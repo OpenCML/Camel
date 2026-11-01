@@ -30,6 +30,39 @@ std::map<std::string, std::map<std::string, std::string>> callees;
 // the same declaration: the tuple both sides of the rule take.
 std::map<std::string, std::map<std::string, std::string>> variables;
 
+/// The arguments a call was given: the nodes of its argument list, without the commas. `(a, b)` is a
+/// `ParentArgues` holding an `ArgumentList` holding an `IndexValues`, and the commas are tokens at
+/// the level that holds the arguments -- so counting the children of the list counts the commas too
+/// and `f(a, b)` comes out as three operands. Descend to the level that holds the arguments and count
+/// its nodes.
+uint32_t argumentCountOf(syntax::Node argues) {
+    syntax::Node list = argues;
+    for (;;) {
+        syntax::Node inner;
+        for (size_t index = 0; index < list->childCount() && !inner; ++index) {
+            const syntax::Child child = list->child(index);
+            if (!child->isNode()) {
+                continue;
+            }
+            const std::string_view kind = syntax::nodeKindName(child->node()->kind());
+            if (kind == "ArgumentList" || kind == "IndexValues") {
+                inner = child->node();
+            }
+        }
+        if (!inner) {
+            break;
+        }
+        list = inner;
+    }
+    uint32_t count = 0;
+    for (size_t index = 0; index < list->childCount(); ++index) {
+        if (list->child(index)->isNode()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 } // namespace
 
 std::string leftHeadOf(syntax::Node left, std::string &shape, uint32_t &arity) {
@@ -62,6 +95,7 @@ std::string leftHeadOf(syntax::Node left, std::string &shape, uint32_t &arity) {
     syntax::TokenRef operatorToken;
     syntax::Node firstNode;
     syntax::Node secondNode;
+    syntax::Node argues;
     for (size_t index = 0; index < current->childCount(); ++index) {
         const syntax::Child child = current->child(index);
         if (child->isToken()) {
@@ -73,6 +107,9 @@ std::string leftHeadOf(syntax::Node left, std::string &shape, uint32_t &arity) {
             } else if (nodeCount == 1) {
                 secondNode = child->node();
             }
+            if (std::string_view(syntax::nodeKindName(child->node()->kind())) == "ParentArgues") {
+                argues = child->node();
+            }
             ++nodeCount;
         }
     }
@@ -82,9 +119,18 @@ std::string leftHeadOf(syntax::Node left, std::string &shape, uint32_t &arity) {
         arity = static_cast<uint32_t>(nodeCount);
         return operatorToken.text();
     }
+    if (tokenCount == 0 && firstNode && argues) {
+        // `f(a, b)` is filed under `f` with one operand per argument: the argument list is the
+        // `ParentArgues` child, and its arguments are what it holds, not the commas between them. The
+        // head is the callee written before it, whether or not it also names its own types
+        // (`f::<T>(a, b)`: the `TypeArguments` child sits between the callee and the arguments).
+        arity = argumentCountOf(argues);
+        return firstNode->text();
+    }
     if (tokenCount == 0 && nodeCount >= 2 && firstNode) {
-        // `f(a, b)` is filed under `f` with one operand per argument: the second child is the
-        // argument list, and its own children are the arguments.
+        // No argument list to count: a two-node node with no operator token and no `ParentArgues`.
+        // Nothing in the tree is filed this way today; the count is the second child's children,
+        // which is what an argument list would have been read as before this was split out.
         arity = secondNode && secondNode->childCount() > 0
                     ? static_cast<uint32_t>(secondNode->childCount())
                     : static_cast<uint32_t>(nodeCount - 1);
@@ -98,31 +144,38 @@ namespace {
 
 /// The first call inside `node`, as the name it calls: a node with no operator token of its own
 /// and at least two children, the callee and its argument list (`f(a, b)`). The right side of a
-/// rule is `(dx, dw) => add_tangent(x, w, dx, dw)`, so this finds `add_tangent`.
+/// rule is `(dx, dw) => add_tangent(x, w, dx, dw)`, so this finds `add_tangent`. A call may also
+/// name its own type arguments -- `(bx: Lift<T>) => mul_batch::<T>(bx)` -- and then the arguments are
+/// the third child, behind the `TypeArguments` the callee carries: the name to call is still the
+/// callee, and a rule whose right side needs an explicit type argument is a rule like any other.
 std::string firstCallIn(syntax::Node node) {
     if (!node) {
         return {};
     }
-    size_t tokens = 0;
-    size_t nodes  = 0;
+    size_t nodes = 0;
     syntax::Node first;
     syntax::Node second;
     for (size_t index = 0; index < node->childCount(); ++index) {
         const syntax::Child child = node->child(index);
-        if (child->isToken()) {
-            ++tokens;
-        } else if (child->isNode()) {
-            if (nodes == 0) {
-                first = child->node();
-            } else if (nodes == 1) {
-                second = child->node();
-            }
-            ++nodes;
+        if (!child->isNode()) {
+            continue;
         }
+        if (nodes == 0) {
+            first = child->node();
+        } else if (nodes == 1) {
+            second = child->node();
+        }
+        ++nodes;
     }
-    if (tokens == 0 && nodes >= 2 && first && second &&
-        std::string_view(syntax::nodeKindName(second->kind())) == "ParentArgues") {
-        return first->text();
+    if (nodes >= 2 && first && second) {
+        // The callee is the first child and the arguments (or the type arguments the callee carries
+        // before them, `f::<T>(a)`) the second. No token requirement: a callee that names its own
+        // types writes its `::` `<` and `>` among the children of the same node, so requiring none
+        // would read exactly the calls this case is here for as "calls nothing".
+        const std::string_view kind = syntax::nodeKindName(second->kind());
+        if (kind == "ParentArgues" || kind == "TypeArguments") {
+            return first->text();
+        }
     }
     // The layers above an expression hold one child each for the precedence levels; a lambda
     // holds its parameters and its body. Descend into every child and take the first answer.

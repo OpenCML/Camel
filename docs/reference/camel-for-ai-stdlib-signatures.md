@@ -780,7 +780,7 @@ div_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
 div_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
 ```
 
-**`rulesets.vmap`** — import { ... } from rulesets.vmap — 6 name(s)
+**`rulesets.vmap`** — import { ... } from rulesets.vmap — 7 name(s)
 
 ```text
 lift: (x: T) => Lift<T>
@@ -789,6 +789,7 @@ vmap_sub: (a: T[], b: T[]) => T[] when is_numeric::<T>()
 vmap_mul: (a: T[], b: T[]) => T[] when is_numeric::<T>()
 vmap_div: (a: T[], b: T[]) => T[] when is_numeric::<T>()
 vmap_neg: (a: T[]) => T[] when is_numeric::<T>()
+vmap_mul_tensor: (a: Lift<T>, b: Lift<T>) => Lift<T>
 ```
 
 **`sim`** — import { ... } from sim — 2 name(s)

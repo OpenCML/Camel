@@ -159,6 +159,27 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "vmap_batches_the_product_of_two_arrays"
+desc = "`r * r` on a row, batched: `tensor:multiply` is not `:op/mul_d` and it has no token a rule's left side could be written with, so its rule is filed under a call -- `mul_tensor` at two operands -- and the operator is bound to that key where it is declared. The reading says the rule was reached (`asked=1 found=1 missing=0 rules=vmap_rule_mul_tensor`), and the values say the two writings are one computation: `[[1, 2, 3], [4, 5, 6]]` squared is `[[1.0, 4.0, 9.0], [16.0, 25.0, 36.0]]` row by row and by the transform, and a batch of one row is still one row (`[[4.0, 9.0, 16.0]]`). The batch is `Lift<f32[3]>` = `f32[?, 3]`, one dimension in front of the row, and the transform multiplies the whole batch at once -- the same operator, so the same bits."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/vmap_array_product.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP vmap op signature=(f: (f32) => f32) => (f32[]) => f32[]", "type=(f32[?, 3]) => f32[?, 3]", "asked=1 found=1 missing=0 rules=vmap_rule_mul_tensor", "same=yes"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
+assert(values.length === 4, `printed ${values.length} values: ${JSON.stringify(values)}`)
+assert(values[0] === values[1] && values[0] === '[[1.0, 4.0, 9.0], [16.0, 25.0, 36.0]]', `rows: ${values[0]} vs ${values[1]}`)
+assert(values[2] === values[3] && values[2] === '[[4.0, 9.0, 16.0]]', `one row: ${values[2]} vs ${values[3]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "vmap_transform_refuses_a_call_by_name"
 desc = "What the elementwise tier refuses, and that it says so at the node it was written at: `g` calls `f`, and `vmap(g)` stops at that call -- `skip=body construct=a call` with `asked=0 found=0`, because the walk never reached a primitive. The refusal is never a copied node hoping for the best: a construct the tier does not batch is named, with the reason, and the program exits with the fault at the call site."
 kind = "behavior"

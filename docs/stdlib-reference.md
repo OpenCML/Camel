@@ -6839,6 +6839,41 @@ vmap_neg: (a: T[]) => T[] when is_numeric::<T>()
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_neg([1.0, -2.0])` gives `[-1.0, 2.0]`
 
+### The product of two arrays
+
+The five keys above are the *scalar* arithmetic: `x * w` on two `f32` is `:op/mul_d`. On two
+arrays the same spelling resolves to another primitive, `tensor:multiply`, and the two are one law
+at two ranks -- the product, element by element -- but they are not one rule, because a rule is
+instantiated at its primitive's *result* type. The scalar one is instantiated at `T = f32` and its
+helper indexes a batch of scalars; this one is instantiated at `T = f32[3]`, the row, and a batch
+of rows is a rank-2 array that `T[]` cannot spell (`T[]` is the array whose *element* is `T`, and
+`map` over `int` produces exactly that -- a shape one rank out of place for a batch, whose rows are
+its leading dimension, `RowsOf<T>`). So this rank says its batch as `Lift<T>` and multiplies the
+whole batch at once, which is the primitive applied to the batch instead of to each row: the same
+operator, and so the same bits.
+
+The key is `mul_tensor`, a call, because the array product has no infix spelling a rule's left side
+could be written with -- `r * r` resolves to the operator, but the operator is not a token. A call
+is a key like any other (`f(a, b)` is `f` at two operands), and `tensor:multiply` is bound to this
+one where the operator is declared: `modules/tensor/module.cpp`, `bindForwardRule`. An operator
+with no binding is an operator no rule is reachable for, and the transform says so by name at the
+primitive. The right side names a *different* function than the left side does, which the index
+requires: a name the left side binds is a pattern variable to the right side, and this family's
+transform reads the callee's name and calls it with the batch -- it never binds the pattern.
+
+#### `vmap_mul_tensor`
+
+```camel
+vmap_mul_tensor: (a: Lift<T>, b: Lift<T>) => Lift<T>
+```
+
+The product of two batches of rows: the whole batch multiplied at once, which for an elementwise
+product is the batch of the row-by-row products. The batch is `Lift<T>`, one dimension in front of
+the row -- so a call says its row type, since a batch of rows is a shape `T` cannot be read out of.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_mul_tensor::<f32[2]>([[1.0, 2.0], [3.0, 4.0]] as f32[2, 2], [[10.0, 10.0], [10.0, 10.0]] as f32[2, 2])` gives `[[10.0, 20.0], [30.0, 40.0]]`
+
 <a id="sim"></a>
 
 ## `sim`: Monte Carlo simulation
