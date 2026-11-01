@@ -22,5 +22,9 @@ func main(): int sync {
     println(first(1.0))
     let back = transpose(first)
     println(back(1.0, 1.0))
+    // The same pullback with twice the cotangent, so the last reading is 2 -- a number the forward
+    // line cannot print. Without it a plan asserting `1.0` would be satisfied by the forward line
+    // alone, and a transpose that answered nothing at all would look green.
+    println(back(1.0, 2.0))
     return 0
 }

@@ -1,0 +1,26 @@
+// Both components of one tuple read at once: `both(x) = let t = (x, 2x); t.0 + t.1`.
+//
+// On paper the value is `x + 2x = 3x`, so the pullback of 1.0 is 3: `1` through the first component and
+// `2` through the second.
+//
+// This is the acceptance for one sentence of the channel's design -- the cotangent belongs to the value
+// that holds the tuple, not to each read. Two reads of one tuple are two slots of one cotangent, so the
+// two answers add up here. A channel keyed by the read would give one cotangent per read and have to
+// decide which read owns the tuple -- and a channel that let the second read overwrite the first would
+// answer 2, while one that took only the first would answer 1.
+import { transpose } from transforms
+import rulesets.transpose
+
+func both(x: float): float {
+    let t = (x, 2.0 * x)
+    return t.0 + t.1
+}
+
+func main(): int sync {
+    println(both(1.0))
+    let back = transpose(both)
+    println(back(1.0, 1.0))
+    // Twice the cotangent, 6: the transpose's own reading, since the forward line prints 3.
+    println(back(1.0, 2.0))
+    return 0
+}
