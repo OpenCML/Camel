@@ -1,0 +1,35 @@
+id = "tools.autodiff_migration_ledger"
+order = 918
+tier = "fast"
+tags = ["feat", "tools", "autodiff"]
+desc = "The autodiff migration ledger is a ratchet: `pass` may only rise, `with`/`array`/`other` and the two denominators may only fall, and the numbers it reads are the ones the page records. It is gated because a ruler that reads nothing reports a number that never changes: the first version looked for `error[...]` lines, which this tree stopped printing, and read `with=0 array=0 other=106` where the classification is `54/46/6`."
+
+# The plan is named by `test/plan-selection.json` (`scripts/autodiff-migration-ledger.mjs`), which the
+# runner self-test requires of every plan file: a plan no case path selects is a plan `--changed`
+# never runs, and the self-test says so by name. That is how this file's first version was caught.
+#
+# `scripts/autodiff-migration-ledger.mjs` is run by hand and by nobody else, so nothing noticed when
+# its diagnostic extraction stopped matching anything: `runCase` looked for a line starting with
+# `error[`, and the one-line diagnostic form this tree prints is
+# `(module)path:line:col: [Error]: message (name=..., code=0x...)` (render.h). Every failing case then
+# had an empty first diagnostic, every one of them landed in `other`, and the ratchet red with
+# `other 6 -> 106` on a tree where nothing had changed. The check runs the tool with `--ledger-check`
+# and reads its own `[LEDGER-CHECK] ok`, so the extraction cannot go blind again without failing here.
+
+[[tests]]
+name = "tools.autodiff_migration_ledger.ratchet"
+desc = "`--ledger-check` reads `total=127 library=118 pass=12 with=54 array=46 other=6`, which is what `LEDGER_RECORDED` holds, and says so instead of reding a number nothing moved."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/autodiff-migration-ledger.mjs"
+args = ["${case}", "--ledger-check"]
+expect_exit = 0
+expect_stdout_contains = ["[LEDGER-CHECK] ok: total=127 library=118", "with=44 array=67 other=7 -- pass 没有降，三类没有升"]
+# It runs alone: for the length of the run, `test/cases/modules/autodiff/` holds files that are not
+# there before or after it (`<case>.ledger-probe.cml`, written and deleted per case), and two other
+# checks walk that tree -- `plan-inventory.mjs`'s case ledger and `check-doc-links.mjs`'s citations --
+# and reded on a file that vanished between their listing and their read when this test ran in
+# parallel. The shared thing is the tree itself, so it takes every slot.
+parallel = false
+normalizers = ["normalize_newlines"]
+timeout_ms = 900000

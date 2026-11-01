@@ -587,7 +587,7 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
             if (regionExit) {
                 if (!hasDirectDataDependency(use.node, exit) &&
                     !dataPathReaches(use.node, exit)) {
-                    linkNodes(LinkType::Ctrl, use.node, exit);
+                    writeControlLink(use.node, exit);
                     continue;
                 }
                 pending.push_back(use);
@@ -791,7 +791,7 @@ void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
     }
     if (auto modifier = modifierOf(variable); modifier.has_value()) {
         if (sameGraph(*modifier, currGraph_) && shouldAddSyncCtrlLink(*modifier, node)) {
-            linkNodes(LinkType::Ctrl, *modifier, node);
+            writeControlLink(*modifier, node);
         }
     }
 }
@@ -1549,7 +1549,7 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     // is written, in the chain, with or without a reader of its value (design principles 3.4).
     if (synced_ && camel::runtime::castMayFault(targetType, sourceType)) {
         if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, castNode)) {
-            linkNodes(LinkType::Ctrl, lastSyncedNode_, castNode);
+            writeControlLink(lastSyncedNode_, castNode);
         }
         lastSyncedNode_ = castNode;
         chainedNodes_.insert(castNode);
@@ -1702,7 +1702,7 @@ node_handle_t Builder::readVariableThrough(
     if (version == variable) {
         if (auto modifier = modifierOf(variable); modifier.has_value()) {
             if (sameGraph(*modifier, currGraph_) && linkCheek(*modifier, value)) {
-                linkNodes(LinkType::Ctrl, *modifier, value);
+                writeControlLink(*modifier, value);
             }
         }
     }
@@ -1731,7 +1731,7 @@ node_handle_t Builder::readVariableThrough(
         syncedReads_.push_back(value);
         if (nodeKindOf(variable) == camel::runtime::GCNodeKind::Port) {
             if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, value)) {
-                linkNodes(LinkType::Ctrl, lastSyncedNode_, value);
+                writeControlLink(lastSyncedNode_, value);
             }
             lastSyncedNode_ = value;
             chainedNodes_.insert(value);
