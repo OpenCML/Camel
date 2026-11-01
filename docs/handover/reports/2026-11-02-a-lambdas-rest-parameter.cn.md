@@ -188,3 +188,27 @@ FUNC 节点上，由 GIR 按 `expected` 填；`..xs` 可以走**同一条通道*
 而 lambda 的 `..xs` 今天只展开成**形参名**（`xs_0`, `xs_1`），**没有一个叫 `xs` 的元组值**。
 `vjp` 的体需要它，所以 `vjp` 并成一条要等 `NK::RestValue` 的下降（`..xs` 作为元组取值的路径），
 那是与"形参表"相邻的另一格。**不是暂停、不是相撞**，是那一格还没做。
+
+## 7. 实测三样（欠账回收，含一处用词更正）
+
+**① 用词更正（显式作废）**：先前写的是"`NK::RestValue` 终于被下降"。**这句作废。**
+`git grep -c RestValue -- src/compile` **改前 0、改后 0**——我们造的**不是** `RestValue` 节点，
+而是 **`GCFillKind::Tuple` 的 Fill**，成员是它的 **`With` 输入**。
+摊开要的是"这是要被摊成实参的元组"，**`With` 是那条边，`Norm` 是"这是一个值"**——
+`expandRestArgument`（`src/compile/gir/builder_rest.cpp:80-118`）只认两种：
+build-time tuple，或 **With 输入个数等于元组长度的 tuple FILL**。
+
+**② `xs[0]` 实测**：**是具名拒绝，不是"到不了"**。
+`apply((..xs) => xs[0])`（期望 `(a: float, b: float) => float`）得到
+
+    No matching function found for argument types: <> ((float, float), int);
+    operator '[]' is not defined for these operand types
+      <:op/idx_arr>: (arr: T[], index: int, axis: int) => T
+      <:op/idx_take>: (arr: T[], indices: int[], axis: int) => T[]
+
+即：rest 参数那个包是**元组**，而 `[]` 只对 `T[]`（数组）等有定义。要让它可索引，
+是给元组加索引规则的问题，不是这一格。
+
+**③ A/B 未测，且今天不成立**：元组对**每个** rest lambda 都建（代码里没有"体内引用了才建"的判据），
+所以**不读 rest 参数的 lambda 也会多一个 Fill 节点**。这一条是**明确的欠账**，
+不是"已满足"。判它需要先查出体内那个引用到底是哪个节点种类（试过的 `NREF` 走法找不到它）。
