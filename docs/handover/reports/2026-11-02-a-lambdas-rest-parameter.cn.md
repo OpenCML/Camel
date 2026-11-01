@@ -1101,3 +1101,62 @@ gc_node_ref_t GraphDraft::materializeStaticValue(
 
 **⑤ 口径提醒**：**②的 21 处是我真读到调用点的；③的 62 处里有一部分（如 `draft_regions` 之外那些"内部 id"）实际上也很可能是②，
 但我没有核到那一行，所以按你第 4 条"查不到 ≠ 不存在"，它们留在③，不写成安全。**
+
+## 32. `enum.cpp:131`：改成"分支 + 现成诊断"，以及为什么今天造不出触发它的程序
+
+**① 选码（三个候选，判据是"含义吻合"）**：
+
+| 码 | 注册含义（`diagnostics/registry.tsv` 原文） | 判断 |
+|---|---|---|
+| `RuntimeDiag::InvalidArgument` `0x000034` | "Invalid argument of '{0}': {1}. — The operator was given an argument it cannot take; the message names the argument and why. The value comes from the program, so what to change is where it was made." | **吻合**：算子拿到一个它接不了的值（null），而那个值来自程序 |
+| `OperandTypeUnsupported` `0x000032` | "'{0}' does not support a value of type '{1}'; it takes {2}." | 不吻合：null **不是**类型不匹配，它没有类型 |
+| `ProgramFault` `0x0001AC` | "{0}" | 不吻合：那是程序自己 `fail` 的通道，不是算子契约 |
+
+⇒ **用 `InvalidArgument`**，页里一句：**这条码的意思正是"值违反了它作为参数的契约"**。
+
+**② 改动（两处，`src/builtin/operators/enum.cpp:131`）**：
+
+```cpp
+    if (value == nullptr) {
+        // A branch rather than an assert: an assert's premise is not held in a release build
+        // (the assert audit of 2026-11-02: an assert that guards a dereference is no guard there).
+        throwRuntimeFault(
+            camel::core::error::RuntimeDiag::InvalidArgument,
+            "__enum_tag__",
+            "the value is null, and a tag is taken from an enum value");
+    }
+```
+
+外加一行 `#include "camel/core/error/runtime.h"`。**没有 `try/catch`、没有返回默认值、没有动 `variant.h:47-54`。**
+
+**③ 触发程序：今天造不出来（贴尝试）**。
+
+```camel
+type E = enum { A, B(int) }
+func main(): int sync {
+    let e: E? = null;
+    match e { case null => 0
+              case E::A => 1
+              case E::B(n) => n }
+}
+```
+
+```
+rc=1
+error[SemanticDiag::TaggedMatchCases]: This 'match' on a value of type 'E?' is not well formed:
+       a literal case cannot be compared with a value that is not opened yet.
+```
+
+**语法与语义两道门都拦住了**：`enum { … }` 要写成 `type E = enum { … }`、`case` 不带逗号、而**匹配一个未开启的 `E?` 会被语义拒绝**。
+所以 **null 到不了 `__enum_tag__`**——**这条分支守的是语言今天不产生的状态**；它留着的意义是：**哪一天上游变了，这里给的是诊断而不是段错误**。
+（本轮还试过 `enum E { … }`、`case null { … }`、带逗号的 `case` 三种写法，分别报 `UnexpectedToken`、`MissingToken: '=>'`、`UnexpectedToken: ','`。）
+
+**④ 读数**：`enum` + `transforms` 计划 = **84/84**，`BUILD_EXIT=0`（第一次构建因 `RuntimeDiag` 未限定名失败，改成 `camel::core::error::RuntimeDiag` 后通过）。
+
+## 33. 两条给作者（按你的要求写进页）
+
+**(a) 最脆的"调用点保证"是状态机那 4 处**：`draft_session.cpp:1918/1953/1959/1965` 保证的前提是**"另一个函数先跑过"**（`encode()` 必须先跑、组必须先建）。
+**这种保证换个调用顺序就没了**——它不是类型或界保证的，是时序保证的。**要稳，应把状态做成显式手段（`has value` 而不是 `ASSERT(!encoded_)`），或让 `encoded()` 返回 `optional`。**
+
+**(b) S1 建议**：**新增检查不要用 `ASSERT`，用"分支 + 诊断"。** `ASSERT` 在 release 里不存在，于是它守的前提也不存在；
+A2（`p.1` on a struct）已经在 `assert` 审计里证明这条路有效一次，`enum.cpp:131` 是第二次。
