@@ -651,7 +651,8 @@ slice: <axis: int, start: int, end: int, step: int = 1> (x: Bytes) => Bytes
 The same slice of a `Bytes`, by byte: it has the one axis 0, and the result is a `Bytes`.
 `b[1:3]` and `b->slice<0, 1, 3>` are the same bytes.
 
-- Example: `encode('hello')->slice<0, 1, 4>` gives `the bytes of 'ell'`
+- Example (a fragment, not compiled): `encode('hello')->slice<0, 1, 4>` gives `the bytes of 'ell'`
+- Why it is not compiled: the example names `encode`, which is `bytes`'s, and a doc example is compiled with this module's names only
 
 #### `concat`
 
