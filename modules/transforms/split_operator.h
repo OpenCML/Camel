@@ -29,4 +29,11 @@ std::unordered_map<std::string, operator_t> splitOperatorKernels();
 /// Publishes the purity and the graph-reading traits of `split`.
 void registerSplitOperatorMetadata();
 
+/// The reading of one `split(f)` call: which half built the two graphs, and for which function. The
+/// text is the same whichever half answered, so `at` names the half (`run` from the kernel,
+/// `compile` from the front end's instantiation) -- the same shape `jvp`'s reading has
+/// (jvp_operator.h, `printJvpCallReading`), and for the same reason: what the cut built is the same
+/// graphs either way, and which half built them is what says whether the call survives.
+void printSplitCallReading(std::ostream &os, std::string_view function, std::string_view at);
+
 } // namespace camel::transforms

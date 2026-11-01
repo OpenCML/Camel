@@ -2337,5 +2337,5 @@ GCGraph *GraphDraft::encode(const std::string &mangledName, const std::string &n
         staticSlots_);
 }
 
-} // namespace camel::runtime
 
+} // namespace camel::runtime

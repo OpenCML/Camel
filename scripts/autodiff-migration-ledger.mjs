@@ -48,7 +48,34 @@ const OFF_PATH_DIR = 'jax_names'
 
 const args = process.argv.slice(2)
 const quiet = args.includes('--quiet')
+const ledgerCheck = args.includes('--ledger-check')
 const onlyCase = args.includes('--case') ? args[args.indexOf('--case') + 1] : undefined
+
+// The ledger's own record, kept the way `diagnostics-catalog.mjs` keeps its name coverage: a constant
+// in the file, refused to move the wrong way. Two numbers here mean opposite things, so the check
+// reads them in opposite directions --
+//
+//   `pass` may only go **up**: a case that starts doing what its plan expects is progress, and one
+//   that stops is a regression however the other lines move.
+//   `with`, `array` and `other` may only go **down**: they count what stops the rest, so a case
+//   joining one of them is a case leaving `pass`.
+//   `total` and `library` are the denominator and may not move at all: a case appearing or leaving
+//   changes what the ledger means, which is a decision for a person, not a side effect.
+//
+// **What `pass` counts, and what it does not.** It counts cases that do what their own plan asks --
+// and 8 of the 12 guard a refusal the library is supposed to make (`err_vjp_annotation`, six
+// `grad_function_value_*`, `with_grad_old_name`). So this records "how many cases are green on the
+// library", **not** "how many cases can be differentiated": the four that really produce numbers are
+// `transform_rules`, `jax_batching`, `jax_vmap` and `jax_vmap_tensor`. A reader who takes 12 for
+// "12 cases differentiate" would be reading it wrong.
+const LEDGER_RECORDED = {
+    total: 127,
+    library: 118,
+    pass: 12,
+    with: 54,
+    array: 46,
+    other: 6,
+}
 
 function camelBinary() {
     const home = process.env.CAMEL_HOME || path.join(ROOT, 'out', 'latest')
@@ -188,14 +215,23 @@ for (const file of files) {
     const test = expectations.get(file)
     const offPath = path.relative(CASE_DIR, file).split(path.sep)[0] === OFF_PATH_DIR
     if (onlyCase && !relative.includes(onlyCase)) continue
-    const migrated = rewriteImports(fs.readFileSync(file, 'utf8')).migrated
-    const { exit, first, text } = runCase(file, test || { args: ['${case}'], expectExit: 0, contains: [] })
+    const source = fs.readFileSync(file, 'utf8')
+    const migrated = rewriteImports(source).migrated
+    // A case with no `func main` is a library user, run through another case that imports it. Run
+    // alone it reports `EntryModuleMissingMain`, which would be this tool's own noise reported as the
+    // case's failure, so it is named for what it is.
+    // A case that expects exit 1 is run whether or not it has a main: rr_vjp_annotation fails
+    // at the parse, so it has none, and its refusal is exactly what it guards.
+    const standalone = /^func\s+main\s*\(/m.test(source) || (test ? test.expectExit !== 0 : false)
+    const { exit, first, text } = standalone
+        ? runCase(file, test || { args: ['${case}'], expectExit: 0, contains: [] })
+        : { exit: null, first: 'no main: this case is run through another one, so it cannot be judged alone', text: '' }
     const expected = test ? test.expectExit : 0
     // The exit code is the least a case can ask for. When its plan also names strings the run has to
     // print, a refusal that exits 1 for some other reason is not that case passing -- the same
     // distinction the plan itself draws.
     const missing = (test ? test.contains : []).filter((s) => !text.includes(s))
-    const matched = exit === expected && missing.length === 0
+    const matched = exit !== null && exit === expected && missing.length === 0
     rows.push({
         relative,
         offPath,
@@ -222,7 +258,7 @@ if (!quiet) {
     for (const row of rows) {
         const line = [
             row.relative.padEnd(width),
-            String(row.exit).padStart(4),
+            (row.exit === null ? '-' : String(row.exit)).padStart(4),
             String(row.expected).padStart(5),
             row.offPath ? 'off' : row.kind.padEnd(6),
             row.first.slice(0, 110),
@@ -232,9 +268,20 @@ if (!quiet) {
     const off = rows.length - library.length
     console.log('')
     console.log(
-        `${library.length} cases import the library's names; ${off} more live under ` +
+        `${library.length} cases name the library's transforms; ${off} more live under ` +
             `${OFF_PATH_DIR}/ or name nothing the library owns and are counted in total only.`,
     )
+    // The nine under `jax_names/` are not skipped, and this says so where a reader can see the
+    // count: they are walked like the rest, they print a row, and they are left out of the four
+    // classes because they exercise the prelude's `vmap`, not this library's `vjp` -- counting them
+    // as "not passing on the library" would be counting the wrong thing.
+    const offPathRows = rows.filter((r) => r.offPath)
+    if (offPathRows.length > 0) {
+        console.log(
+            `Of the ${off}, ${offPathRows.length} live under ${OFF_PATH_DIR}/ and are run and listed, ` +
+                'but they are off this lane: they test the prelude, so they count in total only.',
+        )
+    }
     const noNames = library.filter((r) => !r.migrated)
     console.log(
         'A case passes when its exit code is the one its own plan expects and it prints every string ' +
@@ -243,3 +290,52 @@ if (!quiet) {
     )
 }
 console.log(summary)
+
+if (ledgerCheck) {
+    const measured = {
+        total: rows.length,
+        library: library.length,
+        pass: count('pass'),
+        with: count('with'),
+        array: count('array'),
+        other: count('other'),
+    }
+    const problems = []
+    const move = (key, direction, wording) => {
+        const recorded = LEDGER_RECORDED[key]
+        const got = measured[key]
+        if (direction === 'up' ? got < recorded : got > recorded) {
+            problems.push(
+                `${key} 记录值 ${recorded} 但实测 ${got}（${wording}）：` +
+                    `改了就该在同一个提交里改下 LEDGER_RECORDED 的那个数，并说明读数为什么动了`,
+            )
+        }
+    }
+    if (measured.total !== LEDGER_RECORDED.total) {
+        problems.push(
+            `total 记录值 ${LEDGER_RECORDED.total} 但实测 ${measured.total}：分母是决定，不是副作用`,
+        )
+    }
+    if (measured.library !== LEDGER_RECORDED.library) {
+        problems.push(
+            `library 记录值 ${LEDGER_RECORDED.library} 但实测 ${measured.library}：分母是决定，不是副作用`,
+        )
+    }
+    move('pass', 'up', '只能升')
+    move('with', 'down', '只能降')
+    move('array', 'down', '只能降')
+    move('other', 'down', '只能降')
+    if (problems.length > 0) {
+        console.log('')
+        console.log('[LEDGER-CHECK] the ledger moved the wrong way:')
+        for (const problem of problems) console.log(`  ${problem}`)
+        process.exitCode = 1
+    } else {
+        console.log('')
+        console.log(
+            `[LEDGER-CHECK] ok: total=${measured.total} library=${measured.library} ` +
+                `pass=${measured.pass} with=${measured.with} array=${measured.array} ` +
+                `other=${measured.other} -- pass 没有降，三类没有升`,
+        )
+    }
+}

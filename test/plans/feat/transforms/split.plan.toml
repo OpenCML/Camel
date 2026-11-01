@@ -90,7 +90,7 @@ case = "../../../cases/transforms/split/split_product_chain.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["cubic y= 8.0", "cubic dx1= 12.0", "quartic y= 16.0", "quartic dx1= 32.0", "type=(float) => (float, (float, float)) pure residuals=2", "type=(float) => (float, (float, float, float)) pure residuals=3"]
+expect_stdout_contains = ["cubic y= 8.0", "cubic dx1= 12.0", "quartic y= 16.0", "quartic dx1= 32.0", "type=(float) => (float, (float, float)) pure residuals=2", "type=(float) => (float, (float, float, float)) pure residuals=3", "REINTERP split halves-at=compile function=jvp_of_cubic", "REINTERP split halves-at=compile function=jvp_of_quartic"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -122,26 +122,27 @@ timeout_ms = 20000
 
 [[tests]]
 name = "split_branch_author"
-desc = "**The author's own shape**, asked for by name: `f(x) = if x > 0 then x*x else 3*x`, whose derivative at x = 2.0 and x = -2.0 is **4.0** and **3.0**. It stands beside `split_branch_arms` and the pair is deliberate: there, both arms are linear, so the two numbers alone cannot tell a cut that picked the arm from one that blended them (`4.0`/`0.5`); here the second arm is `3*x`, and a blend or a backward half that recomputed the comparison and took the other arm could not land on 4.0 and 3.0 together. The read path is the cut itself -- `split(jvp(f))` -- because `vjp` stops one step later, in `transpose` (see `split_branch_author_vjp`)."
+desc = "**The author's own shape**, asked for by name: `f(x) = if x > 0 then x*x else 3*x`, whose derivative at x = 2.0 and x = -2.0 is **4.0** and **3.0**. It stands beside `split_branch_arms` and the pair is deliberate: there, both arms are linear, so the two numbers alone cannot tell a cut that picked the arm from one that blended them (`4.0`/`0.5`); here the second arm is `3*x`, and a blend or a backward half that recomputed the comparison and took the other arm could not land on 4.0 and 3.0 together. The read path is the cut itself -- `split(jvp(f))` -- because `vjp` stops one step later, in `transpose` (see `split_branch_author_vjp`). This body has a branch, and a branch is **not** cut at build time yet: the lift builds from a draft (`modules/transforms/jvp_instantiate.cpp`), and a draft hands the transform no Join where a branch answers at, so `jvp(f)` here reads `lifted-at=run` and the cut says `halves-at=run`. The gap is in the lift, not in the cut -- the straight-line chain in `split_product_chain` is cut at build time (`halves-at=compile`) and the kernel never runs there -- and `runtime_branches_remaining` counts this shape among the run-time ones, so the row moves to `compile` the day a branch is read from the draft."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_branch_author.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["REINTERP split function=jvp_of_f", "type=(float) => (float, (float, bool)) pure residuals=2 arms=2", "author x=2.0 value=4.0", "author x=2.0 dfdx=4.0", "author x=-2.0 value=-6.0", "author x=-2.0 dfdx=3.0"]
+expect_stdout_contains = ["REINTERP split function=jvp_of_f", "REINTERP split halves-at=run function=jvp_of_f", "type=(float) => (float, (float, bool)) pure residuals=2 arms=2", "author x=2.0 value=4.0", "author x=2.0 dfdx=4.0", "author x=-2.0 value=-6.0", "author x=-2.0 dfdx=3.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
 name = "split_branch_author_vjp"
-desc = "The same shape read through `vjp`, which is `transpose . split . reinterp<jvp>` -- and the refusal is what this entry pins, because the gap must not be silent. The cut builds the branch (the entry above reads 4.0 and 3.0), so what stops is `transpose`, and where it stops has moved once: the first branch cut refused at `TRANSPOSE function=split_of_jvp_of_f_backward skip=signature`, because a condition crossing as a residual is a `bool` and `transposeSignature` wanted every residual to be a `float`. That was ruled and fixed -- an empty cotangent space is now stated once, in `addCotangent`, and the signature accepts such a member -- so today the refusal is one level down: `skip=arm arm=0`. A split backward half's arm holds the lifted call `jvp_mul` (a `Func`, while `runArm` takes only `Oper`s that have a transpose rule) and reads its `x` out of the residual tuple (an `Accs`, while `runArm` lets an arm stop only at the parameter), so transposing a split backward half's arm is a cut of its own. This entry keeps that named: it fails the day it is made."
+desc = "The same shape read through `vjp`, which is `transpose . split . reinterp<jvp>` -- and it reads the author's numbers: 4.0 at `x = 2.0` and 3.0 at `x = -2.0`, the same two the entry above reads through the cut. The four refusals this entry pinned on the way there are recorded in the case: `skip=signature` (a `bool` residual), `arm-stop kind=10` (an arm holds a `Func`), `arg=1` (a rule kernel's tangent has no value), and `kernel=mul_tangent values=2` (the split recorded on the call the rule produced (`GCNode::tangentArgs`, read as `arm-call ... tangent-args=2`) and turned into a partial transposition: the values are ports, the tangents are what the answer is a cotangent of). It runs on nvm and fvm and the two agree."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_branch_author_vjp.cml"
-args = ["${case}", "std::nvm"]
-backends = ["nvm"]
-expect_exit = 1
-expect_stdout_contains = ["TRANSPOSE function=split_of_jvp_of_f_backward arm-stop region=1 node=7 kernel=mul_tangent values=2", "TRANSPOSE function=split_of_jvp_of_f_backward skip=arm arm=0", "transpose has no transpose for this function"]
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["TRANSPOSE function=split_of_jvp_of_f_backward arm-call region=1 node=7 callee=autodiff::mul_tangent<float> args=4 tangent-args=2", "TRANSPOSE function=autodiff::mul_tangent<float>", "type=(float, float, float) => (float, float)", "author vjp value=4.0 dfdx=4.0", "author vjp value=-6.0 dfdx=3.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
