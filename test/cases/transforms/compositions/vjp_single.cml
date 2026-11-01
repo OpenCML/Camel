@@ -20,7 +20,8 @@ func f(x: float): float {
 
 func main(): int sync {
     let (y, pullback) = vjp(f)(3.0)
-    let dx = pullback(1.0)
+    let cotangents = pullback(1.0)
+    let dx = cotangents.0
     'vjp_single y={} dfdx={}'->format<y, dx>->println
     return 0
 }

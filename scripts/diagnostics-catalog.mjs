@@ -17,6 +17,8 @@
 //   node scripts/diagnostics-catalog.mjs --verify-doc  docs/diagnostics.md is what --write produces
 //   node scripts/diagnostics-catalog.mjs --coverage    list the codes no test mentions (report only)
 //   node scripts/diagnostics-catalog.mjs --coverage-check  fail if any code is mentioned by no test
+//   node scripts/diagnostics-catalog.mjs --name-coverage   the semantic codes no case asserts by name
+//   node scripts/diagnostics-catalog.mjs --name-coverage-check  fail if that set grew past the record
 //   node scripts/diagnostics-catalog.mjs --pin-examples   fill in the example pins of new diagnostics
 //   --root DIR                                        read and write under DIR (the proof cases)
 //
@@ -53,6 +55,25 @@ const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const REGISTRY_REL = 'diagnostics/registry.tsv'
 const DOC_REL = 'docs/diagnostics.md'
 const EXAMPLES_REL = 'diagnostics/examples.tsv'
+
+// The number of semantic codes with no case that asserts them by name, which `--name-coverage-check`
+// refuses to see grow. It counts what is *not* done, so it is the one number here expected to fall,
+// and it fell twice, recorded apart so neither hides in the other:
+//   23 -> 22  `load.module_not_found` pinned `ModuleNotFound`.
+//   22 -> 14  `calling_incomplete` pinned `CallingIncompleteFunction`, and the counter learned the
+//             `verify_script` form (`diagnostics[0].name === 'SemanticDiag::X'`, `.code === '0x...'`),
+//             which these seven had been pinned by all along: StatementAfterReturn,
+//             UnusedFallibleValue, EffectNotExecuted, IgnoredSideEffect, NeverArgumentCall,
+//             FailNotExecuted, StatementAfterFail.
+//   14 -> 6   `null_test_never_null` pinned `NullTestNeverNull`; the counter learned the rendered form
+//             a `-E short` run prints (`name=SemanticDiag::X, code=0x...`, which six had been pinned
+//             by: ModuleParseFailed, ImportedModuleHasErrors, ComprehensionSourceRefused,
+//             ExitInUnusedBranch, DimensionNameUsedOnce, FunctionTypeArgumentNotInferred); and the one
+//             code no path raises, `FeatureNotSupported`, left the target as unraisable instead of
+//             holding a place no case can take.
+// A case added for a code lowers it in that commit; a correction lowers it in the commit that
+// teaches the counter the form, and names what it found.
+const NAME_COVERAGE_RECORDED = 6
 
 // The sections, in the order the headers are included. `id` is also the stem of the two
 // generated files; the type byte of the printed code is read from DiagType in base.h, under the
@@ -774,9 +795,9 @@ for (let i = 0; i < argv.length; i++) {
         mode = argv[i]
     }
 }
-if (!['--check', '--write', '--generate', '--verify-doc', '--coverage', '--coverage-check', '--pin-examples'].includes(mode)) {
+if (!['--check', '--write', '--generate', '--verify-doc', '--coverage', '--coverage-check', '--name-coverage', '--name-coverage-check', '--pin-examples'].includes(mode)) {
     console.log(
-        'usage: node scripts/diagnostics-catalog.mjs --check | --write | --generate | --verify-doc | --coverage | --coverage-check | --pin-examples [--root DIR]'
+        'usage: node scripts/diagnostics-catalog.mjs --check | --write | --generate | --verify-doc | --coverage | --coverage-check | --name-coverage | --name-coverage-check | --pin-examples [--root DIR]'
     )
     process.exit(2)
 }
@@ -819,6 +840,7 @@ if (mode === '--coverage' || mode === '--coverage-check') {
         for (const e of missing) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
         process.exit(0)
     }
+
 
     // The property is the bijection between the two sets -- every code the registry declares is
     // mentioned by a test, and every code a test mentions is one the registry declares -- and not a
@@ -899,9 +921,98 @@ if (mode === '--coverage' || mode === '--coverage-check') {
     process.exit(0)
 }
 
-// --pin-examples fills in the pin of every diagnostic that has none and leaves the ones already
-// written alone: the first run pins what the search would have shown that day, and from then on
-// adding a test changes no other diagnostic's example.
+// ---- the stronger direction: a code a case acts on, not one the prose names -------------------
+// `--coverage-check` asks that every code be *mentioned* by a test, and a plan's prose counts as a
+// mention, so a sentence that would not notice the compiler emitting a different diagnostic keeps
+// it green. This counts the other thing: a case that *pins* the report a run produced -- the name
+// through `expect_diagnostic_name`, the number through `expect_diagnostic_code`, and the same two
+// read out of a `verify_script` (`diagnostics[0].name === 'SemanticDiag::X'`, which usually pins the
+// line and the column beside it). A code with none of those is a diagnostic whose identity no test
+// would notice changing.
+//
+// Both checks stay, and both run in `compile.diag_catalog`: this one narrows what counts, it does
+// not replace the wider one, because replacing it would drop the question "does any test at all
+// exercise this code" for the codes this one still counts as unpinned, and the wider check is the
+// layer that holds that question at zero.
+//
+// The count is a ratchet. `NAME_COVERAGE_RECORDED` is where the tree stands, the check fails when
+// the set grows past it -- a case that stopped pinning its code is a regression here -- and it is
+// lowered in the commit that adds a case, or in the commit that teaches this counter a form of
+// assertion it was missing, which is a correction and is recorded as one. The list is printed so
+// the next case can be picked without re-deriving it.
+if (mode === '--name-coverage' || mode === '--name-coverage-check') {
+    const semantic = catalogEntries(records).filter((e) => e.type === 'SemanticDiag')
+    const plans = walk(path.join(root, 'test', 'plans'), (f) => f.endsWith('.plan.toml'))
+    const pinned = new Set()
+    for (const file of plans) {
+        const text = fs
+            .readFileSync(file, 'utf8')
+            .replace(/^\s*#.*$/gm, '')
+            .replace(/desc\s*=\s*"""[\s\S]*?"""/g, '')
+            .replace(/^\s*desc\s*=.*$/gm, '')
+        for (const m of text.matchAll(/expect_diagnostic_name\s*=\s*["']([A-Za-z]+)::([A-Za-z]+)["']/g)) {
+            pinned.add(`${m[1]}::${m[2]}`)
+        }
+        for (const m of text.matchAll(/expect_diagnostic_code\s*=\s*["']?(0[xX][0-9A-Fa-f]{8})["']?/g)) {
+            pinned.add(m[1].toLowerCase())
+        }
+        // A `verify_script` reads the report as JSON and asserts on the field it names, so it pins
+        // the code as surely as the two keys above -- more surely where it also pins the line.
+        for (const m of text.matchAll(/\.name\s*===\s*["']([A-Za-z]+)::([A-Za-z]+)["']/g)) {
+            pinned.add(`${m[1]}::${m[2]}`)
+        }
+        for (const m of text.matchAll(/\.code\s*===\s*["'](0[xX][0-9A-Fa-f]{8})["']/g)) {
+            pinned.add(m[1].toLowerCase())
+        }
+        // A `-E short` run renders the report as `name=SemanticDiag::X, code=0x...`, and a test whose
+        // needles require that text requires the name the compiler emitted. The comment and `desc`
+        // lines are gone by now, so the words can only come from a needle or a script.
+        for (const n of text.matchAll(/name=([A-Za-z]+)::([A-Za-z]+)/g)) pinned.add(`${n[1]}::${n[2]}`)
+        for (const c of text.matchAll(/\bcode=(0[xX][0-9A-Fa-f]{8})/g)) pinned.add(c[1].toLowerCase())
+    }
+    // A code nothing raises cannot be pinned by a case, so it is not a target: it is listed apart
+    // and does not sit in the set this check refuses to see grow. The raise site is a construction
+    // through `.of(...)` in the compiler, not the entry in the message table -- the table names
+    // every code, including one a path has not started throwing yet.
+    const raisedText = [
+        ...walk(path.join(root, 'src'), (f) => /\.(cpp|h|hpp|cc)$/.test(f)),
+        ...walk(path.join(root, 'include'), (f) => /\.(cpp|h|hpp|cc)$/.test(f)),
+        ...walk(path.join(root, 'modules'), (f) => /\.(cpp|h|hpp|cc)$/.test(f)),
+    ]
+        .filter((f) => !/[\\/]diagnostics[\\/]messages[\\/]/.test(f))
+        .map((f) => fs.readFileSync(f, 'utf8'))
+        .join('\n')
+    const raisedNames = new Set([...raisedText.matchAll(/SemanticDiag::([A-Za-z0-9_]+)/g)].map((m) => m[1]))
+    const unraisable = semantic.filter((e) => !raisedNames.has(e.name))
+    const target = semantic.filter((e) => raisedNames.has(e.name))
+    const missing = target.filter((e) => !pinned.has(e.fullName) && !pinned.has(hex8(e.code).toLowerCase()))
+    console.log(
+        `semantic codes with no case that asserts them by name: ${missing.length} of ${target.length}`
+            + ` (recorded ${NAME_COVERAGE_RECORDED})`
+    )
+    for (const e of missing) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
+    if (unraisable.length > 0) {
+        console.log('no path raises these, so no case can pin them:')
+        for (const e of unraisable) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
+    }
+    if (mode === '--name-coverage') process.exit(0)
+    if (target.length === 0 || pinned.size === 0) {
+        console.log('name coverage: the run read no semantic code or no assertion, which is not a pass')
+        process.exit(1)
+    }
+    if (missing.length > NAME_COVERAGE_RECORDED) {
+        console.log(
+            'name coverage: the set grew by '
+                + `${missing.length - NAME_COVERAGE_RECORDED} past the ${NAME_COVERAGE_RECORDED} this file`
+                + ' records: a case that pinned its diagnostic stopped pinning it, or a semantic code'
+                + ' was added with no case of its own. Fix that case, or add one and lower the record'
+                + ' in the same commit, with the reason the number moved.'
+        )
+        process.exit(1)
+    }
+    process.exit(0)
+}
+
 if (mode === '--pin-examples') {
     const entries = catalogEntries(records)
     const tests = loadTests(root)
