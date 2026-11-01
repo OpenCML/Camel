@@ -300,7 +300,7 @@ struct CallSpec {
     /// operator's, not a name the compiler knows).
     int8_t staticFunctionArg = -1;
     /// Whether a *parameter* standing there is refused too. Measured 2026-11-01: it is the shape
-    /// `stdlib/vjp.cml:56` is written in (`vjp(f: F)` calls `jvp(f)`), so turning it on refuses the
+    /// `stdlib/vjp.cml#vjp` is written in (`vjp(f: F)` calls `jvp(f)`), so turning it on refuses the
     /// library's own body and eight `vjp_api` cases with it. The author's 15:30 ruling names both
     /// shapes; this one waits for `vjp` to stop handing a transform a parameter.
     bool staticFunctionArgRefusesParameters = false;

@@ -1561,7 +1561,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TransformArgumentIsNotAKnownFunction",
                 "'{0}' is applied to {1}, and a transform's argument has to be a function this program knows before it runs.",
-                "The transform builds the transformed graph at the call, from the graph of the function it is given, so it has to name that graph now: a declared function, or a lambda that captures nothing. {1} names no graph until the program runs. Pass a declared function (or a lambda that captures nothing) instead.",
+                "The transform builds the transformed graph at the call, out of the graph of the function it is given, so it has to name that graph now: a declared function, or a lambda that captures nothing. Neither a parameter nor a closure that captures a value names one until the program runs. Pass a declared function, or a lambda that captures nothing, instead.",
             },
         },
         {

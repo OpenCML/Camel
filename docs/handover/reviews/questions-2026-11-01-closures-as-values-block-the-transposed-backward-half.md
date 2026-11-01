@@ -75,7 +75,7 @@ B **新增**一条表示，且与裁定正面冲突；C 让 `split` 多背一个
 - 调用者数：每个算子 **1 个注册点 + 1 个 kernel**（`split_operator.cpp:179/:186`、`jvp_operator.cpp:218/:225`、`transpose_operator.cpp:170/:177`），**外部 C++ 调用点 0**。
 - 判据：**能删 342 行**（`split_operator.cpp` 179、`jvp_operator.cpp:81-226` 146、`transforms.cml:54-62,66` 10、`vjp.cml:47-53` 7），
   **但要搬 1720 行**（`split.cpp` 694 + `jvp.cpp` 1026）进一个新 pass。**按“删不掉就是净负”，甲是净负。**
-  （复核 2026-11-01：上面的行数是当天的文件量，今天读作 `split_operator.cpp` **196**、`jvp_operator.cpp` **268**、`transforms.cml` **116**、`vjp.cml` **104**，`split.cpp` **1466**、`jvp.cpp` **1347** —— 三个 `transforms/*.cpp` 随 `lane-gs6`、`lane-reinterp2` 两笔合并长出来，之后 `split.cpp` 又随 `914e09263`、`e0c206239`（残差元组自成一个类型）多了 96 行、随 `fdb60ba49`（选臂成为残差）多了 437 行，`jvp.cpp` 随 `728b9f27c`、`4fbdc4e3a` 与 `ba0a37be9`、`c98dd492f` 多了 37 行，`split_operator.cpp` 又随 `67509bd1a`（kernel 不再自己定类型）少了 2 行，`jvp_operator.cpp` 与 `jvp.cpp` 又随 `c8bc3d87f`（`jvp(f)` 在调用方的图建起来时实例化）多了 5 行与 32 行；`vjp.cml` 随 `07451069e`（拉回一律返回元组、一元写成 `(float,)`）多了 10 行，此前随 `lane-m4-assembly` 的泛型化变短。命令：`node test/tools/check-doc-readings.mjs`。）
+  （复核 2026-11-01：上面的行数是当天的文件量，今天读作 `split_operator.cpp` **196**、`jvp_operator.cpp` **277**、`transforms.cml` **116**、`vjp.cml` **104**，`split.cpp` **1466**、`jvp.cpp` **1347** —— 三个 `transforms/*.cpp` 随 `lane-gs6`、`lane-reinterp2` 两笔合并长出来，之后 `split.cpp` 又随 `914e09263`、`e0c206239`（残差元组自成一个类型）多了 96 行、随 `fdb60ba49`（选臂成为残差）多了 437 行，`jvp.cpp` 随 `728b9f27c`、`4fbdc4e3a` 与 `ba0a37be9`、`c98dd492f` 多了 37 行，`split_operator.cpp` 又随 `67509bd1a`（kernel 不再自己定类型）少了 2 行，`jvp_operator.cpp` 与 `jvp.cpp` 又随 `c8bc3d87f`（`jvp(f)` 在调用方的图建起来时实例化）多了 5 行与 32 行，`jvp_operator.cpp` 又随本页这条裁定（变换的实参必须是编译期已知的函数）多了 9 行；`vjp.cml` 随 `07451069e`（拉回一律返回元组、一元写成 `(float,)`）多了 10 行，此前随 `lane-m4-assembly` 的泛型化变短。命令：`node test/tools/check-doc-readings.mjs`。）
 
 **乙 —— 每次实例化新铸一个刚性类型，并在原则 5.10 上开一条例外**
 - 一个 `TypeCode` 落地要动 **7 点**：枚举（`type/base.h:56` + `TypeFlag` `:39`）、`typeCodeToString`（`base.cpp:65`，35 分支且 `:111` 有 `default:` **漏了不报错**）、
@@ -116,4 +116,24 @@ B **新增**一条表示，且与裁定正面冲突；C 让 `split` 多背一个
   收成自己的参数。纸面答案仍是 2（余切 3 时 6）。
 
 顺带一条同源的事实：转置后的调用必须把被调值放回原来的位置——原调用把被调方当 `with` 输入传，转置后的调用就得传一个**转置图的静态函数值**
+顺带一条同源的事实：转置后的调用必须把被调值放回原来的位置——原调用把被调方当 `with` 输入传，转置后的调用就得传一个**转置图的静态函数值**
 （空闭包）；放错位置得到的是"CALL node 3 without callee input"。
+
+**终点改了（作者 2026-11-01 15:30，`25852ba4b`）**：这一类**不是**"以后支持捕获"，而是**在调用处报编译错误**——"被调者是参数或捕获"
+那一类，按 09:35 的语言规则，变换的实参必须是编译期已知的函数，在调用处拒绝。所以本页上面那句"被转置的被调方得把捕获值收成自己的参数"
+**不再是路线**，它是这一类的旧样子；现在的样子是编译器在 `transpose(h)` 那一行就说不行：
+
+    error[SemanticDiag::TransformArgumentIsNotAKnownFunction]: 'transpose' is applied to a closure that
+    captures a value, and a transform's argument has to be a function this program knows before it runs.
+       --> .../transpose_arg_not_a_static_function.cml:52:26
+
+判据落在 `CallSpec::staticFunctionArgument` 上（操作符自己的事实，编译器不认识名字，设计原则 6.6），诊断由
+`diagnostics/registry.tsv` 声明、生成器编号（`0x000209`，`0x03000209`）。量出来的影响面：
+- **闭包实参**（`transpose(h)`，`h` 含捕获）：今天以前是**先编译通过、运行期**才打印 `TRANSPOSE function=__g_51__ skip=residual
+  uri=:op/mul_d operand=1`；现在编译期一行错误、指回实参那一行。A/B 关掉那两行 `declareCallSpec`，`skip=residual` 原样回来（`44/45`）。
+- **参数实参**（`transpose(f)`，`f` 是参数）：**没开**。编译器按调用点实例化，`by_param(double)` 处实参就是 `double`，纸面 2.0 照答；
+  它只在参数"留成参数"时才是问题，而**标准库自己**就是那个形状——`stdlib/vjp.cml:56` 的 `vjp(f: F)` 把参数交给 `jvp`。打开参数那半边
+  会拒掉 `vjp` 自己的库体和八个 `vjp_api` 用例（实测 `35/45`）。所以参数半边的开关是 `CallSpec::staticFunctionArgRefusesParameters`，
+  默认关，等 `vjp` 不再是那个形状。
+- **体里调用闭包**（`transpose(g2)`，`g2` 自己体内 `h(2.0)`）：实参是**名字**，这里什么都不拒，运行期仍是 `skip=call … reason=function-closure`；
+  15:30 给这一类的终点是"按被调图递归实例化"，不是这条错误。

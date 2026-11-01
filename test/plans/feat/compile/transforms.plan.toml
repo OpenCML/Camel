@@ -693,3 +693,33 @@ expect_exit = 0
 expect_stdout_contains = ["TANGENT type=float space=self", "TANGENT type=f32 space=self", "TANGENT type=f16 space=self", "TANGENT type=bf16 space=self", "TANGENT type=i32 space=none", "TANGENT type=string space=none", "TANGENT type=float[] space=self", "TANGENT type=i32[] space=none", "TANGENT type=(float, i32) space=none", "TANGENT type=(float, float) space=self"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# The 15:30 ruling on the class "被调者是参数或捕获": not "support the capture one day", but a compile
+# error at the call. The case holds both shapes, and only the closure is refused:
+#   - `transpose(f)` with `f` a parameter is instantiated per call site, so at `by_param(double)` the
+#     argument is `double` and the transpose is built (the entry below pins that it still is);
+#   - `transpose(h)` with `h` a closure holding `x` is refused at the argument's own line, because the
+#     captured value is not something the compiler has.
+# The parameter half of the refusal exists in the code and is declared off: measured 2026-11-01 it
+# refuses `stdlib/vjp.cml#vjp`, where `vjp(f: F)` hands `jvp` a parameter, and the eight `vjp_api` cases
+# with it. That is the blast radius, and it is why the entry next to this one (whose argument is a name
+# and whose body calls a closure) keeps its run-time `skip=call` reading: same review, different class.
+[[tests]]
+name = "transpose.argument_is_not_a_function_it_can_name"
+desc = "A transform builds the transformed graph at the call, so its argument has to be a function this program knows before it runs: `transpose(h)` where `h = (y: float) => y * x` captures a value is refused at the argument's own line, by name -- `error[SemanticDiag::TransformArgumentIsNotAKnownFunction]: 'transpose' is applied to a closure that captures a value, and a transform's argument has to be a function this program knows before it runs.` at 52:26, pointing at the `h`. Before this refusal the same program *compiled* and then failed in the run-time half with `TRANSPOSE function=__g_51__ skip=residual uri=:op/mul_d operand=1`: the same fact, said after the program had started, in words a reader has to decode. The entry pins the name, the number, the line and the column, and forbids `skip=` so the run-time refusal cannot come back quietly. The program's other shape -- `transpose(f)` with `f` a parameter, at a call site the compiler instantiates -- is not refused and answers the paper 2.0; the parameter only matters when it stays a parameter, which is what `stdlib/vjp.cml` does, and that half is measured off (CallSpec::staticFunctionArgRefusesParameters) with the eight cases it would refuse."
+kind = "negative"
+case = "../../../cases/compile/transforms/transpose_arg_not_a_static_function.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 1
+expect_output_not_contains = ["skip="]
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::TransformArgumentIsNotAKnownFunction', input.diagnostics[0].name)
+assert(input.diagnostics[0].code === '0x03000209', input.diagnostics[0].code)
+assert(input.diagnostics[0].line === 52 && input.diagnostics[0].column === 26, JSON.stringify(input.diagnostics[0]))
+assert(input.normalized.stdout.includes("'transpose' is applied to a closure that captures a value"), input.stdout)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
