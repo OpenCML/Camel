@@ -167,6 +167,11 @@ const checked = /the declarations agree with the ([0-9]+) registered operator ov
 if (checked !== null && comparedCount < Number(checked[1])) {
     assert(excused !== null, `${Number(checked[1]) - comparedCount} overload(s) were neither compared nor named`)
 }
+// The run prints the totals it compared its own exception lists with: a class that took an entry the
+// table does not hold (an operator a merge brings in, say) has to appear in that number, so the line
+// is what a green run is read from.
+assert(/the exception lists are the ones EXCEPTIONS records: result [0-9]+ in [0-9]+ class[(]es[)], parameter [0-9]+ in [0-9]+ class[(]es[)]/.test(stdout),
+    'the run did not print the totals it compared its own exception lists with')
 }
 """
 timeout_ms = 30000
