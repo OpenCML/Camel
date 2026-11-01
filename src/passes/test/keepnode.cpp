@@ -1,19 +1,24 @@
+// Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
 /*
- * Draft-only: `:op/keep` is built here, in a graph the program already has, and `replaceNode`
- * (opt/generic/rewrite.cpp) is the code under test. No source syntax reaches that path today --
- * a branch over a static condition is folded before a pass sees it, and every rule that would
- * replace the reader of a computation that may fault refuses to fire, because dropping the reader
- * would drop the fault (see the note at core/operator_table.h, `Keep`) -- so the shape is built by
- * hand, which is the only way this insertion can have a test.
+ * Draft-level readings of `:op/keep`, beside the ones `std::opt` already writes: `replaceNode`
+ * (opt/generic/rewrite.cpp) is the code under test, and the shape it acts on is built here by hand
+ * so the two sides of the question can both be read -- where a keeper is due, and where none is.
  *
- * The node that must keep running is a division by zero: whether the program faults is then a
- * reading of whether that node still runs. The value the program prints is routed through the
- * node that takes the division's place, so the run says the whole of it:
+ * Where it is due: the removal takes the last read of a node whose running is observed, and a
+ * division by zero is the one such node whose running is visible from outside -- the program faults
+ * if and only if it ran. The value the program prints is routed through the node that takes the
+ * division's place, so the run says the whole of it:
  *
- *   test::keep_node   prints KEEPNODE keep=<n> reads_the_divisor=<0|1> printed=<0|1>
- *                     and leaves the program faulting on the division if the keep runs
+ *   test::keep_node       KEEPNODE keep=<n> reads_the_divisor=<0|1> printed=<0|1>, and the program
+ *                         faults on the division, which it can only do through the keeper
+ *
+ * Where none is due: a node that reads nothing observed, and a node whose observed source still has
+ * another reader after the removal. Neither may get a keeper, and the program prints what it prints
+ * without any pass:
+ *
+ *   test::keep_node_pure  KEEPNODE_PURE keep_pure=<n> keep_shared=<n>
  */
 
 #include "camel/passes/test/keepnode.h"

@@ -150,3 +150,38 @@ expect_stdout_contains = ["[EFFECTS] ok std::opt std::nvm", "[EFFECTS] ok the op
 expect_output_not_contains = ["[EFFECTS] RED", "[EFFECTS]   lost:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+
+# The one shape `:op/keep` exists for, written at graph level because no compiler pass makes it
+# today: an effect a pass takes the last read of is a statement of a `sync` block in the graphs the
+# builder writes, and the block's chain keeps it (design principles 3.3's current guarantee -- the
+# chain, not this operator). `test::keepshape` takes the shape from the source: `keep_shape.cml`
+# writes the print in a function that is no `sync` block, so nothing in its graph has a sync edge,
+# and the pass removes the node that reads the print, which is what takes the print's last read.
+#
+# Three readings, and only one of them needs the operator: `keep=1 uri=:op/keep data_user=1
+# standing=alive` is the rewrite's own answer (the operator stands in the value and the print is
+# kept by a data use), `wait_edge=0 waited_on=0` says the print has no order edge to lean on, and
+# the output does the rest -- `1` is the print running and the exit code `99` is the value the
+# removal stands for.
+[[tests]]
+name = "keep_shape.replace"
+desc = "The shape `:op/keep` is for: the effect is read by one node that a pass removes, no `sync` edge stands under it, and the rewrite keeps it through the operator -- the print still runs, and the value is the replacement."
+case = "../../../cases/opt/effects/keep_shape.cml"
+args = ["${case}", "test::keepshape", "${backend}"]
+expect_exit = 99
+expect_stdout_exact = "KEEPSHAPE keep=1 uri=:op/keep data_user=1 sync_statement=0 wait_edge=0 waited_on=0 standing=alive\n1\n"
+
+# `std::jgir` and not `std::gir`: the dot dump asserts `graph->exitNode() != nullptr`
+# (src/passes/trans/dot/graphviz.cpp#dumpGraph, "Runtime graph exit node is missing") and a graph that a
+# pass committed with a node removed trips it, while the same graph runs (`keep_shape.replace`
+# above exits 99) and `std::jgir` draws it. That is a defect of the dump, not of this rewrite, and
+# the plan reads the operator out of the JSON until the dump is looked at.
+[[tests]]
+name = "keep_shape.in_graph"
+desc = "The same rewrite, drawn: the graph holds an OPER node whose operator is `:op/keep`."
+case = "../../../cases/opt/effects/keep_shape.cml"
+args = ["${case}", "test::keepshape", "std::jgir"]
+# One backend: the graph is the same one on each, and the test reads the drawing, not a run.
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["KEEPSHAPE keep=1 uri=:op/keep", "\"label\": \":op/keep\""]

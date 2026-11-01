@@ -1,9 +1,10 @@
+// Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
 /*
- * Test-only producer of `:op/keep` (core/operator_table.h, design principles 3.3): no source
- * syntax makes a pass remove a node whose only reader of an effect is that node, so the tests
- * build the shape at the graph level and observe what `replaceNode` does with it.
+ * Test-only readings of `:op/keep` (core/operator_table.h, design principles 3.3), beside the ones
+ * `std::opt` writes: the shape is built at the graph level and observed, both where a keeper is due
+ * and where none is.
  *
  * The shape is the one `keepThroughValue` names (opt/generic/rewrite.cpp): a node that is about to
  * be replaced, reading a node that must keep running, which nothing else reads, and which is not a

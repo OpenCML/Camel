@@ -1014,3 +1014,21 @@ expect_exit = 0
 expect_stdout_exact = "1.0\n4.0\n2.0\n3.0\nerror IndexOutOfRange: Index 4 is out of range for the elements of length 4.\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+# The index family on a value of two dimensions: the bound and the read agree at every step, and the
+# fault names the thing whose length it counted -- the row a `xs[i, j]` takes with its first word
+# ("an array of length 2", the row's own length), the first dimension of a deeper value ("the first
+# dimension of the input array"), and the dimension an axis word names ("dimension 1 of the input
+# array"). These readings are the sweep's control group: the counts differ (2 rows, 4 elements) and
+# a position is compared with the one it addresses.
+[[tests]]
+name = "index_on_a_rank_two_value"
+desc = "`xs[i, j]`, `xs[i][j]` and a rank-1 subscript on a `float[2, 2]`: `xs[1, 0]` answers 3.0 and `xs[1][1]` 4.0; the row read of `xs[i0, 0]` (i0 = 2) is `Index 2 is out of range for an array of length 2` -- the row it takes has two elements -- `xs[0, i1]` (i1 = 5) is `dimension 1 of the input array of length 2`, `xs[i0][0]` is `the first dimension of the input array of length 2`, and a rank-1 subscript is `an array of length 3`. The four counts are different numbers and each read is compared with the one it addresses."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/index_on_a_rank_two_value.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "3.0\nerror IndexOutOfRange: Index 2 is out of range for an array of length 2.\nerror IndexOutOfRange: Index 5 is out of range for dimension 1 of the input array of length 2.\nerror IndexOutOfRange: Index 3 is out of range for an array of length 3.\n4.0\nerror IndexOutOfRange: Index 2 is out of range for the first dimension of the input array of length 2.\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

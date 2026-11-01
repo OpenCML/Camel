@@ -132,21 +132,26 @@ inline constexpr OperId VarAfter        = 21; // ":var/after"
 /// effect and may fault -- because an operator a pass could drop, merge, move or compute early
 /// would undo the reason it was inserted.
 ///
-/// No program written in Camel reaches that insertion today, and a reader should know it before
-/// trusting 3.3 to this operator: a branch over a condition that can be folded is folded before a
-/// pass sees it, and the rules that would replace the reader of a computation that may fault
-/// refuse to fire, because dropping the reader would drop the fault. What keeps an effect running
-/// across a removal today is the older mechanism beside it -- the statement chain, the waits a
-/// removal inherits, and the order edges a dissolved branch hands on (opt/generic/rewrite.cpp,
-/// `inheritedWait` and the branch's `after` list) -- and the plan that guards that mechanism is
-/// test/plans/feat/opt/unused_value_chain.plan.toml: with the inherited waits switched off, twelve
-/// of its cases go red, while the ones one would expect to guard it, in
-/// test/plans/feat/opt/effects_kept.plan.toml, stay green. The insertion itself is exercised, and
-/// only by construction, in src/passes/test/keepnode.cpp and
-/// test/plans/feat/opt/keep_node.plan.toml: measured there, `KEEPNODE keep=1
-/// reads_the_divisor=1`, the same pass with the insertion switched off reads `keep=0`, and the
-/// counter-case reads `keep_pure=0` where the node being replaced reads nothing observed. The day
-/// a program reaches this path, that plan is what has to keep passing, and the pass has to go.
+/// When it is written: `keepThroughValue` (src/passes/opt/generic/rewrite.cpp), called by
+/// `replaceNode` for a node that has no sync user -- one that holds no place in a `sync` block's
+/// chain. That shape is not hypothetical, so the operator is not unreachable today: `std::opt` over
+/// test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml already draws two of these nodes, and
+/// the same run over branch_keeps_outer_effect.cml and fold_keeps_arm_effect.cml draws two each --
+/// six in all, read as `std::opt std::gir | grep -c ':op/keep'`. What 3.3 still leans on for the
+/// graphs the builder writes is the chain: an effect written inside a `sync` block has a place in
+/// it, and a pass that removes the statement hands that place on instead of reaching for this
+/// operator (rewrite.h, replaceNode). This operator is for the read that has no such place -- and a
+/// graph that keeps neither is refused at the commit ("effect node ... with neither a read of its
+/// value nor a place in its chain"), which is what `test::keepshape` measures.
+///
+/// Two plans hold the rest of the account. test/plans/feat/opt/keep_node.plan.toml builds the shape
+/// at the draft level, where the counter-cases can be read beside it
+/// (src/passes/test/keepnode.cpp): `KEEPNODE keep=1 reads_the_divisor=1` where a keeper is due,
+/// `keep=0` with the insertion switched off, and `KEEPNODE_PURE keep_pure=0 keep_shared=0` where
+/// none may appear and none does. test/plans/feat/opt/unused_value_chain.plan.toml guards the older
+/// mechanism that keeps 3.3 true where the chain does exist: with the inherited waits switched off,
+/// twelve of its cases go red, while the cases one would expect to guard it, in
+/// test/plans/feat/opt/effects_kept.plan.toml, stay green.
 inline constexpr OperId Keep            = 22; // ":op/keep"
 inline constexpr OperId kWellKnownCount = 23; // kNoOper included
 

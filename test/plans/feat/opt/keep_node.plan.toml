@@ -2,15 +2,20 @@ id = "opt.keep_node"
 order = 337
 tier = "fast"
 tags = ["feat", "opt", "effects", "keep"]
-desc = "`:op/keep` is produced by the removal that takes the last reader of a computation that may fault, and by nothing else today: a test-only pass builds the shape at the graph level and the run says whether that node still runs"
+desc = "`:op/keep` where a keeper is due and where none is: a test-only pass builds both shapes at the graph level, and the run says whether the kept node still runs"
 
 # Design principles 3.3 and 9.7: a pass that removes the last use of a node whose running is
 # observed leaves a keeper on data -- `:op/keep(x, v)` gives `v`, and `x` stays read through a data
-# edge. No program reaches that insertion on its own today -- a branch over a static condition is
-# folded before a pass sees it, and the rules that would replace the reader of a computation that
-# may fault refuse to fire -- and that is why this plan builds the shape at the graph level and not
-# from source: `test::keep_node` makes a division by zero whose only reader is replaced, and routes
-# the program's own print through what takes that reader's place.
+# edge.
+#
+# `std::opt` already writes that node today: over the three cases in opt/effects --
+# branch_keeps_outer_effect, dce_effect_under_pure_arithmetic, fold_keeps_arm_effect -- it draws two
+# keepers each, six in all (`std::opt std::gir | grep -c ':op/keep'`). What this plan adds is the
+# read either side of that count, which a running pipeline cannot give: where a keeper is due and
+# the kept node still runs (`.run`), and where none is due and none appears (`.pure`). The shape is
+# built at the graph level because a program cannot choose it: `test::keep_node` makes a division by
+# zero whose only reader is replaced and routes the program's own print through what takes that
+# reader's place.
 #
 #   keep_node_shape.reference  the program as written: `side` prints, then `2`
 #   keep_node_shape.gir        `:op/keep` is in the graph the pass returns
@@ -21,7 +26,9 @@ desc = "`:op/keep` is produced by the removal that takes the last reader of a co
 #
 # The reading with the insertion switched off, measured by hand (opt/generic/rewrite.cpp,
 # keepThroughValue returning `value` on entry): `KEEPNODE keep=0 reads_the_divisor=0`. That is the
-# red this plan turns into.
+# red this plan turns into. The counter-case has one of its own: with the "it is the node's last
+# reader" test in `lastReadsGoingOut` relaxed, `keep_shared` reads 1 and the pass dies on a keeper
+# with no reader and no place in the chain.
 
 [defaults]
 kind = "behavior"
