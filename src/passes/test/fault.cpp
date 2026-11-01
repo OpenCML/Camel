@@ -4,6 +4,7 @@
 #include "fault.h"
 
 #include "camel/passes/test/anchor.h"
+#include "../opt/generic/rewrite.h"
 #include "camel/runtime/draft_session.h"
 
 using camel::passes::test::anchorNode;
@@ -96,4 +97,59 @@ ShareBranchArmTestPass::apply(const camel::runtime::Program *program, std::ostre
                 draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, second, first);
             }
         });
+}
+
+const camel::runtime::Program *
+OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostream &) {
+    using camel::runtime::DraftEdgeKind;
+    using camel::runtime::GCNodeKind;
+    camel::runtime::RuntimeGraphDraftSession session(context_, program);
+    for (camel::runtime::GCGraph *owner : session.collectReachableRuntimeGraphs()) {
+        auto &transaction = session.edit(owner);
+        auto &draft       = transaction.edit();
+        for (camel::runtime::gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+            const auto *header = draft.header(id);
+            if (header == nullptr || header->kind != GCNodeKind::Oper) {
+                continue;
+            }
+            const auto uri = camel::passes::generic::operUriOf(transaction, id);
+            // Not an effect: the strip is about what an effect stands on. `:io/` is the family of
+            // operators whose running is observed (a print, a save); the others compute values.
+            if (!uri.starts_with(":io/")) {
+                continue;
+            }
+            // A node to hang the order edge on: the effect's own chain predecessor when it has one,
+            // its first value input otherwise. The edge is what keeps the effect in the graph (a
+            // node with no edge at all is not a graph).
+            camel::runtime::gc_node_ref_t anchor = camel::runtime::kInvalidNodeRef;
+            if (!draft.ctrlInputsOf(id).empty()) {
+                anchor = draft.ctrlInputsOf(id).front();
+            } else if (!draft.normInputsOf(id).empty()) {
+                anchor = draft.normInputsOf(id).front();
+            }
+            if (anchor == camel::runtime::kInvalidNodeRef) {
+                continue;
+            }
+            // Every edge the effect stands on goes, both directions; what is left is one order
+            // edge -- an edge that orders two nodes that both run and makes neither of them run
+            // (docs/design/effects/edges.cn.md 1.5). Nothing reads the effect, no chain holds it,
+            // no result returns it: the commit must refuse it.
+            for (camel::runtime::gc_node_ref_t pred : draft.normInputsOf(id)) {
+                draft.unlinkInput(DraftEdgeKind::Data, id, pred);
+            }
+            for (camel::runtime::gc_node_ref_t pred : draft.withInputsOf(id)) {
+                draft.unlinkInput(DraftEdgeKind::Data, id, pred, camel::runtime::PortRole::Context);
+            }
+            for (camel::runtime::gc_node_ref_t pred : draft.ctrlInputsOf(id)) {
+                draft.unlinkInput(DraftEdgeKind::Ctrl, id, pred);
+            }
+            for (camel::runtime::gc_node_ref_t pred : draft.syncInputsOf(id)) {
+                draft.unlinkInput(DraftEdgeKind::Sync, id, pred);
+            }
+            const camel::runtime::gc_node_ref_t orders[1] = {anchor};
+            draft.setOrderInputs(id, orders);
+            return session.commit();
+        }
+    }
+    return program;
 }
