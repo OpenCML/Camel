@@ -109,12 +109,14 @@ timeout_ms = 20000
 
 [[tests]]
 name = "split_branch_arms"
-desc = "The entrance to a branch's arm, pinned as the reading it is. `jvp` gives a branch's Join the lifted type (the arm the condition picks writes the pair into it), so the exit of a lifted branching body is a Join and not a tuple fill; the old answer was a bare `skip=exit`, which said neither where the pair was nor what would be needed. The refusal now names the shape, the condition (read off the Brch that names the Join: `condition=5`), and the author's rule for a branch (design 4.2): **the condition itself is a residual**, carried so the backward half picks the arm the forward half took by reading the same condition. The `WALK` lines are this step's work: the arm's **region** is entered and described -- two arms of three nodes, no form ports, and **two values read from outside the region** (`x` and the condition), which is the set a cut has to carry. What still blocks the build is the step after this one: the walk enters the arm but does not build what it finds. Two things are kept side by side rather than confused: a **number** where a number is possible (`feat.modules.autodiff`'s `control_flow_grad` differentiates through this same `if`, `a=6.0` and `b=0.5` are its two arms) and a **reading** where only a reading is possible (this case)."
+desc = "The cut at a branch, and the numbers it was promised: `leaky(x) = if x > 0.0 then x*x else 0.5*x` at x = 2.0 and x = -1.0, one call per arm -- a cut that walks only one arm is not a cut of a branch. The four readings were written down as acceptance numbers *before* the code that prints them (`docs/handover/reviews/m2-split-call-and-branch.cn.md` §6): `4.0`/`4.0` for the arm `x*x` (`2x`), `-0.5`/`0.5` for the arm `0.5*x`. The rule is the author's (design 4.2): **the condition itself is a residual** -- it is a value of the region the branch stands in, not an arm's input, so carrying it across the cut is what lets the backward half pick the arm by the same value the forward half picked it by. The cut line says what crossed: `residuals=2` is `(x, condition)` -- the condition is `bool`, hence `(float, (float, bool))` -- and `arms=2` is the two arms each half built and joined. `WALK`/`ARM` still print: the walk they describe is the one that copies each arm into its own region, and it runs whichever arm the input takes."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_branch_arms.cml"
-args = ["${case}", "std::nvm"]
-expect_exit = 1
-expect_stdout_contains = ["WALK half=backward region=1 arm=0 branch=6 members=3 ports=0 nested=0 outside=2", "WALK half=backward region=2 arm=1 branch=6 members=3 ports=0 nested=0 outside=2", "skip=branch exit=Join condition=", "the condition carried as a residual", "a half's walk enters an arm's region now but does not build the arm it finds"]
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP split function=jvp_of_leaky", "type=(float) => (float, (float, bool)) pure residuals=2 arms=2", "branch x=2.0 value=4.0", "branch x=2.0 dgdx=4.0", "branch x=-1.0 value=-0.5", "branch x=-1.0 dgdx=0.5", "WALK half=backward region=1 arm=0 branch=6 members=3 ports=0 nested=0 outside=2", "ARM half=backward arm=1 region=2 yield=15 members=2 value=10 tangent=11"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

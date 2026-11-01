@@ -16,14 +16,14 @@ timeout_ms = 20000
 
 [[tests]]
 name = "jvp_is_a_function_value.nvm"
-desc = "`reinterp<jvp>(f)` is the operator `jvp(f)`, and it produces a new function (the author's ruling a824031aa), not a rewritten graph: the call builds a graph of the transform's own and answers with a function value naming it. The lifted signature is `(float, float) => (float, float)` -- the ordinary parameter becomes a value and its tangent, and the result is the pair -- so `jvp(f)(2.0, 1.0)` passes two numbers and reads back `(value, tangent)`. Both halves are computed by the new graph: for `f(x) = x*x + 3/x` at 2 the chain gives `f(2) = 5.5`, and the forward rules along it give `f'(2) = 3.25` (2x - 3/x^2, seeded with the 1.0 the caller passed). The rules are the ruleset's: the reading says `source=ruleset` and names what it applied (`jvp_mul`, `jvp_div`, `jvp_add`), because the transform reads `stdlib/rulesets/jvp.cml`'s index at the moment it builds -- there is no second table of laws in C++. A primitive with no rule there is refused by name (`skip=rule uri=...`), never answered with 0 or 1. The type the reading prints is the one `jvpSignature` builds, and it is the same string `JvpResolver` gives the operator."
+desc = "`reinterp<jvp>(f)` is the operator `jvp(f)`, and it produces a new function (the author's ruling a824031aa), not a rewritten graph: the call builds a graph of the transform's own and answers with a function value naming it. The lifted signature is `(float, float) => (float, float)` -- the ordinary parameter becomes a value and its tangent, and the result is the pair -- so `jvp(f)(2.0, 1.0)` passes two numbers and reads back `(value, tangent)`. Both halves are computed by the new graph: for `f(x) = x*x + 3/x` at 2 the chain gives `f(2) = 5.5`, and the forward rules along it give `f'(2) = 3.25` (2x - 3/x^2, seeded with the 1.0 the caller passed). The rules are the ruleset's: the reading says `source=ruleset` and names what it applied (`jvp_mul`, `jvp_div`, `jvp_add`), because the transform reads `stdlib/rulesets/jvp.cml`'s index at the moment it builds -- there is no second table of laws in C++. A primitive with no rule there is refused by name (`skip=rule uri=...`), never answered with 0 or 1. The type the reading prints is the one `jvpSignature` builds, and it is the same string `JvpResolver` gives the operator. Beside that reading the build now says what it made, in one line: `REINTERP jvp built graph=56 nodes=12 exit=11 regions=0 function=f` -- the member the lift reserved, the nodes and regions the draft holds before it is encoded, and the node the graph exits at (the pair, or the gate over it). Those are the facts a compile-time lift has to answer without running anything, so the step that moves this build earlier can be checked by the same numbers."
 kind = "behavior"
 case = "../../../cases/compile/transforms/jvp_lifted.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_div,jvp_add", "REINTERP jvp op signature=(f: (float) => float) => (float, float) => (float, float)", "lifted=(float, float) => (float, float) pure graph=(float, float) => (float, float) pure same=yes", "5.5", "3.25"]
+expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_div,jvp_add", "REINTERP jvp op signature=(f: (float) => float) => (float, float) => (float, float)", "lifted=(float, float) => (float, float) pure graph=(float, float) => (float, float) pure same=yes", "REINTERP jvp built graph=56 nodes=12 exit=11 regions=0 function=f", "5.5", "3.25"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -371,8 +371,13 @@ timeout_ms = 20000
 # cotangent adds to it) -- 15 and 22 below. `answer=per-target` is several values, one sum each, and
 # nothing is added across values -- `read_outer` below, whose 29 is 15 through `x` and 14 through `k`.
 #
-# The three shapes are the channel's three cases and their paper numbers are 15, 22 and 29, so a case
-# that stops answering its number says so.
+# A loop that already carries two states before anything escapes -- `carried` below -- needs one
+# cotangent per state, not one, and the loop's value is then a tuple. Using it means reading a
+# component (`t.0`), which is where the second channel starts: a component read fills that slot of the
+# tuple's cotangent and leaves the rest zero, so `first` answers 1 and `second` answers 2 from the same
+# tuple, and `carried` answers 10 with its accumulators after the two states. Before that channel every
+# one of the three refused at `skip=output`, and with it every tuple-shaped value in a transposed
+# function refuses the same way -- which is what the switch flips.
 [[tests]]
 name = "transpose_loop_escape.names_the_value_one_read"
 desc = "`read_one(x) = loop s = x for i in 0..3 do 2.0*s + x` reads the parameter inside the loop body, so every round's cotangent lands on `x` and has to leave the loop. The loop carries it as a second state and answers 15 -- `s = 2s + x` three times is `8x + 7x`, the state's own cotangent 8 plus the carried sum 7 -- where before this cut it refused with `skip=state`. The reading is kept: `carried=1` in place of `skip=state`, `answer=summed` because the escaped value is the one the state starts from, `captures=1`, and the `ESCAPE` line still names the parameter port as the target and the body's `add` as the product that handed the cotangent out. A channel that dropped that line when it started working could not be compared with the refusal it replaced."
@@ -409,6 +414,45 @@ backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 0
 expect_output_contains = ["TRANSPOSE function=read_outer carried=2 node=12 origin=0 captures=2 answer=per-target", "ESCAPE target=0 from=11 kindOfFrom=11 kindOfTarget=1 typeOfTarget=float norm=[4,0,] with=[11,13,]", "ESCAPE target=1 from=10 kindOfFrom=11 kindOfTarget=11 typeOfTarget=float norm=[4,0,] with=[11,13,]", "29.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_tuple_component.reads_the_first_slot"
+desc = "`first(x) = let t = (x, 2x); t.0` returns one component of a tuple, and the pullback of 1.0 is 1: the tuple's cotangent is a value of the tuple's own shape, the read slot filled and the other zero. That zero is what the companion case checks from the other side -- a walk that zeroed where it should have filled, or filled every slot with the same cotangent, would still answer 1 here. Before this channel a component read dropped its cotangent as a read of a known value, so nothing past a tuple was differentiated and the function refused with `skip=output`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_tuple_component_first.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+expect_output_contains = ["TRANSPOSE function=first graph=", "1.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_tuple_component.reads_the_second_slot"
+desc = "`second(x) = let t = (x, 2x); t.1` is the same tuple read one slot over, and the pullback of 1.0 is 2, because the component read is `2x`. Together with the previous case it says the channel is slot by slot and not \"answer 1 whenever a tuple is read\": filling every slot with the arriving cotangent would give 3 here (1 + 2), and giving it to the first slot always would answer 1 here and 2 for `first`, so neither mistake survives the two cases together."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_tuple_component_second.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+expect_output_contains = ["TRANSPOSE function=second graph=", "2.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_loop_escape.two_states_before_the_escape"
+desc = "The shape that puts the accumulators after states that already exist: `carried(x) = let q = 2x; (loop s = x, p = x for i in 0..3 do (s + p, p + q)).0`, whose paper value is `10x` (rounds `s' = s + p`, `p' = p + q` from `s = p = x` reach `s = 10x, p = 7x`). The forward evaluator prints 10 and 7 first, then the transpose answers 10. The two states arrive with different cotangents -- 1 for `s`, the value read out of the loop, and 0 for `p`, which nothing reads directly but which feeds `s` in every round and comes back as 3 -- and the escape `q` adds those three rounds' worth, which `q = 2x` turns into 6: 1 + 3 + 6. An accumulator placed before the states, or a loop value read with the sums first, lands somewhere else, so this number is what makes the order real. Before the tuple channel this case refused at `skip=output` without ever reaching the loop."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_loop_escape_two_states.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+expect_output_contains = ["7.0", "10.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

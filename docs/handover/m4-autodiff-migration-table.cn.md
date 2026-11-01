@@ -263,7 +263,6 @@ camel test/cases/modules/autodiff/jax_vmap.cml std::nvm   # 退出码 0，打出
 | 123 | `vjp_user_a` | 不过 | 不在 `vjp` 这条路上：不 import `autodiff` 的名字（`prelude` 的 `jvp`/`vmap`） |
 | 124 | `vjp_user_b` | 不过 | 不在 `vjp` 这条路上：不 import `autodiff` 的名字（`prelude` 的 `jvp`/`vmap`） |
 | 125 | `whole_extrema_grad` | 不过 | **试点 3/5：需要新能力** — 改成 `func high(w: float)` + `grad(high)(5.0)` 后，前向走图直接拒绝函数体：`REINTERP jvp function=high skip=body`（体里用 `w` 建 `float[2, 2]` 再取 `max`）。老读数 `1.0 / 0.0 / 1.0 / 0.0` |
-| **过** | **1** | `grad_refuse_no_with`（今天分子 **1**） |
 | 126 | `whole_extrema_tie_grad` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
 | 127 | `with_grad_old_name` | 不过 | 库里没有 value_and_grad |
 ## 这一笔没做的
