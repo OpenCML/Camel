@@ -3,18 +3,15 @@ order = 364
 tier = "fast"
 tags = ["feat", "modules", "autodiff", "remat"]
 
-# `remat` names the transform that trades memory for recomputation: the same values, with the
-# section it marks recomputed in the backward pass instead of kept. JAX spells it `jax.checkpoint`,
-# whose other name is `jax.remat`; in this tree "checkpoint" is the persistence module `ckpt`
-# (stdlib/ckpt.cml), so the transform takes the other word (author's ruling of 2026-10-30,
+# `remat` names the memory-for-recomputation transform: JAX spells it `jax.checkpoint`, whose other
+# name is `jax.remat`; in this tree "checkpoint" is the persistence module `ckpt` (stdlib/ckpt.cml),
+# so the transform takes the other word (author's ruling of 2026-10-30,
 # docs/handover/reviews/questions-2026-10-30-jax.md J8).
 #
-# The transform is an identity on the value, so the numbers are the whole of what a test can pin:
-# the two paths must print the same three numbers, and no number can tell a recomputed section from
-# a carried one (docs/design/program-transforms/m6-combination-numbers.cn.md 4). What the backward
-# pass stores is a reading of the graph, not of the output; `who-owns-the-count-of-a-splits-
-# residuals` and `does-remat-change-what-split-stores` in docs/handover/questions/ are the open
-# end of it, and this plan does not assert a count it cannot read.
+# What a value reads of it is the identity, and that is the whole of what a printed number can pin:
+# the two paths must print the same three numbers. What a pass stores is a reading of the graph, not
+# of the output, so no case here asserts a count; the count is `split`'s to report and
+# `who-owns-the-count-of-a-splits-residuals` in docs/handover/questions/ is where it is argued.
 #
 # The name's arrival is also the tripwire of `modules.jax_alignment`: `remat` was pinned there as
 # a refused import, and that case flips to the value it prints when this module exports the name.
