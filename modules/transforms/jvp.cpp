@@ -433,6 +433,29 @@ bool liftGraph(
 
 } // namespace
 
+/// The build itself, for a caller that has already decided which program the lift's graphs go into:
+/// the draft group's. `program` is the program the callee graphs of a body are looked up in (the
+/// frozen graph's own for a run-time lift, nothing for one of the lift's own), and `group` is where
+/// the lifted graphs are written.
+JvpGraph buildJvpGraphInGroup(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    camel::runtime::GraphDraftGroup &group, const GraphRead &function, std::string_view name,
+    camel::runtime::GraphId self, std::ostream &os) {
+    const GraphId member = group.reserve(
+        "jvp_of_" + std::string(name), "jvp_of_" + std::string(name));
+    LiftState state{context, program, group};
+    JvpGraph refusal;
+    if (!liftGraph(state, function, name, self, member, os, refusal)) {
+        return refusal;
+    }
+    // The count the "one graph per callee" rule is read from: the callee graphs this lift made, in
+    // the order they were first called. A function called twice is one entry.
+    os << "REINTERP jvp callees=" << state.callees.size() << '\n';
+    group.encode();
+    const camel::runtime::GCGraph *made = group.encoded(member);
+    return JvpGraph{group.program(), const_cast<camel::runtime::GCGraph *>(made)};
+}
+
 /// The same build for a caller that holds a frozen graph: the face is made here and lives for the
 /// call. The name and the identity are the caller's because they are the two facts a draft does
 /// not have (it is named and numbered when it is encoded).
@@ -463,19 +486,27 @@ JvpGraph buildJvpGraph(
     // wants `df/dx` and `df/dy` separately runs it twice with (1, 0) and (0, 1).
 
     camel::runtime::GraphDraftGroup group(context, program);
-    const GraphId member = group.reserve(
-        "jvp_of_" + std::string(name), "jvp_of_" + std::string(name));
-    LiftState state{context, program, group};
-    JvpGraph refusal;
-    if (!liftGraph(state, function, name, self, member, os, refusal)) {
-        return refusal;
+    return buildJvpGraphInGroup(context, program, group, function, name, self, os);
+}
+JvpGraph buildJvpGraphOfItsOwn(
+    const camel::core::context::context_ptr_t &context, const GraphRead &function,
+    std::string_view name, camel::runtime::GraphId self, std::ostream &os) {
+    if (context == nullptr) {
+        return JvpGraph{};
     }
-    // The count the "one graph per callee" rule is read from: the callee graphs this lift made, in
-    // the order they were first called. A function called twice is one entry.
-    os << "REINTERP jvp callees=" << state.callees.size() << '\n';
-    group.encode();
-    const camel::runtime::GCGraph *made = group.encoded(member);
-    return JvpGraph{group.program(), const_cast<camel::runtime::GCGraph *>(made)};
+    FunctionType *signature = jvpSignature(function.funcType());
+    if (signature == nullptr) {
+        os << "REINTERP jvp function=" << name << " skip=signature\n";
+        return JvpGraph{};
+    }
+    // The program the lift's own graphs go into: an empty program of the context's, reserved here
+    // and kept by the context for as long as the value that names it lives. The graph the lift
+    // reads is a draft of the caller's, so there is no program of its to extend; the graph the
+    // caller's body calls is a graph of its own, the way the run-time kernel makes one, and this is
+    // the same build writing into it.
+    camel::runtime::Program *base = context->reserveProgram();
+    camel::runtime::GraphDraftGroup group(context, base);
+    return buildJvpGraphInGroup(context, base, group, function, name, self, os);
 }
 
 namespace {

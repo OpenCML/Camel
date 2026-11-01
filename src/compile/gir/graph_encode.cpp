@@ -115,6 +115,12 @@ camel::runtime::GCFillKind classifyFillKind(Type *type) {
     }
 }
 
+/// A graph a compile graph's static area names has to be a graph of the program it is encoded in,
+/// except for a value a value-level transform answered while the graph was built: that graph is in
+/// the transform's own program (StaticProgramFunction, compile/gir/static_function.h), already
+/// encoded there, and the call goes through the value's program rather than this program's table --
+/// which is why validateRuntimeGraphCalls asks the value's program before it asks the table
+/// (src/runtime/graph.cpp).
 void collectCompileStaticGraphRefsRecursive(
     std::vector<graph_ptr_t> &refs, slot_t slot, Type *type,
     std::unordered_set<const Object *> &visited) {
@@ -129,6 +135,14 @@ void collectCompileStaticGraphRefsRecursive(
 
     switch (type->code()) {
     case TypeCode::Function: {
+        // A value of a compile graph refers to that graph, which this program encodes (and which
+        // is thereby a graph this program holds). A value of another program's graph is not
+        // encoded here -- it was encoded in the program the transform built it in, before this
+        // program ran -- and it is not a reference of this program either: the value names the
+        // program that holds it, and that is where a call enters (StaticProgramFunction).
+        if (!isStaticFunction(object)) {
+            break;
+        }
         auto *func = fromSlot<StaticFunction *>(slot);
         if (func && func->graph() && std::ranges::find(refs, func->graph()) == refs.end()) {
             refs.push_back(func->graph());
@@ -192,7 +206,8 @@ void collectCompileStaticGraphRefsRecursive(
 }
 
 /// The graphs a compile graph refers to statically: its declared static refs plus the graphs of
-/// Function values held in its static slots. Sizing and emission must agree on this list.
+/// Function values held in its static slots -- the ones that are graphs of this program. Sizing and
+/// emission must agree on this list.
 std::vector<graph_ptr_t> staticGraphRefsOf(const graph_ptr_t &source) {
     std::vector<graph_ptr_t> refs = source->staticGraphRefs();
     std::unordered_set<const Object *> visited;
@@ -225,83 +240,6 @@ struct PreparedGraph {
 /// draft, not "every node of it".
 std::optional<std::span<const draft_node_ref_t>> liveNodesOf(const PreparedGraph &prepared) {
     return std::span<const draft_node_ref_t>{prepared.liveNodes};
-}
-
-/// The nodes the graph of `transaction` reaches from its roots: the caller hands over the owner, not
-/// the graph, so a reader borrows the draft through it and this file names no storage type.
-std::vector<draft_node_ref_t> collectLiveDraftNodes(const runtime::GraphTransaction &transaction) {
-    const auto &draft = transaction.graph();
-    std::unordered_set<draft_node_ref_t> visited;
-    std::vector<draft_node_ref_t> worklist;
-    auto pushRoot = [&](draft_node_ref_t ref) {
-        if (ref != runtime::kInvalidNodeRef && visited.insert(ref).second) {
-            worklist.push_back(ref);
-        }
-    };
-
-    pushRoot(draft.entryNode());
-    pushRoot(draft.exitNode());
-    pushRoot(draft.outputNode());
-    pushRoot(draft.returnNode());
-    for (draft_node_ref_t ref : draft.normPorts()) {
-        pushRoot(ref);
-    }
-    for (draft_node_ref_t ref : draft.withPorts()) {
-        pushRoot(ref);
-    }
-    for (draft_node_ref_t ref : draft.closureNodes()) {
-        pushRoot(ref);
-    }
-
-    while (!worklist.empty()) {
-        const draft_node_ref_t current = worklist.back();
-        worklist.pop_back();
-        for (draft_node_ref_t input : draft.normInputsOf(current)) {
-            pushRoot(input);
-        }
-        for (draft_node_ref_t input : draft.withInputsOf(current)) {
-            pushRoot(input);
-        }
-        for (draft_node_ref_t input : draft.ctrlInputsOf(current)) {
-            pushRoot(input);
-        }
-        // A sync edge carries "used" (docs/design/effects/edges.cn.md 1.5): the statement
-        // written before this one in the same `sync` block is live exactly as a data input is.
-        for (draft_node_ref_t input : draft.syncInputsOf(current)) {
-            pushRoot(input);
-        }
-        const runtime::DraftNodeHeader *header = draft.header(current);
-        if (header == nullptr) {
-            continue;
-        }
-        if (header->kind == GCNodeKind::Loop) {
-            // The ports of its regions are part of it, whether the code reads them or not.
-            for (auto part : {runtime::GCRegionKind::LoopCond, runtime::GCRegionKind::LoopBody}) {
-                if (const uint32_t region = draft.loopRegionOf(current, part); region != 0) {
-                    for (draft_node_ref_t port : draft.regionPortsOf(region)) {
-                        pushRoot(port);
-                    }
-                }
-            }
-        }
-        if (header->kind == GCNodeKind::Brch) {
-            const auto *payload =
-                reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(current).data());
-            if (payload != nullptr) {
-                pushRoot(payload->join);
-            }
-        } else if (header->kind == GCNodeKind::Join) {
-            const auto *payload =
-                reinterpret_cast<const GCJoinBody *>(draft.payloadOf(current).data());
-            if (payload != nullptr) {
-                pushRoot(payload->brch);
-            }
-        }
-    }
-
-    std::vector<draft_node_ref_t> live(visited.begin(), visited.end());
-    std::sort(live.begin(), live.end());
-    return live;
 }
 
 class EncodeSession {
@@ -471,7 +409,7 @@ class EncodeSession {
         // The runtime graph is the part of the draft that its roots reach; the draft keeps the
         // rest (a rewrite need not have erased a node nothing reads) and the graph does not name
         // it.
-        prepared.liveNodes = collectLiveDraftNodes(graph->transaction());
+        prepared.liveNodes = liveDraftNodes(graph->transaction());
         CAMEL_LOG_INFO_S(
             "GIREncode",
             "Prepare compile graph '{}' reachable nodes={}.",
@@ -522,7 +460,9 @@ class EncodeSession {
                 staticGraphPtrs,
                 ruleGraphPtrs,
                 // A graph compiled from the IR is not lifted from another: the lift is a runtime
-                // operator's own build (draft.cpp passes the list), so nothing to reserve here.
+                // operator's own build (draft.cpp passes the list), and the compile-time one lifts
+                // into a program of its own (modules/transforms/jvp_instantiate.cpp), so nothing
+                // to reserve here.
                 {},
                 prepared.payloadShape,
                 prepared.staticSlots,
@@ -577,6 +517,23 @@ class EncodeSession {
 
         switch (type->code()) {
         case TypeCode::Function: {
+            if (isStaticProgramFunction(object)) {
+                // A function value whose graph is not a compile graph of this program: the
+                // transform built it in a program of its own and encoded it there, so the value
+                // names that program and the graph in it -- exactly what a run-time lift answers,
+                // and what keeps the graph alive (the manager roots a reserved program only until
+                // it settles; this value is what reaches it afterwards). A reference table entry
+                // would name a graph of *this* program, so there is none: the call enters the
+                // value's own program (src/runtime/graph.cpp, validateRuntimeGraphCalls).
+                auto *programFunc = static_cast<StaticProgramFunction *>(object);
+                auto *runtimeFunc = ::Function::create(
+                    programFunc->program(),
+                    programFunc->graphId(),
+                    programFunc->tupleType(),
+                    camel::core::mm::autoSpace());
+                objectCache.emplace(object, runtimeFunc);
+                return toSlot<Object *>(runtimeFunc);
+            }
             auto *funcObj = fromSlot<StaticFunction *>(slot);
             GUARD(funcObj != nullptr, "Compile static function slot payload is null.");
             auto *runtimeFunc = ::Function::create(

@@ -1511,12 +1511,19 @@ declarations show, because the result of a call is the exit type its resolver gi
 #### `vjp`
 
 ```camel
-vjp: (f: (x: T) => float) => (x: T) => (float, (ct: float) => T)
+vjp: (f: (x: T) => float) => (x: T) => (float, (ct: float) => (T,))
 ```
 
 The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
-`(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters. The juxtaposed call
-`transpose(residuals, ct)` is the internal step, not this signature.
+`(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters, `ct`'s own weight one
+member per parameter. The juxtaposed call `transpose(residuals, ct)` is the internal step, not this
+signature.
+
+The pullback answers a tuple in every case, one member per parameter, so a function of one
+parameter has a one-long one -- `(27.0)` for `vjp(cube)(3.0)`'s pullback at `ct = 1.0` -- and the
+number a gradient is comes out of it by position: `grad(f)(x)` is `vjp(f)(x).1(1.0).0` (author's
+ruling of 2026-11-01 14:30: one rule for every arity, no exception for one parameter, no type
+function that takes an element out of a one-long tuple).
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example (a fragment, not compiled): `let reading = vjp(f)`
@@ -1541,9 +1548,11 @@ The same transform for a function of two parameters: `vjp(f)(x, y)` is `(value, 
 grad: (f: (x: float) => float) => (x: float) => float
 ```
 
-The gradient of a function of one parameter: `vjp` with the seed 1, its second half taken --
-`grad(f)(x)` is `vjp(f)(x).1(1.0)` (author's ruling of 2026-11-01). Read `grad(f)` as a name for
-that reading of `vjp`, not as a second transform.
+The gradient of a function of one parameter: `vjp` with the seed 1, its second half taken, and the
+one member a one-parameter pullback answers read out by position --
+`grad(f)(x)` is `vjp(f)(x).1(1.0).0` (author's ruling of 2026-11-01 14:30, the 06:50 formula with
+the `.0` added: the pullback always answers a tuple). Read `grad(f)` as a name for that reading of
+`vjp`, not as a second transform.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example (a fragment, not compiled): `let slope = grad(f)`

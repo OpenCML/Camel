@@ -50,7 +50,9 @@ void forEachReachableGraph(
                 continue;
             }
             auto *funcObj = camel::core::rtdata::fromSlot<StaticFunction *>(staticSlots[i]);
-            if (funcObj && funcObj->graph()) {
+            // A value of a transform's own graph names no graph of this program (see
+            // StaticProgramFunction): it is not reachable from here.
+            if (funcObj && isStaticFunction(funcObj) && funcObj->graph()) {
                 visit(funcObj->graph());
             }
         }

@@ -1,0 +1,10 @@
+// A null test on a value whose type is never null (design principles 3.8): `x` is an `int`, so
+// `x == null` has a fixed answer, and the report says which one instead of leaving the writer to
+// work out that the branch behind it is dead. The program still runs -- it is a warning, and the
+// value is not evaluated -- so the test also pins that the fixed answer is used.
+
+func main(): int sync {
+    let x: int = 5
+    if x == null then println('never') else println('always')
+    return 0
+}

@@ -12,6 +12,8 @@
 
 #include "camel/compile/gir/static_function.h"
 
+#include "camel/core/type/composite/tuple.h"
+
 namespace camel::compile::gir {
 
 using camel::core::rtdata::isOfSameCls;
@@ -106,6 +108,70 @@ void StaticFunction::updateRefs(
             .slotName  = "closure",
             .slotIndex = camel::core::rtdata::RefTraceInfo::npos,
         }));
+}
+
+StaticProgramFunction *StaticProgramFunction::create(
+    const camel::runtime::Program *program, camel::runtime::GraphId graph,
+    const type::FunctionType *type, camel::core::mm::IAllocator &allocator) {
+    GUARD(program != nullptr, "A program function value needs the program its graph is in.");
+    GUARD(
+        camel::runtime::isValid(graph), "A program function value needs the graph it names.");
+    GUARD(type != nullptr, "A program function value needs the type of the value.");
+    void *mem = allocator.alloc(sizeof(StaticProgramFunction), alignof(StaticProgramFunction));
+    if (!mem) {
+        throw std::bad_alloc();
+    }
+    return new (mem) StaticProgramFunction(program, graph, type);
+}
+
+const type::TupleType *StaticProgramFunction::tupleType() const { return type::TupleType::create(); }
+
+bool StaticProgramFunction::equals(
+    const camel::core::rtdata::Object *other, const type::Type *type, bool deep) const {
+    (void)deep;
+    if (this == other) {
+        return true;
+    }
+    if (!isOfSameCls(this, other)) {
+        return false;
+    }
+    const auto *otherFunction = reinterpret_cast<const StaticProgramFunction *>(other);
+    // Two values of one graph are one value: the graph is what the value is of, and a program
+    // never holds two graphs under one id. The type is interned, so it is compared as one.
+    (void)type;
+    return program_ == otherFunction->program_ && graph_ == otherFunction->graph_ &&
+           type_ == otherFunction->type_;
+}
+
+camel::core::rtdata::Object *StaticProgramFunction::clone(
+    camel::core::mm::IAllocator &allocator, const type::Type *type,
+    bool deep) const {
+    (void)type;
+    (void)deep;
+    return reinterpret_cast<camel::core::rtdata::Object *>(
+        create(program_, graph_, type_, allocator));
+}
+
+void StaticProgramFunction::print(std::ostream &os, const type::Type *type) const {
+    (void)type;
+    os << "StaticProgramFunction(graph=" << camel::runtime::toValue(graph_) << ")";
+}
+
+void StaticProgramFunction::updateRefs(
+    const camel::core::rtdata::Object::RefRelocator &relocate, const type::Type *type) {
+    // The program and the graph are not heap objects this value owns: the program is the
+    // context's (the transform asked for it and kept it) and the graph is its member. Nothing to
+    // relocate.
+    (void)relocate;
+    (void)type;
+}
+
+bool isStaticFunction(const camel::core::rtdata::Object *object) {
+    return object != nullptr && typeid(*object) == typeid(StaticFunction);
+}
+
+bool isStaticProgramFunction(const camel::core::rtdata::Object *object) {
+    return object != nullptr && typeid(*object) == typeid(StaticProgramFunction);
 }
 
 } // namespace camel::compile::gir
