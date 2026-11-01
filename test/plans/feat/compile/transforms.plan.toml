@@ -275,3 +275,16 @@ expect_exit = 0
 expect_stdout_contains = ["TRANSPOSE function=pick graph=", "type=(float, float) => float nodes=9 arms=2 rules=mul_t", "TRANSPOSE function=merged graph=", "nodes=12 arms=2 rules=add_t,mul_t", "2.0", "3.0", "7.0", "4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "transpose_runs_a_loop_rounds_backwards.nvm"
+desc = "`transpose` of a loop whose body only uses constants: the rounds run in the other direction, and a constant multiplier is the same multiplier whatever order it arrives in, so a loop of the same number of rounds with each rule replaced by its transpose is the pullback. The round count is the loop's own -- the two bounds of the interval are copied with the loop, and nothing in the case says three -- which the four-round loop in the same file settles: it answers 16 where the three-round one answers 8. For `thrice(x) = loop s = x for i in 0..3 do s * 2.0` the value at x = 1 is 2*2*2 = 8 and the pullback of 1.0 is 8 too; a pullback is linear in its cotangent, so 2.0 at x = 1 pulls back to 16, and that is the same graph read twice. A body that needed the round's own state would be refused by name (`skip=state` with the origin), never answered with a cotangent from nowhere."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_loop.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["TRANSPOSE function=thrice graph=", "type=(float, float) => float", "nodes=11 arms=0 rules=mul_t", "TRANSPOSE function=quad graph=", "8.0", "16.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
