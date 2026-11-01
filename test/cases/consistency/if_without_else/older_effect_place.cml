@@ -3,9 +3,8 @@
  * a call whose body has an effect, written in an expression of a later statement, is ordered after
  * the statements written before it (docs/design/effects/edges.cn.md 4.6, 5.7).
  *
- * Minimal form of `if_without_else.statement`: with `std::nvm` this prints `before / older / 1 1 /
- * after`; through `std::opt` it printed `older / before / ...`, so the effect ran first. The scale
- * is what makes it useful -- two statements, one branch, one backend.
+ * Minimal form of `if_without_else.statement`: both `std::nvm` and `std::opt` print `before /
+ * older / 1 1 / after`. The scale is what makes it useful -- two statements, one branch.
  */
 
 func older(c: bool): int sync {
