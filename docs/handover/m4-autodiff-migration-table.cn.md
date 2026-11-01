@@ -30,6 +30,16 @@
 判法：把 5 条真的按库的写法改一遍、跑一遍，改不动或跑不过的记下走图/声明面拒绝它的那一档；
 用例文件一条都没改（`git diff test/cases/modules/autodiff/` 为空），老读数在各行里作对照。
 
+**声明面这一笔已落下（设计 6.1 的前一半）**：`stdlib/vjp.cml` 的 `vjp`（一元、二元）与 `grad` 现在泛型于参数类型
+`T`/`U`——`grad(f: (x: T) => float): (x: T) => T`，数组、张量、`f32` 的函数都能走到库里，不再因为"库只声明
+float"被挡在重载外。两条数组试点的报错因此从
+`No matching function found for argument types: <> ((xs: float[]) => float pure)`
+变成
+`error[SemanticDiag::ArgumentsRejected]: Invalid call to 'jvp' with argument types <> ((x: float[]) => float): 'jvp' takes a function whose every parameter is a 'float' and whose result is a 'float'`
+（带 `note: in the instance 'vjp<float[]>' of the generic function 'vjp' with T = float[]`）。
+**后一半没通**：`jvp` 只收 `float` 参数，判定在 `modules/transforms/jvp_operator.cpp:115`，本轮不许碰。
+所以数组类现在是"声明面已通、走图未通"，不是"编过、卡在 `skip=`"——差的那一步在前向走图。
+
 | 试点用例 | 类 | 结论 | 卡在哪一档 |
 | --- | --- | --- | --- |
 | `collapse` | `with` | 需要新能力 | `REINTERP split … skip=forward construct=a tangent port`（体里有函数调用） |
@@ -71,8 +81,8 @@
 | 1 | `adjoint_cast_array` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
 | 2 | `adjoint_concat_array` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
 | 3 | `adjoint_reshape_array` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
-| 4 | `array_slice_grad` | 不过 | **试点 4/5：需要库补** — `with <xs: float[]>` 改成 `func subscript(xs: float[]): float` + `grad(subscript)(xs)` 是纯拼写（编得过），但库只声明 `grad(f: (x: float) => float)`：`error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> ((xs: float[]) => float pure)`。要的是 `Vjp<F>` 泛型声明（设计 6.1）。老读数 `[0.0, 2.0, 3.0, 0.0, 0.0]` / `[0.0, 0.0, 5.0, 3.0, 2.0]` / `nonzero=115.0` |
-| 5 | `array_take_grad` | 不过 | **试点 5/5：需要库补** — 同 `array_slice_grad`：`func repeated(xs: float[]): float` + `grad(repeated)(xs)` 是纯拼写，卡在同一处 `No matching function found for argument types: <> ((xs: float[]) => float pure)`（库只声明 `(x: float) => float`）。要 `Vjp<F>` 泛型（设计 6.1）。老读数 `[7.0, 0.0, 3.0, 0.0, 0.0]` / `[0.0, 3.0, 0.0, 0.0, 2.0]` / `nonzero=136.0` |
+| 4 | `array_slice_grad` | 不过 | **试点 4/5：需要库补 → 声明面已通（本轮），走图未通** — `with <xs: float[]>` 改成 `func subscript(xs: float[]): float` + `grad(subscript)(xs)` 是纯拼写；`grad` 现在是 `grad::<T>(f: (x: T) => float): (x: T) => T`，所以重载匹配过了，卡在库里 `jvp` 那一行：`error[SemanticDiag::ArgumentsRejected]: Invalid call to 'jvp' with argument types <> ((x: float[]) => float): 'jvp' takes a function whose every parameter is a 'float' …`，`note: in the instance 'vjp<float[]>' of the generic function 'vjp' with T = float[]`（`modules/transforms/jvp_operator.cpp:115`）。老读数 `[0.0, 2.0, 3.0, 0.0, 0.0]` / `[0.0, 0.0, 5.0, 3.0, 2.0]` / `nonzero=115.0` |
+| 5 | `array_take_grad` | 不过 | **试点 5/5：需要库补 → 声明面已通（本轮），走图未通** — 同 `array_slice_grad`：`func repeated(xs: float[]): float` + `grad(repeated)(xs)` 是纯拼写，报错已从 `No matching function … ((xs: float[]) => float pure)` 变成 `ArgumentsRejected`，卡在库里 `jvp` 那一行（`vjp<float[]>` 实例）。老读数 `[7.0, 0.0, 3.0, 0.0, 0.0]` / `[0.0, 3.0, 0.0, 0.0, 2.0]` / `nonzero=136.0` |
 | 6 | `collapse` | 不过 | **试点 1/5：需要新能力** — `with <x: float>` 改成参数是纯拼写，`func h(x: float)` + `grad(h)(2.0)` 编得过（老读数 `collapse dh=22.0`，改写后同一输入应仍是 22.0）；但函数体里调了 `sq`，`split` 拒绝：`REINTERP split function=jvp_of_h skip=forward construct=a tangent port uri=- why=the value half reads the tangent of parameter 0, which the forward half does not take` |
 | 7 | `collapse_random` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
 | 8 | `collapse_runtime` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |

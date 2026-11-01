@@ -212,9 +212,9 @@ remat: (f: F) => F when is_function::<F>()
 **`vjp`** — import { ... } from vjp — 4 name(s)
 
 ```text
-vjp: (f: (x: float) => float) => (x: float) => (float, (ct: float) => float)
-vjp: (f: (x: float, y: float) => float) => (x: float, y: float) => (float, (ct: float) => (float, float))
-grad: (f: (x: float) => float) => (x: float) => float
+vjp: (f: (x: T) => float) => (x: T) => (float, (ct: float) => T)
+vjp: (f: (x: T, y: U) => float) => (x: T, y: U) => (float, (ct: float) => (T, U))
+grad: (f: (x: T) => float) => (x: T) => T
 with_grad: (f: F) => F when is_function::<F>()
 ```
 
