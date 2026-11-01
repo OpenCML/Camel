@@ -302,6 +302,30 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "vmap_whole_extrema_keep_the_batch_axis_and_agree_with_row_by_row_map"
+desc = "`max(xs)` and `min(xs)` over every element, batched: no axis of the operator's to move one place in, so the rule keeps the batch axis in front and folds away each axis the row had after it -- and IEEE 754-2019 maximum/minimum carry an element and are exactly associative and commutative (design principles 7.7), so the folded answer is the row's own extremum. The rows `[1, 2, 3]`, `[4, 5, 6]`, `[-1, 0, 1]` answer maxima `3`, `6`, `1` and minima `1`, `4`, `-1`; a row of signed zeros answers `0.0` for the maximum and `-0.0` for the minimum (-0 is below +0); a row holding a NaN answers `nan` for both; and a row of two axes keeps folding until the batch axis is the only one left, so a plane answers its own maximum. The readings name the rule and the element its instance was made at: `asked=1 found=1 missing=0 rules=vmap_rule_max elements=float`, the same for `min`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_whole_extrema.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_max elements=float", "asked=1 found=1 missing=0 rules=vmap_rule_min elements=float", "[3.0, 6.0, 1.0]", "[1.0, 4.0, -1.0]", "[0.0, 0.0]", "[-0.0, -0.0]", "[nan, nan]", "[6.0, 7.0]"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
+assert(values.length === 10, `printed ${values.length} values: ${JSON.stringify(values)}`)
+for (const pair of [[0, 1], [2, 3], [8, 9]]) {
+    assert(values[pair[0]] === values[pair[1]], `pair: batched ${values[pair[0]]} vs row by row ${values[pair[1]]}`)
+}
+const nanLines = values.filter(line => line === '[nan, nan]')
+assert(nanLines.length === 2, `NaN rows printed ${nanLines.length} times: ${JSON.stringify(values)}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "vmap_transform_refuses_a_call_by_name"
 desc = "A call in the body, answered rather than walked past: `g` calls `f`, and a batched graph has no body for `f` unless the family holds a rule filed under it, so `vmap(g)` stops at that call -- `construct=a call`, `uri=f`, and the count `asked=1 found=0 missing=1`. The ask is the point: the transform builds the key a call already has (the callee's name and its argument count), asks `rulesets.vmap`, and reports the hole. `asked=0` is what this used to print and it was the wrong answer -- 'the walk never got here' is not 'the family has nothing for this call'. The row-by-row writing prints `[3.0, 5.0, 7.0]` first and keeps working, which is the answer the batched writing does not have."
 kind = "behavior"
@@ -324,3 +348,32 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::RuleRightUsesOuterVariable"
 expect_diagnostic_code = "0x03000207"
 expect_stdout_contains = ["probe_rule_mul"]
+# The whole-tensor argmax and argmin, batched: their answer is the row-major position over the row,
+# and no fold of axis positions produces it, so the rule reads the batch as one line instead --
+# `reshape<[shape(xs)[0], -1]>(xs)` puts a row's elements on its last axis and the reduction along
+# that axis counts them. Each batched answer is printed beside the row-by-row array.vmap of the same
+# function and the plan compares the pairs, because what this pins is that the two writings agree.
+[[tests]]
+name = "vmap_whole_argmax_reads_each_row_as_one_line"
+desc = "The whole-tensor argmax and argmin batched: the rule is a reshape of the batch to `[rows, -1]` and a reduction of its last axis, which is one row's elements -- no fold at all, because folding a row's axes answers a position per axis (`argmax` of a `float[2, 3]` row is 5, not `[1, 2]`). The rows `[1, 2, 3]`, `[4, 9, 6]`, `[7, 8, 5]` answer `[2, 1, 1]` for the maximum and `[0, 0, 2]` for the minimum, a row of two axes is counted as one line too (`[1, 0]` for `[[1, 5], [3, 2]]` and `[9, 1]`), and every batched line equals the row-by-row `array.vmap` printed beside it. Readings: `asked=1 found=1 missing=0 rules=vmap_rule_argmax elements=float`, the same for `argmin`. This entry was a refusal (`asked=1 found=0 missing=1`) while the operator had no key."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_whole_argmax.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_argmax elements=float", "asked=1 found=1 missing=0 rules=vmap_rule_argmin elements=float", "[2, 1, 1]", "[0, 0, 2]", "[1, 0]"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
+assert(values.length === 6, `printed ${values.length} values: ${JSON.stringify(values)}`)
+for (let i = 0; i < 3; i += 1) {
+    assert(values[2 * i] === values[2 * i + 1], `pair ${i}: batched ${values[2 * i]} vs row by row ${values[2 * i + 1]}`)
+}
+assert(values[0] === '[2, 1, 1]', `the maxima are ${values[0]}`)
+assert(values[2] === '[0, 0, 2]', `the minima are ${values[2]}`)
+assert(values[4] === '[1, 0]', `the two-axis row answered ${values[4]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

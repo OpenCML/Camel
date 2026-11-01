@@ -208,7 +208,7 @@ transpose: (f: F) => Transpose<F> when is_function::<F>()
 vmap: (f: F) => Vmap<F> when is_function::<F>()
 ```
 
-**`tensor`** — import { ... } from tensor — 61 name(s)
+**`tensor`** — import { ... } from tensor — 70 name(s)
 
 ```text
 zeros: (shape: int[]) => T[..] when is_numeric::<T>()
@@ -241,19 +241,28 @@ numel: (t: T[..]) => int when is_numeric::<T>()
 dim: <axis: int> (t: T[..]) => int when is_numeric::<T>()
 dim: <axis: i32> (t: T[..]) => int when is_numeric::<T>()
 sum: (t: T[..]) => T
-sum: (t: float[..], axis: int, keepdims?: bool) => float[..]
+sum: (t: T[..], axis: int, keepdims?: bool) => T[..]
 mean: (t: T[..]) => T
-mean: (t: float[..], axis: int, keepdims?: bool) => float[..]
-max: (t: float[..], axis: int, keepdims?: bool) => float[..]
-min: (t: float[..], axis: int, keepdims?: bool) => float[..]
+mean: (t: T[..], axis: int, keepdims?: bool) => T[..]
+max: (t: T[..]) => T
+min: (t: T[..]) => T
+argmax: (t: T[..]) => int
+argmin: (t: T[..]) => int
+max: (t: T[..], axis: int, keepdims?: bool) => T[..]
+min: (t: T[..], axis: int, keepdims?: bool) => T[..]
 argmax: (t: float[..], axis: int, keepdims?: bool) => int64[..]
 argmin: (t: float[..], axis: int, keepdims?: bool) => int64[..]
 softmax: (t: f32[..], axis?: int) => f32[..]
+softmax: (t: float[..], axis?: int) => float[..]
 log_softmax: (t: f32[..], axis?: int) => f32[..]
+log_softmax: (t: float[..], axis?: int) => float[..]
 softmax_grad: (y: f32[..], dy: f32[..], axis?: int) => f32[..]
+softmax_grad: (y: float[..], dy: float[..], axis?: int) => float[..]
 layer_norm: (x: f32[..], gamma: f32[..], beta: f32[..], eps?: number) => f32[..]
+layer_norm: (x: float[..], gamma: float[..], beta: float[..], eps?: number) => float[..]
 matmul: (lhs: float[..], rhs: float[..]) => float[..]
 linear: (x: f32[..], weight: f32[..], bias?: f32[..]) => f32[..]
+linear: (x: float[..], weight: float[..], bias?: float[..]) => float[..]
 zeros_like: (t: float[..]) => float[..]
 ones_like: (t: float[..]) => float[..]
 load_npy: (path: string) => T[..]
@@ -748,7 +757,7 @@ update: (opt: Sgd, params: P, grads: G, state: SgdState) => (P, SgdState)
 update: (opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)
 ```
 
-**`autodiff`** — import { ... } from autodiff — 15 name(s)
+**`autodiff`** — import { ... } from autodiff — 16 name(s)
 
 ```text
 grad: (f: F) => Gradient<F> when is_function::<F>()
@@ -756,6 +765,7 @@ grad: (f: F, has_aux: bool) => GradientAndAux<F> when is_function::<F>()
 with_grad: (f: F) => ValueAndGradient<F> when is_function::<F>()
 with_grad: (f: F, has_aux: bool) => ValueAndGradientAndAux<F> when is_function::<F>()
 stop_gradient: (x: T) => T pure
+remat: (f: F) => F pure when is_function::<F>()
 add_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 sub_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 mul_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
@@ -780,7 +790,7 @@ div_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
 div_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
 ```
 
-**`rulesets.vmap`** — import { ... } from rulesets.vmap — 17 name(s)
+**`rulesets.vmap`** — import { ... } from rulesets.vmap — 21 name(s)
 
 ```text
 lift: (x: T) => Lift<T>
@@ -800,6 +810,10 @@ vmap_argmax_axis: (xs: T[..], axis: int[], keepdims: bool[]) => int[..]
 vmap_argmin_axis: (xs: T[..], axis: int[], keepdims: bool[]) => int[..]
 vmap_sum: (xs: T[..]) => T[..] when is_numeric::<T>()
 vmap_mean: (xs: T[..]) => T[..] when is_float::<T>()
+vmap_max: (xs: T[..]) => T[..] when is_numeric::<T>()
+vmap_min: (xs: T[..]) => T[..] when is_numeric::<T>()
+vmap_argmax: (xs: T[..]) => int[..] when is_numeric::<T>()
+vmap_argmin: (xs: T[..]) => int[..] when is_numeric::<T>()
 ```
 
 **`sim`** — import { ... } from sim — 2 name(s)

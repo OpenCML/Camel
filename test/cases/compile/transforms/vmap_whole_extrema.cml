@@ -1,0 +1,57 @@
+/**
+ * `max(xs)` and `min(xs)` over every element, batched: as with `sum`, there is no axis of the
+ * operator's to move one place in, so the rule keeps the batch axis in front and folds away each
+ * axis the row had after it. IEEE 754-2019 maximum/minimum carry an element and are exactly
+ * associative and commutative (design principles 7.7), so no accumulator is chosen and the fold in
+ * any order reads the same bits: the batched answer is the row's own extremum.
+ *
+ * Three rows `[1, 2, 3]`, `[4, 5, 6]`, `[-1, 0, 1]` answer maxima `3`, `6`, `1` and minima `1`, `4`,
+ * `-1`; a row of signed zeros answers `0.0` for `max` and `-0.0` for `min` (-0 is below +0); a row
+ * holding a NaN answers `nan` for both, as the whole-tensor form does; and a row of two axes keeps
+ * folding until the batch axis is the only one left, so a plane answers its own maximum.
+ *
+ * Each batched result is printed beside the row-by-row `array.vmap` of the same function and the
+ * plan compares the pairs rather than a written golden, because what this pins is that the two
+ * writings are one computation. The reading lines add the rule's name and the element the rule's
+ * instance was made at: `asked=1 found=1 missing=0 rules=vmap_rule_max elements=float`.
+ */
+import rulesets.vmap
+import { vmap as row_vmap } from array
+import { max, min } from tensor
+import { vmap } from transforms
+
+func row_max(x: float[3]): float {
+    return max(x)
+}
+
+func row_min(x: float[3]): float {
+    return min(x)
+}
+
+// A row of two axes: the fold keeps going until the batch axis is the only one left.
+func plane_max(x: float[2, 3]): float {
+    return max(x)
+}
+
+func main(): int sync {
+    let xs: float[3, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [-1.0, 0.0, 1.0]]
+    println(vmap(row_max)(xs))
+    println(row_vmap(row_max)(xs))
+    println(vmap(row_min)(xs))
+    println(row_vmap(row_min)(xs))
+
+    let signed: float[2, 3] = [[-0.0, 0.0, -0.0], [0.0, -0.0, 0.0]]
+    println(vmap(row_max)(signed))
+    println(vmap(row_min)(signed))
+
+    let grid: float[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+    let zeros: float[2, 3] = [[1.0, 0.0, 1.0], [1.0, 1.0, 0.0]]
+    let holes: float[2, 3] = grid * (zeros / zeros + 1.0)
+    println(vmap(row_max)(holes))
+    println(vmap(row_min)(holes))
+
+    let planes: float[2, 2, 3] = [[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], [[-3.0, -2.0, -1.0], [0.0, 7.0, -7.0]]]
+    println(vmap(plane_max)(planes))
+    println(row_vmap(plane_max)(planes))
+    return 0
+}

@@ -6,7 +6,8 @@
 //   node scripts/stdlib-reference.mjs --write       regenerate docs/stdlib-reference.md
 //   node scripts/stdlib-reference.mjs --verify-doc  docs/stdlib-reference.md is what --write would produce
 //   node scripts/stdlib-reference.mjs --verify-ops  the signature files list exactly the operators the
-//                                                   modules register (needs a built compiler)
+//                                                   modules register, with the result type each
+//                                                   operator gives back (needs a built compiler)
 //   node scripts/stdlib-reference.mjs --verify-docs every name has a description and an @example, and
 //                                                   every example compiles (needs a built compiler)
 //   node scripts/stdlib-reference.mjs --audit [--compile]
@@ -1164,7 +1165,8 @@ function splitArguments(text) {
 function declaredParams(entry) {
     return entry.norm
         .map((text) => {
-            const match = text.match(/^(\w+)\s*\??\s*:\s*(.+)$/)
+            // A pack writes its dots before the name (`...rest: T`); the dots are not part of it.
+            const match = text.match(/^(?:\.{2,3})?(\w+)\s*\??\s*:\s*(.+)$/)
             return match ? { text, name: match[1], type: match[2].trim() } : null
         })
         .filter(Boolean)
@@ -1687,10 +1689,503 @@ function namesOfDeclaration(entry) {
     return { with: withNames, norm: normNames }
 }
 
+// ---- the result type, on both sides ----------------------------------------------------------
+//
+// A declaration states the type its call has, and the operator states its own in the signature it
+// registers: `inspect --ops` prints that signature, and the text after its last `=>` is the
+// operator's result (`resultDoc` for a kernel of `tensor`/`nn`, what the resolver computes for a
+// module whose rules are C++). Comparing only names, arity, parameter names and purity left the
+// result free to be a lie: `one_hot` was declared `int64[..]` while its kernel, its inference and
+// every test returned `float32` rows, and nothing read the two statements against each other.
+//
+// The comparison is on the type, not on the spelling. The authority for which spellings name one
+// type is the compiler's own table (`initInnerTypes`, src/compile/gct/builder.cpp): `int` and
+// `i64` are Int64, `float` and `f64` are Float64, and `f32`, `i32`, `bf16`, `f16`, `c64`, `c128`,
+// `bool`, `string`, `Bytes`, `void` and `never` are their own. Two types are the same only when
+// their codes are, so `f32[..]` and `float[..]` stay two types here (design principles 5.1: no
+// value converts between them), while `int64[..]`, `i64[..]` and `int[..]` are one. A name this
+// table does not hold is not read at all: a type variable (`T[..]`), a module's named type
+// (`Gradient<F>`, `Device<f32>`) and an aggregate the C++ side names in prose (`Tensor`,
+// `NumericAggregate`) are reported as not compared, never as a difference.
+
+// A result written as one of these names is read; every other name makes the entry unreadable.
+// The middle column is the type the compiler holds for that spelling. The spellings are the
+// program's own names (src/compile/gct/builder.cpp, `initInnerTypes`), the explicit names of the
+// same types (`i64` for Int64, which the declaration files write as `int64`; `float64` for
+// Float64), and the names the tensor module writes an element type with (`dtypeName`,
+// modules/tensor/dtype.cpp: `float32`, `float64`, `bfloat16`, `float16`, `int32`, `int64`) --
+// those are what a kernel's own `resultDoc` says, so a claim of `float32[..]` and a declaration of
+// `f32[..]` are the same type here.
+const RESULT_SCALARS = new Map([
+    ['int', 'int'],
+    ['i64', 'int'],
+    ['int64', 'int'],
+    ['float', 'float'],
+    ['f64', 'float'],
+    ['float64', 'float'],
+    ['f32', 'f32'],
+    ['float32', 'f32'],
+    ['i32', 'i32'],
+    ['int32', 'i32'],
+    ['bf16', 'bf16'],
+    ['bfloat16', 'bf16'],
+    ['f16', 'f16'],
+    ['float16', 'f16'],
+    ['c64', 'c64'],
+    ['c128', 'c128'],
+    ['bool', 'bool'],
+    ['string', 'string'],
+    ['Bytes', 'Bytes'],
+    ['void', 'void'],
+    ['never', 'never'],
+])
+
+// The element types a bare `float` claim stands for: a result whose element type follows an
+// argument is one of them (a tensor's elements are never bf16/f16 in a kernel that takes the
+// argument's dtype, but the set is the float family the word names).
+const FLOAT_ELEMENTS = new Set(['float', 'f32', 'bf16', 'f16'])
+
+// How many names an exception list shows in one line before it counts the rest.
+const EXCEPTIONS_SHOWN = 12
+
+// The type a signature states, with the conditions a declaration may add after it removed: a
+// `when ...` or `uses ...` clause is about the operator, not about its result.
+function withoutConditions(text) {
+    const source = (text || '').trim()
+    let depth = 0
+    for (let i = 0; i < source.length; i++) {
+        const c = source[i]
+        if (c === '=' && source[i + 1] === '>') {
+            i++
+            continue
+        }
+        if ('([{<'.includes(c)) depth++
+        else if (')]}>'.includes(c)) depth--
+        else if (depth === 0 && /\s/.test(c) && /^(?:when|uses)\b/.test(source.slice(i + 1))) {
+            return source.slice(0, i).trimEnd()
+        }
+    }
+    return source
+}
+
+// The commas of `text` that are not inside a group, or null when the text does not balance.
+function splitTopLevel(text, separator = ',') {
+    const parts = []
+    let at = 0
+    let depth = 0
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i]
+        if (c === '=' && text[i + 1] === '>') {
+            i++
+            continue
+        }
+        if ('([{<'.includes(c)) depth++
+        else if (')]}>'.includes(c)) {
+            if (--depth < 0) return null
+        } else if (c === separator && depth === 0) {
+            parts.push(text.slice(at, i))
+            at = i + 1
+        }
+    }
+    if (depth !== 0) return null
+    parts.push(text.slice(at))
+    return parts
+}
+
+// The index of the `[` that opens a result's dimension list, or -1 when none does. The `[` of the
+// list is read before the group-opening branch: it is the suffix this looks for, not a group.
+function dimensionIndex(text) {
+    let depth = 0
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i]
+        if (c === '[') {
+            if (depth === 0) return i
+            depth++
+        } else if ('({<'.includes(c)) depth++
+        else if (')}>]'.includes(c)) depth--
+    }
+    return -1
+}
+
+// What a dimension list says, in the form the two sides are compared in: `[..]` is any number of
+// dimensions, `[?]` is one of unknown extent (`[]` is that list too), and `[n, m]` keeps the
+// extents it writes. null when the text is not a dimension list.
+function dimensionsOf(text) {
+    if (text === '') return ''
+    if (!text.startsWith('[') || partnerBracket(text, 0) !== text.length - 1) return null
+    const inner = text.slice(1, -1).trim()
+    if (inner === '') return '[?]'
+    const parts = splitTopLevel(inner)
+    if (parts === null) return null
+    const written = parts.map((part) => {
+        const one = part.trim()
+        if (/^\.\.[A-Za-z_]\w*$/.test(one)) return '..'
+        if (one === '?') return '?'
+        return one.replace(/\s+/g, '')
+    })
+    if (written.length > 0 && written.every((one) => one === '..')) return '[..]'
+    return `[${written.join(', ')}]`
+}
+
+// The result as a type the two sides can be compared on: `{text, opaque}`, or null when the text
+// is not a result type at all. `opaque` marks a name only the module can read (a type variable, a
+// named type, an aggregate), which makes the two sides incomparable rather than different.
+// A tuple writes its parts in parentheses and may carry a dimension list of its own
+// (`(f32[..], f32[..])[]`), and a pack may be written with a trailing comma
+// (`(..ElementOf<A>,)`), which is the same tuple.
+function canonicalResult(text) {
+    const source = withoutConditions(text)
+    if (source === '') return null
+    if (source.startsWith('(')) {
+        const close = partnerBracket(source, 0)
+        if (close < 0) return null
+        const dimensions = dimensionsOf(source.slice(close + 1).trim())
+        if (dimensions === null) return null
+        const parts = splitTopLevel(source.slice(1, close))
+        if (parts === null) return null
+        const kept = parts.filter((part, i) => !(i === parts.length - 1 && part.trim() === ''))
+        if (kept.length === 0) return { text: `()${dimensions || ''}`, opaque: true, family: false }
+        const inner = kept.map((part) => canonicalResult(part))
+        if (inner.some((one) => one === null)) return null
+        return {
+            text: `(${inner.map((one) => one.text).join(', ')})${dimensions || ''}`,
+            opaque: inner.some((one) => one.opaque),
+            family: false,
+        }
+    }
+    const at = dimensionIndex(source)
+    const base = (at < 0 ? source : source.slice(0, at)).trim()
+    const dimensions = dimensionsOf(at < 0 ? '' : source.slice(at).trim())
+    if (dimensions === null || base === '') return null
+    const known = RESULT_SCALARS.get(base)
+    if (known === undefined) {
+        // A name the compiler's table does not hold: one module's own type (a type variable, a
+        // named type) or a sentence (`the tensor's element type`). A suffix is kept so that two
+        // spellings of the same variable still agree.
+        return { text: `${base}${dimensions}`, opaque: true, family: false }
+    }
+    // `float` alone is the word the tensor module writes where an operator gives back a tensor of
+    // its argument's element type: `softmax`, `layer_norm`, `linear` and `softmax_grad` return
+    // `dtypeOf<T>()` of the input (modules/tensor/kernels/reduce.cpp) and their `resultDoc` says
+    // `float[..]`, while an operator that returns f64 says `float64[..]` (`from_bytes_f64`,
+    // `to_bytes_f64`). So a bare `float` in a claim is the element family, not one element type.
+    return { text: `${known}${dimensions}`, opaque: false, family: base === 'float' }
+}
+
+// The result an operator claims: the text after the last `=>` of the signature it registers.
+function claimedResult(signature) {
+    const arrow = resultArrow(signature || '')
+    return arrow < 0 ? '' : signature.slice(arrow + 2)
+}
+
+// What a registered parameter says it takes (`modules/tensor/ops/op_def.cpp`, `kindText`). These
+// are not types but sets of them, and `float[..]` in one is the operator's spelling for "a tensor",
+// not for f64: the kind is what the argument reader takes, and a tensor of any element type is one
+// it takes. A signature a resolver builds instead writes real types; those are compared as types.
+const KIND_SETS = new Map([
+    ['Tensor', ['tensor']],
+    ['float[..] | number[]', ['tensor', 'array']],
+    ['float[..] | number', ['tensor', 'number']],
+    ['float[..] | number[] | number', ['tensor', 'array', 'number']],
+    ['int', ['int']],
+    ['number', ['number']],
+    ['bool', ['bool']],
+    ['string', ['string']],
+    ['Bytes', ['Bytes']],
+    ['int[]', ['array']],
+])
+
+// Whether a kind takes everything a need asks for: an `int` is a `number`. A kind that takes a
+// tensor does not take an array, and the other way round, and `f32` is not `float`.
+function kindCovers(kind, need) {
+    if (kind === need) return true
+    return kind === 'number' && ['int', 'i32', 'f32', 'float'].includes(need)
+}
+
+// A type variable: `A` in `bf16(x: A)` binds whatever the caller passes, so it takes everything.
+const TYPE_VARIABLE = /^[A-Z]$/
+
+// The exceptions this check carries, class by class, as data rather than prose: every stop is
+// classified, these are the classes and their counts, and the run compares itself with them. A stop
+// that matches no class fails ("an exception with no label"), a class that is not in this table
+// fails, and a count that moved fails with the number the run found -- so the only way past is to
+// name the class and update the number here, in a commit that says why the list grew or shrank.
+const EXCEPTIONS = {
+    // The operator's own result text is a shape no type variable holds: a function type, a tuple, a
+    // record, a `gradient of W0`, a generic application (`Device<T>`), a named aggregate (`Tensor`),
+    // a bare type variable, or no result text at all; and the two cases where the rule reads and the
+    // declaration is the side that does not (`T[..]` from `from_bytes` and `load_npy`, `Jvp<F>` from
+    // the transforms).
+    result: {
+        'rule states no result': 1,
+        'rule states a function type': 2,
+        'rule states a tuple': 6,
+        'rule states a record': 1,
+        'rule states a gradient-of result': 1,
+        'rule states a generic application': 1,
+        'rule states a named type': 14,
+        'rule states a type variable': 1,
+        'declaration states a type variable': 12,
+        'declaration states a generic application': 2,
+    },
+    // The same question one position to the left: a parameter the operator writes as a function
+    // type, a `grad of P`, a named aggregate (`NumericAggregate`, `Device<T>`), an untyped pack; a
+    // declaration that writes a bare `T`; and two parameter lists that are not a list at all or not
+    // the same length.
+    parameter: {
+        'rule states no parameter list': 1,
+        'declared arity differs from rule arity': 4,
+        'untyped pack ..rest': 6,
+        'function-typed parameter': 9,
+        'grad of P': 2,
+        'named-type parameter': 5,
+        'bare type variable parameter': 7,
+    },
+}
+
+// Compare what the run found with what EXCEPTIONS records. Returns the problems, so the caller can
+// exit non-zero: a bounded list is only kept bounded if something counts it.
+function exceptionProblems(found) {
+    const problems = []
+    for (const half of ['result', 'parameter']) {
+        const { byLabel, unlabelled } = found[half]
+        const recorded = EXCEPTIONS[half]
+        for (const one of unlabelled) {
+            problems.push(`an exception with no label: ${one.name} (${one.uri}): ${one.detail}`)
+        }
+        for (const label of Object.keys(byLabel).sort()) {
+            if (recorded[label] === undefined) {
+                problems.push(
+                    `the exception class '${label}' is not in EXCEPTIONS.${half}: ${byLabel[label]} overload(s) carry it, ` +
+                        'and a new class is a new promise to keep -- add it with its count and say why',
+                )
+            } else if (recorded[label] !== byLabel[label]) {
+                problems.push(
+                    `EXCEPTIONS.${half}['${label}'] records ${recorded[label]}, and the run found ${byLabel[label]}: ` +
+                        'update the number in the same commit and say why the class moved',
+                )
+            }
+        }
+        for (const label of Object.keys(recorded)) {
+            if (byLabel[label] === undefined) {
+                problems.push(
+                    `EXCEPTIONS.${half}['${label}'] records ${recorded[label]}, and the run found none: ` +
+                        'the class is gone, so remove it and say why',
+                )
+            }
+        }
+    }
+    return problems
+}
+
+// The class a result the checker cannot read belongs to, or null when it belongs to none of them.
+// The rule's side is read first: it is the operator that decides what it gives back; when it reads,
+// the declaration that does not is the side the class names.
+function resultStopClass(claimedType, claimed, promised) {
+    if ((claimedType || '').trim() === '') return 'rule states no result'
+    if (claimed === null || claimed.opaque) {
+        const shape = classifyOpaque(claimedType)
+        return shape === null ? null : `rule states ${shape}`
+    }
+    for (const one of promised) {
+        if (one.declared !== null && !one.declared.opaque) continue
+        const shape = classifyOpaque(one.declaredText)
+        return shape === null ? null : `declaration states ${shape}`
+    }
+    return null
+}
+
+// What a piece of text that is not a type this checker reads looks like, as a phrase: 'a function
+// type', 'a tuple', 'a record', 'a gradient-of result', 'a generic application', 'a type variable'
+// or 'a named type'. A type variable is a single capital letter (`T`, `A`), which is how the
+// declarations and the registered signatures spell it; a longer capitalised word is a named type
+// (`Tensor`, `NumericAggregate`, `DeviceAggregate`). null when the text has no shape this checker
+// has a class for -- that exception is unlabelled, and the run refuses it.
+function classifyOpaque(text) {
+    const source = (text || '').trim()
+    if (source.includes('=>')) return 'a function type'
+    if (source.startsWith('(')) return 'a tuple'
+    if (source.startsWith('{')) return 'a record'
+    if (/\bof\b/.test(source)) return 'a gradient-of result'
+    if (/^[A-Z]\w*</.test(source)) return 'a generic application'
+    if (/^[A-Z](\[.*\])?$/.test(source)) return 'a type variable'
+    if (/^[A-Z]\w*/.test(source)) return 'a named type'
+    return null
+}
+
+// Whether the two sides write the same type. A named type (`Json`, `Graph`, `Map<K, V>`) is opaque
+// to this checker, so the texts are all it has; the same text on both sides is the comparison.
+function sameTypeText(declared, operator) {
+    const mine = canonicalResult(declared)
+    const theirs = canonicalResult(operator)
+    return mine !== null && theirs !== null && mine.text === theirs.text
+}
+
+// How one position stands: 'fit' when the operator takes what the declaration promises, 'mismatch'
+// when both sides are read and it does not, 'unreadable' when one side is a type this checker has
+// no reading for and the two do not even spell it the same way.
+function paramVerdict(declared, operator) {
+    const accepted = operatorAccepts(operator)
+    if (accepted !== undefined && accepted.any === true) return 'fit'
+    if (typeof declared === 'string' && sameTypeText(declared, operator)) return 'fit'
+    const needs = declaredNeeds(declared)
+    if (accepted === undefined || needs === null) return 'unreadable'
+    return needs.every((need) => accepted.kinds.some((kind) => kindCovers(kind, need))) ? 'fit' : 'mismatch'
+}
+
+// The classes a parameter that is not a type this checker reads can belong to, by the shape
+// classifyOpaque names. The same shape is the same class on either side: a function-typed parameter
+// is one whether the operator or the declaration writes it.
+const PARAMETER_SHAPES = new Map([
+    ['a function type', 'function-typed parameter'],
+    ['a tuple', 'tuple-typed parameter'],
+    ['a record', 'record-typed parameter'],
+    ['a gradient-of result', 'grad of P'],
+    ['a generic application', 'named-type parameter'],
+    ['a type variable', 'bare type variable parameter'],
+    ['a named type', 'named-type parameter'],
+])
+
+// The class a parameter the checker cannot compare belongs to, or null when it belongs to none.
+// `declared` and `operator` are the two texts at the position that stopped it, `stop` says which
+// part of the parameter list was unreadable: 'no-list' (no parameter list at all), 'pack' (a pack
+// written without a type), 'arity' or 'position'.
+function parameterStopClass(stop, declared, operator) {
+    if (stop === 'no-list') return 'rule states no parameter list'
+    if (stop === 'pack') return 'untyped pack ..rest'
+    if (stop === 'arity') return 'declared arity differs from rule arity'
+    const shape = classifyOpaque(operator) || classifyOpaque(declared)
+    return shape === null ? null : PARAMETER_SHAPES.get(shape) || null
+}
+
+// What an operator's parameter text accepts, as `{ kinds: [...] }` or `{ any: true }`, or undefined
+// when the text is neither a kind, a union of them, one scalar type nor a tensor.
+function operatorAccepts(text) {
+    const source = (text || '').trim()
+    const direct = KIND_SETS.get(source)
+    if (direct !== undefined) return { kinds: direct }
+    const parts = splitTopLevel(source, '|')
+    if (parts !== null && parts.length > 1) {
+        const kinds = []
+        for (const part of parts) {
+            const one = operatorAccepts(part)
+            if (one === undefined) return undefined
+            if (one.any === true) return { any: true }
+            for (const kind of one.kinds) if (!kinds.includes(kind)) kinds.push(kind)
+        }
+        return { kinds }
+    }
+    if (TYPE_VARIABLE.test(source)) return { any: true }
+    const at = dimensionIndex(source)
+    if (at >= 0) {
+        const base = source.slice(0, at).trim()
+        if (TYPE_VARIABLE.test(base) || RESULT_SCALARS.get(base) !== undefined) {
+            // `[]` is a rank-one array and every other suffix a tensor, the same reading the
+            // declaration side takes.
+            return { kinds: [source.slice(at).trim() === '[]' ? 'array' : 'tensor'] }
+        }
+        return undefined
+    }
+    const scalar = RESULT_SCALARS.get(source)
+    if (scalar !== undefined) return { kinds: [scalar] }
+    return undefined
+}
+
+// What a declaration requires of one position, as the set it names: 'tensor', 'array', 'int',
+// 'i32', 'f32', 'float', 'bf16', 'f16', 'c64', 'c128', 'bool', 'string', 'Bytes' or 'number'. null
+// when the text is not a type this checker reads -- a bare type variable (`F`), a module's own type
+// (`OptimizerState`, `Device<f32[..]>`), a function type (`(a: float) => float`) or a tuple.
+function declaredNeed(text) {
+    const source = (text || '').trim()
+    if (source === '') return null
+    // A function type, a tuple or a record: nothing a parameter kind names.
+    if (source.startsWith('(') || source.startsWith('{')) return null
+    if (source === 'Tensor') return 'tensor'
+    const at = dimensionIndex(source)
+    if (at < 0) {
+        if (source === 'number') return 'number'
+        const known = RESULT_SCALARS.get(source)
+        if (known === undefined) return null
+        // `void` and `never` are not values a parameter takes.
+        if (known === 'void' || known === 'never') return null
+        return known
+    }
+    // The bracket suffix decides the arrangement: `[]` is the rank-one array a kind writes as
+    // `int[]` (the element type a declaration names there is narrower than what the kind says, so
+    // it is not compared), and every other suffix -- `[..]`, `[?]`, `[n]`, `[n, m]` -- is a
+    // tensor, including a type variable applied to dimensions.
+    if (source.slice(at).trim() === '[]') return 'array'
+    return dimensionsOf(source.slice(at).trim()) === null ? null : 'tensor'
+}
+
+// Every set a declared parameter names, or null when one of them is a type this checker does not
+// read. A union names several alternatives and every one of them has to be taken.
+function declaredNeeds(text) {
+    const parts = splitTopLevel((text || '').trim(), '|')
+    if (parts === null) return null
+    const needs = []
+    for (const part of parts) {
+        const one = part.trim()
+        if (one === '') return null
+        const need = declaredNeed(one)
+        if (need === null) return null
+        if (!needs.includes(need)) needs.push(need)
+    }
+    return needs.length === 0 ? null : needs
+}
+
+// The parameter types a registered signature states, in order, or null when its text cannot be read
+// as a list of `name: type` positions.
+function signatureParams(signature) {
+    let text = (signature || '').trim()
+    // A signature may open with its const type parameters (`<count: int> (x: T) => T`, or
+    // `::<T>(bytes: Bytes, shape: int[]) => T[..]`); they are not positions of the call, and the
+    // declaration states them as `::<count: int>`.
+    if (text.startsWith('::')) text = text.slice(2).trim()
+    if (text.startsWith('<')) {
+        const close = partnerBracket(text, 0)
+        if (close < 0) return null
+        text = text.slice(close + 1).trim()
+    }
+    if (!text.startsWith('(')) return null
+    const close = partnerBracket(text, 0)
+    if (close < 0) return null
+    const inner = text.slice(1, close).trim()
+    if (inner === '') return []
+    const parts = splitTopLevel(inner)
+    if (parts === null) return null
+    const types = []
+    for (const part of parts) {
+        const named = /^(?:\.{2,3})?(\w+)\s*\??\s*:\s*(.+)$/.exec(part.trim())
+        if (named !== null) {
+            types.push(named[2].trim())
+            continue
+        }
+        // A position with no name is just its type (`(c128) => string`); a pack with no type
+        // (`..rest`) has none to compare, and the overload is listed instead.
+        const bare = part.trim()
+        if (bare === '' || /^\.{2,3}/.test(bare)) return null
+        types.push(bare)
+    }
+    return types
+}
+
 function verifyOps() {
     const registered = registeredOperators()
     const problems = []
+    // The overloads whose result type the two sides state in a form this checker cannot compare:
+    // a bounded list, printed by the caller, never a silent skip.
+    const unchecked = []
     let checked = 0
+    // The overloads whose result type the two sides state in a form this comparison reads and
+    // finds equal. A run that compared no result type at all promises nothing, so it is refused
+    // the way a run that reached no operator is.
+    let resultsCompared = 0
+    // The same two counts for the parameters: what the operator says it takes, position by
+    // position, against what the declaration says, and the overloads whose parameter types are
+    // stated in a form neither side can be read from.
+    let paramsCompared = 0
+    const paramsUnchecked = []
     for (const module of MODULES.filter((m) => m.kind === 'cpp' || m.native)) {
         const registeredName = module.registered || module.name
         const file = path.relative(REPO_ROOT, sourceOf(module)).replace(/\\/g, '/')
@@ -1795,14 +2290,79 @@ function verifyOps() {
             // comparison is per position, so a name that several declarations share type by type
             // is compared against every rule that answers to it.
             //
-            // The types are not compared the same way. A declaration of one name may differ from
-            // the registered rule in type (that is what an overload is: `len` is declared for
-            // `string`, `T[..]`, `Map<K, V>` and `Set<T>`, and one rule of `len` writes
-            // `Map<K, V> | Set<T>`), and the two sides spell the same type in different words
-            // (`i32` for `int`, `(a: float, b: float) => float` for `(...) => NumericAggregate`,
-            // `P` for `grad of P`): comparing them item by item reports one difference per
-            // overload and per alias, which is what it did when it was tried (408 differences,
-            // still 15 when only names with one declaration and one rule were compared).
+            // The parameter types are compared the way a kind is compared with a type, not the way
+            // two types are. A declaration of one name differs from the registered rule in type
+            // (that is what an overload is: `len` is declared for `string`, `T[..]`, `Map<K, V>`
+            // and `Set<T>`, and one rule of `len` writes `Map<K, V> | Set<T>`), and the two sides
+            // spell the types in different words (`i32` for `int`): comparing them as equal texts
+            // reports one difference per overload and per alias, which is what it did when it was
+            // tried (408 differences). What the two sides do say is comparable, though, because
+            // the operator's side is a set of kinds (`Tensor` is any tensor) and the declaration's
+            // is one type: the declaration may narrow a kind, but it may not promise a value the
+            // operator does not take, because that is a reader sent to a call the operator refuses.
+            // A kind this table does not hold, a parameter text that is not `name: type`, and a
+            // declared type that is a bare variable or a module's own type are all "not compared":
+            // counted and named, the same bounded list the result half has.
+            const ruleParams = signatureParams(op.signature)
+            const promisedParams = []
+            for (const entry of matching) {
+                const params = declaredParams(entry)
+                const key = params.map((one) => one.type).join('\u0001')
+                if (promisedParams.some((other) => other.key === key)) continue
+                const verdicts =
+                    ruleParams === null || params.length !== ruleParams.length
+                        ? null
+                        : params.map((one, i) => paramVerdict(one.type, ruleParams[i]))
+                promisedParams.push({ entry, params, verdicts, key })
+            }
+            const fits = (one) => one.verdicts !== null && one.verdicts.every((verdict) => verdict === 'fit')
+            const readableParams = (one) => one.verdicts !== null && one.verdicts.every((verdict) => verdict !== 'unreadable')
+            if (promisedParams.length > 0 && promisedParams.some(fits)) {
+                // One of the name's declarations stating what this operator takes is what the
+                // promise is for this operator, the same rule the result half follows: a name
+                // declared once per type it accepts has several declarations and several rules.
+                paramsCompared++
+            } else if (promisedParams.some(readableParams)) {
+                // Both sides of these are read and no declaration fits: the first position one
+                // promises more than the operator takes is the difference.
+                for (const one of promisedParams.filter(readableParams)) {
+                    const at = one.verdicts.findIndex((verdict) => verdict === 'mismatch')
+                    problems.push(
+                        `${one.entry.file}:${one.entry.line}: '${one.entry.name}' declares parameter ${at + 1} ` +
+                            `\`${one.params[at].type}\`, and ${op.uri} takes \`${ruleParams[at]}\`: ${op.signature}`,
+                    )
+                }
+            } else {
+                // One side or the other is not readable as a type, so the overload is named with the
+                // piece that stopped the comparison, and that piece classifies the stop.
+                const first = promisedParams[0]
+                let stop = 'no-list'
+                let detail = `the registered signature \`${op.signature}\` is not a list of \`name: type\` positions`
+                let at = -1
+                if (ruleParams === null && /\([^)]*\.\./.test(op.signature)) {
+                    stop = 'pack'
+                    detail = `the registered signature \`${op.signature}\` writes a pack without a type`
+                } else if (ruleParams !== null && promisedParams.some((one) => one.verdicts === null)) {
+                    stop = 'arity'
+                    detail = `the declaration states ${first.params.length} parameter(s) and the operator ${ruleParams.length}`
+                } else if (ruleParams !== null) {
+                    at = first.verdicts.findIndex((verdict) => verdict === 'unreadable')
+                    stop = 'position'
+                    detail =
+                        operatorAccepts(ruleParams[at]) === undefined
+                            ? `parameter ${at + 1}: the operator takes \`${ruleParams[at]}\`, which is not a type this checker reads`
+                            : `parameter ${at + 1}: the declaration takes \`${first.params[at].type}\`, which is not a type this checker reads`
+                }
+                // The stop is classified from the two texts at the position that stopped it, and the
+                // result half still runs: one half stopping says nothing about the other.
+                paramsUnchecked.push({
+                    name: op.name,
+                    uri: op.uri,
+                    stop,
+                    label: parameterStopClass(stop, at >= 0 ? first.params[at].type : '', at >= 0 ? ruleParams[at] : ''),
+                    detail,
+                })
+            }
             const ruleNames = registeredNames(op.signature)
             if (ruleNames !== null) {
                 for (const entry of matching) {
@@ -1820,6 +2380,69 @@ function verifyOps() {
                             )
                         }
                     }
+                }
+            }
+            // The result type, the one part of the signature nothing compared: a declaration is
+            // the reference's promise of what a call gives back, and the operator's own signature
+            // is what it actually gives back. A promise the two do not share is reported here.
+            //
+            // A name may be declared several times for the types it accepts, and each of those
+            // declarations is a promise about the rules it answers: one of them stating this
+            // operator's result is the name's result for this rule, so a declaration is compared
+            // only when none of them agrees.
+            const claimedText = claimedResult(op.signature)
+            // A `uses ...` or `when ...` clause after the result is about the operator, not about
+            // its type, the same reading the declaration's side takes.
+            const claimedType = withoutConditions(claimedText)
+            const claimed = canonicalResult(claimedType)
+            const promised = []
+            for (const entry of matching) {
+                const declaredText = withoutConditions(entry.result)
+                const key = `${entry.name}\u0000${declaredText}`
+                if (promised.some((one) => one.key === key)) continue
+                promised.push({ entry, declaredText, declared: canonicalResult(entry.result), key })
+            }
+            const agreed =
+                claimed !== null && promised.some((one) => one.declared !== null && one.declared.text === claimed.text)
+            // A claim the module writes as the element family (`float[..]`) does not say which
+            // element type the result has, so a declaration that writes one of that family is not
+            // a difference: the operator takes the element type from its argument and the
+            // declaration is the one instance it supports. It is not agreement either -- the
+            // element type is unchecked there -- so it is listed, with what the two sides say.
+            const followsArgument =
+                claimed !== null &&
+                claimed.family &&
+                promised.some((one) => one.declared !== null && FLOAT_ELEMENTS.has(one.declared.text.replace(/\[.*$/, '')))
+            const readable =
+                claimed !== null && !claimed.opaque && promised.every((one) => one.declared !== null && !one.declared.opaque)
+            // A claim this checker cannot read but the declaration writes in the same words is the
+            // same promise: the text is all either side has (`Json[]?` is opaque to the reader and
+            // identical on both sides here).
+            const spelledAlike =
+                claimed === null &&
+                promised.some((one) => one.declaredText.replace(/\s+/g, '') === claimedType.replace(/\s+/g, ''))
+            if (agreed || spelledAlike) {
+                resultsCompared++
+            } else if (readable && !followsArgument) {
+                for (const one of promised) {
+                    problems.push(
+                        `${one.entry.file}:${one.entry.line}: '${one.entry.name}' declares the result \`${one.declaredText}\`, ` +
+                            `and ${op.uri} registers \`${claimedText}\`: ${op.signature}`,
+                    )
+                }
+            } else {
+                const label = readable
+                    ? 'declaration-names-an-element-the-rule-takes-from-its-argument'
+                    : resultStopClass(claimedType, claimed, promised)
+                for (const one of promised) {
+                    unchecked.push({
+                        name: one.entry.name,
+                        uri: op.uri,
+                        declared: one.declaredText,
+                        claimed: claimedText.trim(),
+                        label,
+                        detail: `declares \`${one.declaredText}\`, the operator says \`${claimedText.trim()}\``,
+                    })
                 }
             }
             // One operator is declared once per type it accepts (unions are retired), and the
@@ -1882,7 +2505,29 @@ function verifyOps() {
             previous = entry.name
         }
     }
-    return { problems, checked }
+    // The exceptions, counted the way EXCEPTIONS records them: by class, with the ones that carry no
+    // class kept apart so the run can refuse them by name.
+    const tally = (list) => {
+        const byLabel = {}
+        const unlabelled = []
+        for (const one of list) {
+            if (typeof one.label !== 'string' || one.label === '') {
+                unlabelled.push(one)
+                continue
+            }
+            byLabel[one.label] = (byLabel[one.label] || 0) + 1
+        }
+        return { byLabel, unlabelled, total: list.length }
+    }
+    return {
+        problems,
+        checked,
+        unchecked,
+        resultsCompared,
+        paramsCompared,
+        paramsUnchecked,
+        found: { result: tally(unchecked), parameter: tally(paramsUnchecked) },
+    }
 }
 
 // ---- main -----------------------------------------------------------------------------------
@@ -2054,19 +2699,83 @@ if (mode === '--write' || mode === '--verify-doc') {
             `${fragments} marked fragment(s) not compiled`,
     )
 } else if (mode === '--verify-ops') {
-    const { problems, checked } = verifyOps()
+    const { problems, checked, unchecked, resultsCompared, paramsCompared, paramsUnchecked, found } = verifyOps()
     for (const problem of problems) console.log(problem)
+    // The overloads whose types could not be read on one side or the other: a bounded exception,
+    // named, classified and never a silent skip. A name that leaves a list (its type became
+    // readable) and a name that joins it both show in the run's output, and a failure adds what the
+    // two sides said.
+    const announce = (what, why, list, classes, detail) => {
+        if (list.length === 0) return
+        const names = list.map((one) => one.name).filter((name, i, all) => all.indexOf(name) === i)
+        // One list length, so how many names are shown and how many are counted as left over cannot
+        // drift apart.
+        const shown = names.slice(0, EXCEPTIONS_SHOWN)
+        const more = names.length > shown.length ? `, and ${names.length - shown.length} more` : ''
+        console.log(`the declared ${what} was not compared for ${names.length} operator(s) -- ${why}: ${shown.join(', ')}${more}`)
+        // The classes, counted the way EXCEPTIONS records them, then the same bounded detail as the
+        // names, so a reader of a green run still knows which piece is not read and why.
+        for (const label of Object.keys(classes.byLabel).sort()) {
+            console.log(`    ${label}: ${classes.byLabel[label]}`)
+        }
+        for (const one of list.slice(0, EXCEPTIONS_SHOWN)) console.log(`    ${detail(one)}`)
+    }
+    announce(
+        'result type',
+        'a type variable, a named type or a sentence on one side, or an element type the operator takes from its argument',
+        unchecked,
+        found.result,
+        (one) => `${one.name} (${one.uri}): ${one.detail}`,
+    )
+    announce(
+        'parameter types',
+        'a parameter that is a function type, a module\'s own type, a nameless pack or a bare type variable on one side',
+        paramsUnchecked,
+        found.parameter,
+        (one) => `${one.name} (${one.uri}): ${one.detail}`,
+    )
+    // The list is data: the run counts its own exceptions by class and compares them with the
+    // numbers in EXCEPTIONS. A stop with no class, a class the table does not hold, or a class that
+    // moved fails here, so the list cannot grow or shrink without someone writing the class down.
+    const mismatched = exceptionProblems(found)
+    for (const problem of mismatched) console.log(problem)
     if (problems.length > 0) {
         console.log(`${problems.length} difference(s) between the declarations and the registered operators`)
         process.exit(1)
     }
+    if (mismatched.length > 0) {
+        console.log(`${mismatched.length} exception class(es) the run found and EXCEPTIONS does not record`)
+        process.exit(1)
+    }
+    // What the run compared its own lists with, so a reader of a green run sees the totals the table
+    // pins as well as the counts it printed above.
+    const recorded = (half) => {
+        const counts = Object.values(EXCEPTIONS[half])
+        return `${counts.reduce((sum, one) => sum + one, 0)} in ${counts.length} class(es)`
+    }
+    console.log(
+        `the exception lists are the ones EXCEPTIONS records: result ${recorded('result')}, parameter ${recorded('parameter')}`,
+    )
     // A run that reached no operator compared nothing: the probe imported nothing the reference
     // lists, or MODULES is empty. It has to say that, not report agreement.
     if (checked === 0) {
         console.log('verified 0 registered operator overloads: the declarations were compared with nothing')
         process.exit(1)
     }
+    // The same for each half of the signature that compares types: a run that read no result type
+    // or no parameter type at all has compared no promise and must not report agreement either.
+    if (resultsCompared === 0 || paramsCompared === 0) {
+        console.log(
+            `compared the declared result type of ${resultsCompared} and the declared parameter types of ${paramsCompared} ` +
+                'of the registered operators: no signature states types this checker can read',
+        )
+        process.exit(1)
+    }
     console.log(`the declarations agree with the ${checked} registered operator overloads`)
+    const left = (list) =>
+        list.length > 0 ? `; ${list.length} overload(s) with types this checker cannot read are listed above` : ''
+    console.log(`the declared result type agrees with the operator's own for ${resultsCompared} of them${left(unchecked)}`)
+    console.log(`the declared parameter types fit what the operator takes for ${paramsCompared} of them${left(paramsUnchecked)}`)
 } else {
     console.log(USAGE)
     process.exit(2)
