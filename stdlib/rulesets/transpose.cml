@@ -22,6 +22,7 @@
 
 import { is_float } from types
 import { add_cotangent, div_cotangent, mul_cotangent, neg_cotangent, sub_cotangent } from autodiff
+import { zeros_like } from tensor
 
 /// The transpose of `x + c`: the cotangent of the sum is the cotangent of `x`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
@@ -46,4 +47,29 @@ export rule div_t::<T>(x: T, c: T) when is_float::<T>() {
 /// The transpose of `-x`: `-ct`.
 export rule neg_t::<T>(x: T) when is_float::<T>() {
     -x => (ct: T) => neg_cotangent(x, ct)
+}
+// ---- the transpose rule of `:op/idx_arr` ----
+//
+// `ct` goes back to position `i` and every other position is zero: the cotangent of `xs[i]` is that
+// one element, written into an array of zeros shaped like `xs`. The write is `:tangent/scatter_add_arr`
+// (`base, index, delta[, axis]`); its declaration below is **private to this ruleset** -- the library
+// keeps no public name for it, because the only caller is the rule and a public name would be one more
+// shape the registry has to hold in step for no other user.
+//
+// The operator takes three or four operands: `axis` is optional (src/builtin/operators/derivative.cpp:386)
+// and omitting it means the operand's last axis, which is the axis an index of this shape reads.
+
+/// `x[i]`: what `:op/idx_arr` means, and the left side this rule is filed under.
+/// @example index_into([1.0, 2.0, 3.0], 2)    // 3.0
+func index_into::<T>(x: T[], i: int): T {
+    return x[i]
+}
+
+/// `xs` with `delta` added at position `i`: the write a transposed read needs. Private to this module.
+#op(':tangent/scatter_add_arr')
+func scatter_into::<T>(xs: T[], i: int, delta: T): T[]
+
+/// The transpose of `xs[i]`: `ct` at `i`, zero everywhere else.
+export rule idx_arr_t::<T>(xs: T[], i: int) {
+    index_into(xs, i) => (ct: T) => scatter_into(zeros_like(xs), i, ct)
 }
