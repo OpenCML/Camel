@@ -1481,6 +1481,21 @@ size_t dceDraft(camel::runtime::GraphTransaction &transaction, bool valuesOnly =
                 (!draft.waitUsersOf(id).empty() || gateInputsSurvive(transaction, id));
             if ((isDeadWhenUnread(transaction, id) || isDeadGate) && draft.normUsersOf(id).empty() &&
                 draft.withUsersOf(id).empty() && isReplaceable(transaction, id)) {
+                // The statement that goes away may be the last reader of an effect, or of a
+                // computation that may fault, written inside it (`println(5) - 1` read by nothing).
+                // Its value is unread -- that is why it goes -- so there is no reader to hand the
+                // effect's value to: what stands in its place is `:op/keep(x, v)` carrying the
+                // effect's own value, and the operator takes the place the statement had in the
+                // chain. The effect then keeps a data use, which is what says it runs, instead of
+                // being reached only by the order of the chain that used to pass through the
+                // statement (design principles 3.3 as amended, 9.7).
+                if (!draft.syncUsersOf(id).empty()) {
+                    const gc_node_ref_t stood =
+                        keepThroughValue(transaction, id, kInvalidNodeRef);
+                    if (stood != kInvalidNodeRef) {
+                        draft.handChainPlaceTo(id, stood);
+                    }
+                }
                 replaceNode(transaction, id, kInvalidNodeRef);
                 ++removed;
                 changed = true;
