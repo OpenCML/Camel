@@ -333,3 +333,39 @@ $ git merge-base --is-ancestor d14d6a96 HEAD   →  fatal: Not a valid object na
 
 `neg` 的 `1.0` 是**已知待修现象的第一次数值读数**：`neg_t` 的转置给了 `+1.0`，而答案是 `-1.0`。
 `add`/`sub`/`mul` 三族**数值对**，这三族的 `*_tangent` 可以放心作为"转置切到规则路径后应保持不变"的对照值。
+
+## 10. 作者 18:50 那条读数：今天到不了，卡在 `grad` 的签名上（量，不是实现）
+
+原话：**没有切空间的形参不占切向槽**；读数 `f(xs, n) = xs[n] * xs[0]` 在 `([3.0, 2.0], 1)` → `grad` 对 `xs` = `[2.0, 3.0]`。
+
+**今天的结果：编不过，且不是转置的问题——是 `grad` 认不下这个形参。** 三处原文：
+
+**(a) 两参数的函数根本递不进去**（`grad(f)([3.0, 2.0], 1)`，不论数组还是标量）：
+
+```
+error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> ((xs: float[], n: int) => float pure).
+Available overloads:
+  vjp::grad: (f: (x: float) => float) => ((x: float) => float) uses f
+```
+
+**(b) 标量闭包通**：`grad((x) => x * 2.0)(3.0)` → **`2.0`**。
+
+**(c) 数组闭包在体内就被拒**：`grad((xs) => xs[1] * xs[0])([3.0, 2.0])`
+
+```
+error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> (float, int);
+operator '[]' is not defined for these operand types
+Available overloads:
+  <:op/idx_arr>: (arr: T[], index: int, axis: int) => T
+```
+
+**分层判断（`b` 与 `c` 一起给答案）**：`c` 里 `xs` 被定型成 **`float`**——因为 `grad` 只有 `(f: (x: float) => float) => ((x: float) => float)`
+这一条签名，lambda 参数从位置拿类型（这正是 `..xs` 那条规则的同一件事），于是 `xs` 是标量，`xs[1]` 当然没有 `[]`。
+`b` 说明**标量路是好的**。所以缺口在 **`grad` 自己的装配（`stdlib` 侧：它只收一个 `float` 形参、也只回一个 `float`）**，
+**不是转置侧**、也不是算子层——`xs[n] * xs[0]` 里的数组元素与标量相乘，今天**根本没走到**。
+
+**归谁修一句话**：**归 `grad`/`vjp` 的签名与装配（`stdlib/vjp.cml` 那条线）**——要有"数组形参、按元素切向"的那条规则；
+转置侧（`d14d6a96`）在这条读数上**不是瓶颈**。
+
+**注意**：这条读数与 `xs[0]` 那条（§7②）是**同一处**——rest 参数的包是元组、`[]` 定义在数组上；而这里是
+`grad` 把形参定型成 `float`。两者都不是"到不了"，都是**具名拒绝 + 列出可用重载**。
