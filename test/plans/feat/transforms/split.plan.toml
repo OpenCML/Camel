@@ -141,7 +141,7 @@ case = "../../../cases/transforms/split/split_branch_author_vjp.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 1
-expect_stdout_contains = ["TRANSPOSE function=split_of_jvp_of_f_backward skip=arm arm=0", "transpose has no transpose for this function"]
+expect_stdout_contains = ["TRANSPOSE function=split_of_jvp_of_f_backward arm-stop region=1 node=7 arg=1", "TRANSPOSE function=split_of_jvp_of_f_backward skip=arm arm=0", "transpose has no transpose for this function"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

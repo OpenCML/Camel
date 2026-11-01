@@ -16,14 +16,14 @@ timeout_ms = 20000
 
 [[tests]]
 name = "jvp_is_a_function_value.nvm"
-desc = "`reinterp<jvp>(f)` is the operator `jvp(f)`, and it produces a new function (the author's ruling a824031aa), not a rewritten graph: the call builds a graph of the transform's own and answers with a function value naming it. The lifted signature is `(float, float) => (float, float)` -- the ordinary parameter becomes a value and its tangent, and the result is the pair -- so `jvp(f)(2.0, 1.0)` passes two numbers and reads back `(value, tangent)`. Both halves are computed by the new graph: for `f(x) = x*x + 3/x` at 2 the chain gives `f(2) = 5.5`, and the forward rules along it give `f'(2) = 3.25` (2x - 3/x^2, seeded with the 1.0 the caller passed). The rules are the ruleset's: the reading says `source=ruleset` and names what it applied (`jvp_mul`, `jvp_div`, `jvp_add`), because the transform reads `stdlib/rulesets/jvp.cml`'s index at the moment it builds -- there is no second table of laws in C++. A primitive with no rule there is refused by name (`skip=rule uri=...`), never answered with 0 or 1. The type the reading prints is the one `jvpSignature` builds, and it is the same string `JvpResolver` gives the operator. Beside that reading the build now says what it made, in one line: `REINTERP jvp built graph=56 nodes=12 exit=11 regions=0 function=f` -- the member the lift reserved, the nodes and regions the draft holds before it is encoded, and the node the graph exits at (the pair, or the gate over it). Those are the facts a compile-time lift has to answer without running anything, so the step that moves this build earlier can be checked by the same numbers."
+desc = "`reinterp<jvp>(f)` is the operator `jvp(f)`, and it produces a new function (the author's ruling a824031aa), not a rewritten graph: the call builds a graph of the transform's own and answers with a function value naming it. The lifted signature is `(float, float) => (float, float)` -- the ordinary parameter becomes a value and its tangent, and the result is the pair -- so `jvp(f)(2.0, 1.0)` passes two numbers and reads back `(value, tangent)`. Both halves are computed by the new graph: for `f(x) = x*x + 3/x` at 2 the chain gives `f(2) = 5.5`, and the forward rules along it give `f'(2) = 3.25` (2x - 3/x^2, seeded with the 1.0 the caller passed). The rules are the ruleset's: the reading says `source=ruleset` and names what it applied (`jvp_mul`, `jvp_div`, `jvp_add`), because the transform reads `stdlib/rulesets/jvp.cml`'s index at the moment it builds -- there is no second table of laws in C++. A primitive with no rule there is refused by name (`skip=rule uri=...`), never answered with 0 or 1. The type the reading prints is the one `jvpSignature` builds, and it is the same string `JvpResolver` gives the operator. Beside that reading the build now says what it made, in one line: `REINTERP jvp built graph=56 nodes=12 exit=11 regions=0 function=f` -- the member the lift reserved, the nodes and regions the draft holds before it is encoded, and the node the graph exits at (the pair, or the gate over it). Those are the facts a compile-time lift has to answer without running anything, so the step that moves this build earlier can be checked by the same numbers. That step is taken: the build happens while the graph the call is written in is built, and the operator's line says so -- `REINTERP jvp op lifted-at=compile ...` against the run-time lift's `lifted-at=run` -- with one count of the calls the front end answered, `REINTERP compile-time instantiated=1 calls`. Everything else in the two lines is the same text, the graph number included."
 kind = "behavior"
 case = "../../../cases/compile/transforms/jvp_lifted.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_div,jvp_add", "REINTERP jvp op signature=(f: (float) => float) => (float, float) => (float, float)", "lifted=(float, float) => (float, float) pure graph=(float, float) => (float, float) pure same=yes", "REINTERP jvp built graph=56 nodes=12 exit=11 regions=0 function=f", "5.5", "3.25"]
+expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_div,jvp_add", "REINTERP jvp op lifted-at=compile signature=(f: (float) => float) => (float, float) => (float, float)", "lifted=(float, float) => (float, float) pure graph=(float, float) => (float, float) pure same=yes", "REINTERP jvp built graph=56 nodes=12 exit=11 regions=0 function=f", "REINTERP compile-time instantiated=1 calls", "5.5", "3.25"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -533,15 +533,27 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "transpose_no_tangent.function_value_without_a_capture_is_refused"
+desc = "The boundary cut finer, and it does not move: `double(x) = 2x` with `g(x) = let h = double; h(x)` -- a top-level function put into a local and called, with nothing captured -- REFUSES, at the same line as the closure: `TRANSPOSE function=g skip=call node=2 callee=none value=0:1 with=1:0`. So the boundary is not `capture or no capture`: taking the capture away changes nothing, and what is in the way is THE NAME. `let h = double` makes a DATA node carrying a function constant (`Function(graph=double, tupleSlots=0)`), and `GCGraph::calleeIdOf` reads a graph id out of FUNC nodes only; for a function constant the graph sits in the static area as a graph-level reference (kGraphRefStatic) with no accessor from this node. A call written by name (`g(x)`, transpose_call.cml) is the shape that works, because that lowers to a FUNC node. The capture is a second, still-unreached problem: with the name in hand the transposed callee would still have to take the captured value as a parameter of its own. The paper answer owed is 2, and 4 at cotangent 2. Read beside `transpose_no_tangent.function_value_is_refused`, this pair is the evidence for the order of the two fixes."
+kind = "negative"
+case = "../../../cases/compile/transforms/transpose_function_value_no_capture.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 1
+expect_output_contains = ["2.0", "TRANSPOSE function=g skip=call node=2 callee=none"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+[[tests]]
 name = "transpose_no_tangent.function_value_is_refused"
-desc = "A function value in the middle of a differentiable graph, `g(x) = let h = (y: float) => y*x; h(2)`, is REFUSED, and this entry says by what name rather than leaving the shape untested: the case prints the forward value (2.0, which is `2x` at x = 1, so the graph is really computing) and then `TRANSPOSE function=g skip=call node=4 callee=none value=3:0 with=2:4`. The call site cannot name the callee's graph: `h` is a closure, its graph id sits inside the bound value together with the capture `x`, and `calleeIdOf` sees a value the call takes as a `with` input, not a graph. Naming it is only half of what would be needed -- the transposed callee would have to take the capture as a parameter of its own, which is the piece this transform does not have (it refuses `with` parameters outright, as `jvp` does). So the reading is a refusal and not a number, and the entry pins the refusal's name so that the cut which changes it is visible. The paper answer it owes is 2 (and 6 at cotangent 3)."
+desc = "A function value in the middle of a differentiable graph, `g2(x) = let h = (y: float) => y*x; h(2)`, is REFUSED, and this entry says by what name rather than leaving the shape untested: the case prints the forward value (2.0, which is `2x` at x = 1, so the graph is really computing) and then `TRANSPOSE function=g skip=call node=4 callee=none value=3:0 with=2:4`. The call site cannot name the callee's graph: `h` is a closure, its graph id sits inside the bound value together with the capture `x`, and `calleeIdOf` sees a value the call takes as a `with` input, not a graph. Naming it is only half of what would be needed -- the transposed callee would have to take the capture as a parameter of its own, which is the piece this transform does not have (it refuses `with` parameters outright, as `jvp` does). So the reading is a refusal and not a number, and the entry pins the refusal's name so that the cut which changes it is visible. The paper answer it owes is 2 (and 6 at cotangent 3)."
 kind = "negative"
 case = "../../../cases/compile/transforms/transpose_no_tangent_closure.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 1
-expect_output_contains = ["2.0", "TRANSPOSE function=g skip=call node=4 callee=none", "callee=none"]
+expect_output_contains = ["2.0", "TRANSPOSE function=g2 skip=call node=4 callee=none"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

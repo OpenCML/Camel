@@ -3,9 +3,11 @@
 
 #include "camel/compile/gir/graph_read.h"
 
+#include <algorithm>
 #include <cstring>
 #include <format>
 #include <iostream>
+#include <unordered_set>
 
 namespace camel::compile::gir {
 namespace {
@@ -485,6 +487,82 @@ std::string describe(const GraphRead &graph) {
         kindsLine(graph),
         calls.empty() ? "-" : calls,
         opers.empty() ? "-" : opers);
+}
+
+std::vector<gc_node_ref_t> liveDraftNodes(const camel::runtime::GraphTransaction &transaction) {
+    const auto &draft = transaction.graph();
+    std::unordered_set<gc_node_ref_t> visited;
+    std::vector<gc_node_ref_t> worklist;
+    auto pushRoot = [&](gc_node_ref_t ref) {
+        if (ref != camel::runtime::kInvalidNodeRef && visited.insert(ref).second) {
+            worklist.push_back(ref);
+        }
+    };
+
+    pushRoot(draft.entryNode());
+    pushRoot(draft.exitNode());
+    pushRoot(draft.outputNode());
+    pushRoot(draft.returnNode());
+    for (gc_node_ref_t ref : draft.normPorts()) {
+        pushRoot(ref);
+    }
+    for (gc_node_ref_t ref : draft.withPorts()) {
+        pushRoot(ref);
+    }
+    for (gc_node_ref_t ref : draft.closureNodes()) {
+        pushRoot(ref);
+    }
+
+    while (!worklist.empty()) {
+        const gc_node_ref_t current = worklist.back();
+        worklist.pop_back();
+        for (gc_node_ref_t input : draft.normInputsOf(current)) {
+            pushRoot(input);
+        }
+        for (gc_node_ref_t input : draft.withInputsOf(current)) {
+            pushRoot(input);
+        }
+        for (gc_node_ref_t input : draft.ctrlInputsOf(current)) {
+            pushRoot(input);
+        }
+        // A sync edge carries "used" (docs/design/effects/edges.cn.md 1.5): the statement
+        // written before this one in the same `sync` block is live exactly as a data input is.
+        for (gc_node_ref_t input : draft.syncInputsOf(current)) {
+            pushRoot(input);
+        }
+        const camel::runtime::DraftNodeHeader *header = draft.header(current);
+        if (header == nullptr) {
+            continue;
+        }
+        if (header->kind == GCNodeKind::Loop) {
+            // The ports of its regions are part of it, whether the code reads them or not.
+            for (auto part :
+                 {camel::runtime::GCRegionKind::LoopCond, camel::runtime::GCRegionKind::LoopBody}) {
+                if (const uint32_t region = draft.loopRegionOf(current, part); region != 0) {
+                    for (gc_node_ref_t port : draft.regionPortsOf(region)) {
+                        pushRoot(port);
+                    }
+                }
+            }
+        }
+        if (header->kind == GCNodeKind::Brch) {
+            const auto *payload = reinterpret_cast<const camel::runtime::DraftBrchPayload *>(
+                draft.payloadOf(current).data());
+            if (payload != nullptr) {
+                pushRoot(payload->join);
+            }
+        } else if (header->kind == GCNodeKind::Join) {
+            const auto *payload = reinterpret_cast<const camel::runtime::GCJoinBody *>(
+                draft.payloadOf(current).data());
+            if (payload != nullptr) {
+                pushRoot(payload->brch);
+            }
+        }
+    }
+
+    std::vector<gc_node_ref_t> live(visited.begin(), visited.end());
+    std::sort(live.begin(), live.end());
+    return live;
 }
 
 } // namespace camel::compile::gir
