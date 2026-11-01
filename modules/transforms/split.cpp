@@ -6,6 +6,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/tangent_space.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/draft.h"
@@ -186,6 +187,49 @@ gc_node_ref_t fillTuple(rt::GraphDraft &draft, Type *type, std::span<const gc_no
     return fill;
 }
 
+/// `Lift<T>`, read from types: a parameter contributes its value port and, when its type has a
+/// tangent space, the tangent port after it. A `T` with no tangent space -- an integer, a `bool`, a
+/// `string`, a function -- contributes its value alone, which is why counting two ports per parameter
+/// is only right while every parameter is a float. A lifted `f(n: int, x: float)` takes (n, x, dx),
+/// and an even/odd reading would take `x`'s tangent for `x` and lose `dx` (P1-10, review 2026-11-01).
+std::vector<size_t> valuePortsOf(const camel::core::type::FunctionType *liftedType) {
+    std::vector<size_t> values;
+    if (liftedType == nullptr) {
+        return values;
+    }
+    const size_t count = liftedType->normTypesCount();
+    for (size_t i = 0; i < count;) {
+        values.push_back(i);
+        const Type *type    = liftedType->normTypeAt(i);
+        const bool paired   = type == nullptr || camel::core::tangentSpaceOf(type).hasSpace();
+        i += paired ? 2 : 1;
+    }
+    return values;
+}
+
+/// Which parameter a lifted port belongs to, and whether it is that parameter's tangent. A port that
+/// is no parameter's (a seeded value, a residual) answers `npos` and false.
+std::pair<size_t, bool> parameterOfPort(
+    const camel::core::type::FunctionType *liftedType, size_t port) {
+    constexpr size_t kNone = static_cast<size_t>(-1);
+    if (liftedType == nullptr) {
+        return {kNone, false};
+    }
+    const size_t count = liftedType->normTypesCount();
+    for (size_t i = 0, parameter = 0; i < count; ++parameter) {
+        if (port == i) {
+            return {parameter, false};
+        }
+        const Type *type  = liftedType->normTypeAt(i);
+        const bool paired = type == nullptr || camel::core::tangentSpaceOf(type).hasSpace();
+        if (paired && port == i + 1) {
+            return {parameter, true};
+        }
+        i += paired ? 2 : 1;
+    }
+    return {kNone, false};
+}
+
 /// One half of the split while it is being built: the member's draft, the source graph it copies
 /// from, and the port this member gives each parameter of the source (`kInvalidNodeRef` where the
 /// half does not take that component -- the forward half does not take tangents, and the backward
@@ -253,16 +297,22 @@ struct Half {
     }
 
     /// The source inputs this half takes from `ref`: a retargeted call takes the values its caller
-    /// passes, the even arguments; every other node takes all of them, in order.
+    /// passes, which are the lifted signature's value ports (read from its types); every other node
+    /// takes all of them, in order.
     std::vector<gc_node_ref_t> halfInputsOf(gc_node_ref_t ref) const {
         const std::vector<gc_node_ref_t> all = dataInputsOf(source, ref);
         if (!retargets(ref)) {
             return all;
         }
+        const rt::GCGraph *callee = calleeOf(ref);
+        const std::vector<size_t> valuePorts =
+            valuePortsOf(callee != nullptr ? callee->funcType() : source->funcType());
         std::vector<gc_node_ref_t> values;
-        values.reserve((all.size() + 1) / 2);
-        for (size_t i = 0; i < all.size(); i += 2) {
-            values.push_back(all[i]);
+        values.reserve(valuePorts.size());
+        for (size_t port : valuePorts) {
+            if (port < all.size()) {
+                values.push_back(all[port]);
+            }
         }
         return values;
     }
@@ -368,12 +418,14 @@ struct Half {
             if (!tangent) {
                 return refuseAt(
                     refusal, source, ref, "a tangent port",
-                    "the value half reads the tangent of parameter " + std::to_string(index / 2) +
+                    "the value half reads the tangent of parameter " +
+                        std::to_string(parameterOfPort(source->funcType(), index).first) +
                         ", which the forward half does not take");
             }
             return refuseAt(
                 refusal, source, ref, "a parameter",
-                "the backward half reads the value of parameter " + std::to_string(index / 2) +
+                "the backward half reads the value of parameter " +
+                        std::to_string(parameterOfPort(source->funcType(), index).first) +
                     ", and it is not one of the values the cut carries");
         }
         case rt::GCNodeKind::Data: {
@@ -710,7 +762,7 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
         const size_t index = portIndex[ref];
         if (index != Residual::kNotAParameter) {
             // A parameter's value: its type is the parameter's, and its number is half its index.
-            residual.parameter = index / 2;
+            residual.parameter = parameterOfPort(lifted.funcType(), index).first;
             residual.type      = index < lifted.funcType()->normTypesCount()
                                      ? lifted.funcType()->normTypeAt(index)
                                      : lifted.node(ref)->dataType();
@@ -826,6 +878,33 @@ struct ArmCut {
 /// says so by file and name); taking it as a parameter the caller's transaction already fixed keeps the
 /// count where it was.
 template <typename Draft>
+/// One arm of a branch, cut on its own region: the arm's region is made in the half's draft, the
+/// half's walk copies the arm's body *into that region* -- the same `copyHalf` the straight-line body
+/// uses -- and the value the arm hands the Join comes back. The unit here is a **region**, not an
+/// arm-shaped copy of the whole branch (P1-14 of the review): that is what lets the arm of a nested
+/// branch enter this function too, one region at a time, instead of an arm's body being copied whole.
+bool cutArm(
+    Draft &draft, Half &half, const ArmCut &arm, bool tangentSide, gc_node_ref_t brch,
+    SplitGraph &refusal, gc_node_ref_t &armResult) {
+    const gc_node_ref_t root = tangentSide ? arm.tangent : arm.value;
+    if (root == rt::kInvalidNodeRef) {
+        return refuseAt(
+            refusal, half.source, rt::kInvalidNodeRef, "an arm",
+            "the arm's yield does not hold the half this cut keeps");
+    }
+    const uint32_t region = draft.addRegion(rt::GCRegionKind::Arm, 0, brch, arm.index);
+    draft.setInsertRegion(region);
+    const bool copied = half.copyHalf(root, refusal);
+    draft.setInsertRegion(0);
+    if (!copied) {
+        return false;
+    }
+    draft.setRegionResult(region, half.copyOf[root]);
+    armResult = half.copyOf[root];
+    return true;
+}
+
+template <typename Draft>
 bool buildHalfBranch(
     Draft &draft, Half &half, gc_node_ref_t conditionCopy, const std::vector<ArmCut> &arms,
     bool tangentSide, Type *joinType, SplitGraph &refusal, gc_node_ref_t &joinOut) {
@@ -844,21 +923,11 @@ bool buildHalfBranch(
     std::vector<gc_node_ref_t> armResults;
     armResults.reserve(arms.size());
     for (const ArmCut &arm : arms) {
-        const gc_node_ref_t root = tangentSide ? arm.tangent : arm.value;
-        if (root == rt::kInvalidNodeRef) {
-            return refuseAt(
-                refusal, half.source, rt::kInvalidNodeRef, "an arm",
-                "the arm's yield does not hold the half this cut keeps");
-        }
-        const uint32_t region = draft.addRegion(rt::GCRegionKind::Arm, 0, brch, arm.index);
-        draft.setInsertRegion(region);
-        const bool copied = half.copyHalf(root, refusal);
-        draft.setInsertRegion(0);
-        if (!copied) {
+        gc_node_ref_t armResult = rt::kInvalidNodeRef;
+        if (!cutArm(draft, half, arm, tangentSide, brch, refusal, armResult)) {
             return false;
         }
-        draft.setRegionResult(region, half.copyOf[root]);
-        armResults.push_back(half.copyOf[root]);
+        armResults.push_back(armResult);
     }
     // The Join names the Brch and takes the arms' results, written the way `jvp` writes it so the two
     // writers of a branch in this tree state a branch the same way.
@@ -1068,6 +1137,34 @@ SplitGraph cutBranchGraph(
     built.backward = const_cast<rt::GCGraph *>(backwardMade);
     return built;
 }
+/// Which shape a lifted graph's exit has. Asked once, so that the cut has one entry and four cells
+/// instead of a chain of tests: the exit is the pair itself (a straight-line body), a Join a branch
+/// names (the condition picks an arm), a Join no branch names (a loop), or something that is not the
+/// pair at all. The three that can be cut are cells of the same entry because the cut that will
+/// handle them is one traversal over regions -- P1-14 of the review -- and a shape that is refused
+/// is a cell too, so that its refusal stays named instead of becoming a fall-through.
+enum class ExitShape { Straight, Branch, Loop, NotAPair };
+
+ExitShape exitShapeOf(const rt::GCGraph *function, gc_node_ref_t exit) {
+    const rt::GCNode *node = function->node(exit);
+    if (node == nullptr) {
+        return ExitShape::NotAPair;
+    }
+    if (node->kind == rt::GCNodeKind::Fill) {
+        const auto *fill = function->nodeBodyAs<rt::GCFillBody>(exit);
+        if (fill != nullptr && fill->fillKind == rt::GCFillKind::Tuple &&
+            function->withInputsOf(exit).size() == 2) {
+            return ExitShape::Straight;
+        }
+    }
+    if (node->kind != rt::GCNodeKind::Join || function->funcType() == nullptr ||
+        node->dataType() != function->funcType()->exitType()) {
+        return ExitShape::NotAPair;
+    }
+    return branchConditionOf(function, exit) != rt::kInvalidNodeRef ? ExitShape::Branch
+                                                                  : ExitShape::Loop;
+}
+
 SplitGraph buildSplitGraph(
     const camel::core::context::context_ptr_t &context, const rt::Program *program,
     rt::GCGraph *function, std::ostream &os) {
@@ -1115,24 +1212,34 @@ SplitGraph buildSplitGraph(
         return SplitGraph{};
     }
     const rt::GCNode *exitNode = function->node(exit);
-    const auto *exitFill =
-        exitNode->kind == rt::GCNodeKind::Fill ? function->nodeBodyAs<rt::GCFillBody>(exit)
-                                               : nullptr;
-    if (exitFill == nullptr || exitFill->fillKind != rt::GCFillKind::Tuple ||
-        function->withInputsOf(exit).size() != 2) {
-        // The pair does not have to be a tuple fill. A branch answers with its Join, and `jvp` gives
-        // that Join the lifted type, so the exit of `jvp(branch body)` is a Join whose slots hold the
-        // pair: one arm writes (value, tangent) into it and the other writes its own. There is a pair
-        // to cut in that graph all the same -- the author's rule for it is design 4.2: the condition
-        // itself is a residual, and the backward half picks the same arm by evaluating that condition.
-        // What `split` cannot do yet is step *inside* an arm: an arm is a region, not a data input, so
-        // `Half`'s walk (which follows `dataInputsOf`) does not reach it. Saying that is the point of
-        // this reading -- a `skip=exit` that does not say which exit leaves the reader with nothing.
-        if (exitNode->kind == rt::GCNodeKind::Join && function->funcType() != nullptr &&
-            exitNode->dataType() == function->funcType()->exitType()) {
+    (void)exitNode;
+    // One entry, three cells (P1-14, code review 2026-11-01). What used to be a chain of `if`s --
+    // "is it a tuple fill? then straight line; else is it a Join? then branch; else loop; else not a
+    // pair" -- is one question about the *shape* of the exit, asked once, and one `switch` over the
+    // four answers. The shapes it separates, and why they are cells of one entry rather than three
+    // roads:
+    //
+    // - The pair does not have to be a tuple fill. A branch answers with its Join, and `jvp` gives
+    //   that Join the lifted type, so the exit of `jvp(branch body)` is a Join whose slots hold the
+    //   pair: one arm writes (value, tangent) into it and the other writes its own. There is a pair
+    //   to cut in that graph all the same -- the author's rule for it is design 4.2: the condition
+    //   itself is a residual, and the backward half picks the same arm by evaluating that condition.
+    //   What `split` cannot do yet is step *inside* an arm: an arm is a region, not a data input, so
+    //   `Half`'s walk (which follows `dataInputsOf`) does not reach it. Saying that is the point of
+    //   this reading -- a `skip=exit` that does not say which exit leaves the reader with nothing.
+    // - A Join no branch names is the loop, and a loop is a named refusal, not a silence.
+    // - Every cell *starts* at the same place (the exit's shape) and will end at the same place (a
+    //   cut that recurses by region); they are written as cells so that the recursion of P1-14's
+    //   next step is a change of one cell's body, not the invention of a second entry.
+    switch (exitShapeOf(function, exit)) {
+        case ExitShape::Straight:
+            // The exit is the pair itself: the cut is the straight-line body, and the two `copyHalf`
+            // walks after this switch are that cell's one entry.
+            break;
+        case ExitShape::Branch: {
             const gc_node_ref_t condition = branchConditionOf(function, exit);
             SplitGraph refusal;
-            if (condition != rt::kInvalidNodeRef) {
+            {
                 // The first step of the cut a branch needs: enter each arm and say what is in it. The walk a half
                 // does follows `dataInputsOf` and never reaches an arm, so this is the entrance it does not
                 // have yet -- and the numbers are what the next step builds on (an arm is entered through
@@ -1208,10 +1315,6 @@ SplitGraph buildSplitGraph(
                                 }
                             }
                         }
-                        Type *tangentType =
-                            tangent != rt::kInvalidNodeRef && function->node(tangent) != nullptr
-                                ? function->node(tangent)->dataType()
-                                : pairType;
                         os << "ARM half=backward arm=" << one->index << " region=" << region
                            << " yield=" << yield << " members=" << members.size() << " value="
                            << (members.size() == 2 ? members[0] : rt::kInvalidNodeRef) << " tangent="
@@ -1272,6 +1375,17 @@ SplitGraph buildSplitGraph(
                    << " condition=" << condition << " why=" << refusal.refusedWhy << '\n';
                 return refusal;
             }
+        } break;
+        case ExitShape::Loop: {
+            // **Defensive, and unreachable from `.cml` today.** `jvp` does not build a graph whose
+            // exit is a Join that no branch names, so no program in the language can reach this cell
+            // (measured: no plan pins `skip=loop`, because no case can print it). The refusal stays,
+            // and stays phrased as a refusal, because a graph *could* be built with that shape by
+            // another transform, and a cut that met it silently would be worse than one that names it.
+            // This is "cannot happen here", not "not supported yet": the difference is that the
+            // second is a promise to do it and the first is a statement about the graphs this tree
+            // makes. Whoever widens `jvp` past loops will find this comment and know what to re-read.
+            SplitGraph refusal;
             refuseAt(
                 refusal, function, exit, "the exit",
                 "this graph's exit is a Join that holds the pair and no branch names it, so the two "
@@ -1281,15 +1395,22 @@ SplitGraph buildSplitGraph(
                << " why=" << refusal.refusedWhy << '\n';
             return refusal;
         }
-        SplitGraph refusal;
-        refuseAt(
-            refusal, function, exit, "the exit",
-            "a lifted function answers with the pair (result, tangent); this graph's exit is not a "
-            "two-member tuple fill, so there is no pair to cut");
-        os << "REINTERP split function=" << function->name() << " skip=exit ("
-           << refusal.refusedWhy << ")\n";
-        return refusal;
-    }
+        case ExitShape::NotAPair: {
+            // **Defensive, and unreachable from `.cml`.** `split`'s own type refuses a plain function
+            // before this function runs -- `Invalid call to 'split' with argument types <> ((x: float)
+            // => float pure)` -- so the only way to stand here is a graph built by hand whose exit is
+            // neither the pair nor a Join. The same distinction as the cell above: "cannot happen
+            // here", not "not supported yet".
+            SplitGraph refusal;
+            refuseAt(
+                refusal, function, exit, "the exit",
+                "a lifted function answers with the pair (result, tangent); this graph's exit is not a "
+                "two-member tuple fill, so there is no pair to cut");
+            os << "REINTERP split function=" << function->name() << " skip=exit ("
+               << refusal.refusedWhy << ")\n";
+            return refusal;
+        }
+        }
     const gc_node_ref_t resultHalf  = ungated(function, function->withInputsOf(exit)[0]);
     const gc_node_ref_t tangentHalf = ungated(function, function->withInputsOf(exit)[1]);
 
