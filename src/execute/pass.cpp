@@ -2459,11 +2459,16 @@ EffectCredentialViolation effectCredentialViolation(
             std::string writtenAt = std::format("origin {}", violation.origin);
             if (violation.origin != 0 && context != nullptr && context->sourceContext() != nullptr) {
                 const auto range = context->sourceContext()->resolveOrigin(violation.origin);
-                writtenAt        = std::format(
+                // `Range::start` is 0-based (the same convention the compiler's own ranges use); a
+                // position written into a sentence for a reader is 1-based, the way the diagnostic's
+                // caret renders it. Writing the raw values here made one message say ":12:99" while
+                // its own caret pointed at "13:100" -- a reader following the sentence looks one line
+                // above the defect.
+                writtenAt = std::format(
                     "{}:{}:{}",
                     context->sourceContext()->pathForOrigin(violation.origin),
-                    range.start.line,
-                    range.start.character);
+                    range.start.line + 1,
+                    range.start.character + 1);
             }
             violation.text = std::format(
                 "graph '{}' has effect node {} ('{}') with neither a read of its value nor a place "
