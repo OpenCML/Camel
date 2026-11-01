@@ -119,6 +119,53 @@ assert(comparedCount > 400, `only ${comparedCount} operator(s) had their result 
 const excused = /the declared result type was not compared for ([0-9]+) operator[(]s[)]/.exec(stdout)
 const excusedCount = excused === null ? 0 : Number(excused[1])
 assert(excusedCount < 60, `${excusedCount} operators have a result type the two sides cannot compare`)
+// Every overload is either compared or named, the same invariant the parameter half asserts.
+const checked = /the declarations agree with the ([0-9]+) registered operator overloads/.exec(stdout)
+if (checked !== null && comparedCount < Number(checked[1])) {
+    assert(excused !== null, `${Number(checked[1]) - comparedCount} overload(s) were neither compared nor named`)
+}
+}
+"""
+timeout_ms = 30000
+
+# The other half of the same signature: what the operator says it takes, position by position,
+# against what the declaration promises. The operator's side is ten kinds (`Tensor` is any tensor,
+# `int[]` a number array, `float[..] | number` a tensor or a number) and the declaration's is one
+# type, so the comparison is containment -- a declaration may narrow a kind, never promise a value
+# the operator refuses. `one_hot`'s neighbour: the same run that never read a result type never read
+# a parameter type either, so `axis: int` could have been written `axis: float` for months.
+[[tests]]
+name = "registry.parameter_types_match"
+desc = "Every operator's declared parameter types are ones the operator takes, position by position, kind by kind: an `int` array fits a `number` array and an `int` fits a `number`, a tensor does not fit an array, and the parameters that cannot be compared -- a function type, a module's own type, a nameless pack, a bare type variable -- are named with the piece that stopped it."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/stdlib-reference.mjs"
+args = ["${case}", "--verify-ops", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["the declared parameter types fit what the operator takes for"]
+normalizers = ["normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const stdout = input.normalized.stdout
+const compared = /the declared parameter types fit what the operator takes for ([0-9]+) of them/.exec(stdout)
+assert(compared !== null, 'the run did not say how many parameter lists it compared')
+const comparedCount = compared === null ? 0 : Number(compared[1])
+// 524 of 558 overloads are compared today. The floor keeps "compared nothing, or compared almost
+// nothing" from passing as agreement, the same floor the result half carries.
+assert(comparedCount > 400, `only ${comparedCount} operator(s) had their parameter types compared`)
+// 34 overloads of 21 names are listed: `println` and its neighbours (a nameless `..rest` pack),
+// the transforms (a function type as a parameter), `grad`/`adam`/`sgd` (`grad of P`), `tiles`
+// (`NumericAggregate`, `Device<T>`), `string`'s conversions (a bare `T`), `slice` and `upload` (a
+// declaration that states one parameter where the rule states six and three).
+const excused = /the declared parameter types was not compared for ([0-9]+) operator[(]s[)]/.exec(stdout)
+const excusedCount = excused === null ? 0 : Number(excused[1])
+assert(excusedCount < 60, `${excusedCount} operators have parameter types the two sides cannot compare`)
+// Every overload is either compared or named: a run that compared fewer lists than it checked and
+// said nothing about the rest has skipped silently, which is the hole this half closes.
+const checked = /the declarations agree with the ([0-9]+) registered operator overloads/.exec(stdout)
+if (checked !== null && comparedCount < Number(checked[1])) {
+    assert(excused !== null, `${Number(checked[1]) - comparedCount} overload(s) were neither compared nor named`)
+}
 }
 """
 timeout_ms = 30000
