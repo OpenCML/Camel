@@ -155,13 +155,17 @@ timeout_ms = 20000
 # The derivative as a library (design 4.4): the surface is `vjp`/`grad`/`with_grad`, and the middle
 # step of `transpose(split(reinterp<jvp>(f)))` is `split`.
 #
-# All three steps are written now -- `jvp` and `transpose` are operators of the `transforms` module,
-# `split` builds its two halves -- and what the composition still lacks is the assembly. `transpose`
-# takes a function of one `float` parameter; `split` hands back the *pair* of halves, so the pair is
-# what arrives at `transpose` and the call does not type. The refusal is still the right shape: at
-# the line of `stdlib/vjp.cml` that composes the transform, naming `transforms:transpose` and the
-# type it wants. That is what `names_the_missing_step` reads, and it is one step from the numbers:
-# the day the pair is taken apart for `transpose`, the same test reads numbers instead.
+# All three steps are written now -- `jvp` lifts every `float` parameter, `split` builds its two
+# halves, `transpose` walks a function backwards -- and what the composition still lacks is the
+# last shape: `transpose` takes a function of one `float` parameter, and the backward half it has to
+# walk takes the residuals first and the seeds after them (`(res, dx, dy) => value`), so the pair
+# `split` hands back has no call to `transpose` at all. The refusal is still the right shape: at the
+# line of `stdlib/vjp.cml` that composes the transform, naming the types it takes and does not find.
+#
+# `have-library-vjp.mjs --missing` is the same behaviour probe asked the other way round: it is 0
+# while the composition does not build, so this entry retires itself the day it does -- the refusal
+# then has nothing to read, and the comparison below is what runs. Nobody deletes a test to make a
+# library land.
 [[tests]]
 name = "vjp_api.names_the_missing_step"
 desc = "`vjp(f)` is `transpose(split(reinterp<jvp>(f)))` written in `stdlib/vjp.cml`. The middle step is declared as an operator with no implementation, so a call is refused at the line of the library that composes it -- not at the `vjp(f)` call in the program, and not in a sentence of the form `not implemented yet`, which sends the reader to no line at all. Today the refusal names `transpose`, because `transpose` is real and `split` still stands in with a shape it does not take. The run exits non-zero and prints no value."
@@ -170,6 +174,7 @@ case = "../../../cases/compile/transforms/vjp_missing_step.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
+skip_unless = ["node", "test/tools/have-library-vjp.mjs", "--missing"]
 expect_exit = 1
 expect_output_contains = ["stdlib/vjp.cml:33:", "No matching function found", "<transforms:transpose>"]
 expect_output_not_contains = ["not implemented", "尚未实现", "unimplemented"]
@@ -186,13 +191,15 @@ timeout_ms = 20000
 #
 # The gate is a behaviour probe and not a file check: `test/tools/have-library-vjp.mjs` compiles and
 # runs a program that builds `vjp(f)` and calls it, so it answers "is the composition assembled?"
-# rather than "is there a split.cpp?". While `split` hands `transpose` a lifted function where a
-# function of one parameter is taken, the gate refuses and this entry skips with its reason printed;
-# the day the shapes meet it starts running, and a wrong answer is then a red, never a skip. The
-# numbers are the author's, and `18.0` is `3*3*2`: neither is a reading of today's tree.
+# rather than "is there a split.cpp?". While `transpose` still takes a function of one parameter and
+# `split` hands back the pair of halves, the gate refuses and this entry skips with its reason
+# printed; the day the shapes meet it starts running -- and it also runs the comparison itself and
+# prints the numbers, so one command answers "is the assembly done?", while a disagreement is this
+# entry's red and never the gate's skip. `18.0` is `3*3*2` and `12`/`9` are the author's, worked out
+# on paper: none of them is a reading of today's tree.
 [[tests]]
 name = "vjp_api.analytic_gradient"
-desc = "The library's gradient against the derivative worked out on paper, on the author's example: `f(x, y) = x*x*y` at `x = 3`, `y = 2`, so `df/dx = 2*x*y = 12` and `df/dy = x*x = 9`. `vjp(f)(3.0, 2.0)` gives the pair `(y, pullback)` and `pullback(1.0)` gives the two cotangents, in JAX's order; the program prints `f(3, 2) = 18.0`, `library y = 18.0`, then `library`/`analytic` for `df/dx` and `df/dy`. The library half comes from `transpose(split(reinterp<jvp>(f)))` in `stdlib/vjp.cml` and nothing else -- not from the C++ autodiff. Skipped while the composition cannot be built (`split` hands `transpose` a shape it does not take); the precondition prints the refusal, so a skip always says why."
+desc = "The library's gradient against the derivative worked out on paper, on the author's example: `f(x, y) = x*x*y` at `x = 3`, `y = 2`, so `df/dx = 2*x*y = 12` and `df/dy = x*x = 9`. `vjp(f)(3.0, 2.0)` gives the pair `(y, pullback)` and `pullback(1.0)` gives the two cotangents, in JAX's order; the program prints `f(3, 2) = 18.0`, `library y = 18.0`, then `library`/`analytic` for `df/dx` and `df/dy`. The library half comes from `transpose(split(reinterp<jvp>(f)))` in `stdlib/vjp.cml` and nothing else -- not from the C++ autodiff. Skipped while the composition cannot be built (`transpose` takes a function of one parameter, `split` hands back the pair of halves); the precondition prints the refusal, so a skip always says why."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_analytic_gradient.cml"
 args = ["${case}", "${backend}"]

@@ -64,11 +64,12 @@ if (built.status !== 0) {
     }
     console.log(
         'the library `vjp` cannot be built yet (M4): `stdlib/vjp.cml` writes ' +
-            '`transpose(split(reinterp<jvp>(f)))`, `split` hands back its two halves -- the pair ' +
-            '`((float) => (float, (float,)), ((float, float), float, float) => float)` -- and ' +
-            '`transpose` takes a function of exactly one parameter, so the pair is not the function ' +
-            'it walks backwards; what `transpose` has to learn is the half that takes the residuals ' +
-            `first and the seeds after them. The comparison starts running when it does: ${first(built, 3)}`,
+            '`transpose(split(reinterp<jvp>(f)))`, `split` hands back its two halves -- and the ' +
+            'second of them takes the residuals first and the seeds after them, not one parameter -- ' +
+            'while `transpose` takes a function of exactly one parameter, so the pair is not the ' +
+            'function it walks backwards. What `transpose` has to learn is that second half: the ' +
+            'known values, then the linear ones, then the cotangent. The comparison starts running ' +
+            `when it does: ${first(built, 3)}`,
     )
     process.exit(1)
 }

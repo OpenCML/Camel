@@ -7,11 +7,11 @@
  * what came back -- so it fails exactly when `stdlib/vjp.cml` cannot be assembled, and says nothing
  * about whether the answer is right (that is the comparison case's business).
  *
- * `f` takes the two parameters of the author's comparison on purpose, in the order the pieces have
- * to land: today the composition is refused at `stdlib/vjp.cml` itself, because `split` hands
- * `transpose` a lifted function `(float, float) => (float, float)` where a function of one parameter
- * is taken. Once that shape is settled, `jvp`'s one-parameter limit is the next wall for a function
- * of two, and this probe keeps failing until both are gone.
+ * `f` takes the two parameters of the author's comparison on purpose. The wall is one shape, and it
+ * is inside the library, not here: `split` hands back the pair of halves -- the forward one, then the
+ * one that reads the residuals and the seeds -- and `transpose` takes a function of a single
+ * parameter, so `transpose(split(...))` has no call. The library is compiled against its own
+ * declaration, so this fails on the module's own line and this probe only carries that failure out.
  */
 
 import { vjp } from vjp
