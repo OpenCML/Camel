@@ -16,6 +16,8 @@ showcase/c2-mlp-mnist/
   baseline/train_torch.py  the PyTorch counterpart (nn.Linear, F.cross_entropy, torch.optim.Adam, state_dict)
   make_data.py             writes the data and the starting weights (MNIST or a deterministic stand-in)
   compare.py               runs both sides, compares, measures, writes RESULTS.md; exits non-zero on failure
+  phases.py                one training step's time split into forward, backward and optimizer, from `std::profile`'s operator rows
+  compare_implementations.py  the same program under two gradient pipelines, with the two runs' last loss compared
   RESULTS.md               the latest `--profile standard` run (generated, do not edit)
   README.cn.md             Chinese README
   README.md                this file

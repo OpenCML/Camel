@@ -239,10 +239,6 @@ slot_t splitKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     return stepKernel(with, norm, ctx, "split");
 }
 
-slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
-    return stepKernel(with, norm, ctx, "transpose");
-}
-
 } // namespace
 
 const std::vector<oper_group_ptr_t> &operatorGroups() {
@@ -252,12 +248,12 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
         OperatorGroup::create(
             "jvp",
             {{"transforms:jvp", std::make_shared<JvpResolver>()}}),
-        // The two steps of `vjp` that are not written yet (stdlib/vjp.cml): the shape is the
-        // library's, the refusal is theirs.
+        // The step of `vjp` that is not written yet (stdlib/vjp.cml): the shape is the
+        // library's, the refusal is theirs. `transpose` is not here: it has a rule of its own
+        // (`transpose_operator.cpp`), and a second group under one name answers the signature
+        // with the shape of the function it was given -- `(x: float) => float`, not a pullback.
         OperatorGroup::create(
             "split", {{"transforms:split", std::make_shared<StepResolver>()}}),
-        OperatorGroup::create(
-            "transpose", {{"transforms:transpose", std::make_shared<StepResolver>()}}),
     };
     return groups;
 }

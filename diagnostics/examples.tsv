@@ -196,6 +196,7 @@ SemanticDiag::ReturnNeedsConversion	test/cases/compile/array_shape/err_return_sh
 SemanticDiag::ReturnTypeMismatch	test/cases/compile/return_type/string_as_int.cml
 SemanticDiag::RuleConstParamNotMatched	test/cases/modules/rules/const_param_unbound.cml
 SemanticDiag::RuleLeftIsNotAnOperator	test/cases/compile/rulesets/rulesets.err_left_not_operator.cml
+SemanticDiag::RuleRightUsesOuterVariable	test/cases/compile/transforms/vmap_rule_outer_variable.cml
 SemanticDiag::RuleTagNotRequires	test/cases/modules/rules/err_rule_tag.cml
 SemanticDiag::RuleWithArgumentNotConstant	test/cases/modules/rules/err_rule_with_not_constant.cml
 SemanticDiag::RuleWithParameterUnbound	test/cases/modules/rules/err_rule_with_unbound.cml

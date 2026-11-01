@@ -194,6 +194,31 @@ std::string variableNamesOf(syntax::Node left) {
     return joined;
 }
 
+std::string outerNamesUsedInRight(syntax::Node left, syntax::Node right) {
+    // The same leaf walk on both sides: the left answers which names the pattern binds, the right
+    // which names it writes, and what both answer is the dependency the refusal is about. The right
+    // side's own parameters (`bx`, `bw`), its type names and the functions it calls are not the
+    // left's names, so they do not appear in the answer.
+    std::vector<std::string> bound;
+    collectNames(left, bound);
+    if (bound.empty()) {
+        return {};
+    }
+    std::vector<std::string> written;
+    collectNames(right, written);
+    std::string used;
+    for (const std::string &name : written) {
+        if (std::find(bound.begin(), bound.end(), name) == bound.end()) {
+            continue;
+        }
+        if (!used.empty()) {
+            used += ',';
+        }
+        used += name;
+    }
+    return used;
+}
+
 void collectRuleHead(
     const std::string &module,
     std::string head,
@@ -201,6 +226,7 @@ void collectRuleHead(
     std::string rhsCallee,
     std::string shape,
     std::string variables,
+    std::string outerUses,
     uint32_t arity,
     uint32_t tokenStart,
     uint32_t tokenEnd) {
@@ -211,6 +237,7 @@ void collectRuleHead(
         std::move(rhsCallee),
         std::move(shape),
         std::move(variables),
+        std::move(outerUses),
         arity,
         tokenStart,
         tokenEnd});
