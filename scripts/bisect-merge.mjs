@@ -55,6 +55,7 @@ function parseArgs(argv) {
         hostRoot: null,
         forward: false,
         merges: [],
+        groups: [],
         before: [],
     }
     for (let i = 0; i < argv.length; i += 1) {
@@ -103,6 +104,10 @@ function parseArgs(argv) {
                 break
             case '--merge':
                 args.merges.push(value)
+                i += 1
+                break
+            case '--group':
+                args.groups.push(value)
                 i += 1
                 break
             case '--before':
@@ -253,41 +258,60 @@ function forward(args, baseline) {
         )
         return 6
     }
-    const merges = mergesOf(args)
-    if (merges.length === 0) {
+    // A step is one unit of history: a single merge, or a group of commits the caller names
+    // because the unit only builds once all of them are applied (a merge whose follow-up commits
+    // land after it is such a unit).
+    const steps = args.groups.length
+        ? args.groups.map((group) => group.split(',').map((sha) => sha.trim()))
+        : mergesOf(args).map((merge) => [merge.split(' ')[0]])
+    if (steps.length === 0) {
         console.log(`[bisect] no merges between ${args.start} and ${args.base}: nothing to apply`)
         return 4
     }
-    console.log(`[bisect] ${merges.length} merge(s) to apply, one at a time`)
+    console.log(`[bisect] ${steps.length} unit(s) to apply, one at a time`)
     let step = 0
-    for (const merge of merges) {
-        const [sha] = merge.split(' ')
+    for (const shas of steps) {
         step += 1
-        const applied = git(['merge', '--no-ff', '--no-edit', sha], args.path)
-        if (applied.code !== 0) {
-            git(['merge', '--abort'], args.path)
-            console.log(`[bisect] step ${step}/${merges.length} apply ${merge} CONFLICTED`)
-            console.log(
-                `[bisect]   ${applied.output.split(/\r?\n/).slice(0, 4).join('\n[bisect]   ')}`,
-            )
-            console.log('[bisect] the series stops here: resolve the merge by hand and re-run')
-            return 3
+        const subject = git(['log', '-1', '--format=%s', shas[shas.length - 1]], args.path)
+            .output.trim()
+        const label =
+            shas.length === 1 ? `${shas[0]} ${subject}` : `group ${shas.join(',')} ${subject}`
+        for (const sha of shas) {
+            const applied = git(['merge', '--no-ff', '--no-edit', sha], args.path)
+            if (applied.code !== 0) {
+                git(['merge', '--abort'], args.path)
+                console.log(`[bisect] step ${step}/${steps.length} apply ${label} CONFLICTED at ${sha}`)
+                console.log(
+                    `[bisect]   ${applied.output.split(/\r?\n/).slice(0, 4).join('\n[bisect]   ')}`,
+                )
+                console.log('[bisect] the series stops here: resolve the merge by hand and re-run')
+                return 3
+            }
         }
-        const result = measure(args, '[forward]', `step ${step}/${merges.length} apply ${merge}`)
+        const result = measure(args, '[forward]', `step ${step}/${steps.length} apply ${label}`)
         if (result.refused) {
             return 5
         }
+        if (result.summary === '(no [SUMMARY])') {
+            const head = git(['rev-parse', '--short', 'HEAD'], args.path).output.trim()
+            console.log(
+                `[bisect] step ${step}/${steps.length} did not build (at ${head}): forward can only ` +
+                    'judge a state the plan ran on -- this unit needs more of its history before it ' +
+                    'is a unit, and `--group` is how the caller says so',
+            )
+            return 7
+        }
         if (!result.green) {
             const head = git(['rev-parse', '--short', 'HEAD'], args.path).output.trim()
-            console.log(`[bisect] CULPRIT ${merge}`)
-            console.log(`[bisect] red at ${head} after ${step} merge(s); the plan's own reading:`)
+            console.log(`[bisect] CULPRIT ${shas.join(',')} ${subject}`)
+            console.log(`[bisect] red at ${head} after ${step} step(s); the plan's own reading:`)
             console.log(`[bisect]   ${result.summary}`)
             return 0
         }
     }
     console.log(
-        `[bisect] every one of ${merges.length} merges was applied one at a time and the plan stayed green: ` +
-            'no single merge of this list turns it red',
+        `[bisect] every one of ${steps.length} unit(s) was applied and the plan stayed green: ` +
+            'no single unit of this list turns it red',
     )
     return 4
 }
