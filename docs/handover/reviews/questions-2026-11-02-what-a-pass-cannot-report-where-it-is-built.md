@@ -31,6 +31,20 @@ EXIT=134
 
 > **构造期没有诊断接收方；任何在构造期发现的问题，必须在 pass maker 之外接住才报得出来。**
 
+**（补正，2026-11-02）这句话有前提，否则会被读成"参数错误报不出来"**：`src/execute/pass.cpp` 在
+**构造 pass 之前**就已经有一整套参数通道——`bindArgs` 拒掉类型错、名字未知、重复、缺失，
+`parameterDiagnostic` 把它们转成 `RuntimeDiag::InvalidPassParameter` / `SemanticDiag::ParamArgumentWrongType`，
+**带 `<pipeline>:<line>:<column>` 位置**，走 `hasErrors()`。所以"构造期没有接收方"说的是
+**在 pass 的构造体内部（或它调用的函数里）就地 `commit()` 没人接**，**不是**"参数错误天生没地方报"。
+
+**三层要分开记**：
+
+| 层 | 在哪 | 报得出来吗 |
+|---|---|---|
+| 取值/类型/名字校验 | `bindArgs`，**构造之前** | 有：`InvalidPassParameter` + 位置 |
+| 构造循环兜底 | pass maker 外面 | 兜底，转 `PassInternalError`（**还没做**） |
+| 运行期 | pass 的 `apply` 内 `rtmDiags` | 有：`hasErrors()` 停链 |
+
 三条同族的先例，都是"造出来了但没人读"：
 
 | 症状 | 位置 | 读的人在哪 |
@@ -79,19 +93,37 @@ EXIT=134
 
 ## 五、剩下的候选
 
-症状（`result=10` 越界、`Brch.join` 自指）只可能来自 **encode / decode 这一步**：
+**（撤回，2026-11-02，`lit2` 给出四个坐标之后）**这一节原先说"症状只可能来自 encode / decode"，
+**这个判断作废**。`lit2` 的四个坐标是：
 
-- `src/compile/gir/graph_encode.cpp:289`：draft → GCGraph，读 `DraftBrchPayload` 写 `GCBrchBody`；
-- `GraphDraft::decode`：GCGraph → 草稿，把 id 当成本图 id。
+| 坐标 | 读数 |
+|---|---|
+| ① 阶段 | builder 里 `instantiateCompileTimeTransforms()` 那一刻——**commit 前** |
+| ② 读 region 的 API | `GraphRead::regionOf(id)` → `DraftGraphRead` 实现是 `txn_.graph().region(id)`（`graph_read.h:217`），**不重映射** |
+| ③ 那 8 个节点 | 是**编码器编号**（`DraftGraphRead(txn, kept)`，`sourceIdOf(ref) = kept[ref]`，`graph_read.h:183-190`），不是草稿自有 id |
+| ④ 于是 | `Join(3).brch=5` / `owner=5 result=7` / `result=10` 是**跨空间比较** |
 
-而两条 clone 路径（`src/runtime/draft_clone.cpp` 的 GCGraph→草稿 `:68-73`、草稿→草稿 `:134-139`、
-`GCJoinBody.brch` 的 `:98-101` 与 `:145` 起）与 `adoptRegions`（`:204-240`）**都已重映射**，
-所以"拷贝时漏映射"这条也**不成立**。要动 encode/decode，必须先拿到 `lit2` 的**四个坐标**
-（builder commit 前 / 后 / decode 之后，以及读 `result` 用的是 `draft.region(id).result` 还是 `GCGraph::region`）。
+**所以 `result=10` 不是"漏映射"，是"两张表按不同编号空间逐值比较"**：节点按 `kept` 编号、
+region 仍是原始 id。**错在读数，不在代码。** `draft_inline` / `draft_clone` 不要按"漏映射"改；
+`lit2` 那句"回指的来源在草稿里不可信"同样撤回。
 
-## 六、还没做的一件
+**可查的口径**：**两张表的编号空间不同时，逐值比较没有意义——先统一编号，再比。**
+这是"假数"的第七种形态：**假数不只是编出来的，也可以是跨空间比出来的。**
 
-`settle_runs=0` 的**构造期通道**：在 `src/execute/pass.cpp` 的 pass maker 调用点
-`catch (const std::exception &)` → `rtmDiags()->of(RuntimeDiag::InvalidArgument).commit(...)`
-→ 让流水线按 `hasErrors()` 收尾。判据是"具名诊断 + 非零退出 + **不 abort**"。
-它同时是**以后所有 pass 参数校验**的正路，所以值得单开一笔。
+**回指自洽检查（`e33b52ee0`）不受影响**：它跑在冻结图上、只用同一个空间，四条不变量仍然成立。
+要真正回答"构建期草稿自洽与否"，需要的是**同一份草稿、同一阶段、四个值同空间**的第二张表
+（给 `DraftGraphRead` 一条 `kept` 恒等的读数路径即可），不是把同一个检查换个阶段挂。
+
+## 六、已经做完的与还没做的一件
+
+`settle_runs=0` 现在走**主路**（`403b9e869`）：`bindArgs` 旁的取值校验
+（`ParamProblemKind::OutOfRange`）在 **pass 构造之前**拒掉它，
+
+```
+error[RuntimeDiag::InvalidPassParameter]: Invalid pass specification 'std::opt settle_runs=0':
+settle_runs must be at least 1, got 0.      EXIT=1，没有 terminate
+```
+
+**还没做**：构造期兜底——`pass.cpp` 构造循环外 `catch (const std::exception &)` →
+`PassInternalError`（点名 pass、保留 `e.what()` 原文）→ `hasErrors()` 收尾。
+**只兜 `std::exception`，不兜 `...`**：把编程错误也吞掉会掩盖 bug。
