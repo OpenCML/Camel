@@ -875,3 +875,44 @@ test/cases/consistency/new_values/macro_append.cml rc=0
 ```
 
 **没有一支崩**。所以 A6 要么换一个形状，要么需要 README 那条最小程序原文——**不猜着造**，免得把"我没找到"记成"它不崩"。
+
+## 26. A6 复现到了：`std::macro std::opt std::gir` 读变体越界 → SIGABRT
+
+**① 怎么找到的**：A6 的 26 个语料程序清单（`repro_checks.json`）**没有随报告进仓库**（`git ls-tree origin/fsh-dev` 里只有 README 与少量 `minimal/`、`e9_reduced/`）。
+但 README 写明"enum 与 `match … when` 程序在 `std::macro std::opt std::gir` 上 signal 6"，于是按这个类扫：
+`git ls-files "test/cases/*enum*.cml" "test/cases/*match*.cml" | head -40`，每支跑一次该管线 —— **40 支里 2 支崩**。
+
+**② 两支，各三次，都是 SIGABRT（signal 6，core dumped）**：
+
+```
+test/cases/compile/enum/generic_tree.cml   std::macro std::opt std::gir   ← 三次都 Aborted
+test/cases/compile/enum/shapes.cml         std::macro std::opt std::gir   ← 三次都 Aborted
+```
+
+**③ 原文（`generic_tree.cml` 最后一次的尾部）**：
+
+```
+Reading    : reading field 0 of a Variant whose tag 1 declares 0 field(s), so the read is past its last one
+Stack Trace: (not available on this platform)
+```
+
+`shapes.cml` 是同一句的另一种偏移：`reading field 1 of a Variant whose tag 0 declares 1 field(s)`。
+
+**④ 栈（前 12 帧，点出函数名）**：
+
+```
+#0..#4  __pthread_kill / __GI_raise / __GI_abort
+#5  cml::fail_invariant(string const&, string const&, …)
+#6  camel::core::rtdata::Variant::get(unsigned long) const        ← 越界读在这里被守卫抓住
+#7  (anonymous namespace)::foldDraft(GraphTransaction&, Context&, deque<RootHandle>&, unsigned long)
+#8  camel::passes::generic::rewriteReachableGraphs(…)
+#9  simplifyGraph(…, OptimizeRewriteConfig const&, ostream&, unsigned long, GraphIRPass*)
+#10 applyPassesDetailed(…)
+```
+
+**⑤ 位置**：`Variant::get` 的守卫在 `include/camel/core/rtdata/variant.h:47-54`（`GUARD` → `fail_invariant` → `abort`），
+**越界由 `std::opt::generic` 的折叠规则读出来**：`src/passes/opt/generic/generic.cpp:1172` `foldDraft`。
+**也就是"折叠规则按一个 tag 的形状去读，而手里那个值的 tag 不是它假设的那一个"。**
+
+**⑥ 还没修**：这一笔到"复现 + 栈 + 位置"。修的方向是让 `foldDraft` 在读之前核对 tag/字段数（**按 A2 的模板：把断言里的前提变成分支**），
+或者让规则匹配阶段只产出与自身 tag 一致的读 —— **下一笔做，改前 `signal 6` ×3、改后要一个结果或一条具名诊断**。
