@@ -76,9 +76,15 @@ const EXAMPLES_REL = 'diagnostics/examples.tsv'
 //    6 -> 5   `generics.type_variable_unused` pinned `TypeVariableUnused` (`FeatureNotSupported` had
 //             already left the target by being deleted, not by being counted differently: nothing
 //             raised it, so the registry no longer declares it).
+//    5 -> 4   a section-qualified name inside an `expect_*_contains` needle is a pin -- the needle
+//             requires the emitted name in the output -- so `TagHasNoReader` (`tags.plan.toml`, beside
+//             the message it prints) had been pinned all along.
+//    4 -> 3   `NodeOfNotAParameter` was pinned by a bare name in a needle; its test now asserts
+//             `expect_diagnostic_name` too, which is the first-class form and makes the pin readable
+//             rather than incidental. No case was written for it: one existed.
 // A case added for a code lowers it in that commit; a correction lowers it in the commit that
 // teaches the counter the form, and names what it found.
-const NAME_COVERAGE_RECORDED = 5
+const NAME_COVERAGE_RECORDED = 3
 
 // The sections, in the order the headers are included. `id` is also the stem of the two
 // generated files; the type byte of the printed code is read from DiagType in base.h, under the
@@ -554,7 +560,7 @@ function producedNames(root) {
     ].filter((f) => !/[\\/]diagnostics[\\/]messages[\\/]/.test(f))
     const names = new Set()
     for (const file of files) {
-        const text = fs
+        let text = fs
             .readFileSync(file, 'utf8')
             .replace(/\/\*[\s\S]*?\*\//g, '')
             .replace(/\/\/.*$/gm, '')
@@ -979,6 +985,9 @@ if (mode === '--name-coverage' || mode === '--name-coverage-check') {
             .replace(/^\s*#.*$/gm, '')
             .replace(/desc\s*=\s*"""[\s\S]*?"""/g, '')
             .replace(/^\s*desc\s*=.*$/gm, '')
+        // `expect_output_not_contains` requires the words to be *absent*, so a name there is the
+        // opposite of a pin: drop those lists before anything reads a name out of a needle.
+        text = text.replace(/expect_(?:output|stdout|stderr)_not_contains\s*=\s*\[[\s\S]*?\]/g, '')
         for (const m of text.matchAll(/expect_diagnostic_name\s*=\s*["']([A-Za-z]+)::([A-Za-z]+)["']/g)) {
             pinned.add(`${m[1]}::${m[2]}`)
         }
@@ -995,9 +1004,12 @@ if (mode === '--name-coverage' || mode === '--name-coverage-check') {
         }
         // A `-E short` run renders the report as `name=SemanticDiag::X, code=0x...`, and a test whose
         // needles require that text requires the name the compiler emitted. The comment and `desc`
-        // lines are gone by now, so the words can only come from a needle or a script.
+        // lines are gone by now, so the words can only come from a needle or a script. A needle that
+        // writes the section-qualified name on its own (`"NodeOfNotAParameter"` beside the message it
+        // prints) is the same requirement without the `name=` field in front of it.
         for (const n of text.matchAll(/name=([A-Za-z]+)::([A-Za-z]+)/g)) pinned.add(`${n[1]}::${n[2]}`)
         for (const c of text.matchAll(/\bcode=(0[xX][0-9A-Fa-f]{8})/g)) pinned.add(c[1].toLowerCase())
+        for (const n of text.matchAll(/\b([A-Za-z]+Diag)::([A-Za-z0-9_]+)/g)) pinned.add(`${n[1]}::${n[2]}`)
     }
     // A code nothing raises cannot be pinned by a case, so it is not a target: it is listed apart
     // and does not sit in the set this check refuses to see grow.
