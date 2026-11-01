@@ -1,0 +1,44 @@
+{
+ "pipeline": [],
+ "env": {},
+ "expected": [],
+ "outcome": "RUN_ERROR",
+ "diagnostic": "InternalDiag::UnknownInternalError",
+ "detail": "An error has occurred: Runtime graph '__g_51__' breaks the branch-arm invariant: ACCS 7 runs between BRCH 6 and its JOIN 5 and belongs to two arms, 0 and 1: it would run only when arm 0 is taken, and arm 1 reads it (see docs/technical/17_graph_rewrite_api_contracts.md, 4.1)..",
+ "actual": [],
+ "reproduced": {
+  "RUN_ERROR": 10
+ },
+ "origin": {
+  "seed": 241,
+  "features": [
+   "append",
+   "array",
+   "builtin",
+   "capture",
+   "closure",
+   "comprehension",
+   "effects",
+   "env",
+   "float",
+   "func",
+   "hof",
+   "if",
+   "ifnoelse",
+   "logic",
+   "loop",
+   "macro",
+   "match",
+   "narrowing",
+   "nullable",
+   "opover",
+   "partial",
+   "rec",
+   "string",
+   "struct",
+   "tuple",
+   "var",
+   "varparam"
+  ]
+ }
+}
