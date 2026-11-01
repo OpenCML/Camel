@@ -1605,6 +1605,11 @@ func f(c: bool): int sync {
 - 修法照清单：计划只按存活排，`isMember` 只用来决定"在哪条臂里、什么时候"排，不决定排不排；`:251`、`:261` 两处一并看。
 - 用读数说明"通过"时，读数要能分辨出被审的那个机制。这一条以后照此执行。
 
+
+**已修（2026-11-02，develop `9ae8b202`）**：第 1 条那条 `if ((live[n] || isMember(n)) && state[n] != 2)` 已经不在了——排布只按存活，`isMember` 剩下的两处只决定“在哪条臂里、什么时候”排。合并的是 `lane-guard` 的 `4ea783758`（按 sha 并），改动在 `src/execute/graph_runtime_support.cpp` 的 order-pred 遍历：一个顺序边的前驱不再因为“属于正在排的那条臂”就被排进去。
+
+读数：`git grep '|| isMember' src/execute` 命中 **0**；全量 fast 层 `[SUMMARY] total: 8363, pass: 8351, fail: 0, skip: 10, known failures: 2`（`RUN_EXIT=0`）。**这一笔的读数照那条元规则诚实写着：它分不出这处改动**——24 格后端读数带不带这个种子打印相同的值；`let z = 1 / 0` 那条在前端就被删掉，计划见不到；计划级“存活没到却排进计划”的计数在三个程序上带不带种子都是 0（`var_read_before_region` 上是 1，同样带不带都一样）。所以这是**按规则保留，不是按读数保留**。
+
 P0-3（凭据检查不认顺序边）仍未见代码，排在这条之后紧接着做。
 
 ## 转交（2026-11-01 20:40，决策者）：一批外部评估查出的缺陷——`docs/handover/reports/eval-defects-2026-11-01/`
