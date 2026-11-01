@@ -163,6 +163,11 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"struct/append_arr_in_place", __append_in_place_arr__},
         // The private copy of an array a rewritten loop starts from; likewise internal.
         {"struct/copy_arr", __copy_arr__},
+        // `:op/keep(x, v)`: `v`, with `x` kept as an input of an operator that must run, so that
+        // the node `x` names stays in the data-use set (operators/ops.h). Inserted by a pass that
+        // removes the last use of an effect or of a computation that may fault; not a group a
+        // program can name.
+        {"op/keep", __keep__},
 
         // variables
         {"var/new", __builtin__var_new__},
@@ -629,8 +634,13 @@ void registerBuiltinOperatorTraits() {
     auto &registry = camel::core::OperatorTable::instance();
     for (const auto &[name, op] : getOpsImplMap()) {
         const std::string_view key(name);
-        // Every operator over Map and Set (coll/) returns a new value and changes nothing.
-        const bool pure = (key.starts_with("op/") && !storesIntoCell(key)) ||
+        // Every operator under `op/` is pure except the assignment family, which writes a
+        // variable, and `op/keep`, which is there for a node that must keep running: it is
+        // declared the way an operator nobody declared is (it has an effect, and it may fault),
+        // so no pass drops it, merges it, moves it or computes it early, which would undo the
+        // reason a pass inserted it (operators/ops.h). Every operator over Map and Set (coll/)
+        // returns a new value and changes nothing.
+        const bool pure = (key.starts_with("op/") && !storesIntoCell(key) && key != "op/keep") ||
                           key.starts_with("coll/") || key.starts_with("enum/") ||
                           kPureHelpers.contains(key);
         // Declared either way: an operator without a declaration is treated the same as one
