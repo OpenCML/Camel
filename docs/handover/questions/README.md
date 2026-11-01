@@ -20,7 +20,6 @@
 | [`closures-as-values-block-the-transposed-backward-half`](questions-2026-11-01-closures-as-values-block-the-transposed-backward-half.md) | 转置的后一半里出现"闭包当值、调用返回闭包"时，是等去函数化、允许闭包当值，还是让 `split` 内联 | 三条路都不选：`reinterp` 在命中处展开成直接调用（作者 `9f85daeb0`） |
 | [`split-has-landed-and-the-host-is-up`](questions-2026-11-01-split-has-landed-and-the-host-is-up.md) | 状态页：`split` 已落地、主机正常，只剩 `transpose` 收残差一道墙 | 无需裁定（状态通报） |
 | [`inliner-chain-joining-as-its-own-change`](questions-2026-11-01-inliner-chain-joining-as-its-own-change.md) | inliner 的接链修法要不要单独立项：修法与三条判据成立，但代价是 97 fail（放开门槛）/ 47 fail（只放开完全无 wait 的调用），根因是 `main`→`__root__` 那次调用没有 wait | 不删边；修法单独立项，golden 重整代价另估 |
-| [`does-remat-change-what-split-stores`](questions-2026-11-01-does-remat-change-what-split-stores.md) | `remat` 在值上是恒等（已落），"反向不保存残差"由谁读：`split` 的残差数还是 `pullback` 的捕获表 | 标记归 `split`（A）：该段跨切只留入口值，`residuals=` 下降 |
 
 `whether-a-reduction-can-be-written-without-an-axis` 已裁已落（`5fd6fd902`，选 B：四条整轴形态都补），整体挪进 `reviews/`；它带出来的新问题（批 `argmax`/`argmin` 缺扁平视图）就是上面最后一页。
 
