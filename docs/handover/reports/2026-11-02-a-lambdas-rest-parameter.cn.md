@@ -1406,3 +1406,89 @@ A9 也一样：`opt::fold` 今天没有预算上限，**一个常量能把内存
 - **全量**：`total: 8369, pass: 8357, fail: 0, skip: 10, known failures: 2`（与基线同一个数，**没有回退也没有新增**）。
 - `stdlib-reference --verify-docs`：**exit 0**（558 个 example 全查、计数与脚本记录一致）；`diagnostics --verify-doc`：up to date。
 - eval 报的 **143 of 576（1/4 抽样）** 那一层**没有重跑**——那份抽样集不在仓库里；能逐个数的是上面 149 支里的 36。
+
+## 44. A9：`opt::fold` 没有 `constant_budget`——读数复现了，钳的量**不能照搬**，按判据 6 的兜底先问作者
+
+**① 两侧读数（`minimal/fold_interval.cml` 原样）**：
+
+```camel
+func main(): int sync {
+    let k = 0..5000000
+    println(len(k))
+    return 0
+}
+```
+
+| 命令 | `|wc -c` | eval 记 |
+|---|---|---|
+| `camel … opt::fold std::gir` | **43,890,910** | 43,890,478 |
+| `camel … std::opt::fold std::gir` | **2,221** | 1,789 |
+
+**两个语料程序（判据 5）**：
+
+| 程序 | `opt::fold std::gir` | `std::opt::fold std::gir` |
+|---|---|---|
+| `test/cases/feat/mm/gc/gc_block_pacing.cml` | **43,899,403** | **10,714** |
+| `test/cases/para/core/para_block_sort_merge` → `test/cases/para/core/block_sort_merge.cml` | **34,904,296** | **15,378** |
+
+⇒ **之前那个 `too_large` 就是这件事**：Camel 阶段把 500 万个元素物化进图里，dump 出来 43 MB。
+
+**② 原生遍那条钳的落点（原文）**：
+`include/camel/passes/opt/config.h:55-59`：
+
+```cpp
+/// Bytes of constants folding may put into a graph. Folding replaces a computation by the value it
+/// produces, which is compile-time memory bought for run time; past this size the value is not
+/// worth holding and the computation stays (generic.cpp, constantBytesOf). It is the default of
+/// the `constant_budget` parameter of the passes that fold, `std::opt` and `std::opt::fold`.
+inline constexpr size_t kDefaultConstantBudgetBytes = 8u * 1024u * 1024u;
+```
+
+`src/execute/pass.cpp:375-382`：
+
+```cpp
+/// The `constant_budget` parameter of the passes that fold (design principles 9.6): the bytes of
+/// constants folding may materialize in a graph. A negative value is read as 0, which
+/// materializes none of them, the way `growth_budget`'s 0 copies nothing. Its declaration is in
+/// stdlib/std.cml.
+size_t constantBudgetOf(const PassArgs &args) {
+    const int64_t bytes = args.getInt("constant_budget");
+    return bytes < 0 ? 0 : static_cast<size_t>(bytes);
+}
+```
+
+判定在 `src/passes/opt/generic/generic.cpp`：`fitsConstantBudget(value, type, budget)` = `constantBytesOf(value, type, budget) < budget`。
+
+**③ 它钳的是哪个量** —— **"值自身占的字节数"，而且是按类型递归走出来的**（`constantBytesOf`，`generic.cpp:127-196`）：
+
+```cpp
+size_t constantBytesOf(slot_t value, const type::Type *type, size_t stopAt, size_t depth = 0) {
+    …
+    size_t bytes = kConstantShapeOverheadBytes;          // 4 * sizeof(slot_t) = 32
+    switch (type->code()) {
+    case type::TypeCode::Array:
+        bytes += sizeof(Array) + array->rank() * 2 * sizeof(int64_t) + array->byteSize();
+        …每元素递归…
+    case type::TypeCode::Tuple:  bytes += sizeof(Tuple) + tuple->size() * sizeof(slot_t); …
+    case type::TypeCode::Struct: bytes += sizeof(Struct) + record->size() * sizeof(slot_t); …
+    case type::TypeCode::String: bytes += sizeof(String) + text->size() + 1;
+    case type::TypeCode::Complex64/Complex128: bytes += 2 * sizeof(double);
+    default: break;                                       // 不认识的形状只算头部
+    }
+```
+
+**不是元素数、不是节点数、不是字节数的小计**：**它要 `sizeof(Array)`/`sizeof(Tuple)`/`sizeof(Struct)`/`sizeof(String)` 这些 C++ 对象布局，还要按元素类型递归、深度封顶 8、超过 `stopAt` 即停**。
+
+**④ 所以按判据 6 的兜底停手**：**这个钳不是一个能从 Camel 阶段照抄的量**——
+`stdlib` 里没有任何"值的字节数"函数（`git grep bytes -- stdlib/*.cml` 只有 `to_bytes`/字节串），
+而 `eval(t, n)`（`stdlib/graph.cml:281`）**没有预算参数**：它把值物化出来再交回来，**"先物化再丢掉"这一步原生遍也做**（`fitsConstantBudget` 的注释写着"asked after the operator ran"），
+**但 Camel 阶段连"丢掉"的判断都做不出来，因为它量不出那个值的大小。**
+
+**⑤ 给作者的选项（我的建议是甲）**：
+- **甲（默认，照它的算法、不另立新量）**：**把 `constantBytesOf` 作为一条图函数暴露给 Camel**（如 `constant_bytes(n: Node): int`），`opt::fold` 于是可以写
+  `with <constant_budget: int = 8388608>` 并 `if constant_bytes(v) < constant_budget then 替换 else 留下`——**同一个函数、同一个默认值，两个阶段量的是同一个数**。
+  这是**新加一条只读的内建**，不动任何语义；工作量在"函数怎么暴露给 stdlib"那一层。
+- **乙（不推荐）**：Camel 阶段自己定义一个量（元素数上限之类）——**那就是另立新量**，与判据 6 的默认相反，且两个阶段从此不可比。
+
+**⑥ 本轮没有改代码**：**没有把任何一个新量塞进 `opt::fold`**（`stdlib/opt.cml` 与 `stdlib/std.cml` 未动，`git status` 为空）；
+所以 regressions 沿用上一轮的读数（全量 `8369/8357/0`）。**这一条要作者点头才能往下走**：要么准我暴露 `constant_bytes`，要么给一个他认为可接受的量。
