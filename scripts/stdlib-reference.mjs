@@ -1744,6 +1744,9 @@ const RESULT_SCALARS = new Map([
 // argument's dtype, but the set is the float family the word names).
 const FLOAT_ELEMENTS = new Set(['float', 'f32', 'bf16', 'f16'])
 
+// How many names an exception list shows in one line before it counts the rest.
+const EXCEPTIONS_SHOWN = 12
+
 // The type a signature states, with the conditions a declaration may add after it removed: a
 // `when ...` or `uses ...` clause is about the operator, not about its result.
 function withoutConditions(text) {
@@ -2308,14 +2311,17 @@ if (mode === '--write' || mode === '--verify-doc') {
     // name that joins it both show in the run's output, and a failure adds what the two sides said.
     if (unchecked.length > 0) {
         const names = unchecked.map((one) => one.name).filter((name, i, all) => all.indexOf(name) === i)
-        const listed = names.slice(0, 12).join(', ')
-        const more = names.length > 12 ? `, and ${names.length - 12} more` : ''
+        // One list length, so how many names are shown and how many are counted as left over cannot
+        // drift apart.
+        const shown = names.slice(0, EXCEPTIONS_SHOWN)
+        const more = names.length > shown.length ? `, and ${names.length - shown.length} more` : ''
         console.log(
             `the declared result type was not compared for ${names.length} operator(s) -- a type variable, a named ` +
-                `type or a sentence on one side, or an element type the operator takes from its argument: ${listed}${more}`,
+                `type or a sentence on one side, or an element type the operator takes from its argument: ` +
+                `${shown.join(', ')}${more}`,
         )
         if (problems.length > 0) {
-            for (const one of unchecked.slice(0, 12)) {
+            for (const one of unchecked.slice(0, EXCEPTIONS_SHOWN)) {
                 console.log(`    ${one.name} (${one.uri}): declares \`${one.declared}\`, the operator says \`${one.claimed}\``)
             }
         }
