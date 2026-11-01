@@ -14,6 +14,7 @@
 #include "camel/runtime/graph_txn.h"
 #include "camel/utils/type.h"
 
+#include <algorithm>
 #include <array>
 #include <numeric>
 #include <span>
@@ -349,6 +350,115 @@ size_t residualCountOf(FunctionType *backward) {
 
 } // namespace
 
+std::vector<Residual> residualsOf(const rt::GCGraph &lifted) {
+    std::vector<Residual> residuals;
+    if (lifted.funcType() == nullptr) {
+        return residuals;
+    }
+    // The exit is the pair (result, tangent); anything else is not a lifted graph, and there is no
+    // cut to compute residuals of.
+    const gc_node_ref_t exit = ungated(&lifted, lifted.exitNodeRef());
+    if (exit >= lifted.nodeCount() || lifted.node(exit) == nullptr) {
+        return residuals;
+    }
+    const auto &exitWith = lifted.withInputsOf(exit);
+    if (lifted.node(exit)->kind != rt::GCNodeKind::Fill || exitWith.size() != 2) {
+        return residuals;
+    }
+    const gc_node_ref_t resultHalf  = ungated(&lifted, exitWith[0]);
+    const gc_node_ref_t tangentHalf = ungated(&lifted, exitWith[1]);
+
+    // Which side of the cut every node is on, as the exit says it: what the result reaches is
+    // computed before the cut, what the tangent reaches is computed after it.
+    const size_t nodeCount = static_cast<size_t>(lifted.nodeCount());
+    std::vector<char> beforeCut(nodeCount, 0);
+    {
+        std::vector<gc_node_ref_t> stack;
+        if (resultHalf < nodeCount) {
+            stack.push_back(resultHalf);
+            beforeCut[resultHalf] = 1;
+        }
+        while (!stack.empty()) {
+            const gc_node_ref_t ref = stack.back();
+            stack.pop_back();
+            for (gc_node_ref_t input : dataInputsOf(&lifted, ref)) {
+                if (input < nodeCount && beforeCut[input] == 0) {
+                    beforeCut[input] = 1;
+                    stack.push_back(input);
+                }
+            }
+        }
+    }
+    // A value the tangent side reads and the result side already computed crosses the cut: it is a
+    // residual, and the walk stops at it (what is inside the forward half is not this function's
+    // business). A node the result side never reaches is part of the tangent chain: the walk goes
+    // through it.
+    std::vector<char> visited(nodeCount, 0);
+    std::vector<gc_node_ref_t> found;
+    {
+        std::vector<gc_node_ref_t> stack;
+        if (tangentHalf < nodeCount) {
+            stack.push_back(tangentHalf);
+        }
+        while (!stack.empty()) {
+            const gc_node_ref_t ref = stack.back();
+            stack.pop_back();
+            if (ref >= nodeCount || visited[ref] != 0) {
+                continue;
+            }
+            visited[ref] = 1;
+            if (beforeCut[ref] != 0 && ref != tangentHalf) {
+                found.push_back(ref);
+                continue;
+            }
+            for (gc_node_ref_t input : dataInputsOf(&lifted, ref)) {
+                if (input < nodeCount && visited[input] == 0) {
+                    stack.push_back(input);
+                }
+            }
+        }
+    }
+    // Program order: the parameters by their index, then the computed values by their node. The
+    // index of a parameter is its place in the graph's port list (`(value, tangent)` pairs), so the
+    // value of the k-th parameter is at 2k.
+    std::vector<size_t> portIndex(nodeCount, Residual::kNotAParameter);
+    const std::span<const gc_node_ref_t> ports = lifted.normPorts();
+    for (size_t i = 0; i < ports.size(); ++i) {
+        if (ports[i] < nodeCount) {
+            portIndex[ports[i]] = i;
+        }
+    }
+    std::sort(found.begin(), found.end(), [&portIndex](gc_node_ref_t a, gc_node_ref_t b) {
+        const bool aIsPort = portIndex[a] != Residual::kNotAParameter;
+        const bool bIsPort = portIndex[b] != Residual::kNotAParameter;
+        if (aIsPort != bIsPort) {
+            return aIsPort;
+        }
+        if (aIsPort) {
+            return portIndex[a] < portIndex[b];
+        }
+        return a < b;
+    });
+    residuals.reserve(found.size());
+    for (gc_node_ref_t ref : found) {
+        Residual residual;
+        residual.node = ref;
+        const size_t index = portIndex[ref];
+        if (index != Residual::kNotAParameter) {
+            // A parameter's value: its type is the parameter's, and its number is half its index.
+            residual.parameter = index / 2;
+            residual.type      = index < lifted.funcType()->normTypesCount()
+                                     ? lifted.funcType()->normTypeAt(index)
+                                     : lifted.node(ref)->dataType();
+        } else {
+            residual.parameter = Residual::kNotAParameter;
+            residual.type      = lifted.node(ref) != nullptr ? lifted.node(ref)->dataType() : nullptr;
+        }
+        residuals.push_back(residual);
+    }
+    return residuals;
+}
+
 SplitHalves splitHalvesOf(FunctionType *function) {
     SplitHalves halves;
     if (function == nullptr) {
@@ -386,13 +496,14 @@ SplitHalves splitHalvesOf(FunctionType *function) {
         return halves;
     }
 
-    // The residuals: the values the backward half reads, in program order. Which values those are is
-    // a property of the *graph* -- a value only the forward half uses is not a residual -- but the
-    // shape of the call is a signature, and a signature is computed from types. The type function
-    // that would say it (`ResidualsOf<F>`, stdlib/signatures/transforms.cml) is the compiler's and
-    // is not written yet, so what the type can say is the values it has: one residual per value
-    // parameter, in the order they appear. The graph decides what it *fills*; this decides what it
-    // may hold. The two agree wherever the backward half reads every value it is given.
+    // The residuals: the values the backward half reads, in program order. Which values those are is a
+    // property of the *graph*, and `residualsOf` answers it from the graph; the shape of the call,
+    // though, is a signature, and a signature is computed from types. So the type here says what a
+    // type can say -- one slot per value parameter, in the order they appear -- and the graph decides
+    // which slots are read. The two are counted side by side in the reading (`residuals=`,
+    // `carried=`, `slots=`), and they part company in both directions: the identity graph has a slot
+    // nothing reads, and a body whose backward half reads a value it computed (`f(x, y) = x*x*y`
+    // reads `x*x`) needs a value the slots cannot name, so this tier recomputes it.
     std::vector<Type *> residualTypes;
     for (size_t i = 0; i < count; i += 2) {
         residualTypes.push_back(function->normTypeAt(i));
@@ -466,6 +577,11 @@ SplitGraph buildSplitGraph(
     }
 
     const std::string base = "split_of_" + std::string(function->name());
+    // `ResidualsOf<F>`, computed from the graph before either half is built: which forward values the
+    // backward half reads, in program order. The fill below is checked against it rather than
+    // guessed from it -- the tuple's *arity* is the signature's, and only the graph can say which of
+    // its slots are read.
+    const std::vector<Residual> graphResiduals = residualsOf(*function);
     rt::GraphDraftGroup group(context, program);
     // Both members are reserved before either is built: they are the two graphs of one call, and
     // the first reserved one is the group's root (the forward half, which a caller runs first).
@@ -473,6 +589,8 @@ SplitGraph buildSplitGraph(
     const GraphId backwardId = group.reserve(base + "_backward", base + "_backward");
 
     SplitGraph built;
+    // How many values the backward half projected out of the residual tuple while it was being built.
+    size_t projectedResiduals = 0;
     {
         // The forward half: the value of every parameter in, (result, residuals) out.
         auto &draft = group.transaction(forwardId).edit();
@@ -491,10 +609,11 @@ SplitGraph buildSplitGraph(
                << " why=" << built.refusedWhy << '\n';
             return built;
         }
-        // The residuals: the value of every parameter, in program order -- the tuple the backward
-        // half projects a value out of. What the graph *fills* is decided by the cut (the values the
-        // tangent chain reads); what it *may hold* by the signature, because a signature is computed
-        // from types.
+        // The residuals: the value of every parameter, in program order -- the tuple the backward half
+        // projects a value out of. The *arity* is the signature's (a signature is computed from types,
+        // so it says one slot per value parameter); which slots are read is the graph's, and
+        // `residualsOf` names them. The forward half fills every slot, because a tuple of n members
+        // is n values whether or not the other half reads them all.
         std::vector<gc_node_ref_t> residualMembers;
         residualMembers.reserve(sourcePorts.size() / 2);
         for (size_t i = 0; i < sourcePorts.size(); i += 2) {
@@ -538,17 +657,39 @@ SplitGraph buildSplitGraph(
         draft.setExitNode(out);
         draft.setOutputNode(out);
         draft.setReturnNode(out, rt::GCReturnKind::Self);
+        for (gc_node_ref_t accs : backward.residualAccs) {
+            projectedResiduals += accs != rt::kInvalidNodeRef ? 1 : 0;
+        }
     }
     group.encode();
     const rt::GCGraph *forwardMade  = group.encoded(forwardId);
     const rt::GCGraph *backwardMade = group.encoded(backwardId);
-    built.residuals                 = residualCountOf(halves.backward);
+    // What the type says and what the graph says, side by side: the signature decides how many
+    // values may cross the cut (`residualSlots`), `ResidualsOf` -- read from the graph, before the
+    // two halves were built -- decides how many do (`residuals`). The two agree wherever the backward
+    // half reads every value parameter, and the identity graph is where they do not: nothing crosses
+    // there, while the signature still has a slot for each value parameter.
+    built.residualSlots = residualCountOf(halves.backward);
+    built.residuals     = graphResiduals.size();
+    // Of the values that cross, how many the tuple has a slot for. A residual that is not a
+    // parameter is a value the backward half can only recompute this tier (it has no slot to take it
+    // from), and a recomputation is a residual the cut did not carry: countable, and counted here.
+    size_t carried = 0;
+    for (const Residual &residual : graphResiduals) {
+        carried += residual.parameter != Residual::kNotAParameter ? 1 : 0;
+    }
+    built.carried = carried;
+    // The builder's own cut and the type function's are two readings of the same thing, so they are
+    // compared rather than trusted: a value the backward half projected that `residualsOf` does not
+    // name (or the other way round) is a build that put a value on the wrong side of the cut.
+    const bool agree = carried == projectedResiduals;
     os << "REINTERP split function=" << function->name() << " forward=" << rt::toValue(forwardId)
        << " backward=" << rt::toValue(backwardId)
        << " type=" << (forwardMade != nullptr && forwardMade->funcType() != nullptr
                            ? forwardMade->funcType()->toString()
                            : std::string("-"))
-       << " residuals=" << built.residuals << '\n';
+       << " residuals=" << built.residuals << " carried=" << built.carried
+       << " slots=" << built.residualSlots << " agree=" << (agree ? "yes" : "no") << '\n';
     built.program  = group.program();
     built.forward  = const_cast<rt::GCGraph *>(forwardMade);
     built.backward = const_cast<rt::GCGraph *>(backwardMade);
