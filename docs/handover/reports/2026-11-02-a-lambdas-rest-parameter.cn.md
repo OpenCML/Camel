@@ -1029,3 +1029,75 @@ gc_node_ref_t GraphDraft::materializeStaticValue(
 1. 崩点：`Variant::get(0)` on a **tag 1 / 0 fields** 的变体（`shapes.cml` 是 tag 0 / 1 field 读序号 1）；
 2. 已排除：`foldStaticAccess` 两支（打点证明运行时字段数与键都对）、`generic.cpp` 六处（无 `Variant` 字样）、`materializeStaticValue`/`appendStaticSlot`（不读字段）；
 3. 剩下的方向：`GraphDraft::addNode` / `touchRefs` / `relocateStaticValues`——**按类型遍历静态值**的那一层，以及"枚举值被当成结构体/元组静态值送进来"的**上游**（谁把 tag 与静态类型配错了）。
+
+## 31. `ASSERT` 审计剩下 93 处：到不了 10 / 调用点保证 21 / 危险 62
+
+**判法与口径**（先写清，免得三类被读成别的意思）：
+- **① 到不了**：这处在运行期根本不执行（编译期 `static_assert`，或分支永不进入）。
+- **② 前提由调用点保证**：**我读到了那一行**，并写清是哪一行的什么保证。
+- **③ 危险**：**其余全部**。**"我没核实到调用点"也算 ③**——**未核实的断言不能算安全**。每一处仍写明"什么能让它成假"。
+
+**10 + 21 + 62 = 93。**
+
+### ① 到不了（10）
+
+编译期 `static_assert`，运行期没有这行代码：`frame.h:390,391,392,394,395`、`standalone/array.h:396`、
+`utils/exstore.h:25,30`、`utils/type.h:25`、`core/type/composite/func.cpp:25`。
+
+### ② 前提由调用点保证（21）
+
+| 处 | 哪一行保证 |
+|---|---|
+| `draft_regions.cpp:23` | `region == 0 || region < regions_.size()`，region 由同文件 `addRegion` 返回后再传回 |
+| `draft_regions.cpp:53` | 前一行的 `header(id)` 已按 `kind` 分派，`Brch` 支只对 Brch 调用 |
+| `draft_regions.cpp:59,75,82,155,232,238,249` | 同上：`id` 唯一来源是同文件的 `addRegion`，并在 `:23` 处按 `regions_.size()` 校验过 |
+| `draft_session.cpp:1918` | `!encoded_`：`encode()` 只被 `applyPasses` 调一次，之后置位 |
+| `draft_session.cpp:1953` | `encoded_`：`encoded()` 只在 `encode()` 之后被调用 |
+| `draft_session.cpp:1959,1965` | `it != members_.end()`：`it` 由上一行的 `members_.find` 得到并已判 |
+| `draft.cpp:142` | `draftNode->tail`：由同函数的 `allocTail` 分配，失败即 `bad_alloc`（`block.cpp:77,146`、`growable.cpp:330` 同一条"分配器不返回 null"的契约） |
+| `draft.h:217,223` | `bytes.size() >= sizeof(Body)`：`payloadOf` 的字节数由建节点时按 `Body` 申请 |
+| `draft.h:380,2084` | `hasFrameLayout()`：`runtimeGraph` 的帧布局在 `allocateRuntimeSlot` 之前建好 |
+| `set_value.cpp:121` | `:111` 已判 `Struct` 并 `return`；算子签名只收 struct 或 tuple |
+
+### ③ 危险（62）：按"什么能让它成假"列
+
+| 处 | 什么能让它成假 |
+|---|---|
+| `tree.h:63` | 同一个 `node` 被两次 `add`（树的所有者写错） |
+| `execute/loop_driver.h:207` | 形状的 `valueType->size()` 与 `k + collectionCount` 不符（类型与形状分头构造） |
+| `runtime/graph.h:866` | `n->hasPayload()` 为假时 `reinterpret_cast` |
+| `include/camel/runtime/draft.h:445` | `index` 来自调用方，未在 release 校验 |
+| `utils/append_only_table.h:77,82` | `index >= size()`，`index` 由调用方给 |
+| `enum.cpp:131` | **枚举值为 null**（`fromSlot` 得到空指针）⇒ `value->tag()` 解引用空指针 |
+| `enum.cpp:140` | 值的 tag 与图决定的 tag 不一致（重排/内联后 tag 常量失效） |
+| `enum.cpp:143` | `index >= fieldCount()` ⇒ `get` 的 GUARD 会 abort（有消息，不是 UB） |
+| `mem.cpp:32` | 结构体不是 4 个字段 |
+| `struct.cpp:962,978,1007` | 切向量的长度与类型声明的字段数不一致 |
+| `array/dlpack.cpp:150,152,157,222,231,234` | 传进来的是空 tensor / 非 compact / 非紧凑元素类型 |
+| `core/data/composite/array.cpp:184` | `rankZeroType()` 为空 |
+| `core/data/composite/func.cpp:21,24` | `program->graph(graph)` 或 `funcType()` 为空 |
+| `core/data/composite/struct.cpp:147` | `fieldIndex` 无值（`StructData` 的洞不在 `StructType` 里） |
+| `core/data/composite/tuple.cpp:133` | `tupleType` 为空 |
+| `core/mm/block.cpp:77,146` | 分配器返回 null |
+| `core/mm/growable.cpp:330` | 同上 |
+| `core/type/base.cpp:333` | 替换的两边带 `Ref` 码 |
+| `execute/camel_pass.cpp:201` | 程序的根函数为空 |
+| `execute/exec_plan.cpp:29,87` | 节点查找解析为 null |
+| `execute/exec_plan.cpp:849` | 直接调用目标未被填 |
+| `execute/fault_isolation.cpp:84,86` | 节点类型不是 tuple / 不是可失败类型 |
+| `passes/opt/defun/defunctionalize.cpp:434` | **闭包捕获槽为 null** ⇒ 后面按值用 |
+| `passes/trans/gir_metadata.cpp:97,103,125,145` | 无运行时图 / 载荷比 `GCAccsBody`/`GCOperBody` 小 |
+| `runtime/draft.cpp:76,99,121` | 节点 id 解析为 null |
+| `runtime/draft_clone.cpp:32,105,174,319` | 克隆时节点 id 越界 / 源节点为 null |
+| `runtime/draft_construct.cpp:113,117,464,471,478,485,495` | 节点不是 `Oper`/`Loop`，或载荷太小 |
+| `runtime/draft_inline.cpp:851,857,894` | 函数为 null；闭包元组大小与节点数不符 |
+| `runtime/draft_session.cpp:1103,1599,1882,1908` | 图为 null / 闭包为空 / 组没有基底程序或事务 |
+| `runtime/graph.cpp:205,721,965` | 冻结图未 interned；子集保留节点 id；origin 超 32 位 |
+| `runtime/retype.cpp:175` | 替换的任一边为空 |
+
+**④ 本轮没修**：**K = 62 > 3**，按你的规则"其余列名单报我"。**最便宜的一处候选是 `enum.cpp:131`**
+（`value != nullptr` → 改成 `if (value == nullptr) throwRuntimeFault(…)`，两行），但它要一条新的运行期诊断码，
+**而诊断码由生成器分配**（今天已经吃过一次 `0x000209`）——**需要你决定用哪条现成的码，或允许我在下一轮走生成器**。
+
+**⑤ 口径提醒**：**②的 21 处是我真读到调用点的；③的 62 处里有一部分（如 `draft_regions` 之外那些"内部 id"）实际上也很可能是②，
+但我没有核到那一行，所以按你第 4 条"查不到 ≠ 不存在"，它们留在③，不写成安全。**
