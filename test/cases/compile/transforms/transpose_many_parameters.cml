@@ -1,0 +1,22 @@
+// The transpose of a call to a function of several parameters. `mul_tangent(x, w, dx, dw)` is
+// `dx*w + x*dw`, so a rule's tangent function reaches a transposed half with the operands in front
+// of the tangents -- four floats and no residual tuple. `Transpose<F>` takes every parameter as it
+// stands, then the cotangent, and answers one cotangent per parameter in the same order; the laws
+// are still the ruleset's (`add_t`, `mul_t`), because nothing here knows what `mul_tangent` is.
+//
+// At (x, w, dx, dw) = (3, 2, 1, 0) with the cotangent 1 the four answers are the partial
+// derivatives of `dx*w + x*dw`: (dw, dx, w, x) = (0, 1, 2, 3). The first two belong to the operands
+// and the last two to the tangents -- which is what makes this one shape do for a rule function:
+// the half that calls it keeps the two it needs and drops the two a residual owns.
+import rulesets.transpose
+import { transpose } from transforms
+import { mul_tangent } from autodiff
+
+func mt(x: float, w: float, dx: float, dw: float): float {
+    return mul_tangent(x, w, dx, dw)
+}
+
+func main(): int sync {
+    println(transpose(mt)(3.0, 2.0, 1.0, 0.0, 1.0))
+    return 0
+}

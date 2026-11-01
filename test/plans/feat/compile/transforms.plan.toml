@@ -333,3 +333,37 @@ expect_exit = 0
 expect_stdout_contains = ["TRANSPOSE function=g graph=", "TRANSPOSE function=f graph=", "rules=add_t", "4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+# A rule's tangent function is a plain function of several floats: `mul_tangent(x, w, dx, dw)` is
+# `dx*w + x*dw`, so the transposed half of a lifted graph calls it with the operands in front of
+# the tangents. `Transpose<F>` has a shape for that -- every parameter is a value the graph reads and
+# every parameter is also where a cotangent goes -- and the laws are still the ruleset's, which is
+# what `rules=add_t,mul_t` on the callee's line says: nothing in C++ knows what `mul_tangent` is.
+[[tests]]
+name = "transpose_many_parameters"
+desc = "`transpose(mt)` where `mt(x, w, dx, dw) = mul_tangent(x, w, dx, dw)`: a function of four floats and no residual tuple, which the signature step had no shape for before. The transpose takes all four as they stand, then the cotangent, and answers one cotangent per parameter -- `(float, float, float, float, float) => (float, float, float, float)`. At (3, 2, 1, 0) with cotangent 1 the four answers are the partial derivatives of `dx*w + x*dw`, `(dw, dx, w, x)` = `(0.0, 1.0, 2.0, 3.0)`: the operands' two, which the split half that calls it drops because a residual is read rather than differentiated, and the tangents' two, which it keeps. The node counts are the two graphs' own -- five nodes for `mt` (four ports and the call) and seven for `mul_tangent` (four ports, two products, the sum) -- and the rules are read off the walk, so the case pins the shape, the counts and the laws rather than any node's number."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_many_parameters.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["TRANSPOSE function=autodiff::mul_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=7 arms=0 rules=add_t,mul_t", "TRANSPOSE function=mt graph=", "nodes=5 arms=0 rules=-", "(0.0, 1.0, 2.0, 3.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# One seed cannot tell a pullback from a table of derivatives: at ct = 1 the two answers agree by
+# construction. Two seeds can -- a pullback is linear in its cotangent, and a rule applied under the
+# seed is not.
+[[tests]]
+name = "transpose_many_parameters.is_linear_in_the_cotangent"
+desc = "The same call at cotangent 1 and cotangent 2: `(0.0, 1.0, 2.0, 3.0)` and `(0.0, 2.0, 4.0, 6.0)`. Every answer is one primitive under the seed, so doubling the seed doubles each of them, and a transposed graph that answered the derivatives themselves -- or dropped the cotangent for one of the four branches -- would read the same four numbers twice. The pair is the cheap check that the seed reaches every arm of the split, which one seed cannot make."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_many_parameters_in_ct.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "stdout"]
+expect_exit = 0
+expect_stdout_contains = ["(0.0, 1.0, 2.0, 3.0)", "(0.0, 2.0, 4.0, 6.0)"]
+expect_stdout_not_contains = ["(0.0, 1.0, 2.0, 3.0)\n(0.0, 1.0, 2.0, 3.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
