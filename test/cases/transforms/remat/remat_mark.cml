@@ -1,0 +1,22 @@
+// The graph property `remat` sets, read in one run: the function as it was written carries no
+// property, the value `remat` gives carries it, and both compute the same number. The line the
+// kernel prints is the reading -- `in_recompute=0 out_recompute=1` -- and the three values below it
+// say the mark changes nothing a program can print (author's ruling of 2026-11-01: the mark is a
+// property of the graph, not of a call site and not a tag).
+//
+// Marking a marked function is marking it once, which the last call shows: it prints no second
+// `REINTERP remat` line, and its value is the same 18.0.
+import { remat } from transforms
+
+func h(x: float, y: float): float {
+    return x * x * y
+}
+
+func main(): int sync {
+    'remat_mark plain value={}'->format<h(3.0, 2.0)>->println
+    let marked = remat(h)
+    'remat_mark marked value={}'->format<marked(3.0, 2.0)>->println
+    let again = remat(marked)
+    'remat_mark again value={}'->format<again(3.0, 2.0)>->println
+    return 0
+}

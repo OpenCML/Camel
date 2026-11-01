@@ -209,7 +209,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "present.remat"
-desc = "`remat` is the name the recompute-in-the-backward transform has -- JAX's `jax.checkpoint` under its other name, chosen so the persistence word `checkpoint` stays the `ckpt` module's -- and `autodiff` exports it, so the import that pinned the absence resolves and the program prints the value: `remat(square)` is `square`, and `square(2.0)` is 4.0. The flip of the pin is the proof that the name arrived under this spelling; `modules.remat` is where the identity is measured against the gradient."
+desc = "`remat` is the name the recompute-in-the-backward transform has -- JAX's `jax.checkpoint` under its other name, chosen so the persistence word `checkpoint` stays the `ckpt` module's -- and the `transforms` module exports it, so the import that pinned the absence resolves and the program prints the value: `remat(square)` is a function over `square`'s graph with the recompute property, and its value at 2.0 is 4.0. The flip of the pin is the proof that the name arrived under this spelling; `modules.remat` reads the property itself."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/jax_names/remat.cml"
 args = ["${case}"]

@@ -13,7 +13,8 @@
  * make both partial derivatives readable at one point.
  */
 
-import { grad, remat } from autodiff
+import { grad } from autodiff
+import { remat } from transforms
 
 with <y: float>
 func f(x: float): float {
