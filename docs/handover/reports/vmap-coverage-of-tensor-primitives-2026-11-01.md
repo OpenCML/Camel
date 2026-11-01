@@ -27,7 +27,7 @@ func main(): int sync {
 **读数形状**（全表同一把尺子）：`asked` 是走到的原语数，`found` 是被规则集答了的数，`missing` 是差；
 `elements=` 是实例按哪个元素类型造的。
 
-## 一、有批规则的原语（13 条）
+## 一、有批规则的原语（13 条；布局一档落地后为 19 条，见第五节）
 
 | 原语 | 探测体 | 整轴形态 | 批规则 | 读数 |
 |---|---|---|---|---|
@@ -45,7 +45,7 @@ func main(): int sync {
 | `tensor:argmin_axis` | `argmin_axis(x, 0, false)` | 无（沿轴） | 有 | `asked=1 found=1 missing=0 rules=vmap_rule_argmin_axis elements=float` |
 | `tensor:matmul` | `matmul(x, w)`（`w: float[3, 2]`） | —（二元） | 有 | `asked=1 found=1 missing=0 rules=vmap_rule_matmul elements=float` |
 
-## 二、没有批规则的原语（39 条）
+## 二、没有批规则的原语（39 条；其中 6 条已在第五节落地，余 33 条）
 
 这些行的读数**全部**是同一形状，只换 URI 与诊断原文：
 
@@ -174,8 +174,8 @@ error InvalidArgument: Invalid argument of 'argmin': a tensor with no element ha
 
 ## 四、这张表回答了什么
 
-- **M5 覆盖完了没有**：`tensor:*` 里**只有 13 条**有批规则（`sum`、`mean`、`max`、`min`、`argmax`、`argmin`、
-  四条沿轴归约、`matmul`），其余 39 条一条都没有，而且是**键都没绑**（不是"绑了键、规则集里缺一条"）——
+- **M5 覆盖完了没有**：`tensor:*` 里**十三**条有批规则（`sum`、`mean`、`max`、`min`、`argmax`、`argmin`、
+  四条沿轴归约、`matmul`），布局一档（`reshape`/`unsqueeze`/`transpose`/`permute`/`concat`/`dim`）落地后是**十九**条，其余 33 条一条都没有，而且是**键都没绑**（不是"绑了键、规则集里缺一条"）——
   诊断原文分得清：没键是 `the operator has no batching rule key bound at all`，有键缺规则才是
   `the ruleset holds no rule for this operator and operand count`。今天 `tensor:*` 上**没有一条**落进后者。
 - 顺带的一条：整轴归约这一组现在**六条同形**，四折两reshape——`argmax`/`argmin` 的规则不是折，是「批读成一条线」。
@@ -198,30 +198,46 @@ error InvalidArgument: Invalid argument of 'argmin': a tensor with no element ha
 | `layer_norm` `softmax_grad`（2 条） | 全部普通操作数 | `reduction_ops.cpp` 这两条没有 `ordinaryParams = 1` |
 | `zeros_like` `ones_like`（2 条） | 规则 = 算子本身 | `gradient_ops.cpp`，一个普通操作数 |
 
-### 二档：要先改变换，规则本身写得出来（with 参数没被转发）——9 条
+### 二档：要改的是一行变换（with 参数）——9 条里 6 条已落地，3 条有实测原因
 
-`reshape`、`unsqueeze`、`permute`、`transpose`、`concat`、`softmax`、`log_softmax`、`dim`、`where`。
+**改法（已落地，`modules/transforms/vmap.cpp`）**：`batchThroughRule` 原来只把 `function->normInputsOf(ref)` 交给规则，
+现在接着交给 `withInputsOf(ref)`，注释写明"with 参数也是规则的实参，只是不按名字读"。顺序是**端口序**：
+`dataPortsOf` 是"所有 normal 端口，然后是 context 端口"（`include/camel/runtime/draft.h` 的注释就这一句），
+`OpDef::params` 同序（`reshape` 是 `t` 然后 `shape`，`unsqueeze` 是 `t` 然后 `axis`），规则右面是同一序的函数——
+`reshape<dims>(x) => (bx: Lift<T[..]>, bdims: int[..]) => ...`。
 
-- **`reshape`（本轮实测，四条原文）**：规则写 `reshape<dims>(x) => (bx: Lift<T[..]>, bdims: Lift<int[]>) => vmap_reshape(bx, bdims)`，
-  右边只读批量值、不读模式变量，形状靠运行期表达式（`reshape<concat([shape(xs)[0]], flat_dims(dims))>(xs)`，
-  `flat_dims` 用 `numel` + 逐元素读把"一个提升常量的那一行"读回原样）。索引命中、类型也对：
-  `rules=vmap_rule_reshape ... type=(float[?, 4]) => float[?, 2, 2]`；运行时却停在
-  `Runtime indirect call norm-arity mismatch: caller graph 'vmap_of_to_matrix' node 3 has 1 args, target graph 'rulesets.vmap::vmap_reshape<float>' has 2 norm ports.`
-  ——目标形状到不了规则。原因两处：`layout_ops.cpp` 的 `reshape` 是
-  `.params = {{"t", TensorLike}, {"shape", IntArray}}, .withAfterNorm = true, .ordinaryParams = 1`（`shape` 是 with 参数），
-  而 `vmap.cpp:380` 只遍历 `function->normInputsOf(ref)`。顺带量到键的口径：左面写 `reshape<dims>(x)` 时键是
-  **`reshape/1`**（count 的是括号里的操作数），把绑定写成 2 会得到 `found=0 missing=1` 与
-  `the ruleset holds no rule for this operator and operand count`。
-- **`unsqueeze`（本轮实测）**：同样的链——`.ordinaryParams = 1`，规则命中 `rules=vmap_rule_unsqueeze`、类型
-  `(float[?, 3]) => float[?, 1, 3]`，仍是 `has 1 args` / `has 2 norm ports`。左面写 `unsqueeze<axis>(x)`（`axis` 在尖括号里）
-  才过语义检查；写成 `unsqueeze(x, axis)` 得 `'unsqueeze' takes 'axis' in angle brackets, not in the parentheses`。
-- `transpose` / `permute` / `concat` / `softmax` / `log_softmax` / `dim`：各自的 `withAfterNorm = true`（`concat` 是
-  `ordinaryParams = 2`，`a`、`b` 普通、轴是 with），与 `reshape` 同一条原文同一类。
-- `where`：操作数全普通，但元素类型取自**第一个**操作数（`bool`），`vmap.cpp:87-94 firstOperandTypeOf` 会把规则
-  实例化在 `bool` 上——要改一行"取非 bool 操作数"。
-- 修法（**未改，等作者点头**）：`vmap.cpp:379-388` 把 `withInputsOf(ref)` 按序 lift 进去，约三行；或者把
-  `shape` / `perm` / `axis` 改成普通操作数（那是算子接口变更，`ctx.constInts(1)` 等消费方一起动）。
+A/B（同一份规则、同一份程序，只差这一行变换）：关掉 →
+`Runtime indirect call norm-arity mismatch: caller graph 'vmap_of_to_matrix' node 3 has 1 args, target graph 'rulesets.vmap::vmap_reshape<float>' has 2 norm ports.`；
+打开 → `rules=vmap_rule_reshape elements=float`、`type=(float[?, 4]) => float[?, 2, 2]`，三行四元素得
+`[[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]], [[9.0, 1.0], [2.0, 3.0]]]`，`reshape<[2, 2, 1]>` 得
+`[[[[1.0], [2.0]], [[3.0], [4.0]]], [[[5.0], [6.0]], [[7.0], [8.0]]], [[[9.0], [1.0]], [[2.0], [3.0]]]]`。
 
+落地的六条与读数（`test/cases/compile/transforms/vmap_layout_ops.cml`，计划
+`vmap_layout_ops_are_batched_through_their_written_arguments`，四个后端一致）：
+
+| 原语 | 规则 | 读数 / 数值 |
+|---|---|---|
+| `reshape/1` | `reshape<dims>(x)`，右边 `reshape<[shape(xs)[0], 展平(dims)]>(xs)` | `rules=vmap_rule_reshape`，`[3,2,2]` 与 `[3,2,2,1]` |
+| `unsqueeze/1` | `unsqueeze<axis>(x)`，右边 `unsqueeze<batched_axis(axis)>(xs)` | `rules=vmap_rule_unsqueeze`，`[[[1.0, 2.0, 3.0]], [[4.0, 5.0, 6.0]]]`；`<-1>` 得 `[[[1.0], [2.0], [3.0]], …]` |
+| `transpose/1` | 算子本身（批的最后两轴就是行的最后两轴） | `rules=vmap_rule_transpose`，`[[[1.0, 3.0], [2.0, 4.0]], [[5.0, 7.0], [6.0, 8.0]]]` |
+| `permute/1` | 右边 `permute<[0, 每个轴+1]>(xs)` | `rules=vmap_rule_permute`，与 `transpose` 逐位相同（`[1,0]`） |
+| `concat/2` | 右边 `concat<batched_axis(axis)>(ba, bb)` | `rules=vmap_rule_concat`，行 `[2,2]` 并成 `[2,4]` |
+| `dim/1` | 右边 `dim<batched_axis(axis)>(xs)`，且**逐行结果要收成批**（`int[]`，每行一个） | `rules=vmap_rule_dim`，`[2, 2]` |
+
+为什么 `dim` 的右边要收成批：`vmap` 的体返回 `int` 时，批的值类型是 `int[]`，而规则调用节点的结果类型按体算
+（`rowsOfType`）；第一版右边直接 `return dim<…>(xs)`，值类型停在 `int` 而节点要 `int[]`，进程**崩掉**
+（`expected exit 0, got null`，stdout 只有前一行）。写成 `range(0, shape(xs)[0])->map(...)` 后正常。
+
+剩下三条**实测过的原因**：
+
+- `softmax/1`、`log_softmax/1`：轴是**可省的**——`modules/tensor/ops/catalog.cpp:50-57` 把两者声明成
+  `params = {operand(0), operand(1, int64_t{-1})}`，省掉时节点**没有** with 端口。于是同一个键 `softmax/1` 有两种端口数：
+  `softmax<0>(x)` 走 2 端口（实测 `rules=vmap_rule_softmax elements=float`，数值对），`softmax(x)` 走 1 端口，规则
+  照样命中却在运行时炸：`Runtime indirect call norm-arity mismatch: caller graph 'vmap_of_soft_no_axis' node 2 has 1 args, target graph 'rulesets.vmap::vmap_softmax<float>' has 2 norm ports.`。今天 `softmax(x)` 是**干净的诊断**
+  （`the operator has no batching rule key bound at all`），加规则反而变成内部错误，所以**没落地**。要落地得先定一件事：
+  是变换在节点没写轴时补上声明里的默认值（`-1` 就在 `catalog.cpp` 里），还是规则能带一个可选端口。
+- `where/3`：操作数全普通，但元素类型取自**第一个**操作数（`bool`），`vmap.cpp:87-94 firstOperandTypeOf` 会把规则
+  实例化在 `bool` 上——要改一行"取非 bool 操作数"，按作者的划法这是另一笔，没动。
 ### 三档：要先有算子 / 要等语言表面——10 条
 
 - `shape` `numel`：行的形状是"批的形状去掉第 0 维"，今天**没有去掉一个轴的算子**（内部只有 `:op/slice_sub`）。
@@ -233,3 +249,4 @@ error InvalidArgument: Invalid argument of 'argmin': a tensor with no element ha
 
 三档合计 40 条；第三节记的 39 条与此差一条，差额是 `to_bytes`（第三节把它列在字节类里，本节单列）。
 一档 21 条里只有 `exp` 是实测的，其余 20 条的依据是声明读法（同一个 `OpDef` 形状），要逐条落地时一条一条量。
+二档 9 条里 6 条本轮落地（`reshape`/`unsqueeze`/`transpose`/`permute`/`concat`/`dim`，四个后端、读数与数值都在上面的表里），余 3 条各有实测原因（`softmax`/`log_softmax` 的可选轴、`where` 的 bool 首操作数）。

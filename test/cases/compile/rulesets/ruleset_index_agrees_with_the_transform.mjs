@@ -100,6 +100,13 @@ const expected = new Map([
     ['plane_argmin_axis', 'argmin_axis/3'],
     // a row's matrix product
     ['flat_mul', 'matmul/2'],
+    // the layout tier: the shape, axis and permutation written in angle brackets
+    ['row_reshape', 'reshape/1'],
+    ['row_unsqueeze', 'unsqueeze/1'],
+    ['plane_transpose', 'transpose/1'],
+    ['plane_permute', 'permute/1'],
+    ['plane_concat', 'concat/2'],
+    ['plane_dim', 'dim/1'],
 ])
 
 const transformText = run([bodies, 'std::nvm']).stdout

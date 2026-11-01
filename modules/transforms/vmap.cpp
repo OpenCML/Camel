@@ -376,12 +376,31 @@ VmapGraph buildVmapGraph(
             }
             const gc_node_ref_t named = draft.materializeStaticValue(
                 toSlot<::Function *>(functionValue), const_cast<FunctionType *>(callee->funcType()));
+            // The arguments are the node's ports in port order: the normal ones, then the context
+            // (`with`) ones -- `dataPortsOf` is that one list and `portRoleOf` says where the role
+            // changes (camel/runtime/draft.h), and an operator that writes `withAfterNorm` declares
+            // its parameters in the same order (`OpDef::params`: `reshape` is `t` then `shape`,
+            // `unsqueeze` is `t` then `axis`). A `with` argument is a rule's argument too, just not
+            // one read by name: the target shape of a `reshape` and the axis of an `unsqueeze` are
+            // values the batched body has to be given, and a rule's right side is a function whose
+            // ports follow the same order as the primitive's. They are lifted like any operand -- a
+            // constant becomes the batch of one row -- so the callee receives a batch for every
+            // port, exactly as it does for the normal ones.
             std::vector<gc_node_ref_t> arguments;
             for (gc_node_ref_t input : function->normInputsOf(ref)) {
                 if (input >= function->nodeCount() || copyOf[input] == rt::kInvalidNodeRef) {
                     refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
                     refused.refusedUri    = uri;
                     refused.refusedWhy    = "an operand was not lifted";
+                    return rt::kInvalidNodeRef;
+                }
+                arguments.push_back(copyOf[input]);
+            }
+            for (gc_node_ref_t input : function->withInputsOf(ref)) {
+                if (input >= function->nodeCount() || copyOf[input] == rt::kInvalidNodeRef) {
+                    refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                    refused.refusedUri    = uri;
+                    refused.refusedWhy    = "a `with` argument was not lifted";
                     return rt::kInvalidNodeRef;
                 }
                 arguments.push_back(copyOf[input]);
