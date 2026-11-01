@@ -14,6 +14,7 @@
 // `(float, float) => (float, float)` and `transpose` takes a function of one parameter, so the
 // library is refused where it composes itself. The plan asks `test/tools/have-library-vjp.mjs`
 // first and prints its reason with the skip; the day the two shapes meet, this case runs.
+import rulesets.jvp
 import { vjp } from vjp
 
 func f(x: float, y: float): float {

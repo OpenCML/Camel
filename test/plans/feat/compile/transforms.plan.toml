@@ -168,7 +168,7 @@ timeout_ms = 20000
 # library land.
 [[tests]]
 name = "vjp_api.names_the_missing_step"
-desc = "`vjp(f)` is `transpose(split(reinterp<jvp>(f)))` written in `stdlib/vjp.cml`. The composition is assembled there and one step of it cannot be built, so a call is refused at the line of the library that composes it -- not at the `vjp(f)` call in the program, and not in a sentence of the form `not implemented yet`, which sends the reader to no line at all. Today the refusal names `transpose`, and it names the same call in both declarations the stand-in spells (a function of one parameter and of two): the wall is a shape, not an arity. The run exits non-zero and prints no value."
+desc = "`vjp(f)` is `transpose(split(reinterp<jvp>(f)))` written in `stdlib/vjp.cml`. The composition assembles -- `split` hands back the pair of halves and the forward one is called -- and one step of it cannot be built: the walk `transpose` runs refuses a construct inside the backward half (`skip=call`), so the pullback is refused at the line of the library that composes it -- not at the `vjp(f)` call in the program, and not in a sentence of the form `not implemented yet`, which sends the reader to no line at all. The refusal names `transpose` and stands on the library's own call, and the wall is the walk, not the arity. The run exits non-zero."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_missing_step.cml"
 args = ["${case}", "${backend}"]
@@ -176,7 +176,7 @@ backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 skip_unless = ["node", "test/tools/have-library-vjp.mjs", "--missing"]
 expect_exit = 1
-expect_output_contains = ["stdlib/vjp.cml:47:", "stdlib/vjp.cml:59:", "Invalid call to 'transpose'"]
+expect_output_contains = ["stdlib/vjp.cml:51:", "transpose has no transpose for this function", "TRANSPOSE function=split_of_jvp_of_f_backward skip=call"]
 expect_output_not_contains = ["not implemented", "尚未实现", "unimplemented"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

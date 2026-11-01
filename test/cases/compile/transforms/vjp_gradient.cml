@@ -4,6 +4,7 @@
 // the wrapper. All three come from the library's own composition --
 // `transpose(split(reinterp<jvp>(f)))` -- and not from the C++ autodiff. Skipped while the
 // composition cannot be built (the plan's `skip_unless`).
+import rulesets.jvp
 import { grad, vjp } from vjp
 
 func f(x: float): float {
