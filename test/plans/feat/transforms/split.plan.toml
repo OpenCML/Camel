@@ -5,32 +5,40 @@
 # the present inputs allow and hands the residuals on as values, and the backward half, which reads
 # those residuals and the tangent direction and gives the tangent.
 #
-# Two acceptance forms live here, and they do not light up at the same moment:
+# Two acceptance forms live here:
 #   * the identity graph (`split_identity_pipeline`): a lifted body that computes nothing is two
 #     parameter ports and one tuple fill, so the cut has nothing to move between the halves -- the
 #     forward half hands the value through, the backward half hands the tangent through, and the
-#     residuals hold nothing. This is the reading the plumbing lands with;
+#     residual tuple holds the value parameter and nothing else: the backward half reads none of it,
+#     so no *value computed by the body* crosses the cut. (The tuple is one member rather than none
+#     because the shape of the cut is the signature's, and a signature is computed from types: the
+#     type function that would say "no members here" -- `ResidualsOf<F>` -- is the compiler's and is
+#     not written yet, so the tuple holds one member per value parameter, in program order, and the
+#     graph fills it. The two agree the day that function lands.)
 #   * the numbers of the author's example of 2026-10-31 15:25 (g(x) = x*x, x = 3, dx = 1): the
-#     forward half gives y = 9 and r0 = 3 (the residual is the value the backward half needs), the
+#     forward half gives y = 9 and r0 = (3.0) (the residual is the value the backward half needs), the
 #     backward half gives the tangent 6, and it is linear in the tangent direction (dx = 2 gives 12,
-#     dx = 0 gives 0). Those readings need the backward half to *read* a residual, which is the step
-#     after the plumbing: they stay written and open by themselves.
+#     dx = 0 gives 0). r0 is printed as the tuple it is: a one-member tuple prints `(3.0)`.
 #
-# So the entries ask two different gates, each the question its own readings need -- a missing
-# construct is not a defect of the tree, and a red here would say it is. The identity entry asks
-# `test/tools/have-split.mjs` (does `split` exist), and the three number entries ask
-# `test/tools/have-split-residuals.mjs` (does the forward half hand residuals on).
+# The four readings of a cut run by themselves: `split` exists and its forward half hands the
+# residual tuple on, so there is nothing left for a gate to ask. The identity entry keeps
+# `test/tools/have-split.mjs` (a tree without `modules/transforms/split.cpp` skips instead of
+# failing), and the two-parameter entry pins the refusal one step above `split`, until `jvp` lifts a
+# function of two parameters.
+#
+# `r0` reads `(3.0)` and not `3`: the residuals are a tuple in the signature the author wrote
+# (`ResidualsOf<F>` is a tuple of the values, numbered in program order), and a one-member tuple
+# prints as one.
 
 [[tests]]
 name = "split_forward_half"
-desc = "The forward half of split(reinterp<jvp>(g)) for g(x) = x*x at x = 3: it computes what the present inputs allow and hands the residuals on as values. Reads `forward y= 9` and `residual r0= 3`, and the tangent 6 as well, since the same run is what a reader would write to see the pair."
+desc = "The forward half of split(reinterp<jvp>(g)) for g(x) = x*x at x = 3: it computes what the present inputs allow and hands the residuals on as values. Reads `forward y= 9.0` and `residual r0= (3.0)`, and the tangent 6.0 as well, since the same run is what a reader would write to see the pair."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_forward_half.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["forward y= 9", "residual r0= 3", "tangent dx1= 6"]
-skip_unless = ["node", "test/tools/have-split-residuals.mjs"]
+expect_stdout_contains = ["forward y= 9", "residual r0= (3.0)", "tangent dx1= 6"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -43,7 +51,6 @@ args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["tangent dx1= 6"]
-skip_unless = ["node", "test/tools/have-split-residuals.mjs"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -56,18 +63,29 @@ args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["dx1= 6", "dx2= 12", "dx0= 0", "doubles= true"]
-skip_unless = ["node", "test/tools/have-split-residuals.mjs"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 [[tests]]
+name = "split_two_params_waits_for_jvp"
+desc = "The reading program the author named for this tier (f(x, y) = x*x*y at x = 3, y = 2) is refused one step above `split`: `jvp` lifts a function of exactly one parameter, so `jvp(f)` does not type and there are no halves to cut. The entry pins that refusal by name while it is the reason the two-parameter numbers do not exist, and it is the entry that turns red the day `jvp` lifts two -- which is when the count, the contents, the forward output and both tangent directions get written down here."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_two_params.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 1
+expect_output_contains = ["Invalid call to 'jvp'", "takes a function of exactly one parameter"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "split_identity_pipeline"
-desc = "The identity graph: `reinterp<jvp>` builds a body with no operator in it, so `split` has nothing to move and the reading is the pipeline itself. The forward half gives the value the caller passed (3.0) with no residuals, and the backward half gives the tangent back (1.0). A non-zero residual count is a value carried across the cut that the backward half never needs. Gated on `split` existing (`test/tools/have-split.mjs`), which the other three entries also need but not enough of: this entry lights the moment the operator lands, with no edit here."
+desc = "The identity graph: `reinterp<jvp>` builds a body with no operator in it, so `split` has nothing to move and the reading is the pipeline itself. The forward half gives the value the caller passed (3.0) with the residual tuple holding that same value -- the one member the signature has room for -- and the backward half gives the tangent back (1.0) without reading it: no value the body computes crosses the cut. Gated on `split` existing (`test/tools/have-split.mjs`); the count is 1 because the shape of the cut is the signature's until `ResidualsOf<F>` is the compiler's."
 kind = "behavior"
 case = "../../../cases/compile/transforms/split_identity_pipeline.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["identity y= 3", "residual count= 0", "identity dx1= 1"]
+expect_stdout_contains = ["identity y= 3", "residual count= 1", "identity dx1= 1"]
 skip_unless = ["node", "test/tools/have-split.mjs"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

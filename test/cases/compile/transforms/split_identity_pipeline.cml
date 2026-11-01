@@ -1,9 +1,13 @@
 // The identity graph, as a case: the forward transform of `f(x) = x` is two parameter ports and one
 // tuple fill (the value and its tangent, in and out), so `split` of it has nothing to move -- and
-// that is exactly what makes it the first readout. The forward half must give the value the caller
-// passed (3.0) and no residuals at all, and the backward half must give the tangent back (1.0). A
-// residual here would mean a value was carried across the cut that the backward half does not need,
-// which is the defect this case exists for.
+// that is exactly what makes it the first readout. The forward half gives the value the caller
+// passed (3.0) and the backward half gives the tangent back (1.0) without reading any residual: no
+// value the body computes crosses the cut.
+//
+// The residual tuple holds one member -- the value parameter itself -- because the shape of the cut
+// is the signature's, and a signature is computed from types. `ResidualsOf<F>`, the type function
+// that would say "no members here", is the compiler's and is not written yet; until it is, the tuple
+// has one member per value parameter, in program order, and the backward half reads none of them.
 //
 // The spelling is `jvp(g)` -- `reinterp<jvp>(f)` as a call, which is what the operator half of
 // modules/transforms is (jvp_operator.h) -- because `transforms::reinterp::<jvp>(g)`, the spelling

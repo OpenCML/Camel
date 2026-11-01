@@ -1,0 +1,37 @@
+// The reading program the author named for the straight-line tier (2026-11-01): f(x, y) = x*x*y at
+// x = 3, y = 2, split into its two halves. The lifted function's parameters come in pairs -- (x, dx)
+// and (y, dy) -- and the cut is the pair, not a parameter number (author, 15:25): the forward half
+// takes the values (3, 2), the backward half the residuals and the tangents. What it would print is
+// what the tier is judged by: the residual count and its contents, the forward half's output, and
+// the backward half's output in both tangent directions (f(3, 2) = 18, and df = 2*x*y*dx + x*x*dy,
+// so dx = 1, dy = 0 reads 12 and dx = 0, dy = 1 reads 9).
+//
+// It prints none of that today, and the reason is one step above `split`: `jvp` lifts a function of
+// exactly one parameter (modules/transforms/jvp_operator.cpp), so `jvp(f)` for this `f` is refused
+// when the call is typed, before any split exists to cut. The reading this file is for arrives when
+// `jvp` lifts a function of two parameters; the plan entry pins the refusal at `jvp` until then, so
+// the gap is a named one and not a missing case.
+import rulesets.jvp
+import { jvp, split } from transforms
+
+func f(x: float, y: float): float {
+    return x * x * y
+}
+
+/// How many values the residuals tuple holds, counted where the program is compiled (`indices` walks
+/// a tuple's positions; there is no `len` for a tuple).
+func residual_count::<R>(r: R): int {
+    return static loop acc = 0 for j in indices r do acc + 1
+}
+
+func main(): int sync {
+    let lifted = jvp(f)
+    let (fwd, lin) = split(lifted)
+    let (value, res) = fwd(3.0, 2.0)
+    println("residual count=", residual_count(res))
+    println("residual r0=", res)
+    println("forward y=", value)
+    println("tangent dx=", lin(res, 1.0, 0.0))
+    println("tangent dy=", lin(res, 0.0, 1.0))
+    return 0
+}
