@@ -27,13 +27,13 @@
 /// Uploads every leaf of the value -- an array, or a scalar of the element type it is written
 /// with, alone or inside a tuple or a struct -- and gives the same tree with each leaf wrapped in
 /// `Device<...>`. A leaf of any other type is refused when the call is compiled.
-/// @example-fragment the value comes from the caller
+/// @example-fragment `host` is a host tensor the caller has: the example writes the move, and a doc example has no device to move a value to
 /// @example host->upload    // a Device<f32[..]>
 export func upload(value: f32[..]): Device<f32[..]> uses driver
 
 /// Downloads every device leaf of the value and gives the host value it came from. A tree with a
 /// leaf that is not a device value is refused when the call is compiled.
-/// @example-fragment the value comes from the caller
+/// @example-fragment `resident` is a value already on the device: the example writes the download, and a doc example has no device to take one from
 /// @example resident->download    // the array resident holds
 export func download(value: Device<f32[..]>): f32[..] uses driver
 

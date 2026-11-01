@@ -17,7 +17,6 @@ export resource rendezvous_point
 /// passed, and gives how many calls met (after a timeout, how many were waiting). A tool for
 /// showing that calls really run at the same time.
 /// @fails fault `InvalidArgument` when parties is below 1 or timeout is negative
-/// @example-fragment waits for another call, which a page cannot supply
 /// @example rendezvous(2, 1.0)    // 2 when another call arrived in time
 export func rendezvous(parties: int, timeout: float): int uses rendezvous_point
 

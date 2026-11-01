@@ -22,6 +22,13 @@ export func nop::<F>(f: F): F! when is_function::<F>()
 
 /// Expands the macro operators over functions (`grad`, `with_grad`, `vjp` of autodiff) ahead of
 /// the passes that follow.
+with <
+    /// Write the reading line of each round to stderr: the graph, its calls, the rewrites applied so
+    /// far, its branches and its loops. A run that never comes back has then said which graph it was
+    /// in before it stopped saying anything. Off by default -- a program that names the pass is
+    /// asking for the expansion, not for a line on its stderr.
+    report: bool = false
+>
 export func macro::<F>(f: F): F! when is_function::<F>()
 
 /// Gives every function value the form the design asks for: one variant of the enum of its type,

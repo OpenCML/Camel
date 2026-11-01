@@ -179,3 +179,57 @@ error InvalidArgument: Invalid argument of 'argmin': a tensor with no element ha
   诊断原文分得清：没键是 `the operator has no batching rule key bound at all`，有键缺规则才是
   `the ruleset holds no rule for this operator and operand count`。今天 `tensor:*` 上**没有一条**落进后者。
 - 顺带的一条：整轴归约这一组现在**六条同形**，四折两reshape——`argmax`/`argmin` 的规则不是折，是「批读成一条线」。
+## 五、还没有批规则的算子：按"挡住它的是什么"分三档
+
+判据有两条，都是读出来的：算子的参数怎么声明（`modules/tensor/ops/*.cpp` 的
+`OpDef{.params, .withAfterNorm, .ordinaryParams}`），以及变换把什么交给规则
+（`modules/transforms/vmap.cpp:379-388`：`for (input : function->normInputsOf(ref))`——**只转发普通操作数**）。
+`ordinaryParams = 1` 的算子里第二个参数（轴 / 形状 / 排列）是 **with 参数**，规则拿不到；这一条把清单切成两半。
+
+### 一档：改一句规则就能有（要用的参数都是普通操作数）——21 条
+
+| 原语 | 规则就是 | 依据 |
+|---|---|---|
+| `abs` `exp` `log` `sqrt` `rsqrt` `sigmoid` `tanh` `relu` `gelu` `erf` `erfc`（11 条） | 算子在批上，一句同形 | **实测**：加 `vmap_rule_exp` 与 `bindVmapRule({"tensor:exp", "rulesets.vmap", "exp", 1})` 后，`vmap(exp)` 过 `float[2, 3]` 得 `[[1.0, 2.718281828459045, 7.38905609893065], [2.718281828459045, 7.38905609893065, 20.085536923187668]]`，读数 `rules=vmap_rule_exp elements=float`，与逐行 `exp(r)` 的 `[1.0, 2.718…, 7.389…]` 逐位相同 |
+| `maximum` `minimum`（2 条） | 二元 elementwise，形同 `vmap_add` | `elementwise_ops.cpp` 的 `kBinaryParams`，无 `withAfterNorm` |
+| `linear` | 三个操作数都在，算子自己走批轴 | `linalg_ops.cpp` 的 `linear` 无 `ordinaryParams` |
+| `take` `idx_take`（2 条） | `indices` 是普通操作数 | `layout_ops.cpp` 的 `take` / `idx_take` 无 `withAfterNorm` |
+| `one_hot` | `classes` 是普通 int | 同上，`one_hot` 无 `withAfterNorm` |
+| `layer_norm` `softmax_grad`（2 条） | 全部普通操作数 | `reduction_ops.cpp` 这两条没有 `ordinaryParams = 1` |
+| `zeros_like` `ones_like`（2 条） | 规则 = 算子本身 | `gradient_ops.cpp`，一个普通操作数 |
+
+### 二档：要先改变换，规则本身写得出来（with 参数没被转发）——9 条
+
+`reshape`、`unsqueeze`、`permute`、`transpose`、`concat`、`softmax`、`log_softmax`、`dim`、`where`。
+
+- **`reshape`（本轮实测，四条原文）**：规则写 `reshape<dims>(x) => (bx: Lift<T[..]>, bdims: Lift<int[]>) => vmap_reshape(bx, bdims)`，
+  右边只读批量值、不读模式变量，形状靠运行期表达式（`reshape<concat([shape(xs)[0]], flat_dims(dims))>(xs)`，
+  `flat_dims` 用 `numel` + 逐元素读把"一个提升常量的那一行"读回原样）。索引命中、类型也对：
+  `rules=vmap_rule_reshape ... type=(float[?, 4]) => float[?, 2, 2]`；运行时却停在
+  `Runtime indirect call norm-arity mismatch: caller graph 'vmap_of_to_matrix' node 3 has 1 args, target graph 'rulesets.vmap::vmap_reshape<float>' has 2 norm ports.`
+  ——目标形状到不了规则。原因两处：`layout_ops.cpp` 的 `reshape` 是
+  `.params = {{"t", TensorLike}, {"shape", IntArray}}, .withAfterNorm = true, .ordinaryParams = 1`（`shape` 是 with 参数），
+  而 `vmap.cpp:380` 只遍历 `function->normInputsOf(ref)`。顺带量到键的口径：左面写 `reshape<dims>(x)` 时键是
+  **`reshape/1`**（count 的是括号里的操作数），把绑定写成 2 会得到 `found=0 missing=1` 与
+  `the ruleset holds no rule for this operator and operand count`。
+- **`unsqueeze`（本轮实测）**：同样的链——`.ordinaryParams = 1`，规则命中 `rules=vmap_rule_unsqueeze`、类型
+  `(float[?, 3]) => float[?, 1, 3]`，仍是 `has 1 args` / `has 2 norm ports`。左面写 `unsqueeze<axis>(x)`（`axis` 在尖括号里）
+  才过语义检查；写成 `unsqueeze(x, axis)` 得 `'unsqueeze' takes 'axis' in angle brackets, not in the parentheses`。
+- `transpose` / `permute` / `concat` / `softmax` / `log_softmax` / `dim`：各自的 `withAfterNorm = true`（`concat` 是
+  `ordinaryParams = 2`，`a`、`b` 普通、轴是 with），与 `reshape` 同一条原文同一类。
+- `where`：操作数全普通，但元素类型取自**第一个**操作数（`bool`），`vmap.cpp:87-94 firstOperandTypeOf` 会把规则
+  实例化在 `bool` 上——要改一行"取非 bool 操作数"。
+- 修法（**未改，等作者点头**）：`vmap.cpp:379-388` 把 `withInputsOf(ref)` 按序 lift 进去，约三行；或者把
+  `shape` / `perm` / `axis` 改成普通操作数（那是算子接口变更，`ctx.constInts(1)` 等消费方一起动）。
+
+### 三档：要先有算子 / 要等语言表面——10 条
+
+- `shape` `numel`：行的形状是"批的形状去掉第 0 维"，今天**没有去掉一个轴的算子**（内部只有 `:op/slice_sub`）。
+- `zeros` `ones` `full` `eye`：vmap 体里造常量数组，批形态是 `[N, ...]`；常量先被变换拒
+  （`a constant of a type this transform has no batch for`，第三节原文）。
+- `to_bytes` `save_npy` `load_npy_*` `from_bytes_*`：同一层（常量 / 效应）。
+- JAX 对齐页上有、`modules/tensor/ops` 的 `OpDef.name` 全表里**根本没有本体**的：`pad`、`slice`、`sort`、`cumsum`、
+  `clip`、`dot_general` / `einsum`、`conv`、`broadcast_to`、`squeeze`。
+
+三档合计 40 条；第三节记的 39 条与此差一条，差额是 `to_bytes`（第三节把它列在字节类里，本节单列）。
+一档 21 条里只有 `exp` 是实测的，其余 20 条的依据是声明读法（同一个 `OpDef` 形状），要逐条落地时一条一条量。

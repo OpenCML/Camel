@@ -38,9 +38,8 @@ FunctionType *transposeOperatorSignature(FunctionType *function) {
     if (function == nullptr) {
         return nullptr;
     }
-    if (function->withTypesCount() != 0) {
-        return nullptr;
-    }
+    // What `f` may be is `transposeSignature`'s to say: it is the shape law, and it is asked by the
+    // compiler before the call is built. This only names the parameter the declaration writes.
     FunctionType *transposed = transposeSignature(function);
     if (transposed == nullptr) {
         return nullptr;
@@ -80,39 +79,29 @@ class TransposeResolver final : public FuncTypeResolver {
             return std::nullopt;
         }
         const auto *function = tt::as_ptr<FunctionType>(norm[0]);
+        // Whether `f` has a transpose is `transposeSignature`'s to say, and it is the same answer
+        // the call site's type was built from. What is left here is *why* it said no, and the
+        // causes are asked in the order the law asks them -- a second spelling of the shape would
+        // be a second law, and it drifts: the one that stood here still said "one `float`
+        // parameter, or the backward half" while several `float` parameters had been accepted.
+        if (transposeSignature(const_cast<FunctionType *>(function)) != nullptr) {
+            return std::nullopt;
+        }
         if (function->withTypesCount() != 0) {
             return std::string(
                 "`transpose` takes a function without `with` parameters: the transform builds a "
                 "graph of its own and a captured value has no port to enter it by");
-        }
-        if (function->normTypesCount() == 0) {
-            return std::string("`transpose` takes a function of at least one parameter");
-        }
-        // Either one `float` parameter, or the residuals `split` hands the backward half (one tuple
-        // of `float`s) followed by the tangents. Both answer, because both are the same call shape:
-        // the known values, then the cotangent.
-        const auto *bundle =
-            dynamic_cast<const camel::core::type::TupleType *>(function->normTypeAt(0));
-        if (bundle != nullptr && function->normTypesCount() >= 2) {
-            for (size_t i = 1; i < function->normTypesCount(); ++i) {
-                if (function->normTypeAt(i) != camel::core::type::Type::Float64()) {
-                    return std::string(
-                        "`transpose` of a residual-taking function wants `float` tangents after "
-                        "the residuals");
-                }
-            }
-        } else if (function->normTypesCount() != 1 ||
-                   function->normTypeAt(0) != camel::core::type::Type::Float64()) {
-            return std::string(
-                "`transpose` takes a function of one `float` parameter, or the backward half "
-                "`split` gives -- its residuals in one tuple and its tangents after them");
         }
         if (function->exitType() != camel::core::type::Type::Float64()) {
             return std::string(
                 "`transpose` takes a function that returns a `float`: the cotangent of the "
                 "result is what goes in");
         }
-        return std::nullopt;
+        return std::string(
+            "`transpose` takes a function whose parameters are all `float` -- one of them, several "
+            "of them, or the backward half `split` gives (its residuals in one tuple and its "
+            "tangents after them): each parameter is a value the transpose reads and each is where "
+            "a cotangent goes");
     }
 
     std::string signature() const override {

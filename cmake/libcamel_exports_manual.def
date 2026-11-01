@@ -27,5 +27,5 @@
 ; One symbol per line. The generator checks every entry against the symbols libcamel defines in
 ; the configuration being linked and fails with the entry named when it is not defined there.
 EXPORTS
-    ?call@bridge@standalone@camel@@YA?AUValue@123@V?$basic_string_view@DU?$char_traits@D@std@@@std@@AEBV?$vector@UValue@bridge@standalone@camel@@V?$allocator@UValue@bridge@standalone@camel@@@std@@@6@1W4Kind@4123@@Z
+    ?call@bridge@standalone@camel@@YA?AUValue@123@V?$basic_string_view@DU?$char_traits@D@std@@@std@@AEBV?$vector@UValue@bridge@standalone@camel@@V?$allocator@UValue@bridge@standalone@camel@@@std@@@6@1W4Kind@4123@_J@Z
     ?printSlotCapped@rtdata@core@camel@@YAXAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@_KPEAVType@type@23@1@Z

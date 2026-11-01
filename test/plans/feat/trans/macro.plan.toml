@@ -404,3 +404,22 @@ assert(input.normalized.stdout.trim() === '500500', `unexpected stdout: ${input.
 }
 """
 timeout_ms = 10000
+# The reading that answers "where did it stop" before the answer is a timeout. `std::macro` loops
+# until a round changes nothing, so a round that keeps changing something spins with no output at
+# all: test/cases/modules/onnx/export_loop.cml under `std::macro` after an edge was deleted was
+# reported as "timeout 124, no output". One line per reachable graph per round, on stderr, says
+# which graph the run was in, what it was holding (calls, branches, loops) and how many rewrites it
+# had applied -- a number that stops growing is a round that is spinning rather than working.
+#
+# stderr and not stdout: the programs this pass runs are asserted on their stdout byte for byte
+# (`std::macro std::opt std::fvm` in test/plans/feat/compile/collections.plan.toml), and a reading
+# that moved a program's output would be a change to every one of those assertions.
+[[tests]]
+name = "export_loop.reading"
+desc = "`std::macro` over export_loop.cml says where it is per round on stderr -- graph, calls, rewrites applied, branches, loops -- while its stdout stays the program's own output."
+case = "../../../cases/modules/onnx/export_loop.cml"
+args = ["${case}", "std::macro", "report=true"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+expect_stderr_contains = ["M[ACRO] graph=0 name=__root__ calls=1 inlined=0 brch=0 loops=0", "M[ACRO] graph=3 name=iterate calls=0 inlined=0 brch=1 loops=0"]
+normalizers = ["strip_ansi", "normalize_newlines"]
