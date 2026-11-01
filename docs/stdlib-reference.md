@@ -1511,7 +1511,7 @@ declarations show, because the result of a call is the exit type its resolver gi
 #### `vjp`
 
 ```camel
-vjp: (f: (x: T) => float) => (x: T) => (float, (ct: float) => (T,))
+vjp: (f: F) => Vjp<F> when is_function::<F>()
 ```
 
 The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
@@ -1524,23 +1524,23 @@ parameter has a one-long one -- `(27.0)` for `vjp(cube)(3.0)`'s pullback at `ct 
 number a gradient is comes out of it by position: `grad(f)(x)` is `vjp(f)(x).1(1.0).0` (author's
 ruling of 2026-11-01 14:30: one rule for every arity, no exception for one parameter, no type
 function that takes an element out of a one-long tuple).
+The derivative of `f` with respect to its parameters: `vjp(f)(x, y, ...)` is the pair
+`(value, pullback)`, and `pullback(ct)` answers the cotangents of the parameters -- one member per
+parameter, so a function of one parameter has a one-long tuple (author's ruling of 2026-11-01: one
+rule for every arity, no exception for one parameter, no type function that takes an element out of
+a one-long tuple).
+
+One declaration for every arity: `F` is the function, `Vjp<F>` says the parameters are `F`'s and the
+pullback's cotangents are too (stdlib/types.cml), and `(..xs)` takes the parameters the instantiated
+`Vjp<F>` has -- the ordinary rule that a lambda takes its parameters' types from the position it
+stands in, applied to a pack (author's ruling of 2026-11-01 19:10). The lambda's rest parameter is a
+value in its body: `xs` is the tuple of those parameters, and `forward(..xs)` spreads it into the
+call, which is the rule the language already had for spreading a tuple.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example (a fragment, not compiled): `let reading = vjp(f)`
 - Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
-
-#### `vjp`
-
-```camel
-vjp: (f: (x: T, y: U) => float) => (x: T, y: U) => (float, (ct: float) => (T, U))
-```
-
-The same transform for a function of two parameters: `vjp(f)(x, y)` is `(value, pullback)` and
-`pullback(ct)` gives both cotangents, in the order `f` takes the parameters.
-
-- Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example (a fragment, not compiled): `let reading_of_two = vjp(f)`
-- Why it is not compiled: `f` is a function value of two parameters, so the example is a fragment of a program that declares one
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
 
 #### `grad`
 
