@@ -714,17 +714,32 @@ bool buildTransposeMember(
                 // function, so two calls of one function call one graph). The call site passes
                 // what the transposed callee takes, its own parameters as they stand -- they are
                 // the values the call already has -- and then the cotangent.
-                const bool isCall           = node->kind == rt::GCNodeKind::Call;
-                const auto inputs           = function->normInputsOf(ref);
-                const size_t firstArgument  = isCall ? 1 : 0;
-                if (inputs.size() <= firstArgument) {
-                    // A function value nobody calls: there is no graph under it in this position.
+                const bool isCall = node->kind == rt::GCNodeKind::Call;
+                const auto inputs = function->normInputsOf(ref);
+                // Where the callee arrives from. A function value written in place is the call's
+                // first normal input; a value kept in a `let` is a DATA node naming its graph and
+                // the call takes it as a `with` input, with only the arguments as norm inputs; a
+                // FUNC node is the call itself. All three name a graph, so all three transpose the
+                // same way.
+                GraphId calleeId  = function->calleeIdOf(inputs.empty() ? ref : inputs.front());
+                size_t argumentAt = (!inputs.empty() && rt::isValid(calleeId)) ? 1 : 0;
+                if (!rt::isValid(calleeId)) {
+                    const auto captured = function->withInputsOf(ref);
+                    if (!captured.empty()) {
+                        calleeId   = function->calleeIdOf(captured.front());
+                        argumentAt = 0;
+                    }
+                }
+                if (!rt::isValid(calleeId) && !isCall) {
+                    calleeId   = function->calleeIdOf(ref);
+                    argumentAt = 0;
+                }
+                if (inputs.size() <= argumentAt && !rt::isValid(calleeId)) {
                     os << "TRANSPOSE function=" << function->name() << " skip=kind node=" << ref
                        << " kind=" << static_cast<int>(node->kind) << '\n';
                     return false;
                 }
-                const GraphId calleeId =
-                    isCall ? function->calleeIdOf(inputs.front()) : function->calleeIdOf(ref);
+
                 camel::runtime::GCGraph *callee = state.program->graph(calleeId);
                 if (callee == nullptr) {
                     // The callee is the value the first input carries, and a value that is
@@ -766,16 +781,16 @@ bool buildTransposeMember(
                 // there is. A callee of two parameters answers a pair, and splitting that pair is
                 // the step that is not written yet.
                 if (callee->funcType()->normTypesCount() != 1 ||
-                    inputs.size() != firstArgument + 1) {
+                    inputs.size() != argumentAt + 1) {
                     os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
                        << " callee=" << callee->name()
                        << " params=" << callee->funcType()->normTypesCount() << '\n';
                     return false;
                 }
-                const gc_node_ref_t argument = forward(inputs[firstArgument]);
+                const gc_node_ref_t argument = forward(inputs[argumentAt]);
                 if (argument == rt::kInvalidNodeRef) {
                     os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
-                       << " arg=" << inputs[firstArgument] << '\n';
+                       << " arg=" << inputs[argumentAt] << '\n';
                     return false;
                 }
                 FunctionType *calleeType = transposeSignature(callee->funcType());
@@ -790,7 +805,7 @@ bool buildTransposeMember(
                                                                 cotangent[ref]};
                     const gc_node_ref_t made = draft.addCallNode(Type::Float64(), rt::GCCallBody{});
                     draft.setNormInputs(made, std::span<const gc_node_ref_t>(callArgs));
-                    addCotangent(inputs[firstArgument], made);
+                    addCotangent(inputs[argumentAt], made);
                 } else {
                     // The FUNC node is the call: its inputs are its arguments, so the transposed
                     // node takes the callee's parameter and the cotangent and stands where the
@@ -798,7 +813,7 @@ bool buildTransposeMember(
                     const std::array<gc_node_ref_t, 2> callArgs{argument, cotangent[ref]};
                     const gc_node_ref_t made = draft.addFuncNode(transposed, Type::Float64());
                     draft.setNormInputs(made, std::span<const gc_node_ref_t>(callArgs));
-                    addCotangent(inputs[firstArgument], made);
+                    addCotangent(inputs[argumentAt], made);
                 }
                 break;
             }
