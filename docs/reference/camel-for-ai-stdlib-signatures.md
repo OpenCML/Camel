@@ -757,7 +757,7 @@ update: (opt: Sgd, params: P, grads: G, state: SgdState) => (P, SgdState)
 update: (opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)
 ```
 
-**`autodiff`** — import { ... } from autodiff — 15 name(s)
+**`autodiff`** — import { ... } from autodiff — 16 name(s)
 
 ```text
 grad: (f: F) => Gradient<F> when is_function::<F>()
@@ -765,6 +765,7 @@ grad: (f: F, has_aux: bool) => GradientAndAux<F> when is_function::<F>()
 with_grad: (f: F) => ValueAndGradient<F> when is_function::<F>()
 with_grad: (f: F, has_aux: bool) => ValueAndGradientAndAux<F> when is_function::<F>()
 stop_gradient: (x: T) => T pure
+remat: (f: F) => F pure when is_function::<F>()
 add_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 sub_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 mul_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
@@ -789,7 +790,7 @@ div_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
 div_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
 ```
 
-**`rulesets.vmap`** — import { ... } from rulesets.vmap — 19 name(s)
+**`rulesets.vmap`** — import { ... } from rulesets.vmap — 21 name(s)
 
 ```text
 lift: (x: T) => Lift<T>
@@ -811,6 +812,8 @@ vmap_sum: (xs: T[..]) => T[..] when is_numeric::<T>()
 vmap_mean: (xs: T[..]) => T[..] when is_float::<T>()
 vmap_max: (xs: T[..]) => T[..] when is_numeric::<T>()
 vmap_min: (xs: T[..]) => T[..] when is_numeric::<T>()
+vmap_argmax: (xs: T[..]) => int[..] when is_numeric::<T>()
+vmap_argmin: (xs: T[..]) => int[..] when is_numeric::<T>()
 ```
 
 **`sim`** — import { ... } from sim — 2 name(s)
