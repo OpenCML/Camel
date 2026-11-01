@@ -4,18 +4,19 @@
 
 > **索引的价值在于与目录一一对应；一旦少一页，读者就会以为没有那一问。**
 
-> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 3 页**（`call-form-loops-and-setloopgraphs`、`what-argument-does-a-batched-rule-take`、`folding-a-branch-away-must-keep-the-effect-alive`），其余已裁完、整体挪进 `reviews/`。
+> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 4 页**（`call-form-loops-and-setloopgraphs`、`what-argument-does-a-batched-rule-take`、`folding-a-branch-away-must-keep-the-effect-alive`、`inliner-chain-joining-as-its-own-change`），其余已裁完、整体挪进 `reviews/`。
 >
 > **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
-## 现在在等作者：3 页
+## 现在在等作者：4 页
 
 | 页 | 问句 | 默认建议 |
 |---|---|---|
 | `call-form-loops-and-setloopgraphs` | 按调用跑每一轮的循环形式没有任何生产者（`setLoopGraphs` 全仓无调用者），这条拒绝该留、该删，还是连 `setLoopGraphs` 一起删 | 留着拒绝 |
 | `what-argument-does-a-batched-rule-take` | 批处理规则的右边该拿批、还是拿未批的值（`vmap` 的图里没有未批的值） | 右边点名一个普通库函数，以批为实参建调用 |
 | `folding-a-branch-away-must-keep-the-effect-alive` | 3.3「顺序边保活」与 F2「顺序边只排序」冲突，`fold` 把臂折掉后 `println` 不再执行 | 甲：`:op/keep` 数据边保活，3.3 加限定语 |
+| `inliner-chain-joining-as-its-own-change` | `inlineCallableInDraft` 的接链修法能让 S1 删掉 BRCH→臂入口那条 ctrl 边（三条判据全绿），但它重写每个程序的根图（97 / 47 fail），要不要现在付 | 甲：不删边、修法单独立项、按 golden 重整的代价另估 |
 
 
 `whether-a-reduction-can-be-written-without-an-axis` 已裁已落（`5fd6fd902`，选 B：四条整轴形态都补）；它带出来的 `a-batched-argmax-needs-a-flat-view` 也已裁（`f5a450815`：前提不成立，`reshape` 的尖括号里能写运行期形状，规则一句就够），两页都在 `reviews/`。
