@@ -81,8 +81,6 @@ export func split(f: (v: float, d: float) => (float, float)): (v: float, d: floa
 /// @example-fragment `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
 /// @example let back = transpose(f)
 export func transpose::<F>(f: F): Transpose<F> when is_function::<F>()
-||||||| 05a8b3496
-export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()
 
 
 /// Batching: `vmap(f)` gives the function that applies `f` to every row of a batch. A row is one

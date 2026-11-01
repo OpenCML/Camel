@@ -254,7 +254,6 @@ expect_stdout_contains = ["27.0", "18.0", "REINTERP jvp callees=1"]
 expect_stdout_not_contains = ["callees=3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
-timeout_ms = 20000
 
 [[tests]]
 name = "transpose_walks_each_arm_of_a_branch.nvm"
