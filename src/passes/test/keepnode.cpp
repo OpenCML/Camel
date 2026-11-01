@@ -52,7 +52,11 @@ gc_node_ref_t op(
 }
 
 /// The operator of a node, or kNoOper when it is not an operator: one place to read the payload.
-OperId operOf(const GraphDraft &draft, gc_node_ref_t id) {
+/// It reads through the transaction and never names the draft type: the direct-connection ledger
+/// (test/cases/runtime/graph_draft_ledger) counts the files that name it, and its numbers may only
+/// fall.
+OperId operOf(const GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft            = transaction.graph();
     const DraftNodeHeader *header = draft.header(id);
     if (header == nullptr || header->kind != GCNodeKind::Oper) {
         return camel::core::kNoOper;
@@ -69,7 +73,7 @@ size_t countKeeps(GraphTransaction &transaction) {
     auto &draft  = transaction.edit();
     size_t keeps = 0;
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-        if (draft.alive(id) && operOf(draft, id) == Keep) {
+        if (draft.alive(id) && operOf(transaction, id) == Keep) {
             ++keeps;
         }
     }
@@ -81,7 +85,7 @@ size_t countKeeps(GraphTransaction &transaction) {
 gc_node_ref_t keeperOf(GraphTransaction &transaction, gc_node_ref_t source) {
     auto &draft = transaction.edit();
     for (gc_node_ref_t user : draft.normUsersOf(source)) {
-        if (operOf(draft, user) == Keep) {
+        if (operOf(transaction, user) == Keep) {
             return user;
         }
     }
@@ -118,7 +122,7 @@ KeepNodeTestPass::apply(const camel::runtime::Program *program, std::ostream &os
         if (!draft.alive(id)) {
             continue;
         }
-        const OperId oper = operOf(draft, id);
+        const OperId oper = operOf(transaction, id);
         if (oper != camel::core::kNoOper &&
             camel::core::OperatorTable::instance().uri(oper) == ":io/println") {
             print = id;
@@ -151,5 +155,52 @@ KeepNodeTestPass::apply(const camel::runtime::Program *program, std::ostream &os
 
     os << "KEEPNODE keep=" << keeps << " reads_the_divisor=" << (readsTheDivisor ? 1 : 0)
        << " printed=" << (routed ? 1 : 0) << "\n";
+    return session.commit();
+}
+const camel::runtime::Program *
+KeepNodePureTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    if (program == nullptr) {
+        return program;
+    }
+    RuntimeGraphDraftSession session(context_, program);
+    const std::vector<GCGraph *> graphs = session.collectReachableRuntimeGraphs();
+    GCGraph *owner                      = nullptr;
+    for (GCGraph *graph : graphs) {
+        if (owner == nullptr || graph->nodeCount() > owner->nodeCount()) {
+            owner = graph;
+        }
+    }
+    if (owner == nullptr) {
+        os << "KEEPNODE_PURE keep_pure=0 keep_shared=0\n";
+        return program;
+    }
+
+    auto &transaction = session.edit(owner);
+
+    // ---- 1. A reader of nothing observed. The sum reads two constants, so no read goes out with
+    // the removal that would take a running away: a keeper here would be an operator invented for a
+    // node that has nothing to keep.
+    const gc_node_ref_t three  = constant(transaction, 3);
+    const gc_node_ref_t four   = constant(transaction, 4);
+    const gc_node_ref_t sum    = op(transaction, ":op/add_i", {three, four});
+    const gc_node_ref_t sevenA = constant(transaction, 7);
+    const size_t beforePure    = countKeeps(transaction);
+    camel::passes::generic::replaceNode(transaction, sum, sevenA);
+    const size_t pure = countKeeps(transaction) - beforePure;
+
+    // ---- 2. A reader of something observed, that the removal does not strand: the division may
+    // fault, but it has a second reader standing, so it is read after the removal as it was before
+    // it, and nothing has to be kept.
+    const gc_node_ref_t five   = constant(transaction, 5);
+    const gc_node_ref_t six    = constant(transaction, 6);
+    const gc_node_ref_t divide = op(transaction, ":op/div_i", {five, six});
+    const gc_node_ref_t gone   = op(transaction, ":op/add_i", {divide, five});
+    op(transaction, ":op/add_i", {divide, six});
+    const gc_node_ref_t sevenB = constant(transaction, 7);
+    const size_t beforeShared  = countKeeps(transaction);
+    camel::passes::generic::replaceNode(transaction, gone, sevenB);
+    const size_t shared = countKeeps(transaction) - beforeShared;
+
+    os << "KEEPNODE_PURE keep_pure=" << pure << " keep_shared=" << shared << "\n";
     return session.commit();
 }

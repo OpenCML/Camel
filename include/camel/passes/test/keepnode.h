@@ -29,3 +29,15 @@ class KeepNodeTestPass : public RuntimeGraphRewritePass {
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
+
+/// The other side of the same question: a removal must not be given a keeper when the node it
+/// takes the last read of is not one whose running is observed, or when it still has another
+/// reader. Prints KEEPNODE_PURE keep_pure=<n> keep_shared=<n> and leaves the program untouched.
+inline constexpr const char *kKeepNodePureTestPass = "test::keep_node_pure";
+
+class KeepNodePureTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};

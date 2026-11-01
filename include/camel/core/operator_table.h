@@ -138,11 +138,15 @@ inline constexpr OperId VarAfter        = 21; // ":var/after"
 /// refuse to fire, because dropping the reader would drop the fault. What keeps an effect running
 /// across a removal today is the older mechanism beside it -- the statement chain, the waits a
 /// removal inherits, and the order edges a dissolved branch hands on (opt/generic/rewrite.cpp,
-/// `inheritedWait` and the branch's `after` list). The insertion is exercised, and only by
-/// construction, in src/passes/test/keepnode.cpp and test/plans/feat/opt/keep_node.plan.toml:
-/// measured there, `KEEPNODE keep=1 reads_the_divisor=1`, and the same pass with the insertion
-/// switched off reads `keep=0`. The day a program reaches this path, that plan is what has to keep
-/// passing, and the pass has to go.
+/// `inheritedWait` and the branch's `after` list) -- and the plan that guards that mechanism is
+/// test/plans/feat/opt/unused_value_chain.plan.toml: with the inherited waits switched off, twelve
+/// of its cases go red, while the ones one would expect to guard it, in
+/// test/plans/feat/opt/effects_kept.plan.toml, stay green. The insertion itself is exercised, and
+/// only by construction, in src/passes/test/keepnode.cpp and
+/// test/plans/feat/opt/keep_node.plan.toml: measured there, `KEEPNODE keep=1
+/// reads_the_divisor=1`, the same pass with the insertion switched off reads `keep=0`, and the
+/// counter-case reads `keep_pure=0` where the node being replaced reads nothing observed. The day
+/// a program reaches this path, that plan is what has to keep passing, and the pass has to go.
 inline constexpr OperId Keep            = 22; // ":op/keep"
 inline constexpr OperId kWellKnownCount = 23; // kNoOper included
 

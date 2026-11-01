@@ -1008,6 +1008,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
         TEST_PASS(kLoopCollectSummaryTestPass, LoopCollectSummaryTestPass),
         TEST_PASS(kKeepNodeTestPass, KeepNodeTestPass),
+        TEST_PASS(kKeepNodePureTestPass, KeepNodePureTestPass),
         TEST_PASS(kFactStoreTestPass, FactStoreTestPass),
         TEST_PASS(kFactLoadRulesTestPass, FactLoadRulesTestPass),
         TEST_PASS(kFactSeedTestPass, FactSeedTestPass),

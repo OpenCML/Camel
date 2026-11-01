@@ -193,10 +193,14 @@ bool readsNoWrittenSlot(const camel::runtime::GraphTransaction &transaction, gc_
  * folded is folded before a pass sees it, and the rules that would replace the reader of a
  * computation that may fault refuse to fire, because dropping the reader would drop the fault. What
  * keeps an effect running across a removal is the older mechanism below -- the inherited waits and
- * the chain -- and the cases that guard it are in test/plans/feat/opt/effects_kept.plan.toml. This
- * one is reached only by construction, from src/passes/test/keepnode.cpp
- * (test/plans/feat/opt/keep_node.plan.toml), which builds the shape and reads `KEEPNODE keep=1
- * reads_the_divisor=1`; with the insertion switched off the same run reads `keep=0`.
+ * the chain -- and the cases that guard it are in test/plans/feat/opt/unused_value_chain.plan.toml
+ * (`unused_effect_chain` and `unused_effect_chain_param`: with the inherited waits switched off,
+ * twelve of them go red, and the cases one would expect to guard it, in
+ * test/plans/feat/opt/effects_kept.plan.toml, stay green). This one is reached only by
+ * construction, from src/passes/test/keepnode.cpp (test/plans/feat/opt/keep_node.plan.toml), which
+ * builds the shape and reads `KEEPNODE keep=1 reads_the_divisor=1`; with the insertion switched off
+ * the same run reads `keep=0`, and the counter-case in the same plan reads `keep_pure=0` on a node
+ * that reads no observed run at all.
  *
  * With `value` invalid the removal leaves nothing in the value -- the node is read by no one, which
  * is why it goes -- and the operator carries the effect's own value (`:op/keep(x, x)`): it is then

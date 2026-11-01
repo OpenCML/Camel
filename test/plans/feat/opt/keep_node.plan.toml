@@ -6,15 +6,18 @@ desc = "`:op/keep` is produced by the removal that takes the last reader of a co
 
 # Design principles 3.3 and 9.7: a pass that removes the last use of a node whose running is
 # observed leaves a keeper on data -- `:op/keep(x, v)` gives `v`, and `x` stays read through a data
-# edge. No program reaches that insertion on its own today (a branch over a static condition is
+# edge. No program reaches that insertion on its own today -- a branch over a static condition is
 # folded before a pass sees it, and the rules that would replace the reader of a computation that
-# may fault refuse to fire), so `test::keep_node` builds the shape: a division by zero whose only
-# reader is replaced, and the program's own print rerouted through what takes that reader's place.
+# may fault refuse to fire -- and that is why this plan builds the shape at the graph level and not
+# from source: `test::keep_node` makes a division by zero whose only reader is replaced, and routes
+# the program's own print through what takes that reader's place.
 #
 #   keep_node_shape.reference  the program as written: `side` prints, then `2`
 #   keep_node_shape.gir        `:op/keep` is in the graph the pass returns
 #   keep_node_shape.run        KEEPNODE keep=1 reads_the_divisor=1, and the division still runs:
 #                              the program faults on it, which it can only do through the keeper
+#   keep_node_shape.pure       the counter-case: where no keeper may appear, none does, and the
+#                              program prints what it printed without any pass
 #
 # The reading with the insertion switched off, measured by hand (opt/generic/rewrite.cpp,
 # keepThroughValue returning `value` on entry): `KEEPNODE keep=0 reads_the_divisor=0`. That is the
@@ -51,3 +54,17 @@ args = ["${case}", "test::keep_node", "${backend}"]
 expect_exit = 1
 expect_stdout_contains = ["KEEPNODE keep=1 reads_the_divisor=1 printed=1"]
 expect_stderr_contains = ["DivisionByZero"]
+
+# The other side of the same question: a keeper is not inserted for every removal. Two shapes that
+# must stay at `keep=0` -- a node that reads nothing whose running is observed, and a node whose
+# observed source is still read by someone else after the removal. The second one is the one a
+# relaxed condition would break: drop the "it is the node's last reader" test from
+# `lastReadsGoingOut` and it reads `keep_shared=1` here while the program still prints the same,
+# which is exactly why the reading, and not the program's output, is what the plan asserts.
+[[tests]]
+name = "keep_node_shape.pure"
+desc = "Counter-case: nothing observed to keep, and an observed source that still has another reader. No keeper is inserted, and the program's output is the reference's, byte for byte."
+case = "../../../cases/opt/effects/keep_node_shape.cml"
+args = ["${case}", "test::keep_node_pure", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "KEEPNODE_PURE keep_pure=0 keep_shared=0\nside\n2\n"
