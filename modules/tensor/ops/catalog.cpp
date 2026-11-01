@@ -79,6 +79,10 @@ void declareResourcesAndDefinitions() {
  * this table names. The reductions take their own names, because they are ordinary functions of an
  * axis -- there is no operator to spell them with.
  *
+ * `argmax_axis` and `argmin_axis` are here for the reason the transform reads the rule's type off an
+ * operand: they answer `int64` positions over any numeric operand, so their rules are generic in the
+ * operand's element and the key alone would not say which type the instance is made at.
+ *
  * Only the operators whose batched meaning is "one axis in front" have a rule. `tensor:sum` and
  * `tensor:mean` reduce every axis of the operand, and a batch of rows under them is not the rows'
  * own sums -- the axis the reduction takes is what a batching rule shifts -- so the whole-array
@@ -90,6 +94,8 @@ void declareVmapRuleKeys() {
     camel::core::bindVmapRule({"tensor:mean_axis", "rulesets.vmap", "mean_axis", 3});
     camel::core::bindVmapRule({"tensor:max_axis", "rulesets.vmap", "max_axis", 3});
     camel::core::bindVmapRule({"tensor:min_axis", "rulesets.vmap", "min_axis", 3});
+    camel::core::bindVmapRule({"tensor:argmax_axis", "rulesets.vmap", "argmax_axis", 3});
+    camel::core::bindVmapRule({"tensor:argmin_axis", "rulesets.vmap", "argmin_axis", 3});
 }
 
 } // namespace

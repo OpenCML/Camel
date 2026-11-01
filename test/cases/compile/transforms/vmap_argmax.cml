@@ -1,0 +1,60 @@
+/**
+ * `vmap(f)` where `f` takes the position of an extremum along an axis: the reduction keeps the axis
+ * it reduces and the batch adds one axis in front, so the rule is the operator with its own axis
+ * argument moved one place in (`rulesets.vmap`'s `batched_axis`).
+ *
+ * These two reductions are the ones whose *result* element is not the operand's: they take any
+ * numeric tensor and answer `int` positions (the operator's own signature spells that type `int64`). A rule is generic in the element its operands are
+ * made of, so the transform reads that element from an operand and not from the node it is walking
+ * (`modules/transforms/vmap.cpp`'s `firstOperandTypeOf`); reading it from the node would instantiate
+ * the rule at `int` and apply it to floats.
+ *
+ * The batch is three rows of `float[2, 3]`:
+ *
+ *     r0 = [[1, 9, 3], [4, 5, 6]]     r1 = [[7, 2, 5], [0, 8, 1]]
+ *     r2 = [[2, 2, 1], [3, 1, 3]]
+ *
+ * so down the columns the largest elements are at `[1, 0, 1]`, `[0, 1, 0]` and `[1, 0, 1]` (r0's
+ * columns are `[1,4]`, `[9,5]`, `[3,6]`), the smallest are at `[0, 1, 0]`, `[1, 0, 1]` and
+ * `[0, 1, 0]` kept as a row, and along the rows the largest elements are at `[1, 2]`, `[0, 1]` and
+ * `[0, 0]` -- r2's rows tie (`[2, 2, 1]`, `[3, 1, 3]`), and a tie keeps the earlier position.
+ *
+ * Each batched result is printed beside the row-by-row `array.vmap` of the same function; the plan
+ * compares the two strings rather than a written golden. The elements print as integers, not as
+ * floats, and each `f` declares `int[..]` -- a typing no float answer would satisfy -- so the
+ * comparison is of positions as positions.
+ */
+import rulesets.vmap
+import { vmap as row_vmap } from array
+import { argmax_axis, argmin_axis } from tensor
+import { vmap } from transforms
+
+// The axis is the row's first one: in the lifted value it is the second.
+func column_argmax(x: float[2, 3]): int[..] {
+    return argmax_axis(x, 0, false)
+}
+
+// `keepdims` keeps the reduced axis, so the batch keeps it too.
+func column_argmin(x: float[2, 3]): int[..] {
+    return argmin_axis(x, 0, true)
+}
+
+// The axis is the row's second one, which is the lifted value's third.
+func row_argmax(x: float[2, 3]): int[..] {
+    return argmax_axis(x, 1, false)
+}
+
+func main(): int sync {
+    let batch: float[3, 2, 3] = [
+        [[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]],
+        [[7.0, 2.0, 5.0], [0.0, 8.0, 1.0]],
+        [[2.0, 2.0, 1.0], [3.0, 1.0, 3.0]]
+    ]
+    println(vmap(column_argmax)(batch))
+    println(row_vmap(column_argmax)(batch))
+    println(vmap(column_argmin)(batch))
+    println(row_vmap(column_argmin)(batch))
+    println(vmap(row_argmax)(batch))
+    println(row_vmap(row_argmax)(batch))
+    return 0
+}
