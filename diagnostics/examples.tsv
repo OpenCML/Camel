@@ -137,6 +137,7 @@ SemanticDiag::InvalidOperatorURI	test/cases/compile/native/operator_uri_invalid.
 SemanticDiag::InvalidTypeArgument	test/cases/compile/collections/err_bare_name.cml
 SemanticDiag::KnownNotNull	test/cases/compile/tagged/err_plain_left.cml
 SemanticDiag::LambdaParameterWithoutType	test/cases/compile/lambda_inference/no_expected.cml
+SemanticDiag::LambdaRestParameterNotLowered	test/cases/compile/rest_params/lambda_rest_untyped.cml
 SemanticDiag::LiteralNotRepresentable	test/cases/compile/generics/err_literal.cml
 SemanticDiag::LogicalOperandNotBool	test/cases/compile/tagged/err_optional_operand.cml
 SemanticDiag::LoopBodyTypeMismatch	test/cases/compile/static_expansion/static_loop_body_type.cml
