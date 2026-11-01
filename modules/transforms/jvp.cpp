@@ -1298,6 +1298,15 @@ bool liftGraph(
            << " kinds=" << copiedKinds << '/' << seenKinds
            << " exit=Tuple{chain,tangent} tangent=computed source=ruleset rules="
            << (rules.empty() ? "-" : rules) << '\n';
+        // The reading the next step needs: the graph the lift has just finished, in one line.
+        // `graph` is the member it was reserved as, `nodes` and `regions` are what the draft holds
+        // at this moment -- before the group is encoded, which only numbers what is here -- and
+        // `exit` is the node the graph answers with, the pair or the gate over it. Nothing is read
+        // back and nothing is decided here: the line is printed and the build goes on exactly as it
+        // did, so moving this build to compile time can be checked by the same numbers.
+        os << "REINTERP jvp built graph=" << rt::toValue(member) << " nodes=" << draft.nodeCount()
+           << " exit=" << exit << " regions=" << draft.regionCount() << " function=" << name
+           << '\n';
     }
     return true;
 }
