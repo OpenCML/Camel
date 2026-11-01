@@ -6860,6 +6860,67 @@ vmap_neg: (a: T[]) => T[] when is_numeric::<T>()
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_neg([1.0, -2.0])` gives `[-1.0, 2.0]`
 
+### The product of two arrays
+
+The five keys above are the *scalar* arithmetic: `x * w` on two `f32` is `:op/mul_d`. On two
+arrays the same spelling resolves to another primitive, `tensor:multiply`, and the two are one law
+at two ranks -- the product, element by element -- but they are not one rule, because a rule is
+instantiated at its primitive's *element* type (`ruleElementTypeOf`, modules/transforms/vmap.cpp):
+`f32` here, the same `T` the scalar rule gets, while the two operators are different primitives and
+a key holds one rule each.
+
+So the operand is written as the open rank `T[..]`: the batch of a row is that row's element type at
+any rank, and the operator walks all of the ranks it is given. `mul_tensor(x, w)` is the same
+product at whatever rank the row had, and its right side multiplies the whole batch at once -- the
+primitive applied to the batch instead of to each row, which is the same operator and so the same
+bits.
+
+The key is `mul_tensor`, a call, because the array product has no infix spelling a rule's left side
+could be written with -- `r * r` resolves to the operator, but the operator is not a token. A call
+is a key like any other (`f(a, b)` is `f` at two operands), and `tensor:multiply` is bound to this
+one where the operator is declared: `modules/tensor/module.cpp`, `bindVmapRule` -- the batching
+table, which is what a batching transform reads. An operator with no binding is an operator no rule
+is reachable for, and the transform says so by name at the primitive. The right side names a
+*different* function than the left side does, which the index requires: a name the left side binds
+is a pattern variable to the right side, and this family's transform reads the callee's name and
+calls it with the batch -- it never binds the pattern.
+
+#### `vmap_mul_tensor`
+
+```camel
+vmap_mul_tensor: (a: T[..], b: T[..]) => T[..] when is_numeric::<T>()
+```
+
+The product of two batches: the whole batch multiplied at once, which for an elementwise product is
+the batch of the row-by-row products. The parameters are the open rank for the reason `vmap_matmul`
+gives below: a lifted type does not name the element to a call's inference.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_mul_tensor([[1.0, 2.0], [3.0, 4.0]] as f32[2, 2], [[10.0, 10.0], [10.0, 10.0]] as f32[2, 2])` gives `[[10.0, 20.0], [30.0, 40.0]]`
+
+### The element of a row
+
+`r[0]` on a row is `:op/idx_arr`, and batching it gathers one element per row. This is the one rank
+where the rule's type parameter is not the type the operand has: a rule is instantiated at its
+primitive's *result* type (`modules/transforms/vmap.cpp`, `elementType = node->dataType()`), which
+for an index is the element (`f32`) while the value being indexed is the row (`f32[3]`). So the row
+is spelled from the element -- `T[]`, an array of `T` -- and the batch of rows is one dimension in
+front of that, `Lift<T[]>`, which for a row of `f32` is `f32[?, ?]`. The index is a batch as well
+(a constant in the body lifts to a batch of one row), so the gather reads it through `at`, the
+one-row broadcast every helper here uses.
+
+#### `idx_batch`
+
+```camel
+idx_batch: (xs: Lift<T[]>, i: int[]) => Lift<T>
+```
+
+One element per row: row `j` of the batch contributes `xs[j][i[j]]`, and the results are the batch
+`Lift<T>`. Cost is one strided read per row -- `len(xs)` of them, no copy of any row.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `idx_batch::<f32>([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3], [2, 1])` gives `[3.0, 5.0]`
+
 ### Matmul
 
 A batched matrix product adds the batch axis in front of both operands (`[b, m, k] x [b, k, n]`),
