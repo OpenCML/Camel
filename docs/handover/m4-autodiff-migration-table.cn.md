@@ -60,7 +60,7 @@
 | 7 | `collapse_random` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
 | 8 | `collapse_runtime` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
 | 9 | `concat_array_part` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
-| 10 | `control_flow_grad` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 10 | `control_flow_grad` | 不过 | **试点 2/5：需要新能力** — 五条里最简单的一条（`leaky`，单个 `with <x: float>`）改成参数后仍然过不去：`REINTERP split function=jvp_of_leaky skip=exit (a lifted function answers with the pair (result, tangent); this graph's exit is not a two-member tuple fill, so there is no pair to cut)`——函数体里有分支。其后还有一件库补：`power`/`pick`/`walk` 是 `(x, n)` 多参，库只有一元 `grad`。老读数 `a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0` |
 | 11 | `custom_rule` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
 | 12 | `discrete_zero` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
 | 13 | `discrete_zero_refuse` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
