@@ -160,6 +160,17 @@ ROUNDTRIP checked=540 equivalent=495 not_equivalent=45 over_budget=0 unfaithful=
 
 判据：打印 **550（不变）**、等价 **492 → 495（只增）**、产不出文档 **14 → 10（只降）**、拒绝 **1807（不变）**、家族 **49（不升）**。**两条没做到，同一条用例**：`not_equivalent 44 → 45`、`DIFFERENT 新增 1`，都是 `test/cases/modules/tensor/int_division.cml`。原因查清了，是**既有那一类"同样的节点、不同的形状"**，不是 import 改出来的：源里写的是 `[-9223372036854775807 - 1]`（元素是个表达式，图里是 `FILL array slots[0]`），打印机把它折成常量字面量 `[-9223372036854775808]` 写回去，前端把常量元素表读成**常量数组**（`DATA`），于是左边多一个 `FILL`、右边多一个 `DATA`，值一样、形状不同。这一例此前根本编不过（`NoMatchingFunction`），所以从没有过"形状"可比——它是**新露出来的**，不是新造的。两条路：**(a)** 这种"槽位全是常量的 `FILL`"本来就没有忠实写法（任何纯常量表达式都会被折成常量数组），照"写不回来的形状就拒绝"处理，单独一刀，`not_equivalent` 回到 44、另外三条仍等价；**(b)** 让它就这么算进不等价。我建议 (a)，但它属于另一类，所以没混进这一刀。
 
+**2026-11-02 第九刀：写不回的形状具名拒绝，`not_equivalent` 回到 44。** 第八刀那 1 条 `DIFFERENT` 的账在这里收平：`test/cases/modules/tensor/int_division.cml` 从打印栏移到拒绝栏，理由是**这个形状没有忠实写法**——源里写的是 `[-9223372036854775807 - 1]`（元素是表达式，图里是 `FILL array slots[0]`），而它的值 `-2^63` **没有普通字面量写法**（int64 写不出它的绝对值），打印机只能写成表达式，前端再把整个字面量折成**常量数组**，写回的程序建出的是另一张图。**这不是打印机的手艺问题，是语言的事实**；把它算进不等价会让 `not_equivalent` 失去含义（它该记"我们打印了、但回不来"），所以按同一把尺子拒：
+
+```
+std::cml cannot print main: a construction whose slots are constants with no plain literal
+spelling has no faithful spelling: the value is written as an expression, the front end folds
+the literal into a constant array, and the program written back builds a different graph
+```
+
+判据（对照合并 `origin/develop = 374488bf4` 之后**重测**的基线 550 / 1807 / 540 / 495 / 45 / 10 / 49，旧数不跨基线比）：打印 **550 → 549（掉 1，就是 `int_division.cml`，只能拒）**、等价 **495（保持）**、不等价 **45 → 44**、产不出文档 **10（保持）**、拒绝 **1807 → 1808**、家族 **49 → 50**、`DIFFERENT` **新增 0（并回少 1 条）**。新族必须自成一族：老族分别是"没有声明"（`the operator '<name>'`）与"有声明但名字是私有 kernel 的"（`body-less kernel declaration`），这句是第三件事——**声明、名字、写法都齐，但写回去的形状不是同一张图**。条件收得很窄：元素的**值没有普通字面量写法**（`int64`/`int32` 的最小值）才拒；同一支里 `[[1.0, x], [x, 2.0]]` 这种槽位写着**名字**的构造照常打印（实测 `[1, 2]`、`[[1.0, 2.0], [2.0, 2.0]]`、`[-9223372036854775808]` 都会被折成一张 `DATA`，而槽位里有名字的仍是 `FILL`），所以没有连带丢掉 `trans/cpp/exec/array_conversion.cml` 那类。
+
+**`int_division.cml` 这一条要单说一句：它此前根本编不过（`NoMatchingFunction`，缺 `import tensor` 那一刀之前），从没有过"形状"可比 —— 那个不等价是第八刀新露出来的，不是新造的。**
 **补声明清单（按节点数）。** 全语料里被打印机点名、确实没有任何声明的算子 **143 个、12520 个节点**。前 12：`:str/format` 1019、`tensor:sum` 934、`tensor:multiply` 862、`tensor:reshape` 856、`:op/tag_is_null` 689、`:struct/len_arr` 585、`tensor:add` 582、`:op/assn_l` 569、`:mark/map_arr` 389、`tensor:subtract` 324、`tensor:matmul` 238、`:op/slice_sub` 219。
 
 **更正两份旧数。** ① 之前报的「353 条没有声明」其实是「没有 `#op` 标签」的数，不是「没有声明」：`:op/add_l`（3244 节点）、`:op/mul_d`（801）这一批由 `globals.cpp` 的组（`__add__`、`__mul__`）**原生登记**，打印机从不点名它们，所以它们不是缺口；真正的缺口是上面 143 条。② `:op/keep` 已在 `fsh-dev 5773c9482` 删掉，全语料图里 **0 个节点**，扣前扣后都是 353（它与上面那 143 条无关）。

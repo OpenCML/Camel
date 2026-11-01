@@ -44,6 +44,7 @@
 #include <cmath>
 #include <cstdint>
 #include <format>
+#include <limits>
 #include <map>
 #include <memory>
 #include <queue>
@@ -2247,6 +2248,24 @@ class CmlPrinter {
         }
 
         std::vector<std::string> items;
+        // An array construction whose slots are all constants *written as literals* has no faithful
+        // spelling: the front end folds such a literal into a *constant* array (one `DATA`), not
+        // into a construction, so the program written back builds a different graph -- the same
+        // value in another shape (measured: `[1, 2]`, `[[1.0, 2.0], [2.0, 2.0]]` and
+        // `[-9223372036854775808]` all come back as one `DATA`, while `[1.0 + 1.0]` stays a `FILL`).
+        // That is a fact about the language, not about this printer, and printing it anyway would
+        // put a language fact into `not_equivalent`, which is where a printing this printer got
+        // wrong belongs. A construction written back with a *name* in a slot keeps its shape (the
+        // front end does not fold a variable), so the check is on the text of the items, not only
+        // on their nodes: `[[1.0, x], [x, 2.0]]` is a construction and prints.
+        const auto isLiteralText = [](const std::string &text) {
+            if (text.empty()) {
+                return false;
+            }
+            const unsigned char first = static_cast<unsigned char>(text.front());
+            return std::isdigit(first) != 0 || text.front() == '-' || text.front() == '+' ||
+                   text.front() == '\'' || text == "true" || text == "false";
+        };
         const camel::runtime::GCNode *templ = graph_->node(inputs.front());
         if (templ == nullptr || templ->dataIndex >= 0) {
             fail(ref, "a construction whose template is not a constant");
@@ -2273,6 +2292,9 @@ class CmlPrinter {
         }
         items.resize(count);
         std::vector<bool> filled(count, false);
+        // The value each slot holds, so a check on the *value* (a constant with no plain literal
+        // spelling) does not have to read the written node again.
+        std::vector<slot_t> values(count, 0);
         const auto slots = body->slots();
         for (size_t i = 0; i < with.size() && i < slots.size(); ++i) {
             const size_t at = static_cast<size_t>(slots[i]);
@@ -2281,6 +2303,11 @@ class CmlPrinter {
             }
             items[at]  = expression(with[i]).text;
             filled[at] = true;
+            const camel::runtime::GCNode *written = graph_->node(with[i]);
+            if (written != nullptr && written->kind == camel::runtime::GCNodeKind::Data &&
+                written->dataIndex < 0) {
+                values[at] = graph_->staticArea()->get<slot_t>(-written->dataIndex);
+            }
         }
         for (size_t i = 0; i < count; ++i) {
             if (filled[i]) {
@@ -2299,9 +2326,42 @@ class CmlPrinter {
                                         : type->code() == TypeCode::Tuple
                                               ? static_cast<const TupleType *>(type)->typeAt(i)
                                               : static_cast<const StructType *>(type)->typeAt(i);
-            items[i] = constantText(element, fieldType);
+            items[i]  = constantText(element, fieldType);
+            values[i] = element;
         }
         if (type->code() == TypeCode::Array) {
+            // The literal is folded into a constant array only when every item is a literal *and*
+            // the elements are the plain scalars whose literals the folder reads: a construction
+            // written back with a name, an operator or a complex literal in a slot keeps its shape.
+            bool allLiteral = !with.empty();
+            for (size_t i = 0; allLiteral && i < items.size(); ++i) {
+                allLiteral = isLiteralText(items[i]);
+            }
+            // And it only matters when an element has no plain literal spelling: `-2^63` is the one
+            // an int64 cannot write as a magnitude, so it is written as an expression and the front
+            // end folds the whole literal into a constant array -- the construction comes back as a
+            // different graph (the only case in the corpus is `[-9223372036854775807 - 1]`).
+            bool noPlainLiteral = false;
+            if (allLiteral) {
+                for (size_t i = 0; i < values.size(); ++i) {
+                    const slot_t value = values[i];
+                    if (elementType != nullptr && elementType->code() == TypeCode::Int64 &&
+                        fromSlot<int64_t>(value) == std::numeric_limits<int64_t>::min()) {
+                        noPlainLiteral = true;
+                    } else if (elementType != nullptr && elementType->code() == TypeCode::Int32 &&
+                               fromSlot<int32_t>(value) == std::numeric_limits<int32_t>::min()) {
+                        noPlainLiteral = true;
+                    }
+                }
+            }
+            if (allLiteral && noPlainLiteral) {
+                fail(
+                    ref,
+                    "a construction whose slots are constants with no plain literal spelling has no "
+                    "faithful spelling: the value is written as an expression, the front end folds "
+                    "the literal into a constant array, and the program written back builds a "
+                    "different graph");
+            }
             std::string text = "[";
             for (size_t i = 0; i < items.size(); ++i) {
                 text += (i ? ", " : "") + items[i];
