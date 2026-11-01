@@ -127,19 +127,11 @@ const MODULES = [
         name: 'vjp',
         title: '`vjp`: the derivative, as a library',
         kind: 'camel',
-        // `vjp` is the composition of three transforms, and the third -- the walk `transpose` runs
-        // -- cannot take the backward half yet. The module compiles and imports the rulesets it
-        // composes; a pullback raises inside the walk, where a callee of several parameters is
-        // refused. Listing it as `pending` keeps it out of the page
-        // -- a page a reader trusts does not show a call that raises the moment it is made --
-        // without pretending the module is not there: every mode prints why, and `--verify-docs`
-        // turns red the day its examples compile, which is the one line to delete (`pending:`
-        // below) when it does.
-        pending:
-            '`stdlib/vjp.cml` compiles, and what it cannot do yet is run: the backward half `split` ' +
-            'hands back calls `mul_tangent(x, w, dx, dw)`, and the walk `transpose` runs refuses a ' +
-            'callee of several parameters (`skip=signature`), so a pullback raises instead of ' +
-            'answering and an example that calls one would show that error where the reading belongs',
+        // `vjp` is the composition of three transforms, and all three are written: `jvp` lifts,
+        // `split` answers the two halves, and `transpose` walks the backward one. The module
+        // compiles and imports the two rulesets it composes, so a program that imports `vjp` gets a
+        // derivative and a pullback never raises. It was listed as `pending` until the walk took a
+        // callee of several parameters; that reason retired with the step.
     },
     {
         name: 'tensor',
