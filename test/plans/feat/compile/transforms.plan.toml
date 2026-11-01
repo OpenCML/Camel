@@ -420,6 +420,36 @@ timeout_ms = 20000
 # The same missing cotangent, seen from the library: `grad` is
 # `transpose(split(reinterp(jvp(f))))`, so a tangent function that ignores its operands is on every
 # `grad` of a sum, and a refusal there is a refusal of the plainest derivative there is.
+# **This entry pins a wrong behaviour, on purpose.** A program that destructures the residual tuple
+# reads only the members the *static* type names, and the static type is the stand-in the operator
+# resolver builds (`splitHalvesOf`: one member per value parameter), not the tuple the graph hands
+# over. For `f(x, y) = x*x*y*y` the graph says four -- `residuals=4`, and the forward half's type is
+# `(float, float) => (float, (float, float, float, float))` -- while the stand-in says two, so
+# `let (r0, r1) = residuals` silently gets the two parameters and the two products are never handed
+# to the program. The pullback is still right (`(24.0, 36.0)`), because the tuple itself is intact and
+# only its type is short: that is what tells the two apart in these readings.
+#
+# The fix is a language decision, not a change to this plan: see
+# `docs/handover/questions/questions-2026-11-01-is-a-splits-residual-count-a-number-the-type-can-carry.md`.
+# When it lands this entry changes shape -- either the destructure becomes a compile-time refusal
+# (arity 4 against 2 names) or the count reaches the type and the four members get names. Until then
+# the numbers below are today's, and `not_contains` keeps a silent half-fix from passing: a tuple that
+# suddenly reads `r0= 9.0` / `r1= 4.0` means the members moved, which this entry should be told about
+# rather than absorb.
+[[tests]]
+name = "split_residuals_destructured"
+desc = "`split(jvp(f))` for `f(x, y) = x*x*y*y`, destructured: the graph's tuple has four members (`type=(float, float) => (float, (float, float, float, float)) pure residuals=4`), the call site's static type has two, and the destructure takes the two parameters -- `r0= 3.0`, `r1= 2.0` -- while the two products (`9.0`, `4.0`) never reach the program. The pullback of the same run is `(24.0, 36.0)`, the derivative of `x*x*y*y` at (3, 2), because the backward half reads the whole tuple: the value is intact and only its type is short. Pinned as today's behaviour so a fix is visible; the question is a page."
+kind = "behavior"
+case = "../../../cases/compile/transforms/split_residuals_destructured.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP split function=jvp_of_f", "type=(float, float) => (float, (float, float, float, float)) pure residuals=4", "value= 36.0", "r0= 3.0", "r1= 2.0", "tangent= (24.0, 36.0)"]
+expect_stdout_not_contains = ["r0= 9.0", "r1= 4.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 [[tests]]
 name = "grad_where_the_tangent_ignores_the_operands"
 desc = "`grad((x) => x + 1.0)` at 3 is `1.0`: the lifted tangent of the sum is `add_tangent`, whose body is `dx + dw` and which ignores the operands, so the transposed half answers a zero for them and the derivative of the straight line comes out. `grad((x) => x*x*x + 1.0)` at 3 is 27 -- the cube lifted through `mul_tangent` plus a constant the lift does not touch -- and `grad((x) => x*x + 1.0)` at 3 is 6, so the sum contributes nothing in both directions while the term that is not constant answers its own derivative. A refusable zero would fail all three, since every one of them is a sum."
