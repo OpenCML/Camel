@@ -469,6 +469,14 @@ export func operator >=(x: bf16, y: bf16): bool
 #op(':op/ge_s')
 export func operator >=(x: string, y: string): bool
 
+// ---- power and the remaining binary operators ----
+
+/// The 64-bit float raised to the power of the second.
+/// @example 2.0 ^ 3.0    // 8.0
+#op(':op/pow_d')
+export func operator ^(x: float, y: float): float
+
+
 // ---- conversions ----
 //
 // Numeric types are never converted implicitly; these functions do it. There is one conversion
