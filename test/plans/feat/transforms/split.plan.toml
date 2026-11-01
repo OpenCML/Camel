@@ -182,3 +182,16 @@ expect_exit = 0
 expect_stdout_contains = ["split function=jvp_of_g forward=", "residuals=1 recompute=1", "split function=jvp_of_h forward=", "residuals=2", "tagged dx= 27.0", "plain dx= 27.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+
+[[tests]]
+name = "remat_across_module_boundary"
+desc = "`#remat` on a function in another module still marks the graph that is cut. The tag becomes the graph's recompute bit when the graph is built (`src/compile/gir/builder.cpp`), and a module's declarations are built the same way as the file's own, so the reading is the one the same-file case gets: `residuals=1 recompute=1` for a cubic whose only non-parameter residual is `x*x`, and the answer is still 27.0. The same-file case could not have shown a mark that stops at an import."
+kind = "behavior"
+case = "../../../cases/transforms/split/remat_across_module.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["residuals=1 recompute=1", "jvp_of_remat_lib::g", "tagged dx= 27.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
