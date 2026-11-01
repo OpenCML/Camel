@@ -500,11 +500,13 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
             visit(edge.pred);
         }
         // An order edge orders two nodes that both run; it does not make either of them run
-        // (docs/design/effects/edges.cn.md 1.5 and 2). A predecessor that the layout does not
-        // hold anyway is a node nothing reaches, so its order says nothing and is not visited:
-        // no other edge is followed from it.
+        // (docs/design/effects/edges.cn.md 1.5 and 2; design principles 3.1: a node runs iff a node
+        // of its region that runs uses it). A predecessor that the layout does not hold anyway is a
+        // node nothing reaches, so its order says nothing and is not visited: no other edge is
+        // followed from it. Region membership decides *when* a node runs, never *whether* -- it is
+        // read below, to lay the plan out arm by arm, and it does not seed this walk.
         for (const camel::runtime::GCGraphOrderEdge &edge : graph->orderPredsOf(index)) {
-            if (live[edge.pred] || isMember(edge.pred)) {
+            if (live[edge.pred]) {
                 visit(edge.pred);
             }
         }
