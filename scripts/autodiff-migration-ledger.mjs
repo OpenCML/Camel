@@ -74,6 +74,7 @@ const args = process.argv.slice(2)
 const quiet = args.includes('--quiet')
 const ledgerCheck = args.includes('--ledger-check')
 const onlyCase = args.includes('--case') ? args[args.indexOf('--case') + 1] : undefined
+let loaderFailure = ''
 
 // The ledger's own record, kept the way `diagnostics-catalog.mjs` keeps its name coverage: a constant
 // in the file, refused to move the wrong way. Two kinds of number live here, so the check reads them
@@ -93,13 +94,18 @@ const onlyCase = args.includes('--case') ? args[args.indexOf('--case') + 1] : un
 // the library", **not** "how many cases can be differentiated".
 //
 // The record was re-read on 2026-11-02, after the withdrawal of the front-end transform table and its
-// call-site refusal: `pass` fell from 12 to 6 because six cases guarded that refusal (they expected
-// exit 1 and now exit 0), and the three source columns were recounted from the sources rather than
-// from diagnostic wording (54/46/6 became 40/71/7 -- a different question asked of the same 118).
+// call-site refusal. The three source columns were recounted from the sources rather than from
+// diagnostic wording (54/46/6 became 44/67/7 -- a different question asked of the same 118). `pass`
+// did **not** move: it is 12 before and after the withdrawal, and the first reading of it here said 6
+// for a reason that belongs in this file: the shell that ran the ledger had no `LD_LIBRARY_PATH`, so
+// the compiler could not load `libstdc++`, every run exited 1 with no diagnostic, and six cases read as
+// failing that pass when the binary can start. That is why the run now refuses to report a number when
+// the binary does not start (see `loaderFailure` below): a ruler that cannot see must say so, not print
+// a smaller number.
 const LEDGER_RECORDED = {
     total: 127,
     library: 118,
-    pass: 6,
+    pass: 12,
     with: 44,
     array: 67,
     other: 7,
@@ -195,6 +201,9 @@ function runCase(file, test) {
     const { source: rewritten } = rewriteImports(source)
     const probe = file.replace(/\.cml$/, '.ledger-probe.cml')
     fs.writeFileSync(probe, rewritten, 'utf8')
+    if (!fs.existsSync(camelBinary())) {
+        loaderFailure = `no binary at ${camelBinary()}`;
+    }
     try {
         const result = spawnSync(camelBinary(), [probe, passOf(test)], {
             cwd: ROOT,
@@ -204,6 +213,13 @@ function runCase(file, test) {
         })
         const text = `${result.stdout || ''}${result.stderr || ''}`
         const first = text.split('\n').find((l) => l.includes(': [Error]: ')) || ''
+        // A binary that cannot start is not a case that failed. On this host the compiler needs the
+        // newer `libstdc++` on `LD_LIBRARY_PATH`; without it every run exits 1 with a loader message
+        // and no diagnostic, and the ledger would report a pass count that measures the shell, not
+        // the tree. One such run marks the whole measure unusable.
+        if (/error while loading shared libraries|GLIBCXX_|version `GLIBC/.test(text)) {
+            loaderFailure = text.split('\n').find((l) => /error while loading shared libraries|GLIBCXX_/.test(l)) || text.split('\n')[0]
+        }
         return { exit: result.status === null ? -1 : result.status, first: first.trim(), text }
     } finally {
         fs.rmSync(probe, { force: true })
@@ -371,6 +387,23 @@ if (!quiet) {
     )
 }
 console.log(summary)
+
+if (loaderFailure) {
+    console.log('')
+    console.log(`[LEDGER] the binary could not start: ${loaderFailure}`)
+    console.log(
+        '[LEDGER] so every run above reads as failing, and `pass` measures this shell rather than ' +
+            'the tree: put the newer libstdc++ on LD_LIBRARY_PATH and point CAMEL_HOME at the build, ' +
+            'then run it again. No number above is a reading.',
+    )
+    process.exitCode = 1
+}
+
+if (ledgerCheck && loaderFailure) {
+    console.log('')
+    console.log('[LEDGER-CHECK] not run: the binary does not start, so there is nothing to compare against.')
+    process.exit(1)
+}
 
 if (ledgerCheck) {
     const measured = {
