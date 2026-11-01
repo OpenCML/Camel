@@ -1,0 +1,30 @@
+// The smallest shape with a tuple in it, and the first half of the cotangent channel a tuple value
+// needs: `first(x) = let t = (x, 2x); t.0`.
+//
+// On paper the value is `x`, so the pullback of 1.0 is 1 -- and the second component `2x` is not read
+// at all, so its cotangent is zero, not a missing piece. That zero is the point of the case: the
+// tuple's cotangent is a value of the tuple's own shape, with the read slot filled and the rest zero,
+// and a walk that skipped the unread component instead of zeroing it would still answer 1 here --
+// which is why the companion case reads the other slot and must answer 2.
+//
+// Before this channel, a component read dropped its cotangent ("a component of the residuals is a
+// known value"), so nothing downstream of a tuple was differentiated at all and this function
+// refused with `skip=output`.
+import { transpose } from transforms
+import rulesets.transpose
+
+func first(x: float): float {
+    let t = (x, 2.0 * x)
+    return t.0
+}
+
+func main(): int sync {
+    println(first(1.0))
+    let back = transpose(first)
+    println(back(1.0, 1.0))
+    // The same pullback with twice the cotangent, so the last reading is 2 -- a number the forward
+    // line cannot print. Without it a plan asserting `1.0` would be satisfied by the forward line
+    // alone, and a transpose that answered nothing at all would look green.
+    println(back(1.0, 2.0))
+    return 0
+}

@@ -50,12 +50,13 @@ using camel::core::type::type_vec_t;
 using camel::core::type::TypeCode;
 
 /// The type of `split(f)` for a function of this type: the call, whose result is the pair of the two
-/// halves. nullptr when the function is outside what the step takes.
+/// halves. nullptr when the function is outside what the step takes. Its residuals member is the
+/// transform's own residuals tuple with no members: the members are the graph's answer.
 FunctionType *splitOperatorSignature(FunctionType *function) {
     if (function == nullptr) {
         return nullptr;
     }
-    const SplitHalves halves = splitHalvesOf(function);
+    const SplitHalves halves = splitHalvesWith(function, TupleType::residuals({}));
     if (halves.pair == nullptr) {
         return nullptr;
     }
@@ -92,7 +93,8 @@ class SplitResolver final : public FuncTypeResolver {
             norm[0]->code() != TypeCode::Function) {
             return std::nullopt;
         }
-        const SplitHalves halves = splitHalvesOf(tt::as_ptr<FunctionType>(norm[0]));
+        // The reason only: no graph, so the residuals tuple stays the transform's own, with no members.
+        const SplitHalves halves = splitHalvesWith(tt::as_ptr<FunctionType>(norm[0]), nullptr);
         if (!halves.why.empty()) {
             return halves.why;
         }
@@ -148,8 +150,7 @@ slot_t splitKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
             camel::core::error::ExecutionSiteHint{
                 .cachedOrigin = built.refusedOrigin, .keepRaiseSite = true});
     }
-    const SplitHalves halves = splitHalvesOf(function->graph()->funcType());
-    auto *forwardFunction    = ::Function::create(
+    auto *forwardFunction = ::Function::create(
         built.program, built.forward->id(), function->tupleType(), mm::autoSpace());
     auto *backwardFunction = ::Function::create(
         built.program, built.backward->id(), function->tupleType(), mm::autoSpace());
@@ -161,13 +162,12 @@ slot_t splitKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
                 i, closure->get<slot_t>(i), function->tupleType());
         }
     }
+    // The pair is two function values: the field a typed write would materialise is an aggregate,
+    // and a function is not one. The placeholder the kernel used to type it with, and the
+    // declaration text it used to print, are both gone (author, 2026-11-01).
     auto *pair = ::Tuple::create(2, mm::autoSpace());
-    pair->set<slot_t>(0, toSlot<::Function *>(forwardFunction), halves.pair);
-    pair->set<slot_t>(1, toSlot<::Function *>(backwardFunction), halves.pair);
-    // The reading of what the step built is the graph's own (`REINTERP split ... type= ... residuals=`,
-    // split.cpp). The operator's declaration text used to be printed beside it, with the pair's type
-    // read from that placeholder; both are gone: the placeholder is the type a call site is checked
-    // against, not a fact about the two halves (author, 2026-11-01).
+    pair->set<slot_t>(0, toSlot<::Function *>(forwardFunction));
+    pair->set<slot_t>(1, toSlot<::Function *>(backwardFunction));
     return toSlot<::Tuple *>(pair);
 }
 

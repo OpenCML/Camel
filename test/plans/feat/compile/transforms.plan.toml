@@ -371,8 +371,22 @@ timeout_ms = 20000
 # cotangent adds to it) -- 15 and 22 below. `answer=per-target` is several values, one sum each, and
 # nothing is added across values -- `read_outer` below, whose 29 is 15 through `x` and 14 through `k`.
 #
-# The three shapes are the channel's three cases and their paper numbers are 15, 22 and 29, so a case
-# that stops answering its number says so.
+# A loop that already carries two states before anything escapes -- `carried` below -- needs one
+# cotangent per state, not one, and the loop's value is then a tuple. Using it means reading a
+# component (`t.0`), which is where the second channel starts: a component read fills that slot of the
+# tuple's cotangent and leaves the rest zero, so `first` answers 1 and `second` answers 2 from the same
+# tuple, and `carried` answers 10 with its accumulators after the two states. Before that channel every
+# one of the three refused at `skip=output`, and with it every tuple-shaped value in a transposed
+# function refuses the same way -- which is what the switch flips.
+#
+# Three readings then take the same ruler to the rest of the channel: the second state of that loop
+# (`carried_p`, 7 rather than 10, which only the slot index can tell apart), a tuple inside a tuple
+# (`nested`, `t.0.1`, where the cotangent is a tuple in a tuple's slot), and both slots of one tuple
+# read at once (`both`, 3, where two reads are two slots of one cotangent and add). Each case answers
+# its transpose twice, the second time with twice the cotangent, because a plan line the forward
+# reading already satisfies cannot tell a working transpose from a silent zero -- `nested` answered 0.0
+# for exactly that reason until the tuple-in-a-tuple rule was written, and its forward 2.0 had hidden
+# it.
 [[tests]]
 name = "transpose_loop_escape.names_the_value_one_read"
 desc = "`read_one(x) = loop s = x for i in 0..3 do 2.0*s + x` reads the parameter inside the loop body, so every round's cotangent lands on `x` and has to leave the loop. The loop carries it as a second state and answers 15 -- `s = 2s + x` three times is `8x + 7x`, the state's own cotangent 8 plus the carried sum 7 -- where before this cut it refused with `skip=state`. The reading is kept: `carried=1` in place of `skip=state`, `answer=summed` because the escaped value is the one the state starts from, `captures=1`, and the `ESCAPE` line still names the parameter port as the target and the body's `add` as the product that handed the cotangent out. A channel that dropped that line when it started working could not be compared with the refusal it replaced."
@@ -412,6 +426,138 @@ expect_output_contains = ["TRANSPOSE function=read_outer carried=2 node=12 origi
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+[[tests]]
+name = "transpose_tuple_component.reads_the_first_slot"
+desc = "`first(x) = let t = (x, 2x); t.0` returns one component of a tuple, and the pullback of 1.0 is 1: the tuple's cotangent is a value of the tuple's own shape, the read slot filled and the other zero. That zero is what the companion case checks from the other side -- a walk that zeroed where it should have filled, or filled every slot with the same cotangent, would still answer 1 here. Before this channel a component read dropped its cotangent as a read of a known value, so nothing past a tuple was differentiated and the function refused with `skip=output`.
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_tuple_component_first.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+expect_output_contains = ["TRANSPOSE function=first graph=", "1.0", "2.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_tuple_component.reads_the_second_slot"
+desc = "`second(x) = let t = (x, 2x); t.1` is the same tuple read one slot over, and the pullback of 1.0 is 2, because the component read is `2x`. Together with the previous case it says the channel is slot by slot and not \"answer 1 whenever a tuple is read\": filling every slot with the arriving cotangent would give 3 here (1 + 2), and giving it to the first slot always would answer 1 here and 2 for `first`, so neither mistake survives the two cases together.
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_tuple_component_second.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+expect_output_contains = ["TRANSPOSE function=second graph=", "2.0", "4.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_loop_escape.two_states_before_the_escape"
+desc = "The shape that puts the accumulators after states that already exist: `carried(x) = let q = 2x; (loop s = x, p = x for i in 0..3 do (s + p, p + q)).0`, whose paper value is `10x` (rounds `s' = s + p`, `p' = p + q` from `s = p = x` reach `s = 10x, p = 7x`). The forward evaluator prints 10 and 7 first, then the transpose answers 10. The two states arrive with different cotangents -- 1 for `s`, the value read out of the loop, and 0 for `p`, which nothing reads directly but which feeds `s` in every round and comes back as 3 -- and the escape `q` adds those three rounds' worth, which `q = 2x` turns into 6: 1 + 3 + 6. An accumulator placed before the states, or a loop value read with the sums first, lands somewhere else, so this number is what makes the order real. Before the tuple channel this case refused at `skip=output` without ever reaching the loop.
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_loop_escape_two_states.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+expect_output_contains = ["7.0", "10.0", "20.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_loop_escape.second_state_of_the_same_loop"
+desc = "The same two-state loop read one slot over: `carried_p(x) = let q = 2x; (loop s = x, p = x for i in 0..3 do (s + p, p + q)).1`, whose paper value is `7x` -- the same rounds reach `s = 10x, p = 7x`, and this case takes `p`. The previous case gets 10 by reading `.0`, this one gets 7 by reading `.1`, and the two differ by exactly which slot the cotangent was seeded into: 0 for `s` and 1 for `p` here, against 1 and 0 there, plus the same 6 through the escape `q = 2x` (the three rounds' worth of `p`'s cotangent). A channel that always filled the first slot would answer the previous case's decomposition here too.
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_loop_state_second.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+expect_output_contains = ["TRANSPOSE function=carried_p graph=", "7.0", "14.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_tuple_component.reads_through_a_nested_tuple"
+desc = "`nested(x) = let t = ((x, 2x), 3x); t.0.1` reads two levels in: the value is the second component of the first component, `2x`, so the pullback is 2. The channel then has to be applied twice, on the tuples of the cotangent space rather than only on the value's own tuple -- the outer cotangent carries a tuple in its first slot, that one carries 1 in its second slot, and the other slots (the outer `3x`, the inner `x`) are zero. Reading `t.1` would give 3 and `t.0.0` would give 1, so 2 is only produced by the pair of selections in the right order. The case also answers 0.0 before this rule: the sub-tuple cotangent was put in a slot of the holder's cotangent, where the walk cannot see it, and the forward 2.0 above hid it.
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_tuple_nested.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+expect_output_contains = ["TRANSPOSE function=nested graph=", "2.0", "4.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_tuple_component.two_reads_of_one_tuple_add"
+desc = "`both(x) = let t = (x, 2x); t.0 + t.1` reads both components, so the value is `3x` and the pullback is 3: 1 through the first component, 2 through the second. This is the acceptance for the sentence the channel is built on -- the cotangent belongs to the value that holds the tuple, not to each read. Two reads are two slots of one cotangent, so they add here; a channel that let the second read overwrite the first would answer 2, one that kept only the first would answer 1, and one keyed by the read would have to decide which read owns the tuple.
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_tuple_both_slots.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+expect_output_contains = ["TRANSPOSE function=both graph=", "3.0", "6.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_loop_escape.int_is_a_zero_tangent_space"
+desc = "An escape whose target is not a float: `int_escape(x) = let n = int(3x); loop s = x for i in 0..3 do s + float(n)` reads an integer inside the loop body, and the answer is 1.0 -- `x` contributes 1 and the truncation contributes 0, because an integer is a zero tangent space and `float(int(3x))` is a step function that is constant between its jumps. The number and the reason are printed together: the forward reading is 10.0 (1 plus three rounds of `int(3)`), so the integer is really there and really used, and `TRANSPOSE function=int_escape contribution=0 node=<n> type=int space=none from=<cast>` says which value contributes the zero. The two controls are the other half: `g(x) = float(int(5x)) + x` is 1.0 (an integer branch beside a float one does not swallow it), `h(x) = x + x` is 2.0 (no integer anywhere, and not 1). Every transpose is asked twice at different cotangents and the plan asserts the second answers -- 5, 3, 4 -- so the answers must scale with the cotangent and cannot be satisfied by a forward reading; `skip=` must not appear at all, because this shape used to answer a refusal and a refusal is not an answer."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_loop_escape_int.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+expect_output_contains = ["TRANSPOSE function=int_escape contribution=0 node=", "type=int space=none", "TRANSPOSE function=int_escape graph=", "10.0", "5.0", "3.0", "4.0"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_no_tangent.bool_condition"
+desc = "A boolean in the middle of a differentiable graph: `f(x) = let b = x > 0.0; if b then x*x else 0.5x`. On paper the arm that runs is a real chain (at 2 the branch takes `x*x`, so the value is 4 and the pullback is 4), and the condition itself is a choice rather than a magnitude -- `b` contributes 0 to the derivative because a bool has no tangent space. The reading must say so (`contribution=0 ... type=bool space=none`) beside the `arms=2` the branch already prints; a transform that answered 0 would be wrong (the arm is differentiable) and one that refused would be wrong for the same reason. The transpose is asked at cotangent 1 and 2, so 4 then 8: proportional, and 8 is on no forward line."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_no_tangent_bool.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+expect_output_contains = ["type=bool space=none", "4.0", "8.0"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_no_tangent.function_value_is_refused"
+desc = "A function value in the middle of a differentiable graph, `g(x) = let h = (y: float) => y*x; h(2)`, is REFUSED, and this entry says by what name rather than leaving the shape untested: the case prints the forward value (2.0, which is `2x` at x = 1, so the graph is really computing) and then `TRANSPOSE function=g skip=call node=4 callee=none value=3:0 with=2:4`. The call site cannot name the callee's graph: `h` is a closure, its graph id sits inside the bound value together with the capture `x`, and `calleeIdOf` sees a value the call takes as a `with` input, not a graph. Naming it is only half of what would be needed -- the transposed callee would have to take the capture as a parameter of its own, which is the piece this transform does not have (it refuses `with` parameters outright, as `jvp` does). So the reading is a refusal and not a number, and the entry pins the refusal's name so that the cut which changes it is visible. The paper answer it owes is 2 (and 6 at cotangent 3)."
+kind = "negative"
+case = "../../../cases/compile/transforms/transpose_no_tangent_closure.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 1
+expect_output_contains = ["2.0", "TRANSPOSE function=g skip=call node=4 callee=none", "callee=none"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_no_tangent.tuple_member"
+desc = "A tuple with one member that has no tangent space: `k(x) = let t = (x, 3); float(t.1) + t.0`, whose paper answer is `3 + x` -- 5 at x = 2, pullback 1. This is the sentence the integer rule was written on, `a tuple with one member without a space stops only that member`, as two numbers: 0 is `stopped too early` (the whole tuple given no space) and 2 is `did not stop` (the integer path counted as an identity), and 1 is what neither of them answers. The zero is named by type -- `type=int space=none` on the component read of the second slot. Asked at cotangent 1 and 3, so 1 then 3."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_no_tangent_tuple_member.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+expect_output_contains = ["type=int space=none", "1.0", "3.0"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
 [[tests]]
 name = "transpose_transposes_the_callee_and_calls_it.nvm"
 desc = "A call is a graph of its own, so transposing one means transposing that graph: the callee's transpose is built once beside the caller's (one graph per callee, the rule \`jvp\` reads for a lifted function, so two calls of one function call one graph), and the call site passes the arguments it already has and then the cotangent. `g(x) = 2.0*x` called twice and added gives 4 at x = 1, and a pullback through two calls is the sum of the two pullbacks, 2 + 2 = 4 at cotangent 1. The reading is the callee's own TRANSPOSE line followed by the caller's, which is the footprint of one transpose per callee rather than one per call."

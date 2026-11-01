@@ -1,0 +1,28 @@
+// A tuple inside a tuple, with the component read two levels in: `nested(x) = let t = ((x, 2x), 3x);
+// t.0.1`.
+//
+// On paper the value is the second component of the first component, i.e. `2x`, so the pullback of 1.0
+// is 2. The point of nesting it is that the channel has to be applied twice and in the right order: the
+// outer tuple's cotangent has a tuple in its first slot, that tuple's cotangent has 1 in its second
+// slot, and everything else -- the outer second slot, the inner first slot -- is zero. A channel that
+// only ever works on one level, or that filled the outer slot with the number arriving at the innermost
+// read, would answer something else: reading `t.1` (the `3x`) instead would give 3, and reading `t.0.0`
+// would give 1.
+import { transpose } from transforms
+import rulesets.transpose
+
+func nested(x: float): float {
+    let t = ((x, 2.0 * x), 3.0 * x)
+    return t.0.1
+}
+
+func main(): int sync {
+    println(nested(1.0))
+    let back = transpose(nested)
+    println(back(1.0, 1.0))
+    // Twice the cotangent, 4: nothing above prints 4, so the plan's claim is about the transpose and
+    // not about the forward reading. This is the line that turned 0.0 red: the first version of the
+    // channel answered a silent zero here and the forward 2.0 above hid it.
+    println(back(1.0, 2.0))
+    return 0
+}

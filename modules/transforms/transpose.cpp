@@ -6,6 +6,8 @@
 #include "camel/core/forward.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/tangent_space.h"
+#include "camel/core/type/tree.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
 
@@ -70,11 +72,12 @@ FunctionType *transposeSignature(FunctionType *function) {
                 camel::core::type::param_vec_t{}, params,
                 camel::core::type::TupleType::create(cotangentsOfAll));
         }
-        for (size_t i = 0; i < bundle->size(); ++i) {
-            if (bundle->typeAt(i) != Type::Float64()) {
-                return nullptr;
-            }
-        }
+        // A residual's cotangent space may be empty: a branch's condition crosses the cut as a
+        // residual (so the backward half picks the arm the forward half picked, design 4.2) and a
+        // predicate is not a value anything is differentiable with respect to. Such a member is
+        // accepted here and contributes nothing at the other end -- the statement is made once, in the
+        // cotangent space (`addCotangent` drops a target whose type has no cotangent), rather than as a
+        // per-type test at every use.
         for (size_t i = 1; i < count; ++i) {
             if (function->normTypeAt(i) != Type::Float64()) {
                 return nullptr;
@@ -106,6 +109,23 @@ FunctionType *transposeSignature(FunctionType *function) {
 /// did before the channel existed, which is what the A/B of the reading below flips: the same case,
 /// the same line, `skip=state` instead of `carried=1`.
 constexpr bool kCarryEscapedCotangents = true;
+
+/// Whether a tuple value has a cotangent slot by slot. On, reading one component of a tuple fills
+/// that slot and leaves the rest zero, so a value built as a tuple can be differentiated through and a
+/// loop that carries several states can be transposed at all. Off, a component read drops its
+/// cotangent as a read of a known value -- which is what the transform did before this channel, and
+/// what the A/B of the cases below flips back to: everything tuple-shaped refuses with `skip=output`.
+constexpr bool kTupleCotangents = true;
+
+/// Whether a value whose type has no tangent space is a zero of the derivative rather than a reason to
+/// refuse. On, a cotangent that lands on such a value is dropped, and the reading says which value it
+/// was and why -- an integer is a step function, constant between its jumps, so `float(int(3x))`
+/// contributes nothing to the derivative of what it is added to, and `x + float(int(3x))` answers 1.
+/// The type answers this (`camel/core/tangent_space.h`), not the node kind: the same rule covers the
+/// booleans, the strings and a function value. Off, an integer in a loop body stops the body's walk
+/// where it stands -- which is what the transform did before this rule, and what the A/B of the case
+/// below flips back to: `skip=state`, with no answer at all.
+constexpr bool kZeroTangentIntegers = true;
 
 /// What the graphs of one transpose share: one group (a callee's transpose is another member of
 /// it, exactly as `jvp` lifts one graph per callee) and the callees already transposed, so that
@@ -237,7 +257,62 @@ bool buildTransposeMember(
             gc_node_ref_t from      = rt::kInvalidNodeRef;
         };
         std::unordered_map<gc_node_ref_t, Escape> escapes;
+        // A tuple value's cotangent, slot by slot. A component read puts its cotangent in its own
+        // slot and leaves the rest empty; the value that holds the tuple turns the empty slots into
+        // zeros when the walk reaches it. Keyed by the value, not by the read, because two reads of
+        // one tuple are two slots of one cotangent, not two cotangents.
+        std::unordered_map<gc_node_ref_t, std::vector<gc_node_ref_t>> tupleCotangents;
+        // How many slots a tuple value has: a Fill knows its components, anything else has to be
+        // asked its type.
+        const auto tupleSlots = [&](gc_node_ref_t ref) -> size_t {
+            const camel::runtime::GCNode *node = function->node(ref);
+            if (node == nullptr) {
+                return 0;
+            }
+            if (node->kind == rt::GCNodeKind::Fill) {
+                return function->withInputsOf(ref).size();
+            }
+            const Type *type = node->dataType();
+            return type != nullptr && type->code() == camel::core::type::TypeCode::Tuple
+                       ? camel::core::type::tree::arity(type)
+                       : 0;
+        };
+        // Whether a value can hold a cotangent at all. The type answers, through the same query `jvp`
+        // asks of a parameter: a float (and a tuple or array of them) is its own tangent space, and
+        // an integer, a boolean, a `string` or a function has none. A node with no type yet is given
+        // the benefit of the doubt -- guessing "no space" would silently stop a chain that has one.
+        const auto hasTangentSpace = [&](gc_node_ref_t ref) {
+            const camel::runtime::GCNode *node = function->node(ref);
+            if (node == nullptr) {
+                return true;
+            }
+            const Type *type = node->dataType();
+            return type == nullptr || camel::core::tangentSpaceOf(type).hasSpace();
+        };
+        // One line per value whose cotangent is zero because the value cannot hold one. Deduplicated:
+        // a value read in three rounds is still one value contributing one zero, and a reading that
+        // printed it three times would look like three different findings.
+        std::vector<gc_node_ref_t> zeroedValues;
+        const auto noteZero = [&](gc_node_ref_t target, gc_node_ref_t from) {
+            if (std::find(zeroedValues.begin(), zeroedValues.end(), target) !=
+                zeroedValues.end()) {
+                return;
+            }
+            zeroedValues.push_back(target);
+            const camel::runtime::GCNode *node = function->node(target);
+            const Type *type                  = node != nullptr ? node->dataType() : nullptr;
+            os << "TRANSPOSE function=" << function->name() << " contribution=0 node=" << target
+               << " type=" << (type != nullptr ? type->toString() : std::string("?"))
+               << " space=none from=" << from << '\n';
+        };
         const auto addCotangent = [&](gc_node_ref_t ref, gc_node_ref_t node) {
+            // A value with no tangent space holds no cotangent: the type says so, and the reading
+            // names the value rather than leaving the zero unexplained. This is the same question
+            // `jvp` asks of a parameter, asked of a value in the middle of a graph.
+            if (kZeroTangentIntegers && !hasTangentSpace(ref)) {
+                noteZero(ref, ref);
+                return;
+            }
             if (!hasCotangent[ref]) {
                 cotangent[ref]    = node;
                 hasCotangent[ref] = true;
@@ -429,16 +504,23 @@ bool buildTransposeMember(
         }
         addCotangent(oldExit, cotangentIn);
 
-        // One arm of a branch: the region the arm owns, the value it produced in the original
-        // graph, and the cotangent arriving at that value. Returns the cotangent of the parameter
-        // for that arm -- which is the arm's own chain, run backwards inside the arm's region.
+        // One arm of a branch, or one round of a loop body: the region, the values inside it whose
+        // cotangents are already known, and the ports where the chain stops -- the parameter for an
+        // arm, the loop's own state ports for a round. Returns the cotangent each stop received.
+        // A single seed and a single stop is the branch's case; a loop body that carries several
+        // states hands out one cotangent per state and collects one per state, so the shape has to
+        // be a list on both ends.
         bool armsOk = true;
-        const auto runArm = [&](uint32_t oldRegion, gc_node_ref_t armResult,
-                                gc_node_ref_t armCotangent,
-                                gc_node_ref_t stop) -> gc_node_ref_t {
+        struct ArmSeed {
+            gc_node_ref_t at        = rt::kInvalidNodeRef;
+            gc_node_ref_t cotangent = rt::kInvalidNodeRef;
+        };
+        const auto runSeeded = [&](uint32_t oldRegion, const std::vector<ArmSeed> &seeds,
+                                   const std::vector<gc_node_ref_t> &stops)
+            -> std::vector<gc_node_ref_t> {
             std::vector<gc_node_ref_t> local(nodeCount, rt::kInvalidNodeRef);
             std::vector<bool> hasLocal(nodeCount, false);
-            gc_node_ref_t portCotangent = rt::kInvalidNodeRef;
+            std::vector<gc_node_ref_t> portCotangents(stops.size(), rt::kInvalidNodeRef);
             const auto addLocal = [&](gc_node_ref_t ref, gc_node_ref_t node) {
                 if (!hasLocal[ref]) {
                     local[ref]    = node;
@@ -451,16 +533,25 @@ bool buildTransposeMember(
             // cotangent of that parameter for this arm is what the chain hands it. Anything else
             // from outside the region is a residual this step does not have.
             const auto deliver = [&](gc_node_ref_t target, gc_node_ref_t node, gc_node_ref_t from) {
+                // A value the round read that cannot hold a cotangent contributes zero: the round's
+                // answer does not depend on it in a differentiable way, so there is nothing to carry
+                // out of the loop and no accumulator to grow. Dropped here rather than at the escape
+                // collection, which would otherwise build a float sum for an integer.
+                if (kZeroTangentIntegers && !hasTangentSpace(target)) {
+                    noteZero(target, from);
+                    return;
+                }
                 if (function->nodeRegion(target) == oldRegion) {
                     addLocal(target, node);
                     return;
                 }
-                if (target == stop) {
-                    if (portCotangent == rt::kInvalidNodeRef) {
-                        portCotangent = node;
-                    } else {
-                        portCotangent = primitive(":op/add_d", {portCotangent, node});
+                for (size_t i = 0; i < stops.size(); ++i) {
+                    if (stops[i] != target) {
+                        continue;
                     }
+                    portCotangents[i] = portCotangents[i] == rt::kInvalidNodeRef
+                                            ? node
+                                            : primitive(":op/add_d", {portCotangents[i], node});
                     return;
                 }
                 if (allowEscapes) {
@@ -476,7 +567,11 @@ bool buildTransposeMember(
                 }
                 armsOk = false;
             };
-            addLocal(armResult, armCotangent);
+            for (const ArmSeed &seed : seeds) {
+                if (seed.at != rt::kInvalidNodeRef) {
+                    addLocal(seed.at, seed.cotangent);
+                }
+            }
             for (gc_node_ref_t ref = static_cast<gc_node_ref_t>(nodeCount); ref-- > 0;) {
                 if (function->nodeRegion(ref) != oldRegion || !hasLocal[ref]) {
                     continue;
@@ -486,19 +581,65 @@ bool buildTransposeMember(
                     continue;
                 }
                 if (node->kind == rt::GCNodeKind::Port) {
-                    portCotangent = local[ref];
+                    for (size_t i = 0; i < stops.size(); ++i) {
+                        if (stops[i] == ref) {
+                            portCotangents[i] = local[ref];
+                            break;
+                        }
+                    }
+                    continue;
+                }
+                if (node->kind == rt::GCNodeKind::Cast || node->kind == rt::GCNodeKind::Copy) {
+                    // A conversion passes a cotangent along when both sides can hold one. A cast
+                    // *to* an integer (`int(3x)`) ends the chain by its own type: the value it
+                    // produces is a step function, and the cotangent of a step function's output is
+                    // zero with respect to its input. A cast *from* one (`float(n)`) hands its
+                    // cotangent to the integer, and the delivery above drops it.
+                    const auto castInputs = function->normInputsOf(ref);
+                    if (kZeroTangentIntegers && !hasTangentSpace(ref)) {
+                        noteZero(ref, ref);
+                        continue;
+                    }
+                    if (!castInputs.empty()) {
+                        deliver(castInputs.front(), local[ref], ref);
+                    }
                     continue;
                 }
                 if (node->kind != rt::GCNodeKind::Oper) {
                     armsOk = false;
-                    return rt::kInvalidNodeRef;
+                    return {};
+                }
+                // The same rule as the caller's walk: a cotangent with nowhere to go stops at the
+                // type. Inside a loop body the shape it stops is `s + float(n)` -- `float(n)` has one
+                // operand and it is an integer, so the round's cotangent does not reach it, and the
+                // loop needs no accumulator for it.
+                if (kZeroTangentIntegers) {
+                    if (!hasTangentSpace(ref)) {
+                        noteZero(ref, ref);
+                        continue;
+                    }
+                    bool anyReceiver = false;
+                    for (const gc_node_ref_t operand : function->normInputsOf(ref)) {
+                        if (!isConstant(operand) && hasTangentSpace(operand)) {
+                            anyReceiver = true;
+                            break;
+                        }
+                    }
+                    if (!anyReceiver) {
+                        for (const gc_node_ref_t operand : function->normInputsOf(ref)) {
+                            if (!isConstant(operand)) {
+                                noteZero(operand, ref);
+                            }
+                        }
+                        continue;
+                    }
                 }
                 const auto inputs = function->normInputsOf(ref);
                 const auto *body = function->nodeBodyAs<camel::runtime::GCOperBody>(ref);
                 const auto rule  = camel::core::transposeRuleOf(std::string(body->uri()));
                 if (!rule.has_value() || rule->status != camel::parse::ast::RuleLookup::Found) {
                     armsOk = false;
-                    return rt::kInvalidNodeRef;
+                    return {};
                 }
                 noteRule(rule->rule);
                 if (rule->rule == "add_t") {
@@ -529,7 +670,7 @@ bool buildTransposeMember(
                         const gc_node_ref_t c = knownValue(inputs[other]);
                         if (c == rt::kInvalidNodeRef) {
                             armsOk = false;
-                            return rt::kInvalidNodeRef;
+                            return {};
                         }
                         if (rule->rule == "mul_t") {
                             deliver(inputs[i], primitive(":op/mul_d", {local[ref], c}), ref);
@@ -545,9 +686,18 @@ bool buildTransposeMember(
                     continue;
                 }
                 armsOk = false;
-                return rt::kInvalidNodeRef;
+                return {};
             }
-            return portCotangent;
+            return portCotangents;
+        };
+        // A single seed and a single stop: the branch's case, which is what every arm of a branch
+        // is. A loop body is the same walk with one seed and one stop per state it carries.
+        const auto runArm = [&](uint32_t oldRegion, gc_node_ref_t armResult,
+                                gc_node_ref_t armCotangent,
+                                gc_node_ref_t stop) -> gc_node_ref_t {
+            const std::vector<gc_node_ref_t> back =
+                runSeeded(oldRegion, {ArmSeed{armResult, armCotangent}}, {stop});
+            return back.empty() ? rt::kInvalidNodeRef : back.front();
         };
 
         // The walk runs the graph backwards: node ids are creation order, so a node only reads ids
@@ -570,9 +720,88 @@ bool buildTransposeMember(
                 }
                 break;
             case rt::GCNodeKind::Data:
-            case rt::GCNodeKind::Accs:
-                // A component of the residuals is a known value: it is read, not differentiated.
                 break;
+            case rt::GCNodeKind::Accs: {
+                // Reading one component of a tuple. The cotangent of the tuple is a value of the
+                // same shape: this slot is what arrived here, and the other slots are zero. Filling
+                // them is the whole point -- this case used to drop the cotangent, on the reading
+                // that a component of the residuals is a known value, and that reading is why a
+                // tuple had no cotangent at all and every function returning one refused.
+                const auto norm  = function->normInputsOf(ref);
+                const auto *body = function->nodeBodyAs<rt::GCAccsBody>(ref);
+                if (!kTupleCotangents || body == nullptr || norm.empty() ||
+                    function->nodeRegion(norm.front()) != 0) {
+                    break;
+                }
+                const gc_node_ref_t holder = norm.front();
+                // A tuple inside a tuple: the read this node takes a component of is itself read a
+                // component at a time, so its cotangent is a tuple, not a number, and it belongs to
+                // the value the slot holds rather than to a slot of the holder's own cotangent. A
+                // tuple put where a component cotangent belongs is not a cotangent at all, and the
+                // walk cannot see it: it answered a silent zero. So the sub-tuple's slots are handed
+                // over to the component the slot names -- `t.0.1` gives the second slot of `t.0`'s
+                // cotangent to `t.0`'s own value, which is a tuple written out in the body.
+                const auto nested = tupleCotangents.find(ref);
+                if (nested != tupleCotangents.end()) {
+                    const auto *held  = function->node(holder);
+                    const auto parts2 = function->withInputsOf(holder);
+                    if (held == nullptr || held->kind != rt::GCNodeKind::Fill ||
+                        body->value >= parts2.size()) {
+                        os << "TRANSPOSE function=" << function->name()
+                           << " skip=component node=" << ref << " holder=" << holder << '\n';
+                        return false;
+                    }
+                    std::vector<gc_node_ref_t> &into = tupleCotangents[parts2[body->value]];
+                    for (size_t j = 0; j < nested->second.size(); ++j) {
+                        const gc_node_ref_t part = nested->second[j];
+                        if (part == rt::kInvalidNodeRef) {
+                            continue;
+                        }
+                        if (into.size() <= j) {
+                            into.resize(j + 1, rt::kInvalidNodeRef);
+                        }
+                        into[j] = into[j] == rt::kInvalidNodeRef
+                                      ? part
+                                      : primitive(":op/add_d", {into[j], part});
+                    }
+                    hasCotangent[parts2[body->value]] = true;
+                    break;
+                }
+                std::vector<gc_node_ref_t> &slots = tupleCotangents[holder];
+                const size_t count                = tupleSlots(holder);
+                if (slots.size() < count) {
+                    slots.resize(count, rt::kInvalidNodeRef);
+                }
+                if (body->value >= slots.size()) {
+                    break;
+                }
+                gc_node_ref_t &slot = slots[body->value];
+                slot = slot == rt::kInvalidNodeRef
+                           ? cotangent[ref]
+                           : primitive(":op/add_d", {slot, cotangent[ref]});
+                hasCotangent[holder] = true;
+                break;
+            }
+            case rt::GCNodeKind::Fill: {
+                // The value that holds a tuple hands each slot to the component it belongs to. The
+                // slots nobody read are zeros, not holes: a component that is not asked for pulls
+                // back nothing, and saying so with a zero is the same statement a parameter no
+                // cotangent reached makes below.
+                const auto found = tupleCotangents.find(ref);
+                if (!kTupleCotangents || found == tupleCotangents.end()) {
+                    break;
+                }
+                const auto parts = function->withInputsOf(ref);
+                for (size_t i = 0; i < parts.size(); ++i) {
+                    if (isConstant(parts[i])) {
+                        continue;
+                    }
+                    const gc_node_ref_t part =
+                        i < found->second.size() ? found->second[i] : rt::kInvalidNodeRef;
+                    addCotangent(parts[i], part == rt::kInvalidNodeRef ? zero() : part);
+                }
+                break;
+            }
             case rt::GCNodeKind::Cast:
             case rt::GCNodeKind::Copy: {
                 const auto norm = function->normInputsOf(ref);
@@ -616,6 +845,14 @@ bool buildTransposeMember(
                 if (!complete || condition == rt::kInvalidNodeRef) {
                     os << "TRANSPOSE function=" << function->name() << " skip=condition\n";
                     return false;
+                }
+                // A condition is a choice, not a magnitude: the branch that ran is decided by it, and
+                // the transposed graph copies it forward rather than differentiating it. So the
+                // cotangent never reaches it, and the reading would say nothing about a value that is
+                // in the middle of the graph unless it is said here -- a bool contributes zero because
+                // it has no tangent space, and that is a fact about the derivative, not an omission.
+                if (kZeroTangentIntegers && !hasTangentSpace(conditionInputs.front())) {
+                    noteZero(conditionInputs.front(), normBranch.front());
                 }
                 draft.setNormInputs(brch, std::span<const gc_node_ref_t>(&condition, 1));
                 std::vector<gc_node_ref_t> armCotangents;
@@ -663,6 +900,33 @@ bool buildTransposeMember(
                 break;
             }
             case rt::GCNodeKind::Oper: {
+                // Where this rule's cotangent could go. A value whose type has no tangent space
+                // cannot receive one, and an output with none has no cotangent to hand out -- so a
+                // conversion whose only operand is an integer (`:op/ltod`, `float(n)`) stops here.
+                // A rule for such an operator could only be a derivative invented for a value that
+                // has none, so the cotangent is dropped and the value that stopped it is named, the
+                // way an unread parameter answers zero instead of a refusal.
+                if (kZeroTangentIntegers) {
+                    if (!hasTangentSpace(ref)) {
+                        noteZero(ref, ref);
+                        break;
+                    }
+                    bool anyReceiver = false;
+                    for (const gc_node_ref_t operand : function->normInputsOf(ref)) {
+                        if (!isConstant(operand) && hasTangentSpace(operand)) {
+                            anyReceiver = true;
+                            break;
+                        }
+                    }
+                    if (!anyReceiver) {
+                        for (const gc_node_ref_t operand : function->normInputsOf(ref)) {
+                            if (!isConstant(operand)) {
+                                noteZero(operand, ref);
+                            }
+                        }
+                        break;
+                    }
+                }
                 const auto *body           = function->nodeBodyAs<camel::runtime::GCOperBody>(ref);
                 const std::string_view uri = body->uri();
                 const auto rule            = camel::core::transposeRuleOf(std::string(uri));
@@ -764,28 +1028,55 @@ bool buildTransposeMember(
                     return false;
                 }
                 const gc_node_ref_t oldBodyResult = function->region(bodyRegionOld)->result;
-                // The state's initial value is the loop's last norm input; the escapes are compared
-                // with it below, so it is read once here.
+                // How many states the loop already carried: the body's ports are the element
+                // followed by one per state, and the loop's value is the tuple of last states. When
+                // there is one, its cotangent is a float; when there are more, it is a tuple and the
+                // cotangent arrives slot by slot from the component reads.
+                const size_t stateCount = regionPorts.size() - 1;
+                // The state's initial values are the loop's norm inputs after the range; the
+                // escapes are compared with them below, so they are read once here.
                 const auto oldNorm = function->normInputsOf(ref);
                 const uint32_t newRegion =
                     draft.addRegion(rt::GCRegionKind::LoopBody, 0);
                 draft.setInsertRegion(newRegion);
-                // The body takes the iterated element first and the carried state after it. The
-                // element is not differentiated (it comes from the range), so it keeps its type
-                // and goes unused; the carried state becomes the cotangent.
+                // The body takes the iterated element first and the states after it. The element is
+                // not differentiated (it comes from the range), so it keeps its type and goes
+                // unused; each state becomes one cotangent, so the region grows one port per state
+                // and, later, one per escaped value.
                 std::vector<gc_node_ref_t> newPorts;
                 const gc_node_ref_t elementPort = draft.addPortNode(
                     function->node(regionPorts.front())->dataType(),
                     draft.allocateRuntimeSlot(function->node(regionPorts.front())->dataType()));
                 newPorts.push_back(elementPort);
-                const gc_node_ref_t ctPort =
-                    draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
-                newPorts.push_back(ctPort);
+                std::vector<gc_node_ref_t> ctPorts;
+                for (size_t i = 0; i < stateCount; ++i) {
+                    ctPorts.push_back(
+                        draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64())));
+                    newPorts.push_back(ctPorts.back());
+                }
                 draft.setRegionPorts(newRegion, std::span<const gc_node_ref_t>(newPorts));
                 escapes.clear();
                 allowEscapes = true;
+                // One seed per state: the cotangent of that state's next value. For one state that
+                // is the body's whole result; for several it is the component of the result that
+                // the state is, which is why the components are read out here rather than the
+                // tuple node being walked as one value.
+                std::vector<ArmSeed> seeds;
+                if (stateCount == 1) {
+                    seeds.push_back(ArmSeed{oldBodyResult, ctPorts.front()});
+                } else {
+                    const auto results = function->withInputsOf(oldBodyResult);
+                    for (size_t i = 0; i < stateCount; ++i) {
+                        seeds.push_back(ArmSeed{
+                            i < results.size() ? results[i] : rt::kInvalidNodeRef, ctPorts[i]});
+                    }
+                }
+                std::vector<gc_node_ref_t> statePorts(
+                    regionPorts.begin() + 1, regionPorts.end());
+                const std::vector<gc_node_ref_t> back =
+                    runSeeded(bodyRegionOld, seeds, statePorts);
                 const gc_node_ref_t bodyCotangent =
-                    runArm(bodyRegionOld, oldBodyResult, ctPort, regionPorts.back());
+                    back.empty() ? rt::kInvalidNodeRef : back.front();
                 allowEscapes = false;
                 // The escapes in target order: the accumulators, the components and the reading all
                 // follow the graph rather than the map's iteration order.
@@ -793,23 +1084,30 @@ bool buildTransposeMember(
                 std::sort(
                     caught.begin(), caught.end(),
                     [](const auto &left, const auto &right) { return left.first < right.first; });
-                // The value the loop's state starts from: its cotangent is the state's own, and it is
-                // also a value the body may have read.
-                const gc_node_ref_t stateInitial =
-                    oldNorm.empty() ? rt::kInvalidNodeRef : oldNorm.back();
-                // One accumulator per escaped value, all beside the one carried cotangent: the loop
-                // stays one loop -- not one loop per escape -- and grows a state for each value that
-                // escaped, because each of them has a cotangent of its own to hand out and all of
-                // them advance by the same rounds.
+                // The value each state starts from: its cotangent is the state's own, and it is also a
+                // value the body may have read -- an escape can land on one of them.
+                std::vector<gc_node_ref_t> stateInitials;
+                for (size_t i = 0; i < stateCount; ++i) {
+                    const size_t at = 1 + i;
+                    stateInitials.push_back(at < oldNorm.size() ? oldNorm[at] : rt::kInvalidNodeRef);
+                }
+                const auto isStateInitial = [&](gc_node_ref_t what) {
+                    return std::find(stateInitials.begin(), stateInitials.end(), what) !=
+                           stateInitials.end();
+                };
+                // One accumulator per escaped value, beside one cotangent per state: the loop stays one
+                // loop -- not one loop per escape -- and grows a state for each value that escaped,
+                // because each of them has a cotangent of its own to hand out and all of them
+                // advance by the same rounds.
                 const bool carries = kCarryEscapedCotangents && !caught.empty();
                 // Two different readings hide behind a count. One value read by several products is
-                // one sum -- `answer=summed` -- and a single escape onto the state's own value is
-                // the same thing, since the state's cotangent and that sum are cotangents of one
-                // value then. Several escaped values are `answer=per-target`: one cotangent each,
-                // and only the value the state starts from also takes the state's own.
+                // one sum -- `answer=summed` -- and a single escape onto a value the loop's state
+                // starts from is the same thing, since that state's cotangent and the sum are
+                // cotangents of one value then. Several escaped values are `answer=per-target`: one
+                // cotangent each, and only the ones that are a state's own value also take that
+                // state's cotangent.
                 const bool answerSummed =
-                    caught.size() == 1 && stateInitial != rt::kInvalidNodeRef &&
-                    caught.front().first == stateInitial;
+                    caught.size() == 1 && isStateInitial(caught.front().first);
                 if (armsOk && bodyCotangent != rt::kInvalidNodeRef && !caught.empty()) {
                     // What escaped, read the same way whether or not it can be handed back: the
                     // count, and one line per escape -- which value the round only read (`target`),
@@ -864,27 +1162,34 @@ bool buildTransposeMember(
                        << " origin=" << regionOrigin << '\n';
                     return false;
                 }
-                // Each captured cotangent becomes a state of its own, so the region grows one port per
-                // escaped value and hands back the state's cotangent followed by one sum per value.
+                // The region hands back one cotangent per state, then one sum per escaped value. With one
+                // state and no escape that is a single value, which is what the region returned
+                // before there were accumulators at all; with more, it is the tuple the loop carries.
                 // The port list is written again rather than kept from above, because how many
                 // states there are is known only after the body ran -- the same way a branch's arm
                 // grows its ports when its own walk learns what it reads.
-                gc_node_ref_t regionResult = bodyCotangent;
+                std::vector<gc_node_ref_t> regionParts;
+                for (size_t i = 0; i < stateCount; ++i) {
+                    // A state no rule reached pulls nothing back: the zero says so, rather than a
+                    // hole in the tuple.
+                    const gc_node_ref_t part =
+                        i < back.size() ? back[i] : rt::kInvalidNodeRef;
+                    regionParts.push_back(part == rt::kInvalidNodeRef ? zero() : part);
+                }
+                for (const auto &entry : caught) {
+                    const gc_node_ref_t accPort = draft.addPortNode(
+                        Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
+                    newPorts.push_back(accPort);
+                    // The round adds what escaped to the sum the round before handed on. One
+                    // accumulator per value, not per product: the products that call one value
+                    // add into the same sum when they are delivered (the collection above).
+                    regionParts.push_back(primitive(":op/add_d", {accPort, entry.second.cotangent}));
+                }
+                gc_node_ref_t regionResult = regionParts.front();
                 Type *loopType             = Type::Float64();
-                if (carries) {
-                    std::vector<gc_node_ref_t> parts{bodyCotangent};
-                    for (const auto &entry : caught) {
-                        const gc_node_ref_t accPort = draft.addPortNode(
-                            Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
-                        newPorts.push_back(accPort);
-                        // The round adds what escaped to the sum the round before handed on. One
-                        // accumulator per value, not per product: the products that call one value
-                        // add into the same sum when they are delivered (the collection above).
-                        parts.push_back(
-                            primitive(":op/add_d", {accPort, entry.second.cotangent}));
-                    }
+                if (regionParts.size() > 1) {
                     draft.setRegionPorts(newRegion, std::span<const gc_node_ref_t>(newPorts));
-                    const auto pair = tupleOf(parts);
+                    const auto pair = tupleOf(regionParts);
                     regionResult    = pair.first;
                     loopType        = pair.second;
                 }
@@ -895,7 +1200,10 @@ bool buildTransposeMember(
                 draft.setRegionOwner(newRegion, loopNode, function->region(bodyRegionOld)->index);
                 draft.setNodeOrigin(loopNode, static_cast<uint32_t>(function->region(bodyRegionOld)->origin));
                 std::vector<gc_node_ref_t> loopNorm;
-                for (size_t i = 0; i + 1 < oldNorm.size(); ++i) {
+                // The range, and everything before the states in the old norm list: those are
+                // copied as they stand, because the reverse loop iterates over the same values.
+                // What follows them is the states, and those become cotangents.
+                for (size_t i = 0; i + stateCount < oldNorm.size(); ++i) {
                     const gc_node_ref_t copied = forward(oldNorm[i]);
                     if (!complete || copied == rt::kInvalidNodeRef) {
                         os << "TRANSPOSE function=" << function->name() << " skip=range node="
@@ -904,12 +1212,24 @@ bool buildTransposeMember(
                     }
                     loopNorm.push_back(copied);
                 }
-                loopNorm.push_back(ctLoop);
-                if (carries) {
-                    for (size_t i = 0; i < caught.size(); ++i) {
-                        // Every sum starts at zero: a value a round never reaches adds nothing.
-                        loopNorm.push_back(zero());
+                // One seed per state: the cotangent the loop's value carried for that state. With
+                // one state that is the whole cotangent of the loop's value; with several it is the
+                // slot of the tuple that the component reads filled in.
+                for (size_t i = 0; i < stateCount; ++i) {
+                    if (stateCount == 1) {
+                        loopNorm.push_back(ctLoop);
+                        continue;
                     }
+                    const auto slots   = tupleCotangents.find(ref);
+                    const gc_node_ref_t slot = slots != tupleCotangents.end() && i < slots->second.size()
+                                                   ? slots->second[i]
+                                                   : rt::kInvalidNodeRef;
+                    // A slot nobody read is zero: that state's value pulls nothing back into it.
+                    loopNorm.push_back(slot == rt::kInvalidNodeRef ? zero() : slot);
+                }
+                for (size_t i = 0; i < caught.size(); ++i) {
+                    // Every sum starts at zero: a value a round never reaches adds nothing.
+                    loopNorm.push_back(zero());
                 }
                 draft.setNormInputs(loopNode, std::span<const gc_node_ref_t>(loopNorm));
                 // The With inputs of a loop are the results of its parts and its round: the round is
@@ -919,29 +1239,26 @@ bool buildTransposeMember(
                     rt::kGCNodeFlagConstant);
                 const std::array<gc_node_ref_t, 2> loopWith{regionResult, roundValue};
                 draft.setWithInputs(loopNode, std::span<const gc_node_ref_t>(loopWith));
-                if (carries) {
-                    // The loop's value is the carried cotangent followed by one sum per escaped
-                    // value, so each component goes where its own value's cotangent goes. The state's
-                    // cotangent belongs to the value the state starts from, and a sum belongs to the
-                    // value that escaped; when those are the same value the two add, because both
-                    // are cotangents of it. Different values get different slots, which is what the
-                    // reading calls `answer=per-target`, and nothing is added across values.
+                if (carries || stateCount > 1) {
+                    // The loop's value is one cotangent per state followed by one sum per escaped
+                    // value, so each component goes where its own value's cotangent goes: a state's
+                    // cotangent to the value that state starts from, a sum to the value that
+                    // escaped. When those are the same value the two add, because both are
+                    // cotangents of it -- that is `answer=summed`. Different values get different
+                    // slots -- `answer=per-target` -- and nothing is added across values.
                     const auto component = [&](uint32_t index) {
                         const gc_node_ref_t part = draft.addAccsNode(Type::Float64(), index);
                         draft.setNormInputs(part, std::span<const gc_node_ref_t>(&loopNode, 1));
                         return part;
                     };
-                    gc_node_ref_t forState = component(0);
-                    for (size_t i = 0; i < caught.size(); ++i) {
-                        const gc_node_ref_t sum = component(static_cast<uint32_t>(1 + i));
-                        if (caught[i].first == stateInitial) {
-                            forState = primitive(":op/add_d", {forState, sum});
-                        } else {
-                            addCotangent(caught[i].first, sum);
+                    for (size_t i = 0; i < stateCount; ++i) {
+                        if (stateInitials[i] != rt::kInvalidNodeRef) {
+                            addCotangent(stateInitials[i], component(static_cast<uint32_t>(i)));
                         }
                     }
-                    if (stateInitial != rt::kInvalidNodeRef) {
-                        addCotangent(stateInitial, forState);
+                    for (size_t i = 0; i < caught.size(); ++i) {
+                        addCotangent(
+                            caught[i].first, component(static_cast<uint32_t>(stateCount + i)));
                     }
                 } else {
                     result = loopNode;

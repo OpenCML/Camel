@@ -31,6 +31,7 @@
 #include "transpose_operator.h"
 #include "vmap.h"
 #include "vmap_operator.h"
+#include "vjp.h"
 
 #include "camel/compile/gir/rule_templates.h"
 #include "camel/compile/gir/static_function.h"
@@ -304,6 +305,9 @@ class TransformsExecutor : public Executor {
         for (auto &[name, kernel] : camel::transforms::rematOperatorKernels()) {
             all[name] = kernel;
         }
+        for (auto &[name, kernel] : camel::transforms::vjpOperatorKernels()) {
+            all[name] = kernel;
+        }
         return all;
     }
 };
@@ -320,6 +324,18 @@ TransformsModule::TransformsModule(context_ptr_t ctx) : BuiltinModule("transform
     // where the call is. Declared here with the operators, because it is the same operator and the
     // table it fills is the one a build asks (compile/gir/compile_time.h).
     camel::transforms::registerCompileTimeTransforms();
+    // `vjp` is the reverse transform's *name*: the library declares it once for every function
+    // type and the step that builds its graph is the second half of that work (vjp.cpp).
+    camel::transforms::registerVjpOperatorMetadata();
+    // A body-less declaration names the operator `<the module it is written in>:<its name>`, and
+    // the URI's first half is looked up as an executor protocol. `stdlib/vjp.cml` is the module
+    // `vjp`, so the name is answered here, by this module's executor under a second protocol: the
+    // kernels are the same functions and nothing is loaded twice.
+    if (!context_->execMgr().findWithoutImport("vjp:vjp").has_value()) {
+        context_->registerExecutorFactory("vjp", [ctx = context_]() -> executor_ptr_t {
+            return std::make_shared<TransformsExecutor>(ctx);
+        });
+    }
     for (const auto &group : camel::transforms::operatorGroups()) {
         exportEntity(group->name(), group);
     }
