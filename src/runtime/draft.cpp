@@ -2091,6 +2091,28 @@ size_t GraphDraft::dissolveUnorderedGates() {
             // trade a dropped effect for an unbuildable graph. The successors follow the effect
             // through the control kind, which is the kind this wait is carried in while the
             // migration runs (docs/design/effects/edges.cn.md 5.3), and the gate still goes.
+            //
+            // Which node the place goes to, and why it is the effect and not the arm's tail:
+            //
+            // 1. Place. The effect ran inside the arm, before the JOIN. Handing it the block's
+            //    result or `return` instead would move it after the JOIN, past code already ordered
+            //    against the JOIN -- that is not keeping the place, it is taking another one.
+            // 2. One rule, not two. `pruneBranch` already treats the JOIN's successors this way
+            //    (`handChainPlaceTo`): the code that stood after the branch follows the arm's tail.
+            //    The same rule for the nodes that must survive inside the arm is what this does; a
+            //    second rule is exactly the shape of the defect this fixes -- two paths, only one of
+            //    which keeps the observed run.
+            // 3. The arm's tail cannot be the anchor here. When the tail is this gate -- the shape
+            //    `std::opt::inline` leaves, the arm's value being what the gate forwards -- ordering
+            //    the effect after `armTail` is ordering it after the gate that reads it, which is a
+            //    cycle of inputs. The place it stood in is therefore handed to the effect itself,
+            //    and the successors wait on the effect: the equivalent form of "put it where the
+            //    branch's arm left its place", and the one that has no cycle in it.
+            //
+            // The case that locks this is test/cases/opt/effects/inline_reduce_in_folded_arm.cml,
+            // with its entries in test/plans/feat/opt/effects_kept.plan.toml -- that plan's subject
+            // is "a pass never changes which effects run", which is this defect; the `trans` plans
+            // are dumps and traces and do not run programs.
             const bool holdsEffectPlace =
                 normUsersOf(id).empty() && withUsersOf(id).empty() &&
                 normUsersOf(value).size() + withUsersOf(value).size() == 1 &&
