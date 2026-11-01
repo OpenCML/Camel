@@ -232,6 +232,8 @@ digraph GraphIR {
     N39 -> N3A [label="0|0", type="NORM"];
     N44 -> N3C [label="0|0", type="NORM"];
     N42 -> N3C [label="0|0", type="CTRL"];
+    N3A -> N3C [label="ORDER", type="ORDER"];
+    N3A -> N3C [label="SYNC", type="SYNC"];
     N3B -> N3D [label="0|0", type="NORM"];
     N3C -> N3D [label="0|0", type="CTRL"];
     N3C -> N3D [label="SYNC", type="SYNC"];
