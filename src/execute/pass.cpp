@@ -32,12 +32,14 @@
 #include "camel/passes/test/edges.h"
 #include "camel/passes/test/graph_release.h"
 #include "camel/passes/test/keepfn.h"
+#include "camel/passes/test/keepshape.h"
 #include "camel/passes/test/rules.h"
 #include "camel/passes/test/saturate.h"
 #include "camel/passes/test/writings.h"
 #include "camel/runtime/writings.h"
 #include "camel/passes/test/control.h"
 #include "camel/passes/test/loop_collect.h"
+#include "camel/passes/test/keepnode.h"
 #include "camel/passes/test/exhaust_perm_space.h"
 #include "camel/passes/test/throw_bad_alloc.h"
 #include "camel/passes/test/exec_plan.h"
@@ -973,6 +975,8 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kEdgesOkTestPass, EdgesOkTestPass),
         TEST_PASS(kCommitConflictTestPass, CommitConflictTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
+        TEST_PASS(kKeepShapeTestPass, KeepShapeTestPass),
+        TEST_PASS(kKeepInspectTestPass, KeepInspectTestPass),
         TEST_PASS(kContextLifetimeTestPass, ContextLifetimeTestPass),
         TEST_PASS(kContextsTestPass, ContextsTestPass),
         TEST_PASS(kDerivativesTestPass, DerivativesTestPass),
@@ -1006,6 +1010,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kThrowBadAllocTestPass, ThrowBadAllocTestPass),
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
         TEST_PASS(kLoopCollectSummaryTestPass, LoopCollectSummaryTestPass),
+        TEST_PASS(kKeepNodeTestPass, KeepNodeTestPass),
         TEST_PASS(kFactStoreTestPass, FactStoreTestPass),
         TEST_PASS(kFactLoadRulesTestPass, FactLoadRulesTestPass),
         TEST_PASS(kFactSeedTestPass, FactSeedTestPass),

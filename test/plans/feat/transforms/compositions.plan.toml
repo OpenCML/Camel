@@ -21,6 +21,18 @@
 # (`docs/design/program-transforms/m6-combination-numbers.cn.md` 4) until M1/M4 make it runnable.
 
 [[tests]]
+name = "compositions.vjp_single"
+desc = "`vjp` itself on a single-parameter `f(x) = x*x*x` at x = 3 and cotangent 1: the pair's value is 27.0 and the pullback is 3*x*x = 27.0. This is the one M6 reading that runs today -- `vjp = transpose . split . reinterp<jvp>` builds the cut (`residuals=2`) and transposes `mul_tangent` -- so it is pinned, and the four combinations above stay skipped for the reasons their entries name (a batch axis, a call through a function value, or a pair-typed result)."
+kind = "behavior"
+case = "../../../cases/transforms/compositions/vjp_single.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["vjp_single y=27.0 dfdx=27.0"]
+timeout_ms = 30000
+
+[[tests]]
 name = "compositions.grad_vmap_f"
 desc = "grad(vmap(f)) with f(x) = x*x at x = [1, 2, 3]: the gradient of sum_j x_j^2 is [2, 4, 6]."
 kind = "behavior"

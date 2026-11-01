@@ -199,13 +199,23 @@ tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?
 ```
 
-**`transforms`** — import { ... } from transforms — 4 name(s)
+**`transforms`** — import { ... } from transforms — 5 name(s)
 
 ```text
 jvp: (f: F) => Jvp<F> when is_function::<F>()
 split: (f: (v: float, d: float) => (float, float)) => (v: float, d: float) => (float, float)
 transpose: (f: F) => Transpose<F> when is_function::<F>()
 vmap: (f: F) => Vmap<F> when is_function::<F>()
+remat: (f: F) => F when is_function::<F>()
+```
+
+**`vjp`** — import { ... } from vjp — 4 name(s)
+
+```text
+vjp: (f: (x: float) => float) => (x: float) => (float, (ct: float) => float)
+vjp: (f: (x: float, y: float) => float) => (x: float, y: float) => (float, (ct: float) => (float, float))
+grad: (f: (x: float) => float) => (x: float) => float
+with_grad: (f: F) => F when is_function::<F>()
 ```
 
 **`tensor`** — import { ... } from tensor — 70 name(s)

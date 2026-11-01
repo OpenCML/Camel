@@ -95,3 +95,22 @@ export func transpose::<F>(f: F): Transpose<F> when is_function::<F>()
 /// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
 /// @example let batched = vmap(f)
 export func vmap::<F>(f: F): Vmap<F> when is_function::<F>()
+
+/// Memory for recomputation: `remat(f)` gives a function whose graph is `f`'s graph with the
+/// property "a call of it is recomputed on the backward pass instead of kept" (the author's ruling
+/// of 2026-11-01). The property is the graph's, not the call site's and not a tag's: the call
+/// answers with a new graph whose body is the body it was given, so a call through it is a call of
+/// the same function and no value changes -- what changes is what a step that cuts the graph in two
+/// has to keep across the cut. `split` reads the property: the values of a marked graph that cannot
+/// be recomputed from the parameters are not residuals, and the backward half computes them again
+/// (`modules/transforms/split.cpp`). JAX writes the same transform as `jax.checkpoint`, whose other
+/// name is `jax.remat`; in this tree "checkpoint" is the persistence module `ckpt`, so the transform
+/// takes the other word.
+/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
+/// @example let remembered = remat(f)
+///
+/// The type is the argument's own: a function in, the same function out, which is the whole of what
+/// the name says. `modules/transforms/remat_operator.cpp` answers `(f: F) => F` and builds the graph
+/// the value stands on; the shapes a call site can write today are the ones `jvp`'s and `split`'s
+/// declarations show, because the result of a call is the exit type its resolver gives.
+export func remat::<F>(f: F): F when is_function::<F>()

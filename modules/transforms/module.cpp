@@ -25,6 +25,7 @@
 
 #include "jvp.h"
 #include "jvp_operator.h"
+#include "remat_operator.h"
 #include "split.h"
 #include "split_operator.h"
 #include "transpose_operator.h"
@@ -300,6 +301,9 @@ class TransformsExecutor : public Executor {
         for (auto &[name, kernel] : camel::transforms::splitOperatorKernels()) {
             all[name] = kernel;
         }
+        for (auto &[name, kernel] : camel::transforms::rematOperatorKernels()) {
+            all[name] = kernel;
+        }
         return all;
     }
 };
@@ -311,6 +315,7 @@ TransformsModule::TransformsModule(context_ptr_t ctx) : BuiltinModule("transform
     camel::transforms::registerOperatorMetadata();
     camel::transforms::registerVmapOperatorMetadata();
     camel::transforms::registerSplitOperatorMetadata();
+    camel::transforms::registerRematOperatorMetadata();
     for (const auto &group : camel::transforms::operatorGroups()) {
         exportEntity(group->name(), group);
     }
@@ -324,6 +329,12 @@ TransformsModule::TransformsModule(context_ptr_t ctx) : BuiltinModule("transform
     }
     // `split` cuts a lifted function into the two halves `vjp` is written with (split.cpp).
     for (const auto &group : camel::transforms::splitOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+    // `remat` marks a function's graph as recomputable on the backward pass (remat_operator.cpp);
+    // the values are the function's, so the mark is a property of the graph and not a second
+    // meaning of the call.
+    for (const auto &group : camel::transforms::rematOperatorGroups()) {
         exportEntity(group->name(), group);
     }
 }
