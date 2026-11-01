@@ -725,3 +725,48 @@ func main(): int sync {
 不是 PowerShell 的 `cd`——所以这一轮的打点与早前那条 `0x000209` 都写进了主检出 `D:\Projects\Camel`。
 已把两份 diff 存成 patch、`git restore` 主检出（现在 `git status --porcelain` 为空）、把 A1 的 patch `git apply` 到本工作树。
 **`0x000209` 那条不 apply、不保留**（诊断码由生成器分配，手写会被 `--write` 还原）。
+
+## 21. 同族扫描：`savedCells` 恢复点前后有没有引用跨过去
+
+**搜索根**：`git grep -n 'savedCells' -- src`（全树）→ **只有 `src/passes/trans/cml/cml.cpp` 三处恢复点**：
+
+| 恢复点 | 保存 | 恢复 | 恢复方式 |
+|---|---|---|---|
+| `buildBody` | `:1100` | `:1156` | `cells_ = std::move(savedCells);` |
+| 循环打印 | `:1787` | `:1822` | 同上 |
+| 第四个（`skip_`/`topo_` 一起存） | `:1848` | `:1914` | 同上 |
+
+**关键**：`cells_ = std::move(savedCells)` 是**整表赋值**，会销毁表里原有每一个条目——**任何在恢复之前取得的元素引用都会悬垂**。
+
+### 21.1 三栏表
+
+| 处 | 形状 | 判 |
+|---|---|---|
+| `emitAssignment`（`:1478` `cells_.find` → `:1485` 用 `cell->second`） | **引用跨过 `expression(inputs.back())`**，而它会走到 `buildBody`/循环打印的恢复点 | **危险，已修（A1）**：改成 `const std::string cellName = cell->second;` 先拷 |
+| `cellName()`（`:1547`） | `return found->second;` —— 返回类型是 `std::string`，**按值拷出** | **安全**（值在恢复前已拷出） |
+| `paramName()`（`:1303`） | 同上，**按值返回** | **安全** |
+| `expression()` 里的 `declared_.find`（`:1577`） | `return {declared->second, 100};`，`Expr::text` 是 `std::string`，**按值** | **安全** |
+| `appendLines()`（`:1033` 遍历 `lines_`） | 循环体只写 `out_`，**不调打印器**，不会触发恢复 | **安全** |
+| `const std::string &name = graph->name()`（`:246`、`:510`） | 不是被恢复的容器（图的名字） | **到不了** |
+| `body.lines` 的遍历（`:1167`） | 遍历的是**局部副本** `Body::lines` | **到不了** |
+
+**结论**：**同形的只有 A1 那处，已修**；其余按值返回或不在被恢复的容器上。**零命中的搜索根**：`savedCells` 只在 `cml.cpp` 出现（`src/` 全树）；元素引用只在 `emitAssignment` 一处跨过恢复点。
+
+## 22. 全量（`-Plan all -Tier fast -Jobs 8`）：8352 通过，3 条 fail，都不是本车道的改动
+
+```
+[SUMMARY] total: 8367, pass: 8352, fail: 3, skip: 10, known failures: 2
+[FAIL] registry.docs_complete            49.20 s
+[FAIL] registry.reference_is_generated    0.39 s
+[FAIL] docs.doc_readings.current          0.41 s
+```
+
+**② 两条 registry 是生成物过期**：`docs/stdlib-reference.md is out of date: run node scripts/stdlib-reference.mjs --write`；
+`docs_complete` 报 `the run did not say that its counts are the ones the script records`。
+**读数（不是判断）**：`git show origin/develop:docs/stdlib-reference.md` 与本树的 `docs/stdlib-reference.md` **逐字节相同**，
+而 `node scripts/stdlib-reference.mjs --verify-doc` **仍然报过期** ⇒ **`origin/develop` 上这条就是红的**，不是合并造成的。
+
+**③ 一条 `doc_readings`**：`stale transforms-module.lines: docs/handover/reviews/questions-2026-11-01-…md states [202,268,116,104,1531,1396]`。
+**那是 transforms 模块的行数读数，本车道没有改过 `modules/transforms` 的任何文件**（generic-grad 那轮已回退成 HEAD）。
+
+**④ 本车道的两份计划是绿的**：`transforms` + `rest_params` = **68/68**，`BUILD_EXIT=0`。**A6 这一轮没开始**——预算用在全量与扫描上，不假装做了一半。
