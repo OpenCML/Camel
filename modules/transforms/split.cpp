@@ -878,6 +878,33 @@ struct ArmCut {
 /// says so by file and name); taking it as a parameter the caller's transaction already fixed keeps the
 /// count where it was.
 template <typename Draft>
+/// One arm of a branch, cut on its own region: the arm's region is made in the half's draft, the
+/// half's walk copies the arm's body *into that region* -- the same `copyHalf` the straight-line body
+/// uses -- and the value the arm hands the Join comes back. The unit here is a **region**, not an
+/// arm-shaped copy of the whole branch (P1-14 of the review): that is what lets the arm of a nested
+/// branch enter this function too, one region at a time, instead of an arm's body being copied whole.
+bool cutArm(
+    Draft &draft, Half &half, const ArmCut &arm, bool tangentSide, gc_node_ref_t brch,
+    SplitGraph &refusal, gc_node_ref_t &armResult) {
+    const gc_node_ref_t root = tangentSide ? arm.tangent : arm.value;
+    if (root == rt::kInvalidNodeRef) {
+        return refuseAt(
+            refusal, half.source, rt::kInvalidNodeRef, "an arm",
+            "the arm's yield does not hold the half this cut keeps");
+    }
+    const uint32_t region = draft.addRegion(rt::GCRegionKind::Arm, 0, brch, arm.index);
+    draft.setInsertRegion(region);
+    const bool copied = half.copyHalf(root, refusal);
+    draft.setInsertRegion(0);
+    if (!copied) {
+        return false;
+    }
+    draft.setRegionResult(region, half.copyOf[root]);
+    armResult = half.copyOf[root];
+    return true;
+}
+
+template <typename Draft>
 bool buildHalfBranch(
     Draft &draft, Half &half, gc_node_ref_t conditionCopy, const std::vector<ArmCut> &arms,
     bool tangentSide, Type *joinType, SplitGraph &refusal, gc_node_ref_t &joinOut) {
@@ -896,21 +923,11 @@ bool buildHalfBranch(
     std::vector<gc_node_ref_t> armResults;
     armResults.reserve(arms.size());
     for (const ArmCut &arm : arms) {
-        const gc_node_ref_t root = tangentSide ? arm.tangent : arm.value;
-        if (root == rt::kInvalidNodeRef) {
-            return refuseAt(
-                refusal, half.source, rt::kInvalidNodeRef, "an arm",
-                "the arm's yield does not hold the half this cut keeps");
-        }
-        const uint32_t region = draft.addRegion(rt::GCRegionKind::Arm, 0, brch, arm.index);
-        draft.setInsertRegion(region);
-        const bool copied = half.copyHalf(root, refusal);
-        draft.setInsertRegion(0);
-        if (!copied) {
+        gc_node_ref_t armResult = rt::kInvalidNodeRef;
+        if (!cutArm(draft, half, arm, tangentSide, brch, refusal, armResult)) {
             return false;
         }
-        draft.setRegionResult(region, half.copyOf[root]);
-        armResults.push_back(half.copyOf[root]);
+        armResults.push_back(armResult);
     }
     // The Join names the Brch and takes the arms' results, written the way `jvp` writes it so the two
     // writers of a branch in this tree state a branch the same way.
@@ -1360,6 +1377,14 @@ SplitGraph buildSplitGraph(
             }
         } break;
         case ExitShape::Loop: {
+            // **Defensive, and unreachable from `.cml` today.** `jvp` does not build a graph whose
+            // exit is a Join that no branch names, so no program in the language can reach this cell
+            // (measured: no plan pins `skip=loop`, because no case can print it). The refusal stays,
+            // and stays phrased as a refusal, because a graph *could* be built with that shape by
+            // another transform, and a cut that met it silently would be worse than one that names it.
+            // This is "cannot happen here", not "not supported yet": the difference is that the
+            // second is a promise to do it and the first is a statement about the graphs this tree
+            // makes. Whoever widens `jvp` past loops will find this comment and know what to re-read.
             SplitGraph refusal;
             refuseAt(
                 refusal, function, exit, "the exit",
@@ -1371,6 +1396,11 @@ SplitGraph buildSplitGraph(
             return refusal;
         }
         case ExitShape::NotAPair: {
+            // **Defensive, and unreachable from `.cml`.** `split`'s own type refuses a plain function
+            // before this function runs -- `Invalid call to 'split' with argument types <> ((x: float)
+            // => float pure)` -- so the only way to stand here is a graph built by hand whose exit is
+            // neither the pair nor a Join. The same distinction as the cell above: "cannot happen
+            // here", not "not supported yet".
             SplitGraph refusal;
             refuseAt(
                 refusal, function, exit, "the exit",
