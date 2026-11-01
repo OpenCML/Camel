@@ -65,9 +65,15 @@ const EXAMPLES_REL = 'diagnostics/examples.tsv'
 //             which these seven had been pinned by all along: StatementAfterReturn,
 //             UnusedFallibleValue, EffectNotExecuted, IgnoredSideEffect, NeverArgumentCall,
 //             FailNotExecuted, StatementAfterFail.
+//   14 -> 6   `null_test_never_null` pinned `NullTestNeverNull`; the counter learned the rendered form
+//             a `-E short` run prints (`name=SemanticDiag::X, code=0x...`, which six had been pinned
+//             by: ModuleParseFailed, ImportedModuleHasErrors, ComprehensionSourceRefused,
+//             ExitInUnusedBranch, DimensionNameUsedOnce, FunctionTypeArgumentNotInferred); and the one
+//             code no path raises, `FeatureNotSupported`, left the target as unraisable instead of
+//             holding a place no case can take.
 // A case added for a code lowers it in that commit; a correction lowers it in the commit that
 // teaches the counter the form, and names what it found.
-const NAME_COVERAGE_RECORDED = 14
+const NAME_COVERAGE_RECORDED = 6
 
 // The sections, in the order the headers are included. `id` is also the stem of the two
 // generated files; the type byte of the printed code is read from DiagType in base.h, under the
@@ -939,7 +945,11 @@ if (mode === '--name-coverage' || mode === '--name-coverage-check') {
     const plans = walk(path.join(root, 'test', 'plans'), (f) => f.endsWith('.plan.toml'))
     const pinned = new Set()
     for (const file of plans) {
-        const text = fs.readFileSync(file, 'utf8').replace(/^\s*#.*$/gm, '')
+        const text = fs
+            .readFileSync(file, 'utf8')
+            .replace(/^\s*#.*$/gm, '')
+            .replace(/desc\s*=\s*"""[\s\S]*?"""/g, '')
+            .replace(/^\s*desc\s*=.*$/gm, '')
         for (const m of text.matchAll(/expect_diagnostic_name\s*=\s*["']([A-Za-z]+)::([A-Za-z]+)["']/g)) {
             pinned.add(`${m[1]}::${m[2]}`)
         }
@@ -954,15 +964,39 @@ if (mode === '--name-coverage' || mode === '--name-coverage-check') {
         for (const m of text.matchAll(/\.code\s*===\s*["'](0[xX][0-9A-Fa-f]{8})["']/g)) {
             pinned.add(m[1].toLowerCase())
         }
+        // A `-E short` run renders the report as `name=SemanticDiag::X, code=0x...`, and a test whose
+        // needles require that text requires the name the compiler emitted. The comment and `desc`
+        // lines are gone by now, so the words can only come from a needle or a script.
+        for (const n of text.matchAll(/name=([A-Za-z]+)::([A-Za-z]+)/g)) pinned.add(`${n[1]}::${n[2]}`)
+        for (const c of text.matchAll(/\bcode=(0[xX][0-9A-Fa-f]{8})/g)) pinned.add(c[1].toLowerCase())
     }
-    const missing = semantic.filter((e) => !pinned.has(e.fullName) && !pinned.has(hex8(e.code).toLowerCase()))
+    // A code nothing raises cannot be pinned by a case, so it is not a target: it is listed apart
+    // and does not sit in the set this check refuses to see grow. The raise site is a construction
+    // through `.of(...)` in the compiler, not the entry in the message table -- the table names
+    // every code, including one a path has not started throwing yet.
+    const raisedText = [
+        ...walk(path.join(root, 'src'), (f) => /\.(cpp|h|hpp|cc)$/.test(f)),
+        ...walk(path.join(root, 'include'), (f) => /\.(cpp|h|hpp|cc)$/.test(f)),
+        ...walk(path.join(root, 'modules'), (f) => /\.(cpp|h|hpp|cc)$/.test(f)),
+    ]
+        .filter((f) => !/[\\/]diagnostics[\\/]messages[\\/]/.test(f))
+        .map((f) => fs.readFileSync(f, 'utf8'))
+        .join('\n')
+    const raisedNames = new Set([...raisedText.matchAll(/SemanticDiag::([A-Za-z0-9_]+)/g)].map((m) => m[1]))
+    const unraisable = semantic.filter((e) => !raisedNames.has(e.name))
+    const target = semantic.filter((e) => raisedNames.has(e.name))
+    const missing = target.filter((e) => !pinned.has(e.fullName) && !pinned.has(hex8(e.code).toLowerCase()))
     console.log(
-        `semantic codes with no case that asserts them by name: ${missing.length} of ${semantic.length}`
+        `semantic codes with no case that asserts them by name: ${missing.length} of ${target.length}`
             + ` (recorded ${NAME_COVERAGE_RECORDED})`
     )
     for (const e of missing) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
+    if (unraisable.length > 0) {
+        console.log('no path raises these, so no case can pin them:')
+        for (const e of unraisable) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
+    }
     if (mode === '--name-coverage') process.exit(0)
-    if (semantic.length === 0 || pinned.size === 0) {
+    if (target.length === 0 || pinned.size === 0) {
         console.log('name coverage: the run read no semantic code or no assertion, which is not a pass')
         process.exit(1)
     }
