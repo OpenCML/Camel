@@ -52,10 +52,10 @@ export func lift::<T>(x: T): Lift<T> {
 }
 
 // ---- the elementwise tier ----
-// A rule is filed in its ruleset module under the operator its left side is written with and the
-// number of operands it takes, and a transform reads it from there (`lookupRule("rulesets.vmap",
-// head, arity)`); a rule is not a function a program calls, so the rules below and the functions
-// they call are two things with different names.
+// A rule is filed in its ruleset module under the head of its left side -- an operator's token, or
+// the name a call writes -- and the number of operands that head takes, and a transform reads it
+// from there (`lookupRule("rulesets.vmap", head, arity)`); a rule is not a function a program calls,
+// so the rules below and the functions they call are two things with different names.
 //
 // The right side of each rule *names* the function that does the batched arithmetic
 // (`vmap_add(bx, bw)`), and that name is the part a batching transform reads. A rule's right side is
@@ -164,12 +164,11 @@ export func vmap_matmul::<T>(lhs: T[..], rhs: T[..]): T[..] when is_numeric::<T>
     return matmul(lhs, rhs)
 }
 
-/// `matmul(x, w)` batched: the batch is one axis in front of both operands. The left side is written
-/// with the operator the primitive is spelled by (`@`, two operands) rather than the call
-/// `matmul(x, w)`: a rule is filed under the token of its left side, and `tensor:matmul` is declared
-/// with this one (`linalg_ops.cpp`).
+/// `matmul(x, w)` batched: the batch is one axis in front of both operands. The left side names the
+/// call, so the rule is filed under `matmul` at two operands -- the count of the arguments it writes,
+/// which is what the family is asked for (`matmul/2`), not the three children its list node holds.
 export rule vmap_rule_matmul::<T>(x: T[..], w: T[..]) when is_numeric::<T>() {
-    x @ w => (bx: Lift<T[..]>, bw: Lift<T[..]>) => vmap_matmul(bx, bw)
+    matmul(x, w) => (bx: Lift<T[..]>, bw: Lift<T[..]>) => vmap_matmul(bx, bw)
 }
 
 // ---- the reductions along an axis ----

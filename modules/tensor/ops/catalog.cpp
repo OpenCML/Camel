@@ -66,17 +66,18 @@ void declareResourcesAndDefinitions() {
 
 /**
  * The keys this module's batching rules are filed under. A rule is filed in `rulesets.vmap` under
- * the operator its left side is written with and the number of operands that spelling takes (`x @ w`
- * is `@` at two, `sum_axis(xs, axis, keepdims)` is `sum_axis` at three), and the key is a property of
- * the operator -- not of the family that happens to hold a rule for it -- so the operator's own module
+ * the head of its left side and the number of operands that head takes (`matmul(x, w)` is `matmul`
+ * at two, `sum_axis(xs, axis, keepdims)` is `sum_axis` at three), and the key is a property of the
+ * operator -- not of the family that happens to hold a rule for it -- so the operator's own module
  * records it. What a batching transform reads from here is the key, never the rule: the rule's name is
  * read from the family's index at the moment it is asked (camel/core/forward.h), so this table cannot
  * drift from the ruleset that is written.
  *
- * `matmul` is keyed by its operator `@` and not by the call `matmul(..)`: the primitive is declared
- * with the operator spelling (`linalg_ops.cpp`), and a rule over it is written that way
- * (stdlib/rulesets/vmap.cml). The reductions take their own names, because they are ordinary
- * functions of an axis -- there is no operator to spell them with.
+ * `matmul` is keyed by the call, because that is the spelling its rule is written with
+ * (stdlib/rulesets/vmap.cml): the same primitive is also spelled `x @ w`, and a rule written that way
+ * would be filed under `@` at two -- one head per rule, and the head the ruleset writes is the one
+ * this table names. The reductions take their own names, because they are ordinary functions of an
+ * axis -- there is no operator to spell them with.
  *
  * Only the operators whose batched meaning is "one axis in front" have a rule. `tensor:sum` and
  * `tensor:mean` reduce every axis of the operand, and a batch of rows under them is not the rows'
@@ -84,7 +85,7 @@ void declareResourcesAndDefinitions() {
  * form is refused by name rather than approximated (stdlib/rulesets/vmap.cml).
  */
 void declareVmapRuleKeys() {
-    camel::core::bindVmapRule({"tensor:matmul", "rulesets.vmap", "@", 2});
+    camel::core::bindVmapRule({"tensor:matmul", "rulesets.vmap", "matmul", 2});
     camel::core::bindVmapRule({"tensor:sum_axis", "rulesets.vmap", "sum_axis", 3});
     camel::core::bindVmapRule({"tensor:mean_axis", "rulesets.vmap", "mean_axis", 3});
     camel::core::bindVmapRule({"tensor:max_axis", "rulesets.vmap", "max_axis", 3});
