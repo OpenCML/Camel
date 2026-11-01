@@ -989,3 +989,43 @@ Stack Trace: (not available on this platform)
 **这一轮没有改代码**：没有定位到具体那一行之前不动手（也不去反汇编猜）。**打点已删净**（`git status` 为空、`git grep -c probe` = 0），**`variant.h:47-54` 一字未动**。
 
 **下一轮的一条命令**：`git grep -n 'inline' include/camel/runtime/draft_inline.h | head` 找出内联清单，在 `materializeStaticValue` 与 `staticValueOf` 的读点各打一行（tag / 声明字段数 / 读的序号）。
+
+## 30. A6 第三次：`materializeStaticValue` 一行都不读字段 ⇒ 按你的规则停手，交人换角度
+
+**① 原文（`src/runtime/draft.cpp:2116-2142`，两段都贴）**：
+
+```cpp
+size_t GraphDraft::appendStaticSlot(slot_t value, camel::core::type::Type *type) {
+    ++mutations_;
+    if (staticSlots_.empty()) { staticSlots_.push_back(NullSlot); staticSlotTypes_.push_back(Type::Void()); }
+    touchRefs();
+    staticSlots_.push_back(value);
+    staticSlotTypes_.push_back(type);
+    return staticSlots_.size() - 1;
+}
+
+gc_node_ref_t GraphDraft::materializeStaticValue(
+    slot_t value, camel::core::type::Type *type, uint8_t runtimeFlags) {
+    ++mutations_;
+    const size_t slotIndex = appendStaticSlot(value, type);
+    ASSERT(slotIndex <= std::numeric_limits<gc_slot_idx_t>::max(), "Draft static slot index exceeds …");
+    DraftNodeInit init{ .dataIndex = -static_cast<int32_t>(slotIndex), .dataType = type,
+                        .kind = GCNodeKind::Data,
+                        .runtimeFlags = runtimeFlags | kGCNodeFlagConstant };
+    return addNode(init);
+}
+```
+
+**② 它有没有核对 tag 与字段数**：**没有，因为它压根不按序号/键读字段**——`appendStaticSlot` 只是 push 一个槽，
+`materializeStaticValue` 只建一个 `Data` 节点。**这一处既不是"相信类型"的读，也不是"该核对没核对"，它是"根本不读"。**
+（真正的深挖要进 `addNode`/`touchRefs`/`relocateStaticValues` 那一层，而 `relocateStaticValues` 是按 **类型** 逐个 relocate 的。）
+
+**③ 所以按你的规则停手**：**"若读了发现它已经在核对、而崩在更深处 ⇒ 停手贴原文报我，别继续往下挖第三层"**。
+这一条线（`foldStaticAccess` → 六处候选 → `materializeStaticValue`）已三轮，**第三层交人换角度**。
+
+**④ 本轮没有代码改动**：`git status` 为空、`git grep -c probe` = 0、**`variant.h:47-54` 一字未动**。
+
+**⑤ 交给下一个人的三句**：
+1. 崩点：`Variant::get(0)` on a **tag 1 / 0 fields** 的变体（`shapes.cml` 是 tag 0 / 1 field 读序号 1）；
+2. 已排除：`foldStaticAccess` 两支（打点证明运行时字段数与键都对）、`generic.cpp` 六处（无 `Variant` 字样）、`materializeStaticValue`/`appendStaticSlot`（不读字段）；
+3. 剩下的方向：`GraphDraft::addNode` / `touchRefs` / `relocateStaticValues`——**按类型遍历静态值**的那一层，以及"枚举值被当成结构体/元组静态值送进来"的**上游**（谁把 tag 与静态类型配错了）。
