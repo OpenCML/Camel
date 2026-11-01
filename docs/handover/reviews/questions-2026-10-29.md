@@ -1627,3 +1627,11 @@ P0-3（凭据检查不认顺序边）仍未见代码，排在这条之后紧接�
    - 回归用例：`test/cases/modules/onnx/export_entry_impure_recursion.cml` + `onnx.plan` 的 `export_entry_impure_recursion`（exit 1、`RuntimeDiag::TranslationRefused`、16 行 5 列，输出里没有 `PassInternalError` / `did not settle` / `defect of the compiler`）。在提交干净、`dirty: false` 的 HEAD `c6a004b8d`（二进制 2026-11-01 21:39:09 -05:00）上跑 `-Plan all -Tier fast -Jobs 8`：`[SUMMARY] total: 8365, pass: 8353, fail: 0, skip: 10, known failures: 2`，两条 xfail 仍是 `edges.no_ctrl_edge_kind.gir` 和 `edges.gate_has_no_control_input.gir`，与 A5、B1 无关。没有放宽任何不变量，也没有为让门变绿而动校验器；`std::opt` 的 settle 判据（`src/passes/opt/inline/engine.cpp`）一个字未改。
 
 每修一条，在那页对应条目下写"已修 + 提交 + 读数"。附带两条信息：随机程序生成器有 11.8% 的种子被编译器拒，其中一个原因是 `a..b->reduce<…>` 的优先级；任何改写调用的遍之后，`std::cpp` 有约 55% 拒收（"no call of 'main'"）。这两条先记下，冲刺后排。
+
+## 催办（2026-11-01 21:10，决策者）：一小时 3 笔；P0-1 的机制和 P0-3 还是零
+
+P0-1、P0-3 从 18:20 下达，到现在快三小时，还没有一行代码。这两条在审查清单里最小、最直接：一条是删掉 `graph_runtime_support.cpp:532` 的 `|| isMember(n)` 并补上臂里的"被用到"，一条是 `pass.cpp:1845` 起的凭据判定只认三样。
+- **现在就从 P0-6 和台账那边各调一个人**，一人一条。P0-6 剩下的两格（`var`/句柄、非根图入口出口）已经写清了原因，可以等。
+- **P0-1 读数**：20:30 那条（臂里无人用的 `1 / 0` 不报故障、只打印 `2`），外加评估缺陷 A4 里"Region yields node … not in the execution"的最小程序。
+- **P0-3 读数**：只留顺序边的测试遍报 `PassInternalError`。
+- 主机、闸门或额度要是出了问题，在本页末尾写一行，注明时间和现象。
