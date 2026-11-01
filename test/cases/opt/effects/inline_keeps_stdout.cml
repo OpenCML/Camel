@@ -1,0 +1,16 @@
+// A program whose print sits inside a function the inliner folds into its caller: the copy must
+// keep what the print does to `stdout`, and `test::inline_use` prints the use that survived. The
+// drop pass beside it erases the print, which is the other direction: a use that goes away has to
+// be refused, not read as an optimisation.
+import { println } from std
+
+func noisy(): int sync {
+    println("noisy")
+    return 1
+}
+
+func main(): int sync {
+    let v = noisy() + 1
+    println(v)
+    return 0
+}

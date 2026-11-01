@@ -156,5 +156,8 @@ struct OptimizeRewriteConfig {
     /// or the pass already left that content alone) to the pass anyway and fail when it rewrites
     /// one: a test of the screens (generic/rewrite.h), which must admit every graph a rewrite
     /// applies to.
+    /// Runs of the rewrite in a row that may each change the same graph before it is reported as
+    /// not settling (see settleRunsOf in execute/pass.cpp: an internal bound, exposed for a test).
+    size_t settleRuns = 32;
     bool checkScreens = false;
 };

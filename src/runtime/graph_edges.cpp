@@ -98,6 +98,7 @@ class EdgeChecker {
         checkOrderEdges();
         checkSyncEdges();
         checkSyncChainForks();
+        checkBranchBackReferences();
         findCycle();
         for (auto it = graph_.nodes().begin(); it != graph_.nodes().end(); ++it) {
             checkNode(it.ref(), **it);
@@ -106,6 +107,106 @@ class EdgeChecker {
     }
 
   private:
+    /**
+     * A branch and its join name each other, and the owner and result a region carries are nodes
+     * of this graph. Both are the numbers a lift renumbers: a graph copied into a draft and back
+     * keeps its own numbering, and a copy that takes one of these numbers with it reads a node that
+     * is not the one it meant -- another branch's join, or a result past the end. Optional
+     * references (kInvalidNodeRef) are allowed and left alone.
+     */
+    void checkBranchBackReferences() {
+        const size_t before   = violations_.size();
+        const auto nodeCount  = graph_.nodeCount();
+        const auto inRange    = [&](gc_node_ref_t ref) {
+            return ref == kInvalidNodeRef || (ref >= 0 && static_cast<uint32_t>(ref) < nodeCount);
+        };
+        const auto kindOf = [&](gc_node_ref_t ref) {
+            const GCNode *node = graph_.node(ref);
+            return node != nullptr ? node->kind : GCNodeKind::Data;
+        };
+        for (auto it = graph_.nodes().begin(); it != graph_.nodes().end(); ++it) {
+            const gc_node_ref_t ref = it.ref();
+            const GCNode &node      = **it;
+            if (node.kind == GCNodeKind::Brch) {
+                const auto *body = graph_.nodeBodyAs<GCBrchBody>(ref);
+                if (body == nullptr) {
+                    continue;
+                }
+                if (!inRange(body->join)) {
+                    violations_.push_back(
+                        std::format(
+                            "graph '{}' branch {}: its join is {} and the graph has {} nodes",
+                            graph_.name(),
+                            ref,
+                            body->join,
+                            nodeCount));
+                    continue;
+                }
+                if (body->join == kInvalidNodeRef) {
+                    continue;
+                }
+                if (kindOf(body->join) != GCNodeKind::Join) {
+                    violations_.push_back(
+                        std::format(
+                            "graph '{}' branch {}: its join is node {}, which is not a join",
+                            graph_.name(),
+                            ref,
+                            body->join));
+                    continue;
+                }
+                const auto *joinBody = graph_.nodeBodyAs<GCJoinBody>(body->join);
+                if (joinBody != nullptr && joinBody->brch != ref) {
+                    violations_.push_back(
+                        std::format(
+                            "graph '{}' branch {}: its join {} says its branch is {}",
+                            graph_.name(),
+                            ref,
+                            body->join,
+                            joinBody->brch));
+                }
+            } else if (node.kind == GCNodeKind::Join) {
+                const auto *body = graph_.nodeBodyAs<GCJoinBody>(ref);
+                if (body == nullptr || body->brch == kInvalidNodeRef) {
+                    continue;
+                }
+                if (!inRange(body->brch) || kindOf(body->brch) != GCNodeKind::Brch) {
+                    violations_.push_back(
+                        std::format(
+                            "graph '{}' join {}: its branch is node {} of {}",
+                            graph_.name(),
+                            ref,
+                            body->brch,
+                            nodeCount));
+                }
+            }
+        }
+        for (uint32_t id = 1; id < graph_.regionCount(); ++id) {
+            const GCRegion *region = graph_.region(id);
+            if (region == nullptr) {
+                continue;
+            }
+            if (!inRange(region->owner)) {
+                violations_.push_back(
+                    std::format(
+                        "graph '{}' region {}: its owner is {} and the graph has {} nodes",
+                        graph_.name(),
+                        id,
+                        region->owner,
+                        nodeCount));
+            }
+            if (!inRange(region->result)) {
+                violations_.push_back(
+                    std::format(
+                        "graph '{}' region {}: its result is {} and the graph has {} nodes",
+                        graph_.name(),
+                        id,
+                        region->result,
+                        nodeCount));
+            }
+        }
+        (void)before;
+    }
+
     /**
      * Every type id a frozen node names came from the type table's interning path, and the debug
      * assertion is this check: `TypeTable::adopt` -- the door an id could be handed to an object
