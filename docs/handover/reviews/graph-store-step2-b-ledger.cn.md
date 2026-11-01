@@ -1310,3 +1310,30 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(
 
 **这一处要还的账**：`GraphDraft` 删掉那天，这 1 处和其他 302 处一起消失；它没有把终点推远，
 只是让第五个引用角色也走同一个写入面。
+
+## 60. `references` 涨 1 处（303 → 304）：`setBrchJoin`，为什么它必须长在 `GraphDraft` 上
+
+**为什么要这个设置器**：编码器新接了四条交叉引用检查（`camel::runtime::checkGraphCrossReferences`，
+`EdgeChecker` 与 `encodeDraftGraph` 共用同一个函数）。要给这条拒绝写用例，测试遍必须能把一个 BRCH
+的 `join` 指到"不是 JOIN 的节点"上。draft 的旧接口只有 region 的 `result`/`owner`，没有 `BRCH.join`/`JOIN.brch`；
+裸写 payload（`DraftNodeView::payloadAs<DraftBrchPayload>`）同一个写操作两次跑出两个值（`node 0` 与
+`24469`），不可用作用例。类型化设置器是唯一诚实的入口。
+
+**它不做校验**（写在 `draft.h` 的注释里）：draft 在写的过程中允许暂时不自洽，拒绝发生在发布处
+（`encodeDraftGraph`）；在这里校验会变成"这个 join 是否成立"的第五个答案。
+
+**数**：`files` 35，`references` **304**（+1），`constructions` 1，`decode` 4。
+`baseline.json` 已按名字登记：`sites.references["src/runtime/draft_regions.cpp#setBrchJoin"] = 1`。
+
+**A/B（两个方向都量过）**：
+
+- 去掉 `encodeDraftGraph` 里的那次检查 → 用例 `pass_guard.encoded_graph_cross_references` 红在
+  "没有拒绝"：编码**成功**了，损坏的图交给后面一个校验器，报的是另一句话：
+  ```
+  Runtime graph 'main' breaks the branch-arm invariant: BRCH 4 names node 0 as its JOIN, which is not a JOIN reading it
+  ```
+  仍然是 `PassInternalError`，但**不再是"draft 编不出来"**，也不再能归到造出这个 draft 的那一遍身上。
+- 放回来 → `[LEDGER] ok`，`references 304 <= 304`，用例绿（三次运行同一句、`EXIT=1`）。
+
+**这一处要还的账**：`GraphDraft` 删掉那天，这 1 处和其他 303 处一起消失；它没有把终点推远，
+只是让"draft 可以暂时不自洽、拒绝发生在编码处"这条边界有一个可写的入口。

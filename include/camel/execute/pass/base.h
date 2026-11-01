@@ -36,9 +36,15 @@ class GraphIRPass {
     // standard error, with a non-zero exit code. A failure that is already decided while compiling
     // is still a diagnostic (the comment a pass writes about itself): only what the pass finds out
     // when it runs belongs here.
+    /// Ends the pass with an error value instead of a program (design principles 9.1, `(f: F) => F!`).
+    /// It cannot be `[[nodiscard]]` -- it returns nothing -- so the obligation is stated instead:
+    /// **the caller must then check `hasErrorValue()` and either hand the value to the driver that
+    /// ran it or turn it into a diagnostic.** Setting it and continuing is how a pass's answer
+    /// disappears; `applyRegisteredPass` and `applyPassesDetailed` are the two readers that make
+    /// sure it does not.
     void failWithErrorValue(slot_t error) { errorValue_ = error; }
-    bool hasErrorValue() const { return errorValue_ != NullSlot; }
-    slot_t errorValue() const { return errorValue_; }
+    [[nodiscard]] bool hasErrorValue() const { return errorValue_ != NullSlot; }
+    [[nodiscard]] slot_t errorValue() const { return errorValue_; }
 
     // A pass that reads or rewrites graphs with several writings (writings.h). The pass driver
     // extracts one writing per value before a pass that consumes the program (a back end, an
@@ -183,10 +189,6 @@ PassApplyResult applyPassesDetailed(
     const camel::runtime::Program *program, const std::vector<std::string> &passes,
     const camel::core::context::context_ptr_t &ctx, std::ostream &os);
 
-/** Backward-compatible wrapper: only returns the program, without status. */
-const camel::runtime::Program *applyPasses(
-    const camel::runtime::Program *program, const std::vector<std::string> &passes,
-    const camel::core::context::context_ptr_t &ctx, std::ostream &os);
 
 /// The outcome of one registered pass run, for a pass that runs another pass on the program it
 /// is given (std::opt runs the rules library's algebra, `rules::simplify`, as its algebraic

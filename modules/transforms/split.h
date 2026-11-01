@@ -134,9 +134,4 @@ SplitGraph buildSplitGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     camel::runtime::GCGraph *function, std::ostream &os);
 
-/// Registers the cut's compile-time half: `split(f)` where `f` is a value the front end built while
-/// the caller's graph was being built (split_instantiate.cpp). The shapes it does not answer keep
-/// the kernel, which reads the same graph in the program it runs in.
-void registerSplitCompileTimeTransform();
-
 } // namespace camel::transforms

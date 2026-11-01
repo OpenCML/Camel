@@ -52,7 +52,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::ValueWithNoDerivativeRule"
 expect_diagnostic_line = 13
-expect_output_contains = [":coll/map_get_or", "with parameter 2 (counting from 1)", "of type 'float'", "no derivative rule is registered for it"]
+expect_output_contains = ["' takes a differentiable value through its with parameter ", ":coll/map_get_or", "with parameter 2 (counting from 1)", "of type 'float'", "no derivative rule is registered for it"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

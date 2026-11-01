@@ -7098,10 +7098,16 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             // A rest parameter is untyped and last (design principles 5.5); it stands in the
             // signature as a `void` parameter that no call passes a value for.
             if (open && !signature) {
-                // The parser admits `..` in a declaration's parameter list and in a function
-                // type (`(..A) => R`), never in a lambda's.
-                throw std::runtime_error("A rest parameter in a lambda.");
-                throw BuildAbortException();
+                // A lambda's rest parameter (`(..xs) => body`) stands for the parameters of the
+                // function type the lambda is in. That type is not known at this stage -- it builds
+                // a signature, and the expected type is GIR's -- so the slot is recorded the way an
+                // omitted parameter type is, with one difference: it absorbs every parameter from
+                // here on rather than taking one type (`rest`). GIR expands it where the expected
+                // type is in hand. The flag comes from the written parameter (`isRest()`), never
+                // from the arity.
+                factory.addNormArg(name, Type::Void(), false);
+                unwrittenParams.push_back({paramIndex++, paramLoad->origin(), true});
+                continue;
             }
             if (pi + 1 != normParams.size()) {
                 diags_->of(SemanticDiag::RestParameterNotLast)

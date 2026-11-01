@@ -8,6 +8,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/tangent_space.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/parse/ast/rule_head.h"
 #include "camel/runtime/draft.h"
@@ -382,22 +383,36 @@ FunctionType *jvpSignature(FunctionType *function) {
     if (function == nullptr) {
         return nullptr;
     }
-    Type *result = function->exitType();
-    if (result != Type::Float64()) {
+    // What a tangent's type is belongs to the value's type, not to this function: `tangentSpaceOf`
+    // is the one answer (camel/core/tangent_space.h), and a float, an array of floats and a tuple of
+    // them are each their own space. A result with no tangent space -- an `int`, a `string` -- has
+    // nothing to differentiate and is refused here, which is the same refusal as before for every
+    // type that was refused, now asked once instead of written out per type.
+    const camel::core::TangentSpaceAnswer resultSpace =
+        camel::core::tangentSpaceOf(function->exitType());
+    if (!resultSpace.hasSpace()) {
         return nullptr;
     }
-    auto *lifted = TupleType::create(std::vector<Type *>{Type::Float64(), Type::Float64()});
+    auto *lifted = TupleType::create(std::vector<Type *>{function->exitType(), resultSpace.space});
     // Every parameter becomes two parameters, the value and its tangent: `jvp(f)(2.0, 1.0)` passes
     // two numbers, so the graph reads two ports. Handing the pair in as one tuple would need a node
     // that takes it apart, and the only such node -- `Dref` -- belongs to graph construction and is
     // refused outright in a runtime graph (src/runtime/graph.cpp).
     camel::core::type::param_vec_t params;
     for (size_t i = 0; i < function->normTypesCount(); ++i) {
-        if (function->normTypeAt(i) != Type::Float64()) {
-            return nullptr;
+        Type *parameter = function->normTypeAt(i);
+        const camel::core::TangentSpaceAnswer answer = camel::core::tangentSpaceOf(parameter);
+        // A parameter with no tangent space -- the `n` of `xs[n]` -- takes no tangent port, and the
+        // lift carries on: the same rule as `Tangent<bool> = ()` with a contribution of zero, stated
+        // once, here, by the same question the walk asks (`tangentSpaceOf`). The signature layer used
+        // to refuse such a function outright; that refusal is gone, because refusing would make a
+        // program that differentiates with respect to `xs` stop compiling for the sake of an index it
+        // was told to leave alone. Ports, not a `()` slot: an empty slot would be a place a cotangent
+        // could be written, and there is nothing to write (design principles 9.9).
+        params.emplace_back(parameter, false);
+        if (answer.hasSpace()) {
+            params.emplace_back(answer.space, false);
         }
-        params.emplace_back(Type::Float64(), false);
-        params.emplace_back(Type::Float64(), false);
     }
     if (params.empty()) {
         return nullptr;
@@ -492,27 +507,6 @@ JvpGraph buildJvpGraph(
     camel::runtime::GraphDraftGroup group(context, program);
     return buildJvpGraphInGroup(context, program, group, function, name, self, os);
 }
-JvpGraph buildJvpGraphOfItsOwn(
-    const camel::core::context::context_ptr_t &context, const GraphRead &function,
-    std::string_view name, camel::runtime::GraphId self, std::ostream &os) {
-    if (context == nullptr) {
-        return JvpGraph{};
-    }
-    FunctionType *signature = jvpSignature(function.funcType());
-    if (signature == nullptr) {
-        os << "REINTERP jvp function=" << name << " skip=signature\n";
-        return JvpGraph{};
-    }
-    // The program the lift's own graphs go into: an empty program of the context's, reserved here
-    // and kept by the context for as long as the value that names it lives. The graph the lift
-    // reads is a draft of the caller's, so there is no program of its to extend; the graph the
-    // caller's body calls is a graph of its own, the way the run-time kernel makes one, and this is
-    // the same build writing into it.
-    camel::runtime::Program *base = context->reserveProgram();
-    camel::runtime::GraphDraftGroup group(context, base);
-    return buildJvpGraphInGroup(context, base, group, function, name, self, os);
-}
-
 namespace {
 
 bool liftGraph(
@@ -556,14 +550,29 @@ bool liftGraph(
         valuePorts.reserve(parameterCount);
         tangentPorts.reserve(parameterCount);
         for (size_t i = 0; i < parameterCount; ++i) {
-            const gc_node_ref_t value =
-                draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
+            // The port's type is the parameter's own, and the tangent port's is that parameter's
+            // tangent space -- `tangentSpaceOf`'s answer, not `float`: a `float[]` parameter's
+            // tangent is an array of the same shape, and a rule that consumes it (`index_into`)
+            // takes it whole. The element's tangent only appears one layer down, at `xs[i]`.
+            camel::core::type::Type *parameterType = function.funcType()->normTypeAt(i);
+            const gc_node_ref_t value = draft.addPortNode(
+                parameterType, draft.allocateRuntimeSlot(parameterType));
             draft.appendNormPort(value);
             valuePorts.push_back(value);
-            const gc_node_ref_t tangent =
-                draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
-            draft.appendNormPort(tangent);
-            tangentPorts.push_back(tangent);
+            // A parameter with no tangent space takes no tangent port at all -- the same question the
+            // signature asks, so the two layers cannot disagree about which parameters have a slot.
+            const camel::core::TangentSpaceAnswer tangentSpace =
+                camel::core::tangentSpaceOf(parameterType);
+            if (tangentSpace.hasSpace()) {
+                const gc_node_ref_t tangent = draft.addPortNode(
+                    tangentSpace.space, draft.allocateRuntimeSlot(tangentSpace.space));
+                draft.appendNormPort(tangent);
+                tangentPorts.push_back(tangent);
+            } else {
+                // No port, and a place in this list that says so: the list is indexed by the
+                // parameter's position, so it cannot simply be shorter.
+                tangentPorts.push_back(rt::kInvalidNodeRef);
+            }
         }
         // Which parameter a port of the original body is, by its place in that list.
         std::unordered_map<gc_node_ref_t, size_t> parameterOf;
@@ -730,7 +739,7 @@ bool liftGraph(
                 const auto parameter = parameterOf.find(ref);
                 if (parameter != parameterOf.end() && parameter->second < valuePorts.size()) {
                     copyOf[ref]    = valuePorts[parameter->second];
-                    tangentOf[ref] = tangentPorts[parameter->second];
+                    tangentOf[ref] = tangentPorts[parameter->second]; // invalid when the parameter has no tangent space
                     copied[ref]    = true;
                     ++copiedKinds;
                     break;
@@ -1020,12 +1029,14 @@ bool liftGraph(
                             made, static_cast<uint8_t>(rt::kGCNodeFlagSyncStatement));
                     }
                 }
-                if (node->dataType() != Type::Float64()) {
+                if (!camel::core::tangentSpaceOf(node->dataType()).hasSpace()) {
                     // A discrete value -- a comparison's `bool`, a count's `int` -- has no tangent:
                     // it is copied so the nodes that read it have their operand, and no rule is
                     // asked to produce a derivative for it (design principles 9.9: a discrete
                     // value's derivative is zero by definition, and a zero nobody reads is not
-                    // worth a node).
+                    // worth a node). Whether a value has a tangent at all is `tangentSpaceOf`'s
+                    // answer, not a comparison with `float`: an array of floats is its own tangent
+                    // space, and it is walked like a float -- by the rule filed under its operator.
                     break;
                 }
                 const std::string_view uri = body->uri();
@@ -1048,6 +1059,15 @@ bool liftGraph(
                 }
                 std::vector<gc_node_ref_t> tangents;
                 for (gc_node_ref_t original : originals) {
+                    // An operand with no tangent space -- the `i` of `xs[i]`, a branch's condition --
+                    // contributes no slot: the rule is handed the tangents of the operands that have
+                    // one, in their own order (design principles 9.9, and the same "no slot" the
+                    // `Tangent<bool> = ()` reading uses -- a slot that does not exist, not a zero
+                    // that does).
+                    const NodeFace *input = function.node(original);
+                    if (input != nullptr && !camel::core::tangentSpaceOf(input->dataType()).hasSpace()) {
+                        continue;
+                    }
                     if (tangentOf[original] == rt::kInvalidNodeRef) {
                         complete = false;
                         break;

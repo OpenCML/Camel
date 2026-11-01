@@ -215,6 +215,13 @@ class Tree {
     struct UnwrittenParam {
         size_t index                      = 0;
         camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
+        /// This parameter stands for the parameters the lambda's list leaves over: a rest
+        /// parameter (`(..xs) => body`). The one slot it keeps in the signature absorbs the
+        /// expected function type's members from `index` on, so it changes the arity GIR compares
+        /// -- which is why the flag comes from the written parameter (`isRest()`), not from the
+        /// arity, and why the arity check lets it through only when the expected type has at
+        /// least as many parameters as the lambda wrote.
+        bool rest = false;
     };
 
     /// The parameters of the lambda `func` whose type was left out, in the order written. Null

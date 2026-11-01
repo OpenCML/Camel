@@ -521,6 +521,29 @@ bool ParserImpl::lambdaAhead() const {
     if (t1 == TK::KwVar) {
         return true;
     }
+    // A rest parameter's head, `(..xs)` / `(..xs, ...)`, is a lambda's like any other: the reader of
+    // the list that follows is the same, `=>` (or a return type's `:`) after the `)`. A tuple
+    // written `(..xs)` -- one rest argument in it -- has that `=>` too only when it is a lambda.
+    if (t1 == TK::DotDot) {
+        uint32_t depth = 0;
+        for (uint32_t i = 0;; ++i) {
+            switch (peek(i)) {
+            case TK::Eof:
+                return false;
+            case TK::LParen:
+                ++depth;
+                break;
+            case TK::RParen:
+                if (--depth == 0) {
+                    const TK after = peek(i + 1);
+                    return after == TK::FatArrow || after == TK::Colon;
+                }
+                break;
+            default:
+                break;
+            }
+        }
+    }
     if (t1 == TK::Identifier) {
         if (peek(2) == TK::Colon) {
             return true;
@@ -1172,7 +1195,11 @@ void ParserImpl::parseFuncData() {
         unexpected({e(TK::LParen)});
         return close(m, NK::FuncData);
     }
-    parseParentParams();
+    // A lambda's parameter list takes a rest parameter (`(..xs) => body`). It parses here and is
+    // refused where its parameters would have to be built: a lambda's rest parameter stands for
+    // parameters that come from the function type the lambda stands in, and the front end does not
+    // build those yet (the semantic stage names the refusal).
+    parseParentParams(true);
     lambdaParams_ = outerLambdaParams;
     if (eat(TK::Colon)) {
         parseType();
