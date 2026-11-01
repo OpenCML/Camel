@@ -476,6 +476,50 @@ export func operator >=(x: string, y: string): bool
 #op(':op/pow_d')
 export func operator ^(x: float, y: float): float
 
+/// The 32-bit float raised to the power of the second.
+/// @example f32(2.0) ^ f32(3.0)    // 8.0
+#op(':op/pow_f')
+export func operator ^(x: f32, y: f32): f32
+
+/// The 32-bit integer raised to the power of the second.
+#op(':op/pow_i')
+export func operator ^(x: i32, y: i32): i32
+
+/// The 64-bit integer raised to the power of the second.
+#op(':op/pow_l')
+export func operator ^(x: int, y: int): int
+
+/// The half float raised to the power of the second.
+#op(':op/pow_f6')
+export func operator ^(x: f16, y: f16): f16
+
+/// The bfloat16 value raised to the power of the second.
+#op(':op/pow_bf')
+export func operator ^(x: bf16, y: bf16): bf16
+
+/// The single-precision complex value raised to the power of the second.
+#op(':op/pow_c')
+export func operator ^(x: c64, y: c64): c64
+
+/// The single-precision complex value raised to a 32-bit integer power.
+#op(':op/pow_c_i')
+export func operator ^(x: c64, y: i32): c64
+
+/// The single-precision complex value raised to a 64-bit integer power.
+#op(':op/pow_c_l')
+export func operator ^(x: c64, y: int): c64
+
+/// The double-precision complex value raised to the power of the second.
+#op(':op/pow_z')
+export func operator ^(x: c128, y: c128): c128
+
+/// The double-precision complex value raised to a 32-bit integer power.
+#op(':op/pow_z_i')
+export func operator ^(x: c128, y: i32): c128
+
+/// The double-precision complex value raised to a 64-bit integer power.
+#op(':op/pow_z_l')
+export func operator ^(x: c128, y: int): c128
 
 // ---- conversions ----
 //
