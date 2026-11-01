@@ -28,6 +28,22 @@ lane `lane-inv`，基线 `origin/develop` = `0faa9d4bf`（会话开始时），�
 | Arm / Block 归属 | 同上，但来源是 `GCRegion{kind=Arm\|Block}` 的 `owner` / `callSite` | 抬到的位置确实是运行那张图的节点，链按写下的顺序仍然存在 | 0 |
 | 「调用它的节点就拥有它」 | 上一行之外，再让任何调用某张图的节点都成为它的拥有者 | **不成立**：一张图可以被多处调用、也可以当函数值传，拥有者不唯一，抬上去的链是假的。整闸 `fail 186`（`sync_block_order.*`、`var_param.*`、`equal_branch.*` …），报文里还出现「效应在图 51 却说 in graph 47」这种混图 | 186 红，**已剔除，未进这一支** |
 
+## 一条尚未覆盖的形状，今天量过了：同一个 `var`（cell）上的两次写
+
+状态表里最靠前的一条「尚未覆盖」是边界 1——**只比较环境资源**。挑它的原因不是它新，而是它今天仍
+留在覆盖之外，而判据可以一句话指出来：
+
+- **守哪个判据**：设计原则 3.3 的「同一资源上的效应保持写下的顺序」。**判据在哪一行**：
+  `src/execute/pass.cpp` 的 `collectEffects` 里把非 `ResourceClass::Ambient` 的访问丢掉的这段
+  （`if (access.resource.cls != ...Ambient) continue;`），以及 `sharedResourceOf` 只认 ambient 名字。
+- **今天的颜色**：**绿**。最小程序（一个模块级 `var cell`，`cell += bump()` 之后 `println(cell)`，
+  再 `cell += 5`、`println(cell)`）在 `std::nvm`、`std::opt std::nvm`、`std::opt::inline std::opt std::nvm`
+  三遍下都是 `bump / 2 / 7`，顺序没坏。
+- **为什么它本来就对，以及为什么仍不覆盖**：cell 的身份写在程序里（一个 `var` 的名字不是资源，是一格
+  存储），**两张图之间没有可比较的名字**——两个 cell 是不是同一格，只有「谁拥有它」知道，而这正是
+  上一次「调用节点即所有者」那条规则踩坏的地方（见上表 186 红）。所以这条边界是**判据本身的边界**，
+  不是漏写：要覆盖它，得先有一条跨图的 cell 身份模型，那是另一条判据，不属于这张表。
+
 ## `older_effect_place` 今天的颜色
 
 作者问：`older_effect_place` 在 `develop` 上今天是绿是红，绿了是哪一笔修好的。
