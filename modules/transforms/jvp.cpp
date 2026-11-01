@@ -539,6 +539,17 @@ bool liftGraph(
         // Every member the lift makes gets it, the top-level `jvp_of_f` and each `jvp_of_callee`.
         // The id is the caller's, like the name: a draft is numbered when it is encoded.
         draft.addLiftedFromRef(source);
+        // The recompute request is a fact about the *body*, so a lift keeps it: `remat` marks a
+        // graph, `jvp` lifts that graph, and the graph `split` cuts is the lift -- if the mark
+        // stopped at the primal, the lift would be cut as if nothing had been asked for, which is
+        // what the measurement showed (a cubic lifted from a marked graph still carried two
+        // residuals, the same as an unmarked one). Same bit, no new field:
+        // `kGraphFlagRecomputeBackward` (`camel/runtime/graph.h`) travels from the source graph to
+        // the graph that copies its body.
+        if (const camel::runtime::GCGraph *primal = program->graph(source);
+            primal != nullptr && primal->recomputesOnBackward()) {
+            draft.setFlags(static_cast<uint8_t>(draft.flags() | rt::kGraphFlagRecomputeBackward));
+        }
         // One pair of ports per parameter of `f`, in its order: the value the caller passes and the
         // seed of that direction. A port node is a node; the graph's *parameters* are the port nodes
         // it lists as its norm ports, and a call is checked against that list ("has 0 norm ports" is
