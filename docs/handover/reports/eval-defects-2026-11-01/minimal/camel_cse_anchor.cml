@@ -1,0 +1,7 @@
+func echo(x: int): int sync {
+}
+func main(): int sync {
+    var x = 0
+    echo(x)
+    return 0
+}
