@@ -936,3 +936,35 @@ Stack Trace: (not available on this platform)
 
 **给作者的事实**：作者报的 26 支清单（`repro_checks.json`）**没有随报告进仓库**——`git ls-tree -r --name-only origin/fsh-dev` 在 `docs/handover/reports/eval-defects-2026-11-01/` 下只有 `README.md`、`minimal/`、`e9_reduced/`。
 所以这 2 支是**按 README 描述的类（enum 与 `match … when`）扫 40 支找到的**，不是清单里的原班人马。
+
+## 28. A6 打点结果：两支都不是 `foldStaticAccess` 里读的 ⇒ 停手，不扩范围
+
+**打点**（`foldStaticAccess` 两个分支的 `get` 之前，`accsKind` / `code()` / 运行时字段数 / 索引或键），一次构建两支都跑：
+
+```
+=== generic_tree.cml                                  rc=134
+[probe] struct access: kind=1 code=1610612745 runtime_fields=2 key=left
+[probe] struct access: kind=1 code=1610612745 runtime_fields=2 key=right
+[probe] struct access: kind=1 code=1610612745 runtime_fields=2 key=left
+[probe] struct access: kind=1 code=1610612745 runtime_fields=2 key=right
+    Reading    : reading field 0 of a Variant whose tag 1 declares 0 field(s)…
+
+=== shapes.cml                                        rc=134
+[probe] struct access: kind=1 code=1610612745 runtime_fields=2 key=w
+[probe] struct access: kind=1 code=1610612745 runtime_fields=2 key=h
+[probe] struct access: kind=1 code=1610612745 runtime_fields=2 key=w
+[probe] struct access: kind=1 code=1610612745 runtime_fields=2 key=h
+    Reading    : reading field 1 of a Variant whose tag 0 declares 1 field(s)…
+```
+
+**读法**：**两个分支各被走到过，每次运行时对象都有 2 个字段、键都在（`left`/`right`、`w`/`h`）——静态类型与运行时形状一致，`get` 没有越界。**
+**崩点在这之后**，所以**读它的不是 `foldStaticAccess`**。**按你的话：停手，不扩范围。**
+
+**下一步的名单（不本轮做）**：`foldDraft` 这一帧里其余会在"值"上动手的调用——
+`pruneBranch`、`staticValueOf`、`holdsNoValue`、`fitsConstantBudget`、`replaceFoldResult`、`materializeStaticValue`。
+`Variant::get(0)` on a tag-1/0-field variant：**枚举的变体值被当成结构体/元组读**，是下一个要打点的形状。
+
+**判据（照你要求写进页，以后所有 fold 类改动适用）**：
+**静态类型与运行时形状不一致时，折叠应当放弃，而不是相信类型。**
+
+**打点已删净**（`git checkout -- src/passes/opt/generic/generic.cpp`，`git status` 为空，`git grep -c probe` = 0）。
