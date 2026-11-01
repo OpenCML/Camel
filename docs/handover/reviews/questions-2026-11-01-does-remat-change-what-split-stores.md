@@ -1,5 +1,14 @@
 # `remat` 改的是 `split` 的残差数，还是 `pullback` 的捕获表
 
+> **裁定（作者，2026-11-01）：不是"选一条路"——`remat` 是图变换，标记落在图的属性上，读它的是 `split`。**
+> `remat(f)` 造一张新图，图体就是 `f` 的图，外加一个图属性"反向时重算"；没有调用点标记，也没有 tag。
+> `split` 切到带这个属性的图时，跨切只留这次调用的输入，后一半重跑前一半拿到残差。所以 A/B 两条路选的是 **A**
+> （`split` 的残差），而且比 A 更具体：**标记本身是图的属性**，`split` 只是它的读者。
+> 已落的读数：`in_recompute=0 out_recompute=1`（标记），`residuals=3` → `residuals=2 recompute=1`（切法），
+> `18.0/12.0/9.0` 逐位不变（`test/plans/feat/modules/remat.plan.toml` 的 `remat.attribute` 与 `remat.split`）。
+> 仍未落：`remat` 的**编译期实例化**（作者 09:35 那条），所以标记今天由运行期算子设置；嵌套形态
+> （`g(x, y) = remat(h)(x, y) * y`，标记在一次调用的被调方上）等那一步。
+
 > **问什么**：`remat(f)` 在值上是恒等，这一点三份文件都写死了；但"反向时不保存残差"这件事**落在哪一处**
 > ——是 `split` 交出的残差元组（今天可读：`residuals=`），还是 `modules/autodiff/pullback.cpp` 里
 > 建回传图时的捕获表（今天不可读）？两处都自称知道"哪些值是残差"，而今天没有任何一处读 `remat`。
