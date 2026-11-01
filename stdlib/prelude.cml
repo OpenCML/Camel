@@ -266,6 +266,25 @@ export func operator -(x: c64): c64
 #op(':op/neg_z')
 export func operator -(x: c128): c128
 
+// Indexing, `xs[i]`. The operator registers three words -- the array, the position, and the
+// dimension the position names -- and its registration says so
+// (`src/builtin/modules/globals.cpp`: `(arr: T[], index: int, axis: int) => T`); the declaration
+// writes two, because the third is the declaration's default and the mechanism fills it before the
+// operator's type rule sees the call, so a two-word `xs[i]` stays a two-word call. That is why
+// `[]` is declared with the parameters a call writes and not with the registration's whole list,
+// and why the same shape appears wherever this operator is declared under a module's own name
+// (`test/cases/compile/native/generic_module.cml`).
+//
+// `[]` is not a token: it is a pair of brackets, and the declaration writes both. The parser reads
+// `func operator [` `]` as an operator name already (src/parse/syntax/parser.cpp#parseOperatorName,
+// whose own example is `func operator [](m: M, i: int): T`), because a bracket form is an operator
+// declaration like any other, not a form of its own.
+
+/// The element at position `i` on the first dimension of `xs`.
+/// @example [7, 8, 9][0]    // 7
+#op(':op/idx_arr')
+export func operator []::<T>(xs: T[], i: int): T
+
 // ---- conversions ----
 //
 // Numeric types are never converted implicitly; these functions do it. There is one conversion
