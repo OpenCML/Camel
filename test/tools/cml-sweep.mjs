@@ -210,5 +210,10 @@ console.log(
 if (!QUIET) {
     for (const entry of bad) console.log(`DIFFERENT ${relative(entry.file)} ${entry.why}`)
 }
+// Which programs printed, one path each: a printer change is argued by the set that moved, not
+// only by how many moved (one count can hide a program gained and another lost).
+if (argv.includes('--printed')) {
+    for (const entry of printed) console.log(`PRINTED ${relative(entry.file)}`)
+}
 if (fs.existsSync(SCRATCH)) fs.rmSync(SCRATCH, { recursive: true, force: true })
 process.exit(0)

@@ -504,6 +504,14 @@ class OperatorTable {
     /// what its overloads are.
     std::vector<std::string> groupOperators(std::string_view group) const;
 
+    /// The group `uri` was declared in -- the name the language writes for it (`__add__`,
+    /// `println`) -- or an empty string when no declaration registered it. The reverse of
+    /// `groupOperators`, and the one reading a client that has a URI and needs the source form
+    /// takes: everything is decided where the operator is declared, and nothing keeps a second
+    /// copy of it. A copy rather than a view: a call asks once per node and the table may still be
+    /// growing while modules load.
+    std::string groupOf(std::string_view uri) const;
+
     /// The types one group registered: every type the fixed signature of one of its overloads
     /// mentions (its `with` parameters, its ordinary parameters and its result), each once, in
     /// the order they were registered. An overload whose resolver declares no fixed signature

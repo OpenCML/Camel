@@ -300,6 +300,18 @@ std::vector<std::string> OperatorTable::groupOperators(std::string_view group) c
     return uris;
 }
 
+std::string OperatorTable::groupOf(std::string_view uri) const {
+    std::shared_lock lock(mutex_);
+    for (const auto &[name, declared] : groups_) {
+        for (const std::string &member : declared) {
+            if (member == uri) {
+                return name;
+            }
+        }
+    }
+    return {};
+}
+
 std::vector<type::Type *> OperatorTable::registeredTypes(std::string_view group) const {
     std::vector<std::string> uris;
     {

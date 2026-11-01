@@ -21,6 +21,23 @@ ROUNDTRIP checked=458 equivalent=411 not_equivalent=47 over_budget=0 unfaithful=
 
 语料从 2387 涨到 3360（+973），打印 474（打印率 14.1%，旧 14.6%），等价 411/474 = 86.7%（旧 309/348 = 88.8%）。拒绝家族按「图名/算子名/数字掩码」归并后 49 类，最多的五类是：算子没有源码形式 755、图名不是源码标识符 358、`with` 参数是命名类型 86、参数的类型打不出来 85、返回类型是带标签/可空/单元组 73。四类分开记：**打印成功 ≠ 往返等价**（474 vs 458 检查、411 等价），**能打印 ≠ 能重新编译**（16 个连 canonical 文档都产不出）。
 
+**2026-11-02 第二刀：打印机读声明表（`lane-m5`）。** 打印机原来自带一份「URI 里的名字 → 符号」的表（`add/sub/mul/…` 17 条，`cml.cpp`），与算子在哪里声明无关；现在改为问声明表：`OperatorTable::groupOf(uri)` 给出它登记的组（`__add__`、`__neg__`、`__not__`），`operatorSymbolOf(组名)` 给出源码里写的符号；问不到就拒绝并**点名**，不猜拼法。范围只到「读表」——没有补任何一条声明。
+
+```
+node test/tools/cml-sweep.mjs --jobs 16
+SWEEP files=3362 printed=475 refused=1881 frontend=1006 timeout=0
+REFUSALS families=49
+ROUNDTRIP checked=459 equivalent=412 not_equivalent=47 over_budget=0 unfaithful=16
+```
+
+对照上一块（3360 文件、旧二进制）：打印 474 → 475，等价 411 → 412，不等价 47 → 47，产不出 canonical 文档 16 → 16。按文件比而不是按数比：改前旧二进制逐条记下的打印集与改后**一条不差**，只多出 `parse/rulings/not_by_precedence.cml`（它之前卡在 `!!t`：`!` 与 `!` 相邻是一个词法单元，现在打印成 `!(!t)`）；`DIFFERENT` 列表与旧基线**逐行相同**。
+
+两向 A/B（都在主机上跑、改完立即回退）：把 `:op/neg_l` 再登记进 `__not__` 组（声明顺序早于 `__neg__`），同一个程序从 `println(-n)` 变成 `println(!n)`——**文本跟着声明走**，打印机里没有第二份拷贝；`test/cases/consistency/faults/parallel_lowest_index.cml` 是**没有任何声明的算子**，被点名拒绝：`the operator ':mark/map_arr'`。
+
+**补声明清单（按节点数）。** 全语料里被打印机点名、确实没有任何声明的算子 **143 个、12520 个节点**。前 12：`:str/format` 1019、`tensor:sum` 934、`tensor:multiply` 862、`tensor:reshape` 856、`:op/tag_is_null` 689、`:struct/len_arr` 585、`tensor:add` 582、`:op/assn_l` 569、`:mark/map_arr` 389、`tensor:subtract` 324、`tensor:matmul` 238、`:op/slice_sub` 219。
+
+**更正两份旧数。** ① 之前报的「353 条没有声明」其实是「没有 `#op` 标签」的数，不是「没有声明」：`:op/add_l`（3244 节点）、`:op/mul_d`（801）这一批由 `globals.cpp` 的组（`__add__`、`__mul__`）**原生登记**，打印机从不点名它们，所以它们不是缺口；真正的缺口是上面 143 条。② `:op/keep` 已在 `fsh-dev 5773c9482` 删掉，全语料图里 **0 个节点**，扣前扣后都是 353（它与上面那 143 条无关）。
+
 1. **今天能打印的只是少数**：`test/cases/**/*.cml` 共 **2387** 个文件，`std::cml` 打印 **348** 个，以 `CmlUnsupportedConstruct`/`CmlBigConstant` 拒绝 **1338** 个，其余 701 个本来就编译不过（诊断用例）。能打印的集中在 `compile` 122、`consistency` 50、`opt` 39、`modules` 38、`linear` 23、`trans` 21。
 2. **往返性质今天就有反例**：打印成功且能重新编译的 348 个里，**309 个等价、35 个不等价、4 个的打印结果连 `std::jgir canonical=true` 都跑不出来**。这 35 个不是「看起来不整齐」，是打印器**丢节点**或**改接线**，见 §3.9 与 §7。
 3. **最大的两类缺口是声明与类型**：拒绝理由归并后 131 类，最多的是「算子没有源码形式」463 个、「参数的类型打不出来」273 个、「`with` 参数是命名类型」66 个、「图名不是源码标识符」58 个、「宏图」38 个、「参数是命名类型」35 个、「返回类型是带标签/可空/单元组」31 个、「间接调用少了函数值」26 个。

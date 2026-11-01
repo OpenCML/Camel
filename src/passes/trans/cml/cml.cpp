@@ -13,6 +13,7 @@
 
 #include "camel/core/error/diagnostics/messages/semantic.h"
 #include "camel/core/loop_kind.h"
+#include "camel/core/operator_names.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/complex.h"
@@ -2195,63 +2196,40 @@ class CmlPrinter {
                     break;
                 }
             } else {
-                std::string_view base = op;
-                if (base.size() > 2 && base[base.size() - 2] == '_' &&
-                    isSide(base.back())) {
-                    base.remove_suffix(2);
+                // What an operator node is written as comes from where the operator was declared,
+                // not from a table here: the group it was registered in (`__add__`, `__neg__`,
+                // `__idx__`) is the name the language writes for it, and `operatorSymbolOf` turns
+                // that name into the symbol a program writes (design principles 4.3). A group that
+                // is not an operator of the language (`tensor:sum`, `:io/println`) has no symbol,
+                // and an operator nobody declared is in no group at all: both are refused by name
+                // rather than given a spelling this printer would have had to guess.
+                const std::string group = camel::core::OperatorTable::instance().groupOf(uri);
+                // A view, not the `const char *`: every comparison below is a comparison of the
+                // text, and `symbol == "-"` on two pointers would be a comparison of addresses.
+                const char *declared = camel::core::operatorSymbolOf(group);
+                if (declared == nullptr) {
+                    fail(ref, std::format("the operator '{}'", uri));
                 }
-                if (base == "add") {
-                    return infix(ref, inputs, "+", 40);
+                const std::string_view symbol = declared;
+                if (inputs.size() == 2) {
+                    const int precedence = precedenceOf(symbol);
+                    if (precedence < 0) {
+                        // A binary symbol this printer has no precedence for (`[]`, `@`, `=`) is
+                        // written by a construct of its own or not at all: it is refused here
+                        // rather than given parens this printer would have had to invent an
+                        // association for.
+                        fail(ref, std::format("the operator '{}'", uri));
+                    }
+                    return infix(ref, inputs, symbol, precedence);
                 }
-                if (base == "sub") {
-                    return infix(ref, inputs, "-", 40);
+                if (inputs.size() == 1) {
+                    const bool unary = symbol == "-" || symbol == "~" || symbol == "!";
+                    if (!unary) {
+                        fail(ref, std::format("the operator '{}'", uri));
+                    }
+                    return prefix(ref, inputs, symbol);
                 }
-                if (base == "mul") {
-                    return infix(ref, inputs, "*", 50);
-                }
-                if (base == "div") {
-                    return infix(ref, inputs, "/", 50);
-                }
-                if (base == "mod") {
-                    return infix(ref, inputs, "%", 50);
-                }
-                if (base == "pow") {
-                    return infix(ref, inputs, "^", 60);
-                }
-                if (base == "eq") {
-                    return infix(ref, inputs, "==", 30);
-                }
-                if (base == "ne") {
-                    return infix(ref, inputs, "!=", 30);
-                }
-                if (base == "lt") {
-                    return infix(ref, inputs, "<", 30);
-                }
-                if (base == "le") {
-                    return infix(ref, inputs, "<=", 30);
-                }
-                if (base == "gt") {
-                    return infix(ref, inputs, ">", 30);
-                }
-                if (base == "ge") {
-                    return infix(ref, inputs, ">=", 30);
-                }
-                if (base == "and") {
-                    return infix(ref, inputs, "&", 20);
-                }
-                if (base == "or") {
-                    return infix(ref, inputs, "|", 19);
-                }
-                if (base == "neg") {
-                    return prefix(ref, inputs, "-");
-                }
-                if (base == "inv") {
-                    return prefix(ref, inputs, "~");
-                }
-                if (base == "not") {
-                    return prefix(ref, inputs, "!");
-                }
-                fail(ref, std::format("the operator '{}'", uri));
+                fail(ref, std::format("the operator '{}' without one or two values", symbol));
             }
         } else {
             fail(ref, std::format("the operator '{}'", uri));
@@ -2263,6 +2241,33 @@ class CmlPrinter {
         }
         text += ")";
         return {text, 90};
+    }
+
+    /// How tightly a symbol binds, so that the parentheses this printer writes say what the graph
+    /// says. The declaration says which symbol an operator is; how tightly it binds is the
+    /// parser's business, and this is the one place the printed text needs it. A symbol this list
+    /// does not know comes back -1 and is written fully parenthesized, which is never wrong.
+    static int precedenceOf(std::string_view symbol) {
+        if (symbol == "+" || symbol == "-") {
+            return 40;
+        }
+        if (symbol == "*" || symbol == "/" || symbol == "%") {
+            return 50;
+        }
+        if (symbol == "^") {
+            return 60;
+        }
+        if (symbol == "==" || symbol == "!=" || symbol == "<" || symbol == "<=" || symbol == ">" ||
+            symbol == ">=") {
+            return 30;
+        }
+        if (symbol == "&") {
+            return 20;
+        }
+        if (symbol == "|") {
+            return 19;
+        }
+        return -1;
     }
 
     Expr infix(
@@ -2285,7 +2290,13 @@ class CmlPrinter {
             fail(ref, std::format("the operator '{}' without one value", op));
         }
         Expr inner = expression(inputs[0]);
-        return {std::format("{}{}", op, parenthesize(inner, 70)), 70};
+        std::string text = parenthesize(inner, 70);
+        // `!!t` is not two negations to the lexer: `!!` is one token that fits nothing, so an
+        // operand that opens with the operator's own character is parenthesized (`!(!t)`).
+        if (text.starts_with(op)) {
+            text = std::format("({})", text);
+        }
+        return {std::format("{}{}", op, text), 70};
     }
 
     Expr callExpression(gc_node_ref_t ref) {
