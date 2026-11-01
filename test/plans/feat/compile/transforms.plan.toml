@@ -176,6 +176,34 @@ expect_output_not_contains = ["not implemented", "尚未实现", "unimplemented"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# The comparison the author named: one `f` with two parameters, and the library's gradient beside
+# the derivative worked out on paper. `f(x, y) = x*x*y` at `(3, 2)` has `df/dx = 2*x*y = 12` and
+# `df/dy = x*x = 9`, and both numbers are printed -- `library` first, `analytic` under it -- so the
+# reading is a comparison. The surface is JAX's (the author's ruling of 2026-11-01): `vjp(f)(x)` is
+# the pair `(y, pullback)` and `pullback(ct)` is the cotangent of `f`'s parameters, so the call is
+# `vjp(f)(3.0, 2.0)` and then `pullback(1.0)`. The juxtaposed call `transpose` writes is the
+# internal assembly; it is not a standard-library signature and nothing here writes it.
+#
+# The gate is a behaviour probe and not a file check: `test/tools/have-library-vjp.mjs` compiles and
+# runs a program that builds `vjp(f)` and calls it, so it answers "is the composition assembled?"
+# rather than "is there a split.cpp?". While `split` hands `transpose` a lifted function where a
+# function of one parameter is taken, the gate refuses and this entry skips with its reason printed;
+# the day the shapes meet it starts running, and a wrong answer is then a red, never a skip. The
+# numbers are the author's, and `18.0` is `3*3*2`: neither is a reading of today's tree.
+[[tests]]
+name = "vjp_api.analytic_gradient"
+desc = "The library's gradient against the derivative worked out on paper, on the author's example: `f(x, y) = x*x*y` at `x = 3`, `y = 2`, so `df/dx = 2*x*y = 12` and `df/dy = x*x = 9`. `vjp(f)(3.0, 2.0)` gives the pair `(y, pullback)` and `pullback(1.0)` gives the two cotangents, in JAX's order; the program prints `f(3, 2) = 18.0`, `library y = 18.0`, then `library`/`analytic` for `df/dx` and `df/dy`. The library half comes from `transpose(split(reinterp<jvp>(f)))` in `stdlib/vjp.cml` and nothing else -- not from the C++ autodiff. Skipped while the composition cannot be built (`split` hands `transpose` a shape it does not take); the precondition prints the refusal, so a skip always says why."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_analytic_gradient.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+skip_unless = ["node", "test/tools/have-library-vjp.mjs"]
+expect_exit = 0
+expect_stdout_contains = ["f(3, 2) = 18.0", "library  y = 18.0", "library  df/dx = 12.0", "analytic df/dx = 12.0", "library  df/dy = 9.0", "analytic df/dy = 9.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 # The numbers the day the steps land. `f(x) = x*x*x`, so `vjp(f)(3.0, 1.0)` is `(27.0, 27.0)` and
 # `grad(f)(3.0)` is `27.0`; the three-step composition is checked against the derivative written by
 # hand, not against the C++ autodiff. Skipped, not red, while the composition does not run -- today
