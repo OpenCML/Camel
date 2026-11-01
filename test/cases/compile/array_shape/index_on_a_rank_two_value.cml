@@ -1,0 +1,40 @@
+/**
+ * The index family on a value of two dimensions, read from the language surface: `xs[i, j]` is a
+ * position on axis 1 and then a position on axis 0 (design principles 5.4), `xs[i][j]` is the same
+ * two reads written as two subscripts, and each read's fault names the thing whose length it
+ * counted -- "an array" for a value of one dimension (which is what the row a `xs[i, j]` takes
+ * with its first word is), "the first dimension of the input array" for the row read of a deeper
+ * one, and "dimension 1 of the input array" when the axis word says which dimension it was.
+ *
+ * The point of the readings is that the bound and the read agree at every step: `xs[i0, 0]` on a
+ * `float[2, 2]` is refused because the row it takes has two elements, not because four exist; the
+ * counts a value of two dimensions has (`2` rows, `4` elements) are different numbers, and a
+ * position is only ever compared with the one it addresses.
+ */
+func two(xs: float[2, 2], i: int, j: int): float {
+    return xs[i, j]
+}
+
+func nested(xs: float[2, 2], i: int, j: int): float {
+    return xs[i][j]
+}
+
+func one(xs: float[3], i: int): float {
+    return xs[i]
+}
+
+func main(): int sync {
+    let xs: float[2, 2] = [[1.0, 2.0], [3.0, 4.0]]
+    let i0 = 2
+    let i1 = 5
+    println(two(xs, 1, 0))
+    // The row read: `xs[2, 0]` first takes row 2 of a value with two of them.
+    println(attempt(two)(xs, i0, 0))
+    // The axis word says which dimension this one counted.
+    println(attempt(two)(xs, 0, i1))
+    // A value of one dimension: its length is the array's.
+    println(attempt(one)([10, 20, 30], 3))
+    println(nested(xs, 1, 1))
+    println(attempt(nested)(xs, i0, 0))
+    return 0
+}
