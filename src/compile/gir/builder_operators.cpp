@@ -3637,7 +3637,8 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                 if (at < normInputs.size() && normInputs[at].node != nullptr) {
                     const node_handle_t argument = normInputs[at].node;
                     const char *what             = nullptr;
-                    if (nodeIsKind(argument, runtime::GCNodeKind::Port)) {
+                    if (nodeIsKind(argument, runtime::GCNodeKind::Port) &&
+                        callSpec->staticFunctionArgRefusesParameters) {
                         what = "a parameter";
                     } else if (
                         nodeIsKind(argument, runtime::GCNodeKind::Fill) &&
