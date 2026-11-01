@@ -115,3 +115,38 @@ not.
 
 Note the graph name differs by route (`main` after the two listed passes, `__root__` inside
 `std::opt`), which is the same node seen in the graph that holds it at that point, not two nodes.
+
+
+## Second correction: the splice does carry the place -- fold drops it at the replacement
+
+The previous section is wrong in its load-bearing sentence ("fold neither takes the reader nor produces
+the shape"). Dumping the graph after \`std::opt::inline\` alone shows the truth: the tail effect **does**
+get a place, and it is the splice's own gate:
+
+\`\`\`
+N56 [label=":mark/reduce_arr" ...]   N56 -> N5A [label="0|0", type="NORM"]
+N5A [label="GATE", type="GATE"]      N5A -> N43 [WITH]      N47 -> N5A [label="5|0", type="CTRL"]
+\`\`\`
+
+That is \`spliceChainAnchor\` (draft_inline.cpp:1392) doing exactly what criterion 2 asked for: the body's
+tail feeds a GATE, and **the call's chain place is written onto that gate** (the CTRL edge from N47).
+The splice is not the defect.
+
+After \`std::opt::fold\` the gate is gone and the reduce has **no** control input and no users -- so the
+place was lost **at the replacement of the gate**, not at the splice. \`replaceNode\` (rewrite.cpp:314)
+already has the machinery for this shape and says so in its own comment:
+
+> "That is the whole shape of \`let r = (println(5) + println(6)) - 1\` with \`r\` unread: the sum is the
+> block's value, the block's GATE waits on it, and the prints are reached only through the sum. The
+> GATE is the end of the chain, not an unused node, and dropping the sum must leave it waiting on the
+> prints themselves."
+
+That is the same sentence as this defect, one level down: dropping the **gate** must leave it waiting on
+the call. The \`inheritedWait\` / \`handOverSyncWait\` path is what carries a wait onto the producers when a
+node is removed; the gate-collapse path in \`foldDraft\` reaches the node through \`isFoldable\` and
+\`replaceFoldResult\`, and on this program the control input does not arrive at the call.
+
+So the earlier \`isFoldable\` guard was aimed at the wrong node: it watched the call being folded (which
+never happens) instead of the gate whose removal drops the wait. That guard stays reverted; the fix
+belongs beside \`inheritedWait\` in \`replaceNode\`, and it is "a wait that a removed GATE carried goes to
+what the gate's value came from", which is the paragraph the file already contains.
