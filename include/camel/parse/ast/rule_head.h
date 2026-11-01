@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -107,6 +108,13 @@ std::string indexRule(const std::string &family, const RuleHead &rule);
 /// built and printed answers nothing, and reads as if it did: this is the question a transform asks
 /// it, and the answer says which of the two ways there is no rule.
 RuleMatch lookupRule(const std::string &family, const std::string &head, uint32_t arity);
+
+/// How many operands the rule whose left side is `head` takes, when the family holds exactly one
+/// such rule; nullopt when it holds none, or more than one (`-` at one operand and at two are two
+/// rules, and a caller that has only the spelling must not guess which). This is the question an
+/// operator whose rule is written as a call asks about its own name: `tensor:sum_axis` is
+/// `sum_axis` at whatever count the family filed it under, and the count is not in the name.
+std::optional<uint32_t> arityOfHead(const std::string &family, const std::string &head);
 
 /// The function `rule` of `family` calls on its right side (`add_tangent`, ...), or empty when its
 /// right side calls nothing: the name a replacement has to resolve, read from the rule itself.
