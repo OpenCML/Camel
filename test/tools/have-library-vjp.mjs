@@ -14,25 +14,32 @@
 //
 // The question is asked by compiling and running the probe program
 // (`test/cases/compile/transforms/probe_library_vjp.cml`), not by guessing from file names: the
-// probe builds `vjp(f)` and calls it, so it succeeds exactly when the three steps meet -- no
-// `existsSync` of a source file, which says a file is there and not that the shapes agree.
+// probe builds `vjp(f)` and calls it, so it succeeds exactly when the three steps meet.
 //
-// Two readings, in this order:
-//   * the probe does not build: the gate exits 1 and prints the compiler's own words, so a skip
-//     always says which shape is missing;
-//   * it builds: the gate runs the comparison case and prints the numbers it answers, then exits 0.
-//     A wrong answer is *not* hidden here -- it is left to the plan entry, which asserts 12 and 9
-//     and goes red on them. A gate that swallowed a wrong number into a skip would be the silent
-//     pass this whole arrangement exists to avoid.
+// The composition can stop in either of two layers, and they are different jobs, so the gate says
+// which one it is -- in the order the walls fall:
 //
-// With `--missing` the question is the other one, for the entries that read a *refusal*: exit 0
-// when the composition still does not build, 1 when it does. That is what retires the refusal case
-// on the day the assembly lands, without anyone remembering to delete it.
+//   1. the *type* layer. `transpose` has no type for what `split` hands back, so the composition has
+//      no call at all and no graph is walked. The evidence is the compiler's own diagnostic
+//      (`SemanticDiag`) at the line of `stdlib/vjp.cml` that composes it.
+//   2. the *graph* layer. The module compiles, and the walk that has to run a function backwards
+//      refuses a construct inside the half it was given -- today the half calls another graph and
+//      `transpose` does not transpose a call. The evidence is the walk's own reading line
+//      (`TRANSPOSE ... skip=...`) and the diagnostic raised at the `transpose` call.
+//   3. neither: the composition builds, and the case runs. The gate then runs the comparison too
+//      and prints what it answered, so one command gives the numbers as well as the build.
 //
-// Today it fails the way the design records: `split` builds its two halves and hands back the pair,
-// `jvp` lifts every parameter, and `transpose` still takes a function of a single parameter -- so
-// `transpose(split(...))` has no call, and the second half, which takes the residuals first and the
-// seeds after them, is the shape transpose has to learn to walk.
+// Each answer prints what it was judged by, so a reader never has to take the sentence on trust,
+// and the gate walks down a layer by itself as the layers are closed: nothing here names `Call` or
+// a line number, so the day the walk takes a call the report moves to 3 without an edit.
+//
+// A wrong number is *not* hidden here -- it is left to the plan entry, which asserts 12 and 9 and
+// goes red on them. A gate that swallowed a wrong number into a skip would be the silent pass this
+// whole arrangement exists to avoid.
+//
+// With `--missing` the question is the other one, for the entry that reads a *refusal*: exit 0
+// while the composition does not build, 1 when it does. That is what retires the refusal case on
+// the day the assembly lands, without anyone remembering to delete it.
 
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -52,29 +59,69 @@ function run(file) {
         encoding: 'utf8',
         timeout: 60000,
     })
-    return { status: proc.status, text: `${proc.stdout || ''}${proc.stderr || ''}`.trim() }
+    return { status: proc.status, text: `${proc.stdout || ''}${proc.stderr || ''}`.replace(/\r/g, '') }
 }
 
-const first = (result, lines) => result.text.split('\n').slice(0, lines).join(' | ')
+// Which layer refused the composition, read off the run's own words: the compiler says `SemanticDiag`
+// when a call has no type, and a transform that declines a node prints its reading line
+// (`TRANSPOSE ... skip=...`) before the diagnostic at the call site. Neither is a guess about what
+// the code should be doing -- it is what the run said.
+function wallOf(text) {
+    const all = text.split('\n')
+    const reading = all.find((line) => /^TRANSPOSE\s/.test(line.trimStart()))
+    if (reading) {
+        const raised = all.find((line) => /error\[RuntimeDiag::/.test(line))
+        return { layer: 'graph', evidence: [reading, ...(raised ? [raised] : [])] }
+    }
+    const semantic = all.find((line) => /error\[SemanticDiag::/.test(line))
+    if (semantic) {
+        const at = all.find((line) => /^\s*-->\s/.test(line) && /stdlib\/vjp\.cml/.test(line))
+        return { layer: 'type', evidence: [semantic, ...(at ? [at.trim()] : [])] }
+    }
+    return { layer: 'other', evidence: all.slice(0, 4) }
+}
+
+function say(lines) {
+    for (const line of lines) console.log(line)
+}
 
 const built = run(probe)
 if (built.status !== 0) {
     if (missing) {
         process.exit(0)
     }
-    console.log(
-        'the library `vjp` cannot be built yet (M4): `stdlib/vjp.cml` writes ' +
-            '`transpose(split(reinterp<jvp>(f)))`, `split` hands back its two halves -- and the ' +
-            'second of them takes the residuals first and the seeds after them, not one parameter -- ' +
-            'while `transpose` takes a function of exactly one parameter, so the pair is not the ' +
-            'function it walks backwards. What `transpose` has to learn is that second half: the ' +
-            'known values, then the linear ones, then the cotangent. The comparison starts running ' +
-            `when it does: ${first(built, 3)}`,
-    )
+    const { layer, evidence } = wallOf(built.text)
+    if (layer === 'type') {
+        say([
+            'the library `vjp` stops at the type layer (M4): `transpose` does not accept the shape `split`',
+            'hands back, so `transpose(split(reinterp<jvp>(f)))` has no call at all and no graph is walked.',
+            '  evidence (the compiler\'s diagnostic, and the line of the library it points at)',
+            ...evidence.map((line) => `    ${line.trim()}`),
+            '  what is missing: a type for `transpose` over the second half of a split -- the known values,',
+            '  then the linear parameters, then the cotangent.',
+        ])
+    } else if (layer === 'graph') {
+        say([
+            'the library `vjp` stops in the graph (M4): the type layer takes the shape `split` hands back and',
+            'the module compiles, but the walk that runs a function backwards refuses a construct inside it.',
+            '  evidence (the walk\'s own reading, then the diagnostic raised at the `transpose` call)',
+            ...evidence.map((line) => `    ${line.trim()}`),
+            '  what is missing: transposing that construct -- giving it a transpose of its own and replacing',
+            '  the site it is written at, which is the step named to the M3 lane.',
+        ])
+    } else {
+        say([
+            'the library `vjp` cannot be built yet (M4), and the wall is neither of the two this gate reads:',
+            ...evidence.map((line) => `    ${line.trim()}`),
+        ])
+    }
     process.exit(1)
 }
 if (missing) {
-    console.log('the library `vjp` builds now, so the refusal case has nothing to read: it is retired')
+    say([
+        'the library `vjp` builds now, so the refusal case has nothing to read:',
+        '  evidence: the probe program compiled and ran, exit 0',
+    ])
     process.exit(1)
 }
 
@@ -82,21 +129,22 @@ if (missing) {
 // numbers as well as with the build: `library df/dx = 12.0` and `library df/dy = 9.0`.
 const numbers = run(comparison)
 if (numbers.status !== 0) {
-    console.log(`the library \`vjp\` builds but the comparison does not run: ${first(numbers, 3)}`)
+    say([
+        'the library `vjp` builds but the comparison does not run:',
+        ...numbers.text.split('\n').slice(0, 4).map((line) => `    ${line.trim()}`),
+    ])
     process.exit(1)
 }
-for (const line of numbers.text.split('\n')) {
-    console.log(line)
-}
+say(numbers.text.split('\n'))
 const agree =
     numbers.text.includes('library  df/dx = 12.0') &&
     numbers.text.includes('analytic df/dx = 12.0') &&
     numbers.text.includes('library  df/dy = 9.0') &&
     numbers.text.includes('analytic df/dy = 9.0')
 if (!agree) {
-    console.log(
-        'the composition builds, and what it answered is above: the plan entry vjp_api.analytic_gradient ' +
-            'asserts 12 and 9 and is where a disagreement goes red',
-    )
+    say([
+        'the composition builds, and what it answered is above: the plan entry vjp_api.analytic_gradient',
+        'asserts 12 and 9 and is where a disagreement goes red',
+    ])
 }
 process.exit(0)
