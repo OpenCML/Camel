@@ -91,4 +91,25 @@
 
 **判据（自这一拿起）**：**四后端一致说"这不是某一个后端碰巧对了"，两遍一致说"这不是偶然"——两个都要有，缺一个就只是"跑通了"。**
 
-**预计改哪个文件、几行**：`modules/transforms/vmap.cpp` 约 480 行（新文件，其中规则读取 1-6 步约 60 行照 `jvp.cpp:50-129` 抄改、构建约 300 行）、`vmap_operator.cpp` 约 190 行、`vmap.h` 约 77 行、规则集 `stdlib/rulesets/vmap.cml` 约 +75/-20 行、`module.cpp` 约 +28 行、`CMakeLists.txt` +2 行、`stdlib/signatures/transforms.cml` +18 行。
+## 七、作者 11-01 05:10 的追加裁定：右边不许引用左边的模式变量
+
+**裁定原文（照页里那句）**：**外层既然不被调用，就不能有任何东西依赖它。** 所以 `rulesets.vmap` 这类"变换只读右边点名的函数"的 family，规则右边不许写左边的模式变量（`x`、`w`），**在建索引时检查，违反就报编译错误**（不是运行时、不是警告）。
+
+落地方式（一笔，已提交）：
+
+- **数据**：`outerNamesUsedInRight(left, right)`（`include/camel/parse/ast/rule_head.h`，实现 `src/parse/ast/rule_head.cpp`）——左边叶名字与右边叶名字取交；`RuleHead::outerUses` 带着它走，`collectRuleHead` 多一个参数，`src/parse/ast/builder.cpp` 在**两侧都还是语法**的地方算出来（同一个地方已经在算 head / callee / variables，没有第二个读法）。
+- **检查点**：`src/compile/gir/program.cpp` 的建索引循环里，紧跟"左边不是一个算子"之后、`indexRule` 之前——**被拒的规则不进索引**，和重复键一样是"先拒后不记"。诊断 `SemanticDiag::RuleRightUsesOuterVariable`（`0x03000207`，`diagnostics/registry.tsv` 里一行，`--write` 发的号）。
+- **哪些 family**：`familyCallsOnlyItsCallee`（同文件匿名 namespace）= `rulesets.vmap` + fixture `rulesets.probe_batch`。**`rulesets.jvp` 不在里面**：`jvp` 自己调右边（先拿操作数调一遍、再拿它答的东西调一遍），所以它的规则就该写 `x`、`w`，那条检查加不到它头上。
+- **反例**：`stdlib/rulesets/probe_batch.cml`（fixture，形状照 `rulesets.vmap`，一条故意违例的 `probe_rule_mul`）+ `test/cases/compile/transforms/vmap_rule_outer_variable.cml`；报错原文——
+
+  ```
+  error[SemanticDiag::RuleRightUsesOuterVariable]: The rule 'probe_rule_mul' reads 'w' on its right side, and 'w' is a name its left side binds: …
+     --> stdlib/rulesets/probe_batch.cml:22:1
+   22 | rule probe_rule_mul(x: float, w: float) {
+   23 |     x * w => (bx: float[], bw: float[]) => probe_scale(bx, w)
+  ```
+
+- **读数**：`asked=N found=M missing=K` 是遍的**正式输出**（stdout，无环境变量、无开关），`askedFoundMissing()`（`modules/transforms/vmap.cpp`）一处拼、三处用；`missing` 是"问了但规则集没有"的洞。
+- **收尾（下一笔，不在这一笔做）**：`stdlib/array.cml` 里逐行的 `vmap` 在 `reinterp<vmap>` 落地后改成**调变换**，同一程序**逐位相同**才算数，然后把逐行实现**删掉，不留两份**。
+
+**预计改哪个文件、几行**：`modules/transforms/vmap.cpp` 约 480 行（新文件，其中规则读取 1-6 步约 60 行照 `jvp.cpp:50-129` 抄改、构建约 300 行）、`vmap_operator.cpp` 约 190 行、`vmap.h` 约 77 行、规则集 `stdlib/rulesets/vmap.cml` 约 +75/-20 行、`module.cpp` 约 +28 行、`CMakeLists.txt` +2 行、`stdlib/signatures/transforms.cml` +18 行。第七节那一笔另加：`rule_head.h/.cpp`（+1 个函数、+1 个字段、+1 个参数）、`builder.cpp`（+6）、`program.cpp`（+15 建索引处 +11 helper）、`diagnostics/registry.tsv`（+1 行）、fixture `stdlib/rulesets/probe_batch.cml` 与反例用例各一个新文件。

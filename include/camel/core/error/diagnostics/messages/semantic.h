@@ -462,12 +462,13 @@ enum class SemanticDiag : uint32_t {
     /// A `const` case whose constant has no type to take.
     FactConstCaseTypeRequired = 0x0001F7,
     /// A case whose pattern names no variable.
-    FactCaseBindsNoVariable   = 0x0001F8,
-    TypeFunctionNotApplicable = 0x0001FE,
-    StatementAfterReturn      = 0x000201,
-    YieldRequiresStreamHead   = 0x000206,
-    RuleLeftIsNotAnOperator   = 0x000204,
-    DuplicateRuleForOperator  = 0x000205,
+    FactCaseBindsNoVariable    = 0x0001F8,
+    TypeFunctionNotApplicable  = 0x0001FE,
+    StatementAfterReturn       = 0x000201,
+    YieldRequiresStreamHead    = 0x000206,
+    RuleLeftIsNotAnOperator    = 0x000204,
+    DuplicateRuleForOperator   = 0x000205,
+    RuleRightUsesOuterVariable = 0x000207,
 
     // Warnings
     IgnoredSideEffect = 0x100002,

@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-305 diagnostics: 284 errors, 21 warnings. 15 carry a machine-applicable edit, 290 say why they carry none.
+306 diagnostics: 285 errors, 21 warnings. 15 carry a machine-applicable edit, 291 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -266,6 +266,7 @@ prints one entry.
 | `0x03000204` | [SemanticDiag::RuleLeftIsNotAnOperator](#ruleleftisnotanoperator) | Error | no |
 | `0x03000205` | [SemanticDiag::DuplicateRuleForOperator](#duplicateruleforoperator) | Error | no |
 | `0x03000206` | [SemanticDiag::YieldRequiresStreamHead](#yieldrequiresstreamhead) | Error | no |
+| `0x03000207` | [SemanticDiag::RuleRightUsesOuterVariable](#rulerightusesoutervariable) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8696,6 +8697,43 @@ func g() sync {
 
 func main(): int sync {
     g()
+    return 0
+}
+```
+
+### RuleRightUsesOuterVariable
+
+`0x03000207` · Error · `SemanticDiag::RuleRightUsesOuterVariable`
+
+**Fix**
+
+None: choice: the right side has to be rewritten to pass the batch parameters to the named function, and which function and which parameters those are is the writer's
+
+**Message**
+
+```text
+The rule '{0}' reads '{1}' on its right side, and '{1}' is a name its left side binds: in this ruleset the right side names the function the transform calls, and the pattern's names are never bound.
+```
+
+**Help**
+
+```text
+A family whose transform reads a rule's callee and calls it with the batch never calls the rule's right side as a function, so nothing binds the names the left side's pattern writes ('x', 'w'): the batched graph has batches where those values used to be, and a reference to one is a value the graph has none of. Write the right side so it reads only the names its own arrow declares -- the batch parameters -- and passes them to the named function: 'x + w => (bx: Lift<T>, bw: Lift<T>) => vmap_add(bx, bw)'.
+```
+
+**Example** (`test/cases/compile/transforms/vmap_rule_outer_variable.cml`, run as `camel test/cases/compile/transforms/vmap_rule_outer_variable.cml`)
+
+```camel
+import rulesets.probe_batch
+import { vmap } from transforms
+
+func f(x: float): float {
+    return x * 2.0
+}
+
+func main(): int sync {
+    let xs: float[3] = [1.0, 2.0, 3.0]
+    println(vmap(f)(xs))
     return 0
 }
 ```

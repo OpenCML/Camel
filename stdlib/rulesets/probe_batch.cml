@@ -1,0 +1,24 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// A ruleset shaped like `rulesets.vmap` -- a family whose transform reads the callee its rules name
+// and calls that function with the batch -- with one rule that reads a name its left side's pattern
+// binds. The index refuses it where it is written
+// (`SemanticDiag::RuleRightUsesOuterVariable`): nothing binds `w` in such a graph, so the rule is
+// wrong where the reader can see it and not at the call that would have used it.
+//
+// The fixture exists for the same reason `rulesets/probe_missing.cml` does: writing the wrong rule
+// is how the refusal is reachable on purpose, rather than by breaking the production ruleset.
+// `probe_pick_scale` is the function the bad rule names, and it is what a right side would name if it
+// took the batch and nothing else.
+
+/// A batch scaled by one number: what a right side may name.
+/// @example-fragment `probe_batch` is a fixture ruleset, not a module a program calls: the example is a fragment because the module is only read by the index and the transform that asks it
+func probe_scale(a: float[], k: float): float[] {
+    return range(0, len(a), 1)->map<(i: int): float => a[i] * k>
+}
+
+/// The rule the index refuses: its right side reads `w`, which its left side's pattern binds.
+rule probe_rule_mul(x: float, w: float) {
+    x * w => (bx: float[], bw: float[]) => probe_scale(bx, w)
+}
