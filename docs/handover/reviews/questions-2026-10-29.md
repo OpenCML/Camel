@@ -1658,7 +1658,6 @@ P0-1、P0-3 从 18:20 下达，到现在快三小时，还没有一行代码。�
 - **P0-1 读数**：20:30 那条（臂里无人用的 `1 / 0` 不报故障、只打印 `2`），外加评估缺陷 A4 里"Region yields node … not in the execution"的最小程序。
 - **P0-3 读数**：只留顺序边的测试遍报 `PassInternalError`。
 - 主机、闸门或额度要是出了问题，在本页末尾写一行，注明时间和现象。
-<<<<<<< HEAD
 - **2026-11-02 06:40，A3 车道，主机（不是闸门）：** `/usr/bin/clang++` 带的 libstdc++ 只到 `GLIBCXX_3.4.30`（GCC 6.0.30 时代的符号表），而 `out/latest/libs/libcamel.so` 要 `GLIBCXX_3.4.31..36`；所以在车道自己 ssh 上去的 shell 里直接跑 `test/tools/cppexec/run.py`，会有 7 个程序停在 `clang: error: linker command failed`（`fault_index*`、`fault_repeat_huge`、`fault_shl_*`、`fault_shr_negative`）。走闸门（`camel-remote.ps1` 把编译器自己的 libstdc++ 目录放在 `LD_LIBRARY_PATH` 前面）这两条都 PASS，所以这是主机系统 clang 太旧，不是代码；按指示没有去修主机。
 
 
