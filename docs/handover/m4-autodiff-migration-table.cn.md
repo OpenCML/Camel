@@ -98,8 +98,10 @@ camel test/cases/modules/autodiff/jax_vmap.cml std::nvm   # 退出码 0，打出
 
 - **`with`/`array`/`other` 从源码数**：`array` = 用例源码里出现 `[]`/`[..]`/`f32`/`f16`/`bf16`/`Model`/`Plain`；`with` = 出现带 `with` 形参的函数类型（`<x: float> () => float`）；其余归 `other`。三列**把 118 条分完**，与 `pass` 不再相加。规则文件按同样两个写法数，命中处带 `stdlib/rulesets/<file>:<line>` 锚印在表下面。
 - **`pass` 是运行读数，依赖宿主机上的二进制**：它跑 `out/latest/bin/camel`，**同一棵树换个二进制读数就不同**（同一棵树在 2026-11-01 13:44 的二进制下读 `pass=6`，没有二进制时读 `pass=0`），所以**它不可跨机比较**，三列源码数可以。
-- **A/B（同一棵树，2026-11-02）**：连跑两遍 `pass=6 with=44 array=67 other=7`；把 `CAMEL_HOME` 指到没有二进制的目录再跑，`pass=0` 而 **`with=44 array=67 other=7` 一位不变**——分类不随二进制动，这是这次改口径的验收本身。
-- **旧口径的数（54 / 46 / 6 / 12）已作废**，它们量的是措辞，不再与任何一列对齐。**新记录**：`total=127 library=118 pass=6 with=44 array=67 other=7`（`--ledger-check` 通过）。`pass` 从 12 掉到 6 是撤除的直接后果：六条守着那条调用处拒绝的用例（期望 exit 1）现在按 exit 0 跑。
+- **A/B（同一棵树，2026-11-02）**：连跑两遍 `pass=12 with=44 array=67 other=7`；把 `CAMEL_HOME` 指到没有二进制的目录再跑，`pass=0` 而 **`with=44 array=67 other=7` 一位不变**——分类不随二进制动，这是这次改口径的验收本身。**并且：二进制起不来（或根本不在）时台账现在拒绝报数**（见下）。
+
+**一次测量错误，记在这里**：改口径时我第一版读数写的是 `pass=6`，并在文件头据此写了“六条守拒绝的用例掉出来了”。**那是错的**——跑台账的 shell 没有 `LD_LIBRARY_PATH`，编译器加载不到新的 `libstdc++`，每条都 exit 1 且没有诊断，于是六条本来能过的被记成失败。**量它的工具包含它的运行环境**，这条与“包含哪个二进制”是同一条。现在台账遇到“二进制起不来（缺库或根本不在）”会**拒绝报数**：打印 `[LEDGER] the binary could not start: …`、非零退出，`--ledger-check` 也不再比对——**看不见的尺子要先说自己看不见**。
+- **旧分类的数（54 / 46 / 6）作废**，它们量的是措辞，不再与任何一列对齐。**新记录**：`total=127 library=118 pass=12 with=44 array=67 other=7`（`--ledger-check` 通过）。**`pass` 没有动，仍是 12**：八条守拒绝的用例（`err_vjp_annotation`、6 条 `grad_function_value_*`、`with_grad_old_name`）依旧按各自的 exit 1 过，四条真跑数的（`transform_rules`、`jax_batching`、`jax_vmap`、`jax_vmap_tensor`）依旧过。
 
 **`array` 这一列的验收作废（显式作废，别让下一个人再去追它）**：**此后数组那一步的进度以 `grad(f)([3.0, 2.0])` 打印 `[2.0, 3.0]` 与 `skip=body` 消失为准，不再以台账的 `array` 列为准**——那一列只数“有多少条用例的源码里写着数组类型”，它不会因为工作落地而下降。
 （2026-11-01 23:00 重算：118 个顶层用例逐条跑，另 9 个在 `jax_names/` 子目录。）
