@@ -521,6 +521,15 @@ bool buildTransposeMember(
         // states hands out one cotangent per state and collects one per state, so the shape has to
         // be a list on both ends.
         bool armsOk = true;
+        // What an arm hands back to the residual tuple. A value an arm reads out of the residuals has
+        // no forward source inside the arm, so its cotangent has exactly one place to go: the slot it
+        // was read from. That is a different statement from a zero inside the arm -- a zero would say
+        // the value does not affect the answer, and it does (`x` is what `2x` is computed from). The
+        // channel is kept per slot and printed when a cotangent is handed over, because the transposed
+        // function does not answer with it: the residuals are the values the cut carried, not
+        // parameters a caller differentiates, so this is a second-order quantity. Printing it is what
+        // keeps the accounting visible instead of silent.
+        std::unordered_map<uint32_t, gc_node_ref_t> residualBack;
         struct ArmSeed {
             gc_node_ref_t at        = rt::kInvalidNodeRef;
             gc_node_ref_t cotangent = rt::kInvalidNodeRef;
@@ -564,6 +573,28 @@ bool buildTransposeMember(
                                             : primitive(":op/add_d", {portCotangents[i], node});
                     return;
                 }
+                // A residual the arm read: the cotangent goes back into the slot it came from, named
+                // by the slot's number. Nothing inside the arm stands for it, so dropping it here
+                // would be a claim about the value rather than a rule about the cotangent.
+                if (const camel::runtime::GCNode *targetNode = function->node(target);
+                    targetNode != nullptr && targetNode->kind == rt::GCNodeKind::Accs) {
+                    const auto readFrom = function->normInputsOf(target);
+                    const auto *body     = function->nodeBodyAs<rt::GCAccsBody>(target);
+                    const bool onAResidualPort =
+                        !readFrom.empty() &&
+                        std::any_of(stops.begin(), stops.end(), [&](gc_node_ref_t stopRef) {
+                            return stopRef == readFrom.front();
+                        });
+                    if (body != nullptr && onAResidualPort) {
+                        auto &slot = residualBack[body->value];
+                        slot       = slot == rt::kInvalidNodeRef
+                                         ? node
+                                         : primitive(":op/add_d", {slot, node});
+                        os << "TRANSPOSE function=" << function->name() << " residual-return slot="
+                           << body->value << " region=" << oldRegion << '\n';
+                        return;
+                    }
+                }
                 if (allowEscapes) {
                     // The round read this value from outside: its cotangent leaves the loop
                     // through the capture channel, accumulated over the rounds.
@@ -599,6 +630,147 @@ bool buildTransposeMember(
                     }
                     continue;
                 }
+                if (node->kind == rt::GCNodeKind::Func) {
+                    // A call inside an arm. **The callee is transposed, not the call rewritten**: the
+                    // other way -- having `split` leave the un-lifted call in the arm -- would change
+                    // what the cut produces (the tangents are what the lifted call computes, and the
+                    // cut's whole point is that the tangent half still calls the lift), while
+                    // transposing here is the same move the main walk already makes at a call, so
+                    // `transpose` stays the only place that knows how to transpose a call. The callee
+                    // gets its own transposed member (once per callee, the same map the main walk
+                    // fills), and the call site passes what that member takes: the arguments as the arm
+                    // has them, then this node's cotangent.
+                    const GraphId calleeId = function->calleeIdOf(ref);
+                    camel::runtime::GCGraph *callee =
+                        rt::isValid(calleeId) ? state.program->graph(calleeId) : nullptr;
+                    if (callee == nullptr) {
+                        os << "TRANSPOSE function=" << function->name() << " arm-stop region="
+                           << oldRegion << " node=" << ref << " kind=call callee=none\n";
+                        armsOk = false;
+                        return {};
+                    }
+                    // The values a call inside an arm takes: a parameter (a stop), a residual
+                    // projection, or a constant -- the shapes a cut half's arm has. A value the arm
+                    // computes and hands to a call is not reached yet, and is refused by name.
+                    const auto forwardInArm = [&](gc_node_ref_t value) -> gc_node_ref_t {
+                        const camel::runtime::GCNode *sourced = function->node(value);
+                        if (sourced == nullptr) {
+                            return rt::kInvalidNodeRef;
+                        }
+                        if (sourced->kind == rt::GCNodeKind::Port) {
+                            const auto ports = function->normPorts();
+                            for (size_t i = 0; i < ports.size() && i < paramPorts.size(); ++i) {
+                                if (ports[i] == value) {
+                                    return paramPorts[i];
+                                }
+                            }
+                            return rt::kInvalidNodeRef;
+                        }
+                        if (sourced->kind == rt::GCNodeKind::Data) {
+                            return constantValue(value);
+                        }
+                        if (sourced->kind == rt::GCNodeKind::Accs) {
+                            const auto *body = function->nodeBodyAs<rt::GCAccsBody>(value);
+                            if (body != nullptr && !paramPorts.empty()) {
+                                const gc_node_ref_t madePart =
+                                    draft.addAccsNode(sourced->dataType(), body->value);
+                                const gc_node_ref_t holder = paramPorts.front();
+                                draft.setNormInputs(
+                                    madePart, std::span<const gc_node_ref_t>(&holder, 1));
+                                return madePart;
+                            }
+                        }
+                        return rt::kInvalidNodeRef;
+                    };
+                    const auto callInputs = function->normInputsOf(ref);
+
+                    // A lifted call is transposed **through the graph it was lifted from**. The
+                    // tangent half of a lift is linear in the tangents, so the cotangent of tangent i
+                    // is the primal's cotangent of value i -- and that is computed from the values
+                    // only. This is not a shortcut but the requirement: the transposed graph does not
+                    // have a tangent's value (tangents are what the answer is a cotangent of), so a
+                    // transposition that needed one could never be called. `jvp` records the graph a
+                    // lift came from (`kGraphRefLiftedFrom`), which is the same record `split` reads
+                    // to retarget a call.
+                    const GraphId primalId = callee->liftedFrom();
+                    camel::runtime::GCGraph *calleeToTranspose = callee;
+                    size_t valueCount                          = callee->funcType()->normTypesCount();
+                    size_t tangentBase                        = 0;
+                    if (rt::isValid(primalId)) {
+                        camel::runtime::GCGraph *primal = state.program->graph(primalId);
+                        const size_t primalParams =
+                            primal != nullptr ? primal->funcType()->normTypesCount() : 0;
+                        if (primal == nullptr || primalParams == 0 || valueCount != 2 * primalParams) {
+                            os << "TRANSPOSE function=" << function->name() << " arm-stop region="
+                               << oldRegion << " node=" << ref << " lift=primal"
+                               << " params=" << valueCount << '/' << primalParams << '\n';
+                            armsOk = false;
+                            return {};
+                        }
+                        calleeToTranspose = primal;
+                        valueCount        = primalParams;
+                        tangentBase       = primalParams;
+                    }
+                    std::vector<gc_node_ref_t> arguments;
+                    arguments.reserve(valueCount);
+                    for (size_t i = 0; i < valueCount && i < callInputs.size(); ++i) {
+                        const gc_node_ref_t argument = forwardInArm(callInputs[i]);
+                        if (argument == rt::kInvalidNodeRef) {
+                            os << "TRANSPOSE function=" << function->name() << " arm-stop region="
+                               << oldRegion << " node=" << ref << " arg=" << callInputs[i] << '\n';
+                            armsOk = false;
+                            return {};
+                        }
+                        arguments.push_back(argument);
+                    }
+                    if (callInputs.size() != valueCount + tangentBase) {
+                        os << "TRANSPOSE function=" << function->name() << " arm-stop region="
+                           << oldRegion << " node=" << ref << " args=" << callInputs.size()
+                           << " values=" << valueCount << '\n';
+                        armsOk = false;
+                        return {};
+                    }
+                    GraphId transposed   = rt::kInvalidGraphId;
+                    const auto knownCall = state.callees.find(rt::toValue(calleeToTranspose->id()));
+                    if (knownCall == state.callees.end()) {
+                        transposed = group.reserve(
+                            "transpose_of_" + std::string(calleeToTranspose->name()),
+                            "transpose_of_" + std::string(calleeToTranspose->name()));
+                        state.callees.emplace(rt::toValue(calleeToTranspose->id()), transposed);
+                        if (!buildTransposeMember(state, calleeToTranspose, transposed, os)) {
+                            os << "TRANSPOSE function=" << function->name() << " arm-stop region="
+                               << oldRegion << " node=" << ref
+                               << " callee=" << calleeToTranspose->name() << '\n';
+                            armsOk = false;
+                            return {};
+                        }
+                    } else {
+                        transposed = knownCall->second;
+                    }
+                    Type *const answerType =
+                        valueCount == 1
+                            ? Type::Float64()
+                            : camel::core::type::TupleType::create(
+                                  std::vector<Type *>(valueCount, Type::Float64()));
+                    const gc_node_ref_t made = draft.addFuncNode(transposed, answerType);
+                    std::vector<gc_node_ref_t> callArgs   = arguments;
+                    callArgs.push_back(local[ref]);
+                    draft.setNormInputs(made, std::span<const gc_node_ref_t>(callArgs));
+                    for (size_t i = 0; i < valueCount; ++i) {
+                        // The primal's cotangent of value i is the cotangent of the tangent that
+                        // carries it; for a plain call (no lift) it is the cotangent of argument i.
+                        const gc_node_ref_t targetAt = callInputs[tangentBase + i];
+                        if (valueCount == 1) {
+                            deliver(targetAt, made, ref);
+                            break;
+                        }
+                        const gc_node_ref_t part =
+                            draft.addAccsNode(Type::Float64(), static_cast<uint32_t>(i));
+                        draft.setNormInputs(part, std::span<const gc_node_ref_t>(&made, 1));
+                        deliver(targetAt, part, ref);
+                    }
+                    continue;
+                }
                 if (node->kind == rt::GCNodeKind::Cast || node->kind == rt::GCNodeKind::Copy) {
                     // A conversion passes a cotangent along when both sides can hold one. A cast
                     // *to* an integer (`int(3x)`) ends the chain by its own type: the value it
@@ -616,6 +788,12 @@ bool buildTransposeMember(
                     continue;
                 }
                 if (node->kind != rt::GCNodeKind::Oper) {
+                    // Named, not silent: an arm whose body holds something other than an operator
+                    // with a transpose rule stops here, and the line says which node and which kind,
+                    // so the next reader sees what shape the arm has (a lifted call is a FUNC) rather
+                    // than only that the arm failed.
+                    os << "TRANSPOSE function=" << function->name() << " arm-stop region=" << oldRegion
+                       << " node=" << ref << " kind=" << static_cast<int>(node->kind) << '\n';
                     armsOk = false;
                     return {};
                 }

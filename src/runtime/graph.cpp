@@ -1319,7 +1319,7 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape) 
 }
 
 void collectStaticGraphRefsRecursive(
-    std::vector<GraphId> &refs, slot_t slot, Type *type,
+    const Program &program, std::vector<GraphId> &refs, slot_t slot, Type *type,
     std::unordered_set<const Object *> &visited);
 
 GCGraphDebugRecord *createGraphDebugRecord(std::string mangledName, std::string name) {
@@ -1951,7 +1951,7 @@ void validateRuntimeGraphCalls(const Program &program, const GCGraph *graph, Gra
         std::vector<GraphId> referenced;
         std::unordered_set<const Object *> visited;
         for (size_t i = 1; i < slots.size() && i < types->size(); ++i) {
-            collectStaticGraphRefsRecursive(referenced, slots[i], types->typeAt(i), visited);
+            collectStaticGraphRefsRecursive(program, referenced, slots[i], types->typeAt(i), visited);
         }
         const auto refs = graph->refs();
         for (GraphId ref : referenced) {
@@ -2607,7 +2607,7 @@ void GCGraph::updateRefs(
 }
 
 void collectStaticGraphRefsRecursive(
-    std::vector<GraphId> &refs, slot_t slot, Type *type,
+    const Program &program, std::vector<GraphId> &refs, slot_t slot, Type *type,
     std::unordered_set<const Object *> &visited) {
     if (!shouldTraverseStaticSlotType(type) || slot == NullSlot) {
         return;
@@ -2631,7 +2631,14 @@ void collectStaticGraphRefsRecursive(
                 "collecting the static graph references of a function value: it names graph {}, which "
                 "is not a graph in this program, so the reference would point at nothing",
                 static_cast<int>(target)));
-        pushUnique(refs, target);
+        // A value of another program's graph -- a transform builds a graph of its own while the
+        // program is compiled, and the value names that program (StaticProgramFunction,
+        // compile/gir/static_function.h) -- is not a reference of this program: a call through it
+        // enters the graph in the program the value names, so this table does not carry the id and
+        // not carrying it is not a missing entry.
+        if (funcObj->program() == &program) {
+            pushUnique(refs, target);
+        }
 
         if (::Tuple *closure = funcObj->tuple()) {
             TupleType *closureType = const_cast<TupleType *>(funcObj->tupleType());
@@ -2640,6 +2647,7 @@ void collectStaticGraphRefsRecursive(
                     continue;
                 }
                 collectStaticGraphRefsRecursive(
+                    program,
                     refs,
                     closure->get<slot_t>(i),
                     closureType->typeAt(i),
@@ -2655,6 +2663,7 @@ void collectStaticGraphRefsRecursive(
                 continue;
             }
             collectStaticGraphRefsRecursive(
+                program,
                 refs,
                 tuple->get<slot_t>(i),
                 tupleType->typeAt(i),
@@ -2669,6 +2678,7 @@ void collectStaticGraphRefsRecursive(
         }
         for (size_t i = 0; i < array->size(); ++i) {
             collectStaticGraphRefsRecursive(
+                program,
                 refs,
                 array->get<slot_t>(i),
                 arrayType->elemType(),
@@ -2683,6 +2693,7 @@ void collectStaticGraphRefsRecursive(
                 continue;
             }
             collectStaticGraphRefsRecursive(
+                program,
                 refs,
                 st->get<slot_t>(i),
                 structType->typeAt(i),
@@ -2696,7 +2707,7 @@ void collectStaticGraphRefsRecursive(
                 fromSlot<camel::core::rtdata::Table *>(slot),
                 coll,
                 [&](slot_t inner, Type *innerType) {
-                    collectStaticGraphRefsRecursive(refs, inner, innerType, visited);
+                    collectStaticGraphRefsRecursive(program, refs, inner, innerType, visited);
                 });
         }
         break;

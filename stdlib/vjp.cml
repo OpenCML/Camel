@@ -41,20 +41,27 @@ import { is_function } from types
 import { jvp, split, transpose } from transforms
 
 /// The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
-/// `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters. The juxtaposed call
-/// `transpose(residuals, ct)` is the internal step, not this signature.
+/// `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters, `ct`'s own weight one
+/// member per parameter. The juxtaposed call `transpose(residuals, ct)` is the internal step, not this
+/// signature.
+///
+/// The pullback answers a tuple in every case, one member per parameter, so a function of one
+/// parameter has a one-long one -- `(27.0)` for `vjp(cube)(3.0)`'s pullback at `ct = 1.0` -- and the
+/// number a gradient is comes out of it by position: `grad(f)(x)` is `vjp(f)(x).1(1.0).0` (author's
+/// ruling of 2026-11-01 14:30: one rule for every arity, no exception for one parameter, no type
+/// function that takes an element out of a one-long tuple).
 /// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
 /// @example let reading = vjp(f)
-export func vjp::<T>(f: (x: T) => float): (x: T) => (float, (ct: float) => T) {
+export func vjp::<T>(f: (x: T) => float): (x: T) => (float, (ct: float) => (T,)) {
     let (forward, linear) = split(jvp(f))
     return (x: T) => {
         let (value, residuals) = forward(x)
         (value, (ct: float) => {
-            // `transpose` answers the cotangents of the parameters as one tuple, so a function of
-            // one parameter has a one-long one: the pullback gives the number itself, because
-            // `grad(f)(x)` is `vjp(f)(x).1(1.0)` and the gradient of one parameter is a number.
+            // `transpose` answers the cotangents of the parameters as one tuple, and the pullback
+            // hands it on as it is: a function of one parameter's cotangents are the one-long tuple
+            // `(d, )`, which is what a caller destructures with `.0`.
             let cotangents = transpose(linear)(residuals, ct)
-            cotangents.0
+            (cotangents.0, )
         })
     }
 }
@@ -71,9 +78,11 @@ export func vjp::<T, U>(f: (x: T, y: U) => float): (x: T, y: U) => (float, (ct: 
     }
 }
 
-/// The gradient of a function of one parameter: `vjp` with the seed 1, its second half taken --
-/// `grad(f)(x)` is `vjp(f)(x).1(1.0)` (author's ruling of 2026-11-01). Read `grad(f)` as a name for
-/// that reading of `vjp`, not as a second transform.
+/// The gradient of a function of one parameter: `vjp` with the seed 1, its second half taken, and the
+/// one member a one-parameter pullback answers read out by position --
+/// `grad(f)(x)` is `vjp(f)(x).1(1.0).0` (author's ruling of 2026-11-01 14:30, the 06:50 formula with
+/// the `.0` added: the pullback always answers a tuple). Read `grad(f)` as a name for that reading of
+/// `vjp`, not as a second transform.
 /// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
 /// @example let slope = grad(f)
 export func grad(f: (x: float) => float): (x: float) => float {
@@ -81,7 +90,8 @@ export func grad(f: (x: float) => float): (x: float) => float {
     return (x: float) => {
         let (value, pullback) = reading(x)
         let _ = value
-        pullback(1.0)
+        let cotangents = pullback(1.0)
+        cotangents.0
     }
 }
 
