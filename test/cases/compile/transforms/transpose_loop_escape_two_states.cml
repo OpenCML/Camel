@@ -23,6 +23,13 @@
 // The reverse loop therefore carries one cotangent per state plus one sum per escaped value, and what
 // starts it is the component read: reading `t.0` of a tuple fills slot 0 of that tuple's cotangent
 // and leaves the other slots zero.
+//
+// The shape this page was first written to leave open -- an escape whose target is not a float -- is
+// answered now, and not here: `transpose_loop_escape_int.cml` reads 1.0 for
+// `int_escape(x) = let n = int(3x); loop s = x for i in 0..3 do s + float(n)`, because an integer is a
+// zero tangent space and the reading prints which value contributes the zero. What this page said was
+// that the shape refused with `skip=state` and that the cut changing it was a different one; it was,
+// and it has landed.
 import { transpose } from transforms
 import rulesets.transpose
 

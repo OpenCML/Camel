@@ -6,6 +6,7 @@
 #include "camel/core/forward.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/tangent_space.h"
 #include "camel/core/type/tree.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
@@ -115,6 +116,16 @@ constexpr bool kCarryEscapedCotangents = true;
 /// cotangent as a read of a known value -- which is what the transform did before this channel, and
 /// what the A/B of the cases below flips back to: everything tuple-shaped refuses with `skip=output`.
 constexpr bool kTupleCotangents = true;
+
+/// Whether a value whose type has no tangent space is a zero of the derivative rather than a reason to
+/// refuse. On, a cotangent that lands on such a value is dropped, and the reading says which value it
+/// was and why -- an integer is a step function, constant between its jumps, so `float(int(3x))`
+/// contributes nothing to the derivative of what it is added to, and `x + float(int(3x))` answers 1.
+/// The type answers this (`camel/core/tangent_space.h`), not the node kind: the same rule covers the
+/// booleans, the strings and a function value. Off, an integer in a loop body stops the body's walk
+/// where it stands -- which is what the transform did before this rule, and what the A/B of the case
+/// below flips back to: `skip=state`, with no answer at all.
+constexpr bool kZeroTangentIntegers = true;
 
 /// What the graphs of one transpose share: one group (a callee's transpose is another member of
 /// it, exactly as `jvp` lifts one graph per callee) and the callees already transposed, so that
@@ -266,16 +277,40 @@ bool buildTransposeMember(
                        ? camel::core::type::tree::arity(type)
                        : 0;
         };
+        // Whether a value can hold a cotangent at all. The type answers, through the same query `jvp`
+        // asks of a parameter: a float (and a tuple or array of them) is its own tangent space, and
+        // an integer, a boolean, a `string` or a function has none. A node with no type yet is given
+        // the benefit of the doubt -- guessing "no space" would silently stop a chain that has one.
+        const auto hasTangentSpace = [&](gc_node_ref_t ref) {
+            const camel::runtime::GCNode *node = function->node(ref);
+            if (node == nullptr) {
+                return true;
+            }
+            const Type *type = node->dataType();
+            return type == nullptr || camel::core::tangentSpaceOf(type).hasSpace();
+        };
+        // One line per value whose cotangent is zero because the value cannot hold one. Deduplicated:
+        // a value read in three rounds is still one value contributing one zero, and a reading that
+        // printed it three times would look like three different findings.
+        std::vector<gc_node_ref_t> zeroedValues;
+        const auto noteZero = [&](gc_node_ref_t target, gc_node_ref_t from) {
+            if (std::find(zeroedValues.begin(), zeroedValues.end(), target) !=
+                zeroedValues.end()) {
+                return;
+            }
+            zeroedValues.push_back(target);
+            const camel::runtime::GCNode *node = function->node(target);
+            const Type *type                  = node != nullptr ? node->dataType() : nullptr;
+            os << "TRANSPOSE function=" << function->name() << " contribution=0 node=" << target
+               << " type=" << (type != nullptr ? type->toString() : std::string("?"))
+               << " space=none from=" << from << '\n';
+        };
         const auto addCotangent = [&](gc_node_ref_t ref, gc_node_ref_t node) {
-            // The cotangent space of a value that is not a float is empty: there is no tangent of a
-            // predicate, so nothing flows back to it and it never meets arithmetic. This is where that
-            // is stated -- once, for every such value -- and it is why a residual slot that is not a
-            // float (`a branch's condition` is the one that exists) needs no test of its own: the
-            // signature accepts it, the walk never differentiates it, and this drop is what makes the
-            // two agree. A zero cotangent of a `bool` would not even be a value of its type; dropping it
-            // is the same statement without inventing one.
-            const camel::runtime::GCNode *target = function->node(ref);
-            if (target == nullptr || target->dataType() != Type::Float64()) {
+            // A value with no tangent space holds no cotangent: the type says so, and the reading
+            // names the value rather than leaving the zero unexplained. This is the same question
+            // `jvp` asks of a parameter, asked of a value in the middle of a graph.
+            if (kZeroTangentIntegers && !hasTangentSpace(ref)) {
+                noteZero(ref, ref);
                 return;
             }
             if (!hasCotangent[ref]) {
@@ -507,6 +542,14 @@ bool buildTransposeMember(
             // cotangent of that parameter for this arm is what the chain hands it. Anything else
             // from outside the region is a residual this step does not have.
             const auto deliver = [&](gc_node_ref_t target, gc_node_ref_t node, gc_node_ref_t from) {
+                // A value the round read that cannot hold a cotangent contributes zero: the round's
+                // answer does not depend on it in a differentiable way, so there is nothing to carry
+                // out of the loop and no accumulator to grow. Dropped here rather than at the escape
+                // collection, which would otherwise build a float sum for an integer.
+                if (kZeroTangentIntegers && !hasTangentSpace(target)) {
+                    noteZero(target, from);
+                    return;
+                }
                 if (function->nodeRegion(target) == oldRegion) {
                     addLocal(target, node);
                     return;
@@ -718,6 +761,22 @@ bool buildTransposeMember(
                     }
                     continue;
                 }
+                if (node->kind == rt::GCNodeKind::Cast || node->kind == rt::GCNodeKind::Copy) {
+                    // A conversion passes a cotangent along when both sides can hold one. A cast
+                    // *to* an integer (`int(3x)`) ends the chain by its own type: the value it
+                    // produces is a step function, and the cotangent of a step function's output is
+                    // zero with respect to its input. A cast *from* one (`float(n)`) hands its
+                    // cotangent to the integer, and the delivery above drops it.
+                    const auto castInputs = function->normInputsOf(ref);
+                    if (kZeroTangentIntegers && !hasTangentSpace(ref)) {
+                        noteZero(ref, ref);
+                        continue;
+                    }
+                    if (!castInputs.empty()) {
+                        deliver(castInputs.front(), local[ref], ref);
+                    }
+                    continue;
+                }
                 if (node->kind != rt::GCNodeKind::Oper) {
                     // Named, not silent: an arm whose body holds something other than an operator
                     // with a transpose rule stops here, and the line says which node and which kind,
@@ -727,6 +786,31 @@ bool buildTransposeMember(
                        << " node=" << ref << " kind=" << static_cast<int>(node->kind) << '\n';
                     armsOk = false;
                     return {};
+                }
+                // The same rule as the caller's walk: a cotangent with nowhere to go stops at the
+                // type. Inside a loop body the shape it stops is `s + float(n)` -- `float(n)` has one
+                // operand and it is an integer, so the round's cotangent does not reach it, and the
+                // loop needs no accumulator for it.
+                if (kZeroTangentIntegers) {
+                    if (!hasTangentSpace(ref)) {
+                        noteZero(ref, ref);
+                        continue;
+                    }
+                    bool anyReceiver = false;
+                    for (const gc_node_ref_t operand : function->normInputsOf(ref)) {
+                        if (!isConstant(operand) && hasTangentSpace(operand)) {
+                            anyReceiver = true;
+                            break;
+                        }
+                    }
+                    if (!anyReceiver) {
+                        for (const gc_node_ref_t operand : function->normInputsOf(ref)) {
+                            if (!isConstant(operand)) {
+                                noteZero(operand, ref);
+                            }
+                        }
+                        continue;
+                    }
                 }
                 const auto inputs = function->normInputsOf(ref);
                 const auto *body = function->nodeBodyAs<camel::runtime::GCOperBody>(ref);
@@ -940,6 +1024,14 @@ bool buildTransposeMember(
                     os << "TRANSPOSE function=" << function->name() << " skip=condition\n";
                     return false;
                 }
+                // A condition is a choice, not a magnitude: the branch that ran is decided by it, and
+                // the transposed graph copies it forward rather than differentiating it. So the
+                // cotangent never reaches it, and the reading would say nothing about a value that is
+                // in the middle of the graph unless it is said here -- a bool contributes zero because
+                // it has no tangent space, and that is a fact about the derivative, not an omission.
+                if (kZeroTangentIntegers && !hasTangentSpace(conditionInputs.front())) {
+                    noteZero(conditionInputs.front(), normBranch.front());
+                }
                 draft.setNormInputs(brch, std::span<const gc_node_ref_t>(&condition, 1));
                 std::vector<gc_node_ref_t> armCotangents;
                 for (size_t k = 0; k < arms.size(); ++k) {
@@ -986,6 +1078,33 @@ bool buildTransposeMember(
                 break;
             }
             case rt::GCNodeKind::Oper: {
+                // Where this rule's cotangent could go. A value whose type has no tangent space
+                // cannot receive one, and an output with none has no cotangent to hand out -- so a
+                // conversion whose only operand is an integer (`:op/ltod`, `float(n)`) stops here.
+                // A rule for such an operator could only be a derivative invented for a value that
+                // has none, so the cotangent is dropped and the value that stopped it is named, the
+                // way an unread parameter answers zero instead of a refusal.
+                if (kZeroTangentIntegers) {
+                    if (!hasTangentSpace(ref)) {
+                        noteZero(ref, ref);
+                        break;
+                    }
+                    bool anyReceiver = false;
+                    for (const gc_node_ref_t operand : function->normInputsOf(ref)) {
+                        if (!isConstant(operand) && hasTangentSpace(operand)) {
+                            anyReceiver = true;
+                            break;
+                        }
+                    }
+                    if (!anyReceiver) {
+                        for (const gc_node_ref_t operand : function->normInputsOf(ref)) {
+                            if (!isConstant(operand)) {
+                                noteZero(operand, ref);
+                            }
+                        }
+                        break;
+                    }
+                }
                 const auto *body           = function->nodeBodyAs<camel::runtime::GCOperBody>(ref);
                 const std::string_view uri = body->uri();
                 const auto rule            = camel::core::transposeRuleOf(std::string(uri));
