@@ -569,3 +569,16 @@ expect_diagnostic_name = "RuntimeDiag::PassInternalError"
 expect_output_contains = ["Pass 'test::dangle_port' failed with an internal error: an ordinary port of operator node", "reads port 0 of a node the graph does not have"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
+
+[[tests]]
+name = "pass_params.settle_runs_zero_refused_at_construction"
+desc = "A pass parameter is checked where the pass is built, and a value it cannot take is reported through the same channel a running pass reports through: RuntimeDiag::InvalidArgument naming the pass and the value, exit code 1, and no 'terminate called' -- the construction site had no receiver, so the diagnostic was recorded and then escaped as DiagnosticsLimitExceededException, which unterminated the process with code 134 for a program the compiler had refused correctly."
+kind = "negative"
+case = "../../../cases/modules/onnx/export_loop.cml"
+args = ["${case}", "std::opt settle_runs=0", "onnx::export"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_output_contains = ["Invalid argument of 'std::opt': settle_runs must be at least 1, got 0"]
+expect_output_not_contains = ["terminate called", "DiagnosticsLimitExceededException"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000

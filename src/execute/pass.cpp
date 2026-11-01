@@ -381,16 +381,42 @@ size_t constantBudgetOf(const PassArgs &args) {
     return bytes < 0 ? 0 : static_cast<size_t>(bytes);
 }
 
+/// A pass parameter the maker cannot take. It is committed as `RuntimeDiag::InvalidArgument` -- the
+/// pass spec is the program's, so this is not a defect of the compiler and must not be reported as
+/// `PassInternalError` -- and then thrown, only to stop the construction: the receiver at the
+/// construction site (constructPass) lets it through, because the diagnostic is already recorded.
+class PassParameterViolation : public std::runtime_error {
+  public:
+    explicit PassParameterViolation(const std::string &what) : std::runtime_error(what) {}
+};
+
+/// Refuse a pass parameter: name the pass and the value, record it, and stop the construction.
+/// Design principles 9.3: a parameter is read at its declared type, and a value the pass cannot take
+/// is refused where the pass is built. Before this, the maker threw a bare `std::runtime_error`
+/// that reached the driver uncaught: `terminate called after throwing DiagnosticsLimitExceededException`
+/// with exit code 134, for a program the compiler had refused correctly.
+[[noreturn]] void refusePassParameter(
+    const context_ptr_t &ctx, const std::string &pass, const std::string &why) {
+    if (ctx) {
+        try {
+            ctx->rtmDiags()->of(RuntimeDiag::InvalidArgument).commit(pass, why);
+        } catch (const camel::core::error::DiagnosticsLimitExceededBaseException &) {
+            // The diagnostic is recorded; the limit is what throws, not the refusal.
+        }
+    }
+    throw PassParameterViolation(why);
+}
+
 /// The `settle_runs` parameter of `std::opt`: how many runs of the rewrite in a row may each change
 /// the same graph before the pass reports that the rewrite does not settle. It is an internal bound
 /// of the engine, exposed so that a test can prove the report happens at all (a run that changes
 /// nothing ends the loop, so the runaway shows up across runs, not inside one); it is not a tuning
 /// knob, and a value below 1 is refused rather than read as "never report".
-size_t settleRunsOf(const PassArgs &args) {
+size_t settleRunsOf(const context_ptr_t &ctx, const PassArgs &args) {
     const int64_t runs = args.getInt("settle_runs");
     if (runs < 1) {
-        throw std::runtime_error(
-            std::format("std::opt: settle_runs must be at least 1, got {}", runs));
+        refusePassParameter(
+            ctx, "std::opt", std::format("settle_runs must be at least 1, got {}", runs));
     }
     return static_cast<size_t>(runs);
 }
@@ -427,7 +453,7 @@ PassMaker optimizePass() {
         config.checkScreens        = args.getBool("check_screens");
         config.growthBudget        = growthBudgetOf(args, "std::opt");
         config.constantBudgetBytes = constantBudgetOf(args);
-        config.settleRuns          = settleRunsOf(args);
+        config.settleRuns          = settleRunsOf(ctx, args);
         return std::make_unique<OptimizeRewritePass>(ctx, config);
     };
 }
@@ -2484,6 +2510,71 @@ std::string effectOrderViolation(
 
 } // namespace
 
+namespace {
+
+/// What a pass gave up with, as the diagnostic that says so. One function, because two places
+/// receive it: where a pass runs (`apply` threw) and where a pass is built (`factory(ctx)` threw).
+/// A pass's parameters are checked while it is constructed, and that check reports through the same
+/// runtime diagnostics the pass uses when it runs -- so the two places have the same job, and a
+/// second copy of this would be a second answer to what a pass's failure is called.
+void reportPassFailure(const context_ptr_t &ctx, const std::string &name, const std::exception &e) {
+    // A pass that gives up with a plain exception (graph validation at commit, the execution-order
+    // builder meeting a cycle, an arena limit) hit a defect of the compiler, not of the program. It
+    // is still reported as a diagnostic, so that --output-format json stays a valid diagnostics
+    // array. There is no source position for it. The stage names the pass even for a scheduling
+    // pass: the failure belongs to the pass, whatever part of the program had run.
+    setPipelineStage("pass:" + specName(name));
+    std::string what = e.what();
+    while (!what.empty() && (what.back() == '.' || what.back() == '\n')) {
+        what.pop_back(); // the diagnostic's message ends the sentence itself
+    }
+    try {
+        ctx->rtmDiags()->of(RuntimeDiag::PassInternalError).commit(name, what);
+    } catch (const camel::core::error::DiagnosticsLimitExceededBaseException &) {
+        // The diagnostic is recorded; the limit is what throws. Letting it out of a catch handler
+        // is how this became `terminate` in the first place.
+    }
+}
+
+/// Build a pass, and receive what its construction reports.
+///
+/// Construction is where a pass's parameters are checked: `std::opt settle_runs=0` is refused in the
+/// maker, with `RuntimeDiag::InvalidArgument` naming the pass and the value. That diagnostic is
+/// committed to the context like any other, and at the context's diagnostics limit the commit throws
+/// -- which, escaping from a construction site, reached the driver and became `std::terminate` with
+/// exit code 134, for a program the compiler had refused correctly.
+///
+/// So a construction site receives too, and it receives the same way the running site does: a throw
+/// from the diagnostics limit means the diagnostic is already recorded, and the caller's
+/// `hasErrors()` is what turns it into a refusal with a non-zero exit; anything else is a pass that
+/// broke while being built, which `reportPassFailure` reports exactly as a break while running.
+std::unique_ptr<GraphIRPass> constructPass(const context_ptr_t &ctx, const std::string &name) {
+    // A pass is built more than once on the way in -- twice by the pre-checks that ask what kind it
+    // is, and once when the pipeline builds it. A refused parameter is recorded the first time, so
+    // every later construction would record the same diagnostic again: the run reported
+    // 'settle_runs must be at least 1, got 0' twice before this. Once a diagnostic is recorded,
+    // nothing else is built.
+    if (ctx && ctx->rtmDiags()->hasErrors()) {
+        return nullptr;
+    }
+    auto resolved = resolvePassWithModule(name, ctx);
+    if (!resolved.factory) {
+        return nullptr;
+    }
+    try {
+        return resolved.factory(ctx);
+    } catch (const camel::core::error::DiagnosticsLimitExceededBaseException &) {
+        return nullptr;
+    } catch (const PassParameterViolation &) {
+        return nullptr; // refused and recorded by refusePassParameter
+    } catch (const std::exception &e) {
+        reportPassFailure(ctx, name, e);
+        return nullptr;
+    }
+}
+
+} // namespace
+
 PassRunResult applyRegisteredPass(
     const camel::runtime::Program *program, const std::string &spec, const context_ptr_t &ctx,
     std::ostream &os, GraphIRPass *caller) {
@@ -2495,7 +2586,11 @@ PassRunResult applyRegisteredPass(
     const bool publishes = ctx && ctx->currentRuntimeProgram() == program;
     // The old program's content is read here, before the pass runs (graphRevisionsOf).
     const std::unordered_map<uint32_t, uint64_t> beforeRevisions = graphRevisionsOf(program);
-    auto pass            = resolved.factory(ctx);
+    auto pass = constructPass(ctx, spec);
+    if (!pass) {
+        // Construction reported: the diagnostic is recorded, and the caller prints it.
+        return {nullptr, true};
+    }
     const camel::runtime::Program *produced = pass->apply(program, os);
     if (pass->hasErrorValue() && caller != nullptr) {
         caller->failWithErrorValue(pass->errorValue());
@@ -2597,7 +2692,10 @@ firstConsumingPass(const std::vector<std::string> &passes, const context_ptr_t &
         if (!factory) {
             continue;
         }
-        const auto pass = factory(ctx);
+        const auto pass = constructPass(ctx, passes[i]);
+        if (!pass) {
+            continue; // construction reported; the pipeline build below is where it stops
+        }
         if (dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ||
             dynamic_cast<GraphTranslatePass *>(pass.get()) != nullptr) {
             return i;
@@ -2612,7 +2710,10 @@ bool passListTranslatesProgram(const std::vector<std::string> &passes, const con
         if (!factory) {
             continue;
         }
-        const auto pass = factory(ctx);
+        const auto pass = constructPass(ctx, name);
+        if (!pass) {
+            continue; // construction reported; the pipeline build below is where it stops
+        }
         // The first pass that consumes the graph decides what the list does. Before it, rewrite
         // passes only transform the program; after it, the graph is gone.
         if (dynamic_cast<GraphTranslatePass *>(pass.get()) != nullptr) {
@@ -2821,7 +2922,10 @@ PassApplyResult applyPassesDetailed(
             camel::core::mm::autoSpace().safepoint(std::format("before pass {}", p));
             EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), program->root()); });
             camel::utils::phase::Scope phaseScope("pass", p);
-            auto pass = factory(ctx);
+            auto pass = constructPass(ctx, p);
+            if (!pass) {
+                return {nullptr, PassApplyStatus::Failed};
+            }
             // The debugger's observer is told which pass runs: only a scheduling pass runs the
             // program it debugs; a rewrite or translation pass may evaluate graphs of its own.
             const bool schedules = dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr;
@@ -2941,18 +3045,9 @@ PassApplyResult applyPassesDetailed(
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (memory exhausted)", p);
                 return {nullptr, PassApplyStatus::Failed};
             } catch (const std::exception &e) {
-                // A pass that gives up with a plain exception (graph validation at commit, the
-                // execution-order builder meeting a cycle, an arena limit) hit a defect of the
-                // compiler, not of the program. It is still reported as a diagnostic, so that
-                // --output-format json stays a valid diagnostics array. There is no source
-                // position for it. The stage names the pass even for a scheduling pass: the
-                // failure belongs to the pass, whatever part of the program had run.
-                setPipelineStage("pass:" + specName(p));
-                std::string what = e.what();
-                while (!what.empty() && (what.back() == '.' || what.back() == '\n')) {
-                    what.pop_back(); // the diagnostic's message ends the sentence itself
-                }
-                ctx->rtmDiags()->of(RuntimeDiag::PassInternalError).commit(p, what);
+                // The same receiver a construction site uses: one answer to "what is a pass's
+                // failure called", whether the pass broke while being built or while running.
+                reportPassFailure(ctx, p, e);
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (internal error)", p);
                 return {nullptr, PassApplyStatus::Failed};
             }
