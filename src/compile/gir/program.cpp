@@ -194,6 +194,22 @@ bool isWrittenName(const std::string &name) {
            name.front() != '$';
 }
 
+/// Whether `family`'s transform reads a rule's callee name and calls *that* function, never the
+/// rule's right side: such a family has nothing to bind its pattern's names with, so its rules may
+/// not read them (`SemanticDiag::RuleRightUsesOuterVariable`).
+///
+/// `rulesets.jvp` is not one of these: `jvp` calls the right side itself, once with the operands and
+/// then with what it answers, so its rules write `x` and `w` on the right side and must
+/// (`modules/transforms/jvp.cpp`). `rulesets.vmap` is: the batched graph has no unbatched value to
+/// give the outer arrow, so the transform reads `rhsCalleeOf` and calls the named function with the
+/// batch (`modules/transforms/vmap.cpp`), and a rule that reads `x` has nothing to read.
+bool familyCallsOnlyItsCallee(const std::string &family) {
+    // `rulesets.probe_batch` is the fixture of the same shape: the refusal is reachable on purpose
+    // there (stdlib/rulesets/probe_batch.cml), the way `rulesets.probe_missing` makes a missing rule
+    // reachable for `jvp`.
+    return family == "rulesets.vmap" || family == "rulesets.probe_batch";
+}
+
 } // namespace
 
 std::string Builder::qualifiedName(const ModuleUnit &unit, const std::string &name) {
@@ -845,6 +861,18 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                     auto diag = unit->diags->of(SemanticDiag::RuleLeftIsNotAnOperator);
                     diag.at(TokenRange{rule.tokenStart, rule.tokenEnd});
                     diag.commit(rule.rule, rule.shape);
+                    continue;
+                }
+                // A family whose transform reads a rule's callee name and calls that function with
+                // the batch never calls the rule's right side itself, so nothing binds the names its
+                // left side's pattern writes. A rule that reads one of them is a rule no such
+                // transform can use -- and the place to say so is here, where the rule is written,
+                // not the call that would have used it (the author's ruling of 2026-11-01 05:10:
+                // the outer arrow is not called, so nothing may depend on it).
+                if (familyCallsOnlyItsCallee(ruleset) && !rule.outerUses.empty()) {
+                    auto diag = unit->diags->of(SemanticDiag::RuleRightUsesOuterVariable);
+                    diag.at(TokenRange{rule.tokenStart, rule.tokenEnd});
+                    diag.commit(rule.rule, rule.outerUses);
                     continue;
                 }
                 const std::string first =

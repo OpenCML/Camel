@@ -1433,14 +1433,14 @@ gives the cotangent of its parameter. The data flow runs backwards -- each primi
 by the rule the `rulesets.transpose` family files under it, and a value used k times receives k
 cotangents that add. `f(x) = 2*x + 3*x` transposed at the cotangent `1.0` gives `5.0`.
 
+The transposed function takes the parameters of `f` first and the cotangent last --
+`transpose(f)(x, 1.0)` -- because a pullback may need the value it is transposing at: a branch's
+condition is a value, and the cotangent of an arm only means something for the arm that ran.
+The shape is the same for every `f`, so a reader writes the same call whether the body branches
+or not. The type is `(..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)`.
+
 - Example (a fragment, not compiled): `let back = transpose(f)`
 - Why it is not compiled: `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
-
-#### `jvp`
-
-```camel
-jvp: (f: F) => Jvp<F> when is_function::<F>()
-```
 
 #### `vmap`
 
@@ -6804,7 +6804,7 @@ vmap_sub: (a: T[], b: T[]) => T[] when is_numeric::<T>()
 `x - w` of one row, batched.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `vmap_sub([4.0, 6.0], [3.0, 4.0])` gives `[1.0, 2.0]`
+- Example: `vmap_sub([3.0, 4.0], [1.0, 2.0])` gives `[2.0, 2.0]`
 
 #### `vmap_mul`
 
@@ -6826,7 +6826,7 @@ vmap_div: (a: T[], b: T[]) => T[] when is_numeric::<T>()
 `x / w` of one row, batched.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `vmap_div([4.0, 6.0], [2.0, 3.0])` gives `[2.0, 2.0]`
+- Example: `vmap_div([3.0, 8.0], [3.0, 4.0])` gives `[1.0, 2.0]`
 
 #### `vmap_neg`
 

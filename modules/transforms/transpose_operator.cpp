@@ -31,7 +31,7 @@ using camel::core::type::FunctionTypeFactory;
 using camel::core::type::type_vec_t;
 using camel::core::type::TypeCode;
 
-/// The type of `transpose(f)`: `(f: (float) => float) => (float) => (float)`. The parameter is
+/// The type of `transpose(f)`: `(f: (float) => float) => (float, float) => (float)`. The parameter is
 /// named, so the type prints the way the declaration writes it
 /// (`stdlib/signatures/transforms.cml`), and the two are one string.
 FunctionType *transposeOperatorSignature(FunctionType *function) {
@@ -51,7 +51,7 @@ FunctionType *transposeOperatorSignature(FunctionType *function) {
     return factory.build();
 }
 
-/// transpose: (f: (float) => float) => (float) => (float). The cotangent of `f`'s result goes in
+/// transpose: (f: (float) => float) => (float, float) => (float). The cotangent of `f`'s result goes in
 /// and the cotangent of its parameter comes out -- the pullback of a linear function, at the values
 /// the caller passed the last time it was transposed over, and at no others: `2*x` and `3*x` in
 /// the same program are two rules over the same parameter, which is why a value used k times
@@ -98,7 +98,7 @@ class TransposeResolver final : public FuncTypeResolver {
     }
 
     std::string signature() const override {
-        return "(f: (float) => float) => (float) => (float)";
+        return "(f: (float) => float) => (float, float) => (float)";
     }
 
     bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)

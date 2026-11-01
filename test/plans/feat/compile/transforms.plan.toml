@@ -155,43 +155,42 @@ timeout_ms = 20000
 # The derivative as a library (design 4.4): the surface is `vjp`/`grad`/`with_grad`, and the middle
 # step of `transpose(split(reinterp<jvp>(f)))` is `split`.
 #
-# `split` landed as plumbing (modules/transforms/split.cpp): it builds both halves, and what it does
-# not do yet is carry a residual between them. So the three entries below wait for
-# test/tools/have-split-residuals.mjs, the gate that asks exactly that question, and they are skips
-# with that reason rather than reds -- a skip says "not yet", a red says "wrong".
-#
-# The assertion that the refusal has to name the missing step is the one that has to be replaced by
-# numbers the day the step lands; `names_the_missing_step` in particular pins the *shape* of the
-# refusal while a step is missing at all, and the step that is missing now is `split`'s residual.
+# All three steps are written now -- `jvp` and `transpose` are operators of the `transforms` module,
+# `split` builds its two halves -- and what the composition still lacks is the assembly. `transpose`
+# takes a function of one `float` parameter; `split` hands back the *pair* of halves, so the pair is
+# what arrives at `transpose` and the call does not type. The refusal is still the right shape: at
+# the line of `stdlib/vjp.cml` that composes the transform, naming `transforms:transpose` and the
+# type it wants. That is what `names_the_missing_step` reads, and it is one step from the numbers:
+# the day the pair is taken apart for `transpose`, the same test reads numbers instead.
 [[tests]]
 name = "vjp_api.names_the_missing_step"
-desc = "`vjp(f)` is `transpose(split(reinterp<jvp>(f)))` written in `stdlib/vjp.cml`. The middle steps are declared as operators with no implementation, so a call is refused by the step that is missing, named as the transform that is missing (`split` / `transpose`) and standing at the line of the library that composes it -- not at the `vjp(f)` call in the program, and not in a sentence of the form `not implemented yet`, which sends the reader to no line at all. The run exits non-zero and prints no value."
+desc = "`vjp(f)` is `transpose(split(reinterp<jvp>(f)))` written in `stdlib/vjp.cml`. The middle step is declared as an operator with no implementation, so a call is refused at the line of the library that composes it -- not at the `vjp(f)` call in the program, and not in a sentence of the form `not implemented yet`, which sends the reader to no line at all. Today the refusal names `transpose`, because `transpose` is real and `split` still stands in with a shape it does not take. The run exits non-zero and prints no value."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_missing_step.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 1
-expect_output_contains = ['transforms: `split` has no rule', 'is not bound for this function', "stdlib/vjp.cml:33:22:"]
+expect_output_contains = ["stdlib/vjp.cml:33:", "No matching function found", "<transforms:transpose>"]
 expect_output_not_contains = ["not implemented", "尚未实现", "unimplemented"]
-skip_unless = ["node", "test/tools/have-split-residuals.mjs"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 # The numbers the day the steps land. `f(x) = x*x*x`, so `vjp(f)(3.0, 1.0)` is `(27.0, 27.0)` and
 # `grad(f)(3.0)` is `27.0`; the three-step composition is checked against the derivative written by
-# hand, not against the C++ autodiff. Skipped, not red, while `split` hands no residual on (its
-# plumbing is there, the cut carries nothing across yet): a skip says "not yet", a red says "wrong",
-# and a library that is honestly not written is the first.
+# hand, not against the C++ autodiff. Skipped, not red, while the composition does not run -- today
+# the pair `split` hands back is not the function `transpose` walks (test/tools/have-vjp.mjs is the
+# question, and it is the composition itself that answers): a skip says "not yet", a red says
+# "wrong", and a library whose last step is honestly not assembled is the first.
 [[tests]]
 name = "vjp_api.gradient_when_the_steps_land"
-desc = "With `split` and `transpose` implemented, `vjp(f)(3.0, 1.0)` on `f(x) = x*x*x` reads `(27.0, 27.0)` and `grad(f)(3.0)` reads `27.0`: the library's three-step composition against the derivative written by hand. The test is skipped while `split` does not carry residuals (test/tools/have-split-residuals.mjs), so a not-yet-written library is a skip and never a red."
+desc = "With `split` and `transpose` implemented, `vjp(f)(3.0, 1.0)` on `f(x) = x*x*x` reads `(27.0, 27.0)` and `grad(f)(3.0)` reads `27.0`: the library's three-step composition against the derivative written by hand. The test is skipped while the composition does not run (test/tools/have-vjp.mjs), so a not-yet-assembled library is a skip and never a red."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_gradient.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
-skip_unless = ["node", "test/tools/have-split-residuals.mjs"]
+skip_unless = ["node", "test/tools/have-vjp.mjs"]
 expect_exit = 0
 expect_stdout_contains = ["27.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -202,17 +201,15 @@ timeout_ms = 20000
 # and it is the *compiler's* type: no signature names it (`stdlib/signatures/transforms.cml` writes
 # it out in a comment, as the author wrote it), so what a test can read is what the halves are worth,
 # not the type's spelling. `f(x) = x*x*x` at 3: the first half gives `27.0` and the residuals, the
-# second turns them and the cotangent `1.0` back into `27.0`. Skipped while `split` has no
-# implementation; the numbers are already written down.
+# second turns them and the cotangent `1.0` back into `27.0`.
 [[tests]]
 name = "vjp_api.split_halves"
-desc = "`split(jvp(f))` gives the two halves of `Lift<T> = (T, Tangent<T>)`: the first takes the ordinary parameters and answers `(ResultOf<F>, ResidualsOf<F>)` -- for `f(x) = x*x*x` at 3, the value `27.0` and the residuals in program order -- and the second takes those residuals and the cotangent `1.0` and answers `27.0`. `ResidualsOf<F>` is the compiler's type function and appears in no signature; the test reads the numbers, not its spelling. Skipped while `split` does not carry residuals."
+desc = "`split(jvp(f))` gives the two halves of `Lift<T> = (T, Tangent<T>)`: the first takes the ordinary parameters and answers `(ResultOf<F>, ResidualsOf<F>)` -- for `f(x) = x*x*x` at 3, the value `27.0` and the residuals in program order -- and the second takes those residuals and the cotangent `1.0` and answers `27.0`. `ResidualsOf<F>` is the compiler's type function and appears in no signature; the test reads the numbers, not its spelling."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_split_halves.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "stdout"]
-skip_unless = ["node", "test/tools/have-split-residuals.mjs"]
 expect_exit = 0
 expect_stdout_contains = ["27.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -227,6 +224,51 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=sum_of_scaled graph=", "type=(float) => float", "rules=add_t,mul_t", "TRANSPOSE function=scaled_chain graph=", "rules=mul_t,add_t", "TRANSPOSE op signature=(f: (float) => float) => (float) => (float)", "same=yes", "5.0", "20.0"]
+expect_stdout_contains = ["TRANSPOSE function=sum_of_scaled graph=", "type=(float, float) => float nodes=6 arms=0 rules=add_t,mul_t", "TRANSPOSE function=scaled_chain graph=", "rules=mul_t,add_t", "TRANSPOSE op signature=(f: (float) => float) => (float, float) => (float)", "transposed=(float, float) => float", "same=yes", "5.0", "20.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The initial state's tangent rides the chain like any other tangent: `s0 = x` is a port, its tangent
+# is the seed, and the body reads the state twice, so the chain's tangent is `8 x^7` and not a zero
+# and not the last round's `2 x^3`.
+[[tests]]
+name = "jvp_loop.state_read_twice_is_lifted"
+desc = "`loop s = x for i in [1, 2, 3] do s * s` is `f(x) = x^8`: at 3 the value is 6561 and the derivative 8*3^7 = 17496. The initial state is the input, not a constant, and the body reads it twice each round; a tangent that started at zero would read 0.0, one that carried only the last round would be off by a factor of the round count."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_loop_state_read_twice.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "stdout"]
+expect_exit = 0
+expect_stdout_contains = ["6561.0", "17496.0", "REINTERP jvp function=f graph="]
+expect_stdout_not_contains = ["0.0\n0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# One lifted body per callee. `g` is called three times and the count says one.
+[[tests]]
+name = "jvp_call.three_calls_one_body"
+desc = "`g` is called three times in `f(x) = g(x) + g(x) + g(x) = 3 x^2`: the lift makes one body for it (`callees=1`), and the numbers are 27 at 3 with the derivative 6*3 = 18. A lift that made a body per call site would read `callees=3` and the same numbers; the count is what tells the two apart."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_call_three_times_one_body.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "stdout"]
+expect_exit = 0
+expect_stdout_contains = ["27.0", "18.0", "REINTERP jvp callees=1"]
+expect_stdout_not_contains = ["callees=3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_walks_each_arm_of_a_branch.nvm"
+desc = "`transpose` of a function with a branch: each arm is a linear chain of its own, the cotangent runs backwards inside the arm that produced the value, and the condition is read as it was -- the same predicate, at the values the caller passed -- choosing the other arm. The transposed function therefore takes the parameters of `f` first and the cotangent last, which is the one shape for every function: `transpose(f)(x, 1.0)`. For `pick(x)` returning `2*x` when `x > 0` and `3*x` otherwise, the cotangent 1.0 pulls back to 2 at a positive x and 3 at a negative one. `merged(x)` uses its parameter twice on one side only (`2*x + 5*x`, else `4*x`), so the two sides answer 7 and 4: within an arm two cotangents add, while the two arms' cotangents are joined rather than added, because only the arm that ran contributed one. The reading names the arms it built (`arms=2`), the rules it applied, and the type the resolver and the graph agree on."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_branch.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["TRANSPOSE function=pick graph=", "type=(float, float) => float nodes=9 arms=2 rules=mul_t", "TRANSPOSE function=merged graph=", "nodes=12 arms=2 rules=add_t,mul_t", "2.0", "3.0", "7.0", "4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

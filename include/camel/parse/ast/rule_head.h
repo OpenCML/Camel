@@ -35,6 +35,16 @@ std::string rightCalleeOf(syntax::Node right);
 /// the list here, where the declaration is still syntax. Empty for a left side that binds nothing.
 std::string variableNamesOf(syntax::Node left);
 
+/// The names the left side binds that the right side *also writes* (`x` for the right side
+/// `(bx, bw) => vmap_add(bx, x)`), joined by commas in the order the right side writes them; empty
+/// when the right side reads none of them.
+///
+/// This is what a transform that reads a rule's callee and never calls the rule's right side as a
+/// function has to know: nothing binds the pattern's names in such a graph, so a right side that
+/// reads one is a rule no such transform can use. The index refuses it where it is written
+/// (`SemanticDiag::RuleRightUsesOuterVariable`); this answers the question the refusal asks.
+std::string outerNamesUsedInRight(syntax::Node left, syntax::Node right);
+
 /// What a ruleset's index holds for one rule: the head of its left side, its operand count, and the
 /// rule's name.
 struct RuleHead {
@@ -47,6 +57,9 @@ struct RuleHead {
     // The names the left side binds, in order, joined by commas (`a,b`): the tuple both sides of
     // the rule take. Read from the same syntax as `rhsCallee`, at the same place.
     std::string variables;
+    // Which of those names the right side writes (`x`, `x,w`): empty when it reads none of them,
+    // which is what a family whose transform never calls the right side requires of every rule.
+    std::string outerUses;
     uint32_t arity = 0; // how many operands the head takes: 2 for `a + b`, 1 for `-a`
     // The rule's tokens in its module's buffer, for a diagnostic about the rule itself.
     uint32_t tokenStart = 0;
@@ -62,6 +75,7 @@ void collectRuleHead(
     std::string rhsCallee,
     std::string shape,
     std::string variables,
+    std::string outerUses,
     uint32_t arity,
     uint32_t tokenStart,
     uint32_t tokenEnd);

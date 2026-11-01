@@ -195,52 +195,10 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 } // namespace
 
-namespace {
-
-/// The step `vjp` is written in terms of that is not implemented yet (`transpose`). The signature is
-/// the shape the library declares -- the function it was given, back again -- so a program that
-/// names it type-checks; the kernel is the refusal, and it names the step that is missing instead of
-/// the composition, so a reader is sent to the line of `stdlib/vjp.cml` that asks for it. Nothing
-/// here is a placeholder that one day returns something: a step either has a rule or says it has
-/// none. (`split`, the other step of that composition, has one now: modules/transforms/split.cpp.)
-class StepResolver final : public FuncTypeResolver {
-  public:
-    std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm) const override {
-        if (!with.empty() || norm.size() != 1 || norm[0] == nullptr ||
-            norm[0]->code() != TypeCode::Function) {
-            return std::nullopt;
-        }
-        FunctionTypeFactory factory;
-        factory.addNormArg("f", norm[0], false);
-        factory.setExitType(norm[0]);
-        return factory.build();
-    }
-
-    /// The declaration's text: one parameter named `f`, the result the same function.
-    std::string signature() const override {
-        return "(f: (float, float) => (float, float)) => (float, float) => (float, float)";
-    }
-};
-
-/// Refuses the step it is named for, at the line that asked for it.
-slot_t stepKernel(ArgsView &with, ArgsView &norm, Context &ctx, std::string_view step) {
-    (void)with;
-    (void)norm;
-    (void)ctx;
-    throwRuntimeFault(
-        RuntimeDiag::RuntimeError,
-        std::string{"transforms: `"} + std::string{step} +
-            "` has no rule for this function (the step of `vjp` that does this is not bound for "
-            "this function's graph)");
-}
-
-slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
-    return stepKernel(with, norm, ctx, "transpose");
-}
-
-} // namespace
-
+// The two steps of `vjp` (stdlib/vjp.cml) have rules of their own -- `split` in
+// modules/transforms/split_operator.cpp and `transpose` in modules/transforms/transpose_operator.cpp
+// -- so the stand-ins that answered "this step is not bound for this function" are gone with them:
+// a step either has a rule or says it has none, and it no longer has a shape without one.
 const std::vector<oper_group_ptr_t> &operatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         // One rule: `jvp` takes a function and gives its forward transform (design principles 9.9
@@ -248,11 +206,6 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
         OperatorGroup::create(
             "jvp",
             {{"transforms:jvp", std::make_shared<JvpResolver>()}}),
-        // The step of `vjp` that is not written yet (stdlib/vjp.cml): the shape is the library's,
-        // the refusal is its. `split`, the other step of that composition, has a rule of its own
-        // (modules/transforms/split_operator.cpp) and is not registered here.
-        OperatorGroup::create(
-            "transpose", {{"transforms:transpose", std::make_shared<StepResolver>()}}),
     };
     return groups;
 }

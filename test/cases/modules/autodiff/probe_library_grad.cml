@@ -1,0 +1,31 @@
+/**
+ * The precondition's own program for the implementation comparison of the C2 example
+ * (`showcase/c2-mlp-mnist/compare_implementations.py`, run by the `implementations` entry of
+ * `test/plans/perf/showcase_c2.plan.toml`).
+ *
+ * The comparison runs the same training program under two pipelines and compares the last logged
+ * loss. The second pipeline is the library's own gradient: after M4, `vjp` is a function transform
+ * written in the standard library (`vjp = transpose . split . reinterp<jvp>`) and `grad` /
+ * `with_grad` are wrappers over it. Today `vjp` is only the decoration tag of a custom rule
+ * (`stdlib/prelude.cml`), the reverse mode for a non-scalar result does not exist, and so there is
+ * no second implementation to compare against -- the plan entry must skip, not fail.
+ *
+ * This file names the three entry points the comparison needs and nothing else, so it compiles
+ * exactly when they exist. `f` has a `with` parameter so that `grad(f)` and `with_grad(f)` are
+ * legal calls even today (a transform differentiates the first `with` parameter), which leaves the
+ * missing `vjp` as the only reason for this program to fail.
+ */
+
+import { grad, with_grad, vjp } from autodiff
+
+with <w: f32>
+func f(x: f32): f32 {
+    return w * x
+}
+
+func main(): int {
+    let a = with_grad(f)
+    let b = grad(f)
+    let c = vjp(f)
+    return 0
+}
