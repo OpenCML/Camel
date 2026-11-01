@@ -15,6 +15,7 @@
  */
 
 #include "camel/compile/gir/encode.h"
+#include "camel/compile/gir/graph_read.h"
 
 #include "camel/compile/gir/draft_graph_builder.h"
 #include "camel/compile/gir/reachable.h"
@@ -40,6 +41,7 @@
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <iostream>
 #include <span>
 #include <unordered_map>
 #include <unordered_set>
@@ -340,6 +342,29 @@ class EncodeSession {
             }
             for (auto &prepared : prepared_) {
                 camel::runtime::validateRuntimeGraphCalls(program_, prepared.runtime);
+            }
+            // The read face the lift will use on a draft (camel/compile/gir/graph_read.h) against
+            // the graph it was just encoded to: one graph, asked twice, and the two answers have to
+            // be the same answer. This is not a reading and not a switch: the face is either a face
+            // or a second model of the graph, so a graph whose two readings disagree is refused.
+            // It is asked of every graph of every program, which is the widest form the claim can
+            // take -- a program that compiles has had it asked and answered.
+            for (auto &prepared : prepared_) {
+                if (prepared.runtime == nullptr) {
+                    continue;
+                }
+                const DraftGraphRead draftFace(prepared.source->view(), prepared.liveNodes);
+                const FrozenGraphRead frozenFace(*prepared.runtime);
+                const std::string difference = firstDifference(draftFace, frozenFace);
+                GUARD(
+                    difference.empty(),
+                    std::format(
+                        "Graph '{}' does not read the same from its draft and from the encoding "
+                        "built from it: {}. draft {}, frozen {}.",
+                        prepared.source->name(),
+                        difference,
+                        describe(draftFace),
+                        describe(frozenFace)));
             }
         } catch (...) {
             // The program was bound to graphs before they were built; a failure (the graph space
