@@ -1,0 +1,8 @@
+func sum(n: int, acc: int): int {
+    return if n == 0 then acc else sum(n - 1, acc + n)
+}
+
+func main(): int sync {
+    println(sum(100000, 0))
+    return 0
+}
