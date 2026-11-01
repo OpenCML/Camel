@@ -562,9 +562,31 @@ struct Half {
         }
         case rt::GCNodeKind::Brch:
         case rt::GCNodeKind::Join:
-            return refuseAt(refusal, source, ref, "a branch", "the plumbing copies straight-line bodies");
+            // A branch node met *while copying a region*: the cut has already opened this region (the
+            // branch's own arms were the outer cut's business), and what stands here is a branch
+            // nested inside it. The subject of the refusal is the node -- which node, in which region,
+            // for which half -- and not the graph (P1-14's hanging point; the sentence used to be
+            // "the plumbing copies straight-line bodies", which named neither the node nor the half).
+            return refuseAt(
+                refusal, source, ref, "a branch node",
+                std::string("the ") + (tangent ? "backward" : "forward") + " half needs node " +
+                    std::to_string(ref) + " (kind=" +
+                    std::to_string(static_cast<int>(node->kind)) + ", region=" +
+                    std::to_string(source->nodeRegion(ref)) +
+                    "), which is a branch inside the region being cut: a nested branch is cut by the "
+                    "outer cut's recursion, not by copying its body as data");
         case rt::GCNodeKind::Loop:
-            return refuseAt(refusal, source, ref, "a loop", "the plumbing copies straight-line bodies");
+            // The same hanging point for a loop. **Defensive today**: no `.cml` reaches this (a loop's
+            // lifted graph is refused above, at the exit, and `jvp` does not build one), but a graph
+            // built by hand can, and the refusal names it.
+            return refuseAt(
+                refusal, source, ref, "a loop node",
+                std::string("the ") + (tangent ? "backward" : "forward") + " half needs node " +
+                    std::to_string(ref) + " (kind=" +
+                    std::to_string(static_cast<int>(node->kind)) + ", region=" +
+                    std::to_string(source->nodeRegion(ref)) +
+                    "), which is a loop inside the region being cut: a loop hands one turn's residual "
+                    "to the next (design 4.2), and that is not a body this walk can copy");
         default:
             return refuseAt(
                 refusal, source, ref, "a node of another kind",
@@ -1411,14 +1433,10 @@ SplitGraph buildSplitGraph(
                 }
                 refuseAt(
                     refusal, function, exit, "the exit",
-                    "this graph's exit is the Join of a branch (the arm the condition picks writes the "
-                    "pair), so the cut has to happen inside the arms, with the condition carried as a "
-                    "residual -- the backward half then picks the arm the forward half took by reading "
-                    "the same condition. Each arm is entered and described (`WALK`), its yield is read "
-                    "off the Fill that writes the pair (`ARM`), and the backward half copies the arm's "
-                    "body into its own region and joins that arm's half of the pair -- but the arm is "
-                    "not *chosen* yet: the condition picks it, and reading that condition to pick is "
-                    "the next cut, not this one");
+                    "the exit is the Join of a branch, but fewer than two arms of that branch could be "
+                    "collected, so there is no pair of arm cuts to make -- the arms are the regions "
+                    "`WALK` lists, and their yields are what `ARM` reads off the Fill that writes the "
+                    "pair; an arm whose yield does not hold both halves is not an arm this cut can use");
                 os << "REINTERP split function=" << function->name() << " skip=branch exit=Join"
                    << " condition=" << condition << " why=" << refusal.refusedWhy << '\n';
                 return refusal;

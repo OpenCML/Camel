@@ -60,3 +60,19 @@
 2. `buildHalfBranch` 剩下的"建 Join / 建 Brch / 连线 / 重写 Join"改名 `wireBranchJoin`（或内联进 S6/S7），**不留只被调两次的中间层**；
 3. 三行 `WALK`/`ARM` 读数逐字不变；`graph_draft_ledger` 不涨（新代码不直接碰 `GraphDraft`，`cutArm` 是模板的先例可循）；
 4. 拒因换挂点（这一条可以单独一笔，先做 1–3）。
+
+## 施工记录（2026-11-02，`916be0be4` 之后）
+
+- **S3 已改**：pair 类型逐臂读、要求一致，不一致具名拒绝（`edffe4572`）；`arms.front()` 只剩注释。
+- **`buildHalfBranch` 已改名 `wireBranchJoin`**（`916be0be4`），臂循环只在它的 `cutArm` 调用点；
+  `cutBranchGraph` 保持"一次分支切"的顶层，S1/S2/S4/S5/S8 原地。
+- **判据作废**：原判据"`cutBranchGraph` 入口 1 → 0"**作废**——本页注 2 已证明 S1/S2/S4/S5/S8 搬不进
+  区域递归，所以它不是中间层，是顶层。作废要显式写，不然下一个人会照着旧判据删它。
+- **拒因换挂点已做**（本条之后的提交）：
+  - **改前**（图级，`buildSplitGraph` 出口）：`this graph's exit is the Join of a branch (…) … but the arm
+    is not *chosen* yet`；
+  - **改后（节点级，`Half::makeCopy`）**：`the backward half needs node K (kind=…, region=R), which is a
+    branch inside the region being cut: …`；
+  - 出口那条只剩它真正的触发条件：**"出口是分支的 Join，但收集不到两支臂"**；
+  - 循环节点同样改到节点级，并标注**防御性**（`.cml` 到不了，手写图能到）；
+  - `[MAP S1]`…`[MAP S8]` 锚的**行号已漂移**，锚名不变，按名 grep 即可。
