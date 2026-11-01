@@ -1513,7 +1513,7 @@ declarations show, because the result of a call is the exit type its resolver gi
 #### `vjp`
 
 ```camel
-vjp: (f: (x: float) => float) => (x: float) => (float, (ct: float) => float)
+vjp: (f: (x: T) => float) => (x: T) => (float, (ct: float) => T)
 ```
 
 The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
@@ -1527,7 +1527,7 @@ The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x
 #### `vjp`
 
 ```camel
-vjp: (f: (x: float, y: float) => float) => (x: float, y: float) => (float, (ct: float) => (float, float))
+vjp: (f: (x: T, y: U) => float) => (x: T, y: U) => (float, (ct: float) => (T, U))
 ```
 
 The same transform for a function of two parameters: `vjp(f)(x, y)` is `(value, pullback)` and

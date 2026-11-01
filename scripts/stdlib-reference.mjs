@@ -2028,8 +2028,11 @@ const EXCEPTIONS_JOINED = {
 const EXAMPLE_STOPS = {
     // The example calls a name the description introduces and the declaration does not take
     // (`inputs(n)` with `n` a node of the surrounding pass), or names a value the wrapper cannot
-    // bind at all: 39 of them, most of them marked a fragment.
-    'a semantic error': 39,
+    // bind at all: 41 of them, most of them marked a fragment. Two more since `vjp`'s two examples
+    // (`let reading = vjp(f)`) meet a declaration whose parameter type is a variable: the wrapper
+    // binds `f` to a declared parameter type, and `(x: T) => float` has no `T` to bind, so the
+    // example stops at `UnresolvedReference: 'f'` where the concrete declaration let it compile.
+    'a semantic error': 41,
     // `split`'s example reaches the compiler with a function-typed parameter bound by name and the
     // compile graph keeps a live dereference node (`internal error: Compile graph '__doc_example'
     // still contains a live DREF node`). That is the compiler's own class, not the example's.
@@ -2038,11 +2041,12 @@ const EXAMPLE_STOPS = {
 
 // A fragment is a claim -- "this example is not a program of its own" -- and the marker is only
 // honest while the compiler agrees. The run compiles every marked example and counts the ones that
-// compile: 54 do, so 54 pages still say "not compiled" about a program that compiles. It is not a
+// compile: 52 do, so 52 pages still say "not compiled" about a program that compiles. It is not a
 // licence -- the number cannot grow quietly, and a marker that starts compiling shows up here the
 // moment it does -- and it is not the end state: dropping a marker is one deleted line, and the
-// count goes down with it.
-const STALE_FRAGMENTS = 54
+// count goes down with it. Two fewer than the 54 it was: `vjp`'s two marked examples no longer
+// compile, so two markers that were stale are now true ones (see EXAMPLE_STOPS).
+const STALE_FRAGMENTS = 52
 
 // Compare what the run found with what the two numbers above record. Returns the problems, so the
 // caller can exit non-zero: a bounded list is only kept bounded if something counts it.
