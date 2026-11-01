@@ -95,6 +95,7 @@ kind = "behavior"
 case = "../../../cases/compile/tags/decl.cml"
 args = ["${case}"]
 expect_exit = 7
+expect_diagnostic_name = "SemanticDiag::TagHasNoReader"
 expect_output_contains = ["SemanticDiag::TagHasNoReader", "The tag 'decl::readable' is written, but none of the passes it names (std::opt) is in the pipeline."]
 
 [[tests]]
