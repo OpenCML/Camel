@@ -230,3 +230,47 @@ guess would be a fourth wrong certainty. The rule stands and is unchanged:
 \`eraseNode\` (src/runtime/draft.cpp:1674) removes a node and closes the chain; it does not look at what
 the node was the last reader of. \`replaceNode\` (src/passes/opt/generic/rewrite.cpp:314) does. Every
 pass that reaches for \`eraseNode\` directly is one that gets no protection.
+
+
+## Fifth round: the gate is not removed by replaceNode either -- the print in it never fires for one
+
+`replaceNode` was given an entry print (id, kind, replacement, sync-user count) and `eraseNode` a print
+naming a gate's value source, then the failing pipeline ran again. `replaceNode` fires **four times in
+the whole run, and not one of them is a Gate (kind 13)**. So the gate does not go through either path
+that was suspected: not the `pruneBranch` dropped-arm hypothesis of round three, and not
+`replaceNode` as round four concluded from the `ctrlIn=0` reading.
+
+What the prints do establish: the four Gate erasures happen inside `pruneBranch` (the only place that
+erases without `replaceNode` in this run, and it runs six times), and `pruneBranch` **closes the chain
+over the nodes it drops but never asks what they were the last reader of** -- the same sentence as the
+third rule below, now with the exact function.
+
+The protection that is missing in `pruneBranch` is the one `replaceNode` has had all along:
+
+```cpp
+// An effect this node was the last reader of keeps running where the node stood ...
+const auto lastRead = lastReadsGoingOut(transaction, removed, alsoGoing);
+```
+
+`pruneBranch` already has the mirror image of it for the **dropped** arm ("An effect among those reads
+that only the dropped arm used runs where the branch stood", generic.cpp after the erases); what it does
+not have is the same handoff for the **kept** arm's exit gate, whose value source keeps running only if
+something still reads it.
+
+## Handing over
+
+This is the fourth diagnosis and no code change: `std::opt::inline std::opt::fold` still returns 1, and
+per the parent's ruling this is the point to hand the live scene to another hand rather than a fifth
+certainty. The scene, in the order it was earned:
+
+1. `:mark/reduce_arr` is observable by declaration (`pure = false, .callsGraphs = true`).
+2. `inline` gives its tail a place -- a GATE carrying the call's control edge (`spliceChainAnchor`).
+3. The fold does not fold the call (`isPureOper` refuses `pure=false`); the gate is what disappears.
+4. `replaceNode` would protect the last read (`keepThroughValue`, `inheritedWait`), and it never sees
+   this gate: four calls in the whole run, none of them a Gate.
+5. The erasure is `pruneBranch`'s, and that path has no "is this an observed run" question.
+
+## Third rule, as ruled
+
+> **`eraseNode` closes the chain but does not ask whether the node was somebody's last reader;
+> `replaceNode` asks. Any pass that reaches for `eraseNode` directly gets no protection.**
