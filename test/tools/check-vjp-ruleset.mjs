@@ -16,7 +16,9 @@
 //               (`stdlib/vjp.cml:<line>:`), naming what is missing. The expected words differ per
 //               line: without `rulesets.jvp` the forward walk has no rule for `:op/mul_d`, without
 //               `rulesets.transpose` the backward walk has no family for `:op/add_d`.
-//   restored -- the same program exits 0 and prints the three 27.0 readings.
+//   restored -- the same program exits 0 and prints two 27.0 readings and the cotangent tuple
+//               (27.0,) the pullback of a one-parameter function answers (author's ruling of
+//               2026-11-01 14:30: the pullback always answers one cotangent per parameter).
 //
 // So this is a case per import line, and it goes red when the line it guards is gone from the
 // library (nothing to drop, and the half that matters is the restored one), when the run stops
@@ -149,9 +151,12 @@ for (const line of diagnostics.slice(0, 6)) say1.push(`    ${line.trim()}`)
 //    the import line is missing from the library, because the drop then proves nothing.
 const restored = run({})
 const numbers = restored.text.split('\n').filter((line) => /^27\.0$/.test(line.trim()))
+const cotangents = restored.text
+    .split('\n')
+    .filter((line) => /^\(27\.0\)$/.test(line.trim()))
 say1.push(
     `putting the line back, the same program exits ${restored.status} and prints ` +
-        `${numbers.length === 0 ? 'no reading' : `${numbers.length} x 27.0`}`,
+        `${numbers.length === 0 ? 'no reading' : `${numbers.length} x 27.0`} + ${cotangents.length} x (27.0)`,
 )
 
 const failed = []
@@ -165,7 +170,8 @@ if (!onLibrary) {
     failed.push('the diagnostic does not stand on a `stdlib/vjp.cml:<line>:<column>`')
 }
 if (restored.status !== 0) failed.push(`with the line back the program exits ${restored.status}, not 0`)
-if (numbers.length !== 3) failed.push(`with the line back the program prints ${numbers.length} reading(s), not 3`)
+if (numbers.length !== 2) failed.push(`with the line back the program prints ${numbers.length} x 27.0, not 2`)
+if (cotangents.length !== 1) failed.push(`with the line back the program prints ${cotangents.length} x (27.0,), not 1`)
 
 say(say1)
 if (failed.length > 0) {

@@ -20,8 +20,9 @@
 #     `residuals=0` and the forward half answers `(3.0, ())` -- an empty tuple, and the backward half
 #     hands the tangent through without reading anything.
 #   * the author's example of 2026-10-31 15:25 (`g(x) = x*x` at x = 3): y = 9, one residual
-#     `(3.0)`, tangent 6, and linear in the direction (dx = 2 gives 12, dx = 0 gives 0). `r0` is
-#     printed as the tuple it is: a one-member tuple prints `(3.0)`.
+#     `(3.0)` **in the graph**, tangent 6, and linear in the direction (dx = 2 gives 12, dx = 0 gives 0).
+#     The call site's residuals tuple names no members (they are the graph's answer), so the program
+#     prints it as `()` and hands it on whole -- the members it carries are not a signature's to name.
 #   * the author's two-parameter program of 2026-11-01 (`f(x, y) = x*x*y` at 3, 2): the lift answers 18
 #     with 12 in the direction (1, 0) and 9 in (0, 1), and the cut carries **three** residuals --
 #     `x`, `y` and `x*x`, the product the rule for the second `mul` reads.
@@ -36,13 +37,13 @@
 # tree without `modules/transforms/split.cpp` skips instead of failing).
 [[tests]]
 name = "split_forward_half"
-desc = "The forward half of split(reinterp<jvp>(g)) for g(x) = x*x at x = 3: it computes what the present inputs allow and hands the residuals on as values. Reads `forward y= 9.0` and `residual r0= (3.0)`, and the tangent 6.0 as well, since the same run is what a reader would write to see the pair."
+desc = "The forward half of split(reinterp<jvp>(g)) for g(x) = x*x at x = 3: it computes what the present inputs allow and hands the residuals on whole. Reads `forward y= 9.0`, `residuals whole= ()` and the tangent 6.0; `residuals=1` is the graph's count, and the members are the graph's answer, not a signature's."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_forward_half.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["forward y= 9", "residual r0= (3.0)", "tangent dx1= 6", "residuals=1"]
+expect_stdout_contains = ["forward y= 9", "residuals whole= ()", "tangent dx1= 6", "residuals=1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -116,6 +117,31 @@ backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_contains = ["REINTERP split function=jvp_of_leaky", "type=(float) => (float, (float, bool)) pure residuals=2 arms=2", "branch x=2.0 value=4.0", "branch x=2.0 dgdx=4.0", "branch x=-1.0 value=-0.5", "branch x=-1.0 dgdx=0.5", "WALK half=backward region=1 arm=0 branch=6 members=3 ports=0 nested=0 outside=2", "ARM half=backward arm=1 region=2 yield=15 members=2 value=10 tangent=11"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "split_branch_author"
+desc = "**The author's own shape**, asked for by name: `f(x) = if x > 0 then x*x else 3*x`, whose derivative at x = 2.0 and x = -2.0 is **4.0** and **3.0**. It stands beside `split_branch_arms` and the pair is deliberate: there, both arms are linear, so the two numbers alone cannot tell a cut that picked the arm from one that blended them (`4.0`/`0.5`); here the second arm is `3*x`, and a blend or a backward half that recomputed the comparison and took the other arm could not land on 4.0 and 3.0 together. The read path is the cut itself -- `split(jvp(f))` -- because `vjp` stops one step later, in `transpose` (see `split_branch_author_vjp`)."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_branch_author.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP split function=jvp_of_f", "type=(float) => (float, (float, bool)) pure residuals=2 arms=2", "author x=2.0 value=4.0", "author x=2.0 dfdx=4.0", "author x=-2.0 value=-6.0", "author x=-2.0 dfdx=3.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "split_branch_author_vjp"
+desc = "The same shape read through `vjp`, which is `transpose . split . reinterp<jvp>` -- and the refusal is what this entry pins, because the gap must not be silent. The cut builds the branch (the entry above reads 4.0 and 3.0), so what stops is `transpose`, and where it stops has moved once: the first branch cut refused at `TRANSPOSE function=split_of_jvp_of_f_backward skip=signature`, because a condition crossing as a residual is a `bool` and `transposeSignature` wanted every residual to be a `float`. That was ruled and fixed -- an empty cotangent space is now stated once, in `addCotangent`, and the signature accepts such a member -- so today the refusal is one level down: `skip=arm arm=0`. A split backward half's arm holds the lifted call `jvp_mul` (a `Func`, while `runArm` takes only `Oper`s that have a transpose rule) and reads its `x` out of the residual tuple (an `Accs`, while `runArm` lets an arm stop only at the parameter), so transposing a split backward half's arm is a cut of its own. This entry keeps that named: it fails the day it is made."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_branch_author_vjp.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["TRANSPOSE function=split_of_jvp_of_f_backward arm-stop region=1 node=7 arg=1", "TRANSPOSE function=split_of_jvp_of_f_backward skip=arm arm=0", "transpose has no transpose for this function"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

@@ -1,12 +1,14 @@
 // The author's example of 2026-10-31 15:25, as a case: g(x) = x*x, f = reinterp<jvp>(g), x = 3,
-// dx = 1. The FORWARD half of split(f) computes everything the present inputs allow and hands the
-// residuals on as values: for x = 3 it gives y = 9 and r0 = 3 (the value of x, which the backward
-// half needs to turn a cotangent into a tangent).
+// dx = 1. The FORWARD half of split(f) computes what the present inputs allow and hands the residuals on
+// whole -- y = 9, and the tuple the backward half turns a cotangent into a tangent with (6 for dx = 1).
+// The tuple is the transform's own kind (`TupleType::residuals`): its members are the graph's answer, so
+// a signature cannot name them, and a program may neither destructure it nor read an element of it
+// (`SemanticDiag::ResidualsAreNotVisible`; split_residuals_destructured is the refused program). What is
+// left is this case's spelling: bind it to one name and hand it on whole -- printing it prints an empty
+// tuple, the members not being a signature's to name.
 //
-// This case runs when `split` exists (design doc 4.2); test/plans/feat/transforms/split.plan.toml
-// asks test/tools/have-split.mjs first and skips while it does not. The spelling of the calls is
-// the one 4.2 and 4.4 write; the first run after the implementation lands is what pins it, and the
-// numbers are the author's example either way: (9, 3) now, 6 for dx = 1 in split_backward_tangent.
+// This case runs when `split` exists (design doc 4.2); test/tools/have-split.mjs lets a tree without
+// `modules/transforms/split.cpp` skip.
 import rulesets.jvp
 import { jvp, split } from transforms
 
@@ -17,10 +19,10 @@ func g(x: float): float {
 func main(): int sync {
     let f = jvp(g)
     let (fwd, lin) = split(f)
-    let (y, r0) = fwd(3.0)
-    let dy = lin(r0, 1.0)
+    let (y, res) = fwd(3.0)
+    let dy = lin(res, 1.0)
     println("forward y=", y)
-    println("residual r0=", r0)
+    println("residuals whole=", res)
     println("tangent dx1=", dy)
     return 0
 }

@@ -1,0 +1,44 @@
+/**
+ * The same shape as `split_branch_author.cml`, read through `vjp` -- and the refusal is what this case
+ * pins, because the gap is real and must not be silent.
+ *
+ * `vjp = transpose . split . reinterp<jvp>`. The cut builds the author's branch
+ * (`split_branch_author.cml` reads 4.0 and 3.0 through it), so what stops is `transpose`. Where it
+ * stops has moved twice, and each reading is worth keeping because each named a different missing
+ * piece:
+ *
+ * 1. **`skip=signature`**: the condition crosses the cut as a residual so the backward half picks the
+ *    arm the forward half picked (design 4.2), and a condition is a `bool`; `transposeSignature` wanted
+ *    every residual to be a `float`. The ruling was that a residual slot whose cotangent space is empty
+ *    contributes nothing -- no tangent of a predicate -- which is now stated once, in the cotangent
+ *    space (`addCotangent` drops a target that is not a `float`). That refusal is gone.
+ * 2. **`arm-stop region=1 node=7 kind=10`**: the arm's node is a FUNC, while the arm walk took only
+ *    `Oper`s that have a transpose rule. The walk now transposes a call: the callee gets its own
+ *    transposed member (once per callee, the same map the main walk fills), and a **lifted** call is
+ *    transposed through the graph it was lifted from, because the tangent half of a lift is linear in
+ *    the tangents -- the cotangent of tangent i is the primal's cotangent of value i, computed from the
+ *    values only.
+ * 3. **`arm-stop region=1 node=7 arg=1`** (today): the arm's call is not a lift of a user function but
+ *    a **rule kernel**, `autodiff::mul_tangent<float>`, whose arguments are `(x, y, dx, dy)`.
+ *    Transposing it needs all four *values*, and `dx` has no value in the transposed graph -- tangents
+ *    are what the answer is a cotangent of, so they are not among its parameters. This is not
+ *    bookkeeping but a statement the design does not make yet: a rule kernel is linear in its tangent
+ *    arguments, so its transpose needs the value arguments only. Until that is said somewhere (a rule
+ *    table entry, or a mark on the tangent parameters of a lifted signature), the arm's call cannot be
+ *    transposed -- and no number invented here would be the author's 3.0.
+ *
+ * What the case therefore pins today is `arm-stop region=1 node=7 arg=1`, then `skip=arm arm=0`. The
+ * day a rule kernel can be transposed knowing which parameters are linear, this entry fails and asks to
+ * be re-read -- which is the point of pinning a refusal rather than an excuse.
+ */
+import { vjp } from vjp
+
+func f(x: float): float {
+    return if x > 0.0 then x * x else 3.0 * x
+}
+
+func main(): int sync {
+    let (y, pullback) = vjp(f)(2.0)
+    'author vjp value={} dfdx={}'->format<y, pullback(1.0)>->println
+    return 0
+}
