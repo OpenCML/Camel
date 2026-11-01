@@ -85,3 +85,14 @@ transpose_unread_parameters func at(x: float, w: float, dx: float, dw: float): f
 **每个形参都有切空间**，所以这三条红**不是"期望该改"，是我那次改动自己删了一个种子参数**（把返回签名少了一个位置）。按"全部参数都有切空间 → 红说明改动错了"这条判据，这一支到此为止：**要重做的话，正确改法是保留原有的种子参数、只放开循环里的类型判断**，而不是改期望。
 
 （`transpose_unread_parameters` 尤其说明既有不变量：**不被读的参数仍然要有一份余切**——这与"没有切空间的形参不产出余切"是两件事，别混。）
+## 三个 vjp 用例的对照表（引用读数必须带用例名）
+
+| 用例 | 程序 | 期望数 | 今天状态 |
+|---|---|---|---|
+| `vjp_api.analytic_gradient`（`test/plans/feat/compile/transforms.plan.toml`，`vjp_analytic_gradient.cml`） | `f(x,y) = x*x*y` 在 `(3,2)` | `18.0 / 12.0 / 9.0`，四后端 `nvm/fvm/jit/prl` 一致（`backends_agree = ["exit_code", "output_normalized"]`） | **绿** |
+| `vjp_api.gradient_when_the_steps_land`（同计划，`vjp_gradient.cml`） | `f(x) = x*x*x` 在 `x=3` | `vjp(f)(3.0)` 读 `(27.0, 27.0)`、`grad(f)(3.0)` 读 `27.0`；计划里 `backends = ["nvm"]`，`expect_stdout_contains = ["27.0"]`（**只有 nvm 一遍**，没有 `skip_unless`） | **绿** |
+| `probe_library_vjp`（`test/tools/have-library-vjp.mjs`） | 同 `f(x,y)=x*x*y` | **无期望数**，只证"装得起来" | **绿** |
+
+**为什么列这张表**：今天有人（我）引用过两组没有用例名的数（`4.0 / 4.0`、`-6.0 / 3.0`，来自 `stdlib/vjp.cml` 落笔时的对照），它们**查不到出处**，所以不算证据。**引用任何读数必须带用例名或计划名；没带名字的数就是假数**——它看起来像证据，但和"跨空间比较"是同一类错。
+
+**关于 `mt`/`at` 的归属，原样记一句**：`transpose_many_parameters` 与 `transpose_unread_parameters` 的形参全是 `float`、都有切空间，所以那三条红**错在我的改动（删了一个种子参数），不是期望该改**；`unread_parameters` 钉住的是"**不被读的参数仍要有一份余切**"，它与"**没有切空间的形参不产出余切**"是两件事。
