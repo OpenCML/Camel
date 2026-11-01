@@ -707,16 +707,23 @@ Rules buildRules() {
     // added from +0 in ascending order, rounded into the element type once -- the one reduction that
     // does read a dimension, and the one that cannot be written by flattening the value.
     //
-    // Two refusals stay, and they are not the same sentence. A rank of one is refused because its
-    // answer is a value of no dimension: the result's type cannot be written from the signature,
-    // which says `T[..]` -- a value of a rank the callee does not know -- while the answer here
-    // would be the element itself. An open rank is refused for that same reason and only that one:
-    // its rank is a property of the value, so the shape the answer keeps cannot be stated -- and not
-    // because such a value is not an array, which it is, and the operator reads it as one.
+    // One refusal stays. An open rank is refused because its rank is a property of the value, so the
+    // shape the answer keeps cannot be stated -- and not because such a value is not an array, which
+    // it is, and the operator reads it as one.
+    //
+    // A rank of one is not refused: its only lane sums to the answer itself (design principles 5.4),
+    // a value of no dimension, and that value is what `rt::sumAll` answers. Writing it as
+    // `rt::sumAxis` was the defect the census found in `test/cases/modules/tensor/int64_sum.cml`:
+    // the rule emitted an array where the node's type is the element, and the C++ compiler rejected
+    // `const int64_t v = rt::sumAxis(...)`. The fix is here and not in the case: the answer's shape
+    // was written wrong, the node's type was right. The shortcut is taken only when the axis is the
+    // one the value has (0 or -1) and the flag is the constant `false`; a `keepDims` that is a
+    // computation, or an axis that is an operand, keeps the refusal, because then the answer's rank
+    // is not known to the rule either.
     r["tensor:sum_axis"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
             const ArrayType *value = asArrayType(c.normType(0));
-            if (value == nullptr || value->anyRank() || value->rank() < 2 ||
+            if (value == nullptr || value->anyRank() || value->rank() < 1 ||
                 value->elemType() == nullptr) {
                 return std::nullopt;
             }
@@ -744,6 +751,17 @@ Rules buildRules() {
                 }
             } else {
                 return std::nullopt;
+            }
+            // The one lane of a rank-1 value sums to the answer itself: the whole sum, of no
+            // dimension. `rt::sumAxis` would answer an array there -- the wrong shape at this
+            // node -- and `rt::sumAll` answers the element, walking the lanes in the same order
+            // (modules/tensor/kernels/reduce.cpp and the runtime's own `sumAll` add from +0 in
+            // ascending order). The axis has to be the one this value has, and the flag has to be
+            // the constant `false`: with `keepDims` true the answer is a rank-1 array of one
+            // element, which `rt::sumAxis` does write, and a computed flag or axis leaves the
+            // answer's rank unknown to the rule.
+            if (value->rank() == 1 && (axis == "0" || axis == "-1") && keepDims == "false") {
+                return std::format("rt::sumAll({})", c.operand(0));
             }
             return std::format(
                 "rt::sumAxis({}, {}, {}, {})",

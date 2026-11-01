@@ -1,8 +1,6 @@
-# 待验的补丁：`sum<0>` 在秩 1 上的答案形状
+# `sum<0>` 在秩 1 上的答案形状（已落，读数见下）
 
-**状态：补丁写好，未验证，未提交。** 主机 `88zjwei`（10.126.62.88）在本笔前后不可达——
-ping 100% 丢包、22 端口超时、staging push `git exit 128`，两次间隔重试同样。按纪律
-（每次提交前必须 `BUILD_EXIT=0` 与闸门），**不提交未验证的源码改动**。
+**状态：已落。** 主机恢复后取补丁、跑验收、提交（读数见第七节）。
 
 ## 一、根因，一句话
 
@@ -83,3 +81,38 @@ python3 test/tools/cppexec/run.py test/cases/modules/tensor/int64_sum.cml   # �
 ## 六、判据（进页）
 
 「一条读数在两个地方不一样的时候，先问“哪一个是判据”，再问“谁把它改成了另一个”。」
+
+## 七、落地的读数（主机恢复后实测）
+
+```
+camel /tmp/sum0.cml std::cpp | grep sum
+  -> const int64_t v2_sum_axis = rt::sumAll(v1_reshape);
+python3 test/tools/cppexec/run.py /tmp/sum0.cml
+  -> 1  100.0%  same; 1 of the 1 standalone
+```
+
+**补丁确实把形状写对了**：秩 1 的 `sum<0>` 现在写 `rt::sumAll`，生成的程序与解释器逐字相同，且不链运行时（standalone）。
+
+七目录计划（`-Tier fast`，8 路）：
+
+| 目录 | `[SUMMARY]` |
+|---|---|
+| `feat/modules` | total 1855, pass 1853, fail 1, skip 1（唯一红 `gpu_preference.named_device`，机器状态） |
+| `feat/trans` | total 72, pass 72, fail 0 |
+| `feat/compile` | total 1994, pass 1994, fail 0 |
+| `feat/opt` | total 1091, pass 1091, fail 0 |
+| `feat/linear` | total 873, pass 871, fail 0, known failures 2 |
+| `feat/mm` | total 283, pass 283, fail 0 |
+| `feat/parse` | total 109, pass 109, fail 0 |
+
+`feat/trans/cpp`（本笔的直接闸门）：`total 29, pass 29, fail 0`。
+
+### 一个必须写下的更正：本树普查的 `does not build` 是 7，不是 0
+
+全树普查（`python3 test/tools/cppexec/run.py test/cases`）在本树给出 **7 条 `does not build`**：
+`opt/generic` 4 条（`fold_constant_loop`、`fold_constant_loop_effect`、`interval_bounds_computed`、`interval_bounds_constant`）、
+`parse/constructs` 2 条（`constas`、`constas_param`）、`trans/cml/interval` 1 条。**`int64_sum.cml` 不在其中**，它是 `refused`（卡在 `tensor:mean` 对 `int[3]`，那是另一页的缺口）。
+
+原因不是本笔：**本分支落后 `origin/develop` 392 笔**，这几条在新树上的状态与这里不同；fsh-dev 页里那句「does not build 1」是它那棵树（已合并 develop）的读数。所以「1 → 0」这个验收**在本树量不出来**，能给出的是：①秩 1 的 `sum<0>` 生成了正确的 C++ 并与解释器相同（上面两条读数）；②本树普查里 `int64_sum.cml` 从来不是 `does not build`。
+
+**判据**：「一条读数要连同它所在的那棵树、那个提交一起报——离开树的『1』和『7』都不是数。」
