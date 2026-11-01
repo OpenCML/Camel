@@ -4,14 +4,14 @@
 
 > **索引的价值在于与目录一一对应；一旦少一页，读者就会以为没有那一问。**
 
-> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 5 页**，文件名见下表。其余已裁完、整体挪进 `reviews/`。
+> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 6 页**，文件名见下表。其余已裁完、整体挪进 `reviews/`。
 >
 > **索引以目录为准**：这张表曾经列着三页早就挪进 `reviews/` 的文件名，而目录里的另外三页不在表上——**一条指向不存在文件的索引，比没有索引更坏**（读者会以为那一问还在，而去回答一个已经裁过的形状）。以后每次并入前先数目录，再改这张表。
 >
 > **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
-## 现在在等作者：5 页（与目录逐项一致）
+## 现在在等作者：6 页（与目录逐项一致）
 
 | 页 | 问句 | 默认建议 |
 |---|---|---|
@@ -19,6 +19,7 @@
 | [`whether-transpose-takes-the-cotangent-beside-the-parameters`](questions-2026-11-01-whether-transpose-takes-the-cotangent-beside-the-parameters.md) | `transpose(f)` 的余切从哪进：与 `f` 的参数并列，还是由 `split` 提供 | 与参数并列（已落地，此页留着等确认） |
 | [`closures-as-values-block-the-transposed-backward-half`](questions-2026-11-01-closures-as-values-block-the-transposed-backward-half.md) | 转置的后一半里出现"闭包当值、调用返回闭包"时，是等去函数化、允许闭包当值，还是让 `split` 内联 | 三条路都不选：`reinterp` 在命中处展开成直接调用（作者 `9f85daeb0`） |
 | [`split-has-landed-and-the-host-is-up`](questions-2026-11-01-split-has-landed-and-the-host-is-up.md) | 状态页：`split` 已落地、主机正常，只剩 `transpose` 收残差一道墙 | 无需裁定（状态通报） |
+| [`inliner-chain-joining-as-its-own-change`](questions-2026-11-01-inliner-chain-joining-as-its-own-change.md) | inliner 的接链修法要不要单独立项：修法与三条判据成立，但代价是 97 fail（放开门槛）/ 47 fail（只放开完全无 wait 的调用），根因是 `main`→`__root__` 那次调用没有 wait | 不删边；修法单独立项，golden 重整代价另估 |
 | [`does-remat-change-what-split-stores`](questions-2026-11-01-does-remat-change-what-split-stores.md) | `remat` 在值上是恒等（已落），"反向不保存残差"由谁读：`split` 的残差数还是 `pullback` 的捕获表 | 标记归 `split`（A）：该段跨切只留入口值，`residuals=` 下降 |
 
 `whether-a-reduction-can-be-written-without-an-axis` 已裁已落（`5fd6fd902`，选 B：四条整轴形态都补），整体挪进 `reviews/`；它带出来的新问题（批 `argmax`/`argmin` 缺扁平视图）就是上面最后一页。
@@ -116,4 +117,6 @@
 - 三段：现象（`file:line`）、两条路的代价、我方默认建议；末尾一句要作者答的话，选项要能照字面执行。
 - 裁回来：`git mv` 到 `reviews/`，页首写 `裁定：`（结论 + 落在哪个提交）；`questions/` 空 = 没有待裁。
 - **已裁的页必须带 `裁定：` 行**，否则读者不知道是哪个裁定；`who-consumes-the-ruleset-index` 落进 `reviews/` 时就是这么做的（好先例）。
+
+
 
