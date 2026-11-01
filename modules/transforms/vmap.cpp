@@ -80,21 +80,36 @@ Type *ruleElementTypeOf(Type *type) {
     return type;
 }
 
-/// The type of the first operand of the node at `ref`, or nullptr when it has none. A rule is
-/// generic in the element its *operands* are made of, and the node's own `dataType()` is the type of
-/// what it answers: `argmax_axis` takes a tensor of numbers and answers `int64` positions, so asking
-/// the node would instantiate its rule at `int64` and apply it to floats.
+/// The type of the first *value* operand of the node at `ref`, or nullptr when it has none.
+///
+/// A rule is generic in the element its values are made of, and that is not always the first port: a
+/// condition is not a value arm. `where(cond, lhs, rhs)` takes a `bool` first and answers the element
+/// of the two arms, so a rule instantiated on the first port would be a `bool` rule applied to a
+/// float batch -- and the arms carry the element the answer has. The node's own `dataType()` is no
+/// better: `argmax_axis` takes a tensor of numbers and answers `int64` positions, so asking the node
+/// would instantiate its rule at `int64` and apply it to floats. The first port whose element is not
+/// a condition is the one that names the rule's `T`; an operator that is all conditions (none today)
+/// falls back to its first port.
 Type *firstOperandTypeOf(camel::runtime::GCGraph &function, gc_node_ref_t ref) {
+    Type *first = nullptr;
     for (const gc_node_ref_t input : function.normInputsOf(ref)) {
         if (input >= function.nodeCount()) {
             continue;
         }
         const rt::GCNode *operand = function.node(input);
-        if (operand != nullptr) {
+        if (operand == nullptr) {
+            continue;
+        }
+        Type *element = ruleElementTypeOf(operand->dataType());
+        const bool isCondition = element != nullptr && element->code() == TypeCode::Bool;
+        if (first == nullptr) {
+            first = operand->dataType();
+        }
+        if (!isCondition) {
             return operand->dataType();
         }
     }
-    return nullptr;
+    return first;
 }
 
 /// The rule `rulesets.vmap` files for `uri`, or nullptr and why not. The family is read through the

@@ -41,7 +41,7 @@
  */
 
 import { is_float, is_numeric, RowsOf } from types
-import { argmax, argmax_axis, argmin, argmin_axis, concat, dim, matmul, max, max_axis, mean, mean_axis, min, min_axis, numel, permute, reshape, shape, sum, sum_axis, transpose, unsqueeze } from tensor
+import { argmax, argmax_axis, argmin, argmin_axis, concat, dim, matmul, max, max_axis, mean, mean_axis, min, min_axis, numel, permute, reshape, shape, sum, sum_axis, transpose, unsqueeze, where } from tensor
 
 // `tensor` is imported for its operators, not its names. A rule is written as the primitive's own
 // spelling (`x * w`), and it is instantiated at the type the primitive works on -- a row, `f32[3]`,
@@ -607,4 +607,25 @@ export func vmap_dim::<T>(xs: T[..], axis: int[]): int[] when is_numeric::<T>() 
 /// `dim<axis>(x)` batched: the extent one place further in.
 export rule vmap_rule_dim::<T>(x: T[..], axis: int) when is_numeric::<T>() {
     dim<axis>(x) => (bx: Lift<T[..]>, baxis: Lift<int>) => vmap_dim(bx, baxis)
+}
+// ---- where ----
+//
+// `where(cond, a, b)` is elementwise on three arrays of the row's shape, and the condition is one of
+// them: the batch's axis is in front of all three, and a condition that is a constant of the row's
+// shape is lifted to a batch of one row, which broadcasts against the batch. The rule is the
+// operator over the batch, and it is instantiated on the element of the *arms* -- a condition is a
+// `bool` and the answer is the arms' element, so the transform reads the first port that is not a
+// condition to name the rule's `T`.
+
+/// `where(cond, a, b)` batched: the operator over the batch, all three operands one axis in front.
+/// @example vmap_where([[true, false, true]] as bool[1, 3], [[1.0, 2.0, 3.0]] as float[1, 3], [[4.0, 5.0, 6.0]] as float[1, 3])    // [[1.0, 5.0, 3.0]]
+export func vmap_where::<T>(cond: bool[..], a: T[..], b: T[..]): T[..] when is_numeric::<T>() {
+    return where(cond, a, b)
+}
+
+/// `where(cond, x, y)` batched: the condition is a batch of the row's shape too, so the operator
+/// takes all three as they are.
+export rule vmap_rule_where::<T>(cond: bool[..], a: T[..], b: T[..]) when is_numeric::<T>() {
+    where(cond, a, b) => (bcond: Lift<bool[..]>, ba: Lift<T[..]>, bb: Lift<T[..]>) =>
+        vmap_where(bcond, ba, bb)
 }

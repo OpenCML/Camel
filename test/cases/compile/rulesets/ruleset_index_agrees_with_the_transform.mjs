@@ -107,6 +107,8 @@ const expected = new Map([
     ['plane_permute', 'permute/1'],
     ['plane_concat', 'concat/2'],
     ['plane_dim', 'dim/1'],
+    // the condition is not a value arm: where/3 is instantiated on the arms' element
+    ['row_where', 'where/3'],
 ])
 
 const transformText = run([bodies, 'std::nvm']).stdout
