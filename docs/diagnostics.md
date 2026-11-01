@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-308 diagnostics: 287 errors, 21 warnings. 15 carry a machine-applicable edit, 293 say why they carry none.
+307 diagnostics: 286 errors, 21 warnings. 15 carry a machine-applicable edit, 292 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -75,7 +75,6 @@ prints one entry.
 | `0x03000021` | [SemanticDiag::ArgumentNeedsConversion](#argumentneedsconversion) | Error | no |
 | `0x03000022` | [SemanticDiag::ReturnNeedsConversion](#returnneedsconversion) | Error | no |
 | `0x03000027` | [SemanticDiag::ImportNameConflict](#importnameconflict) | Error | no |
-| `0x03000040` | [SemanticDiag::FeatureNotSupported](#featurenotsupported) | Error | no |
 | `0x03000051` | [SemanticDiag::TypeVariableRedeclared](#typevariableredeclared) | Error | no |
 | `0x03000052` | [SemanticDiag::TypeVariableNotBindable](#typevariablenotbindable) | Error | no |
 | `0x03000053` | [SemanticDiag::GenericArgumentsMismatch](#genericargumentsmismatch) | Error | no |
@@ -2154,38 +2153,6 @@ import { f } from conf_c
 
 func main(): int sync {
     println(f(1))
-    return 0
-}
-```
-
-### FeatureNotSupported
-
-`0x03000040` · Error · `SemanticDiag::FeatureNotSupported`
-
-**Fix**
-
-None: choice: the repair is a decision only the writer can make
-
-**Message**
-
-```text
-The feature '{0}' is not supported yet.
-```
-
-**Help**
-
-```text
-Check the documentation for supported features.
-```
-
-**Example** (`test/cases/compile/namespace_rules/p12_use.cml`, run as `camel -E short test/cases/compile/namespace_rules/p12_use.cml`)
-
-```camel
-// use name = qualified name
-import lib
-use inc = lib::Tools::inc
-func main(): int sync {
-    println(inc(1))
     return 0
 }
 ```

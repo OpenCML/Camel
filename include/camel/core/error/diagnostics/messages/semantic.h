@@ -62,7 +62,6 @@ enum class SemanticDiag : uint32_t {
     // An error: the construct it reports is not compiled, so a program that uses it must not
     // run. It used to be a warning (0x100000), and the declaration that used the feature was
     // dropped while the rest of the program went on.
-    FeatureNotSupported = 0x000040,
     // Generic functions and type functions (design principles 5.6).
     TypeVariableRedeclared      = 0x000051,
     TypeVariableNotBindable     = 0x000052,

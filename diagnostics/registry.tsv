@@ -82,7 +82,6 @@ semantic	ImportNameConflict	0x000027	error	The name '{0}' is imported from the m
 # An error: the construct it reports is not compiled, so a program that uses it must not
 # run. It used to be a warning (0x100000), and the declaration that used the feature was
 # dropped while the rest of the program went on.
-semantic	FeatureNotSupported	0x000040	error	The feature '{0}' is not supported yet.	Check the documentation for supported features.	none: choice: the repair is a decision only the writer can make
 # Generic functions and type functions (design principles 5.6).
 semantic	TypeVariableRedeclared	0x000051	error	The type parameter '{0}' is declared twice at the head of this declaration.	A declaration declares each type parameter once, after its name: 'func first::<T>(xs: T[]): T'. A call names them by position or by name ('f::<T = int>').	none: choice: the repair is a decision only the writer can make
 semantic	TypeVariableNotBindable	0x000052	error	The type variable '{0}' of '{1}' can never be bound: {2}.	A type variable must remain present in a parameter or result type. Its position must be reachable through arrays, tuples, structs and function types.	none: choice: the repair is a decision only the writer can make

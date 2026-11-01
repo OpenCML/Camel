@@ -355,6 +355,25 @@ gc_node_ref_t buildRuleTangent(
 
 } // namespace
 
+const TangentKernelDecl *tangentKernelOf(std::string_view name) {
+    // A call names the kernel the way the module that declares it does -- `autodiff::mul_tangent<float>`
+    // -- while the table declares it by the kernel's own name. The qualifier and the type arguments
+    // belong to the caller, so a call is read down to the name before the table is consulted. A name
+    // that is not in the table stays a miss: nothing infers a split from the spelling.
+    const size_t open = name.find('<');
+    std::string_view bare = name.substr(0, open == std::string_view::npos ? name.size() : open);
+    const size_t qualified = bare.rfind("::");
+    if (qualified != std::string_view::npos) {
+        bare = bare.substr(qualified + 2);
+    }
+    for (const TangentKernelDecl &decl : kTangentKernels) {
+        if (decl.name == bare) {
+            return &decl;
+        }
+    }
+    return nullptr;
+}
+
 FunctionType *jvpSignature(FunctionType *function) {
     if (function == nullptr) {
         return nullptr;

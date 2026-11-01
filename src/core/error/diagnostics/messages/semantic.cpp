@@ -269,14 +269,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::FeatureNotSupported,
-            {
-                "FeatureNotSupported",
-                "The feature '{0}' is not supported yet.",
-                "Check the documentation for supported features.",
-            },
-        },
-        {
             SemanticDiag::TypeVariableRedeclared,
             {
                 "TypeVariableRedeclared",
