@@ -25,3 +25,4 @@
 - **PowerShell 的 `Measure-Object -Line` = 1896**——它**不数空行**（这里少 25 行），与上两种不是"差 1"而是差一个量级的东西。
 
 ⇒ 写读数只有一句话能用：**说清用哪一种量法**。只写"1922 行"而不说是 checker 那个数，下一个人用 `wc -l` 复核会以为你错了 1，用 `Measure-Object -Line` 复核会以为你错了 26。
+**更正（2026-11-02 读源码确认）**：checker 用的是 `match(/\n/g)`，**与 `wc -l` 同一个数**（`test/tools/check-doc-readings.mjs` 的 `newlines`）。所以上面三种里，**checker 与第一种相同**；`split('\n').length` 才是多 1 的那一种（末尾换行后的空串）。写读数时"用哪一种量法"要写到这一层：**checker 数换行符，不数 `split` 的尾巴**。
