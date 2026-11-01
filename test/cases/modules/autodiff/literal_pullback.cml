@@ -1,0 +1,67 @@
+/**
+ * The pullback of an array literal whose elements are computed: the fill's slots are positions in
+ * the value's flat element sequence (`[[a, b], [c, d]]` is four elements in row order), and the
+ * gradient of the array hands each active element the cotangent at its own position. Each literal
+ * below is summed, so the derivative in `w` is the sum of the slopes its elements carry -- and every
+ * element depends on `w`, so every position is read.
+ *
+ * The last three shapes were a fault before: a `float[2, 2]` literal's third element is the flat
+ * position 2, and the read refused it as "out of range for the first dimension ... of length 2"
+ * (the check counted a dimension while the read took the element; src/builtin/operators/struct.cpp).
+ * `test/cases/compile/array_shape/open_rank_reads_its_elements.cml` is the same defect read from
+ * the language surface.
+ */
+import { grad } from autodiff
+import { sum } from tensor
+
+// 1 element, slope 1.
+with <w: float>
+func rank_one_short(): float {
+    let xs: float[1] = [w + 1.0]
+    return sum(xs)
+}
+
+// 2 elements, slopes 1 and 2.
+with <w: float>
+func rank_one_two(): float {
+    let xs: float[2] = [w + 1.0, 2.0 * w]
+    return sum(xs)
+}
+
+// 3 elements, slopes 1, 2 and 3.
+with <w: float>
+func rank_one_three(): float {
+    let xs: float[3] = [w + 1.0, 2.0 * w, 3.0 * w]
+    return sum(xs)
+}
+
+// The third flat position is a computed element, and it is the third in row-major order.
+with <w: float>
+func square_three(): float {
+    let xs: float[2, 2] = [[w + 1.0, 2.0 * w], [3.0 * w, 1.0]]
+    return sum(xs)
+}
+
+// Every position computed: the fourth flat position is read as well.
+with <w: float>
+func square_four(): float {
+    let xs: float[2, 2] = [[w + 1.0, 2.0 * w], [3.0 * w, 4.0 * w]]
+    return sum(xs)
+}
+
+// One rank deeper: the positions past the first row are the ones a dimension-bound check refused.
+with <w: float>
+func cube(): float {
+    let xs: float[2, 2, 2] = [[[w, 2.0 * w], [3.0 * w, 1.0]], [[1.0, 1.0], [1.0, 1.0]]]
+    return sum(xs)
+}
+
+func main(): int sync {
+    println(grad(rank_one_short)<0.0>())
+    println(grad(rank_one_two)<0.0>())
+    println(grad(rank_one_three)<0.0>())
+    println(grad(square_three)<0.0>())
+    println(grad(square_four)<0.0>())
+    println(grad(cube)<0.0>())
+    return 0
+}
