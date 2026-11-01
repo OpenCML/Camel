@@ -147,6 +147,15 @@ OperatorSemanticsTestPass::apply(const camel::runtime::Program *program, std::os
         valid("semtest:derived_undeclared"));
     printTraits("semtest:derived_undeclared");
 
+    // ---- The one well-known operator whose traits a pass must not be able to change. ----
+    // `:op/keep` exists so that a node which has to keep running stays alive through a data edge
+    // (design principles 3.3, 9.7): it is declared the way an operator nobody declared is -- an
+    // effect, and it may fault -- because a pass that could drop, merge, move or compute it early
+    // would undo the reason a pass inserted it. The automatic classification of `op/` operators is
+    // one edit away from making it pure, and `mayBeRecomputed` is then true; this line is that
+    // edit's reading (core/operator_table.h, builtin/executors/builtin.cpp).
+    printTraits(":op/keep");
+
     // ---- Queries. ----
     const auto id = table.lookup("semtest:ok");
     os << "SEMANTICS key " << (id && table.key(*id) ? table.key(*id)->toString() : "none") << "\n";
