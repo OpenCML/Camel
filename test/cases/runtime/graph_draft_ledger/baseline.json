@@ -1,8 +1,8 @@
 {
   "comment": "The baseline of the direct-connection ledger (graph-store step 2 b): the numbers below may only fall, and the last step is all of them at zero. `sites` records where each number comes from, as `file#symbol` (a line number moves with every edit above it, a symbol does not); it is diagnostics for a red and never decides the verdict. Record a new row after a commit with check.mjs --record.",
   "numbers": {
-    "files": 34,
-    "references": 301,
+    "files": 35,
+    "references": 300,
     "constructions": 1,
     "decode": 4
   },
@@ -26,6 +26,7 @@
       "modules/tiles/src/graph_values.cpp": 1,
       "modules/tiles/src/region_extract.cpp": 1,
       "modules/tiles/src/region_outline.cpp": 1,
+      "modules/transforms/vmap.cpp": 1,
       "src/compile/gir/builder_support.h": 1,
       "src/compile/gir/draft_graph_builder.cpp": 1,
       "src/core/tags.cpp": 1,
@@ -57,7 +58,7 @@
       "include/camel/runtime/draft_types.h#-": 1,
       "include/camel/runtime/draft_writes.h#operatorOverloadType": 1,
       "include/camel/runtime/graph.h#makeFillPayload": 1,
-      "include/camel/runtime/graph.h#nodeIsFreelySchedulable": 3,
+      "include/camel/runtime/graph.h#nodeIsFreelySchedulable": 2,
       "include/camel/runtime/loop.h#loopOf": 4,
       "include/camel/runtime/node_ref.h#-": 4,
       "include/camel/runtime/operator_instance.h#-": 1,
@@ -68,6 +69,7 @@
       "modules/tiles/src/region_extract.cpp#copyLoopNodes": 1,
       "modules/tiles/src/region_extract.cpp#makeLoopRegions": 1,
       "modules/tiles/src/region_outline.cpp#transferAggregate": 1,
+      "modules/transforms/vmap.cpp#liftConstant": 1,
       "src/compile/gir/builder_support.h#nodeDraftOf": 1,
       "src/compile/gir/draft_graph_builder.cpp#draftOwners": 2,
       "src/compile/gir/draft_graph_builder.cpp#fromDraft": 1,
@@ -153,7 +155,6 @@
       "src/runtime/draft.cpp#setCalleeGraph": 1,
       "src/runtime/draft.cpp#setCtrlInputs": 1,
       "src/runtime/draft.cpp#setInputs": 1,
-      "src/runtime/draft.cpp#setLoopGraphs": 1,
       "src/runtime/draft.cpp#setNodeAttrs": 1,
       "src/runtime/draft.cpp#setNodeName": 1,
       "src/runtime/draft.cpp#setNodeOrigin": 1,
