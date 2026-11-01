@@ -21,12 +21,13 @@
  * (`residualsOf`) before either half is built, and the halves are typed with it -- the identity
  * graph's forward half answers `(result, ())`, `f(x, y) = x*x*y`'s answers a three-member tuple.
  * The residual position in `Split<F>` is therefore a hole the compiler fills where the graph is in
- * hand (author, 2026-11-01); the operator resolver, which sees types only, has the placeholder -- one
- * slot per value parameter -- and that placeholder is what a call site is checked against, never what
- * the graphs carry. Nothing on the far side of the cut is recomputed.
+ * hand (author, 2026-11-01); the operator resolver, which sees types only, gets a stand-in -- one
+ * member per value parameter -- and that stand-in is the type a call site is checked against, never
+ * what the graphs carry. It is not a reading: nothing prints it and it is never compared with the
+ * graph. The count a reading states is the graph's (`residuals=`), and the halves' types are the
+ * graphs' (`type=`). Nothing on the far side of the cut is recomputed.
  *
- * That placeholder is still the call site's type, and it is the one place where type and graph
- * disagree: written up with the readings in
+ * Written up with the readings in
  * docs/handover/reviews/questions-2026-11-01-the-residual-slot-has-no-type-until-execution.md.
  *
  * `g(x) = x*x` at 3 reads `forward y= 9.0`, `residual r0= (3.0)` and `tangent dx1= 6.0`, and 12.0 and

@@ -172,7 +172,7 @@ export func sum::<T>(t: T[..]): T
 /// @fails fault `RuntimeError` when the axis is outside the rank
 /// @example sum<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [4.0, 6.0]
 #op('tensor:sum_axis')
-export func sum(t: float[..], axis: int, keepdims?: bool): float[..]
+export func sum::<T>(t: T[..], axis: int, keepdims?: bool): T[..]
 
 /// The mean of every element, in the operand's element type, with one rounding: the canonical
 /// form of the element type `T` is `mean::<T>(x: T[..]): T = T(sum(float(x)) / float(numel(x)))`.
@@ -190,7 +190,7 @@ export func mean::<T>(t: T[..]): T
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `DivisionByZero` when the axis is empty
 /// @example mean<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [1.5, 3.5]
 #op('tensor:mean_axis')
-export func mean(t: float[..], axis: int, keepdims?: bool): float[..]
+export func mean::<T>(t: T[..], axis: int, keepdims?: bool): T[..]
 
 /// IEEE 754-2019 maximum of every element (design principles 7.7): a NaN anywhere gives `nan`, and
 /// -0 is below +0. An extremum has no identity, so a tensor with no element is a fault rather than
@@ -229,7 +229,7 @@ export func argmin::<T>(t: T[..]): int
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
 /// @example max<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [3.0, 4.0]
 #op('tensor:max_axis')
-export func max(t: float[..], axis: int, keepdims?: bool): float[..]
+export func max::<T>(t: T[..], axis: int, keepdims?: bool): T[..]
 
 /// IEEE 754-2019 minimum over the axis (exactly associative and commutative); keepdims keeps the
 /// axis with extent 1.
@@ -237,7 +237,7 @@ export func max(t: float[..], axis: int, keepdims?: bool): float[..]
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
 /// @example min<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [1.0, 3.0]
 #op('tensor:min_axis')
-export func min(t: float[..], axis: int, keepdims?: bool): float[..]
+export func min::<T>(t: T[..], axis: int, keepdims?: bool): T[..]
 
 /// The position (`int64`) of the first maximum over the axis by IEEE 754-2019 maximum: the first
 /// NaN if there is one, +0 above -0, the earlier position on a tie.
@@ -259,15 +259,30 @@ export func argmin(t: float[..], axis: int, keepdims?: bool): int64[..]
 /// definition in Camel, in `f32`.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
-/// @example softmax([[1.0, 1.0]] as float[1, 2])    // [[0.5, 0.5]]
+/// @example softmax([1.0, 1.0] as f32[])    // [0.5, 0.5]
 export func softmax(t: f32[..], axis?: int): f32[..]
+
+/// The same softmax of an `f64` tensor: the kernel takes the element type of the tensor it is
+/// given, so the result is `f64` as well.
+/// @pure
+/// @fails fault `RuntimeError` when the axis is outside the rank
+/// @example softmax([[1.0, 1.0]] as float[1, 2])    // [[0.5, 0.5]]
+#op('tensor:softmax')
+export func softmax(t: float[..], axis?: int): float[..]
 
 /// The log of the softmax over the axis (-1 by default), computed as its normative definition in
 /// Camel, in `f32`.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
-/// @example log_softmax([[1.0, 1.0]] as float[1, 2])    // [[-0.6931472, -0.6931472]]
+/// @example log_softmax([1.0, 1.0] as f32[])    // [-0.6931472, -0.6931472]
 export func log_softmax(t: f32[..], axis?: int): f32[..]
+
+/// The same log softmax of an `f64` tensor, in `f64`.
+/// @pure
+/// @fails fault `RuntimeError` when the axis is outside the rank
+/// @example log_softmax([[1.0, 1.0]] as float[1, 2])    // [[-0.6931472, -0.6931472]]
+#op('tensor:log_softmax')
+export func log_softmax(t: float[..], axis?: int): float[..]
 
 /// The gradient of the softmax of y with the incoming gradient dy, over the axis (-1 by default).
 /// @pure
@@ -275,12 +290,27 @@ export func log_softmax(t: f32[..], axis?: int): f32[..]
 /// @example softmax_grad(y, dy)
 export func softmax_grad(y: f32[..], dy: f32[..], axis?: int): f32[..]
 
+/// The same gradient in `f64`: y and dy are `f64` tensors and the result is one too.
+/// @pure
+/// @fails fault `RuntimeError` when the axis is outside the rank
+/// @example softmax_grad(y, dy)
+#op('tensor:softmax_grad')
+export func softmax_grad(y: float[..], dy: float[..], axis?: int): float[..]
+
 /// Layer normalization of x with gamma and beta, whose extents are the trailing ones of x, over
 /// the trailing axes; eps is 1e-5 by default. The result is `f32`.
 /// @pure
 /// @fails fault `TensorDimensionMismatch` when gamma or beta does not match the trailing extents of x
 /// @example layer_norm(x, gamma, beta)
 export func layer_norm(x: f32[..], gamma: f32[..], beta: f32[..], eps?: number): f32[..]
+
+/// The same normalization of `f64` tensors, in `f64`: x, gamma and beta are `f64` and the result
+/// is one too.
+/// @pure
+/// @fails fault `TensorDimensionMismatch` when gamma or beta does not match the trailing extents of x
+/// @example layer_norm(x, gamma, beta)
+#op('tensor:layer_norm')
+export func layer_norm(x: float[..], gamma: float[..], beta: float[..], eps?: number): float[..]
 
 // ---- linear algebra ----
 
@@ -297,6 +327,14 @@ export func matmul(lhs: float[..], rhs: float[..]): float[..]
 /// @fails fault `TensorDimensionMismatch` when the features of x are not the rows of weight, or bias is not rank 1 of the output extent
 /// @example linear(x, weight, bias)
 export func linear(x: f32[..], weight: f32[..], bias?: f32[..]): f32[..]
+
+/// The same transform of `f64` operands, in `f64`: it takes the element type of its operands
+/// (the `f32` path is the fused one, the other element types go through `matmul` and the addition).
+/// @pure
+/// @fails fault `TensorDimensionMismatch` when the features of x are not the rows of weight, or bias is not rank 1 of the output extent
+/// @example linear(x, weight, bias)
+#op('tensor:linear')
+export func linear(x: float[..], weight: float[..], bias?: float[..]): float[..]
 
 // ---- gradient ----
 

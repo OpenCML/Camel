@@ -90,6 +90,39 @@ expect_stdout_contains = ["the declarations agree with the"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
 
+# A declaration states the type its call gives back, and the operator states its own in the
+# signature it registers; `--verify-ops` compares the two, so a declaration cannot promise a type
+# the operator does not return. Nothing compared them before: `one_hot` was declared `int64[..]`
+# for months while its kernel, its inference and every test returned f32 rows, and the reference
+# run stayed green because only names, arity, parameter names and purity were read. The run names
+# both halves -- how many result types it compared and which operators it could not compare -- and
+# this test fails if the comparison reports none, or if it has quietly widened into all-but-a-few.
+[[tests]]
+name = "registry.result_types_match"
+desc = "Every operator's declared result type is the one the operator registers (types compared through the compiler's own spellings, not through the text), and the operators whose result type cannot be compared -- a type variable, a named type, a sentence, or an element type taken from an argument -- are named with what each side says."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/stdlib-reference.mjs"
+args = ["${case}", "--verify-ops", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["the declared result type agrees with the operator's own for"]
+normalizers = ["normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const stdout = input.normalized.stdout
+const compared = /the declared result type agrees with the operator's own for ([0-9]+) of them/.exec(stdout)
+assert(compared !== null, 'the run did not say how many result types it compared')
+const comparedCount = compared === null ? 0 : Number(compared[1])
+// The number moves with the library; the floor is what keeps "compared nothing, or compared
+// almost nothing" from passing as agreement. 494 of 554 overloads are compared today.
+assert(comparedCount > 400, `only ${comparedCount} operator(s) had their result type compared`)
+const excused = /the declared result type was not compared for ([0-9]+) operator[(]s[)]/.exec(stdout)
+const excusedCount = excused === null ? 0 : Number(excused[1])
+assert(excusedCount < 60, `${excusedCount} operators have a result type the two sides cannot compare`)
+}
+"""
+timeout_ms = 30000
+
 # A position that means the same thing carries the same name in every rule of a name: that is what
 # a named argument binds to (`len(x: xs)`), and it is why `stdlib/json.cml` and
 # `stdlib/prelude.cml` rename a position. The declaration files and the rules C++
