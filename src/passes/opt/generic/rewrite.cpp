@@ -1,5 +1,7 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
+#include "camel/execute/pass/base.h"
+
 
 /*
  * Draft-editing helpers shared by the generic optimization passes (see rewrite.h).
@@ -665,7 +667,16 @@ const camel::runtime::Program *rewriteReachableGraphs(
     if (total == 0) {
         return program;
     }
-    return session.commit();
+    const camel::runtime::Program *const committed = session.commit();
+    // The check every pass ends with, at the granularity of one rewrite step: `std::opt` runs
+    // fold, cse, algebra, dce and order through here, and until 2026-11-02 none of them was checked
+    // -- the pass was, once, after all of them. A step that moves an effect past another on one
+    // resource is refused here, so the next step never sees such a graph.
+    if (context != nullptr &&
+        checkPassBoundary(context, std::string(passName), *program, *committed)) {
+        return nullptr;
+    }
+    return committed;
 }
 
 } // namespace camel::passes::generic

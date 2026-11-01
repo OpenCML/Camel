@@ -210,3 +210,15 @@ PassRunResult applyRegisteredPass(
     const camel::runtime::Program *program, const std::string &spec,
     const camel::core::context::context_ptr_t &ctx, std::ostream &os,
     GraphIRPass *caller = nullptr);
+
+/// The boundary check, for a caller that holds the two programs and nothing else: a step inside a
+/// pass -- `std::opt`'s fold, cse, algebra, dce and order rounds run through
+/// `rewriteReachableGraphs`, not through `applyRegisteredPass` -- has the program before and after
+/// the step, while `passBoundaryViolation` wants the effects collected once before the pass began.
+/// This walks the before-program for them, which is why the pipeline passes the effects it already
+/// has instead of calling this.
+///
+/// Returns true when it refused: the diagnostic is recorded.
+bool checkPassBoundary(
+    const camel::core::context::context_ptr_t &ctx, const std::string &spec,
+    const camel::runtime::Program &before, const camel::runtime::Program &after);
