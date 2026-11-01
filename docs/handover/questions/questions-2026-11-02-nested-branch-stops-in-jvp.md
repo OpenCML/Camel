@@ -65,3 +65,31 @@ if (arm == nullptr || arm->result == rt::kInvalidNodeRef ||
 > 分支（`Brch`/`Join`）的切向，是"同一只 `Brch` 上再 `Join` 一次各臂的切向"（镜像 `Join`，O(1) 新节点），还是"把臂的 pair 当值、由 `Join` 自己产出 pair"（改 `Join` 的类型与解构）？前者更像今天的形状，但它确实在分支这一支里**多一处切向写入**；后者要把 `Join` 的 `dataType` 改成提升后的类型，动的是 `Join` 的语义。
 
 在作者答这句之前，嵌套分支保持 `skip=branch`（**有名字、有理由**），不拿"近似"或"混合两只臂"顶上。
+## 作者的裁定已实现（2026-11-02 晚，`jvp.cpp` 走通，停在下游一处）
+
+作者 17:30 的裁定是：**按区域从内到外递归，代码只有一处**。照此改了三处（同一处分支处理的三个点，不是"嵌套"另写一支）：
+
+1. **接线顺序**：把所有 `Brch` 按区域深度**从内到外**排序再接线（`regionDepthOf` + `stable_sort`）。内层 `Join` 先成对，外层臂才读得到它。
+2. **`Join` 的诞生位置**：预扫里 `addJoinNode` 改成**在它自己那张 `Brch` 所在的区域**里创建。原来一律建在 region 0，于是嵌套时"区域 0 的 `JOIN` 读臂里的 `BRCH`"，运行时的不变量直接拒绝：`JOIN 3 reads BRCH 10, which lies in an arm of BRCH 7`。
+3. **`Join` 的两个半边**：一个**是某只臂的结果**的 `Join`，它的值与切线是这个对的 `.0` / `.1`（与循环状态端口读法同一套 `addAccsNode(type, 0|1)`）；图自己的那只 `Join` 不投影——它本身就是出口要的对。
+
+`skip=branch` 就此消失，`jvp` 真的把嵌套分支建出来了：
+
+```
+REINTERP jvp function=f graph=61 liftedFrom=55 type=(float, float) => (float, float) pure nodes=14 kinds=14/5 exit=Tuple{chain,tangent}
+REINTERP jvp built graph=61 nodes=31 exit=2 regions=5 function=f
+REINTERP jvp callees=0
+```
+
+## 于是停在 `split`，而且这一处是"第二处"
+
+```
+REINTERP split function=jvp_of_f skip=forward construct=a tangent port uri=- why=the value half reads the tangent of parameter 0, which the forward half does not take
+```
+
+原因不是 `split` 有 bug，而是上面第 3 点：给"是臂的结果"的 `Join` 造的**切线半边（`.1`）落在该臂所在的区域里**，而 `split` 的**前向半**拿到的是同一批区域成员，读到 `.1` 就按规则拒绝（"前向半不读切线"）。也就是说：
+
+- `jvp` 一侧**一处代码**确实够了（作者说得对）；
+- 但要让 `vjp` 出 4.0 / 2.0 / 3.0，还需要 `split` 知道**"嵌套分支的切线半边不属于值半边"**——那是在 `split` 里加判断，**是我这轮被告知的"第二处"**，所以照嘱咐停在这里，代码已回退到 `1b354bf12`（`jvp.cpp` 无改动），只留下这份读数与形状。
+
+要问作者的一句：嵌套分支里，`split` 的前向半该**不复制 `Join` 的切线投影**（按区域成员的角色筛掉 `.1`），还是让 `jvp` 把切线投影**挪到臂外**（在分支所在区域里对 `Join` 的 pair 取 `.1`，臂内只留 `.0`）？两种都能让前向半干净，前者动 `split`，后者动 `jvp`——后者仍然是"一处"。
