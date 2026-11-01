@@ -2391,6 +2391,20 @@ class CmlPrinter {
                               (callForm->declaredByModule || uri.starts_with(":"));
         if (writable) {
             name = callForm->name;
+        } else if (callForm.has_value() && callForm->kernelDeclaration) {
+            // There is a declaration and it has a name, but not one a program writes: a body-less
+            // declaration is the module's own kernel (`array:sum_l` is the `sum_kernel` behind
+            // `array::sum`), and the language never writes a kernel's name. Naming the kernel says
+            // why the operator stays in this column, which a refusal by the operator alone does
+            // not -- and an invented exported name would decide semantics for the author who wrote
+            // the kernel private (design principles 6.4).
+            fail(
+                ref,
+                std::format(
+                    "the operator '{}' without a printable name: '{}' is a body-less kernel "
+                    "declaration, and no program writes that name",
+                    uri,
+                    callForm->name));
         } else {
                 // What an operator node is written as comes from where the operator was declared,
                 // not from a table here: the group it was registered in (`__add__`, `__neg__`,

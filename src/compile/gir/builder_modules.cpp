@@ -451,9 +451,10 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     if (funcType != nullptr) {
         camel::core::OperatorTable::instance().declareCallForm(
             uri,
-            {.name      = name,
-             .minArgs   = funcType->normTypesCount(),
-             .withCount = funcType->withTypesCount()});
+            {.name              = name,
+             .minArgs           = funcType->normTypesCount(),
+             .withCount         = funcType->withTypesCount(),
+             .kernelDeclaration = gct->nativeDeclaration()});
     }
     // The prelude's declaration file declares the built-in operators, whose rules the core
     // computes: the declaration gives each rule it names the parameter types every call is held

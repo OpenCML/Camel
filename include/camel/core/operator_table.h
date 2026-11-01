@@ -526,6 +526,12 @@ class OperatorTable {
         /// carry, so the printer uses a derived shape only for an operator of the core (`:` prefix),
         /// whose names every program has in scope.
         bool declaredByModule = false;
+        /// Whether the declaration this shape was read off is body-less: a kernel the module
+        /// declares for its C++ side (`#impl(sum_kernel)` and the `#op('array:sum_l')` that names
+        /// one instance), whose name is not one a program writes. Such an operator has a name in
+        /// this table and no name in the language, which is a different thing from an operator
+        /// nobody declared, so the printer says which (design principles 6.4).
+        bool kernelDeclaration = false;
     };
 
     /// Records the call shape of `uri`, from the declaration that made it an operator. A second

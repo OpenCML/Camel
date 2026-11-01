@@ -105,6 +105,37 @@ ROUNDTRIP checked=536 equivalent=492 not_equivalent=44 over_budget=0 unfaithful=
 
 **顺便定死"名字"这一列的判据。** 只让"程序写得出来的名字"被打印：核心的算子（`:` 前缀）名字任何程序都在作用域内；模块自己在**声明处**给出调用形状的算子（`transforms` 的 `jvp(f)`/`transpose(f)`/`split(f)`，`CallForm::declaredByModule`）名字是该模块导出的；而**从 Camel 声明推出来**的形状只是被调者的名字，那个声明可能是模块不导出的 kernel（`#impl(sum_kernel)`），所以这类模块算子仍然被拒。放宽到"所有模块算子都打印"实测打印 589、等价 513，但产不出文档 31——剩下的错是**另外几族**（`ImportNameNotExported` 9、`NoMatchingFunction` 3、`Redeclaration` 3、`UnresolvedReference` 3，以及各 1 条的 `ArgumentNeedsConversion`/`DynamicCastForbidden`/`ReservedIdentifier`），按裁决一族一笔地消。
 
+**2026-11-02 第七刀：私有 kernel 的算子拒绝时点名。** 裁决下来的做法是"拒，不给导出名"——打印出来的程序必须能重新编译，替作者挑一个公开名字等于替作者决定语义。先说清事实：那 9 条今天**已经不在打印栏里**（上一刀的 `declaredByModule` 或核心那两条判据就把它们挡住了），所以这一刀不搬数字，只把话说清楚：算子**有声明、有名字，但那个名字不是程序写得出来的**——body-less 声明就是模块自己那侧的 kernel（`array:sum_l` 是 `array::sum` 背后的 `sum_kernel`）。`CallForm` 记下这一列（`kernelDeclaration`，取自声明节点的 `nativeDeclaration()`），打印机拒绝时点名：
+
+```
+the operator 'array:sum_l' without a printable name: 'sum_kernel' is a body-less kernel
+declaration, and no program writes that name
+```
+
+9 条里有 8 条落进这句（第 9 条 `compile/entry_args/scalars.cml` 本来就打印、且在 492 条等价里）：
+
+| 文件 | 算子 URI | 私有 kernel |
+| --- | --- | --- |
+| `compile/when_import/array_sum.cml` | `array:sum_l` | `sum_kernel` |
+| `modules/std/array/sort_basic.cml` | `array:sort_l` | `sort_kernel` |
+| `compile/fstring/basic.cml` | `:str/format` | `format` |
+| `modules/math_calls/erf_values.cml` | `math:round_d` | `round_kernel` |
+| `modules/stdlib/fault_array_min_empty.cml` | `array:min_l` | `min_kernel` |
+| `modules/stdlib/fault_array_max_empty.cml` | `array:max_l` | `max_kernel` |
+| `trans/cpp/math_min_max_int.cml` | `math:min_l` | `min_kernel` |
+| `compile/transforms/rulesets_probe_missing.cml` | `math:pow_d` | `pow_kernel` |
+
+```
+node test/tools/cml-sweep.mjs --jobs 16
+SWEEP files=3358 printed=550 refused=1807 frontend=1001 timeout=0
+REFUSALS families=49
+ROUNDTRIP checked=536 equivalent=492 not_equivalent=44 over_budget=0 unfaithful=14
+```
+
+判据：打印 **550（不变）**、等价 **492（不许降，没降）**、拒绝 **1807（不变）**、不等价 **44**、产不出文档 **14**、`DIFFERENT` **新增 0**。拒绝家族 **48 → 49**，多出来的就是这句（全语料 **376 个图**落在它上面，不是孤例）：它必须自成一族——老的 `the operator '<name>'` 说的是"没有声明"，这句说的是"有声明，名字是私有的"，两件事混进一族正好把这刀要说清的东西抹掉。
+
+**解析器待办（不属于 M7，单独立着）。** `let back: (float, float) => float = transpose(pick)` 今天**编不过**：`error[SyntaxDiag::UnexpectedToken]: Unexpected '=>'; expected '='`，加括号是 `MissingComma`。这是**解析器的缺陷**——类型写在标注位置是合法的，函数类型本身也该写得出来；打印机写空标注只是**绕开**它，不是修它。修解析器时 `test/cases/compile/transforms/transpose_branch.cml` 就是验收：标注写回来之后，打印器那侧的空标注规则才可以考虑退场。
+
 **补声明清单（按节点数）。** 全语料里被打印机点名、确实没有任何声明的算子 **143 个、12520 个节点**。前 12：`:str/format` 1019、`tensor:sum` 934、`tensor:multiply` 862、`tensor:reshape` 856、`:op/tag_is_null` 689、`:struct/len_arr` 585、`tensor:add` 582、`:op/assn_l` 569、`:mark/map_arr` 389、`tensor:subtract` 324、`tensor:matmul` 238、`:op/slice_sub` 219。
 
 **更正两份旧数。** ① 之前报的「353 条没有声明」其实是「没有 `#op` 标签」的数，不是「没有声明」：`:op/add_l`（3244 节点）、`:op/mul_d`（801）这一批由 `globals.cpp` 的组（`__add__`、`__mul__`）**原生登记**，打印机从不点名它们，所以它们不是缺口；真正的缺口是上面 143 条。② `:op/keep` 已在 `fsh-dev 5773c9482` 删掉，全语料图里 **0 个节点**，扣前扣后都是 353（它与上面那 143 条无关）。
