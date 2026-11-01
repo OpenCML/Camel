@@ -2,8 +2,16 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The pass of keepshape.h: it removes the node that takes a print's last read, in the one graph
- * shape where the print has no `sync` edge to stand on, and says what the rewrite did with it.
+ * The passes of keepshape.h: one removes the node that takes a print's last read in the one graph
+ * shape where the print has no `sync` edge to stand on, and says what the rewrite did with it; the
+ * other counts the `:op/keep` nodes a pass list has produced, without changing the program.
+ *
+ * A test pass cannot make this shape by writing a print of its own: a pass that gives a program an
+ * effect it did not have is refused at the pass boundary --
+ * `RuntimeDiag::PassBoundaryResources: Pass 'test::keepshape' changed the ambient resources the
+ * program touches: before nothing, after stdout` -- so the shape has to be built around a print the
+ * source wrote. That is the wall the next test-only pass of this kind hits first, and the reason
+ * `keep_shape.cml` writes its print in a function that is no `sync` block.
  */
 
 #include "camel/passes/test/keepshape.h"
@@ -102,5 +110,52 @@ KeepShapeTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         return session.commit();
     }
     os << "KEEPSHAPE found=0\n";
+    return program;
+}
+const camel::runtime::Program *
+KeepInspectTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    if (program == nullptr) {
+        return program;
+    }
+    // Read-only: the pass is the second half of a pass list, and what it counts is what the first
+    // half wrote.
+    size_t keeps   = 0;
+    size_t inChain = 0;
+    size_t noChain = 0;
+    size_t waited  = 0;
+    RuntimeGraphDraftSession session(context_, program);
+    for (GCGraph *graph : session.collectReachableRuntimeGraphs()) {
+        auto &transaction = session.edit(graph);
+        auto &draft       = transaction.edit();
+        for (gc_node_ref_t id = 0; id < graph->nodeCount(); ++id) {
+            if (graph->node(id) == nullptr ||
+                camel::passes::generic::operUriOf(transaction, id) != ":op/keep") {
+                continue;
+            }
+            ++keeps;
+            // The node the operator keeps is its first input: the one no result takes, whose only
+            // remaining credential is this read.
+            const auto inputs = draft.normInputsOf(id);
+            if (inputs.empty()) {
+                ++noChain;
+                continue;
+            }
+            const gc_node_ref_t kept = inputs.front();
+            const bool place =
+                !draft.syncInputsOf(kept).empty() || !draft.syncUsersOf(kept).empty();
+            if (place) {
+                ++inChain;
+            } else {
+                ++noChain;
+            }
+            // A wait is an order edge: a control edge either way, which is the credential the
+            // operator exists to replace.
+            if (!draft.ctrlInputsOf(kept).empty() || !draft.ctrlUsersOf(kept).empty()) {
+                ++waited;
+            }
+        }
+    }
+    os << "KEEPSPOTS keeps=" << keeps << " in_chain=" << inChain << " out_of_chain=" << noChain
+       << " waited=" << waited << "\n";
     return program;
 }

@@ -185,3 +185,55 @@ args = ["${case}", "test::keepshape", "std::jgir"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["KEEPSHAPE keep=1 uri=:op/keep", "\"label\": \":op/keep\""]
+# Two shapes of the same operator, side by side, because one alone would say the wrong thing about
+# where it lives. `keep_shapes.real_pipeline` is the operator as `std::opt` writes it over an
+# existing case -- two nodes, and the output `5` unchanged. `keep_shapes.no_order_edge` is the
+# rewound one: one node, no order edge anywhere (`waited_on=0`), and the line it prints is the
+# effect the operator is holding up.
+#
+# Note what the two have in common, measured rather than assumed: `in_chain=0` in both. The
+# operator is only written when the node it keeps has no sync user (`replaceNode`:
+# `syncUsers.empty() ? keepThroughValue(...) : replacement`), so a kept node never stands in a
+# `sync` block's chain -- what separates the two shapes is who wrote the operator and whether an
+# order edge is left to lean on, not a chain place.
+[[tests]]
+name = "keep_shapes.real_pipeline"
+desc = "The optimizer's own rewrite: `std::opt` over an existing effect case writes two `:op/keep` nodes, neither of them for a node with a chain place, and the program still prints what it printed."
+case = "../../../cases/opt/effects/dce_effect_under_pure_arithmetic.cml"
+args = ["${case}", "std::opt", "test::keepinspect", "${backend}"]
+expect_exit = 7
+expect_stdout_exact = "KEEPSPOTS keeps=2 in_chain=0 out_of_chain=2 waited=0\n5\n"
+
+[[tests]]
+name = "keep_shapes.no_order_edge"
+desc = "The same operator on the shape with nothing else to hold the effect up: one node, no sync place and no order edge, and the print runs because the operator reads it."
+case = "../../../cases/opt/effects/keep_shape.cml"
+args = ["${case}", "test::keepshape", "test::keepinspect", "${backend}"]
+expect_exit = 99
+expect_stdout_exact = "KEEPSHAPE keep=1 uri=:op/keep data_user=1 sync_statement=0 wait_edge=0 waited_on=0 standing=alive\nKEEPSPOTS keeps=1 in_chain=0 out_of_chain=1 waited=0\n1\n"
+
+# "Is an operator the passes write still reachable?" is a number, and the number is pinned by name
+# for the whole family: `:op/keep` over `test/cases/opt/effects` (three cases, two nodes each),
+# `:enum/tag` and `:enum/field` over `test/cases/opt/defun`, and `:enum/make` pinned to zero because
+# no case reaches that path of the defunctionalizer today -- an empty set with an owner, so a case
+# that starts holding one is a red line and not a surprise. One more case means a rule started
+# writing the operator, one fewer means a rule stopped, and the names are what says which.
+#
+# The assertion names the numerator only (`cases=3 nodes=6`) while the reading prints the
+# denominator too (`of 5`, `of 10`). The denominator is every case of the corpus directory, so it
+# moves whenever anyone adds one there -- the merged tree reads `of 6` for `opt/effects` because
+# another lane put a case in the same directory -- and a red on it would say nothing about the
+# passes. The population may grow; the finding is what may not move.
+[[tests]]
+name = "pass_written.inventory"
+desc = "The operators the passes write, counted by case and pinned by name: `:op/keep` (three of the effect cases), `:enum/tag` and `:enum/field` (six and four of the defun cases), and `:enum/make` pinned to zero with the writer it would have."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/opt/pass_written/check.mjs"
+args = ["${case}"]
+# One run: the check runs the binary itself over the cases it names.
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["[FAMILY] :op/keep cases=3 nodes=6", "[FAMILY] :enum/tag cases=6 nodes=6", "[FAMILY] :enum/field cases=4 nodes=5", "[FAMILY] :enum/make cases=0 nodes=0", "[FAMILY] ok"]
+expect_output_not_contains = ["[FAMILY] RED"]
+timeout_ms = 300000

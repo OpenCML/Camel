@@ -52,6 +52,7 @@ Not in this reference: the profiler (`perf`).
 | [ckpt](#ckpt) | `import { ... } from ckpt` | C++ |
 | [tree](#tree) | `import { ... } from tree` | Camel |
 | [transforms](#transforms) | `import { ... } from transforms` | C++ |
+| [vjp](#vjp) | `import { ... } from vjp` | Camel |
 | [tensor](#tensor) | `import { ... } from tensor` | C++ |
 | [types](#types) | `import { ... } from types` | Camel |
 | [array](#array) | `import { ... } from array` | Camel |
@@ -88,6 +89,7 @@ Not in this reference: the profiler (`perf`).
 | [ckpt](#ckpt) | `import { ... } from ckpt` |  |
 | [tree](#tree) | `import { ... } from tree` |  |
 | [transforms](#transforms) | `import { ... } from transforms` |  |
+| [vjp](#vjp) | `import { ... } from vjp` |  |
 | [tensor](#tensor) | `import { ... } from tensor` |  |
 | [types](#types) | `import { ... } from types` |  |
 | [array](#array) | `import { ... } from array` |  |
@@ -649,7 +651,8 @@ slice: <axis: int, start: int, end: int, step: int = 1> (x: Bytes) => Bytes
 The same slice of a `Bytes`, by byte: it has the one axis 0, and the result is a `Bytes`.
 `b[1:3]` and `b->slice<0, 1, 3>` are the same bytes.
 
-- Example: `encode('hello')->slice<0, 1, 4>` gives `the bytes of 'ell'`
+- Example (a fragment, not compiled): `encode('hello')->slice<0, 1, 4>` gives `the bytes of 'ell'`
+- Why it is not compiled: the example names `encode`, which is `bytes`'s, and a doc example is compiled with this module's names only
 
 #### `concat`
 
@@ -1502,6 +1505,64 @@ declarations show, because the result of a call is the exit type its resolver gi
 
 - Example (a fragment, not compiled): `let remembered = remat(f)`
 - Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
+<a id="vjp"></a>
+
+## `vjp`: the derivative, as a library
+
+#### `vjp`
+
+```camel
+vjp: (f: (x: float) => float) => (x: float) => (float, (ct: float) => float)
+```
+
+The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
+`(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters. The juxtaposed call
+`transpose(residuals, ct)` is the internal step, not this signature.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let reading = vjp(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
+#### `vjp`
+
+```camel
+vjp: (f: (x: float, y: float) => float) => (x: float, y: float) => (float, (ct: float) => (float, float))
+```
+
+The same transform for a function of two parameters: `vjp(f)(x, y)` is `(value, pullback)` and
+`pullback(ct)` gives both cotangents, in the order `f` takes the parameters.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let reading_of_two = vjp(f)`
+- Why it is not compiled: `f` is a function value of two parameters, so the example is a fragment of a program that declares one
+
+#### `grad`
+
+```camel
+grad: (f: (x: float) => float) => (x: float) => float
+```
+
+The gradient of a function of one parameter: `vjp` with the seed 1, its second half taken --
+`grad(f)(x)` is `vjp(f)(x).1(1.0)` (author's ruling of 2026-11-01). Read `grad(f)` as a name for
+that reading of `vjp`, not as a second transform.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let slope = grad(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
+#### `with_grad`
+
+```camel
+with_grad: (f: F) => F when is_function::<F>()
+```
+
+The gradient of the first `with` parameter of `f` (design principles 9.9): the same `vjp`, taken
+with respect to a captured value instead of a parameter.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let slope_over_the_capture = with_grad(f)`
+- Why it is not compiled: `f` captures the value it differentiates against, so the example is a fragment of a program that declares one
 
 <a id="tensor"></a>
 
@@ -7228,11 +7289,12 @@ integer row's mean is `f32`, which is not the element the rule would be written 
 vmap_max: (xs: T[..]) => T[..] when is_numeric::<T>()
 ```
 
-`max(xs)` batched: one maximum per row, folded the same way `sum` is. No accumulator is chosen,
-because IEEE 754-2019 maximum carries an element and is exactly associative and commutative
-(design principles 7.7): the axes of a row may be folded away in any order and the bits are the
-same, so the batch axis in front and the row's axes folded from the first is the same value as
-the row's own `max`.
+`max(xs)` batched: one maximum per row. The row's axes are flattened into one (`shape(xs)[0]`
+is the batch extent, `-1` the rest) and the maximum is taken over that axis in one pass: IEEE
+754-2019 maximum carries an element and is exactly associative and commutative (design
+principles 7.7), so the axes of a row may be folded away in any order -- or in one pass over
+the flattened row -- and the bits are the same: -0 below +0, a NaN anywhere beyond every
+number, in either shape.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_max([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])` gives `[5.0, 4.0]`
@@ -7243,8 +7305,9 @@ the row's own `max`.
 vmap_min: (xs: T[..]) => T[..] when is_numeric::<T>()
 ```
 
-`min(xs)` batched: the same fold, with the IEEE 754-2019 minimum. -0 is below +0 and a NaN is
-beyond every number, so the fold answers both readings the whole-tensor form does.
+`min(xs)` batched: the same one-pass minimum over the flattened row, with the IEEE 754-2019
+`minimum`. -0 is below +0 and a NaN is beyond every number, so the answer is the one the
+whole-tensor form gives.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_min([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])` gives `[1.0, 0.0]`

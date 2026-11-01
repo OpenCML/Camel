@@ -47,9 +47,27 @@ using camel::runtime::kInvalidNodeRef;
  *  - an OPER node's operator: both keep `GCOperBody` in the node's payload, so the face reads the
  *    payload off the draft's tail and answers the same URI.
  */
+/// A node as the lift reads it: the record a frozen graph hands out (`GCNode`), answered for both
+/// faces from one place so a reader that only wants these five facts does not walk two APIs.
+struct NodeFace {
+    GCNodeKind kind           = GCNodeKind::Data;
+    gc_slot_idx_t dataIndex   = 0;
+    const camel::core::type::Type *type = nullptr;
+    uint8_t flags             = 0;
+    /// The node has a payload (`payloadOf` answers its bytes).
+    bool payload              = false;
+    /// False when the id names no node of this graph: a removed node, or one it never had.
+    bool alive                = false;
+
+    constexpr bool hasFlag(uint8_t mask) const { return (flags & mask) != 0; }
+};
+
 class GraphRead {
   public:
     virtual ~GraphRead() = default;
+
+    /// The node's record, as the lift asks for it.
+    virtual NodeFace nodeFaceOf(gc_node_ref_t ref) const = 0;
 
     /// What the graph's type says (its parameters and what it answers); nullptr before it is
     /// complete, as on the frozen side.
@@ -139,6 +157,7 @@ class DraftGraphRead final : public GraphRead {
     std::vector<gc_node_ref_t> withInputsOf(gc_node_ref_t ref) const override;
     std::vector<gc_node_ref_t> ctrlInputsOf(gc_node_ref_t ref) const override;
     GraphId calleeIdOf(gc_node_ref_t ref) const override;
+    NodeFace nodeFaceOf(gc_node_ref_t ref) const override;
     std::span<const std::byte> payloadOf(gc_node_ref_t ref) const override;
 
   private:
@@ -181,6 +200,7 @@ class FrozenGraphRead final : public GraphRead {
         return mappedListOf(graph_.ctrlInputsOf(ref));
     }
     GraphId calleeIdOf(gc_node_ref_t ref) const override { return graph_.calleeIdOf(ref); }
+    NodeFace nodeFaceOf(gc_node_ref_t ref) const override;
     std::span<const std::byte> payloadOf(gc_node_ref_t ref) const override {
         return graph_.nodePayloadBytes(ref);
     }
