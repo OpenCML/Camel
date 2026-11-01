@@ -1,0 +1,37 @@
+/**
+ * `remat` is the identity on the function it is given, so the two paths print the same three
+ * numbers: `f(x, y) = x * x * y` at x = 3, y = 2 gives 18.0, df/dx = 12.0 and df/dy = 9.0 whether
+ * the function reaches the value and the gradient through `remat` or not.
+ *
+ * That is the whole of what the name does to a value: a call through `remat` is a call of the same
+ * function, so the identity is what a program reads of it, and no number moves whether it is
+ * written or not. What a pass stores is not a number this case could report, so this case pins the
+ * half that is assertable -- an identity that can be called, in both readings a value takes.
+ *
+ * `f_by_x` is the same product with x as the `with` parameter instead of y, because `grad`
+ * differentiates the first `with` parameter (design principles 9.9) and two declarations are what
+ * make both partial derivatives readable at one point.
+ */
+
+import { grad, remat } from autodiff
+
+with <y: float>
+func f(x: float): float {
+    return x * x * y
+}
+
+with <x: float>
+func f_by_x(y: float): float {
+    return x * x * y
+}
+
+func main(): int sync {
+    let g = remat(f)
+    let gx = remat(f_by_x)
+    // The plain path first, then the same three numbers through `remat`.
+    let (v, dx, dy) = (f<2.0>(3.0), grad(f_by_x)<3.0>(2.0), grad(f)<2.0>(3.0))
+    let (rv, rdx, rdy) = (g<2.0>(3.0), grad(gx)<3.0>(2.0), grad(g)<2.0>(3.0))
+    'remat plain value={} dfdx={} dfdy={}'->format<v, dx, dy>->println
+    'remat value={} dfdx={} dfdy={}'->format<rv, rdx, rdy>->println
+    return 0
+}
