@@ -968,3 +968,24 @@ Stack Trace: (not available on this platform)
 **静态类型与运行时形状不一致时，折叠应当放弃，而不是相信类型。**
 
 **打点已删净**（`git checkout -- src/passes/opt/generic/generic.cpp`，`git status` 为空，`git grep -c probe` = 0）。
+
+## 29. A6 第二次排除：六处候选中五处已读、都不读变体；剩下的是"被内联进 `foldDraft` 帧里"的那一层
+
+**先按你的要求列"可能在变体上读的位置"**：`git grep -n 'Variant' -- src/passes/opt/generic/generic.cpp` = **0 命中**（这个文件里没有一处直接写 `Variant`）。
+所以读取一定发生在**被调用者**里，而栈上那一帧仍显示 `foldDraft`（release 内联）。
+
+**逐处读的结果**：
+
+| 处 | 会不会读到 `Variant::get` | 依据 |
+|---|---|---|
+| `holdsNoValue`（`generic.cpp:102-105`） | **不会** | 只看 `NullSlot` 与类型码 |
+| `fitsConstantBudget` → `constantBytesOf`（`:127-196`、`:210-212`） | **不会** | `Tuple`/`Struct`/`Array`/`String` 各支都用**运行时自己的** `size()` 作界；`Enum` 落到 `default:`，注释写明"不认识的内容只算头部" |
+| `staticValueOf` / `pruneBranch` / `replaceFoldResult` | **没有出现 `Variant`** | 同上的 grep；且它们的读都走 `staticValueOf`/`draft.header` |
+| `materializeStaticValue` | **未排除** | 定义在 `src/runtime/draft_inline.cpp`，**若被内联就落在 `foldDraft` 帧里** |
+
+**结论（可核对）**：**这六处里没有一处"相信静态类型去读变体字段"的形态**，所以下一层的嫌疑是 **`draft_inline.*` 里被内联进 `foldDraft` 的那些**——
+它们的名字在栈上不出现，正是"帧显示 `foldDraft` 却六处都没打中"的原因。
+
+**这一轮没有改代码**：没有定位到具体那一行之前不动手（也不去反汇编猜）。**打点已删净**（`git status` 为空、`git grep -c probe` = 0），**`variant.h:47-54` 一字未动**。
+
+**下一轮的一条命令**：`git grep -n 'inline' include/camel/runtime/draft_inline.h | head` 找出内联清单，在 `materializeStaticValue` 与 `staticValueOf` 的读点各打一行（tag / 声明字段数 / 读的序号）。
