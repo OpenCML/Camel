@@ -171,6 +171,18 @@ the literal into a constant array, and the program written back builds a differe
 判据（对照合并 `origin/develop = 374488bf4` 之后**重测**的基线 550 / 1807 / 540 / 495 / 45 / 10 / 49，旧数不跨基线比）：打印 **550 → 549（掉 1，就是 `int_division.cml`，只能拒）**、等价 **495（保持）**、不等价 **45 → 44**、产不出文档 **10（保持）**、拒绝 **1807 → 1808**、家族 **49 → 50**、`DIFFERENT` **新增 0（并回少 1 条）**。新族必须自成一族：老族分别是"没有声明"（`the operator '<name>'`）与"有声明但名字是私有 kernel 的"（`body-less kernel declaration`），这句是第三件事——**声明、名字、写法都齐，但写回去的形状不是同一张图**。条件收得很窄：元素的**值没有普通字面量写法**（`int64`/`int32` 的最小值）才拒；同一支里 `[[1.0, x], [x, 2.0]]` 这种槽位写着**名字**的构造照常打印（实测 `[1, 2]`、`[[1.0, 2.0], [2.0, 2.0]]`、`[-9223372036854775808]` 都会被折成一张 `DATA`，而槽位里有名字的仍是 `FILL`），所以没有连带丢掉 `trans/cpp/exec/array_conversion.cml` 那类。
 
 **`int_division.cml` 这一条要单说一句：它此前根本编不过（`NoMatchingFunction`，缺 `import tensor` 那一刀之前），从没有过"形状"可比 —— 那个不等价是第八刀新露出来的，不是新造的。**
+**2026-11-02 第十刀（分类，不动代码）：`358` 那一族不该在"补名字"这一层动。** 350 那一族（`the graph name '<name>' is not a source identifier`）按**首次拒绝时的名字形状**分类，实测（树 = `ea9bf0915` + 合并 `374488bf4`）：
+
+| 形状 | 判定 | 文件数 |
+| --- | --- | --- |
+| 含 `<…>`（泛型实例，如 `array::vmap<float[3], float>`） | `GENERIC` | **219** |
+| 含 `::`（模块/命名空间限定，如 `Tools::inc`、`rules::…__lhs`） | `MANGLED` | **74** |
+| 其余 | `PLAIN` | **0** |
+| 合计 | | **293** |
+
+**291/293 = 99.3% 是"语言的事实"，不是打印机的手艺**：实例图在源码里**没有写法**（源写 `vmap(f)`，实例由调用点定），`namespace`/`module` 区域**打印机不支持**。所以这一族**不该在补名字这一层动**，两条路都等作者裁，页面见 `docs/handover/reviews/questions-2026-11-02-generic-instances-and-namespace-blocks.md`（两条各带代价，默认两条都不做）。
+
+**一处更正（把我上一刀的读数收回）：** 上一刀我报"`PLAIN` 两个、名字是 `rulesets.`（以句点结尾）⇒ 前端拼前缀漏了成员名"——**不成立**：那是我统计脚本的截断错误（`sed` 在第一个句点处截断），真名是 `rulesets.jvp::lift<float>` 与 `rulesets.probe_missing::add_ok__lhs`。用正确的提取重扫：**以 `::`、`.` 或 `<` 结尾的名字计数为 0**，`PLAIN` 为 0。所以"前端拼名字漏成员名"这条缺陷**没有可修的点**，这一刀只有分类、没有代码改动。
 **补声明清单（按节点数）。** 全语料里被打印机点名、确实没有任何声明的算子 **143 个、12520 个节点**。前 12：`:str/format` 1019、`tensor:sum` 934、`tensor:multiply` 862、`tensor:reshape` 856、`:op/tag_is_null` 689、`:struct/len_arr` 585、`tensor:add` 582、`:op/assn_l` 569、`:mark/map_arr` 389、`tensor:subtract` 324、`tensor:matmul` 238、`:op/slice_sub` 219。
 
 **更正两份旧数。** ① 之前报的「353 条没有声明」其实是「没有 `#op` 标签」的数，不是「没有声明」：`:op/add_l`（3244 节点）、`:op/mul_d`（801）这一批由 `globals.cpp` 的组（`__add__`、`__mul__`）**原生登记**，打印机从不点名它们，所以它们不是缺口；真正的缺口是上面 143 条。② `:op/keep` 已在 `fsh-dev 5773c9482` 删掉，全语料图里 **0 个节点**，扣前扣后都是 353（它与上面那 143 条无关）。
