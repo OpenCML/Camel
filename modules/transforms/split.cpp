@@ -321,11 +321,25 @@ struct Half {
             copyOf[ref] = made;
             return true;
         }
-        case rt::GCNodeKind::Func:
-            return refuseAt(
-                refusal, source, ref, "a function value",
-                "the plumbing copies a straight-line body of ports, constants, primitives, fills and "
-                "calls; a function value built by the body is a later tier");
+        case rt::GCNodeKind::Func: {
+            // A call to a named function, which is the shape a rule reaches a half in now that
+            // `reinterp` expands a rule's right side at the match site (`jvp.cpp`): what was a call
+            // through a function value is a call the graph names. The callee is a graph of the
+            // program and not a value on either side of the cut, so the copy names the same graph and
+            // the call's inputs are placed on this half's side.
+            const GraphId callee = source->calleeIdOf(ref);
+            if (!rt::isValid(callee)) {
+                return refuseAt(
+                    refusal, source, ref, "a call to a named function",
+                    "the node names no callee graph, so there is no function to call");
+            }
+            const gc_node_ref_t made = draft.addFuncNode(
+                callee, node->dataType(), 0, draft.allocateRuntimeSlot(node->dataType()), 0);
+            draft.setNormInputs(made, inputs);
+            draft.addDependency(callee);
+            copyOf[ref] = made;
+            return true;
+        }
         case rt::GCNodeKind::Brch:
         case rt::GCNodeKind::Join:
             return refuseAt(refusal, source, ref, "a branch", "the plumbing copies straight-line bodies");
