@@ -157,16 +157,24 @@ timeout_ms = 20000
 # the refusal -- which step, and where -- because a name that answers "not implemented yet" leaves
 # the reader nowhere. This is the assertion that has to be replaced by numbers the day the step
 # lands; the skipped test below is where those numbers go.
+#
+# The refusal moved once `transpose` stopped being a stand-in: it is a real transform now, and the
+# shape `split` stands in with -- a lifted function `(float, float) => (float, float)` -- is not the
+# shape `transpose` takes (a function of one `float` parameter). So the composition is refused when
+# the call is typed, still at the line of `stdlib/vjp.cml` that composes it and still in terms of a
+# transform rather than "not implemented". When `split` returns the shape `transpose` takes, the same
+# test reads as a runtime refusal naming `split`; the two readings are one step apart, and this line
+# is where that step will show up.
 [[tests]]
 name = "vjp_api.names_the_missing_step"
-desc = "`vjp(f)` is `transpose(split(reinterp<jvp>(f)))` written in `stdlib/vjp.cml`. The middle steps are declared as operators with no implementation, so a call is refused by the step that is missing, named as the transform that is missing (`split` / `transpose`) and standing at the line of the library that composes it -- not at the `vjp(f)` call in the program, and not in a sentence of the form `not implemented yet`, which sends the reader to no line at all. The run exits non-zero and prints no value."
+desc = "`vjp(f)` is `transpose(split(reinterp<jvp>(f)))` written in `stdlib/vjp.cml`. The middle step is declared as an operator with no implementation, so a call is refused at the line of the library that composes it -- not at the `vjp(f)` call in the program, and not in a sentence of the form `not implemented yet`, which sends the reader to no line at all. Today the refusal names `transpose`, because `transpose` is real and `split` still stands in with a shape it does not take. The run exits non-zero and prints no value."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_missing_step.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 1
-expect_output_contains = ['transforms: `split` has no rule', 'is not bound for this function', "stdlib/vjp.cml:33:22:"]
+expect_output_contains = ["stdlib/vjp.cml:33:", "Invalid call to 'transpose'"]
 expect_output_not_contains = ["not implemented", "尚未实现", "unimplemented"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
