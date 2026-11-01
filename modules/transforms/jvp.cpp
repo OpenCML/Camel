@@ -37,6 +37,12 @@ using camel::runtime::GraphId;
 
 namespace {
 
+/// Whether a rule's expansion records how many of the arguments of the call it produces are tangents
+/// (`addFuncNode`'s last argument, `GCNode::tangentArgs`). On, the fact lives on the node and
+/// `transpose` reads it there. Off, the call records nothing, and the transpose of a kernel inside an
+/// arm stops again at the tangent that has no value -- the A/B of the two readings.
+constexpr bool kRecordTangentArgs = true;
+
 /// The graph a rule's right side answers with, read from the right side itself.
 ///
 /// The right side of `x * w => (dx, dw) => mul_tangent(x, w, dx, dw)` is a graph that builds the
@@ -244,8 +250,25 @@ gc_node_ref_t expandRuleRightSide(
                 why = "the rule's right side calls a function it does not name";
                 return rt::kInvalidNodeRef;
             }
+            // How many of the call's arguments are tangents -- the rule's own split, recorded on the
+            // call the rule produced. The right side binds the values as its captures and takes the
+            // tangents as its own parameters (`x * w => (dx, dw) => mul_tangent(x, w, dx, dw)`), so an
+            // argument that is one of this expansion's tangent ports is a tangent, and the count is
+            // read off the rule. This is the one place the fact exists in the tree: `transpose` reads
+            // the node rather than re-deriving the split from a name, and there is no second table to
+            // keep in step when a rule is added.
+            uint16_t tangentArgs = 0;
+            if (kRecordTangentArgs && !inputs.empty() && !tangents.empty()) {
+                for (size_t i = inputs.size(); i-- > 0;) {
+                    if (std::find(tangents.begin(), tangents.end(), inputs[i]) == tangents.end()) {
+                        break;
+                    }
+                    ++tangentArgs;
+                }
+            }
             const gc_node_ref_t made = draft.addFuncNode(
-                callee, node->dataType(), 0, draft.allocateRuntimeSlot(node->dataType()), 0);
+                callee, node->dataType(), 0, draft.allocateRuntimeSlot(node->dataType()), 0,
+                tangentArgs);
             if (!inputs.empty()) {
                 draft.setNormInputs(made, inputs);
             }
@@ -354,25 +377,6 @@ gc_node_ref_t buildRuleTangent(
 }
 
 } // namespace
-
-const TangentKernelDecl *tangentKernelOf(std::string_view name) {
-    // A call names the kernel the way the module that declares it does -- `autodiff::mul_tangent<float>`
-    // -- while the table declares it by the kernel's own name. The qualifier and the type arguments
-    // belong to the caller, so a call is read down to the name before the table is consulted. A name
-    // that is not in the table stays a miss: nothing infers a split from the spelling.
-    const size_t open = name.find('<');
-    std::string_view bare = name.substr(0, open == std::string_view::npos ? name.size() : open);
-    const size_t qualified = bare.rfind("::");
-    if (qualified != std::string_view::npos) {
-        bare = bare.substr(qualified + 2);
-    }
-    for (const TangentKernelDecl &decl : kTangentKernels) {
-        if (decl.name == bare) {
-            return &decl;
-        }
-    }
-    return nullptr;
-}
 
 FunctionType *jvpSignature(FunctionType *function) {
     if (function == nullptr) {
@@ -1343,7 +1347,13 @@ bool liftGraph(
             rules += (rules.empty() ? "" : ",") + rule;
         }
         os << "REINTERP jvp function=" << name << " graph=" << rt::toValue(member)
-           << " liftedFrom=" << rt::toValue(source)
+           // The graph the lift was asked about. A run-time lift knows it -- it is the callee graph
+           // the call named -- and prints its id there. A build-time lift does not and cannot: the
+           // callee's runtime id is handed out when the program is encoded, which is after this
+           // build, and a number here would read as the id of some graph. So the reading is a word
+           // for "not assigned yet" rather than a number that looks like an answer.
+           << " liftedFrom="
+           << (rt::isValid(source) ? std::to_string(rt::toValue(source)) : std::string("unassigned"))
            << " type=" << signature->toString() << " nodes=" << function.nodeCount()
            << " kinds=" << copiedKinds << '/' << seenKinds
            << " exit=Tuple{chain,tangent} tangent=computed source=ruleset rules="

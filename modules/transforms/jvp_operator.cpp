@@ -263,6 +263,15 @@ void registerOperatorMetadata() {
     // the first one did not.
     camel::core::OperatorTable::instance().set(
         "transforms:transpose", {.pure = false, .readsGraphs = true});
+    // Both read the graph of the function value they receive, so that value has to be a function this
+    // program knows before it runs: a declared function, or a lambda that captures nothing. A
+    // parameter or a closure that captures a value names no graph at the call, and the compiler
+    // refuses it there by name (CallSpec::staticFunctionArg; sem::TransformArgumentIsNotAKnownFunction)
+    // instead of leaving the transform to refuse once the program is running.
+    camel::core::OperatorTable::instance().declareCallSpec(
+        "transforms:jvp", {.staticFunctionArg = 0});
+    camel::core::OperatorTable::instance().declareCallSpec(
+        "transforms:transpose", {.staticFunctionArg = 0});
 }
 
 } // namespace camel::transforms

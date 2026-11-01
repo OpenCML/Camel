@@ -3626,6 +3626,36 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             }
             // A constant format string is checked against the arguments it formats now, not
             // when the program runs (CallSpec::checkFormat; design principles 5.4).
+            if (callSpec != nullptr && callSpec->staticFunctionArg >= 0) {
+                // A transform builds the transformed graph at the call, out of the graph of the
+                // function it is handed, so that argument has to name a graph the compiler can name
+                // now. A parameter and a closure that captures a value name none until the program
+                // runs -- the capture is not a value the compiler has -- and the run-time half of the
+                // transform is where that used to surface, as a refusal after the program had already
+                // been compiled and started. It is refused here instead, at the call, by name.
+                const auto at = static_cast<size_t>(callSpec->staticFunctionArg);
+                if (at < normInputs.size() && normInputs[at].node != nullptr) {
+                    const node_handle_t argument = normInputs[at].node;
+                    const char *what             = nullptr;
+                    if (nodeIsKind(argument, runtime::GCNodeKind::Port) &&
+                        callSpec->staticFunctionArgRefusesParameters) {
+                        what = "a parameter";
+                    } else if (
+                        nodeIsKind(argument, runtime::GCNodeKind::Fill) &&
+                        !withInputsOf(argument).empty()) {
+                        what = "a closure that captures a value";
+                    }
+                    if (what != nullptr) {
+                        const auto where = normInputs[at].expr != nullptr
+                                               ? normInputs[at].expr->origin()
+                                               : gct->origin();
+                        diags_->of(SemanticDiag::TransformArgumentIsNotAKnownFunction)
+                            .atOrigin(where)
+                            .commit(displayNameOf(targetOperator->name()), what);
+                        throw BuildAbortException();
+                    }
+                }
+            }
             if (callSpec != nullptr && callSpec->checkFormat) {
                 const bool patternInWith = callSpec->formatWithArg >= 0;
                 const auto &patterns     = patternInWith ? withInputs : normInputs;
