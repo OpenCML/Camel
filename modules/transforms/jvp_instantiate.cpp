@@ -25,6 +25,7 @@
 
 #include "jvp.h"
 #include "jvp_operator.h"
+#include "split.h"
 
 #include "camel/compile/gir/compile_time.h"
 #include "camel/compile/gir/static_function.h"
@@ -35,6 +36,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace camel::transforms {
@@ -85,14 +87,31 @@ bool bodyCalls(const gir::graph_ptr_t &graph) {
     return false;
 }
 
-/// Whether the call's value is called where it is made: one CALL node reads it as its callee (a copy
-/// in between is the same value, once), and nothing else reads it. A value passed on to another
-/// transform (`split(jvp(f))`, `transpose(...)`) is read by that transform in the program it runs in,
-/// which a graph of the lift's own is not: those keep the run-time lift.
+/// The URI of the operator that cuts a lifted function in two: `split(jvp(f))` is the shape `vjp` is
+/// built from, and the cut reads the graph the lift made. The table knows how to take that value
+/// (split_instantiate.cpp), so the lift may answer here too.
+constexpr std::string_view kSplitUri = "transforms:split";
+
+/// Whether the call's value is read where it is made: one CALL node takes it as its callee (a copy
+/// in between is the same value, once), or the `split` operator takes it as the function to cut, and
+/// nothing else reads it. A value passed on to `transpose`, or handed to anything else, keeps the
+/// run-time lift: that reader would look for the value in the program it runs in.
 bool calledWhereItIsMade(const gir::CompileTimeCall &call) {
     const auto &draft = call.caller->view();
-    if (!draft.normUsersOf(call.node).empty() || !draft.ctrlUsersOf(call.node).empty()) {
+    if (!draft.ctrlUsersOf(call.node).empty()) {
         return false;
+    }
+    const auto normUsers = draft.normUsersOf(call.node);
+    if (!normUsers.empty()) {
+        if (normUsers.size() != 1) {
+            return false;
+        }
+        const auto *reader = draft.header(normUsers.front());
+        if (reader == nullptr || reader->kind != GCNodeKind::Oper) {
+            return false;
+        }
+        const auto op = call.caller->operTarget(normUsers.front());
+        return op != nullptr && op->uri() == kSplitUri;
     }
     gir::draft_node_ref_t user = call.node;
     for (int hop = 0; hop < 4; ++hop) {
@@ -124,15 +143,16 @@ std::optional<gir::node_handle_t> instantiateJvp(gir::CompileTimeCall &call) {
     }
     if (!callee->view().closureNodes().empty() || !callee->captureNames().empty()) {
         // It captures: the value it is called with carries the captures, which are not a constant of
-        // the program.这一形状还没挪。
+        // the program.
         return std::nullopt;
     }
     if (bodyCalls(callee)) {
-        // 这一形状还没挪：body 里有调用，lift 要读被调用者的图，而这里读的是草稿。
+        // The lifted body calls another function: the lift would have to read the callee's graph here,
+        // and this reads a draft.
         return std::nullopt;
     }
     if (!calledWhereItIsMade(call)) {
-        // 这一形状还没挪：值被交给 split/transpose，那些算子在自己的程序里读它的图。
+        // The value is handed to something else: that reader looks for it in the program it runs in.
         return std::nullopt;
     }
 
@@ -162,13 +182,10 @@ std::optional<gir::node_handle_t> instantiateJvp(gir::CompileTimeCall &call) {
         toSlot<gir::StaticProgramFunction *>(carrier), built.graph->funcType());
     const auto data = call.caller->edit().addDataNode(
         built.graph->funcType(), slot, static_cast<uint8_t>(camel::runtime::kGCNodeFlagConstant));
-    // The call becomes what it stands for: every reader of its value reads the value, and the call
-    // itself is gone -- which is the fact to check, because a call that is gone is a kernel that does
-    // not run.
-    call.caller->edit().replaceAllWithUses(call.node, data);
-    call.caller->edit().replaceAllNormUses(call.node, data);
-    call.caller->edit().replaceAllCtrlUses(call.node, data);
-    call.caller->edit().eraseNode(call.node);
+    // The call becomes what it stands for: every reader of its value reads the value, the call's place
+    // in a statement chain is the value's, and the call itself is gone -- a call that is gone is a
+    // kernel that does not run.
+    gir::replaceCallWithValue(call.caller, call.node, data);
     return call.caller->view().ref(data);
 }
 
@@ -176,6 +193,9 @@ std::optional<gir::node_handle_t> instantiateJvp(gir::CompileTimeCall &call) {
 
 void registerCompileTimeTransforms() {
     gir::registerCompileTimeTransform("transforms:jvp", &instantiateJvp);
+    // The cut reads the value the lift answers, so the two halves are registered together: the pair
+    // of a lift and a cut written in one line is answered by the two of them or by neither.
+    registerSplitCompileTimeTransform();
 }
 
 } // namespace camel::transforms
