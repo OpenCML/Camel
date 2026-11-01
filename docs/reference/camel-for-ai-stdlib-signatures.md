@@ -757,7 +757,7 @@ update: (opt: Sgd, params: P, grads: G, state: SgdState) => (P, SgdState)
 update: (opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)
 ```
 
-**`autodiff`** — import { ... } from autodiff — 15 name(s)
+**`autodiff`** — import { ... } from autodiff — 16 name(s)
 
 ```text
 grad: (f: F) => Gradient<F> when is_function::<F>()
@@ -765,6 +765,7 @@ grad: (f: F, has_aux: bool) => GradientAndAux<F> when is_function::<F>()
 with_grad: (f: F) => ValueAndGradient<F> when is_function::<F>()
 with_grad: (f: F, has_aux: bool) => ValueAndGradientAndAux<F> when is_function::<F>()
 stop_gradient: (x: T) => T pure
+remat: (f: F) => F pure when is_function::<F>()
 add_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 sub_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 mul_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
