@@ -15,10 +15,17 @@ no slice below waits on the deleted node. Nothing was found that still leans on 
 
 | file | sites |
 |---|---|
-| `src/compile/gir/builder_control.cpp` | 8 -- 1359, 2803, 2861, 2891, 2912, 3538, 4013, 4201 |
-| `src/compile/gir/builder_expr.cpp` | 5 -- 589, 793, 1551, 1704, 1733 |
-| `src/compile/gir/builder_operators.cpp` | 3 -- 4122, 4396, 4420 |
-| `src/compile/gir/builder_helpers.h` | 1 -- 686, the `linkCtrl` helper the others can use |
+| `src/compile/gir/builder_helpers.h` | **1** -- `writeControlLink` (698), the one place a control edge is written on the builder's side |
+
+Sixteen call sites call it: `builder_control.cpp` 7 (1360, 2806, 2864, 2913, 3539, 4014, and the
+chain pair in `writeSyncStatement`), `builder_expr.cpp` 5 (590, 794, 1552, 1705, 1734),
+`builder_operators.cpp` 3 (4153, 4434, 4465). Counted on 2026-11-02 with
+`git grep -n 'linkNodes(LinkType::Ctrl' -- src include`: one definition, no other site. Before the
+consolidation of that day the same grep read 15 -- one per caller -- which is why the header's
+"fourteen" had already drifted before anyone read the number.
+
+On the draft side the same shape holds: `GraphDraft::appendControlEdge` (include/camel/runtime/draft.h)
+is the one place `appendInput(DraftEdgeKind::Ctrl, ...)` is called, and twelve call sites call it.
 
 ## 2. Consumers: 63 files, 6 name or build the kind, 57 only read
 
@@ -55,9 +62,13 @@ commits in between are red.
 
 ## Numbers drift from the plan header
 
-The header says fourteen construction sites, 53 reader files and 143 edges in 26 pictures; on
-this tree the same greps read 17, 63 and 138. The header is a summary of the tree it was
-written on, not a bound: this page is the count to plan a slice against.
+The header says fourteen construction sites, 53 reader files and 143 edges in 26 pictures; counted
+on 2026-11-02 the same three questions read **1** write entry (15 call sites, see 1),
+**63** reader files (65 files name `DraftEdgeKind::Ctrl`, `ctrlInputsOf`, `ctrlOutputsOf` or
+`LinkType::Ctrl`, and `LinkType::Ctrl` itself now occurs in 3) and **138** edges in 26 pictures
+(96 under `test/plans`, 42 under `exemplars/*/expected`). The header is a summary of the tree it was
+written on, not a bound: this page is the count to plan a slice against, and it carries the count of
+the day the slice was planned.
 
 ## When a control edge stops being built, who keeps the order it kept
 

@@ -290,3 +290,38 @@ args = ["${case}", "std::jgir"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["\"exit\": null"]
+# An effect whose place in the chain was the GATE inlined in front of it (2026-11-01, lane-fold2).
+#
+# `std::opt::inline` splices an inlined body's tail as a GATE, and `std::opt::fold` prunes the branch
+# whose chain entered that arm. The gate was left with no wait, and the commit dissolved it as "plain
+# forwarding" -- but a gate with no data user forwards nothing: it was the last reader of the
+# `reduce`, and dissolving it took the effect's only place in the chain with it:
+#
+#     graph 'main' has effect node 36 (':mark/reduce_arr') with neither a read of its value nor a
+#     place in its chain
+#
+# The gate still goes; the place it held goes to what it read, so the code that used to wait on the
+# gate waits on the effect (src/runtime/draft.cpp, dissolveUnorderedGates).
+[[tests]]
+name = "inline_reduce_in_folded_arm.reference"
+desc = "No pass: the `reduce` in the taken arm runs, and `main` returns 0 without reading it."
+case = "../../../cases/opt/effects/inline_reduce_in_folded_arm.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "inline_reduce_in_folded_arm.inline_fold"
+desc = "`std::opt::fold` prunes the branch the inlined body's chain was entered from; the `reduce` keeps the place the gate it read held."
+case = "../../../cases/opt/effects/inline_reduce_in_folded_arm.cml"
+args = ["${case}", "std::opt::inline", "std::opt::fold", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "inline_reduce_in_folded_arm.opt"
+desc = "The same program through the whole optimizer."
+case = "../../../cases/opt/effects/inline_reduce_in_folded_arm.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
