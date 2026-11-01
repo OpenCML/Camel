@@ -127,3 +127,37 @@ settle_runs must be at least 1, got 0.      EXIT=1，没有 terminate
 **还没做**：构造期兜底——`pass.cpp` 构造循环外 `catch (const std::exception &)` →
 `PassInternalError`（点名 pass、保留 `e.what()` 原文）→ `hasErrors()` 收尾。
 **只兜 `std::exception`，不兜 `...`**：把编程错误也吞掉会掩盖 bug。
+
+## 七、第四格：预检期连 `commit` 都不行（今天新学到的）
+
+三层表要补一格，而且这一格比前三格都硬：
+
+| 层 | 在哪 | 报得出来吗 |
+|---|---|---|
+| 取值/类型/名字 | `bindArgs`，**pass 存在之前** | 有：`InvalidPassParameter` + 位置 |
+| **预检** | `passListTranslatesProgram` / `firstConsumingPass`，**运行开始之前** | **没有：`commit` 直接抛 `DiagnosticsLimitExceededException`，走到 `terminate`** |
+| 构造 | `build` 返回 `optional`；里面 `catch (const std::exception &)` | `optional` 表达"构造失败"，`catch` 接住"构造抛出"，**两者转成 `buildProblem`（纯字符串），不 commit** |
+| 运行期 | pass 的 `apply` 内 `rtmDiags` | 有：`hasErrors()` 停链 |
+
+**实测**（探针：`std::opt settle_runs=7` 时让 `optimizePass()` 抛 `runtime_error`，提交前已删）：
+
+- 只包 `applyRegisteredPass` 的 `factory(ctx)`（`pass.cpp:2522`）→ **仍 abort**，`gdb` 栈顶是
+  `passListTranslatesProgram(...)`：**流水线开跑之前，预检会为每个 pass 构造一次**，只为 `dynamic_cast`；
+- 再把两个预检构造点包成 `commit(PassInternalError)` → 文本对了
+  （`Pass 'pass:std::opt settle_runs=7' failed while it was being built: …`），**退出仍是 134**，
+  这次抛的是 `DiagnosticsLimitExceededException`——**预检期没有接收方**。
+
+**所以**：兜底不能靠 `commit`；要么让预检**不构造** pass，要么把失败记成字符串，
+交给**已有**的、有接收方的 `throwUnresolvedPass`。
+
+## 八、兜底那一笔的图（可行性表，撤除落地后照此做）
+
+| 项 | 现状 | 要做 |
+|---|---|---|
+| `PassDescriptor`（`include/camel/execute/pass/params.h:96`） | `{ PassMaker make; std::vector<PassParam> params; bool readsTags; }`——**没有 kind** | 加一个 `PassKind kind`（`Rewrite`/`Translate`/`Schedule`），由注册点填；或从 stdlib 声明读 |
+| `resolvePass` 读 kind 的路径 | 声明里没有"这是翻译 pass"这种信息；`std::gir` 之类靠 C++ 类的 `dynamic_cast` 区分 | 若加 `kind`，注册点（`pass.cpp:583` 附近 `PassDescriptor descriptor;`）就要填，**34 个注册点都要看一遍**——这是这一笔真正的工作量 |
+| 预检点 1 `firstConsumingPass` | `pass.cpp:2639` `factory(ctx)`，cast 到 `GraphSchedulePass` / `GraphTranslatePass` | 改问 `descriptor.kind`，不构造 |
+| 预检点 2 `passListTranslatesProgram` | `pass.cpp:2624` `factory(ctx)`，cast 到 `GraphTranslatePass` / `GraphSchedulePass` | 同上 |
+| 另两处 cast | `runPipeline` `:2848`（`schedules`）、`:2890`（`consumes`） | 这两处在**运行中**，已有 `rtmDiags` 接收方，可保留 |
+| `throwUnresolvedPass` | `pass.cpp:1579`，`[[noreturn]]`，签名 `(spec, resolved, line, ctx)`；吃 `paramProblem` / `problem` / `missingPass` | 加一个 `buildProblem` 分支，**同一出口** |
+| 它有没有接收方 | **有（实测）**：`settle_runs=0` 走 `paramProblem` → `parameterDiagnostic` → `error[RuntimeDiag::InvalidPassParameter] … EXIT=1`，无 `terminate` | 这条链路可以直接承载 `buildProblem` |
