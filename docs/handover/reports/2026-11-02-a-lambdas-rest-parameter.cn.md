@@ -236,3 +236,23 @@ GIR 里留下的只是被摊开的实参。**旧的三种说法（`RestValue`／
 **⑥ 仪器读数（给后来的人）**：计划运行器的日志**只保留 `[stdout]` 末尾 50 行**（超出时印
 `[stdout] ... 50 line(s) before`），**所以 `std::gir` 的完整 DOT 在日志里看不全**。要拿完整 DOT，
 在远端直接重定向：`LD_LIBRARY_PATH=$HOME/camel-eval/conda/envs/clang/lib ./out/latest/bin/camel x.cml std::gir > x.gir`。
+
+**⑦ `65d8dbb85`（`Norm → With`）改的到底是什么——查清了：不是空改，但也不是"图里多一个 FILL"。**
+
+- **建**：`src/compile/gir/builder.cpp:1426`（`buildFuncBody` 里那一处，`GCFillKind::Tuple` + `slots`），
+  成员是 `xs_0`, `xs_1`, … 的 **`With` 输入**。`git grep -n GCFillKind::Tuple` 其余各处都是别的路径
+  （循环状态机 `builder_control.cpp` 多处、元组字面量 `gir/tree.cpp:71`、`builder_static.cpp:1526`、
+  `graph_encode.cpp`、`passes/trans/json` 等），服务于各自的路径。
+- **消费**：`src/compile/gir/builder_rest.cpp:103`——`expandRestArgument` 认的正是"`With` 输入个数等于元组长度"，
+  把 With 输入当实参返回；**此后这个 Fill 没有消费者**，所以**摊开的那张图里它不出现**（见 ⑤）。
+- **体内把 `xs` 留住（而不是摊开）时，它就在图上**：`pair((..xs) => xs)` 的 `std::gir` 里有
+
+      N02 [label="(float, float)", type="FILL", value_type="(float, float)"];
+
+  以及 `N00 -> N02`、`N01 -> N02`。
+- **改前/改后（同一个程序、同一条命令）**：改前（成员接 `Norm`）`apply((..xs) => add(..xs))` 给出
+  `The rest argument '..xs' is not a compile-time tuple`（`expandRestArgument` 读不到 With 输入）；
+  改后同一句通过并打印 `3.0`。
+
+**所以正确说法是**：那一笔改的是**这个 Fill 的边**（成员从 `Norm` 变 `With`），**不是"图里多出一个节点"**。
+`Norm` 连接时它是一个值、摊不开；`With` 连接时它是待摊开的实参，由 `expandRestArgument` 消费掉。
