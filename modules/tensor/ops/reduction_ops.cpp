@@ -120,7 +120,8 @@ InferFn reduceAxisInfer(k::ReduceOp op) {
     };
 }
 
-template <k::ReduceOp Op> OpDef reduceAxisDef(std::string_view name, std::string_view exportName) {
+template <k::ReduceOp Op>
+OpDef reduceAxisDef(std::string_view name, std::string_view exportName, std::string_view resultDoc) {
     return OpDef{
         .name    = name,
         .exports = {exportName},
@@ -128,7 +129,7 @@ template <k::ReduceOp Op> OpDef reduceAxisDef(std::string_view name, std::string
             {{"t", ParamKind::Tensor},
              {"axis", ParamKind::Int},
              {"keepdims", ParamKind::Bool, true}},
-        .resultDoc = "the tensor's element type",
+        .resultDoc = resultDoc,
         .infer     = reduceAxisInfer(Op),
         .kernel         = &positionally<reduceAxisKernel<Op>>,
         .traits         = {},
@@ -535,34 +536,40 @@ void layerNormVjp(VjpBuilder &b, const VjpCall &call) {
 } // namespace
 
 std::vector<OpDef> reductionOps() {
+    // What a reduction gives back is written here as the type it is, not as a sentence about one:
+    // `T` is the operand's element type (`reductionDtype` keeps it, except for `argmax`/`argmin`,
+    // which answer an `int64` position, and the `int64` count of a bool `sum` or `mean`), and it is
+    // the variable the declaration binds (`sum::<T>(t: T[..]): T`). The reference check compares
+    // this text against the declaration's result, and a sentence is a type it cannot compare, so
+    // the two statements of one promise would never have been read side by side.
     std::vector<OpDef> defs;
     defs.push_back(OpDef{
         .name      = "sum",
         .exports   = {"sum"},
         .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "the tensor's element type",
+        .resultDoc = "T",
         .infer     = wholeReductionInfer(k::ReduceOp::Sum),
         .kernel    = &sumAllKernel,
         .traits    = {}});
-    defs.push_back(reduceAxisDef<k::ReduceOp::Sum>("sum_axis", "sum"));
+    defs.push_back(reduceAxisDef<k::ReduceOp::Sum>("sum_axis", "sum", "T[..]"));
     defs.push_back(OpDef{
         .name      = "mean",
         .exports   = {"mean"},
         .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "the tensor's element type",
+        .resultDoc = "T",
         .infer     = wholeReductionInfer(k::ReduceOp::Mean),
         .kernel    = &meanAllKernel,
         .traits    = {}});
-    defs.push_back(reduceAxisDef<k::ReduceOp::Mean>("mean_axis", "mean"));
-    defs.push_back(reduceAxisDef<k::ReduceOp::Max>("max_axis", "max"));
-    defs.push_back(reduceAxisDef<k::ReduceOp::Min>("min_axis", "min"));
-    defs.push_back(reduceAxisDef<k::ReduceOp::ArgMax>("argmax_axis", "argmax"));
-    defs.push_back(reduceAxisDef<k::ReduceOp::ArgMin>("argmin_axis", "argmin"));
+    defs.push_back(reduceAxisDef<k::ReduceOp::Mean>("mean_axis", "mean", "T[..]"));
+    defs.push_back(reduceAxisDef<k::ReduceOp::Max>("max_axis", "max", "T[..]"));
+    defs.push_back(reduceAxisDef<k::ReduceOp::Min>("min_axis", "min", "T[..]"));
+    defs.push_back(reduceAxisDef<k::ReduceOp::ArgMax>("argmax_axis", "argmax", "int[..]"));
+    defs.push_back(reduceAxisDef<k::ReduceOp::ArgMin>("argmin_axis", "argmin", "int[..]"));
     defs.push_back(OpDef{
         .name      = "max",
         .exports   = {"max"},
         .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "the tensor's element type",
+        .resultDoc = "T",
         .infer     = wholeReductionInfer(k::ReduceOp::Max),
         .kernel    = &extremumAllKernel<k::ReduceOp::Max>,
         .traits    = {}});
@@ -570,7 +577,7 @@ std::vector<OpDef> reductionOps() {
         .name      = "min",
         .exports   = {"min"},
         .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "the tensor's element type",
+        .resultDoc = "T",
         .infer     = wholeReductionInfer(k::ReduceOp::Min),
         .kernel    = &extremumAllKernel<k::ReduceOp::Min>,
         .traits    = {}});
@@ -578,7 +585,7 @@ std::vector<OpDef> reductionOps() {
         .name      = "argmax",
         .exports   = {"argmax"},
         .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "the row-major position of the maximum, an int",
+        .resultDoc = "int",
         .infer     = wholeReductionInfer(k::ReduceOp::ArgMax),
         .kernel    = &extremumAllKernel<k::ReduceOp::ArgMax>,
         .traits    = {}});
@@ -586,7 +593,7 @@ std::vector<OpDef> reductionOps() {
         .name      = "argmin",
         .exports   = {"argmin"},
         .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "the row-major position of the minimum, an int",
+        .resultDoc = "int",
         .infer     = wholeReductionInfer(k::ReduceOp::ArgMin),
         .kernel    = &extremumAllKernel<k::ReduceOp::ArgMin>,
         .traits    = {}});

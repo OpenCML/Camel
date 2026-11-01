@@ -1846,7 +1846,7 @@ its element type, `bool` as `int64`.
 #### `sum`
 
 ```camel
-sum: (t: float[..], axis: int, keepdims?: bool) => float[..]
+sum: (t: T[..], axis: int, keepdims?: bool) => T[..]
 ```
 
 The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis with extent 1.
@@ -1875,7 +1875,7 @@ is a fault.
 #### `mean`
 
 ```camel
-mean: (t: float[..], axis: int, keepdims?: bool) => float[..]
+mean: (t: T[..], axis: int, keepdims?: bool) => T[..]
 ```
 
 The same mean over one axis; keepdims keeps the axis with extent 1.
@@ -1942,7 +1942,7 @@ tie. A tensor with no element is a fault.
 #### `max`
 
 ```camel
-max: (t: float[..], axis: int, keepdims?: bool) => float[..]
+max: (t: T[..], axis: int, keepdims?: bool) => T[..]
 ```
 
 IEEE 754-2019 maximum over the axis (exactly associative and commutative: any order gives
@@ -1955,7 +1955,7 @@ the same bits); keepdims keeps the axis with extent 1.
 #### `min`
 
 ```camel
-min: (t: float[..], axis: int, keepdims?: bool) => float[..]
+min: (t: T[..], axis: int, keepdims?: bool) => T[..]
 ```
 
 IEEE 754-2019 minimum over the axis (exactly associative and commutative); keepdims keeps the
@@ -2002,6 +2002,19 @@ definition in Camel, in `f32`.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `softmax([1.0, 1.0] as f32[])` gives `[0.5, 0.5]`
+
+#### `softmax`
+
+```camel
+softmax: (t: float[..], axis?: int) => float[..]
+```
+
+The same softmax of an `f64` tensor: the kernel takes the element type of the tensor it is
+given, so the result is `f64` as well.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
 - Example: `softmax([[1.0, 1.0]] as float[1, 2])` gives `[[0.5, 0.5]]`
 
 #### `log_softmax`
@@ -2012,6 +2025,18 @@ log_softmax: (t: f32[..], axis?: int) => f32[..]
 
 The log of the softmax over the axis (-1 by default), computed as its normative definition in
 Camel, in `f32`.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `log_softmax([1.0, 1.0] as f32[])` gives `[-0.6931472, -0.6931472]`
+
+#### `log_softmax`
+
+```camel
+log_softmax: (t: float[..], axis?: int) => float[..]
+```
+
+The same log softmax of an `f64` tensor, in `f64`.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank.
@@ -2029,6 +2054,18 @@ The gradient of the softmax of y with the incoming gradient dy, over the axis (-
 - Failure: fault `RuntimeError` when the axis is outside the rank.
 - Example: `softmax_grad(y, dy)`
 
+#### `softmax_grad`
+
+```camel
+softmax_grad: (y: float[..], dy: float[..], axis?: int) => float[..]
+```
+
+The same gradient in `f64`: y and dy are `f64` tensors and the result is one too.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `softmax_grad(y, dy)`
+
 #### `layer_norm`
 
 ```camel
@@ -2037,6 +2074,19 @@ layer_norm: (x: f32[..], gamma: f32[..], beta: f32[..], eps?: number) => f32[..]
 
 Layer normalization of x with gamma and beta, whose extents are the trailing ones of x, over
 the trailing axes; eps is 1e-5 by default. The result is `f32`.
+
+- Pure.
+- Failure: fault `TensorDimensionMismatch` when gamma or beta does not match the trailing extents of x.
+- Example: `layer_norm(x, gamma, beta)`
+
+#### `layer_norm`
+
+```camel
+layer_norm: (x: float[..], gamma: float[..], beta: float[..], eps?: number) => float[..]
+```
+
+The same normalization of `f64` tensors, in `f64`: x, gamma and beta are `f64` and the result
+is one too.
 
 - Pure.
 - Failure: fault `TensorDimensionMismatch` when gamma or beta does not match the trailing extents of x.
@@ -2065,6 +2115,19 @@ linear: (x: f32[..], weight: f32[..], bias?: f32[..]) => f32[..]
 
 The affine transform of x by a rank-2 weight [in, out] whose rows are the features of x, plus
 a rank-1 bias [out] when given.
+
+- Pure.
+- Failure: fault `TensorDimensionMismatch` when the features of x are not the rows of weight, or bias is not rank 1 of the output extent.
+- Example: `linear(x, weight, bias)`
+
+#### `linear`
+
+```camel
+linear: (x: float[..], weight: float[..], bias?: float[..]) => float[..]
+```
+
+The same transform of `f64` operands, in `f64`: it takes the element type of its operands
+(the `f32` path is the fused one, the other element types go through `matmul` and the addition).
 
 - Pure.
 - Failure: fault `TensorDimensionMismatch` when the features of x are not the rows of weight, or bias is not rank 1 of the output extent.
