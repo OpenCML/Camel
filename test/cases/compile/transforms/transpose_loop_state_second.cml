@@ -1,0 +1,30 @@
+// The same two-state loop as `carried`, with the other state taken out: `carried_p(x) = let q = 2x;
+// (loop s = x, p = x for i in 0..3 do (s + p, p + q)).1`.
+//
+// On paper the rounds are `s' = s + p` and `p' = p + q` from `s = p = x` with `q = 2x`, which reaches
+// `s = 10x, p = 7x`, and this case takes `p`, so `carried_p(x) = 7x` and the pullback of 1.0 is 7.
+//
+// That 7 is a sharper reading than the previous case's 10, because the two states are seeded
+// differently by the same loop: reading `.0` puts the cotangent in the first slot, reading `.1` puts it
+// in the second, and the two produce the same chain only if the slot index is really carried through.
+// A channel that always filled the first slot would answer 7 here by accident of arithmetic only if
+// `p` were unused -- it is not: `p` feeds `s` and the escape. What comes back is 0 for `s` (nothing
+// reads it), 1 for `p`, and 3 rounds of `p`'s cotangent through the escape `q = 2x`, i.e. 6, and
+// 0 + 1 + 6 = 7. The `.0` case was 1 + 3 + 6 = 10, and the difference is exactly the first slot.
+import { transpose } from transforms
+import rulesets.transpose
+
+func carried_p(x: float): float {
+    let q = 2.0 * x
+    return (loop s = x, p = x for i in 0..3 do (s + p, p + q)).1
+}
+
+func main(): int sync {
+    println(carried_p(1.0))
+    let back = transpose(carried_p)
+    println(back(1.0, 1.0))
+    // Twice the cotangent, 14: the last reading is the transpose's alone, since the forward line
+    // prints 7.
+    println(back(1.0, 2.0))
+    return 0
+}

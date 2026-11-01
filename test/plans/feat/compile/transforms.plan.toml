@@ -378,6 +378,15 @@ timeout_ms = 20000
 # tuple, and `carried` answers 10 with its accumulators after the two states. Before that channel every
 # one of the three refused at `skip=output`, and with it every tuple-shaped value in a transposed
 # function refuses the same way -- which is what the switch flips.
+#
+# Three readings then take the same ruler to the rest of the channel: the second state of that loop
+# (`carried_p`, 7 rather than 10, which only the slot index can tell apart), a tuple inside a tuple
+# (`nested`, `t.0.1`, where the cotangent is a tuple in a tuple's slot), and both slots of one tuple
+# read at once (`both`, 3, where two reads are two slots of one cotangent and add). Each case answers
+# its transpose twice, the second time with twice the cotangent, because a plan line the forward
+# reading already satisfies cannot tell a working transpose from a silent zero -- `nested` answered 0.0
+# for exactly that reason until the tuple-in-a-tuple rule was written, and its forward 2.0 had hidden
+# it.
 [[tests]]
 name = "transpose_loop_escape.names_the_value_one_read"
 desc = "`read_one(x) = loop s = x for i in 0..3 do 2.0*s + x` reads the parameter inside the loop body, so every round's cotangent lands on `x` and has to leave the loop. The loop carries it as a second state and answers 15 -- `s = 2s + x` three times is `8x + 7x`, the state's own cotangent 8 plus the carried sum 7 -- where before this cut it refused with `skip=state`. The reading is kept: `carried=1` in place of `skip=state`, `answer=summed` because the escaped value is the one the state starts from, `captures=1`, and the `ESCAPE` line still names the parameter port as the target and the body's `add` as the product that handed the cotangent out. A channel that dropped that line when it started working could not be compared with the refusal it replaced."
@@ -419,40 +428,79 @@ timeout_ms = 20000
 
 [[tests]]
 name = "transpose_tuple_component.reads_the_first_slot"
-desc = "`first(x) = let t = (x, 2x); t.0` returns one component of a tuple, and the pullback of 1.0 is 1: the tuple's cotangent is a value of the tuple's own shape, the read slot filled and the other zero. That zero is what the companion case checks from the other side -- a walk that zeroed where it should have filled, or filled every slot with the same cotangent, would still answer 1 here. Before this channel a component read dropped its cotangent as a read of a known value, so nothing past a tuple was differentiated and the function refused with `skip=output`."
+desc = "`first(x) = let t = (x, 2x); t.0` returns one component of a tuple, and the pullback of 1.0 is 1: the tuple's cotangent is a value of the tuple's own shape, the read slot filled and the other zero. That zero is what the companion case checks from the other side -- a walk that zeroed where it should have filled, or filled every slot with the same cotangent, would still answer 1 here. Before this channel a component read dropped its cotangent as a read of a known value, so nothing past a tuple was differentiated and the function refused with `skip=output`.
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_tuple_component_first.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=first graph=", "1.0"]
+expect_output_contains = ["TRANSPOSE function=first graph=", "1.0", "2.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
 name = "transpose_tuple_component.reads_the_second_slot"
-desc = "`second(x) = let t = (x, 2x); t.1` is the same tuple read one slot over, and the pullback of 1.0 is 2, because the component read is `2x`. Together with the previous case it says the channel is slot by slot and not \"answer 1 whenever a tuple is read\": filling every slot with the arriving cotangent would give 3 here (1 + 2), and giving it to the first slot always would answer 1 here and 2 for `first`, so neither mistake survives the two cases together."
+desc = "`second(x) = let t = (x, 2x); t.1` is the same tuple read one slot over, and the pullback of 1.0 is 2, because the component read is `2x`. Together with the previous case it says the channel is slot by slot and not \"answer 1 whenever a tuple is read\": filling every slot with the arriving cotangent would give 3 here (1 + 2), and giving it to the first slot always would answer 1 here and 2 for `first`, so neither mistake survives the two cases together.
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_tuple_component_second.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=second graph=", "2.0"]
+expect_output_contains = ["TRANSPOSE function=second graph=", "2.0", "4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
 name = "transpose_loop_escape.two_states_before_the_escape"
-desc = "The shape that puts the accumulators after states that already exist: `carried(x) = let q = 2x; (loop s = x, p = x for i in 0..3 do (s + p, p + q)).0`, whose paper value is `10x` (rounds `s' = s + p`, `p' = p + q` from `s = p = x` reach `s = 10x, p = 7x`). The forward evaluator prints 10 and 7 first, then the transpose answers 10. The two states arrive with different cotangents -- 1 for `s`, the value read out of the loop, and 0 for `p`, which nothing reads directly but which feeds `s` in every round and comes back as 3 -- and the escape `q` adds those three rounds' worth, which `q = 2x` turns into 6: 1 + 3 + 6. An accumulator placed before the states, or a loop value read with the sums first, lands somewhere else, so this number is what makes the order real. Before the tuple channel this case refused at `skip=output` without ever reaching the loop."
+desc = "The shape that puts the accumulators after states that already exist: `carried(x) = let q = 2x; (loop s = x, p = x for i in 0..3 do (s + p, p + q)).0`, whose paper value is `10x` (rounds `s' = s + p`, `p' = p + q` from `s = p = x` reach `s = 10x, p = 7x`). The forward evaluator prints 10 and 7 first, then the transpose answers 10. The two states arrive with different cotangents -- 1 for `s`, the value read out of the loop, and 0 for `p`, which nothing reads directly but which feeds `s` in every round and comes back as 3 -- and the escape `q` adds those three rounds' worth, which `q = 2x` turns into 6: 1 + 3 + 6. An accumulator placed before the states, or a loop value read with the sums first, lands somewhere else, so this number is what makes the order real. Before the tuple channel this case refused at `skip=output` without ever reaching the loop.
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_loop_escape_two_states.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 0
-expect_output_contains = ["7.0", "10.0"]
+expect_output_contains = ["7.0", "10.0", "20.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_loop_escape.second_state_of_the_same_loop"
+desc = "The same two-state loop read one slot over: `carried_p(x) = let q = 2x; (loop s = x, p = x for i in 0..3 do (s + p, p + q)).1`, whose paper value is `7x` -- the same rounds reach `s = 10x, p = 7x`, and this case takes `p`. The previous case gets 10 by reading `.0`, this one gets 7 by reading `.1`, and the two differ by exactly which slot the cotangent was seeded into: 0 for `s` and 1 for `p` here, against 1 and 0 there, plus the same 6 through the escape `q = 2x` (the three rounds' worth of `p`'s cotangent). A channel that always filled the first slot would answer the previous case's decomposition here too.
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_loop_state_second.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+expect_output_contains = ["TRANSPOSE function=carried_p graph=", "7.0", "14.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_tuple_component.reads_through_a_nested_tuple"
+desc = "`nested(x) = let t = ((x, 2x), 3x); t.0.1` reads two levels in: the value is the second component of the first component, `2x`, so the pullback is 2. The channel then has to be applied twice, on the tuples of the cotangent space rather than only on the value's own tuple -- the outer cotangent carries a tuple in its first slot, that one carries 1 in its second slot, and the other slots (the outer `3x`, the inner `x`) are zero. Reading `t.1` would give 3 and `t.0.0` would give 1, so 2 is only produced by the pair of selections in the right order. The case also answers 0.0 before this rule: the sub-tuple cotangent was put in a slot of the holder's cotangent, where the walk cannot see it, and the forward 2.0 above hid it.
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_tuple_nested.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+expect_output_contains = ["TRANSPOSE function=nested graph=", "2.0", "4.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_tuple_component.two_reads_of_one_tuple_add"
+desc = "`both(x) = let t = (x, 2x); t.0 + t.1` reads both components, so the value is `3x` and the pullback is 3: 1 through the first component, 2 through the second. This is the acceptance for the sentence the channel is built on -- the cotangent belongs to the value that holds the tuple, not to each read. Two reads are two slots of one cotangent, so they add here; a channel that let the second read overwrite the first would answer 2, one that kept only the first would answer 1, and one keyed by the read would have to decide which read owns the tuple.
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_tuple_both_slots.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+expect_output_contains = ["TRANSPOSE function=both graph=", "3.0", "6.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
