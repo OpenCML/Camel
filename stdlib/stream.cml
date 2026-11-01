@@ -176,7 +176,6 @@ let tee_hint_cap = 64
 /// buffer is expected to have -- and is clamped to the implementation's cap.
 /// The result is a tuple, and taking it apart is what consumes the two streams; the streams
 /// themselves are values like any other, so a `tee` of one of them is another `tee`.
-/// @example-fragment a pair of streams is bound by a destructuring `let`, a statement
 /// @example let (left, right) = unfold(3, (n: int) => if n > 0 then (n, n - 1) else null)->tee<2>
 with <n: int = 8>
 export func tee::<T>(s: T..): (T.., T..) sync {
