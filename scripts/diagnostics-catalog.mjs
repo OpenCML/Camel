@@ -1074,6 +1074,11 @@ if (mode === '--name-coverage' || mode === '--name-coverage-check') {
         // That is exactly what happened: `InternalDiag::UnknownInternalError` was counted as covered
         // by name for as long as this line was short-sighted, in the two plans that write a bracket
         // before the name (stream, tagged). This count must under-report a pin, never invent one.
+        //
+        // Measured over test/plans when this was fixed: 940 absence lists, 106 of them holding a
+        // string with a bracket in it, spread over 31 plans, and 9 of those leaving a name after the
+        // truncation. (The commit that made this change said "46 lists" -- that number was written
+        // from the two plans it had looked at, not counted; these are counted.)
         text = text.replace(
             /expect_(?:output|stdout|stderr)_not_contains\s*=\s*\[((?:[^\[\]]|\[[^\[\]]*\])*)\]/g,
             ''
