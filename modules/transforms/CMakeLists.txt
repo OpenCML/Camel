@@ -6,6 +6,7 @@ add_camel_module(
   SOURCES
     module.cpp
     jvp.cpp
+    jvp_instantiate.cpp
     jvp_operator.cpp
     remat_operator.cpp
     split.cpp

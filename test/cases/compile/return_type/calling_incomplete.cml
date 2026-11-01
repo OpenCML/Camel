@@ -1,0 +1,11 @@
+// A function with no declared return type that calls itself: the call needs the callee's type, and
+// that type is what the callee's body is still being inferred from, so there is nothing to type the
+// call with yet. Naming the return type is the repair, and only the writer can choose it.
+
+func f(n: int) {
+    return f(n)
+}
+
+func main(): int sync {
+    return 0
+}

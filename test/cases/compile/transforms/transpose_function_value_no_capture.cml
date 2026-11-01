@@ -1,0 +1,39 @@
+// The boundary of the last case, cut finer: a function value with no capture.
+//
+// `double(x) = 2x` is a top-level function, and `g(x) = let h = double; h(x)` puts *the function itself*
+// -- not a closure -- into a local before calling it. That is a different value from the one the
+// companion case uses: it is a plain function value, its graph id is what the binding holds, and there is
+// no capture beside it to carry.
+//
+// Measured 2026-11-01: this refuses too, and at the same place as the closure -- `skip=call node=2
+// callee=none value=0:1 with=1:0`. So the boundary is NOT "capture or no capture": taking the capture
+// away changes nothing, and the thing in the way is the *name*. The value in `let h = double` is a DATA
+// node carrying a function constant (`Function(graph=double, tupleSlots=0)` in the GIR), and
+// `GCGraph::calleeIdOf` reads a graph id out of `GCNodeKind::Func` nodes only -- for a function constant
+// the graph is held in the static area, as a graph-level reference (kGraphRefStatic), with no accessor
+// that turns this node into an id. A call written *by name* (`g(x)`, see transpose_call.cml) is the shape
+// that works today, because that one lowers to a FUNC node.
+//
+// The capture is a second, still-unreached problem: even with the name in hand, the transposed callee
+// would have to take the captured value as a parameter of its own. This case exists to tell that order
+// apart -- the paper answer it owes is 2 (and 4 at cotangent 2).
+import { transpose } from transforms
+import rulesets.transpose
+
+func double(x: float): float {
+    return 2.0 * x
+}
+
+func g(x: float): float {
+    let h = double
+    return h(x)
+}
+
+func main(): int sync {
+    println(g(1.0))
+    let back = transpose(g)
+    println(back(1.0, 1.0))
+    // Twice the cotangent, 4: a number no forward line prints, so the claim is about the transpose.
+    println(back(1.0, 2.0))
+    return 0
+}

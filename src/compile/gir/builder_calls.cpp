@@ -116,6 +116,12 @@ compile_graph_ptr_t Builder::functionValueGraphOf(node_handle_t node) const {
     if (!value.has_value()) {
         return nullptr;
     }
+    // Only a value of a compile graph answers a compile graph: a transform's value names a graph of
+    // its own program, which this program does not hold (StaticProgramFunction, static_function.h).
+    auto *held = camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(*value);
+    if (!isStaticFunction(held)) {
+        return nullptr;
+    }
     auto *function = camel::core::rtdata::fromSlot<StaticFunction *>(*value);
     return function != nullptr ? function->graph() : nullptr;
 }
