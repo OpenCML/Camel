@@ -12,7 +12,13 @@
  * without saying anything: one more case means a rule started writing the operator where it did
  * not, one fewer means a rule stopped, and either way someone has to look at which case moved.
  *
- * A count of zero is pinned like any other, and it has an owner: `:enum/make` is written by the
+ * The denominator is printed and not pinned: it is every case of the corpus directory, so it moves
+ * when anyone adds a case there, and a red on it would say nothing about the passes. The numerator
+ * is the pinned part: which cases hold the operator, and how many nodes each one holds. So a case
+ * added to `opt/effects` changes `of 5` to `of 6` in the reading and leaves the check green, while
+ * a case that starts holding `:op/keep` is red -- the population is allowed to grow, the finding
+ * is not allowed to move.
+ *\n * A count of zero is pinned like any other, and it has an owner: `:enum/make` is written by the
  * defunctionalizer and no case of `test/cases/opt/defun` reaches that path today. Zero is a
  * measurement here, not an absence of one -- the day a case starts holding one, this goes red.
  *
