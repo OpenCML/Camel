@@ -83,7 +83,27 @@ ROUNDTRIP checked=502 equivalent=458 not_equivalent=44 over_budget=0 unfaithful=
 
 判据逐条：打印 **516（不低于 516，没掉）**、等价 **447 → 458**、拒绝 **1841（不变）**、拒绝家族 **48（没升）**、**不等价 47 → 44（≤45）**、**产不出文档 22 → 14（≤14）**；按文件比 `DIFFERENT` **只少不多**（对上一笔报的那棵树新增 0、减少 11；对合并 `origin/develop = da27eca0a` 之后的基线新增 0、减少 3）。账是这样走的：合并后先量到 516/455/47/14（数组那条修完已经回到 14），再修 ② 与两个秩 0 的 `var` 用例，把 47 收到 44。
 
-**模块算子的名字还不打。** 让模块算子（`tensor:sum`、`transforms:jvp`）也走表之后，打印涨到 589、等价 481，但产不出文档涨到 60：错误分布 24 条 `UnexpectedToken`（`xs->sum()` 这类**带接收者的调用**被打成前缀调用 `sum(xs)`）、9 条 `DimensionMismatch`（上面那条旧缺陷）、8 条 `ImportNameNotExported`（URI 的模块前缀不是声明导出时的名字）、7 条 `NoMatchingFunction`、3 条 `Redeclaration`、3 条 `UnresolvedReference`、2 条 `MissingComma`。所以表还缺一列：**调用怎么写**（前缀 / 带接收者的 `->` / 有没有 `<...>`，以及名字从哪个模块导出）。这一列不在这一刀里，模块算子因此仍然被拒——`compile/transforms` 那 34 个也还在，等这一列。打印器已能按需写 `import { name, name } from module`（`collectImports`，仅模块算子触发，今天不触发）。
+**（更正。）** 上一笔这里写的"24 条 `UnexpectedToken` 是 `xs->sum()` 被打成 `sum(xs)`"归因错了：实测两种写法都能编过，真原因是函数类型不能写在标注位置，见第六刀。打印器已能按需写 `import { name, name } from module`（`collectImports`）。
+
+**2026-11-02 第六刀：函数类型没有标注写法，`compile/transforms` 的 30 个程序因此能打。** 上一笔列的 24 条 `UnexpectedToken` 的真实原因不是"带接收者的调用被打成前缀调用"——实测 `import { sum } from tensor` 之后 `sum(xs)` 与 `xs->sum()` **都能编过**（`import tensor` 与不导入则两种写法都 `UnresolvedReference`），是我那次归因错了。真原因在**标注位置**：
+
+```
+let back: (float, float) => float = transpose(pick)
+                                        ^ error[SyntaxDiag::UnexpectedToken]: Unexpected '=>'; expected '='
+```
+
+一个函数类型**没有标注写法**：`let` 的类型位置被读成一个类型，其中的 `=>` 不被当成类型的一部分；加一层括号也不行（`let back: ((float, float) => float) = …` 报 `MissingComma`）。而不写标注时，`let back = transpose(pick)` 由值推出类型——正是节点本来的类型。所以 `annotationOf` 在**类型里任何一个函数**（`Function`，或经由元组/数组/结构体含一个函数，`hasFunction` 递归）时写空标注，其余照旧；`var` 声明同一处理。
+
+```
+node test/tools/cml-sweep.mjs --jobs 16
+SWEEP files=3358 printed=550 refused=1807 frontend=1001 timeout=0
+REFUSALS families=48
+ROUNDTRIP checked=536 equivalent=492 not_equivalent=44 over_budget=0 unfaithful=14
+```
+
+对照合并 `origin/develop = 28e36a2cb` 之后的基线（516 / 1841 / 458 / 44 / 14，家族 48）：打印 **516 → 550**、等价 **458 → 492**、拒绝 **1841 → 1807**（降）、不等价 **44 → 44**、产不出文档 **14 → 14**、家族 **48（没升）**；`UnexpectedToken` 那 24 条 **24 → 0**（全消），`DIFFERENT` 行 **新增 0（一条都没多）**。新打的 34 个程序全部等价，一个 `DIFFERENT` 都没添。`compile/transforms` 单独量：**52 个文件里 30 个能打印、30 个全等价、20 个被拒、2 个本来就编译不过**（这一刀之前只打印 1 个）；剩下的 15 个是「图名不是源码标识符」（`vjp::vjp<float>`、`array::vmap<float[3], int>` 这类实例化的名字），归到 358 条的家族，另派。
+
+**顺便定死"名字"这一列的判据。** 只让"程序写得出来的名字"被打印：核心的算子（`:` 前缀）名字任何程序都在作用域内；模块自己在**声明处**给出调用形状的算子（`transforms` 的 `jvp(f)`/`transpose(f)`/`split(f)`，`CallForm::declaredByModule`）名字是该模块导出的；而**从 Camel 声明推出来**的形状只是被调者的名字，那个声明可能是模块不导出的 kernel（`#impl(sum_kernel)`），所以这类模块算子仍然被拒。放宽到"所有模块算子都打印"实测打印 589、等价 513，但产不出文档 31——剩下的错是**另外几族**（`ImportNameNotExported` 9、`NoMatchingFunction` 3、`Redeclaration` 3、`UnresolvedReference` 3，以及各 1 条的 `ArgumentNeedsConversion`/`DynamicCastForbidden`/`ReservedIdentifier`），按裁决一族一笔地消。
 
 **补声明清单（按节点数）。** 全语料里被打印机点名、确实没有任何声明的算子 **143 个、12520 个节点**。前 12：`:str/format` 1019、`tensor:sum` 934、`tensor:multiply` 862、`tensor:reshape` 856、`:op/tag_is_null` 689、`:struct/len_arr` 585、`tensor:add` 582、`:op/assn_l` 569、`:mark/map_arr` 389、`tensor:subtract` 324、`tensor:matmul` 238、`:op/slice_sub` 219。
 

@@ -706,6 +706,54 @@ class CmlPrinter {
         return type->toString();
     }
 
+    /// The `: T` a declaration writes after its name, or nothing when that position has no
+    /// spelling for the type. A function type is the one: `let back: (float, float) => float = ...`
+    /// is a syntax error -- an annotation is read as a type, and the arrow in it is not one, so the
+    /// parser reports `Unexpected '=>'; expected '='` -- and a parenthesised one is no better
+    /// (`MissingComma`). An unannotated `let` takes the type of its value, which is the type the
+    /// node has, so the declaration says the same thing by saying nothing (the same reading
+    /// `emitVariable` has for a `var`).
+    /// Whether a type has a function anywhere in it: such a type has no spelling in the annotation
+    /// position, and a tuple of function types fails the same way its members do.
+    static bool hasFunction(const Type *type) {
+        if (type == nullptr) {
+            return false;
+        }
+        switch (type->code()) {
+        case TypeCode::Function:
+            return true;
+        case TypeCode::Array:
+            return hasFunction(static_cast<const ArrayType *>(type)->elemType());
+        case TypeCode::Tuple: {
+            const auto *tuple = static_cast<const TupleType *>(type);
+            for (size_t i = 0; i < tuple->size(); ++i) {
+                if (hasFunction(tuple->typeAt(i))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        case TypeCode::Struct: {
+            const auto *record = static_cast<const StructType *>(type);
+            for (size_t i = 0; i < record->size(); ++i) {
+                if (hasFunction(record->typeAt(i))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        default:
+            return false;
+        }
+    }
+
+    std::string annotationOf(const Type *type) {
+        if (hasFunction(type)) {
+            return {};
+        }
+        return ": " + typeText(type);
+    }
+
     void prepareGraph(GCGraph *graph) {
         params_.clear();
         declared_.clear();
@@ -1570,7 +1618,7 @@ class CmlPrinter {
             const Expr value       = expression(ref);
             declared_[ref]         = name;
             emit(std::format(
-                "{}let {}: {} = {}", indent_, name, typeText(node->dataType()), value.text));
+                "{}let {}{} = {}", indent_, name, annotationOf(node->dataType()), value.text));
         } else if (effect) {
             if (users == 0) {
                 if (ref == tail && !functionBody) {
@@ -1589,7 +1637,7 @@ class CmlPrinter {
                 const std::string name = freshName();
                 declared_[ref]         = name;
                 emit(std::format(
-                    "{}let {}: {} = {}", indent_, name, typeText(node->dataType()), value.text));
+                    "{}let {}{} = {}", indent_, name, annotationOf(node->dataType()), value.text));
             }
             // A single use keeps the call where the source had it: lifting it into a
             // `let` would move the effect ahead of the expression it belongs to.
@@ -1598,7 +1646,7 @@ class CmlPrinter {
             const std::string name = freshName();
             declared_[ref]         = name;
             emit(std::format(
-                "{}let {}: {} = {}", indent_, name, typeText(node->dataType()), value.text));
+                "{}let {}{} = {}", indent_, name, annotationOf(node->dataType()), value.text));
         } else if (users == 0) {
             // A value nothing reads is not part of the printed program, unless it is the tail
             // of a region, which `buildBody` still writes as the block's value.
@@ -1632,7 +1680,7 @@ class CmlPrinter {
         cells_[ref]        = name;
         declared_[ref]     = name;
         emit(std::format(
-            "{}var {}: {} = {}", indent_, name, typeText(valueType), initial.text));
+            "{}var {}{} = {}", indent_, name, annotationOf(valueType), initial.text));
     }
 
     void emitAssignment(gc_node_ref_t ref, std::string_view uri) {
@@ -2333,13 +2381,15 @@ class CmlPrinter {
         // letter, `:struct/range` written as `range`) are the entries of this table now.
         std::string name;
         const auto callForm = camel::core::OperatorTable::instance().callFormOf(uri);
-        // Only an operator of the core is written by name so far: `:io/println` and the
-        // conversions of `:op/*` are names every program has in scope. A name of a module
-        // (`tensor:sum`, `tensor:max`) is a call of that module's function, and how such a call is
-        // written -- the arrow (`xs->sum()`), the `with` arguments in `<...>` -- is not in the
-        // table yet, so it is still refused rather than written as a prefix call that happens to
-        // parse for some operators and not for others.
-        if (callForm.has_value() && callForm->withCount == 0 && uri.starts_with(":")) {
+        // A name is written when the program can write it: an operator of the core (`:io/println`,
+        // the conversions of `:op/*`) has a name every program has in scope, and an operator whose
+        // own module declared its call shape has a name that module exports (this is the `jvp(f)`,
+        // `transpose(f)` and `split(f)` of `transforms`). A shape read off a Camel declaration is
+        // the callee's name and nothing more -- the declaration may be a kernel the module keeps
+        // private (`#impl(sum_kernel)`) -- so such an operator of a module is still refused.
+        const bool writable = callForm.has_value() && callForm->withCount == 0 &&
+                              (callForm->declaredByModule || uri.starts_with(":"));
+        if (writable) {
             name = callForm->name;
         } else {
                 // What an operator node is written as comes from where the operator was declared,

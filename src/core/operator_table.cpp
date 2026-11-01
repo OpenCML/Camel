@@ -301,6 +301,8 @@ void OperatorTable::declareCallForm(std::string_view uri, const CallForm &form) 
         // documents it under.
         existing.minArgs   = std::min(existing.minArgs, form.minArgs);
         existing.withCount = std::min(existing.withCount, form.withCount);
+        // A module that states the shape itself keeps saying so, whichever declaration came first.
+        existing.declaredByModule = existing.declaredByModule || form.declaredByModule;
         return;
     }
     callForms_.emplace_back(std::string(uri), form);

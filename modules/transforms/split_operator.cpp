@@ -203,7 +203,7 @@ void registerSplitOperatorMetadata() {
     // signature writes -- so the call shape is recorded here, where the operator is declared,
     // rather than in a signature invented to make the printer pass (P1-13).
     camel::core::OperatorTable::instance().declareCallForm(
-        "transforms:split", {.name = "split", .minArgs = 1, .withCount = 0});
+        "transforms:split", {.name = "split", .minArgs = 1, .withCount = 0, .declaredByModule = true});
 }
 
 } // namespace camel::transforms

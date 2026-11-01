@@ -517,6 +517,15 @@ class OperatorTable {
         /// call means printing those values too, so a form with them is not a call this table can
         /// hand out for printing yet: it is kept, and it is what tells a reader why.
         size_t withCount = 0;
+        /// Whether the operator's own module stated this shape, rather than the shape being read
+        /// off a Camel declaration. A module that declares its call shape states that a program
+        /// writes that call (`jvp(f)` is an operator of `transforms` a program can name). A shape
+        /// derived from a Camel declaration is the *callee's* name: the declaration may be a kernel
+        /// the module never exports (`array:sum_kernel` is `#impl(sum_kernel)`), and whether a
+        /// program can write that name is a fact about the module's exports that a graph does not
+        /// carry, so the printer uses a derived shape only for an operator of the core (`:` prefix),
+        /// whose names every program has in scope.
+        bool declaredByModule = false;
     };
 
     /// Records the call shape of `uri`, from the declaration that made it an operator. A second

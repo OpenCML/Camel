@@ -270,9 +270,9 @@ void registerOperatorMetadata() {
     // rather than in a signature invented to make the printer pass (P1-13: an operator with no
     // compilable declaration).
     camel::core::OperatorTable::instance().declareCallForm(
-        "transforms:jvp", {.name = "jvp", .minArgs = 1, .withCount = 0});
+        "transforms:jvp", {.name = "jvp", .minArgs = 1, .withCount = 0, .declaredByModule = true});
     camel::core::OperatorTable::instance().declareCallForm(
-        "transforms:transpose", {.name = "transpose", .minArgs = 1, .withCount = 0});
+        "transforms:transpose", {.name = "transpose", .minArgs = 1, .withCount = 0, .declaredByModule = true});
 }
 
 } // namespace camel::transforms
