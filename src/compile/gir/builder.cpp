@@ -1062,6 +1062,10 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         // with the type variables replaced.
         funcType = instantiateFunctionType(funcType, typeBindings_);
     }
+    // The signature as the source wrote it, kept for the body: once a lambda's unwritten parameters
+    // are filled and its rest parameter expanded, `funcType` no longer carries the one name the body
+    // writes (`xs` for `xs_0`, `xs_1`, ...), and the tuple that name stands for is built there.
+    const FunctionType *const written = funcType;
     if (name.empty()) {
         // A lambda's parameters that write no type take it from the function type of the
         // position the lambda stands in (design principles 5.9).
@@ -1092,7 +1096,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         graph->edit().setFlags(static_cast<uint8_t>(
             graph->view().flags() | camel::runtime::kGraphFlagMacro));
     }
-    buildFuncBody(gct, graph, funcType, name, tags);
+    buildFuncBody(gct, graph, funcType, name, tags, written);
     // A declaration tag whose argument names a function (`#vjp(cube_rule)`) keeps that graph
     // in the reference table of the function's graph: the fact is a graph reference, and the
     // reader finds it in the frozen graph (GCGraph::ruleGraphs).
@@ -1284,7 +1288,7 @@ void Builder::stampPermissions(node_handle_t operNode) const {
 
 void Builder::buildFuncBody(
     const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
-    const std::string &name, const TagFacts &bodyTags) {
+    const std::string &name, const TagFacts &bodyTags, const FunctionType *written) {
     // The function's graph has the permissions of its own body (which include those of the
     // code it is written in), not those of the place that asked for it to be built (a call
     // that instantiates a generic function, a block that declares it). The permission tags
@@ -1349,6 +1353,55 @@ void Builder::buildFuncBody(
             }
             if (recorder_) {
                 recordDeclaration(graph->nodePortName(port), port, gct);
+            }
+        }
+        // A lambda's rest parameter is a value in its body, not only a name for the parameters it
+        // stands for: `(..xs) => forward(..xs)` reads a tuple whose members are `xs_0`, `xs_1`, ...
+        // -- the parameters the expansion above made. `written` says which name and which position,
+        // because the completed `funcType` holds the expanded parameters and no longer the one name
+        // the body writes.
+        //
+        // TODO(debt, next commit): build it only when the body names it. Every rest lambda gets the
+        // tuple today, so a graph that does not read its rest parameter is one node larger than it
+        // was; the check needs the kind the body's reference has (its `xs` is not an NREF, which is
+        // what the walk that was tried looked for).
+        if (written != nullptr) {
+            if (const auto *unwritten = GCT::Tree::of(gct)->unwrittenParamsOf(gct)) {
+                for (const auto &param : *unwritten) {
+                    if (!param.rest) {
+                        continue;
+                    }
+                    const std::string restName(written->argNameAt(param.index));
+                    const size_t withCount   = funcType->withTypesCount();
+                    const auto normPorts     = graph->view().normPorts();
+                    std::vector<Type *> parts;
+                    std::vector<size_t> slots;
+                    std::vector<node_handle_t> members;
+                    for (size_t k = param.index; k < withCount + funcType->normTypesCount(); ++k) {
+                        const size_t norm = k - withCount;
+                        if (norm >= normPorts.size()) {
+                            break;
+                        }
+                        members.push_back(graph->view().ref(normPorts[norm]));
+                        parts.push_back(funcType->normTypeAt(norm));
+                        slots.push_back(k - param.index);
+                    }
+                    if (!members.empty()) {
+                        node_handle_t tuple = currGraph_->addFillNode(
+                            TupleType::create(parts),
+                            camel::runtime::makeFillPayload(
+                                camel::runtime::GCFillKind::Tuple, slots));
+                        // The members are With inputs, which is how a FILL that a rest argument can
+                        // spread carries them (expandRestArgument reads a tuple FILL's With inputs
+                        // as the arguments, builder_rest.cpp): a Norm tuple is a value, and a value
+                        // is not what `..xs` spreads.
+                        for (node_handle_t member : members) {
+                            linkNodes(LinkType::With, member, tuple);
+                        }
+                        insertNode(restName, tuple);
+                    }
+                    break;
+                }
             }
         }
         bodyStates_[graph.get()] = BodyState::Open;

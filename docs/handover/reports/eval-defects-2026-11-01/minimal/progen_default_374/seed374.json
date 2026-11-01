@@ -1,0 +1,44 @@
+{
+ "pipeline": [],
+ "env": {},
+ "expected": [],
+ "outcome": "RUN_ERROR",
+ "diagnostic": "InternalDiag::UnknownInternalError",
+ "detail": "An error has occurred: Runtime graph 'main' breaks its edge invariants (1 violation(s)):\n  graph 'main' node 6 (10): passes a string as ordinary argument 0 of 'u46', which takes a string?.",
+ "actual": [],
+ "reproduced": {
+  "RUN_ERROR": 10
+ },
+ "origin": {
+  "seed": 374,
+  "features": [
+   "append",
+   "array",
+   "builtin",
+   "capture",
+   "closure",
+   "comprehension",
+   "effects",
+   "env",
+   "float",
+   "func",
+   "hof",
+   "if",
+   "ifnoelse",
+   "logic",
+   "loop",
+   "macro",
+   "match",
+   "narrowing",
+   "nullable",
+   "opover",
+   "partial",
+   "rec",
+   "string",
+   "struct",
+   "tuple",
+   "var",
+   "varparam"
+  ]
+ }
+}

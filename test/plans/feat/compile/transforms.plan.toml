@@ -168,6 +168,50 @@ timeout_ms = 20000
 # composition's buildability, so while a step of the walk is still missing this skips and says so;
 # the numbers then run, and a missing ruleset import is a red rather than a skip.
 [[tests]]
+name = "vjp_arities.nvm"
+desc = "One rule for every arity, seen through the one declaration: jp(f) takes the parameters F has, the body's (..xs) takes them from the instantiated Vjp<F>, and orward(..xs) spreads them into the call. One, two and three parameters, with the value and every cotangent checked."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_arities.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_output_contains = ["arity 1", "arity 2", "arity 3", "9.0", "24.0", "12.0", "8.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "vjp_arities.fvm"
+desc = "One rule for every arity, seen through the one declaration: jp(f) takes the parameters F has, the body's (..xs) takes them from the instantiated Vjp<F>, and orward(..xs) spreads them into the call. One, two and three parameters, with the value and every cotangent checked."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_arities.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_output_contains = ["arity 1", "arity 2", "arity 3", "9.0", "24.0", "12.0", "8.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "vjp_arities.jit"
+desc = "One rule for every arity, seen through the one declaration: jp(f) takes the parameters F has, the body's (..xs) takes them from the instantiated Vjp<F>, and orward(..xs) spreads them into the call. One, two and three parameters, with the value and every cotangent checked."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_arities.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+expect_output_contains = ["arity 1", "arity 2", "arity 3", "9.0", "24.0", "12.0", "8.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "vjp_arities.prl"
+desc = "One rule for every arity, seen through the one declaration: jp(f) takes the parameters F has, the body's (..xs) takes them from the instantiated Vjp<F>, and orward(..xs) spreads them into the call. One, two and three parameters, with the value and every cotangent checked."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_arities.cml"
+args = ["${case}", "std::prl"]
+expect_exit = 0
+expect_output_contains = ["arity 1", "arity 2", "arity 3", "9.0", "24.0", "12.0", "8.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "vjp_api.carries_its_own_ruleset"
 desc = "A program whose only import is `vjp` gets a derivative: the library imports the rulesets it composes, so its caller does not have to know that `vjp` is `transpose(split(reinterp<jvp>(f)))`. For `f(x) = x*x*x` at 3 the program prints the value `27.0`, the cotangent `27.0` and the gradient `27.0`. Take either ruleset import out of `stdlib/vjp.cml` and the run stops at that library's own line with `transpose has no transpose for this function` or `jvp has no forward rule for :op/mul_d` -- never here, and never in a sentence of the form `not implemented yet`."
 kind = "behavior"

@@ -1832,9 +1832,14 @@ class Builder {
     /// graph, and the attribute value only keeps the id.
     std::unordered_map<uint32_t, compile_graph_ptr_t> tagFunctionGraphs_;
 
+    /// `written` is the signature as the source wrote it, before a lambda's unwritten parameters were
+    /// filled and its rest parameter expanded; it is where a rest parameter's own name and position
+    /// are read from, since `funcType` holds the expanded parameters (`xs_0`, `xs_1`, ...) and no
+    /// longer the one name the body writes. Null where the caller has none (a generic instance's own
+    /// body), which only means no rest parameter can be expanded there.
     void buildFuncBody(
         const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
-        const std::string &name, const TagFacts &bodyTags);
+        const std::string &name, const TagFacts &bodyTags, const FunctionType *written = nullptr);
 
     /// Evaluates a declaration's `when` condition at one instantiation. `signature` is the
     /// declaration's signature with the instance's types bound, so the `with` parameter names
