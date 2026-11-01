@@ -8,11 +8,11 @@
 
 | 栏 | 行数 | 占 655 | 含义 |
 |---|---|---|---|
-| 已覆盖 | **413** | 63% | 该 URI 有 `#op` tag，或有同名同元数的声明 |
-| 真缺 | **189** | 29% | 没有；且签名写得出来 |
-| 签名表达不了 | **53** | 8% | 没有；且今天的声明语法表达不了（联合参数 21、`Tensor` 参数 15、宽度派生自实参 11、宽度在文件里 5、`number` 1） |
+| 已覆盖 | **435** | 66% | 该 URI 有 `#op` tag，或有同名同元数的声明 |
+| 真缺 | **145** | 22% | 没有；且签名写得出来 |
+| 签名表达不了 | **75** | 11% | 没有；且今天的声明语法表达不了（`!=` 无符号 22、联合 21、`Tensor` 15、无通配 13、宽度派生自实参 3、`number` 1） |
 
-**已覆盖 413 行的来路**：靠 tag 128（`:op` 的 128 行）+ 靠声明 285（`math` 96、`graph` 41+9、`tensor` 44、`array` 33、其余按协议）。
+**已覆盖 435 行的来路**：靠 tag 128（`:op` 的 128 行）+ 靠声明 285（`math` 96、`graph` 41+9、`tensor` 44、`array` 33、其余按协议）。
 
 ## 一条必须说清的限度
 
@@ -77,9 +77,40 @@ error[SemanticDiag::NativeDeclarationNotLoaded]: The declaration 'from_bytes' na
 operator 'tensor:from_bytes_*', which no loaded module implements.
 ```
 
-**加载器不展开 `*`**，所以要么写 13 条各自命名的声明（等于新增 13 个用户可见的名字），要么给加载器加通配。两条都是决定。
+**加载器不展开 `*`**，所以要么写 13 条各自命名的声明（等于新增 13 个用户可见的名字），要么给加载器加通配。两条都是决定，见 [../questions/2026-11-02-p1-13-should-the-loader-expand-the-op-wildcard.md](../questions/2026-11-02-p1-13-should-the-loader-expand-the-op-wildcard.md)（默认：不给加载器加通配，这 13 行记为"签名表达不了（无通配）"）。
 
 这一族的账：**0 条写成的声明，4 行更正到"签名表达不了"，13 行卡在通配**。我把搬进去的三条**撤了**（`git checkout -- stdlib/tensor.cml`），全量回到 `8359/8347/0`——理由：一条会让 137 个测试塌掉的声明不能留在树上，哪怕它在 `inspect` 里看着很对。
+
+## 流程：先写一条，跑全量
+
+上一族（tensor 创建）留下的规矩，从这一族起固定下来：
+
+> **每开一族，先只写一条声明 → 跑全量 → 看掉不掉别的用例。**
+> **掉了 ⇒ 这一族的声明比算子弱/写不出，整族搬进"签名表达不了"，并把掉的那条用例名记进原因。**
+> **不掉 ⇒ 再补齐这一族。**
+
+理由：137 个失败是证据，比"我觉得能写"值钱。这一族正是靠它省下了 8083 个失败。
+
+## 第二族：`:op` 的比较（168 行里结果类型不派生自实参的那一组）
+
+`:op` 真缺 168 行、146 个名字，按"结果类型是否派生自实参"分两组（这一分法就是上一族教训的直接应用）：**结果固定 72 个名字**（`eq_*`、`ne_*`、`lt_*`、`le_*`、`gt_*`、`ge_*`、`*tos`、`and`/`or`/`not`/`mod`/`pow`/`tag_is`/`idx`/`inv`），**结果派生 74 个名字**（`assn_*` 一族，签名是 `(var T, T) => var T`）。先做**结果固定**这组里的比较一族。
+
+`eq_*` 11 个名字（22 行）：`eq_f`、`eq_d`、`eq_i`、`eq_l`、`eq_f6`、`eq_bf`、`eq_c`、`eq_z`、`eq_s`、`eq_bytes`、`eq_b`，签名清一色 `(X, X) => bool`。
+
+**先写一条**（`#op(':op/eq_d') export func operator ==(x: float, y: float): bool`）→ 全量 **`8359/8347/0`**，没掉。**再补齐 11 条** → 全量仍 **`8359/8347/0`**。
+
+**`ne_*` 11 个名字（22 行）写不得**，编译器直说：
+
+```
+error: '!=' cannot be overloaded: it follows an overload of '==': 'a != b' is '!(a == b)'
+with that overload, so the two cannot disagree.
+```
+
+也就是说 `!=` **没有自己的符号可写**，它由 `==` 派生；`:op/ne_*` 那 11 条规则任何声明都命名不到。按流程整族搬进"签名表达不了"（22 行），并且它们是**规则删除的候选**——和 19:50 那条"同键多规则按类型选"要删的 `mul_tensor` 同类：既然 `!=` 是 `==` 的否定，`ne_*` 的规则就多了一份实现同一个事实的东西。
+
+**这一族的账**：`eq_*` 11 个名字 / 22 行 → **已覆盖**（tag + 声明，写法照 `stdlib/prelude.cml` 的算术块，`operator ==` 的组名 `__eq__` 由 `src/core/operator_names.cpp:34` 给出）；`ne_*` 11 个名字 / 22 行 → **签名表达不了**。
+
+**判据**：`inspect --ops` 仍 **655 行**，`:op/eq_*` 与 `:op/ne_*` 那 **44 行与改动前逐字节相同**（比对了 `OPERATOR` 行全文）；`--verify-ops` 仍 **559**、报 agree；全量 `8359/8347/0`。
 
 ## 655 与 559 为什么不一样
 
@@ -107,13 +138,13 @@ P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可�
 
 ## 全表
 
-下面按三栏展开：真缺 189 行按协议分组逐条列出，签名表达不了 53 行按原因列出；已覆盖按协议与来路给出计数（逐条列出 413 行会让这页变成第二个注册表）。
+下面按三栏展开：真缺 145 行按协议分组逐条列出，签名表达不了 75 行按原因列出；已覆盖按协议与来路给出计数（逐条列出 413 行会让这页变成第二个注册表）。
 
-## 已覆盖 413 行的来路
+## 已覆盖 435 行的来路
 
 | 协议 | 靠 tag | 靠同名同元数声明 | 合计 |
 |---|---|---|---|
-| `:op` | 128 | 0 | 128 |
+| `:op` | 150 | 0 | 150 |
 | `math` | 96 | 0 | 96 |
 | `graph` | 9 | 41 | 50 |
 | `tensor` | 0 | 44 | 44 |
@@ -128,7 +159,7 @@ P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可�
 
 ## 真缺（206 行，按协议）
 
-### :op: 168
+### :op: 124
 
 - `:op/and` (2 参)
 - `:op/assn` (2 参)
@@ -192,17 +223,6 @@ P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可�
 - `:op/ctos` (1 参)
 - `:op/dtos` (1 参)
 - `:op/eq` (2 参)
-- `:op/eq_b` (2 参)
-- `:op/eq_bf` (2 参)
-- `:op/eq_bytes` (2 参)
-- `:op/eq_c` (2 参)
-- `:op/eq_d` (2 参)
-- `:op/eq_f` (2 参)
-- `:op/eq_f6` (2 参)
-- `:op/eq_i` (2 参)
-- `:op/eq_l` (2 参)
-- `:op/eq_s` (2 参)
-- `:op/eq_z` (2 参)
 - `:op/ftos` (1 参)
 - `:op/ge_bf` (2 参)
 - `:op/ge_d` (2 参)
@@ -241,17 +261,6 @@ P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可�
 - `:op/mod_i` (2 参)
 - `:op/mod_l` (2 参)
 - `:op/ne` (2 参)
-- `:op/ne_b` (2 参)
-- `:op/ne_bf` (2 参)
-- `:op/ne_bytes` (2 参)
-- `:op/ne_c` (2 参)
-- `:op/ne_d` (2 参)
-- `:op/ne_f` (2 参)
-- `:op/ne_f6` (2 参)
-- `:op/ne_i` (2 参)
-- `:op/ne_l` (2 参)
-- `:op/ne_s` (2 参)
-- `:op/ne_z` (2 参)
 - `:op/not` (1 参)
 - `:op/or` (2 参)
 - `:op/pow_bf` (2 参)
@@ -316,6 +325,20 @@ P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可�
 
 ## 签名表达不了（36 行，附原因）
 
+### no declaration can name it: '!=' is '!(a == b)', so the operator has no symbol of its own: 22
+
+- `:op/ne_b` (2 参)
+- `:op/ne_bf` (2 参)
+- `:op/ne_bytes` (2 参)
+- `:op/ne_c` (2 参)
+- `:op/ne_d` (2 参)
+- `:op/ne_f` (2 参)
+- `:op/ne_f6` (2 参)
+- `:op/ne_i` (2 参)
+- `:op/ne_l` (2 参)
+- `:op/ne_s` (2 参)
+- `:op/ne_z` (2 参)
+
 ### union parameter: 21
 
 - `:coll/eq` (2 参)
@@ -357,7 +380,7 @@ P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可�
 - `tensor:unsqueeze` (2 参)
 - `tensor:zeros_like` (1 参)
 
-### the result's extents derive from an `int[]` argument, and a declaration writes `T[..]`: 10
+### no declaration can name it: the loader does not expand the `*` in `#op('tensor:from_bytes_*')`: 8
 
 - `tensor:from_bytes_aggregate` (2 参)
 - `tensor:from_bytes_bf16` (2 参)
@@ -367,16 +390,19 @@ P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可�
 - `tensor:from_bytes_f64` (2 参)
 - `tensor:from_bytes_i32` (2 参)
 - `tensor:from_bytes_i64` (2 参)
-- `tensor:ones` (1 参)
-- `tensor:zeros` (1 参)
 
-### the result's extents are the file's, known only when the file is read: 5
+### no declaration can name it: the loader does not expand the wildcard in the load_npy tag: 5
 
 - `tensor:load_npy_bool` (1 参)
 - `tensor:load_npy_f32` (1 参)
 - `tensor:load_npy_f64` (1 参)
 - `tensor:load_npy_i32` (1 参)
 - `tensor:load_npy_i64` (1 参)
+
+### the result's extents derive from an `int[]` argument, and a declaration writes `T[..]`: 2
+
+- `tensor:ones` (1 参)
+- `tensor:zeros` (1 参)
 
 ### the result's extents derive from an `int` argument, and a declaration writes `T[..]`: 1
 

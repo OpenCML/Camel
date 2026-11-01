@@ -285,6 +285,66 @@ export func operator -(x: c128): c128
 #op(':op/idx_arr')
 export func operator []::<T>(xs: T[], i: int): T
 
+// ---- comparison ----
+//
+// `==` and `!=` are operators of their own group (`__eq__`, `__ne__`; operator_names.h), and the
+// rule each one names is the kernel for the operand type: `:op/eq_d` is the one for `float`.
+
+/// Whether two 64-bit floats are equal.
+/// @example 1.5 == 1.5    // true
+#op(':op/eq_d')
+export func operator ==(x: float, y: float): bool
+
+/// Whether two 32-bit floats are equal.
+/// @example f32(1.5) == f32(1.5)    // true
+#op(':op/eq_f')
+export func operator ==(x: f32, y: f32): bool
+
+/// Whether two 32-bit integers are equal.
+/// @example i32(3) == i32(3)    // true
+#op(':op/eq_i')
+export func operator ==(x: i32, y: i32): bool
+
+/// Whether two 64-bit integers are equal.
+/// @example 3 == 3    // true
+#op(':op/eq_l')
+export func operator ==(x: int, y: int): bool
+
+/// Whether two half floats are equal.
+/// @example f16(0.5) == f16(0.5)    // true
+#op(':op/eq_f6')
+export func operator ==(x: f16, y: f16): bool
+
+/// Whether two bfloat16 values are equal.
+/// @example bf16(0.5) == bf16(0.5)    // true
+#op(':op/eq_bf')
+export func operator ==(x: bf16, y: bf16): bool
+
+/// Whether two single-precision complex values are equal.
+/// @example c64(1.0, 2.0) == c64(1.0, 2.0)    // true
+#op(':op/eq_c')
+export func operator ==(x: c64, y: c64): bool
+
+/// Whether two double-precision complex values are equal.
+/// @example c128(1.0, 2.0) == c128(1.0, 2.0)    // true
+#op(':op/eq_z')
+export func operator ==(x: c128, y: c128): bool
+
+/// Whether two strings are equal, character by character.
+/// @example 'ab' == 'ab'    // true
+#op(':op/eq_s')
+export func operator ==(x: string, y: string): bool
+
+/// Whether two byte blocks are equal, byte by byte.
+/// @example to_bytes([1] as i32[]) == to_bytes([1] as i32[])    // true
+#op(':op/eq_bytes')
+export func operator ==(x: Bytes, y: Bytes): bool
+
+/// Whether two booleans are equal.
+/// @example true == true    // true
+#op(':op/eq_b')
+export func operator ==(x: bool, y: bool): bool
+
 // ---- conversions ----
 //
 // Numeric types are never converted implicitly; these functions do it. There is one conversion
