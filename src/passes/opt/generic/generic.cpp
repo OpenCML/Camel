@@ -655,6 +655,17 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
             armTail = pred;
         }
     }
+    if (armTail == kInvalidNodeRef && inArm(result) && carriesOrdering(draft, result, true)) {
+        // An arm written as data flow only -- its statements never chained, because what the arm
+        // returns is what they compute -- has no tail of its own. What runs last in it is the value
+        // it returns, when that value is code that runs and not a constant: `if i % 100 == 0 then
+        // { ... ->println } else { '' }` returns the `println`'s value, and running the `println` is
+        // what the arm is written for. Handing the branch's place to another node of the arm would
+        // leave that effect ordered only by the wait the block writes around the branch, and the
+        // node carrying that wait can be folded away itself, which leaves the effect in no chain at
+        // all (`nn.mnist`): the effect's own value is where the branch stood.
+        armTail = result;
+    }
     if (armTail == kInvalidNodeRef) {
         for (gc_node_ref_t n : armNodes) {
             if (!carriesOrdering(draft, n, true)) {
