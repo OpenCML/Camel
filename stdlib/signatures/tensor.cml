@@ -192,6 +192,37 @@ export func mean::<T>(t: T[..]): T
 #op('tensor:mean_axis')
 export func mean(t: float[..], axis: int, keepdims?: bool): float[..]
 
+/// IEEE 754-2019 maximum of every element (design principles 7.7): a NaN anywhere gives `nan`, and
+/// -0 is below +0. An extremum has no identity, so a tensor with no element is a fault rather than
+/// an answer. The axis form below is the same name, chosen by arity (design principles 7.3).
+/// @pure
+/// @fails fault `InvalidArgument` when the tensor has no element
+/// @example max([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // 4.0
+export func max::<T>(t: T[..]): T
+
+/// IEEE 754-2019 minimum of every element: a NaN anywhere gives `nan`, and -0 is below +0. A tensor
+/// with no element is a fault.
+/// @pure
+/// @fails fault `InvalidArgument` when the tensor has no element
+/// @example min([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // 1.0
+export func min::<T>(t: T[..]): T
+
+/// The position of the maximum of every element, counted in row-major order and answered as an
+/// `int`: the first NaN's position if there is one, +0 above -0, and the earliest position on a
+/// tie (design principles 7.7). A tensor with no element is a fault.
+/// @pure
+/// @fails fault `InvalidArgument` when the tensor has no element
+/// @example argmax([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // 3
+export func argmax::<T>(t: T[..]): int
+
+/// The position of the minimum of every element, counted in row-major order and answered as an
+/// `int`: the first NaN's position if there is one, -0 below +0, and the earliest position on a
+/// tie. A tensor with no element is a fault.
+/// @pure
+/// @fails fault `InvalidArgument` when the tensor has no element
+/// @example argmin([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // 0
+export func argmin::<T>(t: T[..]): int
+
 /// IEEE 754-2019 maximum over the axis (exactly associative and commutative: any order gives
 /// the same bits); keepdims keeps the axis with extent 1.
 /// @pure
