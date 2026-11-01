@@ -219,7 +219,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=sum_of_scaled graph=", "type=(float) => float", "rules=add_t,mul_t", "TRANSPOSE function=scaled_chain graph=", "rules=mul_t,add_t", "TRANSPOSE op signature=(f: (float) => float) => (float) => (float)", "same=yes", "5.0", "20.0"]
+expect_stdout_contains = ["TRANSPOSE function=sum_of_scaled graph=", "type=(float, float) => float nodes=6 arms=0 rules=add_t,mul_t", "TRANSPOSE function=scaled_chain graph=", "rules=mul_t,add_t", "TRANSPOSE op signature=(f: (float) => float) => (float, float) => (float)", "transposed=(float, float) => float", "same=yes", "5.0", "20.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -252,5 +252,19 @@ backends_agree = ["exit_code", "stdout"]
 expect_exit = 0
 expect_stdout_contains = ["27.0", "18.0", "REINTERP jvp callees=1"]
 expect_stdout_not_contains = ["callees=3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_walks_each_arm_of_a_branch.nvm"
+desc = "`transpose` of a function with a branch: each arm is a linear chain of its own, the cotangent runs backwards inside the arm that produced the value, and the condition is read as it was -- the same predicate, at the values the caller passed -- choosing the other arm. The transposed function therefore takes the parameters of `f` first and the cotangent last, which is the one shape for every function: `transpose(f)(x, 1.0)`. For `pick(x)` returning `2*x` when `x > 0` and `3*x` otherwise, the cotangent 1.0 pulls back to 2 at a positive x and 3 at a negative one. `merged(x)` uses its parameter twice on one side only (`2*x + 5*x`, else `4*x`), so the two sides answer 7 and 4: within an arm two cotangents add, while the two arms' cotangents are joined rather than added, because only the arm that ran contributed one. The reading names the arms it built (`arms=2`), the rules it applied, and the type the resolver and the graph agree on."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_branch.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["TRANSPOSE function=pick graph=", "type=(float, float) => float nodes=9 arms=2 rules=mul_t", "TRANSPOSE function=merged graph=", "nodes=12 arms=2 rules=add_t,mul_t", "2.0", "3.0", "7.0", "4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

@@ -1,0 +1,37 @@
+// The transpose of a function with a branch: each arm is a linear chain of its own, the cotangent
+// runs backwards inside the arm that produced the value, and the condition is read as it was --
+// the same predicate, at the values the caller passed, choosing the other arm.
+//
+// `pick(x)` returns `2*x` when `x > 0` and `3*x` otherwise: transposed at the cotangent 1.0 it
+// answers 2 at a positive x and 3 at a negative one. `merged(x)` uses its parameter twice on one
+// side only -- `2*x + 5*x` then, `4*x` else -- so the two sides answer 7 and 4: the sum of two
+// cotangents happens inside one arm, and the two arms' cotangents are joined, not added, because
+// only the arm that ran contributed one.
+import { transpose } from transforms
+import rulesets.transpose
+
+func pick(x: float): float {
+    if x > 0.0 then {
+        return 2.0 * x
+    } else {
+        return 3.0 * x
+    }
+}
+
+func merged(x: float): float {
+    if x > 0.0 then {
+        return 2.0 * x + 5.0 * x
+    } else {
+        return 4.0 * x
+    }
+}
+
+func main(): int sync {
+    let back = transpose(pick)
+    println(back(1.0, 1.0))
+    println(back(-1.0, 1.0))
+    let merged_back = transpose(merged)
+    println(merged_back(1.0, 1.0))
+    println(merged_back(-1.0, 1.0))
+    return 0
+}
