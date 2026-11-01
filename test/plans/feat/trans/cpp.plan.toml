@@ -202,6 +202,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 120000
 
 [[tests]]
+name = "every_entry_writes_its_own_file"
+desc = "The property the standalone check depends on and does not itself ask: no two entries of the expect list write one file. Entries of one program differ only in the arguments of its `main` -- entry_args/complex.cml is named by 17 of them, scalars.cml by 20, widths.cml by 9 -- and one pool builds them at once, so an entry whose file name does not carry its own identity is a race between the check's own steps. Measured before the name carried it: `--standalone --jobs 8` over this list went red on round 2 with "clang++: error: linker command failed with exit code 1". What this asserts is the property and not the spelling: it compares the names the tool gives the identities, so changing how a name is spelled stays green while two identities sharing a name goes red, and the failure prints the pair. The many-round stress that found the race is test/tools/cppexec/stress.py, which is minutes long and not in this gate."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/run.py"
+args = ["${case}", "--check-names", "--expect=test/tools/cppexec/expect.txt"]
+expect_exit = 0
+expect_stdout_contains = ["no two share a file name"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 120000
+
+[[tests]]
 name = "every_expect_program_links_no_runtime"
 desc = "The same property as narrow_reductions_needs_no_runtime, asked of every program the expect list names instead of one: each is translated, built and its own dependencies read (`ldd`), and the set of programs that still link the Camel runtime has to be exactly the set test/tools/cppexec/bridged.txt names -- 1 today, written down there as the bridge's own exception and not a gap. Both directions are checked: a second program that links it is red, and so is the one here becoming standalone, because the list is then wrong and a list that can only grow says nothing. What is left is re:test (a regex engine is not in the header set); the tensor builders left it when they stopped calling the bridge, and the line was deleted the same commit."
 kind = "behavior"

@@ -220,6 +220,39 @@ def artifact_stem(name):
     return readable + "_" + hashlib.sha1(name.encode("utf-8")).hexdigest()[:10]
 
 
+def check_artifact_names(paths, args):
+    """Every entry gets its own source and its own executable. The property is the name's, not the
+    way it is spelled: two entries that differ -- in the program or in the arguments of its `main`
+    -- must not land on one name, because the entries of one program are built at once by one pool,
+    and two threads writing one source, linking one executable and running it is a race between the
+    check's own steps (measured: `--standalone --jobs 8` over this list went red on round 2 with
+    `clang++: error: linker command failed`). What this does not fix is how the name is written:
+    change the spelling inside `artifact_stem` and this stays green as long as two identities stay
+    two names."""
+    entries = expand(paths + (read_expect(args.expect) if args.expect else []))
+    if not entries:
+        print("FAIL: no programs")
+        return 2
+    names = {}
+    for program, entry_args in entries:
+        identity = os.path.relpath(program, ROOT).replace("\\", "/") + \
+                   "".join(" " + a for a in entry_args)
+        names.setdefault(artifact_stem(identity), []).append(identity)
+    collisions = {stem: found for stem, found in names.items() if len(found) > 1}
+    if collisions:
+        for stem, found in sorted(collisions.items()):
+            print("FAIL: %d entries write one file (%s):" % (len(found), stem))
+            for name in found[:4]:
+                print("    " + name)
+            if len(found) > 4:
+                print("    and %d more" % (len(found) - 4))
+        print("FAIL: %d file name(s) shared by %d of the %d entries"
+              % (len(collisions), sum(len(f) for f in collisions.values()), len(entries)))
+        return 1
+    print("PASS: %d entries, no two share a file name" % len(entries))
+    return 0
+
+
 def check_standalone(paths, args):
     """Every program written by std::cpp must be one the Camel runtime does not have to be part
     of: the generated code names no bridge, and the executable built from it needs no Camel
@@ -671,17 +704,29 @@ def check_faults(paths, args):
 
 def expand(paths):
     """(program, arguments of its main) for every path: a directory gives its programs, a path
-    followed by arguments (an entry of an --expect list) that program with them."""
-    files = []
+    followed by arguments (an entry of an --expect list) that program with them.
+
+    One file is one entry, however it is spelled and however many roads name it: the expect list
+    names `test/cases/trans/cpp/exec` as a directory *and* one of the files in it, so the same
+    program arrives twice, and two spellings of one path are two entries to a plain `set` (on
+    Windows the directory walk keeps the forward slashes of its root and the listed file does not).
+    Two entries of one file are two threads writing one source and linking one executable, which is
+    the race `artifact_stem` exists to keep out -- so the identity is the normalized path, and the
+    first spelling that names it is the one kept, for the message."""
+    files = {}
     for entry in paths:
         p, *entry_args = entry.split()
         p = os.path.join(ROOT, p) if not os.path.isabs(p) else p
         if os.path.isdir(p):
             for root, _, names in os.walk(p):
-                files += [(os.path.join(root, n), ()) for n in names if n.endswith(".cml")]
+                for n in sorted(names):
+                    if n.endswith(".cml"):
+                        q = os.path.join(root, n)
+                        files.setdefault((os.path.normcase(os.path.abspath(q)), ()), q)
         else:
-            files.append((p, tuple(entry_args)))
-    return [(p, list(a)) for p, a in sorted(set(files))]
+            key = (os.path.normcase(os.path.abspath(p)), tuple(entry_args))
+            files.setdefault(key, p)
+    return [(p, list(a)) for (_, a), p in sorted(files.items(), key=lambda item: (item[1], item[0][1]))]
 
 
 def read_expect(path):
@@ -713,6 +758,9 @@ def main():
     ap.add_argument("--baseline",
                     help="with --standalone: a file of the programs allowed to link the runtime; "
                          "the answer has to be exactly that list, in both directions")
+    ap.add_argument("--check-names", action="store_true",
+                    help="check that no two entries of the list write the same file: entries that "
+                         "differ in the program or in its arguments must get different names")
     ap.add_argument("--four-backends", action="store_true",
                     help="run each program on std::nvm, std::fvm, std::cpp and std::jit, say what "
                          "each one said, and fail when they do not all say the same thing")
@@ -726,6 +774,10 @@ def main():
                     help="do not precompile camel/standalone/runtime.h (clang)")
     args = ap.parse_args()
     args.passes = args.passes.split()
+
+    if args.check_names:
+        # The names are the tool's own, so this needs no compiler and no program to build.
+        return check_artifact_names(args.programs, args)
 
     compiler, msvc = find_compiler()
     if args.have_compiler:
