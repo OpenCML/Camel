@@ -94,6 +94,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "split_call_one"
+desc = "The cut through a call: `g(x) = sq(x) + 1.0` at x = 3, so the lifted body calls `jvp_of_sq` and the value half has to answer with something. A lift answers the pair (result, tangent) and its arguments are a value and a seed per parameter, so a value half that copies the call needs a tangent port -- which is the refusal this entry replaced (`a tangent port ... the value half reads the tangent of parameter 0`). The lift records the graph it was lifted from (`kGraphRefLiftedFrom`), and the value half reads that record: it calls `sq` -- the graph the lift came from -- with the values its caller passes and no seeds at all. The reading is `g value=10.0 dgdx=6.0` -- `sq(3)+1` and `2*3` -- with `residuals=3`, the count the hand-inlined `x*x + 1.0` carries (`x`, `x*x`, the constant), so the retarget moves nothing the inline spelling would have carried differently. The tangent half is untouched: it still calls the lift, which is where the tangents are computed."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_call_one.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["g value=10.0", "g dgdx=6.0", "residuals=3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "split_identity_pipeline"
 desc = "The identity graph: `reinterp<jvp>` builds a body with no operator in it, so `split` has nothing to move and the reading is the pipeline itself. The forward half gives the value the caller passed (3.0) and an **empty** residual tuple -- `(3.0, ())`, which the diagnostic reports as `residuals=0` and the forward half's type as `(float) => (float, ())` -- and the backward half gives the tangent back (1.0) without reading anything. Nothing crosses the cut because nothing is computed on the forward side of it. Gated on `split` existing (`test/tools/have-split.mjs`)."
 kind = "behavior"
