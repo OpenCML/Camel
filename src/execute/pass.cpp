@@ -33,6 +33,7 @@
 #include "camel/passes/test/graph_release.h"
 #include "camel/passes/test/keepfn.h"
 #include "camel/passes/test/bounds.h"
+#include "camel/passes/test/inlineuse.h"
 #include "camel/passes/test/keepshape.h"
 #include "camel/passes/test/rules.h"
 #include "camel/passes/test/saturate.h"
@@ -1003,6 +1004,8 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
         TEST_PASS(kKeepShapeTestPass, KeepShapeTestPass),
         TEST_PASS(kBoundsFlipTestPass, BoundsFlipTestPass),
+        TEST_PASS(kInlineUseTestPass, InlineUseTestPass),
+        TEST_PASS(kInlineUseDropTestPass, InlineUseDropTestPass),
         TEST_PASS(kKeepInspectTestPass, KeepInspectTestPass),
         TEST_PASS(kContextLifetimeTestPass, ContextLifetimeTestPass),
         TEST_PASS(kContextsTestPass, ContextsTestPass),
