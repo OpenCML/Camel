@@ -2569,7 +2569,38 @@ class CmlPrinter {
                 fail(ref, std::format("the operator '{}' without one or two values", symbol));
             }
 
-        std::string text = name + "(";
+        // A call with configuration writes it back in `<>`, in the position the source wrote it:
+        // `print<'{}-{}'>(3, 4)`, `println<'{:.2f}'>(0.5)`. The format is a `with` input of the
+        // call (`:io/print` and `:io/println` carry `<fmt: string>`), and a print that dropped it
+        // wrote `3 4` where the source wrote `3-4` -- the A7 case `trans/cpp/exec/print_formats`.
+        // A configuration the printer cannot write is refused by name through `expression`, never
+        // written half-way.
+        std::string text = name;
+        const auto withArgs = graph_->withInputsOf(ref);
+        if (!withArgs.empty()) {
+            // The one configuration this printer writes is the format of a print: `print<'{}-{}'>`,
+            // `println<'{:.2f}'>` -- a string the call holds and the source writes in `<>`. Any
+            // other configuration (`:mark/map_arr`'s function value, written `xs->map<f>` by the
+            // source) has no spelling here, and writing the call without it would be a print that
+            // dropped the configuration: it is refused by name instead.
+            for (const gc_node_ref_t one : withArgs) {
+                const camel::runtime::GCNode *argument = graph_->node(one);
+                const Type *type = argument != nullptr ? argument->dataType() : nullptr;
+                if (type == nullptr || type->code() != TypeCode::String) {
+                    fail(
+                        ref,
+                        "a call whose configuration is not a format string: the printer writes "
+                        "`name<fmt>(...)` for the print family, and this operator's configuration "
+                        "is not a string, so its call has no spelling here");
+                }
+            }
+            text += "<";
+            for (size_t i = 0; i < withArgs.size(); ++i) {
+                text += (i ? ", " : "") + expression(withArgs[i]).text;
+            }
+            text += ">";
+        }
+        text += "(";
         for (size_t i = 0; i < inputs.size(); ++i) {
             text += (i ? ", " : "") + expression(inputs[i]).text;
         }
