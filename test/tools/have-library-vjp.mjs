@@ -35,11 +35,8 @@
 //
 // A wrong number is *not* hidden here -- it is left to the plan entry, which asserts 12 and 9 and
 // goes red on them. A gate that swallowed a wrong number into a skip would be the silent pass this
-// whole arrangement exists to avoid.
-//
-// With `--missing` the question is the other one, for the entry that reads a *refusal*: exit 0
-// while the composition does not build, 1 when it does. That is what retires the refusal case on
-// the day the assembly lands, without anyone remembering to delete it.
+// whole arrangement exists to avoid. There is no `--missing` mode any more: the refusal case it
+// served was replaced by `vjp_api.carries_its_own_ruleset`, which reads the numbers.
 
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -50,7 +47,6 @@ const home = process.env.CAMEL_HOME || path.join(ROOT, 'out', 'latest')
 const camel = path.join(home, 'bin', process.platform === 'win32' ? 'camel.exe' : 'camel')
 const probe = path.join(ROOT, 'test', 'cases', 'compile', 'transforms', 'probe_library_vjp.cml')
 const comparison = path.join(ROOT, 'test', 'cases', 'compile', 'transforms', 'vjp_analytic_gradient.cml')
-const missing = process.argv.includes('--missing')
 
 function run(file) {
     const proc = spawnSync(camel, [file, 'std::nvm'], {
@@ -87,9 +83,6 @@ function say(lines) {
 
 const built = run(probe)
 if (built.status !== 0) {
-    if (missing) {
-        process.exit(0)
-    }
     const { layer, evidence } = wallOf(built.text)
     if (layer === 'type') {
         say([
@@ -102,12 +95,13 @@ if (built.status !== 0) {
         ])
     } else if (layer === 'graph') {
         say([
-            'the library `vjp` stops in the graph (M4): the type layer takes the shape `split` hands back and',
-            'the module compiles, but the walk that runs a function backwards refuses a construct inside it.',
+            'the library `vjp` stops in the graph (M4): the type layer takes the shape `split` hands back,',
+            'the library imports the two rulesets it composes, and the module compiles, but the walk that',
+            'runs a function backwards refuses what it finds inside the backward half.',
             '  evidence (the walk\'s own reading, then the diagnostic raised at the `transpose` call)',
             ...evidence.map((line) => `    ${line.trim()}`),
-            '  what is missing: transposing that construct -- giving it a transpose of its own and replacing',
-            '  the site it is written at, which is the step named to the M3 lane.',
+            '  what is missing: a transpose of a call whose callee takes several parameters -- the backward',
+            '  half calls `mul_tangent(x, w, dx, dw)` -- which is a step of the walk and not of this library.',
         ])
     } else {
         say([
@@ -115,13 +109,6 @@ if (built.status !== 0) {
             ...evidence.map((line) => `    ${line.trim()}`),
         ])
     }
-    process.exit(1)
-}
-if (missing) {
-    say([
-        'the library `vjp` builds now, so the refusal case has nothing to read:',
-        '  evidence: the probe program compiled and ran, exit 0',
-    ])
     process.exit(1)
 }
 
