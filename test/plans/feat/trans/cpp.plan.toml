@@ -100,6 +100,25 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
+name = "main_after_devirtualize"
+# The root's call of `main` has two spellings: an indirect call of the function value (CALL) and,
+# once a pass has settled the callee, a FUNC node that names its graph (`std::opt::devirtualize`
+# writes that one). The writer read only the first, so it refused every program devirtualize had
+# touched as "the program has no call of 'main' std::cpp can find": 132 of the 132 translatable
+# programs of test/tools/cppexec/expect.txt (the defect the 2026-11-01 eval report counted as
+# "about 55%"). The graph such a node names is still main, found by its name; nothing was inlined
+# away, and this case is the reading that keeps the writer reading both spellings.
+desc = "After `std::opt::devirtualize` the root still calls main and the writer translates the program instead of refusing it: the entry is the graph the root's FUNC node names, found by its name."
+kind = "behavior"
+case = "../../../cases/trans/cpp/main_io.cml"
+args = ["${case}", "std::opt::devirtualize", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["int main(int argc, char **argv)"]
+expect_output_not_contains = ["TranslationRefused", "no call of 'main'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
 name = "narrow_floats"
 desc = "bf16 and f16 are core value types of the language (reduced-precision.md b1) and values of the standalone runtime (include/camel/standalone/half.h), so a program that holds one is translated rather than refused: `rt::BF16` and `rt::F16` stand for the two types, sixteen bits of storage whose constant is the pattern itself (`fromBits`, exact for every pattern a program can write), the text is the type's own shortest text (so `0.1` as a bf16 prints `0.1` and not the `0.100097656` of the f32 it widens to), and arithmetic is computed in f32 and rounded once -- `/` through rt::div, where zero is a fault as it is for f32, and `^` through rt::pow. This entry pinned a refusal before the rules existed; it is now the acceptance case, and the program is built and run by agree_with_fvm, which is what says the two back ends print it byte for byte."
 kind = "behavior"
