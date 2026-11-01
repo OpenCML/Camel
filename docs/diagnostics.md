@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-307 diagnostics: 286 errors, 21 warnings. 15 carry a machine-applicable edit, 292 say why they carry none.
+306 diagnostics: 285 errors, 21 warnings. 15 carry a machine-applicable edit, 291 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -304,7 +304,6 @@ prints one entry.
 | `0x04000032` | [RuntimeDiag::OperandTypeUnsupported](#operandtypeunsupported) | Error | no |
 | `0x04000033` | [RuntimeDiag::FieldNotFound](#fieldnotfound) | Error | no |
 | `0x04000034` | [RuntimeDiag::InvalidArgument](#invalidargument) | Error | no |
-| `0x04000036` | [RuntimeDiag::FileSystemError](#filesystemerror) | Error | no |
 | `0x04000039` | [RuntimeDiag::RegexInvalid](#regexinvalid) | Error | no |
 | `0x0400003A` | [RuntimeDiag::TimeFormatFailed](#timeformatfailed) | Error | no |
 | `0x0400003C` | [RuntimeDiag::GradientElementTypeMismatch](#gradientelementtypemismatch) | Error | no |
@@ -10206,28 +10205,6 @@ func main(): int sync {
     return 0
 }
 ```
-
-### FileSystemError
-
-`0x04000036` · Error · `RuntimeDiag::FileSystemError`
-
-**Fix**
-
-None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-
-**Message**
-
-```text
-'{0}' failed for '{1}': {2}.
-```
-
-**Help**
-
-```text
-Check the path and the permissions of the directories on it.
-```
-
-*No example: no test small enough to show raises it.*
 
 ### RegexInvalid
 
