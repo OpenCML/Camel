@@ -269,9 +269,9 @@ void registerOperatorMetadata() {
     // refuses it there by name (CallSpec::staticFunctionArg; sem::TransformArgumentIsNotAKnownFunction)
     // instead of leaving the transform to refuse once the program is running.
     camel::core::OperatorTable::instance().declareCallSpec(
-        ":transforms:jvp", {.staticFunctionArg = 0});
+        "transforms:jvp", {.staticFunctionArg = 0});
     camel::core::OperatorTable::instance().declareCallSpec(
-        ":transforms:transpose", {.staticFunctionArg = 0});
+        "transforms:transpose", {.staticFunctionArg = 0});
 }
 
 } // namespace camel::transforms
