@@ -8,11 +8,11 @@
 
 | 栏 | 行数 | 占 655 | 含义 |
 |---|---|---|---|
-| 已覆盖 | **463** | 71% | 该 URI 有 `#op` tag，或有同名同元数的声明 |
-| 真缺 | **117** | 18% | 没有；且签名写得出来 |
-| 签名表达不了 | **75** | 11% | 没有；且今天的声明语法表达不了（`!=` 无符号 22、联合 21、`Tensor` 15、无通配 13、宽度派生自实参 3、`number` 1） |
+| 已覆盖 | **464** | 71% | 该 URI 有 `#op` tag，或有同名同元数的声明 |
+| 真缺 | **109** | 17% | 没有；且签名写得出来 |
+| 签名表达不了 | **82** | 13% | 没有；且今天的声明语法表达不了（`!=` 无符号 22、联合 21、`Tensor` 15、无通配 13、宽度派生自实参 3、`number` 1） |
 
-**已覆盖 463 行的来路**：靠 tag 128（`:op` 的 128 行）+ 靠声明 285（`math` 96、`graph` 41+9、`tensor` 44、`array` 33、其余按协议）。
+**已覆盖 464 行的来路**：靠 tag 128（`:op` 的 128 行）+ 靠声明 285（`math` 96、`graph` 41+9、`tensor` 44、`array` 33、其余按协议）。
 
 ## 一条必须说清的限度
 
@@ -133,6 +133,42 @@ with that overload, so the two cannot disagree.
 
 **`ne_*` 的观察已成页**：`docs/handover/questions/2026-11-02-p1-13-eleven-ne-rules-name-nothing.md`——11 个名字、22 行规则命名不到任何东西（`!=` 由 `==` 推出），并写明**删掉后可核对的结果**：`inspect --ops` 655 → **633**，三栏表 `463/117/75` 不动（它们本来就在"签名表达不了"里），`--verify-ops` 声明没变仍 559。不删，只记着。
 
+## 第七族：`*tos` 那 8 行早就被覆盖了，而且不是运算符
+
+先答作者的问题："`dtos` 这条能不能写"——**不用写，它早就被一条通配声明覆盖了**；而且它**不是运算符**，是转换调用 `string(x)` 的语义。
+
+**注册原文**（`camel inspect --ops` 的行，注意 `name` 不是 `dtos`）：
+
+```
+OPERATOR {"module":"<builtin>","name":"string","uri":":op/dtos","with":0,"norm":1,"purity":"pure","signature":"(float) => string"}
+```
+
+**它服务于哪个调用**：`string(x)`。`include/camel/standalone/format.h:180` 自己写着——
+
+```
+/// `string(x)` (:op/itos, :op/ltos, :op/ftos, :op/dtos, :op/atos): the text of `x`.
+```
+
+注册处是内置组的静态类型解析器表（`src/builtin/modules/globals.cpp`：`OperatorGroup::create("string", {...})` 里每条 `":op/dtos"` 配 `StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::String())`）。
+
+**覆盖它的声明**在 `stdlib/prelude.cml:705`：
+
+```
+#op(':op/*tos')
+export func string::<T>(x: T): string
+```
+
+所以这 8 行**不删、不搬**，进"已覆盖"。写第二条声明反而是给同一个调用形状第二份声明——不做。
+
+**这一步纠正了我自己的两个量法错误**（都记在这里，因为三栏表的底数靠它们）：
+
+1. **不能拿 URI 的后缀当名字**。`:op/dtos` 的名字是 `string`（注册表 `name` 字段），`tensor:from_bytes_bf16` 的名字是 `from_bytes`。按后缀当名字会漏掉 `string/1` 这条声明。
+2. **要认通配 tag**。`#op(':op/*tos')` 覆盖哪些 URI，得按"前缀 + 后缀"匹配才数得出来。
+
+两处都改了，于是 8 行从"真缺"进"已覆盖"，总数仍是 655。
+
+**顺带更正通配问题的答案**：通配**是有效机制**，但**只对内置算子组有效**。绑定逻辑在 `src/compile/gir/builder_modules.cpp`：`claimed` 只能来自内置模块（`context_->importModule("")`）里同名的算子组，而 `ownRule` 又被 `uri.find('*') == std::string::npos` 直接否掉——所以 `string`（内置组）的通配能用，`tensor` 的 `from_bytes`（模块算子）的通配没有生效的路。这条写进了 `docs/handover/questions/2026-11-02-p1-13-should-the-loader-expand-the-op-wildcard.md` 的"补一条更正"。
+
 ## 655 与 559 为什么不一样
 
 `inspect --ops` 的 **655** 是**注册表行数**：每个注册重载一行（同一个 URI 可以有计算签名行和声明行两条，这正是 `sum_axis` 的两条）。
@@ -159,16 +195,16 @@ P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可�
 
 ## 全表
 
-下面按三栏展开：真缺 117 行按协议分组逐条列出，签名表达不了 75 行按原因列出；已覆盖按协议与来路给出计数（逐条列出 413 行会让这页变成第二个注册表）。
+下面按三栏展开：真缺 109 行按协议分组逐条列出，签名表达不了 82 行按原因列出；已覆盖按协议与来路给出计数（逐条列出 413 行会让这页变成第二个注册表）。
 
-## 已覆盖 463 行的来路
+## 已覆盖 464 行的来路
 
 | 协议 | 靠 tag | 靠同名同元数声明 | 合计 |
 |---|---|---|---|
-| `:op` | 178 | 0 | 178 |
+| `:op` | 186 | 0 | 186 |
 | `math` | 96 | 0 | 96 |
 | `graph` | 9 | 41 | 50 |
-| `tensor` | 0 | 44 | 44 |
+| `tensor` | 0 | 37 | 37 |
 | `array` | 29 | 4 | 33 |
 | `coll` | 19 | 0 | 19 |
 | `io` | 9 | 5 | 14 |
@@ -180,7 +216,7 @@ P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可�
 
 ## 真缺（206 行，按协议）
 
-### :op: 96
+### :op: 88
 
 - `:op/and` (2 参)
 - `:op/assn` (2 参)
@@ -240,17 +276,11 @@ P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可�
 - `:op/assn_sub_i` (2 参)
 - `:op/assn_sub_l` (2 参)
 - `:op/assn_sub_z` (2 参)
-- `:op/atos` (1 参)
-- `:op/ctos` (1 参)
-- `:op/dtos` (1 参)
 - `:op/eq` (2 参)
-- `:op/ftos` (1 参)
 - `:op/idx_str` (2 参)
 - `:op/idx_take` (3 参)
 - `:op/inv_i` (1 参)
 - `:op/inv_l` (1 参)
-- `:op/itos` (1 参)
-- `:op/ltos` (1 参)
 - `:op/mod_i` (2 参)
 - `:op/mod_l` (2 参)
 - `:op/ne` (2 参)
@@ -270,14 +300,12 @@ P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可�
 - `:op/pow_z_l` (2 参)
 - `:op/set_field` (3 参)
 - `:op/set_index` (3 参)
-- `:op/stos` (1 参)
 - `:op/tag_error_info` (1 参)
 - `:op/tag_error_value` (1 参)
 - `:op/tag_is_error` (1 参)
 - `:op/tag_is_null` (1 参)
 - `:op/tag_null_value` (1 参)
 - `:op/tag_throw` (1 参)
-- `:op/ztos` (1 参)
 
 ### var: 6
 
@@ -318,21 +346,7 @@ P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可�
 
 ## 签名表达不了（36 行，附原因）
 
-### no declaration can name it: '!=' is '!(a == b)', so the operator has no symbol of its own: 22
-
-- `:op/ne_b` (2 参)
-- `:op/ne_bf` (2 参)
-- `:op/ne_bytes` (2 参)
-- `:op/ne_c` (2 参)
-- `:op/ne_d` (2 参)
-- `:op/ne_f` (2 参)
-- `:op/ne_f6` (2 参)
-- `:op/ne_i` (2 参)
-- `:op/ne_l` (2 参)
-- `:op/ne_s` (2 参)
-- `:op/ne_z` (2 参)
-
-### union parameter: 21
+### union parameter: 22
 
 - `:coll/eq` (2 参)
 - `:coll/neq` (2 参)
@@ -349,6 +363,7 @@ P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可�
 - `tensor:mod` (2 参)
 - `tensor:multiply` (2 参)
 - `tensor:one_hot` (2 参)
+- `tensor:pow` (2 参)
 - `tensor:reshape` (2 参)
 - `tensor:strict_eq` (2 参)
 - `tensor:strict_neq` (2 参)
@@ -356,24 +371,44 @@ P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可�
 - `tensor:take` (2 参)
 - `tensor:where` (3 参)
 
-### the parameter type is `Tensor`, which is no type name: 15
+### no declaration can name it: '!=' is '!(a == b)', so the operator has no symbol of its own: 22
 
+- `:op/ne_b` (2 参)
+- `:op/ne_bf` (2 参)
+- `:op/ne_bytes` (2 参)
+- `:op/ne_c` (2 参)
+- `:op/ne_d` (2 参)
+- `:op/ne_f` (2 参)
+- `:op/ne_f6` (2 参)
+- `:op/ne_i` (2 参)
+- `:op/ne_l` (2 参)
+- `:op/ne_s` (2 参)
+- `:op/ne_z` (2 参)
+
+### the parameter type is `Tensor`, which is no type name: 21
+
+- `tensor:argmax_axis` (3 参)
+- `tensor:argmin_axis` (3 参)
 - `tensor:gelu` (1 参)
 - `tensor:idx` (2 参)
 - `tensor:idx2d` (3 参)
 - `tensor:layer_norm` (4 参)
 - `tensor:linear` (3 参)
 - `tensor:matmul` (2 参)
+- `tensor:max_axis` (3 参)
+- `tensor:mean_axis` (3 参)
+- `tensor:min_axis` (3 参)
 - `tensor:neg` (1 参)
 - `tensor:ones_like` (1 参)
 - `tensor:permute` (2 参)
 - `tensor:rsqrt` (1 参)
 - `tensor:softmax_grad` (3 参)
+- `tensor:sum_axis` (3 参)
 - `tensor:transpose` (1 参)
 - `tensor:unsqueeze` (2 参)
 - `tensor:zeros_like` (1 参)
 
-### no declaration can name it: the loader does not expand the `*` in `#op('tensor:from_bytes_*')`: 8
+### no declaration can name it: the loader does not expand the '*' in #op('tensor:from_bytes_*'): 8
 
 - `tensor:from_bytes_aggregate` (2 参)
 - `tensor:from_bytes_bf16` (2 参)
