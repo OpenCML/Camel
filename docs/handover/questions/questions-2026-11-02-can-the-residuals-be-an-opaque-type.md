@@ -1,0 +1,61 @@
+# 问：残差能不能表达成"每次实例化一个不透明类型"（`Residuals<F>`），从而不需要 `TupleType::isResiduals`？
+
+18:40 裁定 ④：残差元组改用语言已有的不透明类型表达，删 `TupleType::isResiduals` 与
+`ResidualsAreNotVisible`。先按纪律实测"能不能"，**能才删**。
+
+## 实测（一条 `.cml`，跑一次）
+
+样板取 `stdlib/rewrite.cml:29` 的 `export type Rule`——"一个类型名，内部结构不外露"，由 C++ 模块
+提供。照它写成带参数的形式：
+
+```camel
+export type Residuals<F>                      // 无体的不透明声明，带一个类型参数
+func use(r: Residuals<(x: float) => float>): int { let _ = r; return 0 }
+```
+
+结果分两格，都干净：
+
+1. **解析：通过。** 无体类型带类型参数不是语法问题（注册表里那条帮助文本自己举的就是
+   `export type Txn<F>` 这个例子）。
+2. **语义：拒。** 拒的位置是**取用点**（`3:8`，即 `use` 的形参注解），不是声明点：
+
+       error[SemanticDiag::NativeTypeNotProvided]: The type 'Residuals' is declared without a
+         right side, so a C++ module has to provide it, and the module 'tmp_residuals_probe'
+         registered no type of that name.
+         --> ...cml:3:8    (注册表码 0x0001FD，打印码 0x030001FD)
+
+   它自己把这条路说清了：无体类型的**身份是"模块 + 名字"，由模块在加载时提供**；这个名字没人注册，
+   就没有这个类型。
+
+## 为什么"那就注册一个 `Residuals` 名字"还不够
+
+无体类型的身份是一次性的（模块 + 名字）：注册一个 `Residuals` 得到的是**一个**名义类型，它的**内容**
+得由 C++ 在类型解析时给出。而残差不是 `F` 的类型的函数——它是 `F` 的**图**的函数：`f(x) = x` 穿过时
+没有残差，`f(x, y) = x*x*y*y` 有四个，两个类型相同的函数体可以有不同数量的残差（这正是
+`StdlibSignatures/transforms.cml` 把 `Split<F>` 的残差位置写成 `_` 的理由：**"它们的数量与类型在
+图在手的地方读，编译器在实例化时填这个位置"**）。
+
+所以要让"每次实例化一个不透明类型"成立，缺的是**一条语言能力**：
+
+> **变换在实例化时铸造一个名义类型**（名字由变换给出、成员/个数由图决定），并且这个类型能被签名
+> 引用（`Vjp<F>` 的第一个成员就是它）。
+
+今天没有任何机制能在**类型解析之后、图在手之时**新铸一个类型并回到签名里；唯一的"实例化时填"的位置
+是 `split` 参考签名里那个 `_`，而它是**文档**，不是类型系统的能力。
+
+## 结论与建议
+
+- **默认建议（作者裁）**：走 `Residuals<F>` 这类"每实例化一个不透明类型"，但**先补那条能力**
+  （变换铸造名义类型）；它同时会消掉"给 `TupleType` 加标志"的需要，正是原则 2.3 要的方向。
+- **在那之前不动代码**：`isResiduals` 今天只有两处（`include/camel/core/type/composite/tuple.h`、
+  `src/compile/gir/builder_expr.cpp`），`ResidualsAreNotVisible` 是**唯一**能把"残差不透明、不可
+  解构"这条语义说出来的位置。删掉它们而没有替代，等于**把规则删了，而不是换个说法**。
+- **备选（若想今天就少一个标志）**：把拒绝语义挪到 `split` 的后一半签名上——那里再放一个 `_`，
+  让"读残差"在**类型**上就没有入口。代价：`_` 是文档，不是类型，这条规则就从"用户会看见的诊断"退成
+  "不会发生"，而设计 4.4 要求它是一条**可诊断**的错误。
+
+## 记账
+
+本轮**没有删码**：诊断码仍是 307，`PINNED_COVERAGE_RECORDED` 仍是 27、按码断言仍是 279 of 307。
+删 `ResidualsAreNotVisible` 的那一笔若发生，按"删码"一栏记账：**307 → 306**，且 27/279 必须在
+**同一个提交**里复核（否则分母又被人为动过）。
