@@ -771,3 +771,15 @@ expect_output_contains = ["Invalid access index: '1'"]
 expect_output_not_contains = ["Segmentation fault"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 15000
+
+# A var holding a lambda, reassigned: the printer died with SIGSEGV formatting this assignment.
+[[tests]]
+name = "cml_var_holding_a_lambda"
+kind = "behavior"
+case = "../../../cases/compile/transforms/cml_var_holding_a_lambda.cml"
+args = ["${case}", "std::cml"]
+expect_exit = 0
+expect_output_contains = ["h = (x: int): int => x + 100"]
+expect_output_not_contains = ["Segmentation fault"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 15000

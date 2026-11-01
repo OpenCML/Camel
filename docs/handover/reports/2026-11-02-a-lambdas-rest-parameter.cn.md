@@ -675,3 +675,53 @@ emit(indent_ + std::format("{} {} {}", cell->second, assignmentOperator(uri),
 
 **⑤ 还没修**：这一笔只到"复现 + 栈 + 文件清单"。**下一次动手前先确认那一句的三个字符串谁坏了**，
 避免用"加个 try/catch"之类的办法把段错误藏起来——**期望仍是"打印出源码"或一条具名拒绝**。
+
+## 20. A1 修好了：`std::cml` 打赋值时的悬垂引用
+
+**① 打点（三个字符串 + ref）**，在 `CmlPrinter::emitAssignment` 的格式化之前：
+
+```
+[probe] cell=0x5a6e100fb8c8 size=99428762372640 cap=99428762372704 op=0x7d48d7c01e8f size=1
+        val=0x5a6e100fbff0 size=24 cap=24 ref=4
+```
+
+**读法**：`op` 与 `val` 都正常（1 和 24），**`cell` 的 `size` 是垃圾值 99428762372640**——**是单元格名字那个 `std::string` 对象本身没了**，
+不是它指向的缓冲有问题。三个里**只有它坏**。
+
+**② 原因**：`emitAssignment` 先 `auto cell = cells_.find(...)`，再在同一个完整表达式里调 `expression(inputs.back())`；
+而打印值的那条路里**会恢复 `cells_` 的存档**（`cml.cpp:1100`/`:1783`/`:1844` 都有 `auto savedCells = cells_;`，试不成就把表放回去）。
+**"放回去"是一次整表赋值，会销毁表里每一个条目** ⇒ `cell->second` 的引用指向已释放的对象，`std::format` 读到垃圾长度。
+
+**③ 修法（只在生命周期上改，没有 try/catch、没有 `if(!valid) return`）**：
+
+```cpp
+const std::string cellName  = cell->second;                    // 先拷
+const std::string valueText = expression(inputs.back()).text;   // 再读值（这一步可能恢复存档）
+emit(indent_ + std::format("{} {} {}", cellName, assignmentOperator(uri), valueText));
+```
+
+**④ 读数（崩 → 打印源码）**：`camel cml_segv.cml std::cml` **改前 `rc=139` ×3；改后 `rc=0` ×3**，前 10 行：
+
+```
+func adder(n: int): (x: int) => int {
+    return (x: int): int => x + n
+}
+
+func main(): int sync {
+    let g: (x: int) => int pure = (x: int): int => x * 3
+    var h: (x: int) => int pure = (x: int): int => x - 1
+    h = (x: int): int => x + 100
+    println('let', g(14), h(1))
+    let add5: (x: int) => int = adder(5)
+```
+
+**⑤ 用例**：`test/cases/compile/transforms/cml_var_holding_a_lambda.cml` + 计划项 `cml_var_holding_a_lambda`
+（`std::cml`、`expect_exit = 0`、`expect_output_contains = ["h = (x: int): int => x + 100"]`、并且不含 `Segmentation fault`）。
+
+**⑥ 判据**：`transforms` + `rest_params` = **68/68**，`BUILD_EXIT=0`；`git grep -c 'std::format' src/passes/trans/cml/cml.cpp`
+**前后未变**（只改了这一个格式化的实参来源，没有动别的格式化点）。
+
+**⑦ 主检出污染（这一轮的错，记下来）**：`[System.IO.File]` 与 `git grep` 的相对路径按**进程的工作目录**解析，
+不是 PowerShell 的 `cd`——所以这一轮的打点与早前那条 `0x000209` 都写进了主检出 `D:\Projects\Camel`。
+已把两份 diff 存成 patch、`git restore` 主检出（现在 `git status --porcelain` 为空）、把 A1 的 patch `git apply` 到本工作树。
+**`0x000209` 那条不 apply、不保留**（诊断码由生成器分配，手写会被 `--write` 还原）。
