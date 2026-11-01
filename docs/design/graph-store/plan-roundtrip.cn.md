@@ -34,6 +34,21 @@ ROUNDTRIP checked=459 equivalent=412 not_equivalent=47 over_budget=0 unfaithful=
 
 两向 A/B（都在主机上跑、改完立即回退）：把 `:op/neg_l` 再登记进 `__not__` 组（声明顺序早于 `__neg__`），同一个程序从 `println(-n)` 变成 `println(!n)`——**文本跟着声明走**，打印机里没有第二份拷贝；`test/cases/consistency/faults/parallel_lowest_index.cml` 是**没有任何声明的算子**，被点名拒绝：`the operator ':mark/map_arr'`。
 
+**2026-11-02 第三刀：47 条不等价按族归并，修「字面量算术回来被折叠」这一族。** 归并的读法不是看判定器那行话，而是把两边的 canonical 文档里每个节点的算子（非算子节点用它的 kind）数一遍再相减：差的是「左边有、右边没有的节点」「右边有、左边没有的节点」。47 条归并成五族（余下是混合族）：**GATE 独缺 6**（`compile/constas/constas_with_rest.cml`——图里的门来自内联/区域，打印出来的程序是内联后的文本，不需要那道门）、**同节点不同形状 6**（`compile/equality/null_test_never_null.cml`）、**`DATA:tuple`↔`DATA:void` 5**（`compile/surface/if_without_else_ok.cml`——`()` 是空组不是 unit，打印器没有第二种写法，裸 `return` 编不过）、**COPY 独缺 4**（`compile/array_shape/rank_zero_var_slot.cml`）、**`DATA:i64`+FILL 3**（`compile/static_expansion/indices_graph.cml`）。
+
+被修的是原来 13 条的那一族：图里是 `:op/add_l` 加它的两个常量节点，打印成 `println(0 + 1 + 2 + 3)`，前端把整串折成 `DATA 6`——打印出来的程序比图少 3 个算子、4 个常量。修法在 `cml.cpp#infix`/`#prefix`：两个操作数都是字面量时，各自先绑一句 `let cmlN = <字面量>`，再写 `cmlN + cmlM`。名字不是字面量，算子就不再被折；而 `let` 一个字面量就是那个常量节点本身，节点一个不多一个不少（实测：`let c = 1` + `c + 2` 的图正是 `DATA 1`、`DATA 2`、`add_l`）。绑定只活到当前语句：`flushHeld` 把名字表连同 `let` 行一起清掉（第一版不清，`compare()` 里读到了 `chain()` 的 `cml0`，打印结果编不过）。名字沿用打印器既有的生成名前缀 `cml`（`cml_contract.py#GENERATED`），不发明新标识符。
+
+```
+node test/tools/cml-sweep.mjs --jobs 16
+SWEEP files=3356 printed=474 refused=1881 frontend=1001 timeout=0
+REFUSALS families=48
+ROUNDTRIP checked=460 equivalent=415 not_equivalent=45 over_budget=0 unfaithful=14
+```
+
+对照同一棵树、合并 `develop` 之后、这一刀之前的基线：打印 **474 → 474**（按文件比：改后 474 条全在改前集合里，一条没丢）、拒绝 1881 → 1881、等价 **413 → 415**、不等价 **47 → 45**、产不出 canonical 文档 14 → 14；`DIFFERENT` 行逐行比对**只少 2 行**（`compile/rest_params/rest_inline.cml`、`compile/static_expansion/static_loop_sequence_forms.cml`），**一行没多**。被修那族 13 条里，11 条不再报缺 `:op/add_l` 与常量（普查里它们只剩 GATE/FILL 等下一族的差），2 条整条出了不等价名单。
+
+**合并 `origin/develop = 3df534542` 带走两个打印，要记账。** 合并后语料 3362 → 3356；`compile/transforms/**` 的 9 个程序全部以 `the operator '<name>'` 被拒（打印机读声明表之后，develop 新加的这类图里的算子没有声明），其中 `jvp_effect.cml`、`jvp_lifted.cml` 在合并前是能打印的。所以「打印不许低于 475」在今天应读作「474 是这棵树的底线，丢的 2 个有名有姓、归到补声明」。
+
 **补声明清单（按节点数）。** 全语料里被打印机点名、确实没有任何声明的算子 **143 个、12520 个节点**。前 12：`:str/format` 1019、`tensor:sum` 934、`tensor:multiply` 862、`tensor:reshape` 856、`:op/tag_is_null` 689、`:struct/len_arr` 585、`tensor:add` 582、`:op/assn_l` 569、`:mark/map_arr` 389、`tensor:subtract` 324、`tensor:matmul` 238、`:op/slice_sub` 219。
 
 **更正两份旧数。** ① 之前报的「353 条没有声明」其实是「没有 `#op` 标签」的数，不是「没有声明」：`:op/add_l`（3244 节点）、`:op/mul_d`（801）这一批由 `globals.cpp` 的组（`__add__`、`__mul__`）**原生登记**，打印机从不点名它们，所以它们不是缺口；真正的缺口是上面 143 条。② `:op/keep` 已在 `fsh-dev 5773c9482` 删掉，全语料图里 **0 个节点**，扣前扣后都是 353（它与上面那 143 条无关）。

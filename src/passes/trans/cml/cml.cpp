@@ -39,6 +39,7 @@
 #include "camel/utils/number_text.h"
 
 #include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <cmath>
 #include <cstdint>
@@ -339,6 +340,13 @@ class CmlPrinter {
     std::unordered_map<gc_node_ref_t, std::string> cells_;
     std::unordered_set<std::string> usedNames_;
     std::vector<std::string> lines_;
+    // Constants bound before the statement that uses them. `1 + 2` written out comes back folded to
+    // `3`: the front end folds an operator whose operands are both literals, so a graph that holds
+    // those three nodes would come back as one. A `let` of a literal is that literal's node and
+    // nothing else, and a name is not a literal, so `let c0 = 1` then `c0 + 2` keeps the node.
+    std::vector<std::string> held_;
+    std::unordered_map<gc_node_ref_t, std::string> heldNames_;
+    size_t heldSeq_ = 0;
     size_t generated_          = 0;
     std::string indent_        = "    ";
     bool branchAsStatement_    = false;
@@ -1026,8 +1034,55 @@ class CmlPrinter {
 
     // ---- printing ------------------------------------------------------------------------
 
+    /// Whether a printed expression is a literal the front end folds when both operands are one: a
+/// number, a string, a boolean. `()` is not: it is the unit value, and binding it would change the
+/// type it is written at.
+    static bool isLiteralText(std::string_view text) {
+        if (text.empty()) {
+            return false;
+        }
+        if (text == "true" || text == "false") {
+            return true;
+        }
+        if (text.front() == '\'' || text.front() == '"') {
+            return true;
+        }
+        const size_t start = text.front() == '-' ? 1 : 0;
+        return start < text.size() && std::isdigit(static_cast<unsigned char>(text[start])) != 0;
+    }
+
     void emit(std::string line) {
+        flushHeld(lines_);
         lines_.push_back(std::move(line));
+    }
+
+    /// Puts the bindings a statement needs in front of it.
+    void flushHeld(std::vector<std::string> &into) {
+        for (std::string &held : held_) {
+            into.push_back(std::move(held));
+        }
+        held_.clear();
+        // The bindings live in the statement they were written for: a later statement in another
+        // function must not read them, and a name reused across statements would read a variable
+        // that is out of scope, or the wrong one.
+        heldNames_.clear();
+    }
+
+    /// The name a constant is bound to before it is used, binding it the first time: one `let` per
+    /// constant node, so a constant read twice stays one node, as it is in the graph.
+    std::string hoistConstant(gc_node_ref_t ref, const std::string &value) {
+        const auto found = heldNames_.find(ref);
+        if (found != heldNames_.end()) {
+            return found->second;
+        }
+        std::string name;
+        do {
+            name = std::format("cml{}", heldSeq_++);
+        } while (usedNames_.contains(name));
+        usedNames_.insert(name);
+        held_.push_back(std::format("{}let {} = {}", indent_, name, value));
+        heldNames_.emplace(ref, name);
+        return name;
     }
 
     void appendLines() {
@@ -1099,6 +1154,8 @@ class CmlPrinter {
         auto savedParams   = params_;
         auto savedDeclared = declared_;
         auto savedCells    = cells_;
+        auto savedHeld     = std::move(held_);
+        auto savedHeldNames = std::move(heldNames_);
         auto savedLines    = std::move(lines_);
         const std::string savedIndent = indent_;
         lines_.clear();
@@ -1142,6 +1199,7 @@ class CmlPrinter {
                 value = declared_.contains(tail) ? Expr{declared_[tail], 100}
                                                  : expression(tail);
             }
+            flushHeld(body.lines);
             body.lines.push_back(value.text.empty() ? indent_ + "return"
                                                     : indent_ + "return " + value.text);
         } else if (tail != camel::runtime::kInvalidNodeRef && graph_->node(tail) != nullptr &&
@@ -1149,12 +1207,15 @@ class CmlPrinter {
             body.hasTail = true;
             body.tail    = declared_.contains(tail) ? Expr{declared_[tail], 100}
                                                     : expression(tail);
+            flushHeld(body.lines);
         }
 
         lines_     = std::move(savedLines);
         params_    = std::move(savedParams);
         declared_  = std::move(savedDeclared);
         cells_     = std::move(savedCells);
+        held_      = std::move(savedHeld);
+        heldNames_ = std::move(savedHeldNames);
         indent_    = savedIndent;
         return body;
     }
@@ -2276,8 +2337,18 @@ class CmlPrinter {
         if (inputs.size() != 2) {
             fail(ref, std::format("the operator '{}' without two values", op));
         }
-        Expr left  = expression(inputs[0]);
-        Expr right = expression(inputs[1]);
+        Expr left;
+        Expr right;
+        // Two literals fold on the way back, and the folded node is not the nodes this graph holds:
+        // each literal is bound first, so the operator survives with the operands it has. A name is
+        // not a literal, and a `let` of a literal is that literal's node and nothing else, so the
+        // count of nodes on both sides stays what it is.
+        left  = expression(inputs[0]);
+        right = expression(inputs[1]);
+        if (isLiteralText(left.text) && isLiteralText(right.text)) {
+            left  = {hoistConstant(inputs[0], left.text), 100};
+            right = {hoistConstant(inputs[1], right.text), 100};
+        }
         return {
             std::format(
                 "{} {} {}", parenthesize(left, precedence), op,
@@ -2290,6 +2361,11 @@ class CmlPrinter {
             fail(ref, std::format("the operator '{}' without one value", op));
         }
         Expr inner = expression(inputs[0]);
+        // The same fold, one operand wide: `-1` comes back as the constant, not as the node that
+        // negated it.
+        if (isLiteralText(inner.text) && inner.text.front() != '-') {
+            inner = {hoistConstant(inputs[0], inner.text), 100};
+        }
         std::string text = parenthesize(inner, 70);
         // `!!t` is not two negations to the lexer: `!!` is one token that fits nothing, so an
         // operand that opens with the operator's own character is parenthesized (`!(!t)`).
