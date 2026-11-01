@@ -1,0 +1,62 @@
+// An escape whose target is not a float: what a cotangent does when it lands on an integer.
+//
+// `int_escape(x) = let n = int(3x); loop s = x for i in 0..3 do s + float(n)` reads `n` -- the
+// parameter, truncated -- inside the loop body, so every round hands a cotangent to `n` and `n` has to
+// carry it out of the loop. The paper answer is 1, and the reason is a rule, not an accident: an
+// integer is a zero tangent space. `int(3x)` is a step function, constant between its jumps, so its
+// derivative is zero wherever it exists; `float(n)` reads that integer and contributes nothing to the
+// derivative of what it is added to. What is left is `x` itself, read once, so the pullback of 1.0 is
+// 1.0. Not 0 (the `x` path is real), not 3 (that would be differentiating the truncation as if it were
+// the identity), and not 13 (that is the value, not the derivative).
+//
+// The controls are the other half of the claim, because "answer 1 for anything with an `int` in it"
+// and "drop every cotangent that touches an integer" are both wrong for different reasons:
+//     g(x) = float(int(5x)) + x   ->  1.0   (the integer branch contributes 0, `x` contributes 1)
+//     h(x) = x + x                ->  2.0   (no integer at all: the answer is what the sum says)
+// h is 2 and not 1, so the rule is not "every function with a cast answers 1"; g is 1 and not 0, so a
+// cotangent reaching an integer is dropped rather than allowed to swallow the float path it sits
+// beside.
+//
+// Why it is 1 and not 0 is printed with the numbers: the forward reading of int_escape is 10.0
+// (`x = 1` plus three rounds of `n = int(3)`), so the integer is really there and really used; the
+// derivative is 1.0 all the same, and that pair -- value 10, derivative 1 -- is what "the truncation
+// is piecewise constant" means when written as two numbers instead of a sentence.
+//
+// Every transpose here is asked twice, at a different cotangent, and the plan asserts the second
+// answers (4, 3, 5) rather than the first: a number that also appears as a forward reading cannot tell
+// a working transpose from a coincidence, and the answer has to be proportional to the cotangent to
+// pass. `skip=` must not appear at all: this shape answered a refusal before the rule existed, and a
+// refusal is not an answer.
+import { transpose } from transforms
+import rulesets.transpose
+
+func int_escape(x: float): float {
+    let n = int(3.0 * x)
+    return loop s = x for i in 0..3 do s + float(n)
+}
+
+func g(x: float): float {
+    return float(int(5.0 * x)) + x
+}
+
+func h(x: float): float {
+    return x + x
+}
+
+func main(): int sync {
+    // The integer is really read, forward: 1 + 3 rounds of int(3) is 10.
+    println(int_escape(1.0))
+    // The loop, whose escape is an integer.
+    let backI = transpose(int_escape)
+    println(backI(1.0, 1.0))
+    println(backI(1.0, 5.0))
+    // The same rule without a loop: an integer branch beside a float one.
+    let backG = transpose(g)
+    println(backG(1.0, 1.0))
+    println(backG(1.0, 3.0))
+    // The control with no integer anywhere.
+    let backH = transpose(h)
+    println(backH(1.0, 1.0))
+    println(backH(1.0, 2.0))
+    return 0
+}
