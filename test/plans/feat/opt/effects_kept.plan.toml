@@ -185,3 +185,48 @@ args = ["${case}", "test::keepshape", "std::jgir"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["KEEPSHAPE keep=1 uri=:op/keep", "\"label\": \":op/keep\""]
+# Two shapes of the same operator, side by side, because one alone would say the wrong thing about
+# where it lives. `keep_shapes.real_pipeline` is the operator as `std::opt` writes it over an
+# existing case -- two nodes, and the output `5` unchanged. `keep_shapes.no_order_edge` is the
+# rewound one: one node, no order edge anywhere (`waited_on=0`), and the line it prints is the
+# effect the operator is holding up.
+#
+# Note what the two have in common, measured rather than assumed: `in_chain=0` in both. The
+# operator is only written when the node it keeps has no sync user (`replaceNode`:
+# `syncUsers.empty() ? keepThroughValue(...) : replacement`), so a kept node never stands in a
+# `sync` block's chain -- what separates the two shapes is who wrote the operator and whether an
+# order edge is left to lean on, not a chain place.
+[[tests]]
+name = "keep_shapes.real_pipeline"
+desc = "The optimizer's own rewrite: `std::opt` over an existing effect case writes two `:op/keep` nodes, neither of them for a node with a chain place, and the program still prints what it printed."
+case = "../../../cases/opt/effects/dce_effect_under_pure_arithmetic.cml"
+args = ["${case}", "std::opt", "test::keepinspect", "${backend}"]
+expect_exit = 7
+expect_stdout_exact = "KEEPSPOTS keeps=2 in_chain=0 out_of_chain=2 waited=0\n5\n"
+
+[[tests]]
+name = "keep_shapes.no_order_edge"
+desc = "The same operator on the shape with nothing else to hold the effect up: one node, no sync place and no order edge, and the print runs because the operator reads it."
+case = "../../../cases/opt/effects/keep_shape.cml"
+args = ["${case}", "test::keepshape", "test::keepinspect", "${backend}"]
+expect_exit = 99
+expect_stdout_exact = "KEEPSHAPE keep=1 uri=:op/keep data_user=1 sync_statement=0 wait_edge=0 waited_on=0 standing=alive\nKEEPSPOTS keeps=1 in_chain=0 out_of_chain=1 waited=0\n1\n"
+
+# "Is `:op/keep` reachable?" is a number, not an opinion: the cases of `test/cases/opt/effects`
+# that hold one, with their names, pinned against what was measured on 2026-11-01 (three of five,
+# two nodes each) plus the two witnesses outside that directory. A change in the count is a
+# decision to look at -- a rule that started writing the operator, or one that stopped -- and the
+# names are what says which.
+[[tests]]
+name = "keep_shape.reachability"
+desc = "The pinned count of cases whose graph holds `:op/keep` under `std::opt`, by name: `opt/effects` three of five with two nodes each, and the two witness cases outside it."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/opt/effects/keep_reachability/check.mjs"
+args = ["${case}"]
+# One run: the check runs the binary itself over the cases it names.
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["[KEEP] effects cases=3 nodes=6 of 5", "[KEEP]   effects dce_effect_under_pure_arithmetic.cml nodes=2", "[KEEP]   witness generic/unread_gate.cml nodes=2", "[KEEP] ok"]
+expect_output_not_contains = ["[KEEP] RED"]
+timeout_ms = 300000
