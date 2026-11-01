@@ -353,7 +353,9 @@ class EncodeSession {
                 if (prepared.runtime == nullptr) {
                     continue;
                 }
-                const DraftGraphRead draftFace(prepared.source->view(), prepared.liveNodes);
+                const auto transaction = camel::runtime::GraphTransaction::borrow(
+                    prepared.source->view());
+                const DraftGraphRead draftFace(*transaction, prepared.liveNodes);
                 const FrozenGraphRead frozenFace(*prepared.runtime);
                 const std::string difference = firstDifference(draftFace, frozenFace);
                 GUARD(

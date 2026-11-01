@@ -4,7 +4,7 @@
 #pragma once
 
 #include "camel/core/type/base.h"
-#include "camel/runtime/draft.h"
+#include "camel/runtime/graph_txn.h"
 #include "camel/runtime/graph.h"
 
 #include <map>
@@ -27,8 +27,8 @@ using camel::runtime::kInvalidNodeRef;
  * The lift (`modules/transforms/jvp.cpp`, `liftGraph`) reads a graph through `GCGraph` and the
  * `GCNode` records it hands out: a node's kind, its type, its ports, the graph its FUNC node calls,
  * the operator of its OPER node, and -- from beside the graph -- the graph a graph id names. A
- * draft has all of that in a different shape (a `DraftNodeHeader` in a pool, ports in a node's
- * tail, callees by index into `GraphDraft::payloadGraphs`), so a lift written against `GCGraph`
+ * draft has all of that in a different shape (a node header in a pool, ports in a node's tail,
+ * callees by index into the graph's payload table), so a lift written against `GCGraph`
  * cannot be pointed at a draft without a face both answer. This is that face: every method is one
  * the lift already calls, with the signature it already calls it by, so moving the lift onto drafts
  * is a change of the type it holds and not a rewrite of what it asks.
@@ -41,7 +41,7 @@ using camel::runtime::kInvalidNodeRef;
  * Two facts the frozen side answers from the graph and a draft answers differently, both kept
  * here because the lift reads them:
  *  - a FUNC node's callee: an id in both, but the frozen graph keeps it in its reference table
- *    (`GCFuncRef` -> `refs_`) and a draft in `payloadGraphs`, so the face resolves it here;
+ *    (`GCFuncRef` -> `refs_`) and a draft in its payload table, so the face resolves it here;
  *  - an OPER node's operator: both keep `GCOperBody` in the node's payload, so the face reads the
  *    payload off the draft's tail and answers the same URI.
  */
@@ -86,7 +86,7 @@ class GraphRead {
 /// The face of a build-time draft: what a graph answers while it is being built.
 class DraftGraphRead final : public GraphRead {
   public:
-    explicit DraftGraphRead(const camel::runtime::GraphDraft &draft) : draft_(draft) {}
+    explicit DraftGraphRead(const camel::runtime::GraphTransaction &txn) : txn_(txn) {}
 
     /// The face of a draft through the id table the encoder builds from it: `kept[i]` is the
     /// draft's node that the runtime graph's node `i` is built from. A draft an encoder has not
@@ -94,17 +94,17 @@ class DraftGraphRead final : public GraphRead {
     /// wants; a draft read beside the graph it was encoded to must use this form, because encoding
     /// drops the front end's placeholders (`GCNodeKind::Dref`) and numbers what is left from zero.
     DraftGraphRead(
-        const camel::runtime::GraphDraft &draft,
+        const camel::runtime::GraphTransaction &txn,
         std::span<const gc_node_ref_t> kept)
-        : draft_(draft), kept_(kept) {}
+        : txn_(txn), kept_(kept) {}
 
-    camel::core::type::FunctionType *funcType() const override { return draft_.funcType(); }
+    camel::core::type::FunctionType *funcType() const override { return txn_.graph().funcType(); }
     gc_cnt_t nodeSlotCount() const override {
-        return kept_.empty() ? static_cast<gc_cnt_t>(draft_.nodeSlotCount())
+        return kept_.empty() ? static_cast<gc_cnt_t>(txn_.graph().nodeSlotCount())
                              : static_cast<gc_cnt_t>(kept_.size());
     }
     gc_cnt_t liveNodeCount() const override {
-        return kept_.empty() ? draft_.nodeCount() : static_cast<gc_cnt_t>(kept_.size());
+        return kept_.empty() ? txn_.graph().nodeCount() : static_cast<gc_cnt_t>(kept_.size());
     }
     bool alive(gc_node_ref_t ref) const override;
     GCNodeKind kindOf(gc_node_ref_t ref) const override;
@@ -130,7 +130,7 @@ class DraftGraphRead final : public GraphRead {
     gc_node_ref_t mappedIdOf(gc_node_ref_t id) const;
     std::vector<gc_node_ref_t> mappedListOf(std::span<const gc_node_ref_t> inputs) const;
 
-    const camel::runtime::GraphDraft &draft_;
+    const camel::runtime::GraphTransaction &txn_;
     std::span<const gc_node_ref_t> kept_;
 };
 
@@ -185,7 +185,7 @@ std::string firstDifference(const GraphRead &draft, const GraphRead &frozen);
 /// side, so a lift that walks from a graph to the graphs it calls walks the same way on a draft.
 class DraftGraphs {
   public:
-    void add(const camel::runtime::GraphDraft &draft);
+    void add(const camel::runtime::GraphTransaction &txn);
     const GraphRead *byId(GraphId id) const;
 
   private:
