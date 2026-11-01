@@ -274,3 +274,39 @@ certainty. The scene, in the order it was earned:
 
 > **`eraseNode` closes the chain but does not ask whether the node was somebody's last reader;
 > `replaceNode` asks. Any pass that reaches for `eraseNode` directly gets no protection.**
+
+
+## Sixth round: the handoff extension did not fix it -- one more negative result
+
+The implementation round extended `pruneBranch` in the one place the fifth round named: before the
+erasures, the **ordered sources of everything about to be erased** (the JOIN, the BRCH, and every node
+in `dropped`) are collected and appended to `outsideReads`, so the dropped-arm handoff below asks the
+same question about them -- "whose last reader did this erasure take, and where does that effect run
+now" -- instead of asking it only about the arm that is not taken.
+
+Measured after it: **`std::opt::inline std::opt::fold` still returns 1**, same node, same sentence;
+`std::opt std::nvm` still 1. So the erasure that takes the reduce's reader is **not** one of
+{JOIN, BRCH, dropped}, or the reduce does not land in that handoff's `lost` list. The change was
+reverted -- an ineffective guard is worse than none, and this file has already recorded that once
+(`takesLastReaderOfAnObservableCall`).
+
+**What the next hand should read first:** which of the four Gate erasures is this one. The print that
+would say it (inside `GraphDraft::eraseNode`, naming the erased gate's value source) was written in the
+last round and **never compiled** -- the anchor did not match and the miss was not checked. That is the
+first thing to redo, and `git grep -c` the literal plus `strings` the binary before trusting a single
+line of its output.
+
+## The five-step scene, for the next hand
+
+1. `:mark/reduce_arr` is observable by declaration (`{.pure = false, .callsGraphs = true}`,
+   src/builtin/executors/builtin.cpp:655-660).
+2. `std::opt::inline` gives the inlined tail a place: a GATE carrying the call's control edge
+   (`spliceChainAnchor`, src/runtime/draft_inline.cpp:1392).
+3. `std::opt::fold` cannot fold the call (`isPureOper` refuses `pure = false`,
+   generic.cpp:1222); the GATE is what disappears.
+4. `replaceNode` would protect the last read (`keepThroughValue`, `inheritedWait`,
+   src/passes/opt/generic/rewrite.cpp:252, 367) and never sees this gate: four calls in the run, none a
+   Gate.
+5. The erasure is in `pruneBranch` (generic.cpp:536-961), and extending its handoff with the erased
+   nodes' ordered sources did **not** reach it. Next: name the erased gate, then hand the wait to its
+   producer.
