@@ -4,14 +4,14 @@
 
 > **索引的价值在于与目录一一对应；一旦少一页，读者就会以为没有那一问。**
 
-> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 9 页**，文件名见下表。其余已裁完、整体挪进 `reviews/`。
+> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 10 页**，文件名见下表。其余已裁完、整体挪进 `reviews/`。
 >
 > **索引以目录为准**：这张表曾经列着三页早就挪进 `reviews/` 的文件名，而目录里的另外三页不在表上——**一条指向不存在文件的索引，比没有索引更坏**（读者会以为那一问还在，而去回答一个已经裁过的形状）。以后每次并入前先数目录，再改这张表。
 >
 > **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
-## 现在在等作者：9 页（与目录逐项一致）
+## 现在在等作者：10 页（与目录逐项一致）
 
 | 页 | 问句 | 默认建议 |
 |---|---|---|
@@ -22,6 +22,7 @@
 | [`inliner-chain-joining-as-its-own-change`](questions-2026-11-01-inliner-chain-joining-as-its-own-change.md) | inliner 的接链修法要不要单独立项：修法与三条判据成立，但代价是 97 fail（放开门槛）/ 47 fail（只放开完全无 wait 的调用），根因是 `main`→`__root__` 那次调用没有 wait | 不删边；修法单独立项，golden 重整代价另估 |
 | [`optional-with-arguments-and-the-batching-key`](questions-2026-11-01-optional-with-arguments-and-the-batching-key.md) | `softmax` 的轴可省：省与不省在批规则里共用一个键 `softmax/1`，端口数却不同（1 或 2）。要么节点上把默认值物化成端口，要么规则语言允许可选端口 | 倾向 A 的窄版：只在 with 位物化，且只对声明了默认值的算子 |
 | [`the-array-parameter-waits-for-the-compile-time-step`](questions-2026-11-01-the-array-parameter-waits-for-the-compile-time-step.md) | `vjp` 遇到 `float[]` 参数（迁移表 54 例）缺的是哪一步、要不要在 `vjp` 这层补 | 不在 `vjp` 这层补：缺的三步（`jvpSignature` 的 float 写死、数组值在走图里没有切向、`:op/idx_arr` 两套规则都缺）正是裁定 14:30 说的"编译期实例化"那一刀，归那条车道 |
+| [`whether-a-function-value-can-take-a-computed-pack`](questions-2026-11-01-whether-a-function-value-can-take-a-computed-pack.md) | `vjp` 并成一条泛型 `vjp::<F>` 时，体要返回一个"参数表是计算出的 pack"的函数值：这个形状要不要给拼写（lambda 收 `..` / rest 形参可标注 pack / 维持两条声明） | **(c) 维持两条按元数分写的声明**：作者 14:30 只裁了方向、没裁机制；而机制那两条各要动设计 5.6 的 pack 来源，是语言的事 |
 | [`probe-plan-kept-or-dropped`](questions-2026-10-30-probe-plan-kept-or-dropped.md) | `test/plans/feat/compile/probe.plan.toml` 的 `probe.machine`（自称"用例集完成前会被删掉"的探针）留下还是删掉 | 见页（这一行只补索引缺口，判断以页为准） |
 | [`t-plus-24-status-and-where-the-hour-went`](questions-2026-11-01-t-plus-24-status-and-where-the-hour-went.md) | 状态页：T+24 的进度与中午那一小时的去向（作者 13:50 催办的两句） | 无需裁定（状态通报） |
 
@@ -124,4 +125,3 @@
 - 三段：现象（`file:line`）、两条路的代价、我方默认建议；末尾一句要作者答的话，选项要能照字面执行。
 - 裁回来：`git mv` 到 `reviews/`，页首写 `裁定：`（结论 + 落在哪个提交）；`questions/` 空 = 没有待裁。
 - **已裁的页必须带 `裁定：` 行**，否则读者不知道是哪个裁定；`who-consumes-the-ruleset-index` 落进 `reviews/` 时就是这么做的（好先例）。
-

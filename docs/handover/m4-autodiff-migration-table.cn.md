@@ -24,7 +24,23 @@
 
 ## 结论
 
-**库层今天能过：1 / 127。**
+**库层今天能过：2 / 127。**（2026-11-01 23:00 重算：118 个顶层用例逐条跑，另 9 个在 `jax_names/` 子目录。）
+
+重算方法与上一版同一套（复制成 `.probe.cml`、把 `from autodiff` 里的 `vjp`/`grad`/`with_grad` 改从 `vjp` 取、跑 `std::nvm`、跑完即删），**只改了一处错**：上一版把 `import { … } from autodiff` 整条换成 `from vjp`，于是库里仍有的辅助名（`add_tangent`、`zero_tangent` 等）被判成"库里没有这个名字"。正确写法是**两行**——transform 的三个名字从 `vjp` 取，其余仍从 `autodiff` 取。改对之后 `transform_rules` 从"不过"变"过"（它只用 `add_tangent`，而 `add_tangent` 一直在 `stdlib/autodiff.cml` 里）。
+
+四类的分子/分母（118 个顶层用例，分母不变）：
+
+| 类（按今天第一条诊断的形态量，不是按写法归类） | 条数 | 过 | 卡在哪 |
+| --- | --- | --- | --- |
+| `with` 形参函数（诊断里是 `(<x: float> () => float pure)` 这种带 `with` 的函数类型） | 57 | 0 | 声明面：函数的类型带 `with` 形参，库的 `grad`/`vjp` 只收 `(x: float) => float`；`with_grad` 的体（`return vjp(f)`）给不出 `F` |
+| 数组/张量形参（诊断里是 `[]`、`[..]`、`f32`、`Model` 等） | 49 | 0 | 声明面 + 走图：`jvpSignature` 的四处 float 写死（见 `questions-2026-11-01-the-array-parameter-waits-for-the-compile-time-step.md`） |
+| 其余（名字缺失、注解写法、只测名字解析） | 10 | 0 | 名字本身（`remat`、`stop_gradient`、`value_and_grad`）、`@vjp` 注解 |
+| 过 | — | 2 | `grad_refuse_no_with`、`transform_rules` |
+
+118 个顶层用例的账：57 + 49 + 10 + 2 = 118。另有 `jax_names/` 子目录 9 个（`jax_vmap*`、`jax_names/jvp` 等）不在 `vjp` 这条路上，不记入分母。
+
+**104 条 `NoMatchingFunction` 的形态只有两种**：函数的类型带 `with` 形参（`(<x: float> () => float pure)`、`(<w: float> (n: int) => float)` 等），或函数的形参是数组/张量（`(<xs: float[]> …)`、`(<x: f32[..]> …)`）。**没有一条是"只差一个拼写"**——这是这一版和上一版一致的结论，只是现在有了逐条证据（`/tmp/m4/probe127b.tsv` 的 118 行）。
+
 
 **试点 5 条已判完（`with` 类 3、数组类 2）：已迁 0 条 — 纯拼写 0、需要库补 2、需要新能力 3。**
 判法：把 5 条真的按库的写法改一遍、跑一遍，改不动或跑不过的记下走图/声明面拒绝它的那一档；
