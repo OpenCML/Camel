@@ -1,0 +1,9 @@
+// Statements are separated by a line break or by one `;`. A second `;` with nothing between it and
+// the one before it is refused where it is written: the parser does not read it as an empty
+// statement, because a reader who wrote it meant one statement, not two.
+
+func main(): int sync {
+    let x: int = 1;;
+    println(x)
+    return 0
+}
