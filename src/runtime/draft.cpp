@@ -2074,6 +2074,37 @@ size_t GraphDraft::dissolveUnorderedGates() {
                 continue;
             }
             const gc_node_ref_t value = normInputsOf(id).back();
+            // Plain forwarding is a gate **with a data user**: dissolving it hands that user the
+            // value the gate carried, so nothing stops running (src/compile/gir/graph_encode.cpp
+            // quotes the answer that settled it). A gate with no data user and no wait forwards
+            // nothing -- the value is read by this node alone -- so dissolving it takes the last
+            // **read** of whatever computed that value, and an effect that stands on a read (a call,
+            // an operator with effects, a computation that may fault, design principles 3.1) is then
+            // in the graph and in no chain. `std::opt::inline` splices an inlined body's tail as a
+            // GATE and the fold prunes the branch whose chain entered it, which leaves exactly this
+            // gate standing where the branch's arm stood.
+            //
+            // What such a gate holds is not a value but a **place**: it is where the code after it
+            // waits. That place is what the erase would take with it, so it is handed to what the
+            // gate read rather than kept on the gate -- a gate without a wait is a violation of its
+            // own (src/runtime/graph.cpp, the GATE check), and keeping one to hold a place would
+            // trade a dropped effect for an unbuildable graph. The successors follow the effect
+            // through the control kind, which is the kind this wait is carried in while the
+            // migration runs (docs/design/effects/edges.cn.md 5.3), and the gate still goes.
+            const bool holdsEffectPlace =
+                normUsersOf(id).empty() && withUsersOf(id).empty() &&
+                normUsersOf(value).size() + withUsersOf(value).size() == 1 &&
+                carriesOrdering(*this, value, true);
+            std::vector<gc_node_ref_t> successors;
+            if (holdsEffectPlace) {
+                for (auto group : {ctrlUsersOf(id), syncUsersOf(id)}) {
+                    for (gc_node_ref_t user : group) {
+                        if (user != id && std::ranges::find(successors, user) == successors.end()) {
+                            successors.push_back(user);
+                        }
+                    }
+                }
+            }
             if (exit_ == id) {
                 exit_ = value;
             }
@@ -2085,6 +2116,14 @@ size_t GraphDraft::dissolveUnorderedGates() {
             }
             replaceAllValueUses(id, value);
             eraseNode(id); // its control users lose nothing: it waited on nothing
+            for (gc_node_ref_t user : successors) {
+                // The place is handed on only to a successor the erase left waiting on nothing:
+                // one that already waits somewhere keeps waiting there.
+                if (user != value && alive(user) && ctrlInputsOf(user).empty() &&
+                    syncInputsOf(user).empty()) {
+                    appendControlEdge(user, value);
+                }
+            }
             ++removed;
             changed = true;
         }
