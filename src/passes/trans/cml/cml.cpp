@@ -13,6 +13,7 @@
 
 #include "camel/core/error/diagnostics/messages/semantic.h"
 #include "camel/core/loop_kind.h"
+#include "camel/core/operator_names.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/complex.h"
