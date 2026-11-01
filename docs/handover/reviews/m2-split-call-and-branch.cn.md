@@ -120,6 +120,41 @@ REINTERP split function=jvp_of_leaky forward=70 backward=71 type=(float) => (flo
 `arms=2` 是每个半边各自建并接上的两条臂。`WALK`/`ARM` 仍然打印，因为把每条臂复制进自己区域的正是
 它们描述的那次走查。
 
+### 6.1 作者原话给的形状（催办的那条）
+
+作者的形状是 `f(x) = if x > 0 then x*x else 3*x`，在 `x = 2.0` 与 `x = -2.0` 上要求 **4.0** 与 **3.0**。
+它与上面那对**并存**，因为两者证明的不是一件事：上面两条臂都是线性的（`x*x` 与 `0.5*x`），光看数分不出
+"选对了臂"和"把两臂混起来"；作者的第二个臂是 `3*x`，混起来、或后一半重算条件走了另一条臂，都落不到
+`4.0` 与 `3.0` 同时成立。
+
+读出来的（`split_branch_author.cml`，nvm 与 fvm 各一遍、`backends_agree` 通过）：
+
+```
+REINTERP split function=jvp_of_f forward=70 backward=71 type=(float) => (float, (float, bool)) pure residuals=2 arms=2
+author x=2.0 value=4.0
+author x=2.0 dfdx=4.0
+author x=-2.0 value=-6.0
+author x=-2.0 dfdx=3.0
+```
+
+**但作者的读法是 `vjp`，而 `vjp` 现在还停在下一步**，这是真缺口，不是数不够：
+
+```
+TRANSPOSE function=split_of_jvp_of_f_backward skip=signature
+transforms: transpose has no transpose for this function
+```
+
+原因只有一个：条件为了"后一半按同一个值选臂"（4.2）作为残差穿过切口，而条件是 `bool`；
+`transposeSignature` 要求残差元组**每个成员都是 `float`**（`modules/transforms/transpose.cpp`：
+`bundle->typeAt(i) != Type::Float64()` → `nullptr` → `skip=signature`）。两边不是同一个前提，选哪边是
+**作者的决定**，不是这一条车道能顺手改的：
+
+1. `transpose` 接受非 `float` 的已知值（残差元组的语义本来就是"走查带不过去的值"）；
+2. 切口换一种方式带条件（转成 `float`，或带臂序号 `int`）。
+
+所以这一笔**没有**去改 `transpose`，也没有改残差的类型：用那种办法变出来的数不会是作者的 `3.0`。
+`split_branch_author_vjp.cml` 把这个拒绝钉成一条读数——哪天上面两个选择之一被做了，这条会红，提醒重读。
+
 ## 7. 下一步（写清，免得下一个人以为"已经做完了"）
 
 分支的切一刀做完了，但**只做了两臂、纯值、无嵌套**这一层。还差的（按顺序）：

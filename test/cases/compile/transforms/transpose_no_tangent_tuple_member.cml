@@ -1,0 +1,31 @@
+// A tuple with one member that has no tangent space: `k(x) = let t = (x, 3); float(t.1) + t.0`.
+//
+// On paper `k(x) = 3 + x`, so `k(2) = 5` and the pullback of 1.0 is 1: the second slot (`3`, an int)
+// contributes nothing and the first slot contributes everything.
+//
+// This is the sentence the integer rule was written on -- "a tuple with one member without a space
+// stops only that member" -- turned into two numbers. A transform that gave the whole tuple no space
+// would answer 0 (nothing in it differentiable), and one that gave every member the arriving cotangent
+// would answer 2 (the `float(t.1)` path counted as an identity). 1 is what neither of those answers,
+// and it is also what tells the two mistakes apart: 0 is "stopped too early", 2 is "did not stop".
+//
+// The zero is on the integer member, and the reading names it by type: `type=int space=none` on the
+// component read of the second slot.
+//
+// The transpose is asked at cotangent 1 and 3, so the answers are 1 then 3: proportional, and 3 is a
+// number no forward line prints.
+import { transpose } from transforms
+import rulesets.transpose
+
+func k(x: float): float {
+    let t = (x, 3)
+    return float(t.1) + t.0
+}
+
+func main(): int sync {
+    println(k(2.0))
+    let back = transpose(k)
+    println(back(2.0, 1.0))
+    println(back(2.0, 3.0))
+    return 0
+}

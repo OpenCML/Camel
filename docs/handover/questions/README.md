@@ -4,7 +4,7 @@
 
 > **索引的价值在于与目录一一对应；一旦少一页，读者就会以为没有那一问。**
 
-> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 1 页**，文件名见下表。其余已裁完、整体挪进 `reviews/`。
+> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 2 页**，文件名见下表。其余已裁完、整体挪进 `reviews/`。
 >
 > **索引以目录为准**：这张表曾经列着三页早就挪进 `reviews/` 的文件名，而目录里的另外三页不在表上——**一条指向不存在文件的索引，比没有索引更坏**（读者会以为那一问还在，而去回答一个已经裁过的形状）。以后每次并入前先数目录，再改这张表。
 >
@@ -12,10 +12,11 @@
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：1 页（与目录逐项一致）
+## 现在在等作者：2 页（与目录逐项一致）
 
 | 页 | 问句 | 默认建议 |
 |---|---|---|
+| [`non-differentiable-residual-slot`](questions-2026-11-01-non-differentiable-residual-slot.md) | 分支条件是不可微的残差槽（`bool`，不是浮点）：转置时按"余切为零"落地对不对（今天已这样落地，并有一条 `contribution=0` 读数） | 对：没有切空间的值贡献零余切，并在读数里写明停在哪；若要别的解释（例如把条件排除出残差）请裁定 |
 | [`what-makes-the-rewrite-session-converge`](questions-2026-11-01-what-makes-the-rewrite-session-converge.md) | 删边后的 124 已定位到 `applyOptimizeRewritePass`/`applyRuntimeOptimizeRewrite`：每轮 0 候选、0 绑定、0 去虚拟化，图却每轮长一个节点，会话永不收敛；是让它收敛还是变成诊断 | 甲：定位那第四处"有变化"，判据是会话数 ≤ 1 且仍 `exported` |
 
 **14:30 作者裁完并亲自把八页挪进 `reviews/`**（`fsh-dev` 的 `235987b44`）：这八页是 `who-owns-the-count-of-a-splits-residuals`、`whether-transpose-takes-the-cotangent-beside-the-parameters`、`closures-as-values-block-the-transposed-backward-half`、`split-has-landed-and-the-host-is-up`、`inliner-chain-joining-as-its-own-change`、`optional-with-arguments-and-the-batching-key`、`probe-plan-kept-or-dropped`、`t-plus-24-status-and-where-the-hour-went`。裁定四条：M4 第二步是 `jvp`/`split`/`transpose` 的**编译期实例化**、`vjp` 仍是 `transpose(split(jvp(f)))` 组合；`Vjp<F>` 拉回一律元组，`grad(f)(x) = vjp(f)(x).1(1.0).0`；`probe.machine` 删；可选 with 参数走 A 的窄版（前端把声明默认值物化）。
