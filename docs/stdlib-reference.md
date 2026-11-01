@@ -1414,9 +1414,23 @@ split: (f: (v: float, d: float) => (float, float)) => (v: float, d: float) => (f
 ```
 
 The step of `vjp` that separates a lifted function into the part computable now and the linear
-residue (design 4.4). Not implemented: the operator has a signature and no rule, so a call is
-refused where it is composed (`stdlib/vjp.cml`) and names this step. The signature is the
-shape the library's compositions can be written with today.
+residue (design 4.2, 4.4). Implemented for the straight-line tier (`modules/transforms/split.cpp`):
+the halves are built from the graph, and what crosses the cut -- the residuals -- is read off the
+graph too, so a body that needs a value it computed carries it instead of computing it again.
+
+The cut, as the author writes it (15:25; revised 2026-11-01): the first half takes the ordinary
+parameters and answers with the result and the *residuals* -- the values the second half reads --
+and the second takes the residuals and the `with` parameters and answers with the result.
+
+    type Split<F> = ((..ParamsOf<F>) => (ResultOf<F>,  _),
+                     (_, ..WithOf<F>) => ResultOf<F>)
+
+The residual position is written `_` and is not a type a program can name: the residuals are a
+property of `f`'s graph, so their number and their types are read where the graph is in hand, and
+the compiler fills the position at instantiation (`ResidualsOf<F>` was the earlier spelling of a
+type function doing that, and it is gone). The second half is linear in the cotangent it is given
+-- that is the condition the transpose step (M3) reads -- and both halves speak in `Tangent<T>`
+at the top of this file.
 fragment of the composition: `let (fwd, lin) = split(jvp(f))`.
 
 - Example (a fragment, not compiled): `let step = split`
