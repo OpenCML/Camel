@@ -1,0 +1,25 @@
+// The identity graph, as a case: today's `reinterp<jvp>` builds a body with no operator in it, so
+// `split` of it has nothing to move -- and that is exactly what makes it the first readout. The
+// forward half must give the value the caller passed (3.0) and no residuals at all, and the
+// backward half must give the tangent back (1.0). A residual here would mean a value was carried
+// across the cut that the backward half does not need, which is the defect this case exists for.
+//
+// Gated the same way as the other three (test/tools/have-split.mjs): while `split` does not exist
+// the plan skips, so this case is not red for a reason that is not a defect. The spelling pins on
+// the first run after the implementation lands, as the forward-half case says.
+import rulesets.jvp
+
+func g(x: float): float {
+    return x * x
+}
+
+func main(): int sync {
+    let f = transforms::reinterp::<jvp>(g)
+    let (fwd, lin) = transforms::split(f)
+    let (y, r0) = fwd(3.0)
+    println("identity y=", y)
+    println("residual count=", len(r0))
+    let dy = lin(r0, 1.0)
+    println("identity dx1=", dy)
+    return 0
+}

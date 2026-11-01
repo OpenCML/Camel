@@ -54,3 +54,15 @@ expect_stdout_contains = ["dx1= 6", "dx2= 12", "dx0= 0", "doubles= true"]
 skip_unless = ["node", "test/tools/have-split.mjs"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+[[tests]]
+name = "split_identity_pipeline"
+desc = "The identity graph: `reinterp<jvp>` builds a body with no operator in it, so `split` has nothing to move and the reading is the pipeline itself. The forward half gives the value the caller passed (3.0) with no residuals, and the backward half gives the tangent back (1.0). A non-zero residual count is a value carried across the cut that the backward half never needs. Gated like the other entries: the plan skips while `split` does not exist, and this entry lights the moment it lands, with no edit here."
+kind = "behavior"
+case = "../../../cases/compile/transforms/split_identity_pipeline.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["identity y= 3", "residual count= 0", "identity dx1= 1"]
+skip_unless = ["node", "test/tools/have-split.mjs"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
