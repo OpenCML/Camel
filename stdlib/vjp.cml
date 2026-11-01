@@ -19,11 +19,14 @@
  * juxtaposed shape `transpose` writes -- known values, then cotangent -- is the internal step and is
  * not a signature: nothing outside this file writes it.
  *
- * The module compiles, and what it cannot do yet is run: `split` hands back the two halves the
- * compiler computes -- the residuals belong to `f`'s graph, so their number and their types are
- * read where the graph is in hand, and no type names them -- and the backward half is a function
- * `transpose` has to walk backwards. That walk refuses a `Call` inside it (`skip=call`), so a
- * pullback raises "transpose has no transpose for this function" at the call below; M3's step.
+ * The module imports the rulesets it composes. `jvp` walks forward with the rules in
+ * `rulesets.jvp` and `transpose` walks the backward half with the rules in `rulesets.transpose`,
+ * so those two imports are part of this file and not of the program that calls it: a library that
+ * makes its caller know how it is put together is not a library, the same reading as a pass's
+ * precondition. Take either import out and the pullback raises at the call below instead, on this
+ * file's own line: `transpose has no transpose for this function` without `rulesets.transpose`, and
+ * `jvp has no forward rule for ':op/mul_d'` without `rulesets.jvp` -- which is what
+ * `test/cases/compile/transforms/vjp_carries_its_ruleset.cml` holds it to.
  *
  * The signatures are stand-ins for `Vjp<F>`, `Split<F>` and `ParamsOf<F>` (design 6.1 is their
  * step), so `vjp` is declared once per arity rather than once for every `F` -- the same rule
@@ -32,6 +35,8 @@
  * which transforms answer it is the library's business (author, 2026-10-31).
  */
 
+import rulesets.jvp
+import rulesets.transpose
 import { is_function } from types
 import { jvp, split, transpose } from transforms
 

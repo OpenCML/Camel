@@ -3,11 +3,10 @@
  * numbers: `f(x, y) = x * x * y` at x = 3, y = 2 gives 18.0, df/dx = 12.0 and df/dy = 9.0 whether
  * the function reaches the value and the gradient through `remat` or not.
  *
- * That is the whole of what a value can show of the transform. The other half of its contract is
- * what the backward pass stores -- the section covered by `remat` may be recomputed instead of
- * kept -- and no number tells a recomputed section from a carried one
- * (docs/design/program-transforms/m6-combination-numbers.cn.md 4). So this case pins the half that
- * is assertable: an identity that can be called, in both readings a value takes.
+ * That is the whole of what the name does to a value: a call through `remat` is a call of the same
+ * function, so the identity is what a program reads of it, and no number moves whether it is
+ * written or not. What a pass stores is not a number this case could report, so this case pins the
+ * half that is assertable -- an identity that can be called, in both readings a value takes.
  *
  * `f_by_x` is the same product with x as the `with` parameter instead of y, because `grad`
  * differentiates the first `with` parameter (design principles 9.9) and two declarations are what
