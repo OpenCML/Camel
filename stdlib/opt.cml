@@ -23,7 +23,7 @@
  */
 
 import { flatten, all, any } from array
-import { Node, Graph, Txn, NodeKind, graphs_of, nodes, inputs, with_inputs, value_users, id, kind, op, op_name, is_pure, is_anchor, is_written_slot, is_constant, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
+import { Node, Graph, Txn, NodeKind, graphs_of, nodes, inputs, with_inputs, value_users, id, kind, op, op_name, is_pure, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
 import { saturate as saturate_rules } from rewrite
 import { algebra, distribution } from rules
 import { is_function } from types
@@ -209,8 +209,8 @@ func evaluated(n: Node): bool {
 // Replaces one operation by the value its operator computes; the answer is whether it did. The
 // arm of a `match` is a graph of its own, so the edit is a call of its own: a statement inside an
 // arm has nothing that depends on it and does not run.
-func put_value::<F>(t: Txn<F>, n: Node, value: Node): bool sync {
-    return if foldable(n) then replaced(t, n, value) else false
+func put_value::<F>(t: Txn<F>, n: Node, value: Node, budget: int): bool sync {
+    return if foldable(n) && constant_bytes(value) < budget then replaced(t, n, value) else false
 }
 
 func replaced::<F>(t: Txn<F>, n: Node, value: Node): bool sync {
@@ -220,16 +220,16 @@ func replaced::<F>(t: Txn<F>, n: Node, value: Node): bool sync {
 
 // The value the round computes for this node, or null when there is nothing to compute or when
 // the expression can only fault, which is left as written and warned about.
-func fold_one::<F>(t: Txn<F>, n: Node): bool sync {
+func fold_one::<F>(t: Txn<F>, n: Node, budget: int): bool sync {
     return match eval(t, n) {
         case null => false
-        case v => put_value(t, n, v)
+        case v => put_value(t, n, v, budget)
     }
 }
 
 // One round over the nodes it evaluates: whether it replaced anything.
-func fold_round::<F>(t: Txn<F>, hits: Node[]): bool {
-    return hits->map<(n: Node): bool => fold_one(t, n)>->any<(did: bool): bool => did>
+func fold_round::<F>(t: Txn<F>, hits: Node[], budget: int): bool {
+    return hits->map<(n: Node): bool => fold_one(t, n, budget)>->any<(did: bool): bool => did>
 }
 
 // Commits a round that replaced something, and abandons one that replaced nothing: the program the
@@ -249,18 +249,24 @@ func abandoned::<F>(t: Txn<F>, f: F): F! sync {
 // `eval` all refused (a constant expression that can only fault is left as written and warned
 // about) is such a round, and recursing on the function it started from would not stop, so it is
 // abandoned.
-func fold_rounds::<F>(f: F): F! when is_function::<F>() sync {
+func fold_rounds::<F>(f: F, budget: int): F! when is_function::<F>() sync {
     let t = open(f)
-    let changed = fold_round(t, all_nodes(graphs_of(f))->filter<evaluated>)
-    return if changed then committed(t) -> fold_rounds else abandoned(t, f)
+    let changed = fold_round(t, all_nodes(graphs_of(f))->filter<evaluated>, budget)
+    return if changed then committed(t) -> fold_rounds(budget) else abandoned(t, f)
 }
 
 /// A pure operation whose operands are all constants is the value they compute, until none is
 /// left. A function that holds no node to evaluate at all is answered without opening a
 /// transaction.
 /// @example ((x: int): int => 1 + 2 + x)->fold
+with <
+    /// Bytes of constants this pass may materialize in a graph: the same measure and the same
+    /// default as `std::opt::fold` (`constantBytesOf`), read through `constant_bytes`; a value
+    /// above it is left as the computation that builds it, and 0 materializes none.
+    constant_budget: int = 8388608
+>
 export func fold::<F>(f: F): F! when is_function::<F>() {
-    return if all_nodes(graphs_of(f))->any<evaluated> then fold_rounds(f) else f
+    return if all_nodes(graphs_of(f))->any<evaluated> then fold_rounds(f, constant_budget) else f
 }
 
 // ---- saturation ----
