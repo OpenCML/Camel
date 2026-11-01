@@ -161,15 +161,29 @@ GraphId DraftGraphRead::calleeIdOf(gc_node_ref_t ref) const {
     return body.ref < callees.size() ? callees[body.ref] : camel::runtime::kInvalidGraphId;
 }
 
-std::string DraftGraphRead::operUriOf(gc_node_ref_t ref) const {
+std::span<const std::byte> DraftGraphRead::payloadOf(gc_node_ref_t ref) const {
+    return txn_.graph().payloadOf(sourceIdOf(ref));
+}
+std::string GraphRead::operUriOf(gc_node_ref_t ref) const {
     if (kindOf(ref) != GCNodeKind::Oper) {
         return {};
     }
     camel::runtime::GCOperBody body{};
-    if (!draftBodyOf(txn_.graph(), sourceIdOf(ref), body)) {
+    if (!bodyOf(ref, body)) {
         return {};
     }
     return std::string(body.uri());
+}
+
+gc_cnt_t GraphRead::armCountOf(gc_node_ref_t ref) const {
+    if (kindOf(ref) != GCNodeKind::Brch) {
+        return 0;
+    }
+    camel::runtime::GCBrchBody body{};
+    if (!bodyOf(ref, body)) {
+        return 0;
+    }
+    return body.armCount;
 }
 bool FrozenGraphRead::alive(gc_node_ref_t ref) const {
     const camel::runtime::GCNode *node = graph_.node(ref);
@@ -201,13 +215,7 @@ bool FrozenGraphRead::hasPayload(gc_node_ref_t ref) const {
     return node != nullptr && node->hasPayload();
 }
 
-std::string FrozenGraphRead::operUriOf(gc_node_ref_t ref) const {
-    if (kindOf(ref) != GCNodeKind::Oper) {
-        return {};
-    }
-    const auto *body = graph_.nodeBodyAs<camel::runtime::GCOperBody>(ref);
-    return body == nullptr ? std::string{} : std::string(body->uri());
-}
+
 
 std::string firstDifference(const GraphRead &draft, const GraphRead &frozen) {
     if (draft.nodeSlotCount() != frozen.nodeSlotCount()) {
@@ -310,11 +318,21 @@ std::string firstDifference(const GraphRead &draft, const GraphRead &frozen) {
                 camel::runtime::toValue(frozen.calleeIdOf(ref)));
         }
         if (draft.kindOf(ref) == GCNodeKind::Oper) {
-            const std::string oper = draft.operUriOf(ref);
+            const std::string oper  = draft.operUriOf(ref);
             const std::string other = frozen.operUriOf(ref);
             if (oper != other) {
                 return std::format("node {}: oper draft={} frozen={}", ref, oper, other);
             }
+        }
+        // A BRCH node's arm count is the one field of its body that is a count and not an id; the
+        // join it names is an id in each numbering and is compared as a port of the two nodes.
+        if (draft.kindOf(ref) == GCNodeKind::Brch &&
+            draft.armCountOf(ref) != frozen.armCountOf(ref)) {
+            return std::format(
+                "node {}: arm count draft={} frozen={}",
+                ref,
+                draft.armCountOf(ref),
+                frozen.armCountOf(ref));
         }
     }
     return {};
