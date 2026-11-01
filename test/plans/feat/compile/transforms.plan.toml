@@ -533,15 +533,27 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "transpose_no_tangent.function_value_without_a_capture_is_refused"
+desc = "The boundary cut finer, and it does not move: `double(x) = 2x` with `g(x) = let h = double; h(x)` -- a top-level function put into a local and called, with nothing captured -- REFUSES, at the same line as the closure: `TRANSPOSE function=g skip=call node=2 callee=none value=0:1 with=1:0`. So the boundary is not `capture or no capture`: taking the capture away changes nothing, and what is in the way is THE NAME. `let h = double` makes a DATA node carrying a function constant (`Function(graph=double, tupleSlots=0)`), and `GCGraph::calleeIdOf` reads a graph id out of FUNC nodes only; for a function constant the graph sits in the static area as a graph-level reference (kGraphRefStatic) with no accessor from this node. A call written by name (`g(x)`, transpose_call.cml) is the shape that works, because that lowers to a FUNC node. The capture is a second, still-unreached problem: with the name in hand the transposed callee would still have to take the captured value as a parameter of its own. The paper answer owed is 2, and 4 at cotangent 2. Read beside `transpose_no_tangent.function_value_is_refused`, this pair is the evidence for the order of the two fixes."
+kind = "negative"
+case = "../../../cases/compile/transforms/transpose_function_value_no_capture.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 1
+expect_output_contains = ["2.0", "TRANSPOSE function=g skip=call node=2 callee=none"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+[[tests]]
 name = "transpose_no_tangent.function_value_is_refused"
-desc = "A function value in the middle of a differentiable graph, `g(x) = let h = (y: float) => y*x; h(2)`, is REFUSED, and this entry says by what name rather than leaving the shape untested: the case prints the forward value (2.0, which is `2x` at x = 1, so the graph is really computing) and then `TRANSPOSE function=g skip=call node=4 callee=none value=3:0 with=2:4`. The call site cannot name the callee's graph: `h` is a closure, its graph id sits inside the bound value together with the capture `x`, and `calleeIdOf` sees a value the call takes as a `with` input, not a graph. Naming it is only half of what would be needed -- the transposed callee would have to take the capture as a parameter of its own, which is the piece this transform does not have (it refuses `with` parameters outright, as `jvp` does). So the reading is a refusal and not a number, and the entry pins the refusal's name so that the cut which changes it is visible. The paper answer it owes is 2 (and 6 at cotangent 3)."
+desc = "A function value in the middle of a differentiable graph, `g2(x) = let h = (y: float) => y*x; h(2)`, is REFUSED, and this entry says by what name rather than leaving the shape untested: the case prints the forward value (2.0, which is `2x` at x = 1, so the graph is really computing) and then `TRANSPOSE function=g skip=call node=4 callee=none value=3:0 with=2:4`. The call site cannot name the callee's graph: `h` is a closure, its graph id sits inside the bound value together with the capture `x`, and `calleeIdOf` sees a value the call takes as a `with` input, not a graph. Naming it is only half of what would be needed -- the transposed callee would have to take the capture as a parameter of its own, which is the piece this transform does not have (it refuses `with` parameters outright, as `jvp` does). So the reading is a refusal and not a number, and the entry pins the refusal's name so that the cut which changes it is visible. The paper answer it owes is 2 (and 6 at cotangent 3)."
 kind = "negative"
 case = "../../../cases/compile/transforms/transpose_no_tangent_closure.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 1
-expect_output_contains = ["2.0", "TRANSPOSE function=g skip=call node=4 callee=none", "callee=none"]
+expect_output_contains = ["2.0", "TRANSPOSE function=g2 skip=call node=4 callee=none"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

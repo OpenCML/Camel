@@ -91,3 +91,11 @@ B **新增**一条表示，且与裁定正面冲突；C 让 `split` 多背一个
 **按 A 继续**：`vjp` 的组装保持 pending（模块表里 `pending` 那句原因会随每次撞墙更新，编得过那天它自己退出 1），
 `transpose` 不再试着装闭包；**同时把 `transpose` 的拒绝信息钉成上面那一行**（指到生产者节点与 kind），
 这样去函数化那天，“被调值有没有名字”一读就知道能不能过。
+
+**复核 2026-11-01（`lane-gs6`）——"没有捕获"也过不了，缺的是名字，不是捕获**：把边界再切细一刀，同一天、同一棵树量了两条：
+
+- 带捕获（`g2(x) = let h = (y: float) => y*x; h(2.0)`）：`TRANSPOSE function=g2 skip=call node=4 callee=none value=3:0 with=2:4`；
+- 不带捕获（`double(x) = 2x`，`g(x) = let h = double; h(x)`）：`TRANSPOSE function=g skip=call node=2 callee=none value=0:1 with=1:0`。
+
+**两条拒绝落在同一处、同一个原因**：`let h = double` 里的值是一个 DATA 节点、装着一个函数常量（GIR 写作
+`Function(graph=double, tupleSlots=0)`），而 `GCGraph::calleeIdOf` 只从 `GCNodeKind::Func` 节点里取图 id——函数常量的图存在静态区、以图级引用记着（`kGraphRefStatic`），没有"这个节点指向哪个图"的取值口。所以**把捕获拿掉并不会让这一条过**：先缺的是名字；捕获是之后的、还没走到的第二件事（即便有了名字，被转置的被调方还得把捕获值收成自己的参数）。今天能过的是**按名字写出来的调用**（`g(x)`，见 `test/cases/compile/transforms/transpose_call.cml`），因为那种调用落成 FUNC 节点。纸面答案：无捕获那条欠 **2**（余切 2 时 **4**），带捕获那条欠 **2**（余切 3 时 **6**）。两条都登记成 `kind = "negative"` 的用例、拒绝行钉死——名字那一步落地时第一条会先变绿、第二条还会红，红在哪一眼就能看出区别。
