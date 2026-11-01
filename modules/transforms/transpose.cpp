@@ -49,7 +49,25 @@ FunctionType *transposeSignature(FunctionType *function) {
     if (count >= 2) {
         const auto *bundle = dynamic_cast<const camel::core::type::TupleType *>(function->normTypeAt(0));
         if (bundle == nullptr) {
-            return nullptr;
+            // A function of several floats and nothing else: a rule's tangent function reaches a
+            // transposed half this way (`mul_tangent(x, w, dx, dw)` is what a lifted half calls
+            // since `reinterp` expands a rule at the match site). Every parameter is a value the
+            // transposed graph reads and every parameter is also where a cotangent goes, so the
+            // transpose takes them all in the order they stand, then the cotangent, and answers one
+            // cotangent per parameter, in that same order.
+            camel::core::type::param_vec_t params;
+            std::vector<Type *> cotangentsOfAll;
+            for (size_t i = 0; i < count; ++i) {
+                if (function->normTypeAt(i) != Type::Float64()) {
+                    return nullptr;
+                }
+                params.emplace_back(Type::Float64(), false);
+                cotangentsOfAll.push_back(Type::Float64());
+            }
+            params.emplace_back(Type::Float64(), false);
+            return FunctionType::create(
+                camel::core::type::param_vec_t{}, params,
+                camel::core::type::TupleType::create(cotangentsOfAll));
         }
         for (size_t i = 0; i < bundle->size(); ++i) {
             if (bundle->typeAt(i) != Type::Float64()) {
@@ -112,16 +130,28 @@ bool buildTransposeMember(
     {
         auto &draft = group.transaction(member).edit();
         draft.setFuncType(signature);
-        const size_t tangentCount = paramCount > 1 ? paramCount - 1 : 1;
-        const bool bundlesResiduals = paramCount > 1;
+        // Three shapes reach this, and the type says which one it is: a function of one float, a
+        // split half (the residuals as one tuple, the tangents after it), and a plain function of
+        // several floats. The first is the single-value pullback; the second and third differ in
+        // where the values the graph reads come from -- a residual tuple or the parameters
+        // themselves.
+        const bool bundlesResiduals =
+            paramCount > 1 && dynamic_cast<const camel::core::type::TupleType *>(
+                                  function->funcType()->normTypeAt(0)) != nullptr;
+        const bool plainParameters = paramCount > 1 && !bundlesResiduals;
         std::vector<gc_node_ref_t> paramPorts;
         {
-            Type *const portType = bundlesResiduals ? function->funcType()->normTypeAt(0)
-                                                    : Type::Float64();
-            const gc_node_ref_t port =
-                draft.addPortNode(portType, draft.allocateRuntimeSlot(portType));
-            draft.appendNormPort(port);
-            paramPorts.push_back(port);
+            // The residual form takes the known values as one tuple; the others take one port per
+            // parameter, as it stands.
+            const size_t portCount = bundlesResiduals ? 1 : (plainParameters ? paramCount : 1);
+            for (size_t i = 0; i < portCount; ++i) {
+                Type *const portType = bundlesResiduals ? function->funcType()->normTypeAt(0)
+                                                        : Type::Float64();
+                const gc_node_ref_t port =
+                    draft.addPortNode(portType, draft.allocateRuntimeSlot(portType));
+                draft.appendNormPort(port);
+                paramPorts.push_back(port);
+            }
         }
         const gc_node_ref_t cotangentIn =
             draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
@@ -219,7 +249,10 @@ bool buildTransposeMember(
                         continue;
                     }
                     if (!bundlesResiduals) {
-                        forwardOf[ref] = paramPorts.front();
+                        // A parameter of a plain function stands as itself, and its value is the
+                        // port the caller fills.
+                        const size_t at = plainParameters && i < paramPorts.size() ? i : 0;
+                        forwardOf[ref] = paramPorts[at];
                         return forwardOf[ref];
                     }
                     if (i == 0) {
@@ -291,6 +324,32 @@ bool buildTransposeMember(
                 if (!with.empty()) {
                     draft.setWithInputs(made, std::span<const gc_node_ref_t>(with));
                 }
+                forwardOf[ref] = made;
+                return made;
+            }
+            if (node->kind == rt::GCNodeKind::Func) {
+                // A call the cotangent path also needs as a *value* -- a tangent feeds the next
+                // tangent, so the second rule needs the first rule's number -- is computed forward
+                // as it stands: the same callee graph, its arguments computed forward. It is
+                // transposed as well, where its own cotangent arrives; this is only the number.
+                const GraphId calleeId = function->calleeIdOf(ref);
+                if (!rt::isValid(calleeId)) {
+                    complete = false;
+                    return rt::kInvalidNodeRef;
+                }
+                std::vector<gc_node_ref_t> copied;
+                for (gc_node_ref_t input : function->normInputsOf(ref)) {
+                    const gc_node_ref_t argument = forward(input);
+                    if (argument == rt::kInvalidNodeRef) {
+                        return rt::kInvalidNodeRef;
+                    }
+                    copied.push_back(argument);
+                }
+                const gc_node_ref_t made = draft.addFuncNode(calleeId, node->dataType());
+                if (!copied.empty()) {
+                    draft.setNormInputs(made, std::span<const gc_node_ref_t>(copied));
+                }
+                draft.addDependency(calleeId);
                 forwardOf[ref] = made;
                 return made;
             }
@@ -468,7 +527,7 @@ bool buildTransposeMember(
             }
             switch (node->kind) {
             case rt::GCNodeKind::Port:
-                if (!bundlesResiduals && !function->normPorts().empty() &&
+                if (!bundlesResiduals && !plainParameters && !function->normPorts().empty() &&
                     function->normPorts().front() == ref) {
                     result = cotangent[ref];
                 }
@@ -813,21 +872,24 @@ bool buildTransposeMember(
                 } else {
                     transposed = known->second;
                 }
-                // One parameter in, one cotangent out: the argument it belongs to is the only one
-                // there is. A callee of two parameters answers a pair, and splitting that pair is
-                // the step that is not written yet.
-                if (callee->funcType()->normTypesCount() != 1 ||
-                    inputs.size() != argumentAt + 1) {
+                // A callee of one parameter answers one cotangent; a callee of several answers one for
+                // each, in the order its parameters stand. Both are one call: the parameters as they
+                // stand at the call site, then the cotangent.
+                const size_t calleeParams = callee->funcType()->normTypesCount();
+                if (calleeParams == 0 || inputs.size() != argumentAt + calleeParams) {
                     os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
-                       << " callee=" << callee->name()
-                       << " params=" << callee->funcType()->normTypesCount() << '\n';
+                       << " callee=" << callee->name() << " params=" << calleeParams << '\n';
                     return false;
                 }
-                const gc_node_ref_t argument = forward(inputs[argumentAt]);
-                if (argument == rt::kInvalidNodeRef) {
-                    os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
-                       << " arg=" << inputs[argumentAt] << '\n';
-                    return false;
+                std::vector<gc_node_ref_t> arguments;
+                for (size_t i = 0; i < calleeParams; ++i) {
+                    const gc_node_ref_t argument = forward(inputs[argumentAt + i]);
+                    if (argument == rt::kInvalidNodeRef) {
+                        os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                           << " arg=" << inputs[argumentAt + i] << '\n';
+                        return false;
+                    }
+                    arguments.push_back(argument);
                 }
                 FunctionType *calleeType = transposeSignature(callee->funcType());
                 if (calleeType == nullptr) {
@@ -835,21 +897,33 @@ bool buildTransposeMember(
                        << " callee=" << callee->name() << " signature\n";
                     return false;
                 }
+                // The callee's transpose stands where the call stood: it takes the arguments as the
+                // call has them and then the cotangent, and answers one cotangent for each argument
+                // -- a number for one parameter, one tuple for several.
+                Type *const answerType =
+                    calleeParams == 1
+                        ? Type::Float64()
+                        : camel::core::type::TupleType::create(
+                              std::vector<Type *>(calleeParams, Type::Float64()));
+                std::vector<gc_node_ref_t> callArgs;
                 if (isCall) {
-                    const gc_node_ref_t calleeValue = draft.addFuncNode(transposed, Type::Float64());
-                    const std::array<gc_node_ref_t, 3> callArgs{calleeValue, argument,
-                                                                cotangent[ref]};
-                    const gc_node_ref_t made = draft.addCallNode(Type::Float64(), rt::GCCallBody{});
-                    draft.setNormInputs(made, std::span<const gc_node_ref_t>(callArgs));
-                    addCotangent(inputs[argumentAt], made);
-                } else {
-                    // The FUNC node is the call: its inputs are its arguments, so the transposed
-                    // node takes the callee's parameter and the cotangent and stands where the
-                    // original stood.
-                    const std::array<gc_node_ref_t, 2> callArgs{argument, cotangent[ref]};
-                    const gc_node_ref_t made = draft.addFuncNode(transposed, Type::Float64());
-                    draft.setNormInputs(made, std::span<const gc_node_ref_t>(callArgs));
-                    addCotangent(inputs[argumentAt], made);
+                    // A call through a value takes the callee's transpose as its first input.
+                    callArgs.push_back(draft.addFuncNode(transposed, Type::Float64()));
+                }
+                callArgs.insert(callArgs.end(), arguments.begin(), arguments.end());
+                callArgs.push_back(cotangent[ref]);
+                const gc_node_ref_t made =
+                    isCall ? draft.addCallNode(answerType, rt::GCCallBody{})
+                           : draft.addFuncNode(transposed, answerType);
+                draft.setNormInputs(made, std::span<const gc_node_ref_t>(callArgs));
+                for (size_t i = 0; i < calleeParams; ++i) {
+                    if (calleeParams == 1) {
+                        addCotangent(inputs[argumentAt], made);
+                        break;
+                    }
+                    const gc_node_ref_t part = draft.addAccsNode(Type::Float64(), static_cast<uint32_t>(i));
+                    draft.setNormInputs(part, std::span<const gc_node_ref_t>(&made, 1));
+                    addCotangent(inputs[argumentAt + i], part);
                 }
                 break;
             }
@@ -859,13 +933,15 @@ bool buildTransposeMember(
                 return false;
             }
         }
-        if (result == rt::kInvalidNodeRef && bundlesResiduals) {
+        if (result == rt::kInvalidNodeRef && (bundlesResiduals || plainParameters)) {
             // The answer of the residual form is one cotangent per tangent, in the order the
-            // tangents stand: the residuals came in as one tuple, the cotangents go out as one.
-            const auto &ports = function->normPorts();
+            // tangents stand: the residuals came in as one tuple, the cotangents go out as one. The
+            // answer of a plain function is one cotangent per parameter, in the order they stand.
+            const auto &ports     = function->normPorts();
+            const size_t firstPort = bundlesResiduals ? 1 : 0;
             std::vector<gc_node_ref_t> parts;
             bool everyTangent = true;
-            for (size_t i = 1; i < ports.size(); ++i) {
+            for (size_t i = firstPort; i < ports.size(); ++i) {
                 if (!hasCotangent[ports[i]]) {
                     everyTangent = false;
                     break;
