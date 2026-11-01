@@ -854,6 +854,22 @@ expect_stdout_contains = ["shape=[3, 3] sum=45.0", "take tensor shape=[2, 3] sum
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# The declaration says what the operator answers, and this is the answer: f32 rows. The annotation
+# is written at the concrete rank, so the operator answering an integer matrix (or another rank) is a
+# compile error here rather than a page that reads differently from the value.
+[[tests]]
+name = "one_hot_rows_are_f32"
+desc = "one_hot([0, 2], 3) is a [2, 3] f32 tensor whose rows are the distributions: it prints as floats, shape is [2, 3], and the sum of its ones is 2.0 -- the rows stand beside logits without a conversion, which is what the signature file states it answers."
+kind = "behavior"
+case = "../../../cases/modules/tensor/one_hot_rows_are_f32.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]\n[2, 3]\n2.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 [[tests]]
 name = "take_out_of_range_is_compile_time"
 desc = "A constant row index outside the statically known first dimension is rejected at the call, with the index and the extent (design principles 3.9, 5.4)."

@@ -1,0 +1,24 @@
+// A call is a graph of its own, so transposing one means transposing *that* graph: the callee's
+// transpose is built as another graph beside this one, one per callee, and the call site calls it
+// with the argument it already has and the cotangent it was given.
+//
+// `g(x) = 2.0 * x` doubled, called twice and added: `f(1.0) = 2 + 2 = 4`, and a pullback through
+// two calls is the sum of the two pullbacks of `g`, which is 2 + 2 = 4 at ȳ = 1.0. The callee is
+// transposed once, not once per call -- `callees=1` is that fact, and it is the same rule `jvp`
+// reads for a lifted function.
+import rulesets.transpose
+import { transpose } from transforms
+
+func g(x: float): float {
+    return 2.0 * x
+}
+
+func f(x: float): float {
+    return g(x) + g(x)
+}
+
+func main(): int sync {
+    println(f(1.0))
+    println(transpose(f)(1.0, 1.0))
+    return 0
+}

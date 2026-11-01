@@ -1,10 +1,16 @@
 /**
- * A program that imports both rulesets and computes nothing: the case next to it asks the index
- * questions through the `std::rulesets` pass (`query=`), so this program's only job is to build both
+ * A program that imports every ruleset and computes nothing: the case next to it asks the index
+ * questions through the `std::rulesets` pass (`query=`), so this program's only job is to build the
  * families.
+ *
+ * `rulesets.vmap` is one of them, and it has to be here: the binding table names it as the family of
+ * `tensor:multiply`'s batching rule (`modules/tensor/module.cpp`), and the table is read as a whole
+ * -- an entry whose family is not in the program is a `-> no rule` line, which is the thing this
+ * program exists to keep out of the reading.
  */
 import { lift } from rulesets.jvp
 import rulesets.transpose
+import rulesets.vmap
 
 func main(): int sync {
     println(lift(1.0).0)

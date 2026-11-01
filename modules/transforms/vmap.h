@@ -26,13 +26,17 @@
  * token, how many operands -- is a property of the operator, so `camel::core::vmapBindingOf(uri)`
  * reads it and `lookupRule("rulesets.vmap", head, arity)` asks this family.
  *
- * What is built today is the elementwise tier, `matmul` and the reductions along an axis: a body of
- * ports, constants and primitives that have a rule. A primitive with no rule, and any other
- * construct (a call, a branch, a loop), is refused *by name* at the node it was written at -- never
- * copied and hoped for (design principles 9.9). A reduction is batched in terms of the axis it was
- * given (`sum_axis` at one axis further in), and the reductions over every axis (`tensor:sum`) have
- * no batching rule: a batch of rows under them is not the rows' sums, and the whole-array form
- * takes no axis to shift. `reshape` is the next tier.
+ * What is built today is the elementwise tier, `matmul`, the reductions along an axis, and calls: a
+ * body of ports, constants, primitives that have a rule, and calls, which are *asked about* -- by the
+ * callee's name and its argument count, the key a call already has -- like any primitive. A primitive
+ * with no rule, a call the family has no rule for, and any other construct (a branch, a loop) is
+ * refused *by name* at the node it was written at -- never copied and hoped for (design principles
+ * 9.9). The count is part of the answer: `asked=1 found=0 missing=1` at a call says the family was
+ * asked and had nothing, which is a hole somebody can fill; `asked=0` would say the walk never
+ * arrived. A reduction is batched in terms of the axis it was given (`sum_axis` at one axis further
+ * in), and the reductions over every axis (`tensor:sum`) have no batching rule: a batch of rows under
+ * them is not the rows' sums, and the whole-array form takes no axis to shift. `reshape` is the next
+ * tier.
  */
 
 #pragma once

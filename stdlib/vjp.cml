@@ -8,40 +8,82 @@
  *     grad(f)              -- `vjp` read at one number, the seed 1
  *     with_grad(f)         -- the same for the first `with` parameter (design principles 9.9)
  *
- * The surface is JAX's (author's ruling of 2026-11-01): `vjp(f)(x)` is the pair `(y, pullback)`,
- * `pullback(ct)` is the cotangent of `f`'s parameters, and `grad(f)(x)` is `vjp(f)(x).1(1.0)`; the
- * juxtaposed shape `transpose` writes -- parameters, then cotangent -- is the *internal* assembly.
+ * This is the assembly the design asks for, written out rather than described. `split(jvp(f))`
+ * answers the pair of halves, so the body takes the pair apart by name -- the forward half and the
+ * linear one -- and hands the linear one to `transpose`, which is the only shape that turns it
+ * round. The forward half runs at the point and answers the residuals with the value; the backward
+ * half reads those residuals and a seed; `transpose` walks it backwards from the cotangent.
  *
- * The middle steps are operators of the `transforms` module with a signature and no rule, so a call
- * is refused by the step that is missing, where it is composed -- this line of the file -- and never
- * by a sentence of the form "not implemented yet", which sends the reader to no line at all.
+ * The surface is JAX's (author's ruling of 2026-11-01): `vjp(f)(x)` is the pair `(y, pullback)` and
+ * `pullback(ct)` is the cotangent of `f`'s parameters, so `grad(f)(x)` is `vjp(f)(x).1(1.0)`. The
+ * juxtaposed shape `transpose` writes -- known values, then cotangent -- is the internal step and is
+ * not a signature: nothing outside this file writes it.
  *
- * The signatures are the stand-in `(f: F) => F`-style shapes: `Vjp<F>`, `Split<F>`, `ParamsOf<F>`
- * and `ResultOf<F>` do not exist yet (design 6.1 is their step), and the wrapper names stay because
- * they are the user's words already -- a program says `grad`, and which transforms answer it is the
- * library's business (author, 2026-10-31). Nothing else in the composition changes when they land:
- * only the names of the shapes it moves between.
+ * The module compiles, and what it cannot do yet is run: `split` hands back the two halves the
+ * compiler computes -- the residuals belong to `f`'s graph, so their number and their types are
+ * read where the graph is in hand, and no type names them -- and the backward half is a function
+ * `transpose` has to walk backwards. That walk refuses a `Call` inside it (`skip=call`), so a
+ * pullback raises "transpose has no transpose for this function" at the call below; M3's step.
+ *
+ * The signatures are stand-ins for `Vjp<F>`, `Split<F>` and `ParamsOf<F>` (design 6.1 is their
+ * step), so `vjp` is declared once per arity rather than once for every `F` -- the same rule
+ * `tensor` follows for a name that is declared once per type it accepts. The generic form replaces
+ * these declarations, not their bodies, and the names stay in any case: a program says `grad`, and
+ * which transforms answer it is the library's business (author, 2026-10-31).
  */
 
 import { is_function } from types
 import { jvp, split, transpose } from transforms
 
 /// The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
-/// `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters. The juxtaposed shape
-/// the body assembles from here is internal and is not this signature.
+/// `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters. The juxtaposed call
+/// `transpose(residuals, ct)` is the internal step, not this signature.
+/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
+/// @example let reading = vjp(f)
 export func vjp(f: (x: float) => float): (x: float) => (float, (ct: float) => float) {
-    return transpose(split(jvp(f)))
+    let (forward, linear) = split(jvp(f))
+    return (x: float) => {
+        let (value, residuals) = forward(x)
+        (value, (ct: float) => {
+            // `transpose` answers the cotangents of the parameters as one tuple, so a function of
+            // one parameter has a one-long one: the pullback gives the number itself, because
+            // `grad(f)(x)` is `vjp(f)(x).1(1.0)` and the gradient of one parameter is a number.
+            let cotangents = transpose(linear)(residuals, ct)
+            cotangents.0
+        })
+    }
 }
 
-/// The gradient of `f`: `vjp` with the seed 1, its second half taken -- `grad(f)(x)` is
-/// `vjp(f)(x).1(1.0)` (author's ruling of 2026-11-01). Read `grad(f)` as a name for that reading of
-/// `vjp`, not as a second transform.
-export func grad::<F>(f: F): F when is_function::<F>() {
-    return vjp(f)
+/// The same transform for a function of two parameters: `vjp(f)(x, y)` is `(value, pullback)` and
+/// `pullback(ct)` gives both cotangents, in the order `f` takes the parameters.
+/// @example-fragment `f` is a function value of two parameters, so the example is a fragment of a program that declares one
+/// @example let reading_of_two = vjp(f)
+export func vjp(f: (x: float, y: float) => float): (x: float, y: float) => (float, (ct: float) => (float, float)) {
+    let (forward, linear) = split(jvp(f))
+    return (x: float, y: float) => {
+        let (value, residuals) = forward(x, y)
+        (value, (ct: float) => transpose(linear)(residuals, ct))
+    }
+}
+
+/// The gradient of a function of one parameter: `vjp` with the seed 1, its second half taken --
+/// `grad(f)(x)` is `vjp(f)(x).1(1.0)` (author's ruling of 2026-11-01). Read `grad(f)` as a name for
+/// that reading of `vjp`, not as a second transform.
+/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
+/// @example let slope = grad(f)
+export func grad(f: (x: float) => float): (x: float) => float {
+    let reading = vjp(f)
+    return (x: float) => {
+        let (value, pullback) = reading(x)
+        let _ = value
+        pullback(1.0)
+    }
 }
 
 /// The gradient of the first `with` parameter of `f` (design principles 9.9): the same `vjp`, taken
 /// with respect to a captured value instead of a parameter.
+/// @example-fragment `f` captures the value it differentiates against, so the example is a fragment of a program that declares one
+/// @example let slope_over_the_capture = with_grad(f)
 export func with_grad::<F>(f: F): F when is_function::<F>() {
     return vjp(f)
 }
