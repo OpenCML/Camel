@@ -14,13 +14,11 @@
  *
  * The middle steps are operators of the `transforms` module with a signature and no rule, so a call
  * is refused by the step that is missing, where it is composed -- this line of the file -- and never
- * by a sentence of the form "not implemented yet", which sends the reader to no line at all.
- *
- * The signatures are the stand-in `(f: F) => F`-style shapes: `Vjp<F>`, `Split<F>`, `ParamsOf<F>`
- * and `ResultOf<F>` do not exist yet (design 6.1 is their step), and the wrapper names stay because
- * they are the user's words already -- a program says `grad`, and which transforms answer it is the
- * library's business (author, 2026-10-31). Nothing else in the composition changes when they land:
- * only the names of the shapes it moves between.
+ * by a sentence of the form "not implemented yet", which sends the reader to no line at all; the
+ * reference page leaves the module out and prints this same reason.
+ * The shapes are stand-ins: `Vjp<F>`, `Split<F>` and `ParamsOf<F>` are design 6.1's step, so the
+ * signatures are spelled for the shapes that exist today; the names stay, because they are the
+ * user's words already -- which transforms answer `grad` is the library's business (author, 2026-10-31).
  */
 
 import { is_function } from types
@@ -29,6 +27,8 @@ import { jvp, split, transpose } from transforms
 /// The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
 /// `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters. The juxtaposed shape
 /// the body assembles from here is internal and is not this signature.
+/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
+/// @example let reading = vjp(f)
 export func vjp(f: (x: float) => float): (x: float) => (float, (ct: float) => float) {
     return transpose(split(jvp(f)))
 }
@@ -36,12 +36,16 @@ export func vjp(f: (x: float) => float): (x: float) => (float, (ct: float) => fl
 /// The gradient of `f`: `vjp` with the seed 1, its second half taken -- `grad(f)(x)` is
 /// `vjp(f)(x).1(1.0)` (author's ruling of 2026-11-01). Read `grad(f)` as a name for that reading of
 /// `vjp`, not as a second transform.
+/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
+/// @example let slope = grad(f)
 export func grad::<F>(f: F): F when is_function::<F>() {
     return vjp(f)
 }
 
 /// The gradient of the first `with` parameter of `f` (design principles 9.9): the same `vjp`, taken
 /// with respect to a captured value instead of a parameter.
+/// @example-fragment `f` captures the value it differentiates against, so the example is a fragment of a program that declares one
+/// @example let slope_over_the_capture = with_grad(f)
 export func with_grad::<F>(f: F): F when is_function::<F>() {
     return vjp(f)
 }

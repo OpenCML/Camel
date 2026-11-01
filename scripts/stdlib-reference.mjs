@@ -123,6 +123,21 @@ const MODULES = [
         computed: 'signatures/transforms.cml',
     },
     {
+        name: 'vjp',
+        title: '`vjp`: the derivative, as a library',
+        kind: 'camel',
+        // `vjp` is the composition of three transforms, so its declarations are the assembly's, and
+        // an example of it cannot compile until the assembly does. Listing it as `pending` keeps
+        // it out of the page -- a page a reader trusts does not show code that does not compile --
+        // without pretending the module is not there: every mode prints why, and `--verify-docs`
+        // turns red the day its examples compile, which is the one line to delete (`pending:`
+        // below) when it does.
+        pending:
+            '`stdlib/vjp.cml` is the composition `transpose(split(reinterp<jvp>(f)))`, and ' +
+            '`transpose` still takes a function of a single parameter while `split` hands back its ' +
+            'two halves, so the module does not compile and an example of it would not either',
+    },
+    {
         name: 'tensor',
         title: '`tensor`: multi-dimensional numeric arrays',
         kind: 'cpp',
@@ -395,6 +410,32 @@ const MODULES = [
         declaration: true,
     },
 ]
+
+// A module the reference knows about and cannot document yet, and the one sentence that says why.
+//
+// The case is real and it is not a file-name question: `vjp` is `transpose(split(reinterp<jvp>(f)))`
+// written in Camel, and it compiles only when all three steps meet. Until then its declarations are
+// still worth listing here -- the module exists, the design names it, and a reader who asks where
+// the derivative lives should find the answer -- but an `@example` of a module that does not compile
+// is code no reader can run, and a page is only worth trusting if everything on it compiles.
+//
+// So the module is in MODULES and out of the page, and `pending` is where that is written down.
+// Nothing is silent about it: every mode prints the sentence below, so the omission is a fact on
+// the screen rather than an absence. And nothing has to be remembered either: `--verify-docs`
+// compiles a pending module's examples anyway, and when they compile it reports that as a problem
+// -- "drop the pending entry" -- so the day the module builds, the reference says so itself.
+function pendingReason(module) {
+    return module.pending ? String(module.pending).replace(/\s+/g, ' ') : null
+}
+
+function announcePending() {
+    for (const module of MODULES) {
+        const reason = pendingReason(module)
+        if (reason !== null) {
+            console.log(`not in the reference yet: the module '${module.name}' -- ${reason}`)
+        }
+    }
+}
 
 function sourceOf(module) {
     if (module.source) {
@@ -927,7 +968,10 @@ out.push('Not in this reference: the profiler (`perf`).')
     out.push('')
     out.push('| Module | Import | Written in |')
     out.push('|---|---|---|')
-    const parsed = MODULES.map((module) => ({ module, entries: parseDeclarations(module) }))
+    const parsed = MODULES.filter((module) => pendingReason(module) === null).map((module) => ({
+        module,
+        entries: parseDeclarations(module),
+    }))
     for (const { module, entries } of parsed) {
         const anchor = module.name === 'globals' ? 'built-in-functions' : module.name
         out.push(
@@ -1435,6 +1479,24 @@ async function verifyDocs() {
     let checked = 0
     let fragments = 0
     for (const module of MODULES) {
+        const pending = pendingReason(module)
+        if (pending !== null) {
+            // Not compiled as a problem -- the module is left out on purpose -- but compiled all
+            // the same, because "the examples compile now" is the signal that the omission is over
+            // and the page should carry the module. A pending module that still fails is the
+            // expected state and says nothing; an empty result (no examples to read) says nothing
+            // either, since there is nothing to be ready.
+            const compiled = await compileExamples(module, parseDeclarations(module))
+            const broken = compiled.results.filter((result) => !result.ok)
+            if (compiled.results.length > 0 && broken.length === 0) {
+                problems.push(
+                    `stdlib/${module.name}.cml is listed as pending in MODULES ('${pending}') but its examples ` +
+                        `compile now: drop its 'pending' entry in scripts/stdlib-reference.mjs, run --write, and the ` +
+                        `page carries the module`,
+                )
+            }
+            continue
+        }
         const entries = parseDeclarations(module)
         problems.push(...docProblems(entries))
         const compiled = await compileExamples(module, entries)
@@ -1853,6 +1915,7 @@ if (bodyProblems.length > 0) {
     process.exit(1)
 }
 if (mode === '--write' || mode === '--verify-doc') {
+    announcePending()
     const text = renderDoc()
     const rendered = (text.match(/^#### /gm) || []).length
     if (rendered === 0) {
@@ -1875,9 +1938,14 @@ if (mode === '--write' || mode === '--verify-doc') {
     // for, from the same parser the reference is generated with. `--compile` also compiles every
     // example (needs a built compiler).
     const compile = flags.includes('--compile')
+    announcePending()
     const rows = []
     let totals = { names: 0, entries: 0, noDoc: 0, noExample: 0, examples: 0, fragments: 0, compileBroken: 0 }
     for (const module of MODULES) {
+        // A pending module has no row: what the table counts -- examples that exist and compile --
+        // is exactly what a module left out of the page cannot answer yet, and a row of zeros would
+        // read as "documented, nothing missing".
+        if (pendingReason(module) !== null) continue
         const entries = parseDeclarations(module)
         const firsts = names.map((name) => entries.find((entry) => entry.name === name))
         const noDoc = firsts.filter((entry) => entry.doc.filter((line) => line.trim() !== '').length === 0).length
@@ -1917,6 +1985,7 @@ if (mode === '--write' || mode === '--verify-doc') {
             `${String(totals.examples).padStart(8)} ${String(totals.fragments).padStart(9)} ${String(totals.compileBroken).padStart(6)}`,
     )
 } else if (mode === '--verify-docs') {
+    announcePending()
     const { problems, checked, fragments } = await verifyDocs()
     for (const problem of problems) console.log(problem)
     if (problems.length > 0) {
