@@ -1,0 +1,55 @@
+id = "opt.inline_use"
+order = 355
+tier = "fast"
+tags = ["feat", "opt", "effects", "inline", "resources"]
+desc = "Inlining a function that writes `stdout` keeps the write: the use is counted before and after the copy, and erasing it is refused by the pass boundary"
+
+# Design principles 3.3: what a program does to state it does not own is its effects, and a pass may
+# move code, copy it or inline a body without changing them. Inlining moves a print from the callee
+# graph into its caller; the node is new, its origin is the call's, and what it does to `stdout` has
+# to be the same afterwards.
+#
+#   inline_keeps_stdout.write    the program as written: two writes of `stdout`, one per graph
+#   inline_keeps_stdout.inline   `std::opt::inline` folds `noisy` into `main`: still two writes,
+#                                and the program prints what it printed
+#   inline_keeps_stdout.drop     `test::inline_use_drop` erases both prints after the inline: the
+#                                boundary refuses the pass (`before stdout (write), after nothing`)
+#
+# The count is the reading `test::inline_use` prints, taken over every graph of the program: a use
+# that merely changed graph is still one use, which is the point of comparing the program and not
+# one graph at a time.
+
+[defaults]
+kind = "behavior"
+backends = ["nvm"]
+backends_agree = []
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "inline_keeps_stdout.write"
+desc = "No pass: `noisy` and `main` each write `stdout` once, and the program prints `noisy` then `2`."
+case = "../../../cases/opt/effects/inline_keeps_stdout.cml"
+args = ["${case}", "test::inline_use", "${backend}"]
+expect_exit = 0
+expect_stdout_contains = ["INLINE_USE kinds=1 stdout (write)=4"]
+expect_output_not_contains = ["PassBoundaryResources", "changed the ambient resources"]
+
+[[tests]]
+name = "inline_keeps_stdout.inline"
+desc = "`std::opt::inline` folds `noisy` into its caller: the print moved graphs, the program still writes `stdout` twice, and the output is unchanged."
+case = "../../../cases/opt/effects/inline_keeps_stdout.cml"
+args = ["${case}", "std::opt::inline", "test::inline_use", "${backend}"]
+expect_exit = 0
+expect_stdout_contains = ["INLINE_USE kinds=1 stdout (write)=4", "noisy", "2"]
+expect_output_not_contains = ["PassBoundaryResources", "changed the ambient resources"]
+
+[[tests]]
+name = "inline_keeps_stdout.drop"
+desc = "The other direction: `test::inline_use_drop` erases the prints after the inline, and the pass boundary refuses it -- a use that goes away is not an optimisation."
+case = "../../../cases/opt/effects/inline_keeps_stdout.cml"
+args = ["${case}", "std::opt::inline", "test::inline_use_drop", "${backend}"]
+expect_exit = 1
+expect_stdout_contains = ["INLINE_USE_DROP erased=3"]
+expect_stderr_contains = ["PassBoundaryResources", "before stdout (write), after nothing"]
+expect_output_not_contains = ["PassBoundaryNodes", "PassBoundaryPorts"]
