@@ -69,12 +69,36 @@ normalizers = ["normalize_newlines"]
 timeout_ms = 20000
 
 [[tests]]
-name = "catalog.name_coverage"
-desc = "The stronger direction of the same question: a mention in prose covers a code, an assertion on the report does not. Counts the semantic codes no case pins with `expect_diagnostic_name` (or `expect_diagnostic_code`) and refuses to see the set grow past the number the script records, so a case that stops pinning its diagnostic is a failure here instead of a quiet loss of cover."
+name = "catalog.pinned_coverage"
+desc = "The gate that replaced the name counter (P2-19): the set is every entry in `diagnostics/registry.tsv`, enumerated the way `--check` and the generated document enumerate it, and a code counts only when a case asserts *it* -- `expect_diagnostic_name`, `expect_diagnostic_code`, or the same two read out of a `verify_script`. Free text is not read, because free text was what could be pressed: a needle containing a name does not require the run to produce it. A code no program can provoke is a named exception in the script, printed with its reason; the recorded floor is the count this tree stands at, and it may be lowered in the commit that adds a case, never raised."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/diagnostics-catalog.mjs"
-args = ["${case}", "--name-coverage-check"]
+args = ["${case}", "--pinned-coverage-check"]
+expect_exit = 0
+expect_stdout_contains = ["diagnostic codes a case asserts by code:"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+[[tests]]
+name = "catalog.pinned_coverage_report"
+desc = "The same count as a report, with the codes that have no assertion listed so the next case can be picked without re-deriving the set."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/diagnostics-catalog.mjs"
+args = ["${case}", "--pinned-coverage"]
+expect_exit = 0
+expect_stdout_contains = ["diagnostic codes a case asserts by code:", "named exception(s)"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+[[tests]]
+name = "catalog.name_coverage"
+desc = "A measurement, not a target (P2-19, retired as a gate): the semantic codes no case asserts by name, counted the way this counter has always counted them -- free text included. It stays because the number is worth watching and because the two denominators are not the same thing (`5 of 239` of the semantic section, with prose read, against `279 of 307` of the registry, by code); it no longer decides whether a commit passes. The gate is `catalog.pinned_coverage`."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/diagnostics-catalog.mjs"
+args = ["${case}", "--name-coverage"]
 expect_exit = 0
 expect_stdout_contains = ["semantic codes with no case that asserts them by name:"]
 normalizers = ["normalize_newlines"]

@@ -798,9 +798,9 @@ for (let i = 0; i < argv.length; i++) {
         mode = argv[i]
     }
 }
-if (!['--check', '--write', '--generate', '--verify-doc', '--coverage', '--coverage-check', '--name-coverage', '--name-coverage-check', '--pin-examples'].includes(mode)) {
+if (!['--check', '--write', '--generate', '--verify-doc', '--coverage', '--coverage-check', '--name-coverage', '--name-coverage-check', '--pinned-coverage', '--pinned-coverage-check', '--pin-examples'].includes(mode)) {
     console.log(
-        'usage: node scripts/diagnostics-catalog.mjs --check | --write | --generate | --verify-doc | --coverage | --coverage-check | --name-coverage | --name-coverage-check | --pin-examples [--root DIR]'
+        'usage: node scripts/diagnostics-catalog.mjs --check | --write | --generate | --verify-doc | --coverage | --coverage-check | --name-coverage | --name-coverage-check | --pinned-coverage | --pinned-coverage-check | --pin-examples [--root DIR]'
     )
     process.exit(2)
 }
@@ -1010,6 +1010,91 @@ if (mode === '--name-coverage' || mode === '--name-coverage-check') {
                 + ' records: a case that pinned its diagnostic stopped pinning it, or a semantic code'
                 + ' was added with no case of its own. Fix that case, or add one and lower the record'
                 + ' in the same commit, with the reason the number moved.'
+        )
+        process.exit(1)
+    }
+    process.exit(0)
+}
+
+// ---- the gate that replaced the name counter: the registry enumerated, a code asserted by code ---
+// P2-19. `--name-coverage` counted a code as covered when a plan *mentioned* it, and the mention was
+// read out of the plan's text: a needle that happens to contain `name=SemanticDiag::X`, a
+// `verify_script` line, or a wider regex each moved the number without a test changing what it
+// asserts. The number was therefore pressable by editing the reading, not the coverage -- and it was
+// a ratchet whose record was lowered in the same commit that added a case, so "the set did not grow"
+// could be true while the set was simply read differently.
+//
+// This replaces it as the gate. Two things are different, and only two:
+//
+//   * The set comes from `diagnostics/registry.tsv` -- every entry, of every type -- through
+//     `catalogEntries`, the same enumeration `--check` and the generated document use. Nothing is
+//     discovered by scanning source files, so a raise site written as an alias cannot leave a code
+//     out of the denominator.
+//   * A code counts only when a plan asserts *it*: `expect_diagnostic_name` / `expect_diagnostic_code`
+//     on the case, or `.name === …` / `.code === …` inside a `verify_script`. Free text is not read,
+//     because free text is what was pressable: a needle can contain a name without the run being
+//     required to produce it.
+//
+// A code no test can provoke is a *named* exception below, with the reason printed: silently skipping
+// one is how a counter starts lying again. No case is added to raise the number: the count is the
+// measurement, and `PINNED_COVERAGE_RECORDED` is the floor a later commit may lower but not raise.
+const PINNED_COVERAGE_EXCEPTIONS = [
+    {
+        fullName: 'InternalDiag::UnknownInternalError',
+        reason:
+            'the compiler reporting that it has no code for a state it reached; no program provokes it,'
+            + ' so no case can pin it -- the registry entry exists so the reporter has something to say',
+    },
+]
+
+const PINNED_COVERAGE_RECORDED = 27
+
+if (mode === '--pinned-coverage' || mode === '--pinned-coverage-check') {
+    const entries = catalogEntries(records)
+    const plans = walk(path.join(root, 'test', 'plans'), (f) => f.endsWith('.plan.toml'))
+    const asserted = new Set()
+    for (const file of plans) {
+        const text = fs
+            .readFileSync(file, 'utf8')
+            .replace(/^\s*#.*$/gm, '')
+            .replace(/desc\s*=\s*"""[\s\S]*?"""/g, '')
+            .replace(/^\s*desc\s*=.*$/gm, '')
+        for (const m of text.matchAll(/expect_diagnostic_name\s*=\s*["']([A-Za-z]+::[A-Za-z0-9_]+)["']/g)) {
+            asserted.add(m[1])
+        }
+        for (const m of text.matchAll(/expect_diagnostic_code\s*=\s*["']?(0[xX][0-9A-Fa-f]{8})["']?/g)) {
+            asserted.add(m[1].toLowerCase())
+        }
+        for (const m of text.matchAll(/\.name\s*===\s*["']([A-Za-z]+::[A-Za-z0-9_]+)["']/g)) {
+            asserted.add(m[1])
+        }
+        for (const m of text.matchAll(/\.code\s*===\s*["'](0[xX][0-9A-Fa-f]{8})["']/g)) {
+            asserted.add(m[1].toLowerCase())
+        }
+    }
+    const excepted = new Set(PINNED_COVERAGE_EXCEPTIONS.map((e) => e.fullName))
+    const missing = entries.filter(
+        (e) => !excepted.has(e.fullName) && !asserted.has(e.fullName) && !asserted.has(hex8(e.code).toLowerCase())
+    )
+    const covered = entries.length - missing.length - excepted.size
+    console.log(
+        `diagnostic codes a case asserts by code: ${covered} of ${entries.length}`
+            + ` (${excepted.size} named exception(s), ${missing.length} with no assertion)`
+    )
+    for (const e of PINNED_COVERAGE_EXCEPTIONS) console.log(`  excepted ${e.fullName}: ${e.reason}`)
+    for (const e of missing) console.log(`  no assertion ${hex8(e.code)}  ${e.fullName}`)
+    if (mode === '--pinned-coverage') process.exit(0)
+    if (entries.length === 0 || asserted.size === 0) {
+        console.log('pinned coverage: the run read no registry entry or no assertion, which is not a pass')
+        process.exit(1)
+    }
+    if (missing.length > PINNED_COVERAGE_RECORDED) {
+        console.log(
+            `pinned coverage: ${missing.length} code(s) with no case asserting them, past the`
+                + ` ${PINNED_COVERAGE_RECORDED} this file records. A case that pinned its diagnostic`
+                + ' stopped pinning it, a new code was added with no case of its own, or a code that'
+                + ' cannot be provoked needs a named exception with its reason. Lower the record only'
+                + ' in the commit that adds the case, and say why the number moved.'
         )
         process.exit(1)
     }
