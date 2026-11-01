@@ -150,3 +150,42 @@ So the earlier \`isFoldable\` guard was aimed at the wrong node: it watched the 
 never happens) instead of the gate whose removal drops the wait. That guard stays reverted; the fix
 belongs beside \`inheritedWait\` in \`replaceNode\`, and it is "a wait that a removed GATE carried goes to
 what the gate's value came from", which is the paragraph the file already contains.
+
+
+## Third round: which branch is missing the call -- and the reading that says "it never enters that branch"
+
+Criterion 1 asked whether the \`inheritedWait\` machinery is **not called** or **called with the wrong
+target**. The reading below says the first: the removal of this gate never goes through
+\`replaceNode\` at all.
+
+What \`replaceNode\` would have done with it, if it had been called:
+
+- \`carriesOrdering\` (src/runtime/graph.cpp:1295) for an Oper is \`!nodeIsFreelySchedulable(draft, node)\`,
+  which is true for \`pure = false\`;
+- \`isObservedRun\` (rewrite.cpp:196) for an Oper is the same test, so true;
+- therefore \`lastReadsGoingOut\` (rewrite.cpp:217) lists the reduce, \`keepThroughValue\` (rewrite.cpp:252)
+  wraps the last reader through \`\:op/keep(x, v)\`, and \`inheritedWait\` (rewrite.cpp:367-384) hands the
+  gate's control input on to it.
+
+Every one of those says the reduce is an observed run. So if \`replaceNode\` had been the path, the node
+would have kept a reader and the wait. It did not keep either, so the gate disappeared through a path
+that is not \`replaceNode\`.
+
+**The hypothesis that fits every measurement so far** (stated as a hypothesis, not as a reading):
+\`pruneBranch\` (generic.cpp:1181) dissolves the branch whose condition is static, keeps the taken arm,
+and erases the nodes of the other one with \`eraseNode\` (the calls at generic.cpp:858-862 are the same
+family). The taken arm's value is the reduce; the arm's exit gate goes with the branch; and because
+\`let n61\` is never read, the reduce is left with nothing. \`eraseNode\` closes the chain but has none of
+\`keepThroughValue\`'s protection -- that lives in \`replaceNode\`.
+
+**To settle it:** put the same one-off print in \`pruneBranch\` and in \`eraseNode\` (node kind, whether it
+was a Gate with a control input, what its value source was) and run the two pipelines; whichever prints
+for the gate tells which path to fix. That measurement was not taken in this round.
+
+## The rule, as ruled: written here and in the design note
+
+> **Folding away a GATE does not lose the value -- it loses the wait the gate was holding for someone
+> else, and that wait has to land on the gate's producer.**
+
+Where it belongs in the code is beside \`inheritedWait\` in \`replaceNode\`, or -- if the erasing path is
+\`pruneBranch\`/\`eraseNode\` -- in that path, by routing it through the same protection.
