@@ -1,0 +1,9 @@
+func adder(n: int): (x: int) => int { return (x) => x + n }
+func main(): int sync {
+    let g: (x: int) => int = (x) => x * 3
+    var h: (x: int) => int = (x) => x - 1
+    h = (x) => x + 100
+    println('let', g(14), h(1))
+    let add5 = adder(5)
+    return 0
+}
