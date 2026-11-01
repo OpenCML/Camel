@@ -3,6 +3,8 @@
 
 #include "transpose.h"
 
+#include "jvp.h"
+
 #include "camel/core/forward.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/func.h"
@@ -639,6 +641,25 @@ bool buildTransposeMember(
                         armsOk = false;
                         return {};
                     }
+                    // A **rule kernel** -- `mul_tangent` and its four siblings -- is declared in `jvp.h`
+                    // as `values` values followed by that many tangents. The declaration is what says
+                    // where the boundary is, and it is read here, but it does not yet make the call
+                    // transposable: the transposed member is built from the callee's *whole* signature,
+                    // so its call site would have to pass the tangents' values, and those are the one
+                    // thing this graph does not have (a tangent is what the answer is a cotangent of).
+                    // What a transposition of a kernel needs is a member of the values and the cotangent
+                    // only -- a linear-map transpose, which nothing builds today. Named, so the next
+                    // reader sees that the member is the gap and not the call.
+                    if (constexpr bool declaredKernelSplit = true; declaredKernelSplit) {
+                        if (const TangentKernelDecl *kernel = tangentKernelOf(callee->name())) {
+                            os << "TRANSPOSE function=" << function->name() << " arm-stop region="
+                               << oldRegion << " node=" << ref << " kernel=" << kernel->name
+                               << " values=" << kernel->values << " primal=" << kernel->primal
+                               << '\n';
+                            armsOk = false;
+                            return {};
+                        }
+                    }
                     // The values a call inside an arm takes: a parameter (a stop), a residual
                     // projection, or a constant -- the shapes a cut half's arm has. A value the arm
                     // computes and hands to a call is not reached yet, and is refused by name.
@@ -707,7 +728,8 @@ bool buildTransposeMember(
                         const gc_node_ref_t argument = forwardInArm(callInputs[i]);
                         if (argument == rt::kInvalidNodeRef) {
                             os << "TRANSPOSE function=" << function->name() << " arm-stop region="
-                               << oldRegion << " node=" << ref << " arg=" << callInputs[i] << '\n';
+                               << oldRegion << " node=" << ref << " arg=" << callInputs[i]
+                               << " callee=" << callee->name() << '\n';
                             armsOk = false;
                             return {};
                         }

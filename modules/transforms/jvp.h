@@ -37,9 +37,11 @@
 #include "camel/core/context/context.h"
 #include "camel/core/source/ids.h"
 #include "camel/core/type/composite/func.h"
-#include "camel/compile/gir/graph_read.h"`r`n#include "camel/runtime/graph.h"
+#include "camel/compile/gir/graph_read.h"
+#include "camel/runtime/graph.h"
 
-#include <string>`r`n#include <string_view>
+#include <string>
+#include <string_view>
 
 namespace camel::transforms {
 
@@ -63,6 +65,40 @@ struct JvpGraph {
 /// The signature `reinterp<jvp>(f)` has for `function`, or nullptr when the function has no forward
 /// transform (its result is not a float, or it takes no `float` parameter).
 camel::core::type::FunctionType *jvpSignature(camel::core::type::FunctionType *function);
+
+/// How a **tangent kernel**'s parameters divide: the first `values` are the values the primal computes
+/// from, the rest are the tangents the rule hands it. A rule's right side is
+/// `(dx, dw) => mul_tangent(x, w, dx, dw)` -- the values are the captures and the tangents are the
+/// lambda's own parameters -- so every rule kernel is a function of `values` followed by `values`
+/// tangents, and this is where that is *declared* for the kernels the tree uses.
+///
+/// A declaration and not a naming convention: a kernel is here by name, with its arity, and a kernel
+/// that is not here has no split at all -- nothing may infer the boundary from `*_tangent` or from a
+/// count. The reader that needs it is `transpose`, when it finds a kernel call inside a branch arm: a
+/// tangent kernel is linear in its tangents, so its transpose needs the values and the cotangent only,
+/// and the tangents are exactly the arguments that have no value in the transposed graph (they are what
+/// the answer is a cotangent of).
+struct TangentKernelDecl {
+    std::string_view name;
+    /// The parameters that are values; the tangents are the next `values` parameters.
+    size_t values = 0;
+    /// The operator whose derivative the kernel computes, as the ruleset files it. It is what a
+    /// transposition of the kernel is a transposition of.
+    std::string_view primal;
+};
+
+/// The declared kernels, in one place. `kTangentKernels` is the table `tangentKernelOf` reads.
+constexpr TangentKernelDecl kTangentKernels[] = {
+    {"add_tangent", 2, ":op/add_d"},
+    {"sub_tangent", 2, ":op/sub_d"},
+    {"mul_tangent", 2, ":op/mul_d"},
+    {"div_tangent", 2, ":op/div_d"},
+    {"neg_tangent", 1, ":op/neg_d"},
+};
+
+/// The declaration of the kernel named `name`, or nullptr when the tree does not declare it. A caller
+/// that needs the split and finds null says so by name; it does not guess an arity.
+const TangentKernelDecl *tangentKernelOf(std::string_view name);
 
 /// Builds the graph of `reinterp<jvp>(f)` for the graph `function` of `program`. The graph `function`
 /// is read, never changed; the new graph is a member of a program of its own, the way
