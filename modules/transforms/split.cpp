@@ -6,6 +6,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/tangent_space.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/draft.h"
@@ -186,6 +187,49 @@ gc_node_ref_t fillTuple(rt::GraphDraft &draft, Type *type, std::span<const gc_no
     return fill;
 }
 
+/// `Lift<T>`, read from types: a parameter contributes its value port and, when its type has a
+/// tangent space, the tangent port after it. A `T` with no tangent space -- an integer, a `bool`, a
+/// `string`, a function -- contributes its value alone, which is why counting two ports per parameter
+/// is only right while every parameter is a float. A lifted `f(n: int, x: float)` takes (n, x, dx),
+/// and an even/odd reading would take `x`'s tangent for `x` and lose `dx` (P1-10, review 2026-11-01).
+std::vector<size_t> valuePortsOf(const camel::core::type::FunctionType *liftedType) {
+    std::vector<size_t> values;
+    if (liftedType == nullptr) {
+        return values;
+    }
+    const size_t count = liftedType->normTypesCount();
+    for (size_t i = 0; i < count;) {
+        values.push_back(i);
+        const Type *type    = liftedType->normTypeAt(i);
+        const bool paired   = type == nullptr || camel::core::tangentSpaceOf(type).hasSpace();
+        i += paired ? 2 : 1;
+    }
+    return values;
+}
+
+/// Which parameter a lifted port belongs to, and whether it is that parameter's tangent. A port that
+/// is no parameter's (a seeded value, a residual) answers `npos` and false.
+std::pair<size_t, bool> parameterOfPort(
+    const camel::core::type::FunctionType *liftedType, size_t port) {
+    constexpr size_t kNone = static_cast<size_t>(-1);
+    if (liftedType == nullptr) {
+        return {kNone, false};
+    }
+    const size_t count = liftedType->normTypesCount();
+    for (size_t i = 0, parameter = 0; i < count; ++parameter) {
+        if (port == i) {
+            return {parameter, false};
+        }
+        const Type *type  = liftedType->normTypeAt(i);
+        const bool paired = type == nullptr || camel::core::tangentSpaceOf(type).hasSpace();
+        if (paired && port == i + 1) {
+            return {parameter, true};
+        }
+        i += paired ? 2 : 1;
+    }
+    return {kNone, false};
+}
+
 /// One half of the split while it is being built: the member's draft, the source graph it copies
 /// from, and the port this member gives each parameter of the source (`kInvalidNodeRef` where the
 /// half does not take that component -- the forward half does not take tangents, and the backward
@@ -253,16 +297,22 @@ struct Half {
     }
 
     /// The source inputs this half takes from `ref`: a retargeted call takes the values its caller
-    /// passes, the even arguments; every other node takes all of them, in order.
+    /// passes, which are the lifted signature's value ports (read from its types); every other node
+    /// takes all of them, in order.
     std::vector<gc_node_ref_t> halfInputsOf(gc_node_ref_t ref) const {
         const std::vector<gc_node_ref_t> all = dataInputsOf(source, ref);
         if (!retargets(ref)) {
             return all;
         }
+        const rt::GCGraph *callee = calleeOf(ref);
+        const std::vector<size_t> valuePorts =
+            valuePortsOf(callee != nullptr ? callee->funcType() : source->funcType());
         std::vector<gc_node_ref_t> values;
-        values.reserve((all.size() + 1) / 2);
-        for (size_t i = 0; i < all.size(); i += 2) {
-            values.push_back(all[i]);
+        values.reserve(valuePorts.size());
+        for (size_t port : valuePorts) {
+            if (port < all.size()) {
+                values.push_back(all[port]);
+            }
         }
         return values;
     }
@@ -368,12 +418,14 @@ struct Half {
             if (!tangent) {
                 return refuseAt(
                     refusal, source, ref, "a tangent port",
-                    "the value half reads the tangent of parameter " + std::to_string(index / 2) +
+                    "the value half reads the tangent of parameter " +
+                        std::to_string(parameterOfPort(source->funcType(), index).first) +
                         ", which the forward half does not take");
             }
             return refuseAt(
                 refusal, source, ref, "a parameter",
-                "the backward half reads the value of parameter " + std::to_string(index / 2) +
+                "the backward half reads the value of parameter " +
+                        std::to_string(parameterOfPort(source->funcType(), index).first) +
                     ", and it is not one of the values the cut carries");
         }
         case rt::GCNodeKind::Data: {
@@ -710,7 +762,7 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
         const size_t index = portIndex[ref];
         if (index != Residual::kNotAParameter) {
             // A parameter's value: its type is the parameter's, and its number is half its index.
-            residual.parameter = index / 2;
+            residual.parameter = parameterOfPort(lifted.funcType(), index).first;
             residual.type      = index < lifted.funcType()->normTypesCount()
                                      ? lifted.funcType()->normTypeAt(index)
                                      : lifted.node(ref)->dataType();
