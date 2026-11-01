@@ -1,0 +1,23 @@
+import { transpose } from transforms
+import rulesets.transpose
+
+func double(x: float): float {
+    return 2.0 * x
+}
+
+func by_param(f: (x: float) => float): float {
+    let back = transpose(f)
+    return back(2.0, 1.0)
+}
+
+func by_capture(x: float): float {
+    let h = (y: float) => y * x
+    let back = transpose(h)
+    return back(1.0, 1.0)
+}
+
+func main(): int sync {
+    println(by_param(double))
+    println(by_capture(3.0))
+    return 0
+}

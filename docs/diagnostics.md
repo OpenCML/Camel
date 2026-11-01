@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-307 diagnostics: 286 errors, 21 warnings. 15 carry a machine-applicable edit, 292 say why they carry none.
+308 diagnostics: 287 errors, 21 warnings. 16 carry a machine-applicable edit, 292 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -268,6 +268,7 @@ prints one entry.
 | `0x03000206` | [SemanticDiag::YieldRequiresStreamHead](#yieldrequiresstreamhead) | Error | no |
 | `0x03000207` | [SemanticDiag::RuleRightUsesOuterVariable](#rulerightusesoutervariable) | Error | no |
 | `0x03000208` | [SemanticDiag::ResidualsAreNotVisible](#residualsarenotvisible) | Error | no |
+| `0x03000209` | [SemanticDiag::TransformArgumentIsNotAKnownFunction](#transformargumentisnotaknownfunction) | Error | yes |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8787,6 +8788,28 @@ func main(): int sync {
     return 0
 }
 ```
+
+### TransformArgumentIsNotAKnownFunction
+
+`0x03000209` · Error · `SemanticDiag::TransformArgumentIsNotAKnownFunction`
+
+**Fix**
+
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+
+**Message**
+
+```text
+'{0}' is applied to {1}, and a transform's argument has to be a function this program knows before it runs.
+```
+
+**Help**
+
+```text
+The transform builds the transformed graph at the call, from the graph of the function it is given, so it has to name that graph now: a declared function, or a lambda that captures nothing. {1} names no graph until the program runs. Pass a declared function (or a lambda that captures nothing) instead.
+```
+
+*No example: no test small enough to show raises it.*
 
 ### IgnoredSideEffect
 

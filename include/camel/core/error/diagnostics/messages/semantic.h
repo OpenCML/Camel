@@ -390,8 +390,13 @@ enum class SemanticDiag : uint32_t {
     RangeStepZero = 0x0001E6,
     /// A subscript slice with a constant step of 0 takes no element: `t[a:b:0]` (design principles 5.4;
     /// the step of a slice follows the same rule the step of a range does).
-    SliceStepZero                  = 0x0001E9,
-    WithPackNeedsNativeDeclaration = 0x000191,
+    SliceStepZero = 0x0001E9,
+    /// A transform (`transpose`, `jvp`) was handed something that is not a function known at compile time:
+    /// a parameter, or a closure that captures a value. The transform builds the transformed graph at the
+    /// call, out of the graph of the function it is given, and neither of those names one until the program
+    /// runs -- so it is refused at the call, by name, rather than left to the run.
+    TransformArgumentIsNotAKnownFunction = 0x000209,
+    WithPackNeedsNativeDeclaration       = 0x000191,
     // #impl(f) (design principles 10.4): the Camel body of the function is its semantics and the
     // body-less declaration f of the same module is the operator that runs it. The graph builder
     // resolves the tag when it declares the module, so no pass reads it and it names no reader.

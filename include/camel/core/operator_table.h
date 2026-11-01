@@ -293,6 +293,12 @@ struct CallSpec {
     std::function<std::optional<std::string>(
         std::string_view pattern, std::span<type::Type *const> argumentTypes)>
         checkFormat;
+    /// The index of the ordinary argument that is the function a transform is applied to (-1: none).
+    /// A transform builds the transformed graph at the call, so that argument has to name a graph the
+    /// compiler knows now: a declared function, or a lambda that captures nothing. A parameter, or a
+    /// closure that captures a value, is refused at the call site (design principles 6.6: the fact is
+    /// the operator's, not a name the compiler knows).
+    int8_t staticFunctionArg = -1;
 };
 
 class OperatorTable {
