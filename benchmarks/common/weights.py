@@ -71,6 +71,8 @@ def _artifacts_complete(spec: ModelSpec, out: Path) -> bool:
     return True
 
 
+# A cache's existence marker cannot stand in for its content being valid: a manifest that is there
+# while a file is empty is worse than no cache at all, because it makes the short circuit fire.
 def generate(spec: ModelSpec, force: bool = False) -> Path:
     """Generate weights/input/manifest for one model; returns the model dir."""
     out = model_dir(spec.name)
