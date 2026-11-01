@@ -1,31 +1,43 @@
 /**
- * The same shape as `split_branch_author.cml`, read through `vjp` -- and the refusal is what this case
- * pins, because the gap is real and must not be silent.
+ * The author's shape read through `vjp` -- **and it reads the author's numbers**: 4.0 at `x = 2.0` and
+ * 3.0 at `x = -2.0`, the same two `split_branch_author.cml` reads through the cut. This case is the
+ * acceptance of the branch cut on the path the author actually named (`vjp`), which is
+ * `transpose . split . reinterp<jvp>`.
  *
- * `vjp = transpose . split . reinterp<jvp>`. The cut builds the author's branch
- * (`split_branch_author.cml` reads 4.0 and 3.0 through it), so what stops is `transpose`. Where it
- * stops has moved once, and both readings are worth keeping:
+ * The four refusals this entry pinned before it answered are kept here, because each one named a
+ * missing piece and each is a statement about the design rather than a debugging step:
  *
- * 1. **`skip=signature`** (2026-11-01, the first branch cut): the condition crosses the cut as a
- *    residual so the backward half picks the arm the forward half picked (design 4.2), and a condition
- *    is a `bool`; `transposeSignature` wanted every residual to be a `float`. The ruling on that was
- *    that a residual slot whose cotangent space is empty contributes nothing -- no tangent of a
- *    predicate -- which is now stated once, in the cotangent space (`addCotangent` drops a target that
- *    is not a `float`), instead of as a per-type test under a subscript. `transposeSignature` accepts
- *    such a member, and that refusal is gone.
- * 2. **`skip=arm arm=0`** (this entry): with the signature accepted, `transpose` reaches the branch and
- *    cannot transpose the *arm body* a split backward half contains. Two reasons, both in
- *    `runArm` (`modules/transforms/transpose.cpp`): the arm's nodes must be `Oper`s with a transpose
- *    rule, while a split backward half's arm holds the **lifted call** `jvp_mul` (a `Func`, not an
- *    `Oper`); and a value the arm reads from outside must be the parameter the arm stops at, while this
- *    arm reads its `x` out of the **residual tuple** (an `Accs`), which is by construction not the
- *    parameter.
+ * 1. **`skip=signature`**: the condition crosses the cut as a residual so the backward half picks the
+ *    arm the forward half picked (design 4.2), and a condition is a `bool`; `transposeSignature` wanted
+ *    every residual to be a `float`. The ruling was that a residual slot whose cotangent space is empty
+ *    contributes nothing -- no tangent of a predicate -- and that is now stated once, in the cotangent
+ *    space (`addCotangent` drops a target that is not a `float`).
+ * 2. **`arm-stop region=1 node=7 kind=10`**: an arm holds a call (a `Func`), while the arm walk took
+ *    only `Oper`s with a transpose rule. The walk now transposes a call: the callee gets its own
+ *    transposed member (once per callee, the same map the main walk fills), and a **lifted** call is
+ *    transposed through the graph it was lifted from, because the tangent half of a lift is linear in
+ *    the tangents -- the cotangent of tangent i is the primal's cotangent of value i, computed from
+ *    the values only.
+ * 3. **`arm-stop region=1 node=7 arg=1`** (before the split was read at all): the arm's call is a **rule kernel**,
+ *    `autodiff::mul_tangent<float>`, whose arguments are `(x, w, dx, dw)`. Transposing it as a plain
+ *    function wants all four values, and a tangent has none in the transposed graph -- tangents are
+ *    what the answer is a cotangent of, so they are not among its parameters.
+ * 4. **`arm-stop ... arg=1`, with the split declared in one place**: which of a kernel call's
+ *    arguments are tangents is **the rule's** fact, so `reinterp` records it on the call it produces
+ *    (`GCNode::tangentArgs`, the reading is `TRANSPOSE ... arm-call ... tangent-args=2`), and `transpose` reads the
+ *    node rather than a second table. The member it asks for is built: a **participating set** turns
+ *    a transposition into a linear map's -- the parameters outside the set are the ports (the values
+ *    the graph reads), the parameters inside it are what the answer is a cotangent of, and a
+ *    cotangent that lands on an outside parameter is dropped before its coefficient is looked at
+ *    (the coefficient would be a participating parameter's value, which is exactly what does not
+ *    exist). `transpose(mul_tangent)` is therefore `(x, w, ct) => (t̄dx, t̄dw)`, and the call site in
+ *    the arm passes `x`, `w` and its cotangent.
  *
- * So the missing piece is exactly "transpose a split backward half's arm", which is a cut of its own:
- * it has to transpose a lifted callee (or see through it to its primal), and it has to treat a
- * residual read as a value whose cotangent goes nowhere -- the same statement as (1), one level down.
- * Nothing here changes `transpose`'s arm walk to make a number appear: the author's 4.0 and 3.0 are
- * read through the cut in `split_branch_author.cml`, and this case keeps the *next* step named.
+ * A second thing the answer needed: an arm of a residual-bundle half stops at its **tangent** port, not
+ * at the bundle -- the answer is the cotangent of the tangents, while the bundle's cotangent is
+ * second-order (a value the cut carried, not a parameter the caller differentiates) and is collected
+ * and dropped at the bundle's own stop. With that, the branch's join answers one cotangent per tangent,
+ * and the one-slot tuple the signature promises is what comes out.
  */
 import { vjp } from vjp
 
@@ -35,6 +47,10 @@ func f(x: float): float {
 
 func main(): int sync {
     let (y, pullback) = vjp(f)(2.0)
-    'author vjp value={} dfdx={}'->format<y, pullback(1.0)>->println
+    let dfdx = pullback(1.0).0
+    'author vjp value={} dfdx={}'->format<y, dfdx>->println
+    let (z, pullbackNeg) = vjp(f)(-2.0)
+    let dfdz = pullbackNeg(1.0).0
+    'author vjp value={} dfdx={}'->format<z, dfdz>->println
     return 0
 }

@@ -137,3 +137,30 @@ export rule jvp_div::<T>(x: T, w: T) when is_float::<T>() {
 export rule jvp_neg::<T>(x: T) when is_float::<T>() {
     -x => (dx: T) => neg_tangent(x, dx)
 }
+
+// ---- the forward rule of `:op/idx_arr` ----
+//
+// `xs[i]` is the one operator a function of an array meets before any other: `f(xs) = xs[0] * xs[1]`
+// is the smallest such function, and without this rule the walk stops at its first node. The left
+// side of a rule is a *named function* filed under the operator -- `xs[i]` is a bracket form with no
+// token to write a left side with -- so `index_into` below is what the operator is spelled as here.
+// The batching ruleset declares its own copy for the same reason: a family cannot read another
+// module's private function, and this one is not `export`ed.
+//
+// The core binds this key in its forward table (`:op/idx_arr` -> `rulesets.jvp`, `index_into` at two
+// operands, src/builtin/operators/derivative.cpp), and the binding and this rule have to land
+// together: a binding with no rule answers "no rule", and a rule with no binding is a key no
+// transform asks for.
+
+/// `x[i]`: what `:op/idx_arr` means, and the left side this rule is filed under.
+/// @example index_into([1.0, 2.0, 3.0], 2)    // 3.0
+func index_into::<T>(x: T[], i: int): T {
+    return x[i]
+}
+
+/// `d(xs[i]) = dxs[i]`: the tangent of an element is that element of the array's tangent. The index
+/// carries no tangent of its own -- `Tangent<int>` is `()` -- so it does not enter the right side.
+/// @example index_into([0.5, 0.25], 1)    // the tangent of `xs[1]` when `dxs` is `[0.5, 0.25]`
+export rule jvp_idx_arr::<T>(xs: T[], i: int) {
+    index_into(xs, i) => (dxs: T[]) => index_into(dxs, i)
+}

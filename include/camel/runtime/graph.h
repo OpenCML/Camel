@@ -299,7 +299,12 @@ static_assert(std::is_trivially_copyable_v<GCGraphSyncEdge>);
 struct GCNode {
     GCNodeKind kind         = GCNodeKind::Data;
     uint8_t flags           = 0;
-    uint16_t reserved       = 0;
+    /// How many of a FUNC node's trailing arguments are tangents: what a rule's expansion recorded on
+    /// the call it produced (`DraftNodeHeader::tangentArgs`, `addFuncNode's last argument`). The
+    /// rule is the one source of which arguments are values and which are tangents; `transpose` reads
+    /// the count off the node rather than deriving it again. 0 for every other node, and for a call
+    /// that is not a rule's tangent function.
+    uint16_t tangentArgs    = 0;
     gc_slot_idx_t dataIndex = 0;
     /// The type of the node's value (camel/core/type/intern.h); kNoTypeId when it has none.
     camel::core::type::TypeId typeId = camel::core::type::kNoTypeId;
@@ -594,6 +599,18 @@ struct GCGraphDerivation;
 struct GCGraphBuildAccess;
 class GCGraph;
 
+/// What `GCGraph::staticFunctionGraphOf` answered: the graph a function constant names, or the
+/// reason it named none. The reason is empty exactly when a graph was answered, so a caller cannot
+/// read a graph and a reason at once.
+struct GCStaticFunctionAnswer {
+    GraphId graph           = kInvalidGraphId;
+    std::string_view reason = {};
+
+    bool hasGraph() const { return graph != kInvalidGraphId; }
+    /// `graph=<id>`, or `none reason=<why>`.
+    std::string describe() const;
+};
+
 class GCGraph : public camel::core::rtdata::Object {
   public:
     // These accessors expose cold compile/debug metadata only. Runtime passes
@@ -771,6 +788,23 @@ class GCGraph : public camel::core::rtdata::Object {
     gc_node_ref_t nodeRef(const GCNode *node) const;
     /// FUNC node `ref`: the callee (invalid when `ref` is not a FUNC node).
     GraphId calleeIdOf(gc_node_ref_t ref) const;
+    /// How many of FUNC node `ref`'s trailing arguments are tangents: the count a rule's expansion
+    /// recorded when it produced the call (`GCNode::tangentArgs`), 0 when the node is not such a call.
+    /// A kernel's parameters are the values the rule bound followed by the tangents it took, so the
+    /// values are the arguments before this count.
+    uint16_t callTangentArgsOf(gc_node_ref_t ref) const;
+    /// The graph a function constant of the static area names, with the reason when it names none.
+    ///
+    /// `calleeIdOf` answers for a FUNC node -- a call written by name. A function value kept in a
+    /// `let` or passed as an argument arrives as a DATA node holding a static function, and this is
+    /// the one entry that turns such a value into a graph id. It refuses rather than guesses, and
+    /// the reason says which check refused: a static slot is never read as an id. The node has to be
+    /// a DATA node of function type (`not-a-data-node`, `no-static-slot`, `not-a-function-type`),
+    /// its slot has to hold a function value that names a graph (`no-function-value`,
+    /// `function-names-no-graph`), and that graph has to be one this graph records as a static
+    /// reference (`not-a-static-reference`) -- a value whose graph is not in the reference table is
+    /// a value from another program, and following it would run a graph this one does not call.
+    GCStaticFunctionAnswer staticFunctionGraphOf(gc_node_ref_t ref) const;
     /// LOOP node `ref`: its form. The node must be a LOOP node.
     camel::core::LoopKind loopKindOf(gc_node_ref_t ref) const {
         return nodeBodyAs<GCLoopRef>(ref)->kind;

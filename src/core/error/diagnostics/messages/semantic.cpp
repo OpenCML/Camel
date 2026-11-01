@@ -269,14 +269,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::FeatureNotSupported,
-            {
-                "FeatureNotSupported",
-                "The feature '{0}' is not supported yet.",
-                "Check the documentation for supported features.",
-            },
-        },
-        {
             SemanticDiag::TypeVariableRedeclared,
             {
                 "TypeVariableRedeclared",
@@ -1554,6 +1546,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "SliceStepZero",
                 "The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are.",
                 "A slice takes every step-th element from its start, so the step decides which elements it has: with a positive step 'a', 'a + step', ... below 'b', and with a negative one backwards from the start. A step that does not move names no slice, so a constant step of 0 is refused where it is written (design principles 5.4). Give a non-zero step, or write 't[a:b]' when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).",
+            },
+        },
+        {
+            SemanticDiag::TransformArgumentIsNotAKnownFunction,
+            {
+                "TransformArgumentIsNotAKnownFunction",
+                "'{0}' is applied to {1}, and a transform's argument has to be a function this program knows before it runs.",
+                "The transform builds the transformed graph at the call, out of the graph of the function it is given, so it has to name that graph now: a declared function, or a lambda that captures nothing. Neither a parameter nor a closure that captures a value names one until the program runs. Pass a declared function, or a lambda that captures nothing, instead.",
             },
         },
         {

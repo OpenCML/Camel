@@ -87,3 +87,14 @@ case = "../../../cases/compile/equality/err_types_differ.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["err_types_differ.cml:2:23: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "(int[], float[])"]
+
+[[tests]]
+name = "equality.null_test_never_null"
+desc = "A null test on a value that cannot be null is fixed, not open: `x` has type `int`, so `x == null` is always false, and the report says so -- naming the value, its type and the answer -- while the program still runs on the fixed answer. Design principles 3.8."
+kind = "negative"
+case = "../../../cases/compile/equality/null_test_never_null.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "always\n"
+expect_diagnostic_name = "SemanticDiag::NullTestNeverNull"
+expect_output_contains = ["'x' has type 'int', which is never null: this test is always false."]
