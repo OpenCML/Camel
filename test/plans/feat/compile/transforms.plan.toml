@@ -840,3 +840,15 @@ assert(input.normalized.stdout.includes("'remat' is applied to a closure that ca
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "grad_of_a_division"
+desc = "`grad((x) => x / 4.0)` at 8 is `0.25`, not a crash and not a division by zero: the transposed `div_tangent` divides by `w * w`, a value rather than a constant, so `div_t`'s second position is reached and answered by the rule's second component -- which reads both operands, the way its law does -- instead of by the first component with the operands swapped (`ct / 0`, since the dividend there is `x * dw` and `dw` is the zero tangent of a constant). `grad((x) => 4.0 / x)` at 2 is `-1.0`: the differentiated value is the divisor, its cotangent is `-(ct * x / (c * c))`, and both values it needs are carried. `grad((x) => -x)` is `-1.0` -- the negation's cotangent is `-ct` -- and the multiplication and subtraction beside it keep their numbers."
+kind = "behavior"
+case = "../../../cases/compile/transforms/grad_of_a_division.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["3.0", "1.0", "-1.0", "0.25", "-1.0", "TRANSPOSE function=autodiff::div_tangent<float> graph="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

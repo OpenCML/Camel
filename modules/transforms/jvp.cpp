@@ -99,7 +99,12 @@ gc_node_ref_t buildRuleTangent(
         why = instance.why.empty() ? "no instance of the rule at float" : instance.why;
         return rt::kInvalidNodeRef;
     }
-    return expandRuleRightSide(group, transaction, instance, values, tangents, why);
+    return expandRuleRightSide(
+        group, transaction, instance,
+        [&values](size_t slot) {
+            return slot < values.size() ? values[slot] : rt::kInvalidNodeRef;
+        },
+        tangents, why);
 }
 
 } // namespace

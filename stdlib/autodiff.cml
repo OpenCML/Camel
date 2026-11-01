@@ -155,10 +155,10 @@ export func neg_cotangent::<T>(ct: T): T when is_float::<T>() {
 //
 // The five above answer the cotangent of `x`, the first name their rule's left side binds. A rule
 // like `x - c` has a second name, and its cotangent is not the one above with the arguments swapped:
-// `sub_cotangent(c, x, ct)` is `ct`, while the cotangent of `c` in `x - c` is `-ct`. So each name gets
-// its own function, named by position, and the transposed graph calls the one for the name it is
-// writing -- the same way the forward rules call `mul_tangent`, rather than a transform re-deriving
-// the arithmetic in C++.
+// `sub_cotangent(ct)` is `ct`, while the cotangent of `c` in `x - c` is `-ct`. So each name gets its
+// own function, named by position, and a rule's right side answers both -- a tuple, in the order the
+// left side names them -- so the transposed graph calls the one for the name it is writing, and no
+// transform re-derives the arithmetic in C++.
 //
 // `x` keeps its own names above (`mul_cotangent` and so on) and nothing here replaces them: `vjp` and
 // `jvp` call those, and their meaning -- the cotangent of the first name -- is the meaning they keep.
@@ -166,20 +166,20 @@ export func neg_cotangent::<T>(ct: T): T when is_float::<T>() {
 // be answered without an operand does not name it and does not need it.
 
 /// The cotangent of `c` in `x + c`: the cotangent of the sum, unchanged.
-/// @example add_cotangent_c(3.0, 5.0, 2.0)    // 2.0
-export func add_cotangent_c::<T>(x: T, c: T, ct: T): T when is_float::<T>() {
+/// @example add_cotangent_c(2.0)    // 2.0
+export func add_cotangent_c::<T>(ct: T): T when is_float::<T>() {
     return ct
 }
 
-/// The cotangent of `c` in `x - c`: `-ct`, the opposite sign of `sub_cotangent(x, c, ct)`.
-/// @example sub_cotangent_c(3.0, 5.0, 2.0)    // -2.0
-export func sub_cotangent_c::<T>(x: T, c: T, ct: T): T when is_float::<T>() {
+/// The cotangent of `c` in `x - c`: `-ct`, the opposite sign of `sub_cotangent(ct)`.
+/// @example sub_cotangent_c(2.0)    // -2.0
+export func sub_cotangent_c::<T>(ct: T): T when is_float::<T>() {
     return -ct
 }
 
 /// The cotangent of `c` in `x * c`: `ct * x`.
-/// @example mul_cotangent_c(3.0, 5.0, 2.0)    // 6.0
-export func mul_cotangent_c::<T>(x: T, c: T, ct: T): T when is_float::<T>() {
+/// @example mul_cotangent_c(3.0, 2.0)    // 6.0
+export func mul_cotangent_c::<T>(x: T, ct: T): T when is_float::<T>() {
     return ct * x
 }
 

@@ -11,11 +11,19 @@ is the argument for deleting the branches rather than keeping them.
 
 **Update (2026-11-02, `lane-m4-assembly`):** the five branches are gone and both positions now expand
 the rule's right side. **T1 is repaired** -- `-x` answers `-1.0` / `-2.0`, measured on `std::nvm`.
-**T2 changes shape but is not repaired**: the branch's `-ct/x` is gone, and the position is still never
-reached (a divisor is a constant); under today's reading of "one rule answers the first name", the
-position would answer `ct/x`. That gap is the pending question
+**T2 is repaired too, and it was reachable all along.** The branch's `-ct/x` is gone, and the reason it
+looked unreachable was the wrong test: a divisor is a *constant* only in the forward graph. `grad` is
+`transpose(split(jvp(f)))`, and the transposition of `autodiff::div_tangent` -- whose body divides by
+`w * w`, a computed value -- reaches `div_t`'s second position. Under "one rule answers the first name"
+that position answered `ct / dividend`, and for `grad((x) => x / 4.0)` the dividend there is `x * dw`
+with `dw = 0`, so the answer was a division by zero (`RuntimeDiag::DivisionByZero` at
+`stdlib/autodiff.cml:145`) where the law says `0`. The rule now answers every name its left side writes,
+in that order, and the transform takes the component for the position it is writing:
+`grad((x) => x / 4.0)` at 8 is `0.25` and `grad((x) => 4.0 / x)` at 2 is `-1.0` (plan
+`feat.compile.transforms`, case `grad_of_a_division`). The reading behind it -- a rule answers N
+cotangents for N names -- is the pending question
 [`whether-a-transpose-rule-answers-every-name-or-the-first`](../questions/questions-2026-11-02-whether-a-transpose-rule-answers-every-name-or-the-first.md),
-which also covers `x - c`'s second position (`+ct` where the law says `-ct`).
+which also covers `x - c`'s second position (`-ct`, now answered by `sub_cotangent_c`).
 
 ## T1 -- `neg` answers the cotangent with the wrong sign
 

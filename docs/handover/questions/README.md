@@ -17,7 +17,7 @@
 |---|---|---|
 <<<<<<< HEAD
 | [`whether-the-empty-tangent-needs-a-port`](questions-2026-11-02-whether-the-empty-tangent-needs-a-port.md) | 没有切空间的形参（`int`/`bool`/`string`）在端口上是"少一个端口"，还是有一个类型为 `()` 的端口 | **沿用"没有槽"**（M3 的 `Tangent<bool> = ()` 就是 `contribution=0`，走图层今天也是"不占槽"）；沿用不了就保持在签名层拒绝，并把差距写在这一页上 |
-| [`whether-a-transpose-rule-answers-every-name-or-the-first`](questions-2026-11-02-whether-a-transpose-rule-answers-every-name-or-the-first.md) | 一条转置规则是"只答它左侧第一个名字的余切"，还是"答左侧每个名字的余切" | **按 A**（只答第一个名字）：库里只给第一个名字、同键第二条规则今天具名拒绝，所以第二位缺值就具名拒绝（`skip=cotangent-needs-a-value`）；A 之下 `x - c` / `x / c` 的第二位今天是错的，要另开一条修 |
+| [`whether-a-transpose-rule-answers-every-name-or-the-first`](questions-2026-11-02-whether-a-transpose-rule-answers-every-name-or-the-first.md) | 一条转置规则是"只答它左侧第一个名字的余切"，还是"答左侧每个名字的余切" | **按 B 落地**（一条规则按左侧顺序返回每个名字的余切，元组）：A 之下 `grad((x) => x / 4.0)` 会除零（第二位把被除数塞进除数槽），所以树逼着按 B 走；`transforms` 52/52，`grad((x) => x / 4.0)`@8 = `0.25`、`grad((x) => 4.0 / x)`@2 = `-1.0`；等作者确认这个读法 |
 ||||||| 3645cdb0b
 =======
 

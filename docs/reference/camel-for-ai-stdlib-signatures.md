@@ -785,9 +785,9 @@ sub_cotangent: (ct: T) => T when is_float::<T>()
 mul_cotangent: (c: T, ct: T) => T when is_float::<T>()
 div_cotangent: (c: T, ct: T) => T when is_float::<T>()
 neg_cotangent: (ct: T) => T when is_float::<T>()
-add_cotangent_c: (x: T, c: T, ct: T) => T when is_float::<T>()
-sub_cotangent_c: (x: T, c: T, ct: T) => T when is_float::<T>()
-mul_cotangent_c: (x: T, c: T, ct: T) => T when is_float::<T>()
+add_cotangent_c: (ct: T) => T when is_float::<T>()
+sub_cotangent_c: (ct: T) => T when is_float::<T>()
+mul_cotangent_c: (x: T, ct: T) => T when is_float::<T>()
 div_cotangent_c: (x: T, c: T, ct: T) => T when is_float::<T>()
 ```
 

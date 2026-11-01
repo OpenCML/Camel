@@ -445,21 +445,23 @@ bool buildTransposeMember(
         // the cotangent -- `mul_cotangent(c, ct)`, `neg_cotangent(ct)` -- so no law is written here
         // a second time, and the numbers are the library's (design principles 5.5: one writing).
         //
-        // The rule answers the cotangent of the name its left side writes *first*, so the operand
-        // whose cotangent is being answered takes that place: for a position past the first, the
-        // operands' values are handed over in the other order. Which of them the rule's body reads
-        // is the rule's own business -- the expansion asks only for those -- so a position that
-        // needs nothing but the other operand is answered where the walk has no value for its own.
+        // The rule answers one cotangent per name its left side writes, in that order -- a tuple --
+        // and `position` is the name whose cotangent this is. The operands' values are handed over
+        // in the left side's own order, because that is the order the right side binds them in: the
+        // dividend stays the dividend and the divisor stays the divisor, whichever position is being
+        // answered. Which of them the answer at `position` reads is the rule's own business -- the
+        // expansion asks only for those -- so a position that needs nothing it does not have is
+        // answered even where the walk carries no value for the other operand (a transposed loop
+        // body's own state, or a divisor that is the differentiated value itself).
         const auto ruleCotangent = [&](const std::string &ruleName,
                                        std::span<const gc_node_ref_t> inputs, size_t position,
                                        gc_node_ref_t ct, std::string &why) -> gc_node_ref_t {
             const auto valueOf = [&](size_t slot) -> gc_node_ref_t {
-                const size_t operand =
-                    (position != 0 && inputs.size() == 2 && slot < 2) ? 1 - slot : slot;
-                return operand < inputs.size() ? knownValue(inputs[operand]) : rt::kInvalidNodeRef;
+                return slot < inputs.size() ? knownValue(inputs[slot]) : rt::kInvalidNodeRef;
             };
             return camel::transforms::expandRuleByName(
-                *state.context, group, group.transaction(member), ruleName, valueOf, {ct}, why);
+                *state.context, group, group.transaction(member), ruleName, valueOf, {ct}, position,
+                why);
         };
         const auto noteRule = [&usedRules](const std::string &name) {
             if (std::find(usedRules.begin(), usedRules.end(), name) == usedRules.end()) {

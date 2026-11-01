@@ -1,37 +1,30 @@
 # 一条转置规则，是"只答它左侧第一个名字的余切"，还是"答左侧每个名字的余切"？
 
-**状态：待裁。** 车道 `lane-m4-assembly`（M4 第三步：`transpose.cpp` 的五条 `law == "…"` 换成展开规则右侧）被它堵在这里：五条分支已经删了，每个位次都改成"展开规则右侧"，但**一条规则只答得了一个名字**，第二位的答案今天是靠"把两个操作数的值对调"凑出来的——对 `x * c` 是对的，对 `x - c`、`x / c` 不是。
+**状态：树已经按 B 落地并被实测逼出来的，等作者确认这个读法。** 车道 `lane-m4-assembly`（M4 第三步：`transpose.cpp` 的五条 `law == "…"` 换成展开规则右侧）先按 A 试过：一条规则只答第一个名字，第二位靠"把两个操作数的值对调"问同一条规则。A 在 `x + c`、`x * c` 上对，在 `x / c` 上**直接炸**——`grad((x) => x / 4.0)` 报 `RuntimeDiag::DivisionByZero`（`stdlib/autodiff.cml:145`，`return ct / c`），因为对调把"被除数"塞进了除数槽，而那里的被除数是 `x * dw`，`dw` 是常量的零切向。所以这一问今天是"B 已经落地，请确认对不对"，不再是"在 A 和 B 之间选"。
 
-## 现象
+## 两条事实
 
-- `stdlib/autodiff.cml` 的五个函数只答左边**第一个**名字：`mul_cotangent(c, ct) = ct * c`、`sub_cotangent(ct) = ct`、`neg_cotangent(ct) = -ct`。第二位的那一半（`mul_cotangent_c`、`sub_cotangent_c`、`div_cotangent_c`，`stdlib/autodiff.cml` 末节）**今天没有任何调用者**：`git grep` 只中它们的声明与文档。
-- `src/parse/ast/rule_head.cpp#indexRule` 的键是 `head@arity`，同一个键上的第二条规则今天**具名拒绝**（`SemanticDiag::DuplicateRuleForOperator`，用例 `rulesets_duplicate_head_refused`，口径 19:50"同键同类型条件才报重名"）。**所以"位次"今天无处安放**：写不出 `mul_t@2 position=1` 这样的第二份右侧，索引里一个键只有一个名字。
+- `stdlib/autodiff.cml` 原来只给第一个名字的函数（`mul_cotangent(c, ct)`、`sub_cotangent(ct)`、`neg_cotangent(ct)`…）；第二位的那一半（`add_cotangent_c`、`sub_cotangent_c`、`mul_cotangent_c`、`div_cotangent_c`）是后来加的，**在 A 之下没有调用者**——`git grep` 只中声明与文档。B 之下它们就是第二位答案，各有调用者。
+- `src/parse/ast/rule_head.cpp#indexRule` 的键是 `head@arity`，同一个键上的第二条规则**具名拒绝**（`SemanticDiag::DuplicateRuleForOperator`，用例 `rulesets_duplicate_head_refused`，plan `rulesets` 63/63）。所以 A 之下"位次"无处安放；B 之下不需要它——位次由右侧元组的顺序承担，一个键仍然一条规则。
 
-这两条合起来就是这一问：`transpose` 拿到的是一个规则，而一个运算符有 N 个操作数，每个操作数都要一句余切。
+## B 今天的样子（已落地）
 
-## 今天的实际行为（默认已落地，等裁定改）
+- 规则集（`stdlib/rulesets/transpose.cml`）：`x / c => (ct: T) => (div_cotangent(c, ct), div_cotangent_c(x, c, ct))`，`x - c`、`x * c`、`x + c` 同形；`-x` 一元，仍然只答一个值。
+- 展开器（`modules/transforms/rule_expand.cpp#expandRuleRightSide`）：`position` 选元组的第 `i` 个分量，并且**只拷这个分量用得到的节点**——所以一个位次只问它自己那份答案读的值，另一个名字的值没有也不问。
+- `transpose`（`modules/transforms/transpose.cpp#ruleCotangent`）：操作数按左侧顺序交给规则，不做值对调；某位次缺它要读的值就具名拒绝 `TRANSPOSE … skip=cotangent-needs-a-value uri=… position=… reason=…`。
 
-`modules/transforms/transpose.cpp` 的 `ruleCotangent` 对第 `i` 位做两件事：把位次 `i` 的操作数放到规则左侧第一个名字的位置（`i != 0` 时把两个操作数的值**对调**），再展开规则右侧；规则正文没读的槽不去要值。
+实测（`nvm`，plan `feat.compile.transforms`，用例 `grad_of_a_division`，52/52）：
 
-实测（`nvm`，探针 `zzprobe_cotangents`，跑完即删）：
-
-| 函数 | 余切 | 今天答 | 定律 |
+| 函数 | 点与余切 | 答 | 定律 |
 |---|---|---|---|
-| `x * 3.0` | 1.0 / 2.0 | `3.0` / `6.0` | 同 |
-| `x - 1.0` | 1.0 / 2.0 | `1.0` / `2.0` | 同 |
-| `-x` | 1.0 / 2.0 | `-1.0` / `-2.0` | 同（修好的旧错：曾答 `1.0` / `2.0`） |
-| `mul2(x, w) = x * w` | 1.0 | `(3.0, 2.0)` | 同 |
+| `grad((x) => x * 3.0)` | 1.0 | `3.0` | 同 |
+| `grad((x) => x - 1.0)` | 1.0 | `1.0` | 同 |
+| `grad((x) => -x)` | 1.0 | `-1.0` | 同（修好的旧错：曾答 `1.0`） |
+| `grad((x) => x / 4.0)` | 8.0，ct=1.0 | `0.25` | 同（A 之下是崩溃/除零） |
+| `grad((x) => 4.0 / x)` | 2.0，ct=1.0 | `-1.0` | 同（`-(1*4/(2*2))`） |
 
-对调只在**两个名字的余切只差"哪个值站在那个槽里"**时才是定律：`x + c`（两个都对 `ct`）和 `x * c`（`ct*c` 对调后是 `ct*x`）成立；`x - c` 的第二位今天是 `+ct`，而定律是 `-ct`；`x / c` 的第二位今天是 `ct/x`，定律是 `-(ct*x/(c*c))`。这两格今天**没有用例**（`test/cases/compile/transforms/*.cml` 里没有两个变量相减/相除的转置），所以计划是绿的；绿的是"没测到"，不是"对"。
+`x / 4.0` 这一条之所以绕不开：`grad` 是 `transpose(split(jvp(f)))`，路上要转置 `autodiff::div_tangent`，它的正文 `dx / w - x * dw / (w * w)` 里除数 `w * w` 是**算出来的值**，所以 `div_t` 的第二位在这条路上**可达**——A 之下它答不出正确的数，只会答错的数或除零。
 
-## 两条路的代价
+## 要作者答的一句
 
-**A：一条规则只答第一个名字（今天的默认）。** 已经落地：索引不动、"位次"不进规则、第二个名字靠对调值来问同一条规则。代价是把 `x - c` / `x / c` 的第二位答错——迁移到规则右侧之后，`transpose` 再也不能像删掉的 `sub_t` 分支那样自己写 `negate(ct)`，因为"定律只写一次"是这一笔的全部理由（设计原则 5.5）。要补这两格，只能是规则集里再写一份右侧，而索引今天不允许同键第二份。
-
-**B：一条规则答每个名字的余切（右侧返回元组）。** `expandRuleRightSide` 只认一个出口节点，要认元组得先有"从元组里取第 i 个分量"的读法和一条规则把 N 个分量交回来的形状；`targetLanguage` 的 `(_) => (ct) => (…, …)` 还不会把元组当返回值拆开用。代价是这一笔要连带改展开器、规则集写法和五条规则的右侧；好处是"位次"回到规则里，`sub` / `div` 的第二格有地方写，也不需要值对调。
-
-## 我方默认建议
-
-**先按 A 走，并把两条事实留在上面**：库里只给第一个名字、同键第二条规则今天具名拒绝。A 之下，第二位缺它要读的值就**具名拒绝**（`TRANSPOSE … skip=cotangent-needs-a-value uri=… position=… reason=…`），绝不退回一个猜的值——`skip=law` 这个旧口径已经删掉，它当年正是"猜不到就整个函数不转置"的位置。
-
-**要作者答的一句：一条转置规则是"只答左边第一个名字的余切"（A，那么 `sub`/`div` 的第二位今天就是错的、要另开一条修），还是"答左边每个名字的余切"（B，那么规则右侧要能返回元组，索引要能放下"位次"）？** 选 A 且要修 `sub`/`div` 的话，请顺带说一句"同一个键上按位次再放一条规则"算不算 19:50 说的"同键同类型条件"——今天它会被 `DuplicateRuleForOperator` 拒掉。
+**"一条规则答它左侧每个名字的余切，按左侧写的顺序返回一个元组"是不是对的读法？** 若是，这一笔已经这样落地，问题是历史；若不是（一条规则只能答第一个名字），那么 `x - c`、`x / c` 的第二位就没有地方写，请说一句"同一个键上按位次再放一条规则"算不算 19:50 说的"同键同类型条件"——今天它会被 `DuplicateRuleForOperator` 拒掉。

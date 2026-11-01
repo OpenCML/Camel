@@ -6845,10 +6845,10 @@ The cotangent of `x` in `-x`: `-ct`.
 
 The five above answer the cotangent of `x`, the first name their rule's left side binds. A rule
 like `x - c` has a second name, and its cotangent is not the one above with the arguments swapped:
-`sub_cotangent(c, x, ct)` is `ct`, while the cotangent of `c` in `x - c` is `-ct`. So each name gets
-its own function, named by position, and the transposed graph calls the one for the name it is
-writing -- the same way the forward rules call `mul_tangent`, rather than a transform re-deriving
-the arithmetic in C++.
+`sub_cotangent(ct)` is `ct`, while the cotangent of `c` in `x - c` is `-ct`. So each name gets its
+own function, named by position, and a rule's right side answers both -- a tuple, in the order the
+left side names them -- so the transposed graph calls the one for the name it is writing, and no
+transform re-derives the arithmetic in C++.
 
 `x` keeps its own names above (`mul_cotangent` and so on) and nothing here replaces them: `vjp` and
 `jvp` call those, and their meaning -- the cotangent of the first name -- is the meaning they keep.
@@ -6858,32 +6858,32 @@ be answered without an operand does not name it and does not need it.
 #### `add_cotangent_c`
 
 ```camel
-add_cotangent_c: (x: T, c: T, ct: T) => T when is_float::<T>()
+add_cotangent_c: (ct: T) => T when is_float::<T>()
 ```
 
 The cotangent of `c` in `x + c`: the cotangent of the sum, unchanged.
 
-- Example: `add_cotangent_c(3.0, 5.0, 2.0)` gives `2.0`
+- Example: `add_cotangent_c(2.0)` gives `2.0`
 
 #### `sub_cotangent_c`
 
 ```camel
-sub_cotangent_c: (x: T, c: T, ct: T) => T when is_float::<T>()
+sub_cotangent_c: (ct: T) => T when is_float::<T>()
 ```
 
-The cotangent of `c` in `x - c`: `-ct`, the opposite sign of `sub_cotangent(x, c, ct)`.
+The cotangent of `c` in `x - c`: `-ct`, the opposite sign of `sub_cotangent(ct)`.
 
-- Example: `sub_cotangent_c(3.0, 5.0, 2.0)` gives `-2.0`
+- Example: `sub_cotangent_c(2.0)` gives `-2.0`
 
 #### `mul_cotangent_c`
 
 ```camel
-mul_cotangent_c: (x: T, c: T, ct: T) => T when is_float::<T>()
+mul_cotangent_c: (x: T, ct: T) => T when is_float::<T>()
 ```
 
 The cotangent of `c` in `x * c`: `ct * x`.
 
-- Example: `mul_cotangent_c(3.0, 5.0, 2.0)` gives `6.0`
+- Example: `mul_cotangent_c(3.0, 2.0)` gives `6.0`
 
 #### `div_cotangent_c`
 

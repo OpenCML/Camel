@@ -133,10 +133,10 @@ bool findRuleRightSide(
 /// of `x * c` are not both available where a loop body's own state stands in one of them, while the
 /// answer that position needs reads only the other -- the constant -- and the rule says so by
 /// naming only that one.
-std::vector<bool> portsReadByBody(const rt::GCGraph &body) {
+std::vector<bool> portsReadByBody(const rt::GCGraph &body, const std::vector<bool> &keep) {
     std::vector<bool> read(body.nodeCount(), false);
     for (gc_node_ref_t ref = 0; ref < body.nodeCount(); ++ref) {
-        if (body.node(ref) == nullptr) {
+        if (body.node(ref) == nullptr || (!keep.empty() && !keep[ref])) {
             continue;
         }
         for (gc_node_ref_t input : body.normInputsOf(ref)) {
@@ -161,8 +161,8 @@ std::vector<bool> portsReadByBody(const rt::GCGraph &body) {
 gc_node_ref_t expandRuleRightSide(
     camel::runtime::GraphDraftGroup &group, camel::runtime::GraphTransaction &transaction,
     const camel::compile::gir::GenericRuleInstance &instance,
-    const std::vector<gc_node_ref_t> &values, const std::vector<gc_node_ref_t> &tangents,
-    std::string &why) {
+    const std::function<gc_node_ref_t(size_t)> &valueOf,
+    const std::vector<gc_node_ref_t> &tangents, std::string &why, size_t position) {
     RuleRightSide right;
     if (!findRuleRightSide(instance, right, why)) {
         return rt::kInvalidNodeRef;
@@ -172,6 +172,62 @@ gc_node_ref_t expandRuleRightSide(
     // program this lift builds on, the way a callee the lifted function calls does.
     group.adopt(*instance.program);
     const rt::GCGraph *body      = right.body;
+    // Which node of the body is *this* answer. A rule's left side names N values, and its right side
+    // answers N cotangents: a tuple, in the order the left side writes them. Position `i` is that
+    // tuple's i-th component, and only the nodes that component needs are copied -- so a position
+    // never asks for a value its own answer does not read (a loop body's own state, for one, which
+    // has no forward value at all). A right side that answers one value answers position 0 only.
+    std::vector<bool> keep;
+    gc_node_ref_t answerRef = body->exitNodeRef();
+    if (position != kWholeAnswer) {
+        for (size_t guard = 0; guard < 8; ++guard) {
+            const rt::GCNode *node =
+                answerRef == rt::kInvalidNodeRef ? nullptr : body->node(answerRef);
+            if (node == nullptr || node->kind != rt::GCNodeKind::Gate) {
+                break;
+            }
+            const auto carried = body->normInputsOf(answerRef);
+            answerRef = carried.empty() ? rt::kInvalidNodeRef : carried.front();
+        }
+        const rt::GCNode *exit = answerRef == rt::kInvalidNodeRef ? nullptr : body->node(answerRef);
+        if (exit == nullptr) {
+            why = "the rule's right side has no value to answer with";
+            return rt::kInvalidNodeRef;
+        }
+        if (exit->kind == rt::GCNodeKind::Fill) {
+            const auto *fillBody = body->nodeBodyAs<rt::GCFillBody>(answerRef);
+            if (fillBody != nullptr && fillBody->fillKind == rt::GCFillKind::Tuple) {
+                const auto components = body->withInputsOf(answerRef);
+                if (position >= components.size()) {
+                    why = "the rule's right side answers " + std::to_string(components.size()) +
+                          " name(s), and the position asked for is " + std::to_string(position);
+                    return rt::kInvalidNodeRef;
+                }
+                answerRef = components[position];
+            } else if (position != 0) {
+                why = "the rule's right side answers one name, and the position asked for is " +
+                      std::to_string(position);
+                return rt::kInvalidNodeRef;
+            }
+        } else if (position != 0) {
+            why = "the rule's right side answers one name, and the position asked for is " +
+                  std::to_string(position);
+            return rt::kInvalidNodeRef;
+        }
+        keep.assign(body->nodeCount(), false);
+        std::vector<gc_node_ref_t> work{answerRef};
+        while (!work.empty()) {
+            const gc_node_ref_t ref = work.back();
+            work.pop_back();
+            if (ref >= keep.size() || keep[ref]) {
+                continue;
+            }
+            keep[ref] = true;
+            for (gc_node_ref_t input : body->normInputsOf(ref)) {
+                work.push_back(input);
+            }
+        }
+    }
     const auto capturePorts     = body->closureNodes();
     const auto parameterPorts   = body->normPorts();
     if (capturePorts.size() != right.captures.size() || parameterPorts.size() != tangents.size()) {
@@ -182,7 +238,7 @@ gc_node_ref_t expandRuleRightSide(
     // called with: the operands, in the order the left side writes them. Only the captures the body
     // actually reads are bound: a right side that names one operand asks for that one only, and the
     // caller may have no value for the other (a transposed loop body's own state).
-    const auto read            = portsReadByBody(*body);
+    const auto read            = portsReadByBody(*body, keep);
     const auto rhsPorts        = instance.rhs->normPorts();
     std::unordered_map<gc_node_ref_t, gc_node_ref_t> bound;
     for (size_t i = 0; i < capturePorts.size(); ++i) {
@@ -191,15 +247,20 @@ gc_node_ref_t expandRuleRightSide(
             why = "a value the rule's right side captures is not one of its parameters";
             return rt::kInvalidNodeRef;
         }
+        if (!keep.empty() && !keep[capturePorts[i]]) {
+            // Not part of the answer this position asks for: it needs no value and asks for none.
+            continue;
+        }
         if (!read[capturePorts[i]]) {
             continue;
         }
         const size_t argument = static_cast<size_t>(at - rhsPorts.begin());
-        if (argument >= values.size() || values[argument] == rt::kInvalidNodeRef) {
+        const gc_node_ref_t value = valueOf == nullptr ? rt::kInvalidNodeRef : valueOf(argument);
+        if (value == rt::kInvalidNodeRef) {
             why = "the rule's right side reads a value the caller does not carry";
             return rt::kInvalidNodeRef;
         }
-        bound[capturePorts[i]] = values[argument];
+        bound[capturePorts[i]] = value;
     }
     for (size_t i = 0; i < parameterPorts.size(); ++i) {
         bound[parameterPorts[i]] = tangents[i];
@@ -211,6 +272,9 @@ gc_node_ref_t expandRuleRightSide(
     for (gc_node_ref_t ref = 0; ref < body->nodeCount(); ++ref) {
         const rt::GCNode *node = body->node(ref);
         if (node == nullptr) {
+            continue;
+        }
+        if (!keep.empty() && !keep[ref]) {
             continue;
         }
         if (node->kind == rt::GCNodeKind::Port) {
@@ -333,8 +397,9 @@ gc_node_ref_t expandRuleRightSide(
         }
     }
     // The body's exit is the value the call of the closure would answer with; a gate in front of it
-    // carries the same value.
-    gc_node_ref_t out = body->exitNodeRef();
+    // carries the same value. A position asks for one component of that value, which the gate walk
+    // above has already found.
+    gc_node_ref_t out = position == kWholeAnswer ? body->exitNodeRef() : answerRef;
     for (size_t guard = 0; guard < 8; ++guard) {
         const rt::GCNode *node = body->node(out);
         if (node == nullptr || node->kind != rt::GCNodeKind::Gate) {
@@ -358,7 +423,7 @@ gc_node_ref_t expandRuleByName(
     camel::core::context::Context &context, camel::runtime::GraphDraftGroup &group,
     camel::runtime::GraphTransaction &transaction, std::string_view ruleName,
     const std::function<gc_node_ref_t(size_t)> &valueOf,
-    const std::vector<gc_node_ref_t> &tangents, std::string &why) {
+    const std::vector<gc_node_ref_t> &tangents, size_t position, std::string &why) {
     using camel::core::type::Type;
     const std::vector<Type *> types{Type::Float64()};
     const auto *instance =
@@ -370,29 +435,11 @@ gc_node_ref_t expandRuleByName(
     if (!findRuleRightSide(*instance, right, why)) {
         return rt::kInvalidNodeRef;
     }
-    // Ask for the values the body reads, and only those: a slot nothing reads stays invalid and is
-    // never bound, so no operand is invented for a position the rule does not answer with.
-    const auto read         = portsReadByBody(*right.body);
-    const auto capturePorts = right.body->closureNodes();
-    const auto rhsPorts     = instance->rhs->normPorts();
-    std::vector<gc_node_ref_t> values(rhsPorts.size(), rt::kInvalidNodeRef);
-    for (size_t i = 0; i < right.captures.size() && i < capturePorts.size(); ++i) {
-        if (!read[capturePorts[i]]) {
-            continue;
-        }
-        const auto at = std::find(rhsPorts.begin(), rhsPorts.end(), right.captures[i]);
-        if (at == rhsPorts.end()) {
-            why = "a value the rule's right side captures is not one of its parameters";
-            return rt::kInvalidNodeRef;
-        }
-        const size_t slot = static_cast<size_t>(at - rhsPorts.begin());
-        values[slot]      = valueOf(slot);
-        if (values[slot] == rt::kInvalidNodeRef) {
-            why = "the walk has no value for an operand the rule's right side reads";
-            return rt::kInvalidNodeRef;
-        }
-    }
-    return expandRuleRightSide(group, transaction, *instance, values, tangents, why);
+    // Whether a value is asked for at all is `expandRuleRightSide`'s call, not this function's: it
+    // knows which captures the answer reads -- after the position has picked one component -- and a
+    // capture the answer does not read is never asked for, so no operand is invented for a slot the
+    // answer does not use.
+    return expandRuleRightSide(group, transaction, *instance, valueOf, tangents, why, position);
 }
 
 } // namespace camel::transforms
