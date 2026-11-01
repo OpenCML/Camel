@@ -1,0 +1,6 @@
+func main(): int sync {
+    let a: int = 1
+    let b: int = 2
+    println(a + b)
+    return 0
+}

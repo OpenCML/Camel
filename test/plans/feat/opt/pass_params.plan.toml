@@ -522,3 +522,38 @@ args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["doc pass forms:", "pass invocation(s) in", "page(s),", "accepted by the real parser", "plan's own desc are reported and not counted", "excused", "parser invocation(s) for"]
 timeout_ms = 30000
+
+[[tests]]
+name = "pass_guard.boundary_nodes"
+desc = "A pass that hands back a program whose graph has lost its exit node is refused by the check every pass ends with, and the message names the pass and the node that is gone: a graph nothing can run must not leave the pipeline as if it could."
+kind = "negative"
+case = "../../../cases/compile/pass_guard/plain.cml"
+args = ["${case}", "test::break_exit"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::PassBoundaryNodes"
+expect_output_contains = ["Pass 'test::break_exit' returned a program whose graph has no exit node whose value it returns."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "pass_guard.boundary_ports"
+desc = "A pass that leaves an operator node's ordinary port reading a node of no type is refused by the same check, which names the node and what is wrong with it: the call the node stands for is one nothing can run."
+kind = "negative"
+case = "../../../cases/compile/pass_guard/plain.cml"
+args = ["${case}", "test::break_ports"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::PassBoundaryPorts"
+expect_output_contains = ["no longer matches its declaration: an ordinary port points at a node that is gone or has no type."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "pass_guard.plain_pipeline_unaffected"
+desc = "The same program without the two broken passes runs to its value, so the guard refuses the graph and not the program: what it checks is what a pass hands back, and the default pipeline is still green."
+kind = "behavior"
+case = "../../../cases/compile/pass_guard/plain.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000

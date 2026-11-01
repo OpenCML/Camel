@@ -31,6 +31,7 @@
 #include "camel/passes/test/derivatives.h"
 #include "camel/passes/test/edges.h"
 #include "camel/passes/test/graph_release.h"
+#include "camel/passes/test/broken_boundary.h"
 #include "camel/passes/test/keepfn.h"
 #include "camel/passes/test/bounds.h"
 #include "camel/passes/test/keepshape.h"
@@ -986,6 +987,8 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kEdgesOkTestPass, EdgesOkTestPass),
         TEST_PASS(kCommitConflictTestPass, CommitConflictTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
+        TEST_PASS(kBreakExitTestPass, BreakExitTestPass),
+        TEST_PASS(kBreakPortsTestPass, BreakPortsTestPass),
         TEST_PASS(kKeepShapeTestPass, KeepShapeTestPass),
         TEST_PASS(kBoundsFlipTestPass, BoundsFlipTestPass),
         TEST_PASS(kKeepInspectTestPass, KeepInspectTestPass),
@@ -2253,10 +2256,7 @@ std::string entryExitViolation(const camel::runtime::Program &program) {
         if (entry && exit) {
             continue;
         }
-        return std::format(
-            "graph {} of it has no {}",
-            camel::runtime::toValue(graph->id()),
-            !entry ? "entry node it can start at" : "exit node whose value it returns");
+        return !entry ? "entry node it can start at" : "exit node whose value it returns";
     }
     return {};
 }
@@ -2984,7 +2984,7 @@ PassApplyResult applyPassesDetailed(
                 if (!ports.empty()) {
                     ctx->rtmDiags()
                         ->of(RuntimeDiag::PassBoundaryPorts)
-                        .commit(p, ports[0], ports[1], ports[2]);
+                        .commit(p, ports[1], ports[2]);
                     CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (ports)", p);
                     return {nullptr, PassApplyStatus::Failed};
                 }

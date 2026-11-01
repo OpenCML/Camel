@@ -109,7 +109,7 @@ const NAME_COVERAGE_RECORDED = new Map([
     ['internal', 0],
     ['lexical', 0],
     ['syntax', 0],
-    ['runtime', 2],
+    ['runtime', 0],
 ])
 
 // The sections, in the order the headers are included. `id` is also the stem of the two
@@ -1008,6 +1008,9 @@ if (mode === '--coverage' || mode === '--coverage-check') {
 // not replace the wider one, because replacing it would drop the question "does any test at all
 // exercise this code" for the codes this one still counts as unpinned, and the wider check is the
 // layer that holds that question at zero.
+//
+// Measured again after the two pass-boundary guards got their cases (runtime 2 -> 0): a broken pass
+// in `test::break_exit` / `test::break_ports` hands back the graph each guard refuses.
 //
 // Measured again after the deletion of FileSystemError (runtime 43 -> 42 codes): runtime 2 of 42.
 //
