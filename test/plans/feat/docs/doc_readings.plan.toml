@@ -1,0 +1,35 @@
+id = "docs.doc_readings"
+order = 922
+tier = "fast"
+tags = ["feat", "docs", "handover"]
+desc = "The numbers hand-written pages cite as premises are the ones the tree has: the check re-measures each reading the pages state (branch counts, line counts, the shape words of `match type`, the status rows of a batch page) and names the page and both numbers when they disagree"
+
+# A page that says "1019 `case TypeCode::` branches" or "`jvp.cpp` is 319 lines" is load-bearing:
+# another lane plans against it, quotes it in a question, or copies the segments it numbers. No
+# test re-read the numbers, so a page went on describing a tree that had moved -- and the next
+# lane started from a premise that was never true (`kindOfFrom=4` and six counts that exist
+# nowhere in this tree were handed out that way).
+#
+# `test/tools/check-doc-readings.mjs` holds one sentence per reading together with the
+# measurement that re-derives it, and requires the two to agree. It reads sources and pages
+# only: no binary, no build host, no timing, so it costs a fraction of a second and can run on
+# every change. The readings that need a run to state (a test total, a compile verdict, a
+# duration) are deliberately not here -- a page quoting a run names the commit it was taken at,
+# and that is not reproducible later.
+#
+# The sentence is part of the contract: a reading that is reworded without updating the script
+# fails as "no longer states the reading in the form this check reads", so a page cannot quietly
+# drop a number the script still measures. What to do when it goes red is in the message: move
+# the number in the page and say in the commit why the reading moved.
+
+[[tests]]
+name = "docs.doc_readings.current"
+desc = "Every reading the hand-written pages state is the one this tree measures, and every sentence the check reads is still on its page."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/check-doc-readings.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["the readings are the ones the pages state: 10 of 10"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000

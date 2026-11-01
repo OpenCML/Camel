@@ -1,0 +1,43 @@
+/**
+ * `where` batched: the condition is an operand like the arms, but it is not a *value* arm -- its
+ * element is `bool` and the answer's element is the arms'. A batching rule is generic in the element
+ * of the values, so the transform reads the first port that is not a condition to name the rule's
+ * `T`; with the first port it would instantiate a `bool` rule and refuse it:
+ *
+ *   No candidate of 'vmap_where' applies to (bool[?, ..], bool[?, ..], bool[?, ..])
+ *
+ * A mask that is a constant of the row's shape is the batch of one row and broadcasts, so one row of
+ * `[1.0, 2.0, 3.0]` under the mask `[true, false, true]` answers `[1.0, 0.0, 3.0]`, and two rows
+ * answer `[[1.0, 0.0, 3.0], [4.0, 0.0, 6.0]]` -- which is the two row-wise answers without the
+ * batch's axis. A value arm that is also a constant does the same: `where(m, r, [10.0, 20.0, 30.0])`
+ * answers `[1.0, 20.0, 3.0]` a row and `[[1.0, 20.0, 3.0], [4.0, 20.0, 6.0]]` for two rows.
+ *
+ * The reading names the rule and the element it was instantiated on: `asked=1 found=1 missing=0
+ * rules=vmap_rule_where elements=float`. `elements=float` is the point of the case: the condition is
+ * `bool` and the rule is filed at `float`.
+ */
+import { vmap } from transforms
+import rulesets.vmap
+import { where } from tensor
+
+func pick(r: float[3]): float[3] {
+    let m: bool[3] = [true, false, true]
+    return where(m, r, 0.0)
+}
+
+func both(r: float[3]): float[3] {
+    let m: bool[3] = [true, false, true]
+    let y: float[3] = [10.0, 20.0, 30.0]
+    return where(m, r, y)
+}
+
+func main(): int sync {
+    let rows: float[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+    println(vmap(pick)(rows))
+    println(vmap(both)(rows))
+    let m: bool[3] = [true, false, true]
+    let r: float[3] = [1.0, 2.0, 3.0]
+    let y: float[3] = [10.0, 20.0, 30.0]
+    println(where(m, r, y))
+    return 0
+}
