@@ -146,9 +146,10 @@ inline constexpr OperId VarAfter        = 21; // ":var/after"
 /// The insertion is also exercised by construction, in src/passes/test/keepnode.cpp and
 /// test/plans/feat/opt/keep_node.plan.toml: measured there, `KEEPNODE keep=1 reads_the_divisor=1`,
 /// and the same pass with the insertion switched off reads `keep=0`. An earlier version of this
-/// comment said no program reached the insertion; the count above is why it does not say that --
-/// 8 of the 106 programs under test/cases/opt/ carry a `:op/keep` node, and that number is pinned
-/// by a plan entry so that a change in either direction is a red run.
+/// comment said no program reached the insertion. The counts that refuted it are 3 of the 5
+/// programs under test/cases/opt/effects/ (each holding two nodes) and 7 in the whole
+/// test/cases/opt tree; both counts, their per-file node counts and their names are pinned by
+/// `keep_shape.reachability`, so a rule that starts or stops writing this node is a red run.
 inline constexpr OperId Keep            = 22; // ":op/keep"
 inline constexpr OperId kWellKnownCount = 23; // kNoOper included
 
