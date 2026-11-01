@@ -651,7 +651,8 @@ slice: <axis: int, start: int, end: int, step: int = 1> (x: Bytes) => Bytes
 The same slice of a `Bytes`, by byte: it has the one axis 0, and the result is a `Bytes`.
 `b[1:3]` and `b->slice<0, 1, 3>` are the same bytes.
 
-- Example: `encode('hello')->slice<0, 1, 4>` gives `the bytes of 'ell'`
+- Example (a fragment, not compiled): `encode('hello')->slice<0, 1, 4>` gives `the bytes of 'ell'`
+- Why it is not compiled: the example names `encode`, which is `bytes`'s, and a doc example is compiled with this module's names only
 
 #### `concat`
 
@@ -1478,6 +1479,31 @@ branch or a loop in the body is refused the same way, because the elementwise ti
 straight-line bodies.
 
 - Example (a fragment, not compiled): `let batched = vmap(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
+#### `remat`
+
+```camel
+remat: (f: F) => F when is_function::<F>()
+```
+
+Memory for recomputation: `remat(f)` gives a function whose graph is `f`'s graph with the
+property "a call of it is recomputed on the backward pass instead of kept" (the author's ruling
+of 2026-11-01). The property is the graph's, not the call site's and not a tag's: the call
+answers with a new graph whose body is the body it was given, so a call through it is a call of
+the same function and no value changes -- what changes is what a step that cuts the graph in two
+has to keep across the cut. `split` reads the property: the values of a marked graph that cannot
+be recomputed from the parameters are not residuals, and the backward half computes them again
+(`modules/transforms/split.cpp`). JAX writes the same transform as `jax.checkpoint`, whose other
+name is `jax.remat`; in this tree "checkpoint" is the persistence module `ckpt`, so the transform
+takes the other word.
+
+The type is the argument's own: a function in, the same function out, which is the whole of what
+the name says. `modules/transforms/remat_operator.cpp` answers `(f: F) => F` and builds the graph
+the value stands on; the shapes a call site can write today are the ones `jvp`'s and `split`'s
+declarations show, because the result of a call is the exit type its resolver gives.
+
+- Example (a fragment, not compiled): `let remembered = remat(f)`
 - Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
 
 <a id="vjp"></a>
@@ -6620,11 +6646,12 @@ scalar (it gives the result and the pullback from the cotangent of the result to
 and `jvp` is forward mode (the result and its tangent along a direction); both land with the
 autodiff lane, not before they work.
 
-The memory-for-recomputation transform is named `remat` here -- JAX's `jax.checkpoint` under its
-other name; in this tree "checkpoint" is the persistence module `stdlib/ckpt.cml` and stays that,
-so the transform takes the other word and there is no second name for a reader to disambiguate.
-What a program reads of it is its value: `remat(f)` gives `f`, so a call through it is a call of
-the same function and no number moves.
+The memory-for-recomputation transform -- `remat` -- is not here: it is a transform of the
+`transforms` module (`stdlib/signatures/transforms.cml`), because what it changes is a property of
+a graph and a call site, not a derivative. JAX calls the same transform `jax.checkpoint` and, by
+its other name, `jax.remat`; in this tree "checkpoint" is the persistence module
+`stdlib/ckpt.cml` and stays that, so the transform takes the other word and there is no second
+name for a reader to disambiguate.
 
 `stop_gradient` marks a value as a constant, and the mathematics of the local rules is written
 here, where the library keeps one statement of it: `add_tangent` and its siblings are the tangent
@@ -6698,19 +6725,6 @@ Gives its argument unchanged and cuts the gradient at this point: a value passed
 argument's own type.
 
 - Example: `stop_gradient(3.0)` gives `3.0`
-
-#### `remat`
-
-```camel
-remat: (f: F) => F pure when is_function::<F>()
-```
-
-Gives `f` back: a call through `remat` is a call of the same function, so adding or removing it
-moves no number and no gradient. That is the whole of what the name does to a value, and it is
-what a program reads of it.
-
-- Example (a fragment, not compiled): `let remembered = remat(f)`
-- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
 
 ### The local rules of the scalar arithmetic
 
@@ -7276,11 +7290,12 @@ integer row's mean is `f32`, which is not the element the rule would be written 
 vmap_max: (xs: T[..]) => T[..] when is_numeric::<T>()
 ```
 
-`max(xs)` batched: one maximum per row, folded the same way `sum` is. No accumulator is chosen,
-because IEEE 754-2019 maximum carries an element and is exactly associative and commutative
-(design principles 7.7): the axes of a row may be folded away in any order and the bits are the
-same, so the batch axis in front and the row's axes folded from the first is the same value as
-the row's own `max`.
+`max(xs)` batched: one maximum per row. The row's axes are flattened into one (`shape(xs)[0]`
+is the batch extent, `-1` the rest) and the maximum is taken over that axis in one pass: IEEE
+754-2019 maximum carries an element and is exactly associative and commutative (design
+principles 7.7), so the axes of a row may be folded away in any order -- or in one pass over
+the flattened row -- and the bits are the same: -0 below +0, a NaN anywhere beyond every
+number, in either shape.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_max([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])` gives `[5.0, 4.0]`
@@ -7291,8 +7306,9 @@ the row's own `max`.
 vmap_min: (xs: T[..]) => T[..] when is_numeric::<T>()
 ```
 
-`min(xs)` batched: the same fold, with the IEEE 754-2019 minimum. -0 is below +0 and a NaN is
-beyond every number, so the fold answers both readings the whole-tensor form does.
+`min(xs)` batched: the same one-pass minimum over the flattened row, with the IEEE 754-2019
+`minimum`. -0 is below +0 and a NaN is beyond every number, so the answer is the one the
+whole-tensor form gives.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_min([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])` gives `[1.0, 0.0]`

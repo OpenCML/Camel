@@ -1,0 +1,15 @@
+// The shape `:op/keep` exists for, in the one form a program can write it: a call that must run
+// whose value only the node above it reads. `test::keep_node` replaces that node, and what happens
+// to this print is the reading (design principles 3.3, 9.7).
+import { println } from std
+
+func side(): int sync {
+    println("side")
+    return 1
+}
+
+func main(): int sync {
+    let v = side() + 1
+    println(v)
+    return 0
+}
