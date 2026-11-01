@@ -188,3 +188,24 @@ expect_exit = 0
 expect_stdout_contains = ["27.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# The two halves, and the type function between them. `ResidualsOf<F>` is what the first half
+# answers with beside the result -- the values the backward half reads, numbered in program order --
+# and it is the *compiler's* type: no signature names it (`stdlib/signatures/transforms.cml` writes
+# it out in a comment, as the author wrote it), so what a test can read is what the halves are worth,
+# not the type's spelling. `f(x) = x*x*x` at 3: the first half gives `27.0` and the residuals, the
+# second turns them and the cotangent `1.0` back into `27.0`. Skipped while `split` has no
+# implementation; the numbers are already written down.
+[[tests]]
+name = "vjp_api.split_halves"
+desc = "`split(jvp(f))` gives the two halves of `Lift<T> = (T, Tangent<T>)`: the first takes the ordinary parameters and answers `(ResultOf<F>, ResidualsOf<F>)` -- for `f(x) = x*x*x` at 3, the value `27.0` and the residuals in program order -- and the second takes those residuals and the cotangent `1.0` and answers `27.0`. `ResidualsOf<F>` is the compiler's type function and appears in no signature; the test reads the numbers, not its spelling. Skipped while `modules/transforms/split.cpp` does not exist."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_split_halves.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "stdout"]
+skip_unless = ["node", "-e", "process.exit(require('fs').existsSync('modules/transforms/split.cpp') ? 0 : 1)"]
+expect_exit = 0
+expect_stdout_contains = ["27.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
