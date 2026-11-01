@@ -73,12 +73,11 @@ $ node scripts/test.js test/plans/feat/compile/transforms.plan.toml
 
 ## 还留着的两条旧账（不在本分支）
 
-1. `Vjp<F>`/`Split<F>`/`ParamsOf<F>` 的泛型声明（设计 6.1）：**量过了，还没落**。类型函数是有的
-   （`type Vjp<F> = (..ParamsOf<F>) => (ResultOf<F>, Pullback<F>)` 在库里能解析），但一条 `vjp::<F>` 声明
-   要么有函数体（要 `jvp`/`split`/`transpose` 在编译期给出对任意 `F` 的形状，作者排序第 2 步），要么由 C++
-   算子扛着（`NativeDeclarationNotLoaded`）。试过的捷径两条都不行：`::<T>` 参数泛型会打死
-   `grad(x => x + 1.0)` 的 lambda 推定（`LambdaParameterWithoutType`），加一条 `float` 重载当推定源又是
-   `Redeclaration`。所以声明仍是 develop 的"每 arity 一条 `float`"。
+1. `Vjp<F>`/`Split<F>`/`ParamsOf<F>` 的泛型声明（设计 6.1）：**参数类型那一半落了**——`vjp` 的一元与二元两条
+   现在写成 `::<T>` / `::<T, U>`，函数体里的 lambda 也跟着用 `T`/`U`；`grad` 仍是具体 `float`，因为一条泛型
+   声明会让不写形参类型的 lambda 失去推定（`LambdaParameterWithoutType`），而"泛型 + `float` 重载"同名字是
+   `Redeclaration`（量过）。要"一条 `::<F>` 声明"还得先让 `jvp`/`split`/`transpose` 在编译期给出对任意 `F`
+   的形状（作者排序第 2 步）：`Vjp<F>` 类型本身已能解析，缺的是函数体（pack 形参还不许写）或一个 C++ 算子。
 2. `jvp` 的判定现在问**切空间**（`camel/core/tangent_space.h`）而不是"是不是 `float`"：`float`/`f32`/`f16`/`bf16`
    和 float 数组是自身，`(float, i32)`/`int[]`/`string` 没有；没空间的参数报"which has none"，有空间但没被提升的
    报"whose tangent space is self and which this transform does not lift yet"。提升逻辑与 `jvp.cpp` 未动。
