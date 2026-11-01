@@ -61,26 +61,53 @@ for (gc_node_ref_t pred : draft.waitInputsOf(nodeId)) {   // 就是被删的那�
 `applyOptimizeRewritePass` 便认为程序变了、再来一轮，直到超时。
 
 **作者那句"某处判断'这条臂要不要算'读的还是 ctrl 边"，在 `isDraftBranchArmHead` 上成立**——只是它判的
-不是"要不要算这条臂"，而是"**这条臂里的调用要不要内联**"。修法因此很具体：这个判断改成问区域
-（`controlRegionOf(draft, nodeId)` 是 Arm、以及它是不是该 arm 的入口），不再问 `waitInputsOf`。
+不是"要不要算这条臂"，而是"**这条臂里的调用要不要内联**"。
+
+## 一之再补：改了 `isDraftBranchArmHead` 之后——**它不是那根撑杆**
+
+按上一节的结论把 `isDraftBranchArmHead` 改成问区域（`controlRegionOf` 是 `Arm`、且没有同臂的节点排在它
+前面），删边的树上重跑：
+
+| 判据 | 读数 |
+|---|---|
+| ① 边删掉 + 改判断 → `exported` | **没有**：`exit 124`，尾部仍是那两行张量 |
+| ② 轮数 ≤ 5 | **没有**：**536 轮**（改之前是 230+） |
+| ③ 边留着 + 改判断 → 与今天一致 | **有**：`export_loop.cml std::macro` `exit 0` / `exported`，onnx 计划 **156/156**（含 `ort_loop_loaded_weights` 的 `Loop`） |
+
+**所以那根撑杆不是臂的判断。** 再往上问一层"到底在反复内联谁"，`-vv` 的 `Inline probe` 给出了名字：
+
+```
+Inline probe 'model' -> 'iterate$spec217': small=true acyclic=false calls=1 closure=false.
+Inline probe 'model' -> 'iterate$spec219': ...
+Inline probe 'model' -> 'iterate$spec221': ...
+```
+
+**每轮内联的是一个新造出来的特化副本 `iterate$specN`**（20 秒里出现 113 个不同的 `iterate$specN`），
+造它的地方是 `specializeGraphWithBindings(…, "spec", session.nextSpecializationNonce())`
+（`src/runtime/draft_inline.cpp:1135`-`:1140`，由 `specializeDirectFuncInDraft` 在 `bindings` 非空时调用）。
+副本的名字每轮带一个新 nonce，所以"这张图我见过"的判断永远不成立；而本该拦住它的那个定点守卫
+（`kTypeSpecializationFixedPointGuard`，`:1120`-`:1131` 的报错）只对**类型**特化生效，`"spec"` 这一路不在其中。
+**这才是"每一轮算不算有变化"里的那个'变化'。**
 
 ## 二、两条路的代价
 
-- **甲：让会话真的收敛。** 把"这一轮算什么变化"找出来——三处置 `changed` 的地方今天都没做事，说明
-  仍有第四处（或 `commit()` 的编码差异）让图每轮多一个节点；定位到那一处并让它不再改，`kMaxSessions`
-  就不再被顶到上限，`124` 自己消失。代价：一笔独立的定位 + 修复，读数判据是"会话数 ≤ 1，且
-  `export_loop.cml std::macro` 打出 `exported`"。
+- **甲：让会话真的收敛。** 现在范围已经收窄到一处：**每轮新造一个 `iterate$specN` 特化副本**。要让会话
+  收敛，就得让"同一个绑定组合"认得出自己已经做过一次（nonce 换成按绑定组合去重），或者让
+  `kTypeSpecializationFixedPointGuard` 那条定点守卫把 `"spec"` 这一路也算进去。代价：一笔动的是特化的
+  身份判断，会牵动所有特化过的调用点，判据是"`export_loop.cml std::macro` 打出 `exported`、轮数 ≤ 5、
+  `iterate$specN` 的数量不再增长"。
 - **乙：接受这张图每轮长一个节点，把超时变成一句诊断。** 会话撞上 `kMaxSessions` 时给出明确的
   "这个程序的重写不收敛"而不是挂死。代价：那条边仍然删不掉（`Loop` 还是变 `If`），只是不再挂死。
 
 ## 三、我方默认建议
 
-**甲**，而且下一刀很小：**在 `applyRuntimeOptimizeRewrite` 返回 `session.commit()` 之前，打印
-`changed`、`appliedInlineCount`、`growthSpent` 和 `program->graphs()` 的节点数**，看是哪一处把它推成
-"有变化"——三处日志全是 0，所以答案必然在别处（我怀疑 `commit()` 每次都产出新图，但没有读数，不作数）。
+**甲**，下一刀：**在 `specializeGraphWithBindings` 之前把这次特化的"键"打出来**（`calleeGraph->name()` +
+每个绑定的 `kind/index/静态值`），看两轮之间的键到底哪里不同——今天只知道名字不同（`$spec217` →
+`$spec219`），不知道**内容**是否相同。键相同就说明缺的是"这个组合我做过"，键不同则要再问一句
+"为什么这个绑定组合每轮都会变出一个新的"。
 
 ## 请作者答一句
 
-**甲（继续定位那第四处变化，直到会话数 ≤ 1）还是乙（把它变成诊断、先不删边）？**
+**甲（把特化的键打出来，让它认得出自己做过一次）还是乙（把它变成诊断、先不删边）？**
 若选甲，请确认判据是"`export_loop.cml std::macro` 打出 `exported`、会话数 ≤ 1、`ort_loop_loaded_weights`
 仍打出 `Loop`"。
