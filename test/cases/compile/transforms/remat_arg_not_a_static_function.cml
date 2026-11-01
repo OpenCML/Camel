@@ -1,1 +1,33 @@
-// The same rule, on `remat(h)` where `h` is a closure holding `x` -- and the one case here where the// number that came out is not explained.//// `remat` marks the graph it is handed for recomputation, so the mark is a property of that graph and// the argument has to name one at the call. Measured 2026-11-02, before the declaration:////   $ camel remat_arg_not_a_static_function.cml std::nvm    # the program below, minus the refusal//   REINTERP remat function=__g_49__ in_recompute=0 out_recompute=1 graph=50//   0.0//// The program asks for `h(2.0)` with `h(y) = y * x` and `x = 3.0`, whose answer is `6.0`; it printed// **0.0**. Which side that is wrong on is not decided here, and this comment does not guess: either// `remat` should support a capturing closure (and the kernel loses the capture) or it should refuse one// (and the silence is the defect). Refusing at the call is the safe half of both, and it is all this// case pins. The number is deliberately not an assertion -- an expectation of `0.0` would make the// defect a specification.//// With the declaration the same program is refused where the `h` is written:////   error[SemanticDiag::TransformArgumentIsNotAKnownFunction]: 'remat' is applied to a closure that//   captures a value, and a transform's argument has to be a function this program knows before it runs.import { remat } from transformsfunc by_capture(x: float): float {    let h = (y: float) => y * x    let again = remat(h)    return again(2.0)}func main(): int sync {    println(by_capture(3.0))    return 0}
+// The same rule, on `remat(h)` where `h` is a closure holding `x` -- and the one case here where the
+// number that came out is not explained.
+//
+// `remat` marks the graph it is handed for recomputation, so the mark is a property of that graph and
+// the argument has to name one at the call. Measured 2026-11-02, before the declaration:
+//
+//   $ camel remat_arg_not_a_static_function.cml std::nvm    # the program below, minus the refusal
+//   REINTERP remat function=__g_49__ in_recompute=0 out_recompute=1 graph=50
+//   0.0
+//
+// The program asks for `h(2.0)` with `h(y) = y * x` and `x = 3.0`, whose answer is `6.0`; it printed
+// **0.0**. Which side that is wrong on is not decided here, and this comment does not guess: either
+// `remat` should support a capturing closure (and the kernel loses the capture) or it should refuse one
+// (and the silence is the defect). Refusing at the call is the safe half of both, and it is all this
+// case pins. The number is deliberately not an assertion -- an expectation of `0.0` would make the
+// defect a specification.
+//
+// With the declaration the same program is refused where the `h` is written:
+//
+//   error[SemanticDiag::TransformArgumentIsNotAKnownFunction]: 'remat' is applied to a closure that
+//   captures a value, and a transform's argument has to be a function this program knows before it runs.
+import { remat } from transforms
+
+func by_capture(x: float): float {
+    let h = (y: float) => y * x
+    let again = remat(h)
+    return again(2.0)
+}
+
+func main(): int sync {
+    println(by_capture(3.0))
+    return 0
+}

@@ -1,1 +1,34 @@
-// The same rule, on the third transform: `split(h)` where `h` is a closure holding `x`.//// `split` is the step that separates a lifted function into the part computable now and the linear part// -- it reads the graph of the function it is handed, exactly as `jvp` and `transpose` do -- so it needs// a graph named at the call, and a closure that captures a value names none:////   error[SemanticDiag::TransformArgumentIsNotAKnownFunction]: 'split' is applied to a closure that//   captures a value, and a transform's argument has to be a function this program knows before it runs.//// The closure is written at `split`'s own parameter type, `(v: float, d: float) => (float, float)`, so// the refusal is the transform's rule and not a type mismatch wearing the same message: nothing here is// the wrong type, and the same shape with the capture taken away (a lambda that captures nothing) is// accepted.//// Measured with the declaration switched off (`staticFunctionArg = -1`): this shape does not fall back// to a run-time refusal the way `transpose` and `jvp` do -- it takes the compiler down with an invariant// violation, `../src/compile/gir/builder_operators.cpp(3831) visitLinkNode: "Target node of LINK must be// a function or operator node"`. So for `split` the check is the difference between a named error at the// argument and a violated guarantee inside the builder, which is the strongest reason of the three to// have it in one place instead of three.import { split } from transformsimport rulesets.jvpfunc by_capture(x: float): float {    let h = (v: float, d: float) => (v + d * x, d)    let step = split(h)    let (value, tangent) = step(2.0, 1.0)    return value + tangent}func main(): int sync {    println(by_capture(3.0))    return 0}
+// The same rule, on the third transform: `split(h)` where `h` is a closure holding `x`.
+//
+// `split` is the step that separates a lifted function into the part computable now and the linear part
+// -- it reads the graph of the function it is handed, exactly as `jvp` and `transpose` do -- so it needs
+// a graph named at the call, and a closure that captures a value names none:
+//
+//   error[SemanticDiag::TransformArgumentIsNotAKnownFunction]: 'split' is applied to a closure that
+//   captures a value, and a transform's argument has to be a function this program knows before it runs.
+//
+// The closure is written at `split`'s own parameter type, `(v: float, d: float) => (float, float)`, so
+// the refusal is the transform's rule and not a type mismatch wearing the same message: nothing here is
+// the wrong type, and the same shape with the capture taken away (a lambda that captures nothing) is
+// accepted.
+//
+// Measured with the declaration switched off (`staticFunctionArg = -1`): this shape does not fall back
+// to a run-time refusal the way `transpose` and `jvp` do -- it takes the compiler down with an invariant
+// violation, `../src/compile/gir/builder_operators.cpp(3831) visitLinkNode: "Target node of LINK must be
+// a function or operator node"`. So for `split` the check is the difference between a named error at the
+// argument and a violated guarantee inside the builder, which is the strongest reason of the three to
+// have it in one place instead of three.
+import { split } from transforms
+import rulesets.jvp
+
+func by_capture(x: float): float {
+    let h = (v: float, d: float) => (v + d * x, d)
+    let step = split(h)
+    let (value, tangent) = step(2.0, 1.0)
+    return value + tangent
+}
+
+func main(): int sync {
+    println(by_capture(3.0))
+    return 0
+}
