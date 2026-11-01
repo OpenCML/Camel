@@ -209,7 +209,6 @@ VmapGraph buildVmapGraph(
         return VmapGraph{};
     }
     const Type *liftedParameter = signature->normTypeAt(0);
-    const Type *liftedResult    = signature->exitType();
 
     VmapGraph refused;
     size_t copiedKinds = 0;
@@ -294,7 +293,73 @@ VmapGraph buildVmapGraph(
                 toSlot<Array *>(one), liftedType, rt::kGCNodeFlagConstant);
         };
 
+        // A node the family answered for: the rule's right side names the function that does the
+        // batched work, and the transform calls it with the batches of this node's operands. The
+        // caller has already asked (and counted the ask); what is left is the instance, at the
+        // primitive's element type -- the type a rule of this family is generic in, whatever rank the
+        // value itself has.
         std::vector<gc_node_ref_t> copyOf(function->nodeCount(), rt::kInvalidNodeRef);
+        const auto batchThroughRule = [&](gc_node_ref_t ref, const std::string &uri,
+                                          const camel::parse::ast::RuleMatch &match)
+            -> gc_node_ref_t {
+            Type *elementType     = ruleElementTypeOf(function->node(ref)->dataType());
+            const uint64_t ruleId = ruleIdOf(*context, match.rule);
+            if (ruleId == 0) {
+                refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                refused.refusedUri    = uri;
+                refused.refusedWhy    = "the rule is named in the index but not registered";
+                return rt::kInvalidNodeRef;
+            }
+            const size_t at = camel::compile::gir::genericRuleInstance(
+                *context, ruleId, std::vector<Type *>{elementType}, {});
+            const auto *entry = camel::compile::gir::genericRuleEntry(*context, ruleId);
+            if (entry == nullptr || at >= entry->instances.size() || !entry->instances[at].made) {
+                refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                refused.refusedUri    = uri;
+                refused.refusedWhy    = entry != nullptr && at < entry->instances.size() &&
+                                             !entry->instances[at].why.empty()
+                                         ? entry->instances[at].why
+                                         : "no instance of the rule at this type";
+                return rt::kInvalidNodeRef;
+            }
+            std::string calleeWhy;
+            const rt::GCGraph *callee = calleeGraphOf(
+                entry->instances[at], camel::parse::ast::rhsCalleeOf(kFamily, match.rule),
+                calleeWhy);
+            if (callee == nullptr || entry->instances[at].program == nullptr) {
+                refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                refused.refusedUri    = uri;
+                refused.refusedWhy    = calleeWhy;
+                return rt::kInvalidNodeRef;
+            }
+            const auto *closureType = camel::core::type::TupleType::create(std::vector<Type *>{});
+            auto *functionValue     = ::Function::create(
+                entry->instances[at].program, callee->id(), closureType, mm::autoSpace());
+            if (functionValue == nullptr) {
+                refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                refused.refusedUri    = uri;
+                refused.refusedWhy    = "the rule's function is not a graph a value can name";
+                return rt::kInvalidNodeRef;
+            }
+            const gc_node_ref_t named = draft.materializeStaticValue(
+                toSlot<::Function *>(functionValue), const_cast<FunctionType *>(callee->funcType()));
+            std::vector<gc_node_ref_t> arguments;
+            for (gc_node_ref_t input : function->normInputsOf(ref)) {
+                if (input >= function->nodeCount() || copyOf[input] == rt::kInvalidNodeRef) {
+                    refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                    refused.refusedUri    = uri;
+                    refused.refusedWhy    = "an operand was not lifted";
+                    return rt::kInvalidNodeRef;
+                }
+                arguments.push_back(copyOf[input]);
+            }
+            Type *resultType = rowsOfType(function->node(ref)->dataType());
+            const gc_node_ref_t call = draft.addCallNode(resultType);
+            draft.setNormInputs(call, arguments);
+            draft.setWithInputs(call, std::span<const gc_node_ref_t>(&named, 1));
+            return call;
+        };
+
         liftOf.assign(function->nodeCount(), rt::kInvalidNodeRef);
         std::string why;
         bool complete = true;
@@ -364,89 +429,86 @@ VmapGraph buildVmapGraph(
                 }
                 ++refused.found;
                 usedRules.push_back(match->rule);
-                // The rule's right side names the function that does the batched arithmetic; the
-                // transform calls it with the batches. The instance is made at the element type the
-                // primitive works on, because that is the type the rule is generic in.
-                Type *elementType = ruleElementTypeOf(node->dataType());
-                const uint64_t ruleId = ruleIdOf(*context, match->rule);
-                if (ruleId == 0) {
-                    refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
-                    refused.refusedUri    = uri;
-                    refused.refusedWhy    = "the rule is named in the index but not registered";
-                    complete              = false;
+                copyOf[ref] = batchThroughRule(ref, uri, *match);
+                if (copyOf[ref] == rt::kInvalidNodeRef) {
+                    complete = false;
                     break;
                 }
-                const size_t at = camel::compile::gir::genericRuleInstance(
-                    *context, ruleId, std::vector<Type *>{elementType}, {});
-                const auto *entry = camel::compile::gir::genericRuleEntry(*context, ruleId);
-                if (entry == nullptr || at >= entry->instances.size() ||
-                    !entry->instances[at].made) {
-                    refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
-                    refused.refusedUri    = uri;
-                    refused.refusedWhy    = entry != nullptr && at < entry->instances.size() &&
-                                                 !entry->instances[at].why.empty()
-                                             ? entry->instances[at].why
-                                             : "no instance of the rule at this type";
-                    complete              = false;
-                    break;
-                }
-                const rt::GCGraph *callee = calleeGraphOf(
-                    entry->instances[at],
-                    camel::parse::ast::rhsCalleeOf(kFamily, match->rule), why);
-                if (callee == nullptr || entry->instances[at].program == nullptr) {
-                    refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
-                    refused.refusedUri    = uri;
-                    refused.refusedWhy    = why;
-                    complete              = false;
-                    break;
-                }
-                const auto *closureType = camel::core::type::TupleType::create(
-                    std::vector<Type *>{});
-                auto *functionValue = ::Function::create(
-                    entry->instances[at].program, callee->id(), closureType, mm::autoSpace());
-                if (functionValue == nullptr) {
-                    refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
-                    refused.refusedUri    = uri;
-                    refused.refusedWhy    = "the rule's function is not a graph a value can name";
-                    complete              = false;
-                    break;
-                }
-                const gc_node_ref_t named = draft.materializeStaticValue(
-                    toSlot<::Function *>(functionValue),
-                    const_cast<FunctionType *>(callee->funcType()));
-                std::vector<gc_node_ref_t> arguments;
-                for (gc_node_ref_t input : function->normInputsOf(ref)) {
-                    if (input >= function->nodeCount() ||
-                        copyOf[input] == rt::kInvalidNodeRef) {
-                        refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
-                        refused.refusedUri    = uri;
-                        refused.refusedWhy    = "an operand was not lifted";
-                        complete              = false;
-                        break;
-                    }
-                    arguments.push_back(copyOf[input]);
-                }
-                if (!complete) {
-                    break;
-                }
-                Type *resultType = rowsOfType(node->dataType());
-                const gc_node_ref_t call = draft.addCallNode(resultType);
-                draft.setNormInputs(call, arguments);
-                draft.setWithInputs(call, std::span<const gc_node_ref_t>(&named, 1));
-                copyOf[ref] = call;
                 ++copiedKinds;
                 break;
             }
-            case rt::GCNodeKind::Call:
-            case rt::GCNodeKind::Func:
-                // A call is a `Func` node naming the callee beside a `Call` node reading it; either
-                // one is the same refusal, reported at the callee's own origin.
-                refused.refusedOrigin   = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
-                refused.refusedConstruct = "a call";
-                refused.refusedWhy      = "the elementwise tier batches ports, constants and "
-                                          "primitives; a call is a later tier";
-                complete                = false;
+            case rt::GCNodeKind::Func: {
+                // A `Func` node is one of two things, and its value type says which. A *direct call*
+                // names its callee's graph, carries the arguments as its norm inputs, and its value
+                // is the callee's result (`f(x)` is one node, not a value plus a call). A *function
+                // value* is a function type, and carries nothing into a batched graph: the node that
+                // reads it is the one that names a use.
+                Type *valueType = function->node(ref)->dataType();
+                if (valueType != nullptr && valueType->code() == TypeCode::Function) {
+                    ++copiedKinds;
+                    break;
+                }
+                // A call is asked about like a primitive, by the key the family files a function
+                // under: the callee's name and how many arguments the call passes. A family may hold
+                // a rule for a function -- the function's own name is a head like any other -- and
+                // then the rule says which function does the batched work, exactly as it does for an
+                // operator. What is never done is walking past a call unasked: a body whose callee
+                // the family has no rule for stops here, with the ask counted (`asked=1 found=0`),
+                // because "there is no rule for this call" is an answer and "nothing was asked" is
+                // not (design principles 9.9).
+                const rt::GCGraph *callee = program->calleeOf(*function, ref);
+                const std::string name =
+                    callee != nullptr ? leafNameOf(callee->name()) : std::string();
+                const size_t operands = function->normInputsOf(ref).size();
+                ++refused.asked;
+                if (name.empty()) {
+                    refused.refusedOrigin    = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                    refused.refusedConstruct = "a call";
+                    refused.refusedUri       = "a call";
+                    refused.refusedWhy       = "the call names no graph of the program";
+                    complete                 = false;
+                    break;
+                }
+                const auto match = camel::parse::ast::lookupRule(
+                    kFamily, name, static_cast<uint32_t>(operands));
+                if (match.status != camel::parse::ast::RuleLookup::Found) {
+                    refused.refusedOrigin    = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                    refused.refusedConstruct = "a call";
+                    refused.refusedUri       = name;
+                    refused.refusedWhy =
+                        match.status == camel::parse::ast::RuleLookup::NoSuchFamily
+                            ? "no ruleset module of that name is loaded"
+                            : "the ruleset holds no rule for a call to `" + name + "` with " +
+                                  std::to_string(operands) +
+                                  (operands == 1 ? " argument" : " arguments");
+                    complete = false;
+                    break;
+                }
+                ++refused.found;
+                usedRules.push_back(match.rule);
+                copyOf[ref] = batchThroughRule(ref, name, match);
+                if (copyOf[ref] == rt::kInvalidNodeRef) {
+                    refused.refusedConstruct = "a call";
+                    complete                 = false;
+                    break;
+                }
+                ++copiedKinds;
                 break;
+            }
+            case rt::GCNodeKind::Call: {
+                // An indirect call: the callee is a *value* the graph computed, so there is no name to
+                // ask a family about, and a rule is filed under a name. Counting it as asked is not a
+                // fiction: the family is the thing that would have to answer, and it cannot be asked
+                // -- which is a hole in the body, reported like any other (asked=1 found=0).
+                ++refused.asked;
+                refused.refusedOrigin    = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                refused.refusedConstruct = "a call";
+                refused.refusedUri       = "a call through a value";
+                refused.refusedWhy       = "the callee is a value, not a name: no rule can be filed "
+                                           "under it";
+                complete                 = false;
+                break;
+            }
             case rt::GCNodeKind::Brch:
             case rt::GCNodeKind::Join:
                 refused.refusedOrigin    = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));

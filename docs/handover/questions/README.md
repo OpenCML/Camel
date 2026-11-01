@@ -9,13 +9,14 @@
 > **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
-## 现在在等作者：3 页
+## 现在在等作者：4 页
 
 | 页 | 问句 | 默认建议 |
 |---|---|---|
 | `call-form-loops-and-setloopgraphs` | 按调用跑每一轮的循环形式没有任何生产者（`setLoopGraphs` 全仓无调用者），这条拒绝该留、该删，还是连 `setLoopGraphs` 一起删 | 留着拒绝 |
 | `what-argument-does-a-batched-rule-take` | 批处理规则的右边该拿批、还是拿未批的值（`vmap` 的图里没有未批的值） | 右边点名一个普通库函数，以批为实参建调用 |
 | `folding-a-branch-away-must-keep-the-effect-alive` | 3.3「顺序边保活」与 F2「顺序边只排序」冲突，`fold` 把臂折掉后 `println` 不再执行 | 甲：`:op/keep` 数据边保活，3.3 加限定语 |
+| `whether-a-reduction-can-be-written-without-an-axis` | `sum`/`mean` 有一实参的整轴形态，`max`/`min`/`argmax`/`argmin` 没有（不是规则缺，是没有这个算子）：要不要补 | 不补：整轴 `max` 就是 `max_axis(x, 0, false)` 折秩 |
 
 15:10 与 15:25 的四页已裁并挪进 `reviews/`：流要表示（`rt::Stream<T>`）、`Json`/`Set`/`Map` 是缺口、`Ref` 在判定入口集中解析一次、`split` 的切口是 `Lift` 的两个分量。
 

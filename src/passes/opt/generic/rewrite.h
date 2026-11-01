@@ -188,6 +188,12 @@ bool readsNoWrittenSlot(const camel::runtime::GraphTransaction &transaction, gc_
  * `removed` is the node whose going takes the reads; `alsoGoing` names nodes whose reads do not
  * count because they go away too (a dissolved branch and its join, the code of an arm that is not
  * taken). Returns `value` itself when no read goes out with the removal.
+ *
+ * With `value` invalid the removal leaves nothing in the value -- the node is read by no one, which
+ * is why it goes -- and the operator carries the effect's own value (`:op/keep(x, x)`): it is then
+ * the statement that reads the effect, and the caller hands it the place the removed node stood in
+ * (`handChainPlaceTo`). The last node built is returned, or the invalid ref when
+ * nothing goes out.
  */
 gc_node_ref_t keepThroughValue(
     camel::runtime::GraphTransaction &transaction, gc_node_ref_t removed, gc_node_ref_t value,

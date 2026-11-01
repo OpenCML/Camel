@@ -1,9 +1,21 @@
 /**
- * What the elementwise tier refuses, and how it says so: a call in the body is a construct the tier
- * does not batch yet, and it is refused *at the call*, by name, with the reason -- never copied and
- * hoped for. `g` calls `f`, so `vmap(g)` stops there even though every primitive of `g` has a rule.
+ * What a call in the body is answered with, and how the tier says so: `g` calls `f`, and a batched
+ * graph has no body for `f` unless `rulesets.vmap` holds a rule filed under it. So `vmap(g)` stops at
+ * that call, at the call's own origin, and names the callee -- `construct=a call`, `uri=f`
+ * (`modules/transforms/vmap.cpp`).
+ *
+ * The count beside it is the part that matters: `asked=1 found=0 missing=1`. The walk *asks* the
+ * family, by the key a call already has (the callee's name and how many arguments it is given), and
+ * the family answers that it holds no such rule. `asked=0` is what this used to print, and it said
+ * the wrong thing: "the walk never got here" is not "the family has nothing for this call". A hole
+ * nobody asked about is a hole nobody can fill.
+ *
+ * The row-by-row writing prints first and keeps working: it is the answer the batched writing does
+ * not have, which is why the refusal is a fault and not a quiet fallback (`[3.0, 5.0, 7.0]` for
+ * `[1, 2, 3]` doubled plus one).
  */
 import rulesets.vmap
+import { vmap as row_vmap } from array
 import { vmap } from transforms
 
 func f(x: float): float {
@@ -16,6 +28,7 @@ func g(x: float): float {
 
 func main(): int sync {
     let xs: float[3] = [1.0, 2.0, 3.0]
+    println(row_vmap(g)(xs))
     println(vmap(g)(xs))
     return 0
 }

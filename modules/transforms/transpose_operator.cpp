@@ -38,7 +38,7 @@ FunctionType *transposeOperatorSignature(FunctionType *function) {
     if (function == nullptr) {
         return nullptr;
     }
-    if (function->withTypesCount() != 0 || function->normTypesCount() != 1) {
+    if (function->withTypesCount() != 0) {
         return nullptr;
     }
     FunctionType *transposed = transposeSignature(function);
@@ -85,20 +85,39 @@ class TransposeResolver final : public FuncTypeResolver {
                 "`transpose` takes a function without `with` parameters: the transform builds a "
                 "graph of its own and a captured value has no port to enter it by");
         }
-        if (function->normTypesCount() != 1) {
-            return std::string("`transpose` takes a function of exactly one parameter");
+        if (function->normTypesCount() == 0) {
+            return std::string("`transpose` takes a function of at least one parameter");
         }
-        if (function->normTypeAt(0) != camel::core::type::Type::Float64() ||
-            function->exitType() != camel::core::type::Type::Float64()) {
+        // Either one `float` parameter, or the residuals `split` hands the backward half (one tuple
+        // of `float`s) followed by the tangents. Both answer, because both are the same call shape:
+        // the known values, then the cotangent.
+        const auto *bundle =
+            dynamic_cast<const camel::core::type::TupleType *>(function->normTypeAt(0));
+        if (bundle != nullptr && function->normTypesCount() >= 2) {
+            for (size_t i = 1; i < function->normTypesCount(); ++i) {
+                if (function->normTypeAt(i) != camel::core::type::Type::Float64()) {
+                    return std::string(
+                        "`transpose` of a residual-taking function wants `float` tangents after "
+                        "the residuals");
+                }
+            }
+        } else if (function->normTypesCount() != 1 ||
+                   function->normTypeAt(0) != camel::core::type::Type::Float64()) {
             return std::string(
-                "`transpose` takes a function of one `float` parameter that returns a `float`: the "
-                "cotangent is a `float` in and a `float` out");
+                "`transpose` takes a function of one `float` parameter, or the backward half "
+                "`split` gives -- its residuals in one tuple and its tangents after them");
+        }
+        if (function->exitType() != camel::core::type::Type::Float64()) {
+            return std::string(
+                "`transpose` takes a function that returns a `float`: the cotangent of the "
+                "result is what goes in");
         }
         return std::nullopt;
     }
 
     std::string signature() const override {
-        return "(f: (float) => float) => (float, float) => (float)";
+        return "(f: (float) => float | ((..Residuals), float, ...) => float) => "
+               "(knowns.., cotangent) => (cotangents..)";
     }
 
     bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)

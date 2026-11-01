@@ -64,6 +64,11 @@ RulesetsPass::apply(const camel::runtime::Program *program, std::ostream &os) {
         for (const std::string &line : camel::core::transposeRuleDescriptions()) {
             os << "TRANSPOSE " << line << '\n';
         }
+        // The batching table is a third one, and the one a `reinterp<vmap>` reads: a binding no
+        // pass prints is a binding no reading can check, so it is listed here like the other two.
+        for (const std::string &line : camel::core::vmapRuleDescriptions()) {
+            os << "VMAP " << line << '\n';
+        }
     }
     size_t start = 0;
     while (start <= query_.size() && !query_.empty()) {

@@ -92,4 +92,9 @@ std::vector<std::string> transposeRuleDescriptions();
 /// all. The batching transform reports the two apart, because the repairs differ.
 std::optional<ForwardRuleBinding> vmapBindingOf(const std::string &uri);
 
+/// The batching bindings, in the words `forwardRuleDescriptions` writes them. A table a transform
+/// reads has to be a table a reading can show: a binding nothing prints is a binding nothing can
+/// check, and an operator whose key was silently unbound looks exactly like one that never had it.
+std::vector<std::string> vmapRuleDescriptions();
+
 } // namespace camel::core

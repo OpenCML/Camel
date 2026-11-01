@@ -1,0 +1,8 @@
+# A list that names one program twice, on purpose, so that `run.py --check-names --fixture` can
+# ask the deduplication a question whose answer is known. It is not part of any other check and it
+# names no expectation: the two lines below are one program, written two ways (`./` is the
+# difference), and the tool has to read them as one entry. If a future change keys deduplication by
+# the spelling of a path instead of by what the path names, these two stay two entries, two threads
+# build one source, and the fixture says so before a gate does.
+test/cases/trans/cpp/exec/site_message.cml
+./test/cases/trans/cpp/exec/site_message.cml

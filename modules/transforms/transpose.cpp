@@ -41,45 +41,85 @@ FunctionType *transposeSignature(FunctionType *function) {
     // branch's condition is a value, and the cotangent of an arm is only meaningful for the arm
     // that ran. The cotangent comes last, which is what makes `transpose(f)(x, 1.0)` read as "what
     // does 1.0 pull back to at x".
-    camel::core::type::param_vec_t params;
-    for (size_t i = 0; i < function->normTypesCount(); ++i) {
-        if (function->normTypeAt(i) != Type::Float64()) {
+    // The residuals split hands the backward half: one tuple parameter holding the values the
+    // walk cannot carry (a x*x needs the x), and the tangents after it. Those values are the
+    // known values this signature's first parameter names -- the ruling of 2026-11-01 06:50 kept the
+    // shape and changed where the known values come from.
+    const size_t count = function->normTypesCount();
+    if (count >= 2) {
+        const auto *bundle = dynamic_cast<const camel::core::type::TupleType *>(function->normTypeAt(0));
+        if (bundle == nullptr) {
             return nullptr;
         }
+        for (size_t i = 0; i < bundle->size(); ++i) {
+            if (bundle->typeAt(i) != Type::Float64()) {
+                return nullptr;
+            }
+        }
+        for (size_t i = 1; i < count; ++i) {
+            if (function->normTypeAt(i) != Type::Float64()) {
+                return nullptr;
+            }
+        }
+        camel::core::type::param_vec_t params;
+        params.emplace_back(function->normTypeAt(0), false);
         params.emplace_back(Type::Float64(), false);
+        std::vector<Type *> tangents;
+        for (size_t i = 1; i < count; ++i) {
+            tangents.push_back(Type::Float64());
+        }
+        return FunctionType::create(
+            camel::core::type::param_vec_t{}, params,
+            camel::core::type::TupleType::create(tangents));
     }
+    if (count != 1 || function->normTypeAt(0) != Type::Float64()) {
+        return nullptr;
+    }
+    camel::core::type::param_vec_t params;
+    params.emplace_back(Type::Float64(), false);
     params.emplace_back(Type::Float64(), false);
     return FunctionType::create(camel::core::type::param_vec_t{}, params, Type::Float64());
 }
 
-TransposeGraph buildTransposeGraph(
-    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    camel::runtime::GCGraph *function, std::ostream &os) {
-    if (program == nullptr || function == nullptr) {
-        return TransposeGraph{};
+/// What the graphs of one transpose share: one group (a callee's transpose is another member of
+/// it, exactly as `jvp` lifts one graph per callee) and the callees already transposed, so that
+/// two calls of one function call one graph.
+struct TransposeState {
+    camel::runtime::GraphDraftGroup &group;
+    const camel::runtime::Program *program;
+    std::unordered_map<uint32_t, GraphId> callees;
+};
+
+bool buildTransposeMember(
+    TransposeState &state, camel::runtime::GCGraph *function, const GraphId member,
+    std::ostream &os) {
+    camel::runtime::GraphDraftGroup &group = state.group;
+    if (state.program == nullptr || function == nullptr) {
+        return false;
     }
     FunctionType *signature = transposeSignature(function->funcType());
     if (signature == nullptr) {
         os << "TRANSPOSE function=" << function->name() << " skip=signature\n";
-        return TransposeGraph{};
+        return false;
     }
 
     const size_t nodeCount         = function->nodeCount();
     const size_t paramCount        = function->funcType()->normTypesCount();
     std::vector<std::string> usedRules;
     std::vector<uint32_t> armRegionsBuilt;
-    camel::runtime::GraphDraftGroup group(context, program);
-    const GraphId member = group.reserve(
-        "transpose_of_" + std::string(function->name()),
-        "transpose_of_" + std::string(function->name()));
     gc_node_ref_t result = rt::kInvalidNodeRef;
+    std::function<gc_node_ref_t(gc_node_ref_t)> knownValue;
     {
         auto &draft = group.transaction(member).edit();
         draft.setFuncType(signature);
+        const size_t tangentCount = paramCount > 1 ? paramCount - 1 : 1;
+        const bool bundlesResiduals = paramCount > 1;
         std::vector<gc_node_ref_t> paramPorts;
-        for (size_t i = 0; i < paramCount; ++i) {
+        {
+            Type *const portType = bundlesResiduals ? function->funcType()->normTypeAt(0)
+                                                    : Type::Float64();
             const gc_node_ref_t port =
-                draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
+                draft.addPortNode(portType, draft.allocateRuntimeSlot(portType));
             draft.appendNormPort(port);
             paramPorts.push_back(port);
         }
@@ -168,14 +208,47 @@ TransposeGraph buildTransposeGraph(
             }
             if (node->kind == rt::GCNodeKind::Port) {
                 const auto &ports = function->normPorts();
-                for (size_t i = 0; i < ports.size() && i < paramPorts.size(); ++i) {
-                    if (ports[i] == ref) {
-                        forwardOf[ref] = paramPorts[i];
+                for (size_t i = 0; i < ports.size(); ++i) {
+                    if (ports[i] != ref) {
+                        continue;
+                    }
+                    if (!bundlesResiduals) {
+                        forwardOf[ref] = paramPorts.front();
                         return forwardOf[ref];
                     }
+                    if (i == 0) {
+                        // The residuals themselves: a value the backward half is handed.
+                        forwardOf[ref] = paramPorts.front();
+                        return forwardOf[ref];
+                    }
+                    // A tangent's own value is the (i-1)-th residual: that is the whole point of
+                    // the residuals -- the value the pullback needs, carried to where it is needed.
+                    const auto *bundle = static_cast<const camel::core::type::TupleType *>(
+                        function->funcType()->normTypeAt(0));
+                    const gc_node_ref_t part = draft.addAccsNode(
+                        bundle->typeAt(i - 1), static_cast<uint32_t>(i - 1));
+                    draft.setNormInputs(part, std::span<const gc_node_ref_t>(&paramPorts.front(), 1));
+                    forwardOf[ref] = part;
+                    return forwardOf[ref];
                 }
                 complete = false;
                 return rt::kInvalidNodeRef;
+            }
+            if (node->kind == rt::GCNodeKind::Accs) {
+                const auto *accs = function->nodeBodyAs<rt::GCAccsBody>(ref);
+                const auto norm  = function->normInputsOf(ref);
+                if (accs == nullptr || norm.empty()) {
+                    complete = false;
+                    return rt::kInvalidNodeRef;
+                }
+                const gc_node_ref_t tuple = forward(norm.front());
+                if (tuple == rt::kInvalidNodeRef) {
+                    return rt::kInvalidNodeRef;
+                }
+                const gc_node_ref_t part = draft.addAccsNode(node->dataType(), accs->value);
+                draft.setNormInputs(part, std::span<const gc_node_ref_t>(&tuple, 1));
+                forwardOf[ref] = part;
+                return part;
             }
             if (node->kind == rt::GCNodeKind::Fill) {
                 const auto *fill = function->nodeBodyAs<rt::GCFillBody>(ref);
@@ -236,12 +309,23 @@ TransposeGraph buildTransposeGraph(
             return made;
         };
 
+        // The value a rule needs beside the cotangent: a constant read straight, anything else
+        // through the residuals -- that is what the residuals were handed over for.
+        knownValue = [&](gc_node_ref_t ref) -> gc_node_ref_t {
+            if (ref >= nodeCount) {
+                return rt::kInvalidNodeRef;
+            }
+            if (isConstant(ref)) {
+                return constantValue(ref);
+            }
+            return forward(ref);
+        };
         // The exit's cotangent is the caller's: `transpose(f)(x, 1.0)` asks what `1.0` pulls back
         // to. It is seeded before the walk, because the walk starts there and goes backwards.
         const gc_node_ref_t oldExit = function->exitNodeRef();
         if (oldExit >= nodeCount) {
             os << "TRANSPOSE function=" << function->name() << " skip=exit\n";
-            return TransposeGraph{};
+            return false;
         }
         addCotangent(oldExit, cotangentIn);
 
@@ -331,11 +415,7 @@ TransposeGraph buildTransposeGraph(
                             continue;
                         }
                         const size_t other = inputs.size() == 2 ? 1 - i : 0;
-                        if (!isConstant(inputs[other])) {
-                            armsOk = false;
-                            return rt::kInvalidNodeRef;
-                        }
-                        const gc_node_ref_t c = constantValue(inputs[other]);
+                        const gc_node_ref_t c = knownValue(inputs[other]);
                         if (c == rt::kInvalidNodeRef) {
                             armsOk = false;
                             return rt::kInvalidNodeRef;
@@ -373,12 +453,23 @@ TransposeGraph buildTransposeGraph(
             }
             switch (node->kind) {
             case rt::GCNodeKind::Port:
-                if (!function->normPorts().empty() && function->normPorts().front() == ref) {
+                if (!bundlesResiduals && !function->normPorts().empty() &&
+                    function->normPorts().front() == ref) {
                     result = cotangent[ref];
                 }
                 break;
             case rt::GCNodeKind::Data:
+            case rt::GCNodeKind::Accs:
+                // A component of the residuals is a known value: it is read, not differentiated.
                 break;
+            case rt::GCNodeKind::Cast:
+            case rt::GCNodeKind::Copy: {
+                const auto norm = function->normInputsOf(ref);
+                if (!norm.empty()) {
+                    addCotangent(norm.front(), cotangent[ref]);
+                }
+                break;
+            }
             case rt::GCNodeKind::Gate: {
                 const auto norm = function->normInputsOf(ref);
                 if (!norm.empty()) {
@@ -397,7 +488,7 @@ TransposeGraph buildTransposeGraph(
                 if (arms.size() < 2 || normBranch.empty()) {
                     os << "TRANSPOSE function=" << function->name() << " skip=join arms="
                        << arms.size() << '\n';
-                    return TransposeGraph{};
+                    return false;
                 }
                 const gc_node_ref_t join = draft.addJoinNode(
                     Type::Float64(), rt::kInvalidNodeRef, static_cast<rt::gc_cnt_t>(arms.size()));
@@ -408,12 +499,12 @@ TransposeGraph buildTransposeGraph(
                 const auto conditionInputs = function->normInputsOf(normBranch.front());
                 if (conditionInputs.empty()) {
                     os << "TRANSPOSE function=" << function->name() << " skip=condition\n";
-                    return TransposeGraph{};
+                    return false;
                 }
                 const gc_node_ref_t condition = forward(conditionInputs.front());
                 if (!complete || condition == rt::kInvalidNodeRef) {
                     os << "TRANSPOSE function=" << function->name() << " skip=condition\n";
-                    return TransposeGraph{};
+                    return false;
                 }
                 draft.setNormInputs(brch, std::span<const gc_node_ref_t>(&condition, 1));
                 std::vector<gc_node_ref_t> armCotangents;
@@ -427,7 +518,7 @@ TransposeGraph buildTransposeGraph(
                     if (!armsOk || armCotangent == rt::kInvalidNodeRef) {
                         os << "TRANSPOSE function=" << function->name() << " skip=arm arm=" << k
                            << '\n';
-                        return TransposeGraph{};
+                        return false;
                     }
                     draft.setRegionResult(newRegion, armCotangent);
                     draft.setInsertRegion(0);
@@ -472,13 +563,13 @@ TransposeGraph buildTransposeGraph(
                             : "no-rule";
                     os << "TRANSPOSE function=" << function->name() << " skip=rule uri=" << uri
                        << " reason=" << reason << '\n';
-                    return TransposeGraph{};
+                    return false;
                 }
                 const auto inputs = function->normInputsOf(ref);
                 if (inputs.size() != 2 && inputs.size() != 1) {
                     os << "TRANSPOSE function=" << function->name() << " skip=arity uri=" << uri
                        << " operands=" << inputs.size() << '\n';
-                    return TransposeGraph{};
+                    return false;
                 }
                 const gc_node_ref_t ct = cotangent[ref];
                 noteRule(rule->rule);
@@ -504,16 +595,12 @@ TransposeGraph buildTransposeGraph(
                             continue;
                         }
                         const size_t other = inputs.size() == 2 ? 1 - i : 0;
-                        if (!isConstant(inputs[other])) {
-                            os << "TRANSPOSE function=" << function->name()
-                               << " skip=residual uri=" << uri << '\n';
-                            return TransposeGraph{};
-                        }
-                        const gc_node_ref_t c = constantValue(inputs[other]);
+                        const gc_node_ref_t c = knownValue(inputs[other]);
                         if (c == rt::kInvalidNodeRef) {
                             os << "TRANSPOSE function=" << function->name()
-                               << " skip=constant uri=" << uri << '\n';
-                            return TransposeGraph{};
+                               << " skip=residual uri=" << uri << " operand=" << inputs[other]
+                               << '\n';
+                            return false;
                         }
                         if (law == "mul_t") {
                             addCotangent(inputs[i], primitive(":op/mul_d", {ct, c}));
@@ -531,7 +618,7 @@ TransposeGraph buildTransposeGraph(
                 } else {
                     os << "TRANSPOSE function=" << function->name() << " skip=law rule=" << law
                        << " uri=" << uri << '\n';
-                    return TransposeGraph{};
+                    return false;
                 }
                 break;
             }
@@ -563,7 +650,7 @@ TransposeGraph buildTransposeGraph(
                 if (bodyRegionOld == 0 || regionPorts.empty()) {
                     os << "TRANSPOSE function=" << function->name() << " skip=state node=" << ref
                        << " origin=" << regionOrigin << '\n';
-                    return TransposeGraph{};
+                    return false;
                 }
                 const gc_node_ref_t oldBodyResult = function->region(bodyRegionOld)->result;
                 const uint32_t newRegion =
@@ -586,7 +673,7 @@ TransposeGraph buildTransposeGraph(
                 if (!armsOk || bodyCotangent == rt::kInvalidNodeRef) {
                     os << "TRANSPOSE function=" << function->name() << " skip=state node=" << ref
                        << " origin=" << regionOrigin << '\n';
-                    return TransposeGraph{};
+                    return false;
                 }
                 draft.setRegionResult(newRegion, bodyCotangent);
                 draft.setInsertRegion(0);
@@ -601,7 +688,7 @@ TransposeGraph buildTransposeGraph(
                     if (!complete || copied == rt::kInvalidNodeRef) {
                         os << "TRANSPOSE function=" << function->name() << " skip=range node="
                            << ref << '\n';
-                        return TransposeGraph{};
+                        return false;
                     }
                     loopNorm.push_back(copied);
                 }
@@ -617,31 +704,163 @@ TransposeGraph buildTransposeGraph(
                 result = loopNode;
                 break;
             }
+            case rt::GCNodeKind::Call:
+            case rt::GCNodeKind::Func: {
+                // A call reaches its callee one of two ways in this graph model: a CALL node whose
+                // first input is the callee's value, or a FUNC node that is the call itself, with
+                // the arguments as its norm inputs. Both are one fact -- a graph is called here --
+                // and both are transposed the same way: the callee's transpose is a graph of its
+                // own, built beside this one, once per callee (the rule `jvp` reads for a lifted
+                // function, so two calls of one function call one graph). The call site passes
+                // what the transposed callee takes, its own parameters as they stand -- they are
+                // the values the call already has -- and then the cotangent.
+                const bool isCall           = node->kind == rt::GCNodeKind::Call;
+                const auto inputs           = function->normInputsOf(ref);
+                const size_t firstArgument  = isCall ? 1 : 0;
+                if (inputs.size() <= firstArgument) {
+                    // A function value nobody calls: there is no graph under it in this position.
+                    os << "TRANSPOSE function=" << function->name() << " skip=kind node=" << ref
+                       << " kind=" << static_cast<int>(node->kind) << '\n';
+                    return false;
+                }
+                const GraphId calleeId =
+                    isCall ? function->calleeIdOf(inputs.front()) : function->calleeIdOf(ref);
+                camel::runtime::GCGraph *callee = state.program->graph(calleeId);
+                if (callee == nullptr) {
+                    // The callee is the value the first input carries, and a value that is
+                    // itself computed -- a call's result, an indirect call -- names no graph here.
+                    os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                       << " callee=none\n";
+                    return false;
+                }
+                GraphId transposed = rt::kInvalidGraphId;
+                const auto known   = state.callees.find(rt::toValue(calleeId));
+                if (known == state.callees.end()) {
+                    transposed = group.reserve(
+                        "transpose_of_" + std::string(callee->name()),
+                        "transpose_of_" + std::string(callee->name()));
+                    state.callees.emplace(rt::toValue(calleeId), transposed);
+                    if (!buildTransposeMember(state, callee, transposed, os)) {
+                        os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                           << " callee=" << callee->name() << '\n';
+                        return false;
+                    }
+                } else {
+                    transposed = known->second;
+                }
+                // One parameter in, one cotangent out: the argument it belongs to is the only one
+                // there is. A callee of two parameters answers a pair, and splitting that pair is
+                // the step that is not written yet.
+                if (callee->funcType()->normTypesCount() != 1 ||
+                    inputs.size() != firstArgument + 1) {
+                    os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                       << " callee=" << callee->name()
+                       << " params=" << callee->funcType()->normTypesCount() << '\n';
+                    return false;
+                }
+                const gc_node_ref_t argument = forward(inputs[firstArgument]);
+                if (argument == rt::kInvalidNodeRef) {
+                    os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                       << " arg=" << inputs[firstArgument] << '\n';
+                    return false;
+                }
+                FunctionType *calleeType = transposeSignature(callee->funcType());
+                if (calleeType == nullptr) {
+                    os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                       << " callee=" << callee->name() << " signature\n";
+                    return false;
+                }
+                if (isCall) {
+                    const gc_node_ref_t calleeValue = draft.addFuncNode(transposed, Type::Float64());
+                    const std::array<gc_node_ref_t, 3> callArgs{calleeValue, argument,
+                                                                cotangent[ref]};
+                    const gc_node_ref_t made = draft.addCallNode(Type::Float64(), rt::GCCallBody{});
+                    draft.setNormInputs(made, std::span<const gc_node_ref_t>(callArgs));
+                    addCotangent(inputs[firstArgument], made);
+                } else {
+                    // The FUNC node is the call: its inputs are its arguments, so the transposed
+                    // node takes the callee's parameter and the cotangent and stands where the
+                    // original stood.
+                    const std::array<gc_node_ref_t, 2> callArgs{argument, cotangent[ref]};
+                    const gc_node_ref_t made = draft.addFuncNode(transposed, Type::Float64());
+                    draft.setNormInputs(made, std::span<const gc_node_ref_t>(callArgs));
+                    addCotangent(inputs[firstArgument], made);
+                }
+                break;
+            }
             default:
                 os << "TRANSPOSE function=" << function->name() << " skip=kind node=" << ref
                    << '\n';
-                return TransposeGraph{};
+                return false;
+            }
+        }
+        if (result == rt::kInvalidNodeRef && bundlesResiduals) {
+            // The answer of the residual form is one cotangent per tangent, in the order the
+            // tangents stand: the residuals came in as one tuple, the cotangents go out as one.
+            const auto &ports = function->normPorts();
+            std::vector<gc_node_ref_t> parts;
+            bool everyTangent = true;
+            for (size_t i = 1; i < ports.size(); ++i) {
+                if (!hasCotangent[ports[i]]) {
+                    everyTangent = false;
+                    break;
+                }
+                parts.push_back(cotangent[ports[i]]);
+            }
+            if (everyTangent && !parts.empty()) {
+                std::vector<Type *> partTypes;
+                std::vector<size_t> slots;
+                for (size_t i = 0; i < parts.size(); ++i) {
+                    partTypes.push_back(Type::Float64());
+                    slots.push_back(i);
+                }
+                Type *const tupleType = camel::core::type::TupleType::create(partTypes);
+                ::Tuple *emptyTuple    = ::Tuple::create(parts.size(), mm::autoSpace());
+                const gc_node_ref_t source = draft.materializeStaticValue(
+                    camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(emptyTuple),
+                    tupleType);
+                const gc_node_ref_t tuple = draft.addFillNode(
+                    tupleType, rt::makeFillPayload(rt::GCFillKind::Tuple, slots));
+                draft.setNormInputs(tuple, std::span<const gc_node_ref_t>(&source, 1));
+                draft.setWithInputs(tuple, std::span<const gc_node_ref_t>(parts));
+                result = tuple;
             }
         }
         if (result == rt::kInvalidNodeRef) {
             os << "TRANSPOSE function=" << function->name() << " skip=output\n";
-            return TransposeGraph{};
+            return false;
         }
         draft.setExitNode(result);
         draft.setOutputNode(result);
         draft.setReturnNode(result, rt::GCReturnKind::Self);
     }
-    group.encode();
-    const camel::runtime::GCGraph *made = group.encoded(member);
-    const auto *madeType = made != nullptr ? made->funcType() : nullptr;
     std::string rules;
     for (const std::string &rule : usedRules) {
         rules += (rules.empty() ? "" : ",") + rule;
     }
     os << "TRANSPOSE function=" << function->name() << " graph=" << rt::toValue(member)
-       << " type=" << (madeType != nullptr ? madeType->toString() : std::string("-"))
-       << " nodes=" << nodeCount << " arms=" << armRegionsBuilt.size()
-       << " rules=" << (rules.empty() ? "-" : rules) << '\n';
+       << " type=" << signature->toString() << " nodes=" << nodeCount
+       << " arms=" << armRegionsBuilt.size() << " rules=" << (rules.empty() ? "-" : rules)
+       << '\n';
+    return true;
+}
+
+TransposeGraph buildTransposeGraph(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    camel::runtime::GCGraph *function, std::ostream &os) {
+    if (program == nullptr || function == nullptr) {
+        return TransposeGraph{};
+    }
+    camel::runtime::GraphDraftGroup group(context, program);
+    const GraphId member = group.reserve(
+        "transpose_of_" + std::string(function->name()),
+        "transpose_of_" + std::string(function->name()));
+    TransposeState state{group, program, {}};
+    if (!buildTransposeMember(state, function, member, os)) {
+        return TransposeGraph{};
+    }
+    group.encode();
+    const camel::runtime::GCGraph *made = group.encoded(member);
     return TransposeGraph{group.program(), const_cast<camel::runtime::GCGraph *>(made)};
 }
 
