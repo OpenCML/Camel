@@ -4,6 +4,7 @@
 #include "fault.h"
 
 #include "camel/passes/test/anchor.h"
+#include "../opt/generic/rewrite.h"
 #include "camel/runtime/draft_session.h"
 
 using camel::passes::test::anchorNode;
@@ -96,4 +97,44 @@ ShareBranchArmTestPass::apply(const camel::runtime::Program *program, std::ostre
                 draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, second, first);
             }
         });
+}
+
+const camel::runtime::Program *
+OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostream &) {
+    using camel::runtime::DraftEdgeKind;
+    using camel::runtime::GCNodeKind;
+    camel::runtime::RuntimeGraphDraftSession session(context_, program);
+    for (camel::runtime::GCGraph *owner : session.collectReachableRuntimeGraphs()) {
+        auto &transaction = session.edit(owner);
+        auto &draft       = transaction.edit();
+        for (camel::runtime::gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+            const auto *header = draft.header(id);
+            if (header == nullptr || header->kind != GCNodeKind::Oper ||
+                draft.orderInputsOf(id).empty()) {
+                continue;
+            }
+            const auto uri = camel::passes::generic::operUriOf(transaction, id);
+            // Not an effect: the strip is about what an effect stands on. `:io/` is the family of
+            // operators whose running is observed (a print, a save); the others compute values.
+            if (!uri.starts_with(":io/")) {
+                continue;
+            }
+            // Every edge but the order ones goes, both directions: what is left is an effect that
+            // an order edge names and that nothing reads, no chain holds, and no result returns.
+            for (camel::runtime::gc_node_ref_t pred : draft.normInputsOf(id)) {
+                draft.unlinkInput(DraftEdgeKind::Data, id, pred);
+            }
+            for (camel::runtime::gc_node_ref_t pred : draft.withInputsOf(id)) {
+                draft.unlinkInput(DraftEdgeKind::Data, id, pred, camel::runtime::PortRole::Context);
+            }
+            for (camel::runtime::gc_node_ref_t pred : draft.ctrlInputsOf(id)) {
+                draft.unlinkInput(DraftEdgeKind::Ctrl, id, pred);
+            }
+            for (camel::runtime::gc_node_ref_t pred : draft.syncInputsOf(id)) {
+                draft.unlinkInput(DraftEdgeKind::Sync, id, pred);
+            }
+            return session.commit();
+        }
+    }
+    return program;
 }

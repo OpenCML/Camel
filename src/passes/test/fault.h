@@ -26,6 +26,19 @@
 inline constexpr const char *kDropCallArgumentPass = "test::drop_call_argument";
 inline constexpr const char *kLeakBranchArmPass    = "test::leak_branch_arm";
 inline constexpr const char *kShareBranchArmPass   = "test::share_branch_arm";
+inline constexpr const char *kOrderOnlyEffectPass  = "test::order_only_effect";
+
+/// TEST-ONLY: strips every edge an effect stands on except its order edges, so the effect is kept
+/// in the graph by an order edge alone. An order edge orders two nodes that both run; it does not
+/// make either of them run (docs/design/effects/edges.cn.md 1.5), so the commit must refuse the
+/// graph with an internal error naming what the effect is missing. The credential read is the one
+/// under test (`effectStandsOnSomething`, src/execute/pass.cpp).
+class OrderOnlyEffectTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
 
 class DropCallArgumentTestPass : public RuntimeGraphRewritePass {
   public:
