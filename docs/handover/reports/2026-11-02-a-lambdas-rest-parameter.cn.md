@@ -633,3 +633,45 @@ error[RuntimeDiag::PassInternalError]: Pass 'std::opt::fold' failed with an inte
 
 **④ 附带一个读数**：报错位置写的是 `:12:99`，而第 12 行只有 `let n6 = true;`（`reduce` 实际在第 13 行）。**位置本身也是错的**——
 与"效果节点在分支里"可能是同一个记账问题，但这是观察，不是结论。
+
+## 19. A1：`std::cml` 段错误（复现 + 栈），修之前先报要动的文件
+
+**① 复现**：`camel cml_segv.cml std::cml` → **`rc=139`、SIGSEGV（core dumped），三次三次**。
+
+**② 栈（前 12 帧，点出函数名）**：
+
+```
+#0 __memmove_avx_unaligned_erms                                        ← SIGSEGV（读坏地址）
+#1 std::__format::__formatter_str<char>::format<…>(string_view, …)
+#2 std::basic_format_arg<…>::_M_visit<…>
+#3 std::__format::_Formatting_scanner<…>::_M_format_arg
+#4 std::__format::_Scanner<char>::_M_on_replacement_field
+#5 std::__format::_Scanner<char>::_M_scan
+#6 (anonymous namespace)::CmlPrinter::emitAssignment(uint, string_view)   ← 崩在打印这一句
+#7 CmlPrinter::processNode
+#8 CmlPrinter::printStatements
+#9 CmlPrinter::run
+#10 CmlDumpPass::apply
+#11 applyPassesDetailed
+```
+
+⇒ **崩在 `CmlPrinter::emitAssignment` 里的 `std::format`**：格式化一个字符串时读到坏指针（`memmove`）。
+不是遍调度、不是 VM，是**打印器在写赋值那一行时**。
+
+**③ 相关代码**：`src/passes/trans/cml/cml.cpp:1470-1489`，`emit()` 那一句是
+
+```cpp
+emit(indent_ + std::format("{} {} {}", cell->second, assignmentOperator(uri),
+                           expression(inputs.back()).text));
+```
+
+`Expr::text` 是 `std::string`（`:207`），`cells_` 是 `unordered_map<gc_node_ref_t, std::string>`（`:338`），
+`assignmentOperator(uri)` 返回 `uri` 的子视图（`uri` 是本帧的 `string_view`，来自节点体）。**三个实参各自看似都有效**，
+所以下一个动作是**在这句前后把三个字符串各打一次长度/指针**，确认是哪一个坏了——**这一步还没做**。
+
+**④ 要动的文件（先报，等调度）**：`src/passes/trans/cml/cml.cpp`（函数 `CmlPrinter::emitAssignment`，必要时连同
+`CmlPrinter::expression` 的 lambda/clone 分支）。**与 `m5'` 的 `xs->sum()` 接收者那一列不重叠**——那里改的是调用形状，
+这里改的是赋值打印时的字符串生命周期。
+
+**⑤ 还没修**：这一笔只到"复现 + 栈 + 文件清单"。**下一次动手前先确认那一句的三个字符串谁坏了**，
+避免用"加个 try/catch"之类的办法把段错误藏起来——**期望仍是"打印出源码"或一条具名拒绝**。
