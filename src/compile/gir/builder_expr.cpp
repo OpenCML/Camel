@@ -2238,7 +2238,19 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     } else {
         accsNode = currGraph_->addAccsNode(elemType, gct->accessKey());
     }
-    linkNodes(LinkType::Norm, tgtNode, accsNode);
+    // `typeof` infers a type and evaluates nothing, and the graph it builds is dropped: a value
+    // that lives in the graph the type is used in is borrowed by name, not by node. Linking the
+    // outer node here would leave an edge in this graph pointing at a node it does not own, which
+    // outlives the graph, so a port carrying that node's type stands in for it.
+    node_handle_t accsSource = tgtNode;
+    if (nodeGraphOf(tgtNode) != currGraph_.get()) {
+        static unsigned long long typeofStandIns = 0;
+        accsSource                               = currGraph_->addPortNode(
+            nodeTypeOf(tgtNode),
+            "$typeof" + std::to_string(++typeofStandIns),
+            false);
+    }
+    linkNodes(LinkType::Norm, accsSource, accsNode);
     registerNodeOrigin(context_, accsNode, gct, "gir.accs");
     if (readConstant != nullptr) {
         rememberConstant(accsNode, readConstant);

@@ -1,0 +1,25 @@
+// The author's example of 2026-10-31 15:25, as a case: g(x) = x*x, f = reinterp<jvp>(g), x = 3,
+// dx = 1. The FORWARD half of split(f) computes everything the present inputs allow and hands the
+// residuals on as values: for x = 3 it gives y = 9 and r0 = 3 (the value of x, which the backward
+// half needs to turn a cotangent into a tangent).
+//
+// This case runs when `split` exists (design doc 4.2); test/plans/feat/transforms/split.plan.toml
+// asks test/tools/have-split.mjs first and skips while it does not. The spelling of the calls is
+// the one 4.2 and 4.4 write; the first run after the implementation lands is what pins it, and the
+// numbers are the author's example either way: (9, 3) now, 6 for dx = 1 in split_backward_tangent.
+import rulesets.jvp
+
+func g(x: float): float {
+    return x * x
+}
+
+func main(): int sync {
+    let f = transforms::reinterp::<jvp>(g)
+    let (fwd, lin) = transforms::split(f)
+    let (y, r0) = fwd(3.0)
+    let dy = lin(r0, 1.0)
+    println("forward y=", y)
+    println("residual r0=", r0)
+    println("tangent dx1=", dy)
+    return 0
+}

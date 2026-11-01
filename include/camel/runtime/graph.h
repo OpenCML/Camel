@@ -65,7 +65,6 @@ class FunctionType;
 
 namespace camel::runtime {
 
-class GraphDraft;
 class Program;
 
 } // namespace camel::runtime
@@ -344,28 +343,23 @@ struct GCFuncRef {
 };
 static_assert(std::is_trivially_copyable_v<GCFuncRef>);
 
-/// Payload of a LOOP node in a frozen graph: its form, the indexes of its condition graph
-/// (kNoLoopGraph for For) and of its body graph in the graph's reference table, where both are
-/// marked callee and nested (the LOOP node calls them each round; they are written inside the
-/// graph), how many values the loop collects into arrays (its collection slots; 0 for a
-/// loop the source wrote, which has none), and where its elements come from
-/// (camel::core::LoopIterableForm: an array, or the pair of the interval's two bounds).
+/// Payload of a LOOP node in a frozen graph: its form, how many values the loop collects into
+/// arrays (its collection slots; 0 for a loop the source wrote, which has none), and where its
+/// elements come from (camel::core::LoopIterableForm: an array, or the pair of the interval's two
+/// bounds). A loop is its body *region* -- the condition and the body are two control regions of the
+/// same graph, sharing the frame of the computation around them (design principles 3.10) -- so the
+/// node names no graph at all.
 struct GCLoopRef {
     camel::core::LoopKind kind                        = camel::core::LoopKind::While;
     camel::core::LoopIterableForm iterableForm        = camel::core::LoopIterableForm::Array;
     uint16_t reserved1                                = 0;
-    uint32_t condRef                                  = kNoLoopGraph;
-    uint32_t bodyRef                                  = kNoLoopGraph;
     uint32_t collectionCount                          = 0;
 };
 static_assert(std::is_trivially_copyable_v<GCLoopRef>);
-static_assert(sizeof(GCLoopRef) == 16, "A LOOP payload is two words.");
+static_assert(sizeof(GCLoopRef) == 8, "A LOOP payload is one word.");
 
-/// What a LOOP node names, as values: the graphs themselves instead of their reference-table
-/// indexes (GraphDraft::loopGraphsOf, GCGraph's loopBodyOf).
+/// What a LOOP node is, as values: the payload's fields.
 struct GCLoopBody {
-    GraphId condGraph                                 = kInvalidGraphId; // invalid for a For loop
-    GraphId bodyGraph                                 = kInvalidGraphId;
     camel::core::LoopKind kind                        = camel::core::LoopKind::While;
     camel::core::LoopIterableForm iterableForm        = camel::core::LoopIterableForm::Array;
     uint16_t reserved1                                = 0;
@@ -571,6 +565,9 @@ class GCUseIndex {
     /// (docs/design/effects/edges.cn.md 1.5). Kept beside the input runs' groups because a sync
     /// edge is not a port.
     std::span<const gc_node_ref_t> sync(gc_node_ref_t ref) const { return group(ref, 3); }
+    /// The users an order edge names: the nodes `ref` must run before when both run, along an edge
+    /// that carries no "used" (GCGraphOrderEdge). Also a side array, so also beside the port groups.
+    std::span<const gc_node_ref_t> order(gc_node_ref_t ref) const { return group(ref, 4); }
 
   private:
     std::span<const gc_node_ref_t> group(gc_node_ref_t ref, size_t kind) const {
@@ -578,7 +575,7 @@ class GCUseIndex {
         return {users_.data() + begins_[at], begins_[at + 1] - begins_[at]};
     }
 
-    static constexpr size_t kGroups = 4;
+    static constexpr size_t kGroups = 5;
     std::vector<gc_node_ref_t> users_;
     std::vector<uint32_t> begins_; // kGroups per node, then the end
 };
@@ -754,10 +751,6 @@ class GCGraph : public camel::core::rtdata::Object {
     gc_node_ref_t nodeRef(const GCNode *node) const;
     /// FUNC node `ref`: the callee (invalid when `ref` is not a FUNC node).
     GraphId calleeIdOf(gc_node_ref_t ref) const;
-    /// LOOP node `ref`: its condition graph (invalid for a For loop, or when `ref` is not a
-    /// LOOP node) and its body graph (invalid when `ref` is not a LOOP node).
-    GraphId loopCondIdOf(gc_node_ref_t ref) const;
-    GraphId loopBodyIdOf(gc_node_ref_t ref) const;
     /// LOOP node `ref`: its form. The node must be a LOOP node.
     camel::core::LoopKind loopKindOf(gc_node_ref_t ref) const {
         return nodeBodyAs<GCLoopRef>(ref)->kind;
@@ -937,6 +930,28 @@ class GCGraph : public camel::core::rtdata::Object {
     std::span<const gc_node_ref_t> withOutputsOf(gc_node_ref_t ref) const;
     std::span<const gc_node_ref_t> ctrlOutputsOf(gc_node_ref_t ref) const;
 
+    /// The five user sets of `ref`, under the names the draft side gives them (`normUsersOf`,
+    /// `withUsersOf`, `ctrlUsersOf`, `syncUsersOf`, `orderUsersOf` of camel/runtime/draft.h): the
+    /// nodes that read a value of it in each kind, and the two kinds that are not ports -- the
+    /// statements that follow it in a `sync` block's chain, and the nodes it is ordered before
+    /// (docs/design/effects/edges.cn.md 1.5, where an edge kind is one notion on both sides of a
+    /// freeze).
+    ///
+    /// `normOutputsOf` and its two siblings are the same three runs, so a reader of a graph asks
+    /// either name and gets the same list. The last two have no sibling because neither a sync nor
+    /// an order edge is a port: both are kept beside the input runs' groups (`GCUseIndex::sync`,
+    /// `GCUseIndex::order`), and `waitUsersOf` is the union of the control and the sync users.
+    ///
+    /// They exist so that a question about what observes a node -- the liveness question of
+    /// camel/runtime/effect_liveness.h reads a data user and a wait, `isUnanchoredPure` reads all
+    /// six edge kinds on both sides -- is asked of a frozen graph the way it is asked of a draft,
+    /// rather than every caller spelling the traversal again.
+    std::span<const gc_node_ref_t> normUsersOf(gc_node_ref_t ref) const;
+    std::span<const gc_node_ref_t> withUsersOf(gc_node_ref_t ref) const;
+    std::span<const gc_node_ref_t> ctrlUsersOf(gc_node_ref_t ref) const;
+    std::span<const gc_node_ref_t> syncUsersOf(gc_node_ref_t ref) const;
+    std::span<const gc_node_ref_t> orderUsersOf(gc_node_ref_t ref) const;
+
     std::span<const gc_node_ref_t> normPorts() const;
     std::span<const gc_node_ref_t> withPorts() const;
     std::span<const gc_node_ref_t> closureNodes() const;
@@ -1074,11 +1089,9 @@ uint32_t funcWriteMaskOf(const GCGraph &graph, gc_node_ref_t ref);
 /// frozen graph, which is what the box check and the backends have.
 camel::core::type::Type *callValueTypeOf(const GCGraph &callee, uint32_t writtenCaptures);
 
-/// The draft payload of the LOOP node `ref` of a frozen graph: the graphs its GCLoopRef names.
+/// The payload of the LOOP node `ref` of a frozen graph, as values.
 inline GCLoopBody loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) {
     return GCLoopBody{
-        .condGraph       = graph.loopCondIdOf(ref),
-        .bodyGraph       = graph.loopBodyIdOf(ref),
         .kind            = graph.loopKindOf(ref),
         .iterableForm    = graph.loopIterableFormOf(ref),
         .collectionCount = graph.loopCollectionCountOf(ref),

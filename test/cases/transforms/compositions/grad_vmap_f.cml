@@ -1,0 +1,34 @@
+/**
+ * M6, first combination: `grad(vmap(f))` with `f(x) = x*x`, at `x = [1, 2, 3]`.
+ *
+ * Conventions, fixed before the code (`docs/design/program-transforms/m6-combination-numbers.cn.md`
+ * 2.1): `vmap(f)` maps elementwise and `grad` needs a scalar, so the composition reads
+ * `grad(batch => sum(vmap(f)(batch)))`; and `grad` differentiates the function's first `with`
+ * parameter (that is the ruling the `grad` operator already carries today), so the batch is that
+ * parameter here.
+ *
+ * The gradient of `sum_j batch_j^2` is `2*batch`: 2, 4, 6. Those numbers come from the derivative,
+ * not from any implementation -- an implementation that disagrees is wrong.
+ */
+
+import { grad } from autodiff
+import { sum } from array
+import { vmap } from transforms
+
+func sq(x: f32): f32 {
+    return x * x
+}
+
+with <batch: f32[]>
+func over_batch(): f32 {
+    return sum(vmap(sq)(batch))
+}
+
+func main(): int {
+    let xs: f32[] = [1.0, 2.0, 3.0]
+    let gs = grad(over_batch)<xs>()
+    println(gs[0])
+    println(gs[1])
+    println(gs[2])
+    return 0
+}

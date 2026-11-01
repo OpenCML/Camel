@@ -219,7 +219,7 @@ size_t algebraDraft(camel::runtime::GraphTransaction &transaction, bool safeFp, 
     }
     const size_t slots  = draft.nodeSlotCount();
     const auto families = Families::current();
-    const WrittenSlots written(draft);
+    const WrittenSlots written(transaction);
     size_t budget = slots * 4, changed = 0;
     std::deque<gc_node_ref_t> work;
     std::vector<bool> queued(slots, true);

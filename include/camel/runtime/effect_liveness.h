@@ -29,7 +29,7 @@ enum class EffectStanding : uint8_t {
     HasNoCredential,
 };
 
-/// The four facts the question is answered from. A caller reads them where it stands -- a pass
+/// The facts the question is answered from. A caller reads them where it stands -- a pass
 /// reads its own draft, the builder reads its own bookkeeping -- and the answer is one function so
 /// that no two callers invent different rules.
 struct EffectLivenessFacts {
@@ -40,12 +40,9 @@ struct EffectLivenessFacts {
     /// builder marked it as one (`kGCNodeFlagSyncStatement`).
     bool isSyncStatement = false;
     /// Outside a block: the node is registered as a writer of a variable, and a read written after
-    /// it takes that variable (the writer table).
+    /// it takes that variable (the writer table). No caller fills it today: the writer table's
+    /// answer is not measured here yet (3.1 keeps it as the third credential).
     bool isWriterWithLaterRead = false;
-    /// The node is a call through a function value that may write captures (`EffectSummary`:
-    /// a call whose callee is not known). It does not decide the standing: such a call is the new
-    /// version of what it wrote, and the reader takes its data edge from the call.
-    bool isCallThroughValue = false;
     /// The node carries a wait: an edge that exists only to order it (today the control edge,
     /// docs/design/effects/plan.cn.md 5.5). A GATE carries no effect of its own -- it carries a
     /// wait -- and what a pass may do with it depends on whether that wait is a chain's

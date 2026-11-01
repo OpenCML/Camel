@@ -46,3 +46,56 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # The timeout below stays; it is only the liveness bound.
 cpu_budget_ms = 13000
 timeout_ms = 180000
+
+# The two readings of a training run, as bounds a plan can hold: the time it takes against the
+# baseline's time, and the loss falling from the first logged step to the last.
+#
+# Why a ratio and not a number of seconds: both sides run this profile on this host in the same
+# window, so contention on a shared machine moves both columns and leaves the ratio roughly where it
+# was.  The single-run value is recorded here anyway, as the loosening rule asks -- on 2026-10-31 the
+# small profile measured 0.321265 s (Camel) against 0.853344 s (PyTorch), a ratio of 0.376, and the
+# three serial samples either side of it read 0.129045 / 0.127260 / 0.128581 s.  The 1.5 bound is
+# 4x the recorded ratio: room for one side to be scheduled badly, not room for a regression.
+# Nothing in the agreement entry above is loosened by this one: it reads the bounds of its own
+# readings (time and the curve), not the numeric tolerances.
+[[tests]]
+name = "bounds"
+desc = "C2 small configuration: the Camel training run stays within 1.5x of the PyTorch baseline's training time on the same data, batch and host, and its logged loss falls from the first step to the last (the same two readings the report's Performance and Loss curve tables carry)."
+kind = "behavior"
+tool = "python"
+case = "../../../showcase/c2-mlp-mnist/compare.py"
+args = ["${case}", "--profile", "small", "--data", "${test_tmp}/c2-showcase-bounds", "--results", "${test_tmp}/c2-showcase-bounds/RESULTS.md"]
+skip_unless = ["${python}", "-c", "import numpy, torch, psutil"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('node:fs')
+const lines = fs.readFileSync(input.test_tmp + '/c2-showcase-bounds/RESULTS.md', 'utf8').split(String.fromCharCode(10))
+const cells = (prefix) => {
+  const row = lines.find((x) => x.startsWith(prefix))
+  assert(row !== undefined, 'the report has no row starting with ' + prefix)
+  return row.split('|').slice(1, -1).map((c) => c.trim())
+}
+const time = cells('| training time')
+const camel = Number(time[1])
+const baseline = Number(time[2])
+assert(Number.isFinite(camel) && Number.isFinite(baseline) && baseline > 0, 'unreadable training time row: ' + time.join(' / '))
+const ratio = camel / baseline
+assert(ratio <= 1.5, 'Camel trains in ' + camel.toFixed(6) + ' s against the baseline s ' + baseline.toFixed(6) + ': ' + ratio.toFixed(3) + 'x, past the 1.5x bound')
+const start = lines.findIndex((x) => x.startsWith('| step |'))
+assert(start > 0, 'the report carries no loss curve')
+const curve = []
+for (let i = start + 2; i < lines.length && lines[i].startsWith('|'); ++i)
+  curve.push(lines[i].split('|').slice(1, -1).map((c) => c.trim()))
+assert(curve.length >= 2, 'the loss curve has ' + curve.length + ' row(s)')
+const first = Number(curve[0][1])
+const last = Number(curve[curve.length - 1][1])
+assert(Number.isFinite(first) && Number.isFinite(last), 'unreadable loss: ' + curve[0].join(' / ') + ' .. ' + curve[curve.length - 1].join(' / '))
+assert(last < first, 'the loss does not fall: step ' + curve[0][0] + ' is ' + first + ', step ' + curve[curve.length - 1][0] + ' is ' + last)
+const firstBaseline = Number(curve[0][2])
+const lastBaseline = Number(curve[curve.length - 1][2])
+assert(lastBaseline < firstBaseline, 'the baseline loss does not fall: ' + firstBaseline + ' -> ' + lastBaseline)
+}
+"""
+timeout_ms = 180000

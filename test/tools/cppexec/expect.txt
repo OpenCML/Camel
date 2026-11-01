@@ -304,6 +304,10 @@ test/cases/trans/cpp/tensor_zeros.cml
 # The shape's own refusal: a negative extent is a fault, and the words are the kernel's ("zeros:
 # Shape cannot contain negative values"), not a sentence of this back end's own making.
 test/cases/trans/cpp/fault_tensor_negative_shape.cml
+# The other two element types the tensor module stores: `bf16` and `f16` are the same shaped array,
+# the fill a value of the element type, so the widths one store per element do not make a tensor a
+# runtime object either.
+test/cases/trans/cpp/tensor_ones_half.cml
 # `shape(m)` answers the value's dimensions as an `int[]` of its own -- a value, not a view -- and a
 # sliced value answers the dimensions it kept.
 test/cases/trans/cpp/shape_rank.cml
@@ -317,6 +321,17 @@ test/cases/trans/cpp/sum_rank.cml
 # dimensions it did not reduce -- `axis=0` sums a rank-2 value's columns, `axis=1` its rows, and the
 # middle axis of a rank-3 value sums elements that are apart in the run.
 test/cases/trans/cpp/sum_axis_rank.cml
+
+# The mean along one dimension is the sum's own two steps in the interpreter's order: each lane added
+# from +0 into a double, the unrounded total divided by the extent in double, one rounding into the
+# element type -- not "the sum divided by a count" written a second way.
+test/cases/trans/cpp/mean_axis_rank.cml
+
+# The mean keeps the element type, and its canonical form is T(sum / numel) in f64 with one rounding:
+# `mean_axis([1, 2, 4] as int[3], 0, false)` is `2` -- int(7 / 3), not a lost average -- while the
+# same three elements through `f32(xs)` are `2.3333333`, and 2^24 + 1 - 2^24 separates an f64
+# accumulator (0.33333334) from an f32 one (0).
+test/cases/trans/cpp/mean_axis_elements.cml
 
 # The extreme along one dimension folds each lane from its identity (-inf or +inf, the lowest or the
 # largest value), so one NaN element makes the answer NaN, and compares with the one statement the

@@ -50,12 +50,12 @@ class EngineRootScope {
 #ifndef NDEBUG
         // The Debug-only safepoint draft-root check counts this scope for this draft only: a
         // session that rewrites several graphs still needs its RootScope for the others.
-        debugDraftRootOpened(transaction_.graph());
+        debugDraftRootOpened(transaction_);
 #endif
     }
     ~EngineRootScope() {
 #ifndef NDEBUG
-        debugDraftRootClosed(transaction_.graph());
+        debugDraftRootClosed(transaction_);
 #endif
         camel::core::mm::autoSpace().unregisterExternalRootTracer(this);
     }

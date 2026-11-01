@@ -148,7 +148,7 @@ const DataLayout *computeLayout(const Type *type) {
                                 ? static_cast<const StructType *>(type)->typeAt(i)
                                 : static_cast<const TupleType *>(type)->typeAt(i);
         const DataLayout *fieldLayout = pureDataLayout(field);
-        ASSERT(fieldLayout != nullptr, "A pure-data field has a layout");
+        GUARD(fieldLayout != nullptr, "A pure-data field has a layout");
         // Type-level, not size-level: a field takes part in the slot-shaped bulk copy only when
         // its own bytes are a slot's bytes (slotResident) and it fills a slot exactly. A c64
         // field is 8 bytes but is not slot-resident, so `{x: c64}` is not slot-shaped.

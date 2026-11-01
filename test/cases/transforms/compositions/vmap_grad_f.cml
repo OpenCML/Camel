@@ -1,0 +1,29 @@
+/**
+ * M6, second combination: `vmap(grad(f))` with the same `f(x) = x*x`, at the same `x = [1, 2, 3]`.
+ *
+ * This is the other order of the first combination, and the two must agree bit for bit: `vmap`
+ * takes the batch axis, `grad` takes the point axis, and swapping them must not change the
+ * answer. `grad(f)` at `w` is `2w`, mapped over the batch that is 2, 4, 6 again -- so a
+ * disagreement with `grad_vmap_f` means one of the two maps over the wrong axis, which is the
+ * mistake this pair exists to catch.
+ *
+ * The point axis is the first `with` parameter of `sq`, as `grad` reads it today; `vmap` supplies
+ * one value of it per element of the batch.
+ */
+
+import { grad } from autodiff
+import { vmap } from transforms
+
+with <w: f32>
+func sq(): f32 {
+    return w * w
+}
+
+func main(): int {
+    let xs: f32[] = [1.0, 2.0, 3.0]
+    let gs = vmap((x: f32) => grad(sq)<x>())(xs)
+    println(gs[0])
+    println(gs[1])
+    println(gs[2])
+    return 0
+}

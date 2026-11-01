@@ -14,6 +14,7 @@
 #include "camel/utils/type.h"
 
 #include <string_view>
+#include <stdexcept>
 
 using namespace std;
 using namespace camel::core::type;
@@ -150,7 +151,7 @@ std::string Type::mangle() const {
     case TypeCode::EnumHole:
         return "H";
     default:
-        ASSERT(false, "Unknown TypeCode");
+        throw std::runtime_error("Unknown TypeCode");
         return "";
     }
 
@@ -289,7 +290,7 @@ CastSafety Type::castSafetyFrom(Type *sourceType) const {
 }
 
 slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
-    ASSERT(sourceType != nullptr, "castSlotFrom source type is null");
+    GUARD(sourceType != nullptr, "castSlotFrom source type is null");
     if (sourceType->code() == TypeCode::Array) {
         // A value of `T[..]` read as `T` is the element it holds: a rank-zero array *is* that
         // element (design principles 5.4), so reading it back hands the element on, and the
@@ -303,7 +304,7 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
             return array->getSlot(0);
         }
     }
-    ASSERT(
+    GUARD(
         castSafetyFrom(sourceType) == CastSafety::Safe,
         "castSlotFrom only allowed when castSafetyFrom returns Safe");
     // The table (castSafetyFrom) holds one entry for a type that lives in a slot: itself, and
@@ -320,7 +321,15 @@ bool Type::assignableFrom(Type *from) const {
     if (to == from)
         return true;
 
-    // Built-in types: composite types containing Ref must be resolved before assignment.
+    // Still an ASSERT, now with the measurements that settle why. Turning it on aborts 17 plan
+    // cases, not the four the ruling named: `comprehension_context.annotated` (nvm/fvm/jit) and
+    // `context.var_sibling` are where it was first seen, and `rank_zero_slot_field*`,
+    // `rank_zero_slot_tuple_element*`, `rank_zero_slot_nested_field*`, `print_and_recompile` and
+    // `ort_struct_casts` reach it too -- valid programs comparing a name with a primitive target
+    // all over the compiler, not one caller that forgot to resolve. Exempting composite targets
+    // (their own `assignableFrom` answers for them) still leaves the rank_zero family aborting,
+    // so the question is broader than any single caller: it is "which type is a name allowed to
+    // stand for, and who reads it", a question about the type system. Stays a release-time check.
     ASSERT(
         to->code_ != TypeCode::Ref && from->code_ != TypeCode::Ref,
         "Ref type cannot be assigned");

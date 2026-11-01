@@ -15,6 +15,7 @@
 #include "camel/runtime/graph.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/exec_plan.h"
+#include "camel/runtime/graph_txn.h"
 #include "camel/runtime/loop.h"
 #include "runtime/graph_build.h"
 
@@ -526,24 +527,15 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             }
         }
         if (node->kind == GCNodeKind::Loop) {
-            // The two graphs are entries of the reference table, marked callee (I12/I13): the
-            // condition exactly when the form has one.
-            const auto *body     = graph->nodeBodyAs<GCLoopRef>(ref);
-            const auto validLoop = [&](uint32_t index) {
-                return index < graph->refs().size() && isValid(graph->refs()[index]) &&
-                       (graph->refRoles(index) & kGraphRefCallee) != 0;
-            };
-            const bool hasCond = camel::core::loopHasCondition(body->kind);
-            // A loop in region form names no graph; its parts are regions of this graph.
-            const bool regionForm = body->bodyRef == kNoLoopGraph && body->condRef == kNoLoopGraph;
+            // A loop is its regions: the condition and the body are two control regions of this
+            // graph (design principles 3.10), so the node names no graph and there is nothing to
+            // check against the reference table -- only that its form is one the language has.
+            const auto *body = graph->nodeBodyAs<GCLoopRef>(ref);
             if (static_cast<uint8_t>(body->kind) >
-                    static_cast<uint8_t>(camel::core::LoopKind::ForWhile) ||
-                (!regionForm &&
-                 (!validLoop(body->bodyRef) ||
-                  (hasCond ? !validLoop(body->condRef) : body->condRef != kNoLoopGraph)))) {
+                static_cast<uint8_t>(camel::core::LoopKind::ForWhile)) {
                 throw std::runtime_error(
                     std::format(
-                        "Runtime graph '{}' has LOOP node {} without its condition or body graph.",
+                        "Runtime graph '{}' has LOOP node {} of a form the language has not.",
                         graph->name(),
                         ref));
             }
@@ -1013,37 +1005,18 @@ void emitDraftPayload(
             }
             break;
         case GCNodeKind::Loop: {
-            // The draft holds the two graphs; the frozen node names them by their indexes in
-            // the reference table, as a FUNC node names its callee.
+            // A loop is its regions: nothing of the frozen payload is a graph, so the node is its
+            // fields and nothing else.
             ASSERT(
                 payloadBytes.size_bytes() >= sizeof(GCLoopRef),
                 "Draft LOOP payload is missing.");
             const GCLoopBody body = draft.loopGraphsOf(planned.draftId);
-            const auto *refIndex  = payload.refIndex;
-            const auto indexOf    = [&](GraphId target) -> uint32_t {
-                if (!isValid(target)) {
-                    return kNoLoopGraph;
-                }
-                const auto found = refIndex
-                                          ? refIndex->find(target)
-                                          : std::unordered_map<GraphId, uint32_t>::const_iterator{};
-                if (refIndex == nullptr || found == refIndex->end()) {
-                    throw std::runtime_error(
-                        std::format(
-                            "LOOP node {} names a graph that is not among the graphs this graph "
-                            "calls (its reference table).",
-                            planned.ref));
-                }
-                return found->second;
-            };
             writeBody(
                 payload.payload,
                 header,
                 GCLoopRef{
                     .kind            = body.kind,
                     .iterableForm    = body.iterableForm,
-                    .condRef         = indexOf(body.condGraph),
-                    .bodyRef         = indexOf(body.bodyGraph),
                     .collectionCount = body.collectionCount,
                 });
         } break;
@@ -1258,7 +1231,8 @@ void emitDraftPayload(
 
 } // namespace
 
-std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphDraft &draft) {
+std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphTransaction &transaction) {
+    const auto &draft = transaction.graph();
     return planDraftPayload(draft).runtimeRefsByDraftId;
 }
 
@@ -2305,24 +2279,6 @@ GraphId GCGraph::calleeIdOf(gc_node_ref_t ref) const {
     return index < refCount_ ? refs_[index] : kInvalidGraphId;
 }
 
-GraphId GCGraph::loopCondIdOf(gc_node_ref_t ref) const {
-    const GCNode *n = node(ref);
-    if (!n || n->kind != GCNodeKind::Loop || !n->hasPayload()) {
-        return kInvalidGraphId;
-    }
-    const uint32_t index = nodeBodyAs<GCLoopRef>(ref)->condRef;
-    return index < refCount_ ? refs_[index] : kInvalidGraphId;
-}
-
-GraphId GCGraph::loopBodyIdOf(gc_node_ref_t ref) const {
-    const GCNode *n = node(ref);
-    if (!n || n->kind != GCNodeKind::Loop || !n->hasPayload()) {
-        return kInvalidGraphId;
-    }
-    const uint32_t index = nodeBodyAs<GCLoopRef>(ref)->bodyRef;
-    return index < refCount_ ? refs_[index] : kInvalidGraphId;
-}
-
 gc_node_ref_t GCGraph::matchedJoinOutputOf(gc_node_ref_t ref) const {
     const auto outputs = withOutputsOf(ref);
     if (outputs.size() != 1) {
@@ -2341,9 +2297,10 @@ GCUseIndex::GCUseIndex(const GCGraph &graph) {
     // order and the uniqueness the encoder gave the stored outputs before they were dropped.
     // Two passes over the input table: count, then place (a counting sort by source).
     //
-    // The fourth group is the sync edges, which are not in the input table: they are a side array
-    // sorted by (user, pred), so they are read in the same user order and placed the same way
-    // (docs/design/effects/edges.cn.md 1.5).
+    // The last two groups are the side arrays, which are not in the input table: the sync edges
+    // (the fourth) and the order edges (the fifth). Both are stored sorted by (user, pred), so
+    // they are read in the same user order and placed the same way (docs/design/effects/
+    // edges.cn.md 1.5).
     const size_t count  = graph.nodeCount();
     const auto groupsOf = [&](gc_node_ref_t user) {
         return std::array<std::span<const gc_node_ref_t>, 3>{
@@ -2367,16 +2324,24 @@ GCUseIndex::GCUseIndex(const GCGraph &graph) {
             }
         }
     }
-    for (const GCGraphSyncEdge &edge : graph.syncEdges()) {
-        if (!graph.containsNodeRef(edge.pred) || !graph.containsNodeRef(edge.user)) {
-            continue;
+    // The side arrays, each edge placed under its predecessor: the sync users in the fourth group,
+    // the order users in the fifth. Both are stored sorted by (user, pred), so one walk of each
+    // places them in the same user order the input runs have, and a user is skipped once its entry
+    // for that source is placed.
+    const auto countSide = [&](const auto &edges, size_t kind) {
+        for (const auto &edge : edges) {
+            if (!graph.containsNodeRef(edge.pred) || !graph.containsNodeRef(edge.user)) {
+                continue;
+            }
+            const size_t at = static_cast<size_t>(edge.pred) * kGroups + kind;
+            if (lastUser[at] != edge.user) {
+                lastUser[at] = edge.user;
+                ++sizes[at];
+            }
         }
-        const size_t at = static_cast<size_t>(edge.pred) * kGroups + 3;
-        if (lastUser[at] != edge.user) {
-            lastUser[at] = edge.user;
-            ++sizes[at];
-        }
-    }
+    };
+    countSide(graph.syncEdges(), 3);
+    countSide(graph.orderEdges(), 4);
     begins_.resize(count * kGroups + 1);
     uint32_t total = 0;
     for (size_t at = 0; at < count * kGroups; ++at) {
@@ -2399,16 +2364,20 @@ GCUseIndex::GCUseIndex(const GCGraph &graph) {
             }
         }
     }
-    for (const GCGraphSyncEdge &edge : graph.syncEdges()) {
-        if (!graph.containsNodeRef(edge.pred) || !graph.containsNodeRef(edge.user)) {
-            continue;
+    const auto placeSide = [&](const auto &edges, size_t kind) {
+        for (const auto &edge : edges) {
+            if (!graph.containsNodeRef(edge.pred) || !graph.containsNodeRef(edge.user)) {
+                continue;
+            }
+            const size_t at = static_cast<size_t>(edge.pred) * kGroups + kind;
+            if (lastUser[at] != edge.user) {
+                lastUser[at]         = edge.user;
+                users_[cursor[at]++] = edge.user;
+            }
         }
-        const size_t at = static_cast<size_t>(edge.pred) * kGroups + 3;
-        if (lastUser[at] != edge.user) {
-            lastUser[at]         = edge.user;
-            users_[cursor[at]++] = edge.user;
-        }
-    }
+    };
+    placeSide(graph.syncEdges(), 3);
+    placeSide(graph.orderEdges(), 4);
 }
 
 const GCUseIndex &GCGraph::uses() const {
@@ -2471,6 +2440,28 @@ std::span<const gc_node_ref_t> GCGraph::withOutputsOf(gc_node_ref_t ref) const {
 
 std::span<const gc_node_ref_t> GCGraph::ctrlOutputsOf(gc_node_ref_t ref) const {
     return containsNodeRef(ref) ? uses().ctrl(ref) : std::span<const gc_node_ref_t>();
+}
+
+// The draft's five names for the same lists (camel/runtime/draft.h): a frozen graph reads them
+// where the table already is, so a pass asks it the question it asks of its own draft.
+std::span<const gc_node_ref_t> GCGraph::normUsersOf(gc_node_ref_t ref) const {
+    return containsNodeRef(ref) ? uses().norm(ref) : std::span<const gc_node_ref_t>();
+}
+
+std::span<const gc_node_ref_t> GCGraph::withUsersOf(gc_node_ref_t ref) const {
+    return containsNodeRef(ref) ? uses().with(ref) : std::span<const gc_node_ref_t>();
+}
+
+std::span<const gc_node_ref_t> GCGraph::ctrlUsersOf(gc_node_ref_t ref) const {
+    return containsNodeRef(ref) ? uses().ctrl(ref) : std::span<const gc_node_ref_t>();
+}
+
+std::span<const gc_node_ref_t> GCGraph::syncUsersOf(gc_node_ref_t ref) const {
+    return containsNodeRef(ref) ? uses().sync(ref) : std::span<const gc_node_ref_t>();
+}
+
+std::span<const gc_node_ref_t> GCGraph::orderUsersOf(gc_node_ref_t ref) const {
+    return containsNodeRef(ref) ? uses().order(ref) : std::span<const gc_node_ref_t>();
 }
 
 std::span<const gc_node_ref_t> GCGraph::normPorts() const {

@@ -14,6 +14,7 @@
 #include <limits>
 #include <new>
 #include <type_traits>
+#include <stdexcept>
 
 using namespace std;
 using namespace camel::core::type;
@@ -52,7 +53,7 @@ Parts partsOf(
     parts.constasIndices = constasIndices;
     parts.withConstIndices = withConstIndices;
     if (hasNames) {
-        ASSERT(argNames.size() == parts.params.size(), "One name per parameter.");
+        GUARD(argNames.size() == parts.params.size(), "One name per parameter.");
         parts.names.reserve(argNames.size());
         for (const auto &name : argNames) {
             parts.names.push_back(internSymbol(name));
@@ -121,7 +122,7 @@ FunctionType::FunctionType(const Parts &parts, bool open)
 }
 
 template <typename T> T *FunctionType::allocate(const Parts &parts) {
-    ASSERT(
+    GUARD(
         parts.withCount <= std::numeric_limits<uint16_t>::max() &&
             parts.params.size() - parts.withCount <= std::numeric_limits<uint16_t>::max(),
         "Too many parameters for one function type.");
@@ -308,8 +309,8 @@ Type *FunctionType::exitType() const {
 }
 
 std::string_view FunctionType::argNameAt(size_t idx) const {
-    ASSERT(hasNames_, "The function type records no parameter names.");
-    ASSERT(idx < paramCount(), "Index out of range");
+    GUARD(hasNames_, "The function type records no parameter names.");
+    GUARD(idx < paramCount(), "Index out of range");
     return symbolText(names()[idx]);
 }
 
@@ -325,7 +326,7 @@ std::vector<std::string_view> FunctionType::argNames() const {
 }
 
 Type *FunctionType::resolve(const type_vec_t &typeList) const {
-    ASSERT(false, "Not implemented");
+    throw std::runtime_error("Not implemented");
     return nullptr;
 }
 
