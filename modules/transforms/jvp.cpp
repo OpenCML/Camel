@@ -409,7 +409,7 @@ bool fail(JvpGraph &refusal, const JvpGraph &why) {
 
 bool liftGraph(
     LiftState &state, const GraphRead &function, std::string_view name,
-    camel::runtime::GraphId member,
+    camel::runtime::GraphId member, camel::runtime::GraphId from,
     std::ostream &os, JvpGraph &refusal);
 
 } // namespace
