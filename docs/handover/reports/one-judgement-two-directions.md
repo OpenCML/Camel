@@ -25,11 +25,33 @@ program at the `std::opt` pass boundary (`CHECKPOINT pass=std::opt`, three nodes
 are the `GCGraph`'s; the printer's names are its own. What the three lines do establish is the
 checkpoint they were taken at, and nothing about the printed graph.
 
-**Left open, for the lane that measures it:** the printed graph shows a sync successor and the
-boundary sees none for a node with the same number. That is either two different graphs (different
-checkpoint, most likely) or `syncUsersOf` answering differently from `syncPredsOf` on a freshly
-encoded graph. The second would be a defect in the credential function itself, and it is measured
-where the printed graph is available -- not here.
+**Still useful, and not thrown away:** the three lines are a *checkpoint reading* -- at the `std::opt`
+boundary, three nodes (`__root__` 60, `arm` 10, `main` 63) had only a control successor at that
+moment. **They say nothing about the final graph** and are not evidence of a defect.
+
+## The open question is closed: `broken = 0`
+
+This page left one question open -- whether `syncUsersOf` and `syncPredsOf` disagree on a freshly
+encoded graph (which would be a defect in the credential function, worse than slice 3b). It was
+measured systematically: at every pass boundary, over every graph, for every edge of the three kinds,
+the two directions were compared.
+
+**The first instrument was wrong**, and its wrongness looked exactly like a finding: it returned a
+`std::span` built over a local `std::vector` inside a callback, so the span dangled and the reverse
+lookup read freed memory. It reported `edges=901343 broken=68520`, with examples like
+`EXAMPLE sync graph='main' 3->4 users=1 preds=0`. That is an instrument bug, not a code bug -- and it
+is the third time this lane's instrument, not the code, was the thing that was broken.
+
+Rewritten without the temporary span (three explicit loops, one per edge kind), the same gate run
+gives:
+
+```
+edges = 901343    broken = 0    checkpoints = 4998    examples = none
+```
+
+So **the accessors are mirrors in both directions** for normal, sync and control edges, and the
+question is void: the `CTRLONLY` lines and the printed graph are two different graphs. **No defect
+follows from this, and slice 3b's priority is not raised by it.**
 
 ## P0-4: converge the liveness model onto the boundary's rule -- tried, measured, reverted
 
