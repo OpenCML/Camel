@@ -1,0 +1,36 @@
+// The arity of a rule's key is the number of operands its left side writes -- for a call as for an
+// operator: `one(a)` is one, `two(a, b)` is two, `three(a, b, c)` is three. The count is read from
+// the arguments the call writes, not from the children of its bracket node: those are the same three
+// (bracket, argument list, bracket) whatever the call holds, so counting them would file every call
+// under the same count and leave a one- or two-argument rule unreachable.
+//
+// `three` is the shape a call would get for free if the count were the brackets', which is why this
+// case pins all three counts and not only the one the bug happened to break.
+func one(a: float): float {
+    return a
+}
+
+func two(a: float, b: float): float {
+    return a + b
+}
+
+func three(a: float, b: float, c: float): float {
+    return a + b + c
+}
+
+rule one_rule(a: float) {
+    one(a) => (ba: float) => one(ba)
+}
+
+rule two_rule(a: float, b: float) {
+    two(a, b) => (ba: float, bb: float) => two(ba, bb)
+}
+
+rule three_rule(a: float, b: float, c: float) {
+    three(a, b, c) => (ba: float, bb: float, bc: float) => three(ba, bb, bc)
+}
+
+func main(): int sync {
+    println(1)
+    return 0
+}

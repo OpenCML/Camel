@@ -1,0 +1,32 @@
+// The transpose of a loop whose body only uses constants: the rounds run in the other direction,
+// and a constant multiplier is the same multiplier whatever order it arrives in -- so a loop of the
+// same number of rounds, with each rule replaced by its transpose, is the pullback. The round count
+// is the loop's own (the two bounds of the interval are copied with it): nothing here says "three",
+// which is why the four-round loop is in the same file and answers differently.
+//
+// `thrice(x) = loop s = x for i in 0..3 do s * 2.0` doubles three times: 2*2*2 = 8, so at x = 1 the
+// value is 8 and the pullback of 1.0 is 8 too. `quad` doubles four times and answers 16. A pullback
+// is linear in its cotangent, so the cotangent 2.0 at x = 1 pulls back to 16: the two numbers are
+// the same graph read twice, not a coincidence of one seed. A body that needed the round's own
+// state would be refused by name (`skip=state`), never answered with a cotangent from nowhere.
+import { transpose } from transforms
+import rulesets.transpose
+
+func thrice(x: float): float {
+    return loop s = x for i in 0..3 do s * 2.0
+}
+
+func quad(x: float): float {
+    return loop s = x for i in 0..4 do s * 2.0
+}
+
+func main(): int sync {
+    let three_back = transpose(thrice)
+    println(thrice(1.0))
+    println(three_back(1.0, 1.0))
+    println(three_back(1.0, 2.0))
+    let quad_back = transpose(quad)
+    println(quad(1.0))
+    println(quad_back(1.0, 1.0))
+    return 0
+}

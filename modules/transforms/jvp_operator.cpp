@@ -56,11 +56,12 @@ FunctionType *jvpOperatorSignature(FunctionType *function) {
     if (function == nullptr) {
         return nullptr;
     }
-    // What `buildJvpGraph` can build, and nothing else: it copies one body, so it takes one
-    // ordinary parameter, and it has no node that reads a captured value into a port, so the
-    // function has no `with` parameters. A function outside that shape is refused where it is
-    // written, not left to fail when the call runs.
-    if (function->withTypesCount() != 0 || function->normTypesCount() != 1) {
+    // What `buildJvpGraph` can build, and nothing else: it copies one body and gives every `float`
+    // parameter of that body a pair of ports, so it takes any number of them (at least one), and it
+    // has no node that reads a captured value into a port, so the function has no `with` parameters.
+    // A function outside that shape is refused where it is written, not left to fail when the call
+    // runs.
+    if (function->withTypesCount() != 0 || function->normTypesCount() == 0) {
         return nullptr;
     }
     FunctionType *lifted = jvpSignature(function);
@@ -73,9 +74,10 @@ FunctionType *jvpOperatorSignature(FunctionType *function) {
     return factory.build();
 }
 
-/// jvp: (f: (float) => float) => (float, float) => (float, float). The lifted signature is the pair
-/// `(value, tangent)` in and the pair `(value, tangent)` out (jvp.h); the seed is the tangent the
-/// caller passes, so `jvp(f)(2.0, 1.0)` is the derivative in the direction 1.
+/// jvp: (f: (float) => float) => (float, float) => (float, float). One pair `(value, tangent)` in
+/// per parameter of `f` and the pair `(value, tangent)` out (jvp.h); the seed is the tangent the
+/// caller passes, so `jvp(f)(2.0, 1.0)` is the derivative in the direction 1, and for a function of
+/// two parameters `jvp(f)(x, dx, y, dy)` is the derivative in the direction `(dx, dy)`.
 class JvpResolver final : public FuncTypeResolver {
   public:
     std::optional<FunctionType *> resolve(
@@ -104,13 +106,21 @@ class JvpResolver final : public FuncTypeResolver {
                 "`jvp` takes a function without `with` parameters: the transform copies the body "
                 "into a new graph, and a captured value has no port to enter it by");
         }
-        if (function->normTypesCount() != 1) {
-            return std::string("`jvp` takes a function of exactly one parameter");
+        if (function->normTypesCount() == 0) {
+            return std::string("`jvp` takes a function of at least one `float` parameter");
         }
-        if (function->normTypeAt(0) != Type::Float64() || function->exitType() != Type::Float64()) {
+        for (size_t i = 0; i < function->normTypesCount(); ++i) {
+            if (function->normTypeAt(i) != Type::Float64()) {
+                return std::string(
+                    "`jvp` takes a function whose every parameter is a `float` and whose result is "
+                    "a `float`: the lifted signature is one `(value, tangent)` pair in and out per "
+                    "`float` parameter");
+            }
+        }
+        if (function->exitType() != Type::Float64()) {
             return std::string(
-                "`jvp` takes a function of one `float` parameter that returns a `float`: the "
-                "lifted signature is `(float, float) => (float, float)`");
+                "`jvp` takes a function whose result is a `float`: the lifted signature answers the "
+                "pair `(value, tangent)`");
         }
         return std::nullopt;
     }
@@ -195,52 +205,10 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 } // namespace
 
-namespace {
-
-/// The steps `vjp` is written in terms of that are not implemented yet (`split` and `transpose`).
-/// The signature is the shape the library declares -- the function it was given, back again -- so a
-/// program that names them type-checks; the kernel is the refusal, and it names the step that is
-/// missing instead of the composition, so a reader is sent to the line of `stdlib/vjp.cml` that asks
-/// for it. Nothing here is a placeholder that one day returns something: a step either has a rule or
-/// says it has none.
-class StepResolver final : public FuncTypeResolver {
-  public:
-    std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm) const override {
-        if (!with.empty() || norm.size() != 1 || norm[0] == nullptr ||
-            norm[0]->code() != TypeCode::Function) {
-            return std::nullopt;
-        }
-        FunctionTypeFactory factory;
-        factory.addNormArg("f", norm[0], false);
-        factory.setExitType(norm[0]);
-        return factory.build();
-    }
-
-    /// The declaration's text: one parameter named `f`, the result the same function.
-    std::string signature() const override {
-        return "(f: (float, float) => (float, float)) => (float, float) => (float, float)";
-    }
-};
-
-/// Refuses the step it is named for, at the line that asked for it.
-slot_t stepKernel(ArgsView &with, ArgsView &norm, Context &ctx, std::string_view step) {
-    (void)with;
-    (void)norm;
-    (void)ctx;
-    throwRuntimeFault(
-        RuntimeDiag::RuntimeError,
-        std::string{"transforms: `"} + std::string{step} +
-            "` has no rule for this function (the step of `vjp` that does this is not bound for "
-            "this function's graph)");
-}
-
-slot_t splitKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
-    return stepKernel(with, norm, ctx, "split");
-}
-
-} // namespace
-
+// The two steps of `vjp` (stdlib/vjp.cml) have rules of their own -- `split` in
+// modules/transforms/split_operator.cpp and `transpose` in modules/transforms/transpose_operator.cpp
+// -- so the stand-ins that answered "this step is not bound for this function" are gone with them:
+// a step either has a rule or says it has none, and it no longer has a shape without one.
 const std::vector<oper_group_ptr_t> &operatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         // One rule: `jvp` takes a function and gives its forward transform (design principles 9.9
@@ -248,12 +216,6 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
         OperatorGroup::create(
             "jvp",
             {{"transforms:jvp", std::make_shared<JvpResolver>()}}),
-        // The step of `vjp` that is not written yet (stdlib/vjp.cml): the shape is the
-        // library's, the refusal is theirs. `transpose` is not here: it has a rule of its own
-        // (`transpose_operator.cpp`), and a second group under one name answers the signature
-        // with the shape of the function it was given -- `(x: float) => float`, not a pullback.
-        OperatorGroup::create(
-            "split", {{"transforms:split", std::make_shared<StepResolver>()}}),
     };
     return groups;
 }
@@ -261,7 +223,6 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
 std::unordered_map<std::string, operator_t> operatorKernels() {
     std::unordered_map<std::string, operator_t> kernels = transposeOperatorKernels();
     kernels["jvp"] = &jvpKernel;
-    kernels["split"] = &splitKernel;
     return kernels;
 }
 
@@ -269,13 +230,14 @@ void registerOperatorMetadata() {
     // It builds a graph: the call does something the compiler cannot see from the arguments alone,
     // so it is declared, as every operator must be (design principles 3.3), as not pure.
     camel::core::OperatorTable::instance().declare(
-        "transforms", {{"jvp", false}, {"split", false}, {"transpose", false}});
+        "transforms", {{"jvp", false}, {"transpose", false}});
     // `jvp` reads the graph of the function value it receives -- that is the whole transform -- so
     // it refuses a loop there as `grad` does (OperatorTraits::readsGraphs; op-semantics 11.4).
     camel::core::OperatorTable::instance().set(
         "transforms:jvp", {.pure = false, .readsGraphs = true});
     // `transpose` builds a graph of its own from the one it is handed, for the same two reasons.
-    camel::core::OperatorTable::instance().declare("transforms", {{"transpose", false}});
+    // Its declaration is the one above, beside `jvp` and `split`: a name declared twice says nothing
+    // the first one did not.
     camel::core::OperatorTable::instance().set(
         "transforms:transpose", {.pure = false, .readsGraphs = true});
 }
