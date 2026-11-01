@@ -1,13 +1,12 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
-#include "camel/execute/pass/base.h"
-
 
 /*
  * Draft-editing helpers shared by the generic optimization passes (see rewrite.h).
  */
 
 #include "rewrite.h"
+#include "camel/execute/pass/base.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/cycle.h"
 
