@@ -450,3 +450,13 @@ expect_exit = 1
 expect_output_contains = ["Pass 'std::opt' failed with an internal error", "did not settle", "1 consecutive runs each changed the program", "name=RuntimeDiag::PassInternalError, code=0x0400000C"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
+[[tests]]
+name = "pass_parameter_value_refused"
+desc = "A parameter the declaration's type accepts and the pass cannot use is refused while the pipeline is read, with the position of the word: settle_runs=0 is not read as 'never report'. It used to commit a diagnostic where the pass is built, where nothing receives it, and the run ended with a terminate and exit 134."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_loop.cml"
+args = ["${case}", "std::opt settle_runs=0", "onnx::export"]
+expect_exit = 1
+expect_output_contains = ["RuntimeDiag::InvalidPassParameter", "settle_runs must be at least 1, got 0", "std::opt settle_runs=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 6000
