@@ -73,6 +73,9 @@ $ node scripts/test.js test/plans/feat/compile/transforms.plan.toml
 
 ## 还留着的两条旧账（不在本分支）
 
-1. `Vjp<F>`/`Split<F>`/`ParamsOf<F>` 的泛型声明（设计 6.1）：`vjp` 仍按 arity 各声明一次。
+1. `Vjp<F>`/`Split<F>`/`ParamsOf<F>` 的泛型声明（设计 6.1）：**参数类型这一半已落**——`vjp`（一元、二元）与
+   `grad` 现在写成 `::<T>`（`grad::<T>(f: (x: T) => float): (x: T) => T`），所以数组/张量/`f32` 的函数能走到库里；
+   仍然"每 arity 一条"，因为函数体是手工拆参数的，而 `jvp` 只收 `float` 参数
+   （`modules/transforms/jvp_operator.cpp:115`），非 float 的 `T` 在这一行被拒。
 2. 残差位那个"类型由编译器填"的问题（`questions-2026-11-01-the-residual-slot-has-no-type-until-execution.md`，
    甲/乙 两案已报价）：今天不影响任何读数。
