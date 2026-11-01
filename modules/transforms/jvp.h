@@ -37,9 +37,11 @@
 #include "camel/core/context/context.h"
 #include "camel/core/source/ids.h"
 #include "camel/core/type/composite/func.h"
-#include "camel/compile/gir/graph_read.h"`r`n#include "camel/runtime/graph.h"
+#include "camel/compile/gir/graph_read.h"
+#include "camel/runtime/graph.h"
 
-#include <string>`r`n#include <string_view>
+#include <string>
+#include <string_view>
 
 namespace camel::transforms {
 
@@ -77,6 +79,16 @@ JvpGraph buildJvpGraph(
 /// it is encoded.
 JvpGraph buildJvpGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    const camel::compile::gir::GraphRead &function, std::string_view name,
+    camel::runtime::GraphId self, std::ostream &os);
+
+/// The same build, for a caller whose graph is a draft and whose lift is therefore not the program's:
+/// the lifted graphs go into a program of their own, reserved by the context and named by the
+/// function value the call stands for. This is what the front end calls while it builds the graph
+/// the call is written in (`camel/compile/gir/compile_time.h`), and the build is the same one the
+/// run-time kernel runs -- the readings are the readings it prints.
+JvpGraph buildJvpGraphOfItsOwn(
+    const camel::core::context::context_ptr_t &context,
     const camel::compile::gir::GraphRead &function, std::string_view name,
     camel::runtime::GraphId self, std::ostream &os);
 
