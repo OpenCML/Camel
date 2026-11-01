@@ -25,9 +25,72 @@
  * the module registers, and docs/stdlib-reference.md is generated from them.
  */
 
+/// The tangent space of `T` (design principles 9.9); `stdlib/types.cml` declares it, and it is
+/// named again here because it is the whole vocabulary of what follows. A forward transform carries
+/// `Lift<T> = (T, Tangent<T>)` (`stdlib/rulesets/jvp.cml`), so the cut `split` makes between "the
+/// part computable now" and "the part computable later" is the cut between those two components --
+/// not a position among the parameters (author, 15:25).
+/// @example is_same::<Tangent<float>, float>()    // true
+export type Tangent<T>
+
+/// The residuals of `f`: the values the backward half of `split` reads, numbered in the order they
+/// appear in the program (`r0`, `r1`, ...), so the backward half's code corresponds line for line to
+/// the original and a reading can be compared byte for byte. A *type function*: the split step
+/// computes it from `f`'s graph, no program writes it, and it appears in no signature -- a signature
+/// that named it would be a signature a caller could have written, and this one is the compiler's.
+/// Where a reader needs the shape, it is written out here, as the author wrote it (15:25):
+///
+///     type Split<F> = ((..ParamsOf<F>) => (ResultOf<F>, ResidualsOf<F>),
+///                      (ResidualsOf<F>, ..WithOf<F>) => ResultOf<F>)
+///
+/// The first half takes the ordinary parameters and answers with the result and the residuals; the
+/// second takes the residuals and the `with` parameters and answers with the result. The second half
+/// is linear in the cotangent it is given -- that is the condition the transpose step (M3) reads --
+/// and both halves speak in `Tangent<T>` above. `split`'s own declaration below therefore does not
+/// name this function: it is the compiler's, and the declaration a reader checks is the operator's.
+/// @example-fragment the shape is a type function, so the example is a fragment of the type it
+/// computes for a function of one number: `ResidualsOf<(x: float) => float>` is a tuple of the
+/// values the backward half reads, in program order.
+export type ResidualsOf<F>
+
 /// Forward mode: `jvp(f)` gives a function that takes the parameters of `f` followed by their
 /// tangents and returns the pair `(value, tangent)`. `jvp(f)(2.0, 1.0)` is the value `f(2.0)`
 /// together with the derivative of `f` at 2 in the direction 1.
 /// @example-fragment `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
 /// @example let forward = jvp(f)
 export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()
+/// The step of `vjp` that separates a lifted function into the part computable now and the linear
+/// residue (design 4.4). Not implemented: the operator has a signature and no rule, so a call is
+/// refused where it is composed (`stdlib/vjp.cml`) and names this step. The signature is the
+/// shape the library's compositions can be written with today.
+/// @example-fragment `split` takes the lifted function a `jvp` call writes, so the example is a
+/// fragment of the composition: `let (fwd, lin) = split(jvp(f))`.
+/// @example let step = split
+export func split(f: (v: float, d: float) => (float, float)): (v: float, d: float) => (float, float)
+
+/// The transpose of a linear function: `transpose(f)` takes the cotangent of `f`'s result and
+/// gives the cotangent of its parameter. The data flow runs backwards -- each primitive is replaced
+/// by the rule the `rulesets.transpose` family files under it, and a value used k times receives k
+/// cotangents that add. `f(x) = 2*x + 3*x` transposed at the cotangent `1.0` gives `5.0`.
+/// @example-fragment `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
+/// @example let back = transpose(f)
+export func transpose::<F>(f: F): Transpose<F> when is_function::<F>()
+||||||| 05a8b3496
+export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()
+
+
+/// Batching: `vmap(f)` gives the function that applies `f` to every row of a batch. A row is one
+/// dimension less than the batch: for `f: (f32) => f32` it is `(f32[]) => f32[]`, and for
+/// `f: (f32[3]) => f32` it is `(f32[?, 3]) => f32[]` -- `Lift<T> = RowsOf<T>`, the value with one
+/// dimension of unknown length in front of it (`stdlib/types.cml`). The arithmetic of every
+/// elementwise primitive is that primitive (`bx + bw` is `x + w` element by element), which is why
+/// `vmap(f)(xs)` and the row-by-row `map` answer the same bits.
+///
+/// The rules come from `stdlib/rulesets/vmap.cml`: the transform asks that family, by the operator's
+/// key, for every primitive of `f`, and calls the function the rule names with the batches. An
+/// operator with no rule is refused by name at the primitive, never batched by a guess; a call, a
+/// branch or a loop in the body is refused the same way, because the elementwise tier batches
+/// straight-line bodies.
+/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
+/// @example let batched = vmap(f)
+export func vmap::<F>(f: F): Vmap<F> when is_function::<F>()
