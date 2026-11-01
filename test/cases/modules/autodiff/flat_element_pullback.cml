@@ -1,0 +1,51 @@
+/**
+ * A position on an open-rank value reads the element the value holds (design principles 5.4), and
+ * the gradient of that read goes back to the same flat element: the pullback is a zero array of the
+ * value's shape with the element's gradient added at the position the read took, and its bound is
+ * the element count -- not the first dimension's length. The two counts are the two
+ * `__index_arr__` decides between (src/builtin/operators/struct.cpp), and its adjoint
+ * (`__tangent/scatter_add_arr__`) has to decide the same way, which is what the pair below pins:
+ *
+ *   flat(xs, 0) of [[w, 2.0], [3.0, 4.0]]  -> 1.0   (the position is in the first row)
+ *   flat(xs, 3) of [[1.0, 2.0], [3.0, w]]  -> 1.0   (the position is the fourth element, past row 0)
+ *
+ * The second one was a fault before, and it named the wrong count: `Index 3 is out of range for the
+ * first dimension of the input array of length 2`, from the pullback body (`(flat.pb)`). The same
+ * pair with the bound at the first dimension and the position in it (index 0) crashed the run
+ * instead of answering, because the gradient of one element was scattered into a rank-2 value's
+ * shape at a position that means something else there.
+ */
+import { grad } from autodiff
+
+func flat(xs: float[..], i: int): float {
+    return xs[i]
+}
+
+// The read's position is in the first row.
+with <w: float>
+func first(): float {
+    let xs: float[2, 2] = [[w, 2.0], [3.0, 4.0]]
+    return flat(xs, 0)
+}
+
+// The read's position is the fourth element, past the first row: `dim(0)` is 2 there.
+with <w: float>
+func past_row(): float {
+    let xs: float[2, 2] = [[1.0, 2.0], [3.0, w]]
+    return flat(xs, 3)
+}
+
+// The gradient of a position the value does not depend on is zero, and it is a zero of the value's
+// own shape rather than a position that never existed.
+with <w: float>
+func constant(): float {
+    let xs: float[2, 2] = [[1.0, 2.0], [3.0, 4.0]]
+    return flat(xs, 3)
+}
+
+func main(): int sync {
+    println(grad(first)<1.0>())
+    println(grad(past_row)<1.0>())
+    println(grad(constant)<1.0>())
+    return 0
+}

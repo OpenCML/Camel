@@ -3418,3 +3418,35 @@ for (const [index, name] of ['max', 'min', 'max_axis'].entries()) {
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+# The pullback of an array literal whose elements are computed: each active element reads the
+# cotangent at its own flat position. The shapes past the first dimension were a fault before --
+# position 2 of a `float[2, 2]` literal was refused as past the first dimension's end -- so the
+# readings 1.0, 3.0, 6.0, 6.0, 10.0 and 6.0 are the sum of the slopes each literal's elements carry.
+[[tests]]
+name = "literal_pullback_reads_every_computed_element"
+desc = "The pullback of a summed array literal whose elements are computed: the fill's slots are flat positions in the value the literal is, so every active element reads the cotangent at its own position -- 1.0 for one element of slope 1, 3.0 for slopes 1 and 2, 6.0 for 1, 2 and 3, 6.0 for the `float[2, 2]` literal whose third flat position is computed, 10.0 when all four are, and 6.0 one rank deeper. The last four were `Index ... is out of range for the first dimension ... length 2` before the bound counted the elements the read actually takes."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/literal_pullback.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n3.0\n6.0\n6.0\n10.0\n6.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+# The pullback of a read from an open-rank value: the gradient goes back to the flat element the read
+# took, so its bound is the element count. With the first dimension's length as the bound the third
+# and fourth elements were refused from the pullback body (`(flat.pb)`), and a position inside the
+# first dimension crashed the run instead of answering.
+[[tests]]
+name = "flat_element_pullback_reaches_every_element"
+desc = "The gradient of `flat(xs: float[..], i)` -- a read of the element an open-rank value holds -- goes back to the position the read took: `flat([[w, 2.0], [3.0, 4.0]], 0)` pulls back 1.0 and `flat([[1.0, 2.0], [3.0, w]], 3)` pulls back 1.0 although the position is the fourth element, past the first dimension's two; a position the value does not depend on pulls back 0.0. The second reading was `Index 3 is out of range for the first dimension of the input array of length 2` from `(flat.pb)` when the scatter's bound counted `dim(0)` while the read took the flat slot, which is the pair `__index_arr__` had already been fixed for."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/flat_element_pullback.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n1.0\n0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

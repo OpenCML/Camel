@@ -18,13 +18,18 @@
  * *passed in* by the caller -- `jvp(f)(2.0, 1.0)` asks for the derivative in the direction 1 -- not
  * found inside the function. In the new graph each primitive's tangent comes from *its rule*: the
  * transform asks the ruleset (`stdlib/rulesets/jvp.cml`) for the rule filed under that operator and
- * operand count, instantiates it at the primitive's types, and calls it. The right side as an
- * instance is `(x, w) => ((dx, dw) => Tangent<T>)`, so it is called once with the operands and what
- * it answers is called with the tangents. A constant's tangent is zero and a port's is the tangent
- * the caller passed; the result's tangent is what the chain of rules computed. There is no table of
- * laws here: a primitive with no rule in the ruleset is refused by name -- `skip=rule uri=...` and
- * why -- rather than answered with 0 or 1, and the reading says where the rules came from
- * (`source=ruleset`).
+ * operand count, instantiates it at the primitive's types, and *applies* it at the match site. A
+ * rule is a rewrite, and the right side of `x * w => (dx, dw) => mul_tangent(x, w, dx, dw)` is a
+ * function of the tangents: the transform expands that one lambda layer while it builds, copying the
+ * body into the new graph with the values the left side bound as its captures and the tangents as
+ * its parameters. What stands where the operator stood is therefore a direct call to the named rule
+ * function -- `mul_tangent(x, w, dx, dw)` -- and not a closure-valued node that a second call reads
+ * (the author's ruling of 2026-11-01; the two-call chain is what performing the rewrite as a
+ * *runtime* call produces, and it belongs in a graph built at run time, not in this one). A
+ * constant's tangent is zero and a port's is the tangent the caller passed; the result's tangent is
+ * what the chain of rules computed. There is no table of laws here: a primitive with no rule in the
+ * ruleset is refused by name -- `skip=rule uri=...` and why -- rather than answered with 0 or 1, and
+ * the reading says where the rules came from (`source=ruleset`).
  */
 
 #pragma once

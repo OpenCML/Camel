@@ -121,3 +121,67 @@ case = "../../../cases/opt/effects/branch_keeps_outer_effect.cml"
 args = ["${case}", "std::opt", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "1\n3\n4\n1\n3\n3\n"
+
+# The assertion the rest of this plan cannot make: the output itself. Every entry above compares a
+# pass against the same program with no pass, on four back ends -- but each of them names the bytes it
+# expects, so an effect that goes missing shows up as a wrong line. A program whose effect is left in
+# no chain of its graph has no wrong line to show: it exits 0, its diagnostics are empty, and the
+# lines it no longer prints are simply not there. `nn.mnist` did exactly that -- `std::opt` dropped
+# `Iteration 0` -- and no plan noticed, because `nn.mnist` is run with `std::null` and compared with
+# nothing.
+#
+# So this one compares the two runs with each other instead of with a golden: same binary, same host,
+# so the numbers cancel out and the check stays true whatever the floats print as. It is a `tool =
+# "node"` test because a plan entry runs one command with one `expect_stdout_*`; comparing two runs
+# byte for byte and naming the line that went missing needs both in one process (see
+# `cases/opt/effects/opt_matches_interpreter/check.mjs`).
+[[tests]]
+name = "opt_matches_interpreter.mnist"
+desc = "`std::opt` prints what the interpreter prints, byte for byte, on `nn.mnist` -- the program where a dissolved branch left its `:io/println` in no chain and the pass silently lost output."
+kind = "behavior"
+tool = "node"
+# One backend, because the check runs the interpreter and the optimizer itself and compares them: the
+# `${backend}` of the other entries would only make it repeat that comparison four times.
+backends = ["nvm"]
+case = "../../../cases/opt/effects/opt_matches_interpreter/check.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["[EFFECTS] ok std::opt std::nvm", "[EFFECTS] ok the optimizer prints what the interpreter prints"]
+expect_output_not_contains = ["[EFFECTS] RED", "[EFFECTS]   lost:"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+# The one shape `:op/keep` exists for, written at graph level because no compiler pass makes it
+# today: an effect a pass takes the last read of is a statement of a `sync` block in the graphs the
+# builder writes, and the block's chain keeps it (design principles 3.3's current guarantee -- the
+# chain, not this operator). `test::keepshape` takes the shape from the source: `keep_shape.cml`
+# writes the print in a function that is no `sync` block, so nothing in its graph has a sync edge,
+# and the pass removes the node that reads the print, which is what takes the print's last read.
+#
+# Three readings, and only one of them needs the operator: `keep=1 uri=:op/keep data_user=1
+# standing=alive` is the rewrite's own answer (the operator stands in the value and the print is
+# kept by a data use), `wait_edge=0 waited_on=0` says the print has no order edge to lean on, and
+# the output does the rest -- `1` is the print running and the exit code `99` is the value the
+# removal stands for.
+[[tests]]
+name = "keep_shape.replace"
+desc = "The shape `:op/keep` is for: the effect is read by one node that a pass removes, no `sync` edge stands under it, and the rewrite keeps it through the operator -- the print still runs, and the value is the replacement."
+case = "../../../cases/opt/effects/keep_shape.cml"
+args = ["${case}", "test::keepshape", "${backend}"]
+expect_exit = 99
+expect_stdout_exact = "KEEPSHAPE keep=1 uri=:op/keep data_user=1 sync_statement=0 wait_edge=0 waited_on=0 standing=alive\n1\n"
+
+# `std::jgir` and not `std::gir`: the dot dump asserts `graph->exitNode() != nullptr`
+# (src/passes/trans/dot/graphviz.cpp#dumpGraph, "Runtime graph exit node is missing") and a graph that a
+# pass committed with a node removed trips it, while the same graph runs (`keep_shape.replace`
+# above exits 99) and `std::jgir` draws it. That is a defect of the dump, not of this rewrite, and
+# the plan reads the operator out of the JSON until the dump is looked at.
+[[tests]]
+name = "keep_shape.in_graph"
+desc = "The same rewrite, drawn: the graph holds an OPER node whose operator is `:op/keep`."
+case = "../../../cases/opt/effects/keep_shape.cml"
+args = ["${case}", "test::keepshape", "std::jgir"]
+# One backend: the graph is the same one on each, and the test reads the drawing, not a run.
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["KEEPSHAPE keep=1 uri=:op/keep", "\"label\": \":op/keep\""]
