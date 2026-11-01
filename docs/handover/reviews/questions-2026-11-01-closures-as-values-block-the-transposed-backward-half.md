@@ -80,6 +80,8 @@ B **新增**一条表示，且与裁定正面冲突；C 让 `split` 多背一个
 （**2026-11-02 又一次**：`vjp.cml` 从 **104** 落到 **98**，是作者 04:02 那笔“`vjp` 对所有元数只有一条声明”把三条按元数编的声明并成一条、改用 lambda 的 `..xs`；那一笔连同它底下的两笔（lambda 形参表里的 `..xs` 成了体内的一个值、它代表的元组就是展开读到的形状）都只挂在 `lane-lit2` 上，本轮从那条车道找回并进 develop，读数因此一起改。）
   （**2026-11-02 lane-m5 再测**：`split_operator.cpp` 202 → **208**、`jvp_operator.cpp` 268 → **278**，是同一件事的两笔——`jvp(f)`、`transpose(f)`、`split(f)` 的**调用形状**（名字、元数、`with` 参数个数）登记在算子声明的地方，六个文件里只有这两个 `*_operator.cpp` 各多出几行注释与三条 `declareCallForm`；`vjp.cml` 98 → **99** 是同一轮的文档修正：那条编不过的 `@example` 改成完整的一行（函数写在调用处），计数回到 39，页面的读数跟着换成 99。）
 
+  （**2026-11-02 `lane-m5` 再测**：`split_operator.cpp` 202 → **208**、`jvp_operator.cpp` 268 → **278**，`case TypeCode::` 1024 → **1028**、文件数仍 74——前两个是同一件事：`jvp(f)`、`transpose(f)`、`split(f)` 的调用形状（名字、元数、`with` 参数个数）现在登记在算子声明的地方，两个 `*_operator.cpp` 各多几行注释与三条 `declareCallForm`；后一个是 `std::cml` 的 `hasFunction` 加的四条（`Function`/`Array`/`Tuple`/`Struct`），因为一个含函数类型的标注在源码里没有写法，打印机要能看出类型里有没有函数。**这两个数是照读数抄的，页是这一页的原文——`lane-m5` 自己那份带一处未解的冲突标记，没有整份取用。**）
+
 **乙 —— 每次实例化新铸一个刚性类型，并在原则 5.10 上开一条例外**
 - 一个 `TypeCode` 落地要动 **7 点**：枚举（`type/base.h:56` + `TypeFlag` `:39`）、`typeCodeToString`（`base.cpp:65`，35 分支且 `:111` 有 `default:` **漏了不报错**）、
   `Type::equals` 与 6 处覆盖、`TypeStorageKind`（`17` 处）、`intern.h:16-22` 的哈希 key、四处序列化、三处运行时值。

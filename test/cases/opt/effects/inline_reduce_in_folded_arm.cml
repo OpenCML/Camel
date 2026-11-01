@@ -1,0 +1,36 @@
+/**
+ * An effect a call performs keeps its place when the branch it was written in is folded away.
+ *
+ * `sum` computes with `reduce`, an operator declared to have effects (`:mark/reduce_arr`,
+ * src/builtin/executors/builtin.cpp, `{.pure = false, .callsGraphs = true}`): the program observes
+ * its running whether or not anything reads what it returns. `pick` calls it in the arm of a branch
+ * whose condition is a constant, and `main` never reads the result, so `std::opt::fold` takes the
+ * branch and every unread value around it away.
+ *
+ * Before the fix the inlined body's tail was a GATE that the fold's branch pruning left with no
+ * wait, and the commit dissolved it as "plain forwarding" -- which it was not, because that gate was
+ * the last reader of the reduce. The pass then failed the graph with
+ *
+ *     graph 'main' has effect node 36 (':mark/reduce_arr') with neither a read of its value nor a
+ *     place in its chain
+ *
+ * Pipeline: std::opt::inline std::opt::fold
+ * Expected output: (nothing)
+ */
+
+func sum(a3: string): int {
+    return concat(['']->map<(p12: string): string => ''>, ['', a3])->reduce<(p10: int, p11: string): int => -1, 0>;
+}
+
+func pick(a2: (a0: int) => int, a24: int, a25: int): int {
+    return if (0 <= 0) then sum(string(0)) else a24 - a25;
+}
+
+func main(): int sync {
+    let unread = if false then sync {
+        return 0;
+    } else sync {
+        return pick((p26: int): int => 0, 7, -1);
+    };
+    return 0;
+}
