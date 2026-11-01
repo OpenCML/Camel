@@ -130,3 +130,26 @@ RuleEntry{ head, arity, rule, variables }   // variables 是左侧绑定的名�
 **没有"右侧的参数表"这个读者**。所以"从右侧签名读出余切位置与已知值位置"**今天表达不出来**——要加一个读者（不是字段，是从规则内容里读出来的东西），按原则 2.3 属于"能从内容推出"，可以做，**但要先把它写成一句话证明，而不是顺手加**。
 
 **这一步的可验收标准（作者已裁）**：五条规则各打印一行 `law=<名字> cotangentAt=<i> knownAt=<j…> sizeDependent=<yes/no>`，**必须与五条分支语义一一对上**；对不上就说明这套词汇表达不了现有五条，**那也是结论**，要写清差在哪一格。**今天这一条没有交出，因为读者不在。**
+## `rhsParams` 的落点（下一步照着做，四个锚都在这儿）
+
+作者已裁：**`rhsParams` 是 `RuleHead` 里"同一份文本的第四样摘要"**（与前三个同类），**但只记"右侧签名"，不记"解释"**——存 `{name, type}` 序列，**`cotangentAt`/`knownAt`/`sizeDependent` 一律不进索引**（那是 `transpose` 对签名的解读，属于消费者）。
+
+四条锚：
+```
+src/parse/ast/builder.cpp:899-916   右侧 callee / 左侧 variables / outerUses 都在这儿读，第四样加在这里
+                                    （`rightCalleeOf(sides[1])`、`variableNamesOf(sides[0])`、
+                                     `outerNamesUsedInRight(...)` 是现成的同族函数，新加一个 `rightParamsOf(sides[1])`）
+include/camel/parse/ast/rule_head.h:62-78   `variables` / `outerUses` 字段与 `RuleHead` 构造参数，
+                                            `rhsParams` 加在 `outerUses` 后面
+src/parse/ast/rule_head.cpp:280-291         构造函数的形参列表（同名同序加一项）
+src/parse/ast/rule_head.cpp  `indexRule`     索引时记的两张表 `callees[family][rule]` / `variables[family][rule]`
+                                            旁边加第三张，并加读者 `rhsParamsOf(family, rule)`
+```
+打印（下一步的验收）：**一行里分清"记的"与"推的"**——
+```
+law=<名字> params=[(x: T), …] → cotangentAt=<i> knownAt=<j…> sizeDependent=<y/n>
+     └─ 索引里记的 ─┘            └──── transpose 现场算出 ────┘
+```
+`transforms 51/51` 必须逐字不变，`if (law == …)` 不动。
+
+**这一轮没有再往前，是因为 `rightParamsOf` 要写一个新的 CST 走读**（同族的 `rightCalleeOf`/`variableNamesOf` 各是一小段），**不是加一个字段就完**；写它需要与 `cst::Expr` 的形状对齐，**改错了会红在解析层**——那比 `transpose` 那层红更难查。
