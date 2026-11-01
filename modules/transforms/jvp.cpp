@@ -467,6 +467,11 @@ bool liftGraph(
         auto &transaction = group.transaction(member);
         auto &draft       = transaction.edit();
         draft.setFuncType(signature);
+        // The graph this one is a lift of: a fact about the graph, not a comment about the call.
+        // `split` reads it when it has to carry a call of a lifted graph into a half, so that the
+        // value half can call the primal instead of the lift (whose first parameter is the pair).
+        // Every member the lift makes gets it, the top-level `jvp_of_f` and each `jvp_of_callee`.
+        draft.addLiftedFromRef(function->id());
         // One pair of ports per parameter of `f`, in its order: the value the caller passes and the
         // seed of that direction. A port node is a node; the graph's *parameters* are the port nodes
         // it lists as its norm ports, and a call is checked against that list ("has 0 norm ports" is
@@ -1259,6 +1264,7 @@ bool liftGraph(
             rules += (rules.empty() ? "" : ",") + rule;
         }
         os << "REINTERP jvp function=" << function->name() << " graph=" << rt::toValue(member)
+           << " liftedFrom=" << rt::toValue(function->id())
            << " type=" << signature->toString() << " nodes=" << function->nodeCount()
            << " kinds=" << copiedKinds << '/' << seenKinds
            << " exit=Tuple{chain,tangent} tangent=computed source=ruleset rules="

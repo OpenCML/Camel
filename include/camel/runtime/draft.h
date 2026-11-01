@@ -452,6 +452,9 @@ class GraphDraft {
     /// in the reference table so that they are part of the program, and read back by the pass
     /// that owns the tag.
     const std::vector<GraphId> &ruleGraphs() const { return ruleGraphs_; }
+    /// The graph this draft was lifted from, empty when it was not lifted: `jvp` writes it on the
+    /// graph it builds from a primal, and it survives into the encoded graph's reference table.
+    const std::vector<GraphId> &liftedFromRefs() const { return liftedFromRefs_; }
 
     /// The normal-role ports of a node: the view of the data ports that a pass caring about the
     /// role reads (`normInputsOf`); `withInputsOf` is the context-role view of the same list.
@@ -830,6 +833,7 @@ class GraphDraft {
     void addSubGraph(GraphId graph);
     void addStaticGraphRef(GraphId graph);
     void addRuleGraphRef(GraphId graph);
+    void addLiftedFromRef(GraphId graph);
 
     GCGraph *encode(const std::string &mangledName, const std::string &name) const;
 
@@ -940,6 +944,7 @@ class GraphDraft {
     std::vector<GraphId> subGraphs_;
     std::vector<GraphId> staticGraphRefs_;
     std::vector<GraphId> ruleGraphs_;
+    std::vector<GraphId> liftedFromRefs_;
 };
 
 /// The control region a node's code lies in: the innermost region that is an arm of a branch or a

@@ -74,6 +74,7 @@
 #include "passes/test/resources.h"
 #include "passes/test/semantics.h"
 #include "passes/test/tags.h"
+#include "camel/passes/test/tangent_space.h"
 #include "passes/trans/cpp/cpp_export.h"
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/profile/profile.h"
@@ -393,6 +394,14 @@ template <class Pass, class... Args> PassMaker makePass(Args &&...args) {
     };
 }
 
+/// `report` is declared in stdlib/std.cml with a default of false: the reading line is for a run
+/// that has to explain where it is, and a program keeps its stderr unless it asks for the line.
+PassMaker macroPass() {
+    return [](const context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<MacroRewritePass>(ctx, args.getBool("report"));
+    };
+}
+
 PassMaker optimizePass() {
     return [](const context_ptr_t &ctx, const PassArgs &args) {
         OptimizeRewriteConfig config;
@@ -565,7 +574,7 @@ void registerCoreKernel(const char *name, PassMaker make, bool readsTags = false
 /// guard that resolves every declaration catches it.
 void registerCoreKernels() {
     registerCoreKernel("nop", makePass<NullGraphIRPass>());
-    registerCoreKernel("macro", makePass<MacroRewritePass>());
+    registerCoreKernel("macro", macroPass());
     registerCoreKernel("defunctionalize", defunctionalizePass());
     registerCoreKernel("gir", makeGraphVizPass({}));
     registerCoreKernel("rgir", makeGraphVizPass(GraphVizDumpConfig{.rich = true}));
@@ -980,6 +989,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kContextLifetimeTestPass, ContextLifetimeTestPass),
         TEST_PASS(kContextsTestPass, ContextsTestPass),
         TEST_PASS(kDerivativesTestPass, DerivativesTestPass),
+        TEST_PASS(kTangentSpaceTestPass, TangentSpaceTestPass),
         TEST_PASS(kCommitMergeTestPass, CommitMergeTestPass),
         TEST_PASS(kEdgesOrderOkTestPass, EdgesOrderOkTestPass),
         TEST_PASS(kEdgesOrderPureTestPass, EdgesOrderPureTestPass),
@@ -1011,6 +1021,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
         TEST_PASS(kLoopCollectSummaryTestPass, LoopCollectSummaryTestPass),
         TEST_PASS(kKeepNodeTestPass, KeepNodeTestPass),
+        TEST_PASS(kKeepNodePureTestPass, KeepNodePureTestPass),
         TEST_PASS(kFactStoreTestPass, FactStoreTestPass),
         TEST_PASS(kFactLoadRulesTestPass, FactLoadRulesTestPass),
         TEST_PASS(kFactSeedTestPass, FactSeedTestPass),

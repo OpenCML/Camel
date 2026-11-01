@@ -1,0 +1,31 @@
+// `split` at a branch, which it refuses -- and the refusal is the reading this case pins.
+//
+// `jvp` gives a branch's Join the lifted type (the arm the condition picks writes the pair
+// (result, tangent) into it), so the exit of a lifted branching body is a Join, not a tuple fill.
+// `split` used to answer `skip=exit` and nothing else, which says neither where the pair is nor what
+// would be needed to cut it. The author's rule for a branch (design 4.2) is: **the condition itself is
+// a residual**, carried across the cut so the backward half picks the arm the forward half took by
+// reading the same condition -- the arm's values are not carried, because the arm is picked, not
+// blended.
+//
+// What blocks it is not the rule but the walk: an arm is a *region*, not a data input, so a half's
+// walk (which follows `dataInputsOf`) never enters it. The refusal now says that, and names the
+// condition it found in the graph (`condition=5` below) -- a fact read from the Brch, not guessed.
+//
+// The numbers this case cannot print are pinned where they do run: `control_flow_grad` in
+// `feat.modules.autodiff` differentiates through branches, including arms that read different values
+// (`a=6.0` and `b=0.5` are the two arms of `if x > 0.0 then x * x else 0.5 * x`).
+import rulesets.jvp
+import { jvp, split } from transforms
+
+func leaky(x: float): float {
+    return if x > 0.0 then x * x else 0.5 * x
+}
+
+func main(): int sync {
+    let (forward, backward) = split(jvp(leaky))
+    let (value, residuals)  = forward(3.0)
+    'branch value={}'->format<value>->println
+    'branch dgdx={}'->format<backward(residuals, 1.0)>->println
+    return 0
+}

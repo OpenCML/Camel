@@ -2022,13 +2022,20 @@ const EXCEPTIONS = {
         'rule states a generic application': 1,
         'rule states a named type': 14,
         'rule states a type variable': 1,
+// `remat` is the thirteenth: its result is the argument's own type (`(f: F) => F`), because a
+        // call through the mark is a call of the same function, and no spelling names every function
+        // type a program can pass. The operator answers that type (`rematOperatorSignature`), so the
+        // declaration is the side that cannot state it concretely -- the same reading `jvp`'s
+        // `Jvp<F>` carries one class over.
         'declaration states a type variable': 13,
         'declaration states a generic application': 2,
     },
     // The same question one position to the left: a parameter the operator writes as a function
     // type, a `grad of P`, a named aggregate (`NumericAggregate`, `Device<T>`), an untyped pack; a
     // declaration that writes a bare `T`; and two parameter lists that are not a list at all or not
-    // the same length.
+    // the same length. `remat`'s `f` is the tenth function-typed one: the operator registers the
+    // shape its kernel answers for a two-parameter function (`(f: (float, float) => float)`), while
+    // the declaration writes the bare `F` no spelling can name.
     parameter: {
         'rule states no parameter list': 1,
         'declared arity differs from rule arity': 4,
