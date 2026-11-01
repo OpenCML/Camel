@@ -1895,15 +1895,29 @@ GraphOrder orderOfGraph(const GCGraph &graph) {
     return result;
 }
 
-/// Whether the effect `ref` stands on something in `graph` (design principles 3.1): a read of its
-/// value -- a normal or `with` input of another node, or the graph's own result, which whoever runs
-/// the graph reads -- or a place in its block's chain. The chain is carried as three edge kinds while
-/// the migration runs (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the control one,
-/// and the order kind joins statements of one block yet), so a place in it is a sync, control or
-/// order edge either way, or the `kGCNodeFlagSyncStatement` the builder and the splices mark.
+/// Whether the effect `ref` stands on something in `graph` (design principles 3.1). Three
+/// credentials, and only three:
 ///
-/// An effect with none of these is in the graph and in no chain: nothing makes it run, which is what
-/// a rewrite that removes its last reader and forgets to hand its place on leaves behind.
+/// 1. **a read of its value** -- a normal or `with` input of another node;
+/// 2. **the graph's own result** -- whoever runs the graph reads it (`exit`, `output`, `return`);
+/// 3. **a place in its block's chain, measured as an edge** -- a sync or control edge to a node that
+///    runs after it. The migration carries the chain as both kinds at once
+///    (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the control one) and either one
+///    is the same fact while both exist.
+///
+/// Two things are **not** credentials, and used to be counted here:
+///
+/// - **the `kGCNodeFlagSyncStatement` tag.** A tag is a declaration, not a use: the builder and the
+///   splices set it on a node, and a rewrite that drops the node's place in the chain leaves the tag
+///   set. Counting it made "this statement is in a block" a fact a pass could keep while losing the
+///   edge that makes it true -- the credential outlived the thing it stands for;
+/// - **an order edge.** `order` joins statements of one block while the migration runs, but it is an
+///   order the *writer* put there, not a read: an effect whose only remaining edge is an order edge
+///   is one no chain makes run. That is exactly the case design principles 3.1 refuses, and the
+///   boundary check now refuses it too (P0-3).
+///
+/// An effect with none of the three is in the graph and in no chain: nothing makes it run, which is
+/// what a rewrite that removes its last reader and forgets to hand its place on leaves behind.
 bool effectStandsOnSomething(const GCGraph &graph, camel::runtime::gc_node_ref_t ref) {
     if (!graph.normUsersOf(ref).empty() || !graph.withUsersOf(ref).empty()) {
         return true;
@@ -1911,13 +1925,9 @@ bool effectStandsOnSomething(const GCGraph &graph, camel::runtime::gc_node_ref_t
     if (graph.exitNodeRef() == ref || graph.outputNodeRef() == ref || graph.returnNodeRef() == ref) {
         return true;
     }
-    const camel::runtime::GCNode *node = graph.node(ref);
-    if (node != nullptr && node->hasFlag(camel::runtime::kGCNodeFlagSyncStatement)) {
-        return true;
-    }
-    return !graph.syncPredsOf(ref).empty() || !graph.syncUsersOf(ref).empty() ||
-           !graph.ctrlInputsOf(ref).empty() || !graph.ctrlUsersOf(ref).empty() ||
-           !graph.orderPredsOf(ref).empty() || !graph.orderUsersOf(ref).empty();
+    // The chain, as the edges that carry it: something runs after this node. The predecessors do
+    // not count -- an edge into a node says the node before it is placed, not this one.
+    return !graph.syncUsersOf(ref).empty() || !graph.ctrlUsersOf(ref).empty();
 }
 
 /// The effects of `program`: every effect node of every graph of it, each at its position in one

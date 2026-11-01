@@ -170,3 +170,4 @@ BreakJoinTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     os << "test::break_join: the program has no branch node\n";
     return program;
 }
+
