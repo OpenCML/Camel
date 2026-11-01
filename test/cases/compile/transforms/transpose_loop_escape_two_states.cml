@@ -1,5 +1,6 @@
-// The fourth shape, and the first where the loop already carries two states of its own: the capture
-// channel would have to put its accumulator after them -- `k = 2 + #escapes`, not `1 + #escapes`.
+// The fourth shape: the loop already carries two states of its own before anything escapes, so the
+// capture channel has to put its accumulators after them -- `k = states + #escapes`, not
+// `1 + #escapes`.
 //
 // `carried(x) = let q = 2x; (loop s = x, p = x for i in 0..3 do (s + p, p + q)).0` is, on paper,
 // the two round rules `s' = s + p` and `p' = p + q` started at `s = p = x`, with `q = 2x` read from
@@ -8,33 +9,20 @@
 //     round 1: s = 2x,    p = 3x
 //     round 2: s = 5x,    p = 5x
 //     round 3: s = 10x,   p = 7x
-// and the value taken out is `s`, so `carried(x) = 10x`, the pullback of 1.0 at x = 1 is 10, and `p`
-// is 7 on the way. Both numbers are printed below by the forward evaluator, before anything is
-// transposed, so the algebra is checked against the compiler rather than asserted in this comment.
+// and the value taken out is `s`, so `carried(x) = 10x` and the pullback of 1.0 at x = 1 is 10. `p`
+// is 7 on the way, and the forward evaluator prints both before anything is transposed, so the
+// algebra is checked against the compiler rather than asserted in this comment.
 //
-// What the transpose does with the shape is a refusal, and where it refuses is the finding:
-// `TRANSPOSE function=carried skip=output`. Two facts, and the second is what makes the first
-// readable. `transpose` takes a function that returns a `float` (handed one that returns a pair it
-// says so and the call does not compile), so a multi-state loop's value -- a tuple -- can never be
-// the transposed function's own output; the only way to use it is to read a component of it (`t.0`),
-// and the reverse walk treats a component read as a read of a known value and never gives it a
-// cotangent. So the output has no answer, the walk stops before the loop node is visited, and no
-// `carried=` line prints at all -- for this shape, or for `select_only` below, which has no loop and
-// refuses at the same line.
+// The two states reach the answer in different ways, which is what makes 10 a real check: `s` is the
+// value read out of the loop, so its cotangent arrives as 1, while `p` is never read at all and its
+// cotangent arrives as 0 -- and comes back as 3, because `p` feeds `s` in all three rounds. The
+// escape `q` adds the three rounds' worth of `p`'s cotangent, which `q = 2x` turns into 6. So the
+// answer is 1 + 3 + 6, and an accumulator put before the states, or a loop value read with the sums
+// first, would not land on it.
 //
-// The control is kept as the second half of the page but cannot run in the same program: an error
-// ends the run, and the loop shape refuses first. Swap the one call -- `transpose(select_only)` for
-// `transpose(carried)` -- and the same line prints with the control's name; that is how the two were
-// told apart, and it is one word to redo it.
-//
-// One thing this page does not settle, said rather than left hanging: an escape whose target is not a
-// float. Measured while this page was written, with `int_escape(x) = let n = int(3x); loop s = x for
-// i in 0..3 do s + float(n)` (paper: f = x + 3*int(3x), so f(1) = 10 and the pullback is 1, the
-// truncation being piecewise constant), it refuses before the accumulator is ever built:
-// `TRANSPOSE function=int_escape skip=state node=12 origin=0`, without a `captures=` field -- the
-// guard for a body that produced no cotangent, so it does not print a number, suspicious or
-// otherwise. That was a throwaway probe and not kept as a case, because the cut that changes it is a
-// different one; what matters here is only that the shape refuses now.
+// The reverse loop therefore carries one cotangent per state plus one sum per escaped value, and what
+// starts it is the component read: reading `t.0` of a tuple fills slot 0 of that tuple's cotangent
+// and leaves the other slots zero.
 import { transpose } from transforms
 import rulesets.transpose
 
@@ -43,20 +31,12 @@ func carried(x: float): float {
     return (loop s = x, p = x for i in 0..3 do (s + p, p + q)).0
 }
 
-func select_only(x: float): float {
-    let t = (x, 2.0 * x)
-    return t.0
-}
-
 func main(): int sync {
-    // The algebra first, forward and un-transposed: 10 through `s`, 7 through `p`, and the control's
-    // 1 through a tuple component.
+    // The algebra first, forward and un-transposed: 10 through `s`, 7 through `p`.
     println(carried(1.0))
     let (a, b) = loop s = 1.0, p = 1.0 for i in 0..3 do (s + p, p + 2.0)
     println(a)
     println(b)
-    println(select_only(1.0))
-    // Then the refusal: the answer the shape owes is 10, and what it gets is `skip=output`.
     let back = transpose(carried)
     println(back(1.0, 1.0))
     return 0
