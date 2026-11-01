@@ -103,3 +103,27 @@ expect_exit = 0
 expect_stdout_contains = ["semantic codes with no case that asserts them by name:"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
+
+[[tests]]
+name = "catalog.text_coverage"
+desc = "The fifth question: does any case read the sentence a code prints? Each code's message is compared with the expected output of the tests that pin it, placeholder text as separator, and a run of at least twelve characters of fixed text has to appear there. A ratchet, like the other counts: the numbers this file records are the floor, so a case that stops quoting a message it used to quote fails here. What it cannot see is the arguments -- a template whose slots are filled with the wrong words still matches the fixed text -- and that class is what the plan cases that run the program are for."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/diagnostics-catalog.mjs"
+args = ["${case}", "--text-coverage-check"]
+expect_exit = 0
+expect_stdout_contains = ["codes whose message text a case asserts:"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+[[tests]]
+name = "catalog.no_producer"
+desc = "Every registered semantic code is constructed somewhere in src, include or modules. A row nothing raises is either a path that should refuse and does not, or a row that outlived its last use -- `FeatureNotSupported` was the second kind for a month, and no case could see it, because a code with no producer is also a code no case can pin. Comments and the message table do not count as producers; a ternary inside the call and a helper that returns the code do."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/diagnostics-catalog.mjs"
+args = ["${case}", "--no-producer-check"]
+expect_exit = 0
+expect_stdout_contains = ["semantic codes no code constructs: 0 of"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 30000

@@ -56,6 +56,7 @@ kind = "behavior"
 case = "../../../cases/compile/diag_json/div_zero.cml"
 args = ["--output-format", "json", "${case}", "std::no_such_pass"]
 expect_exit = 1
+expect_output_contains = ["Unrecognized graph rewriting/scheduling/translation pass '"]
 verify_script = """
 const text = input.normalized.stdout
 const start = text.lastIndexOf('[\n{')
@@ -438,4 +439,25 @@ const want = [7, 8].map(line => 'SemanticDiag::EffectNotExecuted@' + line)
 assert(JSON.stringify(got) === JSON.stringify(want), 'warnings: ' + got.join(' '))
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
+
+[[tests]]
+name = "rewrite_does_not_settle"
+desc = "The rewrite engine reports a rewrite that keeps changing the same graph instead of returning a program that is one rewrite away from being different: settle_runs=1 is the bound exposed so this report can be proved (the default is 32), and the diagnostic names the graph, the bound and the pass."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_loop.cml"
+args = ["${case}", "std::opt settle_runs=1", "onnx::export"]
+expect_exit = 1
+expect_output_contains = ["Pass 'std::opt' failed with an internal error", "did not settle", "1 consecutive runs each changed the program", "name=RuntimeDiag::PassInternalError, code=0x0400000C"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 6000
+[[tests]]
+name = "pass_parameter_value_refused"
+desc = "A parameter the declaration's type accepts and the pass cannot use is refused while the pipeline is read, with the position of the word: settle_runs=0 is not read as 'never report'. It used to commit a diagnostic where the pass is built, where nothing receives it, and the run ended with a terminate and exit 134."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_loop.cml"
+args = ["${case}", "std::opt settle_runs=0", "onnx::export"]
+expect_exit = 1
+expect_output_contains = ["RuntimeDiag::InvalidPassParameter", "settle_runs must be at least 1, got 0", "std::opt settle_runs=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000

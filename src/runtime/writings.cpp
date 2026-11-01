@@ -2196,7 +2196,7 @@ RewriteStats DraftWritings::rewrite(
                 draft_.replaceAllCtrlUses(node, made);
                 for (gc_node_ref_t wait : waits) {
                     if (wait != made) {
-                        draft_.appendInput(DraftEdgeKind::Ctrl, made, wait);
+                        draft_.appendControlEdge(made, wait);
                     }
                 }
                 if (draft_.entryNode() == node)

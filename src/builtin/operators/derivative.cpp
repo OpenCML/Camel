@@ -539,6 +539,21 @@ void registerArrayBatchingRules() {
     camel::core::bindVmapRule({":op/idx_arr", "rulesets.vmap", "index_into", 2});
 }
 
+/// The same operator's **forward** rule, keyed the same way and filed in `rulesets.jvp`: a
+/// differentiating transform reads the forward table and not the batching one, so `xs[i]` needs an
+/// entry in both when both transforms have to walk it. The key belongs to the operator
+/// (`index_into`, two operands), not to the family, so it is written here and read by either.
+void registerArrayForwardRules() {
+    camel::core::bindForwardRule({":op/idx_arr", "rulesets.jvp", "index_into", 2});
+}
+
+// P1-7 removes this table; the rule set's own left-hand side (`index_into`, arity 2) is what will
+// find it. Added now so the array path can be measured before that work lands, and deleted with the
+// table it belongs to -- both array bindings leave on the same day, for the same reason.
+void registerArrayTransposeRules() {
+    camel::core::bindTransposeRule({":op/idx_arr", "rulesets.transpose", "index_into", 2});
+}
+
 /// The batching rules of the same five are written down in `rulesets.vmap`, under the same five
 /// keys: an operator's key is which token its rule's left side writes and how many operands that
 /// token takes, so the two families that already share it share it again. What is bound here is the
@@ -561,6 +576,8 @@ void registerBuiltinDerivatives() {
     registerFloatTransposeRules<F64>();
     registerFloatTransposeRules<F32>();
     registerArrayBatchingRules();
+    registerArrayForwardRules();
+    registerArrayTransposeRules();
     registerFloatVmapRules<F64>();
     registerFloatVmapRules<F32>();
     registry.setRule(":op/dtod", identityVjp);

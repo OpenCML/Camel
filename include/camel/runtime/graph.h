@@ -299,7 +299,12 @@ static_assert(std::is_trivially_copyable_v<GCGraphSyncEdge>);
 struct GCNode {
     GCNodeKind kind         = GCNodeKind::Data;
     uint8_t flags           = 0;
-    uint16_t reserved       = 0;
+    /// How many of a FUNC node's trailing arguments are tangents: what a rule's expansion recorded on
+    /// the call it produced (`DraftNodeHeader::tangentArgs`, `addFuncNode's last argument`). The
+    /// rule is the one source of which arguments are values and which are tangents; `transpose` reads
+    /// the count off the node rather than deriving it again. 0 for every other node, and for a call
+    /// that is not a rule's tangent function.
+    uint16_t tangentArgs    = 0;
     gc_slot_idx_t dataIndex = 0;
     /// The type of the node's value (camel/core/type/intern.h); kNoTypeId when it has none.
     camel::core::type::TypeId typeId = camel::core::type::kNoTypeId;
@@ -783,6 +788,11 @@ class GCGraph : public camel::core::rtdata::Object {
     gc_node_ref_t nodeRef(const GCNode *node) const;
     /// FUNC node `ref`: the callee (invalid when `ref` is not a FUNC node).
     GraphId calleeIdOf(gc_node_ref_t ref) const;
+    /// How many of FUNC node `ref`'s trailing arguments are tangents: the count a rule's expansion
+    /// recorded when it produced the call (`GCNode::tangentArgs`), 0 when the node is not such a call.
+    /// A kernel's parameters are the values the rule bound followed by the tangents it took, so the
+    /// values are the arguments before this count.
+    uint16_t callTangentArgsOf(gc_node_ref_t ref) const;
     /// The graph a function constant of the static area names, with the reason when it names none.
     ///
     /// `calleeIdOf` answers for a FUNC node -- a call written by name. A function value kept in a

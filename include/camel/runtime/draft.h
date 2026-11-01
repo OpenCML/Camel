@@ -132,6 +132,13 @@ struct DraftNodeHeader {
 
     GCNodeKind kind                  = GCNodeKind::Data;
     uint8_t runtimeFlags             = 0;
+    /// How many of a FUNC node's arguments are tangents. A rule's right side is
+    /// `(dx, dw) => mul_tangent(x, w, dx, dw)`: the values are the captures the expansion bound and the
+    /// tangents are the lambda's own parameters, so the expansion knows the count and records it here,
+    /// on the call it produces. One source: the rule. Nothing re-derives the boundary from a name or a
+    /// spelling, and a reader that needs it (`transpose`, at a call inside a branch arm) reads the
+    /// node. 0 for every node that is not a rule's tangent call.
+    uint16_t tangentArgs             = 0;
     DraftNodeStorageClass storageCls = DraftNodeStorageClass::Slab64;
     // The numeric permissions the program granted to the node with the standard permission
     // tags (camel/core/operator_semantics.h, PermissionMask; design principles 7.5), 0 when none.
@@ -580,9 +587,12 @@ class GraphDraft {
     /// The index of `graph` in payloadGraphs(), added when it is not there; kNoLoopGraph for
     /// an invalid id.
     uint32_t payloadGraphIndexOf(GraphId graph);
+    /// `tangentArgs` is how many of the call's trailing arguments are tangents, when the caller knows
+    /// (see DraftNodeHeader::tangentArgs): a rule's expansion does, because the values are the captures
+    /// it bound and the tangents are the lambda's own parameters. 0 for a call that is not one.
     gc_node_ref_t addFuncNode(
         GraphId calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags = 0,
-        gc_slot_idx_t dataIndex = 0, uint32_t writtenCaptures = 0);
+        gc_slot_idx_t dataIndex = 0, uint32_t writtenCaptures = 0, uint16_t tangentArgs = 0);
     /// Which of a FUNC node's callee's captured variables the call writes, as a bit per capture
     /// of the callee's capture table, in the order its captures were made: the value the call
     /// hands on carries the new version of each (camel::runtime::GCFuncRef::reserved).
@@ -675,6 +685,14 @@ class GraphDraft {
     void appendInput(
         DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId,
         PortRole role = PortRole::Normal);
+    /// The one place a control edge is written: every rewrite that keeps the kind alive beside a
+    /// sync edge calls this, so what a control edge means is decided in one function instead of at
+    /// a dozen call sites. The kind is on its way out (docs/design/effects/edges.cn.md 1: a graph's
+    /// edges are data, sync and order); when the read side stops asking for it, this function is
+    /// what goes, not its callers.
+    void appendControlEdge(gc_node_ref_t userId, gc_node_ref_t inputId) {
+        appendInput(DraftEdgeKind::Ctrl, userId, inputId);
+    }
     bool unlinkInput(
         DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId,
         PortRole role = PortRole::Normal);

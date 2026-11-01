@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-307 diagnostics: 286 errors, 21 warnings. 15 carry a machine-applicable edit, 292 say why they carry none.
+306 diagnostics: 285 errors, 21 warnings. 15 carry a machine-applicable edit, 291 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -267,7 +267,7 @@ prints one entry.
 | `0x03000206` | [SemanticDiag::YieldRequiresStreamHead](#yieldrequiresstreamhead) | Error | no |
 | `0x03000207` | [SemanticDiag::RuleRightUsesOuterVariable](#rulerightusesoutervariable) | Error | no |
 | `0x03000208` | [SemanticDiag::ResidualsAreNotVisible](#residualsarenotvisible) | Error | no |
-| `0x03000209` | [SemanticDiag::LambdaRestParameterNotLowered](#lambdarestparameternotlowered) | Error | no |
+| `0x0300020A` | [SemanticDiag::LambdaRestParameterNotLowered](#lambdarestparameternotlowered) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -304,7 +304,6 @@ prints one entry.
 | `0x04000032` | [RuntimeDiag::OperandTypeUnsupported](#operandtypeunsupported) | Error | no |
 | `0x04000033` | [RuntimeDiag::FieldNotFound](#fieldnotfound) | Error | no |
 | `0x04000034` | [RuntimeDiag::InvalidArgument](#invalidargument) | Error | no |
-| `0x04000036` | [RuntimeDiag::FileSystemError](#filesystemerror) | Error | no |
 | `0x04000039` | [RuntimeDiag::RegexInvalid](#regexinvalid) | Error | no |
 | `0x0400003A` | [RuntimeDiag::TimeFormatFailed](#timeformatfailed) | Error | no |
 | `0x0400003C` | [RuntimeDiag::GradientElementTypeMismatch](#gradientelementtypemismatch) | Error | no |
@@ -586,7 +585,18 @@ Unexpected '{0}': no '{1}' is open here.
 Remove the '{0}', or add the '{1}' it was meant to close.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/syntax/unmatched_closing_delimiter.cml`, run as `camel test/cases/parse/syntax/unmatched_closing_delimiter.cml`)
+
+```camel
+// A closing delimiter with nothing open: refused at the delimiter, and the message names both
+// repairs -- remove it, or add the opener it was meant to close -- because only the writer knows
+// which of the two happened.
+
+func main(): int sync {
+    let x: int = 1)
+    return x
+}
+```
 
 ### MissingThen
 
@@ -641,7 +651,19 @@ Unexpected ';': there is no statement between it and the ';' before it.
 Statements are separated by a line break or by one ';'. Remove the extra ';'.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/syntax/extra_semicolon.cml`, run as `camel test/cases/parse/syntax/extra_semicolon.cml`)
+
+```camel
+// Statements are separated by a line break or by one `;`. A second `;` with nothing between it and
+// the one before it is refused where it is written: the parser does not read it as an empty
+// statement, because a reader who wrote it meant one statement, not two.
+
+func main(): int sync {
+    let x: int = 1;;
+    println(x)
+    return 0
+}
+```
 
 ### AssignmentInCondition
 
@@ -663,7 +685,21 @@ None: choice: the condition was meant as a comparison or as an assignment, and t
 To compare, write '==': if x == 1 then ...
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/syntax/assignment_in_condition.cml`, run as `camel test/cases/parse/syntax/assignment_in_condition.cml`)
+
+```camel
+// `=` assigns; it is not the comparison a condition asks for, and a condition that assigns is
+// almost always a comparison written one `=` short. The parser refuses it at the `=` rather than
+// reading it as an assignment or as `==`, and names the operator to write instead.
+
+func main(): int sync {
+    let x: int = 1
+    if x = 1 then
+        println('one')
+    end
+    return 0
+}
+```
 
 ### KeywordAsIdentifier
 
@@ -745,7 +781,18 @@ The declaration of '{0}' has no value.
 A declaration binds a name to a value: let {0} = <value>, or with a type: let {0}: <type> = <value>.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/syntax/missing_initializer.cml`, run as `camel test/cases/parse/syntax/missing_initializer.cml`)
+
+```camel
+// A declaration binds a name to a value: `let x` names a binding and gives it nothing, so there is
+// nothing to bind. Refused at the name, with both forms that would fix it -- `= <value>` or
+// `: <type> = <value>` -- in the message.
+
+func main(): int sync {
+    let x
+    return 0
+}
+```
 
 ### MissingToken
 
@@ -8758,7 +8805,7 @@ func main(): int sync {
 
 ### LambdaRestParameterNotLowered
 
-`0x03000209` · Error · `SemanticDiag::LambdaRestParameterNotLowered`
+`0x0300020A` · Error · `SemanticDiag::LambdaRestParameterNotLowered`
 
 **Fix**
 
@@ -10173,28 +10220,6 @@ func main(): int sync {
     return 0
 }
 ```
-
-### FileSystemError
-
-`0x04000036` · Error · `RuntimeDiag::FileSystemError`
-
-**Fix**
-
-None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-
-**Message**
-
-```text
-'{0}' failed for '{1}': {2}.
-```
-
-**Help**
-
-```text
-Check the path and the permissions of the directories on it.
-```
-
-*No example: no test small enough to show raises it.*
 
 ### RegexInvalid
 

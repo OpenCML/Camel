@@ -1409,7 +1409,7 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     const auto nameControlPair = [&](gc_node_ref_t user, gc_node_ref_t pred) {
         const auto ctrl = ctrlInputsOf(user);
         if (std::ranges::find(ctrl, pred) == ctrl.end()) {
-            appendInput(DraftEdgeKind::Ctrl, user, pred);
+            appendControlEdge(user, pred);
         }
     };
     for (gc_node_ref_t user : syncUsers) {
@@ -1509,7 +1509,7 @@ void GraphDraft::handChainPlaceTo(gc_node_ref_t id, gc_node_ref_t tail) {
         setSyncInputs(user, only);
         const auto ctrl = ctrlInputsOf(user);
         if (std::ranges::find(ctrl, pred) == ctrl.end()) {
-            appendInput(DraftEdgeKind::Ctrl, user, pred);
+            appendControlEdge(user, pred);
         }
     };
     markStatement(tail);
@@ -1655,7 +1655,7 @@ void GraphDraft::takeStatementPlace(gc_node_ref_t oldId, gc_node_ref_t newId) {
     for (gc_node_ref_t pred : kept) {
         const auto ctrl = ctrlInputsOf(newId);
         if (std::ranges::find(ctrl, pred) == ctrl.end()) {
-            appendInput(DraftEdgeKind::Ctrl, newId, pred);
+            appendControlEdge(newId, pred);
         }
     }
     for (gc_node_ref_t user : users) {
@@ -1666,7 +1666,7 @@ void GraphDraft::takeStatementPlace(gc_node_ref_t oldId, gc_node_ref_t newId) {
         setSyncInputs(user, only);
         const auto ctrl = ctrlInputsOf(user);
         if (std::ranges::find(ctrl, newId) == ctrl.end()) {
-            appendInput(DraftEdgeKind::Ctrl, user, newId);
+            appendControlEdge(user, newId);
         }
     }
 }
@@ -2337,5 +2337,5 @@ GCGraph *GraphDraft::encode(const std::string &mangledName, const std::string &n
         staticSlots_);
 }
 
-} // namespace camel::runtime
 
+} // namespace camel::runtime

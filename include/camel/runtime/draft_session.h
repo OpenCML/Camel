@@ -260,6 +260,10 @@ class RuntimeGraphDraftSession {
     };
 
     GraphTransaction &ensureDraft(GCGraph *graph);
+    /// Refuses a draft whose operator port names a node the draft does not have: a graph version
+    /// cannot be written around a reference to nothing, and the guard that judges a pass's program
+    /// promises to refuse exactly this shape. Throws, so the pipeline names the pass that made it.
+    void validateDraftPorts() const;
     std::vector<GCGraph *> collectCommitClosure() const;
     /// The graphs the draft of `graph` refers to (visitDraftGraphs), in visiting order. Kept while
     /// the draft's revision is the same, so that asking for the closure of the program again

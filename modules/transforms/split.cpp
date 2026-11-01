@@ -475,8 +475,12 @@ struct Half {
                 retargetedCalls.insert(ref);
                 return true;
             }
+            // A fact about the call, not about the half it is copied into: when the rule's expansion
+            // recorded how many of the call's trailing arguments are tangents, the copy is the same
+            // call and says the same thing. It is what `transpose` reads at a call inside an arm.
             const gc_node_ref_t made = draft.addFuncNode(
-                callee, node->dataType(), 0, draft.allocateRuntimeSlot(node->dataType()), 0);
+                callee, node->dataType(), 0, draft.allocateRuntimeSlot(node->dataType()), 0,
+                source->callTangentArgsOf(ref));
             draft.setNormInputs(made, inputs);
             draft.addDependency(callee);
             copyOf[ref] = made;
@@ -1132,11 +1136,8 @@ SplitGraph buildSplitGraph(
                 // The first step of the cut a branch needs: enter each arm and say what is in it. The walk a half
                 // does follows `dataInputsOf` and never reaches an arm, so this is the entrance it does not
                 // have yet -- and the numbers are what the next step builds on (an arm is entered through
-                // its form ports, and it is not empty). `enterArmRegions` is the entrance itself: false
-                // leaves the reading exactly as it was before this step, which is how the two are compared.
-                constexpr bool enterArmRegions = true;
+                // its form ports, and it is not empty).
                 const gc_node_ref_t branch = branchNodeOf(function, exit);
-                if (enterArmRegions) {
                     for (uint32_t region = 1; region < function->regionCount(); ++region) {
                         const rt::GCRegion *one = function->region(region);
                         if (one == nullptr || one->kind != rt::GCRegionKind::Arm ||
@@ -1149,42 +1150,19 @@ SplitGraph buildSplitGraph(
                            << " ports=" << walked.ports << " nested=" << walked.nestedBrchs
                            << " outside=" << walked.outside << '\n';
                     }
-                    // The second step: what each arm *yields*, and the Join the backward half makes for
-                    // it. An arm ends in the Fill that writes the pair into the Join's slot, so its two
-                    // members are the value and the tangent -- the tangent is what the backward half
-                    // keeps, and it is read off the Fill's with inputs, never guessed from the arm's
-                    // shape. The Join and the region are made for real (a member of the group's own
-                    // draft) and the numbers below are their refs; nothing is encoded, because the cut
-                    // still refuses, so the step is a construction that can be checked and not a graph
-                    // that pretends to run.
-                    const rt::GCNode *pairNode = exitNode;
-                    Type *pairType             = pairNode->dataType();
-                    // The construction is made in a draft of its own, which is dropped without being
-                    // encoded: the cut still refuses, so these refs are a construction that can be
-                    // checked, not a graph that pretends to run.
-                    rt::GraphDraftGroup probe(context, program);
-                    const GraphId probeId =
-                        probe.reserve("split_arm_probe", "split_arm_probe");
-                    auto &halfDraft = probe.transaction(probeId).edit();
-                    // The A/B of this step: with `copyArmBodies` false the probe holds an empty region
-                    // and an unwired Join per arm, which is the reading before this step; true copies
-                    // the arm's body in and joins that arm's half of the pair.
-                    constexpr bool copyArmBodies = true;
-                    rt::DraftGraphCloneResult copied{};
-                    if (copyArmBodies) {
-                        auto &txn = probe.transaction(probeId);
-                        copied = rt::cloneRuntimeGraphIntoDraft(txn, function, 0);
-                    }
-                    // What the copy holds for a source node. The clone brings the regions with it, so
-                    // an arm's members are the arm's own -- the probe's arm region has the same nodes
-                    // the source's has, and the values its members read from outside are values the
-                    // probe can name.
-                    auto clonedOf = [&](gc_node_ref_t ref) -> gc_node_ref_t {
-                        if (!copyArmBodies || ref >= copied.sourceToCloned.size()) {
-                            return rt::kInvalidNodeRef;
-                        }
-                        return copied.sourceToCloned[ref];
-                    };
+                    // The second step: what each arm *yields*. An arm ends in the Fill that writes the
+                    // pair into the Join's slot, so its two members are the value and the tangent --
+                    // the tangent is what the backward half keeps, and it is read off the Fill's with
+                    // inputs, never guessed from the arm's shape.
+                    //
+                    // No probe draft is made here. This used to clone the whole graph into a draft,
+                    // mint a Join in it and drop the lot, once per branch cut, only to learn how many
+                    // members an arm has and which values they read from outside it -- numbers the
+                    // source graph answers directly (P1-11, code review 2026-11-01). What the reading
+                    // prints is unchanged where a plan pins it; the fields that only the clone could
+                    // report (`probeRegion`, `probeMembers`, `probeJoin`, `conditionCopied`) are gone,
+                    // and `from=[...]` now names source nodes as it always meant to.
+                    Type *pairType = exitNode->dataType();
                     const uint32_t conditionRegion =
                         condition < function->nodeCount() ? function->nodeRegion(condition) : 0;
                     for (uint32_t region = 1; region < function->regionCount(); ++region) {
@@ -1207,41 +1185,26 @@ SplitGraph buildSplitGraph(
                                                          : function->withInputsOf(yield);
                         const gc_node_ref_t tangent =
                             members.size() == 2 ? members[1] : rt::kInvalidNodeRef;
-                        // What the copy holds for this arm: the region it landed in, how many members
-                        // it has there, and the values those members read from *outside* it -- the
-                        // question a cut answers before it can carry anything across.
-                        uint32_t probeRegion = 0;
-                        size_t probeMembers  = 0;
+                        // The values this arm's members read from *outside* it -- the question a cut
+                        // answers before it can carry anything across. Read from the source graph:
+                        // a member's region is the arm's, so a value read from another region is a
+                        // value that has to cross.
                         std::vector<gc_node_ref_t> fromOutside;
-                        if (!copyArmBodies) {
-                            probeRegion = halfDraft.addRegion(
-                                rt::GCRegionKind::Arm, 0, rt::kInvalidNodeRef, one->index);
-                        }
                         for (gc_node_ref_t r = 0; r < function->nodeCount(); ++r) {
                             if (function->nodeRegion(r) != region) {
                                 continue;
                             }
-                            const gc_node_ref_t mine = clonedOf(r);
-                            if (mine == rt::kInvalidNodeRef) {
-                                continue;
-                            }
-                            ++probeMembers;
-                            probeRegion = halfDraft.nodeRegion(mine);
                             for (gc_node_ref_t input : dataInputsOf(function, r)) {
                                 const rt::GCNode *read = function->node(input);
                                 if (read == nullptr || read->kind == rt::GCNodeKind::Data) {
                                     continue; // a constant is not a value the cut has to carry
                                 }
-                                const gc_node_ref_t there = clonedOf(input);
-                                if (there == rt::kInvalidNodeRef || probeRegion == 0) {
+                                if (function->nodeRegion(input) == region) {
                                     continue;
                                 }
-                                if (halfDraft.nodeRegion(there) == probeRegion) {
-                                    continue;
-                                }
-                                if (std::find(fromOutside.begin(), fromOutside.end(), there) ==
+                                if (std::find(fromOutside.begin(), fromOutside.end(), input) ==
                                     fromOutside.end()) {
-                                    fromOutside.push_back(there);
+                                    fromOutside.push_back(input);
                                 }
                             }
                         }
@@ -1249,26 +1212,10 @@ SplitGraph buildSplitGraph(
                             tangent != rt::kInvalidNodeRef && function->node(tangent) != nullptr
                                 ? function->node(tangent)->dataType()
                                 : pairType;
-                        const gc_node_ref_t madeJoin =
-                            halfDraft.addJoinNode(tangentType, rt::kInvalidNodeRef, 1);
-                        const gc_node_ref_t wiredTangent = clonedOf(tangent);
-                        size_t wired                     = 0;
-                        if (wiredTangent != rt::kInvalidNodeRef) {
-                            const std::array<gc_node_ref_t, 1> held{wiredTangent};
-                            halfDraft.setWithInputs(
-                                madeJoin, std::span<const gc_node_ref_t>(held.data(), held.size()));
-                            wired = 1;
-                        }
                         os << "ARM half=backward arm=" << one->index << " region=" << region
                            << " yield=" << yield << " members=" << members.size() << " value="
                            << (members.size() == 2 ? members[0] : rt::kInvalidNodeRef) << " tangent="
-                           << tangent << " probeRegion=" << probeRegion;
-                        if (!copyArmBodies) {
-                            os << " probeJoin=" << madeJoin << '\n';
-                            continue;
-                        }
-                        os << " probeMembers=" << probeMembers << " probeJoin=" << madeJoin
-                           << " wired=" << wired << " inputs=" << fromOutside.size() << " from=[";
+                           << tangent << " inputs=" << fromOutside.size() << " from=[";
                         for (gc_node_ref_t ref : fromOutside) {
                             // Named by what it is in the source graph, not by the probe's ref: a
                             // parameter is `p<index>` (the two the lifted graph takes are the value
@@ -1284,13 +1231,10 @@ SplitGraph buildSplitGraph(
                             }
                         }
                         os << "] condition=" << condition << " conditionRegion=" << conditionRegion
-                           << " conditionCopied=" << clonedOf(condition) << '\n';
-                    }
+                           << '\n';
                 }
-                // The A/B of this step: with `cutBranchArm` false the cut stops at the reading above
-                // and refuses, which is where it stood before the condition was allowed to pick an arm.
-                constexpr bool cutBranchArm = true;
-                if (cutBranchArm) {
+                // The condition picks the arm: the cut hands `cutBranchGraph` the arms it found.
+                {
                     std::vector<ArmCut> arms;
                     for (uint32_t region = 1; region < function->regionCount(); ++region) {
                         const rt::GCRegion *one = function->region(region);

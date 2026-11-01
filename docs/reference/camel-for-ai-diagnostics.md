@@ -304,7 +304,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `FailNotExecuted` | This 'fail' is not executed: {0}. |
 | `StatementAfterFail` | This statement cannot run: the 'fail' written before it never returns. |
 
-**Run time and passes — errors** (`RuntimeDiag`) — 39
+**Run time and passes — errors** (`RuntimeDiag`) — 38
 
 | `RuntimeError` | An error has occurred: {0}. |
 | `DivisionByZero` | Attempted division by zero. |
@@ -328,7 +328,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `OperandTypeUnsupported` | '{0}' does not support a value of type '{1}'; it takes {2}. |
 | `FieldNotFound` | The struct has no field '{0}'. |
 | `InvalidArgument` | Invalid argument of '{0}': {1}. |
-| `FileSystemError` | '{0}' failed for '{1}': {2}. |
 | `RegexInvalid` | '{0}': '{1}' is not a valid regular expression: {2}. |
 | `TimeFormatFailed` | '{0}' failed: {1}. |
 | `GradientElementTypeMismatch` | The gradient of a value of type '{0}' has element type '{1}': {2}. A gradient must have the element type of the value it is the gradient of (design principles 9.9); accumulated as it is, the value would be read at the wrong width and answer with a number that is not the derivative. |

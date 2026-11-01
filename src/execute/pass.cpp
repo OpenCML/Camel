@@ -31,8 +31,10 @@
 #include "camel/passes/test/derivatives.h"
 #include "camel/passes/test/edges.h"
 #include "camel/passes/test/graph_release.h"
+#include "camel/passes/test/broken_boundary.h"
 #include "camel/passes/test/keepfn.h"
 #include "camel/passes/test/bounds.h"
+#include "camel/passes/test/inlineuse.h"
 #include "camel/passes/test/keepshape.h"
 #include "camel/passes/test/rules.h"
 #include "camel/passes/test/saturate.h"
@@ -379,6 +381,15 @@ size_t constantBudgetOf(const PassArgs &args) {
     return bytes < 0 ? 0 : static_cast<size_t>(bytes);
 }
 
+/// The `settle_runs` parameter of `std::opt`: how many runs of the rewrite in a row may each change
+/// the same graph before the pass reports that the rewrite does not settle. It is an internal bound
+/// of the engine, exposed so that a test can prove the report happens at all (a run that changes
+/// nothing ends the loop, so the runaway shows up across runs, not inside one); it is not a tuning
+/// knob, and a value below 1 is refused rather than read as "never report".
+size_t settleRunsOf(const PassArgs &args) {
+    return static_cast<size_t>(args.getInt("settle_runs"));
+}
+
 PassMaker makeGraphVizPass(GraphVizDumpConfig config) {
     return [config](const context_ptr_t &ctx, const PassArgs &) {
         return std::make_unique<GraphVizDumpPass>(ctx, config);
@@ -411,6 +422,7 @@ PassMaker optimizePass() {
         config.checkScreens        = args.getBool("check_screens");
         config.growthBudget        = growthBudgetOf(args, "std::opt");
         config.constantBudgetBytes = constantBudgetOf(args);
+        config.settleRuns          = settleRunsOf(args);
         return std::make_unique<OptimizeRewritePass>(ctx, config);
     };
 }
@@ -971,6 +983,15 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kLeakBranchArmPass, LeakBranchArmTestPass),
         TEST_PASS(kShareBranchArmPass, ShareBranchArmTestPass),
         TEST_PASS(kOperatorSemanticsTestPass, OperatorSemanticsTestPass),
+        TEST_PASS(kFailsWithValueTestPass, FailsWithValueTestPass),
+        // A pass that refuses to be built. The throw is the point: it is what the construction
+        // receiver exists to turn into a named diagnostic instead of a terminate.
+        {
+            kBrokenMakerTestPass,
+            [](const context_ptr_t &) -> std::unique_ptr<GraphIRPass> {
+                throw std::runtime_error("this test pass refuses to be built, and says so");
+            },
+        },
         TEST_PASS(kIndexSemanticsTestPass, IndexSemanticsTestPass),
         TEST_PASS(kDefinitionsTestPass, DefinitionsTestPass),
         TEST_PASS(kExpandDefinitionsTestPass, ExpandDefinitionsTestPass),
@@ -986,8 +1007,13 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kEdgesOkTestPass, EdgesOkTestPass),
         TEST_PASS(kCommitConflictTestPass, CommitConflictTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
+        TEST_PASS(kBreakExitTestPass, BreakExitTestPass),
+        TEST_PASS(kBreakPortsTestPass, BreakPortsTestPass),
+        TEST_PASS(kDanglePortTestPass, DanglePortTestPass),
         TEST_PASS(kKeepShapeTestPass, KeepShapeTestPass),
         TEST_PASS(kBoundsFlipTestPass, BoundsFlipTestPass),
+        TEST_PASS(kInlineUseTestPass, InlineUseTestPass),
+        TEST_PASS(kInlineUseDropTestPass, InlineUseDropTestPass),
         TEST_PASS(kKeepInspectTestPass, KeepInspectTestPass),
         TEST_PASS(kContextLifetimeTestPass, ContextLifetimeTestPass),
         TEST_PASS(kContextsTestPass, ContextsTestPass),
@@ -1255,6 +1281,9 @@ struct ResolvedPass {
 };
 
 /// Resolves one specification: the pass name and its `key=value` words. Prints nothing.
+std::optional<camel::execute::detail::ParamProblem> valueProblem(
+    const std::string &name, const PassArgs &args);
+
 ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
     ResolvedPass result;
     camel::execute::detail::ParsedSpec parsed;
@@ -1313,11 +1342,39 @@ ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
         result.paramProblem = std::move(problem);
         return result;
     }
+    // A value the declaration's type accepted but the pass cannot use. This is where it is
+    // reported: the pipeline is still being read, so the diagnostic carries the position of the
+    // word, the way a wrongly typed parameter does -- and the pass is never built, so nothing here
+    // can end up as an exception nothing catches.
+    if (auto problem = valueProblem(parsed.name, args)) {
+        result.paramProblem = std::move(problem);
+        return result;
+    }
     result.factory =
         [make = descriptor->descriptor.make, args = std::move(args)](const context_ptr_t &ctx) {
             return make(ctx, args);
         };
     return result;
+}
+
+/// A value the declaration's type accepted and the pass cannot use: checked while the pipeline is
+/// read, so the report has a position and the pass is never built with a value it refuses.
+std::optional<camel::execute::detail::ParamProblem> valueProblem(
+    const std::string &name, const PassArgs &args) {
+    using camel::execute::detail::ParamProblem;
+    using camel::execute::detail::ParamProblemKind;
+    // `std::opt settle_runs`: the bound the rewrite engine reports at. It is an internal bound
+    // (see settleRunsOf), and 0 is refused rather than read as "never report".
+    if (name == "std::opt" && args.given("settle_runs") && args.getInt("settle_runs") < 1) {
+        ParamProblem problem;
+        problem.kind = ParamProblemKind::OutOfRange;
+        problem.name = "settle_runs";
+        problem.found = args.text("settle_runs");
+        problem.expected = "at least 1";
+        problem.text = std::format("settle_runs must be at least 1, got {}", args.text("settle_runs"));
+        return problem;
+    }
+    return std::nullopt;
 }
 
 /// A parameter written wrongly at a pass call: the language's own diagnostics for a call, at the
@@ -1344,6 +1401,10 @@ Diagnostic parameterDiagnostic(
     case Kind::WrongType:
         diag = DiagnosticBuilder::of(SemanticDiag::ParamArgumentWrongType)
                    .commit(problem.name, specName(spec), problem.found, problem.expected);
+        break;
+    case Kind::OutOfRange:
+        diag = DiagnosticBuilder::of(RuntimeDiag::InvalidPassParameter).commit(spec, problem.text);
+        diag.stage = "typecheck";
         break;
     case Kind::Missing:
         diag = DiagnosticBuilder::of(SemanticDiag::ParamArgumentMissing)
@@ -2253,18 +2314,22 @@ std::string entryExitViolation(const camel::runtime::Program &program) {
         if (entry && exit) {
             continue;
         }
-        return std::format(
-            "graph {} of it has no {}",
-            camel::runtime::toValue(graph->id()),
-            !entry ? "entry node it can start at" : "exit node whose value it returns");
+        return !entry ? "entry node it can start at" : "exit node whose value it returns";
     }
     return {};
 }
 
 /// Every operator node still matches the declaration it names: an operator the table knows, ordinary
 /// ports that are live nodes with a type, and no more of them than the declaration's operands. A
-/// port the declaration does not have, a port pointing at a node that is gone, or a port without a
-/// type is a call nothing can run.
+/// port the declaration does not have, a port pointing at a dead node or at one without a type, or a
+/// port whose node is gone is a call nothing can run.
+///
+/// One half of the last case is not seen here. A port naming a node that does not exist at all is
+/// refused earlier, by the commit that would have to write it down
+/// (`RuntimeGraphDraftSession::validateDraftPorts`): the graph version cannot be encoded around a
+/// reference to nothing, and the encoder used to read through it and crash before this function ever
+/// ran. What reaches this function is a graph that exists, so it covers the node that is dead (erased,
+/// still referenced) and the node that has no type.
 ///
 /// Returns nothing, or the graph, the node and what is wrong with it.
 std::vector<std::string> portDeclarationViolation(const camel::runtime::Program &program) {
@@ -2458,6 +2523,69 @@ std::string effectOrderViolation(
 
 } // namespace
 
+namespace {
+
+/// What a pass gave up with, as the diagnostic that says so. One function, because two places
+/// receive it: where a pass runs (`apply` threw) and where a pass is built (`factory(ctx)` threw).
+/// A pass's parameters are checked while it is constructed, and that check reports through the same
+/// runtime diagnostics the pass uses when it runs -- so the two places have the same job, and a
+/// second copy of this would be a second answer to what a pass's failure is called.
+void reportPassFailure(const context_ptr_t &ctx, const std::string &name, const std::exception &e) {
+    // A pass that gives up with a plain exception (graph validation at commit, the execution-order
+    // builder meeting a cycle, an arena limit) hit a defect of the compiler, not of the program. It
+    // is still reported as a diagnostic, so that --output-format json stays a valid diagnostics
+    // array. There is no source position for it. The stage names the pass even for a scheduling
+    // pass: the failure belongs to the pass, whatever part of the program had run.
+    setPipelineStage("pass:" + specName(name));
+    std::string what = e.what();
+    while (!what.empty() && (what.back() == '.' || what.back() == '\n')) {
+        what.pop_back(); // the diagnostic's message ends the sentence itself
+    }
+    try {
+        ctx->rtmDiags()->of(RuntimeDiag::PassInternalError).commit(name, what);
+    } catch (const camel::core::error::DiagnosticsLimitExceededBaseException &) {
+        // The diagnostic is recorded; the limit is what throws. Letting it out of a catch handler
+        // is how this became `terminate` in the first place.
+    }
+}
+
+/// Build a pass, and receive what its construction reports.
+///
+/// Construction is where a pass's parameters are checked: `std::opt settle_runs=0` is refused in the
+/// maker, with `RuntimeDiag::InvalidArgument` naming the pass and the value. That diagnostic is
+/// committed to the context like any other, and at the context's diagnostics limit the commit throws
+/// -- which, escaping from a construction site, reached the driver and became `std::terminate` with
+/// exit code 134, for a program the compiler had refused correctly.
+///
+/// So a construction site receives too, and it receives the same way the running site does: a throw
+/// from the diagnostics limit means the diagnostic is already recorded, and the caller's
+/// `hasErrors()` is what turns it into a refusal with a non-zero exit; anything else is a pass that
+/// broke while being built, which `reportPassFailure` reports exactly as a break while running.
+std::unique_ptr<GraphIRPass> constructPass(const context_ptr_t &ctx, const std::string &name) {
+    // A pass is built more than once on the way in -- twice by the pre-checks that ask what kind it
+    // is, and once when the pipeline builds it. A refused parameter is recorded the first time, so
+    // every later construction would record the same diagnostic again: the run reported
+    // 'settle_runs must be at least 1, got 0' twice before this. Once a diagnostic is recorded,
+    // nothing else is built.
+    if (ctx && ctx->rtmDiags()->hasErrors()) {
+        return nullptr;
+    }
+    auto resolved = resolvePassWithModule(name, ctx);
+    if (!resolved.factory) {
+        return nullptr;
+    }
+    try {
+        return resolved.factory(ctx);
+    } catch (const camel::core::error::DiagnosticsLimitExceededBaseException &) {
+        return nullptr;
+    } catch (const std::exception &e) {
+        reportPassFailure(ctx, name, e);
+        return nullptr;
+    }
+}
+
+} // namespace
+
 PassRunResult applyRegisteredPass(
     const camel::runtime::Program *program, const std::string &spec, const context_ptr_t &ctx,
     std::ostream &os, GraphIRPass *caller) {
@@ -2469,10 +2597,30 @@ PassRunResult applyRegisteredPass(
     const bool publishes = ctx && ctx->currentRuntimeProgram() == program;
     // The old program's content is read here, before the pass runs (graphRevisionsOf).
     const std::unordered_map<uint32_t, uint64_t> beforeRevisions = graphRevisionsOf(program);
-    auto pass            = resolved.factory(ctx);
+    auto pass = constructPass(ctx, spec);
+    if (!pass) {
+        // Construction reported: the diagnostic is recorded, and the caller prints it.
+        return {nullptr, true};
+    }
     const camel::runtime::Program *produced = pass->apply(program, os);
-    if (pass->hasErrorValue() && caller != nullptr) {
-        caller->failWithErrorValue(pass->errorValue());
+    if (pass->hasErrorValue()) {
+        if (caller != nullptr) {
+            caller->failWithErrorValue(pass->errorValue());
+        } else {
+            // A pass is `(f: F) => F!` (design principles 9.1): the value it ends with instead of a
+            // program IS its answer, and handing it to the caller is how that answer travels. With
+            // no caller there is nobody to hand it to, and this line used to drop it -- the run
+            // went on as if the pass had succeeded. Nothing reaches this branch today (both call
+            // sites pass `this`), and the branch is here so that a future one cannot be silent.
+            if (ctx) {
+                ctx->rtmDiags()->of(RuntimeDiag::PassInternalError)
+                    .commit(
+                        spec,
+                        "the pass ended with an error value and the caller that ran it has none to "
+                        "give it to");
+            }
+            return {nullptr, true};
+        }
     }
     if (produced == nullptr) {
         return {nullptr, true};
@@ -2571,7 +2719,10 @@ firstConsumingPass(const std::vector<std::string> &passes, const context_ptr_t &
         if (!factory) {
             continue;
         }
-        const auto pass = factory(ctx);
+        const auto pass = constructPass(ctx, passes[i]);
+        if (!pass) {
+            continue; // construction reported; the pipeline build below is where it stops
+        }
         if (dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ||
             dynamic_cast<GraphTranslatePass *>(pass.get()) != nullptr) {
             return i;
@@ -2586,7 +2737,10 @@ bool passListTranslatesProgram(const std::vector<std::string> &passes, const con
         if (!factory) {
             continue;
         }
-        const auto pass = factory(ctx);
+        const auto pass = constructPass(ctx, name);
+        if (!pass) {
+            continue; // construction reported; the pipeline build below is where it stops
+        }
         // The first pass that consumes the graph decides what the list does. Before it, rewrite
         // passes only transform the program; after it, the graph is gone.
         if (dynamic_cast<GraphTranslatePass *>(pass.get()) != nullptr) {
@@ -2795,7 +2949,10 @@ PassApplyResult applyPassesDetailed(
             camel::core::mm::autoSpace().safepoint(std::format("before pass {}", p));
             EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), program->root()); });
             camel::utils::phase::Scope phaseScope("pass", p);
-            auto pass = factory(ctx);
+            auto pass = constructPass(ctx, p);
+            if (!pass) {
+                return {nullptr, PassApplyStatus::Failed};
+            }
             // The debugger's observer is told which pass runs: only a scheduling pass runs the
             // program it debugs; a rewrite or translation pass may evaluate graphs of its own.
             const bool schedules = dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr;
@@ -2915,18 +3072,9 @@ PassApplyResult applyPassesDetailed(
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (memory exhausted)", p);
                 return {nullptr, PassApplyStatus::Failed};
             } catch (const std::exception &e) {
-                // A pass that gives up with a plain exception (graph validation at commit, the
-                // execution-order builder meeting a cycle, an arena limit) hit a defect of the
-                // compiler, not of the program. It is still reported as a diagnostic, so that
-                // --output-format json stays a valid diagnostics array. There is no source
-                // position for it. The stage names the pass even for a scheduling pass: the
-                // failure belongs to the pass, whatever part of the program had run.
-                setPipelineStage("pass:" + specName(p));
-                std::string what = e.what();
-                while (!what.empty() && (what.back() == '.' || what.back() == '\n')) {
-                    what.pop_back(); // the diagnostic's message ends the sentence itself
-                }
-                ctx->rtmDiags()->of(RuntimeDiag::PassInternalError).commit(p, what);
+                // The same receiver a construction site uses: one answer to "what is a pass's
+                // failure called", whether the pass broke while being built or while running.
+                reportPassFailure(ctx, p, e);
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (internal error)", p);
                 return {nullptr, PassApplyStatus::Failed};
             }
@@ -2984,7 +3132,7 @@ PassApplyResult applyPassesDetailed(
                 if (!ports.empty()) {
                     ctx->rtmDiags()
                         ->of(RuntimeDiag::PassBoundaryPorts)
-                        .commit(p, ports[0], ports[1], ports[2]);
+                        .commit(p, ports[1], ports[2]);
                     CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (ports)", p);
                     return {nullptr, PassApplyStatus::Failed};
                 }
@@ -3039,11 +3187,6 @@ PassApplyResult applyPassesDetailed(
     return {program, PassApplyStatus::Transformed};
 }
 
-const camel::runtime::Program *applyPasses(
-    const camel::runtime::Program *program, const std::vector<std::string> &passes,
-    const context_ptr_t &ctx, std::ostream &os) {
-    return applyPassesDetailed(program, passes, ctx, os).program;
-}
 
 
 

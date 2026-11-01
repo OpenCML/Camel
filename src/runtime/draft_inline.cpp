@@ -1662,7 +1662,7 @@ void resolvePlaceForks(GraphDraft &draft) {
         draft.setSyncInputs(n, only);
         const auto ctrl = draft.ctrlInputsOf(n);
         if (std::ranges::find(ctrl, tail) == ctrl.end()) {
-            draft.appendInput(DraftEdgeKind::Ctrl, n, tail);
+            draft.appendControlEdge(n, tail);
         }
     }
 }
@@ -2197,7 +2197,7 @@ DraftInlineResult inlineCallableInDraft(
             draft.setSyncInputs(head, only);
             const auto ctrl = draft.ctrlInputsOf(head);
             if (std::ranges::find(ctrl, pred) == ctrl.end()) {
-                draft.appendInput(DraftEdgeKind::Ctrl, head, pred);
+                draft.appendControlEdge(head, pred);
             }
         }
         bodyChain = scanBodyChain();
@@ -2340,7 +2340,7 @@ DraftInlineResult inlineCallableInDraft(
         const auto nameControlPair = [&](gc_node_ref_t user, gc_node_ref_t pred) {
             const auto ctrl = draft.ctrlInputsOf(user);
             if (std::ranges::find(ctrl, pred) == ctrl.end()) {
-                draft.appendInput(DraftEdgeKind::Ctrl, user, pred);
+                draft.appendControlEdge(user, pred);
             }
         };
         // The statements written after the call follow the body's tail. `closeChainOver` closed the

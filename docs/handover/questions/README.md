@@ -1,10 +1,12 @@
+| [`is-an-arm-block-a-sync-chain`](questions-2026-11-02-is-an-arm-block-a-sync-chain.md) | 选臂的 `Block` 区域算不算一条 `sync` 链（`sync` 臂块是否同步链） | 待裁（`lane-guard` 的红与收敛读数见页内） |
+| [`does-the-pause-cover-a-lambdas-parameter-list`](questions-2026-11-02-does-the-pause-cover-a-lambdas-parameter-list.md) | 暂停是否覆盖 `vjp` 需要的 lambda 形参表：**被保留项与被暂停机制相撞**，不是语言做不到 | 默认 A（`split(jvp(f))` 是一对函数、`transpose` 要一个函数，见页内） |
 # 待裁索引：谁在等作者，堵着什么
 
 > **一页一问；索引按"堵住多少工作"排序，因为作者的时间应该花在最贵的那页上。**
 
 > **索引的价值在于与目录一一对应；一旦少一页，读者就会以为没有那一问。**
 
-> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 questions/ 里有 2 页**，文件名见下表。其余已裁完、整体挪进 `reviews/`。
+> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 questions/ 里有 1 页**，文件名见下表。其余已裁完、整体挪进 `reviews/`。
 >
 > **索引以目录为准**：这张表曾经列着三页早就挪进 `reviews/` 的文件名，而目录里的另外三页不在表上——**一条指向不存在文件的索引，比没有索引更坏**（读者会以为那一问还在，而去回答一个已经裁过的形状）。以后每次并入前先数目录，再改这张表。
 >
@@ -12,12 +14,16 @@
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：2 页（与目录逐项一致）
-
+## 现在在等作者：3 页（与目录逐项一致）
 | 页 | 问句 | 默认建议 |
 |---|---|---|
-| [`the-array-parameter-waits-for-the-compile-time-step`](questions-2026-11-01-the-array-parameter-waits-for-the-compile-time-step.md) | `vjp` 遇到 `float[]` 参数（迁移表 127 例里 54 例这一类）缺的是哪一步、要不要在 `vjp` 这一层补 | 不在 `vjp` 补：缺的三步都在 `jvp`，正是"三个算子编译期实例化"那一刀要动的，等那一刀 |
-| [`whether-a-function-value-can-take-a-computed-pack`](questions-2026-11-01-whether-a-function-value-can-take-a-computed-pack.md) | `vjp` 并成一条泛型时，体要返回"参数表是计算出的 pack"的函数值：要不要给拼写 | **维持两条按元数分写的声明**：作者只裁了方向没裁机制，另两条都要动设计 5.6 的 pack 来源 |
+| [`whether-the-empty-tangent-needs-a-port`](questions-2026-11-02-whether-the-empty-tangent-needs-a-port.md) | 空切空间（`Tangent<bool>=()`）那一格要不要单独一个端口 | 待裁（`lane-m4` 的三条读数与表见页内） |
+| [`is-an-arm-block-a-sync-chain`](questions-2026-11-02-is-an-arm-block-a-sync-chain.md) | 选臂的 `Block` 区域算不算一条 `sync` 链（`sync` 臂块是否同步链） | 待裁（`lane-guard` 的红与收敛读数见页内） |
+| [`does-the-pause-cover-a-lambdas-parameter-list`](questions-2026-11-02-does-the-pause-cover-a-lambdas-parameter-list.md) | 暂停是否覆盖 `vjp` 需要的 lambda 形参表：**被保留项与被暂停机制相撞**，不是语言做不到 | 默认 A（`split(jvp(f))` 是一对函数、`transpose` 要一个函数） |
+
+**17:30 作者把 `nested-branch-stops-in-jvp` 也挪进 `reviews/` 并在 `questions-2026-10-29.md` 记了两条裁定**（`fsh-dev` 的 `9c2e5c7df`）：前端变换实例化**先停手**（已进树的不撤，等负责人一起处理），嵌套分支按区域**从内到外递归**、不为“嵌套”另写一支（`vjp` 在 `2 / 0.5 / -1` 处 `4.0 / 2.0 / 3.0`，四个后端一致）。
+
+**16:10 作者把最后一页也挪进 `reviews/`**（`fsh-dev` 的 `56ce9259c`）：`whether-a-function-value-can-take-a-computed-pack`——lambda 形参表收无类型的 `..xs`（选 ①，不改 5.6），类型从期望类型来，落地后 `vjp` 并成一条声明。所以这一节现在是空的，不是没人在问。
 
 **14:30 作者裁完并亲自把八页挪进 `reviews/`**（`fsh-dev` 的 `235987b44`）：这八页是 `who-owns-the-count-of-a-splits-residuals`、`whether-transpose-takes-the-cotangent-beside-the-parameters`、`closures-as-values-block-the-transposed-backward-half`、`split-has-landed-and-the-host-is-up`、`inliner-chain-joining-as-its-own-change`、`optional-with-arguments-and-the-batching-key`、`probe-plan-kept-or-dropped`、`t-plus-24-status-and-where-the-hour-went`。裁定四条：M4 第二步是 `jvp`/`split`/`transpose` 的**编译期实例化**、`vjp` 仍是 `transpose(split(jvp(f)))` 组合；`Vjp<F>` 拉回一律元组，`grad(f)(x) = vjp(f)(x).1(1.0).0`；`probe.machine` 删；可选 with 参数走 A 的窄版（前端把声明默认值物化）。
 
@@ -34,7 +40,6 @@
 ## 已裁：按还堵着的活排
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
-|---|---|---|---|---|
 | [`a-version-port-that-must-carry-a-value`](../reviews/questions-2026-10-31-a-version-port-that-must-carry-a-value.md) | `void` 调用写过的变量，它的读该靠什么后于那次调用 | 已裁未落 | 22:50——A：新算子 `:var/after(cell, call) : var T`（第二个实参接受 `void`），读写成 `:var/get(:var/after(cell, call))`；两条都是数据边，3.1 的"用到"沿数据边到调用；验收 `callback_write_ignored` 打印 `3`、`effects_syntax` 11 条红消失、拿 `133` 量 | `:var/after` 算子本身；`orderAfterLastWriter` 里那条 ctrl 替身随之可拆 |
 | [`two-references-write-one-object-outside-a-sync-block`](../reviews/questions-2026-10-31-two-references-write-one-object-outside-a-sync-block.md) | 同一可变对象被两条引用写、第二条在这一层看不见时，读拿谁的版本 | 已裁未落 | 22:50——②：**保守的写者集合**（程序里所有写该变量的函数，建图前整个程序扫一遍）；`twice` 里 `counter` 在集合里，`return counter` 的版本是 `:var/after(counter, f(v))`；**20:35 那句就此收回** | 保守写者集合的实现；`twice` 应打印 `3` |
 | [`parallel-map-fault-what-runs-after`](../reviews/questions-2026-10-31-parallel-map-fault-what-runs-after.md) | 并行 `map` 一处故障后，下标更小、还没开始的元素是否仍执行 | 已裁未落 | 22:50——①：保今天的实现，3.6 改措辞（"已经开始的元素跑完；下标大于已知最小故障、还没开始的元素不再开始，下标更小的仍会开始；报下标最小的故障"）；删 `taskflow.cpp:2797` 的 `DESIGN-QUESTION`；补部分故障、四后端同判的用例 | 3.6 措辞；`taskflow.cpp:2797`；四后端同判用例 |
@@ -69,7 +74,6 @@
 ## 已撤：1 页
 
 | 页 | 问什么 | 状态 | 裁定/去向 | 还堵着 |
-|---|---|---|---|---|
 | [`where-the-tag-for-an-operator-can-sit`](../reviews/questions-2026-10-31-where-the-tag-for-an-operator-can-sit.md) | 标签能不能挂在别处的算子声明上 | 已撤 | 20:50——没有跨模块挂标签这回事；结论并入上面 `the-ruleset-module-has-no-rules-in-it` 那一行 | 无 |
 
 ## 留档里仍写着"待裁/等裁决"的页（已裁，别再当待裁）
@@ -94,7 +98,6 @@
 判据同上：只有今天有人被它堵住的才值得成页，其余留在这里，等它真的挡住一条车道再动。原文在 [`docs/design-principles.cn.md`](../../design-principles.cn.md) 第 15 节。
 
 | 条目 | 问什么 | 今天堵着谁 |
-|---|---|---|
 | 类型运算 | 类型表达式要不要有交、差、并这类运算（文法里没有，也没预留运算符） | 无；要加的时候写法和含义一起定 |
 | `typeof` 常量 | `typeof` 作用于常量值时的含义，以及它在泛型里的用法 | 无；GCT 只用 `typeof <变量>`，口径已按 16:30 定成"只求类型" |
 | 类型函数失败 | 类型函数求值失败或不终止时怎么办 | 无；`Tangent`/`ParamsOf` 才刚开始写，还没人写坏过 |

@@ -128,7 +128,7 @@ bool appendControlDependency(
     if (hasControlDependency(transaction, predecessor, user, maxWork)) {
         return false;
     }
-    draft.appendInput(DraftEdgeKind::Ctrl, user, predecessor);
+    draft.appendControlEdge(user, predecessor);
     return true;
 }
 
