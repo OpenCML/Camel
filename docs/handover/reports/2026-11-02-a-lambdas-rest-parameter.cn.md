@@ -519,3 +519,41 @@ help: Ensure the index is within bounds for arrays or refers to a valid field in
 `wrote diagnostics/registry.tsv (unchanged) … 305 codes`，**那一行没有被接受**（文件被还原成 305 条）。
 所以今天用的是现成的 `InvalidAccessIndex`（help 里已有 "or refers to a valid field in structs"）。
 **专门的码留给下一次**，本条不回退。**`--check` 仍是 305。**
+
+## 15. 同族扫描：`ASSERT` 在 release 被编掉、而它守的是一次解引用
+
+**搜索根**：`git grep -n 'ASSERT(' -- src include`，**全树 270 处**。
+**筛法**：`ASSERT(...)` 的**下一行**含 `*` / `[` / `->` / `.at(` / `.value()` 的，**110 处**。
+按区：**前端（`src/compile`、`src/parse`、`include/camel/compile`、`include/camel/parse`）17 处**；
+**其余 93 处**在 `src/runtime`（draft_* 多）、`src/passes`、`src/core`、`include/camel/runtime`。
+
+**纪律（先写这一条）**：诊断码由 `diagnostics-catalog.mjs` 分配，**手写进 `registry.tsv` 的 `0x000209` 会被 `--write` 还原**——
+这不是失败，是设计。所以 A2 用现成的 `InvalidAccessIndex` 是对的，`--check` 仍 305。**下一个人不必再试。**
+
+### 15.1 前端 17 处
+
+| 处 | 守的是什么 | 判 |
+|---|---|---|
+| `gct/node.h:270 accessKey()` | `!accessByIndex()`，然后 `*payload_.name` | **危险，已证实并已修（A2）**：`p.1` 作用在结构体上 ⇒ 三次三次 SIGSEGV。现在先判 `accessByIndex()` 再取名字 |
+| `gct/node.h:219 exportName(i)` | `i < names->count` | **同形，未证**：调用方按 `count` 循环，**没造出越界的最小程序** |
+| `gct/node.h:239 loopStateName(j)` | `j < loopStateCount()` | **同形，未证**：同上，索引来自状态表的遍历 |
+| `gct/node.h:244 loopElementName()` | `loopHasIterable(loopKind())`，然后取 `count - 1` | **同形，未证**：`count == 0` 时是 `[-1]`；**没造出"for 循环没有元素名"的程序** |
+| `gct/node.h:315 enumCase()` | `caseType() == Enum`，然后 `*payload_.enumCase` | **同形，未证**：调用方先按 `caseType()` 分派 |
+| `gct/node.h:339 typeCaseTypeAt(i)` | `types != nullptr && i < count` | **同形，未证**：索引来自模式表遍历 |
+| `gct/node.h:420 staticLoopStateName(j)` | `j < count` | **同形，未证**：同 239 |
+| `gir/arena.h:162,197,285,288,295,300` | 分配器自己的尺寸/守卫字节 | **到不了**：这些是 arena 的**内部不变量**（分配与校验成对），程序形状不选择它们；破坏它意味着分配器已出错 |
+| `parse/ast/base.h:97,99` | `index < children_.size()`，然后 `children_.at(index)->load()` | **到不了（对用户程序）**：越界由 `.at` 抛异常；`->load()` 的空指针意味着**解析器造出了空子节点**，那是解析器的 bug，不是程序的形状 |
+| `parse/ast/base.h:106` | `opt->type() == Optional` | **同形，未证**：先判后取，在 release 下走错类型才 UB；未造出程序 |
+| `parse/ast/builder.cpp:4925` | 多行 `ASSERT` 的续行（筛法误报） | **不适用** |
+
+### 15.2 其余 93 处
+
+**未逐处判定**（如实写：不是"安全"，是"这一轮没判"）。它们在 `src/runtime`（`draft_regions.cpp` 9、`draft_session.cpp` 8、`draft_construct.cpp` 7、`draft.cpp` 4、`draft_clone.cpp` 4 …）、
+`src/passes`、`src/core`、`include/camel/{runtime,core}`。理由不是"大概安全"：**这些是运行期内部结构（草稿图、会话、分配）的不变量，
+用户程序的形状不直接选择它们**；但"不直接"不等于"不可能"，**这一栏留给下一轮逐处判定**。
+
+### 15.3 模板（从 A2 抽出来的）
+
+**把断言里的前提变成代码里的分支。** 断言在 release 里不存在，所以它守的前提在 release 里也**没有守卫**；
+凡是"断言 + 紧接着解引用"的写法，正确形态都是**先判、判不过就报诊断**（编译期）或**报错返回**（运行期）。
+A2 的改法就是这一族的模板：`if (gct->accessByIndex()) { 报 InvalidAccessIndex; throw; }`。
