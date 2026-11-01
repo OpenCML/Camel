@@ -15,7 +15,7 @@
  */
 import rulesets.vmap
 import { vmap } from transforms
-import { argmax, argmax_axis, argmin, argmin_axis, concat, dim, matmul, max, max_axis, mean, mean_axis, min, min_axis, permute, reshape, sum, sum_axis, transpose, unsqueeze } from tensor
+import { argmax, argmax_axis, argmin, argmin_axis, concat, dim, matmul, max, max_axis, mean, mean_axis, min, min_axis, permute, reshape, sum, sum_axis, transpose, unsqueeze, where } from tensor
 
 // ---- the scalar arithmetic: `+/2`, `-/2`, `*/2`, `//2`, `-/1` ----
 func plus(x: float): float {
@@ -123,6 +123,10 @@ func plane_concat(r: float[2, 2]): float[2, 4] {
 func plane_dim(r: float[2, 2]): int {
     return dim<1>(r)
 }
+func row_where(r: float[3]): float[3] {
+    let m: bool[3] = [true, false, true]
+    return where(m, r, 0.0)
+}
 func main(): int sync {
     let xs: float[3] = [1.0, 2.0, 3.0]
     let rows: float[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
@@ -153,5 +157,6 @@ func main(): int sync {
     println(vmap(plane_permute)(planes))
     println(vmap(plane_concat)(planes))
     println(vmap(plane_dim)(planes))
+    println(vmap(row_where)(rows))
     return 0
 }

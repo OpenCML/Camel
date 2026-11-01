@@ -198,7 +198,7 @@ error InvalidArgument: Invalid argument of 'argmin': a tensor with no element ha
 | `layer_norm` `softmax_grad`（2 条） | 全部普通操作数 | `reduction_ops.cpp` 这两条没有 `ordinaryParams = 1` |
 | `zeros_like` `ones_like`（2 条） | 规则 = 算子本身 | `gradient_ops.cpp`，一个普通操作数 |
 
-### 二档：要改的是一行变换（with 参数）——9 条里 6 条已落地，3 条有实测原因
+### 二档：要改的是一行变换（with 参数）——9 条里 7 条已落地，2 条有实测原因（已成一页问作者）
 
 **改法（已落地，`modules/transforms/vmap.cpp`）**：`batchThroughRule` 原来只把 `function->normInputsOf(ref)` 交给规则，
 现在接着交给 `withInputsOf(ref)`，注释写明"with 参数也是规则的实参，只是不按名字读"。顺序是**端口序**：
@@ -236,7 +236,7 @@ A/B（同一份规则、同一份程序，只差这一行变换）：关掉 →
   照样命中却在运行时炸：`Runtime indirect call norm-arity mismatch: caller graph 'vmap_of_soft_no_axis' node 2 has 1 args, target graph 'rulesets.vmap::vmap_softmax<float>' has 2 norm ports.`。今天 `softmax(x)` 是**干净的诊断**
   （`the operator has no batching rule key bound at all`），加规则反而变成内部错误，所以**没落地**。要落地得先定一件事：
   是变换在节点没写轴时补上声明里的默认值（`-1` 就在 `catalog.cpp` 里），还是规则能带一个可选端口。
-- `where/3`：操作数全普通，但元素类型取自**第一个**操作数（`bool`），`vmap.cpp:87-94 firstOperandTypeOf` 会把规则
+- `where/3`：**已落地**。操作数全普通，但元素类型取自**第一个**操作数（`bool`）时规则会被实例化在 `bool` 上并被拒（原文 `No candidate of 'vmap_where' applies to (bool[?, ..], bool[?, ..], bool[?, ..])`）。改法：`vmap.cpp` 的实例化读**第一个不是条件的端口**（`ruleElementTypeOf 是 bool 就跳过），读数 `rules=vmap_rule_where elements=float`，批值 `[[1.0, 0.0, 3.0], [4.0, 0.0, 6.0]]` 与逐行相同。
   实例化在 `bool` 上——要改一行"取非 bool 操作数"，按作者的划法这是另一笔，没动。
 ### 三档：要先有算子 / 要等语言表面——10 条
 
@@ -249,4 +249,6 @@ A/B（同一份规则、同一份程序，只差这一行变换）：关掉 →
 
 三档合计 40 条；第三节记的 39 条与此差一条，差额是 `to_bytes`（第三节把它列在字节类里，本节单列）。
 一档 21 条里只有 `exp` 是实测的，其余 20 条的依据是声明读法（同一个 `OpDef` 形状），要逐条落地时一条一条量。
-二档 9 条里 6 条本轮落地（`reshape`/`unsqueeze`/`transpose`/`permute`/`concat`/`dim`，四个后端、读数与数值都在上面的表里），余 3 条各有实测原因（`softmax`/`log_softmax` 的可选轴、`where` 的 bool 首操作数）。
+二档 9 条里 **7 条**已落地（`reshape`/`unsqueeze`/`transpose`/`permute`/`concat`/`dim`/`where`，四个后端、读数与数值都在上面的表里），余 2 条（`softmax`/`log_softmax`）的原因是同一个：可选的角度参数让同一个键有两种端口数，见文末那页。
+
+`softmax` / `log_softmax` 没落地，原因写成一页问作者的：`docs/handover/questions/2026-11-01-optional-with-arguments-and-the-batching-key.md`（声明里的默认值今天没有读者、端口角色由调用写法决定、变换手里没有默认值可填；树里 `operand(i, default)` 只有 1 处 2 个算子、0 个有键）。

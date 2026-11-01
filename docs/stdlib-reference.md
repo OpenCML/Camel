@@ -7431,6 +7431,26 @@ the same extent, because the batch's axis adds nothing to the row's.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_dim([[[1.0, 2.0], [3.0, 4.0]]] as float[1, 2, 2], [1])` gives `[2]`
 
+### Where
+
+`where(cond, a, b)` is elementwise on three arrays of the row's shape, and the condition is one of
+them: the batch's axis is in front of all three, and a condition that is a constant of the row's
+shape is lifted to a batch of one row, which broadcasts against the batch. The rule is the
+operator over the batch, and it is instantiated on the element of the *arms* -- a condition is a
+`bool` and the answer is the arms' element, so the transform reads the first port that is not a
+condition to name the rule's `T`.
+
+#### `vmap_where`
+
+```camel
+vmap_where: (cond: bool[..], a: T[..], b: T[..]) => T[..] when is_numeric::<T>()
+```
+
+`where(cond, a, b)` batched: the operator over the batch, all three operands one axis in front.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_where([[true, false, true]] as bool[1, 3], [[1.0, 2.0, 3.0]] as float[1, 3], [[4.0, 5.0, 6.0]] as float[1, 3])` gives `[[1.0, 5.0, 3.0]]`
+
 <a id="sim"></a>
 
 ## `sim`: Monte Carlo simulation
