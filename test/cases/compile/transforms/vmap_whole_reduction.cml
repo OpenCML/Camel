@@ -1,0 +1,48 @@
+/**
+ * A reduction over *every* axis, batched: `sum(xs)` takes no axis, so there is none of the
+ * operator's to move one place in -- what its rule keeps is the batch axis itself, and what it folds
+ * away is each of the axes the row had after it, over the rank the value carries (`shape`). A batch
+ * of `float[3]` rows therefore answers one number per row, `float[?]`.
+ *
+ * The three rows are `[1, 2, 3]`, `[4, 5, 6]` and `[-1, 0, 1]`, so their sums are `6`, `15` and `0`,
+ * their means are `2`, `5` and `0`, and their sums doubled are `12`, `30` and `0`. Their squares
+ * would sum to `14`, `77` and `2` -- the numbers a squared norm asks for -- but that body stops
+ * earlier, at the product.
+ *
+ * `sum(x * x)` -- a squared norm, the shape this was first asked for -- is not written here: the
+ * walk reaches the row's product before the sum, and the array product is another primitive whose
+ * rule is not in this tier yet (`*` over floats is, which is what `sum(x) * 2.0` walks).
+ *
+ * Each batched result is printed beside the row-by-row `array.vmap` of the same function and the
+ * plan compares the pairs rather than a written golden, because what this pins is that the two
+ * writings are one computation.
+ */
+import rulesets.vmap
+import { vmap as row_vmap } from array
+import { mean, sum } from tensor
+import { vmap } from transforms
+
+func row_sum(x: float[3]): float {
+    return sum(x)
+}
+
+// The walk meets the whole reduction and then a scalar product: two primitives, two rules.
+func row_sum_doubled(x: float[3]): float {
+    return sum(x) * 2.0
+}
+
+// A mean is of a float: the rule is written for float elements only.
+func row_mean(x: float[3]): float {
+    return mean(x)
+}
+
+func main(): int sync {
+    let xs: float[3, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [-1.0, 0.0, 1.0]]
+    println(vmap(row_sum)(xs))
+    println(row_vmap(row_sum)(xs))
+    println(vmap(row_sum_doubled)(xs))
+    println(row_vmap(row_sum_doubled)(xs))
+    println(vmap(row_mean)(xs))
+    println(row_vmap(row_mean)(xs))
+    return 0
+}

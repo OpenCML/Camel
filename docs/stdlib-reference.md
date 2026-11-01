@@ -1414,9 +1414,23 @@ split: (f: (v: float, d: float) => (float, float)) => (v: float, d: float) => (f
 ```
 
 The step of `vjp` that separates a lifted function into the part computable now and the linear
-residue (design 4.4). Not implemented: the operator has a signature and no rule, so a call is
-refused where it is composed (`stdlib/vjp.cml`) and names this step. The signature is the
-shape the library's compositions can be written with today.
+residue (design 4.2, 4.4). Implemented for the straight-line tier (`modules/transforms/split.cpp`):
+the halves are built from the graph, and what crosses the cut -- the residuals -- is read off the
+graph too, so a body that needs a value it computed carries it instead of computing it again.
+
+The cut, as the author writes it (15:25; revised 2026-11-01): the first half takes the ordinary
+parameters and answers with the result and the *residuals* -- the values the second half reads --
+and the second takes the residuals and the `with` parameters and answers with the result.
+
+    type Split<F> = ((..ParamsOf<F>) => (ResultOf<F>,  _),
+                     (_, ..WithOf<F>) => ResultOf<F>)
+
+The residual position is written `_` and is not a type a program can name: the residuals are a
+property of `f`'s graph, so their number and their types are read where the graph is in hand, and
+the compiler fills the position at instantiation (`ResidualsOf<F>` was the earlier spelling of a
+type function doing that, and it is gone). The second half is linear in the cotangent it is given
+-- that is the condition the transpose step (M3) reads -- and both halves speak in `Tangent<T>`
+at the top of this file.
 fragment of the composition: `let (fwd, lin) = split(jvp(f))`.
 
 - Example (a fragment, not compiled): `let step = split`
@@ -1763,15 +1777,15 @@ The entries of the first axis that indices name, in that order.
 #### `one_hot`
 
 ```camel
-one_hot: (labels: int64[..] | number[], classes: int) => int64[..]
+one_hot: (labels: int64[..] | number[], classes: int) => f32[..]
 ```
 
 Each label (an integer below classes) expanded to a row of classes with a 1 at its position:
-an `int64` tensor of shape [labels, classes].
+a `f32` tensor of shape [labels, classes], each row a distribution over the classes.
 
 - Pure.
 - Failure: fault `IndexOutOfRange` when a label is outside [0, classes), and fault `InvalidArgument` when classes is negative.
-- Example: `one_hot([0, 2] as int[], 3)` gives `[[1, 0, 0], [0, 0, 1]]`
+- Example: `one_hot([0, 2] as int[], 3)` gives `[[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]`
 
 #### `shape`
 
@@ -6745,13 +6759,17 @@ A rule's right side takes the *lifted* operands and answers the *lifted* result.
 elementwise tier is therefore one rule per primitive, each of them the primitive itself: the
 batching of an elementwise operator is that operator.
 
-This round writes the elementwise tier, `matmul`, and the four reductions along an axis. The last
-two need a rule that says *which* axis the batch is on: a batch of rows under `matmul` is the axes
-before its last two, and a reduction keeps the axis it reduces and gains the batch axis in front,
-so its rule is written in terms of the operator's own axis argument (`batched_axis`). A reduction
-over every axis (`tensor:sum`) has no rule and is refused by name: a batch of rows under it is not
-the rows' own sums, and there is no axis of the operator's to shift, so its batched meaning would
-have to be guessed from the rank. `reshape` and the broadcasting moves are the next tier.
+This round writes the elementwise tier, `matmul`, the six reductions along an axis, and the two
+over every axis. The first group need a rule that says *which* axis the batch is on: a batch of
+rows under `matmul` is the axes before its last two, and a reduction along an axis keeps the axis
+it reduces and gains the batch axis in front, so its rule is written in terms of the operator's
+own axis argument (`batched_axis`). A reduction over every axis takes no axis at all -- there is
+none of the operator's to shift -- so its rule keeps the batch axis in front and folds away the
+axes the row had after it, over the rank the value itself carries (`shape`). `max` and `min` have
+no such operator to write a rule for: they are declared with an axis, and the reduction of every
+axis is `max_axis(xs, ...)` over a rank the caller already knows.
+
+`reshape` and the broadcasting moves are the next tier.
 
 Adding a rule changes docs/stdlib-reference.md; regenerate it with
 `node scripts/stdlib-reference.mjs --write`.
@@ -6842,6 +6860,67 @@ vmap_neg: (a: T[]) => T[] when is_numeric::<T>()
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_neg([1.0, -2.0])` gives `[-1.0, 2.0]`
 
+### The product of two arrays
+
+The five keys above are the *scalar* arithmetic: `x * w` on two `f32` is `:op/mul_d`. On two
+arrays the same spelling resolves to another primitive, `tensor:multiply`, and the two are one law
+at two ranks -- the product, element by element -- but they are not one rule, because a rule is
+instantiated at its primitive's *element* type (`ruleElementTypeOf`, modules/transforms/vmap.cpp):
+`f32` here, the same `T` the scalar rule gets, while the two operators are different primitives and
+a key holds one rule each.
+
+So the operand is written as the open rank `T[..]`: the batch of a row is that row's element type at
+any rank, and the operator walks all of the ranks it is given. `mul_tensor(x, w)` is the same
+product at whatever rank the row had, and its right side multiplies the whole batch at once -- the
+primitive applied to the batch instead of to each row, which is the same operator and so the same
+bits.
+
+The key is `mul_tensor`, a call, because the array product has no infix spelling a rule's left side
+could be written with -- `r * r` resolves to the operator, but the operator is not a token. A call
+is a key like any other (`f(a, b)` is `f` at two operands), and `tensor:multiply` is bound to this
+one where the operator is declared: `modules/tensor/module.cpp`, `bindVmapRule` -- the batching
+table, which is what a batching transform reads. An operator with no binding is an operator no rule
+is reachable for, and the transform says so by name at the primitive. The right side names a
+*different* function than the left side does, which the index requires: a name the left side binds
+is a pattern variable to the right side, and this family's transform reads the callee's name and
+calls it with the batch -- it never binds the pattern.
+
+#### `vmap_mul_tensor`
+
+```camel
+vmap_mul_tensor: (a: T[..], b: T[..]) => T[..] when is_numeric::<T>()
+```
+
+The product of two batches: the whole batch multiplied at once, which for an elementwise product is
+the batch of the row-by-row products. The parameters are the open rank for the reason `vmap_matmul`
+gives below: a lifted type does not name the element to a call's inference.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_mul_tensor([[1.0, 2.0], [3.0, 4.0]] as f32[2, 2], [[10.0, 10.0], [10.0, 10.0]] as f32[2, 2])` gives `[[10.0, 20.0], [30.0, 40.0]]`
+
+### The element of a row
+
+`r[0]` on a row is `:op/idx_arr`, and batching it gathers one element per row. This is the one rank
+where the rule's type parameter is not the type the operand has: a rule is instantiated at its
+primitive's *result* type (`modules/transforms/vmap.cpp`, `elementType = node->dataType()`), which
+for an index is the element (`f32`) while the value being indexed is the row (`f32[3]`). So the row
+is spelled from the element -- `T[]`, an array of `T` -- and the batch of rows is one dimension in
+front of that, `Lift<T[]>`, which for a row of `f32` is `f32[?, ?]`. The index is a batch as well
+(a constant in the body lifts to a batch of one row), so the gather reads it through `at`, the
+one-row broadcast every helper here uses.
+
+#### `idx_batch`
+
+```camel
+idx_batch: (xs: Lift<T[]>, i: int[]) => Lift<T>
+```
+
+One element per row: row `j` of the batch contributes `xs[j][i[j]]`, and the results are the batch
+`Lift<T>`. Cost is one strided read per row -- `len(xs)` of them, no copy of any row.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `idx_batch::<f32>([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3], [2, 1])` gives `[3.0, 5.0]`
+
 ### Matmul
 
 A batched matrix product adds the batch axis in front of both operands (`[b, m, k] x [b, k, n]`),
@@ -6929,6 +7008,74 @@ vmap_min_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
 
 - A native operator of this module: an opaque node, pure.
 - Example: `vmap_min_axis([[1.0, 5.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[1.0, 3.0]`
+
+### The positions along an axis
+
+`argmax_axis` and `argmin_axis` are the reductions whose *result* element is not the operand's:
+they take any numeric tensor and answer `int` positions (the operator's own signature spells that
+type `int64`). That is why their rules are the ones that show what a batching rule is generic in
+-- the element the operands are made of, read from an operand, never from the type of the node the
+result is (`modules/transforms/vmap.cpp`'s `firstOperandTypeOf`). A rule instantiated at the
+result's element type would be a rule about `int` arrays applied to floats.
+
+#### `vmap_argmax_axis`
+
+```camel
+vmap_argmax_axis: (xs: T[..], axis: int[], keepdims: bool[]) => int[..]
+```
+
+`argmax_axis(xs, axis, keepdims)` batched: each row's position of its largest element along the
+axis it was given. The positions are `int` whatever the operand's element is, so the type this
+function is generic in is the operand's (`T`), not its result's.
+    // [1, 2]
+
+- A native operator of this module: an opaque node, pure.
+- Example: `vmap_argmax_axis([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3], [0], [false])`
+
+#### `vmap_argmin_axis`
+
+```camel
+vmap_argmin_axis: (xs: T[..], axis: int[], keepdims: bool[]) => int[..]
+```
+
+`argmin_axis(xs, axis, keepdims)` batched: each row's position of its smallest element along the
+axis it was given, with the earlier position on a tie.
+    // [0, 0]
+
+- A native operator of this module: an opaque node, pure.
+- Example: `vmap_argmin_axis([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3], [0], [false])`
+
+### The reductions over every axis
+
+`sum(xs)` and `mean(xs)` take no axis at all, so there is none of the operator's to move one place
+in. What they do to a batch is keep the batch axis in front and fold away the axes the row had
+after it: a batch of rows arrives as one number per row, which is the shape the batch axis
+already is. The fold is written over the value's own rank (`shape`), because the rank is a fact
+about the value and not about the type -- `T[..]` says a tensor, never how many axes.
+
+#### `vmap_sum`
+
+```camel
+vmap_sum: (xs: T[..]) => T[..] when is_numeric::<T>()
+```
+
+`sum(xs)` batched: one sum per row. The batch axis stays in front; each of the row's axes is
+folded away in turn, so a batch of `float[3]` rows answers one number per row.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_sum([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])` gives `[6.0, 15.0]`
+
+#### `vmap_mean`
+
+```camel
+vmap_mean: (xs: T[..]) => T[..] when is_float::<T>()
+```
+
+`mean(xs)` batched: one mean per row, folded the same way `sum` is. A mean is of a float: an
+integer row's mean is `f32`, which is not the element the rule would be written in.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_mean([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])` gives `[2.0, 5.0]`
 
 <a id="sim"></a>
 

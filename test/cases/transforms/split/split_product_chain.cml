@@ -1,0 +1,38 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// A chain of multiplies, split into its two halves: `f3(x) = x*x*x` and `f4(x) = x*x*x*x`, both at
+// x = 2. Three properties in one reading, none of them a claim:
+//
+//   * the derivatives are the analytic ones: f3'(2) = 3x^2 = 12 and f4'(2) = 4x^3 = 32, read through
+//     the backward half of `split`, so the cut is exact and not merely close;
+//   * what crosses the cut is read off the graph: `x` and `x*x` for f3 (2 values), `x`, `x*x` and
+//     `x*x*x` for f4 (3). The products are *carried* -- the backward half's rule for each `mul` reads
+//     the product -- and nothing is computed twice on the far side of the cut;
+//   * the count grows by one per factor, which is the shape the cut has to keep: a backward half that
+//     recomputed the forward chain would answer the same numbers here, so the numbers alone cannot
+//     tell the two apart. The counts do: `residuals=2` and `residuals=3`, and the difference of 1 is
+//     what a linear cut costs per multiplication (the alternative -- recomputation -- would make the
+//     second chain cost as much as the first, and a long chain cost quadratically).
+import rulesets.jvp
+import { jvp, split } from transforms
+
+func cubic(x: float): float {
+    return x * x * x
+}
+
+func quartic(x: float): float {
+    return x * x * x * x
+}
+
+func main(): int sync {
+    let (f3, l3) = split(jvp(cubic))
+    let (y3, r3) = f3(2.0)
+    println("cubic y=", y3)
+    println("cubic dx1=", l3(r3, 1.0))
+    let (f4, l4) = split(jvp(quartic))
+    let (y4, r4) = f4(2.0)
+    println("quartic y=", y4)
+    println("quartic dx1=", l4(r4, 1.0))
+    return 0
+}

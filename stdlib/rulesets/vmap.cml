@@ -22,20 +22,31 @@
  * elementwise tier is therefore one rule per primitive, each of them the primitive itself: the
  * batching of an elementwise operator is that operator.
  *
- * This round writes the elementwise tier, `matmul`, and the four reductions along an axis. The last
- * two need a rule that says *which* axis the batch is on: a batch of rows under `matmul` is the axes
- * before its last two, and a reduction keeps the axis it reduces and gains the batch axis in front,
- * so its rule is written in terms of the operator's own axis argument (`batched_axis`). A reduction
- * over every axis (`tensor:sum`) has no rule and is refused by name: a batch of rows under it is not
- * the rows' own sums, and there is no axis of the operator's to shift, so its batched meaning would
- * have to be guessed from the rank. `reshape` and the broadcasting moves are the next tier.
+ * This round writes the elementwise tier, `matmul`, the six reductions along an axis, and the two
+ * over every axis. The first group need a rule that says *which* axis the batch is on: a batch of
+ * rows under `matmul` is the axes before its last two, and a reduction along an axis keeps the axis
+ * it reduces and gains the batch axis in front, so its rule is written in terms of the operator's
+ * own axis argument (`batched_axis`). A reduction over every axis takes no axis at all -- there is
+ * none of the operator's to shift -- so its rule keeps the batch axis in front and folds away the
+ * axes the row had after it, over the rank the value itself carries (`shape`). `max` and `min` have
+ * no such operator to write a rule for: they are declared with an axis, and the reduction of every
+ * axis is `max_axis(xs, ...)` over a rank the caller already knows.
+ *
+ * `reshape` and the broadcasting moves are the next tier.
  *
  * Adding a rule changes docs/stdlib-reference.md; regenerate it with
  * `node scripts/stdlib-reference.mjs --write`.
  */
 
 import { is_float, is_numeric, RowsOf } from types
-import { matmul, max_axis, mean_axis, min_axis, sum_axis } from tensor
+import { argmax_axis, argmin_axis, matmul, max_axis, mean, mean_axis, min_axis, shape, sum, sum_axis } from tensor
+
+// `tensor` is imported for its operators, not its names. A rule is written as the primitive's own
+// spelling (`x * w`), and it is instantiated at the type the primitive works on -- a row, `f32[3]`,
+// for the array arithmetic -- so that spelling has to resolve at that type here, in this module, or
+// the rule's left side does not build. The product's rule at the bottom of this file is the one
+// that needs it.
+import tensor
 
 /// A value of type `T` with its batch in front: the type a batched function takes for one value.
 /// @example is_same::<Lift<f32>, f32[]>()    // true
@@ -140,6 +151,91 @@ export rule vmap_rule_neg::<T>(x: T) when is_numeric::<T>() {
     -x => (bx: Lift<T>) => vmap_neg(bx)
 }
 
+// ---- the product of two arrays ----
+// The five keys above are the *scalar* arithmetic: `x * w` on two `f32` is `:op/mul_d`. On two
+// arrays the same spelling resolves to another primitive, `tensor:multiply`, and the two are one law
+// at two ranks -- the product, element by element -- but they are not one rule, because a rule is
+// instantiated at its primitive's *element* type (`ruleElementTypeOf`, modules/transforms/vmap.cpp):
+// `f32` here, the same `T` the scalar rule gets, while the two operators are different primitives and
+// a key holds one rule each.
+//
+// So the operand is written as the open rank `T[..]`: the batch of a row is that row's element type at
+// any rank, and the operator walks all of the ranks it is given. `mul_tensor(x, w)` is the same
+// product at whatever rank the row had, and its right side multiplies the whole batch at once -- the
+// primitive applied to the batch instead of to each row, which is the same operator and so the same
+// bits.
+//
+// The key is `mul_tensor`, a call, because the array product has no infix spelling a rule's left side
+// could be written with -- `r * r` resolves to the operator, but the operator is not a token. A call
+// is a key like any other (`f(a, b)` is `f` at two operands), and `tensor:multiply` is bound to this
+// one where the operator is declared: `modules/tensor/module.cpp`, `bindVmapRule` -- the batching
+// table, which is what a batching transform reads. An operator with no binding is an operator no rule
+// is reachable for, and the transform says so by name at the primitive. The right side names a
+// *different* function than the left side does, which the index requires: a name the left side binds
+// is a pattern variable to the right side, and this family's transform reads the callee's name and
+// calls it with the batch -- it never binds the pattern.
+
+/// The product of two values of one type, at any rank: what `tensor:multiply` means, and the left side
+/// this rule is filed under.
+/// @example mul_tensor(2.0, 3.0)    // 6.0
+/// @example mul_tensor([[1.0, 2.0], [3.0, 4.0]] as f32[2, 2], [[1.0, 10.0], [100.0, 1000.0]] as f32[2, 2])    // [[1.0, 20.0], [300.0, 4000.0]]
+func mul_tensor::<T>(x: T[..], w: T[..]): T[..] when is_numeric::<T>() {
+    return x * w
+}
+
+/// The product of two batches: the whole batch multiplied at once, which for an elementwise product is
+/// the batch of the row-by-row products. The parameters are the open rank for the reason `vmap_matmul`
+/// gives below: a lifted type does not name the element to a call's inference.
+/// @example vmap_mul_tensor([[1.0, 2.0], [3.0, 4.0]] as f32[2, 2], [[10.0, 10.0], [10.0, 10.0]] as f32[2, 2])    // [[10.0, 20.0], [30.0, 40.0]]
+export func vmap_mul_tensor::<T>(a: T[..], b: T[..]): T[..] when is_numeric::<T>() {
+    return a * b
+}
+
+/// `x * w` on two arrays, batched: the product of the two batches, which is the batch of the products.
+/// The right side names `vmap_mul_tensor` and the batching transform calls it with the two batches.
+export rule vmap_rule_mul_tensor::<T>(x: T[..], w: T[..]) when is_numeric::<T>() {
+    mul_tensor(x, w) => (bx: T[..], bw: T[..]) => vmap_mul_tensor(bx, bw)
+}
+
+// ---- the element of a row ----
+// `r[0]` on a row is `:op/idx_arr`, and batching it gathers one element per row. This is the rank
+// where the element type and the operand's type are furthest apart: the rule is instantiated at the
+// element (`f32`, which `ruleElementTypeOf` gives for a result that is one too), while the value being
+// indexed is the row (`f32[3]`) and the row's batch is `f32[?, 3]`. So the row is spelled from the
+// element -- `T[]`, an array of `T` -- and the batch of rows is one dimension in front of that,
+// `Lift<T[]>`, which for a row of `f32` is `f32[?, ?]`. The index is a batch as well (a constant in
+// the body lifts to a batch of one row), so the gather reads it through `at`, the one-row broadcast
+// every helper here uses.
+
+// ---- the element of a row ----
+// `r[0]` on a row is `:op/idx_arr`, and batching it gathers one element per row. This is the one rank
+// where the rule's type parameter is not the type the operand has: a rule is instantiated at its
+// primitive's *result* type (`modules/transforms/vmap.cpp`, `elementType = node->dataType()`), which
+// for an index is the element (`f32`) while the value being indexed is the row (`f32[3]`). So the row
+// is spelled from the element -- `T[]`, an array of `T` -- and the batch of rows is one dimension in
+// front of that, `Lift<T[]>`, which for a row of `f32` is `f32[?, ?]`. The index is a batch as well
+// (a constant in the body lifts to a batch of one row), so the gather reads it through `at`, the
+// one-row broadcast every helper here uses.
+
+/// `x[i]` on a row: what `:op/idx_arr` means, and the left side this rule is filed under.
+/// @example index_into([1.0, 2.0, 3.0], 2)    // 3.0
+func index_into::<T>(x: T[], i: int): T {
+    return x[i]
+}
+
+/// One element per row: row `j` of the batch contributes `xs[j][i[j]]`, and the results are the batch
+/// `Lift<T>`. Cost is one strided read per row -- `len(xs)` of them, no copy of any row.
+/// @example idx_batch::<f32>([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3], [2, 1])    // [3.0, 5.0]
+export func idx_batch::<T>(xs: Lift<T[]>, i: int[]): Lift<T> {
+    return range(0, len(xs), 1)->map<(j: int): T => xs[j][at::<int>(i, j)]>
+}
+
+/// `x[i]` on a row, batched: the same element, one row at a time. The right side names `idx_batch`
+/// and the batching transform calls it with the batch of rows and the batch of indices.
+export rule vmap_rule_idx::<T>(x: T[], i: int) {
+    index_into(x, i) => (bx: Lift<T[]>, bi: int[]) => idx_batch::<T>(bx, bi)
+}
+
 // ---- matmul ----
 //
 // A batched matrix product adds the batch axis in front of both operands (`[b, m, k] x [b, k, n]`),
@@ -220,6 +316,86 @@ export func vmap_max_axis::<T>(xs: T[..], axis: int[], keepdims: bool[]): T[..]
 export func vmap_min_axis::<T>(xs: T[..], axis: int[], keepdims: bool[]): T[..]
     when is_numeric::<T>() {
     return min_axis::<T>(xs, batched_axis(axis), at(keepdims, 0))
+}
+
+// ---- the positions along an axis ----
+//
+// `argmax_axis` and `argmin_axis` are the reductions whose *result* element is not the operand's:
+// they take any numeric tensor and answer `int` positions (the operator's own signature spells that
+// type `int64`). That is why their rules are the ones that show what a batching rule is generic in
+// -- the element the operands are made of, read from an operand, never from the type of the node the
+// result is (`modules/transforms/vmap.cpp`'s `firstOperandTypeOf`). A rule instantiated at the
+// result's element type would be a rule about `int` arrays applied to floats.
+
+/// `argmax_axis(xs, axis, keepdims)` batched: each row's position of its largest element along the
+/// axis it was given. The positions are `int` whatever the operand's element is, so the type this
+/// function is generic in is the operand's (`T`), not its result's.
+/// @example vmap_argmax_axis([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3], [0], [false])
+///     // [1, 2]
+export func vmap_argmax_axis::<T>(xs: T[..], axis: int[], keepdims: bool[]): int[..]
+    when is_numeric::<T>() {
+    return argmax_axis::<T>(xs, batched_axis(axis), at(keepdims, 0))
+}
+
+/// `argmin_axis(xs, axis, keepdims)` batched: each row's position of its smallest element along the
+/// axis it was given, with the earlier position on a tie.
+/// @example vmap_argmin_axis([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3], [0], [false])
+///     // [0, 0]
+export func vmap_argmin_axis::<T>(xs: T[..], axis: int[], keepdims: bool[]): int[..]
+    when is_numeric::<T>() {
+    return argmin_axis::<T>(xs, batched_axis(axis), at(keepdims, 0))
+}
+
+/// `argmax_axis(xs, axis, keepdims)` batched: the axis the row reduces is one place further in.
+export rule vmap_rule_argmax_axis::<T>(xs: T[..], axis: int, keepdims: bool) when is_numeric::<T>() {
+    argmax_axis(xs, axis, keepdims) => (bxs: Lift<T[..]>, baxis: Lift<int>, bkeep: Lift<bool>) =>
+        vmap_argmax_axis(bxs, baxis, bkeep)
+}
+
+/// `argmin_axis(xs, axis, keepdims)` batched: the axis the row reduces is one place further in.
+export rule vmap_rule_argmin_axis::<T>(xs: T[..], axis: int, keepdims: bool) when is_numeric::<T>() {
+    argmin_axis(xs, axis, keepdims) => (bxs: Lift<T[..]>, baxis: Lift<int>, bkeep: Lift<bool>) =>
+        vmap_argmin_axis(bxs, baxis, bkeep)
+}
+
+// ---- the reductions over every axis ----
+//
+// `sum(xs)` and `mean(xs)` take no axis at all, so there is none of the operator's to move one place
+// in. What they do to a batch is keep the batch axis in front and fold away the axes the row had
+// after it: a batch of rows arrives as one number per row, which is the shape the batch axis
+// already is. The fold is written over the value's own rank (`shape`), because the rank is a fact
+// about the value and not about the type -- `T[..]` says a tensor, never how many axes.
+
+/// `sum(xs)` batched: one sum per row. The batch axis stays in front; each of the row's axes is
+/// folded away in turn, so a batch of `float[3]` rows answers one number per row.
+/// @example vmap_sum([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])    // [6.0, 15.0]
+export func vmap_sum::<T>(xs: T[..]): T[..] when is_numeric::<T>() {
+    return fold_sum_axes::<T>(xs, len(shape(xs)) - 1)
+}
+
+func fold_sum_axes::<T>(xs: T[..], left: int): T[..] when is_numeric::<T>() {
+    return if left <= 0 then xs else fold_sum_axes::<T>(sum_axis(xs, 1, false), left - 1)
+}
+
+/// `mean(xs)` batched: one mean per row, folded the same way `sum` is. A mean is of a float: an
+/// integer row's mean is `f32`, which is not the element the rule would be written in.
+/// @example vmap_mean([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])    // [2.0, 5.0]
+export func vmap_mean::<T>(xs: T[..]): T[..] when is_float::<T>() {
+    return fold_mean_axes::<T>(xs, len(shape(xs)) - 1)
+}
+
+func fold_mean_axes::<T>(xs: T[..], left: int): T[..] when is_float::<T>() {
+    return if left <= 0 then xs else fold_mean_axes::<T>(mean_axis(xs, 1, false), left - 1)
+}
+
+/// `sum(xs)` batched: the batch axis stays in front and the row's axes are folded away.
+export rule vmap_rule_sum::<T>(xs: T[..]) when is_numeric::<T>() {
+    sum(xs) => (bxs: Lift<T[..]>) => vmap_sum(bxs)
+}
+
+/// `mean(xs)` batched: the batch axis stays in front and the row's axes are folded away.
+export rule vmap_rule_mean::<T>(xs: T[..]) when is_float::<T>() {
+    mean(xs) => (bxs: Lift<T[..]>) => vmap_mean(bxs)
 }
 
 /// `sum_axis(xs, axis, keepdims)` batched: the axis the row reduces is one place further in.

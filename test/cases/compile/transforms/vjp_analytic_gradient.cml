@@ -10,10 +10,12 @@
 // `vjp(f)(3.0, 2.0)` and then `pullback(1.0)`. The juxtaposed `(parameters, cotangent)` call
 // `transpose` writes is the internal assembly and does not reach this file.
 //
-// Skipped, not red, while the composition cannot be built: `split` stands in with a lifted function
-// `(float, float) => (float, float)` and `transpose` takes a function of one parameter, so the
-// library is refused where it composes itself. The plan asks `test/tools/have-library-vjp.mjs`
-// first and prints its reason with the skip; the day the two shapes meet, this case runs.
+// Skipped, not red, while the composition cannot be run: the module compiles against the pair
+// `split` hands back, and the walk `transpose` runs refuses a `Call` inside the backward half, so
+// the pullback raises where the library composes it. The plan asks
+// `test/tools/have-library-vjp.mjs` first and prints its reason with the skip; the day the walk
+// takes that call, this case runs and the two columns are printed one under the other.
+import rulesets.jvp
 import { vjp } from vjp
 
 func f(x: float, y: float): float {

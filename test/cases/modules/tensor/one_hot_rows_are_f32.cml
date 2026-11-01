@@ -1,0 +1,18 @@
+/**
+ * `one_hot` expands each label into a row of `f32` values: the operator's answer is a distribution
+ * over the classes, not an integer index matrix, so it stands beside logits and takes part in float
+ * arithmetic without a conversion at the call (design principles 6.4: the signature file states the
+ * element type the operator answers, and this is that type).
+ *
+ * The rows are what four backends agree on, and `sum` over them is `2.0` -- one `1.0` per label.
+ */
+
+import { one_hot, shape, sum } from tensor
+
+func main(): int sync {
+    let hot: f32[2, 3] = one_hot([0, 2], 3)
+    println(hot)
+    println(shape(hot))
+    println(sum(hot))
+    return 0
+}
