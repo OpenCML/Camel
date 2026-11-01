@@ -55,12 +55,34 @@ def _draw(rng: np.random.Generator, spec) -> np.ndarray:
     return z.astype(np.float32)
 
 
+def _artifacts_complete(spec: ModelSpec, out: Path) -> bool:
+    """True when every file a reader loads exists and is longer than a header.
+
+    The manifest alone is not enough: a run killed while `np.save` was writing, or a truncated
+    copy of the tree, leaves a zero-byte `.npy` behind, and `np.load` then either fails with a
+    message that does not name the file or -- worse -- an empty array reads as a real one.
+    """
+    names = [f"weights/{w.name}.npy" for w in spec.weights] + ["input.npy"]
+    for name in names:
+        path = out / name
+        # A `.npy` is a 128-byte header plus the payload, so anything shorter is not a file.
+        if not path.is_file() or path.stat().st_size <= 128:
+            return False
+    return True
+
+
 def generate(spec: ModelSpec, force: bool = False) -> Path:
     """Generate weights/input/manifest for one model; returns the model dir."""
     out = model_dir(spec.name)
     manifest_path = out / "manifest.json"
     if manifest_path.exists() and not force:
-        return out
+        if _artifacts_complete(spec, out):
+            return out
+        print(
+            f"weights: {spec.name} has a manifest but a missing or empty weight file under {out};"
+            " regenerating",
+            file=sys.stderr,
+        )
     wdir = out / "weights"
     wdir.mkdir(parents=True, exist_ok=True)
 
@@ -90,8 +112,14 @@ def load(model: str) -> Tuple[Dict[str, np.ndarray], np.ndarray]:
     """Load (weights dict, input array) for a model, generating on first use."""
     spec = MODELS[model]
     out = generate(spec)
-    weights = {w.name: np.load(out / "weights" / f"{w.name}.npy") for w in spec.weights}
-    x = np.load(out / "input.npy")
+    try:
+        weights = {w.name: np.load(out / "weights" / f"{w.name}.npy") for w in spec.weights}
+        x = np.load(out / "input.npy")
+    except (EOFError, ValueError) as error:
+        raise RuntimeError(
+            f"weights: {model} has a file under {out} that numpy cannot read ({error});"
+            f" regenerate it with `python -m common.weights --models {model} --force`"
+        ) from error
     return weights, x
 
 

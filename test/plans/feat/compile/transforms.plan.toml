@@ -533,15 +533,16 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
-name = "transpose_no_tangent.function_value_without_a_capture_is_refused"
-desc = "The boundary cut finer, and it does not move: `double(x) = 2x` with `g(x) = let h = double; h(x)` -- a top-level function put into a local and called, with nothing captured -- REFUSES, at the same line as the closure: `TRANSPOSE function=g skip=call node=2 callee=none value=0:1 with=1:0`. So the boundary is not `capture or no capture`: taking the capture away changes nothing, and what is in the way is THE NAME. `let h = double` makes a DATA node carrying a function constant (`Function(graph=double, tupleSlots=0)`), and `GCGraph::calleeIdOf` reads a graph id out of FUNC nodes only; for a function constant the graph sits in the static area as a graph-level reference (kGraphRefStatic) with no accessor from this node. A call written by name (`g(x)`, transpose_call.cml) is the shape that works, because that lowers to a FUNC node. The capture is a second, still-unreached problem: with the name in hand the transposed callee would still have to take the captured value as a parameter of its own. The paper answer owed is 2, and 4 at cotangent 2. Read beside `transpose_no_tangent.function_value_is_refused`, this pair is the evidence for the order of the two fixes."
-kind = "negative"
+name = "transpose_no_tangent.function_value_without_a_capture"
+desc = "The boundary, named: `double(x) = 2x` with `g(x) = let h = double; h(x)` -- a top-level function put into a local and called, nothing captured -- ANSWERS 2 at cotangent 1 and 4 at cotangent 2, exactly the paper `2x`, and `skip=` must not appear. `GCGraph::staticFunctionGraphOf` (beside `calleeIdOf`) is the one entry that turns a function value into a graph id: a DATA node of function type whose static slot holds a function value that names a graph this graph records as a static reference, and it refuses with a name (`not-a-data-node`, `no-static-slot`, `not-a-function-type`, `no-function-value`, `function-names-no-graph`, `not-a-static-reference`, `function-closure`) instead of reading a slot as an id. The transposed call also had to put the callee value back where the original had it -- as a `with` input, as a static function of the transposed graph with an empty closure -- because a callee in the wrong place is a CALL node without a callee. Read beside `transpose_no_tangent.function_value_is_refused` (the same program with a capture added back): that one names its graph too and then refuses at `reason=function-closure`, which is what makes the pair say the capture is the remaining piece."
+kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_function_value_no_capture.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
-expect_exit = 1
-expect_output_contains = ["2.0", "TRANSPOSE function=g skip=call node=2 callee=none"]
+expect_exit = 0
+expect_output_contains = ["TRANSPOSE function=double graph=", "TRANSPOSE function=g graph=", "2.0", "4.0"]
+expect_output_not_contains = ["skip="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 [[tests]]
@@ -553,7 +554,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 1
-expect_output_contains = ["2.0", "TRANSPOSE function=g2 skip=call node=4 callee=none"]
+expect_output_contains = ["2.0", "TRANSPOSE function=g2 skip=call node=4 callee=none", "reason=function-closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
