@@ -2702,7 +2702,7 @@ PassRunResult applyRegisteredPass(
     // site had none: `std::opt::saturate`, `rules::simplify` and the `std::opt` rounds came
     // through here, and a graph they broke reached the next pass unchecked.
     if (ctx != nullptr &&
-        passBoundaryViolation(*ctx, spec, *produced, effectsBefore)) {
+        passBoundaryViolation(ctx, spec, *produced, effectsBefore)) {
         return {nullptr, true};
     }
     const bool changed = programContentChanged(program, beforeRevisions, produced);
@@ -3189,7 +3189,7 @@ PassApplyResult applyPassesDetailed(
             // (design principles 3.3). The check is the last thing the pass does, so that no pass
             // of the pipeline, nested or listed, ends without it.
             // The same check `applyRegisteredPass` ends with, for a pass the pipeline runs.
-            if (passBoundaryViolation(*ctx, p, *program, effectsBefore)) {
+            if (passBoundaryViolation(ctx, p, *program, effectsBefore)) {
                 return {nullptr, PassApplyStatus::Failed};
             }
             if (PassSnapshotHandler snapshotHandler =
