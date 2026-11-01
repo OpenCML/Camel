@@ -46,12 +46,22 @@
 
 ## 三、我方默认建议
 
-**甲**，而且**第一笔改内联的 place，不改导出器**：今天唯一还会被这条边改掉的东西是"调用等哪条语句"
-（`draft_inline.cpp:2325`），导出器和字节码都只是下游。这等于让"臂的入口/内的位置"由**区域**说，
-而不是由一条 ctrl 边兼职——这正是"架构上避免"，而不是把预期改掉。
+**甲**，但**第一刀不在内联的 place**——这一刀已经试过，读数没有动：
+
+- 改法：`draft_inline.cpp` 的 place 改成"先看调用所在区域"（`controlRegionOf(draft, callId)` 的
+  `region.owner`，即臂的 BRCH），取不到才回落到原来的 `ctrlPreds`。**边还留着时**三条判据全在：
+  `export_loop.cml std::macro` → `exported`、exit 0；`ort_loop_loaded_weights` → PASS（仍打出 `Loop`）；
+  `nn_grad_check.spliced_body_chain_is_one_chain` → PASS。
+- **把边删掉再看**：`export_loop.cml std::macro` **仍然 124**。所以"place 从区域取"**没有**替代这条边，
+  这条边今天挡着的不是内联的 place。
+
+这条负读数把范围缩小到：导出器的臂归属已经是区域取（`modules/onnx/passes/export.cpp:255`
+`runtimeBranchOver` → `collectRuntimeBranchArmRegion` → `ControlRegions`），字节码 VM 已经只从计划取
+（`compile.cpp:409`），内联的 place 也不是（刚试过）。**剩下没排除的是 order/`controlFrontier` 那条链，
+和 `std::opt` 交给导出器的那张图本身。** 所以甲的第一刀应当先把 124 定位到具体函数（今天 `gdb -p` 被
+`ptrace_scope` 挡住，只能在导出器里插临时打印），再决定改哪里。
 
 ## 请作者答一句
 
-**甲（先改内联的 place，再删边）还是乙（认定这条边是接口的一部分，收尾停在这里）？**
-若选甲，请确认第一笔就按"内联的 place 从区域取、边先不删、判据是 `export_loop.cml std::macro` 仍
-`exported` 且 `ort_loop_loaded_weights` 仍打出 Loop"来做。
+**甲（继续，但第一刀改成"先把 124 定位到函数"，定位结果出来再回来点名）还是乙（认定这条边是接口的一部分，
+S1 收尾停在读数上）？**
