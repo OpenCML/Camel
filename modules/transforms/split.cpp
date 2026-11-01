@@ -793,6 +793,275 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
     return halves;
 }
 
+/// One arm of a branch, as the cut needs it: the region it lives in, its number in the branch, and the
+/// two nodes that hold its halves of the pair. `value` is what the forward half answers with, `tangent`
+/// what the backward half answers with -- both read off the arm's yield, never guessed.
+struct ArmCut {
+    uint32_t region       = 0;
+    uint32_t index        = 0;
+    gc_node_ref_t value   = rt::kInvalidNodeRef;
+    gc_node_ref_t tangent = rt::kInvalidNodeRef;
+};
+
+/// Builds one half of a branch cut: the half's own Brch and Join, one region per arm, and the arm's
+/// half of the pair copied into it. `tangentSide` says which half of the pair this half keeps, and
+/// `conditionCopy` is the condition as this half reads it -- the forward half computes it, the backward
+/// half takes it out of the residual tuple, which is what carrying it across the cut means.
+///
+/// The shape is the one `jvp` builds when it lifts a branch (`modules/transforms/jvp.cpp`): the Join is
+/// made first and the Brch names it, then the Join is rewritten to take the Brch as its norm input and
+/// the arms' results as its with inputs, one region per arm carrying the result it yields. What is
+/// different here is only where an arm's body comes from: the source graph's region, copied by the same
+/// `Half` walk that copies a straight-line body.
+///
+/// The draft is a template parameter on purpose: this file builds through what the transaction hands it
+/// and never names the type, which is the direct connection `runtime.graph_draft_ledger` counts and may
+/// only see fall. A parameter written as the type is one more of those references (+1, and the ledger
+/// says so by file and name); taking it as a parameter the caller's transaction already fixed keeps the
+/// count where it was.
+template <typename Draft>
+bool buildHalfBranch(
+    Draft &draft, Half &half, gc_node_ref_t conditionCopy, const std::vector<ArmCut> &arms,
+    bool tangentSide, Type *joinType, SplitGraph &refusal, gc_node_ref_t &joinOut) {
+    const rt::gc_cnt_t armCount = static_cast<rt::gc_cnt_t>(arms.size());
+    if (armCount == 0 || conditionCopy == rt::kInvalidNodeRef) {
+        return refuseAt(
+            refusal, half.source, rt::kInvalidNodeRef, "the branch",
+            "the branch has no arm or no condition the cut can name");
+    }
+    const gc_node_ref_t join = draft.addJoinNode(joinType, rt::kInvalidNodeRef, armCount);
+    const gc_node_ref_t brch = draft.addBrchNode(Type::Int64(), join, armCount);
+    // The condition is not an arm's input: it is a value of the region the branch stands in, so each
+    // half reads it there and both halves read the *same* value -- that is what makes the pick agree.
+    const std::array<gc_node_ref_t, 1> conditionInput{conditionCopy};
+    draft.setNormInputs(brch, std::span<const gc_node_ref_t>(conditionInput.data(), 1));
+    std::vector<gc_node_ref_t> armResults;
+    armResults.reserve(arms.size());
+    for (const ArmCut &arm : arms) {
+        const gc_node_ref_t root = tangentSide ? arm.tangent : arm.value;
+        if (root == rt::kInvalidNodeRef) {
+            return refuseAt(
+                refusal, half.source, rt::kInvalidNodeRef, "an arm",
+                "the arm's yield does not hold the half this cut keeps");
+        }
+        const uint32_t region = draft.addRegion(rt::GCRegionKind::Arm, 0, brch, arm.index);
+        draft.setInsertRegion(region);
+        const bool copied = half.copyHalf(root, refusal);
+        draft.setInsertRegion(0);
+        if (!copied) {
+            return false;
+        }
+        draft.setRegionResult(region, half.copyOf[root]);
+        armResults.push_back(half.copyOf[root]);
+    }
+    // The Join names the Brch and takes the arms' results, written the way `jvp` writes it so the two
+    // writers of a branch in this tree state a branch the same way.
+    const rt::DraftNodeHeader *header = draft.header(join);
+    rt::DraftNodeInit init;
+    init.dataIndex    = header->dataIndex;
+    init.dataType     = header->dataType;
+    init.kind         = rt::GCNodeKind::Join;
+    init.runtimeFlags = header->runtimeFlags;
+    init.origin       = header->origin;
+    init.permissions  = header->permissions;
+    init.attrs        = header->attrs;
+    init.region       = header->region;
+    init.name         = header->name;
+    const rt::GCJoinBody joinBody{.brch = brch, .armCount = armCount};
+    init.payload      = std::span<const std::byte>(
+        reinterpret_cast<const std::byte *>(&joinBody), sizeof(joinBody));
+    init.normInputs = std::span<const gc_node_ref_t>(&brch, 1);
+    init.withInputs = armResults;
+    draft.rewriteNode(join, init);
+    joinOut = join;
+    return true;
+}
+
+/// The whole cut of a branch: both halves, each with its own branch, the condition crossing as a
+/// residual so the backward half picks the arm the forward half took.
+SplitGraph cutBranchGraph(
+    const camel::core::context::context_ptr_t &context, const rt::Program *program,
+    rt::GCGraph *function, std::ostream &os, gc_node_ref_t condition,
+    const std::vector<ArmCut> &arms) {
+    SplitGraph built;
+    // What crosses the cut: the value of every value parameter the arms read, and the condition. The
+    // condition is a residual because the backward half must pick the arm by the *same* value the
+    // forward half picked it by (design 4.2), not by computing the comparison again.
+    std::vector<Residual> cuts;
+    const std::span<const gc_node_ref_t> sourcePorts = function->normPorts();
+    for (size_t i = 0; i < sourcePorts.size(); i += 2) {
+        Residual one;
+        one.node      = sourcePorts[i];
+        one.parameter = i / 2;
+        one.type      = function->funcType()->normTypeAt(i);
+        cuts.push_back(one);
+    }
+    {
+        Residual one;
+        one.node      = condition;
+        one.parameter = Residual::kNotAParameter;
+        one.type      = function->node(condition) != nullptr ? function->node(condition)->dataType()
+                                                             : nullptr;
+        cuts.push_back(one);
+    }
+    std::vector<Type *> cutTypes;
+    cutTypes.reserve(cuts.size());
+    for (const Residual &one : cuts) {
+        if (one.type == nullptr) {
+            os << "REINTERP split function=" << function->name()
+               << " skip=residual (a value the cut carries has no type)\n";
+            return built;
+        }
+        cutTypes.push_back(one.type);
+    }
+    Type *cutTuple                = TupleType::create(cutTypes);
+    const SplitHalves branchHalves = splitHalvesWith(function->funcType(), cutTuple);
+    if (branchHalves.forward == nullptr || branchHalves.backward == nullptr) {
+        os << "REINTERP split function=" << function->name() << " skip=signature ("
+           << branchHalves.why << ")\n";
+        return built;
+    }
+    Type *valueType = function->node(arms.front().value) != nullptr
+                          ? function->node(arms.front().value)->dataType()
+                          : nullptr;
+    Type *tangentType = function->node(arms.front().tangent) != nullptr
+                            ? function->node(arms.front().tangent)->dataType()
+                            : nullptr;
+    if (valueType == nullptr || tangentType == nullptr) {
+        os << "REINTERP split function=" << function->name()
+           << " skip=arm (an arm's half of the pair has no type)\n";
+        return built;
+    }
+    std::unordered_map<gc_node_ref_t, size_t> residualIndexOf;
+    for (size_t i = 0; i < cuts.size(); ++i) {
+        residualIndexOf[cuts[i].node] = i;
+    }
+    const std::string base = "split_of_" + std::string(function->name());
+    rt::GraphDraftGroup group(context, program);
+    const GraphId forwardId  = group.reserve(base + "_forward", base + "_forward");
+    const GraphId backwardId = group.reserve(base + "_backward", base + "_backward");
+    {
+        // The forward half: the value parameters in, (the value the arm yields, the residuals) out.
+        auto &draft = group.transaction(forwardId).edit();
+        draft.setFuncType(branchHalves.forward);
+        Half forward(draft, function, program, false);
+        for (size_t i = 0; i < sourcePorts.size(); i += 2) {
+            Type *type               = function->funcType()->normTypeAt(i);
+            const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
+            draft.appendNormPort(port);
+            forward.portOf[i] = port;
+        }
+        // Everything that crosses the cut is made *before* the branch is built, in the region the branch
+// stands in. A residual the walk projects while an arm is open would be created inside that arm's
+// region and then reused by the other arm -- a node of two arms, which the branch-arm invariant
+// refuses (`it would run only when ...`). So the residuals are projected here, in region 0.
+        for (const Residual &one : cuts) {
+            if (!forward.copyHalf(one.node, built)) {
+                os << "REINTERP split function=" << function->name()
+                   << " skip=forward construct=" << built.refusedConstruct
+                   << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
+                   << " why=" << built.refusedWhy << '\n';
+                return built;
+            }
+        }
+        gc_node_ref_t join = rt::kInvalidNodeRef;
+        if (!buildHalfBranch(draft, forward, forward.copyOf[condition], arms, false, valueType,
+                             built, join)) {
+            os << "REINTERP split function=" << function->name()
+               << " skip=forward construct=" << built.refusedConstruct
+               << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
+               << " why=" << built.refusedWhy << '\n';
+            return built;
+        }
+        std::vector<gc_node_ref_t> residualMembers;
+        residualMembers.reserve(cuts.size());
+        for (const Residual &one : cuts) {
+            gc_node_ref_t value = forward.copyOf[one.node];
+            if (value == rt::kInvalidNodeRef && one.parameter != Residual::kNotAParameter) {
+                // A value parameter the arms did not happen to read still crosses: the half's port for
+                // it is the value itself, which is what a residual is for this kind of member.
+                const size_t index = one.parameter * 2;
+                if (index < forward.portOf.size()) {
+                    value = forward.portOf[index];
+                }
+            }
+            if (value == rt::kInvalidNodeRef) {
+                os << "REINTERP split function=" << function->name()
+                   << " skip=residual (the forward half does not compute a value the cut carries)\n";
+                return built;
+            }
+            residualMembers.push_back(value);
+        }
+        const gc_node_ref_t residualValue = fillTuple(
+            draft, branchHalves.backward->normTypeAt(0),
+            std::span<const gc_node_ref_t>(residualMembers.data(), residualMembers.size()));
+        const std::array<gc_node_ref_t, 2> exitHalves{join, residualValue};
+        const gc_node_ref_t out = fillTuple(
+            draft, branchHalves.forward->exitType(),
+            std::span<const gc_node_ref_t>(exitHalves.data(), exitHalves.size()));
+        draft.setExitNode(out);
+        draft.setOutputNode(out);
+        draft.setReturnNode(out, rt::GCReturnKind::Self);
+    }
+    {
+        // The backward half: the residuals and the seeds in, the tangent the picked arm yields out.
+        auto &draft = group.transaction(backwardId).edit();
+        draft.setFuncType(branchHalves.backward);
+        Half backward(draft, function, program, true, &cuts, &residualIndexOf);
+        Type *residualsType = branchHalves.backward->normTypeAt(0);
+        const gc_node_ref_t residualsPort =
+            draft.addPortNode(residualsType, draft.allocateRuntimeSlot(residualsType));
+        draft.appendNormPort(residualsPort);
+        backward.residualsPort = residualsPort;
+        for (size_t i = 1; i < sourcePorts.size(); i += 2) {
+            Type *type               = function->funcType()->normTypeAt(i);
+            const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
+            draft.appendNormPort(port);
+            backward.portOf[i] = port;
+        }
+        // The residuals, projected in region 0 for the same reason as the forward half: an accessor made
+        // inside an arm would belong to that arm and be reused by the other one.
+        for (const Residual &one : cuts) {
+            if (!backward.copyHalf(one.node, built)) {
+                os << "REINTERP split function=" << function->name()
+                   << " skip=backward construct=" << built.refusedConstruct
+                   << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
+                   << " why=" << built.refusedWhy << '\n';
+                return built;
+            }
+        }
+        gc_node_ref_t join = rt::kInvalidNodeRef;
+        if (!buildHalfBranch(draft, backward, backward.copyOf[condition], arms, true, tangentType,
+                             built, join)) {
+            os << "REINTERP split function=" << function->name()
+               << " skip=backward construct=" << built.refusedConstruct
+               << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
+               << " why=" << built.refusedWhy << '\n';
+            return built;
+        }
+        draft.setExitNode(join);
+        draft.setOutputNode(join);
+        draft.setReturnNode(join, rt::GCReturnKind::Self);
+    }
+    group.encode();
+    const rt::GCGraph *forwardMade  = group.encoded(forwardId);
+    const rt::GCGraph *backwardMade = group.encoded(backwardId);
+    built.residuals                 = cuts.size();
+    os << "REINTERP split function=" << function->name() << " forward=" << rt::toValue(forwardId)
+       << " backward=" << rt::toValue(backwardId)
+       << " type=" << (forwardMade != nullptr && forwardMade->funcType() != nullptr
+                           ? forwardMade->funcType()->toString()
+                           : std::string("-"))
+       << " residuals=" << built.residuals << " arms=" << arms.size();
+    if (function->recomputesOnBackward()) {
+        os << " recompute=1";
+    }
+    os << '\n';
+    built.program  = group.program();
+    built.forward  = const_cast<rt::GCGraph *>(forwardMade);
+    built.backward = const_cast<rt::GCGraph *>(backwardMade);
+    return built;
+}
 SplitGraph buildSplitGraph(
     const camel::core::context::context_ptr_t &context, const rt::Program *program,
     rt::GCGraph *function, std::ostream &os) {
@@ -1014,6 +1283,33 @@ SplitGraph buildSplitGraph(
                         }
                         os << "] condition=" << condition << " conditionRegion=" << conditionRegion
                            << " conditionCopied=" << clonedOf(condition) << '\n';
+                    }
+                }
+                // The A/B of this step: with `cutBranchArm` false the cut stops at the reading above
+                // and refuses, which is where it stood before the condition was allowed to pick an arm.
+                constexpr bool cutBranchArm = true;
+                if (cutBranchArm) {
+                    std::vector<ArmCut> arms;
+                    for (uint32_t region = 1; region < function->regionCount(); ++region) {
+                        const rt::GCRegion *one = function->region(region);
+                        if (one == nullptr || one->kind != rt::GCRegionKind::Arm ||
+                            one->owner != branch) {
+                            continue;
+                        }
+                        const std::span<const gc_node_ref_t> results =
+                            one->result < function->nodeCount() ? function->withInputsOf(one->result)
+                                                                : std::span<const gc_node_ref_t>();
+                        ArmCut arm;
+                        arm.region = region;
+                        arm.index  = one->index;
+                        if (results.size() == 2) {
+                            arm.value   = results[0];
+                            arm.tangent = results[1];
+                        }
+                        arms.push_back(arm);
+                    }
+                    if (arms.size() >= 2) {
+                        return cutBranchGraph(context, program, function, os, condition, arms);
                     }
                 }
                 refuseAt(

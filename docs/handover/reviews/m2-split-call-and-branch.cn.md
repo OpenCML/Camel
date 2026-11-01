@@ -100,27 +100,51 @@ REINTERP split function=jvp_of_leaky skip=branch exit=Join condition=5 why=this 
 
 打开 → 上面四行读数在它前面。
 
-## 6. 选臂完成后的验收数（**先定，后读**）
+## 6. 选臂：验收数**先定、后读**，现在读出来了
 
-选臂那一刀做完之后，`split(jvp(leaky))` 必须能读出**每条臂各自**的偏导：
+验收数是手算的，不是从程序里抄的：`d/dx (x*x) = 2x` 在 `2.0` 上是 `4.0`；`d/dx (0.5*x) = 0.5`，与 `x`
+无关。它们在选臂之前写进这一节，选臂之后照原样读出来：
 
-| 输入 | 走哪条臂 | 值 | **偏导（验收数）** |
-|---|---|---|---|
-| `x = 2.0` | `x > 0.0` 为真 → `x*x` | `4.0` | **`dfdx = 4.0`** |
-| `x = -1.0` | 假 → `0.5*x` | `-0.5` | **`dfdx = 0.5`** |
+| 输入 | 走哪条臂 | 值 | 偏导（验收数） | 读出来的 |
+|---|---|---|---|---|
+| `x = 2.0` | `x > 0.0` 真 → `x*x` | `4.0` | **`dfdx = 4.0`** | `branch x=2.0 dgdx=4.0` ✓ |
+| `x = -1.0` | 假 → `0.5*x` | `-0.5` | **`dfdx = 0.5`** | `branch x=-1.0 dgdx=0.5` ✓ |
 
-这两个数是手算的，不是从今天的程序里抄的：`d/dx (x*x) = 2x`，在 `2.0` 上是 `4.0`；`d/dx (0.5*x) = 0.5`，
-与 `x` 无关。**写在选臂之前**，是为了让那一步有验收线可对，而不是做完再挑一个数当结果。
+切成之后那一行是：
+
+```
+REINTERP split function=jvp_of_leaky forward=70 backward=71 type=(float) => (float, (float, bool)) pure residuals=2 arms=2
+```
+
+`residuals=2` 是 `(x, 条件)`——条件穿过切口时是 `bool`，所以前一半的类型是 `(float, (float, bool))`；
+`arms=2` 是每个半边各自建并接上的两条臂。`WALK`/`ARM` 仍然打印，因为把每条臂复制进自己区域的正是
+它们描述的那次走查。
 
 ## 7. 下一步（写清，免得下一个人以为"已经做完了"）
 
-区域走查、body 复制、臂的一半接 Join 都已完成（§2、§3）；还差**选臂**：后一半按**同一个条件**
-（父区域里的 `condition=5`）挑出前一半走过的那条臂，并把条件作为残差带过切口。做完之后 §6 的两个
-验收数必须读得出来。这一笔等父级点名，不和现在这笔一起做。
+分支的切一刀做完了，但**只做了两臂、纯值、无嵌套**这一层。还差的（按顺序）：
 
-## 8. 三条不许动的数（每次复验）
+1. **嵌套分支**：区域里再有 `Brch`（`WALK` 的 `nested=` 记的就是这个数，今天是 0），切法要递归；
+2. **循环**：出口是 Join 但没有 `Brch` 命名它（`skip=loop`），按 4.2 要处理"一圈交给下一圈"的残差；
+3. **副作用的臂**：今天两条臂都只读值；带 `print`/`mut` 的臂要走效果边，`makeCopy` 现在的拒绝是有意的。
+
+## 8. 三条不许动的数（每次复验，原文）
+
+```
+REINTERP split function=jvp_of_h forward=69 backward=70 type=(float, float) => (float, (float, float, float)) pure residuals=3
+split_remat plain value=18.0 dfdx=12.0 dfdy=9.0
+REINTERP remat function=jvp_of_h in_recompute=0 out_recompute=1 graph=71
+REINTERP split function=jvp_of_h__remat forward=72 backward=73 type=(float, float) => (float, (float, float)) pure residuals=2 recompute=1
+split_remat marked value=18.0 dfdx=12.0 dfdy=9.0
+value= 18.0
+dfdx= 12.0
+dfdy= 9.0
+vjp_single y=27.0 dfdx=27.0
+control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0
+```
 
 - `modules.remat`：`residuals=3` 与 `residuals=2 recompute=1` 两条读数；
 - `split_two_params`：`(12.0, 9.0)`；
 - `compositions.vjp_single`：`vjp_single y=27.0 dfdx=27.0`（`vjp` 是 `transpose . split . reinterp<jvp>`，
-  所以这一刀就是它那一刀）。
+  所以这一刀就是它那一刀）；
+- `control_flow_grad`：`a=6.0 b=0.5 …` —— `grad` 那条路与 `split` 这条路的同一件事，现在两边都是数。
