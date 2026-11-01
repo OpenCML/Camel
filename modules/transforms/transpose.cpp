@@ -72,11 +72,12 @@ FunctionType *transposeSignature(FunctionType *function) {
                 camel::core::type::param_vec_t{}, params,
                 camel::core::type::TupleType::create(cotangentsOfAll));
         }
-        for (size_t i = 0; i < bundle->size(); ++i) {
-            if (bundle->typeAt(i) != Type::Float64()) {
-                return nullptr;
-            }
-        }
+        // A residual's cotangent space may be empty: a branch's condition crosses the cut as a
+        // residual (so the backward half picks the arm the forward half picked, design 4.2) and a
+        // predicate is not a value anything is differentiable with respect to. Such a member is
+        // accepted here and contributes nothing at the other end -- the statement is made once, in the
+        // cotangent space (`addCotangent` drops a target whose type has no cotangent), rather than as a
+        // per-type test at every use.
         for (size_t i = 1; i < count; ++i) {
             if (function->normTypeAt(i) != Type::Float64()) {
                 return nullptr;
