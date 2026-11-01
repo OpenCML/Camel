@@ -1,0 +1,13 @@
+// A `>` ending its line inside a chain of comparisons is read as a comparison with the next line:
+// `a >` then `b < c` parses as `a > b < c`, which is never what a program means. A warning, not a
+// refusal -- the program compiles -- because the fix is the writer's (join the lines, or close the
+// argument list where it belongs).
+
+func main(): int {
+    let a = 3
+    let b = 2
+    let c = 1
+    if a >
+        b < c then { return 1 }
+    return 0
+}

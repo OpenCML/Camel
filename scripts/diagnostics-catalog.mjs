@@ -96,8 +96,8 @@ const NAME_COVERAGE_RECORDED = new Map([
     ['semantic', 0],
     ['internal', 0],
     ['lexical', 0],
-    ['syntax', 4],
-    ['runtime', 6],
+    ['syntax', 0],
+    ['runtime', 3],
 ])
 
 // The sections, in the order the headers are included. `id` is also the stem of the two
@@ -993,6 +993,13 @@ if (mode === '--coverage' || mode === '--coverage-check') {
 // exercise this code" for the codes this one still counts as unpinned, and the wider check is the
 // layer that holds that question at zero.
 //
+// Measured again after the syntax round: syntax 0 of 19 (four cases: ExtraSemicolon,
+// MissingInitializer, UnmatchedClosingDelimiter, ComparisonAcrossLines) and runtime 3 of 43 --
+// RegexInvalid, TimeFormatFailed and FormatFailed are pinned by the golden snapshots of
+// `diag_render`, whose text comparison requires the rendered name. The three left are the ones no
+// minimal program reaches, listed in the round's report: PassBoundaryNodes and PassBoundaryPorts
+// need a pass that returns a broken graph, and FileSystemError has no producer at all today.
+//
 // The ratchet is per section, because the sections stand in very different places and one number
 // would hide the other four. Measured when the map was written (307 codes, before
 // `FeatureNotSupported` was deleted): internal 0 of 1, lexical 0 of 5, syntax 5 of 19,
@@ -1042,6 +1049,17 @@ if (mode === '--name-coverage' || mode === '--name-coverage-check') {
         // a pin, and a file read as its own test.
         for (const [name, section] of sectionOf) {
             if (text.includes(name)) pinned.add(`${section}::${name}`)
+        }
+        // A snapshot test compares a whole report against a golden file, so a name in that file is
+        // required text: the run has to print it exactly. Read the files the plan points at.
+        for (const g of text.matchAll(/^\s*golden\s*=\s*["']([^"']+)["']/gm)) {
+            const golden = path.resolve(path.dirname(file), g[1])
+            if (!fs.existsSync(golden)) continue
+            const body = fs.readFileSync(golden, 'utf8')
+            for (const n of body.matchAll(/\b([A-Za-z]+Diag)::([A-Za-z0-9_]+)/g)) pinned.add(`${n[1]}::${n[2]}`)
+            for (const [name, section] of sectionOf) {
+                if (body.includes(name)) pinned.add(`${section}::${name}`)
+            }
         }
         // A test can be a script rather than a plan case, and then the assertion is inside it:
         // `cml_contract.py` runs five refusals and asserts the name each one reports. Only a script
