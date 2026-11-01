@@ -66,6 +66,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "rulesets_arity_of_a_call_counts_its_arguments"
+desc = "A rule whose left side is a call is filed under the head of that call and the number of arguments it writes: `one(a)` is `one/1`, `two(a, b)` is `two/2`, `three(a, b, c)` is `three/3`. The count is the arguments, not the children of the call's bracket node -- those are the same three (bracket, argument list, bracket) for every call, which files all three rules under three and leaves the one- and two-argument rules unreachable by the operator that writes them. The arity is part of the key, so it is pinned through the pass that prints the index: `std::rulesets`."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/rulesets.probe_call_arity.cml"
+args = ["${case}", "std::rulesets", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "RULESET rulesets.probe_call_arity one/1 -> one_rule (rhs one)\nRULESET rulesets.probe_call_arity three/3 -> three_rule (rhs three)\nRULESET rulesets.probe_call_arity two/2 -> two_rule (rhs two)\n1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "rulesets_lookup_answers_and_says_why_not"
 desc = "The index is asked through `lookupRule(family, head, arity)` -- the function a transform asks -- by the `std::rulesets` pass (`query=`), and the answers are pinned: `-` with one operand in `rulesets.jvp` is `jvp_neg`, `-` with two is `jvp_sub` (two primitives, one token), `-` with three has no rule, and a family no module declares is unknown. The two ways of not finding a rule are named apart, because the repairs differ: write the rule, or import the ruleset. A program that asks nothing prints nothing."
 kind = "behavior"

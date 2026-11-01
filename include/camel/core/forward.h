@@ -72,8 +72,10 @@ void bindTransposeRule(ForwardRuleBinding binding);
 /// The key is the operator's, not the family's: which spelling its rule's left side writes and how
 /// many operands that spelling takes. A batching transform reads it here and asks its own family's
 /// index with it (`lookupRule("rulesets.vmap", head, arity)`), because the spellings a rule can be
-/// filed under are those of an expression (`x @ w` is `@` at two operands, `sum_axis(xs, axis,
-/// keepdims)` is `sum_axis` at three), not of the URI the node holds.
+/// filed under are those of an expression (`matmul(x, w)` is `matmul` at two operands, `x @ w` is
+/// `@` at two, `sum_axis(xs, axis, keepdims)` is `sum_axis` at three), not of the URI the node
+/// holds. One primitive spelled two ways is two keys, so the ruleset and this table must name the
+/// same one.
 void bindVmapRule(ForwardRuleBinding binding);
 
 /// What `uri`'s transpose rule is called right now, read from the transpose family's index at this

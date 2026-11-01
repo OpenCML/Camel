@@ -30,6 +30,39 @@ std::map<std::string, std::map<std::string, std::string>> callees;
 // the same declaration: the tuple both sides of the rule take.
 std::map<std::string, std::map<std::string, std::string>> variables;
 
+/// How many arguments a call's parenthesised list holds. `ParentArgues` holds the brackets and the
+/// list (`ArgumentList`), and the arguments are the entries of the `IndexValues` under it -- so the
+/// count is the arguments written, not the children of the list node, which are the same three
+/// (bracket, list, bracket) for `f()`, `f(a)` and `f(a, b)` alike.
+size_t argumentCountIn(syntax::Node argues) {
+    if (!argues) {
+        return 0;
+    }
+    for (size_t index = 0; index < argues->childCount(); ++index) {
+        const syntax::Child child = argues->child(index);
+        if (!child->isNode() || child->node()->kind() != syntax::NodeKind::ArgumentList) {
+            continue;
+        }
+        const syntax::Node list = child->node();
+        for (size_t entry = 0; entry < list->childCount(); ++entry) {
+            const syntax::Child inner = list->child(entry);
+            if (!inner->isNode() || inner->node()->kind() != syntax::NodeKind::IndexValues) {
+                continue;
+            }
+            const syntax::Node values = inner->node();
+            size_t arguments         = 0;
+            for (size_t value = 0; value < values->childCount(); ++value) {
+                if (values->child(value)->isNode()) {
+                    ++arguments;
+                }
+            }
+            return arguments;
+        }
+        return 0;
+    }
+    return 0;
+}
+
 } // namespace
 
 std::string leftHeadOf(syntax::Node left, std::string &shape, uint32_t &arity) {
@@ -84,10 +117,8 @@ std::string leftHeadOf(syntax::Node left, std::string &shape, uint32_t &arity) {
     }
     if (tokenCount == 0 && nodeCount >= 2 && firstNode) {
         // `f(a, b)` is filed under `f` with one operand per argument: the second child is the
-        // argument list, and its own children are the arguments.
-        arity = secondNode && secondNode->childCount() > 0
-                    ? static_cast<uint32_t>(secondNode->childCount())
-                    : static_cast<uint32_t>(nodeCount - 1);
+        // parenthesised list, and the arguments are the entries of the list it holds.
+        arity = static_cast<uint32_t>(argumentCountIn(secondNode));
         return firstNode->text();
     }
     shape = std::string(syntax::nodeKindName(current->kind()));
