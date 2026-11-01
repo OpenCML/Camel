@@ -114,7 +114,9 @@ const compared = /the declared result type agrees with the operator's own for ([
 assert(compared !== null, 'the run did not say how many result types it compared')
 const comparedCount = compared === null ? 0 : Number(compared[1])
 // The number moves with the library; the floor is what keeps "compared nothing, or compared
-// almost nothing" from passing as agreement. 494 of 554 overloads are compared today.
+// almost nothing" from passing as agreement. 517 of 558 overloads are compared today. The exact
+// count of each exception class is not here: EXCEPTIONS in the script holds it, and the run
+// refuses a class it does not record.
 assert(comparedCount > 400, `only ${comparedCount} operator(s) had their result type compared`)
 const excused = /the declared result type was not compared for ([0-9]+) operator[(]s[)]/.exec(stdout)
 const excusedCount = excused === null ? 0 : Number(excused[1])
@@ -153,10 +155,9 @@ const comparedCount = compared === null ? 0 : Number(compared[1])
 // 524 of 558 overloads are compared today. The floor keeps "compared nothing, or compared almost
 // nothing" from passing as agreement, the same floor the result half carries.
 assert(comparedCount > 400, `only ${comparedCount} operator(s) had their parameter types compared`)
-// 34 overloads of 21 names are listed: `println` and its neighbours (a nameless `..rest` pack),
-// the transforms (a function type as a parameter), `grad`/`adam`/`sgd` (`grad of P`), `tiles`
-// (`NumericAggregate`, `Device<T>`), `string`'s conversions (a bare `T`), `slice` and `upload` (a
-// declaration that states one parameter where the rule states six and three).
+// The classes and their counts are `EXCEPTIONS.parameter` in the script, which the run itself
+// checks: a stop with no class, a class it does not hold or a class whose count moved fails there.
+// Here the ceiling is all that is asserted, so the two places cannot disagree about a number.
 const excused = /the declared parameter types was not compared for ([0-9]+) operator[(]s[)]/.exec(stdout)
 const excusedCount = excused === null ? 0 : Number(excused[1])
 assert(excusedCount < 60, `${excusedCount} operators have parameter types the two sides cannot compare`)

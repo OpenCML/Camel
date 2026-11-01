@@ -6563,8 +6563,9 @@ The transform that trades memory for recomputation -- the same values, with the 
 recomputed in the backward pass instead of kept -- is named `remat` here. JAX calls it
 `jax.checkpoint` and, by its other name, `jax.remat`; in this tree "checkpoint" is the persistence
 module `stdlib/ckpt.cml` and stays that, so the transform takes the other word and there is no
-second name for a reader to disambiguate. It is not implemented yet: the name is not a value, and
-a call to it is refused like any other name that does not resolve.
+second name for a reader to disambiguate. The value it gives is the function itself, so a call
+through it is a call of the same function and no number moves; the recomputation is what the
+backward pass does with the section, not a second meaning of the value.
 
 `stop_gradient` marks a value as a constant, and the mathematics of the local rules is written
 here, where the library keeps one statement of it: `add_tangent` and its siblings are the tangent
@@ -6638,6 +6639,23 @@ Gives its argument unchanged and cuts the gradient at this point: a value passed
 argument's own type.
 
 - Example: `stop_gradient(3.0)` gives `3.0`
+
+#### `remat`
+
+```camel
+remat: (f: F) => F pure when is_function::<F>()
+```
+
+Gives `f` unchanged and marks the calls of that value: on the backward pass the section it
+covers may be recomputed instead of kept, so the same numbers are read from less memory. The
+value of a call through it is the value of the same call without it, so adding or removing
+`remat` moves no number and no gradient; what the name says beyond that is about what the
+backward pass stores, and no value tells a recomputed section from a carried one. A program
+that wants the values alone cannot tell the two paths apart, which is what makes the transform
+safe to put around any call.
+
+- Example (a fragment, not compiled): `let remembered = remat(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
 
 ### The local rules of the scalar arithmetic
 
