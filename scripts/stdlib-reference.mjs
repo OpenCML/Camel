@@ -2012,7 +2012,7 @@ const EXCEPTIONS = {
         'rule states a generic application': 1,
         'rule states a named type': 14,
         'rule states a type variable': 1,
-        'declaration states a type variable': 12,
+        'declaration states a type variable': 13,
         'declaration states a generic application': 2,
     },
     // The same question one position to the left: a parameter the operator writes as a function
@@ -2023,29 +2023,21 @@ const EXCEPTIONS = {
         'rule states no parameter list': 1,
         'declared arity differs from rule arity': 4,
         'untyped pack ..rest': 6,
-        'function-typed parameter': 9,
+        'function-typed parameter': 10,
         'grad of P': 2,
         'named-type parameter': 5,
         'bare type variable parameter': 7,
     },
 }
 
-// An operator a merge brings in joins the table by name rather than by a number that only one tree
-// can hold: the counts above are the tree without it, and this entry is the delta the tree with it
-// must show. The operator is still checked where it is present -- it has to be *found* in the class
-// named here, so a change in what it states is not excused by the entry -- and a tree without it
-// holds the numbers above, so both trees are described rather than one being wrong.
-const EXCEPTIONS_JOINED = {
-    'transforms:remat': {
-        // The memory-for-recomputation operator: its declaration writes the type variable (`f: F`
-        // in, `F` out) and the operator states the function type the call gets, so neither side can
-        // be read from the other. It is the same state `jvp`, `split`, `transpose` and `vmap` are
-        // in, and it joins both of their classes.
-        parameter: 'function-typed parameter',
-        result: 'declaration states a type variable',
-        why: 'the declaration writes `f: F` and the operator states `((float, float) => float) => (float, float) => float`',
-    },
-}
+// The numbers count every overload of the tree, the operators a merge brought in included: the tree
+// has `transforms:remat`, whose declaration writes the type variable (`f: F` in, `F` out) while the
+// operator states the function type the call gets
+// (`((float, float) => float) => (float, float) => float`), so neither side can be read from the
+// other. It is one of `declaration states a type variable` on the result and one of
+// `function-typed parameter` on the parameter, the state `jvp`, `split`, `transpose` and `vmap` are
+// in. A tree that has not merged the operator finds one fewer in each class, and the failure there
+// says so rather than being excused: the number describes the tree the run measured.
 
 // The examples that do not compile, by the kind of diagnostic that stopped them, and the examples a
 // `@example-fragment` marker calls "not compiled" that the checker compiles anyway. Both are
@@ -2135,26 +2127,8 @@ function exampleProblems(coverage) {
 function exceptionProblems(found) {
     const problems = []
     for (const half of ['result', 'parameter']) {
-        const { byLabel, byLabelNames, unlabelled } = found[half]
+        const { byLabel, unlabelled } = found[half]
         const recorded = EXCEPTIONS[half]
-        // The operators this tree registers that the table knows join a class: their entry is what
-        // the class holds with them, so a merge that lands one does not move a number that only the
-        // other tree could hold. They are checked first: the class named has to hold the operator
-        // itself, so a change in what it states is a failure, not an entry that passes for free.
-        const joined = Object.entries(EXCEPTIONS_JOINED).filter(
-            ([uri, entry]) => entry[half] !== undefined && found.present.has(uri),
-        )
-        for (const [uri, entry] of joined) {
-            const label = entry[half]
-            if (!(byLabelNames[label] || []).includes(uri)) {
-                problems.push(
-                    `EXCEPTIONS_JOINED['${uri}'].${half} names the class '${label}', and the run puts ${uri} ` +
-                        `in no such class: ${entry.why}. Either it is compared now -- then remove the entry -- ` +
-                        'or it stopped where a different class names it',
-                )
-            }
-        }
-        const expected = (label) => (recorded[label] || 0) + joined.filter(([, entry]) => entry[half] === label).length
         for (const one of unlabelled) {
             problems.push(`an exception with no label: ${one.name} (${one.uri}): ${one.detail}`)
         }
@@ -2164,11 +2138,9 @@ function exceptionProblems(found) {
                     `the exception class '${label}' is not in EXCEPTIONS.${half}: ${byLabel[label]} overload(s) carry it, ` +
                         'and a new class is a new promise to keep -- add it with its count and say why',
                 )
-            } else if (expected(label) !== byLabel[label]) {
-                const mine = joined.filter(([, entry]) => entry[half] === label).map(([uri]) => uri)
+            } else if (recorded[label] !== byLabel[label]) {
                 problems.push(
-                    `EXCEPTIONS.${half}['${label}'] records ${expected(label)}` +
-                        `${mine.length > 0 ? ` (${recorded[label]} plus ${mine.join(', ')})` : ''}, and the run found ` +
+                    `EXCEPTIONS.${half}['${label}'] records ${recorded[label]}, and the run found ` +
                         `${byLabel[label]}: update the number in the same commit and say why the class moved`,
                 )
             }
@@ -2379,10 +2351,6 @@ function signatureParams(signature) {
 
 function verifyOps() {
     const registered = registeredOperators()
-    // Which operator URIs this tree's build registers: the joined entries below are keyed by it, so
-    // the table can say what a class holds with an operator that another lane brings in, and what it
-    // holds without it, without one of the two trees having to be wrong.
-    const present = new Set(registered.map((op) => op.uri))
     const problems = []
     // The overloads whose result type the two sides state in a form this checker cannot compare:
     // a bounded list, printed by the caller, never a silent skip.
@@ -2720,7 +2688,6 @@ function verifyOps() {
     // class kept apart so the run can refuse them by name.
     const tally = (list) => {
         const byLabel = {}
-        const byLabelNames = {}
         const unlabelled = []
         for (const one of list) {
             if (typeof one.label !== 'string' || one.label === '') {
@@ -2728,9 +2695,8 @@ function verifyOps() {
                 continue
             }
             byLabel[one.label] = (byLabel[one.label] || 0) + 1
-            ;(byLabelNames[one.label] = byLabelNames[one.label] || []).push(one.uri)
         }
-        return { byLabel, byLabelNames, unlabelled, total: list.length }
+        return { byLabel, unlabelled, total: list.length }
     }
     return {
         problems,
@@ -2739,7 +2705,7 @@ function verifyOps() {
         resultsCompared,
         paramsCompared,
         paramsUnchecked,
-        found: { result: tally(unchecked), parameter: tally(paramsUnchecked), present },
+        found: { result: tally(unchecked), parameter: tally(paramsUnchecked) },
     }
 }
 
@@ -3015,12 +2981,7 @@ if (mode === '--write' || mode === '--verify-doc') {
     // pins as well as the counts it printed above.
     const recorded = (half) => {
         const counts = Object.values(EXCEPTIONS[half])
-        // The joined entries count here too: the totals this line prints are the ones the run found,
-        // whether or not this tree has the operator they are keyed by.
-        const joined = Object.entries(EXCEPTIONS_JOINED).filter(
-            ([uri, entry]) => entry[half] !== undefined && found.present.has(uri),
-        ).length
-        return `${counts.reduce((sum, one) => sum + one, 0) + joined} in ${counts.length} class(es)`
+        return `${counts.reduce((sum, one) => sum + one, 0)} in ${counts.length} class(es)`
     }
     console.log(
         `the exception lists are the ones EXCEPTIONS records: result ${recorded('result')}, parameter ${recorded('parameter')}`,
