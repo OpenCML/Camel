@@ -1120,6 +1120,34 @@ SplitGraph cutBranchGraph(
     built.backward = const_cast<rt::GCGraph *>(backwardMade);
     return built;
 }
+/// Which shape a lifted graph's exit has. Asked once, so that the cut has one entry and four cells
+/// instead of a chain of tests: the exit is the pair itself (a straight-line body), a Join a branch
+/// names (the condition picks an arm), a Join no branch names (a loop), or something that is not the
+/// pair at all. The three that can be cut are cells of the same entry because the cut that will
+/// handle them is one traversal over regions -- P1-14 of the review -- and a shape that is refused
+/// is a cell too, so that its refusal stays named instead of becoming a fall-through.
+enum class ExitShape { Straight, Branch, Loop, NotAPair };
+
+ExitShape exitShapeOf(const rt::GCGraph *function, gc_node_ref_t exit) {
+    const rt::GCNode *node = function->node(exit);
+    if (node == nullptr) {
+        return ExitShape::NotAPair;
+    }
+    if (node->kind == rt::GCNodeKind::Fill) {
+        const auto *fill = function->nodeBodyAs<rt::GCFillBody>(exit);
+        if (fill != nullptr && fill->fillKind == rt::GCFillKind::Tuple &&
+            function->withInputsOf(exit).size() == 2) {
+            return ExitShape::Straight;
+        }
+    }
+    if (node->kind != rt::GCNodeKind::Join || function->funcType() == nullptr ||
+        node->dataType() != function->funcType()->exitType()) {
+        return ExitShape::NotAPair;
+    }
+    return branchConditionOf(function, exit) != rt::kInvalidNodeRef ? ExitShape::Branch
+                                                                  : ExitShape::Loop;
+}
+
 SplitGraph buildSplitGraph(
     const camel::core::context::context_ptr_t &context, const rt::Program *program,
     rt::GCGraph *function, std::ostream &os) {
@@ -1167,24 +1195,34 @@ SplitGraph buildSplitGraph(
         return SplitGraph{};
     }
     const rt::GCNode *exitNode = function->node(exit);
-    const auto *exitFill =
-        exitNode->kind == rt::GCNodeKind::Fill ? function->nodeBodyAs<rt::GCFillBody>(exit)
-                                               : nullptr;
-    if (exitFill == nullptr || exitFill->fillKind != rt::GCFillKind::Tuple ||
-        function->withInputsOf(exit).size() != 2) {
-        // The pair does not have to be a tuple fill. A branch answers with its Join, and `jvp` gives
-        // that Join the lifted type, so the exit of `jvp(branch body)` is a Join whose slots hold the
-        // pair: one arm writes (value, tangent) into it and the other writes its own. There is a pair
-        // to cut in that graph all the same -- the author's rule for it is design 4.2: the condition
-        // itself is a residual, and the backward half picks the same arm by evaluating that condition.
-        // What `split` cannot do yet is step *inside* an arm: an arm is a region, not a data input, so
-        // `Half`'s walk (which follows `dataInputsOf`) does not reach it. Saying that is the point of
-        // this reading -- a `skip=exit` that does not say which exit leaves the reader with nothing.
-        if (exitNode->kind == rt::GCNodeKind::Join && function->funcType() != nullptr &&
-            exitNode->dataType() == function->funcType()->exitType()) {
+    (void)exitNode;
+    // One entry, three cells (P1-14, code review 2026-11-01). What used to be a chain of `if`s --
+    // "is it a tuple fill? then straight line; else is it a Join? then branch; else loop; else not a
+    // pair" -- is one question about the *shape* of the exit, asked once, and one `switch` over the
+    // four answers. The shapes it separates, and why they are cells of one entry rather than three
+    // roads:
+    //
+    // - The pair does not have to be a tuple fill. A branch answers with its Join, and `jvp` gives
+    //   that Join the lifted type, so the exit of `jvp(branch body)` is a Join whose slots hold the
+    //   pair: one arm writes (value, tangent) into it and the other writes its own. There is a pair
+    //   to cut in that graph all the same -- the author's rule for it is design 4.2: the condition
+    //   itself is a residual, and the backward half picks the same arm by evaluating that condition.
+    //   What `split` cannot do yet is step *inside* an arm: an arm is a region, not a data input, so
+    //   `Half`'s walk (which follows `dataInputsOf`) does not reach it. Saying that is the point of
+    //   this reading -- a `skip=exit` that does not say which exit leaves the reader with nothing.
+    // - A Join no branch names is the loop, and a loop is a named refusal, not a silence.
+    // - Every cell *starts* at the same place (the exit's shape) and will end at the same place (a
+    //   cut that recurses by region); they are written as cells so that the recursion of P1-14's
+    //   next step is a change of one cell's body, not the invention of a second entry.
+    switch (exitShapeOf(function, exit)) {
+        case ExitShape::Straight:
+            // The exit is the pair itself: the cut is the straight-line body, and the two `copyHalf`
+            // walks after this switch are that cell's one entry.
+            break;
+        case ExitShape::Branch: {
             const gc_node_ref_t condition = branchConditionOf(function, exit);
             SplitGraph refusal;
-            if (condition != rt::kInvalidNodeRef) {
+            {
                 // The first step of the cut a branch needs: enter each arm and say what is in it. The walk a half
                 // does follows `dataInputsOf` and never reaches an arm, so this is the entrance it does not
                 // have yet -- and the numbers are what the next step builds on (an arm is entered through
@@ -1260,10 +1298,6 @@ SplitGraph buildSplitGraph(
                                 }
                             }
                         }
-                        Type *tangentType =
-                            tangent != rt::kInvalidNodeRef && function->node(tangent) != nullptr
-                                ? function->node(tangent)->dataType()
-                                : pairType;
                         os << "ARM half=backward arm=" << one->index << " region=" << region
                            << " yield=" << yield << " members=" << members.size() << " value="
                            << (members.size() == 2 ? members[0] : rt::kInvalidNodeRef) << " tangent="
@@ -1324,6 +1358,9 @@ SplitGraph buildSplitGraph(
                    << " condition=" << condition << " why=" << refusal.refusedWhy << '\n';
                 return refusal;
             }
+        } break;
+        case ExitShape::Loop: {
+            SplitGraph refusal;
             refuseAt(
                 refusal, function, exit, "the exit",
                 "this graph's exit is a Join that holds the pair and no branch names it, so the two "
@@ -1333,15 +1370,17 @@ SplitGraph buildSplitGraph(
                << " why=" << refusal.refusedWhy << '\n';
             return refusal;
         }
-        SplitGraph refusal;
-        refuseAt(
-            refusal, function, exit, "the exit",
-            "a lifted function answers with the pair (result, tangent); this graph's exit is not a "
-            "two-member tuple fill, so there is no pair to cut");
-        os << "REINTERP split function=" << function->name() << " skip=exit ("
-           << refusal.refusedWhy << ")\n";
-        return refusal;
-    }
+        case ExitShape::NotAPair: {
+            SplitGraph refusal;
+            refuseAt(
+                refusal, function, exit, "the exit",
+                "a lifted function answers with the pair (result, tangent); this graph's exit is not a "
+                "two-member tuple fill, so there is no pair to cut");
+            os << "REINTERP split function=" << function->name() << " skip=exit ("
+               << refusal.refusedWhy << ")\n";
+            return refusal;
+        }
+        }
     const gc_node_ref_t resultHalf  = ungated(function, function->withInputsOf(exit)[0]);
     const gc_node_ref_t tangentHalf = ungated(function, function->withInputsOf(exit)[1]);
 
