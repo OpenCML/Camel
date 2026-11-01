@@ -175,13 +175,11 @@ TopoNodeSeqDumpPass::apply(const camel::runtime::Program *program, std::ostream 
                 return res;
             }
             case GCNodeKind::Loop: {
-                const auto *cond = program->loopCondOf(*runtimeGraph, nodeRef);
-                const auto *body = program->loopBodyOf(*runtimeGraph, nodeRef);
-                string res       = format(
-                    "LOOP: {} cond={} body={} slot={}",
+                // A loop names no graph: the condition and the body are regions (3.10), so what is
+                // printed is the form and where the node's value goes.
+                string res = format(
+                    "LOOP: {} slot={}",
                     camel::core::loopKindName(runtimeGraph->loopKindOf(nodeRef)),
-                    cond ? cond->name() : string("-"),
-                    body ? body->name() : string("<null>"),
                     node.dataIndex);
                 const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
                 const auto withInputs = runtimeGraph->withInputsOf(nodeRef);

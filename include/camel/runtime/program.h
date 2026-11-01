@@ -81,17 +81,10 @@ class Program final : public camel::core::rtdata::Object {
         return index < byId_.size() ? byId_[index] : nullptr;
     }
     /// The graphs a graph refers to, read in this program (graph.h, GCGraph::refs): the graph
-    /// of FUNC node `ref`; of LOOP node `ref` the condition (nullptr for a For loop) and the
-    /// body; the graph a graph is written in. nullptr where the id names no graph of the
-    /// program.
+    /// of FUNC node `ref`, and the graph a graph is written in. A loop names no graph -- it is its
+    /// regions (design principles 3.10). nullptr where the id names no graph of the program.
     GCGraph *calleeOf(const GCGraph &graph, gc_node_ref_t ref) const {
         return this->graph(graph.calleeIdOf(ref));
-    }
-    GCGraph *loopCondOf(const GCGraph &graph, gc_node_ref_t ref) const {
-        return this->graph(graph.loopCondIdOf(ref));
-    }
-    GCGraph *loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) const {
-        return this->graph(graph.loopBodyIdOf(ref));
     }
     GCGraph *outerOf(const GCGraph &graph) const { return this->graph(graph.outerGraphId()); }
     /// The graphs `ids` name that the program holds, in order.

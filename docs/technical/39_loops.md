@@ -70,9 +70,10 @@ body. Both `EXEC`s carry the numeric permissions in force where the loop is writ
    chain. A loop whose value nothing uses outside a sync block does not run; when its parts have
    effects that is reported as `EffectNotExecuted` ("The loop").
 
-Storage (`include/camel/runtime/graph.h`): kind 15; the frozen payload `GCLoopRef` holds the form
-(`condRef` and `bodyRef` are none: the node names no graph) and `collectionCount`, the number of
-collection slots (section 3.1, zero for a loop written in source today). The regions are
+Storage (`include/camel/runtime/graph.h`): kind 15; the frozen payload `GCLoopRef` holds the form,
+the iterable form and `collectionCount`, the number of collection slots (section 3.1, zero for a
+loop written in source today). A loop names no graph: the condition and the body are regions of the
+graph it is written in, so there is no second form for a payload to describe (principles 3.10). The regions are
 `GCRegion`s of kind `LoopCond` and `LoopBody` owned by the node: their ports are the Port nodes
 the code reads the state and the element through, named by `GCRegion::params`; the With inputs of
 the node are the results of the regions (which is how what they compute is reached from the node)

@@ -527,24 +527,15 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             }
         }
         if (node->kind == GCNodeKind::Loop) {
-            // The two graphs are entries of the reference table, marked callee (I12/I13): the
-            // condition exactly when the form has one.
-            const auto *body     = graph->nodeBodyAs<GCLoopRef>(ref);
-            const auto validLoop = [&](uint32_t index) {
-                return index < graph->refs().size() && isValid(graph->refs()[index]) &&
-                       (graph->refRoles(index) & kGraphRefCallee) != 0;
-            };
-            const bool hasCond = camel::core::loopHasCondition(body->kind);
-            // A loop in region form names no graph; its parts are regions of this graph.
-            const bool regionForm = body->bodyRef == kNoLoopGraph && body->condRef == kNoLoopGraph;
+            // A loop is its regions: the condition and the body are two control regions of this
+            // graph (design principles 3.10), so the node names no graph and there is nothing to
+            // check against the reference table -- only that its form is one the language has.
+            const auto *body = graph->nodeBodyAs<GCLoopRef>(ref);
             if (static_cast<uint8_t>(body->kind) >
-                    static_cast<uint8_t>(camel::core::LoopKind::ForWhile) ||
-                (!regionForm &&
-                 (!validLoop(body->bodyRef) ||
-                  (hasCond ? !validLoop(body->condRef) : body->condRef != kNoLoopGraph)))) {
+                static_cast<uint8_t>(camel::core::LoopKind::ForWhile)) {
                 throw std::runtime_error(
                     std::format(
-                        "Runtime graph '{}' has LOOP node {} without its condition or body graph.",
+                        "Runtime graph '{}' has LOOP node {} of a form the language has not.",
                         graph->name(),
                         ref));
             }
@@ -1014,37 +1005,18 @@ void emitDraftPayload(
             }
             break;
         case GCNodeKind::Loop: {
-            // The draft holds the two graphs; the frozen node names them by their indexes in
-            // the reference table, as a FUNC node names its callee.
+            // A loop is its regions: nothing of the frozen payload is a graph, so the node is its
+            // fields and nothing else.
             ASSERT(
                 payloadBytes.size_bytes() >= sizeof(GCLoopRef),
                 "Draft LOOP payload is missing.");
             const GCLoopBody body = draft.loopGraphsOf(planned.draftId);
-            const auto *refIndex  = payload.refIndex;
-            const auto indexOf    = [&](GraphId target) -> uint32_t {
-                if (!isValid(target)) {
-                    return kNoLoopGraph;
-                }
-                const auto found = refIndex
-                                          ? refIndex->find(target)
-                                          : std::unordered_map<GraphId, uint32_t>::const_iterator{};
-                if (refIndex == nullptr || found == refIndex->end()) {
-                    throw std::runtime_error(
-                        std::format(
-                            "LOOP node {} names a graph that is not among the graphs this graph "
-                            "calls (its reference table).",
-                            planned.ref));
-                }
-                return found->second;
-            };
             writeBody(
                 payload.payload,
                 header,
                 GCLoopRef{
                     .kind            = body.kind,
                     .iterableForm    = body.iterableForm,
-                    .condRef         = indexOf(body.condGraph),
-                    .bodyRef         = indexOf(body.bodyGraph),
                     .collectionCount = body.collectionCount,
                 });
         } break;
@@ -2304,24 +2276,6 @@ GraphId GCGraph::calleeIdOf(gc_node_ref_t ref) const {
         return kInvalidGraphId;
     }
     const uint32_t index = nodeBodyAs<GCFuncRef>(ref)->ref;
-    return index < refCount_ ? refs_[index] : kInvalidGraphId;
-}
-
-GraphId GCGraph::loopCondIdOf(gc_node_ref_t ref) const {
-    const GCNode *n = node(ref);
-    if (!n || n->kind != GCNodeKind::Loop || !n->hasPayload()) {
-        return kInvalidGraphId;
-    }
-    const uint32_t index = nodeBodyAs<GCLoopRef>(ref)->condRef;
-    return index < refCount_ ? refs_[index] : kInvalidGraphId;
-}
-
-GraphId GCGraph::loopBodyIdOf(gc_node_ref_t ref) const {
-    const GCNode *n = node(ref);
-    if (!n || n->kind != GCNodeKind::Loop || !n->hasPayload()) {
-        return kInvalidGraphId;
-    }
-    const uint32_t index = nodeBodyAs<GCLoopRef>(ref)->bodyRef;
     return index < refCount_ ? refs_[index] : kInvalidGraphId;
 }
 

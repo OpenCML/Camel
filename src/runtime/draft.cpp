@@ -2037,10 +2037,6 @@ void GraphDraft::dropUncalledGraphs(std::span<const GraphId> graphs) {
         const DraftNodeHeader *h = header(id);
         if (h && h->kind == GCNodeKind::Func) {
             called.push_back(calleeIdOf(id));
-        } else if (h && h->kind == GCNodeKind::Loop) {
-            const GCLoopBody loop = loopGraphsOf(id);
-            called.push_back(loop.condGraph);
-            called.push_back(loop.bodyGraph);
         }
     }
     const auto gone = [&](GraphId graph) {
@@ -2289,35 +2285,16 @@ GCLoopBody GraphDraft::loopGraphsOf(gc_node_ref_t id) const {
     GUARD(
         draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop,
         std::format(
-            "reading the loop graphs of node {}, whose kind is {}: a loop body is a GCLoopRef payload, "
-            "which only a LOOP node carries, so what this node holds is not a pair of graph indices",
+            "reading the loop of node {}, whose kind is {}: a loop payload is a GCLoopRef, which only "
+            "a LOOP node carries",
             id,
             draftNode == nullptr ? -1 : static_cast<int>(draftNode->header.kind)));
     const auto *ref = DraftNodeView::payloadAs<GCLoopRef>(draftNode);
     return GCLoopBody{
-        .condGraph       = payloadGraphAt(ref->condRef),
-        .bodyGraph       = payloadGraphAt(ref->bodyRef),
         .kind            = ref->kind,
         .iterableForm    = ref->iterableForm,
         .collectionCount = ref->collectionCount,
     };
-}
-
-void GraphDraft::setLoopGraphs(gc_node_ref_t id, GraphId cond, GraphId body) {
-    requireOneWriting("setLoopGraphs");
-    ++mutations_;
-    DraftNode *draftNode = node(id);
-    GUARD(
-        draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop,
-        std::format(
-            "pointing node {}, whose kind is {}, at a loop body: the payload slot holds a GCLoopRef only "
-            "when the node is a LOOP node",
-            id,
-            draftNode == nullptr ? -1 : static_cast<int>(draftNode->header.kind)));
-    touchRefs();
-    auto *ref    = DraftNodeView::payloadAs<GCLoopRef>(draftNode);
-    ref->condRef = payloadGraphIndexOf(cond);
-    ref->bodyRef = payloadGraphIndexOf(body);
 }
 
 GCGraph *GraphDraft::encode(const std::string &mangledName, const std::string &name) const {
