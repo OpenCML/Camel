@@ -972,7 +972,12 @@ class CmlPrinter {
                             node->kind == camel::runtime::GCNodeKind::Func ||
                             node->kind == camel::runtime::GCNodeKind::Call) {
                             GCGraph *callee = program_.calleeOf(*candidate, ref);
-                            if (callee != nullptr && effectful_[callee]) {
+                            // A call through a function value has no graph the printer can read,
+                            // so nothing here can call it pure: it counts as an effect, because
+                            // dropping it is a false print (A7's `effects/writer_table_through_callee`:
+                            // `apply((x) => { counter = x }, 41)` writes the caller's `var` through
+                            // the callee, and the printed program read `0` where the source read 41).
+                            if (callee == nullptr || effectful_[callee]) {
                                 effect = true;
                                 break;
                             }
@@ -1005,7 +1010,9 @@ class CmlPrinter {
         case camel::runtime::GCNodeKind::Func:
         case camel::runtime::GCNodeKind::Call: {
             GCGraph *callee = program_.calleeOf(*graph_, ref);
-            return callee != nullptr && isEffectful(callee);
+            // A call through a function value: no graph to read, so it is an effect (see
+            // `isEffectful` for why -- printing it away loses the write it makes).
+            return callee == nullptr || isEffectful(callee);
         }
         case camel::runtime::GCNodeKind::Join: {
             const auto *body = graph_->nodeBodyAs<camel::runtime::GCJoinBody>(ref);
