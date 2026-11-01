@@ -71,3 +71,26 @@
 ```
 
 **7 个子步（2 轮 × fold/cse/dce + order），检查跑 1 次**（`std::opt` 返回时）。这 7 步走的是 `simplifyGraph` 内部的循环，不是 `applyRegisteredPass`，所以第二节的修补**不覆盖它们**。要覆盖，得让 `simplifyGraph` 每轮返回时也走 `passBoundaryViolation`——代价是每轮一次 `collectEffects`（这棵树上一个程序约 40 个效应点），在 `std::opt` 的 16 轮上限下最多 16 倍。**这一笔没做，因为它需要先量全量耗时；先补的是那条“一次都不查”的路。**
+## 四、第二笔（2026-11-02，同一页往后写）
+
+### ④ 的第二半：`std::opt` 的每个子步现在都查
+
+第一节量过：`std::opt` 一个程序跑 **7 个子步**（2 轮 × fold/cse/dce + order），边界检查**跑 1 次**（`std::opt` 返回时）。第二笔把检查接在**每个子步返回的地方**——`rewriteReachableGraphs`（`src/passes/opt/generic/rewrite.cpp`），fold、cse、algebra、dce、order 全部从这里过，`session.commit()` 之后调 `checkPassBoundary(context, passName, *program, *committed)`。同一个函数，**第三个调用点**；它自己只多做一件事：把“改动前的程序”走一遍 `collectEffects`（管线那两处已经有这份读数，所以不重算）。
+
+**代价**：每步多一次程序遍历（效应点收集），`std::opt` 一轮多 5 次。全量 fast 层仍然 `fail 0`（`[SUMMARY] total: 8358, pass: 8346, fail: 0`），门没有放宽任何一格。
+
+**没有用例能红它，这句话要写在明处**：这个检查拦的是 `std::opt` 自己的重写步（fold/cse/dce/order），而它们由规则与 draft 事务产出，**case 文件里没有入口能喂给它一张排错顺序的图**——能触发它的只有“某条规则把效应挪过了另一个效应”，那不是用例，是规则自己的 bug，届时诊断会以 `PassInternalError` 点名 `std::opt::fold`/`cse`/`dce`/`order`。所以这一格我给的是**检查 + 无红可用例的解释**，而不是假装有一个红。第一节那条 `pass_guard.nested_break` 仍是 ④ 前半（`applyRegisteredPass` 那条路）的红。
+
+### ②/⑤ `var` 与句柄：补不了，理由写在这里（不是“暂时没做”）
+
+身份问题，不是工作量问题：环境资源的身份是**名字**，两张图上的 `"stdout"` 是同一个资源；`var`、句柄、对象的身份是**位置**，只在一张图内有意义。要在跨图的效应表里比较它们，得先有“哪两个 `var` 是同一个变量”的判据，而那正是 `108` 这类指针身份在图之间**不存在**的东西——拿它去配对，会报出程序从来没排过的顺序，比不查更坏。
+
+**窄版本可以做的**（但我没做，因为要设计而不是补一行）：只在同一张图内比非环境资源，键写成“图 id + 资源名”（`waitsFor` 已经要求 `earlier.graph == later.graph`）。它要改 `collectEffects` 的取种条件（现在只收 `Ambient`），全量会变慢，并需要一个新的“同图资源”判据；这是下一笔的事，页里先记着。
+
+### ③ 非根图的入口出口：补不了，理由在 `entryExitViolation` 原处
+
+模块自留的图（规则库、抽出来的体）**不必能单独跑**，所以“所有图都要有入口出口”这条承诺本身就是错的；能查的是“程序自己的那张图”，代码一直是这么做的，注释现在也这么说。要查全部图，得先有“哪些图必须能跑”的判据——那是设计问题。
+
+### 这一轮的一处自伤（记在这里，因为它和“仪器”有关）
+
+`std::opt` 那一笔第一次进闸门时红了 `docs.headers.canonical`：我把 `#include` 插在版权头**上面**，两行头后面没有空行。同时 `scripts/headers.mjs --check` 还报了两份我上一轮用 PowerShell 追加过的文件——**CRLF**：Windows 上 `Add-Content` 写的是 CRLF，仓库要 LF。`node scripts/headers.mjs --fix` 之后 `--check` 全绿（“every one of 1525 member files carries the two-line header”）。**教训**：在这台 Windows 上改 C++ 文件，行尾与文件头都得当作被检查的东西，不是编辑器的事。
