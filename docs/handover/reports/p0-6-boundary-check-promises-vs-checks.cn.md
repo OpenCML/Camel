@@ -94,3 +94,8 @@
 ### 这一轮的一处自伤（记在这里，因为它和“仪器”有关）
 
 `std::opt` 那一笔第一次进闸门时红了 `docs.headers.canonical`：我把 `#include` 插在版权头**上面**，两行头后面没有空行。同时 `scripts/headers.mjs --check` 还报了两份我上一轮用 PowerShell 追加过的文件——**CRLF**：Windows 上 `Add-Content` 写的是 CRLF，仓库要 LF。`node scripts/headers.mjs --fix` 之后 `--check` 全绿（“every one of 1525 member files carries the two-line header”）。**教训**：在这台 Windows 上改 C++ 文件，行尾与文件头都得当作被检查的东西，不是编辑器的事。
+
+## 五、两条关于仪器的规矩（2026-11-02 夜里挣来的，写在这里因为这一页就是量这些的地方）
+
+1. **打印、守卫、探针的校验要走 `libcamel.so`，不是 `bin/camel`。** `src/runtime/draft.cpp` 这类代码编进 `.so`：在 `bin/camel` 上加打印/守卫，量出来恒 0，于是得出"没编进去"的**假阴**——反过来的假阳也一样。
+2. **加完守卫或打印，先 `git grep -c` 确认源码里确实有，再跑。** 今晚三次"没生效"都发生在这一步之前：改的是另一个同名的位置、或者改的树不是正在跑的那棵。**先确认改在源码里，再确认跑的是这棵树，最后才是读那个数。**
