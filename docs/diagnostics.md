@@ -662,7 +662,21 @@ None: choice: the condition was meant as a comparison or as an assignment, and t
 To compare, write '==': if x == 1 then ...
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/syntax/assignment_in_condition.cml`, run as `camel test/cases/parse/syntax/assignment_in_condition.cml`)
+
+```camel
+// `=` assigns; it is not the comparison a condition asks for, and a condition that assigns is
+// almost always a comparison written one `=` short. The parser refuses it at the `=` rather than
+// reading it as an assignment or as `==`, and names the operator to write instead.
+
+func main(): int sync {
+    let x: int = 1
+    if x = 1 then
+        println('one')
+    end
+    return 0
+}
+```
 
 ### KeywordAsIdentifier
 

@@ -389,3 +389,18 @@ expect_output_contains = ["Unexpected 'of'; expected '='."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+
+[[tests]]
+name = "syntax.assignment_in_condition"
+desc = "A condition that assigns is refused at the '=': the two operators are written differently, and a condition is where the difference matters. The report names the operator to write instead, and the parser does not guess which of the two the writer meant."
+kind = "negative"
+case = "../../../cases/parse/syntax/assignment_in_condition.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::AssignmentInCondition"
+expect_diagnostic_code = "0x02000005"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 10
+expect_output_contains = ["'=' assigns; it cannot be used in the condition of an 'if'.", "To compare, write '==': if x == 1 then ..."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
