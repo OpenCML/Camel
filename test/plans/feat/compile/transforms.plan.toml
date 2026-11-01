@@ -155,12 +155,12 @@ timeout_ms = 20000
 # The derivative as a library (design 4.4): the surface is `vjp`/`grad`/`with_grad`, and the middle
 # step of `transpose(split(reinterp<jvp>(f)))` is `split`.
 #
-# All three steps are written now -- `jvp` lifts every `float` parameter, `split` builds its two
-# halves, `transpose` walks a function backwards -- and what the composition still lacks is the
-# last shape: `transpose` takes a function of one `float` parameter, and the backward half it has to
-# walk takes the residuals first and the seeds after them (`(res, dx, dy) => value`), so the pair
-# `split` hands back has no call to `transpose` at all. The refusal is still the right shape: at the
-# line of `stdlib/vjp.cml` that composes the transform, naming the types it takes and does not find.
+# All three steps are written and the assembly is now written out too: `jvp` lifts every `float`
+# parameter, `split` answers the pair of halves, and `stdlib/vjp.cml` takes the pair apart and hands
+# the linear half to `transpose`. What the composition still lacks is that half's type: `transpose`
+# walks a function of one `float` parameter, and the half it is given takes the residuals first and
+# the seeds after them (`(res, dx, dy) => value`). The refusal is still the right shape: at the line
+# of `stdlib/vjp.cml` that composes the transform, naming the type it takes and does not find.
 #
 # `have-library-vjp.mjs --missing` is the same behaviour probe asked the other way round: it is 0
 # while the composition does not build, so this entry retires itself the day it does -- the refusal
@@ -168,7 +168,7 @@ timeout_ms = 20000
 # library land.
 [[tests]]
 name = "vjp_api.names_the_missing_step"
-desc = "`vjp(f)` is `transpose(split(reinterp<jvp>(f)))` written in `stdlib/vjp.cml`. The middle step is declared as an operator with no implementation, so a call is refused at the line of the library that composes it -- not at the `vjp(f)` call in the program, and not in a sentence of the form `not implemented yet`, which sends the reader to no line at all. Today the refusal names `transpose`, because `transpose` is real and `split` still stands in with a shape it does not take. The run exits non-zero and prints no value."
+desc = "`vjp(f)` is `transpose(split(reinterp<jvp>(f)))` written in `stdlib/vjp.cml`. The composition is assembled there and one step of it cannot be built, so a call is refused at the line of the library that composes it -- not at the `vjp(f)` call in the program, and not in a sentence of the form `not implemented yet`, which sends the reader to no line at all. Today the refusal names `transpose`, and it names the same call in both declarations the stand-in spells (a function of one parameter and of two): the wall is a shape, not an arity. The run exits non-zero and prints no value."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_missing_step.cml"
 args = ["${case}", "${backend}"]
@@ -176,7 +176,7 @@ backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 skip_unless = ["node", "test/tools/have-library-vjp.mjs", "--missing"]
 expect_exit = 1
-expect_output_contains = ["stdlib/vjp.cml:33:", "No matching function found", "<transforms:transpose>"]
+expect_output_contains = ["stdlib/vjp.cml:47:", "stdlib/vjp.cml:59:", "Invalid call to 'transpose'"]
 expect_output_not_contains = ["not implemented", "尚未实现", "unimplemented"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
