@@ -272,7 +272,7 @@ bool buildTransposeMember(
                     continue;
                 }
                 Type *const portType = bundlesResiduals ? function->funcType()->normTypeAt(0)
-                                                        : Type::Float64();
+                                                        : function->funcType()->normTypeAt(i);
                 const gc_node_ref_t port =
                     draft.addPortNode(portType, draft.allocateRuntimeSlot(portType));
                 draft.appendNormPort(port);
