@@ -8,6 +8,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/tangent_space.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/parse/ast/rule_head.h"
 #include "camel/runtime/draft.h"
@@ -378,22 +379,30 @@ FunctionType *jvpSignature(FunctionType *function) {
     if (function == nullptr) {
         return nullptr;
     }
-    Type *result = function->exitType();
-    if (result != Type::Float64()) {
+    // What a tangent's type is belongs to the value's type, not to this function: `tangentSpaceOf`
+    // is the one answer (camel/core/tangent_space.h), and a float, an array of floats and a tuple of
+    // them are each their own space. A result with no tangent space -- an `int`, a `string` -- has
+    // nothing to differentiate and is refused here, which is the same refusal as before for every
+    // type that was refused, now asked once instead of written out per type.
+    const camel::core::TangentSpaceAnswer resultSpace =
+        camel::core::tangentSpaceOf(function->exitType());
+    if (!resultSpace.hasSpace()) {
         return nullptr;
     }
-    auto *lifted = TupleType::create(std::vector<Type *>{Type::Float64(), Type::Float64()});
+    auto *lifted = TupleType::create(std::vector<Type *>{function->exitType(), resultSpace.space});
     // Every parameter becomes two parameters, the value and its tangent: `jvp(f)(2.0, 1.0)` passes
     // two numbers, so the graph reads two ports. Handing the pair in as one tuple would need a node
     // that takes it apart, and the only such node -- `Dref` -- belongs to graph construction and is
     // refused outright in a runtime graph (src/runtime/graph.cpp).
     camel::core::type::param_vec_t params;
     for (size_t i = 0; i < function->normTypesCount(); ++i) {
-        if (function->normTypeAt(i) != Type::Float64()) {
+        Type *parameter = function->normTypeAt(i);
+        const camel::core::TangentSpaceAnswer answer = camel::core::tangentSpaceOf(parameter);
+        if (!answer.hasSpace()) {
             return nullptr;
         }
-        params.emplace_back(Type::Float64(), false);
-        params.emplace_back(Type::Float64(), false);
+        params.emplace_back(parameter, false);
+        params.emplace_back(answer.space, false);
     }
     if (params.empty()) {
         return nullptr;
