@@ -152,3 +152,18 @@ A/B 把三处的 `staticFunctionArg` 置为 `-1`：`transpose` 回到 `TRANSPOSE
 
 这三条不是"以后再说"，是"谁来做"：前两条是 `lit2` 的编译期实例化，第三条随它一起改。
 
+**入口一共九个，其中两个今天静默算错数（2026-11-02 实测，探针用完即删）**：检查 `test/tools/check-transform-entry-points.mjs` 从源码里读
+`readsGraphs = true` 的 `transforms`/`autodiff` 算子，得到九个入口；名单在 `modules/transforms/entry-points.tsv`，
+每一行要么 `declared`（并由脚本核对源码里真有 `staticFunctionArg`），要么 `undeclared` 且写明今天的行为。结论没有写成"全都合规"，
+写成"每个入口都有交代"。两个漏声明的入口拿捕获闭包时会**给出错数且毫无提示**（无诊断、无 `skip=`）：
+- `transforms:vmap`：`let h = (y: float) => y * x`，`x = 3.0`，`vmap(h)([2.0, 4.0])` 应为 `6.0 + 12.0 = 18.0`，实测 **`20.0`**；
+  把捕获值换成 `x = 5.0` 仍是 **`20.0`**（即 `2*2 + 4*4`）——元素落进了闭包的 `with` 位、捕获值被丢掉，不是巧合。
+- `transforms:remat`：同一个 `h`，`remat(h)(2.0)` 应为 `6.0`，实测 **`0.0`**，行是
+  `REINTERP remat function=__g_49__ in_recompute=0 out_recompute=1 graph=50`。
+复现（各把这个形状存成 `.cml`）：`camel vmap_probe.cml std::nvm` → `20.0`；`camel remat_probe.cml std::nvm` → `0.0`。
+**归因**：`vmap` 的错在"元素顶替了闭包的 `with` 位"，所以补 `staticFunctionArg` 是对症；`remat` 的 `0.0` **未归因**——
+它要么本该支持捕获闭包（kernel 丢了捕获），要么本该拒绝（沉默就是缺陷），两边都轮不到 `0.0`，但**哪一边是后面单独一轮的事**，
+这一轮只补"拒绝"这个安全的一侧。两个错数只记在 `entry-points.tsv` 的 `Measured` 里，**没有**写成任何用例的期望——
+把 `20.0` 钉进断言等于把缺陷变成规格；用例断的是补上之后的拒绝原文。`autodiff:grad` 一族则登记为"今天无事可做"：
+它先被 `NotDifferentiable`（`it has no 'with' parameter`）挡掉，参数那条规则轮不到说话。
+

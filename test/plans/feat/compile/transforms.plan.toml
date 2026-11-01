@@ -794,12 +794,49 @@ timeout_ms = 120000
 # than living in a comment nobody reads.
 [[tests]]
 name = "entry_points.the_rule_is_declared_where_it_applies"
-desc = "Every transform entry point -- an operator of `transforms` or `autodiff` whose traits say `readsGraphs = true` -- has to say what it does with the function argument it is handed, and the alternatives are checked differently: `declared` must be a real `CallSpec::staticFunctionArg` in the sources with an argument index >= 0 (the A/B that comments it out, or sets it to -1, is red naming the operator), and `undeclared` is printed with the measurement that makes it a decision held open. Today: nine entry points, three declared (`transpose`, `jvp`, `split`) and six recorded as undecided, two of which answer silently wrong numbers -- `transforms:vmap` answers 20.0 where the capture says 18.0, `transforms:remat` answers 0.0 where the capture says 6.0 -- and four of which (`autodiff:grad` and its two-parameter and `with_grad` forms) refuse earlier on their own rule, `NotDifferentiable`. The reading is one line per undecided operator plus the count, so a new entry point or a dropped declaration is a red line naming it."
+desc = "Every transform entry point -- an operator of `transforms` or `autodiff` whose traits say `readsGraphs = true` -- has to say what it does with the function argument it is handed, and the alternatives are checked differently: `declared` must be a real `CallSpec::staticFunctionArg` in the sources with an argument index >= 0 (the A/B that comments it out, or sets it to -1, is red naming the operator), and `undeclared` is printed with the measurement that makes it a decision held open. Today: nine entry points, five declared (`transpose`, `jvp`, `split`, `vmap`, `remat`) and four recorded as undecided -- `autodiff:grad` and its two-parameter and `with_grad` forms, which refuse earlier on their own rule, `NotDifferentiable`, so the argument rule has nothing to add to them today. `vmap` and `remat` were the two the rule reached and nobody had declared: measured 2026-11-02 they answered silently wrong numbers for a capturing closure (`20.0` where the capture says `18.0`, `0.0` where it says `6.0`), and both now refuse where the argument is written -- the numbers are recorded in `modules/transforms/entry-points.tsv` and nowhere asserted, because an expected value of `20.0` would make the defect a specification. The reading is one line per undecided operator plus the count, so a new entry point or a dropped declaration is a red line naming it."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/check-transform-entry-points.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["[entry-points] total: 9, declared: 3, undeclared: 6", "[entry-points] ok: 9 transform entry points, 3 declared and verified, 6 recorded as not declared", "transforms:vmap -- Measured: answers 20.0", "transforms:remat -- Measured: answers 0.0", "autodiff:grad -- Measured: refused earlier by NotDifferentiable"]
+expect_stdout_contains = ["[entry-points] total: 9, declared: 5, undeclared: 4", "[entry-points] ok: 9 transform entry points, 5 declared and verified, 4 recorded as not declared", "autodiff:with_grad -- Same entry as grad with the weights passed beside it", "autodiff:grad -- Measured: refused earlier by NotDifferentiable"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
+[[tests]]
+name = "vmap.argument_is_not_a_function_it_can_name"
+kind = "negative"
+case = "../../../cases/compile/transforms/vmap_arg_not_a_static_function.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 1
+expect_output_not_contains = ["skip="]
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::TransformArgumentIsNotAKnownFunction', input.diagnostics[0].name)
+assert(input.diagnostics[0].code === '0x03000209', input.diagnostics[0].code)
+assert(input.diagnostics[0].line === 27 && input.diagnostics[0].column === 24, JSON.stringify(input.diagnostics[0]))
+assert(input.normalized.stdout.includes("'vmap' is applied to a closure that captures a value"), input.stdout)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "remat.argument_is_not_a_function_it_can_name"
+kind = "negative"
+case = "../../../cases/compile/transforms/remat_arg_not_a_static_function.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 1
+expect_output_not_contains = ["skip="]
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::TransformArgumentIsNotAKnownFunction', input.diagnostics[0].name)
+assert(input.diagnostics[0].code === '0x03000209', input.diagnostics[0].code)
+assert(input.diagnostics[0].line === 26 && input.diagnostics[0].column === 23, JSON.stringify(input.diagnostics[0]))
+assert(input.normalized.stdout.includes("'remat' is applied to a closure that captures a value"), input.stdout)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

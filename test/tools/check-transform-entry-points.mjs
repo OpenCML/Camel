@@ -1,10 +1,14 @@
+#!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Every transform entry point decides what it does with a function argument, and the decision is checked.
 //
 // A transform builds a graph out of the graph of the function value it is handed, which is why the
-// argument has to be a function the compiler can name before the program runs. Three operators declare
-// that rule today (`transforms:transpose`, `transforms:jvp`, `transforms:split`), and a rule that lives
-// in three places is a rule someone forgets in the fourth -- so the set of entry points is *read out of
-// the sources*, not written down in this file:
+// argument has to be a function the compiler can name before the program runs. Five operators declare
+// that rule today (`transforms:transpose`, `transforms:jvp`, `transforms:split`, `transforms:vmap`,
+// `transforms:remat`), and a rule that lives in five places is a rule someone forgets in the sixth -- so
+// the set of entry points is *read out of the sources*, not written down in this file:
 //
 //   - an entry point is an operator of `transforms` or `autodiff` whose traits say `readsGraphs = true`;
 //   - every entry point must appear in `modules/transforms/entry-points.tsv`, and the file must say for
@@ -16,6 +20,14 @@
 // The other modules' graph-reading operators (`tiles`, `onnx`) are out of scope by construction: they
 // read a graph to compile or export it, they are handed no function value whose name could be missing,
 // and the scan below does not look at them.
+//
+// A false positive is worth more attention than a miss: a miss lets one operator through, while a false
+// positive teaches the reader to look past the check, and then the check is worth nothing at all. The
+// first version of the scan read a window of six lines around `readsGraphs = true`, which reported
+// `autodiff:stop_gradient` -- a `{.pure = true, .elementwise = false}` operator whose declaration sits
+// six lines below the loop that marks `grad` and its siblings -- so the scan now reads the statement
+// that carries `readsGraphs = true` and, only when that statement has no uri of its own, the `for
+// (... : { names })` header above it. Both shapes are in `modules/autodiff/operators.cpp`.
 //
 //   node test/tools/check-transform-entry-points.mjs
 //

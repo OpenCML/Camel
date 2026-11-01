@@ -184,6 +184,13 @@ void registerVmapOperatorMetadata() {
     camel::core::OperatorTable::instance().declare("transforms", {{"vmap", false}});
     camel::core::OperatorTable::instance().set(
         "transforms:vmap", {.pure = false, .readsGraphs = true});
+    // It builds the batched graph out of the graph of the function value it is handed, so the argument
+    // has to name one before the program runs -- the same fact `jvp`, `transpose` and `split` declare,
+    // and the one this operator was missing: measured 2026-11-02, a closure capturing `x` was accepted
+    // and answered 20.0 where the capture says 18.0 (and 20.0 again at another capture value), silently
+    // -- the batch element took the closure's `with` slot and the capture was dropped.
+    camel::core::OperatorTable::instance().declareCallSpec(
+        "transforms:vmap", {.staticFunctionArg = 0});
 }
 
 } // namespace camel::transforms
