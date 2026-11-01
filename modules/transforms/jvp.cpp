@@ -199,13 +199,10 @@ JvpGraph buildJvpGraph(
         os << "REINTERP jvp function=" << function->name() << " skip=signature\n";
         return JvpGraph{};
     }
-    // One parameter, for now: with two the exit would need a way to combine two lifted pairs into
-    // the one lifted result, and that is a node in the body -- step 3's business, not this one's.
-    if (function->funcType()->normTypesCount() != 1) {
-        os << "REINTERP jvp function=" << function->name()
-           << " skip=params " << function->funcType()->normTypesCount() << "\n";
-        return JvpGraph{};
-    }
+    // A function of any number of `float` parameters: every one of them becomes a pair, so the
+    // lifted signature is `(v1, d1, ..., vn, dn) => (value, tangent)`. The tangent of the result is
+    // the sum of the directions the caller seeded -- one run reads one direction, and a caller that
+    // wants `df/dx` and `df/dy` separately runs it twice with (1, 0) and (0, 1).
 
     camel::runtime::GraphDraftGroup group(context, program);
     const GraphId member = group.reserve(
@@ -248,16 +245,32 @@ bool liftGraph(
         auto &transaction = group.transaction(member);
         auto &draft       = transaction.edit();
         draft.setFuncType(signature);
-        const gc_node_ref_t value =
-            draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
-        const gc_node_ref_t tangent =
-            draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
-        // A port node is a node; the graph's *parameters* are the port nodes it lists as its norm
-        // ports, and a call is checked against that list ("has 0 norm ports" is how a graph with
-        // the two nodes but no entries in the list refused the call). The lifted signature has two
-        // parameters -- the value and its tangent -- and these are the two the caller passes.
-        draft.appendNormPort(value);
-        draft.appendNormPort(tangent);
+        // One pair of ports per parameter of `f`, in its order: the value the caller passes and the
+        // seed of that direction. A port node is a node; the graph's *parameters* are the port nodes
+        // it lists as its norm ports, and a call is checked against that list ("has 0 norm ports" is
+        // how a graph with the nodes but no entries in the list refused the call) -- so the lifted
+        // signature's 2n parameters are these 2n ports, in the same order.
+        const size_t parameterCount = function->funcType()->normTypesCount();
+        std::vector<gc_node_ref_t> valuePorts;
+        std::vector<gc_node_ref_t> tangentPorts;
+        valuePorts.reserve(parameterCount);
+        tangentPorts.reserve(parameterCount);
+        for (size_t i = 0; i < parameterCount; ++i) {
+            const gc_node_ref_t value =
+                draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
+            draft.appendNormPort(value);
+            valuePorts.push_back(value);
+            const gc_node_ref_t tangent =
+                draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
+            draft.appendNormPort(tangent);
+            tangentPorts.push_back(tangent);
+        }
+        // Which parameter a port of the original body is, by its place in that list.
+        std::unordered_map<gc_node_ref_t, size_t> parameterOf;
+        const std::span<const gc_node_ref_t> originalPorts = function->normPorts();
+        for (size_t i = 0; i < originalPorts.size(); ++i) {
+            parameterOf[originalPorts[i]] = i;
+        }
         // Step 3, first layer: the body is copied node by node. A port reads the caller's value, a
         // constant is written again with the same value, and a primitive keeps its operator and gets
         // its inputs from the copies. Nothing is differentiated here -- no rule closure is built --
@@ -405,11 +418,14 @@ bool liftGraph(
                 region != 0 && region < liftedRegion.size() ? liftedRegion[region] : 0);
             switch (node->kind) {
             case rt::GCNodeKind::Port: {
-                // The lifted graph has one ordinary parameter, so the one port the original body
-                // reads is the value the caller passes. Its tangent is the second parameter.
-                if (!function->normPorts().empty() && function->normPorts().front() == ref) {
-                    copyOf[ref]    = value;
-                    tangentOf[ref] = tangent;
+                // A parameter of the body is one of the caller's pairs: the value is the first port
+                // of that pair, the tangent -- the seed of that direction -- is the second. The
+                // chain then adds every direction's contribution, so the exit is the derivative in
+                // the direction the caller seeded.
+                const auto parameter = parameterOf.find(ref);
+                if (parameter != parameterOf.end() && parameter->second < valuePorts.size()) {
+                    copyOf[ref]    = valuePorts[parameter->second];
+                    tangentOf[ref] = tangentPorts[parameter->second];
                     copied[ref]    = true;
                     ++copiedKinds;
                     break;

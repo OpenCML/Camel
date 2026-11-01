@@ -153,18 +153,15 @@ expect_stdout_not_contains = ["5.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 # The derivative as a library (design 4.4): the surface is `vjp`/`grad`/`with_grad`, and the middle
-# step of `transpose(split(reinterp<jvp>(f)))` is not implemented. What is checked is the *shape* of
-# the refusal -- which step, and where -- because a name that answers "not implemented yet" leaves
-# the reader nowhere. This is the assertion that has to be replaced by numbers the day the step
-# lands; the skipped test below is where those numbers go.
+# step of `transpose(split(reinterp<jvp>(f)))` is `split`.
 #
-# The refusal moved once `transpose` stopped being a stand-in: it is a real transform now, and the
-# shape `split` stands in with -- a lifted function `(float, float) => (float, float)` -- is not the
-# shape `transpose` takes (a function of one `float` parameter). So the composition is refused when
-# the call is typed, still at the line of `stdlib/vjp.cml` that composes it and still in terms of a
-# transform rather than "not implemented". When `split` returns the shape `transpose` takes, the same
-# test reads as a runtime refusal naming `split`; the two readings are one step apart, and this line
-# is where that step will show up.
+# All three steps are written now -- `jvp` and `transpose` are operators of the `transforms` module,
+# `split` builds its two halves -- and what the composition still lacks is the assembly. `transpose`
+# takes a function of one `float` parameter; `split` hands back the *pair* of halves, so the pair is
+# what arrives at `transpose` and the call does not type. The refusal is still the right shape: at
+# the line of `stdlib/vjp.cml` that composes the transform, naming `transforms:transpose` and the
+# type it wants. That is what `names_the_missing_step` reads, and it is one step from the numbers:
+# the day the pair is taken apart for `transpose`, the same test reads numbers instead.
 [[tests]]
 name = "vjp_api.names_the_missing_step"
 desc = "`vjp(f)` is `transpose(split(reinterp<jvp>(f)))` written in `stdlib/vjp.cml`. The middle step is declared as an operator with no implementation, so a call is refused at the line of the library that composes it -- not at the `vjp(f)` call in the program, and not in a sentence of the form `not implemented yet`, which sends the reader to no line at all. Today the refusal names `transpose`, because `transpose` is real and `split` still stands in with a shape it does not take. The run exits non-zero and prints no value."
@@ -174,24 +171,26 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 1
-expect_output_contains = ["stdlib/vjp.cml:33:", "Invalid call to 'transpose'"]
+expect_output_contains = ["stdlib/vjp.cml:33:", "No matching function found", "<transforms:transpose>"]
 expect_output_not_contains = ["not implemented", "尚未实现", "unimplemented"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 # The numbers the day the steps land. `f(x) = x*x*x`, so `vjp(f)(3.0, 1.0)` is `(27.0, 27.0)` and
 # `grad(f)(3.0)` is `27.0`; the three-step composition is checked against the derivative written by
-# hand, not against the C++ autodiff. Skipped, not red, while `split` has no implementation: a skip
-# says "not yet", a red says "wrong", and a library that is honestly not written is the first.
+# hand, not against the C++ autodiff. Skipped, not red, while the composition does not run -- today
+# the pair `split` hands back is not the function `transpose` walks (test/tools/have-vjp.mjs is the
+# question, and it is the composition itself that answers): a skip says "not yet", a red says
+# "wrong", and a library whose last step is honestly not assembled is the first.
 [[tests]]
 name = "vjp_api.gradient_when_the_steps_land"
-desc = "With `split` and `transpose` implemented, `vjp(f)(3.0, 1.0)` on `f(x) = x*x*x` reads `(27.0, 27.0)` and `grad(f)(3.0)` reads `27.0`: the library's three-step composition against the derivative written by hand. The test is skipped while `modules/transforms/split.cpp` does not exist, so a not-yet-written library is a skip and never a red."
+desc = "With `split` and `transpose` implemented, `vjp(f)(3.0, 1.0)` on `f(x) = x*x*x` reads `(27.0, 27.0)` and `grad(f)(3.0)` reads `27.0`: the library's three-step composition against the derivative written by hand. The test is skipped while the composition does not run (test/tools/have-vjp.mjs), so a not-yet-assembled library is a skip and never a red."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_gradient.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
-skip_unless = ["node", "-e", "process.exit(require('fs').existsSync('modules/transforms/split.cpp') ? 0 : 1)"]
+skip_unless = ["node", "test/tools/have-vjp.mjs"]
 expect_exit = 0
 expect_stdout_contains = ["27.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -202,17 +201,15 @@ timeout_ms = 20000
 # and it is the *compiler's* type: no signature names it (`stdlib/signatures/transforms.cml` writes
 # it out in a comment, as the author wrote it), so what a test can read is what the halves are worth,
 # not the type's spelling. `f(x) = x*x*x` at 3: the first half gives `27.0` and the residuals, the
-# second turns them and the cotangent `1.0` back into `27.0`. Skipped while `split` has no
-# implementation; the numbers are already written down.
+# second turns them and the cotangent `1.0` back into `27.0`.
 [[tests]]
 name = "vjp_api.split_halves"
-desc = "`split(jvp(f))` gives the two halves of `Lift<T> = (T, Tangent<T>)`: the first takes the ordinary parameters and answers `(ResultOf<F>, ResidualsOf<F>)` -- for `f(x) = x*x*x` at 3, the value `27.0` and the residuals in program order -- and the second takes those residuals and the cotangent `1.0` and answers `27.0`. `ResidualsOf<F>` is the compiler's type function and appears in no signature; the test reads the numbers, not its spelling. Skipped while `modules/transforms/split.cpp` does not exist."
+desc = "`split(jvp(f))` gives the two halves of `Lift<T> = (T, Tangent<T>)`: the first takes the ordinary parameters and answers `(ResultOf<F>, ResidualsOf<F>)` -- for `f(x) = x*x*x` at 3, the value `27.0` and the residuals in program order -- and the second takes those residuals and the cotangent `1.0` and answers `27.0`. `ResidualsOf<F>` is the compiler's type function and appears in no signature; the test reads the numbers, not its spelling."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_split_halves.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "stdout"]
-skip_unless = ["node", "-e", "process.exit(require('fs').existsSync('modules/transforms/split.cpp') ? 0 : 1)"]
 expect_exit = 0
 expect_stdout_contains = ["27.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
