@@ -316,10 +316,6 @@ TransformsModule::TransformsModule(context_ptr_t ctx) : BuiltinModule("transform
     camel::transforms::registerVmapOperatorMetadata();
     camel::transforms::registerSplitOperatorMetadata();
     camel::transforms::registerRematOperatorMetadata();
-    // The half the front end asks for while it builds a caller's graph: `jvp(f)` with `f` written
-    // where the call is. Declared here with the operators, because it is the same operator and the
-    // table it fills is the one a build asks (compile/gir/compile_time.h).
-    camel::transforms::registerCompileTimeTransforms();
     for (const auto &group : camel::transforms::operatorGroups()) {
         exportEntity(group->name(), group);
     }

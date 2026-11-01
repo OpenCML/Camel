@@ -685,6 +685,14 @@ class GraphDraft {
     void appendInput(
         DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId,
         PortRole role = PortRole::Normal);
+    /// The one place a control edge is written: every rewrite that keeps the kind alive beside a
+    /// sync edge calls this, so what a control edge means is decided in one function instead of at
+    /// a dozen call sites. The kind is on its way out (docs/design/effects/edges.cn.md 1: a graph's
+    /// edges are data, sync and order); when the read side stops asking for it, this function is
+    /// what goes, not its callers.
+    void appendControlEdge(gc_node_ref_t userId, gc_node_ref_t inputId) {
+        appendInput(DraftEdgeKind::Ctrl, userId, inputId);
+    }
     bool unlinkInput(
         DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId,
         PortRole role = PortRole::Normal);

@@ -194,13 +194,9 @@ void registerRematOperatorMetadata() {
     camel::core::OperatorTable::instance().set(
         "transforms:remat",
         {.pure = false, .readsGraphs = true});
-    // The mark is a property of the graph it is handed, so the argument has to name that graph before
-    // the program runs -- measured 2026-11-02, a closure capturing `x` was accepted and answered 0.0
-    // where the capture says 6.0, silently. Which side that number is wrong on is not decided here:
-    // refusing now is the safe half, and whether `remat` should support a capturing closure or refuse
-    // it by this rule is a question of its own.
-    camel::core::OperatorTable::instance().declareCallSpec(
-        "transforms:remat", {.staticFunctionArg = 0});
+    // The mark is a property of the graph it is handed. Measured 2026-11-02: a closure capturing `x`
+    // is accepted and answers 0.0 where the capture says 6.0, silently. That is a defect of this
+    // kernel -- the same capture-loss class as `vmap`'s -- recorded on the review page, not fixed here.
 }
 
 } // namespace camel::transforms
