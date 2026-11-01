@@ -280,7 +280,17 @@ class CmlPrinter {
             return;
         }
         collectImports();
+        // A module imported for its operators is imported whole (`import tensor`): the program
+        // does not write a name of it, and the module's declarations are what give the signs their
+        // rules. A module whose names are written is imported by name, and a module that needs both
+        // is imported whole, which brings the names in too.
+        for (const std::string &module : moduleImports_) {
+            out_ << "import " << module << '\n';
+        }
         for (const auto &[module, names] : imports_) {
+            if (moduleImports_.contains(module)) {
+                continue;
+            }
             out_ << "import { ";
             bool first = true;
             for (const std::string &name : names) {
@@ -289,7 +299,7 @@ class CmlPrinter {
             }
             out_ << " } from " << module << '\n';
         }
-        if (!imports_.empty()) {
+        if (!imports_.empty() || !moduleImports_.empty()) {
             out_ << '\n';
         }
 
@@ -358,6 +368,9 @@ class CmlPrinter {
     /// The modules whose operators the printed program calls by name, and the names it calls of each
     /// (see `collectImports`).
     std::map<std::string, std::set<std::string>> imports_;
+    /// The modules whose operators the printed program writes with a sign (see `collectImports`):
+    /// the module is imported whole, since the sign is bound to its operator by its declarations.
+    std::set<std::string> moduleImports_;
     // Constants bound before the statement that uses them. `1 + 2` written out comes back folded to
     // `3`: the front end folds an operator whose operands are both literals, so a graph that holds
     // those three nodes would come back as one. A `let` of a literal is that literal's node and
@@ -1225,7 +1238,11 @@ class CmlPrinter {
     /// The names the printed program calls, by the module that declares them: a call by name needs
     /// the name in scope, and `sum` is a name of the module `tensor` (`import { sum } from
     /// tensor`). An operator of the core (`:op/add_l`, `:io/println`) has no module to import, and
-    /// an operator written with a sign has no name to bring in.
+    /// an operator written with a sign has no name to bring in -- but the *module* still has to be
+    /// imported, because the sign is bound to its operator by the module's declaration: without
+    /// `import tensor`, `[7, 8, -9] / [1, 0, 2]` is `NoMatchingFunction`, since `/` has no rule for
+    /// `int[]` outside that module (design principles 5.1). So a module operator written with a
+    /// sign imports the module, and one written as a call imports only the name.
     void collectImports() {
         for (const GCGraph *graph : graphs_) {
             for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
@@ -1241,9 +1258,14 @@ class CmlPrinter {
                 if (colon == std::string_view::npos || colon == 0) {
                     continue;
                 }
+                const std::string module(uri.substr(0, colon));
                 const auto form = camel::core::OperatorTable::instance().callFormOf(uri);
-                if (form.has_value() && form->withCount == 0) {
-                    imports_[std::string(uri.substr(0, colon))].insert(form->name);
+                const bool byName =
+                    form.has_value() && form->withCount == 0 && form->declaredByModule;
+                if (byName) {
+                    imports_[module].insert(form->name);
+                } else {
+                    moduleImports_.insert(module);
                 }
             }
         }

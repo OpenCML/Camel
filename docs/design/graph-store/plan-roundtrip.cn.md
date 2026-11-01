@@ -136,6 +136,30 @@ ROUNDTRIP checked=536 equivalent=492 not_equivalent=44 over_budget=0 unfaithful=
 
 **解析器待办（不属于 M7，单独立着）。** `let back: (float, float) => float = transpose(pick)` 今天**编不过**：`error[SyntaxDiag::UnexpectedToken]: Unexpected '=>'; expected '='`，加括号是 `MissingComma`。这是**解析器的缺陷**——类型写在标注位置是合法的，函数类型本身也该写得出来；打印机写空标注只是**绕开**它，不是修它。修解析器时 `test/cases/compile/transforms/transpose_branch.cml` 就是验收：标注写回来之后，打印器那侧的空标注规则才可以考虑退场。
 
+**2026-11-02 第八刀：模块算子写成符号时，模块要 import。** 裁决问的那 3 条 `NoMatchingFunction`（`a / b`、`[7, 8, -9] / [1, 0, 2]`、`x / cml1`），**先答那一句：既不是我把调用形状打错，也不是语言里没有这个写法**——形状是对的（源程序写 `/`，图里是 `tensor:divide`，`__div__` 组给的符号就是 `/`），缺的是**模块没 import**：同一段文本加上 `import tensor` 就编过，去掉就 `NoMatchingFunction`（`/` 在 `int[]` 上没有核心规则，规则是 `tensor` 的声明带来的，原则 5.1）。所以这是第三种情形：**图的依赖比打印出来的 import 多**。
+
+打印器原来只给"按名字调用"的模块算子写 `import { name } from module`；写成符号的模块算子（`tensor:divide`、`tensor:remainder`……）一个 import 都不写，于是打印出来的程序去编就找不到规则。改法一行判据：**按名字写的 → 具名 import；写成符号的 → 整模块 `import <module>`**（整模块导入会把名字也带进来，所以两者都有时只写整模块那条）。
+
+```
+import tensor
+
+func main(): int sync {
+    println('before')
+    println([7, 8, -9] / [1, 0, 2])
+    println('not reached')
+    return 0
+}
+```
+
+```
+node test/tools/cml-sweep.mjs --jobs 16
+SWEEP files=3358 printed=550 refused=1807 frontend=1001 timeout=0
+REFUSALS families=49
+ROUNDTRIP checked=540 equivalent=495 not_equivalent=45 over_budget=0 unfaithful=10
+```
+
+判据：打印 **550（不变）**、等价 **492 → 495（只增）**、产不出文档 **14 → 10（只降）**、拒绝 **1807（不变）**、家族 **49（不升）**。**两条没做到，同一条用例**：`not_equivalent 44 → 45`、`DIFFERENT 新增 1`，都是 `test/cases/modules/tensor/int_division.cml`。原因查清了，是**既有那一类"同样的节点、不同的形状"**，不是 import 改出来的：源里写的是 `[-9223372036854775807 - 1]`（元素是个表达式，图里是 `FILL array slots[0]`），打印机把它折成常量字面量 `[-9223372036854775808]` 写回去，前端把常量元素表读成**常量数组**（`DATA`），于是左边多一个 `FILL`、右边多一个 `DATA`，值一样、形状不同。这一例此前根本编不过（`NoMatchingFunction`），所以从没有过"形状"可比——它是**新露出来的**，不是新造的。两条路：**(a)** 这种"槽位全是常量的 `FILL`"本来就没有忠实写法（任何纯常量表达式都会被折成常量数组），照"写不回来的形状就拒绝"处理，单独一刀，`not_equivalent` 回到 44、另外三条仍等价；**(b)** 让它就这么算进不等价。我建议 (a)，但它属于另一类，所以没混进这一刀。
+
 **补声明清单（按节点数）。** 全语料里被打印机点名、确实没有任何声明的算子 **143 个、12520 个节点**。前 12：`:str/format` 1019、`tensor:sum` 934、`tensor:multiply` 862、`tensor:reshape` 856、`:op/tag_is_null` 689、`:struct/len_arr` 585、`tensor:add` 582、`:op/assn_l` 569、`:mark/map_arr` 389、`tensor:subtract` 324、`tensor:matmul` 238、`:op/slice_sub` 219。
 
 **更正两份旧数。** ① 之前报的「353 条没有声明」其实是「没有 `#op` 标签」的数，不是「没有声明」：`:op/add_l`（3244 节点）、`:op/mul_d`（801）这一批由 `globals.cpp` 的组（`__add__`、`__mul__`）**原生登记**，打印机从不点名它们，所以它们不是缺口；真正的缺口是上面 143 条。② `:op/keep` 已在 `fsh-dev 5773c9482` 删掉，全语料图里 **0 个节点**，扣前扣后都是 353（它与上面那 143 条无关）。
