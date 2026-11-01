@@ -1,0 +1,4 @@
+func main(): int sync {
+    let n = (-2)..(-1)->reduce<(p: string, q: int): string => p, "cd">
+    return 0
+}
