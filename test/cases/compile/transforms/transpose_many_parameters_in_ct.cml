@@ -1,0 +1,21 @@
+// The same call transposed at two cotangents. A pullback is linear in the cotangent it is handed:
+// every answer is one primitive under the seed, so doubling the cotangent doubles every number.
+// At (x, w, dx, dw) = (3, 2, 1, 0) the four answers are (dw*ct, dx*ct, w*ct, x*ct), which is
+// (0, 1, 2, 3) at ct = 1 and (0, 2, 4, 6) at ct = 2 -- the operands' two, which the calling half
+// drops, and the tangents' two, which it keeps.
+//
+// One seed would agree with a pullback that forgot the cotangent and answered the derivatives
+// themselves only because the derivative is what ct = 1 asks for; the pair does not.
+import rulesets.transpose
+import { transpose } from transforms
+import { mul_tangent } from autodiff
+
+func mt(x: float, w: float, dx: float, dw: float): float {
+    return mul_tangent(x, w, dx, dw)
+}
+
+func main(): int sync {
+    println(transpose(mt)(3.0, 2.0, 1.0, 0.0, 1.0))
+    println(transpose(mt)(3.0, 2.0, 1.0, 0.0, 2.0))
+    return 0
+}

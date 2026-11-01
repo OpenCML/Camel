@@ -10,12 +10,11 @@
  * `f` takes the two parameters of the author's comparison on purpose. The wall is inside the
  * library, not here: `split` hands back the pair of halves -- the forward one, then the one that
  * reads the residuals and the cotangent -- and the walk `transpose` runs refuses a construct inside
- * that second half, so the pullback raises where the library composes it. The library is compiled
- * against its own declaration, so this fails on the module's own line and the probe only carries
- * that failure out.
+ * that second half, so the pullback raises where the library composes it. No ruleset import lives
+ * here either: `stdlib/vjp.cml` imports the two it composes, so this program's only import is the
+ * library, and a ruleset that stopped being imported is the library's red and not this file's.
  */
 
-import rulesets.jvp
 import { vjp } from vjp
 
 func f(x: float, y: float): float {

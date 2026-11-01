@@ -6559,12 +6559,11 @@ scalar (it gives the result and the pullback from the cotangent of the result to
 and `jvp` is forward mode (the result and its tangent along a direction); both land with the
 autodiff lane, not before they work.
 
-The transform that trades memory for recomputation -- the same values, with the annotated section
-recomputed in the backward pass instead of kept -- is named `remat` here. JAX calls it
-`jax.checkpoint` and, by its other name, `jax.remat`; in this tree "checkpoint" is the persistence
-module `stdlib/ckpt.cml` and stays that, so the transform takes the other word and there is no
-second name for a reader to disambiguate. It is not implemented yet: the name is not a value, and
-a call to it is refused like any other name that does not resolve.
+The memory-for-recomputation transform is named `remat` here -- JAX's `jax.checkpoint` under its
+other name; in this tree "checkpoint" is the persistence module `stdlib/ckpt.cml` and stays that,
+so the transform takes the other word and there is no second name for a reader to disambiguate.
+What a program reads of it is its value: `remat(f)` gives `f`, so a call through it is a call of
+the same function and no number moves.
 
 `stop_gradient` marks a value as a constant, and the mathematics of the local rules is written
 here, where the library keeps one statement of it: `add_tangent` and its siblings are the tangent
@@ -6638,6 +6637,19 @@ Gives its argument unchanged and cuts the gradient at this point: a value passed
 argument's own type.
 
 - Example: `stop_gradient(3.0)` gives `3.0`
+
+#### `remat`
+
+```camel
+remat: (f: F) => F pure when is_function::<F>()
+```
+
+Gives `f` back: a call through `remat` is a call of the same function, so adding or removing it
+moves no number and no gradient. That is the whole of what the name does to a value, and it is
+what a program reads of it.
+
+- Example (a fragment, not compiled): `let remembered = remat(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
 
 ### The local rules of the scalar arithmetic
 

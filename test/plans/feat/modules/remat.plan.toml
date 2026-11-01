@@ -1,0 +1,31 @@
+id = "modules.remat"
+order = 364
+tier = "fast"
+tags = ["feat", "modules", "autodiff", "remat"]
+
+# `remat` names the memory-for-recomputation transform: JAX spells it `jax.checkpoint`, whose other
+# name is `jax.remat`; in this tree "checkpoint" is the persistence module `ckpt` (stdlib/ckpt.cml),
+# so the transform takes the other word (author's ruling of 2026-10-30,
+# docs/handover/reviews/questions-2026-10-30-jax.md J8).
+#
+# What a value reads of it is the identity, and that is the whole of what a printed number can pin:
+# the two paths must print the same three numbers. What a pass stores is a reading of the graph, not
+# of the output, so no case here asserts a count; the count is `split`'s to report and
+# `who-owns-the-count-of-a-splits-residuals` in docs/handover/questions/ is where it is argued.
+#
+# The name's arrival is also the tripwire of `modules.jax_alignment`: `remat` was pinned there as
+# a refused import, and that case flips to the value it prints when this module exports the name.
+
+[[tests]]
+name = "remat.identity"
+desc = "`remat(f)` is `f`: for `f(x, y) = x * x * y` at x = 3, y = 2 both paths print 18.0, df/dx = 12.0 and df/dy = 9.0, the gradient read through `grad` on the two `with`-parameter orders. The value has to be identical digit for digit -- a transform that moved a number would not be a recomputation of the same graph."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/remat_identity.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "remat plain value=18.0 dfdx=12.0 dfdy=9.0\nremat value=18.0 dfdx=12.0 dfdy=9.0\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

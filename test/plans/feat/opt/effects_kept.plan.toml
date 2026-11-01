@@ -121,3 +121,32 @@ case = "../../../cases/opt/effects/branch_keeps_outer_effect.cml"
 args = ["${case}", "std::opt", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "1\n3\n4\n1\n3\n3\n"
+
+# The assertion the rest of this plan cannot make: the output itself. Every entry above compares a
+# pass against the same program with no pass, on four back ends -- but each of them names the bytes it
+# expects, so an effect that goes missing shows up as a wrong line. A program whose effect is left in
+# no chain of its graph has no wrong line to show: it exits 0, its diagnostics are empty, and the
+# lines it no longer prints are simply not there. `nn.mnist` did exactly that -- `std::opt` dropped
+# `Iteration 0` -- and no plan noticed, because `nn.mnist` is run with `std::null` and compared with
+# nothing.
+#
+# So this one compares the two runs with each other instead of with a golden: same binary, same host,
+# so the numbers cancel out and the check stays true whatever the floats print as. It is a `tool =
+# "node"` test because a plan entry runs one command with one `expect_stdout_*`; comparing two runs
+# byte for byte and naming the line that went missing needs both in one process (see
+# `cases/opt/effects/opt_matches_interpreter/check.mjs`).
+[[tests]]
+name = "opt_matches_interpreter.mnist"
+desc = "`std::opt` prints what the interpreter prints, byte for byte, on `nn.mnist` -- the program where a dissolved branch left its `:io/println` in no chain and the pass silently lost output."
+kind = "behavior"
+tool = "node"
+# One backend, because the check runs the interpreter and the optimizer itself and compares them: the
+# `${backend}` of the other entries would only make it repeat that comparison four times.
+backends = ["nvm"]
+case = "../../../cases/opt/effects/opt_matches_interpreter/check.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["[EFFECTS] ok std::opt std::nvm", "[EFFECTS] ok the optimizer prints what the interpreter prints"]
+expect_output_not_contains = ["[EFFECTS] RED", "[EFFECTS]   lost:"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
