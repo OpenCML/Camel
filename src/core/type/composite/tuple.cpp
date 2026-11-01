@@ -185,6 +185,18 @@ TupleType *TupleType::cell(Type *valueType) {
         }));
 }
 
+TupleType *TupleType::residuals(std::span<Type *const> members) {
+    // The tuple a `split` hands on (see tuple.h): one object per shape, the way a cell and the
+    // tagged forms are, so a program that writes the same members as a plain tuple gets a
+    // different type -- which is the point, since the members are the graph's answer.
+    return static_cast<TupleType *>(internMembers(
+        TypeTable::Shape::Residuals, members, [](const std::vector<Type *> &from) -> Type * {
+            TupleType *created = allocate(from);
+            created->residuals_ = true;
+            return created;
+        }));
+}
+
 TupleType *TupleType::nullable(Type *payloadType) {
     GUARD(payloadType != nullptr, "A nullable type needs a payload type.");
     Type *members[] = {payloadType};
@@ -253,7 +265,7 @@ Type *TupleType::resolve(const type_vec_t &typeList) const {
         i++;
     }
     GUARD(j == typeList.size(), "Not all types in typeList are used");
-    auto newTuple = TupleType::create(std::move(types));
+    auto newTuple = residuals_ ? residuals(types) : TupleType::create(std::move(types));
     GUARD(newTuple->resolved(), "TupleType is not fully resolved");
     return newTuple;
 }
@@ -272,7 +284,7 @@ string TupleType::toString() const { return typeToString(this); }
 std::string TupleType::mangle() const { return typeMangle(this); }
 
 Type *TupleType::clone(bool deep /* = false */) const {
-    if (cell_ || isTagged()) {
+    if (cell_ || isTagged() || residuals_) {
         return const_cast<TupleType *>(this);
     }
     std::vector<Type *> clonedTypes;
@@ -374,7 +386,8 @@ bool TupleType::assignableFrom(Type *sourceType) const {
         return false;
     }
     const TupleType &other = static_cast<const TupleType &>(*sourceType);
-    if (size_ != other.size_ || cell_ != other.cell_ || tag_ != other.tag_) {
+    if (size_ != other.size_ || cell_ != other.cell_ || tag_ != other.tag_ ||
+        residuals_ != other.residuals_) {
         return false;
     }
     // A type that still holds the `Ref` placeholder is not one a value can have (design
@@ -407,7 +420,8 @@ Type *TupleType::unify(Type *other) const {
         return nullptr;
     }
     const auto *rhs = static_cast<const TupleType *>(other);
-    if (size_ != rhs->size_ || cell_ != rhs->cell_ || tag_ != rhs->tag_) {
+    if (size_ != rhs->size_ || cell_ != rhs->cell_ || tag_ != rhs->tag_ ||
+        residuals_ != rhs->residuals_) {
         return nullptr;
     }
     if (equals(other)) {
@@ -432,7 +446,7 @@ Type *TupleType::unify(Type *other) const {
     if (isTagged()) {
         return isNullable() ? nullable(members[0]) : fallible(members[0]);
     }
-    return create(members);
+    return residuals_ ? residuals(members) : create(members);
 }
 
 Type *TupleType::widened() const {
@@ -452,7 +466,8 @@ Type *TupleType::widened() const {
         types.push_back(typesPtr_[i]->widened());
         changed = changed || types.back() != typesPtr_[i];
     }
-    return changed ? TupleType::create(std::move(types)) : const_cast<TupleType *>(this);
+    return changed ? (residuals_ ? residuals(types) : TupleType::create(std::move(types)))
+                   : const_cast<TupleType *>(this);
 }
 
 namespace {

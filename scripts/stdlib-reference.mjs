@@ -2055,7 +2055,6 @@ const EXCEPTIONS = {
 // `function-typed parameter` on the parameter, the state `jvp`, `split`, `transpose` and `vmap` are
 // in. A tree that has not merged the operator finds one fewer in each class, and the failure there
 // says so rather than being excused: the number describes the tree the run measured.
-
 // The examples that do not compile, by the kind of diagnostic that stopped them, and the examples a
 // `@example-fragment` marker calls "not compiled" that the checker compiles anyway. Both are
 // numbers the run compares its own tally with: a class that appears, moves or disappears fails, so
