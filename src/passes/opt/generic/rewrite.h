@@ -189,14 +189,20 @@ bool readsNoWrittenSlot(const camel::runtime::GraphTransaction &transaction, gc_
  * count because they go away too (a dissolved branch and its join, the code of an arm that is not
  * taken). Returns `value` itself when no read goes out with the removal.
  *
- * Nothing a program can write reaches this function today: a branch over a condition that can be
- * folded is folded before a pass sees it, and the rules that would replace the reader of a
- * computation that may fault refuse to fire, because dropping the reader would drop the fault. What
- * keeps an effect running across a removal is the older mechanism below -- the inherited waits and
- * the chain -- and the cases that guard it are in test/plans/feat/opt/effects_kept.plan.toml. This
- * one is reached only by construction, from src/passes/test/keepnode.cpp
- * (test/plans/feat/opt/keep_node.plan.toml), which builds the shape and reads `KEEPNODE keep=1
- * reads_the_divisor=1`; with the insertion switched off the same run reads `keep=0`.
+ * This is reached, and it is not a corner only a test can build: `std::opt` over the three cases in
+ * test/cases/opt/effects -- branch_keeps_outer_effect, dce_effect_under_pure_arithmetic,
+ * fold_keeps_arm_effect -- draws two keepers each, six in all (`std::opt std::gir | grep -c
+ * ':op/keep'`). Where a `sync` block gives the effect a place in its chain the older mechanism
+ * below takes over instead -- the inherited waits and the order edges of a dissolved branch -- and
+ * the cases that guard that mechanism are in test/plans/feat/opt/unused_value_chain.plan.toml
+ * (`unused_effect_chain` and `unused_effect_chain_param`: with the inherited waits switched off,
+ * twelve of them go red, and the cases one would expect to guard it, in
+ * test/plans/feat/opt/effects_kept.plan.toml, stay green).
+ *
+ * The insertion is also built at the draft level, where the shape and its counter-cases can be read
+ * side by side: src/passes/test/keepnode.cpp (test/plans/feat/opt/keep_node.plan.toml) reads
+ * `KEEPNODE keep=1 reads_the_divisor=1`, `keep=0` with the insertion switched off, and
+ * `KEEPNODE_PURE keep_pure=0 keep_shared=0` where no keeper may appear and none does.
  *
  * With `value` invalid the removal leaves nothing in the value -- the node is read by no one, which
  * is why it goes -- and the operator carries the effect's own value (`:op/keep(x, x)`): it is then

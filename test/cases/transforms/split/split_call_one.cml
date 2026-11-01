@@ -1,0 +1,32 @@
+// `split` through a call: `g(x) = sq(x) + 1.0`, so the lifted body calls `jvp_of_sq` and the cut has
+// to decide what the *_value_* half does with that call.
+//
+// A call of a lifted graph answers the pair (result, tangent); its arguments are the value and the seed
+// of every parameter. Before the lift recorded the graph it came from, the value half had no way to
+// tell the lift from any other callee: it needed the call's arguments, one of them is a tangent port,
+// and the cut refused (`a tangent port ... the value half reads the tangent of parameter 0`). The
+// record (`kGraphRefLiftedFrom`) is what makes the call readable: the value half answers with `sq`
+// itself -- `g`'s callee, the graph the lift was lifted from -- and the seeds are not arguments of
+// that call at all.
+//
+// The reading is the pair of numbers and the count, and the count is the part a recomputation could
+// fake: `residuals=3` is what the hand-inlined `x*x + 1.0` gives (`x`, `x*x`, and the constant), so
+// answering with the primal moves nothing that the inline spelling would have carried differently.
+import rulesets.jvp
+import { jvp, split } from transforms
+
+func sq(x: float): float {
+    return x * x
+}
+
+func g(x: float): float {
+    return sq(x) + 1.0
+}
+
+func main(): int sync {
+    let (forward, backward) = split(jvp(g))
+    let (value, residuals)  = forward(3.0)
+    'g value={}'->format<value>->println
+    'g dgdx={}'->format<backward(residuals, 1.0)>->println
+    return 0
+}

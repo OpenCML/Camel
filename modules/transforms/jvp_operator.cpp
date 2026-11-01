@@ -23,6 +23,7 @@
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/tangent_space.h"
 #include "camel/core/type/resolver.h"
 #include "camel/utils/type.h"
 
@@ -110,11 +111,28 @@ class JvpResolver final : public FuncTypeResolver {
             return std::string("`jvp` takes a function of at least one `float` parameter");
         }
         for (size_t i = 0; i < function->normTypesCount(); ++i) {
-            if (function->normTypeAt(i) != Type::Float64()) {
-                return std::string(
-                    "`jvp` takes a function whose every parameter is a `float` and whose result is "
-                    "a `float`: the lifted signature is one `(value, tangent)` pair in and out per "
-                    "`float` parameter");
+            const camel::core::type::Type *parameter = function->normTypeAt(i);
+            const camel::core::TangentSpaceAnswer space =
+                camel::core::tangentSpaceOf(parameter);
+            if (!space.hasSpace()) {
+                return std::format(
+                    "`jvp` takes a function whose every parameter has a tangent space, and "
+                    "parameter {} is a `{}`, which has none",
+                    i,
+                    parameter->toString());
+            }
+            if (parameter != Type::Float64()) {
+                // The type answers what its tangent space is; that it is not `float` is the
+                // transform's own state, and is said as such: the lift builds one `(float, float)`
+                // pair per parameter, so a parameter whose space is itself of another type has a
+                // space and is not lifted yet.
+                return std::format(
+                    "`jvp` lifts a `float` parameter into the pair `(value, tangent)`, and "
+                    "parameter {} is a `{}`, whose tangent space is {} and which this transform "
+                    "does not lift yet",
+                    i,
+                    parameter->toString(),
+                    space.describe());
             }
         }
         if (function->exitType() != Type::Float64()) {

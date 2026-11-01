@@ -208,6 +208,7 @@ EdgesOrderPureTestPass::apply(const camel::runtime::Program *program, std::ostre
         noGraphs,
         noGraphs,
         noGraphs,
+        noGraphs,
         shape,
         [&](GCGraphPayloadArena &arena) {
             for (gc_node_ref_t ref = 0; ref < 2; ++ref) {
