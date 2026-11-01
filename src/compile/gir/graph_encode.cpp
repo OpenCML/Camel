@@ -521,6 +521,9 @@ class EncodeSession {
                 subPtrs,
                 staticGraphPtrs,
                 ruleGraphPtrs,
+                // A graph compiled from the IR is not lifted from another: the lift is a runtime
+                // operator's own build (draft.cpp passes the list), so nothing to reserve here.
+                {},
                 prepared.payloadShape,
                 prepared.staticSlots,
                 prepared.source->view().frameSlotTypes());
@@ -866,6 +869,8 @@ class EncodeSession {
             subPtrs,
             staticGraphRefs,
             ruleGraphs,
+            // No compile-time graph is lifted from another (see preallocateRuntimeGraphs).
+            {},
             prepared.payloadShape,
             [&](camel::runtime::GCGraphPayloadArena &arena) {
                 CAMEL_LOG_INFO_S(

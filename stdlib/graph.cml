@@ -109,7 +109,7 @@ export func kind(n: Node): NodeKind
 export func op(n: Node): Op?
 
 /// The URI of the operator, such as `:op/add_l`.
-/// @example-fragment o is the operator of a node of the surrounding pass
+/// @example-fragment `o` is an operator taken from a node of the surrounding pass
 /// @example op_name(o)
 export func op_name(o: Op): string
 
@@ -225,7 +225,7 @@ export func show(n: Node): string
 
 /// The number a graph, a node or an operator is known by inside its function: the GraphId, the
 /// NodeId or the OperId. Stable for the function, so a pass can key a map by it.
-/// @example-fragment n is a node of the surrounding pass
+/// @example-fragment `n` is the graph the pass runs on
 /// @example id(n)
 #op('graph:id')
 export func id(h: Graph): int
@@ -255,7 +255,6 @@ export func permissions(n: Node): int
 
 /// Opens a transaction on a function: a private workspace in which its graphs are edited.
 /// Nothing changes until `commit`.
-/// @example-fragment the transaction is closed by commit or abort
 /// @example let t = open((x: int): int => x + 1)
 export func open::<F>(f: F): Txn<F> when is_function::<F>()
 

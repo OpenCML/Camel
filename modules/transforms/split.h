@@ -109,7 +109,8 @@ struct Residual {
 /// Program order: parameters by their index, then computed values by their node. The answer is empty
 /// when the graph is not a lifted graph (the exit is not the pair), which is when there is nothing
 /// to cut.
-std::vector<Residual> residualsOf(const camel::runtime::GCGraph &lifted);
+std::vector<Residual> residualsOf(
+    const camel::runtime::GCGraph &lifted, const camel::runtime::Program *program = nullptr);
 
 /// The two graphs of `split(f)` and the program of them.
 struct SplitGraph {

@@ -388,6 +388,16 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         }
     }
 
+    // A graph may name no exit -- the empty tuple and the field access of a static expansion are
+    // two the tree has (test/cases/compile/static_expansion) -- and a drawing has no `null` to say
+    // it with, so it says it in a comment over the node the document would have left empty. No edge
+    // is drawn and no node is invented: the state is the absence, written down.
+    if (graph->exitNode() == nullptr) {
+        res += std::format(
+            "{}{}// exit: none -- this graph names no result (\"exit\": null in std::jgir)\n",
+            baseIndent_,
+            indent_);
+    }
     if (!config_.rich) {
         res +=
             std::format("{}{}{} [label=\"EXIT\", type=\"EXIT\"];\n", baseIndent_, indent_, exitId);
@@ -676,27 +686,39 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         }
     }
 
-    const auto *exitRecord = graph->exitNode();
-    GUARD(exitRecord != nullptr, "Runtime graph exit node is missing.");
-    // The graph's result is a value: the edge leaves its class when it has several writings.
-    const std::string exitSource = edgeSource(graph->nodeRef(exitRecord));
-    if (!config_.rich) {
-        res += std::format(
-            "{}{}{} -> {} [label=\"{}\", type=\"{}\"];\n",
-            baseIndent_,
-            indent_,
-            exitSource,
-            exitId,
-            0,
-            "EXIT");
-    } else {
-        res += std::format(
-            "{}{}{} -> {} [label=\"{}\", type=\"EXIT\", style=solid];\n",
-            baseIndent_,
-            indent_,
-            exitSource,
-            exitId,
-            0);
+    // The graph names the node its result comes from, through the same call the JSON document reads
+    // it with (`GCGraph::exitNodeRef`, src/runtime/graph.cpp#GCGraph::exitNode). The two dumps
+    // differ only in what they can say when there is none, and they say the same thing: a document
+    // writes `null` (src/passes/trans/json/gir.cpp#dumpJsonRuntimeGraph, and the canonical document
+    // before it), and this one writes the comment over the EXIT node and draws no edge into it --
+    // the absence is the state, not a missing drawing.
+    //
+    // A pass that replaces the node a graph returns hands the name on to the node that stands for
+    // its value (src/passes/opt/generic/rewrite.cpp#replaceNode), so the removal of a node no
+    // longer leaves a graph that runs but cannot be drawn. A graph that names no exit is a
+    // different thing and does happen: the empty tuple and the field access of a static expansion
+    // (test/cases/compile/static_expansion) are two, and they run.
+    if (const auto *exitRecord = graph->exitNode()) {
+        // The graph's result is a value: the edge leaves its class when it has several writings.
+        const std::string exitSource = edgeSource(graph->nodeRef(exitRecord));
+        if (!config_.rich) {
+            res += std::format(
+                "{}{}{} -> {} [label=\"{}\", type=\"{}\"];\n",
+                baseIndent_,
+                indent_,
+                exitSource,
+                exitId,
+                0,
+                "EXIT");
+        } else {
+            res += std::format(
+                "{}{}{} -> {} [label=\"{}\", type=\"EXIT\", style=solid];\n",
+                baseIndent_,
+                indent_,
+                exitSource,
+                exitId,
+                0);
+        }
     }
 
     for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
