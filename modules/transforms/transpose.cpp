@@ -166,6 +166,12 @@ bool buildTransposeMember(
             }
             return constantOf[ref];
         };
+        // A round's cotangent can land on a value the round only read: that cotangent has to
+        // leave the loop, and this is where it is caught. `allowEscapes` is on while a LOOP's
+        // body runs -- a branch arm has nowhere to put a capture, so there an outside target is
+        // still a refusal.
+        bool allowEscapes = false;
+        std::unordered_map<gc_node_ref_t, gc_node_ref_t> escapes;
         const auto addCotangent = [&](gc_node_ref_t ref, gc_node_ref_t node) {
             if (!hasCotangent[ref]) {
                 cotangent[ref]    = node;
@@ -361,6 +367,15 @@ bool buildTransposeMember(
                     } else {
                         portCotangent = primitive(":op/add_d", {portCotangent, node});
                     }
+                    return;
+                }
+                if (allowEscapes) {
+                    // The round read this value from outside: its cotangent leaves the loop
+                    // through the capture channel, accumulated over the rounds.
+                    auto &slot = escapes[target];
+                    slot       = slot == rt::kInvalidNodeRef
+                                     ? node
+                                     : primitive(":op/add_d", {slot, node});
                     return;
                 }
                 armsOk = false;
@@ -668,8 +683,29 @@ bool buildTransposeMember(
                     draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
                 newPorts.push_back(ctPort);
                 draft.setRegionPorts(newRegion, std::span<const gc_node_ref_t>(newPorts));
+                escapes.clear();
+                allowEscapes = true;
                 const gc_node_ref_t bodyCotangent =
                     runArm(bodyRegionOld, oldBodyResult, ctPort, regionPorts.back());
+                allowEscapes = false;
+                if (armsOk && bodyCotangent != rt::kInvalidNodeRef && !escapes.empty()) {
+                    // The body's cotangents have a channel now, but the loop still hands back
+                    // one state: the refusal says how many are waiting, and for which values, so
+                    // the step that adds the accumulators knows the count from a reading.
+                    os << "TRANSPOSE function=" << function->name() << " skip=state node=" << ref
+                       << " origin=" << regionOrigin << " captures=" << escapes.size() << " nodes=";
+                    for (const auto &entry : escapes) {
+                        const camel::runtime::GCNode *carrier = function->node(entry.first);
+                        os << entry.first << '('
+                           << (carrier != nullptr ? static_cast<int>(carrier->kind) : -1) << ','
+                           << (carrier != nullptr && carrier->dataType() != nullptr
+                                   ? carrier->dataType()->toString()
+                                   : std::string("-"))
+                           << "),";
+                    }
+                    os << '\n';
+                    return false;
+                }
                 if (!armsOk || bodyCotangent == rt::kInvalidNodeRef) {
                     os << "TRANSPOSE function=" << function->name() << " skip=state node=" << ref
                        << " origin=" << regionOrigin << '\n';
@@ -714,23 +750,52 @@ bool buildTransposeMember(
                 // function, so two calls of one function call one graph). The call site passes
                 // what the transposed callee takes, its own parameters as they stand -- they are
                 // the values the call already has -- and then the cotangent.
-                const bool isCall           = node->kind == rt::GCNodeKind::Call;
-                const auto inputs           = function->normInputsOf(ref);
-                const size_t firstArgument  = isCall ? 1 : 0;
-                if (inputs.size() <= firstArgument) {
-                    // A function value nobody calls: there is no graph under it in this position.
+                const bool isCall = node->kind == rt::GCNodeKind::Call;
+                const auto inputs = function->normInputsOf(ref);
+                // Where the callee arrives from. A function value written in place is the call's
+                // first normal input; a value kept in a `let` is a DATA node naming its graph and
+                // the call takes it as a `with` input, with only the arguments as norm inputs; a
+                // FUNC node is the call itself. All three name a graph, so all three transpose the
+                // same way.
+                GraphId calleeId  = function->calleeIdOf(inputs.empty() ? ref : inputs.front());
+                size_t argumentAt = (!inputs.empty() && rt::isValid(calleeId)) ? 1 : 0;
+                if (!rt::isValid(calleeId)) {
+                    const auto captured = function->withInputsOf(ref);
+                    if (!captured.empty()) {
+                        calleeId   = function->calleeIdOf(captured.front());
+                        argumentAt = 0;
+                    }
+                }
+                if (!rt::isValid(calleeId) && !isCall) {
+                    calleeId   = function->calleeIdOf(ref);
+                    argumentAt = 0;
+                }
+                if (inputs.size() <= argumentAt && !rt::isValid(calleeId)) {
                     os << "TRANSPOSE function=" << function->name() << " skip=kind node=" << ref
                        << " kind=" << static_cast<int>(node->kind) << '\n';
                     return false;
                 }
-                const GraphId calleeId =
-                    isCall ? function->calleeIdOf(inputs.front()) : function->calleeIdOf(ref);
+
                 camel::runtime::GCGraph *callee = state.program->graph(calleeId);
                 if (callee == nullptr) {
                     // The callee is the value the first input carries, and a value that is
-                    // itself computed -- a call's result, an indirect call -- names no graph here.
+                    // itself computed -- a call's result, a returned closure -- names no graph
+                    // here. The refusal names the node that carries that value and its kind, so a
+                    // reader can see what stands in the way without a dump.
+                    const auto describe = [&](gc_node_ref_t value) {
+                        const camel::runtime::GCNode *carrier = function->node(value);
+                        return std::to_string(value) + ':' +
+                               std::to_string(carrier != nullptr
+                                                  ? static_cast<int>(carrier->kind)
+                                                  : -1);
+                    };
                     os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
-                       << " callee=none\n";
+                       << " callee=none value=" << describe(inputs.front());
+                    const auto captured = function->withInputsOf(ref);
+                    if (!captured.empty()) {
+                        os << " with=" << describe(captured.front());
+                    }
+                    os << '\n';
                     return false;
                 }
                 GraphId transposed = rt::kInvalidGraphId;
@@ -752,16 +817,16 @@ bool buildTransposeMember(
                 // there is. A callee of two parameters answers a pair, and splitting that pair is
                 // the step that is not written yet.
                 if (callee->funcType()->normTypesCount() != 1 ||
-                    inputs.size() != firstArgument + 1) {
+                    inputs.size() != argumentAt + 1) {
                     os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
                        << " callee=" << callee->name()
                        << " params=" << callee->funcType()->normTypesCount() << '\n';
                     return false;
                 }
-                const gc_node_ref_t argument = forward(inputs[firstArgument]);
+                const gc_node_ref_t argument = forward(inputs[argumentAt]);
                 if (argument == rt::kInvalidNodeRef) {
                     os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
-                       << " arg=" << inputs[firstArgument] << '\n';
+                       << " arg=" << inputs[argumentAt] << '\n';
                     return false;
                 }
                 FunctionType *calleeType = transposeSignature(callee->funcType());
@@ -776,7 +841,7 @@ bool buildTransposeMember(
                                                                 cotangent[ref]};
                     const gc_node_ref_t made = draft.addCallNode(Type::Float64(), rt::GCCallBody{});
                     draft.setNormInputs(made, std::span<const gc_node_ref_t>(callArgs));
-                    addCotangent(inputs[firstArgument], made);
+                    addCotangent(inputs[argumentAt], made);
                 } else {
                     // The FUNC node is the call: its inputs are its arguments, so the transposed
                     // node takes the callee's parameter and the cotangent and stands where the
@@ -784,7 +849,7 @@ bool buildTransposeMember(
                     const std::array<gc_node_ref_t, 2> callArgs{argument, cotangent[ref]};
                     const gc_node_ref_t made = draft.addFuncNode(transposed, Type::Float64());
                     draft.setNormInputs(made, std::span<const gc_node_ref_t>(callArgs));
-                    addCotangent(inputs[firstArgument], made);
+                    addCotangent(inputs[argumentAt], made);
                 }
                 break;
             }

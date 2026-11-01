@@ -1,5 +1,13 @@
 # 一个归约要不要有「整轴」算子：`sum`/`mean` 有，`max`/`min`/`argmax`/`argmin` 没有
 
+> **裁定（作者，`5fd6fd902`）——选 B：四条整轴形态要补。** 依据 `docs/design-principles.cn.md:548`：
+> 整轴归约与沿轴归约**同名**，沿轴那条带 `with <axis, keepdims>`——所以 `max(x)` 这四个名字本来就该能写，
+> 今天写不出来是实现落后于原则，不是语言里没有这个东西。语义不由实现另定：空张量是 `InvalidArgument` 故障
+> （`:575`），`NaN`/`-0` 的次序与 `argsort` 同一条，整轴 `argmax`/`argmin` 答**行优先展开的位置**、并列取最小。
+> 已落地：`modules/tensor/ops/reduction_ops.cpp` 的四个 OpDef 与 kernel、`stdlib/signatures/tensor.cml`、
+> `vjp` 规则、`vmap` 的整轴批规则（`max`/`min` 有；`argmax`/`argmin` 缺扁平视图，另有一页在等作者：
+> `questions-2026-11-01-a-batched-argmax-needs-a-flat-view.md`）。下面三节是裁定前的事实与三条路，留作记录。
+
 > **问什么**：`sum` 与 `mean` 有一个实参的整轴形态（`sum(x)`、`mean(x)`，URI `tensor:sum` / `tensor:mean`），
 > `max` / `min` / `argmax` / `argmin` **没有**——它们只有带 `axis` 的那一条。要不要给这四个补整轴算子？
 > **堵着谁**：今天**没有人被它堵住**。`vmap` 的覆盖表里这四行只能写「没有这个算子」，不是「规则缺」；
@@ -56,6 +64,8 @@
 与今天「按名拒绝调用」的判据冲突。所以只有 B 的收益是干净的，B 的代价也是最大的。
 
 ## 默认建议与正在做的事
+
+> **以下是裁定前的建议（保留作记录，已被上面的裁定推翻）。**
 
 **按 A 走：不新增整轴算子。** 这条车道（`lane-m5`）已经把 `tensor:sum`/`tensor:mean` 的整轴批规则写上，
 `max`/`min`/`argmax`/`argmin` 的整轴**不写**——因为写不出来，不是拒绝。若作者认为该有，

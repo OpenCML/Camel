@@ -3365,3 +3365,72 @@ assert(out.includes('transform_rules adjoint=true'), `the transpose is not the a
 }
 """
 timeout_ms = 10000
+
+# The pullback of a whole-tensor extremum: max/min broadcast the cotangent over the tensor and give
+# it to the elements equal to the extremum -- the axis forms' rule, with a broadcast instead of an
+# expand. `high(w) = max([[w, 4.0], [3.0, 2.0]])` is 4.0 while w is below it, so the derivative is 0
+# there and 1 at w = 5; `low` is the other way round, 0 at w = 3 and 1 at w = 1.
+[[tests]]
+name = "whole_extrema_pullback"
+desc = "grad of max and min over every element: the cotangent reaches the element that is the extremum and nothing else, and a whole-tensor reduction is differentiable through its broadcast rather than an axis expansion -- 1 at w = 5 and 0 at w = 3 for max, 1 at w = 1 and 0 at w = 3 for min."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/whole_extrema_grad.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n0.0\n1.0\n0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+# The tie: which of the equal elements the cotangent reaches. At w = 0 the two extremal elements have
+# slopes 5 and 1 in w, so 5.0 would be the first only, 1.0 the second only, 6.0 both, 0.0 neither --
+# and the axis form on the same tie is printed beside them, because the two forms are one rule.
+[[tests]]
+name = "whole_extrema_pullback_on_a_tie"
+desc = "grad of max and min over every element on a two-way tie: both answer 6.0 = 5 + 1, so every element equal to the extremum receives the cotangent in full and none is halved, and max_axis on the same tie answers the same 6.0 -- the whole-tensor rule and the axis rule are one rule. design-principles.cn.md:599 pins the *position* of argmax/argmin on a tie, not which elements a max/min pullback feeds; this entry makes the present answer a reading."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/whole_extrema_tie_grad.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "6.0\n6.0\n6.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "whole_extrema_pullback_feeds_both_tied_elements"
+desc = "The same reading as an assertion on the number rather than on a golden line: the tie's gradient is 6.0, which is 5 + 1 -- not 5.0 (the first position only), not 1.0 (the second only) and not 0.0 (neither). A future change that starts halving the cotangent or picking one position fails here with the number it produced."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/whole_extrema_tie_grad.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n').filter(line => line.length > 0)
+assert(lines.length === 3, `printed ${lines.length} numbers: ${JSON.stringify(lines)}`)
+for (const [index, name] of ['max', 'min', 'max_axis'].entries()) {
+    assert(Number(lines[index]) === 6.0, `${name}: the tie answered ${lines[index]}, and 6.0 (5 + 1) is both equal elements fed in full -- 5.0 is the first only, 1.0 the second only, 0.0 neither`)
+}
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+# The pullback of an array literal whose elements are computed: each active element reads the
+# cotangent at its own flat position. The shapes past the first dimension were a fault before --
+# position 2 of a `float[2, 2]` literal was refused as past the first dimension's end -- so the
+# readings 1.0, 3.0, 6.0, 6.0, 10.0 and 6.0 are the sum of the slopes each literal's elements carry.
+[[tests]]
+name = "literal_pullback_reads_every_computed_element"
+desc = "The pullback of a summed array literal whose elements are computed: the fill's slots are flat positions in the value the literal is, so every active element reads the cotangent at its own position -- 1.0 for one element of slope 1, 3.0 for slopes 1 and 2, 6.0 for 1, 2 and 3, 6.0 for the `float[2, 2]` literal whose third flat position is computed, 10.0 when all four are, and 6.0 one rank deeper. The last four were `Index ... is out of range for the first dimension ... length 2` before the bound counted the elements the read actually takes."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/literal_pullback.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n3.0\n6.0\n6.0\n10.0\n6.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

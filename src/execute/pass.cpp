@@ -13,6 +13,7 @@
 #include "camel/core/module/module.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator_table.h"
+#include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/resources.h"
 #include "camel/core/tags.h"
 #include "camel/core/mm/block.h"
@@ -1808,6 +1809,31 @@ GraphOrder orderOfGraph(const GCGraph &graph) {
     return result;
 }
 
+/// Whether the effect `ref` stands on something in `graph` (design principles 3.1): a read of its
+/// value -- a normal or `with` input of another node, or the graph's own result, which whoever runs
+/// the graph reads -- or a place in its block's chain. The chain is carried as three edge kinds while
+/// the migration runs (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the control one,
+/// and the order kind joins statements of one block yet), so a place in it is a sync, control or
+/// order edge either way, or the `kGCNodeFlagSyncStatement` the builder and the splices mark.
+///
+/// An effect with none of these is in the graph and in no chain: nothing makes it run, which is what
+/// a rewrite that removes its last reader and forgets to hand its place on leaves behind.
+bool effectStandsOnSomething(const GCGraph &graph, camel::runtime::gc_node_ref_t ref) {
+    if (!graph.normUsersOf(ref).empty() || !graph.withUsersOf(ref).empty()) {
+        return true;
+    }
+    if (graph.exitNodeRef() == ref || graph.outputNodeRef() == ref || graph.returnNodeRef() == ref) {
+        return true;
+    }
+    const camel::runtime::GCNode *node = graph.node(ref);
+    if (node != nullptr && node->hasFlag(camel::runtime::kGCNodeFlagSyncStatement)) {
+        return true;
+    }
+    return !graph.syncPredsOf(ref).empty() || !graph.syncUsersOf(ref).empty() ||
+           !graph.ctrlInputsOf(ref).empty() || !graph.ctrlUsersOf(ref).empty() ||
+           !graph.orderPredsOf(ref).empty() || !graph.orderUsersOf(ref).empty();
+}
+
 /// The effects of `program`: every effect node of every graph of it, each at its position in one
 /// topological order of its graph and each with the ambient resources it names.
 ProgramEffects collectEffects(const camel::runtime::Program &program) {
@@ -2240,9 +2266,96 @@ std::vector<std::string> portDeclarationViolation(const camel::runtime::Program 
     }
     return {};
 }
+/// Whether running the node is something the program observes: it touches state the program does not
+/// own (an ambient resource: stdout, the filesystem, the clock, the environment, the generator) or it
+/// writes state the program does own (a cell, an object, a handle -- a write nothing reads afterwards
+/// is a write the program lost). Reading a variable is not one of them, and neither is a computation
+/// whose value nobody reads: dropping one changes nothing the program can see, which is exactly what
+/// a pass is allowed to do with it. This is the line the check below draws, and it is what makes it a
+/// check about *effects* rather than about every node: without it the invariant would ask a pure
+/// operation for a credential it never needs, and the first graph a program builds would fail it.
+bool nodeRunsForItsEffect(
+    const camel::runtime::Program &program, const camel::runtime::GCGraph &graph,
+    camel::runtime::gc_node_ref_t ref) {
+    if (!nodeHasEffect(graph, ref)) {
+        return false;
+    }
+    const camel::runtime::NodeResources resources = camel::runtime::resourcesOf(program, graph, ref);
+    if (resources.external) {
+        return true;
+    }
+    for (const camel::runtime::NodeAccess &access : resources.accesses) {
+        if (access.resource.cls == camel::core::sem::ResourceClass::Ambient ||
+            access.mode != camel::core::sem::AccessMode::Read) {
+            return true;
+        }
+    }
+    return false;
+}
 
-std::string effectOrderViolation(const ProgramEffects &before, const ProgramEffects &after) {
-    const std::vector<std::pair<size_t, size_t>> pairs = matchedEffects(before, after);
+/// Every effect a pass hands back stands on one of the two credentials design principles 3.1 gives an
+/// effect: a read of its value (a normal or `with` input of another node, or the graph's own result,
+/// which whoever runs the graph reads), or a place in its block's chain, in the spellings the graphs
+/// carry the chain in while the migration runs (`effectStandsOnSomething`).
+///
+/// An effect that stands on neither is in the graph and in no chain: nothing makes it run, so the
+/// program the pass returned is not the program it was given (3.1, 3.3). That is the whole check --
+/// it asks the question of every effect of the program a pass returns, and not only of the ones the
+/// pass touched, because a node left behind by an earlier round is just as lost as one dropped now.
+/// The question is asked only of effects, by `nodeRunsForItsEffect`: a pure operation that nothing
+/// reads is a computation the program does not observe, and a pass may drop it.
+///
+/// Returns the first violation as the node it belongs to -- its graph, its id, the operator it runs
+/// and where the program wrote it, which is the smallest program that shows the defect -- and the
+/// origin to point the diagnostic at; empty when every effect of every graph stands on something.
+struct EffectCredentialViolation {
+    std::string text;
+    uint64_t origin = 0;
+};
+
+EffectCredentialViolation effectCredentialViolation(
+    const camel::runtime::Program &program, const context_ptr_t &context) {
+    for (const camel::runtime::GCGraph *graph : program.graphs()) {
+        if (graph == nullptr) {
+            continue;
+        }
+        for (uint32_t index = 0; index < graph->nodeCount(); ++index) {
+            const camel::runtime::gc_node_ref_t ref =
+                static_cast<camel::runtime::gc_node_ref_t>(index);
+            const camel::runtime::GCNode *node = graph->node(ref);
+            // A removed node leaves a record of kind `Dead` and no inputs (graph.h, GCNodeKind); it
+            // is not part of the graph a pass returned.
+            if (node == nullptr || node->kind == camel::runtime::GCNodeKind::Dead ||
+                !nodeRunsForItsEffect(program, *graph, ref) ||
+                effectStandsOnSomething(*graph, ref)) {
+                continue;
+            }
+            EffectCredentialViolation violation;
+            violation.origin = graph->nodeOrigin(ref);
+            std::string writtenAt = std::format("origin {}", violation.origin);
+            if (violation.origin != 0 && context != nullptr && context->sourceContext() != nullptr) {
+                const auto range = context->sourceContext()->resolveOrigin(violation.origin);
+                writtenAt        = std::format(
+                    "{}:{}:{}",
+                    context->sourceContext()->pathForOrigin(violation.origin),
+                    range.start.line,
+                    range.start.character);
+            }
+            violation.text = std::format(
+                "graph '{}' has effect node {} ('{}') with neither a read of its value nor a place "
+                "in its chain, written at {}",
+                graph->name(),
+                static_cast<unsigned>(ref),
+                std::string(graph->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri()),
+                writtenAt);
+            return violation;
+        }
+    }
+    return {};
+}
+std::string effectOrderViolation(
+    const ProgramEffects &before, const ProgramEffects &after,
+    const std::vector<std::pair<size_t, size_t>> &pairs) {
     for (size_t i = 0; i < pairs.size(); ++i) {
         const EffectSite &first     = before.sites[pairs[i].first];
         const EffectSite &runsFirst = after.sites[pairs[i].second];
@@ -2805,7 +2918,10 @@ PassApplyResult applyPassesDetailed(
             // of the pipeline, nested or listed, ends without it.
             {
                 const ProgramEffects effectsAfter = collectEffects(*program);
-                const std::string violation = effectOrderViolation(effectsBefore, effectsAfter);
+                const std::vector<std::pair<size_t, size_t>> pairs =
+                    matchedEffects(effectsBefore, effectsAfter);
+                const std::string violation =
+                    effectOrderViolation(effectsBefore, effectsAfter, pairs);
                 if (!violation.empty()) {
                     ctx->rtmDiags()->of(RuntimeDiag::PassInternalError).commit(p, violation);
                     CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (effect order)", p);
@@ -2834,6 +2950,23 @@ PassApplyResult applyPassesDetailed(
                         ->of(RuntimeDiag::PassBoundaryNodes)
                         .commit(p, "graph", boundary);
                     CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (entry/exit)", p);
+                    return {nullptr, PassApplyStatus::Failed};
+                }
+                // Every effect in the program the pass returns stands on a read of its value or on a place
+                // in its chain (design principles 3.1, 3.3 as amended). This is asked of the whole
+                // program, not of what the pass touched: an effect an earlier round left in no chain
+                // is as lost as one dropped now, and a pass that removes the last reader has to route
+                // the effect through something that reads it (`:op/keep`) rather than leave it to an
+                // edge of order alone.
+                const EffectCredentialViolation credential =
+                    effectCredentialViolation(*program, ctx);
+                if (!credential.text.empty()) {
+                    auto diag = ctx->rtmDiags()->of(RuntimeDiag::PassInternalError);
+                    if (credential.origin != 0) {
+                        diag.atOrigin(credential.origin);
+                    }
+                    diag.commit(p, credential.text);
+                    CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (effect credential)", p);
                     return {nullptr, PassApplyStatus::Failed};
                 }
             }

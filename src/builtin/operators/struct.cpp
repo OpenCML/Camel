@@ -537,12 +537,23 @@ slot_t __index_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
     const Int64 axis    = indexAxis(arr, axisArg);
     const auto at       = static_cast<size_t>(axis);
-    const Int64 extent  = arr->dim(at);
+    // The read the type states decides which positions are in range, and the two reads below count
+    // different things: the first dimension's position hands back that row, while a read whose
+    // result type is not an array is the value's own element (design principles 5.4) -- the flat
+    // element an open-rank value holds, and the slot a fill's computed element occupies
+    // (`Backward::visitFill`, modules/autodiff/pullback.cpp). That read counts every element the
+    // value has, so its bound is the element count: counting the first dimension refused `x[3]` on
+    // a `float[2, 2]` (length 2) although the value holds four elements, and it refused the third
+    // computed element of a `[[a, b], [c, 1.0]]` literal its pullback position the same way.
+    const Type *const readType = norm.resultType();
+    const bool elementRead     = at == 0 && arr->rank() > 1 && readType != nullptr &&
+                             readType->code() != TypeCode::Array;
+    const Int64 extent = elementRead ? static_cast<Int64>(arr->numel()) : arr->dim(at);
     if (raw < 0 || raw >= extent) {
         throwRuntimeFault(
             RuntimeDiag::IndexOutOfRange,
             raw,
-            indexDimensionName(at, arr->rank()),
+            elementRead ? std::string{"the elements"} : indexDimensionName(at, arr->rank()),
             static_cast<size_t>(extent));
     }
     if (arr->rank() <= 1) {
@@ -555,8 +566,7 @@ slot_t __index_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
         // the type says the read is the element itself, which is how an open-rank value (`f32[..]`)
         // is read as the numbers it holds: that one takes the slot, the element read the value's
         // own type states (design principles 5.4).
-        const Type *const result = norm.resultType();
-        if (result != nullptr && result->code() != TypeCode::Array) {
+        if (elementRead) {
             return arr->getSlot(static_cast<uint64_t>(raw));
         }
         return arr->firstDimensionElement(static_cast<uint64_t>(raw));
