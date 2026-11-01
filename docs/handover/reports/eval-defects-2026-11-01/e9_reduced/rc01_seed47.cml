@@ -1,0 +1,12 @@
+func u19(a20: string?, a21: string): string {
+    return '';
+}
+
+with <k36: string>
+func w35(a37: bool, a38: string): string {
+    return u19(u19(if false then 'x' else null, 'a'), '');
+}
+
+func main(): int sync {
+    return 0;
+}
