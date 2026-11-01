@@ -668,6 +668,12 @@ std::vector<Builder::RuleCondition> Builder::ruleConditionsIn(
             if (!value.has_value()) {
                 return nullptr;
             }
+            // A transform's value names a graph of its own program, not one of this program's
+            // (StaticProgramFunction, static_function.h).
+            auto *held = camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(*value);
+            if (!isStaticFunction(held)) {
+                return nullptr;
+            }
             auto *function = camel::core::rtdata::fromSlot<StaticFunction *>(*value);
             return function != nullptr ? function->graph() : nullptr;
         };

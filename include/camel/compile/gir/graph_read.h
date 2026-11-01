@@ -327,5 +327,16 @@ class DraftGraphs {
 /// line exactly when they are the same graph as far as this face can tell.
 std::string describe(const GraphRead &graph);
 
+/**
+ * The nodes a draft reaches from its roots, in the order the encoder numbers them.
+ *
+ * This is the id table `DraftGraphRead(txn, kept)` reads a draft through: `kept[i]` is the draft's
+ * node the runtime graph's node `i` is built from. The encoder builds the same list to number the
+ * graph it writes (src/compile/gir/graph_encode.cpp), so a reader that uses this table reads the
+ * numbers the frozen graph will have, and `firstDifference` is what proves it: the encoder compares
+ * the two readings of every graph it writes.
+ */
+std::vector<gc_node_ref_t> liveDraftNodes(const camel::runtime::GraphTransaction &transaction);
+
 
 } // namespace camel::compile::gir
