@@ -181,6 +181,38 @@ expect_stdout_contains = ["27.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# One case per ruleset import. `vjp_carries_its_own_ruleset` guards that the library carries both;
+# these two say which line does what, so a missing one is not just "the composition broke" but
+# "this half broke, here". `test/tools/check-vjp-ruleset.mjs` comments out **one** line in a copy of
+# the installed library, points `CAMEL_STD_LIB` at the copy and runs the same program twice: dropped,
+# it must stop on the library's own line with the words that name what is missing; back, it must
+# print the three 27.0 readings. No program's source can tell the two lines apart -- a caller imports
+# neither -- so the A/B is the only reading there is, and the tool also goes red when the line it
+# guards is gone from the library (nothing to drop, and the restored half is the one that failed).
+[[tests]]
+name = "vjp_api.the_jvp_import_is_load_bearing"
+desc = "Dropping `import rulesets.jvp` from `stdlib/vjp.cml` stops a program that only imports `vjp`: the forward walk has no rule for the multiply in `x*x*x`, so the run exits 1 with `jvp has no forward rule for ':op/mul_d'` and a `note: raised here` standing on the library's own line (`stdlib/vjp.cml:<line>:`). With the line back the same program exits 0 and prints `27.0` three times. The tool drops the line in a copy of the installed library and points `CAMEL_STD_LIB` at it, so the library on disk is untouched."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/check-vjp-ruleset.mjs"
+args = ["${case}", "--drop", "rulesets.jvp"]
+expect_exit = 0
+expect_stdout_contains = ["the library imports rulesets.jvp", "jvp has no forward rule for `:op/mul_d`", "note: raised here", "stdlib/vjp.cml:", "prints 3 x 27.0"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "vjp_api.the_transpose_import_is_load_bearing"
+desc = "Dropping `import rulesets.transpose` from `stdlib/vjp.cml` stops the backward walk of a program that only imports `vjp`: the walk finds no family for `:op/add_d` (`TRANSPOSE ... skip=rule uri=:op/add_d reason=no-such-family`) and raises `transpose has no transpose for this function` on the library's own line (`stdlib/vjp.cml:<line>:`). With the line back the same program exits 0 and prints `27.0` three times. The tool drops the line in a copy of the installed library and points `CAMEL_STD_LIB` at it, so the library on disk is untouched."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/check-vjp-ruleset.mjs"
+args = ["${case}", "--drop", "rulesets.transpose"]
+expect_exit = 0
+expect_stdout_contains = ["the library imports rulesets.transpose", "transpose has no transpose for this function", "skip=rule uri=:op/add_d reason=no-such-family", "stdlib/vjp.cml:", "prints 3 x 27.0"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 30000
+
 # The comparison the author named: one `f` with two parameters, and the library's gradient beside
 # the derivative worked out on paper. `f(x, y) = x*x*y` at `(3, 2)` has `df/dx = 2*x*y = 12` and
 # `df/dy = x*x = 9`, and both numbers are printed -- `library` first, `analytic` under it -- so the
@@ -189,47 +221,46 @@ timeout_ms = 20000
 # `vjp(f)(3.0, 2.0)` and then `pullback(1.0)`. The juxtaposed call `transpose` writes is the
 # internal assembly; it is not a standard-library signature and nothing here writes it.
 #
-# The gate is a behaviour probe and not a file check: `test/tools/have-library-vjp.mjs` compiles and
-# runs a program that builds `vjp(f)` and calls it, so it answers "is the composition assembled?"
-# rather than "is there a split.cpp?". While the walk `transpose` runs still refuses a call whose
-# callee takes several parameters -- the backward half calls `mul_tangent(x, w, dx, dw)` -- the gate
-# refuses and this entry skips with its reason printed (`TRANSPOSE ... skip=signature`); the day the
-# walk takes that call it runs, and it also runs the comparison itself and prints the numbers, so
-# one command answers "is the assembly done?", while a disagreement is this entry's red and never
-# the gate's skip. `18.0` is `3*3*2` and `12`/`9` are the author's, worked out on paper: none of
-# them is a reading of today's tree. The rulesets the composition needs are the library's own
-# imports, so this case imports `vjp` and nothing else.
+# The main line: the case the library has to keep answering, on the program the author named, in
+# every backend. `f(x, y) = x*x*y` at `(3, 2)` has `df/dx = 2*x*y = 12` and `df/dy = x*x = 9`, and
+# both numbers are printed -- `library` first, `analytic` under it -- so the reading is a comparison.
+# The surface is JAX's (the author's ruling of 2026-11-01): `vjp(f)(x)` is the pair `(y, pullback)`
+# and `pullback(ct)` is the cotangent of `f`'s parameters, so the call is `vjp(f)(3.0, 2.0)` and then
+# `pullback(1.0)`. The juxtaposed call `transpose` writes is the internal assembly; it is not a
+# standard-library signature and nothing here writes it.
+#
+# No precondition and no skip: the composition runs, so a wall here is a red and not a silence. Four
+# backends are asked for the same six lines -- `nvm`, `fvm`, `jit`, `prl` -- and compared on the exit
+# code and on the whole standard output, so "the library is the language's" is read once per executor.
+# `18.0` is `3*3*2`; `12` and `9` are the derivative worked out on paper, printed beside the
+# library's answer. `test/tools/check-vjp-ruleset.mjs` drops one of the library's two ruleset imports
+# in a copy, so a missing import is red in its own case as well as here.
 [[tests]]
 name = "vjp_api.analytic_gradient"
-desc = "The library's gradient against the derivative worked out on paper, on the author's example: `f(x, y) = x*x*y` at `x = 3`, `y = 2`, so `df/dx = 2*x*y = 12` and `df/dy = x*x = 9`. `vjp(f)(3.0, 2.0)` gives the pair `(y, pullback)` and `pullback(1.0)` gives the two cotangents, in JAX's order; the program prints `f(3, 2) = 18.0`, `library y = 18.0`, then `library`/`analytic` for `df/dx` and `df/dy`. The library half comes from `transpose(split(reinterp<jvp>(f)))` in `stdlib/vjp.cml` and nothing else -- not from the C++ autodiff -- and the two rulesets that composition needs are that file's own imports, so this program imports `vjp` and nothing else. Skipped while the walk `transpose` runs still refuses a call whose callee takes several parameters; the precondition prints the refusal, so a skip always says why."
+desc = "The library's gradient against the derivative worked out on paper, on the author's example: `f(x, y) = x*x*y` at `x = 3`, `y = 2`, so `df/dx = 2*x*y = 12` and `df/dy = x*x = 9`. `vjp(f)(3.0, 2.0)` gives the pair `(y, pullback)` and `pullback(1.0)` gives the two cotangents, in JAX's order; the program prints `f(3, 2) = 18.0`, `library y = 18.0`, then `library`/`analytic` for `df/dx` and `df/dy`. The library half comes from `transpose(split(reinterp<jvp>(f)))` in `stdlib/vjp.cml` and nothing else -- not from the C++ autodiff -- and the two rulesets that composition needs are that file's own imports, so this program imports `vjp` and nothing else. Run on `nvm`, `fvm`, `jit` and `prl`, which must agree on the exit code and on the whole standard output."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_analytic_gradient.cml"
 args = ["${case}", "${backend}"]
-backends = ["nvm"]
-backends_agree = ["exit_code", "diagnostics"]
-skip_unless = ["node", "test/tools/have-library-vjp.mjs"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "output_normalized"]
 expect_exit = 0
 expect_stdout_contains = ["f(3, 2) = 18.0", "library  y = 18.0", "library  df/dx = 12.0", "analytic df/dx = 12.0", "library  df/dy = 9.0", "analytic df/dy = 9.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
-# The numbers the day the steps land. `f(x) = x*x*x`, so `vjp(f)(3.0, 1.0)` is `(27.0, 27.0)` and
-# `grad(f)(3.0)` is `27.0`; the three-step composition is checked against the derivative written by
-# hand, not against the C++ autodiff. Skipped, not red, while the composition does not run -- today
-# the walk `transpose` runs refuses a call whose callee takes several parameters, which is a step of
-# the walk and not of this library (test/tools/have-vjp.mjs is the question, and it is the
-# composition itself that answers): a skip says "not yet", a red says "wrong", and a library whose
-# last step is honestly not assembled is the first. The rulesets are the library's own imports, so
-# this program imports `vjp` and nothing else.
+# The single-parameter reading, beside the two-parameter main line: `f(x) = x*x*x`, so
+# `vjp(f)(3.0)` is `(27.0, pullback)` and `pullback(1.0)` is `27.0`, and `grad(f)(3.0)` is the same
+# number through the wrapper. The three-step composition is checked against the derivative written by
+# hand, not against the C++ autodiff, and the rulesets are the library's own imports, so this program
+# imports `vjp` and nothing else. No skip: the composition runs.
 [[tests]]
 name = "vjp_api.gradient_when_the_steps_land"
-desc = "With `split` and `transpose` implemented, `vjp(f)(3.0, 1.0)` on `f(x) = x*x*x` reads `(27.0, 27.0)` and `grad(f)(3.0)` reads `27.0`: the library's three-step composition against the derivative written by hand, with the two rulesets imported by `stdlib/vjp.cml` rather than by this program. The test is skipped while the composition does not run (test/tools/have-vjp.mjs), so a not-yet-assembled library is a skip and never a red."
+desc = "`vjp(f)(3.0)` on `f(x) = x*x*x` reads `(27.0, 27.0)` and `grad(f)(3.0)` reads `27.0`: the library's three-step composition against the derivative written by hand, with the two rulesets imported by `stdlib/vjp.cml` rather than by this program. The 27.0 is `3x^2` at 3, and the number the pullback answers is the same one the gradient wrapper reads."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_gradient.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
-skip_unless = ["node", "test/tools/have-vjp.mjs"]
 expect_exit = 0
 expect_stdout_contains = ["27.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

@@ -39,11 +39,12 @@
  * and `jvp` is forward mode (the result and its tangent along a direction); both land with the
  * autodiff lane, not before they work.
  *
- * The memory-for-recomputation transform is named `remat` here -- JAX's `jax.checkpoint` under its
- * other name; in this tree "checkpoint" is the persistence module `stdlib/ckpt.cml` and stays that,
- * so the transform takes the other word and there is no second name for a reader to disambiguate.
- * What a program reads of it is its value: `remat(f)` gives `f`, so a call through it is a call of
- * the same function and no number moves.
+ * The memory-for-recomputation transform -- `remat` -- is not here: it is a transform of the
+ * `transforms` module (`stdlib/signatures/transforms.cml`), because what it changes is a property of
+ * a graph and a call site, not a derivative. JAX calls the same transform `jax.checkpoint` and, by
+ * its other name, `jax.remat`; in this tree "checkpoint" is the persistence module
+ * `stdlib/ckpt.cml` and stays that, so the transform takes the other word and there is no second
+ * name for a reader to disambiguate.
  *
  * `stop_gradient` marks a value as a constant, and the mathematics of the local rules is written
  * here, where the library keeps one statement of it: `add_tangent` and its siblings are the tangent
@@ -56,7 +57,7 @@
  * operator of their left side.
  */
 
-import { is_float, is_function } from types
+import { is_float } from types
 
 // The three tags a derivative rule is written with (`#jvp`, `#transpose`, `#vjp`) are declared
 // in `prelude`, beside the operators they are written on: a tag is a fact about any function,
@@ -67,15 +68,6 @@ import { is_float, is_function } from types
 /// argument's own type.
 /// @example stop_gradient(3.0)    // 3.0
 export func stop_gradient::<T>(x: T): T pure
-
-/// Gives `f` back: a call through `remat` is a call of the same function, so adding or removing it
-/// moves no number and no gradient. That is the whole of what the name does to a value, and it is
-/// what a program reads of it.
-/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
-/// @example let remembered = remat(f)
-export func remat::<F>(f: F): F pure when is_function::<F>() {
-    return f
-}
 
 // ---- the local rules of the scalar arithmetic ----
 // One law, written once: the pattern names the primitive and the right side what the transform

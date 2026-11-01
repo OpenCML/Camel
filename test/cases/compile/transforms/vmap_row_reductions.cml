@@ -1,0 +1,67 @@
+/**
+ * The row-wise `max` and `min` of a batch, through the batching transform: the rule flattens a row
+ * to one line (`reshape<[shape(xs)[0], -1]>`) and reduces that axis in one pass. The readings are
+ * the ones the old axis-by-axis fold answered, bit for bit, which is why the fold was a duplicate:
+ *
+ *   max of [[1.0, -0.0, 2.0], [3.0, 5.0, 4.0], [nan, 1.0, 2.0]]   ->  [2.0, 5.0, nan]
+ *   min of the same                                                ->  [-0.0, 3.0, nan]
+ *   sum of the same (the control: not switched, two roundings)    ->  [3.0, 12.0, nan]
+ *
+ * and the same over rows of two axes (`float[2, 2, 3]`, four axes of a row folded by the fold):
+ *
+ *   max of [[[1, 2, 3], [4, 5, 6]], [[-0.0, 0.0, 1.0], [7.0, nan, 9.0]]]  ->  [6.0, nan]
+ *   min of the same                                                      ->  [1.0, nan]
+ *
+ * IEEE 754-2019 maximum carries an element and is exactly associative and commutative (design
+ * principles 7.7), so one pass over the flattened row and a fold axis by axis answer the same bits:
+ * -0 stays below +0, a NaN anywhere stays beyond every number, in either shape.
+ */
+import { vmap } from transforms
+import rulesets.vmap
+import { max, min, sum } from tensor
+import { nan } from math
+
+func rowmax(r: float[3]): float {
+    return max(r)
+}
+
+func rowmin(r: float[3]): float {
+    return min(r)
+}
+
+func rowsum(r: float[3]): float {
+    return sum(r)
+}
+
+func plane_max(r: float[2, 3]): float {
+    return max(r)
+}
+
+func plane_min(r: float[2, 3]): float {
+    return min(r)
+}
+
+func rowmax_i(r: int[3]): int {
+    return max(r)
+}
+
+func rowmin_i(r: int[3]): int {
+    return min(r)
+}
+
+func main(): int sync {
+    let xs: float[3, 3] = [[1.0, -0.0, 2.0], [3.0, 5.0, 4.0], [nan, 1.0, 2.0]]
+    println(vmap(rowmax)(xs))
+    println(vmap(rowmin)(xs))
+    println(vmap(rowsum)(xs))
+    let ps: float[2, 2, 3] = [
+        [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
+        [[-0.0, 0.0, 1.0], [7.0, nan, 9.0]]
+    ]
+    println(vmap(plane_max)(ps))
+    println(vmap(plane_min)(ps))
+    let is: int[2, 3] = [[1, 5, 2], [4, 0, 3]]
+    println(vmap(rowmax_i)(is))
+    println(vmap(rowmin_i)(is))
+    return 0
+}
