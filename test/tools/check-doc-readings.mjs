@@ -62,21 +62,21 @@ const newlines = (file) => (readFileSync(file, 'utf8').match(/\n/g) || []).lengt
 const READINGS = [
     {
         id: 'typecode.branches',
-        page: 'docs/handover/questions/questions-2026-11-01-closures-as-values-block-the-transposed-backward-half.md',
+        page: 'docs/handover/reviews/questions-2026-11-01-closures-as-values-block-the-transposed-backward-half.md',
         sentence: /复核 2026-11-01：现在是 \*\*(\d+) 处 `case TypeCode::`/,
         where: 'occurrences of `case TypeCode::` under src, include and modules',
         measure: () => [occurrences(sources(), /case TypeCode::/g)],
     },
     {
         id: 'typecode.files',
-        page: 'docs/handover/questions/questions-2026-11-01-closures-as-values-block-the-transposed-backward-half.md',
+        page: 'docs/handover/reviews/questions-2026-11-01-closures-as-values-block-the-transposed-backward-half.md',
         sentence: /、(\d+) 个文件\*\* —— `eeb02d2d4`/,
         where: 'source files holding a `case TypeCode::`',
         measure: () => [filesMatching(sources(), /case TypeCode::/)],
     },
     {
         id: 'principle.5.10.code',
-        page: 'docs/handover/questions/questions-2026-11-01-closures-as-values-block-the-transposed-backward-half.md',
+        page: 'docs/handover/reviews/questions-2026-11-01-closures-as-values-block-the-transposed-backward-half.md',
         sentence: /原则 5\.10 在代码里仍是 \*\*(\d+)\*\* 处/,
         where: 'mentions of 5.10 under src, include and modules',
         measure: () => [occurrences(sources(), /5\.10/g)],
@@ -146,7 +146,7 @@ const READINGS = [
     },
     {
         id: 'transforms-module.lines',
-        page: 'docs/handover/questions/questions-2026-11-01-closures-as-values-block-the-transposed-backward-half.md',
+        page: 'docs/handover/reviews/questions-2026-11-01-closures-as-values-block-the-transposed-backward-half.md',
         sentence: /`split_operator\.cpp` \*\*(\d+)\*\*、`jvp_operator\.cpp` \*\*(\d+)\*\*、`transforms\.cml` \*\*(\d+)\*\*、`vjp\.cml` \*\*(\d+)\*\*，`split\.cpp` \*\*(\d+)\*\*、`jvp\.cpp` \*\*(\d+)\*\*/,
         where: 'lines of the operator halves and of the declarations the page counts',
         measure: () =>
