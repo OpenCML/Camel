@@ -1456,6 +1456,35 @@ std::vector<gc_node_ref_t> RuntimeGraphDraftSession::committedNodeRefs(GCGraph *
     return draftRuntimeNodeRefs(*found->second->transaction);
 }
 
+void RuntimeGraphDraftSession::validateDraftPorts() const {
+    for (const auto &[graph, entry] : drafts_) {
+        if (entry == nullptr || entry->transaction == nullptr) {
+            continue;
+        }
+        const auto &draft  = entry->transaction->graph();
+        const size_t slots = draft.nodeSlotCount();
+        for (gc_node_ref_t id = 0; id < slots; ++id) {
+            const DraftNodeHeader *header = draft.header(id);
+            if (header == nullptr || header->kind != GCNodeKind::Oper) {
+                continue;
+            }
+            const std::span<const gc_node_ref_t> ports = draft.normInputsOf(id);
+            for (size_t port = 0; port < ports.size(); ++port) {
+                const gc_node_ref_t input = ports[port];
+                if (input == kInvalidNodeRef || draft.header(input) == nullptr) {
+                    throw std::runtime_error(std::format(
+                        "an ordinary port of operator node {} of graph '{}' reads port {} of a node "
+                        "the graph does not have ({})",
+                        static_cast<unsigned>(id),
+                        graph->name(),
+                        static_cast<unsigned>(port),
+                        static_cast<unsigned>(input)));
+                }
+            }
+        }
+    }
+}
+
 const Program *RuntimeGraphDraftSession::commitChecked() {
     std::vector<GraphId> differing = conflicts();
     if (!differing.empty()) {
@@ -1478,6 +1507,12 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     if (!runtimeRoot_) {
         return nullptr;
     }
+
+    // A port written at a node the draft does not have cannot be encoded: the writer of the graph
+    // version reads the node at that reference and there is none, which is a crash and not a
+    // diagnostic. The check every pass ends with promises to refuse exactly this shape, and this is
+    // what makes that promise keepable -- the graph has to exist in order to be judged.
+    validateDraftPorts();
 
     GCGraph *oldRuntimeRoot = runtimeRoot_;
 
