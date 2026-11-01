@@ -39,3 +39,33 @@ Runtime graph 'f' breaks its edge invariants (1 violation(s)):
 - `:532` 在今天这份源码里是注释行（"its members are not, and seeding them here…"），不是代码；
 - 复查请按**符号**找：`git grep -n 'isMember' src/execute`，改后只剩定义（`:242`）与两处分组（`:251`/`:261`）；
 - `|| isMember` 式取种：**0 处**。
+## A4b 与 P0-1 的关系：这条读数分辨不出 `:509`（两侧逐字相同）
+
+**A4b** 是"Region yields node … not in the execution"那一类；`test/cases/trans/reduced/` 在这个工作树上不存在（它在 `verify` 的车道里，没并过来），所以两侧都跑 `docs/handover/reports/eval-defects-2026-11-01/minimal/` 里现成的两支（`recompile_segv.cml`、`cml_segv.cml`），四个组合（`nvm` / `opt nvm` / `fvm` / `opt fvm`）。
+
+**两侧先建好再量**（这是今晚第三次同族教训：二进制与树要同代）：
+- **A 侧**：HEAD `a9c9e8d4c`（`:509` = `live[edge.pred]`），二进制 `2026-11-01 18:05:29`；
+- **B 侧**：把 `:509` 临时改回 `live[edge.pred] || isMember(edge.pred)`（未提交），二进制 `2026-11-01 18:15:22`。
+
+**读数（两侧逐字相同）**：
+
+| 程序 | 遍 | A：`rc` / stdout | B：`rc` / stdout |
+|---|---|---|---|
+| `recompile_segv.cml` | `nvm` | `0` / 空 | `0` / 空 |
+| 同上 | `opt nvm` | `0` / 空 | `0` / 空 |
+| 同上 | `fvm` | `0` / 空 | `0` / 空 |
+| 同上 | `opt fvm` | `0` / 空 | `0` / 空 |
+| `cml_segv.cml` | `nvm` | `0` / `let 42 101;` | `0` / `let 42 101;` |
+| 同上 | `opt nvm` | `0` / `let 42 101;` | `0` / `let 42 101;` |
+| 同上 | `fvm` | `0` / `let 42 101;` | `0` / `let 42 101;` |
+| 同上 | `opt fvm` | `0` / `let 42 101;` | `0` / `let 42 101;` |
+
+**结论（如实）**：**这条读数分辨不出 `:509`。** 八个格子两侧一字不差。原因与今晚前面四次一致：这两支程序里没有"臂里有人、却没被用到、却仍进了计划"的形状——前端与遍先把它们处理掉了，`:509` 换成任一种写法都不改变谁会执行。**A4b 与 P0-1 不同根。**
+
+**临时改动已恢复**：`git grep -n '|| isMember' src/execute` → **0**，`dirty=0`。
+
+## 作者页第 4 条下要补的一行（P0-1 第一条读数）
+
+> **已修**：`b21d30d8b`（收尾循环只按存活）、`4ea783758`（顺序前驱访问只按存活）、`d7836f2e9`（问题页：`let z = 1/0` 前端判死，按规则删）、`595fa5143`（P0-3 的凭据判据）。**读数**：24 格四后端相同；`let z=1/0` 四后端 × `opt` 全 `2`、不报除零；`nonlive_members` 0/0；A4b 两支 × 四组合两侧逐字相同 ⇒ **这些读数分辨不出机制，改动按 3.1 的"当且仅当"保留，不按读数声称**。
+>
+> **行号说明**：作者清单写 `:532`/`:534`；实际改的是 **`:509`**（顺序前驱访问），`:532` 是注释行，`:534` 在第一笔起就已经是 `live[n]`。复查请按符号：`git grep -n 'isMember' src/execute` → 定义 `:242`、分组 `:251`/`:261`，`|| isMember` **0 处**。
