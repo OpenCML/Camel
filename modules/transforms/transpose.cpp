@@ -114,8 +114,12 @@ FunctionType *transposeSignature(FunctionType *function, const std::vector<bool>
         // accepted here and contributes nothing at the other end -- the statement is made once, in the
         // cotangent space (`addCotangent` drops a target whose type has no cotangent), rather than as a
         // per-type test at every use.
+        // Each tangent after the bundle lives in its parameter's own tangent space -- the same
+        // answer `jvpSignature` reads (camel/core/tangent_space.h). A `float[]` parameter's
+        // cotangent is an array; a parameter with no space at all is refused, because it cannot be
+        // where a cotangent goes.
         for (size_t i = 1; i < count; ++i) {
-            if (function->normTypeAt(i) != Type::Float64()) {
+            if (!camel::core::tangentSpaceOf(function->normTypeAt(i)).hasSpace()) {
                 return nullptr;
             }
         }
@@ -124,7 +128,7 @@ FunctionType *transposeSignature(FunctionType *function, const std::vector<bool>
         params.emplace_back(Type::Float64(), false);
         std::vector<Type *> tangents;
         for (size_t i = 1; i < count; ++i) {
-            tangents.push_back(Type::Float64());
+            tangents.push_back(camel::core::tangentSpaceOf(function->normTypeAt(i)).space);
         }
         return FunctionType::create(
             camel::core::type::param_vec_t{}, params,

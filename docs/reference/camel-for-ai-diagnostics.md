@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 224
+**Semantic — errors** (`SemanticDiag`) — 225
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -186,6 +186,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `RestArgumentNotTuple` | The rest argument '..{0}' is not a compile-time tuple. |
 | `RestFunctionNeedsExpansion` | The rest function '{0}' cannot be used here: {1}. |
 | `RestArgumentsMismatch` | The call to '{0}' gives {1} argument(s), but its fixed parameters need {2}. |
+| `LambdaRestParameterNotLowered` | The rest parameter '..{0}' of a lambda is not lowered yet. |
 | `StaticTupleEscapes` | The build-time tuple '{0}' is not a value. |
 | `ConstasTypeRequired` | The 'constas' parameter '{0}' writes no type. |
 | `ConstasValueNotConstant` | The value given for the 'constas' parameter '{0}' is not a compile-time constant of its parameter's type ('{1}'). |
