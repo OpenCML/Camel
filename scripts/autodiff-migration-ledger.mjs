@@ -271,6 +271,22 @@ for (const file of files) {
 
 const library = rows.filter((r) => !r.offPath)
 const count = (kind) => library.filter((r) => r.kind === kind).length
+
+// A run that never started reads as a classification, and that is the worst kind of wrong: on a
+// machine with no built tree every case exits -1, every diagnostic is empty, and the four buckets
+// collapse into `other` while the total and the library count still look right. Measured 2026-11-02:
+// a Windows checkout reported `pass=0 with=0 array=0 other=118` where the same tree on the build host
+// reads `pass=12 with=54 array=46 other=6`. So a run in which no case produced a readable exit code is
+// not a ledger, and this says so instead of printing one.
+const ran = rows.filter((row) => row.exit !== null && row.exit !== -1).length
+if (ran === 0) {
+    console.error(
+        `ledger: no case could be run -- is there a built tree at ${path.relative(ROOT, path.dirname(camelBinary())) || 'out/latest'}? ` +
+            'A ledger of unrun cases would report every bucket as `other` and look like a migration fact.',
+    )
+    process.exit(1)
+}
+
 const summary =
     `[LEDGER] total=${rows.length} library=${library.length} pass=${count('pass')} ` +
     `with=${count('with')} array=${count('array')} other=${count('other')}`
