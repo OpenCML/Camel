@@ -44,10 +44,27 @@
 
 **两个旧例外也没有声明**：`:op/idx_arr` 与 `tensor:multiply` 都不在任何被编译的 `#op` 里。作者的裁定要求 `xs[i]` 在声明处写成 `operator []`、`mul_tensor` 这个名字消失，两件事都得先有这一行声明。
 
-## 3. 顺带量到的两件事
+## 3. 待修：33 条声明指向一个不存在的算子
 
-- **`func operator X` 这个写法今天能用**，只是几乎没人用：5 条声明是 `:op/add_f`→`+`、`:op/add_d`→`+`、`:op/sub_f`→`-`、`:op/sub_d`→`-`（`stdlib/prelude.cml`）与 `graph:eq`→`==`（`stdlib/graph.cml:317`）。所以 P1-13 要的不是新机制，是把已有的写法补齐。
-- **33 条声明指向的 URI 在一个"全导入"程序里也没有注册**：`rewrite:` 12、`rand:` 9、`ckpt:` 2、`re:` 2、`test_support:` 2、`:mark/` 2、`hash:`/`onnx:`/`:tangent/` 各 1。这些是"声明了但表里没有"的方向，和本页的反方向（有算子没声明）是两件事，记在这里以免下次量的时候被混进去。`--verify-ops`（`scripts/stdlib-reference.mjs`）盯的是同一对方向，但它只按 `stdlib/signatures/` 的签名文件对，不按 `#op` 行。
+**这一条不是补声明能解决的**——它是反方向：**有声明，没有算子**。在一个"全导入"程序里也没有注册的 URI：
+
+| 协议 | 条数 | 例子 |
+|---|---|---|
+| `rewrite:` | 12 | `rewrite:rewrite`（`stdlib/rewrite.cml:98`）、`rewrite:saturate`、`rewrite:extract` |
+| `rand:` | 9 | `rand:philox`（`stdlib/random.cml:40`）、`rand:uniform_array` |
+| `ckpt:` | 2 | `ckpt:save_tree`、`ckpt:load_tree` |
+| `re:` | 2 | `re:test`、`re:find` |
+| `test_support:` | 2 | `test_support:with_probe_array`、`test_support:arity_two` |
+| `:mark/` | 2 | `:mark/unordered_foreach_arr`、`:mark/unordered_reduce_arr` |
+| `hash:` / `onnx:` / `:tangent/` | 各 1 | `hash:sha256_bytes`、`onnx:export_model`、`:tangent/scatter_add_arr` |
+
+两种可能，都值得一条自己的记录：声明写在一个**没有被这个程序导入**的模块里（那是"分母怎么取"的问题），或者声明指向的算子**真的没有实现**（那是缺实现）。`--verify-ops`（`scripts/stdlib-reference.mjs`）盯的是同一对方向，但它按 `stdlib/signatures/` 的签名文件对，不按 `#op` 行，所以这 33 条它看不见。
+
+**这一轮不修**，记在这里，免得下一次量"哪些算子没声明"时把它们混进分子。
+
+## 4. `func operator X` 今天就能用，只是几乎没人用
+
+5 条声明用了这个写法：`:op/add_f`→`+`、`:op/add_d`→`+`、`:op/sub_f`→`-`、`:op/sub_d`→`-`（`stdlib/prelude.cml:84,89,94,99`）与 `graph:eq`→`==`（`stdlib/graph.cml:317`）。所以 P1-13 要的不是新机制，是把已有写法补齐。
 
 ## 全清单
 

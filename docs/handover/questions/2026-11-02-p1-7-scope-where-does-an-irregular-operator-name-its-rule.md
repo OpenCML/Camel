@@ -50,8 +50,23 @@
 - 三道读法一起改：`forwardRuleOf` / `transposeRuleOf` / `vmapRuleOf` 都走 `ruleKeyOf(family, uri)`；三张登记表、`ForwardRuleBinding`、`bindForwardRule`/`bindTransposeRule`/`bindVmapRule`、`forwardBindingOf`/`vmapBindingOf` 全部删除；`modules/tensor/ops/catalog.cpp#declareVmapRuleKeys` 与 `modules/tensor/module.cpp` 的 21 条绑定随之清空。
 - 对外可观测的行为没变：`feat.compile.rulesets` 63/63，整条 `fast` 闸门 `total: 8353, pass: 8341, fail: 0`；`RULESET`/`LOOKUP` 两张读法一字未动，`rulesets_lookup.py` 现在把"两个例外 + 各自的键解析到哪条规则"当作它盯的那一半。
 
-## 下一步（留给 2）
+## 裁定（2026-11-02，之后）
 
-做法 2 要做的是：`OperatorTable::declare` 收一个"源码里怎么写"的字段（`+`、`matmul`、`[]`），`ruleKeyOf` 改成读它，然后 `ruleKeyExceptions()` **整个删掉**——两个例外那时也会各自说出自己的写法（`index_into` 是"这个算子就是那次调用的函数体"的写法，`mul_tensor` 是它自己的名字）。这一步不动规则集，也不动算子表以外的地方。
+作者另裁，三条都不选：**键本来就有唯一的来源——把算子绑到声明上的那一行**
+（`#op(':op/add_d') export func operator +(x: float, y: float): float` 就能读出头 `+`、元数 2）。
+做法 ②（算子声明带写法字段）因此被否，落地的一半已撤回；`ruleKeyExceptions()` 的那张表也随第二步整张删掉。
+
+顺序是**依赖**，不能跳：
+
+1. **P1-13**：让每个算子都有一条被编译的 `#op` 声明（先量，不动键）；
+2. **键从声明读**：建索引时扫 `#op` 声明得到 `(uri → head, arity)`，删三张 `bind*Rule`、`forward.cpp` 的三份 map、`*Descriptions`、`ruleKeyOf`、`RuleKeyException`；
+3. **同键多规则按类型选**（像重载）：标量 `*` 与张量 `*` 都叫 `*`/2，**`mul_tensor` / `vmap_mul_tensor` 这个名字删掉**；`indexRule` 撞键改成"同键同类型条件才报"；
+4. **`operator []`**：前奏加 `:op/idx_arr` 的运算符声明 + 解析器支持 + 规则左边写 `xs[i]` + **删 `index_into`**。
+
+## 前置读数（P1-13 第 1 步）
+
+585 个注册算子里 **347** 个没有任何被编译的 `#op` 声明；五个算术族的 34 个里只有 4 个（`+`、`-` 的 d/f），
+**`*`、`/`、一元 `-` 一条键都读不出来**；`tensor` 协议 86 个算子 **0 条**被编译声明。
+全文与 347 行清单见 [2026-11-02-p1-13-which-operator-uris-have-no-compiled-declaration.cn.md](../reports/2026-11-02-p1-13-which-operator-uris-have-no-compiled-declaration.cn.md)。
 
 `等点名`。
