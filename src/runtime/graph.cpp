@@ -952,7 +952,7 @@ void emitDraftPayload(
         GCNode &record   = payload.nodes[planned.ref];
         record.kind      = draftHeader->kind;
         record.flags     = draftHeader->runtimeFlags;
-        record.reserved  = 0;
+        record.tangentArgs = draftHeader->tangentArgs;
         record.dataIndex = slotOf(planned.draftId);
         record.typeId    = typeIdOf(effectiveDraftNodeType(draft, *draftHeader));
         record.inBegin   = appendInputs(draft.normInputsOf(planned.draftId));
@@ -2247,7 +2247,7 @@ uint64_t GCGraph::nodeContentHash(gc_node_ref_t ref) const {
     };
     mixValue(n->kind);
     mixValue(n->flags);
-    mixValue(n->reserved);
+    mixValue(n->tangentArgs);
     mixValue(n->dataIndex);
     // The type enters as its canonical id: two records that name one structure, however their
     // keys spell the names in it, are the same content (camel/core/type/intern.h).
@@ -2282,6 +2282,11 @@ GraphId GCGraph::calleeIdOf(gc_node_ref_t ref) const {
     }
     const uint32_t index = nodeBodyAs<GCFuncRef>(ref)->ref;
     return index < refCount_ ? refs_[index] : kInvalidGraphId;
+}
+
+uint16_t GCGraph::callTangentArgsOf(gc_node_ref_t ref) const {
+    const GCNode *n = node(ref);
+    return n != nullptr && n->kind == GCNodeKind::Func ? n->tangentArgs : 0;
 }
 
 std::string GCStaticFunctionAnswer::describe() const {
