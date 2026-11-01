@@ -78,6 +78,8 @@ camel test/cases/modules/autodiff/jax_vmap.cml std::nvm   # 退出码 0，打出
 
 ## 结论
 
+> **量法（2026-11-01 定）**：一条用例算不算“过”，按**它自己的期望退出码**判——有的用例守的就是 exit 1（`with_grad_old_name` 守 `value_and_grad` 不存在，`grad_refuse_*` 守具名拒绝），一律按 exit 0 量会把它们的“过”记成“不过”。四类的数按这个口径重记。
+
 **库层今天能过：2 / 127。**（2026-11-01 23:00 重算：118 个顶层用例逐条跑，另 9 个在 `jax_names/` 子目录。）
 
 重算方法与上一版同一套（复制成 `.probe.cml`、把 `from autodiff` 里的 `vjp`/`grad`/`with_grad` 改从 `vjp` 取、跑 `std::nvm`、跑完即删），**只改了一处错**：上一版把 `import { … } from autodiff` 整条换成 `from vjp`，于是库里仍有的辅助名（`add_tangent`、`zero_tangent` 等）被判成"库里没有这个名字"。正确写法是**两行**——transform 的三个名字从 `vjp` 取，其余仍从 `autodiff` 取。改对之后 `transform_rules` 从"不过"变"过"（它只用 `add_tangent`，而 `add_tangent` 一直在 `stdlib/autodiff.cml` 里）。
@@ -280,7 +282,7 @@ camel test/cases/modules/autodiff/jax_vmap.cml std::nvm   # 退出码 0，打出
 | 124 | `vjp_user_b` | 不过 | 不在 `vjp` 这条路上：不 import `autodiff` 的名字（`prelude` 的 `jvp`/`vmap`） |
 | 125 | `whole_extrema_grad` | 不过 | **试点 3/5：需要新能力** — 改成 `func high(w: float)` + `grad(high)(5.0)` 后，前向走图直接拒绝函数体：`REINTERP jvp function=high skip=body`（体里用 `w` 建 `float[2, 2]` 再取 `max`）。老读数 `1.0 / 0.0 / 1.0 / 0.0` |
 | 126 | `whole_extrema_tie_grad` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
-| 127 | `with_grad_old_name` | 不过 | 库里没有 value_and_grad |
+| 127 | `with_grad_old_name` | **过**（按期望退出码） | 它守的就是这个名字不存在：`UnresolvedReference: 'value_and_grad'`，exit 1 —— 按 exit 0 量会把它记成"不过" |
 ## 这一笔没做的
 
 - 没有改任何用例（`git diff test/cases/modules/autodiff/` 为空），迁移哪一批等点名。
