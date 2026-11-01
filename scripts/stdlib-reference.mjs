@@ -123,6 +123,21 @@ const MODULES = [
         computed: 'signatures/transforms.cml',
     },
     {
+        name: 'vjp',
+        title: '`vjp`: the derivative, as a library',
+        kind: 'camel',
+        // `vjp` is the composition of three transforms, so its declarations are the assembly's, and
+        // an example of it cannot compile until the assembly does. Listing it as `pending` keeps
+        // it out of the page -- a page a reader trusts does not show code that does not compile --
+        // without pretending the module is not there: every mode prints why, and `--verify-docs`
+        // turns red the day its examples compile, which is the one line to delete (`pending:`
+        // below) when it does.
+        pending:
+            '`stdlib/vjp.cml` is the composition `transpose(split(reinterp<jvp>(f)))`, and ' +
+            '`transpose` still takes a function of a single parameter while `split` hands back its ' +
+            'two halves, so the module does not compile and an example of it would not either',
+    },
+    {
         name: 'tensor',
         title: '`tensor`: multi-dimensional numeric arrays',
         kind: 'cpp',
@@ -395,6 +410,32 @@ const MODULES = [
         declaration: true,
     },
 ]
+
+// A module the reference knows about and cannot document yet, and the one sentence that says why.
+//
+// The case is real and it is not a file-name question: `vjp` is `transpose(split(reinterp<jvp>(f)))`
+// written in Camel, and it compiles only when all three steps meet. Until then its declarations are
+// still worth listing here -- the module exists, the design names it, and a reader who asks where
+// the derivative lives should find the answer -- but an `@example` of a module that does not compile
+// is code no reader can run, and a page is only worth trusting if everything on it compiles.
+//
+// So the module is in MODULES and out of the page, and `pending` is where that is written down.
+// Nothing is silent about it: every mode prints the sentence below, so the omission is a fact on
+// the screen rather than an absence. And nothing has to be remembered either: `--verify-docs`
+// compiles a pending module's examples anyway, and when they compile it reports that as a problem
+// -- "drop the pending entry" -- so the day the module builds, the reference says so itself.
+function pendingReason(module) {
+    return module.pending ? String(module.pending).replace(/\s+/g, ' ') : null
+}
+
+function announcePending() {
+    for (const module of MODULES) {
+        const reason = pendingReason(module)
+        if (reason !== null) {
+            console.log(`not in the reference yet: the module '${module.name}' -- ${reason}`)
+        }
+    }
+}
 
 function sourceOf(module) {
     if (module.source) {
@@ -927,7 +968,10 @@ out.push('Not in this reference: the profiler (`perf`).')
     out.push('')
     out.push('| Module | Import | Written in |')
     out.push('|---|---|---|')
-    const parsed = MODULES.map((module) => ({ module, entries: parseDeclarations(module) }))
+    const parsed = MODULES.filter((module) => pendingReason(module) === null).map((module) => ({
+        module,
+        entries: parseDeclarations(module),
+    }))
     for (const { module, entries } of parsed) {
         const anchor = module.name === 'globals' ? 'built-in-functions' : module.name
         out.push(
@@ -1435,6 +1479,24 @@ async function verifyDocs() {
     let checked = 0
     let fragments = 0
     for (const module of MODULES) {
+        const pending = pendingReason(module)
+        if (pending !== null) {
+            // Not compiled as a problem -- the module is left out on purpose -- but compiled all
+            // the same, because "the examples compile now" is the signal that the omission is over
+            // and the page should carry the module. A pending module that still fails is the
+            // expected state and says nothing; an empty result (no examples to read) says nothing
+            // either, since there is nothing to be ready.
+            const compiled = await compileExamples(module, parseDeclarations(module))
+            const broken = compiled.results.filter((result) => !result.ok)
+            if (compiled.results.length > 0 && broken.length === 0) {
+                problems.push(
+                    `stdlib/${module.name}.cml is listed as pending in MODULES ('${pending}') but its examples ` +
+                        `compile now: drop its 'pending' entry in scripts/stdlib-reference.mjs, run --write, and the ` +
+                        `page carries the module`,
+                )
+            }
+            continue
+        }
         const entries = parseDeclarations(module)
         problems.push(...docProblems(entries))
         const compiled = await compileExamples(module, entries)
@@ -1853,6 +1915,7 @@ if (bodyProblems.length > 0) {
     process.exit(1)
 }
 if (mode === '--write' || mode === '--verify-doc') {
+    announcePending()
     const text = renderDoc()
     const rendered = (text.match(/^#### /gm) || []).length
     if (rendered === 0) {
@@ -1871,22 +1934,56 @@ if (mode === '--write' || mode === '--verify-doc') {
         console.log('docs/stdlib-reference.md is up to date')
     }
 } else if (mode === '--audit') {
-    // What each module's documentation has, and what it does not: the table the task asks
-    // for, from the same parser the reference is generated with. `--compile` also compiles every
-    // example (needs a built compiler).
+    // What the module table and the library on disk say to each other, and what each module's
+    // documentation has and has not -- the report the task asks for, from the same parser the
+    // reference is generated with. `--compile` also compiles every example (needs a built compiler).
+    //
+    // The table is the account of what a program can import and what the page documents, so the
+    // audit checks it against the library instead of trusting it: every entry has to name a file
+    // that is there -- a module whose name has drifted from its file is exactly how a table rots,
+    // and it is the one failure that costs nothing to catch -- and every library file no entry
+    // reads is named in a line, so an omission is on the screen rather than a gap nobody sees.
+    //
+    // The second half reports and does not fail. Not every file in `stdlib/` is a module a program
+    // imports: `std.cml` declares the core's passes, `rulesets/transpose.cml` is a table a
+    // transform reads, `prelude.cml` is the source the built-in page is read from. A rule that
+    // every file is an entry would have to list those exceptions anyway, and a list nobody checks
+    // is not a check.
+    //
+    // `pending` is a column and not an absence: a module the page leaves out is still a row, with
+    // the reason it is out beside its counts, so no row can be read as "documented" while the
+    // module is out of the page.
     const compile = flags.includes('--compile')
+    const problems = []
     const rows = []
     let totals = { names: 0, entries: 0, noDoc: 0, noExample: 0, examples: 0, fragments: 0, compileBroken: 0 }
+    const shown = (file) => path.relative(REPO_ROOT, file).replace(/\\/g, '/')
     for (const module of MODULES) {
+        const pending = pendingReason(module)
+        const files = [sourceOf(module)]
+        if (module.computed) files.push(path.join(STDLIB_DIR, module.computed))
+        const absent = files.filter((file) => !fs.existsSync(file))
+        for (const file of absent) {
+            problems.push(`${shown(file)}: what the module '${module.name}' reads is not in the library`)
+        }
+        // An entry that reads nothing has no row: its counts would be zeros, and a row of zeros
+        // reads as "nothing missing". The mismatch above is what says it is broken.
+        if (absent.length > 0) continue
         const entries = parseDeclarations(module)
+        // The declarations of one name are one entry of the reference: the first is the one whose
+        // comment the page prints, and the counts are per name for that reason.
+        const names = [...new Set(entries.map((entry) => entry.name))]
         const firsts = names.map((name) => entries.find((entry) => entry.name === name))
         const noDoc = firsts.filter((entry) => entry.doc.filter((line) => line.trim() !== '').length === 0).length
         const noExample = firsts.filter((entry) => entry.examples.length === 0).length
         const examples = firsts.reduce((sum, entry) => sum + entry.examples.length, 0)
         const fragments = firsts.filter((entry) => entry.fragments.length > 0).length
         for (const problem of docProblems(entries)) console.log(`DOC ${problem}`)
-        let compileBroken = 0
-        if (compile) {
+        // A pending module's examples cannot compile -- that is what pending says -- so compiling
+        // them would report each one as broken and read as a defect of the module rather than as
+        // the state it is in.
+        let compileBroken = null
+        if (compile && pending === null) {
             const compiled = await compileExamples(module, entries)
             const broken = compiled.results.filter((result) => !result.ok)
             compileBroken = broken.length
@@ -1894,29 +1991,53 @@ if (mode === '--write' || mode === '--verify-doc') {
                 console.log(`BROKEN ${result.file}:${result.line}: ${result.name}: ${result.message}`)
             }
         }
-        rows.push({ module: module.name, names: names.length, entries: entries.length, noDoc, noExample, examples, fragments, compileBroken })
+        rows.push({ module: module.name, pending, names: names.length, entries: entries.length, noDoc, noExample, examples, fragments, compileBroken })
         totals.names += names.length
         totals.entries += entries.length
         totals.noDoc += noDoc
         totals.noExample += noExample
         totals.examples += examples
         totals.fragments += fragments
-        totals.compileBroken += compileBroken
+        totals.compileBroken += compileBroken === null ? 0 : compileBroken
     }
-    console.log('module         names entries noDoc noExample examples fragments broken')
-    for (const row of rows) {
-        console.log(
-            `${row.module.padEnd(14)} ${String(row.names).padStart(5)} ${String(row.entries).padStart(7)} ` +
-                `${String(row.noDoc).padStart(5)} ${String(row.noExample).padStart(9)} ` +
-                `${String(row.examples).padStart(8)} ${String(row.fragments).padStart(9)} ${String(row.compileBroken).padStart(6)}`,
-        )
+    // The other direction: the files of the library that no module of the table reads.
+    const readBy = new Set()
+    for (const module of MODULES) {
+        readBy.add(path.resolve(sourceOf(module)))
+        if (module.computed) readBy.add(path.resolve(path.join(STDLIB_DIR, module.computed)))
+    }
+    const unread = []
+    for (const dir of [STDLIB_DIR, path.join(STDLIB_DIR, 'rulesets')]) {
+        if (!fs.existsSync(dir)) continue
+        for (const file of fs.readdirSync(dir)) {
+            if (!file.endsWith('.cml')) continue
+            const full = path.resolve(path.join(dir, file))
+            if (!readBy.has(full)) unread.push(shown(full))
+        }
     }
     console.log(
-        `${'total'.padEnd(14)} ${String(totals.names).padStart(5)} ${String(totals.entries).padStart(7)} ` +
-            `${String(totals.noDoc).padStart(5)} ${String(totals.noExample).padStart(9)} ` +
-            `${String(totals.examples).padStart(8)} ${String(totals.fragments).padStart(9)} ${String(totals.compileBroken).padStart(6)}`,
+        'auditing: the module table against the library on disk (every entry reads a file that is ' +
+            'there) and, for each module, what its declarations have and have not',
     )
+    for (const problem of problems) console.log(`MISMATCH ${problem}`)
+    if (unread.length > 0) {
+        console.log(`files of the library no module of the table reads: ${unread.join(', ')}`)
+    }
+    const column = (row) =>
+        `${row.module.padEnd(14)} ${String(row.pending === null ? '-' : 'yes').padStart(7)} ` +
+        `${String(row.names).padStart(5)} ${String(row.entries).padStart(7)} ${String(row.noDoc).padStart(5)} ` +
+        `${String(row.noExample).padStart(9)} ${String(row.examples).padStart(8)} ${String(row.fragments).padStart(9)} ` +
+        `${String(row.compileBroken === null ? (row.pending === null ? '-' : 'n/a') : row.compileBroken).padStart(6)}`
+    console.log('module         pending names entries noDoc noExample examples fragments broken')
+    for (const row of rows) console.log(column(row))
+    console.log(column({ module: 'total', pending: null, ...totals }))
+    if (problems.length > 0) {
+        console.log(`${problems.length} entr(ies) of the module table do not match the library`)
+        process.exit(1)
+    }
+    console.log(`the module table matches the library: ${MODULES.length} entry(ies), ${unread.length} file(s) it does not read`)
 } else if (mode === '--verify-docs') {
+    announcePending()
     const { problems, checked, fragments } = await verifyDocs()
     for (const problem of problems) console.log(problem)
     if (problems.length > 0) {

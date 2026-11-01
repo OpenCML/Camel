@@ -199,6 +199,24 @@ expect_stdout_contains = ["PASS"]
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 120000
 
+# `--audit` had no case of its own, and a mode nothing runs rots: it answered `ReferenceError:
+# names is not defined` for as long as nobody called it (the variable it counted was deleted with
+# the guards around it, and the line that read it stayed). What the entry reads is the check the
+# mode now makes -- every entry of the table reads a file that exists -- plus the two sentences
+# that say what it audited and what it found, so a mode that stops working is a red and not a
+# script nobody has run.
+[[tests]]
+name = "registry.audit_table_matches_the_library"
+desc = "`scripts/stdlib-reference.mjs --audit` answers what the module table and the library on disk say to each other: every entry reads a file that is there, the files no entry reads are named, and each module's declarations are counted with a `pending` column for the ones the page leaves out. It exits 0 with a sentence saying what it audited, and 1 with a `MISMATCH` line when an entry names a file the library does not have."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/stdlib-reference.mjs"
+args = ["${case}", "--audit"]
+expect_exit = 0
+expect_stdout_contains = ["auditing: the module table against the library on disk", "the module table matches the library"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
 [[tests]]
 name = "registry.reference_is_generated"
 desc = "docs/stdlib-reference.md is what scripts/stdlib-reference.mjs --write produces from the signature files and the library sources: it is generated, not edited."
