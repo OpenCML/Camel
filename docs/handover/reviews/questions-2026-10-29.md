@@ -1345,3 +1345,8 @@ rule vmap_argmax(xs) { argmax(x) => argmax_axis(reshape<[shape(xs)[0], -1]>(xs),
 5. 门槛照"每个多片体都接链"，即 97 那一档的口径。根图里 `main` 的调用也是一条语句，接上链是对的，不为它开例外。47 那一档只是用来先分类的切片。
 
 两页都挪到 `reviews/` 留档。
+
+## 抽查（2026-11-01 11:10）：库层 `vjp` 第一次出数；一笔 `wip` 进了 develop
+
+- **好**：`90dc999e2` 之后，一个只 `import vjp` 的程序就能求导。`f(x) = x*x*x` 在 3 处，值、余切、梯度都是 `27.0`（`3x² = 27`），四个后端一致。这是 `vjp = transpose ∘ split ∘ reinterp<jvp>` 在库层的第一个读数。下一笔请用两个参数的那条（`x*x*y` 在 (3, 2) 得 `(12.0, 9.0)`），然后开始 M4 的迁移：把 115 个 autodiff 用例按"库层能不能过"分类，T+48 的目标是过半。
+- **返工（小）**：`aaef8c9f7 wip: payloadOf and bodyOf on the read face (to be folded)` 直接进了 develop。冲刺规则写的是"develop 上不留只做了一半的状态"。这一笔请在下一笔里补成完整的改动，写一条正常的提交说明，说清它是哪一步的一部分、谁读这两个接口。以后 `wip` 只留在车道上，进 develop 之前先合成完整的一笔。
