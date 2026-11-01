@@ -2155,7 +2155,8 @@ DraftInlineResult inlineCallableInDraft(
     // follows nothing in the block is written after the nearest statement it reads through a chain
     // of values -- the order the body's data edges already give it -- and the body's chain becomes
     // the one chain a block has.
-    if (callHasChainPlace && bodyChain.heads > 1) {
+    const bool joinBodyPieces = bodyChain.heads > 1;
+    if (joinBodyPieces) {
         for (gc_node_ref_t head = static_cast<gc_node_ref_t>(slotsBefore);
              head < draft.nodeSlotCount();
              ++head) {

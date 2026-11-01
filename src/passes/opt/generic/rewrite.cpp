@@ -396,6 +396,23 @@ void replaceNode(
         if (draft.nodeOrigin(stood) == 0) {
             draft.setNodeOrigin(stood, draft.nodeOrigin(id));
         }
+        // A graph names the node its result comes from, and that name is a value use like any
+        // other: when the removed node was the one named, the node that stands for its value takes
+        // the name. `eraseNode` clears a name that points at a node it removes
+        // (src/runtime/draft.cpp#eraseNode), so a caller that replaces the node the
+        // program returns leaves the graph with no result at all -- which is what a graph that runs
+        // but cannot be drawn looked like: `std::nvm` ran it, `std::jgir` named a node the document
+        // did not hold, and `std::gir` stopped at "Runtime graph exit node is missing"
+        // (src/passes/trans/dot/graphviz.cpp#dumpGraph).
+        if (draft.exitNode() == id) {
+            draft.setExitNode(stood);
+        }
+        if (draft.outputNode() == id) {
+            draft.setOutputNode(stood);
+        }
+        if (draft.returnNode() == id) {
+            draft.setReturnNode(stood, draft.returnKind());
+        }
     }
     for (gc_node_ref_t user : ctrlUsers) {
         draft.unlinkInput(camel::runtime::DraftEdgeKind::Ctrl, user, id);
