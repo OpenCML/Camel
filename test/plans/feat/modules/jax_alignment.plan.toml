@@ -209,12 +209,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "present.remat"
-desc = "`remat` is the name the recompute-in-the-backward transform has -- JAX's `jax.checkpoint` under its other name, chosen so the persistence word `checkpoint` stays the `ckpt` module's -- and `autodiff` exports it, so the import that pinned the absence resolves and the program prints the value: `remat(square)` is `square`, and `square(2.0)` is 4.0. The flip of the pin is the proof that the name arrived under this spelling; `modules.remat` is where the identity is measured against the gradient."
+desc = "`remat` is the name the recompute-in-the-backward transform has -- JAX's `jax.checkpoint` under its other name, chosen so the persistence word `checkpoint` stays the `ckpt` module's -- and the `transforms` module exports it, so the import that pinned the absence resolves and a call through the value prints 4.0. The flip of the pin is the proof that the name arrived under this spelling. Both lines are pinned, not only the value: the first line is the transform's **defining output**, not debug residue -- `in_recompute=0 out_recompute=1` is the only thing a program can observe of the mark (the graph's copy carries `kGraphFlagRecomputeBackward` and no number moves), so a plan that dropped it would let the transform stop marking anything and stay green. The graph id in that line is the run's counter and is normalized (`normalize_graph_ids`); the bits, the function name and the fact that a graph was named stay exact. `modules.remat` reads the same property through `split`."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/jax_names/remat.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "jax_remat g=4.0\n"
+expect_stdout_exact = "REINTERP remat function=square in_recompute=0 out_recompute=1 graph=<GRAPH>\njax_remat g=4.0\n"
 expect_output_not_contains = ["UnknownInternalError", "never printed"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_graph_ids"]
 timeout_ms = 10000

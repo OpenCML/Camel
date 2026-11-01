@@ -1,0 +1,22 @@
+// A parameter the body never reads. `add_tangent(x, w, dx, dw)` is `dx + dw`: `x` and `w` are in the
+// signature and nowhere in the body, so the walk that turns the graph round finds no cotangent for
+// them -- and a parameter with no cotangent has a zero for one, because the tangent of a sum along
+// `(dx, dw)` does not depend on the summands at all.
+//
+// The four answers at (3, 2, 1, 0) are `(0, 0, 1, 1)` at cotangent 1 and `(0, 0, 2, 2)` at cotangent
+// 2: the two operands' zeros, which the calling half drops, and the two tangents' ones, which it
+// keeps and which double with the seed. A refusal here would refuse `grad((x) => x + 1.0)`, whose
+// tangent function is exactly this one.
+import rulesets.transpose
+import { transpose } from transforms
+import { add_tangent } from autodiff
+
+func at(x: float, w: float, dx: float, dw: float): float {
+    return add_tangent(x, w, dx, dw)
+}
+
+func main(): int sync {
+    println(transpose(at)(3.0, 2.0, 1.0, 0.0, 1.0))
+    println(transpose(at)(3.0, 2.0, 1.0, 0.0, 2.0))
+    return 0
+}

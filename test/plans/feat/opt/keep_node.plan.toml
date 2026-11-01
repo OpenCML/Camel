@@ -1,0 +1,53 @@
+id = "opt.keep_node"
+order = 337
+tier = "fast"
+tags = ["feat", "opt", "effects", "keep"]
+desc = "`:op/keep` is produced by the removal that takes the last reader of a computation that may fault, and by nothing else today: a test-only pass builds the shape at the graph level and the run says whether that node still runs"
+
+# Design principles 3.3 and 9.7: a pass that removes the last use of a node whose running is
+# observed leaves a keeper on data -- `:op/keep(x, v)` gives `v`, and `x` stays read through a data
+# edge. No program reaches that insertion on its own today (a branch over a static condition is
+# folded before a pass sees it, and the rules that would replace the reader of a computation that
+# may fault refuse to fire), so `test::keep_node` builds the shape: a division by zero whose only
+# reader is replaced, and the program's own print rerouted through what takes that reader's place.
+#
+#   keep_node_shape.reference  the program as written: `side` prints, then `2`
+#   keep_node_shape.gir        `:op/keep` is in the graph the pass returns
+#   keep_node_shape.run        KEEPNODE keep=1 reads_the_divisor=1, and the division still runs:
+#                              the program faults on it, which it can only do through the keeper
+#
+# The reading with the insertion switched off, measured by hand (opt/generic/rewrite.cpp,
+# keepThroughValue returning `value` on entry): `KEEPNODE keep=0 reads_the_divisor=0`. That is the
+# red this plan turns into.
+
+[defaults]
+kind = "behavior"
+backends = ["nvm"]
+backends_agree = []
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "keep_node_shape.reference"
+desc = "No pass: the call prints `side`, the value the branch of the program prints is `2`."
+case = "../../../cases/opt/effects/keep_node_shape.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "side\n2\n"
+
+[[tests]]
+name = "keep_node_shape.gir"
+desc = "The graph the pass returns holds `:op/keep`, and the print reads the value it gives back."
+case = "../../../cases/opt/effects/keep_node_shape.cml"
+args = ["${case}", "test::keep_node", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = [":op/keep", "KEEPNODE keep=1 reads_the_divisor=1 printed=1"]
+
+[[tests]]
+name = "keep_node_shape.run"
+desc = "The division by zero is still run: it is read by the keeper, and the print reads what the keeper gives."
+case = "../../../cases/opt/effects/keep_node_shape.cml"
+args = ["${case}", "test::keep_node", "${backend}"]
+expect_exit = 1
+expect_stdout_contains = ["KEEPNODE keep=1 reads_the_divisor=1 printed=1"]
+expect_stderr_contains = ["DivisionByZero"]

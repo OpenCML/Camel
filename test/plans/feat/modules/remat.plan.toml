@@ -8,24 +8,58 @@ tags = ["feat", "modules", "autodiff", "remat"]
 # so the transform takes the other word (author's ruling of 2026-10-30,
 # docs/handover/reviews/questions-2026-10-30-jax.md J8).
 #
-# What a value reads of it is the identity, and that is the whole of what a printed number can pin:
-# the two paths must print the same three numbers. What a pass stores is a reading of the graph, not
-# of the output, so no case here asserts a count; the count is `split`'s to report and
-# `who-owns-the-count-of-a-splits-residuals` in docs/handover/questions/ is where it is argued.
+# Since the author's ruling of 2026-11-01 the name is a *transform of the `transforms` module*
+# (stdlib/signatures/transforms.cml), not a library identity: `remat(f)` builds a new graph whose body
+# is `f`'s graph plus the graph property `kGraphFlagRecomputeBackward`, and a call through it is a
+# call of the same code, so no number moves. The two readings below are the two halves of that: what
+# a value reads of it (the identity, digit for digit) and what the graph reads of it (the property,
+# once with and once without).
+#
+# What a *pass* stores is still a reading of the graph and not of the output; the count `split`
+# reports for a cut, and whether it is `split`'s to report, is
+# `who-owns-the-count-of-a-splits-residuals` in docs/handover/questions/.
 #
 # The name's arrival is also the tripwire of `modules.jax_alignment`: `remat` was pinned there as
 # a refused import, and that case flips to the value it prints when this module exports the name.
 
 [[tests]]
 name = "remat.identity"
-desc = "`remat(f)` is `f`: for `f(x, y) = x * x * y` at x = 3, y = 2 both paths print 18.0, df/dx = 12.0 and df/dy = 9.0, the gradient read through `grad` on the two `with`-parameter orders. The value has to be identical digit for digit -- a transform that moved a number would not be a recomputation of the same graph."
+desc = "`remat(f)` is `f`: for `f(x, y) = x * x * y` at x = 3, y = 2 both paths print 18.0, df/dx = 12.0 and df/dy = 9.0, the gradient read through `grad` on the two `with`-parameter orders. The value has to be identical digit for digit -- a transform that moved a number would not be a recomputation of the same graph. The two `REINTERP remat` lines the transform prints are the mark being set twice (`in_recompute=0 out_recompute=1`), and the ids in them are the run's, so the values are matched as lines and the reading as a fragment."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/remat_identity.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
-expect_stdout_exact = "remat plain value=18.0 dfdx=12.0 dfdy=9.0\nremat value=18.0 dfdx=12.0 dfdy=9.0\n"
+expect_stdout_contains = ["remat plain value=18.0 dfdx=12.0 dfdy=9.0", "remat value=18.0 dfdx=12.0 dfdy=9.0", "in_recompute=0 out_recompute=1"]
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "remat.attribute"
+desc = "The graph property, read twice in one run: `h` as written carries none, the value `remat(h)` gives carries it -- the kernel prints `in_recompute=0 out_recompute=1` -- and the three calls print 18.0, 18.0, 18.0. Marking a marked function is marking it once: the second call prints no second `REINTERP remat` line and gives the same value."
+kind = "behavior"
+case = "../../../cases/transforms/remat/remat_mark.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["in_recompute=0 out_recompute=1", "remat_mark plain value=18.0", "remat_mark marked value=18.0", "remat_mark again value=18.0"]
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "remat.split"
+desc = "The mark read where it matters, the cut: `split(jvp(h))` for `h(x, y) = x * x * y` carries three residuals (x, y, and the product x*x the backward half's rule reads), and `split(remat(jvp(h)))` carries two -- the parameters -- and says `recompute=1`: the backward half makes x*x again from x. The four numbers are the same either way, digit for digit."
+kind = "behavior"
+case = "../../../cases/transforms/remat/remat_split.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["residuals=3", "residuals=2 recompute=1", "split_remat plain value=18.0 dfdx=12.0 dfdy=9.0", "split_remat marked value=18.0 dfdx=12.0 dfdy=9.0"]
 expect_output_not_contains = ["UnknownInternalError", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
