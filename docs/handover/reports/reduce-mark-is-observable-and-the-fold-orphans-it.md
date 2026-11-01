@@ -86,3 +86,32 @@ are the same as before this round -- no check was widened, and the `Guarantee` w
 
 `31ee71694` (sentence said `:12:99`, caret said `13:100`) was found through this same refusal: the
 span is `12:99-12:138` in `Range::start`'s 0-based coordinates, i.e. `13:100` for a reader.
+
+## Correction, next round: it is not fold that takes the reader -- it is inline
+
+The bisect says it plainly (same program, same binary, one pass at a time):
+
+| pipeline | result |
+|---|---|
+| `std::opt::fold` | **rc = 0**, no output |
+| `std::opt::inline std::opt::fold` | **rc = 1**: `Pass 'std::opt::fold' failed ... graph 'main' has effect node 36 (':mark/reduce_arr') ...` |
+| `std::opt::inline` | rc = 0 |
+| `std::opt::dce` | rc = 0 |
+
+So `fold` alone is innocent: it neither folds the `pure = false` call (it cannot -- `isPureOper` refuses
+it at the top of the loop) nor takes its reader. **`inline` produces the shape**: it splices `f1`'s body
+into the caller, the body's tail is the `reduce`, and in the destination that tail has no reader and
+**no chain place carried over**. `fold` is only the first pass whose boundary looks at the result.
+
+A guard was implemented and measured against this and it does not fix it -- `isFoldable` refusing to
+fold "the last reader of an observable call" leaves the node exactly as orphaned as before, because
+the reader was already gone when fold started. It was reverted; the tree is unchanged.
+
+**The next entry is `src/runtime/draft_inline.cpp`**: when a spliced body's tail effect has no reader
+in the destination, its place in the chain has to come across with it (or the call site's own
+consumer has to be reused). That is the same question as "who gives an unread effect its place",
+which the builder already answers when it builds a block -- the inliner is the one place that does
+not.
+
+Note the graph name differs by route (`main` after the two listed passes, `__root__` inside
+`std::opt`), which is the same node seen in the graph that holds it at that point, not two nodes.
