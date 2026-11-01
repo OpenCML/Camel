@@ -57,7 +57,6 @@ func every_member_python::<T>(): bool {
 /// Runs Python statements in the interpreter. Definitions and assignments stay visible to later
 /// calls, as in a Python session.
 /// @fails error value `PythonError` when the code raises
-/// @example-fragment runs Python code when it runs, and the example only has the `void!` result to show
 /// @example exec('x = 1')
 export func exec(code: string): void!
 
@@ -68,7 +67,6 @@ export func eval(expression: string): PyObject!
 
 /// Runs the Python script at the path.
 /// @fails error value `PythonError` when the file cannot be read or the script raises
-/// @example-fragment runs Python code when it runs, and the example only has the `void!` result to show
 /// @example 'scripts/hello.py'->run_file
 export func run_file(path: string): void!
 

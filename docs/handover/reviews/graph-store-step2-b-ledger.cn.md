@@ -1280,3 +1280,33 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(
 **结论**：这个文件 **93% 是 §53 已定的天花板**（119/128），剩下 9 处里 1 处是账本自己的 `constructions`、4 处是字符串、4 处没有事务可收。**不是同一件事，所以不拆成一笔**——要降它只有 §53/§54 那一问（改名或删类型），不是再来一片。
 
 **一条判据（协调者给的一句）**：**「剩下来的最多处，往往不是最难改的一处，而是最该先问『它是不是同一件事』的一处。」**
+
+## 59. `references` 涨 1 处（302 → 303）：`addLiftedFromRef`，为什么它必须长在 `GraphDraft` 上
+
+`jvp` 建出的每张图要记下「我是从哪张图提出来的」（`kGraphRefLiftedFrom`，第五个引用角色），
+`split` 的值半边靠这条记录把一次提升调用改叫原始函数。写这条记录的是
+`GraphDraft::addLiftedFromRef(GraphId)`。
+
+**为什么在 `GraphDraft` 上，而不是别处**：写图属性只有草稿这一个写入面。`addDependency`、
+`addSubGraph`、`addStaticGraphRef`、`addRuleGraphRef` 都在这里，引用表的所有者就是草稿本身；
+放到外面（自由函数、某个 `refs` 集合、拿到草稿的调用方）去写，引用的所有者就变成了调用方，
+而「谁拥有引用」正是这一步要收掉的东西。所以这一处**不是**绕过墙，而是**墙内的新写入点**，
+形状与四个既有角色完全同形：`touchRefs()` 之后去重追加。
+
+**数**：`files` 35，`references` **303**（+1），`constructions` 1，`decode` 4。
+`baseline.json` 已按名字登记：`sites.references["src/runtime/draft.cpp#addLiftedFromRef"] = 1`，
+不是只把总数从 302 改成 303。
+
+**A/B（两个方向都量过）**：
+
+- 拿掉这个写入器（`draft.h` 的声明 + `draft.cpp` 的定义）→ `[LEDGER] files 35 <= 35 references 302 <= 302 ...`、`[LEDGER] ok`，但属性写不进去：
+  ```
+  ../src/runtime/draft_clone.cpp:275:15: error: no member named 'addLiftedFromRef' in 'camel::runtime::GraphDraft'
+  ../src/runtime/draft_clone.cpp:482:15: error: no member named 'addLiftedFromRef' in 'camel::runtime::GraphDraft'
+  ../src/runtime/draft.cpp:2225:18: error: out-of-line definition of 'addLiftedFromRef' does not match any declaration in 'camel::runtime::GraphDraft'
+  ```
+- 放回来 → `references 303 <= 303`，`[LEDGER] ok`，`[LEDGER]` 那行仍打印，且
+  `runtime.graph_draft_ledger.never_rises` 绿。
+
+**这一处要还的账**：`GraphDraft` 删掉那天，这 1 处和其他 302 处一起消失；它没有把终点推远，
+只是让第五个引用角色也走同一个写入面。
