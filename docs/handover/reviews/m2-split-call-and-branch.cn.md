@@ -58,26 +58,49 @@ REINTERP split function=jvp_of_leaky skip=branch exit=Join condition=5 why=this 
 
 改前（原文，`skip=exit`）：`REINTERP split function=jvp_of_leaky skip=exit (a lifted function answers with the pair (result, tangent); this graph's exit is not a two-member tuple fill, so there is no pair to cut)`
 
-## 3. A/B：入口关掉再打开
+## 3. 每条臂自己的 Join：建出来了，还没接（有读数）
+
+`WALK` 之后再读一层：**每条臂产出什么**，以及后一半为它**建了什么**。
+
+```
+WALK half=backward region=1 arm=0 branch=6 members=3 ports=0 nested=0 outside=2
+WALK half=backward region=2 arm=1 branch=6 members=3 ports=0 nested=0 outside=2
+ARM half=backward arm=0 region=1 yield=13 members=2 value=7 tangent=8 probeRegion=1 probeJoin=0
+ARM half=backward arm=1 region=2 yield=15 members=2 value=10 tangent=11 probeRegion=2 probeJoin=1
+REINTERP split function=jvp_of_leaky skip=branch exit=Join condition=5 why=… Each arm is entered and described (`WALK`), its yield is read off the Fill that writes the pair (`ARM`), and the backward half makes a region and a Join per arm -- but nothing is wired to them yet: not the arm's body, not the condition, so no value of the arm crosses and the choice of arm is the next cut, not this one
+```
+
+- `yield=13` / `yield=15`：臂在区域里以 `Fill` 收尾，写进 Join 的槽。**pair 的两半就是这个 Fill 的两个
+  with 输入**，所以 `value=7 tangent=8` 是读出来的，不是按形状猜的（`0.5*x` 那条臂是 `value=10 tangent=11`）。
+- `probeRegion=1 probeJoin=0` / `probeRegion=2 probeJoin=1`：后一半**真的建了**一个 region 和一个 Join
+  （`addRegion` + `addJoinNode`），建在自己的草稿里。草稿不 `encode`，因为这一刀仍然拒绝 —— 所以这些 ref
+  是**可以核对的构造**，不是一张假装能跑的图。
+- `members=2`：pair 有两个成员，臂的产出形状就是 `(值, 切向)`。
+
+**这一刀有没有让 `outside` 那两个值真的进到臂里？没有。** 建出来的 region 与 Join 都是空的：臂的 body 没
+复制进去、条件没接上、Join 的臂没接。所以"接得上"这件事这一刀**没有**做到，只是**建好了接的位置**。
+把这点写在读数里，是因为它是这一步唯一的真话：`probeJoin` 是个 ref，不是一条边。
+
+## 4. A/B：入口关掉再打开
 
 `enterArmRegions`（`modules/transforms/split.cpp`）就是这个入口。关掉 → 只剩 `skip=branch` 那一行
-（下面贴原文）；打开 → 两行 `WALK` 出现，其余 8 条 `split` 入口和别的计划都不动。
+（下面贴原文），`WALK` 与 `ARM` 都不打；打开 → 四行读数，其余 8 条 `split` 入口和别的计划都不动。
 
 关掉时（原文）：
 
 ```
-REINTERP split function=jvp_of_leaky skip=branch exit=Join condition=5 why=this graph's exit is the Join of a branch (the arm the condition picks writes the pair), so the cut has to happen inside the arms, with the condition carried as a residual -- the backward half then picks the arm the forward half took by reading the same condition -- and a half's walk enters an arm's region now but does not build the arm it finds
+REINTERP split function=jvp_of_leaky skip=branch exit=Join condition=5 why=this graph's exit is the Join of a branch (the arm the condition picks writes the pair), so the cut has to happen inside the arms, with the condition carried as a residual -- the backward half then picks the arm the forward half took by reading the same condition. Each arm is entered and described (`WALK`), its yield is read off the Fill that writes the pair (`ARM`), and the backward half makes a region and a Join per arm -- but nothing is wired to them yet: not the arm's body, not the condition, so no value of the arm crosses and the choice of arm is the next cut, not this one
 ```
 
-打开时：上面第 2 节的两行 `WALK` 在它前面。
+打开时：上面第 2、3 节的四行读数在它前面。
 
-## 4. 下一步（写清，免得下一个人以为"已经做完了"）
+## 5. 下一步（写清，免得下一个人以为"已经做完了"）
 
-区域走查现在是**能进、能说**；还差的是**进了之后建**：每条臂在各自半边里建自己的 Join
-（值半边落 `(float)`、切半边落 `(float)`），条件按 4.2 作为残差带过去，后半边按同一个条件选臂。
+区域走查与 per-arm Join 现在是**能进、能说、能建**；还差**接**：把臂的 body 复制进各自的 region、把条件
+（`outside` 的两个值之一）接上、把臂的产出接到 Join 的槽，然后才轮到"后半边按同一个条件选臂"。
 这一笔要等父级点名，不和现在这笔一起做。
 
-## 5. 三条不许动的数（每次复验）
+## 6. 三条不许动的数（每次复验）
 
 - `modules.remat`：`residuals=3` 与 `residuals=2 recompute=1` 两条读数；
 - `split_two_params`：`(12.0, 9.0)`；

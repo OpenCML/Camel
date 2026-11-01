@@ -15,6 +15,7 @@
 #include "camel/utils/type.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <array>
 #include <numeric>
 #include <span>
@@ -877,14 +878,68 @@ SplitGraph buildSplitGraph(
                            << " ports=" << walked.ports << " nested=" << walked.nestedBrchs
                            << " outside=" << walked.outside << '\n';
                     }
+                    // The second step: what each arm *yields*, and the Join the backward half makes for
+                    // it. An arm ends in the Fill that writes the pair into the Join's slot, so its two
+                    // members are the value and the tangent -- the tangent is what the backward half
+                    // keeps, and it is read off the Fill's with inputs, never guessed from the arm's
+                    // shape. The Join and the region are made for real (a member of the group's own
+                    // draft) and the numbers below are their refs; nothing is encoded, because the cut
+                    // still refuses, so the step is a construction that can be checked and not a graph
+                    // that pretends to run.
+                    const rt::GCNode *pairNode = exitNode;
+                    Type *pairType             = pairNode->dataType();
+                    // The construction is made in a draft of its own, which is dropped without being
+                    // encoded: the cut still refuses, so these refs are a construction that can be
+                    // checked, not a graph that pretends to run.
+                    rt::GraphDraftGroup probe(context, program);
+                    const GraphId probeId =
+                        probe.reserve("split_arm_probe", "split_arm_probe");
+                    auto &halfDraft = probe.transaction(probeId).edit();
+                    for (uint32_t region = 1; region < function->regionCount(); ++region) {
+                        const rt::GCRegion *one = function->region(region);
+                        if (one == nullptr || one->kind != rt::GCRegionKind::Arm ||
+                            one->owner != branch) {
+                            continue;
+                        }
+                        gc_node_ref_t yield = rt::kInvalidNodeRef;
+                        for (gc_node_ref_t r = 0; r < function->nodeCount(); ++r) {
+                            const rt::GCNode *n = function->node(r);
+                            if (n == nullptr || function->nodeRegion(r) != region ||
+                                n->kind != rt::GCNodeKind::Fill || n->dataType() != pairType) {
+                                continue;
+                            }
+                            yield = r;
+                        }
+                        
+                        const uint32_t madeRegion =
+                            halfDraft.addRegion(rt::GCRegionKind::Arm, 0, rt::kInvalidNodeRef,
+                                                one->index);
+                        const std::span<const gc_node_ref_t> members =
+                            yield == rt::kInvalidNodeRef ? std::span<const gc_node_ref_t>()
+                                                         : function->withInputsOf(yield);
+                        Type *tangentType = members.size() == 2 ? function->node(members[1]) != nullptr
+                                                                     ? function->node(members[1])->dataType()
+                                                                     : nullptr
+                                                               : nullptr;
+                        const gc_node_ref_t madeJoin = halfDraft.addJoinNode(
+                            tangentType != nullptr ? tangentType : pairType, rt::kInvalidNodeRef, 2);
+                        os << "ARM half=backward arm=" << one->index << " region=" << region
+                           << " yield=" << yield << " members=" << members.size() << " value="
+                           << (members.size() == 2 ? members[0] : rt::kInvalidNodeRef) << " tangent="
+                           << (members.size() == 2 ? members[1] : rt::kInvalidNodeRef)
+                           << " probeRegion=" << madeRegion << " probeJoin=" << madeJoin << '\n';
+                    }
                 }
                 refuseAt(
                     refusal, function, exit, "the exit",
                     "this graph's exit is the Join of a branch (the arm the condition picks writes the "
                     "pair), so the cut has to happen inside the arms, with the condition carried as a "
                     "residual -- the backward half then picks the arm the forward half took by reading "
-                    "the same condition -- and a half's walk enters an arm's region now but does not "
-                    "build the arm it finds");
+                    "the same condition. Each arm is entered and described (`WALK`), its yield is read "
+                    "off the Fill that writes the pair (`ARM`), and the backward half makes a region "
+                    "and a Join per arm -- but nothing is wired to them yet: not the arm's body, not "
+                    "the condition, so no value of the arm crosses and the choice of arm is the next "
+                    "cut, not this one");
                 os << "REINTERP split function=" << function->name() << " skip=branch exit=Join"
                    << " condition=" << condition << " why=" << refusal.refusedWhy << '\n';
                 return refusal;
