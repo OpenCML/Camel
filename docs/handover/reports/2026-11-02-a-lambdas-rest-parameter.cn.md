@@ -597,3 +597,39 @@ progen fixed: 29 findings, 480 runs
 **判断**：这两条与本节改动无关——`std::opt::fold` 的 `PassInternalError` 不是本车道能产生的形态（本车道的改动要么给
 `SemanticDiag`，要么照常建节点），且 `progen_check` 是 CPU 预算（133 s 对 150 s 的余量）。**但"无关"只是判断，
 不是读数**：要证它在 `develop` 上同样红，得在另一棵树跑同一计划——**本车道没有第二棵树，这一条留给主检出。**
+
+## 18. F20 那条 `PassInternalError`：全文、分层、缩小到哪一步为止（不修）
+
+**① 完整原文（一行，未截）**：
+
+```
+error[RuntimeDiag::PassInternalError]: Pass 'std::opt::fold' failed with an internal error: graph '__root__' has effect node 42 (':mark/reduce_arr') with neither a read of its value nor a place in its chain, written at test/cases/opt/progen/findings/inline_crash_function_argument.cml:12:99.
+```
+
+**② 分层（四次退出码，同一个文件）**：
+
+| 管线 | rc |
+|---|---|
+| `std::nvm` | **0** |
+| `std::opt::inline std::nvm` | **0** |
+| `std::opt std::nvm` | **1** ← 这句在这里 |
+| `std::opt::fold std::nvm` | 不是管线写法（`std::opt::fold` 不是遍名，报 `InvalidPassParameter`） |
+
+⇒ **出在 `std::opt` 这一层里的 `std::opt::fold`**；`std::opt::inline` 与 VM 都干净。与 A4f 同族（"`opt` 在 fold 期间产生效果位置错误"）：
+这里是**效果节点在一个可能不执行的分支里，既没人读它的值、也不在链上**。
+
+**③ 缩小：五次尝试，只有原文件能复现**（判据是"同一句文案逐字相同"）：
+
+| 尝试 | 形状 | 结果 |
+|---|---|---|
+| s1 | `concat(['']) -> reduce<...>` | **编不过**：`NoMatchingFunction … <> (string[])`（`concat` 的实参形状不是这样写的） |
+| s2 | `['', a3] -> reduce<...>`，`a3` 是捕获的字符串 | **rc=0，无这句** |
+| s3 | 同上，先绑 `let y = ['', a3]` 再 reduce | **rc=0，无这句** |
+| s4 | `concat([''], if false then [''] else ['', a3]) -> reduce<...>` 放在函数里，`main` 用 `if false then 0 else f1('')` 调 | **rc=0，无这句** |
+| s5 | `concat(if false then [''] else ['', a3]) -> reduce<...>` | **编不过**：同上 |
+
+⇒ **最小程序仍是原文件**（36 行）。去掉的部分都能各自 rc=0：**`sync { ... }` 两条臂、`r23` 那层调用、以及 `f1` 的函数类型形参 `a2`
+三者里至少有一个是必要条件**，但**我没能把它单独分离出来**——这一条留给下一轮，**不冒充缩小成功**。
+
+**④ 附带一个读数**：报错位置写的是 `:12:99`，而第 12 行只有 `let n6 = true;`（`reduce` 实际在第 13 行）。**位置本身也是错的**——
+与"效果节点在分支里"可能是同一个记账问题，但这是观察，不是结论。
