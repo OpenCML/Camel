@@ -982,6 +982,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kDropCallArgumentPass, DropCallArgumentTestPass),
         TEST_PASS(kLeakBranchArmPass, LeakBranchArmTestPass),
         TEST_PASS(kShareBranchArmPass, ShareBranchArmTestPass),
+        TEST_PASS(kOrderOnlyEffectPass, OrderOnlyEffectTestPass),
         TEST_PASS(kOperatorSemanticsTestPass, OperatorSemanticsTestPass),
         TEST_PASS(kFailsWithValueTestPass, FailsWithValueTestPass),
         TEST_PASS(kBreakJoinTestPass, BreakJoinTestPass),
@@ -1898,10 +1899,15 @@ GraphOrder orderOfGraph(const GCGraph &graph) {
 
 /// Whether the effect `ref` stands on something in `graph` (design principles 3.1): a read of its
 /// value -- a normal or `with` input of another node, or the graph's own result, which whoever runs
-/// the graph reads -- or a place in its block's chain. The chain is carried as three edge kinds while
-/// the migration runs (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the control one,
-/// and the order kind joins statements of one block yet), so a place in it is a sync, control or
-/// order edge either way, or the `kGCNodeFlagSyncStatement` the builder and the splices mark.
+/// the graph reads -- or a place in its block's chain. The chain is carried as two edge kinds while
+/// the migration runs (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the control one),
+/// so a place in it is a sync or control edge either way, or the `kGCNodeFlagSyncStatement` the
+/// builder and the splices mark.
+///
+/// An order edge is not one of them: it orders two nodes that both run and makes neither of them run
+/// (edges.cn.md 1.5), so an effect whose only company is an order edge stands on nothing. Read this
+/// way, this predicate is what refuses such a graph -- `test::order_only_effect` builds one on
+/// purpose by stripping every other edge of an effect, and the refusal names what is missing.
 ///
 /// An effect with none of these is in the graph and in no chain: nothing makes it run, which is what
 /// a rewrite that removes its last reader and forgets to hand its place on leaves behind.
@@ -1917,8 +1923,7 @@ bool effectStandsOnSomething(const GCGraph &graph, camel::runtime::gc_node_ref_t
         return true;
     }
     return !graph.syncPredsOf(ref).empty() || !graph.syncUsersOf(ref).empty() ||
-           !graph.ctrlInputsOf(ref).empty() || !graph.ctrlUsersOf(ref).empty() ||
-           !graph.orderPredsOf(ref).empty() || !graph.orderUsersOf(ref).empty();
+           !graph.ctrlInputsOf(ref).empty() || !graph.ctrlUsersOf(ref).empty();
 }
 
 /// The effects of `program`: every effect node of every graph of it, each at its position in one
