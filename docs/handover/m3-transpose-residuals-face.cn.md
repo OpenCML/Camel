@@ -60,10 +60,19 @@ TRANSPOSE function=split_of_jvp_of_f_backward skip=kind node=11 kind=8
 1. **直接调用在本图模型里有两种写法**：`CALL` 节点（第一个 norm 输入是被调值，`kind=8`），或者 **`FUNC` 节点本身就是这次调用**（`kind=10`，实参直接是它的 norm 输入）。`f(x) = g(x) + g(x)` 走的是后者——`std::gir` 里 `N04 [FUNC g] value_type=float`，根本没有 CALL 节点。只认 `CALL` 会得到 `skip=kind node=2`。
 2. **`addFuncNode`/`addCallNode` 的那个 `type` 是「这次调用的值类型」**（这里是 `float`），不是被调图的签名。传签名进去，边的校验会报 `calls 'transpose_of_g', whose value is a float, and is a (float, float) => float`。
 
-## 六、`split` 的后一半仍然拒，但理由换了
+## 六、被调值是谁：四类，测过的
 
-`transpose(lin)` 现在走到 `skip=call node=11 callee=none`：那个 `Call` 的**第一个输入本身是一个 `Call`**（`kind=8`），也就是被调值**是算出来的**（间接调用），`calleeIdOf` 拿不到图。下一步是「解析间接被调值」——先把内层调用的结果连到一张图上，再转置它。这不是「调用不能转」，是「算出来的被调值还没有名字」。
+「转置一个调用」不是一个功能面，是四个。判据不是读代码猜的，是每类各写一条最小程序量出来的（`camel <file> std::gir` 看节点，跑一遍看拒收原文）：
+
+| 类 | 最小程序 | 今天 |
+|---|---|---|
+| **`Func`**（直接调用：`FUNC` 节点本身就是调用，或 `CALL` 的第一个 norm 输入是被调值） | `f(x) = g(x) + g(x)`，`g(x) = 2.0*x`（`test/cases/compile/transforms/transpose_call.cml`） | **过**：`transpose(f)(1.0, 1.0) = 4.0`，`TRANSPOSE function=g` 只一行 |
+| **`Data`**（函数常量：`let h = g` 后 `h(x)`，闭包/函数值存成静态值，调用以 `with` 输入带着它） | `func f(x) { let h = g; return h(x) + h(x) }` | `skip=call node=3 callee=none value=0:1 with=1:0`——`calleeIdOf` 只认 `FUNC` 节点，`DATA` 里的函数常量名字取不到 |
+| **`Call``**（被调值是某次调用的返回值，即“算出来的”） | `split(jvp(f))` 的后一半（`transpose_residuals`） | `skip=call node=11 callee=none value=10:8 with=7:8` |
+| **`Port`**（高阶：被调值是形参） | `func apply(fn: ((y: float) => float), x) { return fn(x) + fn(x) }`，`f(x) = apply(twice, x)` | `TRANSPOSE function=apply skip=signature` → `f skip=call node=2 callee=apply` |
+
+**`Func` 这一类本来就能过**——所以「转置一个调用」的清单从「猜」变成了：**一类过、三类按名拒**。`Data`/`Call` 两类的替代品**没有造**（闭包当值那条等作者裁定）；`Port` 这一类要的是泛化 `transposeSignature`（函数参数不是 `float`），那是另一个面。
 
 ## 七、这一笔没做到，是因为判断错了预算，不是判断错了方向
 
-我先按「残差版就是把端口和已知值换掉」估了两小时以内，实际动手才发现后一半带调用——那是另一个功能（转置调用），不是这一次改动的延伸。**下次估「收下一种新形状」之前，先把它要走的图打出来看一眼有没有 `Call`/`Dref`/循环**：图解形状比类型形状更早暴露工作量。**这条已经兑现过一次**：拿到「转置调用」这个点名后，先打图，才发现直接调用有两种写法、其中一种根本不是 `CALL` 节点。
+我先按「残差版就是把端口和已知值换掉」估了两小时以内，实际动手才发现后一半带调用——那是另一个功能（转置调用），不是这一次改动的延伸。**下次估「收下一种新形状」之前，先把它要走的图打出来看一眼有没有 `Call`/`Dref`/循环**：图解形状比类型形状更早暴露工作量。**这条已经兑现过两次**：先发现直接调用有两种写法（`CALL` / `FUNC`），后发现在 `let` 里存下的函数值既不是 `Func` 也不是 `Call` 而是 `Data`。
