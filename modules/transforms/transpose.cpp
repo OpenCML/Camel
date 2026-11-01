@@ -476,6 +476,15 @@ bool buildTransposeMember(
         // states hands out one cotangent per state and collects one per state, so the shape has to
         // be a list on both ends.
         bool armsOk = true;
+        // What an arm hands back to the residual tuple. A value an arm reads out of the residuals has
+        // no forward source inside the arm, so its cotangent has exactly one place to go: the slot it
+        // was read from. That is a different statement from a zero inside the arm -- a zero would say
+        // the value does not affect the answer, and it does (`x` is what `2x` is computed from). The
+        // channel is kept per slot and printed when a cotangent is handed over, because the transposed
+        // function does not answer with it: the residuals are the values the cut carried, not
+        // parameters a caller differentiates, so this is a second-order quantity. Printing it is what
+        // keeps the accounting visible instead of silent.
+        std::unordered_map<uint32_t, gc_node_ref_t> residualBack;
         struct ArmSeed {
             gc_node_ref_t at        = rt::kInvalidNodeRef;
             gc_node_ref_t cotangent = rt::kInvalidNodeRef;
@@ -510,6 +519,28 @@ bool buildTransposeMember(
                                             ? node
                                             : primitive(":op/add_d", {portCotangents[i], node});
                     return;
+                }
+                // A residual the arm read: the cotangent goes back into the slot it came from, named
+                // by the slot's number. Nothing inside the arm stands for it, so dropping it here
+                // would be a claim about the value rather than a rule about the cotangent.
+                if (const camel::runtime::GCNode *targetNode = function->node(target);
+                    targetNode != nullptr && targetNode->kind == rt::GCNodeKind::Accs) {
+                    const auto readFrom = function->normInputsOf(target);
+                    const auto *body     = function->nodeBodyAs<rt::GCAccsBody>(target);
+                    const bool onAResidualPort =
+                        !readFrom.empty() &&
+                        std::any_of(stops.begin(), stops.end(), [&](gc_node_ref_t stopRef) {
+                            return stopRef == readFrom.front();
+                        });
+                    if (body != nullptr && onAResidualPort) {
+                        auto &slot = residualBack[body->value];
+                        slot       = slot == rt::kInvalidNodeRef
+                                         ? node
+                                         : primitive(":op/add_d", {slot, node});
+                        os << "TRANSPOSE function=" << function->name() << " residual-return slot="
+                           << body->value << " region=" << oldRegion << '\n';
+                        return;
+                    }
                 }
                 if (allowEscapes) {
                     // The round read this value from outside: its cotangent leaves the loop
@@ -547,6 +578,12 @@ bool buildTransposeMember(
                     continue;
                 }
                 if (node->kind != rt::GCNodeKind::Oper) {
+                    // Named, not silent: an arm whose body holds something other than an operator
+                    // with a transpose rule stops here, and the line says which node and which kind,
+                    // so the next reader sees what shape the arm has (a lifted call is a FUNC) rather
+                    // than only that the arm failed.
+                    os << "TRANSPOSE function=" << function->name() << " arm-stop region=" << oldRegion
+                       << " node=" << ref << " kind=" << static_cast<int>(node->kind) << '\n';
                     armsOk = false;
                     return {};
                 }
