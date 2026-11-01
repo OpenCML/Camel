@@ -80,20 +80,18 @@ Type *ruleElementTypeOf(Type *type) {
     return type;
 }
 
-/// The element type a rule is instantiated at: the element of the value the primitive is *given*, not
-/// of the value it answers. The two are the same for every arithmetic primitive and different for the
-/// reductions whose result element is not the operand's -- `argmax_axis` takes a numeric tensor and
-/// answers positions, and its rule is generic in the operand's element because that is what its
-/// parameters are made of. Reading the node's own type would instantiate those rules at the positions'
-/// type, which is a type the function they call is not generic in.
-Type *firstOperandTypeOf(const rt::GCGraph &function, gc_node_ref_t ref) {
-    for (gc_node_ref_t input : function.normInputsOf(ref)) {
+/// The type of the first operand of the node at `ref`, or nullptr when it has none. A rule is
+/// generic in the element its *operands* are made of, and the node's own `dataType()` is the type of
+/// what it answers: `argmax_axis` takes a tensor of numbers and answers `int64` positions, so asking
+/// the node would instantiate its rule at `int64` and apply it to floats.
+Type *firstOperandTypeOf(camel::runtime::GCGraph &function, gc_node_ref_t ref) {
+    for (const gc_node_ref_t input : function.normInputsOf(ref)) {
         if (input >= function.nodeCount()) {
             continue;
         }
-        Type *type = function.node(input)->dataType();
-        if (type != nullptr) {
-            return ruleElementTypeOf(type);
+        const rt::GCNode *operand = function.node(input);
+        if (operand != nullptr) {
+            return operand->dataType();
         }
     }
     return nullptr;
@@ -233,11 +231,7 @@ VmapGraph buildVmapGraph(
     size_t copiedKinds = 0;
     size_t seenKinds   = 0;
     std::vector<std::string> usedRules;
-    // The element type each rule was instantiated at, in the order they were reached: the reading
-    // states it because it is the one type a rule of this family is generic in, and the reductions
-    // whose result element is not the operand's make that worth printing (`argmax_axis` answers
-    // positions and its rule is generic in the operand's element).
-    std::vector<std::string> elementTypes;
+    std::vector<std::string> usedElements;
     std::vector<gc_node_ref_t> liftOf;
 
     camel::runtime::GraphDraftGroup group(context, program);
@@ -326,9 +320,21 @@ VmapGraph buildVmapGraph(
         const auto batchThroughRule = [&](gc_node_ref_t ref, const std::string &uri,
                                           const camel::parse::ast::RuleMatch &match)
             -> gc_node_ref_t {
-            Type *elementType     = firstOperandTypeOf(*function, ref);
-            if (elementType == nullptr) {
-                elementType = ruleElementTypeOf(function->node(ref)->dataType());
+            // The instance is made at the element type the primitive works on, because that is the
+            // type the rule is generic in -- read from an operand, not from the node, whose type is
+            // what the primitive answers.
+            Type *operandType = firstOperandTypeOf(*function, ref);
+            Type *elementType = ruleElementTypeOf(
+                operandType != nullptr ? operandType : function->node(ref)->dataType());
+            // What the instance was made at, in the reading: a rule is generic in its operands'
+            // element, so this is the one fact a wrong reading of the element would show.
+            const std::string element = elementType != nullptr ? elementType->toString() : "-";
+            bool seenElement          = false;
+            for (const std::string &known : usedElements) {
+                seenElement = seenElement || known == element;
+            }
+            if (!seenElement) {
+                usedElements.push_back(element);
             }
             const uint64_t ruleId = ruleIdOf(*context, match.rule);
             if (ruleId == 0) {
@@ -384,7 +390,6 @@ VmapGraph buildVmapGraph(
             const gc_node_ref_t call = draft.addCallNode(resultType);
             draft.setNormInputs(call, arguments);
             draft.setWithInputs(call, std::span<const gc_node_ref_t>(&named, 1));
-            elementTypes.push_back(elementType != nullptr ? elementType->toString() : std::string("-"));
             return call;
         };
 
@@ -614,24 +619,8 @@ VmapGraph buildVmapGraph(
     for (const std::string &rule : usedRules) {
         rules += (rules.empty() ? "" : ",") + rule;
     }
-    // The element types the rules were instantiated at, each once, in the order reached: a body whose
-    // two rules were made at one element type says so once (`elements=float`), and one that mixed two
-    // names both.
     std::string elements;
-    std::vector<std::string> distinctElements;
-    for (const std::string &element : elementTypes) {
-        bool seen = false;
-        for (const std::string &already : distinctElements) {
-            if (already == element) {
-                seen = true;
-                break;
-            }
-        }
-        if (!seen) {
-            distinctElements.push_back(element);
-        }
-    }
-    for (const std::string &element : distinctElements) {
+    for (const std::string &element : usedElements) {
         elements += (elements.empty() ? "" : ",") + element;
     }
     os << "REINTERP vmap function=" << function->name() << " graph=" << rt::toValue(member)
