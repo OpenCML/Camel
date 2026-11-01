@@ -219,6 +219,15 @@ struct Expr {
 /// operator and the sequence of a fused loop are written with it.
 constexpr int kIntervalPrecedence = 85;
 
+/// How tightly a prefix operator (`-`, `!`, `~`) binds, which is the parser's own level and not
+/// this printer's opinion (`src/parse/syntax/parser_expr.cpp`, `negExpr`): "looser than `->` and
+/// than `^`, tighter than the other binary operators ... `-x ^ 2` is `-(x ^ 2)`, `-a * b` is
+/// `(-a) * b`". So it sits between `*` and `^` of `precedenceOf`: a prefix as the base of a power
+/// takes the parentheses (`(-x) ^ 2`), as the left operand of `*` it does not (`-a * b`). The
+/// value 70 that used to stand here put the prefix above `^`, so `(-x) ^ 2` printed as `-x ^ 2`,
+/// which parses as `-(x ^ 2)` (the A7 case `parse/rulings/power`: 9 printed as -9).
+constexpr int kPrefixPrecedence = 55;
+
 std::string parenthesize(const Expr &value, int minimum) {
     return value.precedence < minimum ? "(" + value.text + ")" : value.text;
 }
@@ -2676,7 +2685,7 @@ class CmlPrinter {
         if (text.starts_with(op)) {
             text = std::format("({})", text);
         }
-        return {std::format("{}{}", op, text), 70};
+        return {std::format("{}{}", op, text), kPrefixPrecedence};
     }
 
     Expr callExpression(gc_node_ref_t ref) {

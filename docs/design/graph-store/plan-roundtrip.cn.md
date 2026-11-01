@@ -210,6 +210,46 @@ kind is the value it holds, so a print that cannot read it cannot write the stat
 
 
 
+
+**2026-11-02 第十四刀（A7 第 4 条）：前缀 `-` 比 `^` 松，括号表把它放严了一级。** 缺陷原文：`parse/rulings/power` 原程序第二行 `-9 9 -4 -4 12`；打印版 `-9 -9 -4 -4 12`——`(-x) ^ 2` 被打成 `-x ^ 2`，而解析器读它是 `-(x ^ 2)`，9 变成 -9。
+
+**这一格的原话是解析器写的，不是打印机猜的**（`src/parse/syntax/parser_expr.cpp`）：
+
+```
+ *   powerExpr       ^                                           right
+ *   negExpr         prefix -  !  ~   looser than `->` and than `^`, tighter than the other binary
+ *                                    operators: `-x->f` is `-(x->f)`, `!xs->is_empty()` is
+ *                                    `!(xs->is_empty())`, `-x ^ 2` is `-(x ^ 2)`, `-a * b` is `(-a) * b`
+```
+
+```
+/// powerExpr : nullableExpr ('^' powerExpr)?
+/// negExpr : ('-' | '!' | '~') negPower | linkExpr
+```
+
+打印机这边原来是 `prefix()` 返回 `70`——**比 `^`（60）严**，于是 `^` 的底数不加括号。改成 `kPrefixPrecedence = 55`（`*` 的 50 与 `^` 的 60 之间），一格一行注释，出处写在常量上。
+
+**"别处还有一份表"的检查**：`git grep -n precedenceOf -- src` 只有 `src/passes/trans/cml/cml.cpp#precedenceOf` 一处（打印侧）；解析侧没有第二份"优先级数字表"，它是 `parser_expr.cpp` 里逐层的语法函数（`parsePower` / `parseNeg`），**这一刀不动它**——我们只是把括号加上，解析器本来就按那套规则读。**所以这次不存在"两张表只改一张"的形状；只改了一处，且改的那处把出处指向了解析器的原话。**
+
+原程序与打印版（`std::nvm`）三行输出：
+
+```
+原: 18 512 64 2     打印: 18 512 64 2
+原: -9 9 -4 -4 12   打印: -9 9 -4 -4 12   （第 4 行现在是 `println(-(x ^ 2), (-x) ^ 2, -4, -4, 12)`）
+原: 0.5 2 3         打印: 0.5 2 3
+```
+
+判据（基线 `553 / 1807 / 543 / 502 / 41 / 10 / 52`，语料 3361 个文件，即第十三刀之后）：
+
+| 读数 | 基线 | 本刀 |
+| --- | --- | --- |
+| `printed` | 553 | **553**（这一条本来就打印） |
+| `equivalent` | 502 | **503** |
+| `not_equivalent` | 41 | **40**（正是 `power`） |
+| `unfaithful` | 10 | **10** |
+| `DIFFERENT` | 51 行 | **50 行，新增 0** |
+| `families` | 52 | **52** |
+
 **2026-11-02 第十三刀（A7 第 5、6 条）：`print` 的格式说明就在 `with` 槽里，读法与 `fail<'Kind'>` 同源。** 缺陷原文：`trans/cpp/exec/print_formats` 原程序 `3-4|1+2` / `next` / `[5][a]` / `0.50`；打印版 `3 4|1 2` / `next` / `5a` / `0.5`。`consistency/values/float_special` 原程序末三行 `nan` / `     nan` / `+nan`；打印版三行都是 `nan`。
 
 **`with` 槽的形状**（`stdlib/prelude.cml` 的声明）：
