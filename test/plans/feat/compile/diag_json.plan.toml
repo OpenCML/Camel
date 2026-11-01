@@ -440,3 +440,14 @@ assert(JSON.stringify(got) === JSON.stringify(want), 'warnings: ' + got.join(' '
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
+
+[[tests]]
+name = "rewrite_does_not_settle"
+desc = "The rewrite engine reports a rewrite that keeps changing the same graph instead of returning a program that is one rewrite away from being different: settle_runs=1 is the bound exposed so this report can be proved (the default is 32), and the diagnostic names the graph, the bound and the pass."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_loop.cml"
+args = ["${case}", "std::opt settle_runs=1", "onnx::export"]
+expect_exit = 1
+expect_output_contains = ["Pass 'std::opt' failed with an internal error", "did not settle", "1 consecutive runs each changed the program", "name=RuntimeDiag::PassInternalError, code=0x0400000C"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 6000

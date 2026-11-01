@@ -1,0 +1,18 @@
+// The same function called from two places: inlining copies its body into both, so the program
+// writes `stdout` twice before the pass and twice after it. What the count says about that is the
+// question this case is here to ask -- a copy that the source wrote twice is not a resource the
+// pass invented.
+import { println } from std
+
+func noisy(): int sync {
+    println("noisy")
+    return 1
+}
+
+func main(): int sync {
+    let a = noisy() + 1
+    let b = noisy() + 2
+    println(a)
+    println(b)
+    return 0
+}
