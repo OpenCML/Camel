@@ -58,6 +58,7 @@ Exit 0 when every program is standalone, 1 otherwise.
 import argparse
 import collections
 import concurrent.futures
+import hashlib
 import json
 import os
 import re
@@ -206,6 +207,19 @@ def needs_of(target, env):
     return out + err
 
 
+def artifact_stem(name):
+    """The file name one entry's written program and its executable get in the work directory.
+
+    It carries the entry's whole identity -- the program's path *and* the arguments of its `main` --
+    because entries of one program differ in nothing else, and the entries are built at once by one
+    pool: two threads that share a source path write it while the other's compiler is reading it,
+    and share an executable while the other is running it. `test/cases/compile/entry_args/complex.cml`
+    is named by twelve such entries, which is how this was found. The readable part is capped and a
+    digest of the whole name follows it, so two names that are cut at the cap stay two names."""
+    readable = re.sub(r"[^A-Za-z0-9_]", "_", name)[:96]
+    return readable + "_" + hashlib.sha1(name.encode("utf-8")).hexdigest()[:10]
+
+
 def check_standalone(paths, args):
     """Every program written by std::cpp must be one the Camel runtime does not have to be part
     of: the generated code names no bridge, and the executable built from it needs no Camel
@@ -242,7 +256,7 @@ def check_standalone(paths, args):
             rec["reason"] = "std::cpp did not write a program"
             return rec
         bridges = "camel/standalone/bridge.h" in out
-        stem = re.sub(r"[^A-Za-z0-9_]", "_", program_rel)[:120]
+        stem = artifact_stem(shown)
         source = os.path.join(workdir, stem + ".cpp")
         target = os.path.join(workdir, stem + EXE)
         with open(source, "w", encoding="utf-8", newline="\n") as f:
@@ -383,7 +397,7 @@ def check(entry, workdir, args):
             rec["detail"] = (text.strip().splitlines() or ["exit %s" % code])[-1][:200]
         return rec
 
-    stem = re.sub(r"[^A-Za-z0-9_]", "_", rec["program"])[:150]
+    stem = artifact_stem(rec["program"])
     source = os.path.join(workdir, stem + ".cpp")
     target = os.path.join(workdir, stem + EXE)
     with open(source, "w", encoding="utf-8", newline="\n") as f:
@@ -451,7 +465,7 @@ def back_end_run(program, entry_args, args, env, workdir, back_end):
                             args.timeout, env)
     if code != 0 or "#include" not in out:
         return code, (out + err).strip()
-    stem = re.sub(r"[^A-Za-z0-9_]", "_", rel)[:150]
+    stem = artifact_stem(rel + "".join(" " + a for a in entry_args))
     source = os.path.join(workdir, stem + ".cpp")
     target = os.path.join(workdir, stem + EXE)
     with open(source, "w", encoding="utf-8", newline="\n") as f:
@@ -563,7 +577,7 @@ def check_fault(entry, workdir, args):
         rec["detail"] = (text.strip().splitlines() or ["exit %s" % code])[-1][:160]
         return rec
 
-    stem = re.sub(r"[^A-Za-z0-9_]", "_", rel)[:150]
+    stem = artifact_stem(rel + "".join(" " + a for a in entry_args))
     source = os.path.join(workdir, stem + ".cpp")
     target = os.path.join(workdir, stem + EXE)
     with open(source, "w", encoding="utf-8", newline="\n") as f:

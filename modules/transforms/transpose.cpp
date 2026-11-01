@@ -177,6 +177,44 @@ TransposeGraph buildTransposeGraph(
                 complete = false;
                 return rt::kInvalidNodeRef;
             }
+            if (node->kind == rt::GCNodeKind::Fill) {
+                const auto *fill = function->nodeBodyAs<rt::GCFillBody>(ref);
+                // The slots of a Fill live after its header, in the payload: the payload is what
+                // has to be written, not the header alone, or the copy has no components.
+                const std::vector<std::byte> fillPayload =
+                    rt::makeFillPayload(fill->fillKind, std::vector<size_t>(fill->slots().begin(), fill->slots().end()));
+                // A Fill is a value, so it needs a slot of its own: without one the loop reads its
+                // bounds from whatever slot 0 happens to hold.
+                const gc_node_ref_t made = draft.addFillNode(
+                    node->dataType(), std::span<const std::byte>(fillPayload),
+                    draft.allocateRuntimeSlot(node->dataType()));
+                // A Fill's Norm input is the static template of the pair it builds: without it the
+                // node has no components, and a loop reading its bounds finds none.
+                std::vector<gc_node_ref_t> fillNorm;
+                for (gc_node_ref_t input : function->normInputsOf(ref)) {
+                    const gc_node_ref_t copied = forward(input);
+                    if (copied == rt::kInvalidNodeRef) {
+                        return rt::kInvalidNodeRef;
+                    }
+                    fillNorm.push_back(copied);
+                }
+                if (!fillNorm.empty()) {
+                    draft.setNormInputs(made, std::span<const gc_node_ref_t>(fillNorm));
+                }
+                std::vector<gc_node_ref_t> with;
+                for (gc_node_ref_t input : function->withInputsOf(ref)) {
+                    const gc_node_ref_t copied = forward(input);
+                    if (copied == rt::kInvalidNodeRef) {
+                        return rt::kInvalidNodeRef;
+                    }
+                    with.push_back(copied);
+                }
+                if (!with.empty()) {
+                    draft.setWithInputs(made, std::span<const gc_node_ref_t>(with));
+                }
+                forwardOf[ref] = made;
+                return made;
+            }
             if (node->kind != rt::GCNodeKind::Oper) {
                 complete = false;
                 return rt::kInvalidNodeRef;
@@ -212,7 +250,8 @@ TransposeGraph buildTransposeGraph(
         // for that arm -- which is the arm's own chain, run backwards inside the arm's region.
         bool armsOk = true;
         const auto runArm = [&](uint32_t oldRegion, gc_node_ref_t armResult,
-                                gc_node_ref_t armCotangent) -> gc_node_ref_t {
+                                gc_node_ref_t armCotangent,
+                                gc_node_ref_t stop) -> gc_node_ref_t {
             std::vector<gc_node_ref_t> local(nodeCount, rt::kInvalidNodeRef);
             std::vector<bool> hasLocal(nodeCount, false);
             gc_node_ref_t portCotangent = rt::kInvalidNodeRef;
@@ -232,7 +271,7 @@ TransposeGraph buildTransposeGraph(
                     addLocal(target, node);
                     return;
                 }
-                if (!function->normPorts().empty() && function->normPorts().front() == target) {
+                if (target == stop) {
                     if (portCotangent == rt::kInvalidNodeRef) {
                         portCotangent = node;
                     } else {
@@ -383,7 +422,8 @@ TransposeGraph buildTransposeGraph(
                     const uint32_t newRegion =
                         draft.addRegion(rt::GCRegionKind::Arm, 0, brch, static_cast<uint32_t>(k));
                     draft.setInsertRegion(newRegion);
-                    const gc_node_ref_t armCotangent = runArm(oldRegion, arms[k], ctJoin);
+                    const gc_node_ref_t armCotangent =
+                        runArm(oldRegion, arms[k], ctJoin, function->normPorts().front());
                     if (!armsOk || armCotangent == rt::kInvalidNodeRef) {
                         os << "TRANSPOSE function=" << function->name() << " skip=arm arm=" << k
                            << '\n';
@@ -493,6 +533,88 @@ TransposeGraph buildTransposeGraph(
                        << " uri=" << uri << '\n';
                     return TransposeGraph{};
                 }
+                break;
+            }
+            case rt::GCNodeKind::Loop: {
+                // A loop is rounds of a region, and the state it carries is the port the loop
+                // hands its own body -- so the k-th round's value has no name in the graph, and
+                // the round count is a value (the loop's first norm input), not a constant. The
+                // transpose therefore runs a loop of the same rounds: what the reverse needs is
+                // the same chain, applied from the far end. That is enough when the body's rules
+                // only use constants -- the product of the round's multipliers does not depend on
+                // the order -- and it is not enough when a rule needs the round's own state, which
+                // is refused by name rather than answered with a cotangent from nowhere.
+                const gc_node_ref_t ctLoop = cotangent[ref];
+                // The origin a refusal names is the region's: it is where the round was written.
+                const uint32_t regionOrigin = static_cast<uint32_t>(function->region(function->nodeRegion(ref))->origin);
+                const gc_node_ref_t bodyRegionOld = [&]() -> uint32_t {
+                    for (uint32_t r = 1; r < function->regionCount(); ++r) {
+                        const rt::GCRegion *part = function->region(r);
+                        if (part != nullptr && part->owner == ref &&
+                            part->kind == rt::GCRegionKind::LoopBody) {
+                            return r;
+                        }
+                    }
+                    return 0;
+                }();
+                const auto regionPorts = bodyRegionOld != 0
+                    ? function->regionPorts(bodyRegionOld)
+                    : std::span<const gc_node_ref_t>{};
+                if (bodyRegionOld == 0 || regionPorts.empty()) {
+                    os << "TRANSPOSE function=" << function->name() << " skip=state node=" << ref
+                       << " origin=" << regionOrigin << '\n';
+                    return TransposeGraph{};
+                }
+                const gc_node_ref_t oldBodyResult = function->region(bodyRegionOld)->result;
+                const uint32_t newRegion =
+                    draft.addRegion(rt::GCRegionKind::LoopBody, 0);
+                draft.setInsertRegion(newRegion);
+                // The body takes the iterated element first and the carried state after it. The
+                // element is not differentiated (it comes from the range), so it keeps its type
+                // and goes unused; the carried state becomes the cotangent.
+                std::vector<gc_node_ref_t> newPorts;
+                const gc_node_ref_t elementPort = draft.addPortNode(
+                    function->node(regionPorts.front())->dataType(),
+                    draft.allocateRuntimeSlot(function->node(regionPorts.front())->dataType()));
+                newPorts.push_back(elementPort);
+                const gc_node_ref_t ctPort =
+                    draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
+                newPorts.push_back(ctPort);
+                draft.setRegionPorts(newRegion, std::span<const gc_node_ref_t>(newPorts));
+                const gc_node_ref_t bodyCotangent =
+                    runArm(bodyRegionOld, oldBodyResult, ctPort, regionPorts.back());
+                if (!armsOk || bodyCotangent == rt::kInvalidNodeRef) {
+                    os << "TRANSPOSE function=" << function->name() << " skip=state node=" << ref
+                       << " origin=" << regionOrigin << '\n';
+                    return TransposeGraph{};
+                }
+                draft.setRegionResult(newRegion, bodyCotangent);
+                draft.setInsertRegion(0);
+                const gc_node_ref_t loopNode = draft.addLoopNode(
+                    rt::loopBodyOf(*function, ref), Type::Float64());
+                draft.setRegionOwner(newRegion, loopNode, function->region(bodyRegionOld)->index);
+                draft.setNodeOrigin(loopNode, static_cast<uint32_t>(function->region(bodyRegionOld)->origin));
+                std::vector<gc_node_ref_t> loopNorm;
+                const auto oldNorm = function->normInputsOf(ref);
+                for (size_t i = 0; i + 1 < oldNorm.size(); ++i) {
+                    const gc_node_ref_t copied = forward(oldNorm[i]);
+                    if (!complete || copied == rt::kInvalidNodeRef) {
+                        os << "TRANSPOSE function=" << function->name() << " skip=range node="
+                           << ref << '\n';
+                        return TransposeGraph{};
+                    }
+                    loopNorm.push_back(copied);
+                }
+                loopNorm.push_back(ctLoop);
+                draft.setNormInputs(loopNode, std::span<const gc_node_ref_t>(loopNorm));
+                // The With inputs of a loop are the results of its parts and its round: the round is
+                // a value of its own, and the body's state port is what the previous round left.
+                const gc_node_ref_t roundValue = draft.materializeStaticValue(
+                    camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(0), Type::Int64(),
+                    rt::kGCNodeFlagConstant);
+                const std::array<gc_node_ref_t, 2> loopWith{bodyCotangent, roundValue};
+                draft.setWithInputs(loopNode, std::span<const gc_node_ref_t>(loopWith));
+                result = loopNode;
                 break;
             }
             default:

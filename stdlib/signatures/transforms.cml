@@ -11,14 +11,16 @@
  * from `jvpSignature(f)` in modules/transforms/jvp.cpp.
  *
  * `Jvp<F>` names the result type the resolver computes:
- *   - every ordinary parameter of `F` becomes two parameters, the value and its tangent (one
- *     parameter today: the transform copies one body -- the pass prints `skip=params` for more);
+ *   - every ordinary parameter of `F` becomes two parameters, the value and its tangent, so
+ *     `jvp(f)` for `f(x, y)` takes `(x, dx, y, dy)`;
  *   - the result is the pair `(value, tangent)`, the same shape in and out;
- *   - `F` must take no `with` parameter and must have a single `float` parameter and a `float`
- *     result, because a captured value has no port to enter the copied graph by.
+ *   - `F` must take no `with` parameter, at least one parameter, every parameter a `float` and a
+ *     `float` result, because a captured value has no port to enter the copied graph by and a
+ *     tangent is a `float` direction.
  * The tangent of an input is the seed: `jvp(f)(2.0, 1.0)` asks for the derivative in the
  * direction 1, and `jvp(f)(2.0, 2.0)` for twice it. Nothing here picks the direction for the
- * caller.
+ * caller, so a function of several parameters is read one direction per run (`jvp(f)(3.0, 1.0, 2.0,
+ * 0.0)` is `df/dx` at (3, 2)).
  * It is not a type a program can write.
  *
  * For reference only: these declarations are not compiled. They are checked against the operators

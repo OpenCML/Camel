@@ -102,12 +102,13 @@ TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
     // is which family holds it and what it is filed under. The key is `mul_tensor` at two operands
     // because the array product has no token of its own: `r * r` resolves to this operator, but `*`
     // at two operands is the *scalar* product's key (`:op/mul_d`), and one key holds one rule. A call
-    // is a key like any other, so the rule's left side is `mul_tensor(x, w)`. An operator with no
-    // binding at all is an operator no rule can be reached for: `reinterp<vmap>` says so by name at
-    // the primitive. `jvp` reads this same table and refuses the rule it finds here -- that rule's
-    // right side answers with a batch, not with a function of the tangents -- which is the answer
-    // array multiply should get from a family that has no tangent rule for it.
-    camel::core::bindForwardRule({"tensor:multiply", "rulesets.vmap", "mul_tensor", 2});
+    // is a key like any other, so the rule's left side is `mul_tensor(x, w)`. It goes in the batching
+    // table, `bindVmapRule`: this is the rule of a batching transform, and the forward table is what a
+    // differentiating transform reads (`jvp` reads it and finds no tangent rule here, which is the
+    // right answer for an operator whose only rule says what a batch does). An operator with no
+    // binding at all is an operator no rule can be reached for, and `reinterp<vmap>` says so by name
+    // at the primitive.
+    camel::core::bindVmapRule({"tensor:multiply", "rulesets.vmap", "mul_tensor", 2});
     // `Tensor` is no type name: a tensor's type is the array spelling that states its element type
     // (`f32[..]`, `f32[2, 3]`, docs/design/arrays-memory/plan.cn.md section 5.1), and a program
     // that writes the old name writes an unknown name. The name qualifies nothing either: the

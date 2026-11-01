@@ -19,22 +19,24 @@
  * function with the batches as its arguments. The rule mechanism is unchanged; what differs is
  * which half of a rule a transform can ask for.
  *
- * A family other than the bound one is read through the operator's *key*: `bindForwardRule` keeps
- * one family per operator (the five scalar keys belong to `rulesets.jvp`,
- * `src/builtin/operators/derivative.cpp#bindForwardRule`), and binding again replaces. The key --
- * which token, how many operands -- is a property of the operator, so
- * `camel::core::forwardBindingOf(uri)` reads it and `lookupRule("rulesets.vmap", head, arity)` asks
- * this family.
+ * A family other than the one an operator's key was first recorded for is read through that *key*:
+ * `bindVmapRule` keeps the family this transform reads, one entry per operator
+ * (`src/builtin/operators/derivative.cpp#registerFloatVmapRules` for the scalar arithmetic, the
+ * tensor module for `matmul` and the axis reductions), and binding again replaces. The key -- which
+ * token, how many operands -- is a property of the operator, so `camel::core::vmapBindingOf(uri)`
+ * reads it and `lookupRule("rulesets.vmap", head, arity)` asks this family.
  *
- * What is built today is the elementwise tier: a body of ports, constants and the five arithmetic
- * primitives, and calls, which are *asked about* -- by the callee's name and its argument count, the
- * key a call already has -- like any primitive. A primitive whose key is unbound, a call the family
- * has no rule for, and any other construct (a branch, a loop) is refused *by name* at the node it was
- * written at -- never copied and hoped for (design principles 9.9). The count is part of the answer:
- * `asked=1 found=0 missing=1` at a call says the family was asked and had nothing, which is a hole
- * somebody can fill; `asked=0` would say the walk never arrived. `matmul`, the reductions and
- * `reshape` are the next tiers: each of them needs a rule that says which axis the batch is on, and
- * `sum` over a batch is not the batch's sum.
+ * What is built today is the elementwise tier, `matmul`, the reductions along an axis, and calls: a
+ * body of ports, constants, primitives that have a rule, and calls, which are *asked about* -- by the
+ * callee's name and its argument count, the key a call already has -- like any primitive. A primitive
+ * with no rule, a call the family has no rule for, and any other construct (a branch, a loop) is
+ * refused *by name* at the node it was written at -- never copied and hoped for (design principles
+ * 9.9). The count is part of the answer: `asked=1 found=0 missing=1` at a call says the family was
+ * asked and had nothing, which is a hole somebody can fill; `asked=0` would say the walk never
+ * arrived. A reduction is batched in terms of the axis it was given (`sum_axis` at one axis further
+ * in), and the reductions over every axis (`tensor:sum`) have no batching rule: a batch of rows under
+ * them is not the rows' sums, and the whole-array form takes no axis to shift. `reshape` is the next
+ * tier.
  */
 
 #pragma once

@@ -128,12 +128,10 @@ std::string leftHeadOf(syntax::Node left, std::string &shape, uint32_t &arity) {
         return firstNode->text();
     }
     if (tokenCount == 0 && nodeCount >= 2 && firstNode) {
-        // No argument list to count: a two-node node with no operator token and no `ParentArgues`.
-        // Nothing in the tree is filed this way today; the count is the second child's children,
-        // which is what an argument list would have been read as before this was split out.
-        arity = secondNode && secondNode->childCount() > 0
-                    ? static_cast<uint32_t>(secondNode->childCount())
-                    : static_cast<uint32_t>(nodeCount - 1);
+        // No `ParentArgues` was found: a two-node node with no operator token. Nothing in the tree is
+        // filed this way today; the count descends into an argument list the way a call's does, so a
+        // shape that reaches here is filed by its arguments rather than by its apostrophes.
+        arity = argumentCountOf(secondNode);
         return firstNode->text();
     }
     shape = std::string(syntax::nodeKindName(current->kind()));

@@ -1,0 +1,28 @@
+/**
+ * The precondition's own program: it only asks whether the library's `vjp` can be built.
+ *
+ * `test/tools/have-library-vjp.mjs` runs this and skips `vjp_api.analytic_gradient` when it fails.
+ * No expected number lives here -- the program builds the composition once, calls it the way the
+ * library declares it (`vjp(f)(x)` is `(y, pullback)`, `pullback(ct)` is the cotangent), and prints
+ * what came back -- so it fails exactly when `stdlib/vjp.cml` cannot be assembled, and says nothing
+ * about whether the answer is right (that is the comparison case's business).
+ *
+ * `f` takes the two parameters of the author's comparison on purpose, in the order the pieces have
+ * to land: today the composition is refused at `stdlib/vjp.cml` itself, because `split` hands
+ * `transpose` a lifted function `(float, float) => (float, float)` where a function of one parameter
+ * is taken. Once that shape is settled, `jvp`'s one-parameter limit is the next wall for a function
+ * of two, and this probe keeps failing until both are gone.
+ */
+
+import { vjp } from vjp
+
+func f(x: float, y: float): float {
+    return x * x * y
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(f)(3.0, 2.0)
+    let (dx, dy) = pullback(1.0)
+    println(value + dx + dy)
+    return 0
+}

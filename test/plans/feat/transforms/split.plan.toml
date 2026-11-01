@@ -5,27 +5,47 @@
 # the present inputs allow and hands the residuals on as values, and the backward half, which reads
 # those residuals and the tangent direction and gives the tangent.
 #
-# Three readings, all on the author's example of 2026-10-31 15:25: g(x) = x*x, f = reinterp<jvp>(g),
-# x = 3, dx = 1.
-#   * the forward half gives y = 9 and r0 = 3 (the residual is the value the backward half needs);
-#   * the backward half gives the tangent 6;
-#   * the backward half is linear in the tangent direction: dx = 2 gives 12 and dx = 0 gives 0.
+# `ResidualsOf<F>` -- which values cross the cut -- is read from the *graph* by
+# `residualsOf` (modules/transforms/split.cpp): the result side of the exit is what the forward half
+# keeps, the tangent side is what the backward half keeps, and a node both reach is a value that
+# crosses. Every diagnostic below prints its answer next to the signature's (`residuals=`, `carried=`,
+# `slots=`, `agree=`), so the two can be compared instead of assumed.
 #
-# Every entry asks test/tools/have-split.mjs first. `split` does not exist yet, so the plan skips
-# with the reason that gate prints -- a missing operator is not a defect of the tree, and a red
-# here would say it is. The entries start running the moment the operator lands, with no edit to
-# this file: that is what the gate is for.
+# Two acceptance forms live here:
+#   * the identity graph (`split_identity_pipeline`): a lifted body that computes nothing is two
+#     parameter ports and one tuple fill, so the cut has nothing to move between the halves -- the
+#     forward half hands the value through, the backward half hands the tangent through. The graph
+#     says so: `residuals=0 carried=0`, no value crosses. `residual count= 1` stays because that
+#     number is the residual *tuple's* arity, and the arity is the signature's: a signature is
+#     computed from types, and `f(x) = x` and `f(x) = x*x` have the same lifted type, so no function
+#     of the type can answer 0 for one and 1 for the other. The one slot is a value parameter, the
+#     forward half fills it as a tuple of one member needs one value, and nothing reads it.
+#   * the numbers of the author's example of 2026-10-31 15:25 (g(x) = x*x, x = 3, dx = 1): the
+#     forward half gives y = 9 and r0 = (3.0) (the residual is the value the backward half needs), the
+#     backward half gives the tangent 6, and it is linear in the tangent direction (dx = 2 gives 12,
+#     dx = 0 gives 0). r0 is printed as the tuple it is: a one-member tuple prints `(3.0)`.
+#   * the two-parameter program the author named on 2026-11-01 (`f(x, y) = x*x*y` at 3, 2), read at
+#     both ends: the lift answers 18 with 12 in the direction (1, 0) and 9 in (0, 1), and the cut
+#     carries two residuals, `(3.0, 2.0)` -- one per value parameter, because this body reads both.
+#
+# The five readings run by themselves: `split` exists and its forward half hands the residual tuple
+# on, so there is nothing left for a gate to ask. The identity entry keeps
+# `test/tools/have-split.mjs` (a tree without `modules/transforms/split.cpp` skips instead of
+# failing).
+#
+# `r0` reads `(3.0)` and not `3`: the residuals are a tuple in the signature the author wrote
+# (`ResidualsOf<F>` is a tuple of the values, numbered in program order), and a one-member tuple
+# prints as one.
 
 [[tests]]
 name = "split_forward_half"
-desc = "The forward half of split(reinterp<jvp>(g)) for g(x) = x*x at x = 3: it computes what the present inputs allow and hands the residuals on as values. Reads `forward y= 9` and `residual r0= 3`, and the tangent 6 as well, since the same run is what a reader would write to see the pair."
+desc = "The forward half of split(reinterp<jvp>(g)) for g(x) = x*x at x = 3: it computes what the present inputs allow and hands the residuals on as values. Reads `forward y= 9.0` and `residual r0= (3.0)`, and the tangent 6.0 as well, since the same run is what a reader would write to see the pair."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_forward_half.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["forward y= 9", "residual r0= 3", "tangent dx1= 6"]
-skip_unless = ["node", "test/tools/have-split.mjs"]
+expect_stdout_contains = ["forward y= 9", "residual r0= (3.0)", "tangent dx1= 6", "residuals=1 carried=1 slots=1 agree=yes"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -38,7 +58,6 @@ args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["tangent dx1= 6"]
-skip_unless = ["node", "test/tools/have-split.mjs"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -51,6 +70,29 @@ args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["dx1= 6", "dx2= 12", "dx0= 0", "doubles= true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+[[tests]]
+name = "split_two_params"
+desc = "The reading program the author named for this tier (f(x, y) = x*x*y at x = 3, y = 2), read at both ends of the composition. The lift takes the four numbers (x, dx, y, dy) and answers the value 18.0 with the derivative in the direction the caller seeded: 12.0 for (1, 0) and 9.0 for (0, 1), which is 2xy and x^2. `split` of that lift cuts at the pair, so the forward half takes the values (3, 2) and answers 18.0 with two residuals -- `(3.0, 2.0)`, one per value parameter in program order -- and the backward half turns (1, 0) into 12.0 and (0, 1) into 9.0. The tuple carries two and not one, because both parameters are values the backward half reads. `ResidualsOf` reads the graph rather than the signature and finds **three** values crossing: `x`, `y`, and `x*x`, which the backward half's rule for the second `mul` reads -- the third has no slot in a tuple whose arity is one per value parameter, so this tier recomputes it inside the backward half. That is why the diagnostic says `residuals=3 carried=2 slots=2`, and why `carried` exists as a reading of its own."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_two_params.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["value= 18.0", "dfdx= 12.0", "dfdy= 9.0", "residual count= 2", "residual r0= (3.0, 2.0)", "forward y= 18.0", "tangent dx= 12.0", "tangent dy= 9.0", "residuals=3 carried=2 slots=2 agree=yes"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "split_identity_pipeline"
+desc = "The identity graph: `reinterp<jvp>` builds a body with no operator in it, so `split` has nothing to move and the reading is the pipeline itself. The forward half gives the value the caller passed (3.0) with the residual tuple holding that same value -- the one member the signature has room for -- and the backward half gives the tangent back (1.0) without reading it: no value the body computes crosses the cut. Gated on `split` existing (`test/tools/have-split.mjs`). `ResidualsOf` now reads that from the graph and says **0** values cross -- `residuals=0 carried=0` -- while `residual count= 1` stays, because that number is the tuple's arity, and the arity is the signature's: a signature is computed from types, and `f(x) = x` and `f(x) = x*x` have the same lifted type, so no function of the type can answer 0 for one and 1 for the other (see the plan header)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/split_identity_pipeline.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["identity y= 3", "residual count= 1", "identity dx1= 1", "residuals=0 carried=0 slots=1 agree=yes"]
 skip_unless = ["node", "test/tools/have-split.mjs"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

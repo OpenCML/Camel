@@ -780,7 +780,7 @@ div_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
 div_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
 ```
 
-**`rulesets.vmap`** — import { ... } from rulesets.vmap — 8 name(s)
+**`rulesets.vmap`** — import { ... } from rulesets.vmap — 13 name(s)
 
 ```text
 lift: (x: T) => Lift<T>
@@ -789,8 +789,13 @@ vmap_sub: (a: T[], b: T[]) => T[] when is_numeric::<T>()
 vmap_mul: (a: T[], b: T[]) => T[] when is_numeric::<T>()
 vmap_div: (a: T[], b: T[]) => T[] when is_numeric::<T>()
 vmap_neg: (a: T[]) => T[] when is_numeric::<T>()
-vmap_mul_tensor: (a: Lift<T>, b: Lift<T>) => Lift<T>
+vmap_mul_tensor: (a: T[..], b: T[..]) => T[..] when is_numeric::<T>()
 idx_batch: (xs: Lift<T[]>, i: int[]) => Lift<T>
+vmap_matmul: (lhs: T[..], rhs: T[..]) => T[..] when is_numeric::<T>()
+vmap_sum_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
+vmap_mean_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
+vmap_max_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
+vmap_min_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
 ```
 
 **`sim`** — import { ... } from sim — 2 name(s)

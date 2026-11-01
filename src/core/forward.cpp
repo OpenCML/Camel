@@ -28,6 +28,14 @@ std::map<std::string, ForwardRuleBinding> &transposeBindings() {
     return table;
 }
 
+/// The batching family's bindings, kept apart for the same reason as the transpose ones: a rule is
+/// filed under its operator and operand count in one family, and the family a transform reads is
+/// not a fact another transform may replace.
+std::map<std::string, ForwardRuleBinding> &vmapBindings() {
+    static std::map<std::string, ForwardRuleBinding> table;
+    return table;
+}
+
 using BindingTable = std::map<std::string, ForwardRuleBinding>;
 
 std::optional<camel::parse::ast::RuleMatch> ruleOf(BindingTable &table, const std::string &uri) {
@@ -107,5 +115,21 @@ std::optional<camel::parse::ast::RuleMatch> transposeRuleOf(const std::string &u
 }
 
 std::vector<std::string> transposeRuleDescriptions() { return descriptionsOf(transposeBindings()); }
+
+void bindVmapRule(ForwardRuleBinding binding) {
+    std::lock_guard<std::mutex> lock(bindingMutex());
+    vmapBindings()[binding.uri] = std::move(binding);
+}
+
+std::optional<ForwardRuleBinding> vmapBindingOf(const std::string &uri) {
+    std::lock_guard<std::mutex> lock(bindingMutex());
+    const auto at = vmapBindings().find(uri);
+    if (at == vmapBindings().end()) {
+        return std::nullopt;
+    }
+    return at->second;
+}
+
+std::vector<std::string> vmapRuleDescriptions() { return descriptionsOf(vmapBindings()); }
 
 } // namespace camel::core

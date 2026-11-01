@@ -6745,10 +6745,13 @@ A rule's right side takes the *lifted* operands and answers the *lifted* result.
 elementwise tier is therefore one rule per primitive, each of them the primitive itself: the
 batching of an elementwise operator is that operator.
 
-This round writes the elementwise tier only. `matmul`, the reductions (`sum`, `sum_axis`, `mean`),
-`reshape` and the broadcasting moves need a rule each that says *which* axis the batch is on --
-`sum` over a batch sums each row, not the batch -- and they come next, in the same module, with
-`RowsOf` doing the work (`reshape` of `RowsOf<T>` is a reshape that keeps the batch dimension).
+This round writes the elementwise tier, `matmul`, and the four reductions along an axis. The last
+two need a rule that says *which* axis the batch is on: a batch of rows under `matmul` is the axes
+before its last two, and a reduction keeps the axis it reduces and gains the batch axis in front,
+so its rule is written in terms of the operator's own axis argument (`batched_axis`). A reduction
+over every axis (`tensor:sum`) has no rule and is refused by name: a batch of rows under it is not
+the rows' own sums, and there is no axis of the operator's to shift, so its batched meaning would
+have to be guessed from the rank. `reshape` and the broadcasting moves are the next tier.
 
 Adding a rule changes docs/stdlib-reference.md; regenerate it with
 `node scripts/stdlib-reference.mjs --write`.
@@ -6768,10 +6771,10 @@ array as that value at every element).
 
 ### The elementwise tier
 
-A rule is filed in its ruleset module under the operator its left side is written with and the
-number of operands it takes, and a transform reads it from there (`lookupRule("rulesets.vmap",
-head, arity)`); a rule is not a function a program calls, so the rules below and the functions
-they call are two things with different names.
+A rule is filed in its ruleset module under the head of its left side -- an operator's token, or
+the name a call writes -- and the number of operands that head takes, and a transform reads it
+from there (`lookupRule("rulesets.vmap", head, arity)`); a rule is not a function a program calls,
+so the rules below and the functions they call are two things with different names.
 
 The right side of each rule *names* the function that does the batched arithmetic
 (`vmap_add(bx, bw)`), and that name is the part a batching transform reads. A rule's right side is
@@ -6844,35 +6847,38 @@ vmap_neg: (a: T[]) => T[] when is_numeric::<T>()
 The five keys above are the *scalar* arithmetic: `x * w` on two `f32` is `:op/mul_d`. On two
 arrays the same spelling resolves to another primitive, `tensor:multiply`, and the two are one law
 at two ranks -- the product, element by element -- but they are not one rule, because a rule is
-instantiated at its primitive's *result* type. The scalar one is instantiated at `T = f32` and its
-helper indexes a batch of scalars; this one is instantiated at `T = f32[3]`, the row, and a batch
-of rows is a rank-2 array that `T[]` cannot spell (`T[]` is the array whose *element* is `T`, and
-`map` over `int` produces exactly that -- a shape one rank out of place for a batch, whose rows are
-its leading dimension, `RowsOf<T>`). So this rank says its batch as `Lift<T>` and multiplies the
-whole batch at once, which is the primitive applied to the batch instead of to each row: the same
-operator, and so the same bits.
+instantiated at its primitive's *element* type (`ruleElementTypeOf`, modules/transforms/vmap.cpp):
+`f32` here, the same `T` the scalar rule gets, while the two operators are different primitives and
+a key holds one rule each.
+
+So the operand is written as the open rank `T[..]`: the batch of a row is that row's element type at
+any rank, and the operator walks all of the ranks it is given. `mul_tensor(x, w)` is the same
+product at whatever rank the row had, and its right side multiplies the whole batch at once -- the
+primitive applied to the batch instead of to each row, which is the same operator and so the same
+bits.
 
 The key is `mul_tensor`, a call, because the array product has no infix spelling a rule's left side
 could be written with -- `r * r` resolves to the operator, but the operator is not a token. A call
 is a key like any other (`f(a, b)` is `f` at two operands), and `tensor:multiply` is bound to this
-one where the operator is declared: `modules/tensor/module.cpp`, `bindForwardRule`. An operator
-with no binding is an operator no rule is reachable for, and the transform says so by name at the
-primitive. The right side names a *different* function than the left side does, which the index
-requires: a name the left side binds is a pattern variable to the right side, and this family's
-transform reads the callee's name and calls it with the batch -- it never binds the pattern.
+one where the operator is declared: `modules/tensor/module.cpp`, `bindVmapRule` -- the batching
+table, which is what a batching transform reads. An operator with no binding is an operator no rule
+is reachable for, and the transform says so by name at the primitive. The right side names a
+*different* function than the left side does, which the index requires: a name the left side binds
+is a pattern variable to the right side, and this family's transform reads the callee's name and
+calls it with the batch -- it never binds the pattern.
 
 #### `vmap_mul_tensor`
 
 ```camel
-vmap_mul_tensor: (a: Lift<T>, b: Lift<T>) => Lift<T>
+vmap_mul_tensor: (a: T[..], b: T[..]) => T[..] when is_numeric::<T>()
 ```
 
-The product of two batches of rows: the whole batch multiplied at once, which for an elementwise
-product is the batch of the row-by-row products. The batch is `Lift<T>`, one dimension in front of
-the row -- so a call says its row type, since a batch of rows is a shape `T` cannot be read out of.
+The product of two batches: the whole batch multiplied at once, which for an elementwise product is
+the batch of the row-by-row products. The parameters are the open rank for the reason `vmap_matmul`
+gives below: a lifted type does not name the element to a call's inference.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `vmap_mul_tensor::<f32[2]>([[1.0, 2.0], [3.0, 4.0]] as f32[2, 2], [[10.0, 10.0], [10.0, 10.0]] as f32[2, 2])` gives `[[10.0, 20.0], [30.0, 40.0]]`
+- Example: `vmap_mul_tensor([[1.0, 2.0], [3.0, 4.0]] as f32[2, 2], [[10.0, 10.0], [10.0, 10.0]] as f32[2, 2])` gives `[[10.0, 20.0], [30.0, 40.0]]`
 
 ### The element of a row
 
@@ -6896,6 +6902,94 @@ One element per row: row `j` of the batch contributes `xs[j][i[j]]`, and the res
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `idx_batch::<f32>([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3], [2, 1])` gives `[3.0, 5.0]`
+
+### Matmul
+
+A batched matrix product adds the batch axis in front of both operands (`[b, m, k] x [b, k, n]`),
+and those are exactly the axes `matmul` already walks as its batch axes (its last two are the
+product's). So the rule is the operator over the lifted operands and nothing else: no row loop, no
+reshape. An operand that is a constant of the body is the batch of one row (`lift`), and one row
+broadcasts over a batch of many -- the operator's own broadcasting, which is the same rule the
+operator states, not a second one of ours.
+
+#### `vmap_matmul`
+
+```camel
+vmap_matmul: (lhs: T[..], rhs: T[..]) => T[..] when is_numeric::<T>()
+```
+
+`matmul(lhs, rhs)` batched: the product of each row of `lhs` with the row the batch of `rhs` gives
+it. A batch of one row is that row at every index.
+
+The parameters are the open rank `T[..]` rather than `Lift<T[..]>` even though the batch is what
+they are given: the transform passes the lifted operands, and a parameter written `Lift<T[..]>`
+says nothing about `T` to a call's inference (the element is one layer down a type computation),
+so the rule's right side could not call this function without naming the type again -- and a
+right side that names a type argument is a right side no transform can read the callee from
+(`rhsCalleeOf`, include/camel/parse/ast/rule_head.h). An open rank takes the batch all the same:
+it is the type that states nothing about the extents, and the batch's own extents are the value's.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_matmul([[1.0, 2.0]] as float[1, 2], [[3.0], [4.0]] as float[2, 1])` gives `[[11.0]]`
+
+### The reductions along an axis
+
+A reduction keeps the axis it reduces -- as an extent of one with `keepdims`, as nothing without
+it -- and the batch adds one axis in front. So the rule is written in terms of the operator's own
+axis argument, and the only thing to translate is that argument: the row's axis `a` is the axis
+one place further in the lifted value, and an axis counted from the last (`-1`) stays what it was,
+because the last axis of the lifted value is the last axis of the row. Nothing is reshaped: the
+batch is an axis these operators already walk.
+
+#### `vmap_sum_axis`
+
+```camel
+vmap_sum_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
+```
+
+`sum_axis(xs, axis, keepdims)` batched: each row's sum along the axis it was given. The parameters
+are the open rank for the reason `vmap_matmul` gives: a lifted type does not name the element to a
+call's inference, and a right side may not name it either.
+
+The axis argument is the *row's*, so the example below reduces the row's axis 1 -- the sum of each
+row of the value -- and not its axis 0: the batch is one axis in front of the one the row counts
+from (`batched_axis`).
+
+- A native operator of this module: an opaque node, pure.
+- Example: `vmap_sum_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[3.0, 7.0]`
+
+#### `vmap_mean_axis`
+
+```camel
+vmap_mean_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
+```
+
+`mean_axis(xs, axis, keepdims)` batched: each row's mean along the axis it was given.
+
+- A native operator of this module: an opaque node, pure.
+- Example: `vmap_mean_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[1.5, 3.5]`
+
+#### `vmap_max_axis`
+
+```camel
+vmap_max_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
+```
+
+`max_axis(xs, axis, keepdims)` batched: each row's largest element along the axis it was given.
+
+- A native operator of this module: an opaque node, pure.
+- Example: `vmap_max_axis([[1.0, 5.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[5.0, 4.0]`
+
+#### `vmap_min_axis`
+
+```camel
+vmap_min_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
+```
+
+`min_axis(xs, axis, keepdims)` batched: each row's smallest element along the axis it was given.
+
+- A native operator of this module: an opaque node, pure.
+- Example: `vmap_min_axis([[1.0, 5.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[1.0, 3.0]`
 
 <a id="sim"></a>
 
