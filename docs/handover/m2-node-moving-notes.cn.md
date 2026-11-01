@@ -37,3 +37,21 @@
 - `orderPredsOf(ref)` / `syncPredsOf(ref)`：顺序边与同步边**不在输入 run 里**，它们各自是图上的独立数组（按 user 排序的一段），要单独搬。同步边背的"被使用"是活的（liveness 跟着它），所以**残差与它无关，但搬迁不能丢**。
 - 节点自身的读法：`node(ref)`（拿 `GCNode` 的记录）、`nodeContentHash(ref)`（节点级事实的版本）、`nodeBodyAs<T>(ref)`（读体）。
 - 失败面：`ref` 不是节点时 `normInputsOf` 等返回空 span、`node(ref)` 返回 nullptr——**用空 span 静默降级会把"搬丢了"变成"搬成空"**，所以搬之前先 `node(ref) != nullptr` 断言一次。
+## 四、`split` 的 plumbing（先接管道，验收用恒等图）
+
+`modules/transforms/split.cpp` 照 `vmap_operator.cpp` 的三件套写：`SplitResolver`
+（`resolve`/`signature`/`parameterNames`，签名写 `(f: (f32) => (f32, f32)) => ((f32) => (f32, ..))` 这一族）、
+`splitKernel`、`splitOperatorGroups()` + `splitOperatorKernels()` 注册，`module.cpp` 里并进 `vmap` 那一组。
+
+**签名手术**（`split` 与 `vmap` 的差别不止"交两次"）：源图 `f` 的每个形参是 `Lift<T> = (T, Tangent<T>)`，
+所以前一半的图**形参只取每个 pair 的第一分量**、出口 =（结果, 残差），后一半的图**形参 = 残差 + 每个 pair 的第二分量**、
+出口 = 切线。恒等图上（`reinterp<jvp>` 今天的产物：两个参数口 + 一个 tuple fill）前一半只剩"值"那个口、
+后一半只剩"切线"那个口，**残差 0 项**。
+
+**造两次的顺序**（`GraphDraftGroup` 的规矩）：`reserve` 两个成员 → 各自 `setFuncType`/`addPortNode`/搬节点 →
+各自 `setOutputNode` → **一次 `encode()`** → `::Function::create(program, group.encoded(id)->id(), tupleType)`
+两次（闭包 tuple 照 `vmapKernel` 逐项抄）→ `::Tuple::create(2)` 装两个 Function → `toSlot` 交回。
+
+**恒等图的读数（这一笔的验收）**：`fwd(3.0)` 打 `3.0`、`lin(r0, 1.0)` 打 `1.0`、`r0` **0 项**——
+若 `r0` 打出非 0，就是把"值"当残差搬了（缺陷）。三条 `9/3/6/12/0` 的读数留在计划里不变，它们是
+`reinterp<jvp>` 真会重写 `x*x` 之后的验收；两条并存，谁先亮就是谁先到。
