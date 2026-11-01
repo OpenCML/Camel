@@ -1987,11 +1987,14 @@ std::string effectKey(const EffectSite &site) {
     return key;
 }
 
-/// The effects of the two programs, matched: one origin and operator that the program has once is
-/// the same effect after the pass. An effect the pass added or removed has no partner, and takes
-/// part in no pair. An effect the program has more than once is left out of every pair: a pass that
-/// copies a body (inlining does) leaves several nodes carrying one origin, and which copy a node of
-/// the next program is cannot be read off the origin, so an order between copies would be a guess.
+/// The effects of the two programs, matched. The key is origin, inline copy site and operator
+/// (`effectKey`), so a body a pass inlined **is** matched: the copies differ in the call site they
+/// were copied into, and each pairs with the copy it came from. What is left out of every pair is
+/// a key the program has more than once on either side -- two nodes of one origin, one copy site
+/// and one operator, which is what a pass that clones a node in place leaves behind. There the
+/// order between the clones would be a guess, and this function does not guess. That is narrower
+/// than the audit's wording ("被内联复制过的不比较") and wider than the comment that stood here
+/// until 2026-11-02, which said copies were not compared at all.
 std::vector<std::pair<size_t, size_t>> matchedEffects(
     const ProgramEffects &before, const ProgramEffects &after) {
     std::unordered_map<std::string, size_t> beforeOccurrences;
@@ -3184,11 +3187,14 @@ PassApplyResult applyPassesDetailed(
                 CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> consumed", p);
                 return {nullptr, PassApplyStatus::Consumed};
             }
-            // The pass ended with a program: the effects on one resource must still be in the
-            // order the program wrote them, which is the order its graph makes them wait for
-            // (design principles 3.3). The check is the last thing the pass does, so that no pass
-            // of the pipeline, nested or listed, ends without it.
-            // The same check `applyRegisteredPass` ends with, for a pass the pipeline runs.
+            // The pass ended with a program: the effects on one **ambient** resource must still be
+            // in the order the program wrote them, which is the order its graph makes them wait for
+            // (design principles 3.3), and the rest of the boundary holds (`passBoundaryViolation`,
+            // which `applyRegisteredPass` calls too: a pass a pass runs by name is checked where it
+            // returns, not only here). What the check does not cover -- a `var` or a handle, an entry
+            // or an exit of a graph that is not the program's own, a copy that lost its inline call
+            // site -- is named on `passBoundaryViolation` and in the report that measured it
+            // (docs/handover/reports/p0-6-boundary-check-promises-vs-checks.cn.md).
             if (passBoundaryViolation(ctx, p, *program, effectsBefore)) {
                 return {nullptr, PassApplyStatus::Failed};
             }
