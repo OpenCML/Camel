@@ -1,12 +1,16 @@
+// Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
 /*
  * Draft-only: `:op/keep` is built here, in a graph the program already has, and `replaceNode`
- * (opt/generic/rewrite.cpp) is the code under test. No source syntax reaches that path today --
- * a branch over a static condition is folded before a pass sees it, and every rule that would
- * replace the reader of a computation that may fault refuses to fire, because dropping the reader
- * would drop the fault (see the note at core/operator_table.h, `Keep`) -- so the shape is built by
- * hand, which is the only way this insertion can have a test.
+ * (opt/generic/rewrite.cpp) is the code under test. Reachability is not a claim this file makes:
+ * `std::opt` writes this node on its own today, in three cases under test/cases/opt/effects/
+ * (branch_keeps_outer_effect, dce_effect_under_pure_arithmetic, fold_keeps_arm_effect), whose
+ * counts and names are pinned by test/cases/opt/pass_written/check.mjs. What that path cannot do
+ * is fault on purpose, so the shape is also built by hand here: a branch over a static condition
+ * is folded before a pass sees it, and every rule that would replace the reader of a computation
+ * that may fault refuses to fire, because dropping the reader would drop the fault (see the note
+ * at core/operator_table.h, `Keep`).
  *
  * The node that must keep running is a division by zero: whether the program faults is then a
  * reading of whether that node still runs. The value the program prints is routed through the
@@ -52,7 +56,8 @@ gc_node_ref_t op(
 }
 
 /// The operator of a node, or kNoOper when it is not an operator: one place to read the payload.
-OperId operOf(const GraphDraft &draft, gc_node_ref_t id) {
+OperId operOf(GraphTransaction &transaction, gc_node_ref_t id) {
+    auto &draft                    = transaction.edit();
     const DraftNodeHeader *header = draft.header(id);
     if (header == nullptr || header->kind != GCNodeKind::Oper) {
         return camel::core::kNoOper;
@@ -69,7 +74,7 @@ size_t countKeeps(GraphTransaction &transaction) {
     auto &draft  = transaction.edit();
     size_t keeps = 0;
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-        if (draft.alive(id) && operOf(draft, id) == Keep) {
+        if (draft.alive(id) && operOf(transaction, id) == Keep) {
             ++keeps;
         }
     }
@@ -81,7 +86,7 @@ size_t countKeeps(GraphTransaction &transaction) {
 gc_node_ref_t keeperOf(GraphTransaction &transaction, gc_node_ref_t source) {
     auto &draft = transaction.edit();
     for (gc_node_ref_t user : draft.normUsersOf(source)) {
-        if (operOf(draft, user) == Keep) {
+        if (operOf(transaction, user) == Keep) {
             return user;
         }
     }
@@ -118,7 +123,7 @@ KeepNodeTestPass::apply(const camel::runtime::Program *program, std::ostream &os
         if (!draft.alive(id)) {
             continue;
         }
-        const OperId oper = operOf(draft, id);
+        const OperId oper = operOf(transaction, id);
         if (oper != camel::core::kNoOper &&
             camel::core::OperatorTable::instance().uri(oper) == ":io/println") {
             print = id;
