@@ -15,7 +15,7 @@
 | 被编译的 `.cml` 文件 | 45 |
 | 注册的算子（并集 probe） | 585 |
 | 其中有被编译 `#op` 声明 | **238** |
-| **没有被编译 `#op` 声明** | **347**（59%） |
+| **没有被编译 `#op` 声明** | **347**（59%）——数的是 tag；有声明但不带 tag 的算子不在这个数里，见"第二次读数" |
 | 用 `func operator X` 写出写法的声明 | **5** |
 
 | 协议 | 注册 | 无声明 |
@@ -65,6 +65,44 @@
 ## 4. `func operator X` 今天就能用，只是几乎没人用
 
 5 条声明用了这个写法：`:op/add_f`→`+`、`:op/add_d`→`+`、`:op/sub_f`→`-`、`:op/sub_d`→`-`（`stdlib/prelude.cml:84,89,94,99`）与 `graph:eq`→`==`（`stdlib/graph.cml:317`）。所以 P1-13 要的不是新机制，是把已有写法补齐。
+
+## 第二次读数：tag 不等于"有声明"，tensor 那 86 个数要先更正
+
+第一批、第二批之后（`+`、`-`、`*`、`/` 与 `[]` 都补了 tag），我按"每个算子一条被编译的 `#op`"去量 tensor，第一条实验就把自己的读数推翻了。
+
+**实验**：给 `stdlib/tensor.cml:162` 那条**已经存在**的 `export func sum_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]` 加上 `#op('tensor:sum_axis')`，重构建后 `inspect --ops` 里 `tensor:sum_axis` 的两行**逐字未变**（`with=0 norm=3` 的那一行本来就在）。也就是说：**那条声明早就在实现这个算子**，tag 是多余的。
+
+原因是设计原则 6.4 第 1 步自己写的：`#op('module:function')` 只在声明**不遵循"模块名 + 名字"约定**时才需要。tensor 的名字都遵循约定——`export func sum_axis` 在 `tensor` 模块里就是 `tensor:sum_axis`。所以本页第一节那句"tensor 86 个算子一条被编译的声明都没有"**是错的**：它数的是 tag，不是声明。
+
+**改用注册表自己量"有没有声明"**：一条声明会造出一条 `norm >= 0` 的重载，纯 C++ 的计算签名是 `norm = -2`。按这个数（`camel inspect --ops`，导入 tensor 的 probe）：
+
+| tensor 协议 | 个数 |
+|---|---|
+| 注册的 URI | 86 |
+| **已有声明造出的重载**（`norm >= 0`） | **18** |
+| 只有计算签名（`norm < 0`） | **68** |
+
+18 个里有 `argmax_axis`、`argmin_axis`、`dim`、`gemm_backend`、`gemm_library`、`gemm_library_threads`、`gemm_threads`、`max_axis`、`mean_axis`、`min_axis`、`num_threads`、`numel` 等。
+
+**第四批那 7 个的真实分布**
+
+| 算子 | 注册形状 | 今天有声明吗 |
+|---|---|---|
+| `tensor:sum_axis` | 计算签名 + `norm:3` 孪生 | **有**（`stdlib/tensor.cml:162`） |
+| `tensor:mean_axis` | 同上 | **有**（`stdlib/tensor.cml:169`） |
+| `tensor:sum` | 只有 `(t: Tensor) => T` | 没有 |
+| `tensor:mean` | 只有 `(t: Tensor) => T` | 没有 |
+| `tensor:max` | 只有 `(t: Tensor) => T` | 没有 |
+| `tensor:min` | 只有 `(t: Tensor) => T` | 没有 |
+| `tensor:reshape` | 只有 `(t: float[..] | number[], shape: int[]) => float[..]` | 没有 |
+
+**剩下 5 个为什么停手（三条都撞上已有的东西，不是不肯做）**
+
+1. **名字撞车**：`tensor:sum` 要写成 `export func sum::<T>(xs: T[..]): T when is_numeric::<T>()`，而 `stdlib/array.cml:155` **已经有一条形状一模一样的** `sum`（`array` 模块的数组归约，带函数体）。再写一条，树里就有两个"一维数组求和"的声明，正是设计原则 §8 说的"两个机制做同一件事"。`mean`、`min`、`max` 同理（`array.cml:167,177,187`；`max`/`min` 还与 `stdlib/math.cml:469,483` 的二元版本同名）。
+2. **`reshape` 的注册签名是联合类型**（`float[..] | number[]`），声明只能写其中一支，写哪一支都是自己做主。
+3. **这 5 个也没有 `#op` 可言**：它们的 URI 遵循约定，加上去是多余的（`sum_axis` 的实验已经证明）。
+
+所以这一步**停在这里报给作者**：两个轴归约不用动；`sum`/`mean`/`max`/`min` 要先回答"和 `array` 里那条同名同形的声明是什么关系"（合并？改名？还是 `tensor:` 这一层不声明、由 `array:` 承担？），`reshape` 要先回答"声明写联合的哪一支"。这三问是语言设计决定，不由我代答。
 
 ## 全清单
 
