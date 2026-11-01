@@ -1511,13 +1511,12 @@ declarations show, because the result of a call is the exit type its resolver gi
 #### `vjp`
 
 ```camel
-vjp: (f: (x: T) => float) => (x: T) => (float, (ct: float) => T)
+vjp: (f: (x: float) => float) => (x: float) => (float, (ct: float) => float)
 ```
 
 The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
 `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters. The juxtaposed call
-`transpose(residuals, ct)` is the internal step, not this signature. `T` is the parameter's type:
-the declaration takes every type, the forward transform takes `float` today.
+`transpose(residuals, ct)` is the internal step, not this signature.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example (a fragment, not compiled): `let reading = vjp(f)`
@@ -1526,7 +1525,7 @@ the declaration takes every type, the forward transform takes `float` today.
 #### `vjp`
 
 ```camel
-vjp: (f: (x: T, y: U) => float) => (x: T, y: U) => (float, (ct: float) => (T, U))
+vjp: (f: (x: float, y: float) => float) => (x: float, y: float) => (float, (ct: float) => (float, float))
 ```
 
 The same transform for a function of two parameters: `vjp(f)(x, y)` is `(value, pullback)` and
@@ -1539,7 +1538,7 @@ The same transform for a function of two parameters: `vjp(f)(x, y)` is `(value, 
 #### `grad`
 
 ```camel
-grad: (f: (x: T) => float) => (x: T) => T
+grad: (f: (x: float) => float) => (x: float) => float
 ```
 
 The gradient of a function of one parameter: `vjp` with the seed 1, its second half taken --

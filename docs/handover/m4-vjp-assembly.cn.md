@@ -73,9 +73,14 @@ $ node scripts/test.js test/plans/feat/compile/transforms.plan.toml
 
 ## 还留着的两条旧账（不在本分支）
 
-1. `Vjp<F>`/`Split<F>`/`ParamsOf<F>` 的泛型声明（设计 6.1）：**参数类型这一半已落**——`vjp`（一元、二元）与
-   `grad` 现在写成 `::<T>`（`grad::<T>(f: (x: T) => float): (x: T) => T`），所以数组/张量/`f32` 的函数能走到库里；
-   仍然"每 arity 一条"，因为函数体是手工拆参数的，而 `jvp` 只收 `float` 参数
-   （`modules/transforms/jvp_operator.cpp:115`），非 float 的 `T` 在这一行被拒。
-2. 残差位那个"类型由编译器填"的问题（`questions-2026-11-01-the-residual-slot-has-no-type-until-execution.md`，
+1. `Vjp<F>`/`Split<F>`/`ParamsOf<F>` 的泛型声明（设计 6.1）：**量过了，还没落**。类型函数是有的
+   （`type Vjp<F> = (..ParamsOf<F>) => (ResultOf<F>, Pullback<F>)` 在库里能解析），但一条 `vjp::<F>` 声明
+   要么有函数体（要 `jvp`/`split`/`transpose` 在编译期给出对任意 `F` 的形状，作者排序第 2 步），要么由 C++
+   算子扛着（`NativeDeclarationNotLoaded`）。试过的捷径两条都不行：`::<T>` 参数泛型会打死
+   `grad(x => x + 1.0)` 的 lambda 推定（`LambdaParameterWithoutType`），加一条 `float` 重载当推定源又是
+   `Redeclaration`。所以声明仍是 develop 的"每 arity 一条 `float`"。
+2. `jvp` 的判定现在问**切空间**（`camel/core/tangent_space.h`）而不是"是不是 `float`"：`float`/`f32`/`f16`/`bf16`
+   和 float 数组是自身，`(float, i32)`/`int[]`/`string` 没有；没空间的参数报"which has none"，有空间但没被提升的
+   报"whose tangent space is self and which this transform does not lift yet"。提升逻辑与 `jvp.cpp` 未动。
+3. 残差位那个"类型由编译器填"的问题（`questions-2026-11-01-the-residual-slot-has-no-type-until-execution.md`，
    甲/乙 两案已报价）：今天不影响任何读数。

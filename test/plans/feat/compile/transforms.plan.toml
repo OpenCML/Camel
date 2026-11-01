@@ -432,3 +432,21 @@ expect_exit = 0
 expect_stdout_contains = ["1.0", "27.0", "6.0", "TRANSPOSE function=autodiff::add_tangent<float> graph="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# A transform asks the type, not the writer of a rule, what a value's tangent space is
+# (`camel/core/tangent_space.h`): `float`, the two reduced-precision floats and every float array
+# are their own space, `(float, i32)` has none because the `i32` has none, and an integer or a
+# string has none at all. `test::tangent_space` prints one line per type and changes no graph, so
+# the answer is held still here and the query is asked before anything lifts a parameter.
+[[tests]]
+name = "tangent_space.the_type_answers"
+desc = "The tangent-space query answers three ways and prints one line per type: `float` (and `f32`, `f16`, `bf16` -- a narrow float is a float) is its own space, `float[]` is its own space because its element is, `i32[]` has none because its element has none, `(float, i32)` has none because one member has none, and `string` has none at all. The reading is the query's own, taken through `test::tangent_space`, which reads the program and gives it back unchanged."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_lifted.cml"
+args = ["${case}", "test::tangent_space", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["TANGENT type=float space=self", "TANGENT type=f32 space=self", "TANGENT type=f16 space=self", "TANGENT type=bf16 space=self", "TANGENT type=i32 space=none", "TANGENT type=string space=none", "TANGENT type=float[] space=self", "TANGENT type=i32[] space=none", "TANGENT type=(float, i32) space=none", "TANGENT type=(float, float) space=self"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

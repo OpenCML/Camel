@@ -29,13 +29,9 @@
  * `test/cases/compile/transforms/vjp_carries_its_ruleset.cml` holds it to.
  *
  * The signatures are stand-ins for `Vjp<F>`, `Split<F>` and `ParamsOf<F>` (design 6.1 is their
- * step). The parameter's type is a type variable `T` here, so the declaration is the same for every
- * type a function of one parameter can take -- an array, a tensor, an `f32` -- and a program that
- * differentiates with respect to one of those reaches this file instead of failing to match a call
- * (design 6.1's `Vjp<F>` would also collapse the arities; they stay one per arity because the body
- * unpacks its parameters by hand). What is left is the transform: `jvp` lifts a function whose
- * parameters are `float`, and says so at the instantiation of this file's body, which is the
- * forward-mode step design 6.1 still owes. The names stay in any case: a program says `grad`, and
+ * step), so `vjp` is declared once per arity rather than once for every `F` -- the same rule
+ * `tensor` follows for a name that is declared once per type it accepts. The generic form replaces
+ * these declarations, not their bodies, and the names stay in any case: a program says `grad`, and
  * which transforms answer it is the library's business (author, 2026-10-31).
  */
 
@@ -46,11 +42,10 @@ import { jvp, split, transpose } from transforms
 
 /// The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
 /// `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters. The juxtaposed call
-/// `transpose(residuals, ct)` is the internal step, not this signature. `T` is the parameter's type:
-/// the declaration takes every type, the forward transform takes `float` today.
+/// `transpose(residuals, ct)` is the internal step, not this signature.
 /// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
 /// @example let reading = vjp(f)
-export func vjp::<T>(f: (x: T) => float): (x: T) => (float, (ct: float) => T) {
+export func vjp(f: (x: float) => float): (x: float) => (float, (ct: float) => float) {
     let (forward, linear) = split(jvp(f))
     return (x: float) => {
         let (value, residuals) = forward(x)
@@ -68,7 +63,7 @@ export func vjp::<T>(f: (x: T) => float): (x: T) => (float, (ct: float) => T) {
 /// `pullback(ct)` gives both cotangents, in the order `f` takes the parameters.
 /// @example-fragment `f` is a function value of two parameters, so the example is a fragment of a program that declares one
 /// @example let reading_of_two = vjp(f)
-export func vjp::<T, U>(f: (x: T, y: U) => float): (x: T, y: U) => (float, (ct: float) => (T, U)) {
+export func vjp(f: (x: float, y: float) => float): (x: float, y: float) => (float, (ct: float) => (float, float)) {
     let (forward, linear) = split(jvp(f))
     return (x: float, y: float) => {
         let (value, residuals) = forward(x, y)
@@ -81,7 +76,7 @@ export func vjp::<T, U>(f: (x: T, y: U) => float): (x: T, y: U) => (float, (ct: 
 /// that reading of `vjp`, not as a second transform.
 /// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
 /// @example let slope = grad(f)
-export func grad::<T>(f: (x: T) => float): (x: T) => T {
+export func grad(f: (x: float) => float): (x: float) => float {
     let reading = vjp(f)
     return (x: float) => {
         let (value, pullback) = reading(x)

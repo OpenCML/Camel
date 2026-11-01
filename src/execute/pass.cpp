@@ -74,6 +74,7 @@
 #include "passes/test/resources.h"
 #include "passes/test/semantics.h"
 #include "passes/test/tags.h"
+#include "camel/passes/test/tangent_space.h"
 #include "passes/trans/cpp/cpp_export.h"
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/profile/profile.h"
@@ -980,6 +981,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kContextLifetimeTestPass, ContextLifetimeTestPass),
         TEST_PASS(kContextsTestPass, ContextsTestPass),
         TEST_PASS(kDerivativesTestPass, DerivativesTestPass),
+        TEST_PASS(kTangentSpaceTestPass, TangentSpaceTestPass),
         TEST_PASS(kCommitMergeTestPass, CommitMergeTestPass),
         TEST_PASS(kEdgesOrderOkTestPass, EdgesOrderOkTestPass),
         TEST_PASS(kEdgesOrderPureTestPass, EdgesOrderPureTestPass),
