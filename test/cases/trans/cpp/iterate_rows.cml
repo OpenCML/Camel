@@ -1,0 +1,25 @@
+/**
+ * `for` over a value of several dimensions walks its first dimension.
+ *
+ * The item is the row, one dimension less, and the number of rounds is the first extent -- not the
+ * element count, which is what a rank-2 value of 2 rows of 3 elements has 6 of and 2 items. The
+ * generated program holds each item as `rt::atRow(items, round, site)`, a value of its own (the
+ * elements are copied), and prints a rank-3 value's planes as rank-2 items the same way.
+ *
+ * `agree_with_fvm` builds and runs this program against std::fvm, byte for byte.
+ */
+
+func main(): int sync {
+    let m = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
+    let rows = loop n = 0 for row in m do n + 1
+    let firsts = loop s = 0.0 for row in m do s + row[0]
+    println(rows, firsts)
+    let cube = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]] as float[2, 2, 2]
+    let planes = loop n = 0 for plane in cube do n + 1
+    let corners = loop n = 0 for plane in cube do n + int(plane[1, 1])
+    println(planes, corners)
+    let v = [1.0, 2.0, 3.0] as float[]
+    let items = loop s = 0.0 for x in v do s + x
+    println(items)
+    return 0
+}

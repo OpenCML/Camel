@@ -115,11 +115,12 @@ const MODULES = [
         name: 'transforms',
         title: '`transforms`: program transforms',
         kind: 'cpp',
-        // A module of passes: it registers no operator, so `--verify-ops` has none to check. What it
-        // registers is a pass, declared in this .cml and registered in modules/transforms.
+        // The pass `reinterp` is declared in this .cml and registered in modules/transforms, so
+        // `--verify-ops` passes over it. The operator `jvp` answers a function built from its
+        // argument's type, so its entry is in the signature file named by `computed:`.
         source: 'transforms.cml',
         declaration: true,
-        passes_only: true,
+        computed: 'signatures/transforms.cml',
     },
     {
         name: 'tensor',
@@ -365,6 +366,14 @@ const MODULES = [
         // declarations are Camel, and `--verify-docs` compiles their examples like any other
         // module's.
         source: 'rulesets/jvp.cml',
+    },
+    {
+        name: 'rulesets.vmap',
+        title: '`rulesets.vmap`: how a batched transform lifts a value',
+        kind: 'camel',
+        // `Lift<T> = RowsOf<T>`: a batched value is the value with one dimension in front, so the
+        // elementwise tier's rule for a primitive is the primitive itself (`stdlib/rulesets/vmap.cml`).
+        source: 'rulesets/vmap.cml',
     },
     {
         name: 'sim',

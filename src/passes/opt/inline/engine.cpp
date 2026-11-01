@@ -273,13 +273,14 @@ bool returnsClosure(const GCGraph *graph) {
 std::vector<const GCGraph *> directCallees(
     const camel::runtime::RuntimeGraphDraftSession &session, const GCGraph *graph) {
     std::vector<const GCGraph *> callees;
-    if (const auto *draft = session.tryDraft(graph)) {
-        for (gc_node_ref_t id = 0; id < draft->nodeSlotCount(); ++id) {
-            const auto *header = draft->header(id);
+    if (const auto *transaction = session.tryDraft(graph)) {
+        const auto &draft = transaction->graph();
+        for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+            const auto *header = draft.header(id);
             if (!header || header->kind != GCNodeKind::Func) {
                 continue;
             }
-            if (GCGraph *callee = draft->calleeGraphOf(id)) {
+            if (GCGraph *callee = draft.calleeGraphOf(id)) {
                 callees.push_back(callee);
             }
         }
@@ -426,16 +427,17 @@ MacroOperandGraphs collectMacroOperandGraphs(
         // A graph this session already edited calls what its draft calls: a specialization
         // made in this session is a new graph that only the draft refers to, and it is as much
         // part of what the operator transforms as the function it was copied from.
-        if (const auto *draft = session.tryDraft(graph)) {
-            for (gc_node_ref_t id = 0; id < draft->nodeSlotCount(); ++id) {
-                const auto *header = draft->header(id);
+        if (const auto *transaction = session.tryDraft(graph)) {
+            const auto &draft = transaction->graph();
+            for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+                const auto *header = draft.header(id);
                 if (!header || header->kind != GCNodeKind::Func) {
                     continue;
                 }
-                reach(draft->calleeGraphOf(id));
+                reach(draft.calleeGraphOf(id));
             }
-            const auto slots = draft->staticSlots();
-            const auto types = draft->staticSlotTypes();
+            const auto slots = draft.staticSlots();
+            const auto types = draft.staticSlotTypes();
             for (size_t i = 1; i < slots.size() && i < types.size(); ++i) {
                 if (types[i] && types[i]->code() == TypeCode::Function) {
                     auto *function = camel::core::rtdata::fromSlot<::Function *>(slots[i]);

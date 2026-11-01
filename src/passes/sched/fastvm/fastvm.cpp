@@ -24,6 +24,7 @@
 
 #include <cstdio>
 #include <optional>
+#include <stdexcept>
 #endif
 
 using namespace std;
@@ -170,8 +171,8 @@ FastVMSchedPass::~FastVMSchedPass() = default;
 
 void FastVMSchedPass::populateDirectCallFrame(
     Frame *callerFrame, Frame *calleeFrame, data_arr_t srcArgs, data_arr_t dstSlots) {
-    ASSERT(callerFrame != nullptr && calleeFrame != nullptr, "FastVM call frame is null.");
-    ASSERT(
+    GUARD(callerFrame != nullptr && calleeFrame != nullptr, "FastVM call frame is null.");
+    GUARD(
         srcArgs.size() == dstSlots.size(),
         "FastVM encoded direct-call layout is arity-mismatched.");
     if (srcArgs.size() == 1) {
@@ -188,7 +189,7 @@ void FastVMSchedPass::populateDirectCallFrame(
 
 void FastVMSchedPass::captureCallArgValues(
     Frame *callerFrame, data_arr_t srcArgs, std::vector<slot_t> &out) {
-    ASSERT(callerFrame != nullptr, "FastVM direct call source frame is null.");
+    GUARD(callerFrame != nullptr, "FastVM direct call source frame is null.");
     out.resize(srcArgs.size());
     if (srcArgs.size() == 1) {
         out[0] = readCallSlot(callerFrame, srcArgs[0]);
@@ -201,8 +202,8 @@ void FastVMSchedPass::captureCallArgValues(
 
 void FastVMSchedPass::populateDirectCallFrameFromValues(
     Frame *calleeFrame, data_arr_t dstSlots, std::span<const slot_t> argValues) {
-    ASSERT(calleeFrame != nullptr, "FastVM direct call target frame is null.");
-    ASSERT(
+    GUARD(calleeFrame != nullptr, "FastVM direct call target frame is null.");
+    GUARD(
         argValues.size() == dstSlots.size(),
         "FastVM encoded direct-call layout is arity-mismatched.");
     if (argValues.size() == 1) {
@@ -215,10 +216,10 @@ void FastVMSchedPass::populateDirectCallFrameFromValues(
 }
 
 void FastVMSchedPass::populateFunctionClosureFrame(Frame *calleeFrame, Function *func) {
-    ASSERT(calleeFrame != nullptr, "FastVM closure target frame is null.");
-    ASSERT(func != nullptr, "FastVM closure Function is null.");
+    GUARD(calleeFrame != nullptr, "FastVM closure target frame is null.");
+    GUARD(func != nullptr, "FastVM closure Function is null.");
     auto *targetGraph = func->graph();
-    ASSERT(targetGraph != nullptr, "FastVM closure target graph is null.");
+    GUARD(targetGraph != nullptr, "FastVM closure target graph is null.");
 
     const auto closureNodes = targetGraph->closureNodes();
     if (closureNodes.empty()) {
@@ -226,8 +227,8 @@ void FastVMSchedPass::populateFunctionClosureFrame(Frame *calleeFrame, Function 
     }
 
     Tuple *closure = func->tuple();
-    ASSERT(closure != nullptr, "FastVM closure tuple is null.");
-    ASSERT(
+    GUARD(closure != nullptr, "FastVM closure tuple is null.");
+    GUARD(
         closure->size() == closureNodes.size(),
         std::format(
             "FastVM closure-arity mismatch for graph '{}': expected {}, got {}.",
@@ -236,22 +237,22 @@ void FastVMSchedPass::populateFunctionClosureFrame(Frame *calleeFrame, Function 
             closure->size()));
     for (size_t i = 0; i < closureNodes.size(); ++i) {
         const auto *port = targetGraph->node(closureNodes[i]);
-        ASSERT(port != nullptr, "FastVM closure port is null.");
+        GUARD(port != nullptr, "FastVM closure port is null.");
         calleeFrame->set(port->dataIndex, closure->get<slot_t>(i));
     }
 }
 
 void FastVMSchedPass::populateIndirectCallFrame(
     Frame *callerFrame, Frame *calleeFrame, Function *func, data_arr_t nargs, data_arr_t wargs) {
-    ASSERT(callerFrame != nullptr, "FastVM indirect call source frame is null.");
-    ASSERT(calleeFrame != nullptr, "FastVM indirect call target frame is null.");
-    ASSERT(func != nullptr, "FastVM indirect call callee Function is null.");
+    GUARD(callerFrame != nullptr, "FastVM indirect call source frame is null.");
+    GUARD(calleeFrame != nullptr, "FastVM indirect call target frame is null.");
+    GUARD(func != nullptr, "FastVM indirect call callee Function is null.");
     auto *targetGraph = func->graph();
-    ASSERT(targetGraph != nullptr, "FastVM indirect call target graph is null.");
-    ASSERT(!wargs.empty(), "FastVM indirect CALL requires with-arg[0] as Function.");
+    GUARD(targetGraph != nullptr, "FastVM indirect call target graph is null.");
+    GUARD(!wargs.empty(), "FastVM indirect CALL requires with-arg[0] as Function.");
 
     const auto normPorts = targetGraph->normPorts();
-    ASSERT(
+    GUARD(
         nargs.size() == normPorts.size(),
         std::format(
             "FastVM indirect call norm-arity mismatch for graph '{}': expected {}, got {}.",
@@ -260,12 +261,12 @@ void FastVMSchedPass::populateIndirectCallFrame(
             nargs.size()));
     for (size_t i = 0; i < normPorts.size(); ++i) {
         const auto *port = targetGraph->node(normPorts[i]);
-        ASSERT(port != nullptr, "FastVM indirect call norm port is null.");
+        GUARD(port != nullptr, "FastVM indirect call norm port is null.");
         calleeFrame->set(port->dataIndex, callerFrame->get<slot_t>(nargs[i]));
     }
 
     const auto withPorts = targetGraph->withPorts();
-    ASSERT(
+    GUARD(
         wargs.size() - 1 == withPorts.size(),
         std::format(
             "FastVM indirect call with-arity mismatch for graph '{}': expected {}, got {}.",
@@ -274,7 +275,7 @@ void FastVMSchedPass::populateIndirectCallFrame(
             wargs.size() - 1));
     for (size_t i = 0; i < withPorts.size(); ++i) {
         const auto *port = targetGraph->node(withPorts[i]);
-        ASSERT(port != nullptr, "FastVM indirect call with port is null.");
+        GUARD(port != nullptr, "FastVM indirect call with port is null.");
         calleeFrame->set(port->dataIndex, callerFrame->get<slot_t>(wargs[i + 1]));
     }
 
@@ -284,21 +285,21 @@ void FastVMSchedPass::populateIndirectCallFrame(
 void FastVMSchedPass::populateMarkedCallFrame(
     Frame *calleeFrame, Function *func, std::span<const slot_t> normArgs,
     std::span<const slot_t> withArgs) {
-    ASSERT(calleeFrame != nullptr, "FastVM marked call target frame is null.");
-    ASSERT(func != nullptr, "FastVM marked call Function is null.");
+    GUARD(calleeFrame != nullptr, "FastVM marked call target frame is null.");
+    GUARD(func != nullptr, "FastVM marked call Function is null.");
     auto *targetGraph = func->graph();
-    ASSERT(targetGraph != nullptr, "FastVM marked call target graph is null.");
+    GUARD(targetGraph != nullptr, "FastVM marked call target graph is null.");
 
     const auto normPorts = targetGraph->normPorts();
     const auto withPorts = targetGraph->withPorts();
-    ASSERT(
+    GUARD(
         normArgs.size() == normPorts.size(),
         std::format(
             "FastVM marked call norm-arity mismatch for graph '{}': expected {}, got {}.",
             targetGraph->name(),
             normPorts.size(),
             normArgs.size()));
-    ASSERT(
+    GUARD(
         withArgs.size() == withPorts.size(),
         std::format(
             "FastVM marked call with-arity mismatch for graph '{}': expected {}, got {}.",
@@ -308,12 +309,12 @@ void FastVMSchedPass::populateMarkedCallFrame(
 
     for (size_t i = 0; i < normPorts.size(); ++i) {
         const auto *port = targetGraph->node(normPorts[i]);
-        ASSERT(port != nullptr, "FastVM marked call norm port is null.");
+        GUARD(port != nullptr, "FastVM marked call norm port is null.");
         calleeFrame->set(port->dataIndex, normArgs[i]);
     }
     for (size_t i = 0; i < withPorts.size(); ++i) {
         const auto *port = targetGraph->node(withPorts[i]);
-        ASSERT(port != nullptr, "FastVM marked call with port is null.");
+        GUARD(port != nullptr, "FastVM marked call with port is null.");
         calleeFrame->set(port->dataIndex, withArgs[i]);
     }
 
@@ -337,7 +338,7 @@ constexpr size_t kLateBytecodeReserve = size_t{1} << 22; // 4M bytecodes, 32 MiB
 
 void FastVMSchedPass::precompile(
     const camel::runtime::Program &program, camel::runtime::GCGraph *runtimeRoot) {
-    ASSERT(runtimeRoot != nullptr, "Runtime root graph is null.");
+    GUARD(runtimeRoot != nullptr, "Runtime root graph is null.");
     auto linked = compileAndLink(context_, program, runtimeRoot, kFastVmCompileStrategy);
     codeSpace_  = std::make_shared<CodeSpace>();
     bytecodes_  = std::move(linked.codes);
@@ -437,7 +438,7 @@ void FastVMSchedPass::push(size_t pc, Frame *frame) {
 }
 
 std::pair<size_t, Frame *> FastVMSchedPass::pop() {
-    ASSERT(stackDepth_ > 0, "FastVM call stack underflow.");
+    GUARD(stackDepth_ > 0, "FastVM call stack underflow.");
     --stackDepth_;
     size_t pc    = pcStack_[stackDepth_];
     Frame *frame = frameStack_[stackDepth_];
@@ -516,7 +517,7 @@ void FastVMSchedPass::observeFault(const camel::core::error::RuntimeFault &fault
 const camel::runtime::Program *
 FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     (void)os;
-    ASSERT(program->root() != nullptr, "FastVM requires a non-null runtime root graph.");
+    GUARD(program->root() != nullptr, "FastVM requires a non-null runtime root graph.");
 
     if (camel::profile::enabled()) {
 #if ENABLE_FASTVM_JIT
@@ -631,7 +632,7 @@ void FastVMSchedPass::evalMarkedOperator(
         evalMarkedOperator_isolate(self, nargs, wargs, currFrame);
         break;
     default:
-        ASSERT(false, "Unsupported marked operator in FastVM.");
+        throw std::runtime_error("Unsupported marked operator in FastVM.: the dispatch reached a case no handler covers");
     }
 }
 
@@ -810,7 +811,7 @@ void FastVMSchedPass::evalMarkedOperator_isolate(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
     (void)wargs;
     Function *func = currFrame.get<Function *>(nargs[0]);
-    ASSERT(func != nullptr && func->graph() != nullptr, "Fault-isolation callee is null.");
+    GUARD(func != nullptr && func->graph() != nullptr, "Fault-isolation callee is null.");
     const HigherOrderCallSite site = higherOrderCallSite(func);
 
     std::array<slot_t, 8> inlineArgs;
@@ -841,7 +842,7 @@ void FastVMSchedPass::evalMarkedOperator_isolate(
         if (!camel::core::error::isIsolatedFault(fault)) {
             throw;
         }
-        ASSERT(
+        GUARD(
             stackDepth_ == stackDepthBefore,
             "A fault left the call stack changed at its isolation boundary.");
         (void)stackDepthBefore;
@@ -1069,14 +1070,14 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                     if (bc->opcode == OpCode::SCHD) {
                         evalMarkedOperator(bc->extra()->mark, bc->result, nargs, wargs, *cur);
                     } else {
-                        ASSERT(bc->opcode == OpCode::CALL, "Unexpected bytecode at a JIT exit.");
+                        GUARD(bc->opcode == OpCode::CALL, "Unexpected bytecode at a JIT exit.");
                         // A call through a function value, as the interpreters make it: nested
                         // on the native stack and counted.
                         fastVmCallBoundarySafepoint();
                         auto *function = cur->get<Function *>(wargs[0]);
-                        ASSERT(function != nullptr, "JIT CALL resolved a null Function callee.");
+                        GUARD(function != nullptr, "JIT CALL resolved a null Function callee.");
                         auto *target = programs_.graphOf(function);
-                        ASSERT(target != nullptr, "JIT CALL target has no runtime graph.");
+                        GUARD(target != nullptr, "JIT CALL target has no runtime graph.");
                         const uint32_t callCount = noteIndirectCall(target);
                         requireNestedCallRoom(cur);
                         Frame *callee = framePool_.acquire(target);
@@ -1094,7 +1095,7 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                     break;
                 }
                 default:
-                    ASSERT(false, "Unknown exit kind of framed JIT code.");
+                    throw std::runtime_error("Unknown exit kind of framed JIT code.: the dispatch reached a case no handler covers");
                 }
             }
             if (!activationEnded) {
@@ -1241,7 +1242,7 @@ void FastVMSchedPass::compileAndCacheGraph(camel::runtime::GCGraph *graph, size_
     if (jitFnOf(graph) || jitCompileFailedOf(graph)) {
         return;
     }
-    ASSERT(
+    GUARD(
         graph->hasFrameLayout(),
         std::format("Graph '{}' has no finalized frame layout.", graph->name()));
 
@@ -1354,7 +1355,7 @@ Bytecode *FastVMSchedPass::materializeCallTarget(size_t pc, Bytecode *bc) {
         return bc;
     }
     auto *runtimeTarget = getFuncExtraRuntimeGraph(bc);
-    ASSERT(runtimeTarget != nullptr, "FastVM direct call target is not materialized.");
+    GUARD(runtimeTarget != nullptr, "FastVM direct call target is not materialized.");
     if (jitCompileFailedOf(runtimeTarget)) {
         return bc;
     }
@@ -1400,16 +1401,16 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
 }
 
 HigherOrderCallSite FastVMSchedPass::higherOrderCallSite(Function *func) {
-    ASSERT(func != nullptr, "Higher-order call target function is null.");
+    GUARD(func != nullptr, "Higher-order call target function is null.");
     camel::runtime::GCGraph *runtimeGraph = programs_.graphOf(func);
-    ASSERT(
+    GUARD(
         runtimeGraph != nullptr,
         "FastVM higher-order runtime call requires a materialized runtime graph.");
     return {.runtimeGraph = runtimeGraph, .entryPc = graphEntryPc(runtimeGraph)};
 }
 
 size_t FastVMSchedPass::graphEntryPc(camel::runtime::GCGraph *graph) {
-    ASSERT(graph != nullptr, "Runtime graph is null.");
+    GUARD(graph != nullptr, "Runtime graph is null.");
     auto pc = fastVmEntryPcOf(graph);
     if (!pc) [[unlikely]] {
         compileLate(graph);
@@ -1427,7 +1428,7 @@ uint32_t FastVMSchedPass::noteIndirectCall(camel::runtime::GCGraph *graph) const
 slot_t FastVMSchedPass::invokeCallOrJit(
     size_t pc, camel::runtime::GCGraph *runtimeGraph, Frame *frame, void *jitCtx,
     uint32_t callCount) {
-    ASSERT(runtimeGraph != nullptr, "FastVM JIT/invoke target runtime graph is null.");
+    GUARD(runtimeGraph != nullptr, "FastVM JIT/invoke target runtime graph is null.");
     currentJitCtx_ = jitCtx;
     JitEntryFn fn  = jitFnOf(runtimeGraph);
     if (fn) {

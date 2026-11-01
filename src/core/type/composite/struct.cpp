@@ -18,6 +18,8 @@
 #include <cstring>
 #include <format>
 #include <mutex>
+#include <stdexcept>
+
 #include <sstream>
 #include <unordered_map>
 
@@ -45,7 +47,7 @@ StructDecl *StructDecl::create(
 }
 
 void StructDecl::define(std::vector<std::pair<std::string, Type *>> fields) {
-    ASSERT(!defined_, "A struct declaration is defined once.");
+    GUARD(!defined_, "A struct declaration is defined once.");
     fields_  = std::move(fields);
     defined_ = true;
 }
@@ -111,8 +113,8 @@ std::vector<std::string> refsOf(const std::vector<std::pair<std::string, Type *>
 } // namespace
 
 StructType *StructType::get(StructDecl *decl, std::span<Type *const> args) {
-    ASSERT(decl != nullptr, "StructType::get needs a declaration.");
-    ASSERT(
+    GUARD(decl != nullptr, "StructType::get needs a declaration.");
+    GUARD(
         args.size() == decl->params().size(),
         "StructType::get: one type argument per parameter of the declaration.");
     // The instance of a declaration is one table entry, keyed by the declaration and the canonical
@@ -124,7 +126,7 @@ StructType *StructType::get(StructDecl *decl, std::span<Type *const> args) {
     if (Type *known = TypeTable::instance().find(TypeTable::Shape::DeclaredStruct, key)) {
         return static_cast<StructType *>(known);
     }
-    ASSERT(decl->defined(), "A struct type is instantiated after its fields are read.");
+    GUARD(decl->defined(), "A struct type is instantiated after its fields are read.");
     std::vector<std::pair<std::string, Type *>> fields;
     fields.reserve(decl->fields().size());
     if (decl->generic()) {
@@ -243,7 +245,7 @@ StructType *StructType::allocate(
         auto it = std::find_if(fields.begin(), fields.end(), [&](const auto &p) {
             return p.first == refName;
         });
-        ASSERT(it != fields.end(), "Ref name not found in fields");
+        GUARD(it != fields.end(), "Ref name not found in fields");
         refIndices.push_back(std::distance(fields.begin(), it));
     }
 
@@ -268,9 +270,9 @@ StructType *StructType::allocate(
 
 StructType *StructType::declare(
     StructDecl *decl, std::span<Type *const> args, const std::vector<std::string> &fieldNames) {
-    ASSERT(decl != nullptr, "StructType::declare needs a declaration.");
-    ASSERT(!decl->defined(), "StructType::declare is called before the fields are read.");
-    ASSERT(
+    GUARD(decl != nullptr, "StructType::declare needs a declaration.");
+    GUARD(!decl->defined(), "StructType::declare is called before the fields are read.");
+    GUARD(
         args.size() == decl->params().size(),
         "StructType::declare: one type argument per parameter of the declaration.");
     std::vector<std::pair<std::string, Type *>> fields;
@@ -291,8 +293,8 @@ StructType *StructType::declare(
 }
 
 void StructType::completeFields(const std::vector<std::pair<std::string, Type *>> &fields) {
-    ASSERT(decl_ != nullptr, "Only a declared type is completed.");
-    ASSERT(fields.size() == size_, "A struct instance has one field per declared field.");
+    GUARD(decl_ != nullptr, "Only a declared type is completed.");
+    GUARD(fields.size() == size_, "A struct instance has one field per declared field.");
     size_t refCount = 0;
     for (size_t i = 0; i < size_; ++i) {
         GUARD(
@@ -304,12 +306,12 @@ void StructType::completeFields(const std::vector<std::pair<std::string, Type *>
                 fieldName(i),
                 i));
         Type *type = fields[i].second;
-        ASSERT(type != nullptr, "A completed struct type has a type for every field.");
+        GUARD(type != nullptr, "A completed struct type has a type for every field.");
         typesPtr_[i]     = type;
         typeCodesPtr_[i] = type->code();
         if (type->code() == TypeCode::Ref) {
             // declare() reserves one refs slot per field, so this cannot overflow.
-            ASSERT(refCount < size_, "Too many Ref fields for the reserved refs array.");
+            GUARD(refCount < size_, "Too many Ref fields for the reserved refs array.");
             refsPtr_[refCount++] = i;
         }
     }
@@ -326,7 +328,7 @@ std::optional<size_t> StructType::findField(std::string_view name) const {
 }
 
 Type *StructType::operator|(const StructType &other) const {
-    ASSERT(resolved() && other.resolved(), "StructType::operator| requires resolved operands");
+    GUARD(resolved() && other.resolved(), "StructType::operator| requires resolved operands");
 
     StructTypeFactory factory;
     // Copy lhs fields.
@@ -344,7 +346,7 @@ Type *StructType::operator|(const StructType &other) const {
 }
 
 Type *StructType::operator&(const StructType &other) const {
-    ASSERT(resolved() && other.resolved(), "StructType::operator& requires resolved operands");
+    GUARD(resolved() && other.resolved(), "StructType::operator& requires resolved operands");
 
     StructTypeFactory factory;
     for (size_t i = 0; i < size_; ++i) {
@@ -358,8 +360,8 @@ Type *StructType::operator&(const StructType &other) const {
 }
 
 Type *StructType::resolve(const type_vec_t &typeList) const {
-    ASSERT(typeList.size() == refCount_, "StructType::resolve: typeList size mismatch");
-    ASSERT(!resolved(), "StructType is already resolved");
+    GUARD(typeList.size() == refCount_, "StructType::resolve: typeList size mismatch");
+    GUARD(!resolved(), "StructType is already resolved");
 
     StructTypeFactory factory;
     // Copy all fields.
@@ -509,7 +511,7 @@ CastSafety StructType::castSafetyFrom(Type *sourceType) const {
 
 // Every conversion castSafetyFrom admits keeps the value.
 slot_t StructType::castSlotFrom(slot_t value, Type *sourceType) const {
-    ASSERT(
+    GUARD(
         castSafetyFrom(sourceType) == CastSafety::Safe,
         "castSlotFrom only allowed when castSafetyFrom returns Safe");
     return value;

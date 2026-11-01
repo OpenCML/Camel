@@ -1,0 +1,29 @@
+/**
+ * The mean keeps the element type. `sum`, `mean`, `min` and `max` answer the element type
+ * (design principles), and the canonical form of `mean` is `T(sum(float(x)) / float(numel(x)))`,
+ * with the sum and the division in f64 and one rounding at the end. So the mean of an integer
+ * value is an integer: `int(7 / 3)` is `2`, which is the conversion `int(·)` already has and not
+ * a lost average -- a program that wants a floating mean writes `f32(xs)` first, and the same
+ * three elements then answer `2.3333333`.
+ *
+ * The `f32` line with `16777216` and `-16777216` around a `1` separates the accumulations: an f32
+ * accumulator loses the `1` (and answers `0`), while the f64 one the canonical form names keeps it
+ * and answers `0.33333334`. The 2-D line reduces rows of three, so the lanes are what the axis
+ * says rather than one run.
+ */
+import { mean_axis, shape } from tensor
+
+func main(): int sync {
+    let ints: int[3] = [1, 2, 4]
+    println(mean_axis(ints, 0, false))
+    println(shape(mean_axis(ints, 0, false)))
+    println(mean_axis(ints, 0, true))
+    println(mean_axis(f32(ints), 0, false))
+    let fs: f32[3] = [1.0, 5.0, 2.0]
+    println(mean_axis(fs, 0, false))
+    let apart: f32[3] = [16777216.0, 1.0, -16777216.0]
+    println(mean_axis(apart, 0, false))
+    let two: int[2, 3] = [[1, 2, 4], [3, 4, 5]]
+    println(mean_axis(two, 1, false))
+    return 0
+}

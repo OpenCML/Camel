@@ -1,0 +1,21 @@
+/**
+ * A narrow element type keeps the canonical form too: the lane is summed in f64 from +0 in
+ * ascending order and the unrounded total is divided in f64, so the only rounding is the one that
+ * stores the quotient on the element type's own grid.
+ *
+ * Each line puts a `1` where the element type cannot keep it, so an accumulator of the element type
+ * would lose it and answer `0`: `16777216 + 1` is beyond the bf16 significand (8 bits), and
+ * `2048 + 1` is beyond the f16 one (11 bits, spacing 2 there). The f64 accumulator keeps the `1`,
+ * and the readings are the neighbours of `1 / 3` on those two grids.
+ */
+import { mean_axis } from tensor
+
+func main(): int sync {
+    let apart: f32[3] = [16777216.0, 1.0, -16777216.0]
+    let narrow: bf16[3] = bf16(apart)
+    println(mean_axis(narrow, 0, false))
+    let small: f32[3] = [2048.0, 1.0, -2048.0]
+    let halves: f16[3] = f16(small)
+    println(mean_axis(halves, 0, false))
+    return 0
+}

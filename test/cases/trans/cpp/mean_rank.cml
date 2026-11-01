@@ -1,0 +1,22 @@
+/**
+ * The mean of a whole value: the sum divided by the number of elements, both in f64, and the
+ * answer's element type reached by one conversion. A mean of integers is an f32 -- not integer
+ * division -- and a mean of f32 elements is not the f32 sum divided again.
+ *
+ * The readings are the lines below; `agree_with_fvm` compares them with std::fvm byte for byte.
+ */
+import { mean, reshape } from tensor
+
+func main(): int sync {
+    let ints: int[4] = [1, 2, 3, 4]
+    println(mean(ints))
+    let thirds: int[3] = [1, 2, 2]
+    println(mean(thirds))
+    let narrow: f32[3] = [0.1, 0.2, 0.3]
+    println(mean(narrow))
+    let grid: float[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+    println(mean(grid))
+    let one: float[1] = [7.0]
+    println(mean(one))
+    return 0
+}

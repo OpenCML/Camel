@@ -21,6 +21,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <stdexcept>
 
 namespace camel::core::mm {
 
@@ -47,7 +48,7 @@ class FreeListAllocator : public IAllocator {
         AllocationDebugScope debugScope;
 #endif
         std::lock_guard<std::mutex> lock(mutex_);
-        ASSERT(align == alignof(slot_t), "Alignment other than 8 bytes is not supported");
+        GUARD(align == alignof(slot_t), "Alignment other than 8 bytes is not supported");
 
         size_t total_size = alignUp(sizeof(ObjectHeader) + size, alignof(slot_t));
 
@@ -56,8 +57,8 @@ class FreeListAllocator : public IAllocator {
         EXEC_WHEN_DEBUG(validateFreeListUnlocked(std::format("an allocation of {} bytes", size)));
 
         while (curr) {
-            ASSERT(curr->size >= sizeof(FreeBlock), "Corrupted free block");
-            ASSERT(curr->size % alignof(slot_t) == 0, "Unaligned free block");
+            GUARD(curr->size >= sizeof(FreeBlock), "Corrupted free block");
+            GUARD(curr->size % alignof(slot_t) == 0, "Unaligned free block");
 
             if (LIKELY(curr->size >= total_size)) {
                 EXEC_WHEN_DEBUG({
@@ -117,7 +118,7 @@ class FreeListAllocator : public IAllocator {
         for (FreeBlock *fb = freeList_; fb != nullptr; fb = fb->next) {
             const auto *addr = reinterpret_cast<const std::byte *>(fb);
             if (addr < start_ || addr >= end_ || addr + fb->size > end_) {
-                ASSERT(false, std::format("Free list corrupted after {}.", context));
+                throw std::runtime_error(std::format("Free list corrupted after {}.", context));
             }
         }
     }
@@ -132,36 +133,36 @@ class FreeListAllocator : public IAllocator {
             total_size = headerOf(ptr)->size();
         } else {
             auto allocIt = allocatedSizes_.find(ptr);
-            ASSERT(
+            GUARD(
                 allocIt != allocatedSizes_.end(),
                 "Free pointer was not allocated by this allocator.");
             total_size = allocIt->second;
             allocatedSizes_.erase(allocIt);
         }
 
-        ASSERT(total_size % alignof(slot_t) == 0, "Object size not aligned");
-        ASSERT(total_size >= sizeof(ObjectHeader), "Invalid object size");
+        GUARD(total_size % alignof(slot_t) == 0, "Object size not aligned");
+        GUARD(total_size >= sizeof(ObjectHeader), "Invalid object size");
 
         std::byte *blockData = static_cast<std::byte *>(ptr) - sizeof(ObjectHeader);
-        ASSERT(blockData >= start_ && blockData < end_, "Free pointer is out of allocator range.");
-        ASSERT(blockData + total_size <= end_, "Free block exceeds allocator range.");
+        GUARD(blockData >= start_ && blockData < end_, "Free pointer is out of allocator range.");
+        GUARD(blockData + total_size <= end_, "Free block exceeds allocator range.");
 
         // Detect double frees by checking overlap with any free block.
         EXEC_WHEN_DEBUG({
             FreeBlock *fb = freeList_;
             while (fb) {
                 std::byte *fb_addr = reinterpret_cast<std::byte *>(fb);
-                ASSERT(
+                GUARD(
                     fb_addr >= start_ && fb_addr < end_,
                     "Free list pointer is out of allocator range.");
-                ASSERT(fb->size >= sizeof(FreeBlock), "Free list block size is invalid.");
-                ASSERT(fb_addr + fb->size <= end_, "Free list block exceeds allocator range.");
+                GUARD(fb->size >= sizeof(FreeBlock), "Free list block size is invalid.");
+                GUARD(fb_addr + fb->size <= end_, "Free list block exceeds allocator range.");
                 std::byte *fb_start  = reinterpret_cast<std::byte *>(fb);
                 std::byte *fb_end    = fb_start + fb->size;
                 std::byte *block_end = blockData + total_size;
 
                 // Check for overlap, excluding adjacency.
-                ASSERT(!(blockData < fb_end && block_end > fb_start), "Double free detected");
+                GUARD(!(blockData < fb_end && block_end > fb_start), "Double free detected");
 
                 fb = fb->next;
             }
@@ -185,17 +186,17 @@ class FreeListAllocator : public IAllocator {
                 obj_size = hdr->size();
             } else {
                 auto allocIt = allocatedSizes_.find(payload);
-                ASSERT(
+                GUARD(
                     allocIt != allocatedSizes_.end(),
                     "Bulk free pointer was not allocated by this allocator.");
                 obj_size = allocIt->second;
                 allocatedSizes_.erase(allocIt);
             }
-            ASSERT(obj_size % alignof(slot_t) == 0, "Object size not aligned");
-            ASSERT(obj_size >= sizeof(ObjectHeader), "Invalid object size");
+            GUARD(obj_size % alignof(slot_t) == 0, "Object size not aligned");
+            GUARD(obj_size >= sizeof(ObjectHeader), "Invalid object size");
             std::byte *addr = reinterpret_cast<std::byte *>(hdr);
-            ASSERT(addr >= start_ && addr < end_, "Bulk free pointer is out of allocator range.");
-            ASSERT(addr + obj_size <= end_, "Bulk free block exceeds allocator range.");
+            GUARD(addr >= start_ && addr < end_, "Bulk free pointer is out of allocator range.");
+            GUARD(addr + obj_size <= end_, "Bulk free block exceeds allocator range.");
             blocks.emplace_back(addr, obj_size);
         }
 
@@ -206,8 +207,8 @@ class FreeListAllocator : public IAllocator {
 
         // Check for overlap and duplicates.
         for (size_t i = 1; i < blocks.size(); ++i) {
-            ASSERT(blocks[i - 1].first != blocks[i].first, "Duplicate blocks in freeBulk");
-            ASSERT(
+            GUARD(blocks[i - 1].first != blocks[i].first, "Duplicate blocks in freeBulk");
+            GUARD(
                 blocks[i - 1].first + blocks[i - 1].second <= blocks[i].first,
                 "Overlapping blocks in freeBulk");
         }
@@ -222,7 +223,7 @@ class FreeListAllocator : public IAllocator {
                     std::byte *block_end = addr + size;
 
                     // Check for overlap.
-                    ASSERT(!(addr < fb_end && block_end > fb_start), "Double free in bulk");
+                    GUARD(!(addr < fb_end && block_end > fb_start), "Double free in bulk");
 
                     fb = fb->next;
                 }
@@ -244,7 +245,7 @@ class FreeListAllocator : public IAllocator {
     /// allocator that keeps its table of sizes (not sizesFromHeaders).
     bool isAllocated(void *payload) const {
         std::lock_guard<std::mutex> lock(mutex_);
-        ASSERT(!sizesFromHeaders_, "isAllocated() needs the table of sizes");
+        GUARD(!sizesFromHeaders_, "isAllocated() needs the table of sizes");
         return allocatedSizes_.contains(payload);
     }
 
@@ -269,7 +270,7 @@ class FreeListAllocator : public IAllocator {
             }
             visited.insert(curr);
 
-            ASSERT(curr->size >= sizeof(FreeBlock), "Invalid free block size");
+            GUARD(curr->size >= sizeof(FreeBlock), "Invalid free block size");
             total += curr->size;
             curr = curr->next;
         }
@@ -290,28 +291,28 @@ class FreeListAllocator : public IAllocator {
             // Is the current position a free block?
             if (UNLIKELY(fb && reinterpret_cast<std::byte *>(fb) == current)) {
                 // Skip the free block.
-                ASSERT(fb->size >= sizeof(FreeBlock), "Free block too small");
-                ASSERT(fb->size % alignof(slot_t) == 0, "Free block not aligned");
-                ASSERT(current + fb->size <= end_, "Free block out of bounds");
+                GUARD(fb->size >= sizeof(FreeBlock), "Free block too small");
+                GUARD(fb->size % alignof(slot_t) == 0, "Free block not aligned");
+                GUARD(current + fb->size <= end_, "Free block out of bounds");
 
                 current += fb->size;
                 fb = fb->next;
             } else {
                 // Must be an allocated object.
-                ASSERT(
+                GUARD(
                     !fb || reinterpret_cast<std::byte *>(fb) > current,
                     "Free list ordering error");
 
                 ObjectHeader *header = reinterpret_cast<ObjectHeader *>(current);
                 size_t obj_size      = header->size();
 
-                ASSERT(obj_size >= sizeof(ObjectHeader), "Invalid object size");
-                ASSERT(obj_size % alignof(slot_t) == 0, "Object not aligned");
-                ASSERT(current + obj_size <= end_, "Object out of bounds");
+                GUARD(obj_size >= sizeof(ObjectHeader), "Invalid object size");
+                GUARD(obj_size % alignof(slot_t) == 0, "Object not aligned");
+                GUARD(current + obj_size <= end_, "Object out of bounds");
 
                 // Ensure we do not overlap the next free block.
                 if (fb) {
-                    ASSERT(
+                    GUARD(
                         current + obj_size <= reinterpret_cast<std::byte *>(fb),
                         "Object overlaps with free block");
                 }
@@ -321,8 +322,8 @@ class FreeListAllocator : public IAllocator {
             }
         }
 
-        ASSERT(current == end_, "Did not reach end");
-        ASSERT(fb == nullptr, "Free list not fully consumed");
+        GUARD(current == end_, "Did not reach end");
+        GUARD(fb == nullptr, "Free list not fully consumed");
     }
 
     bool validate() const {
@@ -481,9 +482,9 @@ class FreeListAllocator : public IAllocator {
     // at the head of the list.
     FreeBlock *
     insertAndCoalesce(std::byte *blockData, size_t total_size, FreeBlock *from = nullptr) {
-        ASSERT(total_size >= sizeof(FreeBlock), "Block too small");
-        ASSERT(blockData >= start_ && blockData + total_size <= end_, "Block out of bounds");
-        ASSERT(
+        GUARD(total_size >= sizeof(FreeBlock), "Block too small");
+        GUARD(blockData >= start_ && blockData + total_size <= end_, "Block out of bounds");
+        GUARD(
             !from || reinterpret_cast<std::byte *>(from) < blockData,
             "The resume block must start below the block being freed");
 

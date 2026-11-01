@@ -379,12 +379,12 @@ slot_t readLeaf(const std::byte *at, TypeCode code, camel::core::mm::IAllocator 
         return rtdata::toSlot(rtdata::Complex::create(real, imaginary, code, allocator));
     }
     default:
-        GUARD(
-            false,
-            std::format(
-                "reading a pure-data leaf whose type code {} has no leaf reader",
-                static_cast<int>(code)));
-        return NullSlot;
+        // Unreachable: the caller reads a leaf the layout names, and every leaf code has a case
+        // above. Reaching it means the layout and this reader disagree, which is a defect of
+        // the compiler, so say that rather than abort.
+        throw std::runtime_error(std::format(
+            "Not a pure-data leaf type: type code {} has no leaf reader",
+            static_cast<int>(code)));
     }
 }
 
@@ -440,12 +440,12 @@ void writeLeaf(std::byte *at, TypeCode code, slot_t slot) {
         break;
     }
     default:
-        GUARD(
-            false,
-            std::format(
-                "writing a pure-data leaf whose type code {} has no leaf writer",
-                static_cast<int>(code)));
-        break;
+        // Unreachable: the caller writes a leaf the layout names, and every leaf code has a case
+        // above. Reaching it means the layout and this writer disagree, which is a defect of
+        // the compiler, so say that rather than abort.
+        throw std::runtime_error(std::format(
+            "Not a pure-data leaf type: type code {} has no leaf writer",
+            static_cast<int>(code)));
     }
 }
 
@@ -629,11 +629,12 @@ slot_t Array::getSlotSlow(uint64_t flatIndex) const {
     case 1:
         return static_cast<slot_t>(*at);
     default:
-        GUARD(
-            false,
-            std::format(
-                "reading a compact element of {} bytes, which is no numeric width", elementSize_));
-        return NullSlot;
+        // Unreachable: a compact leaf is 1, 2, 4 or 8 bytes wide and a slot is 8, and the eight-
+        // byte case returned above; aggregate and complex elements returned before this switch.
+        // Reaching it means a layout states a width this reader does not know, i.e. a defect of
+        // the compiler, so say that rather than abort.
+        throw std::runtime_error(std::format(
+            "Unsupported compact element size: {} bytes has no numeric reader", elementSize_));
     }
 }
 
@@ -708,11 +709,11 @@ void Array::setSlotSlow(uint64_t flatIndex, slot_t value, const type::ArrayType 
                                          : (value & 0xFF));
         break;
     default:
-        GUARD(
-            false,
-            std::format(
-                "storing a compact element of {} bytes, which is no numeric width", elementSize_));
-        break;
+        // Unreachable: the same widths the reader knows, and the eight-byte case returned above.
+        // Reaching it means a layout states a width this writer does not know, i.e. a defect of
+        // the compiler, so say that rather than abort.
+        throw std::runtime_error(std::format(
+            "Unsupported compact element size: {} bytes has no numeric writer", elementSize_));
     }
 }
 

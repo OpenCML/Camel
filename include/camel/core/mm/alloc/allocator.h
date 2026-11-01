@@ -12,6 +12,7 @@
 #include <type_traits>
 #include <utility> // for std::forward
 #include <vector>
+#include <stdexcept>
 
 namespace camel::core::rtdata {
 class Object;
@@ -36,23 +37,23 @@ class IAllocator {
     virtual void free(void *ptr) = 0;
 
     // Bulk clear (suitable for semispaces / bump-pointer allocators).
-    virtual void reset() { ASSERT(false, "reset() not implemented for this allocator"); };
+    virtual void reset() { throw std::runtime_error("reset() not implemented for this allocator"); };
 
     // Query remaining available space.
     virtual size_t available() const {
-        ASSERT(false, "available() not implemented for this allocator");
+        throw std::runtime_error("available() not implemented for this allocator");
         return 0;
     };
 
     // Check whether the pointer belongs to this allocator's managed region.
     virtual bool contains(void *ptr) const {
-        ASSERT(false, "contains() not implemented for this allocator");
+        throw std::runtime_error("contains() not implemented for this allocator");
         return false;
     };
 
     // Iterate allocated objects (read-only; do not free directly in the callback).
     virtual void iterateAllocated(const std::function<void(ObjectHeader *)> &visitor) const {
-        ASSERT(false, "iterateAllocated() not implemented for this allocator");
+        throw std::runtime_error("iterateAllocated() not implemented for this allocator");
     };
 
     // Tells the allocator that the object at `payload`, which it has just handed out, has a

@@ -1,0 +1,21 @@
+/**
+ * A conversion that can fail runs where it is written, whether or not its value is read.
+ *
+ * `open2(...) as float[3, 3]` states a shape and checks it when the program runs (design principles
+ * 5.4): the check is the statement, and the value it gives is not read. Dropping it because its
+ * value is unread would drop the fault with it and let a program the interpreter stops print
+ * `not reached`.
+ *
+ * The generated function keeps the call where it stands -- `rt::asShape(v1_open2, {3, 3},
+ * "float[3, 3]", at_...);` -- and the report is the interpreter's, byte for byte.
+ */
+func open2(v: float[2, 2]): float[..] {
+    return v as float[..]
+}
+
+func main(): int sync {
+    println('before')
+    let unused = open2([[1.0, 2.0], [3.0, 4.0]]) as float[3, 3]
+    println('not reached')
+    return 0
+}

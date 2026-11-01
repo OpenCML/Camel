@@ -19,6 +19,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/collection.h"
 
+#include <string>
 #include <vector>
 
 namespace camel::core::rtdata::table::detail {
@@ -217,7 +218,13 @@ class Cursor {
 
     const Table *leftmostLeaf(const Table *t) {
         while (!t->isLeaf()) {
-            ASSERT(depth_ < kMaxHeight, "A collection tree is higher than its size allows.");
+            // `path_` holds one step per level; a descent past its last step would write the
+            // next one out of the array.
+            GUARD(
+                depth_ < kMaxHeight,
+                std::string("descending to the leftmost leaf at depth ") + std::to_string(depth_) +
+                    ", but a collection tree is at most " + std::to_string(kMaxHeight) +
+                    " levels deep: the next step would be written past the path");
             path_[depth_++] = Step{t, 0};
             t               = t->children()[0];
         }

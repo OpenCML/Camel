@@ -50,7 +50,7 @@ struct ObjectHeader {
     }
 
     size_t size() const {
-        ASSERT(state_ == 0, "Cannot get size from forwarded object");
+        GUARD(state_ == 0, "Cannot get size from forwarded object");
         return total_;
     }
     size_t age() const { return age_; }
@@ -59,13 +59,13 @@ struct ObjectHeader {
     size_t region() const { return region_; }
 
     void setSize(size_t size) {
-        ASSERT(size <= 0x0000FFFFFFFFFFFFULL, "Size exceeds 48-bit limit");
-        ASSERT(size >= sizeof(ObjectHeader), "Size too small");
+        GUARD(size <= 0x0000FFFFFFFFFFFFULL, "Size exceeds 48-bit limit");
+        GUARD(size >= sizeof(ObjectHeader), "Size too small");
         total_ = size & 0x0000FFFFFFFFFFFFULL;
         state_ = 0;
     }
     size_t objSize() const {
-        ASSERT(state_ == 0, "Cannot get object size from forwarded object");
+        GUARD(state_ == 0, "Cannot get object size from forwarded object");
         return static_cast<size_t>(total_ - sizeof(ObjectHeader));
     }
 
@@ -74,7 +74,7 @@ struct ObjectHeader {
             age_++;
     }
     void setAge(size_t age) {
-        ASSERT(age <= 15, "Age must be between 0 and 15");
+        GUARD(age <= 15, "Age must be between 0 and 15");
         age_ = age;
     }
     void resetAge() { age_ = 0; }
@@ -83,12 +83,12 @@ struct ObjectHeader {
     void unmark() { marked_ = 0; }
 
     void forward(void *addr) {
-        ASSERT(addr != nullptr, "Cannot forward to null");
+        GUARD(addr != nullptr, "Cannot forward to null");
 
         size_t addrValue = reinterpret_cast<size_t>(addr);
 
         // Ensure the address is a canonical 48-bit x86-64 address.
-        ASSERT(
+        GUARD(
             (addrValue & 0xFFFF000000000000ULL) == 0 ||
                 (addrValue & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL,
             "Address must be canonical 48-bit");
@@ -98,12 +98,12 @@ struct ObjectHeader {
     }
 
     void setRegion(size_t rid) {
-        ASSERT(rid <= 15, "Region ID out of range");
+        GUARD(rid <= 15, "Region ID out of range");
         region_ = rid & 0x0F;
     }
 
     void *forwardedAddr() const {
-        ASSERT(state_ == 1, "Object is not forwarded");
+        GUARD(state_ == 1, "Object is not forwarded");
         // Restore the full address via sign extension.
         size_t addrValue = total_;
         if (addrValue & 0x0000800000000000ULL) {

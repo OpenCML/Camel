@@ -48,6 +48,7 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+#include <stdexcept>
 
 namespace camel::compile::gir {
 
@@ -66,7 +67,7 @@ inline bool isVoidGraphExitType(Type *type) {
 }
 
 inline runtime::GCFillKind fillKindForType(Type *type) {
-    ASSERT(type != nullptr, "FILL type cannot be null.");
+    GUARD(type != nullptr, "FILL type cannot be null.");
     switch (type->code()) {
     case TypeCode::Tuple:
         return runtime::GCFillKind::Tuple;
@@ -77,7 +78,7 @@ inline runtime::GCFillKind fillKindForType(Type *type) {
     case TypeCode::Function:
         return runtime::GCFillKind::FunctionClosure;
     default:
-        ASSERT(false, std::format("Unsupported FILL type '{}'.", type->toString()));
+        throw std::runtime_error(std::format("Unsupported FILL type '{}'.", type->toString()));
         return runtime::GCFillKind::Tuple;
     }
 }
@@ -85,7 +86,7 @@ inline runtime::GCFillKind fillKindForType(Type *type) {
 inline void setGraphReturnFromResult(
     const compile_graph_ptr_t &graph, draft_node_ref_t outputNode, draft_node_ref_t valueNode,
     Type *resultType) {
-    ASSERT(graph != nullptr, "Graph return setup requires a valid graph.");
+    GUARD(graph != nullptr, "Graph return setup requires a valid graph.");
     graph->edit().setOutputNode(outputNode);
     graph->edit().setExitNode(outputNode);
     if (isVoidGraphExitType(resultType)) {
@@ -166,7 +167,7 @@ inline TupleType *currentClosureTupleType(const compile_graph_ptr_t &graph) {
 
 inline StaticFunction *createStaticFunction(
     const compile_graph_ptr_t &ownerGraph, const compile_graph_ptr_t &targetGraph) {
-    ASSERT(
+    GUARD(
         targetGraph != nullptr,
         "Target graph is null when materializing compile-time function.");
     return StaticFunction::create(
@@ -372,12 +373,12 @@ inline std::string describeGaps(const std::string &subject, const std::vector<Co
 }
 
 inline void setNodeType(node_handle_t node, Type *type) {
-    ASSERT(node != nullptr, "Cannot update type of null draft node.");
+    GUARD(node != nullptr, "Cannot update type of null draft node.");
     nodeDraftOf(node)->setNodeDataType(nodeIdOf(node), type);
 }
 
 inline void setNodeMacro(node_handle_t node, bool enabled) {
-    ASSERT(node != nullptr, "Cannot update runtime flags of null draft node.");
+    GUARD(node != nullptr, "Cannot update runtime flags of null draft node.");
     uint8_t flags = nodeHeaderOf(node)->runtimeFlags;
     if (enabled) {
         flags = static_cast<uint8_t>(flags | runtime::kGCNodeFlagMacro);
@@ -667,6 +668,16 @@ inline void markSyncStatement(node_handle_t node) {
         id, static_cast<uint8_t>(draft->header(id)->runtimeFlags | runtime::kGCNodeFlagSyncStatement));
 }
 
+/// The chain link itself: both ends marked as statements of one block, which is what the seal check
+/// reads back (src/runtime/graph_edges.cpp, `checkSyncEdges`), and the sync edge between them. No
+/// control edge: this is the pair as the model wants it, for a caller whose edge is not written for a
+/// consumer that still reads the old kind.
+inline void writeSyncLink(node_handle_t from, node_handle_t to) {
+    markSyncStatement(from);
+    markSyncStatement(to);
+    linkNodes(LinkType::Sync, from, to);
+}
+
 /// One link of a `sync` block's chain: a statement follows the one written before it by a sync edge,
 /// which carries "used" as well as the order (docs/design/effects/edges.cn.md 1). The link is decided
 /// by that sync edge -- what a `sync` block wrote is read back from `syncPredsOf` -- and the control
@@ -680,9 +691,7 @@ inline void markSyncStatement(node_handle_t node) {
 /// something: this is the raw pair, and a chain that reaches a node the graph hands on asks it even
 /// when that node reads the tail (there the wait *is* the only thing that reaches the node).
 inline void writeSyncStatement(node_handle_t from, node_handle_t to) {
-    markSyncStatement(from);
-    markSyncStatement(to);
-    linkNodes(LinkType::Sync, from, to);
+    writeSyncLink(from, to);
     linkNodes(LinkType::Ctrl, from, to);
 }
 

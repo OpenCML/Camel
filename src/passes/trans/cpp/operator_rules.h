@@ -47,6 +47,10 @@ class OperatorCall {
     virtual const CppValue &with(size_t i) const        = 0;
     virtual const Type *normType(size_t i) const        = 0;
     virtual const Type *withType(size_t i) const        = 0;
+    /// Whether the `with` argument `i` is a constant of the program (a DATA node): a value the
+    /// writer can read, as opposed to one the program computes while it runs. A rule that would
+    /// have to know such a value writes nothing from the type and lets the runtime have it.
+    virtual bool withIsConstant(size_t i) const = 0;
     virtual const Type *resultType() const              = 0;
     /// The name of the Site for a fault of `kind` at this operation; `args` as for
     /// SiteTable::siteFor.
@@ -77,12 +81,6 @@ struct OperatorRule {
     /// Its result depends on its arguments only, it has no effect and cannot fault: the
     /// expression may be moved to its one use (and need not be a statement of its own).
     bool inlinable = false;
-    /// The C++ type of the result when it is not the C++ type of the node's Camel type: an
-    /// operator whose result is a value the runtime owns gives an `rt::Foreign`, whatever the type
-    /// of the value it names says (docs/design/cpp-standalone/README.cn.md 9 -- for such an
-    /// operator the representation is the call's, not the type's). Null: the node's type, as
-    /// everywhere else.
-    const char *resultCpp = nullptr;
 };
 
 /// The rule for the operator `uri`, or null when it has no standalone translation.

@@ -122,7 +122,7 @@ std::vector<JitBlocker> collectBlockers(const CompilationUnit &unit, bool firstO
         return found;
     }
     const size_t graphEnd = unit.entryPc + unit.graphLength;
-    ASSERT(
+    GUARD(
         graphEnd <= unit.bytecodes.size(),
         "Current graph bytecode range exceeds linked bytecode span.");
     for (size_t pc = unit.entryPc; pc < graphEnd;) {
@@ -261,7 +261,7 @@ std::vector<LoopRound> loopRoundsOf(const CompilationUnit &unit) {
         return rounds;
     const Bytecode *base = unit.bytecodes.data();
     const size_t graphEnd = unit.entryPc + unit.graphLength;
-    ASSERT(
+    GUARD(
         graphEnd <= unit.bytecodes.size(),
         "Current graph bytecode range exceeds linked bytecode span.");
     std::unordered_map<const camel::runtime::ExecLoop *, size_t> indexOf;
@@ -427,7 +427,7 @@ std::vector<JitBlocker> collectRuntimeConstructs(const CompilationUnit &unit, bo
         return objectConstant && moved > kMaxRegisterArgs;
     };
     const size_t graphEnd = unit.entryPc + unit.graphLength;
-    ASSERT(
+    GUARD(
         graphEnd <= unit.bytecodes.size(),
         "Current graph bytecode range exceeds linked bytecode span.");
     const size_t frameBytes =

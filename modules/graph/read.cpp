@@ -662,7 +662,7 @@ slot_t isWrittenSlotKernel(ArgsView &, ArgsView &norm, Context &) {
     const NodeView node = viewOf(handle, "graph.is_written_slot");
     if (node.isDraft()) {
         // The draft changes in place, so there is no version to cache an answer under.
-        return toSlot<Bool>(camel::runtime::WrittenSlots(node.draft())(node.ref));
+        return toSlot<Bool>(camel::runtime::WrittenSlots(*node.transaction)(node.ref));
     }
     const GCGraph &graph = graphOf(handle, "graph.is_written_slot");
     std::shared_ptr<camel::runtime::WrittenSlots> written;
@@ -677,7 +677,7 @@ slot_t isWrittenSlotKernel(ArgsView &, ArgsView &norm, Context &) {
             // The copy is opened by a transaction, which is the only owner a draft has; it is never
             // committed, because the answer is computed from the copy and nothing is handed back.
             const auto copy = camel::runtime::GraphTransaction::decode(*handle->program(), &graph);
-            found = cache.emplace(key, std::make_shared<camel::runtime::WrittenSlots>(copy->edit()))
+            found = cache.emplace(key, std::make_shared<camel::runtime::WrittenSlots>(*copy))
                         .first;
         }
         written = found->second;

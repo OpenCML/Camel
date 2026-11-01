@@ -1,0 +1,53 @@
+/**
+ * The positions a half's value is read at: `argsort` of a value of bf16 or f16, and the two loops
+ * `array::argmax` and `array::argmin` write on it. The operator names its element type
+ * (`array:argsort_bf`, `array:argsort_f6`), and the answer is an index, not a value of the array
+ * -- so this is the one module operator over a narrow float whose answer's type is the same as for
+ * any other element type, and what the element type decides is the order the positions are put in:
+ * every NaN after every number, -0 below +0, ties where they stand.
+ *
+ * `array::argmax` is a loop over `precedes(a, b) = argsort([b, a])[0] == 1`, so it asks for an
+ * argsort of two elements at every step; `argmin` looks for a NaN first and then loops the same
+ * way. The readings below are the positions, which is the part a total cannot express.
+ *
+ * One value per line: the readings are the positions, and the lines are what a comparison would
+ * read them from. This program translates to rt::halfArgsort and no bridged call; its readings are
+ * not compared with the interpreter's yet, because the C++ it is written into does not build every
+ * time (see the plan entry narrow_argmax).
+ */
+import { argmax, argmin, argsort } from array
+
+func main(): int sync {
+    let xs: bf16[] = [0.5, -1.5, 2.0]
+    println(argsort(xs))
+    println(argmax(xs))
+    println(argmin(xs))
+    let hs: f16[] = [0.5, -1.5, 2.0]
+    println(argsort(hs))
+    println(argmax(hs))
+    println(argmin(hs))
+
+    // Ties keep the order they stand: the earlier position wins.
+    let ties: bf16[] = [1.5, 1.5, 1.5]
+    println(argsort(ties))
+    println(argmax(ties))
+    println(argmin(ties))
+
+    // -0 is below +0: the order `min` and `max` state, read as positions.
+    let zeros: bf16[] = [0.0, -0.0]
+    println(argsort(zeros))
+    println(argmax(zeros))
+    println(argmin(zeros))
+
+    // Every NaN is after every number, so argmax finds it and argmin names it first.
+    let nans: f16[] = [1.0, f16('nan'), 2.0]
+    println(argsort(nans))
+    println(argmax(nans))
+    println(argmin(nans))
+
+    // A value of several dimensions is read in row-major order, and the position is that order's.
+    let m: bf16[2, 2] = [[0.5, 1.5], [2.5, 3.5]]
+    println(argmax(m))
+    println(argmin(m))
+    return 0
+}

@@ -58,7 +58,7 @@ LinkedBytecodeDumpPass::apply(const camel::runtime::Program *program, std::ostre
     int maxwidth = computeWidth(linked.codes.size());
 
     for (const auto &[offset, length, runtimeGraph] : linked.graphs) {
-        ASSERT(runtimeGraph != nullptr, "Linked bytecode entry is missing runtime graph metadata.");
+        GUARD(runtimeGraph != nullptr, "Linked bytecode entry is missing runtime graph metadata.");
         os << runtimeGraph->mangledName() << ":\n";
         for (size_t i = offset; i < offset + length;) {
             os << "  [" << formatIndex(i, maxwidth) << "] ";

@@ -1,0 +1,101 @@
+# M6: the three combinations, their numbers already written down
+#
+# `docs/design/program-transforms/m6-combination-numbers.cn.md` holds the expected values, derived
+# by hand from the analytic derivatives (`f(x) = x*x`, `g(v) = sum(v*v)`), with the finite
+# difference step and its error bound. This plan is that page as assertions, and it is a SKIP until
+# the library-level transforms exist: a test that is red because the code it compares against is
+# not written yet is noise, and noise added on day one is still noise on day thirty.
+#
+# `skip_unless` asks the precondition in `test/tools/have-transforms-library.mjs`, which compiles a
+# probe naming `grad`, `jvp`, `vjp` and `vmap` and nothing else. When M4/M5 land it passes, these
+# tests run, and from then on a disagreement is the implementation's -- the numbers below are not
+# negotiable and were not read off any implementation.
+#
+# The acceptance line is the page's: |value - expected| <= 1e-9, which is 2.5x wider than the
+# finite difference rounding bound at h = 1e-5 (2.0e-10 for f, 3.6e-10 for g) and far narrower than
+# any real defect would be.
+#
+# `remat` (recompute a subgraph on the backward pass instead of storing its residuals) has no case
+# here yet: its expectation is "the numbers above, bit for bit, and a lower residual count", which
+# is a property of a run and not of a value. It stays in the page
+# (`docs/design/program-transforms/m6-combination-numbers.cn.md` 4) until M1/M4 make it runnable.
+
+[[tests]]
+name = "compositions.grad_vmap_f"
+desc = "grad(vmap(f)) with f(x) = x*x at x = [1, 2, 3]: the gradient of sum_j x_j^2 is [2, 4, 6]."
+kind = "behavior"
+case = "../../../cases/transforms/compositions/grad_vmap_f.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+skip_unless = ["node", "test/tools/have-transforms-library.mjs"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const got = input.normalized.stdout.trim().split('\n').map((s) => Number(s.trim()))
+const want = [2, 4, 6]
+assert(got.length === want.length, `expected ${want.length} values, got ${JSON.stringify(got)}`)
+want.forEach((w, i) => assert(Math.abs(got[i] - w) <= 1e-9, `element ${i}: got ${got[i]}, want ${w}`))
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "compositions.vmap_grad_f"
+desc = "vmap(grad(f)) with the same f and the same batch: [2, 4, 6] again, bit for bit the same as grad(vmap(f)) -- swapping the two axes must not change the answer."
+kind = "behavior"
+case = "../../../cases/transforms/compositions/vmap_grad_f.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+skip_unless = ["node", "test/tools/have-transforms-library.mjs"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const got = input.normalized.stdout.trim().split('\n').map((s) => Number(s.trim()))
+const want = [2, 4, 6]
+assert(got.length === want.length, `expected ${want.length} values, got ${JSON.stringify(got)}`)
+want.forEach((w, i) => assert(Math.abs(got[i] - w) <= 1e-9, `element ${i}: got ${got[i]}, want ${w}`))
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "compositions.jvp_vjp_f"
+desc = "jvp(vjp(f)) with f(x) = x*x, cotangent 1 and direction [0.5, 1.0, 1.5]: the pullback is 2vx, its derivative in x is 2v, so the directional derivative is [1, 2, 3]."
+kind = "behavior"
+case = "../../../cases/transforms/compositions/jvp_vjp_f.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+skip_unless = ["node", "test/tools/have-transforms-library.mjs"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const got = input.normalized.stdout.trim().split('\n').map((s) => Number(s.trim()))
+const want = [1, 2, 3]
+assert(got.length === want.length, `expected ${want.length} values, got ${JSON.stringify(got)}`)
+want.forEach((w, i) => assert(Math.abs(got[i] - w) <= 1e-9, `element ${i}: got ${got[i]}, want ${w}`))
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "compositions.grad_vjp_g_zero"
+desc = "grad(vjp(g)) with g(v) = sum(v*v) at v = [1, 2, 3, 4] must be all zeros: the pullback is linear in v, so its derivative is a constant and the gradient of a constant is 0. This is the one check the three combinations cannot make."
+kind = "behavior"
+case = "../../../cases/transforms/compositions/grad_vjp_g_zero.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+skip_unless = ["node", "test/tools/have-transforms-library.mjs"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const got = input.normalized.stdout.trim().split('\n').map((s) => Number(s.trim()))
+const want = [0, 0, 0, 0]
+assert(got.length === want.length, `expected ${want.length} values, got ${JSON.stringify(got)}`)
+want.forEach((w, i) => assert(Math.abs(got[i] - w) <= 1e-9, `element ${i}: got ${got[i]}, want ${w}`))
+}
+"""
+timeout_ms = 30000

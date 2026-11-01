@@ -15,6 +15,13 @@ The two ways of not finding a rule are named apart because the repairs differ (w
 import the ruleset). The case also checks that a program without the pass prints nothing about
 rules, and that the pass hands the program on unchanged.
 
+The transpose family is asked the same way, because it is the one family whose rules have no
+consumer yet: the index files its five rules under the operator of their left side, and nothing
+binds an operator to it. So the same program answers every transpose question the forward family
+answers -- and with "forward=true" the bindings that would make a transform use them are zero.
+That gap is the reading a transpose operator has to close, so it is pinned here rather than
+remembered.
+
 Usage: python rulesets_lookup.py [--camel PATH]
 """
 
@@ -39,6 +46,12 @@ QUERIES = [
     ("rulesets.jvp|-|2", "LOOKUP rulesets.jvp -/2 -> jvp_sub"),
     ("rulesets.jvp|-|3", "LOOKUP rulesets.jvp -/3 -> no rule"),
     ("rulesets.nope|-|1", "LOOKUP rulesets.nope -/1 -> no such family"),
+    # The transposes of the same five primitives, filed under the same five keys.
+    ("rulesets.transpose|-|1", "LOOKUP rulesets.transpose -/1 -> neg_t"),
+    ("rulesets.transpose|-|2", "LOOKUP rulesets.transpose -/2 -> sub_t"),
+    ("rulesets.transpose|+|2", "LOOKUP rulesets.transpose +/2 -> add_t"),
+    ("rulesets.transpose|*|2", "LOOKUP rulesets.transpose */2 -> mul_t"),
+    ("rulesets.transpose|/|2", "LOOKUP rulesets.transpose //2 -> div_t"),
 ]
 
 failures: list[str] = []
@@ -99,6 +112,38 @@ check(
 check(
     sum(1 for line in lines if line.endswith("-> no such family")) == 1,
     f"exactly one answer says the family is unknown: {lines}",
+)
+
+# The bindings are the other half: a rule in the index is used by a transform only when an operator
+# is bound to that family's key. Forward mode binds ten operators; the transpose family binds none,
+# which is what a transpose operator has to change first.
+code, bound = run(["std::rulesets", "forward=true"])
+check(code == 0, f"the program exits 0 asking for the bindings (got {code}):\n{bound}")
+forwards = [line for line in bound.splitlines() if line.startswith("FORWARD ")]
+check(len(forwards) == 10, f"ten operators have a forward rule, got {len(forwards)}: {forwards}")
+check(
+    all(" rulesets.jvp " in line for line in forwards),
+    f"every one of them is bound to the forward family: {forwards}",
+)
+check(
+    not any(" rulesets.transpose " in line for line in forwards),
+    f"the forward table names the forward family only: {forwards}",
+)
+
+# The transpose table is the second slot: the same five keys, the family a linear function's
+# pullback is written in, and the rules the index already holds for all five.
+transposes = [line for line in bound.splitlines() if line.startswith("TRANSPOSE ")]
+check(
+    len(transposes) == 10,
+    f"ten operators have a transpose rule, got {len(transposes)}: {transposes}",
+)
+check(
+    all(" rulesets.transpose " in line for line in transposes),
+    f"every one of them is bound to the transpose family: {transposes}",
+)
+check(
+    all(not line.endswith("-> no rule") and not line.endswith("-> no such family") for line in transposes),
+    f"and the index answers every binding with a rule the family holds: {transposes}",
 )
 
 if failures:

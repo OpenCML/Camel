@@ -3,6 +3,8 @@
 
 #include "bytecode.h"
 
+#include <stdexcept>
+
 std::string to_string(const OpCode &op) {
     switch (op) {
     case OpCode::RETN:
@@ -134,7 +136,7 @@ std::string to_string(const OpCode &op) {
         return " DGE";
 
     default:
-        ASSERT(false, "Unknown OpCode encountered.");
+        throw std::runtime_error("Unknown OpCode encountered.: the dispatch reached a case no handler covers");
         return "UNKNOWN";
     }
 }
@@ -152,7 +154,7 @@ std::string to_string(const MarkOpCode &op) {
     case MarkOpCode::Isolate:
         return "Isolate";
     default:
-        ASSERT(false, "Unknown MarkOpCode encountered.");
+        throw std::runtime_error("Unknown MarkOpCode encountered.: the dispatch reached a case no handler covers");
         return "UNKNOWN";
     }
 }

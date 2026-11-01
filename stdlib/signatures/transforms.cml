@@ -1,0 +1,33 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Computed signatures of the `transforms` module (C++ operators, modules/transforms).
+ *
+ * The pass `reinterp` is declared in stdlib/transforms.cml. The entry here takes a function and
+ * gives a function whose parameter list and result type come from the argument, which a
+ * declaration cannot write (the arbitrary-function-type gap): `jvp(f)` is
+ * `(f: (float) => float) => (float, float) => (float, float)`, the type `JvpResolver` computes
+ * from `jvpSignature(f)` in modules/transforms/jvp.cpp.
+ *
+ * `Jvp<F>` names the result type the resolver computes:
+ *   - every ordinary parameter of `F` becomes two parameters, the value and its tangent (one
+ *     parameter today: the transform copies one body -- the pass prints `skip=params` for more);
+ *   - the result is the pair `(value, tangent)`, the same shape in and out;
+ *   - `F` must take no `with` parameter and must have a single `float` parameter and a `float`
+ *     result, because a captured value has no port to enter the copied graph by.
+ * The tangent of an input is the seed: `jvp(f)(2.0, 1.0)` asks for the derivative in the
+ * direction 1, and `jvp(f)(2.0, 2.0)` for twice it. Nothing here picks the direction for the
+ * caller.
+ * It is not a type a program can write.
+ *
+ * For reference only: these declarations are not compiled. They are checked against the operators
+ * the module registers, and docs/stdlib-reference.md is generated from them.
+ */
+
+/// Forward mode: `jvp(f)` gives a function that takes the parameters of `f` followed by their
+/// tangents and returns the pair `(value, tangent)`. `jvp(f)(2.0, 1.0)` is the value `f(2.0)`
+/// together with the derivative of `f` at 2 in the direction 1.
+/// @example-fragment `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
+/// @example let forward = jvp(f)
+export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()

@@ -13,6 +13,7 @@
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
+#include <format>
 #include <limits>
 #include <string>
 
@@ -117,7 +118,14 @@ Table *makeBranch(
     mm::IAllocator &allocator) {
     size_t size = 0;
     for (size_t i = 0; i < count; ++i) {
-        ASSERT(children[i]->size() > 0, "A table below a branch is never empty.");
+        // A branch takes keys()[0] of every child as its separator, so a child with no entry
+        // has no key to take.
+        GUARD(
+            children[i]->size() > 0,
+            std::format(
+                "child {} of a new branch holds no entry: the separator below would read the "
+                "first key of an empty table",
+                i));
         size += children[i]->size();
     }
     const size_t width = table::shape().padded ? std::max(count, table::shape().fanout) : count;

@@ -61,7 +61,12 @@ class String : public rtdata::Object {
     std::string_view view() const noexcept { return std::string_view(data_, size_); }
 
     char operator[](size_t i) const {
-        ASSERT(i < size_, "String index out of range");
+        GUARD(
+            i < size_,
+            std::format(
+                "String index out of range: character {} of a string with {} characters",
+                i,
+                size_));
         return data_[i];
     }
 

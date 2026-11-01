@@ -48,7 +48,7 @@ std::string sanitizeClusterId(const std::string &name) {
 
 void TaskflowExecSchedPass::buildAndDump(
     const camel::runtime::Program *program, camel::runtime::GCGraph *graph, std::ostream &os) {
-    ASSERT(graph != nullptr, "Taskflow dump requires a non-null runtime root graph.");
+    GUARD(graph != nullptr, "Taskflow dump requires a non-null runtime root graph.");
     camel::execute::RunScope runScope(programs_, *context_, program);
 
     os << "digraph Taskflow {\n";

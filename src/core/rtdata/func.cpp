@@ -85,7 +85,10 @@ Function *Function::create(
     const type::Type *tupleType, camel::core::mm::IAllocator &allocator) {
     GUARD(program != nullptr, "Runtime Function program cannot be null, and the call passed none: a function value with no program has no graphs to name");
     GUARD(camel::runtime::isValid(graph), "Runtime Function graph cannot be null: this function value names a graph the program does not hold");
-    ASSERT(tupleType && tupleType->code() == type::TypeCode::Tuple, "Type must be TupleType");
+    GUARD(
+        tupleType && tupleType->code() == type::TypeCode::Tuple,
+        "Type must be TupleType, and this call passed none or another kind: the closure's slots "
+        "would be read through field types that do not describe them");
     const type::TupleType *tt = static_cast<const type::TupleType *>(tupleType);
 
     void *mem = allocator.alloc(sizeof(Function), alignof(Function));

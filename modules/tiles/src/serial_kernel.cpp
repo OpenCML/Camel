@@ -42,6 +42,7 @@ IndexExpr mapped(const Node &n, const IndexExpr &at) {
     }
     return result;
 }
+bool narrow(ScalarType type) { return type == ScalarType::F16 || type == ScalarType::BF16; }
 class Lowerer {
     const Program &p;
     const Launch &launch;
@@ -58,9 +59,18 @@ class Lowerer {
     }
     ScalarExpr load(Block &body, size_t input, const IndexExpr &at) {
         const auto id = name();
-        body.push_back(
-            Load{id, {input, at, Predicate(true)}, ScalarValue{p.nodes[input].dtype, 0}});
-        return ScalarExpr::symbol(id, p.nodes[input].dtype);
+        const ScalarType type(p.nodes[input].dtype);
+        body.push_back(Load{id, {input, at, Predicate(true)}, ScalarValue{type, 0}});
+        // A narrow element is read at its own two bytes and computed with as an f32: the widening
+        // loses nothing (a bf16 or f16 is the top or low half of its f32), and the only rounding the
+        // program performs is the one the store back into the element type does.
+        if (narrow(type)) {
+            const auto wide = name();
+            body.push_back(
+                ScalarBinding{wide, ScalarExpr::cast(DType::F32, ScalarExpr::symbol(id, type))});
+            return ScalarExpr::symbol(wide, ScalarType::F32);
+        }
+        return ScalarExpr::symbol(id, type);
     }
     bool member(size_t id) const {
         return std::find(launch.members.begin(), launch.members.end(), id) != launch.members.end();
@@ -110,6 +120,11 @@ class Lowerer {
         auto expr = elementwiseExpression(n.op).substitute("a", input(0));
         if (n.inputs.size() == 2)
             expr = expr.substitute("b", input(1));
+        // A narrow node's value is the element the graph holds, not the f32 that computed it:
+        // rounding here, where the value is written down, keeps a fused program from carrying
+        // precision the graph's own values do not have.
+        if (narrow(ScalarType(n.dtype)))
+            expr = ScalarExpr::cast(ScalarType::F32, ScalarExpr::cast(ScalarType(n.dtype), expr));
         return bind(body, std::move(expr));
     }
 };
@@ -203,6 +218,10 @@ KernelBody serialBody(const Program &p, Launch &launch) {
         }
     } else
         result = lower.value(body, launch.node, row);
+    // The store is the one rounding boundary of the whole program: the value the arithmetic computed
+    // is held in an f32, and a narrow element type takes it once, ties to even, here and nowhere else.
+    if (narrow(ScalarType(root.dtype)) && result.type() != ScalarType(root.dtype))
+        result = ScalarExpr::cast(ScalarType(root.dtype), result);
     body.push_back(Store{{launch.node, row, Predicate(true)}, result});
     launch.blockX = launch.implementation == "ordered_reduce"             ? 32
                     : (root.dtype == DType::F64 || root.op == "cast_f32" || root.op == "cast_f64" ||

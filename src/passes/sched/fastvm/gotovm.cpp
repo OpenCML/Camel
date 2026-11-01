@@ -33,14 +33,14 @@ static thread_local std::array<const Bytecode *, kJitSaveStackLimit> s_jit_bc_st
 static thread_local size_t s_jit_save_depth = 0;
 #define JIT_SAVE_PC_BC()                                                                           \
     do {                                                                                           \
-        ASSERT(s_jit_save_depth < kJitSaveStackLimit, "Nested JIT save stack overflow.");          \
+        GUARD(s_jit_save_depth < kJitSaveStackLimit, "Nested JIT save stack overflow.");          \
         s_jit_pc_stack[s_jit_save_depth] = pc;                                                     \
         s_jit_bc_stack[s_jit_save_depth] = bc;                                                     \
         ++s_jit_save_depth;                                                                        \
     } while (0)
 #define JIT_RESTORE_PC_BC()                                                                        \
     do {                                                                                           \
-        ASSERT(s_jit_save_depth > 0, "Nested JIT save stack underflow.");                          \
+        GUARD(s_jit_save_depth > 0, "Nested JIT save stack underflow.");                          \
         --s_jit_save_depth;                                                                        \
         pc = s_jit_pc_stack[s_jit_save_depth];                                                     \
         bc = s_jit_bc_stack[s_jit_save_depth];                                                     \
@@ -82,6 +82,7 @@ static thread_local size_t s_jit_save_depth = 0;
 #include "service/profiler/core/trace.h"
 #endif
 #include <unordered_set>
+#include <stdexcept>
 
 // This file is compiled a second time by inspectvm.cpp, which defines the two hooks below
 // before it includes this file: that is the loop a program runs on while an execution observer
@@ -376,18 +377,18 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         TypeCode srcType = currFrame->codeAt(bc->fastop[0]);
         if (srcType == TypeCode::Tuple) {
             Tuple *t = currFrame->get<Tuple *>(bc->fastop[0]);
-            ASSERT(
+            GUARD(
                 static_cast<size_t>(bc->fastop[1]) < t->size(),
                 "Tuple access index out of range in FastVM.");
             currFrame->set(bc->result, t->get<slot_t>(static_cast<size_t>(bc->fastop[1])));
         } else if (srcType == TypeCode::Struct) {
             Struct *s = currFrame->get<Struct *>(bc->fastop[0]);
-            ASSERT(
+            GUARD(
                 static_cast<size_t>(bc->fastop[1]) < s->size(),
                 "Struct access index out of range in FastVM.");
             currFrame->set(bc->result, s->get<slot_t>(static_cast<size_t>(bc->fastop[1])));
         } else {
-            ASSERT(false, "ACCS opcode unsupported source type in FastVM.");
+            throw std::runtime_error("ACCS opcode unsupported source type in FastVM.: the dispatch reached a case no handler covers");
         }
 
         NEXT();
@@ -468,7 +469,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         const data_arr_t nargs = bc->nargs();
         const data_arr_t wargs = bc->wargs();
         int32_t brIndex        = fastFrameGet<int32_t>(currFrame, nargs[0]);
-        ASSERT(
+        GUARD(
             brIndex >= 0 && static_cast<size_t>(brIndex) < bc->withCnt(),
             "JOIN opcode choosen index out of range in FastVM.");
         if (bc->result != 0) {
@@ -495,12 +496,12 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
         Type *srcType  = bc->extra()->pType;
         auto *fillBody = *reinterpret_cast<const camel::runtime::GCFillBody *const *>(bc->extra2());
-        ASSERT(isGCTraced(srcType->code()), "FILL target type is not GC-traced in FastVM.");
+        GUARD(isGCTraced(srcType->code()), "FILL target type is not GC-traced in FastVM.");
         Object *sourceObj = currFrame->get<Object *>(nargs[0]);
-        ASSERT(sourceObj != nullptr, "FILL source object is null in FastVM.");
+        GUARD(sourceObj != nullptr, "FILL source object is null in FastVM.");
         Object *srcObj = sourceObj->clone(mm::autoSpace(), srcType, false);
 
-        ASSERT(srcObj != nullptr, "FILL target data is null.");
+        GUARD(srcObj != nullptr, "FILL target data is null.");
         writeComputedGotoFillSlots(currFrame, bc, srcObj, srcType, fillBody);
 
         currFrame->set(bc->result, srcObj);
@@ -517,9 +518,9 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         const data_arr_t nargs = bc->nargs();
         const data_arr_t wargs = bc->wargs();
         auto function          = currFrame->get<Function *>(wargs[0]);
-        ASSERT(function != nullptr, "GotoVM CALL resolved a null Function callee.");
+        GUARD(function != nullptr, "GotoVM CALL resolved a null Function callee.");
         auto *runtimeTarget = programs_.graphOf(function);
-        ASSERT(
+        GUARD(
             runtimeTarget != nullptr,
             "FastVM indirect CALL requires a materialized runtime graph target.");
 
@@ -562,7 +563,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             // pay for tiering metadata on every recursive call.
             push(pc, currFrame);
             auto *runtimeTarget = getFuncExtraRuntimeGraph(bc);
-            ASSERT(
+            GUARD(
                 runtimeTarget != nullptr,
                 "FastVM direct FUNC target must have a materialized runtime graph.");
             Frame *funcFrame = acquireFrameForCall(runtimeTarget);
@@ -582,7 +583,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         const data_arr_t callSrcArgs  = bc->directCallSrcArgs();
         const data_arr_t callDstSlots = bc->directCallDstSlots();
         auto *runtimeTarget           = getFuncExtraRuntimeGraph(bc);
-        ASSERT(
+        GUARD(
             runtimeTarget != nullptr,
             "FastVM direct FUNC target must have a materialized runtime graph.");
         if (getFuncExtraFn(bc) != nullptr) {
@@ -633,7 +634,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 #else
         push(pc, currFrame);
         auto *runtimeTarget = getFuncExtraRuntimeGraph(bc);
-        ASSERT(
+        GUARD(
             runtimeTarget != nullptr,
             "FastVM direct FUNC target must have a materialized runtime graph.");
         Frame *funcFrame = acquireFrameForCall(runtimeTarget);
@@ -663,7 +664,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             auto *lastGraph         = currFrame->graph();
             auto *targetGraph       = getFuncExtraRuntimeGraph(bc);
             auto *runtimeTailTarget = targetGraph;
-            ASSERT(
+            GUARD(
                 runtimeTailTarget != nullptr,
                 "FastVM direct TAIL target must have a materialized runtime graph.");
             slot_t tailArg0 = NullSlot;
@@ -689,7 +690,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         bc                      = materializeCallTarget(pc, const_cast<Bytecode *>(bc));
         auto *runtimeTailTarget = getFuncExtraRuntimeGraph(bc);
         [[maybe_unused]] auto *tailTargetGraph = runtimeTailTarget;
-        ASSERT(
+        GUARD(
             runtimeTailTarget != nullptr,
             std::format(
                 "FastVM direct TAIL target '{}' must have a materialized runtime graph.",
@@ -767,7 +768,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         auto *lastGraph         = currFrame->graph();
         auto *targetGraph       = bc->extra()->runtimeGraph;
         auto *runtimeTailTarget = getFuncExtraRuntimeGraph(bc);
-        ASSERT(
+        GUARD(
             runtimeTailTarget != nullptr,
             "FastVM direct TAIL target must have a materialized runtime graph.");
         slot_t tailArg0 = NullSlot;

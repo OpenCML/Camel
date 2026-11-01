@@ -187,27 +187,27 @@ class FunctionType : public CompositeType {
     size_t withTypesCount() const { return withCount_; }
     size_t normTypesCount() const { return normCount_; }
     Type *withTypeAt(size_t index) const {
-        ASSERT(index < withCount_, "Index out of range");
+        GUARD(index < withCount_, "Index out of range");
         return types()[index];
     }
     TypeCode withTypeCodeAt(size_t index) const {
-        ASSERT(index < withCount_, "Index out of range");
+        GUARD(index < withCount_, "Index out of range");
         return codes()[index];
     }
     bool withIsVarAt(size_t index) const {
-        ASSERT(index < withCount_, "Index out of range");
+        GUARD(index < withCount_, "Index out of range");
         return varMarks()[index] != 0;
     }
     Type *normTypeAt(size_t index) const {
-        ASSERT(index < normCount_, "Index out of range");
+        GUARD(index < normCount_, "Index out of range");
         return types()[withCount_ + index];
     }
     TypeCode normTypeCodeAt(size_t index) const {
-        ASSERT(index < normCount_, "Index out of range");
+        GUARD(index < normCount_, "Index out of range");
         return codes()[withCount_ + index];
     }
     bool normIsVarAt(size_t index) const {
-        ASSERT(index < normCount_, "Index out of range");
+        GUARD(index < normCount_, "Index out of range");
         return varMarks()[withCount_ + index] != 0;
     }
 
@@ -237,7 +237,7 @@ class FunctionType : public CompositeType {
     }
     size_t normConstasCount() const { return constasCount() - withConstasCount(); }
     bool withIsConstasAt(size_t index) const {
-        ASSERT(index < withCount_, "Index out of range");
+        GUARD(index < withCount_, "Index out of range");
         return isConstasAt(index);
     }
     const std::vector<uint16_t> &constasIndices() const { return constasIndices_; }
@@ -246,7 +246,7 @@ class FunctionType : public CompositeType {
                constasIndices_.end();
     }
     bool normIsConstasAt(size_t index) const {
-        ASSERT(index < normCount_, "Index out of range");
+        GUARD(index < normCount_, "Index out of range");
         return isConstasAt(withCount_ + index);
     }
 

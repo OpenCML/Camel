@@ -426,7 +426,7 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
         return programs_.graphOf(function);
     }
     inline ctx::Frame *acquireFrameForCall(camel::runtime::GCGraph *graph) {
-        ASSERT(graph != nullptr, "Runtime graph is null.");
+        GUARD(graph != nullptr, "Runtime graph is null.");
         return framePool_.acquire(graph);
     }
     inline void releaseFrameForCall(ctx::Frame *frame) {
@@ -435,7 +435,7 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     }
     inline void releaseFrameUnchecked(ctx::Frame *frame) { framePool_.release(frame); }
     inline ctx::Frame *acquireFrameForTail(camel::runtime::GCGraph *graph) {
-        ASSERT(graph != nullptr, "Runtime graph is null.");
+        GUARD(graph != nullptr, "Runtime graph is null.");
         ctx::Frame *f = framePool_._acquire(graph);
         framePool_._resetTop();
         return f;

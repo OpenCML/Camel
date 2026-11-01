@@ -48,7 +48,7 @@ size_t findPrev(bytecode_vec_t &codes, size_t index);
 size_t findNext(bytecode_vec_t &codes, size_t index);
 
 inline size_t brchArmDispatchCount(const Bytecode &bc) {
-    ASSERT(bc.opcode == OpCode::BRCH, "Dispatch-arm count query requires a BRCH opcode.");
+    GUARD(bc.opcode == OpCode::BRCH, "Dispatch-arm count query requires a BRCH opcode.");
     return bc.withCnt() == 0 ? 2 : (bc.withCnt() + 1);
 }
 

@@ -66,13 +66,13 @@ struct TaskflowHigherOrderCallSite {
 
 inline runtime_data_idx_t dataIndexOf(const GCGraph *graph, gc_node_ref_t nodeRef) {
     const auto *node = graph ? graph->node(nodeRef) : nullptr;
-    ASSERT(node != nullptr, "Taskflow runtime node lookup resolved to null.");
+    GUARD(node != nullptr, "Taskflow runtime node lookup resolved to null.");
     return node->dataIndex;
 }
 
 inline const GCNode *requireNode(const GCGraph *graph, gc_node_ref_t nodeRef) {
     const auto *node = graph ? graph->node(nodeRef) : nullptr;
-    ASSERT(node != nullptr, "Taskflow runtime node lookup resolved to null.");
+    GUARD(node != nullptr, "Taskflow runtime node lookup resolved to null.");
     return node;
 }
 
@@ -101,8 +101,8 @@ inline slot_t funcValueOf(
 }
 
 slot_t readForwardedRuntimeValue(GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
-    ASSERT(graph != nullptr, "Taskflow forwarded-value read requires a graph.");
-    ASSERT(frame != nullptr, "Taskflow forwarded-value read requires a frame.");
+    GUARD(graph != nullptr, "Taskflow forwarded-value read requires a graph.");
+    GUARD(frame != nullptr, "Taskflow forwarded-value read requires a frame.");
 
     const gc_node_ref_t current = camel::execute::resolveRuntimeForwardedValueRef(graph, nodeRef);
     if (current == kInvalidNodeRef) {
@@ -125,7 +125,7 @@ inline Tuple *closureAt(Frame *frame, runtime_data_idx_t idx) {
 TaskflowHigherOrderCallSite
 makeHigherOrderCallSite(camel::execute::RunPrograms &programs, Function *func) {
     auto *runtimeGraph = func ? programs.graphOf(func) : nullptr;
-    ASSERT(runtimeGraph != nullptr, "Taskflow higher-order call requires a runtime graph target.");
+    GUARD(runtimeGraph != nullptr, "Taskflow higher-order call requires a runtime graph target.");
     return {
         .runtimeGraph = runtimeGraph,
         .closure      = func ? func->tuple() : nullptr,
@@ -136,7 +136,7 @@ makeHigherOrderCallSite(camel::execute::RunPrograms &programs, Function *func) {
 
 TaskflowExecSchedPass::RuntimeBuildInfo
 TaskflowExecSchedPass::buildRuntimeBuildInfo(GCGraph *graph) {
-    ASSERT(graph != nullptr, "Taskflow build info requires a runtime graph.");
+    GUARD(graph != nullptr, "Taskflow build info requires a runtime graph.");
 
     RuntimeBuildInfo info;
     info.skipNodes.resize(graph->nodeCount(), 0);
@@ -593,7 +593,7 @@ uint64_t TaskflowExecSchedPass::nextPlanEpoch() {
 }
 
 TaskflowExecSchedPass::GraphPlan *TaskflowExecSchedPass::planFor(GCGraph *graph) {
-    ASSERT(graph != nullptr, "Taskflow plan lookup requires a runtime graph.");
+    GUARD(graph != nullptr, "Taskflow plan lookup requires a runtime graph.");
     // Every call looks the plan of its callee up. The plans a thread used last are remembered
     // per thread, so that the table and its lock, which all workers share, are only reached
     // the first time a thread meets a graph in a run.
@@ -1254,7 +1254,7 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
 const camel::runtime::Program *
 TaskflowExecSchedPass::apply(const camel::runtime::Program *program, std::ostream & /*os*/) {
     camel::runtime::GCGraph *graph = program->root();
-    ASSERT(graph != nullptr, "Taskflow requires a non-null runtime root graph.");
+    GUARD(graph != nullptr, "Taskflow requires a non-null runtime root graph.");
     if (camel::profile::enabled()) {
         camel::profile::setBackend("std::taskflow");
     }
@@ -1345,14 +1345,14 @@ TaskflowExecSchedPass::apply(const camel::runtime::Program *program, std::ostrea
 }
 
 slot_t TaskflowExecSchedPass::evalGraphTF(GCGraph *graph, Frame *frame) {
-    ASSERT(graph != nullptr, "Taskflow evaluation requires a runtime graph.");
+    GUARD(graph != nullptr, "Taskflow evaluation requires a runtime graph.");
     TaskflowGcRegion region;
     return evalGraph(graph, frame, region);
 }
 
 slot_t TaskflowExecSchedPass::evalGraph(
     GCGraph *graph, Frame *frame, TaskflowGcRegion &region, GraphPlan *plan) {
-    ASSERT(graph != nullptr, "Taskflow evaluation requires a runtime graph.");
+    GUARD(graph != nullptr, "Taskflow evaluation requires a runtime graph.");
     Frame *currFrame = frame;
     if (plan == nullptr) {
         plan = planFor(graph);
@@ -1406,7 +1406,7 @@ slot_t TaskflowExecSchedPass::evalGraph(
         region.enter();
         GCGraph *callerGraph = plan->graph;
         GCGraph *target      = programs_.of(callerGraph).calleeOf(*callerGraph, tailRef);
-        ASSERT(target != nullptr, "Taskflow tail FUNC target graph is null.");
+        GUARD(target != nullptr, "Taskflow tail FUNC target graph is null.");
         GraphPlan *targetPlan = planFor(target);
         target                = targetPlan->graph;
         Frame *lastFrame      = currFrame;
@@ -1658,7 +1658,7 @@ void TaskflowExecSchedPass::runLinearBody(
             frame->set(node->dataIndex, static_cast<Int32>(jumpIdx));
 
             const auto *body = graph->nodeBodyAs<camel::runtime::GCBrchBody>(nodeRef);
-            ASSERT(
+            GUARD(
                 jumpIdx < graph->armCountOf(nodeRef),
                 "Taskflow linear BRCH arm index is out of range.");
             // Same arm range as NodeVM: from the arm's first executable node in the linear
@@ -1774,7 +1774,7 @@ void TaskflowExecSchedPass::executeCallNode(
         Function *func = frame->get<Function *>(dataIndexOf(graph, withInputs.front()));
         targetGraph    = func ? programs_.graphOf(func) : nullptr;
     }
-    ASSERT(targetGraph != nullptr, "Taskflow call target graph is null.");
+    GUARD(targetGraph != nullptr, "Taskflow call target graph is null.");
     auto &thread = region.thread();
     requireCallRoom(thread, graph, nodeRef);
     OpenCall openCall(thread.callDepth);
@@ -1858,7 +1858,7 @@ void TaskflowExecSchedPass::runOnExecutor(tf::Taskflow &flow) {
 
 slot_t TaskflowExecSchedPass::runPreparedSubgraph(tf::Subflow &sf, GCGraph *graph, Frame *frame) {
     graph = frame->runtimeGraph();
-    ASSERT(graph != nullptr, "Taskflow subgraph execution requires a runtime graph.");
+    GUARD(graph != nullptr, "Taskflow subgraph execution requires a runtime graph.");
     (void)sf;
     try {
         slot_t result = evalGraphTF(graph, frame);
@@ -1878,7 +1878,7 @@ TaskflowExecSchedPass::runMarkedOperator(GCGraph *graph, gc_node_ref_t nodeRef, 
     using camel::core::sem::ElementShape;
     const auto *calls =
         OperatorTable::instance().elementCalls(graph->nodeBodyAs<GCOperBody>(nodeRef)->oper);
-    ASSERT(calls != nullptr, "A marked operator declares how it calls its function.");
+    GUARD(calls != nullptr, "A marked operator declares how it calls its function.");
     switch (calls->shape) {
     case ElementShape::Isolate:
         return executeIsolateNode(graph, nodeRef, frame);
@@ -1926,7 +1926,7 @@ slot_t TaskflowExecSchedPass::executeLinearNode(
         const auto withInputs = graph->withInputsOf(nodeRef);
         GUARD(!normInputs.empty(), "Taskflow linear JOIN must have branch-index input.");
         const auto brIndex = frame->get<Int32>(dataIndexOf(graph, normInputs.front()));
-        ASSERT(
+        GUARD(
             brIndex >= 0 && static_cast<size_t>(brIndex) < withInputs.size(),
             "Taskflow linear JOIN branch index is out of range.");
         if (node->dataIndex == 0) {
@@ -1992,13 +1992,13 @@ slot_t TaskflowExecSchedPass::executeLinearNode(
         GUARD(!normInputs.empty(), "Taskflow linear FILL node must have one norm input.");
         const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
         Type *srcType                   = node->dataType();
-        ASSERT(
+        GUARD(
             camel::core::type::isGCTraced(srcType->code()),
             "Taskflow linear FILL target must be GC-traced.");
         Object *sourceObj = frame->get<Object *>(srcIdx);
-        ASSERT(sourceObj != nullptr, "Taskflow linear FILL source object is null.");
+        GUARD(sourceObj != nullptr, "Taskflow linear FILL source object is null.");
         Object *srcObj = sourceObj->clone(camel::core::mm::autoSpace(), srcType, false);
-        ASSERT(srcObj != nullptr, "Taskflow linear FILL target clone is null.");
+        GUARD(srcObj != nullptr, "Taskflow linear FILL target clone is null.");
         std::vector<slot_t> fillValues;
         fillValues.reserve(withInputs.size());
         for (auto input : withInputs) {
@@ -2021,7 +2021,7 @@ slot_t TaskflowExecSchedPass::executeLinearNode(
         const auto *body                = graph->nodeBodyAs<GCAccsBody>(nodeRef);
         if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
             Tuple *tuple = frame->get<Tuple *>(srcIdx);
-            ASSERT(body->value < tuple->size(), "Taskflow linear ACCS tuple index out of bounds.");
+            GUARD(body->value < tuple->size(), "Taskflow linear ACCS tuple index out of bounds.");
             const slot_t value = tuple->get<slot_t>(body->value);
             frame->set(node->dataIndex, value);
             return value;
@@ -2068,9 +2068,9 @@ slot_t TaskflowExecSchedPass::executeLinearNode(
 
 Frame *TaskflowExecSchedPass::acquirePreparedRuntimeCallFrame(
     GCGraph *targetGraph, gc_node_ref_t callNodeRuntimeIndex, Frame *sourceFrame) {
-    ASSERT(targetGraph != nullptr, "Taskflow runtime call target graph is null.");
-    ASSERT(sourceFrame != nullptr, "Taskflow runtime source frame is null.");
-    ASSERT(sourceFrame->runtimeGraph() != nullptr, "Taskflow runtime source graph is null.");
+    GUARD(targetGraph != nullptr, "Taskflow runtime call target graph is null.");
+    GUARD(sourceFrame != nullptr, "Taskflow runtime source frame is null.");
+    GUARD(sourceFrame->runtimeGraph() != nullptr, "Taskflow runtime source graph is null.");
 
     targetGraph            = planFor(targetGraph)->graph;
     Frame *dest            = framePool_.acquire(targetGraph);
@@ -2093,7 +2093,7 @@ Frame *TaskflowExecSchedPass::acquirePreparedRuntimeCallFrame(
 
 Frame *TaskflowExecSchedPass::acquirePreparedClosureCallFrame(
     GCGraph *targetGraph, Tuple *closure, std::span<const slot_t> args) {
-    ASSERT(targetGraph != nullptr, "Taskflow closure call requires a runtime graph target.");
+    GUARD(targetGraph != nullptr, "Taskflow closure call requires a runtime graph target.");
     targetGraph = planFor(targetGraph)->graph;
     Frame *dest = framePool_.acquire(targetGraph);
     fillClosureCallFrame(dest, targetGraph, closure, args);
@@ -2106,7 +2106,7 @@ void TaskflowExecSchedPass::fillClosureCallFrame(
     // this frame. Bind through the actual destination graph, not its source IDs.
     targetGraph          = dest->graph();
     const auto normPorts = targetGraph->normPorts();
-    ASSERT(args.size() == normPorts.size(), "Taskflow closure call norm-arg count mismatch.");
+    GUARD(args.size() == normPorts.size(), "Taskflow closure call norm-arg count mismatch.");
     for (size_t i = 0; i < args.size(); ++i) {
         dest->set(dataIndexOf(targetGraph, normPorts[i]), args[i]);
     }
@@ -2116,8 +2116,8 @@ void TaskflowExecSchedPass::fillClosureCallFrame(
         return;
     }
 
-    ASSERT(closure != nullptr, "Taskflow closure tuple is null.");
-    ASSERT(closure->size() == closureNodes.size(), "Taskflow closure size mismatch.");
+    GUARD(closure != nullptr, "Taskflow closure tuple is null.");
+    GUARD(closure->size() == closureNodes.size(), "Taskflow closure size mismatch.");
     for (size_t i = 0; i < closureNodes.size(); ++i) {
         dest->set(dataIndexOf(targetGraph, closureNodes[i]), closure->get<slot_t>(i));
     }
@@ -2125,8 +2125,8 @@ void TaskflowExecSchedPass::fillClosureCallFrame(
 
 slot_t TaskflowExecSchedPass::executePreparedOperator(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, const GraphPlan *plan) {
-    ASSERT(graph != nullptr, "Taskflow operator execution requires a graph.");
-    ASSERT(frame != nullptr, "Taskflow operator execution requires a frame.");
+    GUARD(graph != nullptr, "Taskflow operator execution requires a graph.");
+    GUARD(frame != nullptr, "Taskflow operator execution requires a frame.");
     // Graph-calling operators own the region so the callee can reach safepoints.
     TaskflowGcRegion region;
     region.enter();
@@ -2252,23 +2252,23 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
 slot_t TaskflowExecSchedPass::executePreparedBranchArm(
     GCGraph *graph, gc_node_ref_t brchRef, size_t armIndex, Frame *frame, tf::Subflow &sf,
     const RuntimeBuildInfo *buildInfo) {
-    ASSERT(graph != nullptr, "Taskflow branch execution requires a graph.");
+    GUARD(graph != nullptr, "Taskflow branch execution requires a graph.");
     RuntimeBranchArmRegion ownedArm;
     const RuntimeBranchArmRegion *arm = nullptr;
     if (buildInfo != nullptr && brchRef < buildInfo->branchArms.size()) {
         const auto &arms = buildInfo->branchArms[brchRef];
-        ASSERT(armIndex < arms.size(), "Taskflow branch arm index is out of range.");
+        GUARD(armIndex < arms.size(), "Taskflow branch arm index is out of range.");
         arm = &arms[armIndex];
     } else {
         ownedArm = camel::execute::collectRuntimeBranchArmRegion(graph, brchRef, armIndex);
         arm      = &ownedArm;
     }
-    ASSERT(arm != nullptr, "Taskflow branch arm resolution failed.");
+    GUARD(arm != nullptr, "Taskflow branch arm resolution failed.");
     for (gc_node_ref_t nodeRef : arm->topoIndices) {
         (void)executePreparedNode(graph, nodeRef, frame, sf, buildInfo);
     }
 
-    ASSERT(arm->tailIndex != kInvalidNodeRef, "Taskflow branch arm has no tail.");
+    GUARD(arm->tailIndex != kInvalidNodeRef, "Taskflow branch arm has no tail.");
     return frame->get<slot_t>(dataIndexOf(graph, arm->tailIndex));
 }
 
@@ -2287,7 +2287,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
         const auto withInputs = graph->withInputsOf(nodeRef);
         GUARD(!normInputs.empty(), "Taskflow JOIN must have branch-index input.");
         const auto brIndex = frame->get<Int32>(dataIndexOf(graph, normInputs.front()));
-        ASSERT(
+        GUARD(
             brIndex >= 0 && static_cast<size_t>(brIndex) < withInputs.size(),
             "Taskflow JOIN branch index is out of range.");
         if (node->dataIndex == 0) {
@@ -2353,13 +2353,13 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
         GUARD(!normInputs.empty(), "Taskflow FILL node must have one norm input.");
         const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
         Type *srcType                   = node->dataType();
-        ASSERT(
+        GUARD(
             camel::core::type::isGCTraced(srcType->code()),
             "Taskflow FILL target must be GC-traced.");
         Object *sourceObj = frame->get<Object *>(srcIdx);
-        ASSERT(sourceObj != nullptr, "Taskflow FILL source object is null.");
+        GUARD(sourceObj != nullptr, "Taskflow FILL source object is null.");
         Object *srcObj = sourceObj->clone(camel::core::mm::autoSpace(), srcType, false);
-        ASSERT(srcObj != nullptr, "Taskflow FILL target clone is null.");
+        GUARD(srcObj != nullptr, "Taskflow FILL target clone is null.");
         std::vector<slot_t> fillValues;
         fillValues.reserve(withInputs.size());
         for (auto input : withInputs) {
@@ -2381,7 +2381,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
         const auto *body                = graph->nodeBodyAs<GCAccsBody>(nodeRef);
         if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
             Tuple *tuple = frame->get<Tuple *>(srcIdx);
-            ASSERT(body->value < tuple->size(), "Taskflow ACCS tuple index out of bounds.");
+            GUARD(body->value < tuple->size(), "Taskflow ACCS tuple index out of bounds.");
             const slot_t value = tuple->get<slot_t>(body->value);
             frame->set(node->dataIndex, value);
             return value;
@@ -2396,7 +2396,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
 
     case GCNodeKind::Func: {
         auto *targetGraph = programs_.of(graph).calleeOf(*graph, nodeRef);
-        ASSERT(targetGraph != nullptr, "Taskflow FUNC target graph is null.");
+        GUARD(targetGraph != nullptr, "Taskflow FUNC target graph is null.");
         Frame *calleeFrame = acquirePreparedRuntimeCallFrame(targetGraph, nodeRef, frame);
         slot_t result      = runPreparedSubgraph(sf, targetGraph, calleeFrame);
         result             = funcValueOf(graph, nodeRef, node, targetGraph, frame, result);
@@ -2409,7 +2409,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
         GUARD(!withInputs.empty(), "Taskflow CALL node must have function input.");
         Function *func    = frame->get<Function *>(dataIndexOf(graph, withInputs.front()));
         auto *targetGraph = func ? programs_.graphOf(func) : nullptr;
-        ASSERT(targetGraph != nullptr, "Taskflow CALL target graph is null.");
+        GUARD(targetGraph != nullptr, "Taskflow CALL target graph is null.");
         Frame *calleeFrame = acquirePreparedRuntimeCallFrame(targetGraph, nodeRef, frame);
         slot_t result      = runPreparedSubgraph(sf, targetGraph, calleeFrame);
         frame->set(node->dataIndex, result);
@@ -2447,7 +2447,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
 template <typename FlowT>
 void TaskflowExecSchedPass::instantiate_graph_instance_generic(
     FlowT &flowLike, GCGraph *runtimeGraph, Frame *frame) {
-    ASSERT(runtimeGraph != nullptr, "Taskflow graph instantiation requires a runtime graph.");
+    GUARD(runtimeGraph != nullptr, "Taskflow graph instantiation requires a runtime graph.");
     auto buildInfo = std::make_shared<RuntimeBuildInfo>(buildRuntimeBuildInfo(runtimeGraph));
     std::vector<tf::Task> taskMap(runtimeGraph->nodeCount());
     std::vector<uint8_t> taskBuilt(runtimeGraph->nodeCount(), 0);
@@ -2664,12 +2664,12 @@ void TaskflowExecSchedPass::buildRuntimeBranchJoinRegion(
     FlowT &flowLike, GCGraph *runtimeGraph, Frame *frame,
     const std::shared_ptr<const RuntimeBuildInfo> &buildInfo, std::vector<tf::Task> &taskMap,
     std::vector<uint8_t> &taskBuilt, gc_node_ref_t brchRuntimeIndex) {
-    ASSERT(runtimeGraph != nullptr, "Taskflow BRCH region requires a runtime graph.");
-    ASSERT(brchRuntimeIndex < buildInfo->branchArms.size(), "Taskflow BRCH ref is out of range.");
+    GUARD(runtimeGraph != nullptr, "Taskflow BRCH region requires a runtime graph.");
+    GUARD(brchRuntimeIndex < buildInfo->branchArms.size(), "Taskflow BRCH ref is out of range.");
     const auto &arms = buildInfo->branchArms[brchRuntimeIndex];
-    ASSERT(!arms.empty(), "Taskflow BRCH region has no branch arms.");
+    GUARD(!arms.empty(), "Taskflow BRCH region has no branch arms.");
     const gc_node_ref_t joinRef = arms.front().joinIndex;
-    ASSERT(joinRef != kInvalidNodeRef, "Taskflow BRCH region has no JOIN.");
+    GUARD(joinRef != kInvalidNodeRef, "Taskflow BRCH region has no JOIN.");
 
     auto selector =
         flowLike
@@ -2739,7 +2739,7 @@ gc_node_ref_t TaskflowExecSchedPass::branchArmEntryForLinear(
             it->second.push_back(graph->execPlan().branchArmEntriesOfNode(brchRef)[arm]);
         }
     }
-    ASSERT(armIndex < it->second.size(), "Taskflow linear BRCH arm index is out of range.");
+    GUARD(armIndex < it->second.size(), "Taskflow linear BRCH arm index is out of range.");
     return it->second[armIndex];
 }
 
@@ -3252,7 +3252,7 @@ TaskflowExecSchedPass::executeIsolateNode(GCGraph *graph, gc_node_ref_t nodeRef,
     const auto normInputs = graph->normInputsOf(nodeRef);
     GUARD(!normInputs.empty(), "The fault-isolation node requires a function input.");
     Function *func = frame->get<Function *>(dataIndexOf(graph, normInputs.front()));
-    ASSERT(func != nullptr && func->graph() != nullptr, "Fault-isolation callee is null.");
+    GUARD(func != nullptr && func->graph() != nullptr, "Fault-isolation callee is null.");
     GCGraph *target = programs_.graphOf(func);
 
     // The room for the call is the caller's: a recursion limit reached here is a fault of the

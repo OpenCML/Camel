@@ -364,8 +364,9 @@ std::vector<GraphId> collectStaticGraphRefs(
 }
 
 void visitDraftGraphs(
-    const camel::core::context::context_ptr_t &context, const GraphDraft &draft,
+    const camel::core::context::context_ptr_t &context, const GraphTransaction &transaction,
     const GraphVisitor &visitor) {
+    const auto &draft = transaction.graph();
     for (GraphId graph : draft.dependencies()) {
         visitor(graph, nullptr);
     }
@@ -410,7 +411,8 @@ void visitDraftGraphs(
     }
 }
 
-std::vector<GraphId> collectDraftDependencyGraphs(const GraphDraft &draft) {
+std::vector<GraphId> collectDraftDependencyGraphs(const GraphTransaction &transaction) {
+    const auto &draft = transaction.graph();
     std::vector<GraphId> dependencies;
     for (GraphId graph : draft.dependencies()) {
         pushUniqueGraph(dependencies, graph);
@@ -439,7 +441,8 @@ std::vector<GraphId> collectDraftDependencyGraphs(const GraphDraft &draft) {
 /// (for the size, then to encode), and most of those graphs are not changed by the rewrite:
 /// when the members are the ones the graph the draft came from already has, that graph's type
 /// is the answer, and nothing is added to the permanent space, which never releases.
-TupleType *draftStaticDataType(const GraphDraft &draft, const GCGraph *fallback) {
+TupleType *draftStaticDataType(const GraphTransaction &transaction, const GCGraph *fallback) {
+    const auto &draft    = transaction.graph();
     auto *known          = fallback ? const_cast<TupleType *>(fallback->staticDataType()) : nullptr;
     const auto slotTypes = draft.staticSlotTypes();
     if (slotTypes.empty()) {
@@ -458,8 +461,9 @@ TupleType *draftStaticDataType(const GraphDraft &draft, const GCGraph *fallback)
 }
 
 std::vector<GraphId> collectDraftStaticGraphRefs(
-    const camel::core::context::context_ptr_t &context, const GraphDraft &draft,
+    const camel::core::context::context_ptr_t &context, const GraphTransaction &transaction,
     const TupleType *staticDataType) {
+    const auto &draft = transaction.graph();
     std::vector<GraphId> staticGraphRefs;
     for (GraphId graph : draft.staticGraphRefs()) {
         pushUniqueGraph(staticGraphRefs, graph);
@@ -475,19 +479,20 @@ std::vector<GraphId> collectDraftStaticGraphRefs(
 
 uint64_t draftGraphOrigin(
     const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
-    const GraphDraft &draft);
+    const GraphTransaction &transaction);
 
 // Encodes `draft` into `target` (`bytes` reserved), rewriting every graph reference through
 // `rewritten`, which must cover all graphs the draft refers to.
 GCGraph *encodeDraftGraph(
     const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
-    const GraphDraft &draft, const Program *program, GCGraph *target, size_t bytes) {
-    TupleType *staticDataType = draftStaticDataType(draft, identity.sourceGraph);
+    const GraphTransaction &transaction, const Program *program, GCGraph *target, size_t bytes) {
+    const auto &draft         = transaction.graph();
+    TupleType *staticDataType = draftStaticDataType(transaction, identity.sourceGraph);
 
-    const std::vector<GraphId> dependencies = collectDraftDependencyGraphs(draft);
+    const std::vector<GraphId> dependencies = collectDraftDependencyGraphs(transaction);
     const std::vector<GraphId> subGraphs(draft.subGraphs().begin(), draft.subGraphs().end());
     const std::vector<GraphId> staticGraphRefs =
-        collectDraftStaticGraphRefs(context, draft, staticDataType);
+        collectDraftStaticGraphRefs(context, transaction, staticDataType);
     const std::vector<GraphId> ruleGraphs(draft.ruleGraphs().begin(), draft.ruleGraphs().end());
 
     std::vector<slot_t> staticSlots(draft.staticSlots().begin(), draft.staticSlots().end());
@@ -539,20 +544,21 @@ GCGraph *encodeDraftGraph(
             e,
             bytes,
             identity.name,
-            draftGraphOrigin(context, identity, draft));
+            draftGraphOrigin(context, identity, transaction));
     }
 }
 
 size_t draftGraphBytes(
-    const camel::core::context::context_ptr_t &context, const GraphDraft &draft,
+    const camel::core::context::context_ptr_t &context, const GraphTransaction &transaction,
     const GCGraph *fallback) {
-    TupleType *staticDataType = draftStaticDataType(draft, fallback);
+    const auto &draft         = transaction.graph();
+    TupleType *staticDataType = draftStaticDataType(transaction, fallback);
     const std::vector<GraphId> dependencyPlaceholders(
-        collectDraftDependencyGraphs(draft).size(),
+        collectDraftDependencyGraphs(transaction).size(),
         kInvalidGraphId);
     const std::vector<GraphId> subGraphPlaceholders(draft.subGraphs().size(), kInvalidGraphId);
     const std::vector<GraphId> staticRefPlaceholders(
-        collectDraftStaticGraphRefs(context, draft, staticDataType).size(),
+        collectDraftStaticGraphRefs(context, transaction, staticDataType).size(),
         kInvalidGraphId);
     const std::vector<GraphId> ruleGraphPlaceholders(
         draft.ruleGraphs().size(),
@@ -577,8 +583,9 @@ size_t draftGraphBytes(
 /// has one.
 uint64_t draftGraphOrigin(
     const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
-    const GraphDraft &draft) {
-    uint64_t origin = 0;
+    const GraphTransaction &transaction) {
+    const auto &draft = transaction.graph();
+    uint64_t origin    = 0;
     if (const auto source = context ? context->sourceContext() : nullptr) {
         origin = source->debugMap().graphOrigin(draft.id());
     }
@@ -589,7 +596,7 @@ uint64_t draftGraphOrigin(
 /// with the graph's name and source position.
 GCGraph *allocateGraph(
     const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
-    const GraphDraft &draft, size_t bytes) {
+    const GraphTransaction &transaction, size_t bytes) {
     try {
         return reinterpret_cast<GCGraph *>(mm::graphSpace().alloc(bytes, alignof(GCGraph)));
     } catch (const mm::MemoryExhausted &e) {
@@ -597,7 +604,7 @@ GCGraph *allocateGraph(
             e,
             bytes,
             identity.name,
-            draftGraphOrigin(context, identity, draft));
+            draftGraphOrigin(context, identity, transaction));
     }
 }
 
@@ -824,21 +831,23 @@ size_t nextDraftRootSessionId() {
     return next.fetch_add(1, std::memory_order_relaxed) + 1;
 }
 
-void noteDraftOpened(DraftRootsDebug &state, const GraphDraft *draft) {
+void noteDraftOpened(DraftRootsDebug &state, const GraphTransaction &transaction) {
     std::lock_guard<std::mutex> lock(draftRootsMutex());
     if (state.drafts.empty()) {
         draftRootSessionsWithDrafts().fetch_add(1, std::memory_order_relaxed);
     }
-    state.drafts.push_back(DraftRootsDebug::Entry{.draft = draft, .roots = 0});
+    // The record names the draft, not the transaction: `GraphTransaction::borrow` lets two
+    // transactions name one draft, and a root covers a draft.
+    state.drafts.push_back(DraftRootsDebug::Entry{.draft = &transaction.graph(), .roots = 0});
 }
 
-void noteDraftClosed(DraftRootsDebug &state, const GraphDraft *draft) {
+void noteDraftClosed(DraftRootsDebug &state, const GraphTransaction &transaction) {
     std::lock_guard<std::mutex> lock(draftRootsMutex());
     if (state.drafts.empty()) {
         return;
     }
-    std::erase_if(state.drafts, [draft](const DraftRootsDebug::Entry &entry) {
-        return entry.draft == draft;
+    std::erase_if(state.drafts, [&](const DraftRootsDebug::Entry &entry) {
+        return entry.draft == &transaction.graph();
     });
     if (state.drafts.empty()) {
         draftRootSessionsWithDrafts().fetch_sub(1, std::memory_order_relaxed);
@@ -878,7 +887,7 @@ std::string describeUncoveredDraft(const DraftRootsDebug &state, std::string_vie
     if (uncovered == nullptr) {
         return {};
     }
-    const GraphDraft &draft     = *uncovered->draft;
+    const auto &draft           = *uncovered->draft;
     const GCGraph *source       = draft.baseGraph();
     const std::string graphName = source != nullptr ? source->name() : std::string{"<built>"};
     const auto slots            = draft.staticSlots();
@@ -954,7 +963,8 @@ DraftRootsDebug::~DraftRootsDebug() {
     }
 }
 
-void debugDraftRootOpened(const GraphDraft &draft) {
+void debugDraftRootOpened(const GraphTransaction &transaction) {
+    const auto &draft = transaction.graph();
     std::lock_guard<std::mutex> lock(draftRootsMutex());
     for (DraftRootsDebug *state : draftRootsRegistry()) {
         for (DraftRootsDebug::Entry &entry : state->drafts) {
@@ -966,7 +976,8 @@ void debugDraftRootOpened(const GraphDraft &draft) {
     }
 }
 
-void debugDraftRootClosed(const GraphDraft &draft) {
+void debugDraftRootClosed(const GraphTransaction &transaction) {
+    const auto &draft = transaction.graph();
     std::lock_guard<std::mutex> lock(draftRootsMutex());
     for (DraftRootsDebug *state : draftRootsRegistry()) {
         for (DraftRootsDebug::Entry &entry : state->drafts) {
@@ -1056,22 +1067,22 @@ bool RuntimeGraphDraftSession::hasDraft(const GCGraph *graph) const {
     return graph != nullptr && drafts_.contains(const_cast<GCGraph *>(graph));
 }
 
-GraphDraft *RuntimeGraphDraftSession::tryDraft(const GCGraph *graph) {
+GraphTransaction *RuntimeGraphDraftSession::tryDraft(const GCGraph *graph) {
     if (!graph) {
         return nullptr;
     }
     if (auto it = drafts_.find(const_cast<GCGraph *>(graph)); it != drafts_.end()) {
-        return &it->second->transaction->edit();
+        return it->second->transaction.get();
     }
     return nullptr;
 }
 
-const GraphDraft *RuntimeGraphDraftSession::tryDraft(const GCGraph *graph) const {
+const GraphTransaction *RuntimeGraphDraftSession::tryDraft(const GCGraph *graph) const {
     if (!graph) {
         return nullptr;
     }
     if (auto it = drafts_.find(const_cast<GCGraph *>(graph)); it != drafts_.end()) {
-        return &it->second->transaction->edit();
+        return it->second->transaction.get();
     }
     return nullptr;
 }
@@ -1099,7 +1110,7 @@ GraphTransaction &RuntimeGraphDraftSession::ensureDraft(GCGraph *graph) {
         }
         draftedIds_[index] = 1;
 #ifndef NDEBUG
-        noteDraftOpened(*debugRoots_, &it->second->transaction->edit());
+        noteDraftOpened(*debugRoots_, *it->second->transaction);
 #endif
     }
     return *it->second->transaction;
@@ -1143,7 +1154,7 @@ void RuntimeGraphDraftSession::traceStaticSlots(
     // object. Without it a key names whatever is at the old address next.
     std::vector<std::pair<slot_t, slot_t>> moves;
     for (auto &[graph, entry] : drafts_) {
-        GraphDraft &draft        = entry->transaction->edit();
+        auto &draft              = entry->transaction->edit();
         const auto slots         = draft.staticSlots();
         const auto types         = draft.staticSlotTypes();
         const size_t slotCount   = std::min(slots.size(), types.size());
@@ -1381,11 +1392,11 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
 
 const std::vector<std::pair<GraphId, const Program *>> &
 RuntimeGraphDraftSession::draftRefs(GCGraph *graph) const {
-    const GraphDraft &draft = drafts_.at(graph)->transaction->graph();
-    DraftRefs &refs         = draftRefs_[graph];
+    const auto &draft = drafts_.at(graph)->transaction->graph();
+    DraftRefs &refs   = draftRefs_[graph];
     if (!refs.valid || refs.revision != draft.revision()) {
         refs.graphs.clear();
-        visitDraftGraphs(context_, draft, [&](GraphId ref, const Program *home) {
+        visitDraftGraphs(context_, *drafts_.at(graph)->transaction, [&](GraphId ref, const Program *home) {
             refs.graphs.emplace_back(ref, home);
         });
         refs.revision = draft.revision();
@@ -1445,7 +1456,7 @@ std::vector<gc_node_ref_t> RuntimeGraphDraftSession::committedNodeRefs(GCGraph *
     if (found == drafts_.end() || found->second->transaction == nullptr) {
         return {};
     }
-    return draftRuntimeNodeRefs(found->second->transaction->graph());
+    return draftRuntimeNodeRefs(*found->second->transaction);
 }
 
 const Program *RuntimeGraphDraftSession::commitChecked() {
@@ -1552,7 +1563,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
             GCGraphBuildAccess::addFlags(graph, kGraphFlagGatesDissolved);
 #ifndef NDEBUG
             // Before the draft is destroyed: the Debug record must never name a freed draft.
-            noteDraftClosed(*debugRoots_, &drafts_.at(graph)->transaction->edit());
+            noteDraftClosed(*debugRoots_, *drafts_.at(graph)->transaction);
 #endif
             drafts_.erase(graph);
             draftedIds_[toValue(graph->id())] = 0;
@@ -1585,8 +1596,8 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     const auto allocate = [&](GCGraph *graph) {
         ensureDraft(graph);
         const DraftEntry &entry = *drafts_.at(graph);
-        const size_t bytes      = draftGraphBytes(context_, entry.transaction->graph(), graph);
-        GCGraph *copy           = allocateGraph(context_, entry.identity, entry.transaction->graph(), bytes);
+        const size_t bytes      = draftGraphBytes(context_, *entry.transaction, graph);
+        GCGraph *copy           = allocateGraph(context_, entry.identity, *entry.transaction, bytes);
         fresh.emplace(graph, copy);
         allocatedBytes.emplace(graph, bytes);
         order.push_back(graph);
@@ -1594,12 +1605,12 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     };
     const auto encode = [&](GCGraph *graph) {
         const DraftEntry &entry = *drafts_.at(graph);
-        GraphDraft &draft = entry.transaction->edit();
+        auto &draft = entry.transaction->edit();
         draft.setFlags(draft.flags() | kGraphFlagGatesDissolved);
         encodeDraftGraph(
             context_,
             entry.identity,
-            draft,
+            *entry.transaction,
             committed,
             fresh.at(graph),
             allocatedBytes.at(graph));
@@ -1844,11 +1855,11 @@ GraphId GraphDraftGroup::reserve(std::string mangledName, std::string name) {
     return id;
 }
 
-GraphDraft &GraphDraftGroup::draft(GraphId id) { return member(id).transaction->edit(); }
+GraphTransaction &GraphDraftGroup::transaction(GraphId id) { return *member(id).transaction; }
 
 void GraphDraftGroup::define(GraphId id, std::unique_ptr<GraphTransaction> transaction) {
     ASSERT(transaction != nullptr, "Graph draft group member transaction cannot be null.");
-    GraphDraft &draft = transaction->edit();
+    auto &draft = transaction->edit();
     draft.setId(id);
     draft.setProgram(program_);
     member(id).transaction = std::move(transaction);
@@ -1862,9 +1873,9 @@ void GraphDraftGroup::encode() {
     std::unordered_map<GraphId, size_t> bytes;
     for (GraphId id : order_) {
         Member &m         = member(id);
-        GraphDraft &graph = m.transaction->edit();
-        bytes.emplace(id, draftGraphBytes(context_, graph, nullptr));
-        graphs.emplace(id, allocateGraph(context_, m.identity, graph, bytes.at(id)));
+        auto &graph = m.transaction->edit();
+        bytes.emplace(id, draftGraphBytes(context_, *m.transaction, nullptr));
+        graphs.emplace(id, allocateGraph(context_, m.identity, *m.transaction, bytes.at(id)));
     }
     // The members form a program with the graphs of the one the group is made over.
     for (GraphId id : order_) {
@@ -1875,9 +1886,9 @@ void GraphDraftGroup::encode() {
     }
     for (GraphId id : order_) {
         const Member &m = member(id);
-        GraphDraft &draft = m.transaction->edit();
+        auto &draft = m.transaction->edit();
         GCGraph *graph =
-            encodeDraftGraph(context_, m.identity, draft, program_, graphs.at(id), bytes.at(id));
+            encodeDraftGraph(context_, m.identity, *m.transaction, program_, graphs.at(id), bytes.at(id));
         validateRuntimeGraphPayload(*program_, graph);
     }
     for (GraphId id : order_) {

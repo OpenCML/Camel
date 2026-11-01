@@ -34,6 +34,22 @@ bool isAnonymousGraphName(const std::string &name) {
 
 std::string typeName(const Type *type) { return type ? type->toString() : "an unknown type"; }
 
+/// The text of a string constant of the program (a DATA node), or nothing when the node is not one:
+/// the writer reads it where a rule cannot, as `fail`'s kind and a field name read here.
+std::optional<std::string> stringConstantOf(const GCGraph *graph, gc_node_ref_t ref) {
+    const auto *node = graph->node(ref);
+    if (node == nullptr || node->kind != GCNodeKind::Data || node->dataType() == nullptr ||
+        node->dataType()->code() != camel::core::type::TypeCode::String) {
+        return std::nullopt;
+    }
+    if (const auto *text =
+            camel::core::rtdata::fromSlot<::String *>(graph->staticArea()->get<slot_t>(-node->dataIndex));
+        text != nullptr) {
+        return text->toString();
+    }
+    return std::nullopt;
+}
+
 /// The value a graph gives: its output node, seen through the GATEs that only order it.
 gc_node_ref_t resultOf(const GCGraph *graph) {
     gc_node_ref_t ref = graph->outputNodeRef();
@@ -579,7 +595,7 @@ const CppValue &FunctionEmitter::valueOf(Frame &frame, gc_node_ref_t ref) {
 
 void FunctionEmitter::bind(
     Frame &frame, gc_node_ref_t ref, std::string expr, bool inlinable, Block &out,
-    const std::string &hint, const char *resultCpp) {
+    const std::string &hint) {
     const Type *type  = frame.graph->node(ref)->dataType();
     const size_t uses = liveUses(frame.graph, ref) + frame.results.count(ref);
     if (!isValueType(type) || uses == 0) {
@@ -602,7 +618,7 @@ void FunctionEmitter::bind(
         Stmt::line(
             std::format(
                 "const {} {} = {};",
-                resultCpp != nullptr ? std::string(resultCpp) : cppType(frame.graph, ref, type),
+                cppType(frame.graph, ref, type),
                 name,
                 withoutParentheses(expr))));
     frame.values[ref] = CppValue{name, false};
@@ -618,6 +634,9 @@ bool FunctionEmitter::lowerNode(
         std::optional<std::string> text;
         if (GCGraph *function = functionConstantOf(g, ref)) {
             text = functionValue(function, {});
+            // A named function used as a value is kept too: a call spells the function type of
+            // the position, and a `void` one drops the result the function gives.
+            frame.closures[ref] = {function, {}};
         } else {
             text = program_.values.constant(g->staticArea()->get<slot_t>(-node->dataIndex), type);
         }
@@ -674,7 +693,7 @@ bool FunctionEmitter::lowerNode(
         return false;
     }
     case GCNodeKind::Cast:
-        lowerCast(frame, ref);
+        lowerCast(frame, ref, out);
         return false;
     case GCNodeKind::Fill:
         lowerFill(frame, ref, out);
@@ -749,9 +768,36 @@ void FunctionEmitter::lowerCall(
                 describeFunction(callee)));
     }
     std::vector<std::string> args;
+    // The parameter each argument fills, in the order a direct call lists them: the normal ones,
+    // then the `with` ones (the callee's own function type).
+    std::vector<const Type *> parameters;
+    if (const auto *calleeType = callee->funcType(); calleeType != nullptr) {
+        for (const Type *p : calleeType->normTypesSpan()) {
+            parameters.push_back(p);
+        }
+        for (const Type *p : calleeType->withTypesSpan()) {
+            parameters.push_back(p);
+        }
+    }
+    size_t argument = 0;
     for (const auto inputs : {g->normInputsOf(ref), g->withInputsOf(ref)}) {
         for (gc_node_ref_t input : inputs) {
-            args.push_back(valueOf(frame, input).text);
+            const Type *parameter = argument < parameters.size() ? parameters[argument] : nullptr;
+            std::string text;
+            // A function value spells the function type of the position it fills: the lambda's
+            // own result is dropped where that type is `void`.
+            if (parameter != nullptr &&
+                parameter->code() == camel::core::type::TypeCode::Function) {
+                const auto closure = frame.closures.find(input);
+                if (closure != frame.closures.end()) {
+                    if (auto spelled = functionValue(
+                            closure->second.first, closure->second.second, parameter)) {
+                        text = std::move(*spelled);
+                    }
+                }
+            }
+            args.push_back(text.empty() ? valueOf(frame, input).text : std::move(text));
+            ++argument;
         }
     }
 
@@ -839,14 +885,15 @@ class NodeCall final : public OperatorCall {
     NodeCall(
         std::string uri, std::vector<CppValue> norm, std::vector<CppValue> with,
         std::vector<const Type *> normTypes, std::vector<const Type *> withTypes,
-        const Type *result,
+        std::vector<bool> withConstant, const Type *result,
         std::function<std::string(RuntimeDiag, const std::vector<std::string> &)> site,
         std::function<std::string()> place,
         std::function<std::string()> bridgeOperator,
         std::function<std::string(const Type *)> cppType,
         std::function<std::string(size_t)> fieldName)
         : uri_(std::move(uri)), norm_(std::move(norm)), with_(std::move(with)),
-          normTypes_(std::move(normTypes)), withTypes_(std::move(withTypes)), result_(result),
+          normTypes_(std::move(normTypes)), withTypes_(std::move(withTypes)),
+          withConstant_(std::move(withConstant)), result_(result),
           site_(std::move(site)), place_(std::move(place)),
           bridgeOperator_(std::move(bridgeOperator)), cppType_(std::move(cppType)),
           fieldName_(std::move(fieldName)) {}
@@ -858,6 +905,7 @@ class NodeCall final : public OperatorCall {
     const CppValue &with(size_t i) const override { return with_[i]; }
     const Type *normType(size_t i) const override { return normTypes_[i]; }
     const Type *withType(size_t i) const override { return withTypes_[i]; }
+    bool withIsConstant(size_t i) const override { return withConstant_[i]; }
     const Type *resultType() const override { return result_; }
     std::string site(RuntimeDiag kind, const std::vector<std::string> &args) override {
         return site_(kind, args);
@@ -871,6 +919,7 @@ class NodeCall final : public OperatorCall {
     std::string uri_;
     std::vector<CppValue> norm_, with_;
     std::vector<const Type *> normTypes_, withTypes_;
+    std::vector<bool> withConstant_;
     const Type *result_;
     std::function<std::string(RuntimeDiag, const std::vector<std::string> &)> site_;
     std::function<std::string()> place_;
@@ -925,6 +974,13 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
     };
     collect(g->normInputsOf(ref), norm, normTypes);
     collect(g->withInputsOf(ref), with, withTypes);
+    // Which of the `with` arguments are constants of the program: a rule that would have to know
+    // one at translation time (the shape a `tensor:reshape` rearranges to) can tell a written
+    // shape from a computed one.
+    std::vector<bool> withConstant;
+    for (gc_node_ref_t input : g->withInputsOf(ref)) {
+        withConstant.push_back(g->node(input)->kind == GCNodeKind::Data);
+    }
     // The arguments' nodes and the first argument's type, kept before they are moved into the
     // call a rule sees: a rule asks for a field name after that, and the field index is a node of
     // the graph (a constant), not a value of the arguments.
@@ -962,21 +1018,56 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
                 "no runtime block space of its own: the counters are not available on this target",
                 describeFunction(g)));
     }
-    // The tensor builders whose value lives in the runtime: `tensor:ones` has a rule
-    // (operator_rules.cpp), and this back end has no rule for the others yet, so they are refused
-    // as work not done. The sentence names the operator: the shape array is translated and the
-    // bridge carries a tensor now, so neither of those is what is missing.
-    if (uri == "tensor:zeros") {
-        refuse(
-            g,
+    // `s[k]` with a struct on the left: the field the name denotes (src/builtin/operators/ops.cpp,
+    // reachable through a declaration of the built-in `:op/idx_str`, which is what the interpreter
+    // reads a field through). A record is a C++ aggregate -- there is no field table at run time --
+    // so the name has to be one the writer reads here: a field the struct has is that member, and a
+    // name it does not have is the interpreter's own report, FieldNotFound, with the name in it.
+    if (uri == ":op/idx_str" && norm.size() == 2 && firstNormType != nullptr &&
+        firstNormType->code() == camel::core::type::TypeCode::Struct &&
+        firstNormType != camel::core::type::errorType()) {
+        const auto *record = static_cast<const camel::core::type::StructType *>(firstNormType);
+        const auto key     = stringConstantOf(g, normInputs[1]);
+        if (!key) {
+            refuse(
+                g,
+                ref,
+                std::format(
+                    "{} indexes a struct by a name the program computes, and a record is a C++ "
+                    "aggregate with no field table to look that name up in",
+                    describeFunction(g)));
+        }
+        for (size_t i = 0; i < record->size(); ++i) {
+            if (record->fieldName(i) != *key) {
+                continue;
+            }
+            bind(
+                frame,
+                ref,
+                std::format(
+                    "{}.{}", norm[0].text, program_.values.fieldName(firstNormType, i)),
+                true,
+                out,
+                "field");
+            return;
+        }
+        bind(
+            frame,
             ref,
             std::format(
-                "{} uses '{}' to build a tensor, and std::cpp has no translation of it yet: the "
-                "value lives in the runtime and crosses the bridge, as 'tensor:ones' does, and this "
-                "operator has no rule in the table",
-                describeFunction(g),
-                uri));
+                "rt::fail({}, {})",
+                program_.sites.siteFor(
+                    g, ref, RuntimeDiag::FieldNotFound,
+                    std::vector<std::string>{SiteTable::valueMark(0)}),
+                cppStringLiteral(*key)),
+            false,
+            out,
+            "field");
+        return;
     }
+    // `tensor:ones` and `tensor:zeros` are rules of the table now (operator_rules.cpp); a tensor
+    // builder the table has no rule for is refused below like any other operator, on the type of
+    // the value it takes or builds.
     if (rule == nullptr) {
         for (const auto types : {&normTypes, &withTypes}) {
             for (const Type *t : *types) {
@@ -1036,6 +1127,7 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
         std::move(with),
         std::move(normTypes),
         std::move(withTypes),
+        std::move(withConstant),
         node->dataType(),
         [&](RuntimeDiag kind, const std::vector<std::string> &args) {
             return program_.sites.siteFor(g, ref, kind, args);
@@ -1091,8 +1183,7 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
                 uri,
                 types.empty() ? std::string() : " of type " + types));
     }
-    bind(
-        frame, ref, std::move(*expr), rule->inlinable, out, operatorHint(uri), rule->resultCpp);
+    bind(frame, ref, std::move(*expr), rule->inlinable, out, operatorHint(uri));
 }
 
 void FunctionEmitter::lowerLoop(
@@ -1130,16 +1221,41 @@ void FunctionEmitter::lowerLoop(
         }
     }
     std::string array, index;
+    const gc_node_ref_t element =
+        iterates ? g->regionPorts(parts[1]).front() : static_cast<gc_node_ref_t>(kInvalidNodeRef);
     if (iterates) {
         const gc_node_ref_t iterable = norm.front();
         array = locals_.unique(std::format("v{}_items", nextValue_++));
         index = locals_.unique(std::format("v{}_round", nextValue_++));
+        // A `for` walks the first dimension (design principles 4.2): on a value of several the item
+        // is a row, one dimension less (`rt::atRow`), and on a value of one it is the element. An
+        // item is not that on an open rank -- a value that is an element at rank 1 and a row above
+        // it has no one C++ type -- which is the reason the index rule of the table refuses the
+        // same type (`:op/idx_arr`): the value the program holds is one type, and which it is is
+        // not a decision a single call can hold.
+        const auto *iterated = asArrayType(g->node(iterable)->dataType());
+        if (iterated != nullptr && iterated->anyRank()) {
+            refuse(
+                g,
+                loop,
+                std::format(
+                    "{} walks a value whose rank is open: an item is an element on a value of one "
+                    "dimension and a row on a value of several, and no one C++ type holds both",
+                    describeFunction(g)));
+        }
         if (g->loopIterableFormOf(loop) == camel::core::LoopIterableForm::Interval) {
             // `for i in a..b`: the graph's sequence is the pair of the interval's two bounds
             // (design principles 4.2, LoopIterableForm::Interval). The C++ this exporter writes
             // has no loop driver of its own — it writes the loop out — so the interval becomes
             // the array of its integers here, with the operation the interval is
             // (`:struct/range`, rt::range). What the program computes is the same.
+            //
+            // The array's type is the element's in rt::Array, and not the type of the node that
+            // holds the two bounds: that node's type is the pair, and a pair is written as a
+            // struct when the program has one of the same shape (a value of two ints, say), so
+            // asking for its C++ type asks for a `Tuple` there and writes an array into it.
+            const std::string items =
+                std::format("rt::Array<{}>", cppType(g, element, g->node(element)->dataType()));
             const auto bounds = g->withInputsOf(iterable);
             if (bounds.size() != 2) {
                 refuse(
@@ -1153,7 +1269,7 @@ void FunctionEmitter::lowerLoop(
                 Stmt::line(
                     std::format(
                         "const {} {} = rt::range({}, {}, 1, {});",
-                        cppType(g, iterable, g->node(iterable)->dataType()),
+                        items,
                         array,
                         withoutParentheses(valueOf(frame, bounds[0]).text),
                         withoutParentheses(valueOf(frame, bounds[1]).text),
@@ -1195,16 +1311,34 @@ void FunctionEmitter::lowerLoop(
     }
     if (iterates) {
         const gc_node_ref_t element = g->regionPorts(parts[1]).front();
-        round.push_back(Stmt::line(std::format("if ({} >= {}.size()) {{ break; }}", index, array)));
+        // The item of a value of several dimensions is its row, one dimension less, which is what
+        // the interpreter hands the body (design principles 4.2): `rt::atRow`, whose elements are
+        // copied -- accepted, as the conversion at the bridge is -- so the body holds a value of
+        // its own. The count of rounds is the first dimension then, not the element count: a value
+        // of 3 rows of 2 elements has 3 items, not 6.
+        const auto *iterated = asArrayType(g->node(norm.front())->dataType());
+        const bool rows      = iterated != nullptr && !iterated->anyRank() && iterated->rank() >= 2;
+        round.push_back(
+            Stmt::line(
+                std::format(
+                    "if ({} >= {}{}) {{ break; }}",
+                    index,
+                    array,
+                    rows ? ".extent(0)" : ".size()")));
         const std::string name = locals_.unique(std::format("v{}_item", nextValue_++));
         round.push_back(
             Stmt::line(
                 std::format(
-                    "const {} {} = {}[{}];",
+                    "const {} {} = {};",
                     cppType(g, element, g->node(element)->dataType()),
                     name,
-                    array,
-                    index)));
+                    rows ? std::format(
+                               "rt::atRow({}, {}, {})",
+                               array,
+                               index,
+                               program_.sites.siteFor(
+                                   g, norm.front(), RuntimeDiag::IndexOutOfRange, {}))
+                         : std::format("{}[{}]", array, index))));
         round.push_back(Stmt::line(std::format("++{};", index)));
         frame.values[element] = CppValue{name, false};
     }
@@ -1397,14 +1531,24 @@ GCGraph *FunctionEmitter::functionConstantOf(const GCGraph *graph, gc_node_ref_t
     return function != nullptr ? function->graph() : nullptr;
 }
 
-std::optional<std::string>
-FunctionEmitter::functionValue(GCGraph *function, const std::vector<std::string> &captures) {
+std::optional<std::string> FunctionEmitter::functionValue(
+    GCGraph *function, const std::vector<std::string> &captures, const Type *expected) {
     // A function value is the graph and the values it captured (design principles, section
     // 1): a lambda that calls the graph's function with the arguments, then the captures.
     auto name = program_.functionNames.find(function);
-    auto type = program_.values.type(function->funcType());
+    // The value spells the function type of the position it fills when that is known: a `void`
+    // function type takes a function whose result nobody wants (design principles 3.9), and a
+    // lambda that returns a value is not that type -- the result is dropped where the value is
+    // made, rather than the call being handed a type the parameter does not have.
+    const Type *spelled = expected != nullptr ? expected : function->funcType();
+    auto type           = program_.values.type(spelled);
     if (name == program_.functionNames.end() || !type) {
         return std::nullopt;
+    }
+    bool dropResult = false;
+    if (expected != nullptr && function->funcType() != nullptr) {
+        const auto *wanted = static_cast<const camel::core::type::FunctionType *>(expected);
+        dropResult         = isVoid(wanted->exitType()) && !isVoid(function->funcType()->exitType());
     }
     std::string params, args;
     size_t i = 0;
@@ -1429,11 +1573,12 @@ FunctionEmitter::functionValue(GCGraph *function, const std::vector<std::string>
         function->name(),
         function->closureNodes().size());
     return std::format(
-        "{}({}, [{}](rt::Depth depth{}) {{ return {}(depth{}{}); }})",
+        "{}({}, [{}](rt::Depth depth{}) {{ {}{}(depth{}{}); }})",
         *type,
         cppStringLiteral(text),
         capture,
         params,
+        dropResult ? "" : "return ",
         name->second,
         args,
         captured);
@@ -1473,6 +1618,10 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
                     describeFunction(g),
                     typeName(node->dataType())));
         }
+        // Kept for a call that takes this value: the position's function type is what the value
+        // has to spell, and the type of the closure is its own (`(x: int) => int` where a `void`
+        // function type takes it).
+        frame.closures[ref] = {function, captures};
         bind(frame, ref, std::move(*value), true, out, "closure");
         return;
     }
@@ -1488,7 +1637,13 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
     if (type->code() == TypeCode::Array) {
         const auto *array = camel::core::rtdata::fromSlot<::Array *>(constant);
         const Type *elem  = static_cast<const camel::core::type::ArrayType *>(type)->elemType();
-        for (size_t i = 0; array != nullptr && i < array->size(); ++i) {
+        // Every element of the run, not `size()`: a template of several dimensions answers its
+        // first extent there and its element count in `numel()` (rtdata/array.h), so reading
+        // `size()` made the filled value the first row's worth of elements and dropped the shape
+        // with them -- a `float[2, 2]` filled this way printed `[1.0, 2.0]` where the interpreter
+        // prints `[[1.0, 2.0], [2.0, 2.0]]`.
+        const size_t count = array != nullptr ? static_cast<size_t>(array->numel()) : 0;
+        for (size_t i = 0; i < count; ++i) {
             itemTypes.push_back(elem);
             items.push_back("");
         }
@@ -1541,7 +1696,32 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
     for (size_t i = 0; i < items.size(); ++i) {
         list += (i ? ", " : "") + items[i];
     }
-    bind(frame, ref, std::format("{}{{{}}}", cppName, list), true, out, "value");
+    // A value of one dimension carries the dimension it has, as a constant does (the literal's rule):
+    // the elements alone are a value of no rank, and `shape`, `len` and `appendText` all read the rank
+    // -- a value of one element would print as the element, which is the one reading it is not. Written
+    // as a call, because with an element type an `{n}` can itself stand for (`rt::Array<T>`, a struct of
+    // one field) the braced pair is read as one more element.
+    //
+    // A value of several dimensions is the elements and the shape in one block, and the block is
+    // written as both: `rt::Array<double>{{1.0, 2.0, 2.0, 2.0}, {2, 2}}`. The constructor takes
+    // the element count from the shape's product (standalone/array.h), so the fold has to write
+    // every element; a value that carried the old shape over a shorter run would be read as the
+    // first dimension's worth of elements, which is the harder defect to find of the two.
+    std::string value = std::format("{}{{{}}}", cppName, list);
+    if (type->code() == TypeCode::Array) {
+        const auto *array = camel::core::rtdata::fromSlot<::Array *>(constant);
+        const size_t rank = array != nullptr ? array->rank() : 0;
+        if (rank == 1) {
+            value = std::format("{}::shaped({{{}}}, {{{}}})", cppName, list, array->dim(0));
+        } else if (rank >= 2) {
+            std::string shape;
+            for (size_t i = 0; i < rank; ++i) {
+                shape += (i > 0 ? ", " : "") + std::to_string(array->dim(i));
+            }
+            value = cppName + "{{" + list + "}, {" + shape + "}}";
+        }
+    }
+    bind(frame, ref, std::move(value), true, out, "value");
 }
 
 void FunctionEmitter::lowerAccess(Frame &frame, gc_node_ref_t ref) {
@@ -1599,7 +1779,7 @@ void FunctionEmitter::lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out
     bind(frame, ref, expr + ")", false, out, "call");
 }
 
-void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
+void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref, Block &out) {
     // A value entering `T?` or `T!` (design principles 3.8), `null` entering `T?`, a failed
     // value passed on with another payload (`->`), a conversion between numbers.
     const GCGraph *g          = frame.graph;
@@ -1624,7 +1804,41 @@ void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
     const bool sameStruct =
         fromType != nullptr && toType != nullptr && fromType->code() == TypeCode::Struct &&
         toType->code() == TypeCode::Struct && program_.values.sameRepresentation(fromType, toType);
-    if (to == from || sameStruct) {
+    // A conversion between two arrays is a check of the shape, and nothing else: both types are the
+    // same `rt::Array<T>` on this side, so the writer has no bytes to move -- but the interpreter
+    // checks the extents when the program runs (design principles 5.4), and a program that says
+    // `as f32[2, 3]` of a value that does not hold them faults there. So the check is written, with
+    // the type's own text and the position of the conversion, which is the report the interpreter
+    // gives (`rt::asShape`, camel/standalone/array.h). A type that leaves an extent open (`f32[?]`)
+    // states -1 for it, and that extent is not checked.
+    const auto *targetArray = camel::core::type::asArrayType(toType);
+    const auto *sourceArray =
+        fromType != nullptr ? camel::core::type::asArrayType(fromType) : nullptr;
+    const bool checksShape = targetArray != nullptr && sourceArray != nullptr &&
+                             !targetArray->anyRank() && !targetArray->extents().empty() &&
+                             to == from;
+    if (checksShape) {
+        std::string extents;
+        for (const auto &form : targetArray->extents()) {
+            extents += (extents.empty() ? "" : ", ") +
+                       std::to_string(form.isConstant() ? form.constant() : -1);
+        }
+        std::string typeText = toType->toString();
+        std::string escaped;
+        for (const char c : typeText) {
+            escaped += c == '"' || c == '\\' ? std::string("\\") + c : std::string(1, c);
+        }
+        // The report's own sentence: the diagnostic's words with one slot, which the fault fills
+        // with the sentence the interpreter writes (`the array has shape [2]`), so the two reports
+        // are one (the site carries the mark the runtime replaces, as `rt::atRow`'s site does).
+        const std::vector<std::string> marks{SiteTable::valueMark(0)};
+        text = std::format(
+            "rt::asShape({}, {{{}}}, \"{}\", {})",
+            value.text,
+            extents,
+            escaped,
+            program_.sites.siteFor(g, ref, RuntimeDiag::RuntimeError, marks));
+    } else if (to == from || sameStruct) {
         frame.values[ref] = value;
         return;
     } else if (
@@ -1655,6 +1869,15 @@ void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
                 describeFunction(g),
                 typeName(fromType),
                 typeName(toType)));
+    }
+    if (checksShape && liveUses(g, ref) + frame.results.count(ref) == 0) {
+        // A conversion that checks a shape is a statement that can stop the program: the check is
+        // what reports, and a value nobody reads is not a check nobody may skip. So it is written
+        // where it stands and its value is dropped -- losing a value wastes it, losing a check
+        // loses the fault it reports (design principles 3.4: a fault is observable).
+        out.push_back(Stmt::line(text + ";"));
+        frame.values[ref] = CppValue{"", false};
+        return;
     }
     frame.values[ref] = CppValue{text, false};
 }
@@ -1710,6 +1933,20 @@ bool FunctionEmitter::cellEscapes(const GCGraph *graph, gc_node_ref_t cell) {
                 (isVariableAccess(operatorId(graph, user)) ||
                  operatorId(graph, user) == camel::core::oper::VarTake) &&
                 graph->normInputsOf(user).front() == cell) {
+                // An access that gives the cell back -- an assignment's value is the cell it
+                // wrote -- hands on this same cell, so what its users do to it, they do to this
+                // one: a call that takes it as a `var` argument takes the variable out of the
+                // function, and the variable is a cell (design note 5.3). A read (`:var/get`)
+                // gives a copy of the value, and its users are not this cell's; `:var/take` is
+                // the in-place forms' own access, which keeps the cell inside the function.
+                const Type *handed = node->dataType();
+                const bool givesTheCell =
+                    operatorId(graph, user) != camel::core::oper::VarTake && handed != nullptr &&
+                    handed->code() == camel::core::type::TypeCode::Tuple &&
+                    static_cast<const camel::core::type::TupleType *>(handed)->isCell();
+                if (givesTheCell && cellEscapes(graph, user)) {
+                    return true;
+                }
                 continue;
             }
             if (node->kind == GCNodeKind::Gate) {
@@ -1844,6 +2081,7 @@ bool FunctionEmitter::lowerVariable(
              valueOf(frame, norm[1])},
             {},
             {type, g->node(norm[1])->dataType()},
+            {}, // an assignment has no `with` argument at all
             {},
             type,
             [&](RuntimeDiag kind, const std::vector<std::string> &args) {

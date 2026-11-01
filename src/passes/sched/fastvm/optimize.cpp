@@ -42,7 +42,7 @@ void erasePcOrigins(
 void moveup(
     bytecode_vec_t &codes, size_t from, size_t to,
     std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins) {
-    ASSERT(from > to, "from should be larger than to");
+    GUARD(from > to, "from should be larger than to");
     Bytecode &bc  = codes[from];
     size_t opsize = bc.opsize;
     std::rotate(codes.begin() + to, codes.begin() + from, codes.begin() + from + opsize);

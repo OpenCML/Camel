@@ -45,9 +45,29 @@ void bindForwardRule(ForwardRuleBinding binding);
 /// which is not the same as a ruleset that lacks the rule).
 std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri);
 
+/// The binding for `uri` as it stands: the family it is filed in, the head of its left side and the
+/// operands that head takes. `forwardRuleOf` answers what *one* family's index resolves for `uri`;
+/// this answers the key itself, which is what a second family reads -- `lookupRule("rulesets.vmap",
+/// head, arity)`. The key is a property of the operator (which token, how many operands), not of the
+/// family that happens to own the binding, so a family other than the bound one reads it here.
+std::optional<ForwardRuleBinding> forwardBindingOf(const std::string &uri);
+
 /// One line per bound operator, sorted by uri: `uri family head/arity -> rule | no rule | no such
 /// family`. The reading a test takes of what the bindings resolve to without asking, in the order a
 /// reader needs it: what was bound, and what the index answers for it.
 std::vector<std::string> forwardRuleDescriptions();
+
+/// Binds `uri`'s transpose rule to the key it is filed under in the transpose family. It is a
+/// second table rather than a second field, because these are two facts about one operator: the
+/// rule for forward mode and the rule for a linear function's transpose live in two rulesets (a
+/// module serves one family), and neither replaces the other.
+void bindTransposeRule(ForwardRuleBinding binding);
+
+/// What `uri`'s transpose rule is called right now, read from the transpose family's index at this
+/// moment -- `forwardRuleOf`'s reading, for the family a linear function's pullback is written in.
+std::optional<camel::parse::ast::RuleMatch> transposeRuleOf(const std::string &uri);
+
+/// The transpose bindings, in the words `forwardRuleDescriptions` writes them.
+std::vector<std::string> transposeRuleDescriptions();
 
 } // namespace camel::core

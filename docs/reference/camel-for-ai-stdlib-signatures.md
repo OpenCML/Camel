@@ -199,6 +199,12 @@ tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?
 ```
 
+**`transforms`** — import { ... } from transforms — 1 name(s)
+
+```text
+jvp: (f: F) => Jvp<F> when is_function::<F>()
+```
+
 **`tensor`** — import { ... } from tensor — 61 name(s)
 
 ```text
@@ -769,6 +775,12 @@ sub_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
 sub_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
 div_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
 div_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
+```
+
+**`rulesets.vmap`** — import { ... } from rulesets.vmap — 1 name(s)
+
+```text
+lift: (x: T) => Lift<T>
 ```
 
 **`sim`** — import { ... } from sim — 2 name(s)

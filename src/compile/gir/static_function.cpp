@@ -22,10 +22,10 @@ const type::TupleType *StaticFunction::tupleType() const { return tupleType_; }
 StaticFunction *StaticFunction::create(
     const std::shared_ptr<DraftGraphBuilder> &graph, const type::Type *tupleType,
     camel::core::mm::IAllocator &allocator) {
-    ASSERT(graph != nullptr, "Compile-time static function graph cannot be null.");
-    ASSERT(tupleType && tupleType->code() == type::TypeCode::Tuple, "Type must be TupleType");
+    GUARD(graph != nullptr, "Compile-time static function graph cannot be null.");
+    GUARD(tupleType && tupleType->code() == type::TypeCode::Tuple, "Type must be TupleType");
     const auto *tt = static_cast<const type::TupleType *>(tupleType);
-    ASSERT(
+    GUARD(
         tt->size() == graph->view().closureNodes().size(),
         "Compile-time function closure tuple size mismatch.");
 
@@ -82,7 +82,7 @@ camel::core::rtdata::Object *StaticFunction::clone(
 
 void StaticFunction::print(std::ostream &os, const type::Type *type) const {
     (void)type;
-    ASSERT(graph_ != nullptr, "Compile-time static function print requires graph identity.");
+    GUARD(graph_ != nullptr, "Compile-time static function print requires graph identity.");
     os << "StaticFunction(graph=" << graph_->name() << ", tupleSlots=";
     os << (closure_ ? std::to_string(closure_->size()) : "null");
     os << ")";

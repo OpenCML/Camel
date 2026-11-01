@@ -99,8 +99,8 @@ JitBinaryDumpPass::apply(const camel::runtime::Program *program, std::ostream &o
     }
 
     for (const auto &[runtimeGraph, entryPc] : linked.offsetMap) {
-        ASSERT(runtimeGraph != nullptr, "JIT machine-code dump requires a runtime graph.");
-        ASSERT(
+        GUARD(runtimeGraph != nullptr, "JIT machine-code dump requires a runtime graph.");
+        GUARD(
             runtimeGraph->hasFrameLayout(),
             std::format("Graph '{}' has no finalized frame layout.", runtimeGraph->name()));
 

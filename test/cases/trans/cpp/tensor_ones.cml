@@ -1,12 +1,14 @@
 /**
- * `tensor:ones` crosses the bridge. A tensor is not a value std::cpp writes: it lives in the
- * runtime's tensor module, and the program holds a counted handle to it (rt::Foreign). So the
- * program prints the runtime's own text for the value, and the one line below is std::fvm's, byte
- * for byte -- there is no second implementation of what a tensor is that could drift from it.
+ * `tensor:ones` crosses the bridge, and the value comes back as the type it has: a `T[..]` is the
+ * shaped array `rt::Array<T>` in this back end, whichever module built it. So the program prints it
+ * with the same `println` as an array it wrote itself, and the one line below is std::fvm's, byte
+ * for byte.
  *
- * The shape crosses as the `int[]` it is, and the program links the runtime: `agree_with_fvm` builds
- * and runs it against std::fvm, and the plan's `tensor_ones` case pins the handle in the writer's
- * output.
+ * The shape crosses as the `int[]` it is, the element type as the integer code of the type, and the
+ * runtime's tensor is converted into the array at the boundary (elements copied out, shape with
+ * them), so the program never holds a runtime pointer. The program links the runtime:
+ * `agree_with_fvm` builds and runs it against std::fvm, and the plan's `tensor_ones` case pins the
+ * array in the writer's output.
  */
 
 import { ones } from tensor

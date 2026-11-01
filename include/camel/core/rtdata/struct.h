@@ -65,7 +65,14 @@ class Struct : public rtdata::Object {
     size_t size() const { return size_ & ~kViewFlag; }
 
     bool has(std::string_view name, const type::Type *type) const {
-        ASSERT(type && type->code() == type::TypeCode::Struct, "Type must be StructType");
+        GUARD(
+            type != nullptr && type->code() == type::TypeCode::Struct,
+            std::format(
+                "Type must be StructType, and this call passed {}: the fields are read and "
+                "written through the struct type's field types",
+                type == nullptr
+                    ? std::string("none")
+                    : "code " + std::to_string(static_cast<int>(type->code()))));
         const type::StructType *structType = static_cast<const type::StructType *>(type);
         return structType->findField(name).has_value();
     }
@@ -74,7 +81,10 @@ class Struct : public rtdata::Object {
     /// renders a value that may still be under construction (a collection a higher-order
     /// operator is filling) and shows its unwritten elements instead of aborting.
     slot_t slotAt(size_t index) const {
-        ASSERT(index < size(), "Index out of range");
+        GUARD(
+            index < size(),
+            std::format(
+                "Struct field out of range: field {} of a value with {} fields", index, size()));
         if (isView()) {
             const ViewData *view = viewData();
             if (view->layout->slotShaped) {
@@ -82,13 +92,23 @@ class Struct : public rtdata::Object {
                 return reinterpret_cast<const slot_t *>(view->bytes)[index];
             }
             const auto *structType = static_cast<const type::StructType *>(view->type);
-            ASSERT(index < structType->size(), "Index out of range");
+            GUARD(
+                index < structType->size(),
+                std::format(
+                    "Struct field out of range: field {} of the {} fields this view stores",
+                    index,
+                    structType->size()));
             const type::Type *fieldType = structType->typeAt(index);
             const std::byte *at = view->bytes + view->layout->fieldOffsets[index];
             if (fieldType->code() == type::TypeCode::Struct ||
                 fieldType->code() == type::TypeCode::Tuple) {
                 const type::DataLayout *layout = type::pureDataLayout(fieldType);
-                ASSERT(layout != nullptr, "A compact field has a layout");
+                GUARD(
+                    layout != nullptr,
+                    std::format(
+                        "A compact field of type '{}' has a layout, and this one has none: the "
+                        "field is stored by its bytes and cannot be read without them",
+                        fieldType->toString()));
                 return rtdata::pureViewOf(at, fieldType, layout, layout->size);
             }
             return rtdata::readPureScalar(at, fieldType->code());
@@ -101,21 +121,48 @@ class Struct : public rtdata::Object {
     }
 
     template <typename T> T get(std::string_view name, const type::Type *type) const {
-        ASSERT(type && type->code() == type::TypeCode::Struct, "Type must be StructType");
+        GUARD(
+            type != nullptr && type->code() == type::TypeCode::Struct,
+            std::format(
+                "Type must be StructType, and this call passed {}: the fields are read and "
+                "written through the struct type's field types",
+                type == nullptr
+                    ? std::string("none")
+                    : "code " + std::to_string(static_cast<int>(type->code()))));
         const type::StructType *structType = static_cast<const type::StructType *>(type);
         auto optIndex                      = structType->findField(name);
-        ASSERT(optIndex.has_value(), std::format("Field name not found: {}", name));
+        GUARD(
+            optIndex.has_value(),
+            std::format(
+                "Field name not found: '{}' names no field of '{}'", name, type->toString()));
         return get<T>(optIndex.value());
     }
 
     template <typename T> void set(size_t index, T value) {
-        ASSERT(index < size(), std::format("Index out of range: {}", index));
+        GUARD(
+            index < size(),
+            std::format(
+                "Struct field out of range: a write at field {} of a value with {} fields",
+                index,
+                size()));
         data_[index] = rtdata::toSlot(value);
     }
 
     template <typename T> void set(size_t index, T value, const type::StructType *structType) {
-        ASSERT(index < size(), std::format("Index out of range: {}", index));
-        ASSERT(structType != nullptr && index < structType->size(), "StructType is invalid.");
+        GUARD(
+            index < size(),
+            std::format(
+                "Struct field out of range: a write at field {} of a value with {} fields",
+                index,
+                size()));
+        GUARD(
+            structType != nullptr && index < structType->size(),
+            std::format(
+                "StructType is invalid for this write: the field is {} and the type passed "
+                "describes {}",
+                index,
+                structType == nullptr ? std::string("no fields")
+                                      : std::to_string(structType->size()) + " fields"));
         // A view is not a value: if one reaches a real store, turn it into a real Struct/Tuple
         // here. This is the boundary the read path relies on (map/filter/reduce/foreach). Only
         // an aggregate field can hold one, so the common scalar write pays no call.
@@ -132,25 +179,48 @@ class Struct : public rtdata::Object {
     }
 
     template <typename T> void set(std::string_view name, T value, const type::Type *type) {
-        ASSERT(type && type->code() == type::TypeCode::Struct, "Type must be StructType");
+        GUARD(
+            type != nullptr && type->code() == type::TypeCode::Struct,
+            std::format(
+                "Type must be StructType, and this call passed {}: the fields are read and "
+                "written through the struct type's field types",
+                type == nullptr
+                    ? std::string("none")
+                    : "code " + std::to_string(static_cast<int>(type->code()))));
         const type::StructType *structType = static_cast<const type::StructType *>(type);
         auto optIndex                      = structType->findField(name);
-        ASSERT(optIndex.has_value(), std::format("Field name not found: {}", name));
+        GUARD(
+            optIndex.has_value(),
+            std::format(
+                "Field name not found: '{}' names no field of '{}'", name, type->toString()));
         set<T>(optIndex.value(), value, structType);
     }
 
     slot_t *data() {
-        ASSERT(!isView(), "A compact element view has no slot array");
+        GUARD(
+            !isView(),
+            "A compact element view has no slot array: its bytes belong to another value, so "
+            "there are no slots here to hand out");
         return data_;
     }
     const slot_t *data() const {
-        ASSERT(!isView(), "A compact element view has no slot array");
+        GUARD(
+            !isView(),
+            "A compact element view has no slot array: its bytes belong to another value, so "
+            "there are no slots here to hand out");
         return data_;
     }
 
     virtual bool
     equals(const rtdata::Object *other, const type::Type *type, bool deep = false) const override {
-        ASSERT(type && type->code() == type::TypeCode::Struct, "Type must be StructType");
+        GUARD(
+            type != nullptr && type->code() == type::TypeCode::Struct,
+            std::format(
+                "Type must be StructType, and this call passed {}: the fields are read and "
+                "written through the struct type's field types",
+                type == nullptr
+                    ? std::string("none")
+                    : "code " + std::to_string(static_cast<int>(type->code()))));
         if (!isOfSameCls(this, other))
             return false;
 
@@ -210,7 +280,14 @@ class Struct : public rtdata::Object {
     virtual rtdata::Object *clone(
         camel::core::mm::IAllocator &allocator, const type::Type *type,
         bool deep = false) const override {
-        ASSERT(type && type->code() == type::TypeCode::Struct, "Type must be StructType");
+        GUARD(
+            type != nullptr && type->code() == type::TypeCode::Struct,
+            std::format(
+                "Type must be StructType, and this call passed {}: the fields are read and "
+                "written through the struct type's field types",
+                type == nullptr
+                    ? std::string("none")
+                    : "code " + std::to_string(static_cast<int>(type->code()))));
         if (isView()) {
             return rtdata::materializeAggregate(viewData()->bytes, type, allocator);
         }
@@ -249,7 +326,14 @@ class Struct : public rtdata::Object {
     }
 
     virtual void print(std::ostream &os, const type::Type *type) const override {
-        ASSERT(type && type->code() == type::TypeCode::Struct, "Type must be StructType");
+        GUARD(
+            type != nullptr && type->code() == type::TypeCode::Struct,
+            std::format(
+                "Type must be StructType, and this call passed {}: the fields are read and "
+                "written through the struct type's field types",
+                type == nullptr
+                    ? std::string("none")
+                    : "code " + std::to_string(static_cast<int>(type->code()))));
         if (size() == 0) {
             os << "{}";
             return;

@@ -181,9 +181,12 @@ namespace {
 /// The shared body of printValue and printSlotCapped. `arrayLimit` applies to every array met
 /// at any depth: a larger array prints as its type, address and length.
 void printValueImpl(std::ostream &os, slot_t data, Type *type, size_t arrayLimit) {
-    ASSERT(
+    GUARD(
         data != DeadSlot,
-        std::format("Accessing uninitialized slot in printSlot: {}", type->toString()));
+        std::format(
+            "Accessing uninitialized slot in printSlot: {}: the slot was never written, so "
+            "printing it would read the fill as a value",
+            type->toString()));
     if (!type->isGCTraced()) {
         printScalar(os, data, type);
         return;

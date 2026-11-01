@@ -54,7 +54,7 @@ void enableTypeStatsReport() {
 
 void *allocTypeStorage(TypeStorageKind kind, size_t size, size_t align) {
     void *mem = mm::permSpace().alloc(size, align);
-    ASSERT(mem != nullptr, "Failed to allocate type storage from the permanent space.");
+    GUARD(mem != nullptr, "Failed to allocate type storage from the permanent space.");
     Counter &counter = counters()[static_cast<size_t>(kind)];
     counter.objects.fetch_add(1, std::memory_order_relaxed);
     counter.bytes.fetch_add(size, std::memory_order_relaxed);

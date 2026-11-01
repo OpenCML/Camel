@@ -5,6 +5,7 @@
 #include "camel/utils/assert.h"
 
 #include <format>
+#include <stdexcept>
 
 namespace camel::compile::gir {
 
@@ -23,7 +24,7 @@ std::string to_string(LinkType type) {
     case LinkType::Order:
         return "Order";
     }
-    ASSERT(false, "Unknown LinkType");
+    throw std::runtime_error("Unknown LinkType");
     return "Unknown";
 }
 

@@ -1,0 +1,32 @@
+/**
+ * M6, the zero that is easy to get wrong: `grad(vjp(g))` with `g(v) = sum(v*v)`, at
+ * `v = [1, 2, 3, 4]`, must be all zeros.
+ *
+ * Why it must: `vjp(g)(v, c) = c*2v` is linear in `v`, so the pullback's derivative with respect to
+ * `v` is a constant and the gradient of that constant is 0. What this catches is the cotangent
+ * being differentiated as if it were a variable, which turns a constant into a wrong non-zero
+ * value -- the one mistake a "the numbers are right" test of the three combinations cannot see.
+ *
+ * The page states it on the 2x2 matrix `[[1,2],[3,4]]`; the flat vector here carries the same
+ * numbers (flattened, that matrix is 1, 2, 3, 4 and its gradient is 2, 4, 6, 8), so nothing is
+ * lost by not needing a batch axis for this one.
+ */
+
+import { grad, vjp } from autodiff
+import { sum } from array
+
+func g(v: f32[4]): f32 {
+    return v[0] * v[0] + v[1] * v[1] + v[2] * v[2] + v[3] * v[3]
+}
+
+func main(): int {
+    let vs: f32[] = [1.0, 2.0, 3.0, 4.0]
+    // The cotangent of a scalar result is a scalar: c = 1. The pullback is then 2*v, and summing
+    // it before differentiating keeps `grad`'s "the result must be a scalar" rule intact.
+    let zero = grad((w: f32[4]) => sum(vjp(g)(w, 1.0)))(vs)
+    println(zero[0])
+    println(zero[1])
+    println(zero[2])
+    println(zero[3])
+    return 0
+}

@@ -31,6 +31,7 @@
 
 #include <atomic>
 #include <cctype>
+#include <stdexcept>
 #define DEBUG_LEVEL -1
 
 using namespace std;
@@ -138,7 +139,7 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                 refTypes.push_back(nodeTypeOf(refNode));
                 refNodes.push_back(refNode);
             }
-            ASSERT(
+            GUARD(
                 holes.size() == refNodes.size(),
                 "Composite holes must match unresolved reference count.");
             // The position this literal stands in gives it its type while it is made, element by
@@ -531,9 +532,9 @@ std::optional<node_handle_t> Builder::modifierOf(node_handle_t node) const {
 }
 
 void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
-    ASSERT(input != nullptr && modifier != nullptr, "Cannot record modifier for a null node.");
+    GUARD(input != nullptr && modifier != nullptr, "Cannot record modifier for a null node.");
     auto *inputGraph = nodeGraphOf(input);
-    ASSERT(
+    GUARD(
         inputGraph == nodeGraphOf(modifier),
         "Modifier tracking must stay within a single compile graph.");
     noteVariable(input);
@@ -666,7 +667,7 @@ uint32_t Builder::captureWriteMaskOf(const compile_graph_ptr_t &callee) const {
         }
         // One word of payload carries the mask. A function that captures more than this and
         // writes one of the later captures cannot hand its versions on: loud, not silent.
-        ASSERT(
+        GUARD(
             k < 32,
             "A call can carry the new version of at most 32 captured variables; this callee "
             "captures more.");
@@ -869,7 +870,7 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
         genericCalleeAllowed_   = false;
         const std::string plain = written.substr(kBuiltinPrefix.size());
         const auto entity       = context_->importModule("")->getNativeEntity(Reference(plain));
-        ASSERT(
+        GUARD(
             entity.has_value() && entity->isOperGroup(),
             "A built-in operator the compiler names does not exist: " + plain);
         node_handle_t drefNode{currGraph_->addDrefNode(
@@ -1440,7 +1441,7 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     if (valueNode == nullptr) {
         valueNode = valueNodeOf(visit(gct->at(0)));
     }
-    ASSERT(valueNode != nullptr, "Cast node value is null.");
+    GUARD(valueNode != nullptr, "Cast node value is null.");
     Type *sourceType = nodeTypeOf(valueNode);
     if (valueTypeOf(sourceType)->code() == TypeCode::Never) {
         // A value of `never` never exists (design principles 3.9): the position takes the node as
@@ -1572,7 +1573,7 @@ node_handle_t Builder::visitVariNode(const GCT::node_ptr_t &gct) {
 
 oper_group_ptr_t Builder::internalOperatorGroup(camel::core::OperId oper) {
     const auto group = context_->importModule("")->nativeOperatorGroup(oper);
-    ASSERT(
+    GUARD(
         group != nullptr,
         "The built-in module did not register the operator the compiler emits: " +
             std::string(camel::core::OperatorTable::instance().uri(oper)));
@@ -1655,7 +1656,7 @@ node_handle_t Builder::newVariableOfType(Type *type) {
     const auto group = internalOperatorGroup(camel::core::oper::VarNewEmpty);
     const std::vector<StaticArg> statics(0);
     const auto op = group->resolve({type}, {}, statics);
-    ASSERT(op.has_value(), "The empty cell operator rejected the type it was given.");
+    GUARD(op.has_value(), "The empty cell operator rejected the type it was given.");
     node_handle_t variable = currGraph_->addOperNode(*op, 0);
     stampPermissions(variable);
     variables_.insert(variable);
@@ -2116,7 +2117,7 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
 node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     ENTER("ACCS");
     node_handle_t tgtNode = valueNodeOf(visit(gct->at(0)));
-    ASSERT(tgtNode != nullptr, "Access node target is null.");
+    GUARD(tgtNode != nullptr, "Access node target is null.");
     if (EnumType *enumType = asEnumType(nodeTypeOf(tgtNode))) {
         // A value of an enum has the fields of the variant it is, and which one that is the
         // compiler does not know (design principles 3.8, 5.3): they are taken out by matching.
@@ -2206,7 +2207,7 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         break;
     }
     default:
-        ASSERT(false, "Unexpected target type in ACCS node.");
+        throw std::runtime_error("Unexpected target type in ACCS node.");
     }
 
     // A member read of a compile-time struct value is that field's value, known here as well: the
@@ -2237,7 +2238,19 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     } else {
         accsNode = currGraph_->addAccsNode(elemType, gct->accessKey());
     }
-    linkNodes(LinkType::Norm, tgtNode, accsNode);
+    // `typeof` infers a type and evaluates nothing, and the graph it builds is dropped: a value
+    // that lives in the graph the type is used in is borrowed by name, not by node. Linking the
+    // outer node here would leave an edge in this graph pointing at a node it does not own, which
+    // outlives the graph, so a port carrying that node's type stands in for it.
+    node_handle_t accsSource = tgtNode;
+    if (nodeGraphOf(tgtNode) != currGraph_.get()) {
+        static unsigned long long typeofStandIns = 0;
+        accsSource                               = currGraph_->addPortNode(
+            nodeTypeOf(tgtNode),
+            "$typeof" + std::to_string(++typeofStandIns),
+            false);
+    }
+    linkNodes(LinkType::Norm, accsSource, accsNode);
     registerNodeOrigin(context_, accsNode, gct, "gir.accs");
     if (readConstant != nullptr) {
         rememberConstant(accsNode, readConstant);

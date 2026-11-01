@@ -82,24 +82,22 @@ inline slot_t readPureScalar(const std::byte *bytes, camel::core::type::TypeCode
 /**
  * Whether `slot`, whose static type is `type`, is a compact element view: a Struct/Tuple whose
  * size field carries the view flag. This check is always compiled: it is the detector behind
- * the debug-only store guard and the block/view self-tests.
+ * the store guard and the block/view self-tests.
  */
 bool isViewSlot(slot_t slot, const camel::core::type::Type *type);
 
 /**
- * The debug-only guard at a store boundary: a view must have been materialised before a value
- * is stored (design principles 10.5). Compiled out in release builds; the
- * always-compiled detector above is what the self-test exercises.
+ * The guard at a store boundary: a view must have been materialised before a value is stored
+ * (design principles 10.5). It is live in every build, because the failure it catches is a
+ * wrong value rather than a crash: a view names one cell of the thread-local view ring, so once
+ * the ring turns that cell over, the stored slot reads different bytes and nothing reports it.
  */
 void assertStoredValueIsNotView(
     slot_t slot, const camel::core::type::Type *type, std::string_view where);
 
-#if defined(NDEBUG)
-#define CAMEL_ASSERT_NOT_VIEW(slot, type, where) ((void)0)
-#else
+/// The same guard at a call site, live in every build (see above).
 #define CAMEL_ASSERT_NOT_VIEW(slot, type, where)                                             \
     ::camel::core::rtdata::assertStoredValueIsNotView((slot), (type), (where))
-#endif
 
 /// Materialises a view into a real Struct/Tuple, and returns any other slot unchanged. Only a
 /// compact pure-data aggregate can be a view; the value is allocated in the auto space.

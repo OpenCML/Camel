@@ -21,11 +21,11 @@ using namespace camel::core::type;
 namespace camel::passes::sched::fastvm {
 
 size_t selectBranchArm(const Bytecode &bc, Frame *frame) {
-    ASSERT(frame != nullptr, "FastVM branch selection requires a frame.");
+    GUARD(frame != nullptr, "FastVM branch selection requires a frame.");
 
     const data_arr_t nargs = bc.nargs();
     const data_arr_t wargs = bc.wargs();
-    ASSERT(nargs.size() == 1, "FastVM BRCH opcode must have exactly one norm operand.");
+    GUARD(nargs.size() == 1, "FastVM BRCH opcode must have exactly one norm operand.");
 
     if (bc.withCnt() == 0) {
         return frame->get<bool>(nargs[0]) ? 0 : 1;
@@ -64,14 +64,14 @@ slot_t funcValueForCall(const BytecodeHeader *call, Frame *callerFrame, slot_t r
         return result;
     }
     auto *callee = getFuncExtraRuntimeGraph(call);
-    ASSERT(callee != nullptr, "A call that writes captured variables needs its callee's graph.");
+    GUARD(callee != nullptr, "A call that writes captured variables needs its callee's graph.");
     // The caller's operands are its arguments in order: its norm arguments first, then its `with`
     // arguments, which are what the callee's with-ports are passed as. The callee's with-ports
     // are its declared `with` parameters and then its captures, in the order it made them, so
     // they are the last withPorts().size() operands.
     const data_arr_t args = call->directCallSrcArgs();
     const size_t withCount = callee->withPorts().size();
-    ASSERT(args.size() >= withCount, "A call's operands must hold its `with` arguments.");
+    GUARD(args.size() >= withCount, "A call's operands must hold its `with` arguments.");
     std::vector<slot_t> withValues;
     withValues.reserve(withCount);
     for (size_t i = 0; i < withCount; ++i) {

@@ -45,7 +45,9 @@ template <typename Fn> decltype(auto) dispatchElementType(type::TypeCode code, F
     case type::TypeCode::Float16:
         return fn.template operator()<rtdata::Float16>();
     default:
-        throw std::invalid_argument("Unsupported array element type");
+        throw std::invalid_argument(
+            "the language has no array conversion to '" + type::typeCodeToString(code) +
+            "': a type name converts a numeric array");
     }
 }
 

@@ -1,0 +1,27 @@
+/**
+ * The value a `match` dispatches is evaluated once, however many cases test it: `speak(n)` is
+ * a call that prints, and it is called once per `match` even though four cases look at the value
+ * and two of them carry a guard. A lowering that copied the value into each case would call it
+ * once per case -- the print would appear twice here, and a guard that fails would have run its
+ * effects again.
+ */
+
+func speak(n: int): int sync {
+    println('speak')
+    return n
+}
+
+func pick(n: int): int sync {
+    return match speak(n) {
+        case 1 when false => 10
+        case 2 when false => 20
+        case _ when n > 3 => 30
+        case _ => 40
+    }
+}
+
+func main(): int sync {
+    println(pick(5))
+    println(pick(1))
+    return 0
+}

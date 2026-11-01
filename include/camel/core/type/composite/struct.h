@@ -229,18 +229,18 @@ class StructType : public CompositeType {
     bool named() const { return decl_ != nullptr; }
     size_t typeArgCount() const { return typeArgs_.size(); }
     Type *typeArgAt(size_t index) const {
-        ASSERT(index < typeArgs_.size(), "StructType: type argument index out of range");
+        GUARD(index < typeArgs_.size(), "StructType: type argument index out of range");
         return typeArgs_[index];
     }
     std::span<Type *const> typeArgs() const { return std::span<Type *const>(typeArgs_); }
 
     size_t size() const { return size_; }
     Type *typeAt(size_t index) const {
-        ASSERT(index < size_, "StructType: index out of range");
+        GUARD(index < size_, "StructType: index out of range");
         return const_cast<Type *>(typesPtr_[index]);
     }
     TypeCode codeAt(size_t index) const {
-        ASSERT(index < size_, "StructType: index out of range");
+        GUARD(index < size_, "StructType: index out of range");
         return typeCodesPtr_[index];
     }
     std::span<Type *const> types() const { return std::span<Type *const>(typesPtr_, size_); }
@@ -248,7 +248,7 @@ class StructType : public CompositeType {
         return std::span<const TypeCode>(typeCodesPtr_, size_);
     }
     std::string_view fieldName(size_t index) const {
-        ASSERT(index < size_, "StructType: index out of range");
+        GUARD(index < size_, "StructType: index out of range");
         return fieldNameAt(index);
     }
     std::optional<size_t> findField(std::string_view name) const;

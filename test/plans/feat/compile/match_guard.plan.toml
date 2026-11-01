@@ -27,6 +27,17 @@ expect_exit = 0
 expect_stdout_exact = "12.0\n-1.0\n2.0\n-2.0\n0.0\nbig\nfive\ntiny\nsmall\n2\n3\n101\n1\n0\n1\n0\n1\n2\n"
 
 [[tests]]
+name = "match_guard.matched_value_evaluated_once"
+desc = "The value a `match` dispatches is evaluated once, however many cases test it: `match speak(n)` is a call that prints, four cases look at the value, and `speak` is printed once per `match`, not once per case. The lowering binds the value to a name and every case compares against that name; a lowering that copied the value into each case would call it once per case, and a guard that fails would have run the effects again."
+kind = "behavior"
+case = "../../../cases/compile/match_guard/matched_value_evaluated_once.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "speak\n30\nspeak\n40\n"
+
+[[tests]]
 name = "match_guard.not_exhaustive"
 desc = "A guarded case is not a default: a `match` whose only case is `case 1 when n > 0` has no `case _`, and the report is MatchWithoutDefault, listing the type of the value. Used to be a syntax error (`when` read as part of the pattern)."
 kind = "negative"

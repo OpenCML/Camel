@@ -140,8 +140,29 @@ std::string typeName(ScalarType type) {
         return "unsigned";
     case ScalarType::I64:
         return "long long";
+    case ScalarType::F16:
+    case ScalarType::BF16:
+        // A narrow element is a physical type the body holds two bytes of. What it has no spelling
+        // for is a device register: `__nv_bfloat16` would also be a device contract nobody wrote yet,
+        // so the printer refuses rather than naming one.
+        throw std::runtime_error("no CUDA spelling for a narrow element yet");
     }
     throw std::runtime_error("invalid physical scalar type");
+}
+// Whether the body can hold elements of this type at all, which is a different question from
+// whether the printer can spell one: validation asks this one.
+bool physical(ScalarType type) {
+    switch (type.kind) {
+    case ScalarType::F32:
+    case ScalarType::F64:
+    case ScalarType::F16:
+    case ScalarType::BF16:
+    case ScalarType::I32:
+    case ScalarType::U32:
+    case ScalarType::I64:
+        return true;
+    }
+    return false;
 }
 std::string location(const KernelBody &kernel, const Access &access) {
     const auto &b = kernel.buffers[access.buffer];
@@ -222,7 +243,7 @@ void controlKinds(const Block &block, bool &returns, bool &barriers) {
 } // namespace
 void validateBody(const KernelBody &body) {
     for (const auto &b : body.buffers) {
-        (void)typeName(b.type);
+        require(physical(b.type), "invalid physical scalar type");
         require(
             b.space == MemorySpace::Global || b.space == MemorySpace::Shared ||
                 b.space == MemorySpace::Constant,

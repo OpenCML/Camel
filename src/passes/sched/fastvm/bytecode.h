@@ -252,7 +252,7 @@ struct BytecodeHeader {                  // 16 bytes
     size_t argsCnt() const { return normCnt() + withCnt(); }
 
     size_t directCallArgCnt() const {
-        ASSERT(isDirectCallOpcode(opcode), "Direct-call arg count requires FUNC/TAIL bytecode.");
+        GUARD(isDirectCallOpcode(opcode), "Direct-call arg count requires FUNC/TAIL bytecode.");
         return normCnt();
     }
 
@@ -264,11 +264,11 @@ struct BytecodeHeader {                  // 16 bytes
     }
 
     const data_arr_t directCallSrcArgs() const {
-        ASSERT(isDirectCallOpcode(opcode), "Direct-call source args require FUNC/TAIL bytecode.");
+        GUARD(isDirectCallOpcode(opcode), "Direct-call source args require FUNC/TAIL bytecode.");
         return nargs();
     }
     const data_arr_t directCallDstSlots() const {
-        ASSERT(
+        GUARD(
             isDirectCallOpcode(opcode),
             "Direct-call destination slots require FUNC/TAIL bytecode.");
         return wargs();
@@ -318,13 +318,13 @@ struct BytecodeHeader {                  // 16 bytes
 
     inline BytecodeExtra *extra() {
         const size_t extraWords = extraWordCount();
-        ASSERT(extraWords != 0, "Bytecode has no extra payload.");
+        GUARD(extraWords != 0, "Bytecode has no extra payload.");
         return reinterpret_cast<BytecodeExtra *>(reinterpret_cast<uint64_t *>(this + opsize) - extraWords);
     }
 
     inline const BytecodeExtra *extra() const {
         const size_t extraWords = extraWordCount();
-        ASSERT(extraWords != 0, "Bytecode has no extra payload.");
+        GUARD(extraWords != 0, "Bytecode has no extra payload.");
         return reinterpret_cast<const BytecodeExtra *>(
             reinterpret_cast<const uint64_t *>(this + opsize) - extraWords);
     }
@@ -334,35 +334,35 @@ struct BytecodeHeader {                  // 16 bytes
     // four, in every build. extra() returns the first word.
     inline uint64_t *extra2() {
         const size_t extraWords = extraWordCount();
-        ASSERT(extraWords >= 2, "Bytecode has no second extra payload word.");
+        GUARD(extraWords >= 2, "Bytecode has no second extra payload word.");
         return reinterpret_cast<uint64_t *>(this + opsize) - extraWords + 1;
     }
     inline const uint64_t *extra2() const {
         const size_t extraWords = extraWordCount();
-        ASSERT(extraWords >= 2, "Bytecode has no second extra payload word.");
+        GUARD(extraWords >= 2, "Bytecode has no second extra payload word.");
         return reinterpret_cast<const uint64_t *>(this + opsize) - extraWords + 1;
     }
 
 #if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
     inline uint64_t *extra3() {
         const size_t extraWords = extraWordCount();
-        ASSERT(extraWords >= 3, "Bytecode has no third extra payload word.");
+        GUARD(extraWords >= 3, "Bytecode has no third extra payload word.");
         return reinterpret_cast<uint64_t *>(this + opsize) - extraWords + 2;
     }
     inline const uint64_t *extra3() const {
         const size_t extraWords = extraWordCount();
-        ASSERT(extraWords >= 3, "Bytecode has no third extra payload word.");
+        GUARD(extraWords >= 3, "Bytecode has no third extra payload word.");
         return reinterpret_cast<const uint64_t *>(this + opsize) - extraWords + 2;
     }
 #endif
 
     /// OPER's third extra word: the attribute set of the node it runs (camel/core/node_attrs.h).
     inline camel::core::attr::AttrSetId *operAttrs() {
-        ASSERT(opcode == OpCode::OPER, "Bytecode is not an OPER.");
+        GUARD(opcode == OpCode::OPER, "Bytecode is not an OPER.");
         return reinterpret_cast<camel::core::attr::AttrSetId *>(extra2() + 1);
     }
     inline const camel::core::attr::AttrSetId *operAttrs() const {
-        ASSERT(opcode == OpCode::OPER, "Bytecode is not an OPER.");
+        GUARD(opcode == OpCode::OPER, "Bytecode is not an OPER.");
         return reinterpret_cast<const camel::core::attr::AttrSetId *>(extra2() + 1);
     }
 
@@ -375,39 +375,39 @@ struct BytecodeHeader {                  // 16 bytes
     // appendBytecode(..., extraUnits), so use constant-offset accessors instead of extra(), whose
     // generic opcode switch is measurable when fib-like code calls through this on every frame.
     inline BytecodeExtra *directCallExtra() {
-        ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
+        GUARD(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
         return reinterpret_cast<BytecodeExtra *>(
             reinterpret_cast<uint64_t *>(this + opsize) - directCallExtraWordCount());
     }
     inline const BytecodeExtra *directCallExtra() const {
-        ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
+        GUARD(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
         return reinterpret_cast<const BytecodeExtra *>(
             reinterpret_cast<const uint64_t *>(this + opsize) - directCallExtraWordCount());
     }
     inline uint64_t *directCallExtra2() {
-        ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
+        GUARD(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
         return reinterpret_cast<uint64_t *>(this + opsize) - directCallExtraWordCount() + 1;
     }
     inline const uint64_t *directCallExtra2() const {
-        ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
+        GUARD(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
         return reinterpret_cast<const uint64_t *>(this + opsize) - directCallExtraWordCount() + 1;
     }
 #if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
     inline uint64_t *directCallExtra3() {
-        ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
+        GUARD(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
         return reinterpret_cast<uint64_t *>(this + opsize) - directCallExtraWordCount() + 2;
     }
     inline const uint64_t *directCallExtra3() const {
-        ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
+        GUARD(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
         return reinterpret_cast<const uint64_t *>(this + opsize) - directCallExtraWordCount() + 2;
     }
 #endif
     inline uint64_t *directCallExtraWriteMask() {
-        ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
+        GUARD(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
         return reinterpret_cast<uint64_t *>(this + opsize) - directCallExtraWordCount() + 3;
     }
     inline const uint64_t *directCallExtraWriteMask() const {
-        ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
+        GUARD(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
         return reinterpret_cast<const uint64_t *>(this + opsize) - directCallExtraWordCount() + 3;
     }
 };
@@ -427,7 +427,7 @@ union BytecodeExtra {                           // 8 bytes
 };
 
 inline const camel::runtime::ExecLoop *BytecodeHeader::loopPayload() const {
-    ASSERT(
+    GUARD(
         opcode == OpCode::LBEG || opcode == OpCode::LTST || opcode == OpCode::LEND,
         "Bytecode is not a loop event.");
     return reinterpret_cast<const BytecodeExtra *>(reinterpret_cast<const uint64_t *>(this + opsize) - 1)

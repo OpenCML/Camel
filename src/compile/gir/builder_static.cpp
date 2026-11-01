@@ -488,7 +488,7 @@ bool Builder::typeCaseMatches(Type *subject, const GCT::node_ptr_t &caseNode) co
 
 node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
     ENTER("TMTCH");
-    ASSERT(gct->size() >= 2, "A match type has a subject type and cases.");
+    GUARD(gct->size() >= 2, "A match type has a subject type and cases.");
     Type *subject = resolveTypeNode(gct->at(0)->dataType(), gct->at(0));
     if (subject == nullptr || subject->code() == TypeCode::TypeVar || containsTypeVar(subject)) {
         diags_->of(SemanticDiag::StaticTypeNotConcrete)
@@ -510,7 +510,7 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
         const size_t caseCount = gct->size() - 1;
         for (size_t i = 0; i < caseCount; ++i) {
             const auto &caseNode = gct->at(i + 1);
-            ASSERT(caseNode->type() == GCT::NodeKind::TCASE, "A case of match type is a TCASE.");
+            GUARD(caseNode->type() == GCT::NodeKind::TCASE, "A case of match type is a TCASE.");
             const uint16_t patterns = caseNode->typeCasePatterns();
             const bool catchesAll =
                 (patterns & (typeCaseBit(GCT::TypeCaseKind::Leaf) |
