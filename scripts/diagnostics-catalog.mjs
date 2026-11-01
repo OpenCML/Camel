@@ -113,6 +113,18 @@ const NO_PRODUCER_RECORDED = new Map([
     ['runtime', 0],
 ])
 
+// Named exceptions: a code no case can reach positively, with the reason. Not a silent skip -- an
+// exception is a decision that is written down, and every count that uses it says how many there are.
+// A code here is outside the denominator of both the name count and the text count: it cannot be
+// pinned by a case, and it cannot have its message read, for the same reason.
+const NO_POSITIVE_CASE = new Map([
+    [
+        'InternalDiag::UnknownInternalError',
+        'the compiler reports it when it reaches a state it has no code for; the tests that name it'
+            + ' assert its absence (expect_output_not_contains), and making it happen would mean'
+            + ' writing a defect into the compiler',
+    ],
+])
 const NAME_COVERAGE_RECORDED = new Map([
     ['semantic', 0],
     ['internal', 0],
@@ -1055,7 +1067,17 @@ if (mode === '--name-coverage' || mode === '--name-coverage-check') {
             .replace(/^\s*desc\s*=.*$/gm, '')
         // `expect_output_not_contains` requires the words to be *absent*, so a name there is the
         // opposite of a pin: drop those lists before anything reads a name out of a needle.
-        text = text.replace(/expect_(?:output|stdout|stderr)_not_contains\s*=\s*\[[\s\S]*?\]/g, '')
+        //
+        // One level of brackets is allowed inside the list, and that is not cosmetic. Read up to the
+        // first `]`, a list written `["[Error]", "UnknownInternalError"]` is stripped only as far as
+        // `["[Error]`, and the rest of it survives as text -- so the absence guard reads as a pin.
+        // That is exactly what happened: `InternalDiag::UnknownInternalError` was counted as covered
+        // by name for as long as this line was short-sighted, in the two plans that write a bracket
+        // before the name (stream, tagged). This count must under-report a pin, never invent one.
+        text = text.replace(
+            /expect_(?:output|stdout|stderr)_not_contains\s*=\s*\[((?:[^\[\]]|\[[^\[\]]*\])*)\]/g,
+            ''
+        )
         for (const m of text.matchAll(/expect_diagnostic_name\s*=\s*["']([A-Za-z]+)::([A-Za-z]+)["']/g)) {
             pinned.add(`${m[1]}::${m[2]}`)
         }
@@ -1112,7 +1134,9 @@ if (mode === '--name-coverage' || mode === '--name-coverage-check') {
     // and does not sit in the set this check refuses to see grow.
     const raised = producedNames(root)
     const report = SECTIONS.filter((s) => sectionFilter === null || s.id === sectionFilter).map((s) => {
-        const all = entries.filter((e) => e.sectionId === s.id)
+        const all = entries.filter(
+            (e) => e.sectionId === s.id && !NO_POSITIVE_CASE.has(e.fullName)
+        )
         const unraisable = all.filter((e) => !raised.has(e.fullName))
         const target = all.filter((e) => raised.has(e.fullName))
         const missing = target.filter((e) => !pinned.has(e.fullName) && !pinned.has(hex8(e.code).toLowerCase()))
@@ -1175,17 +1199,6 @@ if (mode === '--name-coverage' || mode === '--name-coverage-check') {
 // class was caught by the plan cases that run the program, which is why they exist; this check is for
 // the sentence itself, which nothing else reads.
 const TEXT_ASSERTED_RUN = 12
-// Named exceptions: a code whose message cannot be asserted because no case can reach it, with the
-// reason. Not a silent skip -- an exception is a decision that is written down, and the count says
-// how many there are.
-const TEXT_COVERAGE_EXCEPTIONS = new Map([
-    [
-        'internal::UnknownInternalError',
-        'the compiler reports it when it reaches a state it has no code for; the tests that name it'
-            + ' assert its absence (expect_output_not_contains), and making it happen would mean'
-            + ' writing a defect into the compiler',
-    ],
-])
 
 const TEXT_COVERAGE_RECORDED = new Map([
     ['semantic', 136],
@@ -1259,7 +1272,7 @@ if (mode === '--text-coverage' || mode === '--text-coverage-check') {
             .filter((s) => s.length >= TEXT_ASSERTED_RUN)
             .sort((a, b) => b.length - a.length)
     const report = SECTIONS.filter((s) => sectionFilter === null || s.id === sectionFilter).map((s) => {
-        const all = entries.filter((e) => e.sectionId === s.id && !TEXT_COVERAGE_EXCEPTIONS.has(e.fullName))
+        const all = entries.filter((e) => e.sectionId === s.id && !NO_POSITIVE_CASE.has(e.fullName))
         const reading = all.filter((e) => {
             const runs = fixedRuns(e.message)
             if (runs.length === 0) return false
@@ -1275,7 +1288,7 @@ if (mode === '--text-coverage' || mode === '--text-coverage-check') {
         console.log(`text coverage: no section named '${sectionFilter}'`)
         process.exit(2)
     }
-    for (const [key, why] of TEXT_COVERAGE_EXCEPTIONS) {
+    for (const [key, why] of NO_POSITIVE_CASE) {
         console.log(`  excepted: ${key} -- ${why}`)
     }
     for (const r of report) {
