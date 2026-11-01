@@ -12,6 +12,7 @@
  */
 
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/graph_ref_check.h"
 #include "camel/runtime/reachable.h"
 #include "runtime/graph_build.h"
 
@@ -508,8 +509,9 @@ GCGraph *encodeDraftGraph(
 
     const auto payloadShape = describeDraftNativePayload(draft);
     // The node chunks are blocks of their own: the graph space can run out while they are made.
+    GCGraph *encoded = nullptr;
     try {
-    return GCGraphBuildAccess::constructInPlace(
+    encoded = GCGraphBuildAccess::constructInPlace(
         target,
         bytes,
         draft.id(),
@@ -539,6 +541,19 @@ GCGraph *encodeDraftGraph(
             identity.name,
             draftGraphOrigin(context, identity, transaction));
     }
+    // The same four checks the frozen graph gets (camel/runtime/graph_ref_check.h), run on the graph
+    // this draft produced: a draft can hold a number its own graph cannot resolve, and a graph that
+    // is refused by EdgeChecker and published here would be two answers to one question. A refusal
+    // names the graph, the node or region, and the reference, and the pipeline reports it against
+    // the pass that built the draft.
+    if (const auto violations = camel::runtime::checkGraphCrossReferences(*encoded); !violations.empty()) {
+        std::string message = std::format("the draft of graph '{}' cannot be encoded: {}", identity.name, violations.front());
+        for (size_t i = 1; i < violations.size(); ++i) {
+            message += std::format("; {}", violations[i]);
+        }
+        throw std::runtime_error(message);
+    }
+    return encoded;
 }
 
 size_t draftGraphBytes(

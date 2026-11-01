@@ -14,12 +14,8 @@
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：3 页（与目录逐项一致）
-| 页 | 问句 | 默认建议 |
-|---|---|---|
-| [`whether-the-empty-tangent-needs-a-port`](questions-2026-11-02-whether-the-empty-tangent-needs-a-port.md) | 空切空间（`Tangent<bool>=()`）那一格要不要单独一个端口 | 待裁（`lane-m4` 的三条读数与表见页内） |
-| [`is-an-arm-block-a-sync-chain`](questions-2026-11-02-is-an-arm-block-a-sync-chain.md) | 选臂的 `Block` 区域算不算一条 `sync` 链（`sync` 臂块是否同步链） | 待裁（`lane-guard` 的红与收敛读数见页内） |
-| [`does-the-pause-cover-a-lambdas-parameter-list`](questions-2026-11-02-does-the-pause-cover-a-lambdas-parameter-list.md) | 暂停是否覆盖 `vjp` 需要的 lambda 形参表：**被保留项与被暂停机制相撞**，不是语言做不到 | 默认 A（`split(jvp(f))` 是一对函数、`transpose` 要一个函数） |
+## 现在在等作者：0 页（与目录逐项一致）
+目录里没有待裁的页：最后三页（`whether-the-empty-tangent-needs-a-port`、`is-an-arm-block-a-sync-chain`、`does-the-pause-cover-a-lambdas-parameter-list`）已由作者在读完之后整体挪进 `reviews/`，`30191828b` 带进的两条裁定见下。**索引此前仍列着这三行**，指向已被 `git mv` 走的名字——一条指向不存在文件的索引比没有索引更坏，所以这三行在这一笔里删掉，判据仍旧是"以目录为准"。
 
 **17:30 作者把 `nested-branch-stops-in-jvp` 也挪进 `reviews/` 并在 `questions-2026-10-29.md` 记了两条裁定**（`fsh-dev` 的 `9c2e5c7df`）：前端变换实例化**先停手**（已进树的不撤，等负责人一起处理），嵌套分支按区域**从内到外递归**、不为“嵌套”另写一支（`vjp` 在 `2 / 0.5 / -1` 处 `4.0 / 2.0 / 3.0`，四个后端一致）。
 

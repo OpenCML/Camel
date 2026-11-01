@@ -129,3 +129,55 @@ const camel::runtime::Program *FailsWithValueTestPass::apply(
         "TestFailure", "this test pass ended with an error value", "<test::fails_with_value>"));
     return nullptr;
 }
+
+const camel::runtime::Program *
+BreakJoinTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    if (program->root() == nullptr) {
+        os << "test::break_join: no root graph\n";
+        return program;
+    }
+    for (GCGraph *graph : program->graphs()) {
+        // A branch, and a node of the same draft that is not a join: the draft is allowed to be
+        // inconsistent, and the encoder is the place that refuses it.
+        gc_node_ref_t brch = kInvalidNodeRef;
+        gc_node_ref_t other = kInvalidNodeRef;
+        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+            if ((*it)->kind != GCNodeKind::Brch || brch != kInvalidNodeRef) {
+                continue;
+            }
+            brch = it.ref();
+        }
+        if (brch == kInvalidNodeRef) {
+            continue;
+        }
+        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+            if (it.ref() != brch && (*it)->kind != GCNodeKind::Join) {
+                other = it.ref();
+                break;
+            }
+        }
+        if (other == kInvalidNodeRef) {
+            continue;
+        }
+        RuntimeGraphDraftSession session(context_, program);
+        auto &transaction = session.edit(graph);
+        auto &draft       = transaction.edit();
+        draft.setBrchJoin(brch, other);
+        os << "test::break_join: branch " << static_cast<unsigned>(brch) << " now names node "
+           << static_cast<unsigned>(other) << ", which is not a join\n";
+        return session.commit();
+    }
+    os << "test::break_join: the program has no branch node\n";
+    return program;
+}
+
+const camel::runtime::Program *
+NestedBreakTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    // The nested pass is named the way `std::opt::saturate` names `opt::saturate` and the `std::opt`
+    // rounds name `rules::simplify`: through the registry, not through a hand-built object.
+    const PassRunResult nested =
+        applyRegisteredPass(program, kBreakExitTestPass, context_, os, this);
+    os << "test::nested_break: the nested pass returned "
+       << (nested.program == nullptr ? "nothing" : "a program") << '\n';
+    return nested.program;
+}

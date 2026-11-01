@@ -56,3 +56,29 @@ class FailsWithValueTestPass : public RuntimeGraphRewritePass {
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
+
+/// Points a BRCH node's `join` at a node of the same draft that is not a JOIN. The draft is allowed
+/// to be inconsistent while it is written (the draft's `setBrchJoin` does not validate), the encoder
+/// is not: `encodeDraftGraph` refuses the graph with the branch and the reference that does not
+/// resolve. This is the shape a lift that renumbers a graph can leave behind.
+inline constexpr const char *kBreakJoinTestPass = "test::break_join";
+class BreakJoinTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+/// Runs `test::break_exit` the way a pass runs another pass by name (`applyRegisteredPass`), and
+/// hands back whatever it returned. The graph is broken by the nested pass, so the only thing
+/// between that graph and the next pass is the boundary check on this route. Until 2026-11-02 the
+/// route had no check at all -- the comment said "no pass of the pipeline, nested or listed, ends
+/// without it" and a nested pass never reached the code that did it -- so this case is what makes
+/// the claim true rather than stated.
+inline constexpr const char *kNestedBreakTestPass = "test::nested_break";
+class NestedBreakTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
