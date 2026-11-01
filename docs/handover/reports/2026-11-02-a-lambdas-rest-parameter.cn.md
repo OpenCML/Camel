@@ -1160,3 +1160,38 @@ error[SemanticDiag::TaggedMatchCases]: This 'match' on a value of type 'E?' is n
 
 **(b) S1 建议**：**新增检查不要用 `ASSERT`，用"分支 + 诊断"。** `ASSERT` 在 release 里不存在，于是它守的前提也不存在；
 A2（`p.1` on a struct）已经在 `assert` 审计里证明这条路有效一次，`enum.cpp:131` 是第二次。
+
+## 34. 全量闸门（合并 `374488bf4` 之后）：8354 通过、1 条 fail，已修
+
+```
+[SUMMARY] total: 8367, pass: 8354, fail: 1, skip: 10, known failures: 2
+[FAIL] docs.ai_reference.current   193.29 ms
+```
+
+**唯一那条红**：`docs/reference/camel-for-ai-stdlib-signatures.md` 的 `stdlib-signatures` 区域过期，
+`node scripts/camel-for-ai.mjs --check` 的原话是 `the 'stdlib-signatures' region is not what its source produces (525 entries)`。
+`--write` 后 diff 是 **2 增 3 删**，内容还是那一笔：
+
+```
+-vjp: (f: (x: T) => float) => (x: T) => (float, (ct: float) => (T,))
+-vjp: (f: (x: T, y: U) => float) => (x: T, y: U) => (float, (ct: float) => (T, U))
++vjp: (f: F) => Vjp<F> when is_function::<F>()
+```
+
+⇒ **`9048c30ea` 之后有三份生成物没重生成**（`docs/stdlib-reference.md`、`EXAMPLE_STOPS` 计数、这份 AI 参考），
+本车道已全部补齐；`--check` 现在三条都是 "is what its sources produce"。
+
+## 35. 从 62 处里挑"程序真能触到"的两族：都构造不出来（不是安全）
+
+按你的优先顺序试了两族，**判据是"先写出能触发的程序"**，两次都不成立：
+
+| 族 | 试法 | 结论 |
+|---|---|---|
+| `struct.cpp:962/978/1007`（切向量长度与类型字段数不符） | 这些在 `addTangent` 里，只有 `vjp`/`grad`/`with_grad` 的切向相加才会走到；今天 `grad` 只有 `(x: float) => float` 一条签名，**数组/结构体那一臂在 `split`/`transpose` 之前就拒了**（本页 §13 的两堵墙） | **构造不出来**：不是"安全"，是**上游先拒**，走不到这里 |
+| `array/dlpack.cpp:150–157/222–234`（空 tensor / 非 compact） | 那是 **DLPack 导出**（`export` 到 onnx/dlpack 的那条路）的入口，Camel 程序里没有"把空 tensor 交给导出器"的写法；`std::opt` 与四个后端都不经过它 | **构造不出来**：**不是"安全"**，是**程序面没有这个入口** |
+
+**所以本轮没有从 62 处里改第二处**——**没有触发程序就不改**（这条与今晚"按面相改比不改更坏"是同一条）。
+**62 处的名单与"什么能让它成假"已在 §31 里逐条列出**，其中**能被程序触到的**要等 autodiff 的数组臂或导出器接上之后才会出现。
+
+**S1 的第二次证据**（按你要求并列写）：**A2**（`p.1` 作用在结构体上，`rc=139 ×3` → `InvalidAccessIndex`）是第一次；
+**`enum.cpp:131`**（null 枚举读 tag，`ASSERT` → `InvalidArgument`）是第二次。**两次都是"断言的前提变成分支"。**
