@@ -7098,9 +7098,14 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             // A rest parameter is untyped and last (design principles 5.5); it stands in the
             // signature as a `void` parameter that no call passes a value for.
             if (open && !signature) {
-                // The parser admits `..` in a declaration's parameter list and in a function
-                // type (`(..A) => R`), never in a lambda's.
-                throw std::runtime_error("A rest parameter in a lambda.");
+                // A lambda's rest parameter parses (`(..xs) => body`) and is refused here by name:
+                // the parameters it stands for are the ones the front end would have to build out
+                // of the function type the lambda stands in, and it does not build them yet. The
+                // refusal is a diagnosis with a position, not a compiler error: a program that
+                // writes the shape is answered with a sentence about the shape.
+                diags_->of(SemanticDiag::LambdaRestParameterNotLowered)
+                    .at(paramLoad->tokenRange())
+                    .commit(name);
                 throw BuildAbortException();
             }
             if (pi + 1 != normParams.size()) {
