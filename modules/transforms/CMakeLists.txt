@@ -14,4 +14,5 @@ add_camel_module(
     transpose_operator.cpp
     vmap.cpp
     vmap_operator.cpp
+    vjp.cpp
 )
