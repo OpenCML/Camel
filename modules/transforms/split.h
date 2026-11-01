@@ -8,24 +8,30 @@
  * A lifted function carries a value and a tangent for every parameter, and answers with the pair
  * (result, tangent). `split` cuts that function in two along the pair, not along a position:
  *
- *   - the **forward half** takes the value of every parameter and answers with the result and the
- *     residuals -- the values the backward half will need, which today is the empty tuple;
- *   - the **backward half** takes the residuals and the tangent of every parameter and answers with
- *     the tangent of the result.
+ *   - the **forward half** takes the value of every parameter, keeps the part of the body that
+ *     computes on values, and answers with the result and the **residuals** -- the forward values
+ *     the backward half's rules multiply by, handed on beside the result;
+ *   - the **backward half** takes the residuals and the tangent of every parameter, keeps the part of
+ *     the body that reads a tangent, and answers with the tangent of the result. A forward value it
+ *     reads is projected out of the residual tuple (ACCS, TupleIndex), so the cut is a value crossing
+ *     between two graphs and not a recomputation.
  *
- * On a lifted graph that computes nothing (two parameter ports and one tuple fill -- what
- * `reinterp<jvp>` produces for `f(x) = x`) the cut leaves the value port in the forward half, the
- * tangent port in the backward half, and **no** residuals: `fwd(3.0)` is 3.0, `lin(r0, 1.0)` is 1.0
- * and `r0` holds nothing. A residual that appears there would be a value moved into the residuals
- * that nothing reads.
+ * The residuals are a tuple in the signature (`ResidualsOf<F>`, the compiler's type function, not
+ * written yet): one member per value parameter, in program order. The shape says how many there may be
+ * and the graph says which of them the backward half reads.
  *
- * What is built today is the plumbing, on the tier that graph has: the body is copied node by node
- * (a port, a constant, an operator, a fill), the exit's two components are followed separately, and
- * everything else is refused *by name* at the node it was written at -- a call, a branch, a loop, an
- * effect edge, and a backward half that would have to read the value of a parameter (a residual the
- * two halves cannot carry yet, because a runtime graph cannot take a tuple parameter apart). The
- * refusal is the reason the readings of a `jvp` lift of `x*x` wait for the transform that rewrites
- * that body instead of calling the rule's function.
+ * `g(x) = x*x` at 3 reads `forward y= 9.0`, `residual r0= (3.0)` and `tangent dx1= 6.0`, and 12.0 and
+ * 0.0 for dx = 2 and dx = 0. On a lifted graph that computes nothing (two parameter ports and one tuple
+ * fill -- what `reinterp<jvp>` produces for `f(x) = x`) the cut moves no value the backward half reads:
+ * `fwd(3.0)` is 3.0, `lin(r0, 1.0)` is 1.0, and the one residual the signature has room for is the
+ * value parameter, which nothing reads.
+ *
+ * What is built is the straight-line tier: the body is copied node by node -- a port, a constant, an
+ * operator, a fill, and a call (a rule's right side reaches the transform as a call whose callee is a
+ * graph of the program, so the call is copied with its inputs placed on that half's side) -- and
+ * everything else is refused *by name* at the node it was written at: a function value built by the
+ * body, a branch, a loop, an effect edge, and a backward half that would have to read an intermediate
+ * the forward half computed (a residual of that kind is the next tier).
  */
 
 #pragma once
