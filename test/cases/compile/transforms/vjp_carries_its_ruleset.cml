@@ -8,8 +8,9 @@
 // out of `stdlib/vjp.cml` and this goes red at the library's own line -- `transpose has no
 // transpose for this function`, or `jvp has no forward rule for :op/mul_d` -- on the call
 // `stdlib/vjp.cml` composes, never in this file and never in a sentence of the form "not
-// implemented yet". `f(x) = x*x*x` at 3 gives the value 27, the cotangent 27 and the gradient 27:
-// three readings of the same program.
+// implemented yet". `f(x) = x*x*x` at 3 gives the value 27, the cotangent `(27.0,)` -- one member,
+// because a pullback answers one cotangent per parameter and `f` has one -- and the gradient 27: two
+// numbers and the tuple they come out of.
 import { grad, vjp } from vjp
 
 func f(x: float): float {

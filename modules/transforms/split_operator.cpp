@@ -50,12 +50,13 @@ using camel::core::type::type_vec_t;
 using camel::core::type::TypeCode;
 
 /// The type of `split(f)` for a function of this type: the call, whose result is the pair of the two
-/// halves. nullptr when the function is outside what the step takes.
+/// halves. nullptr when the function is outside what the step takes. Its residuals member is the
+/// transform's own residuals tuple with no members: the members are the graph's answer.
 FunctionType *splitOperatorSignature(FunctionType *function) {
     if (function == nullptr) {
         return nullptr;
     }
-    const SplitHalves halves = splitHalvesOf(function);
+    const SplitHalves halves = splitHalvesWith(function, TupleType::residuals({}));
     if (halves.pair == nullptr) {
         return nullptr;
     }
@@ -92,7 +93,8 @@ class SplitResolver final : public FuncTypeResolver {
             norm[0]->code() != TypeCode::Function) {
             return std::nullopt;
         }
-        const SplitHalves halves = splitHalvesOf(tt::as_ptr<FunctionType>(norm[0]));
+        // The reason only: no graph, so the residuals tuple stays the transform's own, with no members.
+        const SplitHalves halves = splitHalvesWith(tt::as_ptr<FunctionType>(norm[0]), nullptr);
         if (!halves.why.empty()) {
             return halves.why;
         }
