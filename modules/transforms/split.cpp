@@ -954,6 +954,30 @@ bool buildHalfBranch(
 
 /// The whole cut of a branch: both halves, each with its own branch, the condition crossing as a
 /// residual so the backward half picks the arm the forward half took.
+///
+/// **Eight steps, and where each one goes when this becomes a region traversal** (P1-14 of the
+/// review; the four-column map with line ranges is
+/// `docs/handover/reviews/p1-14-branch-cut-migration-map.cn.md`):
+///
+/// - `[MAP S1]` the cuts (every value parameter, and the condition) -- outside the recursion, shared.
+/// - `[MAP S2]` the cut tuple and the two halves' signatures (`splitHalvesWith`) -- outside.
+/// - `[MAP S3]` the pair's two types, taken from `arms.front()` -- outside, and the one assumption to
+///   delete: a pair's type should come from the region's yield, not from the first arm.
+/// - `[MAP S4]` the residual index -- outside.
+/// - `[MAP S5]` the group and its two members -- outside.
+/// - `[MAP S6]` the forward half: signature, value ports, the residuals projected in region 0, the
+///   branch itself, and the exit that packs (join, residuals) -- **the branch is the half that moves
+///   into the recursion, one `cutArm` per arm region**.
+/// - `[MAP S7]` the backward half: the same, with the residuals as its first port and the branch's
+///   join as its exit.
+/// - `[MAP S8]` encode, read back, print, hand over -- outside.
+///
+/// Only S6 and S7's branch exist per region; everything else reads the *whole* cut (a residual is the
+/// two halves' shared agreement, the signatures are the graph's, the reading is the cut's), which is
+/// why the recursion the traversal can have is one level deep. The rule for the move, in one line:
+/// **the residuals stay projected in region 0** -- an accessor made inside an arm belongs to that arm
+/// and is reused by the other one, which the branch-arm invariant (`src/runtime/branch_arms.cpp`)
+/// refuses.
 SplitGraph cutBranchGraph(
     const camel::core::context::context_ptr_t &context, const rt::Program *program,
     rt::GCGraph *function, std::ostream &os, gc_node_ref_t condition,
