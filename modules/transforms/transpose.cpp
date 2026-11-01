@@ -727,8 +727,8 @@ bool buildTransposeMember(
                     isCall ? function->calleeIdOf(inputs.front()) : function->calleeIdOf(ref);
                 camel::runtime::GCGraph *callee = state.program->graph(calleeId);
                 if (callee == nullptr) {
-                    // The callee is the value the first input carries -- and a value that is
-                    // itself computed (a call's result, an indirect call) names no graph here.
+                    // The callee is the value the first input carries, and a value that is
+                    // itself computed -- a call's result, an indirect call -- names no graph here.
                     os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
                        << " callee=none\n";
                     return false;
