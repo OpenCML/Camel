@@ -15,6 +15,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace camel::transforms {
@@ -201,7 +202,15 @@ bool buildTransposeMember(
         // body runs -- a branch arm has nowhere to put a capture, so there an outside target is
         // still a refusal.
         bool allowEscapes = false;
-        std::unordered_map<gc_node_ref_t, gc_node_ref_t> escapes;
+        // One escaped cotangent: the product it is (`from`, the node whose rule handed it out) and
+        // the value it landed on. Both are named because the refusal below has to say which node
+        // escaped -- a value the round only read is the only thing that may stand for it, and a
+        // reader that has the count alone cannot tell that from a port that merely stands nearby.
+        struct Escape {
+            gc_node_ref_t cotangent = rt::kInvalidNodeRef;
+            gc_node_ref_t from      = rt::kInvalidNodeRef;
+        };
+        std::unordered_map<gc_node_ref_t, Escape> escapes;
         const auto addCotangent = [&](gc_node_ref_t ref, gc_node_ref_t node) {
             if (!hasCotangent[ref]) {
                 cotangent[ref]    = node;
@@ -415,7 +424,7 @@ bool buildTransposeMember(
             // The arm's chain ends at the parameter, which lives outside the arm's region: the
             // cotangent of that parameter for this arm is what the chain hands it. Anything else
             // from outside the region is a residual this step does not have.
-            const auto deliver = [&](gc_node_ref_t target, gc_node_ref_t node) {
+            const auto deliver = [&](gc_node_ref_t target, gc_node_ref_t node, gc_node_ref_t from) {
                 if (function->nodeRegion(target) == oldRegion) {
                     addLocal(target, node);
                     return;
@@ -432,9 +441,11 @@ bool buildTransposeMember(
                     // The round read this value from outside: its cotangent leaves the loop
                     // through the capture channel, accumulated over the rounds.
                     auto &slot = escapes[target];
-                    slot       = slot == rt::kInvalidNodeRef
-                                     ? node
-                                     : primitive(":op/add_d", {slot, node});
+                    if (slot.cotangent == rt::kInvalidNodeRef) {
+                        slot = Escape{node, from};
+                    } else {
+                        slot.cotangent = primitive(":op/add_d", {slot.cotangent, node});
+                    }
                     return;
                 }
                 armsOk = false;
@@ -467,7 +478,7 @@ bool buildTransposeMember(
                 if (rule->rule == "add_t") {
                     for (size_t i = 0; i < inputs.size(); ++i) {
                         if (!isConstant(inputs[i])) {
-                            deliver(inputs[i], local[ref]);
+                            deliver(inputs[i], local[ref], ref);
                         }
                     }
                     continue;
@@ -478,7 +489,7 @@ bool buildTransposeMember(
                         if (isConstant(inputs[i])) {
                             continue;
                         }
-                        deliver(inputs[i], first ? local[ref] : negate(local[ref]));
+                        deliver(inputs[i], first ? local[ref] : negate(local[ref]), ref);
                         first = false;
                     }
                     continue;
@@ -495,14 +506,14 @@ bool buildTransposeMember(
                             return rt::kInvalidNodeRef;
                         }
                         if (rule->rule == "mul_t") {
-                            deliver(inputs[i], primitive(":op/mul_d", {local[ref], c}));
+                            deliver(inputs[i], primitive(":op/mul_d", {local[ref], c}), ref);
                         } else if (i == 0) {
-                            deliver(inputs[i], primitive(":op/div_d", {local[ref], c}));
+                            deliver(inputs[i], primitive(":op/div_d", {local[ref], c}), ref);
                         } else {
                             const gc_node_ref_t a = constantValue(inputs[0]);
                             const gc_node_ref_t top = primitive(":op/mul_d", {local[ref], a});
                             const gc_node_ref_t sq  = primitive(":op/mul_d", {c, c});
-                            deliver(inputs[i], negate(primitive(":op/div_d", {top, sq})));
+                            deliver(inputs[i], negate(primitive(":op/div_d", {top, sq})), ref);
                         }
                     }
                     continue;
@@ -750,19 +761,42 @@ bool buildTransposeMember(
                 if (armsOk && bodyCotangent != rt::kInvalidNodeRef && !escapes.empty()) {
                     // The body's cotangents have a channel now, but the loop still hands back
                     // one state: the refusal says how many are waiting, and for which values, so
-                    // the step that adds the accumulators knows the count from a reading.
+                    // the step that adds the accumulators knows the count from a reading. Each
+                    // escape gets a line of its own, in target order so that the reading does not
+                    // move with the map's: which value the round only read (`target`), which of the
+                    // body's products handed the cotangent out (`from`, the node the rule ran on),
+                    // and the loop's own two input lists -- norm and with are what an escape has to
+                    // be given back through, so a step that adds the capture channel reads both.
+                    std::vector<std::pair<gc_node_ref_t, Escape>> caught(
+                        escapes.begin(), escapes.end());
+                    std::sort(
+                        caught.begin(), caught.end(), [](const auto &left, const auto &right) {
+                            return left.first < right.first;
+                        });
                     os << "TRANSPOSE function=" << function->name() << " skip=state node=" << ref
-                       << " origin=" << regionOrigin << " captures=" << escapes.size() << " nodes=";
-                    for (const auto &entry : escapes) {
+                       << " origin=" << regionOrigin << " captures=" << caught.size() << '\n';
+                    for (const auto &entry : caught) {
                         const camel::runtime::GCNode *carrier = function->node(entry.first);
-                        os << entry.first << '('
-                           << (carrier != nullptr ? static_cast<int>(carrier->kind) : -1) << ','
+                        const camel::runtime::GCNode *source  = function->node(entry.second.from);
+                        os << "ESCAPE target=" << entry.first << " from=" << entry.second.from
+                           << " kindOfFrom="
+                           << (source != nullptr ? static_cast<int>(source->kind) : -1)
+                           << " kindOfTarget="
+                           << (carrier != nullptr ? static_cast<int>(carrier->kind) : -1)
+                           << " typeOfTarget="
                            << (carrier != nullptr && carrier->dataType() != nullptr
                                    ? carrier->dataType()->toString()
                                    : std::string("-"))
-                           << "),";
+                           << " norm=[";
+                        for (const gc_node_ref_t input : function->normInputsOf(ref)) {
+                            os << input << ',';
+                        }
+                        os << "] with=[";
+                        for (const gc_node_ref_t input : function->withInputsOf(ref)) {
+                            os << input << ',';
+                        }
+                        os << "]\n";
                     }
-                    os << '\n';
                     return false;
                 }
                 if (!armsOk || bodyCotangent == rt::kInvalidNodeRef) {
