@@ -591,10 +591,20 @@ std::string ProgramEmitter::emit(const camel::runtime::Program &runtimeProgram, 
         entry = findEntry(root);
         // Values of the top level that are computed (`let k = f()`, design principles 10.1:
         // before main starts): the root graph is a function of the program that computes
-        // them and calls main.
+        // them and calls main. A CALL keeps them in the closure it calls, which findEntry has
+        // put in `entry.args`; a FUNC node lists them as its own normal inputs, after the value
+        // it gives each declared parameter. Both shapes are read: a top level value that a pass
+        // has made a direct call is still that value, and the alternative -- refusing it as a
+        // value only a literal could be -- is a hole, not a limit of the language.
+        std::vector<gc_node_ref_t> topLevel = entry.args;
+        if (root->node(entry.call)->kind == GCNodeKind::Func) {
+            const auto given = root->normInputsOf(entry.call);
+            topLevel.insert(topLevel.end(), given.begin(), given.end());
+        }
         const bool computed =
-            std::any_of(entry.args.begin(), entry.args.end(), [&](gc_node_ref_t arg) {
-                return root->node(arg)->kind != GCNodeKind::Data;
+            std::any_of(topLevel.begin(), topLevel.end(), [&](gc_node_ref_t arg) {
+                const auto *node = root->node(arg);
+                return node == nullptr || node->kind != GCNodeKind::Data;
             });
         if (computed) {
             parts_.root                = root;
