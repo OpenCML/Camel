@@ -96,3 +96,16 @@ transpose_unread_parameters func at(x: float, w: float, dx: float, dw: float): f
 **为什么列这张表**：今天有人（我）引用过两组没有用例名的数（`4.0 / 4.0`、`-6.0 / 3.0`，来自 `stdlib/vjp.cml` 落笔时的对照），它们**查不到出处**，所以不算证据。**引用任何读数必须带用例名或计划名；没带名字的数就是假数**——它看起来像证据，但和"跨空间比较"是同一类错。
 
 **关于 `mt`/`at` 的归属，原样记一句**：`transpose_many_parameters` 与 `transpose_unread_parameters` 的形参全是 `float`、都有切空间，所以那三条红**错在我的改动（删了一个种子参数），不是期望该改**；`unread_parameters` 钉住的是"**不被读的参数仍要有一份余切**"，它与"**没有切空间的形参不产出余切**"是两件事。
+## `skip=rule` 有两种，别混（今天差点为它去改 `export`）
+
+```
+TRANSPOSE … skip=rule uri=:op/idx_arr reason=no-such-family   ← 规则集没加载（家族不在索引里）
+TRANSPOSE … skip=rule uri=:op/idx_arr reason=unbound          ← 键没绑上（transposeBindings() 里没有这个 uri）
+          （第三种：reason=no-rule —— 家族在、键在，索引里没有这条规则）
+```
+三个 reason 出自 `modules/transforms/transpose.cpp:1296–1301` 的同一个三元式：
+`!rule.has_value()` → `unbound`；`NoSuchFamily` → `no-such-family`；否则 `no-rule`。
+
+**`gs6` 那天量 `transpose` 时格子全是 `no-such-family`，根因是测量程序漏了 `import rulesets.transpose`**——**"测量程序的 import 也是被测量的一部分"**。看到 `skip=rule` 先分这两类：**`no-such-family` 去看 import，`unbound` 去看绑定表**；**别去改规则名的可见性**（`export` 与否不在这条链上：`index_into` 私有与公开，`unbound` 都会是 `unbound`）。
+
+`transposeBindings()` 是 `src/core/forward.cpp:26` 的**函数内 `static`**（`static std::map<std::string, ForwardRuleBinding> table;`），所以"另一个实例"不成立——进程内只有一张表。
