@@ -2585,6 +2585,16 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 enteringTypes(funcType, normInputs, normInputTypes, false))
             .has_value();
     };
+    // The node a call links for one argument. An argument that reads a variable is linked from
+    // the read taken where the argument is written (`early`), because an argument after it may
+    // write that variable (design principles 3.3, `f(c, g(c))`); every other argument is linked
+    // as the value it holds. A conversion that puts the value into its parameter's form belongs
+    // on this node and not on `node`: converting `node` alone left the link carrying the
+    // unconverted early read, so the built graph said a call received a `string` where its
+    // parameter takes a `string?` (defect A3, the `var` argument before a computed argument).
+    const auto linkedNode = [](Argument &input) -> node_handle_t & {
+        return input.early != nullptr ? input.early : input.node;
+    };
     // The dimension names a call binds (design principles 5.4), remembered for the checked
     // conversion of the returned value below.
     ExtentValues dimValues;
@@ -2662,8 +2672,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             if (refined->castSafetyFrom(arg.actual) == CastSafety::Forbidden) {
                 continue;
             }
-            arg.input->node = castNodeTo(valueOf(arg.input->node), refined, arg.input->expr);
-            (*arg.types)[arg.index] = refined;
+            node_handle_t &refinedArg = linkedNode(*arg.input);
+            refinedArg                = castNodeTo(valueOf(refinedArg), refined, arg.input->expr);
+            (*arg.types)[arg.index]   = refined;
         }
         const auto enter = [&](std::vector<Argument> &inputs, type_vec_t &types, bool with) {
             const size_t count = with ? funcType->withTypesCount() : funcType->normTypesCount();
@@ -2674,9 +2685,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     (param->assignableFrom(types[i]) && !isRankZeroEdge(param, types[i]))) {
                     continue;
                 }
-                if (node_handle_t entered = checkValue(inputs[i].node, param, inputs[i].expr)) {
-                    inputs[i].node = entered;
-                    types[i]       = param;
+                node_handle_t &linked = linkedNode(inputs[i]);
+                if (node_handle_t entered = checkValue(linked, param, inputs[i].expr)) {
+                    linked   = entered;
+                    types[i] = param;
                 }
             }
         };
@@ -3861,9 +3873,10 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                 if (!structEnters && !isRankZeroEdge(param, types[i])) {
                     continue;
                 }
-                if (node_handle_t entered = checkValue(inputs[i].node, param, inputs[i].expr)) {
-                    inputs[i].node = entered;
-                    types[i]       = param;
+                node_handle_t &linked = linkedNode(inputs[i]);
+                if (node_handle_t entered = checkValue(linked, param, inputs[i].expr)) {
+                    linked   = entered;
+                    types[i] = param;
                 }
             }
         };
