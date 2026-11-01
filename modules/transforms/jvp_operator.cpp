@@ -236,7 +236,8 @@ void registerOperatorMetadata() {
     camel::core::OperatorTable::instance().set(
         "transforms:jvp", {.pure = false, .readsGraphs = true});
     // `transpose` builds a graph of its own from the one it is handed, for the same two reasons.
-    camel::core::OperatorTable::instance().declare("transforms", {{"transpose", false}});
+    // Its declaration is the one above, beside `jvp` and `split`: a name declared twice says nothing
+    // the first one did not.
     camel::core::OperatorTable::instance().set(
         "transforms:transpose", {.pure = false, .readsGraphs = true});
 }
