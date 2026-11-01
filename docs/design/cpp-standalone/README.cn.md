@@ -657,3 +657,22 @@ camel docs/design/cpp-standalone/proto/m5.cml std::fvm
 ```
 
 原型中 `fib_sa.cpp` 与 `fib_sa2.cpp` 算的是 `fib(37)`；摘要表里 `fib(32)` 的那一行是把常数改为 32 量的。
+
+---
+
+## 附录 B 夜里能自己跑的两个检查
+
+```
+# 一、快的那个（不编译，毫秒级）：一个条目一个文件，且列表里一个程序只出现一次
+python3 test/tools/cppexec/run.py --check-names --expect=test/tools/cppexec/expect.txt
+#    绿：PASS: 174 entries name 174 programs, no two share a file name
+#    红：列出被重复命名的那条（同一程序两种拼法算同一条），并给出 条目数 vs 程序数
+
+# 二、慢的那个（要编译器，一分钟一轮）：整张表的 standalone 检查连跑若干轮
+python3 test/tools/cppexec/stress.py            # 默认 8 轮、8 路；--rounds 24 是取证时用的那 24 轮
+```
+
+红的看法：`stress.py` 在第一轮红处停下，并只打印带 `FAIL` / `does not build` / `error` 的行；
+若红的是 `clang++: error: linker command failed` 一类，先看是不是产物重名（跑第一条检查），
+再把 `--rounds` 调大确认是否偶发。这两条都不挂在任何计划里：第一条只在 `feat/trans/cpp` 里作为一条测试跑，
+第二条是分钟级的，按需手跑。

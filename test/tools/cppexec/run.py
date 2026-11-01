@@ -220,6 +220,96 @@ def artifact_stem(name):
     return readable + "_" + hashlib.sha1(name.encode("utf-8")).hexdigest()[:10]
 
 
+def identity_of(program, entry_args):
+    """What an entry is, for every question this tool asks about entries: the program's path with
+    one separator, and the arguments of its `main`. Two spellings of one path are one identity."""
+    return os.path.relpath(program, ROOT).replace("\\", "/") + \
+        "".join(" " + a for a in entry_args)
+
+
+def check_artifact_names(paths, args):
+    """Every entry gets its own source and its own executable. The property is the name's, not the
+    way it is spelled: two entries that differ -- in the program or in the arguments of its `main`
+    -- must not land on one name, because the entries of one program are built at once by one pool,
+    and two threads writing one source, linking one executable and running it is a race between the
+    check's own steps (measured: `--standalone --jobs 8` over this list went red on round 2 with
+    `clang++: error: linker command failed`). What this does not fix is how the name is written:
+    change the spelling inside `artifact_stem` and this stays green as long as two identities stay
+    two names.
+
+    It also asks the list itself, which is the other half of the same defect: one list, one entry
+    per file. `test/cases/trans/cpp/exec` was listed as a directory *and* `exec/site_message.cml` as
+    a file, and `loops/zero_leaf_state.cml` was listed twice outright; a list that names one file
+    twice asks one question twice, and the two entries are then built in one pool. The count is
+    taken here, on the paths as written, with the identity normalized by this function rather than
+    by the tool's key -- so that the answer does not depend on how the tool deduplicates. Before
+    this, Windows read that list as 175 entries for 174 programs and Linux as 174 for 174: the same
+    list, two answers, and no gate could see either."""
+    listed = expand(paths + (read_expect(args.expect) if args.expect else []), dedupe=False)
+    if not listed:
+        print("FAIL: no programs")
+        return 2
+    if args.fixture:
+        # A list that is *meant* to name one program twice, so that the deduplication is asked a
+        # question whose answer is known. Without it this assertion has no teeth the day the list
+        # is clean: nothing is left for a spelling-keyed deduplication to get wrong. Two things are
+        # asked of the fixture, and each is how a regression shows: the tool must keep one entry
+        # for the two spellings (so keying by the spelling is red), and the fixture must still
+        # contain two spellings (so deleting a line instead of fixing the tool is red too).
+        spelled = expand(read_expect(args.fixture), dedupe=False)
+        kept = expand(read_expect(args.fixture))
+        identities = {identity_of(program, entry_args) for program, entry_args in spelled}
+        if len(kept) != len(identities):
+            print("FAIL: the fixture names %d spellings of %d program(s) and the tool kept %d "
+                  "entr(ies): deduplication is keyed by the spelling of a path, not by identity"
+                  % (len(spelled), len(identities), len(kept)))
+            for program, entry_args in kept:
+                print("    " + program)
+            return 1
+        if len(spelled) == len(identities):
+            print("FAIL: the fixture no longer names one program twice (%d entries, %d programs): "
+                  "it is not asking anything" % (len(spelled), len(identities)))
+            return 1
+        print("the fixture: %d spellings of %d program, and the tool keeps %d entry for them"
+              % (len(spelled), len(identities), len(kept)))
+    # The identity is computed here, not taken from the tool's own key: what is asked is whether
+    # the list names one program twice, and a list has one answer to that whatever the tool does
+    # with it. Two spellings of one path are one program (`exec/site_message.cml` written with a
+    # separator the other line does not have), and the count says so.
+    spellings = {}
+    for program, entry_args in listed:
+        identity = identity_of(program, entry_args)
+        spellings.setdefault(identity, []).append(program)
+    repeated = {identity: found for identity, found in spellings.items() if len(found) > 1}
+    if repeated:
+        for identity, found in sorted(repeated.items()):
+            print("FAIL: one entry, named %d times: %s" % (len(found), identity))
+            for spelling in sorted(set(found)):
+                print("    " + spelling)
+        print("FAIL: %d entries name %d programs: the list asks %d question(s) twice"
+              % (len(listed), len(spellings), len(listed) - len(spellings)))
+        return 1
+    entries = expand(paths + (read_expect(args.expect) if args.expect else []))
+    names = {}
+    for program, entry_args in entries:
+        identity = identity_of(program, entry_args)
+        names.setdefault(artifact_stem(identity), []).append(identity)
+    collisions = {stem: found for stem, found in names.items() if len(found) > 1}
+    if collisions:
+        for stem, found in sorted(collisions.items()):
+            print("FAIL: %d entries write one file (%s):" % (len(found), stem))
+            for name in found[:4]:
+                print("    " + name)
+            if len(found) > 4:
+                print("    and %d more" % (len(found) - 4))
+        print("FAIL: %d file name(s) shared by %d of the %d entries"
+              % (len(collisions), sum(len(f) for f in collisions.values()), len(entries)))
+        return 1
+    print("PASS: %d entries name %d programs, no two share a file name"
+          % (len(listed), len(entries)))
+    return 0
+
+
 def check_standalone(paths, args):
     """Every program written by std::cpp must be one the Camel runtime does not have to be part
     of: the generated code names no bridge, and the executable built from it needs no Camel
@@ -669,19 +759,38 @@ def check_faults(paths, args):
     return 0
 
 
-def expand(paths):
+def expand(paths, dedupe=True):
     """(program, arguments of its main) for every path: a directory gives its programs, a path
-    followed by arguments (an entry of an --expect list) that program with them."""
-    files = []
+    followed by arguments (an entry of an --expect list) that program with them.
+
+    One file is one entry, however it is spelled and however many roads name it: the expect list
+    names `test/cases/trans/cpp/exec` as a directory *and* one of the files in it, so the same
+    program arrives twice, and two spellings of one path are two entries to a plain `set` (on
+    Windows the directory walk keeps the forward slashes of its root and the listed file does not).
+    Two entries of one file are two threads writing one source and linking one executable, which is
+    the race `artifact_stem` exists to keep out -- so the identity is the normalized path, and the
+    first spelling that names it is the one kept, for the message. `dedupe=False` keeps every road
+    as it was written, which is how `--check-names` counts the list itself."""
+    found = []  # (normalized identity, arguments, the path as it was written)
     for entry in paths:
         p, *entry_args = entry.split()
         p = os.path.join(ROOT, p) if not os.path.isabs(p) else p
         if os.path.isdir(p):
             for root, _, names in os.walk(p):
-                files += [(os.path.join(root, n), ()) for n in names if n.endswith(".cml")]
+                for n in sorted(names):
+                    if n.endswith(".cml"):
+                        q = os.path.join(root, n)
+                        found.append((os.path.normcase(os.path.abspath(q)), (), q))
         else:
-            files.append((p, tuple(entry_args)))
-    return [(p, list(a)) for p, a in sorted(set(files))]
+            found.append((os.path.normcase(os.path.abspath(p)), tuple(entry_args), p))
+    if dedupe:
+        first = {}
+        for identity, entry_args, p in found:
+            first.setdefault((identity, entry_args), p)
+        pairs = [(p, entry_args) for (identity, entry_args), p in first.items()]
+    else:
+        pairs = [(p, entry_args) for identity, entry_args, p in found]
+    return [(p, list(a)) for p, a in sorted(pairs, key=lambda item: (item[0], item[1]))]
 
 
 def read_expect(path):
@@ -713,6 +822,14 @@ def main():
     ap.add_argument("--baseline",
                     help="with --standalone: a file of the programs allowed to link the runtime; "
                          "the answer has to be exactly that list, in both directions")
+    ap.add_argument("--check-names", action="store_true",
+                    help="check that no two entries of the list write the same file: entries that "
+                         "differ in the program or in its arguments must get different names")
+    ap.add_argument("--fixture",
+                    help="with --check-names: a list that is meant to name one program twice (two "
+                         "spellings of one path). The tool must keep one entry for them -- else its "
+                         "deduplication is keyed by the spelling -- and the list must still hold two "
+                         "spellings, else the fixture is no longer asking anything")
     ap.add_argument("--four-backends", action="store_true",
                     help="run each program on std::nvm, std::fvm, std::cpp and std::jit, say what "
                          "each one said, and fail when they do not all say the same thing")
@@ -726,6 +843,10 @@ def main():
                     help="do not precompile camel/standalone/runtime.h (clang)")
     args = ap.parse_args()
     args.passes = args.passes.split()
+
+    if args.check_names:
+        # The names are the tool's own, so this needs no compiler and no program to build.
+        return check_artifact_names(args.programs, args)
 
     compiler, msvc = find_compiler()
     if args.have_compiler:
