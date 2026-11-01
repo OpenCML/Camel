@@ -127,19 +127,11 @@ const MODULES = [
         name: 'vjp',
         title: '`vjp`: the derivative, as a library',
         kind: 'camel',
-        // `vjp` is the composition of three transforms, and the third -- the walk `transpose` runs
-        // -- cannot take the backward half yet. The module compiles and imports the rulesets it
-        // composes; a pullback raises inside the walk, where a callee of several parameters is
-        // refused. Listing it as `pending` keeps it out of the page
-        // -- a page a reader trusts does not show a call that raises the moment it is made --
-        // without pretending the module is not there: every mode prints why, and `--verify-docs`
-        // turns red the day its examples compile, which is the one line to delete (`pending:`
-        // below) when it does.
-        pending:
-            '`stdlib/vjp.cml` compiles, and what it cannot do yet is run: the backward half `split` ' +
-            'hands back calls `mul_tangent(x, w, dx, dw)`, and the walk `transpose` runs refuses a ' +
-            'callee of several parameters (`skip=signature`), so a pullback raises instead of ' +
-            'answering and an example that calls one would show that error where the reading belongs',
+        // `vjp` is the composition of three transforms, and all three are written: `jvp` lifts,
+        // `split` answers the two halves, and `transpose` walks the backward one. The module
+        // compiles and imports the two rulesets it composes, so a program that imports `vjp` gets a
+        // derivative and a pullback never raises. It was listed as `pending` until the walk took a
+        // callee of several parameters; that reason retired with the step.
     },
     {
         name: 'tensor',
@@ -1365,7 +1357,15 @@ function runCamelCompile(file, cwd) {
                 .split(/\r?\n/)
                 .map((entry) => entry.trim())
                 .find((entry) => /\b(error|fault)\b/i.test(entry))
-            resolve({ ok: false, message: (line || output.trim().split(/\r?\n/)[0] || `exit ${code}`).slice(0, 240) })
+            // The diagnostic's own name, taken before the message is shortened: the class of the
+            // stop is the kind in `(name=SemanticDiag::UnresolvedReference, ...)`, and a message cut
+            // at 240 characters can lose it.
+            const name = /[(]name=([A-Za-z]+)Diag::/.exec(line || '') || /error\[([A-Za-z]+)Diag::/.exec(line || '')
+            resolve({
+                ok: false,
+                diagnostic: name === null ? null : name[1],
+                message: (line || output.trim().split(/\r?\n/)[0] || `exit ${code}`).slice(0, 240),
+            })
         })
     })
 }
@@ -1382,28 +1382,41 @@ async function compileExample(job) {
             const asStatement = await runCamelCompile(file, dir)
             if (asStatement.ok) return { ...job, ok: true }
         }
-        return { ...job, ok: result.ok, message: result.message }
+        return { ...job, ok: result.ok, message: result.message, diagnostic: result.diagnostic }
     } finally {
         fs.rmSync(dir, { recursive: true, force: true })
     }
 }
 
 // Compiles every example of a module, at most JOBS at a time; one temp directory per example. An
-// entry that marks its example a fragment is not compiled: the marker is the record of that, and
-// docProblems requires the reason.
+// entry that marks its example a fragment is compiled too, and the job remembers that it is one:
+// the marker is a claim about what the compiler will say, and only the compiler can settle it.
 async function compileExamples(module, entries) {
     const jobs = []
     const fragments = []
     const seen = new Set()
+    let declared = 0
     for (const entry of entries) {
-        if (seen.has(entry.name)) continue
-        seen.add(entry.name)
-        if (entry.fragments.length > 0) {
-            fragments.push(entry)
-            continue
-        }
+        if (entry.fragments.length > 0) fragments.push(entry)
         for (const example of entry.examples) {
-            jobs.push({ module, entries, entry, code: exampleCode(example), file: entry.file, line: entry.line, name: entry.name })
+            declared++
+            const code = exampleCode(example)
+            // The same call written twice -- the module's declaration file and its computed
+            // signatures, or two overloads sharing a doc block -- is one program: dedupe on the
+            // text, not the name, so a second entry's *different* example is still compiled.
+            const key = `${entry.name}\u0000${code}`
+            if (seen.has(key)) continue
+            seen.add(key)
+            jobs.push({
+                module,
+                entries,
+                entry,
+                code,
+                file: entry.file,
+                line: entry.line,
+                name: entry.name,
+                fragment: entry.fragments.length > 0,
+            })
         }
     }
     const results = new Array(jobs.length)
@@ -1416,7 +1429,7 @@ async function compileExamples(module, entries) {
         }
     }
     await Promise.all(Array.from({ length: width }, worker))
-    return { results: results.filter(Boolean), fragments }
+    return { results: results.filter(Boolean), fragments, declared }
 }
 
 // ---- auditing the documentation ------------------------------------------------------------
@@ -1477,23 +1490,70 @@ function docProblems(entries) {
     return problems
 }
 
-// The check the plan runs: the doc-comment rule above, plus every example compiled. It needs a
-// built compiler, like --verify-ops.
+// The class of an example that does not compile, read off the diagnostic the compiler reports. The
+// text format names it `error[SemanticDiag::UnresolvedReference]`, the short format ends the line
+// with `(name=SemanticDiag::UnresolvedReference, code=0x0300000B)`, and an internal error says so in
+// words; the first word after the `Diag::` (or the words) is the kind. The vocabulary is the
+// compiler's own -- lexical, syntax, semantic, internal -- so a kind this table does not hold is a
+// diagnostic type someone added, and the run refuses it rather than filing it under "other". null
+// is that refusal.
+const EXAMPLE_STOP_NAMES = new Map([
+    ['lexical', 'a lexical error'],
+    ['syntax', 'a syntax error'],
+    ['semantic', 'a semantic error'],
+    ['internal', 'an internal error'],
+])
+
+function exampleStopClass(result) {
+    const text = (result && result.message) || ''
+    if (result && result.diagnostic) return EXAMPLE_STOP_NAMES.get(result.diagnostic.toLowerCase()) || null
+    if (/\binternal error\b/i.test(text)) return EXAMPLE_STOP_NAMES.get('internal')
+    const found = /\b(?:error\[|name=)([A-Za-z]+)Diag::/.exec(text)
+    return found === null ? null : EXAMPLE_STOP_NAMES.get(found[1].toLowerCase()) || null
+}
+
+// The check the plan runs: the doc-comment rule above, plus every example compiled -- the ones a
+// reader is shown and the ones marked a fragment, because a marker is a claim ("this example is not
+// a program of its own") and a claim nobody tries stays true only until someone writes a wrong one.
+// It needs a built compiler, like --verify-ops.
 async function verifyDocs() {
     const problems = []
     let checked = 0
     let fragments = 0
+    // What happened to every example of every module, counted so that none of them is dropped: how many
+    // were written, how many are a program of their own, the ones that compile, and the ones that do
+    // not, by class and one by one.
+    const coverage = { written: 0, programs: 0, compiled: 0, stops: {}, unlabelled: [], stale: [], stopped: [] }
+    const tally = (result) => {
+        if (result.ok) {
+            coverage.compiled++
+            // A fragment the checker just compiled: the marker is stale, and the page says "not
+            // compiled" about a program that compiles. Counted and named, never silent.
+            if (result.fragment) coverage.stale.push(result)
+            return
+        }
+        const label = exampleStopClass(result)
+        coverage.stopped.push({ ...result, label })
+        if (label === null) coverage.unlabelled.push(result)
+        else coverage.stops[label] = (coverage.stops[label] || 0) + 1
+    }
     for (const module of MODULES) {
         const pending = pendingReason(module)
+        const entries = parseDeclarations(module)
+        const compiled = await compileExamples(module, entries)
+        coverage.written += compiled.declared
+        coverage.programs += compiled.results.length
+        fragments += compiled.fragments.length
+        for (const result of compiled.results) tally(result)
         if (pending !== null) {
-            // Not compiled as a problem -- the module is left out on purpose -- but compiled all
-            // the same, because "the examples compile now" is the signal that the omission is over
-            // and the page should carry the module. A pending module that still fails is the
-            // expected state and says nothing; an empty result (no examples to read) says nothing
-            // either, since there is nothing to be ready.
-            const compiled = await compileExamples(module, parseDeclarations(module))
-            const broken = compiled.results.filter((result) => !result.ok)
-            if (compiled.results.length > 0 && broken.length === 0) {
+            // Not compiled as a problem -- the module is left out on purpose -- but compiled all the
+            // same, because "the examples compile now" is the signal that the omission is over and
+            // the page should carry the module. Only the examples the page would present count: a
+            // module whose every example is marked a fragment has nothing to show, and the marker is
+            // about what the reading can carry, not about what the compiler says. A pending module
+            // that still fails says nothing; an empty result says nothing either.
+            const presented = compiled.results.filter((result) => !result.fragment)
+            if (presented.length > 0 && presented.every((result) => result.ok)) {
                 problems.push(
                     `stdlib/${module.name}.cml is listed as pending in MODULES ('${pending}') but its examples ` +
                         `compile now: drop its 'pending' entry in scripts/stdlib-reference.mjs, run --write, and the ` +
@@ -1502,13 +1562,13 @@ async function verifyDocs() {
             }
             continue
         }
-        const entries = parseDeclarations(module)
         problems.push(...docProblems(entries))
-        const compiled = await compileExamples(module, entries)
-        fragments += compiled.fragments.length
         for (const result of compiled.results) {
             checked++
-            if (!result.ok) {
+            // A marked fragment that does not compile is what the marker is for: the run counts it
+            // and the class table says why. An example the page presents as a program has to
+            // compile, and the failure names the file, the entry and the compiler's own words.
+            if (!result.ok && !result.fragment) {
                 problems.push(
                     `${result.file}:${result.line}: '${result.name}' has an @example that does not compile: ` +
                         `\`${result.code}\`: ${result.message}`,
@@ -1516,7 +1576,7 @@ async function verifyDocs() {
             }
         }
     }
-    return { problems, checked, fragments }
+    return { problems, checked, fragments, coverage }
 }
 
 // The Camel a doc example compiles as: the entry inside `main`, with the module's names in
@@ -1944,13 +2004,118 @@ const EXCEPTIONS = {
     },
 }
 
+// An operator a merge brings in joins the table by name rather than by a number that only one tree
+// can hold: the counts above are the tree without it, and this entry is the delta the tree with it
+// must show. The operator is still checked where it is present -- it has to be *found* in the class
+// named here, so a change in what it states is not excused by the entry -- and a tree without it
+// holds the numbers above, so both trees are described rather than one being wrong.
+const EXCEPTIONS_JOINED = {
+    'transforms:remat': {
+        // The memory-for-recomputation operator: its declaration writes the type variable (`f: F`
+        // in, `F` out) and the operator states the function type the call gets, so neither side can
+        // be read from the other. It is the same state `jvp`, `split`, `transpose` and `vmap` are
+        // in, and it joins both of their classes.
+        parameter: 'function-typed parameter',
+        result: 'declaration states a type variable',
+        why: 'the declaration writes `f: F` and the operator states `((float, float) => float) => (float, float) => float`',
+    },
+}
+
+// The examples that do not compile, by the kind of diagnostic that stopped them, and the examples a
+// `@example-fragment` marker calls "not compiled" that the checker compiles anyway. Both are
+// numbers the run compares its own tally with: a class that appears, moves or disappears fails, so
+// the only way past is to change the number here, in a commit that says why the list moved.
+const EXAMPLE_STOPS = {
+    // The example calls a name the description introduces and the declaration does not take
+    // (`inputs(n)` with `n` a node of the surrounding pass), or names a value the wrapper cannot
+    // bind at all: 39 of them, most of them marked a fragment.
+    'a semantic error': 39,
+    // `split`'s example reaches the compiler with a function-typed parameter bound by name and the
+    // compile graph keeps a live dereference node (`internal error: Compile graph '__doc_example'
+    // still contains a live DREF node`). That is the compiler's own class, not the example's.
+    'an internal error': 1,
+}
+
+// A fragment is a claim -- "this example is not a program of its own" -- and the marker is only
+// honest while the compiler agrees. The run compiles every marked example and counts the ones that
+// compile: 54 do, so 54 pages still say "not compiled" about a program that compiles. It is not a
+// licence -- the number cannot grow quietly, and a marker that starts compiling shows up here the
+// moment it does -- and it is not the end state: dropping a marker is one deleted line, and the
+// count goes down with it.
+const STALE_FRAGMENTS = 54
+
+// Compare what the run found with what the two numbers above record. Returns the problems, so the
+// caller can exit non-zero: a bounded list is only kept bounded if something counts it.
+function exampleProblems(coverage) {
+    const problems = []
+    const stopped = coverage.programs - coverage.compiled
+    const counted = coverage.unlabelled.length + Object.values(coverage.stops).reduce((sum, one) => sum + one, 0)
+    if (stopped !== counted) {
+        problems.push(
+            `${stopped} example(s) do not compile, and ${counted} of them were counted: an example that is neither ` +
+                'compiled nor counted is the skip this check exists to refuse',
+        )
+    }
+    for (const one of coverage.unlabelled) {
+        problems.push(
+            `an example that does not compile with no class: ${one.file}:${one.line}: '${one.name}': ${one.message}`,
+        )
+    }
+    for (const label of Object.keys(coverage.stops).sort()) {
+        if (EXAMPLE_STOPS[label] === undefined) {
+            problems.push(
+                `the example class '${label}' is not in EXAMPLE_STOPS: ${coverage.stops[label]} example(s) stop there, ` +
+                    'and a new class is a new promise to keep -- add it with its count and say why',
+            )
+        } else if (EXAMPLE_STOPS[label] !== coverage.stops[label]) {
+            problems.push(
+                `EXAMPLE_STOPS['${label}'] records ${EXAMPLE_STOPS[label]}, and the run found ${coverage.stops[label]}: ` +
+                    'update the number in the same commit and say why the class moved',
+            )
+        }
+    }
+    for (const label of Object.keys(EXAMPLE_STOPS)) {
+        if (coverage.stops[label] === undefined) {
+            problems.push(
+                `EXAMPLE_STOPS['${label}'] records ${EXAMPLE_STOPS[label]}, and the run found none: ` +
+                    'the class is gone, so remove it and say why',
+            )
+        }
+    }
+    if (coverage.stale.length !== STALE_FRAGMENTS) {
+        problems.push(
+            `STALE_FRAGMENTS records ${STALE_FRAGMENTS}, and ${coverage.stale.length} example(s) a marker calls ` +
+                'not compiled compile: update the number in the same commit and say why, or drop the marker',
+        )
+    }
+    return problems
+}
+
 // Compare what the run found with what EXCEPTIONS records. Returns the problems, so the caller can
 // exit non-zero: a bounded list is only kept bounded if something counts it.
 function exceptionProblems(found) {
     const problems = []
     for (const half of ['result', 'parameter']) {
-        const { byLabel, unlabelled } = found[half]
+        const { byLabel, byLabelNames, unlabelled } = found[half]
         const recorded = EXCEPTIONS[half]
+        // The operators this tree registers that the table knows join a class: their entry is what
+        // the class holds with them, so a merge that lands one does not move a number that only the
+        // other tree could hold. They are checked first: the class named has to hold the operator
+        // itself, so a change in what it states is a failure, not an entry that passes for free.
+        const joined = Object.entries(EXCEPTIONS_JOINED).filter(
+            ([uri, entry]) => entry[half] !== undefined && found.present.has(uri),
+        )
+        for (const [uri, entry] of joined) {
+            const label = entry[half]
+            if (!(byLabelNames[label] || []).includes(uri)) {
+                problems.push(
+                    `EXCEPTIONS_JOINED['${uri}'].${half} names the class '${label}', and the run puts ${uri} ` +
+                        `in no such class: ${entry.why}. Either it is compared now -- then remove the entry -- ` +
+                        'or it stopped where a different class names it',
+                )
+            }
+        }
+        const expected = (label) => (recorded[label] || 0) + joined.filter(([, entry]) => entry[half] === label).length
         for (const one of unlabelled) {
             problems.push(`an exception with no label: ${one.name} (${one.uri}): ${one.detail}`)
         }
@@ -1960,10 +2125,12 @@ function exceptionProblems(found) {
                     `the exception class '${label}' is not in EXCEPTIONS.${half}: ${byLabel[label]} overload(s) carry it, ` +
                         'and a new class is a new promise to keep -- add it with its count and say why',
                 )
-            } else if (recorded[label] !== byLabel[label]) {
+            } else if (expected(label) !== byLabel[label]) {
+                const mine = joined.filter(([, entry]) => entry[half] === label).map(([uri]) => uri)
                 problems.push(
-                    `EXCEPTIONS.${half}['${label}'] records ${recorded[label]}, and the run found ${byLabel[label]}: ` +
-                        'update the number in the same commit and say why the class moved',
+                    `EXCEPTIONS.${half}['${label}'] records ${expected(label)}` +
+                        `${mine.length > 0 ? ` (${recorded[label]} plus ${mine.join(', ')})` : ''}, and the run found ` +
+                        `${byLabel[label]}: update the number in the same commit and say why the class moved`,
                 )
             }
         }
@@ -2173,6 +2340,10 @@ function signatureParams(signature) {
 
 function verifyOps() {
     const registered = registeredOperators()
+    // Which operator URIs this tree's build registers: the joined entries below are keyed by it, so
+    // the table can say what a class holds with an operator that another lane brings in, and what it
+    // holds without it, without one of the two trees having to be wrong.
+    const present = new Set(registered.map((op) => op.uri))
     const problems = []
     // The overloads whose result type the two sides state in a form this checker cannot compare:
     // a bounded list, printed by the caller, never a silent skip.
@@ -2510,6 +2681,7 @@ function verifyOps() {
     // class kept apart so the run can refuse them by name.
     const tally = (list) => {
         const byLabel = {}
+        const byLabelNames = {}
         const unlabelled = []
         for (const one of list) {
             if (typeof one.label !== 'string' || one.label === '') {
@@ -2517,8 +2689,9 @@ function verifyOps() {
                 continue
             }
             byLabel[one.label] = (byLabel[one.label] || 0) + 1
+            ;(byLabelNames[one.label] = byLabelNames[one.label] || []).push(one.uri)
         }
-        return { byLabel, unlabelled, total: list.length }
+        return { byLabel, byLabelNames, unlabelled, total: list.length }
     }
     return {
         problems,
@@ -2527,7 +2700,7 @@ function verifyOps() {
         resultsCompared,
         paramsCompared,
         paramsUnchecked,
-        found: { result: tally(unchecked), parameter: tally(paramsUnchecked) },
+        found: { result: tally(unchecked), parameter: tally(paramsUnchecked), present },
     }
 }
 
@@ -2689,15 +2862,57 @@ if (mode === '--write' || mode === '--verify-doc') {
     console.log(`the module table matches the library: ${MODULES.length} entry(ies), ${unread.length} file(s) it does not read`)
 } else if (mode === '--verify-docs') {
     announcePending()
-    const { problems, checked, fragments } = await verifyDocs()
+    const { problems, checked, fragments, coverage } = await verifyDocs()
     for (const problem of problems) console.log(problem)
+    // Every example of every module, counted: the ones that compile, the ones that do not (by the
+    // kind of diagnostic that stopped them), and the ones a marker calls "not compiled" that compile
+    // anyway. A name is never lost between those lists; the last line of the run says which counts
+    // the script records, and exampleProblems refuses a run whose numbers moved.
+    const stopped = coverage.programs - coverage.compiled
+    const announceExamples = (list, what, detail) => {
+        if (list.length === 0) return
+        const names = list.map((one) => one.name).filter((name, i, all) => all.indexOf(name) === i)
+        const shown = names.slice(0, EXCEPTIONS_SHOWN)
+        const more = names.length > shown.length ? `, and ${names.length - shown.length} more` : ''
+        console.log(`the ${what}: ${shown.join(', ')}${more}`)
+        for (const one of list.slice(0, EXCEPTIONS_SHOWN)) {
+            console.log(`    ${one.file}:${one.line}: '${one.name}': ${detail(one)}`)
+        }
+    }
+    console.log(
+        `the examples: ${coverage.written} written in the modules, ${coverage.programs} a program of their own, ` +
+            `${coverage.compiled} compile, ${stopped} do not, and ${coverage.stale.length} marked a fragment compile anyway`,
+    )
+    for (const label of Object.keys(coverage.stops).sort()) console.log(`    ${label}: ${coverage.stops[label]}`)
+    // Every example that does not compile, by name: the class it stops on and the compiler's own
+    // words, cut to the part that says what is wrong.
+    announceExamples(
+        coverage.stopped,
+        'examples that do not compile',
+        (one) => `${one.label === null ? 'no class' : one.label}: ${one.message.slice(0, 120)}`,
+    )
+    announceExamples(
+        coverage.stale,
+        'examples a marker calls not compiled that compile',
+        () => 'the example compiles, so the marker claims something the compiler disproves',
+    )
+    const mismatched = exampleProblems(coverage)
+    for (const problem of mismatched) console.log(problem)
     if (problems.length > 0) {
         console.log(`${problems.length} documentation problem(s) in ${checked} compiled example(s)`)
         process.exit(1)
     }
+    if (mismatched.length > 0) {
+        console.log(`${mismatched.length} example class(es) the run found and the script does not record`)
+        process.exit(1)
+    }
     console.log(
-        `every declared name has a description and an @example: ${checked} example(s) compile, ` +
-            `${fragments} marked fragment(s) not compiled`,
+        `every declared name has a description and an @example: ${checked} example(s) checked, ` +
+            `${fragments} entry(ies) marked a fragment were compiled too`,
+    )
+    console.log(
+        `the example counts are the ones the script records: ${stopped} that do not compile in ` +
+            `${Object.keys(EXAMPLE_STOPS).length} class(es), ${STALE_FRAGMENTS} marked a fragment that compile`,
     )
 } else if (mode === '--verify-ops') {
     const { problems, checked, unchecked, resultsCompared, paramsCompared, paramsUnchecked, found } = verifyOps()
@@ -2752,7 +2967,12 @@ if (mode === '--write' || mode === '--verify-doc') {
     // pins as well as the counts it printed above.
     const recorded = (half) => {
         const counts = Object.values(EXCEPTIONS[half])
-        return `${counts.reduce((sum, one) => sum + one, 0)} in ${counts.length} class(es)`
+        // The joined entries count here too: the totals this line prints are the ones the run found,
+        // whether or not this tree has the operator they are keyed by.
+        const joined = Object.entries(EXCEPTIONS_JOINED).filter(
+            ([uri, entry]) => entry[half] !== undefined && found.present.has(uri),
+        ).length
+        return `${counts.reduce((sum, one) => sum + one, 0) + joined} in ${counts.length} class(es)`
     }
     console.log(
         `the exception lists are the ones EXCEPTIONS records: result ${recorded('result')}, parameter ${recorded('parameter')}`,

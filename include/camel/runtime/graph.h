@@ -238,6 +238,14 @@ enum GCGraphFlag : uint8_t {
     /// see inside (autodiff, fusion, export, a rule) reads this graph. `Program::implBodies`
     /// lists the graphs that carry it.
     kGraphFlagImplBody = 1 << 3,
+    /// A call of the graph may be *recomputed* on the backward pass instead of kept: the same
+    /// values, with nothing of the body carried across a cut that can compute it again. `remat` sets
+    /// the bit (`transforms:remat`, stdlib/signatures/transforms.cml) on a copy of the function's
+    /// graph, so the body a program runs is unchanged; a step that cuts a graph in two reads it
+    /// (`split`, modules/transforms/split.cpp) and keeps only what cannot be recomputed -- the
+    /// parameters the call is given. It says nothing about the values: a call of a marked graph is
+    /// the same call, so no number moves.
+    kGraphFlagRecomputeBackward = 1 << 4,
 };
 
 /// kWritingDerived: congruence closure found the equivalence, it need not be stored.
@@ -662,6 +670,10 @@ class GCGraph : public camel::core::rtdata::Object {
     /// function is a call of its kernel operator, and this graph is what an expansion reads
     /// (design principles 10.4).
     bool isImplBody() const { return (flags_ & kGraphFlagImplBody) != 0; }
+    /// A call of this graph may be recomputed on the backward pass instead of kept
+    /// (kGraphFlagRecomputeBackward): `remat` set it on this graph, and `split` reads it to decide
+    /// what crosses a cut. The body is the same code either way; only what a cut stores changes.
+    bool recomputesOnBackward() const { return (flags_ & kGraphFlagRecomputeBackward) != 0; }
     /// The kernel the semantic body of an `#impl` function implements (design principles 10.4):
     /// the operator URI a direct call of the function is compiled to, empty for every other
     /// graph. A consumer that must see inside the function (autodiff, fusion, export, a rule)

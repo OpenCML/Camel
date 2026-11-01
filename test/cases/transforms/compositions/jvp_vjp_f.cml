@@ -13,14 +13,15 @@
  * changing it must not change a number below.
  */
 
-import { jvp, vjp } from autodiff
+import { jvp } from transforms
+import { vjp } from vjp
 import { vmap } from transforms
 
 func sq(x: f32): f32 {
     return x * x
 }
 
-func main(): int {
+func main(): int sync {
     let xs: f32[] = [1.0, 2.0, 3.0]
     let dx: f32[] = [0.5, 1.0, 1.5]
     let v: f32 = 1.0
