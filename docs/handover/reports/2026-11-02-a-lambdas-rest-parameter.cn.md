@@ -823,3 +823,55 @@ EXAMPLE_STOPS['a semantic error'] records 39, and the run found 40: update the n
 
 **⑥ 读数**：`docs` + `stdlib_registry` = **16/16**，`fail 0`；本地 `--verify-doc` = `up to date`，
 `check-doc-readings.mjs` = `the readings are the ones the pages state: 10 of 10`。
+
+## 24. `9048c30ea` 三问：作者自己的、`Vjp<F>` 真的存在、文档记的是真签名
+
+**一、`git show --stat 9048c30ea`（原文）**：
+
+```
+9048c30ea Zhenjie Wei <Kogler_S@outlook.com> Mon Nov 2 04:02:10 2026 +0800
+vjp is one declaration for every arity
+
+ stdlib/vjp.cml                                | 42 +++++++++++--------------
+ test/cases/compile/transforms/vjp_arities.cml | 42 +++++++++++++++++++++++++
+ test/plans/feat/compile/transforms.plan.toml  | 44 +++++++++++++++++++++++++++
+ 3 files changed, 104 insertions(+), 24 deletions(-)
+```
+
+**二、是谁的**：**作者的**（`Zhenjie Wei`，今天 04:02），**自带一个用例和一个计划项**（`vjp_arities`，44 行）。
+**不是本车道的产物**——我回滚的是我自己的 generic-grad 实验，回滚后的 `stdlib/vjp.cml` 就是现在这份。
+`git branch -a --contains 9048c30ea` 只列出 `lane-lit2`，`git merge-base --is-ancestor 9048c30ea origin/develop` = **假**：
+**它只在本分支上**，是作者那条线还没进 `develop` 的一笔。
+
+**三、`Vjp<F>` 存在吗**：**存在**。
+
+```
+stdlib/types.cml:100: export type Vjp<F> = (..ParamsOf<F>) => (ResultOf<F>, Pullback<F>)
+stdlib/types.cml:186: export func is_function::<T>(): bool
+stdlib/vjp.cml:68:    export func vjp::<F>(f: F): Vjp<F> when is_function::<F>()
+```
+
+（`src/builtin/operators/derivative.cpp` 里的 `VjpBuilder`/`addVjp<F>` 是 C++ 名字，不是这个类型；类型本身在 `stdlib/types.cml`。）
+
+**四、结论**：**有意的一笔，保留、不 revert**；`docs` 那两处改动照旧，提交信息已点名 `9048c30ea`。
+**没把文档改成记录一个不存在的签名**——`--write` 的产物与 `stdlib/vjp.cml:68` 逐字一致。
+
+**五、两对数（改前 / 改后）**：
+
+| 检查 | 改前 | 改后 |
+|---|---|---|
+| `stdlib-reference.mjs --verify-doc` | `docs/stdlib-reference.md is out of date: run … --write`（**rc=1**） | `docs/stdlib-reference.md is up to date`（**rc=0**） |
+| `check-doc-readings.mjs` | `stale transforms-module.lines … 1 reading(s) are not the ones the tree has`（**rc=1**） | `the readings are the ones the pages state: 10 of 10`（**rc=0**） |
+
+## 25. A6：没找到它的最小程序
+
+作者清单 A6 的最小程序**不在本仓库里**（它是 `std::macro std::opt` 崩）。本轮用现成用例探四支：
+
+```
+test/cases/loops/macro.cml                        rc=0
+test/cases/compile/collections/macro_constants.cml rc=0
+test/cases/consistency/limits/macro_depth.cml      rc=1（正常拒绝）
+test/cases/consistency/new_values/macro_append.cml rc=0
+```
+
+**没有一支崩**。所以 A6 要么换一个形状，要么需要 README 那条最小程序原文——**不猜着造**，免得把"我没找到"记成"它不崩"。
