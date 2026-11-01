@@ -131,7 +131,6 @@ inline constexpr OperId VarAfter        = 21; // ":var/after"
 /// principles 3.3). Its traits are the conservative ones an undeclared operator gets -- it has an
 /// effect and may fault -- because an operator a pass could drop, merge, move or compute early
 /// would undo the reason it was inserted.
-D
 ///
 /// When it is written: `keepThroughValue` (src/passes/opt/generic/rewrite.cpp), called by
 /// `replaceNode` for a node that has no sync user -- one that holds no place in a `sync` block's
