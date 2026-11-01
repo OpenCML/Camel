@@ -2,7 +2,7 @@
 
 施工图。左边是 `modules/transforms/jvp.cpp` 的段（行号按该文件现文，共 319 行），中间是它做了什么，右边是转置版要怎么改。**三处一定会不同的地方**（逆序、k 份相加、换成 `transposeRuleOf`）单独标出落在哪一段。
 
-> **复核 2026-11-01**：`modules/transforms/jvp.cpp` 现在 **1305 行**（写下这一页时是 319 行，段号按那时的文本编号；比上一次复核的 1278 行多的 27 行是 `728b9f27c` 与 `4fbdc4e3a` 让提升带上它来自的图），段行号今天已经对不上文本，重读这一页要先按段名找位置。`.cpp` 的行数由 `node test/tools/check-doc-readings.mjs` 核对。
+> **复核 2026-11-01**：`modules/transforms/jvp.cpp` 现在 **1315 行**（写下这一页时是 319 行，段号按那时的文本编号；比上一次复核的 1305 行多的 10 行是 `ba0a37be9` 与 `c98dd492f` 让提升从调用方取源图的 id、并打印它建出的图），段行号今天已经对不上文本，重读这一页要先按段名找位置。`.cpp` 的行数由 `node test/tools/check-doc-readings.mjs` 核对。
 
 ## 一、段
 
@@ -35,7 +35,8 @@
 
 今天写出来的那一版（跑出 `5.0` 与 `20.0` 两个数）：`modules/transforms/transpose.cpp` **261 行**，`modules/transforms/transpose_operator.cpp` **146 行**（操作符那半：`TransposeResolver` 抄 `JvpResolver`，`transposeKernel` 抄 `jvpKernel`）。
 
-> **复核 2026-11-01**：现在读作 `transpose.cpp` **1171 行**、`transpose_operator.cpp` **169 行**（两笔合并——`lane-gs6` 与 `lane-reinterp2`——把它们的长处补完了；比上一次复核的 1010 行多的 149 行是 `4278f02a3`、`68b524478`、`6b4068b7e` 让每个逃逸值各带一个累加器）；其后 `lane-remat` 建分支的切一刀时又多了 12 行（`transposeSignature` 接受余切空间为空的残差成员，`addCotangent` 统一丢掉不可微的目标）。
+> **复核 2026-11-01**：现在读作 `transpose.cpp` **1357 行**、`transpose_operator.cpp` **169 行**（两笔合并——`lane-gs6` 与 `lane-reinterp2`——把它们的长处补完了；比上一次复核的 1311 行多的 34 行是 `00f9dfa39` 又补了三条元组通道读数与元组套元组的规则（再往前 1159→1311 的 152 行是 `f8de49a65` 让元组值逐槽带余切），原来那条 149 行是 `4278f02a3`、`68b524478`、`6b4068b7e` 让每个逃逸值各带一个累加器）。
+>>>>>>> origin/develop
 
 **预计要改几段、几行：14 段里 4 段照抄、7 段改写、3 段删；约 260 行，其中照抄约 110 行、新写约 150 行。**
 
