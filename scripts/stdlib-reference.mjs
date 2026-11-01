@@ -1375,14 +1375,18 @@ async function compileExample(job) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-doc-example-'))
     try {
         const file = path.join(dir, 'main.cml')
+        // The names the wrapper has to bind for the example to be a program at all: its own bare
+        // names, taken as the parameters of `__doc_example` and typed from the declaration. An
+        // example that needs none is a program of its own -- nothing is missing from it.
+        const bindings = bindArguments(entry, code).map((binding) => binding.name)
         fs.writeFileSync(file, await exampleSource(module, entries, entry, code))
         const result = await runCamelCompile(file, dir)
         if (!result.ok && !STATEMENT_STARTS.test(code)) {
             fs.writeFileSync(file, await exampleSource(module, entries, entry, code, true))
             const asStatement = await runCamelCompile(file, dir)
-            if (asStatement.ok) return { ...job, ok: true }
+            if (asStatement.ok) return { ...job, ok: true, bindings }
         }
-        return { ...job, ok: result.ok, message: result.message, diagnostic: result.diagnostic }
+        return { ...job, ok: result.ok, message: result.message, diagnostic: result.diagnostic, bindings }
     } finally {
         fs.rmSync(dir, { recursive: true, force: true })
     }
@@ -1523,13 +1527,35 @@ async function verifyDocs() {
     // What happened to every example of every module, counted so that none of them is dropped: how many
     // were written, how many are a program of their own, the ones that compile, and the ones that do
     // not, by class and one by one.
-    const coverage = { written: 0, programs: 0, compiled: 0, stops: {}, unlabelled: [], stale: [], stopped: [] }
+    const coverage = {
+        written: 0,
+        programs: 0,
+        compiled: 0,
+        stops: {},
+        unlabelled: [],
+        stale: [],
+        bound: [],
+        thin: [],
+        stopped: [],
+    }
     const tally = (result) => {
         if (result.ok) {
             coverage.compiled++
-            // A fragment the checker just compiled: the marker is stale, and the page says "not
-            // compiled" about a program that compiles. Counted and named, never silent.
-            if (result.fragment) coverage.stale.push(result)
+            if (result.fragment) {
+                // The marker says "not a program of its own". It is stale when the example compiles
+                // with nothing bound -- then it *is* a program of its own, and the page says
+                // otherwise. It is right when the compile needed the names only the surrounding
+                // program has: those names are what the reason has to give, so a reason that does
+                // not name one of them is the other failure, `thin` below.
+                if (result.bindings.length === 0) {
+                    coverage.stale.push(result)
+                } else {
+                    const reason = result.entry.fragments.join(' ')
+                    const unnamed = result.bindings.filter((name) => !new RegExp(`\\b${name}\\b`).test(reason))
+                    coverage.bound.push(result)
+                    if (unnamed.length > 0) coverage.thin.push({ ...result, unnamed })
+                }
+            }
             return
         }
         const label = exampleStopClass(result)
@@ -1986,40 +2012,39 @@ const EXCEPTIONS = {
         'rule states a generic application': 1,
         'rule states a named type': 14,
         'rule states a type variable': 1,
-        'declaration states a type variable': 12,
+// `remat` is the thirteenth: its result is the argument's own type (`(f: F) => F`), because a
+        // call through the mark is a call of the same function, and no spelling names every function
+        // type a program can pass. The operator answers that type (`rematOperatorSignature`), so the
+        // declaration is the side that cannot state it concretely -- the same reading `jvp`'s
+        // `Jvp<F>` carries one class over.
+        'declaration states a type variable': 13,
         'declaration states a generic application': 2,
     },
     // The same question one position to the left: a parameter the operator writes as a function
     // type, a `grad of P`, a named aggregate (`NumericAggregate`, `Device<T>`), an untyped pack; a
     // declaration that writes a bare `T`; and two parameter lists that are not a list at all or not
-    // the same length.
+    // the same length. `remat`'s `f` is the tenth function-typed one: the operator registers the
+    // shape its kernel answers for a two-parameter function (`(f: (float, float) => float)`), while
+    // the declaration writes the bare `F` no spelling can name.
     parameter: {
         'rule states no parameter list': 1,
         'declared arity differs from rule arity': 4,
         'untyped pack ..rest': 6,
-        'function-typed parameter': 9,
+        'function-typed parameter': 10,
         'grad of P': 2,
         'named-type parameter': 5,
         'bare type variable parameter': 7,
     },
 }
 
-// An operator a merge brings in joins the table by name rather than by a number that only one tree
-// can hold: the counts above are the tree without it, and this entry is the delta the tree with it
-// must show. The operator is still checked where it is present -- it has to be *found* in the class
-// named here, so a change in what it states is not excused by the entry -- and a tree without it
-// holds the numbers above, so both trees are described rather than one being wrong.
-const EXCEPTIONS_JOINED = {
-    'transforms:remat': {
-        // The memory-for-recomputation operator: its declaration writes the type variable (`f: F`
-        // in, `F` out) and the operator states the function type the call gets, so neither side can
-        // be read from the other. It is the same state `jvp`, `split`, `transpose` and `vmap` are
-        // in, and it joins both of their classes.
-        parameter: 'function-typed parameter',
-        result: 'declaration states a type variable',
-        why: 'the declaration writes `f: F` and the operator states `((float, float) => float) => (float, float) => float`',
-    },
-}
+// The numbers count every overload of the tree, the operators a merge brought in included: the tree
+// has `transforms:remat`, whose declaration writes the type variable (`f: F` in, `F` out) while the
+// operator states the function type the call gets
+// (`((float, float) => float) => (float, float) => float`), so neither side can be read from the
+// other. It is one of `declaration states a type variable` on the result and one of
+// `function-typed parameter` on the parameter, the state `jvp`, `split`, `transpose` and `vmap` are
+// in. A tree that has not merged the operator finds one fewer in each class, and the failure there
+// says so rather than being excused: the number describes the tree the run measured.
 
 // The examples that do not compile, by the kind of diagnostic that stopped them, and the examples a
 // `@example-fragment` marker calls "not compiled" that the checker compiles anyway. Both are
@@ -2037,12 +2062,15 @@ const EXAMPLE_STOPS = {
 }
 
 // A fragment is a claim -- "this example is not a program of its own" -- and the marker is only
-// honest while the compiler agrees. The run compiles every marked example and counts the ones that
-// compile: 54 do, so 54 pages still say "not compiled" about a program that compiles. It is not a
-// licence -- the number cannot grow quietly, and a marker that starts compiling shows up here the
-// moment it does -- and it is not the end state: dropping a marker is one deleted line, and the
-// count goes down with it.
-const STALE_FRAGMENTS = 54
+// honest while the compiler agrees *and* something really is missing. Both halves are checked: an
+// example that compiles with nothing bound is a program of its own, so its marker is stale; an
+// example that compiles only once a name is bound has a marker that is right, but its reason has to
+// give that name. This is the swept number: the 54 markers that used to excuse a program that
+// compiles are gone -- the 17 examples that stood alone lost theirs (16 markers: two examples of
+// `range` share one), and the 37 that need a name keep it and say which -- so the count of stale
+// markers is nothing, and it cannot grow quietly: a new marker on a program that compiles shows up
+// here the moment the example is compiled.
+const STALE_FRAGMENTS = 0
 
 // Compare what the run found with what the two numbers above record. Returns the problems, so the
 // caller can exit non-zero: a bounded list is only kept bounded if something counts it.
@@ -2085,7 +2113,17 @@ function exampleProblems(coverage) {
     if (coverage.stale.length !== STALE_FRAGMENTS) {
         problems.push(
             `STALE_FRAGMENTS records ${STALE_FRAGMENTS}, and ${coverage.stale.length} example(s) a marker calls ` +
-                'not compiled compile: update the number in the same commit and say why, or drop the marker',
+                'not compiled compile with nothing bound: update the number in the same commit and say why, or ' +
+                'drop the marker',
+        )
+    }
+    // The markers that are right have to say what is missing: a reason that does not name a name the
+    // example is compiled against is the same silence in the other direction.
+    for (const one of coverage.thin) {
+        problems.push(
+            `the marker of ${one.file}:${one.line} '${one.name}' does not say what the example is missing: it ` +
+                `compiles once ${one.unnamed.map((name) => `\`${name}\``).join(', ')} is bound, and the reason ` +
+                `gives ${one.entry.fragments.map((reason) => `\`${reason}\``).join(' ')}`,
         )
     }
     return problems
@@ -2096,26 +2134,8 @@ function exampleProblems(coverage) {
 function exceptionProblems(found) {
     const problems = []
     for (const half of ['result', 'parameter']) {
-        const { byLabel, byLabelNames, unlabelled } = found[half]
+        const { byLabel, unlabelled } = found[half]
         const recorded = EXCEPTIONS[half]
-        // The operators this tree registers that the table knows join a class: their entry is what
-        // the class holds with them, so a merge that lands one does not move a number that only the
-        // other tree could hold. They are checked first: the class named has to hold the operator
-        // itself, so a change in what it states is a failure, not an entry that passes for free.
-        const joined = Object.entries(EXCEPTIONS_JOINED).filter(
-            ([uri, entry]) => entry[half] !== undefined && found.present.has(uri),
-        )
-        for (const [uri, entry] of joined) {
-            const label = entry[half]
-            if (!(byLabelNames[label] || []).includes(uri)) {
-                problems.push(
-                    `EXCEPTIONS_JOINED['${uri}'].${half} names the class '${label}', and the run puts ${uri} ` +
-                        `in no such class: ${entry.why}. Either it is compared now -- then remove the entry -- ` +
-                        'or it stopped where a different class names it',
-                )
-            }
-        }
-        const expected = (label) => (recorded[label] || 0) + joined.filter(([, entry]) => entry[half] === label).length
         for (const one of unlabelled) {
             problems.push(`an exception with no label: ${one.name} (${one.uri}): ${one.detail}`)
         }
@@ -2125,11 +2145,9 @@ function exceptionProblems(found) {
                     `the exception class '${label}' is not in EXCEPTIONS.${half}: ${byLabel[label]} overload(s) carry it, ` +
                         'and a new class is a new promise to keep -- add it with its count and say why',
                 )
-            } else if (expected(label) !== byLabel[label]) {
-                const mine = joined.filter(([, entry]) => entry[half] === label).map(([uri]) => uri)
+            } else if (recorded[label] !== byLabel[label]) {
                 problems.push(
-                    `EXCEPTIONS.${half}['${label}'] records ${expected(label)}` +
-                        `${mine.length > 0 ? ` (${recorded[label]} plus ${mine.join(', ')})` : ''}, and the run found ` +
+                    `EXCEPTIONS.${half}['${label}'] records ${recorded[label]}, and the run found ` +
                         `${byLabel[label]}: update the number in the same commit and say why the class moved`,
                 )
             }
@@ -2340,10 +2358,6 @@ function signatureParams(signature) {
 
 function verifyOps() {
     const registered = registeredOperators()
-    // Which operator URIs this tree's build registers: the joined entries below are keyed by it, so
-    // the table can say what a class holds with an operator that another lane brings in, and what it
-    // holds without it, without one of the two trees having to be wrong.
-    const present = new Set(registered.map((op) => op.uri))
     const problems = []
     // The overloads whose result type the two sides state in a form this checker cannot compare:
     // a bounded list, printed by the caller, never a silent skip.
@@ -2681,7 +2695,6 @@ function verifyOps() {
     // class kept apart so the run can refuse them by name.
     const tally = (list) => {
         const byLabel = {}
-        const byLabelNames = {}
         const unlabelled = []
         for (const one of list) {
             if (typeof one.label !== 'string' || one.label === '') {
@@ -2689,9 +2702,8 @@ function verifyOps() {
                 continue
             }
             byLabel[one.label] = (byLabel[one.label] || 0) + 1
-            ;(byLabelNames[one.label] = byLabelNames[one.label] || []).push(one.uri)
         }
-        return { byLabel, byLabelNames, unlabelled, total: list.length }
+        return { byLabel, unlabelled, total: list.length }
     }
     return {
         problems,
@@ -2700,7 +2712,7 @@ function verifyOps() {
         resultsCompared,
         paramsCompared,
         paramsUnchecked,
-        found: { result: tally(unchecked), parameter: tally(paramsUnchecked), present },
+        found: { result: tally(unchecked), parameter: tally(paramsUnchecked) },
     }
 }
 
@@ -2881,7 +2893,8 @@ if (mode === '--write' || mode === '--verify-doc') {
     }
     console.log(
         `the examples: ${coverage.written} written in the modules, ${coverage.programs} a program of their own, ` +
-            `${coverage.compiled} compile, ${stopped} do not, and ${coverage.stale.length} marked a fragment compile anyway`,
+            `${coverage.compiled} compile, ${stopped} do not, and ${coverage.stale.length} marked a fragment compile ` +
+            `with nothing bound`,
     )
     for (const label of Object.keys(coverage.stops).sort()) console.log(`    ${label}: ${coverage.stops[label]}`)
     // Every example that does not compile, by name: the class it stops on and the compiler's own
@@ -2893,8 +2906,15 @@ if (mode === '--write' || mode === '--verify-doc') {
     )
     announceExamples(
         coverage.stale,
-        'examples a marker calls not compiled that compile',
-        () => 'the example compiles, so the marker claims something the compiler disproves',
+        'examples a marker calls not compiled that compile with nothing bound',
+        () => 'the example compiles with nothing bound, so it is a program of its own and the marker is stale',
+    )
+    // The markers that are right: the example compiles only once the wrapper binds the names the
+    // page's program would have to supply, and each of those names is what the reason has to give.
+    announceExamples(
+        coverage.bound,
+        'examples a marker calls not compiled that compile only with a name bound',
+        (one) => `binds ${one.bindings.join(', ')}`,
     )
     const mismatched = exampleProblems(coverage)
     for (const problem of mismatched) console.log(problem)
@@ -2912,7 +2932,8 @@ if (mode === '--write' || mode === '--verify-doc') {
     )
     console.log(
         `the example counts are the ones the script records: ${stopped} that do not compile in ` +
-            `${Object.keys(EXAMPLE_STOPS).length} class(es), ${STALE_FRAGMENTS} marked a fragment that compile`,
+            `${Object.keys(EXAMPLE_STOPS).length} class(es), ${STALE_FRAGMENTS} marked a fragment that compile alone, ` +
+            `${coverage.bound.length} that compile only with the name they say they need`,
     )
 } else if (mode === '--verify-ops') {
     const { problems, checked, unchecked, resultsCompared, paramsCompared, paramsUnchecked, found } = verifyOps()
@@ -2967,12 +2988,7 @@ if (mode === '--write' || mode === '--verify-doc') {
     // pins as well as the counts it printed above.
     const recorded = (half) => {
         const counts = Object.values(EXCEPTIONS[half])
-        // The joined entries count here too: the totals this line prints are the ones the run found,
-        // whether or not this tree has the operator they are keyed by.
-        const joined = Object.entries(EXCEPTIONS_JOINED).filter(
-            ([uri, entry]) => entry[half] !== undefined && found.present.has(uri),
-        ).length
-        return `${counts.reduce((sum, one) => sum + one, 0) + joined} in ${counts.length} class(es)`
+        return `${counts.reduce((sum, one) => sum + one, 0)} in ${counts.length} class(es)`
     }
     console.log(
         `the exception lists are the ones EXCEPTIONS records: result ${recorded('result')}, parameter ${recorded('parameter')}`,

@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * Test-only producer of `:op/keep` (core/operator_table.h, design principles 3.3): no source
- * syntax makes a pass remove a node whose only reader of an effect is that node, so the tests
- * build the shape at the graph level and observe what `replaceNode` does with it.
+ * Test-only readings of `:op/keep` (core/operator_table.h, design principles 3.3), beside the ones
+ * `std::opt` writes: the shape is built at the graph level and observed, both where a keeper is due
+ * and where none is.
  *
  * The shape is the one `keepThroughValue` names (opt/generic/rewrite.cpp): a node that is about to
  * be replaced, reading a node that must keep running, which nothing else reads, and which is not a
@@ -25,6 +25,18 @@
 inline constexpr const char *kKeepNodeTestPass = "test::keep_node";
 
 class KeepNodeTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+/// The other side of the same question: a removal must not be given a keeper when the node it
+/// takes the last read of is not one whose running is observed, or when it still has another
+/// reader. Prints KEEPNODE_PURE keep_pure=<n> keep_shared=<n> and leaves the program untouched.
+inline constexpr const char *kKeepNodePureTestPass = "test::keep_node_pure";
+
+class KeepNodePureTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     const camel::runtime::Program *
