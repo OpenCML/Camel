@@ -1,18 +1,25 @@
 // The rest parameter of a lambda is a value in its body: `xs` is the tuple of the parameters the
-// position's function type gave the lambda. `..xs` at a call then spreads that tuple by the rule the
-// language already has for spreading a compile-time tuple.
-//
-// TEMP: this is the hand case for the lowering -- it is expected to be red until the binding lands.
+// position's function type gave the lambda, and `..xs` spreads it into a call by the rule that
+// already spreads a tuple.
 
-func forward(f: (a: float, b: float) => (float, float)): (float, float) {
+func add(a: float, b: float): float {
+    return a + b
+}
+
+func apply(f: (a: float, b: float) => float): float {
     return f(1.0, 2.0)
 }
 
-func apply(f: (a: float, b: float) => (float, float)): (float, float) {
-    return forward((..xs) => forward(..xs))
+func spread(): float {
+    return apply((..xs) => add(..xs))
 }
 
 func main(): int sync {
-    let (x, y) = apply((a: float, b: float) => (a + b, a * b))
+    let sum = spread()
+    if sum != 3.0 then {
+        println("spread = {sum}, wanted 3.0")
+        return 1
+    }
+    println("prints 1 x 3.0")
     return 0
 }

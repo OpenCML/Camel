@@ -152,9 +152,9 @@ desc = "A lambda's rest parameter is a value in its body, not only a name for th
 kind = "behavior"
 case = "../../../cases/compile/rest_params/lambda_rest_forward.cml"
 args = ["${case}", "std::fvm"]
-expect_exit = 1
-expect_output_contains = ["is not a compile-time tuple"]
-expect_output_not_contains = ["Unresolved reference"]
+expect_exit = 0
+expect_output_contains = ["prints 1 x 3.0"]
+expect_output_not_contains = ["Unresolved reference", "is not a compile-time tuple"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 [[tests]]

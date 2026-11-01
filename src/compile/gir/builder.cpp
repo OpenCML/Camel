@@ -1391,8 +1391,12 @@ void Builder::buildFuncBody(
                             TupleType::create(parts),
                             camel::runtime::makeFillPayload(
                                 camel::runtime::GCFillKind::Tuple, slots));
+                        // The members are With inputs, which is how a FILL that a rest argument can
+                        // spread carries them (expandRestArgument reads a tuple FILL's With inputs
+                        // as the arguments, builder_rest.cpp): a Norm tuple is a value, and a value
+                        // is not what `..xs` spreads.
                         for (node_handle_t member : members) {
-                            linkNodes(LinkType::Norm, member, tuple);
+                            linkNodes(LinkType::With, member, tuple);
                         }
                         insertNode(restName, tuple);
                     }
