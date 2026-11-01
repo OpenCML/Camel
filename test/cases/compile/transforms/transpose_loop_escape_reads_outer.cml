@@ -1,11 +1,16 @@
 // The third shape: the body reads two different values from outside, and one of them is not the
 // parameter but a product computed before the loop (`k = x*x`). So the values an escape can land on
-// are of two kinds -- a `Port` and an `Oper` -- and the refusal has to name both, `captures=2`. A
-// step that assumed every escape lands on a parameter port would build one accumulator and lose the
-// other; this is the reading that says there are two and which they are.
+// are of two kinds -- a `Port` and an `Oper` -- and each of them gets an accumulator of its own,
+// `carried=2` beside the one carried cotangent: one loop, three states, not one loop per escape.
+//
+// What the two sums mean is not what one sum over two products means, and the reading says which:
+// `answer=per-target`. The parameter `x` is the value the state starts from, so its slot holds the
+// state's cotangent plus its own sum (8 + 7 = 15); `k` is a different value, so its sum goes to it
+// alone (7) and the product `x*x` carries it back to `x` as `7 * 2x = 14`. The two are never added
+// as if they were two reads of one value -- that is the previous file's `answer=summed`.
 //
 // `read_outer(x) = let k = x*x; loop s = x for i in 0..3 do 2.0*s + k + x` is `s = 2s + k + x` three
-// times, `8x + 7k + 7x = 15x + 7x*x` on paper, so `transpose(read_outer)(1, 1)` owes 15 + 14 = 29:
+// times, `8x + 7k + 7x = 15x + 7x*x` on paper, so `transpose(read_outer)(1, 1)` answers 15 + 14 = 29:
 // 15 through `x` and 14 through `k`, which is `2x` at x = 1 with the loop's factor 7.
 import { transpose } from transforms
 import rulesets.transpose
