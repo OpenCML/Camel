@@ -102,8 +102,9 @@ class SplitResolver final : public FuncTypeResolver {
     /// The text is the one a declaration writes (`stdlib/signatures/transforms.cml`), for the shape
     /// the step computes at the type it is given: the forward half takes the values and answers
     /// `(result, residuals)`, the backward half takes the residuals and the tangents and answers the
-    /// tangent. `ResidualsOf<F>` is the compiler's for now, so the text writes the residuals of the
-    /// one-parameter case, which is one value.
+    /// tangent. The residual position is the compiler's (author, 2026-11-01), so the text writes the
+    /// one-parameter placeholder; what the graphs carry is what the graph says, printed beside it as
+    /// `residuals=`.
     std::string signature() const override {
         return "(f: (float, float) => (float, float)) => ((float) => (float, (float)), ((float), "
                "float) => float)";
