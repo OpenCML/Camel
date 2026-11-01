@@ -29,7 +29,17 @@
 //    does not exist: its expectation is exit 1, so exit 0 would be the failure.
 // 3. A case that does not pass is sorted by **the shape of its first diagnostic**, not by what its
 //    source looks like: a function whose type carries a `with` parameter is one class, an
-//    array/tensor parameter is another, and everything else is the third.
+//    array/tensor parameter is another, and everything else is the third. The diagnostic is the
+//    one-line form the renderer documents (`include/camel/core/error/diagnostics/render.h`):
+//
+//        (module)path:line:col: [Error]: message suggestion (name=..., code=0x...)
+//
+//    so a diagnostic line is one that contains `": [Error]: "`. That is the only thing this reads:
+//    the message after it is what carries the function type or the array type. (The first version of
+//    this file looked for lines starting with `error[`, a form this tree stopped printing -- `git
+//    grep -c 'error\[' -- src` is 0 -- so it matched nothing, put every failing case in `other`, and
+//    read 0/0/106 where the classification is 54/46/6. A ruler that reads nothing is worse than no
+//    ruler: it reports a number that never changes and a ratchet that reds forever.)
 //
 // The plan files are read with a small bracket scanner, not a TOML library: the repository has no
 // dependency for that, and the five keys this needs (`case`, `args`, `expect_exit`, and the test's
@@ -175,7 +185,7 @@ function runCase(file, test) {
             env: { ...process.env, CAMEL_HOME: process.env.CAMEL_HOME || path.join(ROOT, 'out', 'latest') },
         })
         const text = `${result.stdout || ''}${result.stderr || ''}`
-        const first = text.split('\n').find((l) => l.startsWith('error[')) || ''
+        const first = text.split('\n').find((l) => l.includes(': [Error]: ')) || ''
         return { exit: result.status === null ? -1 : result.status, first: first.trim(), text }
     } finally {
         fs.rmSync(probe, { force: true })
@@ -188,7 +198,7 @@ function runCase(file, test) {
 // (`<x: float> (y: float) => float`, `<w: float> () => float`) is the `with` class; one that names an
 // array or tensor parameter (`float[]`, `f32[..]`, `Model`, `Plain`) is the array class. Everything
 // else -- a missing name, the `@vjp` annotation -- is `other`.
-const ARRAY_SHAPE = /\[\]|\[\.\.\]|\bf32\b|\bf16\b|\bbf16\b|\bModel\b|\bPlain\b|\[\]/
+const ARRAY_SHAPE = /\[\]|\[\.\.\]|\bf32\b|\bf16\b|\bbf16\b|\bModel\b|\bPlain\b/
 const WITH_SHAPE = /<[A-Za-z_]*\w*\s*:\s*[^>]+>/
 
 function classify(first) {
