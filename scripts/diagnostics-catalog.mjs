@@ -82,9 +82,17 @@ const EXAMPLES_REL = 'diagnostics/examples.tsv'
 //    4 -> 3   `NodeOfNotAParameter` was pinned by a bare name in a needle; its test now asserts
 //             `expect_diagnostic_name` too, which is the first-class form and makes the pin readable
 //             rather than incidental. No case was written for it: one existed.
+//    3 -> 1   a test can be a script: `test/cases/trans/cml_contract.py` runs the std::cml refusals
+//             and asserts the name each one reports, so `CmlUnsupportedConstruct` and
+//             `CmlBigConstant` were pinned in a file no count had read. Only a script under `test/`
+//             counts as a case -- this file is one too (`diag_catalog` runs it), and reading it let
+//             its own comments pin a name that nothing asserted.
+//    1 -> 0   the name on its own in a needle: `WithPackNeedsNativeDeclaration` is required by
+//             `prelude_signatures.plan.toml` without the section in front of it, and that test now
+//             also asserts `expect_diagnostic_name` and the sentence it prints.
 // A case added for a code lowers it in that commit; a correction lowers it in the commit that
 // teaches the counter the form, and names what it found.
-const NAME_COVERAGE_RECORDED = 3
+const NAME_COVERAGE_RECORDED = 0
 
 // The sections, in the order the headers are included. `id` is also the stem of the two
 // generated files; the type byte of the printed code is read from DiagType in base.h, under the
@@ -977,6 +985,7 @@ if (mode === '--coverage' || mode === '--coverage-check') {
 // the next case can be picked without re-deriving it.
 if (mode === '--name-coverage' || mode === '--name-coverage-check') {
     const semantic = catalogEntries(records).filter((e) => e.type === 'SemanticDiag')
+    const semanticNames = semantic.map((e) => e.name)
     const plans = walk(path.join(root, 'test', 'plans'), (f) => f.endsWith('.plan.toml'))
     const pinned = new Set()
     for (const file of plans) {
@@ -1010,6 +1019,32 @@ if (mode === '--name-coverage' || mode === '--name-coverage-check') {
         for (const n of text.matchAll(/name=([A-Za-z]+)::([A-Za-z]+)/g)) pinned.add(`${n[1]}::${n[2]}`)
         for (const c of text.matchAll(/\bcode=(0[xX][0-9A-Fa-f]{8})/g)) pinned.add(c[1].toLowerCase())
         for (const n of text.matchAll(/\b([A-Za-z]+Diag)::([A-Za-z0-9_]+)/g)) pinned.add(`${n[1]}::${n[2]}`)
+        // The name on its own, without the section in front of it (`"WithPackNeedsNativeDeclaration"`
+        // beside the message it prints): a needle that requires the word requires the name the
+        // compiler emitted, and the registered names are unique enough that a word of them in a
+        // needle can only be that code. Only registered names are looked for, and the `not_contains`
+        // lists and `desc` blocks are gone by now, so this cannot read prose or an absence guard.
+        for (const name of semanticNames) {
+            if (text.includes(name)) pinned.add(`SemanticDiag::${name}`)
+        }
+        // A test can be a script rather than a plan case, and then the assertion is inside it:
+        // `cml_contract.py` runs five refusals and asserts the name each one reports, plus a word of
+        // the message. Read the script the plan hands its case to, and take a quoted registered name
+        // in it as a pin, the same way a needle is read above. Only a script under `test/` is a test
+        // case: this file is a case too (`diag_catalog` runs it), and reading it would let this
+        // counter pin whatever its own comments happen to name.
+        for (const m of text.matchAll(/^\s*case\s*=\s*["']([^"']+)["']/gm)) {
+            if (!/\.(py|mjs|js|sh)$/.test(m[1])) continue
+            const script = path.resolve(path.dirname(file), m[1])
+            if (!script.startsWith(path.join(root, 'test') + path.sep)) continue
+            if (!fs.existsSync(script)) continue
+            const body = fs.readFileSync(script, 'utf8')
+            for (const name of semanticNames) {
+                if (body.includes(`"${name}"`) || body.includes(`'${name}'`)) {
+                    pinned.add(`SemanticDiag::${name}`)
+                }
+            }
+        }
     }
     // A code nothing raises cannot be pinned by a case, so it is not a target: it is listed apart
     // and does not sit in the set this check refuses to see grow.
