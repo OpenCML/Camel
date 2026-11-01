@@ -263,6 +263,16 @@ void registerOperatorMetadata() {
     // the first one did not.
     camel::core::OperatorTable::instance().set(
         "transforms:transpose", {.pure = false, .readsGraphs = true});
+    // How a call of each is written: `jvp(f)` and `transpose(f)`, one function and no `with`
+    // parameters. Neither has a Camel declaration that could say so -- the result of `jvp` is the
+    // forward transform of `f`, the result of `transpose` its reverse transform, and no signature
+    // writes either type -- so the call shape is recorded here, where the operator is declared,
+    // rather than in a signature invented to make the printer pass (P1-13: an operator with no
+    // compilable declaration).
+    camel::core::OperatorTable::instance().declareCallForm(
+        "transforms:jvp", {.name = "jvp", .minArgs = 1, .withCount = 0});
+    camel::core::OperatorTable::instance().declareCallForm(
+        "transforms:transpose", {.name = "transpose", .minArgs = 1, .withCount = 0});
 }
 
 } // namespace camel::transforms

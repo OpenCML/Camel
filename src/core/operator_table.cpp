@@ -289,6 +289,46 @@ std::vector<std::string> OperatorTable::groups() const {
     return names;
 }
 
+void OperatorTable::declareCallForm(std::string_view uri, const CallForm &form) {
+    std::unique_lock lock(mutex_);
+    for (auto &[declared, existing] : callForms_) {
+        if (declared != uri) {
+            continue;
+        }
+        // The name of the first declaration stands. One operator may be declared under two
+        // spellings (`:op/itol` is both `int` and `i64`); a reader of the graph has one text to
+        // write and either is the operator, and the first declaration is the one the language
+        // documents it under.
+        existing.minArgs   = std::min(existing.minArgs, form.minArgs);
+        existing.withCount = std::min(existing.withCount, form.withCount);
+        return;
+    }
+    callForms_.emplace_back(std::string(uri), form);
+}
+
+std::optional<OperatorTable::CallForm> OperatorTable::callFormOf(std::string_view uri) const {
+    std::shared_lock lock(mutex_);
+    for (const auto &[declared, form] : callForms_) {
+        if (declared == uri) {
+            return form;
+        }
+    }
+    // A declaration may cover a family of operators with one `*` (`:op/*tos`: one conversion per
+    // source type). Its call shape is the family's, so a URI of the family takes it.
+    for (const auto &[declared, form] : callForms_) {
+        const size_t star = declared.find('*');
+        if (star == std::string::npos || uri.size() + 1 < declared.size()) {
+            continue;
+        }
+        const std::string_view prefix(declared.data(), star);
+        const std::string_view suffix(declared.data() + star + 1, declared.size() - star - 1);
+        if (uri.starts_with(prefix) && uri.ends_with(suffix)) {
+            return form;
+        }
+    }
+    return std::nullopt;
+}
+
 std::vector<std::string> OperatorTable::groupOperators(std::string_view group) const {
     std::shared_lock lock(mutex_);
     std::vector<std::string> uris;

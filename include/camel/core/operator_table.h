@@ -501,6 +501,36 @@ class OperatorTable {
     /// growing while modules load.
     std::string groupOf(std::string_view uri) const;
 
+    /// How an operator is written when it is called by name rather than by a sign: the name, the
+    /// number of ordinary arguments, and how many of its parameters are `with` parameters. An
+    /// operator of this kind (`println`, `tensor:sum`, `jvp`) is a declaration of a function, and
+    /// the declaration is where its call shape is written: the name is the function's, the count
+    /// is its parameter list, and the `with` count is the list of parameters a call may state in
+    /// `<...>`.
+    struct CallForm {
+        std::string name;
+        /// The fewest ordinary arguments a call of this operator takes. A declaration is one
+        /// overload of several and may end in a rest parameter, so the count is a lower bound:
+        /// there is no upper one.
+        size_t minArgs = 0;
+        /// The parameters a call may state in `<...>`, before the ordinary ones. Printing such a
+        /// call means printing those values too, so a form with them is not a call this table can
+        /// hand out for printing yet: it is kept, and it is what tells a reader why.
+        size_t withCount = 0;
+    };
+
+    /// Records the call shape of `uri`, from the declaration that made it an operator. A second
+    /// declaration of the same URI adds to the first: the argument count is the smallest either
+    /// asks for, a form without `with` parameters wins (that is the one shape every call can be
+    /// written in), and the name is the first declaration's, since one operator may be declared
+    /// under two spellings (`:op/itol` is both `int` and `i64`).
+    void declareCallForm(std::string_view uri, const CallForm &form);
+
+    /// The call shape of `uri`, or nothing when no declaration of it is a named call (an operator
+    /// written with a sign, or one of the core's conversions that is declared as a call of a type
+    /// name has one; a rule the core computes alone has none).
+    std::optional<CallForm> callFormOf(std::string_view uri) const;
+
     /// The types one group registered: every type the fixed signature of one of its overloads
     /// mentions (its `with` parameters, its ordinary parameters and its result), each once, in
     /// the order they were registered. An overload whose resolver declares no fixed signature
@@ -673,6 +703,9 @@ class OperatorTable {
     /// mutex_. The types are read out of the overloads' resolvers when they are asked for, so a
     /// resolver replaced at load time is not read twice.
     std::vector<std::pair<std::string, std::vector<std::string>>> groups_;
+    /// The call shape of each URI a declaration named as a function (see `CallForm`), guarded by
+    /// mutex_. Merged while modules load: one URI may be declared by several overloads.
+    std::vector<std::pair<std::string, CallForm>> callForms_;
     std::atomic<uint64_t> epoch_{0};
 };
 

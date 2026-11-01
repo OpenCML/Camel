@@ -441,6 +441,20 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
         diags_->of(SemanticDiag::InvalidOperatorURI).atOrigin(gct->origin()).commit(uri);
         throw BuildAbortException();
     }
+    // How a call of this operator is written is a fact of this declaration, so it is recorded
+    // here rather than worked out again from the URI's spelling by whoever prints the call: the
+    // name is the function's (a tag may name the operator differently, and the function's name is
+    // what a call writes), the count is its ordinary parameters, and the `with` parameters are the
+    // ones a call may state in `<...>`. A `*` in the URI is a family of operators this one
+    // declaration covers, and the family's call shape is its own: the entry is kept under the
+    // pattern and answered for every operator the pattern names (`:op/*tos` is `string(x)`).
+    if (funcType != nullptr) {
+        camel::core::OperatorTable::instance().declareCallForm(
+            uri,
+            {.name      = name,
+             .minArgs   = funcType->normTypesCount(),
+             .withCount = funcType->withTypesCount()});
+    }
     // The prelude's declaration file declares the built-in operators, whose rules the core
     // computes: the declaration gives each rule it names the parameter types every call is held
     // to, and declares nothing of its own. A `*` in the URI stands for the family of operators one

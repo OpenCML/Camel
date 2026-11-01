@@ -44,8 +44,10 @@
 #include <cmath>
 #include <cstdint>
 #include <format>
+#include <map>
 #include <memory>
 #include <queue>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -277,6 +279,19 @@ class CmlPrinter {
         if (!bigConstants_.empty()) {
             return;
         }
+        collectImports();
+        for (const auto &[module, names] : imports_) {
+            out_ << "import { ";
+            bool first = true;
+            for (const std::string &name : names) {
+                out_ << (first ? "" : ", ") << name;
+                first = false;
+            }
+            out_ << " } from " << module << '\n';
+        }
+        if (!imports_.empty()) {
+            out_ << '\n';
+        }
 
         graph_    = root;
         isRoot_   = true;
@@ -340,6 +355,9 @@ class CmlPrinter {
     std::unordered_map<gc_node_ref_t, std::string> cells_;
     std::unordered_set<std::string> usedNames_;
     std::vector<std::string> lines_;
+    /// The modules whose operators the printed program calls by name, and the names it calls of each
+    /// (see `collectImports`).
+    std::map<std::string, std::set<std::string>> imports_;
     // Constants bound before the statement that uses them. `1 + 2` written out comes back folded to
     // `3`: the front end folds an operator whose operands are both literals, so a graph that holds
     // those three nodes would come back as one. A `let` of a literal is that literal's node and
@@ -1094,6 +1112,33 @@ class CmlPrinter {
     }
 
     // ---- scopes --------------------------------------------------------------------------
+
+    /// The names the printed program calls, by the module that declares them: a call by name needs
+    /// the name in scope, and `sum` is a name of the module `tensor` (`import { sum } from
+    /// tensor`). An operator of the core (`:op/add_l`, `:io/println`) has no module to import, and
+    /// an operator written with a sign has no name to bring in.
+    void collectImports() {
+        for (const GCGraph *graph : graphs_) {
+            for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+                if ((*it)->kind != camel::runtime::GCNodeKind::Oper) {
+                    continue;
+                }
+                const auto *body = graph->nodeBodyAs<camel::runtime::GCOperBody>(it.ref());
+                if (body == nullptr) {
+                    continue;
+                }
+                const std::string_view uri = body->uri();
+                const size_t colon         = uri.find(':');
+                if (colon == std::string_view::npos || colon == 0) {
+                    continue;
+                }
+                const auto form = camel::core::OperatorTable::instance().callFormOf(uri);
+                if (form.has_value() && form->withCount == 0) {
+                    imports_[std::string(uri.substr(0, colon))].insert(form->name);
+                }
+            }
+        }
+    }
 
     /// A region's statements and the value it yields. `lines` already carry their indentation;
     /// `closeIndent` lines the closing brace up with the construct that opened the region.
@@ -2220,43 +2265,22 @@ class CmlPrinter {
             fail(ref, "a range without its bounds");
         }
 
+        // An operator whose declaration is a function is written as a call of that function, and
+        // the name and the argument count come from the declaration (`:io/println`, `tensor:sum`,
+        // `jvp`). The printer no longer spells any of them out from the shape of the URI: the
+        // three places it used to (`:io/` stripped of its prefix, `:op/*to*` read off its last
+        // letter, `:struct/range` written as `range`) are the entries of this table now.
         std::string name;
-        if (uri.starts_with(":io/")) {
-            name = std::string(uri.substr(4));
-        } else if (uri.starts_with(":op/")) {
-            const std::string_view op = uri.substr(4);
-            const auto isSide = [](char c) {
-                return c == 'i' || c == 'l' || c == 'f' || c == 'd' || c == 'c' || c == 'z' ||
-                       c == 's';
-            };
-            if (op.size() == 4 && op[1] == 't' && op[2] == 'o' && isSide(op[0]) &&
-                isSide(op[3])) {
-                switch (op[3]) {
-                case 'i':
-                    name = "i32";
-                    break;
-                case 'l':
-                    name = "int";
-                    break;
-                case 'f':
-                    name = "f32";
-                    break;
-                case 'd':
-                    name = "float";
-                    break;
-                case 'c':
-                    name = "c64";
-                    break;
-                case 'z':
-                    name = "c128";
-                    break;
-                case 's':
-                    name = "string";
-                    break;
-                default:
-                    break;
-                }
-            } else {
+        const auto callForm = camel::core::OperatorTable::instance().callFormOf(uri);
+        // Only an operator of the core is written by name so far: `:io/println` and the
+        // conversions of `:op/*` are names every program has in scope. A name of a module
+        // (`tensor:sum`, `tensor:max`) is a call of that module's function, and how such a call is
+        // written -- the arrow (`xs->sum()`), the `with` arguments in `<...>` -- is not in the
+        // table yet, so it is still refused rather than written as a prefix call that happens to
+        // parse for some operators and not for others.
+        if (callForm.has_value() && callForm->withCount == 0 && uri.starts_with(":")) {
+            name = callForm->name;
+        } else {
                 // What an operator node is written as comes from where the operator was declared,
                 // not from a table here: the group it was registered in (`__add__`, `__neg__`,
                 // `__idx__`) is the name the language writes for it, and `operatorSymbolOf` turns
@@ -2292,9 +2316,6 @@ class CmlPrinter {
                 }
                 fail(ref, std::format("the operator '{}' without one or two values", symbol));
             }
-        } else {
-            fail(ref, std::format("the operator '{}'", uri));
-        }
 
         std::string text = name + "(";
         for (size_t i = 0; i < inputs.size(); ++i) {
