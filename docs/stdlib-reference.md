@@ -1442,12 +1442,6 @@ or not. The type is `(..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<Par
 - Example (a fragment, not compiled): `let back = transpose(f)`
 - Why it is not compiled: `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
 
-#### `jvp`
-
-```camel
-jvp: (f: F) => Jvp<F> when is_function::<F>()
-```
-
 #### `vmap`
 
 ```camel
