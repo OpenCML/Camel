@@ -131,6 +131,17 @@ inline constexpr OperId VarAfter        = 21; // ":var/after"
 /// principles 3.3). Its traits are the conservative ones an undeclared operator gets -- it has an
 /// effect and may fault -- because an operator a pass could drop, merge, move or compute early
 /// would undo the reason it was inserted.
+///
+/// When it is written: `keepThroughValue` (src/passes/opt/generic/rewrite.cpp), called by
+/// `replaceNode` for a node that has no sync user -- one that holds no place in a `sync` block's
+/// chain. That shape is not hypothetical, so the operator is not unreachable today: `std::opt` over
+/// test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml already draws two of these nodes.
+/// What 3.3 still leans on for the graphs the builder writes is the chain: an effect written inside
+/// a `sync` block has a place in it, and a pass that removes the statement hands that place on
+/// instead of reaching for this operator (rewrite.h, replaceNode). This operator is for the read
+/// that has no such place -- and a graph that keeps neither is refused at the commit ("effect node
+/// ... with neither a read of its value nor a place in its chain"), which is what
+/// `test::keepshape` measures.
 inline constexpr OperId Keep            = 22; // ":op/keep"
 inline constexpr OperId kWellKnownCount = 23; // kNoOper included
 
