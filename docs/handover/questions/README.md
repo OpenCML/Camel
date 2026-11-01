@@ -4,7 +4,7 @@
 
 > **索引的价值在于与目录一一对应；一旦少一页，读者就会以为没有那一问。**
 
-> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 9 页**，文件名见下表。其余已裁完、整体挪进 `reviews/`。
+> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 1 页**，文件名见下表。其余已裁完、整体挪进 `reviews/`。
 >
 > **索引以目录为准**：这张表曾经列着三页早就挪进 `reviews/` 的文件名，而目录里的另外三页不在表上——**一条指向不存在文件的索引，比没有索引更坏**（读者会以为那一问还在，而去回答一个已经裁过的形状）。以后每次并入前先数目录，再改这张表。
 >
@@ -12,19 +12,13 @@
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：9 页（与目录逐项一致）
+## 现在在等作者：1 页（与目录逐项一致）
 
 | 页 | 问句 | 默认建议 |
 |---|---|---|
-| [`who-owns-the-count-of-a-splits-residuals`](questions-2026-11-01-who-owns-the-count-of-a-splits-residuals.md) | 残差是图的属性、元组项数是类型的属性：`split` 两半的项数由谁定（图给的 `residualsOf`，还是类型上写的替身） | 由图的 `residualsOf` 定（已按作者的裁定实施，此页留着等确认口径；**它与上一页是同一部法的两问**：上一页问"类型能不能携带这个数"，这一页问"谁定义这个数"） |
-| [`whether-transpose-takes-the-cotangent-beside-the-parameters`](questions-2026-11-01-whether-transpose-takes-the-cotangent-beside-the-parameters.md) | `transpose(f)` 的余切从哪进：与 `f` 的参数并列，还是由 `split` 提供 | 与参数并列（已落地，此页留着等确认） |
-| [`closures-as-values-block-the-transposed-backward-half`](questions-2026-11-01-closures-as-values-block-the-transposed-backward-half.md) | 转置的后一半里出现"闭包当值、调用返回闭包"时，是等去函数化、允许闭包当值，还是让 `split` 内联 | 三条路都不选：`reinterp` 在命中处展开成直接调用（作者 `9f85daeb0`） |
-| [`split-has-landed-and-the-host-is-up`](questions-2026-11-01-split-has-landed-and-the-host-is-up.md) | 状态页：`split` 已落地、主机正常，只剩 `transpose` 收残差一道墙 | 无需裁定（状态通报） |
-| [`inliner-chain-joining-as-its-own-change`](questions-2026-11-01-inliner-chain-joining-as-its-own-change.md) | inliner 的接链修法要不要单独立项：修法与三条判据成立，但代价是 97 fail（放开门槛）/ 47 fail（只放开完全无 wait 的调用），根因是 `main`→`__root__` 那次调用没有 wait | 不删边；修法单独立项，golden 重整代价另估 |
-| [`optional-with-arguments-and-the-batching-key`](questions-2026-11-01-optional-with-arguments-and-the-batching-key.md) | `softmax` 的轴可省：省与不省在批规则里共用一个键 `softmax/1`，端口数却不同（1 或 2）。要么节点上把默认值物化成端口，要么规则语言允许可选端口 | 倾向 A 的窄版：只在 with 位物化，且只对声明了默认值的算子 |
 | [`what-makes-the-rewrite-session-converge`](questions-2026-11-01-what-makes-the-rewrite-session-converge.md) | 删边后的 124 已定位到 `applyOptimizeRewritePass`/`applyRuntimeOptimizeRewrite`：每轮 0 候选、0 绑定、0 去虚拟化，图却每轮长一个节点，会话永不收敛；是让它收敛还是变成诊断 | 甲：定位那第四处"有变化"，判据是会话数 ≤ 1 且仍 `exported` |
-| [`probe-plan-kept-or-dropped`](questions-2026-10-30-probe-plan-kept-or-dropped.md) | `probe.machine` 这条自称"用例集完成前会被删掉"的探针计划，今天仍在跑且 PASS：留下（它还守着什么），还是删掉（它守的东西已经有人守了） | 删掉：它自述临时，且今天没有一条判据只由它守；删前把它的读数记进对应的正式用例 |
-| [`t-plus-24-status-and-where-the-hour-went`](questions-2026-11-01-t-plus-24-status-and-where-the-hour-went.md) | 状态页：M2 分支 `split` 的当前读数、M4 第二步从 `vjp.cpp` 起刀，以及中午那一小时停顿的原因 | 无需裁定（状态通报） |
+
+**14:30 作者裁完并亲自把八页挪进 `reviews/`**（`fsh-dev` 的 `235987b44`）：这八页是 `who-owns-the-count-of-a-splits-residuals`、`whether-transpose-takes-the-cotangent-beside-the-parameters`、`closures-as-values-block-the-transposed-backward-half`、`split-has-landed-and-the-host-is-up`、`inliner-chain-joining-as-its-own-change`、`optional-with-arguments-and-the-batching-key`、`probe-plan-kept-or-dropped`、`t-plus-24-status-and-where-the-hour-went`。裁定四条：M4 第二步是 `jvp`/`split`/`transpose` 的**编译期实例化**、`vjp` 仍是 `transpose(split(jvp(f)))` 组合；`Vjp<F>` 拉回一律元组，`grad(f)(x) = vjp(f)(x).1(1.0).0`；`probe.machine` 删；可选 with 参数走 A 的窄版（前端把声明默认值物化）。
 
 [`does-remat-change-what-split-stores`](../reviews/questions-2026-11-01-does-remat-change-what-split-stores.md) 已裁并挪进 `reviews/`（作者，2026-11-01）：`remat` 是**图变换**，标记是**图的属性**（`kGraphFlagRecomputeBackward`），`split` 是它的读法——跨切只留入口值、后一半重算。原默认建议（A：标记归 `split`）方向对，裁定更具体。
 
