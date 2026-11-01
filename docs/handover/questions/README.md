@@ -17,6 +17,8 @@
 | 页 | 问句 | 默认建议 |
 |---|---|---|
 
+**17:30 作者把 `nested-branch-stops-in-jvp` 也挪进 `reviews/` 并在 `questions-2026-10-29.md` 记了两条裁定**（`fsh-dev` 的 `9c2e5c7df`）：前端变换实例化**先停手**（已进树的不撤，等负责人一起处理），嵌套分支按区域**从内到外递归**、不为“嵌套”另写一支（`vjp` 在 `2 / 0.5 / -1` 处 `4.0 / 2.0 / 3.0`，四个后端一致）。
+
 **16:10 作者把最后一页也挪进 `reviews/`**（`fsh-dev` 的 `56ce9259c`）：`whether-a-function-value-can-take-a-computed-pack`——lambda 形参表收无类型的 `..xs`（选 ①，不改 5.6），类型从期望类型来，落地后 `vjp` 并成一条声明。所以这一节现在是空的，不是没人在问。
 
 **14:30 作者裁完并亲自把八页挪进 `reviews/`**（`fsh-dev` 的 `235987b44`）：这八页是 `who-owns-the-count-of-a-splits-residuals`、`whether-transpose-takes-the-cotangent-beside-the-parameters`、`closures-as-values-block-the-transposed-backward-half`、`split-has-landed-and-the-host-is-up`、`inliner-chain-joining-as-its-own-change`、`optional-with-arguments-and-the-batching-key`、`probe-plan-kept-or-dropped`、`t-plus-24-status-and-where-the-hour-went`。裁定四条：M4 第二步是 `jvp`/`split`/`transpose` 的**编译期实例化**、`vjp` 仍是 `transpose(split(jvp(f)))` 组合；`Vjp<F>` 拉回一律元组，`grad(f)(x) = vjp(f)(x).1(1.0).0`；`probe.machine` 删；可选 with 参数走 A 的窄版（前端把声明默认值物化）。

@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-307 diagnostics: 286 errors, 21 warnings. 15 carry a machine-applicable edit, 292 say why they carry none.
+306 diagnostics: 285 errors, 21 warnings. 15 carry a machine-applicable edit, 291 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -304,7 +304,6 @@ prints one entry.
 | `0x04000032` | [RuntimeDiag::OperandTypeUnsupported](#operandtypeunsupported) | Error | no |
 | `0x04000033` | [RuntimeDiag::FieldNotFound](#fieldnotfound) | Error | no |
 | `0x04000034` | [RuntimeDiag::InvalidArgument](#invalidargument) | Error | no |
-| `0x04000036` | [RuntimeDiag::FileSystemError](#filesystemerror) | Error | no |
 | `0x04000039` | [RuntimeDiag::RegexInvalid](#regexinvalid) | Error | no |
 | `0x0400003A` | [RuntimeDiag::TimeFormatFailed](#timeformatfailed) | Error | no |
 | `0x0400003C` | [RuntimeDiag::GradientElementTypeMismatch](#gradientelementtypemismatch) | Error | no |
@@ -8824,7 +8823,38 @@ None: choice: whether to declare the function at the top level or to pass the on
 The transform builds the transformed graph at the call, out of the graph of the function it is given, so it has to name that graph now: a declared function, or a lambda that captures nothing. Neither a parameter nor a closure that captures a value names one until the program runs. Pass a declared function, or a lambda that captures nothing, instead.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/transforms/jvp_arg_not_a_static_function.cml`, run as `camel test/cases/compile/transforms/jvp_arg_not_a_static_function.cml ${backend}`)
+
+```camel
+// The same rule, on the second transform: `jvp(h)` where `h` is a closure holding `x`.
+//
+// `jvp` reads the graph of the function value it is given -- that is the whole transform -- so it needs
+// the same thing `transpose` needs: a graph it can name at the call. A closure that captures a value
+// names none (the static function is known, the captured value is not), and the refusal is the same
+// diagnostic, at the same place, pointing at the same argument:
+//
+//   error[SemanticDiag::TransformArgumentIsNotAKnownFunction]: 'jvp' is applied to a closure that
+//   captures a value, and a transform's argument has to be a function this program knows before it runs.
+//
+// What the case is here for: the rule is one rule. `transpose`, `jvp` and `split` all declare the same
+// call-site fact (`CallSpec::staticFunctionArg`), so a shape refused at one of them is refused at all
+// three, and a reader who learns it once has learned it everywhere. Before the declaration this program
+// compiled and the lift refused once it ran, in the run-time half's own words.
+import { jvp } from transforms
+import rulesets.jvp
+
+func by_capture(x: float): float {
+    let h = (y: float) => y * x
+    let forward = jvp(h)
+    let (value, tangent) = forward(2.0, 1.0)
+    return value + tangent
+}
+
+func main(): int sync {
+    println(by_capture(3.0))
+    return 0
+}
+```
 
 ### IgnoredSideEffect
 
@@ -10206,28 +10236,6 @@ func main(): int sync {
     return 0
 }
 ```
-
-### FileSystemError
-
-`0x04000036` · Error · `RuntimeDiag::FileSystemError`
-
-**Fix**
-
-None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-
-**Message**
-
-```text
-'{0}' failed for '{1}': {2}.
-```
-
-**Help**
-
-```text
-Check the path and the permissions of the directories on it.
-```
-
-*No example: no test small enough to show raises it.*
 
 ### RegexInvalid
 
