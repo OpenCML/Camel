@@ -12,13 +12,11 @@
 /// off always succeeds. Raw mode is left again when the program ends.
 /// @effect changes the terminal
 /// @fails error value `NotATerminal` when raw mode is asked for and standard input is not a terminal (a pipe, a file); error value `IOError` when the terminal refuses
-/// @example-fragment changes the terminal when it runs, and the example only has the `void!` result to show
 /// @example set_terminal_raw_mode(true)
 export func set_terminal_raw_mode(enabled: bool): void!
 
 /// Writes prompt to standard output and reads one line from standard input, without its line end.
 /// @effect writes standard output, reads standard input
-/// @example-fragment waits for a line the example program is not given
 /// @example input('name: ')
 export func input(prompt: string): string
 

@@ -337,6 +337,7 @@ enum GCGraphRefRole : uint8_t {
     kGraphRefNested = 1 << 1, // written inside this graph (a lambda, a branch arm)
     kGraphRefStatic = 1 << 2, // the graph of a function constant of the static area
     kGraphRefRule   = 1 << 3, // the graph a declaration tag of the graph names (a derivative rule)
+    kGraphRefLiftedFrom = 1 << 4, // the graph a lift of this one took its body from (`jvp`)
 };
 
 /// "No graph" in a GCFuncRef or a GCLoopRef: a FUNC node that names no callee yet, the condition
@@ -732,6 +733,13 @@ class GCGraph : public camel::core::rtdata::Object {
     std::vector<GraphId> subGraphs() const { return refsWithRole(kGraphRefNested); }
     std::vector<GraphId> staticGraphRefs() const { return refsWithRole(kGraphRefStatic); }
     std::vector<GraphId> ruleGraphs() const { return refsWithRole(kGraphRefRule); }
+    /// The graph this one was lifted from, and kInvalidGraphId for a graph that was not lifted.
+    /// `jvp` writes it on every graph it builds from a primal, so a transform looking at a call of
+    /// a lifted graph can reach the function the call meant without guessing from the name.
+    GraphId liftedFrom() const {
+        const auto refs = refsWithRole(kGraphRefLiftedFrom);
+        return refs.empty() ? kInvalidGraphId : refs.front();
+    }
     std::span<const slot_t> staticSlots() const;
 
     bool hasNodePayload() const;

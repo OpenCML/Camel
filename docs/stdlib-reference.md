@@ -598,9 +598,8 @@ carry `start` towards `end`. A `for` over an interval is fused by the compiler a
 array; this call builds one.
 
 - Failure: fault `InvalidArgument` when the step is 0.
-- Example (a fragment, not compiled): `range(0, 10, 3)` gives `[0, 3, 6, 9]`
-- Example (a fragment, not compiled): `range(10, 0, -3)` gives `[10, 7, 4, 1]`
-- Why it is not compiled: the interval is written `a..b`; the stepped form is `range(a, b, step)`
+- Example: `range(0, 10, 3)` gives `[0, 3, 6, 9]`
+- Example: `range(10, 0, -3)` gives `[10, 7, 4, 1]`
 
 #### `last`
 
@@ -1302,8 +1301,7 @@ next `save_tree` restores it before replacing it. Only one writer may save to a 
 time; one of two racing saves fails, and a reader still sees a complete checkpoint.
 
 - Failure: error value `PermissionDenied` when the file system refuses a write; error value `IOError` when the directory cannot be written or published, or a symbolic link is in the way.
-- Example (a fragment, not compiled): `{ w: 1.0, step: 10 }->save_tree<dir: 'out/ckpt'>`
-- Why it is not compiled: the tree comes from the surrounding program
+- Example: `{ w: 1.0, step: 10 }->save_tree<dir: 'out/ckpt'>`
 
 #### `load_tree`
 
@@ -3415,8 +3413,7 @@ The result is a tuple, and taking it apart is what consumes the two streams; the
 themselves are values like any other, so a `tee` of one of them is another `tee`.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example (a fragment, not compiled): `let (left, right) = unfold(3, (n: int) => if n > 0 then (n, n - 1) else null)->tee<2>`
-- Why it is not compiled: a pair of streams is bound by a destructuring `let`, a statement
+- Example: `let (left, right) = unfold(3, (n: int) => if n > 0 then (n, n - 1) else null)->tee<2>`
 
 <a id="math"></a>
 
@@ -4365,8 +4362,7 @@ file in the same directory and then renamed over the destination, so a reader se
 content or the new, never half of it.
 
 - Failure: error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason (no space left included).
-- Example (a fragment, not compiled): `'done'->write_text<'out/log.txt'>`
-- Why it is not compiled: writes the file system when it runs, and the example only has the `void!` result to show
+- Example: `'done'->write_text<'out/log.txt'>`
 
 #### `write_bytes`
 
@@ -4380,7 +4376,7 @@ Replaces the content of the file at path with bytes; creating, atomic and errors
 - With effects: writes a file.
 - Failure: error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason (no space left included).
 - Example (a fragment, not compiled): `encode('abc')->write_bytes<'payload.bin', atomic: true>`
-- Why it is not compiled: writes the file system when it runs, and the example only has the `void!` result to show
+- Why it is not compiled: the example builds its `Bytes` with `encode` from the `bytes` module, which this page does not import
 
 #### `append_text`
 
@@ -4392,8 +4388,7 @@ Adds a text to the end of the file at path, creating the file and its parent dir
 they are not there.
 
 - Failure: error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason.
-- Example (a fragment, not compiled): `'one more line\n'->append_text<'out/log.txt'>`
-- Why it is not compiled: writes the file system when it runs, and the example only has the `void!` result to show
+- Example: `'one more line\n'->append_text<'out/log.txt'>`
 
 #### `append_bytes`
 
@@ -4406,7 +4401,7 @@ Adds bytes to the end of the file at path; creating and errors as for `append_te
 - With effects: writes a file.
 - Failure: error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason.
 - Example (a fragment, not compiled): `encode('abc')->append_bytes<'payload.bin'>`
-- Why it is not compiled: writes the file system when it runs, and the example only has the `void!` result to show
+- Why it is not compiled: the example builds its `Bytes` with `encode` from the `bytes` module, which this page does not import
 
 ### Questions about a path
 
@@ -4481,8 +4476,7 @@ Creates one directory. The parent directory must exist, and the directory must n
 
 - With effects: changes the file system.
 - Failure: error value `AlreadyExists` when something exists at the path; error value `NotFound` when the parent directory does not exist; error value `PermissionDenied` when the file system refuses; error value `IOError` otherwise.
-- Example (a fragment, not compiled): `'out'->mkdir`
-- Why it is not compiled: creates a directory when it runs, and the example only has the `void!` result to show
+- Example: `'out'->mkdir`
 
 #### `mkdirs`
 
@@ -4495,8 +4489,7 @@ error, so the call can be repeated.
 
 - With effects: changes the file system.
 - Failure: error value `AlreadyExists` when a file, not a directory, exists at the path; error value `PermissionDenied` when the file system refuses; error value `IOError` otherwise.
-- Example (a fragment, not compiled): `'out/logs/today'->mkdirs`
-- Why it is not compiled: creates a directory when it runs, and the example only has the `void!` result to show
+- Example: `'out/logs/today'->mkdirs`
 
 #### `remove`
 
@@ -4509,8 +4502,7 @@ Removes a file or a symbolic link; a directory, even an empty one, is an error (
 
 - With effects: removes a file.
 - Failure: error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the removal; error value `IOError` when the path is a directory or the removal fails for another reason.
-- Example (a fragment, not compiled): `'notes.txt'->remove`
-- Why it is not compiled: removes a file when it runs, and the example only has the `void!` result to show
+- Example: `'notes.txt'->remove`
 
 #### `remove_dir`
 
@@ -4523,8 +4515,7 @@ delete; a file or a symbolic link is an error too.
 
 - With effects: removes a directory.
 - Failure: error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the removal; error value `IOError` when the path is a file, a symbolic link, or a directory that is not empty.
-- Example (a fragment, not compiled): `'out/old'->remove_dir`
-- Why it is not compiled: removes a directory when it runs, and the example only has the `void!` result to show
+- Example: `'out/old'->remove_dir`
 
 <a id="io"></a>
 
@@ -4546,8 +4537,7 @@ off always succeeds. Raw mode is left again when the program ends.
 
 - With effects: changes the terminal.
 - Failure: error value `NotATerminal` when raw mode is asked for and standard input is not a terminal (a pipe, a file); error value `IOError` when the terminal refuses.
-- Example (a fragment, not compiled): `set_terminal_raw_mode(true)`
-- Why it is not compiled: changes the terminal when it runs, and the example only has the `void!` result to show
+- Example: `set_terminal_raw_mode(true)`
 
 #### `input`
 
@@ -4558,8 +4548,7 @@ input: (prompt: string) => string
 Writes prompt to standard output and reads one line from standard input, without its line end.
 
 - With effects: writes standard output, reads standard input.
-- Example (a fragment, not compiled): `input('name: ')`
-- Why it is not compiled: waits for a line the example program is not given
+- Example: `input('name: ')`
 
 #### `has_input`
 
@@ -5072,8 +5061,7 @@ passed, and gives how many calls met (after a timeout, how many were waiting). A
 showing that calls really run at the same time.
 
 - Failure: fault `InvalidArgument` when parties is below 1 or timeout is negative.
-- Example (a fragment, not compiled): `rendezvous(2, 1.0)` gives `2 when another call arrived in time`
-- Why it is not compiled: waits for another call, which a page cannot supply
+- Example: `rendezvous(2, 1.0)` gives `2 when another call arrived in time`
 
 #### `thread_count`
 
@@ -5304,7 +5292,7 @@ op_name: (o: Op) => string
 The URI of the operator, such as `:op/add_l`.
 
 - Example (a fragment, not compiled): `op_name(o)`
-- Why it is not compiled: o is the operator of a node of the surrounding pass
+- Why it is not compiled: `o` is an operator taken from a node of the surrounding pass
 
 #### `is_pure`
 
@@ -5537,7 +5525,7 @@ The number a graph, a node or an operator is known by inside its function: the G
 NodeId or the OperId. Stable for the function, so a pass can key a map by it.
 
 - Example (a fragment, not compiled): `id(n)`
-- Why it is not compiled: n is a node of the surrounding pass
+- Why it is not compiled: `n` is the graph the pass runs on
 
 ### Facts
 
@@ -5585,8 +5573,7 @@ open: (f: F) => Txn<F> when is_function::<F>()
 Opens a transaction on a function: a private workspace in which its graphs are edited.
 Nothing changes until `commit`.
 
-- Example (a fragment, not compiled): `let t = open((x: int): int => x + 1)`
-- Why it is not compiled: the transaction is closed by commit or abort
+- Example: `let t = open((x: int): int => x + 1)`
 
 #### `replace`
 
@@ -5778,7 +5765,7 @@ check_text: (r: CheckReport) => string
 The report's fixed rendering, one line per row, for a caller that wants it as a value.
 
 - Example (a fragment, not compiled): `check_text(report)` gives `'sampled add_zero: proposition equality, evidence samples 100, ...'`
-- Why it is not compiled: a report comes from a check
+- Why it is not compiled: `report` is the report a check gives back: the example writes what reads it, and a doc example has no check to run
 
 #### `coverage_table`
 
@@ -5853,7 +5840,7 @@ rule_name: (r: Rule) => string
 The name of the rule `r`.
 
 - Example (a fragment, not compiled): `rule_name(r)` gives `'int_add_zero'`
-- Why it is not compiled: a rule comes from the library
+- Why it is not compiled: `r` is a rule of the library: the example writes the question, and a doc example has no library to take one from
 
 #### `rule_two_way`
 
@@ -5864,7 +5851,7 @@ rule_two_way: (r: Rule) => bool
 Whether the rule `r` may also be applied from right to left.
 
 - Example (a fragment, not compiled): `rule_two_way(r)` gives `false`
-- Why it is not compiled: a rule comes from the library
+- Why it is not compiled: `r` is a rule of the library: the example writes the question, and a doc example has no library to take one from
 
 #### `rule_needs`
 
@@ -5875,7 +5862,7 @@ rule_needs: (r: Rule) => int
 How many rewrites the rule `r` needs before it may fire.
 
 - Example (a fragment, not compiled): `rule_needs(r)` gives `0`
-- Why it is not compiled: a rule comes from the library
+- Why it is not compiled: `r` is a rule of the library: the example writes the question, and a doc example has no library to take one from
 
 #### `rule_consts`
 
@@ -5886,7 +5873,7 @@ rule_consts: (r: Rule) => int
 How many constants the rule `r` adds to the function.
 
 - Example (a fragment, not compiled): `rule_consts(r)` gives `0`
-- Why it is not compiled: a rule comes from the library
+- Why it is not compiled: `r` is a rule of the library: the example writes the question, and a doc example has no library to take one from
 
 <a id="tiles"></a>
 
@@ -5923,7 +5910,7 @@ with, alone or inside a tuple or a struct -- and gives the same tree with each l
 `Device<...>`. A leaf of any other type is refused when the call is compiled.
 
 - Example (a fragment, not compiled): `host->upload` gives `a Device<f32[..]>`
-- Why it is not compiled: the value comes from the caller
+- Why it is not compiled: `host` is a host tensor the caller has: the example writes the move, and a doc example has no device to move a value to
 
 #### `download`
 
@@ -5935,7 +5922,7 @@ Downloads every device leaf of the value and gives the host value it came from. 
 leaf that is not a device value is refused when the call is compiled.
 
 - Example (a fragment, not compiled): `resident->download` gives `the array resident holds`
-- Why it is not compiled: the value comes from the caller
+- Why it is not compiled: `resident` is a value already on the device: the example writes the download, and a doc example has no device to take one from
 
 #### `run_preferred_resident`
 
@@ -6096,8 +6083,7 @@ Runs Python statements in the interpreter. Definitions and assignments stay visi
 calls, as in a Python session.
 
 - Failure: error value `PythonError` when the code raises.
-- Example (a fragment, not compiled): `exec('x = 1')`
-- Why it is not compiled: runs Python code when it runs, and the example only has the `void!` result to show
+- Example: `exec('x = 1')`
 
 #### `eval`
 
@@ -6119,8 +6105,7 @@ run_file: (path: string) => void!
 Runs the Python script at the path.
 
 - Failure: error value `PythonError` when the file cannot be read or the script raises.
-- Example (a fragment, not compiled): `'scripts/hello.py'->run_file`
-- Why it is not compiled: runs Python code when it runs, and the example only has the `void!` result to show
+- Example: `'scripts/hello.py'->run_file`
 
 #### `import_module`
 
@@ -6458,8 +6443,7 @@ created when missing.
 
 - With effects: writes files under `dir`.
 - Failure: fault `RuntimeError` when the directory cannot be created or a leaf cannot be written.
-- Example (a fragment, not compiled): `save_params({ w: [1.0, 2.0] as float[], b: [0.0] as float[] }, 'checkpoints/step-1')`
-- Why it is not compiled: the example builds its tensors with `new` from the `tensor` module, which this page does not import
+- Example: `save_params({ w: [1.0, 2.0] as float[], b: [0.0] as float[] }, 'checkpoints/step-1')`
 
 <a id="optim"></a>
 

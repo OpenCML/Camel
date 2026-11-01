@@ -38,6 +38,5 @@ export type OptimizerState
 /// created when missing.
 /// @effect writes files under `dir`
 /// @fails fault `RuntimeError` when the directory cannot be created or a leaf cannot be written
-/// @example-fragment the example builds its tensors with `new` from the `tensor` module, which this page does not import
 /// @example save_params({ w: [1.0, 2.0] as float[], b: [0.0] as float[] }, 'checkpoints/step-1')
 export func save_params::<P>(params: P, dir: string): void
