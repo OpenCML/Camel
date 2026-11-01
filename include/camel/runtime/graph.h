@@ -594,6 +594,18 @@ struct GCGraphDerivation;
 struct GCGraphBuildAccess;
 class GCGraph;
 
+/// What `GCGraph::staticFunctionGraphOf` answered: the graph a function constant names, or the
+/// reason it named none. The reason is empty exactly when a graph was answered, so a caller cannot
+/// read a graph and a reason at once.
+struct GCStaticFunctionAnswer {
+    GraphId graph           = kInvalidGraphId;
+    std::string_view reason = {};
+
+    bool hasGraph() const { return graph != kInvalidGraphId; }
+    /// `graph=<id>`, or `none reason=<why>`.
+    std::string describe() const;
+};
+
 class GCGraph : public camel::core::rtdata::Object {
   public:
     // These accessors expose cold compile/debug metadata only. Runtime passes
@@ -771,6 +783,18 @@ class GCGraph : public camel::core::rtdata::Object {
     gc_node_ref_t nodeRef(const GCNode *node) const;
     /// FUNC node `ref`: the callee (invalid when `ref` is not a FUNC node).
     GraphId calleeIdOf(gc_node_ref_t ref) const;
+    /// The graph a function constant of the static area names, with the reason when it names none.
+    ///
+    /// `calleeIdOf` answers for a FUNC node -- a call written by name. A function value kept in a
+    /// `let` or passed as an argument arrives as a DATA node holding a static function, and this is
+    /// the one entry that turns such a value into a graph id. It refuses rather than guesses, and
+    /// the reason says which check refused: a static slot is never read as an id. The node has to be
+    /// a DATA node of function type (`not-a-data-node`, `no-static-slot`, `not-a-function-type`),
+    /// its slot has to hold a function value that names a graph (`no-function-value`,
+    /// `function-names-no-graph`), and that graph has to be one this graph records as a static
+    /// reference (`not-a-static-reference`) -- a value whose graph is not in the reference table is
+    /// a value from another program, and following it would run a graph this one does not call.
+    GCStaticFunctionAnswer staticFunctionGraphOf(gc_node_ref_t ref) const;
     /// LOOP node `ref`: its form. The node must be a LOOP node.
     camel::core::LoopKind loopKindOf(gc_node_ref_t ref) const {
         return nodeBodyAs<GCLoopRef>(ref)->kind;
