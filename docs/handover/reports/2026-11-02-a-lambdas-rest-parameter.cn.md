@@ -219,3 +219,20 @@ build-time tuple，或 **With 输入个数等于元组长度的 tuple FILL**。
 **没有读 rest 名的 lambda 现在一个节点都不建**（`if (!graphNamesValue(...)) break;`），读的仍然建。
 **但"到底是哪一种"没测出来**：`std::gir` 的 DOT 只在用例失败时才进日志，探针是绿的，所以那一行没拿到。
 这一条留作读数，别照抄任何一句旧话。
+
+**⑤ 实测（远端直接重定向，绕开运行器）**：`(..xs) => add(..xs)` 在 `std::gir` 里
+
+    N03 [label="xs_0", type="PORT", param_name="xs_0", param_kind="normal", param_index="0", value_type="float", …];
+    N04 [label="xs_1", type="PORT", param_name="xs_1", param_kind="normal", param_index="1", value_type="float"];
+    N03 -> N05 [label="0|0", type="NORM"];
+    N04 -> N05 [label="0|1", type="NORM"];
+    N0A [label="Function(graph=__g_50__, …)", value_type="(xs_0: float, xs_1: float) => float pure"];
+
+**这张图里没有 `xs` 节点，也没有 FILL**：`..xs` 在 GIR 就被摊成两条普通实参边（`0|0`、`0|1`）。
+所以"体内那个引用是 `NREF` 还是 `DREF`"这个问题**在图上没有对应物**——它是 GCT 里的引用，
+GIR 里留下的只是被摊开的实参。**旧的三种说法（`RestValue`／不是 `NREF`／`NREF 或 DREF`）都作废，
+以这一行为准。**
+
+**⑥ 仪器读数（给后来的人）**：计划运行器的日志**只保留 `[stdout]` 末尾 50 行**（超出时印
+`[stdout] ... 50 line(s) before`），**所以 `std::gir` 的完整 DOT 在日志里看不全**。要拿完整 DOT，
+在远端直接重定向：`LD_LIBRARY_PATH=$HOME/camel-eval/conda/envs/clang/lib ./out/latest/bin/camel x.cml std::gir > x.gir`。
