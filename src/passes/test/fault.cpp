@@ -118,22 +118,12 @@ OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostr
             if (!uri.starts_with(":io/")) {
                 continue;
             }
-            // A node to hang the order edge on: the effect's own chain predecessor when it has one,
-            // its first value input otherwise. The edge is what keeps the effect in the graph (a
-            // node with no edge at all is not a graph).
-            camel::runtime::gc_node_ref_t anchor = camel::runtime::kInvalidNodeRef;
-            if (!draft.ctrlInputsOf(id).empty()) {
-                anchor = draft.ctrlInputsOf(id).front();
-            } else if (!draft.normInputsOf(id).empty()) {
-                anchor = draft.normInputsOf(id).front();
-            }
-            if (anchor == camel::runtime::kInvalidNodeRef) {
-                continue;
-            }
-            // Every edge the effect stands on goes, both directions; what is left is one order
-            // edge -- an edge that orders two nodes that both run and makes neither of them run
-            // (docs/design/effects/edges.cn.md 1.5). Nothing reads the effect, no chain holds it,
-            // no result returns it: the commit must refuse it.
+            // Every edge the effect stands on goes, both directions, and no edge is put back: what
+            // is left is the node and the `kGCNodeFlagSyncStatement` mark it carries. The mark says
+            // someone believed the node is in a chain; with no sync edge under it, it holds nothing
+            // (design principles 3.1, and the mark was struck as a credential on 2026-11-01). So the
+            // commit must refuse this graph, and it must refuse it on the credential: "neither a read
+            // of its value nor a place in its chain".
             for (camel::runtime::gc_node_ref_t pred : draft.normInputsOf(id)) {
                 draft.unlinkInput(DraftEdgeKind::Data, id, pred);
             }
@@ -146,8 +136,6 @@ OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostr
             for (camel::runtime::gc_node_ref_t pred : draft.syncInputsOf(id)) {
                 draft.unlinkInput(DraftEdgeKind::Sync, id, pred);
             }
-            const camel::runtime::gc_node_ref_t orders[1] = {anchor};
-            draft.setOrderInputs(id, orders);
             return session.commit();
         }
     }
