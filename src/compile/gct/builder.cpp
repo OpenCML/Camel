@@ -7098,15 +7098,16 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             // A rest parameter is untyped and last (design principles 5.5); it stands in the
             // signature as a `void` parameter that no call passes a value for.
             if (open && !signature) {
-                // A lambda's rest parameter parses (`(..xs) => body`) and is refused here by name:
-                // the parameters it stands for are the ones the front end would have to build out
-                // of the function type the lambda stands in, and it does not build them yet. The
-                // refusal is a diagnosis with a position, not a compiler error: a program that
-                // writes the shape is answered with a sentence about the shape.
-                diags_->of(SemanticDiag::LambdaRestParameterNotLowered)
-                    .at(paramLoad->tokenRange())
-                    .commit(name);
-                throw BuildAbortException();
+                // A lambda's rest parameter (`(..xs) => body`) stands for the parameters of the
+                // function type the lambda is in. That type is not known at this stage -- it builds
+                // a signature, and the expected type is GIR's -- so the slot is recorded the way an
+                // omitted parameter type is, with one difference: it absorbs every parameter from
+                // here on rather than taking one type (`rest`). GIR expands it where the expected
+                // type is in hand. The flag comes from the written parameter (`isRest()`), never
+                // from the arity.
+                factory.addNormArg(name, Type::Void(), false);
+                unwrittenParams.push_back({paramIndex++, paramLoad->origin(), true});
+                continue;
             }
             if (pi + 1 != normParams.size()) {
                 diags_->of(SemanticDiag::RestParameterNotLast)

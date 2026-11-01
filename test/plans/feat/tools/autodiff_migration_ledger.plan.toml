@@ -2,7 +2,7 @@ id = "tools.autodiff_migration_ledger"
 order = 918
 tier = "fast"
 tags = ["feat", "tools", "autodiff"]
-desc = "The autodiff migration ledger is a ratchet: `pass` may only rise, `with`/`array`/`other` and the two denominators may only fall, and the numbers it reads are the ones the page records. It is gated because a ruler that reads nothing reports a number that never changes: the first version looked for `error[...]` lines, which this tree stopped printing, and read `with=0 array=0 other=106` where the classification is `54/46/6`."
+desc = "The autodiff migration ledger is a ratchet: `pass` may only rise, `with`/`array`/`other` and the two denominators may only fall, and the numbers it reads are the ones the page records. It is gated because a ruler that reads nothing reports a number that never changes: the wording classifier read `with=0 array=0 other=118` after the refusal it was reading was withdrawn, so the three classes are now counted from the case sources and the rule files, and only `pass` follows the host binary."
 
 # The plan is named by `test/plan-selection.json` (`scripts/autodiff-migration-ledger.mjs`), which the
 # runner self-test requires of every plan file: a plan no case path selects is a plan `--changed`
@@ -18,7 +18,7 @@ desc = "The autodiff migration ledger is a ratchet: `pass` may only rise, `with`
 
 [[tests]]
 name = "tools.autodiff_migration_ledger.ratchet"
-desc = "`--ledger-check` reads `total=127 library=118 pass=12 with=54 array=46 other=6`, which is what `LEDGER_RECORDED` holds, and says so instead of reding a number nothing moved."
+desc = "`--ledger-check` reads `total=127 library=118 pass=6 with=44 array=67 other=7`, which is what `LEDGER_RECORDED` holds, and says so instead of reding a number nothing moved."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/autodiff-migration-ledger.mjs"

@@ -217,7 +217,6 @@ enum class SemanticDiag : uint32_t {
     RestArgumentsMismatch = 0x000190,
     // A rest parameter of a lambda: the shape parses and is refused by name, because the parameters it
     // stands for come from the function type the lambda stands in and the front end does not build them.
-    LambdaRestParameterNotLowered = 0x00020A,
     /// A rest parameter's build-time tuple was used where a runtime value is needed.
     StaticTupleEscapes = 0x00019C,
 

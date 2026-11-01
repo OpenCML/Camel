@@ -1013,14 +1013,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::LambdaRestParameterNotLowered,
-            {
-                "LambdaRestParameterNotLowered",
-                "The rest parameter '..{0}' of a lambda is not lowered yet.",
-                "A rest parameter of a function declaration stands for the arguments a call leaves over, and the call site is what expands them; a lambda has no such call site yet, because the front end does not build the parameters its rest parameter would stand for. Write the parameters out: '(x: float, y: float) => body'.",
-            },
-        },
-        {
             SemanticDiag::StaticTupleEscapes,
             {
                 "StaticTupleEscapes",
