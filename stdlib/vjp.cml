@@ -19,11 +19,11 @@
  * juxtaposed shape `transpose` writes -- known values, then cotangent -- is the internal step and is
  * not a signature: nothing outside this file writes it.
  *
- * The module does not compile yet, and the reason is one call: `transpose` walks a function of a
- * single parameter, and the half it has to walk takes the residuals first and the seeds after them.
- * The day `transpose` takes that half -- known values, then the linear parameters, then the
- * cotangent -- this file compiles as written, and `node test/tools/have-library-vjp.mjs` is the one
- * command that answers whether it does.
+ * The module compiles, and what it cannot do yet is run: `split` hands back the two halves the
+ * compiler computes -- the residuals belong to `f`'s graph, so their number and their types are
+ * read where the graph is in hand, and no type names them -- and the backward half is a function
+ * `transpose` has to walk backwards. That walk refuses a `Call` inside it (`skip=call`), so a
+ * pullback raises "transpose has no transpose for this function" at the call below; M3's step.
  *
  * The signatures are stand-ins for `Vjp<F>`, `Split<F>` and `ParamsOf<F>` (design 6.1 is their
  * step), so `vjp` is declared once per arity rather than once for every `F` -- the same rule
@@ -44,7 +44,13 @@ export func vjp(f: (x: float) => float): (x: float) => (float, (ct: float) => fl
     let (forward, linear) = split(jvp(f))
     return (x: float) => {
         let (value, residuals) = forward(x)
-        (value, (ct: float) => transpose(linear)(residuals, ct))
+        (value, (ct: float) => {
+            // `transpose` answers the cotangents of the parameters as one tuple, so a function of
+            // one parameter has a one-long one: the pullback gives the number itself, because
+            // `grad(f)(x)` is `vjp(f)(x).1(1.0)` and the gradient of one parameter is a number.
+            let cotangents = transpose(linear)(residuals, ct)
+            cotangents.0
+        })
     }
 }
 

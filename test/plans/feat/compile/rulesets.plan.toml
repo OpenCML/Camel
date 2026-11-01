@@ -80,7 +80,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rulesets_lookup_answers_and_says_why_not"
-desc = "The index is asked through `lookupRule(family, head, arity)` -- the function a transform asks -- by the `std::rulesets` pass (`query=`), and the answers are pinned: `-` with one operand in `rulesets.jvp` is `jvp_neg`, `-` with two is `jvp_sub` (two primitives, one token), `-` with three has no rule, and a family no module declares is unknown. The two ways of not finding a rule are named apart, because the repairs differ: write the rule, or import the ruleset. A program that asks nothing prints nothing."
+desc = "The index is asked through `lookupRule(family, head, arity)` -- the function a transform asks -- by the `std::rulesets` pass (`query=`), and the answers are pinned: `-` with one operand in `rulesets.jvp` is `jvp_neg`, `-` with two is `jvp_sub` (two primitives, one token), `-` with three has no rule, and a family no module declares is unknown. The two ways of not finding a rule are named apart, because the repairs differ: write the rule, or import the ruleset. A program that asks nothing prints nothing. The three binding tables are then checked against the index the same pass printed, and nothing in the case counts rules: every binding resolves, asking the index for that key answers the same rule the binding printed, and each family holds exactly the keys its table binds -- so a rule or a binding added to either half is checked as it is added, instead of a written number going red for the one change that cannot be wrong."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/compile/rulesets/rulesets_lookup.py"
@@ -302,6 +302,30 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "vmap_whole_extrema_keep_the_batch_axis_and_agree_with_row_by_row_map"
+desc = "`max(xs)` and `min(xs)` over every element, batched: no axis of the operator's to move one place in, so the rule keeps the batch axis in front and folds away each axis the row had after it -- and IEEE 754-2019 maximum/minimum carry an element and are exactly associative and commutative (design principles 7.7), so the folded answer is the row's own extremum. The rows `[1, 2, 3]`, `[4, 5, 6]`, `[-1, 0, 1]` answer maxima `3`, `6`, `1` and minima `1`, `4`, `-1`; a row of signed zeros answers `0.0` for the maximum and `-0.0` for the minimum (-0 is below +0); a row holding a NaN answers `nan` for both; and a row of two axes keeps folding until the batch axis is the only one left, so a plane answers its own maximum. The readings name the rule and the element its instance was made at: `asked=1 found=1 missing=0 rules=vmap_rule_max elements=float`, the same for `min`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_whole_extrema.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_max elements=float", "asked=1 found=1 missing=0 rules=vmap_rule_min elements=float", "[3.0, 6.0, 1.0]", "[1.0, 4.0, -1.0]", "[0.0, 0.0]", "[-0.0, -0.0]", "[nan, nan]", "[6.0, 7.0]"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
+assert(values.length === 10, `printed ${values.length} values: ${JSON.stringify(values)}`)
+for (const pair of [[0, 1], [2, 3], [8, 9]]) {
+    assert(values[pair[0]] === values[pair[1]], `pair: batched ${values[pair[0]]} vs row by row ${values[pair[1]]}`)
+}
+const nanLines = values.filter(line => line === '[nan, nan]')
+assert(nanLines.length === 2, `NaN rows printed ${nanLines.length} times: ${JSON.stringify(values)}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "vmap_transform_refuses_a_call_by_name"
 desc = "A call in the body, answered rather than walked past: `g` calls `f`, and a batched graph has no body for `f` unless the family holds a rule filed under it, so `vmap(g)` stops at that call -- `construct=a call`, `uri=f`, and the count `asked=1 found=0 missing=1`. The ask is the point: the transform builds the key a call already has (the callee's name and its argument count), asks `rulesets.vmap`, and reports the hole. `asked=0` is what this used to print and it was the wrong answer -- 'the walk never got here' is not 'the family has nothing for this call'. The row-by-row writing prints `[3.0, 5.0, 7.0]` first and keeps working, which is the answer the batched writing does not have."
 kind = "behavior"
@@ -324,3 +348,22 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::RuleRightUsesOuterVariable"
 expect_diagnostic_code = "0x03000207"
 expect_stdout_contains = ["probe_rule_mul"]
+
+# The gap the whole-tensor argmax and argmin leave in this tier, pinned as a reading instead of a
+# promise: no rule exists, and the refusal says which primitive it was asked about and why the
+# family has nothing to answer with. The cause is that their answer is the row-major position over
+# the whole row, which no fold of axis positions produces (argmax of a float[2, 3] row is 5, not
+# [1, 2]), so a row would have to be read as one line -- a flat view whose shape `reshape` takes at
+# compile time.
+[[tests]]
+name = "vmap_whole_argmax_is_refused_by_name"
+desc = "A batched body that calls argmax over every element is refused by name: the reading is `asked=1 found=0 missing=1` at `tensor:argmax` beside `skip=body`, and the fault is `transforms: vmap has no rule for tensor:argmax (the operator has no batching rule key bound at all)` -- an answer that names the primitive, not a wrong number. max and min have a rule (the entry above); argmax and argmin cannot be folded, because their answer is the row-major position over the whole row."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_whole_argmax_is_refused.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 1
+expect_stdout_contains = ["REINTERP vmap function=row_argmax skip=body construct=- uri=tensor:argmaxasked=1 found=0 missing=1", "vmap has no rule for `tensor:argmax` (the operator has no batching rule key bound at all)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

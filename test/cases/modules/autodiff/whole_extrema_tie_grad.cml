@@ -1,0 +1,49 @@
+/**
+ * The pullback of a whole-tensor extremum **on a tie**. At `w = 0` two elements hold the extremum and
+ * each carries its own slope in `w`, so the number the gradient answers says which of them received
+ * the cotangent:
+ *
+ *   - `max`: `[[3.0 + 5.0*w, 3.0 + 1.0*w], [1.0, 1.5]]` -- the maximum is `3.0` twice, at the slopes
+ *     `5` and `1` in row-major order. `5.0` would be the first position only, `1.0` the second only,
+ *     `6.0` both of them, `0.0` neither.
+ *   - `min`: `[[1.0 + 5.0*w, 1.0 + 1.0*w], [2.0, 3.0]]` -- the minimum is `1.0` at the same two
+ *     positions and slopes, so the same four numbers separate the four readings.
+ *
+ * Both answer `6.0`: **every** element equal to the extremum receives the cotangent in full, and none
+ * is halved between them. That is the axis form's rule as well -- `max_axis` on the same tie answers
+ * the same `6.0` -- because both select with `strict_eq(x, extremum)` and hand the cotangent to what
+ * the mask selected (a mask is not a number, 5.1, so the selection is converted and multiplied).
+ *
+ * What this case pins is the reading, not a promise about ties in general: `design-principles.cn.md:599`
+ * gives the *position* of `argmax`/`argmin` on a tie ("并列时返回第一个最值的位置"), and which elements a
+ * `max`/`min` pullback feeds on a tie is a question that ruling does not answer. The four numbers
+ * above make the present answer visible, and the axis form's agreement makes it one rule and not two.
+ */
+import { grad } from autodiff
+import { max, max_axis, min, sum } from tensor
+
+with <w: float>
+func tie_max(): float {
+    let xs: float[2, 2] = [[3.0 + 5.0 * w, 3.0 + 1.0 * w], [1.0, 1.5]]
+    return max(xs)
+}
+
+with <w: float>
+func tie_min(): float {
+    let xs: float[2, 2] = [[1.0 + 5.0 * w, 1.0 + 1.0 * w], [2.0, 3.0]]
+    return min(xs)
+}
+
+// The axis form on the same tie: the rule the whole-tensor form has to agree with.
+with <w: float>
+func axis_tie(): float {
+    let xs: float[2, 2] = [[1.0 + 5.0 * w, 1.0 + 1.0 * w], [2.0, 3.0]]
+    return sum(max_axis(xs, 1, false))
+}
+
+func main(): int sync {
+    println(grad(tie_max)<0.0>())
+    println(grad(tie_min)<0.0>())
+    println(grad(axis_tie)<0.0>())
+    return 0
+}

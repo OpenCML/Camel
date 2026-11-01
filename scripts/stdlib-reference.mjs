@@ -126,16 +126,18 @@ const MODULES = [
         name: 'vjp',
         title: '`vjp`: the derivative, as a library',
         kind: 'camel',
-        // `vjp` is the composition of three transforms, so its declarations are the assembly's, and
-        // an example of it cannot compile until the assembly does. Listing it as `pending` keeps
-        // it out of the page -- a page a reader trusts does not show code that does not compile --
+        // `vjp` is the composition of three transforms, and the third -- the walk `transpose` runs
+        // -- cannot take the backward half yet. The module compiles; a pullback raises where the
+        // walk refuses a `Call` inside that half. Listing it as `pending` keeps it out of the page
+        // -- a page a reader trusts does not show a call that raises the moment it is made --
         // without pretending the module is not there: every mode prints why, and `--verify-docs`
         // turns red the day its examples compile, which is the one line to delete (`pending:`
         // below) when it does.
         pending:
-            '`stdlib/vjp.cml` is the composition `transpose(split(reinterp<jvp>(f)))`, and ' +
-            '`transpose` still takes a function of a single parameter while `split` hands back its ' +
-            'two halves, so the module does not compile and an example of it would not either',
+            '`stdlib/vjp.cml` compiles, and what it cannot do yet is run: `transpose` refuses a ' +
+            '`Call` inside the backward half `split` hands back (`skip=call` in the walk), so a ' +
+            'pullback raises instead of answering and an example that calls one would show that ' +
+            'error where the reading belongs',
     },
     {
         name: 'tensor',
@@ -2015,6 +2017,9 @@ if (mode === '--write' || mode === '--verify-doc') {
             if (!readBy.has(full)) unread.push(shown(full))
         }
     }
+    // A module the page leaves out is announced with its reason in every mode, and this one is a
+    // mode too: a `pending` column says *that* it is out, and only this line says why.
+    announcePending()
     console.log(
         'auditing: the module table against the library on disk (every entry reads a file that is ' +
             'there) and, for each module, what its declarations have and have not',
