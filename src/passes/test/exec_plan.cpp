@@ -8,7 +8,7 @@
  * Then one line per control region, which is the answer liveness is seeded from: a region's
  * `result` is a seed, its members are its range, and both are read here so that a change to
  * either is a reading and not an argument:
- *   REGION <graph> <id> kind <n> owner <ref> result <ref|-1> members <n> in-plan <n>
+ *   REGION <graph> <id> kind <n> owner <ref> result <ref> or none, members <n>, in-plan <n>
  */
 
 #include "camel/passes/test/exec_plan.h"
