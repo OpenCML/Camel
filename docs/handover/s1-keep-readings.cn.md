@@ -59,4 +59,17 @@
 3. **逐条判那 17 处**：每处一行——`文件:行 / 它现在靠什么成立 / 数据保活下还成不成立 /
    不成立就改用 `:op/keep` 后钉什么`，给出 `N`、`M`。
 4. 然后才按 `fold` → `dce` → 内联清理，一笔一处地改代码。
+
+## 5. 算子本身的落点（读到这一步为止）
+
+- **编号是编译期固定的**：`include/camel/core/operator_table.h:98-134` 是 `namespace oper`，最后一个
+  `VarAfter = 21`、`kWellKnownCount = 22`（含 `kNoOper`）。**新算子加在末尾**（`Keep = 22`，
+  `kWellKnownCount = 23`），**否则后面每一个 id 都要挪**，而 id 被序列化进模块缓存之外的很多东西里。
+- **URI 列表同序**：`kWellKnownOperatorUris`（第 137 行起）按 id 排，新的一项加在最后，写 `":op/keep"`。
+  表在启动时按这张列表 intern（`src/core/operator_table.cpp:32`）。
+- **执行器**：`src/builtin/executors/builtin.cpp:35-36` 的 `getOpsImplMap()`，键是不带冒号的
+  `"op/xxx"`（`{"op/atoi", __atoi__}`），新加一行 `{"op/keep", __keep__}`；`__keep__` 的签名要与
+  `operator_t` 一致（看 `src/builtin/operators/ops.h` 里已有的定义照抄），**行为是返回第二个参数**。
+- **保守默认已在**：表头第 22-23 行——"An operator nobody declared is treated conservatively: it has side
+  effects and may fault"。所以**不声明 `mayBeRecomputed` 就等于"不参与重算"**；要显式声明才需要动 traits。
 5. **9.7 的增补只写本页**（"建议 9.7 增补如下"），**不改 `docs/design-principles.cn.md`**——原则文件是作者的。
