@@ -86,6 +86,10 @@ camel test/cases/modules/autodiff/jax_vmap.cml std::nvm   # 退出码 0，打出
 
 **`--ledger-check` 是棘轮**：上面那五个数记在脚本的 `LEDGER_RECORDED` 里，`pass` 只许升、`with`/`array`/`other` 只许降、`total`/`library` 一动就红——所以这个数以后不用人手抄，它自己会拦住回退。**它记的是"库层能过几条"，不是"能求导几条"**：那 8 条守拒绝的用例算过，但它们不能求导。
 
+**取数行修好之后（2026-11-02）**：`runCase` 原来按 `l.startsWith('error[')` 找诊断，而这棵树早已不再输出那个形式——`include/camel/core/error/diagnostics/render.h` 写明短格式是 `(module)path:line:col: [Error]: message suggestion (name=..., code=0x...)`，`git grep -c 'error\[' -- src` 是 **0**。于是它一条也匹配不到，把**每一条不过的用例**都记成 `other`，读出 **`total=127 library=118 pass=12 with=0 array=0 other=106`**——一个瞎了的尺子，而且 `other` 只许降，于是 `--ledger-check` 每天红一条"其实什么都没变"的账。取数行改成 `l.includes(': [Error]: ')` 之后，读数回到 **`pass=12 with=54 array=46 other=6`**，与 `LEDGER_RECORDED` 记的完全一致，所以**棘轮不重记**（新读数等于旧记录，`[LEDGER-CHECK] ok`）。**留档的错数**：`with=0 array=0 other=106`（2026-11-02 取数行修好前的一读），它错在尺子，不在用例。
+
+这里的分账是**计量修正**（取数行错），不是断言升级、不是新用例、也不是删码：`pass`、`total`、`library` 一个都没动，`with`/`array`/`other` 也没有真的换类。
+
 **这个工具只读不写**：它扫用例、跑一遍、打印表与那一行 `[LEDGER]`，不更新本页——本页仍由人手改，工具给数。
 （2026-11-01 23:00 重算：118 个顶层用例逐条跑，另 9 个在 `jax_names/` 子目录。）
 
