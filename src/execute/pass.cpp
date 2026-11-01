@@ -1270,6 +1270,9 @@ struct ResolvedPass {
 };
 
 /// Resolves one specification: the pass name and its `key=value` words. Prints nothing.
+std::optional<camel::execute::detail::ParamProblem> valueProblem(
+    const std::string &name, const PassArgs &args);
+
 ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
     ResolvedPass result;
     camel::execute::detail::ParsedSpec parsed;
@@ -1328,11 +1331,39 @@ ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
         result.paramProblem = std::move(problem);
         return result;
     }
+    // A value the declaration's type accepted but the pass cannot use. This is where it is
+    // reported: the pipeline is still being read, so the diagnostic carries the position of the
+    // word, the way a wrongly typed parameter does -- and the pass is never built, so nothing here
+    // can end up as an exception nothing catches.
+    if (auto problem = valueProblem(parsed.name, args)) {
+        result.paramProblem = std::move(problem);
+        return result;
+    }
     result.factory =
         [make = descriptor->descriptor.make, args = std::move(args)](const context_ptr_t &ctx) {
             return make(ctx, args);
         };
     return result;
+}
+
+/// A value the declaration's type accepted and the pass cannot use: checked while the pipeline is
+/// read, so the report has a position and the pass is never built with a value it refuses.
+std::optional<camel::execute::detail::ParamProblem> valueProblem(
+    const std::string &name, const PassArgs &args) {
+    using camel::execute::detail::ParamProblem;
+    using camel::execute::detail::ParamProblemKind;
+    // `std::opt settle_runs`: the bound the rewrite engine reports at. It is an internal bound
+    // (see settleRunsOf), and 0 is refused rather than read as "never report".
+    if (name == "std::opt" && args.given("settle_runs") && args.getInt("settle_runs") < 1) {
+        ParamProblem problem;
+        problem.kind = ParamProblemKind::OutOfRange;
+        problem.name = "settle_runs";
+        problem.found = args.text("settle_runs");
+        problem.expected = "at least 1";
+        problem.text = std::format("settle_runs must be at least 1, got {}", args.text("settle_runs"));
+        return problem;
+    }
+    return std::nullopt;
 }
 
 /// A parameter written wrongly at a pass call: the language's own diagnostics for a call, at the
@@ -1359,6 +1390,10 @@ Diagnostic parameterDiagnostic(
     case Kind::WrongType:
         diag = DiagnosticBuilder::of(SemanticDiag::ParamArgumentWrongType)
                    .commit(problem.name, specName(spec), problem.found, problem.expected);
+        break;
+    case Kind::OutOfRange:
+        diag = DiagnosticBuilder::of(RuntimeDiag::InvalidPassParameter).commit(spec, problem.text);
+        diag.stage = "typecheck";
         break;
     case Kind::Missing:
         diag = DiagnosticBuilder::of(SemanticDiag::ParamArgumentMissing)
