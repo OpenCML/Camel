@@ -1,6 +1,6 @@
 # 没有 token 的算子怎么按键：`tensor:multiply` 与 `:op/idx_arr` 的批处理规则
 
-**状态：已按默认建议落地（两个原语的规则都进了 `rulesets.vmap`），调用节点仍缺变换侧一笔。车道 `lane-vmaparr`，2026-11-01。**
+**状态：已按默认建议落地（两个原语的规则都进了 `rulesets.vmap`，调用节点已改成"先问再拒"）；`found=1` 待标签。车道 `lane-vmaparr`，2026-11-01。**
 
 ## 一句话
 
@@ -25,15 +25,21 @@
 
 一个算子只挂一个 family，这是既有设计；这一笔之后 `forward=true` 的读数里有 10 条 `rulesets.jvp` 和 2 条 `rulesets.vmap`。**这是必然**：变换按绑定读键，而这两个数组原语的唯一前向规则就是批处理规则，写进 `rulesets.jvp` 是错的（那里是切线）。代价：`jvp` 读到这两条会拒在"规则的右边不是切线的函数"，而不再是"这个算子根本没挂键"——两个都是拒，后者更准但前者才是事实。`test/cases/compile/rulesets/rulesets_lookup.py` 把这件事按名字钉住了（哪十条属于 jvp，哪两条属于 vmap）。
 
-## 还是缺的：调用节点
+## 调用节点：已按（乙）落地
 
-实测（`vmap(g)`，`g(x) = f(x) + 1.0`）：`skip=body construct=a call asked=0 found=0`。`asked=0` 是决定性的——变换在**问之前**就拒，所以**规则集无论怎么写都够不着**，写一条按函数名的规则只会是"写对了但没被用上"。修在 `modules/transforms/vmap.cpp`（本车道不碰），两条路：
+改前实测（`vmap(g)`，`g(x) = f(x) + 1.0`）：`skip=body construct=a call asked=0 found=0`。`asked=0` 是决定性的——变换在**问之前**就拒，规则集怎么写都够不着。
 
-- **（甲）走进去批**：把被调函数的图内联进批处理图再走一遍。`#inline` 之类的既有台阶能前置一部分，但"函数值参数"内联完还是调用。
-- **（乙）按函数名问规则**：现在 call 形状的键已经能装规则了（这一笔刚修好两个读规则的缺陷），所以"被调名 + arity"是现成的键；变换要做的只是在 call 结点上问一次，问不到再按名拒。
+现在（`modules/transforms/vmap.cpp`）：直接调用在图上是一个 `Func` 结点（被调图 + 实参，值是调用结果），间接调用是 `Call` 结点（被调是值）。`Func` 结点按**被调图名字的叶子 + 实参个数**组键问 `rulesets.vmap`：问到就用规则右边点名的函数（与算子那条路完全一致，只是键不同），问不到就按名拒。改后读数：
 
-建议（乙）：不动规则机制，一条规则能同时说"这个函数批处理时调谁"，而且 `asked` 读数会立刻从 0 变成 1，缺口可见。
+```
+REINTERP vmap function=g skip=body construct=a call uri=f asked=1 found=0 missing=1
+transforms: vmap does not batch a call yet (the ruleset holds no rule for a call to `f` with 1 argument)
+```
+
+- **`asked` 不再会是 0**：间接调用（`Call` 结点）也计一次 asked、记 missing，理由写进诊断（被调是值不是名字，规则只能按名字归档）。这是既有先例：算子没挂键时也是"计一次 asked、理由说清楚"。
+- **`found=1` 今天到不了**，原因不是机制而是作用域：规则的头必须在**规则集模块里能解析**，而程序自己写的函数不在 `stdlib/rulesets/vmap.cml` 的作用域里。设计 §3 的答案是给函数加标签（`#jvp(my_jvp)` 那种），那不是这一笔。
+- **叶子名做键会撞名**：变换读的是被调图名字的叶子（`main::f` → `f`），所以程序里一个恰好叫 `f` 的函数会与家庭里以 `f` 为头的规则匹配。今天家庭里没有这样的头，不会错；但这是"用标签收口"而不是"用名字收口"的理由之一——标签是名字对名字，不经过字符串键。
 
 ## 判据
 
-规则写对了不等于用上了：这两条都以 `asked/found/missing` 读数 + 一个手算得出的程序 + 与逐行 `array.vmap` 逐位相同为准，四后端一致才算数。
+规则写对了不等于用上了：这两条都以 `asked/found/missing` 读数 + 一个手算得出的程序 + 与逐行 `array.vmap` 逐位相同为准，四后端一致才算数。调用这条目前只到"问到了、家庭没有"，逐位对比要等 `found=1`（标签）。

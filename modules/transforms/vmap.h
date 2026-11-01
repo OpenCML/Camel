@@ -27,10 +27,14 @@
  * this family.
  *
  * What is built today is the elementwise tier: a body of ports, constants and the five arithmetic
- * primitives. A primitive with no rule, and any other construct (a call, a branch, a loop), is
- * refused *by name* at the node it was written at -- never copied and hoped for (design principles
- * 9.9). `matmul`, the reductions and `reshape` are the next tiers: each of them needs a rule that
- * says which axis the batch is on, and `sum` over a batch is not the batch's sum.
+ * primitives, and calls, which are *asked about* -- by the callee's name and its argument count, the
+ * key a call already has -- like any primitive. A primitive whose key is unbound, a call the family
+ * has no rule for, and any other construct (a branch, a loop) is refused *by name* at the node it was
+ * written at -- never copied and hoped for (design principles 9.9). The count is part of the answer:
+ * `asked=1 found=0 missing=1` at a call says the family was asked and had nothing, which is a hole
+ * somebody can fill; `asked=0` would say the walk never arrived. `matmul`, the reductions and
+ * `reshape` are the next tiers: each of them needs a rule that says which axis the batch is on, and
+ * `sum` over a batch is not the batch's sum.
  */
 
 #pragma once
