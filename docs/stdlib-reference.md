@@ -7215,11 +7215,12 @@ integer row's mean is `f32`, which is not the element the rule would be written 
 vmap_max: (xs: T[..]) => T[..] when is_numeric::<T>()
 ```
 
-`max(xs)` batched: one maximum per row, folded the same way `sum` is. No accumulator is chosen,
-because IEEE 754-2019 maximum carries an element and is exactly associative and commutative
-(design principles 7.7): the axes of a row may be folded away in any order and the bits are the
-same, so the batch axis in front and the row's axes folded from the first is the same value as
-the row's own `max`.
+`max(xs)` batched: one maximum per row. The row's axes are flattened into one (`shape(xs)[0]`
+is the batch extent, `-1` the rest) and the maximum is taken over that axis in one pass: IEEE
+754-2019 maximum carries an element and is exactly associative and commutative (design
+principles 7.7), so the axes of a row may be folded away in any order -- or in one pass over
+the flattened row -- and the bits are the same: -0 below +0, a NaN anywhere beyond every
+number, in either shape.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_max([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])` gives `[5.0, 4.0]`
@@ -7230,8 +7231,9 @@ the row's own `max`.
 vmap_min: (xs: T[..]) => T[..] when is_numeric::<T>()
 ```
 
-`min(xs)` batched: the same fold, with the IEEE 754-2019 minimum. -0 is below +0 and a NaN is
-beyond every number, so the fold answers both readings the whole-tensor form does.
+`min(xs)` batched: the same one-pass minimum over the flattened row, with the IEEE 754-2019
+`minimum`. -0 is below +0 and a NaN is beyond every number, so the answer is the one the
+whole-tensor form gives.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_min([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])` gives `[1.0, 0.0]`
