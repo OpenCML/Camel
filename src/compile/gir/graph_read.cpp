@@ -122,6 +122,10 @@ std::vector<gc_node_ref_t> DraftGraphRead::ctrlInputsOf(gc_node_ref_t ref) const
     return mappedListOf(txn_.graph().ctrlInputsOf(sourceIdOf(ref)));
 }
 
+std::vector<gc_node_ref_t> DraftGraphRead::normPortsOf() const {
+    return mappedListOf(txn_.graph().normPorts());
+}
+
 uint32_t DraftGraphRead::regionOfNode(gc_node_ref_t ref) const {
     const camel::runtime::DraftNodeHeader *header = txn_.graph().header(sourceIdOf(ref));
     return header == nullptr ? 0 : header->region;
@@ -196,6 +200,20 @@ GraphId DraftGraphRead::calleeIdOf(gc_node_ref_t ref) const {
 std::span<const std::byte> DraftGraphRead::payloadOf(gc_node_ref_t ref) const {
     return txn_.graph().payloadOf(sourceIdOf(ref));
 }
+const NodeFace *GraphRead::node(gc_node_ref_t ref) const {
+    if (!recordsBuilt_) {
+        records_.resize(static_cast<size_t>(nodeSlotCount()));
+        for (gc_cnt_t at = 0; at < nodeSlotCount(); ++at) {
+            records_[at] = nodeFaceOf(at);
+        }
+        recordsBuilt_ = true;
+    }
+    if (ref >= records_.size() || !records_[ref].alive) {
+        return nullptr;
+    }
+    return &records_[ref];
+}
+
 std::string GraphRead::operUriOf(gc_node_ref_t ref) const {
     if (kindOf(ref) != GCNodeKind::Oper) {
         return {};
@@ -217,6 +235,11 @@ gc_cnt_t GraphRead::armCountOf(gc_node_ref_t ref) const {
     }
     return body.armCount;
 }
+std::vector<gc_node_ref_t> FrozenGraphRead::normPortsOf() const {
+    const std::span<const gc_node_ref_t> ports = graph_.normPorts();
+    return std::vector<gc_node_ref_t>(ports.begin(), ports.end());
+}
+
 std::vector<gc_node_ref_t> FrozenGraphRead::regionPortsOf(uint32_t id) const {
     const std::span<const gc_node_ref_t> ports = graph_.regionPorts(id);
     return std::vector<gc_node_ref_t>(ports.begin(), ports.end());
@@ -434,12 +457,12 @@ std::string firstDifference(const GraphRead &draft, const GraphRead &frozen) {
 
 
 void DraftGraphs::add(const camel::runtime::GraphTransaction &txn) {
-    byId_.try_emplace(txn.id(), txn);
+    byId_.try_emplace(txn.id(), std::make_unique<DraftGraphRead>(txn));
 }
 
 const GraphRead *DraftGraphs::byId(GraphId id) const {
     const auto found = byId_.find(id);
-    return found == byId_.end() ? nullptr : &found->second;
+    return found == byId_.end() ? nullptr : found->second.get();
 }
 
 std::string describe(const GraphRead &graph) {

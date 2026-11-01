@@ -9,6 +9,7 @@
 
 #include <cstring>
 #include <map>
+#include <memory>
 #include <span>
 #include <string>
 #include <type_traits>
@@ -60,6 +61,13 @@ struct NodeFace {
     bool alive                = false;
 
     constexpr bool hasFlag(uint8_t mask) const { return (flags & mask) != 0; }
+    /// The type of the node's value, spelled the way `GCNode` spells it, so a reader written
+    /// against a frozen graph reads a face's record with the same expression. Types are interned
+    /// and never changed once made, so this is the object the frozen record hands out; the const
+    /// on the field is the face's, not the type's.
+    camel::core::type::Type *dataType() const {
+        return const_cast<camel::core::type::Type *>(type);
+    }
 };
 
 class GraphRead {
@@ -128,6 +136,27 @@ class GraphRead {
     /// way its input lists are).
     virtual std::vector<gc_node_ref_t> regionPortsOf(uint32_t id) const = 0;
 
+    // The names below are the ones the lift already calls these facts by, forwarding to the
+    // interface above and to nothing else. They exist so that moving the lift onto a face is a
+    // change of the type it holds; the face's own vocabulary is the `...Of` names, and removing
+    // any of these forwarding names changes no answer.
+    gc_cnt_t nodeCount() const { return nodeSlotCount(); }
+    /// The node's record, `nullptr` when the id names no node -- the same answer `GCGraph::node`
+    /// gives, so a reader's null check reads the same on a face. The records are held by the face
+    /// itself: built on the first ask and kept until the face dies, so the pointer is valid as
+    /// long as the face is.
+    const NodeFace *node(gc_node_ref_t ref) const;
+    uint32_t regionCount() const { return regionCountOf(); }
+    const camel::runtime::GCRegion *region(uint32_t id) const { return &regionOf(id); }
+    uint32_t nodeRegion(gc_node_ref_t ref) const { return regionOfNode(ref); }
+    std::vector<gc_node_ref_t> regionPorts(uint32_t id) const { return regionPortsOf(id); }
+    std::span<const ::slot_t> staticSlots() const { return staticSlotsOf(); }
+    gc_node_ref_t exitNodeRef() const { return exitRefOf(); }
+    uint64_t nodeOrigin(gc_node_ref_t ref) const { return originOf(ref); }
+    std::vector<gc_node_ref_t> normPorts() const { return normPortsOf(); }
+    /// The graph's own ports (its parameters), the list GCGraph::normPorts answers.
+    virtual std::vector<gc_node_ref_t> normPortsOf() const = 0;
+
     /// The statements this one follows in the same `sync` block. A frozen graph keeps them as
     /// `GCGraphSyncEdge` and a draft as a list of ids; the face answers the predecessor, which is
     /// the only part of the edge the lift reads.
@@ -144,6 +173,12 @@ class GraphRead {
     std::string operUriOf(gc_node_ref_t ref) const;
     /// How many arms a BRCH node has, 0 for another kind of node.
     gc_cnt_t armCountOf(gc_node_ref_t ref) const;
+
+  protected:
+    /// The records `node` hands out, built once on the first ask. A face reads one graph, so this
+    /// is one vector the size of the graph's id space; it is thrown away with the face.
+    mutable std::vector<NodeFace> records_;
+    mutable bool recordsBuilt_ = false;
 };
 
 /// The face of a build-time draft: what a graph answers while it is being built.
@@ -187,6 +222,7 @@ class DraftGraphRead final : public GraphRead {
     }
     uint32_t regionOfNode(gc_node_ref_t ref) const override;
     std::vector<gc_node_ref_t> regionPortsOf(uint32_t id) const override;
+    std::vector<gc_node_ref_t> normPortsOf() const override;
     std::vector<gc_node_ref_t> syncInputsOf(gc_node_ref_t ref) const override;
     gc_node_ref_t exitRefOf() const override;
     std::span<const ::slot_t> staticSlotsOf() const override {
@@ -244,6 +280,7 @@ class FrozenGraphRead final : public GraphRead {
     }
     uint32_t regionOfNode(gc_node_ref_t ref) const override { return graph_.nodeRegion(ref); }
     std::vector<gc_node_ref_t> regionPortsOf(uint32_t id) const override;
+    std::vector<gc_node_ref_t> normPortsOf() const override;
     std::vector<gc_node_ref_t> syncInputsOf(gc_node_ref_t ref) const override;
     gc_node_ref_t exitRefOf() const override { return graph_.exitNodeRef(); }
     std::span<const ::slot_t> staticSlotsOf() const override {
@@ -284,7 +321,7 @@ class DraftGraphs {
     const GraphRead *byId(GraphId id) const;
 
   private:
-    std::map<GraphId, DraftGraphRead> byId_;
+    std::map<GraphId, std::unique_ptr<DraftGraphRead>> byId_;
 };
 
 /// One line about a graph, for a reading: how many nodes, which kind each is, and what its FUNC
