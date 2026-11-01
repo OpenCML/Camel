@@ -84,3 +84,39 @@ BreakPortsTestPass::apply(const camel::runtime::Program *program, std::ostream &
        << " port 0 now reads untyped node " << static_cast<unsigned>(untyped) << '\n';
     return session.commit();
 }
+
+const camel::runtime::Program *
+DanglePortTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    GCGraph *targetGraph = nullptr;
+    gc_node_ref_t target = kInvalidNodeRef;
+    for (GCGraph *graph : program->graphs()) {
+        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+            const GCNode *record = graph->node(it.ref());
+            if (record != nullptr && record->kind == GCNodeKind::Oper) {
+                targetGraph = graph;
+                target      = it.ref();
+                break;
+            }
+        }
+        if (target != kInvalidNodeRef) {
+            break;
+        }
+    }
+    if (target == kInvalidNodeRef) {
+        os << "test::dangle_port: the program has no operator node\n";
+        return program;
+    }
+    const std::span<const gc_node_ref_t> given = targetGraph->normInputsOf(target);
+    std::vector<gc_node_ref_t> ports(given.begin(), given.end());
+    if (ports.empty()) {
+        os << "test::dangle_port: operator node " << static_cast<unsigned>(target) << " has no ports\n";
+        return program;
+    }
+    RuntimeGraphDraftSession session(context_, program);
+    auto &transaction = session.edit(targetGraph);
+    ports[0]          = kInvalidNodeRef;
+    transaction.edit().setNormInputs(target, ports);
+    os << "test::dangle_port: operator node " << static_cast<unsigned>(target)
+       << " port 0 now reads a node the graph does not have\n";
+    return session.commit();
+}

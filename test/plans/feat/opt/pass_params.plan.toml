@@ -557,3 +557,15 @@ expect_exit = 0
 expect_stdout_contains = ["3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
+
+[[tests]]
+name = "pass_guard.dangling_port_refused"
+desc = "A pass that points an operator port at a node the graph does not have is refused by the commit itself, before any version is written: the message names the pass, the graph, the node and the port, and the run exits non-zero instead of crashing. This is the shape the guard for a pass's program claims to refuse and cannot see -- the encoder used to read through the reference and segfault before the guard was reached, so the refusal has to happen where the graph is written."
+kind = "negative"
+case = "../../../cases/compile/pass_guard/plain.cml"
+args = ["${case}", "test::dangle_port"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::PassInternalError"
+expect_output_contains = ["Pass 'test::dangle_port' failed with an internal error: an ordinary port of operator node", "reads port 0 of a node the graph does not have"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000

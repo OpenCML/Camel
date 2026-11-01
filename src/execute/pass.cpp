@@ -989,6 +989,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
         TEST_PASS(kBreakExitTestPass, BreakExitTestPass),
         TEST_PASS(kBreakPortsTestPass, BreakPortsTestPass),
+        TEST_PASS(kDanglePortTestPass, DanglePortTestPass),
         TEST_PASS(kKeepShapeTestPass, KeepShapeTestPass),
         TEST_PASS(kBoundsFlipTestPass, BoundsFlipTestPass),
         TEST_PASS(kKeepInspectTestPass, KeepInspectTestPass),
@@ -2263,8 +2264,15 @@ std::string entryExitViolation(const camel::runtime::Program &program) {
 
 /// Every operator node still matches the declaration it names: an operator the table knows, ordinary
 /// ports that are live nodes with a type, and no more of them than the declaration's operands. A
-/// port the declaration does not have, a port pointing at a node that is gone, or a port without a
-/// type is a call nothing can run.
+/// port the declaration does not have, a port pointing at a dead node or at one without a type, or a
+/// port whose node is gone is a call nothing can run.
+///
+/// One half of the last case is not seen here. A port naming a node that does not exist at all is
+/// refused earlier, by the commit that would have to write it down
+/// (`RuntimeGraphDraftSession::validateDraftPorts`): the graph version cannot be encoded around a
+/// reference to nothing, and the encoder used to read through it and crash before this function ever
+/// ran. What reaches this function is a graph that exists, so it covers the node that is dead (erased,
+/// still referenced) and the node that has no type.
 ///
 /// Returns nothing, or the graph, the node and what is wrong with it.
 std::vector<std::string> portDeclarationViolation(const camel::runtime::Program &program) {

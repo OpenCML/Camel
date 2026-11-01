@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * Two test-only passes that hand the pipeline a graph it must refuse: one loses the exit node of
- * the program's own graph, the other adds an operator node nothing declares. Each stands for a
- * class of mistake a pass can make -- a rewrite that replaces or removes the node a program returns
- * its value at, and one that leaves an operator node no call can run -- and both are caught by the
- * check every pass ends with (src/execute/pass.cpp, `entryExitViolation` and
- * `portDeclarationViolation`). Neither is in a default pipeline: naming one is the whole switch.
+ * Three test-only passes that hand the pipeline a graph it must refuse. Two are caught by the check
+ * every pass ends with (src/execute/pass.cpp, `entryExitViolation` and `portDeclarationViolation`):
+ * one loses the exit node of the program's own graph, one leaves an operator port reading a node of
+ * no type. The third writes a port at a node the graph does not have at all, which the commit has to
+ * refuse before it encodes a version around it -- a reference to nothing cannot be written down.
+ * None is in a default pipeline: naming one is the whole switch.
  */
 
 #pragma once
@@ -22,9 +22,19 @@ class BreakExitTestPass : public RuntimeGraphRewritePass {
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
 
-/// Adds an operator node whose operator no declaration names.
+/// Points an operator port at a node of no type, which the guard refuses.
 inline constexpr const char *kBreakPortsTestPass = "test::break_ports";
 class BreakPortsTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+/// Points an operator port at a node the graph does not have: refused by the commit itself, because
+/// a graph version cannot be written around a reference to nothing.
+inline constexpr const char *kDanglePortTestPass = "test::dangle_port";
+class DanglePortTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     const camel::runtime::Program *
