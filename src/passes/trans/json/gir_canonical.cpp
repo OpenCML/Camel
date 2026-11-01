@@ -631,8 +631,12 @@ class CanonicalDocument {
         // `canonical=false` keeps the registry's number: it is a reading for a person debugging a
         // load order, and there the number is the fact being read.
         const std::string spelling = type::sourceTypeSpelling(t->toString());
+        // The kind goes into the hash with the spelling: two types of different kinds that spell
+        // the same are two types, and a collision must not make the document name them one.
         return json{
-            {"k", "other"}, {"code", stableCodeOf(spelling)}, {"spelling", spelling}};
+            {"k", "other"},
+            {"code", stableCodeOf("other:" + spelling)},
+            {"spelling", spelling}};
     }
 
     void collectTypes() {
