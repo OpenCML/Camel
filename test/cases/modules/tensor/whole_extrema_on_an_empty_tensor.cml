@@ -1,0 +1,17 @@
+/**
+ * An extremum has no identity, so `max`, `min`, `argmax` and `argmin` of a tensor with no element
+ * are a fault and not an answer (design principles 7.7): `InvalidArgument`, the kind 7.7 names.
+ * `sum` of the same tensor is `0` and `mean` divides by zero, which is why these four are the
+ * readings that separate "the identity of a reduction" from "an empty answer".
+ *
+ * The tensor is written `f32[0]` because that is the shape with no element; the fault is raised
+ * before any kernel runs, so the reading is the diagnostic and the exit code, one call per run
+ * (the first one stops the program).
+ */
+import { max } from tensor
+
+func main(): int sync {
+    let none: f32[0] = []
+    println(max(none))
+    return 0
+}

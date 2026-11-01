@@ -3365,3 +3365,20 @@ assert(out.includes('transform_rules adjoint=true'), `the transpose is not the a
 }
 """
 timeout_ms = 10000
+
+# The pullback of a whole-tensor extremum: max/min broadcast the cotangent over the tensor and give
+# it to the elements equal to the extremum -- the axis forms' rule, with a broadcast instead of an
+# expand. `high(w) = max([[w, 4.0], [3.0, 2.0]])` is 4.0 while w is below it, so the derivative is 0
+# there and 1 at w = 5; `low` is the other way round, 0 at w = 3 and 1 at w = 1.
+[[tests]]
+name = "whole_extrema_pullback"
+desc = "grad of max and min over every element: the cotangent reaches the element that is the extremum and nothing else, and a whole-tensor reduction is differentiable through its broadcast rather than an axis expansion -- 1 at w = 5 and 0 at w = 3 for max, 1 at w = 1 and 0 at w = 3 for min."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/whole_extrema_grad.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n0.0\n1.0\n0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

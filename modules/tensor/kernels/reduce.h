@@ -68,6 +68,21 @@ double sumAll(const Array *input);
 /// double once, without that conversion.
 int64_t sumAllInt64(const Array *input);
 
+/// The whole-tensor `max` (op Max) or `min` (op Min) of a floating element type, as `sumAll`
+/// answers a floating sum: IEEE 754-2019 maximum/minimum carry an element and never round, so a
+/// double holds every float element type (f32, f64, bf16, f16) exactly. A NaN anywhere gives the
+/// canonical NaN and -0 is below +0 (design principles 7.7).
+double extremumAllFloat(ReduceOp op, const Array *input);
+
+/// The whole-tensor `max`/`min` of an int32, int64 or bool tensor: an element of the tensor as it
+/// stands, so no conversion and no rounding.
+int64_t extremumAllInt(ReduceOp op, const Array *input);
+
+/// The row-major position of the whole-tensor `max`/`min` (op ArgMax/ArgMin), counted from the
+/// start of the stored order: the first NaN's position if there is one, +0 above -0, and the first
+/// position on a tie (design principles 7.7). An int64, the one width a position has.
+int64_t argExtremumAll(ReduceOp op, const Array *input);
+
 /// Softmax along `axis` (float32 result).
 Array *softmax(const Array *input, int64_t axis, mm::IAllocator &allocator);
 /// Log-softmax along `axis` (float32 result).
