@@ -15,7 +15,10 @@
  *   1. it must build: a merge that lands on a tree the compiler refuses is not a step, and the
  *      script says so and stops (exit 7) rather than calling the plan red there;
  *   2. the plan must run on it: a step whose reading has no `[SUMMARY]` was never measured, and a
- *      measurement that did not happen is not evidence either way.
+ *      measurement that did not happen is not evidence either way;
+ *   3. a harmless unit (`--harmless`) must have no ancestor relation to the units after it. When it
+ *      contains one, `git merge` answers "Already up to date", that unit is never applied, and the
+ *      series reads green because nothing was asked -- refused before anything is built (exit 8).
  *
  * Two directions, one judge (the plan's own exit code):
  *
@@ -76,6 +79,7 @@ function parseArgs(argv) {
         forward: false,
         merges: [],
         groups: [],
+        harmless: [],
         before: [],
     }
     for (let i = 0; i < argv.length; i += 1) {
@@ -124,6 +128,10 @@ function parseArgs(argv) {
                 break
             case '--merge':
                 args.merges.push(value)
+                i += 1
+                break
+            case '--harmless':
+                args.harmless.push(value)
                 i += 1
                 break
             case '--group':
@@ -270,7 +278,45 @@ function revertBefore(args) {
     return 0
 }
 
-function forward(args, baseline) {
+/// The series the caller asked for, and the one relation that makes it a wrong question.
+function planSteps(args) {
+    // A step is one unit of history: a single merge, or a group of commits the caller names
+    // because the unit only builds once all of them are applied (a merge whose follow-up commits
+    // land after it is such a unit). `--harmless` names units applied before the series, to prove
+    // that an order does not change the answer.
+    const steps = args.groups.length
+        ? args.groups.map((group) => group.split(',').map((sha) => sha.trim()))
+        : mergesOf(args).map((merge) => [merge.split(' ')[0]])
+    if (args.harmless.length === 0) {
+        return { steps }
+    }
+    // A harmless unit that contains a later one swallows it: `git merge` answers "Already up to
+    // date", the later unit is never applied, and a series that reads green is green because
+    // nothing was asked. That is a wrong question, not a measurement, so it is refused here.
+    const all = [...args.harmless, ...steps.flat()]
+    for (const harmless of args.harmless) {
+        for (const other of all) {
+            if (other === harmless) {
+                continue
+            }
+            const contained = git(['merge-base', '--is-ancestor', other, harmless], args.path).code === 0
+            const equal =
+                git(['rev-parse', harmless], args.path).output.trim() ===
+                git(['rev-parse', other], args.path).output.trim()
+            if (contained || equal) {
+                console.log(
+                    `[bisect] REFUSED: the harmless unit ${harmless} already contains ${other}; ` +
+                        "git merge answers 'Already up to date' and swallows it, so the series " +
+                        'would read green because nothing after it was applied',
+                )
+                return { refused: true }
+            }
+        }
+    }
+    return { steps: [...args.harmless.map((sha) => [sha]), ...steps] }
+}
+
+function forward(args, baseline, steps) {
     if (!baseline.green) {
         console.log(
             '[bisect] baseline already red: forward asks which merge turns a green tree red, and ' +
@@ -278,12 +324,6 @@ function forward(args, baseline) {
         )
         return 6
     }
-    // A step is one unit of history: a single merge, or a group of commits the caller names
-    // because the unit only builds once all of them are applied (a merge whose follow-up commits
-    // land after it is such a unit).
-    const steps = args.groups.length
-        ? args.groups.map((group) => group.split(',').map((sha) => sha.trim()))
-        : mergesOf(args).map((merge) => [merge.split(' ')[0]])
     if (steps.length === 0) {
         console.log(`[bisect] no merges between ${args.start} and ${args.base}: nothing to apply`)
         return 4
@@ -414,11 +454,16 @@ function main() {
         )
     }
 
+    // The series is checked before anything is built: a wrong question costs no build.
+    const planned = args.forward ? planSteps(args) : null
+    if (planned?.refused) {
+        return 8
+    }
     const baseline = measure(args, '[baseline]', start)
     if (baseline.refused) {
         return 5
     }
-    return args.forward ? forward(args, baseline) : revert(args, baseline)
+    return args.forward ? forward(args, baseline, planned.steps) : revert(args, baseline)
 }
 
 process.exitCode = main()

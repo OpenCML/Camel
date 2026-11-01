@@ -14,4 +14,5 @@
 
 const camel::runtime::Program *applyOptimizeRewritePass(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    std::ostream &os, const OptimizeRewriteConfig &config, bool *changed = nullptr);
+    std::ostream &os, const OptimizeRewriteConfig &config, bool *changed = nullptr,
+    const camel::runtime::GCGraph **lastChangedGraph = nullptr);

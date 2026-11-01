@@ -33,6 +33,7 @@
 #include "camel/passes/test/graph_release.h"
 #include "camel/passes/test/keepfn.h"
 #include "camel/passes/test/bounds.h"
+#include "camel/passes/test/inlineuse.h"
 #include "camel/passes/test/keepshape.h"
 #include "camel/passes/test/rules.h"
 #include "camel/passes/test/saturate.h"
@@ -379,6 +380,20 @@ size_t constantBudgetOf(const PassArgs &args) {
     return bytes < 0 ? 0 : static_cast<size_t>(bytes);
 }
 
+/// The `settle_runs` parameter of `std::opt`: how many runs of the rewrite in a row may each change
+/// the same graph before the pass reports that the rewrite does not settle. It is an internal bound
+/// of the engine, exposed so that a test can prove the report happens at all (a run that changes
+/// nothing ends the loop, so the runaway shows up across runs, not inside one); it is not a tuning
+/// knob, and a value below 1 is refused rather than read as "never report".
+size_t settleRunsOf(const PassArgs &args) {
+    const int64_t runs = args.getInt("settle_runs");
+    if (runs < 1) {
+        throw std::runtime_error(
+            std::format("std::opt: settle_runs must be at least 1, got {}", runs));
+    }
+    return static_cast<size_t>(runs);
+}
+
 PassMaker makeGraphVizPass(GraphVizDumpConfig config) {
     return [config](const context_ptr_t &ctx, const PassArgs &) {
         return std::make_unique<GraphVizDumpPass>(ctx, config);
@@ -411,6 +426,7 @@ PassMaker optimizePass() {
         config.checkScreens        = args.getBool("check_screens");
         config.growthBudget        = growthBudgetOf(args, "std::opt");
         config.constantBudgetBytes = constantBudgetOf(args);
+        config.settleRuns          = settleRunsOf(args);
         return std::make_unique<OptimizeRewritePass>(ctx, config);
     };
 }
@@ -988,6 +1004,8 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
         TEST_PASS(kKeepShapeTestPass, KeepShapeTestPass),
         TEST_PASS(kBoundsFlipTestPass, BoundsFlipTestPass),
+        TEST_PASS(kInlineUseTestPass, InlineUseTestPass),
+        TEST_PASS(kInlineUseDropTestPass, InlineUseDropTestPass),
         TEST_PASS(kKeepInspectTestPass, KeepInspectTestPass),
         TEST_PASS(kContextLifetimeTestPass, ContextLifetimeTestPass),
         TEST_PASS(kContextsTestPass, ContextsTestPass),
