@@ -1,12 +1,12 @@
 // The same situation read one step further: the round reads the parameter twice, through two
 // different products (`+ x` and `+ x` again, each its own `add`). Both cotangents land on the one
-// value, so the refusal has to catch them in one place -- `captures=1`, not two -- and the `from` it
+// value, so the collection catches them in one place -- `captures=1`, not two -- and the `from` it
 // names is the product the reverse walk reached first. Two captures here would mean the channel
-// counts products instead of values, and the step that adds it would hand back a cotangent twice.
+// counts products instead of values, and the carried sum would hand back a cotangent twice.
 //
 // `read_twice(x) = loop s = x for i in 0..3 do 2.0*s + x + x` is `s = 2s + 2x` three times,
-// `8x + 14x = 22x` on paper, so `transpose(read_twice)(1, 1)` owes 22 -- and 15 would be the answer
-// if one of the two reads were dropped.
+// `8x + 14x = 22x` on paper, so `transpose(read_twice)(1, 1)` answers 22 -- and 15, the previous
+// file's number, would be the answer if one of the two reads were dropped.
 import { transpose } from transforms
 import rulesets.transpose
 
