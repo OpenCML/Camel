@@ -119,57 +119,28 @@ B **新增**一条表示，且与裁定正面冲突；C 让 `split` 多背一个
 顺带一条同源的事实：转置后的调用必须把被调值放回原来的位置——原调用把被调方当 `with` 输入传，转置后的调用就得传一个**转置图的静态函数值**
 （空闭包）；放错位置得到的是"CALL node 3 without callee input"。
 
-**终点改了（作者 2026-11-01 15:30，`25852ba4b`）**：这一类**不是**"以后支持捕获"，而是**在调用处报编译错误**——"被调者是参数或捕获"
-那一类，按 09:35 的语言规则，变换的实参必须是编译期已知的函数，在调用处拒绝。所以本页上面那句"被转置的被调方得把捕获值收成自己的参数"
-**不再是路线**，它是这一类的旧样子；现在的样子是编译器在 `transpose(h)` 那一行就说不行：
+**这一段是历史（2026-11-01 15:30 的裁定，2026-11-02 17:50 已被负责人撤回）。** 那一版的做法是在前端建一张按算子
+URI 硬编码的表，构建器每建一个调用就查它，命中就在前端跑模块的建图代码；配套在调用点按"实参必须是程序运行前就能
+点名的函数"报编译错误，五个入口各一条用例钉住。**撤回的理由是"两个机制做同一件事"，不是"实现得不好"**：`#macro`
+加 `std::macro`（设计原则第 8 节）本来就是"动态地构造静态图"的正路，前端那张表是它的第二套；而调用处的拒绝把原本合法、
+由运行期 kernel 正常执行的程序（对参数、对捕获闭包求导）变成了编译错误——那是语义改变，只有负责人能定。
 
-    error[SemanticDiag::TransformArgumentIsNotAKnownFunction]: 'transpose' is applied to a closure that
-    captures a value, and a transform's argument has to be a function this program knows before it runs.
-       --> .../transpose_arg_not_a_static_function.cml:52:26
+**撤掉的是**：`compile_time.{h,cpp}` 与构建器里查表的那几步、`jvp_instantiate.cpp` / `split_instantiate.cpp`、
+两个算子里为它们开的口（`lifted-at=` / `halves-at=` 读数）、`CallSpec` 上的两个规格字段、`builder_operators.cpp` 里的那段检查、
+那条诊断（码一并删掉，注册表落回 **305**）、五条 `*_arg_not_a_static_function.cml` 与钉住它们的 plan 条目、入口名单与其
+检查脚本、以及那把"多少个形状还在运行期提升"的尺子——它数的是一步已经不存在的东西。
 
-判据落在 `CallSpec::staticFunctionArgument` 上（操作符自己的事实，编译器不认识名字，设计原则 6.6），诊断由
-`diagnostics/registry.tsv` 声明、生成器编号（`0x000209`，`0x03000209`）。量出来的影响面：
-- **闭包实参**（`transpose(h)`，`h` 含捕获）：今天以前是**先编译通过、运行期**才打印 `TRANSPOSE function=__g_51__ skip=residual
-  uri=:op/mul_d operand=1`；现在编译期一行错误、指回实参那一行。A/B 关掉那两行 `declareCallSpec`，`skip=residual` 原样回来（`44/45`）。
-- **参数实参**（`transpose(f)`，`f` 是参数）：**没开**。编译器按调用点实例化，`by_param(double)` 处实参就是 `double`，纸面 2.0 照答；
-  它只在参数"留成参数"时才是问题，而**标准库自己**就是那个形状——`stdlib/vjp.cml:56` 的 `vjp(f: F)` 把参数交给 `jvp`。打开参数那半边
-  会拒掉 `vjp` 自己的库体和八个 `vjp_api` 用例（实测 `35/45`）。所以参数半边的开关是 `CallSpec::staticFunctionArgRefusesParameters`，
-  默认关，等 `vjp` 不再是那个形状。
-- **体里调用闭包**（`transpose(g2)`，`g2` 自己体内 `h(2.0)`）：实参是**名字**，这里什么都不拒，运行期仍是 `skip=call … reason=function-closure`；
-  15:30 给这一类的终点是"按被调图递归实例化"，不是这条错误。
+**留下的是**（与阶段无关）：规则在命中处展开、残差不透明且不可解构、拉回函数返回元组、`vjp` 用 `..xs` 并成一条泛型、
+数组参数三步、嵌套分支递归。**三个变换现在只有运行期 kernel 一份实现，对任何函数值都能用**；要不要、以及怎样让
+`std::macro` 提前求值它们，等负责人定，在那之前不做。
 
-**三个变换一条规则（2026-11-02）**：同一条 `CallSpec::staticFunctionArg` 声明在 `transforms:transpose`、`transforms:jvp`、`transforms:split` 上，
-三条用例各钉一次（`transpose_arg_not_a_static_function.cml` 52:26、`jvp_arg_not_a_static_function.cml` 20:23、
-`split_arg_not_a_static_function.cml` 19:22），诊断名、编号 `0x03000209`、行、列都由 `verify_script` 断言，并禁止 `skip=`。
-A/B 把三处的 `staticFunctionArg` 置为 `-1`：`transpose` 回到 `TRANSPOSE function=__g_51__ skip=residual uri=:op/mul_d operand=1`、
-`jvp` 回到 `REINTERP jvp function=__g_56__ skip=body`、而 `split` **不回退成读数**——它把编译器打断在
-`builder_operators.cpp(3831) visitLinkNode: "Target node of LINK must be a function or operator node"`。三个里它对这条检查最依赖。
-
-**参数那半边要开，先要三条前提**（今天一条都不在，归 `lit2` 那条车道——作者 15:30 说的"变换在编译期实例化"）：
-1. 变换在**调用点按实例化的 F 求值**：`vjp::<T>(f: T)` 在调用点 F 已具体，`jvp(f)` 那里看到的是已知函数——这要编译期实例化那一刀，不是今天运行期 operator 的形状。
-2. **库体自身不再把形参交给变换**：`stdlib/vjp.cml#vjp` 现在是 `split(jvp(f))`，只要它还这么写，参数就会被拒。
-3. **8 个 `vjp_api` 用例的形状随之改变**：今天它们靠运行期那一半活着（实测打开参数半边 → `35/45`），得先有编译期路径再改用例。
-
-这三条不是"以后再说"，是"谁来做"：前两条是 `lit2` 的编译期实例化，第三条随它一起改。
-
-**入口一共九个，其中两个今天静默算错数（2026-11-02 实测，探针用完即删）**：检查 `test/tools/check-transform-entry-points.mjs` 从源码里读
-`readsGraphs = true` 的 `transforms`/`autodiff` 算子，得到九个入口；名单在 `modules/transforms/entry-points.tsv`，
-每一行要么 `declared`（并由脚本核对源码里真有 `staticFunctionArg`），要么 `undeclared` 且写明今天的行为。结论没有写成"全都合规"，
-写成"每个入口都有交代"。两个漏声明的入口拿捕获闭包时会**给出错数且毫无提示**（无诊断、无 `skip=`）：
-- `transforms:vmap`：`let h = (y: float) => y * x`，`x = 3.0`，`vmap(h)([2.0, 4.0])` 应为 `6.0 + 12.0 = 18.0`，实测 **`20.0`**；
-  把捕获值换成 `x = 5.0` 仍是 **`20.0`**（即 `2*2 + 4*4`）——元素落进了闭包的 `with` 位、捕获值被丢掉，不是巧合。
-- `transforms:remat`：同一个 `h`，`remat(h)(2.0)` 应为 `6.0`，实测 **`0.0`**，行是
-  `REINTERP remat function=__g_49__ in_recompute=0 out_recompute=1 graph=50`。
-复现（各把这个形状存成 `.cml`）：`camel vmap_probe.cml std::nvm` → `20.0`；`camel remat_probe.cml std::nvm` → `0.0`。
-**归因**：`vmap` 的错在"元素顶替了闭包的 `with` 位"，所以补 `staticFunctionArg` 是对症；`remat` 的 `0.0` **未归因**——
-它要么本该支持捕获闭包（kernel 丢了捕获），要么本该拒绝（沉默就是缺陷），两边都轮不到 `0.0`，但**哪一边是后面单独一轮的事**，
-这一轮只补"拒绝"这个安全的一侧。两个错数只记在 `entry-points.tsv` 的 `Measured` 里，**没有**写成任何用例的期望——
-把 `20.0` 钉进断言等于把缺陷变成规格；用例断的是补上之后的拒绝原文。`autodiff:grad` 一族则登记为"今天无事可做"：
-它先被 `NotDifferentiable`（`it has no 'with' parameter`）挡掉，参数那条规则轮不到说话。
-
+**撤完之后量到的，才是下面那两件事**：`vmap` / `remat` 拿捕获闭包时**静默算错数**（`1.0/4.0` 对纸笔 `3.0/6.0`；`0.0` 对
+纸笔 `6.0`；同一类的更早读数是 `vmap` 的 `20.0` 对 `18.0`、`remat` 的 `0.0` 对 `6.0`），`jvp` / `transpose` 在运行期按名拒绝
+同一形状，而 `split` 在五种形状上全是崩。**前两件是运行期 kernel 的缺陷、待修；第三件是"该拒绝却崩"**——它们现在回到
+"要修"的一侧，不再是"今天被拒了"。
 **撤回之后：9 × 6 实参形状矩阵（2026-11-02 重测，四个后端各一遍）**
 
-> **这一节是撤回后的读数。** 负责人 2026-11-01 17:50 否决了整套前端变换表与调用处拒绝（`TransformArgumentIsNotAKnownFunction`、`CallSpec::staticFunctionArg`、`compile_time.h`、`jvp_instantiate.cpp` / `split_instantiate.cpp` 一并撤掉，见 `reviews/questions-2026-10-29.md` 的"撤回与返工"）。**否决的理由是"两个机制做同一件事"，不是"实现得不好"**：`#macro` 加 `std::macro`（设计原则第 8 节）就是"动态地构造静态图"的正路，前端那张按算子 URI 查的表是它的第二套。三个变换因此只剩运行期 kernel 一份实现，对任何函数值都能用。
+> **这一节是撤回后的读数。** 负责人 2026-11-01 17:50 否决了整套前端变换表与调用处拒绝（那张表、那条诊断、那两个规格字段与两个实例化源文件一并撤掉，逐项见 `reviews/questions-2026-10-29.md` 的"撤回与返工"）。**否决的理由是"两个机制做同一件事"，不是"实现得不好"**：`#macro` 加 `std::macro`（设计原则第 8 节）就是"动态地构造静态图"的正路，前端那张按算子 URI 查的表是它的第二套。三个变换因此只剩运行期 kernel 一份实现，对任何函数值都能用。
 >
 > 下面每一格都是**撤完之后**量出来的，同一个生成器（`test/tools/emit-transform-matrix.mjs`）、同一台机、同一棵树，`nvm` / `fvm` / `jit` / `prl` 各一遍（45 格有程序的共 180 次运行）。**四个后端逐格一致：0 格不一致**；拒绝的格子连码带位置都相同。
 
