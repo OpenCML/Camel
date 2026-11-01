@@ -19,7 +19,7 @@ func sq(): f32 {
     return w * w
 }
 
-func main(): int {
+func main(): int sync {
     let xs: f32[] = [1.0, 2.0, 3.0]
     let gs = vmap((x: f32) => grad(sq)<x>())(xs)
     println(gs[0])

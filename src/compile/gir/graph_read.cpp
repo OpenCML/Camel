@@ -122,6 +122,20 @@ std::vector<gc_node_ref_t> DraftGraphRead::ctrlInputsOf(gc_node_ref_t ref) const
     return mappedListOf(txn_.graph().ctrlInputsOf(sourceIdOf(ref)));
 }
 
+NodeFace DraftGraphRead::nodeFaceOf(gc_node_ref_t ref) const {
+    NodeFace face;
+    const camel::runtime::DraftNodeHeader *header = txn_.graph().header(sourceIdOf(ref));
+    if (header == nullptr || header->kind == GCNodeKind::Dead) {
+        return face;
+    }
+    face.alive     = true;
+    face.kind      = header->kind;
+    face.dataIndex = header->dataIndex;
+    face.type      = header->dataType;
+    face.flags     = header->runtimeFlags;
+    face.payload   = header->payloadBytes != 0;
+    return face;
+}
 GCNodeKind DraftGraphRead::kindOf(gc_node_ref_t ref) const {
     const camel::runtime::DraftNodeHeader *header = txn_.graph().header(sourceIdOf(ref));
     return header == nullptr ? GCNodeKind::Dead : header->kind;
@@ -185,6 +199,20 @@ gc_cnt_t GraphRead::armCountOf(gc_node_ref_t ref) const {
     }
     return body.armCount;
 }
+NodeFace FrozenGraphRead::nodeFaceOf(gc_node_ref_t ref) const {
+    NodeFace face;
+    const camel::runtime::GCNode *node = graph_.node(ref);
+    if (node == nullptr) {
+        return face;
+    }
+    face.alive     = true;
+    face.kind      = node->kind;
+    face.dataIndex = node->dataIndex;
+    face.type      = node->dataType();
+    face.flags     = node->flags;
+    face.payload   = node->hasPayload();
+    return face;
+}
 bool FrozenGraphRead::alive(gc_node_ref_t ref) const {
     const camel::runtime::GCNode *node = graph_.node(ref);
     return node != nullptr && node->kind != GCNodeKind::Dead;
@@ -238,32 +266,36 @@ std::string firstDifference(const GraphRead &draft, const GraphRead &frozen) {
         if (!draft.alive(ref)) {
             continue;
         }
-        if (draft.kindOf(ref) != frozen.kindOf(ref)) {
+        // Read through the record the lift asks for, so what is compared here is the same struct a
+        // reader of the two faces gets: a field that is in `NodeFace` and not compared below is a
+        // field the lift would see differently.
+        const NodeFace draftFace  = draft.nodeFaceOf(ref);
+        const NodeFace frozenFace = frozen.nodeFaceOf(ref);
+        if (draftFace.kind != frozenFace.kind) {
             return std::format(
                 "node {}: kind draft={} frozen={}",
                 ref,
-                static_cast<int>(draft.kindOf(ref)),
-                static_cast<int>(frozen.kindOf(ref)));
+                static_cast<int>(draftFace.kind),
+                static_cast<int>(frozenFace.kind));
         }
         // A data index is compared for a Data node only: that is the node whose index names its
         // value's place in the graph's data area. For another kind the index is the writer's own
         // bookkeeping -- a draft keeps what the builder set, the encoder writes the graph's "no
         // slot" value -- and it is not a fact about the graph a reader of the face can use.
-        if (draft.kindOf(ref) == GCNodeKind::Data &&
-            draft.dataIndexOf(ref) != frozen.dataIndexOf(ref)) {
+        if (draftFace.kind == GCNodeKind::Data && draftFace.dataIndex != frozenFace.dataIndex) {
             return std::format(
                 "node {}: data index draft={} frozen={}",
                 ref,
-                draft.dataIndexOf(ref),
-                frozen.dataIndexOf(ref));
+                draftFace.dataIndex,
+                frozenFace.dataIndex);
         }
         // A type is compared by identity first and by spelling second. The spelling is the second
         // half because a graph's own function type is an object of that graph (each lambda and each
         // instance has one) while a frozen graph keeps an interned id, and the encoder writes the id
         // of the type with the same shape: two objects that print the same are the same type here,
         // and a type that prints differently is a difference whatever its pointer.
-        const camel::core::type::Type *draftType = draft.typeOf(ref);
-        const camel::core::type::Type *frozenType = frozen.typeOf(ref);
+        const camel::core::type::Type *draftType  = draftFace.type;
+        const camel::core::type::Type *frozenType = frozenFace.type;
         if (draftType != frozenType &&
             (draftType == nullptr || frozenType == nullptr ||
              draftType->toString() != frozenType->toString())) {
@@ -277,19 +309,19 @@ std::string firstDifference(const GraphRead &draft, const GraphRead &frozen) {
         // the encoder writes to the frozen node's column.
         constexpr uint8_t kComparedFlags =
             camel::runtime::kGCNodeFlagMacro | camel::runtime::kGCNodeFlagConstant;
-        if ((draft.flagsOf(ref) & kComparedFlags) != (frozen.flagsOf(ref) & kComparedFlags)) {
+        if ((draftFace.flags & kComparedFlags) != (frozenFace.flags & kComparedFlags)) {
             return std::format(
                 "node {}: flags draft={} frozen={}",
                 ref,
-                static_cast<int>(draft.flagsOf(ref)),
-                static_cast<int>(frozen.flagsOf(ref)));
+                static_cast<int>(draftFace.flags),
+                static_cast<int>(frozenFace.flags));
         }
-        if (draft.hasPayload(ref) != frozen.hasPayload(ref)) {
+        if (draftFace.payload != frozenFace.payload) {
             return std::format(
                 "node {}: payload draft={} frozen={}",
                 ref,
-                draft.hasPayload(ref),
-                frozen.hasPayload(ref));
+                draftFace.payload,
+                frozenFace.payload);
         }
         if (std::string role;
             !(role = listDifference(

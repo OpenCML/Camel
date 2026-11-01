@@ -5,15 +5,14 @@
  * persistence module `ckpt` (stdlib/ckpt.cml) and stays that, so the transform takes the other
  * word. That is the author's ruling of 2026-10-30, and there is no second name to keep compatible.
  *
- * This program was the pin of the name's absence: an import of a name `autodiff` did not export,
- * refused with the diagnostic that names it. The name has arrived, so the same program now runs on
- * the other side of the pin: `remat` gives back the function it is handed, so `remat(square)` is
- * `square` and its value at 2 is 4.0. The gradient through the same wrapper is read by
- * `test/cases/modules/autodiff/remat_identity.cml`
- * (docs/handover/reviews/questions-2026-10-30-jax.md, J8).
+ * This program was the pin of the name's absence; the name has arrived, and it is a transform of the
+ * `transforms` module (stdlib/signatures/transforms.cml), so the import names that module. What the
+ * call gives is a function whose graph is `square`'s graph with the recompute property set, and its
+ * value at 2 is 4.0 -- the mark does not change what the body computes. The graph property and the
+ * gradient through the same value are read by `modules.remat`.
  */
 
-import { remat } from autodiff
+import { remat } from transforms
 
 func square(x: float): float {
     return x * x

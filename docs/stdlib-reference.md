@@ -52,6 +52,7 @@ Not in this reference: the profiler (`perf`).
 | [ckpt](#ckpt) | `import { ... } from ckpt` | C++ |
 | [tree](#tree) | `import { ... } from tree` | Camel |
 | [transforms](#transforms) | `import { ... } from transforms` | C++ |
+| [vjp](#vjp) | `import { ... } from vjp` | Camel |
 | [tensor](#tensor) | `import { ... } from tensor` | C++ |
 | [types](#types) | `import { ... } from types` | Camel |
 | [array](#array) | `import { ... } from array` | Camel |
@@ -88,6 +89,7 @@ Not in this reference: the profiler (`perf`).
 | [ckpt](#ckpt) | `import { ... } from ckpt` |  |
 | [tree](#tree) | `import { ... } from tree` |  |
 | [transforms](#transforms) | `import { ... } from transforms` |  |
+| [vjp](#vjp) | `import { ... } from vjp` |  |
 | [tensor](#tensor) | `import { ... } from tensor` |  |
 | [types](#types) | `import { ... } from types` |  |
 | [array](#array) | `import { ... } from array` |  |
@@ -649,7 +651,8 @@ slice: <axis: int, start: int, end: int, step: int = 1> (x: Bytes) => Bytes
 The same slice of a `Bytes`, by byte: it has the one axis 0, and the result is a `Bytes`.
 `b[1:3]` and `b->slice<0, 1, 3>` are the same bytes.
 
-- Example: `encode('hello')->slice<0, 1, 4>` gives `the bytes of 'ell'`
+- Example (a fragment, not compiled): `encode('hello')->slice<0, 1, 4>` gives `the bytes of 'ell'`
+- Why it is not compiled: the example names `encode`, which is `bytes`'s, and a doc example is compiled with this module's names only
 
 #### `concat`
 
@@ -1477,6 +1480,89 @@ straight-line bodies.
 
 - Example (a fragment, not compiled): `let batched = vmap(f)`
 - Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
+#### `remat`
+
+```camel
+remat: (f: F) => F when is_function::<F>()
+```
+
+Memory for recomputation: `remat(f)` gives a function whose graph is `f`'s graph with the
+property "a call of it is recomputed on the backward pass instead of kept" (the author's ruling
+of 2026-11-01). The property is the graph's, not the call site's and not a tag's: the call
+answers with a new graph whose body is the body it was given, so a call through it is a call of
+the same function and no value changes -- what changes is what a step that cuts the graph in two
+has to keep across the cut. `split` reads the property: the values of a marked graph that cannot
+be recomputed from the parameters are not residuals, and the backward half computes them again
+(`modules/transforms/split.cpp`). JAX writes the same transform as `jax.checkpoint`, whose other
+name is `jax.remat`; in this tree "checkpoint" is the persistence module `ckpt`, so the transform
+takes the other word.
+
+The type is the argument's own: a function in, the same function out, which is the whole of what
+the name says. `modules/transforms/remat_operator.cpp` answers `(f: F) => F` and builds the graph
+the value stands on; the shapes a call site can write today are the ones `jvp`'s and `split`'s
+declarations show, because the result of a call is the exit type its resolver gives.
+
+- Example (a fragment, not compiled): `let remembered = remat(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
+<a id="vjp"></a>
+
+## `vjp`: the derivative, as a library
+
+#### `vjp`
+
+```camel
+vjp: (f: (x: float) => float) => (x: float) => (float, (ct: float) => float)
+```
+
+The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
+`(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters. The juxtaposed call
+`transpose(residuals, ct)` is the internal step, not this signature.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let reading = vjp(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
+#### `vjp`
+
+```camel
+vjp: (f: (x: float, y: float) => float) => (x: float, y: float) => (float, (ct: float) => (float, float))
+```
+
+The same transform for a function of two parameters: `vjp(f)(x, y)` is `(value, pullback)` and
+`pullback(ct)` gives both cotangents, in the order `f` takes the parameters.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let reading_of_two = vjp(f)`
+- Why it is not compiled: `f` is a function value of two parameters, so the example is a fragment of a program that declares one
+
+#### `grad`
+
+```camel
+grad: (f: (x: float) => float) => (x: float) => float
+```
+
+The gradient of a function of one parameter: `vjp` with the seed 1, its second half taken --
+`grad(f)(x)` is `vjp(f)(x).1(1.0)` (author's ruling of 2026-11-01). Read `grad(f)` as a name for
+that reading of `vjp`, not as a second transform.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let slope = grad(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
+#### `with_grad`
+
+```camel
+with_grad: (f: F) => F when is_function::<F>()
+```
+
+The gradient of the first `with` parameter of `f` (design principles 9.9): the same `vjp`, taken
+with respect to a captured value instead of a parameter.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let slope_over_the_capture = with_grad(f)`
+- Why it is not compiled: `f` captures the value it differentiates against, so the example is a fragment of a program that declares one
 
 <a id="tensor"></a>
 
@@ -6559,11 +6645,12 @@ scalar (it gives the result and the pullback from the cotangent of the result to
 and `jvp` is forward mode (the result and its tangent along a direction); both land with the
 autodiff lane, not before they work.
 
-The memory-for-recomputation transform is named `remat` here -- JAX's `jax.checkpoint` under its
-other name; in this tree "checkpoint" is the persistence module `stdlib/ckpt.cml` and stays that,
-so the transform takes the other word and there is no second name for a reader to disambiguate.
-What a program reads of it is its value: `remat(f)` gives `f`, so a call through it is a call of
-the same function and no number moves.
+The memory-for-recomputation transform -- `remat` -- is not here: it is a transform of the
+`transforms` module (`stdlib/signatures/transforms.cml`), because what it changes is a property of
+a graph and a call site, not a derivative. JAX calls the same transform `jax.checkpoint` and, by
+its other name, `jax.remat`; in this tree "checkpoint" is the persistence module
+`stdlib/ckpt.cml` and stays that, so the transform takes the other word and there is no second
+name for a reader to disambiguate.
 
 `stop_gradient` marks a value as a constant, and the mathematics of the local rules is written
 here, where the library keeps one statement of it: `add_tangent` and its siblings are the tangent
@@ -6637,19 +6724,6 @@ Gives its argument unchanged and cuts the gradient at this point: a value passed
 argument's own type.
 
 - Example: `stop_gradient(3.0)` gives `3.0`
-
-#### `remat`
-
-```camel
-remat: (f: F) => F pure when is_function::<F>()
-```
-
-Gives `f` back: a call through `remat` is a call of the same function, so adding or removing it
-moves no number and no gradient. That is the whole of what the name does to a value, and it is
-what a program reads of it.
-
-- Example (a fragment, not compiled): `let remembered = remat(f)`
-- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
 
 ### The local rules of the scalar arithmetic
 
