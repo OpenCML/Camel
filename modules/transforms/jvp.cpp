@@ -565,12 +565,19 @@ bool liftGraph(
         valuePorts.reserve(parameterCount);
         tangentPorts.reserve(parameterCount);
         for (size_t i = 0; i < parameterCount; ++i) {
-            const gc_node_ref_t value =
-                draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
+            // The port's type is the parameter's own, and the tangent port's is that parameter's
+            // tangent space -- `tangentSpaceOf`'s answer, not `float`: a `float[]` parameter's
+            // tangent is an array of the same shape, and a rule that consumes it (`index_into`)
+            // takes it whole. The element's tangent only appears one layer down, at `xs[i]`.
+            camel::core::type::Type *parameterType = function.funcType()->normTypeAt(i);
+            const gc_node_ref_t value = draft.addPortNode(
+                parameterType, draft.allocateRuntimeSlot(parameterType));
             draft.appendNormPort(value);
             valuePorts.push_back(value);
-            const gc_node_ref_t tangent =
-                draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
+            camel::core::type::Type *tangentType =
+                camel::core::tangentSpaceOf(parameterType).space;
+            const gc_node_ref_t tangent = draft.addPortNode(
+                tangentType, draft.allocateRuntimeSlot(tangentType));
             draft.appendNormPort(tangent);
             tangentPorts.push_back(tangent);
         }
