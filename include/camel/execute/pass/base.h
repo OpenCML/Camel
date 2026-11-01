@@ -37,8 +37,8 @@ class GraphIRPass {
     // is still a diagnostic (the comment a pass writes about itself): only what the pass finds out
     // when it runs belongs here.
     void failWithErrorValue(slot_t error) { errorValue_ = error; }
-    bool hasErrorValue() const { return errorValue_ != NullSlot; }
-    slot_t errorValue() const { return errorValue_; }
+    [[nodiscard]] bool hasErrorValue() const { return errorValue_ != NullSlot; }
+    [[nodiscard]] slot_t errorValue() const { return errorValue_; }
 
     // A pass that reads or rewrites graphs with several writings (writings.h). The pass driver
     // extracts one writing per value before a pass that consumes the program (a back end, an

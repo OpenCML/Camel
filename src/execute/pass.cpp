@@ -2602,8 +2602,24 @@ PassRunResult applyRegisteredPass(
         return {nullptr, true};
     }
     const camel::runtime::Program *produced = pass->apply(program, os);
-    if (pass->hasErrorValue() && caller != nullptr) {
-        caller->failWithErrorValue(pass->errorValue());
+    if (pass->hasErrorValue()) {
+        if (caller != nullptr) {
+            caller->failWithErrorValue(pass->errorValue());
+        } else {
+            // A pass is `(f: F) => F!` (design principles 9.1): the value it ends with instead of a
+            // program IS its answer, and handing it to the caller is how that answer travels. With
+            // no caller there is nobody to hand it to, and this line used to drop it -- the run
+            // went on as if the pass had succeeded. Nothing reaches this branch today (both call
+            // sites pass `this`), and the branch is here so that a future one cannot be silent.
+            if (ctx) {
+                ctx->rtmDiags()->of(RuntimeDiag::PassInternalError)
+                    .commit(
+                        spec,
+                        "the pass ended with an error value and the caller that ran it has none to "
+                        "give it to");
+            }
+            return {nullptr, true};
+        }
     }
     if (produced == nullptr) {
         return {nullptr, true};
