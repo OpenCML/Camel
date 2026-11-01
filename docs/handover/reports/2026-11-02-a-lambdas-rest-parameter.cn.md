@@ -1531,3 +1531,9 @@ with <
 **⑥ 回归**：`feat/opt` **1143/1143**（新增两支 golden 用例）；全量见 §46。`docs/cli.md` 与 `docs/cli.cn.md` 的参数表把 `opt::fold` 并到 `std::opt`、`std::opt::fold` 那一行（**参数名与默认值照原生遍**）。
 
 **⑦ 这一族的规矩又厚了一层**：A8 缺 `is_anchor`、A9 缺 `constant_budget`，**两次都不是"实现写错"，是"约束没随实现搬过去"**——而 A9 还多一层：**量约束需要一个量，那个量不能自己发明，得让两个阶段共用一个函数**。
+
+## 46. A9 全量读数
+
+**全量 `total: 8383, pass: 8371, fail: 0, skip: 10, known failures: 2`**（基线 `8369/8357/0`，多出的 14 支正是 `feat/opt` 新增的两支 golden 用例加合并 develop 带来的用例）；
+`feat/opt` **1143/1143**；`stdlib-reference --verify-docs` 与 `diagnostics --verify-doc` 全绿；
+`docs/stdlib-reference.md`、`docs/reference/camel-for-ai-stdlib-signatures.md`、`docs/cli.md`、`docs/cli.cn.md` 同笔更新。
