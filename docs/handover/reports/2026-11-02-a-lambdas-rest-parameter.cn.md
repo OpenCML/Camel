@@ -770,3 +770,56 @@ func main(): int sync {
 **那是 transforms 模块的行数读数，本车道没有改过 `modules/transforms` 的任何文件**（generic-grad 那轮已回退成 HEAD）。
 
 **④ 本车道的两份计划是绿的**：`transforms` + `rest_params` = **68/68**，`BUILD_EXIT=0`。**A6 这一轮没开始**——预算用在全量与扫描上，不假装做了一半。
+
+## 23. 全量那 3 条红：都在"生成物过期"，且根子是同一笔
+
+**① `registry.reference_is_generated` 在比什么**：`scripts/stdlib-reference.mjs:2770-2776` ——
+
+```js
+const current = fs.readFileSync(DOC_PATH,'utf8').replace(/\r\n/g,'\n');
+if (current !== text) { console.log('… is out of date: run --write'); process.exit(1); }
+```
+
+**比的是"`--write` 现在会产出的整篇文本"与"文件里的文本"，换行归一化后逐字符比**，不比哈希、不比时间戳、**没有副本**。
+所以"两份文件逐字节相同却报过期"的读法要改一句：**逐字节相同的是"我的树"与"`develop` 的树"，不是"树"与"生成结果"**。
+
+**② 它到底缺哪一项**：`--write` 生成后 `git diff` 是 **14 增 14 删**，全部围绕 `vjp`：
+
+```
+-vjp: (f: (x: T) => float) => (x: T) => (float, (ct: float) => (T,))
++vjp: (f: F) => Vjp<F> when is_function::<F>()
++  …（说明段：一份声明照顾所有 arity、`(..xs)` 的规则）
+```
+
+**也就是 `stdlib/vjp.cml` 变成"一份声明照顾所有 arity"之后，参考文档没有重新生成。**
+`git log 28e36a2cb..HEAD -- stdlib/vjp.cml` 只有一笔：**`9048c30ea` vjp is one declaration for every arity**（从作者那条线进来的）。
+
+**③ `registry.docs_complete`**：`--verify-docs` 在远端（有编译器）的原话是
+
+```
+EXAMPLE_STOPS['a semantic error'] records 39, and the run found 40: update the number in the same commit and say why the class moved
+```
+
+**第 40 条是 `vjp` 自己的例子**：`stdlib/vjp.cml:68` 的 `@example` 仍把 `f` 当值写，而声明已把它当类型参数 ⇒
+`UnresolvedReference: 'f'`。**这是例子自己的欠账，不是"豁免"**——所以数字改成 40，并在旁边写明为什么。
+
+**④ `docs.doc_readings.current`**：`check-doc-readings.mjs` 量的四份文件是
+`split_operator.cpp, jvp_operator.cpp, stdlib/signatures/transforms.cml, stdlib/vjp.cml`：
+
+| 文档记的 | 树上量的 | 哪一份 |
+|---|---|---|
+| 202 | 202 | `split_operator.cpp` |
+| 268 | 268 | `jvp_operator.cpp` |
+| 116 | 116 | `stdlib/signatures/transforms.cml` |
+| **104** | **98** | **`stdlib/vjp.cml`** ← 少了 6 行 |
+| 1531 | 1531 | （页上第五个数） |
+| 1396 | 1396 | （页上第六个数） |
+
+**同一笔 `9048c30ea` 把 `vjp.cml` 缩短了 6 行** ⇒ 页上 104 改 98。**本车道没写过 `stdlib/vjp.cml`**（上面那条 `git log` 就是证明）。
+
+**⑤ 落到一句可执行的话**：**属于 (b) 文档数错了** ——
+`docs/stdlib-reference.md` 用 `--write` 重生成（不手改），`EXAMPLE_STOPS['a semantic error']` 39→40 并注明是 `vjp` 的例子，
+页上 104→98 并注明是 `9048c30ea`。**没有删任何断言、没有加任何豁免。**
+
+**⑥ 读数**：`docs` + `stdlib_registry` = **16/16**，`fail 0`；本地 `--verify-doc` = `up to date`，
+`check-doc-readings.mjs` = `the readings are the ones the pages state: 10 of 10`。
