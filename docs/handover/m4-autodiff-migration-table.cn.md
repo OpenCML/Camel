@@ -26,6 +26,18 @@
 
 **库层今天能过：1 / 127。**
 
+**试点 5 条已判完（`with` 类 3、数组类 2）：已迁 0 条 — 纯拼写 0、需要库补 2、需要新能力 3。**
+判法：把 5 条真的按库的写法改一遍、跑一遍，改不动或跑不过的记下走图/声明面拒绝它的那一档；
+用例文件一条都没改（`git diff test/cases/modules/autodiff/` 为空），老读数在各行里作对照。
+
+| 试点用例 | 类 | 结论 | 卡在哪一档 |
+| --- | --- | --- | --- |
+| `collapse` | `with` | 需要新能力 | `REINTERP split … skip=forward construct=a tangent port`（体里有函数调用） |
+| `control_flow_grad` | `with` | 需要新能力 | `REINTERP split … skip=exit`（体里有分支）；其后还要多参 `grad` |
+| `whole_extrema_grad` | `with` | 需要新能力 | `REINTERP jvp function=high skip=body`（体里建张量取 `max`） |
+| `array_slice_grad` | 数组 | 需要库补 | `No matching function … ((xs: float[]) => float pure)`：库只声明 `(x: float) => float` |
+| `array_take_grad` | 数组 | 需要库补 | 同上 |
+
 | 缺什么 | 条数 | 用例 |
 | --- | --- | --- |
 | 数组/张量参数 + `grad(f)<x>()` 写法 | 35 | `adjoint_*`、`grad_tuple_read`、`var_*` 等 |
@@ -36,17 +48,22 @@
 | 不在 `vjp` 这条路上（`prelude` 的 `jvp`/`vmap`，或只测名字解析） | 11 | `jax_vmap*`、`jax_names/jvp` 等 |
 | **过** | **1** | `grad_refuse_no_with` |
 
-## 写法/类型之后的两道墙（两条最小探针量的，不是估计）
+## 走图与声明面拒绝它的地方（两条最小探针 + 5 条试点量的，不是估计）
 
-- `grad(x => x*x*x)` 过；`grad(x => x + 1.0)` **不过**：
-  `TRANSPOSE function=autodiff::add_tangent<float> skip=output` → `transpose has no transpose for this function`。
-  即：**纯乘积链能过，带加法的就不行**。
-- `grad(x => x*x + 3.0*(x+1.0)*(x+1.0))` 同理死在加法那一支；
-  一旦函数体里调了别的函数（`sq(x) + 3.0*sq(x+1.0)`），更早死在
-  `split does not build this function (the value half reads the tangent of parameter 0, which the forward half does not take)`。
+- `grad(x => x*x*x)` 过（27.0）；`grad(x => x + 1.0)` 在本分支的基线上**仍不过**：
+  `TRANSPOSE function=autodiff::add_tangent<float> skip=output`（lambda 形）或
+  `TRANSPOSE function=split_of_jvp_of_…_backward skip=call node=5 callee=autodiff::add_tangent<float>`（具名函数形）
+  → `transpose has no transpose for this function`。
+  **注意**：`skip=output` 这一族的修法在 `lane-reinterp2` 的 `e9ab3bdd9`（"answer a zero for a parameter no
+  cotangent reached"），它**不在** `origin/develop` 的 `bcf970332` 里（`git branch -a --contains e9ab3bdd9` 只列
+  `lane-reinterp2`）；所以本表按本分支的读数记。那一笔进来之后这一行要重测。
+- 函数体里有调用（`sq(x) * sq(x)`）→ `REINTERP split … skip=forward construct=a tangent port`；
+  函数体里有分支 → `skip=exit`；函数体里建张量再取 `max` → `REINTERP jvp … skip=body`。
+- 数组参数 → 声明面：`No matching function … ((xs: float[]) => float pure)`。
 
 所以"过半"的真正账不是每条用例缺一条规则，而是三件事：库的**声明面**（`Vjp<F>` 泛型，设计 6.1）、
-**`add_tangent` 的转置**（`skip=output`）、**函数体里有调用时 `split` 不建**。这三件不在用例那边。
+**`add_tangent` 的转置**（在 `lane-reinterp2` 上已修，未进 develop）、**`split`/`jvp` 对调用、分支、张量体的支持**。
+这三件都不在用例那边：试点 5 条里 0 条是改写法就能过的。
 
 ## 逐条（127 行）
 | # | 用例 | 库层 | 缺什么 |
@@ -55,7 +72,7 @@
 | 2 | `adjoint_concat_array` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
 | 3 | `adjoint_reshape_array` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
 | 4 | `array_slice_grad` | 不过 | **试点 4/5：需要库补** — `with <xs: float[]>` 改成 `func subscript(xs: float[]): float` + `grad(subscript)(xs)` 是纯拼写（编得过），但库只声明 `grad(f: (x: float) => float)`：`error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> ((xs: float[]) => float pure)`。要的是 `Vjp<F>` 泛型声明（设计 6.1）。老读数 `[0.0, 2.0, 3.0, 0.0, 0.0]` / `[0.0, 0.0, 5.0, 3.0, 2.0]` / `nonzero=115.0` |
-| 5 | `array_take_grad` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 5 | `array_take_grad` | 不过 | **试点 5/5：需要库补** — 同 `array_slice_grad`：`func repeated(xs: float[]): float` + `grad(repeated)(xs)` 是纯拼写，卡在同一处 `No matching function found for argument types: <> ((xs: float[]) => float pure)`（库只声明 `(x: float) => float`）。要 `Vjp<F>` 泛型（设计 6.1）。老读数 `[7.0, 0.0, 3.0, 0.0, 0.0]` / `[0.0, 3.0, 0.0, 0.0, 2.0]` / `nonzero=136.0` |
 | 6 | `collapse` | 不过 | **试点 1/5：需要新能力** — `with <x: float>` 改成参数是纯拼写，`func h(x: float)` + `grad(h)(2.0)` 编得过（老读数 `collapse dh=22.0`，改写后同一输入应仍是 22.0）；但函数体里调了 `sq`，`split` 拒绝：`REINTERP split function=jvp_of_h skip=forward construct=a tangent port uri=- why=the value half reads the tangent of parameter 0, which the forward half does not take` |
 | 7 | `collapse_random` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
 | 8 | `collapse_runtime` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
