@@ -1518,15 +1518,7 @@ The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x
 `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters. The juxtaposed call
 `transpose(residuals, ct)` is the internal step, not this signature.
 
-There is no body: the name stands for the operator `vjp:vjp` of `modules/transforms` (vjp.cpp),
-which makes the three steps -- `jvp`, `split`, `transpose` -- once and closes over them, so the
-arity is the function's and not a declaration's. The two declarations stay because the pullback's
-result is written out: a function of one parameter answers the number (`=> T`), a function of two
-answers the pair (`=> (T, U)`), and the one-for-every-function-form
-(`(..Tangent<ParamsOf<F>>)`) types the one-parameter case as a one-long tuple, which is not the
-ruling. `docs/handover/questions/questions-2026-11-01-*.md` asks the author about that.
-
-- A native operator of this module: an opaque node, pure.
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example (a fragment, not compiled): `let reading = vjp(f)`
 - Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
 
@@ -1539,7 +1531,7 @@ vjp: (f: (x: T, y: U) => float) => (x: T, y: U) => (float, (ct: float) => (T, U)
 The same transform for a function of two parameters: `vjp(f)(x, y)` is `(value, pullback)` and
 `pullback(ct)` gives both cotangents, in the order `f` takes the parameters.
 
-- A native operator of this module: an opaque node, pure.
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example (a fragment, not compiled): `let reading_of_two = vjp(f)`
 - Why it is not compiled: `f` is a function value of two parameters, so the example is a fragment of a program that declares one
 

@@ -191,7 +191,7 @@ timeout_ms = 20000
 # guards is gone from the library (nothing to drop, and the restored half is the one that failed).
 [[tests]]
 name = "vjp_api.the_jvp_import_is_load_bearing"
-desc = "Dropping `import rulesets.jvp` from `stdlib/vjp.cml` stops a program that only imports `vjp`: the forward walk has no rule for the multiply in `x*x*x`, so the run exits 1 with `jvp has no forward rule for ':op/mul_d'` and a `note: raised here` standing on the program's own call line (`vjp_carries_its_ruleset.cml:<line>:`, because the three steps run inside the operator `vjp:vjp` and the library has no body to point at). With the line back the same program exits 0 and prints `27.0` three times. The tool drops the line in a copy of the installed library and points `CAMEL_STD_LIB` at it, so the library on disk is untouched."
+desc = "Dropping `import rulesets.jvp` from `stdlib/vjp.cml` stops a program that only imports `vjp`: the forward walk has no rule for the multiply in `x*x*x`, so the run exits 1 with `jvp has no forward rule for ':op/mul_d'` and a `note: raised here` standing on the library's own line (`stdlib/vjp.cml:<line>:`). With the line back the same program exits 0 and prints `27.0` three times. The tool drops the line in a copy of the installed library and points `CAMEL_STD_LIB` at it, so the library on disk is untouched."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/check-vjp-ruleset.mjs"
