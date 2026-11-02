@@ -72,6 +72,16 @@
 
 **同一轮顺带否掉一个想法（会改动第 5 节第 (2) 条的估算）**：`:struct/slice_arr` **不在算子注册表里**——`src/builtin/operators/struct.cpp` 的 `:struct/*` 只有 `concat_arr`、`copy_arr`、`len_arr`、`append_arr*`、`zip`、`range` 这些，没有切片；`xs[a:b:s]` 的降级走 `src/compile/gir/builder_operators.cpp` 的路径机制，`step` 只作为 `:tangent/scatter_slice_arr` 的梯度实参出现。所以「拿现成切片算子构造 `reverse(range)`」**在建图 API 上没有现成口**：要么给 draft 加一个数组反转助手，要么在 body 里用整数索引倒着取（即第 5 节说的"更麻烦"那条）。
 
+**2026-11-02 更正：是五处，不是四处；而且第 2 处不用写。** 上面那份清单是读数推进之后回看的版本，按它排优先级会少一处：
+
+1. `pairTypeOf`（入口，待写）。
+2. **循环体的端口配对 —— 待激活，不是待写**：`modules/transforms/jvp.cpp` 的 `Port` 分支里已经写着"状态口是循环携带的那个对"（`statePair = pairOf(...)`，为真就建 pair 端口并投影两半），它不跑只是因为 `pairOf` 对聚合体回答 null。第 1 处一放宽，它就自动启动。
+3. **`LOOP` 节点自身的配对 —— 新写**：值里的收集槽（`collectionCount` 那段数组）今天在 `jvp.cpp` 里 **0 命中**。第 1+2 激活之后，失败会推到这一处：循环的值是 `Tuple(state…, 数组…)`，`pairOf` 一旦也认数组，循环的配对类型就是 `Tuple(值, 值)`，而循环体交回的是 `(next, tapeTuple)`，两边对不上 ⇒ `complete = false` ⇒ 仍报 `skip=body`（实测：放宽 `pairTypeOf` 后 `split_loop_taped_rounds.nvm` 从过变错，`jvp has no forward transform`）。
+4. 聚合体的零（`zeroConstantFor`，待写）。
+5. `Accs` 投影配对（待写）。
+
+所以顺序是 **1 → 3 → 4 → 5**，第 2 处只是跟着 1 启动；**1 单独落会让现有 `split` 循环用例变红**，这不是回归的信号乱，而是"门口放宽了、循环节点还没学会配"的必然后果。
+
 ## 要作者答的一句
 
 **「循环反向半程的『按轮倒序』在今天的树上不可观测（能到达 `split` 的循环状态只能是 `float`，逐轮映射可交换），而『倒序』本身属 4.3、`transpose` 仍原样复制区间：我按 4.2 落了『每轮一条残差』、没落倒序，并写明『倒序未实现、不可观测』，等聚合状态能 lift 后再补判别用例——除非你要先放宽 `pairTypeOf`。」**
