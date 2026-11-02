@@ -1887,3 +1887,12 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 5. **P0-4**（`EffectLivenessFacts` 伪单点）：五处判定改走它，或者删掉它。
 
 记账类工作（台账、计数口径、引用格式检查）暂停到冲刺结束，除非它是在修一个让测试悄悄不跑的缺陷。
+
+## 回报（2026-11-02 11:00，协调）：四件的归属与预计
+
+1. **残差藏进闭包** —— `lane-resid`。A 步已落（`236d06f37`）：kernel 造 `lin`、残差进闭包元组、`split.cpp:858` 与 `split_operator.cpp:59` 那两张空成员表随之消失，`transpose` 已改成从 `lin` 的闭包读残差并声明自己的捕获口；读数 `residuals_in_the_closure` 在 (3,2) 上 `back dx=12.0 / back dy=9.0`，且两个前导实参故意传 0.0 仍得 (12,9) ⇒ 残差确实来自闭包而不是参数。差的一步是 `transpose(lin)(1)=(12,9)`：`lin` 的类型 `(float,float)=>float` 与普通双参函数同一个字符串，类型层面分不开，正在量"解析器能不能看见那个值"（看得见就从值的闭包读，不加类型位；看不见才加标记并出页）。**预计下一轮合进来**（`vjp.cml` 与旧 ABI 用例迁移随它）。
+2. **被合并冲掉的 `Float64` 修复** —— `lane-guard-dbg`，`01014a85f`，**这一轮合进 develop**。
+3. **生成器的悬垂草稿节点** —— 交给 `f425c935`（它手上有 poison 仪器，并已完成 nn 那两条的五轮排除）。**ASan 腿现在能跑，下一步拿栈**；预计两轮。
+4. **P0-2 的两处改写** —— `lane-m4b2`。读数：全量 `fail 3835 → 3497`（−338）、280 用例转绿；改动只在 `linkSyncStatement` 一处（建链两头都问，`from` 侧新增 `chainTailBehind`）。剩下的一条是文件里量出来的：`FUNC` 过得了 builder 的 `nodeTakesAnOrder`、过不了 seal 的 `isChainStatement`（**同一个条件的两份拷贝**），正在合成一处；`kGCNodeFlagSyncStatement` 仍未删（13 文件 28 处），按裁定在归零那一笔删。**预计两轮。**
+
+另：ASan 腿 workflow 的第二个阻塞（`CAMEL_TEST_BUILD: debug`）已在 `975a368d0` 修好，这一轮起它第一次有可能真跑起来。
