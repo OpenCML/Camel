@@ -22,3 +22,7 @@
 - Prefer routine verification in `npm run build`; use `npm run debug` only when diagnosing logging or debug-only code paths.
 - **Run the plans your change touches, not the whole tree.** The full suite (`test/plans`), the GC poison sweep, the GC stress plans (`gc.collection_trees_*`, `gc_elder_*`), the progen random-program checks, the PyTorch comparisons and the perf/timeit plans are heavy: they saturate every core for minutes and are worth running only at a milestone, by the coordinator, on a quiet machine. During development a targeted plan list plus `smoke` is the expected verification. Never start a full-suite or stress run to "be safe", and do not leave one running when you stop.
 
+
+## Getting a stack trace
+
+An assertion prints a stack trace only in a **diagnostic build**: `camel-remote.ps1 -StackTrace` (on the remote gate) or `npm run build -- --stack-trace` locally. It adds `-DCAMEL_STACK_TRACE=ON` and drops `build/CMakeCache.txt` so the option is re-read; **it never adds `-rdynamic**, because exporting the executable's symbols changes which definition a module's `dlsym` finds. A diagnostic build is for reading a trace, not for deciding green or red. See `docs/handover/questions/the-switch-that-reaches-no-target.md`.
