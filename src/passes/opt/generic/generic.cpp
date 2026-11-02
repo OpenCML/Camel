@@ -701,29 +701,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         // the branch follow what the branch followed -- `eraseNode` closes the chain over the branch
         // that way (closeChainOver).
         const auto isChainStatement = [&](gc_node_ref_t n) {
-            const camel::runtime::DraftNodeHeader *h = draft.header(n);
-            if (h == nullptr) {
-                return false;
-            }
-            switch (h->kind) {
-            case GCNodeKind::Brch:
-            case GCNodeKind::Loop:
-            case GCNodeKind::Call:
-                return true;
-            case GCNodeKind::Oper: {
-                if (draft.payloadOf(n).size() < sizeof(GCOperBody)) {
-                    return false;
-                }
-                const auto oper =
-                    reinterpret_cast<const GCOperBody *>(draft.payloadOf(n).data())->oper;
-                const auto &table = camel::core::OperatorTable::instance();
-                const auto traits = table.find(oper);
-                return !table.isPure(oper) || table.hasExternalEffect(oper) ||
-                       (traits.has_value() && traits->mayFault);
-            }
-            default:
-                return false;
-            }
+            return camel::runtime::isChainStatement(draft, n);
         };
         gc_node_ref_t place = armTail;
         for (int hop = 0; hop < 64 && place != kInvalidNodeRef && !isChainStatement(place);

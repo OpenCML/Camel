@@ -1090,6 +1090,16 @@ uint32_t controlRegionOf(const GraphDraft &draft, gc_node_ref_t id);
 /// through. Every other region separates blocks.
 bool sameSyncBlock(const GraphDraft &draft, gc_node_ref_t a, gc_node_ref_t b);
 
+/// True when the node is a statement of a chain: one that runs for its effect or may fault, or a
+/// structure that contains such statements (a branch, a loop, a call). Read from the node and the
+/// operator table the way `edges.cn.md` 1 and 4.6 define it, not from a marker a writer set. The
+/// seal check asks the same question of a frozen graph (src/runtime/graph_edges.cpp,
+/// `isChainStatement`), and a rewrite that hands a statement's place to something else asks it of
+/// the draft: a value is not on the chain, so a place handed to one is a sync edge that starts at a
+/// value. The two readings exist because a draft and a frozen graph are two shapes of one model;
+/// the question is the same and the answer has to agree.
+bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id);
+
 /// The runtime node id every live node of the transaction's draft takes when the draft is encoded,
 /// indexed by draft node id (`kInvalidNodeRef` for a node the draft erased, which no commitment
 /// keeps unless the draft keeps its ids). The commit drops the dead places and numbers the rest in

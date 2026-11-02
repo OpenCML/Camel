@@ -1387,6 +1387,33 @@ bool sameSyncBlock(const GraphDraft &draft, gc_node_ref_t a, gc_node_ref_t b) {
     return statementRegionOf(draft, a) == statementRegionOf(draft, b);
 }
 
+bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr) {
+        return false;
+    }
+    switch (header->kind) {
+    case GCNodeKind::Brch:
+    case GCNodeKind::Loop:
+    case GCNodeKind::Call:
+        return true;
+    case GCNodeKind::Oper: {
+        const std::span<const std::byte> payload = draft.payloadOf(id);
+        if (payload.size() < sizeof(GCOperBody)) {
+            return false;
+        }
+        const camel::core::OperId oper =
+            reinterpret_cast<const GCOperBody *>(payload.data())->oper;
+        auto &table             = camel::core::OperatorTable::instance();
+        const auto traits       = table.find(oper);
+        return !table.isPure(oper) || table.hasExternalEffect(oper) ||
+               (traits.has_value() && traits->mayFault);
+    }
+    default:
+        return false;
+    }
+}
+
 void GraphDraft::closeChainOver(gc_node_ref_t id) {
     requireOneWriting("closeChainOver");
     ++mutations_;
@@ -1490,6 +1517,14 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
 void GraphDraft::handChainPlaceTo(gc_node_ref_t id, gc_node_ref_t tail) {
     requireOneWriting("handChainPlaceTo");
     if (id == tail || node(id) == nullptr || node(tail) == nullptr) {
+        return;
+    }
+    if (!isChainStatement(*this, tail)) {
+        // A value is not a statement of a chain, so a place is not handed to it (docs/design/
+        // effects/edges.cn.md 1 and 4.6): handing one over writes a sync edge that starts at a
+        // value. The statements written after `id` keep following `id`, and when `id` goes the
+        // chain closes over it (closeChainOver) -- they follow what `id` followed and the chain
+        // steps over the value, which its readers reach anyway.
         return;
     }
     ++mutations_;
@@ -1622,6 +1657,13 @@ void GraphDraft::takeStatementPlace(gc_node_ref_t oldId, gc_node_ref_t newId) {
         // The replaced node's order edges are part of what it hands over (docs/design/effects/
         // edges.cn.md 4), whether or not it also stood in a `sync` block's chain.
         replaceOrderEdgesAt(oldId, newId);
+    }
+    if (!isChainStatement(*this, newId)) {
+        // The replacer takes the order edges above -- every replacement transfers those -- and no
+        // place in the chain: a value stands on none (docs/design/effects/edges.cn.md 1), and a
+        // place handed to one is a sync edge that starts at a value. The chain closes over the
+        // statement that went instead (closeChainOver).
+        return;
     }
     if ((oldHeader->runtimeFlags & kGCNodeFlagSyncStatement) == 0) {
         // Nothing stood in a chain, so there is no chain place to take.
