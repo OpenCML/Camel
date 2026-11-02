@@ -2,7 +2,7 @@
 
 > 一页一问。作者把读过的页整体挪进 `reviews/`；这里只放**还在等回答**的页。
 
-## 现在在等作者：5 页
+## 现在在等作者：6 页
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
 | --- | --- | --- | --- | --- |
@@ -11,6 +11,7 @@
 | [`2026-11-03-may-a-printed-name-be-the-definitions-own`](2026-11-03-may-a-printed-name-be-the-definitions-own.cn.md) | `tensor:sum` 与 `tensor:sum_axis` 共用一个写名 `sum`，边界在哪只有定义知道、节点不知道；问打印件能不能用定义自己的名字（`sum_axis(m, 0, false)`），还是必须复现源里的 `<>` 写法 | 待裁 | — | 打印器的往返：节点上只有一个写名 |
 | [`2026-11-02-who-updates-the-root-table-when-the-root-is-replaced`](2026-11-02-who-updates-the-root-table-when-the-root-is-replaced.cn.md) | 宏重写换根时谁负责更新根表；`nn` 那两条 bytecode 用例的根换过之后旧根还在表里 | 待裁 | — | `gru_lite_large_bytecode`、`residual_mlp_large_bytecode` 两条 poison 红 |
 | [`2026-11-02-what-carries-the-residuals`](2026-11-02-what-carries-the-residuals.cn.md) | 残差用什么承载（三条路各写过一遍）；`split` 不再交出残差元组之后，闭包里俘获的残差该由谁持有 | 待裁 | — | 残差藏进闭包这条线的入口 |
+| [`2026-11-02-can-a-sync-place-be-derived-from-the-graph`](2026-11-02-can-a-sync-place-be-derived-from-the-graph.cn.md) | 同步链的"位置"（`kGCNodeFlagSyncStatement` 记的那个事实）能不能从图上推出来：照 07:30 的谓词实现，终点侧 1594 个终点落在三条之外、全量 720 红，起点侧照字面 185 红 | 待裁 | — | 标记能否删；B 要重写 `edges.cn.md` 一节 |
 
 **这张表由 `node scripts/check-doc-links.mjs --questions-index` 对着目录核对**：行数与页数不符、或者某一行指向目录里没有的页，它都会红。
 
