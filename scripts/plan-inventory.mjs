@@ -53,6 +53,9 @@ export const SLOW_PLANS = [
     'test/plans/feat/modules/random.plan.toml',
     'test/plans/feat/tools/lsp.plan.toml',
     'test/plans/feat/linear/var_reference.plan.toml',
+    // The whole corpus through the printer, one process per case (`node test/tools/cml-sweep.mjs`),
+    // about a minute.
+    'test/plans/feat/trans/cml_sweep.plan.toml',
     'test/plans/feat/tools/debugger.plan.toml',
     'test/plans/feat/mm/gc_pacing.plan.toml',
     'test/plans/feat/mm/gc_soak.plan.toml',
@@ -272,15 +275,6 @@ export const CASE_EXCEPTIONS = [
             'a trap fixture: the entry directory is not a module root, and this file is what a ' +
             'regression that treats it as one would load (it returns 9, which the pins above never ' +
             'allow). Nothing opens it in a correct run, and its presence is the check',
-    },
-    {
-        file: 'test/cases/compile/transforms/grad_of_an_array_parameter.cml',
-        reason:
-            'a known-unusable observation, kept out of the plan on purpose: grad over an array ' +
-            'parameter fails on a value chain tracked under another lane, and the passing gate for ' +
-            'feat/compile/transforms is 49/49/0, so the program stays in the tree with its ' +
-            'expectation written in it and registering it would turn a known failure into a red ' +
-            'that says nothing new',
     },
 ]
 
