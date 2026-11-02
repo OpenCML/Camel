@@ -8,9 +8,12 @@ distribution comes from the package index -- which a machine that builds a local
 it before publishing (no egress) cannot reach. The work itself is stdlib work: a wheel is a zip
 file, and its tags live in the file name and in `*.dist-info/WHEEL`, so `zipfile` is enough.
 
-    python3 scripts/wheel_retag.py dist/camel_lang-0.2.30-py3-none-any.whl cp310 cp310 linux_x86_64
+    python3 scripts/wheel_retag.py dist/camel_lang-0.2.30-py3-none-any.whl cp310 abi3 linux_x86_64
 
 The wheel is rewritten in place and renamed; the printed name is the retagged file.
+
+The tags it is given are the two forms of the 2026-10-25 ruling (docs/pypi-packaging.md 6): the
+interop wheel `cp310-abi3`, the runtime-only wheel `py3-none`.
 """
 
 import os

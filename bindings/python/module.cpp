@@ -29,6 +29,15 @@
  * or from the RuntimeFault the runtime threw. Neither is reworded here: the texts are the ones
  * the compiler and the runtime produced.
  *
+ * Stable ABI. This file is compiled with `Py_LIMITED_API=0x030A0000` (CMakeLists.txt,
+ * `Python3_add_library(... USE_SABI 3.10)`), so one `_camel.abi3` build serves CPython 3.10 and
+ * every version after it -- the 2026-10-25 ruling carried out on 2026-11-02. What that costs here
+ * is macros and struct members that read a Python object's layout: `PyTuple_GET_SIZE` /
+ * `GET_ITEM` / `SET_ITEM` and the three `PyTypeObject` members this file used (`tp_name`,
+ * `tp_alloc`, `tp_free`) are replaced by their function forms. Nothing else needed to change: the
+ * type comes from a spec, the capsules, the module table and the exception classes are all stable
+ * API.
+ *
  * What it does not do. Only a non-generic exported function is callable (`libraryFunction`
  * refuses a generic one, which has no single graph); passing a type argument for one is a
  * question for the language author, not a choice for this file.
@@ -231,19 +240,55 @@ std::optional<std::string> textOf(PyObject *object, std::string &out) {
     return std::nullopt;
 }
 
+/// The text of a Python string as UTF-8, through `PyUnicode_AsUTF8String` + `PyBytes_AsString`
+/// rather than `PyUnicode_AsUTF8`: that one is declared in `cpython/unicodeobject.h`, which the
+/// limited API does not include (it joins the stable ABI only in 3.13), while these two are
+/// declared unconditionally in every CPython from 3.0 on.
+std::string pythonText(PyObject *string) {
+    if (string == nullptr) {
+        return std::string();
+    }
+    std::string text;
+    if (PyObject *bytes = PyUnicode_AsUTF8String(string)) {
+        if (const char *utf8 = PyBytes_AsString(bytes)) {
+            text = utf8;
+        }
+        Py_DECREF(bytes);
+    }
+    PyErr_Clear();
+    return text;
+}
+
+/// The class name of an exception type, read through an attribute instead of `tp_name`:
+/// `PyTypeObject` is an opaque struct under the limited API (PEP 384), so its members are not
+/// reachable, and `PyType_GetName` arrived only in 3.11. `type.__name__` says the same thing on
+/// every CPython 3.10 and later, which is the range this module is built for.
+std::string pythonTypeName(PyObject *type) {
+    if (type != nullptr) {
+        if (PyObject *name = PyObject_GetAttrString(type, "__name__")) {
+            std::string text = pythonText(name);
+            Py_DECREF(name);
+            if (!text.empty()) {
+                return text;
+            }
+        }
+        PyErr_Clear();
+    }
+    return "an exception";
+}
+
 /// The class name and the text of the exception Python has set, cleared: what a message about a
 /// failed call into Python carries instead of a guess.
 std::string takePythonError() {
     PyObject *type = nullptr, *value = nullptr, *trace = nullptr;
     PyErr_Fetch(&type, &value, &trace);
     PyErr_NormalizeException(&type, &value, &trace);
-    std::string text = type != nullptr ? reinterpret_cast<PyTypeObject *>(type)->tp_name : "an exception";
+    std::string text = pythonTypeName(type);
     if (value != nullptr) {
         if (PyObject *shown = PyObject_Str(value)) {
-            if (const char *utf8 = PyUnicode_AsUTF8(shown)) {
-                if (*utf8 != '\0') {
-                    text += std::string(": ") + utf8;
-                }
+            const std::string detail = pythonText(shown);
+            if (!detail.empty()) {
+                text += std::string(": ") + detail;
             }
             Py_DECREF(shown);
         }
@@ -513,7 +558,13 @@ PyObject *toPython(slot_t value, Type *type) {
                 Py_DECREF(result);
                 return nullptr;
             }
-            PyTuple_SET_ITEM(result, Py_ssize_t(i), item);
+            // `PyTuple_SET_ITEM` is a macro over the tuple's struct, which the limited API does
+            // not describe; `PyTuple_SetItem` is the function form, and it steals the reference
+            // on the same terms -- including on failure, where CPython releases `item` itself.
+            if (PyTuple_SetItem(result, Py_ssize_t(i), item) != 0) {
+                Py_DECREF(result);
+                return nullptr;
+            }
         }
         return result;
     }
@@ -626,7 +677,10 @@ PyObject *sessionNewImpl(PyTypeObject *type, PyObject *args, PyObject *kwargs) {
             args, kwargs, "|OO", const_cast<char **>(names), &entryDirObject, &searchDirsObject)) {
         return nullptr;
     }
-    auto *self = reinterpret_cast<SessionObject *>(type->tp_alloc(type, 0));
+    // `type->tp_alloc(type, 0)` is the same call -- a heap type from `PyType_FromSpec` carries
+    // `PyType_GenericAlloc` in that slot -- and it is the form the limited API can make: the slot
+    // is a member of an opaque `PyTypeObject`.
+    auto *self = reinterpret_cast<SessionObject *>(PyType_GenericAlloc(type, 0));
     if (self == nullptr) {
         return nullptr;
     }
@@ -683,9 +737,11 @@ void sessionDealloc(PyObject *self) {
     session->entryDir.~basic_string();
     session->includeDirs.~vector();
     // A type built from a spec is a heap type: releasing an instance releases the type it took a
-    // reference on (`tp_alloc`).
+    // reference on (the `Py_INCREF` of `type_call`). The memory goes back the way
+    // `PyType_GenericAlloc` took it -- `PyObject_Malloc`, because this type carries no
+    // `Py_TPFLAGS_HAVE_GC` -- rather than through `tp_free`, a member the limited API hides.
     PyTypeObject *type = Py_TYPE(self);
-    type->tp_free(self);
+    PyObject_Free(self);
     Py_DECREF(type);
 }
 
@@ -787,7 +843,10 @@ PyObject *sessionCallImpl(PyObject *self, PyObject *args) {
         r.text = "error: " + r.message;
         CAMEL_RAISE(r);
     }
-    const Py_ssize_t given = PyTuple_GET_SIZE(arguments);
+    // `PyTuple_GET_SIZE` / `PyTuple_GET_ITEM` read the tuple's struct directly and are not in the
+    // limited API; `PyTuple_Size` / `PyTuple_GetItem` are their function forms. The function form
+    // of the getter can report a bad index, which the macro could not, so the read is checked.
+    const Py_ssize_t given = PyTuple_Size(arguments);
     if (size_t(given) != signature->normTypesCount()) {
         Report r;
         r.name  = "ArgumentCountMismatch";
@@ -800,7 +859,18 @@ PyObject *sessionCallImpl(PyObject *self, PyObject *args) {
 
     Arguments converted;
     for (Py_ssize_t i = 0; i < given; ++i) {
-        PyObject *item = PyTuple_GET_ITEM(arguments, i);
+        PyObject *item = PyTuple_GetItem(arguments, i);
+        if (item == nullptr) {
+            // In range by construction, so this is a tuple that violates its own contract rather
+            // than a bad argument; say so instead of handing a null object to the converter.
+            PyErr_Clear();
+            Report r;
+            r.name    = "ArgumentNotReadable";
+            r.message = "argument " + std::to_string(i + 1) + " of " + function +
+                        " could not be read from the tuple";
+            r.text = "error: " + r.message;
+            CAMEL_RAISE(r);
+        }
         Type *declared = signature->normTypeAt(size_t(i));
         if (auto why = convertArgument(item, declared, converted)) {
             Report r;

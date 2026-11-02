@@ -1949,7 +1949,8 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
   - **所以这一条没有在同一笔删掉，是与您原话的唯一偏离，请您裁**：删它要先**把经 `Function::updateRefs` 追到的图登记为根**（车道正在做）。判据：登记不改变行为 → 再删整空间扫 → 全量 + `feat/mm` + `--gc-check poison` 全绿；否则回退，并给出"哪个对象被漏掉"。**这是 GC 语义改动，不是删死代码。**
 - **生成器悬垂节点**：ASan 层已复现（`fastvm.cpp:1017` 的 SEGV、`frame.h:436` 的 invalid vptr，由 `lane-guard-dbg` 修）；**GIR 层已扫完 24 条，结论是不成立**：`test/cases/compile/stream/{generators,yield}_*.cml` 24 条逐条 `std::gir`、逐条跑两次，24/24 逐字节相同；19 条有图的用例里 `no-reader` 的 kind 计数一律只有 `EXIT`；5 条红是拒绝用例（`nodes=0`，本来没有图）。**字节码层没有"读者"这个概念**（值是槽的活跃性）。若您指的是另一层，请给那一层"读"的定义。
 - **`44 → 30 → 29`（实测，`718ae47e6`）**：44 是 develop 上"旧期望 + 新编译器"的数；30 是迁完用例后的数；29 是再把一条负例的期望行号从 27 改到 28 之后的数（用例重写后 `linear` 的解构落在第 28 行）。**这不是"弄坏再修好 15 条"**，是同一批用例从旧形状改到新形状，外加一个坐标。
-- **29 条的根：28 条是 `stdlib/vjp.cml:73:47`**（`Function of type '(float, float) => float' cannot be called`，即库里那条 `with_grad` 导出，属 b2 的账）；**另 1 条是 `registry.docs_complete` 与 `tools.autodiff_migration_ledger.ratchet` 这两个"跑程序数数"的判据**，它们读的就是被 73:47 挡下的那些例子，根同一条。
+- **29 条的根：28 条是 `stdlib/vjp.cml:73:47` 那一行的类型形状**（`Function of type '(float, float) => float' cannot be called`：第 73 行是 `(value, (ct: Tangent<ResultOf<F>>) => transpose(lin)(ct))`，旧的 `Transpose<F>` 给 `transpose(lin)` 的类型是 `(float, float) => float`，而库按 11:30 的新律只传一个余切）；**另 1 条是 `registry.docs_complete` 与 `tools.autodiff_migration_ledger.ratchet` 这两个"跑程序数数"的判据**，它们读的就是被 73:47 挡下的那些例子，根同一条。
+  - **更正（2026-11-02 22:00，实测；上面这一版把根说成了"库里那条 `with_grad` 导出"，错）**：`lane-vjp-del` 把那条 `export func with_grad` 删掉之后，全量 **29 → 29，一条未少**。**删它仍然是对的**（11:50 裁定照旧：有声明没有实现不留，M4 做到 `with` 参数时补上），**但它不清红**——红在 `:73:47` 那一行的类型律，清它的是 `lane-b2` 的新类型律（`ef7aa1e92`）。`8529eb9c4` 的提交信息里"28 of the 29 are `stdlib/vjp.cml:73:47`, which is the library's `with_grad` export and belongs to that branch"这句由此被推翻：那笔把数写对了，**根归属写错了**，两件事被同一个行号粘在一起。判据错的文档比没有判据更坏，所以这里显式作废，而不是改个措辞。
 - **P0-2 的两处改写**：在 `lane-m4b2`，3757 红，仍在车道；两处是链条件的两份拷贝合成一份。**待 `lane-m4b2` 报**（2026-11-02 21:10 记）。
 
 
