@@ -34,3 +34,31 @@ graph 'main': sync chain forks at node 19: statements 21, 23, 24 follow it,
 ## 要作者裁一句
 
 链的起点是"必须是链上语句"（那就得回答：值那一格的位置由谁补，`closeChainOver` 够不够），还是"可以是一段值的上游"（那就得改 `edges.cn.md` 1/4.6，并说明 seal 为什么不拒）。这一句不落地，`kGCNodeFlagSyncStatement` 那 13 处也删不掉。
+
+## 2026-11-02 晚：两次实测把问题从"谓词"挪到了"块撞上 join"
+
+**`JOIN` 是怎么站到链上的。** `builder_control.cpp` 建完分支后：
+
+```cpp
+if (lastSyncedNode_ != nullptr && linkCheek(lastSyncedNode_, joinNode)) {
+    markSyncStatement(lastSyncedNode_);
+    markSyncStatement(joinNode);
+    linkNodes(LinkType::Sync, lastSyncedNode_, joinNode);
+}
+lastSyncedNode_ = joinNode;
+```
+
+它上面那段注释说明为什么这条边非写不可（"the layout reads the join's sync predecessor as the statement written before the branch"），`lastSyncedNode_ = joinNode` 则让分支之后的下一条语句从 join 起链 —— 于是链的起点是一个 `JOIN`，`nodeTakesAnOrder` 说它是（能排序），`isChainStatement` 说它不是（不做事）。最小片段是 `docs/tutorial/examples/10_sync_block.cml`：
+
+```cml
+func report(second: bool): int sync {
+    println('the body is a sync block')
+    if second then { println('three'); println('four') }   // 这条 if 产生 join
+    if second then sync { println('five'); println('six') } // 它的起点就是这个 join
+```
+
+**实测一：让值退出链位（`writeSyncLink` 里先从值手里收回位置，再用 `setSyncInputs(id, {})` 清掉）。** `linear.cml` 的违例 3 → 2（`14 -> 16` kind 11 消失）；`feat.trans.cml` 0/3 → 1/3（`print_then_run_negative_swap_is_seen` 转绿）；全量 8517 / pass 5398 / fail 3099（基线 8515/4736/3759，**fail −660**），**`sync chain forks` 全量为 0**。但 `tutorial.examples.10_sync_block.{nvm,fvm,jit,prl}` 四条转红：`report` 拒 `sync edge 3 -> 17 … kind 7`，链位被交给了 join。已回退（`b3fa14bae` 留档）。
+
+**实测二：让 seal 把 `JOIN` 也当链语句（`nodeIsChainStatement` 加一个 `case`）。** 全量 8519 / pass 4701 / fail 3798，**比不放开更差 39 条**；所以"是不是语句"这一问 seal 拒得对，缺的不是放宽，而是建图侧在块撞上 join 时该把链位交给谁。
+
+**还缺的那一句**：一个块的分支之后如果还有语句，链位应延续到那些语句；如果 join 之后没有语句，链位应停在 join 之前最后一条语句 —— join 自己是控制流的汇合，不是"做过一件事"。按这个说法，`lastSyncedNode_ = joinNode` 就是这次实测暴露的那一行；但它是上面那段注释刻意写的，改它之前要先回答"分支的块值由谁当"，所以仍归作者。
