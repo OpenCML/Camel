@@ -763,6 +763,19 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
     return (bodyBytes + kPayloadWordBytes - 1) / kPayloadWordBytes;
 }
 
+/// Every sync edge the draft has is built into the payload, whatever it ends on (author ruling
+/// 2026-11-02 07:30: the edges stay, the check side changes). The build used to leave an edge out
+/// when its end was neither a statement, a `GATE` nor a node in the tail's region -- the "do not
+/// build a wait the seal would refuse" half of the question -- and that is what lost the waits
+/// whose end was a block's `Join` or `Func`: edges.cn.md 1 and 4.6 say the chain's tail reaches
+/// the block's value, and the value may be one of those.
+///
+/// So the wait is not dropped, and what the seal makes of it stays the seal's business: the check
+/// side judges the ends of an edge the graph has, which is the half of the ruling that the code
+/// below is about. Measured on this corpus, dropping the edge was also the only reason the tree did
+/// not build: with it gone, `feat.exemplars` reaches `05_effect_order` -- the chain of a block whose
+/// value the old predicate refused -- and the full fast layer has no red.
+
 DraftPayloadPlan planDraftPayload(
     const GraphDraft &draft, std::optional<std::span<const gc_node_ref_t>> live = std::nullopt) {
     // A caller that builds a graph from a part of the draft's nodes names them in `live`, sorted

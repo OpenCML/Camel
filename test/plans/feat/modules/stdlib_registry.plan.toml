@@ -258,6 +258,14 @@ expect_exit = 0
 expect_stdout_contains = ["every declared name has a description and an @example"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 180000
+# This case compiles every `@example` of the library -- several hundred programs, each its own
+# process -- and reports how many of them compile. Under a full gate that number is a reading
+# about the machine as much as about the library: on 2026-11-02 the same tree passed alone and
+# failed inside an eight-job gate, because examples that lost the CPU race were counted in the
+# "does not compile" group. A count that moves with the load is not a count, so the case asks
+# for every slot and runs alone. The same rule holds for any future case whose verdict is a
+# number of compiled programs rather than an assertion about one program.
+parallel = false
 verify_script = """
 ({ input, assert }) => {
 const stdout = input.normalized.stdout
