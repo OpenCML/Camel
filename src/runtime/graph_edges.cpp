@@ -293,17 +293,28 @@ class EdgeChecker {
                 bad("chains a node to itself");
                 continue;
             }
-            if (!isWaitingCarrierOrGate(user)) {
+            // Both ends are read from the graph, not from the marker the builder wrote: a marker
+            // that can be derived should not be stored (author ruling 2026-11-02 04:50), and the
+            // predicate is what says whether a place was handed to the right node. `isChainStatement`
+            // is edges.cn.md 1 and 4.6; the end may also be the block's own value (same region as
+            // its tail, the block a statement sits in when nothing wraps it being region 0) or a
+            // `GATE` (edges.cn.md 5.3).
+            const bool endSameBlockValue =
+                graph_.nodeRegion(edge.user) == graph_.nodeRegion(edge.pred);
+            if (!isChainStatementNode(user, edge.user) && !endSameBlockValue &&
+                user->kind != GCNodeKind::Gate) {
                 bad(std::format(
-                    "ends on a node no `sync` block wrote (kind {}, flags {}, data type '{}')",
+                    "ends on a node that is not a statement of the block, not the block's value and "
+                    "not a GATE (kind {}, flags {}, data type '{}')",
                     static_cast<int>(user->kind),
                     user->flags,
                     user->dataType() != nullptr ? user->dataType()->toString() : "-"));
                 continue;
             }
-            if (!isWaitingCarrier(pred)) {
+            if (!isChainStatement(edge.pred)) {
                 bad(std::format(
-                    "starts at a node no `sync` block wrote (kind {}, flags {}, data type '{}')",
+                    "starts at a node that is not a statement of a chain (kind {}, flags {}, data "
+                    "type '{}')",
                     static_cast<int>(pred->kind),
                     pred->flags,
                     pred->dataType() != nullptr ? pred->dataType()->toString() : "-"));
