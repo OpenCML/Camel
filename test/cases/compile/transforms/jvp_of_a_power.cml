@@ -3,17 +3,21 @@
 // (`skip=rule uri=:op/pow_d reason=the operator has no forward rule bound at all`) -- an ordinary
 // power of an ordinary float, undifferentiable. The key is derived now (`pow` is a written
 // operation), and the rule is `jvp_pow`, whose tangent `w * x^(w-1) * dx + x^w * log(x) * dw` is
-// written out in `autodiff::pow_tangent`.
+// written out in `pow_tangent`, in the same file as the rule.
 //
-// Two values are pinned, and the second is the one that matters:
+// What is pinned, in order:
 //   - `p(3.0) = 9.0` and `d(x^2) = 2x dx = 6.0` at `x = 3` with `dx = 1`.
-//   - `p(-3.0) = 9.0` and `2x dx = -6.0` at `x = -3`. The exponent is a constant, so its tangent is
-//     zero and the term `x^w * log(x) * dw` is exactly zero -- but `log(-3.0)` is NaN and
-//     `0 * NaN` is NaN, so an unguarded rule would answer NaN here. The guard is what keeps an
-//     ordinary `(-3.0) ^ 2.0` at -6.0, and this line is the reading that holds it.
-//
-// The exponent is written `2` in `q`: an integer literal needs no conversion node, so the lift sees
-// one operator (`rules=jvp_pow`, with no `jvp_ltod` in the list) and the same 6.0.
+//   - `p(-3.0) = 9.0` and `2x dx = -6.0` at `x = -3`. The exponent is a constant, and a constant's
+//     tangent is a zero constant (`jvp.cpp`'s `zeroConstantFor`), so the exponent's term is
+//     arithmetically nothing -- it is not asked for, and `log(-3.0)` is never evaluated. An
+//     ordinary `(-3.0) ^ 2.0` answers -6.0, not NaN.
+//   - The exponent written as the integer literal `2` in `q` needs no conversion node, so the lift
+//     sees one operator (`rules=jvp_pow`, with no `jvp_ltod` in the list) and the same 6.0.
+//   - `s` is the same operator with the exponent **varying**, and it is where the rule has to be
+//     honest. At `x = 3` the tangent is `x^x (ln x + 1) = 56.66253179403897`. At `x = -3` the value
+//     is real (-1/27 -- an integer exponent is defined at a negative base) but the derivative in the
+//     exponent is not: `log(-3.0)` has no real value and the tangent comes back `nan`. An undefined
+//     derivative says so; it is not written down as a zero.
 import rulesets.jvp
 import { jvp } from transforms
 
@@ -23,6 +27,10 @@ func p(x: float): float {
 
 func q(x: float): float {
     return x ^ 2
+}
+
+func s(x: float): float {
+    return x ^ x
 }
 
 func main(): int sync {
@@ -35,5 +43,11 @@ func main(): int sync {
     let (intPower, intTangent) = jvp(q)(3.0, 1.0)
     println(intPower)
     println(intTangent)
+    let (expValue, expTangent) = jvp(s)(3.0, 1.0)
+    println(expValue)
+    println(expTangent)
+    let (negExpValue, negExpTangent) = jvp(s)(0.0 - 3.0, 1.0)
+    println(negExpValue)
+    println(negExpTangent)
     return 0
 }

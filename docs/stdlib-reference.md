@@ -7046,17 +7046,24 @@ pow_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 
 The tangent of `x ^ w` along `(dx, dw)`: `w * x^(w-1) * dx + x^w * log(x) * dw`.
 
-The second term is the one that needs care, twice over. It is the derivative with respect to the
-**exponent**, and an exponent that is a constant carries `dw = 0` -- so the term is zero -- but
-`log(x)` is `NaN` for a negative `x` and `0 * NaN` is `NaN`, which would turn an
-ordinary `(-3.0) ^ 2.0` into `NaN`. The log is therefore guarded: where it does not exist the
-term answers zero instead, which is the same number the term has for every constant exponent.
-Where the term is *not* zero (a variable exponent) and `x <= 0`, the derivative with respect to
-that exponent has no real value at all -- there is nothing to answer, and this is the one place
-the rule answers zero rather than refusing.
+The two terms answer two different questions, and keeping them apart is what makes the negative
+base honest. The first term is the derivative with respect to the **base**, and it is defined
+wherever `x ^ w` is. The second is the derivative with respect to the **exponent**, and it is
+`x^w * log(x)`: for `x <= 0` that has no real value, because a real power of a negative number
+exists only for integer exponents and has no derivative in the exponent there.
+
+So the second term is computed only where it contributes. A tangent is a number, and a constant
+exponent's tangent is a zero constant (`jvp.cpp`'s `zeroConstantFor`: "the tangent a constant
+gets: the zero of the value's own type"), so `dw = 0` is a *zero* tangent, not a missing one --
+and the product it multiplies is exactly zero. Multiplying that zero by `log(x)` in floating
+point is not zero, it is `NaN` (the log of a negative number), which would turn an ordinary
+`(-3.0) ^ 2.0` into `NaN` for a term that is arithmetically nothing. The zero is therefore taken
+where it is, and where `dw` is not zero the log is asked for and left to answer `NaN`: an
+undefined derivative says so, and is not written as a zero.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `pow_tangent(3.0, 2.0, 1.0, 0.0)` gives `6.0`
+- Example: `pow_tangent(-3.0, 2.0, 1.0, 0.0)` gives `-6.0`
 
 <a id="rulesets.vmap"></a>
 

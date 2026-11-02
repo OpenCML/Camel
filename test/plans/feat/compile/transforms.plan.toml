@@ -991,6 +991,6 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_output_contains = ["REINTERP jvp function=p graph=", "rules=jvp_pow", "REINTERP jvp function=q graph=", "9.0", "6.0", "-6.0"]
+expect_output_contains = ["REINTERP jvp function=p graph=", "rules=jvp_pow", "REINTERP jvp function=q graph=", "REINTERP jvp function=s graph=", "9.0", "6.0", "-6.0", "56.66253179403897", "-0.037037037037037035", "nan"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

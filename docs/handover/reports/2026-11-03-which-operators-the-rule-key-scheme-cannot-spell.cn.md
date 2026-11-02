@@ -92,13 +92,17 @@ REINTERP jvp function=p skip=rule uri=:op/pow_d reason=the operator has no forwa
 | 程序 | 纸上 | 读数 |
 |---|---|---|
 | `p(x) = x ^ 2.0`，`x = 3` | `p = 9`，`d = 2x = 6` | `9.0` / **`6.0`** |
-| `p(x) = x ^ 2.0`，`x = -3` | `p = 9`，`d = 2x = -6` | `9.0` / **`-6.0`** |
+| `p(x) = x ^ 2.0`，`x = -3` | `p = 9`，`d = 2x = -6` | `9.0` / **`-6.0`**（指数项是零切量，`ln(-3)` 不被求值） |
 | `q(x) = x ^ 2`（整数字面量指数），`x = 3` | `d = 6` | `9.0` / **`6.0`**，`rules=jvp_pow`（**无 `jvp_ltod`**：整数字面量不生成转换节点） |
-| `s(x) = x ^ x`（f32，变量指数），`x = 3`，`dx = dw = 1` | `x^x(ln x + 1) = 27 × 2.0986 = 56.66` | `27.0` / **`56.662532806396484`**，`rules=jvp_pow` |
+| `s(x) = x ^ x`（变量指数），`x = 3`，`dx = dw = 1` | `x^x(ln x + 1) = 27 × 2.0986 = 56.66` | `27.0` / **`56.66253179403897`**，`rules=jvp_pow` |
+| `s(x) = x ^ x`，`x = -3`，`dx = dw = 1` | 值 `(-3)^(-3) = -1/27` 是实的；**对指数求导无定义** | `-0.037037037037037035` / **`nan`** |
 
-第二行是这条律真正的考点：指数是常量 ⇒ 它的切量是 0 ⇒ `x^w * log(x) * dw` 本就该是 0，但 `log(-3.0)` 是 NaN、`0 × NaN` 还是 NaN，所以不加保护的写法国答 NaN。`pow_tangent` 里的 `log_or_zero` 就是那道保护（`if x > T(0) then log(x) else T(0)`），**代价**写在下面：
+**"无切量"与"零切量"必须分开**（这是作者 2026-11-03 的裁定，也是这一笔最后改对的地方）。指数的项是 `x^w · ln(x) · dw`：
 
-> **代价（作者可推翻）**：`x <= 0` 且**指数带切量**时（即 `dw ≠ 0`），对指数求导本来就没有实数值，这条律答 0 而不是拒绝。选择它的理由是另一头更糟：不加保护会让 `(-3.0) ^ 2.0` 这种普通写法变成 NaN。**这一处是"答 0"而不是"拒绝"，是这一笔里唯一一个不完美的地方。**
+- **`dw` 为零**（指数是常量）：一项乘以零，**真值就是 0**，`ln(x)` 根本不该被求值。实现里常量的切量是**零常量**（`jvp.cpp` 的 `zeroConstantFor`："the tangent a constant gets: the zero of the value's own type"），所以 `dw = 0` 是**零切量**而不是"没有切量"——这也意味着"该项不存在"在律的实参层面**不可能发生**（`Tangent<float>` 是 `float`，浮点常量的切量一定被传进来）。
+- **`dw` 非零且 `x <= 0`**：`ln(x)` 无实值 ⇒ **让它 NaN**。NaN 是诚实的"无定义"，0 是假的"零"。
+
+所以 `pow_tangent` 里是 `if dw == T(0) then T(0) else pow(x, w) * log(x) * dw`：**零只在"这项本来就是零"的地方取**，不是"x 小于零就把无定义写成零"。上一版那种 `x <= 0 ⇒ 0` 的特例是**错数**（对 `x^x` 在 −3 会答 0），已删除；也不存在第二个特例。
 
 ⚠️ 停手条件 (ii) 的答案：**`x ^ 2` 里的整数字面量不走别的算子**——它不生成转换节点，lift 只看到 `:op/pow_d` 一个算子（`rules=jvp_pow`，无 `jvp_ltod`），指数按浮点常量参与。所以没有"整数幂走 `pow_l` 再转回 float"这种事需要处理。
 
@@ -168,3 +172,5 @@ REINTERP jvp function=p skip=rule uri=:op/pow_d reason=the operator has no forwa
 1. `test/cases/compile/rulesets/rulesets_lookup.py` 的断言从"两条"变"三条"，旁边加了一行注释说明为什么（`:op/ltod` 走例外表绑到 `float_of_int/1`，因为 `float` 在一操作数上是所有转 double 转换共用的写法），免得下一个人以为有人为了让用例绿而放宽了断言。**补 `^` 没有再加例外，表仍是 3 条**。
 2. `test/plans/feat/compile/transforms.plan.toml` 里两条钉 `GraphId` 的用例（`reinterp_builds_its_own_graph` 的 `closure graph=107`、`jvp_is_a_function_value` 的 `built graph=56`）**改成了 286 / 236**：这个 id 是**按位置编的**（pass 用一个计数器给建出来的图编号，ruleset 里的律图先消耗号段），所以往 jvp 族里加一条律，后面的 id 全部平移。两条钉子旁边各加了一行注释说明这件事，免得下一个人以为这是"为了绿而改数"。
 3. 两份**生成物**随 `pow_tangent` 重生：`docs/stdlib-reference.md`（`node scripts/stdlib-reference.mjs --write`）与 `docs/reference/camel-for-ai-stdlib-signatures.md`（`node scripts/camel-for-ai.mjs --write`）。不做的话 `registry.reference_is_generated` 与 `docs.ai_reference.current` 两条用例会红——它们是"生成物必须等于生成它的脚本的产物"，我当时就是被这两条逮住的。
+
+4. **一个不可信的数**：这一轮里有一次全量报出 `31 失败 / 2 killed`，其中 17 条是 `module_import_*`、`simplify_*`、`fusion_group` 这种与本次改动无关的用例，`got exit 127` 与 `SIGBUS (rc=135)`——远端 `out/latest` 被并发构建换掉了（`camel-remote.ps1` 在共享目录 `/home/zjwei/camel-work/tloop` 上跑，两个 run 撞在一起就会出现这个）。**单独重跑即清**（14 红）。看到 `127`/`SIGBUS` 就重跑，别去查代码。
