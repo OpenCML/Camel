@@ -40,6 +40,23 @@
 - **判别用例等聚合状态能 lift 之后补**（补的时候用第 3 节那条矩阵构造，正序 `Y1`、倒序 `Y2`，`Y1 ≠ Y2` 才算数；若届时仍相等，就照实写「这条读数分辨不出顺序」）。
 - **不为让它可观测而放宽 `pairTypeOf`**：聚合体的对是数组余切那一轮的工作，是另一件事，超出本笔。
 
+## 5. 怎么让倒序落地（下一个人照着做）
+
+这一节是 2026-11-02 那一轮只读调查的结论，四件事，按顺序读。
+
+**(1) 顺序从哪来：不是「复制了节点顺序」，是「区间与种类都没变」。**
+`transpose` 遇到 `LOOP` 不是整段复制——它**新建**一个 `LoopBody` 区域，把旧体的每个节点按规则逐节点转置成余切链（`modules/transforms/transpose.cpp#buildTransposeMember`，区域在 `draft.addRegion(GCRegionKind::LoopBody, 0)` 处新建，体由 `runSeeded(bodyRegionOld, seeds, statePorts)` 重放），新端口按 state 数加逃逸数重排。照抄的只有两样：**区间这个值**（`forward(oldNorm[i])`，注释原话：the range … copied as they stand, because the reverse loop iterates over the same values）与**循环种类**（`draft.addLoopNode(rt::loopBodyOf(*function, ref), loopType)`）。执行器看到的是「同一个区间值 + 同一个 `LoopKind`」，所以它照原样从第 0 轮走到第 n−1 轮。**要改顺序，改的是这两样之一，不是节点次序。**
+
+**(2) 最小改法：把区间换成 `reverse(range)`。**
+语言已有它：`stdlib/array.cml#reverse` 就是 `xs[::-1]`，一个切片节点，返回反序数组。把它插在循环的区间口上，循环仍正序迭代——只是迭代的是反序数组——因此**不动 LOOP 语义、不动四个执行器、不动尾递归**。代价：反向时物化一份 n 元数组（12.3 那种长的循环会多一份与胶带同长的副本；如果 n 大到不能接受，见下一条）。
+**替代写法**（更麻烦，别先选）：整数索引倒着取（`n-1 … 0`）配 `Accs(tape, i)`，不需要数组副本，但要把体内**每个**读胶带的点改成按索引取，而且今天 `Accs` 的收集槽语义只有正序下标（收集槽按轮序追加，`include/camel/core/loop_kind.h#LoopKind` 那一族注释、`camel/runtime/loop.h` 的 slot 段）。那是改体，不是改一个口。
+
+**(3) 为什么现在不能落：落了也观测不到。**
+`transpose` 的循环体今天只重放旧体，规则需要「当轮状态」时按 `skip=state` 拒绝（同一文件那两处 `skip=state` 出口）；逐轮残差（胶带）只在 `lin` 的闭包里（`modules/transforms/split.cpp#cutLoopGraph`），**不过切口**。所以「倒序」与「正序」目前只差一个标量乘积的次序——可交换，读数相同。只改顺序，改的是一段没人能验证的走法。**落地的那一天，判别用例是第 3 节那族 4-tuple 非交换矩阵，不是今天任何一条**：那族的前向已经跑通，等的只是聚合状态能 lift（第 2 节）。
+
+**(4) 前置条件。**
+`stdlib/vjp.cml#vjp` 里那一行（`transpose(lin)(ct)`，`Transpose<F>` 的类型律）先进 develop——**`lane-typelaw` 在做**。那条一落地，胶带才有可能作为 `transpose` 的输入过切口，「倒序」也才有东西可读；再往后才是第 3 节的判别用例。
+
 ## 要作者答的一句
 
 **「循环反向半程的『按轮倒序』在今天的树上不可观测（能到达 `split` 的循环状态只能是 `float`，逐轮映射可交换），而『倒序』本身属 4.3、`transpose` 仍原样复制区间：我按 4.2 落了『每轮一条残差』、没落倒序，并写明『倒序未实现、不可观测』，等聚合状态能 lift 后再补判别用例——除非你要先放宽 `pairTypeOf`。」**
