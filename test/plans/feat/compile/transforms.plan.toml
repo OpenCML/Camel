@@ -728,33 +728,6 @@ timeout_ms = 20000
 # The same missing cotangent, seen from the library: `grad` is
 # `transpose(split(reinterp(jvp(f))))`, so a tangent function that ignores its operands is on every
 # `grad` of a sum, and a refusal there is a refusal of the plainest derivative there is.
-# The residuals a `split` hands on are the transform's own tuple: the count is the body's answer
-# (`residuals=4` here), so a program never names, indexes or counts them -- it passes the tuple on
-# whole (author's ruling, 2026-11-01; the findings are in
-# docs/handover/reviews/questions-2026-11-01-the-residual-slot-has-no-type-until-execution.md). This
-# entry is the refusal: the destructuring in the case is `SemanticDiag::ResidualsAreNotVisible`,
-# reported at the `let`, before anything runs.
-#
-# The entry used to pin the opposite. With the residual tuple typed as a plain tuple, four members
-# arrived under a two-member static type and `let (r0, r1) = residuals` took the two parameters in
-# silence, dropping the two products (`r0= 3.0`, `r1= 2.0`). That silent drop is what the diagnostic
-# ends; the numbers are in the commit that replaced them.
-#
-# `not_contains` for those numbers is gone on purpose: with the guard on the program gets nowhere
-# near printing, so a `not_contains` would assert nothing. What this entry asserts is the name, the
-# line, and the sentence the writer reads.
-[[tests]]
-name = "split_residuals_destructured"
-desc = "`split(jvp(f))` for `f(x, y) = x*x*y*y`, destructured: refused. The residual tuple is `TupleType::residuals` -- its members are the graph's answer (four here) and a program does not read them -- so `let (r0, r1) = residuals` is `SemanticDiag::ResidualsAreNotVisible` at the `let`, and the second half still gets the tuple whole (`transpose(linear)(residuals, ct)` is the shape that stays). Before this the same program compiled and dropped the two products in silence."
-kind = "negative"
-case = "../../../cases/compile/transforms/split_residuals_destructured.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ResidualsAreNotVisible"
-expect_diagnostic_line = 18
-expect_output_contains = ["SemanticDiag::ResidualsAreNotVisible", "The residuals `split` collects are not visible to the program"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 20000
 
 [[tests]]
 name = "grad_where_the_tangent_ignores_the_operands"

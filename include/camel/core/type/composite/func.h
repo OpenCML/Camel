@@ -303,6 +303,9 @@ class FunctionType : public CompositeType {
         std::vector<uint16_t> withConstIndices;
         std::vector<SymId> names;
         sem::ResourceSignature resources;
+        /// The signature is `split`'s backward half: its parameters are the tangents, and the values it
+        /// reads are in its closure. Nothing on the type says so -- `transpose` treats every parameter
+        /// as linear (author's ruling of 2026-11-02 11:30).
     };
 
     FunctionType(const Parts &parts, bool open);

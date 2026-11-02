@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-307 diagnostics: 286 errors, 21 warnings. 15 carry a machine-applicable edit, 292 say why they carry none.
+306 diagnostics: 285 errors, 21 warnings. 15 carry a machine-applicable edit, 291 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -267,7 +267,6 @@ prints one entry.
 | `0x03000205` | [SemanticDiag::DuplicateRuleForOperator](#duplicateruleforoperator) | Error | no |
 | `0x03000206` | [SemanticDiag::YieldRequiresStreamHead](#yieldrequiresstreamhead) | Error | no |
 | `0x03000207` | [SemanticDiag::RuleRightUsesOuterVariable](#rulerightusesoutervariable) | Error | no |
-| `0x03000208` | [SemanticDiag::ResidualsAreNotVisible](#residualsarenotvisible) | Error | no |
 | `0x03000209` | [SemanticDiag::CalledFallibleValue](#calledfalliblevalue) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
@@ -8785,55 +8784,6 @@ func f(x: float): float {
 func main(): int sync {
     let xs: float[3] = [1.0, 2.0, 3.0]
     println(vmap(f)(xs))
-    return 0
-}
-```
-
-### ResidualsAreNotVisible
-
-`0x03000208` · Error · `SemanticDiag::ResidualsAreNotVisible`
-
-**Fix**
-
-None: choice: the residuals are handed on whole, and which members the second half reads is the transform's to decide
-
-**Message**
-
-```text
-The residuals `split` collects are not visible to the program: they are handed on whole to the second half, and neither a destructuring nor an element read takes them apart.
-```
-
-**Help**
-
-```text
-A `split`'s forward half answers `(result, residuals)` -- the forward values the backward half's rules multiply by. Their number is the body's: `f(x) = x` crosses with none and `f(x, y) = x*x*y*y` with four, and two bodies with one lifted type can differ (design principles 4.4, the cut between now and later). The tuple travels for one reason, as one value: `let (value, residuals) = forward(xs)` and then `backward(residuals, dx)`, or the same tuple passed to the transposed function beside the cotangent. A program that destructured it, or read `residuals.0`, would depend on a count the graph chose, so both are refused here, at the `let` or the read. Pass the tuple as it stands: which members the second half reads is the transform's decision, made while the graph is built.
-```
-
-**Example** (`test/cases/compile/transforms/split_residuals_destructured.cml`, run as `camel test/cases/compile/transforms/split_residuals_destructured.cml`)
-
-```camel
-// The residuals of a `split`, destructured: refused.
-//
-// `f(x, y) = x*x*y*y` crosses the cut with four values (`residuals=4`), and the tuple a program gets
-// is the transform's own (`TupleType::residuals`): its members are the graph's answer, so a program
-// does not read them. `let (r0, r1) = residuals` is `SemanticDiag::ResidualsAreNotVisible` at the
-// `let`; the tuple goes to the second half whole, as the last line below does.
-import rulesets.jvp
-import rulesets.transpose
-import { jvp, split, transpose } from transforms
-
-func f(x: float, y: float): float {
-    return x * x * y * y
-}
-
-func main(): int sync {
-    let (forward, linear) = split(jvp(f))
-    let (value, residuals) = forward(3.0, 2.0)
-    let (r0, r1) = residuals
-    println("value=", value)
-    println("r0=", r0)
-    println("r1=", r1)
-    println("tangent=", transpose(linear)(residuals, 1.0))
     return 0
 }
 ```
