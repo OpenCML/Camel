@@ -1,11 +1,10 @@
-#| [`2026-11-02-is-p0-2-now-a-pass-by-pass-judgement-change`](2026-11-02-is-p0-2-now-a-pass-by-pass-judgement-change.cn.md) | P0-2 是否改成两件一起做：① 修正 sync 边终点不变量；② 让依赖控制边的 pass 改读 sync 边（默认建议：甲） | 待裁 | — | P0-2 全批：`edges.no_ctrl_edge_kind` 与 `edges.gate_has_no_control_input` 两条标记等它落地才摘 |
- 待裁索引：谁在等作者，堵着什么
+# 待裁索引：谁在等作者，堵着什么
 
 > **一页一问；索引按"堵住多少工作"排序，因为作者的时间应该花在最贵的那页上。**
 
 > **索引的价值在于与目录一一对应；一旦少一页，读者就会以为没有那一问。**
 
-> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 questions/ 里有 3 页**，表里只有已裁的行。其余已裁完、整体挪进 `reviews/`。
+> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 questions/ 里有 2 页**，表里只有已裁的行。其余已裁完、整体挪进 `reviews/`。
 >
 > **索引以目录为准**：这张表曾经列着三页早就挪进 `reviews/` 的文件名，而目录里的另外三页不在表上——**一条指向不存在文件的索引，比没有索引更坏**（读者会以为那一问还在，而去回答一个已经裁过的形状）。以后每次并入前先数目录，再改这张表。
 >
@@ -13,16 +12,14 @@
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：3 页
+## 现在在等作者：1 页
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
-| [`2026-11-02-whether-a-private-kernel-gets-a-writable-name`](2026-11-02-whether-a-private-kernel-gets-a-writable-name.md) | 没有体的 kernel 声明要不要给它一个可写出来的名字（默认建议：不动，先记着） | 待裁 | — | 拒绝原因普查的第 1 族：1814 条拒绝里这一族最大，给了名字打印器才写得回去 |
-| [`2026-11-02-are-thirty-plans-of-another-layer-a-defect`](2026-11-02-are-thirty-plans-of-another-layer-a-defect.cn.md) | 那 31 个"沉默的零"是别的层的计划、不是缺陷，要不要把它们改成快层（默认建议：不处置） | 待裁 | — | 发布闸门的"绿"只盖快层；改层就等于改"我们声称绿的"是什么意思 |
-
+| --- | --- | --- | --- | --- |
 | [`2026-11-02-is-p0-2-now-a-pass-by-pass-judgement-change`](2026-11-02-is-p0-2-now-a-pass-by-pass-judgement-change.cn.md) | P0-2 是否改成两件一起做：① 修正 sync 边终点不变量；② 让依赖控制边的 pass 改读 sync 边（默认建议：甲） | 待裁 | — | P0-2 全批：两条 `known_fail` 标记等它落地才摘 |
-**这一节的行数 = 目录里的页数**（现在 3 = 3）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。
 
-2026-11-02 02:30 的 `cml-sync-tail-write` 与 `whether-the-when-clause-belongs-on-the-declaration` 已裁，在 `reviews/`；`the-neq-group-is-the-fallback-of-ne-with-no-eq-to-negate` 也已裁定并留在 `reviews/`（作者给了执行路径，冲突状态结束）。
+
+2026-11-02 03:30 的两页（另一层的 30 个零、私有 kernel 的名字）已裁，在 `reviews/`。
 
 ## 已裁：按还堵着的活排
 
