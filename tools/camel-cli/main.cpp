@@ -815,7 +815,7 @@ int runCommand(int argc, char *argv[]) {
         } else {
             // Not a diagnostic: a state this version does not build. The text of the exception is
             // printed with it (it used to be printed bare: a line reading `bad any_cast`), and the
-            // program is not blamed: it is a known limitation of this compiler version.
+            // program is not blamed, and the text never asks the reader to send it.
             os << "camel: internal error: " << e.what()
                << "\nThis state is not built by this compiler version, and nothing in the program is "
                    "wrong."

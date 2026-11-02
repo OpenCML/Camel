@@ -2161,16 +2161,15 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     // Create an ExitLoad node to represent the exit statement.
     const AST::ExitType astExit = ast->loadAs<AST::ExitStmtLoad>()->exitType();
     if (astExit == AST::ExitType::Yield) {
-        // A `yield` the generator machine did not claim reached the statement builder, which means
-        // the machine missed a shape it builds: that is a defect of this builder, not a property of
-        // the program (author's ruling of 2026-10-31: the machine's narrowings are compiler
-        // defects, reported as internal errors with the program to send, and not as a missing
-        // feature).
+        // A `yield` the generator machine did not claim reached the statement builder: the machine
+        // missed a shape it builds. Nothing in the program is wrong, and the report says so without
+        // asking for the program (author's ruling of 2026-11-02: a refusal is not a defect of the
+        // program, and the text never asks the reader to send it).
         diags_->of(InternalDiag::UnknownInternalError)
             .at(ast->load()->tokenRange())
             .commit(
                 "a `yield` reached the statement builder, so the generator machine did not claim "
-                "it. This is a known limitation of this compiler version, and nothing in the program is wrong");
+                "it. Nothing in the program is wrong: the machine missed a shape it builds");
         throw BuildAbortException();
     }
     node_ptr_t exitNode = tree_->makeExit(ExitType::Return);
@@ -5728,8 +5727,7 @@ node_ptr_t Builder::visitGeneratorBody(
         diags_->of(InternalDiag::UnknownInternalError)
             .at((atYield != nullptr ? atYield : atNode)->load()->tokenRange())
             .commit(
-                "the generator machine does not build this shape. This is a known limitation of this "
-                "compiler version, and nothing in the program is wrong");
+                "the generator machine does not build this shape, and the program is not at fault");
         throw BuildAbortException();
     };
     // A local that lives across a `yield` is a cell of the body (see `addTypedCell`), so there is
