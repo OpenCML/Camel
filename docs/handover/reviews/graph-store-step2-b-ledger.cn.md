@@ -1366,6 +1366,12 @@ graph.cpp 里被引用的去处，按最近的声明归属记在 `graph.h` 名�
 同一次记录里 `modules/transforms/split.cpp#parameterOfPort` 从 0 变成 2：这 2 处本就在 304 里，
 只是站点键以前记在别的名字下（`14bccd9fd` 起的 `parameterOfPort`），总数没有动。
 
+**基线是怎么抬的，写在明处**：`--record` 拒绝写一个涨了的数，所以这一笔用的是
+`node test/cases/runtime/graph_draft_ledger/check.mjs --record --force`（那页注释写明的"响亮覆盖"，
+diff 里能看见这一行）。`check.mjs` 与 `runtime.graph_draft_ledger.plan.toml` 一行没改，计划里没有
+容差：判据仍是 `current <= baseline`，306 能过只是因为这一笔记了 306。"抬基线算不算改判据"这一问
+单独写成了 `questions-2026-11-02-a-function-that-must-take-graphdraft.md`（等作者裁决，若不认这一笔要退回）。
+
 **A/B（两个方向都量过）**：
 
 - 把 `value_only` 的 `!may_fault(n)` 去掉、只用 `is_pure` → `camel_passes.dce.by_camel` 与

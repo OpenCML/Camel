@@ -1,0 +1,29 @@
+/**
+ * A named `with` argument across an overload set (A13): both declarations of `check` name position
+ * 0 `samples` and position 1 `seed`, so `check<samples: 1000, seed: 7>` reaches one parameter of the
+ * set, and the positional spelling `<1000, 7>` reaches the same one. The function the check is
+ * about is an ordinary argument (`check<...>(f)`), not a `with` argument: a `with` parameter
+ * without a default may not stand in front of ones that have defaults, so the two declarations
+ * could not both name position 0 the same way otherwise.
+ *
+ * The three calls below differ only in how they are written, so their reports are the same text:
+ * a name that drifted to another position would make one of them fail to compile instead.
+ */
+import { check, check_text } from rewrite
+
+rule add_zero(x: int) { x + 0 => x }
+rule mul_one(x: int) { x * 1 => x }
+
+func touch(x: int): int {
+    return x + x
+}
+
+func main(): int sync {
+    let named      = check_text([add_zero, mul_one]->check<samples: 100, seed: 1>)
+    let positional = check_text([add_zero, mul_one]->check<100, 1>)
+    let with_fn    = check_text([add_zero, mul_one]->check<samples: 100, seed: 1>(touch))
+    println(named == positional)
+    println(named == with_fn)
+    println(len(named) > 0)
+    return 0
+}

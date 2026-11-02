@@ -5798,19 +5798,27 @@ A build without a solver answers `Sampled` and `Refuted` and never `Proved`. A g
 checked at the types every operator group registered.
 
 - Example (a fragment, not compiled): `rules->check<samples: 1000, seed: 7>`
-- Why it is not compiled: a rule set comes from the caller
+- Why it is not compiled: `rules` comes from the caller
 
 #### `check`
 
 ```camel
-check: <over: F, samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport when is_function::<F>()
+check: <samples: int = 100, seed: int = 0> (rules: Rule[], over: F) => CheckReport when is_function::<F>()
 ```
 
 The same, with the law also checked at the types of the values `over` has, each once, in the
-order its graphs write them.
+order its graphs write them. `over` is an ordinary argument, not a `with` one, so that both
+overloads of `check` name each `with` position the same way: a named argument
+(`check<samples: 1000>`) means one position in every declaration of the set, and a position one
+declaration names `samples` and the other names `over` is one the name does not reach
+(`OverloadParameterNames`). It cannot stand in the `with` list in front of `samples` and `seed`
+either, because a `with` parameter without a default may not follow one that has a default
+(`WithParameterAfterDefault`), and a function-typed one takes no default (`null` has type
+`void`, and `F?` leaves `F` unbound). Written first, it is the argument the arrow carries:
+`rules->check<8, 1>(f)`.
 
-- Example (a fragment, not compiled): `rules->check<over: f>`
-- Why it is not compiled: a rule set and a function come from the caller
+- Example (a fragment, not compiled): `rules->check(f)`
+- Why it is not compiled: `rules` and `f` come from the caller
 
 #### `check_text`
 

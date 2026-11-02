@@ -1541,6 +1541,17 @@ assert(allDefaults === left, 'the defaults of samples and seed read the register
 timeout_ms = 20000
 
 [[tests]]
+name = "rules.check_named_with_argument"
+desc = "A named `with` argument means one position in every declaration of the overload set (A13): `check<samples: 1000, seed: 7>` reached no overload while the over-taking declaration named that position `over`, because a name one declaration puts at position 0 and the other at position 1 is one the call refuses (`OverloadParameterNames`). Both declarations now name position 0 `samples` and position 1 `seed`, and the function the check is about is the ordinary argument the arrow carries (`check<100, 1>(f)`) instead of a `with` parameter: a `with` parameter without a default may not stand in front of ones that have defaults (`WithParameterAfterDefault`), so `over` could not be moved behind them, and a function-typed `with` parameter takes no default (`null` has type `void`, and `F?` leaves `F` unbound, which the graph refuses as an undetermined static slot). The case writes one call by name and one by position and demands the same report, so a name that drifted to another position fails here instead of in a doc example."
+kind = "behavior"
+case = "../../../cases/modules/rules/check_named_with_argument.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "true\ntrue\ntrue\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "rules.with_parameters_bound"
 desc = "A rule whose declaration writes `with` parameters is a function of them: `add_zero_tiled<1>` and `mul_one_scaled` (whose parameter has a default, so its name alone is a `Rule`) enter a rule set as `Rule` values. The report before and after shows the two functions that hold the pattern losing their addition, and the one that holds `x * 1` losing its product."
 kind = "behavior"
