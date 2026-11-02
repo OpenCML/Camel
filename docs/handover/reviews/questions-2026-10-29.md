@@ -1995,3 +1995,29 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 - 找"被搬语句集合"需要读完 `inlineCallableInDraft` 那 500 行，这本身就说明那个函数该拆了（审查 P1 的超长函数）。先把拼接链的那一段抽成上面那个操作，函数会短一截。
 
 页面挪到 `reviews/` 留档。
+
+## 每日审查（2026-11-02）
+
+范围：过去 24 小时 `origin/develop` 的 692 笔非合并提交，三组并行审，决策者逐条读代码核实。核心与工具组那 297 笔里，动产品代码的 151 笔。下面只列核实过的。
+
+**高**
+1. **合并把已落地的修复冲回去了**：`cbdf86498` 已让规则按被匹配操作数的类型实例化，整条车道合并 `fbfa4900a` 又把 `modules/transforms/jvp.cpp:91` 冲回 `{Type::Float64()}`。**返工**：恢复 `cbdf86498` 的写法。**规矩**：整条合入一条车道时，凡是 develop 上已有、车道上也改过的文件，合并后要对照 develop 侧那几笔的改动逐处确认没被冲掉，写进合并信息。
+2. **`vmap`、`remat` 对捕获变量的闭包静默算错**（之前量到 `vmap` 得 20.0、应为 18.0；`remat` 得 0.0、应为 6.0）。调用处那条拒绝随前端机制一起撤掉了，挡板没了，错数就漏了出来。错数比拒绝更坏。**返工**：修到算对。被变换函数的捕获值，就是那个函数值的一部分，变换照抄它（捕获当作常量端口传进产出的图），不许丢，也不许回到拒绝。读数：同两个程序得 18.0、6.0，加进计划。
+3. **变换仍往用户程序的 stdout 写读数**（审查 P1-8 未动）：`jvp/split/transpose/vmap/remat_operator.cpp` 里的 `std::cout`，以及 `transpose` 的拒绝原因只写 stdout，抛出的错误只有一句"has no transpose for this function"。**返工**：变换不写 stdout；拒绝走带位置、带原因的诊断；测试要读数，就用显式的调试参数取。
+4. **转置的余切累加写死 `:op/add_d`**：`modules/transforms/transpose.cpp` 有七处（`:712`、`:736`、`:755`、`:768`、`:1134`、`:1150`、`:1562`），只有 `:313` 那一处按切空间选加法。**返工**：累加只经一个函数，按切空间给出加法（与规则集的 `add_tangent` 同一个来源），七处都改调它。读数：数组参数 `sum`/`product` 用例不再走 `add_d`。
+5. **`std::opt` 的不收敛计数是函数内 `static`**（`src/passes/opt/inline/engine.cpp:1348` 起的 `streakGraph`/`streak`）：同一进程里不同程序、不同次调用会串账。**返工**：计数放进这一遍或这条流水线的状态里，随运行开始清零。
+
+**中**
+6. **入口调用不计深度这个特例抄了三份**：`casevm.cpp:350`、`gotovm.cpp:660`、`fastvm.cpp:880` 各写一遍。**返工**：收进 `camel/execute/limits.h` 的一个函数，三处调用它。
+7. **`kRecordTangentArgs` 开关又出现了**（`modules/transforms/rule_expand.cpp:29`）。`tangentArgs` 18:40 已裁定删除，开关和字段一起删。
+8. **`TODO(debt, next commit)`**（`src/compile/gir/builder.cpp:1394`）：develop 上不留"下一笔再做"。这一笔做掉，或者删掉这个 TODO 并说明为什么不需要。
+9. **打印器里两份 `isLiteralText`**（`src/passes/trans/cml/cml.cpp:1354` 与 `:3085` 的 lambda），写法不同。合成一份。
+10. **"功能到位才跑"的跳过门还在**（审查 P2-18 未动）：`test/tools/have-library-grad.mjs`、`have-library-vjp.mjs`、`have-transforms-library.mjs`、`have-split.mjs`（恒真）、`have-vjp.mjs`（无人引用）。删掉，引用它们的条目去掉 `skip_unless`。`have-cuda-*`、`have-native-jit` 判断的是宿主能力，不在此列。
+11. **`jvp.cpp` 用 `== Type::Float64()` 判断有没有切向**，与 `tangentSpaceOf` 两套判据。随第 1 条一起改成只问 `tangentSpaceOf`。
+12. **`with_grad` 仍是返回类型对不上的桩**（审查 P1-15）：照原则 9.9 对第一个 `with` 参数实现，或者删掉。
+
+**低**：删开关后留下讲历史的注释（含一处字面 `` `r`n ``）；`known_fail` 的备注里写了会漂移的计数。按"文档写规则不写数字"一并清掉。
+
+**已知、仍在进行、本次不重复**：核心图上为求导加的三个字段（18:40 已裁删）、"效应凭据"多处实现（随 P0-2 收口）、`:op/keep` 换 `GATE`（已裁）。
+
+**排序**：残差藏进闭包（同时修段错误）→ 本次第 2 条（静默错数）→ 第 1 条（被冲掉的修复）→ 生成器悬垂节点 → P0-2 → 其余。
