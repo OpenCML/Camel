@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-307 diagnostics: 286 errors, 21 warnings. 15 carry a machine-applicable edit, 292 say why they carry none.
+306 diagnostics: 285 errors, 21 warnings. 15 carry a machine-applicable edit, 291 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -267,7 +267,6 @@ prints one entry.
 | `0x03000205` | [SemanticDiag::DuplicateRuleForOperator](#duplicateruleforoperator) | Error | no |
 | `0x03000206` | [SemanticDiag::YieldRequiresStreamHead](#yieldrequiresstreamhead) | Error | no |
 | `0x03000207` | [SemanticDiag::RuleRightUsesOuterVariable](#rulerightusesoutervariable) | Error | no |
-| `0x03000208` | [SemanticDiag::ResidualsAreNotVisible](#residualsarenotvisible) | Error | no |
 | `0x03000209` | [SemanticDiag::CalledFallibleValue](#calledfalliblevalue) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
@@ -8785,63 +8784,6 @@ func f(x: float): float {
 func main(): int sync {
     let xs: float[3] = [1.0, 2.0, 3.0]
     println(vmap(f)(xs))
-    return 0
-}
-```
-
-### ResidualsAreNotVisible
-
-`0x03000208` · Error · `SemanticDiag::ResidualsAreNotVisible`
-
-**Fix**
-
-None: choice: the residuals are handed on whole, and which members the second half reads is the transform's to decide
-
-**Message**
-
-```text
-The residuals `split` collects are not visible to the program: they are handed on whole to the second half, and neither a destructuring nor an element read takes them apart.
-```
-
-**Help**
-
-```text
-A `split`'s forward half answers `(result, residuals)` -- the forward values the backward half's rules multiply by. Their number is the body's: `f(x) = x` crosses with none and `f(x, y) = x*x*y*y` with four, and two bodies with one lifted type can differ (design principles 4.4, the cut between now and later). The tuple travels for one reason, as one value: `let (value, residuals) = forward(xs)` and then `backward(residuals, dx)`, or the same tuple passed to the transposed function beside the cotangent. A program that destructured it, or read `residuals.0`, would depend on a count the graph chose, so both are refused here, at the `let` or the read. Pass the tuple as it stands: which members the second half reads is the transform's decision, made while the graph is built.
-```
-
-**Example** (`test/cases/compile/transforms/split_residuals_destructured.cml`, run as `camel test/cases/compile/transforms/split_residuals_destructured.cml`)
-
-```camel
-// The halves of a `split` are not a pair the program can take apart: refused.
-//
-// Under the closure ABI (author, 2026-11-02) `split(jvp(f))` **is** the forward function; for
-// `f(x, y) = x*x*y*y` at `(3.0, 2.0)` it answers `(value, linear)`, and `linear` is a function --
-// the residuals it was built over live in its closure, in no value and in no type. So
-// `let (dx, dy) = linear` cannot mean "read the two directions out of it": there is nothing to
-// index, and the refusal is `SemanticDiag::TypeNotIndexable` at that `let`.
-//
-// What this case asserted before: the binary-tuple ABI handed the residuals back as a value of the
-// transform's own tuple type (`TupleType::residuals`), and `let (r0, r1) = residuals` was refused
-// with `SemanticDiag::ResidualsAreNotVisible`. That mechanism has no producer left on this tree
-// (`TupleType::residuals` is only its definition now; see
-// `docs/handover/reports/2026-11-02-the-residual-chain-is-dead-and-four-spots-to-remove.cn.md`), so
-// the old assertion had no object left to speak about. The wish it was guarding is the same wish,
-// spelled against the new shape -- "give me the carried values, one by one" -- and that is what is
-// refused here.
-import rulesets.jvp
-import { jvp, split } from transforms
-
-func f(x: float, y: float): float {
-    return x * x * y * y
-}
-
-func main(): int sync {
-    let forward = split(jvp(f))
-    let (value, linear) = forward(3.0, 2.0)
-    let (dx, dy) = linear
-    println("value=", value)
-    println("dx=", dx)
-    println("dy=", dy)
     return 0
 }
 ```
