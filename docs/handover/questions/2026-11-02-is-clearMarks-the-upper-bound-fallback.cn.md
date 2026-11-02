@@ -97,3 +97,32 @@ while (current < topSnapshot) { ...; visitor(header); current += obj_size; }
 
 **所以这一行不是兜底，是承重的。按您原话"同一笔删掉"我们做了，结果是 38 条红；
 我们**不删**，并把"为什么它承重"继续读到能说清为止 —— 这是与您原话的第二处偏离，请您裁。**
+
+## 7. 实验做不成的那一步：**根集注册表里根本没有类型可传**
+
+按要求，下一步是把根种子带上"注册时该有的类型"，再跑 `json.gc.forced_major.*` 一族。读注册表后这一步**判死**：
+
+```cpp
+// include/camel/core/mm/gen.h:581
+struct ObjectRootSetEntry {
+    const void *owner = nullptr;
+    std::string name;
+    std::vector<rtdata::Object *> *set = nullptr;
+};
+```
+
+**没有 type 字段。** 所以 `markPhase()` / `clearMarks()` 给根种子传 `nullptr` **不是疏忽，是注册时就丢掉了**
+—— `registerObjectRootSet`（声明 `gen.h:335`、定义 `gen.cpp:157`）收的就是 owner/name/set 三样，
+主调用点是 `src/core/context/context.cpp:432`（注销在 `:320`）。
+
+结论三句：
+
+1. **候选 ① 的缺口在代码里是真的**（`Tuple::updateRefs` 在 `type == nullptr` 时一个槽都不走），
+   但**补它不是一行**：要么给 `ObjectRootSetEntry` 加类型、并让每个注册点交出来，要么改 `Tuple::updateRefs`
+   在没有类型时用值的运行时形状走槽（不安全：分不清哪个槽是引用）。**这属于"另一条要修的东西"，不是这一笔能补的。**
+2. 因此"38 → 0 还是不动"这个 A/B/C **我没有运行**：实验的前提（能传类型）在本树不成立，
+   跑它只会得到"还是 38 条"，那不是判据，是同一件事再说一遍。
+3. **下一步的读物很具体**：`registerObjectRootSet` 的每个调用点**有没有类型可交**。有的（例如上下文持有
+   一份带类型的根表）就先补它；没有的，这一行整空间扫就要留着 —— 它在替"根集不知道类型"这件事兜底。
+
+**已推进到：判死（实验前提不成立）+ 定位到注册表。**
