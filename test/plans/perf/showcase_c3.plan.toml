@@ -80,3 +80,17 @@ expect_exit = 0
 expect_stdout_contains = ["c3 compare: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 300000
+
+# The training run the library path cannot give: the same six-parameter block, the same starting
+# numbers, Adam's constants at rate 0.002, one loss per step for fifty steps, differentiated by the
+# engine's `with_grad` because the library's `vjp` does not compile (wall 1).  Its reference is
+# `baseline/block_train.py`, which prints `py train step=<n> loss=<v>` from the same start.
+[[tests]]
+name = "train.engine_fifty_steps"
+desc = "Fifty Adam steps of the smallest attention block through `with_grad`, printed one line per step: the loss falls from 0.449437188361 to 0.128649809322 with no step rising, and every step is a number `baseline/block_train.py`'s own loop agrees with."
+kind = "behavior"
+case = "../../../showcase/c3-char-transformer/block_train.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["c3 train step=1 loss=0.455920556651", "c3 train step=2 loss=0.449437188361", "c3 train step=3 loss=0.442951748191", "c3 train step=10 loss=0.397492874660", "c3 train step=25 loss=0.299682415252", "c3 train step=50 loss=0.135265634910", "c3 train done steps=50 last=0.128649809322"]
+timeout_ms = 300000
