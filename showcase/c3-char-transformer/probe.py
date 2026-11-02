@@ -52,6 +52,7 @@ EXPECTED = {
     "15_mask_in_f32": "refused",
     "16_layer_norm_dtype": "ok",
     "17_draw_dtype": "ok",
+    "18_take_dtype": "refused",
 }
 
 # The construct each probe reaches, so the report can say which wall is which without reading the
