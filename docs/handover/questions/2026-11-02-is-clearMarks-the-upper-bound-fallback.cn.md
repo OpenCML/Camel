@@ -126,3 +126,28 @@ struct ObjectRootSetEntry {
    一份带类型的根表）就先补它；没有的，这一行整空间扫就要留着 —— 它在替"根集不知道类型"这件事兜底。
 
 **已推进到：判死（实验前提不成立）+ 定位到注册表。**
+## 8. 三栏数完了：**A 栏 0 / 2** —— 加 type 字段救不了这条红
+
+`git grep -n 'registerObjectRootSet(' -- src include modules` 的**真实调用点只有两个**（其余是声明、定义、注销）：
+
+| 调用点 | 注册的 `set` 是什么 | 那一层手上有没有类型 |
+| --- | --- | --- |
+| `src/core/context/context.cpp:432` `registerObjectRootSet(ctx.get(), "runtimeGraphRoots", &ctx->runtimeGraphMgr_->gcRoots())` | `runtimeGraphMgr_->gcRoots()`，元素是 **`Program *`**（`src/runtime/program.cpp:186` 与 `:348` 塞入，`:345`/`:462` 清空） | **C 栏**：集合是**同质**的图载体，不需要数据类型 |
+| `src/passes/test/contexts.cpp:81` `registerObjectRootSet(&ownRoots, kOwnRootSetName, &ownRoots)` | 测试自己的 `ownRoots`，只用来数条目数（`countRootSets`） | **C 栏**：测试探针，与类型无关 |
+
+- **A 栏（有类型可交）：0 个** —— 没有任何调用点手上握着一个可以交出去的 `type::Type *`。
+- **B 栏（类型在更上层被丢掉）：0 个** —— 不存在"上层有类型、注册时丢了"的情形；注册进去的本来就是**图载体**，
+  它们（`Program` / `GCGraph`）在 `updateRefs` 里不需要数据层类型，跟 `Function::updateRefs` 同形。
+- **C 栏（同质 / 无类型需求）：2 个，占全部调用点。**
+
+**结论（这条线的终点）**：**给 `ObjectRootSetEntry` 加 type 字段也救不了那 38 条红** —— 没有调用点能交出类型，
+而根集里装的是同质图载体，它们不靠类型也能追。所以：
+
+> **整空间扫是当前唯一正确的做法**，它兜的不是"根集缺类型"，而是**根遍历这条路本身覆盖不到图空间里的某些 mark 位**
+> （第 3 节实测：删掉就 38 条红，全部落在强制大回收一族）。要真删，得先回答"哪些 mark 位根遍历清不掉"，
+> 而那已经不是注册表这一层的问题。
+
+**这一线到此为止**（三页、四次读数、一个判死的实验、一张三栏表）。作者若要真删这一行，
+读物是"`markObject` 追到的边 ⊆ 根遍历追到的边吗" —— 目前已知**不⊆**，实测为证。
+
+**已推进到：终点（A 栏 0/2，加字段无用；整空间扫保留）。**
