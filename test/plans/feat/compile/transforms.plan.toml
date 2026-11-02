@@ -473,6 +473,12 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 0
+# pinned before 17:10; update when jvp supports loop
+# `type=(float, float) => float` below is the pre-ruling member shape: a transposition of a
+# one-parameter function answers `(float) => (float,)` now. The shape is left as it stands because
+# the case cannot run at all until `jvp` has a forward transform for a loop (`REINTERP jvp
+# function=read_one skip=loop`, lane-loopreverse); re-pinning it before that would be a guess, and
+# the right shape is best read off the run that gets there.
 expect_output_contains = ["TRANSPOSE function=read_one carried=1 node=10 origin=0 captures=1 answer=summed", "ESCAPE target=0 from=9 kindOfFrom=11 kindOfTarget=1 typeOfTarget=float norm=[3,0,] with=[9,11,]", "TRANSPOSE function=read_one graph=", "type=(float, float) => float", "15.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
@@ -800,6 +806,7 @@ timeout_ms = 20000
 # that falls must turn its assertion into a number, and known_fail would hide that.
 [[tests]]
 name = "grad_array_no_int"
+desc = "The gradient of an array through `vjp`, on the backend whose program contains no integer: `xs[0] * xs[1]` over `[3.0, 2.0]` answers `6.0` and the array cotangent `[2.0, 3.0]`, on fvm. The transposed `index_into` member is built; what the walk still needs is the **array's value at the call site** (`TRANSPOSE-NEEDS ... param=0`, then `skip=call ... arg=5`), which the member carries only once its closure does."
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_no_int.cml"
 args = ["${case}", "${backend}"]
@@ -842,12 +849,19 @@ expect_output_not_contains = ["Segmentation fault"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 15000
 
-# the handed-over program: xs[1] * xs[0] over [3.0, 2.0], read through vjp. The cotangent of a function of an array should come back as an array, but the transpose
-# stops at the law the rule library declares for the element read (`idx_arr_t`, stdlib/rulesets/transpose.cml)
-# and answers no cotangent at all. The five shapes here differ only in how the array is used, and each
-# stops at the same line -- so the wall is the law, not the shape. When the arm exists, these flip.
+# the handed-over program: `xs[1] * xs[0]` over `[3.0, 2.0]`, read through `vjp`.
+# The cotangent of a function of an array should come back as an array, and the piece that was missing
+# is **no longer the law**: `index_into`'s transposed member is built -- `TRANSPOSE
+# function=rulesets.jvp::index_into<float> graph=128 type=(int, float[], float) => (float[],) nodes=3
+# arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
+# it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
+# `TRANSPOSE function=... skip=call ... arg=N`. That value is what the member must carry in its
+# closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these flip when it lands.
+# (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
+# replaced it is the one above.)
 [[tests]]
 name = "grad_of_an_array_parameter"
+desc = "The handed-over program: `xs[1] * xs[0]` over `[3.0, 2.0]`, read through `vjp` -- `6.0` and the array cotangent `[2.0, 3.0]`, each operator's value landing in the other's place. Same wall as the rest of the block: the element read's member is built, and the call site still needs the array's **value** (`param=0`, then `skip=call ... arg=5`)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_of_an_array_parameter.cml"
 args = ["${case}", "${backend}"]
@@ -863,12 +877,19 @@ timeout_ms = 30000
 # thing standing between the plan and a red, and the runner reports a marked case that passes as a
 # failure: that report is what asks for the mark's removal.
 
-# one element: xs[0] over [3.0]. The cotangent of a function of an array should come back as an array, but the transpose
-# stops at the law the rule library declares for the element read (`idx_arr_t`, stdlib/rulesets/transpose.cml)
-# and answers no cotangent at all. The five shapes here differ only in how the array is used, and each
-# stops at the same line -- so the wall is the law, not the shape. When the arm exists, these flip.
+# one element: `xs[0]` over `[3.0]`, read through `vjp`.
+# The cotangent of a function of an array should come back as an array, and the piece that was missing
+# is **no longer the law**: `index_into`'s transposed member is built -- `TRANSPOSE
+# function=rulesets.jvp::index_into<float> graph=128 type=(int, float[], float) => (float[],) nodes=3
+# arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
+# it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
+# `TRANSPOSE function=... skip=call ... arg=N`. That value is what the member must carry in its
+# closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these flip when it lands.
+# (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
+# replaced it is the one above.)
 [[tests]]
 name = "grad_array_one_element"
+desc = "One element read: `xs[0]` over `[3.0]` -- `3.0` and the cotangent `[1.0]`, the smallest array a function of an array can have. Same wall: the element read's member is built, and the call site needs the array's **value** (`param=0`, then `skip=call ... arg=2`)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_one_element.cml"
 args = ["${case}", "${backend}"]
@@ -878,12 +899,19 @@ expect_stdout_contains = ["3.0", "[1.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
-# two elements, one read: xs[0] over [3.0, 2.0]. The cotangent of a function of an array should come back as an array, but the transpose
-# stops at the law the rule library declares for the element read (`idx_arr_t`, stdlib/rulesets/transpose.cml)
-# and answers no cotangent at all. The five shapes here differ only in how the array is used, and each
-# stops at the same line -- so the wall is the law, not the shape. When the arm exists, these flip.
+# two elements, one read: `xs[0]` over `[3.0, 2.0]`, read through `vjp`.
+# The cotangent of a function of an array should come back as an array, and the piece that was missing
+# is **no longer the law**: `index_into`'s transposed member is built -- `TRANSPOSE
+# function=rulesets.jvp::index_into<float> graph=128 type=(int, float[], float) => (float[],) nodes=3
+# arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
+# it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
+# `TRANSPOSE function=... skip=call ... arg=N`. That value is what the member must carry in its
+# closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these flip when it lands.
+# (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
+# replaced it is the one above.)
 [[tests]]
 name = "grad_array_two_elements_first"
+desc = "Two elements, only the first read: `xs[0]` over `[3.0, 2.0]` -- `3.0` and `[1.0, 0.0]`, where the second element's cotangent is a zero the law puts there rather than a number the read produces. Same wall (`param=0`, `skip=call ... arg=2`)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_two_elements_first.cml"
 args = ["${case}", "${backend}"]
@@ -893,12 +921,19 @@ expect_stdout_contains = ["3.0", "[1.0, 0.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
-# the sum: xs[0] + xs[1] over [3.0, 2.0]. The cotangent of a function of an array should come back as an array, but the transpose
-# stops at the law the rule library declares for the element read (`idx_arr_t`, stdlib/rulesets/transpose.cml)
-# and answers no cotangent at all. The five shapes here differ only in how the array is used, and each
-# stops at the same line -- so the wall is the law, not the shape. When the arm exists, these flip.
+# the sum: `xs[0] + xs[1]` over `[3.0, 2.0]`, read through `vjp`.
+# The cotangent of a function of an array should come back as an array, and the piece that was missing
+# is **no longer the law**: `index_into`'s transposed member is built -- `TRANSPOSE
+# function=rulesets.jvp::index_into<float> graph=128 type=(int, float[], float) => (float[],) nodes=3
+# arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
+# it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
+# `TRANSPOSE function=... skip=call ... arg=N`. That value is what the member must carry in its
+# closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these flip when it lands.
+# (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
+# replaced it is the one above.)
 [[tests]]
 name = "grad_array_sum"
+desc = "The sum: `xs[0] + xs[1]` over `[3.0, 2.0]` -- `5.0` and `[1.0, 1.0]`, each element contributing once. Same wall (`param=0`, `skip=call ... arg=5`)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_sum.cml"
 args = ["${case}", "${backend}"]
@@ -908,12 +943,19 @@ expect_stdout_contains = ["5.0", "[1.0, 1.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
-# the product: xs[0] * xs[1] over [3.0, 2.0]. The cotangent of a function of an array should come back as an array, but the transpose
-# stops at the law the rule library declares for the element read (`idx_arr_t`, stdlib/rulesets/transpose.cml)
-# and answers no cotangent at all. The five shapes here differ only in how the array is used, and each
-# stops at the same line -- so the wall is the law, not the shape. When the arm exists, these flip.
+# the product: `xs[0] * xs[1]` over `[3.0, 2.0]`, read through `vjp`.
+# The cotangent of a function of an array should come back as an array, and the piece that was missing
+# is **no longer the law**: `index_into`'s transposed member is built -- `TRANSPOSE
+# function=rulesets.jvp::index_into<float> graph=128 type=(int, float[], float) => (float[],) nodes=3
+# arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
+# it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
+# `TRANSPOSE function=... skip=call ... arg=N`. That value is what the member must carry in its
+# closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these flip when it lands.
+# (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
+# replaced it is the one above.)
 [[tests]]
 name = "grad_array_product"
+desc = "The product: `xs[0] * xs[1]` over `[3.0, 2.0]` -- `6.0` and `[2.0, 3.0]`, the other element's value in each place. Same wall (`param=0`, `skip=call ... arg=5`)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_product.cml"
 args = ["${case}", "${backend}"]
@@ -925,7 +967,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "grad_of_a_division"
-desc = "`grad((x) => x / 4.0)` at 8 is `0.25`, not a crash and not a division by zero: the transposed `div_tangent` divides by `w * w`, a value rather than a constant, so `div_t`'s second position is reached and answered by the rule's second component -- which reads both operands, the way its law does -- instead of by the first component with the operands swapped (`ct / 0`, since the dividend there is `x * dw` and `dw` is the zero tangent of a constant). `grad((x) => 4.0 / x)` at 2 is `-1.0`: the differentiated value is the divisor, its cotangent is `-(ct * x / (c * c))`, and both values it needs are carried. `grad((x) => -x)` is `-1.0` -- the negation's cotangent is `-ct` -- and the multiplication and subtraction beside it keep their numbers."
+desc = "`grad((x) => x / 4.0)` at 8 is `0.25`, not a crash and not a division by zero: the transposed `div_tangent` divides by `w * w`, a value rather than a constant, so `div_t`'s second position is reached and answered by the rule's second component -- which reads both operands, the way its law does -- instead of by the first component with the operands swapped (`ct / 0`, since the dividend there is `x * dw` and `dw` is the zero tangent of a constant). `grad((x) => 4.0 / x)` at 2 is `-1.0`: the differentiated value is the divisor, its cotangent is `-(ct * x / (c * c))`, and both values it needs are carried. `grad((x) => -x)` is `-1.0` -- the negation's cotangent is `-ct` -- and the multiplication and subtraction beside it keep their numbers. Today the first four numbers print and the run stops one step later, on the same wall as the array block: the backward half's body reads a value the transposed function does not carry -- `TRANSPOSE-NEEDS ... param=0`, then `skip=call node=5 arg=3` -- so the two remaining answers wait for the closure (`b2f`)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_of_a_division.cml"
 args = ["${case}", "${backend}"]
