@@ -2,24 +2,24 @@
 
 > 一页一问。作者把读过的页整体挪进 `reviews/`；这里只放**还在等回答**的页。
 
-## 现在在等作者：3 页
+## 现在在等作者：6 页
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
+| [`2026-11-02-drafts-outlive-the-safepoint`](2026-11-02-drafts-outlive-the-safepoint.cn.md) | 跨过 safepoint 的 draft，它的静态槽该由谁改写：外部 tracer 代替持有者去改写，收 `built` 就崩在启动期 encode、只收 `borrowed` 又毫无影响；问是"搬迁必须由持有者自己做"，还是"那些 draft 本不该活到 safepoint" | 待裁 | — | draft 的静态槽谁改；`built`/`borrowed` 两种收法都不成 |
 | [`2026-11-02-the-generator-reads-a-draft-node-after-its-builder`](2026-11-02-the-generator-reads-a-draft-node-after-its-builder.cn.md) | `stream.*` 在 Windows 上崩在 `builder_support.h#nodeGraphOf`（草稿节点不属于任何 compile graph builder），同树 Linux 全绿、五个后端都崩，所以是建图不是调度；问该谁去找那个节点的 owner、修好前 Windows 腿要不要继续红 | 待裁 | — | Windows 腿的红；那个节点的 owner |
+| [`2026-11-02-when-should-an-underivable-sync-edge-be-dropped`](2026-11-02-when-should-an-underivable-sync-edge-be-dropped.cn.md) | 同步边"推不出来就别建"该在建图时判还是图定型后判；冻结图没有重发 payload 的通路，所以这个问题只能在图定型之前问 | 待裁 | — | 判定的时机；冻结图没有重发通路 |
+| [`2026-11-02-who-restores-order-after-inline-moves-a-statement`](2026-11-02-who-restores-order-after-inline-moves-a-statement.cn.md) | 内联改变块归属之后，次序该由内联自己补还是由图定型后的统一通道补 | 待裁 | — | 次序的归属：内联还是定型后的通道 |
 | [`2026-11-03-may-a-printed-name-be-the-definitions-own`](2026-11-03-may-a-printed-name-be-the-definitions-own.cn.md) | `tensor:sum` 与 `tensor:sum_axis` 共用一个写名 `sum`，边界在哪只有定义知道、节点不知道；问打印件能不能用定义自己的名字（`sum_axis(m, 0, false)`），还是必须复现源里的 `<>` 写法 | 待裁 | — | 打印器的往返：节点上只有一个写名 |
 | [`questions-2026-11-02-which-index-rows-are-already-landed`](questions-2026-11-02-which-index-rows-are-already-landed.md) | 索引里标"已裁未落"的条目，哪些在树上已经落地 | 待裁 | — | 索引状态是否可以改成"已裁已落"（默认=我们改，并逐条写提交 id） |
 
-**这一节的行数 = 目录里的页数**（现在 3 = 3）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。下一节的行数按 `reviews/` 里的页算，两者不混。
+**这一节的行数 = 目录里的页数**（现在 6 = 6）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。下一节的行数按 `reviews/` 里的页算，两者不混。
 
 ### 已裁、在 `reviews/` 留档
-
 - `2026-11-02-what-counts-as-a-statement-of-a-chain` —— 链上语句含不含 `Func`/`Join`；裁：含 `Call`，不含这两个。
 - `2026-11-02-the-member-count-stated-twice` —— 余量元组没有图时的元数；裁：`split` 不再交出残差元组，检查从此是守卫。
 - `2026-11-02-does-the-neq-cut-take-the-strict-neq-group-with-it` —— `ne_` 那批注册行；裁：补逐元素 `!`，然后删净。
 - `2026-11-02-is-p0-2-now-a-pass-by-pass-judgement-change` —— P0-2 的顺序；裁：先修不变量，按节点性质判。
-
 ## 已裁：按还堵着的活排
-
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
 | [`a-version-port-that-must-carry-a-value`](../reviews/questions-2026-10-31-a-version-port-that-must-carry-a-value.md) | `void` 调用写过的变量，它的读该靠什么后于那次调用 | 已裁未落 | 22:50——A：新算子 `:var/after(cell, call) : var T`（第二个实参接受 `void`），读写成 `:var/get(:var/after(cell, call))`；两条都是数据边，3.1 的"用到"沿数据边到调用；验收 `callback_write_ignored` 打印 `3`、`effects_syntax` 11 条红消失、拿 `133` 量 | `:var/after` 算子本身；`orderAfterLastWriter` 里那条 ctrl 替身随之可拆 |
 | [`two-references-write-one-object-outside-a-sync-block`](../reviews/questions-2026-10-31-two-references-write-one-object-outside-a-sync-block.md) | 同一可变对象被两条引用写、第二条在这一层看不见时，读拿谁的版本 | 已裁未落 | 22:50——②：**保守的写者集合**（程序里所有写该变量的函数，建图前整个程序扫一遍）；`twice` 里 `counter` 在集合里，`return counter` 的版本是 `:var/after(counter, f(v))`；**20:35 那句就此收回** | 保守写者集合的实现；`twice` 应打印 `3` |
@@ -41,44 +41,28 @@
 | [`narrow-float-tangent`](../reviews/questions-2026-10-30-narrow-float-tangent.md) | `bf16`/`f16` 算不算浮点，`Tangent<f16>` 的射程 | 已裁已落 | 10:30——①：窄浮点也是浮点，切空间是自身；另排"窄浮点算术+显式转换"一条 | 无（`derivative.cpp:548-549` 已设 BF16/F16）；新排的窄浮点算术还不存在 |
 | [`operator-family-names`](../reviews/questions-2026-10-30-operator-family-names.md) | 算子族在 stdlib 里怎么露出名字，`add` 能不能重载 | 已裁已落 | 13:50——写 `func operator +`，不重载 `add`，保留名不列函数一览 | 无；`prelude.cml:85` 起已有 4 条 `func operator` |
 | [`reserved-name-in-library`](../reviews/questions-2026-10-30-reserved-name-in-library.md) | 库里的声明能不能叫保留名 `__add__` | 已裁已落 | 13:50——`__add__` 是内部名，库里写 `func operator +`；`ReservedIdentifier` 不动 | 无 |
-
 ## 裁决里点名要我们做的三件返工
-
 22:50 的裁定点名了三件容易读漏的返工（不是新问题，是那一笔要求我们改的现有东西）：
-
 1. **去两个环境变量开关**：`CAMEL_RULESET_INDEX`（`program.cpp:662`）与 `CAMEL_TILES_TEST_REASONS`（`region_test_pass.cpp:302`）都违反"不加环境变量开关"；改成正式遍/参数——规则集索引做成一个 `std::rulesets` 之类的翻译遍，tiles 做成测试遍的参数打印原因，用例钉住读数。
 2. **删 `taskflow.cpp:2797` 那条 `DESIGN-QUESTION`**：并行 `map` 的裁定已给（保实现、3.6 改措辞），标记随之删；补部分故障、四后端同判的用例。
 3. **`reinterp<jvp>` 是第一优先的消费者**：规则集索引的下一笔不是"等变换算子"，就是 `reinterp<jvp>` 按索引逐个原语替换、缺规则报 9.9；不另造检查。
-
 这三件都记在 `301c3790e` 的 22:50 节里；这里单列，因为它们最容易被读成"背景"。
-
 ## 已撤：1 页
-
 | 页 | 问什么 | 状态 | 裁定/去向 | 还堵着 |
 | [`where-the-tag-for-an-operator-can-sit`](../reviews/questions-2026-10-31-where-the-tag-for-an-operator-can-sit.md) | 标签能不能挂在别处的算子声明上 | 已撤 | 20:50——没有跨模块挂标签这回事；结论并入上面 `the-ruleset-module-has-no-rules-in-it` 那一行 | 无 |
 | [`questions-2026-11-02-what-does-tq-match`](../reviews/questions-2026-11-02-what-does-tq-match.md) | `T[?]` 匹配什么 | 已裁（作者 2026-11-02 11:10） | `T[..]` 匹配任意秩、`T[?]` 只匹配秩 1 | 一条还没兑现的读数欠账（页里记着） |
-
 ## 留档里仍写着"待裁/等裁决"的页（已裁，别再当待裁）
-
 - [`reviews/questions-2026-10-30-cell-type.md`](../reviews/questions-2026-10-30-cell-type.md)：页首说"已由作者答复…不再更新"，第 5 行却还写"裁定：待裁"；16:30 已裁（只求类型的推导）。
 - [`questions-2026-10-31-how-an-indirect-call-hands-back-a-version`](../reviews/questions-2026-10-31-how-an-indirect-call-hands-back-a-version.md)：页内写"等作者裁决"，21:35 已裁并已落。
 - [`questions-2026-10-31-what-carries-a-wait-for-a-write`](../reviews/questions-2026-10-31-what-carries-a-wait-for-a-write.md)：页内写"等作者裁决"，20:35 已裁。
 - **22:50 裁完的四页**（[`a-version-port-that-must-carry-a-value`](../reviews/questions-2026-10-31-a-version-port-that-must-carry-a-value.md)、[`two-references-write-one-object-outside-a-sync-block`](../reviews/questions-2026-10-31-two-references-write-one-object-outside-a-sync-block.md)、[`parallel-map-fault-what-runs-after`](../reviews/questions-2026-10-31-parallel-map-fault-what-runs-after.md)、[`who-consumes-the-ruleset-index`](../reviews/questions-2026-10-31-who-consumes-the-ruleset-index.md)）：页内还写着"要作者答的一句"，已裁未落，别再当待裁。
-
 这些页的页内状态是它主人的活，本索引只记判断，不改页。**页内状态可能落后于索引；以索引为准**——下一个人别读到页里的"待裁"就去问一个已经答过的问题。
-
 ## 不是问题、只是记录
-
 [`region-count-account`](../reviews/questions-2026-10-30-region-count-account.md)、[`two-behaviour-diffs-left`](../reviews/questions-2026-10-30-two-behaviour-diffs-left.md)（页首自己写明是记录）、[`output-order-jitter`](../reviews/output-order-jitter.cn.md)、[`random-red-unused-pure-result`](../reviews/random-red-unused-pure-result.cn.md)（两份现象报告，12:35 已裁；后者由 `ca94c1759` 修）。它们不占待裁位。
-
 ## 报告里提到"待裁/待定/未定"但不是在等作者
-
 `code-review-types`、`principles-audit-2026-10-26`、`code-review-indexing`、`code-review-index`、`code-review-macro-modules-gc`、`code-review-onnx-tiles`、`code-review-python`、`defun-dispatch-notes`、`gpu-g4-g5-plan`。这些词是技术用语（未定类型、未定 extent、仍未定的机制），没有一页在等作者；要等裁定的问题一律单独成页。
-
 ## 原则第 15 节的 8 条：2 条已成页，6 条还在原则里
-
 判据同上：只有今天有人被它堵住的才值得成页，其余留在这里，等它真的挡住一条车道再动。原文在 [`docs/design-principles.cn.md`](../../design-principles.cn.md) 第 15 节。
-
 | 条目 | 问什么 | 今天堵着谁 |
 | 类型运算 | 类型表达式要不要有交、差、并这类运算（文法里没有，也没预留运算符） | 无；要加的时候写法和含义一起定 |
 | `typeof` 常量 | `typeof` 作用于常量值时的含义，以及它在泛型里的用法 | 无；GCT 只用 `typeof <变量>`，口径已按 16:30 定成"只求类型" |
@@ -91,20 +75,13 @@
 | 算子实参装入 | 内建算子的实参是否自动装入（`xs->append<5>`，`xs: (int?)[]`） | 无车道被堵；但审计 A25 记着今天要写 `5 as int?` |
 | 源码声明流水线 | 是否允许入口文件写出 `pipeline std::macro, tiles::compile, std::nvm` | 无；流水线仍只在命令行拼 |
 | GIR handle 名字什么 | 编译期 `node_handle_t` 名字一个事务（与 `NodeView` 同型）还是一张草稿 | **已成页**（待裁）；**堵 b6 的最后一块**：`nodeDraftOf` 66 个 + `draft()` 132 个调用点；**同页第二问**：region 的 id 能不能在 extract 时就分配（`tiles` 那 9 处等它） |
-
 ## 裁定去哪找
-
 - 本批 15 页的裁定：[`reviews/questions-2026-10-29.md`](../reviews/questions-2026-10-29.md)，按时间排，末几节是 15:30–22:10。
 - 22:50 的四页裁定（版本口 / 看不见的写 / 并行 `map` / 规则集索引）在同一文件末节，提交 `301c3790e`。
 - 更早的批量复核：[`questions-2026-10-23`](../reviews/questions-2026-10-23.md)、[`-24-evening`](../reviews/questions-2026-10-24-evening.md)、[`-26-late`](../reviews/questions-2026-10-26-late.md)、[`-29`](../reviews/questions-2026-10-29.md)、[`-30-jax`](../reviews/questions-2026-10-30-jax.md)、[`-30`](../reviews/questions-2026-10-30.md)。
 - 单条裁定留档：`reviews/questions-2026-10-30-*.md` 与 `-10-31-*.md`，页首一般有 `裁定：` 一行。
-
 ## 写页的规矩
-
 - 一页一问，文件名 `questions-YYYY-MM-DD-<主题>.md`。
 - 三段：现象（`file:line`）、两条路的代价、我方默认建议；末尾一句要作者答的话，选项要能照字面执行。
 - 裁回来：`git mv` 到 `reviews/`，页首写 `裁定：`（结论 + 落在哪个提交）；`questions/` 空 = 没有待裁。
 - **已裁的页必须带 `裁定：` 行**，否则读者不知道是哪个裁定；`who-consumes-the-ruleset-index` 落进 `reviews/` 时就是这么做的（好先例）。
-
-
-
