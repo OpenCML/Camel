@@ -198,6 +198,13 @@ export func foreign_resource::<F>(f: F): F! when is_function::<F>()
 
 /// Runs the allocator's poison check.
 export func poison::<F>(f: F): F! when is_function::<F>()
+
+/// Traces a tuple value whose type declares more members than the value has, and stops: the
+/// collector trusts the type's count, so a value that disagrees is a memory-safety bug. Two halves,
+/// because the reading is the pair: `tuple_members_agree` traces a value that agrees (silent, the
+/// walk runs) and `tuple_members` traces one that does not (the guard speaks and the process stops).
+export func tuple_members::<F>(f: F): F! when is_function::<F>()
+export func tuple_members_agree::<F>(f: F): F! when is_function::<F>()
 }
 
 // -----------------------------------------------------------------------------
