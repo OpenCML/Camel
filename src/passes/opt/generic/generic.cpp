@@ -689,7 +689,56 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     // value with a lambda call in the arm, whose effect stopped running). The call runs before the
     // erases so that eraseNode's own chain closing finds no successor left to close over.
     if (armTail != kInvalidNodeRef && draft.alive(armTail) && draft.alive(join)) {
-        draft.handChainPlaceTo(join, armTail);
+        // A chain place may only be handed to a statement of the chain (docs/design/effects/
+        // edges.cn.md 1 and 4.6): a branch, a loop, a call, or an operator that has an effect or may
+        // fault. The arm's value is often none of those -- the `JOIN` of a nested branch, a function
+        // value, a pure computation, the `GATE` that forwarded the value -- and handing such a node
+        // the place writes a sync edge that starts at a value, which is a value standing on the
+        // chain. What the place belongs to is the statement behind the value, the arm's chain tail
+        // (5.3: the chain's tail is what the block's value reads); the value is reached by its
+        // readers either way. A value with no statement behind it (an arm whose code is data flow
+        // only) takes no place at all: the chain steps over it, and the statements written after
+        // the branch follow what the branch followed -- `eraseNode` closes the chain over the branch
+        // that way (closeChainOver).
+        const auto isChainStatement = [&](gc_node_ref_t n) {
+            const camel::runtime::DraftNodeHeader *h = draft.header(n);
+            if (h == nullptr) {
+                return false;
+            }
+            switch (h->kind) {
+            case GCNodeKind::Brch:
+            case GCNodeKind::Loop:
+            case GCNodeKind::Call:
+                return true;
+            case GCNodeKind::Oper: {
+                if (draft.payloadOf(n).size() < sizeof(GCOperBody)) {
+                    return false;
+                }
+                const auto oper =
+                    reinterpret_cast<const GCOperBody *>(draft.payloadOf(n).data())->oper;
+                const auto &table = camel::core::OperatorTable::instance();
+                const auto traits = table.find(oper);
+                return !table.isPure(oper) || table.hasExternalEffect(oper) ||
+                       (traits.has_value() && traits->mayFault);
+            }
+            default:
+                return false;
+            }
+        };
+        gc_node_ref_t place = armTail;
+        for (int hop = 0; hop < 64 && place != kInvalidNodeRef && !isChainStatement(place);
+             ++hop) {
+            gc_node_ref_t behind = kInvalidNodeRef;
+            for (gc_node_ref_t pred : draft.syncInputsOf(place)) {
+                if (pred != place && inArm(pred) && draft.alive(pred)) {
+                    behind = pred;
+                }
+            }
+            place = behind;
+        }
+        if (place != kInvalidNodeRef && isChainStatement(place)) {
+            draft.handChainPlaceTo(join, place);
+        }
     }
     // The joined chain's head stands where the branch stood: `handChainPlaceTo` gave the place to the
     // chain's tail, which already waits on the fragment before it, so the entry is written here. The
