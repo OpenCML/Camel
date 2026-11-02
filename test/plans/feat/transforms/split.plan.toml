@@ -41,6 +41,7 @@ desc = "The forward half of split(reinterp<jvp>(g)) for g(x) = x*x at x = 3: it 
 kind = "behavior"
 case = "../../../cases/transforms/split/split_forward_half.cml"
 args = ["${case}", "std::nvm"]
+envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["forward y= 9", "residuals whole= ()", "tangent dx1= 6", "residuals=2"]
@@ -53,6 +54,7 @@ desc = "The backward half alone: it takes the residuals the forward half collect
 kind = "behavior"
 case = "../../../cases/transforms/split/split_backward_tangent.cml"
 args = ["${case}", "std::nvm"]
+envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["tangent dx1= 6"]
@@ -65,6 +67,7 @@ desc = "The backward half is linear in the tangent direction: at x = 3 it is dx 
 kind = "behavior"
 case = "../../../cases/transforms/split/split_linear_in_dx.cml"
 args = ["${case}", "std::nvm"]
+envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["dx1= 6", "dx2= 12", "dx0= 0", "doubles= true"]
@@ -76,6 +79,7 @@ desc = "The reading program the author named for this tier (f(x, y) = x*x*y at x
 kind = "behavior"
 case = "../../../cases/transforms/split/split_two_params.cml"
 args = ["${case}", "std::nvm"]
+envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["value= 18.0", "dfdx= 12.0", "dfdy= 9.0", "forward y= 18.0", "tangent dx= 12.0", "tangent dy= 9.0", "type=(float, float) => (float, (float, float, float, float, float)) pure residuals=5"]
@@ -88,6 +92,7 @@ desc = "A chain of multiplies, both ends of the composition: `f3(x) = x*x*x` and
 kind = "behavior"
 case = "../../../cases/transforms/split/split_product_chain.cml"
 args = ["${case}", "std::nvm"]
+envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["cubic y= 8.0", "cubic dx1= 12.0", "quartic y= 16.0", "quartic dx1= 32.0", "type=(float) => (float, (float, float, float)) pure residuals=3", "type=(float) => (float, (float, float, float, float)) pure residuals=4", "REINTERP split function=jvp_of_cubic", "REINTERP split function=jvp_of_quartic"]
@@ -152,6 +157,7 @@ desc = "The identity graph: `reinterp<jvp>` builds a body with no operator in it
 kind = "behavior"
 case = "../../../cases/compile/transforms/split_identity_pipeline.cml"
 args = ["${case}", "std::nvm"]
+envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["identity y= 3", "identity dx1= 1", "type=(float) => (float, (float,)) pure residuals=1"]
@@ -165,6 +171,7 @@ desc = "`#remat` written on a function is a standard tag, so it compiles, checks
 kind = "behavior"
 case = "../../../cases/transforms/split/remat_tag.cml"
 args = ["${case}", "std::nvm"]
+envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["7.0"]
@@ -177,9 +184,10 @@ desc = "`#remat` written on a function is the same request as calling `remat(f)`
 kind = "behavior"
 case = "../../../cases/transforms/split/remat_tag_residuals.cml"
 args = ["${case}", "std::nvm"]
+envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["split function=jvp_of_g forward=", "residuals=1 recompute=1", "split function=jvp_of_h forward=", "residuals=2", "tagged dx= 27.0", "plain dx= 27.0"]
+expect_stdout_contains = ["split function=jvp_of_g forward=", "residuals=2 recompute=1", "split function=jvp_of_h forward=", "residuals=2", "tagged dx= 27.0", "plain dx= 27.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -190,9 +198,13 @@ desc = "`#remat` on a function in another module still marks the graph that is c
 kind = "behavior"
 case = "../../../cases/transforms/split/remat_across_module.cml"
 args = ["${case}", "std::nvm"]
+envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["residuals=1 recompute=1", "jvp_of_remat_lib::g", "tagged dx= 27.0"]
+# `residuals=2` because `ca1941405` counts the parameters in the residual set: the backward half reads
+# them, so `#remat` removes only what the recompute region can rebuild and leaves the parameters. The
+# expectation read `residuals=1` from before that commit.
+expect_stdout_contains = ["residuals=2 recompute=1", "jvp_of_remat_lib::g", "tagged dx= 27.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -203,6 +215,7 @@ desc = "A body with an external effect is not marked for recompute: `jvp`'s lift
 kind = "negative"
 case = "../../../cases/transforms/split/remat_effect_is_not_recomputed.cml"
 args = ["${case}", "std::nvm"]
+envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 1
 expect_stdout_contains = ["REINTERP jvp not_recomputed=g why=an operator of the body has an external effect, so it would run twice", "split does not build this function"]
