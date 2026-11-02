@@ -46,6 +46,23 @@ A lane may be red; `develop` may not. When a lane's tip is red, take its **last 
 green** and say so in the merge message, so the red's cause lands with the next commit instead of
 sitting on `develop`.
 
+### "Green" is only green on today's `develop`
+
+A lane that reports a green suite reports it about **the `develop` it last merged in**. Five times in
+one night a lane was green and still not mergeable, because the tree it measured predated a change
+its own work would have to live with. Two checks before merging a green lane, both required:
+
+- `git merge-base --is-ancestor origin/develop <the commit to merge>` — **must succeed**. If it
+  fails, the green belongs to an older world: the lane merges `origin/develop` in, re-runs, and
+  reports again.
+- `git rev-list --count origin/develop..<the commit to merge>` — the lane's own commits, a different
+  number from how far behind it is, and both are worth knowing.
+
+One exception: a commit behind by **documentation only**, with each intervening commit named and its
+file list shown in the merge message. Documents cannot make code green or red, so the reading holds.
+Being behind by a commit that touches code is not an exception — it is the thing the check exists
+to catch.
+
 ## Coordinator Workflow: Handover Branches And `wzj-dev`
 
 The coordinator's own work follows a two-step integration so the remote stays quiet and the task book's readers still see progress.
