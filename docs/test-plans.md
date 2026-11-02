@@ -778,6 +778,7 @@ Behavior-style tests may combine:
 - `expect_stdout_contains`
 - `expect_stdout_exact`
 - `expect_stdout`
+- `expect_stdout_matches`
 - `expect_stdout_starts_with`
 - `expect_stderr_contains`
 - `expect_output_contains`
@@ -815,6 +816,43 @@ A multiline value written as `"""` followed by a newline starts with that newlin
 specifies; put the first output line on the same line as the opening `"""` when the program does
 not print a leading blank line. The reader of a failing test should not have to discover that
 difference by hand.
+
+### `expect_stdout_matches`
+
+A pattern -- or a list of patterns -- each of which must match some line of the normalized standard
+output. **It is a search, line by line: any line matching passes.** It is not "the whole output
+matches" (then `^` and `$` would anchor the file instead of a line, and no plan could say "a line
+that starts with ...") and it is not "every line matches" -- no test wants that, and it would turn
+one extra printed line into a red, which is a different assertion.
+
+The anchor is the difference between the two most common mistakes, so both are spelled out. With
+`expect_stdout_matches = ["24\\.0"]` a line containing `24.0` anywhere passes -- `width 24.0 height
+7` passes. With `expect_stdout_matches = ["^24\\.0$"]` only a line that is exactly `24.0` passes,
+and `width 24.0 height 7` does not. An unanchored pattern is a substring of a line; add the anchors
+when the line's whole shape is what the test is about.
+
+Use it for output whose shape is what matters and whose values are not pinned
+(`^width \\d+\\.\\d+ height \\d+$`); use `expect_stdout_exact` when every line is pinned.
+
+Three shapes are **plan errors**, refused at load with `plan:line`, and the run starts nothing:
+a pattern that does not compile (`"["`), an empty pattern (`""`, which matches every line and would
+be green forever), and this field together with `expect_stdout_contains`, `expect_stdout_exact` or
+`expect_stdout` -- two assertions on one stdout, whose precedence is written nowhere, so the plan
+states one of them.
+
+A pattern that is legal and matches nothing is a **failing test**, and its message carries the
+pattern as written, that the expression is legal, and the head of the output (twelve lines) it
+matched against:
+
+```
+[FAIL] probe.missing.entry
+    [INFO] expect_stdout_matches: /^never printed$/ (a legal regular expression) matches no line of the normalized stdout
+    [match] pattern /^never printed$/ -- a legal regular expression that matched no line
+    [stdout head] 3 of 3 line(s)
+      width 24.0 height 7
+      24.0
+      done
+```
 
 ### `expect_stdout_starts_with`
 

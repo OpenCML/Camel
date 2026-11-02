@@ -68,3 +68,14 @@ expect_exit = 0
 expect_stdout_contains = ["PASS"]
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 120000
+[[tests]]
+name = "cli.plan_stdout_matches"
+desc = "`expect_stdout_matches` reads the output line by line and any line matching passes: an unanchored pattern is a substring of a line and an anchored one is the whole line; a legal pattern that matches nothing is red with the pattern, that it is legal, and the head of the output; a pattern that does not compile, an empty pattern and a second stdout assertion beside it are plan errors that name `plan:line` and start nothing."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/cli/stdout_matches.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 180000
