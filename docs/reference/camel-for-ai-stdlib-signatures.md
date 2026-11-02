@@ -615,7 +615,7 @@ arity_probe: <tag: int, extra: int[] = []> (f: F, example: E) => int when is_fun
 zen: () => string
 ```
 
-**`graph`** — import { ... } from graph — 42 name(s)
+**`graph`** — import { ... } from graph — 43 name(s)
 
 ```text
 graph_of: (f: F) => Graph when is_function::<F>()
@@ -635,6 +635,7 @@ is_pure: (n: Node) => bool
 is_anchor: (n: Node) => bool
 is_written_slot: (n: Node) => bool
 is_constant: (n: Node) => bool
+constant_bytes: (n: Node) => int
 type_of: (n: Node) => TypeRef?
 type_name: (t: TypeRef) => string
 callee: (n: Node) => Graph?
