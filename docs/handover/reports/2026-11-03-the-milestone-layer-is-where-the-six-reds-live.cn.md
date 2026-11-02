@@ -1,8 +1,10 @@
 # 六条 milestone 红：`fail 0` 没有撒谎，但它是"这一层没测"的 0
 
 > 2026-11-03 00:25。`h-fold2` 报它在自己树上跑 `test/plans/feat/linear/jit_framed.plan.toml` 读到 `57 / 51 / 6`。这一页回答"是不是它弄红的"，并把结论记成一条债。
+>
+> **更正（2026-11-03，A3 车道）**：第 1 节的结论"这些是 milestone 层自己的既有红"是错的——那 6 条红不是 GC 失败，是计划里 `--gc-check verify=1` 这个 CLI 不认的旧写法（详见"那 6 条红"一节）。把它改成 `verify=both` 之后，同一棵树上 `total: 57, pass: 57, fail: 0`，**milestone 层今天的红是 0 条**。下面 00:25 的读数照原样保留，只当"当时是怎么找到的"的纪录。教训一句：**一条测试如果从来没跑起来过，它的"红"和"绿"都不是读数——先证明它跑起来了，再读它的结果。**
 
-## 结论：不是它弄红的，是 milestone 层自己的既有红
+## 结论：不是它弄红的（那 6 条红也不是既有缺陷，是参数写错）
 
 在 `develop`（`bf64149aa` = `63bf99814` + 当轮已并的 `lane-m4b` 三笔，全量 `8375/8363/0`）上跑同一个计划文件，原文：
 
@@ -29,15 +31,15 @@ name = "framed.operators.gc_stress"
 tier = "milestone"
 ```
 
-**它们不是 `fast` 层、也不是 `slow` 层的测试，而是 `milestone` 层**（`test/plans` 下 `tier = "milestone"` 的测试现在 **20 条**）。我们每轮的闸门命令是 `-Plan all -Tier fast`，`fast` 层按 `tier` 跳过它们；而 `scripts/plan-inventory.mjs:121` 又把这个**计划**登记在 `FORBIDDEN` 里（理由："its 2 milestone tests are GC stress"），所以连"整份计划被哪一层跑到"这条兜底也不指向 milestone。
+**它们不是 `fast` 层、也不是 `slow` 层的测试，而是 `milestone` 层**（`test/plans` 下 `tier = "milestone"` 现为 **30 行**：21 行写在计划头、也就是 21 个整文件归这一层；9 行写在单条测试上，按后端展开是 13 次运行。此前记作"20 条"，实测 30 行 / 13 次运行，核对命令见"`tier = "milestone"` 到底是几条"一节）。我们每轮的闸门命令是 `-Plan all -Tier fast`，`fast` 层按 `tier` 跳过它们；而 `scripts/plan-inventory.mjs:121` 又把这个**计划**登记在 `FORBIDDEN` 里（理由："its 2 milestone tests are GC stress"），所以连"整份计划被哪一层跑到"这条兜底也不指向 milestone。
 
 ⇒ **`fail 0` 是真的，但它只覆盖 `fast` 层；这 6 条红从来没有被任何一层跑到。** 这正是"绿是因为没测到"。
 
 ## 债（怎么还）
 
-1. **不要现在修这 6 条**：它们是 GC stress（`--gc-stress safepoint` + `--gc-check verify`），`agents/test.md` 把这一层定成"由协调者在一台安静的机器上跑"的 milestone 层，改它们要先有那一层的基准。
+1. **~~不要现在修这 6 条~~（已撤）**：原文担心"它们是 GC stress，改它们要先有那一层的基准"。实际那 6 条根本没跑起来（参数写错），改的是一个从没被校验过的命令行，不碰任何断言：改成 `verify=both` 后 `57/57/0`。
 2. **要修的是"看不见"这件事**：`--tier` 的覆盖面应该有一处**能被读到的账**——谁跑 milestone、多久一次、上一次是什么时候、红的是哪几条。今天这个信息只活在某条车道的临时输出里。
-3. **短期**：把这条记成具名待办（milestone 层的 6 条 `jit_framed` gc_stress 红），并在 `agents/test.md` 的 milestone 段里写明"这一层不进每轮闸门，所以它的红只能在被点名时看到"。
+3. **~~短期：把这条记成具名待办（milestone 层的 6 条 `jit_framed` gc_stress 红）~~（已撤）**：待办没有对象了。留下的是原来那半句——在 `agents/test.md` 的 milestone 段里写明"这一层不进每轮闸门，所以它的红只能在被点名时看到"。
 4. **反面教训写在这里**：**一个"绿"只有在说清它盖住哪一层之后才是绿。** 报 `[SUMMARY]` 时要带上 `-Tier`，这一条以后每轮都写。
 
 ## 覆盖账：338 个计划文件，fast 走到 312（A3 车道补，2026-11-03）
@@ -76,15 +78,15 @@ grep -rn '^tier = "milestone"' test/plans | awk -F: '$2 < 5' | wc -l   # 21（�
 
 | 计划文件 | 读数 | milestone 那几条的结果 |
 | --- | --- | --- |
-| `feat/linear/jit_framed` | `total: 57, pass: 51, fail: 6` | 2 条 × 3 后端，**6 条全红** |
+| `feat/linear/jit_framed` | 改前 `total: 57, pass: 51, fail: 6`；**改后 `total: 57, pass: 57, fail: 0`** | 2 条 × 3 后端：改前 6 红（参数写错），**改后全绿**（4.79–5.75 s） |
 | `feat/modules/onnx` | `total: 157, pass: 126, fail: 0, skip: 31` | 3 条 skip（缺 torch / onnxruntime）、`export_tree_recursion` 过 |
 | `feat/showcase_i2` | `total: 5, pass: 5, fail: 0` | `diffusion_step.gpu.denoise` 过 |
 | `perf/fib` | `total: 6, pass: 6, fail: 0` | 过（另可注意：它整份是 benchmark，数只对空机器有意义） |
 | `perf/startup` | `total: 1, pass: 1, fail: 0` | 过 |
 
-⇒ **这 9 条里今天 6 条红，全部是 `linear.jit_framed` 的两条 gc_stress × 3 个后端；其余 3 条 pass 之外，onnx 的 3 条是按条件 skip（缺 Python 模块），不是绿。子系统只有一个：JIT framed 代码的 GC stress（`--gc-stress` + `--gc-check`）。**
+⇒ **这 9 条（13 次运行）今天的结果：0 条红、6 条绿、3 条按条件 skip、4 条绿在 onnx/showcase/fib/startup 上。** 改前读到的那 6 条红不是 GC，是下一节的那个旧参数；**milestone 层今天的红是 0 条。**
 
-## 那 6 条红的账：不是 GC，是计划里一个从来没跑过的旧写法
+## 那 6 条红：不是 GC，是计划里一个从来没跑起来的旧参数（已修）
 
 6 条红的原文不是断言失败，是**命令行解析失败**：
 
@@ -92,10 +94,10 @@ grep -rn '^tier = "milestone"' test/plans | awk -F: '$2 < 5' | wc -l   # 21（�
 [stderr] Invalid --gc-check verify: '1'. Expected before, after or both.
 ```
 
-计划里写的（`jit_framed.plan.toml:59` 与 `:171`）是 `--gc-check verify=1`；CLI 收的是 `verify=before|after|both`。两边同一天落地：`e566ff707`（2026-10-31，计划改成用命令行选项设收集器）与 `f6b37bf01`（2026-10-31，收集器参数从命令行读）。**这两行从写下那天起就没成功跑过一次**，而它们归 milestone 层，所以没人发现。
+计划里写的（`jit_framed.plan.toml:59` 与 `:171`）是 `--gc-check verify=1`；CLI 收的是 `verify=before|after|both`。两边同一天落地：`e566ff707`（2026-10-31，计划改成用命令行选项设收集器）与 `f6b37bf01`（2026-10-31，收集器参数从命令行读）。**这两行从写下那天起就没成功跑过一次**——所以它们的"红"从来不是读数，是"这条测试没跑起来"。按 CLI 自己点名的合法值改成 `verify=both` 之后，同一棵树上 `total: 57, pass: 57, fail: 0`，`framed.operators.gc_stress.fvm/jit/inline_jit` 5.75 / 4.96 / 4.79 s、`framed.loops.gc_stress.*` 4.83 / 3.72 / 3.12 s 全绿 ⇒ **原来那 6 条"既有红"整笔撤销，它们是参数错误，不是 GC stress 失败**。
 
 - 归属：计划 sweep 那条车道（`e566ff707`），不是 GC、不是 JIT 后端、不是 `lane-fold2`。
-- 修法是一行参数（`verify=1` → `verify=both`），但按上一节的第 1 条，milestone 层要改先有那一层的基准，所以**只记账，不改**。
+- 修法是一行参数（`verify=1` → `verify=both`）——**已改**（`jit_framed.plan.toml:59` 与 `:171`），改后 `57/57/0`。上一节第 1 条原来写"不要现在修这 6 条"，按这条读数撤销：修的不是 GC 断言，是一个从没跑起来的参数。
 
 ## 纪律（A3 车道这半句）
 
@@ -103,9 +105,10 @@ grep -rn '^tier = "milestone"' test/plans | awk -F: '$2 < 5' | wc -l   # 21（�
 
 ## 一个文件里有一条跑不动，就把整份文件从所有层里摘掉
 
-`scripts/plan-inventory.mjs:121` 把 `jit_framed` 这**整份计划**登记进 `FORBIDDEN`，理由却是"its 2 milestone tests are GC stress"。这是"**按文件排除，而实际只需要按条排除**"：
+`scripts/plan-inventory.mjs:121` 把 `jit_framed` 这**整份计划**登记进 `FORBIDDEN`，理由却是"its 2 milestone tests are GC stress"——而它是 57 条里 2 条（`modules/onnx` 157 里 4 条、`modules/autodiff` 263 里 5 条、`feat/mm/gc` 45 里 43 条）。**按文件排除，而实际只需要按条排除**：464 条 fast 用例因为 58 条非 fast 用例一起被划走。
 
-- 代价一：理由只能写成以偏概全的一句。`jit_framed` 是 57 条里 2 条、`modules/onnx` 是 157 条里 4 条、`modules/autodiff` 是 263 条里 5 条（slow）——写着"its N milestone tests"，读者会以为其余不用管，而 `FORBIDDEN` 在语义上是"这份文件不进任何一层"。
-- 代价二：**`plan_inventory` 那条"每个计划文件都有归宿"的保证，对这三份文件只是逻辑上成立**：归宿指向 milestone 层，而 milestone 层今天没有任何一条流水线在跑（这一页前面量的就是这件事）。有归宿 ≠ 有人跑。
-- 建议（**不改，这是工具的设计改动**）：`FORBIDDEN` 从"文件 → 理由"改成"文件 → 条目名单"，或者给 runner 一个能按名字选测试的开关（今天它做不到，`plan-inventory.mjs:75-77` 的注释就是在说这件事：命名文件会把被排除的条目一起启动）。有了按条排除，`jit_framed` 的 51 条 fast 与 6 条 milestone 各归各层，理由也能写准："这 2 条 × 3 个后端是 GC stress"。
-- 在改之前，至少让"这份文件里有一条跑不动"这件事**在读数上可见**：闸门跑 `-Plan all` 时把每个文件里被 tier 跳过的条目数打出来（今天只能靠人翻 TOML）。
+建议、代价与验收写在单独一页（**不改工具**，这是测试工具的选层粒度设计）：[`2026-11-03-a-whole-plan-excluded-for-one-entry-in-it.cn.md`](2026-11-03-a-whole-plan-excluded-for-one-entry-in-it.cn.md)——`FORBIDDEN` 改记条目名单，前提是先给 runner 一个按名字选测试的开关（`plan-inventory.mjs:75-77` 的注释说明它今天做不到）。
+
+## 教训
+
+**一条测试如果从来没跑起来过，它的"红"和"绿"都不是读数——先证明它跑起来了，再读它的结果。** 这一页的两个发现都是这一条的实例：6 条"红"是参数写错（没跑起来），20 条"挡在 milestone 层"是数错（数出来是 30 行 / 13 次运行）。
