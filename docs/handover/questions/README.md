@@ -5,6 +5,7 @@
 ## 现在在等作者
 
 - `2026-11-02-the-generator-reads-a-draft-node-after-its-builder` —— `stream.*` 的几条在 Windows 上崩在 `builder_support.h#nodeGraphOf`（草稿节点不属于任何 compile graph builder），同树 Linux 全绿、五个后端都崩，所以是建图不是调度；问该谁去找那个节点的 owner、修好前 Windows 腿要不要继续红。
+- `2026-11-03-may-a-printed-name-be-the-definitions-own` —— `tensor:sum` 与 `tensor:sum_axis` 共用一个写名 `sum`，边界在哪只有定义知道、节点不知道；问打印件能不能用定义自己的名字（`sum_axis(m, 0, false)`），还是必须复现源里的 `<>` 写法。
 
 ### 已裁、在 `reviews/` 留档
 
