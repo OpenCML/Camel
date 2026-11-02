@@ -1,0 +1,8 @@
+// `map` states its call shape in its own declaration, and that shape is exported, so the printer
+// writes a call of it: the receiver becomes the first argument and the closure stays in `<>`. The
+// graph round trip is EQUAL (22 vertices, 55 edges) and both programs return 2.
+func main(): int {
+    let xs = [1, 2, 3]
+    let ys = xs->map<(x: int) => x * 2>
+    return ys[0]
+}
