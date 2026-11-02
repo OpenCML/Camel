@@ -794,10 +794,18 @@ kind = "behavior"
 case = "../../../cases/compile/transforms/grad_of_an_array_parameter.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-expect_exit = 1
-expect_stdout_contains = ["skip=law rule=idx_arr_t uri=:op/idx_arr", "transpose has no transpose"]
+expect_exit = 0
+expect_stdout_contains = ["6.0", "[2.0, 3.0]"]
+expect_output_not_contains = ["skip=", "breaks its edge invariants"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+# Marked known_fail on the author's ruling of 2026-11-03 00:30: a case that cannot pass today belongs
+# in the plan with a mark, an owner and a reason, not outside it in CASE_EXCEPTIONS. The assertion is
+# the answer the transform owes -- `[2.0, 3.0]` -- and not today's refusal, so the mark is the only
+# thing standing between the plan and a red, and the runner reports a marked case that passes as a
+# failure: that report is what asks for the mark's removal.
+known_fail = ["nvm"]
+known_fail_note = "Owner: the value chain that lane-lit2 carries. The array element read's transpose arm is missing -- the transform answers `skip=law rule=idx_arr_t uri=:op/idx_arr` and `transpose has no transpose`, so the pullback never reaches `[2.0, 3.0]`. Reason for the mark rather than a pinned refusal: the pinned form asserts today's wrong answer as correct, and the plan's own header already says what that costs. When the arm lands, remove the mark in the same commit."
 
 # one element: xs[0] over [3.0]. The cotangent of a function of an array should come back as an array, but the transpose
 # stops at the law the rule library declares for the element read (`idx_arr_t`, stdlib/rulesets/transpose.cml)
