@@ -42,6 +42,10 @@ struct EffectLivenessFacts {
     /// Outside a block: the node is registered as a writer of a variable, and a read written after
     /// it takes that variable (the writer table). No caller fills it today: the writer table's
     /// answer is not measured here yet (3.1 keeps it as the third credential).
+    /// **Not a credential today**: `effectStandingOf` no longer reads it, because no caller fills it
+    /// and a field that is false everywhere would only suggest that 3.1's third credential is in use.
+    /// Kept as the shape the writer table will answer with once it is measured; whoever fills it also
+    /// puts it back in the rule, in the same commit.
     bool isWriterWithLaterRead = false;
     /// The node carries a wait: an edge that exists only to order it (today the control edge,
     /// docs/design/effects/plan.cn.md 5.5). A GATE carries no effect of its own -- it carries a

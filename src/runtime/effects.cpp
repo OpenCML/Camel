@@ -117,7 +117,12 @@ effectSummaryOfRegion(const Program &program, const GCGraph *graph, uint32_t reg
 EffectStanding effectStandingOf(const EffectLivenessFacts &facts) {
     // 3.1's two: a value of it is read, or it is a statement of a `sync` block. A read written
     // after it takes what it wrote only where the writer table says so.
-    if (facts.hasDataUser || facts.isSyncStatement || facts.isWriterWithLaterRead) {
+    // `isWriterWithLaterRead` is **not** read here: no caller fills it (see the field's comment), so
+    // it is false everywhere, and a credential that can never be true does not belong in the rule -- it
+    // only makes a reader believe a third credential exists. 3.1's third credential is not implemented
+    // in this layer today; when the writer table's answer is measured, it comes back here with a
+    // caller.
+    if (facts.hasDataUser || facts.isSyncStatement) {
         return EffectStanding::Alive;
     }
     // A call through a function value is not a third answer: the writer table records it as the
