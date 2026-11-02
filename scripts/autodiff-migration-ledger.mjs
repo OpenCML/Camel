@@ -103,10 +103,10 @@ let loaderFailure = ''
 // the binary does not start (see `loaderFailure` below): a ruler that cannot see must say so, not print
 // a smaller number.
 const LEDGER_RECORDED = {
-    total: 127,
-    library: 118,
+    total: 128,
+    library: 119,
     pass: 12,
-    with: 44,
+    with: 45,
     array: 67,
     other: 7,
 }

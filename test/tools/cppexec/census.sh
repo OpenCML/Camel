@@ -143,7 +143,7 @@ CLASSES = [
     ("no entry: no call of 'main'", r"^the program has no call of .main. std::cpp can find"),
     ("an operator that has no rule for its operand type", r"uses the operator .[^']*. on a value of type .*which has no translation in std::cpp yet"),
     ("an operator that has no rule for its result type", r"uses the operator .[^']*., whose result of type .*has no translation in std::cpp yet"),
-    ("an operator that has no rule for several value types", r"uses the operator .[^']*. on values .*std::cpp does not translate it for yet"),
+    ("an operator that has no rule for several value types", r"uses the operator .[^']*. on values .*and std::cpp does not translate this operator"),
     ("a declared type the writer does not carry", r"std::cpp translates numbers \(real and complex\)"),
     ("a function value the writer does not carry", r"makes a function value of type .*std::cpp does not translate yet"),
     ("a conversion the writer does not carry", r"converts a value of type .*which std::cpp does not translate yet"),
