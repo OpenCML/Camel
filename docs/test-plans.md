@@ -187,9 +187,10 @@ Rules for a new test:
 - Naming a plan **file** as the target runs all its tests, whatever `--tier` says; the layer
   still filters a directory target and the whole tree. This keeps a named slow test reachable
   without `--tier all` and keeps `--tier` meaningful for a broad run.
-- A debug test that expects an abort states `expect_exit` with the abort's code and asserts the
-  message, and also asserts that the "not caught" line is **absent**: the positive form is what
-  makes a missing guard a failure instead of a pass.
+- A debug test that expects an abort states `expect_signal = "ABRT"` (the process dies of the abort,
+  and there is no exit code to compare) and asserts the message, and also asserts that the "not
+  caught" line is **absent**: the positive form is what makes a missing guard a failure instead of a
+  pass.
 
 ## The Debug Build And The Debug Layer
 
@@ -588,7 +589,21 @@ Every `[[tests]]` entry may use these common fields:
 - `args`
   Required in practice. Argument vector passed to `camel`. Variable tokens like `${case}` or `${run_jit}` are expanded before execution.
 - `expect_exit`
-  Optional integer expected process exit code.
+  Optional integer expected process exit code. It and `expect_signal` are one question with one
+  answer: a table that writes both is a plan error, because a process killed by a signal has no exit
+  code to compare.
+- `expect_signal`
+  Optional signal the test's process must have been killed by, written as a name (`"ABRT"`,
+  `"SIGABRT"`) or as the number this platform numbers it by (`6`); the three are one expectation.
+  There is no default and no boolean form: an entry that expects a death has to name the signal,
+  because "it dies somehow" is not a reading a reader can check and would pass a death by any other
+  signal. It stands in place of `expect_exit`, so the entry is green when the process dies of
+  exactly that signal and red otherwise, and the failure prints what happened instead
+  (`expected signal SIGSEGV, got signal SIGABRT (rc=134, 0.03 s)`); a signal that did not arrive
+  is `expected signal SIGABRT, got exit 0`. Before this field existed, the only way to record "this
+  run is meant to die" was `known_fail`, which says the run is wrong today and turns the entry green
+  again the day the process stops dying -- the opposite of what the entry is for. See
+  `test/tools/selftest/signal/` for the fixture that pins both directions.
 - `timeout_ms`
   Optional process timeout in milliseconds. Default is `10000`. A timeout is a pass condition, so it
   is a bound only with room under it: the runner fails a test that used more than a quarter of its
@@ -806,7 +821,7 @@ virtual environment's interpreter, else `benchmarks/.venv`'s, else PATH's; also 
 
 Behavior-style tests may combine:
 
-- `expect_exit`
+- `expect_exit` (or `expect_signal` in its place: a process ends with a code or of a signal)
 - `expect_stdout_contains`
 - `expect_stdout_exact`
 - `expect_stdout`

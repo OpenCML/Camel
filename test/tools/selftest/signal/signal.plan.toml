@@ -1,0 +1,29 @@
+# Fixture of test/tools/selftest/run.mjs: the two directions of `expect_signal`. It is not under
+# test/plans, and two of its three tests fail on purpose. `abrt` is the entry the field exists for:
+# the process dies of the signal the entry names, and the entry is green. `wrong_signal` and
+# `exit_instead` are the discrimination -- a field that agreed with any death would be a comment.
+id = "selftest.signal"
+order = 2
+tier = "fast"
+
+[defaults]
+tool = "node"
+kind = "behavior"
+case = "abort.mjs"
+args = ["${case}"]
+
+[[tests]]
+name = "abrt"
+desc = "expect_signal = \"ABRT\": the process must be killed by SIGABRT, written without its SIG."
+expect_signal = "ABRT"
+
+[[tests]]
+name = "wrong_signal"
+desc = "The process dies of SIGABRT; the entry named SIGSEGV, so it fails and prints what happened."
+expect_signal = "SEGV"
+
+[[tests]]
+name = "exit_instead"
+desc = "The process ends normally, so it did not die of the signal the entry named -- by name or by number."
+case = "exit_zero.mjs"
+expect_signal = 6

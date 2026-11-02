@@ -1,0 +1,17 @@
+# Fixture of test/tools/selftest/run.mjs: `expect_signal` without a signal named is a plan error, not
+# an entry that asserts something weaker. "It dies somehow" is not a reading a reader can check, and
+# a default signal would turn a death by anything else into a green run.
+id = "selftest.signal.no_signal"
+order = 3
+tier = "fast"
+
+[defaults]
+tool = "node"
+kind = "behavior"
+case = "abort.mjs"
+args = ["${case}"]
+
+[[tests]]
+name = "expect_signal_true"
+desc = "A boolean is not a signal: the plan must be refused with the file, the test and the key named."
+expect_signal = true
