@@ -217,7 +217,7 @@ REINTERP jvp function=rulesets.jvp::jvp_ltod__lhs skip=rule uri=:op/ltod
 | (b'-2) | **一个键放多条律**：`indexRule` 每个键存一个 vector，`lookupRule` 返回候选表，三个 transform 依次试到"这个类型有实例"为止。引擎**已经**按操作数的元素类型实例化律（`genericRuleInstance(context, ruleId, {elementType}, {})`），类型不符时它给的是**具名拒绝**（`no instance of the rule at float`），不是错律 | `indexRule`/`lookupRule` 改成 vector + `jvp/vmap/transpose` 三处改成循环 | 无：键**完全不需要推导**，`float` 就是一个键，32 条缺口**一条例外都不用加**，例外表自动回到 2 |
 
 **(b'-2) 是 (b') 的真身，而且比 (b') 更小**：键不需要带类型（`float@1` 就够），因为类型分派是引擎已有的能力，不是键要解决的问题。**我按"不许留下一个红的树"回退了这一版**（`git checkout` 七个文件，`rulesets` 回 **67/67**、`transforms` 回 **48/61**、例外表回 **3**），把量到的东西写在这里，等点名再动。
-### 5.3 落 (b'-2)：一个键放多条律，类型分派留在引擎里（已落地）
+### 5.3 落 (b'-2)：一个键放多条律，类型分派留在引擎里（已落地；**"引擎已有分派"这一句在 §5.4 被实测推翻**）
 
 作者裁 (b'-2)。落地的形状比 (b') **更小**，因为键不再编码类型：
 
@@ -274,6 +274,51 @@ REINTERP jvp function=f6tod  ... tangent=computed source=ruleset rules=jvp_dtod
 **按 ⚠️ 停手条件 (i) 回退**：`stdlib/rulesets/jvp.cml` 与 `modules/transforms/jvp.cpp` 已 `git checkout` 回 `a9061b77a`，读数回到 `rulesets` **67/67**、`transforms` **48/61**。
 
 **要作者裁的一句**：**"一个键里的哪条律答这个类型"该由谁判**——是 `genericRuleInstance` 真的执行条件（那么 5.3 的候选表就够了，27 条律可以立刻写回），还是索引侧要有一个按类型的显式查表（那就回到 (b') 的键带类型，再看 5.2 里"律不能声明具体类型"那条约束怎么绕）？
+### 5.5 让 `when` 在实例判定里生效（作者裁 (a)，已落地）
+
+**改的是"说了不算"这件事**：一条律写了 `when is_same::<T, int>()`，却在 `float` 上被当成实例——**那条 `when` 是假话**。假话比缺失危险：缺失会拒绝，假话会算错。
+
+**一处代码，十二行**（`src/compile/gir/rule_templates.cpp#genericRuleInstance`）：
+
+```cpp
+std::string conditionWhy;
+if (owner != nullptr && ruleConditionAt(context, ruleId, types, conditionWhy) ==
+                            RuleConditionAt::Fails) {
+    instance.why = std::format("its condition does not hold at {}", tupleText(types));
+    entry.instances.push_back(std::move(instance));
+    return entry.instances.size() - 1;
+}
+```
+
+`ruleConditionAt` 早就存在（`rule_templates.h:148`，`check` 用的就是它），`genericRuleInstance` 从没问过它。**只有 `Fails` 会拿走这个元组**：`ValueDependent`（类型部分成立、其余读值）与 `Unknown`（问不出）照旧保留——问不出的条件不许吃掉实例。
+
+**一处刻意的顺序**：条件判 `Fails` 之后，**仍然让模板去实例化一次**，好让"体说了什么"留在 `why` 里（`operator '+' is not defined for these operand types` 这种报告是 `rules` 计划里两条用例钉住的）；体编译得过、只有条件不成立时，`why` 才是`its condition does not hold at …`。**实例一律不发布**——条件是在发布之前问的，这才是"律关于 `int` 就不会答给 `float`"的保证。
+
+**没有动 `rule_expand.cpp:227` 的判定顺序**（作者写的 ⚠️(i) 小实验因此没必要做）：门在实例之前，端口数检查留在原地当第二道筛。
+
+**②③ 各算子的日志（`rules=` 就是"哪条律答的"）**：
+
+```
+function=ltod   rules=jvp_ltod     3.5 / 1.0   （:op/ltod，int 源）
+function=f6tod  rules=jvp_f6tod    3.5 / 1.0   （:op/f6tod，f16 源）
+function=dtof   rules=jvp_dtof     3.5 / 1.0   （:op/dtof，float 源）
+function=ftod   rules=jvp_ftod     见下面的安全阀
+```
+
+`itod`/`dtod` 走的是常量折叠（`jvp(dtod)(3.5, 1.0)` 全是常量，不建图）——数对（`3.5`/`1.0`），但没有 `rules=` 行，所以安全阀用了一个不可折叠的输入（`math::sin(1.0)`）。
+
+**④ 安全阀：修前给错的数，修后给对的数。** 构造办法：把 `jvp_ftod` 的正文**临时**改成 `float(dx) * 2.0`（`jvp_dtod` 是 `f64(dx)`，两条律端口数都是 1，**端口数相同、类型不同**），再用不可折叠的 `f32(x)` 调用 `:op/ftod`：
+
+| | 日志 | 切量 |
+|---|---|---|
+| 门关（= §5.4 的状态，并让候选继续往下试） | `rules=jvp_dtod` | **`1.0`** ← 错的（`jvp_dtod` 的 `f64(dx)`） |
+| 门开（本笔） | `rules=jvp_ftod` | **`2.0`** ← 对的（`jvp_ftod` 的 `float(dx) * 2.0`） |
+
+两个数都是实测：`[stdout] 1.0` / `[stdout] 2.0`，同一份探针、只差那十行。**这一条同时证明了 §5.4 的担心不是假想**：端口数相同就会套错律，而套错的律会给出错数。
+
+**⑤ 读数**：`rulesets` **67/67**（27 条律全部归档、无重复键报警）；`transforms` **48/61**（同一份 13 条红，新增红 0）；全量见下。
+
+**⑥ 页里被纠正的一句**：§5.3 说"类型分派是引擎已有的能力"——**实测证明这条路径上没有**，纠正它的是 `:op/ftod` 那行 `rules=jvp_dtod`，不是文档推断。§5.3 的标题已标注。
 ## 6. 一句话结论
 
 **这条缝是方案性的，不是少数特例**：按"结果有切空间却拼不出键"计，**32 条**（把复数算进去 50 条），而例外表只能一条一条地救——今天救了两条、补了一条（`^`）。缺口的形状有两个：

@@ -240,3 +240,181 @@ export func pow_tangent::<T>(x: T, w: T, dx: T, dw: T): T when is_float::<T>() {
 export rule jvp_pow::<T>(x: T, w: T) when is_float::<T>() {
     x ^ w => (dx: T, dw: T) => pow_tangent(x, w, dx, dw)
 }
+
+//
+
+// ---- the forward rules of the conversions ----
+//
+// A conversion is linear in its value, so its derivative is the same conversion applied to the
+// tangent: `d(float(x)) = float(dx)`, and `d(float(n)) = 0` when the source has no tangent space
+// (an integer is a step, a string is not a number). One rule per `<source>to<destination>` name,
+// because the key of each is the destination's spelling at one operand and `float@1` therefore
+// holds eight rules -- one per source type -- which is what `lookupRules` answers and the engine
+// dispatches between by the operand's own type.
+//
+// The spellings are `float`, `f32`, `f16` and `bf16` (the ones the prelude declares). `f64` names
+// the same `:op/*tod` uris as `float` does, and one uri has one key, so the laws are written with
+// `float`; a rule written with `f64` would be filed under `f64@1`, which no uri asks for.
+
+/// `d(float(x)) = float(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
+/// @example dtod
+export rule jvp_dtod::<T>(x: T) when is_same::<T, float>() {
+    float(x) => (dx: T) => float(dx)
+}
+
+/// `d(float(x)) = float(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
+/// @example ftod
+export rule jvp_ftod::<T>(x: T) when is_same::<T, f32>() {
+    float(x) => (dx: T) => float(dx)
+}
+
+/// `d(float(x)) = float(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
+/// @example f6tod
+export rule jvp_f6tod::<T>(x: T) when is_same::<T, f16>() {
+    float(x) => (dx: T) => float(dx)
+}
+
+/// `d(float(x)) = float(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
+/// @example bftod
+export rule jvp_bftod::<T>(x: T) when is_same::<T, bf16>() {
+    float(x) => (dx: T) => float(dx)
+}
+
+/// `d(float(x)) = 0`: a i32 is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
+/// @example itod
+export rule jvp_itod::<T>(x: T) when is_same::<T, i32>() {
+    float(x) => () => 0.0
+}
+
+/// `d(float(x)) = 0`: a string is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
+/// @example stod
+export rule jvp_stod::<T>(x: T) when is_same::<T, string>() {
+    float(x) => () => 0.0
+}
+
+/// `d(f32(x)) = f32(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
+/// @example dtof
+export rule jvp_dtof::<T>(x: T) when is_same::<T, float>() {
+    f32(x) => (dx: T) => f32(dx)
+}
+
+/// `d(f32(x)) = f32(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
+/// @example ftof
+export rule jvp_ftof::<T>(x: T) when is_same::<T, f32>() {
+    f32(x) => (dx: T) => f32(dx)
+}
+
+/// `d(f32(x)) = f32(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
+/// @example f6tof
+export rule jvp_f6tof::<T>(x: T) when is_same::<T, f16>() {
+    f32(x) => (dx: T) => f32(dx)
+}
+
+/// `d(f32(x)) = f32(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
+/// @example bftof
+export rule jvp_bftof::<T>(x: T) when is_same::<T, bf16>() {
+    f32(x) => (dx: T) => f32(dx)
+}
+
+/// `d(f32(x)) = 0`: a i32 is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
+/// @example itof
+export rule jvp_itof::<T>(x: T) when is_same::<T, i32>() {
+    f32(x) => () => f32(0)
+}
+
+/// `d(f32(x)) = 0`: a int is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
+/// @example ltof
+export rule jvp_ltof::<T>(x: T) when is_same::<T, int>() {
+    f32(x) => () => f32(0)
+}
+
+/// `d(f32(x)) = 0`: a string is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
+/// @example stof
+export rule jvp_stof::<T>(x: T) when is_same::<T, string>() {
+    f32(x) => () => f32(0)
+}
+
+/// `d(f16(x)) = f16(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
+/// @example dtof6
+export rule jvp_dtof6::<T>(x: T) when is_same::<T, float>() {
+    f16(x) => (dx: T) => f16(dx)
+}
+
+/// `d(f16(x)) = f16(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
+/// @example ftof6
+export rule jvp_ftof6::<T>(x: T) when is_same::<T, f32>() {
+    f16(x) => (dx: T) => f16(dx)
+}
+
+/// `d(f16(x)) = f16(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
+/// @example f6tof6
+export rule jvp_f6tof6::<T>(x: T) when is_same::<T, f16>() {
+    f16(x) => (dx: T) => f16(dx)
+}
+
+/// `d(f16(x)) = f16(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
+/// @example bftof6
+export rule jvp_bftof6::<T>(x: T) when is_same::<T, bf16>() {
+    f16(x) => (dx: T) => f16(dx)
+}
+
+/// `d(f16(x)) = 0`: a i32 is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
+/// @example itof6
+export rule jvp_itof6::<T>(x: T) when is_same::<T, i32>() {
+    f16(x) => () => f16(0)
+}
+
+/// `d(f16(x)) = 0`: a int is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
+/// @example ltof6
+export rule jvp_ltof6::<T>(x: T) when is_same::<T, int>() {
+    f16(x) => () => f16(0)
+}
+
+/// `d(f16(x)) = 0`: a string is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
+/// @example stof6
+export rule jvp_stof6::<T>(x: T) when is_same::<T, string>() {
+    f16(x) => () => f16(0)
+}
+
+/// `d(bf16(x)) = bf16(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
+/// @example dtobf
+export rule jvp_dtobf::<T>(x: T) when is_same::<T, float>() {
+    bf16(x) => (dx: T) => bf16(dx)
+}
+
+/// `d(bf16(x)) = bf16(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
+/// @example ftobf
+export rule jvp_ftobf::<T>(x: T) when is_same::<T, f32>() {
+    bf16(x) => (dx: T) => bf16(dx)
+}
+
+/// `d(bf16(x)) = bf16(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
+/// @example f6tobf
+export rule jvp_f6tobf::<T>(x: T) when is_same::<T, f16>() {
+    bf16(x) => (dx: T) => bf16(dx)
+}
+
+/// `d(bf16(x)) = bf16(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
+/// @example bftobf
+export rule jvp_bftobf::<T>(x: T) when is_same::<T, bf16>() {
+    bf16(x) => (dx: T) => bf16(dx)
+}
+
+/// `d(bf16(x)) = 0`: a i32 is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
+/// @example itobf
+export rule jvp_itobf::<T>(x: T) when is_same::<T, i32>() {
+    bf16(x) => () => bf16(0)
+}
+
+/// `d(bf16(x)) = 0`: a int is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
+/// @example ltobf
+export rule jvp_ltobf::<T>(x: T) when is_same::<T, int>() {
+    bf16(x) => () => bf16(0)
+}
+
+/// `d(bf16(x)) = 0`: a string is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
+/// @example stobf
+export rule jvp_stobf::<T>(x: T) when is_same::<T, string>() {
+    bf16(x) => () => bf16(0)
+}
+
