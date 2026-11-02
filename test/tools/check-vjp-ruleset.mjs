@@ -134,7 +134,11 @@ say1.push(`dropping that one line in a copy of the library, and running the same
 
 const without = run({ CAMEL_STD_LIB: copyRoot })
 const diagnostics = without.text.split('\n').filter((line) => /error\[|^note:|-->\s|^TRANSPOSE\s/.test(line))
-const onLibrary = diagnostics.some((line) => /-->\s.*stdlib\/vjp\.cml:[0-9]+:[0-9]+/.test(line))
+// The copy lives outside the checkout, so the compiler prints its path whole and with the
+// platform's own separator (`D:\Temp\...\stdlib\vjp.cml:56:35` on Windows, `/tmp/...` on Linux).
+// The claim is that the diagnostic stands on the library's own line; which slash spells that file
+// is the platform's business, so both are read.
+const onLibrary = diagnostics.some((line) => /-->\s.*stdlib[\\/]vjp\.cml:[0-9]+:[0-9]+/.test(line))
 const named = diagnostics.some((line) => line.includes(expected.words))
 const reading = expected.reading === null || diagnostics.some((line) => line.includes(expected.reading))
 const raised = expected.raised === null || diagnostics.some((line) => line.includes(expected.raised))
