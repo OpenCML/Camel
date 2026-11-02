@@ -138,10 +138,10 @@ type Split<F> = ((..ParamsOf<F>) => (ResultOf<F>, _,),   // 残差位：由编�
 
 ```camel
 func transpose::<F>(f: F): Transpose<F> when is_linear::<F>()
-type Transpose<F> = (ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
+type Transpose<F> = (..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
 ```
 
-对一个对其输入线性的函数（残差是已知值），把数据流反过来。
+对一个对其输入线性的函数（残差是已知值），把数据流反过来。上面那是**声明**的宽松形状（全部参数都参与求导时就是它）；**实际收到的参数个数是函数体的事**：取余切的参数不再传，没有切空间的参数（`int`、`bool`、字符串）与体从外面读到的值各占一格，余切永远在最后 —— 因此单 `float` 函数的转置是 `transpose(f)(1.0)`。
 
 - **原语**：换成它的 `#transpose` 规则；
 - **一个值被用了几次**：反过来就是几份相加；
@@ -157,7 +157,7 @@ func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
     let (fwd, lin) = split(reinterp<jvp>(f))
     return (..xs: ..ParamsOf<F>) => {
         let (y, res) = fwd(..xs)
-        (y, (ct) => transpose(lin)(res, ct))
+        (y, (ct) => transpose(lin)(ct))
     }
 }
 ```

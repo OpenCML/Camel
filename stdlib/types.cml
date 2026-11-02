@@ -105,9 +105,18 @@ export type Vjp<F> = (..ParamsOf<F>) => (ResultOf<F>, Pullback<F>)
 export type Jvp<F> =
     (..ParamsOf<F>, ..Tangent<ParamsOf<F>>) => (ResultOf<F>, Tangent<ResultOf<F>>)
 
-/// The transpose of a linear function: its parameters, then the cotangent of its result, then the
-/// cotangents of its parameters. The cotangent comes last because a pullback may need the value it
-/// transposes at (a branch's condition is a value).
+/// The transpose of a linear function: the values the call site still passes, then the cotangent of
+/// the result, then the cotangents of the parameters. The cotangent comes last because a pullback may
+/// need the value it transposes at (a branch's condition is a value).
+///
+/// Which parameters stand before the cotangent is a property of the *body*, not of the type: a
+/// parameter that takes a cotangent is not passed (the cotangent carries it), a parameter with no
+/// tangent space (an `int`, a `bool`, a string) stands there as a value, and a value the member's body
+/// reads from outside stands there too. So the number of parameters is `..ParamsOf<F>` only when no
+/// parameter takes a cotangent -- which is why the declaration above is the loose one and why
+/// `transpose(f)` of a one-`float` function is called `transpose(f)(1.0)`. The build writes the exact
+/// shape (`modules/transforms/transpose.cpp#transposeSignature`); a type operation could only
+/// approximate it, and an approximate declaration would be read as a contract.
 /// @example is_same::<Transpose<(x: float) => float>, (x: float, ct: float) => (float,)>()    // true
 export type Transpose<F> =
     (..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)

@@ -95,9 +95,14 @@ FunctionType *transposeSignature(
         return nullptr;
     }
     // The law, as the author rules it (2026-11-02 11:30): `transpose(g)` treats **every parameter
-    // of `g` as a linear input** and answers `(y-bar) => (one cotangent per parameter)`. So the
-    // transposed function takes the cotangent of the result and nothing else, and no parameter of
-    // `g` is a value its caller passes. A fixed value a body needs is not a parameter: it is
+    // of `g` as a linear input** and answers `(y-bar) => (one cotangent per parameter)`. So no
+    // parameter of `g` that takes a cotangent is a value its caller passes, and a body that only
+    // reads such parameters gives a transposed function that takes the cotangent of the result and
+    // nothing else. Two things stand before that cotangent instead of being passed as themselves:
+    // a parameter whose type has no tangent space (an `int`, a `bool`, a string) is a value the call
+    // site still fills, and so is a value the body reads from outside; which parameters those are is
+    // a fact of the body, read below from the function rather than from its type. A fixed value a
+    // body needs is not a parameter: it is
     // captured by the function that is transposed -- `transpose((dx) => f_lin(x, dx))(y-bar)` -- and
     // that is the caller's spelling. What it buys is that the type of a function says nothing about
     // which half of a pair it came from, so no bit has to be carried and the operator resolver --
