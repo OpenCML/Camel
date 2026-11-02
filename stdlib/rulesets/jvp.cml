@@ -164,3 +164,36 @@ func index_into::<T>(x: T[], i: int): T {
 export rule jvp_idx_arr::<T>(xs: T[], i: int) {
     index_into(xs, i) => (dxs: T[]) => index_into(dxs, i)
 }
+
+// ---- the forward rule of `:op/ltod` ----
+//
+// `float(n)` where `n` is an `int`. An integer is a **zero tangent space**
+// (`camel/core/tangent_space.h`: `float` and the float arrays are their own space, an integer and a
+// string have none), so there is no tangent for the conversion to carry and its derivative is zero.
+// The rule is written the way `jvp_idx_arr` above treats an `int` operand -- it *does not enter the
+// right side*, because `Tangent<int>` is `()` -- and the answer here is the zero of the **result's**
+// space, which is a `float`: `float(n)` reads an integer and contributes nothing of its own.
+//
+// The key is the same kind of exception `:op/idx_arr` is: `ruleKeyOf` derives a `:op/` key only from
+// `add`, `sub`, `mul`, `div` and `neg` (`src/core/forward.cpp`), and `ltod` says nothing about the
+// spelling -- `float(x: int)` is written `float`, a spelling every conversion to a double shares
+// (`float(x: i32)`, `float(x: float)`, `float(x: string)` ...), so one key could not name this one.
+// `ruleKeyExceptions()` therefore files this operator under the call below, whose body the operator
+// is, exactly as it files `:op/idx_arr` under `index_into`.
+
+/// `float(n)` where `n` is an `int`: the body of `:op/ltod`, and the left side its rule is filed
+/// under. Not `export`ed: a rule's left side is written with it, and nothing else has a use for it.
+/// `is_same` is how a rule here names one type (`sum_kernel` in `array.cml` does the same), and it
+/// is also what lets the body convert: `float` is a different operator for `i32` than for `int`.
+/// @example float_of_int(3)    // 3.0
+func float_of_int::<T>(n: T): float when is_same::<T, int>() {
+    return float(n)
+}
+
+/// `d(float(n)) = 0`: an integer is a step, not a slope. `int(3x)` is constant between its jumps, so
+/// its derivative is zero wherever it exists, and `float(n)` reads that integer without adding
+/// anything -- the value is real (`int_escape(1.0)` is 10.0) and its derivative is 0.
+/// @example float_of_int(3)    // 3.0; lifted, its tangent is 0.0
+export rule jvp_ltod::<T>(n: T) when is_same::<T, int>() {
+    float_of_int(n) => () => 0.0
+}

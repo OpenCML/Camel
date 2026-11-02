@@ -152,11 +152,16 @@ code, bound = run(["std::rulesets", "forward=true"])
 check(code == 0, f"the program exits 0 asking for the keys (got {code}):\n{bound}")
 
 exceptions = [line for line in bound.splitlines() if line.startswith("RULEKEY-EXCEPTION ")]
-check(len(exceptions) == 2, f"exactly two operators have a key that cannot be derived: {exceptions}")
+check(len(exceptions) == 3, f"exactly three operators have a key that cannot be derived: {exceptions}")
 keys = [(line.split()[1], line.split()[3]) for line in exceptions]
 check(
-    keys == [(":op/idx_arr", "index_into/2"), ("tensor:multiply", "mul_tensor/2")],
-    f"the two are the array index and the array product, at the keys their rules are filed under: {keys}",
+    keys
+    == [
+        (":op/idx_arr", "index_into/2"),
+        (":op/ltod", "float_of_int/1"),
+        ("tensor:multiply", "mul_tensor/2"),
+    ],
+    f"the three are the array index, the array product and the conversion from an integer, at the keys their rules are filed under: {keys}",
 )
 check(
     all(" because " in line and len(line.split(" because ", 1)[1]) > 20 for line in exceptions),

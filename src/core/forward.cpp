@@ -27,16 +27,23 @@ constexpr std::array<WrittenOperation, 5> kWrittenOperations{{
     {"neg", "-", 1},
 }};
 
-/// The two operators whose key cannot be derived, and why. Both are written up in
+/// The three operators whose key cannot be derived, and why. The first two are written up in
 /// `docs/handover/reviews/questions-2026-11-01-how-does-an-operator-without-a-token-get-a-key.md`;
 /// the reason is repeated here because this is the code a reader of the key finds first.
-const std::array<RuleKeyException, 2> kRuleKeyExceptions{{
+const std::array<RuleKeyException, 3> kRuleKeyExceptions{{
     {":op/idx_arr",
      "index_into",
      2,
      "`xs[i]` is a bracket form, which is none of `a <op> b`, `<op> a` or `f(a, b)`, so the "
      "operator has no token a rule's left side could be written with; its rule is filed under the "
      "call `index_into(x, i)`, whose body the operator is"},
+    {":op/ltod",
+     "float_of_int",
+     1,
+     "`float(n)` is the spelling, and `float` at one operand is a spelling every conversion to a "
+     "double shares (`float(x: i32)`, `float(x: float)`, `float(x: string)` and the rest), so one "
+     "key could not name this one; its rule is filed under the call `float_of_int(n)`, whose body "
+     "the operator is"},
     {"tensor:multiply",
      "mul_tensor",
      2,

@@ -11,8 +11,9 @@
  * **Nothing is registered per operator.** The key a rule is filed under is a fact about the
  * operator, so it is read off the operator: `:op/add_d` is written `+` with two operands because
  * that is what `add` means, and `tensor:matmul` is written `matmul(...)` because that is the
- * operator's own name. Two operators cannot be written that way -- `xs[i]` is a bracket form with no
- * token, and the array product's `*` key at two operands is already `:op/mul_d`'s -- and those two are
+ * operator's own name. Three operators cannot be written that way -- `xs[i]` is a bracket form with no
+ * token, the array product's `*` key at two operands is already `:op/mul_d`'s, and `ltod`'s spelling
+ * `float(x)` at one operand is a key every conversion to a double shares -- and those three are
  * the whole of `ruleKeyExceptions()`, which says so in words and is printed by the `std::rulesets`
  * pass so that an exception is never silent.
  *

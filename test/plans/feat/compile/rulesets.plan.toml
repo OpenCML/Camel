@@ -92,7 +92,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "rulesets_keys_are_derived_and_the_exceptions_are_printed"
-desc = "No operator is bound to a key by hand: `std::rulesets forward=true` prints the two operators whose key cannot be derived from the operator itself, each with the reason, and the sentence saying how every other key is derived. `xs[i]` is a bracket form, which is none of `a <op> b`, `<op> a` or `f(a, b)`, so `:op/idx_arr`'s rule is filed under the call `index_into(x, i)`; `*/2` is already `:op/mul_d`'s key, so `tensor:multiply`'s rule is filed under `mul_tensor(x, w)`. The two lines print on every run of the pass, not only when asked for, because an exception only visible on request is an exception nobody reads."
+desc = "No operator is bound to a key by hand: `std::rulesets forward=true` prints the three operators whose key cannot be derived from the operator itself, each with the reason, and the sentence saying how every other key is derived. `xs[i]` is a bracket form, which is none of `a <op> b`, `<op> a` or `f(a, b)`, so `:op/idx_arr`'s rule is filed under the call `index_into(x, i)`; `float(n)` is `float` at one operand, a spelling every conversion to a double shares, so `:op/ltod`'s rule is filed under the call `float_of_int(n)`; `*/2` is already `:op/mul_d`'s key, so `tensor:multiply`'s rule is filed under `mul_tensor(x, w)`. The three lines print on every run of the pass, not only when asked for, because an exception only visible on request is an exception nobody reads."
 kind = "behavior"
 case = "../../../cases/compile/rulesets/rulesets_lookup.cml"
 args = ["${case}", "std::rulesets", "forward=true", "${backend}"]
