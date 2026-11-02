@@ -1978,3 +1978,35 @@ Camel Invariant Violation: … tuple.h(160) … TupleType: index out of range
 **我倾向乙：它一次解决 272 处，甲只是再缩一轮。**
 
 **⑤ 另：`Array` 那条与这条的并法按你④的裁决记的——只并措辞，不并缺陷**（那条是阈值过期，这条是容器头没设）。见下一节。
+
+
+## 59. 你②那便宜一问的答案：**构造过，不是悬垂** ⇒ 是「未设被读成空」，不是「未构造就被索引」
+
+**探针**：`TupleType` 的唯一构造点（`src/core/type/composite/tuple.cpp` 的 `TupleType::TupleType(layout, types)`）里，
+对 `size_ == 0` 的实例记进一个 64 槽的静态登记表并计数；守卫里打印 `emptyBuilt`（本次运行建了几个空元组）与 `mine`（被索引的这个在不在登记表里）。
+
+**读数（`vjp_arities.cml std::nvm` + `--gc-check poison`）**：
+```
+PROBE typeAt why=? this=0x7a2b59846188 size=0 index=4 emptyBuilt=5 mine=yes
+```
+**① `mine=yes` ⇒ 这个被索引的元组是"真的建出来过"的空元组，不是悬垂/未初始化内存。**
+⇒ **你②问的那一分为二，答案是后者不存在：不是「未构造就被索引」，是「构造了空的，被当成有 4 个成员」。**
+**② `emptyBuilt=5` ⇒ 空元组不是单例**（一次运行建了 5 个空 `TupleType`）——**这本身也是一笔账：默认实例没有被共享。**
+
+**③ 与 `Array` 那条分开记**（按你③）：
+- **「未设被读成空」**：类型/容器头是**合法构造出来的空实例**，只是**本该有成员的那一份没被填**。**今夜两条都属于这一类**（`Array::getSlot` 的 `element 0 of an array that holds 0`、本条）；
+- **「未构造就被索引」**：读到的是**从未被构造的记忆**（悬垂或未初始化）。**今夜没有找到实例——`mine=yes` 把它排除了。**
+
+**④ 结论（本线可以交班的形态）**：`main` 的 37 号节点装填 `__g_75__`（`targetClosure=2`，**该有 2 个闭包槽**）时，
+**读到的类型是一个"合法的空元组"（0 成员），却按第 4 个成员去取**。
+⇒ **不是下标算错，不是悬垂，是"这个槽该有的那份类型没被设进去，空的那份顶了位"。**
+⇒ **根在"谁给这个槽设类型"那一段（闭包装填），不在类型工厂；`mine=yes` 把类型工厂整段排除。**
+
+**⑤ 乙（同档 + `-g`）不可用，理由记下**：`camel-remote.ps1` 的参数只有
+`Jobs/Tier/NoBuild/AllowStale/Clean/Changed/ChangedBase/UpdateGolden/LibStdCxxDir`，**没有构建旗标透传**；
+`npm run debug` 会翻 `NDEBUG`（你①明令不许）；要 `-g` 只能删 `build` 目录重配 CMake，**且 `-g` 进 per-config 文件，
+"看着改了其实没生效"的风险正是你昨夜踩过的那个**。⇒ **这条路今晚不开。**
+
+**⑥ 下一步（不构建也能做的）**：读**闭包装填**那一段（`src/execute/graph_runtime_support.cpp` 的 bind 附近，
+及其调用的 `Frame`/闭包槽装填函数），找出"闭包环境应有几个槽"的那个来源，与"实际设进槽的类型"对照——
+**判据：`targetClosure=2` 说的是应有 2 个，而读的是第 4 个 ⇒ 先看这两个数字是各自由谁算出来的。**
