@@ -70,6 +70,22 @@ expect_output_contains = ["REINTERP jvp function=f graph=", "type=(float, float)
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# The same lift, with the state an array instead of a float. The pair is `(float[], float[])` and the
+# two readings beside it are the two columns of the loop's Jacobian, so a lift that loses the rounds'
+# composition cannot pass by getting one column right.
+[[tests]]
+name = "jvp_loop.array_state_is_lifted"
+desc = "A loop whose state is an array of floats is reinterpreted like a float one: the pair is `(float[], float[])`, the body region's result is a FILL whose tangent is the same FILL over the members' tangents, and the round's element arrives through the iterable, which is copied rather than paired. For `loop x = s for k in [1.0, 10.0] do [x[1], x[0] + x[1] * k]` the per-round map is `M_k = [[0,1],[1,k]]`, so two rounds give `M = [[1,1],[10,11]]`: `f(1,2) = (3, 32)` and the two seeds read `(1, 10)` and `(1, 11)`. The reading names the three rules it applied, `jvp_idx_arr` among them -- the array read is differentiated by the rule the ruleset already had. This does not lift a tuple or a struct state (that still stops at the body) and does not pin any walk order: the rules are elementwise, so every order gives these numbers."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_loop_array_state.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["REINTERP jvp function=f graph=", "type=(float[], float[]) => (float[], float[]) pure", "rules=jvp_idx_arr,jvp_mul,jvp_add", "value= [3.0, 32.0]", "dx= [1.0, 10.0]", "dy= [1.0, 11.0]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 # A loop whose body never reads the state's tangent -- `s + 1.0`, where the derivative does not
 # flow through the state at all -- is still lifted: the tangent is carried as zero, and the value is
 # what the loop computes. The pair is the loop's value whether or not anything differentiates it.
