@@ -120,6 +120,14 @@ struct InlineReport {
 };
 inline constexpr const char *kInlineReportFactKey = "std::opt/inline-report";
 
+/// How many runs in a row changed the same graph: the state the not-settling report counts, and
+/// nothing more. It is a value a pass run owns (OptimizeRewritePass holds one), never a static, so
+/// two programs in one process cannot share a count.
+struct SettleStreak {
+    std::string graph;
+    size_t runs = 0;
+};
+
 struct OptimizeRewriteConfig {
     bool enableDevirtualization = true;
     bool enableSpecialization   = true;
@@ -159,5 +167,10 @@ struct OptimizeRewriteConfig {
     /// Runs of the rewrite in a row that may each change the same graph before it is reported as
     /// not settling (see settleRunsOf in execute/pass.cpp: an internal bound, exposed for a test).
     size_t settleRuns = 32;
+    /// The runs already counted towards `settleRuns`, owned by the pass instance (see
+    /// OptimizeRewritePass) and therefore cleared when a run starts. Not a static in the engine: a
+    /// count that outlived the program it was counting would report a run of one program against
+    /// the next, and nothing in a count of runs belongs to the process rather than to a pass.
+    SettleStreak *settleStreak = nullptr;
     bool checkScreens = false;
 };

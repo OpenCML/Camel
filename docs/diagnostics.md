@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-306 diagnostics: 285 errors, 21 warnings. 15 carry a machine-applicable edit, 291 say why they carry none.
+307 diagnostics: 286 errors, 21 warnings. 15 carry a machine-applicable edit, 292 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -268,6 +268,7 @@ prints one entry.
 | `0x03000206` | [SemanticDiag::YieldRequiresStreamHead](#yieldrequiresstreamhead) | Error | no |
 | `0x03000207` | [SemanticDiag::RuleRightUsesOuterVariable](#rulerightusesoutervariable) | Error | no |
 | `0x03000208` | [SemanticDiag::ResidualsAreNotVisible](#residualsarenotvisible) | Error | no |
+| `0x03000209` | [SemanticDiag::CalledFallibleValue](#calledfalliblevalue) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8833,6 +8834,49 @@ func main(): int sync {
     println("r0=", r0)
     println("r1=", r1)
     println("tangent=", transpose(linear)(residuals, 1.0))
+    return 0
+}
+```
+
+### CalledFallibleValue
+
+`0x03000209` · Error · `SemanticDiag::CalledFallibleValue`
+
+**Fix**
+
+None: choice: the error value has to be handled, returned or dropped explicitly, and which one is the intent
+
+**Message**
+
+```text
+This value has type '{0}' and it is fallible: calling it as a function leaves the error it may hold nowhere to be read.
+```
+
+**Help**
+
+```text
+A 'T!' is a value that reports a failure instead of giving a result, so a call of it has nothing to run: take it apart first ('!!', '->' or 'match'), return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...', and then call the function it gives.
+```
+
+**Example** (`test/cases/compile/unused_values/called_fallible.cml`, run as `camel -E short test/cases/compile/unused_values/called_fallible.cml`)
+
+```camel
+// Calling a `T!` as a function: the value reports a failure instead of giving a result, so the
+// call has nothing to run and the error it may hold has nowhere to be read. This used to be an
+// invariant violation in the builder (an abort, `visitLinkNode`): the target of a LINK is not a
+// function, and the builder stopped the process instead of the program. It is now a diagnostic,
+// and it is an error, not a warning: a warning would let the statement be dropped and the run go
+// on as if the call had been made.
+import { cse } from opt
+
+with <w: float>
+func loss(x: float): float {
+    return w * x + w * x
+}
+
+func main(): int sync {
+    let step = loss->cse
+    println(step<2.0>(3.0))
     return 0
 }
 ```

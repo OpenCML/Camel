@@ -391,7 +391,8 @@ enum class SemanticDiag : uint32_t {
     RangeStepZero = 0x0001E6,
     /// A subscript slice with a constant step of 0 takes no element: `t[a:b:0]` (design principles 5.4;
     /// the step of a slice follows the same rule the step of a range does).
-    SliceStepZero = 0x0001E9,
+    SliceStepZero       = 0x0001E9,
+    CalledFallibleValue = 0x000209,
     /// A transform (`transpose`, `jvp`) was handed something that is not a function known at compile time:
     /// a parameter, or a closure that captures a value. The transform builds the transformed graph at the
     /// call, out of the graph of the function it is given, and neither of those names one until the program
