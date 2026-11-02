@@ -1,0 +1,77 @@
+// Step 3 of growing the block into a Transformer: a token embedding (`take`, the lookup as the gather
+// it is) in front, and a two-layer feed-forward with `relu` behind, both inside the residual:
+//
+//     x    = take(emb, tokens)                    [2, 2]
+//     r    = x + attention(x)                     residual around the attention
+//     h    = relu(r @ f1 + b1)                    [2, 4]
+//     loss = sum(r + h @ f2 + b2)                 residual around the feed-forward
+//
+// There is no layer normalization in this stage on purpose: `stage2_residual_ln.cml` is where
+// `nn.layer_norm` refused, and this stage measures whether the rest of the block runs without it.
+// The library's `relu`, `take`, `matmul` and `softmax` are all used as they are.
+//
+//     camel showcase/c3-char-transformer/grow/stage3_embed_ffn.cml
+//     python showcase/c3-char-transformer/baseline/grow.py --stage 3
+import { relu, softmax, sum, take, transpose } from tensor
+import { adam, adam_state } from nn
+import { with_grad } from autodiff
+
+type Model = {
+    emb: float[..],
+    f1: float[..],
+    b1: float[..],
+    f2: float[..],
+    b2: float[..],
+    wq1: float[..],
+    wk1: float[..],
+    wv1: float[..]
+}
+
+func mask(): float[..] {
+    return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2]
+}
+
+func attention(x: float[..], wq: float[..], wk: float[..], wv: float[..]): float[..] {
+    let q = x @ wq
+    let k = transpose(x @ wk)
+    let a = softmax<1>(q @ k * 0.70710678118654752 + mask())
+    return a @ (x @ wv)
+}
+
+with <m: Model>
+func block(tokens: int[..]): float {
+    let x = take(m.emb, tokens)
+    let r = x + attention(x, m.wq1, m.wk1, m.wv1)
+    let hidden = relu(r @ m.f1 + m.b1)
+    return sum(r + hidden @ m.f2 + m.b2)
+}
+
+func initial(): Model {
+    return {
+        emb: [[1.0, 0.5], [0.5, 1.0]] as float[2, 2],
+        f1: [[0.75, -0.5, 0.5, 0.25], [1.0, 0.5, -0.25, 0.75]] as float[2, 4],
+        b1: [0.1, -0.1, 0.05, 0.0] as float[],
+        f2: [[1.0, 0.5], [-0.5, 1.0], [0.25, -0.25], [0.5, 1.0]] as float[4, 2],
+        b2: [0.0, 0.1] as float[],
+        wq1: [[1.0, 0.5], [0.5, 1.0]] as float[2, 2],
+        wk1: [[0.5, 1.0], [1.0, 0.5]] as float[2, 2],
+        wv1: [[1.0, -1.0], [-1.0, 1.0]] as float[2, 2]
+    }
+}
+
+func main(): int sync {
+    let tokens = [0, 1] as int[]
+    let model0 = initial()
+    let (final, state, steps, log) = loop m = model0, opt = adam_state(model0), step = 0, log = '' as string
+        while step < 50
+        do {
+            let (value, g) = with_grad(block)<m>(tokens)
+            let next = adam(m, g, opt, 0.002)
+            let nlog = log + `stage3 step=${step + 1} loss=${value:.12f}` + "\n"
+            return (next.0, next.1, step + 1, nlog)
+        }
+    log->print
+    let last = with_grad(block)<final>(tokens).0
+    `stage3 done steps=${steps} last=${last:.12f}`->println
+    return 0
+}

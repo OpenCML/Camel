@@ -1,0 +1,112 @@
+// Step 4: the whole thing the author asked for, shrunk to two positions and width two -- embedding,
+// two post-layer-norm blocks (layer_norm -> attention -> residual, layer_norm -> FFN -> residual), a
+// final layer_norm, and the sum as the loss.
+//
+//   x   = take(emb, tokens)
+//   b1  = x + attention(layer_norm(x))                  b2 = b1 + ffn(layer_norm(b1))
+//   loss = sum(layer_norm(b2))
+//
+// It is written the way `train.cml` writes the model, with `nn.layer_norm`, and it is expected to
+// stop where `stage2_residual_ln.cml` stopped.  Recording that stop is this stage's reading: the
+// numbers it would print are the ones `baseline/grow.py --stage 4` prints, and they are not claimed
+// here.
+//
+//     camel showcase/c3-char-transformer/grow/stage4_full_model.cml
+//     python showcase/c3-char-transformer/baseline/grow.py --stage 4
+import { layer_norm, relu, softmax, sum, take, transpose } from tensor
+import { adam, adam_state } from nn
+import { with_grad } from autodiff
+
+type Model = {
+    emb: float[..],
+    g1a: float[..],
+    b1a: float[..],
+    wq1: float[..],
+    wk1: float[..],
+    wv1: float[..],
+    g1b: float[..],
+    b1b: float[..],
+    f1_1: float[..],
+    fb1_1: float[..],
+    f2_1: float[..],
+    fb2_1: float[..],
+    g2a: float[..],
+    b2a: float[..],
+    wq2: float[..],
+    wk2: float[..],
+    wv2: float[..],
+    g2b: float[..],
+    b2b: float[..],
+    f1_2: float[..],
+    fb1_2: float[..],
+    f2_2: float[..],
+    fb2_2: float[..],
+    gout: float[..],
+    bout: float[..]
+}
+
+func mask(): float[..] {
+    return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2]
+}
+
+func attention(x: float[..], wq: float[..], wk: float[..], wv: float[..]): float[..] {
+    let q = x @ wq
+    let k = transpose(x @ wk)
+    let a = softmax<1>(q @ k * 0.70710678118654752 + mask())
+    return a @ (x @ wv)
+}
+
+with <m: Model>
+func block(x: float[..], layer: int): float[..] {
+    let normed1 = layer_norm(x, m.g1a, m.b1a)
+    let attended = x + attention(normed1, m.wq1, m.wk1, m.wv1)
+    let normed2 = layer_norm(attended, m.g1b, m.b1b)
+    let hidden = relu(normed2 @ m.f1_1 + m.fb1_1)
+    return attended + hidden @ m.f2_1 + m.fb2_1
+}
+
+with <m: Model>
+func loss_of(tokens: int[..]): float {
+    let x = take(m.emb, tokens)
+    let first = block(x, 0)
+    let second = block(first, 1)
+    return sum(layer_norm(second, m.gout, m.bout))
+}
+
+func main(): int sync {
+    let tokens = [0, 1] as int[]
+    let model0 = {
+        emb: [[1.0, 0.5], [0.5, 1.0]] as float[2, 2],
+        g1a: [1.0, 1.0] as float[], b1a: [0.0, 0.0] as float[],
+        wq1: [[1.0, 0.5], [0.5, 1.0]] as float[2, 2],
+        wk1: [[0.5, 1.0], [1.0, 0.5]] as float[2, 2],
+        wv1: [[1.0, -1.0], [-1.0, 1.0]] as float[2, 2],
+        g1b: [1.0, 1.0] as float[], b1b: [0.0, 0.0] as float[],
+        f1_1: [[0.75, -0.5, 0.5, 0.25], [1.0, 0.5, -0.25, 0.75]] as float[2, 4],
+        fb1_1: [0.1, -0.1, 0.05, 0.0] as float[],
+        f2_1: [[1.0, 0.5], [-0.5, 1.0], [0.25, -0.25], [0.5, 1.0]] as float[4, 2],
+        fb2_1: [0.0, 0.1] as float[],
+        g2a: [1.0, 1.0] as float[], b2a: [0.0, 0.0] as float[],
+        wq2: [[0.75, 0.0], [0.0, 0.75]] as float[2, 2],
+        wk2: [[0.0, 0.5], [0.5, 0.0]] as float[2, 2],
+        wv2: [[1.0, 1.0], [1.0, 1.0]] as float[2, 2],
+        g2b: [1.0, 1.0] as float[], b2b: [0.0, 0.0] as float[],
+        f1_2: [[0.5, 0.25, 0.75, -0.5], [0.25, 0.75, 0.5, 0.5]] as float[2, 4],
+        fb1_2: [0.0, 0.05, -0.05, 0.1] as float[],
+        f2_2: [[0.5, 1.0], [1.0, 0.25], [-0.25, 0.5], [0.75, -0.5]] as float[4, 2],
+        fb2_2: [0.1, 0.0] as float[],
+        gout: [1.0, 1.0] as float[], bout: [0.0, 0.0] as float[]
+    }
+    let (final, state, steps, log) = loop m = model0, opt = adam_state(model0), step = 0, log = '' as string
+        while step < 50
+        do {
+            let (value, g) = with_grad(loss_of)<m>(tokens)
+            let next = adam(m, g, opt, 0.002)
+            let nlog = log + `stage4 step=${step + 1} loss=${value:.12f}` + "\n"
+            return (next.0, next.1, step + 1, nlog)
+        }
+    log->print
+    let last = with_grad(loss_of)<final>(tokens).0
+    `stage4 done steps=${steps} last=${last:.12f}`->println
+    return 0
+}

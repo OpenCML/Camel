@@ -206,3 +206,46 @@ the two tensor operands have different element types ('f32' and 'float')
 - `read_text` 的 `!!` 要给兜底值（`!! ''`）。
 - `if` 的每个分枝都要 `then`（`if mode == 'forward' then { ... }`）。
 - 这几处修好之后探针的答案才变成上面那张表：前两轮的红是我自己的拼写，不是墙。
+
+## 墙 10（新）：`nn.layer_norm` 把 `float[..]` 归一化成 `f32[..]`
+
+把注意力块长成 Transformer 时撞到的第一面新墙。 坐标：
+
+```
+grow/stage2_residual_ln.cml:45:35: [Error]: No matching function found for argument types:
+<> (f32[..], float[..], float[..], float[..]). Check the number and ...
+    attention: (x: float[..], wq: float[..], wk: float[..], wv: float[..]) => float[..] pure
+ (name=SemanticDiag::NoMatchingFunction, code=0x0300000F)
+```
+
+- 说得出来的：`layer_norm(first, m.g1, m.b1)` 的实参三个都是 `float[..]`，它照样接受了，**回来的是
+  `f32[..]`**；紧跟着的 `attention`（第一个参数 `float[..]`）就拒绝了。 两个重载都在
+  `stdlib/signatures/tensor.cml`：f32 的在 305 行、f64 的在 313 行，浮点实参走到前面那个（隐式窄化）。
+- 说显式类型也不行：`layer_norm<float>(x, g, b)` →
+  `grow/probe_layer_norm_float.cml:15:24: [Error]: 'float' is used as a value here, but it names an
+  operator with 8 signatures [...]`。
+- 归类：这是原来「墙 9（元素类型传播）」的第一个**精确坐标**——不是新的一句诊断，是同一根现在有了
+  文件名和列号。 整模型（两层，`grow/stage4_full_model.cml`）就停在同一处，`stage4` 的用例把它
+  锁成 negative，消息里那句 `f32[..], float[..]` 就是它。
+- 清掉之后：`baseline/grow.py --stage 2` 的四个读数是验收值——step1 `0.000000000000`、
+  step10 `-0.072004447310`、step25 `-0.192068171421`、step50 `-0.836281312279`、更新后
+  `-0.856052891460`。 `stage4` 同理，由 `--stage 4` 给出。
+
+### 没有采用的"绕法"
+
+手写一个 `layer_norm`（`sum`/`sqrt` 拼出来，全程 `float`）能让 stage 2 跑起来，但那是**绕开库的
+重载缺陷**，不是修它，所以**没有写**。 能跑的形状（stage 1、stage 3）都是"本来就不需要
+`layer_norm`"的形状，不是把 `layer_norm` 换掉。
+
+## 交接给 `splitlift` 车道的一条：`pairTypeOf` 只给浮点标量
+
+- 这条不是本目录的墙，是另一条车道正在拆的同一根：`jvp` 的 `pairTypeOf` 只给浮点标量写 pair，
+  `zeroConstantFor` 也只给 `Float64`/`Float32` 造零，于是 `matmul(A, x)` 里那个常量数组操作数
+  没有切向节点，抬升在 `complete = false` 处停下，报的是无坐标的
+  `transforms: jvp has no forward transform for this function`。
+- 本目录已经做了一半：`matmul` 的前向规则（`jvp_matmul`）已经进 `stdlib/rulesets/jvp.cml`，
+  键由 `forward.h` 从算子名推出，"没有前向规则"那句已经消失。
+- **清掉后 `matmul` 的 `jvp` 会给出数，验收值就在用例注释里**：
+  `test/cases/compile/transforms/jvp_matmul.cml` 那六个数（`A=[[1,2],[3,4]]`、`x=(1,2)`，
+  `dx=(1,0)` → 切向 1，`dx=(0,1)` → 切向 2）。 那边落完，这边那条 negative 用例自己会变成
+  正例，只需把 `expect_exit` 与两条 `expect_stdout_contains` 换成那六个数。

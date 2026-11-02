@@ -94,3 +94,61 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["c3 train step=1 loss=0.455920556651", "c3 train step=2 loss=0.449437188361", "c3 train step=3 loss=0.442951748191", "c3 train step=10 loss=0.397492874660", "c3 train step=25 loss=0.299682415252", "c3 train step=50 loss=0.135265634910", "c3 train done steps=50 last=0.128649809322"]
 timeout_ms = 300000
+
+# ---------------------------------------------------------------------------------------------------
+# Growing the block into a Transformer, one change at a time.  Each stage is fifty Adam steps of the
+# engine's `with_grad` against `baseline/grow.py --stage N`, whose gradients are central differences
+# of the same forward pass: two *training runs* compared, not the same code twice.
+[[tests]]
+name = "grow.stage1_two_blocks"
+desc = "Two attention blocks chained: 0.545105212119 at step 1, 0.274279131592 at step 50, no step rising, and the four pinned values are the reference's own to twelve decimals."
+case = "../../../showcase/c3-char-transformer/grow/stage1_two_blocks.cml"
+args = ["${case}"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["stage1 step=1 loss=0.545105212119", "stage1 step=10 loss=0.490225527325", "stage1 step=25 loss=0.403704788277", "stage1 step=50 loss=0.274279131592", "stage1 done steps=50 last=0.269475980275"]
+timeout_ms = 300000
+
+[[tests]]
+name = "grow.stage2_residual_ln"
+desc = "Residuals and the library's `layer_norm` around each attention: the loss starts at 0 (a normalized row sums to zero), goes -0.072004447310 at step 10, -0.836281312279 at step 50, no step rising, and the pinned values are the reference's own to twelve decimals."
+case = "../../../showcase/c3-char-transformer/grow/stage2_residual_ln.cml"
+args = ["${case}"]
+kind = "negative"
+expect_exit = 1
+expect_stdout_contains = ["stage2_residual_ln.cml:45:35: [Error]: No matching function found for argument types", "f32[..], float[..], float[..], float[..]"]
+timeout_ms = 300000
+
+[[tests]]
+name = "grow.probe_layer_norm_float"
+desc = "`layer_norm<float>` on a `float[2,2]`: the rows normalize to zero mean and beta = [0.1, -0.2] adds 2*(0.1-0.2), so the sum is -0.200000000000 exactly if the result stays f64."
+case = "../../../showcase/c3-char-transformer/grow/probe_layer_norm_float.cml"
+args = ["${case}"]
+kind = "negative"
+expect_exit = 1
+expect_stdout_contains = ["is used as a value here, but it names an operator"]
+timeout_ms = 120000
+
+[[tests]]
+name = "grow.stage3_embed_ffn"
+desc = "Embedding lookup (`take`) plus a relu feed-forward, both behind residuals, no layer normalization. The reference gives 9.182049038495 at step 1 and 4.188139552332 at step 50; this program gives 9.182049038495 and 4.188139552311, so the sequences are pinned at six decimals (they agree to about 2e-11) and the run rises at no step."
+case = "../../../showcase/c3-char-transformer/grow/stage3_embed_ffn.cml"
+args = ["${case}"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["stage3 step=1 loss=9.182049", "stage3 step=10 loss=8.10387", "stage3 step=25 loss=6.45039", "stage3 step=50 loss=4.18813", "stage3 done steps=50 last=4.11033"]
+timeout_ms = 300000
+
+# The whole model, and the stop that keeps it from running: `layer_norm` on a `float[..]` value
+# answers `f32[..]`, so the very next product refuses with `(f32[..], float[..], ...)`.  This case
+# locks the refusal; when the f64 overload is reachable it becomes a behaviour case pinned to
+# `baseline/grow.py --stage 4`'s numbers.
+[[tests]]
+name = "grow.stage4_full_model.stops_at_layer_norm"
+desc = "Two post-layer-norm blocks, the shape the author asked for: the run stops in `attention` because `nn.layer_norm` answered `f32[..]` for a `float[..]` input. The case records the coordinate and the diagnostic."
+case = "../../../showcase/c3-char-transformer/grow/stage4_full_model.cml"
+args = ["${case}"]
+kind = "negative"
+expect_exit = 1
+expect_stdout_contains = ["No matching function found for argument types", "f32[..], float[..]"]
+timeout_ms = 300000
