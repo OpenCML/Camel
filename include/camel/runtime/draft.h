@@ -635,38 +635,26 @@ class GraphDraft {
     /// (docs/design/effects/edges.cn.md 2), and closing the chain over `id` steps over that code.
     void handChainPlaceTo(gc_node_ref_t id, gc_node_ref_t tail);
     /// True when `id` is a statement of a chain: one that runs for its effect or may fault, or a
-    /// structure that contains such statements (a branch, a loop, a call). Read from the node and
-    /// the operator table the way `edges.cn.md` 1 and 4.6 define it, not from a marker a writer set.
-    /// The seal check asks the same question of a frozen graph (src/runtime/graph_edges.cpp,
-    /// `isChainStatement`), and a rewrite that would hand a statement's place to something else asks
-    /// it of the draft: a value is not on the chain, so a place handed to one is a sync edge that
-    /// starts at a value. Two readings of one model -- a draft and a frozen graph are its two shapes
-    /// -- and the answer has to agree.
+    /// structure that contains such statements (a branch, a loop, a call). The answer is not
+    /// written here: `camel::runtime::nodeIsChainStatement` (graph.h) is the one definition the seal
+    /// check asks of a frozen graph and the builder asks when it writes a chain link, and this reads
+    /// its answer out of the draft's payload. A rewrite that would hand a statement's place to
+    /// something else asks it too: a value is not on the chain, so a place handed to one is a sync
+    /// edge that starts at a value.
     bool isChainStatement(gc_node_ref_t id) const {
         const DraftNodeHeader *header = this->header(id);
         if (header == nullptr) {
             return false;
         }
-        switch (header->kind) {
-        case GCNodeKind::Brch:
-        case GCNodeKind::Loop:
-        case GCNodeKind::Call:
-            return true;
-        case GCNodeKind::Oper: {
-            const std::span<const std::byte> payload = payloadOf(id);
-            if (payload.size() < sizeof(GCOperBody)) {
-                return false;
-            }
-            const camel::core::OperId oper =
-                reinterpret_cast<const GCOperBody *>(payload.data())->oper;
-            auto &table       = camel::core::OperatorTable::instance();
-            const auto traits = table.find(oper);
-            return !table.isPure(oper) || table.hasExternalEffect(oper) ||
-                   (traits.has_value() && traits->mayFault);
+        if (header->kind != GCNodeKind::Oper) {
+            return camel::runtime::nodeIsChainStatement(header->kind, camel::core::kNoOper);
         }
-        default:
-            return false;
-        }
+        const std::span<const std::byte> payload = payloadOf(id);
+        const camel::core::OperId oper =
+            payload.size() < sizeof(GCOperBody)
+                ? camel::core::kNoOper
+                : reinterpret_cast<const GCOperBody *>(payload.data())->oper;
+        return camel::runtime::nodeIsChainStatement(header->kind, oper);
     }
     /// The node `newId` takes the place `oldId` had in its block's chain: the statements written
     /// after `oldId` are written after `newId`, and `newId` is written after what `oldId` followed

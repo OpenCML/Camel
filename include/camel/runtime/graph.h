@@ -196,6 +196,22 @@ bool nodeIsFreelySchedulable(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget = nullptr,
     const camel::core::type::Type *castSource = nullptr, bool fixedShapes = false);
 
+/// Whether a node of this kind is a statement of a chain: one that runs for its effect or may
+/// fault, or a structure that holds such statements -- a branch, a loop, a call
+/// (docs/design/effects/edges.cn.md 1 and 4.6). `oper` is `kNoOper` for every kind but OPER.
+///
+/// This is the question a sync edge's *start* asks: the node the chain is written from must be a
+/// statement of that chain, because a value has no place on it. It is one definition for the three
+/// readers: the seal check when it reads a frozen graph, the census beside it, and the builder and
+/// the draft when they are about to write or hand over a place. The copies are why a `GATE`
+/// exception grew on one of them and not the other.
+///
+/// Not the same question as `nodeTakesAnOrder`: that one also lets an order sit on the *end* of a
+/// chain, where a `GATE` (a block's value, section 5.3) and a `FUNC` (the function value a `CALL`
+/// runs) legitimately stand. Both are refused as a start and allowed as an end, which is why the
+/// two functions exist and why neither may be written as the other.
+bool nodeIsChainStatement(GCNodeKind kind, camel::core::OperId oper);
+
 /// The fault half of `nodeIsFreelySchedulable`, on its own: whether running a node of this kind
 /// can raise a fault (`castMayFault`, `OperatorTraits::mayFault`; design principles 3.9) where it
 /// is written. It is the fact that decides whether a statement nobody reads may still be dropped,
@@ -219,6 +235,10 @@ bool nodeIsFreelySchedulable(const GCGraph &graph, gc_node_ref_t ref);
 /// `nodeMayFault` of a node of a graph, read the way `nodeIsFreelySchedulable(const GCGraph &)`
 /// reads its operands and types.
 bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref);
+
+/// `nodeIsChainStatement` of a node of a graph: the operator body is read here, so a caller that
+/// holds only a reference asks it the same way the seal check does.
+bool nodeIsChainStatement(const GCGraph &graph, gc_node_ref_t ref);
 
 /// Whether a node owns a control region of this graph, and so stands on the outside for what runs
 /// inside it (`docs/design/effects/edges.cn.md` 4.6): a `BRCH` or a `LOOP` that carries an arm or a
