@@ -1,3 +1,8 @@
+# 2026-11-02: the four residual counts below went up once (1->2, 3->5, 2->3, 3->4, 0->1) when a
+# parameter's value port crossed the cut for every parameter. It now crosses only when the type does
+# not carry the length: a `T[]`'s length lives in its value, so the array crosses; a scalar's shape
+# *is* its type, so its value port would be the parameter the forward half already holds. The counts
+# are back to what the graph actually answers, and `remat` is green again (6/6).
 # Copyright (c) the OpenCML Organization
 # SPDX-License-Identifier: MIT
 
@@ -37,13 +42,13 @@
 # tree without `modules/transforms/split.cpp` skips instead of failing).
 [[tests]]
 name = "split_forward_half"
-desc = "The forward half of split(reinterp<jvp>(g)) for g(x) = x*x at x = 3: it computes what the present inputs allow and hands the residuals on whole. Reads `forward y= 9.0`, `residuals whole= ()` and the tangent 6.0; `residuals=2` is the graph's count -- the pair the body computes, plus the parameter's value port, which crosses now that the tangent side reads its tangent, and the members are the graph's answer, not a signature's."
+desc = "The forward half of split(reinterp<jvp>(g)) for g(x) = x*x at x = 3: it computes what the present inputs allow and hands the residuals on whole. Reads `forward y= 9.0`, `residuals whole= ()` and the tangent 6.0; `residuals=1` is the graph's count, and the members are the graph's answer, not a signature's."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_forward_half.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["forward y= 9", "residuals whole= ()", "tangent dx1= 6", "residuals=2"]
+expect_stdout_contains = ["forward y= 9", "residuals whole= ()", "tangent dx1= 6", "residuals=1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -72,25 +77,25 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 [[tests]]
 name = "split_two_params"
-desc = "The reading program the author named for this tier (f(x, y) = x*x*y at x = 3, y = 2), read at both ends of the composition. The lift takes the four numbers (x, dx, y, dy) and answers the value 18.0 with the derivative in the direction the caller seeded: 12.0 for (1, 0) and 9.0 for (0, 1), which is 2xy and x^2. `split` of that lift cuts at the pair, and what crosses the cut is read off the graph: **five** residuals -- `x`, `y`, `x*x`, the product the backward half's rule for the second `mul` reads, and the two parameters' value ports, which cross because the tangent side reads their tangents -- so the forward half answers a five-member tuple and the backward half turns (1, 0) into 12.0 and (0, 1) into 9.0 without computing that product again. The diagnostic reads `residuals=5` and the forward half's type is `(float, float) => (float, (float, float, float, float, float))`: the arity is the graph's, not the signature's."
+desc = "The reading program the author named for this tier (f(x, y) = x*x*y at x = 3, y = 2), read at both ends of the composition. The lift takes the four numbers (x, dx, y, dy) and answers the value 18.0 with the derivative in the direction the caller seeded: 12.0 for (1, 0) and 9.0 for (0, 1), which is 2xy and x^2. `split` of that lift cuts at the pair, and what crosses the cut is read off the graph: **three** residuals -- `x`, `y`, and `x*x`, the product the backward half's rule for the second `mul` reads -- so the forward half answers a three-member tuple and the backward half turns (1, 0) into 12.0 and (0, 1) into 9.0 without computing that product again. The diagnostic reads `residuals=3` and the forward half's type is `(float, float) => (float, (float, float, float))`: the arity is the graph's, not the signature's."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_two_params.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["value= 18.0", "dfdx= 12.0", "dfdy= 9.0", "forward y= 18.0", "tangent dx= 12.0", "tangent dy= 9.0", "type=(float, float) => (float, (float, float, float, float, float)) pure residuals=5"]
+expect_stdout_contains = ["value= 18.0", "dfdx= 12.0", "dfdy= 9.0", "forward y= 18.0", "tangent dx= 12.0", "tangent dy= 9.0", "type=(float, float) => (float, (float, float, float)) pure residuals=3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
 name = "split_product_chain"
-desc = "A chain of multiplies, both ends of the composition: `f3(x) = x*x*x` and `f4(x) = x*x*x*x` at x = 2. The derivatives are the analytic ones read through the backward half -- 12 = 3x^2 and 32 = 4x^3 -- and the cut carries 3 residuals for the cubic and 4 for the quartic (`x`, `x*x`; plus `x*x*x`; plus the parameter's value port, which crosses because the tangent side reads its tangent). The forward half's type reads `(float) => (float, (float, float, float))` and `(float) => (float, (float, float, float, float))` -- the arity the graph gave it."
+desc = "A chain of multiplies, both ends of the composition: `f3(x) = x*x*x` and `f4(x) = x*x*x*x` at x = 2. The derivatives are the analytic ones read through the backward half -- 12 = 3x^2 and 32 = 4x^3 -- and the cut carries 2 residuals for the cubic and 3 for the quartic (`x`, `x*x`; plus `x*x*x`). The count growing by one per factor is the shape check: a backward half that recomputed the forward chain would print the same numbers, so the numbers alone cannot tell carrying from recomputing and the counts can. The forward half's type reads `(float) => (float, (float, float))` and `(float) => (float, (float, float, float))` -- the arity the graph gave it."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_product_chain.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["cubic y= 8.0", "cubic dx1= 12.0", "quartic y= 16.0", "quartic dx1= 32.0", "type=(float) => (float, (float, float, float)) pure residuals=3", "type=(float) => (float, (float, float, float, float)) pure residuals=4", "REINTERP split function=jvp_of_cubic", "REINTERP split function=jvp_of_quartic"]
+expect_stdout_contains = ["cubic y= 8.0", "cubic dx1= 12.0", "quartic y= 16.0", "quartic dx1= 32.0", "type=(float) => (float, (float, float)) pure residuals=2", "type=(float) => (float, (float, float, float)) pure residuals=3", "REINTERP split function=jvp_of_cubic", "REINTERP split function=jvp_of_quartic"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -148,13 +153,13 @@ timeout_ms = 20000
 
 [[tests]]
 name = "split_identity_pipeline"
-desc = "The identity graph: `reinterp<jvp>` builds a body with no operator in it, so `split` has nothing to move and the reading is the pipeline itself. The forward half gives the value the caller passed (3.0) and a one-member residual tuple -- `(3.0, (x,))`, which the diagnostic reports as `residuals=1` and the forward half's type as `(float) => (float, (float,))` -- and the backward half gives the tangent back (1.0) without reading the residual: nothing is computed on the forward side of the cut, but the tangent side reads the tangent of parameter 0, and what the reverse reads crosses. Gated on `split` existing (`test/tools/have-split.mjs`)."
+desc = "The identity graph: `reinterp<jvp>` builds a body with no operator in it, so `split` has nothing to move and the reading is the pipeline itself. The forward half gives the value the caller passed (3.0) and an **empty** residual tuple -- `(3.0, ())`, which the diagnostic reports as `residuals=0` and the forward half's type as `(float) => (float, ())` -- and the backward half gives the tangent back (1.0) without reading anything. Nothing crosses the cut because nothing is computed on the forward side of it. Gated on `split` existing (`test/tools/have-split.mjs`)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/split_identity_pipeline.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["identity y= 3", "identity dx1= 1", "type=(float) => (float, (float,)) pure residuals=1"]
+expect_stdout_contains = ["identity y= 3", "identity dx1= 1", "type=(float) => (float, ()) pure residuals=0"]
 skip_unless = ["node", "test/tools/have-split.mjs"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
