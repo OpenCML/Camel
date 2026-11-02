@@ -334,7 +334,7 @@ print family, and this operator's configuration is not a string, so its call has
 
 **作者裁的一页（`fsh-dev = d2face663`，2026-11-03 03:30）直接指向本刀的相邻判据，逐字留档：**
 
-> 「私有 kernel 要不要可写名字：**前提不成立**，A、B、C 都不选。最小例子里 `shl` 不是私有的：`stdlib/math.cml:627-632` 写着 `#op('math:shl_i') export func shl::<T>(x: T): T when is_same::<T, i32>()`，`shl_l` 同理。它是**导出的**无体声明，程序也确实写了 `1->shl<64>`。打印器那条判据『无体 kernel 声明，没有程序写这个名字』**错在把『无体』当成了『私有』**：无体只说明实现在 C++ 里，名字照样可写。」
+> 「私有 kernel 要不要可写名字：**前提不成立**，A、B、C 都不选。最小例子里 `shl` 不是私有的：`stdlib/math.cml#shl` 写着 `#op('math:shl_i') export func shl::<T>(x: T): T when is_same::<T, i32>()`，`shl_l` 同理。它是**导出的**无体声明，程序也确实写了 `1->shl<64>`。打印器那条判据『无体 kernel 声明，没有程序写这个名字』**错在把『无体』当成了『私有』**：无体只说明实现在 C++ 里，名字照样可写。」
 
 ⇒ **"无体"说的是实现在哪，"私有"说的是名字能不能写，两件事。** 本刀没有动这条判据（`operatorExpression` 里 `kernelDeclaration` 那一支仍然拒绝），所以这一族的读数照旧：**411 条**（`REFUSAL 411 ... <name> is a body-less kernel declaration, and no program writes that name`），是重扫里最大的一族，全量 3377 个文件里占 12.2%。按作者的修法——算子由一条**导出的**声明绑定时，打印那条声明的名字（`x->shl<64>`），重编译时重载按类型选回 `shl_l`；只有确实没有任何导出声明能到达的算子才算"没有可写名字"——是下一刀的事。
 
