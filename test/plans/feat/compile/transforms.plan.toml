@@ -276,6 +276,32 @@ expect_output_contains = ["vjp_loop value=90.0", "(60.0)", "vjp_loop cotangent=6
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
+# The transform's refusals are two files: the words it writes into its reading log
+# (`modules/transforms/transpose.cpp`) and the sentences it answers them with
+# (`modules/transforms/transpose_operator.cpp`). One can gain a word the other has never heard of, and
+# a sentence can outlive the word it names, and no program can see either: eight of the seventeen words
+# are not reachable from anything this tree can run, so a case that runs `camel` cannot pin them -- the
+# ones it can reach say nothing about the rest. So the check reads the two sources and holds the sets
+# together, and the property is not "every word has a sentence of its own" (a cause whose sentence
+# would only repeat the word adds nothing, and the one catch-all sentence prints the word anyway) but
+# "every word has a readable landing, and no landing is left standing without a word".
+#
+# The reds it can be are both directions: delete one sentence and its word moves into the set that
+# reads the catch-all, which is not where an unanswered word should fall; rename one word and its
+# sentence becomes a claim about a cause nothing names. Both were walked by hand before this entry was
+# written (the sentence of `state-unread` deleted, then its word renamed), and both read as reds.
+[[tests]]
+name = "transpose_refusal_words_are_answerable"
+desc = "The words `transpose` writes into its reading log and the sentences `refusalCause` answers them with, held together across the two files that hold them: all 17 words land on a non-empty sentence -- 9 in words of their own, 8 on the sentence that names the word -- no sentence waits for a word no file writes except the one cause that has a sentence and no shape yet, and the sentence that names the word exists, because every landing above leans on it. Delete one sentence and its word joins the catch-all set, which is a red; rename one word and its sentence becomes a promise nothing keeps, which is a red."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/transpose_refusal/check.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["17 words written into the log", "9 of them answered in their own words", "8 answered by the sentence that names the word", "1 sentence waiting for a word no file writes", "every landing is non-empty"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
 [[tests]]
 name = "vjp_api.carries_its_own_ruleset"
 desc = "A program whose only import is `vjp` gets a derivative: the library imports the rulesets it composes, so its caller does not have to know that `vjp` is `transpose(split(reinterp<jvp>(f)))`. For `f(x) = x*x*x` at 2 the program prints the value `8.0`, the cotangent `(12.0)` and the gradient `12.0`. The point is chosen so the value and the gradient differ, and every printed line is pinned whole: the reading was `x = 3` before, where value, cotangent and gradient are all `27.0`, so an assertion that only asked whether `27.0` appears answered yes to a gradient computed as the value it differentiates (P2-22 of the 2026-11-01 review). `expect_output_not_contains` refuses the old point outright, so a case that drifts back to it cannot pass on the ambiguous number again. Take either ruleset import out of `stdlib/vjp.cml` and the run stops at that library's own line with `transpose has no transpose for this function` or `jvp has no forward rule for :op/mul_d` -- never here, and never in a sentence of the form `not implemented yet`."
