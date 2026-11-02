@@ -1654,3 +1654,41 @@ graph '…' node 14 (10): calls 'transpose_of_rulesets.jvp::index_into<float>', 
 
 **⑥ 本轮读数**：树干净（`transpose.cpp` 已 `git checkout` 回 `f14f65031` 的状态，端口类型修复在），五条用例仍钉 `skip=law rule=idx_arr_t`，
 **全量 `8388 total, pass 8376, fail 0`**（与上一轮同一个数）。
+
+
+## 49. 实例化写死 + 签名只算一份：四条不变量 **4 → 0**，露出来的是"0 长度数组进余切"的运行期缺陷
+
+**作者的裁定（00:30）把诊断改了一个说法，照改**：不是"两处字面量"，是**"调用节点的签名不是从 `transposeSignature` 取的"**，
+**类型与实参次序是它的两个症状**；**同 `beeb887f4` 同一族，但这一处是"签名算了第二遍"**。
+
+**落地的三笔**（各一次构建、各一次跑）：
+
+| 笔 | commit | 读数 |
+| --- | --- | --- |
+| 答案类型取签名 | `2c0b12f80` | `feat/compile/transforms` 57/57，不动 |
+| 答案槽数/槽类型取签名 | `033e566fe` | 57/57；与 arm 一起量时 **8 → 4** 条不变量 |
+| 规则按被匹配节点的元素类型实例化（P1-9） | `cbdf86498` | 57/57；与 arm 一起量时 **4 → 0** 条不变量 |
+
+**"签名算两遍"的三处位置**（都在 `transpose.cpp` 同一个调用点）：`answerType` 用 `calleeParams` 重算（1745-1749）、
+被调值写成 `Type::Float64()`（1759）、答案槽数按 `calleeParams` 给而不是按"有切空间的参数"给（1785-1793）。
+**三处都改成从 `transposeSignature` 的返回值读**。
+
+**实例化写死（审查 P1-9）的改法**：把"规则在什么类型上是泛型的"从一个答案变成一处实现——
+`modules/transforms/rule_types.h` 的 `ruleElementTypeOf`/`firstOperandTypeOf`，**从 `vmap.cpp` 原样搬出**，
+`vmap` 与 `jvp` 都读它；`buildRuleTangent` 因此收一个 `elementType` 参数，不再把 `float` 写进去。
+**注意 `module.cpp:74` 那处（`printRuleUris`）没有"被匹配节点"可问**——它是列出规则名与算子的诊断，按 `float` 实例化只是取 `lhsOperatorUri`，
+这一处留原样，理由写在这里免得下一个人以为是漏改。
+
+**合起来量（arm 在场）**：
+
+| 量 | 改前 | 改后 |
+| --- | --- | --- |
+| `breaks its edge invariants` | **4** 条（全是 `passes a int as ordinary argument 0 of index_into`） | **0** |
+| `skip=law rule=idx_arr_t` | 存在 | **不存在** |
+| 运行期 | 到不了 | **`Camel Invariant Violation: Array::getSlot`，`element 0 of an array that holds 0`**，`expected exit 1, got null` |
+
+**⇒ 最值钱的一条：移交单里"静默中止、`got null`"是真的**，**它一直被"拒绝"挡在后面**；今天图能建、叫得对，
+剩下的是**一个 0 元素的数组进到了 `:tangent/zeros_arr`/`scatter_add_arr`**（`struct.cpp:1063-1085` 用 `value->shapeSpan()` 建零数组）。
+
+**身份裁定记下**：**被转置成员只靠图 id 认身份，名字只给人读**；`state.callees`（`transpose.cpp:1702-1716`）**已经是按 id 的记忆**，
+所以"同一次转置里重复建成员图"今天不存在，不必再加一层。**`T[?]`/命名那一支不走名字。**
