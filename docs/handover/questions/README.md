@@ -14,7 +14,7 @@
 
 ## 现在在等作者：0 页
 
-2026-11-02 01:10 的 `cml-var-version-in-printed-text` 已裁，在 `reviews/`。
+2026-11-02 01:30：`cml-var-version-in-printed-text`（01:10）与 `whether-the-release-gate-names-plans-or-runs-the-tree`（01:30）都已裁，在 `reviews/`，裁定见 `reviews/questions-2026-10-29.md`。
 
 ## 已裁：按还堵着的活排
 
