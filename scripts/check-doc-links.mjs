@@ -276,7 +276,12 @@ function checkAnsweredPages() {
     // (`reviews/questions-<date>.md`), where the reply is a line and not a file. Both are the
     // author's rule of 18:30, and reading only the first would leave every page of a batch
     // looking unanswered.
-    const indexFiles = reviews.filter((name) => name.startsWith('questions-'))
+    // The two halves do different jobs and must not be merged: a file of the same name is strong
+    // evidence, so per-question replies (`questions-<slug>.md`) are matched by NAME only and their
+    // text is never read; a name inside a batch index (`questions-<date>[-word].md`) is strong
+    // because that is where a batch's replies are lines rather than files. A word found in the
+    // body of some other page's reply is weak evidence and would report a question nobody answered.
+    const indexFiles = reviews.filter((name) => /^questions-\d{4}-\d{2}-\d{2}(-[A-Za-z0-9_]+)?\.md$/.test(name))
     const indexLines = indexFiles.map((name) => ({
         name,
         lines: fs.readFileSync(path.join(REVIEWS_DIR, name), 'utf8').split(/\r?\n/),
@@ -286,7 +291,7 @@ function checkAnsweredPages() {
         if (!page.endsWith('.md') || page === 'README.md') continue
         const stem = pageStem(page)
         const answered = reviews.filter((review) => {
-            if (review.startsWith('questions-')) return false
+            if (review.startsWith('questions-')) return false // matched by name only; see indexFiles
             const reviewStem = pageStem(review)
             return reviewStem === stem || reviewStem.endsWith(`-${stem}`) || reviewStem.endsWith(stem)
         })
