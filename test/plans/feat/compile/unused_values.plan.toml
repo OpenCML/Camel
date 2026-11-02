@@ -111,3 +111,29 @@ args = ["${case}", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["one input, one answer: PASS (40 compiles"]
 timeout_ms = 120000
+
+[[tests]]
+name = "unused_values.called_fallible"
+desc = "A `T!` called as a function is an error, not an invariant violation and not a dropped statement: the call has nothing to run, the error the value may hold has nowhere to be read, and the `CalledFallibleValue` diagnostic points at the call. Before, the builder aborted in `visitLinkNode` (the target of a LINK is not a function); reporting it as a warning instead let the statement be dropped and the run end with exit code 0 as if the call had been made."
+kind = "negative"
+case = "../../../cases/compile/unused_values/called_fallible.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::CalledFallibleValue', input.diagnostics[0].name)
+assert(input.diagnostics[0].line === 16, JSON.stringify(input.diagnostics[0]))
+"""
+
+[[tests]]
+name = "unused_values.called_fallible_pipeline"
+desc = "The shape the report was written from: `let step = loss->cse->with_grad` then `println(step<2.0>(3.0))`. The call of the fallible value is `CalledFallibleValue` at the call, the run stops with exit 1, and the entry is not reported as missing a `main` -- the module has one, and `EntryModuleMissingMain` here would send the writer to a function that is written."
+kind = "negative"
+case = "../../../cases/compile/unused_values/called_fallible_pipeline.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::CalledFallibleValue', input.diagnostics[0].name)
+assert(input.diagnostics[0].line === 12 && input.diagnostics[0].column === 22, JSON.stringify(input.diagnostics[0]))
+"""
