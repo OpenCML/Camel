@@ -281,6 +281,24 @@ print family, and this operator's configuration is not a string, so its call has
 
 
 
+
+**2026-11-02 第二十四刀：五次都没落地，交班（页：`docs/handover/questions/2026-11-02-cml-sync-tail-write.md`）**
+
+按第二十三刀的入口判据动手，**只改入口**（`handsTail` 认"`tail` 站在退出链上"+ 放开 `regionNeedsSync(0)`），探针原文：
+
+```
+[cml-probe2] region=0 tail=4 exit=7 sync=1 write=-1
+[cml-probe2] region=0 tail=6 exit=11 sync=1 write=-1
+```
+
+**`write` 仍是 `-1`**——我比的是链上的闸门，`tail` 是链**底**的值节点，判据还是不成立；而且**放开那条守卫单独就把 `var_param` 契约用例打坏了**（`feat.trans.cml` 报 `AssertionError`）。按"`write == -1` 就停、`var_param` 坏就退"停手，全部回退。
+
+**这一刀把两件事钉死了**：①`regionNeedsSync(0)` 那条守卫**有承重**，不能只去掉；②"`sync` 体的值就是它最后一次写的值"这个前提本身没被证明——值节点同时被写和退出闸门读，正是因为**建图侧认为它是两个使用者**。⇒ 若建图侧是自觉的，那打印器把一句拆成三句是**忠实**的，要改的是建图或判据定义，不是打印器。
+
+已写成待修项 + 最小复现（`g2` **7 对 6**、`DIFFERENT`、答案两侧都是 `1`），交下一班；连续五轮不落地，按你的话换现场。
+
+**读数未动**（语料 3377）：`printed 559 / checked 552 / equivalent 511 / not_equivalent 41 / unfaithful 7 / families 53 / DIFFERENT 48`。
+
 **2026-11-02 第二十三刀试过并回退：改"值节点有几个使用者"打坏了 `var_param`，而 `closure_var` 一字未动**
 
 按上一刀的形状动手，四步都试了：把退出链（`GATE`/`COPY`，从 exit 往下）从 `valueUsers` 里排除、让 `blockValueWrite` 对 `sync` 体也生效、在 `assignmentHandingOn` 里穿过闸门找写的值、以及把"退出链的尾就是值"这条也认了。**结果：`closure_var` 的打印文本一字未变，而 `test/cases/trans/cml/var_param.cml` 的契约用例坏了**（`feat.trans.cml` 报 `AssertionError: var_param.before.json / after.json`）⇒ **按"不许把结构差换成语义差"的纪律，全部回退。**
