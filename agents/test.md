@@ -115,3 +115,4 @@ and whatever nobody has seen yet.
 than an hour of probes: two cases that crashed in `jvp_add` and `jvp_mul` were already repaired on
 `origin/lane-lit2` (`19f0b05e8`, `0aed45eb6`) and the fix had not been merged, so the failure read
 like a new defect in the tree under our hands.
+A green run proves the `GUARD`s it walked past, not the `ASSERT`s it compiled out: `GUARD` is defined before `#ifdef NDEBUG` and its comment says it is alive in the build that ships, while `ASSERT` becomes `((void)0)` under it.
