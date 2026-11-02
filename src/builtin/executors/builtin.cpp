@@ -107,13 +107,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/f6tof", __f6tof__},
         {"op/f6tod", __f6tod__},
 
-        {"op/itos", __itos__},
-        {"op/ltos", __ltos__},
-        {"op/ftos", __ftos__},
-        {"op/dtos", __dtos__},
-        {"op/stos", __stos__},
-        {"op/ctos", __atos__},
-        {"op/ztos", __atos__},
         {"op/atos", __atos__},
 
         // The scalar operations of the two reduced-precision floating types (design principles

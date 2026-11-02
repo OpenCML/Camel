@@ -91,26 +91,10 @@ void declareResourcesAndDefinitions() {
  * axis, which is one row's elements.
  */
 void declareVmapRuleKeys() {
-    camel::core::bindVmapRule({"tensor:matmul", "rulesets.vmap", "matmul", 2});
-    camel::core::bindVmapRule({"tensor:sum", "rulesets.vmap", "sum", 1});
-    camel::core::bindVmapRule({"tensor:mean", "rulesets.vmap", "mean", 1});
-    camel::core::bindVmapRule({"tensor:max", "rulesets.vmap", "max", 1});
-    camel::core::bindVmapRule({"tensor:min", "rulesets.vmap", "min", 1});
-    camel::core::bindVmapRule({"tensor:argmax", "rulesets.vmap", "argmax", 1});
-    camel::core::bindVmapRule({"tensor:argmin", "rulesets.vmap", "argmin", 1});
-    camel::core::bindVmapRule({"tensor:sum_axis", "rulesets.vmap", "sum_axis", 3});
-    camel::core::bindVmapRule({"tensor:mean_axis", "rulesets.vmap", "mean_axis", 3});
-    camel::core::bindVmapRule({"tensor:max_axis", "rulesets.vmap", "max_axis", 3});
-    camel::core::bindVmapRule({"tensor:min_axis", "rulesets.vmap", "min_axis", 3});
-    camel::core::bindVmapRule({"tensor:argmax_axis", "rulesets.vmap", "argmax_axis", 3});
-    camel::core::bindVmapRule({"tensor:argmin_axis", "rulesets.vmap", "argmin_axis", 3});
-    camel::core::bindVmapRule({"tensor:reshape", "rulesets.vmap", "reshape", 1});
-    camel::core::bindVmapRule({"tensor:unsqueeze", "rulesets.vmap", "unsqueeze", 1});
-    camel::core::bindVmapRule({"tensor:transpose", "rulesets.vmap", "transpose", 1});
-    camel::core::bindVmapRule({"tensor:permute", "rulesets.vmap", "permute", 1});
-    camel::core::bindVmapRule({"tensor:concat", "rulesets.vmap", "concat", 2});
-    camel::core::bindVmapRule({"tensor:dim", "rulesets.vmap", "dim", 1});
-    camel::core::bindVmapRule({"tensor:where", "rulesets.vmap", "where", 3});
+    // Nothing to declare: the key a batching rule is filed under is read off the operator itself
+    // (`camel/core/forward.h#ruleKeyOf`), and every tensor operator here is written as a call of its
+    // own name -- `matmul(x, w)`, `sum_axis(xs, axis, keepdims)`, `where(c, a, b)`. The arity is the
+    // one the family's index filed it under, so this function would only be able to say it twice.
 }
 
 } // namespace

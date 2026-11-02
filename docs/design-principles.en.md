@@ -297,7 +297,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 
 ### 4.3 Operator overloading
 
-- **Users can overload operators in Camel source**, written `func operator &(a: Mask, b: Mask): Mask` (the form is provisional). What can be overloaded are the operators that today fall onto `__x__` functions; `&&` and `||` and constructs such as `??`, `!!` and `->` cannot be overloaded. Names of the form `__x__` are still reserved and users do not write them directly.
+- **Users can overload operators in Camel source**, written `func operator &(a: Mask, b: Mask): Mask`; indexing is written `func operator [](xs: T[], i: int): T` (both brackets, and otherwise the same `func operator` followed by the symbol as any other; the form is provisional). What can be overloaded are the operators that today fall onto `__x__` functions; `&&` and `||` and constructs such as `??`, `!!` and `->` cannot be overloaded. Names of the form `__x__` are still reserved and users do not write them directly.
 - A user's overload takes precedence when it is more specific than the built-in; overloading `==` gives `!=` (`!=` cannot be overloaded by itself); an operator declared in a namespace block belongs to the module.
 
 ### 4.4 Functions and parameters

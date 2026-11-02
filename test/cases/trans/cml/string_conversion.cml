@@ -1,0 +1,28 @@
+// `string(x)` is a conversion call, not an operator of the language: it has no symbol among the
+// overloadable forms (`src/core/operator_names.cpp`), and every source type reaches it through one
+// operator whose kernel is chosen by type. Printing the program must write `string(x)` and never
+// the kernel's own name, and the printed source must compile and run like the original.
+//
+// Both positions matter: a value position (`string(count)`) and a parameter position, where the
+// call is an argument rather than the whole expression.
+let scale = 2.5
+
+func shout(text: string): string {
+    return text + '!'
+}
+
+func describe(count: int): string sync {
+    let label = 'i' + string(count)
+    let called = shout(string(count * 2))
+    println(label)
+    println(called)
+    return label
+}
+
+func main(): int sync {
+    let n = 7
+    println(string(n))
+    println(string(scale))
+    println(describe(n))
+    return 0
+}

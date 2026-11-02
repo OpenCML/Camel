@@ -2604,11 +2604,20 @@ class CmlPrinter {
         // `transpose(f)` and `split(f)` of `transforms`). A shape read off a Camel declaration is
         // the callee's name and nothing more -- the declaration may be a kernel the module keeps
         // private (`#impl(sum_kernel)`) -- so such an operator of a module is still refused.
-        const bool writable = callForm.has_value() && callForm->withCount == 0 &&
+        // `:op/` is the language's own namespace for operators: the symbol of every group there is
+        // fixed by the language, so a program writes `+` wherever it is -- not `__add__`, which is
+        // the group's internal name. An operator of a module is spelled by the name that module
+        // exports, so the declaration's name is what a program writes for those. The test is who
+        // owns the name, not whether a symbol exists and not how the name was derived.
+        const bool languageOwned =
+            uri.starts_with(":op/") &&
+            camel::core::operatorSymbolOf(
+                camel::core::OperatorTable::instance().groupOf(uri)) != nullptr;
+        const bool writable = !languageOwned && callForm.has_value() && callForm->withCount == 0 &&
                               (callForm->declaredByModule || uri.starts_with(":"));
         if (writable) {
             name = callForm->name;
-        } else if (callForm.has_value() && callForm->kernelDeclaration) {
+        } else if (callForm.has_value() && callForm->kernelDeclaration && !languageOwned) {
             // There is a declaration and it has a name, but not one a program writes: a body-less
             // declaration is the module's own kernel (`array:sum_l` is the `sum_kernel` behind
             // `array::sum`), and the language never writes a kernel's name. Naming the kernel says
