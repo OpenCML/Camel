@@ -182,3 +182,54 @@ TRANSPOSE function=mt skip=call node=4 callee=autodiff::mul_tangent<float>
 所以"对切线自身求四元余切"在本树里**没有可写的拼法**：那条用例问的是设计已经收回的问题，
 `…is_linear_in_the_cotangent` 随之删除；它独有的"一个种子分不出 pullback 与导数表"并进
 `transpose_unread_parameters`（那条本来就跑 ct=1 和 ct=2 并钉两个元组）。
+
+## 八、跨区域读 Port 的结构校验：检测力够，但今天的图不合法（2026-11-03，`lane-norm-arity`）
+
+作者 22:50 裁的"结构校验补一条"（区域里的节点只能读本区域的节点、本区域的端口和常量；读外层
+区域的 Port 而不经循环／分支的输入，`commit` 时拒绝，点名节点与区域）已经写出来过，**检测力够，
+但没有上树**：挂点是 `src/runtime/graph_edges.cpp#checkGraphCrossReferences`（冻结图经由
+`EdgeChecker` 那一路、草稿经由 `src/runtime/draft_session.cpp#encodeDraft` 的编码前检查，一处
+实现两个调用点共用）。这一族既有的三项（branch↔join 互指、region 的 owner/result 在范围内）都只是
+字符串，最终形态是 `Pass 'X' failed with an internal error: … breaks its edge invariants (N
+violation(s))`，**没有诊断码**，所以它不进 `diagnostics/registry.tsv` —— 加一行只会是一行没人发的码。
+
+加上之后 `feat/compile/transforms` 从 **59 / 11** 变成 **42 / 28**，新增红 17 条，全部是原来绿的：
+
+```
+jvp_loop.state_is_lifted / array_state_is_lifted / value_only_is_still_lifted /
+init_from_input_is_lifted / state_read_twice_is_lifted
+vjp_loop_gradient.nvm / .fvm / .jit / .prl
+jvp_branch.arms_are_each_interpreted     jvp_of_a_power      reinterp_builds_its_own_graph
+transpose_runs_a_loop_rounds_backwards   transpose_walks_each_arm_of_a_branch
+transpose_no_tangent.bool_condition      transpose_loop_escape.names_the_value_one_read
+transpose_loop_escape.one_value_read_twice_is_one_capture
+```
+
+读数（原样）说明被拦的是什么形状：
+
+```
+camel: internal error: Runtime graph 'read_one' breaks its edge invariants (1 violation(s)):
+  graph 'read_one' node 9 in region 1: it reads port 0 of region 0
+```
+
+**分类（21 处违规，全部只读地对照了源码）**：21 / 21 是"捕获（不变量）"类，**0 处**是 iterable／
+初始对那类。理由是三段式的：iterable 与初始状态是 LOOP 节点的 norm 输入，body 拿到的是**自己的
+region port**（`nodeRegion(port) == region`，检查天然放行），所以 body 去够 region 0 的口只可能是
+捕获 —— `jvp_loop.cml` 的注释自述"`x` is captured into the loop body"，`read_one`／`read_twice`／
+`read_outer` 的 body 分别只读 `x`、`x` 两次、`k + x`，`jvp_of_*` 读的是抬升后写在 region 0 上的
+pair 成员（`split.cpp#regionClosure` 所谓 `invariants`），`transpose_of_thrice` 的 body 只有
+`s * 2.0`（常量是 Data 节点，不受检），所以被读的那个口不可能是 iterable。其中 **16 条读在 loop
+body**、**5 条读在 arm**（`pick`、两个 `if` 程序的 `f`、`rulesets.jvp::pow_tangent<float>` 的三个
+参数口）。
+
+**所以这不是尺度问题，是顺序问题**：检查要成立，前提是先把捕获改成经循环输入进体（作者 22:50 的
+甲，归 `splitlift`）。校验已撤回，patch 留在本机 `D:\Temp\region-port-check.patch`（未入库），它是
+那条根修的**完成判据**：
+
+- ① 重放 `D:\Temp\region-port-check.patch` 后，`feat/compile/transforms` 应回到 **59 / 11**；
+- ② 仍红的名字必须**一字不差**是这 5 条：`jvp_branch.arms_are_each_interpreted`、
+  `transpose_no_tangent.bool_condition`、`transpose_walks_each_arm_of_a_branch`、`jvp_of_a_power`、
+  `reinterp_builds_its_own_graph`；
+- ③ 上面 16 条 loop body 里**任何一条**仍红 ⇒ 停、点名（那才是循环根修没覆盖的形状）。
+
+那 5 条是**另一种构造**：分支臂也要把捕获复制成 arm 输入，不在循环那条修的范围里。
