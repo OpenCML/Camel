@@ -1912,15 +1912,42 @@ function writeLogFiles(plan, test, result, status, logDir) {
 }
 
 /**
+/**
  * A test with `backends = ["nvm", "fvm", ...]` is one test per back end, named
  * `<name>.<backend>`, in that order. `${backend}` in its `args` is the pass list `run_<backend>`
  * of test/vars.toml. Every assertion of the entry holds for each of them; in addition, each back
  * end after the first must equal the first on the fields listed in `backends_agree`. A back end
  * listed in `known_fail` is expected to fail (see main).
+ *
+ * A test with no `backends` list is one run, and its mark is `known_fail = true`. The mark used to
+ * be read *after* the early return for that shape, so `known_fail` on such a test did nothing at
+ * all: the case failed, the run went red, and the mark was never mentioned. `20860eb01` found it
+ * and fixed the one case where it showed -- by giving that case a `fvm` back end so the mark
+ * applied -- which fixed the symptom; the author's 01:50 ruling asked for the mechanism. Now the
+ * shape decides how the mark is written, and a mark written in the other shape's words is refused
+ * by name instead of being ignored.
  */
 function expandBackends(test) {
-    if (!Array.isArray(test.backends)) return [test]
-    const knownFail = new Set(test.known_fail || [])
+    const marked = test.known_fail ?? false
+    if (!Array.isArray(test.backends)) {
+        if (marked === false || (Array.isArray(marked) && marked.length === 0)) return [test]
+        if (marked !== true) {
+            throw new Error(
+                `known_fail on ${test.name} names back ends (${JSON.stringify(marked)}), but the test has no ` +
+                    `backends list, so no back end of that name runs here: write known_fail = true`,
+            )
+        }
+        return [{ ...test, __knownFail: true }]
+    }
+    if (marked === true) {
+        throw new Error(
+            `known_fail on ${test.name} is true, but the test has backends: name the back ends that fail`,
+        )
+    }
+    if (marked !== false && !Array.isArray(marked)) {
+        throw new Error(`known_fail on ${test.name} must be true or a list of back ends; it is ${JSON.stringify(marked)}`)
+    }
+    const knownFail = new Set(marked === false ? [] : marked)
     for (const backend of knownFail) {
         if (!test.backends.includes(backend)) {
             throw new Error(`known_fail names '${backend}', which is not in backends of ${test.name}`)
@@ -2853,7 +2880,10 @@ async function executePlans(plans, options, sharedVars, logDir) {
                     } else {
                         result.status = 'fail'
                         result.failures.push(
-                            `marked known_fail on '${entry.test.__backend}' but passes: remove the mark`
+                            `marked known_fail` +
+                                (entry.test.__backend
+                                    ? ` on '${entry.test.__backend}' but passes: remove the mark`
+                                    : ' but passes, so the mark is out of date and must be removed'),
                         )
                     }
                 }
