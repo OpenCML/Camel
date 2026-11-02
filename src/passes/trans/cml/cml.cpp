@@ -63,6 +63,7 @@ using namespace camel::core::rtdata;
 using camel::core::SymId;
 using camel::core::type::ArrayType;
 using camel::core::type::FunctionType;
+using camel::core::type::StructDecl;
 using camel::core::type::StructType;
 using camel::core::type::TupleType;
 using camel::core::type::Type;
@@ -309,35 +310,18 @@ class CmlPrinter {
         classifyLambdas();
         collectTopLevelNames(root);
         findEntry(root);
+        collectImports();
+        // The named struct types have to be known before a signature is validated: a signature
+        // that names `V` is printable only because the printed program will declare `V`.
+        collectNamedTypes();
+        checkNamedTypeNames();
+        orderNamedTypes();
         for (GCGraph *graph : graphs_) {
             validateGraph(graph, graph == root);
         }
         scanBigConstants();
         if (!bigConstants_.empty()) {
             return;
-        }
-        collectImports();
-        // A module imported for its operators is imported whole (`import tensor`): the program
-        // does not write a name of it, and the module's declarations are what give the signs their
-        // rules. A module whose names are written is imported by name, and a module that needs both
-        // is imported whole, which brings the names in too.
-        for (const std::string &module : moduleImports_) {
-            out_ << "import " << module << '\n';
-        }
-        for (const auto &[module, names] : imports_) {
-            if (moduleImports_.contains(module)) {
-                continue;
-            }
-            out_ << "import { ";
-            bool first = true;
-            for (const std::string &name : names) {
-                out_ << (first ? "" : ", ") << name;
-                first = false;
-            }
-            out_ << " } from " << module << '\n';
-        }
-        if (!imports_.empty() || !moduleImports_.empty()) {
-            out_ << '\n';
         }
 
         graph_    = root;
@@ -372,6 +356,44 @@ class CmlPrinter {
         for (GCGraph *graph : functions) {
             printFunction(graph);
         }
+
+        // The body is written first and the header last, because which `type` statements the
+        // program needs is known only once its text exists: a named type is declared when the
+        // program *writes* its name, and a type the graph carries in a place nothing prints needs
+        // no declaration (writing one would add a declaration the source never had).
+        orderNamedTypes();
+        // A module imported for its operators is imported whole (`import tensor`): the program
+        // does not write a name of it, and the module's declarations are what give the signs their
+        // rules. A module whose names are written is imported by name, and a module that needs both
+        // is imported whole, which brings the names in too.
+        for (const std::string &module : moduleImports_) {
+            out_ << "import " << module << '\n';
+        }
+        for (const auto &[module, names] : imports_) {
+            if (moduleImports_.contains(module)) {
+                continue;
+            }
+            out_ << "import { ";
+            bool first = true;
+            for (const std::string &name : names) {
+                out_ << (first ? "" : ", ") << name;
+                first = false;
+            }
+            out_ << " } from " << module << '\n';
+        }
+        if (!imports_.empty() || !moduleImports_.empty()) {
+            out_ << '\n';
+        }
+        // One `type` statement per named struct type the program names, before the text that names
+        // it: `func f(x: V): int` on its own is `UnresolvedTypeReference: 'V'`, and the declaration
+        // is the half the printed program was missing (see `collectNamedTypes`).
+        for (const StructType *record : namedTypeOrder_) {
+            out_ << namedTypeText(record) << '\n';
+        }
+        if (!namedTypeOrder_.empty()) {
+            out_ << '\n';
+        }
+        out_ << body_;
     }
 
   private:
@@ -410,6 +432,20 @@ class CmlPrinter {
     /// The modules whose operators the printed program writes with a sign (see `collectImports`):
     /// the module is imported whole, since the sign is bound to its operator by its declarations.
     std::set<std::string> moduleImports_;
+    /// The named struct types the printed program mentions, in discovery order, and the ones for
+    /// which no `type` statement can be written, with the reason (see `collectNamedTypes`).
+    std::vector<const StructType *> namedTypeRecords_;
+    std::unordered_set<const StructType *> namedTypeSeen_;
+    std::unordered_map<const StructType *, std::string> namedTypeWhy_;
+    /// The same types in an order a `type` statement can be read in: a field type's declaration
+    /// first (see `orderNamedTypes`).
+    std::vector<const StructType *> namedTypeOrder_;
+    /// The named types the printed text actually names: only these are declared, so a type the
+    /// graph carries where nothing prints it does not add a declaration the source never had.
+    std::unordered_set<const StructType *> namedTypeUsed_;
+    /// The program's text without its header. The header carries one `type` statement per named
+    /// type the text names, and that is known only after the text is written.
+    std::string body_;
     // Constants bound before the statement that uses them. `1 + 2` written out comes back folded to
     // `3`: the front end folds an operator whose operands are both literals, so a graph that holds
     // those three nodes would come back as one. A `let` of a literal is that literal's node and
@@ -723,10 +759,19 @@ class CmlPrinter {
         }
         case TypeCode::Struct: {
             const auto *record = static_cast<const StructType *>(type);
-            if (record->named() || record->typeArgCount() != 0) {
+            if (record->named()) {
+                // The program writes the type's name, and `run` writes one `type` statement per
+                // named type it mentions, so the name is declared. Its fields are the declaration
+                // `collectNamedTypes` already settled; walking into them here would never end for
+                // a type that mentions itself.
+                if (namedTypePrintable(record)) {
+                    return;
+                }
                 fail(
                     camel::runtime::kInvalidNodeRef,
-                    std::format("{} is the named type '{}'", where, type->toString()));
+                    std::format(
+                        "{} is the named type '{}', whose declaration cannot be printed: {}",
+                        where, type->toString(), namedTypeObstacleOf(record)));
             }
             for (size_t i = 0; i < record->size(); ++i) {
                 checkType(record->typeAt(i), "a struct field");
@@ -806,7 +851,7 @@ class CmlPrinter {
         if (hasFunction(type)) {
             return {};
         }
-        return ": " + typeText(type);
+        return ": " + writtenTypeText(type);
     }
 
     /// `resetNames` is false for a lambda's body, which is written inside the text of the body that
@@ -1345,9 +1390,10 @@ class CmlPrinter {
 
     void appendLines() {
         for (const std::string &line : lines_) {
-            out_ << line << '\n';
+            body_ += line;
+            body_ += '\n';
         }
-        out_ << '\n';
+        body_ += '\n';
         lines_.clear();
     }
 
@@ -1387,6 +1433,403 @@ class CmlPrinter {
                 }
             }
         }
+    }
+
+    // ---- named struct types ---------------------------------------------------------------
+    //
+    // A named struct type is printed by its name (`V`), and a program that writes the name has to
+    // declare it: `func f(x: V): int` on its own does not compile (`UnresolvedTypeReference:
+    // 'V'`), while the same function after `type V = { x: int }` does. Nothing in the graph gives
+    // the second half: the field table is on the type (`StructType::size()` / `typeAt(i)` /
+    // `fieldName(i)`), so the declaration can be written, but the printer had no `type` emitter
+    // -- and importing the declaring module instead is not a general substitute, because an
+    // import only brings a type in when the module is exported *and* resolvable from where the
+    // printed file is compiled (the corpus compiles it in a temporary directory, where a
+    // case-local module is on no search path).
+    //
+    // So: collect the named types the program mentions, decide for each whether a `type`
+    // statement can be written, and refuse -- with the reason naming which half is missing -- the
+    // ones that cannot.
+
+    /// Whether a name can be written for this type at all, and if not, why not.
+    std::string namedTypeObstacle(const StructType *record) const {
+        const StructDecl *decl = record->decl();
+        if (decl == nullptr) {
+            return "the type has no declaration";
+        }
+        if (decl->generic() || record->typeArgCount() != 0) {
+            return "a generic declaration, and the printer writes no type parameters";
+        }
+        if (!isIdentifier(decl->name())) {
+            return std::format("a name that is not a source identifier ('{}')", decl->name());
+        }
+        if (decl->handle()) {
+            return "a `#resource` declaration, and the tag is not readable from the type";
+        }
+        for (size_t i = 0; i < record->size(); ++i) {
+            if (!isIdentifier(record->fieldName(i))) {
+                return std::format(
+                    "a field name that is not a source identifier ('{}')",
+                    std::string(record->fieldName(i)));
+            }
+            if (record->typeAt(i) == nullptr) {
+                return std::format("a field ('{}') with no type", std::string(record->fieldName(i)));
+            }
+        }
+        return {};
+    }
+
+    /// Records every named struct type `type` mentions, and every named type their fields mention.
+    void visitNamedTypes(const Type *type) {
+        if (type == nullptr) {
+            return;
+        }
+        switch (type->code()) {
+        case TypeCode::Array:
+            visitNamedTypes(static_cast<const ArrayType *>(type)->elemType());
+            return;
+        case TypeCode::Tuple: {
+            const auto *tuple = static_cast<const TupleType *>(type);
+            if (tuple->isTagged() || tuple->isNullable() || tuple->isCell()) {
+                return; // refused where it is printed, and it declares nothing
+            }
+            for (size_t i = 0; i < tuple->size(); ++i) {
+                visitNamedTypes(tuple->typeAt(i));
+            }
+            return;
+        }
+        case TypeCode::Struct: {
+            const auto *record = static_cast<const StructType *>(type);
+            if (!record->named()) {
+                for (size_t i = 0; i < record->size(); ++i) {
+                    visitNamedTypes(record->typeAt(i));
+                }
+                return;
+            }
+            noteNamedType(record);
+            return;
+        }
+        case TypeCode::Function: {
+            const auto *function = static_cast<const FunctionType *>(type);
+            for (size_t i = 0; i < function->normTypesCount(); ++i) {
+                visitNamedTypes(function->normTypeAt(i));
+            }
+            if (function->hasExitType()) {
+                visitNamedTypes(function->exitType());
+            }
+            return;
+        }
+        default:
+            return;
+        }
+    }
+
+    void noteNamedType(const StructType *record) {
+        if (!namedTypeSeen_.insert(record).second) {
+            return;
+        }
+        namedTypeRecords_.push_back(record);
+        const std::string obstacle = namedTypeObstacle(record);
+        if (!obstacle.empty()) {
+            namedTypeWhy_[record] = obstacle;
+            return;
+        }
+        // The fields are what the declaration writes, so their own types are needed too. A type
+        // that mentions itself ends here: it is already recorded.
+        for (size_t i = 0; i < record->size(); ++i) {
+            visitNamedTypes(record->typeAt(i));
+        }
+        // A field that names a type with no writable declaration makes this declaration
+        // unwritable as well: writing `type A = { b: B }` where `B` cannot be declared would
+        // name a type the printed program has no declaration for.
+        for (size_t i = 0; i < record->size(); ++i) {
+            const std::string nested = unwritableInside(record->typeAt(i));
+            if (!nested.empty()) {
+                namedTypeWhy_[record] = std::format(
+                    "its field '{}' has a type whose declaration cannot be printed: {}",
+                    std::string(record->fieldName(i)), nested);
+                return;
+            }
+        }
+    }
+
+    /// The obstacle of the first named type `type` mentions whose declaration cannot be written,
+    /// or nothing. A named type is looked up rather than walked into: its own fields were settled
+    /// when it was recorded, and a type that mentions itself would never end.
+    std::string unwritableInside(const Type *type) const {
+        if (type == nullptr) {
+            return {};
+        }
+        switch (type->code()) {
+        case TypeCode::Array:
+            return unwritableInside(static_cast<const ArrayType *>(type)->elemType());
+        case TypeCode::Tuple: {
+            const auto *tuple = static_cast<const TupleType *>(type);
+            if (tuple->isTagged() || tuple->isNullable() || tuple->isCell()) {
+                return {};
+            }
+            for (size_t i = 0; i < tuple->size(); ++i) {
+                const std::string nested = unwritableInside(tuple->typeAt(i));
+                if (!nested.empty()) {
+                    return nested;
+                }
+            }
+            return {};
+        }
+        case TypeCode::Struct: {
+            const auto *record = static_cast<const StructType *>(type);
+            if (record->named()) {
+                const auto found = namedTypeWhy_.find(record);
+                return found != namedTypeWhy_.end() ? found->second : std::string{};
+            }
+            for (size_t i = 0; i < record->size(); ++i) {
+                const std::string nested = unwritableInside(record->typeAt(i));
+                if (!nested.empty()) {
+                    return nested;
+                }
+            }
+            return {};
+        }
+        case TypeCode::Function: {
+            const auto *function = static_cast<const FunctionType *>(type);
+            for (size_t i = 0; i < function->normTypesCount(); ++i) {
+                const std::string nested = unwritableInside(function->normTypeAt(i));
+                if (!nested.empty()) {
+                    return nested;
+                }
+            }
+            return function->hasExitType() ? unwritableInside(function->exitType()) : std::string{};
+        }
+        default:
+            return {};
+        }
+    }
+
+    void collectNamedTypes() {
+        for (const GCGraph *graph : graphs_) {
+            const FunctionType *type = graph->funcType();
+            if (type != nullptr) {
+                for (size_t i = 0; i < type->withTypesCount(); ++i) {
+                    visitNamedTypes(type->withTypeAt(i));
+                }
+                for (size_t i = 0; i < type->normTypesCount(); ++i) {
+                    visitNamedTypes(type->normTypeAt(i));
+                }
+                if (type->hasExitType()) {
+                    visitNamedTypes(type->exitType());
+                }
+            }
+            for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+                visitNamedTypes((*it)->dataType());
+            }
+        }
+    }
+
+    /// A type statement has to be readable: its name is a name of the printed module, so it
+    /// cannot be a name the module gives something else, and two different types cannot share it.
+    void checkNamedTypeNames() {
+        std::map<std::string, const StructType *> byName;
+        for (const StructType *record : namedTypeRecords_) {
+            if (namedTypeWhy_.contains(record)) {
+                continue;
+            }
+            const std::string name = record->decl()->name();
+            if (topLevelNames_.contains(name)) {
+                namedTypeWhy_[record] =
+                    std::format("its name '{}' is also a function the program declares", name);
+                continue;
+            }
+            bool imported = false;
+            for (const auto &[module, names] : imports_) {
+                imported = imported || module == name || names.contains(name);
+            }
+            for (const std::string &module : moduleImports_) {
+                imported = imported || module == name;
+            }
+            if (imported) {
+                namedTypeWhy_[record] = std::format(
+                    "its name '{}' is also a name the program imports", name);
+                continue;
+            }
+            const auto [found, inserted] = byName.emplace(name, record);
+            if (!inserted) {
+                namedTypeWhy_[found->second] = std::format(
+                    "two different types the program uses are both named '{}'", name);
+                namedTypeWhy_[record] = namedTypeWhy_[found->second];
+            }
+        }
+    }
+
+    /// Puts the declarations in an order a `type` statement can be read in: a field type's
+    /// declaration first. A type that mentions itself is the one cycle a declaration can write
+    /// (`type Node = { children: Node[] }`); a cycle between two types is refused, because
+    /// neither can be written before the other.
+    void orderNamedTypes() {
+        namedTypeOrder_.clear();
+        std::vector<const StructType *> stack;
+        std::unordered_set<const StructType *> onStack;
+        std::unordered_set<const StructType *> placed;
+        for (const StructType *record : namedTypeRecords_) {
+            placeNamedType(record, stack, onStack, placed);
+        }
+    }
+
+    void placeNamedType(
+        const StructType *record, std::vector<const StructType *> &stack,
+        std::unordered_set<const StructType *> &onStack,
+        std::unordered_set<const StructType *> &placed) {
+        if (record == nullptr || namedTypeWhy_.contains(record) || placed.contains(record)) {
+            return;
+        }
+        if (!namedTypeUsed_.contains(record)) {
+            return; // the program never writes its name
+        }
+        if (onStack.contains(record)) {
+            // The type is already being declared, so this closes a cycle. It is a legal one only
+            // when the type names itself: the declaration's own name is in scope before its
+            // fields are read. Any other cycle has no first declaration.
+            if (stack.empty() || stack.back() != record) {
+                for (const StructType *member : stack) {
+                    if (!namedTypeWhy_.contains(member)) {
+                        namedTypeWhy_[member] =
+                            "it is one of a cycle of type declarations, which has no first";
+                    }
+                }
+                namedTypeWhy_[record] =
+                    "it is one of a cycle of type declarations, which has no first";
+            }
+            return;
+        }
+        stack.push_back(record);
+        onStack.insert(record);
+        for (size_t i = 0; i < record->size(); ++i) {
+            // Only a named type needs a declaration of its own; an array, a tuple or an anonymous
+            // struct is written inside this one and its members are placed here.
+            placeInside(record->typeAt(i), stack, onStack, placed);
+        }
+        stack.pop_back();
+        onStack.erase(record);
+        placed.insert(record);
+        if (!namedTypeWhy_.contains(record)) {
+            namedTypeOrder_.push_back(record);
+        }
+    }
+
+    /// Places the named types a non-named type mentions, in order.
+    void placeInside(
+        const Type *type, std::vector<const StructType *> &stack,
+        std::unordered_set<const StructType *> &onStack,
+        std::unordered_set<const StructType *> &placed) {
+        if (type == nullptr) {
+            return;
+        }
+        switch (type->code()) {
+        case TypeCode::Array:
+            placeInside(static_cast<const ArrayType *>(type)->elemType(), stack, onStack, placed);
+            return;
+        case TypeCode::Tuple: {
+            const auto *tuple = static_cast<const TupleType *>(type);
+            for (size_t i = 0; i < tuple->size(); ++i) {
+                placeInside(tuple->typeAt(i), stack, onStack, placed);
+            }
+            return;
+        }
+        case TypeCode::Struct: {
+            const auto *record = static_cast<const StructType *>(type);
+            if (record->named()) {
+                placeNamedType(record, stack, onStack, placed);
+                return;
+            }
+            for (size_t i = 0; i < record->size(); ++i) {
+                placeInside(record->typeAt(i), stack, onStack, placed);
+            }
+            return;
+        }
+        default:
+            return;
+        }
+    }
+
+    /// The `type` statement for a named struct type: the name it is printed by, and the field
+    /// table the type itself carries.
+    std::string namedTypeText(const StructType *record) {
+        std::string text = "type " + record->decl()->name() + " = { ";
+        for (size_t i = 0; i < record->size(); ++i) {
+            text += (i == 0 ? "" : ", ");
+            text += std::string(record->fieldName(i)) + ": " + writtenTypeText(record->typeAt(i));
+        }
+        text += " }";
+        return text;
+    }
+
+    /// Whether the printed program can declare `record`: the test `checkType` uses, so a type is
+    /// accepted exactly when its declaration is written.
+    bool namedTypePrintable(const StructType *record) const {
+        return namedTypeSeen_.contains(record) && !namedTypeWhy_.contains(record);
+    }
+
+    /// Records the named types `type` writes, and the ones their declarations need: a field whose
+    /// type is named makes that type's own declaration part of this one.
+    void markNamedTypesUsed(const Type *type) {
+        if (type == nullptr) {
+            return;
+        }
+        switch (type->code()) {
+        case TypeCode::Array:
+            markNamedTypesUsed(static_cast<const ArrayType *>(type)->elemType());
+            return;
+        case TypeCode::Tuple: {
+            const auto *tuple = static_cast<const TupleType *>(type);
+            for (size_t i = 0; i < tuple->size(); ++i) {
+                markNamedTypesUsed(tuple->typeAt(i));
+            }
+            return;
+        }
+        case TypeCode::Struct: {
+            const auto *record = static_cast<const StructType *>(type);
+            if (!record->named()) {
+                for (size_t i = 0; i < record->size(); ++i) {
+                    markNamedTypesUsed(record->typeAt(i));
+                }
+                return;
+            }
+            if (!namedTypeUsed_.insert(record).second || namedTypeWhy_.contains(record)) {
+                return;
+            }
+            for (size_t i = 0; i < record->size(); ++i) {
+                markNamedTypesUsed(record->typeAt(i));
+            }
+            return;
+        }
+        case TypeCode::Function: {
+            const auto *function = static_cast<const FunctionType *>(type);
+            for (size_t i = 0; i < function->normTypesCount(); ++i) {
+                markNamedTypesUsed(function->normTypeAt(i));
+            }
+            if (function->hasExitType()) {
+                markNamedTypesUsed(function->exitType());
+            }
+            return;
+        }
+        default:
+            return;
+        }
+    }
+
+    /// `typeText` for a position the program writes: the named types it names are the ones the
+    /// header declares.
+    std::string writtenTypeText(const Type *type) {
+        markNamedTypesUsed(type);
+        return typeText(type);
+    }
+
+    /// Why `record` has no declaration in the printed program, for the refusal that keeps it.
+    std::string namedTypeObstacleOf(const StructType *record) const {
+        const auto found = namedTypeWhy_.find(record);
+        if (found != namedTypeWhy_.end()) {
+            return found->second;
+        }
+        return "the printer did not reach it";
     }
 
     /// A region's statements and the value it yields. `lines` already carry their indentation;
@@ -2125,8 +2568,25 @@ class CmlPrinter {
                 fail(ref, "a cast without an input or a type");
             }
             Expr inner = expression(inputs.front());
+            // The entrance of an unnamed struct value into a named struct type is a conversion the
+            // compiler inserts by itself wherever the type is known -- a return type, an annotated
+            // `let`, a parameter, a field. Writing it is not the same graph: `return ({ x: 0 } as
+            // V)` folds to a literal of `V`, while the source has the literal and the conversion,
+            // so the printed program is one node short (`consistency/operator_overloads`
+            // `plus_b.cml`). The cast is dropped and the position it stands in supplies the type;
+            // a conversion between two named types (which the language only writes) stays.
+            const camel::runtime::GCNode *source = graph_->node(inputs.front());
+            const Type *from = source != nullptr ? source->dataType() : nullptr;
+            if (from != nullptr && from->code() == TypeCode::Struct &&
+                static_cast<const StructType *>(node->dataType())->named() &&
+                camel::core::type::relateStructs(
+                    static_cast<const StructType *>(node->dataType()),
+                    static_cast<const StructType *>(from)) !=
+                    camel::core::type::StructRelation::None) {
+                return inner;
+            }
             return {
-                std::format("({} as {})", parenthesize(inner, 80), typeText(node->dataType())),
+                std::format("({} as {})", parenthesize(inner, 80), writtenTypeText(node->dataType())),
                 80};
         }
         case camel::runtime::GCNodeKind::Accs:
@@ -2419,11 +2879,11 @@ class CmlPrinter {
             if (type->normIsVarAt(i)) {
                 text += "var ";
             }
-            text += (i ? ", " : "") + name + ": " + typeText(type->normTypeAt(i));
+            text += (i ? ", " : "") + name + ": " + writtenTypeText(type->normTypeAt(i));
         }
         text += ")";
         if (type->hasExitType()) {
-            text += ": " + typeText(type->exitType());
+            text += ": " + writtenTypeText(type->exitType());
         }
         text += " => " + blockText(body, body.sync);
 
@@ -3234,6 +3694,14 @@ class CmlPrinter {
         }
         const std::string localName =
             spaceParts.empty() ? name : name.substr(name.rfind("::") + 2);
+        // A function a program declared as an operator is stored under the operator's reserved
+        // name (`func operator +` builds the graph `__add__`), and that name is not source a
+        // program can write back: `__add__` is a reserved identifier (`ReservedIdentifier`). The
+        // symbol the declaration used is the name the program writes, so `operator +` is printed.
+        std::string writtenName = localName;
+        if (const char *symbol = camel::core::operatorSymbolOf(localName); symbol != nullptr) {
+            writtenName = std::string("operator ") + symbol;
+        }
         std::string signature;
         if (type->withTypesCount() > 0) {
             std::string clause = "with <";
@@ -3242,12 +3710,12 @@ class CmlPrinter {
                 if (!isIdentifier(withName)) {
                     withName = std::format("w{}", i);
                 }
-                clause += (i ? ", " : "") + withName + ": " + typeText(type->withTypeAt(i));
+                clause += (i ? ", " : "") + withName + ": " + writtenTypeText(type->withTypeAt(i));
             }
             clause += ">";
             emit(headerIndent_ + clause);
         }
-        signature += "func " + localName + "(";
+        signature += "func " + writtenName + "(";
         for (size_t i = 0; i < type->normTypesCount(); ++i) {
             signature += i ? ", " : "";
             if (type->normIsVarAt(i)) {
@@ -3257,11 +3725,11 @@ class CmlPrinter {
             if (!isIdentifier(param)) {
                 param = std::format("p{}", i);
             }
-            signature += param + ": " + typeText(type->normTypeAt(i));
+            signature += param + ": " + writtenTypeText(type->normTypeAt(i));
         }
         signature += ")";
         if (type->hasExitType()) {
-            signature += ": " + typeText(type->exitType());
+            signature += ": " + writtenTypeText(type->exitType());
         }
         // A function graph whose body has a control edge between its own nodes was written with
         // a body that is a sync block: the modifier says so, and it is the only mark of it.

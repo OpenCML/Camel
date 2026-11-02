@@ -273,7 +273,7 @@ semantic	NativeResourceMismatch	0x0001A4	error	The declaration '{0}' says '{1}',
 #
 # `std::cml`, the source printer (step S1). 0x1A5 and up.
 #/ A graph holds a construct the printer does not turn into source.
-semantic	CmlUnsupportedConstruct	0x0001A5	error	std::cml cannot print {0}: {1}.	This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, and `sync` blocks. Tags, named types, generic instances and the other region kinds are refused.	none: choice: the repair is a decision only the writer can make
+semantic	CmlUnsupportedConstruct	0x0001A5	error	std::cml cannot print {0}: {1}.	This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, `sync` blocks, and one `type` statement for each named struct type the program names. Tags, generic instances and the other region kinds are refused.	none: choice: the repair is a decision only the writer can make
 #/ A constant is larger than the printer's max_literal_bytes.
 semantic	CmlBigConstant	0x0001A6	error	std::cml refused the constant '{0}' of type {1} in {2}: {3} bytes, over max_literal_bytes ({4}).	Raise the limit with `std::cml max_literal_bytes=...`, or keep the value in a module the printed program imports.	none: choice: the repair is a decision only the writer can make
 #
