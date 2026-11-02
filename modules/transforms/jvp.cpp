@@ -3,6 +3,8 @@
 
 #include "jvp.h"
 
+#include "rule_types.h"
+
 #include "camel/compile/gir/rule_templates.h"
 #include "camel/core/forward.h"
 #include "camel/core/mm.h"
@@ -335,7 +337,8 @@ gc_node_ref_t buildRuleTangent(
     camel::core::context::Context &context, camel::runtime::GraphDraftGroup &group,
     camel::runtime::GraphTransaction &transaction,
     std::string_view uri, const std::vector<gc_node_ref_t> &values,
-    const std::vector<gc_node_ref_t> &tangents, std::string &ruleName, std::string &why) {
+    const std::vector<gc_node_ref_t> &tangents, camel::core::type::Type *elementType,
+    std::string &ruleName, std::string &why) {
     const auto match = camel::core::forwardRuleOf(std::string(uri));
     if (!match.has_value()) {
         why = "the operator has no forward rule bound at all";
@@ -363,7 +366,7 @@ gc_node_ref_t buildRuleTangent(
         return rt::kInvalidNodeRef;
     }
     const size_t at = camel::compile::gir::genericRuleInstance(
-        context, ruleId, std::vector<camel::core::type::Type *>{Type::Float64()}, {});
+        context, ruleId, std::vector<camel::core::type::Type *>{elementType}, {});
     const auto *entry = camel::compile::gir::genericRuleEntry(context, ruleId);
     if (entry == nullptr || at >= entry->instances.size()) {
         why = "no instance of the rule at float";
@@ -1082,6 +1085,8 @@ bool liftGraph(
                 tangentOf[ref] =
                     buildRuleTangent(
                         *context, state.group, transaction, uri, inputs, tangents,
+                        camel::transforms::rules::ruleElementTypeOf(
+                            camel::transforms::rules::firstOperandTypeOf(function, ref)),
                         ruleName, ruleWhy);
                 if (tangentOf[ref] == rt::kInvalidNodeRef) {
                     // Named, not guessed: the transform has no derivative for this operator, and
