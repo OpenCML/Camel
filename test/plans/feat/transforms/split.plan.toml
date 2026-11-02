@@ -36,13 +36,13 @@
 # so there is nothing for a gate to ask.
 [[tests]]
 name = "split_forward_half"
-desc = "The forward half of split(reinterp<jvp>(g)) for g(x) = x*x at x = 3: it computes what the present inputs allow and hands the residuals on whole. Reads `forward y= 9.0`, `residuals whole= ()` and the tangent 6.0; `residuals=2` is the graph's count -- the pair the body computes, plus the parameter's value port, which crosses now that the tangent side reads its tangent, and the members are the graph's answer, not a signature's."
+desc = "The forward half of split(reinterp<jvp>(g)) for g(x) = x*x at x = 3, under the closure ABI (2026-11-02): it computes what the present inputs allow and hands the linear map back closed over the residuals it carried, so the map takes the tangent direction alone. Reads `forward y= 9` and `tangent dx1= 6`; `residuals=2` is the graph's count -- the pair the body computes, plus the parameter's value port, which crosses now that the tangent side reads its tangent, and the members are the graph's answer, not a signature's, which is why no value and no type carries them."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_forward_half.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_output_contains = ["forward y= 9", "residuals whole= ()", "tangent dx1= 6", "residuals=2"]
+expect_output_contains = ["forward y= 9", "tangent dx1= 6", "residuals=2"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -100,7 +100,7 @@ case = "../../../cases/transforms/split/split_product_chain.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_output_contains = ["cubic y= 8.0", "cubic dx1= 12.0", "quartic y= 16.0", "quartic dx1= 32.0", "type=(float) => (float, (float, float, float)) pure residuals=3", "type=(float) => (float, (float, float, float, float)) pure residuals=4", "REINTERP split function=jvp_of_cubic", "REINTERP split function=jvp_of_quartic"]
+expect_output_contains = ["cubic y= 8.0", "cubic dx1= 12.0", "quartic y= 16.0", "quartic dx1= 32.0", "type=(float) => (float, (float) => float pure) pure residuals=3", "type=(float) => (float, (float) => float pure) pure residuals=4", "REINTERP split function=jvp_of_cubic", "REINTERP split function=jvp_of_quartic"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -126,7 +126,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_output_contains = ["REINTERP split function=jvp_of_leaky", "type=(float) => (float, (float, bool)) pure residuals=2 arms=2", "branch x=2.0 value=4.0", "branch x=2.0 dgdx=4.0", "branch x=-1.0 value=-0.5", "branch x=-1.0 dgdx=0.5", "WALK half=backward region=1 arm=0 branch=6 members=3 ports=0 nested=0 outside=2", "ARM half=backward arm=1 region=2 yield=15 members=2 value=10 tangent=11"]
+expect_output_contains = ["REINTERP split function=jvp_of_leaky", "type=(float) => (float, (float) => float pure) pure residuals=2 arms=2", "branch x=2.0 value=4.0", "branch x=2.0 dgdx=4.0", "branch x=-1.0 value=-0.5", "branch x=-1.0 dgdx=0.5", "WALK half=backward region=1 arm=0 branch=6 members=3 ports=0 nested=0 outside=2", "ARM half=backward arm=1 region=2 yield=15 members=2 value=10 tangent=11"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -139,7 +139,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_output_contains = ["REINTERP split function=jvp_of_f", "REINTERP split function=jvp_of_f", "type=(float) => (float, (float, bool)) pure residuals=2 arms=2", "author x=2.0 value=4.0", "author x=2.0 dfdx=4.0", "author x=-2.0 value=-6.0", "author x=-2.0 dfdx=3.0"]
+expect_output_contains = ["REINTERP split function=jvp_of_f", "REINTERP split function=jvp_of_f", "type=(float) => (float, (float) => float pure) pure residuals=2 arms=2", "author x=2.0 value=4.0", "author x=2.0 dfdx=4.0", "author x=-2.0 value=-6.0", "author x=-2.0 dfdx=3.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -164,6 +164,6 @@ case = "../../../cases/compile/transforms/split_identity_pipeline.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_output_contains = ["identity y= 3", "identity dx1= 1", "type=(float) => (float, (float,)) pure residuals=1"]
+expect_output_contains = ["identity y= 3", "identity dx1= 1", "type=(float) => (float, (float) => float pure) pure residuals=1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
