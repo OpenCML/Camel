@@ -52,4 +52,29 @@
 | `parse/constructs/comprehensions` | `Redeclaration`：同名 `v` |
 | `trans/cpp/exec/variables` | `UnresolvedReference: 'cml3'`——**基线也是 `cml3`** |
 
+**2026-11-02 第十六刀：区域内的读是同一个事实，不是另一把刀（已按此改，补了用例）**
+
+上一版这页写过"区域内的读不动，要单独一刀"。**查过记录版本的位置之后，这个说法收回**：
+
+- `git grep -n 'recordWrite' src/compile/gir/` 只有三处调用：`builder_expr.cpp#recordWrite` 本体、`builder_control.cpp:2921`（`mergeArmVariables`，`builder_control.cpp:2775`/`3657`/`4062` 调它）、`builder_operators.cpp:4250/4293/4302`（经调用的写）。**版本只在一处记**，只是"写本身就是区域节点"时它写 **control** 边而不是 ORDER 边。
+- **臂/循环体的节点就在块的同一个图里**（`controlOf` 是"哪个区域铺开它"，不是"哪个图记它的版本"）：`if` 的 then 臂里的读与它的写之间有 `N0C -> N10 [ORDER]`，两端 `controlOf` 都是那个 BRCH。**所以判据一条就够**：`orderUsersOf(ref)` 非空 ⇒ 落 `let`，臂里的 `let` 就落在臂里。
+- 删掉那条 `controlOf != 0` 的守卫之后：`report('int', before, t)` 回来了，源 `int 3 4`、打印版也 `int 3 4`（改前是 `report('int', t, t)` → `int 4 4`）。
+- **语料 3361 个文件一个都没踩到这个角**，所以补了用例 `test/cases/trans/cml/arm_read.cml`（进了 `cml_contract.py` 的 `CORPUS`/`MARKERS`）。守卫在时它红，删掉后绿——**用例咬得住，缺陷也确实只在角上**。
+- 读数（同一棵合并后的树，语料 3363）：`printed 554/554`、`equivalent 504→505`、`not_equivalent 40→39`、`refused 1808/1808`、`unfaithful 10/10`（同一批文件名）、`DIFFERENT 50→49 行、新增 0`、`families 53/53`。
+
+**`unfaithful` 那 10 条的重新分类（按作者 00:30 的裁定：名字只给人读、可重名；身份只靠图 id；去重归 `std::cml` 起名规则）**
+
+裁定把"起名"划给打印器（M7），所以这 10 条要按**打印文本能不能重新编译**分类，而不是按"重名好不好看"：
+
+| 分类 | 用例 | 为什么 |
+| --- | --- | --- |
+| **真 `unfaithful`（打印文本不能重新编译）** | `compile/static_expansion/comprehensions`、`parse/constructs/comprehensions`（`Redeclaration: 'v'`）、`compile/when_overloads/values`（`Redeclaration: 'pick'`） | 编译器**拒收**打印出来的文本：同一作用域里两处同名的绑定。**不是"读起来费劲"，是编译不过**。修法归 M7（打印器起名保证同作用域唯一），**不引入"名字即身份"的规则** |
+| 同上 | `compile/array_shape/literal_length`（`ArgumentNeedsConversion`）、`compile/array_shape/rank_zero_parameter_slot`（`DynamicCastForbidden`） | 打印出的字面量/形状没有它需要的那层类型，编译不过 |
+| 同上 | `compile/module_operators/anon_models`（`ReservedIdentifier`）、`compile/static_expansion/fields_and_access`（无诊断但拿不到 canonical 文档）、`consistency/values/closure_var`、`linear/nvm/var_params`、`trans/cpp/exec/variables`（`UnresolvedReference: 'cmlN'`） | 打印出的名字（生成名/临时名）在这些位置不可写、或临时名出了作用域 |
+| **只是"读起来费劲"（不是缺陷）** | **无** | 十条全部编译不过；**没有一条**是"能编译、只是重名" |
+
+**"两个同名 `let`"这一句怎么答（承 M7）**：名字只给人读，**重名本身不是缺陷**；但**打印出来的文本必须能重新编译**，而编译器在同一作用域里拒收同名绑定——所以打印器起名时同作用域内要唯一（今天的 `cmlN` 已经这么做），**这条规则不进"身份"那一层**（身份只靠图 id）。
+
+**"名字不是身份"在打印路径上的落点**：打印器**不按名字查算子**——四处查表全按 URI（`isPure(uri)`、`callFormOf(uri)`、`groupOf(uri)`，见 `src/passes/trans/cml/cml.cpp#operatorExpression` 与 `#moduleImports`），名字是表里查出来的**拼写**（`callForm->name`、`operatorSymbolOf(group)`）；`sourceName(ref)` 只用来给人看的绑定名。`plan-roundtrip.cn.md` 的 `byName` 那一处是"`import` 一个名字还是 `import` 一个模块"的**拼写选择**，查的仍是 URI。
+
 **问作者的那一句**：上面第 1 条（版本号不进文本）与第 2、3 条（落 `let` / 具名拒绝）是不是你要的默认？如果"版本号要进文本"，那是另一套设计（文本里出现 `@2` 之类的写法），本刀就要改成拒绝而不是落 `let`。

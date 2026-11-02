@@ -1785,9 +1785,7 @@ class CmlPrinter {
     /// Answers true when the read should be written by the generic statement logic as a `let`: the
     /// source named it, and the variable's name would not say the version it reads.
     bool materialiseRead(gc_node_ref_t ref) {
-        if (control_->controlOf(ref) != 0) {
-            return false;
-        }
+
         const auto inputs = graph_->normInputsOf(ref);
         if (inputs.size() != 1) {
             return false;
@@ -1795,6 +1793,14 @@ class CmlPrinter {
         // The order edge to the write it must see past is what makes the read's version older than
         // the text at the place the read stands. A read whose value path already carries that order
         // (`n + 1` reading `n` before writing it) has no such edge, and the variable's name says it.
+        //
+        // An arm's or a loop body's nodes are in the block's own graph -- `controlOf` says which
+        // region lays them out, not which graph records their versions -- so a read inside an arm
+        // and the write it must see past are the same two nodes of the same graph as a read and a
+        // write of the block (verified on `arm_inner`: `N0C -> N10 [ORDER]`, both `controlOf` the
+        // BRCH), and the same `recordWrite` wrote the edge. That is why this rule reads
+        // `orderUsersOf` and not "the read is in a region": the fact is one, and its spelling in
+        // the text is one: the `let` goes inside the arm where the read stands.
         if (graph_->orderUsersOf(ref).empty()) {
             return false;
         }

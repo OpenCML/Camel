@@ -272,6 +272,29 @@ print family, and this operator's configuration is not a string, so its call has
 | `families` | 52 | **52** |
 
 
+
+**2026-11-02 第十六刀（区域内的读）：先证明是同一个事实，再拆那条守卫。** 上一刀留了一句"区域内的读要单独一刀"。**动手前先查"记录版本的位置"**：`git grep -n 'recordWrite' src/compile/gir/` 只有三处调用点——`builder_expr.cpp#recordWrite` 本体、`builder_control.cpp#mergeArmVariables`（对 JOIN/LOOP 的那一次，`mergeArmVariables` 的调用点在分支与循环的构建里）、`builder_operators.cpp` 里经调用的那三处写。**版本只在一处记**，但它对"写本身就是区域节点"另走一条：`regionExit` 时写的是 **control** 边（`writeControlLink`），注释把另一半说清了——"a read in the region around the write … stays pending: the write that meets it is the region's own"。
+
+**关键的一问"臂里的读和块里的读是不是同一个事实"，答案在图上是**：臂的节点**就在块的图里**（`controlOf` 说的是"哪个区域来铺开它们"，不是"哪个图记它们的版本"）。`~/a7/arm_inner.cml`（`if` 的 then 臂里 `let before = t; t += 1; report(before, t)`）的 gir 里 `N0C -> N10 [ORDER]`，两端 `controlOf` 都是那个 BRCH——**同一条 `recordWrite` 写的同一条 ORDER 边**。所以它不是另一个事实，上一刀那条 `controlOf(ref) != 0` 的守卫只是把真缺陷挡在门外：改前的打印是 `report('int', t, t)`，跑出 `int 4 4`，源是 `int 3 4`。
+
+改法：**删掉那条守卫**（判据仍是 `orderUsersOf`）。语料里**没有一条**覆盖这个角：3361 个文件一个都没踩到，所以这一刀必须**补用例**——`test/cases/trans/cml/arm_read.cml`（写在 `cml_contract.py` 的 `CORPUS` 与 `MARKERS` 里）。
+
+判据（**同一棵合并后的树、语料 3363 个文件**，即 `arm_read.cml` 已在语料里；基线是"守卫还在"的那次构建，只差这一行）：
+
+| 读数 | 守卫还在 | 本刀 |
+| --- | --- | --- |
+| `printed` | 554 | **554** |
+| `equivalent` | 504 | **505** |
+| `not_equivalent` | 40 | **39**（唯一变化是新增的 `arm_read.cml`） |
+| `refused` | 1808 | **1808** |
+| `unfaithful` | 10 | **10**（十个文件名逐一相同） |
+| `DIFFERENT` | 50 行 | **49 行，新增 0** |
+| `families` | 53 | **53** |
+
+**"只动了一条用例"正是这一刀的重点**：删守卫前的全量快跑是 `8375/8362/1`（红的正是新增的 `arm_read.cml`），删后是 `8375/8363/0`。**守卫在时那条用例是 `DIFFERENT`，删掉后消失**——用例咬得住这条缺陷，缺陷也确实只在角上。
+
+两个顺带记下的读数变化（**都不是本刀**，是合并 `bf64149aa` 带进来的那一个语料文件）：`refused` 1807 → 1808、`families` 52 → 53。后者是**工具把家族名归一化时的伪影**：`REFUSAL … cannot print <graph>: float[]) => float pure>: the graph name '<name>' is not a source identifier.`——同一个"图名不是源标识符"家族，因为那个图的**名字里带 `: `**，家族的 `<graph>` 前缀削掉了半截。**家族数没涨，涨的是归一化没归准。**
+
 **2026-11-02 第十五刀（A7 第 3、7、8 条，同一机制）：`let before = z` 消失，读版本打成变量名。** 三条用例（`var_read_before_region`、`var_read_before_write`、`order_edges_regions`）是**一件事**，不是三件：`:var/get` 只打 `cellName(cellReadBy(...))`，**读的是哪一版它不打**。
 
 **判据不是"有没有 ORDER 边"这种猜测，而是建图器自己写的那句话**（`src/compile/gir/builder_expr.cpp#recordWrite`）："读要看见写之前的值……读在写之前由一条 order 边排定"。图上就是 `N03 -> N0E [ORDER]` 这样的边：**一个读若被排在一次写之前，它的版本就一定比文本在该处写到的旧**——因为文本里变量名只表示"文本此刻写到的那一版"。
