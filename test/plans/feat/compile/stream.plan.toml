@@ -1350,3 +1350,17 @@ expect_diagnostic_column = 9
 expect_output_contains = ["next value of its state"]
 expect_output_not_contains = ["UnknownInternalError", "GeneratorInitialValueShapeUnsupported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "stream.generators_match_binding_across_yield"
+desc = "A `match` arm that binds a name and yields it is refused, because the binding lives in the arm's own graph and cannot outlive the `yield` -- building the shape needs the binding to become a cell with its payload written into it in the arm, which is a mechanism, not a local edit. The refusal names the code and the position, and says nothing about reporting the program or about a defect of the compiler."
+kind = "negative"
+case = "../../../cases/compile/stream/generators_match_binding_across_yield.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "InternalDiag::UnknownInternalError"
+expect_diagnostic_code = "0x00000000"
+expect_diagnostic_line = 19
+expect_diagnostic_column = 13
+expect_output_not_contains = ["Please report it", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

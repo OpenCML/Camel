@@ -17,7 +17,7 @@ const std::unordered_map<InternalDiag, DiagInfo> &getInternalDiagInfoMap() {
             {
                 "UnknownInternalError",
                 "An error has occurred: {0}.",
-                "The compiler reached a state it has no code for, so nothing in the program is known to be wrong. Report it together with the program that reached it.",
+                "The compiler reached a state it has no code for. This is a known limitation of this compiler version, and nothing in the program is wrong.",
             },
         },
     };
