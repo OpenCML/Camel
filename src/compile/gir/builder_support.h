@@ -18,6 +18,7 @@
 #include "camel/runtime/draft.h"
 #include "camel/utils/assert.h"
 
+#include <format>
 #include <span>
 #include <string>
 #include <string_view>
@@ -100,28 +101,45 @@ inline runtime::PortRole toPortRole(LinkType type) {
     return type == LinkType::With ? runtime::PortRole::Context : runtime::PortRole::Normal;
 }
 
+/// The draft a handle names, once the handle is known to name it. An address says where a draft
+/// lives, not which draft it is: the allocator hands a destroyed draft's memory to the next one, so
+/// a handle whose draft is gone would otherwise read that other graph's node at the same id and
+/// hand back a plausible value of the wrong graph. The epoch the handle carries says which draft it
+/// was made in, which is what makes it safe to dereference the address it holds.
+inline runtime::GraphDraft *nodeDraftOf(node_handle_t node) {
+    GUARD(node != nullptr, "Draft node is null.");
+    GUARD(
+        node.epoch == node.draft->epoch(),
+        std::format(
+            "A draft node names the draft it was made in, and every draft is made with an epoch of "
+            "its own: this handle was made in epoch {} at {} and that address now holds epoch {}, "
+            "so the handle outlived its graph.",
+            node.epoch,
+            static_cast<const void *>(node.draft),
+            node.draft->epoch()));
+    return node.draft;
+}
+
 inline runtime::GCNodeKind nodeKindOf(node_handle_t node) {
     GUARD(node != nullptr, "Draft node is null.");
-    return node.draft->header(node.id)->kind;
+    return nodeDraftOf(node)->header(node.id)->kind;
 }
 
 inline camel::core::type::Type *nodeTypeOf(node_handle_t node) {
     GUARD(node != nullptr, "Draft node is null.");
-    return node.draft->header(node.id)->dataType;
+    return nodeDraftOf(node)->header(node.id)->dataType;
 }
 
 inline const runtime::DraftNodeHeader *nodeHeaderOf(node_handle_t node) {
     GUARD(node != nullptr, "Draft node is null.");
-    return node.draft->header(node.id);
-}
-
-inline runtime::GraphDraft *nodeDraftOf(node_handle_t node) {
-    GUARD(node != nullptr, "Draft node is null.");
-    return node.draft;
+    return nodeDraftOf(node)->header(node.id);
 }
 
 inline DraftGraphBuilder *nodeGraphOf(node_handle_t node) {
-    auto *builder = DraftGraphBuilder::fromDraft(nodeDraftOf(node));
+    // nodeDraftOf states the identity of the handle first, so that a handle that outlived its graph
+    // is reported as that and not as a graph that has no builder.
+    (void)nodeDraftOf(node);
+    auto *builder = DraftGraphBuilder::fromRef(node);
     GUARD(builder != nullptr, "Draft node is not owned by a compile graph builder.");
     return builder;
 }

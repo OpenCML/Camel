@@ -9,7 +9,7 @@
 - **Before writing a file, print the target's absolute path.** `[System.IO.File]::WriteAllText` and shell redirection (`>` , `Out-File`) resolve a *relative* path against the process's working directory, not against the directory a previous `cd` put the shell in -- and that working directory is not always the worktree the reader assumes. On 2026-11-02 six writes landed in the main checkout `D:\Projects\Camel` that way, two of them as **0-byte** files: a 0-byte file is the worst shape, because it looks like "I created it" while nothing was written. So: derive the path from an absolute root (or `$PSScriptRoot`), print it with `Resolve-Path -LiteralPath` / `[IO.Path]::GetFullPath()`, and end a round with `git -C D:\Projects\Camel status --porcelain`, which must print nothing.
 - **A commit that no remote branch contains does not exist for anyone else.** The last command of a round is `git branch -r --contains HEAD`: an empty list means the round's work is invisible to every other lane, however green its readings were. On 2026-11-02 four commits sat on a local branch while another lane reported, in good faith, that the rule it needed was not in the tree -- "I committed it" is not "it can be merged". Push the branch (or hand the merge lane a branch that is pushed) before saying a round is done.
 - **Only a tip that `origin/<branch>` resolves to is a reading that can be merged.** `git cat-file -t <sha>` answering `commit` proves the object is in *this* repository and nothing more; `git branch -r --contains <sha>` printing nothing proves no remote branch carries it. Both together mean the reading cannot be checked by anyone else, which is the same class of problem as a change written into somebody else's checkout: the numbers may be right and nobody can reproduce them. On 2026-11-02 the fix for the Debug link error `typeinfo for camel::rewritemod::ProofObject` was reported at `41f2303d7` -- a commit that existed locally and that no remote branch contained. A merge lane's answer to "is this ready" is therefore `git ls-remote --heads origin | grep <branch>` and a `rev-parse` of that ref, never "the lane says its branch is at <sha>".
-- **A merge runs three instruments first, and any one of them red stops the merge.** `git grep -n '^<<<<<<< '` for conflict markers -- including the four `|||||||` lines a diff3 conflict leaves, which that grep does not match; `node scripts/diagnostics-catalog.mjs --check` for a code registry that still names what the tree emits; and `node scripts/check-doc-links.mjs --questions-index`, because `docs/handover/questions/` is a table whose row count is maintained by hand and whose pages move to `reviews/` when the author rules on them. The index rule is one line: **the page is generated, not written.** ode scripts/check-doc-links.mjs --questions-index --write builds it from the directory -- one row per page, the page title as the sentence, the header counting the directory -- and --questions-index without --write compares the file with exactly that text, so a hand edit is a red that names the line and prints both versions. The fix is always to regenerate. The author made this the rule at 11:10, after a night in which the same table broke three times in three merges (3 pending-index problems, a row for a page that had moved to reviews/, a header one behind the directory) and after he retired every hand-kept state table at 08:10: an index kept by hand beside a directory is two sources for one fact.
+- **A merge runs three instruments first, and any one of them red stops the merge.** `node scripts/conflict-markers.mjs` for conflict markers -- all four forms: the head, the diff3 base block, the separator and the tail. The one-line `git grep -n '^<<<<<<< '` we typed by hand sees only the first, and on 2026-11-02 that missed a merge that had been aborted and committed as `407a7ee9f`, which left a base block in test/plans/feat/trans/cml.plan.toml -- a plan file that still parses far enough to be reported as a case. A bare separator counts only where a hunk head precedes it, because in Markdown it is a setext heading underline; `node scripts/diagnostics-catalog.mjs --check` for a code registry that still names what the tree emits; and `node scripts/check-doc-links.mjs --questions-index`, because `docs/handover/questions/` is a table whose row count is maintained by hand and whose pages move to `reviews/` when the author rules on them. The index rule is one line: **the page is generated, not written.** ode scripts/check-doc-links.mjs --questions-index --write builds it from the directory -- one row per page, the page title as the sentence, the header counting the directory -- and --questions-index without --write compares the file with exactly that text, so a hand edit is a red that names the line and prints both versions. The fix is always to regenerate. The author made this the rule at 11:10, after a night in which the same table broke three times in three merges (3 pending-index problems, a row for a page that had moved to reviews/, a header one behind the directory) and after he retired every hand-kept state table at 08:10: an index kept by hand beside a directory is two sources for one fact.
 
 ## Verification Style
 - Always define explicit acceptance criteria for an implementation plan and validate against them.
@@ -162,6 +162,96 @@ Three zero-hit readings on 2026-11-02 were all the same mistake, and none of the
 
 **A zero is not a reading until the search space has been shown to contain the thing.** State the command, the file or the ref it read, and which tree that ref or file belongs to.
 
+The same is true of a non-zero that arrives too easily. `(Get-Process -Id $pid).Threads | % StartAddress`
+answers `RtlUserThreadStart` -- an address inside ntdll -- for **every** thread of a process,
+including the main one and every thread the program started itself, because that is the stub every
+Windows thread begins in rather than the routine the caller passed to `CreateThread`. A count built
+on it reads "this process is nothing but operating-system pool workers", which is not a fact about
+the process at all. `test_support`'s `thread_count` asks instead with
+`NtQueryInformationThread(ThreadQuerySetWin32StartAddress)`, which reports the start routine the
+thread was created with: on `-t 1` the same camel process is 4 threads, of which 1 is the run's own
+(address outside ntdll) and 3 are the operating system's (address inside it), so the answer is 1,
+which is what `count.timeit_cli_one_serial` expects. **When a Windows API's reading looks
+surprising, check whether it is the API that answers a different question than the one you asked.**
+
+## A fixture that writes a path into Camel source writes forward slashes
+
+The author's ruling of 2026-11-02 13:10, in response to the `interpreter_first_use` red: **a fixture
+that writes a platform path into Camel source text writes it with forward slashes, or with a writing
+the language does not unescape.** A Windows path in a double-quoted Camel string is not text -- it is
+escapes: `\t` and `\r` are legal escapes, so `D:\temp\run-1/a.svg` becomes `D:` + a tab + `emp` + a
+carriage return + `un-1/a.svg` **silently**, and `\C`, `\m`, `\i` are unknown escapes that only warn
+(`LexicalDiag::InvalidEscapeSequence`, `docs/language/02_lexical.md`, an error or a warning still open
+with the author). The warning does not save the path: the two escapes that broke the image were the
+legal ones.
+
+The idiom is one line, at the place the path is made:
+
+```js
+const CML = SCRATCH.replaceAll('\\', '/')   // what goes into the program text
+```
+
+and `path.join(...).replaceAll('\\', '/')` when the path is built inline, as `pass_param_effect.mjs`
+already did. Node-side reads and writes keep the platform path; only the text spliced into a program
+uses the forward-slash one.
+
+**This cannot be checked by reading the fixture, which is why the rule is here and not in a guard.**
+On 2026-11-02 `test/cases` held 26 fixtures that build Camel text, 15 of them writing a `.cml` file,
+and exactly two spliced a path into the text: one wrong (`${SCRATCH}`) and one right (`${CML}`). The
+two have **the same static shape** -- a template splice naming a variable -- and differ only in a
+value that exists at run time and only on Windows. A checker over the text would report both or
+neither. The shape that *can* be seen at run time is the child's own warning line: a fixture writing
+a Windows path into a program makes that program print `Invalid escape sequence in string` on stderr,
+which is where a guard would read it (on the Windows leg, since a Linux path has no backslash).
+
+## A line count is a `\n` count, and the number carries its command
+
+Two instruments answer "how many lines" differently, and on 2026-11-02 both were used on the same
+files within an hour:
+
+- **PowerShell's `Measure-Object -Line` skips empty lines.** On one working copy it read
+  `split_operator.cpp` as **190** where the file has **209** `\n`s, and `jvp.cpp` as **1221** where it
+  has **1245**. Nineteen and twenty-four lines of difference are just the blank lines.
+- **`wc -l` counts `\n`s**, so a file **without a trailing newline** reads one short of its visible
+  line count: `modules/transforms/split_operator.cpp` is 209 by `wc -l` and 210 lines as `cat` shows
+  it.
+
+**So: count with `\n` (`git show <sha>:<path> | wc -l`), never with `Measure-Object -Line`, and paste
+the command beside any number quoted in a report or a page.** Two instruments, two numbers, one file:
+that is enough to make every later reading untraceable, and a line count is exactly the measurement
+that looks too simple to get wrong.
+
+**The same error one layer down: a line break inside a path is two citations.** `docs.links.citations`
+went red on a page name wrapped across two lines: the checker read the fragment that began the second
+line as a file name and answered `no such file`. The physical shape of the text was read as its
+meaning, the same mistake as a line count taken from the wrong instrument. Keep a path on one line
+whatever its length; a checker that answers `no unverified citation` is the reading that it is whole.
+This paragraph does **not** reproduce the broken shape -- writing it here would trip the same check,
+which is exactly the point.
+
+## A new plan needs a selection rule, or `--changed` can never run it
+
+A plan file added to `test/plans` is only reachable by an ordinary change if `test/plan-selection.json`
+has a rule that names it from the paths its cases live in. Without one the plan exists, runs when
+named, and is **invisible to `--changed` and to the layer accounting**, which is what the runner's own
+book says in one line:
+
+```
+plan-selection: 1 plan file(s) no case path selects, so --changed can never run them:
+test/plans/feat/tools/plan_normalizers.plan.toml (its cases are under test/tools/).
+Add a rule that names the plan for the directory its cases live in.
+```
+
+The instance on record: a guard plan whose case is `test/tools/check-plan-normalizers.mjs` landed with
+no rule. Its two entries were green when named and the result was `runner.backend_matrix` red on the
+next full run — the book's `plan-selection` check has no other place to report it. The cure is one
+entry in `rules` (the tool's path to the plan) plus the plan's name in the rule that owns
+`test/tools/selftest/`, because the guard reads fixture trees there.
+
+The same applies to a plan that must stay out of an ordinary change: `SLOW_PLANS` and the selection
+rules are two halves of one fact — a plan is either reachable on purpose or named in the slow list on
+purpose, never neither.
+
 ## A timeout budget is a change like any other
 
 A `timeout_ms` in a plan file is not housekeeping: it decides whether a slow machine reports a red or
@@ -218,6 +308,14 @@ Ask whether a thing is there and the answer is a boolean; ask how many lines car
 
 A probe log that records only `[FAIL] <name> <ms>` can count failures and cannot group them: the first diagnostic line is what turns forty reds into one root cause or ten. Print that line, and print it even when jobs run in parallel.
 
+## A check only a Debug build's standard library performs is not an instrument
+
+`std::vector::operator[]` past the end is undefined behaviour, and what reports it is the standard library of the build you happen to run: a Debug build's (`_GLIBCXX_ASSERTIONS`) or an ASan build's. On 2026-11-02 `feat/compile/stream.plan.toml` was **green in Release and red in 24 of its 143 tests in Debug**, all from one line: `settleStreamLinearity` asked `draft.region(draft.nodeRegion(node))` for region 0 of a draft that has no regions at all. Release built the reference, found the loop's carrier list empty, never read through it, and passed -- **that run was not a weaker reading of the fact; it was no reading at all.** The answer is not "add an `ASSERT` there", which is compiled out and leaves the next Release run green by the same mechanism: state the precondition where the answer is unknown (`GUARD` in `GraphDraft::region`, alive in the build that ships) and let the reader that starts from `nodeRegion` ask `regionCount()` first. The leg that has to see it already exists: `ci.yml`'s sanitizer job runs `smoke`, `feat/compile/stream` and `feat/compile/transforms` on a Debug ASan/UBSan build.
+
+## A pointer that answers "which graph" answers with an address
+
+`nodeGraphOf()` cannot return null -- its `GUARD (builder != nullptr)` fails through `fail_invariant` first -- so none of its **61** call sites needs a null branch, and that is the point: the guard turns "no answer" into a stop. But 14 of them only **compare** two answers for identity (`builder_helpers.h`, `builder_expr.cpp`, `builder_control.cpp`, `builder_operators.cpp`, `captures.cpp`, `builder_support.h`), where a null would be worse than a crash: `nullptr == nullptr` says "the same graph". When one of those wants to be sure two handles name one graph, ask the draft whether it is the one the handle names (`isNamedBy`, address **and** epoch, which `3609d015a` made the identity) instead of comparing the address a handle happens to carry.
+
 - 主检出 `D:\Projects\Camel` 只用来 `pull --ff-only`；所有编辑都用工作树内的相对路径，或 `D:\Projects\Camel-wt\<lane>\...` 的绝对路径。写完用 `git -C <树> status --porcelain` 自检，不要用 `git status`（它按进程 CWD 解析，会看到另一棵树）。
 ## Check the input before you believe the reading
 
@@ -241,3 +339,11 @@ Two readings of 2026-11-02 were wrong for this reason and neither was a code def
 **An `ACCEPT` from `parsecheck` proves the text it was given parses, not that the text is the file
 you meant to give it.** A parser that accepts a truncated file is not evidence of completeness; the
 size and the statement count are what cross-check it.
+
+## A Log File Belongs Outside The Tree
+When a run's output is redirected, `*> D:\Temp\<name>.log` and never `*> run.log` beside the sources.
+A file written inside the tree is an untracked file the plan-selection audit then has to explain: it
+matches no rule in `test/plan-selection.json`, and the audit answers "tracked file matched by no rule",
+which turns a reading into a red about the reading. This happened twice in one night -- once as an
+extra failure in a full run, once as a "thirtieth red" that was the log itself. The log is the record
+of the measurement, so it belongs where records live and not where the sources do.

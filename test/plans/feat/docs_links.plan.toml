@@ -216,3 +216,27 @@ expect_exit = 0
 expect_stdout_contains = ["no value used twice"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
+
+[[tests]]
+name = "docs.no_unfinished_merge_left_in_the_tree"
+desc = "No tracked text file carries the leftovers of an unfinished merge: a hunk head, a diff3 base block, a separator or a tail. The gate we typed by hand before this only looked for the head, and on 2026-11-02 a merge that had been aborted was committed as 407a7ee9f with test/plans/feat/trans/cml.plan.toml still holding its `||||||| bbc9b2b65` base block -- a file that parses far enough to be reported as a case. A bare `=======` is not a marker by itself (in Markdown it is a setext heading underline), so it counts only where a hunk head precedes it in the same block."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/conflict-markers.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["no conflict markers", "hunk head, a base block, a separator or a tail"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.no_unfinished_merge_pattern_sees_all_four_forms"
+desc = "The marker rule's reverse reading: on a probe file carrying all four forms, this rule catches four lines and the old one-line `git grep '^<<<<<<< '` catches one, so the rule is known to catch 407a7ee9f's shape rather than merely passing on a clean tree."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/conflict-markers.mjs"
+args = ["${case}", "--self-test"]
+expect_exit = 0
+expect_stdout_contains = ["catches 4 line(s)", "the old one-liner catches 1", "misses three of the four forms"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000

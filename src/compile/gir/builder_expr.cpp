@@ -1776,11 +1776,12 @@ void Builder::collapseNonEscapingVariableReads() {
             // A read is recorded while this builder is in the graph that made it, and the table
             // outlives that graph: the graph is handed over and released, and the builder with it.
             // Asking `sameGraph` about such a read asserts that it has an owner (builder_support.h,
-            // `nodeGraphOf`), which is exactly what is gone here, so the graph is compared by the
-            // draft the handle already carries. A read of another graph is not this graph's read;
-            // it is skipped here and dropped at the border by `forgetNodesOfOtherGraphs`, because
-            // an outer graph's reads are still needed by the outer graph's own turn.
-            if (nodeDraftOf(read) != &graphDraft) {
+            // `nodeGraphOf`), which is exactly what is gone here, so the read asks the draft
+            // whether it names it at all -- by address and by epoch, which is what a handle names
+            // a draft by. A read of another graph is not this graph's read; it is skipped here and
+            // dropped at the border by `forgetNodesOfOtherGraphs`, because an outer graph's reads
+            // are still needed by the outer graph's own turn.
+            if (!graphDraft.isNamedBy(read)) {
                 continue;
             }
             if (graphDraft.header(nodeIdOf(read)) == nullptr || !graphDraft.alive(nodeIdOf(read))) {
@@ -1811,9 +1812,9 @@ void Builder::collapseNonEscapingVariableReads() {
     std::unordered_map<node_handle_t, std::vector<std::pair<node_handle_t, node_handle_t>>> byCell;
     auto &draft = currGraph_->transaction().edit();
     for (const auto &[read, info] : variableReadSource_) {
-        // Same reason as above: the cell is asked about by the draft its handle names, because a
+        // Same reason as above: the draft is asked whether it is the one the cell names, because a
         // cell of a graph that has been released has no builder left to answer `sameGraph`.
-        if (info.cell == nullptr || nodeDraftOf(info.cell) != &draft) {
+        if (!draft.isNamedBy(info.cell)) {
             continue;
         }
         byCell[info.cell].push_back({read, info.source});

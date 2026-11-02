@@ -610,6 +610,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "reduced_text_in_an_array"
+desc = "A bf16 and an f16 write the shortest digits that read back as the same element of their own type (design principles 7.7): `0.1 as bf16` prints `0.1`, not the f32 text `0.100097656` of the value it widens to. The digits are searched for in a buffer of their own (camel/utils/number_text.h, `shortestHalfDigits`) and read after that search returns, so the digits of both types are pinned here -- a candidate handed back as a view of that buffer reads as an empty digit string on a build whose frames were reused, and the element then carries no digits at all."
+kind = "behavior"
+case = "../../../cases/modules/tensor/reduced_text_in_an_array.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = """[0.1, -0.1, 1.0, -1.0, 100.0, -100.0]
+[0.1, -0.1, 1.0, -1.0, 100.0, -100.0]
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "fuse_bits.unfused"
 desc = "The reference bytes of `x @ w + b` and its relu without any pass (the program's own operators)."
 kind = "behavior"
