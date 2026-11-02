@@ -1623,7 +1623,7 @@ P0-3（凭据检查不认顺序边）仍未见代码，排在这条之后紧接�
 3. **A4：差分测试找到 6 个根因**，都在 `std::opt`/`inline`/`fold`，以及之后的 fvm/jit/prl。其中"Region yields node … not in the execution"（`graph_runtime_support.cpp:216`）和"GATE 读一条可能不走的臂里的 OPER"，很可能和 P0-1（按成员排计划）同根。修 P0-1 时用这两个最小程序作读数。
 4. **A7、B1、B2 归 M7**：`std::cml` 打印出的程序行为不同，丢了 `fail<…>` 语句、把 `var` 读挪到写之后、丢了格式说明；判等工具里声明边指错（B1，一行就能修）；不透明类型的 `code` 依赖模块加载顺序，规范文档不规范（B2）。
    - **已修（B1）：判等工具里类型的声明边指向声明自己的顶点。** 提交 `c6a004b8d`（2 个文件，+23/-1）。`test/tools/cml_roundtrip.py` 的 `Document._type` 把 `decl` 和 `elem`/`key`/`value`/`exit` 放进同一个循环、边一律建到 `T:<id>`，而声明是文档 `decls` 建的 `D:<id>`。改前：`for key in ("elem", "key", "value", "exit", "decl"): self.edge(vid, f"T:{entry[key]}", key)`；改后：`if entry.get("decl") is not None: self.edge(vid, f"D:{entry['decl']}", "decl")`。读数：同一份文档比它自己——README 的复现程序 `test/cases/opt/generic/gate_branch_wait.cml`（`std::jgir canonical=true`，去掉 `GRAPH_STATS` 行）从 `DIFFERENT: ...: T:10 --decl--> unknown vertex T:d0`（exit 1）变成 `EQUAL: the two canonical documents are equivalent (75 vertices, 242 edges)`（exit 0）；`type P = { a: int, b: int }` 的文档同样从 `T:2 --decl--> unknown vertex T:d0` 变成 `EQUAL`（18 顶点、47 边）。`feat/trans/canonical_gir`、`feat/trans/cml` 各 `[SUMMARY] total: 1, pass: 1, fail: 0`。回归：`test/cases/trans/cml_canon_contract.py` 新增一条"带具名声明的程序与自己相等"的判定；换回旧工具跑同一计划是 `expected exit 0, got 1`。
-   - **已修（B2）：规范文档用拼写命名模块的不透明类型，不用注册表发的号。** 提交 `1f85033d9`（1 个文件，+23/-4）。先量"码从哪来"：`src/passes/trans/json/gir_canonical.cpp` 的 `other` 条目写的是 `{"code", static_cast<uint32_t>(t->code())}`，而 `Other` 类型的码不是身份——`include/camel/core/type/other.h` 的 `OtherTypeRegistry::registerType` 是 `uint32_t id = counter.fetch_add(1);` 加 `makeTypeCode(TypeFlag::OtherType | flags, id)`，每首次注册一个新类型名就前进一格，而每个模块在自己静态初始化里注册（`modules/json/value.cpp`、`modules/rewrite/rule.cpp` 的 `static TypeCode code = registerOtherType(...)`）：**是注册/遇到顺序，不是内容哈希**。所以同一程序换一条加载不同模块的流水线写法，两份文档只在这些号上不同，而且同一个号 0xA000000A 在一份里是 `Node<int>`、在另一份里是 `Rule`——位置而不是名字（评估那边要 `--mask-codes` 才看得见它们相等，正是因为这个）。改法：码改成拼写的 FNV-1a（`stableCodeOf`，每个进程、每个平台同一个数），字段仍然点名类型（`Node<int>` 与 `Node<float>` 不同），加载顺序不再进入文档；注册表与 `canonical=false` 一律不动。读数：`test/cases/compile/when/rule_when.cml` 同一条流水线的两种写法，改前 `diff` 8 行、只有 `"code": 2684354570` 对 `2684354568` 与 `2684354566` 对 `2684354574`，改后 `diff` 为空、`cml_roundtrip.py` 判 `EQUAL: the two canonical documents are equivalent (42 vertices, 114 edges)`；同一种写法跑两次改前改后都相等；`canonical=false` 的 v1 文档与 `egraph=true` 文档改前改后逐字节相同，且里面根本没有这几个号。`--mask-codes` 那 64 格没有现成脚本可跑（`scripts/run_checker.py` 与 `e3_all_stride4.jsonl` 不在树上），按指示只贴上面那一对，没有现造程序去凑格子。回归：`feat/trans` 全部计划（含 `canonical_gir`、`cml`、`canonical_opt_export`）与 `feat/compile/gir` 全绿；全量 `-Plan all -Tier fast -Jobs 8` 在带这个改动的树上 `[SUMMARY] total: 8365, pass: 8353, fail: 0, skip: 10, known failures: 2`，与改前同一基线的 `8365/8353/0` 同一个数。
+   - **已修（B2）：规范文档用拼写命名模块的不透明类型，不用注册表发的号。** 提交 `1f85033d9`（1 个文件，+23/-4）。先量"码从哪来"：`src/passes/trans/json/gir_canonical.cpp` 的 `other` 条目写的是 `{"code", static_cast<uint32_t>(t->code())}`，而 `Other` 类型的码不是身份——`include/camel/core/type/other.h` 的 `OtherTypeRegistry::registerType` 是 `uint32_t id = counter.fetch_add(1);` 加 `makeTypeCode(TypeFlag::OtherType | flags, id)`，每首次注册一个新类型名就前进一格，而每个模块在自己静态初始化里注册（`modules/json/value.cpp`、`modules/rewrite/rule.cpp` 的 `static TypeCode code = registerOtherType(...)`）：**是注册/遇到顺序，不是内容哈希**。所以同一程序换一条加载不同模块的流水线写法，两份文档只在这些号上不同，而且同一个号 0xA000000A 在一份里是 `Node<int>`、在另一份里是 `Rule`——位置而不是名字（评估那边要 `--mask-codes` 才看得见它们相等，正是因为这个）。改法：码改成拼写的 FNV-1a（`stableCodeOf`，每个进程、每个平台同一个数），字段仍然点名类型（`Node<int>` 与 `Node<float>` 不同），加载顺序不再进入文档；注册表与 `canonical=false` 一律不动。读数：`test/cases/compile/when/rule_when.cml` 同一条流水线的两种写法，改前 `diff` 8 行、只有 `"code": 2684354570` 对 `2684354568` 与 `2684354566` 对 `2684354574`，改后 `diff` 为空、`cml_roundtrip.py` 判 `EQUAL: the two canonical documents are equivalent (42 vertices, 114 edges)`；同一种写法跑两次改前改后都相等；`canonical=false` 的 v1 文档与 `egraph=true` 文档改前改后逐字节相同，且里面根本没有这几个号。`--mask-codes` 那 64 格没有现成脚本可跑（`scripts/run_checker.py` 与 `e3_all_stride4.jsonl` 不在树上），按指示只贴上面那一对，没有现造程序去凑格子。回归：`feat/trans` 全部计划（含 `canonical_gir`、`cml`、`canonical_opt_export`）与 `feat/compile/gir` 全绿；全量 `-Plan all -Tier fast -Jobs 8` 在带这个改动的树上 `[SUMMARY] total: 8365, pass: 8353, fail: 0, skip: 10, known failures: 2`，与改前同一基线的 `8365/8353/0` 同一个数。同笔加固（`5a2d072dc`，1 个文件）：`code` 的哈希输入不只拼写，还拼上 kind——`stableCodeOf("other:" + spelling)`；理由是拼写相同而 kind 不同的两个类型不该在规范文档里拿到同一个码。加固后上面三条读数不变（`rule_when` 两种写法 `diff` 仍为空、`cml_roundtrip.py` 仍 `EQUAL: ... (42 vertices, 114 edges)`、`canonical=false` 与 `egraph=true` 的文档仍逐字节相同），这几个码现在是 `1073091934` 与 `3949022875`。
 5. **A8、A9 归 P1**：Camel 写的 `opt::cse` 把锚点节点交给 `graph.replace` 而失败，原生版成功；Camel 写的 `opt::fold` 没有常量预算，产出 43.9 MB 的图，原生版是 1.8 KB。Camel 遍和原生遍要守同一份约定。
 6. **A5、A6**：导出遇到不纯的递归程序报内部错误，而不是 `TranslationRefused`；`std::macro std::opt` 在 26 个程序上崩溃，挪到别的目录就不崩，说明依赖路径或内存布局，要用地址检查构建去查。
    - **已修（A5）：导出在化简之前，在程序自己的不纯算子处拒绝。** 提交 `045c4aad3`（3 个文件，+90/-8）。README 的命令今天先死在别处：`camel minimal/export_internal.cml std::macro std::opt "onnx::export out=m.onnx"` 3/3 给的是 `error[RuntimeDiag::PassInternalError]: Pass 'std::opt' failed with an internal error: the rewrite of graph '__root__' did not settle: 32 consecutive runs each changed the program.`；同一个程序只写 `onnx::export` 是 **exit 139（段错误）**。责任层在导出自己：不纯的拒绝只写在"化简后"的图上，而化简在它之前跑——导出逐层展开递归，深度是常量的递归就要展开那么多层，32 轮后引擎放弃并交出空 program，拒绝走不到，`program->root()` 还把空指针读掉。修法：把"收到的图"上的检查提到化简之前，但只拒**化简不会消掉**的算子——宏（`autodiff:with_grad` 这一族）、函数自己的变量、落在它上面的就地写法；其余仍由化简后的判定负责。第一版不分青红皂白提前拒，把 15 个训练步导出全拒了（全停在 `autodiff:with_grad`），是基线读数 `total: 156, pass: 125, fail: 0` 抓出来的；引擎交出空 program 时同样先查不纯，不再解引用。
@@ -1633,6 +1633,23 @@ P0-3（凭据检查不认顺序边）仍未见代码，排在这条之后紧接�
    - 回归用例：`test/cases/modules/onnx/export_entry_impure_recursion.cml` + `onnx.plan` 的 `export_entry_impure_recursion`（exit 1、`RuntimeDiag::TranslationRefused`、16 行 5 列，输出里没有 `PassInternalError` / `did not settle` / `defect of the compiler`）。在提交干净、`dirty: false` 的 HEAD `c6a004b8d`（二进制 2026-11-01 21:39:09 -05:00）上跑 `-Plan all -Tier fast -Jobs 8`：`[SUMMARY] total: 8365, pass: 8353, fail: 0, skip: 10, known failures: 2`，两条 xfail 仍是 `edges.no_ctrl_edge_kind.gir` 和 `edges.gate_has_no_control_input.gir`，与 A5、B1 无关。没有放宽任何不变量，也没有为让门变绿而动校验器；`std::opt` 的 settle 判据（`src/passes/opt/inline/engine.cpp`）一个字未改。
 
 每修一条，在那页对应条目下写"已修 + 提交 + 读数"。附带两条信息：随机程序生成器有 11.8% 的种子被编译器拒，其中一个原因是 `a..b->reduce<…>` 的优先级；任何改写调用的遍之后，`std::cpp` 有约 55% 拒收（"no call of 'main'"）。这两条先记下，冲刺后排。
+   - **已修（清单第二条）：`std::cpp` 拒收优化后的程序——`main` 没走，是它只认了一种调用写法。** 提交 `e20e7a59c`（2 个文件，+51/-3）。复现：`camel test/cases/trans/cpp/main_io.cml std::opt::devirtualize std::cpp` 给 `rc=1` 和 `error[RuntimeDiag::TranslationRefused]: Translation pass 'std::cpp' refused the graph: the program has no call of 'main' std::cpp can find.`（定位在 `func main()` 的声明处 7:1）；同一程序只跑 `std::cpp` 是 `rc=0`、写出 70 行 C++。
+     `main` 去哪了：**没改名、没被内联、没搬到别的图**，`std::opt::devirtualize` 把"调用一个函数值"换成了"直接命名那张图"——改前根图是 `N08 [DATA Function(graph=main)] --WITH--> N09 [CALL] --EXIT--> O00`，改后是 `N09 [label="main", type="FUNC"] --EXIT--> O00`：同一次调用，callee 从值里挪进了节点。而 `std::cpp` 找入口只认 `CALL`：`src/passes/trans/cpp/program_emitter.cpp` 的 `findEntry` 原文是 `if (node != nullptr && node->kind == GCNodeKind::Call) { call = candidate; break; }`，随后 `if (callNode == nullptr || callNode->kind != GCNodeKind::Call || root->withInputsOf(call).empty()) throw Refusal{root, call, "the program has no call of 'main' std::cpp can find", false};`。`FUNC` 是同一份调用：同文件的 `collectFunctions` 已经用 `parts_.program->calleeOf(*graph, ref)` 读它，`FunctionEmitter::lowerCall` 也把它当调用翻。所以修法是认下第二种写法，并按节点带的名字找 `main`（`main`，或特化写法 `main$…`），不改 `std::cpp` 的语义，也不动任何优化遍。
+     读数（判据 4）：同一程序 `std::opt::devirtualize std::cpp` 从 `rc=1` 到 `rc=0`；产物编出来跑一次打印 `elapsed = 0.0000`，与 `camel … std::fvm` 的输出逐字相同、`rc` 同为 0——"不拒"和"产物对"两件事都读了。按遍序的小表（语料 `test/tools/cppexec/expect.txt` 里 158 个文件，`ok` / `no main` / 其它拒收 / 其它）：
+       改前：`(none)` 132/0/0/26，`std::macro` 132/0/0/26，`std::opt::inline` 132/0/0/26，**`std::opt::devirtualize` 0/132/0/26**——拒收从 `devirtualize` 这一格开始，而且不是 55%，是这个语料上它碰到的**全部 132 个可译程序**。
+       改后：最后一行变成 130/0/2/26；剩下 2 条是另一种拒绝（`the entry function uses a value of the top level of the module that is computed`），下面是那 2 条的第二笔；26 条 `other` 是语料里的 `--arg` 拒收用例，四列相同。
+     回归：`feat/trans/cpp.main_after_devirtualize`（同一程序带 `std::opt::devirtualize`，要求 `rc=0`、写出 `int main(int argc, char **argv)`，且不含 `TranslationRefused` / `no call of 'main'`）。门：`-Plan all -Tier fast -Jobs 8` 在干净 HEAD `e20e7a59c` 上 `[SUMMARY] total: 8371, pass: 8359, fail: 0, skip: 10, known failures: 2`；`total` 比上一轮的 `8365` 多 6（develop 合并带来的 `rest_params`、`transforms` 两个计划共 5 条，加这条回归），`feat/trans/cpp` 走门的路径是 `total: 53, pass: 53, fail: 0`，`agree_with_fvm`、`every_fault_program_says_what_fvm_says` 都在里面 PASS。
+   - **顺带修掉那 2 条：顶层算出来的值，到了 `main` 门口换了只手。** 提交 `4c4c3989a`（2 个文件，+50/-3），接在 `e20e7a59c` 后面。剩下那 2 条是 `test/cases/compile/module_imports/d4_cpp_computed.cml` 与 `test/cases/consistency/faults/top_level_fault.cml`，两条都是"模块顶层先算一个值，再进 `main`"（design principles 10.1），**两条程序本身没问题**：`camel d4_cpp_computed.cml std::fvm` 打印 `7`、`rc=0`；`camel top_level_fault.cml std::fvm` 在 `6:14` 报 `DivisionByZero`、`rc=1`——而且**同两条只跑 `std::cpp` 都是 `rc=0`**，所以是 `std::cpp` 的洞。
+     判定原文（`program_emitter.cpp` 的 `emit`，改前）：`const bool computed = std::any_of(entry.args.begin(), entry.args.end(), [&](gc_node_ref_t arg) { return root->node(arg)->kind != GCNodeKind::Data; });`，命中就把根图当 `top_level` 发出去；守住它的是 `argumentText` 里的 `if (!value) throw Refusal{... "the entry function uses a value of the top level of the module that is computed, and std::cpp translates only literal top-level values yet (compute the value inside a function instead)" ...}`。**这条拒绝不是"语言不许"，是"我还不支持"——而且它连"我还需要"都认错了地方**：`entry.args` 只有 `CALL` 那种写法才有（闭包的捕获），`FUNC` 写法里那个值就是调用节点自己的 `norm` 入参，`entry.args` 是空的，于是"没有要算的顶层值"和"有但没看见"成了一件事。
+     修法：`computed` 按根节点实际有的写法取参数——`CALL` 取 `entry.args`，`FUNC` 再并上 `root->normInputsOf(entry.call)`；`top_level` 那条路一行没改，两种写法发出的是同一张图。读数：`d4_cpp_computed` 产物编出来跑打印 `7`、`rc=0`，与 `std::fvm` 逐字相同；`top_level_fault` 产物编出来跑在 `6:14` 打印同一条 `DivisionByZero`、`rc=1`，`not reached` 不打印，与 `std::fvm` 逐字相同。表：`std::opt::devirtualize` 那一格 **130/0/2/26 → 132/0/0/26**（走的"能修就修"那条，不是改文案那条）。
+     整条语料再过一遍 `devirtualize`（`test/tools/cppexec/run.py --expect test/tools/cppexec/expect.txt --passes "std::opt::devirtualize"`，174 个程序）：**171 与 `std::fvm` 逐字相同**，1 条编不过（bridged 程序链接要用编译器自带的 libstdc++，主机那条老，就是页末那条环境备注），2 条与 fvm 不同——而**这两条是 `std::fvm` 变了，不是 C++ 变了**：`test/cases/trans/cpp/exec/recursion_limit.cml` 在 `std::opt::devirtualize` 之后 fvm 打印 `999`、`1000`、`not reached`、`rc=0`，不加这一遍它在 `depth(1000)` 处 `MaxRecursionDepthExceeded`、`rc=1`，而 C++ 产物始终是后者（文档 3.9 说的就是后者）。把这一笔 stash 掉在旧树上量，两条一模一样，所以是那一遍的栈帧记账，**记在这里，没有动它**。
+     回归：`feat/trans/cpp.computed_top_level_after_devirtualize` 与 `feat/trans/cpp.top_level_fault_after_devirtualize`，`feat/trans/cpp` 走门 55/55/0；全量 `-Plan all -Tier fast -Jobs 8` 在干净 HEAD `1a606cfe4` 上 `[SUMMARY] total: 8373, pass: 8361, fail: 0, skip: 10, known failures: 2`（上一轮 `8371/8359/0` 加这 2 条回归）。
+
+## 给作者：清单第二条的"约 55%"是保守估计（2026-11-02，A3 车道）
+
+- **真实数字是 `devirtualize` 之后 132/132 全拒，根因一处：`findEntry` 只认 `Call`。** 语料 `test/tools/cppexec/expect.txt` 的 158 个程序里，`std::cpp` 单独跑、`std::macro std::cpp`、`std::opt::inline std::cpp` 各 132 个译出、0 个"无 main"；`std::opt::devirtualize std::cpp` 是 **0 个译出、132 个"无 main"**。所以不是"约 55% 拒收"，是这一遍碰到的可译程序全拒。
+- **修好后 130/132 通过（`e20e7a59c`），剩 2 条是另一个原因；那 2 条也已修（`4c4c3989a`），现在 132/132。** 两条都只做一处判定：一条把"入口调用"的两种写法都认下来，一条把"顶层算出来的值"从闭包换到 `FUNC` 节点的 `norm` 入参之后仍然认出来。产物都编出来跑过，输出与 `std::fvm` 逐字相同。
+- 这个表比"55%"有用：它把"一个遍之后全线崩塌"变成"**两处判定**"，而且每一处都有名字、有位置、有产物读数。
 
 ## 催办（2026-11-01 21:10，决策者）：一小时 3 笔；P0-1 的机制和 P0-3 还是零
 
@@ -1641,6 +1658,8 @@ P0-1、P0-3 从 18:20 下达，到现在快三小时，还没有一行代码。�
 - **P0-1 读数**：20:30 那条（臂里无人用的 `1 / 0` 不报故障、只打印 `2`），外加评估缺陷 A4 里"Region yields node … not in the execution"的最小程序。
 - **P0-3 读数**：只留顺序边的测试遍报 `PassInternalError`。
 - 主机、闸门或额度要是出了问题，在本页末尾写一行，注明时间和现象。
+- **2026-11-02 06:40，A3 车道，主机（不是闸门）：** `/usr/bin/clang++` 带的 libstdc++ 只到 `GLIBCXX_3.4.30`（GCC 6.0.30 时代的符号表），而 `out/latest/libs/libcamel.so` 要 `GLIBCXX_3.4.31..36`；所以在车道自己 ssh 上去的 shell 里直接跑 `test/tools/cppexec/run.py`，会有 7 个程序停在 `clang: error: linker command failed`（`fault_index*`、`fault_repeat_huge`、`fault_shl_*`、`fault_shr_negative`）。走闸门（`camel-remote.ps1` 把编译器自己的 libstdc++ 目录放在 `LD_LIBRARY_PATH` 前面）这两条都 PASS，所以这是主机系统 clang 太旧，不是代码；按指示没有去修主机。
+
 
 ## 抽查（2026-11-01 22:30）：`vjp` 并成一条，好；把例子计数从 39 调到 40，返工
 
@@ -1671,6 +1690,65 @@ P0-1、P0-3 从 18:20 下达，到现在快三小时，还没有一行代码。�
 - 一个值被位置取走，是一次数据使用，凭这条数据边就会被执行（3.1），不需要 ctrl。今天还靠 ctrl 撑着的地方，归 P0-2（删控制边）一起改。
 
 8 页都挪到 `reviews/` 留档。
+## 已修（2026-11-02，A3 车道）：`std::opt::devirtualize` 曾把递归深度上限抬高一层
+
+- **读数（修前）。** `test/cases/trans/cpp/exec/recursion_limit.cml`，四种跑法：`std::fvm` → `999` 之后在 `6:38` 的 `1 + depth(n - 1)` 报 `MaxRecursionDepthExceeded`，rc=1；`std::opt::devirtualize std::fvm` → `999 / 1000 / not reached` 三行全打完，rc=0；`std::nvm` 同上，`std::opt::devirtualize std::nvm` 也打出三行；`std::jit` 两种写法都是 rc=1。也就是**一个优化遍改变了哪个程序会失败**，连带改变了"`println('not reached')` 这条效应执不执行"（9.7 说改写不改变哪些效应执行）。C++ 产物始终是"会失败"那一侧（3.9 要的形状）。
+- **它按什么计。** 不是 `CALL` 节点数，是"同时打开的、不是尾调用的调用"。`include/camel/execute/limits.h:33` 的 `kEntryCalls = 1` 明写：入口图自己对 `main` 的那一次调用不算；其余每个函数调用（直接写的、经函数值调的、高阶算子为元素调的）都算。计数器有两处：`std::nvm` 的 `currRecursionDepth_`（自增在 `src/passes/sched/nodevm/nodevm.cpp:298`，自减在 776/791/809/828），判定在 `requireRecursionRoom`（`nodevm.cpp:283`：`openCalls = currRecursionDepth_ - 1`，`openCalls >= maxRecursionDepth_ + kEntryCalls` 就报）；`std::fvm` 的是 `stackDepth_ + nestedCalls_`（`src/passes/sched/fastvm/fastvm.cpp:450`，`push()` 在 426 行用同一个判定）。
+- **根因：尾调用把入口那次调用合并掉了。** 两个解释器都做尾调用优化：nvm 在 `nodevm.cpp:640-676` 里 `isTailCall` 就直接换图换帧、`goto loop_start`，不开新激活；fvm 的 `label_TAIL`（`gotovm.cpp`）释放 `currFrame` 再取一个新帧，`stackDepth_` 不变。而 `-1` 与 `+ kEntryCalls` 这两笔减掉的正好是**两个**不是程序自己发的激活：入口图自己的激活，和它对 `main` 的调用。`devirtualize` 把入口那次调用从 `N16 [CALL]`（函数值调用）改成 `N16 [FUNC main]`（直接调用，落在尾位置），它就被当成尾调用合并了，只剩一笔可减——上限高出一层，`depth(1000)` 于是跑得动。
+- **修法（不调上限）。** 入口图对它的被调者的那次调用，无论哪种写法都单独开一个激活：nvm 把条件改成 `isTailCall && currRecursionDepth_ > 1`；fvm 的 `label_TAIL` 在 `stackDepth_ + nestedCalls_ == 0` 时走"直接调用那条路"（`push` + 新帧）。另外编译路径的预算按"还剩多少"算：`fastvm.cpp:880` 原来只减 `stackDepth_`，现在减 `stackDepth_ + nestedCalls_`——否则 fvm 改对以后 `std::jit` 反而在 `depth(99)` 就报（这一条是修完 fvm 后读数抓出来的，见下）。
+- **读数（修后）。** 小程序 `depth(k)`（`--max-recursion-depth 10`）的边界三种后端一致：`k=9` rc=0、`k=10` rc=1，加不加 `devirtualize` 都一样（修前只有"加 `devirtualize`"那一列是 `k=10` rc=0、`k=11` rc=1）。`recursion_limit.cml` 七种跑法（默认 / `std::fvm` / `devirtualize std::fvm` / `std::nvm` / `devirtualize std::nvm` / `std::jit` / `devirtualize std::jit`）逐字相同：`999` + `6:38` 的 `MaxRecursionDepthExceeded`，rc=1。
+- **语料。** `test/tools/cppexec/expect.txt` 的 159 个程序，`std::fvm` 与 `std::opt::devirtualize std::fvm` 的输出和退出码逐字相同（修前有 2 条不同）。`run.py --expect … --passes "std::opt::devirtualize"` 173/174 与 fvm 相同，剩下 1 条是主机 clang 的链接问题（见上一条），与这一笔无关。
+- **回归与闸门。** `consistency.limits` 新增 `limit.direct.after_devirtualize.fits` / `.exceeds`，各跑 nvm/fvm/jit/prl 四个后端；把三处源码改动 stash 掉再跑该计划是 `total: 108, pass: 104, fail: 4`（正好四条 `exceeds`），改回来是 108/108/0。全闸门：`[SUMMARY] total: 8393, pass: 8381, fail: 0, skip: 10, known failures: 2`，`RUN_EXIT=0`（真值为 `edges.no_ctrl_edge_kind.gir`、`edges.gate_has_no_control_input.gir` 两条 xfail，与这一笔无关）。
+- **判据引用（留一句给作者，不是新裁定）。** 3.9 原文只写到"递归深度：尾递归要做优化，程序应尽量写成尾递归或循环；非尾递归给一个可配置的上限，默认在各调度器上统一为 1000，并行调度器同样计数"——它说"各调度器统一"，没说"各流水线统一"。9.6 又说"开不开优化，程序的行为一样"不是设计原则，折叠遍可以删掉一个没人用、会出故障的纯计算而让程序继续。我按 `limits.h` 自己的那句话判：那里写着"计的是同一个数：每个函数的调用，直接写的、经函数值调的、高阶算子为元素调的"——三种写法同一个数，`devirtualize` 只改写法，所以不该改数；它没有删掉任何计算，只是把同一次调用换了个拼法。如果作者认为 9.6 也允许优化遍改动上限，这一笔可以整笔回退，上面每条读数都在。
+
+
+## 已修 / 一问（2026-11-02，A3 车道）：整张"优化遍 × 后端 × 边界"矩阵——数错的那一处已修，删掉一次调用的那几格是问题不是数错
+
+上一节修的是 `std::opt::devirtualize` 一处。这一节把"还有哪些遍会改变『程序是否撞到深度上限』"问成一张表，四支程序 × 九种流水线 × 三种后端逐格量，然后按读数分两类：**数错了**（同一次调用，写法变了，数跟着变——这是缺陷）和**调用真被删了**（内联少了一层栈——这是问题）。
+
+- **量法。** 每格记退出码，比的是**边界那一对**（上限 L：一个 N 跑得动、下一个 N 撞上），不是"跑完没跑完"。九种流水线：什么都不加（基准行）、`std::opt::inline`、`std::opt::devirtualize`、`std::opt::fold`、`std::opt::cse`、`std::opt::dce`、`std::opt::saturate`、`std::opt::inline std::opt::devirtualize`、`std::opt`。判定：**任何一格与基准行不同 ⇒ 那一遍也动了上限**，再去找它是数错还是真删了调用；没有把上限调高让两边一致。
+
+- **表一：`depth_direct.cml`（`func depth(n) = if n == 0 then 0 else 1 + depth(n-1)`），`--max-recursion-depth 10`，N=9 应 0 / N=10 应 1。**
+
+| 流水线 | 9/nvm | 9/fvm | 9/jit | 10/nvm | 10/fvm | 10/jit |
+|---|---|---|---|---|---|---|
+| 什么都不加 | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt::inline` | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt::devirtualize` | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt::fold` | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt::cse` | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt::dce` | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt::saturate` | 0 | 0 | 0 | 1 | 1 | 1 |
+| `inline devirtualize` | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt` | 0 | 0 | 0 | **0** | **0** | **0** |
+
+  修前 `devirtualize` 那一行也是 `0 0 0 / 0 0 0`（上一节修的），现在回到基准。剩下 `std::opt` 一格不同，见最后一问。
+
+- **表二：`depth_value.cml`（每层两次调用：`step` 调 `via`，`via` 经函数值调 `step`），`--max-recursion-depth 100`，N=49 应 0 / N=50 应 1。**
+
+| 流水线 | 49/nvm | 49/fvm | 49/jit | 50/nvm | 50/fvm | 50/jit |
+|---|---|---|---|---|---|---|
+| 什么都不加 | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt::inline` | 0 | 0 | 0 | **0** | **0** | **0** |
+| `std::opt::devirtualize` | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt::fold` / `cse` / `dce` | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt::saturate` | 0 | 0 | 0 | **0** | **0** | **0** |
+| `inline devirtualize` | 0 | 0 | 0 | **0** | **0** | **0** |
+| `std::opt` | 0 | 0 | 0 | **0** | **0** | **0** |
+
+- **表三：`depth_map.cml`（递归在 map 元素里，多一层调用），`--max-recursion-depth 100`，N=98 应 0 / N=130 应 1。** 九行六格**全部**是 `0 0 0 / 1 1 1`，与基准行相同（表略）。
+
+- **表四：`tail_under_limit.cml`（上限 8，一百万次尾调用）。** 九种流水线在 `std::fvm` 上全是 rc=0——反方向也钉住：没有哪一遍把尾调用变成不尾。
+
+- **第一类：数错了，已修（`devirtualize`，上一节）。** 同一次调用换了个拼法（`CALL` 的函数值调用 → `FUNC main` 直接调用，落在尾位置），尾调用折叠把它并进入口的激活，而检查里 `-1` 与 `+ kEntryCalls` 减掉的正是两个不是程序自己发的激活。修法：入口图对它的被调者的调用单独开一个激活（nvm/fvm/jit 三处），上限不动。修后表一、表二 `devirtualize` 行全部回到基准。
+
+- **第二类：调用真被删了（`inline` / `saturate` / `std::opt`）。** 表二那三行不是数错：`step`/`via` 互递归在同一个 SCC 里，内联阶段按设计把它们压紧（`src/passes/opt/inline/engine.cpp` 的 `shouldSkipRecursiveInline` 对同 SCC 返回 false，注释写着这是 profitable transformation），压紧后每层真的只剩一次调用，栈上确实少一帧。边界正好翻倍印证：`std::opt::inline` 下 N=100 还在跑、N=101 才撞；`saturate` 与 `std::opt` 是 N=99 跑、N=100 撞。表一 `std::opt` 那一格是同一个道理的另一面：`std::opt` 的内联阶段把入口图对 `main` 的调用内联进了入口图（`std::opt` 之后根图里既没有 `CALL` 也没有 `FUNC main`，`main` 的图体直接搬进了根图、`main` 这个图被 DCE 删掉），于是 `kEntryCalls` 想减的那一个激活不存在了——少减一个，就多一层。
+
+- **我为什么没有"修"第二类。** 试过：让内联阶段不许往入口图里内联（`engine.cpp` 候选循环里挡掉 `nextGraph == program->root()`）。表一那一格确实从 `0` 变回 `1`，但**撞了 60 条用例**：`feat.modules.onnx` 的 60 条 `pass_export_*` 全红，原因是 `onnx::export` 正是靠"`std::opt` 把 `main` 内联进入口图"才看得见导出请求（`modules/onnx/passes/export.cpp`，`collectRequests` 说"the entry graph still contains a call … that was not inlined, so no onnx.export_model(...) request is visible in it; run std::opt before onnx::export"），其中一条用例专门断言"内联预算耗尽时这条调用留在入口图里"的原话。也就是说，"入口那次调用被内联"是**语言里设计好的形状**，不是我在调度器侧可以假设它不会发生的事。这一笔已整笔回退，源码回到上一节那个提交。
+
+- **一问（留给作者，默认=现状允许）。** 内联删掉一次调用，递归深度上限该不该跟着变？两条路：(甲) **允许**（现状）——3.9 计的是"打开的调用"，内联之后确实少一次调用，9.6 也说"开不开优化，程序的行为一样"不是原则；代价是同一个程序开不开 `std::opt` 会有不同的深度边界（表一两格、表二三行）。(乙) **不许**——就得把被内联掉的调用记成虚拟帧：`GCRegionKind::Inline` 认得出内联区域，三个调度器和 JIT 的计数要按区域进出增减，这是另一笔工程（不小，但不动上限）。我按现状留在这里；若作者判"不许"，我按 (乙) 做。
+
+- **判据引用（同上一条，留一句）。** 若作者认为 9.6 也允许优化遍动上限，本节的结论就是"两处都不用动"，上一节那一笔也可整笔回退，矩阵每一格都在。回归面：`consistency.limits` 仍是 108 条全绿（这一节没有新增条目，第二类的地方在计划里写成了一段注释，写明读数与出处，不钉住一个待裁定的行为）。
 
 ## 抽查（2026-11-01 23:30，P0-3）：顺序边不再算凭据，好；标记还算，返工
 
@@ -1738,6 +1816,8 @@ P0-1、P0-3 的主体都落了，下一步是 P0-2（控制边，批次项 9）�
 | `lane-lit2` | 49 笔整支（`12509f812`，先按 diff 取过的四笔在合并信息里逐个点名） | 0；新推的 10 笔**未合**（它报不出"最后一次全绿"，按规矩不合） | `total: 8388, pass: 8375, fail: 0, skip: 10, known failures: 3` |
 | `lane-m5` | 32 笔整支（`7037652a9`） | 0 | `total: 8388, pass: 8375, fail: 0, skip: 10, known failures: 3` |
 
+**RangeRightIsLink 的落处（2026-11-02 11:00 补，读数落在这里而不是只在合并信息里）**：撤除随 lane-a3 整支合并落地。git grep -c 'RangeRightIsLink' -- diagnostics/registry.tsv = **0 命中**，diagnostics/registry **307 → 306 码**，
+ode scripts/camel-for-ai.mjs --write 输出 `already what the sources produce (nothing written)`、git status --porcelain **为空** ⇒ 四处一致。作者 00:50 的判断是"它把 ..(b->f) 这种合法程序拒了，而同样的优先级在  + b->f 上不报错"。
 **代价记一笔**：整支合之后，`8582dc7a0`（`RangeRightIsLink`）只能在 `develop` 上撤，不能"从车道里摘掉"——这是整支合并的第一次代价，不是对那个决定的抱怨。
 
 
@@ -1759,3 +1839,18 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 - 按 2.3：推不出（条件不在签名里）；已有机制里，声明事实的存放处正是标签那一套；通用（任何带 `when` 的重载都需要）。写进提交信息。
 
 两页挪到 `reviews/` 留档。
+
+## 补裁（2026-11-02 02:50）：`ne_*` 删除掉了 508 条——意料之中，接着做前端那半
+
+`6f135cfef` 记下：删掉 11 个 `:op/ne_*` 之后，全量从 8374 过掉到 7866 过，于是没有执行裁定。这 508 条正是 02:10 那条最后一句说要"一并看"的：前端把 `a != b` 建成了 `ne_*` 节点。所以删除要分两步，在同一笔里做：
+1. 前端把 `!=` 建成对 `==` 结果的取反（`!(a == b)`，走 `operator ==` 的同一套重载解析），不再产出 `ne_*`；
+2. 删掉 22 行注册，以及 ONNX 导出、内建执行器里按 URI 点名 `ne_*` 的地方（`modules/onnx/lowering.cpp:1376`、`src/builtin/executors/builtin.cpp` 那几行）。
+读数：全量回到 8374 过、0 失败，`inspect --ops` 少 22 行。你们在 `branching.md` 里写的规矩是对的：裁定和读数冲突时先写问题页、提交里说明没执行。这一次的冲突是裁定没写全，我补上了，照做。
+
+## 收下（2026-11-02 02:50）：里程碑层那一页
+
+七条读数都要紧，其中三条要立刻处理：
+- **309 个计划里有 31 个一条用例都没启动**：照 01:30 的规矩，计划条目必须能证明自己跑过。这 31 个逐个修好让它们真跑，或者删掉；runner 对"零条启动"直接报错，不再静默算过。
+- **`std::fvm` 下毒化扫描抓到一个跨安全点持有的裸指针**，和 `remat.split` 的崩溃同族。这是内存安全问题，排在 P0 之后第一个修。
+- **Linux 上没有栈回溯**：那是一个没实现的分支，却打印一句把锅推给平台的话。这正是"暂不支持"诊断的变种。实现它，或者删掉那句话、直接报内部错误。
+另外，`Type::Float64()` 那 132 行里有 8 处是可证明的缺陷，归 P1-9 修。

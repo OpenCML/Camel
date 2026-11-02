@@ -135,6 +135,12 @@ GCGraph *functionConstant(const GCGraph *graph, gc_node_ref_t ref) {
     return function != nullptr ? function->graph() : nullptr;
 }
 
+/// Whether a graph is the entry the language writes as `main`. A specialized spelling of it keeps
+/// that name with a `$` suffix, as every function's does.
+bool isEntryName(const std::string &name) {
+    return name == "main" || name.rfind("main$", 0) == 0;
+}
+
 const char *kindName(GCNodeKind kind) {
     switch (kind) {
     case GCNodeKind::Data:
@@ -175,19 +181,39 @@ const char *kindName(GCNodeKind kind) {
 
 ProgramEmitter::Entry ProgramEmitter::findEntry(GCGraph *root) const {
     // The root graph ends with the call of `main`: through a closure (FILL) when main captures
-    // values of the top level, else through the function constant itself.
+    // values of the top level, else through the function constant itself -- and through a FUNC
+    // node once a pass has settled the callee (`std::opt::devirtualize` does). A FUNC node is the
+    // same call with its graph named in the node instead of held in a value; the writer reads it
+    // too, or every optimized program is refused as one that does not call main (defect of the
+    // 2026-11-01 eval report: 72 to 78 of 138 programs in each pipeline from devirtualize on).
     Entry entry;
     // The call is the root's result; when main gives nothing, only its completion point.
     gc_node_ref_t call = root->returnNodeRef();
     for (gc_node_ref_t candidate :
          {root->returnNodeRef(), root->exitNodeRef(), root->outputNodeRef()}) {
         const auto *node = candidate != kInvalidNodeRef ? root->node(candidate) : nullptr;
-        if (node != nullptr && node->kind == GCNodeKind::Call) {
+        if (node != nullptr &&
+            (node->kind == GCNodeKind::Call || node->kind == GCNodeKind::Func)) {
             call = candidate;
             break;
         }
     }
     const auto *callNode = call != kInvalidNodeRef ? root->node(call) : nullptr;
+    if (callNode != nullptr && callNode->kind == GCNodeKind::Func) {
+        // The graph it names is the entry, and it is main: found by the name the node carries,
+        // not by the shape of the call (a specialized spelling keeps the `$` suffix).
+        entry.main = parts_.program->calleeOf(*root, call);
+        if (entry.main != nullptr && !isEntryName(entry.main->name())) {
+            entry.main = nullptr;
+        }
+        if (entry.main == nullptr) {
+            throw Refusal{root, call, "the program has no call of 'main' std::cpp can find", false};
+        }
+        // Its arguments are the node's own: the wrapper reads them from `withInputsOf(entry.call)`
+        // and here every `with` input is an argument (a FUNC node holds no callee among them).
+        entry.call = call;
+        return entry;
+    }
     if (callNode == nullptr || callNode->kind != GCNodeKind::Call ||
         root->withInputsOf(call).empty()) {
         throw Refusal{root, call, "the program has no call of 'main' std::cpp can find", false};
@@ -480,10 +506,13 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
         // ones, then what it captures.
         call = std::format("{}(0", parts_.functionNames.at(entry.main));
         const auto withInputs = root->withInputsOf(entry.call);
+        // A CALL node keeps its callee in `with` 0, so its arguments start after it; a FUNC node
+        // names its callee in the node itself and every `with` input is an argument of main.
+        const size_t first = root->node(entry.call)->kind == GCNodeKind::Func ? 0 : 1;
         for (gc_node_ref_t arg : root->normInputsOf(entry.call)) {
             call += ", " + argumentText(arg);
         }
-        for (size_t i = 1; i < withInputs.size(); ++i) {
+        for (size_t i = first; i < withInputs.size(); ++i) {
             call += ", " + argumentText(withInputs[i]);
         }
         for (gc_node_ref_t arg : entry.args) {
@@ -562,10 +591,20 @@ std::string ProgramEmitter::emit(const camel::runtime::Program &runtimeProgram, 
         entry = findEntry(root);
         // Values of the top level that are computed (`let k = f()`, design principles 10.1:
         // before main starts): the root graph is a function of the program that computes
-        // them and calls main.
+        // them and calls main. A CALL keeps them in the closure it calls, which findEntry has
+        // put in `entry.args`; a FUNC node lists them as its own normal inputs, after the value
+        // it gives each declared parameter. Both shapes are read: a top level value that a pass
+        // has made a direct call is still that value, and the alternative -- refusing it as a
+        // value only a literal could be -- is a hole, not a limit of the language.
+        std::vector<gc_node_ref_t> topLevel = entry.args;
+        if (root->node(entry.call)->kind == GCNodeKind::Func) {
+            const auto given = root->normInputsOf(entry.call);
+            topLevel.insert(topLevel.end(), given.begin(), given.end());
+        }
         const bool computed =
-            std::any_of(entry.args.begin(), entry.args.end(), [&](gc_node_ref_t arg) {
-                return root->node(arg)->kind != GCNodeKind::Data;
+            std::any_of(topLevel.begin(), topLevel.end(), [&](gc_node_ref_t arg) {
+                const auto *node = root->node(arg);
+                return node == nullptr || node->kind != GCNodeKind::Data;
             });
         if (computed) {
             parts_.root                = root;

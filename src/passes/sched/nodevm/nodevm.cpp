@@ -639,7 +639,17 @@ slot_t NodeVMSchedPass::call(
                     std::format("a direct call names a function whose graph is not in the program's graph table"));
                 const bool isTailCall = currPlan->directCallTailEligible[i] != 0 ||
                                         currPlan->directCallFeedsTailJoin[i] != 0;
-                if (isTailCall) {
+                // The entry graph's own activation is not a call of the program, and its call of
+                // `main` is the one call kEntryCalls excuses (camel/execute/limits.h): the room
+                // check below subtracts both by name. A tail call reuses its caller's activation,
+                // so the entry's call of `main` asked whether it may reuse the entry's activation
+                // would leave one activation fewer on the stack and lift the limit by one -- which
+                // is what a graph whose entry call is a direct call (`FUNC main`) rather than a
+                // call through a function value used to do, after std::opt::devirtualize. The
+                // count of open calls must not depend on how a call is spelled, so the entry's
+                // callee always gets an activation of its own, the way the value-call spelling
+                // gives it one. Every other tail call reuses its caller's activation as before.
+                if (isTailCall && currRecursionDepth_ > 1) {
                     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                         "NodeVM",
                         "Optimizing tail-call for node [{}/{}] graph={}: ref={}",
