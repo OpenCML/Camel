@@ -383,21 +383,18 @@ class Tuple : public rtdata::Object {
         // a value that disagree about how many members there are is a memory-safety bug, not a
         // diagnostic question. The check below is in the shipped build, not only in a debug one: a
         // release that trusts the same static type has the same bug.
+        //
+        // The bound on the walk is gone (05:30: "B 的兜底代码在同一笔删掉"). It was there to stop
+        // `codes[i]` leaving the array the type owns while a residuals tuple still reached the caller
+        // as a tuple; the ruling that residuals are no longer a tuple removes the disagreement, so the
+        // walk goes back to the value's own count and a disagreement is a report followed by the read
+        // it always was. What must not come back is trusting the two counts to agree in silence.
         const size_t members = size();
         if (members > tupleType->size()) {
             camel::core::rtdata::detail::reportMembersBeyondType(this, tupleType, members);
         }
 
-        // B-FALLBACK (2026-11-02, the 05:10 ruling): while a residuals tuple still reaches the caller
-        // as a tuple, its count is stated twice, and this stops the walk at the shorter count so that
-        // `codes[i]` stays inside the array the type owns. The ruling is that this bound goes away
-        // with the tuple: `split` hands on `(y, lin)` and the residuals are no longer a tuple, so the
-        // two counts are one number again. Delete this line and the `traced` bound in the loop below
-        // in that commit (grep `B-FALLBACK`); the check above stays, because the next disagreement
-        // must not be silent.
-        const size_t traced = members < tupleType->size() ? members : tupleType->size();
-
-        for (size_t i = 0; i < traced; ++i) {
+        for (size_t i = 0; i < members; ++i) {
             if (type::isGCTraced(codes[i])) {
                 if (rtdata::Object *&ref = refArr[i]) {
                     const type::Type *slotType = tupleType->typeAt(i);
