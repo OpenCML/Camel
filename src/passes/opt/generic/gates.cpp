@@ -46,6 +46,13 @@ if (!gate || gate->kind != GCNodeKind::Gate || !edgeBudget || !isReplaceable(tra
     // Unread gates have their own DCE rule. Bound both local inspection and potential fanout
     // before allocating scratch storage; retaining a shared barrier can be cheaper than
     // materializing the Cartesian product of waits and consumers.
+    //
+    // `valueUses == 0` is also the last-reader question this rewrite has to answer before it erases
+    // anything, and the answer it gives is "not mine": a gate nobody reads is the only reader of
+    // what it forwards, so this rewrite -- which moves the gate's waits to consumers that need not
+    // exist -- would take that read away with the gate. It is left to the rule that dissolves
+    // unordered gates (src/runtime/draft.cpp, `dissolveUnorderedGates`), which hands the place the
+    // gate held to the node it read instead of dropping it.
     // The control inputs are counted for the fan-out bound: they multiply the waits this
     // rewrite moves to the consumers. They stop existing with the kind (see hasWaitEdge,
     // camel/runtime/effect_liveness.h), and this bound goes with the rewrite above it.
