@@ -25,30 +25,24 @@ void printTaggedSlots(
     std::ostream &os, const slot_t *slots, const camel::core::type::TupleType *type);
 
 namespace detail {
-/// Says, once per type, that a tuple value carries more members than its type declares.
+/// What a tuple value and its type disagreeing about the member count means, in one sentence.
 ///
 /// The two counts are the same number stated twice -- the value's `size_` and the type's `size_` --
 /// and nothing compared them, so a value and a type that disagree were traced by a loop that read
 /// `codes[i]` past the end of the type's array: a garbage code that happens to be a traced kind
 /// crashed at `typeAt(i)`, and one that is not a traced kind was skipped in silence and its
 /// reference was never relocated (the stale pointer `docs/technical/36_gc_handle_rules.md` is
-/// about). Neither reading names the tuple that was wrong, which is why this says it in words.
-/// Reported once per type, not once per collection: a program collects thousands of times.
-inline void reportMembersBeyondType(
+/// about). The trace stops here rather than reading on (author, 2026-11-02 06:30): a disagreeing
+/// value is a memory-safety bug, and a guard that reports one and then reads anyway is worse than
+/// no guard, because it turns "I know this is wrong" into a read that may be taken as data.
+inline std::string membersBeyondTypeReading(
     const void *value, const type::TupleType *tupleType, size_t members) {
-    static std::mutex mutex;
-    static std::unordered_set<const type::TupleType *> said;
-    std::lock_guard<std::mutex> lock(mutex);
-    if (!said.insert(tupleType).second) {
-        return;
-    }
-    std::fprintf(
-        stderr,
-        "[camel] tuple trace: a tuple value (%p) has %zu member(s) but its type declares %zu; the "
-        "members past %zu are not traced or relocated\n",
+    return std::format(
+        "Tuple trace: a tuple value ({}) has {} member(s) but its type declares {}; the collector "
+        "trusts a value's static type, so this is a memory-safety bug and not a diagnostic question "
+        "(docs/technical/36_gc_handle_rules.md)",
         value,
         members,
-        tupleType->size(),
         tupleType->size());
 }
 
@@ -377,19 +371,22 @@ class Tuple : public rtdata::Object {
         auto codes                       = tupleType->codes();
         rtdata::Object **refArr          = reinterpret_cast<rtdata::Object **>(data_);
 
-        // `codes` is the type's array and has the type's length, so a value with more members than
-        // its type would read past it here. The walk therefore stops at the shorter of the two counts
-        // and the disagreement is said out loud instead of being read out of bounds. Stopping short
-        // is the lesser evil: a member that is not traced is a reference that is not relocated, which
-        // the poison check reports by name, while an index past the array is an arbitrary code that
-        // either crashes in `typeAt` or silently skips the reference that needed moving.
+        // The lesson this check exists for (author, 2026-11-02 05:30): the collector trusts a value's
+        // static type -- `codes` is the type's array and `refArr` is the value's slots -- so a type and
+        // a value that disagree about how many members there are is a memory-safety bug, not a
+        // diagnostic question. The check below is in the shipped build, not only in a debug one: a
+        // release that trusts the same static type has the same bug.
+        //
+        // The bound on the walk is gone (05:30: "B 的兜底代码在同一笔删掉"). It was there to stop
+        // `codes[i]` leaving the array the type owns while a residuals tuple still reached the caller
+        // as a tuple; the ruling that residuals are no longer a tuple removes the disagreement, so the
+        // walk goes back to the value's own count.
         const size_t members = size();
-        if (members > tupleType->size()) {
-            camel::core::rtdata::detail::reportMembersBeyondType(this, tupleType, members);
-        }
-        const size_t traced = members < tupleType->size() ? members : tupleType->size();
+        GUARD(
+            members <= tupleType->size(),
+            camel::core::rtdata::detail::membersBeyondTypeReading(this, tupleType, members));
 
-        for (size_t i = 0; i < traced; ++i) {
+        for (size_t i = 0; i < members; ++i) {
             if (type::isGCTraced(codes[i])) {
                 if (rtdata::Object *&ref = refArr[i]) {
                     const type::Type *slotType = tupleType->typeAt(i);

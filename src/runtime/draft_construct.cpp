@@ -612,14 +612,30 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
 void GraphDraft::appendNormPort(gc_node_ref_t id) {
     requireOneWriting("appendNormPort");
     ++mutations_;
-    ASSERT(node(id) != nullptr, "Cannot register a missing draft node as a norm port.");
+    GUARD(node(id) != nullptr, "Cannot register a missing draft node as a norm port.");
+    // The two port lists are one classification, not two: a node is a normal parameter or a `with`
+    // parameter, and a draft that lists it in both states two different things about the same node.
+    // What makes this worth a check in the shipped build is that the pair `removeWithPort` /
+    // `appendNormPort` (or the reverse) is a *reclassification* and easy to half-write: the append
+    // looks right on its own, and no reader of the list complains. Today every reclassification
+    // names the removal first (`captures.cpp`, `builder_calls.cpp`, `entry_args.cpp`,
+    // `draft_inline.cpp`); this is what says so if one stops doing it.
+    GUARD(
+        std::find(withPorts_.begin(), withPorts_.end(), id) == withPorts_.end(),
+        "A draft node is registered as a with port and appended again as a norm port: a port is "
+        "reclassified by removing it from the other list first, not by appending it to both.");
     appendUniqueNodeRef(normPorts_, id);
 }
 
 void GraphDraft::appendWithPort(gc_node_ref_t id) {
     requireOneWriting("appendWithPort");
     ++mutations_;
-    ASSERT(node(id) != nullptr, "Cannot register a missing draft node as a with port.");
+    GUARD(node(id) != nullptr, "Cannot register a missing draft node as a with port.");
+    // The other half of the check above; see the comment there.
+    GUARD(
+        std::find(normPorts_.begin(), normPorts_.end(), id) == normPorts_.end(),
+        "A draft node is registered as a norm port and appended again as a with port: a port is "
+        "reclassified by removing it from the other list first, not by appending it to both.");
     appendUniqueNodeRef(withPorts_, id);
 }
 
