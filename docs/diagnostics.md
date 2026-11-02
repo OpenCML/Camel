@@ -15,11 +15,12 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-306 diagnostics: 285 errors, 21 warnings. 15 carry a machine-applicable edit, 291 say why they carry none.
+307 diagnostics: 286 errors, 21 warnings. 15 carry a machine-applicable edit, 292 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
 | `0x00000000` | [InternalDiag::UnknownInternalError](#unknowninternalerror) | Error | no |
+| `0x00000001` | [InternalDiag::GeneratorInitialValueShapeUnsupported](#generatorinitialvalueshapeunsupported) | Error | no |
 | `0x01000000` | [LexicalDiag::IllegalCharacter](#illegalcharacter) | Error | yes |
 | `0x01000001` | [LexicalDiag::InvalidNumberFormat](#invalidnumberformat) | Error | yes |
 | `0x01000002` | [LexicalDiag::UnclosedStringLiteral](#unclosedstringliteral) | Error | yes |
@@ -356,6 +357,45 @@ The compiler reached a state it has no code for, so nothing in the program is kn
 func main(): int sync {
     let m = [(1.5, 1)] as Map<float, int>
     println("never printed")
+    return 0
+}
+```
+
+### GeneratorInitialValueShapeUnsupported
+
+`0x00000001` · Error · `InternalDiag::GeneratorInitialValueShapeUnsupported`
+
+**Fix**
+
+None: internal: this version does not build the shape, so there is nothing in the program to change
+
+**Message**
+
+```text
+An error has occurred: {0}.
+```
+
+**Help**
+
+```text
+The generator machine does not build this shape yet: a generator 'loop' takes its initial value written as a literal at the loop, and a value computed there or held in a local is not built. This is a known limitation of this compiler version, and nothing in the program is wrong, so there is nothing to change in the program and no repair to suggest.
+```
+
+**Example** (`test/cases/compile/stream/generators_loop_call_initialiser.cml`, run as `camel test/cases/compile/stream/generators_loop_call_initialiser.cml`)
+
+```camel
+func f(): int {
+    return 0
+}
+
+func g(): int.. sync {
+    loop i = f() while i < 3 do {
+        yield i
+        i + 1
+    }
+}
+
+func main(): int sync {
     return 0
 }
 ```
