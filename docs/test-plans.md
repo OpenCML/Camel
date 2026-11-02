@@ -154,6 +154,23 @@ skipped appears in no summary, so the plan proves less than its file says while 
 it names the plan and fails the run. Both numbers are counted, never computed: multiplying by
 `backends.length` reads `7339` for a layer that starts `3404`.
 
+Immediately before `[SUMMARY]`, every run states the artifact its numbers belong to:
+
+```
+[provenance] tip 97fd0bf9bda2e782e8097f1f9dad6e582b7e9d5e | binary built 2026-11-01T22:40:46-05:00 | tree /home/zjwei/camel-work/h-a3 | tier fast | jobs 8
+```
+
+- **`tip` is the tested checkout's `git rev-parse HEAD`**, character for character -- never a branch
+  ref (`origin/develop` names a different tree's commit, and that conflation cost a night).
+- **A dirty tree has no tip**: it prints `(dirty: N files)` and no sha, because what ran is that
+  commit plus edits nobody recorded, so a sha would claim a provenance that does not exist. The count
+  includes untracked files: a new case or plan the commit does not carry is part of what ran.
+- **`binary built` is the executable's mtime, not the build's log time.** "The build ran" is not "the
+  binary is new": a failed link, a stale `out/latest` and another tree's artifacts all leave the log
+  looking right. A tree with no binary (a plan of `tool = "node"` cases, an unbuilt checkout) says
+  `unknown` rather than an empty field. `out/latest/build-info.json` carries the build's own stamp for
+  anyone who needs to know which tree produced the binary -- the two answer different questions.
+
 Rules for a new test:
 
 - It is fast by default: do not mark a test slow to make the default set look fast.
@@ -1382,6 +1399,14 @@ instances run at the same time without seeing each other's files. A case run out
   Compound values (`alloc=3,safepoint=1,kind=major`, `poison,verify=both`) and pass parameters
   (`std::opt safe_fp=true`) are not run options and are left alone.
 - Prefer explicit `expect_exit = 0` for successful behavior tests.
+- **`null` is not an exit code; it is the absence of one.** A run can end without an exit code in
+  three ways, and the failure line says which:
+  `expected exit 0, got signal SIGSEGV (rc=139, 0.03 s)` (the shell's `128 + n` for the signal),
+  `expected exit 0, got timeout after 30000 ms` (only a real timeout says this), and
+  `expected exit 0, could not start: <message>` (the process never existed). `[SUMMARY]` keeps the
+  first two apart as well -- `, timed out: <n>` and `, killed by a signal: <n>`, printed only when
+  one happened -- because a crash reported as a hang sends the reader to the wrong instrument: a
+  0.03 s SIGSEGV was read as a timeout for two rounds.
 - Prefer `verify_script` over `verify_script_path` for short, local checks.
 - Prefer `verify_script_path` for reusable or multi-test logic.
 - Do not encode final pass/fail semantics only inside Camel output like `"ok"`.

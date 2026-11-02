@@ -5,11 +5,17 @@
  * What keeps a node whose running does something alive (docs/design-principles.cn.md 3.1): the two
  * things an effect can stand on, and the one shape where neither has an answer yet.
  *
- * The question is asked by every pass that drops, folds or keeps a node because of what running it
- * does (the reduction of waits, a gate's bypass test, the fusion group's consumer test, the
- * liveness walk that reports a dropped effect, the splice that moves a statement into a chain).
- * Asking it in one place is what keeps those answers from disagreeing (design principles 3.1: a
- * write runs when something reads what it wrote, or when it is a statement of a `sync` block).
+ * The question is asked where a pass decides whether running a node is part of the program, and
+ * today that is two places: the fusion group's consumer test (`FusionGroupView::isPrivateTo`) and
+ * the pass that prints the answer for a plan to pin (`KeepInspectTestPass`).
+ *
+ * The gate's bypass test, the splice that moves a statement into a chain and the walk that reports a
+ * dropped effect are **not** among them, although this header used to say so: each of them asks
+ * whether a node carries a **wait**, which is a structural fact and never a credential -- a GATE
+ * with a wait is `HasNoCredential` here, and that is the right answer to a different question.
+ * Three callers read the wait from three different places (control inputs; control or sync inputs;
+ * a control frontier), so the field they filled from this header was three readings wearing one
+ * name. It is gone; each caller names its own reading on the line where it reads it.
  */
 
 #pragma once
@@ -32,6 +38,14 @@ enum class EffectStanding : uint8_t {
 /// The facts the question is answered from. A caller reads them where it stands -- a pass
 /// reads its own draft, the builder reads its own bookkeeping -- and the answer is one function so
 /// that no two callers invent different rules.
+///
+/// Three fields, and each is a fact the answer reads. Nothing about a **wait** lives here any more:
+/// `hasWaitEdge` was filled by four call sites in three spellings (`!ctrlInputs`, `!ctrl ∨ !sync`, a
+/// control frontier) and `isWaitedOn` by one, and `effectStandingOf` read neither -- so the header's
+/// "asked in one place" was true of the declaration and false of the four answers, which is what a
+/// pseudo-single-point is. Deleting the two fields is the ruling from
+/// `docs/handover/reports/code-review-2026-11-01.md` item 4: a field that cannot be routed through
+/// the answer is deleted rather than left looking like part of it.
 struct EffectLivenessFacts {
     /// A value of the node is read by something (design principles 3.1): a normal, `with` or
     /// version input of another node.
@@ -41,21 +55,10 @@ struct EffectLivenessFacts {
     bool isSyncStatement = false;
     /// Outside a block: the node is registered as a writer of a variable, and a read written after
     /// it takes that variable (the writer table). No caller fills it today: the writer table's
-    /// answer is not measured here yet (3.1 keeps it as the third credential).
+    /// answer is not measured here yet (3.1 keeps it as the third credential). It stays because this
+    /// field is the only place in the tree that states that credential; deleting it would delete a
+    /// sentence about 3.1, not a piece of dead code.
     bool isWriterWithLaterRead = false;
-    /// The node carries a wait: an edge that exists only to order it (today the control edge,
-    /// docs/design/effects/plan.cn.md 5.5). A GATE carries no effect of its own -- it carries a
-    /// wait -- and what a pass may do with it depends on whether that wait is a chain's
-    /// (`isSyncStatement`) or an edge of its own.
-    ///
-    /// Its only source today is a control input. Once the control edge stops being written this is
-    /// false everywhere, and `bypassValueGate` (src/passes/opt/generic/gates.cpp) becomes dead code:
-    /// its premise is gone, not its correctness. Read this line before deleting either.
-    bool hasWaitEdge = false;
-    /// Something outside takes this node as a wait: it has control users (the same kind, the other
-    /// direction). An effect something waits on is observed from outside, so a fusion group may not
-    /// take it in as private: the wait would move with it.
-    bool isWaitedOn = false;
 };
 
 /// The answer. There are two of them: an effect is kept by a data use, a chain, or a later read of
