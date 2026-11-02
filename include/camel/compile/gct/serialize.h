@@ -31,6 +31,27 @@
  *               number, because in memory fourteen of those tables are keyed by `const Node*`
  *               and one by `data_ptr_t`, and neither means anything in another process.
  *
+ * Byte order. Every multi-byte field is written little-endian and read little-endian, by
+ * converting at the boundary rather than by copying the bytes of a native value: this tree is
+ * built on Windows and on Linux, a cache directory can be shared between the two, and a file
+ * written by one and read by the other would otherwise be read a word at a time in the wrong
+ * order -- which does not fail, it produces a number. The padding of a record is written as zero
+ * for the same reason: two builds of one tree must produce the same bytes, and padding is where
+ * a compiler is free to write something else.
+ *
+ * Cache key. A stored tree is only valid for the build that wrote it, so the key carries at least
+ * the platform and the word size, and the compiler and the optimization level whenever either can
+ * change the tree: a build whose pointers are four bytes wide and one whose pointers are eight
+ * will both hash the same source and neither can read the other's file. A matching hash does not
+ * save this; only the key can.
+ *
+ * Where the count comes from. A `test::` pass reads it. Every pass is built with the pipeline's
+ * `Context` (`GraphIRPass` holds `context_`), so a test pass walks `context->allUserModules()` and
+ * asks each module for its construction tree; it is named on the command line and never in the
+ * default pipeline, so a run that does not name it does exactly what it did before, and its
+ * `apply` still receives the program the previous pass produced, which it hands back unchanged.
+ * That is the shape the counting pass has: no file, no cache, one line on stdout.
+ *
  * Two rules that must not be simplified away by a later change:
  *
  *  - An operator reference is keyed by what the registry resolves, not by the spelling a node
