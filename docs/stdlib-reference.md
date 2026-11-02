@@ -6803,52 +6803,112 @@ The tangent of `-x` along `dx`: `-dx`.
 #### `add_cotangent`
 
 ```camel
-add_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+add_cotangent: (ct: T) => T when is_float::<T>()
 ```
 
 The cotangent of `x` in `x + c`: the cotangent of the sum, unchanged.
 
-- Example: `add_cotangent(3.0, 5.0, 2.0)` gives `2.0`
+The first five take only the values their answer is a function of -- `ct`, and the other name
+where the answer reads it. A transpose rule's right side names what it calls with exactly these,
+so a position whose answer does not read an operand asks for no value of it; that is what lets
+the transposed loop body answer a rule whose other operand is the round's own state (design
+principles: a value the walk does not carry costs nothing unless the rule reads it).
+
+- Example: `add_cotangent(2.0)` gives `2.0`
 
 #### `sub_cotangent`
 
 ```camel
-sub_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+sub_cotangent: (ct: T) => T when is_float::<T>()
 ```
 
 The cotangent of `x` in `x - c`: the cotangent of the difference, unchanged.
 
-- Example: `sub_cotangent(3.0, 5.0, 2.0)` gives `2.0`
+- Example: `sub_cotangent(2.0)` gives `2.0`
 
 #### `mul_cotangent`
 
 ```camel
-mul_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+mul_cotangent: (c: T, ct: T) => T when is_float::<T>()
 ```
 
 The cotangent of `x` in `x * c`: `ct * c`.
 
-- Example: `mul_cotangent(3.0, 5.0, 2.0)` gives `10.0`
+- Example: `mul_cotangent(5.0, 2.0)` gives `10.0`
 
 #### `div_cotangent`
 
 ```camel
-div_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+div_cotangent: (c: T, ct: T) => T when is_float::<T>()
 ```
 
 The cotangent of `x` in `x / c`: `ct / c`.
 
-- Example: `div_cotangent(6.0, 4.0, 2.0)` gives `0.5`
+- Example: `div_cotangent(4.0, 2.0)` gives `0.5`
 
 #### `neg_cotangent`
 
 ```camel
-neg_cotangent: (x: T, ct: T) => T when is_float::<T>()
+neg_cotangent: (ct: T) => T when is_float::<T>()
 ```
 
 The cotangent of `x` in `-x`: `-ct`.
 
-- Example: `neg_cotangent(3.0, 2.0)` gives `-2.0`
+- Example: `neg_cotangent(2.0)` gives `-2.0`
+
+### The other half: the cotangent of each name of a rule's left side
+
+The five above answer the cotangent of `x`, the first name their rule's left side binds. A rule
+like `x - c` has a second name, and its cotangent is not the one above with the arguments swapped:
+`sub_cotangent(ct)` is `ct`, while the cotangent of `c` in `x - c` is `-ct`. So each name gets its
+own function, named by position, and a rule's right side answers both -- a tuple, in the order the
+left side names them -- so the transposed graph calls the one for the name it is writing, and no
+transform re-derives the arithmetic in C++.
+
+`x` keeps its own names above (`mul_cotangent` and so on) and nothing here replaces them: `vjp` and
+`jvp` call those, and their meaning -- the cotangent of the first name -- is the meaning they keep.
+What changed is only their parameters: each takes the values its answer reads, so a rule that can
+be answered without an operand does not name it and does not need it.
+
+#### `add_cotangent_c`
+
+```camel
+add_cotangent_c: (ct: T) => T when is_float::<T>()
+```
+
+The cotangent of `c` in `x + c`: the cotangent of the sum, unchanged.
+
+- Example: `add_cotangent_c(2.0)` gives `2.0`
+
+#### `sub_cotangent_c`
+
+```camel
+sub_cotangent_c: (ct: T) => T when is_float::<T>()
+```
+
+The cotangent of `c` in `x - c`: `-ct`, the opposite sign of `sub_cotangent(ct)`.
+
+- Example: `sub_cotangent_c(2.0)` gives `-2.0`
+
+#### `mul_cotangent_c`
+
+```camel
+mul_cotangent_c: (x: T, ct: T) => T when is_float::<T>()
+```
+
+The cotangent of `c` in `x * c`: `ct * x`.
+
+- Example: `mul_cotangent_c(3.0, 2.0)` gives `6.0`
+
+#### `div_cotangent_c`
+
+```camel
+div_cotangent_c: (x: T, c: T, ct: T) => T when is_float::<T>()
+```
+
+The cotangent of `c` in `x / c`: `-(ct * x / (c * c))`.
+
+- Example: `div_cotangent_c(6.0, 4.0, 2.0)` gives `-0.75`
 
 <a id="rulesets.jvp"></a>
 

@@ -224,4 +224,36 @@ size_t genericRuleInstance(
     return entry.instances.size() - 1;
 }
 
+const GenericRuleInstance *genericRuleInstanceByName(
+    camel::core::context::Context &context, std::string_view name,
+    const std::vector<camel::core::type::Type *> &types, const RuleWithArguments &with,
+    std::string &why) {
+    Table &table    = rulesOf(context);
+    uint64_t ruleId = 0;
+    for (size_t i = 0; i < table.size(); ++i) {
+        if (table[i] != nullptr && table[i]->name == name) {
+            ruleId = static_cast<uint64_t>(i) + 1;
+            break;
+        }
+    }
+    if (ruleId == 0) {
+        why = "the context has no rule of that name";
+        return nullptr;
+    }
+    // The id is all this adds: whether the pair is new is `genericRuleInstance`'s question, and it
+    // answers the same place for a second ask. Read the entry again afterwards -- its vector grew.
+    const size_t at          = genericRuleInstance(context, ruleId, types, with);
+    GenericRuleEntry *entry  = genericRuleEntry(context, ruleId);
+    if (entry == nullptr || at >= entry->instances.size()) {
+        why = "the rule's instance could not be read back";
+        return nullptr;
+    }
+    const GenericRuleInstance &instance = entry->instances[at];
+    if (!instance.made || instance.rhs == nullptr) {
+        why = instance.why.empty() ? "the rule has no instance at these types" : instance.why;
+        return nullptr;
+    }
+    return &instance;
+}
+
 } // namespace camel::compile::gir
