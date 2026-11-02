@@ -161,6 +161,20 @@ the two tensor operands have different element types ('f32' and 'float')
 模型没有缩小：`train.cml` 就是作者要的两层、两头、宽 16、context 8；拿不到曲线不是模型太大，是上面
 九面墙。
 
+## 全量闸门（`-Plan all -Tier fast -Jobs 8`）
+
+| 时点 | total | pass | fail | skip | known |
+|---|---|---|---|---|---|
+| 分叉点 `ef60bd42a`（动手前） | 8522 | 8473 | **29** | 10 | 10 |
+| 本 lane 收尾（引用修好之后） | 8522 | 8473 | **29** | 10 | 10 |
+
+- total 一样，说明新增的 `test/plans/perf/showcase_c3.plan.toml` 没有被 fast 层选中：它的 `tier` 是
+  `milestone`，只有点名或 `--tier milestone` 才跑它。那四条今天全绿。
+- 29 个红里 26 个是 `vjp`/`grad` 家族（墙 1 的同一个根），另 2 个（`registry.docs_complete`、
+  `tools.autodiff_migration_ledger.ratchet`）是读整棵树的守卫，消息里报的也是 `vjp.cml` 那处。
+- 中途我看过一次 `8472 / 30`：多出来的那一个是本目录的文档引用写法（带行号地引用库文件，
+  `docs.links.citations` 要求引用符号）。 改成符号引用后回到 29——那是**我的红**，不是墙。
+
 ## 我自己写错、不算墙的
 
 - 张量算子的附加参数写在**尖括号**里（`mean<1, true>(x)`、`reshape<[3, 2]>(x)`、`softmax<1>(x)`），
