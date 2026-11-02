@@ -2,7 +2,7 @@
 
 > 一页一问。作者把读过的页整体挪进 `reviews/`；这里只放**还在等回答**的页。
 
-## 现在在等作者：6 页
+## 现在在等作者：7 页
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
 | --- | --- | --- | --- | --- |
@@ -13,6 +13,7 @@
 | [`2026-11-02-what-carries-the-residuals`](2026-11-02-what-carries-the-residuals.cn.md) | 残差用什么承载（三条路各写过一遍）；`split` 不再交出残差元组之后，闭包里俘获的残差该由谁持有 | 待裁 | — | 残差藏进闭包这条线的入口 |
 | [`2026-11-02-can-a-sync-place-be-derived-from-the-graph`](2026-11-02-can-a-sync-place-be-derived-from-the-graph.cn.md) | 同步链的"位置"（`kGCNodeFlagSyncStatement` 记的那个事实）能不能从图上推出来：照 07:30 的谓词实现，终点侧 1594 个终点落在三条之外、全量 720 红，起点侧照字面 185 红 | 待裁 | — | 标记能否删；B 要重写 `edges.cn.md` 一节 |
 
+| [`2026-11-02-who-makes-a-spliced-chain-tail-final`](2026-11-02-who-makes-a-spliced-chain-tail-final.cn.md) | 拼接时链尾只是快照，谁把它变成终态：删 `resolvePlaceForks` 后 `05_effect_order` 由 `visit 3` 变 `total 60`（效应不再执行） | 待裁 | — | 删 `resolvePlaceForks`；B 要越出"一个草稿操作"的边界 |
 **这张表由 `node scripts/check-doc-links.mjs --questions-index` 对着目录核对**：行数与页数不符、或者某一行指向目录里没有的页，它都会红。
 
 > **一条裁定有没有落地，看代码和提交，不看这张索引**（作者 2026-11-02 08:10）。"已裁已落/已裁未落"那张状态表整节删掉了：维护一张追着代码改的表，本身就是一份没人该维护的台账。审查清单上的条目修完，写一行"已修，提交号"在那页里。
