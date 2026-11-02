@@ -14,6 +14,7 @@
 #include "jvp_operator.h"
 
 #include "jvp.h"
+#include "readings.h"
 #include "transpose_operator.h"
 
 #include "camel/core/context/context.h"
@@ -168,9 +169,10 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "transforms: jvp needs a function value");
     }
     // The reading is part of the interface (jvp.h): a graph the caller cannot name yet is a graph
-    // nobody can check. It goes to the program's own output, as the pass's reading does.
+    // nobody can check. It goes to the diagnostic side (`readings.h`), not to the program's output:
+    // the same walk that explains a refusal used to land among the numbers the program printed.
     const JvpGraph built = buildJvpGraph(
-        ctx.shared_from_this(), function->program(), function->graph(), std::cout);
+        ctx.shared_from_this(), function->program(), function->graph(), readings());
     if (built.graph == nullptr) {
         if (built.refusedOrigin == camel::source::kInvalidOriginId) {
             throwRuntimeFault(
@@ -200,7 +202,7 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     // `pure` clause, which a declaration cannot write and `--verify-ops` does not compare. What has
     // to be one string, and is what the call site relies on, is the lifted half: the type the
     // operator says it returns and the type of the graph it hands back.
-    printJvpCallReading(std::cout, function->graph()->funcType(), built.graph->funcType());
+    printJvpCallReading(readings(), function->graph()->funcType(), built.graph->funcType());
     auto *result = ::Function::create(
         built.program, built.graph->id(), function->tupleType(), mm::autoSpace());
     if (::Tuple *closure = function->tuple()) {

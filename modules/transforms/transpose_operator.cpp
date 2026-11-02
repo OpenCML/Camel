@@ -3,6 +3,7 @@
 
 #include "transpose_operator.h"
 
+#include "readings.h"
 #include "transpose.h"
 
 #include "camel/core/context/context.h"
@@ -126,7 +127,7 @@ slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "transforms: transpose needs a function value");
     }
     const TransposeGraph built = buildTransposeGraph(
-        ctx.shared_from_this(), function->program(), function->graph(), std::cout);
+        ctx.shared_from_this(), function->program(), function->graph(), readings());
     if (built.graph == nullptr) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError, "transforms: transpose has no transpose for this function");
@@ -139,7 +140,7 @@ slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
                                                  : std::string("-");
     const std::string handedBack =
         built.graph->funcType() != nullptr ? built.graph->funcType()->toString() : "-";
-    std::cout << "TRANSPOSE op signature=" << spelled << " resolved=" << produced
+    readings() << "TRANSPOSE op signature=" << spelled << " resolved=" << produced
               << " transposed=" << given << " graph=" << handedBack
               << " same=" << (given == handedBack ? "yes" : "no") << '\n';
     auto *result = ::Function::create(

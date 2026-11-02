@@ -1,0 +1,30 @@
+// A refusal is a diagnostic, not the program's output.
+//
+// `transpose(g2)` has no transpose here: `h` is a closure being assembled, so at the point where a
+// transposed call would need a graph there is none, and the walk says exactly that -- which node,
+// which callee, why. That sentence is the answer a reader needs, and it used to be printed into the
+// same stream as the program's numbers: a caller that captured the program's output captured the
+// transform's debugging with it, and a caller that collected the diagnostics got nothing (the
+// author's review, high-3 second half).
+//
+// The transform speaks on the diagnostic side now (`modules/transforms/readings.h`), and this case
+// is the one that can tell the difference: `expect_stdout_exact` pins the program's stdout to the
+// single line `g2(1.0)` prints, so a transform that borrowed stdout again would redden it, and the
+// reason is pinned where a diagnostic belongs. The refused call never reaches the second `println`.
+//
+// The paper answer this shape owes (2, and 6 at cotangent 3) is the question page
+// `docs/handover/reviews/questions-2026-11-01-closures-as-values-block-the-transposed-backward-half.md`.
+import { transpose } from transforms
+import rulesets.transpose
+
+func g2(x: float): float {
+    let h = (y: float) => y * x
+    return h(2.0)
+}
+
+func main(): int sync {
+    println(g2(1.0))
+    let back = transpose(g2)
+    println(back(1.0, 1.0))
+    return 0
+}

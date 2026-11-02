@@ -2061,17 +2061,30 @@ const EXCEPTIONS = {
 const EXAMPLE_STOPS = {
     // The example calls a name the description introduces and the declaration does not take
     // (`inputs(n)` with `n` a node of the surrounding pass), or names a value the wrapper cannot
-    // bind at all: 39 of them, most of them marked a fragment. This was 40 for one commit: the
-    // author's one declaration for every arity made `stdlib/vjp.cml#vjp` generic over `F`, and its
-    // example `let reading = vjp(f)` stopped as UnresolvedReference 'f'. The number was raised to
-    // record it; the example is fixed instead -- it writes the function where the call is,
-    // `vjp((x: float) => x * x)(3.0)`, and compiles and runs with nothing bound -- so the count is
-    // back to 39, and the rule it leaves is: fix the example, not the count.
+    // bind at all: 38 of them, most of them marked a fragment. This was 39 until `check''s two
+    // overloads came to name the same `with` positions: the example
+    // `rules->check<samples: 1000, seed: 7>` used to stop here as `OverloadParameterNames`, because
+    // `samples` stood at position 0 in one declaration and position 1 in the other, and it compiles
+    // now that both say `samples, seed`. No example was deleted -- one moved from this class to the
+    // side that compiles once its names are bound -- so the number follows the tree. This was 40
+    // for one commit: the author''s one declaration for every arity made `stdlib/vjp.cml#vjp` generic
+    // over `F`, and its example `let reading = vjp(f)` stopped as UnresolvedReference 'f'. The
+    // number was raised to record it; the example is fixed instead -- it writes the function where
+    // the call is, `vjp((x: float) => x * x)(3.0)`, and compiles and runs with nothing bound -- so
+    // the count is back down, and the rule it leaves is: fix the example, not the count.
     //
-    // 39 -> 38 with the split ABI (2026-11-02): the example that stopped here was reading the pair
-    // `split` used to answer before it reached the point where the new shape turns it into the
-    // internal-error class above, so the class moved rather than the corpus shrinking. It returns to
-    // 39 when `stdlib/vjp.cml` is migrated (next step of the same lane).
+    // The split ABI (2026-11-02) moved one more out of this class and into the internal-error one:
+    // `split`''s own example used to read the pair the call answered and stopped here; with the
+    // forward half alone it reaches the compiler''s `Unexpected target type in ACCS node` instead,
+    // so the two numbers of this lane sum to the same corpus. Both return when `stdlib/vjp.cml` is
+    // migrated.
+    //
+    // This is a shape count, not a count of assertions that passed: it says how many examples
+    // stop at this class of diagnostic in the tree the run measured, so moving it neither relaxes
+    // nor tightens anything -- the rule is still that every `@example` compiles, or carries a
+    // `@example-fragment` marker whose reason names what it is missing. A number here that moved
+    // says a shape changed; a number here that was lowered without a reason would be the same
+    // silence as a relaxed gate.
     'a semantic error': 38,
     // `split`'s example reaches the compiler with a function-typed parameter bound by name and the
     // compile graph keeps a live dereference node (`internal error: Compile graph '__doc_example'

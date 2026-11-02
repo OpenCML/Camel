@@ -136,18 +136,26 @@ export func run::<F>(f: F): Run<F>! when is_function::<F>()
 /// instance's type tuple), not its place in `rules`, so a rule draws the same samples in any call.
 /// A build without a solver answers `Sampled` and `Refuted` and never `Proved`. A generic law is
 /// checked at the types every operator group registered.
-/// @example-fragment a rule set comes from the caller
+/// @example-fragment `rules` comes from the caller
 /// @example rules->check<samples: 1000, seed: 7>
 with <samples: int = 100, seed: int = 0>
 export func check(rules: Rule[]): CheckReport
 
 /// The same, with the law also checked at the types of the values `over` has, each once, in the
-/// order its graphs write them.
-/// @example-fragment a rule set and a function come from the caller
-/// @example rules->check<over: f>
+/// order its graphs write them. `over` is an ordinary argument, not a `with` one, so that both
+/// overloads of `check` name each `with` position the same way: a named argument
+/// (`check<samples: 1000>`) means one position in every declaration of the set, and a position one
+/// declaration names `samples` and the other names `over` is one the name does not reach
+/// (`OverloadParameterNames`). It cannot stand in the `with` list in front of `samples` and `seed`
+/// either, because a `with` parameter without a default may not follow one that has a default
+/// (`WithParameterAfterDefault`), and a function-typed one takes no default (`null` has type
+/// `void`, and `F?` leaves `F` unbound). Written first, it is the argument the arrow carries:
+/// `rules->check<8, 1>(f)`.
+/// @example-fragment `rules` and `f` come from the caller
+/// @example rules->check(f)
 #op('rewrite:check_over')
-with <over: F, samples: int = 100, seed: int = 0>
-export func check::<F>(rules: Rule[]): CheckReport when is_function::<F>()
+with <samples: int = 100, seed: int = 0>
+export func check::<F>(rules: Rule[], over: F): CheckReport when is_function::<F>()
 
 /// The report's fixed rendering, one line per row, for a caller that wants it as a value.
 /// @example-fragment `report` is the report a check gives back: the example writes what reads it, and a doc example has no check to run

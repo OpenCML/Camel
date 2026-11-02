@@ -13,6 +13,7 @@
 
 #include "split_operator.h"
 
+#include "readings.h"
 #include "split.h"
 
 #include "camel/core/context/context.h"
@@ -126,7 +127,7 @@ slot_t splitKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "transforms: split needs a function value");
     }
     const SplitGraph built = buildSplitGraph(
-        ctx.shared_from_this(), function->program(), function->graph(), std::cout);
+        ctx.shared_from_this(), function->program(), function->graph(), readings());
     if (built.forward == nullptr || built.backward == nullptr) {
         if (built.refusedOrigin == camel::source::kInvalidOriginId) {
             throwRuntimeFault(
@@ -159,29 +160,8 @@ slot_t splitKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     // The answer is the forward half alone: `fwd(x)` is `(y, lin)`, and `lin` is built inside that
     // graph, closed over the residuals the call computes (author, 2026-11-02 05:10). The backward
     // graph is reachable only through that `lin`, which is why the call hands out no second value.
-    printSplitCallReading(std::cout, function->graph()->name());
+    printSplitCallReading(readings(), function->graph()->name());
     return toSlot<::Function *>(forwardFunction);
-}
-
-} // namespace
-
-const std::vector<oper_group_ptr_t> &splitOperatorGroups() {
-    static const std::vector<oper_group_ptr_t> groups = {
-        OperatorGroup::create("split", {{"transforms:split", std::make_shared<SplitResolver>()}}),
-    };
-    return groups;
-}
-
-void printSplitCallReading(std::ostream &os, std::string_view function) {
-    os << "REINTERP split function=" << function << '\n';
-}
-
-std::unordered_map<std::string, operator_t> splitOperatorKernels() {
-    return {
-        {"split", &splitKernel},
-    };
-}
-
 void registerSplitOperatorMetadata() {
     camel::core::OperatorTable::instance().declare("transforms", {{"split", false}});
     // The step reads the graph of the function value it receives -- that is the whole transform --

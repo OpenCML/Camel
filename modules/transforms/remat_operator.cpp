@@ -16,6 +16,8 @@
 
 #include "remat_operator.h"
 
+#include "readings.h"
+
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
@@ -178,7 +180,7 @@ slot_t rematKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         }
     }
     // The reading: the property before and after the copy, so one run prints both numbers.
-    std::cout << "REINTERP remat function=" << source->name()
+    readings() << "REINTERP remat function=" << source->name()
               << " in_recompute=" << (source->recomputesOnBackward() ? 1 : 0)
               << " out_recompute=" << (marked->recomputesOnBackward() ? 1 : 0)
               << " graph=" << rt::toValue(made) << std::endl;

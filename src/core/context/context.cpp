@@ -780,10 +780,19 @@ std::string Context::importerDirectory(const module::Module *importer) const {
             camel::utils::pathFromUtf8(importer->path()).parent_path());
     }
     // The entry program (and a program-level import, which stands where the program does): its
-    // own directory is the entry file's directory.
+    // own directory is the entry file's directory. The entry file is the word the command line
+    // wrote, and a bare file name (`camel edits.cml probes::count_adds`) carries no directory at
+    // all: the parent of `edits.cml` is the empty path, which is no directory, so nothing beside
+    // the program was searched and the module next to it was not found, while `./edits.cml` -- the
+    // same file -- gave `.` and worked. The answer is the entry file's directory however the word
+    // is spelled, and that directory is the context's entry directory: the working directory for a
+    // bare name, and for `-` (a program read from stdin) too, where there is no file to ask.
     if (mainModule_ && !mainModule_->path().empty()) {
-        return camel::utils::pathToUtf8(
+        const std::string dir = camel::utils::pathToUtf8(
             camel::utils::pathFromUtf8(mainModule_->path()).parent_path());
+        if (!dir.empty()) {
+            return dir;
+        }
     }
     return entryConfig_.entryDir;
 }
