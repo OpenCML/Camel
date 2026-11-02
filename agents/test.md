@@ -17,6 +17,21 @@
 - **A probe of a run-time overflow on a narrow type cannot be written as a literal expression.** `let x: f16 = 65504.0 + 65504.0` is refused at compile time ("the literal '65504.0 + 65504.0' cannot be represented as type 'f16': the value 131008 is out of range"), because the constant folders check the folded value against the declared type — the infinity rule of the element type never runs. Put one operand in a variable (`let max: f16 = 65504.0; let over: f16 = max + max`) so the sum is a run-time operation; that is what answers infinity rather than saturating.
 - **A migration changes what a fixture means, not only what it checks.** When a name moves from one mechanism to another (a builtin module becomes a declaration module, an operator stops being computed in C++), every test that used that name as an *example of the old mechanism* is now testing something else, and it will keep passing or start failing for a reason unrelated to its title. Before merging a migration, grep the tree for the migrated names and read each use: the pass-resolution diagnostic, the LSP's "computed member" examples, and a pinned count of declarations are the three that actually broke. A pinned count that moves because of a migration is updated to the measured value in the same change, with the reason; a guard whose subject changed is retargeted to a name that still exercises the mechanism, never deleted.
 - **A rule shared by several back ends or paths has one test that runs on all of them.** Otherwise each platform exercises a different implementation, or the check covers one element type and the bug lives in another. Wrong: two interpreter sources of which each platform compiles one, tested through whichever was built; a gradient check on f32 only. Right: one case parameterized over the back ends and element types, with the outputs compared.
+- **"Zero hits" is a reading only when the commands and the exception are printed.** An audit that
+  reports "no such site" proves nothing; one that prints each `git grep` it ran, the count it
+  returned and an explanation of every non-zero line does. Measured 2026-11-02 on the
+  `nn` bytecode poison: five searches over `modules/nn` (internal pointers, tensor data pointers,
+  higher-order element calls, operator/function entry points, raw pointer locals) returned
+  0/0/0/0/1, and the single `auto *tuple = ::Tuple::create(3, mm::autoSpace())` was explained as a
+  freshly allocated object written flat inside the same call, which rule 1 allows. The audit was
+  then a reading rather than an absence. The same shape applies to a positive result: a cached
+  address that crosses a safepoint is proven by the three lines *taking* it, the call that reaches
+  the safepoint and the line *using* it, not by naming the file.
+- **Before auditing an execution path, paste the `args` line of the case that failed.** Three times
+  in one night a lane audited the wrong path because it inferred the back end from the test's name:
+  a poisoned build (the instrument was not the one believed), `verify=1` (two trees, two readings,
+  both true), and a `--tf bytecode` that the plan text did not say. The plan entry's `args` array is
+  the one answer, and it costs one command.
 - Start with small inputs when debugging high-volume workloads such as `fib 30`.
 - Use `std::gir` for graph inspection, `std::nvm` for baseline runtime behavior, and `std::fvm` or `std::jit` for scheduler/runtime verification when relevant.
 - Prefer routine verification in `npm run build`; use `npm run debug` only when diagnosing logging or debug-only code paths.
