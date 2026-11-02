@@ -40,6 +40,20 @@ const CHECKER = path.join(ROOT, 'test', 'tools', 'cml_roundtrip.py')
 const SCRATCH = fs.mkdtempSync(path.join(os.tmpdir(), 'cml-sweep-'))
 const PYTHON = process.env.CAMEL_PYTHON || 'python3'
 
+// The corpus must be driven with absolute paths and `cwd` at the root: a relative case path makes the
+// compiler search for its imports under `<cwd>/<case dir>/<case dir>` and answer ModuleNotFound, so
+// 192 of the 3377 cases change verdict and the counts stop being comparable with any earlier run
+// (measured 2026-11-02: 559/1814/1004 absolute against 551/1701/1125 relative). A number from the
+// wrong invocation is worse than no number, so this refuses to run rather than report one.
+if (!path.isAbsolute(ROOT) || !path.isAbsolute(CASES) || !path.isAbsolute(camel)) {
+    console.error(
+        `cml-sweep: refusing to run: ROOT, CASES and the camel path must be absolute ` +
+            `(ROOT=${ROOT}, CASES=${CASES}, camel=${camel}). Run it from the repository, or set ` +
+            `CAMEL_HOME to an absolute path.`,
+    )
+    process.exit(2)
+}
+
 const argv = process.argv.slice(2)
 function option(name, fallback) {
     const at = argv.indexOf(name)

@@ -24,6 +24,7 @@
 - Start with small inputs when debugging high-volume workloads such as `fib 30`.
 - Use `std::gir` for graph inspection, `std::nvm` for baseline runtime behavior, and `std::fvm` or `std::jit` for scheduler/runtime verification when relevant.
 - Prefer routine verification in `npm run build`; use `npm run debug` only when diagnosing logging or debug-only code paths.
+- **Drive the compiler with absolute paths and `cwd` at the repository root.** A case given as a relative path resolves its `import`s against the wrong directory: `camel test/cases/compile/enum/cross/use.cml` searches `.../compile/enum/cross/test/cases/compile/enum/cross` first and reports `ModuleNotFound: 'shapes'`, where the absolute path finds the module and the printer's real verdict is `cannot print shapes::area: the graph name ... is not a source identifier`. The search root is built from the case's directory joined onto the working directory, so a relative case path is joined twice. Measured on 2026-11-02 over the corpus of 3377: the same survey reads `printed=559 refused=1814 frontend=1004` with absolute paths and `printed=551 refused=1701 frontend=1125` with relative ones -- **192 of 3377 cases answer differently**, 113 of them falling from a refusal to a front-end error. `test/tools/cml-sweep.mjs` does this correctly (absolute `ROOT`, `cwd: ROOT`) and now refuses to run if it is handed a non-absolute root, so the wrong invocation cannot produce a number at all. **A reading taken with the wrong invocation is not a harder-to-read reading, it is a different reading**: the wrong path form changes the verdict on 192 cases, so the two columns are not comparable and a difference between them is not a regression.
 - **Run the plans your change touches, not the whole tree.** The full suite (`test/plans`), the GC poison sweep, the GC stress plans (`gc.collection_trees_*`, `gc_elder_*`), the progen random-program checks, the PyTorch comparisons and the perf/timeit plans are heavy: they saturate every core for minutes and are worth running only at a milestone, by the coordinator, on a quiet machine. During development a targeted plan list plus `smoke` is the expected verification. Never start a full-suite or stress run to "be safe", and do not leave one running when you stop.
   **What the milestone layer actually is, and what it looked like when it was first
   measured (2026-11-02).** `--tier milestone` selects 27 plan files: `tier` is a
@@ -68,6 +69,16 @@ Two ways to name a process, and only two: `kill <PID>`, or `pkill -f '~/camel-wo
 `pkill -f 'run-tests.mjs'` and `pkill node` are forbidden. On 2026-11-02 one lane used the first while five lanes were running: every one of them was inside that pattern, and only the accident that `pkill` matched the killing shell's own `bash -c` first kept them alive; a `pgrep` afterwards found all five still running. **Alive was luck, not judgement.**
 
 The same day made the other half of the point with a check instead of an accident: with the "zero tests started" gate in place, 31 of the tree's 309 plans turned out to be silent zeros - their tier puts them out of an ordinary run, and until the gate existed they said nothing at all - and the first real defect came with them, `test/plans/feat/trans/cml_sweep.plan.toml` missing a plan-level `tier`, calling itself fast while its only test is slow, reddening the whole fast pass. **Green because nothing ran is not green.**
+
+## The instrument's range is narrower than the fact
+
+Three zero-hit readings on 2026-11-02 were all the same mistake, and none of them was a broken branch:
+
+- `git branch -r --contains <sha>` reads **the local checkout's `refs/remotes`**. When those are stale, a branch that was pushed correctly looks like it does not exist; four tool commits were reported as "on no remote branch" while `origin/lane-a3` had held them all along, and `git push` answered `Everything up-to-date` because there was nothing to push. **Either `git fetch` first, or ask the server: `git ls-remote --heads origin <branch>`.**
+- A build artefact was searched for in `build.ninja` while the build wrote `build-Release.ninja`: the grep was right and the file was the wrong one.
+- A `git grep` for a tool's own message hit nothing because the main checkout was three commits behind the tree that contained it, so "the tool isn't there" was really "this tree predates the tool".
+
+**A zero is not a reading until the search space has been shown to contain the thing.** State the command, the file or the ref it read, and which tree that ref or file belongs to.
 
 ## `-NoBuild` after a merge: `exit 4` is the runner refusing, not a failing test
 
