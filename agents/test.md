@@ -308,6 +308,14 @@ Ask whether a thing is there and the answer is a boolean; ask how many lines car
 
 A probe log that records only `[FAIL] <name> <ms>` can count failures and cannot group them: the first diagnostic line is what turns forty reds into one root cause or ten. Print that line, and print it even when jobs run in parallel.
 
+## A check only a Debug build's standard library performs is not an instrument
+
+`std::vector::operator[]` past the end is undefined behaviour, and what reports it is the standard library of the build you happen to run: a Debug build's (`_GLIBCXX_ASSERTIONS`) or an ASan build's. On 2026-11-02 `feat/compile/stream.plan.toml` was **green in Release and red in 24 of its 143 tests in Debug**, all from one line: `settleStreamLinearity` asked `draft.region(draft.nodeRegion(node))` for region 0 of a draft that has no regions at all. Release built the reference, found the loop's carrier list empty, never read through it, and passed -- **that run was not a weaker reading of the fact; it was no reading at all.** The answer is not "add an `ASSERT` there", which is compiled out and leaves the next Release run green by the same mechanism: state the precondition where the answer is unknown (`GUARD` in `GraphDraft::region`, alive in the build that ships) and let the reader that starts from `nodeRegion` ask `regionCount()` first. The leg that has to see it already exists: `ci.yml`'s sanitizer job runs `smoke`, `feat/compile/stream` and `feat/compile/transforms` on a Debug ASan/UBSan build.
+
+## A pointer that answers "which graph" answers with an address
+
+`nodeGraphOf()` cannot return null -- its `GUARD (builder != nullptr)` fails through `fail_invariant` first -- so none of its **61** call sites needs a null branch, and that is the point: the guard turns "no answer" into a stop. But 14 of them only **compare** two answers for identity (`builder_helpers.h`, `builder_expr.cpp`, `builder_control.cpp`, `builder_operators.cpp`, `captures.cpp`, `builder_support.h`), where a null would be worse than a crash: `nullptr == nullptr` says "the same graph". When one of those wants to be sure two handles name one graph, ask the draft whether it is the one the handle names (`isNamedBy`, address **and** epoch, which `3609d015a` made the identity) instead of comparing the address a handle happens to carry.
+
 - 主检出 `D:\Projects\Camel` 只用来 `pull --ff-only`；所有编辑都用工作树内的相对路径，或 `D:\Projects\Camel-wt\<lane>\...` 的绝对路径。写完用 `git -C <树> status --porcelain` 自检，不要用 `git status`（它按进程 CWD 解析，会看到另一棵树）。
 ## Check the input before you believe the reading
 
