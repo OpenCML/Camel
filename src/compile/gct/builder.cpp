@@ -6291,8 +6291,19 @@ node_ptr_t Builder::visitGeneratorBody(
                         const auto &matchAst = stmt->at(0);
                         const int afterMatch = newArm();
                         fill(afterMatch, stmts, i + 1, next, nextState);
+                        // The matched value outlives the `yield`s the arms are cut at, so it is put in
+                        // a cell where the `match` stands and the branch reads the cell. A cell declared
+                        // in the walk is captured with the others (the capture loop reads every name in
+                        // `cellNames`, which the walk filled), so an arm that starts after a `yield`
+                        // still finds it written.
+                        node_ptr_t subject = visitData(matchAst->atAs<AST::DataLoad>(0));
+                        const std::string subjectCell =
+                            "__gen_match_subject_" + std::to_string(cellNames.size());
+                        addTypedCell(subjectCell, subject, stmt);
+                        cellNames.push_back(subjectCell);
+                        *exec << writeCell(subjectCell, subject);
                         node_ptr_t brch = tree_->makeBrch();
-                        *brch << visitData(matchAst->atAs<AST::DataLoad>(0));
+                        *brch << readCell(subjectCell);
                         for (const auto &caseNode : *matchAst->atAs<AST::RepeatedLoad>(1)) {
                             const auto &pattern = caseNode->at(0);
                             if (pattern->type() == AST::LoadType::Data &&
