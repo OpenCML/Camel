@@ -53,6 +53,8 @@ TRANSPOSE op signature=(f: (float) => float | ((..Residuals), float, ...) => flo
 
 **我方默认**：按读数走 **1**；写法上取后者（kernel 置位 + 声明写普通类型），因为它在类型字符串上零改动、且与 `same=` 那条自检同向——除非作者要类型构造那一版。
 
+**若作者选 (a)（类型构造），打印会不会变、`is_same` 会不会劈开，届时需重新量**：(b) 只多一位，(a) 多一个类型构造，两者的兼容性代价不同，不能拿 (b) 的读数替 (a) 担保。
+
 ## 这条堵着谁
 
 `stdlib/vjp.cml` 的 `transpose(linear)(res, ct)` 要改成 `transpose(lin)(ct)`，`vjp` 及全部 `vjp_*`/`grad_*`/`split_branch_author_vjp` 的用例迁移（`feat/transforms` 那 15 条红）都等在它后面。`transpose` 的**图侧**已经通了（残差从闭包进、转置图自己的捕获口，读数 `back dx=12.0 back dy=9.0`，`residuals_in_the_closure.cml` 已绿），堵住的只有"收几个实参"这一条类型法。

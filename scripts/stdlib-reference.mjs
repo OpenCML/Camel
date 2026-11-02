@@ -2061,7 +2061,7 @@ const EXCEPTIONS = {
 const EXAMPLE_STOPS = {
     // The example calls a name the description introduces and the declaration does not take
     // (`inputs(n)` with `n` a node of the surrounding pass), or names a value the wrapper cannot
-    // bind at all: 38 of them, most of them marked a fragment. This was 39 until `check''s two
+    // bind at all: 37 of them, most of them marked a fragment, measured on the tree that merged both This was 39 until `check''s two
     // overloads came to name the same `with` positions: the example
     // `rules->check<samples: 1000, seed: 7>` used to stop here as `OverloadParameterNames`, because
     // `samples` stood at position 0 in one declaration and position 1 in the other, and it compiles
@@ -2085,7 +2085,7 @@ const EXAMPLE_STOPS = {
     // `@example-fragment` marker whose reason names what it is missing. A number here that moved
     // says a shape changed; a number here that was lowered without a reason would be the same
     // silence as a relaxed gate.
-    'a semantic error': 38,
+    'a semantic error': 37,
     // `split`'s example reaches the compiler with a function-typed parameter bound by name and the
     // compile graph keeps a live dereference node (`internal error: Compile graph '__doc_example'
     // still contains a live DREF node`). That is the compiler's own class, not the example's.
