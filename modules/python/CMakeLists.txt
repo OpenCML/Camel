@@ -119,9 +119,53 @@ if(NOT _rollup_mm STREQUAL "" AND _camel_bridge_sdk_len EQUAL 0)
   message(FATAL_ERROR "PyPI rollup: nowhere to build py_bridge for mm=${_rollup_mm} (need modules/python/sdks/python${_rollup_mm}/ or CAMEL_PYPI_SDK_ROOT from the interpreter).")
 endif()
 
+# One more place a bridge can come from, and the one that is missing on a Linux host: the
+# interpreter this build has already resolved. `modules/python/sdks/` is gitignored and per tree, so
+# a tree nobody filled has no `python3*` folder -- and then the module's `.cmo` is built (the check
+# above passes and the module is added below) while no `py_bridge*` target exists, so `import
+# python` fails at run time with "python bridge for active environment not found ...
+# libs/libpy_bridge310.so". `camel_python_dev_dirs` cannot read an interpreter prefix as one root
+# either: a venv has the headers under `include/python3.X` and no libpython at all, and a system
+# install keeps the library in `lib/` or `lib/x86_64-linux-gnu/`, not in the `libs/` that macro
+# looks for. So the two directories are handed over as they are, instead of as a root.
+#
+# Two roads, and they do not overlap: a PyPI rollup fills `_sdk_dirs` from
+# `CAMEL_PYPI_SDK_ROOT`/`CAMEL_PYPI_SINGLE_SDK_MM` above, and a tree with a filled cache takes the
+# `file(GLOB)` branch, so neither reaches this one. Only "no cache, not a rollup" lands here, which
+# is the everyday Linux build and the CI setup-python build (there, `pythonXY.lib` sits beside
+# `Python.h` in the interpreter prefix and the WIN32 branch below links it).
+set(_interp_bridge_inc "")
+set(_interp_bridge_lib "")
+set(_interp_bridge_mm "")
+if(_camel_bridge_sdk_len EQUAL 0 AND _rollup_mm STREQUAL "")
+  find_package(Python3 3.10 COMPONENTS Interpreter Development QUIET)
+  if(Python3_FOUND AND Python3_INCLUDE_DIRS AND Python3_LIBRARIES)
+    list(GET Python3_INCLUDE_DIRS 0 _interp_bridge_inc)
+    # `Python3_LIBRARIES` is a list that may name more than libpython; the one whose name starts
+    # with `python3` is the library this bridge embeds.
+    foreach(_cand IN LISTS Python3_LIBRARIES)
+      if(_cand MATCHES "python3")
+        get_filename_component(_interp_bridge_lib "${_cand}" DIRECTORY)
+        break()
+      endif()
+    endforeach()
+  endif()
+  if(NOT "${_interp_bridge_lib}" STREQUAL "" AND EXISTS "${_interp_bridge_inc}/Python.h")
+    set(_interp_bridge_mm "${Python3_VERSION_MAJOR}${Python3_VERSION_MINOR}")
+    # One entry, so the loop below makes exactly one bridge. Nothing is created, copied or written:
+    # the two directories are the ones CMake already resolved.
+    set(_sdk_dirs "${_interp_bridge_inc}")
+    list(LENGTH _sdk_dirs _camel_bridge_sdk_len)
+    message(STATUS "python bridge: no modules/python/sdks, building py_bridge${_interp_bridge_mm} from the interpreter (inc=${_interp_bridge_inc} lib=${_interp_bridge_lib})")
+  endif()
+endif()
+
 foreach(_sdk IN LISTS _sdk_dirs)
   if(NOT "$ENV{CAMEL_PYPI_SDK_ROOT}" STREQUAL "" AND NOT _rollup_mm STREQUAL "")
     set(_py_mm "${_rollup_mm}")
+    set(_sdk_name "interpreter_tree")
+  elseif(NOT "${_interp_bridge_mm}" STREQUAL "")
+    set(_py_mm "${_interp_bridge_mm}")
     set(_sdk_name "interpreter_tree")
   else()
     get_filename_component(_sdk_name "${_sdk}" NAME)
@@ -132,7 +176,12 @@ foreach(_sdk IN LISTS _sdk_dirs)
     continue()
   endif()
 
-  camel_python_dev_dirs("${_sdk}" _sdk_inc _sdk_lib)
+  if(NOT "${_interp_bridge_inc}" STREQUAL "")
+    set(_sdk_inc "${_interp_bridge_inc}")
+    set(_sdk_lib "${_interp_bridge_lib}")
+  else()
+    camel_python_dev_dirs("${_sdk}" _sdk_inc _sdk_lib)
+  endif()
   if(NOT EXISTS "${_sdk_inc}/Python.h" OR NOT EXISTS "${_sdk_lib}")
     message(STATUS "Skip bridge ${_sdk_name}: missing Python.h or lib dir (inc=${_sdk_inc} lib=${_sdk_lib})")
     continue()
