@@ -60,3 +60,28 @@ We took the second branch: the sentence that blamed the platform is gone, and an
 tracer now says `(stack trace disabled at build time -- rebuild with -D CAMEL_STACK_TRACE=ON ...)`, which
 is true of our build and says what to do. The first branch -- implement it -- stops at reading 4; section
 3 holds the readings that say so.
+
+## One name, two directions: `hasWaitEdge`
+
+`hasWaitEdge` looks like the other facts in `EffectLivenessFacts` and is not one of them. It is filled by
+four assemblies as `!ctrlInputsOf(node).empty()` -- "this node has a control input" -- and it has exactly
+one reader, the early exit in `gates.cpp`: `if (!facts.hasWaitEdge) { return false; }`. **It never reaches
+`effectStandingOf`.**
+
+So the intuition "a wider fact means less checking" is false for this field, and exactly backwards:
+
+* **wider** `hasWaitEdge` -> **more** nodes enter the gate rewrite -> **more** rewriting;
+* it cannot change a credential verdict at all, because no verdict reads it.
+
+`wider = does less` was used twice tonight while judging this family, and both times it pointed the wrong
+way. Four names in one night mean two different things:
+
+| name | meaning A | meaning B |
+| --- | --- | --- |
+| `!=` | the operator | `__neq__` the builtin |
+| `ne_*` | a ruleset group | `__neq__` |
+| `rank` | a type's dimension count | an order |
+| `wait_edge` | a pass parameter (does not exist) | a `KEEPSHAPE` output column for `facts.hasWaitEdge` |
+
+The discipline that comes out of it: **read the declaration and the doc string, then the code, then
+measure** -- and do not start from what the name sounds like.
