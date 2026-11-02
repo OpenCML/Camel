@@ -30,7 +30,7 @@ tool = "python"
 case = "../../../showcase/c3-char-transformer/probe.py"
 args = ["${case}", "--json", "${test_tmp}/c3-probes.json"]
 expect_exit = 0
-expect_stdout_contains = ["probes total=17", "probes mismatched=0"]
+expect_stdout_contains = ["probes total=18", "mismatched=0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 300000
 

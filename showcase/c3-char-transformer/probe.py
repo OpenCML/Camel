@@ -51,12 +51,14 @@ EXPECTED = {
     "14_jvp_call": "ok",
     "15_mask_in_f32": "refused",
     "16_layer_norm_dtype": "ok",
+    "17_draw_dtype": "ok",
 }
 
 # The construct each probe reaches, so the report can say which wall is which without reading the
 # probe's text.  The key is the file stem.
 CONSTRUCTS = {
     "17_draw_dtype": "the element type a drawn tensor has, next to a zeroed one",
+    "18_take_dtype": "the element type a row comes back with",
     "13_jvp_scalar": "the forward control: `jvp` at one scalar parameter",
     "15_mask_in_f32": "the causal mask, written in f32 with `where`",
     "16_layer_norm_dtype": "the element type `layer_norm` answers with",
@@ -109,8 +111,10 @@ def first_reason(text):
     return interesting[-1]
 
 
-def wall_tag(text):
+def wall_tag(text, verdict="refused"):
     """The wall a refusal names, in as few characters as it can be named in."""
+    if verdict == "ok":
+        return "ok"
     for line in text.splitlines():
         match = re.search(r"has no forward rule for `([A-Za-z_:]+)`", line)
         if match:
@@ -121,7 +125,7 @@ def wall_tag(text):
         match = re.search(r"/([^/]+\.cml:\d+:\d+): \[(Error|Fault)\]", line)
         if match:
             return match.group(1)
-    return "ok" if not text.strip() else "other"
+    return "other"
 
 
 def compact_reason(text, limit=150):
@@ -250,12 +254,13 @@ def main():
     print(f"probe-groups total={len(groups)} answered={answered or '(none)'}")
     # One line for the whole inventory: which wall each probe hit, by name.  This is the table
     # WALLS.cn.md is written from and the one thing a run must not lose in a tail.
-    spelled = " ".join(f"{r['probe']}={wall_tag(r['stdout'] + r['stderr'])}" for r in readings)
+    spelled = " ".join(f"{r['probe']}={wall_tag(r['stdout'] + r['stderr'], r['verdict'])}"
+                       for r in readings)
     for chunk in wrap(f"probe-walls {spelled}", 96):
         print(chunk)
     # The probes added last, listed last: a report read from its tail stays able to say what the
     # newest probes answered.
-    recent = " ".join(f"{r['probe']}={wall_tag(r['stdout'] + r['stderr'])}"
+    recent = " ".join(f"{r['probe']}={wall_tag(r['stdout'] + r['stderr'], r['verdict'])}"
                       for r in readings[-3:])
     for chunk in wrap(f"probe-recent {recent}", 96):
         print(chunk)
