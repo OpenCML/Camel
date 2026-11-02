@@ -6,9 +6,17 @@
 
 - `2026-11-02-the-generator-reads-a-draft-node-after-its-builder` —— `stream.*` 的几条在 Windows 上崩在 `builder_support.h#nodeGraphOf`（草稿节点不属于任何 compile graph builder），同树 Linux 全绿、五个后端都崩，所以是建图不是调度；问该谁去找那个节点的 owner、修好前 Windows 腿要不要继续红。
 - `2026-11-03-may-a-printed-name-be-the-definitions-own` —— `tensor:sum` 与 `tensor:sum_axis` 共用一个写名 `sum`，边界在哪只有定义知道、节点不知道；问打印件能不能用定义自己的名字（`sum_axis(m, 0, false)`），还是必须复现源里的 `<>` 写法。
-- `2026-11-02-drafts-outlive-the-safepoint` —— 跨过 safepoint 的 draft，它的静态槽该由谁改写：外部 tracer 代替持有者去改写，收 `built` 就崩在启动期 encode、只收 `borrowed` 又毫无影响；问是"搬迁必须由持有者自己做"，还是"那些 draft 本不该活到 safepoint"。
-- `2026-11-02-when-should-an-underivable-sync-edge-be-dropped` —— 同步边"推不出来就别建"该在建图时判还是图定型后判；冻结图没有重发 payload 的通路，所以这个问题只能在图定型之前问。
 - `2026-11-02-who-restores-order-after-inline-moves-a-statement` —— 内联改变块归属之后，次序该由内联自己补还是由图定型后的统一通道补。
+
+### 已裁、在 `reviews/` 留档
+
+- `2026-11-02-when-should-an-underivable-sync-edge-be-dropped` —— 已裁已落：**D，不删边、改检查侧**；`Func`/`Join` 可以是链尾，内联处插 `GATE` 接住链尾。
+- `2026-11-02-drafts-outlive-the-safepoint` —— 已裁待落：不走搬运方案，先查草稿静态值为何落在会被搬动的空间，应分配在图空间。
+- `2026-11-02-what-counts-as-a-statement-of-a-chain` —— 已裁已落：链上语句含 `Call`，不含 `Func`/`Join`。
+- `2026-11-02-the-member-count-stated-twice` —— 已裁已落：`split` 不再交出残差元组，检查从此是守卫。
+- `2026-11-02-does-the-neq-cut-take-the-strict-neq-group-with-it` —— 已裁已落：补逐元素 `!`，然后删净。
+- `2026-11-02-is-p0-2-now-a-pass-by-pass-judgement-change` —— 已裁已落：先修不变量，按节点性质判。
+
 
 ### 已裁、在 `reviews/` 留档
 - `2026-11-02-what-counts-as-a-statement-of-a-chain` —— 链上语句含不含 `Func`/`Join`；裁：含 `Call`，不含这两个。
