@@ -442,7 +442,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"coll/map_items", __coll_map_items__},
         {"coll/set_items", __coll_keys__},
         {"coll/eq", __coll_eq__},
-        {"coll/neq", __coll_neq__},
     };
     return map;
 }
@@ -581,12 +580,11 @@ void registerBuiltinOperatorTraits() {
         // The predicates over a collection: `has` and `contains` walk the entries looking for a
         // key, `eq` and `neq` compare two collections by content, and `set_is_subset` walks one
         // looking for each element of the other (collection.cpp#__coll_has__, #__coll_eq__,
-        // #__coll_neq__, #__coll_set_is_subset__). None of them builds a value, so none of them
+        // #__coll_set_is_subset__). None of them builds a value, so none of them
         // can run out of memory either, which is the one fault the rest of `coll/` does have.
         "coll/has",
         "coll/set_contains",
         "coll/eq",
-        "coll/neq",
         "coll/set_is_subset",
         // The read-only helpers of `prelude.cml`: `contains` over an array walks it comparing
         // elements by content, `contains` over a string searches it, `len` of `Bytes` reads a

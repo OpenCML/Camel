@@ -182,7 +182,6 @@
 | `:coll/has` | `src/builtin/operators/collection.cpp#__coll_has__` | 在表里走一遍找键（`table::has`），找不到返回 false；不造值、不抛 | trait | `declared_traits`、`fault_free_behavior` |
 | `:coll/set_contains` | `src/builtin/operators/collection.cpp#__coll_has__` | 与 `has` 同一个内核，返回的是“是不是元素” | trait | `declared_traits` |
 | `:coll/eq` | `src/builtin/operators/collection.cpp#__coll_eq__` | 按内容比较两张表（`Table::equals`，递归比键与值），只读 | trait | `declared_traits` |
-| `:coll/neq` | `src/builtin/operators/collection.cpp#__coll_neq__` | 同一个比较取反 | trait | `declared_traits` |
 | `:coll/set_is_subset` | `src/builtin/operators/collection.cpp#__coll_set_is_subset__` | 逐个元素在另一张表里找（`table::isSubset`），只读 | trait | `declared_traits` |
 
 这一族的反向验证有两半，正好各打红一次：

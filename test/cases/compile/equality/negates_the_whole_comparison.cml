@@ -4,8 +4,8 @@
  * The front end builds `!=` as `!(==)` for every operand type (design principles 4.2): what the
  * graph holds is the whole comparison's own operator -- `:op/eq`, the entry that compares an array,
  * a tuple or a struct by content -- and `:op/not` on the bool it answers. There is no separate
- * not-equal node, for a composite or for anything else; the group `__neq__` is a name the modules
- * fill (a map and a set own `:coll/neq` there), not a resolver that `!=` asks.
+ * not-equal node for a composite: what the group `__neq__` holds is the entry that lets a type
+ * whose `==` is declared have a `!=` at all, not a node the graph draws.
  *
  * This case is the graph's side of that rule: the values are pinned by
  * `consistency/values/content_equality.cml` on the four back ends, and here the same shapes must

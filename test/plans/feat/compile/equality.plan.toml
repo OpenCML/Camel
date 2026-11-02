@@ -123,3 +123,27 @@ args = ["${case}", "std::gir"]
 expect_exit = 0
 expect_stdout_contains = ["label=\":op/eq\"", "label=\":op/not\""]
 expect_output_not_contains = ["label=\":op/ne\""]
+[[tests]]
+name = "equality.collections_compare_by_content"
+desc = "A map and a set are compared by content -- same entries, same members, in any order -- and their `!=` is the negation of that comparison; the four back ends agree."
+kind = "behavior"
+case = "../../../cases/compile/equality/collections_compare_by_content.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = """true false
+false true
+true false
+false true
+"""
+
+[[tests]]
+name = "equality.collections_negative_graph"
+desc = "The same program printed as a graph: a map's and a set's equality is `:coll/eq` and its negation is `:op/not`, and nothing in the graph is named `:coll/neq` -- the collection reaches its `!=` through the equality it owns."
+kind = "behavior"
+case = "../../../cases/compile/equality/collections_compare_by_content.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["label=\":coll/eq\"", "label=\":op/not\""]
+expect_output_not_contains = ["coll/neq"]
