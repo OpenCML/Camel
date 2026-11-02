@@ -85,6 +85,19 @@ Three zero-hit readings on 2026-11-02 were all the same mistake, and none of the
 
 **A zero is not a reading until the search space has been shown to contain the thing.** State the command, the file or the ref it read, and which tree that ref or file belongs to.
 
+## A timeout budget is a change like any other
+
+A `timeout_ms` in a plan file is not housekeeping: it decides whether a slow machine reports a red or
+a slower red. So it goes through a lane branch like code does, and its commit says **which red goes
+away because of it and what the two-core CI measured in CPU**, because those are the two numbers that
+tell a budget that was too small from a test that got slow.
+
+A plan edited in the main checkout, or in someone else's worktree, is a change with no author and no
+reading: on 2026-11-02 five plan files with raised timeouts appeared in the main checkout that way
+(`diag_catalog`, `new_values`, `case_ledger`, `plan_inventory`, `trans/cpp`), quoting two-core CI
+figures in their comments. The content may well be right; it still cannot land, because nobody can say
+which red it removed. The patch is kept outside the tree, and whoever wrote it re-does it on a lane.
+
 ## `-NoBuild` after a merge: `exit 4` is the runner refusing, not a failing test
 
 After a merge the tree no longer matches the installed binary and `out/latest/stdlib`, and

@@ -51,3 +51,4 @@
 但**走另一个追踪器**：栈是 `markObject` ← `markPhase` ← `collectGraphSpace`，**不经过 `Tuple::updateRefs`**，
 所以本轮加在 `rtdata/tuple.h` 的检查**不会点名它们**（实测：两条仍只打 `GC poison: a raw pointer …`）。
 两族要合成一条，检查得同时加在图空间标记那一处——那是 `h-a3` 的活。
+**已裁（2026-11-02 05:30）：留档。** 作者裁：split 不再交出残差元组，这条缺陷的产生者随之消失，元数与类型声明的比较从此是守卫。
