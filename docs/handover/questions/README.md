@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：7 页
+## 现在在等作者：8 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -16,3 +16,4 @@
 | [`2026-11-02-the-nine-shapes-the-generator-machine-refuses`](2026-11-02-the-nine-shapes-the-generator-machine-refuses.cn.md) | 生成器拒绝的九种形状：哪些能从源码走到 |
 | [`2026-11-02-transpose-tangent-parameters`](2026-11-02-transpose-tangent-parameters.cn.md) | `transpose` 怎么知道一个函数的参数是切向（半身），而不是普通参数？ |
 | [`2026-11-02-which-generator-does-the-dangling-node-mean`](2026-11-02-which-generator-does-the-dangling-node-mean.cn.md) | 「生成器悬垂节点」指的是哪一件事：`yield` 状态机降级出的无人读节点，还是 `test/tools/progen` 生成的程序里的悬垂？ |
+| [`2026-11-03-why-the-self-test-grew-expensive-without-any-test-count-growth`](2026-11-03-why-the-self-test-grew-expensive-without-any-test-count-growth.cn.md) | 自检什么时候变贵了：成本已逐项归因，没有余额，也没有可比的前后读数 |
