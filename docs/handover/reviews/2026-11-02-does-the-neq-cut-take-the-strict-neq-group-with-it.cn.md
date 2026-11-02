@@ -27,3 +27,5 @@
 ## 给 `lane-m5` 的一句话
 
 `__not__` 的 `bool[]` 条目本笔也已经补上（tensor 内核 `UnaryOp::Not`，`notInfer` 只接受 `bool` 元素类型，`!float[]` 仍被拒），所以那 11 条不必再等；`lane-m5` 的 `86dbd3672` 做的是同一条，两个车道会撞在 `elementwise.h`、`elementwise.cpp`、`elementwise_ops.cpp` 三个文件上，合并时取一份即可。**bif16/f16 的 `Not` 两车道都不需要**（见上面第 1 类，`:op/not_bf`/`:op/not_f6` 是"数值真假"的新语义）。
+**裁定于 2026-11-02 04:30**：第 1 条——补逐元素 !（ool[] 上 ! 逐元素取反），
+e_ 那 22 行随之删净。见 eviews/questions-2026-10-29.md。
