@@ -98,3 +98,28 @@ expect_exit = 0
 expect_stdout_exact = "always\n"
 expect_diagnostic_name = "SemanticDiag::NullTestNeverNull"
 expect_output_contains = ["'x' has type 'int', which is never null: this test is always false."]
+
+[[tests]]
+name = "equality.negates_the_whole_comparison"
+desc = "`!=` on an array, a tuple, a struct and a string is the negation of the whole `==`: the graph holds `:op/eq` -- the entry that compares a composite by content -- and `:op/not`, and no node named `:op/ne`, because the front end builds `!=` as `!(==)` for every operand type and the group `__neq__` is a name the modules fill rather than a resolver `!=` asks."
+kind = "behavior"
+case = "../../../cases/compile/equality/negates_the_whole_comparison.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = """true false
+true false
+true false
+false true
+"""
+
+[[tests]]
+name = "equality.negative_graph"
+desc = "The same program printed as a graph: the whole comparisons are `:op/eq` nodes and the negations are `:op/not` on their result, and nothing in the graph is named `:op/ne`."
+kind = "behavior"
+case = "../../../cases/compile/equality/negates_the_whole_comparison.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["label=\":op/eq\"", "label=\":op/not\""]
+expect_output_not_contains = ["label=\":op/ne\""]
