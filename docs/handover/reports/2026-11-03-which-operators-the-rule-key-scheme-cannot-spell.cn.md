@@ -377,6 +377,44 @@ if (!portsTakeOperands(instance, operandTypes, why)) { shapeWhy = why; continue;
 **这一笔只挡实测到的这一处**（⚠️(i)）：`buildRuleTangent` 的候选循环；数组路径上**其他**崩点没有被走过，也就不在这里假装挡住。
 
 **读数**：`rulesets` **67/67**；`transforms` 见下（新增红 0 才算过）；全量见下（**`killed` 必须是 0**，这是本笔的关键读数）。
+## 5.8 附：P0-2 第二半的清单（只调查，不改代码）
+
+```
+git grep -n -E 'ctrlInputsOf|ctrlEdgesOf|orderPredsOf' -- src modules include
+```
+
+**命中 206 行 / 60 个文件**（`ctrlInputsOf` 188，`orderPredsOf` 19，`ctrlEdgesOf` 0——这个名字不存在）。按区域：
+
+| 区域 | 行数 | 它在回答什么 |
+|---|---|---|
+| `src/runtime/` | 76 | 运行时的等待边本身（`draft`/`graph`/`control`/`writings`/`draft_inline`/`draft_clone`） |
+| `src/passes/`（opt 等） | 29 | **编译期 pass 的决定**——唯一可能有"该读没读"的一组 |
+| `src/passes/test/` | 23 | 测试 pass 的断言与构造 |
+| `src/compile/gir/` | 18 | 建图（`builder_control`）与 `GraphRead` 读法 |
+| `src/execute/` | 18 | 执行计划与调度（ctrl 就是等待边，语义正确） |
+| `include/` | 11 | 访问器本身的声明/实现（不是读者） |
+| `src/passes/trans/` | 10 | printer（dot/json/stats） |
+| `modules/tiles` | 7 | 区域切分 |
+| `modules/autodiff` | 6 | pullback 的边搬运 |
+| 其它 `modules/` | 8 | `rewrite`/`graph`/`onnx` |
+
+**编译期那一组（`src/passes/opt` + `modules/transforms` + `modules/tiles`）共 32 行 / 12 文件**，逐行看过：**19 行同处也读了 sync**（`generic.cpp:203`、`rewrite.cpp:377`、`screen.cpp:231`、`split.cpp:373`、`gates.cpp:36` 是范本——`split.cpp` 那处干脆三个都读），**13 行只读 ctrl**：
+
+| 文件#符号 | 它在回答什么 | 该换成 | 备注 |
+|---|---|---|---|
+| **`src/passes/opt/generic/algebra.cpp#constant`** | "这个值能不能折成常量"（`!ctrl.empty() \|\| written(id)`） | ③ + ①：加 `!syncInputsOf(id).empty()` | **最小可换**（见下） |
+| `algebra.cpp` 同函数 | 同上（`written(id)` 是效应那半） | ③ 已答 | — |
+| `gates.cpp:62/90/94` | gate 的 frontier / 代价 | ① 该并读 sync | 需先定"代价"口径 |
+| `rewrite.cpp:512`、`rewrite.h:115` | "这个 user 能不能改写" | ① 该并读 sync | 与 512 同一判断的两处写法 |
+| `screen.cpp:274` | 等待 frontier 的规模 | ① 该并读 sync | 与 `screen.cpp:231` 成对，231 已读 |
+| `tiles/compiler.cpp:536`、`region_extract.cpp:108`、`graph_regions.cpp:513` | 区域切分的依赖闭包 | ① 该并读 sync | 三处同一件事 |
+| `defun/defunctionalize.cpp:878`、`tiles/region_outline.cpp:518/531` | 把已有边列**搬**到新节点 | **写侧**（另组） | 读是为了写，不是判断 |
+
+**挑出的一处：`src/passes/opt/generic/algebra.cpp#constant`。** 为什么最小：它是**一个纯谓词里的一个合取项**（`!draft.ctrlInputsOf(id).empty()` → 再加一个 `!draft.syncInputsOf(id).empty()`），不新增 API、不动图、不改任何 pass 的遍历；唯一的效果是**少折几个常量**（把"带着 sync 等待的节点"排除在常量之外），也就是只会更保守。它和 `842f4c1e9` 之前那笔 `fault` 的改法同一类：同一个谓词，同一处加减一个条件。
+
+**⚠️ 写边被单独分组**：`setCtrlInputs(..., ctrlInputsOf(...))` 这类（`draft_inline` 12 处、`draft_clone` 4 处、`pullback.cpp:1662/2646/2719`、`defunctionalize.cpp:304`、`rewrite.cpp:323`、`region_outline.cpp:518`）是**把已有的等待边原样搬走**，读是为了写，和"读边判断"不是一件事，不混进上表。
+
+**本轮不改代码。**
 ## 6. 一句话结论
 
 **这条缝是方案性的，不是少数特例**：按"结果有切空间却拼不出键"计，**32 条**（把复数算进去 50 条），而例外表只能一条一条地救——今天救了两条、补了一条（`^`）。缺口的形状有两个：
