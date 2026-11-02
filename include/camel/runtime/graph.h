@@ -241,7 +241,7 @@ enum GCGraphFlag : uint8_t {
     /// (the old `@vjp` decorator); that is a graph reference now (kGraphRefRule).
     kGraphFlagMacro = 1 << 0,
     /// A commit looked at the graph's gates: none waits on nothing (GraphDraft::
-    /// dissolveUnorderedGates). A graph without it is looked at by the next commit that
+    /// dissolveUnorderedGates). A graph without it is looked at by the first commit that
     /// reaches it; a graph with it is left as it is unless it is edited.
     kGraphFlagGatesDissolved = 1 << 1,
     /// Some values of the graph have several writings (an equivalence table, writings.h). Such

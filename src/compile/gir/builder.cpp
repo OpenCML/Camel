@@ -1391,10 +1391,18 @@ void Builder::buildFuncBody(
         // because the completed `funcType` holds the expanded parameters and no longer the one name
         // the body writes.
         //
-        // TODO(debt, next commit): build it only when the body names it. Every rest lambda gets the
-        // tuple today, so a graph that does not read its rest parameter is one node larger than it
-        // was; the check needs the kind the body's reference has (its `xs` is not an NREF, which is
-        // what the walk that was tried looked for).
+        // The tuple is built only when the body names it (`graphNamesValue` above): a rest lambda that
+        // never reads `xs` gets no node, and its graph is what it was before rest parameters existed.
+        // The question is asked of the GCT the body already is, so what it looks for is the NREF or
+        // DREF the reference became -- not the source name, which is also in the parameter list -- and
+        // it does not enter a nested FUNC, whose names are not this body's.
+        //
+        // The condition under which this is wrong, and the one that would go red: the guard answers
+        // "no" for every kind of node it does not look at, so a body that reaches `xs` through a new
+        // kind -- a name reference that is neither NREF nor DREF -- loses the tuple silently. What
+        // moves then is not the node count: the body's read of `xs` stops resolving, and the red is
+        // `UnresolvedReference` in `rest_params.lambda_rest_as_a_value` (and in every other case whose
+        // rest lambda reads its parameter), the same red the binding was added to remove.
         if (written != nullptr) {
             if (const auto *unwritten = GCT::Tree::of(gct)->unwrittenParamsOf(gct)) {
                 for (const auto &param : *unwritten) {

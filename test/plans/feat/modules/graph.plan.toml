@@ -183,6 +183,18 @@ timeout_ms = 10000
 # A transaction edits the program being processed and commits a new Program (design 5.1).
 
 [[tests]]
+name = "graph.pass_module_found_from_a_bare_entry_filename"
+desc = "The entry file written as a bare file name -- `camel edits.cml probes::count_adds std::nvm`, run in the case's own directory -- finds the module beside it, and reads exactly what `./edits.cml` and an absolute path read. A pass is resolved against the entry program's own directory, and that directory is read from the entry path: `edits.cml` names no directory at all, so its parent is the empty path, and an empty path used to be the whole answer -- the entry program's own directory was dropped from the search roots and `probes::count_adds` was `UnrecognizedGraphPass`, while `./edits.cml` gave `.` and worked. The case is a harness because the test runner starts every process in the repository root and the defect is about the shape of the path word: the compiler has to be started from the case's directory with the bare name in its argument list."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/modules/graph_pass/bare_entry_filename.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["edits.cml: exit 0", "./edits.cml: exit 0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
 name = "txn_replace_and_commit"
 desc = "x + 0 is replaced by x in a transaction; the committed program no longer has the add and runs as before."
 kind = "behavior"
