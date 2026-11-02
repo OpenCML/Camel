@@ -12,18 +12,20 @@
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：1 页
+## 现在在等作者：2 页
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
 | --- | --- | --- | --- | --- |
-| [`2026-11-02-is-p0-2-now-a-pass-by-pass-judgement-change`](2026-11-02-is-p0-2-now-a-pass-by-pass-judgement-change.cn.md) | P0-2 是否改成两件一起做：① 修正 sync 边终点不变量；② 让依赖控制边的 pass 改读 sync 边（默认建议：甲） | 待裁 | — | P0-2 全批：两条 `known_fail` 标记等它落地才摘 |
+| [`2026-11-02-is-p0-2-now-a-pass-by-pass-judgement-change`](2026-11-02-is-p0-2-now-a-pass-by-pass-judgement-change.cn.md) | P0-2 是否两件一起做：① 修正 sync 边终点不变量；② 让 pass 改读 sync 边（默认：甲） | 待裁 | — | P0-2 全批 |
+| [`2026-11-02-what-counts-as-a-statement-of-a-chain`](2026-11-02-what-counts-as-a-statement-of-a-chain.cn.md) | 链上语句是否含 `Func`/`Join`（默认：都不含，`Call` 含；实测 17753 处与标记不一致） | 待裁 | — | 不变量能否改成"按节点性质判"，取决于这一问 |
+
+
 
 
 2026-11-02 03:30 的两页（另一层的 30 个零、私有 kernel 的名字）已裁，在 `reviews/`。
 
 ## 已裁：按还堵着的活排
 
-| 页 | 问什么 | 状态 | 裁定 | 还堵着 |
 | [`a-version-port-that-must-carry-a-value`](../reviews/questions-2026-10-31-a-version-port-that-must-carry-a-value.md) | `void` 调用写过的变量，它的读该靠什么后于那次调用 | 已裁未落 | 22:50——A：新算子 `:var/after(cell, call) : var T`（第二个实参接受 `void`），读写成 `:var/get(:var/after(cell, call))`；两条都是数据边，3.1 的"用到"沿数据边到调用；验收 `callback_write_ignored` 打印 `3`、`effects_syntax` 11 条红消失、拿 `133` 量 | `:var/after` 算子本身；`orderAfterLastWriter` 里那条 ctrl 替身随之可拆 |
 | [`two-references-write-one-object-outside-a-sync-block`](../reviews/questions-2026-10-31-two-references-write-one-object-outside-a-sync-block.md) | 同一可变对象被两条引用写、第二条在这一层看不见时，读拿谁的版本 | 已裁未落 | 22:50——②：**保守的写者集合**（程序里所有写该变量的函数，建图前整个程序扫一遍）；`twice` 里 `counter` 在集合里，`return counter` 的版本是 `:var/after(counter, f(v))`；**20:35 那句就此收回** | 保守写者集合的实现；`twice` 应打印 `3` |
 | [`parallel-map-fault-what-runs-after`](../reviews/questions-2026-10-31-parallel-map-fault-what-runs-after.md) | 并行 `map` 一处故障后，下标更小、还没开始的元素是否仍执行 | 已裁未落 | 22:50——①：保今天的实现，3.6 改措辞（"已经开始的元素跑完；下标大于已知最小故障、还没开始的元素不再开始，下标更小的仍会开始；报下标最小的故障"）；删 `taskflow.cpp:2797` 的 `DESIGN-QUESTION`；补部分故障、四后端同判的用例 | 3.6 措辞；`taskflow.cpp:2797`；四后端同判用例 |
@@ -57,7 +59,6 @@
 
 ## 已撤：1 页
 
-| 页 | 问什么 | 状态 | 裁定/去向 | 还堵着 |
 | [`where-the-tag-for-an-operator-can-sit`](../reviews/questions-2026-10-31-where-the-tag-for-an-operator-can-sit.md) | 标签能不能挂在别处的算子声明上 | 已撤 | 20:50——没有跨模块挂标签这回事；结论并入上面 `the-ruleset-module-has-no-rules-in-it` 那一行 | 无 |
 | [`questions-2026-11-02-what-does-tq-match`](../reviews/questions-2026-11-02-what-does-tq-match.md) | `T[?]` 匹配什么 | 已裁（作者 2026-11-02 11:10） | `T[..]` 匹配任意秩、`T[?]` 只匹配秩 1 | 一条还没兑现的读数欠账（页里记着） |
 
