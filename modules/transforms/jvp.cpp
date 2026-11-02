@@ -12,6 +12,7 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/tangent_space.h"
+#include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/parse/ast/rule_head.h"
 #include "camel/runtime/draft.h"
@@ -32,6 +33,7 @@ namespace camel::transforms {
 namespace mm = camel::core::mm;
 namespace rt = camel::runtime;
 using camel::core::type::FunctionType;
+using camel::core::type::ArrayType;
 using camel::core::type::TupleType;
 using camel::core::type::Type;
 using camel::runtime::gc_node_ref_t;
@@ -41,6 +43,24 @@ using camel::compile::gir::NodeFace;
 using camel::runtime::GraphId;
 
 namespace {
+
+/// Whether this lift carries a pair for a value of `type`: a floating scalar, or an array of values
+/// it carries a pair for -- `float[]` and `float[][]` are one answer, asked recursively. An array of
+/// a type it does not carry (`int[]`, an array of tuples) is not carried either: its members would
+/// have no tangent to put in the second half.
+bool pairCarried(camel::core::type::Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    if (camel::core::type::isFloatingScalar(type->code())) {
+        return true;
+    }
+    if (type->code() != camel::core::type::TypeCode::Array) {
+        return false;
+    }
+    const auto *array = tt::as_ptr<camel::core::type::ArrayType>(type);
+    return array != nullptr && pairCarried(const_cast<camel::core::type::Type *>(array->elemType()));
+}
 
 /// The type of the lifted *pair* of a value: `(v, dv)`, written at the value's own type, because
 /// the tangent of a floating scalar is a value of the same type (`tangentSpaceOf`'s `Self`). Null
@@ -53,9 +73,11 @@ namespace {
 /// around `f32` values and the pass gave up on four broken edges (the author's review, #1 and #11).
 /// Two things are asked of the type, and both are asked here so that the next answer cannot be a
 /// second one: *is its tangent space its own type* (`tangentSpaceOf`), and *is the pair written for
-/// this shape* -- a floating scalar today, because the halves are read by `Accs` and the zero is a
-/// static `0.0`. An aggregate is `Self` too and its pair is the array-cotangent round's work; asking
-/// for it here would write a scalar pair around an array value, which is worse than a refusal.
+/// this shape*. Written for a floating scalar and for an array of them: the halves are read by
+/// `Accs`, and an array's members are walked one for one, which is what a loop whose state is an
+/// array needs. A tuple or a struct is `Self` too, and it is refused here by name: its members are
+/// not carried through the body yet (such a state stops at the body today), and pairing it here
+/// would move that refusal without a case that shows the new one.
 camel::core::type::TupleType *pairTypeOf(camel::core::type::Type *type) {
     if (type == nullptr) {
         return nullptr;
@@ -64,7 +86,7 @@ camel::core::type::TupleType *pairTypeOf(camel::core::type::Type *type) {
     if (space.kind != camel::core::TangentSpaceKind::Self || space.space != type) {
         return nullptr;
     }
-    if (!camel::core::type::isFloatingScalar(type->code())) {
+    if (!pairCarried(type)) {
         return nullptr;
     }
     return camel::core::type::TupleType::create(
@@ -672,6 +694,69 @@ bool liftGraph(
                 }
                 break;
             }
+            case rt::GCNodeKind::Fill: {
+                // An aggregate built from its members: a tuple, a struct, an array literal. Its
+                // tangent is the same shape built from the members' tangents, because an aggregate's
+                // tangent space is itself, element by element (design principles 9.9) -- so the
+                // payload (kind and slots) and the static template (the Norm input) are the same
+                // and only the member slots differ. Without this case a loop whose state is an
+                // array has no lifted body: the body region's result is a FILL, and the walk had
+                // no copy of it at all.
+                std::vector<gc_node_ref_t> templates;
+                std::vector<gc_node_ref_t> members;
+                std::vector<gc_node_ref_t> memberTangents;
+                bool everyMemberHasTangent = true;
+                for (gc_node_ref_t input : function.normInputsOf(ref)) {
+                    if (input >= function.nodeCount() || !copied[input]) {
+                        complete = false;
+                        break;
+                    }
+                    templates.push_back(copyOf[input]);
+                }
+                for (gc_node_ref_t input : function.withInputsOf(ref)) {
+                    if (!complete) {
+                        break;
+                    }
+                    if (input >= function.nodeCount() || !copied[input]) {
+                        complete = false;
+                        break;
+                    }
+                    members.push_back(
+                        valueOf[input] != rt::kInvalidNodeRef ? valueOf[input] : copyOf[input]);
+                    if (tangentOf[input] == rt::kInvalidNodeRef) {
+                        everyMemberHasTangent = false;
+                    } else {
+                        memberTangents.push_back(tangentOf[input]);
+                    }
+                }
+                copyOf[ref] = draft.addFillNode(node->dataType(), function.payloadOf(ref));
+                copied[ref] = true;
+                ++copiedKinds;
+                if (!complete) {
+                    break;
+                }
+                if (!templates.empty()) {
+                    draft.setNormInputs(copyOf[ref], templates);
+                }
+                if (!members.empty()) {
+                    draft.setWithInputs(copyOf[ref], members);
+                }
+                // A member without a tangent (an `int` slot of a mixed aggregate) leaves the whole
+                // tangent unwritten rather than half-written: the refusal downstream is then about
+                // a tangent that is not there, not about one that is wrong.
+                if (pairOf(node->dataType()) != nullptr && everyMemberHasTangent) {
+                    const gc_node_ref_t tangent =
+                        draft.addFillNode(node->dataType(), function.payloadOf(ref));
+                    if (!templates.empty()) {
+                        draft.setNormInputs(tangent, templates);
+                    }
+                    if (!memberTangents.empty()) {
+                        draft.setWithInputs(tangent, memberTangents);
+                    }
+                    tangentOf[ref] = tangent;
+                }
+                break;
+            }
             case rt::GCNodeKind::Join: {
                 // Made before the walk (its type is the pair of the value it yields). Its inputs are
                 // wired after it.
@@ -1133,14 +1218,24 @@ bool liftGraph(
                 break;
             }
             std::vector<gc_node_ref_t> loopInputs;
+            // Norm input 0 of a `for` is the iterable (camel/runtime/loop.h, LoopView::iterable):
+            // the sequence the rounds take, not a value of the parameters. It is copied as it
+            // stands, exactly as the body's element port is (a plain port above). The state inputs
+            // after it are the values the loop carries, and those are the ones that become pairs.
+            rt::GCLoopBody liftedKind{};
+            const bool hasIterable = function.bodyOf(ref, liftedKind) &&
+                                     (liftedKind.kind == camel::core::LoopKind::For ||
+                                      liftedKind.kind == camel::core::LoopKind::ForWhile);
+            size_t inputIndex = 0;
             for (gc_node_ref_t input : function.normInputsOf(ref)) {
                 if (input >= function.nodeCount() || !copied[input]) {
                     complete = false;
                     break;
                 }
+                const bool iterable = hasIterable && inputIndex++ == 0;
                 const NodeFace *in = function.node(input);
                 const gc_node_ref_t copy         = copyOf[input];
-                if (in != nullptr && pairOf(in->dataType()) != nullptr) {
+                if (!iterable && in != nullptr && pairOf(in->dataType()) != nullptr) {
                     if (tangentOf[input] == rt::kInvalidNodeRef) {
                         complete = false;
                         break;
