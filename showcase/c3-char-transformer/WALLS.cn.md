@@ -315,12 +315,39 @@ Array *out = createTensor(TypeCode::Float32, ws->shapeSpan(), allocator, true); 
   `ops/layout_ops.cpp` 1 处：这些算子的**前向**本来就是 f32 层（conv/pool/batch_norm/gemm），
   不是"收 f64 却写 f32"，先不动。
 
-## 墙 12（下一个，未修）：`matmul_grad` 还是写 f32
+## 墙 12 的更正：`matmul_grad` **不是**墙，3e-6 是参照自己的误差
 
-- 坐标 `modules/tensor/kernels/gradient.cpp:567`
-  （`createTensor(TypeCode::Float32, (forLhs ? lhs : rhs)->shapeSpan(), allocator)`）。
-- 证据：stage2 现在能跑，但和验收值差 **3.0e-6**——本程序 step50 `-0.836278289207`、更新后
-  `-0.856049871704`；参照 `-0.836281312279`、`-0.856052891460`。 整条链上还写死 f32 的只剩
-  `matmul_grad`，量级对得上（每步 ~1e-7 相对误差，50 步累积到 3e-6）。
-- 按"若数值差 1e-6 以上就先查谁依赖"的规矩：**没继续改**，先报。 要改它的做法与墙 11 相同
-  （`matmulGrad` 模板化 + 按 dy 的 dtype 分发）。
+我按"下一个写死 f32 的是 `matmul_grad`"报过一次，**这个判断错了**，两处证据：
+
+**一、`matmul_grad` 的 f32 存货对 f64 根本走不到。**
+`matmulGradGemm` 一进门就自己把门关上（`modules/tensor/kernels/gradient.cpp#matmulGradGemm`）：
+
+```
+if (lhs->dtype() != TypeCode::Float32 || rhs->dtype() != TypeCode::Float32 ||
+    dy->dtype() != TypeCode::Float32 || lhs->rank() < 2 || rhs->rank() < 2) {
+    return nullptr;
+}
+```
+
+f64 的乘积返回 `nullptr`，走的是 `matmulGradLhs`/`matmulGradRhs` 里的通用路径
+（`matmul` + `sumTo` + `reshape`），那三个都是按元素类型分派的。 所以那一处
+`createTensor(TypeCode::Float32, …)` 只服务 f32 快路，**不该动**；"模板化 + 按 dy 分发"会白改。
+
+**二、3e-6 是我的参照算错了，不是引擎偏了。**
+先卡位置：把 stage2 跑 3 步，本程序 step2 = `-0.008000314590`，参照 `-0.008000314670`，
+**只差 8.0e-11**。 任何残留的 f32 存货都会给出 ~1e-7 的差，8e-11 排除它。
+那 8e-11 是中心差分的截断+抵消误差，而这个 stage 的开头恰好最受不了一点误差：
+第一步的 loss 对除了最后一个 `beta` 以外的参数**恒为 0**，Adam 的 `v` 也是 0，
+除法 `sqrt(v) + 1e-8` 把这点误差放大 —— 8e-11 到第 50 步变成 3.0e-6。
+
+改参照的办法是**复步求导**（`grow.py --exact`）：`loss(x + ih)` 的虚部就是导数，机器精度、
+没有相减抵消。 换上之后，参照与引擎在 **12 位上一个字都不差**：
+
+```
+stage2 step=50 loss=-0.836278289207     stage2 done steps=50 last=-0.856049871704
+```
+
+也就是说：**先前那组"验收值" `-0.836281312279` / `-0.856052891460` 才是噪声大的那一组**
+（差分参照自己的误差），引擎一直在给对的数。 这条写进用例了，stage2 十五个数全按 12 位钉死；
+stage4 的参照（`grow.py --stage 4 --exact`）也写出来了，十五个里十四个钉到 12 位，
+剩下 step1 那个 0 两边符号不同（参照 +0.0、引擎 -0.0），只钉前缀。

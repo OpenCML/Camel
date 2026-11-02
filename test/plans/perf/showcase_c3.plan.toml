@@ -111,12 +111,12 @@ timeout_ms = 300000
 
 [[tests]]
 name = "grow.stage2_residual_ln"
-desc = "Residuals and the library layer_norm around each attention.  It runs now, after layerNormInfer and layerNormGrad stopped answering f32 for f64; it is pinned at four decimals because it does not yet agree to six: this program gives -0.836278289207 at step 50 and -0.856049871704 after the last update, the reference gives -0.836281312279 and -0.856052891460, a gap of 3.0e-6 that comes from matmul_grad still writing f32 (gradient.cpp:567), the next wall in the family."
+desc = "Residuals and the library layer_norm around each attention: the loss starts at 0 (a normalised row sums to zero), no step rises, and all fifteen pinned values are the reference's own to twelve decimals.  The reference is `baseline/grow.py --stage 2 --exact`: complex-step gradients, because a central difference is not accurate enough for this stage. Its first step's loss is zero for every parameter but the last beta, so Adam's squared average is zero there and the division by sqrt(v) + 1e-8 magnifies the difference's own error: 8.0e-11 at step 2 became 3.0e-6 by step 50.  With exact gradients the two agree on every digit, which is also the reading that says no f32 store is left in this chain."
 case = "../../../showcase/c3-char-transformer/grow/stage2_residual_ln.cml"
 args = ["${case}"]
 kind = "behavior"
 expect_exit = 0
-expect_stdout_contains = ["stage2 step=1 loss=0.0000", "stage2 step=10 loss=-0.0720", "stage2 step=25 loss=-0.1920", "stage2 step=50 loss=-0.8362", "stage2 done steps=50 last=-0.8560"]
+expect_stdout_contains = ["stage2 step=1 loss=0.000000000000", "stage2 step=2 loss=-0.008000314590", "stage2 step=3 loss=-0.016000656417", "stage2 step=4 loss=-0.024001033565", "stage2 step=5 loss=-0.032001451997", "stage2 step=6 loss=-0.040001918397", "stage2 step=7 loss=-0.048002440612", "stage2 step=8 loss=-0.056003028012", "stage2 step=9 loss=-0.064003691904", "stage2 step=10 loss=-0.072004446062", "stage2 step=20 loss=-0.152024201514", "stage2 step=25 loss=-0.192068140575", "stage2 step=30 loss=-0.232320419892", "stage2 step=40 loss=-0.646090332968", "stage2 step=50 loss=-0.836278289207", "stage2 done steps=50 last=-0.856049871704"]
 timeout_ms = 300000
 
 [[tests]]
@@ -139,19 +139,17 @@ expect_exit = 0
 expect_stdout_contains = ["stage3 step=1 loss=9.182049", "stage3 step=10 loss=8.10387", "stage3 step=25 loss=6.45039", "stage3 step=50 loss=4.18813", "stage3 done steps=50 last=4.11033"]
 timeout_ms = 300000
 
-# The whole model, both layers, running: the two walls that stopped it are gone (`layerNormInfer`
-# no longer answers f32 for a `float[..]` input, and `layerNormGrad` now writes the input's element
-# type).  It has no pinned numbers yet, deliberately: its reference is `baseline/grow.py --stage 4`,
-# which is not written, and a number pinned from the run itself would only be a regression lock.  A
-# full run is worth recording here only once there is something to compare it with.
+# The whole model, both layers: `layerNormInfer` no longer answers f32 for a `float[..]` input,
+# `layerNormGrad` writes the input's element type, and `baseline/grow.py --stage 4` writes the
+# reference the fifteen values below come from.
 [[tests]]
 name = "grow.stage4_full_model"
-desc = "Two post-layer-norm blocks -- embedding, attention and feed-forward each behind a residual, a final layer_norm -- run for fifty Adam steps through `with_grad`. The case proves it runs and prints fifty losses; the numbers are not pinned because the reference for this stage is not written yet."
+desc = "Two post-layer-norm blocks -- embedding, attention and feed-forward each behind a residual, a final layer_norm -- for fifty Adam steps through `with_grad`, against `baseline/grow.py --stage 4 --exact`, whose twenty-five tensors are the same numbers in the same order. Fourteen of the fifteen pinned values are the reference's own to twelve decimals, and no step rises. The one not pinned to the digit is the first loss: it is zero, every normalised row sums to zero with beta still at zero, and the two write that zero with different signs (the reference sums to +0.0, the engine to -0.0), so only its prefix is pinned."
 case = "../../../showcase/c3-char-transformer/grow/stage4_full_model.cml"
 args = ["${case}"]
 kind = "behavior"
 expect_exit = 0
-expect_stdout_contains = ["stage4 step=1 loss=", "stage4 step=50 loss=", "stage4 done steps=50 last="]
+expect_stdout_contains = ["stage4 step=1 loss=", "stage4 step=2 loss=-0.015999913354", "stage4 step=3 loss=-0.031999843358", "stage4 step=4 loss=-0.047999790194", "stage4 step=5 loss=-0.063999750966", "stage4 step=6 loss=-0.079999722894", "stage4 step=7 loss=-0.095999703644", "stage4 step=8 loss=-0.111999691342", "stage4 step=9 loss=-0.127999684509", "stage4 step=10 loss=-0.143999681990", "stage4 step=20 loss=-0.303999767620", "stage4 step=25 loss=-0.383999834790", "stage4 step=30 loss=-0.463999906339", "stage4 step=40 loss=-0.624000056242", "stage4 step=50 loss=-0.784000203479", "stage4 done steps=50 last=-0.800000217888"]
 timeout_ms = 300000
 
 [[tests]]
