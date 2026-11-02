@@ -121,12 +121,12 @@ func initial(): Model {
     }
 }
 
-func main(): int sync {
+func main(count: int): int sync {
     let tokens = [0, 1] as int[]
     let model0 = initial()
     let z0 = (rows_of<model0>(tokens) + model0.pos) @ model0.head
     let (final, state, steps, log) = loop m = model0, opt = adam_state(model0), step = 0, log = '' as string
-        while step < 200
+        while step < count
         do {
             let (value, g) = with_grad(loss_of)<m>(tokens)
             let next = adam(m, g, opt, 0.002)
