@@ -102,8 +102,39 @@ expect_output_contains = ["REINTERP jvp function=identity graph=", "type=(Pair, 
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
-# A loop whose body never reads the state's tangent -- `s + 1.0`, where the derivative does not flow
-# through the state at all -- is still lifted: the tangent is carried as zero, and the value is
+# The walk order, pinned by a number. The program above answers the same two columns under every
+# walk, so the pin is its pullback: with the rounds undone in the other direction `g(s) = f(s)[0]`
+# has the gradient `s0 + s1` (`(1.0, 1.0)`), and undone in the order they were written it has
+# `s0 + 10*s1` (`(1.0, 10.0)`). One cotangent, two numbers, no seed to argue about.
+#
+# Marked known_fail against the author's ruling of 2026-11-03 00:30 (a case that cannot pass today
+# belongs in the plan with a mark, an owner and a reason, not outside it): the assertion is the
+# answer the transform owes, not today's refusal, and the runner reports a marked case that passes
+# as a failure, so the mark's removal is what this case asks for.
+#
+# Where the wall is today, read off the run rather than off the transpose site itself: `vjp` never
+# reaches `transpose`. `split(jvp(g))` refuses first -- `REINTERP split function=jvp_of_g
+# skip=forward construct=a loop ... why=the cut enters a loop through the loop cell, and that cell
+# is the exit` -- so the reverse walk in `modules/transforms/transpose.cpp#buildTransposeMember`
+# is not yet the first thing between this program and its answer.
+# Owner: whoever lands that reverse walk (the review page names the `Loop` case of that function).
+[[tests]]
+name = "vjp_loop.rounds_are_undone_in_reverse"
+desc = "The pullback of a two-round loop reads `(1.0, 1.0)` and not `(1.0, 10.0)`: for `loop x = s for k in [1.0, 10.0] do [x[1], x[0] + x[1] * k]` the per-round map is `M_k = [[0,1],[1,k]]`, so `M = M_10 * M_1 = [[1,1],[10,11]]`, and a pullback must apply `M_1^T` after `M_10^T` -- the rounds are undone in the other direction (design 4.2/4.3). Reading the loop's first component, the correct walk gives the gradient `(1.0, 1.0)` and a copied range gives `(1.0, 10.0)`; the two numbers separate the walks and nothing else in the program has to change. `vjp` takes a function whose result is a `float` (the cotangent of the result is the seed), so the pullback's subject is `g(s) = (loop ...)[0]` -- the same loop, the same two numbers."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_loop_rounds_walk_backwards.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+known_fail = ["nvm"]
+known_fail_msg = "skip=forward"
+known_fail_note = "split(jvp(g)) does not build the forward half of a loop whose cell is the exit; the reverse walk is behind that."
+expect_exit = 0
+expect_output_contains = ["value= 3.0", "grad= [1.0, 1.0]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# A loop whose body never reads the state's tangent -- `s + 1.0`, where the derivative does not
+# flow through the state at all -- is still lifted: the tangent is carried as zero, and the value is
 # what the loop computes. The pair is the loop's value whether or not anything differentiates it.
 [[tests]]
 name = "jvp_loop.value_only_is_still_lifted"
