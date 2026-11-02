@@ -596,6 +596,17 @@ jobs:
       id-token: write
 
     steps:
+      # The tag check below runs `scripts/check_wheel_tags.py`, which is in the repository, and this
+      # job used to run without checking anything out: the step that refuses an unpublishable tag
+      # died on `can't open file '.../scripts/check_wheel_tags.py'` and the upload never started
+      # (the v0.2.41 tag run, and every tag since the job was written this way). The checkout is the
+      # first step on purpose: it cleans the workspace, so it cannot come after the artifacts are
+      # downloaded. Only `scripts` is needed, and the script reads nothing else.
+      - name: Check out the tag check this job runs
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+
       - name: Download all wheel artifacts
         uses: actions/download-artifact@v4
         with:
