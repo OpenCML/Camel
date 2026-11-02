@@ -73,19 +73,21 @@ Type *rowsOfType(Type *type) {
 }
 
 
-/// The rule `rulesets.vmap` files for `uri`, or nullptr and why not. The family is read through the
-/// operator's key: `vmapBindingOf` answers the key the operator's batching rule is filed under, and
-/// the head and the operand count in it are the operator's, not this family's. The key comes from
-/// the operator's own module (`camel/core/forward.h#bindVmapRule`), because the spelling a rule is
-/// written with (`matmul(x, w)`, `sum_axis(xs, axis, keepdims)`) is not the URI the node holds
-/// (`tensor:matmul`, `tensor:sum_axis`).
+/// The rule `rulesets.vmap` files for `uri`, or nullptr and why not. The key -- the spelling the
+/// rule's left side is written with, and its operand count -- is read off the operator itself
+/// (`camel/core/forward.h#ruleKeyOf`): `tensor:matmul` is written `matmul(x, w)` because that is the
+/// operator's name, and the two operators that cannot be spelled that way are named, with their
+/// reasons, in `ruleKeyExceptions()`. Nothing is registered per operator.
 std::optional<camel::parse::ast::RuleMatch> ruleOfUri(const std::string &uri, std::string &why) {
-    const auto binding = camel::core::vmapBindingOf(uri);
-    if (!binding.has_value()) {
-        why = "the operator has no batching rule key bound at all";
+    const auto answer = camel::core::vmapRuleOf(uri);
+    if (!answer.has_value()) {
+        why = "the operator's own name says no key (no rule is written for a call of it)";
         return std::nullopt;
     }
-    return camel::parse::ast::lookupRule(kFamily, binding->head, binding->arity);
+    if (answer->status == camel::parse::ast::RuleLookup::NoRuleForPrimitive) {
+        why = "the family holds no rule under that key";
+    }
+    return answer;
 }
 
 /// The rule's templates, by the name the index answered: what `genericRuleInstance` is asked for.

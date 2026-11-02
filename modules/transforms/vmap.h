@@ -20,10 +20,10 @@
  * which half of a rule a transform can ask for.
  *
  * A family other than the one an operator's key was first recorded for is read through that *key*:
- * `bindVmapRule` keeps the family this transform reads, one entry per operator
- * (`src/builtin/operators/derivative.cpp#registerFloatVmapRules` for the scalar arithmetic, the
- * tensor module for `matmul` and the axis reductions), and binding again replaces. The key -- which
- * token, how many operands -- is a property of the operator, so `camel::core::vmapBindingOf(uri)`
+ * The key a batching rule is filed under -- the spelling the rule's left side writes, and how many
+ * operands that spelling takes -- is read off the operator itself (`camel/core/forward.h#ruleKeyOf`):
+ * this transform keeps no table of its own, and the two operators whose key cannot be derived are
+ * named, with their reasons, in `ruleKeyExceptions()`.
  * reads it and `lookupRule("rulesets.vmap", head, arity)` asks this family.
  *
  * What is built today is the elementwise tier, `matmul`, the reductions along an axis, and calls: a

@@ -15,26 +15,21 @@ The two ways of not finding a rule are named apart because the repairs differ (w
 import the ruleset). The case also checks that a program without the pass prints nothing about
 rules, and that the pass hands the program on unchanged.
 
-The transpose family is asked the same way, because it is the one family whose rules have no
-consumer yet: the index files its five rules under the operator of their left side, and nothing
-binds an operator to it. So the same program answers every transpose question the forward family
-answers -- and with "forward=true" the bindings that would make a transform use them are zero.
-That gap is the reading a transpose operator has to close, so it is pinned here rather than
-remembered.
+The transpose and batching families are asked the same way, because they are asked apart: a
+differentiating transform reads `rulesets.jvp`, a pullback `rulesets.transpose`, `reinterp<vmap>`
+`rulesets.vmap`. Each is asked by its own keys, and the program imports all three.
 
-The third family is `rulesets.vmap`, and the program imports it for one reason: the batching table
-(`bindVmapRule`) names it as the family of the array and tensor primitives' batching rules
-(`tensor:multiply`, `:op/idx_arr`, `matmul`, the reductions). Each table is read as a whole, so a
-binding whose family is not in the program prints `-> no rule`, and that line is the thing a table
-must never show for a binding that has a rule. The family is therefore part of the fixture, and the
-three tables are printed apart (`FORWARD`, `TRANSPOSE`, `VMAP`) because they are asked apart: a
-differentiating transform reads the first, a pullback the second, `reinterp<vmap>` the third.
+**No operator is bound to a key by hand any more.** The key a rule is filed under is read off the
+operator itself (`camel/core/forward.h#ruleKeyOf`): `:op/add_d` is written `+` with two operands
+because that is what `add` means, and `tensor:sum_axis` is written `sum_axis(...)` because that is
+the operator's own name, at whatever count the family filed it under. Two operators cannot be written
+that way, and those two are the whole of `ruleKeyExceptions()`: `:op/idx_arr` (`xs[i]` is a bracket
+form with no token) and `tensor:multiply` (`*/2` is already `:op/mul_d`'s key). With
+`forward=true` the pass prints those two lines and the sentence saying how the rest is derived, so an
+exception is never silent -- and this case pins both the lines and the rules their keys resolve to.
 
-Nothing in this file counts rules. The two halves of the same fact -- the index a module builds and
-the tables the operators bind into it -- are checked against each other: every binding resolves to a
-rule, asking the index for that key answers the same rule the binding printed, and each family holds
-exactly the keys its table binds. A rule added to a family, or an operator bound to a new key, moves
-both halves, so this test grows with them instead of going red at the next addition.
+Nothing in this file counts rules. The two halves of the same fact are checked against each other: the
+index a module builds, and the keys the operators derive.
 
 Query the array primitives' keys like any other: `rulesets.vmap` at `mul_tensor` with two operands is
 `vmap_rule_mul_tensor`, and at `index_into` with two is `vmap_rule_idx`. A call is a key (`f(a, b)` is
@@ -63,6 +58,9 @@ CAMEL, ARGV = camel_from_argv(REPO_ROOT)
 QUERIES = [
     ("rulesets.jvp|-|1", "LOOKUP rulesets.jvp -/1 -> jvp_neg"),
     ("rulesets.jvp|-|2", "LOOKUP rulesets.jvp -/2 -> jvp_sub"),
+    ("rulesets.jvp|+|2", "LOOKUP rulesets.jvp +/2 -> jvp_add"),
+    ("rulesets.jvp|*|2", "LOOKUP rulesets.jvp */2 -> jvp_mul"),
+    ("rulesets.jvp|/|2", "LOOKUP rulesets.jvp //2 -> jvp_div"),
     ("rulesets.jvp|-|3", "LOOKUP rulesets.jvp -/3 -> no rule"),
     ("rulesets.nope|-|1", "LOOKUP rulesets.nope -/1 -> no such family"),
     # The transposes of the same five primitives, filed under the same five keys.
@@ -146,87 +144,56 @@ check(
     f"exactly one answer says the family is unknown: {lines}",
 )
 
-# The bindings are the other half: a rule in the index is used by a transform only when an operator
-# is bound to that family's key. There are three tables and they are printed apart because they are
-# asked apart: a differentiating transform reads the forward one, a pullback reads the transpose one,
-# and `reinterp<vmap>` reads the batching one. Each table is checked against the index the same way,
-# so nothing here names an operator or counts a rule: a table that grows is checked as it grows.
-#
-#   * every binding resolves (`-> <rule>`, never `-> no rule` / `-> no such family`);
-#   * asking the index for that key directly answers the same rule the binding printed;
-#   * the family holds exactly the keys the table binds -- one rule per key, none unreached.
+# No per-operator table is left, so what the pass prints is the other half of the same fact: the keys
+# that cannot be derived, with the reason each cannot. They are printed on every run of the pass,
+# whatever `forward` says, because an exception only visible on request is an exception nobody reads;
+# `forward=true` adds the sentence saying how every other key is derived.
 code, bound = run(["std::rulesets", "forward=true"])
-check(code == 0, f"the program exits 0 asking for the bindings (got {code}):\n{bound}")
+check(code == 0, f"the program exits 0 asking for the keys (got {code}):\n{bound}")
 
-
-def parseBinding(line: str) -> tuple[str, str, str, int, str]:
-    """`uri family head/arity -> rule`, the four parts this file reads."""
-    fields = line.split()
-    head, _, arity = fields[2].rpartition("/")
-    return fields[0], fields[1], head, int(arity), line.partition(" -> ")[2]
-
-
-tables: dict[str, list[tuple[str, str, str, int, str]]] = {}
-for entry in bound.splitlines():
-    prefix, _, rest = entry.partition(" ")
-    if prefix in ("FORWARD", "TRANSPOSE", "VMAP") and rest:
-        tables.setdefault(prefix, []).append(parseBinding(rest))
+exceptions = [line for line in bound.splitlines() if line.startswith("RULEKEY-EXCEPTION ")]
+check(len(exceptions) == 2, f"exactly two operators have a key that cannot be derived: {exceptions}")
+keys = [(line.split()[1], line.split()[3]) for line in exceptions]
 check(
-    sorted(tables) == ["FORWARD", "TRANSPOSE", "VMAP"],
-    f"the pass prints all three tables: {sorted(tables)}",
+    keys == [(":op/idx_arr", "index_into/2"), ("tensor:multiply", "mul_tensor/2")],
+    f"the two are the array index and the array product, at the keys their rules are filed under: {keys}",
+)
+check(
+    all(" because " in line and len(line.split(" because ", 1)[1]) > 20 for line in exceptions),
+    f"each line says why in words, not only what: {exceptions}",
+)
+check(
+    any("bracket form" in line and "no token" in line for line in exceptions),
+    f"the index's reason is that `xs[i]` is a bracket form with no token: {exceptions}",
+)
+check(
+    any(":op/mul_d" in line and "already" in line for line in exceptions),
+    f"the product's reason is that `*/2` is already the scalar product's key: {exceptions}",
+)
+check(
+    any(line.startswith("RULEKEY derivable:") for line in bound.splitlines()),
+    f"with \"forward=true\" the pass says how every other key is derived: {bound}",
 )
 
-familyOf = {"FORWARD": "rulesets.jvp", "TRANSPOSE": "rulesets.transpose", "VMAP": "rulesets.vmap"}
-listedKeys = {family: set() for family in familyOf.values()}
-for line in listed:
-    _, family, key, _ = line.split(maxsplit=3)
-    head, _, arity = key.rpartition("/")
-    listedKeys.setdefault(family, set()).add((head, int(arity)))
-
-for prefix, rows in tables.items():
-    check(rows, f"the {prefix} table is empty: {bound}")
-    unresolved = [row for row in rows if row[4].startswith("no ")]
-    check(not unresolved, f"every {prefix} binding answers with a rule the family holds: {unresolved}")
-    foreign = [row for row in rows if row[1] != familyOf[prefix]]
-    check(not foreign, f"every {prefix} binding names its own family: {foreign}")
-    keys = {(row[2], row[3]) for row in rows}
-    check(
-        keys == listedKeys[familyOf[prefix]],
-        f"the {familyOf[prefix]} index and the {prefix} table hold the same keys: "
-        f"{sorted(keys)} vs {sorted(listedKeys[familyOf[prefix]])}",
-    )
-
-# Every binding, asked for by name: the answer is the rule the table printed, which is the same fact
-# read twice. This is the check a written count cannot make -- it says the two halves agree about
-# *which* rule, key by key.
-questions = sorted({f"{row[1]}|{row[2]}|{row[3]}" for rows in tables.values() for row in rows})
+# Each exception's key resolves in the family it names, and asking the index for it by name answers the
+# same rule: the exception is written down in C++ and the rule is written down in the ruleset, so the
+# two halves are checked against each other here rather than one of them being trusted.
+questions = [f"rulesets.vmap|{head}|{arity}" for _, key in keys for head, _, arity in [key.rpartition("/")]]
 code, answered = run(["std::rulesets", f"query={';'.join(questions)}"])
-check(code == 0, f"the program exits 0 asking every binding (got {code}):\n{answered}")
+check(code == 0, f"the program exits 0 asking the exceptions' keys (got {code}):\n{answered}")
 looked = {
     line.split(" -> ")[0]: line.partition(" -> ")[2]
     for line in answered.splitlines()
     if line.startswith("LOOKUP ")
 }
-for rows in tables.values():
-    for uri, family, head, arity, rule in rows:
-        want = f"LOOKUP {family} {head}/{arity}"
-        check(
-            looked.get(want) == rule,
-            f"`{uri}` is bound to {family} {head}/{arity} -> {rule}, and the index answers {looked.get(want)!r}",
-        )
-
-# The two operators this fixture exists for are in the batching table, by name: the array product and
-# the element of a row are what showed that an operator without a token of its own needs a key, and
-# they are the two whose bindings moved tables once already.
-arrays = [line for line in bound.splitlines() if line.startswith("VMAP :op/idx") or line.startswith("VMAP tensor:multiply")]
-check(
-    [line.split(" -> ")[0] for line in arrays]
-    == [
-        "VMAP :op/idx_arr rulesets.vmap index_into/2",
-        "VMAP tensor:multiply rulesets.vmap mul_tensor/2",
-    ],
-    f"the array operators are batching rules, filed under the batching family: {arrays}",
-)
+for want, rule in (
+    ("LOOKUP rulesets.vmap index_into/2", "vmap_rule_idx"),
+    ("LOOKUP rulesets.vmap mul_tensor/2", "vmap_rule_mul_tensor"),
+):
+    check(
+        looked.get(want) == rule,
+        f"`{want}` resolves to {rule}, and the index answers {looked.get(want)!r}",
+    )
 
 if failures:
     for failure in failures:

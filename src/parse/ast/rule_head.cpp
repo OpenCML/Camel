@@ -335,6 +335,30 @@ RuleMatch lookupRule(const std::string &family, const std::string &head, uint32_
     return RuleMatch{RuleLookup::Found, at->second};
 }
 
+std::optional<uint32_t> arityOfHead(const std::string &family, const std::string &head) {
+    std::lock_guard<std::mutex> lock(registryMutex);
+    const auto familyAt = indexed.find(family);
+    if (familyAt == indexed.end()) {
+        return std::nullopt;
+    }
+    // The keys are `head@arity`, so the family's map is scanned for this head and the answer is
+    // given only when there is exactly one: two arities of one spelling are two rules, and a caller
+    // that has only the spelling would be guessing.
+    const std::string prefix = head + "@";
+    std::optional<uint32_t> found;
+    for (const auto &[key, rule] : familyAt->second) {
+        (void)rule;
+        if (key.rfind(prefix, 0) != 0) {
+            continue;
+        }
+        if (found.has_value()) {
+            return std::nullopt;
+        }
+        found = static_cast<uint32_t>(std::stoul(key.substr(prefix.size())));
+    }
+    return found;
+}
+
 std::string rhsCalleeOf(const std::string &family, const std::string &rule) {
     std::lock_guard<std::mutex> lock(registryMutex);
     const auto at = callees.find(family);

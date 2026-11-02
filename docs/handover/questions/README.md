@@ -15,11 +15,11 @@
 ## 现在在等作者：1 页
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
-| [`2026-11-02-cml-var-version-in-printed-text`](2026-11-02-cml-var-version-in-printed-text.md) | 打印器写一个 `:var/get` 时，它读的是哪个版本要不要进文本（不进就得落 `let` 或具名拒绝，进就得有 `@2` 之类的新写法） | 待裁 | — | `trans/cml` 的往返：三条用例同一机制（`parse/constructs/comprehensions` 报 `Redeclaration`、`trans/cpp/exec/variables` 报 `UnresolvedReference: 'cml3'`，基线也是 `cml3`） |
+| [`2026-11-02-p1-13-eleven-ne-rules-name-nothing`](2026-11-02-p1-13-eleven-ne-rules-name-nothing.md) | `:op/ne_*` 那 11 个名字、22 行规则命名不到任何东西：删不删 | 待裁 | — | 一次删除的候选，删不删由作者定；`lane-gs6` 的通配清理把这块照了出来 |
 
-**这一节的行数 = 目录里的页数**（现在 1 = 1）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。下一节的行数按 `reviews/` 里的页算，两者不混。
+**这一节的行数 = 目录里的页数**（现在 1 = 1）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。
 
-2026-11-02 00:30 的四页（`*tos` 观察、残差集、被转置成员的身份、两个 `float` 端口的成员）已裁，在 `reviews/`，裁定见 `reviews/questions-2026-10-29.md` 同时刻那一条。
+2026-11-02 01:30：`cml-var-version-in-printed-text`（01:10）与 `whether-the-release-gate-names-plans-or-runs-the-tree`（01:30）都已裁，在 `reviews/`，裁定见 `reviews/questions-2026-10-29.md`。
 
 ## 已裁：按还堵着的活排
 
@@ -59,6 +59,7 @@
 
 | 页 | 问什么 | 状态 | 裁定/去向 | 还堵着 |
 | [`where-the-tag-for-an-operator-can-sit`](../reviews/questions-2026-10-31-where-the-tag-for-an-operator-can-sit.md) | 标签能不能挂在别处的算子声明上 | 已撤 | 20:50——没有跨模块挂标签这回事；结论并入上面 `the-ruleset-module-has-no-rules-in-it` 那一行 | 无 |
+| [`questions-2026-11-02-what-does-tq-match`](../reviews/questions-2026-11-02-what-does-tq-match.md) | `T[?]` 匹配什么 | 已裁（作者 2026-11-02 11:10） | `T[..]` 匹配任意秩、`T[?]` 只匹配秩 1 | 一条还没兑现的读数欠账（页里记着） |
 
 ## 留档里仍写着"待裁/等裁决"的页（已裁，别再当待裁）
 
