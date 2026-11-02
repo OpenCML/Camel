@@ -116,7 +116,7 @@ case = "../../../showcase/c3-char-transformer/grow/stage2_residual_ln.cml"
 args = ["${case}"]
 kind = "behavior"
 expect_exit = 0
-expect_stdout_contains = ["stage2 step=1 loss=0.000000000000", "stage2 step=2 loss=-0.008000314590", "stage2 step=3 loss=-0.016000656417", "stage2 step=4 loss=-0.024001033565", "stage2 step=5 loss=-0.032001451997", "stage2 step=6 loss=-0.040001918397", "stage2 step=7 loss=-0.048002440612", "stage2 step=8 loss=-0.056003028012", "stage2 step=9 loss=-0.064003691904", "stage2 step=10 loss=-0.072004446062", "stage2 step=20 loss=-0.152024201514", "stage2 step=25 loss=-0.192068140575", "stage2 step=30 loss=-0.232320419892", "stage2 step=40 loss=-0.646090332968", "stage2 step=50 loss=-0.836278289207", "stage2 done steps=50 last=-0.856049871704"]
+expect_stdout_contains = ["stage2 step=1 loss=0.000000000000", "stage2 step=2 loss=-0.008000314590", "stage2 step=3 loss=-0.016000656417", "stage2 step=4 loss=-0.024001033565", "stage2 step=5 loss=-0.032001451997", "stage2 step=6 loss=-0.040001918397", "stage2 step=7 loss=-0.048002440612", "stage2 step=8 loss=-0.056003028012", "stage2 step=9 loss=-0.064003691904", "stage2 step=10 loss=-0.072004446062", "stage2 step=11 loss=-0.080005307404", "stage2 step=12 loss=-0.088006296882", "stage2 step=13 loss=-0.096007440681", "stage2 step=14 loss=-0.104008771827", "stage2 step=15 loss=-0.112010332400", "stage2 step=16 loss=-0.120012176605", "stage2 step=17 loss=-0.128014375103", "stage2 step=18 loss=-0.136017021211", "stage2 step=19 loss=-0.144020239954", "stage2 step=20 loss=-0.152024201514", "stage2 step=25 loss=-0.192068140575", "stage2 step=30 loss=-0.232320419892", "stage2 step=40 loss=-0.646090332968", "stage2 step=50 loss=-0.836278289207", "stage2 done steps=50 last=-0.856049871704"]
 timeout_ms = 300000
 
 [[tests]]
@@ -149,7 +149,7 @@ case = "../../../showcase/c3-char-transformer/grow/stage4_full_model.cml"
 args = ["${case}"]
 kind = "behavior"
 expect_exit = 0
-expect_stdout_contains = ["stage4 step=1 loss=", "stage4 step=2 loss=-0.015999913354", "stage4 step=3 loss=-0.031999843358", "stage4 step=4 loss=-0.047999790194", "stage4 step=5 loss=-0.063999750966", "stage4 step=6 loss=-0.079999722894", "stage4 step=7 loss=-0.095999703644", "stage4 step=8 loss=-0.111999691342", "stage4 step=9 loss=-0.127999684509", "stage4 step=10 loss=-0.143999681990", "stage4 step=20 loss=-0.303999767620", "stage4 step=25 loss=-0.383999834790", "stage4 step=30 loss=-0.463999906339", "stage4 step=40 loss=-0.624000056242", "stage4 step=50 loss=-0.784000203479", "stage4 done steps=50 last=-0.800000217888"]
+expect_stdout_contains = ["stage4 step=1 loss=", "stage4 step=2 loss=-0.015999913354", "stage4 step=3 loss=-0.031999843358", "stage4 step=4 loss=-0.047999790194", "stage4 step=5 loss=-0.063999750966", "stage4 step=6 loss=-0.079999722894", "stage4 step=7 loss=-0.095999703644", "stage4 step=8 loss=-0.111999691342", "stage4 step=9 loss=-0.127999684509", "stage4 step=10 loss=-0.143999681990", "stage4 step=11 loss=-0.159999682888", "stage4 step=12 loss=-0.175999686506", "stage4 step=13 loss=-0.191999692301", "stage4 step=14 loss=-0.207999699851", "stage4 step=15 loss=-0.223999708826", "stage4 step=16 loss=-0.239999718966", "stage4 step=17 loss=-0.255999730064", "stage4 step=18 loss=-0.271999741957", "stage4 step=19 loss=-0.287999754511", "stage4 step=20 loss=-0.303999767620", "stage4 step=25 loss=-0.383999834790", "stage4 step=30 loss=-0.463999906339", "stage4 step=40 loss=-0.624000056242", "stage4 step=50 loss=-0.784000203479", "stage4 done steps=50 last=-0.800000217888"]
 timeout_ms = 300000
 
 [[tests]]
@@ -187,3 +187,12 @@ expect_exit = 0
 expect_stdout_contains = ["grad loss=", "grad wq2 [[0.0, 0.0], [0.0, 0.0]]", "grad wk2 [[0.0, 0.0], [0.0, 0.0]]", "grad gout [1.99997835", "grad bout [2.0, 2.0]"]
 timeout_ms = 120000
 
+[[tests]]
+name = "grow.params_after_20_steps"
+desc = "Twenty Adam steps of the stage-2 model, then the ten tensors printed, against `baseline/grad_first_step.py --stage 2 --params 20`.  The first-step gradient matching says the pullback is right; twenty steps matching says the update, `adam`'s two averages and the next step's gradient are wired up too.  The pinned values are the reference's own to nine significant digits, and the element-by-element verdict is the comparison script's."
+case = "../../../showcase/c3-char-transformer/grow/params_after_20_steps.cml"
+args = ["${case}"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["param steps=20 loss=", "param wq1 [[0.964079930726", "param g1 [1.029526109", "param b1 [0.02839496349", "param g2 [0.95796927601", "param b2 [-0.03999999979"]
+timeout_ms = 300000

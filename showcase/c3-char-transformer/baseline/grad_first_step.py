@@ -71,6 +71,10 @@ def main():
     parser.add_argument("--stage", type=int, default=2, choices=(2, 4))
     parser.add_argument("--engine", default=None,
                         help="a file holding the matching grad_first_step case's stdout")
+    parser.add_argument("--params", type=int, default=None, metavar="STEPS",
+                        help="instead of the gradient, print the parameters after STEPS Adam steps")
+    parser.add_argument("--steps", type=int, default=None,
+                        help="print the loss of each of the first STEPS steps")
     args = parser.parse_args()
 
     shapes, order, start_of, loss = LAYOUT[args.stage]
@@ -80,10 +84,20 @@ def main():
         a = np.array(flat[offsets[name][0]:offsets[name][1]], dtype=np.float64)
         return a.reshape(shapes[name]).tolist()
 
-    flat = gradient(args.stage)
-    print(f"grad loss={loss(list(start_of())).real:.12f}")
+    tag = "param" if args.params is not None else "grad"
+    if args.params is not None:
+        _, _, weights = grow.run(args.stage, exact=True, steps=args.params,
+                                 return_weights=True)
+        flat = list(weights)
+    else:
+        flat = gradient(args.stage)
+        print(f"grad loss={loss(list(start_of())).real:.12f}")
+    if args.steps is not None:
+        losses, _ = grow.run(args.stage, exact=True, steps=args.steps)
+        for step, value in enumerate(losses, start=1):
+            print(f"step {step} loss={float(value):.12f}")
     for name in order:
-        print(f"grad {name} {nested(flat, name)!r}")
+        print(f"{tag} {name} {nested(flat, name)!r}")
 
     if not args.engine:
         return 0
@@ -91,7 +105,7 @@ def main():
     text = Path(args.engine).read_text(encoding="utf-8")
     seen = {}
     for line in text.splitlines():
-        m = re.match(r"^grad (\w+) (\[.*\])$", line.strip())
+        m = re.match(rf"^{tag} (\w+) (\[.*\])$", line.strip())
         if m:
             seen[m.group(1)] = ast.literal_eval(m.group(2))
     missing = [n for n in order if n not in seen]

@@ -243,14 +243,14 @@ def gradient_of(loss, weights, exact):
     return out
 
 
-def run(stage, use_torch=False, exact=False):
+def run(stage, use_torch=False, exact=False, steps=None, return_weights=False):
     names, start, loss = STAGES[stage]
     weights = list(start)
     m = [0.0] * len(weights)
     v = [0.0] * len(weights)
     correction1 = correction2 = 1.0
     losses = []
-    for _ in range(STEPS):
+    for _ in range(STEPS if steps is None else steps):
         losses.append(loss(weights))
         gradient = gradient_of(loss, weights, exact)
         for i in range(len(weights)):
@@ -261,6 +261,8 @@ def run(stage, use_torch=False, exact=False):
         for i in range(len(weights)):
             weights[i] -= RATE * (m[i] / (1.0 - correction1)) / (
                 np.sqrt(v[i] / (1.0 - correction2)) + EPS)
+    if return_weights:
+        return losses, loss(weights), weights
     return losses, loss(weights)
 
 

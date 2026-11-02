@@ -1,0 +1,83 @@
+// Where stage 2's parameters end up after twenty Adam steps, printed so it can be compared with
+// `baseline/grad_first_step.py --stage 2 --params 20`.
+//
+// A gradient that agrees at the first step only says the pullback is right.  Twenty steps of it
+// agreeing says the update, the optimizer's state and the next step's gradient are wired together
+// too -- which is what "the small Transformer is training" actually claims.
+//
+//     camel showcase/c3-char-transformer/grow/params_after_20_steps.cml
+import { layer_norm, softmax, sum, transpose } from tensor
+import { adam, adam_state } from nn
+import { with_grad } from autodiff
+
+type Model = {
+    wq1: float[..],
+    wk1: float[..],
+    wv1: float[..],
+    g1: float[..],
+    b1: float[..],
+    wq2: float[..],
+    wk2: float[..],
+    wv2: float[..],
+    g2: float[..],
+    b2: float[..]
+}
+
+func mask(): float[..] {
+    return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2]
+}
+
+func attention(x: float[..], wq: float[..], wk: float[..], wv: float[..]): float[..] {
+    let q = x @ wq
+    let k = transpose(x @ wk)
+    let a = softmax<1>(q @ k * 0.70710678118654752 + mask())
+    return a @ (x @ wv)
+}
+
+with <m: Model>
+func block(x: float[..]): float {
+    let first = x + attention(x, m.wq1, m.wk1, m.wv1)
+    let normed = layer_norm(first, m.g1, m.b1)
+    let second = first + attention(normed, m.wq2, m.wk2, m.wv2)
+    return sum(layer_norm(second, m.g2, m.b2))
+}
+
+func initial(): Model {
+    return {
+        wq1: [[1.0, 0.5], [0.5, 1.0]] as float[2, 2],
+        wk1: [[0.5, 1.0], [1.0, 0.5]] as float[2, 2],
+        wv1: [[1.0, -1.0], [-1.0, 1.0]] as float[2, 2],
+        g1: [1.0, 1.0] as float[],
+        b1: [0.0, 0.0] as float[],
+        wq2: [[0.75, 0.0], [0.0, 0.75]] as float[2, 2],
+        wk2: [[0.0, 0.5], [0.5, 0.0]] as float[2, 2],
+        wv2: [[1.0, 1.0], [1.0, 1.0]] as float[2, 2],
+        g2: [1.0, 1.0] as float[],
+        b2: [0.0, 0.0] as float[]
+    }
+}
+
+func main(): int sync {
+    let x = [[1.0, 0.5], [0.5, 1.0]] as float[2, 2]
+    let model0 = initial()
+    let (final, state, steps) = loop m = model0, opt = adam_state(model0), step = 0
+        while step < 20
+        do {
+            let (value, g) = with_grad(block)<m>(x)
+            let next = adam(m, g, opt, 0.002)
+            return (next.0, next.1, step + 1)
+        }
+    let loss = with_grad(block)<final>(x).0
+    `param steps=${steps} loss=${loss:.12f}`->println
+    "param wq1 "->print; final.wq1->println
+    "param wk1 "->print; final.wk1->println
+    "param wv1 "->print; final.wv1->println
+    "param g1 "->print; final.g1->println
+    "param b1 "->print; final.b1->println
+    "param wq2 "->print; final.wq2->println
+    "param wk2 "->print; final.wk2->println
+    "param wv2 "->print; final.wv2->println
+    "param g2 "->print; final.g2->println
+    "param b2 "->print; final.b2->println
+    return 0
+}
