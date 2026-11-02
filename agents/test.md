@@ -22,6 +22,19 @@
   executable's mtime, not the build log's: four rewrites in one night came from a correct number
   attributed to the wrong artifact (a stale `refs/remotes`, `build.ninja` for `build-Release.ninja`, a
   lane's readings filed as `develop`'s, a `-NoBuild` exit code read as a failure).
+- **Before treating a red as a new defect, ask whether somebody already fixed it on another branch.**
+  Twice in one night the answer was yes: `grad_array_sum` was about to get a probe written for it
+  while the fix sat on `origin/lane-lit2` (`19f0b05e8`, `0aed45eb6`), and a `GUARD` question was
+  answered the same way. The tool carries the rule so it stops depending on who remembers it:
+  ```
+  node scripts/find-fix.mjs test/plans/feat/compile/transforms.plan.toml:grad_array_sum,cotangent
+  ```
+  It fetches first, prints the branches that changed **that case's entry** since `origin/develop`, the
+  commits on any remote branch whose message carries the case name or a keyword (each with the branches
+  that hold it and `merged`/`not merged`), and the merged count. Read the exit code as the verdict:
+  `0` found a candidate, `1` found nothing (so far a new defect -- an empty reading is not a pass), `2`
+  could not read (`git fetch` failed, so `refs/remotes` may be stale and would report a false "no
+  branch has it"). It writes nothing; `--offline` skips the fetch and says the reading is stale.
 - **`null` is not an exit code; it is the absence of one.** A run that ends without an exit code ended in one of three ways, and the runner names which: `got signal SIGSEGV (rc=139, 0.03 s)` (the shell's `128 + n`), `got timeout after 30000 ms` (only a real timeout says this), `could not start: <message>` (the process never existed). `[SUMMARY]` separates the last two for `fail` counts: `, timed out: <n>` and `, killed by a signal: <n>`, printed only when one happened. **Read the exit line before reading a timing**: `got null` was read as a hang for two rounds while the process was dying of SIGSEGV in 0.03 s, and both directions of that diagnosis were wrong.
 - **A layer's size is two numbers, and every run prints both**: `[tier] milestone: 27 plan file(s), 3330 declared test entries, 3404 started`. Read the second one as "what this run covers" and the first as "what the files declare"; quoting either alone as "the layer" is how `3330` and `3404` were both read as the same thing. `declared > started` is a defect (an entry that neither ran nor was skipped, so it is in no summary) and fails the run; `declared < started` is normal (`backends` expands an entry, a `compare_to` companion joins). Both are counted, never computed -- `backends.length` multiplication reads `7339` for a layer that starts `3404`.
 - **A guard must be able to fail.** Say in its comment which change to the tree makes it red, and record that red run (a plan case, a test, or the report with the failing output). A number a verdict rests on comes from the tree — the files, the parser, the registered operators — never from a literal list inside the guard; where a literal is a pin, a plan pins it so a change is visible. A guard that examined zero things fails; it never reports a pass.
