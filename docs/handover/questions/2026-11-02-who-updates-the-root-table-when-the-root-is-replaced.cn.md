@@ -63,8 +63,38 @@
 **⇒ 悬垂的不是根，是根里的一个槽。** `markObject` 自己不查毒；它是沿着一棵活的对象的成员往下走的
 （`current->updateRefs(markRef, entry.type)`）。所以毒是**某个活对象的一个成员指针**报的：那个成员指向
 的对象在一次 safepoint 上被搬走了，而成员所在的槽没有被重定位。程序与图住在 `mm::graphSpace()`，
-图空间的对象不搬（`func.cpp` 的注释），但图里的**静态值**可以指向年轻代对象 —— 于是问题变成一句新问：
-**运行期由宏重写造出来的图，往静态值槽里写一个年轻代对象时，有没有记写屏障（remembered set）？**
+图空间的对象不搬（`func.cpp` 的注释），但图里的**静态值**可以指向年轻代对象 —— 于是接下来问的是：
+**运行期由宏重写造出来的图，往静态值槽里写一个年轻代对象时，有没有记写屏障？**
+
+## 第三个假设也不必跑探针就否掉了：静态值槽的写本来就过写屏障
+
+**写静态值槽的入口一共三处，全在 `include/camel/core/context/frame.h`**：
+
+| 位置 | 现场 |
+|---|---|
+| `frame.h:243` | `staticArea_->set<T>(idx, value, staticDataLayout());` |
+| `frame.h:380` | `staticArea_->set<T>(idx, value, staticDataType_);` |
+| `frame.h:704` | `staticArea_->set<slot_t>(static_cast<size_t>(-dataIdx), value, staticDataType_);` |
+
+三处都走同一个 `::Tuple::set`，而 `Tuple::set` 在写之前就调
+`camel::core::mm::writeBarrier(this, tupleType, slot, fieldType)`（`include/camel/core/rtdata/tuple.h`，
+`set` 的实现第一行）。也就是说**屏障在共享写入路径上，不是调用方选开**。收集器自己的自测就在验这条：
+`gen.cpp:505-530` 断言"一个元组上的 old→young 存储被记进了 remembered set"，验不过就抛
+`GC remembered-set self-test did not record old-to-young edge` / `lost the young child reference`。
+
+而且静态区本身也不是"收集器看不见的老年代容器"：`gen.cpp:1381-1385` 的注释写着，一个图的静态区
+**既作为图的根被追踪、又通过该图的每个活动帧被追踪**（正因如此同一槽会被访问多次，`forwardYoungRef`
+才要挡"复制副本"）。
+
+**⇒ 所以"静态值写漏了屏障"这条也否掉了，不用跑计数探针**：探针只能证明"确实有往年轻代的写"，而这些写
+在写入点就已经被记下 —— 那不会把假设变成正解，只是把已知的事再数一遍。
+
+## 下一个问题（留给下一轮，探针很小）
+
+排掉"根"、"根表里的已释放程序"、"静态值槽的写屏障"三样之后，剩下的形状是**一个已释放/已搬走的
+`GCGraph *` 还挂在一个活的 `Program` 上**：`markPhase` 从 `gcRoots_` 里拿出一个活程序往下走，程序表里的
+某个图指针已经指向被清扫掉的图。可测的问法是一个探针：**在 `GCGraphManager::freeDead` 里，逐个被释放的
+图问一句"还有没有活程序的名字表里留着它"**，有就打印，没有就也否掉（就像 `freeDead` 那次 0 行一样干净）。
 
 （探针已全部删除；A 没有提交，因为它没有换来任何一条绿，而"多留 81 个程序到 `settle`"是实打实的内存代价。）
 
@@ -73,9 +103,8 @@
 **A（仍未证伪，但不再是正解）：`reserve()` 时就登记成根。** 它修的是窗口本身（一次运行里 81 个程序短暂
 无主），代价多留一些程序到 `settle`。**它不解释这两条红，别当成修好了。**
 
-**B：查写屏障。** 运行期造的图把年轻代对象写进静态值槽时，要么记一张写屏障，要么让静态值只收老年代
-对象。**代价**：要动写屏障的入口，且今天的年轻代收集是否已经在别处记过，需要先量（`--gc-check poison`
-的每一次 safepoint 都会搬，所以漏洞会稳定复现 —— 这也说明它可测）。
+**B（作废，已被静态证据否掉）：查静态值的写屏障。** 见上一节：三处写入点都走 `Tuple::set`，屏障在
+共享路径上，静态区还被当根追踪。
 
 **B：根表存句柄（`RootHandle`）而不是裸 `Program *`。**
 句柄被收集器搬动时自动更新，`gcRoots_` 就不再是"一串裸指针"。**代价**：`Program` 现在住在
