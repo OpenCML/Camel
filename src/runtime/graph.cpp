@@ -708,41 +708,18 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
     return (bodyBytes + kPayloadWordBytes - 1) / kPayloadWordBytes;
 }
 
-/// Is this sync edge -- from `tail` to `end` -- one the model allows (edges.cn.md 1 and 4.6)? An
-/// end is a statement of the chain, or the value of the block, and the block-value half needs the
-/// tail: an end in the tail's region is in the tail's block, and region 0 is the graph's own block
-/// (control_regions.h: `0 when it is in none`), not the absence of one.
+/// Every sync edge the draft has is built into the payload, whatever it ends on (author ruling
+/// 2026-11-02 07:30: the edges stay, the check side changes). The build used to leave an edge out
+/// when its end was neither a statement, a `GATE` nor a node in the tail's region -- the "do not
+/// build a wait the seal would refuse" half of the question -- and that is what lost the waits
+/// whose end was a block's `Join` or `Func`: edges.cn.md 1 and 4.6 say the chain's tail reaches
+/// the block's value, and the value may be one of those.
 ///
-/// A branch, a loop or a call is a statement; an operator is one when it has an effect or may fault;
-/// a function value and a join are not. An end that is none of these is not built into the payload
-/// rather than built and refused at the seal. The seal asks the same question (src/runtime/
-/// graph_edges.cpp, isChainStatementNode plus the region test beside it).
-static bool syncEdgeEndIsAllowed(const GraphDraft &draft, gc_node_ref_t end, gc_node_ref_t tail) {
-    const GCNodeKind kind = draft.header(end)->kind;
-    if (kind == GCNodeKind::Gate) {
-        return true;
-    }
-    bool isStatement = true;
-    if (kind == GCNodeKind::Func || kind == GCNodeKind::Join) {
-        isStatement = false;
-    } else if (kind == GCNodeKind::Oper) {
-        const auto bytes = DraftNodeView::payload(draft.node(end));
-        if (bytes.size() >= sizeof(GCOperBody)) {
-            const auto *body = reinterpret_cast<const GCOperBody *>(bytes.data());
-            if (body->oper != camel::core::kNoOper) {
-                auto &table       = camel::core::OperatorTable::instance();
-                const auto traits = table.find(body->oper);
-                isStatement       = !table.isPure(body->oper) ||
-                              table.hasExternalEffect(body->oper) ||
-                              (traits.has_value() && traits->mayFault);
-            }
-        }
-    }
-    if (isStatement) {
-        return true;
-    }
-    return draft.header(end)->region == draft.header(tail)->region;
-}
+/// So the wait is not dropped, and what the seal makes of it stays the seal's business: the check
+/// side judges the ends of an edge the graph has, which is the half of the ruling that the code
+/// below is about. Measured on this corpus, dropping the edge was also the only reason the tree did
+/// not build: with it gone, `feat.exemplars` reaches `05_effect_order` -- the chain of a block whose
+/// value the old predicate refused -- and the full fast layer has no red.
 
 DraftPayloadPlan planDraftPayload(
     const GraphDraft &draft, std::optional<std::span<const gc_node_ref_t>> live = std::nullopt) {
@@ -871,11 +848,7 @@ DraftPayloadPlan planDraftPayload(
         edgeCount += draft.normInputsOf(draftId).size() + draft.withInputsOf(draftId).size() +
                      draft.ctrlInputsOf(draftId).size();
         orderEdgeCount += keptOrderInputs;
-        for (const gc_node_ref_t tail : draft.syncInputsOf(draftId)) {
-            if (syncEdgeEndIsAllowed(draft, draftId, tail)) {
-                ++syncEdgeCount;
-            }
-        }
+        syncEdgeCount += draft.syncInputsOf(draftId).size();
     }
 
     for (gc_node_ref_t ref : draft.normPorts()) {
@@ -1171,20 +1144,9 @@ void emitDraftPayload(
     emitSideEdges(
         payload.orderEdges, payload.orderEdgeCount,
         [&](gc_node_ref_t id) { return draft.orderInputsOf(id); }, true, true);
-    std::vector<gc_node_ref_t> keptSyncInputs;
     emitSideEdges(
         payload.syncEdges, payload.syncEdgeCount,
-        [&](gc_node_ref_t id) -> std::span<const gc_node_ref_t> {
-            keptSyncInputs.clear();
-            for (const gc_node_ref_t tail : draft.syncInputsOf(id)) {
-                if (syncEdgeEndIsAllowed(draft, id, tail)) {
-                    keptSyncInputs.push_back(tail);
-                }
-            }
-            return keptSyncInputs;
-        },
-        false,
-        false);
+        [&](gc_node_ref_t id) { return draft.syncInputsOf(id); }, false, false);
 
     for (size_t i = 0; i < draft.normPorts().size(); ++i) {
         payload.normPorts[i] = plan.runtimeRefsByDraftId[draft.normPorts()[i]];
