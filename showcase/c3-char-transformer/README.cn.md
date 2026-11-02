@@ -98,7 +98,7 @@ python showcase\c3-char-transformer\probe.py
 - **gradient (engine with_grad)** 行：引擎答的六个偏导对解析雅可比，容差 `1e-4` 相对。
   这是对照：引擎能算，说明缺的是**库层的规则**，不是程序（实测 `0.000e+00`）。
 - **gradient (library vjp)** 行：库层 `vjp` 对这六个参数的回答。今天它答不出来，
-  这一行写的是拒绝的原话（`stdlib/vjp.cml:78:47`）；分类见 `WALLS.cn.md` 墙 1。若哪天库层开始
+  这一行写的是拒绝的原话（`stdlib/vjp.cml#vjp`，第 78 行）；分类见 `WALLS.cn.md` 墙 1。若哪天库层开始
   给数，这一行会拿同样的 `1e-4` 去比，而不是继续写"拒绝"。
 - `baseline/block.py` 的解析雅可比用同一文件的中心差分自查（步长 `1e-6`），自查误差打在同一份
   输出里（记录值 `4.828e-10`），所以"手推的雅可比"不是一句声明。

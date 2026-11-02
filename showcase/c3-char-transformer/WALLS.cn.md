@@ -60,7 +60,7 @@ of the generic function ...] (name=SemanticDiag::ArgumentsMismatch)
   跑不到；六个 API 级探针全部停在这里。
 - **性质**：这就是 develop 上那 29 个红的同一个根（另一条 lane 在修），所以这里只记读数，不动
   `stdlib/**`。
-- **要让它倒**：修 `stdlib/vjp.cml:73/78` 那处把 `(float, float) => float` 用单个参数调用的地方
+- **要让它倒**：修 `stdlib/vjp.cml#vjp` 那处把 `(float, float) => float` 用单个参数调用的地方（第 73、78 行）
   （组合时的参数列表与类型律不一致）。
 
 ## 墙 2–7：前向规则缺失（`rulesets/jvp.cml`）

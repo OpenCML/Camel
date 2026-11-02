@@ -41,7 +41,7 @@ those are this example's own arithmetic, not the library's.
 
 | wall | construct | today |
 |---|---|---|
-| 1 | the library's `vjp` composition | does not compile (`stdlib/vjp.cml:78`) — this is what blocks every gradient |
+| 1 | the library's `vjp` composition | does not compile (`stdlib/vjp.cml#vjp`, line 78) — this is what blocks every gradient |
 | 2–7 | forward rules for `matmul`, `softmax`, `mean_axis`, `reshape`, `take`, `subtract` | missing (`jvp` has no rule for any of them) |
 | 8 | a constant tensor in one element type | no spelling: `full::<f32>(shape, -1000.0)` refuses, `reshape` will not take a `bool[]` |
 | 9 | a model in one element type | the forward pass stops at `(f32[..], float[..])`; `layer_norm`, `normal`, `take` were cleared by probes 16–18 |
