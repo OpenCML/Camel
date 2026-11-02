@@ -3045,6 +3045,12 @@ assert(out === '0 7 7', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
+# The verifier is three lines over the case's own output, but that output carries the JIT's 304-line
+# disassembly, so what the 5 s default bounds is spawning node and handing it that text. On the
+# two-core CI runner it timed out while the run itself had finished in 834 ms, which is the harness
+# being read rather than the work. 20 s is the case's own bound, and it still bounds a verifier that
+# hangs.
+verify_timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor_read.default"
