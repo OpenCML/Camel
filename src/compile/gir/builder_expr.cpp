@@ -2206,7 +2206,17 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         throw BuildAbortException();
     }
     case TypeCode::Struct: {
-        const auto *strTy    = tt::as_ptr<camel::core::type::StructType>(tgtType);
+        const auto *strTy = tt::as_ptr<camel::core::type::StructType>(tgtType);
+        if (gct->accessByIndex()) {
+            // `.N` is a tuple's element; a struct's members are read by name. Asking for the name of a
+            // positional access dereferences the name it does not have -- a null pointer the assert
+            // above guards in a debug build and release builds dropped, which is how `p.1` on a struct
+            // segfaulted the compiler instead of being refused.
+            diags_->of(SemanticDiag::InvalidAccessIndex)
+                .atOrigin(gct->origin())
+                .commit(std::to_string(gct->accessIndex()));
+            throw BuildAbortException();
+        }
         const auto &optIndex = strTy->findField(gct->accessKey());
         if (!optIndex.has_value()) {
             diags_->of(SemanticDiag::InvalidAccessIndex)

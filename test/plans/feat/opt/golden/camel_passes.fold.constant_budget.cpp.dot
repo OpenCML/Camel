@@ -1,0 +1,28 @@
+digraph GraphIR {
+    subgraph cluster_F01 {
+        label="main";
+        O01 [label="EXIT", type="EXIT"];
+        N00 [label="0", type="DATA", origin=<ORIGIN>, span="1:12-1:13", srcfile="<ROOT>/test/cases/opt/camel_passes/fold_constant_budget.cml", value_type="int"];
+        N01 [label="5000000", type="DATA", origin=<ORIGIN>, span="1:15-1:22", srcfile="<ROOT>/test/cases/opt/camel_passes/fold_constant_budget.cml", value_type="int"];
+        N02 [label="1", type="DATA", origin=<ORIGIN>, span="1:12-1:22", srcfile="<ROOT>/test/cases/opt/camel_passes/fold_constant_budget.cml", value_type="int"];
+        N03 [label=":struct/range", type="OPER", origin=<ORIGIN>, span="1:12-1:22", srcfile="<ROOT>/test/cases/opt/camel_passes/fold_constant_budget.cml", value_type="int[]"];
+        N04 [label=":struct/len_arr", type="OPER", origin=<ORIGIN>, span="2:12-2:15", srcfile="<ROOT>/test/cases/opt/camel_passes/fold_constant_budget.cml", value_type="int"];
+        N05 [label=":io/println", type="OPER", origin=<ORIGIN>, span="2:4-2:11", srcfile="<ROOT>/test/cases/opt/camel_passes/fold_constant_budget.cml", value_type="int"];
+        N06 [label="0", type="DATA", origin=<ORIGIN>, span="3:11-3:12", srcfile="<ROOT>/test/cases/opt/camel_passes/fold_constant_budget.cml", value_type="int"];
+        N07 [label="GATE", type="GATE", value_type="int"];
+        N07 -> O01 [label="0", type="EXIT"];
+        N00 -> N03 [label="0|0", type="NORM"];
+        N01 -> N03 [label="0|1", type="NORM"];
+        N02 -> N03 [label="0|2", type="NORM"];
+        N03 -> N04 [label="0|0", type="NORM"];
+        N04 -> N05 [label="0|0", type="NORM"];
+        N06 -> N07 [label="0|0", type="NORM"];
+        N05 -> N07 [label="0|0", type="CTRL"];
+        N05 -> N07 [label="SYNC", type="SYNC"];
+    }
+    O00 [label="EXIT", type="EXIT"];
+    N08 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="0:0-4:1", srcfile="<ROOT>/test/cases/opt/camel_passes/fold_constant_budget.cml", value_type="() => int uses stdout"];
+    N09 [label="CALL", type="CALL", value_type="int"];
+    N09 -> O00 [label="0", type="EXIT"];
+    N08 -> N09 [label="0|0", type="WITH"];
+}

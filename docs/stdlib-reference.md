@@ -5351,6 +5351,20 @@ Whether the node is a constant of the graph.
 - Example (a fragment, not compiled): `is_constant(n)`
 - Why it is not compiled: n is a node of the surrounding pass
 
+#### `constant_bytes`
+
+```camel
+constant_bytes: (n: Node) => int
+```
+
+The bytes the node's constant value occupies: the measure `std::opt` and `std::opt::fold` clamp with
+`constant_budget`, so that a pass written in Camel can ask the same question the native pass asks. The
+cost is the value's elements plus the shape that describes them, the walk follows members 8 deep, and a
+node that is no constant costs 0.
+
+- Example (a fragment, not compiled): `constant_bytes(n)`
+- Why it is not compiled: n is a node of the surrounding pass
+
 #### `type_of`
 
 ```camel

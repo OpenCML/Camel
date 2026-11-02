@@ -1833,10 +1833,14 @@ class CmlPrinter {
             }
             fail(ref, "an assignment to a cell the printer has not seen");
         }
-        emit(indent_ +
-             std::format(
-                 "{} {} {}", cell->second, assignmentOperator(uri),
-                 expression(inputs.back()).text));
+        // The cell's name is copied, not referred to. Reading the value's expression can restore a saved
+        // copy of `cells_` (a nested attempt that does not print puts the table back), and putting it
+        // back destroys every entry the map held -- so a reference taken before it points at freed
+        // storage. That is what the crash was: the probe showed the name's size as garbage while the
+        // value's text and the operator were intact.
+        const std::string cellName  = cell->second;
+        const std::string valueText = expression(inputs.back()).text;
+        emit(indent_ + std::format("{} {} {}", cellName, assignmentOperator(uri), valueText));
     }
 
     /// `fail<'Kind'>(message)` as a statement. The kind is the constant string the call holds in

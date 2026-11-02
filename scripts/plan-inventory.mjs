@@ -276,15 +276,6 @@ export const CASE_EXCEPTIONS = [
             'regression that treats it as one would load (it returns 9, which the pins above never ' +
             'allow). Nothing opens it in a correct run, and its presence is the check',
     },
-    {
-        file: 'test/cases/compile/transforms/grad_of_an_array_parameter.cml',
-        reason:
-            'a known-unusable observation, kept out of the plan on purpose: grad over an array ' +
-            'parameter fails on a value chain tracked under another lane, and the passing gate for ' +
-            'feat/compile/transforms is 49/49/0, so the program stays in the tree with its ' +
-            'expectation written in it and registering it would turn a known failure into a red ' +
-            'that says nothing new',
-    },
 ]
 
 const CASE_ROOT = 'test/cases'

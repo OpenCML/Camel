@@ -288,6 +288,7 @@ SyntaxDiag::ComparisonAcrossLines	test/cases/compile/surface/angle_then_name_lin
 SyntaxDiag::ComparisonNeedsSpace	test/cases/parse/syntax/comparison_needs_space.cml
 SyntaxDiag::EmptyInterpolation	test/cases/compile/fstring/empty_interpolation.cml
 SyntaxDiag::ExtraSemicolon	test/cases/parse/syntax/extra_semicolon.cml
+SyntaxDiag::FuncTypeNeedsNames	test/cases/parse/rulings/function_type_needs_names.cml
 SyntaxDiag::KeywordAsIdentifier	test/cases/compile/stream/yield_keyword.cml
 SyntaxDiag::LambdaParametersNeedParentheses	test/cases/parse/rulings/lambda_without_parentheses.cml
 SyntaxDiag::LineStartsWithOperator	test/cases/parse/syntax/line_starts_with_operator.cml
@@ -296,6 +297,7 @@ SyntaxDiag::MissingComma	test/cases/compile/lambda_inference/func_type.cml
 SyntaxDiag::MissingInitializer	test/cases/parse/syntax/missing_initializer.cml
 SyntaxDiag::MissingThen	test/cases/parse/syntax/missing_then.cml
 SyntaxDiag::MissingToken	test/cases/compile/fstring/lambda_spec.cml
+SyntaxDiag::RangeRightIsLink	test/cases/parse/rulings/range_right_is_link.cml
 SyntaxDiag::UnexpectedEndOfFile	test/cases/compile/fstring/bad_expr.cml
 SyntaxDiag::UnexpectedToken	test/cases/compile/array_shape/err_const_shape.cml
 SyntaxDiag::UnmatchedClosingDelimiter	test/cases/parse/syntax/unmatched_closing_delimiter.cml
