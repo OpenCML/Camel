@@ -124,6 +124,7 @@ std::string_view regionKindText(camel::runtime::GCRegionKind kind) {
     return "unknown";
 }
 
+
 bool isIdentifier(std::string_view text) {
     if (text.empty()) {
         return false;
@@ -137,6 +138,32 @@ bool isIdentifier(std::string_view text) {
         return false;
     }
     return std::all_of(text.begin(), text.end(), word);
+}
+
+/// A graph name of a function a program declares inside a namespace: `Tools::inc`, `util::id`. Each
+/// segment is a source identifier, and there is no generic argument list (a graph name that carries
+/// `<...>` is an instance, not a declaration). Such a function is printed inside its `namespace`
+/// block (`compile/namespace_rules/*`), which is what the source wrote.
+bool isNamespaceName(std::string_view text) {
+    if (text.find('<') != std::string_view::npos) {
+        return false;
+    }
+    size_t start = 0;
+    size_t segments = 0;
+    for (;;) {
+        const size_t at = text.find("::", start);
+        const std::string_view segment =
+            at == std::string_view::npos ? text.substr(start) : text.substr(start, at - start);
+        if (!isIdentifier(segment)) {
+            return false;
+        }
+        ++segments;
+        if (at == std::string_view::npos) {
+            break;
+        }
+        start = at + 2;
+    }
+    return segments >= 2;
 }
 
 /// True when the text is valid UTF-8, so it can be written raw in a UTF-8 source file.
@@ -392,6 +419,9 @@ class CmlPrinter {
     size_t heldSeq_ = 0;
     size_t generated_          = 0;
     std::string indent_        = "    ";
+    /// The indent of the header lines of the function being printed: a function inside a
+    /// `namespace` block sits one level in, and its body one deeper.
+    std::string headerIndent_;
     bool branchAsStatement_    = false;
     std::unique_ptr<camel::runtime::ControlRegions> control_;
 
@@ -560,7 +590,7 @@ class CmlPrinter {
         if (!root) {
             if (!lambda) {
                 const std::string &name = graph->name();
-                if (!isIdentifier(name)) {
+                if (!isIdentifier(name) && !isNamespaceName(name)) {
                     fail(
                         camel::runtime::kInvalidNodeRef,
                         std::format("the graph name '{}' is not a source identifier", name));
@@ -3154,6 +3184,29 @@ class CmlPrinter {
 
         const FunctionType *type = graph->funcType();
         const std::string name   = graph->name();
+        // A function a program declared inside a namespace is printed inside that `namespace` block,
+        // under its own name: the graph name is the qualified one (`Tools::inc`), and the source
+        // wrote the block, not the qualified name (`compile/namespace_rules/lib2.cml`).
+        std::vector<std::string> spaceParts;
+        headerIndent_.clear();
+        if (isNamespaceName(name)) {
+            size_t start = 0;
+            for (;;) {
+                const size_t at = name.find("::", start);
+                if (at == std::string::npos) {
+                    break;
+                }
+                spaceParts.push_back(name.substr(start, at - start));
+                start = at + 2;
+            }
+            for (size_t i = 0; i < spaceParts.size(); ++i) {
+                emit(std::string(4 * i, ' ') + "namespace " + spaceParts[i] + " {");
+            }
+            indent_ = std::string(4 * (spaceParts.size() + 1), ' ');
+            headerIndent_ = std::string(4 * spaceParts.size(), ' ');
+        }
+        const std::string localName =
+            spaceParts.empty() ? name : name.substr(name.rfind("::") + 2);
         std::string signature;
         if (type->withTypesCount() > 0) {
             std::string clause = "with <";
@@ -3165,9 +3218,9 @@ class CmlPrinter {
                 clause += (i ? ", " : "") + withName + ": " + typeText(type->withTypeAt(i));
             }
             clause += ">";
-            emit(clause);
+            emit(headerIndent_ + clause);
         }
-        signature += "func " + name + "(";
+        signature += "func " + localName + "(";
         for (size_t i = 0; i < type->normTypesCount(); ++i) {
             signature += i ? ", " : "";
             if (type->normIsVarAt(i)) {
@@ -3188,10 +3241,13 @@ class CmlPrinter {
         if (regionNeedsSync(0)) {
             signature += " sync";
         }
-        emit(signature + " {");
+        emit(headerIndent_ + signature + " {");
         isRoot_ = false;
         printStatements();
-        emit("}");
+        emit(std::string(4 * spaceParts.size(), ' ') + "}");
+        for (size_t i = spaceParts.size(); i > 0; --i) {
+            emit(std::string(4 * (i - 1), ' ') + "}");
+        }
         appendLines();
     }
 

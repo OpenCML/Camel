@@ -283,6 +283,17 @@ print family, and this operator's configuration is not a string, so its call has
 
 
 
+
+**2026-11-02 第二十五刀（命名空间包装）：`printed 559 → 562`，`equivalent 511 → 514`，判据没到 700，原因查清了**
+
+普查说第 2 族有 149 条只差一层 `namespace` 包装。本刀就补那一层：`printFunction` 认 `A::B` 形式的图名，把函数原样放进 `namespace A { … }`，函数名用末段（`Tools::inc` 打成 `namespace Tools { func inc(...) }`）；拒绝判据从"必须是标识符"放宽到"标识符或命名空间名"（`isNamespaceName`，段间 `::`，含 `<` 的不算）。
+
+**结果（语料 3377）**：`printed 562`、`refused 1811`、`frontend 1004`、`checked 555`、`equivalent 514`、`not_equivalent 41`、`unfaithful 7`、`families 57`、`DIFFERENT 48` 行——**`DIFFERENT` 与 `unfaithful` 一条没动，三条新印出来的全是 `EQUAL`**。
+
+**149 这个上界错在哪**：`graph name is not a source identifier` 那一族从 **353 掉到 216**（137 条走过了这一关），**但只有 3 条变成"能打印"**，其余 **134 条紧接着撞上别的拒绝**——最多的三类是"无体 kernel 声明"（374→377）、"算符 `<name>`"（306→311）、"参数/返回是命名类型"（51→53、45→48）。⇒ **`namespace` 包装是这 149 条的最后一层，不是唯一一层**；判据一（`printed ≥ 700`）与判据二（`refused ≤ 1665`）**未达，差的 134 条各有各的下一个理由，不是这一刀没做好。**
+
+**自检**：`lib2.cml`（最小例子）打印后往返 **`EQUAL (14 vertices, 24 edges)`**；契约计划 `feat.trans.cml` `1/1` 通过；全量 fast suite **`8390 / 8374 / 0`**（skip 10、known failures 6）。
+
 **2026-11-02 拒绝原因普查：1814 条按理由归成 53 族，前十族占 81.8%**
 
 口径（写死，下一个人复算时照此）：**语料 3377 个 `.cml`**，仓库 `/home/zjwei/camel-work/h-m5`，`origin/develop = e8fa221a0` 已并入本车道，`CAMEL_HOME=$PWD/out/latest`，用 `node test/tools/cml-sweep.mjs --jobs 16` 在**绝对路径**下跑（`printed=559 refused=1814 frontend=1004`，见 `/tmp/sw54.txt`），理由串取 `reasonOf` 的归一化形式（变量名/图 id/数字都掩成 `<name>`/`<n>`）。
