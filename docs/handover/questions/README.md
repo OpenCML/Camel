@@ -1,13 +1,15 @@
 # 待裁索引
 
 > 一页一问。作者把读过的页整体挪进 `reviews/`；这里只放**还在等回答**的页。
+
 ## 现在在等作者
+
 - `2026-11-02-the-generator-reads-a-draft-node-after-its-builder` —— `stream.*` 的几条在 Windows 上崩在 `builder_support.h#nodeGraphOf`（草稿节点不属于任何 compile graph builder），同树 Linux 全绿、五个后端都崩，所以是建图不是调度；问该谁去找那个节点的 owner、修好前 Windows 腿要不要继续红。
-| [`2026-11-02-when-should-an-underivable-sync-edge-be-dropped`](2026-11-02-when-should-an-underivable-sync-edge-be-dropped.cn.md) | 同步边"推不出来就别建"该在建图时判还是图定型后判；冻结图没有重发 payload 的通路 | 未裁 |
 - `2026-11-03-may-a-printed-name-be-the-definitions-own` —— `tensor:sum` 与 `tensor:sum_axis` 共用一个写名 `sum`，边界在哪只有定义知道、节点不知道；问打印件能不能用定义自己的名字（`sum_axis(m, 0, false)`），还是必须复现源里的 `<>` 写法。
 - `2026-11-02-drafts-outlive-the-safepoint` —— 跨过 safepoint 的 draft，它的静态槽该由谁改写：外部 tracer 代替持有者去改写，收 `built` 就崩在启动期 encode、只收 `borrowed` 又毫无影响；问是"搬迁必须由持有者自己做"，还是"那些 draft 本不该活到 safepoint"。
-||||||| parent of 0bb8ac9ce (docs: ask who restores order after inline moves a statement)
-| [`2026-11-02-who-restores-order-after-inline-moves-a-statement`](2026-11-02-who-restores-order-after-inline-moves-a-statement.cn.md) | 内联改变块归属之后，次序该由内联自己补还是由图定型后的统一通道补 | 未裁 |
+- `2026-11-02-when-should-an-underivable-sync-edge-be-dropped` —— 同步边"推不出来就别建"该在建图时判还是图定型后判；冻结图没有重发 payload 的通路，所以这个问题只能在图定型之前问。
+- `2026-11-02-who-restores-order-after-inline-moves-a-statement` —— 内联改变块归属之后，次序该由内联自己补还是由图定型后的统一通道补。
+
 ### 已裁、在 `reviews/` 留档
 - `2026-11-02-what-counts-as-a-statement-of-a-chain` —— 链上语句含不含 `Func`/`Join`；裁：含 `Call`，不含这两个。
 - `2026-11-02-the-member-count-stated-twice` —— 余量元组没有图时的元数；裁：`split` 不再交出残差元组，检查从此是守卫。
