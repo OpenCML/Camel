@@ -43,28 +43,27 @@ using camel::runtime::GraphId;
 namespace {
 
 /// The type of the lifted *pair* of a value: `(v, dv)`, written at the value's own type, because
-/// the tangent of a floating scalar is a value of the same type (`tangentSpaceOf`'s `Self`). Null
-/// when this transform does not carry a pair for the value.
+/// the tangent of a value is a value of its own type wherever `tangentSpaceOf` answers `Self`. Null
+/// when the value has no pair this transform can write.
 ///
 /// The question is `tangentSpaceOf`'s (design principles 9.9: what a value's tangent is belongs to
 /// its type), and the answer is the value's own type -- so `jvp` of an `f32` function is pairs of
 /// `f32`, not of `float`. Until 2026-11-02 this was `Type::Float64()`, one member of the floating
 /// family written down as if it were the family: the rule instance came out as `mul_tangent<float>`
 /// around `f32` values and the pass gave up on four broken edges (the author's review, #1 and #11).
-/// Two things are asked of the type, and both are asked here so that the next answer cannot be a
-/// second one: *is its tangent space its own type* (`tangentSpaceOf`), and *is the pair written for
-/// this shape* -- a floating scalar today, because the halves are read by `Accs` and the zero is a
-/// static `0.0`. An aggregate is `Self` too and its pair is the array-cotangent round's work; asking
-/// for it here would write a scalar pair around an array value, which is worse than a refusal.
+/// The same day it asked a second question as well -- *is the value a floating scalar* -- and
+/// answered no for a tuple and for an array. A tuple and an array of floats are `Self` too, so that
+/// second question was this transform's own policy written as if it were the type's: it kept a loop
+/// whose state is an aggregate from being lifted at all (`skip=body`), a value the language takes
+/// and the derivative of which `tangentSpaceOf` has already named. One question is asked here now,
+/// and what a *reader* of a pair can do with an aggregate pair is the reader's question, asked
+/// where the pair is read -- not a second gate at the door.
 camel::core::type::TupleType *pairTypeOf(camel::core::type::Type *type) {
     if (type == nullptr) {
         return nullptr;
     }
     const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(type);
     if (space.kind != camel::core::TangentSpaceKind::Self || space.space != type) {
-        return nullptr;
-    }
-    if (!camel::core::type::isFloatingScalar(type->code())) {
         return nullptr;
     }
     return camel::core::type::TupleType::create(
@@ -318,6 +317,54 @@ bool liftGraph(
         const NodeFace *node = function.node(ref);
         return node != nullptr ? node->dataType() : nullptr;
     };
+    // The type of a lifted LOOP node's value, and of the body result that value comes from: a loop's
+    // value is the tuple `LoopView` describes (include/camel/runtime/loop.h: the state values first,
+    // then one array per collection slot). Only a state value is a value this transform carries a
+    // pair for. A collection slot is the per-round recording a graph producer asked for -- `split`'s
+    // tape (`GCLoopBody::collectionCount`) -- and it is copied as it stands: a recording has no
+    // derivative, and a pair in its place would need one.
+    //
+    // The state components keep their places: the loop has one state port per state value, so
+    // pairing the state *tuple* as one value would leave the loop's value with fewer components
+    // than `LoopView`'s states + collections and the encoded graph would not validate. That is why
+    // the pairing is per component, and why this one function writes both the node's type and the
+    // body's result: two functions would be two answers about the same shape.
+    //
+    // No collection slots is the loop the source writes, and it takes the path it took before this
+    // reading existed -- the value paired whole, or left alone when it has no pair.
+    const auto liftedLoopValueType = [&pairOf](Type *valueType, size_t collectionCount) -> Type * {
+        if (valueType == nullptr) {
+            return nullptr;
+        }
+        if (collectionCount == 0) {
+            TupleType *whole = pairOf(valueType);
+            return whole != nullptr ? static_cast<Type *>(whole) : valueType;
+        }
+        // A collecting loop's value is a tuple by construction (`LoopView::valueIsTuple`), and its
+        // last `collectionCount` components are the collection slots.
+        if (valueType->code() != camel::core::type::TypeCode::Tuple) {
+            return nullptr;
+        }
+        const auto *tuple        = static_cast<const TupleType *>(valueType);
+        const size_t parts       = tuple->size();
+        if (parts <= collectionCount) {
+            return nullptr;
+        }
+        const size_t stateCount  = parts - collectionCount;
+        std::vector<Type *> lifted;
+        lifted.reserve(parts);
+        for (size_t j = 0; j < stateCount; ++j) {
+            TupleType *statePair = pairOf(tuple->typeAt(j));
+            if (statePair == nullptr) {
+                return nullptr;
+            }
+            lifted.push_back(static_cast<Type *>(statePair));
+        }
+        for (size_t c = stateCount; c < parts; ++c) {
+            lifted.push_back(tuple->typeAt(c));
+        }
+        return TupleType::create(std::move(lifted));
+    };
     size_t copiedKinds = 0;
     size_t seenKinds   = 0;
     std::vector<std::string> usedRules;
@@ -420,22 +467,86 @@ bool liftGraph(
         // *by name* rather than answered with 0 or 1, because a wrong derivative that looks like a
         // derivative is the expensive kind of wrong.
         std::vector<gc_node_ref_t> tangentOf(function.nodeCount(), rt::kInvalidNodeRef);
+        // A tuple FILL node over `members`, in order: the static template is the Norm input (the
+        // shape the fill copies) and the members are the context ports. This is the shape every
+        // writer of a tuple in a runtime graph uses (`split`'s `fillTuple`, split.cpp), so a tuple
+        // this lift makes is a tuple the other writers can read.
+        const auto fillTupleOf = [&draft](
+                                     Type *tupleType,
+                                     std::span<const gc_node_ref_t> members) -> gc_node_ref_t {
+            ::Tuple *emptyMembers = ::Tuple::create(members.size(), mm::autoSpace());
+            const gc_node_ref_t source = draft.materializeStaticValue(
+                camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(emptyMembers),
+                tupleType);
+            std::vector<size_t> slots(members.size());
+            for (size_t i = 0; i < slots.size(); ++i) {
+                slots[i] = i;
+            }
+            const gc_node_ref_t fill =
+                draft.addFillNode(tupleType, rt::makeFillPayload(rt::GCFillKind::Tuple, slots));
+            draft.setNormInputs(fill, std::span<const gc_node_ref_t>(&source, 1));
+            draft.setWithInputs(fill, members);
+            return fill;
+        };
         // The lifted pair: a value and its tangent, in the one shape the lifted types are written in
         // -- the pair of the value's own type, which is the caller's answer. The exit of the
         // transformed body and the exit of an arm are both this pair, so it is made in one place.
-        const auto liftedPair = [&draft, &pairOf](
+        const auto liftedPair = [&pairOf, &fillTupleOf](
                                     Type *valueType, gc_node_ref_t half,
                                     gc_node_ref_t halfTangent) {
             TupleType *pairType = pairOf(valueType);
-            ::Tuple *emptyTuple = ::Tuple::create(2, mm::autoSpace());
-            const gc_node_ref_t source = draft.materializeStaticValue(
-                camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(emptyTuple), pairType);
-            const gc_node_ref_t pair = draft.addFillNode(
-                pairType, rt::makeFillPayload(rt::GCFillKind::Tuple, std::vector<size_t>{0, 1}));
-            draft.setNormInputs(pair, std::span<const gc_node_ref_t>(&source, 1));
             const std::array<gc_node_ref_t, 2> halves{half, halfTangent};
-            draft.setWithInputs(pair, halves);
-            return pair;
+            return fillTupleOf(pairType, halves);
+        };
+        // The body's result of a LOOP node and the loop's own value are the same shape (see
+        // `liftedLoopValueType`): the state values first, then what the collection slots keep. The
+        // state components are the pair -- one per component -- and the collection components are
+        // spliced back as they stand, so the node's type and the body's result cannot contradict
+        // each other: both are `liftedLoopValueType` of their own tuple.
+        const auto liftedLoopBodyResult = [&draft, &valueTypeOf, &liftedPair, &fillTupleOf,
+                                           &liftedLoopValueType, &copyOf, &tangentOf](
+                                              gc_node_ref_t exit,
+                                              size_t collectionCount) -> gc_node_ref_t {
+            Type *exitType = valueTypeOf(exit);
+            if (exitType == nullptr || exitType->code() != camel::core::type::TypeCode::Tuple) {
+                return rt::kInvalidNodeRef;
+            }
+            const auto *tuple = static_cast<const TupleType *>(exitType);
+            if (tuple->size() <= collectionCount) {
+                return rt::kInvalidNodeRef;
+            }
+            const size_t stateCount = tuple->size() - collectionCount;
+            const gc_node_ref_t exitCopy    = copyOf[exit];
+            const gc_node_ref_t exitTangent = tangentOf[exit];
+            if (exitCopy == rt::kInvalidNodeRef || exitTangent == rt::kInvalidNodeRef) {
+                return rt::kInvalidNodeRef;
+            }
+            Type *liftedType = liftedLoopValueType(exitType, collectionCount);
+            if (liftedType == nullptr ||
+                liftedType->code() != camel::core::type::TypeCode::Tuple) {
+                return rt::kInvalidNodeRef;
+            }
+            std::vector<gc_node_ref_t> members;
+            members.reserve(tuple->size());
+            for (size_t j = 0; j < stateCount; ++j) {
+                // The j-th state, projected out of the body's result and its tangent: the same two
+                // halves a straight-line exit hands `liftedPair`.
+                const gc_node_ref_t half = draft.addAccsNode(
+                    tuple->typeAt(j), static_cast<uint32_t>(j));
+                draft.setNormInputs(half, std::span<const gc_node_ref_t>(&exitCopy, 1));
+                const gc_node_ref_t halfTangent =
+                    draft.addAccsNode(tuple->typeAt(j), static_cast<uint32_t>(j));
+                draft.setNormInputs(halfTangent, std::span<const gc_node_ref_t>(&exitTangent, 1));
+                members.push_back(liftedPair(tuple->typeAt(j), half, halfTangent));
+            }
+            for (size_t c = 0; c < collectionCount; ++c) {
+                const size_t index       = stateCount + c;
+                const gc_node_ref_t kept = draft.addAccsNode(
+                    tuple->typeAt(index), static_cast<uint32_t>(index));
+                draft.setNormInputs(kept, std::span<const gc_node_ref_t>(&exitCopy, 1));
+                members.push_back(kept);
+            }
+            return fillTupleOf(liftedType, members);
         };
         // A branch is a property of the *graph*, not of a node: its arms are regions, the value they
         // yield is the Join's, and an arm yields the pair of that value in the lifted graph -- so the
@@ -852,15 +963,26 @@ bool liftGraph(
                 // body reads through projections), and the region's result is the pair of the
                 // body's new value and its tangent. The inputs and the region are wired after the
                 // walk. The node names no graph: the rounds are the region (design principles 3.10).
+                //
+                // A loop a producer gave collection slots has a value that is not the state alone:
+                // it is `Tuple(state…, array…)` (`LoopView`), and only the state part is lifted.
+                // `liftedLoopValueType` answers both cases, and the body's result is written by the
+                // same rule, so the node's type and what its region yields say the same thing.
                 rt::GCLoopBody body{};
                 function.bodyOf(ref, body);
                 rt::GCLoopBody liftedBody = body;
-                TupleType *loopPair       = pairOf(node->dataType());
-                copyOf[ref]               = draft.addLoopNode(
-                    liftedBody,
-                    loopPair != nullptr ? static_cast<Type *>(loopPair) : node->dataType());
-                liftedLoopNode            = copyOf[ref];
-                copied[ref]               = true;
+                Type *liftedValueType     = liftedLoopValueType(node->dataType(), body.collectionCount);
+                if (liftedValueType == nullptr) {
+                    // A collecting loop whose state this transform cannot pair: the copy would have
+                    // the old value type and a body yielding the pair, and the two would only
+                    // disagree at run time. Refused here instead (design principles: a wrong
+                    // derivative that looks like one is the expensive kind of wrong).
+                    complete = false;
+                    break;
+                }
+                copyOf[ref] = draft.addLoopNode(liftedBody, liftedValueType);
+                liftedLoopNode = copyOf[ref];
+                copied[ref]    = true;
                 ++copiedKinds;
                 break;
             }
@@ -1092,6 +1214,11 @@ bool liftGraph(
                 complete = false;
                 break;
             }
+            // How many values this loop collects into arrays each round: the shape of its value and
+            // of its body's result (`LoopView::collectionCount`). Read here as well as in the walk,
+            // from the one node, so the two readings are the same reading.
+            rt::GCLoopBody body{};
+            function.bodyOf(ref, body);
             // The body region comes first: its result is the pair the state becomes, and the loop
             // node's *first with-input* is that same result (LoopView::bodyResult reads it there),
             // so it has to be the pair and not the copy of the old exit.
@@ -1118,13 +1245,33 @@ bool liftGraph(
                     draft.setRegionPorts(liftedRegion[r], ports);
                 }
                 const gc_node_ref_t exit = part->result;
-                if (exit == rt::kInvalidNodeRef || !copied[exit] ||
-                    tangentOf[exit] == rt::kInvalidNodeRef) {
+                if (exit == rt::kInvalidNodeRef || !copied[exit]) {
                     complete = false;
                     break;
                 }
                 draft.setInsertRegion(liftedRegion[r]);
-                newState = liftedPair(valueTypeOf(exit), copyOf[exit], tangentOf[exit]);
+                if (body.collectionCount == 0) {
+                    // A loop that collects nothing yields the state and nothing else, so its body's
+                    // result *is* the value: the exit becomes the pair of it and its tangent, which
+                    // is the path this lift has always taken.
+                    if (tangentOf[exit] == rt::kInvalidNodeRef) {
+                        complete = false;
+                        break;
+                    }
+                    newState = liftedPair(valueTypeOf(exit), copyOf[exit], tangentOf[exit]);
+                } else {
+                    // A collecting loop yields `Tuple(next state…, value per collection slot)`: the
+                    // state part is lifted and the collection parts are spliced back as they are,
+                    // which is the same split the loop's own value type went through
+                    // (`liftedLoopValueType`). Both halves are written, or neither is: a body
+                    // yielding the pair while the node's type still says `Tuple(state, array)` is a
+                    // graph that builds and fails only at run time.
+                    newState = liftedLoopBodyResult(exit, body.collectionCount);
+                }
+                if (newState == rt::kInvalidNodeRef) {
+                    complete = false;
+                    break;
+                }
                 draft.setRegionResult(liftedRegion[r], newState);
                 draft.setInsertRegion(0);
             }
@@ -1133,6 +1280,14 @@ bool liftGraph(
                 break;
             }
             std::vector<gc_node_ref_t> loopInputs;
+            // The inputs are the state values and, before them, the array a `for` loop walks
+            // (`LoopView::iterable` and `LoopView::initialState` name the two). The array is not a
+            // state: the loop still iterates the values it was given, and no derivative flows
+            // through the array itself. Pairing it would hand the loop a pair where it asks for an
+            // array -- and `pairOf` pairs it once an array of floats answers `Self`, which is why
+            // this one input is named instead of being left to the type.
+            size_t inputIndex = 0;
+            const size_t stateStart = camel::core::loopHasIterable(body.kind) ? 1 : 0;
             for (gc_node_ref_t input : function.normInputsOf(ref)) {
                 if (input >= function.nodeCount() || !copied[input]) {
                     complete = false;
@@ -1140,6 +1295,10 @@ bool liftGraph(
                 }
                 const NodeFace *in = function.node(input);
                 const gc_node_ref_t copy         = copyOf[input];
+                if (inputIndex++ < stateStart) {
+                    loopInputs.push_back(copy);
+                    continue;
+                }
                 if (in != nullptr && pairOf(in->dataType()) != nullptr) {
                     if (tangentOf[input] == rt::kInvalidNodeRef) {
                         complete = false;
