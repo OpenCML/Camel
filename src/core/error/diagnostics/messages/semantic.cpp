@@ -1549,6 +1549,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::CalledFallibleValue,
+            {
+                "CalledFallibleValue",
+                "This value has type '{0}' and it is fallible: calling it as a function leaves the error it may hold nowhere to be read.",
+                "A 'T!' is a value that reports a failure instead of giving a result, so a call of it has nothing to run: take it apart first ('!!', '->' or 'match'), return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...', and then call the function it gives.",
+            },
+        },
+        {
             SemanticDiag::WithPackNeedsNativeDeclaration,
             {
                 "WithPackNeedsNativeDeclaration",
