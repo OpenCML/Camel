@@ -714,6 +714,111 @@ class GraphDraft {
     void setNodeDataType(gc_node_ref_t id, camel::core::type::Type *type);
     void setNodeDataIndex(gc_node_ref_t id, gc_slot_idx_t dataIndex);
     void setNodeRuntimeFlags(gc_node_ref_t id, uint8_t runtimeFlags);
+    /// Writes the place a spliced chain takes in the chain of a block, in one operation
+    /// (docs/design/effects/edges.cn.md 5.7; author ruling 2026-11-02 07:50): the chain's head is
+    /// written after `callPred` -- the statement the call it replaced was written after -- and the
+    /// chain's tail before each of `callSucc` -- the statements written after that call. Beside
+    /// each sync edge it writes the control edge naming the same pair, in the kind a block's chain
+    /// is still carried in while the migration runs (1.5, 5.3). The caller passes the call's own
+    /// place, read before the call is erased; a pass that moves statements instead of a call passes
+    /// the place of the statement it moved. One operation, because the place is one thing: a splice
+    /// that wrote the head and left the tail to someone else is what forked the chain, and
+    /// `resolvePlaceForks` existed only to repair that.
+    ///
+    /// The tail's place is the block's only if the block owns the value it ends on. When it does
+    /// not -- a reader of that value stands in another region -- hanging the statements after the
+    /// call on it would order every other reader and pull this chain live for them (5.3), so a
+    /// `GATE` over the value carries the place instead: one data port reading the value, one sync
+    /// predecessor, the chain's tail. It is a node of the caller's region, and the statements
+    /// written after the call follow it.
+    ///
+    /// Returns the node the block's chain now ends at: the tail, or the gate built to carry it.
+    ///
+    /// `inMyBlock` answers whether a node is a statement of the block this chain is spliced into.
+    /// The caller passes it (`sameSyncBlock`, below) because the splice knows which block that is
+    /// and this operation does not: a body's own nodes sit in an inline region, so "the same region
+    /// as the tail" would call the caller's own statements foreign and build a gate for nothing.
+    template <class InMyBlock>
+    gc_node_ref_t spliceChain(
+        gc_node_ref_t head, gc_node_ref_t tail, std::span<const gc_node_ref_t> callPred,
+        std::span<const gc_node_ref_t> callSucc, InMyBlock inMyBlock) {
+        if (!alive(head) || !alive(tail)) {
+            return kInvalidNodeRef;
+        }
+        const auto namePair = [&](gc_node_ref_t user, gc_node_ref_t pred) {
+            const auto ctrl = ctrlInputsOf(user);
+            if (std::ranges::find(ctrl, pred) == ctrl.end()) {
+                appendControlEdge(user, pred);
+            }
+        };
+        const auto markStatement = [&](gc_node_ref_t node) {
+            const DraftNodeHeader *h = header(node);
+            if (h != nullptr) {
+                setNodeRuntimeFlags(
+                    node, static_cast<uint8_t>(h->runtimeFlags | kGCNodeFlagSyncStatement));
+            }
+        };
+        // The body's head is written after the statement the call was written after. A head that
+        // already stands in a chain keeps its place: moving a second one onto it would fork it.
+        for (gc_node_ref_t pred : callPred) {
+            if (pred == head || pred == tail || !alive(pred) || !syncInputsOf(head).empty()) {
+                continue;
+            }
+            markStatement(head);
+            markStatement(pred);
+            const gc_node_ref_t only[1] = {pred};
+            setSyncInputs(head, only);
+            namePair(head, pred);
+            break;
+        }
+        // The chain's tail is where the statements written after the call follow -- unless the
+        // block does not own the value the tail ends on, in which case a GATE of this block
+        // carries it (edges.cn.md 5.3).
+        gc_node_ref_t end = tail;
+        if (tail != head && !callSucc.empty()) {
+            bool sharedOutside = false;
+            for (auto group : {normUsersOf(tail), withUsersOf(tail)}) {
+                for (gc_node_ref_t user : group) {
+                    if (user != head && !inMyBlock(user)) {
+                        sharedOutside = true;
+                        break;
+                    }
+                }
+                if (sharedOutside) {
+                    break;
+                }
+            }
+            if (sharedOutside) {
+                const DraftNodeHeader *tailHeader = header(tail);
+                const DraftNodeInit gateInit{
+                    .dataIndex = tailHeader ? tailHeader->dataIndex : static_cast<gc_slot_idx_t>(0),
+                    .dataType  = tailHeader ? tailHeader->dataType : nullptr,
+                    .kind      = GCNodeKind::Gate,
+                    .region    = nodeRegion(tail),
+                    .normInputs = std::span<const gc_node_ref_t>(&tail, 1),
+                };
+                const gc_node_ref_t gate = addNode(gateInit);
+                const gc_node_ref_t only[1] = {tail};
+                setSyncInputs(gate, only);
+                markStatement(gate);
+                namePair(gate, tail);
+                end = gate;
+            }
+        }
+        for (gc_node_ref_t user : callSucc) {
+            if (user == head || user == tail || user == end || !alive(user)) {
+                continue;
+            }
+            // The statement follows what the call followed until this takes that place back from
+            // it, so an existing sync predecessor here is replaced, not kept.
+            markStatement(user);
+            markStatement(end);
+            const gc_node_ref_t only[1] = {end};
+            setSyncInputs(user, only);
+            namePair(user, end);
+        }
+        return end;
+    }
     /// Gives LOOP node `id` `count` collection slots (camel/runtime/loop.h): its body must then
     /// return the next state followed by the values to collect, and its value type must name the
     /// state and one array per slot. A graph producer that builds such a node calls this; the
