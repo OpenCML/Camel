@@ -171,6 +171,10 @@ std::string refusalCause(const std::string &log) {
     if (word == "state") {
         return "a loop carries its state out of itself, and that shape has no transpose";
     }
+    if (word == "state-unread") {
+        return "the loop is the whole answer and the value its state starts from answers no parameter, "
+               "so the cotangent of that value has no parameter to land on";
+    }
     if (word == "call") {
         return "this call's callee has no transpose of its own, so the call cannot be turned around";
     }
