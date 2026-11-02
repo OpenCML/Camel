@@ -217,6 +217,29 @@ class EdgeChecker {
             return false;
         }
     }
+    /// Is this node a statement of a chain, read from the node and the operator table (edges.cn.md
+    /// 1 and 4.6) rather than from the marker: a branch, a loop or a call is a statement; an
+    /// operator is one when it has an effect or may fault. Used by the census below only.
+    bool isChainStatementNode(const GCNode *node, gc_node_ref_t ref) const {
+        switch (node->kind) {
+        case GCNodeKind::Brch:
+        case GCNodeKind::Loop:
+        case GCNodeKind::Call:
+            return true;
+        case GCNodeKind::Oper: {
+            const auto *body = graph_.nodeBodyAs<GCOperBody>(ref);
+            if (body == nullptr || body->oper == camel::core::kNoOper) {
+                return true;
+            }
+            auto &table = camel::core::OperatorTable::instance();
+            const auto traits = table.find(body->oper);
+            return !table.isPure(body->oper) || table.hasExternalEffect(body->oper) ||
+                   (traits.has_value() && traits->mayFault);
+        }
+        default:
+            return false;
+        }
+    }
     static bool isWaitingCarrier(const GCNode *node) {
         return (node->flags & kGCNodeFlagSyncStatement) != 0;
     }
@@ -285,6 +308,27 @@ class EdgeChecker {
                     pred->flags,
                     pred->dataType() != nullptr ? pred->dataType()->toString() : "-"));
                 continue;
+            }
+            // Census, not a refusal (author ruling 2026-11-02): an edge the marker calls a chain
+            // tail, whose end the graph cannot derive as one, is counted here and nowhere else --
+            // it is not refused and it is not removed. The count is read at log level info and
+            // above, so a default run is unchanged; it never writes to the program's stdout, which
+            // is what a case asserts.
+            {
+                const bool endIsStatement = isChainStatementNode(user, edge.user);
+                if (!endIsStatement && user->kind != GCNodeKind::Gate) {
+                    static std::set<std::pair<gc_node_ref_t, gc_node_ref_t>> seen;
+                    if (seen.insert(std::make_pair(edge.user, edge.pred)).second) {
+                        CAMEL_LOG_INFO_S(
+                            "SyncCensus",
+                            "sync census: n={} end={} tail={} kind={} region={}",
+                            seen.size(),
+                            static_cast<unsigned>(edge.user),
+                            static_cast<unsigned>(edge.pred),
+                            static_cast<int>(user->kind),
+                            static_cast<unsigned>(graph_.nodeRegion(edge.user)));
+                    }
+                }
             }
             if (graph_.syncPredsOf(edge.user).size() > 1) {
                 bad("is the second predecessor of one statement");
