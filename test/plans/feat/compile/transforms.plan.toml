@@ -738,6 +738,11 @@ expect_stdout_contains = ["TANGENT type=float space=self", "TANGENT type=f32 spa
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# Four cases of this block were marked known_fail until 2026-11-02, and their notes said the process
+# was killed at the timeout with exit null. That reading was the runner's, not the case's: it printed
+# `got null` for every death by signal, and a bare run takes zero seconds and returns 139 (SIGSEGV) -
+# an array cotangent summed as one number rather than an array. lane-lit2 repaired it (19f0b05e8,
+# 0aed45eb6) and removed the marks in the same commit; the four now pass in about 0.1-0.2 s each.
 # The two walls between here and the array arm of grad, pinned as refusals rather than known_fail: a wall
 # that falls must turn its assertion into a number, and known_fail would hide that.
 [[tests]]
