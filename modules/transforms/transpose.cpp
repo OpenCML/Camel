@@ -32,6 +32,30 @@ using camel::core::type::Type;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GraphId;
 
+namespace {
+
+/// The sum a cotangent accumulates with is the sum of the type it lands in: two array cotangents
+/// add element by element (`:tangent/add_arr`, design principles 9.9) and a number's add is
+/// `:op/add_d`. Handing an array to `add_d` is the same lie as calling it a float -- it reads the
+/// array as a number and takes the process down, which is what two element reads of one array did
+/// (a sum of two reads was enough; one read was not). Every accumulation in this file asks this
+/// question; a site that spells `:op/add_d` itself decided the answer without asking.
+const char *addUriFor(const camel::runtime::GCGraph *function, gc_node_ref_t ref, Type *&addType) {
+    const camel::runtime::GCNode *node = function->node(ref);
+    const Type *type                   = node != nullptr ? node->dataType() : nullptr;
+    const camel::core::TangentSpaceAnswer space =
+        type == nullptr ? camel::core::TangentSpaceAnswer{} : camel::core::tangentSpaceOf(type);
+    if (space.hasSpace() && space.space != nullptr &&
+        space.space->code() == camel::core::type::TypeCode::Array) {
+        addType = space.space;
+        return ":tangent/add_arr";
+    }
+    addType = Type::Float64();
+    return ":op/add_d";
+}
+
+} // namespace
+
 FunctionType *transposeSignature(
     FunctionType *function, const std::vector<bool> &participates,
     std::vector<size_t> *answersOf) {
@@ -300,17 +324,21 @@ bool buildTransposeMember(
         // float -- it reads the array as a number and takes the process down, which is what two
         // element reads of one array did (a sum of two reads was enough; one read was not).
         const auto addUriAndType = [&](gc_node_ref_t ref, Type *&addType) {
-            const camel::runtime::GCNode *node = function->node(ref);
-            const Type *type = node != nullptr ? node->dataType() : nullptr;
-            const camel::core::TangentSpaceAnswer space =
-                type == nullptr ? camel::core::TangentSpaceAnswer{} : camel::core::tangentSpaceOf(type);
-            if (space.hasSpace() && space.space != nullptr &&
-                space.space->code() == camel::core::type::TypeCode::Array) {
-                addType = space.space;
-                return ":tangent/add_arr";
+            return addUriFor(function, ref, addType);
+        };
+        // Every cotangent accumulation in this file goes through this one function: given what a
+        // place holds already (invalid means nothing yet) and what arrives, it answers the value
+        // that place holds afterwards. The sum is chosen by the tangent space of what is already
+        // there, so an array accumulates with `:tangent/add_arr` and a number with `:op/add_d`;
+        // nothing here spells an addition of its own.
+        const auto accumulate = [&](gc_node_ref_t into, gc_node_ref_t node) -> gc_node_ref_t {
+            if (into == rt::kInvalidNodeRef) {
+                return node;
             }
-            addType = Type::Float64();
-            return ":op/add_d";
+            Type *addType            = Type::Float64();
+            const char *const addUri = addUriFor(function, into, addType);
+            return into == node ? primitiveOf(addType, addUri, {node, node})
+                                : primitiveOf(addType, addUri, {into, node});
         };
         const auto zero = [&]() {
             return draft.materializeStaticValue(
@@ -709,7 +737,7 @@ bool buildTransposeMember(
                     hasLocal[ref] = true;
                     return;
                 }
-                local[ref] = primitive(":op/add_d", {local[ref], node});
+                local[ref] = accumulate(local[ref], node);
             };
             // The arm's chain ends at the parameter, which lives outside the arm's region: the
             // cotangent of that parameter for this arm is what the chain hands it. Anything else
@@ -731,9 +759,7 @@ bool buildTransposeMember(
                     if (stops[i] != target) {
                         continue;
                     }
-                    portCotangents[i] = portCotangents[i] == rt::kInvalidNodeRef
-                                            ? node
-                                            : primitive(":op/add_d", {portCotangents[i], node});
+                    portCotangents[i] = accumulate(portCotangents[i], node);
                     return;
                 }
                 // A residual the arm read: the cotangent goes back into the slot it came from, named
@@ -750,9 +776,7 @@ bool buildTransposeMember(
                         });
                     if (body != nullptr && onAResidualPort) {
                         auto &slot = residualBack[body->value];
-                        slot       = slot == rt::kInvalidNodeRef
-                                         ? node
-                                         : primitive(":op/add_d", {slot, node});
+                        slot       = accumulate(slot, node);
                         os << "TRANSPOSE function=" << function->name() << " residual-return slot="
                            << body->value << " region=" << oldRegion << '\n';
                         return;
@@ -765,7 +789,7 @@ bool buildTransposeMember(
                     if (slot.cotangent == rt::kInvalidNodeRef) {
                         slot = Escape{node, from};
                     } else {
-                        slot.cotangent = primitive(":op/add_d", {slot.cotangent, node});
+                        slot.cotangent = accumulate(slot.cotangent, node);
                     }
                     return;
                 }
@@ -1129,9 +1153,7 @@ bool buildTransposeMember(
                         if (into.size() <= j) {
                             into.resize(j + 1, rt::kInvalidNodeRef);
                         }
-                        into[j] = into[j] == rt::kInvalidNodeRef
-                                      ? part
-                                      : primitive(":op/add_d", {into[j], part});
+                        into[j] = accumulate(into[j], part);
                     }
                     hasCotangent[parts2[body->value]] = true;
                     break;
@@ -1145,9 +1167,7 @@ bool buildTransposeMember(
                     break;
                 }
                 gc_node_ref_t &slot = slots[body->value];
-                slot = slot == rt::kInvalidNodeRef
-                           ? cotangent[ref]
-                           : primitive(":op/add_d", {slot, cotangent[ref]});
+                slot = accumulate(slot, cotangent[ref]);
                 hasCotangent[holder] = true;
                 break;
             }
