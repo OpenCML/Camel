@@ -395,8 +395,15 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "stdout"]
 expect_exit = 0
-expect_stdout_contains = ["rules=jvp_mul", "type=(f32, f32) => (f32, f32)", "1.0", "2.0"]
-expect_stdout_not_contains = ["mul_tangent<float>", "which takes a float"]
+# The reading spans both streams: the two numbers are the program's output, and the
+# `REINTERP` lines that name the rule instance and the type it was asked for are the pass
+# talking, which goes to stderr. Asserting both against stdout made this case look broken on a
+# tree where the fix is present -- the run of 2026-11-02 18:45 printed exactly the expected
+# stderr lines and failed on four needles that were never on that stream. `expect_output_*`
+# reads the two streams as one, which is what a case reports when its verdict is a sentence the
+# program and the pass together print.
+expect_output_contains = ["rules=jvp_mul", "type=(f32, f32) => (f32, f32)", "1.0", "2.0"]
+expect_output_not_contains = ["mul_tangent<float>", "which takes a float"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
