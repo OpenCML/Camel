@@ -21,6 +21,7 @@ import { CUDA_DEVICE_ORDER, PCI_BUS_ID, chooseFreeDevice } from './free-device.m
 import { RUN_DIRS_KEPT, SCRATCH_DIR, formatRetention, pruneRunnerOutput, runnerOutputPath } from './runner-output.mjs'
 import { argProblems } from './cli-arg-domains.mjs'
 import { tierAccountingLine, tierAccountingProblems } from './tier-accounting.mjs'
+import { formatIsoTime, provenanceLine } from './provenance.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const TOOLS_ROOT = path.dirname(__filename)
@@ -907,6 +908,35 @@ function readCpuReport(text) {
     return { cpuMs: report.cpu_ms, reason: null }
 }
 
+/**
+ * How a run ended, in words that are not `null`.
+ *
+ * `exitCode` is `null` when there is no exit code to report: the child was killed by the timeout,
+ * a signal took it down, or it never started. Printing `got null` for all three reads as one thing
+ * ("something odd"), and it was read as a timeout for two rounds while the process was in fact
+ * dying of SIGSEGV in 0.03 s -- a crash looked at as a hang, in both directions of the diagnosis.
+ * So the three shapes are named and kept apart:
+ *
+ *   got exit 1
+ *   got signal SIGSEGV (rc=139, 0.03 s)      -- the shell's convention, 128 + the signal number
+ *   got timeout after 30000 ms               -- only a real timeout says this
+ *   could not start: <message>               -- the spawn failed; the process never existed
+ */
+function describeExit(result) {
+    const where = result.errorMessage ? ` could not start: ${result.errorMessage}` : null
+    if (where) return where.trim()
+    if (result.timedOut) {
+        const bound = typeof result.timeoutMs === 'number' ? ` after ${result.timeoutMs} ms` : ''
+        return `timeout${bound}`
+    }
+    if (result.signal) {
+        const number = os.constants && os.constants.signals ? os.constants.signals[result.signal] : undefined
+        const rc = typeof number === 'number' ? `rc=${128 + number}, ` : ''
+        return `signal ${result.signal} (${rc}${formatDurationMs(result.wallMs)})`
+    }
+    return `exit ${result.exitCode}`
+}
+
 function formatMetric(result) {
     // A test judged on its own CPU time prints the CPU figure it was judged on, with the budget it
     // was read against and the wall clock beside it as information: on this host the wall figure is
@@ -1045,12 +1075,66 @@ function fullOutputLine(statusDir) {
     return `full output: ${relative}/ (stdout.txt, stderr.txt, output.txt, meta.json)`
 }
 
+/**
+ * The commit, the binary and the tree a run's numbers belong to, on one line before them.
+ *
+ * Four rewrites in one night came from a correct number attributed to the wrong artifact: a stale
+ * `refs/remotes` ("those commits are on no branch"), `build.ninja` read as `build-Release.ninja`, a
+ * lane's readings filed as `develop`'s, and a `-NoBuild` run's hollow exit code read as a failure.
+ * The numbers were right and their owner was not, so the run states its owner:
+ *
+ *   [provenance] tip <sha> | binary built <ISO> | tree <abs> | tier fast | jobs 8
+ *
+ * `tip` is `git rev-parse HEAD` **of this checkout** -- never a branch ref, which names another tree's
+ * commit. A dirty tree prints `(dirty: N files)` and no sha: the sha names a commit, and what ran was
+ * that commit plus edits nobody recorded. `binary built` is the executable's mtime, not the build
+ * log's: "the build ran" is not "the binary is new" (a failed link, a stale out/latest and another
+ * tree's artifacts all leave the log looking right).
+ *
+ * Cost is two `git` calls and one `stat` per run, paid once, at the summary where the numbers are.
+ */
+function readProvenance(options) {
+    const sha = gitOutput(['rev-parse', 'HEAD'])
+    // Untracked files are counted as dirty on purpose: a new case file or a new plan that the commit
+    // does not carry is part of what ran, and `run.json`'s narrower count (tracked only) answers a
+    // different question.
+    const porcelain = gitOutput(['status', '--porcelain'])
+    const dirty = porcelain === null ? 0 : porcelain.split('\n').filter((line) => line.trim() !== '').length
+    let binaryBuilt = 'unknown'
+    try {
+        binaryBuilt = formatIsoTime(fs.statSync(camelBinary(options)).mtime)
+    } catch {
+        // A run that never started a camel program may have no binary (a plan of `tool = "node"`
+        // cases, a tree that was never built): the field says `unknown` rather than inventing one.
+    }
+    return provenanceLine({
+        sha: sha || null,
+        dirty,
+        binaryBuilt,
+        tree: REPO_ROOT,
+        tier: options.tier,
+        jobs: options.jobs,
+    })
+}
+
+function printProvenance(options) {
+    console.log(`${COLORS.cyan}[provenance]${COLORS.reset} ${readProvenance(options)}`)
+}
+
 function printRunSummary(summary) {
     const total = summary.pass + summary.fail + summary.skip + summary.xfail
     const skipped = summary.skip > 0 ? `, skip: ${summary.skip}` : ''
     const known = summary.xfail > 0 ? `, known failures: ${summary.xfail}` : ''
+    // The two ways a failing run ends without an exit code, counted apart. They are printed only
+    // when one happened, so a green run's summary keeps its shape -- and a red one says which of
+    // the two it was without the reader having to look at the individual failures.
+    const timedOut = summary.timedOut > 0 ? `, timed out: ${summary.timedOut}` : ''
+    const crashed = summary.crashed > 0 ? `, killed by a signal: ${summary.crashed}` : ''
     console.log('')
-    console.log(`${COLORS.cyan}[SUMMARY]${COLORS.reset} total: ${total}, pass: ${summary.pass}, fail: ${summary.fail}${skipped}${known}`)
+    console.log(
+        `${COLORS.cyan}[SUMMARY]${COLORS.reset} total: ${total}, pass: ${summary.pass}, fail: ${summary.fail}` +
+            `${skipped}${known}${timedOut}${crashed}`,
+    )
 }
 
 /**
@@ -1534,7 +1618,7 @@ async function validateTest(test, result, context) {
     const failures = []
     const scope = context.scope || {}
     if (typeof test.expect_exit === 'number' && result.exitCode !== test.expect_exit) {
-        failures.push(`expected exit ${test.expect_exit}, got ${result.exitCode}`)
+        failures.push(`expected exit ${test.expect_exit}, got ${describeExit(result)}`)
     }
     for (const rawNeedle of test.expect_stdout_contains || []) {
         const needle = expandTextTokens(rawNeedle, scope)
@@ -1911,7 +1995,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
             : [
                   `does not compile (${test.case}): ` +
                       ((result.output.match(/^error\[[^\n]*/m) || [''])[0] ||
-                          `exit ${result.exitCode}`),
+                          describeExit(result)),
               ]
         : await validateTest(test, result, { ...logContext, scope })    // The cost judgement of a test that declares `cpu_budget_ms`, in the unit
     // the rule asks for:
@@ -2971,7 +3055,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
     // last 150 s with no slot held at all. `jobs`-wide, the same timeouts cost one lane each.
     const probes = new Slots(options.jobs)
     const verifications = new Slots(options.jobs)
-    const summary = { pass: 0, fail: 0, skip: 0, xfail: 0 }
+    const summary = { pass: 0, fail: 0, skip: 0, xfail: 0, timedOut: 0, crashed: 0 }
     // Results by test name, as a serial run had them: a differential test and a back end after
     // the first read the result of the test they compare against.
     const completed = new Map()
@@ -2997,6 +3081,13 @@ async function executePlans(plans, options, sharedVars, logDir) {
             return
         }
         summary[outcome.status]++
+        // A failing run that ended without an exit code is one of two things, and the summary says
+        // which: the timeout took it, or a signal did. (A marked failure is counted as `xfail`
+        // above and is not classified here -- the mark's own note says what it is.)
+        if (outcome.status === 'fail' && outcome.result) {
+            if (outcome.result.timedOut) summary.timedOut++
+            else if (outcome.result.signal) summary.crashed++
+        }
         printStatusLine(outcome.status, test.name, outcome.metric)
         if (outcome.failures.length > 0) {
             const note = test.__knownFail ? test.known_fail_note || test.failure_note : test.failure_note
@@ -3407,6 +3498,7 @@ async function main() {
         )
     )
 
+    printProvenance(options)
     printRunSummary(outcome.summary)
     if (marginSkippedTests > 0) {
         // The rule's own reading, so a run on a host without a CPU figure says what it did not judge

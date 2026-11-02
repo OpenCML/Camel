@@ -50,7 +50,7 @@ uint32_t GraphDraft::addInlineRegion(uint32_t parent, GraphId callee, gc_node_re
 void GraphDraft::setBrchJoin(gc_node_ref_t brch, gc_node_ref_t join) {
     ++mutations_;
     DraftNode *node = this->node(brch);
-    ASSERT(node != nullptr && node->kind == GCNodeKind::Brch, "Not a branch node.");
+    ASSERT(node != nullptr && node->header.kind == GCNodeKind::Brch, "Not a branch node.");
     DraftNodeView::payloadAs<DraftBrchPayload>(node)->join = join;
 }
 

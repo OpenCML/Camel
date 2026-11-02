@@ -1,0 +1,15 @@
+id = "feat.tools.exit_reporting"
+tier = "fast"
+desc = "A run that ends without an exit code says which of the three ways it ended -- a signal with the shell's 128 + n, a real timeout, or a process that never started -- instead of `got null`, and the summary counts timeouts and signal kills apart"
+
+[[tests]]
+name = "runner.exit_reporting_names_the_signal"
+desc = "`got null` reads as one thing and was diagnosed as a timeout for two rounds while the process was dying of SIGSEGV in 0.03 s. A signal kill prints `got signal SIGSEGV (rc=139, <time>)`, a real timeout prints `got timeout after 100 ms`, neither prints `null`, and `[SUMMARY]` separates them as `killed by a signal: <n>` and `timed out: <n>`."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/exit_reporting.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 180000
