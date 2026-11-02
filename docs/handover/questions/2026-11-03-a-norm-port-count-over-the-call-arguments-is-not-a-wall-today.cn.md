@@ -82,10 +82,10 @@ stdout 是：
 
 ## 8 读数（基线，不是某一笔的成果；本机不构建，全部走主机）
 
-| 计划 | `52896caf`（clean） | `f385b42aa`（clean） |
-| --- | --- | --- |
-| `feat/compile/transforms` | 64 = **51 通过 / 13 失败** | 70 = **57 通过 / 13 失败** |
-| 全量 fast（`-Plan all -Tier fast -Jobs 8`） | 8535 / **8500 通过 / 15 失败** / skip 10 / known 10 / killed 0 | 8541 / **8506 通过 / 15 失败** / skip 10 / known 10 / killed 0 |
+| 计划 | `52896caf`（clean） | `f385b42aa`（clean） | `579d2c7ad`（clean） |
+| --- | --- | --- | --- |
+| `feat/compile/transforms` | 64 = **51 通过 / 13 失败** | 70 = **57 通过 / 13 失败** | 70 = **57 通过 / 13 失败** |
+| 全量 fast（`-Plan all -Tier fast -Jobs 8`） | 8535 / **8500 通过 / 15 失败** / skip 10 / known 10 / killed 0 | 8541 / **8506 通过 / 15 失败** / skip 10 / known 10 / killed 0 | 8541 / **8506 通过 / 15 失败** / skip 10 / known 10 / killed 0 |
 
 13 个失败名单在两棵树上**逐名相同**：`transpose_loop_escape.*` 六条，`grad_array*` 与
 `grad_of_a_division` 七条 —— 与本页说的是同一件事：挡住它们的是 `jvp`/`split` 的抬升，不是 `transpose`。
