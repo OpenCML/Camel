@@ -749,8 +749,6 @@ backends = ["fvm"]
 expect_exit = 0
 expect_stdout_contains = ["6.0", "[2.0, 3.0]"]
 timeout_ms = 15000
-known_fail = ["fvm"]
-known_fail_note = "Owner: lane-m4b, whose answersOf work landed the element read's transpose arm. Two element reads beside a mul give five residuals, and under std::fvm this case is not refused any more and does not finish either: the process is killed at the timeout with exit null, while the same program under std::nvm prints the forward value and no cotangent. Both belong to the same member -- the answer tuple whose first slot reaches no line of stdout -- and the runner reports a marked case that passes as a failure, which is what asks for the mark's removal."
 
 [[tests]]
 name = "grad_array_with_int.fvm"
@@ -806,8 +804,6 @@ timeout_ms = 30000
 # the answer the transform owes -- `[2.0, 3.0]` -- and not today's refusal, so the mark is the only
 # thing standing between the plan and a red, and the runner reports a marked case that passes as a
 # failure: that report is what asks for the mark's removal.
-known_fail = ["nvm"]
-known_fail_note = "Owner: the value chain that lane-lit2 carries. The array element read's transpose arm is missing -- the transform answers `skip=law rule=idx_arr_t uri=:op/idx_arr` and `transpose has no transpose`, so the pullback never reaches `[2.0, 3.0]`. Reason for the mark rather than a pinned refusal: the pinned form asserts today's wrong answer as correct, and the plan's own header already says what that costs. When the arm lands, remove the mark in the same commit."
 
 # one element: xs[0] over [3.0]. The cotangent of a function of an array should come back as an array, but the transpose
 # stops at the law the rule library declares for the element read (`idx_arr_t`, stdlib/rulesets/transpose.cml)
@@ -849,12 +845,10 @@ kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_sum.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-expect_exit = 1
-expect_stdout_contains = ["skip=law rule=idx_arr_t uri=:op/idx_arr", "transpose has no transpose"]
+expect_exit = 0
+expect_stdout_contains = ["5.0", "[1.0, 1.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
-known_fail = ["nvm"]
-known_fail_note = "Owner: lane-m4b, whose answersOf work landed the element read's transpose arm. With two residuals the pullback answers the array and the case reads it; with five residuals (two element reads beside an add or a mul) the pullback answers a tuple and the first member reaches no line of stdout -- the program prints the forward value and nothing else, exit 0. So the case is not refused and not passing either: the cotangent is computed and does not arrive. The runner reports a marked case that passes as a failure, which is what asks for the mark's removal once the tuple's first slot prints."
 
 # the product: xs[0] * xs[1] over [3.0, 2.0]. The cotangent of a function of an array should come back as an array, but the transpose
 # stops at the law the rule library declares for the element read (`idx_arr_t`, stdlib/rulesets/transpose.cml)
@@ -866,12 +860,10 @@ kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_product.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-expect_exit = 1
-expect_stdout_contains = ["skip=law rule=idx_arr_t uri=:op/idx_arr", "transpose has no transpose"]
+expect_exit = 0
+expect_stdout_contains = ["6.0", "[2.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
-known_fail = ["nvm"]
-known_fail_note = "Owner: lane-m4b, whose answersOf work landed the element read's transpose arm. With two residuals the pullback answers the array and the case reads it; with five residuals (two element reads beside an add or a mul) the pullback answers a tuple and the first member reaches no line of stdout -- the program prints the forward value and nothing else, exit 0. So the case is not refused and not passing either: the cotangent is computed and does not arrive. The runner reports a marked case that passes as a failure, which is what asks for the mark's removal once the tuple's first slot prints."
 
 [[tests]]
 name = "grad_of_a_division"
