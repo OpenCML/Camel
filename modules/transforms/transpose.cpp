@@ -264,10 +264,13 @@ bool buildTransposeMember(
             draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
         draft.appendNormPort(cotangentIn);
 
-        const auto primitive = [&draft](const char *uri, std::vector<gc_node_ref_t> inputs) {
-            const gc_node_ref_t made = draft.addOperNode(Type::Float64(), nullptr, uri);
+        const auto primitiveOf = [&draft](Type *type, const char *uri, std::vector<gc_node_ref_t> inputs) {
+            const gc_node_ref_t made = draft.addOperNode(type, nullptr, uri);
             draft.setNormInputs(made, std::span<const gc_node_ref_t>(inputs));
             return made;
+        };
+        const auto primitive = [&primitiveOf](const char *uri, std::vector<gc_node_ref_t> inputs) {
+            return primitiveOf(Type::Float64(), uri, std::move(inputs));
         };
         const auto zero = [&]() {
             return draft.materializeStaticValue(
@@ -360,6 +363,16 @@ bool buildTransposeMember(
         // asks of a parameter: a float (and a tuple or array of them) is its own tangent space, and
         // an integer, a boolean, a `string` or a function has none. A node with no type yet is given
         // the benefit of the doubt -- guessing "no space" would silently stop a chain that has one.
+        const auto arrayTangentOf = [&](gc_node_ref_t ref) {
+            const camel::runtime::GCNode *node = function->node(ref);
+            if (node == nullptr || node->dataType() == nullptr) {
+                return false;
+            }
+            const camel::core::TangentSpaceAnswer space =
+                camel::core::tangentSpaceOf(node->dataType());
+            return space.hasSpace() && space.space != nullptr &&
+                   space.space->code() == camel::core::type::TypeCode::Array;
+        };
         const auto hasTangentSpace = [&](gc_node_ref_t ref) {
             const camel::runtime::GCNode *node = function->node(ref);
             if (node == nullptr) {
@@ -424,11 +437,12 @@ bool buildTransposeMember(
                 hasCotangent[ref] = true;
                 return;
             }
+            const char *const addUri = arrayTangentOf(ref) ? ":tangent/add_arr" : ":op/add_d";
             if (cotangent[ref] == node) {
-                cotangent[ref] = primitive(":op/add_d", {node, node});
+                cotangent[ref] = primitive(addUri, {node, node});
                 return;
             }
-            cotangent[ref] = primitive(":op/add_d", {cotangent[ref], node});
+            cotangent[ref] = primitive(addUri, {cotangent[ref], node});
         };
         const auto negate = [&](gc_node_ref_t node) {
             return primitive(":op/sub_d", {zero(), node});
@@ -1351,6 +1365,25 @@ bool buildTransposeMember(
                             addCotangent(inputs[i], negate(primitive(":op/div_d", {top, sq})));
                         }
                     }
+                } else if (law == "idx_arr_t") {
+                    const gc_node_ref_t xs = knownValue(inputs[0]);
+                    const gc_node_ref_t at = knownValue(inputs[1]);
+                    if (xs == rt::kInvalidNodeRef || at == rt::kInvalidNodeRef) {
+                        os << "TRANSPOSE function=" << function->name() << " skip=residual uri="
+                           << uri << '\n';
+                        return false;
+                    }
+                    const camel::runtime::GCNode *arrayNode = function->node(inputs[0]);
+                    Type *const arrayTangent =
+                        arrayNode != nullptr && arrayNode->dataType() != nullptr
+                            ? camel::core::tangentSpaceOf(arrayNode->dataType()).space
+                            : Type::Float64();
+                    const gc_node_ref_t zeroArray =
+                        primitiveOf(arrayTangent, ":tangent/zeros_arr", {xs});
+                    addCotangent(
+                        inputs[0],
+                        primitiveOf(
+                            arrayTangent, ":tangent/scatter_add_arr", {zeroArray, at, ct}));
                 } else {
                     os << "TRANSPOSE function=" << function->name() << " skip=law rule=" << law
                        << " uri=" << uri << '\n';
@@ -1798,7 +1831,12 @@ bool buildTransposeMember(
                     if (answered.empty()) {
                         break;
                     }
-                    if (answered.size() == 1) {
+                    // One answer is the value itself only when the signature answers a bare value -- a
+                    // one-parameter callee answers `Float64`. A member with several parameters answers a
+                    // tuple even when only one of them has a space, and what a caller delivers then is
+                    // that tuple's slot 0, not the tuple: handing it over whole is how an array read
+                    // arrived at `:tangent/add_arr` as a `(float[],)` tuple, numel and all.
+                    if (answered.size() == 1 && answerTuple == nullptr) {
                         addCotangent(inputs[argumentAt + answered[0]], made);
                         break;
                     }
@@ -1833,18 +1871,43 @@ bool buildTransposeMember(
             const auto &ports      = function->normPorts();
             const size_t firstPort = bundlesResiduals ? 1 : 0;
             std::vector<gc_node_ref_t> parts;
+            std::vector<Type *> partTypes;
             for (size_t i = firstPort; i < ports.size(); ++i) {
                 if (partial && !participatesOf(i)) {
                     // A value parameter of a partial transposition: no cotangent is answered for it.
                     continue;
                 }
-                parts.push_back(hasCotangent[ports[i]] ? cotangent[ports[i]] : zero());
+                // One slot per parameter that has a tangent space, typed by that space -- the rule
+                // `transposeSignature` states. An int parameter has none and therefore no slot, and an
+                // array parameter's slot is an array: a slot per parameter typed float is a promise the
+                // tuple cannot keep, and the caller that reads element 1 of a one-slot answer learns it
+                // at run time.
+                const camel::runtime::GCNode *portNode = function->node(ports[i]);
+                Type *const space =
+                    portNode != nullptr && portNode->dataType() != nullptr
+                        ? camel::core::tangentSpaceOf(portNode->dataType()).space
+                        : nullptr;
+                if (space == nullptr) {
+                    continue;
+                }
+                if (hasCotangent[ports[i]]) {
+                    parts.push_back(cotangent[ports[i]]);
+                } else if (space->code() == camel::core::type::TypeCode::Array) {
+                    // The zero of an array's tangent space is the array of zeros, not the number
+                    // zero: the slot is an array, and the run would read the 0.0 as one.
+                    const gc_node_ref_t known = knownValue(ports[i]);
+                    parts.push_back(
+                        known == rt::kInvalidNodeRef
+                            ? zero()
+                            : primitiveOf(space, ":tangent/zeros_arr", {known}));
+                } else {
+                    parts.push_back(zero());
+                }
+                partTypes.push_back(space);
             }
             if (!parts.empty()) {
-                std::vector<Type *> partTypes;
                 std::vector<size_t> slots;
                 for (size_t i = 0; i < parts.size(); ++i) {
-                    partTypes.push_back(Type::Float64());
                     slots.push_back(i);
                 }
                 Type *const tupleType = camel::core::type::TupleType::create(partTypes);
