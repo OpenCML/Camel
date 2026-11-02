@@ -54,3 +54,25 @@
 **结论：P0-2 不是"删一条边"，是"给依赖控制边的 pass 换判据"。** 最小一步因此改成：**选一个族、换它的判据，读数是红数下降多少**（默认从红数最大的 `fault` 172 条起）。
 
 **撤净证明**：`git status --porcelain` 空；`git branch --contains <探针提交>` 空；`Deleted branch probe/ctrl-off (was 6938afa67)`；车道 HEAD 与实验前逐字相同。
+## 第一个样本：`fault` 族里的一条，为什么缺控制边就红
+
+**为什么默认从 `fault` 起：因为它是最大的族（172），不是因为它最有代表性。** 172 条里估计不止一个根因，本页只给一条样本，**不把"最大"冒充"最有代表"**。
+
+**样本**：`src/passes/test/fault.cpp` 里那个"摘掉效果"的 pass（`fault.cpp:109-160`）。它给一个 `:io/` 节点的"等待"挂一条 order 边，锚点是这样选的：
+
+```
+camel::runtime::gc_node_ref_t anchor = camel::runtime::kInvalidNodeRef;
+if (!draft.ctrlInputsOf(id).empty()) {
+    anchor = draft.ctrlInputsOf(id).front();      // fault.cpp:125-126
+} else if (!draft.normInputsOf(id).empty()) {
+    anchor = draft.normInputsOf(id).front();      // fault.cpp:127-129
+}
+```
+
+**① 它依赖控制边做哪个判断**：**"这个效果等的那个前驱是谁"**。第一分支读 `ctrlInputsOf`；**控制链被写成 sync 边之后这个分支永远空**，于是它退到 `normInputsOf`，锚点从"链前驱"变成"第一个值输入"，order 边挂错节点，用例期望的那条诊断不再出现 ⇒ 红。
+
+**② 还能靠什么判（两个候选）**
+- **甲：读 `syncInputsOf`** —— `include/camel/runtime/draft.h:490` 已有这个访问器，**数据已经在图里，不缺**；改的是"先问谁"的顺序。
+- **乙：读标记 `kGCNodeFlagSyncStatement`** —— `include/camel/runtime/graph.h:176` 定义、`src/compile/gir/builder_helpers.h:668` 打上，**数据也在**；但它是"我知道这里有等待"的布尔，回答不了"等的是谁"，**只能用来筛节点，不能单独当锚点**。
+
+**③ 换判据之后的读数会是什么样**：**这一条从红变绿**是必然的；**同族一起变绿需要一次计数**——那个 pass 的用例清单本轮没有取，所以本页只写"这一条"，不写"这一族"。
