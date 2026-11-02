@@ -19,6 +19,7 @@ import {
 } from './cuda-visibility.mjs'
 import { CUDA_DEVICE_ORDER, PCI_BUS_ID, chooseFreeDevice } from './free-device.mjs'
 import { RUN_DIRS_KEPT, SCRATCH_DIR, formatRetention, pruneRunnerOutput, runnerOutputPath } from './runner-output.mjs'
+import { argProblems } from './cli-arg-domains.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const TOOLS_ROOT = path.dirname(__filename)
@@ -2266,7 +2267,46 @@ function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
             emptyByLayer.push(plan.__planPath)
         }
     }
-    return { plans: selectedPlans, emptyByLayer, unproven }
+    // The options a plan writes are the CLI's words, and a value the CLI does not take is a *plan*
+    // error, not a red test: the CLI refuses it while parsing, so the test would fail with an exit
+    // code that says nothing about the program. Six entries of `jit_framed` were read that way for
+    // a night (`--gc-check verify=1`, diagnosed as a GC defect). The domains live in
+    // `cli-arg-domains.mjs`, which checks itself against `tools/camel-cli/config.cpp`.
+    const argProblemsOfPlans = []
+    const reportedArgs = new Set()
+    for (const plan of selectedPlans) {
+        for (const test of plan.tests) {
+            for (const problem of argProblems(test.args)) {
+                const line = planLineOf(plan.__planPath, problem.word) ?? planLineOf(plan.__planPath, problem.option)
+                const key = `${plan.__planPath}|${line}|${problem.option}|${problem.word}`
+                if (reportedArgs.has(key)) continue
+                reportedArgs.add(key)
+                argProblemsOfPlans.push({ planPath: plan.__planPath, line, testName: test.name, ...problem })
+            }
+        }
+    }
+    return { plans: selectedPlans, emptyByLayer, unproven, argProblems: argProblemsOfPlans }
+}
+
+/**
+ * The line of a plan file where a word is written, so a plan error can be reported as
+ * `plan:line`. The word came from the file, so it is in there; a word assembled by the runner
+ * (an expanded `${case}`, say) is not, and then the caller falls back to the option's line.
+ */
+const PLAN_TEXT = new Map()
+function planLineOf(planPath, needle) {
+    if (!needle) return null
+    let lines = PLAN_TEXT.get(planPath)
+    if (!lines) {
+        try {
+            lines = fs.readFileSync(planPath, 'utf8').split(/\r?\n/)
+        } catch {
+            return null
+        }
+        PLAN_TEXT.set(planPath, lines)
+    }
+    const index = lines.findIndex((line) => line.includes(needle))
+    return index === -1 ? null : index + 1
 }
 
 function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false) {
@@ -3020,6 +3060,27 @@ async function main() {
     })
     const selected = loadPlans(options.targets, options.tier, options.layeredPlans, options.compileOnly === true)
     const plans = selected.plans
+    // A plan that names an option value the CLI does not take is a plan error, and the run refuses
+    // instead of starting it: the CLI would exit 1 while parsing, and that exit code is not a
+    // reading about the program under test. `plan:line` and the legal values are in the message so
+    // the fix is at the file, not in a GC investigation.
+    if (selected.argProblems.length > 0) {
+        for (const problem of selected.argProblems) {
+            const where = problem.line ? `${relPath(problem.planPath)}:${problem.line}` : relPath(problem.planPath)
+            console.error(
+                `${COLORS.red}[PLAN ERROR]${COLORS.reset} ${where}: test '${problem.testName}': ` +
+                    `${problem.word} -- ${problem.reason}; the CLI does not take it as written`,
+            )
+        }
+        console.error(
+            `${COLORS.red}[PLAN ERROR]${COLORS.reset} ${selected.argProblems.length} run option value(s) in ` +
+                'the plans this run selected are not ones the CLI takes, so nothing was started: this is a ' +
+                'plan error, not a failing test. The values the CLI reads are listed in ' +
+                'test/tools/cli-arg-domains.mjs, which is checked against tools/camel-cli/config.cpp.',
+        )
+        process.exitCode = 2
+        return 2
+    }
     // A plan this run reaches and starts nothing in is not a silent zero. The ones whose own tier
     // is another layer are counted and named on one line -- the milestone layer under a fast run is
     // the usual case -- and the ones whose own tier is this layer are failures: the run would print

@@ -45,3 +45,26 @@ expect_exit = 0
 expect_stdout_contains = ["PASS"]
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 30000
+[[tests]]
+name = "cli.arg_domains_match_the_cli"
+desc = "The value domains the runner refuses a plan for (`--gc-check`, `--gc-stress`, `--gc`) are read out of tools/camel-cli/config.cpp and src/core/mm/mm.cpp, and both sides still say the same thing: a value listed here that the CLI dropped, and a value the CLI gained that is not here (which would refuse a legal plan), are both failures."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/cli-arg-domains.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "cli.plan_arg_domain_refused"
+desc = "A plan naming a run option value the CLI does not take (`--gc-check verify=1`) is refused at load with a [PLAN ERROR] naming plan:line, the test and the legal values, and the run starts nothing; a legal compound value (`alloc=3,safepoint=1,kind=major`, `poison,verify=both`, `--gc mark-sweep`) and a pass parameter (`std::opt safe_fp=true`) are still accepted."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/cli/arg_domain_refused.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 120000

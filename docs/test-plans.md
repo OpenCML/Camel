@@ -1314,6 +1314,20 @@ instances run at the same time without seeing each other's files. A case run out
   of the wrong type for the fields it types) with an error naming the plan file, the test and
   the key; fix the plan, do not work around the runner. A new field is added to the runner and
   to this document in the same change, so the next plan can rely on it.
+- **`args` is checked against the CLI's own option values at load.** `--gc-check`, `--gc-stress`
+  and `--gc` take a closed set of words, and a plan that names anything else is a **plan error**:
+  the run prints `[PLAN ERROR] <plan>:<line>: test '<name>': <word> -- <what the option takes>`
+  and starts nothing (exit 2). It is not a failing test, and must not be read as one: the CLI
+  refuses the word while parsing, so the exit code it produces says nothing about the program the
+  test runs. Six entries of `test/plans/feat/linear/jit_framed.plan.toml` were investigated as a
+  GC defect over `--gc-check verify=1` before anyone read the option.
+  The values are `moves, poison, config, verify=before|after|both` (also `pre`, `post`) for
+  `--gc-check`; `kind=minor|major|both, alloc=<n>, safepoint=<n>` for `--gc-stress`; and
+  `generational|gen|1|mark-sweep|marksweep|0` for `--gc`. The table lives in
+  `test/tools/cli-arg-domains.mjs`, which reads those values out of `tools/camel-cli/config.cpp`
+  and `src/core/mm/mm.cpp` and fails when either side moves (`cli.arg_domains_match_the_cli`).
+  Compound values (`alloc=3,safepoint=1,kind=major`, `poison,verify=both`) and pass parameters
+  (`std::opt safe_fp=true`) are not run options and are left alone.
 - Prefer explicit `expect_exit = 0` for successful behavior tests.
 - Prefer `verify_script` over `verify_script_path` for short, local checks.
 - Prefer `verify_script_path` for reusable or multi-test logic.
