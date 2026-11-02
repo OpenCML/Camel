@@ -1,0 +1,18 @@
+// Calling a `T!` as a function: the value reports a failure instead of giving a result, so the
+// call has nothing to run and the error it may hold has nowhere to be read. This used to be an
+// invariant violation in the builder (an abort, `visitLinkNode`): the target of a LINK is not a
+// function, and the builder stopped the process instead of the program. It is now a diagnostic,
+// and it is an error, not a warning: a warning would let the statement be dropped and the run go
+// on as if the call had been made.
+import { cse } from opt
+
+with <w: float>
+func loss(x: float): float {
+    return w * x + w * x
+}
+
+func main(): int sync {
+    let step = loss->cse
+    println(step<2.0>(3.0))
+    return 0
+}

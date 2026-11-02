@@ -54,6 +54,7 @@ SemanticDiag::ArgumentsRejected	test/cases/compile/fstring/bad_spec.cml
 SemanticDiag::AssignmentTargetNotVariable	test/cases/compile/semantic/assign_to_temporary.cml
 SemanticDiag::BranchElementTypeMismatch	test/cases/compile/semantic/branch_element_type_mismatch.cml
 SemanticDiag::BranchReturnTypeMismatch	test/cases/compile/semantic/branch_return_mismatch.cml
+SemanticDiag::CalledFallibleValue	test/cases/compile/unused_values/called_fallible.cml
 SemanticDiag::CallingIncompleteFunction	test/cases/compile/module_load/order_values.cml
 SemanticDiag::CaptureAfterRecursiveCall	test/cases/compile/module_load/recursive_late_var.cml
 SemanticDiag::CollectionKeyNotAllowed	test/cases/compile/collections/err_key_float.cml
