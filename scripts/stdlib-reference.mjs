@@ -2072,6 +2072,13 @@ const EXAMPLE_STOPS = {
     // number was raised to record it; the example is fixed instead -- it writes the function where
     // the call is, `vjp((x: float) => x * x)(3.0)`, and compiles and runs with nothing bound -- so
     // the count is back down, and the rule it leaves is: fix the example, not the count.
+    //
+    // This is a shape count, not a count of assertions that passed: it says how many examples
+    // stop at this class of diagnostic in the tree the run measured, so moving it neither relaxes
+    // nor tightens anything -- the rule is still that every `@example` compiles, or carries a
+    // `@example-fragment` marker whose reason names what it is missing. A number here that moved
+    // says a shape changed; a number here that was lowered without a reason would be the same
+    // silence as a relaxed gate.
     'a semantic error': 38,
     // `split`'s example reaches the compiler with a function-typed parameter bound by name and the
     // compile graph keeps a live dereference node (`internal error: Compile graph '__doc_example'

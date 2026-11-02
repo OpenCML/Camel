@@ -2,10 +2,11 @@
 
 > 一页一问。作者把读过的页整体挪进 `reviews/`；这里只放**还在等回答**的页。
 
-## 现在在等作者：9 页
+## 现在在等作者：10 页
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
 | --- | --- | --- | --- | --- |
+| [`2026-11-02-which-position-holds-the-over-argument`](2026-11-02-which-position-holds-the-over-argument.cn.md) | `check` 的"带程序"形式那个程序放在哪：`over` 占 `with` 位 0 会破 `OverloadParameterNames`（六种写法各自停在哪条规则都已量过，三条要求不能同时成立），现方案把它挪到箭头实参，`rules->check<over: f>` 变成 `rules->check(f)`；问 A（保持）认不认，不认则在 B/C/D 里点一条 | 待裁 | — | `rules->check<over: f>` 这个写法；动语言规则的许可 |
 | [`2026-11-02-the-generator-reads-a-draft-node-after-its-builder`](2026-11-02-the-generator-reads-a-draft-node-after-its-builder.cn.md) | `stream.*` 在 Windows 上崩在 `builder_support.h#nodeGraphOf`（草稿节点不属于任何 compile graph builder），同树 Linux 全绿、五个后端都崩，所以是建图不是调度；问该谁去找那个节点的 owner、修好前 Windows 腿要不要继续红 | 待裁 | — | Windows 腿的红；那个节点的 owner |
 | [`2026-11-02-who-restores-order-after-inline-moves-a-statement`](2026-11-02-who-restores-order-after-inline-moves-a-statement.cn.md) | 内联改变块归属之后，次序该由内联自己补还是由图定型后的统一通道补 | 待裁 | — | 次序的归属：内联还是定型后的通道 |
 | [`2026-11-03-may-a-printed-name-be-the-definitions-own`](2026-11-03-may-a-printed-name-be-the-definitions-own.cn.md) | `tensor:sum` 与 `tensor:sum_axis` 共用一个写名 `sum`，边界在哪只有定义知道、节点不知道；问打印件能不能用定义自己的名字（`sum_axis(m, 0, false)`），还是必须复现源里的 `<>` 写法 | 待裁 | — | 打印器的往返：节点上只有一个写名 |
