@@ -49,6 +49,12 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '..', '..', '..')
 const runner = path.join(path.dirname(here), 'run-tests.mjs')
 const stripAnsi = (text) => text.replace(/\x1b\[[0-9;]*m/g, '')
+// Printed at the end and read by nothing: how many child runs this file started, and what the
+// whole thing cost in CPU and in wall time. The three numbers belong together because the bound
+// this self-test runs under rose twice on readings that were never the same kind, and a host that
+// reports its own cost is the only thing that stops the next raise from being a guess.
+// See docs/handover/questions/2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant.cn.md.
+const cost = { children: 0, cpuStart: process.cpuUsage(), wallStart: process.hrtime.bigint() }
 const problems = []
 const scratchRoot = path.join(repoRoot, 'tmp', 'test')
 // When the self-test runs under the runner, this is its own scratch directory; a direct run
@@ -57,6 +63,7 @@ const probeLogDir = process.env.CAMEL_TEST_TMPDIR || path.join(repoRoot, 'tmp')
 fs.mkdirSync(probeLogDir, { recursive: true })
 
 function runRunner(args, extraEnv = {}) {
+    cost.children += 1
     const proc = spawnSync(process.execPath, [runner, ...args], {
         encoding: 'utf8',
         cwd: repoRoot,
@@ -69,6 +76,7 @@ function runRunner(args, extraEnv = {}) {
 // and `--list` live there, above the plan runner. A check of a target shorthand has to go
 // through it, not through run-tests.mjs, or it would test a different parser.
 function runTestCli(args, extraEnv = {}) {
+    cost.children += 1
     const proc = spawnSync(process.execPath, [path.join(repoRoot, 'test', 'runner.mjs'), ...args], {
         encoding: 'utf8',
         cwd: repoRoot,
@@ -1074,3 +1082,13 @@ if (problems.length > 0) {
     process.exit(1)
 }
 console.log('runner self-test ok')
+// The three numbers, printed and used by nothing: what this run cost on this host, and how many
+// child runs it took to cost it. `timeout_ms` is untouched -- that is what makes this line safe to
+// add, and why it is a reading rather than a decision.
+const spent = process.cpuUsage(cost.cpuStart)
+const spentCpu = (spent.user + spent.system) / 1e6
+const spentWall = Number(process.hrtime.bigint() - cost.wallStart) / 1e9
+console.log(
+    `[calibration] child-runs=${cost.children}; measured=${spentCpu.toFixed(1)} s cpu; ` +
+        `wall=${spentWall.toFixed(1)} s`,
+)

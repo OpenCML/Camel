@@ -1,13 +1,30 @@
-// The transpose of a call to a function of several parameters. `mul_tangent(x, w, dx, dw)` is
-// `dx*w + x*dw`, so a rule's tangent function reaches a transposed half with the operands in front
-// of the tangents -- four floats and no residual tuple. `Transpose<F>` takes every parameter as it
-// stands, then the cotangent, and answers one cotangent per parameter in the same order; the laws
-// are still the ruleset's (`add_t`, `mul_t`), because nothing here knows what `mul_tangent` is.
+// **The refusal this shape earns, and why it is the right answer rather than a gap.**
 //
-// At (x, w, dx, dw) = (3, 2, 1, 0) with the cotangent 1 the four answers are the partial
-// derivatives of `dx*w + x*dw`: (dw, dx, w, x) = (0, 1, 2, 3). The first two belong to the operands
-// and the last two to the tangents -- which is what makes this one shape do for a rule function:
-// the half that calls it keeps the two it needs and drops the two a residual owns.
+// `mul_tangent(x, w, dx, dw)` is `dx*w + x*dw`, and the laws that turn it round read the operands:
+// `mul_t` answers `(mul_cotangent(w, ct), mul_cotangent_c(dx, ct))`, so the *value* of `w` and the
+// *value* of `dx` are what the member is computed from. Two of those four values are operands, which a
+// split half reads from its residual tuple; the other two are the **tangents** `dx` and `dw`, and a
+// transposition has no value for a tangent -- the tangent's cotangent is the answer, not an input.
+//
+// Under the ruling (author, 2026-11-02 11:30) a transposed member may take the values it needs **out
+// of the closure it was built with** -- the closure of the function it is the transposition of -- and
+// must be refused otherwise: the closure is how a value reaches a transposed function without the type
+// naming it, and a value that is not in the closure is not in the call. For `lin` below the closure is
+// empty (`3.0` and `2.0` are literals inside the body, and `dx`/`dw` are `lin`'s own parameters, not
+// captures), so there is nowhere for `dx`'s value to come from, and the transposition is refused by
+// name instead of being answered with a number it does not have.
+//
+// This is the case's answer and not a missing piece: a function of four parameters **is** transposed
+// when nothing it answers a cotangent for is needed as a value -- `transpose_unread_parameters` reads
+// the same four answers that way -- and the rule kernel's four-parameter member **is** built when the
+// values come from the cut that carries them (`split_branch_author_vjp`, where the member takes the
+// operands' two and answers the tangents' two). What is refused here is the one shape neither route
+// supports: the pullback of the whole rule with respect to the tangents themselves.
+//
+// The reading is the refusal's own words -- `skip=cotangent-needs-a-value` on `:op/mul_d`,
+// `position=1`, "the rule's right side reads a value the caller does not carry" -- and it is
+// deliberately one level deeper than the user-facing sentence, because that sentence ("transpose has
+// no transpose for this function") says nothing about *which* value is missing.
 import rulesets.transpose
 import { jvp, split, transpose } from transforms
 import { mul_tangent } from autodiff
@@ -17,6 +34,8 @@ func mt(x: float, w: float, dx: float, dw: float): float {
 }
 import rulesets.jvp
 func main(): int sync {
-    println(transpose(mt)(1.0))
+    // The refused shape: two values named by the body, two tangents the closure cannot hold.
+    let lin = (dx: float, dw: float) => mt(3.0, 2.0, dx, dw)
+    println(transpose(lin)(1.0))
     return 0
 }

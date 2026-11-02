@@ -7036,6 +7036,35 @@ The forward rule of `/` on two 64-bit floats.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `div_jvp(6.0, 2.0, (1.0, 0.25))` gives `(3.0, 0.125)`
 
+### The forward rule of `^` (a power)
+
+#### `pow_tangent`
+
+```camel
+pow_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+```
+
+The tangent of `x ^ w` along `(dx, dw)`: `w * x^(w-1) * dx + x^w * log(x) * dw`.
+
+The two terms answer two different questions, and keeping them apart is what makes the negative
+base honest. The first term is the derivative with respect to the **base**, and it is defined
+wherever `x ^ w` is. The second is the derivative with respect to the **exponent**, and it is
+`x^w * log(x)`: for `x <= 0` that has no real value, because a real power of a negative number
+exists only for integer exponents and has no derivative in the exponent there.
+
+So the second term is computed only where it contributes. A tangent is a number, and a constant
+exponent's tangent is a zero constant (`jvp.cpp`'s `zeroConstantFor`: "the tangent a constant
+gets: the zero of the value's own type"), so `dw = 0` is a *zero* tangent, not a missing one --
+and the product it multiplies is exactly zero. Multiplying that zero by `log(x)` in floating
+point is not zero, it is `NaN` (the log of a negative number), which would turn an ordinary
+`(-3.0) ^ 2.0` into `NaN` for a term that is arithmetically nothing. The zero is therefore taken
+where it is, and where `dw` is not zero the log is asked for and left to answer `NaN`: an
+undefined derivative says so, and is not written as a zero.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `pow_tangent(3.0, 2.0, 1.0, 0.0)` gives `6.0`
+- Example: `pow_tangent(-3.0, 2.0, 1.0, 0.0)` gives `-6.0`
+
 <a id="rulesets.vmap"></a>
 
 ## `rulesets.vmap`: how a batched transform lifts a value

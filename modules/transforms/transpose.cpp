@@ -1043,15 +1043,31 @@ bool buildTransposeMember(
                     // when a rule is added.
                     const uint16_t tangentArgs =
                         function->callTangentArgsOf(ref);
-                    // The values a call inside an arm takes: a parameter (a stop), a residual
-                    // projection, or a constant -- the shapes a cut half's arm has. A value the arm
-                    // computes and hands to a call is not reached yet, and is refused by name.
-                    const auto forwardInArm = [&](gc_node_ref_t value) -> gc_node_ref_t {
+                    // The values a call inside an arm takes: a parameter (a stop), a residual projection, a
+                    // constant, or a value the arm computes from those -- the shapes a cut half's arm
+                    // has. A shape none of them covers still stops the arm by name.
+                    // `std::function` rather than `auto`: a value the arm computes is forwarded by
+                    // rebuilding the operation from what its own inputs forward to, so the lambda
+                    // answers itself -- the same shape `forward` has, and for the same reason.
+                    std::function<gc_node_ref_t(gc_node_ref_t)> forwardInArm;
+                    forwardInArm = [&](gc_node_ref_t value) -> gc_node_ref_t {
                         const camel::runtime::GCNode *sourced = function->node(value);
                         if (sourced == nullptr) {
                             return rt::kInvalidNodeRef;
                         }
                         if (sourced->kind == rt::GCNodeKind::Port) {
+                            // A capture the linear half declared is a port as well, and the graph being
+                            // built already stands a port where it stands: `closurePortOf`, read first
+                            // here for the same reason `forward()` reads it first. An arm of a cut half
+                            // reads the values the cut carried -- `(x) => x*x`'s `x` is a residual, not
+                            // a parameter -- so without this entry the arm's walk stops on the first
+                            // parameter a callee's rule needs a value for: `arm-call region=1
+                            // callee=autodiff::mul_tangent<float>`, then `arm-stop ... arg=0`, then
+                            // `skip=arm arm=0`.
+                            if (const auto capture = closurePortOf.find(value);
+                                capture != closurePortOf.end()) {
+                                return capture->second;
+                            }
                             // The port at position `i` of the original graph **is** parameter `i`, the
                             // same rule `forward()` reads: a graph has one port per parameter, in the
                             // order the parameters stand. The list to read it through is
@@ -1095,6 +1111,39 @@ bool buildTransposeMember(
                                 draft.setNormInputs(
                                     madePart, std::span<const gc_node_ref_t>(&holder, 1));
                                 return madePart;
+                            }
+                        }
+if (sourced->kind == rt::GCNodeKind::Oper) {
+                            // A value the arm *computes* and hands to a call: `merged(x) = 2x + 5x`
+                            // lifts to a sum whose rule binds the two summands, so the arm's
+                            // `add_tangent(2x, 5x, dx, dc)` is passed two numbers that are not
+                            // parameters -- and `add_tangent`'s transposed half still takes them as
+                            // ports, because they are parameters it answers nothing for. The same
+                            // move `forward()` makes for an operator answers it: the operation is
+                            // rebuilt in the graph being built from the values its own inputs
+                            // forward to, recursively, and nothing is invented -- an input the arm
+                            // cannot forward stops the rebuild where it stops.
+                            const auto *oper = function->nodeBodyAs<rt::GCOperBody>(value);
+                            if (oper != nullptr) {
+                                std::vector<gc_node_ref_t> operands;
+                                bool allForwarded = true;
+                                for (gc_node_ref_t input : function->normInputsOf(value)) {
+                                    const gc_node_ref_t copied = forwardInArm(input);
+                                    if (copied == rt::kInvalidNodeRef) {
+                                        allForwarded = false;
+                                        break;
+                                    }
+                                    operands.push_back(copied);
+                                }
+                                if (allForwarded) {
+                                    const gc_node_ref_t rebuilt =
+                                        draft.addOperNode(sourced->dataType(), nullptr, oper->uri());
+                                    if (!operands.empty()) {
+                                        draft.setNormInputs(
+                                            rebuilt, std::span<const gc_node_ref_t>(operands));
+                                    }
+                                    return rebuilt;
+                                }
                             }
                         }
                         // Anything else the round needs is a value the body computes or reads --
