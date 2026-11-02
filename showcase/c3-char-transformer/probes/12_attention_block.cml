@@ -41,6 +41,5 @@ func main(): int sync {
     let (value, pullback) = vjp(head)<h>(x)
     println(`value = ${value:.6f}`)
     let cotangents = pullback(f32(1.0))
-    println(`pullback length = ${len(cotangents)}`)
     return 0
 }

@@ -17,7 +17,6 @@ func main(): int sync {
     let (value, pullback) = vjp(read)(w)
     let cotangents = pullback(1.0)
     println(`value = ${value:.1f}`)
-    println(`pullback length = ${len(cotangents)}`)
     println(`cotangent of w = ${cotangents.0}`)
     return 0
 }

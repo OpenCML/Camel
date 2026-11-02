@@ -23,7 +23,6 @@ func main(): int sync {
     let (value, pullback) = g<m>([3.0, 4.0])
     println(`value = ${value:.4f}`)
     let cotangents = pullback(1.0)
-    println(`pullback length = ${len(cotangents)}`)
     println(`cotangent of x = ${cotangents.0}`)
     return 0
 }
