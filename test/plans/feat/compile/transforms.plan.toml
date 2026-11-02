@@ -693,6 +693,22 @@ expect_exit = 1
 expect_output_contains = ["skip=cotangent-needs-a-value uri=:op/mul_d position=1", "reason=the rule's right side reads a value the caller does not carry", "TRANSPOSE function=mt skip=call node=", "callee=mt", "transpose has no transpose for this function"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+# One seed cannot tell a pullback from a table of derivatives -- at ct = 1 the two agree by
+# construction. Two seeds can, and `sum4` is the subject that leaves all four branches watched: its
+# law reads no operand value, so nothing is captured and every answer is `ct`, not `0`.
+[[tests]]
+name = "transpose_many_parameters.is_linear_in_the_cotangent"
+desc = "The same four-parameter pullback at cotangent 1 and cotangent 2: `(1.0, 1.0, 1.0, 1.0)` and `(2.0, 2.0, 2.0, 2.0)`. A transposition is **linear in the cotangent** it is handed -- every answer is one primitive under the seed -- so doubling the seed doubles each of them, and a transposed graph that dropped the seed on any one branch would read that branch unchanged while the other three doubled. One seed cannot make that distinction at all: at ct = 1 a pullback and a table of the derivatives read the same numbers. `sum4(a, b, c, d) = a + b + c + d` is the subject because **all four answers are live** -- `add_t`'s right side reads no operand value, so the member takes the cotangent alone (`type=(float) => (float, float, float, float) nodes=7 arms=0 rhs=add_t`) and its four answers are the four parameters' cotangents, each `ct`. A subject whose answers include zeros would leave those branches unwatched, since a zero stays zero whether the seed reaches it or not: `transpose_unread_parameters` reads two zeros and two ones, this one reads four numbers that all double. The many-parameter function whose laws *do* read the operands -- `mul_tangent`'s -- cannot carry this reading, because its pullback is refused (`transpose_many_parameters`), so the case asks the seed question of the subject where the question has an answer."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_many_parameters_in_ct.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "stdout"]
+expect_exit = 0
+expect_output_contains = ["TRANSPOSE function=sum4 graph=", "type=(float) => (float, float, float, float) nodes=7 arms=0 rhs=add_t", "(1.0, 1.0, 1.0, 1.0)", "(2.0, 2.0, 2.0, 2.0)"]
+expect_stdout_not_contains = ["(1.0, 1.0, 1.0, 1.0)\n(1.0, 1.0, 1.0, 1.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
 # A parameter the body never reads has no cotangent to hand back, and the answer for it is zero, not
 # a refusal: `add_tangent(x, w, dx, dw) = dx + dw` does not depend on `x` or `w` at all.
 [[tests]]
