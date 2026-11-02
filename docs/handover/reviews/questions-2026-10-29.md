@@ -2080,3 +2080,13 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 | `may-transpose-of-a-function-declare-its-signature-after-building-the-member` | 17:10 |
 
 以后判断"答没答"，看 `reviews/questions-2026-10-29.md` 里有没有那一页的名字，或者看 `reviews/` 里有没有同名页；不要看 `questions/` 里还剩什么，它可能是合并留下的残余。合并闸门的索引检查加一条：`questions/` 里不许出现在 `reviews/` 里已经有同名页的文件。
+
+## 裁定（2026-11-02 18:50，M2/M3）：反向半程按轮倒序——不新增算子，用已有的 `range` 和 `:op/idx_arr`
+
+两页的前提里有一条不对：运行期下标读数组的算子是有的，就是 `:op/idx_arr`（`src/builtin/executors/builtin.cpp:324` 的执行器，`globals.cpp:1940` 的注册；`xs[i]` 降级后就是它，`rulesets.jvp` 的 `index_into`、`rulesets.transpose` 的 `idx_arr_t` 也都挂在它上面）。它不是编译器内部机制，`draft` 可以像造别的 `Oper` 一样造它。
+- **做法（B，全部用已有算子）**：反向循环迭代 `range(n - 1, -1, -1)`（`range` 已经收负步长），每轮用 `:op/idx_arr(tape, i)` 从残差带里取第 `i` 轮的残差。`n` 是残差带的长度（`:struct/len_arr`）。残差带作为反向循环的不变输入进来。
+- **不新增 `:struct/reverse_arr`（A）**：今天的需要用已有算子就能表达，为一个变换加一个用户可见的算子不值得。用户要反转数组，用库里已有的 `reverse`。
+- **现在就做**，不等可观测（15:30 已裁）。判别用例照 15:30：聚合状态提升已经在 `b19a84dfe`、`1e553aaad` 里落了，那个 2×2 矩阵连乘的例子现在应该能走到 `split`，用它来证明 `vjp` 给出的是倒序的结果。
+- 页里第 4 节说"`split.cpp` 的后一半要重做一遍"，照做，这是这一项本来的工作量。
+
+两页挪到 `reviews/` 留档。
