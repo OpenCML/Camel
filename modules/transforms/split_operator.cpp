@@ -162,6 +162,27 @@ slot_t splitKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     // graph is reachable only through that `lin`, which is why the call hands out no second value.
     printSplitCallReading(readings(), function->graph()->name());
     return toSlot<::Function *>(forwardFunction);
+}
+
+} // namespace
+
+const std::vector<oper_group_ptr_t> &splitOperatorGroups() {
+    static const std::vector<oper_group_ptr_t> groups = {
+        OperatorGroup::create("split", {{"transforms:split", std::make_shared<SplitResolver>()}}),
+    };
+    return groups;
+}
+
+void printSplitCallReading(std::ostream &os, std::string_view function) {
+    os << "REINTERP split function=" << function << '\n';
+}
+
+std::unordered_map<std::string, operator_t> splitOperatorKernels() {
+    return {
+        {"split", &splitKernel},
+    };
+}
+
 void registerSplitOperatorMetadata() {
     camel::core::OperatorTable::instance().declare("transforms", {{"split", false}});
     // The step reads the graph of the function value it receives -- that is the whole transform --
