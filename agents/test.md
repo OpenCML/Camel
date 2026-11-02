@@ -68,3 +68,19 @@ Two ways to name a process, and only two: `kill <PID>`, or `pkill -f '~/camel-wo
 `pkill -f 'run-tests.mjs'` and `pkill node` are forbidden. On 2026-11-02 one lane used the first while five lanes were running: every one of them was inside that pattern, and only the accident that `pkill` matched the killing shell's own `bash -c` first kept them alive; a `pgrep` afterwards found all five still running. **Alive was luck, not judgement.**
 
 The same day made the other half of the point with a check instead of an accident: with the "zero tests started" gate in place, 31 of the tree's 309 plans turned out to be silent zeros - their tier puts them out of an ordinary run, and until the gate existed they said nothing at all - and the first real defect came with them, `test/plans/feat/trans/cml_sweep.plan.toml` missing a plan-level `tier`, calling itself fast while its only test is slow, reddening the whole fast pass. **Green because nothing ran is not green.**
+
+## `-NoBuild` after a merge: `exit 4` is the runner refusing, not a failing test
+
+After a merge the tree no longer matches the installed binary and `out/latest/stdlib`, and
+`camel-remote.ps1` says so and stops:
+
+```
+The plan would run the old binary and the old out/latest/stdlib, not this tree.
+Re-run without -NoBuild (it builds this tree and stamps the install), or pass -AllowStale to run anyway.
+[camel-remote] h-m4b exit 4 (transfer 2.8 s, build 0.2 s; total 3 s)
+```
+
+**`exit 4` means nothing ran.** A log with no `[SUMMARY]` is not a run that passed or failed; it is
+a run that did not happen, and reading it as a failure sends you off to diagnose a test that never
+started. This is the instrument doing its job - it refused a run of the old binary that would have
+produced a green about a tree nobody built - so it belongs here as correct behaviour, not as a trap.
