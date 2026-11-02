@@ -56,7 +56,7 @@ name = "framed.operators.gc_stress"
 tier = "milestone"
 desc = "The same with a collection at every seventh safepoint and the heap verified before and after: framed code keeps every reference in its pool frame, where the collector finds it."
 backends = ["fvm", "jit", "inline_jit"]
-args = ["--gc-stress", "safepoint=7", "--gc-check", "verify=1", "${case}"]
+args = ["--gc-stress", "safepoint=7", "--gc-check", "verify=both", "${case}"]
 sweep = false
 timeout_ms = 240000
 expect_exit = 0
@@ -168,7 +168,7 @@ tier = "milestone"
 desc = "The allocating loops with a collection at every safepoint and the heap verified: the self tail call of compiled code polls the collector as the interpreter's does."
 case = "../../../cases/linear/jit/framed_loops.cml"
 backends = ["fvm", "jit", "inline_jit"]
-args = ["--gc-stress", "safepoint=1", "--gc-check", "verify=1", "${case}"]
+args = ["--gc-stress", "safepoint=1", "--gc-check", "verify=both", "${case}"]
 envs = ["N=20000"]
 sweep = false
 timeout_ms = 240000

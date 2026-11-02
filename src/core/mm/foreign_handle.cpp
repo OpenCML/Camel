@@ -98,8 +98,15 @@ bool debugRunForeignResourceSelfTest(GenerationalAllocatorWithGC &allocator) {
             nullptr,
             "GC.foreign_resource.selftest.rooted");
 
-        for (size_t i = 0; i < 8; ++i) {
+        // A pinned handle needs a non-moving object, and an object becomes non-moving by being
+        // promoted. Eight collections were enough only while the promotion threshold was at most
+        // eight, which it never was in this configuration; collect until the allocator reports the
+        // address stable, with a bound so a broken promotion path fails here instead of looping.
+        size_t collections = 0;
+        while (!allocator.isObjectAddressStable(rooted.getAs<rtdata::ForeignResourceObject>()) &&
+               collections < 64) {
             allocator.minorGC();
+            ++collections;
         }
 
         object = rooted.getAs<rtdata::ForeignResourceObject>();
