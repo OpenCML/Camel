@@ -1,0 +1,17 @@
+/**
+ * The body of a generator `loop` is cut at its `yield`: the pull that hands an element out stops
+ * there, and the pull after it runs the rest of the body and the condition again. So the last
+ * statement of the body writes the next value of the loop's state. A body of only `yield i` reads a
+ * fresh `i` on every pull, and the loop never moves on -- a rule about the language, reported by
+ * name, not a defect of the compiler.
+ */
+
+func g(): int.. sync {
+    loop i = 0 while i < 3 do {
+        yield i
+    }
+}
+
+func main(): int sync {
+    return 0
+}
