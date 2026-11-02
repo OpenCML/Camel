@@ -212,6 +212,70 @@ expect_output_contains = ["arity 1", "arity 2", "arity 3", "9.0", "24.0", "12.0"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
+# The gradient of a loop, read through the library and nothing else.
+#
+# The stop this pins: `vjp` over a loop used to end at `transpose` of `split`'s backward half with
+# `skip=state`, because that half reads the round's *primal* values -- the tape `split` appends one
+# member of per round -- and the reverse loop had nowhere to hand them in
+# (`arm-stop ... callee=autodiff::add_tangent<float>` after the arm's first value argument). The
+# backward half itself was never wrong: `split(jvp(f))`'s `lin(1.0)` answered the tangent before and
+# answers it now. What was missing is the wire the case reads: the round's element port is the one
+# value both loops have, and it is where the tape's per-round residuals come from.
+#
+# The numbers are paper first: `f(x) = loop s = 0.0 for i in [1.0, 2.0, 3.0, 4.0] do s + x*x*i`
+# adds `i*x*x` once per round, so `f(x) = x*x*(1+2+3+4) = 10x^2`, `f(3) = 90`, `f'(x) = 20x` and
+# `f'(3) = 60`; the pullback is linear in its cotangent, so `pullback(2.0).0` is `120.0`. The weights
+# are what makes it a tape pin and not just a loop pin: every round reading the same element would
+# answer `24`.
+#
+# The round *order* is not what this pins, and cannot be: each round's map is `ds + 2x*dx*i`, a sum of
+# scalars, and a sum does not care in which order it is added. `vjp` over a loop does not walk the
+# rounds backwards yet (`docs/design/program-transforms` 4.2/4.3; the 2026-11-02 question page on
+# reversing a backward), so the case pins the value the tree can produce and says so in its comment.
+[[tests]]
+name = "vjp_loop_gradient.nvm"
+desc = "The library's gradient through a loop: `vjp(f)`/`grad(f)` at 3 for `f(x) = loop s = 0.0 for i in [1.0, 2.0, 3.0, 4.0] do s + x*x*i`. On paper `f(x) = 10x^2`, so the value is 90, the cotangent of `1.0` is `(60.0)`, the gradient 60, and the cotangent of `2.0` is 120 (a pullback is linear in its cotangent). The per-round weights 1,2,3,4 are the tape's own: a backward half that paired every round with one element would answer 24. The reading also pins the two halves: `split` carries `tape=4 invariants=1` and the transposed half reports `carried=1 ... answer=per-target`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_loop_gradient.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_output_contains = ["REINTERP split function=jvp_of_f", "tape=4 invariants=1", "TRANSPOSE function=split_of_jvp_of_f_backward carried=1", "answer=per-target", "vjp_loop value=90.0", "(60.0)", "vjp_loop cotangent=60.0", "vjp_loop grad=60.0", "vjp_loop linear-in-ct=120.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vjp_loop_gradient.fvm"
+desc = "The same case on the bytecode VM: the transforms build one graph per call, so the three schedulers read the numbers the interpreter reads."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_loop_gradient.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_output_contains = ["vjp_loop value=90.0", "(60.0)", "vjp_loop cotangent=60.0", "vjp_loop grad=60.0", "vjp_loop linear-in-ct=120.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vjp_loop_gradient.jit"
+desc = "The same case with the JIT: the transposed graph is called through the same call path, so the numbers are the interpreter's."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_loop_gradient.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+expect_output_contains = ["vjp_loop value=90.0", "(60.0)", "vjp_loop cotangent=60.0", "vjp_loop grad=60.0", "vjp_loop linear-in-ct=120.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vjp_loop_gradient.prl"
+desc = "The same case on the parallel scheduler: the loop runs its rounds and the reverse half its accumulators, and the answer is the interpreter's."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_loop_gradient.cml"
+args = ["${case}", "std::prl"]
+expect_exit = 0
+expect_output_contains = ["vjp_loop value=90.0", "(60.0)", "vjp_loop cotangent=60.0", "vjp_loop grad=60.0", "vjp_loop linear-in-ct=120.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
 [[tests]]
 name = "vjp_api.carries_its_own_ruleset"
 desc = "A program whose only import is `vjp` gets a derivative: the library imports the rulesets it composes, so its caller does not have to know that `vjp` is `transpose(split(reinterp<jvp>(f)))`. For `f(x) = x*x*x` at 2 the program prints the value `8.0`, the cotangent `(12.0)` and the gradient `12.0`. The point is chosen so the value and the gradient differ, and every printed line is pinned whole: the reading was `x = 3` before, where value, cotangent and gradient are all `27.0`, so an assertion that only asked whether `27.0` appears answered yes to a gradient computed as the value it differentiates (P2-22 of the 2026-11-01 review). `expect_output_not_contains` refuses the old point outright, so a case that drifts back to it cannot pass on the ambiguous number again. Take either ruleset import out of `stdlib/vjp.cml` and the run stops at that library's own line with `transpose has no transpose for this function` or `jvp has no forward rule for :op/mul_d` -- never here, and never in a sentence of the form `not implemented yet`."
