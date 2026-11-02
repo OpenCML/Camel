@@ -1888,3 +1888,33 @@ terminate called after throwing an instance of 'camel::core::mm::MemoryExhausted
 **⑤ 这一夜 `Type::Float64()` 的账最终是**：132 行 / 30 文件，**83 合法、12 测试、6 默认值、3 其它、28 形似缺陷**，
 而这 28 里**已经改掉 8 处**（`primitive`、`zero`、`tupleOf` 的类型、`addCotangent` 的加法与定型、`skip=unread-parameter` 的零构造），
 **剩下 20 处"待证"，2 处（`rule_expand.cpp:428`、`jvp.cpp:91`）等用例**。**没有一处是因为"看着像"而改的。**
+
+
+## 56. `poison:transforms` 那 10 条：**同一句诊断**，而且是**类型**上的越界，不是 `guard` 那族的裸指针
+
+**① 10 条全部直跑过（不经 runner），一条原文**：
+```
+$ ./out/latest/bin/camel --gc-check poison test/cases/compile/transforms/vjp_arities.cml std::nvm
+EXIT=134
+
+Camel Invariant Violation:
+    Location   : ../include/camel/core/type/composite/tuple.h(143)
+    Function   : Type *camel::core::type::TupleType::typeAt(size_t) const
+    Guarantee  : index < size_
+    Reading    : TupleType: index out of range
+```
+**② 十条同一句**（`vjp_arities` nvm/fvm/jit/prl、`vjp_api.analytic_gradient` nvm/fvm/jit/prl、
+`grad_where_the_tangent_ignores_the_operands.nvm`、`vjp_api.carries_its_own_ruleset.nvm`）：
+**`Location: tuple.h(143)` + `Reading: TupleType: index out of range`，exit 全部 134（SIGABRT）**。
+**⇒ 按"同族的判据是同一句诊断文本"：这 10 条是一族，一个根因的 10 个外观。**
+
+**③ 判据 1 的答案：不是 `guard` 那族。** `guard` 追的是 `a raw pointer was kept across a safepoint`（搬动后的指针被用）；
+这里是**类型元组被用越界的下标去取**（`typeAt(k)`，`k >= size_`）。**两个句子不同，不是一个缺陷。**
+
+**④ 而且是"poison 专属"**：同一条用例**不加 `--gc-check poison` 时 exit 0 并印出 `24.0 / 12.0 / 8.0 / 6.0`**。
+所以它不是一条普通的红，是**"搬动之后读到一个错的类型/下标"**——与 `guard` 那族的**形状相同**（跨 safepoint 之后读到搬动前的东西），
+**只是落在类型上，于是被类型的不变量接住，而不是被"指针被搬动"的报告接住。**
+
+**⑤ 下一步的探针（没做，等点头）**：在 `include/camel/core/type/composite/tuple.h:143` 的守卫里**加上 `this` 的 `size_` 与实际下标**，
+以及 `modules/autodiff/pullback.cpp` 里 13 处 `typeAt(...)` 各是哪一处（判据：加了下标与 size 之后，一次构建就能指出是哪个调用点、下标记成了几）。
+**这是 `type/composite/tuple.h` 与本报告之外的 `pullback.cpp`，按规矩先报不动。**
