@@ -250,7 +250,7 @@ bool buildTransposeMember(
                     continue;
                 }
                 Type *const portType = bundlesResiduals ? function->funcType()->normTypeAt(0)
-                                                        : Type::Float64();
+                                                        : function->funcType()->normTypeAt(i);
                 const gc_node_ref_t port =
                     draft.addPortNode(portType, draft.allocateRuntimeSlot(portType));
                 draft.appendNormPort(port);
@@ -1742,11 +1742,10 @@ bool buildTransposeMember(
                 // The callee's transpose stands where the call stood: it takes the arguments as the
                 // call has them and then the cotangent, and answers one cotangent for each argument
                 // -- a number for one parameter, one tuple for several.
-                Type *const answerType =
-                    calleeParams == 1
-                        ? Type::Float64()
-                        : camel::core::type::TupleType::create(
-                              std::vector<Type *>(calleeParams, Type::Float64()));
+                // The answer is the signature's, not a second computation of it: `calleeType` is what
+                // the transposed member answers, and building it again from the parameter count is how
+                // a call site ends up saying `(float, float)` about a member that answers `(float[])`.
+                Type *const answerType = calleeType->exitType();
                 std::vector<gc_node_ref_t> callArgs;
                 // Where the callee stood at the call site, it stands in the transposed call: as the
                 // first normal input when the original wrote it in place, as a `with` input when the

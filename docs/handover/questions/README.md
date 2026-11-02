@@ -12,16 +12,14 @@
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：3 页
+## 现在在等作者：1 页
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
-| [`2026-11-02-p1-13-the-eight-tos-rows-serve-the-string-call`](2026-11-02-p1-13-the-eight-tos-rows-serve-the-string-call.md) | 8 个 `*tos` 行是不是运算符、`dtos` 要不要写出来（观察：不是运算符，已被 `prelude.cml:705` 的 `string/1` 通配覆盖） | 待裁 | — | gs6 的三栏表：这 8 行留在"已覆盖" |
-| [`questions-2026-11-02-who-builds-the-two-float-transposed-member`](questions-2026-11-02-who-builds-the-two-float-transposed-member.md) | 那张"端口是两个 `float`"的被转置成员是谁建的：`lane-m4b` 排除五条假设（两条是它自己的）后仍不知道，建它的人是不是该由 `transpose` 自己写 | 待裁 | — | `lane-m4b` 的 `(float,float)` 转置成员：`beeb887f4` 只修了"端口类型取自字面量"，成员由谁建仍未定 |
-| [`questions-2026-11-02-which-index-rows-are-already-landed`](questions-2026-11-02-which-index-rows-are-already-landed.md) | 索引里标"已裁未落"的条目，哪些在树上已经落地 | 待裁 | — | 索引状态是否可以改成"已裁已落"（默认=我们改，并逐条写提交 id） |
+| [`2026-11-02-cml-var-version-in-printed-text`](2026-11-02-cml-var-version-in-printed-text.md) | 打印器写一个 `:var/get` 时，它读的是哪个版本要不要进文本（不进就得落 `let` 或具名拒绝，进就得有 `@2` 之类的新写法） | 待裁 | — | `trans/cml` 的往返：三条用例同一机制（`parse/constructs/comprehensions` 报 `Redeclaration`、`trans/cpp/exec/variables` 报 `UnresolvedReference: 'cml3'`，基线也是 `cml3`） |
 
-2026-11-01 23:20 决策者分拣了从车道收上来的 58 页：50 页早已答过（同名页在 `reviews/`），8 页新的当轮裁完，全部在 `reviews/`，裁定见 `reviews/questions-2026-10-29.md` 同日 23:20 那一条。写在车道分支上、没有进 develop 的页不算问题。
+**这一节的行数 = 目录里的页数**（现在 1 = 1）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。下一节的行数按 `reviews/` 里的页算，两者不混。
 
-**两节各数各的，都能对得上**：这一节的行数 = **目录里的页数**（现在 2 = 2，多一行或少一行都是索引坏了）；下一节的行数 = 已裁的裁定，**页都在 `reviews/`，不占这个目录**。收页时先数目录，再改这两节——这是一次减法，不靠记性。
+2026-11-02 00:30 的四页（`*tos` 观察、残差集、被转置成员的身份、两个 `float` 端口的成员）已裁，在 `reviews/`，裁定见 `reviews/questions-2026-10-29.md` 同时刻那一条。
 
 ## 已裁：按还堵着的活排
 

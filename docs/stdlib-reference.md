@@ -1536,11 +1536,12 @@ pullback's cotangents are too (stdlib/types.cml), and `(..xs)` takes the paramet
 stands in, applied to a pack (author's ruling of 2026-11-01 19:10). The lambda's rest parameter is a
 value in its body: `xs` is the tuple of those parameters, and `forward(..xs)` spreads it into the
 call, which is the rule the language already had for spreading a tuple.
+The whole reading in one line: the function is written where the call is, so the example is a
+program of its own -- `y` is `x * x` at 3, and the pullback read at `ct = 1.0` answers the
+derivative there, one member per parameter.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example (a fragment, not compiled): `let reading = vjp(f)`
-- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
-- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+- Example: `let (y, pullback) = vjp((x: float) => x * x)(3.0)` gives `y = 9.0, and pullback(1.0) is (6.0)`
 
 #### `grad`
 
@@ -5348,6 +5349,20 @@ is_constant: (n: Node) => bool
 Whether the node is a constant of the graph.
 
 - Example (a fragment, not compiled): `is_constant(n)`
+- Why it is not compiled: n is a node of the surrounding pass
+
+#### `constant_bytes`
+
+```camel
+constant_bytes: (n: Node) => int
+```
+
+The bytes the node's constant value occupies: the measure `std::opt` and `std::opt::fold` clamp with
+`constant_budget`, so that a pass written in Camel can ask the same question the native pass asks. The
+cost is the value's elements plus the shape that describes them, the walk follows members 8 deep, and a
+node that is no constant costs 0.
+
+- Example (a fragment, not compiled): `constant_bytes(n)`
 - Why it is not compiled: n is a node of the surrounding pass
 
 #### `type_of`

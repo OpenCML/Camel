@@ -3,6 +3,7 @@
 
 #include "enum.h"
 
+#include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/variant.h"
 #include "camel/core/type/enum.h"
@@ -128,7 +129,16 @@ slot_t __enum_make__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __enum_tag__(ArgsView &with, ArgsView &norm, Context &ctx) {
     const Variant *value = fromSlot<const Variant *>(norm.slot(0));
-    ASSERT(value != nullptr, "The tag of an enum value is read from a value that is null.");
+    if (value == nullptr) {
+        // The value a tag is read from is null: it came from the program and the operator cannot
+        // take it. A branch rather than an assert, because an assert's premise is not held in a
+        // release build (the assert audit of 2026-11-02: an assert that guards a dereference is
+        // no guard at all there).
+        throwRuntimeFault(
+            camel::core::error::RuntimeDiag::InvalidArgument,
+            "__enum_tag__",
+            "the value is null, and a tag is taken from an enum value");
+    }
     return toSlot<Int64>(static_cast<Int64>(value->tag()));
 }
 

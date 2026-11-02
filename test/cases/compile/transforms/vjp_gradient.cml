@@ -1,11 +1,15 @@
-// The gradient, the day the library is written: `f(x) = x*x*x`, so `f(3) = 27` and `f'(3) = 27`.
-// The surface is JAX's (author's ruling of 2026-11-01), so `vjp(f)(3.0)` is the pair
-// `(27.0, pullback)` and `pullback(1.0)` is `27.0`; `grad(f)(3.0)` is the same number read through
-// the wrapper. All three come from the library's own composition --
+// The gradient, the day the library is written: `f(x) = x*x*x` at 2, so `f(2) = 8` and
+// `f'(2) = 3*x^2 = 12`. The surface is JAX's (author's ruling of 2026-11-01), so `vjp(f)(2.0)` is
+// the pair `(8.0, pullback)` and `pullback(1.0)` is the cotangent tuple `(12.0)`; `grad(f)(2.0)` is
+// the same number read through the wrapper. All three come from the library's own composition --
 // `transpose(split(reinterp<jvp>(f)))` -- and not from the C++ autodiff; the rulesets that
 // composition needs are the library's own imports, so this file imports `vjp` and nothing else.
-// Skipped while the composition cannot be run: the walk `transpose` runs refuses a call whose
-// callee takes several parameters (the plan's `skip_unless`).
+//
+// The point is 2 and not 3 for one reason: at 3 the value, the cotangent and the gradient are all
+// 27, so a reading that only asked whether `27.0` appears could not tell the derivative from the
+// value it differentiates -- it stayed green with the gradient computed as the value (P2-22 of the
+// 2026-11-01 review). Here the value (8.0) and the gradient (12.0) differ, and each printed line is
+// pinned whole by the plan.
 import { grad, vjp } from vjp
 
 func f(x: float): float {
@@ -13,9 +17,11 @@ func f(x: float): float {
 }
 
 func main(): int sync {
-    let (value, pullback) = vjp(f)(3.0)
-    println(value)
-    println(pullback(1.0))
-    println(grad(f)(3.0))
+    let (value, pullback) = vjp(f)(2.0)
+    let cotangents = pullback(1.0)
+    println('vjp_gradient value={}'->format<value>)
+    println(cotangents)
+    println('vjp_gradient cotangent={}'->format<cotangents.0>)
+    println('vjp_gradient grad={}'->format<grad(f)(2.0)>)
     return 0
 }
