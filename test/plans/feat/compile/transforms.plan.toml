@@ -1091,6 +1091,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
+name = "grad_constant_beside_a_value"
+desc = "A constant on a value operand is not an operand that did not arrive: `grad((x) => 5.0 + x * 7.0)` at 2 is `7.0`, and `grad((x) => x * 5.0 + x * 7.0)` at 2 is `12.0`. The two have the same shape to a reader and the second always cut; the first was refused by `split` with 'an operand of the node is not reachable from the half's exit', because the backward half asks for every data input of the node it copies and a bare `5.0` feeding `:op/add_d` is a constant -- never copied, never crossing the cut -- so it read as unreachable (measured 2026-11-03 against `fa00`/`fa11`)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/grad_constant_beside_a_value.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["7.0", "12.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "grad_of_a_division"
 desc = "`grad((x) => x / 4.0)` at 8 is `0.25`, not a crash and not a division by zero: the transposed `div_tangent` divides by `w * w`, a value rather than a constant, so `div_t`'s second position is reached and answered by the rule's second component -- which reads both operands, the way its law does -- instead of by the first component with the operands swapped (`ct / 0`, since the dividend there is `x * dw` and `dw` is the zero tangent of a constant). `grad((x) => 4.0 / x)` at 2 is `-1.0`: the differentiated value is the divisor, its cotangent is `-(ct * x / (c * c))`, and both values it needs are carried. `grad((x) => -x)` is `-1.0` -- the negation's cotangent is `-ct` -- and the multiplication and subtraction beside it keep their numbers. Today the first four numbers print and the run stops one step later, on the same wall as the array block: the backward half's body reads a value the transposed function does not carry -- `TRANSPOSE-NEEDS ... param=0`, then `skip=call node=5 arg=3` -- so the two remaining answers wait for the closure (`b2f`)."
 kind = "behavior"
