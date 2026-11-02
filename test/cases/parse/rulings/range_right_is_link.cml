@@ -1,0 +1,7 @@
+// The interval is one expression, and a call after it belongs to the interval only in parentheses:
+// `->` binds tighter than `..`, so `a..b->f` is `a..(b->f)`. The refusal names the precedence.
+
+func main(): int sync {
+    let n = (-2)..(-1)->reduce<(p: string, q: int): string => p, "cd">
+    return 0
+}

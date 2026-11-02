@@ -1286,6 +1286,36 @@ void Builder::stampPermissions(node_handle_t operNode) const {
     }
 }
 
+namespace {
+
+/// Whether the GCT `node`, or something it contains, reads the value `name`. The body of a lambda is a
+/// GCT node by the time its graph is built, and a name the body does not declare stands in it as the
+/// reference it makes (NREF for a value, DREF for something reached as a declaration), so the question
+/// is asked of the graph the body already is rather than of the source it came from. GIR asks it
+/// before building the tuple a rest parameter stands for: a lambda that never reads its rest
+/// parameter gets no node, and its graph is what it was.
+bool graphNamesValue(const GCT::node_ptr_t &node, const std::string &name) {
+    if (node == nullptr) {
+        return false;
+    }
+    const GCT::NodeKind kind = node->type();
+    if ((kind == GCT::NodeKind::NREF || kind == GCT::NodeKind::DREF) && node->name() == name) {
+        return true;
+    }
+    if (kind == GCT::NodeKind::FUNC) {
+        // A function or lambda written inside the body has a body of its own, and its names are not
+        // this body's.
+        return false;
+    }
+    for (size_t i = 0; i < node->size(); ++i) {
+        if (graphNamesValue(node->at(i), name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
 void Builder::buildFuncBody(
     const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
     const std::string &name, const TagFacts &bodyTags, const FunctionType *written) {
@@ -1372,6 +1402,9 @@ void Builder::buildFuncBody(
                         continue;
                     }
                     const std::string restName(written->argNameAt(param.index));
+                    if (!graphNamesValue(gct->at(1), restName)) {
+                        break;
+                    }
                     const size_t withCount   = funcType->withTypesCount();
                     const auto normPorts     = graph->view().normPorts();
                     std::vector<Type *> parts;
