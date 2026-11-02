@@ -121,27 +121,64 @@ target graph 'transpose_of___g_58__' has 3 norm ports.
 'transpose_of_split_of_jvp_of_both_backward': expected 2, got 1.`）。**这条改动因此已整体撤回**，
 树停在 `719e81272`，`killed by a signal` 回到 0。
 
-**要裁的那一句（新）：** 一个转置成员的捕获端口**由谁命名**？现在 `transpose(f)` 的类型是
-`(cotangent) => (cotangents..)`，类型侧"看不到 captures"（`transposeSignature(function)` 不带捕获集合），
-所以一个需要操作数值的成员，其调用点**没有任何写法**能把那些值传进去。两条路：(a) 让
-`transposeSignature` 在**图已建好之后**用真正的捕获集合重建类型（调用点由 resolve 的那一侧读它）；
-(b) 规定"顶层被转置的函数，其体不得读参与参数的值"——即这些值只能来自闭包（`split` 的残差），
-那就把 `transpose_many_parameters`/`unread_parameters` 这两条改写成 `split(jvp(f))` 的拼法，或改钉成
-**明确拒绝**。这两条都超出本车道"一处小修"的范围。
+**要裁的那一句（新）——已裁，2026-11-03 17:10：** 作者原话：类型本来就由 `F` 静态定出，**捕获不属于类型**；
+毛病在成员把已知值做成了 `with` 端口、要求调用方传，可这些已知值是成员**捕获**的，应当进函数值的闭包，
+和 lambda 捕获变量走同一套表示（捕获端口 + 闭包元组）。函数类型不暴露闭包内容，所以 `transpose(f)` 的类型
+仍然是 `(ȳ) => (每个参数一项的余切)`；**也不需要限制成员的捕获**：成员要捕获多少已知值都行，都在闭包里。
+
+⇒ (a) 重建类型：作者明说**不必**，且类型不该暴露闭包 ⇒ 不做。
+⇒ (b) 禁止体读参与参数的值：作者明说**不需要限制成员的捕获** ⇒ 不做。
+⇒ 走第三条：**成员的闭包 = `f` 的闭包，同序同类型整份透传**（`split.cpp:606-617` 的 `addResidualCaptures`：
+只 `appendClosureNode`、**没有** `appendWithPort`；填充走 `GCFillKind::FunctionClosure`，`split.cpp:628-641`），
+`withPorts` 归零；`f` 的闭包里没有的值 ⇒ **保持拒绝**。这一层归 `b2f` 车道（同一处代码），本车道不碰。
 
 ## 六、本车道的读数（`lane-tloop @ 719e81272`，Release，远端闸门）
 
 | 计划 | 之前 | 之后 |
 |---|---|---|
-| `feat/compile/transforms` | 42 / 60 | **45 / 60** |
+| `feat/compile/transforms` | 42 / 60 | **46 / 59**（`many_parameters` 绿、删掉 1 条不可建的读数） |
 | `feat/transforms/split` | 14 / 18 | **18 / 18** |
-| 全量 fast | 8526 总数 / 8483 通过 / 23 失败 | **8490 通过 / 16 失败 / 跳过 10 / known 10 / `killed` 0** |
+| 全量 fast | 8526 总数 / 8483 通过 / 23 失败 | **8525 总数 / 8491 通过 / 14 失败 / 跳过 10 / known 10 / `killed` 0** |
 
-A 族 5 条：`transpose_walks_each_arm_of_a_branch`、`transpose_no_tangent.bool_condition`、
-`transpose_unread_parameters` **已绿**；`transpose_many_parameters` 两条**仍红**，红的理由就是第五节
-那个类型侧的洞（不是 need 集合，need 集合已能一趟报全并有读数）。另外 4 条 `split_branch_author_vjp`
-（nvm/fvm/jit/prl）随之全绿 —— 它要的正是"臂里那条 `mul_tangent` 部分转置能被建出来"。
+A 族 5 条**全绿或按裁决明确拒绝**：`transpose_walks_each_arm_of_a_branch`、
+`transpose_no_tangent.bool_condition`、`transpose_unread_parameters` 有数；`transpose_many_parameters`
+是**钉子住的拒绝**（理由见下）；`…is_linear_in_the_cotangent` 随它删掉。另外 4 条
+`split_branch_author_vjp`（nvm/fvm/jit/prl）随之全绿 —— 它要的正是"臂里那条 `mul_tangent`
+部分转置能被建出来"。
 
 **没有采用的两条路，及理由**：① 下标统一（`:742` 记 `i` → 记 `at`）单独立一次提交（`fb2ec50df`），
 读数一条没动，因为它本来就同义；② 探针占位 + need 集合上送，读数完全正确但会打开第五节那个
-arity 缺口（`SIGABRT`），所以整条撤回，**等 (a)/(b) 的裁决**再上。
+arity 缺口（`SIGABRT`），所以整条撤回 —— 裁决是第三条（闭包透传，归 `b2f`），不是"改类型"也不是
+"禁止捕获"。
+
+## 七、`many_parameters` 两条的处置（`50ff68746`）
+
+**`unread_parameters` 的四个数从哪来 —— 核过了，不是"把参数改成闭包变量"**：`add_tangent` 的律 `add_t`
+**不读任何操作数的值**，所以成员一个值都不用捕获，签名就是 `(float) => (float, float, float, float)`，
+顶层调用是**纯调用**、无捕获端口。读数（原样）：
+
+```
+TRANSPOSE function=autodiff::add_tangent<float> graph=74 type=(float) => (float, float, float, float) nodes=5 arms=0 rhs=add_t
+TRANSPOSE function=at                 graph=58 type=(float) => (float, float, float, float) nodes=5 arms=0 rhs=-
+stdout: (0.0, 0.0, 1.0, 1.0) / (0.0, 0.0, 2.0, 2.0)
+```
+
+唯一站不住的是**写法**：原来转置的是 `let lin = (x,w,dx,dw) => at(x,w,dx,dw)` 这个包装 lambda，
+容易读成"把参数变成捕获变量才有这四个数"。改成 `transpose(at)(1.0)` —— 同一问法、同一四个数、
+同一个五节点成员（实测 `graph=58` 那次），包装删掉。
+
+**`many_parameters` —— 明确拒绝，理由**：`mul_tangent` 的律要读操作数（`mul_cotangent(w, ct)`、
+`mul_cotangent_c(dx, ct)`），而它读的四个值里有两个是**切线自身的值**；转置对一个切线没有值可给
+（切线的余切正是它要答的东西）。被转置的 `lin` 闭包是空的（`3.0`/`2.0` 是体内的字面量，`dx`/`dw`
+是它自己的参数，不是捕获），所以在"闭包里没有 ⇒ 拒绝"这条裁决下无处可取。读数（原样）：
+
+```
+TRANSPOSE function=autodiff::mul_tangent<float> skip=cotangent-needs-a-value uri=:op/mul_d position=1 \
+    reason=the rule's right side reads a value the caller does not carry
+TRANSPOSE function=mt skip=call node=4 callee=autodiff::mul_tangent<float>
+```
+
+另试过 `vjp` 路线（`vjp(mt)(3,2,1,0)`），`split` 在直线提升图上先拒（`skip=exit`：exit 不是双成员元组填充），
+所以"对切线自身求四元余切"在本树里**没有可写的拼法**：那条用例问的是设计已经收回的问题，
+`…is_linear_in_the_cotangent` 随之删除；它独有的"一个种子分不出 pullback 与导数表"并进
+`transpose_unread_parameters`（那条本来就跑 ct=1 和 ct=2 并钉两个元组）。
