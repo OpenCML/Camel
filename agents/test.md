@@ -35,3 +35,21 @@
   and `small` (6.19 s of 6.00) are not slow machines: they sit against their ceilings, so a run
   that is wider or narrower than 8 jobs has to re-calibrate them rather than read them as red.
 
+
+### `known_fail`, as the runner reads it
+
+| the entry | write |
+| --- | --- |
+| has a `backends` list | `known_fail = ["<be>"]` — a name that is not in `backends` is refused at load |
+| has no `backends` list | `known_fail = true` |
+| mixing the two | refused: `known_fail on <test> names back ends (["fvm"]), but the test has no backends list, so no back end of that name runs here: write known_fail = true` |
+| `known_fail = true` with a `backends` list | refused: `name the back ends that fail` |
+| a mark that starts passing | `marked known_fail but passes, so the mark is out of date and must be removed` |
+
+(source: `test/tools/run-tests.mjs`, `expandBackends` / `__knownFail`, commit `a01fcdfdc`)
+
+**The milestone numbers carry a tip.** `--tier milestone` is 27 plan files and on the order of 3390
+tests, and `-Plan <a subdirectory>` still covers the whole layer, because `tier` is a property of the
+file. The first run of this layer, on 2026-11-02, was `total 3302 / pass 3286 / fail 16` on
+`2c1a7b6c4`; on `37dcd074a` it is 15, and the two that left are the GC self-tests whose thresholds
+and collection counts the field could not reach. A count without a tip is not a count.
