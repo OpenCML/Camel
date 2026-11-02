@@ -12,6 +12,7 @@
 
 #include "vmap_operator.h"
 
+#include "readings.h"
 #include "vmap.h"
 
 #include "camel/core/context/context.h"
@@ -129,7 +130,7 @@ slot_t vmapKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     // constants the batched body reads.
     const VmapGraph built = buildVmapGraph(
         ctx.shared_from_this(), function->program(), function->graph(), function->tuple(),
-        std::cout);
+        readings());
     if (built.graph == nullptr) {
         if (built.refusedOrigin == camel::source::kInvalidOriginId) {
             throwRuntimeFault(
@@ -157,7 +158,7 @@ slot_t vmapKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
                                                  : std::string("-");
     const std::string handedBack =
         built.graph->funcType() != nullptr ? built.graph->funcType()->toString() : "-";
-    std::cout << "REINTERP vmap op signature=" << spelled << " resolved=" << produced
+    readings() << "REINTERP vmap op signature=" << spelled << " resolved=" << produced
               << " lifted=" << lifted << " graph=" << handedBack
               << " same=" << (lifted == handedBack ? "yes" : "no") << " asked=" << built.asked
               << " found=" << built.found << '\n';
