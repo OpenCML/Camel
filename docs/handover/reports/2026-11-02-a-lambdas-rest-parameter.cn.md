@@ -1692,3 +1692,33 @@ graph '…' node 14 (10): calls 'transpose_of_rulesets.jvp::index_into<float>', 
 
 **身份裁定记下**：**被转置成员只靠图 id 认身份，名字只给人读**；`state.callees`（`transpose.cpp:1702-1716`）**已经是按 id 的记忆**，
 所以"同一次转置里重复建成员图"今天不存在，不必再加一层。**`T[?]`/命名那一支不走名字。**
+
+
+## 50. `zeros_like(xs)` 这条建议我先核了前提：`zeros_arr` 今天**已经**是从 `xs` 取值建零数组的，空的不是它
+
+作者的建议是"数组的余切零由残差里的 `xs` 给出（`zeros_like(xs)`），用 Camel 的造零函数"。**我核了这条的前提，结论是：这条改动打在空处的上游。**
+
+**① arm 里加了一行读数（探针，未提交）**：
+```
+TRANSPOSE arm=idx_arr_t function=rulesets.jvp::index_into<float> xs=0 xsType=float[] at=1 ctType=float[]
+```
+**`xs` 就是那个参数端口（`0`），它的类型是 `float[]`（开放秩），`at` 是常量 `1`，余切类型 `float[]`。**⇒ **arm 拿到的 `xs` 是对的，没有"另发明零数组"。**
+
+**② `zeros_arr` 今天就是从 `xs` 的值建零数组**（`src/builtin/operators/struct.cpp:1063-1086`）：
+```cpp
+auto *value = norm.get<Array *>(0);
+Array *zero = Array::create(mm::autoSpace(), tangentArray, value->shapeSpan());
+for (uint64_t i = 0; i < value->numel(); ++i) { … }
+```
+**形状取的是 `xs` 的值自己的 `shapeSpan()`——正是"`zeros_like(xs)`"。** 也就是说**这条建议的实现已经在**，不是缺实现。
+
+**③ 而 `scatter_add_arr` 也不会给出这条错**（同文件 `1103-1121`）：下界是 `base->dim(at)`，
+越界走的是 `RuntimeDiag::IndexOutOfRange`（一条**带诊断的运行期错误**），**不是不变量违例**。
+
+**④ 所以"`element 0 of an array that holds 0`"这条读的不是 `zeros_arr` 的循环、也不是 `scatter` 的越界检查，而是别处的 `getSlot(0)`**；
+**空数组是从上游进来的**（`xs=0` 这个端口的**运行期值**是空的，或答案元组那一侧读到了空数组）。
+**⇒ 我没有把 `zeros_arr` 改成"取残差的 `xs`"——它已经是了；改了只会是同一件事的第二种写法。**（"查不到 ≠ 不存在"，前提先核，这条照旧。）
+
+**⑤ 下一个探针应该看的地方**（写下来省下一次摸索）：**不是 `struct.cpp`，是"传进被转置成员的那个实参数组在运行期有几个元素"**——
+`xs=0` 是**图的端口**，运行期值由调用点给；`transpose_of_index_into` 的实参是 `[forward(xs), forward(i), ct]`，
+**先量 `forward(xs)` 落在这个端口上的数组的 `numel()`**，再决定改哪一层。
