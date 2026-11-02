@@ -72,7 +72,7 @@ const TEST_FIELDS = new Set([
     'name', 'desc', 'kind', 'case', 'args', 'envs', 'tool', 'timeout_ms', 'cpu_budget_ms', 'verify_timeout_ms',
     'skip_unless', 'skip_unless_timeout_ms', 'parallel', 'tier', 'sweep', 'cuda_devices',
     'cuda_free_device',
-    'known_fail', 'known_fail_note', 'failure_note',
+    'known_fail', 'known_fail_note', 'known_fail_msg', 'failure_note',
     'backends', 'backends_agree', 'compare_to', 'compare_fields',
     'golden', 'snapshot_stream', 'snapshot_compare', 'normalizers',
     'expect_exit', 'expect_stdout_contains', 'expect_stdout_exact', 'expect_stdout',
@@ -2200,6 +2200,9 @@ function expandBackends(test) {
         __backend: backend,
         __backendReference: index === 0 ? null : `${test.name}.${test.backends[0]}`,
         __knownFail: knownFail.has(backend),
+        // Absent unless the plan pins one, so every mark written before this field existed stays
+        // legal: the mechanism grows by pinning cases one at a time, never by a migration.
+        __knownFailMsg: typeof test.known_fail_msg === 'string' ? test.known_fail_msg : null,
     }))
 }
 
@@ -3236,7 +3239,23 @@ async function executePlans(plans, options, sharedVars, logDir) {
                     // A known failure that fails is reported and counted apart, and does not fail
                     // the run. One that passes fails the run: the mark is out of date.
                     if (result.status === 'fail') {
-                        result.status = 'xfail'
+                        // A mark says "this case fails", not "this case fails for this reason". A
+                        // case that starts failing differently is a new defect wearing an old name,
+                        // so a plan may pin a fragment of the message it expects: one that no
+                        // longer appears turns the run red, the same way a mark that starts
+                        // passing does. Unset is legal and pins nothing.
+                        const pinned = entry.test.__knownFailMsg
+                        const seen = `${(result.failures || []).join('\n')}\n${result.stdout || ''}\n${result.stderr || ''}`
+                        if (pinned !== null && !seen.includes(pinned)) {
+                            const first = `${(result.failures || [])[0] || result.stderr || result.stdout || '(no output)'}`
+                                .split('\n')[0]
+                            result.status = 'fail'
+                            result.failures.push(
+                                `known failure changed its mind: expected "${pinned}", got "${first.trim()}"`,
+                            )
+                        } else {
+                            result.status = 'xfail'
+                        }
                     } else {
                         result.status = 'fail'
                         result.failures.push(
