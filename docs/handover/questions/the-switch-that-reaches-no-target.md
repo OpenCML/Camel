@@ -50,3 +50,13 @@ for a build-configuration change; an incremental build can neither prove nor dis
 To finish this, the configure step's own output has to be visible first (`build/configure.log`, or the
 last 200 lines printed on failure) -- the reason the chain could not be followed is that a failed or
 skipped configure left no trace beyond "the build was fast".
+
+## The author's ruling, 2026-11-02 02:50
+
+> Linux 上没有栈回溯：那是一个没实现的分支，却打印一句把锅推给平台的话。这正是"暂不支持"诊断的变种。
+> 实现它，或者删掉那句话、直接报内部错误。
+
+We took the second branch: the sentence that blamed the platform is gone, and an assertion without a
+tracer now says `(stack trace disabled at build time -- rebuild with -D CAMEL_STACK_TRACE=ON ...)`, which
+is true of our build and says what to do. The first branch -- implement it -- stops at reading 4; section
+3 holds the readings that say so.
