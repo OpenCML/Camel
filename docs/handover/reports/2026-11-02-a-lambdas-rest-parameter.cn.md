@@ -1825,3 +1825,38 @@ TRANSPOSE function=rulesets.jvp::index_into<float> graph=92 type=(float[], int, 
 **⑤ 教训收在这里**（今晚最贵的一条）：**一个能解释现象的候选不等于原因；只有"改掉它现象消失、改回它现象回来"才是原因。**
 六道墙里有五处"看着就是它"的地方**确实都有毛病**（`zeros_arr`、`scatter`、`transposeSignature`、答案装配、`add_arr` 的入参），
 **但真正卡住的那一处每次都不是被怀疑的那一处**——**所以每一道都要用探针把读数打出来，再动改。**
+
+
+## 54. 数组余切的两处"类型写成字面量"：一个 `add_d` 让三条用例段错误，一条拒绝让三条动不了
+
+**合并 `develop` 之后（`e8fa221a0` → `6dee3f03f`）动的行号**：`addCotangent` 在 **449–453**（改后 **461–470**），`primitive` 在 **289**（旁边新增 `primitiveOf`），拒绝块 `skip=unread-parameter` 在 **1867**（改后 **1887**），新增的零分支在 **1863**。
+
+**① 段错误（这是这一夜第一个"有信号的"读数）**：
+```
+$ ./out/latest/bin/camel test/cases/compile/transforms/grad_array_sum.cml std::nvm
+5.0
+Segmentation fault (core dumped)        EXIT=139
+```
+`addCotangent` 把**每一次**余切交付都写成 `:op/add_d`（数字的加）。**一次元素读取只有一份余切、从不求和**，所以 `one_element` 与 `two_elements_first` 绿；**求和/乘法/移交件这三条要加两份数组余切**，就把 `float[]` 当数字加 ⇒ 段错误。
+**改法**：加法的算子与节点类型都取自"余切落在什么空间"——数组空间用 `:tangent/add_arr`，数字用 `:op/add_d`，节点用该空间定型（`primitiveOf`）。
+
+**② 拒绝改成构造零**（你定的那条）：数组形参没收到余切 ⇒ 答案是它的零，由 `:tangent/zeros_arr` 按端口上的值造（`idxArrayVjp` 用的同一个算子）。**零余切是 pullback 那个求和的单位元，所以"答零"与"不答"是同一件事，只是类型对。**
+
+**③ 一次构建出的三条读数**：`5.0` → `[1.0, 1.0]`；`6.0` → `[2.0, 3.0]`；`6.0` → `[2.0, 3.0]`。
+两条仍叛着"拒绝"的钉换成这三个数，**四条 `known_fail` 在让它们通过的这一笔里全部撤掉**（`sum`/`product`/`of_an_array_parameter` 的 nvm、`no_int` 的 fvm）——**撤标的理由是"答案来了"，不是"断言松了"。**
+
+**④ 读数**：`feat/compile/transforms` **58 / 58**；全量 fast **`total: 8390, pass: 8378, fail: 0, skip: 10, known failures: 2`，`RUN_EXIT=0`**；`doc_readings` **10/10**（`transpose.cpp` 1927 → **1970**）。
+
+**⑤ 父级交来的两条 `poison` 用例：诊断原文，以及"不是同一个缺陷"的判定**：
+```
+$ ./out/latest/bin/camel --gc-check poison --gc mark-sweep -vv …grad_array_one_element.cml std::nvm
+camel: fatal: the minor collection started for 'nodevm graph boundary' threw
+  (The auto.elder space (run-time values) is exhausted: an allocation of 119370353.0 MB does not fit,
+   0 bytes of the limit of 67108864.0 MB are in use; the limit is fixed);
+  the heap is half relocated and cannot be used again
+terminate called after throwing an instance of 'camel::core::mm::MemoryExhausted'
+```
+`two_elements_first` 同形，`129402773.0 MB`。**判定：不是同一条缺陷**，两条理由：
+1. **这两条的数组形参都被反半读到**，`skip=unread-parameter` 那条分支**根本走不到**，我这一刀的零构造不参与；
+2. **失败形态不同**：我修的是"把数组当数字加/把没读到的形参拒掉"，**这里是 `--gc-check poison` 下 `nodevm graph boundary` 的小回收里读出一个巨大的分配量**（`119370353 MB` ≈ 一个地址或被搬动过的头被当成元素数），**不加 poison 时这两条绿**。
+⇒ **这是 GC 搬动/根化那一侧的事，不在 `transpose.cpp` 的 lit2 区域，我没改、也不该在这一刀里改。**
