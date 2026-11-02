@@ -2290,3 +2290,34 @@ and a `bool` has none, so there is no cotangent for the transposed function to t
 
 **④ 已经成立的一条**：`transpose` 的门（第 66 条）**不再单独做** —— 它是这条的一部分，并且**已经落地且全量绿**；
 `f32` 验收要在这条落地后再量；**若那时自然成立，就是这条带来的，不是另外改的**。
+
+
+## 68. 第 1 步（`split` 交 `(y, lin)`）的读数：它不是一处签名的改动，是两件今天不存在的本事
+
+**① 代码现状（读出来的，不是猜的）**
+- `modules/transforms/split.cpp:852-869`：`split` 今天交出的是**一对静态函数类型**
+  `forward: (..values) => (result, residuals)`、`backward: (residuals, ..tangents) => tangent`，
+  残差是 **`backward` 的第一个普通参数**（`backwardParams.emplace_back(residuals, false)`），随值走，不是 `with`。
+- `modules/transforms/split.cpp:807-811`：`split` **拒绝带 `with` 参数的函数**（"a captured value has no port to enter them by"）。
+- `modules/transforms/transpose.cpp:44`：`transpose` 同样**拒绝 `withTypesCount() != 0`**——今天 `transpose` 没有任何处理 `with` 的路径
+  （全文只有这一处出现 `with`），而作者的裁定要的正是"`transpose(lin)` 对普通参数转置，`with` 参数当已知值"。
+
+**② 因此第 1 步要两件今天没有的本事**，任何一件都不是改一行：
+1. **前一半在运行时造一个闭包**：残差要"绑进 `lin`"，`lin` 就必须是**运行时的函数值**（有捕获、有 layout），
+   而 `split` 现在交的是静态函数类型——今天做这件事的是 **`stdlib/vjp.cml` 的源码级 lambda**（作者原话："和库里 `vjp` 今天的体……本质上是同一件事"）。
+   把它搬进 `split` 的 C++，等于让变换在生成的图里**造闭包节点**。
+2. **`transpose` 收 `with`**：`transposeSignature` 第 44 行现在明确拒绝；要"`with` 当已知值"就得给它一条新路
+   （`with` 参数在转置后的函数里变成已知值、不参与求导，且要在 `transpose` 的图复制里作为端口存在）。
+
+**③ 与止损点的关系**：父代理给的是"连续两次构建红数不减就停在『形状改了但仍在 N 条红』"。
+**本轮没有动手，红数是 0/58 变**：`feat/compile/transforms` **58/58**，全量 **8447/8435/0、known 2**。
+**这条不是"试了两次都红"，是"读出来它需要两个新本事"** —— 按同一纪律，**不硬推第 1 步，先报这一条**。
+
+**④ 建议的切法（若作者同意拆细）**
+- **1a**：先让 `transpose` 能收一个**只带一个普通参数的 `with` 函数**（`with` 当已知值），用今天 `backward` 的类型做输入，
+  **不动 `split` 的形状**——这一步能单独绿、单独量；
+- **1b**：再让 `split` 的前一半交出 `(y, lin)`，`lin` 是带 `with` 的闭包；
+- **1c**：删 `isResiduals` / `ResidualsAreNotVisible` / "元组当残差"（第 67 条表里那三行 + `diagnostics-catalog.mjs --write`）。
+
+**⑤ 仍排在最后**：`{Float64()}` 三处、`:op/ftod`。`f32→float` 隐式转换一字未动。
+**⑥ 本轮无代码改动**：树干净，58/58 与全量基准都未动。
