@@ -388,7 +388,9 @@ void Builder::settleStreamLinearity() {
                 }
             }
             // A read made in the loop's own region, outside the rounds, is the loop's read: the
-            // state assembly of a machine is built where the loop is wired up.
+            // state assembly of a machine is built where the loop is wired up. `nodeRegion` names
+            // the body for a node of a draft that has no control region yet, and `region` answers
+            // the body then too; the body owns no loop, so nothing consumes the read here.
             if (!inRound && !consumed) {
                 const GCRegion &home = draft.region(draft.nodeRegion(reader.node));
                 for (const auto &[builder, loop] : carriers) {

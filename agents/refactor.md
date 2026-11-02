@@ -130,3 +130,11 @@ answer, so a test that merely passes does not catch it.
 - During major refactors, identify the primary structural contradiction early.
 - If a deeper dependency blocks progress, surface that blocker directly instead of only cleaning peripheral symptoms.
 - Record important decisions and rationale in both code comments and docs when the refactor changes semantics.
+- **A default argument belongs in the declaration, not in both.** `transposeSignature` was one
+  function: a definition in `transpose.cpp` and a declaration in `transpose.h`. Adding the fourth
+  parameter *with a default* to the definition only turned the two into two overloads, and the
+  three-argument call sites became `error: call to 'transposeSignature' is ambiguous` -- at
+  `transposeSignature` in `transpose.cpp`, a line the change never touched. Right: add the parameter to the
+  declaration with its default and leave the definition without one. A build that reports
+  ambiguity at a line you did not edit is telling you a declaration and a definition stopped being
+  the same function.
