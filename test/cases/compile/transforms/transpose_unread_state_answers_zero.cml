@@ -1,0 +1,33 @@
+// A loop whose state starts at a constant, and the parameter it never reads.
+//   k(x) = loop s = 0.0 for i in [1, 2, 3] do s + 2.0 = 6.0 for every x, so k'(x) = 0
+// The loop is the whole answer, and the value its state starts from answers no parameter: nothing the
+// loop did can reach `x`, so the cotangent of the loop's value is the zero of its cotangent space --
+// the reading 48bfa6778 took for a straight line ("a parameter the body never reads answers a zero
+// cotangent, not a refusal"), read for a loop (author's ruling of 2026-11-03, `origin/fsh-dev =
+// ad7e716b0`, fourth of four).
+//
+// The zero must also be *linear*: a pullback of `2.0` answers `0.0` and not `1.0`, which is what tells
+// a zero answer from the constant `1.0` the same shape answered before this change. `m`, whose state
+// starts at the parameter, is the control: `m(x) = x + 6`, so `m'(x) = 1` and its pullback is `1.0`.
+import { transpose } from transforms
+import rulesets.transpose
+
+func k(x: float): float {
+    let _ = x
+    return loop s = 0.0 for i in [1, 2, 3] do s + 2.0
+}
+
+func m(x: float): float {
+    return loop s = x for i in [1, 2, 3] do s + 2.0
+}
+
+func main(): int sync {
+    println('k value=', k(3.0))
+    let back = transpose(k)
+    println('k pullback(1.0)=', back(1.0))
+    println('k pullback(2.0)=', back(2.0))
+    println('m value=', m(3.0))
+    let control = transpose(m)
+    println('m pullback(1.0)=', control(1.0))
+    return 0
+}

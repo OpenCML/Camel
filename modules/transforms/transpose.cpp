@@ -2070,20 +2070,39 @@ bool buildTransposeMember(
                     // tangents the escapes carry, and a half that escaped nothing is a function no
                     // parameter reaches. Answering the loop there named a cotangent for a value no
                     // parameter is -- `h(x) = loop s = 0.0 for i in [1,2,3,4] do s + 2.0` answered
-                    // `1.0` for a derivative of `0.0` -- so the shape is refused by name instead. The
-                    // cotangent is delivered first, so the delivery the branch above makes is still
-                    // written once: a shape that does escape reaches its parameter either way.
+                    // `1.0` for a derivative of `0.0` -- so the loop is not the answer. The reference
+                    // answers zero instead, which is the same reading the straight-line case took on
+                    // 48bfa6778 ("a parameter the body never reads answers a zero cotangent, not a
+                    // refusal", author's ruling of 2026-11-03, `origin/fsh-dev = ad7e716b0`, fourth
+                    // of four): the parameter is not read, so it has no influence, so its cotangent is
+                    // zero. The answer is therefore built from the parameters the walk reached, the
+                    // way every other transposition builds it, and a parameter nothing delivered to
+                    // keeps the zero the tail already writes for it.
                     if (stateInitials[0] != rt::kInvalidNodeRef) {
                         addCotangent(stateInitials[0], loopNode);
                     }
                     const camel::runtime::GCNode *const start =
                         stateInitials[0] < nodeCount ? function->node(stateInitials[0]) : nullptr;
-                    if (start == nullptr || start->kind != rt::GCNodeKind::Port) {
+                    if (start != nullptr && start->kind == rt::GCNodeKind::Port) {
+                        result =
+                            tupleOf({loopNode}, {cotangentTypeOf(loopNode, Type::Float64())}).first;
+                    } else if (closurePortOf.empty()) {
+                        // Nothing reaches that value, so nothing it did can reach a parameter, so the
+                        // cotangent of the loop's value is the zero of its cotangent space: the same
+                        // reading the straight-line case took on 48bfa6778 ("a parameter the body
+                        // never reads answers a zero cotangent, not a refusal"), read for a loop. It is
+                        // answered only when the member carries no closure: a half that carries one
+                        // is called with the value it carries, and an answer that is a constant
+                        // would be a member called for a value nothing in it reads -- which is the
+                        // shape that took the process down when it was answered this way, so it stays
+                        // refused by name one branch below.
+                        const gc_node_ref_t none = zeroOf(loopNode);
+                        result = tupleOf({none}, {cotangentTypeOf(loopNode, Type::Float64())}).first;
+                    } else {
                         os << "TRANSPOSE function=" << function->name() << " skip=state-unread node="
                            << ref << " origin=" << regionOrigin << '\n';
                         return false;
                     }
-                    result = tupleOf({loopNode}, {cotangentTypeOf(loopNode, Type::Float64())}).first;
                 }
                 break;
             }
