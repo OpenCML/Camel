@@ -380,3 +380,42 @@ func main(): int sync {
 ## B. Defects of the measuring instruments (test tools)
 
 ### B1. `test/tools/cml_roundtrip.py` reports a document as different from itself
+
+---
+
+### A11. `commit` accepts an edit that makes a node outside a branch read a value inside one of its arms
+Found while building the paper's running example (2026-11-02, `cases/cross_arm.cml` on `cases/region_target.cml`, rerun by
+`cases/run_cases.sh`). The stage replaces `x + 1` (read by `r + y` after the branch) with `x * 7`, which lies in an Arm region, and commits.
+Observed: commit succeeds; `std::nvm` and `std::fvm` then fail with `PassInternalError: ... Cycle detected while building runtime execution topo in graph 'pick'`.
+Expected: commit refuses with `GraphInvalid`, naming the region rule. Commit's checks at the pin do not include the region-reading rule; the runtime
+validator has a similar check (it caught A4f). This is the faulty-pass example of Sections 1 and 3 of the paper.
+
+### A12. Calling an unhandled fallible stage result aborts the compiler
+`let step = loss->opt::cse->with_grad` then `step<2.0>(3.0)` without handling the error (`cases/probe/v6.cml`): `Camel Invariant Violation ...
+visitLinkNode: Target node of LINK must be a function or operator node`. Expected: a diagnostic that the value is fallible. Matching it, or
+`(loss->opt::cse !! loss)->with_grad`, works (`cases/intro_pipeline.cml`).
+
+### A13. `rules->check<samples: 1000>` (the doc example in stdlib/rewrite.cml) is refused
+`OverloadParameterNames`: the two overloads of `check` name that position differently. The positional form `rules->check<1000, 0>` works
+(`cases/rules_check.cml`).
+
+### A14. A pass from a user module is not found when the entry file is a bare name
+`camel edits.cml probes::count_adds std::nvm` gives `UnrecognizedGraphPass`; `./edits.cml`, an absolute path or `-I .` work. The test runner
+passes absolute paths, so the suite does not see it.
+
+## B. Defects of the measuring instruments (test tools)
+
+### B1. `test/tools/cml_roundtrip.py` reports a document as different from itself
+In `Document._type` the edge from a type to its declaration is built to the vertex `T:<id>`, but declarations are the vertices `D:<id>`. Any canonical document that holds a named declaration fails: `DIFFERENT: ...: T:10 --decl--> unknown vertex T:d0`, even compared with itself. Reproduce: `camel test/cases/opt/generic/gate_branch_wait.cml "std::jgir canonical=true"`, drop the `GRAPH_STATS` line, run the checker on that file against itself: exit 1. In E3, 136 of the (program x variant) cells per stage (68 programs) are affected. `scripts/run_checker.py --fix-decl` applies the one-line fix in memory (the file in the tree is untouched); the numbers in `summary.md` use it and every row keeps the shipped verdict (`canonical_shipped_rc`).
+
+### B2. The canonical document is not canonical for opaque types
+`std::jgir canonical=true` writes for a type of kind `other` (for example `Node<int>`, `Rule`) a `code` that depends on the order in which modules were loaded. `camel f.cml std::opt::saturate "std::jgir canonical=true"` and the same with `opt::saturate` give documents that differ only in these codes (`2684354570` against `2684354568` for `Node<int>`, program `compile/when/rule_when`), though both execute the same Camel pass; the native pass run twice gives equal documents (`repro_checks.json`, `saturate_native_twice`). With the field ignored (`run_checker.py --mask-codes`) 64 (program x variant) cells, 32 programs, change from unequal to equal for saturate alone (`e3_all_stride4.jsonl`, verdict `equal_after_code_mask`).
+
+## C. Observations that are not defects, recorded because the final campaign has to deal with them
+
+- **The generator and the compiler disagree.** The compiler rejects 235 of 2,000 (11.8%) default progen programs (`e2_progen.jsonl`, `no_compile`) and 22 of the first 160 (13.8%, E9) with `NoMatchingFunction` (21) or `GenericFunctionAsValue` (1). One cause is the precedence of `a..b->reduce<...>`: `..` binds weaker than `->`, so `reduce` is applied to `-1` (`minimal/generator_reject.cml`). The progen sources are generator version 6; the pin may have moved past it.
+- **`std::cpp` refuses most optimised programs.** 72 to 78 of 138 programs in each pipeline from `std::opt::devirtualize` on are refused with `TranslationRefused: the program has no call of 'main' std::cpp can find` (a located refusal, counted as legal). The cpp column therefore checks the pipelines `none` and `std::macro` almost alone.
+- **Silent wrong values: none found.** 138 programs, 13,662 cells, 0 `MISMATCH` (`e9_summary.json`).
+- **`std::cml` prints none of the compiling generator programs.** Default features: 0 of 1,765 (first refusals: an operator on a named struct type 1,482, a `dead` region 283). With `-opover,-struct,-tuple,-nullable,-partial,-macro,-comprehension`: 0 of 1,657 (`dead` region 1,040, operators 411, closures 149). The generator half of E2 is empty at this pin.
+- **`opt::saturate` and `std::opt::saturate` time out (120 s) on 3 programs** (`both_fail` in `e3_all_stride4.jsonl`).
+- **E6 "refused without a position" is 185, all of them files without a `main`** (library modules); it is 0 for the 3,088 files that declare `main` (`e6_summary.json`).

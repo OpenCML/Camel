@@ -2037,3 +2037,16 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 - 第二节列的"还没做"的几项，如果是真的未落地（例如 `orderAfterLastWriter` 仍写 `writeControlLink`，属于 P0-2；`zero_tangent` 的元组/结构体臂），归到各自所属的返工里，不需要单独跟踪。
 
 页面挪到 `reviews/` 留档。
+
+## 转交（2026-11-02 08:20）：评估缺陷 A11–A14；A11 违反不变量 1，排进 P0
+
+**A11（P0）：`commit` 接受了一次"分支外的节点读臂里的值"的编辑。** 一个用户写的遍把分支之后 `r + y` 读的 `y = x + 1` 换成臂里的 `x * 7`，`commit` 成功，后端才以"Cycle detected while building runtime execution topo"失败。原则第 1.2 节不变量 1 是"Camel 程序造不出结构上坏的图——提交时的整体校验"，不变量 3 是"会出错或有效应的节点不被移出它所在的区域——提交时的校验"。区域读取规则在运行时校验器里有（`branch_arms.cpp`），提交时却没有。这正是"同一条规则两处各查一半"。
+- **返工**：`commit` 跑完整的结构校验，包括区域规则：分支外的节点不读臂内的值，臂内节点不被搬出臂。用的是运行时校验器里同一个函数，不另写一份。违反时报 `GraphInvalid`，点名两个节点和那条臂。运行时那一处保留，作为断言。
+- 读数：`camel -I docs/handover/reports/eval-defects-2026-11-01/cases region_target.cml cross_arm::move std::nvm` 在 `commit` 处报 `GraphInvalid`，不再走到后端。用例文件在该目录的 `cases/` 下。
+- 顺带核对：`commit` 的检查清单是否覆盖了运行时校验器的全部结构规则。凡是运行时查、提交时不查的，一并补到提交时。
+
+**A12**：`loss->opt::cse->with_grad` 的错误没处理时，进程以 "Camel Invariant Violation … visitLinkNode: Target node of LINK must be a function or operator node" 中止，而不是给诊断。任何输入都只能得到诊断，查是哪一步把错误值当函数链了下去（`cases/v6.cml`）。
+**A13**：`stdlib/rewrite.cml` 文档例子 `rules->check<samples: 1000>` 被 `OverloadParameterNames` 拒绝，因为 `check` 的两个重载在这一位置的参数名不同。改成两个重载用同一个名字，例子照原样编过。
+**A14**：入口文件写成裸文件名（`camel edits.cml probes::count_adds`）时，找不到用户模块里的遍；写 `./edits.cml` 或绝对路径就行。模块搜索的根目录应当按入口文件所在目录算，与写法无关。测试运行器总是传绝对路径，所以测试漏了这种情况：加一条用裸文件名启动的用例。
+
+条目原文追加在 `docs/handover/reports/eval-defects-2026-11-01/README.md` 末尾。排序：A11 进 P0，紧跟残差那一笔；A12、A14 是"任何输入都只能得到诊断"的同类，排在 A2 之后；A13 是一行修。
