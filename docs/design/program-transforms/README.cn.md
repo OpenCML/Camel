@@ -121,8 +121,8 @@ type Reinterp<F, H> = (..H.Lift<ParamsOf<F>>) => H.Lift<ResultOf<F>>
 
 ```camel
 func split::<F>(f: F): Split<F>
-type Split<F> = ((..ParamsOf<F>) => (ResultOf<F>, _,),   // 残差位：由编译器在实例化时填，用户写不出
-                 (_, ..WithOf<F>)  => ResultOf<F>)
+type Split<F> = ((..ParamsOf<F>)          => (ResultOf<F>, (..Tangent<ParamsOf<F>>) => Tangent<ResultOf<F>>),
+                 (..Tangent<ParamsOf<F>>) => Tangent<ResultOf<F>>)   // 残差是后一半的闭包，不在类型里
 ```
 
 把一个"一部分输入现在就有、另一部分以后才有"的函数拆成两个：前一个只用现在就有的输入，算出能算的一切，并把后一个要用的中间值（残差）作为输出；后一个接残差与其余输入。线性化就是 `split(reinterp<jvp>(f))`，"现在就有"的是原始输入，"以后才有"的是切向量。

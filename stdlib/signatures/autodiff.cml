@@ -13,6 +13,12 @@
  *   - the gradient is a value of the type of the first `with` parameter of `F` (see
  *     stdlib/autodiff.cml for the leaves: integers and bools give a zero of their own type);
  *   - `F` must have a scalar float result.
+ * `grad` has no declaration in standard library types: its result type is computed here, so there is
+ * no one place where its shape is written down to be pinned against -- a reader who wants to check it
+ * checks the behaviour (a call and its printed gradient), not the declaration. That is a fact about
+ * this operator and not a gap to be closed by inventing a type operation: what a gradient's type is
+ * depends on the body, which the type of `F` does not describe.
+ *
  * `GradientAndAux<F>` and `ValueAndGradientAndAux<F>` are the same two over a function whose
  * result is the pair `(value, aux)`: `has_aux` splits the pair, the first element is what is
  * differentiated and the second is handed back unchanged. The results are `(gradient, aux)` and

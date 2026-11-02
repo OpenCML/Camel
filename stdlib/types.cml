@@ -99,8 +99,16 @@ export type Pullback<F> = (ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
 /// @example is_same::<Vjp<(x: float) => float>, (x: float) => (float, Pullback<(x: float) => float>)>()    // true
 export type Vjp<F> = (..ParamsOf<F>) => (ResultOf<F>, Pullback<F>)
 
-/// The forward transform's type: the parameters of `f`, then their tangents, then the value and its
+/// The forward transform's type: the parameters of `f` and their tangents, then the value and its
 /// tangent (`jvp(f)(2.0, 1.0)` is `f(2.0)` and `df` in the direction 1).
+///
+/// The declaration below is an approximation of the order. The built type pairs each parameter with
+/// its tangent as it goes -- value, tangent, value, tangent -- and gives a parameter whose type has no
+/// tangent space (an `int`, a `bool`, a string) one place only
+/// (`modules/transforms/jvp.cpp#jvpSignature`). A type written from `F` alone can only say "all the
+/// values, then all the tangents", which is not that order, so a reader takes the order from the build
+/// and the declaration as the loose form. A type operation could approximate the pairing, and an
+/// approximate declaration would be read as a contract.
 /// @example is_same::<Jvp<(x: float) => float>, (x: float, d: float) => (float, float)>()    // true
 export type Jvp<F> =
     (..ParamsOf<F>, ..Tangent<ParamsOf<F>>) => (ResultOf<F>, Tangent<ResultOf<F>>)
