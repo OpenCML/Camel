@@ -728,17 +728,21 @@ timeout_ms = 20000
 # The same missing cotangent, seen from the library: `grad` is
 # `transpose(split(reinterp(jvp(f))))`, so a tangent function that ignores its operands is on every
 # `grad` of a sum, and a refusal there is a refusal of the plainest derivative there is.
-# The residuals a `split` hands on are the transform's own tuple: the count is the body's answer
-# (`residuals=4` here), so a program never names, indexes or counts them -- it passes the tuple on
-# whole (author's ruling, 2026-11-01; the findings are in
-# docs/handover/reviews/questions-2026-11-01-the-residual-slot-has-no-type-until-execution.md). This
-# entry is the refusal: the destructuring in the case is `SemanticDiag::ResidualsAreNotVisible`,
-# reported at the `let`, before anything runs.
+# This entry is the refusal of a wish, and the wish has moved twice. The count is the body's answer
+# (`residuals=4` here), so a program never names, indexes or counts them (author's ruling, 2026-11-01;
+# the findings are in
+# docs/handover/reviews/questions-2026-11-01-the-residual-slot-has-no-type-until-execution.md).
 #
-# The entry used to pin the opposite. With the residual tuple typed as a plain tuple, four members
-# arrived under a two-member static type and `let (r0, r1) = residuals` took the two parameters in
-# silence, dropping the two products (`r0= 3.0`, `r1= 2.0`). That silent drop is what the diagnostic
-# ends; the numbers are in the commit that replaced them.
+# Under the binary-tuple ABI the wish was spelled `let (r0, r1) = residuals` and refused with
+# `SemanticDiag::ResidualsAreNotVisible` at that `let`. That diagnostic's only emit site is a guard on
+# `TupleType::isResiduals()`, and no transform produces a residual tuple any more (`split` hands the
+# values to a closure instead), so the mechanism has no producer left and the refusal cannot fire:
+# see docs/handover/reports/2026-11-02-the-residual-chain-is-dead-and-four-spots-to-remove.cn.md.
+#
+# Under the closure ABI the same wish is `let (dx, dy) = linear`, taking the linear half apart to get
+# the directions one by one, and that is refused with `SemanticDiag::TypeNotIndexable` at the `let`:
+# `linear` is a function, the residuals it was built over ride in its closure, and nothing about them
+# reaches the program's type. The numbers the entry pins are the ones the refusal still allows.
 #
 # `not_contains` for those numbers is gone on purpose: with the guard on the program gets nowhere
 # near printing, so a `not_contains` would assert nothing. What this entry asserts is the name, the
