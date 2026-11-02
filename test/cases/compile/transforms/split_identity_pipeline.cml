@@ -16,8 +16,6 @@
 // declares it and no module registers it). The readings do not change with the spelling: they are
 // about the graph the transform hands back.
 //
-// Gated the same way as the other three (test/tools/have-split.mjs): while `split` does not exist
-// the plan skips, so this case is not red for a reason that is not a defect.
 import rulesets.jvp
 import { jvp, split } from transforms
 

@@ -113,6 +113,37 @@ Two ways to name a process, and only two: `kill <PID>`, or `pkill -f '~/camel-wo
 
 The same day made the other half of the point with a check instead of an accident: with the "zero tests started" gate in place, 31 of the tree's 309 plans turned out to be silent zeros - their tier puts them out of an ordinary run, and until the gate existed they said nothing at all - and the first real defect came with them, `test/plans/feat/trans/cml_sweep.plan.toml` missing a plan-level `tier`, calling itself fast while its only test is slow, reddening the whole fast pass. **Green because nothing ran is not green.**
 
+## A guard that reports and then reads on can turn a red into a green
+
+`Tuple::updateRefs` compared the value's member count with its type's and, on a disagreement, printed
+a line and traced on. Under that behaviour `poison:transforms:vjp_api.carries_its_own_ruleset.nvm`
+**passed** the full poison sweep. When the guard learned to stop instead of reporting
+(`members <= tupleType->size()`, author's ruling 06:30), the same case failed with that guarantee and
+`has 3 member(s) but its type declares 0`.
+
+So the green was a read past the end of the type's array whose garbage code happened not to name a
+traced kind: the case was never right, it was lucky. Two things follow. A check with two behaviours
+(report-and-continue, report-and-stop) has two different green sets, and **only the stopping one can
+say "this never happens"** -- a report-and-continue guard's silence means "nothing crashed", not
+"nothing disagreed". And when a guard is strengthened, the **gains and the losses both have to be
+re-measured**: a case that turns red is a case that was green for the wrong reason, not a regression.
+
+## A core pass needs a declaration in `stdlib/std.cml` before a plan can name it
+
+Registering a kernel in `src/execute/pass.cpp` (`registerCoreKernel("gc::tuple_members", …)`) is half the
+job: the pipeline resolves `std::gc::tuple_members` through **`stdlib/std.cml`**, so a kernel with no
+`export func tuple_members::<F>(f: F): F! when is_function::<F>()` line in that file is reachable from
+C++ and from no test, and the run says
+
+```
+error[RuntimeDiag::InvalidPassParameter]: Invalid pass specification 'std::gc::tuple_members_agree':
+module 'std' declares no pass 'gc::tuple_members_agree' in <install>/stdlib/std.cml
+```
+
+`gc::poison` is declared there for the same reason (`stdlib/std.cml`, "Runs the allocator's poison
+check"). Two things follow: a plan entry and a manual run both need the declaration, and a self-test
+whose point is that it is *never* reachable from a plan has to be reachable to be tested at all.
+
 ## The instrument's range is narrower than the fact
 
 Three zero-hit readings on 2026-11-02 were all the same mistake, and none of them was a broken branch:
@@ -178,3 +209,5 @@ When the instrument gets finer, past agreement has to be rejudged: four `known_f
 Ask whether a thing is there and the answer is a boolean; ask how many lines carry it and the answer is a reading. A boolean is wrong once and the table is wrong with it: an index said three pages while `Contains` said the new row was already in place, and counting the rows found two.
 
 A probe log that records only `[FAIL] <name> <ms>` can count failures and cannot group them: the first diagnostic line is what turns forty reds into one root cause or ten. Print that line, and print it even when jobs run in parallel.
+
+- 主检出 `D:\Projects\Camel` 只用来 `pull --ff-only`；所有编辑都用工作树内的相对路径，或 `D:\Projects\Camel-wt\<lane>\...` 的绝对路径。写完用 `git -C <树> status --porcelain` 自检，不要用 `git status`（它按进程 CWD 解析，会看到另一棵树）。

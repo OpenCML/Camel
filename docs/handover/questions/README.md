@@ -2,54 +2,24 @@
 
 > 一页一问。作者把读过的页整体挪进 `reviews/`；这里只放**还在等回答**的页。
 
-## 现在在等作者：4 页
+## 现在在等作者：8 页
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
 | --- | --- | --- | --- | --- |
 | [`2026-11-02-the-generator-reads-a-draft-node-after-its-builder`](2026-11-02-the-generator-reads-a-draft-node-after-its-builder.cn.md) | `stream.*` 在 Windows 上崩在 `builder_support.h#nodeGraphOf`（草稿节点不属于任何 compile graph builder），同树 Linux 全绿、五个后端都崩，所以是建图不是调度；问该谁去找那个节点的 owner、修好前 Windows 腿要不要继续红 | 待裁 | — | Windows 腿的红；那个节点的 owner |
 | [`2026-11-02-who-restores-order-after-inline-moves-a-statement`](2026-11-02-who-restores-order-after-inline-moves-a-statement.cn.md) | 内联改变块归属之后，次序该由内联自己补还是由图定型后的统一通道补 | 待裁 | — | 次序的归属：内联还是定型后的通道 |
 | [`2026-11-03-may-a-printed-name-be-the-definitions-own`](2026-11-03-may-a-printed-name-be-the-definitions-own.cn.md) | `tensor:sum` 与 `tensor:sum_axis` 共用一个写名 `sum`，边界在哪只有定义知道、节点不知道；问打印件能不能用定义自己的名字（`sum_axis(m, 0, false)`），还是必须复现源里的 `<>` 写法 | 待裁 | — | 打印器的往返：节点上只有一个写名 |
-| [`questions-2026-11-02-which-index-rows-are-already-landed`](2026-11-02-which-index-rows-are-already-landed.cn.md) | 索引里标"已裁未落"的条目，哪些在树上已经落地 | 待裁 | — | 索引状态是否可以改成"已裁已落"（默认=我们改，并逐条写提交 id） |
+| [`2026-11-02-who-updates-the-root-table-when-the-root-is-replaced`](2026-11-02-who-updates-the-root-table-when-the-root-is-replaced.cn.md) | 宏重写换根时谁负责更新根表；`nn` 那两条 bytecode 用例的根换过之后旧根还在表里 | 待裁 | — | `gru_lite_large_bytecode`、`residual_mlp_large_bytecode` 两条 poison 红 |
+| [`2026-11-02-what-carries-the-residuals`](2026-11-02-what-carries-the-residuals.cn.md) | 残差用什么承载（三条路各写过一遍）；`split` 不再交出残差元组之后，闭包里俘获的残差该由谁持有 | 待裁 | — | 残差藏进闭包这条线的入口 |
+| [`2026-11-02-can-a-sync-place-be-derived-from-the-graph`](2026-11-02-can-a-sync-place-be-derived-from-the-graph.cn.md) | 同步链的"位置"（`kGCNodeFlagSyncStatement` 记的那个事实）能不能从图上推出来：照 07:30 的谓词实现，终点侧 1594 个终点落在三条之外、全量 720 红，起点侧照字面 185 红 | 待裁 | — | 标记能否删；B 要重写 `edges.cn.md` 一节 |
+| [`2026-11-02-can-the-pow-rows-be-built-from-a-base`](2026-11-02-can-the-pow-rows-be-built-from-a-base.cn.md) | `:op/pow_*` 那一族 12 行能不能由一条底算子（`pow_bf`/`pow`）生成，还是每行都得自己写 | 待裁 | — | 那 12 行的归属 |
+| [`2026-11-02-is-the-cpp-backends-elementwise-comparison-missing`](2026-11-02-is-the-cpp-backends-elementwise-comparison-missing.cn.md) | `std::cpp` 下数组 `==`/`!=`/`===` 与逐元素算术的现状，是没翻译还是翻译错 | 已答：`==`/`!=` 对，`===` 与逐元素算术都没有翻译 | — | `std::cpp` 的逐元素层 |
 
 **这张表由 `node scripts/check-doc-links.mjs --questions-index` 对着目录核对**：行数与页数不符、或者某一行指向目录里没有的页，它都会红。
 
-### 已裁、在 `reviews/` 留档
-
-- `2026-11-02-when-should-an-underivable-sync-edge-be-dropped` —— 已裁已落：**D，不删边、改检查侧**；`Func`/`Join` 可以是链尾，内联处插 `GATE` 接住链尾。
-- `2026-11-02-drafts-outlive-the-safepoint` —— 已裁待落：不走搬运方案，先查草稿静态值为何落在会被搬动的空间，应分配在图空间。
-- `2026-11-02-what-counts-as-a-statement-of-a-chain` —— 已裁已落：链上语句含 `Call`，不含 `Func`/`Join`。
-- `2026-11-02-the-member-count-stated-twice` —— 已裁已落：`split` 不再交出残差元组，检查从此是守卫。
-- `2026-11-02-does-the-neq-cut-take-the-strict-neq-group-with-it` —— 已裁已落：补逐元素 `!`，然后删净。
-- `2026-11-02-is-p0-2-now-a-pass-by-pass-judgement-change` —— 已裁已落：先修不变量，按节点性质判。
+> **一条裁定有没有落地，看代码和提交，不看这张索引**（作者 2026-11-02 08:10）。"已裁已落/已裁未落"那张状态表整节删掉了：维护一张追着代码改的表，本身就是一份没人该维护的台账。审查清单上的条目修完，写一行"已修，提交号"在那页里。
 
 
-### 已裁、在 `reviews/` 留档
-- `2026-11-02-what-counts-as-a-statement-of-a-chain` —— 链上语句含不含 `Func`/`Join`；裁：含 `Call`，不含这两个。
-- `2026-11-02-the-member-count-stated-twice` —— 余量元组没有图时的元数；裁：`split` 不再交出残差元组，检查从此是守卫。
-- `2026-11-02-does-the-neq-cut-take-the-strict-neq-group-with-it` —— `ne_` 那批注册行；裁：补逐元素 `!`，然后删净。
-- `2026-11-02-is-p0-2-now-a-pass-by-pass-judgement-change` —— P0-2 的顺序；裁：先修不变量，按节点性质判。
-## 已裁：按还堵着的活排
-| 页 | 问什么 | 状态 | 裁定 | 还堵着 |
-| [`a-version-port-that-must-carry-a-value`](../reviews/questions-2026-10-31-a-version-port-that-must-carry-a-value.md) | `void` 调用写过的变量，它的读该靠什么后于那次调用 | 已裁未落 | 22:50——A：新算子 `:var/after(cell, call) : var T`（第二个实参接受 `void`），读写成 `:var/get(:var/after(cell, call))`；两条都是数据边，3.1 的"用到"沿数据边到调用；验收 `callback_write_ignored` 打印 `3`、`effects_syntax` 11 条红消失、拿 `133` 量 | `:var/after` 算子本身；`orderAfterLastWriter` 里那条 ctrl 替身随之可拆 |
-| [`two-references-write-one-object-outside-a-sync-block`](../reviews/questions-2026-10-31-two-references-write-one-object-outside-a-sync-block.md) | 同一可变对象被两条引用写、第二条在这一层看不见时，读拿谁的版本 | 已裁未落 | 22:50——②：**保守的写者集合**（程序里所有写该变量的函数，建图前整个程序扫一遍）；`twice` 里 `counter` 在集合里，`return counter` 的版本是 `:var/after(counter, f(v))`；**20:35 那句就此收回** | 保守写者集合的实现；`twice` 应打印 `3` |
-| [`parallel-map-fault-what-runs-after`](../reviews/questions-2026-10-31-parallel-map-fault-what-runs-after.md) | 并行 `map` 一处故障后，下标更小、还没开始的元素是否仍执行 | 已裁未落 | 22:50——①：保今天的实现，3.6 改措辞（"已经开始的元素跑完；下标大于已知最小故障、还没开始的元素不再开始，下标更小的仍会开始；报下标最小的故障"）；删 `taskflow.cpp:2797` 的 `DESIGN-QUESTION`；补部分故障、四后端同判的用例 | 3.6 措辞；`taskflow.cpp:2797`；四后端同判用例 |
-| [`who-consumes-the-ruleset-index`](../reviews/questions-2026-10-31-who-consumes-the-ruleset-index.md) | 规则集索引建好了、打印得出来，但没有 pass 查它 | 已裁未落 | 22:50——`reinterp<H>` 就是消费者：`reinterp<jvp>` 按索引逐个原语替换，缺规则就在那个原语处报编译期诊断（9.9），验收是标量函数的 `jvp`；不另造"没有变换也报缺规则"的检查 | `reinterp<jvp>` 是第一优先的消费者；标量 `jvp` 验收 |
-| [`the-ruleset-module-has-no-rules-in-it`](../reviews/questions-2026-10-31-the-ruleset-module-has-no-rules-in-it.md) | `autodiff` 算不算 `jvp` 那族的规则集模块，还是把前向规则搬进 `rulesets/jvp.cml` | 已裁已落 | 22:10——(b) 搬进 `rulesets/jvp.cml`；规则集就是 `stdlib/rulesets/` 下的模块，按路径前缀判断 | 无。已落地 `3bf5324e2`（索引键加元数）`67b4c17bc`（5 条前向进 `rulesets/jvp.cml`、5 条转置进 `rulesets/transpose.cml`）`13d385530`（语言参考三句）；`autodiff` 只留包装与切线函数 |
-| [`jvp-family-anchor`](../reviews/questions-2026-10-30-jvp-family-anchor.md) | `#jvp` 这族规则没有挂点：补声明、挂标签、还是按算子 id 查表 | 已裁未落 | 09:35 ①，20:50 改成"内置原语的规则写规则集模块、按左边归属"，22:10 补上"搬规则" | 与上一行是**同一件活**；索引已落（`program.cpp:658-659` 按 `rulesets.` 前缀建），规则还没搬 |
-| [`what-carries-a-wait-for-a-write`](../reviews/questions-2026-10-31-what-carries-a-wait-for-a-write.md) | 值在门后等一次写、或等一次调用，该由哪种边承担 | 已裁未落 | 20:35——3.1 已经答了，不加第四种边；三件事：门的等待=同步前驱、三族遍改读"数据使用+同步链"、然后停造 ctrl 重测 | **②a 停造 ctrl**；`simplify`/`unread_gate`/`dropped_effects` 三族遍；`gates.cpp:19` 的使能条件 |
-| [`reinterp-rule-set`](../reviews/questions-2026-10-30-reinterp-rule-set.md) | 规则集 `H` 以什么形式交给算子 | 已裁未落 | 09:15——C：`H` 是编译期名字；规则集是一个模块；`transforms` 收 `reinterp`/`split`/`transpose` | **`reinterp` 还没实现**（`git grep reinterp` 只中 `reinterpret_cast`），`modules/transforms/` 只有骨架；第 3–5 步都等它 |
-| [`a-version-port-that-accepts-more-than-void`](../reviews/questions-2026-10-31-a-version-port-that-accepts-more-than-void.md) | `:var/after` 的第二个实参只接受 `void`（按 22:50 的字面），还是任意值 | 已裁未落 | 23:50——A（比我们的主张更宽）：接受任意值，包括 `void`；第二实参不被读，只表示"这次调用之后的版本"；签名写成 `(var T, any) => var T`，语言参考写同一句 | 语言参考与签名注释写成 `(var T, any) => var T`（今天的实现已对） |
-| [`generator-cell-type-by-inference`](../reviews/generator-cell-type-by-inference.cn.md) | 单元的类型由"只求类型的推导"定，还是由运行时状态的首个写入定 | 已裁未落 | 16:30——A：`typeof` 只用"只求类型"的推导 | **第 11 条生成器的收尾**：`src/compile/gct/builder.cpp:2164` 仍报 `FeatureNotSupported("generators")` |
-| [`literal-head-type-expression`](../reviews/questions-2026-10-30-literal-head-type-expression.md) | `Tangent<T>` 这类算出来的类型能不能当字面量的头 | 已裁未落 | 10:10——②的规则、①的工作量：字面量头走类型表达式解析器；同一笔补 `zero_tangent` 的元组/结构体臂 | **`zero_tangent` 的聚合臂**（`stdlib/rulesets/jvp.cml:53` 仍是 `case _ => ()`）；规则集模块合入前的最后一块 |
-| [`match-type-guard`](../reviews/questions-2026-10-30-match-type-guard.md) | `match type` 里能不能用类型函数做守卫 | 已裁未落 | 11:10——②：不是加守卫，是修缺陷；`T[..]` 匹配任意秩，`T[?]` 只匹配秩 1 | **`zero_tangent` 的任意秩臂真正生效**（修 `match type` 的实施例，本次未核）；`stdlib/rules.cml` 里靠"只匹配秩 1"写错的条目逐条改 `T[?]` |
-| [`one-operator-two-names`](../reviews/questions-2026-10-31-one-operator-two-names.md) | `array:argmax_axis` 与 `tensor:argmax_axis` 两条身份怎么合 | 已裁未落 | 21:35——一个算子一个 URI，取 `tensor:`；`array.cml` 改 `#op`、删 C++ 侧注册 | **六个轴归约的 ONNX 导出与签名合并**；`stdlib/array.cml:405/413` 仍是 `array:` |
-| [`grad-builds-its-graph-at-runtime`](../reviews/questions-2026-10-30-grad-builds-its-graph-at-runtime.md) | 去函数化的验收数不到 `grad` 造出的那个函数值，归第 6 条还是第 7 条 | 已裁未落 | 12:35——A：本条只管程序里写出的函数值；`grad` 造图归第 6 条 | **第 6 条把 `grad` 改写成 `reinterp`/`split`/`transpose`**；`indirect_calls` 读到 0 作联合验收 |
-| [`defun-tag-in-the-type`](../reviews/defun-tag-in-the-type.cn.md) | 文档与 `defun.cpp:8-10` 哪个为准；老 `std::defunctionalize` 是否退役 | 已裁已落 | 12:35——文档为准；老 pass 退役，`std::defun_value` 长成完整一步；笔记进 `docs/design/defunctionalization/README.cn.md` | 无；它解锁第 7 条 |
-| [`function-type-structural-vs-enum`](../reviews/function-type-structural-vs-enum.cn.md) | 函数类型按结构比较（5.2）与"每个函数类型一个 enum"怎么并存 | 已裁已落 | 12:35——一族一个 `enum`；效应限定是子类型；5.2 补一句 | 无（`design-principles.cn.md:354` 已写）；族定义给去函数化用 |
-| [`how-an-indirect-call-hands-back-a-version`](../reviews/questions-2026-10-31-how-an-indirect-call-hands-back-a-version.md) | 穿过函数值的调用写下的捕获，版本怎么交回来 | 已裁已落 | 21:35——A：调用节点本身就是版本；删 `PendingIndirectCallVersion` | 无；`callback_write_ignored.cml` 已按"打印 3"验 |
-| [`narrow-float-tangent`](../reviews/questions-2026-10-30-narrow-float-tangent.md) | `bf16`/`f16` 算不算浮点，`Tangent<f16>` 的射程 | 已裁已落 | 10:30——①：窄浮点也是浮点，切空间是自身；另排"窄浮点算术+显式转换"一条 | 无（`derivative.cpp:548-549` 已设 BF16/F16）；新排的窄浮点算术还不存在 |
-| [`operator-family-names`](../reviews/questions-2026-10-30-operator-family-names.md) | 算子族在 stdlib 里怎么露出名字，`add` 能不能重载 | 已裁已落 | 13:50——写 `func operator +`，不重载 `add`，保留名不列函数一览 | 无；`prelude.cml:85` 起已有 4 条 `func operator` |
-| [`reserved-name-in-library`](../reviews/questions-2026-10-30-reserved-name-in-library.md) | 库里的声明能不能叫保留名 `__add__` | 已裁已落 | 13:50——`__add__` 是内部名，库里写 `func operator +`；`ReservedIdentifier` 不动 | 无 |
 ## 裁决里点名要我们做的三件返工
 22:50 的裁定点名了三件容易读漏的返工（不是新问题，是那一笔要求我们改的现有东西）：
 1. **去两个环境变量开关**：`CAMEL_RULESET_INDEX`（`program.cpp:662`）与 `CAMEL_TILES_TEST_REASONS`（`region_test_pass.cpp:302`）都违反"不加环境变量开关"；改成正式遍/参数——规则集索引做成一个 `std::rulesets` 之类的翻译遍，tiles 做成测试遍的参数打印原因，用例钉住读数。
