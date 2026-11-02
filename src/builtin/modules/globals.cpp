@@ -774,40 +774,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "string",
             {
                 {
-                    ":op/itos",
-                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::String()),
-                },
-                {
-                    ":op/ltos",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::String()),
-                },
-                {
-                    ":op/ftos",
-                    StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::String()),
-                },
-                {
-                    ":op/dtos",
-                    StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::String()),
-                },
-                {
-                    ":op/stos",
-                    StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::String()),
-                },
-                {
-                    ":op/ctos",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Complex64(), false}},
-                        Type::String()),
-                },
-                {
-                    ":op/ztos",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Complex128(), false}},
-                        Type::String()),
-                },
-                {
                     // Every other type: the text println writes for the value. A type rule,
                     // not a parameter of type `any` (design principles 5.10): the operator
                     // reads the argument with the static type it has at the call.

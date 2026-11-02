@@ -57,18 +57,19 @@ RulesetsPass::apply(const camel::runtime::Program *program, std::ostream &os) {
             os << '\n';
         }
     }
+    // The keys a rule is filed under are read off the operator, so there is no per-operator table to
+    // print. What is worth printing is the other half of that: the operators whose key is *not*
+    // derivable, and why. With `forward=true` -- the reading of what the three transform families
+    // resolve -- those lines come out, because a table a transform reads has to be a table a reading
+    // can show, exceptions included.
     if (forward_) {
-        for (const std::string &line : camel::core::forwardRuleDescriptions()) {
-            os << "FORWARD " << line << '\n';
+        for (const camel::core::RuleKeyException &exception : camel::core::ruleKeyExceptions()) {
+            os << "RULEKEY-EXCEPTION " << exception.uri << " -> " << exception.head << '/'
+               << exception.arity << " because " << exception.why << '\n';
         }
-        for (const std::string &line : camel::core::transposeRuleDescriptions()) {
-            os << "TRANSPOSE " << line << '\n';
-        }
-        // The batching table is a third one, and the one a `reinterp<vmap>` reads: a binding no
-        // pass prints is a binding no reading can check, so it is listed here like the other two.
-        for (const std::string &line : camel::core::vmapRuleDescriptions()) {
-            os << "VMAP " << line << '\n';
-        }
+        os << "RULEKEY derivable: an operator's key is its own spelling -- the five tokens of the "
+              "arithmetic, and a module operator's own name at the operand count its rule is filed "
+              "under\n";
     }
     size_t start = 0;
     while (start <= query_.size() && !query_.empty()) {
