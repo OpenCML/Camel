@@ -1951,3 +1951,30 @@ PROBE typeAt after this=0x7bf8c8646188 size=0 sameness=same
 **④ 下一刀（要一次全量重建，因为你批的探针要加在 `frame.h`）**：把 `why` 只加到 `frame.h:719/720`，
 判据是那行 `PROBE typeAt why=frame.h:719` 出现（或 `why=?` 仍在 ⇒ 往下继续缩）。
 **这一刀是"缩范围"，不是修。**
+
+
+## 58. 缩范围第二轮：`frame.h` 7 处、`tree.h` 的 `childType` 全部**排除**；`-vvv` 把时刻钉在**闭包调用的装填**上
+
+**① 这一轮排除的（都打过名字、都没响）**：
+`include/camel/core/context/frame.h` 的 **7 处**（98/110/230/273/288 数据布局与动态区、719/720 `ArgsView`），
+`include/camel/core/type/tree.h` 的 `childType`（连它在 `i >= arity` 时的自打点都**没响**）。
+加上**上一轮已排除**的 `pullback.cpp` 13 处、`split.cpp` 3 处、`transpose.cpp` 2 处 ⇒ **25 处具名候选全部不是现场。**
+
+**② `-vvv` 把时刻钉住了**（不用猜）：
+```
+[INFO] <GraphExec> Indirect call bind: caller='main' node=37 target='__g_75__' callerNorm=1 callerWith=1 targetNorm=1 targetWith=0 targetClosure=2
+Camel Invariant Violation: … tuple.h(160) … TupleType: index out of range
+```
+**⇒ 崩在"给 `main` 的 37 号节点装填一次闭包间接调用（目标 `__g_75__`，`targetClosure=2`）"的当口**，不是 pullback 内部、不是帧的布局读取。
+**这正是你②问的"谁把这个类型设进帧槽"的那一段：装填闭包参数/闭包槽的时候。**
+
+**③ 地址那条路走不通（记下来，省下一班一次构建）**：release 版**没有调试信息**（`addr2line` 打回来 `??:?`），
+`nm` 里连我加的锚符号都没有（`inline` 空函数被折叠），**所以 `delta=400208` 无法换算成 `file:line`**。
+⇒ **缩范围只能靠 `why` 打名字**，而全树还**剩 272 处 `typeAt(`、约 60 个文件**（`src/execute`、`src/runtime`、`src/compile/gir` 最密）。
+
+**④ 下一刀的两个选择（都要你点头，因为都不便宜）**：
+- **甲**：只给**闭包装填那一段**（`src/execute/graph_runtime_support.cpp` 附近、`src/execute/graph_runtime*.cpp`、`src/runtime/frame*.cpp`）的 `typeAt` 打名字——候选约十几处，**一次构建**；
+- **乙**：让 `-Tier fast` 带上 `-g`（或另开一档 `Tier debug`），**一次构建换回 `addr2line` 的能力**，`delta` 立刻变成 `file:line`。
+**我倾向乙：它一次解决 272 处，甲只是再缩一轮。**
+
+**⑤ 另：`Array` 那条与这条的并法按你④的裁决记的——只并措辞，不并缺陷**（那条是阈值过期，这条是容器头没设）。见下一节。
