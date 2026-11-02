@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "camel/utils/windows_parser_guard.h"
-// protocol.h includes nlohmann/json before anything that pulls in ANTLR.
+// protocol.h includes nlohmann/json before anything that defines or undefines the C macro EOF it
+// uses; the ANTLR headers that used to `#undef` it are gone (docs/technical/34_handwritten_parser.md).
 #include "server.h"
 
 #include "camel/core/error/diagnostics.h"

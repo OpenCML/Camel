@@ -3,7 +3,8 @@
 
 #include "camel/utils/windows_parser_guard.h"
 
-// Before any header that pulls in ANTLR, which undefines EOF.
+// Before any header that defines or undefines the C macro EOF that nlohmann/json uses; the ANTLR
+// headers that used to `#undef` it are gone (docs/technical/34_handwritten_parser.md).
 #include "nlohmann/json.hpp"
 
 #include "camel/core/error/diagnostics.h"

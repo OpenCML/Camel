@@ -12,7 +12,11 @@
 
 #pragma once
 
-// nlohmann/json uses the C macro EOF, which the ANTLR headers undefine: include it first.
+// nlohmann/json uses the C macro EOF: include it before anything that defines or undefines that
+// macro. The ANTLR headers that used to `#undef` it were deleted with the handwritten parser
+// (docs/technical/34_handwritten_parser.md) and nothing here does it today; the order stays because
+// the cost of keeping it is one line and the cost of losing it is a compile error that reads as a
+// missing macro.
 #include "nlohmann/json.hpp"
 
 #include <condition_variable>
