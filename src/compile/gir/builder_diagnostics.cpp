@@ -1052,8 +1052,7 @@ void Builder::reportUnusedFallibleValues() {
             // asks -- whether the value has a taker -- not whether the join stands on a chain.
             // A control edge orders nothing of its own (docs/design/effects/edges.cn.md 1), so it
             // is not read as a place in a chain either.
-            const bool ordered =
-                !draft.ctrlUsersOf(id).empty() || !draft.syncUsersOf(id).empty();
+            const bool ordered = !draft.syncUsersOf(id).empty();
             const bool takesNothing =
                 draft.normUsersOf(id).empty() && draft.withUsersOf(id).empty();
             if (nodeIsKind(node, runtime::GCNodeKind::Join) &&
