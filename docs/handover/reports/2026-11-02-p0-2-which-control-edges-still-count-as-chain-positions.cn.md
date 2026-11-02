@@ -76,3 +76,22 @@ if (!draft.ctrlInputsOf(id).empty()) {
 - **乙：读标记 `kGCNodeFlagSyncStatement`** —— `include/camel/runtime/graph.h:176` 定义、`src/compile/gir/builder_helpers.h:668` 打上，**数据也在**；但它是"我知道这里有等待"的布尔，回答不了"等的是谁"，**只能用来筛节点，不能单独当锚点**。
 
 **③ 换判据之后的读数会是什么样**：**这一条从红变绿**是必然的；**同族一起变绿需要一次计数**——那个 pass 的用例清单本轮没有取，所以本页只写"这一条"，不写"这一族"。
+## 换判据的收益率：177 → 40（≈77%）
+
+改法（`1c97c4792`）：`src/passes/test/fault.cpp:125-129` 的锚点**先问 `syncInputsOf`**，`ctrlInputsOf` 那一支**删掉，不留兜底** —— 注释原文：**"a control link is written as a sync edge once P0-2 lands, and then the branch below would be empty for every node"**。留一个永不生效的分支比不留更糟：它让下一个读者以为还有两条路。
+
+**读数**（一次性分支 `probe/ctrl-off2`，与改动分属两笔，探针那笔从未进车道）：
+- 改前：`[FAIL] fault.*` **177 条**；
+- 改后：`faults.plan.toml` **176 → pass 152 / fail 24**、`fault_preservation.plan.toml` **28 → pass 12 / fail 16** ⇒ **剩 40 条**。
+- **`fault` 族里这个根因占 137/177**；**剩余 40 条另有根因。**
+
+**P0-2 不是删一条边，是把"先问谁"问对。**
+
+## 剩下的 40 条：40 不是 40 个用例，是 10 个 × 4 个后端
+
+| 计划 | 用例（每个 × `nvm`/`fvm`/`jit`/`prl`） |
+| --- | --- |
+| `feat/consistency/faults.plan.toml` | `fault.div_zero_in_arm`、`fault.in_tail_round`、`fault.in_sync_call`、`fault.in_map_many`、`fault.in_untaken_arm`、`end.error_reaches_main` |
+| `feat/opt/fault_preservation.plan.toml` | `rules_drop_division.algebra`、`rules_drop_division.opt`、`dce_chained_division.opt`、`inline_faulting_callee_order.opt` |
+
+**这 10 条里几个根因，本页不判**：判据是"同诊断首行同根因"，而探针日志只记了用例名、没有记诊断首行。**要判就得再跑一次带输出的探针，本轮没跑。**
