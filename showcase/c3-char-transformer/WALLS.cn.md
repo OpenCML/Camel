@@ -249,3 +249,44 @@ grow/stage2_residual_ln.cml:45:35: [Error]: No matching function found for argum
   `test/cases/compile/transforms/jvp_matmul.cml` 那六个数（`A=[[1,2],[3,4]]`、`x=(1,2)`，
   `dx=(1,0)` → 切向 1，`dx=(0,1)` → 切向 2）。 那边落完，这边那条 negative 用例自己会变成
   正例，只需把 `expect_exit` 与两条 `expect_stdout_contains` 换成那六个数。
+
+## 墙 10 的更正：不是声明写错，是 `layerNormInfer` 的推断门
+
+我按"声明写错"试过两种改法，**都没有效果**（都实测过，各跑一次 showcase 计划，stage2 的红原样）：
+
+1. 把 `f32` 与 `float` 两个 `layer_norm` 声明**换顺序**（`float` 在前）——`grow/stage2_residual_ln.cml:45:35` 的红不变；
+2. **删掉** `f32` 那条声明，只留 `#op('tensor:layer_norm')` 的 `float` 一条——红也不变。
+
+真正的缺陷是一行推断：`modules/tensor/ops/reduction_ops.cpp` 的 `layerNormInfer` 结尾原来写的是
+
+```
+x && ctx.facts(0).dtype == TypeCode::Float64 ? Float64 : Float32      // x 是 shape，不是 dtype
+```
+
+也就是**形状未知就退回 `f32`**，哪怕 `dtype` 明明是 `f64`。 `float[..]` 实参正是"形状未知、类型 f64"，
+于是归一化的结果被声明成 `f32`，下一个 `matmul` 就拒。 改成同文件邻居 `softmax_grad` 已经在用的
+`floatLikeFirst(ctx)`（只读 dtype），一行，不动算法。
+
+清掉之后（实测）：`forward.cml` —— **整个两层两头的模型**——跑起来了，打出
+`c3 forward init loss=3.303745`（chars=4278、context=8、width=16、heads=2、classes=28、seed=7）。
+这是模型自己的第一个 loss，以前从来没拿到过。
+
+## 墙 11（新）：`layer_norm` 的**梯度**对 `f64` 一律回 `f32`
+
+墙 10 清掉之后 stage2 / stage4 都编译通过，停在运行期：
+
+```
+(attention.pb):?:?: [Error]: An error has occurred: matmul_grad_lhs: the two operands have
+different element types ('f32' and 'f64'): a tensor operator computes in one element type
+```
+
+- 坐标：`modules/tensor/kernels/gradient.cpp` 的 `layerNormGrad` —— `asFloat(x)` 收下 f64 转成
+  `float`，输出却写死 `createTensor(TypeCode::Float32, ...)`（`Input` 那一支在 433 行），所以
+  **f64 的归一化梯度是 f32 的**。 这跟 `docs/handover/reports/code-review-autodiff.md` 的 H3
+  （`gelu_grad`/`erf_grad`/`layer_norm_grad` 按 f32 读 f64）是同一处，这里只是第一次在**训练循环里**
+  撞到它，而且是在**引擎 `with_grad`** 上撞到的，不是库路径。
+- 为什么现在才炸：`layer_norm` 在反向链的**最后一环**时不炸（梯度没再流进 matmul），所以
+  `grow/probe_f32_in_pullback.cml` 的三段各自都能过——`sum(layer_norm(x,g,b))`、
+  `sum(attention(x))`、`sum(layer_norm(x) @ w)` 都绿；一旦归一化在中间（残差 + 再进注意力），
+  那个 f32 梯度就进了 `matmul_grad_lhs`。
+- 没修：这是内核的读写宽度，不是声明；按"只改声明"的界，停在这里报。

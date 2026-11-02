@@ -2,14 +2,15 @@
 // two post-layer-norm blocks (layer_norm -> attention -> residual, layer_norm -> FFN -> residual), a
 // final layer_norm, and the sum as the loss.
 //
-//   x   = take(emb, tokens)
-//   b1  = x + attention(layer_norm(x))                  b2 = b1 + ffn(layer_norm(b1))
-//   loss = sum(layer_norm(b2))
+//   x    = take(emb, tokens)
+//   a1   = x + attention(layer_norm(x))            f1 = a1 + ffn(layer_norm(a1))
+//   a2   = f1 + attention(layer_norm(f1))          f2 = a2 + ffn(layer_norm(a2))
+//   loss = sum(layer_norm(f2))
 //
-// It is written the way `train.cml` writes the model, with `nn.layer_norm`, and it is expected to
-// stop where `stage2_residual_ln.cml` stopped.  Recording that stop is this stage's reading: the
-// numbers it would print are the ones `baseline/grow.py --stage 4` prints, and they are not claimed
-// here.
+// The two blocks are written out rather than called: a `with <m: Model> func block(...)` cannot be
+// called from inside another `with <m: Model>` function without re-binding the parameter, and what
+// this stage wants to read is the model, not a calling convention.  It is the same arithmetic
+// `train.cml` writes, at two positions and width two.
 //
 //     camel showcase/c3-char-transformer/grow/stage4_full_model.cml
 //     python showcase/c3-char-transformer/baseline/grow.py --stage 4
@@ -57,25 +58,19 @@ func attention(x: float[..], wq: float[..], wk: float[..], wv: float[..]): float
 }
 
 with <m: Model>
-func block(x: float[..], layer: int): float[..] {
-    let normed1 = layer_norm(x, m.g1a, m.b1a)
-    let attended = x + attention(normed1, m.wq1, m.wk1, m.wv1)
-    let normed2 = layer_norm(attended, m.g1b, m.b1b)
-    let hidden = relu(normed2 @ m.f1_1 + m.fb1_1)
-    return attended + hidden @ m.f2_1 + m.fb2_1
-}
-
-with <m: Model>
 func loss_of(tokens: int[..]): float {
     let x = take(m.emb, tokens)
-    let first = block(x, 0)
-    let second = block(first, 1)
+    let attended1 = x + attention(layer_norm(x, m.g1a, m.b1a), m.wq1, m.wk1, m.wv1)
+    let hidden1 = relu(layer_norm(attended1, m.g1b, m.b1b) @ m.f1_1 + m.fb1_1)
+    let first = attended1 + hidden1 @ m.f2_1 + m.fb2_1
+    let attended2 = first + attention(layer_norm(first, m.g2a, m.b2a), m.wq2, m.wk2, m.wv2)
+    let hidden2 = relu(layer_norm(attended2, m.g2b, m.b2b) @ m.f1_2 + m.fb1_2)
+    let second = attended2 + hidden2 @ m.f2_2 + m.fb2_2
     return sum(layer_norm(second, m.gout, m.bout))
 }
 
-func main(): int sync {
-    let tokens = [0, 1] as int[]
-    let model0 = {
+func initial(): Model {
+    return {
         emb: [[1.0, 0.5], [0.5, 1.0]] as float[2, 2],
         g1a: [1.0, 1.0] as float[], b1a: [0.0, 0.0] as float[],
         wq1: [[1.0, 0.5], [0.5, 1.0]] as float[2, 2],
@@ -97,6 +92,11 @@ func main(): int sync {
         fb2_2: [0.1, 0.0] as float[],
         gout: [1.0, 1.0] as float[], bout: [0.0, 0.0] as float[]
     }
+}
+
+func main(): int sync {
+    let tokens = [0, 1] as int[]
+    let model0 = initial()
     let (final, state, steps, log) = loop m = model0, opt = adam_state(model0), step = 0, log = '' as string
         while step < 50
         do {

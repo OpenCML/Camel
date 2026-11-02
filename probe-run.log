@@ -1,0 +1,195 @@
+[camel-remote] showcase: pushed lane-c3-merged, 3 changed file(s), 2 untracked (1.5 s)
+[camel-remote] host: 437 GB free, 21206 MB of checkouts
+[camel-remote] ccache: ccache version 4.5.1
+
+> camel-scripts@0.2.42 build
+> node ./scripts/build.js
+
+generated diagnostics/registry.tsv (unchanged) and 0 file(s); 0 new number(s), 306 codes
+[STEP] Footprint 261102_161129_34637f8b2_dirty reused: sources, configuration and options unchanged
+[STEP] Building Release... (261102_161129_34637f8b2_dirty)
+[STEP] Running: cmake .. -G "Ninja Multi-Config" -DBUILD_FOOTPRINT="261102_161129_34637f8b2_dirty" -DCMAKE_TOOLCHAIN_FILE=./build/conan_toolchain.cmake -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DENABLE_FASTVM_JIT=ON -DENABLE_FASTVM_COMPUTED_GOTO=ON -DCAMEL_ENABLE_PYTHON=ON -DCAMEL_TENSOR_BLAS=ON
+-- Using Conan toolchain: /home/zjwei/camel-work/showcase/build/conan_toolchain.cmake
+-- Conan toolchain: Defining architecture flag: -m64
+-- Conan toolchain: C++ Standard 17 with extensions ON
+-- Conan: Component target declared 'fmt::fmt'
+-- Conan: Component target declared 'GTest::gtest'
+-- Conan: Component target declared 'GTest::gtest_main'
+-- Conan: Component target declared 'GTest::gmock'
+-- Conan: Component target declared 'GTest::gmock_main'
+-- Conan: Target declared 'gtest::gtest'
+-- Conan: Target declared 'nlohmann_json::nlohmann_json'
+-- Conan: Target declared 'Taskflow::Taskflow'
+-- ============ Build options: ============
+-- ENABLE_FASTVM_JIT=ON
+-- ENABLE_FASTVM_COMPUTED_GOTO=ON
+-- CAMEL_ENABLE_PYTHON=ON
+-- CAMEL_TENSOR_BLAS=ON
+-- CAMEL_TARGET_ARCH=native (flags: -march=native;-mfma)
+-- ========================================
+-- Taskflow workers: 8 MiB stacks (headers patched from /home/zjwei/.conan2/p/taskf7d6b83cc29e97/p/include)
+-- Python DLL repository not found: /home/zjwei/camel-work/showcase/modules/python/dlls (optional, gitignored)
+-- Conan: Component target declared 'pybind11::headers'
+-- Conan: Component target declared 'pybind11::pybind11'
+-- Conan: Component target declared 'pybind11::embed'
+-- Conan: Component target declared 'pybind11::module'
+-- Conan: Component target declared 'pybind11::python_link_helper'
+-- Conan: Component target declared 'pybind11::windows_extras'
+-- Conan: Component target declared 'pybind11::lto'
+-- Conan: Component target declared 'pybind11::thin_lto'
+-- Conan: Component target declared 'pybind11::opt_size'
+-- Conan: Component target declared 'pybind11::python2_no_register'
+-- Conan: Target declared 'pybind11_all_do_not_use'
+-- Conan: Including build module from '/home/zjwei/.conan2/p/pybin1596a2038ac33/p/lib/cmake/pybind11/pybind11Common.cmake'
+-- Python DLL repository not found: /home/zjwei/camel-work/showcase/modules/python/dlls (optional, gitignored)
+-- Conan: Component target declared 'pybind11::headers'
+-- Conan: Component target declared 'pybind11::pybind11'
+-- Conan: Component target declared 'pybind11::embed'
+-- Conan: Component target declared 'pybind11::module'
+-- Conan: Component target declared 'pybind11::python_link_helper'
+-- Conan: Component target declared 'pybind11::windows_extras'
+-- Conan: Component target declared 'pybind11::lto'
+-- Conan: Component target declared 'pybind11::thin_lto'
+-- Conan: Component target declared 'pybind11::opt_size'
+-- Conan: Component target declared 'pybind11::python2_no_register'
+-- Conan: Target declared 'pybind11_all_do_not_use'
+-- Conan: Including build module from '/home/zjwei/.conan2/p/pybin1596a2038ac33/p/lib/cmake/pybind11/pybind11Common.cmake'
+-- Could NOT find BLAS (missing: BLAS_LIBRARIES) 
+-- CAMEL_TENSOR_BLAS: library GEMM is /usr/lib/x86_64-linux-gnu/libopenblas.so
+CMake Warning at /home/zjwei/camel-eval/venv-build/lib/python3.10/site-packages/cmake/data/share/cmake-4.4/Modules/FindCUDAToolkit.cmake:1360 (message):
+  Could not find librt library, needed by CUDA::cudart_static
+Call Stack (most recent call first):
+  modules/tiles/CMakeLists.txt:26 (find_package)
+
+
+-- tiles: CUDA 12.3.107 headers; driver/NVRTC loaded at runtime
+-- Conan: Target declared 'httplib::httplib'
+-- Configuring done (2.2s)
+-- Generating done (0.7s)
+-- Build files have been written to: /home/zjwei/camel-work/showcase/build
+[STEP] Running: cmake --build . --config Release
+[1/7] Building CXX object modules/tensor/CMakeFiles/tensor_cmo_objects.dir/Release/ops/reduction_ops.cpp.o
+../modules/tensor/ops/reduction_ops.cpp:555:24: warning: missing field 'semantics' initializer [-Wmissing-designated-field-initializers]
+  555 |         .traits    = {}});
+      |                        ^
+../modules/tensor/ops/reduction_ops.cpp:564:24: warning: missing field 'semantics' initializer [-Wmissing-designated-field-initializers]
+  564 |         .traits    = {}});
+      |                        ^
+../modules/tensor/ops/reduction_ops.cpp:577:24: warning: missing field 'semantics' initializer [-Wmissing-designated-field-initializers]
+  577 |         .traits    = {}});
+      |                        ^
+../modules/tensor/ops/reduction_ops.cpp:585:24: warning: missing field 'semantics' initializer [-Wmissing-designated-field-initializers]
+  585 |         .traits    = {}});
+      |                        ^
+../modules/tensor/ops/reduction_ops.cpp:593:24: warning: missing field 'semantics' initializer [-Wmissing-designated-field-initializers]
+  593 |         .traits    = {}});
+      |                        ^
+../modules/tensor/ops/reduction_ops.cpp:601:24: warning: missing field 'semantics' initializer [-Wmissing-designated-field-initializers]
+  601 |         .traits    = {}});
+      |                        ^
+../modules/tensor/ops/reduction_ops.cpp:612:28: warning: missing field 'semantics' initializer [-Wmissing-designated-field-initializers]
+  612 |         .ordinaryParams = 1});
+      |                            ^
+../modules/tensor/ops/reduction_ops.cpp:622:28: warning: missing field 'semantics' initializer [-Wmissing-designated-field-initializers]
+  622 |         .ordinaryParams = 1});
+      |                            ^
+../modules/tensor/ops/reduction_ops.cpp:631:24: warning: missing field 'semantics' initializer [-Wmissing-designated-field-initializers]
+  631 |         .traits    = {}});
+      |                        ^
+../modules/tensor/ops/reduction_ops.cpp:643:24: warning: missing field 'semantics' initializer [-Wmissing-designated-field-initializers]
+  643 |         .traits    = {}});
+      |                        ^
+../modules/tensor/ops/reduction_ops.cpp:138:5: warning: missing field 'semantics' initializer [-Wmissing-designated-field-initializers]
+  138 |     };
+      |     ^
+../modules/tensor/ops/reduction_ops.cpp:556:20: note: in instantiation of function template specialization 'camel::tensor::ops::(anonymous namespace)::reduceAxisDef<camel::tensor::kernels::ReduceOp::Sum>' requested here
+  556 |     defs.push_back(reduceAxisDef<k::ReduceOp::Sum>("sum_axis", "sum", "T[..]"));
+      |                    ^
+../modules/tensor/ops/reduction_ops.cpp:138:5: warning: missing field 'semantics' initializer [-Wmissing-designated-field-initializers]
+  138 |     };
+      |     ^
+../modules/tensor/ops/reduction_ops.cpp:565:20: note: in instantiation of function template specialization 'camel::tensor::ops::(anonymous namespace)::reduceAxisDef<camel::tensor::kernels::ReduceOp::Mean>' requested here
+  565 |     defs.push_back(reduceAxisDef<k::ReduceOp::Mean>("mean_axis", "mean", "T[..]"));
+      |                    ^
+../modules/tensor/ops/reduction_ops.cpp:138:5: warning: missing field 'semantics' initializer [-Wmissing-designated-field-initializers]
+  138 |     };
+      |     ^
+../modules/tensor/ops/reduction_ops.cpp:566:20: note: in instantiation of function template specialization 'camel::tensor::ops::(anonymous namespace)::reduceAxisDef<camel::tensor::kernels::ReduceOp::Max>' requested here
+  566 |     defs.push_back(reduceAxisDef<k::ReduceOp::Max>("max_axis", "max", "T[..]"));
+      |                    ^
+../modules/tensor/ops/reduction_ops.cpp:138:5: warning: missing field 'semantics' initializer [-Wmissing-designated-field-initializers]
+  138 |     };
+      |     ^
+../modules/tensor/ops/reduction_ops.cpp:567:20: note: in instantiation of function template specialization 'camel::tensor::ops::(anonymous namespace)::reduceAxisDef<camel::tensor::kernels::ReduceOp::Min>' requested here
+  567 |     defs.push_back(reduceAxisDef<k::ReduceOp::Min>("min_axis", "min", "T[..]"));
+      |                    ^
+../modules/tensor/ops/reduction_ops.cpp:138:5: warning: missing field 'semantics' initializer [-Wmissing-designated-field-initializers]
+  138 |     };
+      |     ^
+../modules/tensor/ops/reduction_ops.cpp:568:20: note: in instantiation of function template specialization 'camel::tensor::ops::(anonymous namespace)::reduceAxisDef<camel::tensor::kernels::ReduceOp::ArgMax>' requested here
+  568 |     defs.push_back(reduceAxisDef<k::ReduceOp::ArgMax>("argmax_axis", "argmax", "int[..]"));
+      |                    ^
+../modules/tensor/ops/reduction_ops.cpp:138:5: warning: missing field 'semantics' initializer [-Wmissing-designated-field-initializers]
+  138 |     };
+      |     ^
+../modules/tensor/ops/reduction_ops.cpp:569:20: note: in instantiation of function template specialization 'camel::tensor::ops::(anonymous namespace)::reduceAxisDef<camel::tensor::kernels::ReduceOp::ArgMin>' requested here
+  569 |     defs.push_back(reduceAxisDef<k::ReduceOp::ArgMin>("argmin_axis", "argmin", "int[..]"));
+      |                    ^
+16 warnings generated.
+[2/7] Linking CXX shared library modules/tensor/Release/tensor.cmo
+[3/7] Linking CXX shared library modules/nn/Release/nn.cmo
+[4/7] Linking CXX shared library modules/random/Release/random.cmo
+[5/7] Linking CXX shared library modules/tiles/Release/tiles.cmo
+[6/7] Linking CXX shared library modules/ckpt/Release/ckpt.cmo
+[7/7] Linking CXX shared library modules/onnx/Release/onnx.cmo
+source tree artifacts: 1298 files under src, include, modules, tools, stdlib, third_party, cmake, no build output in the source tree
+[DONE] Copied all build artifacts
+[STEP] Collecting Release build artifacts to out/latest/
+[DONE] Artifacts collected to out/latest/
+[STEP] Stamped out/latest/build-info.json: 34637f8b27 (dirty: 5 file(s)), 1300 source files, fingerprint 925d808bd02a
+[DONE] Release build completed
+BUILD_SECONDS=4.9
+BUILD_EXIT=0
+[tier] fast: 1 plan file(s), 0 declared test entries, 11 started
+[INFO] camel executable (release): /home/zjwei/camel-work/showcase/out/latest/bin/camel
+[INFO] discovered plans: 1
+[INFO] tier: fast, tests: 11, jobs: 1
+[RETAIN] run dirs: 163 scanned, 1 removed (0.0 MB, 29 entries), 20 kept of the newest 20, 142 kept because they recorded failures; scratch roots: 0 removed (0.0 MB), 45 kept
+[INFO] named plan target(s) run in full: 1 (the tier filter leaves a named plan alone)
+
+[PLAN] perf.showcase_c3: perf.showcase_c3_char_transformer
+[PASS] probes                                                  1.14 s
+[FAIL] forward                                              321.48 ms
+    [INFO] full output: test/results/log/20261102_111346_3383085/fail/perf.showcase_c3_char_transformer/forward/ (stdout.txt, stderr.txt, output.txt, meta.json)
+    [INFO] stdout does not contain 'c3 config steps='
+    [stdout] c3 forward config chars=4278 context=8 width=16 heads=2 classes=28 seed=7
+    [stdout] c3 forward init loss=3.303745
+    [stderr] (empty)
+[PASS] train.stops_at_the_wall                              132.98 ms
+[PASS] parity                                                  3.63 s
+[PASS] train.engine_fifty_steps                             158.74 ms
+[PASS] grow.stage1_two_blocks                               279.44 ms
+[FAIL] grow.stage2_residual_ln                              169.13 ms
+    [INFO] full output: test/results/log/20261102_111346_3383085/fail/perf.showcase_c3_char_transformer/grow.stage2_residual_ln/ (stdout.txt, stderr.txt, output.txt, meta.json)
+    [INFO] stdout does not contain 'stage2_residual_ln.cml:45:35: [Error]: No matching function found for argument types'
+    [INFO] stdout does not contain 'f32[..], float[..], float[..], float[..]'
+    [stdout] (attention.pb):?:?: [Error]: An error has occurred: matmul_grad_lhs: the two operands have different element types ('f32' and 'f64'): a tensor operator computes in one element type, and there is no implicit conversion between numeric types....
+    [stderr] (attention.pb):?:?: [Error]: An error has occurred: matmul_grad_lhs: the two operands have different element types ('f32' and 'f64'): a tensor operator computes in one element type, and there is no implicit conversion between numeric types....
+[PASS] grow.probe_layer_norm_float                           72.77 ms
+[PASS] grow.stage3_embed_ffn                                129.01 ms
+[FAIL] grow.stage4_full_model.stops_at_layer_norm            86.81 ms
+    [INFO] full output: test/results/log/20261102_111346_3383085/fail/perf.showcase_c3_char_transformer/grow.stage4_full_model.stops_at_layer_norm/ (stdout.txt, stderr.txt, output.txt, meta.json)
+    [INFO] stdout does not contain 'No matching function found for argument types'
+    [INFO] stdout does not contain 'f32[..], float[..]'
+    [stdout] (grad(loss_of)):?:?: [Error]: An error has occurred: matmul_grad_lhs: the two operands have different element types ('f32' and 'f64'): a tensor operator computes in one element type, and there is no implicit conversion between numeric types...
+    [stderr] (grad(loss_of)):?:?: [Error]: An error has occurred: matmul_grad_lhs: the two operands have different element types ('f32' and 'f64'): a tensor operator computes in one element type, and there is no implicit conversion between numeric types...
+[PASS] grow.probe_f32_in_pullback                           180.39 ms
+[INFO] test scratch kept: /home/zjwei/camel-work/showcase/tmp/test/run-3383085
+[provenance] tip (dirty: 5 files) | binary built 2026-11-02T11:13:45-05:00 | tree /home/zjwei/camel-work/showcase | tier fast | jobs 1
+
+[SUMMARY] total: 11, pass: 8, fail: 3
+[SLOT] concurrency 0.99/1, slots held 1/1, children 6.2 s, no-child 0.1 s (pre-spawn 0.1 s, post-exit 0.0 s), probes 0.0 s (in slot 0.0 s), verifications 0.0 s (in slot 0.0 s), log writes 0.0 s (blocking 0.0 s of slots), serial 0 tests locking 0.0 s, empty capacity 0.0 s, after the last release 0.0 s (0.1 s of it per slot), loop stalls 0.0 s
+[INFO] wall: 6.3 s, jobs: 1, tier: fast
+[SPLIT] build 4.9 s, test 6.3 s, total 11.2 s
+RUN_EXIT=1
+[camel-remote] showcase exit 1 (transfer 3.0 s, build 5.0 s, plan 7.4 s; total 15 s)

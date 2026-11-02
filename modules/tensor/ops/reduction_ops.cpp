@@ -359,10 +359,12 @@ std::optional<Type *> layerNormInfer(const InferContext &ctx) {
                 formatShape(*x)));
         }
     }
-    return tensorOf(
-        x && ctx.facts(0).dtype == TypeCode::Float64 ? std::optional(TypeCode::Float64)
-                                                    : std::optional(TypeCode::Float32),
-        x);
+    // The element type follows the input's, and the shape does not decide it. The previous form
+    // gated the dtype on `x` (the *shape*) being known, so a `float[..]` argument -- shape unknown,
+    // dtype f64 -- was declared `f32`: a normalisation in a `float` model then handed an f32 value
+    // to the next product and the program stopped at `(f32[..], float[..], ...)`. `floatLikeFirst`
+    // is what the neighbouring `softmax_grad` already uses, and it reads the dtype alone.
+    return floatLikeFirst(ctx);
 }
 
 slot_t layerNormKernel(ArgsView &, ArgsView &norm, context::Context &) {

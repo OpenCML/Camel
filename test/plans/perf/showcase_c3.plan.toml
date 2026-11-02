@@ -43,9 +43,9 @@ name = "forward"
 desc = "train.cml --arg mode=forward: the two-layer, two-head character Transformer loads the committed corpus (its length, context, width and vocabulary are printed), builds its parameter tree from the seed, and prints the cross-entropy of the first window.  A model that cannot compute its own loss is a bug in the example, not a wall in the library, so this entry is not a wall reading."
 kind = "behavior"
 case = "../../../showcase/c3-char-transformer/forward.cml"
-args = ["${case}", "--arg", "corpus=showcase/c3-char-transformer/corpus.txt"]
-expect_exit = 1
-expect_stdout_contains = ["No matching function found for argument types"]
+args = ["${case}", "--arg", "corpus=showcase/c3-char-transformer/corpus.txt", "--arg", "seed=7"]
+expect_exit = 0
+expect_stdout_contains = ["c3 forward config chars=4278 context=8 width=16 heads=2 classes=28 seed=7", "c3 forward init loss=3.303745"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 120000
 
@@ -116,7 +116,7 @@ case = "../../../showcase/c3-char-transformer/grow/stage2_residual_ln.cml"
 args = ["${case}"]
 kind = "negative"
 expect_exit = 1
-expect_stdout_contains = ["stage2_residual_ln.cml:45:35: [Error]: No matching function found for argument types", "f32[..], float[..], float[..], float[..]"]
+expect_stdout_contains = ["matmul_grad_lhs: the two operands have different element types ('f32' and 'f64')"]
 timeout_ms = 300000
 
 [[tests]]
@@ -150,5 +150,15 @@ case = "../../../showcase/c3-char-transformer/grow/stage4_full_model.cml"
 args = ["${case}"]
 kind = "negative"
 expect_exit = 1
-expect_stdout_contains = ["No matching function found for argument types", "f32[..], float[..]"]
+expect_stdout_contains = ["grad(loss_of)", "matmul_grad_lhs: the two operands have different element types ('f32' and 'f64')"]
 timeout_ms = 300000
+
+[[tests]]
+name = "grow.probe_f32_in_pullback"
+desc = "After the `layer_norm` inference fix, stage 2 compiles and stops in `attention.pb` with `matmul_grad_lhs: ('f32' and 'f64')`. This probe narrows which composition answers an f32 value: layer_norm alone, attention alone, or the product of a normalised value."
+case = "../../../showcase/c3-char-transformer/grow/probe_f32_in_pullback.cml"
+args = ["${case}"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["probe both value="]
+timeout_ms = 120000
