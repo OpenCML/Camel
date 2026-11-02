@@ -230,3 +230,14 @@ expect_exit = 0
 expect_stdout_contains = ["pos step=1 loss=4.952361566340", "pos step=2 loss=4.873064008395", "pos step=3 loss=4.794549291334", "pos step=4 loss=4.716833197884", "pos step=5 loss=4.639935217249", "pos step=6 loss=4.563875041623", "pos step=7 loss=4.488672172026", "pos step=8 loss=4.414345786361", "pos step=9 loss=4.340914674089", "pos step=10 loss=4.268397195245", "pos step=11 loss=4.196811250402", "pos step=12 loss=4.126174256205", "pos step=13 loss=4.056503123890", "pos step=14 loss=3.987814239262", "pos step=15 loss=3.920123443125", "pos step=16 loss=3.853446011376", "pos step=17 loss=3.787796634069", "pos step=18 loss=3.723189392866", "pos step=19 loss=3.659637736329", "pos step=20 loss=3.597154452547", "pos done steps=200 last=0.9495584215", "pos before [[", "pos after [[-0.2471", "pos prob after [[0.37886"]
 timeout_ms = 300000
 
+
+
+[[tests]]
+name = "grow.stage7_pos_attn"
+desc = "Stage 6 plus one head of self attention before the head -- Q, K, S, A, O with no mask, built from the tensors that were already there (matmul, transpose, softmax), no new operator.  It is worse than stage 6 and this case records that rather than hiding it: the loss ends at 1.387116155841, sitting on the abstention floor 1.386294 that stage 6 had crossed to reach 0.949558422, and both argmax are wrong again.  Unmasked attention over two positions averages them, and what made stage 6 work was telling them apart.  The twenty step lines are pinned at twelve decimals from `grow.py --stage 7`, which is the evidence that the attention block runs through the same pullback as everything else."
+case = "../../../showcase/c3-char-transformer/grow/stage7_pos_attn.cml"
+args = ["${case}", "--arg", "count=200"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["attn step=1 loss=2.300166876862", "attn step=2 loss=2.246755973928", "attn step=3 loss=2.195492619329", "attn step=4 loss=2.146411861759", "attn step=5 loss=2.099537202740", "attn step=6 loss=2.054878411717", "attn step=7 loss=2.012431362224", "attn step=8 loss=1.972178335344", "attn step=9 loss=1.934088673689", "attn step=10 loss=1.898119733712", "attn step=11 loss=1.864218085669", "attn step=12 loss=1.832320904370", "attn step=13 loss=1.802357488724", "attn step=14 loss=1.774250846210", "attn step=15 loss=1.747919280479", "attn step=16 loss=1.723277925919", "attn step=17 loss=1.700240181786", "attn step=18 loss=1.678719009195", "attn step=19 loss=1.658628065951", "attn step=20 loss=1.639882665617", "attn done steps=200 last=1.387116155841", "attn before [[", "attn after [[0.0020", "attn prob after [[0.50103"]
+timeout_ms = 300000

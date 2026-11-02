@@ -310,6 +310,31 @@ NAMES6 = NAMES5 + ["pos"]
 START6 = START5 + [0.0, 0.0, 0.0, 0.0]
 STAGES[6] = (NAMES6, START6, loss_stage6)
 
+def forward7(w):
+    """Stage 7: one head of self attention over the two positions, then the head."""
+    head = np.array(w[92:96]).reshape(2, 2)
+    position = np.array(w[96:100]).reshape(2, 2)
+    wq = np.array(w[100:104]).reshape(2, 2)
+    wk = np.array(w[104:108]).reshape(2, 2)
+    wv = np.array(w[108:112]).reshape(2, 2)
+    x = forward4(w) + position
+    q = x @ wq
+    k = (x @ wk).T
+    a = softmax_rows(q @ k * 0.70710678118654752)
+    return a @ (x @ wv) @ head
+
+
+def loss_stage7(w):
+    """The same cross entropy as stage 5 and 6, on logits that attention has mixed."""
+    z = forward7(w)
+    denominator = np.log(np.exp(z) @ np.ones((2, 2)))
+    return (denominator * LABEL).sum() - (z * LABEL).sum()
+
+
+NAMES7 = NAMES6 + ["wq", "wk", "wv"]
+START7 = START6 + [0.5, 0.0, 0.0, 0.5, 0.5, 0.0, 0.0, 0.5, 0.5, 0.0, 0.0, 0.5]
+STAGES[7] = (NAMES7, START7, loss_stage7)
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--stage", type=int, default=1)
