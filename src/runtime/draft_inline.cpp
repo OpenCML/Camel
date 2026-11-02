@@ -1561,10 +1561,11 @@ bool devirtualizeStaticCallInDraft(
 /// The place is resolved again here, after the code is in -- reading which statement ends the chain
 /// that grows from the one it was written after, rather than the snapshot the splice took.
 void resolvePlaceForks(GraphDraft &draft) {
+    // A statement of a chain is read from the node itself (draft.h, `isChainStatement`), not from
+    // the mark the builder left: the mark says the builder chained the node, which is a different
+    // question from whether running it is observable.
     const auto isStatement = [&](gc_node_ref_t n) {
-        const DraftNodeHeader *header = draft.header(n);
-        return draft.alive(n) && header != nullptr &&
-               (header->runtimeFlags & kGCNodeFlagSyncStatement) != 0;
+        return draft.alive(n) && draft.isChainStatement(n);
     };
     const auto inBlock = [&](gc_node_ref_t a, gc_node_ref_t b) {
         return sameSyncBlock(draft, a, b);
