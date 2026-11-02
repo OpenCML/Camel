@@ -276,6 +276,21 @@ print family, and this operator's configuration is not a string, so its call has
 
 
 
+
+**2026-11-02 第十九刀没合：作用域那三条不是同一个缺陷，而且名字修好会把"响的失败"变成"哑的失败"**
+
+裁下来做"作用域三条（`cmlN` 出作用域）"，判据是 `unfaithful 10 → 7`。**查完并试做了四种改法，最后整笔回退**，因为其中两条会从"打印不出来"变成"能跑但答错"。
+
+**病因与试做**：
+
+1. **`trans/cpp/exec/variables` 是名字本身错了**：`println(add(5), add(7), acc)` 的读，版本是 `:var/after`（一次调用留下的版本）。`operatorExpression` 里读 cell 只剥 `:op/assn*`（`cellReadBy`），不剥 `:var/after`，于是 `cellName` 给那个 cell **现编**了一个 `cml7`，而文本里从没有声明过它。改成 `cellOf`（它剥 `:op/assn*` 与 `:var/after` 到 `:var/new`）之后：**回程 `EQUAL (95 vertices, 355 edges)`**，输出逐行相同。
+2. **另外两条是别的东西**：`closure_var` 与 `var_params` 名字修好之后**能编译、能跑，但答案不同**——`closure_var` 源程序打印 `3 / 24 / 249`，打印出来的程序打印 `1 / 2 / 4`。原因是**调用被丢**：`twice(x)`、`add(100)`、`f(g)` 这些"结果没人读、被调函数通过捕获写了一个变量 cell"的调用，打印器按纯调用丢掉了。
+3. **试了三种修法都没动它**：把 `generated_` 改成跨嵌套体单调（名字不再撞）、把 lambda 图加进 `isEffectful` 的候选、给 `nodeEffect` 加"被调图里出现 `:op/assn` 就算有效果"——**`closure_var` 仍答 `1 / 2 / 4`**。说明那个调用不是走 `nodeEffect` 那条分支丢的（另有路径，下一刀查）。
+
+**为什么整笔回退**：留着第 1 条、不回退，`unfaithful` 会 10 → 9，但另外两条就变成**静默答错**；按"打印不忠实 = 假打印，宁可拒"的规矩，这是把一条响的失败换成两条哑的失败，**不能合**。所以代码回到 `e7d84d507`，`unfaithful` 仍是 10。
+
+**下一刀该查的**：`twice(x)`、`add(100)`、`f(g)` 这类"结果没人读、被调函数通过捕获写 cell"的调用走的是哪条丢弃路径（`nodeEffect` 已被排除三次）。判据：`closure_var` 源与打印程序输出**逐行相同**（`3 / 24 / 249`），`var_params` 同理（`1 / 3 / 13 / 6 / 15 / 8 / 113 / 20001`），且两条回程 `EQUAL`。
+
 **2026-11-02 第十八刀没下刀：`when` 槽不在打印器这一层（只查未改）**
 
 `unfaithful` 里唯一"签名侧"的那条（`compile/when_overloads/values.cml`）本来排在下一刀。**查完发现修法不在打印器**，所以先不落代码。
