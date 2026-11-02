@@ -1139,14 +1139,14 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
                 if (member == node) {
                     continue;
                 }
-                // What the member carries, read where every pass reads it
-                // (camel/runtime/effect_liveness.h): the wait it has, and whether it sits on a
-                // block's chain. Only the wait is moved today; the chain is read here so that the
-                // day the control edge stops there is already a fact of the member to move.
-                EffectLivenessFacts memberFacts;
-                memberFacts.hasWaitEdge     = !draft_.ctrlInputsOf(member).empty();
-                memberFacts.isSyncStatement = !draft_.syncInputsOf(member).empty();
-                if (!memberFacts.hasWaitEdge) {
+                // What the member carries: the wait it has, and whether it sits on a block's chain.
+                // A structural reading, written where it is read -- `EffectLivenessFacts` no longer
+                // carries a wait field (camel/runtime/effect_liveness.h says why). Only the wait is
+                // moved; the member's place on a block's chain is not, so it is not read here
+                // either (it used to be assigned and never used, which is one more reason the
+                // field was a bag rather than an answer).
+                const bool memberCarriesWait = !draft_.ctrlInputsOf(member).empty();
+                if (!memberCarriesWait) {
                     continue;
                 }
                 for (gc_node_ref_t wait : draft_.ctrlInputsOf(member)) {

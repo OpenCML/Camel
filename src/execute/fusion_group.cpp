@@ -84,13 +84,14 @@ bool FusionGroupView::isPrivateTo(gc_node_ref_t node, std::span<const gc_node_re
             return false;
         }
     }
-    // What is left is the question of what observes the node from outside the group, and it is
-    // asked where every other pass asks it (camel/runtime/effect_liveness.h): a data user, a wait,
-    // or a place on a block's chain. A node that any of those reaches must stay where it is -- a
-    // fusion group runs as one piece, so taking it in would move the observation with it.
+    // What is left is the question of what observes the node from outside the group. Two of the
+    // three ways are 3.1's own and are answered by the one function that answers them
+    // (camel/runtime/effect_liveness.h, `effectStandingOf`); the third -- something outside waits on
+    // this node -- is not a credential and is not in that answer, so it is read here and named as
+    // the extra it is. A node any of the three reaches must stay where it is: a fusion group runs as
+    // one piece, so taking it in would move the observation with it.
     camel::runtime::EffectLivenessFacts facts;
-    facts.hasDataUser  = !graph_->withOutputsOf(node).empty();
-    facts.isWaitedOn   = !graph_->ctrlOutputsOf(node).empty();
+    facts.hasDataUser     = !graph_->withOutputsOf(node).empty();
     facts.isSyncStatement = !graph_->syncPredsOf(node).empty();
     if (!facts.isSyncStatement && graph_->hasSyncEdges()) {
         for (const camel::runtime::GCGraphSyncEdge &edge : graph_->syncEdges()) {
@@ -100,7 +101,9 @@ bool FusionGroupView::isPrivateTo(gc_node_ref_t node, std::span<const gc_node_re
             }
         }
     }
-    return !facts.hasDataUser && !facts.isWaitedOn && !facts.isSyncStatement;
+    const bool isWaitedOn = !graph_->ctrlOutputsOf(node).empty();
+    return camel::runtime::effectStandingOf(facts) == camel::runtime::EffectStanding::HasNoCredential &&
+           !isWaitedOn;
 }
 
 void registerFusionGroup(attr::AttrKey key, std::string_view name, FusionGroupKernel kernel) {

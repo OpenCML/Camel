@@ -2,13 +2,14 @@
 
 > 一页一问。作者把读过的页整体挪进 `reviews/`；这里只放**还在等回答**的页。
 
-## 现在在等作者：2 页
+## 现在在等作者：3 页
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
 | [`2026-11-02-the-generator-reads-a-draft-node-after-its-builder`](2026-11-02-the-generator-reads-a-draft-node-after-its-builder.cn.md) | `stream.*` 在 Windows 上崩在 `builder_support.h#nodeGraphOf`（草稿节点不属于任何 compile graph builder），同树 Linux 全绿、五个后端都崩，所以是建图不是调度；问该谁去找那个节点的 owner、修好前 Windows 腿要不要继续红 | 待裁 | — | Windows 腿的红；那个节点的 owner |
+| [`2026-11-03-may-a-printed-name-be-the-definitions-own`](2026-11-03-may-a-printed-name-be-the-definitions-own.cn.md) | `tensor:sum` 与 `tensor:sum_axis` 共用一个写名 `sum`，边界在哪只有定义知道、节点不知道；问打印件能不能用定义自己的名字（`sum_axis(m, 0, false)`），还是必须复现源里的 `<>` 写法 | 待裁 | — | 打印器的往返：节点上只有一个写名 |
 | [`questions-2026-11-02-which-index-rows-are-already-landed`](questions-2026-11-02-which-index-rows-are-already-landed.md) | 索引里标"已裁未落"的条目，哪些在树上已经落地 | 待裁 | — | 索引状态是否可以改成"已裁已落"（默认=我们改，并逐条写提交 id） |
 
-**这一节的行数 = 目录里的页数**（现在 2 = 2）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。下一节的行数按 `reviews/` 里的页算，两者不混。
+**这一节的行数 = 目录里的页数**（现在 3 = 3）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。下一节的行数按 `reviews/` 里的页算，两者不混。
 
 ### 已裁、在 `reviews/` 留档
 
