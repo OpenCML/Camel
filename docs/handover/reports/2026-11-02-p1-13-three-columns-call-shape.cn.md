@@ -8,9 +8,9 @@
 
 | 栏 | 行数 | 占 655 | 含义 |
 |---|---|---|---|
-| 已覆盖 | **464** | 71% | 该 URI 有 `#op` tag，或有同名同元数的声明 |
-| 真缺 | **109** | 17% | 没有；且签名写得出来 |
-| 签名表达不了 | **82** | 13% | 没有；且今天的声明语法表达不了（`!=` 无符号 22、联合 21、`Tensor` 15、无通配 13、宽度派生自实参 3、`number` 1） |
+| 已覆盖 | **487** | 74% | 该 URI 有 `#op` tag，或有同名同元数的声明 |
+| 真缺 | **22** | 3% | 没有；且签名写得出来 |
+| 签名表达不了 | **146** | 22% | 没有；且今天的声明语法表达不了（赋值 57、`!=` 无符号 29、联合 22、`Tensor` 21、无通配 13、宽度派生自实参 3、`number` 1） |
 
 **已覆盖 464 行的来路**：靠 tag 128（`:op` 的 128 行）+ 靠声明 285（`math` 96、`graph` 41+9、`tensor` 44、`array` 33、其余按协议）。
 
@@ -169,6 +169,160 @@ export func string::<T>(x: T): string
 
 **顺带更正通配问题的答案**：通配**是有效机制**，但**只对内置算子组有效**。绑定逻辑在 `src/compile/gir/builder_modules.cpp`：`claimed` 只能来自内置模块（`context_->importModule("")`）里同名的算子组，而 `ownRule` 又被 `uri.find('*') == std::string::npos` 直接否掉——所以 `string`（内置组）的通配能用，`tensor` 的 `from_bytes`（模块算子）的通配没有生效的路。这条写进了 `docs/handover/reviews/2026-11-02-p1-13-should-the-loader-expand-the-op-wildcard.md` 的"补一条更正"。
 
+## 第八族：复合赋值（57 行）——不是"写不出"，是**根本不是运算符**
+
+先贴注册表原文（`name` 与 `signature` 都贴，免得再踩"后缀不是名字"的坑）：
+
+```
+OPERATOR {"module":"<builtin>","name":"__assn_add__","uri":":op/assn_add_d","with":0,"norm":2,
+          "purity":"effectful","signature":"(var float, float) => var float",
+          "semantics":{"key":":op/assn_add_d@1.0", ..., "resources":"rmw variable norm 0 whole; result same 0"}}
+```
+
+名字是组的名字 `__assn_add__`（不是 `assn_add_d`），第一个参数是 `var float`（变量引用），而且这一族是 `purity: "effectful"`。
+
+**试着写成 `operator +=`（`test/cases/consistency/operator_overloads/compound_assignment.cml` 就是这么写的），编译器直接拒**：
+
+```
+error[SemanticDiag::OperatorNotOverloadable]: '+=' cannot be overloaded: a compound assignment is
+the assignment of the plain operator: 'a += b' is 'a = a + b', so it follows an overload of '+'.
+help: The operators that can be overloaded are the binary '+', '-', '*', '/', '%', '^', '@', '==',
+'<', '<=', '>', '>=', '&', '|', indexing '[]', and the unary '-', '!', '~'; '!=' follows '=='.
+'&&', '||', '??', '!!', '->', '..', 'as', assignment and compound assignment are constructs of the
+language.
+```
+
+所以这 57 行**整族搬进"签名表达不了"**，原因照抄编译器：*assignment and compound assignment are constructs, not operators（`a += b` 是 `a = a + b`）*。同一条理由也吞掉了 `:op/ne` 与 6 行 `graph:ne`（`!=` 同样没有自家符号）。
+
+**分组表**（按 `name` 分组，共 57 行）：
+
+| 组 | 行 | 代表 URI |
+|---|---|---|
+| `__assn_pow__` | 12 | `assn_pow_bf/c/c_i/c_l/d/f/f6/i/l/z/z_i/z_l` |
+| `__assn_add__` | 9 | `assn_add_bf/c/d/f/f6/i/l/s/z` |
+| `__assn_div__` | 8 | `assn_div_bf/c/d/f/f6/i/l/z` |
+| `__assn_mul__` | 8 | `assn_mul_bf/c/d/f/f6/i/l/z` |
+| `__assn_sub__` | 8 | `assn_sub_bf/c/d/f/f6/i/l/z` |
+| `__assn__` | 7 | `assn`、`assn_b/d/f/i/l/s` |
+| `__assn_mod__` | 2 | `assn_mod_i`、`assn_mod_l` |
+| `__assn_and__` / `__assn_or__` / `__assn_owned__` | 各 1 | `assn_and`、`assn_or`、`assn_owned` |
+
+**作者第 4 条那条硬判据（"读一次写一次会不会变成两次读"）在这里不发生**：复合赋值不能声明，就没有"声明改变语义"这回事。它今天的语义写在算子的 `semantics` 里——`"resources":"rmw variable norm 0 whole; result same 0"`，一次读、一次写、结果是同一个变量——这行事实留在注册表，声明碰不到它。
+
+**这一族的账**：0 条写成；**57 行从"真缺"进"签名表达不了"**；三栏 `464/109/82 → 464/52/146`。
+
+**顺带得到一张"下一族能做"的清单**：编译器那句 help 列了可重载的运算符，剩下的 45 行"真缺"里，据此可写的有 `__pow__` 12（`^`）、`__mod__` 2（`%`）、`__and__` 1（`&`）、`__or__` 1（`|`）、`__not__` 1（`!`）、`__inv__` 2（`~`）、`__idx__` 3（`[]`）；其余（`__var_get__`、`__enum_make__`、`__error_value__`、`__iter__`、`__cmp__`、`__isolate__`、`__throw__`、`__copy_arr__`、`__append_owned__`、`__null_value__`、`__is_null__`、`__is_error__`、`__error_info__`、`__set_field__`、`__set_index__`、`__enum_field__`、`__enum_tag__`）名字里带 `__` 的结构化调用，要先按同一套办法验：它们大概率也不是用户能写的运算符。
+
+## 定义依据：编译器自己列的那张清单
+
+这一轮起，"能不能写"不再靠逐条试编译，先查这张清单。它是 `SemanticDiag::OperatorNotOverloadable` 的 help 原文：
+
+```
+The operators that can be overloaded are the binary '+', '-', '*', '/', '%', '^', '@', '==', '<',
+'<=', '>', '>=', '&', '|', indexing '[]', and the unary '-', '!', '~'; '!=' follows '=='.
+'&&', '||', '??', '!!', '->', '..', 'as', assignment and compound assignment are constructs of the
+language.
+```
+
+它把三样东西一次划到"构造"那边：`!=`（它跟 `==`）、赋值与复合赋值、以及 `&&`/`||`/`??`/`!!`/`->`/`..`/`as`。所以"签名表达不了"那一栏的**定义**就是：**要么不在清单上，要么清单点名说它是构造**。前两轮的 57 行赋值、29 行 `!=` 都是按这条定的，不需要再试。
+
+## 第九族：`^`（`__pow__`）12 行，按类型各写一条
+
+注册表原文（看 `name`，不看后缀）：
+
+```
+OPERATOR {"module":"<builtin>","name":"__pow__","uri":":op/pow_d","with":0,"norm":2,"purity":"pure",
+          "signature":"(float, float) => float"}
+```
+
+**"`^` 在整数上是不是异或"——不是，而且根本没有异或符号**。`src/core/operator_names.cpp` 的符号表：
+
+```
+{"^", 2, 2, "__pow__"},
+```
+
+整张表里没有 `__xor__`。所以 `^` 在 `i32`/`int` 上也是幂（`:op/pow_i` 是 `(i32, i32) => i32`），**不存在"一个符号两种语义"**，按类型分开写就是完整答案。
+
+先写 `pow_d` 一条、跑全量（`8376/8364/0`），再补齐 11 条（两条提交：`672535e6c`、`a4bf5e4c7`）。12 条的对应关系就是注册表自己的：
+
+| 类型 | 规则 | 声明 |
+|---|---|---|
+| `float`、`f32`、`i32`、`int`、`f16`、`bf16` | `pow_d/f/i/l/f6/bf` | 两个同类型参数 |
+| `c64`、`c128` | `pow_c`、`pow_z` | 两个同类型参数 |
+| `c64`、`c128` 的整数指数 | `pow_c_i`、`pow_c_l`、`pow_z_i`、`pow_z_l` | 第二个参数是 `i32` / `int` |
+
+判据：`inspect --ops` **655 行且整表与改动前逐字节相同**（声明认领的是已存在的规则，不新增行）；`--verify-ops` **559**、agree；三栏 `464/45/146 → 476/33/146`；全量 `8376/8364/0`。
+
+## 可重载清单 vs 剩下 33 行：一次给全
+
+**清单内、还写得出来的 11 行**：
+
+| 符号 | 组 | 行 |
+|---|---|---|
+| `[]` | `__idx__` | 3 |
+| `~` | `__inv__` | 2 |
+| `%` | `__mod__` | 2 |
+| `&` | `__and__` | 1 |
+| `==` | `__eq__` | 1 |
+| `!` | `__not__` | 1 |
+| `\|` | `__or__` | 1 |
+
+**清单外、是结构化调用的 22 行（22 组，每组 1 行）**：
+
+| 组 | 为什么不是符号 |
+|---|---|
+| `__cmp__` | 比较两个值的大小并返回 `int`；语言里没有对应的符号 |
+| `__iter__` | 迭代协议，`for` 语句编译出来的调用 |
+| `__isolate__` | 隔离调用，编译器的构造 |
+| `__throw__` | `throw` 语句编译出来的调用 |
+| `__copy_arr__` | 数组复制，赋值/传参的构造 |
+| `__append_owned__` | 带所有权的追加，模块内部的构造 |
+| `__set_field__` | 字段赋值，赋值语句的构造 |
+| `__set_index__` | 下标赋值，赋值语句的构造 |
+| `__enum_make__` | 枚举构造，`Type { ... }` 的构造 |
+| `__enum_field__` | 读枚举字段，字段访问的构造 |
+| `__enum_tag__` | 读枚举标签，`match` 的构造 |
+| `__null_value__` | `null` 字面量的语义 |
+| `__is_null__` | `??` 的构造（`??` 本身就是构造） |
+| `__is_error__` | 错误值判定，`!!` 的构造 |
+| `__error_value__` / `__error_info__` | 错误值与其信息，`!!` 的构造 |
+| `__var_new__` / `__var_new_empty__` / `__var_get__` / `__var_peek__` / `__var_take__` / `__var_after__` | `var` 协议的内部调用（`var` 是类型的修饰，不是符号） |
+
+**这三栏到此就有结论了**：655 行里 **476 行写得出声明**、**33 行还缺**（其中 11 行只是还没写、22 行按定义写不出）、**146 行按定义写不出**。加上这 11 行就是 655 = 487 + 146 + 22。
+
+## 第十族到第十二族：最后 11 行写完，三栏收口
+
+按你定的顺序，先难后易，每族一笔、每族一次全量：
+
+| 族 | 行 | 全量 | 提交 |
+|---|---|---|---|
+| `[]`（`__idx__`） | 3 | `8376/8364/0` | `345b4d1e3` |
+| `~` + `!`（`__inv__`/`__not__`） | 3 | `8376/8364/0` | `bd0d984cb` |
+| `%` + `&` + `\|` + `==` | 5 | `8376/8364/0` | `74fb52d4d` |
+
+`[]` 那族本来最可能"是构造"，结果**三条都写得出来**：`:op/idx_str`（字符串取字符）、`:coll/map_idx`（`Map<K,V>` 取键，缺键给 `null`）、`:op/idx_take`（按指标表沿轴取，三词下标）。于是 `[]` 现在有四条规则，数组那条不再是唯一一条。
+
+`==` 那条是唯一的通用规则——`(a: T, b: T) => bool, T an array, tuple or struct of comparable parts`——用 `::<T>` 声明，`when` 留给类型本身，加载器接受了。
+
+## 收口：655 行现在是什么状态
+
+| 栏 | 行 | 占比 | 定义依据 |
+|---|---|---|---|
+| **写得出声明** | **487** | 74% | 名字在编译器那张可重载清单上，且规则表的类型陈述得出 |
+| **结构上写不出** | **22** | 3% | 名字不在清单上：`&&`/`\|\|`/`??`/`!!`/`->`/`..`/`as`、赋值、复合赋值都是语言构造；这些名字是编译器的结构化调用（`__cmp__`、`__iter__`、`__throw__`、`__enum_*`、`__error_*`、`__var_*`……） |
+| **签名表达不了** | **146** | 22% | 清单点名是构造（赋值 57、`!=` 29），或语言没有对应的类型写法（联合 22、`Tensor` 21、无通配 13、宽度派生自实参 3、`number` 1） |
+
+`487 + 22 + 146 = 655`。
+
+## P1-13 的收口结论
+
+**这 655 行里，没有一行是"我们偷懒没写"。剩下的 168 行按语言定义写不出来。**
+
+- **22 行**是构造：它们不叫运算符，写不出声明不是缺签名，是缺符号。
+- **146 行**是签名表达不了：57 + 29 行被编译器那句 help 点名划成构造，其余 60 行是类型写法或通配通道的边界（联合、`Tensor`、模块算子的通配、宽度派生自实参、`number`）。
+
+**判据**：`inspect --ops` **655 行，且整表与这一轮开始前逐字节相同**；`--verify-ops` **559**、agree；全量 **`8376/8364/0`**（三族各一次、收尾一次）；三栏 **`476/33/146 → 487/22/146`**。
+
 ## 655 与 559 为什么不一样
 
 `inspect --ops` 的 **655** 是**注册表行数**：每个注册重载一行（同一个 URI 可以有计算签名行和声明行两条，这正是 `sum_axis` 的两条）。
@@ -195,18 +349,18 @@ P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可�
 
 ## 全表
 
-下面按三栏展开：真缺 109 行按协议分组逐条列出，签名表达不了 82 行按原因列出；已覆盖按协议与来路给出计数（逐条列出 413 行会让这页变成第二个注册表）。
+下面按三栏展开：真缺 22 行按协议分组逐条列出，签名表达不了 146 行按原因列出；已覆盖按协议与来路给出计数（逐条列出 413 行会让这页变成第二个注册表）。
 
-## 已覆盖 464 行的来路
+## 已覆盖 487 行的来路
 
 | 协议 | 靠 tag | 靠同名同元数声明 | 合计 |
 |---|---|---|---|
-| `:op` | 186 | 0 | 186 |
+| `:op` | 208 | 0 | 208 |
 | `math` | 96 | 0 | 96 |
 | `graph` | 9 | 41 | 50 |
 | `tensor` | 0 | 37 | 37 |
 | `array` | 29 | 4 | 33 |
-| `coll` | 19 | 0 | 19 |
+| `coll` | 20 | 0 | 20 |
 | `io` | 9 | 5 | 14 |
 | `struct` | 10 | 0 | 10 |
 | `str` | 5 | 4 | 9 |
@@ -216,9 +370,50 @@ P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可�
 
 ## 真缺（206 行，按协议）
 
-### :op: 88
+### :op: 8
 
-- `:op/and` (2 参)
+- `:op/set_field` (3 参)
+- `:op/set_index` (3 参)
+- `:op/tag_error_info` (1 参)
+- `:op/tag_error_value` (1 参)
+- `:op/tag_is_error` (1 参)
+- `:op/tag_is_null` (1 参)
+- `:op/tag_null_value` (1 参)
+- `:op/tag_throw` (1 参)
+
+### var: 6
+
+- `:var/after` (2 参)
+- `:var/get` (1 参)
+- `:var/new` (1 参)
+- `:var/new/empty` (0 参)
+- `:var/peek` (1 参)
+- `:var/take` (1 参)
+
+### struct: 3
+
+- `:struct/append_arr_owned` (1 参)
+- `:struct/copy_arr` (1 参)
+- `:struct/iter_str` (1 参)
+
+### enum: 3
+
+- `:enum/field` (3 参)
+- `:enum/make` (2 参)
+- `:enum/tag` (1 参)
+
+### macro: 1
+
+- `:macro/cmp` (1 参)
+
+### mark: 1
+
+- `:mark/isolate` (1 参)
+
+## 签名表达不了（36 行，附原因）
+
+### assignment and compound assignment are constructs, not operators: "`a += b` is `a = a + b`" (SemanticDiag::OperatorNotOverloadable): 57
+
 - `:op/assn` (2 参)
 - `:op/assn_add_bf` (2 参)
 - `:op/assn_add_c` (2 参)
@@ -276,75 +471,22 @@ P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可�
 - `:op/assn_sub_i` (2 参)
 - `:op/assn_sub_l` (2 参)
 - `:op/assn_sub_z` (2 参)
-- `:op/eq` (2 参)
-- `:op/idx_str` (2 参)
-- `:op/idx_take` (3 参)
-- `:op/inv_i` (1 参)
-- `:op/inv_l` (1 参)
-- `:op/mod_i` (2 参)
-- `:op/mod_l` (2 参)
+
+### no declaration can name it: '!=' is '!(a == b)', so the operator has no symbol of its own: 29
+
 - `:op/ne` (2 参)
-- `:op/not` (1 参)
-- `:op/or` (2 参)
-- `:op/pow_bf` (2 参)
-- `:op/pow_c` (2 参)
-- `:op/pow_c_i` (2 参)
-- `:op/pow_c_l` (2 参)
-- `:op/pow_d` (2 参)
-- `:op/pow_f` (2 参)
-- `:op/pow_f6` (2 参)
-- `:op/pow_i` (2 参)
-- `:op/pow_l` (2 参)
-- `:op/pow_z` (2 参)
-- `:op/pow_z_i` (2 参)
-- `:op/pow_z_l` (2 参)
-- `:op/set_field` (3 参)
-- `:op/set_index` (3 参)
-- `:op/tag_error_info` (1 参)
-- `:op/tag_error_value` (1 参)
-- `:op/tag_is_error` (1 参)
-- `:op/tag_is_null` (1 参)
-- `:op/tag_null_value` (1 参)
-- `:op/tag_throw` (1 参)
-
-### var: 6
-
-- `:var/after` (2 参)
-- `:var/get` (1 参)
-- `:var/new` (1 参)
-- `:var/new/empty` (0 参)
-- `:var/peek` (1 参)
-- `:var/take` (1 参)
-
-### graph: 6
-
+- `:op/ne_b` (2 参)
+- `:op/ne_bf` (2 参)
+- `:op/ne_bytes` (2 参)
+- `:op/ne_c` (2 参)
+- `:op/ne_d` (2 参)
+- `:op/ne_f` (2 参)
+- `:op/ne_f6` (2 参)
+- `:op/ne_i` (2 参)
+- `:op/ne_l` (2 参)
+- `:op/ne_s` (2 参)
+- `:op/ne_z` (2 参)
 - `graph:ne` (2 参)
-
-### struct: 3
-
-- `:struct/append_arr_owned` (1 参)
-- `:struct/copy_arr` (1 参)
-- `:struct/iter_str` (1 参)
-
-### enum: 3
-
-- `:enum/field` (3 参)
-- `:enum/make` (2 参)
-- `:enum/tag` (1 参)
-
-### macro: 1
-
-- `:macro/cmp` (1 参)
-
-### coll: 1
-
-- `:coll/map_idx` (2 参)
-
-### mark: 1
-
-- `:mark/isolate` (1 参)
-
-## 签名表达不了（36 行，附原因）
 
 ### union parameter: 22
 
@@ -370,20 +512,6 @@ P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可�
 - `tensor:subtract` (2 参)
 - `tensor:take` (2 参)
 - `tensor:where` (3 参)
-
-### no declaration can name it: '!=' is '!(a == b)', so the operator has no symbol of its own: 22
-
-- `:op/ne_b` (2 参)
-- `:op/ne_bf` (2 参)
-- `:op/ne_bytes` (2 参)
-- `:op/ne_c` (2 参)
-- `:op/ne_d` (2 参)
-- `:op/ne_f` (2 参)
-- `:op/ne_f6` (2 参)
-- `:op/ne_i` (2 参)
-- `:op/ne_l` (2 参)
-- `:op/ne_s` (2 参)
-- `:op/ne_z` (2 参)
 
 ### the parameter type is `Tensor`, which is no type name: 21
 

@@ -6,14 +6,20 @@
  *
  * A reverse rule is registered with its computation (camel/core/derivative.h, VjpRule). A forward
  * rule is not: it is written where every rule is written -- in a ruleset module, as a `rule` whose
- * left side is the operator -- and what the core records here is only *where* it is written down:
- * the ruleset family and the key (`head`, `arity`) the index files it under.
+ * left side is the operator -- and all this file answers is *where* it is written down.
  *
- * So the name is read from that family's index every time it is asked for, never remembered from
- * registration time. That is what makes the binding an index consumer rather than a second copy of
- * the rules: remove a rule from the ruleset and the next question has no answer, which is exactly
- * what a transform must see. A registry that remembered the name would keep answering "jvp_neg"
- * for a rule the program no longer has.
+ * **Nothing is registered per operator.** The key a rule is filed under is a fact about the
+ * operator, so it is read off the operator: `:op/add_d` is written `+` with two operands because
+ * that is what `add` means, and `tensor:matmul` is written `matmul(...)` because that is the
+ * operator's own name. Two operators cannot be written that way -- `xs[i]` is a bracket form with no
+ * token, and the array product's `*` key at two operands is already `:op/mul_d`'s -- and those two are
+ * the whole of `ruleKeyExceptions()`, which says so in words and is printed by the `std::rulesets`
+ * pass so that an exception is never silent.
+ *
+ * The name is read from the family's index every time it is asked for, never remembered from
+ * registration time. That is what makes this an index consumer rather than a second copy of the
+ * rules: remove a rule from the ruleset and the next question has no answer, which is exactly what a
+ * transform must see.
  */
 
 #pragma once
@@ -22,79 +28,54 @@
 
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
 namespace camel::core {
 
-/// A ruleset module that holds a forward rule, and the key it is filed under there: the operator of
-/// the rule's left side and how many operands that operator takes (`-x` and `x - w` are two keys).
-struct ForwardRuleBinding {
-    std::string uri;    // the operator the rule forwards, e.g. ":op/add_d"
-    std::string family; // the ruleset module, e.g. "rulesets.jvp"
-    std::string head;   // the operator of the rule's left side, e.g. "+"
+/// The key a rule is filed under in a ruleset family: the spelling of the rule's left side, and how
+/// many operands that spelling takes (`-x` and `x - w` are two keys).
+struct RuleKey {
+    std::string head; // the operator of the rule's left side, e.g. "+"
     uint32_t arity = 0;
 };
 
-/// Binds `uri`'s forward rule to the key it is filed under in a ruleset family. Binding again
-/// replaces the earlier binding: one key per operator.
-void bindForwardRule(ForwardRuleBinding binding);
+/// An operator whose key cannot be derived from the operator itself, and why. Every one of these is
+/// an operator whose rule is written with a spelling the operator does not have -- a token the
+/// language gave to another operator, or no token at all -- so the key is written down here once, in
+/// words, instead of being derivable. The list is printed (`ruleKeyExceptionLines`) wherever the
+/// ruleset index is reported: an exception that nobody reads is the same as a wrong answer.
+struct RuleKeyException {
+    std::string uri;   // the operator, e.g. ":op/idx_arr"
+    std::string head;  // the spelling its rule's left side is written with, e.g. "index_into"
+    uint32_t arity = 0;
+    std::string why; // why the key cannot be derived, in one sentence
+};
 
-/// What `uri`'s forward rule is called right now, read from the family's index at this moment.
-/// `nullopt` when no forward rule is bound for `uri` at all (the operator was never given one,
-/// which is not the same as a ruleset that lacks the rule).
+/// The exceptions, in uri order.
+std::span<const RuleKeyException> ruleKeyExceptions();
+
+/// One line per exception: `uri -> head/arity because why`. What the `std::rulesets` pass prints.
+std::vector<std::string> ruleKeyExceptionLines();
+
+/// The key the operator `uri`'s rule is filed under in `family`, derived from the operator itself:
+/// nullopt when the operator's name says nothing about the rule's spelling (an operator that is not
+/// written with a call or a token at all, and is not one of the exceptions).
+///
+/// `family` is needed for the arity of a module operator: `tensor:sum_axis` is `sum_axis` at three
+/// operands, and three is a fact the family's index holds (`arityOfHead`), not one the name spells.
+std::optional<RuleKey> ruleKeyOf(const std::string &family, const std::string &uri);
+
+/// What `uri`'s forward rule is called right now, read from `rulesets.jvp`'s index at this moment.
+/// `nullopt` when the operator has no key at all (which is not the same as a family that lacks the
+/// rule: the two are `NoRuleForPrimitive` and `NoSuchFamily` in the answer).
 std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri);
 
-/// The binding for `uri` as it stands: the family it is filed in, the head of its left side and the
-/// operands that head takes. `forwardRuleOf` answers what *one* family's index resolves for `uri`;
-/// this answers the key itself, which is what a second family reads -- `lookupRule("rulesets.vmap",
-/// head, arity)`. The key is a property of the operator (which token, how many operands), not of the
-/// family that happens to own the binding, so a family other than the bound one reads it here.
-std::optional<ForwardRuleBinding> forwardBindingOf(const std::string &uri);
-
-/// One line per bound operator, sorted by uri: `uri family head/arity -> rule | no rule | no such
-/// family`. The reading a test takes of what the bindings resolve to without asking, in the order a
-/// reader needs it: what was bound, and what the index answers for it.
-std::vector<std::string> forwardRuleDescriptions();
-
-/// Binds `uri`'s transpose rule to the key it is filed under in the transpose family. It is a
-/// second table rather than a second field, because these are two facts about one operator: the
-/// rule for forward mode and the rule for a linear function's transpose live in two rulesets (a
-/// module serves one family), and neither replaces the other.
-void bindTransposeRule(ForwardRuleBinding binding);
-
-/// Binds `uri`'s batching rule to the key it is filed under in `rulesets.vmap`. A third table, for
-/// the reason the transpose bindings are a second one: an operator has one rule per family (a
-/// forward rule in `rulesets.jvp`, a batching rule in `rulesets.vmap`), and the two are written by
-/// different hands -- so a binding may never replace the other fact, and a family that reads one
-/// key cannot be made to read the other's.
-///
-/// The key is the operator's, not the family's: which spelling its rule's left side writes and how
-/// many operands that spelling takes. A batching transform reads it here and asks its own family's
-/// index with it (`lookupRule("rulesets.vmap", head, arity)`), because the spellings a rule can be
-/// filed under are those of an expression (`matmul(x, w)` is `matmul` at two operands, `x @ w` is
-/// `@` at two, `sum_axis(xs, axis, keepdims)` is `sum_axis` at three), not of the URI the node
-/// holds. One primitive spelled two ways is two keys, so the ruleset and this table must name the
-/// same one.
-void bindVmapRule(ForwardRuleBinding binding);
-
-/// What `uri`'s transpose rule is called right now, read from the transpose family's index at this
-/// moment -- `forwardRuleOf`'s reading, for the family a linear function's pullback is written in.
+/// `forwardRuleOf`, for the family a linear function's pullback is written in.
 std::optional<camel::parse::ast::RuleMatch> transposeRuleOf(const std::string &uri);
 
-/// The transpose bindings, in the words `forwardRuleDescriptions` writes them.
-std::vector<std::string> transposeRuleDescriptions();
-
-/// The binding for `uri` in the batching family: the family the rule is written in and the key it
-/// is filed under there. `nullopt` when the operator was never given a batching rule key, which is
-/// not the same fact as a ruleset that lacks the rule: an operator whose key is recorded and whose
-/// family holds no rule for it is a hole, and one with no key was never given a batching rule at
-/// all. The batching transform reports the two apart, because the repairs differ.
-std::optional<ForwardRuleBinding> vmapBindingOf(const std::string &uri);
-
-/// The batching bindings, in the words `forwardRuleDescriptions` writes them. A table a transform
-/// reads has to be a table a reading can show: a binding nothing prints is a binding nothing can
-/// check, and an operator whose key was silently unbound looks exactly like one that never had it.
-std::vector<std::string> vmapRuleDescriptions();
+/// `forwardRuleOf`, for the family a batching transform asks (`rulesets.vmap`).
+std::optional<camel::parse::ast::RuleMatch> vmapRuleOf(const std::string &uri);
 
 } // namespace camel::core

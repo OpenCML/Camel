@@ -61,6 +61,7 @@ CORPUS = [
     CML / "with_param.cml",
     CML / "var_param.cml",
     CML / "write_value.cml",
+    CML / "string_conversion.cml",
     CASES / "trans/jgir_duplicate.cml",
     CASES / "linear/nvm/hello.cml",
 ]
@@ -193,6 +194,12 @@ def check_round_trip(source):
     assert before["entry"] == after["entry"], (before["entry"], after["entry"])
 
     check_names(source, printed, printed_path)
+    if source.stem == "string_conversion":
+        # The eight per-type kernels are one operator now, and the printer names it: `string(x)`.
+        # A kernel's own name in the text would be a spelling no source can read back.
+        assert "string(" in printed, (source.name, "the conversion is not printed as string(x)", printed)
+        for kernel in ("dtos", "itos", "ltos", "ftos", "stos", "ctos", "ztos", "atos"):
+            assert kernel + "(" not in printed, (source.name, kernel, printed)
 
     original_run = run_source(source)
     printed_run = run_source(printed_path)

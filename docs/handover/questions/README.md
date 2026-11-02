@@ -12,15 +12,14 @@
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：2 页
+## 现在在等作者：1 页
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
-| [`2026-11-02-cml-var-version-in-printed-text`](2026-11-02-cml-var-version-in-printed-text.md) | 打印器写一个 `:var/get` 时，它读的是哪个版本要不要进文本（不进就得落 `let` 或具名拒绝，进就得有 `@2` 之类的新写法） | 待裁 | — | `trans/cml` 的往返：三条用例同一机制（`parse/constructs/comprehensions` 报 `Redeclaration`、`trans/cpp/exec/variables` 报 `UnresolvedReference: 'cml3'`，基线也是 `cml3`） |
-| [`2026-11-02-whether-the-release-gate-names-plans-or-runs-the-tree`](2026-11-02-whether-the-release-gate-names-plans-or-runs-the-tree.md) | 发布闸门该继续按 `FAST_TARGETS + SLOW_PLANS` 点名，还是与开发闸门用同一条命令（`-Plan all -Tier fast`）；`FORBIDDEN` 的 18 个文件里 464 条 fast 用例今天只在开发闸门里跑过 | 待裁 | — | 发布闸门与开发闸门两套定义：`FORBIDDEN` 以"为了 2 条 milestone 用例"为由把同文件另外 55 条也划走 |
+| [`2026-11-02-p1-13-eleven-ne-rules-name-nothing`](2026-11-02-p1-13-eleven-ne-rules-name-nothing.md) | `:op/ne_*` 那 11 个名字、22 行规则命名不到任何东西：删不删 | 待裁 | — | 一次删除的候选，删不删由作者定；`lane-gs6` 的通配清理把这块照了出来 |
 
-**这一节的行数 = 目录里的页数**（现在 2 = 2）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。下一节的行数按 `reviews/` 里的页算，两者不混。
+**这一节的行数 = 目录里的页数**（现在 1 = 1）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。
 
-2026-11-02 00:30 的四页（`*tos` 观察、残差集、被转置成员的身份、两个 `float` 端口的成员）已裁，在 `reviews/`，裁定见 `reviews/questions-2026-10-29.md` 同时刻那一条。
+2026-11-02 01:30：`cml-var-version-in-printed-text`（01:10）与 `whether-the-release-gate-names-plans-or-runs-the-tree`（01:30）都已裁，在 `reviews/`，裁定见 `reviews/questions-2026-10-29.md`。
 
 ## 已裁：按还堵着的活排
 
