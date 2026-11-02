@@ -1,0 +1,23 @@
+// WALL PROBE 03 -- the matrix product. Every attention block and every MLP layer is `x @ w`, and
+// `w @ w` is the smallest program that reaches the operator with one parameter and no bias.
+//
+// The engine has a gradient for it (`modules/tensor/ops/vjp.cpp`, `matmul`), but the library's
+// rulesets are `stdlib/rulesets/jvp.cml` and `stdlib/rulesets/transpose.cml`, and neither files a
+// rule under the operator `@` -- so the forward half stops at the first node.
+import { sum } from tensor
+import rulesets.jvp
+import rulesets.transpose
+import { vjp } from vjp
+
+func quadratic(w: f32[..]): f32 {
+    return sum(w @ w)
+}
+
+func main(): int sync {
+    let w = [[1.0, 0.5], [0.5, 1.0]] as f32[2, 2]
+    let (value, pullback) = vjp(quadratic)(w)
+    println(`value = ${value:.4f}`)
+    let cotangents = pullback(f32(1.0))
+    println(`cotangent of w = ${cotangents.0}`)
+    return 0
+}

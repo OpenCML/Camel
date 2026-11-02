@@ -1,0 +1,7 @@
+# The corpus is committed (`corpus.txt`); everything below is produced by a run.
+block.json
+probes.json
+*.npy
+*.npz
+artifacts/
+__pycache__/

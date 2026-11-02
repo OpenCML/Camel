@@ -1,0 +1,46 @@
+// WALL PROBE 12 -- one head of attention, two tokens, one dimension:
+//
+//     q = x @ wq,  k = x @ wk,  v = x @ wv
+//     s = q @ transpose(k) / sqrt(d)      with the causal mask applied to s
+//     a = softmax(s)                      along the key axis
+//     y = a @ v
+//
+// Six parameters (wq, wk, wv and the mask is a constant), one short sequence, no batching. This is
+// the block the author asked to have compared parameter by parameter, and it is the block the
+// reports' parity reading is about: it either answers six cotangents or it stops at the first
+// construct the library cannot differentiate, and which of those happens is the reading.
+import { sqrt } from math
+import { softmax, sum } from tensor
+import rulesets.jvp
+import rulesets.transpose
+import { vjp } from vjp
+
+type Head = {
+    wq: f32[..],
+    wk: f32[..],
+    wv: f32[..]
+}
+
+/// One head over one sequence of two tokens: `x` is `[2, 2]`, each weight `[2, 1]`.
+with <h: Head>
+func head(x: f32[..]): f32 {
+    let scores = (x @ h.wq) @ transpose((x @ h.wk)) / sqrt(2.0)
+    let masked = scores - 1000.0 * (1.0 - [[1.0, 0.0], [1.0, 1.0]] as f32[2, 2])
+    let attention = softmax(masked, 1)
+    let out = attention @ (x @ h.wv)
+    return sum(out)
+}
+
+func main(): int sync {
+    let x = [[1.0, 0.5], [0.5, 1.0]] as f32[2, 2]
+    let h = {
+        wq: [[1.0], [0.5]] as f32[2, 1],
+        wk: [[0.5], [1.0]] as f32[2, 1],
+        wv: [[1.0], [-1.0]] as f32[2, 1]
+    }
+    let (value, pullback) = vjp(head)<h>(x)
+    println(`value = ${value:.6f}`)
+    let cotangents = pullback(f32(1.0))
+    println(`pullback length = ${len(cotangents)}`)
+    return 0
+}

@@ -1,0 +1,20 @@
+// WALL PROBE 07 -- two parameters. A model's parameters are many, and `vjp` states the answer as
+// one cotangent per parameter (`(ct) => (one cotangent per parameter)`, ruling 2026-11-02 11:30), so
+// the two-parameter pullback is the shape a model needs before anything else.
+import rulesets.jvp
+import rulesets.transpose
+import { vjp } from vjp
+
+func dot(a: float[], b: float[]): float {
+    return a[0] * b[0] + a[1] * b[1]
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(dot)([3.0, 4.0], [2.0, 5.0])
+    println(`value = ${value:.1f}`)
+    let cotangents = pullback(1.0)
+    println(`pullback length = ${len(cotangents)}`)
+    println(`cotangent of a = ${cotangents.0}`)
+    println(`cotangent of b = ${cotangents.1}`)
+    return 0
+}

@@ -1,0 +1,22 @@
+// WALL PROBE 06 -- the layout of a head: a multi-head attention splits `[tokens, d_model]` into
+// `[tokens, heads, d_head]`, transposes to `[heads, tokens, d_head]`, and joins the heads back.
+// That is `reshape`, `transpose` and `permute`, and the layout tier has a batching rule for each
+// (`rulesets.vmap`) and no forward or transpose rule for any.
+import { reshape, sum, transpose } from tensor
+import rulesets.jvp
+import rulesets.transpose
+import { vjp } from vjp
+
+func turned(x: f32[..]): f32 {
+    let m = reshape<[2, 3]>(x)
+    return sum(transpose(m) * transpose(m))
+}
+
+func main(): int sync {
+    let x = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]
+    let (value, pullback) = vjp(turned)(x)
+    println(`value = ${value:.4f}`)
+    let cotangents = pullback(f32(1.0))
+    println(`cotangent of x = ${cotangents.0}`)
+    return 0
+}

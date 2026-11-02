@@ -1,0 +1,56 @@
+// The smallest attention block of C3, differentiated by the *library's* own reverse transform:
+// `stdlib/vjp.cml`'s `vjp`, which is `transpose(split(reinterp<jvp>(f)))` written in Camel.
+//
+// The block is the same six-parameter computation as `block_forward.cml`.  Its parameters are a
+// `with` parameter of the function (the shape C2 uses for its model: `with <m: Mlp>`), and the
+// question this program asks is what the transform makes of them:
+//
+//   * if `h` is a parameter of `block`, `pullback(ct)` answers three cotangents (wq, wk, wv) and
+//     nothing about `x`;
+//   * if `h` is only a value captured by the closure, `pullback(ct)` answers one cotangent, the
+//     cotangent of `x`, and the model's parameters are not differentiated at all.
+//
+// The program prints which of the two happened (`pullback_length`), then the four numbers of the
+// cotangent of `x` -- the only numbers the library can answer here.  The six parameters' gradients
+// are compared by `compare.py` against `baseline/block.py`'s analytic Jacobian; this program is the
+// library's side of that comparison, and `block_engine_grad.cml` is the engine's.
+import { softmax, sum, transpose } from tensor
+import rulesets.jvp
+import rulesets.transpose
+import { vjp } from vjp
+
+type Head = {
+    wq: float[..],
+    wk: float[..],
+    wv: float[..]
+}
+
+func mask(): float[..] {
+    return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2]
+}
+
+with <h: Head>
+func block(x: float[..]): float {
+    let scores = (x @ h.wq) @ transpose(x @ h.wk) * 0.70710678118654752
+    let attention = softmax(scores + mask(), 1)
+    return sum(attention @ (x @ h.wv))
+}
+
+func main(): int sync {
+    let x = [[1.0, 0.5], [0.5, 1.0]] as float[2, 2]
+    let h = {
+        wq: [[1.0], [0.5]] as float[2, 1],
+        wk: [[0.5], [1.0]] as float[2, 1],
+        wv: [[1.0], [-1.0]] as float[2, 1]
+    }
+    let (value, pullback) = vjp(block)<h>(x)
+    `c3 block value=${value:.12f}`->println
+    let cotangents = pullback(0.0)
+    `c3 block pullback_length=${len(cotangents)}`->println
+    let dx = cotangents.0
+    `c3 block dx.00=${sum(dx * [[1.0, 0.0], [0.0, 0.0]] as float[2, 2]):.12f}`->println
+    `c3 block dx.01=${sum(dx * [[0.0, 1.0], [0.0, 0.0]] as float[2, 2]):.12f}`->println
+    `c3 block dx.10=${sum(dx * [[0.0, 0.0], [1.0, 0.0]] as float[2, 2]):.12f}`->println
+    `c3 block dx.11=${sum(dx * [[0.0, 0.0], [0.0, 1.0]] as float[2, 2]):.12f}`->println
+    return 0
+}
