@@ -55,6 +55,8 @@ N02 -> N04 [label="0|0", type="CTRL"]      ← 两条副作用调用之间只有
 
 于是换成推导后，"是语句但没被挂上链"的节点会新增成为链头、被并进块链：`generic.effect_order_folded`、`effect_order_folded.simplify.{nvm,fvm,jit}`、`nn.lrit` 转绿，`export_gated_gru_forward`、`export_gated_gru_step`、`ort_gated_gru_step`、`residual_mlp_large_bytecode`、`stdlib.math_numbers.inline_opt` 转红，总数 650 不动。**净总数交换了缺陷类，不是读数。**
 
+> **更正（2026-11-03）：上面这段的证据撤回，结论留下。** 同一晚 `println(1); println(2)` 的 `std::gir` 首导里，`N01 -> N03` 上 `ORDER` 与 `SYNC` **并见** —— 一个 `sync` 块里有副作用的相邻语句之间**有**链边；上一段那张"零 SYNC"的图是纯函数 `g(x) = x` 那次，不是这一条。这条前提（"每条语句都被挂上链"不成立）另有一个证人：`src/runtime/draft_inline.cpp#inlineCallableInDraft` 拼进来的函数体里，`id=13` 是语句却没有标记 —— 那不是 `sync` 块，是拼进来的一段体。见 [`a-structural-nodes-chain-position-belongs-to-its-join.cn.md`](2026-11-03-a-structural-nodes-chain-position-belongs-to-its-join.cn.md)。
+
 ## 例外清单
 
 | 位置 | 为什么留着 |
