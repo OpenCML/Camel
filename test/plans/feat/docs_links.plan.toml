@@ -62,7 +62,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "docs.links.questions_index"
-desc = "The pending table of docs/handover/questions lists exactly the pages in that directory, one row each, and its header says that number: the count and the rows are derived from the tree, so a merge that resolves to one side cannot leave a row behind or a stale number over it."
+desc = "The pending table of docs/handover/questions is what the generator writes: the same function builds the page from the directory -- one row per page, the title of the page as its sentence, the header counting the directory -- and the check compares the file with that text, so a hand edit is a red naming the line and printing both versions. No count is kept beside the directory to fall out of step with it, which is why the table is generated rather than written and then compared."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/check-doc-links.mjs"
