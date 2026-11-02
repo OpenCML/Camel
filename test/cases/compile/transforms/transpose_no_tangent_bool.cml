@@ -13,7 +13,7 @@
 //
 // The transpose is asked twice, at cotangent 1 and at cotangent 2, so the answer has to be 4 then 8 --
 // proportional to the cotangent, and 8 is a number no forward line prints.
-import { transpose } from transforms
+import { jvp, split, transpose } from transforms
 import rulesets.transpose
 
 func f(x: float): float {
@@ -24,11 +24,11 @@ func f(x: float): float {
         return 0.5 * x
     }
 }
-
+import rulesets.jvp
 func main(): int sync {
     println(f(2.0))
-    let back = transpose(f)
-    println(back(2.0, 1.0))
-    println(back(2.0, 2.0))
+    let (_, lin) = split(jvp(f))(2.0)
+    println(transpose(lin)(1.0))
+    println(transpose(lin)(2.0))
     return 0
 }

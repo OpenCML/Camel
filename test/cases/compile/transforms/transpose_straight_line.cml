@@ -22,8 +22,8 @@ func scaled_chain(x: float): float {
 
 func main(): int sync {
     let back = transpose(sum_of_scaled)
-    println(back(2.0, 1.0))
+    println(back(1.0))
     let chain_back = transpose(scaled_chain)
-    println(chain_back(2.0, 1.0))
+    println(chain_back(1.0))
     return 0
 }
