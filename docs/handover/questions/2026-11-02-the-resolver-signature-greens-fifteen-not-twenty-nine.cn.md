@@ -33,9 +33,23 @@
    两族共同的根是「一个参数只能是端口（值）或答案（余切），不能两者都是」，即捕获缺口那一件。
 6. 另有 22 条 `transpose_*` 在本分支上变红，那是**用例写法**还锁着旧拼写（`test/plans` 里的类型串），
    归 `lane-casemig`（23 文件 / 50 处，逐条表 `76fd69924`），与签名无关。
+7. 第 5 条那 11 条的捕获缺口，插桩实测（成员构建之前；`i` 是 `div_tangent` 的参数号）：
+
+   ```text
+   TRANSPOSE-PRE function=split_of_jvp_of___g_63___backward callee=autodiff::div_tangent<float> i=0 forwarded=1
+   TRANSPOSE-PRE function=split_of_jvp_of___g_63___backward callee=autodiff::div_tangent<float> i=1 forwarded=1
+   TRANSPOSE-PRE function=split_of_jvp_of___g_63___backward callee=autodiff::div_tangent<float> i=2 forwarded=0
+   TRANSPOSE-PRE function=split_of_jvp_of___g_63___backward callee=autodiff::div_tangent<float> i=3 forwarded=1
+   ```
+
+   成员里要的是源参数 3（`db`）的值，而 `callInputs[3]` **forwarded=1**——值在调用点拿得到；
+   但 `callInputs[2]`（`da`）**forwarded=0**，所以**「把每个参数的值都打进 bundle」已排除**：它会在
+   `i=2` 落成 `skip=call node arg=…`，即把一种拒绝换成另一种。形状因此收窄为**两遍**：第一遍走成员
+   构建，把 `param=N` 这类「要值」记下来而不中止；第二遍按那个集合开捕获端口，调用点只 forward
+   集合里的参数（集合里若有一个 forwarded=0 就保持原来的拒绝，不填 0）。两遍已批准、正在落，
+   改动不触及用户可见的 `transpose(g)` 的签名。
 
 ## 我方默认
 
-继续做捕获（成员加 `(all-params bundle, ct)` 的捕获端口，调用点把 `forward(callInputs[i])`
-打进 bundle），目标是关掉第 5 条那 11 条；**不为了凑「29 条绿」去改用例或改期望值**，
-也不把第 6 条那 22 条迁移件算进这一笔。
+按第 7 条那个两遍形状落捕获（**不是**全参数 bundle），目标是关掉第 5 条那 11 条；
+**不为了凑「29 条绿」去改用例或改期望值**，也不把第 6 条那 22 条迁移件算进这一笔。
