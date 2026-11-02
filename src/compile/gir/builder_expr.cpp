@@ -1773,8 +1773,17 @@ void Builder::collapseNonEscapingVariableReads() {
         std::vector<node_handle_t> unused;
         for (const auto &entry : variableReadSource_) {
             const node_handle_t read = entry.first;
-            if (!sameGraph(read, currGraph_) || graphDraft.header(nodeIdOf(read)) == nullptr ||
-                !graphDraft.alive(nodeIdOf(read))) {
+            // A read is recorded while this builder is in the graph that made it, and the table
+            // outlives that graph: the graph is handed over and released, and the builder with it.
+            // Asking `sameGraph` about such a read asserts that it has an owner (builder_support.h,
+            // `nodeGraphOf`), which is exactly what is gone here, so the graph is compared by the
+            // draft the handle already carries. A read of another graph is not this graph's read;
+            // it is skipped here and dropped at the border by `forgetNodesOfOtherGraphs`, because
+            // an outer graph's reads are still needed by the outer graph's own turn.
+            if (nodeDraftOf(read) != &graphDraft) {
+                continue;
+            }
+            if (graphDraft.header(nodeIdOf(read)) == nullptr || !graphDraft.alive(nodeIdOf(read))) {
                 continue;
             }
             const draft_node_ref_t readId = nodeIdOf(read);
@@ -1800,13 +1809,15 @@ void Builder::collapseNonEscapingVariableReads() {
     // The reads recorded for this graph, grouped by the cell they read. A cell of an outer graph
     // belongs to that graph's own turn, so it is skipped here.
     std::unordered_map<node_handle_t, std::vector<std::pair<node_handle_t, node_handle_t>>> byCell;
+    auto &draft = currGraph_->transaction().edit();
     for (const auto &[read, info] : variableReadSource_) {
-        if (info.cell == nullptr || !sameGraph(info.cell, currGraph_)) {
+        // Same reason as above: the cell is asked about by the draft its handle names, because a
+        // cell of a graph that has been released has no builder left to answer `sameGraph`.
+        if (info.cell == nullptr || nodeDraftOf(info.cell) != &draft) {
             continue;
         }
         byCell[info.cell].push_back({read, info.source});
     }
-    auto &draft = currGraph_->transaction().edit();
     for (auto &[cell, reads] : byCell) {
         // A `var` parameter of this graph is a resource shared with the caller, and a captured cell
         // is shared with a closure: both keep their cell.

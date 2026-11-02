@@ -143,6 +143,8 @@ function check(file) {
 // check above. This mode derives the page list from the tree, so the index cannot quietly fall
 // behind it. The pages of a subdirectory (jit/) are pages too; the top-level README is the index.
 const TECHNICAL = path.join(root, 'docs', 'technical')
+const QUESTIONS_DIR = path.join(root, 'docs', 'handover', 'questions')
+const QUESTIONS_INDEX = path.join(QUESTIONS_DIR, 'README.md')
 const TECHNICAL_INDEX = path.join(TECHNICAL, 'README.md')
 
 function technicalPages(directory = TECHNICAL) {
@@ -158,6 +160,55 @@ function technicalPages(directory = TECHNICAL) {
         }
     }
     return pages.sort()
+}
+
+// The pending table of docs/handover/questions lists the pages in that directory, and its header
+// says how many rows it has. Hand-kept counts went wrong three times in one night: a merge resolved
+// to their side dropped a row and the header still carried the old number. So both are derived here:
+// the rows of the pending table must be exactly the *.md files beside it (README.md aside), one row
+// each, and the header's number must equal the number of pages.
+function checkQuestionsIndex() {
+    if (!fs.existsSync(QUESTIONS_INDEX)) {
+        console.log('docs/handover/questions/README.md: no such file')
+        return 2
+    }
+    const pages = fs
+        .readdirSync(QUESTIONS_DIR)
+        .filter((name) => name.endsWith('.md') && name !== 'README.md')
+        .sort()
+    const text = fs.readFileSync(QUESTIONS_INDEX, 'utf8')
+    const header = text.match(/##\s*现在在等作者：\s*(\d+)\s*页/)
+    const sectionStart = text.indexOf('## 现在在等作者')
+    const sectionEnd = sectionStart < 0 ? -1 : text.indexOf('\n## ', sectionStart + 1)
+    const section = sectionStart < 0 ? '' : text.slice(sectionStart, sectionEnd < 0 ? undefined : sectionEnd)
+    const rows = [...section.matchAll(/^\|\s*\[[^\]]*\]\(([^)]+)\)/gm)].map((m) =>
+        decodeURIComponent(m[1].split('#')[0]),
+    )
+    const problems = []
+    if (header === null) {
+        problems.push('docs/handover/questions/README.md: no "## 现在在等作者：N 页" header')
+    } else if (Number(header[1]) !== pages.length) {
+        problems.push(
+            `docs/handover/questions/README.md: the header says ${header[1]} page(s), the directory has ${pages.length}`,
+        )
+    }
+    for (const page of pages) {
+        const count = rows.filter((row) => row === page).length
+        if (count === 0) problems.push(`docs/handover/questions/README.md: no row for ${page}`)
+        if (count > 1) problems.push(`docs/handover/questions/README.md: ${count} rows for ${page}`)
+    }
+    for (const row of rows) {
+        if (!pages.includes(row)) {
+            problems.push(`docs/handover/questions/README.md: row for ${row}, no such page`)
+        }
+    }
+    for (const p of problems) console.log(p)
+    if (problems.length > 0) {
+        console.log(`${problems.length} pending-index problem(s): the table and the directory differ`)
+        return 1
+    }
+    console.log(`the pending table lists ${pages.length} page(s), one row each, as the header says`)
+    return 0
 }
 
 function checkTechnicalIndex() {
@@ -463,6 +514,9 @@ function checkCitations() {
 }
 if (args.includes('--citations')) {
     process.exit(checkCitations())
+}
+if (args.includes('--questions-index')) {
+    process.exit(checkQuestionsIndex())
 }
 if (args.includes('--technical-index')) {
     process.exit(checkTechnicalIndex())
