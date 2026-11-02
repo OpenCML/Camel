@@ -206,19 +206,6 @@ resolver_ptr_t namedStaticSignature(const char *name, Type *param, Type *exit) {
             StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Float16())        \
     }
 
-/// A predicate of a group (`!x`): the operand is the type, the result is bool. The two
-/// reduced-precision floats have one because their `!=` is `!(a == b)` and nothing else: the
-/// `:op/ne_bf` / `:op/ne_f6` arms are the one place where the equality's answer is negated in the
-/// element type's own group, and once they are gone the negation has to be sayable for a bf16 or
-/// f16 operand. Where `ne` exists, `not` must exist -- that is the rule this macro writes down.
-#define CAMEL_HALF_PREDICATE(STEM)                                                                 \
-    {":op/" STEM "_bf",                                                                            \
-     StaticFuncTypeResolver::create({}, {{Type::BFloat16(), false}}, Type::Bool())},               \
-    {                                                                                              \
-        ":op/" STEM "_f6",                                                                         \
-            StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Bool())           \
-    }
-
 /**
  * The static checks of a subscript on an array (design principles 3.9 and 5.4; the "越界" rule of
  * docs/design-principles.cn.md: where the compiler can know the length — a fixed-length type is
@@ -2085,11 +2072,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":op/not",
                     StaticFuncTypeResolver::create({}, {{Type::Bool(), false}}, Type::Bool()),
                 },
-                // A bf16 or f16 operand is negated through its group's own comparison: its truth
-                // is `x != 0`, computed in f32 by the same one path every narrow operation takes
-                // (design principles 7.3). Without these two the `!=` of the two reduced types has
-                // no `not` to be written with once its `:op/ne_bf` / `:op/ne_f6` arms go.
-                CAMEL_HALF_PREDICATE("not"),
             }),
         OperatorGroup::create(
             "__neg__",
