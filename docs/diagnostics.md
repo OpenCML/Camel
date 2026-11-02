@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-307 diagnostics: 286 errors, 21 warnings. 15 carry a machine-applicable edit, 292 say why they carry none.
+308 diagnostics: 287 errors, 21 warnings. 15 carry a machine-applicable edit, 293 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -268,6 +268,7 @@ prints one entry.
 | `0x03000205` | [SemanticDiag::DuplicateRuleForOperator](#duplicateruleforoperator) | Error | no |
 | `0x03000206` | [SemanticDiag::YieldRequiresStreamHead](#yieldrequiresstreamhead) | Error | no |
 | `0x03000207` | [SemanticDiag::RuleRightUsesOuterVariable](#rulerightusesoutervariable) | Error | no |
+| `0x03000208` | [SemanticDiag::GeneratorLoopBodyNeedsNextState](#generatorloopbodyneedsnextstate) | Error | no |
 | `0x03000209` | [SemanticDiag::CalledFallibleValue](#calledfalliblevalue) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
@@ -8824,6 +8825,40 @@ func f(x: float): float {
 func main(): int sync {
     let xs: float[3] = [1.0, 2.0, 3.0]
     println(vmap(f)(xs))
+    return 0
+}
+```
+
+### GeneratorLoopBodyNeedsNextState
+
+`0x03000208` · Error · `SemanticDiag::GeneratorLoopBodyNeedsNextState`
+
+**Fix**
+
+None: choice: the body has to end with the value the next round starts from, and which value that is the writer's
+
+**Message**
+
+```text
+A generator loop body ends with the next value of its state, and this one ends without writing one: the pull after the yield has nowhere to go on from.
+```
+
+**Help**
+
+```text
+The body of a loop in a generator is cut at its yield: the pull that hands an element out stops there, and the pull after it runs the rest of the body and the condition again, so the last statement of the body has to write the loop's next state value. Writing 'yield i' and then 'i + 1' moves the loop on; a body of only 'yield i' reads a fresh i on every pull, so the loop never moves on.
+```
+
+**Example** (`test/cases/compile/stream/generators_loop_body_without_next_state.cml`, run as `camel test/cases/compile/stream/generators_loop_body_without_next_state.cml`)
+
+```camel
+func g(): int.. sync {
+    loop i = 0 while i < 3 do {
+        yield i
+    }
+}
+
+func main(): int sync {
     return 0
 }
 ```
