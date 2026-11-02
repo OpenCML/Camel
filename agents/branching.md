@@ -101,8 +101,12 @@ merge base it belongs to.
 The instance on record: the closure page
 `docs/handover/reviews/questions-2026-11-01-closures-as-values-block-the-transposed-backward-half.md`
 carried six line counts measured in a lane tree and read as `develop`'s; they were off by up to 34
-lines, and one path named a file by a name two files share. The page now carries the command and the
-sha beside the numbers, which is what makes the next reader able to re-measure instead of trust.
+lines, and one path named a file by a name two files share. The first repair put the sha and the
+command beside the numbers, and the author rejected that on 2026-11-02 05:30: **a design page or a
+handover page states rules and reasons, and a reading that moves with the code belongs in the commit
+message of the change that took it.** A sha and a command do not make such a number durable -- they
+only make a wrong number look checked. The page now states no counts at all and points at those
+commit messages.
 
 ### "Green" is only green on today's `develop`
 
