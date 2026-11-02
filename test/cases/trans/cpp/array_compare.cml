@@ -1,0 +1,25 @@
+/**
+ * Whole-array comparison in the standalone C++: `==` is the content comparison, and where the two
+ * arrays differ decides nothing.
+ *
+ * `a == b` on two arrays answers one bool, by content, element by element (design principles 4.2) --
+ * it is `Array<T>::operator==` in the emitted program. `a != b` is `!(a == b)`, so the graph holds
+ * the equality and a `not` on the bool. Neither form is elementwise: `a === b` is the tensor
+ * module's comparison and answers `bool[..]`, which is a different operator with a different
+ * result.
+ *
+ * The third block is the one a short-circuit written into the comparison would get wrong: the two
+ * arrays agree on every element but the last. A comparison that stops at the first element, or
+ * that compares sizes only, answers true there.
+ */
+
+func main(): int sync {
+    let a: f32[4] = [1.0, 2.0, 3.0, 4.0]
+    let same: f32[4] = [1.0, 2.0, 3.0, 4.0]
+    let first: f32[4] = [9.0, 2.0, 3.0, 4.0]
+    let last: f32[4] = [1.0, 2.0, 3.0, 9.0]
+    println(a == same, a != same)
+    println(a == first, a != first)
+    println(a == last, a != last)
+    return 0
+}

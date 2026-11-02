@@ -368,3 +368,4 @@ test/cases/modules/stdlib/array_kernels_read_back.cml
 # the interpreter's permutation, not another shuffle that is also uniform -- so a program with a
 # constant key prints the same order compiled or interpreted, byte for byte.
 test/cases/trans/cpp/shuffle_reads_back.cml
+test/cases/trans/cpp/array_compare.cml
