@@ -176,3 +176,14 @@ kind = "behavior"
 expect_exit = 0
 expect_stdout_contains = ["grad loss=0.000000000000", "grad wq1 [[0.0, 0.0], [0.0, 0.0]]", "grad wk1 [[0.0, 0.0], [0.0, 0.0]]", "grad wv1 [[0.0, 0.0], [0.0, 0.0]]", "grad g1 [0.0, 0.0]", "grad b1 [0.0, 0.0]", "grad wq2 [[0.0, 0.0], [0.0, 0.0]]", "grad wk2 [[0.0, 0.0], [0.0, 0.0]]", "grad wv2 [[0.0, 0.0], [0.0, 0.0]]", "grad g2 [7.866746175", "grad b2 [2.0, 2.0]"]
 timeout_ms = 120000
+
+[[tests]]
+name = "grow.grad_first_step_stage4"
+desc = "Stage 4's gradient at its start: twenty-five tensors, ninety-two elements, against baseline/grad_first_step.py --stage 4.  Two carry a gradient and agree to ten significant digits (gout [1.99997835..., bout [2.0, 2.0]); the other twenty-three are zero to rounding, at most 2.3e-16, and that is structural: the loss is sum(layer_norm(second, gout, bout)) with gout = [1, 1], so each row's normalised coordinates cancel in the sum and the loss does not move when second does.  The zero rows cannot be pinned to a digit -- they are each side's own rounding -- so what this case pins is that they are zero where they should be, and the element-by-element judgement is grow/baseline grad_first_step.py --stage 4 --engine, whose compare line reads the residues."
+case = "../../../showcase/c3-char-transformer/grow/grad_first_step_stage4.cml"
+args = ["${case}"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["grad loss=", "grad wq2 [[0.0, 0.0], [0.0, 0.0]]", "grad wk2 [[0.0, 0.0], [0.0, 0.0]]", "grad gout [1.99997835", "grad bout [2.0, 2.0]"]
+timeout_ms = 120000
+
