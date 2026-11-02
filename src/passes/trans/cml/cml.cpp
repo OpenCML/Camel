@@ -406,6 +406,12 @@ class CmlPrinter {
     std::vector<GCGraph *> graphs_;
     std::unordered_map<const GCGraph *, bool> effectful_;
     std::unordered_set<std::string> topLevelNames_;
+    /// The names of the functions the printed file declares (`func map(...)`): a module operator
+    /// written by name has to mean the module's, and the program's own function of that name is
+    /// what a bare `map<f>(xs)` would call. Collected from the graphs, because the root graph's
+    /// `nodeName` is not always the source name of a top-level function (measured on
+    /// `consistency/comprehension/shadowed.cml`: a guard keyed on `topLevelNames_` never fired).
+    std::unordered_set<std::string> writtenFunctionNames_;
     std::unordered_set<gc_node_ref_t> entrySkip_;
     GCGraph *entryGraph_ = nullptr;
 
@@ -498,6 +504,16 @@ class CmlPrinter {
             if (!name.empty()) {
                 topLevelNames_.insert(name);
             }
+        }
+        // The names the file will declare: `func <name>`, in the spelling `printFunction` writes
+        // (the part after the last `::`).
+        for (const GCGraph *graph : graphs_) {
+            const std::string name = graph->name();
+            if (name.empty()) {
+                continue;
+            }
+            const size_t at = name.rfind("::");
+            writtenFunctionNames_.insert(at == std::string::npos ? name : name.substr(at + 2));
         }
     }
 
@@ -1435,8 +1451,18 @@ class CmlPrinter {
                 }
                 const std::string module(uri.substr(0, colon));
                 const auto form = camel::core::OperatorTable::instance().callFormOf(uri);
+                // A module operator the printer writes as a call imports the declaration's name; one
+                // it writes with a sign imports the module (`/` for `int[]` is a rule of `math`,
+                // which the sign needs in scope). An exported body-less declaration is a call too
+                // (`shl` is `export func shl::<T>(x: T)` with `#op('math:shl_i')` and no body), and
+                // printing it without the import wrote `shl<4>(1)` under a bare `import math`, which
+                // the front end answered with `UnresolvedReference: 'shl'` (the author's minimal
+                // example, measured).
+                const bool written = camel::core::operatorSymbolOf(
+                                         camel::core::OperatorTable::instance().groupOf(uri)) !=
+                                     nullptr;
                 const bool byName =
-                    form.has_value() && form->withCount == 0 && form->declaredByModule;
+                    !written && form.has_value() && (form->declaredByModule || form->exported);
                 if (byName) {
                     imports_[module].insert(form->name);
                 } else {
@@ -3355,7 +3381,15 @@ class CmlPrinter {
             camel::core::operatorSymbolOf(
                 camel::core::OperatorTable::instance().groupOf(uri)) != nullptr;
         const bool writable = !languageOwned && callForm.has_value() &&
-                              (callForm->declaredByModule || callForm->exported || uri.starts_with(":"));
+                              (callForm->declaredByModule || callForm->exported ||
+                               uri.starts_with(":")) &&
+                              // The name has to mean the same thing in the printed file. A program
+                              // that declares a function of that name shadows the module's, and a
+                              // bare `map<f>(xs)` would then call the program's own `map`: measured
+                              // on `consistency/comprehension/shadowed.cml`, whose `map` returns a
+                              // string and where the printed call only failed because the argument
+                              // types happened not to fit.
+                              !writtenFunctionNames_.contains(callForm->name);
         if (writable) {
             name = callForm->name;
         } else if (callForm.has_value() && callForm->kernelDeclaration && !languageOwned &&
@@ -3373,6 +3407,16 @@ class CmlPrinter {
                 std::format(
                     "the operator '{}' without a printable name: '{}' is a body-less kernel "
                     "declaration, and no program writes that name",
+                    uri,
+                    callForm->name));
+        } else if (callForm.has_value() &&
+                   (callForm->declaredByModule || callForm->exported) &&
+                   writtenFunctionNames_.contains(callForm->name)) {
+            fail(
+                ref,
+                std::format(
+                    "the operator '{}' is written by the name '{}', and this program declares a "
+                    "function of that name too: the printed file would call the program's one",
                     uri,
                     callForm->name));
         } else {

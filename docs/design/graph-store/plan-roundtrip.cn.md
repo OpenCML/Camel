@@ -334,9 +334,9 @@ print family, and this operator's configuration is not a string, so its call has
 
 **作者裁的一页（`fsh-dev = d2face663`，2026-11-03 03:30）直接指向本刀的相邻判据，逐字留档：**
 
-> 「私有 kernel 要不要可写名字：**前提不成立**，A、B、C 都不选。最小例子里 `shl` 不是私有的：`stdlib/math.cml:627-632` 写着 `#op('math:shl_i') export func shl::<T>(x: T): T when is_same::<T, i32>()`，`shl_l` 同理。它是**导出的**无体声明，程序也确实写了 `1->shl<64>`。打印器那条判据『无体 kernel 声明，没有程序写这个名字』**错在把『无体』当成了『私有』**：无体只说明实现在 C++ 里，名字照样可写。」
+> 「私有 kernel 要不要可写名字：**前提不成立**，A、B、C 都不选。最小例子里 `shl` 不是私有的：`stdlib/math.cml#shl`（原文写的是行号 627-632，这里按引用规则换成符号）写着 `#op('math:shl_i') export func shl::<T>(x: T): T when is_same::<T, i32>()`，`shl_l` 同理。它是**导出的**无体声明，程序也确实写了 `1->shl<64>`。打印器那条判据『无体 kernel 声明，没有程序写这个名字』**错在把『无体』当成了『私有』**：无体只说明实现在 C++ 里，名字照样可写。」
 
-⇒ **"无体"说的是实现在哪，"私有"说的是名字能不能写，两件事。** 本刀没有动这条判据（`operatorExpression` 里 `kernelDeclaration` 那一支仍然拒绝），所以这一族的读数照旧：**411 条**（`REFUSAL 411 ... <name> is a body-less kernel declaration, and no program writes that name`），是重扫里最大的一族，全量 3377 个文件里占 12.2%。按作者的修法——算子由一条**导出的**声明绑定时，打印那条声明的名字（`x->shl<64>`），重编译时重载按类型选回 `shl_l`；只有确实没有任何导出声明能到达的算子才算"没有可写名字"——是下一刀的事。
+⇒ **"无体"说的是实现在哪，"私有"说的是名字能不能写，两件事。** 这一条已按作者的修法落地，见本页**第二十九刀**：`OperatorTable::CallForm` 多了 `exported`（由 `Module::exportEntity` 填，`declarePrivateEntity` 不填），打印器据此决定写不写名字，这一族 **411 → 30**。
 
 **另一处仪器问题，与"仪器先坏"同族**：`test/tools/cml_roundtrip.py` 把类型的 `decl` 指向 `T:<类型表下标>` 而不是 `D:<声明顶点>`，于是**任何带命名类型的 canonical 文档都被判 `unknown vertex T:d0`**——这个 bug 一直把命名类型挡在"可测量"的门外；不修它，本刀连基线都量不出来。
 
@@ -896,6 +896,38 @@ func main(): int sync { var x = 1
 | 整语料 | 每一个能编译的用例要么往返等价要么在允许拒绝清单里 | **348/2387 打印，35 不等价，4 打印不出 canonical** |
 
 **这 35 个不等价是这一步最有价值的资产**：它们证明检查器真的会红，也给出打印器"悄悄丢节点"的具体形态。S3a 的第一件事是把它们逐个定性（丢节点 / 改接线 / canonical 自身的问题），因为「打印器丢了节点」与「规范转储漏了东西」是两种完全不同的缺陷。
+
+**2026-11-02 第二十九刀：并上 develop，并按作者裁定让"导出的无体声明"有名字可写——那一族 411 → 30**
+
+先记 merge：`origin/lane-m5` 落后 `origin/develop` 85 笔，`git merge origin/develop --no-edit` 只有一个冲突（`test/tools/cml_roundtrip.py` 里类型的 `decl` 边，两边都改成了 `D:`，取同一处、注释合成一段），merge commit `61ed5e18c`，`git merge-base --is-ancestor origin/develop HEAD` = 0。**下面所有读数都是 merge 之后的树（3379 个文件，比旧 tip 多 2 个）**；旧 tip 的数只作对照：`d7f1bd8e3`（3377 文件）`printed 589 / refused 1779 / equivalent 543 / not_equ 43 / unfaithful 3 / DIFFERENT 46`。**"merge 了但没改打印器"那棵中间树我没有单独量**——这是本轮的读数缺口，写在这里，不拿旧 tip 顶替。
+
+修法与作者那条判据一一对应：
+
+- `OperatorTable::CallForm` 加 `exported`，由 `Module::exportEntity` 填，`declarePrivateEntity` 不填：导出表就是"名字能不能写"的事实。图的 `GCOperBody` 只有 `op`/`oper`/`reserved`，`Program` 也不持有 `Module`，所以这个事实在打印期推不出来，只能记。
+- `cml.cpp` 的 `writable` 从 `declaredByModule || uri.starts_with(":")` 改成 `declaredByModule || exported || ':'`；`kernelDeclaration` 退回去只表示"没有体"。
+- 带 `with` 参数的可写调用现在写 `name<with...>(args)`（`shl<4>(1)`），with 值可以是字面量或字符串。
+
+**量出来才看见的两道墙**（都不是这条判据能顺带收的）：
+
+1. **按名字写出来的模块算子要 import 那个名字**：只写 `import math` 时 `shl<4>(1)` 是 `UnresolvedReference: 'shl'`（作者最小例，实测）。`collectImports` 现在按"写符号还是写调用"分叉：写调用时 `import { shl } from math`，写符号时仍 `import module`（`/` 对 `int[]` 的规则要整模块在作用域里）。
+2. **程序自己声明的同名函数会把名字抢走**：`consistency/comprehension/shadowed.cml` 自己声明 `func map`，打印出的 `map<(x: int): int => x>(xs)` 调用的是程序那个 `map`（实测 `NoMatchingFunction`，只是型别恰好不合才没静默出错）。现在按"打印文件里会不会声明这个名字"拒绝——`writtenFunctionNames_` 取自 `graphs_` 的函数名，因为根图的 `nodeName` 不一定是源码名（同一棵树上用 `topLevelNames_` 写的守卫一次也没响，是实测）。
+
+**判据①（作者的 `shl` 最小例）**：`import { shl } from math` + `println(1->shl<40>)`，源给 `1099511627776`，打印出 `println(shl<40>(1))`，重编译同样 `1099511627776`（移 40 位只有 64 位的 `shl_l` 能做到，`shl_i` 会 fault 在宽度上），往返 **EQUAL 16 顶点 / 39 边**。
+
+**判据②（这一族还剩多少，报绝对值）**：**411 → 30**。剩下的 30 条是"模块没有导出那个 kernel"的（`array:sort_l` 这类 `#impl` 内核）。
+
+**判据③（`unfaithful` 不回 7 以上）**：**7**（基线 3 + 本轮新 4）。新的 4 条，逐条点名：`compile/native/para_declaration_import.cml`（`unordered_reduce` 写成裸名但没有 import）、`consistency/if_without_else/statement.cml`、`resources/conflict_per_resource.cml`（`Module 'rand' not found`：URI 前缀不等于可 import 的模块名）、`trans/cpp/empty_literal_takes_the_position.cml`（`let cml1: [] = []`，空字面量没有元素类型可写）。**这 4 条是下一刀的清单，不是"可留的形状差异"**；为了压回 7，`comprehension/shadowed` 那条从"印出来但错"退回成拒绝。
+
+读数（新 tip，3379 文件，`node test/tools/cml-sweep.mjs --jobs 16`）：
+
+```
+SWEEP files=3379 printed=707 refused=1664 frontend=1008 timeout=0
+ROUNDTRIP checked=700 equivalent=649 not_equivalent=51 over_budget=0 unfaithful=7
+```
+
+`printed 589 → 707`（+118）、`equivalent 543 → 649`（+106）、`refused 1779 → 1664`、`not_equivalent 43 → 51`（+8，同样要逐条定性，不许当形状差异放过）、`families 58`。重扫里最大的一族换成了 `the operator '<name>'`（429 条：没有调用形状也没有符号的算子），`import { name } from module` 那族（171 条）还在。
+
+**自检**：全量 fast suite `8447 / 8435 / 0`（skip 10、known failures 2）。第一次跑出 1 条红是 `docs.links.citations`：本页引了作者原话里的 `stdlib/math.cml:627-632`（行号），判据要求引用写成符号，改成 `stdlib/math.cml#shl` 并在括号里注明原文是行号，`docs_links` 14/14 通过。契约计划 `feat.trans.cml` 1/1：新增 `map_with_closure.cml`（`map<closure>(xs)` 往返 EQUAL 22 顶点 / 55 边），拒绝例子换成 `modules/stdlib/array_kernels_read_back.cml`（`array:sort_l` 是模块没导出的内核）。
 
 ## 8. 要裁定的问题（本计划不擅自决定）
 
