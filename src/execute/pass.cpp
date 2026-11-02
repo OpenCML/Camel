@@ -1938,8 +1938,10 @@ GraphOrder orderOfGraph(const GCGraph &graph) {
 /// value -- a normal or `with` input of another node, or the graph's own result, which whoever runs
 /// the graph reads -- or a place in its block's chain. The chain is carried as two edge kinds while
 /// the migration runs (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the control one),
-/// so a place in it is a sync or control edge either way, or the `kGCNodeFlagSyncStatement` the
-/// builder and the splices mark.
+/// so a place in it is a sync or control edge either way. The chain is read as edges, not as the
+/// `kGCNodeFlagSyncStatement` mark: a mark is anybody's to set (`markSyncStatement` in
+/// `passes/opt/generic/rewrite.h`), so it says someone believed the node is in a chain, not that
+/// anything holds it there (the mark was a credential until 2026-11-01; the author struck it).
 ///
 /// An order edge is not one of them: it orders two nodes that both run and makes neither of them run
 /// (edges.cn.md 1.5), so an effect whose only company is an order edge stands on nothing. Read this
@@ -1953,10 +1955,6 @@ bool effectStandsOnSomething(const GCGraph &graph, camel::runtime::gc_node_ref_t
         return true;
     }
     if (graph.exitNodeRef() == ref || graph.outputNodeRef() == ref || graph.returnNodeRef() == ref) {
-        return true;
-    }
-    const camel::runtime::GCNode *node = graph.node(ref);
-    if (node != nullptr && node->hasFlag(camel::runtime::kGCNodeFlagSyncStatement)) {
         return true;
     }
     return !graph.syncPredsOf(ref).empty() || !graph.syncUsersOf(ref).empty() ||
