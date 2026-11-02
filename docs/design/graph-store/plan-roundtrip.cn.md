@@ -278,6 +278,40 @@ print family, and this operator's configuration is not a string, so its call has
 
 
 
+
+**2026-11-02 第二十一刀（版本管线后面的效果）：`unfaithful 10 → 7`，`equivalent +2`**
+
+上一刀的探针把病因钉在"有效果的节点，唯一使用者是版本管线（`GATE`/`:var/peek`/`:var/after`）"上。本刀按那条修，**并且一并对齐了两件同源的事**（不一起做就只会从"调用不见"换成"用了未定义的名字"）：
+
+1. **效果自己当语句**：`processNode` 里 `effect && users == 1` 原本假定唯一使用者会把调用写进自己的文本；新增 `feedsVersionPlumbing`，当使用者是版本管线时把效果**当语句印在原位置**（`twice(x)`、`add(100)`）。这里**不需要给结果起名**——后面的写命名的是变量，不是调用的版本，所以语句形式就是全部。
+2. **嵌套体的名字不许撞**：`prepareGraph` 加 `resetNames`，lambda 的体传 `false`。原本内层体的 `cml1` 与外层体的 `cml1` 是同一个名字（`let cml2: int = cml1 + 1` 里的 `cml1` 声明在内层）。
+3. **读要读到 cell 而不是版本**：`:var/get`/`:var/peek` 的表达式改用 `cellOf`（能剥 `:op/assn*` 与 `:var/after`），否则 `println(cml6)` 里的 `cml6` 从没被声明过。
+
+**三条用例（源 → 打印程序）**：
+
+| 用例 | 输出 | 回程 |
+| --- | --- | --- |
+| `consistency/values/closure_var` | `3 / 24 / 249` → **`3 / 24 / 249`** | 仍 `DIFFERENT`（见下） |
+| `linear/nvm/var_params` | `1 / 3 / 13 / 6 / 15 / 8 / 113 / 20001` → **同** | **`EQUAL (121 vertices, 464 edges)`** |
+| `trans/cpp/exec/variables` | `12 / 33 / abc / 5 / 12 / 12` → **同** | **`EQUAL (95 vertices, 355 edges)`** |
+
+**反向验证**（把修法 stash 掉重编，语料同为 3376）：`closure_var` 的打印程序回到 **4 个编译错误**，文本里 `twice(x)`、`add(100)` 的 `grep -c` 为 **0**。**改掉它现象消失、关掉它现象回来。**
+
+**读数**（两栏同一语料 3376，基线是 stash 后重编）：
+
+| 读数 | 基线 | 本刀 |
+| --- | --- | --- |
+| `printed` | 558 | 558 |
+| `refused` | 1814 | 1814 |
+| `checked` | 548 | **551** |
+| `equivalent` | 508 | **510** |
+| `not_equivalent` | 40 | **41** |
+| `unfaithful` | 10 | **7** |
+| `families` | 53 | 53 |
+| `DIFFERENT` 行 | 50 | **48** |
+
+**`unfaithful` 到了 7，比判据要的 8 多清了一条**（三条都不再是"不产出 canonical 文档"）。`closure_var` 从"不可打印"变成"可打印、输出对、但图不同构"：两张 lambda 图各**少一个带 `sync` 输入的 `GATE`**（`g2` 12 对 11、`g3` 8 对 7）——那是退出闸门，疑与"尾值是显式 `return`"有关（第十六刀那条规则的边界）。记作下一项，未在本刀内追。
+
 **2026-11-02 第二十刀：探针定位到那条调用（只查未改）**
 
 上一刀留的悬案是"`twice(x)`、`add(100)`、`f(g)` 这类调用被丢了，走的哪条路径"。**探针贴了三层，结论：它在，遍历到了，`effect=1`，`users=1`——它被"单用户"那条规则吞掉了。**

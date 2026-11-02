@@ -779,13 +779,19 @@ class CmlPrinter {
         return ": " + typeText(type);
     }
 
-    void prepareGraph(GCGraph *graph) {
+    /// `resetNames` is false for a lambda's body, which is written inside the text of the body that
+    /// makes it: names the inner body invented are in scope there, so the outer body must keep
+    /// counting past them (`consistency/values/closure_var` printed `let cml2 = cml1 + 1` with
+    /// `cml1` declared one scope down).
+    void prepareGraph(GCGraph *graph, bool resetNames = true) {
         params_.clear();
         declared_.clear();
         cells_.clear();
         usedNames_.clear();
         lines_.clear();
-        generated_ = 0;
+        if (resetNames) {
+            generated_ = 0;
+        }
         topo_.clear();
         control_ = std::make_unique<camel::runtime::ControlRegions>(*graph);
 
@@ -1031,6 +1037,47 @@ class CmlPrinter {
             return false;
         }
         return camel::core::OperatorTable::instance().isPure(uri);
+    }
+
+    /// Whether the only thing that reads `ref` is version plumbing: a `GATE`/`COPY` chain that ends
+    /// at `:var/peek`, `:var/after` or the cell slot of a write. Those nodes print a variable name,
+    /// never the value they carry, so an effect that reaches one has no other place to be written.
+    bool feedsVersionPlumbing(gc_node_ref_t ref) {
+        gc_node_ref_t current = ref;
+        for (int guard = 0; guard < 16; ++guard) {
+            std::vector<gc_node_ref_t> users;
+            for (const gc_node_ref_t user : graph_->normOutputsOf(current)) {
+                if (!skip_.contains(user)) {
+                    users.push_back(user);
+                }
+            }
+            if (users.size() != 1) {
+                return false;
+            }
+            const gc_node_ref_t user = users.front();
+            const camel::runtime::GCNode *node = graph_->node(user);
+            if (node == nullptr) {
+                return false;
+            }
+            if (node->kind == camel::runtime::GCNodeKind::Gate ||
+                node->kind == camel::runtime::GCNodeKind::Copy) {
+                current = user;
+                continue;
+            }
+            if (node->kind != camel::runtime::GCNodeKind::Oper) {
+                return false;
+            }
+            const std::string_view uri = graph_->nodeBodyAs<camel::runtime::GCOperBody>(user)->uri();
+            if (uri == ":var/peek" || uri == ":var/after") {
+                return true;
+            }
+            if (uri.starts_with(":op/assn")) {
+                const auto inputs = graph_->normInputsOf(user);
+                return !inputs.empty() && inputs.front() == current;
+            }
+            return false;
+        }
+        return false;
     }
 
     bool nodeEffect(gc_node_ref_t ref) {
@@ -1723,8 +1770,26 @@ class CmlPrinter {
                 emit(std::format(
                     "{}let {}{} = {}", indent_, name, annotationOf(node->dataType()), value.text));
             }
-            // A single use keeps the call where the source had it: lifting it into a
-            // `let` would move the effect ahead of the expression it belongs to.
+            // A single use keeps the call where the source had it: lifting it into a `let` would
+            // move the effect ahead of the expression it belongs to -- unless the one user is
+            // version plumbing. A call whose result is used as the cell a later write stores
+            // through (`GATE` -> `:var/peek` -> `:op/assn*`) is never written by that user: the
+            // plumbing prints a variable name, and the call's text died with it. The call then is
+            // a statement of its own, where it stands (`consistency/values/closure_var`: `twice(x)`
+            // and `add(100)` vanished, and the printed program answered 1, 2, 4 where the source
+            // answers 3, 24, 249).
+            //
+            // The result needs no name here: the write that follows names the variable, not the
+            // call's version, so the statement form is the whole of it.
+            else if (feedsVersionPlumbing(ref)) {
+                branchAsStatement_ = true;
+                const std::string text = expression(ref).text;
+                branchAsStatement_     = false;
+                emit(indent_ + text);
+                if (ref == tail) {
+                    tailPrintedAsStatement = true;
+                }
+            }
         } else if ((users > 1 || needsAnnotation(ref)) && !typeWrittenByUse(ref)) {
             const Expr value       = expression(ref);
             const std::string name = freshName();
@@ -2261,7 +2326,7 @@ class CmlPrinter {
         generated_         = 0;
         indent_            = outerIndent;
         branchAsStatement_ = false;
-        prepareGraph(lambda);
+        prepareGraph(lambda, false);
 
         const auto ports = lambda->closureNodes();
         const auto caps  = lambda->captureNames();
@@ -2559,7 +2624,13 @@ class CmlPrinter {
             if (inputs.size() != 1) {
                 fail(ref, "a variable read without a cell");
             }
-            return {cellName(cellReadBy(inputs.front())), 100};
+            // The cell the read reads, not the version node: a version is a write or a
+            // `:var/after` (what a call through a `var` parameter or a captured variable left
+            // behind), and both end at the `:var/new` that made the cell. Stopping at the write
+            // left `:var/after` nodes unnamed, and `cellName` then invented a `cml` name for a
+            // cell no declaration ever introduced (`linear/nvm/var_params` printed `println(cml6)`
+            // with nothing named `cml6`).
+            return {cellName(cellOf(inputs.front())), 100};
         }
         if (uri.starts_with(":var/")) {
             fail(ref, std::format("the operator '{}'", uri));
