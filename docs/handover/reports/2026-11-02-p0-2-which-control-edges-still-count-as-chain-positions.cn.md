@@ -129,3 +129,35 @@ camel: internal error: Runtime graph 'pick' breaks its edge invariants (2 violat
 **⇒ 这就是 P0-2 真正的墙**：**不是"哪个 pass 读控制边"，而是"sync 边必须落在一个 `sync` block 写过的节点上"这条不变量。** P0-2 要做的是**让链位由 sync 承担的同时，把这条不变量该说的东西说对**（哪些节点允许是 sync 边的终点），**而不是把控制边悄悄换成 sync 边**。
 
 **这一句是机制，不是我上一轮那个症状**（"除法没执行"是症状，上面才是机制）。
+## 更正：4192 是上界，不是终局读数
+
+**上一节那个 `Ctrl→Sync` 的 4192 条红，只证明"悄悄把控制边换成 sync 边会撞墙"，不证明"P0-2 的终局会红 4192 条"** —— 终局还包括"把这条不变量该说的东西说对"。
+
+**⇒ 4192 的正确读法：它是"只换边、不改不变量"的读数，是 P0-2 的上界，不是它的终局读数。** 把实验读数当目标读数用过一次（`remat`），这一页不再犯。
+
+## 那条不变量本身（原文）
+
+**检查处**：`src/runtime/graph_edges.cpp:203-241`（`bad(...)` 造每条 violation），**汇总打印在 `:710`**：`Runtime graph '{}' breaks its edge invariants ({} violation(s)):`。
+
+**它要求什么**（判据原文，`:226-241`）：
+
+```cpp
+if ((user->flags & kGCNodeFlagSyncStatement) == 0 && user->kind != GCNodeKind::Gate) {
+    bad("ends on a node no `sync` block wrote ...");
+}
+if ((pred->flags & kGCNodeFlagSyncStatement) == 0) {
+    bad("starts at a node no `sync` block wrote ...");
+}
+```
+
+⇒ **一条 sync 边的两端都必须带 `kGCNodeFlagSyncStatement`；终点额外允许是 `Gate`。**
+
+**为什么这条要求曾经是对的**：sync 边原本只由 `sync` 块产生，而 `sync` 块写过的节点由 `src/compile/gir/builder_helpers.h:668` 打上这个 flag —— **"sync 边"与"sync 块写过的节点"是同一件东西的两种说法。**
+
+**P0-2 之后它该变成什么**：谓词要回答的是 **"这条链的终点是不是某个等待的承担者"**，而不是"它是不是 sync 块写的"。
+
+**两条候选**：
+- **甲：放宽不变量** —— 终点条件改成"带等待标记 **或** 是 Gate"。**代价**：判据从"谁写的"变成"谁承担的"，需要一个新的谓词；**风险**：放宽后旧图里真正非法的边也过关，`breaks its edge invariants` 从此少报。
+- **乙：建图时给等待链终点打上 sync flag** —— 不加新谓词，只让 `builder_helpers.h:668` 的标记覆盖等待链的全部终点。**代价**：建图阶段要知道"等待链的终点"，而那是 P0-2 的核心知识；**风险**：标记扩散，`kGCNodeFlagSyncStatement` 从"sync 块写的"退化成"大概有等待"，标记的语义被稀释。
+
+**本页不改它**：这条不变量判的是"图能不能成立"，改错会让整棵树在开跑前崩——今天的探针已经演示过。
