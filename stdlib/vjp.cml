@@ -50,7 +50,6 @@ import { jvp, split, transpose } from transforms
 /// number a gradient is comes out of it by position: `grad(f)(x)` is `vjp(f)(x).1(1.0).0` (author's
 /// ruling of 2026-11-01 14:30: one rule for every arity, no exception for one parameter, no type
 /// function that takes an element out of a one-long tuple).
-/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
 /// The derivative of `f` with respect to its parameters: `vjp(f)(x, y, ...)` is the pair
 /// `(value, pullback)`, and `pullback(ct)` answers the cotangents of the parameters -- one member per
 /// parameter, so a function of one parameter has a one-long tuple (author's ruling of 2026-11-01: one
@@ -63,8 +62,10 @@ import { jvp, split, transpose } from transforms
 /// stands in, applied to a pack (author's ruling of 2026-11-01 19:10). The lambda's rest parameter is a
 /// value in its body: `xs` is the tuple of those parameters, and `forward(..xs)` spreads it into the
 /// call, which is the rule the language already had for spreading a tuple.
-/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
-/// @example let reading = vjp(f)
+/// The whole reading in one line: the function is written where the call is, so the example is a
+/// program of its own -- `y` is `x * x` at 3, and the pullback read at `ct = 1.0` answers the
+/// derivative there, one member per parameter.
+/// @example let (y, pullback) = vjp((x: float) => x * x)(3.0)    // y = 9.0, and pullback(1.0) is (6.0)
 export func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
     let (forward, linear) = split(jvp(f))
     return (..xs) => {
