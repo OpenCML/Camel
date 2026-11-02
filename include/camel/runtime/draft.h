@@ -634,6 +634,40 @@ class GraphDraft {
     /// replacing code reachable from the graph's result: the chain is what says a statement runs
     /// (docs/design/effects/edges.cn.md 2), and closing the chain over `id` steps over that code.
     void handChainPlaceTo(gc_node_ref_t id, gc_node_ref_t tail);
+    /// True when `id` is a statement of a chain: one that runs for its effect or may fault, or a
+    /// structure that contains such statements (a branch, a loop, a call). Read from the node and
+    /// the operator table the way `edges.cn.md` 1 and 4.6 define it, not from a marker a writer set.
+    /// The seal check asks the same question of a frozen graph (src/runtime/graph_edges.cpp,
+    /// `isChainStatement`), and a rewrite that would hand a statement's place to something else asks
+    /// it of the draft: a value is not on the chain, so a place handed to one is a sync edge that
+    /// starts at a value. Two readings of one model -- a draft and a frozen graph are its two shapes
+    /// -- and the answer has to agree.
+    bool isChainStatement(gc_node_ref_t id) const {
+        const DraftNodeHeader *header = this->header(id);
+        if (header == nullptr) {
+            return false;
+        }
+        switch (header->kind) {
+        case GCNodeKind::Brch:
+        case GCNodeKind::Loop:
+        case GCNodeKind::Call:
+            return true;
+        case GCNodeKind::Oper: {
+            const std::span<const std::byte> payload = payloadOf(id);
+            if (payload.size() < sizeof(GCOperBody)) {
+                return false;
+            }
+            const camel::core::OperId oper =
+                reinterpret_cast<const GCOperBody *>(payload.data())->oper;
+            auto &table       = camel::core::OperatorTable::instance();
+            const auto traits = table.find(oper);
+            return !table.isPure(oper) || table.hasExternalEffect(oper) ||
+                   (traits.has_value() && traits->mayFault);
+        }
+        default:
+            return false;
+        }
+    }
     /// The node `newId` takes the place `oldId` had in its block's chain: the statements written
     /// after `oldId` are written after `newId`, and `newId` is written after what `oldId` followed
     /// (docs/design/effects/edges.cn.md 4: a replacement transfers the replaced node's orderings to
@@ -1089,16 +1123,6 @@ uint32_t controlRegionOf(const GraphDraft &draft, gc_node_ref_t id);
 /// statement of it (section 5.7), so the region that annotates the moved code (Inline) is looked
 /// through. Every other region separates blocks.
 bool sameSyncBlock(const GraphDraft &draft, gc_node_ref_t a, gc_node_ref_t b);
-
-/// True when the node is a statement of a chain: one that runs for its effect or may fault, or a
-/// structure that contains such statements (a branch, a loop, a call). Read from the node and the
-/// operator table the way `edges.cn.md` 1 and 4.6 define it, not from a marker a writer set. The
-/// seal check asks the same question of a frozen graph (src/runtime/graph_edges.cpp,
-/// `isChainStatement`), and a rewrite that hands a statement's place to something else asks it of
-/// the draft: a value is not on the chain, so a place handed to one is a sync edge that starts at a
-/// value. The two readings exist because a draft and a frozen graph are two shapes of one model;
-/// the question is the same and the answer has to agree.
-bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id);
 
 /// The runtime node id every live node of the transaction's draft takes when the draft is encoded,
 /// indexed by draft node id (`kInvalidNodeRef` for a node the draft erased, which no commitment

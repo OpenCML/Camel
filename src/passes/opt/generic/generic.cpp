@@ -701,7 +701,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         // the branch follow what the branch followed -- `eraseNode` closes the chain over the branch
         // that way (closeChainOver).
         const auto isChainStatement = [&](gc_node_ref_t n) {
-            return camel::runtime::isChainStatement(draft, n);
+            return draft.isChainStatement(n);
         };
         gc_node_ref_t place = armTail;
         for (int hop = 0; hop < 64 && place != kInvalidNodeRef && !isChainStatement(place);
