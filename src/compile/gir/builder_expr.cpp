@@ -2185,17 +2185,6 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         const auto &tupleType = tt::as_ptr<TupleType>(tgtType);
         const auto *gctTree     = GCT::Tree::of(gct);
         const size_t names      = gctTree != nullptr ? gctTree->unpackCount(gct) : 0;
-        // The tuple a `split` hands on beside its result is the transform's own: its members are the
-        // graph's answer -- how many forward values the backward half reads is a property of the body,
-        // not of the type -- so a program neither destructures it nor reads an element of it, and
-        // hands it on whole instead (design principles 4.4, the cut between now and later). Refused
-        // where the program would have read it: at the `let` for a destructuring, at the read for
-        // `residuals.0`. One answer per declaration, the rule the count below follows: every name of
-        // the destructuring carries it, and the first reports.
-        if (tupleType->isResiduals() && (names == 0 || gct->accessIndex() == 0)) {
-            diags_->of(SemanticDiag::ResidualsAreNotVisible).atOrigin(gct->origin()).commit();
-            throw BuildAbortException();
-        }
         // A destructuring declaration binds one name per element: `let (x, y) = t` needs a tuple of
         // two, whichever way the count is wrong (design principles 3.9). Reported here, at the
         // declaration, and not as an element read past the end -- a name too few used to drop the
@@ -2251,7 +2240,17 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         break;
     }
     default:
-        throw std::runtime_error("Unexpected target type in ACCS node.");
+        // A composite that is none of the three above has no element to read: a function value is the
+        // case that reaches here, and it is not a corner -- `split` answers the forward half, so
+        // `let (y, lin) = split(f)` destructures a *function*, and the read lands on a type whose
+        // members are parameters, not elements (`(float, float) => float`). This used to be a
+        // `runtime_error`, which the driver reports as a defect of the compiler; a program that asks
+        // a function for its element is a program with a mistake in it, and it is told which type it
+        // asked (2026-11-02, the split ABI: sixteen cases in test/cases/transforms reached it).
+        diags_->of(SemanticDiag::TypeNotIndexable)
+            .atOrigin(gct->origin())
+            .commit(tgtType->toString());
+        throw BuildAbortException();
     }
 
     // A member read of a compile-time struct value is that field's value, known here as well: the

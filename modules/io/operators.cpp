@@ -62,24 +62,75 @@ bool isTerminal() {
     DWORD mode;
     return GetConsoleMode(hStdin, &mode) != 0;
 }
-bool hasInput() { return _kbhit() != 0; }
+// What standard input has waiting to be read, and it is two questions, not one: `_kbhit` asks the
+// console for a key and answers nothing at all when standard input is not a console -- it reads 0
+// on a pipe, which is what every program a plan runs and every `spawnSync(..., { input })` child
+// gets, and it reads 0 on a redirected file too. Asking it alone made a piped program see no input
+// on this platform, where the POSIX side's `select` answers for a terminal, a pipe and a file alike
+// (design principles 11.5: the same program says the same thing on every platform). So the console
+// keeps `_kbhit`, a pipe is peeked without consuming a byte, and a file is read while its pointer
+// is short of its end. Nothing waiting is "no input", whether the end of the pipe has come or the
+// writer has not written yet.
+//
+// The three answers of standard input that is none of these, measured on Windows with a pipe, a
+// file, the `NUL` device and a closed handle: `NUL` fails the peek (`ERROR_INVALID_FUNCTION`) and
+// answers the size question with an empty file, so it reads as nothing waiting and its `ReadFile`
+// returns 0 bytes; a closed handle fails both questions (`ERROR_INVALID_HANDLE`) and reads as
+// nothing waiting too; and a console is asked `_kbhit` before anything else -- a key put into the
+// console's input buffer answers `true` there and comes off `_getch`, so the console path is not
+// the fallback of a pipe question, it is the first question on a console.
+bool hasInput() {
+    if (isTerminal()) {
+        return _kbhit() != 0;
+    }
+    DWORD available = 0;
+    if (PeekNamedPipe(hStdin, nullptr, 0, nullptr, &available, nullptr)) {
+        return available > 0;
+    }
+    LARGE_INTEGER size{};
+    LARGE_INTEGER position{};
+    if (GetFileSizeEx(hStdin, &size) &&
+        SetFilePointerEx(hStdin, LARGE_INTEGER{}, &position, FILE_CURRENT)) {
+        return position.QuadPart < size.QuadPart;
+    }
+    return false;
+}
+/// One byte of standard input: a key on a console, `ReadFile` on anything else. False is the end.
+bool readByte(char &out) {
+    if (isTerminal()) {
+        out = static_cast<char>(_getch());
+        return true;
+    }
+    DWORD read = 0;
+    if (!ReadFile(hStdin, &out, 1, &read, nullptr) || read != 1) {
+        return false;
+    }
+    return true;
+}
 // `maxChars` counts characters (code points), and a character is read whole.
 std::string readInput(int maxChars = -1) {
     std::string result;
     int chars = 0;
     while (hasInput() && (maxChars < 0 || chars < maxChars)) {
-        char ch = _getch();
+        char ch = 0;
+        if (!readByte(ch))
+            break;
         result += ch;
         size_t more = camel::utf8::sequenceLength(static_cast<unsigned char>(ch)) - 1;
-        while (more-- > 0 && hasInput())
-            result += static_cast<char>(_getch());
+        while (more-- > 0 && hasInput()) {
+            char next = 0;
+            if (!readByte(next))
+                break;
+            result += next;
+        }
         ++chars;
     }
     return result;
 }
 void clearInputBuffer() {
-    while (_kbhit())
-        _getch();
+    char ch = 0;
+    while (hasInput() && readByte(ch)) {
+    }
 }
 } // namespace Terminal
 #else

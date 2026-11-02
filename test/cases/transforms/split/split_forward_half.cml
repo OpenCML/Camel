@@ -1,11 +1,10 @@
 // The author's example of 2026-10-31 15:25, as a case: g(x) = x*x, f = reinterp<jvp>(g), x = 3,
 // dx = 1. The FORWARD half of split(f) computes what the present inputs allow and hands the residuals on
 // whole -- y = 9, and the tuple the backward half turns a cotangent into a tangent with (6 for dx = 1).
-// The tuple is the transform's own kind (`TupleType::residuals`): its members are the graph's answer, so
-// a signature cannot name them, and a program may neither destructure it nor read an element of it
-// (`SemanticDiag::ResidualsAreNotVisible`; split_residuals_destructured is the refused program). What is
-// left is this case's spelling: bind it to one name and hand it on whole -- printing it prints an empty
-// tuple, the members not being a signature's to name.
+// The tuple is the transform's own: its members are the graph's answer, so a signature cannot name
+// them, and a program may neither destructure it nor read an element of it. What is left is this
+// case's spelling: bind it to one name and hand it on whole -- printing it prints an empty tuple, the
+// members not being a signature's to name.
 //
 // `split` exists (design doc 4.2) and this case reads what its forward half hands back.
 import rulesets.jvp

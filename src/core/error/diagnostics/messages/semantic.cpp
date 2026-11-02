@@ -1797,14 +1797,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::ResidualsAreNotVisible,
-            {
-                "ResidualsAreNotVisible",
-                "The residuals `split` collects are not visible to the program: they are handed on whole to the second half, and neither a destructuring nor an element read takes them apart.",
-                "A `split`'s forward half answers `(result, residuals)` -- the forward values the backward half's rules multiply by. Their number is the body's: `f(x) = x` crosses with none and `f(x, y) = x*x*y*y` with four, and two bodies with one lifted type can differ (design principles 4.4, the cut between now and later). The tuple travels for one reason, as one value: `let (value, residuals) = forward(xs)` and then `backward(residuals, dx)`, or the same tuple passed to the transposed function beside the cotangent. A program that destructured it, or read `residuals.0`, would depend on a count the graph chose, so both are refused here, at the `let` or the read. Pass the tuple as it stands: which members the second half reads is the transform's decision, made while the graph is built.",
-            },
-        },
-        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",
