@@ -2085,7 +2085,7 @@ const EXAMPLE_STOPS = {
     // `@example-fragment` marker whose reason names what it is missing. A number here that moved
     // says a shape changed; a number here that was lowered without a reason would be the same
     // silence as a relaxed gate.
-    'a semantic error': 37,
+    'a semantic error': 38,
     // `split`'s example reaches the compiler with a function-typed parameter bound by name and the
     // compile graph keeps a live dereference node (`internal error: Compile graph '__doc_example'
     // still contains a live DREF node`). That is the compiler's own class, not the example's.
@@ -2099,7 +2099,7 @@ const EXAMPLE_STOPS = {
     // lane (`stdlib/vjp.cml` and the cases that destructure the pair), and the number comes back to 1
     // when that step lands. The rule above stands: this records a move in progress, not a permission
     // to leave the examples broken.
-    'an internal error': 4,
+    'an internal error': 1,
 }
 
 // A fragment is a claim -- "this example is not a program of its own" -- and the marker is only
