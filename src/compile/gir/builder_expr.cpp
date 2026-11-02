@@ -2185,17 +2185,6 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         const auto &tupleType = tt::as_ptr<TupleType>(tgtType);
         const auto *gctTree     = GCT::Tree::of(gct);
         const size_t names      = gctTree != nullptr ? gctTree->unpackCount(gct) : 0;
-        // The tuple a `split` hands on beside its result is the transform's own: its members are the
-        // graph's answer -- how many forward values the backward half reads is a property of the body,
-        // not of the type -- so a program neither destructures it nor reads an element of it, and
-        // hands it on whole instead (design principles 4.4, the cut between now and later). Refused
-        // where the program would have read it: at the `let` for a destructuring, at the read for
-        // `residuals.0`. One answer per declaration, the rule the count below follows: every name of
-        // the destructuring carries it, and the first reports.
-        if (tupleType->isResiduals() && (names == 0 || gct->accessIndex() == 0)) {
-            diags_->of(SemanticDiag::ResidualsAreNotVisible).atOrigin(gct->origin()).commit();
-            throw BuildAbortException();
-        }
         // A destructuring declaration binds one name per element: `let (x, y) = t` needs a tuple of
         // two, whichever way the count is wrong (design principles 3.9). Reported here, at the
         // declaration, and not as an element read past the end -- a name too few used to drop the
