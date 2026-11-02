@@ -36,6 +36,15 @@ returned for rework when it misses any of these, however well it tests:
 - **Comments state current facts and reasons**, not history ("used to", "after the rewrite") and not a
   narration of the code. Task numbers, test names and measured counts appear in reports and notes,
   never in code or comments.
+- **Storage that is read as an object must have a live object on it.** A sentinel is constructed
+  with placement new, not left as raw bytes, and the room for it is proved by a guard around the
+  bump that installs it, not by the size of the struct. Both halves are argued before the code is
+  written, because they fail differently: an object that was never constructed is an invalid vptr
+  (a member written through a `reinterpret_cast` onto nothing), while an object constructed and
+  never destroyed is a leak or an unregistered root. The discriminator for a sweep is whether the
+  target type is polymorphic -- only then is the defect both provable by a sanitizer and fatal to a
+  virtual call; raw storage read as a plain header or a slot array is a milder class, and leaving
+  that class alone is a classification, not an omission.
 - **Errors are values or located diagnostics**, never silent fallbacks, magic sentinels or
   swallowed exceptions (see the next section).
 - **Tests assert behaviour that matters** (a property, a graph shape, an exact output), not
