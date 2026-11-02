@@ -35,8 +35,9 @@ constexpr std::string_view compareName(k::CompareOp op) {
 }
 
 constexpr std::string_view unaryName(k::UnaryOp op) {
-    constexpr std::string_view names[] =
-        {"neg", "abs", "exp", "log", "sqrt", "rsqrt", "sigmoid", "tanh", "relu", "gelu", "erf", "erfc"};
+    constexpr std::string_view names[] = {
+        "neg", "abs", "exp", "log", "sqrt", "rsqrt", "sigmoid", "tanh", "relu", "gelu",
+        "erf", "erfc", "not"};
     return names[static_cast<size_t>(op)];
 }
 
@@ -195,6 +196,18 @@ InferFn unaryInfer(bool producesFloat) {
         }
         return tensorOf(dtype, in.shape);
     };
+}
+
+/// `!` of a tensor: `bool[]` in, `bool[]` out, and nullopt for every other element type -- a
+/// negation of a number is not a value this language has. Written as its own inference rather
+/// than as `unaryInfer(false)` because that one keeps whatever element type it is given, and a
+/// call that cannot be answered must not match an overload at all.
+std::optional<Type *> notInfer(const InferContext &ctx) {
+    const TensorFacts in = ctx.facts(0);
+    if (!in.dtype || *in.dtype != TypeCode::Bool) {
+        return std::nullopt;
+    }
+    return tensorOf(in.dtype, in.shape);
 }
 
 const std::vector<ParamSpec> kBinaryParams = {
@@ -517,6 +530,19 @@ std::vector<OpDef> elementwiseOps() {
     defs.push_back(unaryDef<k::UnaryOp::Gelu>("gelu", {"gelu"}));
     defs.push_back(unaryDef<k::UnaryOp::Erf>("erf", {"erf"}));
     defs.push_back(unaryDef<k::UnaryOp::Erfc>("erfc", {"erfc"}));
+    // `!` on a tensor: the negation of an elementwise comparison's result, which is a `bool`
+    // element type and nothing else (design principles 4.2 -- `!==` is the negation of `===`,
+    // and `!` of one `bool[]` is what builds it). Every other element type has no negation, and
+    // `notInfer` says so by not matching, rather than a kernel refusing at run time.
+    defs.push_back(OpDef{
+        .name      = "not",
+        .exports   = {"__not__"},
+        .params    = {{"t", ParamKind::Tensor}},
+        .resultDoc = "bool[..]",
+        .infer     = notInfer,
+        .kernel    = &unaryKernel<k::UnaryOp::Not>,
+        .traits    = elementwiseTraits(),
+    });
 
     defs.push_back(OpDef{
         .name    = "where",

@@ -80,6 +80,10 @@ enum class UnaryOp {
     Gelu, // tanh approximation
     Erf,
     Erfc,
+    /// `!`, on a tensor of `bool` only: the negation of an elementwise comparison's result. The
+    /// element type is unchanged, so it takes the integer/bool kernel path; the name table in
+    /// elementwise_ops.cpp is indexed by this enumerator, so a new operator goes last.
+    Not,
 };
 
 enum class BinaryOp {

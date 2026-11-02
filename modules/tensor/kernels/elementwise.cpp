@@ -443,6 +443,10 @@ template <UnaryOp Op, typename T> inline T unaryInt(T x) {
         return x < T{} ? static_cast<T>(-x) : x;
     } else if constexpr (Op == UnaryOp::Relu) {
         return relu(x);
+    } else if constexpr (Op == UnaryOp::Not) {
+        // `bool` only: the defs refuse every other element type, so `x` is a truth value and
+        // its negation is the truth value of "x is zero".
+        return static_cast<T>(!x);
     } else {
         return x;
     }
@@ -464,6 +468,8 @@ template <typename T> void runUnaryInt(UnaryOp op, const T *src, T *dst, int64_t
         return unaryIntLoop<UnaryOp::Abs>(src, dst, count);
     case UnaryOp::Relu:
         return unaryIntLoop<UnaryOp::Relu>(src, dst, count);
+    case UnaryOp::Not:
+        return unaryIntLoop<UnaryOp::Not>(src, dst, count);
     default:
         // Not reached: every other operator produces a float result (unaryProducesFloat).
         throw std::logic_error("integer unary kernel called for a float-producing operator");
@@ -495,6 +501,7 @@ int64_t unaryGrain(UnaryOp op) {
     case UnaryOp::Neg:
     case UnaryOp::Abs:
     case UnaryOp::Relu:
+    case UnaryOp::Not:
         return kElementGrain;
     default:
         return grainForWork(kNsPerFloat * 8.0);
@@ -600,7 +607,8 @@ ScalarOperand ScalarOperand::fromSlot(TypeCode code, slot_t slot) {
 }
 
 bool unaryProducesFloat(UnaryOp op) {
-    return op != UnaryOp::Neg && op != UnaryOp::Abs && op != UnaryOp::Relu;
+    return op != UnaryOp::Neg && op != UnaryOp::Abs && op != UnaryOp::Relu &&
+           op != UnaryOp::Not;
 }
 
 bool binaryProducesFloat(BinaryOp op) { return op == BinaryOp::Pow; }

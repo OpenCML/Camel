@@ -84,7 +84,13 @@ void CAMEL_UNARY_ENTRY(UnaryOp op, const float *src, float *dst, int64_t count) 
         return loop<UnaryOp::Erf>(src, dst, count);
     case UnaryOp::Erfc:
         return loop<UnaryOp::Erfc>(src, dst, count);
+    case UnaryOp::Not:
+        // Not a float operator: `!` takes a `bool` tensor and keeps its element type, so it is
+        // computed by the integer path (elementwise.cpp, unaryInt). Reaching here would mean the
+        // defs let a float tensor through, which they do not.
+        break;
     }
+    throw std::logic_error("a float unary loop was asked for an operator that is not one");
 }
 
 } // namespace camel::tensor::kernels::detail

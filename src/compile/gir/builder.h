@@ -3008,11 +3008,13 @@ class Builder {
     /// Adds what the declaring modules of the operands export as overloads of `group` to the
     /// set of `dref`, once each: an overload the module also imports (or one found by both
     /// routes) stays one candidate. `!=` takes the `==` overloads, as it does for the ones the
-    /// program declares (design principles 4.3). Returns whether anything was added.
+    /// program declares (design principles 4.3); `writtenGroup` is the group the program wrote,
+    /// because the built-in rule's own group is already `==`'s and so does not say it by its
+    /// name. Returns whether anything was added.
     bool addDeclaringModuleOverloads(
         node_handle_t dref, const std::string &group,
         const camel::core::type::type_vec_t &withTypes,
-        const camel::core::type::type_vec_t &normTypes);
+        const camel::core::type::type_vec_t &normTypes, const std::string &writtenGroup);
     /// Whether a module that declares one of the operand types exports an overload of `group`
     /// (design principles 5.7). Asked before an operator DREF exists, for `+=`, which follows the
     /// plain operator (`compoundAssignmentByRebinding`) — together with the group's own rules
