@@ -1,5 +1,8 @@
 # 反传倒着走要能钉住，先要循环状态不是浮点标量
 
+**已裁定（作者 2026-11-03，见 `origin/fsh-dev` `e83fabea2`）**：作者要求反向逐轮走**现在**落地，钉子就是本页第 1 节那条两轮矩阵程序的 `(1.0, 1.0)`。本页的默认建议因此被取代，正文保留为当时的判断与理由。
+**已派（`lane-splitprimal`，`a7c41f15`）**：反向逐轮走在那一支上落地，钉子仍是本页第 1 节那条两轮矩阵程序的 `(1.0, 1.0)`。
+
 ## 问什么
 
 `modules/transforms/transpose.cpp#transposeNodesInDraft` 的 `case rt::GCNodeKind::Loop:`（`:1704`）把原 range 照抄给反向循环，所以它正着走、不保序（设计 4.2/4.3 要求倒着走）。`split` 那一半已经倒过来（`e8c78f495`），`transpose` 这一半没动。问的是**它被钉住之前先要什么**：改 `:1704`，还是抬升先能配非标量态？这一页把钉住顺序的那条程序记下来，等先决条件落地。
@@ -64,3 +67,13 @@ export rule jvp_idx_arr::<T>(xs: T[], i: int) {
     index_into(xs, i) => (dxs: T[]) => index_into(dxs, i)
 }
 ```
+
+## 我方默认（按它往下做）
+
+**这条默认已被裁定取代**：作者要求现在就换走法（`origin/fsh-dev` `e83fabea2`），钉子是本页第 1 节那条两轮矩阵程序答出 `(1.0, 1.0)`。下面留着，因为它记的是我们当时的判断与理由。
+
+**不动 `:1704`，先把"带 escape 的循环抬不起来"这一格修掉** —— 今天 `transpose_loop_escape.*` 六条全红在 `REINTERP jvp function=read_one skip=loop`，走法在这一层之上还看不见；等那条程序（§1）能在 `transpose` 侧看见 `(1.0, 1.0)` 与 `(1.0, 10.0)` 的差别，再动 `:1704` 换走法，并用 `expect_output_contains` 钉住。
+
+**理由**：§5 的读数是"抬升落地了、顺序仍钉不住"—— 现在改 `:1704` 没有任何程序看得出差别（§4：`split_loop_taped_rounds` 的 `loop d = 30.0` 在任何走法下都是 30.0），"没变坏"是唯一钉得住的东西。
+
+**若作者说不（要求先改走法）**：回退一层 —— 只回退 `:1704` 那一笔（`transposeNodesInDraft` 的 `case rt::GCNodeKind::Loop:`），不碰抬升侧的 `Fill` 两处；两侧的读数各自独立，回退不互相牵连。
