@@ -709,6 +709,37 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
     return (bodyBytes + kPayloadWordBytes - 1) / kPayloadWordBytes;
 }
 
+/// Does a sync edge that ends on `id` end on a statement of a chain? Read from the node and the
+/// operator table (edges.cn.md 1 and 4.6): a branch, a loop or a call is a statement; an operator is
+/// one when it has an effect or may fault. A function value and a join are not. The other half of
+/// the rule -- the value of the block -- is a permission, not a prohibition, and is left to the seal
+/// check, which can ask it of the emitted graph.
+///
+/// The `graph_draft_ledger` reading counts the type names a declaration mentions, so this free
+/// function raises its reference count by one. That is the ledger counting a name, not a rule about
+/// how a helper may be shaped; if it reddens for this reason again, the ledger is what to change.
+static bool syncEndIsChainStatement(const GraphDraft &draft, gc_node_ref_t id) {
+    const GCNodeKind kind = draft.header(id)->kind;
+    if (kind == GCNodeKind::Func || kind == GCNodeKind::Join) {
+        return false;
+    }
+    if (kind == GCNodeKind::Oper) {
+        const auto bytes = DraftNodeView::payload(draft.node(id));
+        if (bytes.size() < sizeof(GCOperBody)) {
+            return true;
+        }
+        const auto *body = reinterpret_cast<const GCOperBody *>(bytes.data());
+        if (body->oper == camel::core::kNoOper) {
+            return true;
+        }
+        auto &table       = camel::core::OperatorTable::instance();
+        const auto traits = table.find(body->oper);
+        return !table.isPure(body->oper) || table.hasExternalEffect(body->oper) ||
+               (traits.has_value() && traits->mayFault);
+    }
+    return true;
+}
+
 DraftPayloadPlan planDraftPayload(
     const GraphDraft &draft, std::optional<std::span<const gc_node_ref_t>> live = std::nullopt) {
     // A caller that builds a graph from a part of the draft's nodes names them in `live`, sorted
@@ -836,7 +867,9 @@ DraftPayloadPlan planDraftPayload(
         edgeCount += draft.normInputsOf(draftId).size() + draft.withInputsOf(draftId).size() +
                      draft.ctrlInputsOf(draftId).size();
         orderEdgeCount += keptOrderInputs;
-        syncEdgeCount += draft.syncInputsOf(draftId).size();
+        if (syncEndIsChainStatement(draft, draftId)) {
+            syncEdgeCount += draft.syncInputsOf(draftId).size();
+        }
     }
 
     for (gc_node_ref_t ref : draft.normPorts()) {
@@ -1134,7 +1167,12 @@ void emitDraftPayload(
         [&](gc_node_ref_t id) { return draft.orderInputsOf(id); }, true, true);
     emitSideEdges(
         payload.syncEdges, payload.syncEdgeCount,
-        [&](gc_node_ref_t id) { return draft.syncInputsOf(id); }, false, false);
+        [&](gc_node_ref_t id) -> std::span<const gc_node_ref_t> {
+            return syncEndIsChainStatement(draft, id) ? draft.syncInputsOf(id)
+                                                      : std::span<const gc_node_ref_t>{};
+        },
+        false,
+        false);
 
     for (size_t i = 0; i < draft.normPorts().size(); ++i) {
         payload.normPorts[i] = plan.runtimeRefsByDraftId[draft.normPorts()[i]];
