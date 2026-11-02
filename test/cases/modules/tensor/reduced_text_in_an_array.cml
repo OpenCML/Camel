@@ -1,0 +1,18 @@
+/**
+ * A bf16 or an f16 writes the shortest digits that read back as the same element of its own type
+ * (design principles 7.7, "reduced-precision-text"): `0.1 as bf16` prints `0.1`, where the f32 text
+ * of the value it widens to would print `0.100097656`.
+ *
+ * The digits are found in camel/utils/number_text.h, `shortestHalfDigits`, and they must survive the
+ * call that found them: the search builds each candidate in a buffer of its own and the text is read
+ * after that call returns, so a candidate handed back as a view of the buffer is a view of a dead
+ * frame -- on one build it read as empty for `0.1 as bf16`, and an empty digit string lays out a
+ * text with no digits in it. This case pins the digits themselves, for both reduced types, on the
+ * values the search trims and the values it does not.
+ */
+
+func main(): int sync {
+    println(bf16([0.1, -0.1, 1.0, -1.0, 100.0, -100.0]))
+    println(f16([0.1, -0.1, 1.0, -1.0, 100.0, -100.0]))
+    return 0
+}

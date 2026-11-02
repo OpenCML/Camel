@@ -487,6 +487,12 @@ inline bool scientificParsesBack(std::string_view scientific, float &parsed) {
 /// 2026-10-23, "reduced-precision-text"). `value` is the exact f32 widening of the element, so
 /// its own digits are a fallback that always reads back, and the loop only takes fewer of them.
 /// `roundsBack(token)` says whether one candidate is the same element of the narrow type.
+///
+/// The answer is written into `storage` and read from there, and the view points into `storage` and
+/// never into this function's own `buffer`: the caller reads the text after this call returned, so a
+/// candidate handed back as a view of `buffer` is a view of a dead frame -- the digits then come out
+/// of whatever the frames in between left there, and a digit string read as empty lays out a text
+/// with no digits in it at all. That contract is ownership, not a reading of one build.
 template <typename RoundsBack>
 std::string_view shortestHalfDigits(float value, RoundsBack roundsBack, std::string &storage) {
     char buffer[64];
