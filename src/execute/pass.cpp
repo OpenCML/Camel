@@ -320,6 +320,41 @@ class GcPoisonPass final : public GraphIRPass {
     }
 };
 
+class GcTupleMembersPass final : public GraphIRPass {
+  public:
+    GcTupleMembersPass(const context_ptr_t &ctx, bool mismatch)
+        : GraphIRPass(ctx), mismatch_(mismatch) {}
+
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
+        // The collector trusts a value's static type, so a value carrying more members than its type
+        // declares is a memory-safety bug. The reading that put this guard here had five members
+        // against a type that declared zero (a residuals tuple typed by the operator resolver's
+        // empty placeholder); here the disagreement is three against two, which is the same bug
+        // without depending on `split`.
+        //
+        // The pass has two modes and the case runs both. `agree` is the control: two members, a type
+        // of two, the walk runs and the program goes on. `mismatch` is the guard: it must stop the
+        // process with the two counts in the message, and must not return -- a guard that reports a
+        // disagreement and then reads anyway is worse than none, because the read it allows may be
+        // taken as data.
+        const type::TupleType *pair = type::TupleType::create(
+            std::vector<type::Type *>{type::Type::Float(), type::Type::Float()});
+        const size_t members = mismatch_ ? 3 : 2;
+        ::Tuple *value = ::Tuple::create(members, camel::core::mm::autoSpace());
+        const auto relocate = [](camel::core::rtdata::Object *object,
+                                 const camel::core::type::Type *,
+                                 const camel::core::rtdata::RefTraceInfo &) { return object; };
+        value->updateRefs(relocate, pair);
+        os << "{\"ok\":true,\"kind\":\"gc.tuple_members\",\"members\":" << members
+           << ",\"declared\":2}\n";
+        return program;
+    }
+
+  private:
+    bool mismatch_;
+};
+
 class GcForeignResourcePass final : public GraphIRPass {
   public:
     explicit GcForeignResourcePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
@@ -629,6 +664,8 @@ void registerCoreKernels() {
     registerCoreKernel("gc::remembered_set", makePass<GcRememberedSetPass>());
     registerCoreKernel("gc::foreign_resource", makePass<GcForeignResourcePass>());
     registerCoreKernel("gc::poison", makePass<GcPoisonPass>());
+    registerCoreKernel("gc::tuple_members", makePass<GcTupleMembersPass>(true));
+    registerCoreKernel("gc::tuple_members_agree", makePass<GcTupleMembersPass>(false));
     registerCoreKernel("nvm", makePass<NodeVMSchedPass>());
     registerCoreKernel("fvm", fastVmPass(false));
     registerCoreKernel("fastvm::bytecode", makePass<BytecodeDumpPass>());

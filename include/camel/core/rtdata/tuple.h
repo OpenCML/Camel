@@ -25,31 +25,24 @@ void printTaggedSlots(
     std::ostream &os, const slot_t *slots, const camel::core::type::TupleType *type);
 
 namespace detail {
-/// Says, once per type, that a tuple value carries more members than its type declares.
+/// What a tuple value and its type disagreeing about the member count means, in one sentence.
 ///
 /// The two counts are the same number stated twice -- the value's `size_` and the type's `size_` --
 /// and nothing compared them, so a value and a type that disagree were traced by a loop that read
 /// `codes[i]` past the end of the type's array: a garbage code that happens to be a traced kind
 /// crashed at `typeAt(i)`, and one that is not a traced kind was skipped in silence and its
 /// reference was never relocated (the stale pointer `docs/technical/36_gc_handle_rules.md` is
-/// about). Neither reading names the tuple that was wrong, which is why this says it in words.
-/// Reported once per type, not once per collection: a program collects thousands of times.
-inline void reportMembersBeyondType(
+/// about). The trace stops here rather than reading on (author, 2026-11-02 06:30): a disagreeing
+/// value is a memory-safety bug, and a guard that reports one and then reads anyway is worse than
+/// no guard, because it turns "I know this is wrong" into a read that may be taken as data.
+inline std::string membersBeyondTypeReading(
     const void *value, const type::TupleType *tupleType, size_t members) {
-    static std::mutex mutex;
-    static std::unordered_set<const type::TupleType *> said;
-    std::lock_guard<std::mutex> lock(mutex);
-    if (!said.insert(tupleType).second) {
-        return;
-    }
-    std::fprintf(
-        stderr,
-        "[camel] tuple trace: a tuple value (%p) has %zu member(s) but its type declares %zu%s; the "
-        "members past %zu are not traced or relocated\n",
+    return std::format(
+        "Tuple trace: a tuple value ({}) has {} member(s) but its type declares {}; the collector "
+        "trusts a value's static type, so this is a memory-safety bug and not a diagnostic question "
+        "(docs/technical/36_gc_handle_rules.md)",
         value,
         members,
-        tupleType->size(),
-        tupleType->isResiduals() ? " (residuals kind)" : "",
         tupleType->size());
 }
 
@@ -387,12 +380,11 @@ class Tuple : public rtdata::Object {
         // The bound on the walk is gone (05:30: "B 的兜底代码在同一笔删掉"). It was there to stop
         // `codes[i]` leaving the array the type owns while a residuals tuple still reached the caller
         // as a tuple; the ruling that residuals are no longer a tuple removes the disagreement, so the
-        // walk goes back to the value's own count and a disagreement is a report followed by the read
-        // it always was. What must not come back is trusting the two counts to agree in silence.
+        // walk goes back to the value's own count.
         const size_t members = size();
-        if (members > tupleType->size()) {
-            camel::core::rtdata::detail::reportMembersBeyondType(this, tupleType, members);
-        }
+        GUARD(
+            members <= tupleType->size(),
+            camel::core::rtdata::detail::membersBeyondTypeReading(this, tupleType, members));
 
         for (size_t i = 0; i < members; ++i) {
             if (type::isGCTraced(codes[i])) {
