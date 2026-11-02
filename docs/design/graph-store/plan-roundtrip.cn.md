@@ -273,6 +273,19 @@ print family, and this operator's configuration is not a string, so its call has
 
 
 
+
+**2026-11-02 查证（`return i + 1` 与 `:var/new` 那个结构类）：两条都不是缺陷，且"不是同一处"是量出来的**
+
+**一、尾值的 `return` 不是缺陷，别再改。** 最小用例（循环体尾值 `i + 1` → 打印 `return i + 1`）回程 `EQUAL: the two canonical documents are equivalent (37 vertices, 125 edges)`。它不是"尾值没名字"，是"尾值需要一个带门的返回"（`CmlPrinter::buildBody`："a bare last expression yields the value without that gate"）。**"修"它就会修坏一个正确的打印。**
+
+**二、`git grep -n 'var/new' src modules stdlib`**：建图器在 `builder.h`/`builder_expr.cpp`（`var v = e` 就是 `:var/new`），执行器在 `src/builtin/executors/builtin.cpp`，`stdlib` **一处都没有**。
+
+**三、`var_read_before_region` 丢的不是 `:var/new`，是整个**没人用的区域**。** 那份 canonical 文档里两边各有 4 个 `:var/new`，**数量一样**；差的是 `nothing_written` 那张图：**左 15 个顶点、2 个区域，右 5 个顶点、0 个区域**。而左图**本来就没有 `:var/new`**——`var n = 7` 没人写，编译器早已把它折成常量 `7`（`n0 DATA 7 -> n1 COPY`，那个 COPY 悬空），打印器又把这个**值没人用、什么也不写**的 `LOOP` 整段丢了。所以检查器那行 `{"op": ":var/new@1.0"}` 只是**它在整份文档里挑给"右缺失"的代表**，不是病因；**病因是"没人用的区域被丢"**，与 `:var/new` 无关。
+
+**四、`order_edges_regions` 是另一处，不是同一处。** 左 65 顶点 / 6 区域、右 63 顶点 / 6 区域（区域没丢，只少两个顶点），形状差是：左 `GATE(2 入)` 2 个、`:var/get` 3 个、`:var/peek` 0 个；右对应 0 / 2 / 1。**同一族两个用例，两种病因**——所以这两条要分开修。
+
+**五、该修的是"丢区域"。** 打印器的 `users == 0` 丢弃对**纯值**是对的（那是个死值），对**区域**不是：源里写下的 `loop` 是程序的一部分，丢了它，回程就不再同构（这一刀就是这条）。判据仍是 canonical 判等：修完之后 `var_read_before_region` 应当 `EQUAL`。
+
 **2026-11-02 第十六刀（区域内的读）：先证明是同一个事实，再拆那条守卫。** 上一刀留了一句"区域内的读要单独一刀"。**动手前先查"记录版本的位置"**：`git grep -n 'recordWrite' src/compile/gir/` 只有三处调用点——`builder_expr.cpp#recordWrite` 本体、`builder_control.cpp#mergeArmVariables`（对 JOIN/LOOP 的那一次，`mergeArmVariables` 的调用点在分支与循环的构建里）、`builder_operators.cpp` 里经调用的那三处写。**版本只在一处记**，但它对"写本身就是区域节点"另走一条：`regionExit` 时写的是 **control** 边（`writeControlLink`），注释把另一半说清了——"a read in the region around the write … stays pending: the write that meets it is the region's own"。
 
 **关键的一问"臂里的读和块里的读是不是同一个事实"，答案在图上是**：臂的节点**就在块的图里**（`controlOf` 说的是"哪个区域来铺开它们"，不是"哪个图记它们的版本"）。`~/a7/arm_inner.cml`（`if` 的 then 臂里 `let before = t; t += 1; report(before, t)`）的 gir 里 `N0C -> N10 [ORDER]`，两端 `controlOf` 都是那个 BRCH——**同一条 `recordWrite` 写的同一条 ORDER 边**。所以它不是另一个事实，上一刀那条 `controlOf(ref) != 0` 的守卫只是把真缺陷挡在门外：改前的打印是 `report('int', t, t)`，跑出 `int 4 4`，源是 `int 3 4`。
