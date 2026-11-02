@@ -20,6 +20,7 @@
 #include "camel/utils/log.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
@@ -30,6 +31,14 @@
 namespace camel::runtime {
 
 namespace mm = camel::core::mm;
+
+uint64_t nextDraftEpoch() {
+    // A number, not an address: the allocator hands a destroyed draft's memory to the next one, so
+    // the address says where a draft lives and not which one it is. 0 stays free for the handle
+    // that names no draft.
+    static std::atomic<uint64_t> counter{0};
+    return counter.fetch_add(1, std::memory_order_relaxed) + 1;
+}
 
 namespace {
 

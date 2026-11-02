@@ -51,8 +51,15 @@ DraftGraphBuilder::DraftGraphBuilder(std::shared_ptr<runtime::GraphTransaction> 
 
 DraftGraphBuilder::~DraftGraphBuilder() { draftOwners().erase(&draft()); }
 
-DraftGraphBuilder *DraftGraphBuilder::fromDraft(const runtime::GraphDraft *draft) {
-    auto it = draftOwners().find(draft);
+DraftGraphBuilder *DraftGraphBuilder::fromRef(const runtime::DraftNodeRef &node) {
+    // The address is not the identity: a draft that was destroyed leaves its memory to the next
+    // one, and a builder is registered for that address again. The epoch the handle carries says
+    // which draft it named, so a handle whose draft is gone finds no owner here instead of finding
+    // the owner of the graph that took its place.
+    if (node.draft == nullptr || node.draft->epoch() != node.epoch) {
+        return nullptr;
+    }
+    auto it = draftOwners().find(node.draft);
     return it != draftOwners().end() ? it->second : nullptr;
 }
 
