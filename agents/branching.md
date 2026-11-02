@@ -29,6 +29,26 @@ The coordinator's own work follows a two-step integration so the remote stays qu
 - As soon as a handover branch is merged into `wzj-dev` and its worktree is removed, delete the branch. If an older remote `handover/...` branch still exists from before this rule, delete it too; the commits are in `develop`.
 - The rules above still hold: merge commits only, never rebase `develop`, never force-push, never touch `main`.
 
+## The `release` Branch: Where A Version Is Assembled
+
+- `release` is the branch a version is assembled on and the only branch a tag is made from; `main`
+  is moved to the tagged commit afterwards. It is cut from `develop` and lives one version.
+- Assemble a version there with `git merge --no-ff <develop boundary>` -- the boundary is the last
+  `develop` commit that version ships -- then write its `changes.log` section, tag, and run
+  `node scripts/setver.js <next>` for the following development version.
+- Push `release` **before** creating the tag. `.github/workflows/ci.yml` and `build-pypi.yml` run on
+  that push (about 40 minutes, in parallel), so the tag, `main` and the published wheel only move
+  once the run is green. A red run on `release` costs a push; a red run on the tag costs a
+  published version that cannot be taken back.
+- A fix that run asks for is made on `release` when it is a build, test or timing bound. A fix that
+  changes meaning is made on `develop` and `git cherry-pick -x`-ed onto `release`, so both sides
+  hold the same content and the later merge is a no-op.
+- After the tag, merge `release` back into `develop` with `git merge --no-ff release`, which is how
+  the notes, the version bump and any release-branch fix reach the next version.
+  `git merge-base --is-ancestor release develop` must be true afterwards.
+- `develop` is not a trigger of either workflow: it takes a merge every few minutes, and a leg that
+  started on it would spend 40 minutes measuring a tree nobody releases.
+
 ## `develop` To `main`
 
 - Only merge `develop` into `main` when intentionally releasing a new version.
@@ -41,7 +61,10 @@ The coordinator's own work follows a two-step integration so the remote stays qu
 - Before merging `develop` into `main`, check whether `changes.log` already contains the release notes for the pending release.
 - If `changes.log` is missing the release notes, summarize them from the relevant git commit history and prepare a `changes.log` update on `develop`.
 - Before committing that `changes.log` update on `develop`, ask the user to confirm that the proposed release-note content is appropriate.
-- After the merge commit is created on `main`, immediately create a version tag in the form `vx.x.x`.
+- The version tag is created on the `release` commit that carries the notes, once that commit's run
+  is green; `main` is then moved to that same commit, so the tag, `main` and `release` name one
+  tree. `main` is an ancestor of it (every earlier release is in `release`'s history), so the move
+  is a fast-forward; when it is not, stop and read the graph rather than forcing it.
 - The release merge commit on `main` should name the key released changes; avoid redundant action words such as `publish`, `merge`, or the branch name unless they are necessary to keep the subject clear.
 
 ## Post-Release Version Bump
