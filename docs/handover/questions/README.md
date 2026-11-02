@@ -54,6 +54,7 @@
 
 | 页 | 问什么 | 状态 | 裁定/去向 | 还堵着 |
 | [`where-the-tag-for-an-operator-can-sit`](../reviews/questions-2026-10-31-where-the-tag-for-an-operator-can-sit.md) | 标签能不能挂在别处的算子声明上 | 已撤 | 20:50——没有跨模块挂标签这回事；结论并入上面 `the-ruleset-module-has-no-rules-in-it` 那一行 | 无 |
+| [`questions-2026-11-02-what-does-tq-match`](../reviews/questions-2026-11-02-what-does-tq-match.md) | `T[?]` 匹配什么 | 已裁（作者 2026-11-02 11:10） | `T[..]` 匹配任意秩、`T[?]` 只匹配秩 1 | 一条还没兑现的读数欠账（页里记着） |
 
 ## 留档里仍写着"待裁/等裁决"的页（已裁，别再当待裁）
 

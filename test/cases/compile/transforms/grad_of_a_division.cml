@@ -1,0 +1,17 @@
+// The derivative of a division: the two that used to crash the translator, and the negated one that
+// used to come out with the wrong sign. A `grad` here is `transpose(split(jvp(f)))`, so the numbers
+// come out of the transposed graph the ruleset writes -- and `x / 4.0` passes through the transpose of
+// `div_tangent`, whose own division is by a computed value, so the second name's cotangent of `div_t`
+// is on the path and is answered, not refused and not divided by the wrong operand.
+import rulesets.jvp
+import rulesets.transpose
+import { grad } from vjp
+
+func main(): int sync {
+    println(grad((x) => x * 3.0)(1.0))
+    println(grad((x) => x - 1.0)(1.0))
+    println(grad((x) => -x)(1.0))
+    println(grad((x) => x / 4.0)(8.0))
+    println(grad((x) => 4.0 / x)(2.0))
+    return 0
+}

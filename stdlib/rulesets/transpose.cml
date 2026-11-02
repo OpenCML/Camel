@@ -10,6 +10,12 @@
  * it by `c`, and `-x` negates it. The value the primitive was given is a value here, not a constant
  * of the rule, so `mul_t` is also the transpose of `x * 3`.
  *
+ * A left side that names two values answers two cotangents, in the order it names them: the right
+ * side's value is a tuple of two, and the transform that answers the second name takes the second
+ * component. The two answers share nothing -- `x - c` negates one and passes the other through, and
+ * `x / c` divides by `c` in one and needs both values in the other -- so each is written once,
+ * where its own law is.
+ *
  * A rule belongs to the family of the module it is declared in, and to a primitive by the operator
  * of its left side and the number of operands that operator was given. The forward rules of the
  * same primitives are in `rulesets.jvp`: the two left sides are the same text, and a module holds
@@ -21,32 +27,42 @@
  */
 
 import { is_float } from types
-import { add_cotangent, div_cotangent, mul_cotangent, neg_cotangent, sub_cotangent } from autodiff
+import {
+    add_cotangent,
+    add_cotangent_c,
+    div_cotangent,
+    div_cotangent_c,
+    mul_cotangent,
+    mul_cotangent_c,
+    neg_cotangent,
+    sub_cotangent,
+    sub_cotangent_c,
+} from autodiff
 import { zeros_like } from tensor
 
-/// The transpose of `x + c`: the cotangent of the sum is the cotangent of `x`.
+/// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
-    x + c => (ct: T) => add_cotangent(x, c, ct)
+    x + c => (ct: T) => (add_cotangent(ct), add_cotangent_c(ct))
 }
 
-/// The transpose of `x - c`.
+/// The transpose of `x - c`: `ct` for `x`, `-ct` for `c`.
 export rule sub_t::<T>(x: T, c: T) when is_float::<T>() {
-    x - c => (ct: T) => sub_cotangent(x, c, ct)
+    x - c => (ct: T) => (sub_cotangent(ct), sub_cotangent_c(ct))
 }
 
-/// The transpose of `x * c`: `ct * c`.
+/// The transpose of `x * c`: `ct * c` for `x`, `ct * x` for `c`.
 export rule mul_t::<T>(x: T, c: T) when is_float::<T>() {
-    x * c => (ct: T) => mul_cotangent(x, c, ct)
+    x * c => (ct: T) => (mul_cotangent(c, ct), mul_cotangent_c(x, ct))
 }
 
-/// The transpose of `x / c`: `ct / c`.
+/// The transpose of `x / c`: `ct / c` for `x`, `-ct * x / (c * c)` for `c`.
 export rule div_t::<T>(x: T, c: T) when is_float::<T>() {
-    x / c => (ct: T) => div_cotangent(x, c, ct)
+    x / c => (ct: T) => (div_cotangent(c, ct), div_cotangent_c(x, c, ct))
 }
 
 /// The transpose of `-x`: `-ct`.
 export rule neg_t::<T>(x: T) when is_float::<T>() {
-    -x => (ct: T) => neg_cotangent(x, ct)
+    -x => (ct: T) => neg_cotangent(ct)
 }
 // ---- the transpose rule of `:op/idx_arr` ----
 //
