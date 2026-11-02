@@ -7,23 +7,18 @@
  *     vjp(f) = transpose(split(reinterp<jvp>(f)))
  *     grad(f)              -- `vjp` read at one number, the seed 1
  *
- * The library used to carry a second name, `with_grad`, which returned `vjp(f)` under a declared
- * type of `F`: a declaration whose implementation was a different function. The author struck it
- * at 11:50 and again at 13:30 -- a library export comes back when M4 lifts `with` parameters and
- * can answer a gradient at one. The engine's own `with_grad` (stdlib/signatures/autodiff.cml) is
- * the real one, and stays until buildGradientGraph retires.
- *
  * This is the assembly the design asks for, written out rather than described. `split(jvp(f))`
  * answers the forward half, and the forward half called at the point answers `(value, lin)`: the
  * value, and the linear one. `lin` is the backward graph with the residuals already in its closure,
  * so its parameters are the tangents and it reads nothing else. `transpose(lin)` is therefore the
- * shape that takes the cotangent **alone** -- `(ct) => (cotangents)`, one per tangent -- because the
- * values it needs are not in its parameter list, they are what the split captured for it.
+ * shape that takes the cotangent **alone** -- `(ct) => (cotangents)`, one per tangent -- which is the
+ * shape `transpose` has for every function since the author's ruling of 2026-11-02 11:30: every
+ * parameter of the transposed function is a linear input, and a value its body needs is captured by
+ * the function that is transposed, not passed to it. That is why the pullback below is `lin`'s
+ * transpose handed on as it is: the two shapes are one.
  *
  * The surface is JAX's (author's ruling of 2026-11-01): `vjp(f)(x)` is the pair `(y, pullback)` and
- * `pullback(ct)` is the cotangent of `f`'s parameters, so `grad(f)(x)` is `vjp(f)(x).1(1.0)`. The
- * juxtaposed shape `transpose` writes -- known values, then cotangent -- is the internal step and is
- * not a signature: nothing outside this file writes it.
+ * `pullback(ct)` is the cotangent of `f`'s parameters, so `grad(f)(x)` is `vjp(f)(x).1(1.0)`.
  *
  * The module imports the rulesets it composes. `jvp` walks forward with the rules in
  * `rulesets.jvp` and `transpose` walks the backward half with the rules in `rulesets.transpose`,
@@ -43,13 +38,14 @@
 
 import rulesets.jvp
 import rulesets.transpose
-import { is_function, ResultOf, Tangent, Vjp } from types
+import { is_function, Vjp } from types
 import { jvp, split, transpose } from transforms
 
 /// The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
 /// `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters, `ct`'s own weight one
-/// member per parameter. The juxtaposed call `transpose(residuals, ct)` is the internal step, not this
-/// signature.
+/// member per parameter. The pullback is `lin`'s transpose, and that is the whole of the step: the
+/// two have the shape `(ct) => (cotangents)` (author's ruling of 2026-11-02 11:30), so nothing is
+/// wrapped around it.
 ///
 /// The pullback answers a tuple in every case, one member per parameter, so a function of one
 /// parameter has a one-long one -- `(27.0)` for `vjp(cube)(3.0)`'s pullback at `ct = 1.0` -- and the
@@ -74,8 +70,8 @@ import { jvp, split, transpose } from transforms
 /// @example let (y, pullback) = vjp((x: float) => x * x)(3.0)    // y = 9.0, and pullback(1.0) is (6.0)
 export func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
     return (..xs) => {
-        let (value, lin) = split(jvp(f))(..xs)
-        (value, (ct: Tangent<ResultOf<F>>) => transpose(lin)(ct))
+        let (y, lin) = split(jvp(f))(..xs)
+        (y, transpose(lin))
     }
 }
 /// The gradient of a function of one parameter: `vjp` with the seed 1, its second half taken, and the
