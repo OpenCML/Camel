@@ -1722,3 +1722,42 @@ for (uint64_t i = 0; i < value->numel(); ++i) { … }
 **⑤ 下一个探针应该看的地方**（写下来省下一次摸索）：**不是 `struct.cpp`，是"传进被转置成员的那个实参数组在运行期有几个元素"**——
 `xs=0` 是**图的端口**，运行期值由调用点给；`transpose_of_index_into` 的实参是 `[forward(xs), forward(i), ct]`，
 **先量 `forward(xs)` 落在这个端口上的数组的 `numel()`**，再决定改哪一层。
+
+
+## 51. 仪器打到了：`numel=0 rank=0 size=0 storage=0 elemSize=0` —— 读的不是"空数组"，是**一个没被建起来的 Array**，凶手在**答案装配**
+
+**两个临时探针（各一次构建，已删）**：
+
+**探针一（`zeros_arr` 入口）**：
+```
+PROBE zeros_arr numel=2 rank=1 type=float[] tangent=float[]
+```
+⇒ **`xs` 到 `zeros_arr` 时有 2 个元素，形状是对的**（与 §50 的结论一致：上游没问题，`zeros_arr` 也没问题）。
+
+**探针二（`Array::getSlot` 的守卫前面）**：
+```
+PROBE getSlot flat=0 numel=0 rank=0 size=0 storage=0 elemSize=0
+```
+⇒ **`rank=0`、`elemSize=0`、`storage=0`（compact）**：**这不是"一个 0 元素的 `float[]`"，而是一个"默认构造/零初始化过的 `Array` 头"**——
+**有人把 `null` 或一块没写过的对象当成数组读它的第 0 个元素。**（一个真的 0 元素 `float[]` 会是 `rank=1, elemSize=8`。）
+
+**⇒ 凶手位置（今晚第五个"不在被怀疑那一处"）**：`modules/transforms/transpose.cpp:1833-1846`，**被转置成员的答案装配**：
+
+```cpp
+for (size_t i = firstPort; i < ports.size(); ++i) {
+    if (partial && !participatesOf(i)) { continue; }
+    parts.push_back(hasCotangent[ports[i]] ? cotangent[ports[i]] : zero());   // ① 每个端口一个槽
+}
+…
+for (size_t i = 0; i < parts.size(); ++i) { partTypes.push_back(Type::Float64()); slots.push_back(i); }  // ② 槽类型一律 float
+```
+
+**两处毛病，都是"签名算了第二遍"的第 4、5 个实例**：
+1. **每个端口都进一个槽** —— 而签名（`transposeSignature`，早已正确）只给"有切空间的参数"一个槽：`index_into<float>` 的 `i: int` **不该有槽**；
+2. **槽类型写死 `Type::Float64()`** —— `xs` 的槽装的是一个 `float[]`，元组却说它是 `float`。
+
+**⇒ 序号对上了**：`(float[], float)` 这种元组类型 vs. 实际槽里的数组 ⇒ 调用侧按下标读它、按 `float` 解释它 ⇒ 读到 `null` 当成数组 ⇒ `getSlot` 报 `holds 0`。
+
+**下一笔的改法（两处，一起改才绿）**：① `parts` 只收"`tangentSpaceOf(端口的值的类型).hasSpace()`"的端口；② `partTypes` 取该端口值的切空间，**不写字面量**。
+**判据**：`grad_of_an_array_parameter` 从 `expected exit 1, got null` 变 `expected exit 0`，且 `feat/compile/transforms` 不开新红。
+**这条修好之后才谈撤 `known_fail` 标。**
