@@ -35,8 +35,8 @@ constexpr std::string_view compareName(k::CompareOp op) {
 }
 
 constexpr std::string_view unaryName(k::UnaryOp op) {
-    constexpr std::string_view names[] =
-        {"neg", "abs", "exp", "log", "sqrt", "rsqrt", "sigmoid", "tanh", "relu", "gelu", "erf", "erfc"};
+    constexpr std::string_view names[] = {
+        "neg", "abs", "exp", "log", "sqrt", "rsqrt", "sigmoid", "tanh", "relu", "gelu", "erf", "erfc", "not"};
     return names[static_cast<size_t>(op)];
 }
 
@@ -60,7 +60,10 @@ template <k::CompareOp Op> slot_t compareKernel(ArgsView &, ArgsView &norm, cont
 
 template <k::UnaryOp Op> slot_t unaryKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel(unaryName(Op), [&] {
-        return wrap(norm.resultType(), k::unary(Op, tensorArg(norm, 0), resultAllocator()));
+        // `allowArray` is what lets a mask in: every other unary operator's operand is already a
+        // numeric array (`isTensorType`), so for them the flag changes nothing.
+        return wrap(
+            norm.resultType(), k::unary(Op, tensorArg(norm, 0, true), resultAllocator()));
     });
 }
 
@@ -206,6 +209,9 @@ const std::vector<ParamSpec> kCompareParams = {
     {"rhs", ParamKind::TensorLikeOrScalar},
 };
 const std::vector<ParamSpec> kUnaryParams = {{"t", ParamKind::Tensor}};
+/// `!x` takes a mask, and a mask is its own category: a bool array is not a numeric array, so the
+/// signature an error quotes reads `bool[]` (`op_def.cpp`, `kindText`) rather than `float[..]`.
+const std::vector<ParamSpec> kNotParams = {{"t", ParamKind::BoolArray}};
 
 OpTraits elementwiseTraits() { return OpTraits{.pure = true, .elementwise = true}; }
 
@@ -244,6 +250,37 @@ OpDef unaryDef(std::string_view name, std::vector<std::string_view> exports) {
         .resultDoc = "float[..]",
         .infer     = unaryInfer(k::unaryProducesFloat(Op)),
         .kernel    = &unaryKernel<Op>,
+        .traits    = elementwiseTraits(),
+    };
+}
+
+/// `!` is the logical negation: an array of bools is the only array it takes. A numeric array is
+/// refused here rather than negated silently -- `!xs` on `f32[]` would otherwise compute a mask and
+/// store it back as zeros and ones, which is neither the type the program wrote nor an answer. The
+/// rule is the one the unary `-` follows on the other side: `-xs` is element-wise on a numeric
+/// array, and an array of bools has no negation but this one.
+std::optional<Type *> notInfer(const InferContext &ctx) {
+    const TensorFacts in = ctx.facts(0);
+    if (!in.dtype || *in.dtype != TypeCode::Bool) {
+        return std::nullopt;
+    }
+    return tensorOf(in.dtype, in.shape);
+}
+
+/// `!x` on a mask: the operand is a bool array (`[true, false]`), which is not a numeric tensor,
+/// so the parameter kind is the wider one and the kernel converts it (`tensorArg` with `allowArray`
+/// below). It is registered in `__not__` -- the group the language's `!` resolves in -- because
+/// `a !== b` on arrays is written `!(a === b)`: the element-wise comparison of the two operands,
+/// then the negation of the mask it gives. Without an element-wise `not` that decomposition has no
+/// second half, and the `!==` arms are the only way to express it.
+OpDef notDef() {
+    return OpDef{
+        .name      = "not",
+        .exports   = {"__not__"},
+        .params    = kNotParams,
+        .resultDoc = "bool[..]",
+        .infer     = notInfer,
+        .kernel    = &unaryKernel<k::UnaryOp::Not>,
         .traits    = elementwiseTraits(),
     };
 }
@@ -517,6 +554,8 @@ std::vector<OpDef> elementwiseOps() {
     defs.push_back(unaryDef<k::UnaryOp::Gelu>("gelu", {"gelu"}));
     defs.push_back(unaryDef<k::UnaryOp::Erf>("erf", {"erf"}));
     defs.push_back(unaryDef<k::UnaryOp::Erfc>("erfc", {"erfc"}));
+    // `!` on a mask, in the core's `__not__` group: the second half of `a !== b` on arrays.
+    defs.push_back(notDef());
 
     defs.push_back(OpDef{
         .name    = "where",

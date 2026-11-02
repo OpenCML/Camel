@@ -1,0 +1,35 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/*
+ * `!` on a mask, and the two comparisons it is the other half of.
+ *
+ * `a !== b` on arrays is `!(a === b)`: the element-wise comparison gives a mask and `!` negates it
+ * element by element. This case pins both halves and their agreement, because the `!==` arms of the
+ * tensor module are expressible only while `!` can take a bool array -- a bool array is not a
+ * numeric tensor, so `not` is the one unary operator whose parameter has to admit a plain array.
+ *
+ * Printed: one line per check, `-` or the mask, so a reader sees the shape as well as the answer.
+ */
+
+import tensor
+
+func main(): int sync {
+    let a = [[1.0, 2.0], [3.0, 4.0]]
+    let b = [[1.0, 9.0], [3.0, 0.5]]
+
+    // The two spellings of the same answer: the element-wise `!==`, and the negation of `===`.
+    let strict = a !== b
+    let byNot = !(a === b)
+    println(strict)
+    println(byNot)
+    println(strict === byNot)
+
+    // A mask written out, and one bound to a name: both are bool arrays and both can be negated.
+    let mask: bool[] = [true, false, true]
+    println(!mask)
+    println(![true, false])
+    println(!mask === [false, true, false])
+
+    return 0
+}

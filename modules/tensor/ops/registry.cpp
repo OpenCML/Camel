@@ -67,6 +67,10 @@ bool matchesKind(ParamKind kind, Type *type) {
         return type && BytesType::get()->equals(type);
     case ParamKind::IntArray:
         return isIntArray(type);
+    case ParamKind::BoolArray:
+        return type && type->code() == TypeCode::Array &&
+               static_cast<ArrayType *>(type)->elemType() != nullptr &&
+               static_cast<ArrayType *>(type)->elemType()->code() == TypeCode::Bool;
     }
     return false;
 }
