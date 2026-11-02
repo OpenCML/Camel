@@ -2127,3 +2127,34 @@ static_cast<size_t>(init.dataIndex) < runtimeSlotTypes_.size()` —— **越界�
 
 **下一位的最小起点**：`-vvv` 的最后一行 `Indirect call bind: caller='main' node=37 target='__g_75__' … targetClosure=2`
 后面紧跟崩溃；`why=?` 说明不在那 25 处里；**建议从闭包装填那一段（`src/execute/graph_runtime_support.cpp` 的 bind 之后）逐函数给 `typeAt` 打名字**。
+
+
+## 63. `{Float64()}` 三处：纯重构先落地（绿），换型的三次尝试都撞在"从哪个图读类型"上
+
+**① 已提交的部分（行为不变的重构）**：`ruleElementTypeOf` / `operandElementTypeOf` / `firstOperandTypeOf`
+从 `vmap.cpp` 提到 `modules/transforms/rule_expand.{h,cpp}`，`vmap` 改调共享的这三个。
+**判据：`feat/compile/transforms` 58/58，与拿走前一致。** 这是"三处同一个函数"的**地基**，不是那次换型。
+
+**② 换型的三种取法，读数（每一种都在 `feat/compile/transforms` 上跑过）**：
+| 取法 | 结果 | 读数 |
+|---|---|---|
+| 按"元素"剥离（`ruleElementTypeOf(operand)`） | 10 条红 | `passes a float[] as argument 0 of 'rulesets.jvp::index_into<float[]>', which takes a float[][]` |
+| 按"值的类型原样" | 7 条红 | `passes a float[] as argument 2 of 'autodiff::mul_tangent<float>', which takes a float` |
+| 报告那处改成"用已有实例 / 试 `ruleInstanceTypes()`" | 1 条红 | `reinterp_builds_its_own_graph` 的 `REINTERP uri :op/add_d -> rule jvp_add -> rhs …` 不再出现 |
+
+**③ 两条互相矛盾的读数是关键**：一次说规则的参数**多了**一秩（`float[][]` 收到了 `float[]`），
+一次说**少**了一秩（`float` 收到了 `float[]`）。**同一个操作数不可能既多一秩又少一秩** ⇒
+**我读到的类型，和真正被传进去的值，不是同一个节点。**
+⇒ **难点不是"要不要写死 `Float64()`"，而是"从哪个图的哪个节点读这个类型"。**
+`valueOf`/`knownValue` 返回的 ref 可能属于**另一个 transaction**（前向那一半），而我用
+`group.transaction(member).graph().header(value)` 去读它的类型——**读到的自然不是那个值的类型。**
+
+**④ 因此本轮停在这里，三处 `{Float64()}` 一处没动**（**不以红换红**）：
+- `modules/transforms/jvp.cpp:91`（`buildRuleTangent`）、
+- `modules/transforms/rule_expand.cpp:428`（`expandRuleByName`）、
+- `modules/transforms/module.cpp:74`（`printRuleUris` 的报告）。
+**下一步只需回答一个问题**：`expandRuleByName` 的 `valueOf` 与 `buildRuleTangent` 的 `values` 里的 ref
+**属于哪个图/哪个 transaction**（前向那一半、还是被转置成员自己那一半）——**答出来之后，取型就是一行。**
+
+**⑤ 边界照旧**：`f32 → float` 隐式转换**一个字没动**；`:op/ftod` 的前向规则、`vjp` 把结果限死成 `float` 这两件**没开始**。
+**⑥ 树干净**：重构已提交；`feat/compile/transforms` **58/58**。

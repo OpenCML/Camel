@@ -19,6 +19,32 @@ namespace camel::transforms {
 /// stands. Every other position asks for one name's cotangent.
 inline constexpr size_t kWholeAnswer = static_cast<size_t>(-1);
 
+/// The type a rule is generic in: the type the primitive works on. A primitive over scalars is its
+/// own type (`+` on two `f32`), and one over arrays works on the element of the array -- `matmul`
+/// multiplies elements, `sum_axis` adds them -- so the rule is filed once per element type and says
+/// which axis the batch is on, never what shape a row has.
+///
+/// One function, three askers: `vmap`, `jvp` and the transposer each instantiate a rule at a type
+/// their operands name. Writing `Float64()` where this answer belongs is a special case in the place
+/// that has none.
+camel::core::type::Type *ruleElementTypeOf(camel::core::type::Type *type);
+
+/// The element of the first operand that is not a condition, from the operands' own types, or the
+/// first of them when every one is a condition; nullptr when the list holds no type at all.
+///
+/// A rule is generic in the element its values are made of, and that is not always the first port:
+/// a condition is not a value arm. `where(cond, lhs, rhs)` takes a `bool` first and answers the
+/// element of the two arms, so a rule instantiated on the first port would be a `bool` rule applied
+/// to a float batch. The node's own type is no better: `argmax_axis` takes a tensor of numbers and
+/// answers `int64` positions.
+camel::core::type::Type *operandElementTypeOf(
+    std::span<camel::core::type::Type *const> operandTypes);
+
+/// The same question asked of a built graph: the element named by the node at `ref`'s first value
+/// port, or nullptr when it has none.
+camel::core::type::Type *firstOperandTypeOf(
+    camel::runtime::GCGraph &function, camel::runtime::gc_node_ref_t ref);
+
 /// The rule's right side expanded at the match site: the body of the closure it answers with is
 /// copied into this graph, its captures bound to the operands and its parameters to the tangents,
 /// and the copy's exit is the operator's derivative.

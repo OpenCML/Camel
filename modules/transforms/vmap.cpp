@@ -3,6 +3,8 @@
 
 #include "vmap.h"
 
+#include "rule_expand.h"
+
 #include "camel/compile/gir/draft_graph_builder.h"
 #include "camel/compile/gir/rule_templates.h"
 #include "camel/core/forward.h"
@@ -66,50 +68,6 @@ Type *rowsOfType(Type *type) {
         return ArrayType::openRank(array->elemType(), forms);
     }
     return ArrayType::create(array->elemType(), forms, array->packName());
-}
-
-/// The type a rule is generic in: the type the primitive works on. A primitive over scalars is its
-/// own type (`+` on two `f32`), and one over arrays works on the element of the array -- `matmul`
-/// multiplies elements, `sum_axis` adds them -- so the rule is filed once per element type and says
-/// which axis the batch is on, never what shape a row has. Asking for the array type instead would
-/// file one instance per shape and would name the rows in type of the rule's `T`.
-Type *ruleElementTypeOf(Type *type) {
-    while (type != nullptr && type->code() == TypeCode::Array) {
-        type = tt::as_ptr<ArrayType>(type)->elemType();
-    }
-    return type;
-}
-
-/// The type of the first *value* operand of the node at `ref`, or nullptr when it has none.
-///
-/// A rule is generic in the element its values are made of, and that is not always the first port: a
-/// condition is not a value arm. `where(cond, lhs, rhs)` takes a `bool` first and answers the element
-/// of the two arms, so a rule instantiated on the first port would be a `bool` rule applied to a
-/// float batch -- and the arms carry the element the answer has. The node's own `dataType()` is no
-/// better: `argmax_axis` takes a tensor of numbers and answers `int64` positions, so asking the node
-/// would instantiate its rule at `int64` and apply it to floats. The first port whose element is not
-/// a condition is the one that names the rule's `T`; an operator that is all conditions (none today)
-/// falls back to its first port.
-Type *firstOperandTypeOf(camel::runtime::GCGraph &function, gc_node_ref_t ref) {
-    Type *first = nullptr;
-    for (const gc_node_ref_t input : function.normInputsOf(ref)) {
-        if (input >= function.nodeCount()) {
-            continue;
-        }
-        const rt::GCNode *operand = function.node(input);
-        if (operand == nullptr) {
-            continue;
-        }
-        Type *element = ruleElementTypeOf(operand->dataType());
-        const bool isCondition = element != nullptr && element->code() == TypeCode::Bool;
-        if (first == nullptr) {
-            first = operand->dataType();
-        }
-        if (!isCondition) {
-            return operand->dataType();
-        }
-    }
-    return first;
 }
 
 /// The rule `rulesets.vmap` files for `uri`, or nullptr and why not. The key -- the spelling the

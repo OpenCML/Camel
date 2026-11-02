@@ -16,6 +16,48 @@
 
 namespace camel::transforms {
 
+namespace {
+using camel::core::type::ArrayType;
+using camel::core::type::Type;
+using camel::core::type::TypeCode;
+} // namespace
+
+Type *ruleElementTypeOf(Type *type) {
+    while (type != nullptr && type->code() == TypeCode::Array) {
+        type = tt::as_ptr<ArrayType>(type)->elemType();
+    }
+    return type;
+}
+
+Type *operandElementTypeOf(std::span<Type *const> operandTypes) {
+    Type *first = nullptr;
+    for (Type *type : operandTypes) {
+        if (type == nullptr) {
+            continue;
+        }
+        Type *element = ruleElementTypeOf(type);
+        if (first == nullptr) {
+            first = type;
+        }
+        if (element == nullptr || element->code() != TypeCode::Bool) {
+            return type;
+        }
+    }
+    return first;
+}
+
+Type *firstOperandTypeOf(camel::runtime::GCGraph &function, camel::runtime::gc_node_ref_t ref) {
+    std::vector<Type *> operandTypes;
+    for (const camel::runtime::gc_node_ref_t input : function.normInputsOf(ref)) {
+        if (input >= function.nodeCount()) {
+            continue;
+        }
+        const camel::runtime::GCNode *operand = function.node(input);
+        operandTypes.push_back(operand == nullptr ? nullptr : operand->dataType());
+    }
+    return operandElementTypeOf(operandTypes);
+}
+
 namespace rt = camel::runtime;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GraphId;
