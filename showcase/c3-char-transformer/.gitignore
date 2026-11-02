@@ -8,3 +8,4 @@ __pycache__/
 RESULTS.md
 train.json
 grow*.json
+*.log
