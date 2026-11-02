@@ -205,7 +205,9 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout = "200010000\n"
-timeout_ms = 30000
+# 45 s, not 30: the CI runner measured 8360-9360 ms of CPU per back end for this loop, which 30 s
+# was 3.2-3.6x -- under the 4x the margin rule asks for. 45 s is 4.8-5.4x those figures.
+timeout_ms = 45000
 
 [[tests]]
 name = "new_values.peek_loop.graph"
