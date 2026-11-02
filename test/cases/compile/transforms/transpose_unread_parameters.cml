@@ -8,14 +8,16 @@
 // keeps and which double with the seed. A refusal here would refuse `grad((x) => x + 1.0)`, whose
 // tangent function is exactly this one.
 //
-// The function that is transposed has to be the four-parameter one, because a transposed function
-// answers **one cotangent per parameter** and a call hands it the cotangent and nothing else: the
-// four numbers can only be read from a function of four. Wrapping the call in a closure of the two
-// tangents (`(dx, dw) => at(3.0, 2.0, dx, dw)`) asks a different question and answers two numbers --
-// `(1.0, 1.0)`, which is the derivative of `dx + dw` and is not wrong, it is the answer to something
-// else. `transpose(at)(3.0, 2.0, 1.0, 0.0, 1.0)` was the old spelling of this case, when a transposed
-// function took its values as parameters; `lin(x, w, dx, dw) = at(x, w, dx, dw)` is the same
-// observation under the ruling of 2026-11-02 11:30, and it reads the same four numbers.
+// The function transposed is `at` itself, and it has to be a function of four, because a transposed
+// function answers **one cotangent per parameter** and is called with the cotangent and nothing else
+// (author, 2026-11-02 11:30): `transpose(at)(1.0)`. The old spelling `transpose(at)(3.0, 2.0, 1.0,
+// 0.0, 1.0)` passed the values as parameters, which a transposition no longer takes.
+//
+// Nothing is captured, and that is the point of the case rather than an accident: `add_t`'s right side
+// reads **no operand value** (`add_cotangent(ct)`, `add_cotangent_c(ct)`), so the member needs no value
+// the caller would have to supply, its signature is `(float) => (float, float, float, float)`, and the
+// top-level call is a call. A body that read one of its parameters' values would need it in the
+// transposed function's closure and would be refused without it (see `transpose_many_parameters`).
 import rulesets.transpose
 import { jvp, split, transpose } from transforms
 import { add_tangent } from autodiff
@@ -27,9 +29,9 @@ import rulesets.jvp
 func main(): int sync {
     // The observation: a transposed function answers one cotangent per parameter, so the four numbers
     // need a function of four parameters. `x` and `w` are read by nothing in the body, and their
-    // answers are the zeros this case is about.
-    let lin = (x: float, w: float, dx: float, dw: float) => at(x, w, dx, dw)
-    println(transpose(lin)(1.0))
-    println(transpose(lin)(2.0))
+    // answers are the zeros this case is about. Two seeds, because one seed alone cannot tell a
+    // pullback from the derivatives themselves -- at ct = 1 the two are the same numbers.
+    println(transpose(at)(1.0))
+    println(transpose(at)(2.0))
     return 0
 }

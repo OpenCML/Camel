@@ -683,38 +683,21 @@ timeout_ms = 20000
 # what `rules=add_t,mul_t` on the callee's line says: nothing in C++ knows what `mul_tangent` is.
 [[tests]]
 name = "transpose_many_parameters"
-desc = "`transpose(mt)` where `mt(x, w, dx, dw) = mul_tangent(x, w, dx, dw)`: a function of four floats and no residual tuple, which the signature step had no shape for before. The transpose takes all four as they stand, then the cotangent, and answers one cotangent per parameter -- `(float, float, float, float, float) => (float, float, float, float)`. At (3, 2, 1, 0) with cotangent 1 the four answers are the partial derivatives of `dx*w + x*dw`, `(dw, dx, w, x)` = `(0.0, 1.0, 2.0, 3.0)`: the operands' two, which the split half that calls it drops because a residual is read rather than differentiated, and the tangents' two, which it keeps. The node counts are the two graphs' own -- five nodes for `mt` (four ports and the call) and seven for `mul_tangent` (four ports, two products, the sum) -- and the rules are read off the walk, so the case pins the shape, the counts and the laws rather than any node's number."
+desc = "**A refusal, and the refusal is the answer**, because the pullback of `mul_tangent` with respect to its tangents is a shape no route supports. `mul_tangent(x, w, dx, dw) = dx*w + x*dw`, and `mul_t`'s right side reads the operands: the cotangent of `dx` is `mul_cotangent(w, ct)` and the cotangent of `w` is `mul_cotangent_c(dx, ct)`, so the member is computed from the value of `w` and the value of `dx`. Two of those values are operands, which a split half carries in its residual tuple; the other two are the **tangents**, and a transposition has no value for a tangent -- the tangent's cotangent is what it answers. Under the ruling (author, 2026-11-02 11:30) a transposed member takes the values it needs out of **the closure it was built with**, the closure of the function it is the transposition of, and is refused otherwise; the closure is how a value reaches a transposed function without the type naming it. For the shape here the closure is empty -- `3.0` and `2.0` are literals in the body, and `dx`/`dw` are `lin`'s own parameters, not captures -- so `dx`'s value has nowhere to come from. The reading is the refusal's own words, one level below the user-facing sentence (which says only that there is no transposition for the function): `skip=cotangent-needs-a-value uri=:op/mul_d position=1`, `reason=the rule's right side reads a value the caller does not carry`, and the two calls that inherit it (`TRANSPOSE function=mt skip=call`, then the closure above it). Both other shapes are read elsewhere and are green: a function of four parameters whose body reads no parameter value is transposed and answers four cotangents (`transpose_unread_parameters`), and the kernel's four-parameter member is built when the values come from the cut that carries them (`split_branch_author_vjp`, where the member takes the operands' two and answers the tangents' two)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_many_parameters.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
-expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=autodiff::mul_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=7 arms=0 rhs=add_t,mul_t", "TRANSPOSE function=mt graph=", "nodes=5 arms=0 rhs=-", "(0.0, 1.0, 2.0, 3.0)"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-# One seed cannot tell a pullback from a table of derivatives: at ct = 1 the two answers agree by
-# construction. Two seeds can -- a pullback is linear in its cotangent, and a rule applied under the
-# seed is not.
-[[tests]]
-name = "transpose_many_parameters.is_linear_in_the_cotangent"
-desc = "The same call at cotangent 1 and cotangent 2: `(0.0, 1.0, 2.0, 3.0)` and `(0.0, 2.0, 4.0, 6.0)`. Every answer is one primitive under the seed, so doubling the seed doubles each of them, and a transposed graph that answered the derivatives themselves -- or dropped the cotangent for one of the four branches -- would read the same four numbers twice. The pair is the cheap check that the seed reaches every arm of the split, which one seed cannot make."
-kind = "behavior"
-case = "../../../cases/compile/transforms/transpose_many_parameters_in_ct.cml"
-args = ["${case}", "${backend}"]
-backends = ["nvm"]
-backends_agree = ["exit_code", "stdout"]
-expect_exit = 0
-expect_stdout_contains = ["(0.0, 1.0, 2.0, 3.0)", "(0.0, 2.0, 4.0, 6.0)"]
-expect_stdout_not_contains = ["(0.0, 1.0, 2.0, 3.0)\n(0.0, 1.0, 2.0, 3.0)"]
+expect_exit = 1
+expect_output_contains = ["skip=cotangent-needs-a-value uri=:op/mul_d position=1", "reason=the rule's right side reads a value the caller does not carry", "TRANSPOSE function=mt skip=call node=", "callee=mt", "transpose has no transpose for this function"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 # A parameter the body never reads has no cotangent to hand back, and the answer for it is zero, not
 # a refusal: `add_tangent(x, w, dx, dw) = dx + dw` does not depend on `x` or `w` at all.
 [[tests]]
 name = "transpose_unread_parameters"
-desc = "`transpose(at)` where `at(x, w, dx, dw) = add_tangent(x, w, dx, dw) = dx + dw`: the operand parameters are in the signature and nowhere in the body, so the walk finds no cotangent for them, and the transposed graph answers a zero for each rather than refusing the whole function. The four answers at (3, 2, 1, 0) are `(0.0, 0.0, 1.0, 1.0)` at cotangent 1 and `(0.0, 0.0, 2.0, 2.0)` at cotangent 2 -- the two zeros that say the sum does not depend on its summands, and the two ones that double with the seed. The observation is a function of four parameters, because a transposed function answers one cotangent per parameter and is called with the cotangent alone (author, 2026-11-02 11:30): `let lin = (x, w, dx, dw) => at(x, w, dx, dw)` then `transpose(lin)(1.0)`, which is the old `transpose(at)(3.0, 2.0, 1.0, 0.0, ct)` with its values dropped -- the same four numbers, asked the way a transposition is asked now. Both graphs are five nodes (four ports and the sum) and the law is `add_t`, read off the walk: nothing here knows what `add_tangent` computes, and no rule was written for it. The member's own type is `(float) => (float, float, float, float)`: `add_t`'s right side reads no operand value, so nothing has to be captured and the transposed function takes the cotangent alone."
+desc = "`transpose(at)` where `at(x, w, dx, dw) = add_tangent(x, w, dx, dw) = dx + dw`: the operand parameters are in the signature and nowhere in the body, so the walk finds no cotangent for them, and the transposed graph answers a zero for each rather than refusing the whole function. The four answers at (3, 2, 1, 0) are `(0.0, 0.0, 1.0, 1.0)` at cotangent 1 and `(0.0, 0.0, 2.0, 2.0)` at cotangent 2 -- the two zeros that say the sum does not depend on its summands, and the two ones that double with the seed. **Two seeds, because one cannot tell a pullback from a table of derivatives**: at ct = 1 the two agree by construction, so a transposed graph that answered the derivatives themselves, or dropped the seed for one of the four branches, would read the same four numbers twice. The function transposed is `at` itself, because a transposed function answers one cotangent per parameter and is called with the cotangent alone (author, 2026-11-02 11:30): `transpose(at)(1.0)` is the old `transpose(at)(3.0, 2.0, 1.0, 0.0, ct)` with its values dropped -- the same four numbers, asked the way a transposition is asked now. Both graphs are five nodes and the law is `add_t`, read off the walk: nothing here knows what `add_tangent` computes, and no rule was written for it. The member's own type is `(float) => (float, float, float, float)`: `add_t`'s right side reads **no** operand value, so nothing has to be captured and the transposed function takes the cotangent alone -- which is what makes this shape answerable at all, beside `transpose_many_parameters`, whose law reads the tangents' own values and is refused."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_unread_parameters.cml"
 args = ["${case}", "${backend}"]
