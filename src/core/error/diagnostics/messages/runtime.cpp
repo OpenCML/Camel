@@ -348,6 +348,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "A function value is lowered by giving it the form the design asks for (one variant of the enum of its type, with the values it captured) and turning the call through it into a direct call of the function the tag names, or one match on the tag where only the run time knows it. A family this pass cannot see whole is left as it is, and the whole family stays on the old form: a value read by a node that is not a call (a higher-order operator such as map calls it inside the operator), a function that is called directly as well as held as a value, a call whose callee waits on something, a value handed to a parameter declared as another function type (a lambda that returns its write where the parameter says void), a type that is an argument of the entry function, or a type that holds another family this pass leaves as written. Guessing one of them would change which effects run, so nothing is guessed.",
             },
         },
+        {
+            RuntimeDiag::JitWithoutCodeGenerator,
+            {
+                "JitWithoutCodeGenerator",
+                "`std::jit` has no native code generator in this build; the program runs on the bytecode interpreter, as under `std::fvm`, and the result is the same.",
+                "The JIT generates code for x86-64 only. Every other processor turns ENABLE_FASTVM_JIT off in cmake/Options.cmake (arm64 Linux and Apple Silicon), and a build may switch it off by hand. The pass is accepted rather than refused, because a command line has to run on every platform, so this says what the pass does here instead: the program is interpreted. Silence it with `-Wno-jit-without-code-generator`, or make it an error with `-Werror`.",
+            },
+        },
     };
     return infoMap;
 }
