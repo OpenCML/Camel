@@ -267,7 +267,7 @@ prints one entry.
 | `0x03000205` | [SemanticDiag::DuplicateRuleForOperator](#duplicateruleforoperator) | Error | no |
 | `0x03000206` | [SemanticDiag::YieldRequiresStreamHead](#yieldrequiresstreamhead) | Error | no |
 | `0x03000207` | [SemanticDiag::RuleRightUsesOuterVariable](#rulerightusesoutervariable) | Error | no |
-| `0x03000208` | [SemanticDiag::GeneratorLoopBodyNeedsNextState](#generatorloopbodyneedsnextstate) | Error | no |
+| `0x03000208` | [SemanticDiag::LoopBodyNeedsNextState](#loopbodyneedsnextstate) | Error | no |
 | `0x03000209` | [SemanticDiag::CalledFallibleValue](#calledfalliblevalue) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
@@ -8789,9 +8789,9 @@ func main(): int sync {
 }
 ```
 
-### GeneratorLoopBodyNeedsNextState
+### LoopBodyNeedsNextState
 
-`0x03000208` · Error · `SemanticDiag::GeneratorLoopBodyNeedsNextState`
+`0x03000208` · Error · `SemanticDiag::LoopBodyNeedsNextState`
 
 **Fix**
 
@@ -8800,13 +8800,13 @@ None: choice: the body has to end with the value the next round starts from, and
 **Message**
 
 ```text
-A generator loop body ends with the next value of its state, and this one ends without writing one: the pull after the yield has nowhere to go on from.
+A loop body ends with the next value of its state, and this one ends without writing one: the round after this one has nowhere to go on from.
 ```
 
 **Help**
 
 ```text
-The body of a loop in a generator is cut at its yield: the pull that hands an element out stops there, and the pull after it runs the rest of the body and the condition again, so the last statement of the body has to write the loop's next state value. Writing 'yield i' and then 'i + 1' moves the loop on; a body of only 'yield i' reads a fresh i on every pull, so the loop never moves on.
+The body of a loop is cut at its yield: the pull that hands an element out stops there, and the pull after it runs the rest of the body and the condition again, so the last statement of the body has to write the loop's next state value. Writing 'yield i' and then 'i + 1' moves the loop on; a body of only 'yield i' reads a fresh i on every pull, so the loop never moves on.
 ```
 
 **Example** (`test/cases/compile/stream/generators_loop_body_without_next_state.cml`, run as `camel test/cases/compile/stream/generators_loop_body_without_next_state.cml`)

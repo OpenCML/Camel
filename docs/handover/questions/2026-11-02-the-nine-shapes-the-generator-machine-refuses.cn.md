@@ -89,6 +89,6 @@ error[InternalDiag::UnknownInternalError]: An error has occurred: the generator 
 | `loop s = 0 for i in [0, 1, 2] do { sync { println(s) } }` | `0` `0` `0`，**没有任何诊断** |
 | `loop s = 0 for i in [0, 1, 2] do { println(s) }` | `0` `0` `0`，**没有任何诊断** |
 
-⇒ 普通 `loop` 的体不以值结尾时**不报任何码**（既不是 `GeneratorLoopBodyNeedsNextState`，也不是别的码），状态停在初始值、循环照常跑完。
+⇒ 普通 `loop` 的体不以值结尾时**不报任何码**（既不是 `LoopBodyNeedsNextState`，也不是别的码），状态停在初始值、循环照常跑完。
 
-所以 `GeneratorLoopBodyNeedsNextState` **今天只在生成器路径上落地**。要让参考里那句「与所有 `loop` 一样」在两侧都成立，普通 `loop` 的降低也得报同一个码；这一条**尚未做**，记在这里。
+所以 `LoopBodyNeedsNextState` **今天只在生成器路径上落地**。要让参考里那句「与所有 `loop` 一样」在两侧都成立，普通 `loop` 的降低也得报同一个码；这一条**尚未做**，记在这里。

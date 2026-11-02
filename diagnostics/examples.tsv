@@ -112,7 +112,6 @@ SemanticDiag::FoldCallResultNotConstant	test/cases/compile/fold_calls/result_kin
 SemanticDiag::FoldCallTooDeep	test/cases/compile/fold_calls/depth_limit.cml
 SemanticDiag::FunctionNameAsValue	test/cases/compile/function_values/literal_operator_name.cml
 SemanticDiag::FunctionTypeArgumentNotInferred	test/cases/compile/native/tensor_show_empty_array.cml
-SemanticDiag::GeneratorLoopBodyNeedsNextState	test/cases/compile/stream/generators_loop_body_without_next_state.cml
 SemanticDiag::GenericArgumentsMismatch	test/cases/compile/constas/constas_argument_shape.cml
 SemanticDiag::GenericFunctionAsValue	test/cases/compile/generics/err_as_value.cml
 SemanticDiag::GenericFunctionUnsupported	test/cases/compile/generics/err_decorated.cml
@@ -142,6 +141,7 @@ SemanticDiag::KnownNotNull	test/cases/compile/tagged/err_plain_left.cml
 SemanticDiag::LambdaParameterWithoutType	test/cases/compile/lambda_inference/no_expected.cml
 SemanticDiag::LiteralNotRepresentable	test/cases/compile/generics/err_literal.cml
 SemanticDiag::LogicalOperandNotBool	test/cases/compile/tagged/err_optional_operand.cml
+SemanticDiag::LoopBodyNeedsNextState	test/cases/compile/stream/generators_loop_body_without_next_state.cml
 SemanticDiag::LoopBodyTypeMismatch	test/cases/compile/static_expansion/static_loop_body_type.cml
 SemanticDiag::LoopConditionNotBool	test/cases/loops/err_condition.cml
 SemanticDiag::LoopNameRepeated	test/cases/compile/static_expansion/static_loop_name_repeated.cml

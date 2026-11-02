@@ -5717,7 +5717,7 @@ node_ptr_t Builder::visitGeneratorBody(
     // The body of a generator `loop` is cut at its `yield`, and its last statement writes the next
     // state value. A body that does not is a rule the reader has to be told, not a defect.
     const auto reportLoopBodyShape = [&](const AST::node_ptr_t &atNode) -> void {
-        diags_->of(SemanticDiag::GeneratorLoopBodyNeedsNextState)
+        diags_->of(SemanticDiag::LoopBodyNeedsNextState)
             .at(atNode->load()->tokenRange())
             .commit();
         throw BuildAbortException();
