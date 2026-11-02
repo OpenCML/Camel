@@ -316,6 +316,32 @@ export func operator ~(x: int): int
 #op(':op/not')
 export func operator !(x: bool): bool
 
+// ---- the remaining binary operators: `%`, `&`, `|`, and the generic `==` ----
+
+/// The remainder of dividing the first 32-bit integer by the second.
+/// @example i32(7) % i32(2)    // 1
+#op(':op/mod_i')
+export func operator %(x: i32, y: i32): i32
+
+/// The remainder of dividing the first 64-bit integer by the second.
+/// @example 7 % 2    // 1
+#op(':op/mod_l')
+export func operator %(x: int, y: int): int
+
+/// The conjunction of two booleans.
+/// @example true & false    // false
+#op(':op/and')
+export func operator &(x: bool, y: bool): bool
+
+/// The disjunction of two booleans.
+/// @example true | false    // true
+#op(':op/or')
+export func operator |(x: bool, y: bool): bool
+
+/// Whether two arrays, tuples or structs of comparable parts are equal, part by part.
+#op(':op/eq')
+export func operator ==::<T>(a: T, b: T): bool
+
 // ---- comparison ----
 //
 // `==` and `!=` are operators of their own group (`__eq__`, `__ne__`; operator_names.h), and the
