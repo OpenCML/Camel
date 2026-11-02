@@ -75,6 +75,22 @@ Two ways to name a process, and only two: `kill <PID>`, or `pkill -f '~/camel-wo
 
 The same day made the other half of the point with a check instead of an accident: with the "zero tests started" gate in place, 31 of the tree's 309 plans turned out to be silent zeros - their tier puts them out of an ordinary run, and until the gate existed they said nothing at all - and the first real defect came with them, `test/plans/feat/trans/cml_sweep.plan.toml` missing a plan-level `tier`, calling itself fast while its only test is slow, reddening the whole fast pass. **Green because nothing ran is not green.**
 
+## A core pass needs a declaration in `stdlib/std.cml` before a plan can name it
+
+Registering a kernel in `src/execute/pass.cpp` (`registerCoreKernel("gc::tuple_members", …)`) is half the
+job: the pipeline resolves `std::gc::tuple_members` through **`stdlib/std.cml`**, so a kernel with no
+`export func tuple_members::<F>(f: F): F! when is_function::<F>()` line in that file is reachable from
+C++ and from no test, and the run says
+
+```
+error[RuntimeDiag::InvalidPassParameter]: Invalid pass specification 'std::gc::tuple_members_agree':
+module 'std' declares no pass 'gc::tuple_members_agree' in <install>/stdlib/std.cml
+```
+
+`gc::poison` is declared there for the same reason (`stdlib/std.cml`, "Runs the allocator's poison
+check"). Two things follow: a plan entry and a manual run both need the declaration, and a self-test
+whose point is that it is *never* reachable from a plan has to be reachable to be tested at all.
+
 ## The instrument's range is narrower than the fact
 
 Three zero-hit readings on 2026-11-02 were all the same mistake, and none of them was a broken branch:
