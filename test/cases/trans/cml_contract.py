@@ -55,6 +55,8 @@ CORPUS = [
     CML / "linear.cml",
     CML / "branch.cml",
     CML / "arm_write.cml",
+    CML / "arm_read.cml",
+    CML / "unused_loop.cml",
     CML / "loop.cml",
     CML / "interval.cml",
     CML / "closure.cml",
@@ -84,6 +86,8 @@ SOURCE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 MARKERS = {
     "branch": ["if ", "else ", "match ", "case "],
     "arm_write": ["if ", "else "],
+    "arm_read": ["if ", "else ", "let ", "var "],
+    "unused_loop": ["loop ", "while "],
     "loop": ["loop ", "for ", "while ", "sync {"],
     "interval": ["..", "for ", "while ", "let "],
     "closure": ["=>", "sync", "offset", "base"],
