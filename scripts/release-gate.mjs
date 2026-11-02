@@ -124,6 +124,11 @@ const STATIC_CHECKS = [
     // and in whoever remembered it; a page that arrives without a default now stops the gate
     // instead. The check names the page and which half is missing.
     { name: 'questions: every pending page names a default and gives it', args: ['scripts/check-doc-links.mjs', '--questions-defaults'] },
+    // The other half of the same reading rule: outside docs/handover/ a source is cited by symbol
+    // (`file#Symbol`) and never by line, because a line moves with every edit. Inside handover the
+    // line numbers are that day's reading, and the index says so once for all 203 pages instead of
+    // 183 pages each saying it.
+    { name: 'citations: no source cited by line outside docs/handover', args: ['scripts/check-doc-links.mjs', '--source-line-citations'] },
     { name: 'document snippets: Camel fences compile and print what the page says', args: ['scripts/check-doc-snippets.mjs'], camel: true },
     { name: 'stdlib declarations: a migrated module stays migrated', args: ['scripts/stdlib-declarations.mjs', '--check'], camel: true },
     // The conformance matrix: every program in test/conformance/cases.json is compared with the

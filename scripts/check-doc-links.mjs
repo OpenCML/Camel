@@ -8,6 +8,8 @@
 //   node scripts/check-doc-links.mjs            the reader-facing documents (see SCOPE)
 //   node scripts/check-doc-links.mjs --default-roots  the same, ignoring a script path argument
 //   node scripts/check-doc-links.mjs --all      every tracked *.md of the repository
+//   node scripts/check-doc-links.mjs --source-line-citations  outside docs/handover no source is cited
+//                                               by line (a line moves with every edit; name the symbol)
 //   node scripts/check-doc-links.mjs --questions-defaults  every page under docs/handover/questions
 //                                               names a default in a heading and gives it text (the
 //                                               author's rule of 2026-11-03: a question is asked with
@@ -686,6 +688,37 @@ function checkQuestionsHaveDefaults() {
     }
     console.log(`every pending page names a default and gives it: ${checked} page(s) in ${QUESTIONS_DIR}`)
     return 0
+}
+// The rule the handover index states: a citation names a file and a symbol (`file#Symbol`), never a
+// line, because a line moves with every edit. Inside docs/handover/ the line numbers are that day's
+// reading and stay; outside it, a line number on a repository source is a citation that will rot.
+// The match is deliberately narrow: a path that starts at one of the source roots and ends in a
+// position. A `.cml` name with a position is excluded: it is a tool's output or an example
+// program's line, and rewriting one would falsify the transcript it is quoted in -- `folded.cml:31`
+// from a debugger session, and `test/cases/perf/mlp_step.cml:51:33` in a timing transcript, are the
+// two that made this narrow.
+const SOURCE_LINE_CITATION = /(?<![\w/])(?:src|include|modules|stdlib|scripts|test)\/[A-Za-z0-9_./-]*\.(?:cpp|h|hpp|cc|ts|mjs|js|toml|py):\d+/
+function checkSourceLineCitations() {
+    const files = markdownFiles('docs').filter((f) => !f.includes(`${path.sep}handover${path.sep}`))
+    let found = 0
+    for (const file of files) {
+        const lines = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n').split('\n')
+        lines.forEach((line, index) => {
+            const hit = SOURCE_LINE_CITATION.exec(line)
+            if (hit === null) return
+            found += 1
+            console.log(`${path.relative(root, file).split(path.sep).join('/')}:${index + 1}: \`${hit[0]}\` cites a source by line; name the symbol instead (file#Symbol)`)
+        })
+    }
+    if (found > 0) {
+        console.log(`${found} source citation(s) outside docs/handover give a line number, which moves with every edit`)
+        return 1
+    }
+    console.log(`no source citation outside docs/handover gives a line number: ${files.length} page(s) checked`)
+    return 0
+}
+if (args.includes('--source-line-citations')) {
+    process.exit(checkSourceLineCitations())
 }
 if (args.includes('--questions-defaults')) {
     process.exit(checkQuestionsHaveDefaults())
