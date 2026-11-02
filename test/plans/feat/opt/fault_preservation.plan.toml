@@ -82,3 +82,74 @@ case = "../../../cases/opt/fault_preservation/inline_faulting_callee_order.cml"
 args = ["${case}", "std::opt", "${backend}"]
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
 expect_stdout_starts_with = "1\n2\n"
+
+# ---- the same three programs through the Camel passes ----
+
+# `opt::dce` is the standard library's own dead-value sweep (`stdlib/opt.cml`), and the ruling on
+# the A10 defect is that it decides what it may drop with the fact the C++ sweep decides with:
+# `may_fault` (`stdlib/graph.cml`), which reads the operator table's fault feature and
+# `castMayFault` the way `isValueOnly` does. An unread statement that can fault therefore stays,
+# and each entry below holds the Camel run to the C++ run of the same program on the same back
+# end, field for field: the same exit code and the same stdout, diagnostic and all (`*_agrees`).
+# The fault cases are `dce_chained_division` (an unread `div_l` in a `sync` block),
+# `chained_cast` (an unread `CAST` whose conversion is checked) and `one_hot_oob` (an unread
+# `tensor:one_hot` whose label is out of range).
+
+[[tests]]
+name = "dce_chained_division.camel_dce"
+desc = "`opt::dce`, written in Camel, keeps `let r = 5 / z`: the division may fault, so it is no value a pass may drop, and `after` is not printed."
+case = "../../../cases/opt/fault_preservation/dce_chained_division.cml"
+args = ["${case}", "opt::dce", "${backend}"]
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_stdout_starts_with = "before\n"
+
+[[tests]]
+name = "dce_chained_division.camel_dce_agrees_with_cpp"
+desc = "The Camel sweep and the C++ sweep of the same program are the same run: the same exit code and the same stdout, the DivisionByZero located at the same place."
+kind = "differential"
+case = "../../../cases/opt/fault_preservation/dce_chained_division.cml"
+args = ["${case}", "opt::dce", "std::nvm"]
+compare_to = "dce_chained_division.dce.nvm"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "chained_cast.camel_dce"
+desc = "`opt::dce` keeps the unread checked conversion: `may_fault` answers true for the CAST whose conversion is checked, as `castMayFault` does for the C++ sweep."
+case = "../../../cases/opt/fault_preservation/chained_cast.cml"
+args = ["${case}", "opt::dce", "${backend}"]
+expect_stdout_starts_with = "before\n"
+expect_output_contains = ["conversion to 'f32[2, 3]' failed"]
+
+[[tests]]
+name = "chained_cast.camel_dce_agrees_with_cpp"
+desc = "The two sweeps of the conversion program are the same run: the same exit code and the same stdout, the failed conversion located at the same place."
+kind = "differential"
+case = "../../../cases/opt/fault_preservation/chained_cast.cml"
+args = ["${case}", "opt::dce", "std::nvm"]
+compare_to = "chained_cast.dce.nvm"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "one_hot_oob.dce"
+desc = "`std::opt::dce` keeps the unread `one_hot`: the call may fault, so the program reports the label outside [0, classes) and exits 1."
+case = "../../../cases/modules/tensor/one_hot_oob.cml"
+args = ["${case}", "std::opt::dce", "${backend}"]
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_output_contains = ["Index 3 is out of range for the class dimension of one_hot of length 3"]
+
+[[tests]]
+name = "one_hot_oob.camel_dce"
+desc = "`opt::dce` keeps it too: `tensor:one_hot` may fault, so the Camel sweep drops no call of it that nothing reads."
+case = "../../../cases/modules/tensor/one_hot_oob.cml"
+args = ["${case}", "opt::dce", "${backend}"]
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_output_contains = ["Index 3 is out of range for the class dimension of one_hot of length 3"]
+
+[[tests]]
+name = "one_hot_oob.camel_dce_agrees_with_cpp"
+desc = "The two sweeps of the `one_hot` program are the same run: the same exit code and the same stdout, the out-of-range label located at the same place."
+kind = "differential"
+case = "../../../cases/modules/tensor/one_hot_oob.cml"
+args = ["${case}", "opt::dce", "std::nvm"]
+compare_to = "one_hot_oob.dce.nvm"
+compare_fields = ["exit_code", "stdout_normalized"]
