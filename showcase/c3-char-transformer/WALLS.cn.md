@@ -1,0 +1,170 @@
+# C3 的墙
+
+这一项交的是墙，不是训练曲线。 下面每一面墙都有三样东西：一个能单独跑的最小程序、它的原始诊断、
+以及「要让它倒，得改哪里」。 诊断文字是 runner 打印的原样，没有改写。
+
+## 测量条件
+
+| 项 | 值 |
+|---|---|
+| `camel --version` | `Camel v0.2.42 (Build 261102_140104_ef60bd42a)` |
+| 分支 | `lane-showcase`，从 `origin/develop` 的 `ef60bd42a8978b80a801f4fcb4e590f7cbf55605` 分叉 |
+| 测量所在的树 | 主机 `/home/zjwei/camel-work/showcase`（工作树 `D:\Projects\Camel-wt\showcase`） |
+| 二进制构建时间 | 每次运行由 runner 打印，最后一次为 `2026-11-02T09:21:43-05:00` |
+| 跑法（一次一个 plan） | `& 'D:\Projects\Camel-wt\camel-remote.ps1' -Path D:\Projects\Camel-wt\showcase -Plan test/plans/perf/showcase_c3.plan.toml -Jobs 8` |
+| 全部探针 | `python showcase/c3-char-transformer/probe.py`（在树的根上跑） |
+
+## 十八个探针的答案
+
+`probe.py` 把「该有答案」写进自己（`EXPECTED`），探针翻面就非零退出：该拒的答了是墙倒了，该答的
+拒了是回归，两种都得重写这份报告。
+
+| 探针 | 构造 | 今天的结果 |
+|---|---|---|
+| 13 `13_jvp_scalar` | `jvp` 对单个 float | **有答案**（`9` 与 `6`） |
+| 14 `14_jvp_call` | 被求导函数里有一次调用 | **有答案**（`18` 与 `12`） |
+| 16 `16_layer_norm_dtype` | `layer_norm` 在 float 上的元素类型 | **有答案**（float 进、float 出） |
+| 17 `17_draw_dtype` | `normal::<float>` 与 `zeros::<float>` 相加 | **有答案**（同一元素类型） |
+| 18 `18_take_dtype` | `take(table, [0])` 这一行的元素类型 | **有答案**（float 进、float 出） |
+| 01 `01_grad_scalar` | 库 `grad` 对单个 float（控制组） | 拒：**墙 1** |
+| 02 `02_grad_table` | 数组参数按位置读 | 拒：**墙 1** |
+| 07 `07_two_parameters` | 两个参数、一个 cotangent | 拒：**墙 1** |
+| 10 `10_with_parameter` | `with` 参数上的模型树 | 拒：**墙 1** |
+| 11 `11_grad_of_a_model` | `grad` 指向一个模型 | 拒：**墙 1** |
+| 12 `12_attention_block` | 一个 head 的完整块 | 拒：**墙 1** |
+| 03 `03_matmul` | 矩阵乘 | 拒：**墙 2**：`jvp` 对 `tensor:matmul` 没有前向规则 |
+| 04 `04_softmax` | 沿 key 轴的 softmax | 拒：**墙 3**：`tensor:softmax` |
+| 05 `05_reduction` | 沿轴归约（layer norm 的均值与方差） | 拒：**墙 4**：`tensor:mean_axis` |
+| 06 `06_layout` | reshape/transpose（切分与合回头） | 拒：**墙 5**：`tensor:reshape` |
+| 08 `08_embedding` | 从表里读一行 | 拒：**墙 6**：`tensor:take` |
+| 09 `09_causal_mask` | 因果 mask 的加法 | 拒：**墙 7**：`tensor:subtract` |
+| 15 `15_mask_in_f32` | 用 `where` 造一个 f32 的常量 mask | 拒：**墙 8** |
+
+`probes total=18 ok=5 refused=13`，拒的落进 8 个互不相同的诊断。
+
+## 墙 1：库级 `vjp` 整块不能用（挡路的一面）
+
+最小程序：`showcase/c3-char-transformer/probes/01_grad_scalar.cml`（`grad` 对 `x*x` 在 3 处求导）
+
+诊断（原样）：
+
+```
+(vjp) .../out/latest/stdlib/vjp.cml:78:47: [Error]: Function of type '(float, float) => float'
+cannot be called with argument types: <> (float). [in the instance 'vjp<(x: float) => float>'
+of the generic function ...] (name=SemanticDiag::ArgumentsMismatch)
+(train) .../train.cml:47:1: [Error]: Cannot import module 'vjp': it has errors.
+```
+
+- **归 类**：变换拒绝（transform refusal）——拒绝发生在 `vjp` 自己的组合里，不是被求导程序里的构造。
+- **挡住的**：`import { vjp } from vjp` 失败，于是 `train.cml`（含它的 `mode=forward` 分支）一行都
+  跑不到；六个 API 级探针全部停在这里。
+- **性质**：这就是 develop 上那 29 个红的同一个根（另一条 lane 在修），所以这里只记读数，不动
+  `stdlib/**`。
+- **要让它倒**：修 `stdlib/vjp.cml:73/78` 那处把 `(float, float) => float` 用单个参数调用的地方
+  （组合时的参数列表与类型律不一致）。
+
+## 墙 2–7：前向规则缺失（`rulesets/jvp.cml`）
+
+六面墙的形状完全相同，只有算子名不同。 以 `08_embedding.cml` 为例，原样诊断：
+
+```
+08_embedding.cml:10:15: [Error]: An error has occurred: transforms: jvp has no forward rule for
+`tensor:take` (the operator has no forward rule bound at all). [raised here at 16:28]
+C [RuntimeDiag::RuntimeError]
+```
+
+其余五个只是把 `tensor:take` 换成各自的算子名。 归 类都是**缺规则**：
+
+| 墙 | 算子 | 最小程序 | 挡住的是 C3 的哪一段 |
+|---|---|---|---|
+| 2 | `tensor:matmul` | `probes/03_matmul.cml` | 每个 `x @ w` |
+| 3 | `tensor:softmax` | `probes/04_softmax.cml` | attention 的权重 |
+| 4 | `tensor:mean_axis` | `probes/05_reduction.cml` | `layer_norm` 的均值/方差 |
+| 5 | `tensor:reshape` | `probes/06_layout.cml` | 多头切分与合回头 |
+| 6 | `tensor:take` | `probes/08_embedding.cml` | 字符 embedding 的查表 |
+| 7 | `tensor:subtract` | `probes/09_causal_mask.cml` | mask 与残差的减法 |
+
+**要让它倒**：`stdlib/rulesets/jvp.cml` 里每个算子加一条前向规则（`f` 与切向如何一起走），
+`stdlib/rulesets/transpose.cml` 里同一算子再加一条反向规则——`vjp` 是
+`transpose(split(reinterp<jvp>(f)))`，两层都缺才是「`vjp` 也走不动」的完整原因。
+
+## 墙 8：常量张量没有单一元素类型的写法
+
+最小程序：`probes/15_mask_in_f32.cml`
+
+```
+15_mask_in_f32.cml:12:57: [Error]: No matching function found for argument types: <> (int[], float).
+```
+
+`full::<f32>([2, 2], -1000.0)` 不成立：形状是 `int[]`、值是 `float`，而 `full::<T>` 要一个 `T`。
+模型里唯一的常量张量就是因果 mask，于是：
+
+- `zeros::<f32>` 拿得到 0，`full(-1000.0)` 拿不到 −1000，`where` 又要求 `bool[..]` 的**张量**条件，
+  而 `bool[]` 喂不进 `reshape<[8, 8]>`（它的签名只收数值数组）。
+- **归 类**：缺规则（**类型/常量规则**），四类里最接近「缺规则」，但它缺的不是微分规则而是
+  张量构造规则，报告里单列。
+- **要让它倒**：`full`/`fill` 接受与目标元素类型不同的数值字面量（或提供 f32 写法），或让
+  `reshape` 收 `bool[]`，或给 `where` 一个标量分枝的重载。
+
+## 墙 9：模型写不成一个元素类型（挡住 loss 的那一面）
+
+最小程序：`forward.cml`（与 `train.cml` 同一个模型、同一种子，只去掉 `import` 与训练循环）
+
+```
+(forward)/showcase/c3-char-transformer/forward.cml:177:33: [Error]:
+No matching function found for argument types: <> (f32[..], float[..], float[..], ...)
+(forward)/showcase/c3-char-transformer/forward.cml:192:45: [Error]:
+Invalid call to '__mat__' with argument types <> (f32[..], float[..]):
+the two tensor operands have different element types ('f32' and 'float')
+```
+
+模型的字段都声明 `float[..]`，第一处不匹配出现在 `attention(layer_norm(x, ga, ba), ...)` 的第一个
+实参上：`layer_norm` 的回答被当成 `f32[..]`。 已经排除的候选（各自都有一个今天**有答案**的探针）：
+`layer_norm` 的 float 分枝（16）、`normal::<float>`（17）、`take` 的读行（18）。 所以这条的成因
+**没有定位**，只剩「`with` 参数里读出的字段类型」与「`+` 之后元素的类型」两个候选——下一个探针该
+写的是后者，程序见本节末。
+
+- **归 类**：缺规则（**元素类型传播**）。四类之外。
+- **挡住的**：`forward.cml` 的 `c3 forward init loss=`，也就是 step 0 的 loss；`train.cml` 的每一天。
+- **要让它倒**：先定位（下面的三行程序），再谈修法。 写法：
+
+  ```camel
+  import { sum, zeros } from tensor
+  func main(): int sync {
+      let a = zeros::<float>([1, 2])
+      let b = zeros::<float>([1, 2])
+      println(`add keeps = ${sum(a + b):.6f}`)   // a+b 是 float 还是 f32：换成与第三个 float 张量相加即知
+      return 0
+  }
+  ```
+
+## 拿到的读数
+
+| 读数 | 值 |
+|---|---|
+| 前向：Camel vs 解析值 | `0.455920556651` vs `0.455920556651`，相对误差 `0.000e+00`（容差 `1e-6`） |
+| 反向：引擎 `with_grad` 六个参数 vs 解析值 | 全部 `0.000e+00`（容差 `1e-4`，最差参数 `wq.0 = -0.021925348589`） |
+| 解析值自身的可靠性 | 与中心差分（`h=1e-6`）最差 `4.828e-10` |
+| 库 `vjp` 的同一行 | 拒（墙 1），没有数 |
+| 跑法 | `python showcase/c3-char-transformer/compare.py`（`c3 compare: PASS`） |
+
+引擎那一行**不是**这一项要的路径，它只用来证明块的算术是对的：前向与六个偏导都和手推值一致，
+所以库拒掉的东西是可算的，问题在库这一侧。
+
+## 拿不到的读数
+
+- **每参数梯度对比（库路径）**：墙 1。
+- **loss 在 step 0/1/10/N**：step 0 需要墙 9，step ≥ 1 需要墙 1 与墙 2–7。 一条也没拿到，命令是现成的：
+  `camel showcase/c3-char-transformer/forward.cml --arg corpus=showcase/c3-char-transformer/corpus.txt`
+  与 `camel showcase/c3-char-transformer/train.cml --arg corpus=... --arg mode=train --arg steps=2`。
+
+模型没有缩小：`train.cml` 就是作者要的两层、两头、宽 16、context 8；拿不到曲线不是模型太大，是上面
+九面墙。
+
+## 我自己写错、不算墙的
+
+- 张量算子的附加参数写在**尖括号**里（`mean<1, true>(x)`、`reshape<[3, 2]>(x)`、`softmax<1>(x)`），
+  不写在圆括号里。 诊断会直接把该写的写法念出来。
+- `read_text` 的 `!!` 要给兜底值（`!! ''`）。
+- `if` 的每个分枝都要 `then`（`if mode == 'forward' then { ... }`）。
+- 这几处修好之后探针的答案才变成上面那张表：前两轮的红是我自己的拼写，不是墙。

@@ -140,14 +140,6 @@ def compact_reason(text, limit=150):
     return "(no output)"
 
 
-def report_failure(label, result, width=96):
-    """Print a program's whole output, wrapped, so a diagnostic is never clipped in a report."""
-    text = result["stdout"] + result["stderr"]
-    for line in text.splitlines():
-        for chunk in wrap(line.rstrip(), width):
-            print(f"c3 compare diag.{label} {chunk}")
-
-
 def refusal(text):
     for line in text.splitlines():
         line = line.strip()
