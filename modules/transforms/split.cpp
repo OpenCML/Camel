@@ -405,6 +405,25 @@ struct Half {
         // a hole in its inputs.
         std::vector<gc_node_ref_t> inputs;
         for (gc_node_ref_t input : halfInputsOf(ref)) {
+            // A constant has no producer, so either half can write it again: a half that reads one
+            // takes it as available rather than as an operand that failed to arrive. Without this the
+            // answer depends on the shape of the expression and not on its type -- a body whose only
+            // peculiarity is a bare constant on a value operand (`f(x) = 5.0 + x * 7.0`) is refused
+            // for an input "not reachable from the half's exit" (measured 2026-11-03: `fa00` cuts,
+            // `fa11` refused, and the whole difference is a `5.0` feeding `:op/add_d`'s value port).
+            if (input < source->nodeCount() && copyOf[input] == rt::kInvalidNodeRef) {
+                const rt::GCNode *const constant = source->node(input);
+                if (constant != nullptr && constant->kind == rt::GCNodeKind::Data) {
+                    const std::span<const slot_t> slots = source->staticSlots();
+                    const std::ptrdiff_t slotIndex =
+                        -static_cast<std::ptrdiff_t>(constant->dataIndex);
+                    if (constant->dataIndex < 0 && slotIndex >= 0 &&
+                        static_cast<size_t>(slotIndex) < slots.size()) {
+                        copyOf[input] = draft.materializeStaticValue(
+                            slots[static_cast<size_t>(slotIndex)], constant->dataType());
+                    }
+                }
+            }
             if (input < source->nodeCount() && copyOf[input] == rt::kInvalidNodeRef &&
                 crossesCut(input)) {
                 const gc_node_ref_t accs = projectResidual(residualIndexOf->at(input), refusal);
