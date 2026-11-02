@@ -2183,18 +2183,10 @@ DraftInlineResult inlineCallableInDraft(
             if (pred == kInvalidNodeRef || pred == head) {
                 continue;
             }
-            // The pair the block's chain is written with: both ends a statement of it, the sync edge
-            // naming the order and the control edge the same pair beside it, as the builder writes
-            // them (writeSyncStatement).
-            const auto markStatement = [&](gc_node_ref_t node) {
-                const DraftNodeHeader *h = draft.header(node);
-                if (h != nullptr) {
-                    draft.setNodeRuntimeFlags(
-                        node, static_cast<uint8_t>(h->runtimeFlags | kGCNodeFlagSyncStatement));
-                }
-            };
-            markStatement(pred);
-            markStatement(head);
+            // The pair the block's chain is written with: the sync edge naming the order and the
+            // control edge the same pair beside it, as the builder writes them (writeSyncStatement).
+            // Both ends are statements of the block from here on because the chain names them; no
+            // mark is written beside the edge (the `kGCNodeFlagSyncStatement` retirement).
             const gc_node_ref_t only[1] = {pred};
             draft.setSyncInputs(head, only);
             const auto ctrl = draft.ctrlInputsOf(head);

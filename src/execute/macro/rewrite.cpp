@@ -31,11 +31,11 @@ gc_node_ref_t bridgeMacroRewriteControl(
         draft.ctrlInputsOf(replacedNodeId).end());
     // The node a macro rewrote may be a statement of a `sync` block: the gate then takes its place
     // in the chain (takeStatementPlace, called by the caller), so a gate is needed even when
-    // nothing ordered the node (docs/design/effects/edges.cn.md 1.5).
-    const auto *replacedHeader = draft.header(replacedNodeId);
+    // nothing ordered the node (docs/design/effects/edges.cn.md 1.5). A statement is read from the
+    // chain itself -- a node the chain names as a predecessor or a user -- and not from the
+    // `kGCNodeFlagSyncStatement` mark, which said the same thing in a second place.
     const bool wasStatement =
-        replacedHeader != nullptr &&
-        (replacedHeader->runtimeFlags & camel::runtime::kGCNodeFlagSyncStatement) != 0;
+        !draft.syncInputsOf(replacedNodeId).empty() || !draft.syncUsersOf(replacedNodeId).empty();
     // Something may also have ordered the replaced node: an effect written between two others on
     // one resource carries an order edge, and the edges move with the node (takeStatementPlace ->
     // replaceOrderEdgesAt). A materialized value is the work's result and not the work, so it is a

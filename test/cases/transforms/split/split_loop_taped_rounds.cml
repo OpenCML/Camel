@@ -1,0 +1,54 @@
+// `split` through a loop (sprint item 2, 2026-11-02: 每轮残差作为收集输出，后一半按轮倒序取；
+// design 4.2, design principles 3.10 and 9.9). A lifted loop has no tuple fill to cut -- `jvp` gives
+// the LOOP node the pair type, so the node's two value components *are* the pair -- and the cut
+// therefore gives the forward loop one collection slot: one tuple per round, holding what the
+// backward half reads from that round. `lin` then loops over that tape, so its rounds are the
+// forward rounds one for one and no index operator is needed to pair them.
+//
+// The factor below changes with the round, which is what makes the numbers a check rather than a
+// coincidence. At x = 1 with factors 2, 3, 5:
+//
+//     primal:   1 * 2 = 2, 2 * 3 = 6, 6 * 5 = 30          -> 30
+//     tangent:  1 * 2 = 2, 2 * 3 = 6, 6 * 5 = 30          -> 30  (d/dx = 2*3*5)
+//
+// A tape that kept only the *last* round's residuals -- the shape you get by letting the loop keep
+// running and reading the state afterwards, instead of collecting one element per round -- would
+// hand the tangent body the factor 5 in all three rounds and print 125 for `lin(1.0)`, not 30. So
+// 30 is the number this case pins: each round's residual is that round's, and the tape's length is
+// the number of rounds the forward half ran.
+//
+// What a *single* float state cannot pin is the order the backward half walks the rounds in: the
+// per-round maps here are the scalars 2, 3, 5, they commute, and every walk order prints the same
+// 30. Nor can any other loop in this tree pin it, and that is a statement about the lift rather than
+// about this cut: `jvp` gives a pair to a floating scalar and to nothing else (`pairTypeOf`,
+// modules/transforms/jvp.cpp#pairTypeOf), so a loop's state can only be a float -- and one float's
+// per-round maps are scalars, so the derivative is the same product however it is walked. The
+// construct that would break the tie is one state holding a 2x2 matrix (four floats as a tuple),
+// with round maps Mk = [[1, k], [k*k, 1]] that do not commute, so that walking the rounds the other
+// way multiplies them in the other order. Measured: the primal runs (a four-tuple state is a value
+// the language takes), and `jvp` answers
+//
+//     REINTERP jvp function=f skip=body
+//
+// (modules/transforms/jvp.cpp#liftGraph) instead of lifting it, so `split(jvp(f))` never sees such a loop.
+// An order-sensitive case therefore waits on the lift of an aggregate state, not on this cut.
+//
+// The reverse walk itself is `transpose`'s (4.3: 倒着走，逐轮取 `split` 留下的残差), and `transpose`
+// still copies a loop's range as it stands -- so `vjp` over a loop is not order-correct yet either.
+// That is design 4.2's next gap: one page of its own, neither widened nor closed here. This case
+// holds the split to what it can be held to on its own -- the tape is per round, and it carries
+// exactly what the backward half reads from that round.
+import rulesets.jvp
+import { jvp, split } from transforms
+
+func f(x: float): float {
+    return loop a = x for k in [2.0, 3.0, 5.0] do a * k
+}
+
+func main(): int sync {
+    let fwd = split(jvp(f))
+    let (value, lin) = fwd(1.0)
+    println("loop y=", value)
+    println("loop d=", lin(1.0))
+    return 0
+}

@@ -2161,16 +2161,15 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     // Create an ExitLoad node to represent the exit statement.
     const AST::ExitType astExit = ast->loadAs<AST::ExitStmtLoad>()->exitType();
     if (astExit == AST::ExitType::Yield) {
-        // A `yield` the generator machine did not claim reached the statement builder, which means
-        // the machine missed a shape it builds: that is a defect of this builder, not a property of
-        // the program (author's ruling of 2026-10-31: the machine's narrowings are compiler
-        // defects, reported as internal errors with the program to send, and not as a missing
-        // feature).
+        // A `yield` the generator machine did not claim reached the statement builder: the machine
+        // missed a shape it builds. Nothing in the program is wrong, and the report says so without
+        // asking for the program (author's ruling of 2026-11-02: a refusal is not a defect of the
+        // program, and the text never asks the reader to send it).
         diags_->of(InternalDiag::UnknownInternalError)
             .at(ast->load()->tokenRange())
             .commit(
                 "a `yield` reached the statement builder, so the generator machine did not claim "
-                "it; send the program, this is a compiler defect");
+                "it. Nothing in the program is wrong: the machine missed a shape it builds");
         throw BuildAbortException();
     }
     node_ptr_t exitNode = tree_->makeExit(ExitType::Return);
@@ -3933,9 +3932,16 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         //
         // Every escape form is decoded here, so an unknown escape is reported here too, once per
         // spelling, in the lexical catalogue: an octal escape is simply unknown, and so is
-        // `\q`. The text keeps the pair as written; a warning does not stop the program.
+        // `\q`. The text keeps the pair as written; the diagnostic is an error, so a program
+        // that writes one does not compile (the author's ruling of 2026-11-02: a string that
+        // silently becomes something else is dearer than one that refuses to build).
+        //
+        // A raw string (`r"C:\dir"`) is not decoded at all: its text is the value, so a backslash
+        // in it is a backslash -- there is no escape to be unknown, and the table is not run.
         std::vector<std::string> unknownEscapes;
-        std::string decoded = decodeEscapes(str, literal->fromFormattedString(), &unknownEscapes);
+        std::string decoded = literal->fromRawString()
+                                ? str
+                                : decodeEscapes(str, literal->fromFormattedString(), &unknownEscapes);
         for (const std::string &escape : unknownEscapes) {
             diags_->of(LexicalDiag::InvalidEscapeSequence)
                 .at(ast->load()->tokenRange())
@@ -5710,17 +5716,15 @@ node_ptr_t Builder::visitGeneratorBody(
     const AST::node_ptr_t &bodyAst = funcAst->atAs<AST::StmtBlockLoad>(1);
     const auto &bodyStmts         = bodyAst->atAs<AST::RepeatedLoad>(0);
 
-    // The head writes the stream type, and it is what says what one `yield` hands out. A shape
-    // this machine does not build is a defect of the machine, not a property of the program: the
-    // ruling of 2026-10-31 retired the "generators are not supported" refusal, and what is left is
-    // a defect reporter -- `reportUnbuiltShape` -- that names the shape and asks for the program.
-    const auto reportUnbuiltShape = [&](const AST::node_ptr_t &atNode) -> void {
-        const AST::node_ptr_t atYield = firstOwnYield(atNode);
-        diags_->of(InternalDiag::UnknownInternalError)
-            .at((atYield != nullptr ? atYield : atNode)->load()->tokenRange())
-            .commit(
-                "the generator machine does not build this shape; send the program, this is a "
-                "compiler defect");
+    // The head writes the stream type, and it is what says what one `yield` hands out. A statement
+    // shape this machine does not build is a broken invariant, guarded where the statement walk
+    // meets it -- not a refusal written for the reader, and not a property of any program.
+    // The body of a generator `loop` is cut at its `yield`, and its last statement writes the next
+    // state value. A body that does not is a rule the reader has to be told, not a defect.
+    const auto reportLoopBodyShape = [&](const AST::node_ptr_t &atNode) -> void {
+        diags_->of(SemanticDiag::LoopBodyNeedsNextState)
+            .at(atNode->load()->tokenRange())
+            .commit();
         throw BuildAbortException();
     };
     // A local that lives across a `yield` is a cell of the body (see `addTypedCell`), so there is
@@ -5994,11 +5998,15 @@ node_ptr_t Builder::visitGeneratorBody(
                     stmt->loadAs<AST::ExitStmtLoad>()->exitType() == AST::ExitType::Yield) {
                     // The answer: the element and the stream that continues after this point.
                     const auto &values = stmt->atAs<AST::RepeatedLoad>(0);
+                    // Not reachable from source today: the statement parser requires an expression after
+                    // `yield`, so a bare `yield` is a syntax error before this point. The refusal stays
+                    // because everything below reads `values`; it is a guard on the shape of the node,
+                    // not a gate this version chose to keep shut.
                     // `yield a, b` hands out the tuple `(a, b)`, the same element `yield (a, b)`
                     // writes. A `yield` with no value has no element to hand out and keeps the
                     // named refusal.
                     if (values->size() == 0) {
-                        reportUnbuiltShape(stmt);
+                        GUARD(false, "a `yield` with no value reached the generator machine");
                     }
                     const auto elementOf = [&](const auto &list) -> node_ptr_t {
                         if (list->size() == 1) {
@@ -6102,7 +6110,7 @@ node_ptr_t Builder::visitGeneratorBody(
                             popScope();
                             return;
                         }
-                        reportUnbuiltShape(stmt);
+                        GUARD(false, "a statement the generator body does not build reached the machine");
                     }
                     if (isLoop) {
                         // A `while` loop whose body writes a `yield`. The pull that hands an
@@ -6123,7 +6131,7 @@ node_ptr_t Builder::visitGeneratorBody(
                             if (seqAst == nullptr || loopAst->optAtAs<AST::DataLoad>(2) != nullptr ||
                                 loopLoad->state().size() != 1 || init == nullptr ||
                                 !hoistable(init)) {
-                                reportUnbuiltShape(stmt);
+                                GUARD(false, "a `loop ... for` clause reached the generator machine");
                             }
                             const std::string stateName = loopLoad->state()[0].toString();
                             if (std::find(cellNames.begin(), cellNames.end(), stateName) ==
@@ -6213,7 +6221,7 @@ node_ptr_t Builder::visitGeneratorBody(
                         // the arm boundary is the next step).
                         if (inits->size() == 0 || loopLoad->state().empty() || loopLoad->hasFor() ||
                             inits->size() != loopLoad->state().size()) {
-                            reportUnbuiltShape(stmt);
+                            GUARD(false, "a `loop` with no state, or a state with no first value, reached the machine");
                         }
                         // One cell per carried name. The body already may have a cell of that name
                         // (a `var` of its own): the loop carries that one cell, and the value below
@@ -6224,9 +6232,9 @@ node_ptr_t Builder::visitGeneratorBody(
                         for (size_t k = 0; k < loopLoad->state().size(); ++k) {
                             const std::string name = loopLoad->state()[k].toString();
                             const AST::node_ptr_t eachInit = inits->at(k);
-                            if (!hoistable(eachInit)) {
-                                reportUnbuiltShape(stmt);
-                            }
+                            // The initial value is evaluated where the loop stands (see the write below),
+                            // once, before the first condition: a value computed there, or read from a
+                            // local, is the first round's state like a constant is.
                             if (std::find(cellNames.begin(), cellNames.end(), name) ==
                                 cellNames.end()) {
                                 addTypedCell(name, visitData(eachInit), stmt);
@@ -6290,8 +6298,19 @@ node_ptr_t Builder::visitGeneratorBody(
                         const auto &matchAst = stmt->at(0);
                         const int afterMatch = newArm();
                         fill(afterMatch, stmts, i + 1, next, nextState);
+                        // The matched value outlives the `yield`s the arms are cut at, so it is put in
+                        // a cell where the `match` stands and the branch reads the cell. A cell declared
+                        // in the walk is captured with the others (the capture loop reads every name in
+                        // `cellNames`, which the walk filled), so an arm that starts after a `yield`
+                        // still finds it written.
+                        node_ptr_t subject = visitData(matchAst->atAs<AST::DataLoad>(0));
+                        const std::string subjectCell =
+                            "__gen_match_subject_" + std::to_string(cellNames.size());
+                        addTypedCell(subjectCell, subject, stmt);
+                        cellNames.push_back(subjectCell);
+                        *exec << writeCell(subjectCell, subject);
                         node_ptr_t brch = tree_->makeBrch();
-                        *brch << visitData(matchAst->atAs<AST::DataLoad>(0));
+                        *brch << readCell(subjectCell);
                         for (const auto &caseNode : *matchAst->atAs<AST::RepeatedLoad>(1)) {
                             const auto &pattern = caseNode->at(0);
                             if (pattern->type() == AST::LoadType::Data &&
@@ -6300,7 +6319,14 @@ node_ptr_t Builder::visitGeneratorBody(
                                      AST::DataType::EnumPattern)) {
                                 // The arm binds a name; a binding lives in the arm's own graph, so
                                 // it would have to become a cell to outlive the `yield`.
-                                reportUnbuiltShape(caseNode);
+                                // reachable from source: stream.generators_match_binding_across_yield (2026-11-03)
+                                diags_->of(InternalDiag::UnknownInternalError)
+                                    .at(caseNode->load()->tokenRange())
+                                    .commit(
+                                        "a `match` arm binds a name and the arm then `yield`s it: the "
+                                        "binding lives in the arm's own graph, so it has to become a cell "
+                                        "to outlive the `yield`");
+                                throw BuildAbortException();
                             }
                             const int armPc = newArm();
                             fill(
@@ -6373,7 +6399,7 @@ node_ptr_t Builder::visitGeneratorBody(
                 // already written as a cell) would go round without moving: refused by name
                 // here rather than run as a loop that never advances.
                 if (last == nullptr) {
-                    reportUnbuiltShape(from < stmts->size() ? stmts->at(from) : stmts);
+                    reportLoopBodyShape(from < stmts->size() ? stmts->at(from) : stmts);
                 }
                 // One name takes the value itself; a list of names takes the tuple the body built, one
                 // element per name -- the shape a loop that carries several values hands on:
@@ -6409,7 +6435,7 @@ node_ptr_t Builder::visitGeneratorBody(
                     if (tupleItems == nullptr || tupleItems->size() != names.size()) {
                         // A loop that carries several values hands them on as a tuple of the
                         // same length; anything else has no value for one of the names.
-                        reportUnbuiltShape(lastStmt != nullptr ? lastStmt : stmts->at(from));
+                        reportLoopBodyShape(lastStmt != nullptr ? lastStmt : stmts->at(from));
                     }
                     // The next values are built before any of them is written: a state name the
                     // second element reads must be the value of this round, not the one the first

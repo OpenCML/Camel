@@ -1517,8 +1517,9 @@ vjp: (f: F) => Vjp<F> when is_function::<F>()
 
 The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
 `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters, `ct`'s own weight one
-member per parameter. The juxtaposed call `transpose(residuals, ct)` is the internal step, not this
-signature.
+member per parameter. The pullback is `lin`'s transpose, and that is the whole of the step: the
+two have the shape `(ct) => (cotangents)` (author's ruling of 2026-11-02 11:30), so nothing is
+wrapped around it.
 
 The pullback answers a tuple in every case, one member per parameter, so a function of one
 parameter has a one-long one -- `(27.0)` for `vjp(cube)(3.0)`'s pullback at `ct = 1.0` -- and the

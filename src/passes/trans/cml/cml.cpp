@@ -199,6 +199,43 @@ bool isUtf8(std::string_view text) {
 }
 
 std::string escapeString(std::string_view text, bool towardUtf8) {
+    // A value with two or more backslashes and nothing else that an escape is for (no control
+    // character, no byte outside printable ASCII) is printed as a raw string: a Windows path
+    // stays `r"C:\dir\file"` instead of becoming `'C:\\dir\\file'`, and reading the printed
+    // program costs what reading the original cost. The delimiters are `r"`, `r#"`, `r##"` ...
+    // with as many `#` as it takes for the closing `"` + `#`s not to occur inside the value, so
+    // the printed literal is always the value and nothing of it is decoded.
+    const auto rawForm = [&]() -> std::string {
+        size_t backslashes = 0;
+        for (const char ch : text) {
+            const auto c = static_cast<unsigned char>(ch);
+            if (ch == '\\') {
+                ++backslashes;
+                continue;
+            }
+            if (c < 0x20 || c == 0x7F || c >= 0x80) {
+                return {};
+            }
+        }
+        if (backslashes < 2) {
+            return {};
+        }
+        size_t hashes = 0;
+        for (;; ++hashes) {
+            const std::string closer = "\"" + std::string(hashes, '#');
+            if (text.find(closer) == std::string_view::npos) {
+                break;
+            }
+        }
+        const std::string fence(hashes, '#');
+        std::string raw = "r" + fence + "\"";
+        raw += text;
+        raw += "\"" + fence;
+        return raw;
+    };
+    if (std::string raw = rawForm(); !raw.empty()) {
+        return raw;
+    }
     std::string out = "'";
     for (const char raw : text) {
         const auto c = static_cast<unsigned char>(raw);

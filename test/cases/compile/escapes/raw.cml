@@ -1,0 +1,15 @@
+/**
+ * raw strings: `r"..."` and `r#"..."#`, `r##"..."##`. Nothing between the delimiters is decoded,
+ * so a backslash is a backslash and the closing quote is the quote followed by as many `#` as the
+ * opening one. `"\\"` is the other way to write one backslash.
+ */
+
+func main(): int sync {
+    println('q', len(r"\q"), r"\q")
+    println('path', r"C:\dir\file")
+    println('quotes', len(r#"a"b"#), r#"a"b"#)
+    println('hash', len(r##"a"#b"##), r##"a"#b"##)
+    println('escaped', len("\\"), "\\")
+    println('empty', len(r""), len(r#""#))
+    return 0
+}

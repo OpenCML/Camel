@@ -813,11 +813,12 @@ int runCommand(int argc, char *argv[]) {
                       .toJson()
                << "\n]" << endl;
         } else {
-            // Not a diagnostic: a defect of the compiler. Said as such, with the text of the
-            // exception (it used to be printed bare: a line reading `bad any_cast`).
+            // Not a diagnostic: a state this version does not build. The text of the exception is
+            // printed with it (it used to be printed bare: a line reading `bad any_cast`), and the
+            // program is not blamed, and the text never asks the reader to send it.
             os << "camel: internal error: " << e.what()
-               << "\nThis is a defect of the compiler, not an error of the program. Please "
-                  "report it with the program that shows it."
+               << "\nThis is a defect of the compiler, not an error of the program. No shape the program "
+                   "can write reaches it."
                << endl;
         }
         ASSERT(false, e.what());

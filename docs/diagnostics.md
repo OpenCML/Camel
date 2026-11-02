@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-306 diagnostics: 285 errors, 21 warnings. 15 carry a machine-applicable edit, 291 say why they carry none.
+307 diagnostics: 287 errors, 20 warnings. 15 carry a machine-applicable edit, 292 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -24,7 +24,7 @@ prints one entry.
 | `0x01000001` | [LexicalDiag::InvalidNumberFormat](#invalidnumberformat) | Error | yes |
 | `0x01000002` | [LexicalDiag::UnclosedStringLiteral](#unclosedstringliteral) | Error | yes |
 | `0x01000003` | [LexicalDiag::UnterminatedComment](#unterminatedcomment) | Error | yes |
-| `0x01100000` | [LexicalDiag::InvalidEscapeSequence](#invalidescapesequence) | Warn | no |
+| `0x01000004` | [LexicalDiag::InvalidEscapeSequence](#invalidescapesequence) | Error | no |
 | `0x02000001` | [SyntaxDiag::MissingClosingDelimiter](#missingclosingdelimiter) | Error | yes |
 | `0x02000002` | [SyntaxDiag::UnmatchedClosingDelimiter](#unmatchedclosingdelimiter) | Error | yes |
 | `0x02000003` | [SyntaxDiag::MissingThen](#missingthen) | Error | yes |
@@ -267,6 +267,7 @@ prints one entry.
 | `0x03000205` | [SemanticDiag::DuplicateRuleForOperator](#duplicateruleforoperator) | Error | no |
 | `0x03000206` | [SemanticDiag::YieldRequiresStreamHead](#yieldrequiresstreamhead) | Error | no |
 | `0x03000207` | [SemanticDiag::RuleRightUsesOuterVariable](#rulerightusesoutervariable) | Error | no |
+| `0x03000208` | [SemanticDiag::LoopBodyNeedsNextState](#loopbodyneedsnextstate) | Error | no |
 | `0x03000209` | [SemanticDiag::CalledFallibleValue](#calledfalliblevalue) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
@@ -345,7 +346,7 @@ An error has occurred: {0}.
 **Help**
 
 ```text
-The compiler reached a state it has no code for, so nothing in the program is known to be wrong. Report it together with the program that reached it.
+The compiler reached a state it has no code for. This is a defect of the compiler, not an error of the program.
 ```
 
 **Example** (`test/cases/compile/collections/err_key_float.cml`, run as `camel test/cases/compile/collections/err_key_float.cml`)
@@ -493,7 +494,7 @@ func main(): int {
 
 ### InvalidEscapeSequence
 
-`0x01100000` · Warn · `LexicalDiag::InvalidEscapeSequence`
+`0x01000004` · Error · `LexicalDiag::InvalidEscapeSequence`
 
 **Fix**
 
@@ -508,23 +509,14 @@ Invalid escape sequence in string: {0}.
 **Help**
 
 ```text
-Check and correct the escape sequence.
+A string decodes '\n', '\t', '\r', '\a', '\b', '\f', '\v', '\0', '\\', '\'', '\"', '\`', '\$', '\xHH' and the braced Unicode form '\u{...}'. Any other pair is refused rather than kept: a string that silently becomes something else is dearer than one that does not build. To write a backslash itself, write '\\' or use a raw string, in which nothing is an escape: r"C:\dir".
 ```
 
-**Example** (`test/cases/compile/escapes/plain.cml`, run as `camel test/cases/compile/escapes/plain.cml`)
+**Example** (`test/cases/compile/escapes/unknown.cml`, run as `camel test/cases/compile/escapes/unknown.cml`)
 
 ```camel
 func main(): int sync {
-    println('101', len('\101'))
-    println('0', len('\0'))
-    println('x41', len('\x41'), '\x41')
-    println('u', len('\u{1F600}'))
-    println('n', len('\n'))
-    println('8', len('\8'), '\8')
-    println('0x', len('\0x'))
-    println('01', len('\01'))
-    println('012', len('\012'))
-    println('033', len('\033'))
+    println('\q')
     return 0
 }
 ```
@@ -8784,6 +8776,40 @@ func f(x: float): float {
 func main(): int sync {
     let xs: float[3] = [1.0, 2.0, 3.0]
     println(vmap(f)(xs))
+    return 0
+}
+```
+
+### LoopBodyNeedsNextState
+
+`0x03000208` · Error · `SemanticDiag::LoopBodyNeedsNextState`
+
+**Fix**
+
+None: choice: the body has to end with the value the next round starts from, and which value that is the writer's
+
+**Message**
+
+```text
+A loop body ends with the next value of its state, and this one ends without writing one: the round after this one has nowhere to go on from.
+```
+
+**Help**
+
+```text
+The body of a loop is cut at its yield: the pull that hands an element out stops there, and the pull after it runs the rest of the body and the condition again, so the last statement of the body has to write the loop's next state value. Writing 'yield i' and then 'i + 1' moves the loop on; a body of only 'yield i' reads a fresh i on every pull, so the loop never moves on.
+```
+
+**Example** (`test/cases/compile/stream/generators_loop_body_without_next_state.cml`, run as `camel test/cases/compile/stream/generators_loop_body_without_next_state.cml`)
+
+```camel
+func g(): int.. sync {
+    loop i = 0 while i < 3 do {
+        yield i
+    }
+}
+
+func main(): int sync {
     return 0
 }
 ```

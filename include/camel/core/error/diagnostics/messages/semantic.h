@@ -472,6 +472,7 @@ enum class SemanticDiag : uint32_t {
     TypeFunctionNotApplicable  = 0x0001FE,
     StatementAfterReturn       = 0x000201,
     YieldRequiresStreamHead    = 0x000206,
+    LoopBodyNeedsNextState     = 0x000208,
     RuleLeftIsNotAnOperator    = 0x000204,
     DuplicateRuleForOperator   = 0x000205,
     RuleRightUsesOuterVariable = 0x000207,

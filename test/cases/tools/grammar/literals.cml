@@ -1,4 +1,4 @@
-// Literals: every form the lexer accepts (antlr/OpenCMLLex.g4).
+// Literals: every form the lexer accepts (docs/technical/34_handwritten_parser.md, the lexer).
 
 // INTEGER: DEC, OCT, HEX, BIN, each with an optional exponent
 let dec = 0
@@ -56,3 +56,9 @@ let nothing: int? = null
 let pair = (1, 2.0)
 let first = pair.0
 let second = pair.1
+
+// RAWS: r"..." and r#"..."# -- nothing between the delimiters is an escape, and the closing
+// quote is followed by as many '#' as the opening one
+let rawPlain = r"C:\dir\q"
+let rawHash = r#"a"b"#
+let rawTwoHashes = r##"a"#b"##

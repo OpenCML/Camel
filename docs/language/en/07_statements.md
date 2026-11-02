@@ -89,7 +89,8 @@ error InvalidAge: age is negative
 - A round may `yield` several times, and the resume point is the position of the `yield`: a loop, a branch, a `match` arm or a `sync` block in the region may all write one, nested to any depth. There is no delegation: handing an inner stream out is written `for x in inner do yield x`.
 - Statements after a `yield` run only when the consumer pulls another element. The stream gives one element at a time and its values are linear; a generator function may be called several times, and each call gets its own stream. `return` ends the stream, without a value; a stream that produces no element at all is a legal empty stream.
 - A fault happens at the pull that produces that element (a fault is not a value), and elements already handed out are unaffected.
-- The generator state machine has landed: a `yield` in a function body lowers to a machine that steps by resume point (one struct holds the state, each `yield` is a segment, a pull function advances it), and a `yield` is never run quietly as a `return`. A shape the machine cannot take is a compiler defect: it reports an internal error and asks for the program, not "not implemented yet".
+- As in every `loop`, the last statement of the body writes the next value of the state (design principles 3.10). In a generator the body is cut at its `yield`, and the pull after it runs the rest of the body and the condition again, so `loop i = 0 while i < n do { yield i; i + 1 }` moves on, while a body of only `yield i` reads a fresh `i` on every pull and never moves on: `SemanticDiag::LoopBodyNeedsNextState`.
+- The initial value of that `loop` is evaluated where the loop stands, once, before the first condition, so it may be a literal, a value held in a local, or the result of a call: `loop i = start while i < n do ...` starts from whatever `start` holds when the pull reaches the loop.
 
 #### 7.3.2 The value of a stream, and one pull
 

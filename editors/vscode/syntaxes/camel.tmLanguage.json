@@ -71,6 +71,14 @@
     "strings": {
       "patterns": [
         {
+          "comment": "RAWS: r\"...\" and r#\"...\"#, r##\"...\"## -- the closing delimiter is a quote followed by as many '#' as the opening one, and nothing inside is an escape. It comes first because `r` is an ordinary name and would otherwise start a string one character later.",
+          "name": "string.quoted.raw.camel",
+          "begin": "(?<![A-Za-z0-9_])r(#+)?\"",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.camel" } },
+          "end": "\"\\1",
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.camel" } }
+        },
+        {
           "comment": "MULTI_STR, single quotes. The lexer ends it at the first ''' whatever precedes.",
           "name": "string.quoted.triple.single.camel",
           "begin": "'''",

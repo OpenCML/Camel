@@ -3,7 +3,8 @@
 
 #include "camel/utils/windows_parser_guard.h"
 
-// nlohmann MUST be included before any header that pulls in ANTLR (EOF conflict)
+// nlohmann/json uses the C macro EOF: keep it above any header that defines or undefines it. The
+// ANTLR headers that used to `#undef` it are gone (docs/technical/34_handwritten_parser.md).
 #include "nlohmann/json.hpp"
 
 #include "command.h"

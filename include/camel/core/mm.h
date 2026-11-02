@@ -113,6 +113,7 @@ struct AllocatorChecks {
     bool poison                   = false; // write over the from-space at every safepoint
     bool verifyBefore             = false; // check the invariants before a collection
     bool verifyAfter              = false; // ... and after
+    bool markCheck                = false; // compare the cleared marks with the graph space
     bool printConfig              = false; // print the resolved configuration at start
 };
 

@@ -326,13 +326,23 @@ function collect(config, tag) {
         logWarn(`Removed stale out/${tag}/stdlib/${f}: no module of that name is built`)
     }
 
-    // Copy Python bridge DLLs to out/<tag>/libs for runtime routing.
+    // Copy Python bridge libraries to out/<tag>/libs for runtime routing. The name carries the
+    // platform: `py_bridge310.dll` on Windows, `libpy_bridge310.so` / `.dylib` elsewhere -- and the
+    // loader asks for exactly that name inside `libs/` (`bridgeFileNameForTag` in
+    // src/core/module/dynamic.cpp), so a Linux host that built its bridge still failed to find it
+    // while only the Windows spelling was collected here.
     const bridgeDir = path.join(BASEDIR, 'build', 'modules', 'python', config)
     if (fs.existsSync(bridgeDir)) {
         const files = fs.readdirSync(bridgeDir)
         for (const f of files) {
             const lower = f.toLowerCase()
-            if (lower.startsWith('py_bridge') && (lower.endsWith('.dll') || lower.endsWith('.pdb'))) {
+            const isBridge = lower.startsWith('py_bridge') || lower.startsWith('libpy_bridge')
+            const isLibrary =
+                lower.endsWith('.dll') ||
+                lower.endsWith('.pdb') ||
+                lower.endsWith('.so') ||
+                lower.endsWith('.dylib')
+            if (isBridge && isLibrary) {
                 fs.copyFileSync(path.join(bridgeDir, f), path.join(libsDir, f))
             }
         }

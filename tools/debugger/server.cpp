@@ -13,7 +13,8 @@
  * dispatch，保证“当前选中的任务”收到操作。
  */
 
-// nlohmann 必须在解析器相关头之前（否则 ANTLR 的 EOF 会遮蔽 C 的 EOF）
+// nlohmann/json 用 C 的 EOF 宏，必须在会定义或取消它的头之前 —— 当年是 ANTLR 的头 `#undef` 了它，
+// 那些头已随手写解析器删除（docs/technical/34_handwritten_parser.md），今天没有谁这么做；顺序照旧。
 #include "nlohmann/json.hpp"
 // state.h 必须在任何会拉入 Windows 的头之前，避免 minwindef/wingdi 的 TRUE/FALSE/ERROR/IN/CONST
 // 与解析器冲突

@@ -265,6 +265,14 @@ reading: on 2026-11-02 five plan files with raised timeouts appeared in the main
 figures in their comments. The content may well be right; it still cannot land, because nobody can say
 which red it removed. The patch is kept outside the tree, and whoever wrote it re-does it on a lane.
 
+**Where the number comes from**: a `liveness` bound is measured with `--jobs 1` **on the gate host**,
+and the bound is **four times the slowest reading there**; a reading taken on any other machine is a
+reference, never the figure the multiple is applied to. A machine that is not the gate host can be
+several times slower, and the budget then carries a margin nobody can see: `98a500e4f` raised this
+self-test's bound to 240 s as four times 45.8 s read elsewhere, and the same self-test reads 68.57 s
+of CPU on the gate host -- 3.5 times, not four. Quote the host and the layer beside the number, and
+when two readings disagree, the gate host's is the one the bound is built on.
+
 ## `-NoBuild` after a merge: `exit 4` is the runner refusing, not a failing test
 
 After a merge the tree no longer matches the installed binary and `out/latest/stdlib`, and
@@ -339,3 +347,20 @@ Two readings of 2026-11-02 were wrong for this reason and neither was a code def
 **An `ACCEPT` from `parsecheck` proves the text it was given parses, not that the text is the file
 you meant to give it.** A parser that accepts a truncated file is not evidence of completeness; the
 size and the statement count are what cross-check it.
+
+## Deleting A Named Example Moves Its Class Count
+`scripts/stdlib-reference.mjs` keeps `EXAMPLE_STOPS`: for each class of doc example that cannot run,
+how many are in it. Deleting an example -- with the declaration it named, or because the shape it
+showed is gone -- makes that class one smaller, and the count is the only thing that notices. Leave it
+and `registry.docs_complete` goes red **on an otherwise clean `develop`**, which reads as a defect in
+the compiler rather than in the bookkeeping: on 2026-11-02 this was the second root hiding inside one
+night's twenty-nine reds. Change the number in the same commit as the deletion, and write the reason
+beside it -- the file says a number that moved without a reason is the same silence as a relaxed gate.
+
+## A Log File Belongs Outside The Tree
+When a run's output is redirected, `*> D:\Temp\<name>.log` and never `*> run.log` beside the sources.
+A file written inside the tree is an untracked file the plan-selection audit then has to explain: it
+matches no rule in `test/plan-selection.json`, and the audit answers "tracked file matched by no rule",
+which turns a reading into a red about the reading. This happened twice in one night -- once as an
+extra failure in a full run, once as a "thirtieth red" that was the log itself. The log is the record
+of the measurement, so it belongs where records live and not where the sources do.

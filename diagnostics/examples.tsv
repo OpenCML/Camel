@@ -140,6 +140,7 @@ SemanticDiag::KnownNotNull	test/cases/compile/tagged/err_plain_left.cml
 SemanticDiag::LambdaParameterWithoutType	test/cases/compile/lambda_inference/no_expected.cml
 SemanticDiag::LiteralNotRepresentable	test/cases/compile/generics/err_literal.cml
 SemanticDiag::LogicalOperandNotBool	test/cases/compile/tagged/err_optional_operand.cml
+SemanticDiag::LoopBodyNeedsNextState	test/cases/compile/stream/generators_loop_body_without_next_state.cml
 SemanticDiag::LoopBodyTypeMismatch	test/cases/compile/static_expansion/static_loop_body_type.cml
 SemanticDiag::LoopConditionNotBool	test/cases/loops/err_condition.cml
 SemanticDiag::LoopNameRepeated	test/cases/compile/static_expansion/static_loop_name_repeated.cml

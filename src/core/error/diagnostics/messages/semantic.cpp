@@ -1773,6 +1773,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::LoopBodyNeedsNextState,
+            {
+                "LoopBodyNeedsNextState",
+                "A loop body ends with the next value of its state, and this one ends without writing one: the round after this one has nowhere to go on from.",
+                "The body of a loop is cut at its yield: the pull that hands an element out stops there, and the pull after it runs the rest of the body and the condition again, so the last statement of the body has to write the loop's next state value. Writing 'yield i' and then 'i + 1' moves the loop on; a body of only 'yield i' reads a fresh i on every pull, so the loop never moves on.",
+            },
+        },
+        {
             SemanticDiag::RuleLeftIsNotAnOperator,
             {
                 "RuleLeftIsNotAnOperator",

@@ -1,0 +1,30 @@
+/**
+ * A `match` arm that binds a name and then `yield`s it. The binding lives in the arm's own graph,
+ * so it cannot outlive the `yield`: the shape is refused today, and the refusal is pinned here so
+ * that whoever builds the shape has to delete this case on purpose.
+ *
+ * The sentence "This is a defect of the compiler, not an error of the program. Please report it
+ * with the program that shows it." must not come back: a refusal is a known limitation, and the
+ * program is not at fault.
+ */
+
+type Option = enum {
+    Some(int),
+    None,
+}
+
+func g(o: Option): int.. sync {
+    match o {
+        case Option::Some(v) => {
+            yield v
+        }
+        case Option::None => {
+            yield 0
+        }
+    }
+}
+
+func main(): int sync {
+    loop acc = 0 for v in g(Option::Some(7)) do sync { println(v); acc + 1 }
+    return 0
+}

@@ -13,16 +13,33 @@ case = "../../../tools/selftest/run.mjs"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["runner self-test ok"]
-# The deciding reading is this self-test's own CPU time, not the wall clock: the runner's margin
-# rule reads the CPU of every test's process tree. Six runs of this case inside the fast
-# layer at -Jobs 8 on 2026-10-24 read 12.41-12.69 s of CPU against 22.0-23.5 s of wall -- a 2.3%
-# spread in the figure that decides, where the wall clock spread 6.5% in the same six runs. The
-# same fixture read 7.22-7.39 s of CPU when its nested tests ran unwrapped; the wrapper that makes
-# the reading is now under every test, its own nested runs included, and that cost is this
-# test's own work. The margin is 45 s, so the bound has more than three times the work in it. 180 s
-# is the liveness bound: a nested run that hangs must not hold the gate, and the wall this test
-# takes on this host (15.8-23.5 s measured inside gates) is the host's.
-timeout_ms = 180000
-# No `parallel = false`: this test starts the runner itself, and it used to be serial because
-# the inner run cleared tmp/test, deleting the outer run's scratch. Every run now owns
-# tmp/test/run-<pid> and removes only that root, so the inner run cannot touch this one.
+# The reading that decides is this self-test's own CPU time, not the wall clock: the runner's
+# timeout rule reads the CPU of every test's process tree. Six runs of this case inside the fast
+# layer at -Jobs 8 on 2026-10-24 read 12.41-12.69 s of CPU -- a 0.28 s spread, 2.3% -- against
+# 22.0-23.5 s of wall, 6.5% in the same six runs. The same fixture read 7.22-7.39 s of CPU when its
+# nested tests ran unwrapped; the wrapper that makes the reading is now under every test, its own
+# nested runs included, and that cost is this test's own work.
+#
+# The bound is stated as the work's upper bound plus a written jitter band, and not as a multiple of
+# the work (author ruling 2026-11-02 16:50: a judgement that moves with the load can be red in one
+# of two adjacent runs, and such a test is neither a red nor a green). The upper bound is 13.0 s --
+# the highest of those six readings, rounded up -- and the band is 0.5 s, twice the 0.28 s spread
+# they showed, so the work would have to reach 13.5 s to be believed, 0.8 s past anything measured
+# here. A multiple of the figure moves with the figure; a bound and a band do not.
+#
+# 180 s is the liveness bound, a different thing: a nested run that hangs must not hold the gate,
+# and the wall this test takes on this host (15.8-23.5 s measured inside gates) is the host's.
+# 400 s, with a stated reason: the margin rule fails a test whose own CPU time exceeds a quarter
+# of its timeout, and this case is load-sensitive because it starts the runner that starts the rest.
+# Readings on the gate host, all at -Jobs 8: 45.8 s, then 61.7 s in a later gate, and 54.5 s alone --
+# the spread is the neighbours, not the work. Four times the highest of those is 247 s, so 400 s is
+# the first bound that the rule cannot trip on a reading this test has already produced. The bound was
+# 180 s when the work cost 12.5 s and nobody re-measured it after the work grew fourfold; why the
+# same fixture now costs four times what it did on 2026-10-24 is a separate question, left open.
+timeout_ms = 400000
+# `parallel = false` (the same ruling): the figure this test is judged by is a sum over its process
+# tree, so it follows how many cores the host hands the neighbours. Alone it is its own work plus
+# the band above. The old reason for keeping it parallel is gone and was never about the reading:
+# the inner run used to clear tmp/test and delete the outer run's scratch, and every run now owns
+# tmp/test/run-<pid> and removes only that root.
+parallel = false
