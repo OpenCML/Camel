@@ -162,6 +162,28 @@ Three zero-hit readings on 2026-11-02 were all the same mistake, and none of the
 
 **A zero is not a reading until the search space has been shown to contain the thing.** State the command, the file or the ref it read, and which tree that ref or file belongs to.
 
+## A wall clock on this host is not a cost, and a phase is not a sum with its children
+
+Two readings taken on 2026-11-02, from one command, wrong in the two ways that make a performance
+number unusable:
+
+- **`--time-phases` scopes nest.** `compile` is the scope around `mainModule->compile(Done)`
+  (`tools/camel-cli/main.cpp`), so `parse prelude`, `gct prelude` and `declare prelude` are reported
+  at depth 1, inside it. A report that added 11.22 ms of prelude phases to a `compile` that had
+  grown by 10.96 ms counted the same work twice and read 22.2 ms where the truth was 11.2. **A
+  child's time is inside its parent's: read `depth` before adding anything up, and sum one depth.**
+- **A wall clock on this host measures the other lanes.** The same command read `imports_nothing`
+  6.00 ms of wall time on one run and 30.12 ms on the next, while the top-level CPU phases of the
+  two runs read 5.60 and 17.09 ms: eight lanes run suites on 32 threads, so a wall clock is the
+  queue and the CPU time is the work. `total_ns` in the phase report is wall; `cpu_ns` per phase is
+  the half that does not move with load. **Compare CPU, quote CPU, and when a wall number has to
+  appear, say what other load the two runs met.**
+
+The pair matters because it fails in opposite directions: the nesting makes a cost look twice as
+large as it is, and the shared host makes it look arbitrary. A performance reading in this tree is
+`cpu_ns` summed over one depth, from two binaries whose `camel --version` lines are quoted beside
+it.
+
 ## A timeout budget is a change like any other
 
 A `timeout_ms` in a plan file is not housekeeping: it decides whether a slow machine reports a red or
