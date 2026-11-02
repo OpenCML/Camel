@@ -1908,3 +1908,17 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 做完这一步，`kGCNodeFlagSyncStatement` 就没有读者了，在同一笔或紧接的一笔里删掉，`builder_helpers.h:668` 打标记的那一行随之删掉。
 
 然后逐个遍改判据，从故障族剩下的 40 条开始（`1c97c4792` 已经让故障族从 177 降到 40）。每一步贴全量读数；两条 `known_fail` 在删完最后一处 ctrl 的那一笔里摘掉。页面挪到 `reviews/` 留档。
+
+## 裁定（2026-11-02 05:10，负责人同意）：残差藏进前一半返回的线性映射里
+
+`split` 的前一半不再交出残差元组，改为交出 `(y, lin)`。`lin` 就是后一半，残差作为它的 `with` 参数绑在里面，切线是它的普通参数，类型 `(..Tangent<ParamsOf<F>>) => Tangent<ResultOf<F>>` 只由 `F` 决定。`transpose(lin)` 对普通参数转置，`with` 参数当已知值。这和库里 `vjp` 今天的体（返回一个捕获 `residuals` 的闭包）以及旧 `grad` 生成闭包，本质上是同一件事，只是把它做成了 `split` 的对外形状。
+- 删掉 `TupleType::isResiduals`、`ResidualsAreNotVisible` 诊断，以及 `transpose` 里"第一个参数是元组就当残差"的猜法；
+- `split_residuals_destructured` 那条用例改写：程序拿不到残差，用例改成断言 `lin` 的方向导数和 `transpose(lin)` 的两个偏导（`x*x*y` 在 (3, 2)：`lin(1, 0) = 12`，`transpose(lin)(1) = (12, 9)`）；
+- `stdlib/vjp.cml` 随之简化成 `let (y, lin) = split(jvp(f))(..xs); (y, transpose(lin))`；
+- 设计稿 4.2 的 `split` 签名照此改写，`Split<F>` 里残差位那个 `_` 删掉。
+
+## 返工（2026-11-02 05:10）：`ne_*` 删了，表和注释里还留着
+
+`0b8345585` 删了 kernel 和注册，可还有两类残留：
+- **死表项**：`src/passes/sched/fastvm/compile.cpp:102-103` 的 `:op/ne_*` 到 `INE`/`LNE`/`FNE`/`DNE` 的映射，`src/passes/trans/cpp/operator_rules.cpp:351,368,385,980` 的 `:op/ne_*` 规则。这些 URI 已经不存在，表项永远查不到，删掉；`!=` 在这些后端走 `==` 加取反的已有规则。
+- **讲历史的注释**："`:op/ne_*` is gone with the `ne_*` kernels"（`modules/onnx/lowering.cpp:1376`）、"`:op/ne_*` arms are gone"（`builtin.cpp:133`），`globals.cpp:211`、`:2039` 也提到已删除的 arm。照"不留指向旧名的记录"的规矩删掉；如果这一处需要解释，写现在的规则（"`!=` 建成 `!(==)`"），不写过去有过什么。
