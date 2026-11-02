@@ -62,3 +62,17 @@ STREAM_TEE {"tee":4,…,"elements":3,"peak":3,…,"hint":64,"cap":64}
 ## 为什么把不变量交给 runner，而不是让用例自己校验
 
 **A**：用例自己校验自己的输出，等于让被测者当裁判。**B**：给 `run-tests.mjs` 加 `expect_stdout_matches`（正则），加的是表达能力，受益的是所有"每条都必须满足 P"的用例，不只这一条。今天先用 `STREAM_TEE {` 与 `"cap":64` 两条字面断言止住红——它仍能抓到"报告没打"和"cap 写错"，**抓不到 `peak <= cap`，那一条等正则落地再补**。
+## 一族两小类，名与判据
+
+- **甲类「测试在测另一个世界」**：期望过期。三个实例：`16` vs `15`（阈值到不了，永不晋升）、`8` vs `15`（没晋升就要求稳定地址）、`hint 2 → peak 20`（poison 下不再出现的交错）。**修法：改期望。**
+- **乙类「两个各自通过的功能第一次同时出现」**：`poison:modules.nn:gru_lite_large_bytecode` 与 `…residual_mlp_large_bytecode`。**"同时出现"只是发现方式**：直跑 `--gc-check poison` 后 stderr 是
+  `[camel] GC poison: a pointer to a Camel object was used after a safepoint moved the object (a raw pointer was kept across a safepoint; see docs/technical/36_gc_handle_rules.md)`
+  ⇒ **FastVM 那条执行路径把裸指针跨过了一个 safepoint**。**修法：改代码。**
+
+**判据：甲类改期望、乙类改代码，混在一起会让人去改期望。**
+
+## 扫描器替我们做组合覆盖，而它从没被跑过
+
+`poison:` 变体不是谁写的，是 `gc_poison_sweep` 从计划条目自动派生出来的（`skip_args_prefix = "--gc-"`，`test/plans/feat/mm/gc_poison_sweep.plan.toml:38`）——**我们有一个机制在替我们做组合覆盖，而这个机制所在的那一层（milestone）从没被跑过。它第一次跑就抓到一个真 bug，而且那个 bug 是 poison 检查自己报的案，不是我们猜出来的。**
+
+**"不是我的线"不等于"没人管"**：把发现交出去时，要把它交到具体人手上——这条报给了协调人，由它派给 `guard`，闭环才成立；写在页里不算交付。
