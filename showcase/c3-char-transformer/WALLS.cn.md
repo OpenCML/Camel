@@ -126,6 +126,8 @@ C [RuntimeDiag::RuntimeError]
 
 ## 墙 8：常量张量没有单一元素类型的写法
 
+**与墙 9 的关系（2026-11-03 查重）**：同族、不同修法，不合并；整模型那一侧见墙 9。
+
 最小程序：`probes/15_mask_in_f32.cml`
 
 ```
@@ -143,6 +145,8 @@ C [RuntimeDiag::RuntimeError]
   `reshape` 收 `bool[]`，或给 `where` 一个标量分枝的重载。
 
 ## 墙 9：模型写不成一个元素类型（挡住 loss 的那一面）
+
+**与墙 8 的关系（2026-11-03 查重）**：同一族（张量的元素类型说不清），但**修法不同** —— 墙 8 要的是"常量张量怎么带元素类型写"，这里是"整个模型的元素类型要一致"⇒ 不合并，只互相参见。
 
 最小程序：`forward.cml`（与 `train.cml` 同一个模型、同一种子，只去掉 `import` 与训练循环）
 
@@ -264,6 +268,8 @@ grow/stage2_residual_ln.cml:45:35: [Error]: No matching function found for argum
 
 ## 墙 10 的更正：不是声明写错，是 `layerNormInfer` 的推断门
 
+**与墙 11 的关系（2026-11-03 查重）**：同一族（`layer_norm`）的**前向**与**梯度**两侧，但**修法不同**（这里是推断门，11 是梯度按输入元素类型写）⇒ 不合并，只互相参见。
+
 我按"声明写错"试过两种改法，**都没有效果**（都实测过，各跑一次 showcase 计划，stage2 的红原样）：
 
 1. 把 `f32` 与 `float` 两个 `layer_norm` 声明**换顺序**（`float` 在前）——`grow/stage2_residual_ln.cml:45:35` 的红不变；
@@ -304,6 +310,8 @@ different element types ('f32' and 'f64'): a tensor operator computes in one ele
 - 没修：这是内核的读写宽度，不是声明；按"只改声明"的界，停在这里报。
 
 ## 墙 11 的处理：`layerNormGrad` 现在按输入的元素类型写
+
+**与墙 10 的关系（2026-11-03 查重）**：同族、不同修法，不合并；前向那一侧的推断门见墙 10 的更正。
 
 改的就是这一句（`modules/tensor/kernels/gradient.cpp`，原来是两处写死）：
 
@@ -558,15 +566,11 @@ argmax **[1, 0]（两行都对）**。
 
 **三个 stage 并排**：stage6（位置）**0.9496** ← stage8（位置 + 因果注意力）**1.2813** ← stage7（位置 + 无 mask 注意力）**1.3871** ← 弃权地板 **1.386294**。
 
+## 墙 13（新）：端口由体加、由调用点填，中间没有一处数个数（norm 侧与 with 侧）
 
-## 墙 13（新）：转置成员的 norm 端口数 > 调用点实参数 ⇒ 运行时内部错误
-
-- **判据**：`transpose` 建出的成员，其 norm 端口数**大于**调用点实参个数时，抛 `Runtime indirect call norm-arity mismatch`（运行期内部错误，不是语言诊断）。
-- **证据**：`transpose_loop_escape.reads_outer` 的读数 `carried=2 captures=2` 与调用点的 `has 1 args`。
-- **现状**：端口在构造时按"体需要的值"加，调用点仍按原形状填；两侧没有一处统一数个数。
-
-## 墙 14（新）：with 端口侧的同一件事
-
-- **判据**：同 13，但发生在 with 端口：成员 with 段比调用点填的多（或少）时，结果不是诊断而是错值或内部错误。
-- **证据**：`grad_of_a_division` 的 with-arity 读数（`transpose_loop_escape` 那一族之外的第一条）。
-- **现状**：与 13 同根 —— 端口由体加、由调用点填，中间没有一处校验，**两条合起来才是一堵墙**。
+- **判据**：成员构造时按"体需要的值"加端口，调用点仍按原形状填；**两侧的个数没有一处对齐校验**，于是
+  norm 侧与 with 侧都以内部故障收场，而不是以一条语言诊断。
+- **证据（norm 侧）**：`transpose_loop_escape.reads_outer` 读数 `carried=2 captures=2` 对调用点 `has 1 args`
+  ⇒ 抛 `Runtime indirect call norm-arity mismatch`（运行期内部错误）。
+- **证据（with 侧）**：`grad_of_a_division` 的 with-arity 读数（该族之外的第一条），结果不是诊断而是错值/内部错误。
+- **现状**：两侧同根，**一堵墙两个面**；只改一面会留下另一面同样的故障。
