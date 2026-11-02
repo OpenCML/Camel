@@ -720,6 +720,15 @@ bool buildTransposeMember(
                     // stood before an answered one (`index_into(xs, i)`: port 0 is the array, and the
                     // list's own position 0 is the `int`).
                     const size_t at = i < paramCount ? i : paramCount;
+                    // Every place below indexes the *parameter*, not the port. `portOfParam`,
+                    // `capturePortOf` and `transposeSignature`'s capture list are all keyed that way --
+                    // the last one through `funcType()->normTypeAt(at)` -- so the ask this walk records
+                    // has to be a parameter index too, or the set the probe reports names places the
+                    // consumer reads as different parameters. The two numbers agree for every graph a
+                    // parameter of which is one norm port, which is the shape this walk assumes; writing
+                    // `at` says which of the two lists the number belongs to, and keeps a port past the
+                    // last parameter (`i >= paramCount`, which has no parameter to name) out of the set
+                    // instead of recording it as one.
                     // A value the body asked for and the caller hands in as a capture port: the
                     // port stands where the parameter stands, so the member reads the value from
                     // it and nothing is asked of the caller's closure.
@@ -736,12 +745,12 @@ bool buildTransposeMember(
                         // caller's to capture, not this graph's to invent.
                         forwardOf[ref] =
                             at < portOfParam.size() ? portOfParam[at] : rt::kInvalidNodeRef;
-                        if (forwardOf[ref] == rt::kInvalidNodeRef &&
-                            std::find(wantedValues.begin(), wantedValues.end(), i) ==
+                        if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount &&
+                            std::find(wantedValues.begin(), wantedValues.end(), at) ==
                                 wantedValues.end()) {
-                            wantedValues.push_back(i);
-                            os << "TRANSPOSE-NEEDS function=" << function->name() << " param=" << i
-                               << '\n';
+                            wantedValues.push_back(at);
+                            os << "TRANSPOSE-NEEDS function=" << function->name()
+                               << " param=" << at << '\n';
                         }
                         return forwardOf[ref];
                     }
@@ -1982,7 +1991,13 @@ bool buildTransposeMember(
                             caught[i].first, component(static_cast<uint32_t>(stateCount + i)));
                     }
                 } else {
-                    result = loopNode;
+                    // One state and nothing escaped: the loop's value is that state's cotangent, and it
+                    // is the transposed function's whole answer -- one cotangent, in the one-slot tuple
+                    // the signature promises, the same shape a branch's answer takes (author,
+                    // 2026-11-02 11:30). Handing the scalar out unwrapped is what took the process down
+                    // when the graph was called: the call site's slot is typed `(float,)` by the
+                    // signature, so a `float` written into it is read as a tuple.
+                    result = tupleOf({loopNode}, {cotangentTypeOf(loopNode, Type::Float64())}).first;
                 }
                 break;
             }
