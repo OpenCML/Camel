@@ -5,6 +5,7 @@
 
 #include "readings.h"
 #include "transpose.h"
+#include <sstream>
 
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
@@ -121,6 +122,72 @@ class TransposeResolver final : public FuncTypeResolver {
     }
 };
 
+/// The half of a refusal that says which cause it was.
+///
+/// `buildTransposeGraph` answers a null graph for every cause and writes the cause into its reading
+/// log as `skip=<word>`; one pointer therefore carried eighteen different causes, and the sentence
+/// raised here could only name two of them at once. The log is read, not judged again: a second
+/// judgement would be the same decision written twice and would drift from the first.
+///
+/// Only the cause is answered -- the prefix `transpose has no transpose for this function` stays
+/// where it was, because it is what a reader greps for and what the plan's assertions pin.
+std::string refusalCause(const std::string &log) {
+    const size_t at = log.rfind("skip=");
+    if (at == std::string::npos) {
+        return "the transform gave no reason";
+    }
+    std::string word = log.substr(at + 5);
+    if (const size_t nl = word.find('\n'); nl != std::string::npos) {
+        word.resize(nl);
+    }
+    const size_t space = word.find(' ');
+    std::string position;
+    if (space != std::string::npos) {
+        const std::string rest = word.substr(space + 1);
+        word.resize(space);
+        if (const size_t p = rest.find("param="); p != std::string::npos) {
+            const size_t end = rest.find(' ', p);
+            const std::string digits =
+                rest.substr(p + 6, end == std::string::npos ? std::string::npos : end - p - 6);
+            try {
+                position = "the parameter at position " + std::to_string(std::stoul(digits) + 1);
+            } catch (...) {
+                position = "a parameter";
+            }
+        }
+    }
+    if (word == "cotangent-needs-a-value") {
+        return position.empty() ? "a parameter holds no cotangent: nothing uses its value"
+                                : position + " holds no cotangent: nothing uses its value";
+    }
+    if (word == "unread-parameter") {
+        return position.empty() ? "a parameter is never read by the body, so it answers no cotangent"
+                                : position + " is never read by the body, so it answers no cotangent";
+    }
+    if (word == "needs-a-value-outside-the-closure") {
+        return "the member reads a value that the transposed function does not carry in its closure, "
+               "so there is nothing to capture for it";
+    }
+    if (word == "state") {
+        return "a loop carries its state out of itself, and that shape has no transpose";
+    }
+    if (word == "call") {
+        return "this call's callee has no transpose of its own, so the call cannot be turned around";
+    }
+    if (word == "rule") {
+        return "the rule table has no rule for a step of this body";
+    }
+    if (word == "condition") {
+        return "a bool condition has no cotangent space, so it carries no derivative";
+    }
+    if (word == "signature" || word == "exit") {
+        return "the graph's shape disagrees with the signature the call was written against";
+    }
+    // TODO: no program in this tree reaches the words below yet, so each keeps a plain sentence
+    // naming the shape; when one becomes reachable, replace it with the cause it stands for.
+    return "the shape this program used has no transpose (the transform named it `" + word + "`)";
+}
+
 /// transpose(f) at run time: the new graph, as a function value. Nothing of `f` is changed, and the
 /// value keeps `f`'s closure.
 slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -129,11 +196,17 @@ slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (function == nullptr || function->graph() == nullptr) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "transforms: transpose needs a function value");
     }
+    // The reading log is both the diagnostic text a reader sees and what the plan's cases assert, so
+    // it is captured and then forwarded: a tee, not a replacement. Capturing it is also the only way
+    // to know which of the causes the build named -- the graph pointer is null either way.
+    std::ostringstream why;
     const TransposeGraph built = buildTransposeGraph(
-        ctx.shared_from_this(), function->program(), function->graph(), readings());
+        ctx.shared_from_this(), function->program(), function->graph(), why);
+    readings() << why.str();
     if (built.graph == nullptr) {
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError, "transforms: transpose has no transpose for this function");
+            RuntimeDiag::RuntimeError,
+            "transforms: transpose has no transpose for this function: " + refusalCause(why.str()));
     }
     const std::string spelled = TransposeResolver{}.signature();
     const auto resolved = TransposeResolver{}.resolve({}, type_vec_t{function->graph()->funcType()});
