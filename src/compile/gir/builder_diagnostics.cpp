@@ -1197,8 +1197,9 @@ void Builder::markNonRetainingReads() {
         // A synced read names the graph it was made in, and that graph is handed over when its body
         // is complete and released with its builder: `nodeTransactionOf` would then assert that the
         // read has an owner (builder_support.h, `nodeGraphOf`). Nothing is left to mark in a graph
-        // that is gone, so such a read is skipped instead.
-        auto *owner = DraftGraphBuilder::fromDraft(nodeDraftOf(read));
+        // that is gone, so such a read is skipped instead -- and it is skipped for the graph the
+        // read was made in, not for whichever graph the allocator put at its address since.
+        auto *owner = DraftGraphBuilder::fromRef(read);
         if (owner == nullptr) {
             continue;
         }
