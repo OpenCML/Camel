@@ -199,3 +199,14 @@ Ask whether a thing is there and the answer is a boolean; ask how many lines car
 A probe log that records only `[FAIL] <name> <ms>` can count failures and cannot group them: the first diagnostic line is what turns forty reds into one root cause or ten. Print that line, and print it even when jobs run in parallel.
 
 - 主检出 `D:\Projects\Camel` 只用来 `pull --ff-only`；所有编辑都用工作树内的相对路径，或 `D:\Projects\Camel-wt\<lane>\...` 的绝对路径。写完用 `git -C <树> status --porcelain` 自检，不要用 `git status`（它按进程 CWD 解析，会看到另一棵树）。
+
+## 改名与抽谓词这类重构，判据是逐用例比，不是总数不变
+
+两棵总数相同的树，可以是一条转绿一条转红互相抵消。把上一跑的失败用例名单和这一跑逐条比：
+`0 条转绿、0 条转红` 才叫中性。这一条是 2026-11-02 夜里做出来的：`8508/4735/3758` →
+`8512/4738/3759` 多出的 4 个是 develop 新用例，逐用例比 0/0，唯一的新红 `gpu_preference.named_device`
+是那条 CUDA 探针随卡可见性翻，不是这次改的。
+
+顺带记在这条旁边，因为它是同一件事的反面：`gpu_preference.named_device` 与
+`gpu_scope.placement_with_a_device` 这种 `skip_unless` 一首卡就翻的用例，
+**今天分辨不了"实现对不对"，只分辨"有没有卡"** —— 用例先坏在仪器上，判据跟着坏。待办，不是本轮修。
