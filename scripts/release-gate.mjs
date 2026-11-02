@@ -113,6 +113,10 @@ const STATIC_CHECKS = [
     { name: 'stdlib reference: docs/stdlib-reference.md is up to date', args: ['scripts/stdlib-reference.mjs', '--verify-doc'] },
     { name: 'diagnostics registry: the declarations and the generated code tables agree', args: ['scripts/diagnostics-catalog.mjs', '--check'] },
     { name: 'document links: no broken relative link', args: ['scripts/check-doc-links.mjs', '--all'] },
+    // A page the reviewer has already answered belongs in reviews/, and a copy left in questions/
+    // reads as a question nobody is working on. The author's rule of 2026-11-03 is why this is a
+    // gate check and not a habit: the answer is decided by reviews/, never by what is left behind.
+    { name: 'pending questions: no page already answered in reviews', args: ['scripts/check-doc-links.mjs', '--questions-index'] },
     { name: 'document snippets: Camel fences compile and print what the page says', args: ['scripts/check-doc-snippets.mjs'], camel: true },
     { name: 'stdlib declarations: a migrated module stays migrated', args: ['scripts/stdlib-declarations.mjs', '--check'], camel: true },
     // The conformance matrix: every program in test/conformance/cases.json is compared with the
