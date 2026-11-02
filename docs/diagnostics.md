@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-307 diagnostics: 286 errors, 21 warnings. 15 carry a machine-applicable edit, 292 say why they carry none.
+306 diagnostics: 285 errors, 21 warnings. 15 carry a machine-applicable edit, 291 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -43,7 +43,6 @@ prints one entry.
 | `0x02000010` | [SyntaxDiag::WhenAfterBody](#whenafterbody) | Error | yes |
 | `0x02000011` | [SyntaxDiag::AsRightSideIsType](#asrightsideistype) | Error | no |
 | `0x02000012` | [SyntaxDiag::LambdaParametersNeedParentheses](#lambdaparametersneedparentheses) | Error | yes |
-| `0x02000013` | [SyntaxDiag::RangeRightIsLink](#rangerightislink) | Error | no |
 | `0x02000014` | [SyntaxDiag::FuncTypeNeedsNames](#functypeneedsnames) | Error | no |
 | `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn | no |
 | `0x03000000` | [SemanticDiag::StaticHeadNameCount](#staticheadnamecount) | Error | no |
@@ -1110,38 +1109,6 @@ func main(): int sync {
     let written: (x: int) => int = x => ident(ident(x))
     println(composed(3))
     return written(3)
-}
-```
-
-### RangeRightIsLink
-
-`0x02000013` · Error · `SyntaxDiag::RangeRightIsLink`
-
-**Fix**
-
-None: choice: whether '..' should bind tighter than '->' is the language's to decide; the program adds the parentheses, and the refusal says so
-
-**Message**
-
-```text
-The right side of '..' is a '->' call: '..' binds looser than '->', so the call lands on the last value rather than on the interval.
-```
-
-**Help**
-
-```text
-The interval is an expression, and the call is written after it in parentheses: (a..b)->reduce(f). Written without them, a..b->reduce(f) is a..(b->reduce(f)), which asks the last value of the interval to be reduced. The precedence is the language's, so the parentheses are the program's to add.
-```
-
-**Example** (`test/cases/parse/rulings/range_right_is_link.cml`, run as `camel test/cases/parse/rulings/range_right_is_link.cml`)
-
-```camel
-// The interval is one expression, and a call after it belongs to the interval only in parentheses:
-// `->` binds tighter than `..`, so `a..b->f` is `a..(b->f)`. The refusal names the precedence.
-
-func main(): int sync {
-    let n = (-2)..(-1)->reduce<(p: string, q: int): string => p, "cd">
-    return 0
 }
 ```
 

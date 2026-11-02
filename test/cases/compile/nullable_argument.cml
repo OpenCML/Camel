@@ -1,0 +1,55 @@
+/**
+ * A `T` enters a `T?` formal parameter as it enters every other position (design principles 3.8):
+ * the entering happens where the value meets the position, and an argument is the first position
+ * named. An argument that reads a variable is linked from the read taken where the argument is
+ * written, because an argument after it may write that variable (design principles 3.3, the `uses`
+ * of `f(c, g(c))`); the conversion into the parameter's type belongs on that read.
+ *
+ * Defect A3: the conversion was put on the argument node the call does not link, so the graph the
+ * front end built passed a `string`/`bool`/`int` where the parameter takes a `string?`/`bool?`/
+ * `int?`, and the compiler refused its own graph as breaking its edge invariants. It showed only
+ * when a `var` argument came before an argument computed at the call (a call, a binary operator, a
+ * branch), and `var` alone or a later leaf argument hid it.
+ */
+
+func takes_str(a: string?, b: string): string sync {
+    println(a ?? '<null>', b);
+    return b;
+}
+
+func takes_bool(a: bool?, b: bool): bool sync {
+    println(a ?? false, b);
+    return b;
+}
+
+func takes_int(a: int?, b: int): int sync {
+    println(a ?? -1, b);
+    return b;
+}
+
+func bump(var c: int): int sync {
+    c = c + 1;
+    return c;
+}
+
+func two(): string sync {
+    return 'w';
+}
+
+func main(): int sync {
+    // The `var` read stands before an argument that is a call, a branch and an operator.
+    var s = 'v';
+    takes_str(s, two());
+    takes_str(s, if true then 'x' else 'y');
+    var b = false;
+    takes_bool(b, 3 > 0);
+    // The early read is still taken before the later argument writes the variable: `1` is `n`
+    // as the first argument was written, and `2` is what `bump` left in it.
+    var n = 1;
+    takes_int(n, bump(n));
+    println('n after', n);
+    // A variable whose declared type already is `T?` passes as it is.
+    var t: string? = 'q';
+    takes_str(t, 'lit');
+    return 0;
+}

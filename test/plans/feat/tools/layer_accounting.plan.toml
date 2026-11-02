@@ -1,0 +1,15 @@
+id = "feat.tools.layer_accounting"
+tier = "fast"
+desc = "A tier run prints what the layer declares and what it starts; an entry that is declared and started by nothing is a defect rather than a plan that proves nothing"
+
+[[tests]]
+name = "runner.tier_declared_against_started"
+desc = "`[tier] <layer>: N plan file(s), D declared test entries, S started` is printed for every tier run and both numbers are counted; `declared` above `started` names the plan and is red, while `declared` below it (a named plan runs entries of another layer in full, `backends` expands an entry) is the feature and stays green. The milestone reading this exists for is 3330 declared / 3404 started, which nobody had printed side by side."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/tier_accounting.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 180000

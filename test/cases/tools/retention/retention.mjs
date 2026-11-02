@@ -68,6 +68,9 @@ const RUN_DIR_COUNT = 5
 // The names, with the placeholder that carries the pid each one is planted for.
 const RUN_DIR_NAMES = {
     dead: Array.from({ length: RUN_DIR_COUNT }, (_, index) => `20260101_00000${index + 1}_${DEAD_PID}`),
+    // The oldest of the dead runs, and the one whose summary.json records a failure: age alone
+    // would remove it, and the policy must keep it.
+    failed: `20260101_000001_${DEAD_PID}`,
     live: `20200101_000000_${LIVE_PID}`,
     foreign: 'a-directory-a-person-made',
 }
@@ -97,12 +100,22 @@ function names(dir) {
     }
 }
 
-/** One planted run directory, with its payload and the mtime that decides its place in the order. */
-function plantRunDir(logRoot, name, modifiedMs) {
+/**
+ * One planted run directory, with its payload and the mtime that decides its place in the order.
+ * `failed` plants the summary.json of a run that recorded a red test, which is the marker the
+ * policy keeps whatever the age says.
+ */
+function plantRunDir(logRoot, name, modifiedMs, failed = false) {
     const statusDir = path.join(logRoot, name, 'pass', 'planted.plan', 'planted.test')
     fs.mkdirSync(statusDir, { recursive: true })
     fs.writeFileSync(path.join(statusDir, 'stdout.txt'), 'p'.repeat(1024))
     fs.writeFileSync(path.join(statusDir, 'meta.json'), 'm'.repeat(512))
+    if (failed) {
+        fs.writeFileSync(
+            path.join(logRoot, name, 'summary.json'),
+            JSON.stringify({ summary: { pass: 0, fail: 1, skip: 0, xfail: 0 } }),
+        )
+    }
     const when = new Date(modifiedMs)
     fs.utimesSync(path.join(logRoot, name), when, when)
 }
@@ -132,7 +145,11 @@ function buildFixture(root) {
         [RUN_DIR_NAMES.live, 1],
         ...RUN_DIR_NAMES.dead.map((name, index) => [name, 2 + index]),
     ]
-    for (const [name, minutes] of placed) plantRunDir(logRoot, name, BASE_MS + minutes * MINUTE_MS)
+    for (const [name, minutes] of placed) {
+        // The oldest run is the one that recorded a failure: the bound would remove it for its age,
+        // and the policy keeps it instead.
+        plantRunDir(logRoot, name, BASE_MS + minutes * MINUTE_MS, name === RUN_DIR_NAMES.failed)
+    }
     const now = Date.now()
     plantScratchRoot(scratchRoot, SCRATCH_ROOT_NAMES.stale, now - 3 * HOUR_MS)
     plantScratchRoot(scratchRoot, SCRATCH_ROOT_NAMES.live, now - 3 * HOUR_MS)
@@ -168,8 +185,15 @@ function policyMode() {
     const pruned = buildFixture(path.join(SCRATCH, 'policy-pruned'))
     const control = buildFixture(path.join(SCRATCH, 'policy-control'))
     const dead = RUN_DIR_NAMES.dead
-    const removedExpected = dead.slice(0, RUN_DIR_COUNT - 2)
-    const keptExpected = [...dead.slice(-2), RUN_DIR_NAMES.live, RUN_DIR_NAMES.foreign]
+    // The oldest dead run recorded a failure and the policy keeps it, so the two that go are the
+    // oldest of the rest.
+    const removedExpected = dead.slice(1, RUN_DIR_COUNT - 2)
+    const keptExpected = [
+        RUN_DIR_NAMES.failed,
+        ...dead.slice(-2),
+        RUN_DIR_NAMES.live,
+        RUN_DIR_NAMES.foreign,
+    ]
 
     check(processAlive(DEAD_PID) === false, `a pid past either host's range must read as gone (${DEAD_PID})`)
     check(processAlive(LIVE_PID) === true, 'this process must read as alive')
@@ -195,6 +219,18 @@ function policyMode() {
         `removed ${report.run_dirs.removed_names.join(', ') || 'nothing'}, expected only ${removedExpected.join(', ')}`
     )
     check(report.run_dirs.live === 1, `the live run's directory must be kept for its pid, not its age (live ${report.run_dirs.live})`)
+    // The marker beats the age: the oldest run here recorded a failure, and its whole output is
+    // what a reader needs the morning after.
+    check(
+        report.run_dirs.failed === 1 && fs.existsSync(path.join(pruned.logRoot, RUN_DIR_NAMES.failed)),
+        `a run directory that recorded a failure must be kept whatever its age (failed ${report.run_dirs.failed})`,
+    )
+    check(
+        fs.existsSync(
+            path.join(pruned.logRoot, RUN_DIR_NAMES.failed, 'pass', 'planted.plan', 'planted.test', 'stdout.txt'),
+        ),
+        'the kept failing run must still hold the test output that was planted in it',
+    )
     check(report.run_dirs.foreign === 1, `a directory the runner never wrote must be counted, not removed (foreign ${report.run_dirs.foreign})`)
     check(
         report.run_dirs.entries_removed === removedExpected.length * PLANTED_ENTRIES

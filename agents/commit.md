@@ -17,3 +17,7 @@
 - Before writing the commit message, explicitly identify the common purpose that explains every staged file.
 - If two staged areas need different commit subjects to be described honestly, split them into separate commits.
 - When staged changes clearly span multiple concerns, split them into multiple commits instead of writing a single broad summary.
+
+## Citations In Messages And Documents
+- A message or page that points at code cites a **symbol**, not a line: `modules/graph/module.cpp#neKernel`, never the same path followed by a line number. The `docs.links.citations` check refuses the line form, and it is right to: a line number is a reading of one tree, and the next commit that touches the file makes it false.
+- A line number belongs only in a sentence that quotes a measurement whose instrument counts lines, and that sentence has to say which tree it was measured on.

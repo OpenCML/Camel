@@ -297,7 +297,6 @@ SyntaxDiag::MissingComma	test/cases/compile/lambda_inference/func_type.cml
 SyntaxDiag::MissingInitializer	test/cases/parse/syntax/missing_initializer.cml
 SyntaxDiag::MissingThen	test/cases/parse/syntax/missing_then.cml
 SyntaxDiag::MissingToken	test/cases/compile/fstring/lambda_spec.cml
-SyntaxDiag::RangeRightIsLink	test/cases/parse/rulings/range_right_is_link.cml
 SyntaxDiag::UnexpectedEndOfFile	test/cases/compile/fstring/bad_expr.cml
 SyntaxDiag::UnexpectedToken	test/cases/compile/array_shape/err_const_shape.cml
 SyntaxDiag::UnmatchedClosingDelimiter	test/cases/parse/syntax/unmatched_closing_delimiter.cml

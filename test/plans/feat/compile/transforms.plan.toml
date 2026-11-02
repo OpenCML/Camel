@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 [[tests]]
-name = "reinterp_builds_its_own_graph.nvm"
+name = "reinterp_builds_its_own_graph"
 desc = "The first form of `reinterp` does two things and says them. It prints the other key the index holds, one line per operator: the left side of a rule is written `a + b` and a node names its operator by URI, so the instance records the URI its left side is written with, and the reading is `URI -> rule -> the GraphId of its right side` (`:op/div_d -> rule jvp_div -> rhs N`). Then it walks every function of the program that is made of operators -- for `f(x) = x*x + 3/x` that is `f`, with three primitives and two constants -- and builds a graph of the transform's own for each, printing its GraphId and node count. It is not a transform yet: the graph it builds is a single port handed to the output, and the reading says exactly that, so the next step has a number to grow from instead of a claim to believe."
 kind = "behavior"
 case = "../../../cases/compile/transforms/reinterp_scalar.cml"
@@ -15,7 +15,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
-name = "jvp_is_a_function_value.nvm"
+name = "jvp_is_a_function_value"
 desc = "`reinterp<jvp>(f)` is the operator `jvp(f)`, and it produces a new function (the author's ruling a824031aa), not a rewritten graph: the call builds a graph of the transform's own and answers with a function value naming it. The lifted signature is `(float, float) => (float, float)` -- the ordinary parameter becomes a value and its tangent, and the result is the pair -- so `jvp(f)(2.0, 1.0)` passes two numbers and reads back `(value, tangent)`. Both halves are computed by the new graph: for `f(x) = x*x + 3/x` at 2 the chain gives `f(2) = 5.5`, and the forward rules along it give `f'(2) = 3.25` (2x - 3/x^2, seeded with the 1.0 the caller passed). The rules are the ruleset's: the reading says `source=ruleset` and names what it applied (`jvp_mul`, `jvp_div`, `jvp_add`), because the transform reads `stdlib/rulesets/jvp.cml`'s index at the moment it builds -- there is no second table of laws in C++. A primitive with no rule there is refused by name (`skip=rule uri=...`), never answered with 0 or 1. The operator's own line, `REINTERP jvp op ...`, prints the spelling a declaration writes, the type the call resolved to, the lifted half, and the type of the graph the call answered with: the two have to be one string, and they are. The build also says what it made -- `REINTERP jvp built graph=56 nodes=12 exit=11 regions=0 function=f` -- the member the lift reserved, the nodes and regions the draft holds before it is encoded, and the node the graph exits at. The lift is the run-time kernel's, on every shape: there is one implementation of the transform and the call reaches it as a call."
 kind = "behavior"
 case = "../../../cases/compile/transforms/jvp_lifted.cml"
@@ -330,7 +330,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
-name = "transpose_runs_the_data_flow_backwards.nvm"
+name = "transpose_runs_the_data_flow_backwards"
 desc = "`transpose(f)` is the pullback of a linear function's graph, built the way `jvp` builds the forward one: a new function value naming a graph of the transform's own, with `f` untouched. The walk runs the graph backwards -- a value used k times receives k cotangents that add -- and each primitive is replaced by the rule the `rulesets.transpose` family files under its operator, asked of the index by `transposeRuleOf` rather than matched against the uri in C++. For `f(x) = 2*x + 3*x` the parameter is used twice, so the cotangent 1.0 pulls back to 2 + 3 = 5; for `f(x) = (x*2 + x*3) * 4` the outer 4 reaches the sum before it splits, so the answer is 4*2 + 4*3 = 20. A primitive whose other operand is not a constant needs that operand's forward value, which is a residual this step does not have: it is refused by name, never answered with a wrong cotangent."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_straight_line.cml"
@@ -375,7 +375,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
-name = "transpose_walks_each_arm_of_a_branch.nvm"
+name = "transpose_walks_each_arm_of_a_branch"
 desc = "`transpose` of a function with a branch: each arm is a linear chain of its own, the cotangent runs backwards inside the arm that produced the value, and the condition is read as it was -- the same predicate, at the values the caller passed -- choosing the other arm. The transposed function therefore takes the parameters of `f` first and the cotangent last, which is the one shape for every function: `transpose(f)(x, 1.0)`. For `pick(x)` returning `2*x` when `x > 0` and `3*x` otherwise, the cotangent 1.0 pulls back to 2 at a positive x and 3 at a negative one. `merged(x)` uses its parameter twice on one side only (`2*x + 5*x`, else `4*x`), so the two sides answer 7 and 4: within an arm two cotangents add, while the two arms' cotangents are joined rather than added, because only the arm that ran contributed one. The reading names the arms it built (`arms=2`), the rules it applied, and the type the resolver and the graph agree on."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_branch.cml"
@@ -388,7 +388,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
-name = "transpose_runs_a_loop_rounds_backwards.nvm"
+name = "transpose_runs_a_loop_rounds_backwards"
 desc = "`transpose` of a loop whose body only uses constants: the rounds run in the other direction, and a constant multiplier is the same multiplier whatever order it arrives in, so a loop of the same number of rounds with each rule replaced by its transpose is the pullback. The round count is the loop's own -- the two bounds of the interval are copied with the loop, and nothing in the case says three -- which the four-round loop in the same file settles: it answers 16 where the three-round one answers 8. For `thrice(x) = loop s = x for i in 0..3 do s * 2.0` the value at x = 1 is 2*2*2 = 8 and the pullback of 1.0 is 8 too; a pullback is linear in its cotangent, so 2.0 at x = 1 pulls back to 16, and that is the same graph read twice. A body that needed the round's own state would be refused by name (`skip=state` with the origin), never answered with a cotangent from nowhere."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_loop.cml"
@@ -616,7 +616,7 @@ expect_output_not_contains = ["skip="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 [[tests]]
-name = "transpose_transposes_the_callee_and_calls_it.nvm"
+name = "transpose_transposes_the_callee_and_calls_it"
 desc = "A call is a graph of its own, so transposing one means transposing that graph: the callee's transpose is built once beside the caller's (one graph per callee, the rule \`jvp\` reads for a lifted function, so two calls of one function call one graph), and the call site passes the arguments it already has and then the cotangent. `g(x) = 2.0*x` called twice and added gives 4 at x = 1, and a pullback through two calls is the sum of the two pullbacks, 2 + 2 = 4 at cotangent 1. The reading is the callee's own TRANSPOSE line followed by the caller's, which is the footprint of one transpose per callee rather than one per call."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_call.cml"
@@ -741,7 +741,7 @@ timeout_ms = 20000
 # The two walls between here and the array arm of grad, pinned as refusals rather than known_fail: a wall
 # that falls must turn its assertion into a number, and known_fail would hide that.
 [[tests]]
-name = "grad_array_no_int.fvm"
+name = "grad_array_no_int"
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_no_int.cml"
 args = ["${case}", "${backend}"]
@@ -749,8 +749,6 @@ backends = ["fvm"]
 expect_exit = 0
 expect_stdout_contains = ["6.0", "[2.0, 3.0]"]
 timeout_ms = 15000
-known_fail = ["fvm"]
-known_fail_note = "Owner: lane-m4b, whose answersOf work landed the element read's transpose arm. Two element reads beside a mul give five residuals, and under std::fvm this case is not refused any more and does not finish either: the process is killed at the timeout with exit null, while the same program under std::nvm prints the forward value and no cotangent. Both belong to the same member -- the answer tuple whose first slot reaches no line of stdout -- and the runner reports a marked case that passes as a failure, which is what asks for the mark's removal."
 
 [[tests]]
 name = "grad_array_with_int.fvm"
@@ -791,7 +789,7 @@ timeout_ms = 15000
 # and answers no cotangent at all. The five shapes here differ only in how the array is used, and each
 # stops at the same line -- so the wall is the law, not the shape. When the arm exists, these flip.
 [[tests]]
-name = "grad_of_an_array_parameter.nvm"
+name = "grad_of_an_array_parameter"
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_of_an_array_parameter.cml"
 args = ["${case}", "${backend}"]
@@ -806,15 +804,13 @@ timeout_ms = 30000
 # the answer the transform owes -- `[2.0, 3.0]` -- and not today's refusal, so the mark is the only
 # thing standing between the plan and a red, and the runner reports a marked case that passes as a
 # failure: that report is what asks for the mark's removal.
-known_fail = ["nvm"]
-known_fail_note = "Owner: the value chain that lane-lit2 carries. The array element read's transpose arm is missing -- the transform answers `skip=law rule=idx_arr_t uri=:op/idx_arr` and `transpose has no transpose`, so the pullback never reaches `[2.0, 3.0]`. Reason for the mark rather than a pinned refusal: the pinned form asserts today's wrong answer as correct, and the plan's own header already says what that costs. When the arm lands, remove the mark in the same commit."
 
 # one element: xs[0] over [3.0]. The cotangent of a function of an array should come back as an array, but the transpose
 # stops at the law the rule library declares for the element read (`idx_arr_t`, stdlib/rulesets/transpose.cml)
 # and answers no cotangent at all. The five shapes here differ only in how the array is used, and each
 # stops at the same line -- so the wall is the law, not the shape. When the arm exists, these flip.
 [[tests]]
-name = "grad_array_one_element.nvm"
+name = "grad_array_one_element"
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_one_element.cml"
 args = ["${case}", "${backend}"]
@@ -829,7 +825,7 @@ timeout_ms = 30000
 # and answers no cotangent at all. The five shapes here differ only in how the array is used, and each
 # stops at the same line -- so the wall is the law, not the shape. When the arm exists, these flip.
 [[tests]]
-name = "grad_array_two_elements_first.nvm"
+name = "grad_array_two_elements_first"
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_two_elements_first.cml"
 args = ["${case}", "${backend}"]
@@ -844,34 +840,30 @@ timeout_ms = 30000
 # and answers no cotangent at all. The five shapes here differ only in how the array is used, and each
 # stops at the same line -- so the wall is the law, not the shape. When the arm exists, these flip.
 [[tests]]
-name = "grad_array_sum.nvm"
+name = "grad_array_sum"
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_sum.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-expect_exit = 1
-expect_stdout_contains = ["skip=law rule=idx_arr_t uri=:op/idx_arr", "transpose has no transpose"]
+expect_exit = 0
+expect_stdout_contains = ["5.0", "[1.0, 1.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
-known_fail = ["nvm"]
-known_fail_note = "Owner: lane-m4b, whose answersOf work landed the element read's transpose arm. With two residuals the pullback answers the array and the case reads it; with five residuals (two element reads beside an add or a mul) the pullback answers a tuple and the first member reaches no line of stdout -- the program prints the forward value and nothing else, exit 0. So the case is not refused and not passing either: the cotangent is computed and does not arrive. The runner reports a marked case that passes as a failure, which is what asks for the mark's removal once the tuple's first slot prints."
 
 # the product: xs[0] * xs[1] over [3.0, 2.0]. The cotangent of a function of an array should come back as an array, but the transpose
 # stops at the law the rule library declares for the element read (`idx_arr_t`, stdlib/rulesets/transpose.cml)
 # and answers no cotangent at all. The five shapes here differ only in how the array is used, and each
 # stops at the same line -- so the wall is the law, not the shape. When the arm exists, these flip.
 [[tests]]
-name = "grad_array_product.nvm"
+name = "grad_array_product"
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_product.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-expect_exit = 1
-expect_stdout_contains = ["skip=law rule=idx_arr_t uri=:op/idx_arr", "transpose has no transpose"]
+expect_exit = 0
+expect_stdout_contains = ["6.0", "[2.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
-known_fail = ["nvm"]
-known_fail_note = "Owner: lane-m4b, whose answersOf work landed the element read's transpose arm. With two residuals the pullback answers the array and the case reads it; with five residuals (two element reads beside an add or a mul) the pullback answers a tuple and the first member reaches no line of stdout -- the program prints the forward value and nothing else, exit 0. So the case is not refused and not passing either: the cotangent is computed and does not arrive. The runner reports a marked case that passes as a failure, which is what asks for the mark's removal once the tuple's first slot prints."
 
 [[tests]]
 name = "grad_of_a_division"
