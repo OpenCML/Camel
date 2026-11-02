@@ -93,6 +93,7 @@ GenerationalAllocatorWithGC::DebugConfig debugConfig() {
     config.stressCollection        = collectionKindOf(selectedChecks.stress);
     config.logMovements            = selectedChecks.logMoves;
     config.poisonAtSafepoints      = selectedChecks.poison;
+    config.checkMarks              = selectedChecks.markCheck;
     config.verifyBeforeGC          = selectedChecks.verifyBefore;
     config.verifyAfterGC           = selectedChecks.verifyAfter;
     return config;
@@ -124,7 +125,8 @@ void maybePrintDebugConfig(
               << " stressSafepoint=" << config.stressEveryNSafepoints
               << " stressMode=" << collectionKindName(config.stressCollection)
               << " logMoves=" << (config.logMovements ? "true" : "false")
-              << " poison=" << (config.poisonAtSafepoints ? "true" : "false") << '\n';
+              << " poison=" << (config.poisonAtSafepoints ? "true" : "false")
+              << " mark=" << (config.checkMarks ? "true" : "false") << '\n';
 }
 
 } // namespace

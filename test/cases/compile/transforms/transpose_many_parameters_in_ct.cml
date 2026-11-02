@@ -7,15 +7,16 @@
 // One seed would agree with a pullback that forgot the cotangent and answered the derivatives
 // themselves only because the derivative is what ct = 1 asks for; the pair does not.
 import rulesets.transpose
-import { transpose } from transforms
+import { jvp, split, transpose } from transforms
 import { mul_tangent } from autodiff
 
 func mt(x: float, w: float, dx: float, dw: float): float {
     return mul_tangent(x, w, dx, dw)
 }
-
+import rulesets.jvp
 func main(): int sync {
-    println(transpose(mt)(3.0, 2.0, 1.0, 0.0, 1.0))
-    println(transpose(mt)(3.0, 2.0, 1.0, 0.0, 2.0))
+    let lin = (dx: float, dw: float) => mt(3.0, 2.0, dx, dw)
+    println(transpose(lin)(1.0))
+    println(transpose(lin)(2.0))
     return 0
 }

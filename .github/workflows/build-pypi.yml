@@ -1,9 +1,14 @@
 # Multi-platform native build + camel-lang wheels.
 #
-# Two wheels come out of one native build, per platform (5.37 item 7):
-#   camel_lang-<ver>-<cp3XX>-<cp3XX>-<platform>.whl   body + the Python interop extension
-#   camel_lang-<ver>-py3-none-<platform>.whl          body only; installs on any Python 3
-# The interpreter cannot reach the binaries, so the Python version does not multiply the build.
+# Two wheels come out of one native build, per platform (5.37 item 7, carried out 2026-11-02 as
+# the abi3 ruling; docs/handover/README.cn.md item 7, review index C28):
+#   camel_lang-<ver>-cp310-abi3-<platform>.whl   body + the Python interop extension, every
+#                                                CPython 3.10 and later
+#   camel_lang-<ver>-py3-none-<platform>.whl     body only; installs on any Python 3
+# The interpreter cannot reach the binaries, so the Python version does not multiply the build --
+# and the extension is compiled against the stable ABI (`Py_LIMITED_API=0x030A0000`,
+# `Python3_add_library(... USE_SABI 3.10)`), so one interop wheel covers every version from 3.10
+# on. `scripts/check_wheel_tags.py --ruling` fails a job whose two wheels are not those two forms.
 #
 # Runners (edit matrix.cfg if labels change): https://github.com/actions/runner-images
 #
@@ -102,9 +107,10 @@ jobs:
       # the interpreter this job builds for comes from the distribution: python3.11-devel
       # (AlmaLinux 8 AppStream) provides /usr/bin/python3.11 and /usr/lib64/libpython3.11.so.
       # There is no python3.10 package at all here ("dnf list --available 'python3.10*'" ->
-      # "Error: No matching Packages to list"), which is why the Linux interop wheel is cp311 and
-      # not cp310; docs/pypi-packaging.md 7.1 records the reading and what the stable-ABI route
-      # would still need.
+      # "Error: No matching Packages to list"). That used to pin the Linux interop wheel to
+      # `cp311`; since the extension is built against the stable ABI it no longer does -- the
+      # wheel is `cp310-abi3` and this interpreter only decides which libpython the *embedding*
+      # module links. docs/pypi-packaging.md 7.1 records the reading.
       CAMEL_TARGET_ARCH: ${{ matrix.cfg.target_arch }}
       CAMEL_PYPI_PYTHON: /usr/bin/python3.11
 
@@ -218,9 +224,11 @@ jobs:
           ls -la wheelhouse/
 
       - name: Refuse an unpublishable tag (5.37 item 1)
-        # In the build step, so a wrong tag fails here and not at the index.
+        # In the build step, so a wrong tag fails here and not at the index. `--ruling` adds the
+        # abi3 half: the two wheels of this platform have to be `cp310-abi3` (with the extension)
+        # and `py3-none` (without), and both have to be present.
         run: |
-          python3 scripts/check_wheel_tags.py \
+          python3 scripts/check_wheel_tags.py --ruling \
             --expect "${{ matrix.cfg.platform_tag }}" wheelhouse/*.whl
 
       - name: Upload wheel artifact
@@ -402,7 +410,7 @@ jobs:
 
       - name: Refuse an unpublishable tag (5.37 item 1)
         run: |
-          python scripts/check_wheel_tags.py \
+          python scripts/check_wheel_tags.py --ruling \
             --expect "${{ matrix.cfg.platform_tag }}" wheelhouse/*.whl
 
       - name: Smoke-install the wheels (clean venv)
@@ -451,9 +459,12 @@ jobs:
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------------------
-  # 5.37 item 4: the Linux wheels are smoke-tested where the user is -- two containers, each
-  # installed from the wheel alone. On the runner (not in the build container) because that is
-  # where Docker is.
+  # The smoke matrix of the abi3 ruling: three interpreters per platform -- the stable ABI
+  # floor (3.10), the current newest (the interop wheel has to work there, which is the whole
+  # point of `cp310-abi3`), and one that only gets the body (3.9: `camel` runs, `import camel`
+  # explains itself). docs/pypi-packaging.md 7.2 is the checklist this matrix implements.
+  # Each container is installed from the wheel alone. On the runner (not in the build
+  # container) because that is where Docker is.
   # ---------------------------------------------------------------------------------------
   smoke-linux:
     name: smoke-install (${{ matrix.image }}, ${{ matrix.expect }})
@@ -464,21 +475,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # The interpreter the interop wheel is built for -- 3.11, the only CPython in the build
-          # image with a shared libpython. pip takes
-          # camel_lang-<ver>-cp311-cp311-manylinux_2_28_x86_64.whl, so `import camel` works and an
+          # The stable ABI floor. pip takes
+          # camel_lang-<ver>-cp310-abi3-manylinux_2_28_x86_64.whl, so `import camel` works and an
           # array crosses through DLPack.
-          - image: python:3.11-slim
+          - image: python:3.10-slim
             expect: interop
-          # The version the Linux release cannot build an interop wheel for (docs/pypi-packaging.md
-          # 7.1: the image has no python3.10 package at all). pip takes
-          # camel_lang-<ver>-py3-none-manylinux_2_28_x86_64.whl, the `camel` command works, and
-          # `import camel` has to say why it cannot (5.37 item 7).
-          - image: ubuntu:22.04
-            expect: body-only
-          # A third version, so the same body-only wheel is shown installing on an interpreter
-          # with no relation to the build image.
-          - image: python:3.12-slim
+          # The current newest CPython at the time of the decision (3.14; use the newest stable
+          # on the day of a release and keep 3.14 in the matrix). Same one wheel: an abi3 build
+          # that fails here is not abi3.
+          - image: python:3.14-slim
+            expect: interop
+          # An interpreter that only gets the body: `py3-none`. This used to be 3.12 and
+          # ubuntu:22.04, which now correctly take the interop wheel, so they moved here as 3.9 --
+          # the version the body-only wheel exists for (docs/pypi-packaging.md 7.2).
+          - image: python:3.9-slim
             expect: body-only
     steps:
       - name: Checkout
@@ -513,7 +523,9 @@ jobs:
           if command -v apt-get >/dev/null 2>&1; then
             apt-get update -qq && apt-get install -y -qq python3-pip python3-venv >/dev/null
           fi
-          python3 -m pip install --quiet --find-links /wheels camel-lang
+          # No index: the smoke has to measure the wheelhouse, not whatever PyPI still carries
+          # (a body-only wheel from an older release would make a broken interop run look green).
+          python3 -m pip install --quiet --no-index --find-links /wheels camel-lang
           echo "--- installed ---"
           python3 -m pip list 2>/dev/null | grep -i camel || true
           python3 -m pip show -f camel-lang 2>/dev/null | sed -n '1,6p' || true

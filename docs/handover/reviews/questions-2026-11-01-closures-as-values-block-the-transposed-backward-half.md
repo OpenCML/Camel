@@ -73,13 +73,22 @@ B **新增**一条表示，且与裁定正面冲突；C 让 `split` 多背一个
 - 拼写数：`stdlib` 值级 **4 行**（`stdlib/vjp.cml:44,51,62,65`）+ **3 行文档示例**（`stdlib/signatures/transforms.cml:43,64,79`）；
   `vjp.cml` 要换 **11 行**，两条同形声明并成一条泛型；要改写的程序 **5 个文件**。
 - 调用者数：每个算子 **1 个注册点 + 1 个 kernel**（`split_operator.cpp:179/:186`、`jvp_operator.cpp:218/:225`、`transpose_operator.cpp:170/:177`），**外部 C++ 调用点 0**。
-- 判据：**能删 342 行**（`split_operator.cpp` 179、`jvp_operator.cpp:81-226` 146、`transforms.cml:54-62,66` 10、`vjp.cml:47-53` 7），
+- 判据：**能删 342 行**（`split_operator.cpp` 179、`jvp_operator.cpp:81-226` 146、`stdlib/signatures/transforms.cml:54-62,66` 10、`vjp.cml:47-53` 7），
   **但要搬 1720 行**（`split.cpp` 694 + `jvp.cpp` 1026）进一个新 pass。**按“删不掉就是净负”，甲是净负。**
 
 
-- 路径：`modules/transforms/split_operator.cpp` **202**、`modules/transforms/jvp_operator.cpp` **268**、`stdlib/signatures/transforms.cml` **116**（这一页原来只写 `transforms.cml`；`stdlib/transforms.cml` 是另一份、只有 25 行，照那个名字去数会"文件不存在"）、`stdlib/vjp.cml` **98**、`modules/transforms/split.cpp` **1531**、`modules/transforms/jvp.cpp` **1126**。
+- 路径：`modules/transforms/split_operator.cpp`、`modules/transforms/jvp_operator.cpp`、
+  `stdlib/signatures/transforms.cml`（这一份是签名声明；`stdlib/transforms.cml` 是另一份**同名文件**，
+  照那个名字去数会数到另一份）、`stdlib/vjp.cml`、`modules/transforms/split.cpp`、
+  `modules/transforms/jvp.cpp`。**这六个文件的行数这一页不写**：它随代码变，**带 sha 与命令也一样** ——
+  sha 只是让错的数字更可信（作者 05:30 的裁定：设计稿与交接页写规则与理由，读数写进提交信息，那是它所属的
+  时刻）。上一版把这六个数量在**车道树**上却读成 develop 的数，树一动就全错；要数就自己量一次，或去那一笔的
+  提交信息里找。
 
-  （**2026-11-02 `lane-m5` 再测**：`split_operator.cpp` 202 → **208**、`jvp_operator.cpp` 268 → **278**，`case TypeCode::` 1024 → **1028**、文件数仍 74——前两个是同一件事：`jvp(f)`、`transpose(f)`、`split(f)` 的调用形状（名字、元数、`with` 参数个数）现在登记在算子声明的地方，两个 `*_operator.cpp` 各多几行注释与三条 `declareCallForm`；后一个是 `std::cml` 的 `hasFunction` 加的四条（`Function`/`Array`/`Tuple`/`Struct`），因为一个含函数类型的标注在源码里没有写法，打印机要能看出类型里有没有函数。**这两个数是照读数抄的，页是这一页的原文——`lane-m5` 自己那份带一处未解的冲突标记，没有整份取用。**）
+  （**2026-11-02 `lane-m5` 再测**时这些文件都变长了，因为 `jvp(f)`／`transpose(f)`／`split(f)` 的调用形状
+  （名字、元数、`with` 参数个数）搬到了算子声明处，`std::cml` 的 `hasFunction` 也多了 `Function`／`Array`／
+  `Tuple`／`Struct` 四条——一个含函数类型的标注在源码里没有写法，打印机要能看出类型里有没有函数。**具体读数在
+  那两笔的提交信息里，这一页不写。**）
 
 **乙 —— 每次实例化新铸一个刚性类型，并在原则 5.10 上开一条例外**
 - 一个 `TypeCode` 落地要动 **7 点**：枚举（`type/base.h:56` + `TypeFlag` `:39`）、`typeCodeToString`（`base.cpp:65`，35 分支且 `:111` 有 `default:` **漏了不报错**）、
@@ -119,6 +128,7 @@ B **新增**一条表示，且与裁定正面冲突；C 让 `split` 多背一个
 
 顺带一条同源的事实：转置后的调用必须把被调值放回原来的位置——原调用把被调方当 `with` 输入传，转置后的调用就得传一个**转置图的静态函数值**
 （空闭包）；放错位置得到的是"CALL node 3 without callee input"。
- **2026-11-02（读数来源：lane-m4b 的树，不是 develop）**：这六个数是在 lane-m4b 上量的，与 develop 不同的部分由本车道自己的提交与合并造成——split.cpp 因 6b6d82aa8（值端口跨切）变大、jvp.cpp 因 21aa36805/9a54b9d5 的重构变小，其余跟着同一批改动。**今后引用这六个数，必须说清在哪棵树上量**。
-**2026-11-02 合并时重读一次**：`split.cpp` 那段注释变长了一行多，因为本车道把残差收录条件恢复成「后一半读到的参数一律记」（裁定 00:30）。**设计稿和交接页写规则与理由，不写会随代码变的数字**（作者 05:30 的裁定）；要用数字，写进提交信息，那是它所属的时刻。
-**2026-11-02 勘误**：上面那句"合并时按仪器重读为 1569"作废——1569 是在合并树的中间状态上量的，提交 `ca1941405` 里 `split.cpp` 的注释比那次短 6 行，**本文树上的数是 1563**。**教训：读数必须在 `git rev-parse HEAD` 与 `git status --porcelain` 都对上之后再取；树在动时读出来的数会跟着动。**
+ **2026-11-02（本页不再写那六个数）**：它们在 `lane-pools`、`lane-m5`、`lane-m4b` 上被重量过，每一次都被读成
+develop 的数、每一次合并都作废一次——后面三行勘误互相打架就是这件事的代价，也是作者 05:30 那条裁定的由来：
+**设计稿和交接页写规则与理由，不写会随代码变的数字；读数写进提交信息，那是它所属的时刻。** 教训仍在：读数必须
+在 `git rev-parse HEAD` 与 `git status --porcelain` 都对上之后再取，树在动时读出来的数会跟着动。

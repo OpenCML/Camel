@@ -56,9 +56,10 @@ export const ARG_DOMAINS = [
             ['moves', null],
             ['poison', null],
             ['config', null],
+            ['mark', null],
             ['verify', ['before', 'pre', 'after', 'post', 'both']],
         ]),
-        summary: 'moves, poison, config or verify=before|after|both (also pre, post)',
+        summary: 'moves, poison, config, mark or verify=before|after|both (also pre, post)',
     },
     {
         option: '--gc-stress',

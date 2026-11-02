@@ -1,0 +1,14 @@
+/**
+ * the raw form of the printer: this program's string value has three backslashes, so std::cml
+ * prints it as a raw string, and the printed program must print the same text and the same
+ * lengths. test/tools/roundtrip-compare.mjs compares the two runs.
+ */
+
+func main(): int sync {
+    let path = "C:\\dir\\file"
+    println(path)
+    println(len(path))
+    let mixed = "a\\b\"c\n"
+    println(len(mixed))
+    return 0
+}

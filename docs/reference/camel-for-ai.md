@@ -343,6 +343,17 @@ func add(a: i32, b: int): int {
 }
 ```
 
+### A backslash is an escape, and an unknown one does not compile
+
+A string decodes a fixed table of escapes, and anything else is `LexicalDiag::InvalidEscapeSequence`
+at error severity: `"\q"` does not build, it is not a string holding a backslash and a `q`. This is
+the one mistake a Windows path invites, because `\t`, `\n` and `\r` are escapes and `\C`, `\m` and
+`\i` are not. **Write instead** — double the backslash, or write a raw string, in which nothing is
+decoded: `"C:\\dir\\file"` or `r"C:\dir\file"`. A raw string is `r"..."` or `r#"..."#` with as many
+`#` after the closing quote as before the opening one, and it ends only at that delimiter.
+
+Sources: `diagnostics/registry.tsv`, and the language reference, whose lexical chapter has the table.
+
 ### `as` is not a conversion
 
 `as` restricts a value to a type it already has; it never converts, so `s as int` on a string is

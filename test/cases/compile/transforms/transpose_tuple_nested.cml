@@ -19,10 +19,10 @@ func nested(x: float): float {
 func main(): int sync {
     println(nested(1.0))
     let back = transpose(nested)
-    println(back(1.0, 1.0))
+    println(back(1.0))
     // Twice the cotangent, 4: nothing above prints 4, so the plan's claim is about the transpose and
     // not about the forward reading. This is the line that turned 0.0 red: the first version of the
     // channel answered a silent zero here and the forward 2.0 above hid it.
-    println(back(1.0, 2.0))
+    println(back(2.0))
     return 0
 }

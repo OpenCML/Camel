@@ -32,7 +32,10 @@ using camel::core::type::FunctionTypeFactory;
 using camel::core::type::type_vec_t;
 using camel::core::type::TypeCode;
 
-/// The type of `transpose(f)`: `(f: (float) => float) => (float, float) => (float)`. The parameter is
+/// The type of `transpose(f)`: `(f: (float) => float) => (cotangent: float) => (float,)`. The call
+/// takes the cotangent of `f`'s result and answers one cotangent per parameter of `f` -- every
+/// parameter is a linear input (author, 2026-11-02 11:30), so the transposed function takes nothing
+/// else and a value the body needs is captured by the function that is transposed. The parameter is
 /// named, so the type prints the way the declaration writes it
 /// (`stdlib/signatures/transforms.cml`), and the two are one string.
 FunctionType *transposeOperatorSignature(FunctionType *function) {
@@ -51,11 +54,11 @@ FunctionType *transposeOperatorSignature(FunctionType *function) {
     return factory.build();
 }
 
-/// transpose: (f: (float) => float) => (float, float) => (float). The cotangent of `f`'s result goes in
-/// and the cotangent of its parameter comes out -- the pullback of a linear function, at the values
-/// the caller passed the last time it was transposed over, and at no others: `2*x` and `3*x` in
-/// the same program are two rules over the same parameter, which is why a value used k times
-/// arrives as k cotangents that add.
+/// transpose: `(f: (float) => float) => (cotangent: float) => (float,)`. The cotangent of `f`'s
+/// result goes in and the cotangents of `f`'s parameters come out, one member per parameter -- the
+/// pullback of a linear function. Every parameter of `f` is a linear input, so the transposed
+/// function is passed no value: `2*x` and `3*x` in the same program are two rules over the same
+/// parameter, which is why a value used k times arrives as k cotangents that add.
 class TransposeResolver final : public FuncTypeResolver {
   public:
     std::optional<FunctionType *> resolve(
@@ -99,15 +102,15 @@ class TransposeResolver final : public FuncTypeResolver {
                 "result is what goes in");
         }
         return std::string(
-            "`transpose` takes a function whose parameters are all `float` -- one of them, several "
-            "of them, or the backward half `split` gives (its residuals in one tuple and its "
-            "tangents after them): each parameter is a value the transpose reads and each is where "
-            "a cotangent goes");
+            "`transpose` takes a function whose parameters are all linear: each one is what a "
+            "cotangent is answered for, so a parameter whose type holds no cotangent -- an integer, "
+            "a `bool`, a string -- leaves the function with no transpose. A value the body needs is "
+            "captured by the function that is transposed, not passed to the transposed one");
     }
 
     std::string signature() const override {
-        return "(f: (float) => float | ((..Residuals), float, ...) => float) => "
-               "(knowns.., cotangent) => (cotangents..)";
+        return "(f: (float) => float | (float, ...) => float) => "
+               "(cotangent) => (cotangents..)";
     }
 
     bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)

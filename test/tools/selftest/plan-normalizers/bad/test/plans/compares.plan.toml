@@ -1,0 +1,18 @@
+# A plan that breaks the rule on purpose: the child is Python, which ends a line with the
+# platform's `\r\n`, and the comparison is byte for byte. On Windows this plan is red on text it
+# never meant to compare. `test/tools/check-plan-normalizers.mjs --selftest` reads this file and must
+# report it; the repaired copy is one directory up, in `good/`.
+id = "selftest.plan_normalizers.bad"
+desc = "A Python child's text compared byte for byte with no `normalize_newlines`"
+tier = "fast"
+
+[[tests]]
+name = "compares.python"
+desc = "Two lines of a Python child's output, compared exactly"
+kind = "behavior"
+tool = "python"
+case = "says.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = ["first\nsecond\n"]
+timeout_ms = 20000

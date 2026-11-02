@@ -23,6 +23,7 @@
 #include "jit/runtime/trampoline.h"
 
 #include <cstdio>
+#include <cstdint>
 #include <optional>
 #include <stdexcept>
 #endif
@@ -1124,16 +1125,32 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
         // As the interpreters: release what this driver holds, bring the call stack back to
         // where it was entered, and pass the fault on; a fault that has no position yet gets
         // the one of the bytecode the driver was at.
+        //
+        // What it holds is the frame it stands in and the frames it left for calls, and those are
+        // not always below it: a callee's frame is above the caller its call pushed, so a driver
+        // whose callee has already released its own frame (`raiseJitFault`, `invokeOwnedJitFrame`)
+        // stands in a frame that the frames it still holds are *above*. The pool is a stack, so the
+        // order is the pool's -- the highest frame first -- and releasing `cur` first released a
+        // frame that was not the top whenever the fault came back out of a call the driver had
+        // already pushed (`stream.generator_body_fault_ends_stream` on `std::jit`, 2026-11-02,
+        // where `main` was released under the still-active closure frame).
         Frame *siteFrame = cur;
+        std::vector<Frame *> mine;
+        mine.reserve(stackDepth_ - depthBase + 1);
         if (framePool_.isActive(cur))
-            framePool_.release(cur);
-        nestedCalls_ = nestedBase;
-        while (stackDepth_ > depthBase) {
-            Frame *held = frameStack_[stackDepth_ - 1];
-            if (framePool_.isActive(held))
-                framePool_.release(held);
-            --stackDepth_;
+            mine.push_back(cur);
+        for (size_t at = depthBase; at < stackDepth_; ++at) {
+            Frame *held = frameStack_[at];
+            if (held != nullptr && held != cur && framePool_.isActive(held))
+                mine.push_back(held);
         }
+        std::sort(mine.begin(), mine.end(), [](const Frame *left, const Frame *right) {
+            return reinterpret_cast<uintptr_t>(left) > reinterpret_cast<uintptr_t>(right);
+        });
+        for (Frame *held : mine)
+            framePool_.release(held);
+        stackDepth_ = depthBase;
+        nestedCalls_ = nestedBase;
         try {
             throw;
         } catch (const RuntimeFault &fault) {

@@ -110,17 +110,21 @@ def _missing_message() -> str:
     has no extension on purpose, so its message names the interpreter the extension needs and
     says that the `camel` command is unaffected. A checkout that was never built has an
     extension that does not exist yet, and that message says how to build it.
+
+    The interop wheel is one file per platform (`cp310-abi3`, the stable ABI floor), not one per
+    CPython version: the message must not send a 3.13 user looking for a `cp313` wheel, because
+    none is published -- the 2026-10-25 decision, carried out 2026-11-02.
     """
     bundled = _HERE / ".cmlenv"
     if (bundled / "bin").is_dir():
         return (
             "camel was installed without its Python interop extension: this wheel "
             "(py3-none-<platform>) carries the `camel` command only. Calling Camel from Python "
-            "needs the interop wheel this release published for your platform, and its file name "
-            "says which CPython it is for (cp311, cp313, ...): it is the interpreter the release "
-            "was built with, and there is one per platform rather than one for every version. "
-            "Install camel-lang with that interpreter and pip picks the wheel that has the "
-            "extension; `camel` itself works as it is."
+            "needs CPython 3.10 or newer and the interop wheel this release published for your "
+            "platform -- camel_lang-<version>-cp310-abi3-<platform>.whl, one file that covers "
+            "every CPython from 3.10 on, so there is no per-version wheel to look for. Install "
+            "camel-lang with such an interpreter and pip picks the wheel that has the extension; "
+            "`camel` itself works as it is."
         )
     return (
         "the Camel extension module (_camel) was not found. It is built with the rest of the "

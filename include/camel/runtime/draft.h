@@ -29,9 +29,11 @@
 #include "camel/runtime/graph.h"
 #include "camel/runtime/node_ref.h"
 #include "camel/runtime/program.h"
+#include "camel/utils/assert.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <memory>
 #include <optional>
 #include <span>
@@ -875,14 +877,41 @@ class GraphDraft {
     /// materialising an array); no graph producer of a library does. Asserts that `id` is a LOOP
     /// node.
     void setLoopIterableInterval(gc_node_ref_t id);
-    /// Regions (GCRegion). A draft has region 0, the body, once it has any other. Ids are not
-    /// reused.
+    /// Regions (GCRegion). The body is region 0 and it is there once the draft has any other
+    /// region; before that the table is empty and every node is in the body. Ids are not reused.
     size_t regionCount() const { return regions_.size(); }
-    const GCRegion &region(uint32_t id) const { return regions_[id]; }
+    /// The region `id`.
+    ///
+    /// Region 0 is **the body**, and it answers even when the table is empty: `addRegion` writes
+    /// the body's record only when the first other region is added (`regions_`: "empty, or region 0
+    /// (the body) then the others"), while `nodeRegion` answers 0 for every node of a draft that has
+    /// no control regions at all. So "which region encloses this node" has an answer in that state
+    /// too -- the body, which owns no loop and carries no ports -- and the reader does not have to
+    /// know that the table is empty to get it. Any other id has to be one the draft has.
+    ///
+    /// The reading past the body is a `GUARD`, not an `ASSERT`: it stays in every build, because a
+    /// build that reads past the end without saying anything is one where only a Debug build's
+    /// standard library would object (`settleStreamLinearity` read `regions_[0]` of an empty table
+    /// in Release, bound the reference, never read through it and passed; 24 tests of
+    /// `feat/compile/stream` aborted in Debug on 2026-11-02).
+    const GCRegion &region(uint32_t id) const {
+        static const GCRegion body{};
+        if (id == 0 && regions_.empty())
+            return body;
+        GUARD(
+            id < regions_.size(),
+            std::format(
+                "A draft names a region by id, and this one has {}: id {} is neither the body, "
+                "which is region 0, nor a control region it carries.",
+                regions_.size(),
+                id));
+        return regions_[id];
+    }
     size_t regionPortCount() const { return regionPorts_.size(); }
     gc_node_ref_t regionPort(size_t index) const { return regionPorts_[index]; }
     std::span<const gc_node_ref_t> regionPortsOf(uint32_t id) const {
-        return {regionPorts_.data() + regions_[id].portBegin, regions_[id].portCount};
+        const GCRegion &record = region(id);
+        return {regionPorts_.data() + record.portBegin, record.portCount};
     }
     /// The equivalences between the nodes of the draft (writings.h): the draft is not in the
     /// executable state while there are any. Until they are extracted, the nodes can only be

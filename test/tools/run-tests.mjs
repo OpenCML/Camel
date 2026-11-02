@@ -75,7 +75,7 @@ const TEST_FIELDS = new Set([
     'known_fail', 'known_fail_note', 'failure_note',
     'backends', 'backends_agree', 'compare_to', 'compare_fields',
     'golden', 'snapshot_stream', 'snapshot_compare', 'normalizers',
-    'expect_exit', 'expect_stdout_contains', 'expect_stdout_exact', 'expect_stdout',
+    'expect_exit', 'expect_signal', 'expect_stdout_contains', 'expect_stdout_exact', 'expect_stdout',
     'expect_stdout_matches',
     'expect_stdout_starts_with', 'expect_stdout_not_contains', 'expect_stderr_contains',
     'expect_output_contains', 'expect_output_not_contains',
@@ -233,6 +233,20 @@ function validatePlanSchema(doc, planPath) {
                 `${planLabel(planPath)}: ${where}: cpu_budget_ms needs timeout_ms: the budget is the ` +
                     `cost bound and the timeout is the liveness bound (a hang, not a slow run)`
             )
+        }
+        // `expect_signal` names the signal that must have killed the test's process. The shape is
+        // checked here -- a name, or a number this platform knows, and nothing else -- so a plan that
+        // writes `true` ("it dies somehow") fails with its file, its test and its key named instead
+        // of passing while asserting nothing. It and `expect_exit` are one question with one answer,
+        // so a table that writes both is a contradiction and not a preference.
+        if (entry.expect_signal !== undefined) {
+            expectedSignalNumber(entry.expect_signal, `${planLabel(planPath)}: ${where}: `)
+            if (entry.expect_exit !== undefined) {
+                throw new PlanSchemaError(
+                    `${planLabel(planPath)}: ${where}: expect_signal with expect_exit: a process ` +
+                        `ends one way, and a killed one has no exit code to compare`
+                )
+            }
         }
     }
 }
@@ -937,6 +951,49 @@ function describeExit(result) {
     return `exit ${result.exitCode}`
 }
 
+/** The number a signal name stands for, as this platform numbers it; undefined for no signal. */
+function signalNumberOf(name) {
+    const signals = (os.constants && os.constants.signals) || {}
+    if (typeof name !== 'string' || name.length === 0) return undefined
+    return Object.prototype.hasOwnProperty.call(signals, name) ? signals[name] : undefined
+}
+
+/**
+ * The signal a plan expects, as the number this platform numbers it by: `expect_signal = "ABRT"`,
+ * `"SIGABRT"` and `6` are one expectation written three ways.
+ *
+ * There is no default and no boolean form. `expect_exit = 0` is the ordinary end of a process, so an
+ * entry that says nothing is asserting it; a process that dies of a signal is not ordinary, and an
+ * entry that expects one has to name it -- otherwise the entry says nothing a reader could check,
+ * and a death by a *different* signal would pass it.
+ */
+function expectedSignalNumber(value, prefix = '') {
+    const signals = (os.constants && os.constants.signals) || {}
+    if (typeof value === 'number') {
+        if (!Object.values(signals).includes(value)) {
+            throw new PlanSchemaError(
+                `${prefix}expect_signal: ${value} is not a signal number on this platform`
+            )
+        }
+        return value
+    }
+    if (typeof value !== 'string' || value.trim().length === 0) {
+        throw new PlanSchemaError(
+            `${prefix}expect_signal must name a signal ("ABRT", "SIGABRT") or give its number (6), ` +
+                `got ${JSON.stringify(value)}: a plan that expects a crash has to say which signal killed it`
+        )
+    }
+    const written = value.trim().toUpperCase()
+    const name = written.startsWith('SIG') ? written : `SIG${written}`
+    const number = signalNumberOf(name)
+    if (number === undefined) {
+        throw new PlanSchemaError(
+            `${prefix}expect_signal: '${value}' is not a signal this platform knows`
+        )
+    }
+    return number
+}
+
 function formatMetric(result) {
     // A test judged on its own CPU time prints the CPU figure it was judged on, with the budget it
     // was read against and the wall clock beside it as information: on this host the wall figure is
@@ -1617,7 +1674,19 @@ function assertionProblems(test) {
 async function validateTest(test, result, context) {
     const failures = []
     const scope = context.scope || {}
-    if (typeof test.expect_exit === 'number' && result.exitCode !== test.expect_exit) {
+    // A process ends one of two ways, and a plan says which it expects: an exit code, or a signal
+    // that killed it. `expect_signal` is the second and it stands in place of the exit assertion
+    // rather than joining it, because a killed process has no exit code at all (`exitCode` is null):
+    // checking both would fail one crash twice, once for the signal that was expected and once for
+    // the exit code that cannot exist. This is the one place a signal decides a verdict, so a plan
+    // that expects a crash no longer has to be marked `known_fail` -- a mark that says the run is
+    // wrong today, which reads as "the crash is the defect" and turns the entry green again the day
+    // the process stops crashing.
+    if (test.expect_signal !== undefined) {
+        if (signalNumberOf(result.signal) !== expectedSignalNumber(test.expect_signal)) {
+            failures.push(`expected signal ${String(test.expect_signal)}, got ${describeExit(result)}`)
+        }
+    } else if (typeof test.expect_exit === 'number' && result.exitCode !== test.expect_exit) {
         failures.push(`expected exit ${test.expect_exit}, got ${describeExit(result)}`)
     }
     for (const rawNeedle of test.expect_stdout_contains || []) {
@@ -2321,6 +2390,7 @@ export function expandSweeps(doc, planPath) {
             if (sampleCount > 0) {
                 const preferred = eligible.filter(
                     (test) => (test.expect_exit === undefined || test.expect_exit === 0) &&
+                        test.expect_signal === undefined &&
                         test.tier !== 'slow' && test.tier !== 'milestone'
                 )
                 for (const test of [...preferred, ...eligible]) {

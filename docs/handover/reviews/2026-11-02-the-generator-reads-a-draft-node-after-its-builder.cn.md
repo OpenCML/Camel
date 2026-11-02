@@ -48,41 +48,36 @@
 （都用 `std::nvm`，那是本机必崩的后端）。拿到栈就是 A 的入口。在拿到栈之前，**不要**把 11 条标成
 `known_fail`：这张页存在的意义正是"腿绿不等于树对"，标掉它等于把这句话反着写。
 
-## 补充读数（2026-11-02 12:05，树 `fe7740302` 之上，HEAD `3bdd5ee47` 之后）
+## 未结：Debug 腿 11 条全绿，Windows 腿与 ASan 腿未跑（2026-11-02，`lane-draftown` @ `2074a0269`）
 
-**在 HEAD 上，这条在这块主机上复现不出来。** 走的是本页建议的 B 的替代：不拿 ASan 栈，而是给
-"所有权丢了"装一个不依赖内存内容的探针——`nodeGraphOf`（`src/compile/gir/builder_support.h:123`）
-在查到 builder 之后，再问一句"这个 handle 的 id 在那块草稿里是不是活节点"：
+> **未结**：Debug 腿 11 条全绿（`build` 必崩守卫下不崩）；Windows 腿与 ASan 腿未跑，CI 的 ASan 腿（`67f88a8ac`）下一次运行给出读数；两条都绿才结案。
 
-```cpp
-if (node.id >= builder->transaction().edit().nodeSlotCount() ||
-    !builder->transaction().edit().alive(node.id)) { /* print [PROBE-OWNER] ... */ }
-```
+认图的那一笔是 `3609d015a`（草稿节点按 `(地址, epoch)` 认图，不再按回收地址），见证用例是
+`test/plans/feat/runtime/draft_node_owner.plan.toml`。判据不是"Linux 绿"——那正是这张页不信任的东西——
+而是"守卫必崩的前提下仍然绿"。**`nodeGraphOf()` 的 `GUARD(builder != nullptr, ...)` 本来就是常驻的**
+（`include/camel/utils/assert.h#GUARD` 没有 `NDEBUG` 分支，失败走 `[[noreturn]] fail_invariant`），
+它不返回 null，也不只是报诊断，所以没有"把它改严一点再试"的余地：**它今天已经是"问到没有答案就死"。**
 
-**为什么需要这一句**：`DraftGraphBuilder::fromDraft` 只比地址（`draftOwners()` 是
-`unordered_map<const GraphDraft *, DraftGraphBuilder *>`，`~DraftGraphBuilder` 时擦掉自己那一行），
-所以"查到了 builder"和"这个 handle 的 owner 还活着"不是同一件事——owner 走了以后地址可能被同事务里
-下一张图复用，查询就会答成邻居。**"答成邻居"这一半在 Linux 上是可测的，Windows 上的 `!= nullptr`
-判死只是另一半。**
+读数取自 Debug 构建（`ASSERT` 与 safepoint 草稿根不变量都开着）：
 
-读数（同一块主机、`-Tier fast -Jobs 8`，手跑 `./out/latest/bin/camel` 直接看 stderr）：
+- `test/plans/feat/compile/stream.plan.toml`：9 条全 `[PASS]` —— `stream.generator_loop_two_states.{nvm,fvm,jit,prl}`、
+  `stream.generator_loop_two_states_gir`、`stream.generators_shapes_consumed.{nvm,fvm,jit,prl}`；
+- `test/plans/feat/showcase_s1.plan.toml`：`stream_fib.default.nvm`、`stream_fib.default.prl` 两条 `[PASS]`。
 
-- 本页点名的两条：`generators_shapes_consumed` 与 `generators_loop_two_states`，各跑 `std::nvm`，
-  `[PROBE-OWNER]` **0 条**；
-- 把 `test/cases/compile/stream/*.cml` 全部扫一遍 × `std::gir`、`std::nvm` 两个后端：**158 次运行，
-  `[PROBE-OWNER]` 0 条**；
-- `feat.compile.stream` 整条计划 143/143 绿。
+**11 条在必崩守卫下全绿，Debug 腿因此不是运气。** 修复后这个形状不是"地址被复用、恰好读到对的图"，
+而是那个 handle 根本不会带着旧 epoch 被解引用：epoch 对不上就在 `nodeDraftOf` 停下，并打印两个 epoch 与地址
+（本线上一次实测：`... made in epoch 48 at 0x55e420207380, and that address now holds epoch 49`）。
 
-⇒ **能拿到的事实**：在本树上，Linux 这一侧每一步都查到"确实持有那个 id 的 builder"，所以 B 的
-替代路径拿不到栈，A 也没有入口。**要么 v0.2.39–0.2.40 之后这条已经不复现（`draftOwners` 与
-`~DraftGraphBuilder` 自 `5b3747492` 起没有改过，改的是 `src/compile/gir` 的 52 个提交），要么它只在
-Windows 的对象寿命下出现**——而这块主机不允许建 Windows 腿，所以这一条我停在这里，不自造修法。
+**未跑，两条腿，理由现在是硬的**：Windows 腿——本地禁止构建（蓝屏），远端 wrapper 只跑 Linux 计划，
+所以"Windows 上不再崩"是由"必崩守卫下不崩"推出来的，不是直接读数；ASan 腿——`camel-remote.ps1` 只有
+`Release`/`Debug` 两种 `-Config`，没有 sanitizer 配置，这条腿只能在 CI 里跑：`67f88a8ac` 已把它的测试步
+扩到 `test/plans/feat/compile/stream.plan.toml` 与 `test/plans/feat/compile/transforms.plan.toml`，
+所以下一次 CI 运行就是这两条腿里 ASan 那条的读数（此前写"只跑 `smoke`"，那是扩展之前的范围）。
 
-**顺带一条对"一般规则"的核对**：`docs/technical/36_gc_handle_rules.md` 的 §2 里**没有**一条一般规则说
-"对象被造出来的那一刻就要有主"；最接近的是 **第 4 条"An address is not an identity"**，而
-`draftOwners()` 正是"拿地址当身份"，只是那张表管的是编译期草稿、这份文档管的是 GC 对象。**若要这条
-一般规则同时也管编译期对象，§2 需要补一句**；补不补是作者的判断，我没有改那份文档。
-
-**判据里没做到的两条**：① 复现（上：0/158，本机拿不到）；② "修好后该用例 rc=0"——没有可修的入口，
-所以没有改代码，也就没有"修好后"的读数。③ 全量 `fail 0` 在 `3bdd5ee47` 上是成立的，但**与这条无关**
-（本次唯一改动是探针加删，src 已还原）。
+**顺带（与本条无关，Debug 腿新发现，已修）**：同一张 `stream` 计划在 Debug 下有 25 条红，其中 24 条崩在
+`std::vector<GCRegion>::operator[]` 越界：`GraphDraft::region()` 拿到空 regions 的 `id=0`，调用点是
+`src/compile/gir/builder_linearity.cpp#settleStreamLinearity`。根因是草稿的约定缺了一半——`addRegion` 只在
+加第一个控制区域时才写下 body 的记录，所以"表为空"是草稿的合法状态，而 `nodeRegion` 对其中每个节点都答 0；
+`2074a0269` 让 `region(0)` 在这种状态下答 body（一个不拥有任何 loop、不带端口的 `GCRegion{}`），并给其余的 id
+留了常驻 `GUARD`。剩下 1 条 `stream.generator_body_fault_ends_stream.jit` 是另一个缺陷（`FramePool::release`
+在非栈顶释放），与本页无关。
