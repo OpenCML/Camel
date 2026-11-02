@@ -155,8 +155,10 @@ class Document:
         for key in ("elem", "key", "value", "exit"):
             if entry.get(key) is not None:
                 self.edge(vid, f"T:{entry[key]}", key)
-        # A declaration is not a type: its vertex is `D:<id>` (built from the document's `decls`),
-        # so a type's `decl` edge names that vertex, not a `T:` one.
+        # A named type (or an enum) carries the id of its declaration, and the document lists the
+        # declarations under `decls` with that id: the edge goes to the declaration vertex. A
+        # declaration is compared by what it is -- kind and parameter count -- not by the id, which
+        # is a position in the document's own table.
         if entry.get("decl") is not None:
             self.edge(vid, f"D:{entry['decl']}", "decl")
         for key, field in (("args", "arg"), ("elems", "elem"), ("variants", "variant")):
