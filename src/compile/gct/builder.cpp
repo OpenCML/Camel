@@ -2170,7 +2170,7 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
             .at(ast->load()->tokenRange())
             .commit(
                 "a `yield` reached the statement builder, so the generator machine did not claim "
-                "it. This is a known limitation of this compiler version, and nothing in the program is wrong.");
+                "it. This is a known limitation of this compiler version, and nothing in the program is wrong");
         throw BuildAbortException();
     }
     node_ptr_t exitNode = tree_->makeExit(ExitType::Return);
@@ -5723,7 +5723,7 @@ node_ptr_t Builder::visitGeneratorBody(
                 "the generator machine does not build this shape: a generator `loop` takes its initial "
                 "value written as a literal at the loop, and a value computed there or held in a local "
                 "is not built. This is a known limitation of this compiler version, and nothing in "
-                "the program is wrong.");
+                "the program is wrong");
         throw BuildAbortException();
     };
     // A local that lives across a `yield` is a cell of the body (see `addTypedCell`), so there is
