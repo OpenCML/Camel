@@ -1509,6 +1509,11 @@ if (mode === '--write' || mode === '--generate') {
         // A diagnostic with no pin yet is pinned from the search this run would have shown, so the
         // page keeps that example from then on instead of moving when a test is added later. The
         // pin file is written only when something was added: a re-run writes nothing.
+        //
+        // The example of a code is the test that names it, so a code that no plan entry names yet
+        // gets no pin: run this before the entry is written and the pin (and the example the page
+        // shows) stays empty until a later run, which is not a second pass of this script -- the
+        // input changed, not the writer. Write the plan entry first, or run this again after it.
         for (const entry of entries) {
             if (pins.has(entry.fullName)) continue
             const found = exampleFor(entry, tests, root, new Map())
