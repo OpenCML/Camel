@@ -94,6 +94,7 @@ void CAMEL_UNARY_ENTRY(UnaryOp op, const float *src, float *dst, int64_t count) 
         // dtype-preserving loop). The case exists so the switch stays exhaustive.
         return;
     }
+    throw std::logic_error("a float unary loop was asked for an operator that is not one");
 }
 
 } // namespace camel::tensor::kernels::detail

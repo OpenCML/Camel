@@ -1,27 +1,29 @@
-# `ne_` 那 22 行里有没有 `__strict_neq__` 的 11 行？有的话 `!==` 跑在什么上？
+# `ne_` 那 22 行里有没有 `__strict_neq__` 的 11 行？有。而删除的前提是同元素类型的 `eq_` 已经存在
 
-一句话：**前端已把 `!=` 建成 `!(==)` 且全绿；把这 22 行删掉会让 `!==`（标量和数组都算）没有一条规则可跑，而 `inspect --ops` 恰好只在这 22 行一起消失时才少 22 行。** 这两件事同时成立的唯一出路是给 tensor 模块补一个逐元素 `!`，那是新能力，不是"删注册行"。
+**答案：22 = `__neq__` 的 11 条 + `__strict_neq__` 抄它们的 11 条；已删、已测、全绿。** 这一页记的是删除前必须先立的一条判据，和 22 行按这条判据的分类。
 
-## 读数（都是这台机器上量的，不是推的）
+## 一条判据
 
-- `camel inspect --ops` 对一个最小程序今天列 **352** 行。
-- `__neq__` 组今天 13 行：9 条显式 `:op/ne_{i,l,f,d,b,s,bytes,c,z}` + `:op/ne` 复合 + `CAMEL_HALF_COMPARE("ne")` 的 2 条（`ne_bf`、`ne_f6`），外加 collection 模块导出的 `:coll/neq`。
-- `__strict_neq__` 组今天 11 行，**一行都不是写出来的**：`src/builtin/modules/globals.cpp:2335-2345` 把 `__neq__` 的 11 条定签名 resolver 抄了一份。
-- 于是：删掉 `__neq__` 的 11 条 `ne_*`（9 条显式 + `CAMEL_HALF_COMPARE("ne")` 一行），`__strict_neq__` 的 11 条自动变空 —— **352 → 330，正好 22 行，且 `:op/ne_*` 剩 0 条**。删 9 条留 2 条 bf16/f16 则只少 18 行（`__neq__` 9 + `__strict_neq__` 9），对不上 22。
-- `!==` 不是可重载形式：`isOverloadableOperatorGroup("__strict_neq__")` 为假（`src/core/operator_names.cpp:167-174`，`__strict_eq__`/`__strict_neq__` 只在 `operatorSymbolOf` 的附加表里，不在 `kForms` 里）。所以 `visitExpr` 不会把它送进 `operatorDrefOf`，而是按名字解析 `__strict_neq__` 这个导出组 —— 组一空，报的就是"`operator '!==' is not defined`，可用重载：空"。
-- 想把 `!==` 建成 `!(===)`（和 `!=` 之于 `==` 对称，也正是设计原则 4.2 的说法）也不行，因为**数组**那半要 `!` 作用在 `bool[]` 上：`__not__` 今天只有 `<:op/not>: (bool) => bool`；tensor 内核的 `UnaryOp` 里没有 `Not`（`modules/tensor/kernels/elementwise.h:70-82`）；`!==` 在数组上今天走的是 tensor 模块自己导进 `__strict_neq__` 的 `CompareOp::NotEqual`（`modules/tensor/ops/elementwise_ops.cpp:506`）。
-- 实测（构建树里 `!==` 建成 `!(===)` 之后）：`1 !== 2` → `true`、`1 === 1` → `true`、`1 !== 1` → `false`、`"a" !== "b"` → `true`，标量全对；但 `test/cases/modules/tensor/comparison.cml:28` 的 `a !== b` 报 `operator '!' is not defined for these operand types`，可用重载只有 `(bool) => bool`。
-- 所以：**"少 22 行"和"`!==` 仍然能跑"在没有逐元素 `!` 的前提下互斥**，`!=` 那半不影响这一点。
+**凡是 `ne_*` 存在的地方，同一元素类型的 `eq_*` 必须已经存在。** 因为 `!=` 走的是 `!(==)`：中间的 `==` 交出 `bool`，`!` 只需作用在 `bool` 上，而 `:op/not: (bool) => bool` 一直都在。判据落在 `eq_*` 上，不落在 `not` 上 —— 一个元素类型若有 `ne_*` 却没有 `eq_*`，那 `ne_*` 就是它唯一能被比较的方式，删了就少一种能力；两者都在，`ne_*` 只是多余的那一个。
 
-## 三条路，带代价
+## 22 行按这条判据分两类
 
-1. **给 tensor 补逐元素 `!`**（`UnaryOp::Not` + 把它导进 `__not__`），`!==` 统一建成 `!(===)`，22 行照删。
-   代价：内核要过一遍 int/浮点/半精度那几个 switch 和 dtype 表（`elementwise.cpp` 里 `UnaryOp::Neg` 有 3 处 switch）；语言面变大 —— `!xs` 从"不许"变成"逐元素求反"；tensor 那半从 `NotEqual` 走成 `Not(Equal)`，读数要重记。
-2. **`!==` 保留自己的标量规则**，也就是 22 行一条都不删（只删 `!=` 那一半根本不存在：`__neq__` 的行同时是 `__strict_neq__` 的来源）。
-   代价：`inspect --ops` 仍是 352，22 行死注册留在表里，"少 22 行"这条判据拿不到。
-3. **按操作数形状分叉**：`__strict_neq__` 自己的条目命中就用它（数组走 tensor 的 `NotEqual`），没命中就退回 `!(===)`（标量）。实现上是 `visitLinkNode` 里解析失败后重试一次。
-   代价：前端按形状选语义，正是这套代码避免的写法；两条语义路径以后会各自长。
+1. **11 条 `__neq__` 的**（9 条显式 `:op/ne_{i,l,f,d,b,s,bytes,c,z}` + `CAMEL_HALF_COMPARE("ne")` 的 `ne_bf`、`ne_f6`）：同元素类型的 `eq_{i,l,f,d,b,s,bytes,c,z}`、`eq_bf`、`eq_f6` **全都在**，多个取反就够。**这一类删了不欠账**：`1 != 2` 得 `eq_l` + `not`，`bf16`/`f16` 的 `!=` 走 `!(bf16 == bf16)` 即 `eq_bf`/`eq_f6` + `not`（实测图里就是 `op/eq_bf` + `op/not`）——**不需要"补一个 bf16/f16 的 `not`"，那会是"数值真假"的新语义，不是这一笔的事**。
+2. **11 条 `__strict_neq__` 抄来的**：`!==` 在数组上要的取反是 **`!` 作用在 `bool[]`**，而这一条当时**不存在**（`__not__` 只有 `(bool) => bool`，tensor 内核的 `UnaryOp` 里没有 `Not`）。**这一类除了 `eq_*`（即 `__strict_eq__` 的 11 条，都在）还要先补 `!bool[]`**，否则 `!==` 的标量与数组两半同时没有规则 —— 实测过：删了之后 `1 !== 2` 报"可用重载：空"，`modules.tensor.comparison:28` 报 `operator '!' is not defined`。
 
-## 本笔的默认（已按它做了）
+## 删除半的阻塞是 `__not__` 的内核，不是注册表
 
-**走第 2 条的本笔版本：这一笔只交前端那半**（`!=` 建成 `!(==)`，判据 1/2/4 全绿），**22 行不动**，因为本笔没有权限决定 `!==` 换成什么。若无人回复，下一步按**第 1 条**做：补 tensor 的逐元素 `!`，`!==` 建成 `!(===)`，然后一次性删掉那 22 行 —— 那样 `inspect --ops` 少 22、`1 != 2` 仍是 `eq_l`+`not`、`!==` 标量与数组都还在，三条同时成立。
+**不是"`__neq__` 组删不掉"，也不是"注册表里有别的东西引用它们"**：注册表这一侧是一条一条删干净的（`globals.cpp` 的 11 条、`builtin.cpp` 的 21 行内核与免故障清单、`onnx/lowering.cpp` 的 `:op/ne_*` 一行、`struct.cpp` 的 `__ne_bytes__`）。**唯一的阻塞是"取反可表达"：`__not__` 的 `bool[]` 内核落地与否，决定那 11 条能不能删。** 后来的人若看到这里还红，先查 `__not__` 有没有 `bool[]` 条目，不要回头翻注册表。
+
+## 本笔的读数（`develop` 18ddc4eb3 的合并树上）
+
+- `camel inspect --ops` 最小程序：**352 → 330，正好 −22**；`:op/ne_*` **剩 0 行**。
+- `1 === 1, 1 !== 2, 1 !== 1, "a" !== "b"` → `true true false true`；图中 `1 !== 2` 是 **`eq_l` + `not`**。
+- `f16` 的 `a != b`/`a !== b`/`a == b` → `true true false`；`bf16` 的 `a != b` → `false`，图里是 **`op/eq_bf` + `op/not`**。
+- `!([true, false])` → `[false, true]`，`![true, true]` → `[false, false]`，`![false]` → `[true]`；`!` 作用在 `float[]` 上仍然被拒（`notInfer` 只接受 `bool` 元素类型）。
+- `test/cases/modules/tensor/comparison.cml` 整份跑通：`a !== b` → `[false, false, false]`（逐元素，`a` 与 `b` 相等处取反为假）。
+- 整树 **fast** 层：**8447 总数 / 8435 过 / 0 失败 / 10 skip / 2 known failures**；`stdlib-reference --verify-ops` **exit 0**。
+
+## 给 `lane-m5` 的一句话
+
+`__not__` 的 `bool[]` 条目本笔也已经补上（tensor 内核 `UnaryOp::Not`，`notInfer` 只接受 `bool` 元素类型，`!float[]` 仍被拒），所以那 11 条不必再等；`lane-m5` 的 `86dbd3672` 做的是同一条，两个车道会撞在 `elementwise.h`、`elementwise.cpp`、`elementwise_ops.cpp` 三个文件上，合并时取一份即可。**bif16/f16 的 `Not` 两车道都不需要**（见上面第 1 类，`:op/not_bf`/`:op/not_f6` 是"数值真假"的新语义）。
