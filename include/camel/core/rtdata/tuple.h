@@ -44,11 +44,12 @@ inline void reportMembersBeyondType(
     }
     std::fprintf(
         stderr,
-        "[camel] tuple trace: a tuple value (%p) has %zu member(s) but its type declares %zu; the "
+        "[camel] tuple trace: a tuple value (%p) has %zu member(s) but its type declares %zu%s; the "
         "members past %zu are not traced or relocated\n",
         value,
         members,
         tupleType->size(),
+        tupleType->isResiduals() ? " (residuals kind)" : "",
         tupleType->size());
 }
 

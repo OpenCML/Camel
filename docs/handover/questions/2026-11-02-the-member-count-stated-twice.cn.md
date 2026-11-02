@@ -2,6 +2,8 @@
 
 **2026-11-02，`lane-ledger2`，树 `18ddc4eb3` + 未提交的一处修（`include/camel/core/rtdata/tuple.h`）。**
 
+> **作者 2026-11-02 05:10 裁定：`split` 不再交出残差元组（改为交出 `(y, lin)`，残差作为 `lin` 的 `with` 参数）⇒ 本页要解决的"同一个成员数被说两遍"在这条路上自然消失；若仍有实例，那时的类型就是真类型。** 下面的 A/B/C 与读数保留为这条问题被裁定前的现场，不再作为等回答的问句。
+
 ## 问句
 
 `split` 的余量元组在"没有图在手"时（operator resolver 只看到类型，`modules/transforms/split.cpp:841-843`）被写成
