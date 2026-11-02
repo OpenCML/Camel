@@ -2264,3 +2264,29 @@ and a `bool` has none, so there is no cotangent for the transposed function to t
 **⑧ 全量读数（同一 tip、门后）**：`total: 8447, pass: 8434, fail: 1, skip: 10, known 2`，红的是 **`docs.doc_readings.current`** ——
 门改了 `transpose.cpp`（1970→**1990** 行）与 `transpose_operator.cpp`（169→**177** 行），页里的行数读数过期；**已更新，`check-doc-readings` 现读 `the readings are the ones the pages state: 10 of 10`**。
 ⇒ **代码零红**：这 1 条是"页里的数过期"，不是行为回归。
+
+
+## 67. 门后全量绿；作者 05:10 的裁定（`split` 交 `(y, lin)`）接手了这条线——先落图，不动手
+
+**① 门这一半的完整读数**：`feat/compile/transforms` **58/58**；全量 fast 在同一 tip 上
+`total: 8447, pass: 8435, fail: 0, skip: 10, known 2`，`RUN_EXIT=0` —— **与改前基准逐项相同**。
+上一次全量的那 1 条红是 `docs.doc_readings.current`（`transpose.cpp` 1970→**1990**、`transpose_operator.cpp` 169→**177**，页里的行数过期），
+更新后 `check-doc-readings` 读 `the readings are the ones the pages state: 10 of 10`。**代码零红**。
+
+**② 作者裁定要拆的东西，位置已点清（这是下一步的工单，不是我做完的东西）**
+| 要改的 | 位置 | 现状 |
+|---|---|---|
+| `split` 对外形状 `(y, lin)` | `stdlib/signatures/transforms.cml:66`（今天写 `(v: float, d: float) => (v: float, d: float)`）、`modules/transforms/split.cpp` | `lin` 今天与 `y` 同形，不含残差 |
+| 残差标志 | `include/camel/core/type/composite/tuple.h:139`（`isResiduals()`） | 要删 |
+| 残差的可见性规则 | `src/compile/gir/builder_expr.cpp:2184`（`tupleType->isResiduals() && …`） | 要删 |
+| 转置里"第一个参数是元组就当残差"的猜法 | `modules/transforms/transpose.cpp:143-171`（`count >= 2` 且 `normTypeAt(0)` 是 `TupleType` 的那一支） | 要删 |
+| 诊断 `SemanticDiag::ResidualsAreNotVisible` | `diagnostics/registry.tsv:630`、`include/camel/core/error/diagnostics/messages/semantic.h:477`、`diagnostics/examples.tsv:187`、`modules/transforms/split.cpp:846` | 要删（**`registry.tsv` 是源，改完跑 `node scripts/diagnostics-catalog.mjs --write`**） |
+| `vjp` 的身体 | `stdlib/vjp.cml` | 要简化为 `let (y, lin) = split(jvp(f))(..xs); (y, transpose(lin))` |
+| 设计稿 4.2 | `docs/design/program-transforms/README.cn.md` | `Split<F>` 里残差位那个 `_` 删掉 |
+| 用例 | `test/cases/compile/transforms/split_residuals_destructured.cml` | 改成断言 `x*x*y` 在 `(3,2)`：`lin(1,0) = 12`、`transpose(lin)(1) = (12, 9)` |
+
+**③ 顺序（父代理定的，照做）**：① `split` 形状 → ② 删三样（`isResiduals`、`ResidualsAreNotVisible`、"元组当残差"）→ ③ `vjp.cml` 与设计稿 4.2 → ④ 用例（用作者给的期望值）→ ⑤ **`{Float64()}` 三处与 `:op/ftod` 排在它之后**（这条会重排 `split`/`vjp`，先删取型会被重排冲掉）。
+**每步一次构建、一次 `feat/compile/transforms`；红了就停在那一步报数。**
+
+**④ 已经成立的一条**：`transpose` 的门（第 66 条）**不再单独做** —— 它是这条的一部分，并且**已经落地且全量绿**；
+`f32` 验收要在这条落地后再量；**若那时自然成立，就是这条带来的，不是另外改的**。
