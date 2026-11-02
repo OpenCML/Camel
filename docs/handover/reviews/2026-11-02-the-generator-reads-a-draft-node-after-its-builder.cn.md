@@ -47,3 +47,30 @@
 先走 **B**：用 ASan Debug 构建跑 `generators_shapes_consumed.cml` 与 `generators_loop_two_states.cml`
 （都用 `std::nvm`，那是本机必崩的后端）。拿到栈就是 A 的入口。在拿到栈之前，**不要**把 11 条标成
 `known_fail`：这张页存在的意义正是"腿绿不等于树对"，标掉它等于把这句话反着写。
+
+## 结案：11 条在必崩守卫下全绿（2026-11-02 21:55，`lane-draftown` @ `f5a455f62`）
+
+认图的那一笔是 `3609d015a`（草稿节点按 `(地址, epoch)` 认图，不再按回收地址），见证用例是
+`test/plans/feat/runtime/draft_node_owner.plan.toml`。判据不是"Linux 绿"——那正是这张页不信任的东西——
+而是"守卫必崩的前提下仍然绿"。**`nodeGraphOf()` 的 `GUARD(builder != nullptr, ...)` 本来就是常驻的**
+（`include/camel/utils/assert.h#GUARD` 没有 `NDEBUG` 分支，失败走 `[[noreturn]] fail_invariant`），
+它不返回 null，也不只是报诊断，所以没有"把它改严一点再试"的余地：**它今天已经是"问到没有答案就死"。**
+
+读数取自 Debug 构建（`ASSERT` 与 safepoint 草稿根不变量都开着）：
+
+- `test/plans/feat/compile/stream.plan.toml`：9 条全 `[PASS]` —— `stream.generator_loop_two_states.{nvm,fvm,jit,prl}`、
+  `stream.generator_loop_two_states_gir`、`stream.generators_shapes_consumed.{nvm,fvm,jit,prl}`；
+- `test/plans/feat/showcase_s1.plan.toml`：`stream_fib.default.nvm`、`stream_fib.default.prl` 两条 `[PASS]`。
+
+**11 条在必崩守卫下全绿，故 Linux 的绿不是运气。** 修复后这个形状不是"地址被复用、恰好读到对的图"，
+而是那个 handle 根本不会带着旧 epoch 被解引用：epoch 对不上就在 `nodeDraftOf` 停下，并打印两个 epoch 与地址
+（本线上一次实测：`... made in epoch 48 at 0x55e420207380, and that address now holds epoch 49`）。
+
+**未跑，两条腿，理由是硬的**：Windows 腿——本地禁止构建（蓝屏），远端 wrapper 只跑 Linux 计划；
+ASan 腿——`camel-remote.ps1` 只有 `Release`/`Debug` 两种 `-Config`，没有 sanitizer 配置，`ci.yml` 的 ASan 腿只跑 `smoke`。
+所以"Windows 上不再崩"是由"必崩守卫下不崩"推出来的，不是直接读数。
+
+**顺带（与本条无关，Debug 腿新发现）**：同一张 `stream` 计划在 Debug 下有 25 条红，全部崩在
+`std::vector<GCRegion>::operator[]` 越界，`GraphDraft::region()` 拿到空 regions 的 `id=0`，
+调用点是 `src/compile/gir/builder_linearity.cpp#settleStreamLinearity`。这是 Debug 才有的既有缺陷
+（Release 的 `vector::operator[]` 不做边界检查），与草稿节点的身份无关，归到别处修。

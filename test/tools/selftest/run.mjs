@@ -192,6 +192,33 @@ if (!strict.output.includes(`[INFO] test scratch kept: ${strictRoot}`)) {
 }
 fs.rmSync(strictRoot, { recursive: true, force: true })
 
+// --- expect_signal: a run that is meant to die of a named signal -------------------------------
+// "This process dies of SIGABRT" had no way to be written: `expect_exit` compares an exit code a
+// killed process does not have, and `known_fail` says the run is wrong today -- it turns the entry
+// red the day the process stops dying, which is the opposite of what such an entry means. The
+// fixture dies three ways, and only the first is green: of the signal the entry names, of a signal
+// it does not name, and not at all. The last two are the discrimination, and the fourth plan writes
+// no signal at all, which must be refused where the plan is read.
+const signalDir = path.join(here, 'signal')
+const signal = runRunner([signalDir])
+if (signal.status !== 1) problems.push(`expect_signal: runner exit ${signal.status}, expected 1`)
+if (!signal.output.includes('[SUMMARY] total: 4, pass: 1, fail: 3')) {
+    problems.push(`expect_signal: unexpected summary (${summaryLine(signal.output)})`)
+}
+if (!signal.output.includes('[PASS] abrt')) {
+    problems.push(`expect_signal: the expected signal did not pass:\n${signal.output}`)
+}
+if (!signal.output.includes('expected signal SEGV, got signal SIGABRT')) {
+    problems.push(`expect_signal: a death by another signal was not reported that way:\n${signal.output}`)
+}
+if (!signal.output.includes('expected signal 6, got exit 0')) {
+    problems.push(`expect_signal: a run that ended normally was not reported as not having died:\n${signal.output}`)
+}
+if (!signal.output.includes('expect_signal must name a signal')) {
+    problems.push(`expect_signal: a plan that named no signal was not refused:\n${signal.output}`)
+}
+fs.rmSync(path.join(scratchRoot, `run-${signal.pid}`), { recursive: true, force: true })
+
 //  --- the verify payload ----------------------------------------------------------------
 // The fixture's script asserts that `case_path` is the resolved case path and that the other
 // documented fields are present. Before the fix `case_path` was undefined here, so this plan
