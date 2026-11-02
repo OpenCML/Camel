@@ -1,0 +1,15 @@
+id = "feat.tools.find_fix"
+tier = "fast"
+desc = "A red is checked against the other remote branches before it is treated as a new defect: `scripts/find-fix.mjs` names the branches that changed this case's plan entry, the commits whose message carries the case name or a keyword (with `merged`/`not merged` per commit), and exits 1 on an empty reading and 2 when the fetch failed, because a stale `refs/remotes` reports a false `no branch has it`"
+
+[[tests]]
+name = "tools.find_fix_asks_who_already_fixed_it"
+desc = "Built on a throwaway repository so the reading does not depend on which lanes exist later: a lane that edits the case's entry shows in block 1 as `not merged`, a commit that names the case and is already in `develop` shows as `merged`, a name with no fix anywhere prints three empty blocks and exits 1, and a `fetch` that fails exits 2 rather than reporting a fresh-looking empty reading."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/find_fix.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 240000
