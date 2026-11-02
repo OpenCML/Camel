@@ -973,6 +973,10 @@ any Formatter::visitTypeDecl(cst::TypeDecl context) {
         result += " = " + any_cast<string>(visitType(context->type()));
     } else if (context->tokCount(TK::String) > 0) {
         result += " = " + formatStringLiteral(context->tok(TK::String)->text());
+    } else if (context->tokCount(TK::RawString) > 0) {
+        // A raw string's text is its value; re-quoting it or touching its delimiters would
+        // change what the program means, so it is kept exactly as written.
+        result += " = " + context->tok(TK::RawString)->text();
     }
     return result;
 }
@@ -1771,6 +1775,10 @@ literal
 any Formatter::visitLiteral(cst::Literal context) {
     if (context->tok(TK::String)) {
         return formatStringLiteral(context->tok(TK::String)->text());
+    } else if (context->tok(TK::RawString)) {
+        // Kept as written: the text between the delimiters is the value, so a `\` in it is a
+        // backslash, and choosing another delimiter or escaping a quote would change it.
+        return context->tok(TK::RawString)->text();
     } else if (context->tok(TK::MultiStr)) {
         return formatStringLiteral(context->tok(TK::MultiStr)->text(), true);
     } else if (context->tok(TK::FString)) {

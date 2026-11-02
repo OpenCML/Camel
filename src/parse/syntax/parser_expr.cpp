@@ -52,6 +52,7 @@ bool ParserImpl::startsExpr(TK kind) const {
     case TK::Real:
     case TK::Imaginary:
     case TK::String:
+    case TK::RawString:
     case TK::MultiStr:
     case TK::FString:
     case TK::KwTrue:
@@ -777,6 +778,7 @@ void ParserImpl::parsePrimary() {
     case TK::Real:
     case TK::Imaginary:
     case TK::String:
+    case TK::RawString:
     case TK::MultiStr:
     case TK::FString:
     case TK::KwTrue:
@@ -1589,9 +1591,9 @@ void ParserImpl::parsePattern(bool fieldPosition) {
         bump();
         break;
     default:
-        if (cur_ == TK::Integer || cur_ == TK::Real || cur_ == TK::String || cur_ == TK::MultiStr ||
-            cur_ == TK::KwTrue || cur_ == TK::KwFalse ||
-            cur_ == TK::KwNull || literalSignAhead()) {
+        if (cur_ == TK::Integer || cur_ == TK::Real || cur_ == TK::String ||
+            cur_ == TK::RawString || cur_ == TK::MultiStr || cur_ == TK::KwTrue ||
+            cur_ == TK::KwFalse || cur_ == TK::KwNull || literalSignAhead()) {
             parseLiteral();
         } else {
             unexpected({SyntaxError::PatternItem});

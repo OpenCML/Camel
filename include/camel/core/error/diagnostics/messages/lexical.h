@@ -21,10 +21,7 @@ enum class LexicalDiag : uint32_t {
     InvalidNumberFormat   = 0x000001,
     UnclosedStringLiteral = 0x000002,
     UnterminatedComment   = 0x000003,
-
-    // severity = 1 (Warning). The value used to be 0x010000, which has the severity bits of
-    // an error; nothing reports this code yet, so the number could be put right.
-    InvalidEscapeSequence = 0x100000,
+    InvalidEscapeSequence = 0x000004,
 };
 
 constexpr DiagType diagTypeOf(LexicalDiag) { return DiagType::LexicalDiag; }

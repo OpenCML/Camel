@@ -1,0 +1,10 @@
+/**
+ * A raw string with no closing delimiter is LexicalDiag::UnclosedStringLiteral, reported at the
+ * opening quote -- line 8 here -- and not at the end of the file: what follows is source again, so
+ * a string that was never closed does not swallow the rest of the program.
+ */
+
+func main(): int sync {
+    println(r"abc)
+    return 0
+}

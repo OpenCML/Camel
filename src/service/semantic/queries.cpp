@@ -839,9 +839,9 @@ std::optional<Hover> SemanticModel::hover(uint32_t offset) const {
     if (token >= 0) {
         const TokenInfo &info = file.syntax.tokens[token];
         if (isKind(info.type, TK::Integer) || isKind(info.type, TK::Real) ||
-            isKind(info.type, TK::String) || isKind(info.type, TK::MultiStr) ||
-            isKind(info.type, TK::FString) || isKind(info.type, TK::KwTrue) ||
-            isKind(info.type, TK::KwFalse)) {
+            isKind(info.type, TK::String) || isKind(info.type, TK::RawString) ||
+            isKind(info.type, TK::MultiStr) || isKind(info.type, TK::FString) ||
+            isKind(info.type, TK::KwTrue) || isKind(info.type, TK::KwFalse)) {
             if (auto type = typeOfExpression(info.range)) {
                 code(types_[*type].text);
                 return Hover{md.str(), info.range};
@@ -1018,7 +1018,8 @@ std::vector<Completion> SemanticModel::completions(uint32_t offset) const {
             if (token.range.start < offset &&
                 offset < token.range.end + (token.channel == 3 ? 1u : 0u) &&
                 (token.channel >= 3 || isKind(token.type, TK::String) ||
-                 isKind(token.type, TK::MultiStr) || isKind(token.type, TK::FString))) {
+                 isKind(token.type, TK::RawString) || isKind(token.type, TK::MultiStr) ||
+                 isKind(token.type, TK::FString))) {
                 return items;
             }
             if (token.range.start > offset) {
@@ -1587,7 +1588,9 @@ std::vector<SemanticToken> SemanticModel::semanticTokens() const {
         } else if (isKind(kind, TK::Integer) || isKind(kind, TK::Real) || isKind(kind, TK::Imaginary)) {
             // `.0` after a dot is a tuple index, lexed as an integer.
             out.push_back({range, TNumber, 0});
-        } else if (isKind(kind, TK::String) || isKind(kind, TK::FString)) {
+        } else if (
+            isKind(kind, TK::String) || isKind(kind, TK::RawString) ||
+            isKind(kind, TK::FString)) {
             out.push_back({range, TString, 0});
         } else if (
             isKind(kind, TK::DotDot) ||

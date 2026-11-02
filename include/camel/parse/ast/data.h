@@ -399,9 +399,16 @@ class LiteralLoad : public DataLoad {
     bool fromFormattedString() const { return fromFormattedString_; }
     void setFromFormattedString() { fromFormattedString_ = true; }
 
+    /// Set on the literal of a raw string (`r"..."`, `r#"..."#`). Its text is the value: the
+    /// GCT does not run the escape table over it, and a backslash in it is an ordinary character
+    /// -- which is what makes `r"C:\dir"` the way to write such a path.
+    bool fromRawString() const { return fromRawString_; }
+    void setFromRawString() { fromRawString_ = true; }
+
   private:
     Literal value_;
     bool fromFormattedString_ = false;
+    bool fromRawString_       = false;
 };
 
 class ArrayDataLoad : public DataLoad {
