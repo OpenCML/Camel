@@ -1028,35 +1028,39 @@ bool liftGraph(
                 break;
             }
             case rt::GCNodeKind::Accs: {
-                // A projection out of a tuple: `s.0` of a tuple state. Its value is the projection
-                // of the tuple's value and its tangent is the projection of the tuple's tangent, at
-                // the same index -- the tangent of a tuple is the tuple of the tangents of its
-                // parts, so the j-th part's tangent is the j-th tangent. A field named by symbol is
-                // not projected here: the draft names that access by the key, not by the number the
-                // payload carries, and copying it as an index would read another member.
+                // A projection out of an aggregate: `.0` of a tuple state, `.a` of a struct state.
+                // Its value is the projection of the aggregate's value and its tangent is the
+                // projection of the aggregate's tangent, at the same member -- the tangent of an
+                // aggregate is the aggregate of its members' tangents (design principles 9.9), so the
+                // j-th member's tangent is the j-th tangent. A tuple names its member by number and a
+                // struct by key, and both are written as they are read: the draft has both forms
+                // (`addAccsNode(type, tupleIndex)` and `addAccsNode(type, structKey)`), and reading a
+                // keyed access by the number the payload carries would project another member.
                 rt::GCAccsBody accsBody{};
                 const auto *body    = function.bodyOf(ref, accsBody) ? &accsBody : nullptr;
                 const auto inputs   = function.normInputsOf(ref);
-                if (body == nullptr || body->accsKind != rt::GCAccsKind::TupleIndex ||
-                    inputs.size() != 1 || inputs.front() >= function.nodeCount() ||
-                    !copied[inputs.front()]) {
+                const bool tupleIndexed =
+                    body != nullptr && body->accsKind == rt::GCAccsKind::TupleIndex;
+                const bool keyed = body != nullptr && body->accsKind == rt::GCAccsKind::StructKey;
+                if ((!tupleIndexed && !keyed) || inputs.size() != 1 ||
+                    inputs.front() >= function.nodeCount() || !copied[inputs.front()]) {
                     break;
                 }
+                const auto project = [&](gc_node_ref_t from) {
+                    const gc_node_ref_t projection =
+                        keyed ? draft.addAccsNode(node->dataType(), body->key())
+                              : draft.addAccsNode(node->dataType(), body->value);
+                    draft.setNormInputs(projection, std::span<const gc_node_ref_t>(&from, 1));
+                    return projection;
+                };
                 const gc_node_ref_t tuple = inputs.front();
                 const gc_node_ref_t source =
                     valueOf[tuple] != rt::kInvalidNodeRef ? valueOf[tuple] : copyOf[tuple];
-                const gc_node_ref_t made = draft.addAccsNode(node->dataType(), body->value);
-                draft.setNormInputs(made, std::span<const gc_node_ref_t>(&source, 1));
-                copyOf[ref] = made;
+                copyOf[ref] = project(source);
                 copied[ref] = true;
                 ++copiedKinds;
                 if (tangentOf[tuple] != rt::kInvalidNodeRef) {
-                    const gc_node_ref_t tupleTangent = tangentOf[tuple];
-                    const gc_node_ref_t halfTangent =
-                        draft.addAccsNode(node->dataType(), body->value);
-                    draft.setNormInputs(
-                        halfTangent, std::span<const gc_node_ref_t>(&tupleTangent, 1));
-                    tangentOf[ref] = halfTangent;
+                    tangentOf[ref] = project(tangentOf[tuple]);
                 }
                 break;
             }
