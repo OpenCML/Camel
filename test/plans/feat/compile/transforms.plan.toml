@@ -409,14 +409,14 @@ timeout_ms = 20000
 
 [[tests]]
 name = "transpose_walks_each_arm_of_a_branch"
-desc = "`transpose` of a function with a branch: each arm is a linear chain of its own, the cotangent runs backwards inside the arm that produced the value, and the condition is read as it was -- the same predicate, at the values the caller passed -- choosing the other arm. The transposed function therefore takes the parameters of `f` first and the cotangent last, which is the one shape for every function: `transpose(f)(x, 1.0)`. For `pick(x)` returning `2*x` when `x > 0` and `3*x` otherwise, the cotangent 1.0 pulls back to 2 at a positive x and 3 at a negative one. `merged(x)` uses its parameter twice on one side only (`2*x + 5*x`, else `4*x`), so the two sides answer 7 and 4: within an arm two cotangents add, while the two arms' cotangents are joined rather than added, because only the arm that ran contributed one. The reading names the arms it built (`arms=2`), the rules it applied, and the type the resolver and the graph agree on."
+desc = "`transpose` of a function with a branch: each arm is a linear chain of its own, the cotangent runs backwards inside the arm that produced the value, and the condition is read as it was -- the same predicate, at the values the caller passed -- choosing the other arm. The values each arm reads are the ones the cut carried, so the transposed half takes the cotangent alone (author, 2026-11-02 11:30) and the case is spelled the way a transposition is asked now: `let (_, lin) = split(jvp(pick))(1.0)` then `transpose(lin)(1.0)`. For `pick(x)` returning `2*x` when `x > 0` and `3*x` otherwise, the cotangent 1.0 pulls back to 2 at a positive x and 3 at a negative one. `merged(x)` uses its parameter twice on one side only (`2*x + 5*x`, else `4*x`), so the two sides answer 7 and 4: within an arm two cotangents add, while the two arms' cotangents are joined rather than added, because only the arm that ran contributed one -- and the two summands reach the arm's `add_tangent` as values the arm computes, which is a shape the arm's forward had to learn to answer (`forwardInArm`'s operator case) for this number to exist. The reading names the arms it built (`arms=2` on each half), the laws the rule kernel was transposed with (`rhs=add_t,mul_t` on the kernel's own line, since the half's own line applies no rule), and the type the resolver and the graph agree on."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_branch.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=pick graph=", "type=(float, float) => float nodes=9 arms=2 rhs=mul_t", "TRANSPOSE function=merged graph=", "nodes=12 arms=2 rhs=add_t,mul_t", "2.0", "3.0", "7.0", "4.0"]
+expect_output_contains = ["TRANSPOSE function=split_of_jvp_of_pick_backward graph=", "type=(float) => (float,) nodes=11 arms=2", "TRANSPOSE function=split_of_jvp_of_merged_backward graph=", "type=(float) => (float,) nodes=16 arms=2", "TRANSPOSE function=autodiff::mul_tangent<float> graph=", "rhs=add_t,mul_t", "(2.0)", "(3.0)", "(7.0)", "(4.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
