@@ -109,3 +109,23 @@ if (!draft.ctrlInputsOf(id).empty()) {
 ⇒ **按"同诊断首行同根因"，这 40 条是 1 个根因**：**除法从来没有被执行（或没有到达），所以 `DivisionByZero` 没有发出；前向值本身也没打出来。** 我在上一轮按用例名猜"两组（抛错次序 vs 优化器纯度）"，**诊断否掉了这个猜测**——名字像两件事，读数是一件事。
 
 **因此这一族不是"袋子里装的不是同一样东西"**：它装的是一样东西，只是从两个计划的入口进来。
+## 剩下 40 条的机制：真正挡住它的是边不变量，不是某个 pass 的读法
+
+**三问的答案（读代码 + 探针跑出的 stdout 原文）：**
+
+**① `DivisionByZero` 在哪一层发出**：**在执行的算子层** —— `src/builtin/executors/builtin_semantics.cpp:230` 给 `:op/div_*` 声明 `FaultSpec{FaultKind::DivisionByZero, 1}`（下标 1 = 除数），**除法真的执行时才发。**
+
+**② 那一层看的是什么次序**：**它根本轮不到执行。** 探针跑出的 stdout 原文（`test/results/log/20261101_230542_745449/fail/.../stdout.txt`）：
+
+```
+camel: internal error: Runtime graph 'pick' breaks its edge invariants (2 violation(s)):
+  graph 'pick': sync edge 5 -> 6 ends on a node no `sync` block wrote (kind 11, flags 0, data type 'int')
+```
+
+⇒ **把控制链写成 sync 边之后，`sync` 边落在了普通 oper 节点上，图的不变量直接否掉这张图**（"ends on a node no `sync` block wrote"），**程序在开跑前就中止**。`fault.in_sync_call` 的原文更直接：`A statement of a sync block already follows node 5, so it cannot follow node 7 as well.`
+
+**③ `<N>` 那四个值说明什么**：**它们一个也没出现，因为 stdout 里是编译器内部错误文本，不是程序的输出** ⇒ **"程序根本没跑完"，不是"跑完但答案错"。** 优化器那组的 `before` 同理。
+
+**⇒ 这就是 P0-2 真正的墙**：**不是"哪个 pass 读控制边"，而是"sync 边必须落在一个 `sync` block 写过的节点上"这条不变量。** P0-2 要做的是**让链位由 sync 承担的同时，把这条不变量该说的东西说对**（哪些节点允许是 sync 边的终点），**而不是把控制边悄悄换成 sync 边**。
+
+**这一句是机制，不是我上一轮那个症状**（"除法没执行"是症状，上面才是机制）。
