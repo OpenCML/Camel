@@ -119,6 +119,11 @@ const STATIC_CHECKS = [
     // reads as a question nobody is working on. The author's rule of 2026-11-03 is why this is a
     // gate check and not a habit: the answer is decided by reviews/, never by what is left behind.
     { name: 'pending questions: no page already answered in reviews', args: ['scripts/check-doc-links.mjs', '--questions-index'] },
+    // The same rule's other half: a new question is one page under docs/handover/questions/, and
+    // every page states a default and starts on it that round. That half used to live in the skill
+    // and in whoever remembered it; a page that arrives without a default now stops the gate
+    // instead. The check names the page and which half is missing.
+    { name: 'questions: every pending page names a default and gives it', args: ['scripts/check-doc-links.mjs', '--questions-defaults'] },
     { name: 'document snippets: Camel fences compile and print what the page says', args: ['scripts/check-doc-snippets.mjs'], camel: true },
     { name: 'stdlib declarations: a migrated module stays migrated', args: ['scripts/stdlib-declarations.mjs', '--check'], camel: true },
     // The conformance matrix: every program in test/conformance/cases.json is compared with the

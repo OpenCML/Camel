@@ -8,6 +8,10 @@
 //   node scripts/check-doc-links.mjs            the reader-facing documents (see SCOPE)
 //   node scripts/check-doc-links.mjs --default-roots  the same, ignoring a script path argument
 //   node scripts/check-doc-links.mjs --all      every tracked *.md of the repository
+//   node scripts/check-doc-links.mjs --questions-defaults  every page under docs/handover/questions
+//                                               names a default in a heading and gives it text (the
+//                                               author's rule of 2026-11-03: a question is asked with
+//                                               the answer this side would start on)
 //   node scripts/check-doc-links.mjs --technical-index  every page under docs/technical is listed
 //                                               in docs/technical/README.md (the list is the tree)
 //   node scripts/check-doc-links.mjs --citations  every *.md path cited anywhere in the tree — in a
@@ -636,6 +640,55 @@ function checkCitations() {
 }
 if (args.includes('--citations')) {
     process.exit(checkCitations())
+}
+// A rule about the pages that only a reader of the rule could keep: "我方新问题一律一页一问放进
+// docs/handover/questions/" and "每页都要写默认建议，并当轮按默认开工" (author, 2026-11-03). The second
+// half is a property of the page, so it is checked on the page rather than remembered: a section
+// whose heading names a default, and at least one line of text under it. The report names which of
+// the two is missing, because "this page is not compliant" sends the reader back to the rule to work
+// out which half it broke.
+function checkQuestionsHaveDefaults() {
+    if (!fs.existsSync(QUESTIONS_DIR)) {
+        console.log(`${QUESTIONS_DIR}: no such directory`)
+        return 2
+    }
+    const pages = fs
+        .readdirSync(QUESTIONS_DIR)
+        .filter((name) => name.endsWith('.cn.md'))
+        .sort()
+    if (pages.length === 0) {
+        console.log(`${QUESTIONS_DIR}: no page to check, so nothing here is a pass`)
+        return 2
+    }
+    let checked = 0
+    for (const page of pages) {
+        const file = path.posix.join(QUESTIONS_DIR, page)
+        const lines = fs.readFileSync(path.join(QUESTIONS_DIR, page), 'utf8').replace(/\r\n/g, '\n').split('\n')
+        const isHeading = (line) => /^#{1,6}\s+\S/.test(line)
+        const start = lines.findIndex((line) => isHeading(line) && /(默认|default)/i.test(line))
+        if (start === -1) {
+            console.log(`${file}: no section names a default: a heading has to hold 默认 or default, and the answer goes under it`)
+            continue
+        }
+        let body = 0
+        for (let i = start + 1; i < lines.length && !isHeading(lines[i]); i += 1) {
+            if (lines[i].trim() !== '') body += 1
+        }
+        if (body === 0) {
+            console.log(`${file}: the default section "${lines[start].replace(/^#{1,6}\s+/, '')}" has no text, so there is no default to start on`)
+            continue
+        }
+        checked += 1
+    }
+    if (checked !== pages.length) {
+        console.log(`${checked} of ${pages.length} pending page(s) give a default; a page without one is a question nobody can start on`)
+        return 1
+    }
+    console.log(`every pending page names a default and gives it: ${checked} page(s) in ${QUESTIONS_DIR}`)
+    return 0
+}
+if (args.includes('--questions-defaults')) {
+    process.exit(checkQuestionsHaveDefaults())
 }
 if (args.includes('--questions-index')) {
     if (args.includes('--write')) process.exit(writeQuestionsIndex())
