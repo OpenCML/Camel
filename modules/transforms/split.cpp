@@ -896,7 +896,8 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
     // is an ordinary function type, so there is no arity a signature could not know, and no guard has
     // to be loosened to admit one.
     halves.backward = FunctionType::create(param_vec_t{}, tangentParams, tangent)
-                          ->withResources(function->resources());
+                          ->withResources(function->resources())
+                          ->withClosedHalf();
     // The forward half answers `(result, lin)`: the value and the linear function closed over the
     // residuals it was computed with. `lin`'s type is the backward half's, so the pair's second member
     // is spelled `(tangents...) => tangent` and the closure stays where it belongs -- off the type.

@@ -109,7 +109,7 @@ FunctionType::FunctionType(const Parts &parts, bool open)
       normCount_(static_cast<uint16_t>(parts.params.size() - parts.withCount)),
       hasNames_(parts.hasNames), hasRest_(parts.hasRest), hasWithRest_(parts.hasWithRest),
       constasIndices_(parts.constasIndices), withConstIndices_(parts.withConstIndices),
-      resources_(parts.resources), open_(open) {
+      resources_(parts.resources), open_(open), closedHalf_(parts.closedHalf) {
     for (size_t i = 0; i < parts.params.size(); ++i) {
         const auto &[type, isVar] = parts.params[i];
         types()[i]                = type;
@@ -195,6 +195,14 @@ FunctionType *FunctionType::intern(const Parts &parts) {
         key.push_back(internSymbol(parts.resources.allocates->name));
     }
     key.push_back(parts.resources.external ? 1 : 0);
+    // A closed half -- the backward half `split` hands out, whose parameters are the tangents and
+    // whose values are its captures -- is part of what the signature is: two signatures that differ
+    // there are not one type, because `transpose` answers them different shapes. It is in the **key
+    // only**, the way parameter names are (see the comment at the top of intern()): a type prints it
+    // nowhere and `equals` ignores it (text.cpp: sameTypeWith compares the parameters, the result and
+    // the resources), so a marked signature is compatible with the plain one and is accepted where
+    // the plain type is expected.
+    key.push_back(parts.closedHalf ? 1 : 0);
     // The head ends here; the parameters and the names follow, so the canonical key can reuse it.
     const size_t head = key.size();
     for (const auto &[type, isVar] : parts.params) {
@@ -241,6 +249,7 @@ FunctionType::Parts FunctionType::parts() const {
     parts.constasIndices = constasIndices_;
     parts.withConstIndices = withConstIndices_;
     parts.resources = resources_;
+    parts.closedHalf = closedHalf_;
     parts.params.reserve(paramCount());
     for (size_t i = 0; i < paramCount(); ++i) {
         parts.params.emplace_back(types()[i], varMarks()[i] != 0);
@@ -276,6 +285,20 @@ FunctionType *FunctionType::create(
 FunctionType *FunctionType::withExitType(Type *exitType) const {
     Parts changed    = parts();
     changed.exitType = exitType;
+    return intern(changed);
+}
+
+FunctionType *FunctionType::withClosedHalf(bool closedHalf) const {
+    if (closedHalf_ == closedHalf) {
+        return const_cast<FunctionType *>(this);
+    }
+    if (asOpen() != nullptr) {
+        OpenFunctionType *copy = OpenFunctionType::copyOf(this);
+        copy->closedHalf_      = closedHalf;
+        return copy;
+    }
+    Parts changed     = parts();
+    changed.closedHalf = closedHalf;
     return intern(changed);
 }
 
