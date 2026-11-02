@@ -1700,3 +1700,52 @@ P0-1、P0-3 从 18:20 下达，到现在快三小时，还没有一行代码。�
 - **语料。** `test/tools/cppexec/expect.txt` 的 159 个程序，`std::fvm` 与 `std::opt::devirtualize std::fvm` 的输出和退出码逐字相同（修前有 2 条不同）。`run.py --expect … --passes "std::opt::devirtualize"` 173/174 与 fvm 相同，剩下 1 条是主机 clang 的链接问题（见上一条），与这一笔无关。
 - **回归与闸门。** `consistency.limits` 新增 `limit.direct.after_devirtualize.fits` / `.exceeds`，各跑 nvm/fvm/jit/prl 四个后端；把三处源码改动 stash 掉再跑该计划是 `total: 108, pass: 104, fail: 4`（正好四条 `exceeds`），改回来是 108/108/0。全闸门：`[SUMMARY] total: 8393, pass: 8381, fail: 0, skip: 10, known failures: 2`，`RUN_EXIT=0`（真值为 `edges.no_ctrl_edge_kind.gir`、`edges.gate_has_no_control_input.gir` 两条 xfail，与这一笔无关）。
 - **判据引用（留一句给作者，不是新裁定）。** 3.9 原文只写到"递归深度：尾递归要做优化，程序应尽量写成尾递归或循环；非尾递归给一个可配置的上限，默认在各调度器上统一为 1000，并行调度器同样计数"——它说"各调度器统一"，没说"各流水线统一"。9.6 又说"开不开优化，程序的行为一样"不是设计原则，折叠遍可以删掉一个没人用、会出故障的纯计算而让程序继续。我按 `limits.h` 自己的那句话判：那里写着"计的是同一个数：每个函数的调用，直接写的、经函数值调的、高阶算子为元素调的"——三种写法同一个数，`devirtualize` 只改写法，所以不该改数；它没有删掉任何计算，只是把同一次调用换了个拼法。如果作者认为 9.6 也允许优化遍改动上限，这一笔可以整笔回退，上面每条读数都在。
+
+
+## 已修 / 一问（2026-11-02，A3 车道）：整张"优化遍 × 后端 × 边界"矩阵——数错的那一处已修，删掉一次调用的那几格是问题不是数错
+
+上一节修的是 `std::opt::devirtualize` 一处。这一节把"还有哪些遍会改变『程序是否撞到深度上限』"问成一张表，四支程序 × 九种流水线 × 三种后端逐格量，然后按读数分两类：**数错了**（同一次调用，写法变了，数跟着变——这是缺陷）和**调用真被删了**（内联少了一层栈——这是问题）。
+
+- **量法。** 每格记退出码，比的是**边界那一对**（上限 L：一个 N 跑得动、下一个 N 撞上），不是"跑完没跑完"。九种流水线：什么都不加（基准行）、`std::opt::inline`、`std::opt::devirtualize`、`std::opt::fold`、`std::opt::cse`、`std::opt::dce`、`std::opt::saturate`、`std::opt::inline std::opt::devirtualize`、`std::opt`。判定：**任何一格与基准行不同 ⇒ 那一遍也动了上限**，再去找它是数错还是真删了调用；没有把上限调高让两边一致。
+
+- **表一：`depth_direct.cml`（`func depth(n) = if n == 0 then 0 else 1 + depth(n-1)`），`--max-recursion-depth 10`，N=9 应 0 / N=10 应 1。**
+
+| 流水线 | 9/nvm | 9/fvm | 9/jit | 10/nvm | 10/fvm | 10/jit |
+|---|---|---|---|---|---|---|
+| 什么都不加 | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt::inline` | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt::devirtualize` | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt::fold` | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt::cse` | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt::dce` | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt::saturate` | 0 | 0 | 0 | 1 | 1 | 1 |
+| `inline devirtualize` | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt` | 0 | 0 | 0 | **0** | **0** | **0** |
+
+  修前 `devirtualize` 那一行也是 `0 0 0 / 0 0 0`（上一节修的），现在回到基准。剩下 `std::opt` 一格不同，见最后一问。
+
+- **表二：`depth_value.cml`（每层两次调用：`step` 调 `via`，`via` 经函数值调 `step`），`--max-recursion-depth 100`，N=49 应 0 / N=50 应 1。**
+
+| 流水线 | 49/nvm | 49/fvm | 49/jit | 50/nvm | 50/fvm | 50/jit |
+|---|---|---|---|---|---|---|
+| 什么都不加 | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt::inline` | 0 | 0 | 0 | **0** | **0** | **0** |
+| `std::opt::devirtualize` | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt::fold` / `cse` / `dce` | 0 | 0 | 0 | 1 | 1 | 1 |
+| `std::opt::saturate` | 0 | 0 | 0 | **0** | **0** | **0** |
+| `inline devirtualize` | 0 | 0 | 0 | **0** | **0** | **0** |
+| `std::opt` | 0 | 0 | 0 | **0** | **0** | **0** |
+
+- **表三：`depth_map.cml`（递归在 map 元素里，多一层调用），`--max-recursion-depth 100`，N=98 应 0 / N=130 应 1。** 九行六格**全部**是 `0 0 0 / 1 1 1`，与基准行相同（表略）。
+
+- **表四：`tail_under_limit.cml`（上限 8，一百万次尾调用）。** 九种流水线在 `std::fvm` 上全是 rc=0——反方向也钉住：没有哪一遍把尾调用变成不尾。
+
+- **第一类：数错了，已修（`devirtualize`，上一节）。** 同一次调用换了个拼法（`CALL` 的函数值调用 → `FUNC main` 直接调用，落在尾位置），尾调用折叠把它并进入口的激活，而检查里 `-1` 与 `+ kEntryCalls` 减掉的正是两个不是程序自己发的激活。修法：入口图对它的被调者的调用单独开一个激活（nvm/fvm/jit 三处），上限不动。修后表一、表二 `devirtualize` 行全部回到基准。
+
+- **第二类：调用真被删了（`inline` / `saturate` / `std::opt`）。** 表二那三行不是数错：`step`/`via` 互递归在同一个 SCC 里，内联阶段按设计把它们压紧（`src/passes/opt/inline/engine.cpp` 的 `shouldSkipRecursiveInline` 对同 SCC 返回 false，注释写着这是 profitable transformation），压紧后每层真的只剩一次调用，栈上确实少一帧。边界正好翻倍印证：`std::opt::inline` 下 N=100 还在跑、N=101 才撞；`saturate` 与 `std::opt` 是 N=99 跑、N=100 撞。表一 `std::opt` 那一格是同一个道理的另一面：`std::opt` 的内联阶段把入口图对 `main` 的调用内联进了入口图（`std::opt` 之后根图里既没有 `CALL` 也没有 `FUNC main`，`main` 的图体直接搬进了根图、`main` 这个图被 DCE 删掉），于是 `kEntryCalls` 想减的那一个激活不存在了——少减一个，就多一层。
+
+- **我为什么没有"修"第二类。** 试过：让内联阶段不许往入口图里内联（`engine.cpp` 候选循环里挡掉 `nextGraph == program->root()`）。表一那一格确实从 `0` 变回 `1`，但**撞了 60 条用例**：`feat.modules.onnx` 的 60 条 `pass_export_*` 全红，原因是 `onnx::export` 正是靠"`std::opt` 把 `main` 内联进入口图"才看得见导出请求（`modules/onnx/passes/export.cpp`，`collectRequests` 说"the entry graph still contains a call … that was not inlined, so no onnx.export_model(...) request is visible in it; run std::opt before onnx::export"），其中一条用例专门断言"内联预算耗尽时这条调用留在入口图里"的原话。也就是说，"入口那次调用被内联"是**语言里设计好的形状**，不是我在调度器侧可以假设它不会发生的事。这一笔已整笔回退，源码回到上一节那个提交。
+
+- **一问（留给作者，默认=现状允许）。** 内联删掉一次调用，递归深度上限该不该跟着变？两条路：(甲) **允许**（现状）——3.9 计的是"打开的调用"，内联之后确实少一次调用，9.6 也说"开不开优化，程序的行为一样"不是原则；代价是同一个程序开不开 `std::opt` 会有不同的深度边界（表一两格、表二三行）。(乙) **不许**——就得把被内联掉的调用记成虚拟帧：`GCRegionKind::Inline` 认得出内联区域，三个调度器和 JIT 的计数要按区域进出增减，这是另一笔工程（不小，但不动上限）。我按现状留在这里；若作者判"不许"，我按 (乙) 做。
+
+- **判据引用（同上一条，留一句）。** 若作者认为 9.6 也允许优化遍动上限，本节的结论就是"两处都不用动"，上一节那一笔也可整笔回退，矩阵每一格都在。回归面：`consistency.limits` 仍是 108 条全绿（这一节没有新增条目，第二类的地方在计划里写成了一段注释，写明读数与出处，不钉住一个待裁定的行为）。
