@@ -35,7 +35,12 @@ PROBES = HERE / "probes"
 # regression, and either one means the report has to be rewritten -- so the reader exits non-zero
 # on a mismatch instead of leaving it to a human to diff.
 EXPECTED = {
-    "01_grad_scalar": "refused",
+    # This one answered on develop as of 2026-11-03: `grad square at 3 = 6.0` and `at -2 = -4.0`,
+    # which are the two numbers the probe itself names as what it has to answer before any other
+    # probe's refusal can be read as the library's.  The wall fell when `stdlib/vjp.cml` was rewritten
+    # (`8194d89fd` and the author's ruling of 2026-11-02 11:30) -- before that the module did not
+    # compile at all and the probe reported a refusal that belonged to the module, not to the shape.
+    "01_grad_scalar": "ok",
     "02_grad_table": "refused",
     "03_matmul": "refused",
     "04_softmax": "refused",
