@@ -221,6 +221,14 @@ the command beside any number quoted in a report or a page.** Two instruments, t
 that is enough to make every later reading untraceable, and a line count is exactly the measurement
 that looks too simple to get wrong.
 
+**The same error one layer down: a line break inside a path is two citations.** `docs.links.citations`
+went red on a page name wrapped across two lines: the checker read the fragment that began the second
+line as a file name and answered `no such file`. The physical shape of the text was read as its
+meaning, the same mistake as a line count taken from the wrong instrument. Keep a path on one line
+whatever its length; a checker that answers `no unverified citation` is the reading that it is whole.
+This paragraph does **not** reproduce the broken shape -- writing it here would trip the same check,
+which is exactly the point.
+
 ## A new plan needs a selection rule, or `--changed` can never run it
 
 A plan file added to `test/plans` is only reachable by an ordinary change if `test/plan-selection.json`
