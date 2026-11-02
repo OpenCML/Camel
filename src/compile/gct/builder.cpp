@@ -2170,7 +2170,7 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
             .at(ast->load()->tokenRange())
             .commit(
                 "a `yield` reached the statement builder, so the generator machine did not claim "
-                "it; send the program, this is a compiler defect");
+                "it. This is a known limitation of this compiler version, and nothing in the program is wrong");
         throw BuildAbortException();
     }
     node_ptr_t exitNode = tree_->makeExit(ExitType::Return);
@@ -5713,14 +5713,17 @@ node_ptr_t Builder::visitGeneratorBody(
     // The head writes the stream type, and it is what says what one `yield` hands out. A shape
     // this machine does not build is a defect of the machine, not a property of the program: the
     // ruling of 2026-10-31 retired the "generators are not supported" refusal, and what is left is
-    // a defect reporter -- `reportUnbuiltShape` -- that names the shape and asks for the program.
+    // a defect reporter -- `reportUnbuiltShape` -- that names the shape and states that this version
+    // does not build it
     const auto reportUnbuiltShape = [&](const AST::node_ptr_t &atNode) -> void {
         const AST::node_ptr_t atYield = firstOwnYield(atNode);
-        diags_->of(InternalDiag::UnknownInternalError)
+        diags_->of(InternalDiag::GeneratorInitialValueShapeUnsupported)
             .at((atYield != nullptr ? atYield : atNode)->load()->tokenRange())
             .commit(
-                "the generator machine does not build this shape; send the program, this is a "
-                "compiler defect");
+                "the generator machine does not build this shape: a generator `loop` takes its initial "
+                "value written as a literal at the loop, and a value computed there or held in a local "
+                "is not built. This is a known limitation of this compiler version, and nothing in "
+                "the program is wrong");
         throw BuildAbortException();
     };
     // A local that lives across a `yield` is a cell of the body (see `addTypedCell`), so there is

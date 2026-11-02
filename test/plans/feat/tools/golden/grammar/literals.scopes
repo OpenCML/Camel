@@ -1,6 +1,6 @@
->// Literals: every form the lexer accepts (antlr/OpenCMLLex.g4).
+>// Literals: every form the lexer accepts (docs/technical/34_handwritten_parser.md, the lexer).
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
-#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
 >
 >// INTEGER: DEC, OCT, HEX, BIN, each with an optional exponent
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel

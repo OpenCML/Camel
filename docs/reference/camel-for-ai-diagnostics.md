@@ -19,9 +19,10 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | Name | What the compiler says |
 |---|---|
 
-**Internal — errors** (`InternalDiag`) — 1
+**Internal — errors** (`InternalDiag`) — 2
 
 | `UnknownInternalError` | An error has occurred: {0}. |
+| `GeneratorInitialValueShapeUnsupported` | An error has occurred: {0}. |
 
 **Lexical — errors** (`LexicalDiag`) — 4
 

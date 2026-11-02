@@ -14,6 +14,8 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/profile/allocation.h"
+
+#include <cstdio>
 #include "camel/utils/assert.h"
 #include "camel/utils/brpred.h"
 #include "camel/utils/log.h"
@@ -1475,11 +1477,52 @@ void GenerationalAllocatorWithGC::clearMarks() {
     elderGenSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
     largeObjSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
 
-    // Graph carriers are also traced through Function values (Function::updateRefs traces the
-    // runtime graph so runtime-created graphs keep their static constants alive). Those graphs
-    // are not necessarily in a registered root set, so unmark the whole graph space instead of only
-    // the registered roots, or a later collection would skip them and miss their edges.
-    graphSpace().iterateAllocated([](ObjectHeader *header) { header->unmark(); });
+    // The marks a root path cannot reach: markObject recorded every object it marked, and an object
+    // marked through a root set in an earlier cycle may be in no root set now (the contexts clear
+    // and refill gcRoots_), so walking the roots cannot find it. Unmark the ledger instead of
+    // scanning the whole graph space, and check the address first: an entry whose object was freed
+    // and whose address was reused must not be unmarked.
+    // Two things are worth stating here, because this replaced a whole-space scan. The bit: this
+    // runs from markPhase() alone, as its first statement, so every mark it clears is recomputed in
+    // the same cycle before anything reads it -- clearing one too many changes no decision, and the
+    // scan existed because clearing too few does. The address: isAllocated() is not about the bit,
+    // it is there because headerOf() on a freed address would read a header that has since been
+    // reused, and that read is the danger.
+    std::vector<rtdata::Object *> unmarkedLedger;
+    unmarkedLedger.reserve(markedSinceClear_.size());
+    for (rtdata::Object *marked : markedSinceClear_) {
+        if (marked != nullptr && graphSpace().isAllocated(marked)) {
+            unmarkedLedger.push_back(marked);
+            headerOf(marked)->unmark();
+        }
+    }
+    markedSinceClear_.clear();
+
+    // --gc-check mark compares the ledger with the whole-space scan it replaced. Off by default:
+    // the scan is the cost the ledger exists to avoid, so this is a check and not a fallback --
+    // a survivor is reported, never repaired by clearing more.
+    if (debugConfig_.checkMarks) {
+        size_t survivors = 0;
+        graphSpace().iterateAllocated([&survivors](ObjectHeader *header) {
+            if (!header->marked_) {
+                return;
+            }
+            ++survivors;
+            if (survivors <= 8) {
+                std::fprintf(
+                    stderr,
+                    "[gc] mark check: graph-space object survived the ledger: header=%p size=%zu\n",
+                    static_cast<void *>(header),
+                    header->size());
+            }
+        });
+        std::fprintf(
+            stderr,
+            "[gc] mark check: ledger=%zu survivors=%zu %s\n",
+            unmarkedLedger.size(),
+            survivors,
+            survivors == 0 ? "P==W" : "P!=W");
+    }
 
     for (const ObjectRootSetEntry &entry : objectRootSets_) {
         if (entry.set == nullptr) {
@@ -1519,6 +1562,7 @@ void GenerationalAllocatorWithGC::markObject(rtdata::Object *obj, const type::Ty
             continue;
 
         header->mark();
+        markedSinceClear_.insert(current);
         recordObjectTypeUnlocked(current, entry.type);
 
         // The parent layout supplies refType wherever static slot metadata is available.

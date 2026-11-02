@@ -1,0 +1,14 @@
+func f(): int {
+    return 0
+}
+
+func g(): int.. sync {
+    loop i = f() while i < 3 do {
+        yield i
+        i + 1
+    }
+}
+
+func main(): int sync {
+    return 0
+}

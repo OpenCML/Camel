@@ -240,6 +240,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         // pointer that C++ code kept across the safepoint reads poison instead of a value
         // that happens to be still right. Requires young copying. See poison.h.
         bool poisonAtSafepoints = false;
+    bool checkMarks = false; // --gc-check mark: compare the ledger with the graph space
     };
 
     struct RuntimeStats {
@@ -629,6 +630,12 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // Graph carriers whose static area this minor collection has traced. Program graphs are
     // roots; a graph created while the program runs is reached through a Function value.
     std::unordered_set<rtdata::Object *> minorTracedGraphs_;
+    // Every object markObject has marked since the last clearMarks(): the ledger the collector
+    // clears marks from. It has to outlive a collection -- an object marked through a root set in
+    // one cycle may be in no root set in the next, and then no root path reaches its mark. Entries
+    // are only unmarked after isAllocated() says the address is still a live graph-space object:
+    // an address that was freed and reused must not be unmarked.
+    std::unordered_set<rtdata::Object *> markedSinceClear_;
     std::vector<rtdata::Object *> minorGraphScan_;
     DebugConfig debugConfig_{};
     RuntimeStats stats_{};

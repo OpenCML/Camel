@@ -521,3 +521,28 @@ Not verified: Windows (Clang with the MSVC standard library) and macOS (libc++).
 plain C++23 without platform-specific parts; the removal of the ANTLR headers uncovered standard
 headers that had been included only through them (`<deque>`, `<mutex>`, `<any>` were added where
 the Linux build needed them), and other platforms may need more of the same.
+
+## 10. What is left of ANTLR in the tree
+
+**There is no ANTLR code, runtime or generated artefact in the repository**: no file whose name
+contains `antlr`, no `.g4` grammar, no managed file under `src/parse/antlr/` or
+`include/camel/parse/antlr/`, no `find_package`, no link, no generation step. `git grep -il antlr`
+returns only comments, pages, history snapshots, and the one build guard below; not one of them is a
+dependency.
+
+**The one place that still acts on the name is `CMakeLists.txt`, and it is there for an old
+checkout, not for this tree.** The source list is a `GLOB_RECURSE`, so a checkout that still carries
+the old ignored `src/parse/antlr/` directory would compile those outputs into `libcamel`; the
+`list(FILTER ...) EXCLUDE REGEX "/src/parse/antlr/")` keeps them out. It is not a dependency: a tree
+that never had that directory builds the same with the filter deleted. It stays because deleting it
+costs such a checkout its build and buys this tree nothing.
+
+**The two guards that were dead have gone** (2026-11-02): the ignore rules in `.gitignore` and the
+skip pattern in `scripts/check-std-includes.mjs`. Nothing can generate those paths any more, so both
+only made a reader think a parser generator was still in the build.
+
+What also stays is the comment in `tools/debugger` and `tools/lang-server` that keeps
+`nlohmann/json.hpp` first: it uses the C macro `EOF`, and **the ANTLR headers used to `#undef` it**,
+which is why the order was written down. Those headers are gone and nothing undefines `EOF` today, so
+the comment says that instead of claiming the conflict is still there -- the order costs one line and
+the failure it prevents (`EOF` silently missing) reads as a defect in somebody else's header.

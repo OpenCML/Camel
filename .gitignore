@@ -61,11 +61,6 @@ REVIEW.md
 # Local goal and planning documents (not tracked)
 goal/
 
-# Legacy parser caches retained for builds of historical versions.
-/antlr/
-/src/parse/antlr/
-/include/camel/parse/antlr/
-
 # Local experiments, never fixtures
 scratch/
 

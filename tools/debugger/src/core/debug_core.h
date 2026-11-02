@@ -27,7 +27,10 @@
  * concurrently with them and no collection can start under them.
  */
 
-// First: ANTLR, which the compiler headers pull in, undefines EOF.
+// First: nlohmann/json uses the C macro EOF, and a header that `#undef`s EOF would take it away
+// silently. The ANTLR headers that used to do exactly that were deleted with the handwritten parser
+// (docs/technical/34_handwritten_parser.md); nothing undefines EOF today, so this order costs nothing
+// and tells the next person who adds such a header why the line has to come first.
 #include "nlohmann/json.hpp"
 
 #include "program_index.h"
