@@ -21,6 +21,7 @@
 
 | [`2026-11-02-what-counts-as-a-statement-of-a-chain`](2026-11-02-what-counts-as-a-statement-of-a-chain.cn.md) | 链上语句是否含 `Func`/`Join`（默认：都不含，`Call` 含；实测 17753 处与标记不一致） | 待裁 | — | 不变量能否改成"按节点性质判" |
 | [`2026-11-02-when-should-an-underivable-sync-edge-be-dropped`](2026-11-02-when-should-an-underivable-sync-edge-be-dropped.cn.md) | 同步边"推不出来就别建"该在建图时判还是图定型后判；冻结图没有重发 payload 的通路 | 未裁 |
+| [`2026-11-02-who-restores-order-after-inline-moves-a-statement`](2026-11-02-who-restores-order-after-inline-moves-a-statement.cn.md) | 内联改变块归属之后，次序该由内联自己补还是由图定型后的统一通道补 | 未裁 |
 
 **这一节的行数 = 目录里的页数**（现在 3 = 3）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。
 
