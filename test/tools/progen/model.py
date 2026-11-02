@@ -175,7 +175,11 @@ def ex(n: N, ind: int, top: bool = False) -> str:
 
     def post(x):                       # the receiver of a postfix form
         s = ex(x, ind, True)
-        return s if x.k in ATOMS else "(" + s + ")"
+        # A range takes parentheses here although it stands on its own as an operand elsewhere:
+        # the postfix forms bind tighter than `..`, so `a..b->f` is `a..(b->f)` and the call lands
+        # on the last value of the interval (design principles 4.2). The call on the interval is
+        # written `(a..b)->f`, and the generator means the interval.
+        return s if x.k in ATOMS and x.k != "range" else "(" + s + ")"
 
     def bound(x):                      # a bound of `..`: no unary operator may lead it
         s = post(x)
@@ -267,7 +271,7 @@ def ex(n: N, ind: int, top: bool = False) -> str:
     if k == "reduce":
         return wrap(f"{post(n.c[0])}->reduce<{arg(n.c[1])}, {arg(n.c[2])}>")
     if k == "slice":
-        return wrap(f"({post(n.c[0])})[{arg(n.c[1])}:{arg(n.c[2])}]")
+        return wrap(f"{post(n.c[0])}[{arg(n.c[1])}:{arg(n.c[2])}]")
     if k == "contains":
         return wrap(f"{post(n.c[0])}->contains<{arg(n.c[1])}>")
     if k == "append":

@@ -152,9 +152,13 @@ class Document:
             label["norm_var"] = [item["var"] for item in entry["norm"]]
         self.V[vid] = label
         self.pretty[vid] = entry
-        for key in ("elem", "key", "value", "exit", "decl"):
+        for key in ("elem", "key", "value", "exit"):
             if entry.get(key) is not None:
                 self.edge(vid, f"T:{entry[key]}", key)
+        # A declaration is not a type: its vertex is `D:<id>` (built from the document's `decls`),
+        # so a type's `decl` edge names that vertex, not a `T:` one.
+        if entry.get("decl") is not None:
+            self.edge(vid, f"D:{entry['decl']}", "decl")
         for key, field in (("args", "arg"), ("elems", "elem"), ("variants", "variant")):
             for i, ref in enumerate(entry.get(key) or []):
                 if key == "variants":

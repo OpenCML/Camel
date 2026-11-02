@@ -347,6 +347,34 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 fastVmCallBoundarySafepoint();
                 const data_arr_t srcArgs  = bc.directCallSrcArgs();
                 const data_arr_t dstSlots = bc.directCallDstSlots();
+                // The entry graph's own activation is not a call of the program, and its call of
+                // `main` is the one call kEntryCalls excuses (camel/execute/limits.h): the room
+                // check in push() and requireNestedCallRoom() subtracts both by name. A tail call
+                // reuses its caller's activation, so folding the entry's call of its callee into
+                // the entry's activation leaves one activation fewer on the stack and lifts the
+                // limit by one -- which is what a graph whose entry call is a direct call
+                // (`FUNC main`) rather than a call through a function value did, after
+                // std::opt::devirtualize. The count of open calls must not depend on how a call is
+                // spelled (camel/execute/limits.h), so the entry's callee gets an activation of
+                // its own, exactly as the value-call spelling gives it one. Every other tail call
+                // reuses its caller's activation as before.
+                if (stackDepth_ + nestedCalls_ == 0) {
+#if ENABLE_FASTVM_JIT
+                    const Bytecode *entryBc = materializeCallTarget(pc, const_cast<Bytecode *>(&bc));
+#else
+                    const auto *entryBc = &bc;
+#endif
+                    auto *entryTarget = getFuncExtraRuntimeGraph(entryBc);
+                    GUARD(
+                        entryTarget != nullptr,
+                        "FastVM direct TAIL target of the entry graph must have a materialized runtime graph.");
+                    push(pc, currFrame);
+                    Frame *funcFrame = framePool_.acquire(entryTarget);
+                    populateDirectCallFrame(currFrame, funcFrame, srcArgs, dstSlots);
+                    pc        = getFuncExtraTargetPc(entryBc);
+                    currFrame = funcFrame;
+                    continue;
+                }
 #if ENABLE_FASTVM_JIT
                 const Bytecode *tailBc  = materializeCallTarget(pc, const_cast<Bytecode *>(&bc));
                 auto *runtimeTailTarget = getFuncExtraRuntimeGraph(tailBc);

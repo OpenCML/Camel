@@ -983,6 +983,19 @@ function printFailedOutput(result) {
     }
 }
 
+/**
+ * Where a failed test's whole output is. The log keeps twelve lines of it (`printFailedOutput`,
+ * and only under CI), which is enough to see the shape of a failure and not enough to read the
+ * cause: twice on 2026-11-02 a conclusion was drawn from a truncated fragment whose first line --
+ * the one that said what happened -- was above the cut. The runner already writes every test's
+ * stdout, stderr, merged output and meta.json into its run directory; this line is the pointer to
+ * it, relative to the checkout so it reads the same on a build machine as here.
+ */
+function fullOutputLine(statusDir) {
+    const relative = path.relative(REPO_ROOT, statusDir).split(path.sep).join('/')
+    return `full output: ${relative}/ (stdout.txt, stderr.txt, output.txt, meta.json)`
+}
+
 function printRunSummary(summary) {
     const total = summary.pass + summary.fail + summary.skip + summary.xfail
     const skipped = summary.skip > 0 ? `, skip: ${summary.skip}` : ''
@@ -1841,8 +1854,13 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
  * file was rewritten once for every test in it. See test/tools/runner-output.mjs, and
  * docs/test-plans.md, "Runner Output".
  */
+/** The directory one test's log files go into: `<run>/<status>/<plan>/<test>/`. */
+function logPathOf(plan, test, status, logDir) {
+    return path.join(logDir, status, sanitizeSegment(plan.id), sanitizeSegment(test.name))
+}
+
 function writeLogFiles(plan, test, result, status, logDir) {
-    const statusDir = path.join(logDir, status, sanitizeSegment(plan.id), sanitizeSegment(test.name))
+    const statusDir = logPathOf(plan, test, status, logDir)
     ensureDir(statusDir)
     fs.writeFileSync(path.join(statusDir, 'stdout.txt'), result.stdout)
     fs.writeFileSync(path.join(statusDir, 'stderr.txt'), result.stderr)
@@ -1912,15 +1930,42 @@ function writeLogFiles(plan, test, result, status, logDir) {
 }
 
 /**
+/**
  * A test with `backends = ["nvm", "fvm", ...]` is one test per back end, named
  * `<name>.<backend>`, in that order. `${backend}` in its `args` is the pass list `run_<backend>`
  * of test/vars.toml. Every assertion of the entry holds for each of them; in addition, each back
  * end after the first must equal the first on the fields listed in `backends_agree`. A back end
  * listed in `known_fail` is expected to fail (see main).
+ *
+ * A test with no `backends` list is one run, and its mark is `known_fail = true`. The mark used to
+ * be read *after* the early return for that shape, so `known_fail` on such a test did nothing at
+ * all: the case failed, the run went red, and the mark was never mentioned. `20860eb01` found it
+ * and fixed the one case where it showed -- by giving that case a `fvm` back end so the mark
+ * applied -- which fixed the symptom; the author's 01:50 ruling asked for the mechanism. Now the
+ * shape decides how the mark is written, and a mark written in the other shape's words is refused
+ * by name instead of being ignored.
  */
 function expandBackends(test) {
-    if (!Array.isArray(test.backends)) return [test]
-    const knownFail = new Set(test.known_fail || [])
+    const marked = test.known_fail ?? false
+    if (!Array.isArray(test.backends)) {
+        if (marked === false || (Array.isArray(marked) && marked.length === 0)) return [test]
+        if (marked !== true) {
+            throw new Error(
+                `known_fail on ${test.name} names back ends (${JSON.stringify(marked)}), but the test has no ` +
+                    `backends list, so no back end of that name runs here: write known_fail = true`,
+            )
+        }
+        return [{ ...test, __knownFail: true }]
+    }
+    if (marked === true) {
+        throw new Error(
+            `known_fail on ${test.name} is true, but the test has backends: name the back ends that fail`,
+        )
+    }
+    if (marked !== false && !Array.isArray(marked)) {
+        throw new Error(`known_fail on ${test.name} must be true or a list of back ends; it is ${JSON.stringify(marked)}`)
+    }
+    const knownFail = new Set(marked === false ? [] : marked)
     for (const backend of knownFail) {
         if (!test.backends.includes(backend)) {
             throw new Error(`known_fail names '${backend}', which is not in backends of ${test.name}`)
@@ -2119,6 +2164,20 @@ export function testTier(plan, test) {
  * `tier = "debug"`. `all` therefore leaves those tests out: it runs on the Release binary, where
  * the debug layer's abort case would not abort.
  */
+// The layers a run of `tier` claims to cover: a plan of one of them that starts nothing in this run
+// is a failure, and a plan of another layer is expected to be empty here. `compileOnly` covers the
+// non-fast entries wherever they live, so no plan is "expected empty" in that mode.
+function coveredTiers(tier, compileOnly = false) {
+    if (compileOnly) return new Set(['fast', 'slow', 'milestone', 'debug'])
+    if (tier === 'all') return new Set(['fast', 'slow', 'milestone'])
+    if (tier === 'debug') return new Set(['debug'])
+    return new Set([tier])
+}
+
+// A plan path as a reader names it: relative to the repository root, forward slashes.
+function relPath(abs) {
+    return path.relative(path.resolve(TEST_ROOT, '..'), abs).split(path.sep).join('/')
+}
 function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
     const order = []
     for (const plan of plans) {
@@ -2168,6 +2227,16 @@ function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
     }
     const kept = new Set(selected)
     const selectedPlans = []
+    // A plan the run reaches but starts nothing in is not a pass: nothing about it was read. Two
+    // shapes must not be confused, and the author's 01:30 ruling asks for the difference to be a
+    // rule rather than a habit: a plan whose own tier is another layer is *expected* to contribute
+    // nothing here (the milestone layer under a fast run), and is counted so the zero is explained
+    // instead of silent; a plan whose own tier is the layer this run covers and starts nothing is a
+    // failure, because a plan of this layer that gives this layer no test is in the run by name
+    // only. A plan that declares no test at all is a failure in every layer.
+    const covered = coveredTiers(tier, compileOnly)
+    const emptyByLayer = []
+    const unproven = []
     let cursor = 0
     for (const plan of plans) {
         const tests = []
@@ -2175,9 +2244,29 @@ function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
             if (kept.has(cursor)) tests.push(test)
             cursor++
         }
-        if (tests.length > 0) selectedPlans.push({ ...plan, tests })
+        if (tests.length > 0) {
+            selectedPlans.push({ ...plan, tests })
+            continue
+        }
+        const key = relPath(plan.__planPath)
+        const declared = plan.tests.length
+        const own = plan.__planError ? 'failing' : plan.tier ?? 'fast'
+        if (plan.__planError) {
+            // A schema error already fails this plan; it is counted here as read, not as unproven.
+            emptyByLayer.push(plan.__planPath)
+        } else if (declared === 0) {
+            unproven.push(`${key}: the plan declares no test at all, so this run proves nothing about it`)
+        } else if (covered.has(own)) {
+            unproven.push(
+                `${key}: its own tier is '${own}', the layer this run covers, and it declares ` +
+                    `${declared} test(s) none of which this run selects -- a plan that starts no test ` +
+                    'proves nothing',
+            )
+        } else {
+            emptyByLayer.push(plan.__planPath)
+        }
     }
-    return selectedPlans
+    return { plans: selectedPlans, emptyByLayer, unproven }
 }
 
 function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false) {
@@ -2715,6 +2804,11 @@ async function executePlans(plans, options, sharedVars, logDir) {
             if (note) {
                 printDetailLines([`note: ${note}`])
             }
+            if (outcome.status === 'fail') {
+                // The pointer comes before the twelve-line tail: a reader who stops at the tail must
+                // still have been told where the rest is.
+                printDetailLines([fullOutputLine(logPathOf(plan, test, outcome.status, logDir))])
+            }
             printDetailLines(outcome.failures)
             if (outcome.status === 'fail') printFailedOutput(outcome.result)
         }
@@ -2853,7 +2947,10 @@ async function executePlans(plans, options, sharedVars, logDir) {
                     } else {
                         result.status = 'fail'
                         result.failures.push(
-                            `marked known_fail on '${entry.test.__backend}' but passes: remove the mark`
+                            `marked known_fail` +
+                                (entry.test.__backend
+                                    ? ` on '${entry.test.__backend}' but passes: remove the mark`
+                                    : ' but passes, so the mark is out of date and must be removed'),
                         )
                     }
                 }
@@ -2921,7 +3018,21 @@ async function main() {
             return false
         }
     })
-    const plans = loadPlans(options.targets, options.tier, options.layeredPlans, options.compileOnly === true)
+    const selected = loadPlans(options.targets, options.tier, options.layeredPlans, options.compileOnly === true)
+    const plans = selected.plans
+    // A plan this run reaches and starts nothing in is not a silent zero. The ones whose own tier
+    // is another layer are counted and named on one line -- the milestone layer under a fast run is
+    // the usual case -- and the ones whose own tier is this layer are failures: the run would print
+    // a [SUMMARY] that says nothing about them.
+    if (selected.unproven.length > 0) {
+        for (const problem of selected.unproven) console.error(`${COLORS.red}[FAIL]${COLORS.reset} ${problem}`)
+        console.error(
+            `${COLORS.red}[FAIL]${COLORS.reset} ${selected.unproven.length} plan file(s) started no test ` +
+                'in this run and their own tier is the layer it covers; the run proves nothing about them',
+        )
+        process.exitCode = 1
+        return 1
+    }
     // The pid keeps two runs started in the same second (the self-test does this) out of one
     // directory, whose logs and summary.json would otherwise overwrite each other.
     const logDir = path.join(LOG_ROOT, `${timestamp()}_${process.pid}`)
@@ -2949,6 +3060,25 @@ async function main() {
     console.log(
         `${COLORS.cyan}[INFO]${COLORS.reset} tier: ${options.tier}, tests: ${testCount}, jobs: ${options.jobs}`
     )
+    if (testCount === 0 && options.targets.length > 0) {
+        // A run that starts nothing is not a pass: every claim it could make is about tests it did
+        // not run. (No target at all is `scripts/test.js --changed` finding nothing to run, which is
+        // a legitimate no-op and says so, not a green run.)
+        console.error(
+            `${COLORS.red}[FAIL]${COLORS.reset} this run selected no test at all: ` +
+                `${plans.length} plan file(s) were reached and none of their entries is in this layer`,
+        )
+        process.exitCode = 1
+        return 1
+    }
+    if (selected.emptyByLayer.length > 0) {
+        // Named, so that a zero is a reading and not an absence: these plan files were reached and
+        // started nothing because their own tier says they belong to another layer.
+        console.log(
+            `${COLORS.cyan}[INFO]${COLORS.reset} plans of another layer, started nothing here: ` +
+                `${selected.emptyByLayer.length} (their own tier selects them: --tier slow, --tier milestone, --tier debug)`
+        )
+    }
     if (!CAN_READ_CHILD_CPU) {
         // Said once, and only where it changes what the run means: on this host no test's timeout
         // margin is judged, because the kernel offers no CPU figure and the wall clock is not a

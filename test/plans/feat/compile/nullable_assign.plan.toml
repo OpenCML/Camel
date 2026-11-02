@@ -16,3 +16,21 @@ expect_exit = 0
 expect_stdout = "2.5 2.5 [2.5, null] 3\n4.5\n2.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# The argument position is the other entrance the description above names. An argument that reads
+# a variable is linked from the read taken where the argument is written (design principles 3.3),
+# and the conversion into `T?` must land on that read; it landed on the node the call does not
+# link, so the front end built a graph its own validator refused (defect A3).
+
+[[tests]]
+name = "nullable_assign.argument_before_a_computed_argument"
+desc = "A `var` read passed to a `T?` parameter enters it when a later argument is computed at the call: with a call, a branch and an operator after it, `takes_str`/`takes_bool`/`takes_int` receive `string?`/`bool?`/`int?` values and the program runs on all three backends. The early read keeps its place: `1 2` is `n` as written and after `bump`, so the conversion did not move the read after the later argument's write to the same variable."
+kind = "behavior"
+case = "../../../cases/compile/nullable_argument.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "v w\nv x\nfalse true\n1 2\nn after 2\nq lit\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

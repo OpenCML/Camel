@@ -178,6 +178,10 @@ function remove(full, report) {
  *     starts nested runs while an outer run is going, and they write to the same tree.
  *   * a directory this runner did not write (a name that does not match `timestamp_pid`) is left
  *     alone and reported instead: what this module does not understand is not its to delete.
+ *   * a directory whose `summary.json` records failed tests is kept whatever its age: that
+ *     directory is the whole output of those tests, and a green run may have its twelve-line tail
+ *     pruned while a red one is the record someone has to read (2026-11-02, the day two
+ *     conclusions were drawn from a truncated fragment).
  *   * a scratch root goes when its run is gone and the root has not been touched for
  *     `scratchKeepMs`, so the root of the run that just failed is still there to read.
  *
@@ -188,6 +192,17 @@ function remove(full, report) {
  * the checkout's own tree. Everything removed is counted while it is removed, so the run prints what
  * the bound cost the tree rather than a number someone has to look up.
  */
+function failuresRecorded(runDir) {
+    try {
+        const summary = JSON.parse(fs.readFileSync(path.join(runDir, 'summary.json'), 'utf8'))
+        const count = summary?.summary?.fail
+        return Number.isFinite(count) ? count : 0
+    } catch {
+        // No summary.json is a run that never finished; it has no recorded failure to keep.
+        return 0
+    }
+}
+
 export function pruneRunnerOutput(options = {}) {
     const repoRoot = options.repoRoot || REPO_ROOT
     const keep = options.keep === undefined ? RUN_DIRS_KEPT : options.keep
@@ -210,7 +225,7 @@ export function pruneRunnerOutput(options = {}) {
         keep,
         log_root: logRoot,
         scratch_root: scratchRoot,
-        run_dirs: { scanned: 0, kept: 0, live: 0, foreign: 0, removed: 0, entries_removed: 0, bytes_removed: 0, removed_names: [], errors: [] },
+        run_dirs: { scanned: 0, kept: 0, live: 0, failed: 0, foreign: 0, removed: 0, entries_removed: 0, bytes_removed: 0, removed_names: [], errors: [] },
         scratch_roots: { scanned: 0, kept: 0, live: 0, young: 0, foreign: 0, removed: 0, entries_removed: 0, bytes_removed: 0, removed_names: [], errors: [] },
     }
 
@@ -239,6 +254,10 @@ export function pruneRunnerOutput(options = {}) {
         }
         if (isAlive(candidate.pid)) {
             report.run_dirs.live++
+            continue
+        }
+        if (failuresRecorded(candidate.full) > 0) {
+            report.run_dirs.failed++
             continue
         }
         const cost = remove(candidate.full, report.run_dirs)
@@ -289,6 +308,7 @@ export function formatRetention(report) {
     return `run dirs: ${runs.scanned} scanned, ${runs.removed} removed (${megabytes(runs.bytes_removed)}, `
         + `${runs.entries_removed} entries), ${runs.kept} kept of the newest ${report.keep}`
         + (runs.live > 0 ? ` plus ${runs.live} a live run owns` : '')
+        + (runs.failed > 0 ? `, ${runs.failed} kept because they recorded failures` : '')
         + (runs.foreign > 0 ? `, ${runs.foreign} not written by the runner` : '')
         + `; scratch roots: ${scratch.removed} removed (${megabytes(scratch.bytes_removed)})`
         + (scratch.live + scratch.young > 0 ? `, ${scratch.live + scratch.young} kept` : '')

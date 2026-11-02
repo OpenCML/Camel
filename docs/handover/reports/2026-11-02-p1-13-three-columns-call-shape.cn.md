@@ -77,7 +77,7 @@ error[SemanticDiag::NativeDeclarationNotLoaded]: The declaration 'from_bytes' na
 operator 'tensor:from_bytes_*', which no loaded module implements.
 ```
 
-**加载器不展开 `*`**，所以要么写 13 条各自命名的声明（等于新增 13 个用户可见的名字），要么给加载器加通配。两条都是决定，见 [../questions/2026-11-02-p1-13-should-the-loader-expand-the-op-wildcard.md](../questions/2026-11-02-p1-13-should-the-loader-expand-the-op-wildcard.md)（默认：不给加载器加通配，这 13 行记为"签名表达不了（无通配）"）。
+**加载器不展开 `*`**，所以要么写 13 条各自命名的声明（等于新增 13 个用户可见的名字），要么给加载器加通配。两条都是决定，见 [../reviews/2026-11-02-p1-13-should-the-loader-expand-the-op-wildcard.md](../reviews/2026-11-02-p1-13-should-the-loader-expand-the-op-wildcard.md)（默认：不给加载器加通配，这 13 行记为"签名表达不了（无通配）"）。
 
 这一族的账：**0 条写成的声明，4 行更正到"签名表达不了"，13 行卡在通配**。我把搬进去的三条**撤了**（`git checkout -- stdlib/tensor.cml`），全量回到 `8359/8347/0`——理由：一条会让 137 个测试塌掉的声明不能留在树上，哪怕它在 `inspect` 里看着很对。
 
@@ -131,7 +131,7 @@ with that overload, so the two cannot disagree.
 
 **判据**：`inspect --ops` **655 行**，而且**整张表 655 行与改动前逐字节相同**（不是只看排序那 28 行）；`--verify-ops` **559**、agree；三栏表 `435/145/75 → 463/117/75`（只增"已覆盖"，"真缺"只减）。
 
-**`ne_*` 的观察已成页**：`docs/handover/questions/2026-11-02-p1-13-eleven-ne-rules-name-nothing.md`——11 个名字、22 行规则命名不到任何东西（`!=` 由 `==` 推出），并写明**删掉后可核对的结果**：`inspect --ops` 655 → **633**，三栏表 `463/117/75` 不动（它们本来就在"签名表达不了"里），`--verify-ops` 声明没变仍 559。不删，只记着。
+**`ne_*` 的观察记在这里**（本页原来指向的 `2026-11-02-p1-13-eleven-ne-rules-name-nothing.md` 不在树里，故不指向它）：11 个名字、22 行规则命名不到任何东西（`!=` 由 `==` 推出），并写明**删掉后可核对的结果**：`inspect --ops` 655 → **633**，三栏表 `463/117/75` 不动（它们本来就在"签名表达不了"里），`--verify-ops` 声明没变仍 559。不删，只记着。
 
 ## 第七族：`*tos` 那 8 行早就被覆盖了，而且不是运算符
 
@@ -167,7 +167,7 @@ export func string::<T>(x: T): string
 
 两处都改了，于是 8 行从"真缺"进"已覆盖"，总数仍是 655。
 
-**顺带更正通配问题的答案**：通配**是有效机制**，但**只对内置算子组有效**。绑定逻辑在 `src/compile/gir/builder_modules.cpp`：`claimed` 只能来自内置模块（`context_->importModule("")`）里同名的算子组，而 `ownRule` 又被 `uri.find('*') == std::string::npos` 直接否掉——所以 `string`（内置组）的通配能用，`tensor` 的 `from_bytes`（模块算子）的通配没有生效的路。这条写进了 `docs/handover/questions/2026-11-02-p1-13-should-the-loader-expand-the-op-wildcard.md` 的"补一条更正"。
+**顺带更正通配问题的答案**：通配**是有效机制**，但**只对内置算子组有效**。绑定逻辑在 `src/compile/gir/builder_modules.cpp`：`claimed` 只能来自内置模块（`context_->importModule("")`）里同名的算子组，而 `ownRule` 又被 `uri.find('*') == std::string::npos` 直接否掉——所以 `string`（内置组）的通配能用，`tensor` 的 `from_bytes`（模块算子）的通配没有生效的路。这条写进了 `docs/handover/reviews/2026-11-02-p1-13-should-the-loader-expand-the-op-wildcard.md` 的"补一条更正"。
 
 ## 第八族：复合赋值（57 行）——不是"写不出"，是**根本不是运算符**
 
@@ -341,7 +341,7 @@ OPERATOR {"module":"<builtin>","name":"__pow__","uri":":op/pow_d","with":0,"norm
 
 ## 对 P1-7 的意义
 
-P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可读**。结论分三种，`docs/handover/questions/2026-11-02-p1-13-tensor-and-array-same-name-is-it-one-call-shape.md` 逐条问了作者：
+P1-7 要的是"键从声明读"，而这张表说的是**键有没有声明可读**。结论分三种，`docs/handover/reviews/2026-11-02-p1-13-tensor-and-array-same-name-is-it-one-call-shape.md` 逐条问了作者：
 
 - **同一个调用形状已经覆盖的**（`sum`/`mean`/`min`/`max` 等）：不要再写第二条同名声明，缺的是**类型条件**；
 - **声明在、类型条件挡着的**（`abs`/`exp`/`log`/`erf`/`erfc`/`pow`/`dim`）：是类型问题，不是声明问题；

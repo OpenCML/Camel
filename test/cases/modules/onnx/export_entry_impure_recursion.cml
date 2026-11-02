@@ -1,0 +1,18 @@
+// The export translates `main` itself when the program makes no `export_model` call, so a program
+// that does more than compute cannot be exported at all: the refusal is at the impure operator.
+//
+// The recursion is what made this the wrong diagnostic (defect A5): the export simplifies the
+// function before translating it, and that simplification unrolls a recursion level by level, so
+// a recursion whose depth is a constant is unrolled that many levels and the budget runs out
+// first. The program was then reported as a defect of the compiler -- `Pass 'std::opt' failed with
+// an internal error: the rewrite of graph '__root__' did not settle` -- instead of being refused
+// where it is impure. Nothing about the recursion makes this program exportable, so the refusal is
+// owed before any simplification is tried.
+func sum(n: int, acc: int): int {
+    return if n == 0 then acc else sum(n - 1, acc + n)
+}
+
+func main(): int sync {
+    println(sum(100000, 0))
+    return 0
+}

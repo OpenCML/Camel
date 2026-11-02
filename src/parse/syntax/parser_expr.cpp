@@ -246,15 +246,7 @@ void ParserImpl::parseRange() {
     bool any = false;
     while (cur_ == TK::DotDot && !panic_) {
         bump();
-        const uint32_t dotToken = prev_;
         parseAdditive();
-        // The right operand is a `->` chain: `..` binds looser than `->`, so `a..b->f` is
-        // `a..(b->f)` and the call lands on the last value. A program that means `(a..b)->f` is
-        // told to add the parentheses instead of being told that a signature does not match.
-        if (!stack_.empty() && (stack_.back() & Tree::kTokenBit) == 0 &&
-            tree_.nodes_[stack_.back()].kind == NK::LinkExpr) {
-            error(SyntaxError::Kind::RangeRightIsLink, {}, dotToken);
-        }
         any = true;
     }
     if (any) {
