@@ -218,3 +218,15 @@ expect_exit = 0
 expect_stdout_contains = ["lm step=1 loss=4.952361566340", "lm step=2 loss=4.878116365291", "lm step=3 loss=4.804657591241", "lm step=4 loss=4.732000640920", "lm step=5 loss=4.660164476818", "lm step=6 loss=4.589168109785", "lm step=7 loss=4.519030195674", "lm step=8 loss=4.449768895672", "lm step=9 loss=4.381401804344", "lm step=10 loss=4.313945903088", "lm step=11 loss=4.247417525628", "lm step=12 loss=4.181832330282", "lm step=13 loss=4.117205276443", "lm step=14 loss=4.053550603865", "lm step=15 loss=3.990881813803", "lm step=16 loss=3.929211651258", "lm step=17 loss=3.868552087752", "lm step=18 loss=3.808914304052", "lm step=19 loss=3.750308672379", "lm step=20 loss=3.692744737646", "lm done steps=200 last=1.444728431190", "lm before [[", "lm prob before [[0.9902884"]
 timeout_ms = 300000
 
+
+
+[[tests]]
+name = "grow.stage6_pos_emb"
+desc = "Stage 5 with a learned position embedding added to the rows before the head -- the smallest thing that gives the head the one variable it lacked.  Stage 5 stalled at the abstention floor 2 log 2 = 1.386294 because both positions arrived with nearly the same row; with the position added the loss goes to 0.949558421529 and both argmax are right, which is the claim this case exists to make.  The twenty step lines are pinned at twelve decimals from `grow.py --stage 6`."
+case = "../../../showcase/c3-char-transformer/grow/stage6_pos_emb.cml"
+args = ["${case}"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["pos step=1 loss=4.952361566340", "pos step=2 loss=4.873064008395", "pos step=3 loss=4.794549291334", "pos step=4 loss=4.716833197884", "pos step=5 loss=4.639935217249", "pos step=6 loss=4.563875041623", "pos step=7 loss=4.488672172026", "pos step=8 loss=4.414345786361", "pos step=9 loss=4.340914674089", "pos step=10 loss=4.268397195245", "pos step=11 loss=4.196811250402", "pos step=12 loss=4.126174256205", "pos step=13 loss=4.056503123890", "pos step=14 loss=3.987814239262", "pos step=15 loss=3.920123443125", "pos step=16 loss=3.853446011376", "pos step=17 loss=3.787796634069", "pos step=18 loss=3.723189392866", "pos step=19 loss=3.659637736329", "pos step=20 loss=3.597154452547", "pos done steps=200 last=0.9495584215", "pos before [[", "pos after [[-0.2471", "pos prob after [[0.37886"]
+timeout_ms = 300000
+

@@ -292,6 +292,24 @@ NAMES5 = NAMES4 + ["head"]
 START5 = START4 + [0.5, -0.5, -0.5, 0.5]
 STAGES[5] = (NAMES5, START5, loss_stage5)
 
+def forward6(w):
+    """Stage 6's logits: stage 4's rows plus a learned position embedding, through the head."""
+    position = np.array(w[96:100]).reshape(2, 2)
+    head = np.array(w[92:96]).reshape(2, 2)
+    return (forward4(w) + position) @ head
+
+
+def loss_stage6(w):
+    """The same cross entropy as stage 5, on rows that can now tell the two positions apart."""
+    z = forward6(w)
+    denominator = np.log(np.exp(z) @ np.ones((2, 2)))
+    return (denominator * LABEL).sum() - (z * LABEL).sum()
+
+
+NAMES6 = NAMES5 + ["pos"]
+START6 = START5 + [0.0, 0.0, 0.0, 0.0]
+STAGES[6] = (NAMES6, START6, loss_stage6)
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--stage", type=int, default=1)
