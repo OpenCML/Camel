@@ -57,7 +57,9 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # 174 programs, 214.8 s of CPU alone and more under the gate's contention. The margin rule wants the
 # bound to be at least four times the work: 1200 s is 5.6x the alone figure and 5x the loaded one,
 # and it is still the runner's kill rather than a verdict, so a program that hangs is reported as one.
-timeout_ms = 1200000
+# The shared host is the fast one, though: the two-core CI runner measured 511.5 s of CPU for the same
+# 174 programs, which 1200 s was 2.3x -- under the four the rule asks for. 2400 s is 4.7x that figure.
+timeout_ms = 2400000
 
 [[tests]]
 name = "link_line_keeps_the_compilers_stdlib"
@@ -286,7 +288,10 @@ expect_exit = 0
 expect_stdout_contains = ["program(s) need no Camel runtime", "link it, all in the baseline"]
 expect_output_not_contains = ["FAIL:", "is not in the baseline", "no longer links the runtime"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 900000
+# 2100 s: the same 174 translations and builds as agree_with_fvm plus an `ldd` of each, and the
+# two-core CI runner measured 493.3 s of CPU for it, which 900 s was 1.8x -- under the four the
+# margin rule asks for. 2100 s is 4.3x that figure.
+timeout_ms = 2100000
 
 [[tests]]
 name = "fault_narrow_text_number"

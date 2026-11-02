@@ -1,11 +1,18 @@
-# Everything that has to stay green, on every tag and on demand.
+# Everything that has to stay green, on the release branch, on every tag and on demand.
 #
 # The work of one platform lives in ci-leg.yml: compiling is ~13 of the ~15 minutes of a leg, and
 # a leg that only Release needs (macOS) is opt-in rather than a fourth runner on every tag.
+#
+# `release` is the branch a version is assembled on, and it is pushed *before* the tag is made
+# (agents/branching.md): a red run there costs a push, where a red run on the tag costs a
+# published version. `develop` is not a trigger -- it takes a merge every few minutes, so a leg
+# that started on it would spend 40 minutes measuring a tree nobody releases.
 name: CI
 
 on:
   push:
+    branches:
+      - release
     tags:
       - "v*"
       - "V*"
@@ -148,12 +155,19 @@ jobs:
           LDFLAGS: -fsanitize=address,undefined
         run: npm run debug
 
-      - name: Test (smoke)
+      # The author's 2026-11-02 06:10 ruling: both memory defects of that day sat in
+      # `stream` and `transforms`, and a leg that only runs `smoke` reports them on one
+      # platform instead of on every platform. Widening the plans is the cheapest way to
+      # make "crashes only on Windows" become "crashes everywhere, nightly".
+      - name: Test (smoke, stream, transforms)
         env:
           ASAN_OPTIONS: detect_leaks=0:symbolize=1
           ASAN_SYMBOLIZER_PATH: /usr/bin/llvm-symbolizer-19
           UBSAN_OPTIONS: print_stacktrace=1
-        run: node scripts/test.js smoke
+        run: |
+          node scripts/test.js smoke
+          node scripts/test.js test/plans/feat/compile/stream.plan.toml
+          node scripts/test.js test/plans/feat/compile/transforms.plan.toml
 
       - name: Upload test logs
         if: always()
