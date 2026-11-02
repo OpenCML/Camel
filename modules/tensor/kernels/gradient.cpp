@@ -414,28 +414,32 @@ Array *erfGrad(const Array *x, const Array *dy, mm::IAllocator &allocator) {
     return out;
 }
 
-Array *layerNormGrad(
-    const Array *x, const Array *gamma, const Array *dy, double eps,
-    LayerNormGrad which, mm::IAllocator &allocator) {
-    const Array *xs = asFloat(x, allocator);
-    const Array *ws = asFloat(gamma, allocator);
-    const Array *gs = asFloat(dy, allocator);
-    if (!xs->sameShape(gs)) {
-        throw ShapeError("layer_norm gradient: dy shape differs from the input");
-    }
-    const auto width = static_cast<int64_t>(ws->numel());
-    const auto rows  = static_cast<int64_t>(xs->numel()) / std::max<int64_t>(width, 1);
-    const float *px  = xs->dataAs<float>();
-    const float *pw  = ws->dataAs<float>();
-    const float *pg  = gs->dataAs<float>();
+namespace {
+
+/// The element type the gradient is written in is the input's, not `f32`: `layerNormGrad` used to
+/// read its inputs through `asFloat` (which only validates, it does not convert) and then write
+/// `createTensor(TypeCode::Float32, ...)` whatever it was given, so the normalization gradient of an
+/// `f64` model came back `f32` and the next `matmul_grad_lhs` refused the pair `('f32' and 'f64')`.
+/// The arithmetic below already accumulates in `double`; only the element the answer is stored in
+/// follows the input, which is the same rule `sumToArm` beside it follows (`SumElement<Code>`).
+template <TypeCode Code>
+Array *layerNormGradArm(
+    const Array *xs, const Array *ws, const Array *gs, double eps, LayerNormGrad which,
+    mm::IAllocator &allocator) {
+    using Real        = SumElement<Code>;
+    const auto width  = static_cast<int64_t>(ws->numel());
+    const auto rows   = static_cast<int64_t>(xs->numel()) / std::max<int64_t>(width, 1);
+    const Real *px    = xs->dataAs<Real>();
+    const Real *pw    = ws->dataAs<Real>();
+    const Real *pg    = gs->dataAs<Real>();
 
     if (which == LayerNormGrad::Input) {
-        Array *out = createTensor(TypeCode::Float32, xs->shapeSpan(), allocator);
-        float *po         = out->dataAs<float>();
+        Array *out = createTensor(Code, xs->shapeSpan(), allocator);
+        Real *po   = out->dataAs<Real>();
         parallelFor(rows, 16, [&](int64_t begin, int64_t end) {
             for (int64_t r = begin; r < end; ++r) {
-                const float *row = px + r * width;
-                const float *g   = pg + r * width;
+                const Real *row = px + r * width;
+                const Real *g   = pg + r * width;
                 double mean = 0.0, var = 0.0;
                 for (int64_t k = 0; k < width; ++k) {
                     mean += row[k];
@@ -456,23 +460,23 @@ Array *layerNormGrad(
                 }
                 const double meanH  = sumH / static_cast<double>(width);
                 const double meanHX = sumHX / static_cast<double>(width);
-                float *o            = po + r * width;
+                Real *o             = po + r * width;
                 for (int64_t k = 0; k < width; ++k) {
                     const double h    = static_cast<double>(g[k]) * pw[k];
                     const double xhat = (row[k] - mean) * inv;
-                    o[k]              = static_cast<float>(inv * (h - meanH - xhat * meanHX));
+                    o[k]              = static_cast<Real>(inv * (h - meanH - xhat * meanHX));
                 }
             }
         });
         return out;
     }
 
-    Array *out = createTensor(TypeCode::Float32, ws->shapeSpan(), allocator, true);
-    float *po         = out->dataAs<float>();
+    Array *out = createTensor(Code, ws->shapeSpan(), allocator, true);
+    Real *po   = out->dataAs<Real>();
     std::vector<double> acc(static_cast<size_t>(width), 0.0);
     for (int64_t r = 0; r < rows; ++r) {
-        const float *row = px + r * width;
-        const float *g   = pg + r * width;
+        const Real *row = px + r * width;
+        const Real *g   = pg + r * width;
         if (which == LayerNormGrad::Beta) {
             for (int64_t k = 0; k < width; ++k) {
                 acc[static_cast<size_t>(k)] += g[k];
@@ -495,9 +499,28 @@ Array *layerNormGrad(
         }
     }
     for (int64_t k = 0; k < width; ++k) {
-        po[k] = static_cast<float>(acc[static_cast<size_t>(k)]);
+        po[k] = static_cast<Real>(acc[static_cast<size_t>(k)]);
     }
     return out;
+}
+
+} // namespace
+
+Array *layerNormGrad(
+    const Array *x, const Array *gamma, const Array *dy, double eps,
+    LayerNormGrad which, mm::IAllocator &allocator) {
+    const Array *xs = asFloat(x, allocator);
+    const Array *ws = asFloat(gamma, allocator);
+    const Array *gs = asFloat(dy, allocator);
+    if (!xs->sameShape(gs)) {
+        throw ShapeError("layer_norm gradient: dy shape differs from the input");
+    }
+    if (ws->numel() > xs->numel()) {
+        throw ShapeError("layer_norm gradient: gamma has more elements than the input");
+    }
+    return xs->dtype() == TypeCode::Float64
+               ? layerNormGradArm<TypeCode::Float64>(xs, ws, gs, eps, which, allocator)
+               : layerNormGradArm<TypeCode::Float32>(xs, ws, gs, eps, which, allocator);
 }
 
 namespace {

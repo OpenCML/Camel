@@ -1,0 +1,96 @@
+the graph reads the loss at the edge.
+the library writes a window under the rule and stops.
+the rule says the graph keeps the rule.
+the library checks a window and checks a window.
+if the runner folds the loss it is kept.
+the model checks a tensor.
+when the gradient reads the rule the pass runs.
+the compiler writes a tensor so the next step is cheap.
+the gradient keeps the rule in the graph.
+the model writes a window beside the split and stops.
+the rule says the graph keeps the loss.
+the model moves a tensor and moves a tensor.
+if the runner reads the loss it is kept.
+the model writes a tensor.
+when the graph reads the rule the pass runs.
+the model checks a cotangent so the next step is cheap.
+the runner reads the loss beside the split.
+the library writes a cotangent beside the split and stops.
+the rule says the runner keeps the mask.
+the model checks a window and checks a window.
+if the gradient folds the rule it is kept.
+the model writes a window.
+when the graph keeps the mask the pass runs.
+the compiler checks a tensor so the next step is cheap.
+the gradient keeps the loss under the rule.
+the compiler writes a cotangent beside the split and stops.
+the rule says the runner reads the loss.
+the model writes a window and writes a window.
+if the gradient folds the loss it is kept.
+the library checks a cotangent.
+when the graph keeps the rule the pass runs.
+the library checks a tensor so the next step is cheap.
+the graph reads the rule under the rule.
+the library moves a window at the edge and stops.
+the rule says the graph folds the loss.
+the library checks a window and checks a window.
+if the graph keeps the loss it is kept.
+the compiler writes a window.
+when the runner keeps the rule the pass runs.
+the model writes a window so the next step is cheap.
+the gradient folds the loss at the edge.
+the compiler checks a window at the edge and stops.
+the rule says the gradient keeps the rule.
+the model moves a tensor and moves a tensor.
+if the runner folds the mask it is kept.
+the compiler moves a tensor.
+when the runner keeps the mask the pass runs.
+the compiler checks a window so the next step is cheap.
+the gradient reads the mask under the rule.
+the model writes a cotangent beside the split and stops.
+the rule says the graph folds the mask.
+the library writes a tensor and writes a tensor.
+if the runner folds the rule it is kept.
+the compiler checks a cotangent.
+when the gradient reads the rule the pass runs.
+the model moves a cotangent so the next step is cheap.
+the graph keeps the mask on the node.
+the model moves a tensor under the rule and stops.
+the rule says the gradient reads the rule.
+the library checks a window and checks a window.
+if the graph reads the rule it is kept.
+the model moves a cotangent.
+when the graph keeps the mask the pass runs.
+the compiler checks a window so the next step is cheap.
+the runner keeps the loss in the graph.
+the model writes a tensor at the edge and stops.
+the rule says the graph folds the mask.
+the model checks a cotangent and checks a cotangent.
+if the gradient folds the mask it is kept.
+the library writes a cotangent.
+when the runner reads the mask the pass runs.
+the library moves a cotangent so the next step is cheap.
+the runner keeps the mask on the node.
+the model moves a cotangent under the rule and stops.
+the rule says the runner folds the rule.
+the compiler writes a tensor and writes a tensor.
+if the graph folds the rule it is kept.
+the model moves a window.
+when the runner keeps the loss the pass runs.
+the library moves a tensor so the next step is cheap.
+the runner folds the mask in the graph.
+the library writes a window on the node and stops.
+the rule says the gradient keeps the loss.
+the library writes a cotangent and writes a cotangent.
+if the runner folds the loss it is kept.
+the library checks a window.
+when the runner folds the rule the pass runs.
+the library checks a cotangent so the next step is cheap.
+the graph reads the rule in the graph.
+the library writes a cotangent at the edge and stops.
+the rule says the runner reads the rule.
+the library moves a tensor and moves a tensor.
+if the gradient keeps the loss it is kept.
+the library writes a window.
+when the graph reads the mask the pass runs.
+the model moves a cotangent so the next step is cheap.
