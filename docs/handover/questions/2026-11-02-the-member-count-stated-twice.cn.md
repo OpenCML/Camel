@@ -21,11 +21,21 @@
 4. **没有"未知元数"这种类型**：`TupleType` 只有 `create / cell / nullable / fallible / residuals`
    四类用法，`variadic` 属于函数签名，不属于元组类型。
 
+## 另有一条路：在运行期构造点修正类型（**找过了：没有**）
+
+`modules/transforms/split.cpp:1219` 已经拿到了真数（`TupleType::create(residualTypes)`），所以先要找的是"值造出来的那一刻能不能顺手把类型改正"。**找不到，而且是结构上找不到：**
+
+1. **`Tuple` 值不存类型**：`include/camel/core/rtdata/tuple.h:416-418` 的私有部分只有 `uint32_t size_` 与 `slot_t data_[]`；带类型指针的是紧凑视图（`ViewData::type`，只有 `isView()` 才读）。**普通元组的类型永远来自槽声明。**
+2. **运行期造这个值的两处都不带真类型**：`modules/transforms/split_operator.cpp:168` 是 `::Tuple::create(2, mm::autoSpace())`（无形参类型）；`modules/transforms/split.cpp:1498-1500` 是 `fillTuple(draft, halves.backward->normTypeAt(0), …)`——**它用的就是编译期那个类型对象**，空占位原样传下去。
+3. **`split` 是运行期算子**（`modules/transforms/split_operator.cpp:124` `splitKernel`）：图只有进了内核才拿得到，而调用点槽位上的类型**在编译期就由 operator resolver 定死**（`split_operator.cpp:59` 的空占位）。**内核里的真数改不到调用点的签名。**
+
+⇒ **运行期没有任何地方能把类型改对。** 编译期那处"有真话"的地方恰恰落在"没有图"的一侧：`split.cpp:1194-1196` 的注释自己写着，**签名从类型算不出余量个数**（`f(x) = x` 与 `f(x) = x*x` 的 lifted 类型一样）。**这就是"只能选 A 或 C"的直接证据**：要么类型能说"未知"，要么 resolver 只能拒绝。
+
 ## 三条路与代价
 
 | 路 | 代价 |
 | --- | --- |
-| **A. 给元组类型一个"元数未知"的答案**（余量用它） | 新 TypeCode 加上每个读 `TupleType` 的地方（`codes()`、`typeAt`、打印、相等、interning）都要回答"未知"；收集器要有一条"未知时怎么扫"的规则，这一条正是安全策略，得作者定 |
+| **A. 给元组类型一个"元数未知"的答案**（余量用它） | 新 TypeCode 加上每个读 `TupleType` 的地方（`codes()`、`typeAt`、打印、相等、interning）都要回答"未知"；收集器要有一条"未知时怎么扫"的规则，这一条正是安全策略，得作者定。**上一节已确认没有更小的路：运行期改不了类型，编译期那一侧算不出数** |
 | **B. 原地兜住**（本轮已做：按类型上界扫 + 每类型报一次，不中止） | 不越界读，但**漏追踪变成常规路径**：6/21 仍崩（换了句子），且"少扫"安全与否取决于"漏掉的成员里有没有引用" |
 | **C. 让两半永远由图来定型**（去掉 resolver 的空占位） | operator resolver 没有图，只能改成"拒绝"；今天能靠签名通过的用例会变成拒绝 |
 
