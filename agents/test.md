@@ -162,6 +162,96 @@ Three zero-hit readings on 2026-11-02 were all the same mistake, and none of the
 
 **A zero is not a reading until the search space has been shown to contain the thing.** State the command, the file or the ref it read, and which tree that ref or file belongs to.
 
+The same is true of a non-zero that arrives too easily. `(Get-Process -Id $pid).Threads | % StartAddress`
+answers `RtlUserThreadStart` -- an address inside ntdll -- for **every** thread of a process,
+including the main one and every thread the program started itself, because that is the stub every
+Windows thread begins in rather than the routine the caller passed to `CreateThread`. A count built
+on it reads "this process is nothing but operating-system pool workers", which is not a fact about
+the process at all. `test_support`'s `thread_count` asks instead with
+`NtQueryInformationThread(ThreadQuerySetWin32StartAddress)`, which reports the start routine the
+thread was created with: on `-t 1` the same camel process is 4 threads, of which 1 is the run's own
+(address outside ntdll) and 3 are the operating system's (address inside it), so the answer is 1,
+which is what `count.timeit_cli_one_serial` expects. **When a Windows API's reading looks
+surprising, check whether it is the API that answers a different question than the one you asked.**
+
+## A fixture that writes a path into Camel source writes forward slashes
+
+The author's ruling of 2026-11-02 13:10, in response to the `interpreter_first_use` red: **a fixture
+that writes a platform path into Camel source text writes it with forward slashes, or with a writing
+the language does not unescape.** A Windows path in a double-quoted Camel string is not text -- it is
+escapes: `\t` and `\r` are legal escapes, so `D:\temp\run-1/a.svg` becomes `D:` + a tab + `emp` + a
+carriage return + `un-1/a.svg` **silently**, and `\C`, `\m`, `\i` are unknown escapes that only warn
+(`LexicalDiag::InvalidEscapeSequence`, `docs/language/02_lexical.md`, an error or a warning still open
+with the author). The warning does not save the path: the two escapes that broke the image were the
+legal ones.
+
+The idiom is one line, at the place the path is made:
+
+```js
+const CML = SCRATCH.replaceAll('\\', '/')   // what goes into the program text
+```
+
+and `path.join(...).replaceAll('\\', '/')` when the path is built inline, as `pass_param_effect.mjs`
+already did. Node-side reads and writes keep the platform path; only the text spliced into a program
+uses the forward-slash one.
+
+**This cannot be checked by reading the fixture, which is why the rule is here and not in a guard.**
+On 2026-11-02 `test/cases` held 26 fixtures that build Camel text, 15 of them writing a `.cml` file,
+and exactly two spliced a path into the text: one wrong (`${SCRATCH}`) and one right (`${CML}`). The
+two have **the same static shape** -- a template splice naming a variable -- and differ only in a
+value that exists at run time and only on Windows. A checker over the text would report both or
+neither. The shape that *can* be seen at run time is the child's own warning line: a fixture writing
+a Windows path into a program makes that program print `Invalid escape sequence in string` on stderr,
+which is where a guard would read it (on the Windows leg, since a Linux path has no backslash).
+
+## A line count is a `\n` count, and the number carries its command
+
+Two instruments answer "how many lines" differently, and on 2026-11-02 both were used on the same
+files within an hour:
+
+- **PowerShell's `Measure-Object -Line` skips empty lines.** On one working copy it read
+  `split_operator.cpp` as **190** where the file has **209** `\n`s, and `jvp.cpp` as **1221** where it
+  has **1245**. Nineteen and twenty-four lines of difference are just the blank lines.
+- **`wc -l` counts `\n`s**, so a file **without a trailing newline** reads one short of its visible
+  line count: `modules/transforms/split_operator.cpp` is 209 by `wc -l` and 210 lines as `cat` shows
+  it.
+
+**So: count with `\n` (`git show <sha>:<path> | wc -l`), never with `Measure-Object -Line`, and paste
+the command beside any number quoted in a report or a page.** Two instruments, two numbers, one file:
+that is enough to make every later reading untraceable, and a line count is exactly the measurement
+that looks too simple to get wrong.
+
+**The same error one layer down: a line break inside a path is two citations.** `docs.links.citations`
+went red on a page name wrapped across two lines: the checker read the fragment that began the second
+line as a file name and answered `no such file`. The physical shape of the text was read as its
+meaning, the same mistake as a line count taken from the wrong instrument. Keep a path on one line
+whatever its length; a checker that answers `no unverified citation` is the reading that it is whole.
+This paragraph does **not** reproduce the broken shape -- writing it here would trip the same check,
+which is exactly the point.
+
+## A new plan needs a selection rule, or `--changed` can never run it
+
+A plan file added to `test/plans` is only reachable by an ordinary change if `test/plan-selection.json`
+has a rule that names it from the paths its cases live in. Without one the plan exists, runs when
+named, and is **invisible to `--changed` and to the layer accounting**, which is what the runner's own
+book says in one line:
+
+```
+plan-selection: 1 plan file(s) no case path selects, so --changed can never run them:
+test/plans/feat/tools/plan_normalizers.plan.toml (its cases are under test/tools/).
+Add a rule that names the plan for the directory its cases live in.
+```
+
+The instance on record: a guard plan whose case is `test/tools/check-plan-normalizers.mjs` landed with
+no rule. Its two entries were green when named and the result was `runner.backend_matrix` red on the
+next full run — the book's `plan-selection` check has no other place to report it. The cure is one
+entry in `rules` (the tool's path to the plan) plus the plan's name in the rule that owns
+`test/tools/selftest/`, because the guard reads fixture trees there.
+
+The same applies to a plan that must stay out of an ordinary change: `SLOW_PLANS` and the selection
+rules are two halves of one fact — a plan is either reachable on purpose or named in the slow list on
+purpose, never neither.
+
 ## A timeout budget is a change like any other
 
 A `timeout_ms` in a plan file is not housekeeping: it decides whether a slow machine reports a red or

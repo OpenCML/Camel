@@ -73,11 +73,18 @@ B **新增**一条表示，且与裁定正面冲突；C 让 `split` 多背一个
 - 拼写数：`stdlib` 值级 **4 行**（`stdlib/vjp.cml:44,51,62,65`）+ **3 行文档示例**（`stdlib/signatures/transforms.cml:43,64,79`）；
   `vjp.cml` 要换 **11 行**，两条同形声明并成一条泛型；要改写的程序 **5 个文件**。
 - 调用者数：每个算子 **1 个注册点 + 1 个 kernel**（`split_operator.cpp:179/:186`、`jvp_operator.cpp:218/:225`、`transpose_operator.cpp:170/:177`），**外部 C++ 调用点 0**。
-- 判据：**能删 342 行**（`split_operator.cpp` 179、`jvp_operator.cpp:81-226` 146、`transforms.cml:54-62,66` 10、`vjp.cml:47-53` 7），
+- 判据：**能删 342 行**（`split_operator.cpp` 179、`jvp_operator.cpp:81-226` 146、`stdlib/signatures/transforms.cml:54-62,66` 10、`vjp.cml:47-53` 7），
   **但要搬 1720 行**（`split.cpp` 694 + `jvp.cpp` 1026）进一个新 pass。**按“删不掉就是净负”，甲是净负。**
 
 
-- 路径：`modules/transforms/split_operator.cpp` **202**、`modules/transforms/jvp_operator.cpp` **268**、`stdlib/signatures/transforms.cml` **116**（这一页原来只写 `transforms.cml`；`stdlib/transforms.cml` 是另一份、只有 25 行，照那个名字去数会"文件不存在"）、`stdlib/vjp.cml` **98**、`modules/transforms/split.cpp` **1531**、`modules/transforms/jvp.cpp` **1126**。
+- 路径（**2026-11-02 `lane-pools` 重测**，量在 `origin/develop` = **`c89209596`** 上，命令是
+  `git show c89209596:<路径> | wc -l`，六个数逐个这样量）：`modules/transforms/split_operator.cpp` **209**
+  （这一份**不以换行结尾**，所以 `wc -l` 报 209、`cat` 数则是 210 行）、`modules/transforms/jvp_operator.cpp` **280**、
+  `stdlib/signatures/transforms.cml` **116**（这一份是签名声明；`stdlib/transforms.cml` 是另一份、只有 **25** 行，
+  照那个名字去数会数到另一份）、`stdlib/vjp.cml` **99**、`modules/transforms/split.cpp` **1563**、
+  `modules/transforms/jvp.cpp` **1245**。上一版这六个数（202/268/116/98/1531/1126）是在**车道树**上量的却被读成
+  develop 的数，树一动就错了：**页里的数必须带 sha 与命令**，重测前先 `git rev-parse --short HEAD` 与
+  `git status --porcelain` 都对上再取（作者 05:30 的裁定：这一页写规则与理由，数字只在带出处时作为某一刻的价格）。
 
   （**2026-11-02 `lane-m5` 再测**：`split_operator.cpp` 202 → **208**、`jvp_operator.cpp` 268 → **278**，`case TypeCode::` 1024 → **1028**、文件数仍 74——前两个是同一件事：`jvp(f)`、`transpose(f)`、`split(f)` 的调用形状（名字、元数、`with` 参数个数）现在登记在算子声明的地方，两个 `*_operator.cpp` 各多几行注释与三条 `declareCallForm`；后一个是 `std::cml` 的 `hasFunction` 加的四条（`Function`/`Array`/`Tuple`/`Struct`），因为一个含函数类型的标注在源码里没有写法，打印机要能看出类型里有没有函数。**这两个数是照读数抄的，页是这一页的原文——`lane-m5` 自己那份带一处未解的冲突标记，没有整份取用。**）
 

@@ -1,0 +1,32 @@
+id = "tools.plan_normalizers"
+order = 919
+tier = "fast"
+tags = ["feat", "tools"]
+
+# The guard for the class of red that says nothing about the program: a Python child writes the
+# platform's line ending, so a plan that compares its text byte for byte is red on Windows before
+# the value it exists to pin is ever compared. `f8a2da8f4` fixed the one plan that did it (the
+# CUDA-visibility self-test), and this plan keeps it from coming back: the guard reads every plan,
+# and its own two fixtures prove it still goes red.
+
+[[tests]]
+name = "plan_normalizers.tree"
+desc = "Every plan that compares a Python child's text declares `normalize_newlines` first: 141 Python entries in 370 plans, 3 of which compare text, all 3 in the plan that declares it. A Camel run and a Node fixture write `\\n` on every platform, so they are not reported."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/check-plan-normalizers.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS every Python child's text"]
+timeout_ms = 120000
+
+[[tests]]
+name = "plan_normalizers.red_example"
+desc = "The guard on a fixture that breaks the rule: it reports that entry, names the file, and exits 1, while the repaired copy of the same plan is silent. A guard nobody can make go red is a guard nobody knows is still connected."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/check-plan-normalizers.mjs"
+args = ["${case}", "--selftest"]
+expect_exit = 0
+expect_stdout_contains = ["PASS plan-normalizer self-test ok"]
+timeout_ms = 120000
