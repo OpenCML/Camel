@@ -1337,3 +1337,43 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(
 
 **这一处要还的账**：`GraphDraft` 删掉那天，这 1 处和其他 303 处一起消失；它没有把终点推远，
 只是让"draft 可以暂时不自洽、拒绝发生在编码处"这条边界有一个可写的入口。
+
+## 61. `references` 涨 2 处（304 → 306）：`nodeMayFault` 的 draft 重载，为什么它必须收 `GraphDraft`
+
+**为什么要这个重载**：`opt::dce` 这一遍写在 Camel 里（`stdlib/opt.cml`），它判断"没人读的语句能不能删"要问
+"这个节点会不会在这里出错"。C++ 那一遍（`std::opt::dce`）问的是 `isValueOnly` → `nodeIsFreelySchedulable`，
+而 `nodeIsFreelySchedulable` 是两件事的合取：算子可重算（`OperatorTable::mayBeRecomputed`）**且**不会出错
+（`OperatorTraits::mayFault` 与 `castMayFault`）。Camel 模块 `graph` 已经把前半件读成
+`may_be_recomputed`，后半件没有出口 —— 这就是 A10（Camel 那一遍把 `5 / z` 这种会出错的语句删掉，程序照样
+跑完、exit 0，而原生那一遍报 `DivisionByZero`）。
+
+**为什么不能只拿现成的那个函数凑**：`nodeIsFreelySchedulable(draft, id, true)` 是合取，它的假既可能是
+"算子不可重算"（比如规则的值、`fact`），也可能是"会出错"，两者不能从它一个 bool 里分开；而 `may_fault`
+是要单独回答、单独写进 `stdlib/graph.cml` 的问题（"a call、loop、gate 答 true，全定型逐元算子答 false"）。
+另写一个函数、只问后半件，是唯一能把同一句话给两处用的做法。
+
+**为什么不把定型的形状走查抄一份到 `modules/graph`**：那样 `read.cpp` 要自己走一遍 `header()` 与
+`shapesAreFixed` 才能算出 `fixedShapes`。A10 这个缺陷本身就是"两处各写一遍、然后说法不一致"长出来的
+（`is_pure` 与 `mayFault` 被当成同一件事）；在一个被判 red 的改写任务上再把一段判定抄成两份，是把下一个
+A10 提前写进来。所以这里认这一处账：一个声明（`include/camel/runtime/draft.h`）、一个定义
+（`src/runtime/graph.cpp`），定义体只调 `draft.header()`/`payloadOf()`/`normInputsOf()` 与
+`shapesAreFixed`，和 `nodeIsFreelySchedulable` 的 draft 版逐行同源。
+
+**数**：`files` 35，`references` **306**（+2），`constructions` 1，`decode` 4。
+`baseline.json` 已按名字登记：`sites.references["src/runtime/graph.cpp#nodeMayFault"] = 1` 与
+`sites.references["include/camel/runtime/graph.h#nodeMayFault"] = 2`（后者是同一个声明在 draft.h 与
+graph.cpp 里被引用的去处，按最近的声明归属记在 `graph.h` 名下）。
+同一次记录里 `modules/transforms/split.cpp#parameterOfPort` 从 0 变成 2：这 2 处本就在 304 里，
+只是站点键以前记在别的名字下（`14bccd9fd` 起的 `parameterOfPort`），总数没有动。
+
+**A/B（两个方向都量过）**：
+
+- 把 `value_only` 的 `!may_fault(n)` 去掉、只用 `is_pure` → `camel_passes.dce.by_camel` 与
+  `dce.property` 照旧绿（它们不含会出错的语句），而 `fault_preservation` 那三条红：
+  `dce_chained_division` 打 `before`/`after`、exit 0，`chained_cast` 打 `not reached`、exit 0，
+  `one_hot_oob` 什么都不打、exit 0 —— 正是 A10。
+- 放回来 → 三条都报原生那一句（`DivisionByZero` 8:15、`conversion to 'f32[2, 3]' failed` 15:18、
+  `IndexOutOfRange` 10:15，`opt::dce` 与 `std::opt::dce` 逐字符相同），`fault_preservation` 全绿。
+
+**这一处要还的账**：`GraphDraft` 删掉那天，这 2 处和其他 304 处一起消失；它没有把终点推远，
+只是让"会出错"这件事在 Camel 与 C++ 两侧只有一个答案。
