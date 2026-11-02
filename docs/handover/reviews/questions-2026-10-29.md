@@ -1918,3 +1918,11 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 - 以前那些 `transpose(f)(x, ȳ)` 写法（`x` 是已知值）改成先把 `x` 捕获进去：`transpose((dx) => f_lin(x, dx))(ȳ)`。用例照改。
 - 删掉 `withClosedHalf`/`isClosedHalf`、`honourClosedHalf` 和它们在 interning key 里的那一位。`796f5ae07` 那种"wip，为保持一致先提交"只许留在车道上，合进 develop 之前合成完整的一笔。
 - 读数：`lin(1, 0) = 12`，`transpose(lin)(1) = (12, 9)`，`vjp` 的库体随之变成 `let (y, lin) = forward(..xs); (y, transpose(lin))`。
+
+## 裁定（2026-11-02 11:50）：`with_grad` 是不是桩——你们查的是旧引擎那一份，桩是库里那一份
+
+`modules/autodiff` 的 `with_grad`（`valueAndGradKernel`，与 `grad` 共用 `gradFunction`）确实不是桩，读数 `(12.0, 6.0)` 对，那条交叉核对的用例也写得好，收下。审查 P1-15 和今早第 12 条说的是另一份：`stdlib/vjp.cml` 里的 `export func with_grad::<F>(f: F): F … { return vjp(f) }`，返回类型写 `F`，实际返回的是 `Vjp<F>`，也不是对 `with` 参数求值加梯度。两份同名、语义不同，又是两套并存。
+- 库里这一份要么照原则 9.9 实现（对第一个 `with` 参数求值和梯度，建在库层 `vjp` 上，需要 `jvp` 能提升 `with` 参数），要么现在就删掉这条 `export`，等提升 `with` 参数那一步落地时再写。"有声明没有实现"不留，所以**先删**；M4 做到 `with` 参数时补上，届时用你们这条交叉核对用例去验收库层那一份。
+- 旧引擎那一份随 `buildGradientGraph` 退役（M4 的终点），在那之前照常用。
+
+页面挪到 `reviews/` 留档。另：`lane-resid` 那笔"标记位删掉，`transpose` 把每个参数都当线性"（9 分钟前）方向对，请合进来。
