@@ -2043,7 +2043,6 @@ const EXCEPTIONS = {
         'function-typed parameter': 10,
         'grad of P': 2,
         'named-type parameter': 5,
-        'bare type variable parameter': 7,
     },
 }
 

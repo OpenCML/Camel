@@ -99,6 +99,485 @@ export func operator -(x: f32, y: f32): f32
 #op(':op/sub_d')
 export func operator -(x: float, y: float): float
 
+// The remaining element types of `+` and `-`, one declaration per type: the sum of two integers is
+// `+` at those two types, the sum of two strings is `+` too, and `-` is the difference at every
+// numeric type. The two tokens end up as **ten** declarations for `+` (every one of them at two
+// operands) and **sixteen** for `-`: eight differences at two operands and eight negations at one.
+// One token, one operator, and the overloads are the element types -- the number of operands is what
+// tells a negation apart from a difference.
+
+/// The sum of two 32-bit integers.
+#op(':op/add_i')
+export func operator +(x: i32, y: i32): i32
+
+/// The sum of two 64-bit integers.
+#op(':op/add_l')
+export func operator +(x: int, y: int): int
+
+/// The sum of two 16-bit floats.
+#op(':op/add_f6')
+export func operator +(x: f16, y: f16): f16
+
+/// The sum of two `bf16` values.
+#op(':op/add_bf')
+export func operator +(x: bf16, y: bf16): bf16
+
+/// The sum of two single-precision complex numbers.
+#op(':op/add_c')
+export func operator +(x: c64, y: c64): c64
+
+/// The sum of two double-precision complex numbers.
+#op(':op/add_z')
+export func operator +(x: c128, y: c128): c128
+
+/// Two strings joined into one, the left one first.
+#op(':op/add_s')
+export func operator +(x: string, y: string): string
+
+/// Two byte strings joined into one, the left one first.
+#op(':op/add_bytes')
+export func operator +(x: Bytes, y: Bytes): Bytes
+
+/// The difference of two 32-bit integers.
+#op(':op/sub_i')
+export func operator -(x: i32, y: i32): i32
+
+/// The difference of two 64-bit integers.
+#op(':op/sub_l')
+export func operator -(x: int, y: int): int
+
+/// The difference of two 16-bit floats.
+#op(':op/sub_f6')
+export func operator -(x: f16, y: f16): f16
+
+/// The difference of two `bf16` values.
+#op(':op/sub_bf')
+export func operator -(x: bf16, y: bf16): bf16
+
+/// The difference of two single-precision complex numbers.
+#op(':op/sub_c')
+export func operator -(x: c64, y: c64): c64
+
+/// The difference of two double-precision complex numbers.
+#op(':op/sub_z')
+export func operator -(x: c128, y: c128): c128
+
+// The rest of the scalar arithmetic, one declaration per element type: a token's meaning at a type
+// is what the type's operator is, and the declaration below is that meaning written down. `*`, `/`
+// and unary `-` are one name with eight types each, so the eight are the overloads of one operator,
+// not eight operators: `a * b` is a call of whichever of these the operands' type selects.
+//
+// A unary `-` is the same token as the binary one above (`-x` and `x - y` are two calls of one
+// operator), so the two spellings are told apart by how many operands they take.
+
+/// The product of two 32-bit floats.
+#op(':op/mul_f')
+export func operator *(x: f32, y: f32): f32
+
+/// The product of two 64-bit floats.
+#op(':op/mul_d')
+export func operator *(x: float, y: float): float
+
+/// The product of two 32-bit integers.
+#op(':op/mul_i')
+export func operator *(x: i32, y: i32): i32
+
+/// The product of two 64-bit integers.
+#op(':op/mul_l')
+export func operator *(x: int, y: int): int
+
+/// The product of two 16-bit floats.
+#op(':op/mul_f6')
+export func operator *(x: f16, y: f16): f16
+
+/// The product of two `bf16` values.
+#op(':op/mul_bf')
+export func operator *(x: bf16, y: bf16): bf16
+
+/// The product of two single-precision complex numbers.
+#op(':op/mul_c')
+export func operator *(x: c64, y: c64): c64
+
+/// The product of two double-precision complex numbers.
+#op(':op/mul_z')
+export func operator *(x: c128, y: c128): c128
+
+/// The quotient of two 32-bit floats.
+#op(':op/div_f')
+export func operator /(x: f32, y: f32): f32
+
+/// The quotient of two 64-bit floats.
+#op(':op/div_d')
+export func operator /(x: float, y: float): float
+
+/// The truncated quotient of two 32-bit integers.
+#op(':op/div_i')
+export func operator /(x: i32, y: i32): i32
+
+/// The truncated quotient of two 64-bit integers.
+#op(':op/div_l')
+export func operator /(x: int, y: int): int
+
+/// The quotient of two 16-bit floats.
+#op(':op/div_f6')
+export func operator /(x: f16, y: f16): f16
+
+/// The quotient of two `bf16` values.
+#op(':op/div_bf')
+export func operator /(x: bf16, y: bf16): bf16
+
+/// The quotient of two single-precision complex numbers.
+#op(':op/div_c')
+export func operator /(x: c64, y: c64): c64
+
+/// The quotient of two double-precision complex numbers.
+#op(':op/div_z')
+export func operator /(x: c128, y: c128): c128
+
+/// The negation of a 32-bit float.
+#op(':op/neg_f')
+export func operator -(x: f32): f32
+
+/// The negation of a 64-bit float.
+#op(':op/neg_d')
+export func operator -(x: float): float
+
+/// The negation of a 32-bit integer.
+#op(':op/neg_i')
+export func operator -(x: i32): i32
+
+/// The negation of a 64-bit integer.
+#op(':op/neg_l')
+export func operator -(x: int): int
+
+/// The negation of a 16-bit float.
+#op(':op/neg_f6')
+export func operator -(x: f16): f16
+
+/// The negation of a `bf16` value.
+#op(':op/neg_bf')
+export func operator -(x: bf16): bf16
+
+/// The negation of a single-precision complex number.
+#op(':op/neg_c')
+export func operator -(x: c64): c64
+
+/// The negation of a double-precision complex number.
+#op(':op/neg_z')
+export func operator -(x: c128): c128
+
+// Indexing, `xs[i]`. The operator registers three words -- the array, the position, and the
+// dimension the position names -- and its registration says so
+// (`src/builtin/modules/globals.cpp`: `(arr: T[], index: int, axis: int) => T`); the declaration
+// writes two, because the third is the declaration's default and the mechanism fills it before the
+// operator's type rule sees the call, so a two-word `xs[i]` stays a two-word call. That is why
+// `[]` is declared with the parameters a call writes and not with the registration's whole list,
+// and why the same shape appears wherever this operator is declared under a module's own name
+// (`test/cases/compile/native/generic_module.cml`).
+//
+// `[]` is not a token: it is a pair of brackets, and the declaration writes both. The parser reads
+// `func operator [` `]` as an operator name already (src/parse/syntax/parser.cpp#parseOperatorName,
+// whose own example is `func operator [](m: M, i: int): T`), because a bracket form is an operator
+// declaration like any other, not a form of its own.
+
+/// The element at position `i` on the first dimension of `xs`.
+/// @example [7, 8, 9][0]    // 7
+#op(':op/idx_arr')
+export func operator []::<T>(xs: T[], i: int): T
+
+/// The character at position i of a string.
+/// @example 'abc'[1]    // 'b'
+#op(':op/idx_str')
+export func operator [](s: string, i: int): string
+
+/// The value stored under key, or null when the map has no such key.
+/// @example ([('a', 1)] as Map<string, int>)['a']    // 1
+#op(':coll/map_idx')
+export func operator []::<K, V>(m: Map<K, V>, key: K): V?
+
+/// A copy of the array holding the elements at the given indices along the axis.
+#op(':op/idx_take')
+export func operator []::<T>(arr: T[], indices: int[], axis: int): T[]
+
+// ---- the unary operators ----
+
+/// The bitwise complement of a 32-bit integer.
+/// @example ~i32(0)    // -1
+#op(':op/inv_i')
+export func operator ~(x: i32): i32
+
+/// The bitwise complement of a 64-bit integer.
+/// @example ~0    // -1
+#op(':op/inv_l')
+export func operator ~(x: int): int
+
+/// The negation of a boolean.
+/// @example !true    // false
+#op(':op/not')
+export func operator !(x: bool): bool
+
+// ---- the remaining binary operators: `%`, `&`, `|`, and the generic `==` ----
+
+/// The remainder of dividing the first 32-bit integer by the second.
+/// @example i32(7) % i32(2)    // 1
+#op(':op/mod_i')
+export func operator %(x: i32, y: i32): i32
+
+/// The remainder of dividing the first 64-bit integer by the second.
+/// @example 7 % 2    // 1
+#op(':op/mod_l')
+export func operator %(x: int, y: int): int
+
+/// The conjunction of two booleans.
+/// @example true & false    // false
+#op(':op/and')
+export func operator &(x: bool, y: bool): bool
+
+/// The disjunction of two booleans.
+/// @example true | false    // true
+#op(':op/or')
+export func operator |(x: bool, y: bool): bool
+
+/// Whether two arrays, tuples or structs of comparable parts are equal, part by part.
+#op(':op/eq')
+export func operator ==::<T>(a: T, b: T): bool
+
+// ---- comparison ----
+//
+// `==` and `!=` are operators of their own group (`__eq__`, `__ne__`; operator_names.h), and the
+// rule each one names is the kernel for the operand type: `:op/eq_d` is the one for `float`.
+
+/// Whether two 64-bit floats are equal.
+/// @example 1.5 == 1.5    // true
+#op(':op/eq_d')
+export func operator ==(x: float, y: float): bool
+
+/// Whether two 32-bit floats are equal.
+/// @example f32(1.5) == f32(1.5)    // true
+#op(':op/eq_f')
+export func operator ==(x: f32, y: f32): bool
+
+/// Whether two 32-bit integers are equal.
+/// @example i32(3) == i32(3)    // true
+#op(':op/eq_i')
+export func operator ==(x: i32, y: i32): bool
+
+/// Whether two 64-bit integers are equal.
+/// @example 3 == 3    // true
+#op(':op/eq_l')
+export func operator ==(x: int, y: int): bool
+
+/// Whether two half floats are equal.
+/// @example f16(0.5) == f16(0.5)    // true
+#op(':op/eq_f6')
+export func operator ==(x: f16, y: f16): bool
+
+/// Whether two bfloat16 values are equal.
+/// @example bf16(0.5) == bf16(0.5)    // true
+#op(':op/eq_bf')
+export func operator ==(x: bf16, y: bf16): bool
+
+/// Whether two single-precision complex values are equal.
+/// @example c64(1.0, 2.0) == c64(1.0, 2.0)    // true
+#op(':op/eq_c')
+export func operator ==(x: c64, y: c64): bool
+
+/// Whether two double-precision complex values are equal.
+/// @example c128(1.0, 2.0) == c128(1.0, 2.0)    // true
+#op(':op/eq_z')
+export func operator ==(x: c128, y: c128): bool
+
+/// Whether two strings are equal, character by character.
+/// @example 'ab' == 'ab'    // true
+#op(':op/eq_s')
+export func operator ==(x: string, y: string): bool
+
+/// Whether two byte blocks are equal, byte by byte.
+/// @example to_bytes([1] as i32[]) == to_bytes([1] as i32[])    // true
+#op(':op/eq_bytes')
+export func operator ==(x: Bytes, y: Bytes): bool
+
+/// Whether two booleans are equal.
+/// @example true == true    // true
+#op(':op/eq_b')
+export func operator ==(x: bool, y: bool): bool
+
+// ---- ordering ----
+
+/// Whether the first 64-bit float is less than the second.
+/// @example 1.5 < 2.5    // true
+#op(':op/lt_d')
+export func operator <(x: float, y: float): bool
+
+/// Whether the first of two 32-bit floats is less than the second.
+#op(':op/lt_f')
+export func operator <(x: f32, y: f32): bool
+
+/// Whether the first of two 32-bit integers is less than the second.
+#op(':op/lt_i')
+export func operator <(x: i32, y: i32): bool
+
+/// Whether the first of two 64-bit integers is less than the second.
+#op(':op/lt_l')
+export func operator <(x: int, y: int): bool
+
+/// Whether the first of two half floats is less than the second.
+#op(':op/lt_f6')
+export func operator <(x: f16, y: f16): bool
+
+/// Whether the first of two bfloat16 values is less than the second.
+#op(':op/lt_bf')
+export func operator <(x: bf16, y: bf16): bool
+
+/// Whether the first of two strings is less than the second.
+#op(':op/lt_s')
+export func operator <(x: string, y: string): bool
+
+// ---- ordering: `<=` ----
+
+/// Whether the first 64-bit float is less than or equal to the second.
+/// @example 1.5 <= 1.5    // true
+#op(':op/le_d')
+export func operator <=(x: float, y: float): bool
+
+/// Whether the first 32-bit float is less than or equal to the second.
+#op(':op/le_f')
+export func operator <=(x: f32, y: f32): bool
+
+/// Whether the first 32-bit integer is less than or equal to the second.
+#op(':op/le_i')
+export func operator <=(x: i32, y: i32): bool
+
+/// Whether the first 64-bit integer is less than or equal to the second.
+#op(':op/le_l')
+export func operator <=(x: int, y: int): bool
+
+/// Whether the first half float is less than or equal to the second.
+#op(':op/le_f6')
+export func operator <=(x: f16, y: f16): bool
+
+/// Whether the first bfloat16 value is less than or equal to the second.
+#op(':op/le_bf')
+export func operator <=(x: bf16, y: bf16): bool
+
+/// Whether the first string is less than or equal to the second, character by character.
+#op(':op/le_s')
+export func operator <=(x: string, y: string): bool
+
+// ---- ordering: `>` ----
+
+/// Whether the first of two 64-bit floats is greater than the second.
+/// @example 2.5 > 1.5    // true
+#op(':op/gt_d')
+export func operator >(x: float, y: float): bool
+
+/// Whether the first of two 32-bit floats is greater than the second.
+#op(':op/gt_f')
+export func operator >(x: f32, y: f32): bool
+
+/// Whether the first of two 32-bit integers is greater than the second.
+#op(':op/gt_i')
+export func operator >(x: i32, y: i32): bool
+
+/// Whether the first of two 64-bit integers is greater than the second.
+#op(':op/gt_l')
+export func operator >(x: int, y: int): bool
+
+/// Whether the first of two half floats is greater than the second.
+#op(':op/gt_f6')
+export func operator >(x: f16, y: f16): bool
+
+/// Whether the first of two bfloat16 values is greater than the second.
+#op(':op/gt_bf')
+export func operator >(x: bf16, y: bf16): bool
+
+/// Whether the first of two strings is greater than the second.
+#op(':op/gt_s')
+export func operator >(x: string, y: string): bool
+
+// ---- ordering: `>=` ----
+
+/// Whether the first of two 64-bit floats is greater than or equal to the second.
+/// @example 2.5 >= 2.5    // true
+#op(':op/ge_d')
+export func operator >=(x: float, y: float): bool
+
+/// Whether the first of two 32-bit floats is greater than or equal to the second.
+#op(':op/ge_f')
+export func operator >=(x: f32, y: f32): bool
+
+/// Whether the first of two 32-bit integers is greater than or equal to the second.
+#op(':op/ge_i')
+export func operator >=(x: i32, y: i32): bool
+
+/// Whether the first of two 64-bit integers is greater than or equal to the second.
+#op(':op/ge_l')
+export func operator >=(x: int, y: int): bool
+
+/// Whether the first of two half floats is greater than or equal to the second.
+#op(':op/ge_f6')
+export func operator >=(x: f16, y: f16): bool
+
+/// Whether the first of two bfloat16 values is greater than or equal to the second.
+#op(':op/ge_bf')
+export func operator >=(x: bf16, y: bf16): bool
+
+/// Whether the first of two strings is greater than or equal to the second.
+#op(':op/ge_s')
+export func operator >=(x: string, y: string): bool
+
+// ---- power and the remaining binary operators ----
+
+/// The 64-bit float raised to the power of the second.
+/// @example 2.0 ^ 3.0    // 8.0
+#op(':op/pow_d')
+export func operator ^(x: float, y: float): float
+
+/// The 32-bit float raised to the power of the second.
+/// @example f32(2.0) ^ f32(3.0)    // 8.0
+#op(':op/pow_f')
+export func operator ^(x: f32, y: f32): f32
+
+/// The 32-bit integer raised to the power of the second.
+#op(':op/pow_i')
+export func operator ^(x: i32, y: i32): i32
+
+/// The 64-bit integer raised to the power of the second.
+#op(':op/pow_l')
+export func operator ^(x: int, y: int): int
+
+/// The half float raised to the power of the second.
+#op(':op/pow_f6')
+export func operator ^(x: f16, y: f16): f16
+
+/// The bfloat16 value raised to the power of the second.
+#op(':op/pow_bf')
+export func operator ^(x: bf16, y: bf16): bf16
+
+/// The single-precision complex value raised to the power of the second.
+#op(':op/pow_c')
+export func operator ^(x: c64, y: c64): c64
+
+/// The single-precision complex value raised to a 32-bit integer power.
+#op(':op/pow_c_i')
+export func operator ^(x: c64, y: i32): c64
+
+/// The single-precision complex value raised to a 64-bit integer power.
+#op(':op/pow_c_l')
+export func operator ^(x: c64, y: int): c64
+
+/// The double-precision complex value raised to the power of the second.
+#op(':op/pow_z')
+export func operator ^(x: c128, y: c128): c128
+
+/// The double-precision complex value raised to a 32-bit integer power.
+#op(':op/pow_z_i')
+export func operator ^(x: c128, y: i32): c128
+
+/// The double-precision complex value raised to a 64-bit integer power.
+#op(':op/pow_z_l')
+export func operator ^(x: c128, y: int): c128
+
 // ---- conversions ----
 //
 // Numeric types are never converted implicitly; these functions do it. There is one conversion
@@ -333,7 +812,7 @@ export func c128(x: c128): c128
 /// x as text, as println writes it. A float is written as the shortest text that reads back as
 /// the same number: string(2.5) is '2.5', string(2.0) is '2.0'.
 /// @example string(42)    // '42'
-#op(':op/*tos')
+#op(':op/atos')
 export func string::<T>(x: T): string
 
 /// The integer a text spells, or an error value.

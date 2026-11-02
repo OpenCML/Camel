@@ -458,29 +458,15 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     }
     // The prelude's declaration file declares the built-in operators, whose rules the core
     // computes: the declaration gives each rule it names the parameter types every call is held
-    // to, and declares nothing of its own. A `*` in the URI stands for the family of operators one
-    // declaration covers (`:op/*tol`: one per source type).
+    // to, and declares nothing of its own. The URI is exact on both sides: a rule of the group is
+    // claimed by the declaration that names it, and nothing else.
     if (context_->preludeModule() != nullptr && unit_->module == context_->preludeModule()) {
-        const auto matches = [](const std::string &pattern, const std::string &candidate) {
-            const size_t star = pattern.find('*');
-            if (star == std::string::npos) {
-                return pattern == candidate;
-            }
-            return candidate.size() >= pattern.size() - 1 &&
-                   candidate.compare(0, star, pattern, 0, star) == 0 &&
-                   candidate.compare(
-                       candidate.size() - (pattern.size() - star - 1),
-                       std::string::npos,
-                       pattern,
-                       star + 1,
-                       std::string::npos) == 0;
-        };
         bool claimed = false;
         if (const auto builtins = context_->importModule("")) {
             if (const auto entity = builtins->getNativeEntity(Reference(name));
                 entity.has_value() && entity->isOperGroup()) {
                 for (const auto &[ruleUri, rule] : entity->operGroup()->resolvers()) {
-                    if (rule != nullptr && matches(uri, ruleUri)) {
+                    if (rule != nullptr && uri == ruleUri) {
                         context_->claimBuiltinSignature(rule, funcType);
                         claimed = true;
                     }
