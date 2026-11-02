@@ -340,6 +340,15 @@ Two readings of 2026-11-02 were wrong for this reason and neither was a code def
 you meant to give it.** A parser that accepts a truncated file is not evidence of completeness; the
 size and the statement count are what cross-check it.
 
+## Deleting A Named Example Moves Its Class Count
+`scripts/stdlib-reference.mjs` keeps `EXAMPLE_STOPS`: for each class of doc example that cannot run,
+how many are in it. Deleting an example -- with the declaration it named, or because the shape it
+showed is gone -- makes that class one smaller, and the count is the only thing that notices. Leave it
+and `registry.docs_complete` goes red **on an otherwise clean `develop`**, which reads as a defect in
+the compiler rather than in the bookkeeping: on 2026-11-02 this was the second root hiding inside one
+night's twenty-nine reds. Change the number in the same commit as the deletion, and write the reason
+beside it -- the file says a number that moved without a reason is the same silence as a relaxed gate.
+
 ## A Log File Belongs Outside The Tree
 When a run's output is redirected, `*> D:\Temp\<name>.log` and never `*> run.log` beside the sources.
 A file written inside the tree is an untracked file the plan-selection audit then has to explain: it
