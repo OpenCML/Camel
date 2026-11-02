@@ -26,4 +26,6 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["plan files, every one of them has a destination"]
 normalizers = ["normalize_newlines"]
-timeout_ms = 30000
+# 45 s, not 30: the walk reads 331 plan files and 3488 case files, and the CI runner measured 9410 ms
+# of CPU for it -- 3.2x the bound, under the 4x the margin rule asks for. 45 s is 4.8x that figure.
+timeout_ms = 45000

@@ -4,13 +4,13 @@
 
 ## 现在在等作者
 
-**没有待裁的页**：目录里只有这个 `README.md`。新的页从车道落进来，就在同一笔里把它加到下面。
+- `2026-11-02-the-generator-reads-a-draft-node-after-its-builder` —— `stream.*` 的几条在 Windows 上崩在 `builder_support.h#nodeGraphOf`（草稿节点不属于任何 compile graph builder），同树 Linux 全绿、五个后端都崩，所以是建图不是调度；问该谁去找那个节点的 owner、修好前 Windows 腿要不要继续红。
 
 ### 已裁、在 `reviews/` 留档
 
 - `2026-11-02-what-counts-as-a-statement-of-a-chain` —— 链上语句含不含 `Func`/`Join`；裁：含 `Call`，不含这两个。
 - `2026-11-02-the-member-count-stated-twice` —— 余量元组没有图时的元数；裁：`split` 不再交出残差元组，检查从此是守卫。
-- `2026-11-02-does-the-neq-cut-take-the-strict-neq-group-with-it` —— `ne_` 那 22 行；裁：补逐元素 `!`，然后删净。
+- `2026-11-02-does-the-neq-cut-take-the-strict-neq-group-with-it` —— `ne_` 那批注册行；裁：补逐元素 `!`，然后删净。
 - `2026-11-02-is-p0-2-now-a-pass-by-pass-judgement-change` —— P0-2 的顺序；裁：先修不变量，按节点性质判。
 
 ## 已裁：按还堵着的活排
