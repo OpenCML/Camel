@@ -72,6 +72,9 @@ of the generic function ...] (name=SemanticDiag::ArgumentsMismatch)
 - **要让它倒**：修 `stdlib/vjp.cml#vjp` 那处把 `(float, float) => float` 用单个参数调用的地方（第 73、78 行）
   （组合时的参数列表与类型律不一致）。
 
+**墙 1 的根因之一（2026-11-03 补，另一条车道的读数）**：类型包拼接把**数组参数按类型合并**。`(..ParamsOf<F>, ..Tangent<ParamsOf<F>>)` 在 `F` 有三个数组参数时给出 **2 个成员**（应 6 个）⇒ 调用点按 2 个实参填、被调方按 6 个读 ⇒ 上面那句 `cannot be called with argument types: <>`。
+- **判据**：纯函数最小例，`Swap` 对 1 / 2 / 3 个数组参数**全为 true** —— 分解本身没错，**拼接之后重数丢了**。
+- **现状**：拼接在类型层完成，重数在有数组参数时必错；与 `stdlib/vjp.cml#vjp` 的那处调用是同一堵墙的两面，不改这里它也不倒。
 ## 墙 2–7：前向规则缺失（`rulesets/jvp.cml`）
 
 六面墙的形状完全相同，只有算子名不同。 以 `08_embedding.cml` 为例，原样诊断：
@@ -554,3 +557,16 @@ argmax **[1, 0]（两行都对）**。
 前 20 步与 `grow.py --stage 8` **12 位一致**，所以这不是接线问题。 按判据这是读数，**没有调参、没有加步数**。
 
 **三个 stage 并排**：stage6（位置）**0.9496** ← stage8（位置 + 因果注意力）**1.2813** ← stage7（位置 + 无 mask 注意力）**1.3871** ← 弃权地板 **1.386294**。
+
+
+## 墙 13（新）：转置成员的 norm 端口数 > 调用点实参数 ⇒ 运行时内部错误
+
+- **判据**：`transpose` 建出的成员，其 norm 端口数**大于**调用点实参个数时，抛 `Runtime indirect call norm-arity mismatch`（运行期内部错误，不是语言诊断）。
+- **证据**：`transpose_loop_escape.reads_outer` 的读数 `carried=2 captures=2` 与调用点的 `has 1 args`。
+- **现状**：端口在构造时按"体需要的值"加，调用点仍按原形状填；两侧没有一处统一数个数。
+
+## 墙 14（新）：with 端口侧的同一件事
+
+- **判据**：同 13，但发生在 with 端口：成员 with 段比调用点填的多（或少）时，结果不是诊断而是错值或内部错误。
+- **证据**：`grad_of_a_division` 的 with-arity 读数（`transpose_loop_escape` 那一族之外的第一条）。
+- **现状**：与 13 同根 —— 端口由体加、由调用点填，中间没有一处校验，**两条合起来才是一堵墙**。
