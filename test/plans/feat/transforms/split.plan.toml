@@ -108,7 +108,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["g value=10.0", "g dgdx=6.0", "residuals=3"]
+# `residuals=3` is the parameter and two intermediates. `ca1941405` (parameters are in the residual set)`n# leaves it at 3, because this graph has one free variable: the count moved where a second one was added.`nexpect_stdout_contains = ["g value=10.0", "g dgdx=6.0", "residuals=3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
