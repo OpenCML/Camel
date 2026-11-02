@@ -41,6 +41,29 @@ const bool writable = symbol == nullptr && callForm.has_value() && …;
 
 > **当一条算子同时有符号名与声明名时，打印器按什么选？** 默认建议：**能写符号就写符号**（符号是语言的一部分，任何程序都认），**符号不存在时才用声明名**——但"能写符号"要按**调用位置**判定，不是按组。
 
+## 试过的第三条规则：名字与组名同名 ⇒ 印符号
+
+按"名字是派生的还是写下来的"再试一次：
+
+```
+const bool derivedFromGroup = callForm.has_value() && callForm->name == group &&
+                              operatorSymbolOf(group) != nullptr;
+const bool writable = … && !derivedFromGroup;      // 派生名让位给符号
+```
+
+全量 **`8389/8371/5`**——红的从 2 条变 5 条（`interval_bounds_constant.opt_cml`、`stream.interval_loop_cml`、`canonical_document_and_equivalence`、`print_and_recompile`、`cml_var_holding_a_lambda`）。**这条区分不了，第四版不再试。**
+
+**结论**：`name == groupOf(uri)` 与 `operatorSymbolOf(group) != nullptr` **不足以判断"该印哪个名字"**。需要的是**第三种事实**：不是组，也不是名字的来源，而是**这个调用点所在的这一段程序，在它可见的名字空间里能不能写出那个符号**（`+` 在语言每一处都写得出；模块导出的调用形状只在自己作用域里写得出）。这一条请作者裁。
+
+**表格（能拿的两列是实测，另两列是读代码，别当实测）**
+
+| 用例 | uri | groupOf | operatorSymbolOf | callFormOf 的 name | 源程序实际写的 |
+|---|---|---|---|---|---|
+| `cml_var_holding_a_lambda` | `:op/add_*` | `__add__` | `+` | `__add__` | `x + n` |
+| `stream.interval_loop_cml` | `:op/mul_*` | `__mul__` | `*` | `__mul__` | `x * 3` |
+
+前两行来自红里的 stdout（`__add__(x, n)`、`__mul__(x, 3)`），后两列按代码读出。`declaredByModule` 一列要一次专门的探针程序才拿得到，**没做**。
+
 ## 现状
 
 - `origin/lane-gs6` = `7f74bdb71`，全量 **`8389/8374/2`**（`cml_var_holding_a_lambda`、`stream.interval_loop_cml`）；
