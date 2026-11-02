@@ -2189,3 +2189,34 @@ PROBE transposeRule slot=1 ref=3 owner=0x5d653625c980 type=float
 ⇒ **这不是"该不该写死"，而是"哪一处操作数命名 `T`"**：一条规则可以有 `where(cond, a, b)`、`index_into(xs, i)`、元组分量——**作者点名哪一处，取型就是一行；在此之前，任何"取第一个"的规则都是我替他定的特例。**
 
 **⑤ 边界**：试错的取法不成立，**退回绿**；**退回不等于放弃，等一句点名**。`feat/compile/transforms` **58/58**，三处 `{Float64()}` 仍在（**删 0**）。
+
+
+## 65. `ruleElementTypeOf` 的读数：它对每个操作数都给答案，但混合元数的表里没有共同的 T
+
+**① 打印（直接跑用例、`grep PROBE`）**
+```
+PROBEJVP uri=:op/idx_arr values=2 t=float
+PROBE71  rule=idx_arr_t types=[float[],int] elems=[float,other]      # ruleElementTypeOf(float[])=float, ruleElementTypeOf(int)=int
+```
+- `ruleElementTypeOf` **不返回 `nullptr`**：它对每个操作数都给一个确定的元素（`float[]`→`float`，`int`→`int`）。
+- **但它给的是"每个操作数各自的元素"，不是"这条规则的 `T`"**：`idx_arr_t` 的两个操作数是 `float[]` 与 `int`，两个元素**不相同**。
+  规则该按 `float` 归档（值的那一维）——**这一步只有"取第一个操作数"这条规则能定，而那是惯例，不是 `ruleElementTypeOf` 的话。**
+
+**② 按"取第一个操作数、剥到元素"实例化（=`vmap` 的写法）仍然红 7 条，而且这 7 条一条都不打印 `PROBE71`**
+⇒ **这 7 条根本没走到我改的那一处**（转置的 `ruleCotangent`），**红是 jvp 那一侧改动的结果**。
+⇒ 上一轮父代理说的"三处一处都没验过"是对的：**两处一起改，读数互相遮住**；**下一轮必须一次只改一处**。
+
+**③ 新读数（本轮最要紧的一条）：作者的验收例今天写不出来。**
+```
+error[SemanticDiag::ArgumentsRejected]: Invalid call to 'transpose' with argument types <> (((), f32) => f32 pure):
+`transpose` takes a function that returns a `float`: the cotangent of the result is what goes in.
+```
+⇒ `f(x: f32) = x * x` 在 `3` 处取 `grad`，**在 `transpose` 的签名检查就被拒**，**根本到不了任何 `{Float64()}` 站点**。
+⇒ **父代理排序的第 ③ 项（`Tangent<ResultOf<F>>` 把结果限死成 `float`）是三道闸的"正门"，必须排在删 `{Float64()}` 之前**；
+**在那之前，"删掉三处取型"这条验收取不到读数**——不是因为改得不对，是因为**用例进不来**。
+
+**④ 探针纪律（写进页）**：**"探针一次没打印"是读数，不是"这里没问题"。**
+本轮它恰好是**唯一的判别证据**（它证明 7 条红不来自我改的那一处）。
+
+**⑤ 边界**：试错取法不成立 ⇒ **退回绿**，`feat/compile/transforms` **58/58**；三处 `{Float64()}` 仍在（**删 0**）；
+`grad_f32_square.cml` 探针文件**已删**，树干净；`f32→float` 隐式转换一字未动。
