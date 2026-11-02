@@ -196,6 +196,17 @@ bool nodeIsFreelySchedulable(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget = nullptr,
     const camel::core::type::Type *castSource = nullptr, bool fixedShapes = false);
 
+/// The fault half of `nodeIsFreelySchedulable`, on its own: whether running a node of this kind
+/// can raise a fault (`castMayFault`, `OperatorTraits::mayFault`; design principles 3.9) where it
+/// is written. It is the fact that decides whether a statement nobody reads may still be dropped,
+/// so the C++ sweep reads it here and `graph::may_fault` (modules/graph) hands the same answer to
+/// the passes written in Camel: one definition, so the two cannot disagree. A node whose operator
+/// nobody declared is not known never to fault, and neither is a kind this file does not know
+/// (a call, a loop, a gate).
+bool nodeMayFault(
+    GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget = nullptr,
+    const camel::core::type::Type *castSource = nullptr, bool fixedShapes = false);
+
 /// Whether a type states its shape in full: not an array, or an array of fixed rank whose
 /// extents are all constants.
 bool shapesAreFixed(const camel::core::type::Type *type);
@@ -204,6 +215,10 @@ class GCGraph;
 /// The same question of a node of a graph; a CAST is asked with its result type and the type of
 /// its input.
 bool nodeIsFreelySchedulable(const GCGraph &graph, gc_node_ref_t ref);
+
+/// `nodeMayFault` of a node of a graph, read the way `nodeIsFreelySchedulable(const GCGraph &)`
+/// reads its operands and types.
+bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref);
 
 /// Whether a node owns a control region of this graph, and so stands on the outside for what runs
 /// inside it (`docs/design/effects/edges.cn.md` 4.6): a `BRCH` or a `LOOP` that carries an arm or a

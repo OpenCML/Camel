@@ -36,7 +36,6 @@ slot_t __coll_set_intersect__(ArgsView &with, ArgsView &norm, camel::core::conte
 slot_t __coll_set_difference__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __coll_set_is_subset__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __coll_eq__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-slot_t __coll_neq__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
 /**
  * The operator groups of this file. Some carry a name the globals module already has a group

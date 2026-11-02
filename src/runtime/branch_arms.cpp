@@ -132,6 +132,7 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
             branches.push_back(it.ref());
         }
     }
+
     if (branches.empty()) {
         return;
     }
@@ -310,8 +311,42 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
             if (input == kInvalidNodeRef || input >= slots || !live[input]) {
                 continue;
             }
+
                 const uint32_t there = controlOf(input);
-                if (there == 0 || within(here, there)) {
+                if (there == 0) {
+                    // The JOIN of a BRCH runs after every one of its arms (the arms' results are
+                    // its with inputs), so a node inside an arm cannot read it: the arm would wait
+                    // on the join that waits on the arm. The arm is what makes the read ordinary
+                    // looking -- reading the body is allowed -- so the JOIN is named here.
+                    if (here != 0) {
+                        for (const gc_node_ref_t owner : branches) {
+                            if (!live[owner]) {
+                                continue;
+                            }
+                            const gc_node_ref_t armJoin =
+                                graph->nodeBodyAs<GCBrchBody>(owner)->join;
+                            if (input != armJoin || armJoin == kInvalidNodeRef) {
+                                continue;
+                            }
+                            const int64_t arm = regions.armOf(here, owner);
+                            if (arm < 0) {
+                                continue;
+                            }
+                            fail(
+                                graph,
+                                std::format(
+                                    "{} runs in arm {} of BRCH {} and reads its JOIN {}, which runs "
+                                    "after every arm: the arm would wait on the node that waits on "
+                                    "the arm",
+                                    describe(program, graph, ref),
+                                    arm,
+                                    owner,
+                                    describe(program, graph, input)));
+                        }
+                    }
+                    continue;
+                }
+                if (within(here, there)) {
                     continue;
                 }
                 // The JOIN reads the results of its arms (and what waits inside them), the LOOP
@@ -349,6 +384,7 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
                             theirArm,
                             ownArm));
                 }
+
                 fail(
                     graph,
                     std::format(

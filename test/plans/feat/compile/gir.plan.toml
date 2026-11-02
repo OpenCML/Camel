@@ -49,3 +49,14 @@ assert(out.includes('function_values named=9.0 positive=6.0 negative=0.5'), `une
 }
 """
 timeout_ms = 10000
+
+[[tests]]
+name = "pow.twelve_rows"
+desc = "`^` is `__pow__`, and the graph of one function that writes it on every pair of types the arithmetic answers for holds twelve distinct operator nodes: the two integers, the two floats, the two reduced floats, the two complexes, and the two complexes against an integer exponent of either width. The rows are different algorithms, not spellings of one -- integer repeated squaring, the float power, that power rounded through f32 for the reduced types, and the complex power -- so the case pins the twelve rather than the answer. Every operand is a parameter, so no `^` folds."
+kind = "behavior"
+case = "../../../cases/compile/gir/pow_rows.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["label=\":op/pow_i\"", "label=\":op/pow_l\"", "label=\":op/pow_f\"", "label=\":op/pow_d\"", "label=\":op/pow_bf\"", "label=\":op/pow_f6\"", "label=\":op/pow_c\"", "label=\":op/pow_c_i\"", "label=\":op/pow_c_l\"", "label=\":op/pow_z\"", "label=\":op/pow_z_i\"", "label=\":op/pow_z_l\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 12000

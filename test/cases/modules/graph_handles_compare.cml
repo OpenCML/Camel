@@ -1,0 +1,28 @@
+/**
+ * A handle of the `graph` module compares with `==` and `!=`, and its `!=` is the negation of `==`.
+ *
+ * `==` of the handle types is declared in `stdlib/graph.cml` (design principles 4.3): two handles
+ * are equal when they name the same thing of the same Program. `!=` is `!(==)` on that
+ * declaration, so a graph holds the equality and `:op/not` on its answer -- the module keeps no
+ * entry in `__neq__` for it, and nothing in the graph is named `graph:ne`.
+ *
+ * A graph names one function's graph, so two graphs of different functions differ and a graph
+ * equals itself; a node of one graph equals itself.
+ */
+
+import { graph_of, nodes } from graph
+import { Graph, Node } from graph
+
+func twice(x: int): int {
+    return x * 2
+}
+
+func main(): int sync {
+    let g: Graph = graph_of(main)
+    let other: Graph = graph_of(twice)
+    let ns: Node[] = nodes(g)
+    println(g == g, g != g)
+    println(g == other, g != other)
+    println(ns[0] == ns[0], ns[0] != ns[0])
+    return 0
+}

@@ -23,8 +23,7 @@ real defect makes (a dropped term or a wrong operator moves the loss by whole pe
 relative to the loss; the unit floor keeps it meaningful when the loss is near zero.
 
 Exit 0 when the two agree and both ran; non-zero with the reason otherwise -- including "the
-second pipeline does not run at all", which is today's state until M4 lands (the plan entry that
-calls this is skipped by `test/tools/have-library-grad.mjs` for exactly that reason).
+second pipeline does not run at all".
 """
 
 import argparse
