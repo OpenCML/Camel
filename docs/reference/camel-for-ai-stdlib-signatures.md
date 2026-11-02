@@ -203,7 +203,7 @@ tree_unzip: (r: R, s: S) => ?
 
 ```text
 jvp: (f: F) => Jvp<F> when is_function::<F>()
-split: (f: (v: float, d: float) => (float, float)) => (v: float, d: float) => (float, float)
+split: (f: (v: float, d: float) => (float, float)) => (v: float, d: float) => (float, (float, float) => float)
 transpose: (f: F) => Transpose<F> when is_function::<F>()
 vmap: (f: F) => Vmap<F> when is_function::<F>()
 remat: (f: F) => F when is_function::<F>()

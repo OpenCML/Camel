@@ -728,6 +728,38 @@ timeout_ms = 20000
 # The same missing cotangent, seen from the library: `grad` is
 # `transpose(split(reinterp(jvp(f))))`, so a tangent function that ignores its operands is on every
 # `grad` of a sum, and a refusal there is a refusal of the plainest derivative there is.
+# This entry is the refusal of a wish, and the wish has moved twice. The count is the body's answer
+# (`residuals=4` here), so a program never names, indexes or counts them (author's ruling, 2026-11-01;
+# the findings are in
+# docs/handover/reviews/questions-2026-11-01-the-residual-slot-has-no-type-until-execution.md).
+#
+# Under the binary-tuple ABI the wish was spelled `let (r0, r1) = residuals` and refused with
+# `SemanticDiag::ResidualsAreNotVisible` at that `let`. That diagnostic and the `TupleType::isResiduals()`
+# guard that was its only emitter are deleted (`79c61958b`, 307 codes -> 306), because no transform
+# produces a residual tuple any more (`split` hands the values to a closure instead): the mechanism
+# and the sentence it said are both gone, see
+# docs/handover/reports/2026-11-02-the-residual-chain-is-dead-and-four-spots-to-remove.cn.md.
+#
+# Under the closure ABI the same wish is `let (dx, dy) = linear`, taking the linear half apart to get
+# the directions one by one, and that is refused with `SemanticDiag::TypeNotIndexable` at the `let`:
+# `linear` is a function, the residuals it was built over ride in its closure, and nothing about them
+# reaches the program's type. The numbers the entry pins are the ones the refusal still allows.
+#
+# `not_contains` for those numbers is gone on purpose: with the guard on the program gets nowhere
+# near printing, so a `not_contains` would assert nothing. What this entry asserts is the name, the
+# line, and the sentence the writer reads.
+[[tests]]
+name = "split_residuals_destructured"
+desc = "`split(jvp(f))` for `f(x, y) = x*x*y*y`: its halves are not a pair the program can take apart, and that is refused. Under the closure ABI `split(jvp(f))` is the forward function, `forward(3.0, 2.0)` answers `(value, linear)` and `linear` is a function closed over the residuals it carried, so `let (dx, dy) = linear` has nothing to index and stops with `SemanticDiag::TypeNotIndexable` at that `let`. The case used to pin `SemanticDiag::ResidualsAreNotVisible` -- the binary-tuple ABI handed the residuals back as a value of the transform's own tuple type -- and that diagnostic is deleted with its mechanism (`79c61958b`), so the assertion moved to the same wish spelled against the new shape: give me the carried values one by one."
+kind = "negative"
+case = "../../../cases/compile/transforms/split_residuals_destructured.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeNotIndexable"
+expect_diagnostic_line = 28
+expect_output_contains = ["SemanticDiag::TypeNotIndexable", "does not support index access"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
 
 [[tests]]
 name = "grad_where_the_tangent_ignores_the_operands"
