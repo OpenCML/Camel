@@ -124,3 +124,5 @@ A green run proves the `GUARD`s it walked past, not the `ASSERT`s it compiled ou
 When the instrument gets finer, past agreement has to be rejudged: four `known_fail` notes were audited as `same` while the runner printed `got null` for every signal death, and the moment it could say `SIGSEGV (rc=139, 1.24 s)` the same notes read `different`. A `same` is only as good as the reading it was taken on.
 
 Ask whether a thing is there and the answer is a boolean; ask how many lines carry it and the answer is a reading. A boolean is wrong once and the table is wrong with it: an index said three pages while `Contains` said the new row was already in place, and counting the rows found two.
+
+A probe log that records only `[FAIL] <name> <ms>` can count failures and cannot group them: the first diagnostic line is what turns forty reds into one root cause or ten. Print that line, and print it even when jobs run in parallel.

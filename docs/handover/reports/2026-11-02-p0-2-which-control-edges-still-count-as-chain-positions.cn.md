@@ -95,3 +95,17 @@ if (!draft.ctrlInputsOf(id).empty()) {
 | `feat/opt/fault_preservation.plan.toml` | `rules_drop_division.algebra`、`rules_drop_division.opt`、`dce_chained_division.opt`、`inline_faulting_callee_order.opt` |
 
 **这 10 条里几个根因，本页不判**：判据是"同诊断首行同根因"，而探针日志只记了用例名、没有记诊断首行。**要判就得再跑一次带输出的探针，本轮没跑。**
+## 那 40 条的分组：一个诊断，不是两组
+
+带输出的探针（`-Jobs 1`，`probe/ctrl-off3`，已撤净）把每一条的诊断首行取到了。**40 条全部是同一句**：
+
+```
+[INFO] stdout does not start with "<N>\n"
+[INFO] expected diagnostic RuntimeDiag::DivisionByZero
+```
+
+`<N>` 分别是 `1`（`fault.div_zero_in_arm`）、`1437`（`fault.in_tail_round`）、`5`（`fault.in_sync_call`）、`before`（优化器那一组）等 —— **同一句话，变量不同位**。
+
+⇒ **按"同诊断首行同根因"，这 40 条是 1 个根因**：**除法从来没有被执行（或没有到达），所以 `DivisionByZero` 没有发出；前向值本身也没打出来。** 我在上一轮按用例名猜"两组（抛错次序 vs 优化器纯度）"，**诊断否掉了这个猜测**——名字像两件事，读数是一件事。
+
+**因此这一族不是"袋子里装的不是同一样东西"**：它装的是一样东西，只是从两个计划的入口进来。
