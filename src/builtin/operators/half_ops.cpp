@@ -89,6 +89,13 @@ slot_t __builtin__eq_bf__(ArgsView &, ArgsView &norm, Context &) {
 slot_t __builtin__ne_bf__(ArgsView &, ArgsView &norm, Context &) {
     return comparison<BFloat16>(norm, [](float a, float b) { return a != b; });
 }
+/// `!x` for a bf16: the value's truth is `x != 0`, so its negation is `x == 0`, widened to f32 like
+/// every other operation of the type, and the answer is a bool (design principles 7.3). It exists
+/// so that `a != b` can be `!(a == b)` for the reduced types too, the way it is for every other
+/// type.
+slot_t __builtin__not_bf__(ArgsView &, ArgsView &norm, Context &) {
+    return toSlot(Bool(operand<BFloat16>(norm, 0) == 0.0f));
+}
 slot_t __builtin__lt_bf__(ArgsView &, ArgsView &norm, Context &) {
     return comparison<BFloat16>(norm, [](float a, float b) { return a < b; });
 }
@@ -144,6 +151,10 @@ slot_t __builtin__eq_f6__(ArgsView &, ArgsView &norm, Context &) {
 }
 slot_t __builtin__ne_f6__(ArgsView &, ArgsView &norm, Context &) {
     return comparison<Float16>(norm, [](float a, float b) { return a != b; });
+}
+/// `!x` for an f16: the same definition as the bf16 one above.
+slot_t __builtin__not_f6__(ArgsView &, ArgsView &norm, Context &) {
+    return toSlot(Bool(operand<Float16>(norm, 0) == 0.0f));
 }
 slot_t __builtin__lt_f6__(ArgsView &, ArgsView &norm, Context &) {
     return comparison<Float16>(norm, [](float a, float b) { return a < b; });

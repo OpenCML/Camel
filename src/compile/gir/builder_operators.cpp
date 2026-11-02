@@ -242,9 +242,25 @@ std::string Builder::moduleDisplayName(const std::string &name) {
     return name;
 }
 
+namespace {
+
+// The group whose result `a != b` negates (design principles 4.2, 4.3): `==`. `!=` is not
+// overloaded itself -- an overload of `==` gives it -- so this is also the group the call
+// resolves in before the negation is built over its one result. Null for every other operator,
+// and for a call written by name. `!==` is not here: it is not an overloadable form, so no DREF
+// of it reaches this file -- the construction tree builds it as `!(===)` (gct/builder.cpp).
+const char *negatedWholeOf(const std::string &group) {
+    if (group == "__neq__") {
+        return "__eq__";
+    }
+    return nullptr;
+}
+
+} // namespace
+
 bool Builder::addDeclaringModuleOverloads(
     node_handle_t dref, const std::string &group, const type_vec_t &withTypes,
-    const type_vec_t &normTypes) {
+    const type_vec_t &normTypes, const std::string &writtenGroup) {
     if (instantiationDepth_ == 0 || dref == nullptr) {
         // No dependent type variable: the operator is looked up where it is written, as before.
         return false;
@@ -253,10 +269,13 @@ bool Builder::addDeclaringModuleOverloads(
     if (declaring.empty()) {
         return false;
     }
-    // `!=` has no overloads of its own: an overload of `==` gives it (design principles 4.3),
-    // exactly as for the overloads the program declares (operatorDrefOf).
-    const bool negated       = group == "__neq__";
-    const std::string wanted = negated ? std::string("__eq__") : group;
+    // `!=` and `!==` have no overloads of their own: an overload of `==` gives the first and an
+    // overload of `===` the second (design principles 4.2, 4.3), exactly as for the overloads
+    // the program declares (operatorDrefOf). What the program wrote says that, not the group
+    // the call resolves in: for the built-in rule the DREF's group is already the comparison's.
+    const char *negatedWhole   = negatedWholeOf(writtenGroup);
+    const bool negated         = negatedWhole != nullptr;
+    const std::string wanted   = negated ? std::string(negatedWhole) : group;
     auto known               = operatorOverloads_.find(dref);
     if (known == operatorOverloads_.end()) {
         known = operatorOverloads_.emplace(dref, operatorOverloadsOf(group)).first;
@@ -357,17 +376,26 @@ bool Builder::hasProgramOperatorOverloads(const std::string &group) {
 
 node_handle_t Builder::operatorDrefOf(const std::string &group, const GCT::node_ptr_t &gct) {
     OperatorOverloads set = operatorOverloadsOf(group);
-    // `!=` is not overloaded itself: an overload of `==` gives it (design principles 4.3).
-    // Where one applies, `a != b` is the negation of the call of that overload; where none
-    // does, the built-in `!=` (the group of the DREF, which set.ops is not) is used as before.
+    // `!=` is not overloaded itself: an overload of `==` gives it (design principles 4.2, 4.3).
+    // Where one applies, the call is the negation of that overload's call; where none does, it is
+    // the negation of the built-in `==` as well, and the DREF below names `==`'s group so that the
+    // call itself resolves it and builds the negation over its one result (visitLinkNode). The
+    // built-in group path does not read negatedEqualities_ -- its only reader is the branch
+    // above, where a declared overload was chosen -- so nothing is recorded for it here.
     bool negated = false;
-    if (group == "__neq__") {
-        if (OperatorOverloads equality = operatorOverloadsOf("__eq__");
+    if (const char *whole = negatedWholeOf(group)) {
+        if (OperatorOverloads equality = operatorOverloadsOf(whole);
             !equality.graphs.empty() || !equality.templates.empty()) {
             set.graphs    = std::move(equality.graphs);
             set.templates = std::move(equality.templates);
             set.moduleOf  = std::move(equality.moduleOf);
             negated       = true;
+        } else if (equality.ops != nullptr) {
+            // The built-in `==` / `===` is a registry rule of the operator table (`:op/eq_*`,
+            // `:op/eq`), not a declared overload, so the rule itself is the group the DREF
+            // names. `ops` is a shared pointer into that table, which outlives this DREF: a
+            // borrow, no copy.
+            set.ops = equality.ops;
         }
     }
     GUARD(set.ops != nullptr, "An operator has no group.");
@@ -1939,6 +1967,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // function value of that graph. (The graph was cast to a node: `bad any_cast`, bare.)
     node_handle_t targetNode =
         lambdaCalleeAfterArguments ? nullptr : valueNodeOf(targetNodeRes);
+    // The group the program wrote. An operator's callee is a DREF naming its group, and `!=` is
+    // resolved through `==`'s group (operatorDrefOf), so the name read here is the one the
+    // program wrote -- `__neq__` -- and not the group the call is resolved in. The negation,
+    // the null test, the declaring module's overloads and the reports all ask this; a named
+    // call (`f(x)`, `add(a, b)`) says no.
+    const std::string writtenGroup =
+        gct->at(0)->type() == GCT::NodeKind::DREF ? gct->at(0)->name() : std::string();
 
     compile_graph_ptr_t targetGraph = nullptr;
     oper_idx_ptr_t targetOperator   = nullptr;
@@ -2739,7 +2774,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
         if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
             const auto &ops = std::get<oper_group_ptr_t>(drefTarget);
-            addDeclaringModuleOverloads(targetNode, ops->name(), withInputTypes, normInputTypes);
+            addDeclaringModuleOverloads(targetNode, ops->name(), withInputTypes, normInputTypes,
+                                        writtenGroup);
         }
     }
 
@@ -3160,6 +3196,19 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
         } else if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
             auto ops = std::get<oper_group_ptr_t>(drefTarget);
+            // The name the reports use for this call. `a != b` resolves in `==`'s group
+            // (operatorDrefOf) but the program wrote `!=`, and a report about a call that
+            // failed names the operator that failed: for every other call this is the group's
+            // own name, unchanged.
+            const char *negatedWhole         = negatedWholeOf(writtenGroup);
+            const std::string &reportGroup   = negatedWhole != nullptr ? writtenGroup : ops->name();
+            // `a != b` over the built-in `==`: the group resolved here is `==`'s (operatorDrefOf),
+            // and what that gives is negated at the end of this call, over this one result
+            // (`negateResult`, below). Its single reader is there, so the built-in path needs
+            // no entry in negatedEqualities_.
+            if (negatedWhole != nullptr && ops->name() == negatedWhole) {
+                negateResult = true;
+            }
             if (auto expanded = explicitOperatorTypes_.contains(targetNode)
                                     ? nullptr
                                     : expandTreeCall(ops, withInputs, normInputs, gct)) {
@@ -3330,13 +3379,16 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 // The candidates are listed each with the condition it wrote, sorted, so that
                 // two files holding one program with the declarations in the two orders report
                 // one and the same diagnostic.
-                rejectAmbiguousCall(ops->name(), argumentTypes(), ambiguousConditions, gct);
+                rejectAmbiguousCall(reportGroup, argumentTypes(), ambiguousConditions, gct);
             }
             if (!res.has_value() && withInputs.empty()) {
                 // `x == null` / `x != null` over a `T?`: the tag of `x`, not a comparison of
-                // two values (design principles 3.8).
+                // two values (design principles 3.8). The group asked about is the one the
+                // program wrote: the DREF's own is `==`'s for the built-in rule, and `x != null`
+                // would lose its negation to it.
+                const std::string nullGroup = writtenGroup.empty() ? ops->name() : writtenGroup;
                 if (node_handle_t test =
-                        nullComparison(ops->name(), gct, normInputs, normInputTypes)) {
+                        nullComparison(nullGroup, gct, normInputs, normInputTypes)) {
                     LEAVE("LINK");
                     return test;
                 }
@@ -3371,7 +3423,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                             normInputTypes, ", ", [](Type *t) { return t->toString(); }));
                     diags_->of(SemanticDiag::WhenConditionUnmet)
                         .atOrigin(gct->origin())
-                        .commit(ops->name(), argTypes, conditions);
+                        .commit(reportGroup, argTypes, conditions);
                     throw BuildAbortException();
                 }
                 // An argument that states no element type (`[]`, an array whose element type
@@ -3384,7 +3436,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     !name.empty()) {
                     diags_->of(SemanticDiag::FunctionTypeArgumentNotInferred)
                         .atOrigin(gct->origin())
-                        .commit(name, ops->name());
+                        .commit(name, reportGroup);
                     throw BuildAbortException();
                 }
                 // A function with a `var` parameter given to an operator that calls it with values:
@@ -3404,7 +3456,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                             diags_->of(SemanticDiag::ArgumentsRejected)
                                 .atOrigin(input.expr->origin())
                                 .commit(
-                                    ops->name(),
+                                    reportGroup,
                                     type->toString(),
                                     "an operator calls a function argument with values, and a "
                                     "function with a var parameter must be given a variable");
@@ -3452,13 +3504,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     } else {
                         diags_->of(SemanticDiag::ArgumentsRejected)
                             .atOrigin(gct->origin())
-                            .commit(ops->name(), argTypesStr, strutil::join(reasons, "; "));
+                            .commit(reportGroup, argTypesStr, strutil::join(reasons, "; "));
                     }
                     throw BuildAbortException();
                 }
                 // An operator written in the program: say which, the group name is not what
                 // the program wrote.
-                if (const char *symbol = operatorSymbolOf(ops->name())) {
+                if (const char *symbol = operatorSymbolOf(reportGroup)) {
                     argTypesStr += std::format(
                         "; operator '{}' is not defined for these operand types",
                         symbol);
@@ -3689,7 +3741,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                                             "${((x: int): int => x)}");
                                     }
                                     rejection.commit(
-                                        ops->name(),
+                                        reportGroup,
                                         "format specifier '" + placeholders[i] +
                                             "' of an interpolation",
                                         *part);
@@ -3699,7 +3751,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                             diags_->of(SemanticDiag::ArgumentsRejected)
                                 .atOrigin(patterns[at].expr->origin())
                                 .commit(
-                                    ops->name(),
+                                    reportGroup,
                                     "format string '" + std::string(text) + "'",
                                     *problem);
                             throw BuildAbortException();
@@ -3739,7 +3791,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                         diags_->of(SemanticDiag::ArgumentsRejected)
                             .atOrigin(input.expr->origin())
                             .commit(
-                                ops->name(),
+                                reportGroup,
                                 type->toString(),
                                 "an operator calls a function argument with values, and a "
                                 "function with a var parameter must be given a variable");
