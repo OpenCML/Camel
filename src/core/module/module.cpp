@@ -354,6 +354,11 @@ bool Module::exportEntity(const Reference &ref, const entity &ent) {
         auto &table = camel::core::OperatorTable::instance();
         for (const auto &[uri, resolver] : ent.operGroup()->resolvers()) {
             nativeOperatorGroups_[table.intern(uri)] = ent.operGroup();
+            // The name is exported, so a program may write it: a body-less declaration is a walk
+            // to the implementation, not a statement that the name is private (see
+            // `CallForm::exported`). `declarePrivateEntity` does not say this, which is what tells
+            // the printer the two apart.
+            table.markExported(uri);
         }
         // The same operator under a type-qualified name (`Tensor.shape` beside `shape`) is one
         // signature: a plain name this module writes takes its aliases with it.

@@ -442,19 +442,13 @@ slot_t __len_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return rtdata::toSlot(static_cast<Int64>(norm.get<BytesObject *>(0)->view().size()));
 }
 
-// `a == b` and `a != b` of two `Bytes`: the same bytes in the same order.
+// `a == b` of two `Bytes`: the same bytes in the same order. `!=` is the negation of this one
+// (builder_operators.cpp), so it has no kernel of its own any more.
 slot_t __eq_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
     (void)ctx;
     return rtdata::toSlot(
         norm.get<BytesObject *>(0)->view() == norm.get<BytesObject *>(1)->view());
-}
-
-slot_t __ne_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    (void)with;
-    (void)ctx;
-    return rtdata::toSlot(
-        norm.get<BytesObject *>(0)->view() != norm.get<BytesObject *>(1)->view());
 }
 
 // `a + b` of two `Bytes`: the bytes of a followed by those of b, as for two strings.
