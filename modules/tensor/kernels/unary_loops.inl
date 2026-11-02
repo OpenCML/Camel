@@ -43,6 +43,11 @@ template <UnaryOp Op> inline float unaryF32(float x) {
         return vmath::gelu(x);
     } else if constexpr (Op == UnaryOp::Erf) {
         return std::erf(x);
+    } else if constexpr (Op == UnaryOp::Not) {
+        // Unreachable: `not` produces a bool and runs in the dtype-preserving loop. Named here so
+        // the chain's `else` stays a static assert about the last operator rather than swallowing
+        // a new one.
+        return x;
     } else {
         static_assert(Op == UnaryOp::Erfc);
         return std::erfc(x);
@@ -85,12 +90,10 @@ void CAMEL_UNARY_ENTRY(UnaryOp op, const float *src, float *dst, int64_t count) 
     case UnaryOp::Erfc:
         return loop<UnaryOp::Erfc>(src, dst, count);
     case UnaryOp::Not:
-        // Not a float operator: `!` takes a `bool` tensor and keeps its element type, so it is
-        // computed by the integer path (elementwise.cpp, unaryInt). Reaching here would mean the
-        // defs let a float tensor through, which they do not.
-        break;
+        // Never asked: a bool tensor is not an f32 buffer (elementwise.cpp dispatches it to the
+        // dtype-preserving loop). The case exists so the switch stays exhaustive.
+        return;
     }
-    throw std::logic_error("a float unary loop was asked for an operator that is not one");
 }
 
 } // namespace camel::tensor::kernels::detail

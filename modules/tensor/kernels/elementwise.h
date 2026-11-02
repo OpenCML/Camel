@@ -80,9 +80,10 @@ enum class UnaryOp {
     Gelu, // tanh approximation
     Erf,
     Erfc,
-    /// `!`, on a tensor of `bool` only: the negation of an elementwise comparison's result. The
-    /// element type is unchanged, so it takes the integer/bool kernel path; the name table in
-    /// elementwise_ops.cpp is indexed by this enumerator, so a new operator goes last.
+    /// `!x` on a mask: the one unary operator that is not arithmetic. It is dtype-preserving and
+    /// produces a bool, and it exists so that `a !== b` on arrays can be written `!(a === b)` --
+    /// the same decomposition the scalar `!=` takes once its own `ne` arms are gone. Appended
+    /// last: the name table in elementwise_ops.cpp is indexed by this enumerator.
     Not,
 };
 

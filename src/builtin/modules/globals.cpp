@@ -2020,6 +2020,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":op/not",
                     StaticFuncTypeResolver::create({}, {{Type::Bool(), false}}, Type::Bool()),
                 },
+                // A bf16 or f16 operand has no `!`: its truth would be `x != 0`, which is a value that is
+// neither the language's `bool` nor its comparison, and `!=` of the two reduced types does not
+// need it -- `a != b` is `!(a == b)`, and what `!` negates is the `bool` that `eq_bf`/`eq_f6`
+// returned (design principles 4.2, 7.3).
             }),
         OperatorGroup::create(
             "__neg__",

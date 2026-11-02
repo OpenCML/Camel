@@ -122,6 +122,9 @@ const std::unordered_map<std::string_view, OperatorSemantics> &declarations() {
 
         // ---- Unary maps ----
         t.emplace("neg", exactFloat("-x per element: the sign flipped"));
+        // `!x` on a mask is exact by definition -- no arithmetic and no rounding -- and it is the
+        // decomposition `a !== b` on arrays takes, so it is stated here beside the arithmetic maps.
+        t.emplace("not", exactFloat("!x per element: true where the element is false"));
         t.emplace("abs", exactFloat("|x| per element: the sign cleared"));
         t.emplace(
             "relu",
