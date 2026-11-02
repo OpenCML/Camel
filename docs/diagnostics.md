@@ -381,7 +381,24 @@ An error has occurred: {0}.
 The generator machine does not build this shape yet: a generator 'loop' takes its initial value written as a literal at the loop, and a value computed there or held in a local is not built. This is a known limitation of this compiler version, and nothing in the program is wrong, so there is nothing to change in the program and no repair to suggest.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/stream/generators_loop_call_initialiser.cml`, run as `camel test/cases/compile/stream/generators_loop_call_initialiser.cml`)
+
+```camel
+func f(): int {
+    return 0
+}
+
+func g(): int.. sync {
+    loop i = f() while i < 3 do {
+        yield i
+        i + 1
+    }
+}
+
+func main(): int sync {
+    return 0
+}
+```
 
 ## Lexical (`LexicalDiag`)
 
