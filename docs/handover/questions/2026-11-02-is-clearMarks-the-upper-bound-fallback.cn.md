@@ -83,3 +83,17 @@ while (current < topSnapshot) { ...; visitor(header); current += obj_size; }
    **只有 `clearMarks` 是"整表扫"**（`scanRelocatedObjects` 是 Cheney 扫描，扫的是新空间，属正常设计）。
 
 **已推进到：找到并判定**（一处：`clearMarks()` 的图空间整表清位；判为兜底；**未删**，等裁）。
+## 6. 实测（本轮补上）：按您原话删了，38 条红
+
+| 步骤 | `[SUMMARY]` |
+| --- | --- |
+| 基线（删码笔之后） | `total: 8514, pass: 8450, fail: 44, skip: 10, known failures: 10` |
+| 先补"按根走"的清位、整空间扫留着 | `total: 8514, pass: 8450, fail: 44, skip: 10, known failures: 10`（逐项相同） |
+| 删掉整空间扫 | `total: 8514, pass: 8412, fail: 82, skip: 10, known failures: 10` |
+
+新红的 38 条**全部落在强制大回收/回收压力这一族**（`json.gc.forced_major.*`、`attempt.collector.stress.*`、
+`recursive_struct.array_gc_*`、`concurrent_alloc.prl_gc_stress`、`map_chunks.prl_gc_stress`、
+`shapes.prl_gc_stress_major` …），**普通运行一条没红**。
+
+**所以这一行不是兜底，是承重的。按您原话"同一笔删掉"我们做了，结果是 38 条红；
+我们**不删**，并把"为什么它承重"继续读到能说清为止 —— 这是与您原话的第二处偏离，请您裁。**
