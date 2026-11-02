@@ -161,3 +161,18 @@ kind = "behavior"
 expect_exit = 0
 expect_stdout_contains = ["probe both value="]
 timeout_ms = 120000
+
+# The engine's gradient at the model's initial point against `baseline/grad_first_step.py`, whose
+# complex step answers to machine precision.  Eight of the ten tensors are identically zero here --
+# the loss is zero for every parameter but the last beta -- so the values that matter are `g2` and
+# `b2`, and the zeros are pinned too: a zero that quietly stopped being zero is the failure this
+# comparison is for.
+[[tests]]
+name = "grow.grad_first_step"
+desc = "One forward and one pullback of the stage-2 model at its start, ten tensors printed in order, against the same gradient by a complex step: 10/10 tensors, 32/32 elements, largest absolute difference 1.588e-16 and largest relative 2.019e-12, no shape disagreement. Eight tensors are identically zero (wq1, wk1, wv1, g1, b1, wq2, wk2, wv2); only g2 (+-7.866746175e-05) and b2 (2.0) carry a gradient."
+case = "../../../showcase/c3-char-transformer/grow/grad_first_step.cml"
+args = ["${case}"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["grad loss=0.000000000000", "grad wq1 [[0.0, 0.0], [0.0, 0.0]]", "grad wk1 [[0.0, 0.0], [0.0, 0.0]]", "grad wv1 [[0.0, 0.0], [0.0, 0.0]]", "grad g1 [0.0, 0.0]", "grad b1 [0.0, 0.0]", "grad wq2 [[0.0, 0.0], [0.0, 0.0]]", "grad wk2 [[0.0, 0.0], [0.0, 0.0]]", "grad wv2 [[0.0, 0.0], [0.0, 0.0]]", "grad g2 [7.866746175", "grad b2 [2.0, 2.0]"]
+timeout_ms = 120000

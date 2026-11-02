@@ -1,0 +1,73 @@
+// The engine's gradient of the whole stage-2 model at its initial point, printed one tensor at a
+// time, so it can be compared element by element with `baseline/grad_first_step.py`, which takes the
+// same gradient by a complex step.  Nothing is trained here: one forward, one pullback.
+//
+//     camel showcase/c3-char-transformer/grow/grad_first_step.cml
+//     python showcase/c3-char-transformer/baseline/grad_first_step.py
+import { layer_norm, softmax, sum, transpose } from tensor
+import { with_grad } from autodiff
+
+type Model = {
+    wq1: float[..],
+    wk1: float[..],
+    wv1: float[..],
+    g1: float[..],
+    b1: float[..],
+    wq2: float[..],
+    wk2: float[..],
+    wv2: float[..],
+    g2: float[..],
+    b2: float[..]
+}
+
+func mask(): float[..] {
+    return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2]
+}
+
+func attention(x: float[..], wq: float[..], wk: float[..], wv: float[..]): float[..] {
+    let q = x @ wq
+    let k = transpose(x @ wk)
+    let a = softmax<1>(q @ k * 0.70710678118654752 + mask())
+    return a @ (x @ wv)
+}
+
+with <m: Model>
+func block(x: float[..]): float {
+    let first = x + attention(x, m.wq1, m.wk1, m.wv1)
+    let normed = layer_norm(first, m.g1, m.b1)
+    let second = first + attention(normed, m.wq2, m.wk2, m.wv2)
+    return sum(layer_norm(second, m.g2, m.b2))
+}
+
+func initial(): Model {
+    return {
+        wq1: [[1.0, 0.5], [0.5, 1.0]] as float[2, 2],
+        wk1: [[0.5, 1.0], [1.0, 0.5]] as float[2, 2],
+        wv1: [[1.0, -1.0], [-1.0, 1.0]] as float[2, 2],
+        g1: [1.0, 1.0] as float[],
+        b1: [0.0, 0.0] as float[],
+        wq2: [[0.75, 0.0], [0.0, 0.75]] as float[2, 2],
+        wk2: [[0.0, 0.5], [0.5, 0.0]] as float[2, 2],
+        wv2: [[1.0, 1.0], [1.0, 1.0]] as float[2, 2],
+        g2: [1.0, 1.0] as float[],
+        b2: [0.0, 0.0] as float[]
+    }
+}
+
+func main(): int sync {
+    let x = [[1.0, 0.5], [0.5, 1.0]] as float[2, 2]
+    let m = initial()
+    let (value, g) = with_grad(block)<m>(x)
+    `grad loss=${value:.12f}`->println
+    "grad wq1 "->print; g.wq1->println
+    "grad wk1 "->print; g.wk1->println
+    "grad wv1 "->print; g.wv1->println
+    "grad g1 "->print; g.g1->println
+    "grad b1 "->print; g.b1->println
+    "grad wq2 "->print; g.wq2->println
+    "grad wk2 "->print; g.wk2->println
+    "grad wv2 "->print; g.wv2->println
+    "grad g2 "->print; g.g2->println
+    "grad b2 "->print; g.b2->println
+    return 0
+}
