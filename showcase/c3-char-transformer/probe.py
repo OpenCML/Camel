@@ -253,6 +253,12 @@ def main():
     spelled = " ".join(f"{r['probe']}={wall_tag(r['stdout'] + r['stderr'])}" for r in readings)
     for chunk in wrap(f"probe-walls {spelled}", 96):
         print(chunk)
+    # The probes added last, listed last: a report read from its tail stays able to say what the
+    # newest probes answered.
+    recent = " ".join(f"{r['probe']}={wall_tag(r['stdout'] + r['stderr'])}"
+                      for r in readings[-3:])
+    for chunk in wrap(f"probe-recent {recent}", 96):
+        print(chunk)
 
     # The inventory pinned: answering when expected to refuse is a wall falling, refusing when
     # expected to answer is a regression, and both are this entry's business.
