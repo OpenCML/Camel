@@ -29,4 +29,6 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["case files, every one of them is read by code or recorded with a reason"]
 normalizers = ["normalize_newlines"]
-timeout_ms = 30000
+# 45 s, not 30: the same walk as gate.plan_inventory, and the CI runner measured 9330 ms of CPU for
+# it -- 3.2x the bound, under the 4x the margin rule asks for. 45 s is 4.8x that figure.
+timeout_ms = 45000
