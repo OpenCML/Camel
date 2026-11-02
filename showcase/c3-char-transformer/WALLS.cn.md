@@ -9,6 +9,13 @@
 > "形状未知"把 `float[..]` 的归一化结果退回 `f32`（墙 10 的更正）。 墙再多，也比不上这一行。
 # C3 的墙
 
+**这张表怎么数（2026-11-03 收口）**：**十三堵墙**。编号是**台账号，不是序号** —— 空号与合节各有原因，不代表缺失：
+- **13 / 14**：13 是"端口由体加、由调用点填、中间没有一处数个数"（norm 与 with 两个面合成一条）；14 是 `split` 对"操作数不在半程出口可达集里"的具名拒绝，**候选**（根因未定）。
+- **12**：**撤稿**（`matmul_grad` 不是墙），编号保留、正文留证据，因为下一轮看到一个 3e-6 的差会来引用它。
+- **8 / 9 / 10 / 11**：四条各自独立；8↔9 与 10↔11 是"同族、修法不同"，两条都留、双向 `参见`。
+- **2–7**：六堵合成一节（`rulesets/jvp.cml` 的前向规则缺失）。
+
+
 这一项交的是墙，不是训练曲线。 下面每一面墙都有三样东西：一个能单独跑的最小程序、它的原始诊断、
 以及「要让它倒，得改哪里」。 诊断文字是 runner 打印的原样，没有改写。
 
@@ -126,6 +133,8 @@ C [RuntimeDiag::RuntimeError]
 
 ## 墙 8：常量张量没有单一元素类型的写法
 
+**与墙 9 的关系（2026-11-03 查重）**：同族、不同修法，不合并；整模型那一侧见墙 9。
+
 最小程序：`probes/15_mask_in_f32.cml`
 
 ```
@@ -143,6 +152,8 @@ C [RuntimeDiag::RuntimeError]
   `reshape` 收 `bool[]`，或给 `where` 一个标量分枝的重载。
 
 ## 墙 9：模型写不成一个元素类型（挡住 loss 的那一面）
+
+**与墙 8 的关系（2026-11-03 查重）**：同一族（张量的元素类型说不清），但**修法不同** —— 墙 8 要的是"常量张量怎么带元素类型写"，这里是"整个模型的元素类型要一致"⇒ 不合并，只互相参见。
 
 最小程序：`forward.cml`（与 `train.cml` 同一个模型、同一种子，只去掉 `import` 与训练循环）
 
@@ -264,6 +275,8 @@ grow/stage2_residual_ln.cml:45:35: [Error]: No matching function found for argum
 
 ## 墙 10 的更正：不是声明写错，是 `layerNormInfer` 的推断门
 
+**与墙 11 的关系（2026-11-03 查重）**：同一族（`layer_norm`）的**前向**与**梯度**两侧，但**修法不同**（这里是推断门，11 是梯度按输入元素类型写）⇒ 不合并，只互相参见。
+
 我按"声明写错"试过两种改法，**都没有效果**（都实测过，各跑一次 showcase 计划，stage2 的红原样）：
 
 1. 把 `f32` 与 `float` 两个 `layer_norm` 声明**换顺序**（`float` 在前）——`grow/stage2_residual_ln.cml:45:35` 的红不变；
@@ -305,6 +318,8 @@ different element types ('f32' and 'f64'): a tensor operator computes in one ele
 
 ## 墙 11 的处理：`layerNormGrad` 现在按输入的元素类型写
 
+**与墙 10 的关系（2026-11-03 查重）**：同族、不同修法，不合并；前向那一侧的推断门见墙 10 的更正。
+
 改的就是这一句（`modules/tensor/kernels/gradient.cpp`，原来是两处写死）：
 
 ```
@@ -325,6 +340,18 @@ Array *out = createTensor(TypeCode::Float32, ws->shapeSpan(), allocator, true); 
   不是"收 f64 却写 f32"，先不动。
 
 ## 墙 12 的更正：`matmul_grad` **不是**墙，3e-6 是参照自己的误差
+
+**这一条被撤，因为**：控位差 8.0e-11、复步参照 12 位一致、`matmulGradGemm` 的 dtype 门让 f64 走不到 f32 快路（三条证据在下）——**撤稿带证据，不只是一句结论**。
+
+**结论与三条证据（2026-11-03 复核，撤稿成立）**：
+
+1. **控位**：stage2 跑 3 步，引擎 `-0.008000314590` 对参照 `-0.008000314670`，**绝对差 8.0e-11**（对 ~8.0e-3 的量 ⇒ 相对 ~1e-8）；到第 50 步放大成 3.0e-6。
+2. **复步参照 12 位一致**：用 `grow.py --exact`（`loss(x + ih)` 的虚部即导数，无相减抵消）重算，参照与引擎在 12 位上一个字都不差 ⇒ 原来的中心差分参照自己是误差源。
+3. **`matmulGradGemm` 的 dtype 门**：`lhs/rhs/dy` 任一不是 `Float32` 就 `return nullptr` ⇒ f64 物理上走不到那条 f32 快路（`modules/tensor/kernels/gradient.cpp#matmulGradGemm`）；且真有 f32 存货会给出 ~1e-7 相对（≈8e-10 绝对），比实测大一个量级。
+
+**关于 `grad` 的一条被更正的判断（2026-11-03）：这条被更正，因为** `grad` 有两个且泛型只对第一个 `with` 参数求导，我最初按"只接受单参数"记 —— 那是调用方式不对。：`grad` 有两个 —— `stdlib/vjp.cml#grad` 是**单 `float` 实例**（`(x: float) => float`），`stdlib/signatures/autodiff.cml#grad` 是泛型，**只对函数的第一个 `with` 参数求导**（设计原则 9.9：权重是 `with` 参数，普通参数是数据）。我最初按"`grad` 只接受一个 float 参数"记，那是**调用方式不对**（导错了 `grad`、也没给 `with` 参数），不是签名限制，故不成墙。
+
+**第四项：闭式标量算术（2026-11-03，不用 `vjp`/`grad` 的矩阵路径）**：`A = [[1,2],[3,4]]`、`B = [[5,6],[7,8]]`、`dC = 全 1` 时纸面 `dL/dA = dC·Bᵀ = [[11,15],[11,15]]`、`dL/dB = Aᵀ·dC = [[4,4],[6,6]]`。用八个**单参数标量函数**（把待测元素当唯一参数、其余写死）跑 `grad`，逐个取该元素的导数：`dL/da00` 实测 **11.0**，与纸面逐位一致；其余七个在此树上撞到**另一堵**既有墙（`transforms: split does not build this function (an operand of the node is not reachable from the half's exit)`），与 `matmul_grad` 无关，故只报 1/8 已测。
 
 我按"下一个写死 f32 的是 `matmul_grad`"报过一次，**这个判断错了**，两处证据：
 
@@ -558,15 +585,18 @@ argmax **[1, 0]（两行都对）**。
 
 **三个 stage 并排**：stage6（位置）**0.9496** ← stage8（位置 + 因果注意力）**1.2813** ← stage7（位置 + 无 mask 注意力）**1.3871** ← 弃权地板 **1.386294**。
 
+## 墙 13（新）：端口由体加、由调用点填，中间没有一处数个数（norm 侧与 with 侧）
 
-## 墙 13（新）：转置成员的 norm 端口数 > 调用点实参数 ⇒ 运行时内部错误
+- **判据**：成员构造时按"体需要的值"加端口，调用点仍按原形状填；**两侧的个数没有一处对齐校验**，于是
+  norm 侧与 with 侧都以内部故障收场，而不是以一条语言诊断。
+- **证据（norm 侧）**：`transpose_loop_escape.reads_outer` 读数 `carried=2 captures=2` 对调用点 `has 1 args`
+  ⇒ 抛 `Runtime indirect call norm-arity mismatch`（运行期内部错误）。
+- **证据（with 侧）**：`grad_of_a_division` 的 with-arity 读数（该族之外的第一条），结果不是诊断而是错值/内部错误。
+- **现状**：两侧同根，**一堵墙两个面**；只改一面会留下另一面同样的故障。
 
-- **判据**：`transpose` 建出的成员，其 norm 端口数**大于**调用点实参个数时，抛 `Runtime indirect call norm-arity mismatch`（运行期内部错误，不是语言诊断）。
-- **证据**：`transpose_loop_escape.reads_outer` 的读数 `carried=2 captures=2` 与调用点的 `has 1 args`。
-- **现状**：端口在构造时按"体需要的值"加，调用点仍按原形状填；两侧没有一处统一数个数。
+## 墙 14（新，暂记）：`split` 拒绝"操作数不在半程出口可达集里"的函数
 
-## 墙 14（新）：with 端口侧的同一件事
-
-- **判据**：同 13，但发生在 with 端口：成员 with 段比调用点填的多（或少）时，结果不是诊断而是错值或内部错误。
-- **证据**：`grad_of_a_division` 的 with-arity 读数（`transpose_loop_escape` 那一族之外的第一条）。
-- **现状**：与 13 同根 —— 端口由体加、由调用点填，中间没有一处校验，**两条合起来才是一堵墙**。
+- **判据**：`split(jvp(f))` 对某些形状的 `f` 报 `transforms: split does not build this function (an operand of the node is not reachable from the half's exit)` —— 是**具名拒绝**，不是崩溃，也不是类型错。
+- **原文（完整）**：`error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: split does not build this function (an operand of the node is not reachable from the half's exit).` 位置 `stdlib/vjp.cml#vjp` 的 `let (y, lin) = split(jvp(f))(..xs)`。
+- **证据**：单个函数的四个"把待测元素当唯一参数、其余写死"的标量函数里，`fa00` 通过（导数 11.0 = 纸面 `dC·Bᵀ[0][0]`），`fa11` 在 `split` 这一步被拒；同一份程序、同一棵树。
+- **现状**：同一个 `vjp` 组合，对同构但不同的求和形状一处通过一处被拒 —— **这是形状相关，不是类型相关**；根因未定（可能与"半程出口的可达集"如何收集有关），**判准与否待裁**，故按候选记录。
