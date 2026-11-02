@@ -87,8 +87,9 @@ STATEMENTS = [
     "let v = match type ((x: int) => int) { case #leaf => 1 case _ => 2 }",
 ]
 
-# Not here: `import {} from a` and `export {}`, on which the ANTLR-based builder dereferences a
-# missing identifier list and crashes; the hand-written front end builds an import without names.
+# Not here: `import {} from a` and `export {}`, on which the ANTLR-based builder that the hand-written
+# front end replaced dereferenced a missing identifier list and crashed; the hand-written front end
+# builds an import without names.
 # Nor the prefix `sync func` and the keyword `wait`: both were retired (item 5), the parser
 # refuses them like any other unknown spelling, and there is no decision left to probe.
 DECLARATIONS = [
