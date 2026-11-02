@@ -71,11 +71,18 @@ export func split(f: (v: float, d: float) => (float, float)): (v: float, d: floa
 /// by the rule the `rulesets.transpose` family files under it, and a value used k times receives k
 /// cotangents that add. `f(x) = 2*x + 3*x` transposed at the cotangent `1.0` gives `5.0`.
 ///
-/// The transposed function takes the parameters of `f` first and the cotangent last --
-/// `transpose(f)(x, 1.0)` -- because a pullback may need the value it is transposing at: a branch's
-/// condition is a value, and the cotangent of an arm only means something for the arm that ran.
-/// The shape is the same for every `f`, so a reader writes the same call whether the body branches
-/// or not. The type is `(..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)`.
+/// The transposed function takes the values the call site still passes first and the cotangent of
+/// the result last, because a pullback may need the value it is transposing at: a branch's condition
+/// is a value, and the cotangent of an arm only means something for the arm that ran.
+///
+/// Which values those are is a property of `f`'s body, not of its type: a parameter that takes a
+/// cotangent is not passed (the cotangent carries it), a parameter with no tangent space (an `int`,
+/// a `bool`, a string) stands there as a value, and a value the body reads from outside stands there
+/// too. So for a one-`float` function the call is `transpose(f)(1.0)` and for a function that branches
+/// on a condition the condition is read by the transposed body and not passed to it -- a reader writes
+/// the call the body asks for, and the build writes the exact shape
+/// (`modules/transforms/transpose.cpp#transposeSignature`). See `stdlib/types.cml#Transpose` for why
+/// the declaration is the loose `(..ParamsOf<F>, ct: Tangent<ResultOf<F>>)` and what it approximates.
 /// @example-fragment `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
 /// @example let back = transpose(f)
 export func transpose::<F>(f: F): Transpose<F> when is_function::<F>()

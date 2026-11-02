@@ -121,8 +121,8 @@ type Reinterp<F, H> = (..H.Lift<ParamsOf<F>>) => H.Lift<ResultOf<F>>
 
 ```camel
 func split::<F>(f: F): Split<F>
-type Split<F> = ((..ParamsOf<F>) => (ResultOf<F>, _,),   // 残差位：由编译器在实例化时填，用户写不出
-                 (_, ..WithOf<F>)  => ResultOf<F>)
+type Split<F> = ((..ParamsOf<F>)          => (ResultOf<F>, (..Tangent<ParamsOf<F>>) => Tangent<ResultOf<F>>),
+                 (..Tangent<ParamsOf<F>>) => Tangent<ResultOf<F>>)   // 残差是后一半的闭包，不在类型里
 ```
 
 把一个"一部分输入现在就有、另一部分以后才有"的函数拆成两个：前一个只用现在就有的输入，算出能算的一切，并把后一个要用的中间值（残差）作为输出；后一个接残差与其余输入。线性化就是 `split(reinterp<jvp>(f))`，"现在就有"的是原始输入，"以后才有"的是切向量。
@@ -138,10 +138,10 @@ type Split<F> = ((..ParamsOf<F>) => (ResultOf<F>, _,),   // 残差位：由编�
 
 ```camel
 func transpose::<F>(f: F): Transpose<F> when is_linear::<F>()
-type Transpose<F> = (ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
+type Transpose<F> = (..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
 ```
 
-对一个对其输入线性的函数（残差是已知值），把数据流反过来。
+对一个对其输入线性的函数（残差是已知值），把数据流反过来。上面那是**声明**的宽松形状（全部参数都参与求导时就是它）；**实际收到的参数个数是函数体的事**：取余切的参数不再传，没有切空间的参数（`int`、`bool`、字符串）与体从外面读到的值各占一格，余切永远在最后 —— 因此单 `float` 函数的转置是 `transpose(f)(1.0)`。
 
 - **原语**：换成它的 `#transpose` 规则；
 - **一个值被用了几次**：反过来就是几份相加；
@@ -157,7 +157,7 @@ func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
     let (fwd, lin) = split(reinterp<jvp>(f))
     return (..xs: ..ParamsOf<F>) => {
         let (y, res) = fwd(..xs)
-        (y, (ct) => transpose(lin)(res, ct))
+        (y, (ct) => transpose(lin)(ct))
     }
 }
 ```
