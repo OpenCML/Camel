@@ -81,7 +81,7 @@ if the reading were noise, and do not stop and wait.
 
 The example on record: the ruling said the eleven `:op/ne_*` rows are a second implementation of
 `==` and should go. Deleting them took the suite from `8390/8374/0` to `8390/7866/508`, because
-`modules/graph/module.cpp:110` builds a `__neq__` group for the types that have no `==` to fall back
+`modules/graph/module.cpp#neKernel` builds a `__neq__` group for the types that have no `==` to fall back
 on. The rows stayed, the question went back to `questions/`, and the ruling's own text stayed in the
 record untouched.
 
