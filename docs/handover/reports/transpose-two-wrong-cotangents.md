@@ -22,7 +22,7 @@ in that order, and the transform takes the component for the position it is writ
 `grad((x) => x / 4.0)` at 8 is `0.25` and `grad((x) => 4.0 / x)` at 2 is `-1.0` (plan
 `feat.compile.transforms`, case `grad_of_a_division`). The reading behind it -- a rule answers N
 cotangents for N names -- is the pending question
-[`whether-a-transpose-rule-answers-every-name-or-the-first`](../questions/questions-2026-11-02-whether-a-transpose-rule-answers-every-name-or-the-first.md),
+[`whether-a-transpose-rule-answers-every-name-or-the-first`](../reviews/questions-2026-11-02-whether-a-transpose-rule-answers-every-name-or-the-first.md),
 which also covers `x - c`'s second position (`-ct`, now answered by `sub_cotangent_c`).
 
 ## T1 -- `neg` answers the cotangent with the wrong sign

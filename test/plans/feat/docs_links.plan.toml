@@ -61,6 +61,18 @@ normalizers = ["normalize_newlines"]
 timeout_ms = 20000
 
 [[tests]]
+name = "docs.links.questions_index"
+desc = "The pending table of docs/handover/questions lists exactly the pages in that directory, one row each, and its header says that number: the count and the rows are derived from the tree, so a merge that resolves to one side cannot leave a row behind or a stale number over it."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-links.mjs"
+args = ["${case}", "--questions-index"]
+expect_exit = 0
+expect_stdout_contains = ["the pending table lists", "as the header says"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+[[tests]]
 name = "docs.links.citations"
 desc = "Every cited file exists and every path#Symbol citation names a symbol in that file; a citation with a line number is a defect."
 kind = "behavior"
