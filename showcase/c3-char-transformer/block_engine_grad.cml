@@ -1,0 +1,49 @@
+// The same block, differentiated by the *engine's* gradient builder (`autodiff.with_grad`), which is
+// not the library's `vjp` and is not what this example is about.  It is here as a control: if the
+// engine answers the six gradients and the library answers none, the model and the six parameters
+// are right, and what is missing is the library's rules -- not this program's arithmetic.
+//
+// Each parameter's gradient is a [2, 1] tensor; the six numbers are read out one at a time by
+// multiplying with a selector, because a program cannot index a tensor at a constant here (that
+// absence is one of the walls in WALLS.cn.md).
+import { softmax, sum, transpose } from tensor
+import { with_grad } from autodiff
+
+type Head = {
+    wq: float[..],
+    wk: float[..],
+    wv: float[..]
+}
+
+func mask(): float[..] {
+    return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2]
+}
+
+with <h: Head>
+func block(x: float[..]): float {
+    let q = x @ h.wq
+    let k = transpose(x @ h.wk)
+    let scores = q @ k * 0.70710678118654752
+    let attention = softmax<1>(scores + mask())
+    return sum(attention @ (x @ h.wv))
+}
+
+func main(): int sync {
+    let x = [[1.0, 0.5], [0.5, 1.0]] as float[2, 2]
+    let h = {
+        wq: [[1.0], [0.5]] as float[2, 1],
+        wk: [[0.5], [1.0]] as float[2, 1],
+        wv: [[1.0], [-1.0]] as float[2, 1]
+    }
+    let (value, g) = with_grad(block)<h>(x)
+    `c3 block value=${value:.12f}`->println
+    let first = [[1.0], [0.0]] as float[2, 1]
+    let second = [[0.0], [1.0]] as float[2, 1]
+    `c3 block engine.wq.0=${sum(g.wq * first):.12f}`->println
+    `c3 block engine.wq.1=${sum(g.wq * second):.12f}`->println
+    `c3 block engine.wk.0=${sum(g.wk * first):.12f}`->println
+    `c3 block engine.wk.1=${sum(g.wk * second):.12f}`->println
+    `c3 block engine.wv.0=${sum(g.wv * first):.12f}`->println
+    `c3 block engine.wv.1=${sum(g.wv * second):.12f}`->println
+    return 0
+}

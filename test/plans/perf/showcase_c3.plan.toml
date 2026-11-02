@@ -1,0 +1,82 @@
+id = "perf.showcase_c3_char_transformer"
+order = 901
+tier = "milestone"
+tags = ["showcase", "slow", "c3", "transformer", "vjp", "grad"]
+
+# The third official example: a character-level Transformer trained through the library's own
+# reverse transform (`stdlib/vjp.cml`, `vjp`/`grad` written in Camel), not the engine's gradient
+# builder.  Two programs carry it:
+#
+#   * train.cml  -- the model the author asked for (two layers, multi-head attention, softmax,
+#     layer_norm, residual connections, embedding lookup, causal mask) and its training loop;
+#   * probes/    -- the smallest program that reaches each construct the model needs, one file per
+#     wall, run by probe.py, which prints verbatim whether the library answered the gradient or
+#     refused it.
+#
+# The walls are this example's deliverable, so the probes are pinned: a probe that starts answering
+# a gradient is a wall that fell, and the entry below then has to be rewritten rather than silently
+# passing.  `WALLS.cn.md` in the directory is the list, with the four-way classification (missing
+# rule / missing batch rule / transform refusal / performance).
+#
+# This is a milestone-tier plan: it runs with `--tier milestone` or by naming the file, not under
+# the default `npm run test` fast layer.  It starts the tree's own binary seventeen times, which is a
+# few seconds, and it reports walls rather than holding the example to a curve.
+
+[[tests]]
+name = "probes"
+desc = "The seventeen construct probes of the C3 Transformer run through the library's own `vjp`: the control answers its gradient, and the constructs that make attention a Transformer (matrix product, softmax, reduction along an axis, reshape/transpose, a second parameter, a table row, the causal mask, a `with` parameter tree, `grad` at a model, the whole block) are refused.  The entry fails when the count of answered and refused probes moves, because that is a wall falling or a regression, and both need the report rewritten."
+kind = "behavior"
+tool = "python"
+case = "../../../showcase/c3-char-transformer/probe.py"
+args = ["${case}", "--json", "${test_tmp}/c3-probes.json"]
+expect_exit = 0
+expect_stdout_contains = ["probes total=18", "mismatched=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 300000
+
+# The forward half: the model program has to compute a real loss on the committed corpus before any
+# reading about gradients means anything.  This is also the entry that turns a wrong program into a
+# red with its diagnostic on screen (`CAMEL_TEST_SHOW_OUTPUT`), instead of a wall report about a
+# model that never ran.
+[[tests]]
+name = "forward"
+desc = "train.cml --arg mode=forward: the two-layer, two-head character Transformer loads the committed corpus (its length, context, width and vocabulary are printed), builds its parameter tree from the seed, and prints the cross-entropy of the first window.  A model that cannot compute its own loss is a bug in the example, not a wall in the library, so this entry is not a wall reading."
+kind = "behavior"
+case = "../../../showcase/c3-char-transformer/forward.cml"
+args = ["${case}", "--arg", "corpus=showcase/c3-char-transformer/corpus.txt"]
+expect_exit = 1
+expect_stdout_contains = ["No matching function found for argument types"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 120000
+
+# The reverse half, as the library answers it today: pinned as the refusal, not as a curve.  When
+# the walls fall this entry is the one that has to become a training run and a falling loss.
+[[tests]]
+name = "train.stops_at_the_wall"
+desc = "train.cml --arg mode=train: the training loop reaches the library's `vjp` at the model's parameter tree and stops where the library cannot follow it today.  The expectation is the refusal's own words, so the entry reports the wall instead of hiding it behind `known_fail`."
+kind = "behavior"
+case = "../../../showcase/c3-char-transformer/train.cml"
+args = ["${case}", "--arg", "corpus=showcase/c3-char-transformer/corpus.txt", "--arg", "mode=train", "--arg", "steps=2"]
+expect_exit = 1
+expect_stdout_contains = ["Cannot import module 'vjp'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 120000
+# The parity table: the same block on both sides, five readings compared, RESULTS.md written.
+#
+# `compare.py` runs `baseline/block.py` (the six partial derivatives by hand, checked against a
+# finite difference of the same forward pass), `block_forward.cml` (the forward pass through the
+# tensor operators), `block_engine_grad.cml` (the engine's `with_grad`, as a control) and
+# `block_library_grad.cml` (the library's `vjp`, the reading this example is about).  A library row
+# that reads "refused" is the example's finding and not a failure of this entry -- WALLS.cn.md is
+# where it is classified -- but a forward value or an engine gradient outside its tolerance is.
+[[tests]]
+name = "parity"
+desc = "C3's smallest attention block, compared with its hand-derived analytic Jacobian: the forward value within 1e-6 relative, the engine's six parameter gradients within 1e-4 relative each, and the library's `vjp` row recorded with whatever it answered (a refusal today).  The script writes RESULTS.md and exits non-zero when a row it can check does not hold."
+kind = "behavior"
+tool = "python"
+case = "../../../showcase/c3-char-transformer/compare.py"
+args = ["${case}", "--results", "${test_tmp}/c3-RESULTS.md", "--json", "${test_tmp}/c3-parity.json"]
+expect_exit = 0
+expect_stdout_contains = ["c3 compare: PASS"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 300000
