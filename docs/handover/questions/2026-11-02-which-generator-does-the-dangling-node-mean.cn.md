@@ -100,3 +100,27 @@ sample: O05[EXIT] O06[EXIT] O07[EXIT] O04[EXIT] O03[EXIT] O02[EXIT] O0B[EXIT] O0
 
 **已推进到：扫完 GIR 层**（24 条 generator 用例，19 条绿的全部只有 EXIT 无读者；5 条拒绝用例无图可读），
 **字节码层无此概念，结论到 GIR 为止**。下一层若要读，需要先定义那一层的"读"。
+## 6. 作者 13:50 指明出处（本页结论不变）
+
+作者 13:50 说明他说的那一件是 **`stream.*` 11 条在 Windows 上崩在 `src/compile/gir/builder_support.h:125` 的
+`nodeGraphOf()`（"Draft node is not owned by a compile graph builder"）**，Linux 上碰巧读得到已释放的内存所以不报；
+**与 GCT 的 `extractData` 的 `dangling` 无关，与 `test/tools/progen` 也无关**。本页第 4 节那份 GIR 层扫描
+（24 条用例、19 条绿、0 个非 EXIT 无读者节点）**是另一件事，结论照旧**。
+
+## 7. `reportUnbuiltShape` 的现状与它卡在哪（预备改成一个说明语言规则的码）
+
+- **现状**：`src/compile/gct/builder.cpp` 的 `visitGeneratorBody` 里有一个 lambda `reportUnbuiltShape`
+  （`:5717`），报的是 **`InternalDiag::UnknownInternalError`** + 文案
+  `"the generator machine does not build this shape; send the program, this is a compiler defect"`。
+  另有 `:2164` 那条 `yield` 落语句构造器的路径，报的也是 `InternalDiag::UnknownInternalError`；
+  **`FeatureNotSupported` 在 `diagnostics/registry.tsv` 零命中**（作者的"那个码已删"与实测一致）。
+- **它有九个调用点**（`:6001`、`:6105`、`:6126`、`:6216`、`:6228`、`:6303`、`:6376`、`:6412`，加 lambda 本身）。
+- **卡在哪：没有一个现成用例能触发它。** 五条 present-day 拒绝用例实测报的是别的码：
+  `generators_cell_retype` → `SemanticDiag::NoMatchingFunction`、
+  `generators_read_before_declaration` → `SemanticDiag::UnresolvedReference`、
+  `yield_head_nested_no_stream` / `yield_head_no_stream` → `SemanticDiag::YieldRequiresStreamHead`、
+  `yield_keyword` → `SyntaxDiag::KeywordAsIdentifier`。
+  所以新码要落地，**必须先写出一条能走到那九个分支之一**的生成器程序（这就是 `--coverage-check` 要求的"有产出者的用例"）。
+  下一步读物：那九个分支各自接哪种语句形状（逐个读条件），再挑最好构造的一种写成用例。
+
+**已推进到：出处对齐 + 现状 + 卡点（缺一个会红的用例）。**
