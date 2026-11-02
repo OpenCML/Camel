@@ -63,6 +63,28 @@ file list shown in the merge message. Documents cannot make code green or red, s
 Being behind by a commit that touches code is not an exception — it is the thing the check exists
 to catch.
 
+### When a ruling and a reading disagree
+
+A ruling is a decision about what the language should be; a reading is what the tree does today. They
+can disagree, and when they do, **do neither of the two easy things**: do not execute the ruling as
+if the reading were noise, and do not stop and wait.
+
+- **Take the default the page itself wrote down.** If the page that asked the question names a
+  default and a criterion for abandoning it ("if the suite drops, something calls it directly and it
+  is not a candidate"), the measurement is what applies that criterion. A reading of 508 failing
+  cases is the criterion answering.
+- **Write the conflict as a question page** and put it in `questions/`, with the reading, what was
+  tried, and the paths: the ruling stands as written in the record, and the person who ruled gets to
+  rule again knowing the number.
+- **Say in the merge or fix commit that the ruling was not executed, and why.** Otherwise the next
+  reader finds a ruling on `develop` and assumes it was carried out.
+
+The example on record: the ruling said the eleven `:op/ne_*` rows are a second implementation of
+`==` and should go. Deleting them took the suite from `8390/8374/0` to `8390/7866/508`, because
+`modules/graph/module.cpp:110` builds a `__neq__` group for the types that have no `==` to fall back
+on. The rows stayed, the question went back to `questions/`, and the ruling's own text stayed in the
+record untouched.
+
 ## Coordinator Workflow: Handover Branches And `wzj-dev`
 
 The coordinator's own work follows a two-step integration so the remote stays quiet and the task book's readers still see progress.
