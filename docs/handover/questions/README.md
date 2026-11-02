@@ -2,14 +2,15 @@
 
 > 一页一问。作者把读过的页整体挪进 `reviews/`；这里只放**还在等回答**的页。
 
-## 现在在等作者：4 页
+## 现在在等作者：5 页
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
 | --- | --- | --- | --- | --- |
 | [`2026-11-02-the-generator-reads-a-draft-node-after-its-builder`](2026-11-02-the-generator-reads-a-draft-node-after-its-builder.cn.md) | `stream.*` 在 Windows 上崩在 `builder_support.h#nodeGraphOf`（草稿节点不属于任何 compile graph builder），同树 Linux 全绿、五个后端都崩，所以是建图不是调度；问该谁去找那个节点的 owner、修好前 Windows 腿要不要继续红 | 待裁 | — | Windows 腿的红；那个节点的 owner |
 | [`2026-11-02-who-restores-order-after-inline-moves-a-statement`](2026-11-02-who-restores-order-after-inline-moves-a-statement.cn.md) | 内联改变块归属之后，次序该由内联自己补还是由图定型后的统一通道补 | 待裁 | — | 次序的归属：内联还是定型后的通道 |
 | [`2026-11-03-may-a-printed-name-be-the-definitions-own`](2026-11-03-may-a-printed-name-be-the-definitions-own.cn.md) | `tensor:sum` 与 `tensor:sum_axis` 共用一个写名 `sum`，边界在哪只有定义知道、节点不知道；问打印件能不能用定义自己的名字（`sum_axis(m, 0, false)`），还是必须复现源里的 `<>` 写法 | 待裁 | — | 打印器的往返：节点上只有一个写名 |
-| [`questions-2026-11-02-which-index-rows-are-already-landed`](2026-11-02-which-index-rows-are-already-landed.cn.md) | 索引里标"已裁未落"的条目，哪些在树上已经落地 | 待裁 | — | 索引状态是否可以改成"已裁已落"（默认=我们改，并逐条写提交 id） |
+| [`2026-11-02-which-index-rows-are-already-landed`](2026-11-02-which-index-rows-are-already-landed.cn.md) | 索引里标"已裁未落"的条目，哪些在树上已经落地 | 待裁 | — | 索引状态是否可以改成"已裁已落"（默认=我们改，并逐条写提交 id） |
+| [`2026-11-02-who-reports-a-lost-capture`](2026-11-02-who-reports-a-lost-capture.cn.md) | 捕获照抄不了的时候（类型没有批量形式、或调用链上拿不到值），该由变换按名字拒绝，还是由一条与变换无关的"值与它的图捕获对得上"检查来报 | 待裁 | — | 报错的归属：变换还是独立检查 |
 
 **这张表由 `node scripts/check-doc-links.mjs --questions-index` 对着目录核对**：行数与页数不符、或者某一行指向目录里没有的页，它都会红。
 
