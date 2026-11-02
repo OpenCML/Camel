@@ -24,7 +24,6 @@ slot_t __slice_bytes__(ArgsView &with, ArgsView &norm, camel::core::context::Con
 slot_t __len_bytes__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __add_bytes__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __eq_bytes__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-slot_t __ne_bytes__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __idx_take_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __last_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __concat_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

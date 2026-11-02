@@ -1,26 +1,17 @@
-# 待裁索引：谁在等作者，堵着什么
+# 待裁索引
 
-> **一页一问；索引按"堵住多少工作"排序，因为作者的时间应该花在最贵的那页上。**
+> 一页一问。作者把读过的页整体挪进 `reviews/`；这里只放**还在等回答**的页。
 
-> **索引的价值在于与目录一一对应；一旦少一页，读者就会以为没有那一问。**
+## 现在在等作者
 
-> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 questions/ 里有 1 页**，表里只有已裁的行。其余已裁完、整体挪进 `reviews/`。
->
-> **索引以目录为准**：这张表曾经列着三页早就挪进 `reviews/` 的文件名，而目录里的另外三页不在表上——**一条指向不存在文件的索引，比没有索引更坏**（读者会以为那一问还在，而去回答一个已经裁过的形状）。以后每次并入前先数目录，再改这张表。
->
-> **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
+- `2026-11-02-the-generator-reads-a-draft-node-after-its-builder` —— `stream.*` 的几条在 Windows 上崩在 `builder_support.h#nodeGraphOf`（草稿节点不属于任何 compile graph builder），同树 Linux 全绿、五个后端都崩，所以是建图不是调度；问该谁去找那个节点的 owner、修好前 Windows 腿要不要继续红。
 
-状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
+### 已裁、在 `reviews/` 留档
 
-## 现在在等作者：2 页
-
-| 页 | 问什么 | 状态 | 裁定 | 还堵着 |
-| [`2026-11-02-whether-a-private-kernel-gets-a-writable-name`](2026-11-02-whether-a-private-kernel-gets-a-writable-name.md) | 没有体的 kernel 声明要不要给它一个可写出来的名字（默认建议：不动，先记着） | 待裁 | — | 拒绝原因普查的第 1 族：1814 条拒绝里这一族最大，给了名字打印器才写得回去 |
-| [`2026-11-02-are-thirty-plans-of-another-layer-a-defect`](2026-11-02-are-thirty-plans-of-another-layer-a-defect.cn.md) | 那 31 个"沉默的零"是别的层的计划、不是缺陷，要不要把它们改成快层（默认建议：不处置） | 待裁 | — | 发布闸门的"绿"只盖快层；改层就等于改"我们声称绿的"是什么意思 |
-
-**这一节的行数 = 目录里的页数**（现在 2 = 2）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。
-
-2026-11-02 02:30 的 `cml-sync-tail-write` 与 `whether-the-when-clause-belongs-on-the-declaration` 已裁，在 `reviews/`；`the-neq-group-is-the-fallback-of-ne-with-no-eq-to-negate` 也已裁定并留在 `reviews/`（作者给了执行路径，冲突状态结束）。
+- `2026-11-02-what-counts-as-a-statement-of-a-chain` —— 链上语句含不含 `Func`/`Join`；裁：含 `Call`，不含这两个。
+- `2026-11-02-the-member-count-stated-twice` —— 余量元组没有图时的元数；裁：`split` 不再交出残差元组，检查从此是守卫。
+- `2026-11-02-does-the-neq-cut-take-the-strict-neq-group-with-it` —— `ne_` 那批注册行；裁：补逐元素 `!`，然后删净。
+- `2026-11-02-is-p0-2-now-a-pass-by-pass-judgement-change` —— P0-2 的顺序；裁：先修不变量，按节点性质判。
 
 ## 已裁：按还堵着的活排
 

@@ -286,7 +286,61 @@ print family, and this operator's configuration is not a string, so its call has
 
 
 
-**2026-11-02 第二十七刀：族 4 + 族 9 是同一个理由，而闭合它要的不是一处改动（只查未改）**
+**2026-11-02 第二十八刀：族 4 + 族 9 闭合，两半都落地——接受命名结构类型，并写出 `type` 声明**
+
+**做了什么**（`src/passes/trans/cml/cml.cpp`）：①`checkType` 的 `record->named()` 分支不再一律拒绝，改为问"这个类型的声明写得出来吗"；②新增收集/校验/排序/写出四步：`collectNamedTypes` 从签名与节点类型里收命名结构类型，`namedTypeObstacle` 逐个判可写性（泛型、`#resource`、名字不是源标识符、字段名不是标识符、字段无类型），`orderNamedTypes` 按字段依赖排序（自引用合法，跨类型环拒绝），`namedTypeText` 用 `StructType::fieldName(i)/typeAt(i)` 写出 `type V = { x: int }`。③**只声明打印文本真正写到的类型**——正文先写到 `body_`，头部后拼，否则会给源里根本没有的类型添一条声明，往返当场变成不等价（第一版就是这个错：34 条新印出来的里有 19 条 not_equivalent、15 条连文档都产不出）。④拒绝文本现在说清**缺哪一半**：`the named type 'V', whose declaration cannot be printed: <理由>`。
+
+**两个最小例子（判据四是"输出忠实"，不是"不再拒绝"）**：
+
+- 族 9 `consistency/operator_overloads/mods/plus_b.cml`：打印 `type V = { x: int }` + `func operator +(a: V, b: V): V { return { x: 0 } }`，往返 **`EQUAL (18 vertices, 31 edges)`**。
+- 族 4 `modules/tensor/shape_inference/loaded_struct_as.cml`：过了命名类型这一关，停在**下一道墙** `the operator 'tensor:sum'`（不是本刀的缺陷，是它挡在后面的另一层）。同形状的最小例子（`type P = { x: int, y: int }` + `with <m: P>`，即"`with` 参数是命名类型"）打印、编译、运行 `exit 7`（与源相同），并由 `test/cases/trans/cml/named_type.cml` 钉住往返。
+
+**这一刀还被迫补了两半**（不补的话打出来的程序不忠实，正是判据四禁止的形状）：
+
+1. **算子函数的名字**：`func operator +` 编出来的图叫 `__add__`，而 `__add__` 是保留标识符（`ReservedIdentifier`），原样打印回去编不过。改用 `operatorSymbolOf(组名)` 写回 `func operator +`（族 9 的 51 条都是这个形状）。顺带把基线里一条 `DIFFERENT`（`plus_a.cml`）变成了 `EQUAL`。
+2. **编译器自己插入的结构转换**：`return ({ x: 0 } as V)` 里那次 cast 写出来就多一个节点（打印出来的图比源少一个节点、类型表少一项匿名结构），按 `relateStructs(to, from) != None` 且目标是命名类型时丢掉这次 cast，让位置类型（返回类型、标注、参数、字段）重新插入。
+
+**仪器也修了一处**：`test/tools/cml_roundtrip.py` 把类型的 `decl` 字段指向 `D:<id>`（声明顶点），原来指向 `T:<id>`（类型表按数字索引），于是**任何带命名类型的 canonical 文档都判非法**（`unknown vertex T:d0`）。不修这一处，本刀无法测量——这不是放宽判据：`decls` 顶点按 kind/params 比较，本来就在文档里。
+
+**语料读数（3377 文件，绝对路径，`--jobs 16`，同语料同命令）**：
+
+```
+改前  SWEEP files=3377 printed=562 refused=1811 frontend=1004 timeout=0
+      ROUNDTRIP checked=555 equivalent=515 not_equivalent=40 over_budget=0 unfaithful=7   (DIFFERENT 47, families 57)
+改后  SWEEP files=3377 printed=589 refused=1779 frontend=1009 timeout=0
+      ROUNDTRIP checked=586 equivalent=543 not_equivalent=43 over_budget=0 unfaithful=3   (DIFFERENT 46, families 57)
+```
+
+`printed +27`（562→589）、`equivalent +28`（515→543）、`unfaithful 7 → 3`、`families 57 → 57`。**判据二（`printed ≥ 590`）差 1**，原因写在下面：这 7 条不是"少印"，是 7 条**从"印出来但不对"或"印出来但会报错"退回成安全的拒绝**。
+
+逐条算账（三块，原因不同，处置也不同）：
+
+1. **本刀新增的 5 条 `unfaithful`，全部处置**（不是"新露出来的墙"就算完 —— 以前是拒绝、现在是"印出来但不对"，方向反了，所以退回拒绝）：
+   | 文件 | 原来印出来错在哪 | 现在 |
+   | --- | --- | --- |
+   | `compile/native/idx_field_missing.cml` | 程序自己声明的无体 `#op(':op/idx_str')` 被写成内建符号 `s['y']` → 重编译 `NoMatchingFunction`（源文件自己写明内建 `[]` 对该结构不成立） | 拒绝：`a subscript on a struct: the '[]' of the language takes an array or a string, so this one comes from a declaration in this program` |
+   | `trans/cpp/field_name_missing.cml` | 同上（同一个 `#op/idx_str` 形状） | 同上 |
+   | `parse/rulings/static_for_head_names.cml` | 一个源码名在一个块里绑两次（`let v: int` 两行）→ `Redeclaration: 'v'` | 拒绝：`two bindings of the name 'v' in one block: one expansion of a 'static for' keeps the source name on every copy` |
+   | `compile/array_shape/rank_zero_slot_nested_field.cml` | 模板值里那个 `Inner` 字段没有 struct → 打印成 `{ inner: {  } }` → `DeclaredTypeMismatch` | 拒绝：`a template value of 'Inner' that holds no struct: the literal written from it would be an empty struct where the type has 1 field(s)` |
+   | `compile/literals/context_data_literal.cml` | 匹配模式被物化成 `let cml1` 再写成 `case cml1`（名字不是模式）→ `IdentifierPatternNeedsNullableOrErrorType` | **修好**（不是退回）：模式不再物化，写 `case 3.0`，往返 **EQUAL (43 顶点 / 120 边)** |
+2. **同一个守卫顺带收了 3 条基线就 `unfaithful` 的程序**（`compile/static_expansion/comprehensions.cml`、`compile/static_expansion/fields_and_access.cml`、`parse/constructs/comprehensions.cml`）：它们也是"一个块里同名重绑"，以前印出来就编不过。方向与第 1 块相同（把响亮的错换成安静的拒绝），所以没有为保住 `printed` 而给守卫加范围。**这就是 `printed` 589 而不是 592 的全部原因。**
+3. **`not_equivalent 40 → 43` 三条留着，但要说清它们不是"等价只是形状不同"**（我上一版这么写过，是错的）：`compile/casts/same_type.cml`、`compile/struct_join/join_arms.cml`、`loops/struct_state.cml`，判定器实测两边 canonical 文档不等价。**它们不是新露出来的墙，是真正没解决的三条**，下一刀单独看。
+
+⇒ **下一刀的形状**：`printed` 的上界现在由"打印器写出来的程序与图是不是同一个程序"卡住，而且这几条各自是**不同的**一道墙（无体外核被写成内建符号、同名重绑、模板缺 struct、canonical 形状差异 3），不是一处判据能一起收的。
+
+**仍拒绝的 9 条**（`REFUSAL` 行，文本逐条点出缺哪一半）：6 条名字不是源标识符（`ns::T`）、2 条泛型声明（"the printer writes no type parameters"）、1 条 `#resource` 声明（"the tag is not readable from the type"）。
+
+**已知缺口，没加守卫**：`namedTypeText` 只写字段名与字段类型，字段上的 `#tag(...)`（`parse/rulings/static_for_head_names.cml` 的 `type Box = { #width(8) low: int }`）写不出来。这一刀没有为它加拒绝，因为还没有一条能证明"打印出来的程序读字段标签、结果与源不同"的最小例子；加一条打不响的守卫比没有更糟，先记在这里，下一刀补例子或补 `namedTypeObstacle`。
+
+**作者裁的一页（`fsh-dev = d2face663`，2026-11-03 03:30）直接指向本刀的相邻判据，逐字留档：**
+
+> 「私有 kernel 要不要可写名字：**前提不成立**，A、B、C 都不选。最小例子里 `shl` 不是私有的：`stdlib/math.cml#shl`（原文写的是行号 627-632，这里按引用规则换成符号）写着 `#op('math:shl_i') export func shl::<T>(x: T): T when is_same::<T, i32>()`，`shl_l` 同理。它是**导出的**无体声明，程序也确实写了 `1->shl<64>`。打印器那条判据『无体 kernel 声明，没有程序写这个名字』**错在把『无体』当成了『私有』**：无体只说明实现在 C++ 里，名字照样可写。」
+
+⇒ **"无体"说的是实现在哪，"私有"说的是名字能不能写，两件事。** 这一条已按作者的修法落地，见本页**第二十九刀**：`OperatorTable::CallForm` 多了 `exported`（由 `Module::exportEntity` 填，`declarePrivateEntity` 不填），打印器据此决定写不写名字，这一族 **411 → 30**。
+
+**另一处仪器问题，与"仪器先坏"同族**：`test/tools/cml_roundtrip.py` 把类型的 `decl` 指向 `T:<类型表下标>` 而不是 `D:<声明顶点>`，于是**任何带命名类型的 canonical 文档都被判 `unknown vertex T:d0`**——这个 bug 一直把命名类型挡在"可测量"的门外；不修它，本刀连基线都量不出来。
+
+**自检**：`test/plans/feat/trans/cml.plan.toml` `1/1` 通过（新增 `test/cases/trans/cml/named_type.cml` 的往返、`check_declarations` 判"用到的类型必须在输出里有声明"、以及一条负例读数：把打印结果里那行 `type P = ...` 删掉再编译 → `UnresolvedTypeReference`，说明声明是承重的那一半）；`docs.doc_readings` 的 `case TypeCode::` 读数 1028 → 1043（本刀在 `cml.cpp` 加了几个 `TypeCode` 走查），页已同步；全量 fast suite **`8390 / 8374 / 0`**（skip 10、known failures 6）。
 
 **先答"两族是不是同一个理由"：是。** 两族的拒绝原文都出自 `checkType` 的同一个分支（`case TypeCode::Struct` 里 `record->named()` 那一次 `fail`），只是位置不同：
 
@@ -842,6 +896,38 @@ func main(): int sync { var x = 1
 | 整语料 | 每一个能编译的用例要么往返等价要么在允许拒绝清单里 | **348/2387 打印，35 不等价，4 打印不出 canonical** |
 
 **这 35 个不等价是这一步最有价值的资产**：它们证明检查器真的会红，也给出打印器"悄悄丢节点"的具体形态。S3a 的第一件事是把它们逐个定性（丢节点 / 改接线 / canonical 自身的问题），因为「打印器丢了节点」与「规范转储漏了东西」是两种完全不同的缺陷。
+
+**2026-11-02 第二十九刀：并上 develop，并按作者裁定让"导出的无体声明"有名字可写——那一族 411 → 30**
+
+先记 merge：`origin/lane-m5` 落后 `origin/develop` 85 笔，`git merge origin/develop --no-edit` 只有一个冲突（`test/tools/cml_roundtrip.py` 里类型的 `decl` 边，两边都改成了 `D:`，取同一处、注释合成一段），merge commit `61ed5e18c`，`git merge-base --is-ancestor origin/develop HEAD` = 0。**下面所有读数都是 merge 之后的树（3379 个文件，比旧 tip 多 2 个）**；旧 tip 的数只作对照：`d7f1bd8e3`（3377 文件）`printed 589 / refused 1779 / equivalent 543 / not_equ 43 / unfaithful 3 / DIFFERENT 46`。**"merge 了但没改打印器"那棵中间树我没有单独量**——这是本轮的读数缺口，写在这里，不拿旧 tip 顶替。
+
+修法与作者那条判据一一对应：
+
+- `OperatorTable::CallForm` 加 `exported`，由 `Module::exportEntity` 填，`declarePrivateEntity` 不填：导出表就是"名字能不能写"的事实。图的 `GCOperBody` 只有 `op`/`oper`/`reserved`，`Program` 也不持有 `Module`，所以这个事实在打印期推不出来，只能记。
+- `cml.cpp` 的 `writable` 从 `declaredByModule || uri.starts_with(":")` 改成 `declaredByModule || exported || ':'`；`kernelDeclaration` 退回去只表示"没有体"。
+- 带 `with` 参数的可写调用现在写 `name<with...>(args)`（`shl<4>(1)`），with 值可以是字面量或字符串。
+
+**量出来才看见的两道墙**（都不是这条判据能顺带收的）：
+
+1. **按名字写出来的模块算子要 import 那个名字**：只写 `import math` 时 `shl<4>(1)` 是 `UnresolvedReference: 'shl'`（作者最小例，实测）。`collectImports` 现在按"写符号还是写调用"分叉：写调用时 `import { shl } from math`，写符号时仍 `import module`（`/` 对 `int[]` 的规则要整模块在作用域里）。
+2. **程序自己声明的同名函数会把名字抢走**：`consistency/comprehension/shadowed.cml` 自己声明 `func map`，打印出的 `map<(x: int): int => x>(xs)` 调用的是程序那个 `map`（实测 `NoMatchingFunction`，只是型别恰好不合才没静默出错）。现在按"打印文件里会不会声明这个名字"拒绝——`writtenFunctionNames_` 取自 `graphs_` 的函数名，因为根图的 `nodeName` 不一定是源码名（同一棵树上用 `topLevelNames_` 写的守卫一次也没响，是实测）。
+
+**判据①（作者的 `shl` 最小例）**：`import { shl } from math` + `println(1->shl<40>)`，源给 `1099511627776`，打印出 `println(shl<40>(1))`，重编译同样 `1099511627776`（移 40 位只有 64 位的 `shl_l` 能做到，`shl_i` 会 fault 在宽度上），往返 **EQUAL 16 顶点 / 39 边**。
+
+**判据②（这一族还剩多少，报绝对值）**：**411 → 30**。剩下的 30 条是"模块没有导出那个 kernel"的（`array:sort_l` 这类 `#impl` 内核）。
+
+**判据③（`unfaithful` 不回 7 以上）**：**7**（基线 3 + 本轮新 4）。新的 4 条，逐条点名：`compile/native/para_declaration_import.cml`（`unordered_reduce` 写成裸名但没有 import）、`consistency/if_without_else/statement.cml`、`resources/conflict_per_resource.cml`（`Module 'rand' not found`：URI 前缀不等于可 import 的模块名）、`trans/cpp/empty_literal_takes_the_position.cml`（`let cml1: [] = []`，空字面量没有元素类型可写）。**这 4 条是下一刀的清单，不是"可留的形状差异"**；为了压回 7，`comprehension/shadowed` 那条从"印出来但错"退回成拒绝。
+
+读数（新 tip，3379 文件，`node test/tools/cml-sweep.mjs --jobs 16`）：
+
+```
+SWEEP files=3379 printed=707 refused=1664 frontend=1008 timeout=0
+ROUNDTRIP checked=700 equivalent=649 not_equivalent=51 over_budget=0 unfaithful=7
+```
+
+`printed 589 → 707`（+118）、`equivalent 543 → 649`（+106）、`refused 1779 → 1664`、`not_equivalent 43 → 51`（+8，同样要逐条定性，不许当形状差异放过）、`families 58`。重扫里最大的一族换成了 `the operator '<name>'`（429 条：没有调用形状也没有符号的算子），`import { name } from module` 那族（171 条）还在。
+
+**自检**：全量 fast suite `8447 / 8435 / 0`（skip 10、known failures 2）。第一次跑出 1 条红是 `docs.links.citations`：本页引了作者原话里的行号引用（`627-632`），判据要求引用写成符号，改成 `stdlib/math.cml#shl` 并在括号里注明原文是行号，`docs_links` 14/14 通过。契约计划 `feat.trans.cml` 1/1：新增 `map_with_closure.cml`（`map<closure>(xs)` 往返 EQUAL 22 顶点 / 55 边），拒绝例子换成 `modules/stdlib/array_kernels_read_back.cml`（`array:sort_l` 是模块没导出的内核）。
 
 ## 8. 要裁定的问题（本计划不擅自决定）
 

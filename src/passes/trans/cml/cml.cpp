@@ -63,6 +63,7 @@ using namespace camel::core::rtdata;
 using camel::core::SymId;
 using camel::core::type::ArrayType;
 using camel::core::type::FunctionType;
+using camel::core::type::StructDecl;
 using camel::core::type::StructType;
 using camel::core::type::TupleType;
 using camel::core::type::Type;
@@ -309,35 +310,19 @@ class CmlPrinter {
         classifyLambdas();
         collectTopLevelNames(root);
         findEntry(root);
+        collectImports();
+        // The named struct types have to be known before a signature is validated: a signature
+        // that names `V` is printable only because the printed program will declare `V`.
+        collectNamedTypes();
+        checkNamedTypeNames();
+        orderNamedTypes();
+        collectMatchPatterns();
         for (GCGraph *graph : graphs_) {
             validateGraph(graph, graph == root);
         }
         scanBigConstants();
         if (!bigConstants_.empty()) {
             return;
-        }
-        collectImports();
-        // A module imported for its operators is imported whole (`import tensor`): the program
-        // does not write a name of it, and the module's declarations are what give the signs their
-        // rules. A module whose names are written is imported by name, and a module that needs both
-        // is imported whole, which brings the names in too.
-        for (const std::string &module : moduleImports_) {
-            out_ << "import " << module << '\n';
-        }
-        for (const auto &[module, names] : imports_) {
-            if (moduleImports_.contains(module)) {
-                continue;
-            }
-            out_ << "import { ";
-            bool first = true;
-            for (const std::string &name : names) {
-                out_ << (first ? "" : ", ") << name;
-                first = false;
-            }
-            out_ << " } from " << module << '\n';
-        }
-        if (!imports_.empty() || !moduleImports_.empty()) {
-            out_ << '\n';
         }
 
         graph_    = root;
@@ -372,6 +357,44 @@ class CmlPrinter {
         for (GCGraph *graph : functions) {
             printFunction(graph);
         }
+
+        // The body is written first and the header last, because which `type` statements the
+        // program needs is known only once its text exists: a named type is declared when the
+        // program *writes* its name, and a type the graph carries in a place nothing prints needs
+        // no declaration (writing one would add a declaration the source never had).
+        orderNamedTypes();
+        // A module imported for its operators is imported whole (`import tensor`): the program
+        // does not write a name of it, and the module's declarations are what give the signs their
+        // rules. A module whose names are written is imported by name, and a module that needs both
+        // is imported whole, which brings the names in too.
+        for (const std::string &module : moduleImports_) {
+            out_ << "import " << module << '\n';
+        }
+        for (const auto &[module, names] : imports_) {
+            if (moduleImports_.contains(module)) {
+                continue;
+            }
+            out_ << "import { ";
+            bool first = true;
+            for (const std::string &name : names) {
+                out_ << (first ? "" : ", ") << name;
+                first = false;
+            }
+            out_ << " } from " << module << '\n';
+        }
+        if (!imports_.empty() || !moduleImports_.empty()) {
+            out_ << '\n';
+        }
+        // One `type` statement per named struct type the program names, before the text that names
+        // it: `func f(x: V): int` on its own is `UnresolvedTypeReference: 'V'`, and the declaration
+        // is the half the printed program was missing (see `collectNamedTypes`).
+        for (const StructType *record : namedTypeOrder_) {
+            out_ << namedTypeText(record) << '\n';
+        }
+        if (!namedTypeOrder_.empty()) {
+            out_ << '\n';
+        }
+        out_ << body_;
     }
 
   private:
@@ -383,6 +406,12 @@ class CmlPrinter {
     std::vector<GCGraph *> graphs_;
     std::unordered_map<const GCGraph *, bool> effectful_;
     std::unordered_set<std::string> topLevelNames_;
+    /// The names of the functions the printed file declares (`func map(...)`): a module operator
+    /// written by name has to mean the module's, and the program's own function of that name is
+    /// what a bare `map<f>(xs)` would call. Collected from the graphs, because the root graph's
+    /// `nodeName` is not always the source name of a top-level function (measured on
+    /// `consistency/comprehension/shadowed.cml`: a guard keyed on `topLevelNames_` never fired).
+    std::unordered_set<std::string> writtenFunctionNames_;
     std::unordered_set<gc_node_ref_t> entrySkip_;
     GCGraph *entryGraph_ = nullptr;
 
@@ -410,6 +439,30 @@ class CmlPrinter {
     /// The modules whose operators the printed program writes with a sign (see `collectImports`):
     /// the module is imported whole, since the sign is bound to its operator by its declarations.
     std::set<std::string> moduleImports_;
+    /// The named struct types the printed program mentions, in discovery order, and the ones for
+    /// which no `type` statement can be written, with the reason (see `collectNamedTypes`).
+    std::vector<const StructType *> namedTypeRecords_;
+    std::unordered_set<const StructType *> namedTypeSeen_;
+    std::unordered_map<const StructType *, std::string> namedTypeWhy_;
+    /// The same types in an order a `type` statement can be read in: a field type's declaration
+    /// first (see `orderNamedTypes`).
+    std::vector<const StructType *> namedTypeOrder_;
+    /// The named types the printed text actually names: only these are declared, so a type the
+    /// graph carries where nothing prints it does not add a declaration the source never had.
+    std::unordered_set<const StructType *> namedTypeUsed_;
+    /// The names the block being printed has bound. A second `let` of one name in one block is a
+    /// `Redeclaration` in the program the text would be, so it is refused where it is found (a
+    /// `static for` expands one source binding once per field, and the graph then holds two nodes
+    /// with that name in one body: `parse/rulings/static_for_head_names.cml`).
+    std::unordered_set<std::string> blockNames_;
+    /// The constants the arms of a `match` test. The printed text has to write each as a literal: a
+    /// name is not a pattern, and materialising one as a `let` wrote `case cml1`, which the front
+    /// end refuses (`IdentifierPatternNeedsNullableOrErrorType`,
+    /// `compile/literals/context_data_literal.cml`).
+    std::unordered_set<gc_node_ref_t> patternRefs_;
+    /// The program's text without its header. The header carries one `type` statement per named
+    /// type the text names, and that is known only after the text is written.
+    std::string body_;
     // Constants bound before the statement that uses them. `1 + 2` written out comes back folded to
     // `3`: the front end folds an operator whose operands are both literals, so a graph that holds
     // those three nodes would come back as one. A `let` of a literal is that literal's node and
@@ -451,6 +504,16 @@ class CmlPrinter {
             if (!name.empty()) {
                 topLevelNames_.insert(name);
             }
+        }
+        // The names the file will declare: `func <name>`, in the spelling `printFunction` writes
+        // (the part after the last `::`).
+        for (const GCGraph *graph : graphs_) {
+            const std::string name = graph->name();
+            if (name.empty()) {
+                continue;
+            }
+            const size_t at = name.rfind("::");
+            writtenFunctionNames_.insert(at == std::string::npos ? name : name.substr(at + 2));
         }
     }
 
@@ -723,10 +786,19 @@ class CmlPrinter {
         }
         case TypeCode::Struct: {
             const auto *record = static_cast<const StructType *>(type);
-            if (record->named() || record->typeArgCount() != 0) {
+            if (record->named()) {
+                // The program writes the type's name, and `run` writes one `type` statement per
+                // named type it mentions, so the name is declared. Its fields are the declaration
+                // `collectNamedTypes` already settled; walking into them here would never end for
+                // a type that mentions itself.
+                if (namedTypePrintable(record)) {
+                    return;
+                }
                 fail(
                     camel::runtime::kInvalidNodeRef,
-                    std::format("{} is the named type '{}'", where, type->toString()));
+                    std::format(
+                        "{} is the named type '{}', whose declaration cannot be printed: {}",
+                        where, type->toString(), namedTypeObstacleOf(record)));
             }
             for (size_t i = 0; i < record->size(); ++i) {
                 checkType(record->typeAt(i), "a struct field");
@@ -806,7 +878,7 @@ class CmlPrinter {
         if (hasFunction(type)) {
             return {};
         }
-        return ": " + typeText(type);
+        return ": " + writtenTypeText(type);
     }
 
     /// `resetNames` is false for a lambda's body, which is written inside the text of the body that
@@ -1345,9 +1417,10 @@ class CmlPrinter {
 
     void appendLines() {
         for (const std::string &line : lines_) {
-            out_ << line << '\n';
+            body_ += line;
+            body_ += '\n';
         }
-        out_ << '\n';
+        body_ += '\n';
         lines_.clear();
     }
 
@@ -1378,8 +1451,18 @@ class CmlPrinter {
                 }
                 const std::string module(uri.substr(0, colon));
                 const auto form = camel::core::OperatorTable::instance().callFormOf(uri);
+                // A module operator the printer writes as a call imports the declaration's name; one
+                // it writes with a sign imports the module (`/` for `int[]` is a rule of `math`,
+                // which the sign needs in scope). An exported body-less declaration is a call too
+                // (`shl` is `export func shl::<T>(x: T)` with `#op('math:shl_i')` and no body), and
+                // printing it without the import wrote `shl<4>(1)` under a bare `import math`, which
+                // the front end answered with `UnresolvedReference: 'shl'` (the author's minimal
+                // example, measured).
+                const bool written = camel::core::operatorSymbolOf(
+                                         camel::core::OperatorTable::instance().groupOf(uri)) !=
+                                     nullptr;
                 const bool byName =
-                    form.has_value() && form->withCount == 0 && form->declaredByModule;
+                    !written && form.has_value() && (form->declaredByModule || form->exported);
                 if (byName) {
                     imports_[module].insert(form->name);
                 } else {
@@ -1387,6 +1470,418 @@ class CmlPrinter {
                 }
             }
         }
+    }
+
+    // ---- named struct types ---------------------------------------------------------------
+    //
+    // A named struct type is printed by its name (`V`), and a program that writes the name has to
+    // declare it: `func f(x: V): int` on its own does not compile (`UnresolvedTypeReference:
+    // 'V'`), while the same function after `type V = { x: int }` does. Nothing in the graph gives
+    // the second half: the field table is on the type (`StructType::size()` / `typeAt(i)` /
+    // `fieldName(i)`), so the declaration can be written, but the printer had no `type` emitter
+    // -- and importing the declaring module instead is not a general substitute, because an
+    // import only brings a type in when the module is exported *and* resolvable from where the
+    // printed file is compiled (the corpus compiles it in a temporary directory, where a
+    // case-local module is on no search path).
+    //
+    // So: collect the named types the program mentions, decide for each whether a `type`
+    // statement can be written, and refuse -- with the reason naming which half is missing -- the
+    // ones that cannot.
+
+    /// Whether a name can be written for this type at all, and if not, why not.
+    std::string namedTypeObstacle(const StructType *record) const {
+        const StructDecl *decl = record->decl();
+        if (decl == nullptr) {
+            return "the type has no declaration";
+        }
+        if (decl->generic() || record->typeArgCount() != 0) {
+            return "a generic declaration, and the printer writes no type parameters";
+        }
+        if (!isIdentifier(decl->name())) {
+            return std::format("a name that is not a source identifier ('{}')", decl->name());
+        }
+        if (decl->handle()) {
+            return "a `#resource` declaration, and the tag is not readable from the type";
+        }
+        for (size_t i = 0; i < record->size(); ++i) {
+            if (!isIdentifier(record->fieldName(i))) {
+                return std::format(
+                    "a field name that is not a source identifier ('{}')",
+                    std::string(record->fieldName(i)));
+            }
+            if (record->typeAt(i) == nullptr) {
+                return std::format("a field ('{}') with no type", std::string(record->fieldName(i)));
+            }
+        }
+        return {};
+    }
+
+    /// Records every named struct type `type` mentions, and every named type their fields mention.
+    void visitNamedTypes(const Type *type) {
+        if (type == nullptr) {
+            return;
+        }
+        switch (type->code()) {
+        case TypeCode::Array:
+            visitNamedTypes(static_cast<const ArrayType *>(type)->elemType());
+            return;
+        case TypeCode::Tuple: {
+            const auto *tuple = static_cast<const TupleType *>(type);
+            if (tuple->isTagged() || tuple->isNullable() || tuple->isCell()) {
+                return; // refused where it is printed, and it declares nothing
+            }
+            for (size_t i = 0; i < tuple->size(); ++i) {
+                visitNamedTypes(tuple->typeAt(i));
+            }
+            return;
+        }
+        case TypeCode::Struct: {
+            const auto *record = static_cast<const StructType *>(type);
+            if (!record->named()) {
+                for (size_t i = 0; i < record->size(); ++i) {
+                    visitNamedTypes(record->typeAt(i));
+                }
+                return;
+            }
+            noteNamedType(record);
+            return;
+        }
+        case TypeCode::Function: {
+            const auto *function = static_cast<const FunctionType *>(type);
+            for (size_t i = 0; i < function->normTypesCount(); ++i) {
+                visitNamedTypes(function->normTypeAt(i));
+            }
+            if (function->hasExitType()) {
+                visitNamedTypes(function->exitType());
+            }
+            return;
+        }
+        default:
+            return;
+        }
+    }
+
+    void noteNamedType(const StructType *record) {
+        if (!namedTypeSeen_.insert(record).second) {
+            return;
+        }
+        namedTypeRecords_.push_back(record);
+        const std::string obstacle = namedTypeObstacle(record);
+        if (!obstacle.empty()) {
+            namedTypeWhy_[record] = obstacle;
+            return;
+        }
+        // The fields are what the declaration writes, so their own types are needed too. A type
+        // that mentions itself ends here: it is already recorded.
+        for (size_t i = 0; i < record->size(); ++i) {
+            visitNamedTypes(record->typeAt(i));
+        }
+        // A field that names a type with no writable declaration makes this declaration
+        // unwritable as well: writing `type A = { b: B }` where `B` cannot be declared would
+        // name a type the printed program has no declaration for.
+        for (size_t i = 0; i < record->size(); ++i) {
+            const std::string nested = unwritableInside(record->typeAt(i));
+            if (!nested.empty()) {
+                namedTypeWhy_[record] = std::format(
+                    "its field '{}' has a type whose declaration cannot be printed: {}",
+                    std::string(record->fieldName(i)), nested);
+                return;
+            }
+        }
+    }
+
+    /// The obstacle of the first named type `type` mentions whose declaration cannot be written,
+    /// or nothing. A named type is looked up rather than walked into: its own fields were settled
+    /// when it was recorded, and a type that mentions itself would never end.
+    std::string unwritableInside(const Type *type) const {
+        if (type == nullptr) {
+            return {};
+        }
+        switch (type->code()) {
+        case TypeCode::Array:
+            return unwritableInside(static_cast<const ArrayType *>(type)->elemType());
+        case TypeCode::Tuple: {
+            const auto *tuple = static_cast<const TupleType *>(type);
+            if (tuple->isTagged() || tuple->isNullable() || tuple->isCell()) {
+                return {};
+            }
+            for (size_t i = 0; i < tuple->size(); ++i) {
+                const std::string nested = unwritableInside(tuple->typeAt(i));
+                if (!nested.empty()) {
+                    return nested;
+                }
+            }
+            return {};
+        }
+        case TypeCode::Struct: {
+            const auto *record = static_cast<const StructType *>(type);
+            if (record->named()) {
+                const auto found = namedTypeWhy_.find(record);
+                return found != namedTypeWhy_.end() ? found->second : std::string{};
+            }
+            for (size_t i = 0; i < record->size(); ++i) {
+                const std::string nested = unwritableInside(record->typeAt(i));
+                if (!nested.empty()) {
+                    return nested;
+                }
+            }
+            return {};
+        }
+        case TypeCode::Function: {
+            const auto *function = static_cast<const FunctionType *>(type);
+            for (size_t i = 0; i < function->normTypesCount(); ++i) {
+                const std::string nested = unwritableInside(function->normTypeAt(i));
+                if (!nested.empty()) {
+                    return nested;
+                }
+            }
+            return function->hasExitType() ? unwritableInside(function->exitType()) : std::string{};
+        }
+        default:
+            return {};
+        }
+    }
+
+    void collectNamedTypes() {
+        for (const GCGraph *graph : graphs_) {
+            const FunctionType *type = graph->funcType();
+            if (type != nullptr) {
+                for (size_t i = 0; i < type->withTypesCount(); ++i) {
+                    visitNamedTypes(type->withTypeAt(i));
+                }
+                for (size_t i = 0; i < type->normTypesCount(); ++i) {
+                    visitNamedTypes(type->normTypeAt(i));
+                }
+                if (type->hasExitType()) {
+                    visitNamedTypes(type->exitType());
+                }
+            }
+            for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+                visitNamedTypes((*it)->dataType());
+            }
+        }
+    }
+
+    /// The constants the arms of a `match` test, collected before anything is printed: no `let` may
+    /// be written for one of them, because the pattern position has to be the literal itself.
+    void collectMatchPatterns() {
+        for (const GCGraph *graph : graphs_) {
+            for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+                if ((*it)->kind != camel::runtime::GCNodeKind::Brch) {
+                    continue;
+                }
+                for (const gc_node_ref_t pattern : graph->withInputsOf(it.ref())) {
+                    patternRefs_.insert(pattern);
+                }
+            }
+        }
+    }
+
+    /// A type statement has to be readable: its name is a name of the printed module, so it
+    /// cannot be a name the module gives something else, and two different types cannot share it.
+    void checkNamedTypeNames() {
+        std::map<std::string, const StructType *> byName;
+        for (const StructType *record : namedTypeRecords_) {
+            if (namedTypeWhy_.contains(record)) {
+                continue;
+            }
+            const std::string name = record->decl()->name();
+            if (topLevelNames_.contains(name)) {
+                namedTypeWhy_[record] =
+                    std::format("its name '{}' is also a function the program declares", name);
+                continue;
+            }
+            bool imported = false;
+            for (const auto &[module, names] : imports_) {
+                imported = imported || module == name || names.contains(name);
+            }
+            for (const std::string &module : moduleImports_) {
+                imported = imported || module == name;
+            }
+            if (imported) {
+                namedTypeWhy_[record] = std::format(
+                    "its name '{}' is also a name the program imports", name);
+                continue;
+            }
+            const auto [found, inserted] = byName.emplace(name, record);
+            if (!inserted) {
+                namedTypeWhy_[found->second] = std::format(
+                    "two different types the program uses are both named '{}'", name);
+                namedTypeWhy_[record] = namedTypeWhy_[found->second];
+            }
+        }
+    }
+
+    /// Puts the declarations in an order a `type` statement can be read in: a field type's
+    /// declaration first. A type that mentions itself is the one cycle a declaration can write
+    /// (`type Node = { children: Node[] }`); a cycle between two types is refused, because
+    /// neither can be written before the other.
+    void orderNamedTypes() {
+        namedTypeOrder_.clear();
+        std::vector<const StructType *> stack;
+        std::unordered_set<const StructType *> onStack;
+        std::unordered_set<const StructType *> placed;
+        for (const StructType *record : namedTypeRecords_) {
+            placeNamedType(record, stack, onStack, placed);
+        }
+    }
+
+    void placeNamedType(
+        const StructType *record, std::vector<const StructType *> &stack,
+        std::unordered_set<const StructType *> &onStack,
+        std::unordered_set<const StructType *> &placed) {
+        if (record == nullptr || namedTypeWhy_.contains(record) || placed.contains(record)) {
+            return;
+        }
+        if (!namedTypeUsed_.contains(record)) {
+            return; // the program never writes its name
+        }
+        if (onStack.contains(record)) {
+            // The type is already being declared, so this closes a cycle. It is a legal one only
+            // when the type names itself: the declaration's own name is in scope before its
+            // fields are read. Any other cycle has no first declaration.
+            if (stack.empty() || stack.back() != record) {
+                for (const StructType *member : stack) {
+                    if (!namedTypeWhy_.contains(member)) {
+                        namedTypeWhy_[member] =
+                            "it is one of a cycle of type declarations, which has no first";
+                    }
+                }
+                namedTypeWhy_[record] =
+                    "it is one of a cycle of type declarations, which has no first";
+            }
+            return;
+        }
+        stack.push_back(record);
+        onStack.insert(record);
+        for (size_t i = 0; i < record->size(); ++i) {
+            // Only a named type needs a declaration of its own; an array, a tuple or an anonymous
+            // struct is written inside this one and its members are placed here.
+            placeInside(record->typeAt(i), stack, onStack, placed);
+        }
+        stack.pop_back();
+        onStack.erase(record);
+        placed.insert(record);
+        if (!namedTypeWhy_.contains(record)) {
+            namedTypeOrder_.push_back(record);
+        }
+    }
+
+    /// Places the named types a non-named type mentions, in order.
+    void placeInside(
+        const Type *type, std::vector<const StructType *> &stack,
+        std::unordered_set<const StructType *> &onStack,
+        std::unordered_set<const StructType *> &placed) {
+        if (type == nullptr) {
+            return;
+        }
+        switch (type->code()) {
+        case TypeCode::Array:
+            placeInside(static_cast<const ArrayType *>(type)->elemType(), stack, onStack, placed);
+            return;
+        case TypeCode::Tuple: {
+            const auto *tuple = static_cast<const TupleType *>(type);
+            for (size_t i = 0; i < tuple->size(); ++i) {
+                placeInside(tuple->typeAt(i), stack, onStack, placed);
+            }
+            return;
+        }
+        case TypeCode::Struct: {
+            const auto *record = static_cast<const StructType *>(type);
+            if (record->named()) {
+                placeNamedType(record, stack, onStack, placed);
+                return;
+            }
+            for (size_t i = 0; i < record->size(); ++i) {
+                placeInside(record->typeAt(i), stack, onStack, placed);
+            }
+            return;
+        }
+        default:
+            return;
+        }
+    }
+
+    /// The `type` statement for a named struct type: the name it is printed by, and the field
+    /// table the type itself carries.
+    std::string namedTypeText(const StructType *record) {
+        std::string text = "type " + record->decl()->name() + " = { ";
+        for (size_t i = 0; i < record->size(); ++i) {
+            text += (i == 0 ? "" : ", ");
+            text += std::string(record->fieldName(i)) + ": " + writtenTypeText(record->typeAt(i));
+        }
+        text += " }";
+        return text;
+    }
+
+    /// Whether the printed program can declare `record`: the test `checkType` uses, so a type is
+    /// accepted exactly when its declaration is written.
+    bool namedTypePrintable(const StructType *record) const {
+        return namedTypeSeen_.contains(record) && !namedTypeWhy_.contains(record);
+    }
+
+    /// Records the named types `type` writes, and the ones their declarations need: a field whose
+    /// type is named makes that type's own declaration part of this one.
+    void markNamedTypesUsed(const Type *type) {
+        if (type == nullptr) {
+            return;
+        }
+        switch (type->code()) {
+        case TypeCode::Array:
+            markNamedTypesUsed(static_cast<const ArrayType *>(type)->elemType());
+            return;
+        case TypeCode::Tuple: {
+            const auto *tuple = static_cast<const TupleType *>(type);
+            for (size_t i = 0; i < tuple->size(); ++i) {
+                markNamedTypesUsed(tuple->typeAt(i));
+            }
+            return;
+        }
+        case TypeCode::Struct: {
+            const auto *record = static_cast<const StructType *>(type);
+            if (!record->named()) {
+                for (size_t i = 0; i < record->size(); ++i) {
+                    markNamedTypesUsed(record->typeAt(i));
+                }
+                return;
+            }
+            if (!namedTypeUsed_.insert(record).second || namedTypeWhy_.contains(record)) {
+                return;
+            }
+            for (size_t i = 0; i < record->size(); ++i) {
+                markNamedTypesUsed(record->typeAt(i));
+            }
+            return;
+        }
+        case TypeCode::Function: {
+            const auto *function = static_cast<const FunctionType *>(type);
+            for (size_t i = 0; i < function->normTypesCount(); ++i) {
+                markNamedTypesUsed(function->normTypeAt(i));
+            }
+            if (function->hasExitType()) {
+                markNamedTypesUsed(function->exitType());
+            }
+            return;
+        }
+        default:
+            return;
+        }
+    }
+
+    /// `typeText` for a position the program writes: the named types it names are the ones the
+    /// header declares.
+    std::string writtenTypeText(const Type *type) {
+        markNamedTypesUsed(type);
+        return typeText(type);
+    }
+
+    /// Why `record` has no declaration in the printed program, for the refusal that keeps it.
+    std::string namedTypeObstacleOf(const StructType *record) const {
+        const auto found = namedTypeWhy_.find(record);
+        if (found != namedTypeWhy_.end()) {
+            return found->second;
+        }
+        return "the printer did not reach it";
     }
 
     /// A region's statements and the value it yields. `lines` already carry their indentation;
@@ -1403,6 +1898,9 @@ class CmlPrinter {
     void printStatements() {
         gc_node_ref_t tail = camel::execute::resolveRuntimeTailValueRef(graph_);
         bool tailPrintedAsStatement = false;
+        // The names of one function's block are not the names of the next: two functions may both
+        // bind `base` (the corpus' `linear.cml` does), and only one block's names are in scope.
+        blockNames_.clear();
 
         // A block with no chain of its own runs the write it yields only because the value is
         // taken from that write: the source ends such a body with the write, and `return v` after
@@ -1448,6 +1946,8 @@ class CmlPrinter {
         auto savedParams   = params_;
         auto savedDeclared = declared_;
         auto savedCells    = cells_;
+        auto savedBlockNames = std::move(blockNames_);
+        blockNames_.clear();
         auto savedHeld     = std::move(held_);
         auto savedHeldNames = std::move(heldNames_);
         auto savedLines    = std::move(lines_);
@@ -1509,6 +2009,7 @@ class CmlPrinter {
         params_    = std::move(savedParams);
         declared_  = std::move(savedDeclared);
         cells_     = std::move(savedCells);
+        blockNames_ = std::move(savedBlockNames);
         held_      = std::move(savedHeld);
         heldNames_ = std::move(savedHeldNames);
         indent_    = savedIndent;
@@ -1803,6 +2304,19 @@ class CmlPrinter {
         // answer with the name the declaration is about to give the node.
         if (named) {
             const std::string name = sourceName(ref);
+            // Two nodes of one block with one source name: the printed program would declare the
+            // name twice in that block, which is a `Redeclaration`. A `static for` over the fields
+            // of a type expands one source binding once per field and the graph keeps the name on
+            // every one of them (`parse/rulings/static_for_head_names.cml` printed `let v` twice).
+            if (!blockNames_.insert(name).second) {
+                fail(
+                    ref,
+                    std::format(
+                        "two bindings of the name '{}' in one block: one expansion of a `static "
+                        "for` keeps the source name on every copy, and a block cannot declare one "
+                        "name twice",
+                        name));
+            }
             const Expr value       = expression(ref);
             declared_[ref]         = name;
             emit(std::format(
@@ -1847,7 +2361,8 @@ class CmlPrinter {
                     tailPrintedAsStatement = true;
                 }
             }
-        } else if ((users > 1 || needsAnnotation(ref)) && !typeWrittenByUse(ref)) {
+        } else if ((users > 1 || needsAnnotation(ref)) && !typeWrittenByUse(ref) &&
+                   !(patternRefs_.contains(ref) && users <= 1)) {
             const Expr value       = expression(ref);
             const std::string name = freshName();
             declared_[ref]         = name;
@@ -1902,6 +2417,14 @@ class CmlPrinter {
         std::string name = sourceName(ref);
         if (name.empty()) {
             name = freshName();
+        } else if (!blockNames_.insert(name).second) {
+            // The same rule as a `let`: a block cannot declare one name twice.
+            fail(
+                ref,
+                std::format(
+                    "two bindings of the name '{}' in one block: a `var` and the bindings beside "
+                    "it share the source's names, and a block declares one name once",
+                    name));
         }
         const Expr initial = expression(inputs.front());
         cells_[ref]        = name;
@@ -2125,8 +2648,47 @@ class CmlPrinter {
                 fail(ref, "a cast without an input or a type");
             }
             Expr inner = expression(inputs.front());
+            // The entrance of an unnamed struct value into a named struct type is a conversion the
+            // compiler inserts by itself wherever the type is known -- a return type, an annotated
+            // `let`, a parameter, a field. Writing it is not the same graph: `return ({ x: 0 } as
+            // V)` folds to a literal of `V`, while the source has the literal and the conversion,
+            // so the printed program is one node short (`consistency/operator_overloads`
+            // `plus_b.cml`). The cast is dropped and the position it stands in supplies the type;
+            // a conversion between two named types (which the language only writes) stays.
+            const camel::runtime::GCNode *source = graph_->node(inputs.front());
+            const Type *from = source != nullptr ? source->dataType() : nullptr;
+            if (from != nullptr && from->code() == TypeCode::Struct &&
+                static_cast<const StructType *>(node->dataType())->named() &&
+                camel::core::type::relateStructs(
+                    static_cast<const StructType *>(node->dataType()),
+                    static_cast<const StructType *>(from)) !=
+                    camel::core::type::StructRelation::None) {
+                // ... but only when the value already *is* the type, field for field: the position
+                // supplies the conversion, and a position does not build the fields of a value
+                // that has none. A struct with no fields converted to one with a field has no
+                // spelling at all (`({  } as Inner)` is `LiteralNotRepresentable`,
+                // `compile/array_shape/rank_zero_slot_nested_field.cml`), so it is refused rather
+                // than written as the empty literal it is not.
+                const auto *target = static_cast<const StructType *>(node->dataType());
+                const auto *value  = static_cast<const StructType *>(from);
+                bool sameFields    = target->size() == value->size();
+                for (size_t i = 0; sameFields && i < target->size(); ++i) {
+                    sameFields = std::string_view(target->fieldName(i)) == value->fieldName(i) &&
+                                 target->typeAt(i) == value->typeAt(i);
+                }
+                if (sameFields) {
+                    return inner;
+                }
+                fail(
+                    ref,
+                    std::format(
+                        "a conversion of '{}' to the named type '{}': the two do not have the same "
+                        "fields, and the language has no spelling for the conversion itself",
+                        value->toString(),
+                        target->toString()));
+            }
             return {
-                std::format("({} as {})", parenthesize(inner, 80), typeText(node->dataType())),
+                std::format("({} as {})", parenthesize(inner, 80), writtenTypeText(node->dataType())),
                 80};
         }
         case camel::runtime::GCNodeKind::Accs:
@@ -2419,11 +2981,11 @@ class CmlPrinter {
             if (type->normIsVarAt(i)) {
                 text += "var ";
             }
-            text += (i ? ", " : "") + name + ": " + typeText(type->normTypeAt(i));
+            text += (i ? ", " : "") + name + ": " + writtenTypeText(type->normTypeAt(i));
         }
         text += ")";
         if (type->hasExitType()) {
-            text += ": " + typeText(type->exitType());
+            text += ": " + writtenTypeText(type->exitType());
         }
         text += " => " + blockText(body, body.sync);
 
@@ -2587,6 +3149,42 @@ class CmlPrinter {
             }
             items[at]  = expression(with[i]).text;
             filled[at] = true;
+            // A field of a struct type written with a struct value of another shape: the position
+            // converts a literal that *is* the field's type (`{ x: 1, y: 2 }` as a `Point`), and it
+            // converts nothing else. A value with no fields where the field has one has no
+            // spelling here at all and would be printed as the empty literal it is not
+            // (`compile/array_shape/rank_zero_slot_nested_field.cml` printed `{ inner: {  } }` for
+            // an `Inner`, and the front end answered `DeclaredTypeMismatch`).
+            if (type->code() == TypeCode::Struct) {
+                const auto *record    = static_cast<const StructType *>(type);
+                const camel::runtime::GCNode *written = graph_->node(with[i]);
+                const Type *writtenType = written != nullptr ? written->dataType() : nullptr;
+                const Type *fieldType   = record->typeAt(at);
+                if (writtenType != nullptr && fieldType != nullptr &&
+                    writtenType->code() == TypeCode::Struct &&
+                    fieldType->code() == TypeCode::Struct) {
+                    const auto *writtenRecord = static_cast<const StructType *>(writtenType);
+                    const auto *fieldRecord    = static_cast<const StructType *>(fieldType);
+                    bool sameFields            = writtenRecord->size() == fieldRecord->size();
+                    for (size_t k = 0; sameFields && k < fieldRecord->size(); ++k) {
+                        sameFields =
+                            std::string_view(writtenRecord->fieldName(k)) ==
+                                fieldRecord->fieldName(k) &&
+                            writtenRecord->typeAt(k) == fieldRecord->typeAt(k);
+                    }
+                    if (!sameFields) {
+                        fail(
+                            ref,
+                            std::format(
+                                "the field '{}' is written with a value of type '{}', which is not "
+                                "'{}': a literal becomes the field's type by having its fields, and "
+                                "this one has no spelling for that conversion",
+                                record->fieldName(at),
+                                writtenType->toString(),
+                                fieldType->toString()));
+                    }
+                }
+            }
             const camel::runtime::GCNode *written = graph_->node(with[i]);
             if (written != nullptr && written->kind == camel::runtime::GCNodeKind::Data &&
                 written->dataIndex < 0) {
@@ -2696,6 +3294,20 @@ class CmlPrinter {
             if (inputs.size() != 2 && inputs.size() != 3) {
                 fail(ref, "an index without a value and an index");
             }
+            // The language's `[]` takes an array or a string; a subscript on a struct exists only
+            // because the program declared an overload with its own signature, and a body-less
+            // declaration is not written by this printer. The printed program would resolve `[]`
+            // to the built-in and refuse the call (`compile/native/idx_field_missing.cml`: the
+            // source says so itself, and `s['y']` is `NoMatchingFunction` when recompiled).
+            const camel::runtime::GCNode *indexed = graph_->node(inputs[0]);
+            const Type *indexedType = indexed != nullptr ? indexed->dataType() : nullptr;
+            if (indexedType != nullptr && indexedType->code() == TypeCode::Struct) {
+                fail(
+                    ref,
+                    "a subscript on a struct: the '[]' of the language takes an array or a string, "
+                    "so this one comes from a declaration in this program, and the printed program "
+                    "would resolve '[]' to the built-in and refuse the call");
+            }
             Expr base  = expression(inputs[0]);
             Expr index = expression(inputs[1]);
             // The position's own axis is the third word, and the dimensions before it are kept
@@ -2768,22 +3380,43 @@ class CmlPrinter {
             uri.starts_with(":op/") &&
             camel::core::operatorSymbolOf(
                 camel::core::OperatorTable::instance().groupOf(uri)) != nullptr;
-        const bool writable = !languageOwned && callForm.has_value() && callForm->withCount == 0 &&
-                              (callForm->declaredByModule || uri.starts_with(":"));
+        const bool writable = !languageOwned && callForm.has_value() &&
+                              (callForm->declaredByModule || callForm->exported ||
+                               uri.starts_with(":")) &&
+                              // The name has to mean the same thing in the printed file. A program
+                              // that declares a function of that name shadows the module's, and a
+                              // bare `map<f>(xs)` would then call the program's own `map`: measured
+                              // on `consistency/comprehension/shadowed.cml`, whose `map` returns a
+                              // string and where the printed call only failed because the argument
+                              // types happened not to fit.
+                              !writtenFunctionNames_.contains(callForm->name);
         if (writable) {
             name = callForm->name;
-        } else if (callForm.has_value() && callForm->kernelDeclaration && !languageOwned) {
-            // There is a declaration and it has a name, but not one a program writes: a body-less
-            // declaration is the module's own kernel (`array:sum_l` is the `sum_kernel` behind
-            // `array::sum`), and the language never writes a kernel's name. Naming the kernel says
-            // why the operator stays in this column, which a refusal by the operator alone does
-            // not -- and an invented exported name would decide semantics for the author who wrote
-            // the kernel private (design principles 6.4).
+        } else if (callForm.has_value() && callForm->kernelDeclaration && !languageOwned &&
+                   !callForm->exported) {
+            // There is a declaration and it has a name, but the module did not export it: a
+            // body-less declaration the module keeps to itself is the kernel behind an `#impl`
+            // function (`array:sum_l` is the `sum_kernel` behind `array::sum`), and a program of
+            // the language cannot write that name. A name whose module *does* export it is a call
+            // (`shl` is exported with no body, and `1->shl<4>` is what the source writes), so the
+            // test is the export and not the body: "body-less" says where the implementation is,
+            // "private" says whether a program may write the name, and they are different facts
+            // (the author's ruling of 2026-11-03; design principles 6.4).
             fail(
                 ref,
                 std::format(
                     "the operator '{}' without a printable name: '{}' is a body-less kernel "
                     "declaration, and no program writes that name",
+                    uri,
+                    callForm->name));
+        } else if (callForm.has_value() &&
+                   (callForm->declaredByModule || callForm->exported) &&
+                   writtenFunctionNames_.contains(callForm->name)) {
+            fail(
+                ref,
+                std::format(
+                    "the operator '{}' is written by the name '{}', and this program declares a "
+                    "function of that name too: the printed file would call the program's one",
                     uri,
                     callForm->name));
         } else {
@@ -2832,15 +3465,21 @@ class CmlPrinter {
         std::string text = name;
         const auto withArgs = graph_->withInputsOf(ref);
         if (!withArgs.empty()) {
-            // The one configuration this printer writes is the format of a print: `print<'{}-{}'>`,
-            // `println<'{:.2f}'>` -- a string the call holds and the source writes in `<>`. Any
-            // other configuration (`:mark/map_arr`'s function value, written `xs->map<f>` by the
-            // source) has no spelling here, and writing the call without it would be a print that
-            // dropped the configuration: it is refused by name instead.
+            // The one configuration this printer used to write was the format of a print:
+            // `print<'{}-{}'>`, `println<'{:.2f}'>` -- a string the call holds and the source writes
+            // in `<>`. A declared operator that states a `with` parameter of its own (`shl` is
+            // `with <count: int>`, written `1->shl<4>`) holds a value there, and a value the
+            // printer can write is written: a literal or a string. Anything else (`:mark/map_arr`'s
+            // function value, written `xs->map<f>` by the source) has no spelling here, and writing
+            // the call without it would be a print that dropped the configuration: it is refused by
+            // name instead.
             for (const gc_node_ref_t one : withArgs) {
                 const camel::runtime::GCNode *argument = graph_->node(one);
                 const Type *type = argument != nullptr ? argument->dataType() : nullptr;
-                if (type == nullptr || type->code() != TypeCode::String) {
+                const bool literal =
+                    argument != nullptr && argument->kind == camel::runtime::GCNodeKind::Data &&
+                    argument->dataIndex < 0;
+                if (type == nullptr || (type->code() != TypeCode::String && !literal)) {
                     fail(
                         ref,
                         "a call whose configuration is not a format string: the printer writes "
@@ -2870,7 +3509,7 @@ class CmlPrinter {
         if (symbol == "+" || symbol == "-") {
             return 40;
         }
-        if (symbol == "*" || symbol == "/" || symbol == "%") {
+        if (symbol == "*" || symbol == "/" || symbol == "%" || symbol == "@") {
             return 50;
         }
         if (symbol == "^") {
@@ -3163,6 +3802,20 @@ class CmlPrinter {
         case TypeCode::Struct: {
             const auto *value  = fromSlot<Struct *>(slot);
             const auto *record = static_cast<const StructType *>(type);
+            // A template value of a struct type that holds no struct: the fields the type has are
+            // not in the value, so the literal written from it is `{  }` -- an empty struct where
+            // the type has fields, which the front end refuses (`DeclaredTypeMismatch`,
+            // `compile/array_shape/rank_zero_slot_nested_field.cml`). No spelling of the type is a
+            // value that has none of its fields.
+            if (value == nullptr && record->size() > 0) {
+                fail(
+                    camel::runtime::kInvalidNodeRef,
+                    std::format(
+                        "a template value of '{}' that holds no struct: the literal written from it "
+                        "would be an empty struct where the type has {} field(s)",
+                        record->toString(),
+                        record->size()));
+            }
             std::string text   = "{ ";
             for (size_t i = 0; value != nullptr && i < record->size(); ++i) {
                 text += (i ? ", " : "") + std::string(record->fieldName(i)) + ": " +
@@ -3234,6 +3887,14 @@ class CmlPrinter {
         }
         const std::string localName =
             spaceParts.empty() ? name : name.substr(name.rfind("::") + 2);
+        // A function a program declared as an operator is stored under the operator's reserved
+        // name (`func operator +` builds the graph `__add__`), and that name is not source a
+        // program can write back: `__add__` is a reserved identifier (`ReservedIdentifier`). The
+        // symbol the declaration used is the name the program writes, so `operator +` is printed.
+        std::string writtenName = localName;
+        if (const char *symbol = camel::core::operatorSymbolOf(localName); symbol != nullptr) {
+            writtenName = std::string("operator ") + symbol;
+        }
         std::string signature;
         if (type->withTypesCount() > 0) {
             std::string clause = "with <";
@@ -3242,12 +3903,12 @@ class CmlPrinter {
                 if (!isIdentifier(withName)) {
                     withName = std::format("w{}", i);
                 }
-                clause += (i ? ", " : "") + withName + ": " + typeText(type->withTypeAt(i));
+                clause += (i ? ", " : "") + withName + ": " + writtenTypeText(type->withTypeAt(i));
             }
             clause += ">";
             emit(headerIndent_ + clause);
         }
-        signature += "func " + localName + "(";
+        signature += "func " + writtenName + "(";
         for (size_t i = 0; i < type->normTypesCount(); ++i) {
             signature += i ? ", " : "";
             if (type->normIsVarAt(i)) {
@@ -3257,11 +3918,11 @@ class CmlPrinter {
             if (!isIdentifier(param)) {
                 param = std::format("p{}", i);
             }
-            signature += param + ": " + typeText(type->normTypeAt(i));
+            signature += param + ": " + writtenTypeText(type->normTypeAt(i));
         }
         signature += ")";
         if (type->hasExitType()) {
-            signature += ": " + typeText(type->exitType());
+            signature += ": " + writtenTypeText(type->exitType());
         }
         // A function graph whose body has a control edge between its own nodes was written with
         // a body that is a sync block: the modifier says so, and it is the only mark of it.

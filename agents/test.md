@@ -16,6 +16,7 @@
   **The three stdout assertions, and what each one answers.** `expect_stdout_exact` -- is the whole output this text, character for character. `expect_stdout_contains` -- does the output contain this substring, anywhere. `expect_stdout_matches` -- does **some line** of the output match this regular expression (a search, line by line, like `contains`; `^`/`$` anchor a line, and an unanchored pattern is a substring of a line -- `24\.0` passes on `width 24.0 height 7`, `^24\.0$` does not). A pattern that does not compile, an empty pattern, and `expect_stdout_matches` written beside `expect_stdout_contains`/`expect_stdout_exact` are **plan errors** (`exit 2`, `plan:line`, nothing started): a plan states one thing about its stdout, not two whose order nobody wrote down. A legal pattern that matches nothing is a normal red, and prints the pattern, that it is legal, and the head of the output.
 - When you add a plan field, add it to the runner and to `docs/test-plans.md` in the same change; when you remove one, remove it from both and fix the plans that use it.
 - **A layer's size is two numbers, and every run prints both**: `[tier] milestone: 27 plan file(s), 3330 declared test entries, 3404 started`. Read the second one as "what this run covers" and the first as "what the files declare"; quoting either alone as "the layer" is how `3330` and `3404` were both read as the same thing. `declared > started` is a defect (an entry that neither ran nor was skipped, so it is in no summary) and fails the run; `declared < started` is normal (`backends` expands an entry, a `compare_to` companion joins). Both are counted, never computed -- `backends.length` multiplication reads `7339` for a layer that starts `3404`.
+- **"Full" is not a layer; say which one.** The same tree answers two very different numbers: the whole-tree **fast** layer (`--plan all --tier fast`) is the acceptance reading -- 8447 total, 8435 pass, 0 fail, 10 skip, 2 known failures on 2026-11-02, which is what `develop` itself reads -- while `--tier all` over the whole tree is 11874 and adds the milestone, perf and stress plans that "Run the plans your change touches" says a lane must not start. A report that says "the full suite" without naming the tier cannot be compared with another report, and the two numbers have been read as one thing. Quote the tier, the total, and the pass/fail beside it.
 - **A guard must be able to fail.** Say in its comment which change to the tree makes it red, and record that red run (a plan case, a test, or the report with the failing output). A number a verdict rests on comes from the tree — the files, the parser, the registered operators — never from a literal list inside the guard; where a literal is a pin, a plan pins it so a change is visible. A guard that examined zero things fails; it never reports a pass.
 - **Pin the words that separate the cases, not a word both of them can produce.** `bf16` contains `f16`, and the reduced-precision diagnostic prints one help paragraph for both types ("bf16 and f16 are floating types of the language"), so `expect_output_contains = ["bf16"]` stays green even when the message names `f16` — a guard that cannot fail, measured: the bf16 case swapped to `f16` still passed 44/0. Pin the phrase only one of them can print (`element type 'f16'`, `element type 'bf16'`) and record the swap that reds it (43/1). The same trap is any short word that is a substring of its sibling: a pin of `f32` is satisfied by `f32[]`, and a pin of `NaN` is satisfied by `NaN` in a legend.
 - **A probe of a run-time overflow on a narrow type cannot be written as a literal expression.** `let x: f16 = 65504.0 + 65504.0` is refused at compile time ("the literal '65504.0 + 65504.0' cannot be represented as type 'f16': the value 131008 is out of range"), because the constant folders check the folded value against the declared type — the infinity rule of the element type never runs. Put one operand in a variable (`let max: f16 = 65504.0; let over: f16 = max + max`) so the sum is a run-time operation; that is what answers infinity rather than saturating.
@@ -84,6 +85,19 @@ Three zero-hit readings on 2026-11-02 were all the same mistake, and none of the
 
 **A zero is not a reading until the search space has been shown to contain the thing.** State the command, the file or the ref it read, and which tree that ref or file belongs to.
 
+## A timeout budget is a change like any other
+
+A `timeout_ms` in a plan file is not housekeeping: it decides whether a slow machine reports a red or
+a slower red. So it goes through a lane branch like code does, and its commit says **which red goes
+away because of it and what the two-core CI measured in CPU**, because those are the two numbers that
+tell a budget that was too small from a test that got slow.
+
+A plan edited in the main checkout, or in someone else's worktree, is a change with no author and no
+reading: on 2026-11-02 five plan files with raised timeouts appeared in the main checkout that way
+(`diag_catalog`, `new_values`, `case_ledger`, `plan_inventory`, `trans/cpp`), quoting two-core CI
+figures in their comments. The content may well be right; it still cannot land, because nobody can say
+which red it removed. The patch is kept outside the tree, and whoever wrote it re-does it on a lane.
+
 ## `-NoBuild` after a merge: `exit 4` is the runner refusing, not a failing test
 
 After a merge the tree no longer matches the installed binary and `out/latest/stdlib`, and
@@ -99,3 +113,30 @@ Re-run without -NoBuild (it builds this tree and stamps the install), or pass -A
 a run that did not happen, and reading it as a failure sends you off to diagnose a test that never
 started. This is the instrument doing its job - it refused a run of the old binary that would have
 produced a green about a tree nobody built - so it belongs here as correct behaviour, not as a trap.
+
+A red also changes hands when the bookkeeping changes: the milestone layer s last red,
+`rules.every_exported_rule_enters_the_check`, disappeared in a merge that touched neither the test
+nor its plan file (`git log 4fa772787..d526043da -- test/plans/feat/modules/rules.plan.toml` is
+empty, and the plan runs 173/173 on `2227c21c1`), because `a01fcdfdc` changed how `known_fail` is
+read. **A count belongs to a tip and to the rules that counted it.**
+## `got null` is not a timeout
+
+The runner writes `expected exit 0, got null` when the process died on a signal and no exit code
+came back. Two marked cases of `transforms.plan.toml` were read as hangs for a day; run bare with a
+timer they take **zero seconds** and return **139**, which is SIGSEGV. **Run it bare once before
+explaining it:** a `got null` has at least three causes - killed at the timeout, killed by a signal,
+and whatever nobody has seen yet.
+
+## Before asking whether a failure is new, ask whether someone already fixed it elsewhere
+
+`git log --oneline origin/develop..origin/<candidate lane> --grep=<keyword>`. One grep is cheaper
+than an hour of probes: two cases that crashed in `jvp_add` and `jvp_mul` were already repaired on
+`origin/lane-lit2` (`19f0b05e8`, `0aed45eb6`) and the fix had not been merged, so the failure read
+like a new defect in the tree under our hands.
+A green run proves the `GUARD`s it walked past, not the `ASSERT`s it compiled out: `GUARD` is defined before `#ifdef NDEBUG` and its comment says it is alive in the build that ships, while `ASSERT` becomes `((void)0)` under it.
+
+When the instrument gets finer, past agreement has to be rejudged: four `known_fail` notes were audited as `same` while the runner printed `got null` for every signal death, and the moment it could say `SIGSEGV (rc=139, 1.24 s)` the same notes read `different`. A `same` is only as good as the reading it was taken on.
+
+Ask whether a thing is there and the answer is a boolean; ask how many lines carry it and the answer is a reading. A boolean is wrong once and the table is wrong with it: an index said three pages while `Contains` said the new row was already in place, and counting the rows found two.
+
+A probe log that records only `[FAIL] <name> <ms>` can count failures and cannot group them: the first diagnostic line is what turns forty reds into one root cause or ten. Print that line, and print it even when jobs run in parallel.

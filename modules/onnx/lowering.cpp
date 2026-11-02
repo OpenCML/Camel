@@ -1373,7 +1373,8 @@ LoweringRegistry::LoweringRegistry() {
         add(":op/gt_" + t, scalarCompare("Greater", false));
         add(":op/ge_" + t, scalarCompare("GreaterOrEqual", false));
         add(":op/eq_" + t, scalarCompare("Equal", false));
-        add(":op/ne_" + t, scalarCompare("Equal", true));
+        // `:op/ne_*` is gone with the `ne_*` kernels: `!=` is `!(==)` (builder_operators.cpp),
+        // so the not-equal of a scalar is exported as Equal followed by Not, not as a row here.
     }
     add(":op/and", scalarOp("And", 2));
     add(":op/or", scalarOp("Or", 2));

@@ -80,6 +80,11 @@ enum class UnaryOp {
     Gelu, // tanh approximation
     Erf,
     Erfc,
+    /// `!x` on a mask: the one unary operator that is not arithmetic. It is dtype-preserving and
+    /// produces a bool, and it exists so that `a !== b` on arrays can be written `!(a === b)` --
+    /// the same decomposition the scalar `!=` takes once its own `ne` arms are gone. Appended
+    /// last: the name table in elementwise_ops.cpp is indexed by this enumerator.
+    Not,
 };
 
 enum class BinaryOp {

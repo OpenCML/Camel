@@ -181,6 +181,52 @@ class EdgeChecker {
                 declared->toString()));
     }
 
+    /// A node the builder chained inside a `sync` block: it carries the wait that block wrote.
+    /// Every check about a sync edge asks this question, so it is asked in one place -- two
+    /// copies of one condition drift, and these copies had already grown a `GATE` exception on
+    /// only one of them.
+    /// Is this node a statement of a chain: one that runs for its effect or may fault, or a
+    /// structure that contains such statements (a branch, a loop, a call)? Answered from the node
+    /// itself and the operator table, as edges.cn.md 1 and 4.6 define it, not from a marker the
+    /// builder wrote (author ruling 2026-11-02 04:50: a marker that can be derived should not be
+    /// stored).
+    bool isChainStatement(gc_node_ref_t ref) const {
+        const GCNode *node = graph_.node(ref);
+        if (node == nullptr) {
+            return false;
+        }
+        switch (node->kind) {
+        case GCNodeKind::Brch:
+        case GCNodeKind::Loop:
+        case GCNodeKind::Call:
+            return true;
+        case GCNodeKind::Oper: {
+            const auto *body = graph_.nodeBodyAs<GCOperBody>(ref);
+            if (body == nullptr || body->oper == camel::core::kNoOper) {
+                return false;
+            }
+            const auto traits = camel::core::OperatorTable::instance().find(body->oper);
+            if (!traits.has_value()) {
+                return false;
+            }
+            return !camel::core::OperatorTable::instance().isPure(body->oper) ||
+                   camel::core::OperatorTable::instance().hasExternalEffect(body->oper) ||
+                   traits->mayFault;
+        }
+        default:
+            return false;
+        }
+    }
+    static bool isWaitingCarrier(const GCNode *node) {
+        return (node->flags & kGCNodeFlagSyncStatement) != 0;
+    }
+    /// The same question at a sync edge's end: a `GATE` may stand there instead of a statement,
+    /// because a block's value node may be one the block does not own (edges.cn.md 5.3).
+    static bool isWaitingCarrierOrGate(const GCNode *node) {
+        return isWaitingCarrier(node) || node->kind == GCNodeKind::Gate;
+    }
+
+
     /// The other half of the structural rule of 4.6: a sync edge joins two statements one `sync`
     /// block writes directly -- or the block's chain tail to the block's value -- and nothing else.
     /// The builder records that fact on each node it chains (kGCNodeFlagSyncStatement), so the
@@ -224,7 +270,7 @@ class EdgeChecker {
                 bad("chains a node to itself");
                 continue;
             }
-            if ((user->flags & kGCNodeFlagSyncStatement) == 0 && user->kind != GCNodeKind::Gate) {
+            if (!isWaitingCarrierOrGate(user)) {
                 bad(std::format(
                     "ends on a node no `sync` block wrote (kind {}, flags {}, data type '{}')",
                     static_cast<int>(user->kind),
@@ -232,7 +278,7 @@ class EdgeChecker {
                     user->dataType() != nullptr ? user->dataType()->toString() : "-"));
                 continue;
             }
-            if ((pred->flags & kGCNodeFlagSyncStatement) == 0) {
+            if (!isWaitingCarrier(pred)) {
                 bad(std::format(
                     "starts at a node no `sync` block wrote (kind {}, flags {}, data type '{}')",
                     static_cast<int>(pred->kind),
@@ -301,8 +347,7 @@ class EdgeChecker {
             if (user->kind == GCNodeKind::Dead || pred->kind == GCNodeKind::Dead) {
                 continue; // reported by checkSyncEdges
             }
-            if ((user->flags & kGCNodeFlagSyncStatement) == 0 ||
-                (pred->flags & kGCNodeFlagSyncStatement) == 0) {
+            if (!isWaitingCarrier(user) || !isWaitingCarrier(pred)) {
                 continue; // reported by checkSyncEdges
             }
             if (controlBlockOf(edge.user) != controlBlockOf(edge.pred)) {

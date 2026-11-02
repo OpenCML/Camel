@@ -443,6 +443,11 @@ template <UnaryOp Op, typename T> inline T unaryInt(T x) {
         return x < T{} ? static_cast<T>(-x) : x;
     } else if constexpr (Op == UnaryOp::Relu) {
         return relu(x);
+    } else if constexpr (Op == UnaryOp::Not) {
+        // The one dtype-preserving operator whose answer is not arithmetic: `!x` on a mask. A
+        // bool is the type this reaches in practice; every other T is the identity below by the
+        // same rule that keeps the fallback row for an operator nobody added a loop for.
+        return static_cast<T>(!x);
     } else {
         return x;
     }
@@ -464,6 +469,10 @@ template <typename T> void runUnaryInt(UnaryOp op, const T *src, T *dst, int64_t
         return unaryIntLoop<UnaryOp::Abs>(src, dst, count);
     case UnaryOp::Relu:
         return unaryIntLoop<UnaryOp::Relu>(src, dst, count);
+    case UnaryOp::Not:
+        // `!x` element by element: the operand is a bool mask and the result is one of the same
+        // shape, so the loop is the dtype-preserving one and nothing is computed in f32.
+        return unaryIntLoop<UnaryOp::Not>(src, dst, count);
     default:
         // Not reached: every other operator produces a float result (unaryProducesFloat).
         throw std::logic_error("integer unary kernel called for a float-producing operator");
@@ -495,6 +504,7 @@ int64_t unaryGrain(UnaryOp op) {
     case UnaryOp::Neg:
     case UnaryOp::Abs:
     case UnaryOp::Relu:
+    case UnaryOp::Not:
         return kElementGrain;
     default:
         return grainForWork(kNsPerFloat * 8.0);
@@ -553,6 +563,11 @@ void runUnaryF64(UnaryOp op, const double *src, double *dst, int64_t count) {
             case UnaryOp::Erfc:
                 dst[i] = std::erfc(x);
                 break;
+            case UnaryOp::Not:
+                // Unreachable: `not` produces a bool, so it never runs in the float loops. It is
+                // named here so that adding an operator to the enum cannot silently fall through
+                // a switch that has no default.
+                throw std::logic_error("`not` has no float loop: its result is a bool");
             }
         }
     });
@@ -600,7 +615,8 @@ ScalarOperand ScalarOperand::fromSlot(TypeCode code, slot_t slot) {
 }
 
 bool unaryProducesFloat(UnaryOp op) {
-    return op != UnaryOp::Neg && op != UnaryOp::Abs && op != UnaryOp::Relu;
+    return op != UnaryOp::Neg && op != UnaryOp::Abs && op != UnaryOp::Relu &&
+           op != UnaryOp::Not;
 }
 
 bool binaryProducesFloat(BinaryOp op) { return op == BinaryOp::Pow; }

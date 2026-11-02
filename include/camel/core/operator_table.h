@@ -532,6 +532,14 @@ class OperatorTable {
         /// this table and no name in the language, which is a different thing from an operator
         /// nobody declared, so the printer says which (design principles 6.4).
         bool kernelDeclaration = false;
+        /// Whether the module that declared this shape exports the name. A body-less declaration
+        /// is not the same thing as a private one: the body says where the implementation is, the
+        /// export says whether a program may write the name (`shl` is `#op('math:shl_i')` with no
+        /// body and `export func shl::<T>(x: T)`, so `1->shl<4>` is a call a program writes; the
+        /// kernel of an `#impl` function is declared without exporting and is not). Filled at
+        /// export, so the printer reads a fact about the program rather than guessing one from the
+        /// declaration's spelling.
+        bool exported = false;
     };
 
     /// Records the call shape of `uri`, from the declaration that made it an operator. A second
@@ -540,6 +548,13 @@ class OperatorTable {
     /// written in), and the name is the first declaration's, since one operator may be declared
     /// under two spellings (`:op/itol` is both `int` and `i64`).
     void declareCallForm(std::string_view uri, const CallForm &form);
+
+    /// Records that a module exported the operator `uri`: a program of that module may write the
+    /// name, so a body-less declaration whose shape is this one is a call the printer can write
+    /// (see `CallForm::exported`). A URI the table has no shape for is left alone: the export
+    /// happens while modules load, and a module of the core exports operators whose shape comes
+    /// from somewhere else.
+    void markExported(std::string_view uri);
 
     /// The call shape of `uri`, or nothing when no declaration of it is a named call (an operator
     /// written with a sign, or one of the core's conversions that is declared as a call of a type
