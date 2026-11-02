@@ -11,6 +11,14 @@
 // remat(h)(x, y) * y`, where the marked graph is a call *inside* the graph being split -- needs the
 // mark to be on the call's callee when `split` walks the lifted body, which is what the compile-time
 // instantiation step gives; until then the cut reads the graph it is handed.
+//
+// The closure ABI (author, 2026-11-02) is what the four lines below read. `split(lifted)` is the
+// forward function; `plainForward(3.0, 2.0)` answers the value and a linear map closed over that
+// call's residuals, so the map takes the direction alone -- `plainBackward(1.0, 0.0)` for df/dx and
+// `plainBackward(0.0, 1.0)` for df/dy. Under the binary-tuple ABI the same case destructured
+// `split` into `(forward, backward)` and passed the residual bundle with the direction:
+// `plainBackward(plainResiduals, 1.0, 0.0)`. Nothing about the four numbers changed; the residuals
+// stopped being a value the program holds.
 import rulesets.jvp
 import { jvp, remat, split } from transforms
 
@@ -19,17 +27,16 @@ func h(x: float, y: float): float {
 }
 
 func main(): int sync {
-    let lifted                       = jvp(h)
-    let (plainForward, plainBackward) = split(lifted)
-    let (plainValue, plainResiduals)  = plainForward(3.0, 2.0)
+    let lifted                       = split(jvp(h))
+    let (plainValue, plainBackward)  = lifted(3.0, 2.0)
     'split_remat plain value={} dfdx={} dfdy={}'->format<
-        plainValue, plainBackward(plainResiduals, 1.0, 0.0), plainBackward(plainResiduals, 0.0, 1.0)
+        plainValue, plainBackward(1.0, 0.0), plainBackward(0.0, 1.0)
     >->println
-    let marked                       = remat(lifted)
-    let (markForward, markBackward) = split(marked)
-    let (markValue, markResiduals)  = markForward(3.0, 2.0)
+    let marked                       = remat(jvp(h))
+    let markForward                  = split(marked)
+    let (markValue, markBackward)    = markForward(3.0, 2.0)
     'split_remat marked value={} dfdx={} dfdy={}'->format<
-        markValue, markBackward(markResiduals, 1.0, 0.0), markBackward(markResiduals, 0.0, 1.0)
+        markValue, markBackward(1.0, 0.0), markBackward(0.0, 1.0)
     >->println
     return 0
 }

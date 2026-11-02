@@ -4,7 +4,9 @@
 // "the input doubles, the output doubles"; a case that only reads dx = 1 cannot tell 6 + 6 from
 // 2·6 + 1.
 //
-// The case runs when `split` exists (design doc 4.2); the plan skips it until then.
+// The linear map is what the forward half hands back, closed over the residuals: it takes the
+// direction alone (`lin(1.0)`, `lin(2.0)`, `lin(0.0)`). Before the closure ABI those three calls
+// passed the residual value as a first argument; the three answers are the same.
 import rulesets.jvp
 import { jvp, split } from transforms
 
@@ -13,12 +15,11 @@ func g(x: float): float {
 }
 
 func main(): int sync {
-    let f = jvp(g)
-    let (fwd, lin) = split(f)
-    let (_y, r0) = fwd(3.0)
-    let once = lin(r0, 1.0)
-    let twice = lin(r0, 2.0)
-    let none = lin(r0, 0.0)
+    let fwd = split(jvp(g))
+    let (_y, lin) = fwd(3.0)
+    let once = lin(1.0)
+    let twice = lin(2.0)
+    let none = lin(0.0)
     println("dx1=", once)
     println("dx2=", twice)
     println("dx0=", none)
