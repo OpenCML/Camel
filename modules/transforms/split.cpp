@@ -687,6 +687,15 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
             }
         }
     }
+    // The index of a parameter is its place in the graph's port list (`(value, tangent)` pairs), so
+    // the value of the k-th parameter is at 2k.
+    std::vector<size_t> portIndex(nodeCount, Residual::kNotAParameter);
+    const std::span<const gc_node_ref_t> ports = lifted.normPorts();
+    for (size_t i = 0; i < ports.size(); ++i) {
+        if (ports[i] < nodeCount) {
+            portIndex[ports[i]] = i;
+        }
+    }
     // A value the tangent side reads and the result side already computed crosses the cut: it is a
     // residual, and the walk stops at it (what is inside the forward half is not this function's
     // business). A node the result side never reaches is part of the tangent chain: the walk goes
@@ -723,6 +732,31 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 }
                 continue;
             }
+            if (portIndex[ref] != Residual::kNotAParameter) {
+                // A parameter the tangent side reads is a residual too, even though the result side
+                // never reached it -- and what goes into the packet is the parameter's *value* port,
+                // not its tangent. The forward half is handed "the value of every parameter in,
+                // (result, residuals) out": it has a port for every value and none for a tangent, so
+                // a value port is the only thing it can hand over. `xs[i]` is the shape that needs
+                // it: the transpose of the read writes its cotangent into `zeros_like(xs)`, a `T[]`'s
+                // length is not a thing its type carries, and this parameter holds the array.
+                const size_t index     = portIndex[ref];
+                const size_t valuePort = index % 2 == 0 ? index : index - 1;
+                // Only a value whose length its type does not carry has to cross: a `T[]`'s length
+                // lives in its value, so the array crosses; a scalar's shape *is* its type, so its
+                // value port would be the parameter the forward half already holds. The condition is
+                // asked of the type, not of the shape of the code that reads it.
+                Type *const valueType = valuePort < ports.size() && ports[valuePort] < nodeCount
+                                            ? lifted.node(ports[valuePort])->dataType()
+                                            : nullptr;
+                const bool lengthCrosses =
+                    valueType != nullptr && valueType->code() == camel::core::type::TypeCode::Array;
+                if (lengthCrosses && valuePort < ports.size() && ports[valuePort] < nodeCount &&
+                    std::find(found.begin(), found.end(), ports[valuePort]) == found.end()) {
+                    found.push_back(ports[valuePort]);
+                }
+                continue;
+            }
             for (gc_node_ref_t input : dataInputsOf(&lifted, ref)) {
                 if (input < nodeCount && visited[input] == 0) {
                     stack.push_back(input);
@@ -730,16 +764,7 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
             }
         }
     }
-    // Program order: the parameters by their index, then the computed values by their node. The
-    // index of a parameter is its place in the graph's port list (`(value, tangent)` pairs), so the
-    // value of the k-th parameter is at 2k.
-    std::vector<size_t> portIndex(nodeCount, Residual::kNotAParameter);
-    const std::span<const gc_node_ref_t> ports = lifted.normPorts();
-    for (size_t i = 0; i < ports.size(); ++i) {
-        if (ports[i] < nodeCount) {
-            portIndex[ports[i]] = i;
-        }
-    }
+    // Program order: the parameters by their index, then the computed values by their node.
     // A graph that says its calls are recomputed on the backward pass (`remat`,
     // kGraphFlagRecomputeBackward, camel/runtime/graph.h) crosses the cut with its parameters and
     // nothing else: every other value is computed again in the backward half from them, because a
@@ -1521,13 +1546,26 @@ SplitGraph buildSplitGraph(
         std::vector<gc_node_ref_t> residualMembers;
         residualMembers.reserve(graphResiduals.size());
         for (const Residual &residual : graphResiduals) {
-            if (residual.node >= function->nodeCount() ||
-                forward.copyOf[residual.node] == rt::kInvalidNodeRef) {
+            gc_node_ref_t value = residual.node < function->nodeCount()
+                                      ? forward.copyOf[residual.node]
+                                      : rt::kInvalidNodeRef;
+            if (value == rt::kInvalidNodeRef && residual.parameter != Residual::kNotAParameter) {
+                // A value parameter the forward half's walk did not copy still crosses: the half's
+                // port for it is the value itself, which is what a residual is for this kind of
+                // member. The branch member below makes the same fallback, and the two have to
+                // agree -- `residualsOf` names the same residuals for both, and a parameter the
+                // backward half reads is one of them.
+                const size_t portIndex = residual.parameter * 2;
+                if (portIndex < forward.portOf.size()) {
+                    value = forward.portOf[portIndex];
+                }
+            }
+            if (value == rt::kInvalidNodeRef) {
                 os << "REINTERP split function=" << function->name()
                    << " skip=residual (the forward half does not compute a value the cut carries)\n";
                 return built;
             }
-            residualMembers.push_back(forward.copyOf[residual.node]);
+            residualMembers.push_back(value);
         }
         const gc_node_ref_t residualValue = fillTuple(
             draft, halves.backward->normTypeAt(0),

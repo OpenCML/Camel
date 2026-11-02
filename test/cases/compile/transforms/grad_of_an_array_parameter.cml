@@ -1,0 +1,29 @@
+// The cotangent of a function of an array: `g(xs) = xs[1] * xs[0]` at `[3.0, 2.0]` pulls back to
+// `[2.0, 3.0]`, because `dg/dxs[0] = xs[1] = 2` and `dg/dxs[1] = xs[0] = 3`.
+//
+// The shape the transform has to get right is the cotangent that comes back: an array's cotangent is
+// an array (`tangent_space.h`), so the transposed graph answers `float[]`, not a tuple of floats. The
+// element read `xs[i]` is `:op/idx_arr`, whose transpose rule writes the cotangent into an array of
+// zeros shaped like `xs` -- and the `i` is an `int`, a parameter with no tangent space, which the
+// rule's right side reads as a value and never as the target of a cotangent.
+//
+// Read through `vjp` and not through `grad`: `stdlib/vjp.cml` declares `vjp::<T>` over the parameter
+// type but `grad(f: (x: float) => float)` over the scalar alone, so `grad` of a function of an array
+// is a front-end type error today and never reaches the transform. Making `grad` generic is another
+// lane's change; this case reads the same cotangent one step lower, where the array is reachable.
+import rulesets.jvp
+import rulesets.transpose
+import { vjp } from vjp
+
+func g(xs: float[]): float {
+    return xs[1] * xs[0]
+}
+
+func main(): int sync {
+    let reading = vjp(g)([3.0, 2.0])
+    let (value, pullback) = reading
+    println(value)
+    let cotangents = pullback(1.0)
+    println(cotangents.0)
+    return 0
+}

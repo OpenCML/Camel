@@ -1,3 +1,8 @@
+# 2026-11-02: the four residual counts below went up once (1->2, 3->5, 2->3, 3->4, 0->1) when a
+# parameter's value port crossed the cut for every parameter. It now crosses only when the type does
+# not carry the length: a `T[]`'s length lives in its value, so the array crosses; a scalar's shape
+# *is* its type, so its value port would be the parameter the forward half already holds. The counts
+# are back to what the graph actually answers, and `remat` is green again (6/6).
 # Copyright (c) the OpenCML Organization
 # SPDX-License-Identifier: MIT
 
