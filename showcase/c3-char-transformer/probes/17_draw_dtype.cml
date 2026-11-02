@@ -1,0 +1,14 @@
+// WALL PROBE 17 -- which of the two things in `take(m.emb, window) + m.pos` is not the type the
+// model says it is.  The model's parameters are declared `float[..]` and built from
+// `normal::<float><shape: ...>` and `zeros::<float>(...)`; if those two disagree, then the model
+// cannot be written in one element type, and the block's second matmul is the first place the
+// disagreement is noticed (`'__mat__' with (f32[..], float[..])`).
+import { fold, key, normal } from random
+import { sum, zeros } from tensor
+
+func main(): int sync {
+    let drawn = normal::<float><shape: [2, 2]>(fold(key(7), 1))
+    let zeroed = zeros::<float>([2, 2])
+    println(`normal + zeros = ${sum(drawn + zeroed):.6f}`)
+    return 0
+}

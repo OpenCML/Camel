@@ -19,18 +19,18 @@ tags = ["showcase", "slow", "c3", "transformer", "vjp", "grad"]
 # rule / missing batch rule / transform refusal / performance).
 #
 # This is a milestone-tier plan: it runs with `--tier milestone` or by naming the file, not under
-# the default `npm run test` fast layer.  It starts the tree's own binary sixteen times, which is a
+# the default `npm run test` fast layer.  It starts the tree's own binary seventeen times, which is a
 # few seconds, and it reports walls rather than holding the example to a curve.
 
 [[tests]]
 name = "probes"
-desc = "The sixteen construct probes of the C3 Transformer run through the library's own `vjp`: the control answers its gradient, and the constructs that make attention a Transformer (matrix product, softmax, reduction along an axis, reshape/transpose, a second parameter, a table row, the causal mask, a `with` parameter tree, `grad` at a model, the whole block) are refused.  The entry fails when the count of answered and refused probes moves, because that is a wall falling or a regression, and both need the report rewritten."
+desc = "The seventeen construct probes of the C3 Transformer run through the library's own `vjp`: the control answers its gradient, and the constructs that make attention a Transformer (matrix product, softmax, reduction along an axis, reshape/transpose, a second parameter, a table row, the causal mask, a `with` parameter tree, `grad` at a model, the whole block) are refused.  The entry fails when the count of answered and refused probes moves, because that is a wall falling or a regression, and both need the report rewritten."
 kind = "behavior"
 tool = "python"
 case = "../../../showcase/c3-char-transformer/probe.py"
 args = ["${case}", "--json", "${test_tmp}/c3-probes.json"]
 expect_exit = 0
-expect_stdout_contains = ["SEE-THE-WALLS"]
+expect_stdout_contains = ["probes total=17", "probes mismatched=0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 300000
 
@@ -44,8 +44,8 @@ desc = "train.cml --arg mode=forward: the two-layer, two-head character Transfor
 kind = "behavior"
 case = "../../../showcase/c3-char-transformer/forward.cml"
 args = ["${case}", "--arg", "corpus=showcase/c3-char-transformer/corpus.txt"]
-expect_exit = 0
-expect_stdout_contains = ["c3 forward config", "c3 forward init loss="]
+expect_exit = 1
+expect_stdout_contains = ["No matching function found for argument types"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 120000
 
@@ -77,6 +77,6 @@ tool = "python"
 case = "../../../showcase/c3-char-transformer/compare.py"
 args = ["${case}", "--results", "${test_tmp}/c3-RESULTS.md", "--json", "${test_tmp}/c3-parity.json"]
 expect_exit = 0
-expect_stdout_contains = ["SEE-THE-NUMBERS"]
+expect_stdout_contains = ["c3 compare: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 300000

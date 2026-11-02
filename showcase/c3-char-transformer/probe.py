@@ -30,9 +30,33 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 PROBES = HERE / "probes"
 
+# What each probe is expected to answer, as of the run that wrote WALLS.cn.md.  A probe that starts
+# answering when it was expected to refuse (or the other way round) is a wall falling or a
+# regression, and either one means the report has to be rewritten -- so the reader exits non-zero
+# on a mismatch instead of leaving it to a human to diff.
+EXPECTED = {
+    "01_grad_scalar": "refused",
+    "02_grad_table": "refused",
+    "03_matmul": "refused",
+    "04_softmax": "refused",
+    "05_reduction": "refused",
+    "06_layout": "refused",
+    "07_two_parameters": "refused",
+    "08_embedding": "refused",
+    "09_causal_mask": "refused",
+    "10_with_parameter": "refused",
+    "11_grad_of_a_model": "refused",
+    "12_attention_block": "refused",
+    "13_jvp_scalar": "ok",
+    "14_jvp_call": "ok",
+    "15_mask_in_f32": "refused",
+    "16_layer_norm_dtype": "ok",
+}
+
 # The construct each probe reaches, so the report can say which wall is which without reading the
 # probe's text.  The key is the file stem.
 CONSTRUCTS = {
+    "17_draw_dtype": "the element type a drawn tensor has, next to a zeroed one",
     "13_jvp_scalar": "the forward control: `jvp` at one scalar parameter",
     "15_mask_in_f32": "the causal mask, written in f32 with `where`",
     "16_layer_norm_dtype": "the element type `layer_norm` answers with",
@@ -229,10 +253,21 @@ def main():
     spelled = " ".join(f"{r['probe']}={wall_tag(r['stdout'] + r['stderr'])}" for r in readings)
     for chunk in wrap(f"probe-walls {spelled}", 96):
         print(chunk)
+
+    # The inventory pinned: answering when expected to refuse is a wall falling, refusing when
+    # expected to answer is a regression, and both are this entry's business.
+    mismatched = [f"{r['probe']}:{r['verdict']}!={EXPECTED[r['probe']]}"
+                  for r in readings
+                  if r["probe"] in EXPECTED and r["verdict"] != EXPECTED[r["probe"]]]
+    unclassified = [r["probe"] for r in readings if r["probe"] not in EXPECTED]
+    print(f"probes pinned={sum(1 for r in readings if r['probe'] in EXPECTED)} "
+          f"mismatched={len(mismatched)} unclassified={','.join(unclassified) or '(none)'}")
+    for each in mismatched:
+        print(f"probes mismatch {each}")
     if args.json:
         Path(args.json).write_text(json.dumps({"readings": readings}, indent=2), encoding="utf-8")
         print(f"probes json={args.json}")
-    return 0
+    return 0 if not mismatched else 1
 
 
 if __name__ == "__main__":
