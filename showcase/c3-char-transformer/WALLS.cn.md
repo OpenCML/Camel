@@ -88,6 +88,30 @@ C [RuntimeDiag::RuntimeError]
 `stdlib/rulesets/transpose.cml` 里同一算子再加一条反向规则——`vjp` 是
 `transpose(split(reinterp<jvp>(f)))`，两层都缺才是「`vjp` 也走不动」的完整原因。
 
+### 墙 2 已经补过一半：规则写进去了，但抬不起来
+
+2026-11-02 深夜给 `tensor:matmul` 补了前向规则（`jvp_matmul` → `matmul_tangent`，
+`d(a·b) = da·b + a·db`，两个切向都在右式里），并加了一条用例锁住它：
+`test/cases/compile/transforms/jvp_matmul.cml`（今天是**期待拒绝**的形态）。键不用登记——
+`forward.h` 的 `ruleKeyOf` 从算子名自己推出 `matmul`/2——所以 `matmul` 上那句「没有前向规则
+绑在这上面」已经不出现了。
+
+它还答不出数：一个常量只有「有 pair 的类型」才有零切向，而 `jvp.cpp` 的 `pairTypeOf`
+只给浮点标量写真 pair（`zeroConstantFor` 也只写 `f64`/`f32` 的零），于是 `matmul(A, x)` 里的
+常量 A 拿不到切向节点，身体在 `complete = false` 处停下，报的是没有 `file:line` 的
+`transforms: jvp has no forward transform for this function`。要补的是**一块**：让抬升能给
+数组类型的值一个零切向，不是改 matmul。
+
+顺手试过、并**已回退**的一条路：把 `matmul_tangent` 放进 `stdlib/autodiff.cml`（加
+`import { matmul } from tensor`）。它让 6 条本来绿的用例转红（`loop_grad_struct_state` 四后端、
+`loop_grad_parameter_array.shape`、`fusion_group.profile.none`），红在 tape 反传图里
+`add: the two operands have different element types ('void' and 'f64')`；把同一个函数留在
+`rulesets/jvp.cml` 里则 `modules/autodiff` + `modules/fusion_group` 280/280 全绿。
+**结论**：那个模块导出的泛型集合是别处依赖的东西，加一个导出函数不是局部改动。
+
+手算已写进用例注释与计划 `desc`，规则一旦能被答出，那条用例从「期待拒绝」翻成
+`value=5.0000 tangent=1.0000` / `tangent=2.0000`。
+
 ## 墙 8：常量张量没有单一元素类型的写法
 
 最小程序：`probes/15_mask_in_f32.cml`
