@@ -102,7 +102,7 @@
 2. **`reshape` 的注册签名是联合类型**（`float[..] | number[]`），声明只能写其中一支，写哪一支都是自己做主。
 3. **这 5 个也没有 `#op` 可言**：它们的 URI 遵循约定，加上去是多余的（`sum_axis` 的实验已经证明）。
 
-本页第二节的三个问题已经按默认往下做，见 [2026-11-02-p1-13-three-columns-call-shape.cn.md](2026-11-02-p1-13-three-columns-call-shape.cn.md)（按调用形状数的三栏底数：464 / 109 / 82）与 [../questions/2026-11-02-p1-13-tensor-and-array-same-name-is-it-one-call-shape.md](../questions/2026-11-02-p1-13-tensor-and-array-same-name-is-it-one-call-shape.md)（`tensor:` 与 `array:` 同名算子的问题页）。
+本页第二节的三个问题已经按默认往下做，见 [2026-11-02-p1-13-three-columns-call-shape.cn.md](2026-11-02-p1-13-three-columns-call-shape.cn.md)（按调用形状数的三栏底数：464 / 109 / 82）与 [../reviews/2026-11-02-p1-13-tensor-and-array-same-name-is-it-one-call-shape.md](../reviews/2026-11-02-p1-13-tensor-and-array-same-name-is-it-one-call-shape.md)（`tensor:` 与 `array:` 同名算子的问题页）。
 
 所以这一步**停在这里报给作者**：两个轴归约不用动；`sum`/`mean`/`max`/`min` 要先回答"和 `array` 里那条同名同形的声明是什么关系"（合并？改名？还是 `tensor:` 这一层不声明、由 `array:` 承担？），`reshape` 要先回答"声明写联合的哪一支"。这三问是语言设计决定，不由我代答。
 
