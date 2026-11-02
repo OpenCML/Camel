@@ -477,6 +477,33 @@ tmp_e2_branch  node=8  ctrl=4,    sync=       ← 只有 ctrl
 2. **§5.9 撤掉的那一行，理论上可能生效**——因为"只有 sync"的节点确实存在；只是我上一轮的探针里，常量候选不在这种节点上。要证明它在起作用，需要一个"常量候选恰好只有 sync 边"的程序——那是下一步（需要先知道那 3 个节点各是什么算子，临时打印里没有 kind/op）。
 
 **抽样声明**：以上是**在这 7 个程序上**的读数，不是全称结论。`sync` 边在更多 pass 之后的图上可能更常见（inline 的 splice、`setSyncInputs` 的搬运都可能只写一种）。
+### 5.11 那 3 个节点是什么：Join 只有 sync，两个算术只有 ctrl
+
+§5.10 的临时打印加上 `kind` 与算子名再跑同一批 7 个程序（**测完已 `git checkout`，仪器不进提交**）：
+
+```
+tmp_e2_branch | node=3 kind=7  op=          ctrl=      sync=2,      ← Join
+tmp_e2_branch | node=6 kind=11 op=:op/mul_l ctrl=4,    sync=       ← 分支臂
+tmp_e2_branch | node=8 kind=11 op=:op/add_l ctrl=4,    sync=       ← 分支臂
+```
+
+`kind=7` 是 **Join**（`GCNodeKind`：Data 0 … Brch 6, Join 7, Call 8 … Oper 11）——`if … then … else` 那个值的汇合点，它带着 sync 前驱（`2` 是条件 `:op/gt_l`）却**没有** ctrl 边；两个算术在 `Brch`（`4`）的控制边上，是**分支臂**，本来就不在块的语句链上。
+
+**② §5.9 那一行有没有靶子：没有。** `constant()` 的候选要求 `h->kind == GCNodeKind::Data`（`algebra.cpp` 第一个条件），而实测到的唯一"只有 sync"的节点是 **Join**——它永远进不了 `constant()`。要让那一行咬人，得有一个 **Data 节点**只有 sync 边；这批程序里没有。所以 §5.9 的合取项**没有靶子**（在这 7 个程序上），撤掉是对的。
+
+**③ 8 处的复核：我上一轮用"±1 行内有 sync 字样"做的分类**有假阳性**，逐处读之后**：
+
+| 位置 | 它处理什么形状 | 会不会遇到只有 sync 的节点 | 依据 |
+|---|---|---|---|
+| `rewrite.cpp:512` | 删除节点后把等待继承给后继（遍历 `syncUsers`） | **不是候选**——它同一表达式里读了两侧：`!syncInputsOf(user).empty() \|\| !ctrlInputsOf(user).empty()` | 逐行读 |
+| `rewrite.h:115` | `inheritWait`：**写** sync 边 + 补 ctrl 边 | **写侧**，不是读者 | 内有 `setSyncInputs` + `appendInput(Ctrl…)` |
+| `screen.cpp:274` | 数"多余的 ctrl 输入"（`ctrl >= 2`） | 不会：问的是**退役那种边**自己的冗余 | 逐行读 |
+| `gates.cpp:62/90/94` | gate 的 frontier 与代价 | 会（Join 可能是 gate 的后继） | 按形状推断，**未逐处读** |
+| `tiles/compiler.cpp:536`、`region_extract.cpp:108`、`graph_regions.cpp:513` | 区域切分的依赖闭包 | 会（任何节点都可能出现） | 按形状推断，**未逐处读** |
+
+**净结果：8 处里已确认 3 处不必改**（1 处本就两侧都读、1 处是写侧、1 处问的是 ctrl 的冗余）。剩下 **5 处**（`gates.cpp` 三处 + `tiles` 三处＝两族）是"按形状推断会"，**要逐处读才能定**——这正是"9 处"这个数字第三次缩小：9 → 8（§5.9 撤）→ 8 里 3 处不必改。
+
+**④ 抽样声明**：仍是那 7 个程序、78 个节点；`kind`/算子名只在 `tmp_e2_branch` 里产生了差异，其余 6 个程序没有。
 ## 6. 一句话结论
 
 **这条缝是方案性的，不是少数特例**：按"结果有切空间却拼不出键"计，**32 条**（把复数算进去 50 条），而例外表只能一条一条地救——今天救了两条、补了一条（`^`）。缺口的形状有两个：
