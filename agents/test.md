@@ -174,6 +174,36 @@ thread was created with: on `-t 1` the same camel process is 4 threads, of which
 which is what `count.timeit_cli_one_serial` expects. **When a Windows API's reading looks
 surprising, check whether it is the API that answers a different question than the one you asked.**
 
+## A fixture that writes a path into Camel source writes forward slashes
+
+The author's ruling of 2026-11-02 13:10, in response to the `interpreter_first_use` red: **a fixture
+that writes a platform path into Camel source text writes it with forward slashes, or with a writing
+the language does not unescape.** A Windows path in a double-quoted Camel string is not text -- it is
+escapes: `\t` and `\r` are legal escapes, so `D:\temp\run-1/a.svg` becomes `D:` + a tab + `emp` + a
+carriage return + `un-1/a.svg` **silently**, and `\C`, `\m`, `\i` are unknown escapes that only warn
+(`LexicalDiag::InvalidEscapeSequence`, `docs/language/02_lexical.md`, an error or a warning still open
+with the author). The warning does not save the path: the two escapes that broke the image were the
+legal ones.
+
+The idiom is one line, at the place the path is made:
+
+```js
+const CML = SCRATCH.replaceAll('\\', '/')   // what goes into the program text
+```
+
+and `path.join(...).replaceAll('\\', '/')` when the path is built inline, as `pass_param_effect.mjs`
+already did. Node-side reads and writes keep the platform path; only the text spliced into a program
+uses the forward-slash one.
+
+**This cannot be checked by reading the fixture, which is why the rule is here and not in a guard.**
+On 2026-11-02 `test/cases` held 26 fixtures that build Camel text, 15 of them writing a `.cml` file,
+and exactly two spliced a path into the text: one wrong (`${SCRATCH}`) and one right (`${CML}`). The
+two have **the same static shape** -- a template splice naming a variable -- and differ only in a
+value that exists at run time and only on Windows. A checker over the text would report both or
+neither. The shape that *can* be seen at run time is the child's own warning line: a fixture writing
+a Windows path into a program makes that program print `Invalid escape sequence in string` on stderr,
+which is where a guard would read it (on the Windows leg, since a Linux path has no backslash).
+
 ## A timeout budget is a change like any other
 
 A `timeout_ms` in a plan file is not housekeeping: it decides whether a slow machine reports a red or
