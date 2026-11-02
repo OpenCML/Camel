@@ -13,6 +13,8 @@
 | [`2026-11-02-can-the-pow-rows-be-built-from-a-base`](2026-11-02-can-the-pow-rows-be-built-from-a-base.cn.md) | `__pow__` 的 12 行能不能由一条"底座 + 逐元素"的通用规则替代（即能不能像 `ne_*` 那样删） | 已答：推不出（三种算法各占一段），留 12 行 | — | — |
 | [`2026-11-02-is-the-cpp-backends-elementwise-comparison-missing`](2026-11-02-is-the-cpp-backends-elementwise-comparison-missing.cn.md) | `std::cpp` 下数组 `==`/`!=`/`===` 与逐元素算术的现状，是没翻译还是翻译错 | 已答：`==`/`!=` 对，`===` 与逐元素算术都没有翻译 | — | `std::cpp` 的逐元素层 |
 
+| [`2026-11-02-who-updates-the-root-table-when-the-root-is-replaced`](2026-11-02-who-updates-the-root-table-when-the-root-is-replaced.cn.md) | 宏重写换根时谁负责更新根表；`nn` 那两条 bytecode 用例的根换过之后旧根还在表里 | 待裁 | — | `gru_lite_large_bytecode`、`residual_mlp_large_bytecode` 两条 poison 红 |
+| [`2026-11-02-what-carries-the-residuals`](2026-11-02-what-carries-the-residuals.cn.md) | 残差用什么承载（三条路各写过一遍）；`split` 不再交出残差元组之后，闭包里俘获的残差该由谁持有 | 待裁 | — | 残差藏进闭包这条线的入口 |
 **这张表由 `node scripts/check-doc-links.mjs --questions-index` 对着目录核对**：行数与页数不符、或者某一行指向目录里没有的页，它都会红。
 
 ### 已裁、在 `reviews/` 留档
