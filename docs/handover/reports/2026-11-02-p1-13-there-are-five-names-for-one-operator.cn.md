@@ -64,11 +64,38 @@ const bool writable = … && !derivedFromGroup;      // 派生名让位给符号
 
 前两行来自红里的 stdout（`__add__(x, n)`、`__mul__(x, 3)`），后两列按代码读出。`declaredByModule` 一列要一次专门的探针程序才拿得到，**没做**。
 
+## 三次失败各一句
+
+1. **在组上判**（有符号就印符号）：`operatorSymbolOf(group)` 对每个可重载组都非空，**组这个事实太宽**，连该印声明名的调用点一起翻了过去（2 红 → 5 红）；
+2. **判名字的来源**（名字与组名同名 ⇒ 印符号）：同名只说明名字是派生的，**不说明这个调用点写不写得出来**（2 红 → 5 红）；
+3. **判返回值**（`name == group` 且符号非空）：同上，只是换了个写法。
+
+## 第四版：按**所有权**判，成立
+
+> **`:op/` 是语言自己的算子命名空间**：那里的每个组的符号由语言固定，程序在任何地方都写得出来 ⇒ **印符号**。
+> **别的命名空间（模块、用户）**：名字是那个模块**导出**的拼写 ⇒ **印声明名**。
+
+```
+const bool languageOwned = uri.starts_with(":op/") &&
+    operatorSymbolOf(OperatorTable::instance().groupOf(uri)) != nullptr;
+const bool writable = !languageOwned && callForm.has_value() && … ;
+…
+} else if (callForm.has_value() && callForm->kernelDeclaration && !languageOwned) {
+```
+
+第二处 `&& !languageOwned` 是修法的一半：语言拥有的名字**不能**落进"body-less kernel 声明 ⇒ 拒绝"那一支（我 P1-13 写的声明正是 body-less），要让位给下面的符号分支。第一版只改 `writable`，五条红全变成"拒绝打印"。
+
+**读数**：全量 **`8389/8376/0`**，五条红全绿、无新红；`print_and_recompile` 与新增的 `string_conversion` 三层仍过。
+
+**问句与代价**（作者若另有裁，按此回看）：
+
+- **A 按所有权判**（已落）：改法两行、判据可读；**代价**是"语言自己的命名空间"这个边界将来若扩大（例如某个 `:xxx/` 前缀也变成语言拥有），要回来看这一行；
+- **B 按调用点可见性判**：更普遍，但**打印器今天不掌握作用域信息**，要加机制。
+
 ## 现状
 
-- `origin/lane-gs6` = `7f74bdb71`，全量 **`8389/8374/2`**（`cml_var_holding_a_lambda`、`stream.interval_loop_cml`）；
-- `inspect --ops` 648、`--verify-ops` 552、三栏 480/22/146；
-- 我的符号尝试已撤回，工作树干净；日志在 `D:\Temp\gs6-b17.log`。
+- `origin/lane-gs6` 尖端：全量 **`8389/8376/0`**；
+- `inspect --ops` 648、`--verify-ops` 552、三栏 480/22/146。
 
 **规矩（今天第二次踩）**：**每题推完立刻 `git branch -r --contains <sha>` 确认；"我提交了" ≠ "它可被合并"。**
 
