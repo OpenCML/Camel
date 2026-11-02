@@ -21,6 +21,7 @@
 
 import { is_float, is_same, Tangent } from types
 import { zeros_like } from tensor
+import { log, pow } from math
 import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
 
 /// A value of type `T` with its tangent: what a forward transform carries for one value.
@@ -196,4 +197,44 @@ func float_of_int::<T>(n: T): float when is_same::<T, int>() {
 /// @example float_of_int(3)    // 3.0; lifted, its tangent is 0.0
 export rule jvp_ltod::<T>(n: T) when is_same::<T, int>() {
     float_of_int(n) => () => 0.0
+}
+
+// ---- the forward rule of `^` (a power) ----
+
+/// The tangent of `x ^ w` along `(dx, dw)`: `w * x^(w-1) * dx + x^w * log(x) * dw`.
+///
+/// The second term is the one that needs care, twice over. It is the derivative with respect to the
+/// **exponent**, and an exponent that is a constant carries `dw = 0` -- so the term is zero -- but
+/// `log(x)` is `NaN` for a negative `x` and `0 * NaN` is `NaN`, which would turn an
+/// ordinary `(-3.0) ^ 2.0` into `NaN`. The log is therefore guarded: where it does not exist the
+/// term answers zero instead, which is the same number the term has for every constant exponent.
+/// Where the term is *not* zero (a variable exponent) and `x <= 0`, the derivative with respect to
+/// that exponent has no real value at all -- there is nothing to answer, and this is the one place
+/// the rule answers zero rather than refusing.
+/// @example pow_tangent(3.0, 2.0, 1.0, 0.0)    // 6.0
+export func pow_tangent::<T>(x: T, w: T, dx: T, dw: T): T when is_float::<T>() {
+    return w * pow(x, w - T(1)) * dx + pow(x, w) * log_or_zero(x) * dw
+}
+
+/// `log(x)` where the logarithm exists, and zero where it does not. The one caller multiplies the
+/// answer by a tangent that is zero for every constant exponent, so the guarded branch is the one
+/// that keeps `0 * NaN` out of an answer that is exactly zero.
+/// @example log_or_zero(2.0)    // 0.6931471805599453
+func log_or_zero::<T>(x: T): T when is_float::<T>() {
+    return if x > T(0) then log(x) else T(0)
+}
+
+/// `d(x ^ w) = w * x^(w-1) * dx + x^w * log(x) * dw`, written out in `pow_tangent` above. The
+/// operator is spelled `^`, and its key is derived from its name -- `pow` is one of the written
+/// operations `src/core/forward.cpp` lists -- so nothing here is filed under a call.
+///
+/// The tangent helper lives here rather than in `autodiff` with its siblings for one measured
+/// reason: it needs `log` and `pow`, which belong to `math`, and a module dependency added to
+/// `autodiff` adds that module's declaration rows to every profile report that declares `autodiff`
+/// -- the golden of `test/cases/modules/tensor/fusion_group_profile.py` moved by exactly those rows
+/// when this was first written. A ruleset is where a program that wants the rule goes, so the cost
+/// lands here instead.
+/// @example 3.0 ^ 2.0    // 9.0
+export rule jvp_pow::<T>(x: T, w: T) when is_float::<T>() {
+    x ^ w => (dx: T, dw: T) => pow_tangent(x, w, dx, dw)
 }

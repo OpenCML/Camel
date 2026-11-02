@@ -9,7 +9,13 @@ namespace camel::core {
 
 namespace {
 
-/// The five operations of the language that are written as a token, and what each is written with.
+/// The operations of the language that are written as a token, and what each is written with. The
+/// table holds the ones whose **result has a tangent space**, because those are the ones a transform
+/// has to ask about: `%`, `==`, `<`, `&&` and `!` are written tokens too, and they are absent because
+/// their results are integers and booleans -- no space, no question. `^` was the one name missing
+/// from that list with a float result (`pow_d` is a float raised to a float), which made `x ^ 2.0`
+/// impossible to differentiate at all; it is here now.
+///
 /// The name is the operator's own (`:op/add_d` names `add`), so this table is about the *language's
 /// spelling*, not about which operators exist: a module that declares another `add` overload is
 /// spelled `+` too, and nothing here has to be told about it.
@@ -19,12 +25,13 @@ struct WrittenOperation {
     uint32_t arity;
 };
 
-constexpr std::array<WrittenOperation, 5> kWrittenOperations{{
+constexpr std::array<WrittenOperation, 6> kWrittenOperations{{
     {"add", "+", 2},
     {"sub", "-", 2},
     {"mul", "*", 2},
     {"div", "/", 2},
     {"neg", "-", 1},
+    {"pow", "^", 2},
 }};
 
 /// The three operators whose key cannot be derived, and why. The first two are written up in

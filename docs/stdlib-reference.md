@@ -7036,6 +7036,28 @@ The forward rule of `/` on two 64-bit floats.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `div_jvp(6.0, 2.0, (1.0, 0.25))` gives `(3.0, 0.125)`
 
+### The forward rule of `^` (a power)
+
+#### `pow_tangent`
+
+```camel
+pow_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+```
+
+The tangent of `x ^ w` along `(dx, dw)`: `w * x^(w-1) * dx + x^w * log(x) * dw`.
+
+The second term is the one that needs care, twice over. It is the derivative with respect to the
+**exponent**, and an exponent that is a constant carries `dw = 0` -- so the term is zero -- but
+`log(x)` is `NaN` for a negative `x` and `0 * NaN` is `NaN`, which would turn an
+ordinary `(-3.0) ^ 2.0` into `NaN`. The log is therefore guarded: where it does not exist the
+term answers zero instead, which is the same number the term has for every constant exponent.
+Where the term is *not* zero (a variable exponent) and `x <= 0`, the derivative with respect to
+that exponent has no real value at all -- there is nothing to answer, and this is the one place
+the rule answers zero rather than refusing.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `pow_tangent(3.0, 2.0, 1.0, 0.0)` gives `6.0`
+
 <a id="rulesets.vmap"></a>
 
 ## `rulesets.vmap`: how a batched transform lifts a value
