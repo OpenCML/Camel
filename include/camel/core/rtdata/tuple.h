@@ -11,7 +11,10 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdio>
+#include <mutex>
 #include <new>
+#include <unordered_set>
 
 namespace rtdata = camel::core::rtdata;
 namespace type   = camel::core::type;
@@ -20,6 +23,59 @@ namespace camel::core::rtdata {
 /// Defined in rtdata/tagged.cpp.
 void printTaggedSlots(
     std::ostream &os, const slot_t *slots, const camel::core::type::TupleType *type);
+
+namespace detail {
+/// Says, once per type, that a tuple value carries more members than its type declares.
+///
+/// The two counts are the same number stated twice -- the value's `size_` and the type's `size_` --
+/// and nothing compared them, so a value and a type that disagree were traced by a loop that read
+/// `codes[i]` past the end of the type's array: a garbage code that happens to be a traced kind
+/// crashed at `typeAt(i)`, and one that is not a traced kind was skipped in silence and its
+/// reference was never relocated (the stale pointer `docs/technical/36_gc_handle_rules.md` is
+/// about). Neither reading names the tuple that was wrong, which is why this says it in words.
+/// Reported once per type, not once per collection: a program collects thousands of times.
+inline void reportMembersBeyondType(
+    const void *value, const type::TupleType *tupleType, size_t members) {
+    static std::mutex mutex;
+    static std::unordered_set<const type::TupleType *> said;
+    std::lock_guard<std::mutex> lock(mutex);
+    if (!said.insert(tupleType).second) {
+        return;
+    }
+    std::fprintf(
+        stderr,
+        "[camel] tuple trace: a tuple value (%p) has %zu member(s) but its type declares %zu; the "
+        "members past %zu are not traced or relocated\n",
+        value,
+        members,
+        tupleType->size(),
+        tupleType->size());
+}
+
+/// Says, once per type, that a tuple value is described by a type that is not a tuple at all.
+///
+/// The same disagreement as above, produced the other way: a closure tuple described by the function
+/// signature it belongs to has no member count to compare against, so `updateRefs` returns before
+/// the walk and *every* member is left untraced. The poison check then reports a raw pointer kept
+/// across a safepoint somewhere else, in a frame that never saw this tuple. Reported here because a
+/// branch that cannot happen for a correct program is exactly where a wrong one goes quiet.
+inline void
+reportTupleHasNoTupleType(const void *value, const type::Type *type, size_t members) {
+    static std::mutex mutex;
+    static std::unordered_set<const type::Type *> said;
+    std::lock_guard<std::mutex> lock(mutex);
+    if (!said.insert(type).second) {
+        return;
+    }
+    std::fprintf(
+        stderr,
+        "[camel] tuple trace: a tuple value (%p) has %zu member(s) but its type is not a tuple "
+        "(type code %d); no member is traced or relocated\n",
+        value,
+        members,
+        static_cast<int>(type->code()));
+}
+} // namespace detail
 } // namespace camel::core::rtdata
 
 class Tuple : public rtdata::Object {
@@ -311,13 +367,29 @@ class Tuple : public rtdata::Object {
         if (isView()) {
             return; // pure data has no references
         }
-        if (!type || type->code() != type::TypeCode::Tuple)
+        if (!type || type->code() != type::TypeCode::Tuple) {
+            if (type != nullptr && size() > 0) {
+                camel::core::rtdata::detail::reportTupleHasNoTupleType(this, type, size());
+            }
             return;
+        }
         const type::TupleType *tupleType = static_cast<const type::TupleType *>(type);
         auto codes                       = tupleType->codes();
         rtdata::Object **refArr          = reinterpret_cast<rtdata::Object **>(data_);
 
-        for (size_t i = 0; i < size(); ++i) {
+        // `codes` is the type's array and has the type's length, so a value with more members than
+        // its type would read past it here. The walk therefore stops at the shorter of the two counts
+        // and the disagreement is said out loud instead of being read out of bounds. Stopping short
+        // is the lesser evil: a member that is not traced is a reference that is not relocated, which
+        // the poison check reports by name, while an index past the array is an arbitrary code that
+        // either crashes in `typeAt` or silently skips the reference that needed moving.
+        const size_t members = size();
+        if (members > tupleType->size()) {
+            camel::core::rtdata::detail::reportMembersBeyondType(this, tupleType, members);
+        }
+        const size_t traced = members < tupleType->size() ? members : tupleType->size();
+
+        for (size_t i = 0; i < traced; ++i) {
             if (type::isGCTraced(codes[i])) {
                 if (rtdata::Object *&ref = refArr[i]) {
                     const type::Type *slotType = tupleType->typeAt(i);

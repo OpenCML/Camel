@@ -1,0 +1,35 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/*
+ * `!=` on the two reduced-precision floats, written as the negation of their equality.
+ *
+ * `a != b` is `!(a == b)` for every type: `==` answers a bool whatever its operands are, so the
+ * negation only ever has to take a bool. These two types are the ones whose `!=` used to be its own
+ * arm (`:op/ne_bf`, `:op/ne_f6`), which is why the decomposition is pinned here rather than
+ * anywhere else: it is what remains to be true once those arms are gone.
+ *
+ * There is deliberately no `!` on a bf16 or f16 value in this case. `!x` on a number would be a
+ * truthiness rule the language does not have -- `!0.0` answering true is a new meaning for `!`, not
+ * a consequence of `!=` being built from `==`.
+ */
+
+func main(): int sync {
+    let zeroBf: bf16 = bf16(0.0)
+    let twoBf: bf16 = bf16(2.0)
+    let zeroF6: f16 = f16(0.0)
+    let oneF6: f16 = f16(1.5)
+
+    // `a != b` and `!(a == b)` are the same answer, at both types.
+    println(twoBf != zeroBf)
+    println(!(twoBf == zeroBf))
+    println(twoBf != twoBf)
+    println(!(twoBf == twoBf))
+
+    println(oneF6 != zeroF6)
+    println(!(oneF6 == zeroF6))
+    println(oneF6 != oneF6)
+    println(!(oneF6 == oneF6))
+
+    return 0
+}
