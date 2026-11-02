@@ -11,7 +11,7 @@
 | `extract(p, cost: string)` | 改为 `with <cost: (o: Op, inputs: float[]) => float> extract::<F>` | 设计稿 v2 第 5 节：代价是 Camel 函数，字符串形式删除（Q1） |
 | `run(p)` | 改为 `run::<F>(f: F): Run<F>!`，`with` 参数不变 | |
 | `Run<Program>` | 改 `Run<F>` | 结果是同类型的函数 |
-| `check(rules, samples, seed, program: Program? = null)` | 拆成两条按 `with` 区分的重载：`rules->check<samples, seed>` 与 `rules->check<over: f, samples, seed>` | 可空的 `Program?` 位置参数是“有没有这个实参”的伪装；`with` 参数参与重载选择后两个形式各有清楚的签名 |
+| `check(rules, samples, seed, program: Program? = null)` | 拆成两条重载：`rules->check<samples, seed>` 与 `rules->check<samples, seed>(over)` | 可空的 `Program?` 位置参数是“有没有这个实参”的伪装；`with` 参数参与重载选择后两个形式各有清楚的签名。`over` 放在普通参数位而不是 `with` 位：两条声明必须把每个 `with` 位置叫成同一个名字（`<samples: 1000>` 才能落到两条声明的同一位置），而无默认值的 `with` 参数不能跟在有默认值的后面（`WithParameterAfterDefault`），函数类型又给不出默认值（`null` 是 `void`，`F?` 让 `F` 悬空）。见 `docs/handover/reviews/questions-2026-11-02-with-position-names-across-overloads.md` |
 | `CheckReport` 及九个读取函数（`check_row_count`、`check_rule`、`check_instance`、`check_verdict`、`check_proposition`、`check_evidence`、`check_reason`、`check_coverage`、`check_text`） | `CheckReport` 改成 Camel 结构体 `{ rows: CheckRow[] }`，`CheckRow` 的字段 `rule`、`instance`、`verdict`、`proposition`、`evidence`、`reason`、`coverage`；八个读取函数删除，`check_text` 保留 | 与上一轮对 `Run` 的评审同一条（`stdlib-rewrite.md` 第 2 条）：Java 式访问器；`IndexError` 的八处 `@fails` 随之消失（越界是数组下标的故障） |
 | 判决与命题的字符串 | `Verdict = enum { Proved, Refuted, Sampled }`、`Proposition = enum { Equality, RealEquality, ErrorBound }` | 文档里写着“这些词是封闭的”，那就是枚举 |
 | `check_coverage_table()` | 改为值 `coverage_table`，写成不带右边的 `export let`（值仍由 C++ 导出） | 常量写成值，不加括号（`math` 稿同样）。原则 6.4：与不写体的 `func`、不写右边的 `type` 同一条规则 |
