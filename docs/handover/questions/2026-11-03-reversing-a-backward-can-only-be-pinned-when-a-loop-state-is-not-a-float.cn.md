@@ -64,3 +64,11 @@ export rule jvp_idx_arr::<T>(xs: T[], i: int) {
     index_into(xs, i) => (dxs: T[]) => index_into(dxs, i)
 }
 ```
+
+## 我方默认（按它往下做）
+
+**不动 `:1704`，先把"带 escape 的循环抬不起来"这一格修掉** —— 今天 `transpose_loop_escape.*` 六条全红在 `REINTERP jvp function=read_one skip=loop`，走法在这一层之上还看不见；等那条程序（§1）能在 `transpose` 侧看见 `(1.0, 1.0)` 与 `(1.0, 10.0)` 的差别，再动 `:1704` 换走法，并用 `expect_output_contains` 钉住。
+
+**理由**：§5 的读数是"抬升落地了、顺序仍钉不住"—— 现在改 `:1704` 没有任何程序看得出差别（§4：`split_loop_taped_rounds` 的 `loop d = 30.0` 在任何走法下都是 30.0），"没变坏"是唯一钉得住的东西。
+
+**若作者说不（要求先改走法）**：回退一层 —— 只回退 `:1704` 那一笔（`transposeNodesInDraft` 的 `case rt::GCNodeKind::Loop:`），不碰抬升侧的 `Fill` 两处；两侧的读数各自独立，回退不互相牵连。
