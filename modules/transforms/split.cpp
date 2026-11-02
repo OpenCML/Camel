@@ -377,6 +377,28 @@ struct Half {
                 "the plumbing copies the data ports of a straight-line body; the control, order and "
                 "sync edges are a later tier");
         }
+        // A branch and a loop are refused here, before their inputs are asked for. A loop's inputs
+        // are the body's yield -- a node of another region -- and the round counter it writes into a
+        // port that is nobody's parameter, so asking for them first answers "an operand of the node
+        // is not reachable from the half's exit" (or, deeper, "a port") about a graph whose answer is
+        // "a loop". The answer is the same either way; only the sentence is not (measured: jvp of a
+        // loop of two states).
+        switch (node->kind) {
+        case rt::GCNodeKind::Brch:
+        case rt::GCNodeKind::Join:
+            return refuseAt(refusal, source, ref, "a branch", "the plumbing copies straight-line bodies");
+        case rt::GCNodeKind::Loop:
+            // The loop cell is entered when the *exit* is the loop (cutLoopGraph): the exit of
+            // jvp(loop body) of one state is the LOOP node itself. Here the loop is inside the chain
+            // the exit reads -- the value half of the exit's pair, or a value one of them computes --
+            // and this half would have to copy a body region, which the plumbing does not do.
+            return refuseAt(
+                refusal, source, ref, "a loop",
+                "the cut enters a loop through the loop cell, and that cell is the exit: this loop "
+                "is inside the chain the exit reads, so the half would have to copy a body region");
+        default:
+            break;
+        }
         // Every input must be available: either copied already, or one of the values that cross the
         // cut, which this half takes out of the residual tuple at its place in the list. A graph the
         // walk could not finish (a cycle, a reference that is not a node) is a refusal, not a node with
@@ -560,11 +582,6 @@ struct Half {
             copyOf[ref] = made;
             return true;
         }
-        case rt::GCNodeKind::Brch:
-        case rt::GCNodeKind::Join:
-            return refuseAt(refusal, source, ref, "a branch", "the plumbing copies straight-line bodies");
-        case rt::GCNodeKind::Loop:
-            return refuseAt(refusal, source, ref, "a loop", "the plumbing copies straight-line bodies");
         default:
             return refuseAt(
                 refusal, source, ref, "a node of another kind",
@@ -588,6 +605,21 @@ struct Half {
             }
             if (!expanded) {
                 stack.back().second = true;
+                // A branch or a loop is refused at the node, not through what its inputs name. A
+                // loop's inputs are the body's yield -- a node of another region -- and the round
+                // counter the loop writes into a port that is nobody's parameter, so expanding them
+                // copies a body region into a straight-line half and reports the first port of it
+                // ("a port, the round number") for a graph whose answer is "a loop". The answer is
+                // the same either way; only the sentence is not (measured: `jvp` of a loop of two
+                // states, `the port is not a parameter of the graph`).
+                const rt::GCNode *here   = source->node(ref);
+                const bool refusedAtNode = here != nullptr &&
+                                           (here->kind == rt::GCNodeKind::Loop ||
+                                            here->kind == rt::GCNodeKind::Brch ||
+                                            here->kind == rt::GCNodeKind::Join);
+                if (refusedAtNode) {
+                    continue;
+                }
                 for (gc_node_ref_t input : halfInputsOf(ref)) {
                     // A value that crosses the cut is read out of the residual tuple: walking into
                     // what computes it would copy the forward half into this one, which is exactly
