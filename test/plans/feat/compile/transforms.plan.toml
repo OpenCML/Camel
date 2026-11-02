@@ -600,13 +600,11 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 0
-# pinned before 17:10; update when jvp supports loop
-# `type=(float, float) => float` below is the pre-ruling member shape: a transposition of a
-# one-parameter function answers `(float) => (float,)` now. The shape is left as it stands because
-# the case cannot run at all until `jvp` has a forward transform for a loop (`REINTERP jvp
-# function=read_one skip=loop`, lane-loopreverse); re-pinning it before that would be a guess, and
-# the right shape is best read off the run that gets there.
-expect_output_contains = ["TRANSPOSE function=read_one carried=1 node=10 origin=0 captures=1 answer=summed", "ESCAPE target=0 from=9 kindOfFrom=11 kindOfTarget=1 typeOfTarget=float norm=[3,0,] with=[9,11,]", "TRANSPOSE function=read_one graph=", "type=(float, float) => float", "15.0"]
+# Pinned before 17:10 and held back on purpose until `jvp` had a forward transform for a loop
+# (`REINTERP jvp function=read_one skip=loop`); re-pinning it before that would have been a guess.
+# That condition is met now, and the shape below is read off the run rather than guessed: the
+# transposed member answers `(float) => (float,)`, one cotangent in and one per parameter out.
+expect_output_contains = ["TRANSPOSE function=read_one carried=1 node=10 origin=0 captures=1 answer=summed", "ESCAPE target=0 from=9 kindOfFrom=11 kindOfTarget=1 typeOfTarget=float norm=[3,0,] with=[9,11,]", "TRANSPOSE function=read_one graph=", "type=(float) => (float,) nodes=12 arms=0 rhs=add_t,mul_t", "15.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
