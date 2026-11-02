@@ -2,7 +2,7 @@
 
 > 一页一问。作者把读过的页整体挪进 `reviews/`；这里只放**还在等回答**的页。
 
-## 现在在等作者：10 页
+## 现在在等作者：11 页
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
 | --- | --- | --- | --- | --- |
@@ -15,6 +15,7 @@
 | [`2026-11-02-can-the-pow-rows-be-built-from-a-base`](2026-11-02-can-the-pow-rows-be-built-from-a-base.cn.md) | `:op/pow_*` 那一族 12 行能不能由一条底算子（`pow_bf`/`pow`）生成，还是每行都得自己写 | 待裁 | — | 那 12 行的归属 |
 | [`2026-11-02-is-the-cpp-backends-elementwise-comparison-missing`](2026-11-02-is-the-cpp-backends-elementwise-comparison-missing.cn.md) | `std::cpp` 下数组 `==`/`!=`/`===` 与逐元素算术的现状，是没翻译还是翻译错 | 已答：`==`/`!=` 对，`===` 与逐元素算术都没有翻译 | — | `std::cpp` 的逐元素层 |
 | [`2026-11-02-who-reports-a-lost-capture`](2026-11-02-who-reports-a-lost-capture.cn.md) | 捕获照抄不了的时候（类型没有批量形式、或调用链上拿不到值），该由变换按名字拒绝，还是由一条与变换无关的"值与它的图捕获对得上"检查来报 | 待裁 | — | 报错的归属：变换还是独立检查 |
+| [`2026-11-02-is-a-chain-start-the-same-question-as-an-order-carrier`](2026-11-02-is-a-chain-start-the-same-question-as-an-order-carrier.cn.md) | `nodeTakesAnOrder`（次序能不能落在节点上，链的**终点**可以是 `GATE`/`FUNC`）与 `isChainStatement`（能不能当链的**起点**）是一问还是两问；按窄的那个走，`FUNC` 起点 63 条没了但 +816 条 `sync chain forks`（`fail` 3497 → 4313） | 待裁 | — | 被拒的 1112 条起点边；`std::opt::inline` 后 `JOIN` 起点那 17 条；`kGCNodeFlagSyncStatement` 的 13 处 |
 | [`2026-11-02-who-makes-a-spliced-chain-tail-final`](2026-11-02-who-makes-a-spliced-chain-tail-final.cn.md) | 拼接时链尾只是快照，谁把它变成终态：删 `resolvePlaceForks` 后 `05_effect_order` 由 `visit 3` 变 `total 60`（效应不再执行） | 待裁 | — | 删 `resolvePlaceForks`；B 要越出"一个草稿操作"的边界 |
 **这张表由 `node scripts/check-doc-links.mjs --questions-index` 对着目录核对**：行数与页数不符、或者某一行指向目录里没有的页，它都会红。
 
