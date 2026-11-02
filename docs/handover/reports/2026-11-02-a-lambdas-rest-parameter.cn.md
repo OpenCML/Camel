@@ -2104,3 +2104,26 @@ static_cast<size_t>(init.dataIndex) < runtimeSlotTypes_.size()` —— **越界�
 > 因为补空处按读数本来就是安全的），**动静**：现在这类不一致会以 `typeAt: index out of range` 的形式在别处爆掉，
 > 换成一条点名"布局与下标不一致"的守卫，**把"静默读成空"变成"当场说清楚"**。
 > **实测**：正常与 poison 各 34 次 `prepareGraph`、15/13 次 `encodeDraft`，**当前树上一次都不触发**——**加了不会红**。
+
+
+## 62. GC 那条线收束：**三个候选全部被读数否掉**，现场仍未指名 ⇒ 停在这里，交班
+
+**四个候选排成一行（按你③）**：
+
+| # | 候选 | 结论 | 读数 |
+|---|---|---|---|
+| 1 | 编码侧补空布局（`graph_encode.cpp:391-394`） | **排除** | 正常 34 次 / poison 34 次，`nodesWithDataIndex=0` 都是 3，`hasLayout=0` 都是 1，且那个图 `maxDataIndex=-1` |
+| 2 | 运行时图构建（`draft_session.cpp:encodeDraftGraph`） | **排除** | 正常 15 次 / poison 13 次（更早崩），**`slots=0` 两边都是 0**；每个图的槽数都等于最大下标+1 |
+| 3 | 冻结图解码（`draft.cpp:930-931` 无条件照搬布局） | **排除** | 探针只在该路径"有节点带下标而布局为空/缺"时打印：**正常 0 次 / poison 0 次** |
+| 4 | 谁冻结的（写侧） | **不成立** | 3 已排除 ⇒ 没有"零槽冻结图"被解码，写侧无对象可查 |
+
+**⇒ 现场不在任何"写布局"的地方。** 空 `TupleType` 是**合法构造出来的**（`mine=yes`），
+而它既不是编码补齐、也不是运行时图构建、也不是冻结图解码带进来的。**剩下的路只有"读取者拿错了元组"，而读取者仍未指名**
+（已排除 25 处具名候选：`pullback.cpp` 13、`split.cpp` 3、`transpose.cpp` 2、`frame.h` 7）。
+
+**⇒ 这条线按你的安排停在页面**：12 条红（`poison:transforms` 10 + `remat.split` 2）**已确定是同一句诊断、同一个形态**
+（"一个合法的空 `TupleType` 被越界索引"，只在 poison 下发生），**嫌疑范围从"整个 autodiff"收到"闭包调用的装填"**，
+**四个布局写入口全部排除**。**这是一份能被人接着做的交班，不是结论。**
+
+**下一位的最小起点**：`-vvv` 的最后一行 `Indirect call bind: caller='main' node=37 target='__g_75__' … targetClosure=2`
+后面紧跟崩溃；`why=?` 说明不在那 25 处里；**建议从闭包装填那一段（`src/execute/graph_runtime_support.cpp` 的 bind 之后）逐函数给 `typeAt` 打名字**。
