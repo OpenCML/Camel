@@ -2206,7 +2206,12 @@ class CmlPrinter {
                 return c == 'i' || c == 'l' || c == 'f' || c == 'd' || c == 'c' || c == 'z' ||
                        c == 's';
             };
-            if (op.size() == 4 && op[1] == 't' && op[2] == 'o' && isSide(op[0]) &&
+            if (op == "atos") {
+                // The conversion operator every source type shares: `string(x)`. The printer names
+                // the conversion, not the kernel behind it, so merging the per-type kernels into
+                // this one operator changes nothing here.
+                name = "string";
+            } else if (op.size() == 4 && op[1] == 't' && op[2] == 'o' && isSide(op[0]) &&
                 isSide(op[3])) {
                 switch (op[3]) {
                 case 'i':

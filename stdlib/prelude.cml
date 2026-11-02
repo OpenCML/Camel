@@ -812,7 +812,7 @@ export func c128(x: c128): c128
 /// x as text, as println writes it. A float is written as the shortest text that reads back as
 /// the same number: string(2.5) is '2.5', string(2.0) is '2.0'.
 /// @example string(42)    // '42'
-#op(':op/*tos')
+#op(':op/atos')
 export func string::<T>(x: T): string
 
 /// The integer a text spells, or an error value.
