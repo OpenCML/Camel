@@ -100,12 +100,11 @@ KeepShapeTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         facts.isSyncStatement =
             !draft.syncInputsOf(print).empty() || !draft.syncUsersOf(print).empty();
         facts.hasWaitEdge = !draft.ctrlInputsOf(print).empty();
-        facts.isWaitedOn  = !draft.ctrlUsersOf(print).empty();
         os << "KEEPSHAPE keep=" << (keep ? 1 : 0) << " uri=" << (uri.empty() ? "-" : uri)
            << " data_user=" << (facts.hasDataUser ? 1 : 0)
            << " sync_statement=" << (facts.isSyncStatement ? 1 : 0)
            << " wait_edge=" << (facts.hasWaitEdge ? 1 : 0)
-           << " waited_on=" << (facts.isWaitedOn ? 1 : 0) << " standing="
+           << " waited_on=" << (draft.ctrlUsersOf(print).empty() ? 0 : 1) << " standing="
            << (keepsEffectAlive(effectStandingOf(facts)) ? "alive" : "none") << "\n";
         return session.commit();
     }

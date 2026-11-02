@@ -90,7 +90,6 @@ bool FusionGroupView::isPrivateTo(gc_node_ref_t node, std::span<const gc_node_re
     // fusion group runs as one piece, so taking it in would move the observation with it.
     camel::runtime::EffectLivenessFacts facts;
     facts.hasDataUser  = !graph_->withOutputsOf(node).empty();
-    facts.isWaitedOn   = !graph_->ctrlOutputsOf(node).empty();
     facts.isSyncStatement = !graph_->syncPredsOf(node).empty();
     if (!facts.isSyncStatement && graph_->hasSyncEdges()) {
         for (const camel::runtime::GCGraphSyncEdge &edge : graph_->syncEdges()) {
@@ -100,7 +99,7 @@ bool FusionGroupView::isPrivateTo(gc_node_ref_t node, std::span<const gc_node_re
             }
         }
     }
-    return !facts.hasDataUser && !facts.isWaitedOn && !facts.isSyncStatement;
+    return !facts.hasDataUser && graph_->ctrlOutputsOf(node).empty() && !facts.isSyncStatement;
 }
 
 void registerFusionGroup(attr::AttrKey key, std::string_view name, FusionGroupKernel kernel) {

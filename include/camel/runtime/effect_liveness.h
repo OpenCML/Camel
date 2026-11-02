@@ -35,9 +35,11 @@ enum class EffectStanding : uint8_t {
 struct EffectLivenessFacts {
     /// A value of the node is read by something (design principles 3.1): a normal, `with` or
     /// version input of another node.
+    /// Category: **credential** -- `effectStandingOf` reads it.
     bool hasDataUser = false;
     /// The node is a statement of a `sync` block: it has a sync predecessor or successor, or the
     /// builder marked it as one (`kGCNodeFlagSyncStatement`).
+    /// Category: **credential** -- `effectStandingOf` reads it.
     bool isSyncStatement = false;
     /// Outside a block: the node is registered as a writer of a variable, and a read written after
     /// it takes that variable (the writer table). No caller fills it today: the writer table's
@@ -46,6 +48,8 @@ struct EffectLivenessFacts {
     /// and a field that is false everywhere would only suggest that 3.1's third credential is in use.
     /// Kept as the shape the writer table will answer with once it is measured; whoever fills it also
     /// puts it back in the rule, in the same commit.
+    /// Category: **not read** -- kept as the shape the writer table will answer with; the rule that
+    /// would read it comes back in the commit that fills it.
     bool isWriterWithLaterRead = false;
     /// The node carries a wait: an edge that exists only to order it (today the control edge,
     /// docs/design/effects/plan.cn.md 5.5). A GATE carries no effect of its own -- it carries a
@@ -54,12 +58,10 @@ struct EffectLivenessFacts {
     ///
     /// Its only source today is a control input. Once the control edge stops being written this is
     /// false everywhere, and `bypassValueGate` (src/passes/opt/generic/gates.cpp) becomes dead code:
-    /// its premise is gone, not its correctness. Read this line before deleting either.
+    /// Category: **local decision** -- several sites decide with it (`gates.cpp`, `draft_inline.cpp`,
+    /// `writings.cpp`, `graph.cpp`, `keepshape.cpp`), and `effectStandingOf` does **not** read it, so
+    /// filling it or leaving it alone cannot change a verdict.
     bool hasWaitEdge = false;
-    /// Something outside takes this node as a wait: it has control users (the same kind, the other
-    /// direction). An effect something waits on is observed from outside, so a fusion group may not
-    /// take it in as private: the wait would move with it.
-    bool isWaitedOn = false;
 };
 
 /// The answer. There are two of them: an effect is kept by a data use, a chain, or a later read of
