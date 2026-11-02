@@ -1192,15 +1192,9 @@ bool readLoopCut(
     };
     cut.loop = loop;
     cut.body = rt::loopBodyOf(*function, loop);
-    // A `for` loop's rounds are its array's elements, so the tape has one element per round and the
-    // forward half needs no condition region. A `while` loop's rounds are decided by a condition
-    // region, which is a region of its own to cut; the interval form is not lifted by `jvp` yet, so
-    // a loop that has one never reaches this cell.
-    if (cut.body.iterableForm != camel::core::LoopIterableForm::Array) {
-        return refuse(
-            "this loop iterates an interval, and the interval form is not lifted by `jvp` yet, so "
-            "there is no lifted loop to cut");
-    }
+    // The iterable form does not decide whether a loop can be cut: `jvp` lifts both forms
+    // (measured 2026-11-03: an interval loop lifts and answers 16/16). Only the element type differs,
+    // and it is read from the tail's own form.
     if (cut.body.collectionCount != 0) {
         return refuse(
             "this loop already collects values, and a cut's tape would have to be merged into a "
@@ -1585,6 +1579,9 @@ SplitGraph cutLoopGraph(
         }
         rt::GCLoopBody backwardBody = cut.body;
         backwardBody.collectionCount = 0;
+        // The tape is an array, whatever the primal loop iterated: the backward half walks one
+        // element per round the forward half taped, so it is not the interval's pair.
+        backwardBody.iterableForm = camel::core::LoopIterableForm::Array;
         const gc_node_ref_t backwardLoop =
             draft.addLoopNode(backwardBody, cut.stateTangentType);
         const uint32_t region =
