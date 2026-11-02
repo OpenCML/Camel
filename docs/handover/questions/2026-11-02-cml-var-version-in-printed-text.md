@@ -77,4 +77,29 @@
 
 **"名字不是身份"在打印路径上的落点**：打印器**不按名字查算子**——四处查表全按 URI（`isPure(uri)`、`callFormOf(uri)`、`groupOf(uri)`，见 `src/passes/trans/cml/cml.cpp#operatorExpression` 与 `#moduleImports`），名字是表里查出来的**拼写**（`callForm->name`、`operatorSymbolOf(group)`）；`sourceName(ref)` 只用来给人看的绑定名。`plan-roundtrip.cn.md` 的 `byName` 那一处是"`import` 一个名字还是 `import` 一个模块"的**拼写选择**，查的仍是 URI。
 
+**2026-11-02 查证：branch/loop 尾值那个 `return` 不是缺陷（只查未改）**
+
+问题原样：`return i + 1` / `return println(2)` 是"值是语句被当成值是表达式"，还是"区域的尾值被包成一个没有名字的返回"？
+
+**`git grep -n 'println' src/passes/trans/cml/` 的原文**（十处，没有一处是语句/尾值逻辑）：
+
+```
+cml.cpp:1281:    /// tensor`). An operator of the core (`:op/add_l`, `:io/println`) has no module to import, and
+cml.cpp:1679:                // (`println('before'); fail<'NoPremise'>('...'); println('after')` printed as
+cml.cpp:1774:    /// `println(before, z)` after a loop that writes `z` printed `z` twice (the A7 cases
+cml.cpp:1781:    ///     println(cml1, z)    // the old version, then the one the loop left
+cml.cpp:2601:        // the name and the argument count come from the declaration (`:io/println`, `tensor:sum`,
+cml.cpp:2607:        // A name is written when the program can write it: an operator of the core (`:io/println`,
+cml.cpp:2636:                // is not an operator of the language (`tensor:sum`, `:io/println`) has no symbol,
+cml.cpp:2669:        // `print<'{}-{}'>(3, 4)`, `println<'{:.2f}'>(0.5)`. The format is a `with` input of the
+cml.cpp:2670:        // call (`:io/print` and `:io/println` carry `<fmt: string>`), and a print that dropped it
+cml.cpp:2678:            // `println<'{:.2f}'>` -- a string the call holds and the source writes in `<>`. Any
+```
+
+**答案：第二种，而且是"有名字的返回"——`return <值>`，不是"没名字"**。它在 `CmlPrinter::buildBody` 里一句就写完：`if (!functionBody && regionReturnsValue(region) && !tailPrintedAsStatement) { … body.lines.push_back(indent_ + "return " + value.text); }`——**区域要交值、尾值又没被当成语句打出来时，就打一条 `return`**；注释写的理由是与"裸尾表达式"相比多一道门（"a bare last expression yields the value without that gate"）。**与"值是语句/值是表达式"的混淆无关**：`:io/println` 在打印器里只是普通算子，没有任何 `println` 专属分支。
+
+**而它不是缺陷**：最小用例（循环体尾值 `i + 1` → 打印成 `return i + 1`）回程**判等**——`EQUAL: the two canonical documents are equivalent (37 vertices, 125 edges)`。**打印成 `return` 的图与原图等价，所以不该"修"。**
+
+**因此 49 行 DIFFERENT 的主项要换人**：`var_read_before_region` 今天仍不等价，但检查器指出的是**另一个结构类**——`a structural class has 1 vertex/vertices on the left and 0 on the right: {"op": ":var/new@1.0" …}`，与尾值无关。下一步该查这一处（`order_edges_regions` 大概是同一处），而不是尾值。
+
 **问作者的那一句**：上面第 1 条（版本号不进文本）与第 2、3 条（落 `let` / 具名拒绝）是不是你要的默认？如果"版本号要进文本"，那是另一套设计（文本里出现 `@2` 之类的写法），本刀就要改成拒绝而不是落 `let`。

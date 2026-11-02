@@ -293,7 +293,7 @@ print family, and this operator's configuration is not a string, so its call has
 
 **"只动了一条用例"正是这一刀的重点**：删守卫前的全量快跑是 `8375/8362/1`（红的正是新增的 `arm_read.cml`），删后是 `8375/8363/0`。**守卫在时那条用例是 `DIFFERENT`，删掉后消失**——用例咬得住这条缺陷，缺陷也确实只在角上。
 
-两个顺带记下的读数变化（**都不是本刀**，是合并 `bf64149aa` 带进来的那一个语料文件）：`refused` 1807 → 1808、`families` 52 → 53。后者是**工具把家族名归一化时的伪影**：`REFUSAL … cannot print <graph>: float[]) => float pure>: the graph name '<name>' is not a source identifier.`——同一个"图名不是源标识符"家族，因为那个图的**名字里带 `: `**，家族的 `<graph>` 前缀削掉了半截。**家族数没涨，涨的是归一化没归准。**
+两个顺带记下的读数变化（**都不是本刀**，是合并 `bf64149aa` 带进来的那一个语料文件）：`refused` 1807 → 1808、`families` 52 → 53。后者是**工具把家族名归一化时的伪影**：`REFUSAL … cannot print <graph>: float[]) => float pure>: the graph name '<name>' is not a source identifier.`——同一个"图名不是源标识符"家族，因为那个图的**名字里带 `: `**，家族的 `<graph>` 前缀削掉了半截。**家族数没涨，涨的是归一化没归准。** **由此得一条仪器规则：家族数在名字被截断时不可信**——`REFUSAL` 行的家族键是把"`std::cml cannot print <图名>:`"这段前缀削掉得到的，图名里带 `: ` 时只削掉半截，同一个家族就数成两个。**下一次看到 `families` 涨一，先查那一行是不是被截断的家族，再当成"多了一个家族"。**
 
 **2026-11-02 第十五刀（A7 第 3、7、8 条，同一机制）：`let before = z` 消失，读版本打成变量名。** 三条用例（`var_read_before_region`、`var_read_before_write`、`order_edges_regions`）是**一件事**，不是三件：`:var/get` 只打 `cellName(cellReadBy(...))`，**读的是哪一版它不打**。
 
