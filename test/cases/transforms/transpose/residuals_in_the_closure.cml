@@ -32,7 +32,7 @@ func main(): int sync {
     let fwd = split(lifted)
     let (value, lin) = fwd(3.0, 2.0)
     let back = transpose(lin)
-    let (bx, by) = back(1.0)
+    let (bx, by) = back(0.0, 0.0, 1.0)
     println("value= ", value)
     println("back dx= ", bx, " back dy= ", by)
     return 0
