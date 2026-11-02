@@ -26,7 +26,7 @@ with <h: Head>
 func head(x: f32[..]): f32 {
     let scores = (x @ h.wq) @ transpose((x @ h.wk)) / sqrt(2.0)
     let masked = scores - 1000.0 * (1.0 - [[1.0, 0.0], [1.0, 1.0]] as f32[2, 2])
-    let attention = softmax(masked, 1)
+    let attention = softmax<1>(masked)
     let out = attention @ (x @ h.wv)
     return sum(out)
 }

@@ -21,7 +21,7 @@ func block(x: float[..], wq: float[..], wk: float[..], wv: float[..]): float[..]
     let q = x @ wq
     let k = transpose(x @ wk)
     let scores = q @ k * 0.70710678118654752
-    let attention = softmax(scores + mask(), 1)
+    let attention = softmax<1>(scores + mask())
     return attention @ (x @ wv)
 }
 

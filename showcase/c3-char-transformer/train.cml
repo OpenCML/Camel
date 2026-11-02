@@ -145,7 +145,7 @@ type Transformer = {
 func causal_mask(): float[..] {
     let n = 8
     let flat = range(0, n * n, 1)->map<(k: int): float => if k % n <= k / n then 0.0 else -1000.0>
-    return reshape(flat, [8, 8])
+    return reshape<[8, 8]>(flat)
 }
 
 // Multi-head attention over one window: `x` is [T, D], every weight [D, D], every bias [D], and
@@ -160,12 +160,12 @@ func attention(
     x: float[..], wq: float[..], bq: float[..], wk: float[..], bk: float[..],
     wv: float[..], bv: float[..], wo: float[..], bo: float[..]
 ): float[..] {
-    let q = permute(reshape(x @ wq + bq, [8, 2, 8]), [1, 0, 2])
-    let k = permute(reshape(x @ wk + bk, [8, 2, 8]), [1, 0, 2])
-    let v = permute(reshape(x @ wv + bv, [8, 2, 8]), [1, 0, 2])
+    let q = permute<[1, 0, 2]>(reshape<[8, 2, 8]>(x @ wq + bq))
+    let k = permute<[1, 0, 2]>(reshape<[8, 2, 8]>(x @ wk + bk))
+    let v = permute<[1, 0, 2]>(reshape<[8, 2, 8]>(x @ wv + bv))
     let scores = q @ transpose(k) * 0.35355339059327379 + causal_mask()
-    let mixed = softmax(scores, 2) @ v
-    let joined = reshape(permute(mixed, [1, 0, 2]), [8, 16])
+    let mixed = softmax<2>(scores) @ v
+    let joined = reshape<[8, 16]>(permute<[1, 0, 2]>(mixed))
     return joined @ wo + bo
 }
 
