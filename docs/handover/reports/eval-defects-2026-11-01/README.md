@@ -274,7 +274,7 @@ Found by E2 on `test/cases`; the printed source compiles to a different graph an
 Another 36 printed programs have a different graph and the same behaviour (e.g. `compile/rest_params/rest_inline`, where a static expansion is printed in its expanded form: a structure the language cannot state, or a loss no run observes; these are for review). 13 printed programs do not compile (`recompile_fail`: a redeclared name in comprehensions, `float[]` arguments, an array-literal shape, a reserved `__` identifier, an unresolved printer temporary `cml1`, and a warning that fails the recompile); 2 crash (A1, A2). All are listed with their reason in `e2_test.jsonl`.
 
 ### A8. The Camel stage `opt::cse` fails where `std::opt::cse` succeeds
-Stage `opt::cse` (stdlib/opt.cml), E3. 36 of 145 compiling programs of the optimisation corpus (`test/cases/opt`) and 143 of 576 compiling programs of the 1-in-4 sample of `test/cases` end with `Invalid argument of 'graph.replace': the node anchors its graph (an exit, an output, a return or the end of a branch arm)`. Minimal (`minimal/camel_cse_anchor.cml`, reduced from `opt/generic/control_chain.cml`): `camel f.cml opt::cse std::gir` fails, `camel f.cml std::opt::cse std::gir` succeeds (control, 3 of 3).
+Fixed on `lane-lit2` (`44e6d99e8`: `is_hit` asks `is_anchor`). Stage `opt::cse` (stdlib/opt.cml), E3. 36 of 145 compiling programs of the optimisation corpus (`test/cases/opt`) and 143 of 576 compiling programs of the 1-in-4 sample of `test/cases` end with `Invalid argument of 'graph.replace': the node anchors its graph (an exit, an output, a return or the end of a branch arm)`. Minimal (`minimal/camel_cse_anchor.cml`, reduced from `opt/generic/control_chain.cml`): `camel f.cml opt::cse std::gir` fails, `camel f.cml std::opt::cse std::gir` succeeds (control, 3 of 3).
 
 ```
 func echo(x: int): int sync {
@@ -289,7 +289,7 @@ func main(): int sync {
 Expected: the pass merges what it can and leaves anchors alone, as the native pass does. `docs/technical/45_graph_module.md` lists the known gaps of `opt::cse`; this one is not among them as far as the summary table in that file goes.
 
 ### A9. The Camel stage `opt::fold` has no constant budget
-Stage `opt::fold`, E3. `camel f.cml opt::fold std::gir` on `minimal/fold_interval.cml` writes 43,890,478 bytes of graph dump; `std::opt::fold` writes 1,789 (`repro_checks.json`, `fold_interval_dump_bytes`). The native pass honours `constant_budget` (default 8 MiB) and leaves the interval as the computation that builds it; the Camel pass materialises the 5,000,000 elements. Two corpus programs (`feat/mm/gc/gc_block_pacing`, `para/core/block_sort_merge`) are affected; their dumps were too large to compare (`too_large` in `e3_*.jsonl`).
+Fixed on `lane-lit2` (`de37ecf0a`: `constant_bytes` is `constantBytesOf`, and `opt::fold` takes `constant_budget`). Stage `opt::fold`, E3. `camel f.cml opt::fold std::gir` on `minimal/fold_interval.cml` writes 43,890,478 bytes of graph dump; `std::opt::fold` writes 1,789 (`repro_checks.json`, `fold_interval_dump_bytes`). The native pass honours `constant_budget` (default 8 MiB) and leaves the interval as the computation that builds it; the Camel pass materialises the 5,000,000 elements. Two corpus programs (`feat/mm/gc/gc_block_pacing`, `para/core/block_sort_merge`) are affected; their dumps were too large to compare (`too_large` in `e3_*.jsonl`).
 
 ```
 func main(): int sync {
@@ -299,6 +299,44 @@ func main(): int sync {
 }
 ```
 
+### A10. The transpose has no arm for the array-index law, so a gradient of an array parameter stops there
+
+Stage `transpose` (modules/transforms/transpose.cpp), reached through `vjp` (E2/E3). Five shapes, one stop.
+`camel f.cml` with the case below prints the forward value `6.0` and then refuses:
+
+```
+[stdout] TRANSPOSE function=rulesets.jvp::index_into<float> skip=law rule=idx_arr_t uri=:op/idx_arr
+[stdout] (vjp)…/stdlib/vjp.cml:72:47: [Error]: transforms: transpose has no transpose for …
+```
+
+The rule exists and is declared (`stdlib/rulesets/transpose.cml:73`, `idx_arr_t`:
+`index_into(xs, i) => (ct: T) => scatter_into(zeros_like(xs), i, ct)`), and the pullback already emits the same
+`:tangent/scatter_add_arr` (modules/autodiff/pullback.cpp:2146-2161). The transposer's catch-all `else`
+(transpose.cpp:1354) knows only the arithmetic laws, so the array element read gets no cotangent at all.
+
+```camel
+import rulesets.jvp
+import rulesets.transpose
+import { vjp } from vjp
+
+func g(xs: float[]): float {
+    return xs[1] * xs[0]
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(g)([3.0, 2.0])
+    println(value)
+    let cotangents = pullback(1.0)
+    println(cotangents.0)
+    return 0
+}
+```
+
+Expected: `6.0` then `[2.0, 3.0]` (`dg/dxs[0] = xs[1] = 2`, `dg/dxs[1] = xs[0] = 3`). The same stop holds for a
+single-element array, for one read out of two, for the sum and for the product, so the wall is the law and not
+the shape. Whether to honour it is a design question -- the cotangent of an array element is an array, and the
+transposer's cotangent port is a `float` today -- so it is filed as
+`reviews/questions-2026-11-02-whether-the-transpose-honours-the-array-index-law.md` rather than changed here.
 ## B. Defects of the measuring instruments (test tools)
 
 ### B1. `test/tools/cml_roundtrip.py` reports a document as different from itself

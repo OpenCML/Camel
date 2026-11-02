@@ -141,6 +141,22 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
             },
         },
         {
+            SyntaxDiag::RangeRightIsLink,
+            {
+                "RangeRightIsLink",
+                "The right side of '..' is a '->' call: '..' binds looser than '->', so the call lands on the last value rather than on the interval.",
+                "The interval is an expression, and the call is written after it in parentheses: (a..b)->reduce(f). Written without them, a..b->reduce(f) is a..(b->reduce(f)), which asks the last value of the interval to be reduced. The precedence is the language's, so the parentheses are the program's to add.",
+            },
+        },
+        {
+            SyntaxDiag::FuncTypeNeedsNames,
+            {
+                "FuncTypeNeedsNames",
+                "A function type names its parameters: write '(x: float, y: float) => float', not a list of types.",
+                "In parentheses a list of types is a tuple type, and '(float, float)' is read as one; the parameters of a function type are written 'name: type'. The names are the writer's to choose, and the types of the function's own parameters already say which is which.",
+            },
+        },
+        {
             SyntaxDiag::WhenAfterBody,
             {
                 "WhenAfterBody",

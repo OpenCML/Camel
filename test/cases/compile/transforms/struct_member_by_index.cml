@@ -1,0 +1,10 @@
+// A struct's member is read by name, not by position. `p.1` asks for the second member of a struct by
+// position, which is a refusal -- it used to dereference the name a positional access does not have and
+// segfaulted the compiler (signal 11, three runs out of three).
+// The file also has no `return` in `nested`, which wants a string; that second diagnostic is not printed
+// in this run, because the compiler stops at the type error above.
+func nested(t: { p: { x: int }, q: (int, int) }): string sync {
+    let p: { x: int } = t.p
+    let v: int = p.1
+    let _ = v
+}

@@ -738,3 +738,131 @@ expect_stdout_contains = ["TANGENT type=float space=self", "TANGENT type=f32 spa
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# The two walls between here and the array arm of grad, pinned as refusals rather than known_fail: a wall
+# that falls must turn its assertion into a number, and known_fail would hide that.
+[[tests]]
+name = "grad_array_no_int.fvm"
+kind = "behavior"
+case = "../../../cases/compile/transforms/grad_array_no_int.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["transpose has no transpose for this function"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 15000
+
+[[tests]]
+name = "grad_array_with_int.fvm"
+kind = "behavior"
+case = "../../../cases/compile/transforms/grad_array_with_int.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["Invalid call to 'split'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 15000
+
+# A struct's member read by position used to segfault the compiler in release builds; it is a refusal now.
+[[tests]]
+name = "struct_member_by_index.jgir"
+kind = "behavior"
+case = "../../../cases/compile/transforms/struct_member_by_index.cml"
+args = ["${case}", "std::jgir", "canonical=true"]
+expect_exit = 1
+expect_output_contains = ["Invalid access index: '1'"]
+expect_output_not_contains = ["Segmentation fault"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 15000
+
+# A var holding a lambda, reassigned: the printer died with SIGSEGV formatting this assignment.
+[[tests]]
+name = "cml_var_holding_a_lambda"
+kind = "behavior"
+case = "../../../cases/compile/transforms/cml_var_holding_a_lambda.cml"
+args = ["${case}", "std::cml"]
+expect_exit = 0
+expect_output_contains = ["h = (x: int): int => x + 100"]
+expect_output_not_contains = ["Segmentation fault"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 15000
+
+# the handed-over program: xs[1] * xs[0] over [3.0, 2.0], read through vjp. The cotangent of a function of an array should come back as an array, but the transpose
+# stops at the law the rule library declares for the element read (`idx_arr_t`, stdlib/rulesets/transpose.cml)
+# and answers no cotangent at all. The five shapes here differ only in how the array is used, and each
+# stops at the same line -- so the wall is the law, not the shape. When the arm exists, these flip.
+[[tests]]
+name = "grad_of_an_array_parameter.nvm"
+kind = "behavior"
+case = "../../../cases/compile/transforms/grad_of_an_array_parameter.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["6.0", "[2.0, 3.0]"]
+expect_output_not_contains = ["skip=", "breaks its edge invariants"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+# Marked known_fail on the author's ruling of 2026-11-03 00:30: a case that cannot pass today belongs
+# in the plan with a mark, an owner and a reason, not outside it in CASE_EXCEPTIONS. The assertion is
+# the answer the transform owes -- `[2.0, 3.0]` -- and not today's refusal, so the mark is the only
+# thing standing between the plan and a red, and the runner reports a marked case that passes as a
+# failure: that report is what asks for the mark's removal.
+known_fail = ["nvm"]
+known_fail_note = "Owner: the value chain that lane-lit2 carries. The array element read's transpose arm is missing -- the transform answers `skip=law rule=idx_arr_t uri=:op/idx_arr` and `transpose has no transpose`, so the pullback never reaches `[2.0, 3.0]`. Reason for the mark rather than a pinned refusal: the pinned form asserts today's wrong answer as correct, and the plan's own header already says what that costs. When the arm lands, remove the mark in the same commit."
+
+# one element: xs[0] over [3.0]. The cotangent of a function of an array should come back as an array, but the transpose
+# stops at the law the rule library declares for the element read (`idx_arr_t`, stdlib/rulesets/transpose.cml)
+# and answers no cotangent at all. The five shapes here differ only in how the array is used, and each
+# stops at the same line -- so the wall is the law, not the shape. When the arm exists, these flip.
+[[tests]]
+name = "grad_array_one_element.nvm"
+kind = "behavior"
+case = "../../../cases/compile/transforms/grad_array_one_element.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["skip=law rule=idx_arr_t uri=:op/idx_arr", "transpose has no transpose"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+# two elements, one read: xs[0] over [3.0, 2.0]. The cotangent of a function of an array should come back as an array, but the transpose
+# stops at the law the rule library declares for the element read (`idx_arr_t`, stdlib/rulesets/transpose.cml)
+# and answers no cotangent at all. The five shapes here differ only in how the array is used, and each
+# stops at the same line -- so the wall is the law, not the shape. When the arm exists, these flip.
+[[tests]]
+name = "grad_array_two_elements_first.nvm"
+kind = "behavior"
+case = "../../../cases/compile/transforms/grad_array_two_elements_first.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["skip=law rule=idx_arr_t uri=:op/idx_arr", "transpose has no transpose"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+# the sum: xs[0] + xs[1] over [3.0, 2.0]. The cotangent of a function of an array should come back as an array, but the transpose
+# stops at the law the rule library declares for the element read (`idx_arr_t`, stdlib/rulesets/transpose.cml)
+# and answers no cotangent at all. The five shapes here differ only in how the array is used, and each
+# stops at the same line -- so the wall is the law, not the shape. When the arm exists, these flip.
+[[tests]]
+name = "grad_array_sum.nvm"
+kind = "behavior"
+case = "../../../cases/compile/transforms/grad_array_sum.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["skip=law rule=idx_arr_t uri=:op/idx_arr", "transpose has no transpose"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+# the product: xs[0] * xs[1] over [3.0, 2.0]. The cotangent of a function of an array should come back as an array, but the transpose
+# stops at the law the rule library declares for the element read (`idx_arr_t`, stdlib/rulesets/transpose.cml)
+# and answers no cotangent at all. The five shapes here differ only in how the array is used, and each
+# stops at the same line -- so the wall is the law, not the shape. When the arm exists, these flip.
+[[tests]]
+name = "grad_array_product.nvm"
+kind = "behavior"
+case = "../../../cases/compile/transforms/grad_array_product.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["skip=law rule=idx_arr_t uri=:op/idx_arr", "transpose has no transpose"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
