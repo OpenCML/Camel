@@ -275,6 +275,41 @@ print family, and this operator's configuration is not a string, so its call has
 
 
 
+
+**2026-11-02 第十八刀没下刀：`when` 槽不在打印器这一层（只查未改）**
+
+`unfaithful` 里唯一"签名侧"的那条（`compile/when_overloads/values.cml`）本来排在下一刀。**查完发现修法不在打印器**，所以先不落代码。
+
+**现状（逐字）**——源里两个声明：
+
+```
+with <fast: bool, wide: bool>
+func pick(x: int): string when fast { return 'fast' }
+
+with <fast: bool, wide: bool>
+func pick(x: int): string when wide { return 'wide' }
+```
+
+**打印出来**：
+
+```
+with <fast: bool, wide: bool>
+func pick(x: int): string { return 'fast' }
+
+with <fast: bool, wide: bool>
+func pick(x: int): string { return 'wide' }
+```
+
+**答：既不是"打印器没打 `with` 槽"，也不是"声明在 GIR 里没有 `with` 槽"**——`with <fast: bool, wide: bool>` **打出来了，与源逐字相同**。丢的是 **`when` 条件**，而三处证据说明它不在打印器能读到的地方：
+
+1. **GIR 里没有它**：`std::gir` 里两张图都叫 `pick`，`with` 端口 `fast`/`wide` 与普通参数 `x` 一模一样，**签名完全相同**，没有任何条件节点或属性；
+2. **声明记录里没有它**：打印器唯一能问的声明表是 `camel::core::OperatorTable::instance().callFormOf(uri)`，`CallForm` 的字段是 `name`/`minArgs`/`withCount`/`declaredByModule`/`kernelDeclaration`（`include/camel/core/operator_table.h#CallForm`）——**没有条件文本**；
+3. **条件只活在编译期的树上**：`include/camel/compile/gct/tree.h#whenOf`（`WhenClause`，带 `condition` 与 `text`），建图器用它判重载是否互斥（`src/compile/gir/builder.cpp` 的 `whenClauses_`），**过不了图这道门**。
+
+⇒ **这是声明/建图侧的债**：要让打印器写出 `when fast`，条件文本得先挂在**声明**上（`CallForm` 加字段，或图/声明记录带上它）。**它不在打印这一层，硬印只能印出"看起来对"的两条同名声明**。所以 `unfaithful` **10 → 9 这一刀做不到**，得等条件文本上到声明层。
+
+**由此记一条**：`unfaithful` 的十条里，**"签名侧"那条其实和"起名侧"两条一样，都卡在声明层**——一条要条件文本，两条要"同作用域唯一"。打印器能自己清的是**作用域那三条**与 `fields_and_access`。
+
 **2026-11-02 第十七刀（没人用的区域）：先答"它有没有语句形式"，再改。** 裁下来的问题是"那张图左边那个 `LOOP`，值没人用、什么也不写，它在 CML 里有没有**语句形式**"。
 
 **答：有，而且源程序本身就是那种写法**——`nothing_written` 里的 `loop i = 0 while i < 2 do sync { i + 1 }` 就是一个其值无人读的循环**语句**。所以不是语言层的缺口，**打印器应当印出来**。
