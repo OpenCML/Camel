@@ -8,9 +8,15 @@
 // out of `stdlib/vjp.cml` and this goes red at the library's own line -- `transpose has no
 // transpose for this function`, or `jvp has no forward rule for :op/mul_d` -- on the call
 // `stdlib/vjp.cml` composes, never in this file and never in a sentence of the form "not
-// implemented yet". `f(x) = x*x*x` at 3 gives the value 27, the cotangent `(27.0,)` -- one member,
-// because a pullback answers one cotangent per parameter and `f` has one -- and the gradient 27: two
-// numbers and the tuple they come out of.
+// implemented yet".
+//
+// The point is `x = 2`, and it is chosen so that **the value and the gradient differ**: `f(2) = 8`
+// and `3*x*x = 12`, with the cotangent `(12.0)` -- one member, because a pullback answers one
+// cotangent per parameter and `f` has one. At `x = 3` all three numbers are 27, and an assertion
+// that only asked whether `27.0` appears could not tell a wrong gradient from the value it
+// differentiates: it stayed green with the gradient computed as the value (see P2-22 of
+// docs/handover/reports/). Each line below is pinned whole for that reason, and the plan also
+// refuses the old point's `27.0` outright.
 import { grad, vjp } from vjp
 
 func f(x: float): float {
@@ -18,9 +24,11 @@ func f(x: float): float {
 }
 
 func main(): int sync {
-    let (value, backward) = vjp(f)(3.0)
-    println(value)
-    println(backward(1.0))
-    println(grad(f)(3.0))
+    let (value, backward) = vjp(f)(2.0)
+    let cotangents = backward(1.0)
+    println('vjp_ruleset value={}'->format<value>)
+    println(cotangents)
+    println('vjp_ruleset cotangent={}'->format<cotangents.0>)
+    println('vjp_ruleset grad={}'->format<grad(f)(2.0)>)
     return 0
 }
