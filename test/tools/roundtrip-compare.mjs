@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * The `std::cml` round trip, measured as **behaviour**: a program is printed, the printed program is
  * run, and its `rc` and `stdout` are compared with the origin's. Text equality is not the question
