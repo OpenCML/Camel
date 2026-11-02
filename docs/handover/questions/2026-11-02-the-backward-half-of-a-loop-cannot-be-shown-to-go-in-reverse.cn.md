@@ -10,7 +10,7 @@
 
 ## 2. 实测：今天的树上，能到达 `split` 的循环输入分辨不出走序
 
-- `jvp` 只给**浮点标量**配对：`pairTypeOf`（`modules/transforms/jvp.cpp:59-72`）要求 `tangentSpaceOf` 回答 `Self` 且 `isFloatingScalar`，聚合体（元组、数组）一律返回空。
+- `jvp` 只给**浮点标量**配对：`pairTypeOf`（`modules/transforms/jvp.cpp#pairTypeOf`）要求 `tangentSpaceOf` 回答 `Self` 且 `isFloatingScalar`，聚合体（元组、数组）一律返回空。
 - 所以被 lift 的循环，其状态口只能是**一对 `float`**：状态是标量。
 - 单 `float` 的逐轮导数是标量乘积；标量可交换，所以正序累乘与倒序累乘是**同一个数**。
 - 读数（`test/cases/transforms/split/split_loop_taped_rounds.cml`，因子 2、3、5）：`loop y= 30.0`、`loop d= 30.0`；三个因子的任何排列都给 30。
@@ -29,7 +29,7 @@
   REINTERP jvp function=f skip=body
   ```
 
-  即 `modules/transforms/jvp.cpp:995`，外层报 `transforms: jvp has no forward transform for this function.`，exit 1。
+  即 `modules/transforms/jvp.cpp#liftGraph`，外层报 `transforms: jvp has no forward transform for this function.`，exit 1。
 - 卡点**不是**多状态（那会是 `skip=loop`），是 `skip=body`：状态是聚合体 ⇒ 没有对 ⇒ 循环体里的节点不是可 lift 的值。我到不了 `split`，也就拿不到 Y1 / Y2 这一对数。
 
 ## 4. 我方默认

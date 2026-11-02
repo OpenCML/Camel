@@ -21,7 +21,7 @@
 // per-round maps here are the scalars 2, 3, 5, they commute, and every walk order prints the same
 // 30. Nor can any other loop in this tree pin it, and that is a statement about the lift rather than
 // about this cut: `jvp` gives a pair to a floating scalar and to nothing else (`pairTypeOf`,
-// modules/transforms/jvp.cpp:59-72), so a loop's state can only be a float -- and one float's
+// modules/transforms/jvp.cpp#pairTypeOf), so a loop's state can only be a float -- and one float's
 // per-round maps are scalars, so the derivative is the same product however it is walked. The
 // construct that would break the tie is one state holding a 2x2 matrix (four floats as a tuple),
 // with round maps Mk = [[1, k], [k*k, 1]] that do not commute, so that walking the rounds the other
@@ -30,7 +30,7 @@
 //
 //     REINTERP jvp function=f skip=body
 //
-// (modules/transforms/jvp.cpp:995) instead of lifting it, so `split(jvp(f))` never sees such a loop.
+// (modules/transforms/jvp.cpp#liftGraph) instead of lifting it, so `split(jvp(f))` never sees such a loop.
 // An order-sensitive case therefore waits on the lift of an aggregate state, not on this cut.
 //
 // The reverse walk itself is `transpose`'s (4.3: 倒着走，逐轮取 `split` 留下的残差), and `transpose`
