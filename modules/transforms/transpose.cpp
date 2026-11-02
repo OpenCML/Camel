@@ -1982,7 +1982,13 @@ bool buildTransposeMember(
                             caught[i].first, component(static_cast<uint32_t>(stateCount + i)));
                     }
                 } else {
-                    result = loopNode;
+                    // One state and nothing escaped: the loop's value is that state's cotangent, and it
+                    // is the transposed function's whole answer -- one cotangent, in the one-slot tuple
+                    // the signature promises, the same shape a branch's answer takes (author,
+                    // 2026-11-02 11:30). Handing the scalar out unwrapped is what took the process down
+                    // when the graph was called: the call site's slot is typed `(float,)` by the
+                    // signature, so a `float` written into it is read as a tuple.
+                    result = tupleOf({loopNode}, {cotangentTypeOf(loopNode, Type::Float64())}).first;
                 }
                 break;
             }
