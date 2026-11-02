@@ -128,3 +128,14 @@ A/B 读数（都跑 `test/plans/feat/compile/branch_exit.plan.toml`，10 例）�
 | 拿掉被守的那条分支（把 JOIN 的 `with` 输入从 `live` 的走法里去掉——臂的结果正是这样进图的） | `total: 10, pass: 1, fail: 9`，9 例全是同一句：`Camel Invariant Violation: Region 1 yields node 4 and its owner 7 is in the execution, but that node is not: the value the region makes is read by nothing the exit depends on.`（`used_arm_exit` 与 `unused_arm_exit` 各 4 个 back end，加 `unused_arm_exit.wno`） |
 
 被守的分支一拿掉，红的不是数值，是这句话本身；还原即绿。这一笔只加这一条不变量，没动任何判定；`isWriterWithLaterRead` 的语义也没有动（它仍是那个洞的名字）。
+---
+
+## 7. 收窄之后（P0-4 的第一笔，`lane-a3`）
+
+上面 1–6 节量的是 `76297223f` 的树，不改。这一节记那之后改了什么：
+
+- **删 2 个字段**：`hasWaitEdge`、`isWaitedOn`。它们不在 `effectStandingOf` 的答案里（答案只读 `hasDataUser || isSyncStatement || isWriterWithLaterRead`），却是 5 处里 4 处填的字段，其中 `hasWaitEdge` 有**三种写法**（§3）。判据来自 `docs/handover/reports/code-review-2026-11-01.md` 第 4 条：**做不到经它判定的字段，删掉。**
+- **4 处不再借壳**：`gates.cpp`、`graph.cpp`、`writings.cpp`、`draft_inline.cpp` 各写自己的 `bool`（分别叫 `carriesWait`/`waitOnAChain`、`hasWaitEdge`、`memberCarriesWait`、`callCarriesWait`/`callOnAChain`），注释写明这是**结构问题**、不是活性答案——带等待的 GATE 在答案里是 `HasNoCredential`，那个答案回答不了它。
+- **1 处改走单点**：`FusionGroupView::isPrivateTo` 现在调 `effectStandingOf(...) == HasNoCredential`，再与它自己那一条（`isWaitedOn`，不吃凭据，故不在答案里）相与。等价性：`isWriterWithLaterRead` 恒 false，所以 `HasNoCredential ∧ ¬isWaitedOn` 与改前的 `¬data ∧ ¬waited ∧ ¬sync` 同。
+- **字段集**：5 → 3。`isWriterWithLaterRead` 留着（赋值 0、读点 1），理由见 §2 第 44 行：它是 3.1 第三条凭据在全树唯一的表述。
+- **读数**：全量 fast 层 `total: 8450, pass: 8438, fail: 0, skip: 10, known failures: 2`，`RUN_EXIT=0`；`effects_kept` 79/79（`KEEPSHAPE` 那四行列一字未改）。
