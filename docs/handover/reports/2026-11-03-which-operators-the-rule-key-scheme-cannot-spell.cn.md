@@ -147,7 +147,7 @@ REINTERP jvp function=p skip=rule uri=:op/pow_d reason=the operator has no forwa
 
 第 1–25 行是**同一个形状**：一个写法、一个目的地、若干源。第 26–32 行各自有形状（数组转换、可失败解析、两个没有 token 的数组算子），不能靠同一条规则救。
 
-## 5. 修法二选一：两栏代价（**作者选 (b)，但 (b) 经复核不成立，见 §5.1**）
+## 5. 修法二选一：两栏代价（**(b) 经复核不成立（§5.1）；(b') 键侧成立、律侧不成立（§5.2），出路见 §5.2 末表**）
 
 | | **(a) 每 uri 一行例外** | **(b) 让 `ruleKeyOf` 从 `<源>to<目的>` 推键** |
 |---|---|---|
@@ -192,6 +192,31 @@ REINTERP jvp function=p skip=rule uri=:op/pow_d reason=the operator has no forwa
 | (c) | **键 = 算子 uri 本身**：`ruleKeyOf` 整张表与 3 条例外全部消失，律自己声明它给哪些 uri | 3 → 0 | 规则集语法 + 索引重定键 + 现有约 100 条律要带 uri | 最彻底，也最大 |
 
 **(b') 是 (b) 的真身**：它保留"从名字推"的便宜（例外 3→2），把省不下的那条硬约束（20 条律）放到索引里解决，而不是假装它不存在。**我不擅自改索引身份**——那是设计决定；这一节只把"选 (b) 会撞到什么"钉在纸上。
+### 5.2 复核 (b')：键能带类型，但**律不能声明具体参数类型**（实测，已回退）
+
+作者改裁 (b')（键 = 拼写 + 操作数类型，索引按 `when` 约束分派）。按"先答、再改、再量"走了三步：
+
+**① 新键的形状（先答，答得出来）**：`:op/dt od` → `float@1#float`，`:op/itod` → `float@1#i32`，两者**不同** ✓。推导表（`d`→`float`、`f`→`f32`、`f6`→`f16`、`bf`→`bf16`、`i`→`i32`、`l`→`int`、`s`→`string`；`a` 不给签名，因为数组重载的参数类型是类型变量 `A`，它的律按拼写归档）。停在①的停手条件没有触发。
+
+**② 实现**（已写、已编译、已跑）：`RuleHead` 添 `paramTypes`（声明处读 `x: float` 的类型拼写），`indexRule` 对转换拼写与全具体类型的律按 `head@1#<类型>` 归档，`lookupRule` 先查签名再查拼写，`arityOfHead` 跳过带 `#` 的键；`ruleKeyOf` 添 `conversionKeyOf`（名字 → 键）；`:op/ltod` 的律从 `float_of_int(n)` 改成 `float(n)`，参数声明为 `n: int`；例外表 **3 → 2** ✓（`rulesets` **67/67**，没有掉条数、没有重复键报警）。**②③ 停手条件都没触发。**
+
+**③ 量出来的硬阻塞：律不能声明具体参数类型。** 改完后 `transforms` 从 48/61 变成 46/61，多出的两条不是图号平移，而是这一行：
+
+```
+REINTERP jvp function=rulesets.jvp::jvp_ltod__lhs skip=rule uri=:op/ltod
+    reason=the rule is named in the index but its templates are not registered
+```
+
+`jvp.cpp:110-121` 在一个**模板表**（`genericRuleTable`）里按律名找 id，找不到就拒绝。只有**带类型参数**的律才会进那张表——`export rule jvp_ltod(n: int)` 没有 `::<T>`，所以它在索引里（键 `float@1#int` 找到了）却**展开不了**。于是 (b') 的键侧成立、**律侧不成立**：要让键带上 `int`，律就得写 `(n: int)`；要能被展开，律就得写 `::<T>` ⇒ 两者互斥。
+
+**两条出路（等作者裁）**：
+
+| | 做法 | 代价 | 风险 |
+|---|---|---|---|
+| (b'-1) | 签名不从参数读，而从**条件**读：律保持 `::<T> when is_same::<T, int>()`，`RuleHead` 再捕获 when 子句文本，索引把 `is_same::<T, X>` 里的 `X` 当签名 | 一处文本解析；律的形状不变 | 条件的一种写法变成键（`is_same` 换个写法就推不出） |
+| (b'-2) | **一个键放多条律**：`indexRule` 每个键存一个 vector，`lookupRule` 返回候选表，三个 transform 依次试到"这个类型有实例"为止。引擎**已经**按操作数的元素类型实例化律（`genericRuleInstance(context, ruleId, {elementType}, {})`），类型不符时它给的是**具名拒绝**（`no instance of the rule at float`），不是错律 | `indexRule`/`lookupRule` 改成 vector + `jvp/vmap/transpose` 三处改成循环 | 无：键**完全不需要推导**，`float` 就是一个键，32 条缺口**一条例外都不用加**，例外表自动回到 2 |
+
+**(b'-2) 是 (b') 的真身，而且比 (b') 更小**：键不需要带类型（`float@1` 就够），因为类型分派是引擎已有的能力，不是键要解决的问题。**我按"不许留下一个红的树"回退了这一版**（`git checkout` 七个文件，`rulesets` 回 **67/67**、`transforms` 回 **48/61**、例外表回 **3**），把量到的东西写在这里，等点名再动。
 ## 6. 一句话结论
 
 **这条缝是方案性的，不是少数特例**：按"结果有切空间却拼不出键"计，**32 条**（把复数算进去 50 条），而例外表只能一条一条地救——今天救了两条、补了一条（`^`）。缺口的形状有两个：
