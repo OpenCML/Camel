@@ -693,10 +693,12 @@ function checkQuestionsHaveDefaults() {
 // line, because a line moves with every edit. Inside docs/handover/ the line numbers are that day's
 // reading and stay; outside it, a line number on a repository source is a citation that will rot.
 // The match is deliberately narrow: a path that starts at one of the source roots and ends in a
-// position. A `.cml` name with a position is excluded: it is a tool's output or an example
-// program's line, and rewriting one would falsify the transcript it is quoted in -- `folded.cml:31`
-// from a debugger session, and `test/cases/perf/mlp_step.cml:51:33` in a timing transcript, are the
-// two that made this narrow.
+// position. A `.cml` name with a position is excluded: it is a tool's output or an example program's
+// line, and rewriting one would falsify the transcript it is quoted in. Two transcripts made this
+// narrow -- a debugger session stepping through `docs/tutorial/examples/folded.cml` and printing its
+// own positions, and a timing line from docs/cli.md that names a case file of
+// `test/cases/perf` with a position after it. (Written this way because the citation check reads
+// comments too: a comment that spells either out with a line number is itself an unpaid citation.)
 const SOURCE_LINE_CITATION = /(?<![\w/])(?:src|include|modules|stdlib|scripts|test)\/[A-Za-z0-9_./-]*\.(?:cpp|h|hpp|cc|ts|mjs|js|toml|py):\d+/
 function checkSourceLineCitations() {
     const files = markdownFiles('docs').filter((f) => !f.includes(`${path.sep}handover${path.sep}`))
