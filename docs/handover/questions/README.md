@@ -2,17 +2,26 @@
 
 > 一页一问。作者把读过的页整体挪进 `reviews/`；这里只放**还在等回答**的页。
 
-## 现在在等作者：6 页
+## 现在在等作者：4 页
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
-| [`2026-11-02-drafts-outlive-the-safepoint`](2026-11-02-drafts-outlive-the-safepoint.cn.md) | 跨过 safepoint 的 draft，它的静态槽该由谁改写：外部 tracer 代替持有者去改写，收 `built` 就崩在启动期 encode、只收 `borrowed` 又毫无影响；问是"搬迁必须由持有者自己做"，还是"那些 draft 本不该活到 safepoint" | 待裁 | — | draft 的静态槽谁改；`built`/`borrowed` 两种收法都不成 |
+| --- | --- | --- | --- | --- |
 | [`2026-11-02-the-generator-reads-a-draft-node-after-its-builder`](2026-11-02-the-generator-reads-a-draft-node-after-its-builder.cn.md) | `stream.*` 在 Windows 上崩在 `builder_support.h#nodeGraphOf`（草稿节点不属于任何 compile graph builder），同树 Linux 全绿、五个后端都崩，所以是建图不是调度；问该谁去找那个节点的 owner、修好前 Windows 腿要不要继续红 | 待裁 | — | Windows 腿的红；那个节点的 owner |
-| [`2026-11-02-when-should-an-underivable-sync-edge-be-dropped`](2026-11-02-when-should-an-underivable-sync-edge-be-dropped.cn.md) | 同步边"推不出来就别建"该在建图时判还是图定型后判；冻结图没有重发 payload 的通路，所以这个问题只能在图定型之前问 | 待裁 | — | 判定的时机；冻结图没有重发通路 |
 | [`2026-11-02-who-restores-order-after-inline-moves-a-statement`](2026-11-02-who-restores-order-after-inline-moves-a-statement.cn.md) | 内联改变块归属之后，次序该由内联自己补还是由图定型后的统一通道补 | 待裁 | — | 次序的归属：内联还是定型后的通道 |
 | [`2026-11-03-may-a-printed-name-be-the-definitions-own`](2026-11-03-may-a-printed-name-be-the-definitions-own.cn.md) | `tensor:sum` 与 `tensor:sum_axis` 共用一个写名 `sum`，边界在哪只有定义知道、节点不知道；问打印件能不能用定义自己的名字（`sum_axis(m, 0, false)`），还是必须复现源里的 `<>` 写法 | 待裁 | — | 打印器的往返：节点上只有一个写名 |
-| [`questions-2026-11-02-which-index-rows-are-already-landed`](questions-2026-11-02-which-index-rows-are-already-landed.md) | 索引里标"已裁未落"的条目，哪些在树上已经落地 | 待裁 | — | 索引状态是否可以改成"已裁已落"（默认=我们改，并逐条写提交 id） |
+| [`questions-2026-11-02-which-index-rows-are-already-landed`](2026-11-02-which-index-rows-are-already-landed.cn.md) | 索引里标"已裁未落"的条目，哪些在树上已经落地 | 待裁 | — | 索引状态是否可以改成"已裁已落"（默认=我们改，并逐条写提交 id） |
 
-**这一节的行数 = 目录里的页数**（现在 6 = 6）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。下一节的行数按 `reviews/` 里的页算，两者不混。
+**这张表由 `node scripts/check-doc-links.mjs --questions-index` 对着目录核对**：行数与页数不符、或者某一行指向目录里没有的页，它都会红。
+
+### 已裁、在 `reviews/` 留档
+
+- `2026-11-02-when-should-an-underivable-sync-edge-be-dropped` —— 已裁已落：**D，不删边、改检查侧**；`Func`/`Join` 可以是链尾，内联处插 `GATE` 接住链尾。
+- `2026-11-02-drafts-outlive-the-safepoint` —— 已裁待落：不走搬运方案，先查草稿静态值为何落在会被搬动的空间，应分配在图空间。
+- `2026-11-02-what-counts-as-a-statement-of-a-chain` —— 已裁已落：链上语句含 `Call`，不含 `Func`/`Join`。
+- `2026-11-02-the-member-count-stated-twice` —— 已裁已落：`split` 不再交出残差元组，检查从此是守卫。
+- `2026-11-02-does-the-neq-cut-take-the-strict-neq-group-with-it` —— 已裁已落：补逐元素 `!`，然后删净。
+- `2026-11-02-is-p0-2-now-a-pass-by-pass-judgement-change` —— 已裁已落：先修不变量，按节点性质判。
+
 
 ### 已裁、在 `reviews/` 留档
 - `2026-11-02-what-counts-as-a-statement-of-a-chain` —— 链上语句含不含 `Func`/`Join`；裁：含 `Call`，不含这两个。

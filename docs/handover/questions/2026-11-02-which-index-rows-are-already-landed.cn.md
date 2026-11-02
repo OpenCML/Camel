@@ -36,3 +36,18 @@
 ## 四、一处口径提醒
 
 作者的索引写"已裁未落"时看的是 **`develop`**，而我这份核对表看的是**本车道 HEAD**（`9a34bd7c0`，已并 `bc28c4f3d`）。两者之间若有差，**以 `develop` 上的命令输出为准**；我这边的结论只说明"这些改动在本车道已存在"，合并后即等于在 `develop` 上成立。
+
+## 五、复核一次（2026-11-02 15:55，`origin/develop` = `1cdcb4725`）
+
+**页名从 `questions-…` 改成 `2026-11-02-…cn.md` 时顺手复跑了第一节与第二节的命令，两格变了，四格没变**：
+
+| 条目 | 8 小时前的写法 | 现在的命令与读数 | 结论 |
+|---|---|---|---|
+| `reinterp-rule-set` / `who-consumes-the-ruleset-index` 的消费者 | "`git grep reinterp` 只中 `reinterpret_cast`"、"`modules/transforms/` 只有骨架" | `git grep -n 'reinterp' -- stdlib modules` = **127 行**，其中 `reinterpret_cast` **85** 行、**其余 42 行是 `reinterp` 本身**（`modules/transforms/jvp.h:5` 写的就是 `reinterp<jvp>(f)`）；模块不再是小骨架：`split.cpp` **1517** 行、`transpose.cpp` **1945** 行、`jvp.cpp` **1103** 行 | **变了**：消费者已经在模块里；仍成立的部分只有"**C++ 侧没有 `reinterp` 算子 id**"（`git grep -n 'reinterp' -- src include` 只中 `reinterpret_*`） |
+| `what-carries-a-wait-for-a-write` ②a 停造 ctrl | `writeControlLink` **15** 个调用点 | `git grep -n 'writeControlLink' -- src` = **16** 行 | **变了 1**（多的一处在本轮之前就进了 `develop`） |
+| `parallel-map-fault-what-runs-after` | `taskflow.cpp` 里 `DESIGN-QUESTION` 0 命中 | 同上：`src` 下命中的 8 个文件里**没有** `taskflow.cpp` | 不变 |
+| `generator-cell-type-by-inference` | `FeatureNotSupported("generators")` 0 命中 | = **0** | 不变 |
+| `one-operator-two-names` | `array:argmax` 在 `src` 0 命中 | = **0** | 不变 |
+| `literal-head-type-expression` / `match-type-guard` | `zero_tangent` 仍以 `case _ => ()` 收尾 | `stdlib/rulesets/jvp.cml:54` 仍是 `case _ => ()` | 不变 |
+
+**⇒ 第一节里"已经落地"那六条没有一条被推翻；被推翻的是第二节里那条"`reinterp` 与 `transforms` 都还没有"**——它现在是"模块已有 `reinterp<jvp>`、C++ 侧还没有算子 id"。
