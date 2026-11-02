@@ -1896,3 +1896,9 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 4. **P0-2 的两处改写** —— `lane-m4b2`。读数：全量 `fail 3835 → 3497`（−338）、280 用例转绿；改动只在 `linkSyncStatement` 一处（建链两头都问，`from` 侧新增 `chainTailBehind`）。剩下的一条是文件里量出来的：`FUNC` 过得了 builder 的 `nodeTakesAnOrder`、过不了 seal 的 `isChainStatement`（**同一个条件的两份拷贝**），正在合成一处；`kGCNodeFlagSyncStatement` 仍未删（13 文件 28 处），按裁定在归零那一笔删。**预计两轮。**
 
 另：ASan 腿 workflow 的第二个阻塞（`CAMEL_TEST_BUILD: debug`）已在 `975a368d0` 修好，这一轮起它第一次有可能真跑起来。
+
+## 裁定（2026-11-02 10:50）：`check` 的被测程序放普通参数——A，照现在这样
+
+`with` 参数是函数在这一次使用里固定的配置（采样数、种子），普通参数是被处理的输入。被检查的那个程序是输入，不是配置，所以写成 `rules->check(f)` 本来就对，`<over: f>` 那种写法把输入放错了位置。两条重载的 `with` 位置一致，`check<samples: 1000>` 照原样编过，三条要求同时成立。页面挪到 `reviews/` 留档。
+
+**这一批看过**：`b9c2ba629` 让余切累加按切空间选加法（今早审查第 4 条），`1b3213d0d` 把变换的读数挪到诊断那一侧（第 3 条，`modules/transforms` 里只剩 `readings.h` 一处 `std::cout`，请确认它只在显式的调试参数下输出），A13（`9390de694`）、A14（`3373b79b9`）已修，`24d352d0e` 处理了那条 `TODO(debt)`。四件逾期项的负责人和轮次已写明，收下。
