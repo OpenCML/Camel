@@ -1739,12 +1739,6 @@ bool buildTransposeMember(
                     }
                     arguments.push_back(argument);
                 }
-                FunctionType *calleeType = transposeSignature(callee->funcType());
-                if (calleeType == nullptr) {
-                    os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
-                       << " callee=" << callee->name() << " signature\n";
-                    return false;
-                }
                 // The callee's transpose stands where the call stood: it takes the arguments as the
                 // call has them and then the cotangent, and answers one cotangent for each argument
                 // -- a number for one parameter, one tuple for several.
@@ -1752,6 +1746,8 @@ bool buildTransposeMember(
                 // the transposed member answers, and building it again from the parameter count is how
                 // a call site ends up saying `(float, float)` about a member that answers `(float[])`.
                 Type *const answerType = calleeType->exitType();
+                std::vector<gc_node_ref_t> callArgs;
+                callArgs.reserve(arguments.size() + 2);
                 // Where the callee stood at the call site, it stands in the transposed call: as the
                 // first normal input when the original wrote it in place, as a `with` input when the
                 // original took it as a value (`let h = double; h(x)`). A call whose callee value is
