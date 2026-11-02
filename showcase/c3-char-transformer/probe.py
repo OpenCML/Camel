@@ -83,6 +83,21 @@ def first_reason(text):
     return interesting[-1]
 
 
+def wall_tag(text):
+    """The wall a refusal names, in as few characters as it can be named in."""
+    for line in text.splitlines():
+        match = re.search(r"has no forward rule for `([A-Za-z_:]+)`", line)
+        if match:
+            return f"no-rule:{match.group(1)}"
+        match = re.search(r"no [a-z]+ rule for `([A-Za-z_:]+)`", line)
+        if match:
+            return f"no-rule:{match.group(1)}"
+        match = re.search(r"/([^/]+\.cml:\d+:\d+): \[(Error|Fault)\]", line)
+        if match:
+            return match.group(1)
+    return "ok" if not text.strip() else "other"
+
+
 def compact_reason(text, limit=150):
     """A refusal in one line: where it was, what it said, and the name the compiler files it under.
 
@@ -207,6 +222,11 @@ def main():
             print(f"probe-group refused {chunk}")
     answered = ",".join(r["probe"] for r in readings if r["verdict"] == "ok")
     print(f"probe-groups total={len(groups)} answered={answered or '(none)'}")
+    # One line for the whole inventory: which wall each probe hit, by name.  This is the table
+    # WALLS.cn.md is written from and the one thing a run must not lose in a tail.
+    spelled = " ".join(f"{r['probe']}={wall_tag(r['stdout'] + r['stderr'])}" for r in readings)
+    for chunk in wrap(f"probe-walls {spelled}", 96):
+        print(chunk)
     if args.json:
         Path(args.json).write_text(json.dumps({"readings": readings}, indent=2), encoding="utf-8")
         print(f"probes json={args.json}")

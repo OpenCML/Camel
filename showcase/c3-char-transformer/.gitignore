@@ -5,3 +5,4 @@ probes.json
 *.npz
 artifacts/
 __pycache__/
+RESULTS.md

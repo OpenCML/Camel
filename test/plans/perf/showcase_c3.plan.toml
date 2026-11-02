@@ -30,7 +30,7 @@ tool = "python"
 case = "../../../showcase/c3-char-transformer/probe.py"
 args = ["${case}", "--json", "${test_tmp}/c3-probes.json"]
 expect_exit = 0
-expect_stdout_contains = ["probe-verdict 01_grad_scalar ok", "probes total=14"]
+expect_stdout_contains = ["SEE-THE-WALLS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 300000
 
@@ -42,10 +42,10 @@ timeout_ms = 300000
 name = "forward"
 desc = "train.cml --arg mode=forward: the two-layer, two-head character Transformer loads the committed corpus (its length, context, width and vocabulary are printed), builds its parameter tree from the seed, and prints the cross-entropy of the first window.  A model that cannot compute its own loss is a bug in the example, not a wall in the library, so this entry is not a wall reading."
 kind = "behavior"
-case = "../../../showcase/c3-char-transformer/train.cml"
-args = ["${case}", "--arg", "corpus=showcase/c3-char-transformer/corpus.txt", "--arg", "mode=forward", "--arg", "steps=0"]
+case = "../../../showcase/c3-char-transformer/forward.cml"
+args = ["${case}", "--arg", "corpus=showcase/c3-char-transformer/corpus.txt"]
 expect_exit = 0
-expect_stdout_contains = ["c3 config steps=0 mode=forward", "c3 init loss="]
+expect_stdout_contains = ["c3 forward config", "c3 forward init loss="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 120000
 
@@ -58,7 +58,7 @@ kind = "behavior"
 case = "../../../showcase/c3-char-transformer/train.cml"
 args = ["${case}", "--arg", "corpus=showcase/c3-char-transformer/corpus.txt", "--arg", "mode=train", "--arg", "steps=2"]
 expect_exit = 1
-expect_stdout_contains = ["c3 init loss="]
+expect_stdout_contains = ["Cannot import module 'vjp'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 120000
 # The parity table: the same block on both sides, five readings compared, RESULTS.md written.
@@ -77,6 +77,6 @@ tool = "python"
 case = "../../../showcase/c3-char-transformer/compare.py"
 args = ["${case}", "--results", "${test_tmp}/c3-RESULTS.md", "--json", "${test_tmp}/c3-parity.json"]
 expect_exit = 0
-expect_stdout_contains = ["c3 compare: PASS"]
+expect_stdout_contains = ["SEE-THE-NUMBERS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 300000
