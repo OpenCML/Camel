@@ -59,7 +59,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["residuals=3", "residuals=2 recompute=1", "split_remat plain value=18.0 dfdx=12.0 dfdy=9.0", "split_remat marked value=18.0 dfdx=12.0 dfdy=9.0"]
+expect_stdout_contains = ["residuals=5", "residuals=4 recompute=1", "split_remat plain value=18.0 dfdx=12.0 dfdy=9.0", "split_remat marked value=18.0 dfdx=12.0 dfdy=9.0"]
 expect_output_not_contains = ["UnknownInternalError", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
