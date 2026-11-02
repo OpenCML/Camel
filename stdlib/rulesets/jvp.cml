@@ -175,15 +175,17 @@ export rule jvp_idx_arr::<T>(xs: T[], i: int) {
 // right side*, because `Tangent<int>` is `()` -- and the answer here is the zero of the **result's**
 // space, which is a `float`: `float(n)` reads an integer and contributes nothing of its own.
 //
-// The key is the same kind of exception `:op/idx_arr` is: `ruleKeyOf` derives a `:op/` key only from
-// `add`, `sub`, `mul`, `div` and `neg` (`src/core/forward.cpp`), and `ltod` says nothing about the
-// spelling -- `float(x: int)` is written `float`, a spelling every conversion to a double shares
-// (`float(x: i32)`, `float(x: float)`, `float(x: string)` ...), so one key could not name this one.
-// `ruleKeyExceptions()` therefore files this operator under the call below, whose body the operator
-// is, exactly as it files `:op/idx_arr` under `index_into`.
+// The key is the operator's own spelling: `ltod` is `float(x: int)`, `ruleKeyOf` reads the
+// destination's letter (`d` -> `float`) and the arity (one), and the family files this rule under
+// `float` at one operand. The *source* is not in the key, and does not have to be: several
+// conversions share that spelling (`float(x: i32)`, `float(x: float)`, ...), so a key holds several
+// rules and the engine decides -- it instantiates a rule at the operand's own type, and a law whose
+// condition (`is_same::<T, int>()`) does not hold there is refused by name instead of applied.
+// `ltod` used to be an exception for the opposite reason (one key held one rule); it is not one now.
 
-/// `float(n)` where `n` is an `int`: the body of `:op/ltod`, and the left side its rule is filed
-/// under. Not `export`ed: a rule's left side is written with it, and nothing else has a use for it.
+/// `float(n)` where `n` is an `int`. Not `export`ed: nothing calls it -- the rule below answers
+/// with the zero of the result's space directly -- but it is the body `:op/ltod` is, written down
+/// once where the conversion's own documentation can point at it.
 /// `is_same` is how a rule here names one type (`sum_kernel` in `array.cml` does the same), and it
 /// is also what lets the body convert: `float` is a different operator for `i32` than for `int`.
 /// @example float_of_int(3)    // 3.0
@@ -196,7 +198,7 @@ func float_of_int::<T>(n: T): float when is_same::<T, int>() {
 /// anything -- the value is real (`int_escape(1.0)` is 10.0) and its derivative is 0.
 /// @example float_of_int(3)    // 3.0; lifted, its tangent is 0.0
 export rule jvp_ltod::<T>(n: T) when is_same::<T, int>() {
-    float_of_int(n) => () => 0.0
+    float(n) => () => 0.0
 }
 
 // ---- the forward rule of `^` (a power) ----

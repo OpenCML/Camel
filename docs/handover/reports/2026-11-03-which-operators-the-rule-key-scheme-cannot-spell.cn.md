@@ -217,6 +217,33 @@ REINTERP jvp function=rulesets.jvp::jvp_ltod__lhs skip=rule uri=:op/ltod
 | (b'-2) | **一个键放多条律**：`indexRule` 每个键存一个 vector，`lookupRule` 返回候选表，三个 transform 依次试到"这个类型有实例"为止。引擎**已经**按操作数的元素类型实例化律（`genericRuleInstance(context, ruleId, {elementType}, {})`），类型不符时它给的是**具名拒绝**（`no instance of the rule at float`），不是错律 | `indexRule`/`lookupRule` 改成 vector + `jvp/vmap/transpose` 三处改成循环 | 无：键**完全不需要推导**，`float` 就是一个键，32 条缺口**一条例外都不用加**，例外表自动回到 2 |
 
 **(b'-2) 是 (b') 的真身，而且比 (b') 更小**：键不需要带类型（`float@1` 就够），因为类型分派是引擎已有的能力，不是键要解决的问题。**我按"不许留下一个红的树"回退了这一版**（`git checkout` 七个文件，`rulesets` 回 **67/67**、`transforms` 回 **48/61**、例外表回 **3**），把量到的东西写在这里，等点名再动。
+### 5.3 落 (b'-2)：一个键放多条律，类型分派留在引擎里（已落地）
+
+作者裁 (b'-2)。落地的形状比 (b') **更小**，因为键不再编码类型：
+
+| 文件 | 改动 |
+|---|---|
+| `include/camel/parse/ast/rule_head.h` | `RuleHead` 添 `condition`（律的条件文本）；新 `lookupRules(family, head, arity)` |
+| `src/parse/ast/rule_head.cpp` | 索引从 `map<key, string>` 变成 `map<key, vector<RuleSlot>>`（`RuleSlot` = 律名 + 条件）；`indexRule` 追加而不是拒绝——**同键同条件才是重复**（`DuplicateRuleForOperator` 仍在，`rulesets_duplicate_head_refused` 仍绿）；`lookupRules` 按归档顺序返回候选；`rulesOf` 列出每一条 |
+| `src/parse/ast/builder.cpp` | 在声明处读 `when` 条件的文本（`is_same::<T, int>()`） |
+| `include/camel/core/forward.h`、`src/core/forward.cpp` | 新 `forwardRulesOf(uri)`（候选表）；新 `conversionKeyOf`：**只认目的地字母**（`d`→`float`、`f`→`f32`、`f6`→`f16`、`bf`→`bf16`、`c`/`z`→`c64`/`c128`），源不进键；`:op/ltod` 的例外删除 |
+| `modules/transforms/jvp.cpp` | 按归档顺序逐个试候选：在 `genericRuleTable` 里找模板、按**操作数自己的类型**取实例，实例不成则试下一条，全不成报最后一条原因 |
+| `stdlib/rulesets/jvp.cml` | `jvp_ltod` 的左侧从 `float_of_int(n)` 改回**算子本身** `float(n)`（条件与 `::<T>` 都保留）；于是它的键是 `float@1` |
+| `test/cases/compile/rulesets/rulesets_lookup.py` | 例外 3 → 2，并列出剩下两条 |
+
+**读数**：例外表 **3 → 2**；`feat/compile/rulesets` **67/67**（没有掉条数、没有重复键报警）；`feat/compile/transforms` **48/61**（与基线同一份 13 条红，新增红 0）；缺口 **32 → 3**（脚本复核：prelude 里 29 条转换 uri 现在都有键，剩下的 `parse_float`/`idx_take`/`slice_sub` 不是转换形状）。
+
+**安全阀实测（这一条是 (b'-2) 的关键）**：`float(x)` 作用在 **float** 上（`:op/dt od`，没有律）——
+
+```
+REINTERP jvp function=f skip=rule uri=:op/dtod
+    reason=the rule's right side does not take the values and tangents the rule binds
+[Error]: transforms: jvp has no forward rule for `:op/dt od`
+```
+
+它**拒绝**，没有把 `jvp_ltod` 的那条零实参律套到 1 个切量的算子上——这正是"试候选"不会变成"套错律"的原因：候选能不能用，由**实例的实参个数与条件**决定，不是由顺序决定。同一份探针里 `float(n)`（`:op/ltod`，`n: int`）给出 `rules=jvp_ltod`、**`3.0` / `0.0`**，即派生出来的键确实找到了那条律。
+
+**候选顺序**：按**归档顺序**（`indexRule` 的追加序，也就是模块里写的顺序）。今天没有任何键持有第二条律（旧的不变式保证了这一点），所以顺序不影响任何结果；等第一批转换律落下来，谁先谁后仍不影响——只有一条会在该类型上成实例。
 ## 6. 一句话结论
 
 **这条缝是方案性的，不是少数特例**：按"结果有切空间却拼不出键"计，**32 条**（把复数算进去 50 条），而例外表只能一条一条地救——今天救了两条、补了一条（`^`）。缺口的形状有两个：

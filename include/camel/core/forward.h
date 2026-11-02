@@ -73,6 +73,16 @@ std::optional<RuleKey> ruleKeyOf(const std::string &family, const std::string &u
 /// rule: the two are `NoRuleForPrimitive` and `NoSuchFamily` in the answer).
 std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri);
 
+/// Every forward rule `uri` could answer by, in the order the family filed them: empty when the
+/// operator has no key or the family holds none.
+///
+/// A key can hold several rules, because one spelling can name several operators (`float(x: float)`
+/// and `float(x: int)` are both `float` at one operand) and the *type* is what tells their laws
+/// apart. The index does not encode the type; this answers the candidates and the caller lets the
+/// engine decide -- it instantiates a rule at the operand's own type, and a rule whose condition
+/// does not hold there gives a named refusal instead of an answer.
+std::vector<camel::parse::ast::RuleMatch> forwardRulesOf(const std::string &uri);
+
 /// `forwardRuleOf`, for the family a linear function's pullback is written in.
 std::optional<camel::parse::ast::RuleMatch> transposeRuleOf(const std::string &uri);
 

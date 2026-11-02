@@ -905,6 +905,12 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         // rule where it is written (the rule is wrong here, not at the call that would use it).
         std::string outerUses =
             sides[1] ? outerNamesUsedInRight(sides[0], sides[1]) : std::string();
+        // The rule's condition as written (`is_same::<T, int>()`), or empty. It is part of what a
+        // rule *is*: two rules filed under one key with the same condition could not be told apart
+        // by the engine, so that pair is a duplicate, while two that differ in their condition are
+        // a family it dispatches over.
+        const auto conditionClause = context->get<cst::WhenClause>();
+        std::string condition = conditionClause ? conditionClause->text() : std::string();
         collectRuleHead(
             diags_->moduleName(),
             std::move(head),
@@ -913,6 +919,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
             std::move(shape),
             std::move(variables),
             std::move(outerUses),
+            std::move(condition),
             arity,
             range.start,
             range.end);
