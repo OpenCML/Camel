@@ -91,7 +91,7 @@ error InvalidAge: age is negative
 - A fault happens at the pull that produces that element (a fault is not a value), and elements already handed out are unaffected.
 - The generator state machine has landed: a `yield` in a function body lowers to a machine that steps by resume point (one struct holds the state, each `yield` is a segment, a pull function advances it), and a `yield` is never run quietly as a `return`. A shape the machine does not build is reported by name of the shape, at the position it is written.
 - A `loop` in a generator body ends with the next value of its state: the body is cut at its `yield`, the pull after it runs the rest of the body and the condition again, so the last statement of the body writes the loop's next state value, as in `loop i = 0 while i < n do { yield i; i + 1 }`. A body of only `yield i` reads a fresh `i` on every pull, and the loop never moves on: that is `SemanticDiag::GeneratorLoopBodyNeedsNextState`.
-- The initial value of that `loop` is written as a literal at the loop. A value computed there, or one held in a local, is a shape this compiler version does not build yet, reported as `InternalDiag::GeneratorInitialValueShapeUnsupported`.
+- The initial value of that `loop` is evaluated where the loop stands, once, before the first condition, so it may be a literal, a value held in a local, or the result of a call: `loop i = start while i < n do ...` starts from whatever `start` holds when the pull reaches the loop.
 
 #### 7.3.2 The value of a stream, and one pull
 

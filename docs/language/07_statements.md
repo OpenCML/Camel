@@ -91,7 +91,7 @@ error InvalidAge: age is negative
 - 故障发生在产生那个元素的那次拉取处（故障不是值），之前已经交出的元素不受影响。
 - 生成器状态机已经落地：`yield` 在函数体里降低成一台按恢复点走的机器（一个结构体装状态、每个 `yield` 一段、拉取函数推进它），`yield` 不会被当成 `return` 悄悄执行。机器不构建的形状按形状的名字报在它写的位置上。
 - 生成器体里的 `loop` 以它的**下一个状态值**结尾：体在 `yield` 处被切开，拉取过一次之后的那次拉取会跑完体的剩余部分再判一次条件，所以体的最后一条语句要写出循环的下一个状态值，例如 `loop i = 0 while i < n do { yield i; i + 1 }`。只有 `yield i` 的体会在每次拉取时读到一个新的 `i`，循环永远不前进：这就是 `SemanticDiag::GeneratorLoopBodyNeedsNextState`。
-- 那个 `loop` 的初始值要**直接在循环上写成字面量**；写在此处的计算值、或者放在局部量里的值，是本版本尚未构建的形状，报 `InternalDiag::GeneratorInitialValueShapeUnsupported`。
+- 那个 `loop` 的初始值**在循环所在的位置求值**，一次，在第一次判条件之前，所以它可以是字面量、可以是局部量里的值，也可以是一次调用的结果：`loop i = start while i < n do ...` 从拉取到达循环时 `start` 持有的值开始。
 
 #### 7.3.2 流的值与一次拉取
 

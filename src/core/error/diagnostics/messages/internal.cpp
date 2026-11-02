@@ -20,14 +20,6 @@ const std::unordered_map<InternalDiag, DiagInfo> &getInternalDiagInfoMap() {
                 "The compiler reached a state it has no code for, so nothing in the program is known to be wrong. Report it together with the program that reached it.",
             },
         },
-        {
-            InternalDiag::GeneratorInitialValueShapeUnsupported,
-            {
-                "GeneratorInitialValueShapeUnsupported",
-                "An error has occurred: {0}.",
-                "The generator machine does not build this shape yet: a generator 'loop' takes its initial value written as a literal at the loop, and a value computed there or held in a local is not built. This is a known limitation of this compiler version, and nothing in the program is wrong, so there is nothing to change in the program and no repair to suggest.",
-            },
-        },
     };
     return infoMap;
 }

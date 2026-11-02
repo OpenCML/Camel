@@ -5725,7 +5725,7 @@ node_ptr_t Builder::visitGeneratorBody(
     };
     const auto reportUnbuiltShape = [&](const AST::node_ptr_t &atNode) -> void {
         const AST::node_ptr_t atYield = firstOwnYield(atNode);
-        diags_->of(InternalDiag::GeneratorInitialValueShapeUnsupported)
+        diags_->of(InternalDiag::UnknownInternalError)
             .at((atYield != nullptr ? atYield : atNode)->load()->tokenRange())
             .commit(
                 "the generator machine does not build this shape: a generator `loop` takes its initial "
@@ -6235,9 +6235,9 @@ node_ptr_t Builder::visitGeneratorBody(
                         for (size_t k = 0; k < loopLoad->state().size(); ++k) {
                             const std::string name = loopLoad->state()[k].toString();
                             const AST::node_ptr_t eachInit = inits->at(k);
-                            if (!hoistable(eachInit)) {
-                                reportUnbuiltShape(stmt);
-                            }
+                            // The initial value is evaluated where the loop stands (see the write below),
+                            // once, before the first condition: a value computed there, or read from a
+                            // local, is the first round's state like a constant is.
                             if (std::find(cellNames.begin(), cellNames.end(), name) ==
                                 cellNames.end()) {
                                 addTypedCell(name, visitData(eachInit), stmt);
