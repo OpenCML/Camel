@@ -270,3 +270,14 @@ that says "only my content is in it" is the **two-dot** diff, `git diff <base>..
   lands; the base's newer files are untouched because they were never in your paths.
 - **Force-push a shared lane with `--force-with-lease` only.** Another lane may have written to it, and
   the lease is what turns "I am replacing what I saw" into a refusal when that is no longer true.
+
+## The Main Checkout Is A Read-Only Coordination Surface
+The checkout at the repository root is where merges are inspected and where a reader looks; it is not
+anyone's work tree. Before a lane starts work, `git -C <main checkout> rev-parse --abbrev-ref HEAD` must
+answer `develop`. A lane that finds itself editing a file inside that checkout stops, stashes what it
+wrote, and redoes the change in its own worktree -- a stash is not a rescue, it is a way to keep the
+work while the checkout goes back to being readable. Six times in one night this surface was written
+into from somewhere else: a reformatted header, a broken replacement in `graph_read.cpp`, a duplicated
+probe diagnostic, a zero-byte `cml.cpp`, and once eight files plus a branch other than `develop`. Each
+time the diff had to be recovered from the wreckage before anyone could say whether it was work or a
+repeat of work that had already landed.
