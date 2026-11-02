@@ -136,7 +136,8 @@ OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostr
             // The mark the effect carries, before any edge goes: a test reading of this pass has to
             // show that the node under test is marked, not assume it because the program wrote it in
             // a `sync` block (a reading that assumes its own instrument works is no reading).
-            out << "order_only_effect: node=" << id << " uri=" << uri << "\n";
+            out << "order_only_effect: node=" << id << " uri=" << uri
+                << " runtimeFlags=" << static_cast<int>(header->runtimeFlags) << "\n";
             // Every edge the effect stands on goes, both directions, and no edge is put back: what
             // is left is the node and the `kGCNodeFlagSyncStatement` mark it carries. The mark says
             // someone believed the node is in a chain; with no sync edge under it, it holds nothing

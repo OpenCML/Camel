@@ -34,9 +34,20 @@ order_only_effect: node=1 uri=:io/println
 | 侧 | `pass.cpp` 里 `hasFlag(kGCNodeFlagSyncStatement)` | 结果 |
 |---|---|---|
 | A | **不在**（`84a5d7825` 的树） | `PassInternalError`：`graph 'main' has effect node 1 (':io/println') with neither a read of its value nor a place in its chain` |
-| B | **临时加回**（未提交，二进制 `2026-11-01 20:31`） | **一模一样的原文** |
+| B | **临时加回**（未提交，二进制 `2026-11-01 21:02`） | **一模一样的原文** |
 
-**为什么分辨不出**：**`DraftNodeHeader` 里没有 flags 字段**（`include/camel/runtime/draft.h` 的 `DraftNodeHeader` 只有 owner/selfId/dataIndex/大小/类型/四类输入计数）。标记只活在**提交后的 `GCNode`** 上；任何走 draft 改写再提交的遍，**回来时标记就没了**。所以"标记在、链边不在"这个形状**不可能经过一次 draft 改写送到凭据检查面前**——两侧看到的都是"没有标记、只有一条顺序边"，于是都拒。
+**为什么分辨不出**：**这个形状的标记在输入图上、也进了 draft，但它到不了凭据检查。**
+
+先纠正一处我写错的判断：**`DraftNodeHeader` 是有 flags 的，字段叫 `runtimeFlags`**（`include/camel/runtime/draft.h:134`），`DraftNodeHeader` 的 `flags` 这个名字不存在，所以我第一版探针写 `header->flags` 编译错，我由此写成"draft 没有 flags"——**那是错的**。改成 `header->runtimeFlags` 之后：
+
+```
+order_only_effect: marked node=1 graph=1
+order_only_effect: node=1 uri=:io/println runtimeFlags=4      ← 4 = kGCNodeFlagSyncStatement (1<<2)
+```
+
+**标记确实在 draft 里，值的每一位都对**。而两侧仍然都拒。
+
+所以真正的结构事实是另一句：**标记在 draft 里、在被改写的节点上，但凭据检查看的是 `session.commit()` 之后的 `GCNode`，那里它已经不是 4 了**——这个形状里，`test::order_only_effect` 把该节点的全部入边与出边解掉、只补一条顺序出边，**提交后的节点不再带 `kGCNodeFlagSyncStatement`**（`draft.cpp:1626-1645` 只在一部分重建路径上把标记搬过去）。**我没有再往这张图里打第二针去取那个 0/4**，所以这一句的边界是：**A/B 两侧的读数一样、且输入侧标记为 4 已经验过；提交后为何不是 4，是我从代码路径读出来的，不是量出来的**——下一位要把它量实，就在 `effectCredentialViolation` 里打一次 `ref` 的 `flags`。
 
 **这条本身是裁定的佐证**：一个**通不过一次改写**的东西，本来就不该当凭据。
 
