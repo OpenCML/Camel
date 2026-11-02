@@ -313,7 +313,18 @@ whatever their age or their place in the order:
 - a directory whose `<pid>` is a process that is still alive: the runner's own self-test starts nested
   runs beside an outer one, and they write into the same tree;
 - a directory the runner did not write, whose name is not `<timestamp>_<pid>`: it is counted and
-  reported, not deleted.
+  reported, not deleted;
+- a directory whose `summary.json` records a failed test: a green run's twelve-line tail may age out,
+  a red run's whole output is the record someone has to read the next morning, so the bound keeps it
+  (`[RETAIN]` counts them as "kept because they recorded failures"). This is the one place where the
+  bound is not about size: a directory of failures is why the tree keeps a record at all.
+
+A failed test's log entry ends with one line naming where its whole output is,
+`[INFO] full output: test/results/log/<run>/fail/<plan>/<test>/ (stdout.txt, stderr.txt, output.txt,
+meta.json)`, with the path relative to the checkout so it reads the same on a build machine. What
+follows in the log is at most the last twelve lines of stdout and stderr, and only with `CI` or
+`CAMEL_TEST_SHOW_OUTPUT` set: it is enough to see the shape of a failure and not enough to read its
+cause. Read the file.
 
 A scratch root `tmp/test/run-<pid>` goes when its run is gone and the root has not been touched for an
 hour. The runner keeps its root when a test failed precisely so that the files can be read, and that

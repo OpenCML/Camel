@@ -983,6 +983,19 @@ function printFailedOutput(result) {
     }
 }
 
+/**
+ * Where a failed test's whole output is. The log keeps twelve lines of it (`printFailedOutput`,
+ * and only under CI), which is enough to see the shape of a failure and not enough to read the
+ * cause: twice on 2026-11-02 a conclusion was drawn from a truncated fragment whose first line --
+ * the one that said what happened -- was above the cut. The runner already writes every test's
+ * stdout, stderr, merged output and meta.json into its run directory; this line is the pointer to
+ * it, relative to the checkout so it reads the same on a build machine as here.
+ */
+function fullOutputLine(statusDir) {
+    const relative = path.relative(REPO_ROOT, statusDir).split(path.sep).join('/')
+    return `full output: ${relative}/ (stdout.txt, stderr.txt, output.txt, meta.json)`
+}
+
 function printRunSummary(summary) {
     const total = summary.pass + summary.fail + summary.skip + summary.xfail
     const skipped = summary.skip > 0 ? `, skip: ${summary.skip}` : ''
@@ -1841,8 +1854,13 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
  * file was rewritten once for every test in it. See test/tools/runner-output.mjs, and
  * docs/test-plans.md, "Runner Output".
  */
+/** The directory one test's log files go into: `<run>/<status>/<plan>/<test>/`. */
+function logPathOf(plan, test, status, logDir) {
+    return path.join(logDir, status, sanitizeSegment(plan.id), sanitizeSegment(test.name))
+}
+
 function writeLogFiles(plan, test, result, status, logDir) {
-    const statusDir = path.join(logDir, status, sanitizeSegment(plan.id), sanitizeSegment(test.name))
+    const statusDir = logPathOf(plan, test, status, logDir)
     ensureDir(statusDir)
     fs.writeFileSync(path.join(statusDir, 'stdout.txt'), result.stdout)
     fs.writeFileSync(path.join(statusDir, 'stderr.txt'), result.stderr)
@@ -2785,6 +2803,11 @@ async function executePlans(plans, options, sharedVars, logDir) {
             const note = test.__knownFail ? test.known_fail_note || test.failure_note : test.failure_note
             if (note) {
                 printDetailLines([`note: ${note}`])
+            }
+            if (outcome.status === 'fail') {
+                // The pointer comes before the twelve-line tail: a reader who stops at the tail must
+                // still have been told where the rest is.
+                printDetailLines([fullOutputLine(logPathOf(plan, test, outcome.status, logDir))])
             }
             printDetailLines(outcome.failures)
             if (outcome.status === 'fail') printFailedOutput(outcome.result)
