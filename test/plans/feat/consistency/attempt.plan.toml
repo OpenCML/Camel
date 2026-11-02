@@ -142,7 +142,7 @@ assert(input.normalized.stdout === '34200000\n1999000\n42\nend\n', JSON.stringif
 """
 
 [[tests]]
-name = "attempt.many.prl"
+name = "attempt.many"
 desc = "The same on the parallel scheduler, 20000 rounds (about 54 s of CPU across the workers; the bound is 4x that)."
 kind = "behavior"
 backends = ["prl"]
