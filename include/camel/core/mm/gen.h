@@ -240,6 +240,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         // pointer that C++ code kept across the safepoint reads poison instead of a value
         // that happens to be still right. Requires young copying. See poison.h.
         bool poisonAtSafepoints = false;
+    bool checkMarks = false; // --gc-check mark: compare the ledger with the graph space
     };
 
     struct RuntimeStats {
