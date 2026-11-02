@@ -282,6 +282,153 @@ print family, and this operator's configuration is not a string, so its call has
 
 
 
+
+
+
+
+**2026-11-02 第二十八刀：族 4 + 族 9 闭合，两半都落地——接受命名结构类型，并写出 `type` 声明**
+
+**做了什么**（`src/passes/trans/cml/cml.cpp`）：①`checkType` 的 `record->named()` 分支不再一律拒绝，改为问"这个类型的声明写得出来吗"；②新增收集/校验/排序/写出四步：`collectNamedTypes` 从签名与节点类型里收命名结构类型，`namedTypeObstacle` 逐个判可写性（泛型、`#resource`、名字不是源标识符、字段名不是标识符、字段无类型），`orderNamedTypes` 按字段依赖排序（自引用合法，跨类型环拒绝），`namedTypeText` 用 `StructType::fieldName(i)/typeAt(i)` 写出 `type V = { x: int }`。③**只声明打印文本真正写到的类型**——正文先写到 `body_`，头部后拼，否则会给源里根本没有的类型添一条声明，往返当场变成不等价（第一版就是这个错：34 条新印出来的里有 19 条 not_equivalent、15 条连文档都产不出）。④拒绝文本现在说清**缺哪一半**：`the named type 'V', whose declaration cannot be printed: <理由>`。
+
+**两个最小例子（判据四是"输出忠实"，不是"不再拒绝"）**：
+
+- 族 9 `consistency/operator_overloads/mods/plus_b.cml`：打印 `type V = { x: int }` + `func operator +(a: V, b: V): V { return { x: 0 } }`，往返 **`EQUAL (18 vertices, 31 edges)`**。
+- 族 4 `modules/tensor/shape_inference/loaded_struct_as.cml`：过了命名类型这一关，停在**下一道墙** `the operator 'tensor:sum'`（不是本刀的缺陷，是它挡在后面的另一层）。同形状的最小例子（`type P = { x: int, y: int }` + `with <m: P>`，即"`with` 参数是命名类型"）打印、编译、运行 `exit 7`（与源相同），并由 `test/cases/trans/cml/named_type.cml` 钉住往返。
+
+**这一刀还被迫补了两半**（不补的话打出来的程序不忠实，正是判据四禁止的形状）：
+
+1. **算子函数的名字**：`func operator +` 编出来的图叫 `__add__`，而 `__add__` 是保留标识符（`ReservedIdentifier`），原样打印回去编不过。改用 `operatorSymbolOf(组名)` 写回 `func operator +`（族 9 的 51 条都是这个形状）。顺带把基线里一条 `DIFFERENT`（`plus_a.cml`）变成了 `EQUAL`。
+2. **编译器自己插入的结构转换**：`return ({ x: 0 } as V)` 里那次 cast 写出来就多一个节点（打印出来的图比源少一个节点、类型表少一项匿名结构），按 `relateStructs(to, from) != None` 且目标是命名类型时丢掉这次 cast，让位置类型（返回类型、标注、参数、字段）重新插入。
+
+**仪器也修了一处**：`test/tools/cml_roundtrip.py` 把类型的 `decl` 字段指向 `D:<id>`（声明顶点），原来指向 `T:<id>`（类型表按数字索引），于是**任何带命名类型的 canonical 文档都判非法**（`unknown vertex T:d0`）。不修这一处，本刀无法测量——这不是放宽判据：`decls` 顶点按 kind/params 比较，本来就在文档里。
+
+**语料读数（3377 文件，绝对路径，`--jobs 16`，同语料同命令）**：
+
+```
+改前  SWEEP files=3377 printed=562 refused=1811 frontend=1004 timeout=0
+      ROUNDTRIP checked=555 equivalent=515 not_equivalent=40 over_budget=0 unfaithful=7   (DIFFERENT 47, families 57)
+改后  SWEEP files=3377 printed=589 refused=1779 frontend=1009 timeout=0
+      ROUNDTRIP checked=586 equivalent=543 not_equivalent=43 over_budget=0 unfaithful=3   (DIFFERENT 46, families 57)
+```
+
+`printed +27`（562→589）、`equivalent +28`（515→543）、`unfaithful 7 → 3`、`families 57 → 57`。**判据二（`printed ≥ 590`）差 1**，原因写在下面：这 7 条不是"少印"，是 7 条**从"印出来但不对"或"印出来但会报错"退回成安全的拒绝**。
+
+逐条算账（三块，原因不同，处置也不同）：
+
+1. **本刀新增的 5 条 `unfaithful`，全部处置**（不是"新露出来的墙"就算完 —— 以前是拒绝、现在是"印出来但不对"，方向反了，所以退回拒绝）：
+   | 文件 | 原来印出来错在哪 | 现在 |
+   | --- | --- | --- |
+   | `compile/native/idx_field_missing.cml` | 程序自己声明的无体 `#op(':op/idx_str')` 被写成内建符号 `s['y']` → 重编译 `NoMatchingFunction`（源文件自己写明内建 `[]` 对该结构不成立） | 拒绝：`a subscript on a struct: the '[]' of the language takes an array or a string, so this one comes from a declaration in this program` |
+   | `trans/cpp/field_name_missing.cml` | 同上（同一个 `#op/idx_str` 形状） | 同上 |
+   | `parse/rulings/static_for_head_names.cml` | 一个源码名在一个块里绑两次（`let v: int` 两行）→ `Redeclaration: 'v'` | 拒绝：`two bindings of the name 'v' in one block: one expansion of a 'static for' keeps the source name on every copy` |
+   | `compile/array_shape/rank_zero_slot_nested_field.cml` | 模板值里那个 `Inner` 字段没有 struct → 打印成 `{ inner: {  } }` → `DeclaredTypeMismatch` | 拒绝：`a template value of 'Inner' that holds no struct: the literal written from it would be an empty struct where the type has 1 field(s)` |
+   | `compile/literals/context_data_literal.cml` | 匹配模式被物化成 `let cml1` 再写成 `case cml1`（名字不是模式）→ `IdentifierPatternNeedsNullableOrErrorType` | **修好**（不是退回）：模式不再物化，写 `case 3.0`，往返 **EQUAL (43 顶点 / 120 边)** |
+2. **同一个守卫顺带收了 3 条基线就 `unfaithful` 的程序**（`compile/static_expansion/comprehensions.cml`、`compile/static_expansion/fields_and_access.cml`、`parse/constructs/comprehensions.cml`）：它们也是"一个块里同名重绑"，以前印出来就编不过。方向与第 1 块相同（把响亮的错换成安静的拒绝），所以没有为保住 `printed` 而给守卫加范围。**这就是 `printed` 589 而不是 592 的全部原因。**
+3. **`not_equivalent 40 → 43` 三条留着，但要说清它们不是"等价只是形状不同"**（我上一版这么写过，是错的）：`compile/casts/same_type.cml`、`compile/struct_join/join_arms.cml`、`loops/struct_state.cml`，判定器实测两边 canonical 文档不等价。**它们不是新露出来的墙，是真正没解决的三条**，下一刀单独看。
+
+⇒ **下一刀的形状**：`printed` 的上界现在由"打印器写出来的程序与图是不是同一个程序"卡住，而且这几条各自是**不同的**一道墙（无体外核被写成内建符号、同名重绑、模板缺 struct、canonical 形状差异 3），不是一处判据能一起收的。
+
+**仍拒绝的 9 条**（`REFUSAL` 行，文本逐条点出缺哪一半）：6 条名字不是源标识符（`ns::T`）、2 条泛型声明（"the printer writes no type parameters"）、1 条 `#resource` 声明（"the tag is not readable from the type"）。
+
+**已知缺口，没加守卫**：`namedTypeText` 只写字段名与字段类型，字段上的 `#tag(...)`（`parse/rulings/static_for_head_names.cml` 的 `type Box = { #width(8) low: int }`）写不出来。这一刀没有为它加拒绝，因为还没有一条能证明"打印出来的程序读字段标签、结果与源不同"的最小例子；加一条打不响的守卫比没有更糟，先记在这里，下一刀补例子或补 `namedTypeObstacle`。
+
+**作者裁的一页（`fsh-dev = d2face663`，2026-11-03 03:30）直接指向本刀的相邻判据，逐字留档：**
+
+> 「私有 kernel 要不要可写名字：**前提不成立**，A、B、C 都不选。最小例子里 `shl` 不是私有的：`stdlib/math.cml#shl` 写着 `#op('math:shl_i') export func shl::<T>(x: T): T when is_same::<T, i32>()`，`shl_l` 同理。它是**导出的**无体声明，程序也确实写了 `1->shl<64>`。打印器那条判据『无体 kernel 声明，没有程序写这个名字』**错在把『无体』当成了『私有』**：无体只说明实现在 C++ 里，名字照样可写。」
+
+⇒ **"无体"说的是实现在哪，"私有"说的是名字能不能写，两件事。** 本刀没有动这条判据（`operatorExpression` 里 `kernelDeclaration` 那一支仍然拒绝），所以这一族的读数照旧：**411 条**（`REFUSAL 411 ... <name> is a body-less kernel declaration, and no program writes that name`），是重扫里最大的一族，全量 3377 个文件里占 12.2%。按作者的修法——算子由一条**导出的**声明绑定时，打印那条声明的名字（`x->shl<64>`），重编译时重载按类型选回 `shl_l`；只有确实没有任何导出声明能到达的算子才算"没有可写名字"——是下一刀的事。
+
+**另一处仪器问题，与"仪器先坏"同族**：`test/tools/cml_roundtrip.py` 把类型的 `decl` 指向 `T:<类型表下标>` 而不是 `D:<声明顶点>`，于是**任何带命名类型的 canonical 文档都被判 `unknown vertex T:d0`**——这个 bug 一直把命名类型挡在"可测量"的门外；不修它，本刀连基线都量不出来。
+
+**自检**：`test/plans/feat/trans/cml.plan.toml` `1/1` 通过（新增 `test/cases/trans/cml/named_type.cml` 的往返、`check_declarations` 判"用到的类型必须在输出里有声明"、以及一条负例读数：把打印结果里那行 `type P = ...` 删掉再编译 → `UnresolvedTypeReference`，说明声明是承重的那一半）；`docs.doc_readings` 的 `case TypeCode::` 读数 1028 → 1043（本刀在 `cml.cpp` 加了几个 `TypeCode` 走查），页已同步；全量 fast suite **`8390 / 8374 / 0`**（skip 10、known failures 6）。
+
+**先答"两族是不是同一个理由"：是。** 两族的拒绝原文都出自 `checkType` 的同一个分支（`case TypeCode::Struct` 里 `record->named()` 那一次 `fail`），只是位置不同：
+
+| 族 | 计数 | 最小例子 | 拒绝原文 |
+| --- | --- | --- | --- |
+| 4 | 86 | `modules/tensor/shape_inference/loaded_struct_as.cml` | `std::cml cannot print f: a 'with' parameter is the named type 'P'.` |
+| 9 | 51 | `consistency/operator_overloads/mods/plus_b.cml` | `std::cml cannot print __add__: a parameter is the named type 'V'.` |
+
+`where` 那个参数是 `"a 'with' parameter"` 还是 `"a parameter"`，判据是同一个 `record->named()`。
+
+**为什么不能只把名字打出来**：打印器现在能拿到名字（`type->toString()` 给的是 `P`/`V`），但**打出来的程序里没有这个类型**。实测（手写打印器将要产出的形状，不经过打印器）：
+
+```
+func f(x: V): int { return 0 }            -> status=1  UnresolvedTypeReference: 'V'
+type V = { x: int }  +  同一个 func f      -> status=0
+```
+
+⇒ **只放开 `checkType` 会把"明拒"换成"打出来编译不过"**，正是作者立的那条禁令的形状。要闭合它需要两半：①`checkType` 接受命名结构类型；②**把类型声明打出来**（`type V = { … }`，字段表在 `StructType::size()/typeAt(i)` 里），或者在打印的程序里 `import` 声明它的模块——而打印器**既没有 `type` 声明发射器，也没有"类型来自哪个模块"的导入收集**（现在的 `collectImports` 只收算符调用）。
+
+**判据没有达成，也没有开工**：这一刀的形状是"新增一个声明发射器 + 名字作用域"，不是一处判据；按"连续不落地就交班"的规矩，这里只留查证与实测，不再试。
+
+**下一刀的形状（给接的人）**：先在 `typeText`/`checkType` 之外加一个"本图用到的命名类型"集合，逐个问它能不能写出声明（字段表可读）或能不能写成导入；两者都不行就维持拒绝、并在拒绝文本里说清是哪一半缺。判据：`printed ≥ 590`、`refused ≤ 1780`、`equivalent 515 / not_equivalent 40 / DIFFERENT 47 / unfaithful 7` 不回退，**核心是"输出里的类型名与源里的一致、且该类型在输出里有声明或导入"**。
+
+**2026-11-02 第二十六刀（`sync` 体的尾写）：作者裁定后一次落地，`closure_var` 回程 `EQUAL`**
+
+作者裁定："`sync` 体以一次写结尾——这是打印器的缺陷，不需要裁……修那一处识别，让退出节点是一次写时走它"。本刀只改这一处：`blockValueWrite` 去掉 `regionNeedsSync(0)` 的早退，`handsTail` 从"`tail` 必须是退出节点的直接 normal 输入"改成"沿退出链往下走，`tail` 站在链上任何一点都算"，交给 `assignmentHandingOn` 的是链底那个非闸门节点。
+
+**探针**（这是第二十二至二十五刀四次无效的根因，现在过了）：
+
+```
+修复前：[cml-probe2] region=0 tail=2 exit=6 sync=1 write=-1
+修复后：[cml-probe2] region=0 tail=2 exit=6 sync=1 write=4
+```
+
+**判据四样全过**：
+
+| 判据 | 读数 |
+| --- | --- |
+| 最小程序（`sync { t = t + y }`） | 往返 **`EQUAL (33 vertices, 105 edges)`**，两侧答案 `1` |
+| `g2` / `g3` | **12 对 12**、**8 对 8** |
+| `closure_var` | 往返 **`EQUAL (64 vertices, 244 edges)`**，答案 `3 / 24 / 249` 两侧相同 |
+| 六项读数 | `equivalent 514 → 515`、`not_equivalent 41 → 40`、`DIFFERENT 48 → 47`（差集**正好**是 `closure_var`）；`printed 562`、`checked 555`、`unfaithful 7`、`families 57` 不动 |
+
+**契约用例 `var_param` 通过**——它正是当初"放开 `regionNeedsSync` 守卫会打坏"的那条：那时打坏它的是"守卫去掉但链没认对"，链认对之后它不再坏。⇒ **"去掉守卫"本身不是病因，"只去掉守卫"才是。**
+
+**文本形状变了但答案没变**：`step` 的体现在打成 `let cml1 = t + y; t = cml1`（两句，不是源的一句 `t = t + y`），但不再有 `return`，重编译后与源图**同构**。⇒ "少一句"不是判据，"同构"才是。
+
+**2026-11-02 第二十五刀（命名空间包装）：`printed 559 → 562`，`equivalent 511 → 514`，判据没到 700，原因查清了**
+
+普查说第 2 族有 149 条只差一层 `namespace` 包装。本刀就补那一层：`printFunction` 认 `A::B` 形式的图名，把函数原样放进 `namespace A { … }`，函数名用末段（`Tools::inc` 打成 `namespace Tools { func inc(...) }`）；拒绝判据从"必须是标识符"放宽到"标识符或命名空间名"（`isNamespaceName`，段间 `::`，含 `<` 的不算）。
+
+**结果（语料 3377）**：`printed 562`、`refused 1811`、`frontend 1004`、`checked 555`、`equivalent 514`、`not_equivalent 41`、`unfaithful 7`、`families 57`、`DIFFERENT 48` 行——**`DIFFERENT` 与 `unfaithful` 一条没动，三条新印出来的全是 `EQUAL`**。
+
+**这一刀把 137 条从族 2 挪到了族 1/3，净印出 3 条**（净收益是 3，不是 149）：`graph name is not a source identifier` 那一族从 **353 掉到 216**（137 条走过了这一关），**但只有 3 条变成"能打印"**，其余 **134 条紧接着撞上别的拒绝**——最多的三类是"无体 kernel 声明"（374→377）、"算符 `<name>`"（306→311）、"参数/返回是命名类型"（51→53、45→48）。⇒ **`namespace` 包装是这 149 条的最后一层，不是唯一一层**；判据一（`printed ≥ 700`）与判据二（`refused ≤ 1665`）**未达，差的 134 条各有各的下一个理由，不是这一刀没做好。**
+
+**自检**：`lib2.cml`（最小例子）打印后往返 **`EQUAL (14 vertices, 24 edges)`**；契约计划 `feat.trans.cml` `1/1` 通过；全量 fast suite **`8390 / 8374 / 0`**（skip 10、known failures 6）。
+
+**2026-11-02 拒绝原因普查：1814 条按理由归成 53 族，前十族占 81.8%**
+
+口径（写死，下一个人复算时照此）：**语料 3377 个 `.cml`**，仓库 `/home/zjwei/camel-work/h-m5`，`origin/develop = e8fa221a0` 已并入本车道，`CAMEL_HOME=$PWD/out/latest`，用 `node test/tools/cml-sweep.mjs --jobs 16` 在**绝对路径**下跑（`printed=559 refused=1814 frontend=1004`，见 `/tmp/sw54.txt`），理由串取 `reasonOf` 的归一化形式（变量名/图 id/数字都掩成 `<name>`/`<n>`）。
+
+**分组自检**：`grep '^REFUSAL '` 的 53 行求和 = **1814**，与 `refused` 相等 ⇒ 没有把不同原因并了、也没有把同一原因拆了。
+
+| # | 计数 | 理由（归一化） | 最小例子（字节） |
+| --- | --- | --- | --- |
+| 1 | 374 | 算符没有可打印的名字：它是**无体的 kernel 声明**，程序不写那个名字 | `modules/math_calls/err_shl_int.cml`（89） |
+| 2 | 353 | 图名不是源标识符 | `compile/namespace_rules/lib2.cml`（72） |
+| 3 | 306 | 算符 `<name>`（没有声明可依据） | `trans/cpp/fault_tensor_negative_shape.cml`（162） |
+| 4 | 86 | 参数是命名类型 | `modules/tensor/shape_inference/loaded_struct_as.cml`（344） |
+| 5 | 85 | 参数的类型打印器不写 | `compile/enum/warn_redundant_wildcard.cml`（261） |
+| 6 | 73 | 返回类型是带 tag／可空／cell 的元组 | `consistency/unused_fallible/main_declared.cml`（150） |
+| 7 | 57 | 图带节点属性或 tag | `trans/cml/refuse/tagged_node.cml`（275） |
+| 8 | 51 | 区域既不是分支也不是循环 | `compile/diag_render/runtime_chunk_range.cml`（131） |
+| 9 | 51 | 参数是命名类型（另一种位置） | `consistency/operator_overloads/mods/plus_b.cml`（81） |
+| 10 | 48 | 返回类型是打印器不写的类型 | `compile/enum/wildcard_only.cml`（291） |
+
+**前十族 = 1484 / 1814 = 81.8%**（其余 43 族共 330 条）。分布是**长尾重头**：三族（374 + 353 + 306 = 1033，**56.9%**）就占了多半。
+
+**前十里"本该能打"的三族，各自缺什么**（这是本普查的目的：打印机下一步做什么）：
+
+- **第 2 族（353）"图名不是源标识符"**：用同一套归一化再分一次，353 条正好分成三块——**149 条 `A::B`（纯命名空间，没有泛型实参）**、**113 条 `name<T>`（泛型实例）**、**91 条 `A::B<T>`（两者都有）**，合计 353。其中**149 条是纯打印器侧**：源里写的就是 `namespace Tools { export func inc ... }`，打印器只要会写那层 `namespace` 包装；**缺的东西打印器自己就有**，不需要任何人裁定。剩下 204 条要写泛型实参 `<T>`，那是"泛型实例"这一整类被拒的一部分（见第 1 族的同一原因），要作者裁定。
+- **第 1 族（374）"无体 kernel 声明"**：例子里是 `1->shl<64>`。算符节点带的是 `math:shl_l`，`CallForm` 说得出公有的调用形状，但那个名字是模块**保私有**的 kernel（`kernelDeclaration`），而且源写法还带括号实参 `<64>`，打印器没有位置记它。⇒ 要打出来需要三样东西（可写的名字、括号实参、接收者箭头写法），其中"造一个导出名"会替作者决定语义（设计原则 6.4 禁止）。**这一族要作者裁定，不是打印机自己能闭合的。**
+- **第 3 族（306）"算符 `<name>`"**：连 `CallForm` 都没有，说明算符没人声明过或没登记进组。**先要回答"这个算符从哪来"**，不是打印器的问题。
+
+⇒ 下一步在**第 2 族的 149 条子族**（`A::B`，无泛型实参）：前十族里唯一"缺的东西在打印器内部"的一块，判据可以写成"输出里 `namespace` 包装与源一致"，不碰语义。
+
+**一个口径坑（记下来）**：同一个普查脚本改成用**相对路径**跑（`camel test/cases/...`），读数变成 `printed=551 refused=1701 frontend=1125`——**和 `cml-sweep.mjs` 的 559/1814/1004 差 113 条**。`cml-sweep.mjs` 用 `ROOT` 绝对路径 + `cwd: ROOT`；复算必须照它，否则先差出 113 条再讨论分组。
+
 **2026-11-02 第二十四刀：五次都没落地，交班（页：`docs/handover/questions/2026-11-02-cml-sync-tail-write.md`）**
 
 按第二十三刀的入口判据动手，**只改入口**（`handsTail` 认"`tail` 站在退出链上"+ 放开 `regionNeedsSync(0)`），探针原文：

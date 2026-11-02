@@ -1,10 +1,17 @@
 # A `sync` body whose last statement is a write is printed as three statements
 
-**状态**：待修（未修）。打印器侧。2026-11-02 连续五次尝试未落地，交接。
+**状态**：**已修**（2026-11-02，作者裁定后一次落地）。修复：`blockValueWrite` 的 `handsTail` 认"`tail` 站在退出链上任何一点"，并让 `sync` 块也走这处识别；读数见页末"修复记录"。
+
+## 结论：这不是"打印器写错了"，是两个使用者是不是真的
+
+"`sync` 体的值就是它最后一次写的值"是**建图侧的前提**，不是打印器的猜测。图里那个值节点被**两个**
+使用者读——写本身，和退出闸门——**建图侧这样建，打印器就把一句拆成三句**。所以：**若建图侧是自觉的，
+三句是忠实的，该改的是建图或判据的定义，不是打印器。** 先答这一问，再谈下刀；下面所有读数都是围绕
+这一问收集的。
 
 ## 一句话
 
-`sync` 体的值是它最后一次写的值。打印器写不出来这一句，于是把一句拆成三句；重编译后退出链上的
+`sync` 体的值若是它最后一次写的值，打印器写不出来这一句，于是把一句拆成三句；重编译后退出链上的
 两个闸门变成一个。
 
 ## 最小复现
@@ -104,3 +111,20 @@ n7 GATE(normal<-n6, control<-n5)   <- exit
 - `docs/design/graph-store/plan-roundtrip.cn.md` 的第二十二、二十三刀两节（查证与回退记录）。
 - `CmlPrinter::blockValueWrite`、`CmlPrinter::assignmentHandingOn`、`CmlPrinter::valueUsers`、
   `CmlPrinter::regionValueWrite`。
+## 修复记录（2026-11-02）
+
+作者裁定："`sync` 体以一次写结尾——这是打印器的缺陷，不需要裁……修那一处识别，让退出节点是一次写时走它"。
+
+修法（只动这一处）：`blockValueWrite` 去掉 `regionNeedsSync(0)` 的早退，并把 `handsTail` 从"`tail` 必须是退出节点的直接 normal 输入"改成"沿退出链的 normal 输入往下走，`tail` 站在链上任何一点都算，交给 `assignmentHandingOn` 的值是链底那个非闸门节点"。
+
+读数：
+
+```
+修复前：[cml-probe2] region=0 tail=2 exit=6 sync=1 write=-1
+修复后：[cml-probe2] region=0 tail=2 exit=6 sync=1 write=4
+```
+
+- **最小程序**（`sync { t = t + y }`）：往返 **`EQUAL (33 vertices, 105 edges)`**，两侧答案都是 `1`。
+- **`closure_var`**：往返 **`EQUAL (64 vertices, 244 edges)`**，`g2` **12 对 12**、`g3` **8 对 8**，答案 `3 / 24 / 249` 两侧相同（修复前 `g2` 12 对 11、`g3` 8 对 7、`DIFFERENT`）。
+- 语料 3377：`equivalent 514 → 515`、`not_equivalent 41 → 40`、`DIFFERENT 48 → 47`（差集正好是 `closure_var` 这一条），`printed 562`、`checked 555`、`unfaithful 7`、`families 57` 不动。
+- `test/cases/trans/cml/var_param.cml` 契约用例通过（这条当初是"放开守卫会打坏它"的那条用例，本刀没有再坏它）。

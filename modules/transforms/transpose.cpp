@@ -286,10 +286,31 @@ bool buildTransposeMember(
             draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
         draft.appendNormPort(cotangentIn);
 
-        const auto primitive = [&draft](const char *uri, std::vector<gc_node_ref_t> inputs) {
-            const gc_node_ref_t made = draft.addOperNode(Type::Float64(), nullptr, uri);
+        const auto primitiveOf = [&draft](Type *type, const char *uri, std::vector<gc_node_ref_t> inputs) {
+            const gc_node_ref_t made = draft.addOperNode(type, nullptr, uri);
             draft.setNormInputs(made, std::span<const gc_node_ref_t>(inputs));
             return made;
+        };
+        const auto primitive = [&primitiveOf](const char *uri, std::vector<gc_node_ref_t> inputs) {
+            return primitiveOf(Type::Float64(), uri, std::move(inputs));
+        };
+        // The sum a cotangent accumulates with is the sum of the type it lands in: two array
+        // cotangents add element by element (`:tangent/add_arr`, design principles 9.9) and a
+        // number's add is `:op/add_d`. Handing an array to `add_d` is the same lie as calling it a
+        // float -- it reads the array as a number and takes the process down, which is what two
+        // element reads of one array did (a sum of two reads was enough; one read was not).
+        const auto addUriAndType = [&](gc_node_ref_t ref, Type *&addType) {
+            const camel::runtime::GCNode *node = function->node(ref);
+            const Type *type = node != nullptr ? node->dataType() : nullptr;
+            const camel::core::TangentSpaceAnswer space =
+                type == nullptr ? camel::core::TangentSpaceAnswer{} : camel::core::tangentSpaceOf(type);
+            if (space.hasSpace() && space.space != nullptr &&
+                space.space->code() == camel::core::type::TypeCode::Array) {
+                addType = space.space;
+                return ":tangent/add_arr";
+            }
+            addType = Type::Float64();
+            return ":op/add_d";
         };
         const auto zero = [&]() {
             return draft.materializeStaticValue(
@@ -446,11 +467,13 @@ bool buildTransposeMember(
                 hasCotangent[ref] = true;
                 return;
             }
+            Type *addType = Type::Float64();
+            const char *const addUri = addUriAndType(ref, addType);
             if (cotangent[ref] == node) {
-                cotangent[ref] = primitive(":op/add_d", {node, node});
+                cotangent[ref] = primitiveOf(addType, addUri, {node, node});
                 return;
             }
-            cotangent[ref] = primitive(":op/add_d", {cotangent[ref], node});
+            cotangent[ref] = primitiveOf(addType, addUri, {cotangent[ref], node});
         };
         // One position's cotangent: the rule the index filed for this operator, its right side
         // expanded where the operator stood. What stands in the graph is the rule's own function of
@@ -1858,6 +1881,26 @@ bool buildTransposeMember(
                 if (portType == nullptr || space.space == Type::Float64()) {
                     parts.push_back(zero());
                     partTypes.push_back(Type::Float64());
+                    continue;
+                }
+                if (space.space->code() == camel::core::type::TypeCode::Array) {
+                    // An array parameter the backward half never read. Its cotangent is the
+                    // zero of its own space, and the zero of an array's tangent space is the
+                    // array of zeros built from the value's shape -- `:tangent/zeros_arr`,
+                    // the operator the pullback already builds for the same purpose
+                    // (`idxArrayVjp`, builtin/operators/derivative.cpp). The parameter's port
+                    // carries the value the shape comes from, so the zero is built where the
+                    // value already stands. A zero cotangent is the identity of the sum the
+                    // pullback takes, so answering it is the same as answering nothing, in the
+                    // type the slot promises; refusing the call instead stops a function that
+                    // is written correctly -- providing the parameter is read by the forward
+                    // half, which is why a parameter with no tangent space was already let
+                    // through above.
+                    const gc_node_ref_t zeros =
+                        draft.addOperNode(space.space, nullptr, ":tangent/zeros_arr");
+                    draft.setNormInputs(zeros, std::span<const gc_node_ref_t>(&ports[i], 1));
+                    parts.push_back(zeros);
+                    partTypes.push_back(space.space);
                     continue;
                 }
                 // A value with a cotangent space and no cotangent: the graph never read it. A zero of
