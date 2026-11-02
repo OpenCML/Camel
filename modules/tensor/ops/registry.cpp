@@ -292,6 +292,38 @@ void OpRegistry::add(std::string_view protocol, std::vector<OpDef> defs) {
                 std::string(protocol),
                 std::move(uri),
                 std::make_shared<const OpDef>(std::move(def))});
+        // How a call of this operator is written is a fact of this definition, so it is declared
+        // here beside the traits instead of being guessed by a reader of the graph. A module of the
+        // core states its shapes in a Camel declaration and the builder records them there
+        // (`builder_modules.cpp`); an operator registered as data has no such declaration, and
+        // without an entry here the printer saw "no call shape" and refused every call of one --
+        // which is why `tensor:sum`, `tensor:tanh` and the rest of the family were refused while the
+        // operators themselves were registered and ran.
+        //
+        // The counts come from the definition's own parameters: `withAfterNorm` says that the
+        // parameters past `ordinaryParams` are written in `<>`. An operator whose element type is
+        // stated in the call (`zeros::<f32>([2, 2])`) is left without a shape: a call printed
+        // without `::<T>` is a different program, and that fact has nowhere to be recorded yet, so
+        // those keep being refused by name instead of being printed wrongly.
+        if (const auto &def = *entries_.back().def; !def.elementFromCall && !def.withAfterNorm) {
+            for (std::string_view exported : def.exports) {
+                // A group name (`__mat__`, `__idx__`) is not a name a program writes: those are the
+                // language's own operators, and the printer writes their sign.
+                if (exported.starts_with("__") && exported.ends_with("__")) {
+                    continue;
+                }
+                const size_t ordinary = def.withAfterNorm ? def.ordinaryParams : def.params.size();
+                camel::core::OperatorTable::instance().declareCallForm(
+                    entries_.back().uri,
+                    {.name              = std::string(exported),
+                     .minArgs           = ordinary,
+                     .withCount         = def.params.size() - ordinary,
+                     .declaredByModule  = true,
+                     .kernelDeclaration = false,
+                     .exported          = true});
+                break;
+            }
+        }
         // An operator without an export name belongs to no operator group, which is what
         // publishes resolvers by URI. Such an operator still needs its result type to follow its
         // arguments when types are re-inferred (specialization to an export's input shapes);
