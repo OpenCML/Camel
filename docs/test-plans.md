@@ -1382,6 +1382,14 @@ instances run at the same time without seeing each other's files. A case run out
   Compound values (`alloc=3,safepoint=1,kind=major`, `poison,verify=both`) and pass parameters
   (`std::opt safe_fp=true`) are not run options and are left alone.
 - Prefer explicit `expect_exit = 0` for successful behavior tests.
+- **`null` is not an exit code; it is the absence of one.** A run can end without an exit code in
+  three ways, and the failure line says which:
+  `expected exit 0, got signal SIGSEGV (rc=139, 0.03 s)` (the shell's `128 + n` for the signal),
+  `expected exit 0, got timeout after 30000 ms` (only a real timeout says this), and
+  `expected exit 0, could not start: <message>` (the process never existed). `[SUMMARY]` keeps the
+  first two apart as well -- `, timed out: <n>` and `, killed by a signal: <n>`, printed only when
+  one happened -- because a crash reported as a hang sends the reader to the wrong instrument: a
+  0.03 s SIGSEGV was read as a timeout for two rounds.
 - Prefer `verify_script` over `verify_script_path` for short, local checks.
 - Prefer `verify_script_path` for reusable or multi-test logic.
 - Do not encode final pass/fail semantics only inside Camel output like `"ok"`.
