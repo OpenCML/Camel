@@ -1918,3 +1918,36 @@ Camel Invariant Violation:
 **⑤ 下一步的探针（没做，等点头）**：在 `include/camel/core/type/composite/tuple.h:143` 的守卫里**加上 `this` 的 `size_` 与实际下标**，
 以及 `modules/autodiff/pullback.cpp` 里 13 处 `typeAt(...)` 各是哪一处（判据：加了下标与 size 之后，一次构建就能指出是哪个调用点、下标记成了几）。
 **这是 `type/composite/tuple.h` 与本报告之外的 `pullback.cpp`，按规矩先报不动。**
+
+
+## 57. 探针装上了：`size=0`、`index` 每次都不一样、元组本身**没被搬动**
+
+**探针（已按规矩删掉，三行，贴在这里以便复现）**：在 `include/camel/core/type/composite/tuple.h` 的 `typeAt` 前加
+`Type *typeAt(size_t index, const char *why)`（默认参数 `"?"`，现有调用点不动），守卫前打印
+`why / this / size_ / index / __builtin_return_address(0)`，打印后再取一次 `this` 与 `size_` 比较 `same/MOVED`；
+再把 `pullback.cpp`（13 处）、`split.cpp`（3 处）、`transpose.cpp`（2 处）的 `typeAt` 调用逐个带上 `"文件名:行号"`。
+
+**读数（`vjp_arities.cml std::nvm`，`--gc-check poison`）**：
+```
+PROBE typeAt why=? this=0x7bf8c8646188 size=0 index=4 caller=0x7bf8ce125356
+PROBE typeAt after this=0x7bf8c8646188 size=0 sameness=same
+```
+**换一次运行（`setarch -R` 关 ASLR）**：`this=0x7ffff1646188 size=0 index=2` —— **下标从 4 变成 2。**
+
+**① 三个事实**：
+1. **`size=0`**：被索引的那个 `TupleType` **一个成员都没有**；
+2. **`index` 两次运行不同（4 / 2）**：**下标不是算错的常量，是从别处走出来的**；
+3. **`sameness=same`**：**元组自己没被搬动**（前后同址同 size）。
+
+**② 判据的答案：两个都错，而且错在"这个元组是空的"。** 一个真的 5 成员元组被索引 4 会得到 `size=5`；
+这里 `size=0`，所以**不是"对正确的元组用了错的下标"，是"拿到了一个空元组"**——**而空元组正是 default 构造的那个形状**：
+**今夜早些时候 `Array::getSlot` 那次 `element 0 of an array that holds 0`，是一个 default 构造的 `Array` 头被当作真数组用；
+这里是 default 构造的 `TupleType`（`size_ = 0`）被当作真的有布局用。同一族。**
+
+**③ `why=?` ⇒ 这个调用点不在我注解的 18 处里。** 剩下的候选集中在 `include/camel/core/context/frame.h:719/720`
+（`runtimeDataType_->typeAt(...)` / `staticDataType_->typeAt(...)`：**帧按数据槽位问布局的类型**），
+以及 `type/tree.h:46-47`、`execute/loop_driver.h` 与 `json`/`onnx` 模块。**`frame.h` 是最像的一处：一个零成员的"运行时数据类型"被问第 4 个槽。**
+
+**④ 下一刀（要一次全量重建，因为你批的探针要加在 `frame.h`）**：把 `why` 只加到 `frame.h:719/720`，
+判据是那行 `PROBE typeAt why=frame.h:719` 出现（或 `why=?` 仍在 ⇒ 往下继续缩）。
+**这一刀是"缩范围"，不是修。**
