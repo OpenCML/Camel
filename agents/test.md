@@ -339,3 +339,11 @@ Two readings of 2026-11-02 were wrong for this reason and neither was a code def
 **An `ACCEPT` from `parsecheck` proves the text it was given parses, not that the text is the file
 you meant to give it.** A parser that accepts a truncated file is not evidence of completeness; the
 size and the statement count are what cross-check it.
+
+## A Log File Belongs Outside The Tree
+When a run's output is redirected, `*> D:\Temp\<name>.log` and never `*> run.log` beside the sources.
+A file written inside the tree is an untracked file the plan-selection audit then has to explain: it
+matches no rule in `test/plan-selection.json`, and the audit answers "tracked file matched by no rule",
+which turns a reading into a red about the reading. This happened twice in one night -- once as an
+extra failure in a full run, once as a "thirtieth red" that was the log itself. The log is the record
+of the measurement, so it belongs where records live and not where the sources do.
