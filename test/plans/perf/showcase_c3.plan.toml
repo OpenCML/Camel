@@ -53,12 +53,12 @@ timeout_ms = 120000
 # the walls fall this entry is the one that has to become a training run and a falling loss.
 [[tests]]
 name = "train.stops_at_the_wall"
-desc = "train.cml --arg mode=train: the training loop reaches the library's `vjp` at the model's parameter tree and stops where the library cannot follow it today.  The expectation is the refusal's own words, so the entry reports the wall instead of hiding it behind `known_fail`."
+desc = "train.cml --arg mode=train: the training loop reaches the library's `vjp` at the model's parameter tree and stops where the library cannot follow it today.  The expectation is the refusal's own words, so the entry reports the wall instead of hiding it behind `known_fail`.  The words changed on develop 2026-11-03: the pin used to be `Cannot import module 'vjp'`, which was the whole module failing to compile; `stdlib/vjp.cml` was rewritten (8194d89fd, the author's ruling of 2026-11-02 11:30), now compiles, and answers scalar and two-scalar functions -- `grad` at 3 gives 6.0 and vjp of a two-parameter product gives its two cotangents -- so the refusal moved to the shape this loop actually needs, a (struct, array) parameter pair, where the library's own `(..xs)` spread reports an empty argument list at vjp.cml:73.  The wall is the same wall; only its sentence is more precise."
 kind = "behavior"
 case = "../../../showcase/c3-char-transformer/train.cml"
 args = ["${case}", "--arg", "corpus=showcase/c3-char-transformer/corpus.txt", "--arg", "mode=train", "--arg", "steps=2"]
 expect_exit = 1
-expect_stdout_contains = ["Cannot import module 'vjp'"]
+expect_stdout_contains = ["cannot be called with argument types"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 120000
 # The parity table: the same block on both sides, five readings compared, RESULTS.md written.
@@ -252,3 +252,4 @@ kind = "behavior"
 expect_exit = 0
 expect_stdout_contains = ["causal step=1 loss=2.600174800352", "causal step=2 loss=2.551554899392", "causal step=3 loss=2.504333965784", "causal step=4 loss=2.458522726524", "causal step=5 loss=2.414130273993", "causal step=6 loss=2.371162218715", "causal step=7 loss=2.329620445913", "causal step=8 loss=2.289503047085", "causal step=9 loss=2.250804325969", "causal step=10 loss=2.213514856189", "causal step=11 loss=2.177621581600", "causal step=12 loss=2.143107953088", "causal step=13 loss=2.109954095338", "causal step=14 loss=2.078136995710", "causal step=15 loss=2.047630705399", "causal step=16 loss=2.018406541683", "causal step=17 loss=1.990433282081", "causal step=18 loss=1.963677353024", "causal step=19 loss=1.938103043354", "causal step=20 loss=1.913672804968", "causal done steps=200 last=1.281279765502", "causal A before [[1.0, 0.0]", "causal A after [[1.0, 0.0]"]
 timeout_ms = 300000
+
