@@ -5,6 +5,7 @@
 ## 现在在等作者
 
 - `2026-11-02-the-generator-reads-a-draft-node-after-its-builder` —— `stream.*` 的几条在 Windows 上崩在 `builder_support.h#nodeGraphOf`（草稿节点不属于任何 compile graph builder），同树 Linux 全绿、五个后端都崩，所以是建图不是调度；问该谁去找那个节点的 owner、修好前 Windows 腿要不要继续红。
+| [`2026-11-02-when-should-an-underivable-sync-edge-be-dropped`](2026-11-02-when-should-an-underivable-sync-edge-be-dropped.cn.md) | 同步边"推不出来就别建"该在建图时判还是图定型后判；冻结图没有重发 payload 的通路 | 未裁 |
 - `2026-11-03-may-a-printed-name-be-the-definitions-own` —— `tensor:sum` 与 `tensor:sum_axis` 共用一个写名 `sum`，边界在哪只有定义知道、节点不知道；问打印件能不能用定义自己的名字（`sum_axis(m, 0, false)`），还是必须复现源里的 `<>` 写法。
 - `2026-11-02-drafts-outlive-the-safepoint` —— 跨过 safepoint 的 draft，它的静态槽该由谁改写：外部 tracer 代替持有者去改写，收 `built` 就崩在启动期 encode、只收 `borrowed` 又毫无影响；问是"搬迁必须由持有者自己做"，还是"那些 draft 本不该活到 safepoint"。
 
