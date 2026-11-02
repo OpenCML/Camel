@@ -33,7 +33,7 @@ func g2(x: float): float {
 func main(): int sync {
     println(g2(1.0))
     let back = transpose(g2)
-    println(back(1.0, 1.0))
-    println(back(1.0, 3.0))
+    println(back(1.0))
+    println(back(3.0))
     return 0
 }

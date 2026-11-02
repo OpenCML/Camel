@@ -7,7 +7,7 @@
 // side only -- `2*x + 5*x` then, `4*x` else -- so the two sides answer 7 and 4: the sum of two
 // cotangents happens inside one arm, and the two arms' cotangents are joined, not added, because
 // only the arm that ran contributed one.
-import { transpose } from transforms
+import { jvp, split, transpose } from transforms
 import rulesets.transpose
 
 func pick(x: float): float {
@@ -25,13 +25,18 @@ func merged(x: float): float {
         return 4.0 * x
     }
 }
-
+import rulesets.jvp
 func main(): int sync {
-    let back = transpose(pick)
-    println(back(1.0, 1.0))
-    println(back(-1.0, 1.0))
-    let merged_back = transpose(merged)
-    println(merged_back(1.0, 1.0))
-    println(merged_back(-1.0, 1.0))
+    // The value each arm reads is captured by the half the cut returns, so the transpose of that half
+    // takes the cotangent and nothing else: 2 at a positive x, 3 at a negative one, 7 and 4 for the
+    // function that reads its parameter twice on one side.
+    let (_, pick_pos) = split(jvp(pick))(1.0)
+    println(transpose(pick_pos)(1.0))
+    let (_, pick_neg) = split(jvp(pick))(-1.0)
+    println(transpose(pick_neg)(1.0))
+    let (_, merged_pos) = split(jvp(merged))(1.0)
+    println(transpose(merged_pos)(1.0))
+    let (_, merged_neg) = split(jvp(merged))(-1.0)
+    println(transpose(merged_neg)(1.0))
     return 0
 }
