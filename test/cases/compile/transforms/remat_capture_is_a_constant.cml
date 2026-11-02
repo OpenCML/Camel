@@ -1,0 +1,28 @@
+/**
+ * A function that captures a value, marked for recomputation: the marked copy keeps the capture.
+ *
+ * `remat` copies the graph it is handed and sets one bit on the copy, so the copy is the same
+ * function. A copy that declared no captures was not: the value it was handed to still carried the
+ * closure, the graph said it captured nothing, and a call through it bound nothing -- every read of a
+ * capture answered the zero of its slot. `make(3.0)(1.0)` is `4.0`, but through the marked value it
+ * printed `1.0` (the body read `x + 0`); batched, `vmap(remat(make(3.0)))([1, 2, 3])` printed
+ * `[2.0, 4.0, 6.0]` where `[4.0, 5.0, 6.0]` is the answer (author's review, high-2, the same
+ * capture-loss class as `vmap`'s).
+ *
+ * The first line is the per-call reading with the capture read by hand (`1 + 3`), the second the same
+ * defect seen through the batch. Both are hand-computed here so neither depends on the other.
+ */
+import rulesets.vmap
+import { vmap, remat } from transforms
+
+func make(c: float): (x: float) => float {
+    return (x: float) => x + c
+}
+
+func main(): int sync {
+    let xs: float[3] = [1.0, 2.0, 3.0]
+    let marked = remat(make(3.0))
+    'remat capture value={}'->format<marked(1.0)>->println
+    println(vmap(remat(make(3.0)))(xs))
+    return 0
+}

@@ -109,23 +109,14 @@ class GraphModule final : public BuiltinModule {
         // Everything else is declared in stdlib/graph.cml, including the per-sample-type
         // `constant` and `add_constant`.
         // `==` of the handle types is declared in stdlib/graph.cml (design principles 4.3): two
-        // handles are equal when they name the same thing of the same Program. `!=` cannot be
-        // declared — an overload of `==` gives it, and `operator !=` is OperatorNotOverloadable
-        // — so the module keeps the `__neq__` group the compiler asks for when it does not
-        // negate a Camel overload. Both names are default imported: an importer of `graph`
-        // finds them among a type's operators without naming them.
-        std::vector<std::pair<std::string, resolver_ptr_t>> ne;
-        for (HandleKind kind : kHandleKinds) {
-            // A Program is the implementation's own and a transaction is never compared.
-            if (kind == HandleKind::Program || kind == HandleKind::Txn) {
-                continue;
-            }
-            Type *type = HandleType::get(kind);
-            ne.emplace_back("graph:ne", StaticFuncTypeResolver::create({}, {{type, false}, {type, false}}, Type::Bool()));
-        }
-        exportEntity("__neq__", OperatorGroup::create("__neq__", ne));
+        // handles are equal when they name the same thing of the same Program, and `!=` is
+        // `!(==)` on that declaration -- the graph holds the equality and the negation, as it
+        // does for an array or a tuple. `operator !=` cannot be declared
+        // (OperatorNotOverloadable), and `__neq__` needs no entry here: an entry in that group
+        // is what answers `!=` when the `==` is a Camel function the compiler cannot negate,
+        // which a declared handle operator is not. `==` is default imported so that an importer
+        // of `graph` finds it among a type's operators without naming it.
         exportDefaultImportRef("__eq__");
-        exportDefaultImportRef("__neq__");
     }
 
     bool load() override {
@@ -157,6 +148,8 @@ class GraphModule final : public BuiltinModule {
                 {"op", true},
                 {"op_name", true},
                 {"is_pure", true},
+                {"may_be_recomputed", true},
+                {"may_fault", true},
                 {"type_of", true},
                 {"type_name", true},
                 {"callee", true},
