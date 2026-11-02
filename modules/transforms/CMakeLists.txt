@@ -8,6 +8,7 @@ add_camel_module(
     jvp.cpp
     jvp_operator.cpp
     remat_operator.cpp
+    rule_expand.cpp
     split.cpp
     split_operator.cpp
     transpose.cpp

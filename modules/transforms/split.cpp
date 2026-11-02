@@ -742,16 +742,10 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 // length is not a thing its type carries, and this parameter holds the array.
                 const size_t index     = portIndex[ref];
                 const size_t valuePort = index % 2 == 0 ? index : index - 1;
-                // Only a value whose length its type does not carry has to cross: a `T[]`'s length
-                // lives in its value, so the array crosses; a scalar's shape *is* its type, so its
-                // value port would be the parameter the forward half already holds. The condition is
-                // asked of the type, not of the shape of the code that reads it.
-                Type *const valueType = valuePort < ports.size() && ports[valuePort] < nodeCount
-                                            ? lifted.node(ports[valuePort])->dataType()
-                                            : nullptr;
-                const bool lengthCrosses =
-                    valueType != nullptr && valueType->code() == camel::core::type::TypeCode::Array;
-                if (lengthCrosses && valuePort < ports.size() && ports[valuePort] < nodeCount &&
+                // A parameter the tangent side reads crosses too: the residual set is what the
+                // backward half actually reads, whether the forward half computed it or it is a
+                // parameter itself. The ruling of 2026-11-02 00:30: the rule does not split by type.
+                if (valuePort < ports.size() && ports[valuePort] < nodeCount &&
                     std::find(found.begin(), found.end(), ports[valuePort]) == found.end()) {
                     found.push_back(ports[valuePort]);
                 }
