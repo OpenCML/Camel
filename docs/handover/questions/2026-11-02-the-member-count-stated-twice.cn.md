@@ -43,8 +43,20 @@
 
 ## 默认（按默认先做，不等回复）
 
-**默认 A**：**"不知道"和"零个"是两件事**，类型必须能说"我不知道元数"，否则每一次"没有图在手"都在对收集器撒谎。
-在 A 落地之前，**B 作为权宜留在树上**（它至少把静默改成点名，并且不再越界读），但**不许把 B 当成正解**。
+> **作者 2026-11-02 05:30 已裁：A 不做（为一个库在核心类型里加变体，违反 2.3）；B 是绕过且不安全（漏扫的成员里若有引用，回收后就是悬垂指针），只许作为过渡留几个小时，不许当正解、不许扩大。**
+
+## B 的兜底代码清单（等 05:10 落地即删）
+
+**唯一标记是 `B-FALLBACK`**：`git grep -n 'B-FALLBACK' -- include` 就是这张清单的全部。
+
+| `include/camel/core/rtdata/tuple.h` | 是什么 | 删时怎么办 |
+| --- | --- | --- |
+| `391-397` 的 `B-FALLBACK` 注释块 | 说明为什么按类型上界扫 | 与下面两行一起删 |
+| `398` `const size_t traced = members < tupleType->size() ? members : tupleType->size();` | 上界本身 | 删 |
+| `400` `for (size_t i = 0; i < traced; ++i)` | 用上界 | 改回 `i < members` |
+
+**保留（不是兜底，是守卫，Release 也开）**：`387-389` 的 `if (members > tupleType->size())` 与 `37` 的
+`reportMembersBeyondType`；以及"元组值被非元组类型描述"那条 `64` `reportTupleHasNoTupleType`。
 
 ## 附：同一条判据的第二个产生者（不是本页的问句）
 

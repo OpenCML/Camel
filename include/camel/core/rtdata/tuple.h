@@ -378,16 +378,23 @@ class Tuple : public rtdata::Object {
         auto codes                       = tupleType->codes();
         rtdata::Object **refArr          = reinterpret_cast<rtdata::Object **>(data_);
 
-        // `codes` is the type's array and has the type's length, so a value with more members than
-        // its type would read past it here. The walk therefore stops at the shorter of the two counts
-        // and the disagreement is said out loud instead of being read out of bounds. Stopping short
-        // is the lesser evil: a member that is not traced is a reference that is not relocated, which
-        // the poison check reports by name, while an index past the array is an arbitrary code that
-        // either crashes in `typeAt` or silently skips the reference that needed moving.
+        // The lesson this check exists for (author, 2026-11-02 05:30): the collector trusts a value's
+        // static type -- `codes` is the type's array and `refArr` is the value's slots -- so a type and
+        // a value that disagree about how many members there are is a memory-safety bug, not a
+        // diagnostic question. The check below is in the shipped build, not only in a debug one: a
+        // release that trusts the same static type has the same bug.
         const size_t members = size();
         if (members > tupleType->size()) {
             camel::core::rtdata::detail::reportMembersBeyondType(this, tupleType, members);
         }
+
+        // B-FALLBACK (2026-11-02, the 05:10 ruling): while a residuals tuple still reaches the caller
+        // as a tuple, its count is stated twice, and this stops the walk at the shorter count so that
+        // `codes[i]` stays inside the array the type owns. The ruling is that this bound goes away
+        // with the tuple: `split` hands on `(y, lin)` and the residuals are no longer a tuple, so the
+        // two counts are one number again. Delete this line and the `traced` bound in the loop below
+        // in that commit (grep `B-FALLBACK`); the check above stays, because the next disagreement
+        // must not be silent.
         const size_t traced = members < tupleType->size() ? members : tupleType->size();
 
         for (size_t i = 0; i < traced; ++i) {
