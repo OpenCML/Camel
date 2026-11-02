@@ -927,7 +927,7 @@ ROUNDTRIP checked=700 equivalent=649 not_equivalent=51 over_budget=0 unfaithful=
 
 `printed 589 → 707`（+118）、`equivalent 543 → 649`（+106）、`refused 1779 → 1664`、`not_equivalent 43 → 51`（+8，同样要逐条定性，不许当形状差异放过）、`families 58`。重扫里最大的一族换成了 `the operator '<name>'`（429 条：没有调用形状也没有符号的算子），`import { name } from module` 那族（171 条）还在。
 
-**自检**：全量 fast suite `8447 / 8435 / 0`（skip 10、known failures 2）。第一次跑出 1 条红是 `docs.links.citations`：本页引了作者原话里的 `stdlib/math.cml:627-632`（行号），判据要求引用写成符号，改成 `stdlib/math.cml#shl` 并在括号里注明原文是行号，`docs_links` 14/14 通过。契约计划 `feat.trans.cml` 1/1：新增 `map_with_closure.cml`（`map<closure>(xs)` 往返 EQUAL 22 顶点 / 55 边），拒绝例子换成 `modules/stdlib/array_kernels_read_back.cml`（`array:sort_l` 是模块没导出的内核）。
+**自检**：全量 fast suite `8447 / 8435 / 0`（skip 10、known failures 2）。第一次跑出 1 条红是 `docs.links.citations`：本页引了作者原话里的行号引用（`627-632`），判据要求引用写成符号，改成 `stdlib/math.cml#shl` 并在括号里注明原文是行号，`docs_links` 14/14 通过。契约计划 `feat.trans.cml` 1/1：新增 `map_with_closure.cml`（`map<closure>(xs)` 往返 EQUAL 22 顶点 / 55 边），拒绝例子换成 `modules/stdlib/array_kernels_read_back.cml`（`array:sort_l` 是模块没导出的内核）。
 
 ## 8. 要裁定的问题（本计划不擅自决定）
 

@@ -155,7 +155,7 @@ class Document:
         for key in ("elem", "key", "value", "exit"):
             if entry.get(key) is not None:
                 self.edge(vid, f"T:{entry[key]}", key)
-# A named type (or an enum) carries the id of its declaration, and the document lists the
+        # A named type (or an enum) carries the id of its declaration, and the document lists the
         # declarations under `decls` with that id: the edge goes to the declaration vertex, which
         # is `D:<id>` and not a `T:` one -- a declaration is not a type. A declaration is compared
         # by what it is -- kind and parameter count -- not by the id, which is a position in the
