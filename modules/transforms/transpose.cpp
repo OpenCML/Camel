@@ -1079,15 +1079,30 @@ bool buildTransposeMember(
                                 if (ports[i] != value) {
                                     continue;
                                 }
-                                return i < portOfParam.size() ? portOfParam[i]
-                                                              : rt::kInvalidNodeRef;
+                                if (const gc_node_ref_t port = i < portOfParam.size()
+                                                                  ? portOfParam[i]
+                                                                  : rt::kInvalidNodeRef;
+                                    port != rt::kInvalidNodeRef) {
+                                    return port;
+                                }
+                                break;
                             }
-                            return rt::kInvalidNodeRef;
+                            // Not a parameter: a closure port of the half (a value the cut carried,
+                            // the primal a rule reads) is a capture port of this member, and
+                            // `forward` is the one entry that knows it.
+                            return forward(value);
                         }
                         if (sourced->kind == rt::GCNodeKind::Data) {
                             return constantValue(value);
                         }
                         if (sourced->kind == rt::GCNodeKind::Accs) {
+                            // A residual read first: the forward copy answers it -- a member of the
+                            // tape element, or of the tuple a parameter carries -- which is where a
+                            // `split` half's per-round values are read from.
+                            if (const gc_node_ref_t copied = forward(value);
+                                copied != rt::kInvalidNodeRef) {
+                                return copied;
+                            }
                             const auto *body = function->nodeBodyAs<rt::GCAccsBody>(value);
                             if (body != nullptr && !paramPorts.empty()) {
                                 const gc_node_ref_t madePart =
@@ -1801,6 +1816,14 @@ bool buildTransposeMember(
                     function->node(regionPorts.front())->dataType(),
                     draft.allocateRuntimeSlot(function->node(regionPorts.front())->dataType()));
                 newPorts.push_back(elementPort);
+                // The round's element is the one thing both loops have: the forward loop iterated
+                // it and the reverse loop iterates the same array, so round k reads element k in
+                // either direction. It is therefore a value a round can *forward* rather than one
+                // it has to refuse -- and it is where the backward half `split` hands out reads its
+                // per-round residuals from, because the tape the cut gives that half to iterate is
+                // that half's element. A rule that needs the round's own state still refuses
+                // (`skip=state`): the state has no per-round value in the reverse walk.
+                forwardOf[regionPorts.front()] = elementPort;
                 // A state's cotangent port lives in the state's own tangent space: a loop that
                 // carries a `float[]` state pulls back an array, and a port typed `float` would hand
                 // that array to a number -- the same read that took the process down when two
@@ -2041,11 +2064,31 @@ bool buildTransposeMember(
                     }
                 } else {
                     // One state and nothing escaped: the loop's value is that state's cotangent, and it
-                    // is the transposed function's whole answer -- one cotangent, in the one-slot tuple
-                    // the signature promises, the same shape a branch's answer takes (author,
-                    // 2026-11-02 11:30). Handing the scalar out unwrapped is what took the process down
-                    // when the graph was called: the call site's slot is typed `(float,)` by the
-                    // signature, so a `float` written into it is read as a tuple.
+                    // is the transposed function's whole answer **when the value the state starts from
+                    // is a parameter** -- the hand-written loop `thrice(x) = loop s = x for i in 0..3`
+                    // is the shape, and there one cotangent, in the one-slot tuple the signature
+                    // promises, is exactly right (author, 2026-11-02 11:30; handing the scalar out
+                    // unwrapped is what took the process down when the graph was called).
+                    //
+                    // A state that starts at anything else answers no parameter, and the loop's
+                    // cotangent then has nowhere to land: the backward half `split` hands out starts
+                    // its tangent at the constant the lifted graph wrote, so its parameters are the
+                    // tangents the escapes carry, and a half that escaped nothing is a function no
+                    // parameter reaches. Answering the loop there named a cotangent for a value no
+                    // parameter is -- `h(x) = loop s = 0.0 for i in [1,2,3,4] do s + 2.0` answered
+                    // `1.0` for a derivative of `0.0` -- so the shape is refused by name instead. The
+                    // cotangent is delivered first, so the delivery the branch above makes is still
+                    // written once: a shape that does escape reaches its parameter either way.
+                    if (stateInitials[0] != rt::kInvalidNodeRef) {
+                        addCotangent(stateInitials[0], loopNode);
+                    }
+                    const camel::runtime::GCNode *const start =
+                        stateInitials[0] < nodeCount ? function->node(stateInitials[0]) : nullptr;
+                    if (start == nullptr || start->kind != rt::GCNodeKind::Port) {
+                        os << "TRANSPOSE function=" << function->name() << " skip=state-unread node="
+                           << ref << " origin=" << regionOrigin << '\n';
+                        return false;
+                    }
                     result = tupleOf({loopNode}, {cotangentTypeOf(loopNode, Type::Float64())}).first;
                 }
                 break;
