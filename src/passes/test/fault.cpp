@@ -100,10 +100,25 @@ ShareBranchArmTestPass::apply(const camel::runtime::Program *program, std::ostre
 }
 
 const camel::runtime::Program *
-OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostream &) {
+OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostream &out) {
     using camel::runtime::DraftEdgeKind;
     using camel::runtime::GCNodeKind;
     camel::runtime::RuntimeGraphDraftSession session(context_, program);
+    // One-off reading: the flags every node of the input graph carries. The `kGCNodeFlagSyncStatement`
+    // mark lives on the committed node, not on the draft, so this is where it can be seen.
+    for (const camel::runtime::GCGraph *graph : program->graphs()) {
+        if (graph == nullptr) {
+            continue;
+        }
+        for (uint32_t node = 0; node < graph->nodeCount(); ++node) {
+            const camel::runtime::GCNode *committed =
+                graph->node(static_cast<camel::runtime::gc_node_ref_t>(node));
+            if (committed != nullptr &&
+                committed->hasFlag(camel::runtime::kGCNodeFlagSyncStatement)) {
+                out << "order_only_effect: marked node=" << node << " graph=" << node << "\n";
+            }
+        }
+    }
     for (camel::runtime::GCGraph *owner : session.collectReachableRuntimeGraphs()) {
         auto &transaction = session.edit(owner);
         auto &draft       = transaction.edit();
@@ -118,6 +133,10 @@ OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostr
             if (!uri.starts_with(":io/")) {
                 continue;
             }
+            // The mark the effect carries, before any edge goes: a test reading of this pass has to
+            // show that the node under test is marked, not assume it because the program wrote it in
+            // a `sync` block (a reading that assumes its own instrument works is no reading).
+            out << "order_only_effect: node=" << id << " uri=" << uri << "\n";
             // Every edge the effect stands on goes, both directions, and no edge is put back: what
             // is left is the node and the `kGCNodeFlagSyncStatement` mark it carries. The mark says
             // someone believed the node is in a chain; with no sync edge under it, it holds nothing
