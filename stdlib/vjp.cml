@@ -9,10 +9,11 @@
  *     with_grad(f)         -- the same for the first `with` parameter (design principles 9.9)
  *
  * This is the assembly the design asks for, written out rather than described. `split(jvp(f))`
- * answers the pair of halves, so the body takes the pair apart by name -- the forward half and the
- * linear one -- and hands the linear one to `transpose`, which is the only shape that turns it
- * round. The forward half runs at the point and answers the residuals with the value; the backward
- * half reads those residuals and a seed; `transpose` walks it backwards from the cotangent.
+ * answers the forward half, and the forward half called at the point answers `(value, lin)`: the
+ * value, and the linear one. `lin` is the backward graph with the residuals already in its closure,
+ * so its parameters are the tangents and it reads nothing else. `transpose(lin)` is therefore the
+ * shape that takes the cotangent **alone** -- `(ct) => (cotangents)`, one per tangent -- because the
+ * values it needs are not in its parameter list, they are what the split captured for it.
  *
  * The surface is JAX's (author's ruling of 2026-11-01): `vjp(f)(x)` is the pair `(y, pullback)` and
  * `pullback(ct)` is the cotangent of `f`'s parameters, so `grad(f)(x)` is `vjp(f)(x).1(1.0)`. The
@@ -60,17 +61,16 @@ import { jvp, split, transpose } from transforms
 /// pullback's cotangents are too (stdlib/types.cml), and `(..xs)` takes the parameters the instantiated
 /// `Vjp<F>` has -- the ordinary rule that a lambda takes its parameters' types from the position it
 /// stands in, applied to a pack (author's ruling of 2026-11-01 19:10). The lambda's rest parameter is a
-/// value in its body: `xs` is the tuple of those parameters, and `forward(..xs)` spreads it into the
-/// call, which is the rule the language already had for spreading a tuple.
+/// value in its body: `xs` is the tuple of those parameters, and `split(jvp(f))(..xs)` spreads it into
+/// the call of the forward half, which is the rule the language already had for spreading a tuple.
 /// The whole reading in one line: the function is written where the call is, so the example is a
 /// program of its own -- `y` is `x * x` at 3, and the pullback read at `ct = 1.0` answers the
 /// derivative there, one member per parameter.
 /// @example let (y, pullback) = vjp((x: float) => x * x)(3.0)    // y = 9.0, and pullback(1.0) is (6.0)
 export func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
-    let (forward, linear) = split(jvp(f))
     return (..xs) => {
-        let (value, residuals) = forward(..xs)
-        (value, (ct: Tangent<ResultOf<F>>) => transpose(linear)(residuals, ct))
+        let (value, lin) = split(jvp(f))(..xs)
+        (value, (ct: Tangent<ResultOf<F>>) => transpose(lin)(ct))
     }
 }
 /// The gradient of a function of one parameter: `vjp` with the seed 1, its second half taken, and the

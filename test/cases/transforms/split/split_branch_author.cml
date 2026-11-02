@@ -26,14 +26,14 @@ func f(x: float): float {
 }
 
 func main(): int sync {
-    let (forward, backward) = split(jvp(f))
-    let (up, upResiduals)   = forward(2.0)
+    let forward = split(jvp(f))
+    let (up, upBackward)   = forward(2.0)
     // f(2) = 4, and d/dx (x*x) = 2x = 4 there.
     'author x=2.0 value={}'->format<up>->println
-    'author x=2.0 dfdx={}'->format<backward(upResiduals, 1.0)>->println
-    let (down, downResiduals) = forward(-2.0)
+    'author x=2.0 dfdx={}'->format<upBackward(1.0)>->println
+    let (down, downBackward) = forward(-2.0)
     // f(-2) = -6, and d/dx (3*x) = 3 there -- the arm the condition did not take at 2.0.
     'author x=-2.0 value={}'->format<down>->println
-    'author x=-2.0 dfdx={}'->format<backward(downResiduals, 1.0)>->println
+    'author x=-2.0 dfdx={}'->format<downBackward(1.0)>->println
     return 0
 }

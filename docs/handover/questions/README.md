@@ -12,3 +12,4 @@
 | [`2026-11-02-is-a-chain-start-the-same-question-as-an-order-carrier`](2026-11-02-is-a-chain-start-the-same-question-as-an-order-carrier.cn.md) | `nodeTakesAnOrder` 与 `isChainStatement`：一个问题还是两个？ |
 | [`2026-11-02-is-an-unknown-escape-in-a-string-a-warning-or-an-error`](2026-11-02-is-an-unknown-escape-in-a-string-a-warning-or-an-error.cn.md) | 字符串里的未知转义是警告还是错误？ |
 | [`2026-11-02-transpose-tangent-parameters`](2026-11-02-transpose-tangent-parameters.cn.md) | `transpose` 怎么知道一个函数的参数是切向（半身），而不是普通参数？ |
+| [`2026-11-02-which-generator-does-the-dangling-node-mean`](2026-11-02-which-generator-does-the-dangling-node-mean.cn.md) | 「生成器悬垂节点」指的是哪一件事：`yield` 状态机降级出的无人读节点，还是 `test/tools/progen` 生成的程序里的悬垂？ |
