@@ -3354,17 +3354,20 @@ class CmlPrinter {
             uri.starts_with(":op/") &&
             camel::core::operatorSymbolOf(
                 camel::core::OperatorTable::instance().groupOf(uri)) != nullptr;
-        const bool writable = !languageOwned && callForm.has_value() && callForm->withCount == 0 &&
-                              (callForm->declaredByModule || uri.starts_with(":"));
+        const bool writable = !languageOwned && callForm.has_value() &&
+                              (callForm->declaredByModule || callForm->exported || uri.starts_with(":"));
         if (writable) {
             name = callForm->name;
-        } else if (callForm.has_value() && callForm->kernelDeclaration && !languageOwned) {
-            // There is a declaration and it has a name, but not one a program writes: a body-less
-            // declaration is the module's own kernel (`array:sum_l` is the `sum_kernel` behind
-            // `array::sum`), and the language never writes a kernel's name. Naming the kernel says
-            // why the operator stays in this column, which a refusal by the operator alone does
-            // not -- and an invented exported name would decide semantics for the author who wrote
-            // the kernel private (design principles 6.4).
+        } else if (callForm.has_value() && callForm->kernelDeclaration && !languageOwned &&
+                   !callForm->exported) {
+            // There is a declaration and it has a name, but the module did not export it: a
+            // body-less declaration the module keeps to itself is the kernel behind an `#impl`
+            // function (`array:sum_l` is the `sum_kernel` behind `array::sum`), and a program of
+            // the language cannot write that name. A name whose module *does* export it is a call
+            // (`shl` is exported with no body, and `1->shl<4>` is what the source writes), so the
+            // test is the export and not the body: "body-less" says where the implementation is,
+            // "private" says whether a program may write the name, and they are different facts
+            // (the author's ruling of 2026-11-03; design principles 6.4).
             fail(
                 ref,
                 std::format(
@@ -3418,15 +3421,21 @@ class CmlPrinter {
         std::string text = name;
         const auto withArgs = graph_->withInputsOf(ref);
         if (!withArgs.empty()) {
-            // The one configuration this printer writes is the format of a print: `print<'{}-{}'>`,
-            // `println<'{:.2f}'>` -- a string the call holds and the source writes in `<>`. Any
-            // other configuration (`:mark/map_arr`'s function value, written `xs->map<f>` by the
-            // source) has no spelling here, and writing the call without it would be a print that
-            // dropped the configuration: it is refused by name instead.
+            // The one configuration this printer used to write was the format of a print:
+            // `print<'{}-{}'>`, `println<'{:.2f}'>` -- a string the call holds and the source writes
+            // in `<>`. A declared operator that states a `with` parameter of its own (`shl` is
+            // `with <count: int>`, written `1->shl<4>`) holds a value there, and a value the
+            // printer can write is written: a literal or a string. Anything else (`:mark/map_arr`'s
+            // function value, written `xs->map<f>` by the source) has no spelling here, and writing
+            // the call without it would be a print that dropped the configuration: it is refused by
+            // name instead.
             for (const gc_node_ref_t one : withArgs) {
                 const camel::runtime::GCNode *argument = graph_->node(one);
                 const Type *type = argument != nullptr ? argument->dataType() : nullptr;
-                if (type == nullptr || type->code() != TypeCode::String) {
+                const bool literal =
+                    argument != nullptr && argument->kind == camel::runtime::GCNodeKind::Data &&
+                    argument->dataIndex < 0;
+                if (type == nullptr || (type->code() != TypeCode::String && !literal)) {
                     fail(
                         ref,
                         "a call whose configuration is not a format string: the printer writes "
