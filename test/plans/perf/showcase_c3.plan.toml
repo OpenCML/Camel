@@ -19,12 +19,12 @@ tags = ["showcase", "slow", "c3", "transformer", "vjp", "grad"]
 # rule / missing batch rule / transform refusal / performance).
 #
 # This is a milestone-tier plan: it runs with `--tier milestone` or by naming the file, not under
-# the default `npm run test` fast layer.  It starts the tree's own binary fourteen times, which is a
+# the default `npm run test` fast layer.  It starts the tree's own binary sixteen times, which is a
 # few seconds, and it reports walls rather than holding the example to a curve.
 
 [[tests]]
 name = "probes"
-desc = "The fourteen construct probes of the C3 Transformer run through the library's own `vjp`: the control answers its gradient, and the constructs that make attention a Transformer (matrix product, softmax, reduction along an axis, reshape/transpose, a second parameter, a table row, the causal mask, a `with` parameter tree, `grad` at a model, the whole block) are refused.  The entry fails when the count of answered and refused probes moves, because that is a wall falling or a regression, and both need the report rewritten."
+desc = "The sixteen construct probes of the C3 Transformer run through the library's own `vjp`: the control answers its gradient, and the constructs that make attention a Transformer (matrix product, softmax, reduction along an axis, reshape/transpose, a second parameter, a table row, the causal mask, a `with` parameter tree, `grad` at a model, the whole block) are refused.  The entry fails when the count of answered and refused probes moves, because that is a wall falling or a regression, and both need the report rewritten."
 kind = "behavior"
 tool = "python"
 case = "../../../showcase/c3-char-transformer/probe.py"

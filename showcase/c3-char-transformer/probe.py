@@ -34,6 +34,8 @@ PROBES = HERE / "probes"
 # probe's text.  The key is the file stem.
 CONSTRUCTS = {
     "13_jvp_scalar": "the forward control: `jvp` at one scalar parameter",
+    "15_mask_in_f32": "the causal mask, written in f32 with `where`",
+    "16_layer_norm_dtype": "the element type `layer_norm` answers with",
     "14_jvp_call": "a call inside the differentiated function",
     "01_grad_scalar": "the control: the library `grad` at one scalar parameter",
     "02_grad_table": "an array parameter read by position (an embedding table)",
