@@ -19,7 +19,7 @@
 （`src/compile/gct/builder.h:36,61,394`）里没有表达式的类型。`loop i = 0` 的初值是个字面量，
 GCT 顺手就有 `int64`；但 5.4 点名的 `pairs(n)`，内层是 `loop j = i + 1`，`i + 1` 在 GCT 处没有类型。
 
-GCT 唯一能表达"某表达式的类型"的机制是 `typeof <expr>`（`builder.cpp:6129`，`TypeOfType::create`），
+GCT 唯一能表达"某表达式的类型"的机制是 `typeof <expr>`（`src/compile/gct/builder.cpp#addTypedCell`，`TypeOfType::create`），
 而 GIR 解析它是**在使用处把表达式建出来**（`src/compile/gir/builder_generics.cpp:2465-2489`），
 也就是建在创建体里。于是：
 

@@ -5716,25 +5716,15 @@ node_ptr_t Builder::visitGeneratorBody(
     const AST::node_ptr_t &bodyAst = funcAst->atAs<AST::StmtBlockLoad>(1);
     const auto &bodyStmts         = bodyAst->atAs<AST::RepeatedLoad>(0);
 
-    // The head writes the stream type, and it is what says what one `yield` hands out. A shape
-    // this machine does not build is a defect of the machine, not a property of the program: the
-    // ruling of 2026-10-31 retired the "generators are not supported" refusal, and what is left is
-    // a defect reporter -- `reportUnbuiltShape` -- that names the shape and states that this version
-    // does not build it
+    // The head writes the stream type, and it is what says what one `yield` hands out. A statement
+    // shape this machine does not build is a broken invariant, guarded where the statement walk
+    // meets it -- not a refusal written for the reader, and not a property of any program.
     // The body of a generator `loop` is cut at its `yield`, and its last statement writes the next
     // state value. A body that does not is a rule the reader has to be told, not a defect.
     const auto reportLoopBodyShape = [&](const AST::node_ptr_t &atNode) -> void {
         diags_->of(SemanticDiag::LoopBodyNeedsNextState)
             .at(atNode->load()->tokenRange())
             .commit();
-        throw BuildAbortException();
-    };
-    const auto reportUnbuiltShape = [&](const AST::node_ptr_t &atNode) -> void {
-        const AST::node_ptr_t atYield = firstOwnYield(atNode);
-        diags_->of(InternalDiag::UnknownInternalError)
-            .at((atYield != nullptr ? atYield : atNode)->load()->tokenRange())
-            .commit(
-                "the generator machine does not build this shape, and the program is not at fault");
         throw BuildAbortException();
     };
     // A local that lives across a `yield` is a cell of the body (see `addTypedCell`), so there is
@@ -6016,7 +6006,7 @@ node_ptr_t Builder::visitGeneratorBody(
                     // writes. A `yield` with no value has no element to hand out and keeps the
                     // named refusal.
                     if (values->size() == 0) {
-                        reportUnbuiltShape(stmt);
+                        GUARD(false, "a `yield` with no value reached the generator machine");
                     }
                     const auto elementOf = [&](const auto &list) -> node_ptr_t {
                         if (list->size() == 1) {
@@ -6120,7 +6110,7 @@ node_ptr_t Builder::visitGeneratorBody(
                             popScope();
                             return;
                         }
-                        reportUnbuiltShape(stmt);
+                        GUARD(false, "a statement the generator body does not build reached the machine");
                     }
                     if (isLoop) {
                         // A `while` loop whose body writes a `yield`. The pull that hands an
@@ -6141,7 +6131,7 @@ node_ptr_t Builder::visitGeneratorBody(
                             if (seqAst == nullptr || loopAst->optAtAs<AST::DataLoad>(2) != nullptr ||
                                 loopLoad->state().size() != 1 || init == nullptr ||
                                 !hoistable(init)) {
-                                reportUnbuiltShape(stmt);
+                                GUARD(false, "a `loop ... for` clause reached the generator machine");
                             }
                             const std::string stateName = loopLoad->state()[0].toString();
                             if (std::find(cellNames.begin(), cellNames.end(), stateName) ==
@@ -6231,7 +6221,7 @@ node_ptr_t Builder::visitGeneratorBody(
                         // the arm boundary is the next step).
                         if (inits->size() == 0 || loopLoad->state().empty() || loopLoad->hasFor() ||
                             inits->size() != loopLoad->state().size()) {
-                            reportUnbuiltShape(stmt);
+                            GUARD(false, "a `loop` with no state, or a state with no first value, reached the machine");
                         }
                         // One cell per carried name. The body already may have a cell of that name
                         // (a `var` of its own): the loop carries that one cell, and the value below
@@ -6308,8 +6298,19 @@ node_ptr_t Builder::visitGeneratorBody(
                         const auto &matchAst = stmt->at(0);
                         const int afterMatch = newArm();
                         fill(afterMatch, stmts, i + 1, next, nextState);
+                        // The matched value outlives the `yield`s the arms are cut at, so it is put in
+                        // a cell where the `match` stands and the branch reads the cell. A cell declared
+                        // in the walk is captured with the others (the capture loop reads every name in
+                        // `cellNames`, which the walk filled), so an arm that starts after a `yield`
+                        // still finds it written.
+                        node_ptr_t subject = visitData(matchAst->atAs<AST::DataLoad>(0));
+                        const std::string subjectCell =
+                            "__gen_match_subject_" + std::to_string(cellNames.size());
+                        addTypedCell(subjectCell, subject, stmt);
+                        cellNames.push_back(subjectCell);
+                        *exec << writeCell(subjectCell, subject);
                         node_ptr_t brch = tree_->makeBrch();
-                        *brch << visitData(matchAst->atAs<AST::DataLoad>(0));
+                        *brch << readCell(subjectCell);
                         for (const auto &caseNode : *matchAst->atAs<AST::RepeatedLoad>(1)) {
                             const auto &pattern = caseNode->at(0);
                             if (pattern->type() == AST::LoadType::Data &&
@@ -6318,7 +6319,14 @@ node_ptr_t Builder::visitGeneratorBody(
                                      AST::DataType::EnumPattern)) {
                                 // The arm binds a name; a binding lives in the arm's own graph, so
                                 // it would have to become a cell to outlive the `yield`.
-                                reportUnbuiltShape(caseNode);
+                                // reachable from source: stream.generators_match_binding_across_yield (2026-11-03)
+                                diags_->of(InternalDiag::UnknownInternalError)
+                                    .at(caseNode->load()->tokenRange())
+                                    .commit(
+                                        "a `match` arm binds a name and the arm then `yield`s it: the "
+                                        "binding lives in the arm's own graph, so it has to become a cell "
+                                        "to outlive the `yield`");
+                                throw BuildAbortException();
                             }
                             const int armPc = newArm();
                             fill(

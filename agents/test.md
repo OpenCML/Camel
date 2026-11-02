@@ -265,6 +265,14 @@ reading: on 2026-11-02 five plan files with raised timeouts appeared in the main
 figures in their comments. The content may well be right; it still cannot land, because nobody can say
 which red it removed. The patch is kept outside the tree, and whoever wrote it re-does it on a lane.
 
+**Where the number comes from**: a `liveness` bound is measured with `--jobs 1` **on the gate host**,
+and the bound is **four times the slowest reading there**; a reading taken on any other machine is a
+reference, never the figure the multiple is applied to. A machine that is not the gate host can be
+several times slower, and the budget then carries a margin nobody can see: `98a500e4f` raised this
+self-test's bound to 240 s as four times 45.8 s read elsewhere, and the same self-test reads 68.57 s
+of CPU on the gate host -- 3.5 times, not four. Quote the host and the layer beside the number, and
+when two readings disagree, the gate host's is the one the bound is built on.
+
 ## `-NoBuild` after a merge: `exit 4` is the runner refusing, not a failing test
 
 After a merge the tree no longer matches the installed binary and `out/latest/stdlib`, and

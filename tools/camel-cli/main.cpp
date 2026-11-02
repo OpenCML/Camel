@@ -817,8 +817,8 @@ int runCommand(int argc, char *argv[]) {
             // printed with it (it used to be printed bare: a line reading `bad any_cast`), and the
             // program is not blamed, and the text never asks the reader to send it.
             os << "camel: internal error: " << e.what()
-               << "\nThis state is not built by this compiler version, and nothing in the program is "
-                   "wrong."
+               << "\nThis is a defect of the compiler, not an error of the program. No shape the program "
+                   "can write reaches it."
                << endl;
         }
         ASSERT(false, e.what());
