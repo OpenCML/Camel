@@ -709,6 +709,42 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
     return (bodyBytes + kPayloadWordBytes - 1) / kPayloadWordBytes;
 }
 
+/// Is this sync edge -- from `tail` to `end` -- one the model allows (edges.cn.md 1 and 4.6)? An
+/// end is a statement of the chain, or the value of the block, and the block-value half needs the
+/// tail: an end in the tail's region is in the tail's block, and region 0 is the graph's own block
+/// (control_regions.h: `0 when it is in none`), not the absence of one.
+///
+/// A branch, a loop or a call is a statement; an operator is one when it has an effect or may fault;
+/// a function value and a join are not. An end that is none of these is not built into the payload
+/// rather than built and refused at the seal. The seal asks the same question (src/runtime/
+/// graph_edges.cpp, isChainStatementNode plus the region test beside it).
+static bool syncEdgeEndIsAllowed(const GraphDraft &draft, gc_node_ref_t end, gc_node_ref_t tail) {
+    const GCNodeKind kind = draft.header(end)->kind;
+    if (kind == GCNodeKind::Gate) {
+        return true;
+    }
+    bool isStatement = true;
+    if (kind == GCNodeKind::Func || kind == GCNodeKind::Join) {
+        isStatement = false;
+    } else if (kind == GCNodeKind::Oper) {
+        const auto bytes = DraftNodeView::payload(draft.node(end));
+        if (bytes.size() >= sizeof(GCOperBody)) {
+            const auto *body = reinterpret_cast<const GCOperBody *>(bytes.data());
+            if (body->oper != camel::core::kNoOper) {
+                auto &table       = camel::core::OperatorTable::instance();
+                const auto traits = table.find(body->oper);
+                isStatement       = !table.isPure(body->oper) ||
+                              table.hasExternalEffect(body->oper) ||
+                              (traits.has_value() && traits->mayFault);
+            }
+        }
+    }
+    if (isStatement) {
+        return true;
+    }
+    return draft.header(end)->region == draft.header(tail)->region;
+}
+
 DraftPayloadPlan planDraftPayload(
     const GraphDraft &draft, std::optional<std::span<const gc_node_ref_t>> live = std::nullopt) {
     // A caller that builds a graph from a part of the draft's nodes names them in `live`, sorted
@@ -836,7 +872,11 @@ DraftPayloadPlan planDraftPayload(
         edgeCount += draft.normInputsOf(draftId).size() + draft.withInputsOf(draftId).size() +
                      draft.ctrlInputsOf(draftId).size();
         orderEdgeCount += keptOrderInputs;
-        syncEdgeCount += draft.syncInputsOf(draftId).size();
+        for (const gc_node_ref_t tail : draft.syncInputsOf(draftId)) {
+            if (syncEdgeEndIsAllowed(draft, draftId, tail)) {
+                ++syncEdgeCount;
+            }
+        }
     }
 
     for (gc_node_ref_t ref : draft.normPorts()) {
@@ -1132,9 +1172,20 @@ void emitDraftPayload(
     emitSideEdges(
         payload.orderEdges, payload.orderEdgeCount,
         [&](gc_node_ref_t id) { return draft.orderInputsOf(id); }, true, true);
+    std::vector<gc_node_ref_t> keptSyncInputs;
     emitSideEdges(
         payload.syncEdges, payload.syncEdgeCount,
-        [&](gc_node_ref_t id) { return draft.syncInputsOf(id); }, false, false);
+        [&](gc_node_ref_t id) -> std::span<const gc_node_ref_t> {
+            keptSyncInputs.clear();
+            for (const gc_node_ref_t tail : draft.syncInputsOf(id)) {
+                if (syncEdgeEndIsAllowed(draft, id, tail)) {
+                    keptSyncInputs.push_back(tail);
+                }
+            }
+            return keptSyncInputs;
+        },
+        false,
+        false);
 
     for (size_t i = 0; i < draft.normPorts().size(); ++i) {
         payload.normPorts[i] = plan.runtimeRefsByDraftId[draft.normPorts()[i]];
