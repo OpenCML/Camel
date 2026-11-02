@@ -675,7 +675,7 @@ saturate: <rules: Rule[], rounds: int = 6, strict: bool = false> (f: F) => F! wh
 extract: <cost: (o: Op, inputs: float[]) => float> (f: F) => F! when is_function::<F>()
 run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false> (f: F) => Run<F>! when is_function::<F>()
 check: <samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport
-check: <over: F, samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport when is_function::<F>()
+check: <samples: int = 100, seed: int = 0> (rules: Rule[], over: F) => CheckReport when is_function::<F>()
 check_text: (r: CheckReport) => string
 coverage_table: string
 explain: <a: Node, b: Node> (r: Run<F>) => Proof!

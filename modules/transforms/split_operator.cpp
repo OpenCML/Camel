@@ -13,6 +13,7 @@
 
 #include "split_operator.h"
 
+#include "readings.h"
 #include "split.h"
 
 #include "camel/core/context/context.h"
@@ -128,7 +129,7 @@ slot_t splitKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "transforms: split needs a function value");
     }
     const SplitGraph built = buildSplitGraph(
-        ctx.shared_from_this(), function->program(), function->graph(), std::cout);
+        ctx.shared_from_this(), function->program(), function->graph(), readings());
     if (built.forward == nullptr || built.backward == nullptr) {
         if (built.refusedOrigin == camel::source::kInvalidOriginId) {
             throwRuntimeFault(
@@ -169,7 +170,7 @@ slot_t splitKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     pair->set<slot_t>(0, toSlot<::Function *>(forwardFunction));
     pair->set<slot_t>(1, toSlot<::Function *>(backwardFunction));
     // The call's reading: which graph the two halves were built from.
-    printSplitCallReading(std::cout, function->graph()->name());
+    printSplitCallReading(readings(), function->graph()->name());
     return toSlot<::Tuple *>(pair);
 }
 

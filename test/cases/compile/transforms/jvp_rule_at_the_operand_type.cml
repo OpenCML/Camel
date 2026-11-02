@@ -1,0 +1,32 @@
+// A rule is instantiated at the type of the operand it was matched on, not at `float`.
+//
+// `g` is a function of `f32`: every value in its body is an `f32`, so the rule `rulesets.jvp` files
+// for `*` has to be asked for an `f32` instance. When it was asked for `{Type::Float64()}` the
+// instance that came back was `autodiff::mul_tangent<float>`, and the pass refused the graph it was
+// handed -- not a wrong number, a graph that breaks its own edges:
+//
+//   graph 'jvp_of_g' node 3 (10): passes a f32 as ordinary argument 0 of
+//   'autodiff::mul_tangent<float>', which takes a float        (arguments 0, 1, 2 and 3)
+//
+// `f32` is the smallest program that tells the two writings apart: its tangent space is the value's
+// own type and it is not `float`. An *array* operand cannot show the difference, because the rule's
+// `T` is the array's element -- `sum_axis` over a `float[]` matches at `float` either way, which is
+// why `rule_types.h` asks for the element and not the operand's type.
+//
+// g(x) = x * x, so g(1) = 1 and g'(1) * 1 = 2.
+import rulesets.jvp
+import { jvp } from transforms
+import { ones } from tensor
+
+func g(x: f32): f32 {
+    return x * x
+}
+
+func main(): int sync {
+    // An `f32` value, made the one way the language spells one: an element of an `f32` array.
+    let a: f32[2] = ones::<f32>([2])
+    let (value, tangent) = jvp(g)(a[0], a[0])
+    println(value)
+    println(tangent)
+    return 0
+}

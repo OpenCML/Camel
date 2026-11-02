@@ -6,6 +6,7 @@
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
 | --- | --- | --- | --- | --- |
+| [`2026-11-02-which-position-holds-the-over-argument`](2026-11-02-which-position-holds-the-over-argument.cn.md) | `check` 的"带程序"形式那个程序放在哪：`over` 占 `with` 位 0 会破 `OverloadParameterNames`（六种写法各自停在哪条规则都已量过，三条要求不能同时成立），现方案把它挪到箭头实参，`rules->check<over: f>` 变成 `rules->check(f)`；问 A（保持）认不认，不认则在 B/C/D 里点一条 | 待裁 | — | `rules->check<over: f>` 这个写法；动语言规则的许可 |
 | [`2026-11-02-the-generator-reads-a-draft-node-after-its-builder`](2026-11-02-the-generator-reads-a-draft-node-after-its-builder.cn.md) | `stream.*` 在 Windows 上崩在 `builder_support.h#nodeGraphOf`（草稿节点不属于任何 compile graph builder），同树 Linux 全绿、五个后端都崩，所以是建图不是调度；问该谁去找那个节点的 owner、修好前 Windows 腿要不要继续红 | 待裁 | — | Windows 腿的红；那个节点的 owner |
 | [`2026-11-02-who-restores-order-after-inline-moves-a-statement`](2026-11-02-who-restores-order-after-inline-moves-a-statement.cn.md) | 内联改变块归属之后，次序该由内联自己补还是由图定型后的统一通道补 | 待裁 | — | 次序的归属：内联还是定型后的通道 |
 | [`2026-11-03-may-a-printed-name-be-the-definitions-own`](2026-11-03-may-a-printed-name-be-the-definitions-own.cn.md) | `tensor:sum` 与 `tensor:sum_axis` 共用一个写名 `sum`，边界在哪只有定义知道、节点不知道；问打印件能不能用定义自己的名字（`sum_axis(m, 0, false)`），还是必须复现源里的 `<>` 写法 | 待裁 | — | 打印器的往返：节点上只有一个写名 |
@@ -14,9 +15,9 @@
 | [`2026-11-02-can-a-sync-place-be-derived-from-the-graph`](2026-11-02-can-a-sync-place-be-derived-from-the-graph.cn.md) | 同步链的"位置"（`kGCNodeFlagSyncStatement` 记的那个事实）能不能从图上推出来：照 07:30 的谓词实现，终点侧 1594 个终点落在三条之外、全量 720 红，起点侧照字面 185 红 | 待裁 | — | 标记能否删；B 要重写 `edges.cn.md` 一节 |
 | [`2026-11-02-can-the-pow-rows-be-built-from-a-base`](2026-11-02-can-the-pow-rows-be-built-from-a-base.cn.md) | `:op/pow_*` 那一族 12 行能不能由一条底算子（`pow_bf`/`pow`）生成，还是每行都得自己写 | 待裁 | — | 那 12 行的归属 |
 | [`2026-11-02-is-the-cpp-backends-elementwise-comparison-missing`](2026-11-02-is-the-cpp-backends-elementwise-comparison-missing.cn.md) | `std::cpp` 下数组 `==`/`!=`/`===` 与逐元素算术的现状，是没翻译还是翻译错 | 已答：`==`/`!=` 对，`===` 与逐元素算术都没有翻译 | — | `std::cpp` 的逐元素层 |
+| [2026-11-02-is-a-chain-start-the-same-question-as-an-order-carrier](2026-11-02-is-a-chain-start-the-same-question-as-an-order-carrier.cn.md) | `nodeTakesAnOrder`（次序能不能落在节点上，链的**终点**可以是 `GATE`/`FUNC`）与 `isChainStatement`（能不能当链的**起点**）是一问还是两问；按窄的那个走，`FUNC` 起点 63 条没了但 +816 条 `sync chain forks`（`fail` 3497 → 4313） | 待裁 | — | 被拒的 1112 条起点边；`std::opt::inline` 后 `JOIN` 起点那 17 条；`kGCNodeFlagSyncStatement` 的 13 处 |
 | [`2026-11-02-who-reports-a-lost-capture`](2026-11-02-who-reports-a-lost-capture.cn.md) | 捕获照抄不了的时候（类型没有批量形式、或调用链上拿不到值），该由变换按名字拒绝，还是由一条与变换无关的"值与它的图捕获对得上"检查来报 | 待裁 | — | 报错的归属：变换还是独立检查 |
-| [`2026-11-02-is-a-chain-start-the-same-question-as-an-order-carrier`](2026-11-02-is-a-chain-start-the-same-question-as-an-order-carrier.cn.md) | `nodeTakesAnOrder`（次序能不能落在节点上，链的**终点**可以是 `GATE`/`FUNC`）与 `isChainStatement`（能不能当链的**起点**）是一问还是两问；按窄的那个走，`FUNC` 起点 63 条没了但 +816 条 `sync chain forks`（`fail` 3497 → 4313） | 待裁 | — | 被拒的 1112 条起点边；`std::opt::inline` 后 `JOIN` 起点那 17 条；`kGCNodeFlagSyncStatement` 的 13 处 |
-| [`2026-11-02-who-makes-a-spliced-chain-tail-final`](2026-11-02-who-makes-a-spliced-chain-tail-final.cn.md) | 拼接时链尾只是快照，谁把它变成终态：删 `resolvePlaceForks` 后 `05_effect_order` 由 `visit 3` 变 `total 60`（效应不再执行） | 待裁 | — | 删 `resolvePlaceForks`；B 要越出"一个草稿操作"的边界 |
+
 **这张表由 `node scripts/check-doc-links.mjs --questions-index` 对着目录核对**：行数与页数不符、或者某一行指向目录里没有的页，它都会红。
 
 > **一条裁定有没有落地，看代码和提交，不看这张索引**（作者 2026-11-02 08:10）。"已裁已落/已裁未落"那张状态表整节删掉了：维护一张追着代码改的表，本身就是一份没人该维护的台账。审查清单上的条目修完，写一行"已修，提交号"在那页里。
