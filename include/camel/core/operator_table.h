@@ -493,6 +493,59 @@ class OperatorTable {
     /// what its overloads are.
     std::vector<std::string> groupOperators(std::string_view group) const;
 
+    /// The group `uri` was declared in -- the name the language writes for it (`__add__`,
+    /// `println`) -- or an empty string when no declaration registered it. The reverse of
+    /// `groupOperators`, and the one reading a client that has a URI and needs the source form
+    /// takes: everything is decided where the operator is declared, and nothing keeps a second
+    /// copy of it. A copy rather than a view: a call asks once per node and the table may still be
+    /// growing while modules load.
+    std::string groupOf(std::string_view uri) const;
+
+    /// How an operator is written when it is called by name rather than by a sign: the name, the
+    /// number of ordinary arguments, and how many of its parameters are `with` parameters. An
+    /// operator of this kind (`println`, `tensor:sum`, `jvp`) is a declaration of a function, and
+    /// the declaration is where its call shape is written: the name is the function's, the count
+    /// is its parameter list, and the `with` count is the list of parameters a call may state in
+    /// `<...>`.
+    struct CallForm {
+        std::string name;
+        /// The fewest ordinary arguments a call of this operator takes. A declaration is one
+        /// overload of several and may end in a rest parameter, so the count is a lower bound:
+        /// there is no upper one.
+        size_t minArgs = 0;
+        /// The parameters a call may state in `<...>`, before the ordinary ones. Printing such a
+        /// call means printing those values too, so a form with them is not a call this table can
+        /// hand out for printing yet: it is kept, and it is what tells a reader why.
+        size_t withCount = 0;
+        /// Whether the operator's own module stated this shape, rather than the shape being read
+        /// off a Camel declaration. A module that declares its call shape states that a program
+        /// writes that call (`jvp(f)` is an operator of `transforms` a program can name). A shape
+        /// derived from a Camel declaration is the *callee's* name: the declaration may be a kernel
+        /// the module never exports (`array:sum_kernel` is `#impl(sum_kernel)`), and whether a
+        /// program can write that name is a fact about the module's exports that a graph does not
+        /// carry, so the printer uses a derived shape only for an operator of the core (`:` prefix),
+        /// whose names every program has in scope.
+        bool declaredByModule = false;
+        /// Whether the declaration this shape was read off is body-less: a kernel the module
+        /// declares for its C++ side (`#impl(sum_kernel)` and the `#op('array:sum_l')` that names
+        /// one instance), whose name is not one a program writes. Such an operator has a name in
+        /// this table and no name in the language, which is a different thing from an operator
+        /// nobody declared, so the printer says which (design principles 6.4).
+        bool kernelDeclaration = false;
+    };
+
+    /// Records the call shape of `uri`, from the declaration that made it an operator. A second
+    /// declaration of the same URI adds to the first: the argument count is the smallest either
+    /// asks for, a form without `with` parameters wins (that is the one shape every call can be
+    /// written in), and the name is the first declaration's, since one operator may be declared
+    /// under two spellings (`:op/itol` is both `int` and `i64`).
+    void declareCallForm(std::string_view uri, const CallForm &form);
+
+    /// The call shape of `uri`, or nothing when no declaration of it is a named call (an operator
+    /// written with a sign, or one of the core's conversions that is declared as a call of a type
+    /// name has one; a rule the core computes alone has none).
+    std::optional<CallForm> callFormOf(std::string_view uri) const;
+
     /// The types one group registered: every type the fixed signature of one of its overloads
     /// mentions (its `with` parameters, its ordinary parameters and its result), each once, in
     /// the order they were registered. An overload whose resolver declares no fixed signature
@@ -665,6 +718,9 @@ class OperatorTable {
     /// mutex_. The types are read out of the overloads' resolvers when they are asked for, so a
     /// resolver replaced at load time is not read twice.
     std::vector<std::pair<std::string, std::vector<std::string>>> groups_;
+    /// The call shape of each URI a declaration named as a function (see `CallForm`), guarded by
+    /// mutex_. Merged while modules load: one URI may be declared by several overloads.
+    std::vector<std::pair<std::string, CallForm>> callForms_;
     std::atomic<uint64_t> epoch_{0};
 };
 

@@ -53,6 +53,9 @@ export const SLOW_PLANS = [
     'test/plans/feat/modules/random.plan.toml',
     'test/plans/feat/tools/lsp.plan.toml',
     'test/plans/feat/linear/var_reference.plan.toml',
+    // The whole corpus through the printer, one process per case (`node test/tools/cml-sweep.mjs`),
+    // about a minute.
+    'test/plans/feat/trans/cml_sweep.plan.toml',
     'test/plans/feat/tools/debugger.plan.toml',
     'test/plans/feat/mm/gc_pacing.plan.toml',
     'test/plans/feat/mm/gc_soak.plan.toml',
