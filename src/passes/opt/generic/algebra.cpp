@@ -155,9 +155,14 @@ std::optional<T> constant(
     const WrittenSlots &written) {
     const auto &draft = transaction.graph();
     const auto *h = draft.header(id);
+    // A constant is a value no chain holds. Read off the control edge alone, a node that waits on a
+    // sync chain looks free: the sync edge is what names a chain's tail once the control edge is
+    // gone (docs/design/effects/edges.cn.md 5.3), so folding it away would step over the statements
+    // before it. Both kinds are asked, as gates.cpp#carriesWait and generic.cpp#waits do.
     if (!h || h->kind != GCNodeKind::Data || h->dataType == nullptr || h->dataIndex >= 0 ||
         h->dataType->code() != ops.element || !draft.normInputsOf(id).empty() ||
-        !draft.withInputsOf(id).empty() || !draft.ctrlInputsOf(id).empty() || written(id)) {
+        !draft.withInputsOf(id).empty() || !draft.ctrlInputsOf(id).empty() ||
+        !draft.syncInputsOf(id).empty() || written(id)) {
         return std::nullopt;
     }
     const auto index = static_cast<size_t>(-h->dataIndex);

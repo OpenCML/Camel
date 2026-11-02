@@ -415,6 +415,31 @@ git grep -n -E 'ctrlInputsOf|ctrlEdgesOf|orderPredsOf' -- src modules include
 **⚠️ 写边被单独分组**：`setCtrlInputs(..., ctrlInputsOf(...))` 这类（`draft_inline` 12 处、`draft_clone` 4 处、`pullback.cpp:1662/2646/2719`、`defunctionalize.cpp:304`、`rewrite.cpp:323`、`region_outline.cpp:518`）是**把已有的等待边原样搬走**，读是为了写，和"读边判断"不是一件事，不混进上表。
 
 **本轮不改代码。**
+### 5.9 P0-2 第二半 · 第 1 处：`algebra.cpp#constant` 加读 sync（已落地）
+
+§5.8 清单里挑出的最小一处。改动是一行合取项：
+
+```cpp
+    if (!h || h->kind != GCNodeKind::Data || h->dataType == nullptr || h->dataIndex >= 0 ||
+        h->dataType->code() != ops.element || !draft.normInputsOf(id).empty() ||
+        !draft.withInputsOf(id).empty() || !draft.ctrlInputsOf(id).empty() ||
+        !draft.syncInputsOf(id).empty() || written(id)) {
+```
+
+理由写在函数里：**常量是"没有任何链握着它的值"**；只看控制边，一个挂在 sync 链上的节点看起来是自由的（`edges.cn.md` 5.3：控制边消失之后，命名链尾的正是 sync 边），把它折走就是跨过它前面的语句。`gates.cpp#carriesWait` 与 `generic.cpp#waits` 早就是这么问的。
+
+**读数（改前 = `942f35372`，改后 = 本笔）**：
+
+```
+全量     8527 / 8493 pass / 14 fail / skip 10 / known failures 10   （改前改后完全一致）
+红名单   14 条逐名 diff：新增 0，减少 0
+killed   log 里出现 0 次
+feat/opt     1171 / 1171 全绿
+```
+
+**"更保守"没有体现在任何一条用例上**——因为**今天的用例里没有一个"带 sync 等待、又长得像常量"的节点**。也就是说：这一笔在语义上是补对了，但**没有一条用例能证明它在起作用**（对比 §5.5 那道门有突变读数）。要把它变成"被证明过的守卫"，需要一个先造一个 sync 链上的常量候选、再看它折不折的用例；那是用例，不是闸门检查项（本 sprint 不许新增闸门检查项）。
+
+**这一笔只有一行 diff、零行为变化**——也正是"补对了但还没有读数"的诚实状态，留着等第 2–9 处做完一起验。
 ## 6. 一句话结论
 
 **这条缝是方案性的，不是少数特例**：按"结果有切空间却拼不出键"计，**32 条**（把复数算进去 50 条），而例外表只能一条一条地救——今天救了两条、补了一条（`^`）。缺口的形状有两个：
