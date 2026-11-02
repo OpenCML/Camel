@@ -241,3 +241,14 @@ kind = "behavior"
 expect_exit = 0
 expect_stdout_contains = ["attn step=1 loss=2.300166876862", "attn step=2 loss=2.246755973928", "attn step=3 loss=2.195492619329", "attn step=4 loss=2.146411861759", "attn step=5 loss=2.099537202740", "attn step=6 loss=2.054878411717", "attn step=7 loss=2.012431362224", "attn step=8 loss=1.972178335344", "attn step=9 loss=1.934088673689", "attn step=10 loss=1.898119733712", "attn step=11 loss=1.864218085669", "attn step=12 loss=1.832320904370", "attn step=13 loss=1.802357488724", "attn step=14 loss=1.774250846210", "attn step=15 loss=1.747919280479", "attn step=16 loss=1.723277925919", "attn step=17 loss=1.700240181786", "attn step=18 loss=1.678719009195", "attn step=19 loss=1.658628065951", "attn step=20 loss=1.639882665617", "attn done steps=200 last=1.387116155841", "attn before [[", "attn after [[0.0020", "attn prob after [[0.50103"]
 timeout_ms = 300000
+
+
+[[tests]]
+name = "grow.stage8_causal_attn"
+desc = "Stage 7 with the causal mask added and nothing else changed.  The reading that matters first is the attention weights before any training: row 0 is [1.0, 0.0], so position 0 sees only itself and the mask really is in force; row 1 is [0.578, 0.422], so position 1 still mixes.  Then the loss: 2.600174800352 to 1.281279765502, which crosses the abstention floor 1.386294 and puts both argmax back at [1, 0], but does not beat stage s six 0.949558422 -- the mask recovers the position signal and adds nothing on top of it.  The twenty step lines are pinned at twelve decimals from `grow.py --stage 8`."
+case = "../../../showcase/c3-char-transformer/grow/stage8_causal_attn.cml"
+args = ["${case}", "--arg", "count=200"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["causal step=1 loss=2.600174800352", "causal step=2 loss=2.551554899392", "causal step=3 loss=2.504333965784", "causal step=4 loss=2.458522726524", "causal step=5 loss=2.414130273993", "causal step=6 loss=2.371162218715", "causal step=7 loss=2.329620445913", "causal step=8 loss=2.289503047085", "causal step=9 loss=2.250804325969", "causal step=10 loss=2.213514856189", "causal step=11 loss=2.177621581600", "causal step=12 loss=2.143107953088", "causal step=13 loss=2.109954095338", "causal step=14 loss=2.078136995710", "causal step=15 loss=2.047630705399", "causal step=16 loss=2.018406541683", "causal step=17 loss=1.990433282081", "causal step=18 loss=1.963677353024", "causal step=19 loss=1.938103043354", "causal step=20 loss=1.913672804968", "causal done steps=200 last=1.281279765502", "causal A before [[1.0, 0.0]", "causal A after [[1.0, 0.0]"]
+timeout_ms = 300000

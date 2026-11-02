@@ -335,6 +335,39 @@ NAMES7 = NAMES6 + ["wq", "wk", "wv"]
 START7 = START6 + [0.5, 0.0, 0.0, 0.5, 0.5, 0.0, 0.0, 0.5, 0.5, 0.0, 0.0, 0.5]
 STAGES[7] = (NAMES7, START7, loss_stage7)
 
+CAUSAL = np.array([[0.0, -1000.0], [0.0, 0.0]])
+
+
+def attn8(w):
+    """Stage 8's attention weights: the same scores as stage 7, with the causal mask added."""
+    position = np.array(w[96:100]).reshape(2, 2)
+    wq = np.array(w[100:104]).reshape(2, 2)
+    wk = np.array(w[104:108]).reshape(2, 2)
+    x = forward4(w) + position
+    q = x @ wq
+    k = (x @ wk).T
+    return softmax_rows(q @ k * 0.70710678118654752 + CAUSAL)
+
+
+def forward8(w):
+    """Stage 8: stage 7 with the causal mask, so position 0 can only see itself."""
+    position = np.array(w[96:100]).reshape(2, 2)
+    head = np.array(w[92:96]).reshape(2, 2)
+    wv = np.array(w[108:112]).reshape(2, 2)
+    x = forward4(w) + position
+    return attn8(w) @ (x @ wv) @ head
+
+
+def loss_stage8(w):
+    z = forward8(w)
+    denominator = np.log(np.exp(z) @ np.ones((2, 2)))
+    return (denominator * LABEL).sum() - (z * LABEL).sum()
+
+
+NAMES8 = NAMES7
+START8 = START7
+STAGES[8] = (NAMES8, START8, loss_stage8)
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--stage", type=int, default=1)
