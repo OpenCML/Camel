@@ -1952,47 +1952,11 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 - **29 条的根：28 条是 `stdlib/vjp.cml:73:47`**（`Function of type '(float, float) => float' cannot be called`，即库里那条 `with_grad` 导出，属 b2 的账）；**另 1 条是 `registry.docs_complete` 与 `tools.autodiff_migration_ledger.ratchet` 这两个"跑程序数数"的判据**，它们读的就是被 73:47 挡下的那些例子，根同一条。
 - **P0-2 的两处改写**：在 `lane-m4b2`，3757 红，仍在车道；两处是链条件的两份拷贝合成一份。**待 `lane-m4b2` 报**（2026-11-02 21:10 记）。
 
-## 裁定（2026-11-02 13:10）：两页
 
-**`transpose` 怎么知道参数是切向**——11:30 已经裁了，四条路都不需要。`transpose(g)` 对**任何** `g` 都把所有参数当作线性输入，结果类型是 `(ȳ: ResultOf<G>) => (每个参数一项的余切)`，不分它是不是 `split` 的后一半。所以 `(float, float) => float` 转置出来一律是 `(float) => (float, float)`，类型只由 `g` 的类型决定，解析器只看类型就够了。`TransposeResolver` 里那个 `(knowns.., cotangent) => (cotangents..)` 的签名是旧约定，照新约定改；要转置一个带已知值的函数，先把已知值捕获进去。这一页写在 11:30 之前，车道的合并信息说已经照新约定做了，抽查确认 `isResiduals`、`ResidualsAreNotVisible`、`withClosedHalf` 在 `src`/`include`/`modules` 里都已清零（`79c61958b` 删掉了残差机制，诊断码 307 → 306）。页面挪到 `reviews/`。
+## 更正（2026-11-02 21:55）：13:30 说的"28 条就是那条 `with_grad` 导出"，与实测不符
 
-**字符串里的未知转义是警告还是错误**——这是语言规则的改动（升成错误会让今天能编过的程序编不过），按今天的规矩拿给负责人定，在那之前维持警告。我给负责人的建议是升成错误：一个悄悄变成别的东西的字符串，比一个编译不过的字符串代价大。页面留在 `questions/` 等负责人。同时，页里说得对，`\t`、`\r` 撞上 Windows 路径这一半，升级也盖不住。夹具写路径一律用正斜杠，或者用不做转义的写法（如果语言有原始字符串），这一条现在就改。
+库里那条 `with_grad` 导出已按 11:50 与 13:30 两次裁定删掉（`3a2e8fc90`）。**但它一条红也没清掉**：删前删后 `total 8521 / pass 8472 / fail 29`，两侧完全相同。
 
-## 抽查（2026-11-02 13:30）：三处
-
-1. **库里的 `with_grad` 还没删，正在造红**：`8529eb9c4` 记下 29 条失败里有 28 条停在 `stdlib/vjp.cml:73`，就是库里那条 `with_grad` 的 `export`。11:50 已经裁定先删，删掉这 28 条就消失。这一轮做。
-2. **收集器的"整块图空间都清标记"兜底**（`efe45ea50`）：你们查明它不是只给残差元组用的，而是因为"精确的根集合不够"，就把整个图空间当作活的。这是在掩盖漏登记的根，生成器悬垂节点、草稿静态槽、换根窗口，正是今天找到的三处漏登记。处理顺序：先修这三处所有权（各自的裁定都已下达）；修完后，把兜底改成一个检查，在 Debug 和 ASan 构建里断言"精确根集合标记到的对象，与兜底标记到的一致"，不一致就报出是哪个对象；检查跑绿一段时间后，再删兜底。不悄悄删，也不长期留着。
-3. **车道整条合进来时，把 `wip` 状态也带进了 develop 历史**：`796f5ae07`（加标记位的 wip）和 `2850834ab` 都在 develop 的历史里，虽然后面的提交又把它们撤了，最终的树是干净的。可二分可能落在这些中间状态上。合并信息里写的是"合成一笔"，实际是整条合入。以后照 11:30 那条，车道上的 wip 在合入 develop 之前先压成完整的一笔。
-
-## 返工（2026-11-02 13:40）：互操作 wheel 只覆盖一个 CPython 版本——10-25 已裁成 abi3，没执行
-
-发布后发现：win-x64 的互操作 wheel 只有 `cp310`，linux 只有 `cp311`，3.12、3.13 上 `import camel` 失败。这不是"打包策略"，是 10-25 已经定下、没有落地的一条：`docs/handover/README.cn.md` 第 7 条（负责人 2026-10-25），审查索引 C28，`questions-2026-10-24-evening.md` 第 6 条。
-- 照原裁定：每个平台只做一次原生构建，出两个 wheel。`camel_lang-<ver>-cp310-abi3-<平台>.whl` 是本体加互操作，扩展用 `Python3_add_library(... USE_SABI 3.10)` 和 `Py_LIMITED_API=0x030A0000`，`PyTuple_GET_SIZE/GET_ITEM/SET_ITEM` 换成函数形式（`docs/pypi-packaging.md:145` 已经量过，只剩 5 处），嵌入模块链接 `python3`；`camel_lang-<ver>-py3-none-<平台>.whl` 只有本体。一份互操作 wheel 覆盖 3.10 及以后的所有版本。
-- 树里现在 `bindings/` 与 CMake 都没有 `USE_SABI`/`Py_LIMITED_API`，只落地了"只带本体"那一半。
-- 冒烟测试照原裁定，每个平台跑三个解释器：3.10、当前最新版（互操作能用）、一个只拿到本体的（3.9 或 PyPy）。`scripts/check_wheel_tags.py` 已经认 `abi3`，让它在发布闸门里断言互操作 wheel 的标签是 `abi3`。
-- 不需要另开一页记进交接，交接里本来就有。这是冲刺外的一条小车道，排在冲刺返工之后，但在下一次发版之前做完。
-
-## 裁定（2026-11-02 13:50）："生成器悬垂节点"指哪一件——(i) 的那一件，06:10 那页写着
-
-指的是 06:10 裁的那页 `the-generator-reads-a-draft-node-after-its-builder`：`stream.*` 那 11 条在 Windows 上崩在 `src/compile/gir/builder_support.h:125` 的 `nodeGraphOf()`（"Draft node is not owned by a compile graph builder"），Linux 上碰巧读得到已释放的内存，所以不报。它与 GCT 的 `extractData` 的 `dangling` 无关，与 `progen` 也无关。我 12:50 那句写得太短，没有指明出处，是我的疏忽。
-- 刚合进来的 `lane-draftown`（草稿节点按 epoch 而不是回收地址认图，见证用例 `owner_after_the_graph`）很可能正是这件事的修复。请在 Windows 腿和 ASan 腿上各跑一次那 11 条 `stream.*`：两边都绿，这一项就结案，在本页写一行。还红就照 06:10 的判据接着找。
-- 顺带：页里提到 `builder.cpp` 里还有一句 `"the generator machine does not build this shape; send the program, this is a …"`，以及一处 `FeatureNotSupported`。前者是"暂不支持"诊断的变种，后者那个码 11-01 已经删了。在本页写清这两处的现状：还在的话，要么实现那个形状，要么报一个说明语言规则的诊断，不写"请把程序发来"。
-
-页面挪到 `reviews/` 留档。
-
-## 裁定（2026-11-02 14:10，负责人定）：字符串里的未知转义是编译错误
-
-负责人定：未知转义（如 `"\C"`）改为编译错误，不再是警告。这与 Java、C#、Go、Rust、Swift、Kotlin、Zig 一致；Python 也在从警告往错误走。
-- `LexicalDiag::InvalidEscapeSequence` 由 `warn` 改成 `error`，消息点名那个转义和它的位置，提示写成"合法的转义是……；要写反斜杠本身，写 `\`"。`diagnostics/registry.tsv`、`docs/diagnostics.md`、`docs/language/02_lexical.md` 的转义表同一笔改。
-- 全树扫一遍今天靠"未知转义原样保留"才编得过的源码（用例、示例、标准库文档例子、夹具），改成 `\` 或正斜杠。夹具生成的路径一律用正斜杠。
-- 原始字符串要不要加，另等负责人一句话，这一笔不加。
-页面挪到 `reviews/` 留档。
-
-## 裁定（2026-11-02 14:20，负责人定）：加原始字符串，照 Rust 的写法
-
-写进原则第 4 节（中英两版）：`r"…"` 不处理任何转义；内容里要出现 `"` 时，两边加同样数目的 `#`，如 `r#"a "b" c"#`、`r##"…"#…"##`。不采用 Python 那种"不能以反斜杠结尾"的写法。和 14:10 的"未知转义是编译错误"放在同一批做：
-- 词法：识别 `r` 加零个或多个 `#` 加 `"`，直到遇到 `"` 加同样数目的 `#` 为止；内容原样保留，换行也保留。
-- `std::cml` 打印字符串时，内容里反斜杠多就用原始字符串写回，反正往返只看语义。
-- 语言参考的词法一节、AI 参考、语法高亮（如果仓库里有编辑器语法文件）同一笔更新。
-- `stdlib/re.cml` 的文档例子改用 `r"…"`。
-- 用例：`r"\d+\.\w"`、`r#"say "hi""#`、空的 `r""`、以反斜杠结尾的 `r"a\"`、未闭合时报词法错误并指到起点。
+- **29 条的根是 `stdlib/vjp.cml:73:47` 那一行自己**：`(value, (ct: Tangent<ResultOf<F>>) => transpose(lin)(ct))`。旧的 `Transpose<F>` 给 `transpose(lin)` 的类型是 `(float, float) => float`，库按新律只传一个余切 ⇒ 调用不成立，凡是读 `vjp` / `grad` 的程序都停在这里。
+- **`with_grad` 的导出在 `:93`–`:99`，任何一条红都到不了那一行** ⇒ 29 条同一根；13:30 说的"28 条"实际是 29 条。
+- **清红的是 `lane-b2` 的新类型律**（`ef7aa1e92`），代价是 22 条旧写法用例要迁（`lane-casemig`）。**两件事我们都做了，只是它们不是同一件。**

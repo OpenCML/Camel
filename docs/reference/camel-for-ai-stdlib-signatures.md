@@ -209,12 +209,11 @@ vmap: (f: F) => Vmap<F> when is_function::<F>()
 remat: (f: F) => F when is_function::<F>()
 ```
 
-**`vjp`** — import { ... } from vjp — 3 name(s)
+**`vjp`** — import { ... } from vjp — 2 name(s)
 
 ```text
 vjp: (f: F) => Vjp<F> when is_function::<F>()
 grad: (f: (x: float) => float) => (x: float) => float
-with_grad: (f: F) => F when is_function::<F>()
 ```
 
 **`tensor`** — import { ... } from tensor — 70 name(s)
