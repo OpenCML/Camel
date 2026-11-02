@@ -154,6 +154,23 @@ skipped appears in no summary, so the plan proves less than its file says while 
 it names the plan and fails the run. Both numbers are counted, never computed: multiplying by
 `backends.length` reads `7339` for a layer that starts `3404`.
 
+Immediately before `[SUMMARY]`, every run states the artifact its numbers belong to:
+
+```
+[provenance] tip 97fd0bf9bda2e782e8097f1f9dad6e582b7e9d5e | binary built 2026-11-01T22:40:46-05:00 | tree /home/zjwei/camel-work/h-a3 | tier fast | jobs 8
+```
+
+- **`tip` is the tested checkout's `git rev-parse HEAD`**, character for character -- never a branch
+  ref (`origin/develop` names a different tree's commit, and that conflation cost a night).
+- **A dirty tree has no tip**: it prints `(dirty: N files)` and no sha, because what ran is that
+  commit plus edits nobody recorded, so a sha would claim a provenance that does not exist. The count
+  includes untracked files: a new case or plan the commit does not carry is part of what ran.
+- **`binary built` is the executable's mtime, not the build's log time.** "The build ran" is not "the
+  binary is new": a failed link, a stale `out/latest` and another tree's artifacts all leave the log
+  looking right. A tree with no binary (a plan of `tool = "node"` cases, an unbuilt checkout) says
+  `unknown` rather than an empty field. `out/latest/build-info.json` carries the build's own stamp for
+  anyone who needs to know which tree produced the binary -- the two answer different questions.
+
 Rules for a new test:
 
 - It is fast by default: do not mark a test slow to make the default set look fast.
