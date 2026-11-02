@@ -192,3 +192,5 @@ When the instrument gets finer, past agreement has to be rejudged: four `known_f
 Ask whether a thing is there and the answer is a boolean; ask how many lines carry it and the answer is a reading. A boolean is wrong once and the table is wrong with it: an index said three pages while `Contains` said the new row was already in place, and counting the rows found two.
 
 A probe log that records only `[FAIL] <name> <ms>` can count failures and cannot group them: the first diagnostic line is what turns forty reds into one root cause or ten. Print that line, and print it even when jobs run in parallel.
+
+- 主检出 `D:\Projects\Camel` 只用来 `pull --ff-only`；所有编辑都用工作树内的相对路径，或 `D:\Projects\Camel-wt\<lane>\...` 的绝对路径。写完用 `git -C <树> status --porcelain` 自检，不要用 `git status`（它按进程 CWD 解析，会看到另一棵树）。
