@@ -2724,6 +2724,7 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     }
 
     // Determine the binary operator and create the corresponding node
+    const bool negatedStrictNeq = binaryExpr->op() == AST::BinaryDataOp::StrictNeq;
     switch (binaryExpr->op()) {
     case AST::BinaryDataOp::LogicalOr:
     case AST::BinaryDataOp::LogicalAnd: {
@@ -2739,7 +2740,13 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         opNode = tree_->makeDRef("__strict_eq__");
     } break;
     case AST::BinaryDataOp::StrictNeq: {
-        opNode = tree_->makeDRef("__strict_neq__");
+        // `a !== b` is the negation of `a === b` (design principles 4.2): the comparison built
+        // here is `===`'s and the negation is wrapped around its call below, so the operands are
+        // evaluated once and the result is negated element by element. It is built here rather
+        // than in the builder -- where `!=` becomes `!(==)` -- because `!==` is not an
+        // overloadable form (operator_names.cpp): no name is looked up for it, so it never
+        // reaches the code that would give it a written group to negate.
+        opNode = tree_->makeDRef("__strict_eq__");
     } break;
     case AST::BinaryDataOp::Index:
         // A subscript is built above, one node per dimension it writes (design principles 5.4).
@@ -2787,6 +2794,24 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     }
     setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.binary.link");
     registerGctSemantic(context_, res, ast, std::move(parts), std::move(mergedInputs));
+
+    if (negatedStrictNeq) {
+        // `!(a === b)`: one call of `!` over the comparison linked above, so the operands are
+        // evaluated once. The negation carries the operator's origin, so a diagnostic about it
+        // points at `!==` and not at a name the program did not write.
+        node_ptr_t notOperator = tree_->makeDRef("__not__");
+        setOriginFromOrigin(
+            context_,
+            notOperator,
+            nodeOrigin(opNode),
+            camel::source::OriginKind::GctNode,
+            "gct.binary.negation");
+        node_ptr_t negation = tree_->makeLink(1);
+        *negation << notOperator << res;
+        setOriginFromAst(
+            context_, negation, ast, camel::source::OriginKind::GctNode, "gct.binary.negation");
+        res = negation;
+    }
 
     LEAVE("BinaryExpr");
     return res;
