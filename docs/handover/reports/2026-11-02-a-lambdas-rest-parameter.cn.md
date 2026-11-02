@@ -2160,3 +2160,32 @@ static_cast<size_t>(init.dataIndex) < runtimeSlotTypes_.size()` —— **越界�
 **⑥ 树干净**：重构已提交；`feat/compile/transforms` **58/58**。
 **⑦ 基准（在新 `develop = 274abfb3a` 上量，全量 fast）**：`[SUMMARY] total: 8447, pass: 8435, fail: 0, skip: 10, known failures: 2`，`RUN_EXIT=0`
 ——**与作者给的基准逐项相同**。`{Float64()}` 三处**一处没删**（`jvp.cpp:91`、`rule_expand.cpp:428`、`module.cpp:74`），删掉的数 = **0**。
+
+
+## 64. 一次打印回答"从哪个图读"，答案把问题缩小到"哪一处操作数命名 T"
+
+**① 打印（一次运行、最小循环例，五项都在 `PROBE` 行里）**
+```
+PROBE transposeRule rule=mul_t member=82 thisGraph=0x5d653625c980 inputs=2
+PROBE transposeRule slot=0 ref=0 owner=0x5d653625c980 type=float
+PROBE transposeRule slot=1 ref=3 owner=0x5d653625c980 type=float
+```
+- 第 1/3 项：**操作数的 ref 与 call site 是同一个图**（`owner == thisGraph`，同一个地址）。
+- 第 4 项：该图说这两个操作数是 `float`。
+- 第 5 项：`rule=mul_t`，所以这一处实例化的类型**与 `Float64()` 同名**。
+
+**② 顺手纠正我上一轮的一个误判**：`PROBE buildRuleTangent` **一次都没打印** ⇒ 这 58 条用例的转置/求导路径**没有走到 jvp 那个 helper**；
+所以上一轮那些 `index_into<float[]>` / `mul_tangent<float>` 的读数**全部来自 `expandRuleByName`**（转置路径），
+**不是 jvp 路径**。我把两份读数当成了两个站点的读数，这是错的，此处更正。
+
+**③ 但"取 `inputs` 的 `value_type`"这一步仍然红 7 条**：
+`transpose_runs_the_data_flow_backwards`、`transpose_walks_each_arm_of_a_branch`、
+`transpose_runs_a_loop_rounds_backwards`、`transpose_loop_escape.{names_the_value_one_read,two_states_before_the_escape,second_state_of_the_same_loop}`、
+`transpose_tuple_component.two_reads_of_one_tuple_add`。
+
+**④ 读数指向的那一点**：红用例全是**分支 / 元组 / 循环逃逸**——这些位置的左侧**不止两个 float 操作数**（有 `bool`、有元组、有 int）。
+"取第一个非 `bool` 操作数" **不足以**决定 `T`：`Float64()` 之所以一直成立，是因为它对**所有**操作数都成立；
+换成"某一个操作数的类型"，**混合元数的规则就没有一个共同的 `T` 可站**。
+⇒ **这不是"该不该写死"，而是"哪一处操作数命名 `T`"**：一条规则可以有 `where(cond, a, b)`、`index_into(xs, i)`、元组分量——**作者点名哪一处，取型就是一行；在此之前，任何"取第一个"的规则都是我替他定的特例。**
+
+**⑤ 边界**：试错的取法不成立，**退回绿**；**退回不等于放弃，等一句点名**。`feat/compile/transforms` **58/58**，三处 `{Float64()}` 仍在（**删 0**）。
