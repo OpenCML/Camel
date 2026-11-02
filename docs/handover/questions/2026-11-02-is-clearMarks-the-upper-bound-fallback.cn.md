@@ -151,3 +151,33 @@ struct ObjectRootSetEntry {
 读物是"`markObject` 追到的边 ⊆ 根遍历追到的边吗" —— 目前已知**不⊆**，实测为证。
 
 **已推进到：终点（A 栏 0/2，加字段无用；整空间扫保留）。**
+## 9. 差集（C 栏）：**markObject 只在 markPhase 里被调**，于是"根遍历走不到"的不是 markObject 的边
+
+只读，不改代码。三件事：
+
+- **A 栏（markObject 里的 relocate 点）**：`markObject` 自己只有一个 relocate 点 ——
+  `current->updateRefs([...]push..., entry.type)`（`gen.cpp:1525`），它追的对象**全部来自"当前对象的槽"**，
+  没有表、没有图空间的特殊通道。
+- **B 栏（根遍历的种子）**：`objectRootSets_`（元素是 `Program *`）、`externalRootTracers_`、`rootHandles_` ——
+  三条路，`markPhase` 用的就是它们（`gen.cpp:1440`、`:1460`、`:1463`），而 `markObject` 的**仅有两个调用点**
+  也都在 `markPhase` 里（`:1446`、`:1456`）。
+- **C 栏（差集）**：**"markObject 追到的边"不可能超出"markPhase 能到的边"** —— 两者就是同一次遍历。
+  所以更强那句（"markObject 内部才追的边，根遍历走不到"）**不成立**；我上一轮那句"已知不 ⊆"**判错，撤回**。
+
+**真正的差集在别处，而且有名字**：`minorTracedGraphs_`（`include/camel/core/mm/gen.h:631`，
+`std::unordered_set<rtdata::Object *>`）。**图空间里的对象会在小回收（minor）里被打上 mark** ——
+它们由**年轻代的引用追踪**标记，不经 `markPhase`：
+
+- `gen.cpp:991` `if (minorTracedGraphs_.insert(rootObj).second) { ... }`（小回收从年轻根出发追图载体）；
+- `gen.cpp:1367` `if (graphSpace().isAllocated(ref) && minorTracedGraphs_.insert(ref).second)`（年轻引用边里的图载体）；
+- `gen.cpp:971` / `:1043` 两处 `minorTracedGraphs_.clear()` —— 说明这个集合本来就是"这轮小回收碰过的图"。
+
+**所以那 38 条红的机制是**：小回收给图空间对象打了 mark，`clearMarks()` 的整空间扫把它们清掉；
+换成"根遍历清位"后，**这些对象的 mark 位没有任何一条根路径能走到**（它们的参照者可能已经被年轻代回收掉了），
+于是残留到下一次大回收，被 mark 逻辑当成仍然有效 —— 只在反复强制大回收/压力场景里暴露。
+
+**下一笔可执行的那一句**：`clearMarks()` 里**遍历 `minorTracedGraphs_` 的成员逐个 `unmark()`，并清空该集合**
+（再配根遍历 + 各空间的整表清位），然后才谈删整空间扫。这是用一个**精确集合**替换一个**粗集合**，
+形状与"根遍历 + `objectRootSets_`"一致，**不是新增机制**。
+
+**已推进到：差集定位（`minorTracedGraphs_`；上一轮"不 ⊆"那句话撤回）。**
