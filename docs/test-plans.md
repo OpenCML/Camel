@@ -313,7 +313,18 @@ whatever their age or their place in the order:
 - a directory whose `<pid>` is a process that is still alive: the runner's own self-test starts nested
   runs beside an outer one, and they write into the same tree;
 - a directory the runner did not write, whose name is not `<timestamp>_<pid>`: it is counted and
-  reported, not deleted.
+  reported, not deleted;
+- a directory whose `summary.json` records a failed test: a green run's twelve-line tail may age out,
+  a red run's whole output is the record someone has to read the next morning, so the bound keeps it
+  (`[RETAIN]` counts them as "kept because they recorded failures"). This is the one place where the
+  bound is not about size: a directory of failures is why the tree keeps a record at all.
+
+A failed test's log entry ends with one line naming where its whole output is,
+`[INFO] full output: test/results/log/<run>/fail/<plan>/<test>/ (stdout.txt, stderr.txt, output.txt,
+meta.json)`, with the path relative to the checkout so it reads the same on a build machine. What
+follows in the log is at most the last twelve lines of stdout and stderr, and only with `CI` or
+`CAMEL_TEST_SHOW_OUTPUT` set: it is enough to see the shape of a failure and not enough to read its
+cause. Read the file.
 
 A scratch root `tmp/test/run-<pid>` goes when its run is gone and the root has not been touched for an
 hour. The runner keeps its root when a test failed precisely so that the files can be read, and that
@@ -646,10 +657,24 @@ everywhere is written once:
   below (`exit_code`, `stdout_normalized`, `stderr_normalized`, `output_normalized`) and
   `diagnostics` (name, code, line and column of every diagnostic, in the order printed).
 - `known_fail`
-  Back ends of `backends` on which the test is known to fail. Such a test is reported as
+  How a test that is expected to fail is marked. **One spelling per shape of the entry**, and the
+  runner refuses the other at load, by name:
+  - with `backends = [...]`, a list of back ends of that list, `known_fail = ["nvm"]`; a name that
+    is not in `backends` is refused;
+  - without a `backends` list the entry is one run, and the mark is `known_fail = true`. A list
+    here is refused (`names back ends (...), but the test has no backends list, so no back end of
+    that name runs here: write known_fail = true`), because it used to be read by nobody: the
+    expansion returned the entry before the mark was read, so the case failed, the run went red and
+    the mark was never mentioned (fixed 2026-11-02, `test/tools/run-tests.mjs`).
+
+  A marked test is reported as
   `[XFAIL]`, counted apart in the summary (`known failures: N`) and does not fail the run. When
   it passes it fails the run, with the request to remove the mark: a mark cannot go stale
-  unnoticed.
+  unnoticed. `known failures: N` can rise without anything regressing -- a mark only applies to a
+  run that happens, so a case that skipped before and starts now turns its mark into an `[XFAIL]`
+  for the first time (2026-11-02: compiling `modules/transforms` moved `skip 43 -> 10` and
+  `known failures 3 -> 6` in the same run). Read the two numbers together before calling it a
+  regression.
 - `known_fail_note`
   Printed with an `[XFAIL]`: why, and what will fix it.
 

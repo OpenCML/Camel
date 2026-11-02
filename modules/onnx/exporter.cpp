@@ -553,11 +553,17 @@ bool runsBefore(const GCGraph *g, gc_node_ref_t from, gc_node_ref_t to) {
     return false;
 }
 
-void Evaluator::refuseEffects(GCGraph *root) {
-    std::unordered_set<GCGraph *> seenGraphs{root};
-    std::vector<GCGraph *> graphs{root};
+/// Refuses when an impure operator is reachable from `root`'s exit through data, control or sync
+/// edges, in that graph or in a function it calls or holds as a constant. `beforeSimplification`
+/// is the check the export makes on the graph it received, before its own simplification ran: it
+/// refuses only the operators no simplification lowers away (see `lowerableBySimplification`).
+void refuseEffectsOf(
+    core::context::Context &ctx, camel::source::source_context_ptr_t source, const GCGraph *root,
+    bool beforeSimplification) {
+    std::unordered_set<const GCGraph *> seenGraphs{root};
+    std::vector<const GCGraph *> graphs{root};
     while (!graphs.empty()) {
-        GCGraph *g = graphs.back();
+        const GCGraph *g = graphs.back();
         graphs.pop_back();
         const gc_node_ref_t exit = g->exitNodeRef();
         if (!g->hasNodePayload() || exit == camel::runtime::kInvalidNodeRef) {
@@ -593,9 +599,21 @@ void Evaluator::refuseEffects(GCGraph *root) {
                     const auto cell = g->normInputsOf(norm.front());
                     return !cell.empty() && isLocalVariable(g, cell.front());
                 }();
-                if (!onLocalVariable && !inPlaceOnLocalVariable &&
+                const std::string uri(body->uri());
+                // The simplification below expands macros (grad, with_grad, ...) and lowers a
+                // function's own variables, and the in-place forms over them, into operators the
+                // export translates (a training step updates its weights that way). Asked before
+                // the simplification has run, their verdict is therefore not written yet: a
+                // program that carries them is refused only if the simplified graph still does
+                // (defect A5's first attempt refused here and broke every exported training
+                // step, at 'autodiff:with_grad').
+                const bool lowerableBySimplification =
+                    beforeSimplification &&
+                    (n->isMacro() || core::OperatorTable::instance().reusesOperand(uri) ||
+                     readsOrAssignsVariable(body->oper) ||
+                     uri == ":struct/append_arr_in_place");
+                if (!onLocalVariable && !inPlaceOnLocalVariable && !lowerableBySimplification &&
                     !core::OperatorTable::instance().isPure(body->oper)) {
-                    const std::string uri(body->uri());
                     const uint64_t origin = g->nodeOrigin(ref);
                     const std::string what =
                         readsOrAssignsVariable(body->oper)
@@ -605,12 +623,12 @@ void Evaluator::refuseEffects(GCGraph *root) {
                     throw ExportError(
                         isSourceName(g->name()) ? std::format("in '{}': {}", g->name(), what)
                                                 : what,
-                        locationOf(origin),
+                        sourceLocationOf(source, origin),
                         origin,
                         ExportError::Kind::Other);
                 }
             } else if (n->kind == GCNodeKind::Func) {
-                referenced = programOf(g).calleeOf(*g, ref);
+                referenced = camel::onnx::programOf(ctx, g).calleeOf(*g, ref);
             } else if (
                 n->kind == GCNodeKind::Data && n->dataIndex < 0 && n->dataType() &&
                 n->dataType()->code() == TypeCode::Function) {
@@ -640,6 +658,10 @@ void Evaluator::refuseEffects(GCGraph *root) {
             }
         }
     }
+}
+
+void Evaluator::refuseEffects(GCGraph *root) {
+    refuseEffectsOf(ctx_, source_, root, /*beforeSimplification=*/false);
 }
 
 Value Evaluator::eval(Activation &act, gc_node_ref_t ref) {
@@ -5002,16 +5024,43 @@ Model translatePrepared(
     if (prepStats) {
         std::cerr << "ONNX_PREP_STATS received " << reachableStats(*program, root) << std::endl;
     }
+    // A program that does more than compute is refused here, on what the export received, because
+    // the simplification is not what decides it and it is not always able to run: the export
+    // unrolls a recursion level by level, so a recursion whose depth is a constant asks for that
+    // many levels, and the rewrite engine gives up first (`Pass 'std::opt' failed with an internal
+    // error: the rewrite of graph '__root__' did not settle: 32 consecutive runs each changed the
+    // program`, a defect of the compiler blamed on the program). The operators whose verdict the
+    // simplification can still change are left to the check after it (defect A5).
+    refuseEffectsOf(ctx, ctx.sourceContext(), root, /*beforeSimplification=*/true);
     try {
         program =
             preparation == Preparation::ShapesOnly
                 ? simplifyGraph(context, program, exportRewriteConfig(), log, kMaxExportRounds)
                 : simplifyFully(context, program, log);
+        if (program == nullptr) {
+            // The engine gave up without an exception: it committed its diagnostic and returned
+            // no program. A program that is refused for a reason of its own is refused here (the
+            // diagnostic is already written, so this only adds what it could not say).
+            refuseEffectsOf(ctx, ctx.sourceContext(), beforeSimplify, false);
+            throw ExportError(
+                "the simplification of the exported function did not end",
+                std::string(),
+                camel::source::kInvalidOriginId,
+                ExportError::Kind::Other);
+        }
         root = program->root();
         collectProgramNames(*program, names);
     } catch (const ExportError &) {
         throw;
     } catch (const std::exception &e) {
+        // The simplification gave up on a program that cannot be exported for a reason of its
+        // own: an impure operator is not a computation, whatever the simplification makes of the
+        // recursion around it. That reason is looked for here, on the graph the export received,
+        // because the simplification's own failure is a budget running out -- a recursion whose
+        // depth is a constant is unrolled that many levels -- and reporting it as the export's
+        // internal error said nothing about the program. A program whose simplification failed
+        // without such an operator goes on to the diagnostics below.
+        refuseEffectsOf(ctx, ctx.sourceContext(), beforeSimplify, false);
         // Simplification unrolls a recursion level by level. A function that calls itself
         // twice on one path doubles with every level, and when its depth depends on the model
         // input nothing ends that before memory runs out. Say so, at

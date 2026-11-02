@@ -100,6 +100,62 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
+name = "main_after_devirtualize"
+# The root's call of `main` has two spellings: an indirect call of the function value (CALL) and,
+# once a pass has settled the callee, a FUNC node that names its graph (`std::opt::devirtualize`
+# writes that one). The writer read only the first, so it refused every program devirtualize had
+# touched as "the program has no call of 'main' std::cpp can find": 132 of the 132 translatable
+# programs of test/tools/cppexec/expect.txt (the defect the 2026-11-01 eval report counted as
+# "about 55%"). The graph such a node names is still main, found by its name; nothing was inlined
+# away, and this case is the reading that keeps the writer reading both spellings.
+desc = "After `std::opt::devirtualize` the root still calls main and the writer translates the program instead of refusing it: the entry is the graph the root's FUNC node names, found by its name."
+kind = "behavior"
+case = "../../../cases/trans/cpp/main_io.cml"
+args = ["${case}", "std::opt::devirtualize", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["int main(int argc, char **argv)"]
+expect_output_not_contains = ["TranslationRefused", "no call of 'main'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "computed_top_level_after_devirtualize"
+# A value the top level computes before main starts (`let k = seven()`, design principles 10.1) is
+# not a limit of the language and not one of this writer: with the entry call indirect the root
+# graph is emitted as `top_level`, which computes the value and calls main with it. With the call
+# direct (`std::opt::devirtualize`) that value is the entry call's own normal input rather than
+# something the closure holds, and the writer read only the closure -- so it refused the program as
+# one whose top-level value only a literal could be. The program the writer now emits prints `7`,
+# which is what std::fvm prints; agree_with_fvm reads that, and this entry pins that it is
+# translated at all.
+desc = "A value the top level computes reaches main as the entry call's own argument once the call is direct; the writer translates the program (the root graph as `top_level`) instead of refusing it as a value only a literal could be."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/d4_cpp_computed.cml"
+args = ["${case}", "std::opt::devirtualize", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["int main(int argc, char **argv)", "seven("]
+expect_output_not_contains = ["TranslationRefused", "top level of the module"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "top_level_fault_after_devirtualize"
+# The same shape with a fault in it: `let BAD = 10 / ZERO` is computed before main prints
+# anything, so the program stops there (design principles 10.1). Translated as the root graph, the
+# division is the program's first statement and its site carries the interpreter's sentence; the
+# built program prints the report at 6:14 and exits 1, as std::fvm does, and `not reached` prints
+# in neither.
+desc = "A fault in a value the top level computes is the program's first statement, whether the entry call is indirect or direct: the writer translates the program, and the report at the division is the interpreter's."
+kind = "behavior"
+case = "../../../cases/consistency/faults/top_level_fault.cml"
+args = ["${case}", "std::opt::devirtualize", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["int main(int argc, char **argv)", "Attempted division by zero."]
+expect_output_not_contains = ["TranslationRefused", "top level of the module"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
 name = "narrow_floats"
 desc = "bf16 and f16 are core value types of the language (reduced-precision.md b1) and values of the standalone runtime (include/camel/standalone/half.h), so a program that holds one is translated rather than refused: `rt::BF16` and `rt::F16` stand for the two types, sixteen bits of storage whose constant is the pattern itself (`fromBits`, exact for every pattern a program can write), the text is the type's own shortest text (so `0.1` as a bf16 prints `0.1` and not the `0.100097656` of the f32 it widens to), and arithmetic is computed in f32 and rounded once -- `/` through rt::div, where zero is a fault as it is for f32, and `^` through rt::pow. This entry pinned a refusal before the rules existed; it is now the acceptance case, and the program is built and run by agree_with_fvm, which is what says the two back ends print it byte for byte."
 kind = "behavior"
