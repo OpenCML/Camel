@@ -1,3 +1,6 @@
+> **第一个"模型真跑起来"的数：`c3 forward init loss=3.303745`**（两层两头，chars=4278、context=8、
+> width=16、heads=2、classes=28、seed=7）。 以前从来没拿到过；拿到它是因为 `layerNormInfer` 不再按
+> "形状未知"把 `float[..]` 的归一化结果退回 `f32`（墙 10 的更正）。 墙再多，也比不上这一行。
 # C3 的墙
 
 这一项交的是墙，不是训练曲线。 下面每一面墙都有三样东西：一个能单独跑的最小程序、它的原始诊断、
@@ -290,3 +293,34 @@ different element types ('f32' and 'f64'): a tensor operator computes in one ele
   `sum(attention(x))`、`sum(layer_norm(x) @ w)` 都绿；一旦归一化在中间（残差 + 再进注意力），
   那个 f32 梯度就进了 `matmul_grad_lhs`。
 - 没修：这是内核的读写宽度，不是声明；按"只改声明"的界，停在这里报。
+
+## 墙 11 的处理：`layerNormGrad` 现在按输入的元素类型写
+
+改的就是这一句（`modules/tensor/kernels/gradient.cpp`，原来是两处写死）：
+
+```
+Array *out = createTensor(TypeCode::Float32, xs->shapeSpan(), allocator);        // 原来是 433
+Array *out = createTensor(TypeCode::Float32, ws->shapeSpan(), allocator, true);  // 原来是 470
+```
+
+现在函数体按 `SumElement<Code>` 模板化（`layerNormGradArm<Code>`），由 `x->dtype()` 分发：
+`Float64` 进 `double` 那支、`Float32` 进 `float` 那支，输出也写同一个 `Code`。 累加本来就是 `double`，
+所以 f32 的读数一个比特没动，f64 的梯度才是真的 f64。 依据是同一文件里 `sumToArm` 的同一套写法
+（`SumFunction`/`SumElement<Code>`）。
+
+**普查（`git grep -n 'createTensor(TypeCode::Float32'`）：22 处**
+- `modules/tensor/kernels/gradient.cpp`：**5 处**，387、406、433、470、567 —— 这是 H3 那一族
+  （`erf_grad`、`gelu_grad`、`layer_norm_grad` 的两支、`matmul_grad`）。 我改了 433/470。
+- `modules/tensor/kernels/conv.cpp` 11 处、`gemm.cpp` 1 处、`layout.cpp` 1 处、`tiles/src/module.cpp` 2 处、
+  `ops/layout_ops.cpp` 1 处：这些算子的**前向**本来就是 f32 层（conv/pool/batch_norm/gemm），
+  不是"收 f64 却写 f32"，先不动。
+
+## 墙 12（下一个，未修）：`matmul_grad` 还是写 f32
+
+- 坐标 `modules/tensor/kernels/gradient.cpp:567`
+  （`createTensor(TypeCode::Float32, (forLhs ? lhs : rhs)->shapeSpan(), allocator)`）。
+- 证据：stage2 现在能跑，但和验收值差 **3.0e-6**——本程序 step50 `-0.836278289207`、更新后
+  `-0.856049871704`；参照 `-0.836281312279`、`-0.856052891460`。 整条链上还写死 f32 的只剩
+  `matmul_grad`，量级对得上（每步 ~1e-7 相对误差，50 步累积到 3e-6）。
+- 按"若数值差 1e-6 以上就先查谁依赖"的规矩：**没继续改**，先报。 要改它的做法与墙 11 相同
+  （`matmulGrad` 模板化 + 按 dy 的 dtype 分发）。
