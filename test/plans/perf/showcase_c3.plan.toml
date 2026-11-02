@@ -32,7 +32,7 @@ args = ["${case}", "--json", "${test_tmp}/c3-probes.json"]
 expect_exit = 0
 expect_stdout_contains = ["probe-verdict 01_grad_scalar ok", "probes total=14"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
- 300000
+timeout_ms = 300000
 
 # The forward half: the model program has to compute a real loss on the committed corpus before any
 # reading about gradients means anything.  This is also the entry that turns a wrong program into a
