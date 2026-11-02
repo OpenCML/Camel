@@ -1,23 +1,21 @@
 // WALL PROBE 09 -- the causal mask. Attention at position t may read positions <= t and nothing
-// after, and the way a program writes that is a mask: `where(mask, scores, -inf)` (or the mask
-// added to the scores before the softmax). Without a rule for `where` the mask is not part of the
-// differentiated program at all.
-import { sum, where } from tensor
+// after, and the way a program writes that is a mask: `where(cond, a, b)` on the scores, or a
+// constant added to them. Without a rule for `where` the mask is not part of the differentiated
+// program at all.
+import { ones, sum, where } from tensor
 import rulesets.jvp
-import rulesets.transpose
-import { vjp } from vjp
+import { jvp } from transforms
 
-func masked(x: f32[..]): f32 {
+func masked(x: float[..]): float {
     let keep = [[true, false], [true, true]] as bool[2, 2]
     let hidden = where(keep, x, x - 10.0)
     return sum(hidden * hidden)
 }
 
 func main(): int sync {
-    let x = [[1.0, 2.0], [3.0, 4.0]] as f32[2, 2]
-    let (value, pullback) = vjp(masked)(x)
-    println(`value = ${value:.4f}`)
-    let cotangents = pullback(f32(1.0))
-    println(`cotangent of x = ${cotangents.0}`)
+    let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
+    let (value, tangent) = jvp(masked)(x, ones::<float>([2, 2]))
+    println(`value = ${value:.6f}`)
+    println(`tangent = ${tangent:.6f}`)
     return 0
 }

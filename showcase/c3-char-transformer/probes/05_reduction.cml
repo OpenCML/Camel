@@ -1,26 +1,20 @@
 // WALL PROBE 05 -- the reduction. `layer_norm` is a mean and a variance along the last axis, and a
-// loss is a mean over a batch; both are `sum_axis`/`mean_axis`, and no ruleset files a rule under
-// either name. `sum` over every axis is here too: it is what turns a residual bundle into a loss.
-import { mean_axis, sum_axis } from tensor
+// loss is a mean over a batch; both are `mean`/`sum` with an axis. This probe centres a row and sums
+// its squares -- one `mean` along an axis, one subtraction, one `sum` over everything.
+import { mean, ones, sum } from tensor
 import rulesets.jvp
-import rulesets.transpose
-import { vjp } from vjp
+import { jvp } from transforms
 
-func centred(x: f32[..]): f32[..] {
-    let m = mean_axis(x, 1, true)
-    return x - m
-}
-
-func spread(x: f32[..]): f32 {
-    let d = centred(x)
-    return sum_axis(d * d, 1, false)[0]
+func centred_energy(x: float[..]): float {
+    let m = mean(x, 1, true)
+    let d = x - m
+    return sum(d * d)
 }
 
 func main(): int sync {
-    let x = [[1.0, 2.0, 3.0, 4.0]] as f32[1, 4]
-    let (value, pullback) = vjp(spread)(x)
+    let x = [[1.0, 2.0, 3.0, 4.0]] as float[1, 4]
+    let (value, tangent) = jvp(centred_energy)(x, ones::<float>([1, 4]))
     println(`value = ${value:.6f}`)
-    let cotangents = pullback(f32(1.0))
-    println(`cotangent of x = ${cotangents.0}`)
+    println(`tangent = ${tangent:.6f}`)
     return 0
 }

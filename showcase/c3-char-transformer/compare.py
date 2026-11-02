@@ -107,6 +107,21 @@ def relative(left, right):
     return abs(left - right) / max(abs(left), abs(right), 1e-12)
 
 
+def wrap(line, width):
+    """`line` cut into pieces of at most `width` characters, so a reader sees all of it."""
+    if not line:
+        return [""]
+    return [line[at:at + width] for at in range(0, len(line), width)]
+
+
+def report_failure(label, result, width=96):
+    """Print a program's whole output, wrapped, so a diagnostic is never clipped in a report."""
+    text = result["stdout"] + result["stderr"]
+    for line in text.splitlines():
+        for chunk in wrap(line.rstrip(), width):
+            print(f"c3 compare diag.{label} {chunk}")
+
+
 def refusal(text):
     for line in text.splitlines():
         line = line.strip()
@@ -141,6 +156,9 @@ def main():
     forward = run([camel, str(HERE / "block_forward.cml")])
     engine = run([camel, str(HERE / "block_engine_grad.cml")])
     library = run([camel, str(HERE / "block_library_grad.cml")])
+    for label, result in (("forward", forward), ("engine", engine), ("library", library)):
+        if result["exit"] != 0:
+            report_failure(label, result)
 
     rows = []
 

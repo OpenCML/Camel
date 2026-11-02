@@ -33,6 +33,8 @@ PROBES = HERE / "probes"
 # The construct each probe reaches, so the report can say which wall is which without reading the
 # probe's text.  The key is the file stem.
 CONSTRUCTS = {
+    "13_jvp_scalar": "the forward control: `jvp` at one scalar parameter",
+    "14_jvp_call": "a call inside the differentiated function",
     "01_grad_scalar": "the control: the library `grad` at one scalar parameter",
     "02_grad_table": "an array parameter read by position (an embedding table)",
     "03_matmul": "the matrix product (`@`), the operator of every layer",
@@ -79,6 +81,13 @@ def first_reason(text):
         if re.search(r"\b(error|Error|Fault|fault|refus|no rule|NoMatching|Invalid|Invalid call)\b", line):
             return line
     return interesting[-1]
+
+
+def wrap(line, width):
+    """`line` cut into pieces of at most `width` characters, so a reader sees all of it."""
+    if not line:
+        return [""]
+    return [line[at:at + width] for at in range(0, len(line), width)]
 
 
 def run_probe(camel, path, passes):
@@ -133,9 +142,11 @@ def main():
         verdict = "ok" if result["exit"] == 0 else "refused"
         print(f"probe {path.stem} exit={result['exit']} seconds={result['seconds']:.3f} "
               f"construct={CONSTRUCTS.get(path.stem, '?')}")
+        # A diagnostic is one long line, and a report that truncates it is a report that cannot be
+        # acted on: the text is wrapped rather than clipped, so the whole of it survives.
         for line in combined.splitlines():
-            if line.strip():
-                print(f"probe-out {path.stem} {line.rstrip()}")
+            for chunk in wrap(line.rstrip(), 96):
+                print(f"probe-out {path.stem} {chunk}")
         print(f"probe-reason {path.stem} {first_reason(combined)}")
         print(f"probe-verdict {path.stem} {verdict}")
         readings.append({

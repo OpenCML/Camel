@@ -257,7 +257,7 @@ func initial(seed: int = 7): Transformer {
 // transform, and it is what a reader can check against the PyTorch counterpart.  `mode=train` runs
 // the training loop, which calls the library's `vjp` on the parameter tree.
 func main(corpus: string, steps: int, mode: string, lr: float = 0.002, seed: int = 7): int sync {
-    let text = corpus->read_text !!
+    let text = corpus->read_text !! ''
     let data = tokens(text)
     let model = initial(seed)
     let first = slice(data, 0, 0, 8)
@@ -265,7 +265,7 @@ func main(corpus: string, steps: int, mode: string, lr: float = 0.002, seed: int
     let start = window_loss(model, first, first_targets)
     `c3 config steps=${steps} mode=${mode} lr=${lr:.4f} seed=${seed} chars=${len(data)} context=${context()} width=${width()} heads=${heads()} classes=${classes()}`->println
     `c3 init loss=${start:.6f}`->println
-    if mode == 'forward' {
+    if mode == 'forward' then {
         return 0
     }
 

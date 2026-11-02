@@ -19,18 +19,18 @@ tags = ["showcase", "slow", "c3", "transformer", "vjp", "grad"]
 # rule / missing batch rule / transform refusal / performance).
 #
 # This is a milestone-tier plan: it runs with `--tier milestone` or by naming the file, not under
-# the default `npm run test` fast layer.  It starts the tree's own binary a dozen times, which is a
+# the default `npm run test` fast layer.  It starts the tree's own binary fourteen times, which is a
 # few seconds, and it reports walls rather than holding the example to a curve.
 
 [[tests]]
 name = "probes"
-desc = "The twelve construct probes of the C3 Transformer run through the library's own `vjp`: the control answers its gradient, and the constructs that make attention a Transformer (matrix product, softmax, reduction along an axis, reshape/transpose, a second parameter, a table row, the causal mask, a `with` parameter tree, `grad` at a model, the whole block) are refused.  The entry fails when the count of answered and refused probes moves, because that is a wall falling or a regression, and both need the report rewritten."
+desc = "The fourteen construct probes of the C3 Transformer run through the library's own `vjp`: the control answers its gradient, and the constructs that make attention a Transformer (matrix product, softmax, reduction along an axis, reshape/transpose, a second parameter, a table row, the causal mask, a `with` parameter tree, `grad` at a model, the whole block) are refused.  The entry fails when the count of answered and refused probes moves, because that is a wall falling or a regression, and both need the report rewritten."
 kind = "behavior"
 tool = "python"
 case = "../../../showcase/c3-char-transformer/probe.py"
 args = ["${case}", "--json", "${test_tmp}/c3-probes.json"]
 expect_exit = 0
-expect_stdout_contains = ["probe-verdict 01_grad_scalar ok", "probes total=12"]
+expect_stdout_contains = ["probe-verdict 01_grad_scalar ok", "probes total=14"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
 ({ input, assert }) => {
@@ -57,7 +57,7 @@ summary.split(String.fromCharCode(32)).forEach((piece) => {
   const at = piece.indexOf('=')
   if (at > 0) fields[piece.slice(0, at)] = piece.slice(at + 1)
 })
-assert(Number(fields.total) === 12, 'the run covered ' + fields.total + ' probes, not 12')
+assert(Number(fields.total) === 14, 'the run covered ' + fields.total + ' probes, not 14')
 assert(Number(fields.ok) >= 1, 'no probe answered a gradient at all')
 }
 """

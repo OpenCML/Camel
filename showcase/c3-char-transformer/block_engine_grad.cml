@@ -21,7 +21,9 @@ func mask(): float[..] {
 
 with <h: Head>
 func block(x: float[..]): float {
-    let scores = (x @ h.wq) @ transpose(x @ h.wk) * 0.70710678118654752
+    let q = x @ h.wq
+    let k = transpose(x @ h.wk)
+    let scores = q @ k * 0.70710678118654752
     let attention = softmax(scores + mask(), 1)
     return sum(attention @ (x @ h.wv))
 }

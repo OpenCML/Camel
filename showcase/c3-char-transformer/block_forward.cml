@@ -4,13 +4,13 @@
 //
 //   x  = [[1.0, 0.5], [0.5, 1.0]]          "two tokens of one dimension"
 //   q  = x @ wq,  k = x @ wk,  v = x @ wv  with wq = [[1.0], [0.5]] and so on
-//   s  = q @ transpose(k) * 1/sqrt(2)      the scores, [2, 2]
+//   s  = q @ transpose(k) / sqrt(2)        the scores, [2, 2]
 //   s' = s + mask                          mask = 0 below the diagonal, -1000 above it
 //   a  = softmax(s', 1)                    position 0 reads position 0 only
 //   out = sum(a @ v)                       the one number the six parameters are compared on
 //
 // The program prints `c3 block forward=<value>` and nothing else, so a comparison script reads one
-// line.  `tools`-free: no pass is needed beyond the default scheduler.
+// line.  `transpose` swaps the last two axes of a rank-2 tensor, which is the scores' shape here.
 import { softmax, sum, transpose } from tensor
 
 func mask(): float[..] {
@@ -18,7 +18,9 @@ func mask(): float[..] {
 }
 
 func block(x: float[..], wq: float[..], wk: float[..], wv: float[..]): float[..] {
-    let scores = (x @ wq) @ transpose(x @ wk) * 0.70710678118654752
+    let q = x @ wq
+    let k = transpose(x @ wk)
+    let scores = q @ k * 0.70710678118654752
     let attention = softmax(scores + mask(), 1)
     return attention @ (x @ wv)
 }
