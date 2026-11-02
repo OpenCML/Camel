@@ -16,9 +16,14 @@
 //               (`stdlib/vjp.cml:<line>:`), naming what is missing. The expected words differ per
 //               line: without `rulesets.jvp` the forward walk has no rule for `:op/mul_d`, without
 //               `rulesets.transpose` the backward walk has no family for `:op/add_d`.
-//   restored -- the same program exits 0 and prints two 27.0 readings and the cotangent tuple
-//               (27.0,) the pullback of a one-parameter function answers (author's ruling of
-//               2026-11-01 14:30: the pullback always answers one cotangent per parameter).
+//   restored -- the same program exits 0 and prints the four readings of
+//               `test/cases/compile/transforms/vjp_carries_its_ruleset.cml` whole: the value, the
+//               cotangent tuple the pullback answers (one member per parameter, author's ruling of
+//               2026-11-01 14:30), the cotangent read out of it, and the gradient. The point is
+//               `x = 2`, where the value (8.0) and the gradient (12.0) differ: a run that answered
+//               the value for the derivative could not print those four lines (P2-22 of the
+//               2026-11-01 review -- the old point was `x = 3`, where all three numbers were 27.0
+//               and a single `27.0` reading could not tell them apart).
 //
 // So this is a case per import line, and it goes red when the line it guards is gone from the
 // library (nothing to drop, and the half that matters is the restored one), when the run stops
@@ -150,13 +155,19 @@ for (const line of diagnostics.slice(0, 6)) say1.push(`    ${line.trim()}`)
 // 3. The other half: the same program, the library untouched. This is the half that goes red when
 //    the import line is missing from the library, because the drop then proves nothing.
 const restored = run({})
-const numbers = restored.text.split('\n').filter((line) => /^27\.0$/.test(line.trim()))
-const cotangents = restored.text
-    .split('\n')
-    .filter((line) => /^\(27\.0\)$/.test(line.trim()))
+// The readings the case prints, each pinned whole and each on its own line. The value is not the
+// gradient at this point, so the list cannot be satisfied by one number appearing somewhere.
+const EXPECTED_READING = [
+    'vjp_ruleset value=8.0',
+    '(12.0)',
+    'vjp_ruleset cotangent=12.0',
+    'vjp_ruleset grad=12.0',
+]
+const printed = restored.text.split('\n').map((line) => line.trim())
+const missing = EXPECTED_READING.filter((line) => !printed.includes(line))
 say1.push(
     `putting the line back, the same program exits ${restored.status} and prints ` +
-        `${numbers.length === 0 ? 'no reading' : `${numbers.length} x 27.0`} + ${cotangents.length} x (27.0)`,
+        `${EXPECTED_READING.length - missing.length} of ${EXPECTED_READING.length} readings`,
 )
 
 const failed = []
@@ -170,8 +181,9 @@ if (!onLibrary) {
     failed.push('the diagnostic does not stand on a `stdlib/vjp.cml:<line>:<column>`')
 }
 if (restored.status !== 0) failed.push(`with the line back the program exits ${restored.status}, not 0`)
-if (numbers.length !== 2) failed.push(`with the line back the program prints ${numbers.length} x 27.0, not 2`)
-if (cotangents.length !== 1) failed.push(`with the line back the program prints ${cotangents.length} x (27.0,), not 1`)
+for (const line of missing) {
+    failed.push(`with the line back the program does not print \`${line}\``)
+}
 
 say(say1)
 if (failed.length > 0) {

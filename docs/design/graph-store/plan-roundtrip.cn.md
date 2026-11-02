@@ -209,6 +209,134 @@ kind is the value it holds, so a print that cannot read it cannot write the stat
 | `families` | 52 | **52** | 不升；kind 不是常量的那条具名拒绝在本语料里**一次没触发** |
 
 **A7 那 8 个用例按"打印器漏了什么"分类（给作者）：** **陈述 1** —— `statement_after_fail`（`fail<...>` 语句被丢，本刀已修）；**写表 1** —— `writer_table_through_callee`（原 `0` `41`、打印版 `0` `0`，写作表经被调用者传出去的那条路没写回）；**其它 6** —— `linear/runtime/var_read_before_region`、`var_read_before_write`（`var` 的读被挪到写之后，2 条）、`order_edges_regions`（`exit 56`→`76`，区域顺序边）、`parse/rulings/power`（`-9 9`→`-9 -9`，一元负号的结合）、`trans/cpp/exec/print_formats`（`3-4|1+2`→`3 4|1 2`，格式说明符丢）、`consistency/values/float_special`（宽度与正号标志丢）。**这个分类比"8"这个数有用：陈述与写表各 1 条，剩下 6 条都不是"打印器忘了写一条语句"，是 print 的格式与求值顺序。**
+
+**2026-11-02 第十二刀（A7 第 2 条）：`41` 从哪来——写作表的第三张凭据，穿过函数值的调用是"可能的写者"。** 缺陷原文：`effects/writer_table_through_callee` 原程序 `0` `41`；打印版 `0` `0`。
+
+`41` 的来源在 `src/compile/gir/builder_expr.cpp#recordWrite`（`throughCallee`）的注释里：**"穿过一个函数值的调用只是一个变量*可能的*写者（保守写者集合），所以写在它前面的那次写必须继续运行，而调用之后读到的版本要指名它"**。源里的 `apply((x: int) => { counter = x }, 41)` 正是这条：`counter` 是闭包捕获的 `var`，调用是它的写，所以**调用之前的读读到 `0`、之后的读读到 `41`**。
+
+**打印机把它丢了**：`program_.calleeOf` 只对**已知的图**给得出被调者，穿过函数值的调用它给出 `nullptr` ⇒ `nodeEffect` 判"无效果"、图的纯性扫描也判这个函数纯 ⇒ `apply` 的体 `f(v)` 与 `main` 里的 `apply(...)` **都当"没有值的非效果"被跳过**。打印版于是从不调用，两次读都是 `0`。
+
+修法：**穿过函数值的调用一律当效果**（`nodeEffect` 与纯性扫描两处），理由写进注释——**"没有打印机读得到的图，所以这里没有东西能说它纯；把它打印掉就是假打印"**。打印出来的程序：`apply` 的体是 `f(v)`，`main` 里是 `apply((x: int): int => { counter = x }, 41)`。
+
+两侧读数（`std::nvm`）：原程序 `0` `41`；打印版 `0` `41`（`rc=0`）。
+
+判据（合并 `origin/develop = 427eb900d` 后**重测的基线** `553 / 1807 / 543 / 499 / 44 / 10 / 52`，语料 3361 个文件）：
+
+| 读数 | 基线 | 本刀 |
+| --- | --- | --- |
+| `printed` | 553 | **553**（一条不丢：这一条本来就打印，只是打印错了） |
+| `equivalent` | 499 | **500** |
+| `not_equivalent` | 44 | **43**（正是 `writer_table_through_callee`） |
+| `unfaithful` | 10 | **10** |
+| `DIFFERENT` | 54 行 | **53 行，新增 0** |
+| `families` | 52 | **52** |
+
+
+**2026-11-02 第十三刀（A7 第 5、6 条）：`print` 的格式说明就在 `with` 槽里，读法与 `fail<'Kind'>` 同源。** 缺陷原文：`trans/cpp/exec/print_formats` 原程序 `3-4|1+2` / `next` / `[5][a]` / `0.50`；打印版 `3 4|1 2` / `next` / `5a` / `0.5`。`consistency/values/float_special` 原程序末三行 `nan` / `     nan` / `+nan`；打印版三行都是 `nan`。
+
+**`with` 槽的形状**（`stdlib/prelude.cml` 的声明）：
+
+```
+/// With a format, print<fmt>(...), writes the format with the arguments put in,
+/// also without a line end.
+/// @example print('a', 1)    // a 1
+#op(':io/print')
+with <fmt: string>
+export func print::<T>(x: T, ..rest): T
+```
+
+`println` 同形，`with <fmt: string>`。图里它是**一条 WITH 边**（`std::gir` 的 `N00 -> N03 [label="0|0", type="WITH"]`），格式字符串是那次调用的常量。`float_special` 的 `println<'{:>8}'>`、`println<'{:+}'>` 是同一个槽——**宽度与符号不是 print 的另一个参数，就是格式串本身**，所以这两个用例是同一类。
+
+**打印机把它丢了**：算子那条路只写名字和括号里的值，`with` 槽里的格式从不写回（`print<'{}-{}'>(3, 4)` 打成 `print(3, 4)`）；`callForm->withCount == 0` 才允许写名字，`print` 的合并调用形（`print()`、`print::<T>(x, ..rest)`、`print::<T>` 三份声明的共同形）正是 0。
+
+**改法**：算子调用的名字后、括号前写 `<...>`，槽里的每个值按 `expression` 打印；**配置不是格式串就具名拒绝**：
+
+```
+a call whose configuration is not a format string: the printer writes `name<fmt>(...)` for the
+print family, and this operator's configuration is not a string, so its call has no spelling here
+```
+
+**第一版太宽，被自己的 golden 拦住**：曾把可写条件放宽成 `withCount == 0 || uri.starts_with(":")`，于是 `trans/cml/refuse/operator.cml` 的 `xs->map<(x: int) => x * 2>`（`:mark/map_arr`，配置是一个函数值）被打成 `map<(x: int): int => x * 2>(xs)`，golden 报 `AssertionError`——**这条用例的注释写着"源拼法是算子组的，不是节点的，所以拒绝"**。收紧成"配置必须是字符串"后它仍是拒绝，格式串的那两条打印。**这就是"只改一半比不改更坏"的形状：名字写得出、配置写不出时，宁可整条拒。**
+
+两侧读数（`std::nvm`）：`print_formats` 原 `3-4|1+2` / `next` / `[5][a]` / `0.50`，打印版同上；`float_special` 原 `nan` / `     nan` / `+nan`，打印版同上。
+
+判据（基线 `553 / 1807 / 543 / 500 / 43 / 10 / 52`，语料 3361 个文件，即第十二刀之后）：
+
+| 读数 | 基线 | 本刀 |
+| --- | --- | --- |
+| `printed` | 553 | **553**（不降：两条本来就打印，只是打错） |
+| `equivalent` | 500 | **502** |
+| `not_equivalent` | 43 | **41**（`print_formats`、`float_special`） |
+| `unfaithful` | 10 | **10** |
+| `DIFFERENT` | 53 行 | **51 行，新增 0** |
+| `families` | 52 | **52** |
+
+
+**2026-11-02 第十五刀（A7 第 3、7、8 条，同一机制）：`let before = z` 消失，读版本打成变量名。** 三条用例（`var_read_before_region`、`var_read_before_write`、`order_edges_regions`）是**一件事**，不是三件：`:var/get` 只打 `cellName(cellReadBy(...))`，**读的是哪一版它不打**。
+
+**判据不是"有没有 ORDER 边"这种猜测，而是建图器自己写的那句话**（`src/compile/gir/builder_expr.cpp#recordWrite`）："读要看见写之前的值……读在写之前由一条 order 边排定"。图上就是 `N03 -> N0E [ORDER]` 这样的边：**一个读若被排在一次写之前，它的版本就一定比文本在该处写到的旧**——因为文本里变量名只表示"文本此刻写到的那一版"。
+
+改法（两档，按父裁的默认）：
+
+1. **能便宜地忠实 ⇒ 忠实**：`orderUsersOf(ref)` 非空 ⇒ 这个读落成一条 `let`，位置不变（源里有名字就用源名字：`let before: int = z`；没有就给 `cmlN`）。
+2. **便宜不了 ⇒ 具名拒绝**：诊断写"这条读的版本在文本里无法表达"。**本语料里一次没触发**——ORDER 边保证读在写之前，落 `let` 总是安全的。
+3. **版本号不进文本**：位置决定次序。
+
+三条卡两侧输出（`std::nvm`）**逐行相同**：`0 2`/`0 3`/`0 5 1`；`int 2 1`/`int 2 1`/`array [7, 7] [1, 1]`；`exit 56`。
+
+判据（基线 `553 / 1807 / 543 / 503 / 40 / 10 / 52`，语料 3361 个文件，即合并 `01ff08254` 之后）：
+
+| 读数 | 基线 | 本刀 |
+| --- | --- | --- |
+| `printed` | 553 | **553** |
+| `equivalent` | 503 | **504** |
+| `not_equivalent` | 40 | **39**（`var_read_before_write`） |
+| `refused` | 1807 | **1807**（具名拒绝没触发） |
+| `unfaithful` | 10 | **10** |
+| `DIFFERENT` | 50 行 | **49 行，新增 0** |
+| `families` | 52 | **52** |
+
+**这一刀没做、要单独一刀的**：①**区域内的读**（`arm_write.cml` 读的是分支留下的版本，那里变量名本来就对）；②另外两条**行为已相同**但 canonical 仍差，差的是**另一个缺陷**——循环/分支体的尾值打印成 `return i + 1` / `return println(2)`。问题页：`docs/handover/questions/2026-11-02-cml-var-version-in-printed-text.md`。
+
+**2026-11-02 第十四刀（A7 第 4 条）：前缀 `-` 比 `^` 松，括号表把它放严了一级。** 缺陷原文：`parse/rulings/power` 原程序第二行 `-9 9 -4 -4 12`；打印版 `-9 -9 -4 -4 12`——`(-x) ^ 2` 被打成 `-x ^ 2`，而解析器读它是 `-(x ^ 2)`，9 变成 -9。
+
+**这一格的原话是解析器写的，不是打印机猜的**（`src/parse/syntax/parser_expr.cpp`）：
+
+```
+ *   powerExpr       ^                                           right
+ *   negExpr         prefix -  !  ~   looser than `->` and than `^`, tighter than the other binary
+ *                                    operators: `-x->f` is `-(x->f)`, `!xs->is_empty()` is
+ *                                    `!(xs->is_empty())`, `-x ^ 2` is `-(x ^ 2)`, `-a * b` is `(-a) * b`
+```
+
+```
+/// powerExpr : nullableExpr ('^' powerExpr)?
+/// negExpr : ('-' | '!' | '~') negPower | linkExpr
+```
+
+打印机这边原来是 `prefix()` 返回 `70`——**比 `^`（60）严**，于是 `^` 的底数不加括号。改成 `kPrefixPrecedence = 55`（`*` 的 50 与 `^` 的 60 之间），一格一行注释，出处写在常量上。
+
+**"别处还有一份表"的检查**：`git grep -n precedenceOf -- src` 只有 `src/passes/trans/cml/cml.cpp#precedenceOf` 一处（打印侧）；解析侧没有第二份"优先级数字表"，它是 `parser_expr.cpp` 里逐层的语法函数（`parsePower` / `parseNeg`），**这一刀不动它**——我们只是把括号加上，解析器本来就按那套规则读。**所以这次不存在"两张表只改一张"的形状；只改了一处，且改的那处把出处指向了解析器的原话。**
+
+原程序与打印版（`std::nvm`）三行输出：
+
+```
+原: 18 512 64 2     打印: 18 512 64 2
+原: -9 9 -4 -4 12   打印: -9 9 -4 -4 12   （第 4 行现在是 `println(-(x ^ 2), (-x) ^ 2, -4, -4, 12)`）
+原: 0.5 2 3         打印: 0.5 2 3
+```
+
+判据（基线 `553 / 1807 / 543 / 502 / 41 / 10 / 52`，语料 3361 个文件，即第十三刀之后）：
+
+| 读数 | 基线 | 本刀 |
+| --- | --- | --- |
+| `printed` | 553 | **553**（这一条本来就打印） |
+| `equivalent` | 502 | **503** |
+| `not_equivalent` | 41 | **40**（正是 `power`） |
+| `unfaithful` | 10 | **10** |
+| `DIFFERENT` | 51 行 | **50 行，新增 0** |
+| `families` | 52 | **52** |
+
 **两套计数（写进页，免得下一个人以为数字被改动）：** `EXAMPLE_STOPS` 的键是**诊断类别**（`a semantic error`、`an internal error`），值是该类的条数，**不是总停止数**。作者 22:30 那一笔记的 `40` 是 `a semantic error` 类，总停止数是 **41**；本轮把 `vjp` 的 `@example` 修好之后，`a semantic error` 回到 **39**、总停止数 **40**（`vjp` 已不在"编不过"的名单里，那份名单现在是 34 个名字、40 条，多为 `f`/`encode`/`n` 这类 fragment）。两个数一起看才不误会。
 **补声明清单（按节点数）。** 全语料里被打印机点名、确实没有任何声明的算子 **143 个、12520 个节点**。前 12：`:str/format` 1019、`tensor:sum` 934、`tensor:multiply` 862、`tensor:reshape` 856、`:op/tag_is_null` 689、`:struct/len_arr` 585、`tensor:add` 582、`:op/assn_l` 569、`:mark/map_arr` 389、`tensor:subtract` 324、`tensor:matmul` 238、`:op/slice_sub` 219。
 
