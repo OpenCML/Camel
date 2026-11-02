@@ -10,4 +10,4 @@
 | 页 | 问什么 |
 | --- | --- |
 | [`2026-11-02-is-with-grad-a-stub`](2026-11-02-is-with-grad-a-stub.cn.md) | `with_grad` 记为"不是 stub、缺一条用例"，还是你那边有别的发现？ |
-| [`2026-11-02-should-the-three-cpu-budgets-be-met-or-repriced`](2026-11-02-should-the-three-cpu-budgets-be-met-or-repriced.cn.md) | 三条 CPU 预算是真超（单跑仍超 0.1%–19%）：修性能，还是按今天的机器重新定价 |
+| [`2026-11-02-transpose-tangent-parameters`](2026-11-02-transpose-tangent-parameters.cn.md) | `transpose` 怎么知道一个函数的参数是切向（半身），而不是普通参数？ |

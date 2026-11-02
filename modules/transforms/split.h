@@ -58,12 +58,18 @@
 
 namespace camel::transforms {
 
-/// The two graphs `split(f)` answers with, as types: `(forward, backward)`, the pair the call's
-/// result is. `why` says why there are none when the function is outside what the step takes.
+/// The two halves of a lifted function, as types. `split(f)` answers the **forward** half: calling it
+/// gives the value and the linear function `lin` closed over the residuals. So `forward` is
+/// `(values...) => (result, lin)`, `backward` is `lin`'s own type `(tangents...) => tangent` -- with no
+/// residual position in it -- and `closure` is the layout of `lin`'s closure tuple, one member per
+/// residual, which the build reads off the backward graph. `pair` is the type the call `split(f)`
+/// answers with, i.e. the forward half. `why` says why there are none when the function is outside
+/// what the step takes.
 struct SplitHalves {
-    camel::core::type::FunctionType *forward   = nullptr;
-    camel::core::type::FunctionType *backward  = nullptr;
-    const camel::core::type::TupleType *pair   = nullptr;
+    camel::core::type::FunctionType *forward    = nullptr;
+    camel::core::type::FunctionType *backward   = nullptr;
+    const camel::core::type::TupleType *closure = nullptr;
+    const camel::core::type::Type *pair         = nullptr;
     std::string why;
 };
 
@@ -72,12 +78,12 @@ struct SplitHalves {
 /// the function is not of that shape.
 SplitHalves splitHalvesOf(camel::core::type::FunctionType *function);
 
-/// The halves when the residual tuple is known -- which it is as soon as the *graph* is in hand,
+/// The halves when the residuals are known -- which they are as soon as the *graph* is in hand,
 /// because which values cross the cut is a property of the body (`residualsOf`). `split` builds its
-/// halves with this one, so the identity graph's forward half answers `(result, ())` and
-/// `f(x, y) = x*x*y`'s answers a three-member tuple. `splitHalvesOf(function)` is the same call with
-/// the placeholder a caller that has only types can know: one slot per value parameter, the shape the
-/// operator resolver checks the call site against.
+/// halves with this one, so `lin` captures the values the graph names: none for the identity graph,
+/// five for `f(x, y) = x*x*y`. `splitHalvesOf(function)` is the same call with no graph, i.e. an empty
+/// closure -- the shape the operator resolver checks the call site against, since a signature has
+/// nothing to name.
 SplitHalves splitHalvesWith(
     camel::core::type::FunctionType *function, camel::core::type::Type *residuals);
 
