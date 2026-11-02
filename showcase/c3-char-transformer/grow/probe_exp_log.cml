@@ -1,0 +1,13 @@
+// Which elementwise ops the log-softmax needs are actually here: exp, log, and a row sum.
+//
+//     camel showcase/c3-char-transformer/grow/probe_exp_log.cml
+import { exp, log, sum } from tensor
+
+func main(): int sync {
+    let z = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
+    let e = exp(z)
+    "probe exp "->print; e->println
+    "probe log "->print; exp(z)->log->println
+    "probe sum_all "->print; sum(e)->println
+    return 0
+}

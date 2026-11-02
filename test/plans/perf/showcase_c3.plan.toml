@@ -206,3 +206,15 @@ kind = "behavior"
 expect_exit = 0
 expect_stdout_contains = ["param steps=200 loss=-3.515723011861", "param wq1 [[0.9147992848", "param b1 [0.07669344319", "param wq2 [[0.8261623793", "param g2 [0.52088289142", "param b2 [-0.39999999800"]
 timeout_ms = 300000
+
+
+[[tests]]
+name = "grow.stage5_lm_head"
+desc = "Stage 4 plus a head and a cross entropy against the next token: twenty-six tensors, two hundred Adam steps.  This is the model the author asked for with a target attached -- the old loss is kept untouched in grow.stage4_full_model, which still proves what it proved.  The twenty step lines are pinned at twelve decimals from `grow.py --stage 5`, which is the evidence that the new head runs through the same gradient path as everything else; what the model then does with that gradient is a separate question, reported in WALLS.cn.md."
+case = "../../../showcase/c3-char-transformer/grow/stage5_lm_head.cml"
+args = ["${case}"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["lm step=1 loss=4.952361566340", "lm step=2 loss=4.878116365291", "lm step=3 loss=4.804657591241", "lm step=4 loss=4.732000640920", "lm step=5 loss=4.660164476818", "lm step=6 loss=4.589168109785", "lm step=7 loss=4.519030195674", "lm step=8 loss=4.449768895672", "lm step=9 loss=4.381401804344", "lm step=10 loss=4.313945903088", "lm step=11 loss=4.247417525628", "lm step=12 loss=4.181832330282", "lm step=13 loss=4.117205276443", "lm step=14 loss=4.053550603865", "lm step=15 loss=3.990881813803", "lm step=16 loss=3.929211651258", "lm step=17 loss=3.868552087752", "lm step=18 loss=3.808914304052", "lm step=19 loss=3.750308672379", "lm step=20 loss=3.692744737646", "lm done steps=200 last=1.444728431190", "lm before [[", "lm prob before [[0.9902884"]
+timeout_ms = 300000
+

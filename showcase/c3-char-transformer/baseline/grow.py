@@ -271,6 +271,27 @@ def run(stage, use_torch=False, exact=False, steps=None, return_weights=False):
     return losses, loss(weights)
 
 
+HEAD_START = [[0.5, -0.5], [-0.5, 0.5]]
+LABEL = np.array([[0.0, 1.0], [1.0, 0.0]])
+
+
+def forward5(w):
+    """Stage 5's logits: stage 4's output rows through the head."""
+    head = np.array(w[92:96]).reshape(2, 2)
+    return forward4(w) @ head
+
+
+def loss_stage5(w):
+    """Cross entropy against LABEL -- each row's target class, in log space."""
+    z = forward5(w)
+    denominator = np.log(np.exp(z) @ np.ones((2, 2)))
+    return (denominator * LABEL).sum() - (z * LABEL).sum()
+
+
+NAMES5 = NAMES4 + ["head"]
+START5 = START4 + [0.5, -0.5, -0.5, 0.5]
+STAGES[5] = (NAMES5, START5, loss_stage5)
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--stage", type=int, default=1)
