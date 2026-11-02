@@ -1860,3 +1860,31 @@ terminate called after throwing an instance of 'camel::core::mm::MemoryExhausted
 1. **这两条的数组形参都被反半读到**，`skip=unread-parameter` 那条分支**根本走不到**，我这一刀的零构造不参与；
 2. **失败形态不同**：我修的是"把数组当数字加/把没读到的形参拒掉"，**这里是 `--gc-check poison` 下 `nodevm graph boundary` 的小回收里读出一个巨大的分配量**（`119370353 MB` ≈ 一个地址或被搬动过的头被当成元素数），**不加 poison 时这两条绿**。
 ⇒ **这是 GC 搬动/根化那一侧的事，不在 `transpose.cpp` 的 lit2 区域，我没改、也不该在这一刀里改。**
+
+
+## 55. `{Float64()}` 的用例写不出来，所以代码不动——而挡住它的是两条正当的拒绝
+
+**① 撤标的顺序确认（你问的那条）**：`test/tools/run-tests.mjs:2856` 把"标了却通过"直接改成 `fail` 并附
+`marked known_fail on '<backend>' but passes: remove the mark`。**上一笔我是"先撤标、再同一次构建里跑"，一次就 58/58**，没有出现那条检查的红。
+
+**② 要写 `f32[]` 用例，三道探针全部被拒**（原文，逐层）：
+
+| 探针 | 结果 |
+|---|---|
+| `func g(xs: f32[]): f32` | `Invalid call to 'transpose' … : 'transpose' takes a function that returns a 'float'`（`stdlib/vjp.cml:73`） |
+| `func g(xs: f32[]): float { return xs[0] as float }` | `DynamicCastForbidden: Dynamic cast from 'f32' to 'float' is not allowed` |
+| `func g(xs: f32[]): float { return float(xs[0]) }` | `RuntimeDiag: transforms: jvp has no forward rule for ':op/ftod' (the operator has no forward rule bound at all)` |
+
+**⇒ 今天没有任何一条能进到"规则实例化"那一步**：`vjp` 只接受返回 `float` 的函数（`transpose` 的单参支要求 `Float64` 出口），
+而唯一的加宽通路 `float(f32)` 是 `:op/ftod`，它连前向规则都没有。**`int[]` 同理：元素读取回答 `int`，被同一条出口检查挡住。**
+
+**③ 结论（按你的规矩：写不出用例 ⇒ 写页，不动代码）**：`rule_expand.cpp:428` 与 `jvp.cpp:91` 的 `{Float64()}` **今天不是缺陷，
+是"可微的东西只有 float64"这句话的后果**。两条拒绝就是保住这个字面量的那道闸：闸在，实例化类型永远只能是 float64。
+
+**④ 但那天闸一开，它就是缺陷**——写清楚留给下一个人：`expandRuleByName` 手里有 `tangents` 和 `position`，
+**元素类型从 `position` 那个位置的值/余切类型取**（`firstOperandTypeOf`/`ruleElementTypeOf` 已经为 `vmap` 与 `jvp` 做同一件事）。
+判据：`f32[]` 用例能跑通的那一笔，`TRANSPOSE … rules=idx_arr_t` 那一行的实例化类型从 `float64` 变成 `f32`。
+
+**⑤ 这一夜 `Type::Float64()` 的账最终是**：132 行 / 30 文件，**83 合法、12 测试、6 默认值、3 其它、28 形似缺陷**，
+而这 28 里**已经改掉 8 处**（`primitive`、`zero`、`tupleOf` 的类型、`addCotangent` 的加法与定型、`skip=unread-parameter` 的零构造），
+**剩下 20 处"待证"，2 处（`rule_expand.cpp:428`、`jvp.cpp:91`）等用例**。**没有一处是因为"看着像"而改的。**
