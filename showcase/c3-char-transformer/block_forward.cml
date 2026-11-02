@@ -1,0 +1,36 @@
+// The smallest attention block of C3, forward only.  This is the half that does not need the
+// reverse transform, and it is what compare.py checks against the analytic value of the same
+// formulas (baseline/block.py):
+//
+//   x  = [[1.0, 0.5], [0.5, 1.0]]          "two tokens of one dimension"
+//   q  = x @ wq,  k = x @ wk,  v = x @ wv  with wq = [[1.0], [0.5]] and so on
+//   s  = q @ transpose(k) / sqrt(2)        the scores, [2, 2]
+//   s' = s + mask                          mask = 0 below the diagonal, -1000 above it
+//   a  = softmax(s', 1)                    position 0 reads position 0 only
+//   out = sum(a @ v)                       the one number the six parameters are compared on
+//
+// The program prints `c3 block forward=<value>` and nothing else, so a comparison script reads one
+// line.  `transpose` swaps the last two axes of a rank-2 tensor, which is the scores' shape here.
+import { softmax, sum, transpose } from tensor
+
+func mask(): float[..] {
+    return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2]
+}
+
+func block(x: float[..], wq: float[..], wk: float[..], wv: float[..]): float[..] {
+    let q = x @ wq
+    let k = transpose(x @ wk)
+    let scores = q @ k * 0.70710678118654752
+    let attention = softmax<1>(scores + mask())
+    return attention @ (x @ wv)
+}
+
+func main(): int sync {
+    let x = [[1.0, 0.5], [0.5, 1.0]] as float[2, 2]
+    let wq = [[1.0], [0.5]] as float[2, 1]
+    let wk = [[0.5], [1.0]] as float[2, 1]
+    let wv = [[1.0], [-1.0]] as float[2, 1]
+    let out = block(x, wq, wk, wv)
+    `c3 block forward=${sum(out):.12f}`->println
+    return 0
+}

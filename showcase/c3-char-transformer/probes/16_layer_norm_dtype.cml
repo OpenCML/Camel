@@ -1,0 +1,17 @@
+// WALL PROBE 16 -- the element type of `layer_norm`.  The model is written in `float` (the type the
+// rest of the library's declarations use), and a block is a normalized sublayer; if `layer_norm`
+// answers `f32` whatever it is given, then a `float` model cannot be written at all and the whole
+// file has to be f32 -- which is a fact about the API, not about this example.
+import { layer_norm, ones, sum } from tensor
+
+func normed(x: float[..], gamma: float[..], beta: float[..]): float {
+    return float(sum(layer_norm(x, gamma, beta)))
+}
+
+func main(): int sync {
+    let x = [[1.0, 2.0, 3.0, 4.0]] as float[1, 4]
+    let gamma = ones::<float>([4])
+    let beta = ones::<float>([4])
+    println(`normed sum = ${normed(x, gamma, beta):.6f}`)
+    return 0
+}

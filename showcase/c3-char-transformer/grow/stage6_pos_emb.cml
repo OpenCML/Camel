@@ -1,0 +1,145 @@
+// Stage 6: stage 5 plus the one thing *it* was missing -- a position.
+//
+// Stage 4's loss was sum(layer_norm(second, gout, bout)), which has no label in it: it pushes the
+// output rows towards a negative sum and nothing else, so "does it predict the next token" was not a
+// question that loss could answer.  This adds a head (rows @ head -> logits over the two tokens) and
+// a cross-entropy loss against tokens[i + 1], wrapped around at the end because a two-token sequence
+// has no third token to point at.
+//
+// Stage 5 could not use the target: the body hands both positions nearly the same row, and a
+// 2x2 head cannot separate them, so the cheapest descent was uniform logits (loss 1.386294 = the
+// abstention floor).  A learned position embedding added to the rows gives the head the missing
+// variable, and nothing else changes.
+//
+// The row denominators are written as exp(z) @ ones -- a 2x2 batch, so the all-ones product is the
+// per-row sum, and no axis argument is needed.
+//
+//     camel showcase/c3-char-transformer/grow/stage6_pos_emb.cml
+import { exp, layer_norm, log, relu, softmax, sum, take, transpose } from tensor
+import { adam, adam_state } from nn
+import { with_grad } from autodiff
+
+type Model = {
+    emb: float[..],
+    g1a: float[..],
+    b1a: float[..],
+    wq1: float[..],
+    wk1: float[..],
+    wv1: float[..],
+    g1b: float[..],
+    b1b: float[..],
+    f1_1: float[..],
+    fb1_1: float[..],
+    f2_1: float[..],
+    fb2_1: float[..],
+    g2a: float[..],
+    b2a: float[..],
+    wq2: float[..],
+    wk2: float[..],
+    wv2: float[..],
+    g2b: float[..],
+    b2b: float[..],
+    f1_2: float[..],
+    fb1_2: float[..],
+    f2_2: float[..],
+    fb2_2: float[..],
+    gout: float[..],
+    bout: float[..],
+    head: float[..],
+    pos: float[..]
+}
+
+func mask(): float[..] {
+    return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2]
+}
+
+func ones(): float[..] {
+    return [[1.0, 1.0], [1.0, 1.0]] as float[2, 2]
+}
+
+// One target per row: row 0 wants class 1 (the token after token 0), row 1 wraps to class 0.
+func label(): float[..] {
+    return [[0.0, 1.0], [1.0, 0.0]] as float[2, 2]
+}
+
+func attention(x: float[..], wq: float[..], wk: float[..], wv: float[..]): float[..] {
+    let q = x @ wq
+    let k = transpose(x @ wk)
+    let a = softmax<1>(q @ k * 0.70710678118654752 + mask())
+    return a @ (x @ wv)
+}
+
+with <m: Model>
+func rows_of(tokens: int[..]): float[..] {
+    let x = take(m.emb, tokens)
+    let attended1 = x + attention(layer_norm(x, m.g1a, m.b1a), m.wq1, m.wk1, m.wv1)
+    let hidden1 = relu(layer_norm(attended1, m.g1b, m.b1b) @ m.f1_1 + m.fb1_1)
+    let first = attended1 + hidden1 @ m.f2_1 + m.fb2_1
+    let attended2 = first + attention(layer_norm(first, m.g2a, m.b2a), m.wq2, m.wk2, m.wv2)
+    let hidden2 = relu(layer_norm(attended2, m.g2b, m.b2b) @ m.f1_2 + m.fb1_2)
+    return attended2 + hidden2 @ m.f2_2 + m.fb2_2
+}
+
+with <m: Model>
+func loss_of(tokens: int[..]): float {
+    let x = take(m.emb, tokens)
+    let attended1 = x + attention(layer_norm(x, m.g1a, m.b1a), m.wq1, m.wk1, m.wv1)
+    let hidden1 = relu(layer_norm(attended1, m.g1b, m.b1b) @ m.f1_1 + m.fb1_1)
+    let first = attended1 + hidden1 @ m.f2_1 + m.fb2_1
+    let attended2 = first + attention(layer_norm(first, m.g2a, m.b2a), m.wq2, m.wk2, m.wv2)
+    let hidden2 = relu(layer_norm(attended2, m.g2b, m.b2b) @ m.f1_2 + m.fb1_2)
+    let second = attended2 + hidden2 @ m.f2_2 + m.fb2_2
+    let z = (second + m.pos) @ m.head
+    let den = log(exp(z) @ ones())
+    return sum(den * label()) - sum(z * label())
+}
+
+func initial(): Model {
+    return {
+        emb: [[1.0, 0.5], [0.5, 1.0]] as float[2, 2],
+        g1a: [1.0, 1.0] as float[], b1a: [0.0, 0.0] as float[],
+        wq1: [[1.0, 0.5], [0.5, 1.0]] as float[2, 2],
+        wk1: [[0.5, 1.0], [1.0, 0.5]] as float[2, 2],
+        wv1: [[1.0, -1.0], [-1.0, 1.0]] as float[2, 2],
+        g1b: [1.0, 1.0] as float[], b1b: [0.0, 0.0] as float[],
+        f1_1: [[0.75, -0.5, 0.5, 0.25], [1.0, 0.5, -0.25, 0.75]] as float[2, 4],
+        fb1_1: [0.1, -0.1, 0.05, 0.0] as float[],
+        f2_1: [[1.0, 0.5], [-0.5, 1.0], [0.25, -0.25], [0.5, 1.0]] as float[4, 2],
+        fb2_1: [0.0, 0.1] as float[],
+        g2a: [1.0, 1.0] as float[], b2a: [0.0, 0.0] as float[],
+        wq2: [[0.75, 0.0], [0.0, 0.75]] as float[2, 2],
+        wk2: [[0.0, 0.5], [0.5, 0.0]] as float[2, 2],
+        wv2: [[1.0, 1.0], [1.0, 1.0]] as float[2, 2],
+        g2b: [1.0, 1.0] as float[], b2b: [0.0, 0.0] as float[],
+        f1_2: [[0.5, 0.25, 0.75, -0.5], [0.25, 0.75, 0.5, 0.5]] as float[2, 4],
+        fb1_2: [0.0, 0.05, -0.05, 0.1] as float[],
+        f2_2: [[0.5, 1.0], [1.0, 0.25], [-0.25, 0.5], [0.75, -0.5]] as float[4, 2],
+        fb2_2: [0.1, 0.0] as float[],
+        gout: [1.0, 1.0] as float[], bout: [0.0, 0.0] as float[],
+        head: [[0.5, -0.5], [-0.5, 0.5]] as float[2, 2],
+        pos: [[0.0, 0.0], [0.0, 0.0]] as float[2, 2]
+    }
+}
+
+func main(count: int): int sync {
+    let tokens = [0, 1] as int[]
+    let model0 = initial()
+    let z0 = (rows_of<model0>(tokens) + model0.pos) @ model0.head
+    let (final, state, steps, log) = loop m = model0, opt = adam_state(model0), step = 0, log = '' as string
+        while step < count
+        do {
+            let (value, g) = with_grad(loss_of)<m>(tokens)
+            let next = adam(m, g, opt, 0.002)
+            let nlog = log + `pos step=${step + 1} loss=${value:.12f}` + "\n"
+            return (next.0, next.1, step + 1, nlog)
+        }
+    let last = with_grad(loss_of)<final>(tokens).0
+    let z1 = (rows_of<final>(tokens) + final.pos) @ final.head
+    log->print
+    `pos done steps=${steps} last=${last:.12f}`->println
+    "pos before "->print; z0->println
+    "pos after "->print; z1->println
+    "pos prob before "->print; softmax<1>(z0)->println
+    "pos prob after "->print; softmax<1>(z1)->println
+    return 0
+}

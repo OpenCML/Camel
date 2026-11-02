@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_same, Tangent } from types
-import { zeros_like } from tensor
+import { matmul, zeros_like } from tensor
 import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
 
 /// A value of type `T` with its tangent: what a forward transform carries for one value.
@@ -136,6 +136,27 @@ export rule jvp_div::<T>(x: T, w: T) when is_float::<T>() {
 /// `d(-x) = -dx`.
 export rule jvp_neg::<T>(x: T) when is_float::<T>() {
     -x => (dx: T) => neg_tangent(x, dx)
+}
+
+// ---- the forward rule of `matmul` ----
+//
+// The matrix product is the one operator a model meets at every step, and its key needs no
+// exception: the rule's left side is written `matmul(a, b)`, the name the operator itself has, so
+// `ruleKeyOf` derives the key (`tensor:matmul` -> `matmul` at two operands) from the family's index
+// (`include/camel/core/forward.h`). A rule with no binding and a binding with no rule are the two
+// halves that must land together, and here the rule is the binding.
+
+/// The tangent of `a · b` along `(da, db)`: `da · b + a · db`. The rule below is the only caller: the
+/// tangent of the product is the product of the tangents' terms, and it is written here rather than
+/// in `autodiff` because that module's generic helpers are one value's arithmetic, while this one
+/// takes two of them.
+func matmul_tangent::<T>(a: T[..], b: T[..], da: T[..], db: T[..]): T[..] when is_float::<T>() {
+    return matmul(da, b) + matmul(a, db)
+}
+
+/// `d(a · b) = da · b + a · db`, both operands' tangents in one right side.
+export rule jvp_matmul::<T>(a: T[..], b: T[..]) when is_float::<T>() {
+    matmul(a, b) => (da: T[..], db: T[..]) => matmul_tangent(a, b, da, db)
 }
 
 // ---- the forward rule of `:op/idx_arr` ----

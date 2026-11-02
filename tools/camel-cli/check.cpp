@@ -73,8 +73,8 @@ int checkFrontend(
                    << "\n]" << std::endl;
         else
             output << "camel: internal error: " << error.what()
-                   << "\nThis state is not built by this compiler version, and nothing in the program is "
-                   "wrong."
+                   << "\nThis is a defect of the compiler, not an error of the program. No shape the program "
+                   "can write reaches it."
                    << std::endl;
         ASSERT(false, error.what());
     } catch (...) {

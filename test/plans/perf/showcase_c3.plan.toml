@@ -1,0 +1,254 @@
+id = "perf.showcase_c3_char_transformer"
+order = 901
+tier = "milestone"
+tags = ["showcase", "slow", "c3", "transformer", "vjp", "grad"]
+
+# The third official example: a character-level Transformer trained through the library's own
+# reverse transform (`stdlib/vjp.cml`, `vjp`/`grad` written in Camel), not the engine's gradient
+# builder.  Two programs carry it:
+#
+#   * train.cml  -- the model the author asked for (two layers, multi-head attention, softmax,
+#     layer_norm, residual connections, embedding lookup, causal mask) and its training loop;
+#   * probes/    -- the smallest program that reaches each construct the model needs, one file per
+#     wall, run by probe.py, which prints verbatim whether the library answered the gradient or
+#     refused it.
+#
+# The walls are this example's deliverable, so the probes are pinned: a probe that starts answering
+# a gradient is a wall that fell, and the entry below then has to be rewritten rather than silently
+# passing.  `WALLS.cn.md` in the directory is the list, with the four-way classification (missing
+# rule / missing batch rule / transform refusal / performance).
+#
+# This is a milestone-tier plan: it runs with `--tier milestone` or by naming the file, not under
+# the default `npm run test` fast layer.  It starts the tree's own binary seventeen times, which is a
+# few seconds, and it reports walls rather than holding the example to a curve.
+
+[[tests]]
+name = "probes"
+desc = "The seventeen construct probes of the C3 Transformer run through the library's own `vjp`: the control answers its gradient, and the constructs that make attention a Transformer (matrix product, softmax, reduction along an axis, reshape/transpose, a second parameter, a table row, the causal mask, a `with` parameter tree, `grad` at a model, the whole block) are refused.  The entry fails when the count of answered and refused probes moves, because that is a wall falling or a regression, and both need the report rewritten."
+kind = "behavior"
+tool = "python"
+case = "../../../showcase/c3-char-transformer/probe.py"
+args = ["${case}", "--json", "${test_tmp}/c3-probes.json"]
+expect_exit = 0
+expect_stdout_contains = ["probes total=18", "mismatched=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 300000
+
+# The forward half: the model program has to compute a real loss on the committed corpus before any
+# reading about gradients means anything.  This is also the entry that turns a wrong program into a
+# red with its diagnostic on screen (`CAMEL_TEST_SHOW_OUTPUT`), instead of a wall report about a
+# model that never ran.
+[[tests]]
+name = "forward"
+desc = "train.cml --arg mode=forward: the two-layer, two-head character Transformer loads the committed corpus (its length, context, width and vocabulary are printed), builds its parameter tree from the seed, and prints the cross-entropy of the first window.  A model that cannot compute its own loss is a bug in the example, not a wall in the library, so this entry is not a wall reading."
+kind = "behavior"
+case = "../../../showcase/c3-char-transformer/forward.cml"
+args = ["${case}", "--arg", "corpus=showcase/c3-char-transformer/corpus.txt", "--arg", "seed=7"]
+expect_exit = 0
+expect_stdout_contains = ["c3 forward config chars=4278 context=8 width=16 heads=2 classes=28 seed=7", "c3 forward init loss=3.303745"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 120000
+
+# The reverse half, as the library answers it today: pinned as the refusal, not as a curve.  When
+# the walls fall this entry is the one that has to become a training run and a falling loss.
+[[tests]]
+name = "train.stops_at_the_wall"
+desc = "train.cml --arg mode=train: the training loop reaches the library's `vjp` at the model's parameter tree and stops where the library cannot follow it today.  The expectation is the refusal's own words, so the entry reports the wall instead of hiding it behind `known_fail`."
+kind = "behavior"
+case = "../../../showcase/c3-char-transformer/train.cml"
+args = ["${case}", "--arg", "corpus=showcase/c3-char-transformer/corpus.txt", "--arg", "mode=train", "--arg", "steps=2"]
+expect_exit = 1
+expect_stdout_contains = ["Cannot import module 'vjp'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 120000
+# The parity table: the same block on both sides, five readings compared, RESULTS.md written.
+#
+# `compare.py` runs `baseline/block.py` (the six partial derivatives by hand, checked against a
+# finite difference of the same forward pass), `block_forward.cml` (the forward pass through the
+# tensor operators), `block_engine_grad.cml` (the engine's `with_grad`, as a control) and
+# `block_library_grad.cml` (the library's `vjp`, the reading this example is about).  A library row
+# that reads "refused" is the example's finding and not a failure of this entry -- WALLS.cn.md is
+# where it is classified -- but a forward value or an engine gradient outside its tolerance is.
+[[tests]]
+name = "parity"
+desc = "C3's smallest attention block, compared with its hand-derived analytic Jacobian: the forward value within 1e-6 relative, the engine's six parameter gradients within 1e-4 relative each, and the library's `vjp` row recorded with whatever it answered (a refusal today).  The script writes RESULTS.md and exits non-zero when a row it can check does not hold."
+kind = "behavior"
+tool = "python"
+case = "../../../showcase/c3-char-transformer/compare.py"
+args = ["${case}", "--results", "${test_tmp}/c3-RESULTS.md", "--json", "${test_tmp}/c3-parity.json"]
+expect_exit = 0
+expect_stdout_contains = ["c3 compare: PASS"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 300000
+
+# The training run the library path cannot give: the same six-parameter block, the same starting
+# numbers, Adam's constants at rate 0.002, one loss per step for fifty steps, differentiated by the
+# engine's `with_grad` because the library's `vjp` does not compile (wall 1).  Its reference is
+# `baseline/block_train.py`, which prints `py train step=<n> loss=<v>` from the same start.
+[[tests]]
+name = "train.engine_fifty_steps"
+desc = "Fifty Adam steps of the smallest attention block through `with_grad`, printed one line per step: the loss falls from 0.449437188361 to 0.128649809322 with no step rising, and every step is a number `baseline/block_train.py`'s own loop agrees with."
+kind = "behavior"
+case = "../../../showcase/c3-char-transformer/block_train.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["c3 train step=1 loss=0.455920556651", "c3 train step=2 loss=0.449437188361", "c3 train step=3 loss=0.442951748191", "c3 train step=10 loss=0.397492874660", "c3 train step=25 loss=0.299682415252", "c3 train step=50 loss=0.135265634910", "c3 train done steps=50 last=0.128649809322"]
+timeout_ms = 300000
+
+# ---------------------------------------------------------------------------------------------------
+# Growing the block into a Transformer, one change at a time.  Each stage is fifty Adam steps of the
+# engine's `with_grad` against `baseline/grow.py --stage N`, whose gradients are central differences
+# of the same forward pass: two *training runs* compared, not the same code twice.
+[[tests]]
+name = "grow.stage1_two_blocks"
+desc = "Two attention blocks chained: 0.545105212119 at step 1, 0.274279131592 at step 50, no step rising, and the four pinned values are the reference's own to twelve decimals."
+case = "../../../showcase/c3-char-transformer/grow/stage1_two_blocks.cml"
+args = ["${case}"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["stage1 step=1 loss=0.545105212119", "stage1 step=10 loss=0.490225527325", "stage1 step=25 loss=0.403704788277", "stage1 step=50 loss=0.274279131592", "stage1 done steps=50 last=0.269475980275"]
+timeout_ms = 300000
+
+[[tests]]
+name = "grow.stage2_residual_ln"
+desc = "Residuals and the library layer_norm around each attention: the loss starts at 0 (a normalised row sums to zero), no step rises, and all fifteen pinned values are the reference's own to twelve decimals.  The reference is `baseline/grow.py --stage 2 --exact`: complex-step gradients, because a central difference is not accurate enough for this stage. Its first step's loss is zero for every parameter but the last beta, so Adam's squared average is zero there and the division by sqrt(v) + 1e-8 magnifies the difference's own error: 8.0e-11 at step 2 became 3.0e-6 by step 50.  With exact gradients the two agree on every digit, which is also the reading that says no f32 store is left in this chain."
+case = "../../../showcase/c3-char-transformer/grow/stage2_residual_ln.cml"
+args = ["${case}"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["stage2 step=1 loss=0.000000000000", "stage2 step=2 loss=-0.008000314590", "stage2 step=3 loss=-0.016000656417", "stage2 step=4 loss=-0.024001033565", "stage2 step=5 loss=-0.032001451997", "stage2 step=6 loss=-0.040001918397", "stage2 step=7 loss=-0.048002440612", "stage2 step=8 loss=-0.056003028012", "stage2 step=9 loss=-0.064003691904", "stage2 step=10 loss=-0.072004446062", "stage2 step=11 loss=-0.080005307404", "stage2 step=12 loss=-0.088006296882", "stage2 step=13 loss=-0.096007440681", "stage2 step=14 loss=-0.104008771827", "stage2 step=15 loss=-0.112010332400", "stage2 step=16 loss=-0.120012176605", "stage2 step=17 loss=-0.128014375103", "stage2 step=18 loss=-0.136017021211", "stage2 step=19 loss=-0.144020239954", "stage2 step=20 loss=-0.152024201514", "stage2 step=25 loss=-0.192068140575", "stage2 step=30 loss=-0.232320419892", "stage2 step=40 loss=-0.646090332968", "stage2 step=50 loss=-0.836278289207", "stage2 done steps=50 last=-0.856049871704"]
+timeout_ms = 300000
+
+[[tests]]
+name = "grow.probe_layer_norm_float"
+desc = "`layer_norm<float>` on a `float[2,2]`: the rows normalize to zero mean and beta = [0.1, -0.2] adds 2*(0.1-0.2), so the sum is -0.200000000000 exactly if the result stays f64."
+case = "../../../showcase/c3-char-transformer/grow/probe_layer_norm_float.cml"
+args = ["${case}"]
+kind = "negative"
+expect_exit = 1
+expect_stdout_contains = ["is used as a value here, but it names an operator"]
+timeout_ms = 120000
+
+[[tests]]
+name = "grow.stage3_embed_ffn"
+desc = "Embedding lookup (`take`) plus a relu feed-forward, both behind residuals, no layer normalization. The reference gives 9.182049038495 at step 1 and 4.188139552332 at step 50; this program gives 9.182049038495 and 4.188139552311, so the sequences are pinned at six decimals (they agree to about 2e-11) and the run rises at no step."
+case = "../../../showcase/c3-char-transformer/grow/stage3_embed_ffn.cml"
+args = ["${case}"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["stage3 step=1 loss=9.182049", "stage3 step=10 loss=8.10387", "stage3 step=25 loss=6.45039", "stage3 step=50 loss=4.18813", "stage3 done steps=50 last=4.11033"]
+timeout_ms = 300000
+
+# The whole model, both layers: `layerNormInfer` no longer answers f32 for a `float[..]` input,
+# `layerNormGrad` writes the input's element type, and `baseline/grow.py --stage 4` writes the
+# reference the fifteen values below come from.
+[[tests]]
+name = "grow.stage4_full_model"
+desc = "Two post-layer-norm blocks -- embedding, attention and feed-forward each behind a residual, a final layer_norm -- for fifty Adam steps through `with_grad`, against `baseline/grow.py --stage 4 --exact`, whose twenty-five tensors are the same numbers in the same order. Fourteen of the fifteen pinned values are the reference's own to twelve decimals, and no step rises. The one not pinned to the digit is the first loss: it is zero, every normalised row sums to zero with beta still at zero, and the two write that zero with different signs (the reference sums to +0.0, the engine to -0.0), so only its prefix is pinned."
+case = "../../../showcase/c3-char-transformer/grow/stage4_full_model.cml"
+args = ["${case}"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["stage4 step=1 loss=", "stage4 step=2 loss=-0.015999913354", "stage4 step=3 loss=-0.031999843358", "stage4 step=4 loss=-0.047999790194", "stage4 step=5 loss=-0.063999750966", "stage4 step=6 loss=-0.079999722894", "stage4 step=7 loss=-0.095999703644", "stage4 step=8 loss=-0.111999691342", "stage4 step=9 loss=-0.127999684509", "stage4 step=10 loss=-0.143999681990", "stage4 step=11 loss=-0.159999682888", "stage4 step=12 loss=-0.175999686506", "stage4 step=13 loss=-0.191999692301", "stage4 step=14 loss=-0.207999699851", "stage4 step=15 loss=-0.223999708826", "stage4 step=16 loss=-0.239999718966", "stage4 step=17 loss=-0.255999730064", "stage4 step=18 loss=-0.271999741957", "stage4 step=19 loss=-0.287999754511", "stage4 step=20 loss=-0.303999767620", "stage4 step=25 loss=-0.383999834790", "stage4 step=30 loss=-0.463999906339", "stage4 step=40 loss=-0.624000056242", "stage4 step=50 loss=-0.784000203479", "stage4 done steps=50 last=-0.800000217888"]
+timeout_ms = 300000
+
+[[tests]]
+name = "grow.probe_f32_in_pullback"
+desc = "After the `layer_norm` inference fix, stage 2 compiles and stops in `attention.pb` with `matmul_grad_lhs: ('f32' and 'f64')`. This probe narrows which composition answers an f32 value: layer_norm alone, attention alone, or the product of a normalised value."
+case = "../../../showcase/c3-char-transformer/grow/probe_f32_in_pullback.cml"
+args = ["${case}"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["probe both value="]
+timeout_ms = 120000
+
+# The engine's gradient at the model's initial point against `baseline/grad_first_step.py`, whose
+# complex step answers to machine precision.  Eight of the ten tensors are identically zero here --
+# the loss is zero for every parameter but the last beta -- so the values that matter are `g2` and
+# `b2`, and the zeros are pinned too: a zero that quietly stopped being zero is the failure this
+# comparison is for.
+[[tests]]
+name = "grow.grad_first_step"
+desc = "One forward and one pullback of the stage-2 model at its start, ten tensors printed in order, against the same gradient by a complex step: 10/10 tensors, 32/32 elements, largest absolute difference 1.588e-16 and largest relative 2.019e-12, no shape disagreement. Eight tensors are identically zero (wq1, wk1, wv1, g1, b1, wq2, wk2, wv2); only g2 (+-7.866746175e-05) and b2 (2.0) carry a gradient."
+case = "../../../showcase/c3-char-transformer/grow/grad_first_step.cml"
+args = ["${case}"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["grad loss=0.000000000000", "grad wq1 [[0.0, 0.0], [0.0, 0.0]]", "grad wk1 [[0.0, 0.0], [0.0, 0.0]]", "grad wv1 [[0.0, 0.0], [0.0, 0.0]]", "grad g1 [0.0, 0.0]", "grad b1 [0.0, 0.0]", "grad wq2 [[0.0, 0.0], [0.0, 0.0]]", "grad wk2 [[0.0, 0.0], [0.0, 0.0]]", "grad wv2 [[0.0, 0.0], [0.0, 0.0]]", "grad g2 [7.866746175", "grad b2 [2.0, 2.0]"]
+timeout_ms = 120000
+
+[[tests]]
+name = "grow.grad_first_step_stage4"
+desc = "Stage 4's gradient at its start: twenty-five tensors, ninety-two elements, against baseline/grad_first_step.py --stage 4.  Two carry a gradient and agree to ten significant digits (gout [1.99997835..., bout [2.0, 2.0]); the other twenty-three are zero to rounding, at most 2.3e-16, and that is structural: the loss is sum(layer_norm(second, gout, bout)) with gout = [1, 1], so each row's normalised coordinates cancel in the sum and the loss does not move when second does.  The zero rows cannot be pinned to a digit -- they are each side's own rounding -- so what this case pins is that they are zero where they should be, and the element-by-element judgement is grow/baseline grad_first_step.py --stage 4 --engine, whose compare line reads the residues."
+case = "../../../showcase/c3-char-transformer/grow/grad_first_step_stage4.cml"
+args = ["${case}"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["grad loss=", "grad wq2 [[0.0, 0.0], [0.0, 0.0]]", "grad wk2 [[0.0, 0.0], [0.0, 0.0]]", "grad gout [1.99997835", "grad bout [2.0, 2.0]"]
+timeout_ms = 120000
+
+[[tests]]
+name = "grow.params_after_20_steps"
+desc = "Twenty Adam steps of the stage-2 model, then the ten tensors printed, against `baseline/grad_first_step.py --stage 2 --params 20`.  The first-step gradient matching says the pullback is right; twenty steps matching says the update, `adam`'s two averages and the next step's gradient are wired up too.  The pinned values are the reference's own to nine significant digits, and the element-by-element verdict is the comparison script's."
+case = "../../../showcase/c3-char-transformer/grow/params_after_20_steps.cml"
+args = ["${case}", "--arg", "count=20"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["param steps=20 loss=", "param wq1 [[0.964079930726", "param g1 [1.029526109", "param b1 [0.02839496349", "param g2 [0.95796927601", "param b2 [-0.03999999979"]
+timeout_ms = 300000
+
+[[tests]]
+name = "grow.params_after_200_steps"
+desc = "Two hundred Adam steps, and the loss still falling: -3.498964275 before the last update and -3.515723011859 after it, against `grow.py --exact`.  The three claims are separate -- a matching first-step gradient says the pullback is right, twenty matching steps say the update is right, and this one says the model is actually training: all eight tensors that had an identically zero gradient at step 1 are non-zero by step 200 (b1 0 -> 0.0767, wq2 0.75 -> 0.8262, g1 1.0 -> 1.0777), because gout leaving [1, 1] reconnects the path the first step's cancellation cut."
+case = "../../../showcase/c3-char-transformer/grow/params_after_20_steps.cml"
+args = ["${case}", "--arg", "count=200"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["param steps=200 loss=-3.515723011861", "param wq1 [[0.9147992848", "param b1 [0.07669344319", "param wq2 [[0.8261623793", "param g2 [0.52088289142", "param b2 [-0.39999999800"]
+timeout_ms = 300000
+
+
+[[tests]]
+name = "grow.stage5_lm_head"
+desc = "Stage 4 plus a head and a cross entropy against the next token: twenty-six tensors, two hundred Adam steps.  This is the model the author asked for with a target attached -- the old loss is kept untouched in grow.stage4_full_model, which still proves what it proved.  The twenty step lines are pinned at twelve decimals from `grow.py --stage 5`, which is the evidence that the new head runs through the same gradient path as everything else; what the model then does with that gradient is a separate question, reported in WALLS.cn.md."
+case = "../../../showcase/c3-char-transformer/grow/stage5_lm_head.cml"
+args = ["${case}"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["lm step=1 loss=4.952361566340", "lm step=2 loss=4.878116365291", "lm step=3 loss=4.804657591241", "lm step=4 loss=4.732000640920", "lm step=5 loss=4.660164476818", "lm step=6 loss=4.589168109785", "lm step=7 loss=4.519030195674", "lm step=8 loss=4.449768895672", "lm step=9 loss=4.381401804344", "lm step=10 loss=4.313945903088", "lm step=11 loss=4.247417525628", "lm step=12 loss=4.181832330282", "lm step=13 loss=4.117205276443", "lm step=14 loss=4.053550603865", "lm step=15 loss=3.990881813803", "lm step=16 loss=3.929211651258", "lm step=17 loss=3.868552087752", "lm step=18 loss=3.808914304052", "lm step=19 loss=3.750308672379", "lm step=20 loss=3.692744737646", "lm done steps=200 last=1.444728431190", "lm before [[", "lm prob before [[0.9902884"]
+timeout_ms = 300000
+
+
+
+[[tests]]
+name = "grow.stage6_pos_emb"
+desc = "Stage 5 with a learned position embedding added to the rows before the head -- the smallest thing that gives the head the one variable it lacked.  Stage 5 stalled at the abstention floor 2 log 2 = 1.386294 because both positions arrived with nearly the same row; with the position added the loss goes to 0.949558421529 and both argmax are right, which is the claim this case exists to make.  The twenty step lines are pinned at twelve decimals from `grow.py --stage 6`."
+case = "../../../showcase/c3-char-transformer/grow/stage6_pos_emb.cml"
+args = ["${case}", "--arg", "count=200"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["pos step=1 loss=4.952361566340", "pos step=2 loss=4.873064008395", "pos step=3 loss=4.794549291334", "pos step=4 loss=4.716833197884", "pos step=5 loss=4.639935217249", "pos step=6 loss=4.563875041623", "pos step=7 loss=4.488672172026", "pos step=8 loss=4.414345786361", "pos step=9 loss=4.340914674089", "pos step=10 loss=4.268397195245", "pos step=11 loss=4.196811250402", "pos step=12 loss=4.126174256205", "pos step=13 loss=4.056503123890", "pos step=14 loss=3.987814239262", "pos step=15 loss=3.920123443125", "pos step=16 loss=3.853446011376", "pos step=17 loss=3.787796634069", "pos step=18 loss=3.723189392866", "pos step=19 loss=3.659637736329", "pos step=20 loss=3.597154452547", "pos done steps=200 last=0.9495584215", "pos before [[", "pos after [[-0.2471", "pos prob after [[0.37886"]
+timeout_ms = 300000
+
+
+
+[[tests]]
+name = "grow.stage7_pos_attn"
+desc = "Stage 6 plus one head of self attention before the head -- Q, K, S, A, O with no mask, built from the tensors that were already there (matmul, transpose, softmax), no new operator.  It is worse than stage 6 and this case records that rather than hiding it: the loss ends at 1.387116155841, sitting on the abstention floor 1.386294 that stage 6 had crossed to reach 0.949558422, and both argmax are wrong again.  Unmasked attention over two positions averages them, and what made stage 6 work was telling them apart.  The twenty step lines are pinned at twelve decimals from `grow.py --stage 7`, which is the evidence that the attention block runs through the same pullback as everything else."
+case = "../../../showcase/c3-char-transformer/grow/stage7_pos_attn.cml"
+args = ["${case}", "--arg", "count=200"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["attn step=1 loss=2.300166876862", "attn step=2 loss=2.246755973928", "attn step=3 loss=2.195492619329", "attn step=4 loss=2.146411861759", "attn step=5 loss=2.099537202740", "attn step=6 loss=2.054878411717", "attn step=7 loss=2.012431362224", "attn step=8 loss=1.972178335344", "attn step=9 loss=1.934088673689", "attn step=10 loss=1.898119733712", "attn step=11 loss=1.864218085669", "attn step=12 loss=1.832320904370", "attn step=13 loss=1.802357488724", "attn step=14 loss=1.774250846210", "attn step=15 loss=1.747919280479", "attn step=16 loss=1.723277925919", "attn step=17 loss=1.700240181786", "attn step=18 loss=1.678719009195", "attn step=19 loss=1.658628065951", "attn step=20 loss=1.639882665617", "attn done steps=200 last=1.387116155841", "attn before [[", "attn after [[0.0020", "attn prob after [[0.50103"]
+timeout_ms = 300000
+
+
+[[tests]]
+name = "grow.stage8_causal_attn"
+desc = "Stage 7 with the causal mask added and nothing else changed.  The reading that matters first is the attention weights before any training: row 0 is [1.0, 0.0], so position 0 sees only itself and the mask really is in force; row 1 is [0.578, 0.422], so position 1 still mixes.  Then the loss: 2.600174800352 to 1.281279765502, which crosses the abstention floor 1.386294 and puts both argmax back at [1, 0], but does not beat stage s six 0.949558422 -- the mask recovers the position signal and adds nothing on top of it.  The twenty step lines are pinned at twelve decimals from `grow.py --stage 8`."
+case = "../../../showcase/c3-char-transformer/grow/stage8_causal_attn.cml"
+args = ["${case}", "--arg", "count=200"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["causal step=1 loss=2.600174800352", "causal step=2 loss=2.551554899392", "causal step=3 loss=2.504333965784", "causal step=4 loss=2.458522726524", "causal step=5 loss=2.414130273993", "causal step=6 loss=2.371162218715", "causal step=7 loss=2.329620445913", "causal step=8 loss=2.289503047085", "causal step=9 loss=2.250804325969", "causal step=10 loss=2.213514856189", "causal step=11 loss=2.177621581600", "causal step=12 loss=2.143107953088", "causal step=13 loss=2.109954095338", "causal step=14 loss=2.078136995710", "causal step=15 loss=2.047630705399", "causal step=16 loss=2.018406541683", "causal step=17 loss=1.990433282081", "causal step=18 loss=1.963677353024", "causal step=19 loss=1.938103043354", "causal step=20 loss=1.913672804968", "causal done steps=200 last=1.281279765502", "causal A before [[1.0, 0.0]", "causal A after [[1.0, 0.0]"]
+timeout_ms = 300000

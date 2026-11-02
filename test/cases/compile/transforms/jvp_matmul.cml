@@ -1,0 +1,33 @@
+// The forward rule of `matmul`: `d(a · b) = da · b + a · db`. Every number below can be done by hand.
+//
+//   A = [[1, 2], [3, 4]]      x = (1, 2)      dx = (1, 0) then (0, 1)
+//
+//   A · x  = (1·1 + 2·2, 3·1 + 4·2) = (5, 11)      -> value 5
+//   A · dx = (1, 3) with dx = (1, 0)               -> tangent 1
+//   A · dx = (2, 4) with dx = (0, 1)               -> tangent 2
+//
+// Both readings move the second operand, whose rule term is `a · db`; the first operand here is the
+// constant `A`, so its term is zero. The reading that would separate `da · b` cannot be taken
+// through `jvp` yet: `matmul(param, constant)`, `matmul(w, w)` and `matmul(computed, constant)` are
+// each refused with `transforms: jvp has no forward transform for this function` at the `jvp` call
+// and no `file:line` of the operator -- a refusal the lift cannot place. The rule is written with
+// both terms anyway, so that the day the lift carries an array operand's tangent the rule is right;
+// this case locks the half that can be read today.
+import { matmul } from tensor
+import rulesets.jvp
+import { jvp } from transforms
+
+func quadratic(x: float[..]): float {
+    return matmul([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], x)[0]
+}
+
+func main(): int sync {
+    let x = [1.0, 2.0] as float[]
+    let e0 = [1.0, 0.0] as float[]
+    let e1 = [0.0, 1.0] as float[]
+    let (v0, d0) = jvp(quadratic)(x, e0)
+    let (v1, d1) = jvp(quadratic)(x, e1)
+    `jvp matmul dx=(1,0) value=${v0:.4f} tangent=${d0:.4f}`->println
+    `jvp matmul dx=(0,1) value=${v1:.4f} tangent=${d1:.4f}`->println
+    return 0
+}
