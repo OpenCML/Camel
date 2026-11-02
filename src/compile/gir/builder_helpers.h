@@ -712,6 +712,14 @@ inline node_handle_t releaseChainPlaceOfValue(node_handle_t value, node_handle_t
     }
     runtime::GraphDraft *draft = nodeDraftOf(value);
     const auto preds           = syncInputsOf(value);
+    if (preds.empty()) {
+        // Nothing stands behind the value in this chain at all, so the value is where the chain
+        // would start -- and a chain does not start at a value (docs/design/effects/edges.cn.md
+        // 1, 4.6): a link written from it orders nothing and the seal refuses it. The value is
+        // transparent here too; the statement after it starts the chain, which is what a block
+        // whose first statement computes a value does.
+        return nullptr;
+    }
     if (preds.size() != 1 || !draft->syncUsersOf(nodeIdOf(value)).empty()) {
         return value;
     }
@@ -722,14 +730,14 @@ inline node_handle_t releaseChainPlaceOfValue(node_handle_t value, node_handle_t
         // A chain place in another block is not this link's to hand on.
         return value;
     }
-    if (!nodeIsChainStatementNode(node_handle_t(draft, predId))) {
+    if (!nodeIsChainStatementNode(draft->ref(predId))) {
         // The place is handed to a statement or to nobody: a value with no statement behind it is
         // transparent to the chain -- it writes no sync edge of its own, and the next statement
         // links from wherever the chain stood before it.
         return nullptr;
     }
     draft->setSyncInputs(nodeIdOf(value), {});
-    return node_handle_t(draft, predId);
+    return draft->ref(predId);
 }
 
 /// The chain link itself: both ends marked as statements of one block, which is what the seal check
