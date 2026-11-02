@@ -93,19 +93,21 @@ KeepShapeTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         // Whether the print is kept by a value of it being read -- the question
         // `effectStandingOf` answers (camel/runtime/effect_liveness.h). A control edge is not a
         // data use: `waited_on` says whether an order edge keeps the print running anyway, which is
-        // why running the program alone cannot tell the two apart.
+        // why running the program alone cannot tell the two apart. The two wait readings are printed
+        // and are not part of the standing: they are structural facts, which is why the header no
+        // longer carries them as fields of the answer.
         EffectLivenessFacts facts;
         facts.hasDataUser =
             !draft.normUsersOf(print).empty() || !draft.withUsersOf(print).empty();
         facts.isSyncStatement =
             !draft.syncInputsOf(print).empty() || !draft.syncUsersOf(print).empty();
-        facts.hasWaitEdge = !draft.ctrlInputsOf(print).empty();
-        facts.isWaitedOn  = !draft.ctrlUsersOf(print).empty();
+        const bool hasWaitEdge = !draft.ctrlInputsOf(print).empty();
+        const bool isWaitedOn  = !draft.ctrlUsersOf(print).empty();
         os << "KEEPSHAPE keep=" << (keep ? 1 : 0) << " uri=" << (uri.empty() ? "-" : uri)
            << " data_user=" << (facts.hasDataUser ? 1 : 0)
            << " sync_statement=" << (facts.isSyncStatement ? 1 : 0)
-           << " wait_edge=" << (facts.hasWaitEdge ? 1 : 0)
-           << " waited_on=" << (facts.isWaitedOn ? 1 : 0) << " standing="
+           << " wait_edge=" << (hasWaitEdge ? 1 : 0)
+           << " waited_on=" << (isWaitedOn ? 1 : 0) << " standing="
            << (keepsEffectAlive(effectStandingOf(facts)) ? "alive" : "none") << "\n";
         return session.commit();
     }
