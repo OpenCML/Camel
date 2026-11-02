@@ -101,3 +101,17 @@ A red also changes hands when the bookkeeping changes: the milestone layer s las
 nor its plan file (`git log 4fa772787..d526043da -- test/plans/feat/modules/rules.plan.toml` is
 empty, and the plan runs 173/173 on `2227c21c1`), because `a01fcdfdc` changed how `known_fail` is
 read. **A count belongs to a tip and to the rules that counted it.**
+## `got null` is not a timeout
+
+The runner writes `expected exit 0, got null` when the process died on a signal and no exit code
+came back. Two marked cases of `transforms.plan.toml` were read as hangs for a day; run bare with a
+timer they take **zero seconds** and return **139**, which is SIGSEGV. **Run it bare once before
+explaining it:** a `got null` has at least three causes - killed at the timeout, killed by a signal,
+and whatever nobody has seen yet.
+
+## Before asking whether a failure is new, ask whether someone already fixed it elsewhere
+
+`git log --oneline origin/develop..origin/<candidate lane> --grep=<keyword>`. One grep is cheaper
+than an hour of probes: two cases that crashed in `jvp_add` and `jvp_mul` were already repaired on
+`origin/lane-lit2` (`19f0b05e8`, `0aed45eb6`) and the fix had not been merged, so the failure read
+like a new defect in the tree under our hands.
