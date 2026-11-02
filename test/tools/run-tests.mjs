@@ -2146,6 +2146,20 @@ export function testTier(plan, test) {
  * `tier = "debug"`. `all` therefore leaves those tests out: it runs on the Release binary, where
  * the debug layer's abort case would not abort.
  */
+// The layers a run of `tier` claims to cover: a plan of one of them that starts nothing in this run
+// is a failure, and a plan of another layer is expected to be empty here. `compileOnly` covers the
+// non-fast entries wherever they live, so no plan is "expected empty" in that mode.
+function coveredTiers(tier, compileOnly = false) {
+    if (compileOnly) return new Set(['fast', 'slow', 'milestone', 'debug'])
+    if (tier === 'all') return new Set(['fast', 'slow', 'milestone'])
+    if (tier === 'debug') return new Set(['debug'])
+    return new Set([tier])
+}
+
+// A plan path as a reader names it: relative to the repository root, forward slashes.
+function relPath(abs) {
+    return path.relative(path.resolve(TEST_ROOT, '..'), abs).split(path.sep).join('/')
+}
 function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
     const order = []
     for (const plan of plans) {
@@ -2195,6 +2209,16 @@ function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
     }
     const kept = new Set(selected)
     const selectedPlans = []
+    // A plan the run reaches but starts nothing in is not a pass: nothing about it was read. Two
+    // shapes must not be confused, and the author's 01:30 ruling asks for the difference to be a
+    // rule rather than a habit: a plan whose own tier is another layer is *expected* to contribute
+    // nothing here (the milestone layer under a fast run), and is counted so the zero is explained
+    // instead of silent; a plan whose own tier is the layer this run covers and starts nothing is a
+    // failure, because a plan of this layer that gives this layer no test is in the run by name
+    // only. A plan that declares no test at all is a failure in every layer.
+    const covered = coveredTiers(tier, compileOnly)
+    const emptyByLayer = []
+    const unproven = []
     let cursor = 0
     for (const plan of plans) {
         const tests = []
@@ -2202,9 +2226,29 @@ function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
             if (kept.has(cursor)) tests.push(test)
             cursor++
         }
-        if (tests.length > 0) selectedPlans.push({ ...plan, tests })
+        if (tests.length > 0) {
+            selectedPlans.push({ ...plan, tests })
+            continue
+        }
+        const key = relPath(plan.__planPath)
+        const declared = plan.tests.length
+        const own = plan.__planError ? 'failing' : plan.tier ?? 'fast'
+        if (plan.__planError) {
+            // A schema error already fails this plan; it is counted here as read, not as unproven.
+            emptyByLayer.push(plan.__planPath)
+        } else if (declared === 0) {
+            unproven.push(`${key}: the plan declares no test at all, so this run proves nothing about it`)
+        } else if (covered.has(own)) {
+            unproven.push(
+                `${key}: its own tier is '${own}', the layer this run covers, and it declares ` +
+                    `${declared} test(s) none of which this run selects -- a plan that starts no test ` +
+                    'proves nothing',
+            )
+        } else {
+            emptyByLayer.push(plan.__planPath)
+        }
     }
-    return selectedPlans
+    return { plans: selectedPlans, emptyByLayer, unproven }
 }
 
 function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false) {
@@ -2951,7 +2995,21 @@ async function main() {
             return false
         }
     })
-    const plans = loadPlans(options.targets, options.tier, options.layeredPlans, options.compileOnly === true)
+    const selected = loadPlans(options.targets, options.tier, options.layeredPlans, options.compileOnly === true)
+    const plans = selected.plans
+    // A plan this run reaches and starts nothing in is not a silent zero. The ones whose own tier
+    // is another layer are counted and named on one line -- the milestone layer under a fast run is
+    // the usual case -- and the ones whose own tier is this layer are failures: the run would print
+    // a [SUMMARY] that says nothing about them.
+    if (selected.unproven.length > 0) {
+        for (const problem of selected.unproven) console.error(`${COLORS.red}[FAIL]${COLORS.reset} ${problem}`)
+        console.error(
+            `${COLORS.red}[FAIL]${COLORS.reset} ${selected.unproven.length} plan file(s) started no test ` +
+                'in this run and their own tier is the layer it covers; the run proves nothing about them',
+        )
+        process.exitCode = 1
+        return 1
+    }
     // The pid keeps two runs started in the same second (the self-test does this) out of one
     // directory, whose logs and summary.json would otherwise overwrite each other.
     const logDir = path.join(LOG_ROOT, `${timestamp()}_${process.pid}`)
@@ -2979,6 +3037,25 @@ async function main() {
     console.log(
         `${COLORS.cyan}[INFO]${COLORS.reset} tier: ${options.tier}, tests: ${testCount}, jobs: ${options.jobs}`
     )
+    if (testCount === 0 && options.targets.length > 0) {
+        // A run that starts nothing is not a pass: every claim it could make is about tests it did
+        // not run. (No target at all is `scripts/test.js --changed` finding nothing to run, which is
+        // a legitimate no-op and says so, not a green run.)
+        console.error(
+            `${COLORS.red}[FAIL]${COLORS.reset} this run selected no test at all: ` +
+                `${plans.length} plan file(s) were reached and none of their entries is in this layer`,
+        )
+        process.exitCode = 1
+        return 1
+    }
+    if (selected.emptyByLayer.length > 0) {
+        // Named, so that a zero is a reading and not an absence: these plan files were reached and
+        // started nothing because their own tier says they belong to another layer.
+        console.log(
+            `${COLORS.cyan}[INFO]${COLORS.reset} plans of another layer, started nothing here: ` +
+                `${selected.emptyByLayer.length} (their own tier selects them: --tier slow, --tier milestone, --tier debug)`
+        )
+    }
     if (!CAN_READ_CHILD_CPU) {
         // Said once, and only where it changes what the run means: on this host no test's timeout
         // margin is judged, because the kernel offers no CPU figure and the wall clock is not a
