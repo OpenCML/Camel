@@ -85,4 +85,48 @@ enum class ReadStatus : std::uint8_t {
                           ///< something else appended to
 };
 
+/// The fixed part of the file. `counts` says how many entries each table holds, so a reader can
+/// refuse a file whose tables run past its end before it allocates anything for them.
+struct Layout {
+    std::array<char, 8> magic = kMagic;
+    std::uint32_t version    = kVersion;
+    std::uint32_t types      = 0;
+    std::uint32_t operators  = 0;
+    std::uint32_t nodes      = 0;
+    std::uint32_t strings    = 0; ///< bytes of the name pool the records point into
+};
+
+/// One node of the tree, in pre-order. `parent` is a node number or `kNoParent` for the root;
+/// `name` is an offset into the name pool, `nameLength` its length; `children` is the count the
+/// node's record says it has, and the children follow it in pre-order.
+struct NodeRecord {
+    static constexpr std::uint32_t kNoParent = 0xFFFF'FFFFu;
+    std::uint32_t parent     = kNoParent;
+    std::uint32_t name       = 0;
+    std::uint32_t nameLength = 0;
+    std::uint16_t kind       = 0; ///< the `NodeKind` the writer knew when it wrote the file
+    std::uint16_t children   = 0;
+};
+
+/// One type of the type table. `identity` is the canonical identity of design principles 5.1 as
+/// a string, never a spelling of the type: two spellings of one type and two types of one
+/// spelling both exist, and a file keyed by spelling answers the wrong entry for one of them.
+struct TypeRecord {
+    std::uint32_t identity       = 0; ///< offset into the name pool
+    std::uint32_t identityLength = 0;
+    std::uint16_t flags          = 0; ///< the type's own recorded properties, as the writer sees
+                                      ///< them (nullable, fallible and the rest of its shape)
+};
+
+/// One entry of the operator table. `oper` is the identifier the operator registry resolves, not
+/// the name a node prints: two operators can share a spelling, and a file keyed by spelling
+/// answers one of them for the other, silently.
+struct OperatorRecord {
+    std::uint32_t oper = 0;
+};
+
+static_assert(sizeof(NodeRecord) == 16, "the node record is written as sixteen bytes");
+static_assert(sizeof(TypeRecord) == 12, "the type record is written as twelve bytes (two of them padding)");
+static_assert(sizeof(OperatorRecord) == 4, "the operator record is written as four bytes");
+
 } // namespace camel::compile::gct::serialize
