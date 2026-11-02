@@ -2,6 +2,8 @@
 
 **2026-11-02，`lane-ledger2`，树 `18ddc4eb3` + 未提交的一处修（`include/camel/core/rtdata/tuple.h`）。**
 
+> **作者 2026-11-02 05:10 裁定：`split` 不再交出残差元组（改为交出 `(y, lin)`，残差作为 `lin` 的 `with` 参数）⇒ 本页要解决的"同一个成员数被说两遍"在这条路上自然消失；若仍有实例，那时的类型就是真类型。** 下面的 A/B/C 与读数保留为这条问题被裁定前的现场，不再作为等回答的问句。
+
 ## 问句
 
 `split` 的余量元组在"没有图在手"时（operator resolver 只看到类型，`modules/transforms/split.cpp:841-843`）被写成
@@ -41,8 +43,20 @@
 
 ## 默认（按默认先做，不等回复）
 
-**默认 A**：**"不知道"和"零个"是两件事**，类型必须能说"我不知道元数"，否则每一次"没有图在手"都在对收集器撒谎。
-在 A 落地之前，**B 作为权宜留在树上**（它至少把静默改成点名，并且不再越界读），但**不许把 B 当成正解**。
+> **作者 2026-11-02 05:30 已裁：A 不做（为一个库在核心类型里加变体，违反 2.3）；B 是绕过且不安全（漏扫的成员里若有引用，回收后就是悬垂指针），只许作为过渡留几个小时，不许当正解、不许扩大。**
+
+## B 的兜底代码清单（等 05:10 落地即删）
+
+**唯一标记是 `B-FALLBACK`**：`git grep -n 'B-FALLBACK' -- include` 就是这张清单的全部。
+
+| `include/camel/core/rtdata/tuple.h` | 是什么 | 删时怎么办 |
+| --- | --- | --- |
+| `391-397` 的 `B-FALLBACK` 注释块 | 说明为什么按类型上界扫 | 与下面两行一起删 |
+| `398` `const size_t traced = members < tupleType->size() ? members : tupleType->size();` | 上界本身 | 删 |
+| `400` `for (size_t i = 0; i < traced; ++i)` | 用上界 | 改回 `i < members` |
+
+**保留（不是兜底，是守卫，Release 也开）**：`387-389` 的 `if (members > tupleType->size())` 与 `37` 的
+`reportMembersBeyondType`；以及"元组值被非元组类型描述"那条 `64` `reportTupleHasNoTupleType`。
 
 ## 附：同一条判据的第二个产生者（不是本页的问句）
 

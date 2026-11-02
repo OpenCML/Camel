@@ -140,6 +140,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 10000
 
 [[tests]]
+name = "gc.tuple_trace_guard"
+desc = "The collector's trace compares a tuple value's member count with its type's: two against two runs and the program goes on, three against two stops the process with both counts in the message. A guard that reports a disagreement and then reads the type's array anyway is worse than no guard, so the case also asserts that the mismatch did not return."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/check-tuple-trace.mjs"
+args = ["${case}", "test/cases/feat/mm/gc/gc_fib10.cml"]
+expect_exit = 0
+expect_stdout_contains = ["agree: two members, a type of two -- exit 0", "mismatch: three members, a type of two --", "the guard is silent on agreement and stops on a disagreement"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
 name = "gc.macro_constants.poison.nvm"
 desc = "Object constants produced by std::macro survive the moving collector (poison, nvm)."
 kind = "behavior"
