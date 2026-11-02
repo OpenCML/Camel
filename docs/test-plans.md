@@ -646,10 +646,24 @@ everywhere is written once:
   below (`exit_code`, `stdout_normalized`, `stderr_normalized`, `output_normalized`) and
   `diagnostics` (name, code, line and column of every diagnostic, in the order printed).
 - `known_fail`
-  Back ends of `backends` on which the test is known to fail. Such a test is reported as
+  How a test that is expected to fail is marked. **One spelling per shape of the entry**, and the
+  runner refuses the other at load, by name:
+  - with `backends = [...]`, a list of back ends of that list, `known_fail = ["nvm"]`; a name that
+    is not in `backends` is refused;
+  - without a `backends` list the entry is one run, and the mark is `known_fail = true`. A list
+    here is refused (`names back ends (...), but the test has no backends list, so no back end of
+    that name runs here: write known_fail = true`), because it used to be read by nobody: the
+    expansion returned the entry before the mark was read, so the case failed, the run went red and
+    the mark was never mentioned (fixed 2026-11-02, `test/tools/run-tests.mjs`).
+
+  A marked test is reported as
   `[XFAIL]`, counted apart in the summary (`known failures: N`) and does not fail the run. When
   it passes it fails the run, with the request to remove the mark: a mark cannot go stale
-  unnoticed.
+  unnoticed. `known failures: N` can rise without anything regressing -- a mark only applies to a
+  run that happens, so a case that skipped before and starts now turns its mark into an `[XFAIL]`
+  for the first time (2026-11-02: compiling `modules/transforms` moved `skip 43 -> 10` and
+  `known failures 3 -> 6` in the same run). Read the two numbers together before calling it a
+  regression.
 - `known_fail_note`
   Printed with an `[XFAIL]`: why, and what will fix it.
 
