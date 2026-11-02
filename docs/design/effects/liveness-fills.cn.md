@@ -138,4 +138,5 @@ A/B 读数（都跑 `test/plans/feat/compile/branch_exit.plan.toml`，10 例）�
 - **4 处不再借壳**：`gates.cpp`、`graph.cpp`、`writings.cpp`、`draft_inline.cpp` 各写自己的 `bool`（分别叫 `carriesWait`/`waitOnAChain`、`hasWaitEdge`、`memberCarriesWait`、`callCarriesWait`/`callOnAChain`），注释写明这是**结构问题**、不是活性答案——带等待的 GATE 在答案里是 `HasNoCredential`，那个答案回答不了它。
 - **1 处改走单点**：`FusionGroupView::isPrivateTo` 现在调 `effectStandingOf(...) == HasNoCredential`，再与它自己那一条（`isWaitedOn`，不吃凭据，故不在答案里）相与。等价性：`isWriterWithLaterRead` 恒 false，所以 `HasNoCredential ∧ ¬isWaitedOn` 与改前的 `¬data ∧ ¬waited ∧ ¬sync` 同。
 - **字段集**：5 → 3。`isWriterWithLaterRead` 留着（赋值 0、读点 1），理由见 §2 第 44 行：它是 3.1 第三条凭据在全树唯一的表述。
+- **层账**：本笔新增 3 条用例（`runner.exit_reporting_names_the_signal`、`tools.find_fix_asks_who_already_fixed_it`、`runner.provenance_line_names_the_artifact`），故全量 `8450 = 8447 + 3`；其余各自层账见 `[tier]` 行。
 - **读数**：全量 fast 层 `total: 8450, pass: 8438, fail: 0, skip: 10, known failures: 2`，`RUN_EXIT=0`；`effects_kept` 79/79（`KEEPSHAPE` 那四行列一字未改）。
