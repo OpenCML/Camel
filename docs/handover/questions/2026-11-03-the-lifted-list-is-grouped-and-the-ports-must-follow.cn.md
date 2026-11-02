@@ -27,3 +27,20 @@
 ## 为什么上表那两步要一起改
 
 只改签名不改图，`split` 切错位置、`grad_of_a_division` 变红 —— 这就是上表第一行那一条新增红。一次改到图端口，两个读数会同时动；分两次提交会让中间那次落在"声明对了、实现还按旧序读"的状态上，正是作者点名的那类不一致。
+
+## 端口也按 grouped 排过一次了，读数如下（已回退）
+
+`jvp.cpp` 的端口改成值 `0..n-1`、切向 `n..2n-1`，空切向那一位建一个 `void` 端口并 `appendNormPort`；`split.cpp` 的两个读法按中点两分。构建通过（`jvp.cpp`、`split.cpp` 各 2.6 s），读数：
+
+| 量的是 | 读数 |
+| --- | --- |
+| 全量 `[SUMMARY]` | 8542 / **8493 / 29** / 10 / 10 —— 比 15 条多 **14 条**（停手上限是 5） |
+| 新增红 | `vjp_arities.*`（4 档）、`vjp_api.analytic_gradient.*`（4 档）、`split_two_params.nvm`、`residuals_in_the_closure.nvm`、`remat.split.*`（2 档）、`grad_of_a_division.nvm`、`docs.links.questions_index`、`registry.docs_complete` |
+| `vjp(f)([1.0,2.0],[3],[4])` | 仍报，被调者为 `(float[..], int[..], void) => (float, (int[..], float[..], void) => float pure) pure` |
+
+两件事从这组数里读得出来：
+
+1. **`vjp_arities` 全红说明 `split` 与 `jvp` 的排布不能分两次对齐**：值端口一挪，`lin` 的形参就跟着挪，而 `lin` 的类型是 `split` 从一个还按旧序建的反半程里读出来的 —— 半程两边必须同一笔改。
+2. **`void` 端口能建、能 `appendNormPort`，但值进不去**：被调者里那个 `void` 就是证据 —— 参数表里有一格没有任何值可传，于是 `vjp` 的 `(..xs)` 拿到的那一格是空的。所以 `()` 占位在**类型层**成立，在**端口层**还需要"这一格传什么"的答案（一个 `void` 常量？一个被跳过的形参？），这正是 `transposeSignature` 那一笔要一起定的事。
+
+因此这一笔按停手规则回退，代码停在 `799bd565f`；上表是下一步的起点，不是成品。
