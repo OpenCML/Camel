@@ -72,6 +72,37 @@ bool shapesAreFixed(const camel::core::type::Type *type) {
     return true;
 }
 
+bool nodeMayFault(
+    GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
+    const camel::core::type::Type *castSource, bool fixedShapes) {
+    switch (kind) {
+    case GCNodeKind::Data:
+    case GCNodeKind::Port:
+    case GCNodeKind::Copy:
+    case GCNodeKind::Fill:
+    case GCNodeKind::Accs: // reads a field of a value whose type has it: nothing to fail
+    case GCNodeKind::Brch:
+    case GCNodeKind::Join:
+        return false;
+    case GCNodeKind::Cast:
+        return castMayFault(castTarget, castSource);
+    case GCNodeKind::Oper: {
+        const std::optional<camel::core::OperatorTraits> traits =
+            camel::core::OperatorTable::instance().find(oper);
+        if (!traits.has_value()) {
+            return true; // nobody declared it: not known never to fault
+        }
+        // An elementwise operator fails only when its operands' shapes do not broadcast: asked
+        // with every shape the type states in full, it cannot (nodeIsFreelySchedulable).
+        return traits->mayFault && !(traits->elementwise && fixedShapes);
+    }
+    default:
+        // A call, a function, a gate, a loop: what it runs is not in this table, and nothing
+        // says it cannot fault.
+        return true;
+    }
+}
+
 bool nodeIsFreelySchedulable(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
     const camel::core::type::Type *castSource, bool fixedShapes) {
@@ -85,14 +116,14 @@ bool nodeIsFreelySchedulable(
     case GCNodeKind::Join:
         return true;
     case GCNodeKind::Cast:
-        return !castMayFault(castTarget, castSource);
+        return !nodeMayFault(kind, camel::core::kNoOper, castTarget, castSource, fixedShapes);
     case GCNodeKind::Oper: {
         const auto &table = camel::core::OperatorTable::instance();
         const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
         if (!table.mayBeRecomputed(oper) || !traits.has_value()) {
             return false;
         }
-        return !traits->mayFault || (traits->elementwise && fixedShapes);
+        return !nodeMayFault(kind, oper, nullptr, nullptr, fixedShapes);
     }
     default:
         // A call, a function, a gate, a loop: an anchor that may be an effect, and nothing
@@ -121,6 +152,30 @@ bool nodeIsFreelySchedulable(const GCGraph &graph, gc_node_ref_t ref) {
     }
     default:
         return nodeIsFreelySchedulable(node->kind, camel::core::kNoOper);
+    }
+}
+
+bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref) {
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr) {
+        return true;
+    }
+    switch (node->kind) {
+    case GCNodeKind::Oper: {
+        const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
+        return body == nullptr || nodeMayFault(node->kind, body->oper);
+    }
+    case GCNodeKind::Cast: {
+        const auto inputs = graph.normInputsOf(ref);
+        const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
+        return nodeMayFault(
+            node->kind,
+            camel::core::kNoOper,
+            node->dataType(),
+            source != nullptr ? source->dataType() : nullptr);
+    }
+    default:
+        return nodeMayFault(node->kind, camel::core::kNoOper);
     }
 }
 
@@ -1267,6 +1322,41 @@ bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byS
     }
     default:
         return nodeIsFreelySchedulable(header->kind, camel::core::kNoOper);
+    }
+}
+
+bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr || !draft.alive(id)) {
+        return true;
+    }
+    switch (header->kind) {
+    case GCNodeKind::Oper: {
+        const std::span<const std::byte> payload = draft.payloadOf(id);
+        bool fixed = byShape && shapesAreFixed(header->dataType);
+        for (gc_node_ref_t input : draft.normInputsOf(id)) {
+            const DraftNodeHeader *in = draft.header(input);
+            fixed = fixed && in != nullptr && shapesAreFixed(in->dataType);
+        }
+        return payload.size() < sizeof(GCOperBody) ||
+               nodeMayFault(
+                   header->kind,
+                   reinterpret_cast<const GCOperBody *>(payload.data())->oper,
+                   nullptr,
+                   nullptr,
+                   fixed);
+    }
+    case GCNodeKind::Cast: {
+        const auto inputs = draft.normInputsOf(id);
+        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
+        return nodeMayFault(
+            header->kind,
+            camel::core::kNoOper,
+            header->dataType,
+            source != nullptr ? source->dataType : nullptr);
+    }
+    default:
+        return nodeMayFault(header->kind, camel::core::kNoOper);
     }
 }
 

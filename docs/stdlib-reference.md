@@ -5315,6 +5315,38 @@ Whether the node is an operation whose operator is declared pure.
 - Example (a fragment, not compiled): `is_pure(n)`
 - Why it is not compiled: n is a node of the surrounding pass
 
+#### `may_be_recomputed`
+
+```camel
+may_be_recomputed: (n: Node) => bool
+```
+
+Whether a pass may compute the node's value itself and treat it as a value: its operator is
+pure *and* foldable, so folding it, merging it with an identical call or dropping it when
+nothing reads it cannot change the program. A pure operator that must run where the program
+writes it (a rule's value, a `fact`) is not one, and neither is any node that is no operation.
+This is the question the C++ fold, cse and dce ask (`OperatorTable::mayBeRecomputed`); whether
+the call may also be *moved* or dropped asks `may_fault` as well.
+
+- Example (a fragment, not compiled): `may_be_recomputed(n)`
+- Why it is not compiled: n is a node of the surrounding pass
+
+#### `may_fault`
+
+```camel
+may_fault: (n: Node) => bool
+```
+
+Whether running the node can raise a fault where the program writes it (a division by zero, an
+index out of range, a conversion whose value does not fit). It is the operator table's own fact
+(`OperatorTraits::mayFault`, the one the C++ sweep reads) and the conversion's (`castMayFault`);
+a call, a loop or a gate nobody declared answers true, and an elementwise operator whose
+operands' shapes the types state in full answers false. A node that may fault is not a value a
+pass may drop, move or merge away, whatever the purity of its operator.
+
+- Example (a fragment, not compiled): `may_fault(n)`
+- Why it is not compiled: n is a node of the surrounding pass
+
 #### `is_anchor`
 
 ```camel
