@@ -518,8 +518,13 @@ std::string_view shortestHalfDigits(float value, RoundsBack roundsBack, std::str
             if (keep > 1 && mantissa[keep - 1] == '.') {
                 --keep;
             }
+            // Both returns hand out text that outlives this call, so neither may be a view of
+            // `buffer`: the caller reads it after the frame that owns the array is gone, and what
+            // it reads then is whatever the frames in between left there -- on one build an empty
+            // view, from which `halfText` laid out a text with no digits in it.
             if (keep == mantissa.size()) {
-                return candidate;
+                storage.assign(candidate);
+                return storage;
             }
             storage.assign(mantissa.substr(0, keep));
             storage += candidate.substr(ePos);
