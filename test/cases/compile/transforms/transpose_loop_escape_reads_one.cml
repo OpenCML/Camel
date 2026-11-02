@@ -4,11 +4,14 @@
 // (8) plus that sum (7).
 //
 // `read_one(x) = loop s = x for i in 0..3 do 2.0*s + x` is `s = 2s + x` three times, `8x + 7x = 15x`
-// on paper, so `transpose(read_one)(1, 1)` answers 15. The reading is kept beside it: the loop still
-// says how many values escaped and which product handed each one out, `carried=1` in place of
-// `skip=state` -- nothing is skipped now -- and the ESCAPE line still names the parameter port and
-// the body's `add`, because a reading that vanished when the fix landed could not be compared with
-// the refusal it replaced.
+// on paper, so at `x = 2` the value is 30 and `transpose(read_one)` answers the cotangent 15. Both are
+// printed, because one number cannot tell them apart: at `x = 1` the value and the cotangent are both
+// 15 (`c*x` with `c = 15`), so a run that computed the value where the cotangent belongs, or the
+// cotangent twice, would have looked right. 30 and 15 are two numbers no single mistake produces.
+// The reading is kept beside it: the loop still says how many values escaped and which product handed
+// each one out, `carried=1` in place of `skip=state` -- nothing is skipped now -- and the ESCAPE line
+// still names a port and the product that handed the cotangent out, because a reading that vanished
+// when the fix landed could not be compared with the refusal it replaced.
 import { jvp, split, transpose } from transforms
 import rulesets.transpose
 
@@ -17,7 +20,8 @@ func read_one(x: float): float {
 }
 import rulesets.jvp
 func main(): int sync {
-    let (_, lin) = split(jvp(read_one))(1.0)
+    let (value, lin) = split(jvp(read_one))(2.0)
+    println(value)
     println(transpose(lin)(1.0))
     return 0
 }

@@ -587,9 +587,11 @@ expect_exit = 0
 # Re-pinned 2026-11-03 against the first run that gets here: `split` cuts the interval loop now, so
 # the transposed graph is `split_of_jvp_of_read_one_backward` rather than `read_one`, its member is
 # `(float) => (float,)`, and the cotangent leaves through the tangent rule's `add_tangent` call. The
-# number is checked on paper, not taken from that run: `s = 2s + x` for the three rounds of `0..3` is
-# `2s = 2(2(2x + x) + x) + x = 8x + 7x = 15x`, so the transposed member answers 15 at `x = 1`.
-expect_output_contains = ["REINTERP split function=jvp_of_read_one", "residuals=2 loop=1 tape=2 invariants=1", "TRANSPOSE function=split_of_jvp_of_read_one_backward carried=1 node=3 origin=0 captures=1 answer=summed", "ESCAPE target=2 from=11 kindOfFrom=10 kindOfTarget=1 typeOfTarget=float norm=[1,2,] with=[11,12,]", "TRANSPOSE function=split_of_jvp_of_read_one_backward graph=", "type=(float) => (float,)", "15.0"]
+# numbers are checked on paper, not taken from that run: `s = 2s + x` for the three rounds of `0..3` is
+# `2s = 2(2(2x + x) + x) + x = 8x + 7x = 15x`, so at `x = 2` the value is 30 and the cotangent is 15.
+# Both are pinned: `c*x` makes the two equal at `x = 1`, and a pin that cannot tell them apart cannot
+# say whether the transposed member answered the cotangent at all.
+expect_output_contains = ["REINTERP split function=jvp_of_read_one", "residuals=2 loop=1 tape=2 invariants=1", "TRANSPOSE function=split_of_jvp_of_read_one_backward carried=1 node=3 origin=0 captures=1 answer=summed", "ESCAPE target=2 from=11 kindOfFrom=10 kindOfTarget=1 typeOfTarget=float norm=[1,2,] with=[11,12,]", "TRANSPOSE function=split_of_jvp_of_read_one_backward graph=", "type=(float) => (float,)", "30.0", "15.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -605,9 +607,10 @@ expect_exit = 0
 # Re-pinned 2026-11-03 with the entry above: the cut reaches this loop now, so the transposed graph
 # is `split_of_jvp_of_read_twice_backward` and the source of the escape is `add_tangent` (`Func`,
 # 10) rather than the body's own `add` (`Oper`, 11). On paper `s = 2s + 2x` for the three rounds of
-# `0..3` is `8x + 14x = 22x`, so the transposed member answers 22 at `x = 1` -- and 15 would be the
-# answer if one of the two reads were dropped, which is what `captures=1` rules out.
-expect_output_contains = ["REINTERP split function=jvp_of_read_twice", "residuals=2 loop=1 tape=3 invariants=1", "TRANSPOSE function=split_of_jvp_of_read_twice_backward carried=1 node=3 origin=0 captures=1 answer=summed", "ESCAPE target=2 from=13 kindOfFrom=10 kindOfTarget=1 typeOfTarget=float norm=[1,2,] with=[13,14,]", "TRANSPOSE function=split_of_jvp_of_read_twice_backward graph=", "type=(float) => (float,)", "22.0"]
+# `0..3` is `8x + 14x = 22x`, so at `x = 2` the value is 44 and the cotangent is 22 -- and 15 would be
+# the answer if one of the two reads were dropped, which is what `captures=1` rules out. Both numbers
+# are pinned for the reason the entry above gives.
+expect_output_contains = ["REINTERP split function=jvp_of_read_twice", "residuals=2 loop=1 tape=3 invariants=1", "TRANSPOSE function=split_of_jvp_of_read_twice_backward carried=1 node=3 origin=0 captures=1 answer=summed", "ESCAPE target=2 from=13 kindOfFrom=10 kindOfTarget=1 typeOfTarget=float norm=[1,2,] with=[13,14,]", "TRANSPOSE function=split_of_jvp_of_read_twice_backward graph=", "type=(float) => (float,)", "44.0", "22.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

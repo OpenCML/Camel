@@ -5,8 +5,10 @@
 // counts products instead of values, and the carried sum would hand back a cotangent twice.
 //
 // `read_twice(x) = loop s = x for i in 0..3 do 2.0*s + x + x` is `s = 2s + 2x` three times,
-// `8x + 14x = 22x` on paper, so `transpose(read_twice)(1, 1)` answers 22 -- and 15, the previous
-// file's number, would be the answer if one of the two reads were dropped.
+// `8x + 14x = 22x` on paper, so at `x = 2` the value is 44 and the cotangent is 22 -- and 15, the
+// previous file's number, would be the answer if one of the two reads were dropped. Both are printed
+// for the reason the previous file gives: at `x = 1` the value and the cotangent are the same number
+// (22), so only a point where they differ can say which of the two came out.
 import { jvp, split, transpose } from transforms
 import rulesets.transpose
 
@@ -15,7 +17,8 @@ func read_twice(x: float): float {
 }
 import rulesets.jvp
 func main(): int sync {
-    let (_, lin) = split(jvp(read_twice))(1.0)
+    let (value, lin) = split(jvp(read_twice))(2.0)
+    println(value)
     println(transpose(lin)(1.0))
     return 0
 }
