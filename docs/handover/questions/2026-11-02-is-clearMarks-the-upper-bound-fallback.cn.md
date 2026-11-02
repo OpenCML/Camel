@@ -212,3 +212,32 @@ struct ObjectRootSetEntry {
 与本页的两次读数应当分开落。
 
 **已推进到：判死"用 `minorTracedGraphs_` 替代"这条假设 + 定位到唯一打 mark 点 + 给出记账式方案。**
+## 11. 记账式清位落地了：整空间扫已删，读数五项与基线一致
+
+`markObject` 每标一个对象就记进 `markedSinceClear_`（跨回收的账），`clearMarks()` 遍历这份账逐个
+`unmark()` 并清空 —— **整空间扫删掉了**。**每个条目先过 `graphSpace().isAllocated()` 再 unmark**：
+地址若已被释放并复用，绝不能碰（精确集合比粗集合更危险的那一面）。
+
+读数（全量 fast，同一 wrapper）：`total: 8514, pass: 8450, fail: 44, skip: 10, known failures: 10`
+—— **五项与基线逐项相同**；两次删扫描时出现的 38 条强制大回收/压力红**全绿**。
+
+两次失败的路（根遍历单用、`minorTracedGraphs_` 清位）留在第 10 节；这一笔是它们的替代品，
+不是新增机制：**作者点的"兜底"换成了"记账"**。P == W 的 Debug/ASan 断言与"人为少记一个"的反向读数
+**还没做**（本机 wrapper 只出 Release 构建），留作下一笔。
+
+## 12. 两处代码现状（作者 13:50 点名）
+
+- **`visitGeneratorBody`（`builder.cpp` 的 `reportUnbuiltShape`）**：**还在**，报的是
+  `InternalDiag::UnknownInternalError` + 文案 `"the generator machine does not build this shape; send the program, this is a compiler defect"`。
+  按裁定它应当**报告一个说明语言规则的诊断**（"生成器体不支持这个形状：<哪个形状>"），**不写"请把程序发来"** —— 未改，下一笔。
+- **`FeatureNotSupported`（`builder.cpp:2164` 那条路径）**：**已经不是它了** —— `diagnostics/registry.tsv` 里
+  `git grep FeatureNotSupported` **零命中**（码 11-01 已删，与作者一致）；那条路径现在报的同样是
+  `InternalDiag::UnknownInternalError`，文案 `"a \`yield\` reached the statement builder, so the generator machine did not claim it; send the program, this is a compiler defect"`。
+  **作者的判断（那个码已删）与我们实测一致。**
+
+## 13. 与"悬垂节点"那页的关系（作者 13:50 指明出处）
+
+作者 13:50 指明他说的那一件是 **`stream.*` 11 条在 Windows 上崩在 `src/compile/gir/builder_support.h:125` 的
+`nodeGraphOf()`（"Draft node is not owned by a compile graph builder"）**，Linux 上碰巧读得到已释放内存所以不报；
+**与 GCT 的 `extractData` 的 `dangling` 无关，与 progen 也无关**。本页第 5 节的 GIR 层扫描（24 条用例、
+0 个非 EXIT 无读者节点）是**另一件事，结论照旧**。
