@@ -12,14 +12,21 @@
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：1 页
+## 现在在等作者：4 页
+
+| 页 | 问什么 | 状态 | 裁定 | 还堵着 |
+| [`2026-11-02-p1-13-the-eight-tos-rows-serve-the-string-call`](2026-11-02-p1-13-the-eight-tos-rows-serve-the-string-call.md) | 8 个 `*tos` 行是不是运算符、`dtos` 要不要写出来（观察：不是运算符，已被 `prelude.cml:705` 的 `string/1` 通配覆盖） | 待裁 | — | gs6 的三栏表：这 8 行留在"已覆盖" |
+| [`questions-2026-11-02-who-builds-the-two-float-transposed-member`](questions-2026-11-02-who-builds-the-two-float-transposed-member.md) | 那张"端口是两个 `float`"的被转置成员是谁建的：`lane-m4b` 排除五条假设（两条是它自己的）后仍不知道，建它的人是不是该由 `transpose` 自己写 | 待裁 | — | `lane-m4b` 的 `(float,float)` 转置成员：`beeb887f4` 只修了"端口类型取自字面量"，成员由谁建仍未定 |
+| [`questions-2026-11-02-whether-a-residual-is-what-the-reverse-reads`](questions-2026-11-02-whether-a-residual-is-what-the-reverse-reads.md) | 残差集该由"反向实际读了什么"决定，还是由"前向建图时顺手记了什么"决定 | 待裁 | — | `lane-m4b` 的数组参数 `grad`/`vjp`：三处转置落点已改（不变量 8→6），剩下 6 条同一个根（反向要读原数组，残差里没有它）；`split` 侧改过、实测红了、已回退 |
+| [`questions-2026-11-02-whether-a-transposed-member-is-identified-by-name`](questions-2026-11-02-whether-a-transposed-member-is-identified-by-name.md) | 被转置出来的成员，将来有人会"按名字"去找它吗（今天没有代码按名字查，具名待办） | 待裁 | — | 转置成员的命名 API：今天无人按名字查，改了名不会红，所以只能靠裁定 |
 
 2026-11-01 23:20 决策者分拣了从车道收上来的 58 页：50 页早已答过（同名页在 `reviews/`），8 页新的当轮裁完，全部在 `reviews/`，裁定见 `reviews/questions-2026-10-29.md` 同日 23:20 那一条。写在车道分支上、没有进 develop 的页不算问题。
+
+**两节各数各的，都能对得上**：这一节的行数 = **目录里的页数**（现在 4 = 4，多一行或少一行都是索引坏了）；下一节的行数 = 已裁的裁定，**页都在 `reviews/`，不占这个目录**。收页时先数目录，再改这两节——这是一次减法，不靠记性。
 
 ## 已裁：按还堵着的活排
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
-| [`2026-11-02-p1-13-the-eight-tos-rows-serve-the-string-call`](2026-11-02-p1-13-the-eight-tos-rows-serve-the-string-call.md) | 8 个 `*tos` 行是不是运算符、`dtos` 要不要写出来（观察：不是运算符，已被 `prelude.cml:705` 的 `string/1` 通配覆盖） | 待裁 | — | gs6 的三栏表：这 8 行留在"已覆盖" |
 | [`a-version-port-that-must-carry-a-value`](../reviews/questions-2026-10-31-a-version-port-that-must-carry-a-value.md) | `void` 调用写过的变量，它的读该靠什么后于那次调用 | 已裁未落 | 22:50——A：新算子 `:var/after(cell, call) : var T`（第二个实参接受 `void`），读写成 `:var/get(:var/after(cell, call))`；两条都是数据边，3.1 的"用到"沿数据边到调用；验收 `callback_write_ignored` 打印 `3`、`effects_syntax` 11 条红消失、拿 `133` 量 | `:var/after` 算子本身；`orderAfterLastWriter` 里那条 ctrl 替身随之可拆 |
 | [`two-references-write-one-object-outside-a-sync-block`](../reviews/questions-2026-10-31-two-references-write-one-object-outside-a-sync-block.md) | 同一可变对象被两条引用写、第二条在这一层看不见时，读拿谁的版本 | 已裁未落 | 22:50——②：**保守的写者集合**（程序里所有写该变量的函数，建图前整个程序扫一遍）；`twice` 里 `counter` 在集合里，`return counter` 的版本是 `:var/after(counter, f(v))`；**20:35 那句就此收回** | 保守写者集合的实现；`twice` 应打印 `3` |
 | [`parallel-map-fault-what-runs-after`](../reviews/questions-2026-10-31-parallel-map-fault-what-runs-after.md) | 并行 `map` 一处故障后，下标更小、还没开始的元素是否仍执行 | 已裁未落 | 22:50——①：保今天的实现，3.6 改措辞（"已经开始的元素跑完；下标大于已知最小故障、还没开始的元素不再开始，下标更小的仍会开始；报下标最小的故障"）；删 `taskflow.cpp:2797` 的 `DESIGN-QUESTION`；补部分故障、四后端同判的用例 | 3.6 措辞；`taskflow.cpp:2797`；四后端同判用例 |
