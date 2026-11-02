@@ -9,15 +9,15 @@
 // `skip=state` -- nothing is skipped now -- and the ESCAPE line still names the parameter port and
 // the body's `add`, because a reading that vanished when the fix landed could not be compared with
 // the refusal it replaced.
-import { jvp, split, transpose } from transforms
+import { transpose } from transforms
 import rulesets.transpose
 
 func read_one(x: float): float {
     return loop s = x for i in 0..3 do 2.0 * s + x
 }
-import rulesets.jvp
+
 func main(): int sync {
-    let (_, lin) = split(jvp(read_one))(1.0)
-    println(transpose(lin)(1.0))
+    let back = transpose(read_one)
+    println(back(1.0))
     return 0
 }

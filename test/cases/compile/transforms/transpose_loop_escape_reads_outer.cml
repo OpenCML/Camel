@@ -12,16 +12,16 @@
 // `read_outer(x) = let k = x*x; loop s = x for i in 0..3 do 2.0*s + k + x` is `s = 2s + k + x` three
 // times, `8x + 7k + 7x = 15x + 7x*x` on paper, so `transpose(read_outer)(1, 1)` answers 15 + 14 = 29:
 // 15 through `x` and 14 through `k`, which is `2x` at x = 1 with the loop's factor 7.
-import { jvp, split, transpose } from transforms
+import { transpose } from transforms
 import rulesets.transpose
 
 func read_outer(x: float): float {
     let k = x * x
     return loop s = x for i in 0..3 do 2.0 * s + k + x
 }
-import rulesets.jvp
+
 func main(): int sync {
-    let (_, lin) = split(jvp(read_outer))(1.0)
-    println(transpose(lin)(1.0))
+    let back = transpose(read_outer)
+    println(back(1.0))
     return 0
 }

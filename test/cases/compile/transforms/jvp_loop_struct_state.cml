@@ -1,0 +1,47 @@
+// A loop whose state is a struct: not a tuple and not an array. Its members are named, so the state's
+// members are read by key (`GCAccsKind::StructKey`) where a tuple's are read by number -- the one
+// thing this shape asks of the lift that the tuple state did not.
+//
+// Two programs, so that both places a member is read are covered:
+//   identity(s) = loop x = s for k in [1.0, 10.0] do x
+//     the body is the state itself: the members are read only where the state goes in and comes out.
+//   swap(s)     = loop x = s for k in [1.0, 10.0] do { a: x.b, b: x.a + x.b * k }
+//     the body reads both members and builds the new state as a `{ a: ..., b: ... }` literal.
+//
+// On paper: `identity` is the identity, so its Jacobian is I and both seeds come back unchanged;
+// `swap`'s per-round map is `M_k = [[0, 1], [1, k]]`, so two rounds of k = 1 then k = 10 are
+//   M = M_10 * M_1 = [[1, 1], [10, 11]]
+// and `swap(1, 2) = (3, 32)` with the two seeds reading `(1, 10)` and `(1, 11)`.
+//
+// The struct literal in the body is lowered to a *tuple* fill -- the loop's state type is
+// `(float, float)` -- so the struct-ness lives at the boundary: the parameter is `Pair` and its
+// members are read by key. That mixing of shapes is what a wrong template or a wrong projection
+// makes visible, which is why the numbers are pinned here rather than the shape.
+import rulesets.jvp
+import { jvp } from transforms
+
+type Pair = { a: float, b: float }
+
+func identity(s: Pair): Pair {
+    return loop x = s for k in [1.0, 10.0] do x
+}
+
+func swap(s: Pair): Pair {
+    return loop x = s for k in [1.0, 10.0] do { a: x.b, b: x.a + x.b * k }
+}
+
+func main(): int sync {
+    let flat = jvp(identity)
+    let (value, d1) = flat({ a: 1.0, b: 2.0 }, { a: 1.0, b: 0.0 })
+    println("identity value= ", value.a, " ", value.b)
+    println("identity d1=", d1.a, " ", d1.b)
+    let (_, d2) = flat({ a: 1.0, b: 2.0 }, { a: 0.0, b: 1.0 })
+    println("identity d2=", d2.a, " ", d2.b)
+    let lifted = jvp(swap)
+    let (w, e1) = lifted({ a: 1.0, b: 2.0 }, { a: 1.0, b: 0.0 })
+    println("swap value= ", w.a, " ", w.b)
+    println("swap d1=", e1.a, " ", e1.b)
+    let (_, e2) = lifted({ a: 1.0, b: 2.0 }, { a: 0.0, b: 1.0 })
+    println("swap d2=", e2.a, " ", e2.b)
+    return 0
+}

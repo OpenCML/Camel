@@ -54,6 +54,8 @@ PROBE oper-no-tangent uri=:op/idx_arr ref=5 ← 真正让 complete=false 的那�
 
 **这一格落了两次，第二次才是对的**：`b0b733ba5` 落在旧基座上，除了 `Fill` 还顺手装回了一道第二道门（"浮点标量，或元素可配对的数组"才写对）—— 那正是作者 2026-11-02 要求撤掉的那道门，等于把"一个问题"又写回成两个。合并车道在 `jvp.cpp` 上停下不替人挑，是对的；现在这一笔在 `542ba0dda` 上重做，那道门全树为 0，只留 `Fill` 的两处（切线分派、模板形状），并在同一个 base 上量过：数组两列仍逐位对、`transforms` 红名单不变、全量 8536 里没有新增红。
 
+**同一天又补了结构体态（2026-11-03）**：它卡的地方跟数组态不同 —— 卡在 `case rt::GCAccsKind::StructKey` 的投影，`jvp.cpp` 的 `case Accs:` 原来只认 `TupleIndex`，按键的成员读直接 `break`，于是循环的状态输入（参数 `s.a` / `s.b` 两个投影）从来没被拷贝过，`skip=loop`。打印 GIR 才看得清的一件事是：**循环状态本身在 GIR 里已经是元组**（体里的 `{a:…, b:…}` 被降成 `(float, float)` 的 FILL），所以"结构体与元组的差别"只剩成员读的**寻址方式**（按键 vs 按号），补一格分派即可，`pairOf`/`pairTypeOf` 一个字没动。用例 `test/cases/compile/transforms/jvp_loop_struct_state.cml` 用两条程序钉住：恒等态（`loop x = s for k in [1.0, 10.0] do x`，Jacobian 是 I，两个种子原样回来）与含字面量的 `swap`（`M = [[1,1],[10,11]]`，`swap(1,2) = (3, 32)`，种子读 `(1, 10)` / `(1, 11)`）。
+
 ## 附录：那条"本来就在"的规则
 
 `stdlib/rulesets/jvp.cml` 末尾，两段原样：
