@@ -124,9 +124,13 @@ It runs, in order:
    Three of them are perf plans whose tests assert counts and properties, never a duration:
    `perf.para_speedup` and the count guards `perf.step_counts` and `perf.reduce_layout_counts`
    (the measured halves of `perf.step_budget` and `perf.reduce_layout` stay in the skip list);
-3. the eight static checks: `stdlib-reference --verify-ops`, `--verify-doc`, `diagnostics-catalog
+3. the static checks: `stdlib-reference --verify-ops`, `--verify-doc`, `diagnostics-catalog
    --check`, `check-doc-links --all`, `check-doc-snippets`, `stdlib-declarations --check`,
-   `check-conformance`, `check-std-includes`;
+   `check-conformance`, `check-std-includes`, `rule-proofs`, and `check-wheel-tags` -- the last one
+   reads the wheels the last `npm run pypi:rollup` left in `dist/pypi/` and requires the two forms
+   `cp310-abi3` (with the interop extension) and `py3-none` (without it), asserting through the same
+   `scripts/check_wheel_tags.py --ruling` the build job runs; with no wheel in `dist/pypi/` it prints
+   a `SKIPPED` banner naming that command, because this gate does not build wheels;
 
 then exits non-zero when any phase failed. It does not build: build once first, and it checks the
 install it measures against that build's stamp — the rule that a run must not measure another
@@ -137,6 +141,11 @@ and the same `--camel` goes to every layer: the fast and slow plan layers set ea
 An exported `CAMEL_HOME` does not choose the install — it is the install location's convention for
 the `camel` binary and for an SDK user — and a stamp travels inside the install it describes, so an
 install built by another tree is refused by that stamp whatever path it sits at.
+
+It also does not install the wheels it just read the tags of: the checklist for the interpreter
+matrix a release has to smoke those wheels on — CPython 3.10 (the stable ABI floor, interop), the
+newest CPython (interop), and 3.9 or PyPy (the `py3-none` body, `camel` runs and `import camel`
+explains itself) — is `docs/pypi-packaging.md` section 7.2, with the exact interpreter versions.
 
 The two standard-library checkers among those static checks (`stdlib-reference.mjs --verify-ops`,
 `stdlib-declarations.mjs --check`) apply the same rule themselves, before they read a registry: an

@@ -26,7 +26,9 @@
 //                      one. Naming a file makes the runner run the whole plan, slow tests
 //                      included, whatever `--tier` says; that is the only honest way to reach
 //                      them, and a directory target would silently drop them again;
-//   3. static checks-- the eight tree/compiler checks a release has to pass;
+//   3. static checks-- the checks a release has to pass, tree and compiler ones along with the
+//                      wheel tags of the last `npm run pypi:rollup` (that one prints a SKIPPED
+//                      banner when no wheel was built, so no layer claims a pass it did not take);
 //   4. what the run does not cover -- the milestone layer, counted by reading the tree:
 //                      every test whose own tier says `milestone` (`--tier milestone`
 //                      selects it). The gate prints the number and that it did not run it,
@@ -120,6 +122,14 @@ const STATIC_CHECKS = [
     // tree's binary, so it takes the install the gate picked like the two checkers above.
     { name: 'conformance: each recorded reading holds before and after optimization', args: ['scripts/check-conformance.mjs'], camel: true },
     { name: 'std includes: no header borrowed through another header', args: ['scripts/check-std-includes.mjs'] },
+    // The wheel tags a release may upload: `cp310-abi3-<platform>` with the interop extension and
+    // `py3-none-<platform>` without it (the 2026-10-25 ruling, carried out 2026-11-02;
+    // docs/handover/README.cn.md item 7, review index C28). It reads what `npm run pypi:rollup`
+    // left in dist/pypi/ and prints a SKIPPED banner -- naming that command -- when the gate was
+    // not run after a wheel build: this gate does not build wheels, and a fabricated pass here
+    // would be worse than the missing check. The rule itself is scripts/check_wheel_tags.py, the
+    // script the build job runs, so the two cannot disagree about which tags are allowed.
+    { name: 'wheel tags: the interop wheel is cp310-abi3 and the runtime wheel py3-none', args: ['scripts/check-wheel-tags.mjs'] },
     // The rule library decided by an SMT solver: every rule's two sides under the premise its
     // numeric licence stands for. The solver is an optional dependency, so the checker prints a
     // SKIPPED banner naming what to install and still exits zero; that banner is in this layer's
