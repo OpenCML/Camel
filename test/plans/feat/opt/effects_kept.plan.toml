@@ -169,7 +169,7 @@ desc = "The shape `:op/keep` is for: the effect is read by one node that a pass 
 case = "../../../cases/opt/effects/keep_shape.cml"
 args = ["${case}", "test::keepshape", "${backend}"]
 expect_exit = 99
-expect_stdout_exact = "KEEPSHAPE keep=1 uri=:op/keep data_user=1 sync_statement=0 wait_edge=0 waited_on=0 standing=alive\n1\n"
+expect_stdout_exact = "KEEPSHAPE keep=1 uri=:op/keep data_user=1 sync_statement=0 wait_edge=0 waited_on=0 fusion_private=1 standing=alive\n1\n"
 
 # `std::jgir` and not `std::gir`: the dot dump asserts `graph->exitNode() != nullptr`
 # (src/passes/trans/dot/graphviz.cpp#dumpGraph, "Runtime graph exit node is missing") and a graph that a
@@ -210,7 +210,7 @@ desc = "The same operator on the shape with nothing else to hold the effect up: 
 case = "../../../cases/opt/effects/keep_shape.cml"
 args = ["${case}", "test::keepshape", "test::keepinspect", "${backend}"]
 expect_exit = 99
-expect_stdout_exact = "KEEPSHAPE keep=1 uri=:op/keep data_user=1 sync_statement=0 wait_edge=0 waited_on=0 standing=alive\nKEEPSPOTS keeps=1 in_chain=0 out_of_chain=1 waited=0\n1\n"
+expect_stdout_exact = "KEEPSHAPE keep=1 uri=:op/keep data_user=1 sync_statement=0 wait_edge=0 waited_on=0 fusion_private=1 standing=alive\nKEEPSPOTS keeps=1 in_chain=0 out_of_chain=1 waited=0\n1\n"
 
 # "Is an operator the passes write still reachable?" is a number, and the number is pinned by name
 # for the whole family: `:op/keep` over `test/cases/opt/effects` (three cases, two nodes each),

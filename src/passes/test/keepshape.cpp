@@ -104,7 +104,18 @@ KeepShapeTestPass::apply(const camel::runtime::Program *program, std::ostream &o
            << " data_user=" << (facts.hasDataUser ? 1 : 0)
            << " sync_statement=" << (facts.isSyncStatement ? 1 : 0)
            << " wait_edge=" << (facts.hasWaitEdge ? 1 : 0)
-           << " waited_on=" << (draft.ctrlUsersOf(print).empty() ? 0 : 1) << " standing="
+           << " waited_on=" << (draft.ctrlUsersOf(print).empty() ? 0 : 1)
+           // Would a fusion group take this node in as private? Asked with the expression
+           // `fusion_group`'s `isPrivate` asks, but **reading the raw fact itself** (`withUsersOf`), never
+           // `facts.hasDataUser`: that field is already this pass's answer (`norm` + `with`), so
+           // borrowing it would prove this side's conclusion with this side's conclusion. Do not
+           // simplify this back into `!facts.hasDataUser` -- that version cannot be 1 by construction.
+           << " fusion_private="
+           << ((draft.withUsersOf(print).empty() && draft.ctrlUsersOf(print).empty() &&
+                !facts.isSyncStatement)
+                   ? 1
+                   : 0)
+           << " standing="
            << (keepsEffectAlive(effectStandingOf(facts)) ? "alive" : "none") << "\n";
         return session.commit();
     }
