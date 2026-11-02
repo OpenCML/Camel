@@ -196,3 +196,13 @@ kind = "behavior"
 expect_exit = 0
 expect_stdout_contains = ["param steps=20 loss=", "param wq1 [[0.964079930726", "param g1 [1.029526109", "param b1 [0.02839496349", "param g2 [0.95796927601", "param b2 [-0.03999999979"]
 timeout_ms = 300000
+
+[[tests]]
+name = "grow.params_after_200_steps"
+desc = "Two hundred Adam steps, and the loss still falling: -3.498964275 before the last update and -3.515723011859 after it, against `grow.py --exact`.  The three claims are separate -- a matching first-step gradient says the pullback is right, twenty matching steps say the update is right, and this one says the model is actually training: all eight tensors that had an identically zero gradient at step 1 are non-zero by step 200 (b1 0 -> 0.0767, wq2 0.75 -> 0.8262, g1 1.0 -> 1.0777), because gout leaving [1, 1] reconnects the path the first step's cancellation cut."
+case = "../../../showcase/c3-char-transformer/grow/params_after_20_steps.cml"
+args = ["${case}", "--arg", "count=200"]
+kind = "behavior"
+expect_exit = 0
+expect_stdout_contains = ["param steps=200 loss=-3.515723011861", "param wq1 [[0.9147992848", "param b1 [0.07669344319", "param wq2 [[0.8261623793", "param g2 [0.52088289142", "param b2 [-0.39999999800"]
+timeout_ms = 300000
