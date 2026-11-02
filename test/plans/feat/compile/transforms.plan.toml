@@ -749,8 +749,6 @@ backends = ["fvm"]
 expect_exit = 0
 expect_stdout_contains = ["6.0", "[2.0, 3.0]"]
 timeout_ms = 15000
-known_fail = ["fvm"]
-known_fail_note = "Owner: lane-m4b. Today this is a SIGSEGV: the runner reports `expected exit 0, got signal SIGSEGV (rc=139)` and the four marked cases of this family die in 1.24, 2.24, 3.20 and 4.21 s, so the note this carried before - `the process is killed at the timeout with exit null` - was wrong about the cause: the runner could not tell a signal death from a timeout, the case never timed out. The crash is the array cotangent summed as one number rather than an array, repaired on lane-lit2 in 19f0b05e8 and 0aed45eb6 and not yet merged; the mark comes off in the commit that merges it, which is also what the runner asks for when a marked case starts passing."
 
 [[tests]]
 name = "grad_array_with_int.fvm"
@@ -806,8 +804,6 @@ timeout_ms = 30000
 # the answer the transform owes -- `[2.0, 3.0]` -- and not today's refusal, so the mark is the only
 # thing standing between the plan and a red, and the runner reports a marked case that passes as a
 # failure: that report is what asks for the mark's removal.
-known_fail = ["nvm"]
-known_fail_note = "Owner: the value chain that lane-lit2 carries. The array element read's transpose arm is missing -- the transform answers `skip=law rule=idx_arr_t uri=:op/idx_arr` and `transpose has no transpose`, so the pullback never reaches `[2.0, 3.0]`. Reason for the mark rather than a pinned refusal: the pinned form asserts today's wrong answer as correct, and the plan's own header already says what that costs. When the arm lands, remove the mark in the same commit."
 
 # one element: xs[0] over [3.0]. The cotangent of a function of an array should come back as an array, but the transpose
 # stops at the law the rule library declares for the element read (`idx_arr_t`, stdlib/rulesets/transpose.cml)
@@ -849,12 +845,10 @@ kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_sum.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-expect_exit = 1
-expect_stdout_contains = ["skip=law rule=idx_arr_t uri=:op/idx_arr", "transpose has no transpose"]
+expect_exit = 0
+expect_stdout_contains = ["5.0", "[1.0, 1.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
-known_fail = ["nvm"]
-known_fail_note = "Owner: lane-m4b. Today this is a SIGSEGV: the runner reports `expected exit 0, got signal SIGSEGV (rc=139)` and the four marked cases of this family die in 1.24, 2.24, 3.20 and 4.21 s, so the note this carried before - `the process is killed at the timeout with exit null` - was wrong about the cause: the runner could not tell a signal death from a timeout, the case never timed out. The crash is the array cotangent summed as one number rather than an array, repaired on lane-lit2 in 19f0b05e8 and 0aed45eb6 and not yet merged; the mark comes off in the commit that merges it, which is also what the runner asks for when a marked case starts passing."
 
 # the product: xs[0] * xs[1] over [3.0, 2.0]. The cotangent of a function of an array should come back as an array, but the transpose
 # stops at the law the rule library declares for the element read (`idx_arr_t`, stdlib/rulesets/transpose.cml)
@@ -866,12 +860,10 @@ kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_product.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-expect_exit = 1
-expect_stdout_contains = ["skip=law rule=idx_arr_t uri=:op/idx_arr", "transpose has no transpose"]
+expect_exit = 0
+expect_stdout_contains = ["6.0", "[2.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
-known_fail = ["nvm"]
-known_fail_note = "Owner: lane-m4b. Today this is a SIGSEGV: the runner reports `expected exit 0, got signal SIGSEGV (rc=139)` and the four marked cases of this family die in 1.24, 2.24, 3.20 and 4.21 s, so the note this carried before - `the process is killed at the timeout with exit null` - was wrong about the cause: the runner could not tell a signal death from a timeout, the case never timed out. The crash is the array cotangent summed as one number rather than an array, repaired on lane-lit2 in 19f0b05e8 and 0aed45eb6 and not yet merged; the mark comes off in the commit that merges it, which is also what the runner asks for when a marked case starts passing."
 
 [[tests]]
 name = "grad_of_a_division"
