@@ -310,6 +310,21 @@ bool buildTransposeMember(
                 }
             }
         }
+        // The `with` parameters: values the function is configured with, not ones it is applied to.
+        // They enter the transposed graph the way they entered the source -- as a read of the value
+        // the function value was bound with -- so they are ports of this graph too, in the `with`
+        // run where a cotangent never goes and where the parameter list of the transposed function
+        // does not put them. The transposed function value keeps the source's closure
+        // (`transposeKernel` copies the tuple slot by slot), so the slot these ports name is the one
+        // the caller's binding filled.
+        std::vector<gc_node_ref_t> withPortsOfFunction;
+        for (size_t i = 0; i < function->funcType()->withTypesCount(); ++i) {
+            Type *const withType = function->funcType()->withTypeAt(i);
+            const gc_node_ref_t port =
+                draft.addPortNode(withType, draft.allocateRuntimeSlot(withType));
+            draft.appendWithPort(port);
+            withPortsOfFunction.push_back(port);
+        }
         const gc_node_ref_t cotangentIn =
             draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
         draft.appendNormPort(cotangentIn);
@@ -552,6 +567,17 @@ bool buildTransposeMember(
                 return forwardOf[ref];
             }
             if (node->kind == rt::GCNodeKind::Port) {
+                // A `with` port is not one of the parameters the caller passes: its value is the one
+                // the function value was bound with, and the transposed graph reads it from the port
+                // this graph was given for it. The closure the transposed value keeps is the
+                // source's, so the slot is the same one.
+                const auto &withPorts = function->withPorts();
+                for (size_t i = 0; i < withPorts.size() && i < withPortsOfFunction.size(); ++i) {
+                    if (withPorts[i] == ref) {
+                        forwardOf[ref] = withPortsOfFunction[i];
+                        return forwardOf[ref];
+                    }
+                }
                 const auto &ports = function->normPorts();
                 for (size_t i = 0; i < ports.size(); ++i) {
                     if (ports[i] != ref) {
