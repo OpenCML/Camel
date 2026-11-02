@@ -193,20 +193,15 @@ class EdgeChecker {
     bool isChainStatement(gc_node_ref_t ref) const {
         return camel::runtime::nodeIsChainStatement(graph_, ref);
     }
-    static bool isWaitingCarrier(const GCNode *node) {
-        return (node->flags & kGCNodeFlagSyncStatement) != 0;
-    }
-    /// The same question at a sync edge's end: a `GATE` may stand there instead of a statement,
-    /// because a block's value node may be one the block does not own (edges.cn.md 5.3).
-    static bool isWaitingCarrierOrGate(const GCNode *node) {
-        return isWaitingCarrier(node) || node->kind == GCNodeKind::Gate;
-    }
+
 
 
     /// The other half of the structural rule of 4.6: a sync edge joins two statements one `sync`
     /// block writes directly -- or the block's chain tail to the block's value -- and nothing else.
-    /// The builder records that fact on each node it chains (kGCNodeFlagSyncStatement), so the
-    /// check is: both ends are such a node, they are not the same node and not a node a rewrite
+    /// What makes a node such a statement is the node itself -- the shape of it, read back by
+    /// `nodeIsChainStatement` (author ruling 2026-11-02 04:50: a mark that can be derived should not
+    /// be stored) -- so the check is: both ends are such a node, they are not the same node and not a
+    /// node a rewrite
     /// removed, and one statement is written directly after one other (the tail that reaches the
     /// block's value is the one node that two sync edges leave). The other direction -- one
     /// statement two statements follow -- is `checkSyncChainForks` below.
@@ -359,7 +354,7 @@ class EdgeChecker {
             if (user->kind == GCNodeKind::Dead || pred->kind == GCNodeKind::Dead) {
                 continue; // reported by checkSyncEdges
             }
-            if (!isWaitingCarrier(user) || !isWaitingCarrier(pred)) {
+            if (!isChainStatement(edge.user) || !isChainStatement(edge.pred)) {
                 continue; // reported by checkSyncEdges
             }
             if (controlBlockOf(edge.user) != controlBlockOf(edge.pred)) {
