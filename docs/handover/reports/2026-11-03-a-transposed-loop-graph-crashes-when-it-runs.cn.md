@@ -149,3 +149,65 @@ C 两个循环函数、三次转置调用                    8.0 (8.0) (16.0) 16
 **读数**：`feat/compile/transforms` 42 / 60（修前 41，`transpose_runs_a_loop_rounds_backwards` 换回
 cotangent-only 写法后转绿）；`feat/transforms/split` 14 / 18；全量 fast `8526` 里 `8483` 过、`23` 红、
 `killed by a signal` **0**。
+
+## 六、同一处崩溃的第二个触发形状：给带闭包的那半答零（2026-11-03 07:10，`lane-splitprimal @ cd46c06de`）
+
+上面那条（裸 `float` 当元组）修完后，这一页记的那个 SIGSEGV 不再出现。**同一个 `GUARD` 还有第二个触发
+形状**，记在这里是因为它比上面那条更难看见：图建得出来、`same=yes`、`skip=` 一条不写，**只在被调用的
+那一刻崩**，而它的触发条件是一个设计决定，不是一个漏写的包装。
+
+作者裁定"未读到的参数在循环里也答零余切"（`origin/fsh-dev = ad7e716b0`）。把这个零答给
+`split(jvp(h))` 的 backward 半（`h(x) = loop s = 0.0 for i in [1,2,3,4] do s + 2.0`，`h' = 0`）就崩：
+
+```
+--- transpose of h (body reads no outside value) ---
+REINTERP split function=jvp_of_h forward=248 backward=249 type=(float) => (float, (float) => float pure) pure residuals=1 loop=1 tape=1 invariants=0
+h value= 8.0
+h lin(1.0)= 0.0
+TRANSPOSE function=split_of_jvp_of_h_backward graph=250 type=(float) => (float,) nodes=10 arms=0 rhs=-
+Program received signal SIGSEGV, Segmentation fault.
+rc=139
+```
+
+**`nodevm.cpp:548` 的原文三行**（`NodeVMSchedPass::call`，`case GCNodeKind::Accs` /
+`GCAccsKind::TupleIndex` 分支）：
+
+```cpp
+547:  Tuple *t   = currFrame->get<Tuple *>(srcIdx);                    // ← 0x0
+548:  GUARD(idx < t->size(), "Tuple index out of bounds in NodeVM.");  // ← 崩在这
+```
+
+**带行号的栈**（`-Config Debug` 构建，`out/debug`）：
+
+```
+#0  Tuple::size (this=0x0) at include/camel/core/rtdata/tuple.h:112
+#1  NodeVMSchedPass::call (rootRuntimeGraph=0x7fffe79b3b90, rootFrame=0x7fffe75c6158) at src/passes/sched/nodevm/nodevm.cpp:548
+#2  NodeVMSchedPass::call (…) at src/passes/sched/nodevm/nodevm.cpp:629   ← 间接调用：call(funcRuntimeGraph, funcFrame)
+#3  NodeVMSchedPass::call (…) at src/passes/sched/nodevm/nodevm.cpp:629   ← 同一个调用点第二次
+#4  NodeVMSchedPass::apply (…) at src/passes/sched/nodevm/nodevm.cpp:857
+```
+
+`Tuple::size_` 就是 Release 里 `mov 0x8(%rax),%ecx` 那一下（`call+3468`，`rax=0x0`）：**空指针，不是野指针。**
+
+**一句根因**：`Accs`/`TupleIndex` 按位置取成员时，`currFrame` 上那个"参数携带的元组"槽是空的
+（`currFrame->get<Tuple *>` 得 `0x0`），因为两层间接调用（`nodevm.cpp:629`，
+`fillFrameForIndirectCall` 之后）进去时没有把这个元组填进成员帧，槽还是 `NullSlot` —— **不是递归爆栈**
+（`call` 只有三层、`#1`/`#2` 同址、`currRecursionDepth_` 的守卫 `throwNativeStackExhausted` 没响），
+是**成员图少填了一个参数槽**。
+
+**触发条件**：只有在我们给"带闭包的那半"回答常量零时才会走到。今天 `transpose.cpp` 那道守卫
+（`closurePortOf.empty()`）让它保持在拒绝这一侧 —— 所以 `h` 经 `vjp` 现在是
+`TRANSPOSE function=split_of_jvp_of_h_backward skip=state-unread node=2 origin=0`、exit 1、**不崩**；
+而同一条零答案对不带闭包的形状（`k(x) = loop s = 0.0 for i in [1,2,3] do s + 2.0`，`k' = 0`）已经生效，
+答 `(0.0)`（`pullback(2.0)` 也是 `(0.0)`，线性的零）。
+
+**仍是推测的那一半**（照实写，没验证）：那个元组本应是调用点传入的闭包/参数元组 —— 零答案让这个元组失去了
+唯一的读者，调用点于是没有再传它，而图里那个 `Accs` 节点还在按位置取它。要坐实，得看
+`fillFrameForIndirectCall` 在两种形状下各填了几个槽；这一页没做。
+
+**查这一格要付两次构建**：`-Config Debug` 构建 **315 s**（没有缓存命中，`out/debug` 是独立目录），拿到行号后
+把诊断开关撤回、`out/latest` 的 Release 恢复构建 **304 s**（源码回到已提交内容，但指纹变化仍触发一次
+`collect-out`）。符号是唯一拿到 `file:line` 的办法，而 `.so` 是 strip 的 —— 所以下一次有人要查这一格，
+预算里要有这两次构建。
+
+**读数树**：`lane-splitprimal @ cd46c06de`，`out/debug` 与 `out/latest` 都是同一棵树。
