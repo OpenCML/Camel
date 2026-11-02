@@ -34,3 +34,13 @@ src/core/mm/gc_debug.cpp:36               promotionAgeThreshold_ = 16;
 ## 形状
 
 这条 bug 不靠读代码发现，靠的是让代码自己说：**三次打点、两轮排除，最后是 `16` 与 `15` 这两个数打架。** 排除"自检写错"这件事是打点做的，不是推断的。
+## 第二条自检：同一个形状，另一个数
+
+`gc.foreign_resource_lifetime` 报 `foreign pinned handle requires an object in a non-moving allocation region`。判定它只用读两处：
+
+- `isObjectAddressStable`（`gen.cpp:143`）只在 `inElderGenSpace(header) || inLargeObjSpace(header)` 时为真；
+- 那条自检在 pin 之前只跑 **8 次** `minorGC()`（`foreign_handle.cpp`，自检体），而晋升阈值是 **15** ⇒ 对象还在 young，**pin 的契约没问题，是"8 次就够"这个假设过期了**。
+
+所以这一条不是"分配路径错"，是**期望过期**：那个 8 与阈值 15 不是同一套数。改法是把"固定 8 次"换成"收集到 `isObjectAddressStable` 为真，最多 64 次"——**上界是给坏掉的晋升路径留的响**，不是给循环兜底。
+
+`gc.plan.toml` 至此 **45 条 / 45 绿**，layer 里那两条"出生即红"的自检第一次真的跑过并通过。
