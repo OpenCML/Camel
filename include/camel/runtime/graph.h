@@ -240,6 +240,20 @@ bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref);
 /// holds only a reference asks it the same way the seal check does.
 bool nodeIsChainStatement(const GCGraph &graph, gc_node_ref_t ref);
 
+/// Whether `candidate` is the block's own value node where an edge's end stands, the block being
+/// the one `tail` is a statement of. A sync edge may end on one of three things
+/// (docs/design/effects/edges.cn.md 5.3): a statement of the block's chain, the block's own value
+/// -- any kind of node, because a block's value is whatever its chain's tail computed -- or a
+/// `GATE`. This is the second of the three, asked as "the same block": a node's region is the block
+/// it belongs to, and region 0 is the graph itself, the block a statement sits in when nothing
+/// wraps it (control_regions.h: `0 when it is in none`), so an end and its tail in one region are
+/// in one block -- outside any block, the graph's own chain.
+///
+/// The seal check asks it of a frozen graph and the census beside it counts by it; they had the
+/// same expression written twice, which is the state the question was already in when
+/// `nodeIsChainStatement` was two copies.
+bool isTheBlocksOwnValue(const GCGraph &graph, gc_node_ref_t candidate, gc_node_ref_t tail);
+
 /// Whether a node owns a control region of this graph, and so stands on the outside for what runs
 /// inside it (`docs/design/effects/edges.cn.md` 4.6): a `BRCH` or a `LOOP` that carries an arm or a
 /// part of a loop. Such a node computes nothing itself and still carries an order edge.

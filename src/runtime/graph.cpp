@@ -220,6 +220,10 @@ bool nodeIsChainStatement(const GCGraph &graph, gc_node_ref_t ref) {
     return nodeIsChainStatement(node->kind, body != nullptr ? body->oper : camel::core::kNoOper);
 }
 
+bool isTheBlocksOwnValue(const GCGraph &graph, gc_node_ref_t candidate, gc_node_ref_t tail) {
+    return graph.nodeRegion(candidate) == graph.nodeRegion(tail);
+}
+
 using camel::core::rtdata::fromSlot;
 using camel::core::rtdata::Object;
 using camel::core::rtdata::toSlot;

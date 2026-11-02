@@ -252,8 +252,7 @@ class EdgeChecker {
             // is edges.cn.md 1 and 4.6; the end may also be the block's own value (same region as
             // its tail, the block a statement sits in when nothing wraps it being region 0) or a
             // `GATE` (edges.cn.md 5.3).
-            const bool endSameBlockValue =
-                graph_.nodeRegion(edge.user) == graph_.nodeRegion(edge.pred);
+            const bool endSameBlockValue = isTheBlocksOwnValue(graph_, edge.user, edge.pred);
             if (!isChainStatement(edge.user) && !endSameBlockValue &&
                 user->kind != GCNodeKind::Gate) {
                 bad(std::format(
@@ -284,8 +283,7 @@ class EdgeChecker {
                 // wraps it (control_regions.h: `0 when it is in none`) -- so an end and its tail
                 // in the same region are in one block, and the value of that block is an end the
                 // graph can derive.
-                const bool sameBlockValue =
-                    graph_.nodeRegion(edge.user) == graph_.nodeRegion(edge.pred);
+                const bool sameBlockValue = isTheBlocksOwnValue(graph_, edge.user, edge.pred);
                 if (!endIsStatement && !sameBlockValue && user->kind != GCNodeKind::Gate) {
                     static std::set<std::pair<gc_node_ref_t, gc_node_ref_t>> seen;
                     if (seen.insert(std::make_pair(edge.user, edge.pred)).second) {
