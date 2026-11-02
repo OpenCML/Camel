@@ -1,0 +1,26 @@
+/**
+ * A loop whose value nothing reads, and whose body writes nothing: it is still a statement the
+ * source wrote, so the printed program keeps it.
+ *
+ * Dropping a value nothing reads is right -- that is DCE, and a printed program does not carry dead
+ * values -- but a region is not a value: `spin` runs two rounds, and a print that loses the loop
+ * hands back a different program that happens to answer the same thing. The round trip is what
+ * notices: `linear/runtime/var_read_before_region.cml`'s `nothing_written` lost a whole LOOP this
+ * way (15 vertices and 2 regions on the left, 5 vertices and 0 on the right), and its canonical
+ * documents stopped being isomorphic. The rule is the graph's own: a region in the graph is a
+ * statement in the text, whatever its value is worth.
+ *
+ * Expected output:
+ *   (nothing)               the loop answers nothing; it is kept because the source wrote it
+ */
+
+func spin(): int sync {
+    loop i = 0 while i < 2 do sync {
+        i + 1
+    }
+    return 0
+}
+
+func main(): int sync {
+    return spin()
+}

@@ -20,6 +20,49 @@ This repository uses a strict `main` / `develop` / feature-branch workflow. Foll
 - After the merge completes, rebase the merged feature branch so it stays synchronized with the updated `develop`.
 - After the merge, verify branch ancestry before proceeding.
 
+### A lane may not accumulate: the ten-commit rule
+
+A lane's age is measured in `develop`'s API changes, not in days. A lane holding forty unmerged
+commits is a fuse: every change `develop` makes in the code the lane also edits is a merge that has
+not happened yet, and every commit taken out of the lane by diff is a chance to miss one.
+
+The rule, and who counts what when:
+
+- **The lane owner**, before starting a new piece of work, runs
+  `git rev-list --count origin/develop..HEAD`. If it is **more than 10**, the lane merges into
+  `develop` **first** and only then continues.
+- **The lane owner**, after every merge of `develop` into the lane, runs the same count and records
+  it in the merge commit. A lane that merges `develop` in and then adds ten more commits without
+  going back has already crossed the line again.
+- **The coordinator (or the merge lane)**, when a lane is handed over, runs the same count before
+  deciding how to take it. **A lane over 10 is taken whole (`git merge --no-ff`), not by diff** —
+  taking a commit out of a long lane is how a dependency gets missed (the include that `01ff08254`
+  needed is the example on record).
+- **After any merge, the person who merged runs `git rev-list --count origin/develop..HEAD`, which
+  must be 0 — or 1 when the merge commit itself has not been pushed yet.** Anything else means a
+  commit is still outside the door, which has happened twice and was caught only by this count.
+
+A lane may be red; `develop` may not. When a lane's tip is red, take its **last commit that was
+green** and say so in the merge message, so the red's cause lands with the next commit instead of
+sitting on `develop`.
+
+### "Green" is only green on today's `develop`
+
+A lane that reports a green suite reports it about **the `develop` it last merged in**. Five times in
+one night a lane was green and still not mergeable, because the tree it measured predated a change
+its own work would have to live with. Two checks before merging a green lane, both required:
+
+- `git merge-base --is-ancestor origin/develop <the commit to merge>` — **must succeed**. If it
+  fails, the green belongs to an older world: the lane merges `origin/develop` in, re-runs, and
+  reports again.
+- `git rev-list --count origin/develop..<the commit to merge>` — the lane's own commits, a different
+  number from how far behind it is, and both are worth knowing.
+
+One exception: a commit behind by **documentation only**, with each intervening commit named and its
+file list shown in the merge message. Documents cannot make code green or red, so the reading holds.
+Being behind by a commit that touches code is not an exception — it is the thing the check exists
+to catch.
+
 ## Coordinator Workflow: Handover Branches And `wzj-dev`
 
 The coordinator's own work follows a two-step integration so the remote stays quiet and the task book's readers still see progress.

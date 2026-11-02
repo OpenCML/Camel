@@ -272,6 +272,251 @@ print family, and this operator's configuration is not a string, so its call has
 | `families` | 52 | **52** |
 
 
+
+
+
+
+
+
+
+
+
+
+**2026-11-02 第二十四刀：五次都没落地，交班（页：`docs/handover/questions/2026-11-02-cml-sync-tail-write.md`）**
+
+按第二十三刀的入口判据动手，**只改入口**（`handsTail` 认"`tail` 站在退出链上"+ 放开 `regionNeedsSync(0)`），探针原文：
+
+```
+[cml-probe2] region=0 tail=4 exit=7 sync=1 write=-1
+[cml-probe2] region=0 tail=6 exit=11 sync=1 write=-1
+```
+
+**`write` 仍是 `-1`**——我比的是链上的闸门，`tail` 是链**底**的值节点，判据还是不成立；而且**放开那条守卫单独就把 `var_param` 契约用例打坏了**（`feat.trans.cml` 报 `AssertionError`）。按"`write == -1` 就停、`var_param` 坏就退"停手，全部回退。
+
+**这一刀把两件事钉死了**：①`regionNeedsSync(0)` 那条守卫**有承重**，不能只去掉；②"`sync` 体的值就是它最后一次写的值"这个前提本身没被证明——值节点同时被写和退出闸门读，正是因为**建图侧认为它是两个使用者**。⇒ 若建图侧是自觉的，那打印器把一句拆成三句是**忠实**的，要改的是建图或判据定义，不是打印器。
+
+已写成待修项 + 最小复现（`g2` **7 对 6**、`DIFFERENT`、答案两侧都是 `1`），交下一班；连续五轮不落地，按你的话换现场。
+
+**读数未动**（语料 3377）：`printed 559 / checked 552 / equivalent 511 / not_equivalent 41 / unfaithful 7 / families 53 / DIFFERENT 48`。
+
+**2026-11-02 第二十三刀试过并回退：改"值节点有几个使用者"打坏了 `var_param`，而 `closure_var` 一字未动**
+
+按上一刀的形状动手，四步都试了：把退出链（`GATE`/`COPY`，从 exit 往下）从 `valueUsers` 里排除、让 `blockValueWrite` 对 `sync` 体也生效、在 `assignmentHandingOn` 里穿过闸门找写的值、以及把"退出链的尾就是值"这条也认了。**结果：`closure_var` 的打印文本一字未变，而 `test/cases/trans/cml/var_param.cml` 的契约用例坏了**（`feat.trans.cml` 报 `AssertionError: var_param.before.json / after.json`）⇒ **按"不许把结构差换成语义差"的纪律，全部回退。**
+
+**探针给的新事实（这次是它省了一整晚）**：
+
+```
+[cml-probe2] region=0 tail=4 exit=7 sync=1 write=-1
+[cml-probe2] region=0 tail=4 exit=7 sync=1 write=-1   (两张 lambda 图各一行)
+```
+
+- `tail=4` **是值节点本身**（`n4`，那个 `:op/add_l`），不是退出闸门、也不是它直接带的那个 `sync` 闸门 `n6`；
+- 而 `blockValueWrite` 要求 `tail` 是 exit 的**直接** normal 输入（`exit=7` 的直接输入是 `n6`）⇒ **`write=-1`，认写这一步从入口就没生效**；
+- 所以"穿过闸门链"那一步再怎么改都看不到效果——**它根本没被调用到**。
+
+**四次尝试的读数完全一致**（同语料 3377）：`printed 559`、`checked 552`、`equivalent 511`、`not_equivalent 41`、`unfaithful 7`、`families 53`、`DIFFERENT 48` 行，且 `DIFFERENT` 集合与回退后**逐行相同**（`diff` 空）。⇒ 这一刀对语料**零影响**，只在 `var_param` 上造出一处坏。
+
+**下一刀要改的是入口，不是链**：`blockValueWrite` 的 `handsTail` 判据要以**"`tail` 在退出链上"**为准（`tail` 可以是值节点本身，也可以是链上任何闸门），而不是"`tail` 是 exit 的直接 normal 输入"；改完先用 `CAMEL_CML_PROBE2` 确认 `write != -1`，再谈文本。
+
+**2026-11-02 第二十二刀没下：`sync` 闸门是"区域的值等它自己的写"，而三句文本把一次写拆成了三句（只查未改）**
+
+`closure_var` 剩下的差是两张 lambda 图各少一个带 `sync` 输入的 `GATE`。查下来三条判据各有答案：
+
+**一、那个 `GATE` 是哪一个 `sync`？** 是**区域自己的退出闸门**，不是调用点那次同步。源图（`g3`，`twice` 的体）：
+
+```
+n5 :op/assn_l                      <- 写
+n6 GATE(normal<-n4, sync<-n5)      <- 等这次写
+n7 GATE(normal<-n6, control<-n5)   <- 退出闸门（exit）
+```
+
+调用点那边是 `CALL` + `FILL`（`g2` 的 `n4`/`n3`），两侧完全相同、没少。
+
+**二、打印器侧还是建图侧？打印器侧**——因为**打印出来的文本比源多两句**：
+
+```
+let cml1: int = total + y + y      <- 源里没有这句
+total = cml1                       <- 源里是一句 `total = total + y + y`
+return cml1                        <- 这句也没有
+```
+
+重编译这三句，写和"区域的值"被拆成两个节点，退出链就合并成一个 `GATE(normal + control + sync)`（右侧 `g3` 的 `n6`），于是少了一个闸门。**建图侧没少东西**：同一段源文本重新建图会得到源图那样的两个闸门。
+
+**三、与"尾值写成显式 `return`"有关吗？无关，已用对照排除。** 把那条规则关掉重编（`CAMEL_CM_NO_RETURN`），尾值变成裸表达式 `cml1`：**`g2` 仍是 12 对 11、`g3` 仍是 8 对 7，结构类原文一字不差**。⇒ "关掉它现象回来"没有发生，因果关系不成立。
+
+**再试的两条也没动它**：让 `blockValueWrite` 对 `sync` 体也生效、以及让 `assignmentHandingOn` 从闸门链往下找写的值——**文本一字不差**。原因在更前面：`let cml1` 是**值节点有两个使用者**（写 + 退出闸门）时给出的，拆分发生在尾值规则之前，所以改尾值规则看不到效果。
+
+**下一刀的形状**：**在做 `users > 1` 判断之前，先认出"区域的值就是它最后一次写的值"（穿过退出闸门的 `sync`/`control` 那一层）**，让值节点只剩一个使用者，打印器就会写成源的那一句 `total = total + y + y`。判据：`g2` 12 对 12、`g3` 8 对 8、`closure_var` 回程 `EQUAL`，且 `equivalent` 与 `DIFFERENT` 的读数不回退。
+
+**2026-11-02 第二十一刀（版本管线后面的效果）：`unfaithful 10 → 7`，`equivalent +2`**
+
+上一刀的探针把病因钉在"有效果的节点，唯一使用者是版本管线（`GATE`/`:var/peek`/`:var/after`）"上。本刀按那条修，**并且一并对齐了两件同源的事**（不一起做就只会从"调用不见"换成"用了未定义的名字"）：
+
+1. **效果自己当语句**：`processNode` 里 `effect && users == 1` 原本假定唯一使用者会把调用写进自己的文本；新增 `feedsVersionPlumbing`，当使用者是版本管线时把效果**当语句印在原位置**（`twice(x)`、`add(100)`）。这里**不需要给结果起名**——后面的写命名的是变量，不是调用的版本，所以语句形式就是全部。
+2. **嵌套体的名字不许撞**：`prepareGraph` 加 `resetNames`，lambda 的体传 `false`。原本内层体的 `cml1` 与外层体的 `cml1` 是同一个名字（`let cml2: int = cml1 + 1` 里的 `cml1` 声明在内层）。
+3. **读要读到 cell 而不是版本**：`:var/get`/`:var/peek` 的表达式改用 `cellOf`（能剥 `:op/assn*` 与 `:var/after`），否则 `println(cml6)` 里的 `cml6` 从没被声明过。
+
+**三条用例（源 → 打印程序）**：
+
+| 用例 | 输出 | 回程 |
+| --- | --- | --- |
+| `consistency/values/closure_var` | `3 / 24 / 249` → **`3 / 24 / 249`** | 仍 `DIFFERENT`（见下） |
+| `linear/nvm/var_params` | `1 / 3 / 13 / 6 / 15 / 8 / 113 / 20001` → **同** | **`EQUAL (121 vertices, 464 edges)`** |
+| `trans/cpp/exec/variables` | `12 / 33 / abc / 5 / 12 / 12` → **同** | **`EQUAL (95 vertices, 355 edges)`** |
+
+**反向验证**（把修法 stash 掉重编，语料同为 3376）：`closure_var` 的打印程序回到 **4 个编译错误**，文本里 `twice(x)`、`add(100)` 的 `grep -c` 为 **0**。**改掉它现象消失、关掉它现象回来。**
+
+**读数**（两栏同一语料 3376，基线是 stash 后重编）：
+
+| 读数 | 基线 | 本刀 |
+| --- | --- | --- |
+| `printed` | 558 | 558 |
+| `refused` | 1814 | 1814 |
+| `checked` | 548 | **551** |
+| `equivalent` | 508 | **510** |
+| `not_equivalent` | 40 | **41** |
+| `unfaithful` | 10 | **7** |
+| `families` | 53 | 53 |
+| `DIFFERENT` 行 | 50 | **48** |
+
+**`unfaithful` 到了 7，比判据要的 8 多清了一条**（三条都不再是"不产出 canonical 文档"）。`closure_var` 从"不可打印"变成"可打印、输出对、但图不同构"：两张 lambda 图各**少一个带 `sync` 输入的 `GATE`**（`g2` 12 对 11、`g3` 8 对 7）——那是退出闸门，疑与"尾值是显式 `return`"有关（第十六刀那条规则的边界）。记作下一项，未在本刀内追。
+
+**2026-11-02 第二十刀：探针定位到那条调用（只查未改）**
+
+上一刀留的悬案是"`twice(x)`、`add(100)`、`f(g)` 这类调用被丢了，走的哪条路径"。**探针贴了三层，结论：它在，遍历到了，`effect=1`，`users=1`——它被"单用户"那条规则吞掉了。**
+
+**探针的原话**（`CAMEL_CML_PROBE` 打开，`closure_var`）：
+
+```
+body calls=1 topo=12                                  <- add 的体，1 个调用
+region-walk region=0 ref=4 ctrl=0 users=1 effect=1 skip=0   <- 那个调用：活着、在本区域、users=1、effect=1
+```
+
+三条候选路径逐条排除：
+
+1. **不是 `users == 0` 跳过**：它的 `users=1`，不是 0；`processNode` 里 `effect && users == 1` 那条分支的注释写着"一次使用把调用留在源里它在的地方"——**它假定那个单一使用者会把调用印进自己的文本**。
+2. **不是 `isEffectful`**：探针直接读 `nodeEffect`，答案是 **1**（有效果）。上一刀试的三种修法没动它，正因为丢的地方根本不在那。
+3. **不是建图时没了**：`std::gir` 里它在（`N0C`，`span="11:8-11:16"`），探针在打印器里也见到了它。
+
+**它是怎么消失的**：那个单一使用者是**版本管线的节点**——图里是 `N0C -> N0F [NORM]`、`N0F -> N10 [NORM]`、`N0C -> N10 [CTRL]`，即调用 → `GATE` → `:var/peek` → `:op/assn_l`。打印器把这一串印成"变量名 + 赋值"（`total = cml2`），**从不回头印那个调用**，于是调用的文本跟着死掉的 `GATE` 一起没了。
+
+**下一刀的判据（写死）**：**一个有效果的节点，它唯一的使用者若属于"版本管线"（`GATE`/`:var/peek`/`:var/after`）而不是一个会写它的值消费者，那个效果必须自己作为语句印出来**。判据读数：`closure_var` 的打印程序输出 `3 / 24 / 249`（现在 `1 / 2 / 4`）、`var_params` 输出 `1 / 3 / 13 / 6 / 15 / 8 / 113 / 20001`，两条回程 `EQUAL`，且 `unfaithful` 10 → 8。
+
+**顺带记下探针的做法，下次直接用**：三条路径要分开答，就得让"在但被跳过"和"根本不在"分开——`body calls=N`（本图拓扑里有多少调用）+ `region-walk`（遍历时见到了谁、`users`/`effect`/`ctrl` 各是多少）。只有前者时 **`found=0` 会被误读成"它不在图里"**。
+
+**2026-11-02 第十九刀没合：作用域那三条不是同一个缺陷，而且名字修好会把"响的失败"变成"哑的失败"**
+
+裁下来做"作用域三条（`cmlN` 出作用域）"，判据是 `unfaithful 10 → 7`。**查完并试做了四种改法，最后整笔回退**，因为其中两条会从"打印不出来"变成"能跑但答错"。
+
+**病因与试做**：
+
+1. **`trans/cpp/exec/variables` 是名字本身错了**：`println(add(5), add(7), acc)` 的读，版本是 `:var/after`（一次调用留下的版本）。`operatorExpression` 里读 cell 只剥 `:op/assn*`（`cellReadBy`），不剥 `:var/after`，于是 `cellName` 给那个 cell **现编**了一个 `cml7`，而文本里从没有声明过它。改成 `cellOf`（它剥 `:op/assn*` 与 `:var/after` 到 `:var/new`）之后：**回程 `EQUAL (95 vertices, 355 edges)`**，输出逐行相同。
+2. **另外两条是别的东西**：`closure_var` 与 `var_params` 名字修好之后**能编译、能跑，但答案不同**——`closure_var` 源程序打印 `3 / 24 / 249`，打印出来的程序打印 `1 / 2 / 4`。原因是**调用被丢**：`twice(x)`、`add(100)`、`f(g)` 这些"结果没人读、被调函数通过捕获写了一个变量 cell"的调用，打印器按纯调用丢掉了。
+3. **试了三种修法都没动它**：把 `generated_` 改成跨嵌套体单调（名字不再撞）、把 lambda 图加进 `isEffectful` 的候选、给 `nodeEffect` 加"被调图里出现 `:op/assn` 就算有效果"——**`closure_var` 仍答 `1 / 2 / 4`**。说明那个调用不是走 `nodeEffect` 那条分支丢的（另有路径，下一刀查）。
+
+**为什么整笔回退**：留着第 1 条、不回退，`unfaithful` 会 10 → 9，但另外两条就变成**静默答错**；按"打印不忠实 = 假打印，宁可拒"的规矩，这是把一条响的失败换成两条哑的失败，**不能合**。所以代码回到 `e7d84d507`，`unfaithful` 仍是 10。
+
+**下一刀该查的**：`twice(x)`、`add(100)`、`f(g)` 这类"结果没人读、被调函数通过捕获写 cell"的调用走的是哪条丢弃路径（`nodeEffect` 已被排除三次）。判据：`closure_var` 源与打印程序输出**逐行相同**（`3 / 24 / 249`），`var_params` 同理（`1 / 3 / 13 / 6 / 15 / 8 / 113 / 20001`），且两条回程 `EQUAL`。
+
+**2026-11-02 第十八刀没下刀：`when` 槽不在打印器这一层（只查未改）**
+
+`unfaithful` 里唯一"签名侧"的那条（`compile/when_overloads/values.cml`）本来排在下一刀。**查完发现修法不在打印器**，所以先不落代码。
+
+**现状（逐字）**——源里两个声明：
+
+```
+with <fast: bool, wide: bool>
+func pick(x: int): string when fast { return 'fast' }
+
+with <fast: bool, wide: bool>
+func pick(x: int): string when wide { return 'wide' }
+```
+
+**打印出来**：
+
+```
+with <fast: bool, wide: bool>
+func pick(x: int): string { return 'fast' }
+
+with <fast: bool, wide: bool>
+func pick(x: int): string { return 'wide' }
+```
+
+**答：既不是"打印器没打 `with` 槽"，也不是"声明在 GIR 里没有 `with` 槽"**——`with <fast: bool, wide: bool>` **打出来了，与源逐字相同**。丢的是 **`when` 条件**，而三处证据说明它不在打印器能读到的地方：
+
+1. **GIR 里没有它**：`std::gir` 里两张图都叫 `pick`，`with` 端口 `fast`/`wide` 与普通参数 `x` 一模一样，**签名完全相同**，没有任何条件节点或属性；
+2. **声明记录里没有它**：打印器唯一能问的声明表是 `camel::core::OperatorTable::instance().callFormOf(uri)`，`CallForm` 的字段是 `name`/`minArgs`/`withCount`/`declaredByModule`/`kernelDeclaration`（`include/camel/core/operator_table.h#CallForm`）——**没有条件文本**；
+3. **条件只活在编译期的树上**：`include/camel/compile/gct/tree.h#whenOf`（`WhenClause`，带 `condition` 与 `text`），建图器用它判重载是否互斥（`src/compile/gir/builder.cpp` 的 `whenClauses_`），**过不了图这道门**。
+
+⇒ **这是声明/建图侧的债**：要让打印器写出 `when fast`，条件文本得先挂在**声明**上（`CallForm` 加字段，或图/声明记录带上它）。**它不在打印这一层，硬印只能印出"看起来对"的两条同名声明**。所以 `unfaithful` **10 → 9 这一刀做不到**，得等条件文本上到声明层。
+
+**由此记一条**：`unfaithful` 的十条里，**"签名侧"那条其实和"起名侧"两条一样，都卡在声明层**——一条要条件文本，两条要"同作用域唯一"。打印器能自己清的是**作用域那三条**与 `fields_and_access`。
+
+**2026-11-02 第十七刀（没人用的区域）：先答"它有没有语句形式"，再改。** 裁下来的问题是"那张图左边那个 `LOOP`，值没人用、什么也不写，它在 CML 里有没有**语句形式**"。
+
+**答：有，而且源程序本身就是那种写法**——`nothing_written` 里的 `loop i = 0 while i < 2 do sync { i + 1 }` 就是一个其值无人读的循环**语句**。所以不是语言层的缺口，**打印器应当印出来**。
+
+改法（`CmlPrinter::processNode` 的 `users == 0` 分支）：**丢弃仍然对纯值成立**（那是 DCE），**但 `LOOP`/`BRCH` 节点不是值，图里有就印成语句**（`JOIN` 不在这里印——它是分支的汇合点，`expression(BRCH)` 已经写了它）。
+
+**双向读数（同一份程序，两次构建）**：
+
+| 构建 | 打印出来的 `spin` | 回程 |
+| --- | --- | --- |
+| 改前 | `func spin(): int sync { return 0 }`——**整个循环消失** | `DIFFERENT`（缺 `DATA 2` 一类，左边多一个顶点） |
+| 改后 | `loop i = 0 while i < 2 do sync { return i + 1 }` 保留 | **`EQUAL: the two canonical documents are equivalent (29 vertices, 92 edges)`** |
+
+两侧输出都是空（循环不产生输出），`std::nvm` 逐行相同。
+
+判据（基线 `557 / 1813 / 547 / 507 / 40 / 10 / 53`，语料 3374；本刀之后语料 3375，因为新增了用例）：
+
+| 读数 | 基线 | 本刀 |
+| --- | --- | --- |
+| `printed` | 557 | **558**（新增用例） |
+| `equivalent` | 507 | **508**（新增用例就是那一条） |
+| `not_equivalent` | 40 | **40** |
+| `refused` | 1813 | **1813** |
+| `unfaithful` | 10 | **10**（同一批文件名） |
+| `DIFFERENT` | 50 行 | **50 行，新增 0** |
+| `families` | 53 | **53** |
+
+**用例**：`test/cases/trans/cml/unused_loop.cml`（进 `cml_contract.py` 的 `CORPUS`/`MARKERS`）——改前它是 `DIFFERENT`，改后 `EQUAL`。
+
+**`var_read_before_region` 仍未 `EQUAL`，剩下的不是打印器的事**：那张图的差已经缩到 `DATA 7 -> COPY`（左边，一个 COPY 喂 `println` 两个槽）对右边两个独立 `DATA 7`。**没有任何文本能产出左边那个形状**——`let x = 7; println(x, x)` 编译出来是 `DATA 7` 直接喂两个槽（实测），而那个 COPY 是**编译器消掉 `var n = 7` 之后留下的悬空拷贝**（`var n = 7` 没人写，`n` 被折成常量，`COPY` 留在图上）。⇒ **这是编译器 DCE 的残留，不是打印器的选择**；要它 `EQUAL` 得先由编译器那一侧清掉那个拷贝。
+
+**2026-11-02 查证（`return i + 1` 与 `:var/new` 那个结构类）：两条都不是缺陷，且"不是同一处"是量出来的**
+
+**一、尾值的 `return` 不是缺陷，别再改。** 最小用例（循环体尾值 `i + 1` → 打印 `return i + 1`）回程 `EQUAL: the two canonical documents are equivalent (37 vertices, 125 edges)`。它不是"尾值没名字"，是"尾值需要一个带门的返回"（`CmlPrinter::buildBody`："a bare last expression yields the value without that gate"）。**"修"它就会修坏一个正确的打印。**
+
+**二、`git grep -n 'var/new' src modules stdlib`**：建图器在 `builder.h`/`builder_expr.cpp`（`var v = e` 就是 `:var/new`），执行器在 `src/builtin/executors/builtin.cpp`，`stdlib` **一处都没有**。
+
+**三、`var_read_before_region` 丢的不是 `:var/new`，是整个**没人用的区域**。** 那份 canonical 文档里两边各有 4 个 `:var/new`，**数量一样**；差的是 `nothing_written` 那张图：**左 15 个顶点、2 个区域，右 5 个顶点、0 个区域**。而左图**本来就没有 `:var/new`**——`var n = 7` 没人写，编译器早已把它折成常量 `7`（`n0 DATA 7 -> n1 COPY`，那个 COPY 悬空），打印器又把这个**值没人用、什么也不写**的 `LOOP` 整段丢了。所以检查器那行 `{"op": ":var/new@1.0"}` 只是**它在整份文档里挑给"右缺失"的代表**，不是病因；**病因是"没人用的区域被丢"**，与 `:var/new` 无关。**由此得第二条仪器规则：结构差异检查器报的"某个 op 少了 1 个"可能只是它挑的代表**——要看**顶点数与区域数**才知道丢的是哪一个量级（15/2 对 5/0 是"整段区域没了"，65/6 对 63/6 才是"少了两个顶点"）。今晚这是第二次"仪器报的东西不是病因"（第一次是按 kernel 条数认 `:op/atos`）。
+
+**四、`order_edges_regions` 是另一处，不是同一处。** 左 65 顶点 / 6 区域、右 63 顶点 / 6 区域（区域没丢，只少两个顶点），形状差是：左 `GATE(2 入)` 2 个、`:var/get` 3 个、`:var/peek` 0 个；右对应 0 / 2 / 1。**同一族两个用例，两种病因**——所以这两条要分开修。
+
+**五、该修的是"丢区域"。** 打印器的 `users == 0` 丢弃对**纯值**是对的（那是个死值），对**区域**不是：源里写下的 `loop` 是程序的一部分，丢了它，回程就不再同构（这一刀就是这条）。判据仍是 canonical 判等：修完之后 `var_read_before_region` 应当 `EQUAL`。
+
+**2026-11-02 第十六刀（区域内的读）：先证明是同一个事实，再拆那条守卫。** 上一刀留了一句"区域内的读要单独一刀"。**动手前先查"记录版本的位置"**：`git grep -n 'recordWrite' src/compile/gir/` 只有三处调用点——`builder_expr.cpp#recordWrite` 本体、`builder_control.cpp#mergeArmVariables`（对 JOIN/LOOP 的那一次，`mergeArmVariables` 的调用点在分支与循环的构建里）、`builder_operators.cpp` 里经调用的那三处写。**版本只在一处记**，但它对"写本身就是区域节点"另走一条：`regionExit` 时写的是 **control** 边（`writeControlLink`），注释把另一半说清了——"a read in the region around the write … stays pending: the write that meets it is the region's own"。
+
+**关键的一问"臂里的读和块里的读是不是同一个事实"，答案在图上是**：臂的节点**就在块的图里**（`controlOf` 说的是"哪个区域来铺开它们"，不是"哪个图记它们的版本"）。`~/a7/arm_inner.cml`（`if` 的 then 臂里 `let before = t; t += 1; report(before, t)`）的 gir 里 `N0C -> N10 [ORDER]`，两端 `controlOf` 都是那个 BRCH——**同一条 `recordWrite` 写的同一条 ORDER 边**。所以它不是另一个事实，上一刀那条 `controlOf(ref) != 0` 的守卫只是把真缺陷挡在门外：改前的打印是 `report('int', t, t)`，跑出 `int 4 4`，源是 `int 3 4`。
+
+改法：**删掉那条守卫**（判据仍是 `orderUsersOf`）。语料里**没有一条**覆盖这个角：3361 个文件一个都没踩到，所以这一刀必须**补用例**——`test/cases/trans/cml/arm_read.cml`（写在 `cml_contract.py` 的 `CORPUS` 与 `MARKERS` 里）。
+
+判据（**同一棵合并后的树、语料 3363 个文件**，即 `arm_read.cml` 已在语料里；基线是"守卫还在"的那次构建，只差这一行）：
+
+| 读数 | 守卫还在 | 本刀 |
+| --- | --- | --- |
+| `printed` | 554 | **554** |
+| `equivalent` | 504 | **505** |
+| `not_equivalent` | 40 | **39**（唯一变化是新增的 `arm_read.cml`） |
+| `refused` | 1808 | **1808** |
+| `unfaithful` | 10 | **10**（十个文件名逐一相同） |
+| `DIFFERENT` | 50 行 | **49 行，新增 0** |
+| `families` | 53 | **53** |
+
+**"只动了一条用例"正是这一刀的重点**：删守卫前的全量快跑是 `8375/8362/1`（红的正是新增的 `arm_read.cml`），删后是 `8375/8363/0`。**守卫在时那条用例是 `DIFFERENT`，删掉后消失**——用例咬得住这条缺陷，缺陷也确实只在角上。
+
+两个顺带记下的读数变化（**都不是本刀**，是合并 `bf64149aa` 带进来的那一个语料文件）：`refused` 1807 → 1808、`families` 52 → 53。后者是**工具把家族名归一化时的伪影**：`REFUSAL … cannot print <graph>: float[]) => float pure>: the graph name '<name>' is not a source identifier.`——同一个"图名不是源标识符"家族，因为那个图的**名字里带 `: `**，家族的 `<graph>` 前缀削掉了半截。**家族数没涨，涨的是归一化没归准。** **由此得一条仪器规则：家族数在名字被截断时不可信**——`REFUSAL` 行的家族键是把"`std::cml cannot print <图名>:`"这段前缀削掉得到的，图名里带 `: ` 时只削掉半截，同一个家族就数成两个。**下一次看到 `families` 涨一，先查那一行是不是被截断的家族，再当成"多了一个家族"。**
+
 **2026-11-02 第十五刀（A7 第 3、7、8 条，同一机制）：`let before = z` 消失，读版本打成变量名。** 三条用例（`var_read_before_region`、`var_read_before_write`、`order_edges_regions`）是**一件事**，不是三件：`:var/get` 只打 `cellName(cellReadBy(...))`，**读的是哪一版它不打**。
 
 **判据不是"有没有 ORDER 边"这种猜测，而是建图器自己写的那句话**（`src/compile/gir/builder_expr.cpp#recordWrite`）："读要看见写之前的值……读在写之前由一条 order 边排定"。图上就是 `N03 -> N0E [ORDER]` 这样的边：**一个读若被排在一次写之前，它的版本就一定比文本在该处写到的旧**——因为文本里变量名只表示"文本此刻写到的那一版"。
