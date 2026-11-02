@@ -167,3 +167,15 @@ expect_exit = 0
 expect_output_contains = ["identity y= 3", "identity dx1= 1", "type=(float) => (float, (float) => float pure) pure residuals=1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "split_loop_taped_rounds"
+desc = "`split` through a loop: the exit of a lifted loop is the LOOP node itself (its two value components *are* the pair), so the cut gives the forward loop one collection slot -- one tuple per round holding what the backward half reads from that round -- and `lin` loops over that tape. The round's factor changes (2, 3, 5), so the primal 30 and the tangent 30 are the per-round tape's doing: a tape that kept only the last round's residuals would print 125 for `lin(1.0)`. The diagnostic pins the shape -- `loop=1 tape=2 invariants=0`, one collection slot and two residuals per round (the round's element and the state's value) -- and `residuals=1` says the tape crosses the cut inside `lin`'s closure like every other residual. What this entry cannot pin is the order the rounds are walked in: with one float state the per-round maps are scalars 2, 3, 5, they commute, and every walk order prints the same 30. An order-sensitive case needs two states with non-commuting per-round maps, and `jvp` refuses to lift a loop with more than one state (`skip=loop`: it would have to pair the tuple the body yields), so that graph never reaches `split` -- the case records the shears it would use and what each walk would print. The reverse walk itself is `transpose`'s (4.3), and `transpose` still copies a loop's range as it stands; named in the case, not hidden."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_loop_taped_rounds.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["loop y= 30.0", "loop d= 30.0", "type=(float) => (float, (float) => float pure) pure residuals=1 loop=1 tape=2 invariants=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

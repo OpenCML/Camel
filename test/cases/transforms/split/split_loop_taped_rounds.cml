@@ -1,0 +1,45 @@
+// `split` through a loop (sprint item 2, 2026-11-02: 每轮残差作为收集输出，后一半按轮倒序取；
+// design 4.2, design principles 3.10 and 9.9). A lifted loop has no tuple fill to cut -- `jvp` gives
+// the LOOP node the pair type, so the node's two value components *are* the pair -- and the cut
+// therefore gives the forward loop one collection slot: one tuple per round, holding what the
+// backward half reads from that round. `lin` then loops over that tape, so its rounds are the
+// forward rounds one for one and no index operator is needed to pair them.
+//
+// The factor below changes with the round, which is what makes the numbers a check rather than a
+// coincidence. At x = 1 with factors 2, 3, 5:
+//
+//     primal:   1 * 2 = 2, 2 * 3 = 6, 6 * 5 = 30          -> 30
+//     tangent:  1 * 2 = 2, 2 * 3 = 6, 6 * 5 = 30          -> 30  (d/dx = 2*3*5)
+//
+// A tape that kept only the *last* round's residuals -- the shape you get by letting the loop keep
+// running and reading the state afterwards, instead of collecting one element per round -- would
+// hand the tangent body the factor 5 in all three rounds and print 125 for `lin(1.0)`, not 30. So
+// 30 is the number this case pins: each round's residual is that round's, and the tape's length is
+// the number of rounds the forward half ran.
+//
+// What a *single* float state cannot pin is the order the backward half walks the rounds in: the
+// per-round maps here are the scalars 2, 3, 5, they commute, and every walk order prints the same
+// 30. An order-sensitive case needs two states whose per-round maps do not commute -- A = [[1,1],
+// [0,1]] and B = [[1,0],[1,1]] alternate: A.B = [[2,3],[3,5]] and B.A = [[5,3],[3,2]], so the
+// tangent of (1,0) would be (2,3) walking one way and (5,3) the other. That case cannot be written
+// yet, and not because of this cut: `jvp` refuses to lift a loop with more than one state (it would
+// have to pair the tuple the body yields, and it answers `skip=loop` instead), so the graph never
+// reaches `split`. The split's own rounds are the linearization's, and they run forward by
+// definition; the reverse walk the design asks for is `transpose`'s (4.3: 倒着走，逐轮取 `split`
+// 留下的残差), and `transpose` still copies a loop's range as it stands. Until those two land, this
+// case holds the cut to what it can be held to on its own: the tape is per round, and it carries
+// exactly what the backward half reads from that round.
+import rulesets.jvp
+import { jvp, split } from transforms
+
+func f(x: float): float {
+    return loop a = x for k in [2.0, 3.0, 5.0] do a * k
+}
+
+func main(): int sync {
+    let fwd = split(jvp(f))
+    let (value, lin) = fwd(1.0)
+    println("loop y=", value)
+    println("loop d=", lin(1.0))
+    return 0
+}
