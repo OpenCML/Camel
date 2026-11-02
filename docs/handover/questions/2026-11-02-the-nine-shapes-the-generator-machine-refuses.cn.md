@@ -92,3 +92,5 @@ error[InternalDiag::UnknownInternalError]: An error has occurred: the generator 
 ⇒ 普通 `loop` 的体不以值结尾时**不报任何码**（既不是 `LoopBodyNeedsNextState`，也不是别的码），状态停在初始值、循环照常跑完。
 
 所以 `LoopBodyNeedsNextState` **今天只在生成器路径上落地**。要让参考里那句「与所有 `loop` 一样」在两侧都成立，普通 `loop` 的降低也得报同一个码；这一条**尚未做**，记在这里。
+
+**一个单独记下的事实（2026-11-03）**：普通 `loop` 的**体值从来没有被读过**。`visitLoopExpr` 把 `visitStmtBlock` 的返回（整块的那个 exec 节点）直接挂成 `loop` 节点的体（`builder.cpp:3438` `*loopNode << bodyValue;`），而块里最后一句 `s + 1` 只是这个 exec 链上的一个叶子。所以 `loop s = 0 for i in [0, 1, 2] do { println(s) }` 里 `s` 一次都没被改写、**连"体没给下一个状态"都没有报**：规则缺的不是一句诊断，而是**"体的值"这个位置本身**。要判"体值类型 vs 状态类型"，得在**类型检查期**做，降低期拿不到类型。
