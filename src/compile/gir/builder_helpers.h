@@ -723,8 +723,10 @@ inline node_handle_t releaseChainPlaceOfValue(node_handle_t value, node_handle_t
         return value;
     }
     if (!nodeIsChainStatementNode(node_handle_t(draft, predId))) {
-        // The place is handed to a statement, or to nobody.
-        return value;
+        // The place is handed to a statement or to nobody: a value with no statement behind it is
+        // transparent to the chain -- it writes no sync edge of its own, and the next statement
+        // links from wherever the chain stood before it.
+        return nullptr;
     }
     draft->setSyncInputs(nodeIdOf(value), {});
     return node_handle_t(draft, predId);

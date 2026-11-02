@@ -1812,7 +1812,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
             if (waitsOnTail) {
                 markSyncStatement(lastSyncedNode_);
                 markSyncStatement(res);
-                linkNodes(LinkType::Sync, lastSyncedNode_, res);
+                writeSyncLink(lastSyncedNode_, res);
             } else {
                 node_handle_t gate = currGraph_->addGateNode(nodeTypeOf(res));
                 linkNodes(LinkType::Norm, res, gate);
