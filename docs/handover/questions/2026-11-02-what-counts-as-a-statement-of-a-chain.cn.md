@@ -27,3 +27,12 @@
 ## 这份页不改代码
 
 按默认继续，下一步是"建边侧：终点不满足 `isChainEnd` 就不建这条 sync 边"的探针（一次性分支），读数是"三档计划各红多少，与 601 对照"。
+## 为什么这一步要跨层：建边侧与检查侧用的是两套节点身份
+
+**检查侧**（`src/runtime/graph_edges.cpp`）手里是 `GCGraph` 与 `GCNode*`/`gc_node_ref_t`，能问 `nodeBodyAs<GCOperBody>`、`nodeRegion`、`normOutputsOf`。
+
+**建边侧**（`src/compile/gir/`）拿的是 `node_handle_t`，走 `linkNodes(LinkType::Sync, from, to)` 写边；那些调用点是 `builder.cpp:1807`、`builder_control.cpp:1310/2823/2893`、`builder_helpers.h:678`。**编译期的节点种类（`GCT::NodeKind`）与运行时的 `GCNodeKind` 不是一套**，`isChainEnd` 不能直接搬过去问。
+
+⇒ **"终点不满足 `isChainEnd` 就不建这条 sync 边"这一步必须在能同时看见两侧的地方做**（提交前的图封存处，或把判断放到 `DraftGraph` 的 `appendInput` 那一层，那里两者都有 ref）——**这也解释了为什么这一步不是"改一行谓词"**。
+
+**不为了跑通探针去改建边侧的数据结构**：探针只允许"在某处少建一条边"。
