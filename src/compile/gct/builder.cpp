@@ -2170,7 +2170,7 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
             .at(ast->load()->tokenRange())
             .commit(
                 "a `yield` reached the statement builder, so the generator machine did not claim "
-                "it; send the program, this is a compiler defect");
+                "it. This is a known limitation of this compiler version, and nothing in the program is wrong");
         throw BuildAbortException();
     }
     node_ptr_t exitNode = tree_->makeExit(ExitType::Return);
@@ -5713,14 +5713,25 @@ node_ptr_t Builder::visitGeneratorBody(
     // The head writes the stream type, and it is what says what one `yield` hands out. A shape
     // this machine does not build is a defect of the machine, not a property of the program: the
     // ruling of 2026-10-31 retired the "generators are not supported" refusal, and what is left is
-    // a defect reporter -- `reportUnbuiltShape` -- that names the shape and asks for the program.
+    // a defect reporter -- `reportUnbuiltShape` -- that names the shape and states that this version
+    // does not build it
+    // The body of a generator `loop` is cut at its `yield`, and its last statement writes the next
+    // state value. A body that does not is a rule the reader has to be told, not a defect.
+    const auto reportLoopBodyShape = [&](const AST::node_ptr_t &atNode) -> void {
+        diags_->of(SemanticDiag::GeneratorLoopBodyNeedsNextState)
+            .at(atNode->load()->tokenRange())
+            .commit();
+        throw BuildAbortException();
+    };
     const auto reportUnbuiltShape = [&](const AST::node_ptr_t &atNode) -> void {
         const AST::node_ptr_t atYield = firstOwnYield(atNode);
-        diags_->of(InternalDiag::UnknownInternalError)
+        diags_->of(InternalDiag::GeneratorInitialValueShapeUnsupported)
             .at((atYield != nullptr ? atYield : atNode)->load()->tokenRange())
             .commit(
-                "the generator machine does not build this shape; send the program, this is a "
-                "compiler defect");
+                "the generator machine does not build this shape: a generator `loop` takes its initial "
+                "value written as a literal at the loop, and a value computed there or held in a local "
+                "is not built. This is a known limitation of this compiler version, and nothing in "
+                "the program is wrong");
         throw BuildAbortException();
     };
     // A local that lives across a `yield` is a cell of the body (see `addTypedCell`), so there is
@@ -6373,7 +6384,7 @@ node_ptr_t Builder::visitGeneratorBody(
                 // already written as a cell) would go round without moving: refused by name
                 // here rather than run as a loop that never advances.
                 if (last == nullptr) {
-                    reportUnbuiltShape(from < stmts->size() ? stmts->at(from) : stmts);
+                    reportLoopBodyShape(from < stmts->size() ? stmts->at(from) : stmts);
                 }
                 // One name takes the value itself; a list of names takes the tuple the body built, one
                 // element per name -- the shape a loop that carries several values hands on:
@@ -6409,7 +6420,7 @@ node_ptr_t Builder::visitGeneratorBody(
                     if (tupleItems == nullptr || tupleItems->size() != names.size()) {
                         // A loop that carries several values hands them on as a tuple of the
                         // same length; anything else has no value for one of the names.
-                        reportUnbuiltShape(lastStmt != nullptr ? lastStmt : stmts->at(from));
+                        reportLoopBodyShape(lastStmt != nullptr ? lastStmt : stmts->at(from));
                     }
                     // The next values are built before any of them is written: a state name the
                     // second element reads must be the value of this round, not the one the first

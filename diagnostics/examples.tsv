@@ -1,6 +1,7 @@
 # The example each diagnostic shows in docs/diagnostics.md: the diagnostic, and the case
 # that raises it. `--write` fills in the ones that are missing and never rewrites the others:
 # adding a test must not move another diagnostic's example, and a pin is what makes that true.
+InternalDiag::GeneratorInitialValueShapeUnsupported	test/cases/compile/stream/generators_loop_call_initialiser.cml
 InternalDiag::UnknownInternalError	test/cases/compile/collections/err_key_float.cml
 LexicalDiag::IllegalCharacter	test/cases/compile/check/lexical_error.cml
 LexicalDiag::InvalidEscapeSequence	test/cases/compile/escapes/plain.cml
@@ -111,6 +112,7 @@ SemanticDiag::FoldCallResultNotConstant	test/cases/compile/fold_calls/result_kin
 SemanticDiag::FoldCallTooDeep	test/cases/compile/fold_calls/depth_limit.cml
 SemanticDiag::FunctionNameAsValue	test/cases/compile/function_values/literal_operator_name.cml
 SemanticDiag::FunctionTypeArgumentNotInferred	test/cases/compile/native/tensor_show_empty_array.cml
+SemanticDiag::GeneratorLoopBodyNeedsNextState	test/cases/compile/stream/generators_loop_body_without_next_state.cml
 SemanticDiag::GenericArgumentsMismatch	test/cases/compile/constas/constas_argument_shape.cml
 SemanticDiag::GenericFunctionAsValue	test/cases/compile/generics/err_as_value.cml
 SemanticDiag::GenericFunctionUnsupported	test/cases/compile/generics/err_decorated.cml

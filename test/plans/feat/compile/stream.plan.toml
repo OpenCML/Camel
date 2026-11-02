@@ -1326,3 +1326,33 @@ expect_exit = 0
 expect_stdout_exact = "1384\n102101112202122\n88\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+[[tests]]
+name = "stream.generators_loop_call_initialiser"
+desc = "A generator `loop` whose initial value is computed -- `loop i = f()` -- is a shape this version does not build: reported as InternalDiag::GeneratorInitialValueShapeUnsupported at the `yield`, with nothing in the program to change and no request for the program. The three readings that fix the boundary: `loop i = 0` runs and prints 0 1 2, `var start = 0` then `loop i = start` is refused, and so is `loop i = 1 + 1`."
+kind = "negative"
+case = "../../../cases/compile/stream/generators_loop_call_initialiser.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "InternalDiag::GeneratorInitialValueShapeUnsupported"
+expect_diagnostic_code = "0x00000001"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 9
+expect_output_contains = ["known limitation"]
+expect_output_not_contains = ["send the program", "compiler defect"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "stream.generators_loop_body_without_next_state"
+desc = "A generator `loop` body ends with the next value of its state, and one that ends without writing it is reported by name -- SemanticDiag::GeneratorLoopBodyNeedsNextState at the `yield` -- because the pull after it runs the rest of the body and the condition again. A body of only `yield i` reads a fresh `i` on every pull, so the loop never moves on. Writing `i + 1` as the last statement runs it."
+kind = "negative"
+case = "../../../cases/compile/stream/generators_loop_body_without_next_state.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GeneratorLoopBodyNeedsNextState"
+expect_diagnostic_code = "0x03000208"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 9
+expect_output_contains = ["next value of its state"]
+expect_output_not_contains = ["UnknownInternalError", "GeneratorInitialValueShapeUnsupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

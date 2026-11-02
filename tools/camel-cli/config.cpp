@@ -740,10 +740,11 @@ bool parseArgs(int argc, char *argv[]) {
          (option("--gc-stress") & value("kind=...,alloc=...,safepoint=...", gcStressOpt)) %
              "collect under stress: kind=minor|major|both names the collection, alloc=N collects "
              "every N allocations, safepoint=N every N safepoints",
-         (option("--gc-check") & value("moves,poison,verify=...,config", gcCheckOpt)) %
+         (option("--gc-check") & value("moves,poison,verify=...,config,mark", gcCheckOpt)) %
              "read the collector: moves logs every moved object, poison writes over the from-space "
              "at every safepoint, verify=before|after|both checks the invariants around a "
-             "collection, config prints the resolved configuration at start",
+              "collection, config prints the resolved configuration at start, mark compares the marks the "
+              "root walk clears with the whole graph space",
          (option("--coll") & value("leaf=...,fanout=...,pad=...,validate=...", collOpt)) %
              "the widths of a Map or Set tree: leaf=N entries per leaf (0: unbounded, one sorted "
              "array), fanout=N children per branch, pad=on|off (off allocates a table for its "
@@ -1111,6 +1112,8 @@ bool parseArgs(int argc, char *argv[]) {
                     checks.logMoves = true;
                 } else if (word.key == "poison") {
                     checks.poison = true;
+                    } else if (word.key == "mark") {
+                        checks.markCheck = true;
                 } else if (word.key == "config") {
                     checks.printConfig = true;
                 } else if (word.key == "verify") {
