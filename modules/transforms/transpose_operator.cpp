@@ -10,6 +10,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/tangent_space.h"
 #include "camel/core/type/resolver.h"
 #include "camel/utils/type.h"
 
@@ -92,10 +93,17 @@ class TransposeResolver final : public FuncTypeResolver {
                 "`transpose` takes a function without `with` parameters: the transform builds a "
                 "graph of its own and a captured value has no port to enter it by");
         }
-        if (function->exitType() != camel::core::type::Type::Float64()) {
+        // Why the result is refused, when it is: the cotangent that goes in lives in the result's
+        // tangent space, so a result with no space has nowhere for one to go. `float` is not the
+        // rule -- a `f32` result answers a `f32` cotangent -- and the space is what answers.
+        const camel::core::TangentSpaceAnswer exitSpace =
+            camel::core::tangentSpaceOf(function->exitType());
+        if (!exitSpace.hasSpace()) {
             return std::string(
-                "`transpose` takes a function that returns a `float`: the cotangent of the "
-                "result is what goes in");
+                "`transpose` takes a function whose result has a tangent space: the cotangent that "
+                "goes in is the result's, and a `" +
+                function->exitType()->toString() +
+                "` has none, so there is no cotangent for the transposed function to take");
         }
         return std::string(
             "`transpose` takes a function whose parameters are all `float` -- one of them, several "

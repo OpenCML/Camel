@@ -44,9 +44,19 @@ FunctionType *transposeSignature(
     if (function->withTypesCount() != 0 || function->normTypesCount() == 0) {
         return nullptr;
     }
-    if (function->exitType() != Type::Float64()) {
+    // `Tangent<ResultOf<F>>`: the cotangent that goes in is of the result's own tangent space, and a
+    // function is transposable exactly when its result has one. A `float` result answers `float`, so
+    // the shape this signature has always described is the case where the result's space is itself --
+    // but the rule is the space, not the spelling: a `f32` function has a `f32` cotangent, and it was
+    // refused here for a type name rather than for anything about tangents. What has no space at all
+    // -- `bool`, `string`, a function value, an integer -- is still refused, and the refusal is the
+    // space's answer (`camel/core/tangent_space.h`) rather than a second test written here.
+    const camel::core::TangentSpaceAnswer exitSpace =
+        camel::core::tangentSpaceOf(function->exitType());
+    if (!exitSpace.hasSpace()) {
         return nullptr;
     }
+    Type *const seed = exitSpace.space;
     // `participates` names the parameters a cotangent is answered for. It is empty for an ordinary
     // transposition, where a cotangent is answered for every parameter and every parameter is also a
     // value the transposed graph reads. When it is not empty, a *participating* parameter is one the
@@ -89,7 +99,7 @@ FunctionType *transposeSignature(
         if (cotangentsOfParticipants.empty()) {
             return nullptr;
         }
-        params.emplace_back(Type::Float64(), false);
+        params.emplace_back(seed, false);
         return FunctionType::create(
             camel::core::type::param_vec_t{}, params,
             camel::core::type::TupleType::create(cotangentsOfParticipants));
@@ -125,7 +135,7 @@ FunctionType *transposeSignature(
                     }
                 }
             }
-            params.emplace_back(Type::Float64(), false);
+            params.emplace_back(seed, false);
             return FunctionType::create(
                 camel::core::type::param_vec_t{}, params,
                 camel::core::type::TupleType::create(cotangentsOfAll));
@@ -147,7 +157,7 @@ FunctionType *transposeSignature(
         }
         camel::core::type::param_vec_t params;
         params.emplace_back(function->normTypeAt(0), false);
-        params.emplace_back(Type::Float64(), false);
+        params.emplace_back(seed, false);
         std::vector<Type *> tangents;
         for (size_t i = 1; i < count; ++i) {
             tangents.push_back(camel::core::tangentSpaceOf(function->normTypeAt(i)).space);
@@ -159,16 +169,26 @@ FunctionType *transposeSignature(
             camel::core::type::param_vec_t{}, params,
             camel::core::type::TupleType::create(tangents));
     }
-    if (count != 1 || function->normTypeAt(0) != Type::Float64()) {
+    if (count != 1) {
+        return nullptr;
+    }
+    // The one-parameter case, read the same way as the others: the parameter is the value the
+    // transposed function reads, and where a cotangent goes is its tangent space. `float` is the case
+    // where that space is itself; a `f32` parameter answers a `f32` cotangent and used to be refused
+    // for its name.
+    const camel::core::TangentSpaceAnswer parameterSpace =
+        camel::core::tangentSpaceOf(function->normTypeAt(0));
+    if (!parameterSpace.hasSpace()) {
         return nullptr;
     }
     camel::core::type::param_vec_t params;
-    params.emplace_back(Type::Float64(), false);
-    params.emplace_back(Type::Float64(), false);
+    params.emplace_back(function->normTypeAt(0), false);
+    params.emplace_back(seed, false);
     if (answersOf != nullptr) {
         answersOf->push_back(0);
     }
-    return FunctionType::create(camel::core::type::param_vec_t{}, params, Type::Float64());
+    return FunctionType::create(
+        camel::core::type::param_vec_t{}, params, parameterSpace.space);
 }
 
 /// A loop whose body let a cotangent escape carries that cotangent as a state of its own.

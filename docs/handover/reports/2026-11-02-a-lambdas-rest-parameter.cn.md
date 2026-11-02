@@ -2220,3 +2220,47 @@ error[SemanticDiag::ArgumentsRejected]: Invalid call to 'transpose' with argumen
 
 **⑤ 边界**：试错取法不成立 ⇒ **退回绿**，`feat/compile/transforms` **58/58**；三处 `{Float64()}` 仍在（**删 0**）；
 `grad_f32_square.cml` 探针文件**已删**，树干净；`f32→float` 隐式转换一字未动。
+
+
+## 66. 正门打开了：`transpose` 收"结果有切空间的函数"，不再收"结果叫 `float` 的函数"
+
+**① 门在哪儿**：`modules/transforms/transpose.cpp#transposeSignature` 的第二道判断原是
+`if (function->exitType() != Type::Float64()) return nullptr;`。现在改成问**结果类型的切空间**
+（`camel::core::tangentSpaceOf(function->exitType())`），并把这个空间当作**进去的那个 cotangent 的类型**（`seed`）：
+
+- 一处门：`exitType != Float64()` → `!exitSpace.hasSpace()`；
+- 四处 `seed`：多 `float` 形态（`count>=2` 无 bundle）、residuals 形态、单参数形态的形参之后的那个 cotangent，全部由 `Type::Float64()` 改为 `seed = exitSpace.space`；
+- 单参数形态的**参数**判断（原 `normTypeAt(0) != Float64()`）改为"参数有切空间"，答案类型用 `parameterSpace.space`；
+- 拒绝的话改由**空间**说（`transpose_operator.cpp#explainRejection`），并把类型名念出来。
+
+**② 判据 ①（作者的验收例）：门开了，但下一条错就是那三处 `{Float64()}`**
+`func g(x: f32): f32 { return x * x }` + `vjp(g)(f32(3.0))` 现在**进得来**：
+```
+REINTERP jvp function=g graph=67 liftedFrom=55 type=(f32, f32) => (f32, f32) pure nodes=2 kinds=2/2
+          exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul
+error: graph 'jvp_of_g' node 3 (10): passes a f32 as ordinary argument 0 of 'autodiff::mul_tangent<float>', which takes a float
+```
+⇒ **`(f32, f32) => (f32, f32)` 已经成立**，卡住的是 `mul_tangent<float>`——**这正是 `jvp.cpp` 那处 `{Float64()}`**。
+⇒ **验收例现在可测了**：门这一半做完，`{Float64()}` 那一半是下一条错的名字。
+
+**③ 判据 ②（该拒的仍然拒）** `func h(x: float): bool` 求转置：
+```
+error[SemanticDiag::ArgumentsRejected]: Invalid call to 'transpose' with argument types <> ((x: float) => bool pure):
+`transpose` takes a function whose result has a tangent space: the cotangent that goes in is the result's,
+and a `bool` has none, so there is no cotangent for the transposed function to take.
+```
+⇒ **拒绝仍在，理由从"不是 float"变成"`bool` 没有切空间"**。
+
+**④ 判据 ③（非 `float` 结果）**：`float`（`f64`）的 `x*x` 一直是过的，`feat/compile/transforms` 58/58 里包含它 ⇒ **`float64` 本来就是"空间是自己"的那个特例，不是规则**。
+
+**⑤ 判据 ④（全量）**：全量 fast 见下条（同一 tip、改后）。**改前基准 `8447/8435/0`、`known 2`。**
+
+**⑥ 两条纪律写进页**：
+- **"一次只改一处；两处一起改，红数会互相抵消，读数就不再指向任何一处。"**（本轮 7 条红的教训）
+- **"探针一次没打印是读数，不是'这里没问题'。"**
+
+**⑦ 边界**：`f32 → float` 隐式转换**一个字没动**；`{Float64()}` 三处**仍在**（删 0）；`:op/ftod` 未动；探针用例已删，树干净。
+`grad_f32_square.cml` 的正文留在本条里（下一轮直接重建，不留在树上，因为它今天还跑不通）。
+**⑧ 全量读数（同一 tip、门后）**：`total: 8447, pass: 8434, fail: 1, skip: 10, known 2`，红的是 **`docs.doc_readings.current`** ——
+门改了 `transpose.cpp`（1970→**1990** 行）与 `transpose_operator.cpp`（169→**177** 行），页里的行数读数过期；**已更新，`check-doc-readings` 现读 `the readings are the ones the pages state: 10 of 10`**。
+⇒ **代码零红**：这 1 条是"页里的数过期"，不是行为回归。
