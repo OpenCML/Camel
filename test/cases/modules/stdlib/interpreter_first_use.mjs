@@ -38,6 +38,12 @@ const REPO_ROOT = path.resolve(HERE, '..', '..', '..', '..')
 const HOME = process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest')
 const CAMEL = path.join(HOME, 'bin', process.platform === 'win32' ? 'camel.exe' : 'camel')
 const SCRATCH = process.env.CAMEL_TEST_TMPDIR || fs.mkdtempSync(path.join(os.tmpdir(), 'camel-init-'))
+// The directory as a program writes it, which is not the directory this file writes to: a path
+// interpolated into a Camel string literal is read as escapes, so a Windows separator in front of a
+// segment like `tmp` or `run-1` becomes a tab and a carriage return and the program then writes its
+// image somewhere that is no path at all. Forward slashes are a separator on every platform, and the
+// scratch directory itself keeps the platform's own form for the reads and writes of this file.
+const CML = SCRATCH.replaceAll('\\', '/')
 const BROKEN_HOME = path.join(SCRATCH, 'broken-python-home')
 fs.mkdirSync(BROKEN_HOME, { recursive: true })
 
@@ -57,7 +63,7 @@ func main(): int {
     use_pyplot: `import { plot } from pyplot
 
 func main(): int sync {
-    plot([1.0, 2.0, 3.0], "${SCRATCH}/use-pyplot.svg")
+    plot([1.0, 2.0, 3.0], "${CML}/use-pyplot.svg")
     return 0
 }
 `,
@@ -76,7 +82,7 @@ func main(): int sync {
         case error e => 1
         case v => 0
     }
-    plot([1.0, 2.0, 3.0], "${SCRATCH}/python-then-plot.svg")
+    plot([1.0, 2.0, 3.0], "${CML}/python-then-plot.svg")
     return failed
 }
 `,
@@ -84,7 +90,7 @@ func main(): int sync {
 import { import_module } from python
 
 func main(): int sync {
-    plot([1.0, 2.0, 3.0], "${SCRATCH}/plot-then-python.svg")
+    plot([1.0, 2.0, 3.0], "${CML}/plot-then-python.svg")
     let failed = match import_module("_ssl") {
         case error e => 1
         case v => 0
@@ -96,9 +102,9 @@ func main(): int sync {
 import { exec } from python
 
 func main(): int sync {
-    plot([1.0, 2.0, 3.0], "${SCRATCH}/twice-1.svg")
+    plot([1.0, 2.0, 3.0], "${CML}/twice-1.svg")
     let _ = exec("x = 1")
-    plot([3.0, 2.0, 1.0], "${SCRATCH}/twice-2.svg")
+    plot([3.0, 2.0, 1.0], "${CML}/twice-2.svg")
     return 0
 }
 `,

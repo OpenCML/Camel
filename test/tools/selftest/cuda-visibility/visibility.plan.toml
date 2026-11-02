@@ -12,6 +12,12 @@ id = "selftest.cuda_visibility"
 desc = "The Python CUDA-visibility default, its opt-in and its precondition"
 tier = "fast"
 
+# A Python child writes the platform's line ending, and an exact comparison is byte for byte after
+# the normalizers a plan declares: without this line the four Python tests below are red on Windows
+# on the child's `\r\n`, before the value they exist to pin is ever compared.
+[defaults]
+normalizers = ["normalize_newlines"]
+
 [[tests]]
 name = "reference.node"
 kind = "behavior"
