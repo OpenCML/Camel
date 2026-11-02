@@ -1,0 +1,25 @@
+id = "tools.gctcheck"
+order = 922
+tier = "fast"
+tags = ["feat", "tools", "inspect", "gct"]
+desc = "The GCT dump comparer notices the differences it exists for: the same record compares equal, a constant that was copied instead of shared is a difference, and a refusal that turned into a tree is a difference of its own kind"
+
+# test/tools/gctcheck/check.py compares two `camel inspect --gct` dumps of the corpus, which is how
+# a change to the construction tree is checked (`agents/test.md`, "A tool that compares two builds
+# needs a reading of its own"). Three hand-written records, so the expectation does not depend on a
+# compiler: the same record twice, a record whose shared constant was split into two addresses, and
+# a refusal beside a tree. The middle one is the reason the addresses are tokenized one token per
+# distinct address: masking them all to one word would compare the copy equal to the share.
+
+[[tests]]
+name = "tools.gctcheck.control"
+desc = "The comparer's three controls: a record against itself is the same; a record whose shared constant (`0xA1` twice) was split into `0xA1` and `0xA2` is different, which is what a reader that copies a shared value instead of sharing it would do; a `kind: refusal` record against a `kind: tree` record is different and reported as a refusal that became a tree."
+kind = "behavior"
+tool = "python"
+case = "../../../../test/tools/gctcheck/check.py"
+args = ["${case}", "control"]
+expect_exit = 0
+expect_stdout_contains = ["PASS control: two dumps of the same record agree: same", "PASS control: a copied constant is a difference: different (tree text changed)", "PASS control: a refusal that became a tree is a difference: different (refusal became tree)", "gctcheck: 3 controls hold"]
+expect_output_not_contains = ["FAIL control"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
