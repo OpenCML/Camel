@@ -204,6 +204,46 @@ neither. The shape that *can* be seen at run time is the child's own warning lin
 a Windows path into a program makes that program print `Invalid escape sequence in string` on stderr,
 which is where a guard would read it (on the Windows leg, since a Linux path has no backslash).
 
+## A line count is a `\n` count, and the number carries its command
+
+Two instruments answer "how many lines" differently, and on 2026-11-02 both were used on the same
+files within an hour:
+
+- **PowerShell's `Measure-Object -Line` skips empty lines.** On one working copy it read
+  `split_operator.cpp` as **190** where the file has **209** `\n`s, and `jvp.cpp` as **1221** where it
+  has **1245**. Nineteen and twenty-four lines of difference are just the blank lines.
+- **`wc -l` counts `\n`s**, so a file **without a trailing newline** reads one short of its visible
+  line count: `modules/transforms/split_operator.cpp` is 209 by `wc -l` and 210 lines as `cat` shows
+  it.
+
+**So: count with `\n` (`git show <sha>:<path> | wc -l`), never with `Measure-Object -Line`, and paste
+the command beside any number quoted in a report or a page.** Two instruments, two numbers, one file:
+that is enough to make every later reading untraceable, and a line count is exactly the measurement
+that looks too simple to get wrong.
+
+## A new plan needs a selection rule, or `--changed` can never run it
+
+A plan file added to `test/plans` is only reachable by an ordinary change if `test/plan-selection.json`
+has a rule that names it from the paths its cases live in. Without one the plan exists, runs when
+named, and is **invisible to `--changed` and to the layer accounting**, which is what the runner's own
+book says in one line:
+
+```
+plan-selection: 1 plan file(s) no case path selects, so --changed can never run them:
+test/plans/feat/tools/plan_normalizers.plan.toml (its cases are under test/tools/).
+Add a rule that names the plan for the directory its cases live in.
+```
+
+The instance on record: a guard plan whose case is `test/tools/check-plan-normalizers.mjs` landed with
+no rule. Its two entries were green when named and the result was `runner.backend_matrix` red on the
+next full run — the book's `plan-selection` check has no other place to report it. The cure is one
+entry in `rules` (the tool's path to the plan) plus the plan's name in the rule that owns
+`test/tools/selftest/`, because the guard reads fixture trees there.
+
+The same applies to a plan that must stay out of an ordinary change: `SLOW_PLANS` and the selection
+rules are two halves of one fact — a plan is either reachable on purpose or named in the slow list on
+purpose, never neither.
+
 ## A timeout budget is a change like any other
 
 A `timeout_ms` in a plan file is not housekeeping: it decides whether a slow machine reports a red or
