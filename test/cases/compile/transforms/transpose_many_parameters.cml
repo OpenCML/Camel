@@ -17,9 +17,6 @@ func mt(x: float, w: float, dx: float, dw: float): float {
 }
 import rulesets.jvp
 func main(): int sync {
-    // The two values the linear half reads are captured; every parameter of what is transposed is a
-    // tangent, so the call passes the cotangent alone.
-    let lin = (dx: float, dw: float) => mt(3.0, 2.0, dx, dw)
-    println(transpose(lin)(1.0))
+    println(transpose(mt)(1.0))
     return 0
 }

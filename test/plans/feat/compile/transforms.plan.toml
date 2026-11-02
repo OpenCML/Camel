@@ -956,3 +956,13 @@ expect_exit = 1
 expect_stdout_contains = ["transforms: jvp has no forward transform for this function"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+||||||| parent of 36d65aec7 (test: two cases that reach the refusal through the shape the language uses now)
+
+[[tests]]
+name = "transpose_refusal_names_an_unread_parameter"
+desc = "A function whose second parameter is never read: `transpose(f)` refuses and the sentence names the parameter rather than the shape's other causes. Asserted as text only -- no number is pinned, because the capability is missing today and this red is its evidence."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_refusal_unread_parameter.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_output_contains = ["transpose has no transpose for this function:", "parameter"]
