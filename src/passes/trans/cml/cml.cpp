@@ -3509,7 +3509,7 @@ class CmlPrinter {
         if (symbol == "+" || symbol == "-") {
             return 40;
         }
-        if (symbol == "*" || symbol == "/" || symbol == "%") {
+        if (symbol == "*" || symbol == "/" || symbol == "%" || symbol == "@") {
             return 50;
         }
         if (symbol == "^") {

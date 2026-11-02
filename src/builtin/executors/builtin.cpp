@@ -129,10 +129,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/div_bf", __builtin__div_bfbf__},
         {"op/pow_bf", __builtin__pow_bfbf__},
         {"op/neg_bf", __builtin__neg_bf__},
-        // `!x` on the two reduced types: the negation their `!=` is built from once its own
-        // `:op/ne_*` arms are gone (`globals.cpp`, `__not__`).
-        {"op/not_bf", __builtin__not_bf__},
-        {"op/not_f6", __builtin__not_f6__},
         {"op/add_f6", __builtin__add_f6f6__},
         {"op/sub_f6", __builtin__sub_f6f6__},
         {"op/mul_f6", __builtin__mul_f6f6__},
