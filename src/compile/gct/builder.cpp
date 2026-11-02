@@ -2161,16 +2161,15 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     // Create an ExitLoad node to represent the exit statement.
     const AST::ExitType astExit = ast->loadAs<AST::ExitStmtLoad>()->exitType();
     if (astExit == AST::ExitType::Yield) {
-        // A `yield` the generator machine did not claim reached the statement builder, which means
-        // the machine missed a shape it builds: that is a defect of this builder, not a property of
-        // the program (author's ruling of 2026-10-31: the machine's narrowings are compiler
-        // defects, reported as internal errors with the program to send, and not as a missing
-        // feature).
+        // A `yield` the generator machine did not claim reached the statement builder: the machine
+        // missed a shape it builds. Nothing in the program is wrong, and the report says so without
+        // asking for the program (author's ruling of 2026-11-02: a refusal is not a defect of the
+        // program, and the text never asks the reader to send it).
         diags_->of(InternalDiag::UnknownInternalError)
             .at(ast->load()->tokenRange())
             .commit(
                 "a `yield` reached the statement builder, so the generator machine did not claim "
-                "it. This is a known limitation of this compiler version, and nothing in the program is wrong");
+                "it. Nothing in the program is wrong: the machine missed a shape it builds");
         throw BuildAbortException();
     }
     node_ptr_t exitNode = tree_->makeExit(ExitType::Return);
@@ -5725,20 +5724,17 @@ node_ptr_t Builder::visitGeneratorBody(
     // The body of a generator `loop` is cut at its `yield`, and its last statement writes the next
     // state value. A body that does not is a rule the reader has to be told, not a defect.
     const auto reportLoopBodyShape = [&](const AST::node_ptr_t &atNode) -> void {
-        diags_->of(SemanticDiag::GeneratorLoopBodyNeedsNextState)
+        diags_->of(SemanticDiag::LoopBodyNeedsNextState)
             .at(atNode->load()->tokenRange())
             .commit();
         throw BuildAbortException();
     };
     const auto reportUnbuiltShape = [&](const AST::node_ptr_t &atNode) -> void {
         const AST::node_ptr_t atYield = firstOwnYield(atNode);
-        diags_->of(InternalDiag::GeneratorInitialValueShapeUnsupported)
+        diags_->of(InternalDiag::UnknownInternalError)
             .at((atYield != nullptr ? atYield : atNode)->load()->tokenRange())
             .commit(
-                "the generator machine does not build this shape: a generator `loop` takes its initial "
-                "value written as a literal at the loop, and a value computed there or held in a local "
-                "is not built. This is a known limitation of this compiler version, and nothing in "
-                "the program is wrong");
+                "the generator machine does not build this shape, and the program is not at fault");
         throw BuildAbortException();
     };
     // A local that lives across a `yield` is a cell of the body (see `addTypedCell`), so there is
@@ -6012,6 +6008,10 @@ node_ptr_t Builder::visitGeneratorBody(
                     stmt->loadAs<AST::ExitStmtLoad>()->exitType() == AST::ExitType::Yield) {
                     // The answer: the element and the stream that continues after this point.
                     const auto &values = stmt->atAs<AST::RepeatedLoad>(0);
+                    // Not reachable from source today: the statement parser requires an expression after
+                    // `yield`, so a bare `yield` is a syntax error before this point. The refusal stays
+                    // because everything below reads `values`; it is a guard on the shape of the node,
+                    // not a gate this version chose to keep shut.
                     // `yield a, b` hands out the tuple `(a, b)`, the same element `yield (a, b)`
                     // writes. A `yield` with no value has no element to hand out and keeps the
                     // named refusal.
@@ -6242,9 +6242,9 @@ node_ptr_t Builder::visitGeneratorBody(
                         for (size_t k = 0; k < loopLoad->state().size(); ++k) {
                             const std::string name = loopLoad->state()[k].toString();
                             const AST::node_ptr_t eachInit = inits->at(k);
-                            if (!hoistable(eachInit)) {
-                                reportUnbuiltShape(stmt);
-                            }
+                            // The initial value is evaluated where the loop stands (see the write below),
+                            // once, before the first condition: a value computed there, or read from a
+                            // local, is the first round's state like a constant is.
                             if (std::find(cellNames.begin(), cellNames.end(), name) ==
                                 cellNames.end()) {
                                 addTypedCell(name, visitData(eachInit), stmt);

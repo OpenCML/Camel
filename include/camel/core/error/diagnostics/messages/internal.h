@@ -16,8 +16,7 @@
 namespace camel::core::error {
 
 enum class InternalDiag : uint32_t {
-    UnknownInternalError                  = 0x000000,
-    GeneratorInitialValueShapeUnsupported = 0x000001,
+    UnknownInternalError = 0x000000,
 };
 
 constexpr DiagType diagTypeOf(InternalDiag) { return DiagType::InternalDiag; }
