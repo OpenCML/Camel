@@ -2060,3 +2060,23 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 **另**：`98a500e4f` 把自检的存活超时从 180 秒调到 240 秒，理由是"它要做的事涨了四倍"。调上限可以，但"同一个夹具比 10-24 贵了四倍"本身要查清楚：是自检覆盖的范围变大了（合理），还是运行器变慢了（缺陷）。查清后在提交信息里写一句。
 
 五页挪到 `reviews/` 留档。
+
+## 更正索引（2026-11-02 18:30，决策者）：develop 的 `questions/` 里那 11 页都已裁过
+
+`df4298843` 说"他还没裁的十页保持不动，索引重生成为十一页"。这 11 页我都已经答过，答复和原页都在 `reviews/` 里，只是 develop 上的 `questions/` 没有跟着删。fsh-dev 那边早已挪走，合并时 develop 一侧又把它们留了下来。逐页对应如下，请在 develop 上从 `questions/` 删掉，再重新生成索引：
+
+| 页 | 裁定 |
+|---|---|
+| `a-plan-whose-verdict-depends-on-load` | 16:50 |
+| `can-a-known-failure-be-per-tier` | 14:10 |
+| `is-an-unknown-escape-in-a-string-a-warning-or-an-error` | 14:10（负责人定：编译错误），14:20 原始字符串 |
+| `is-clearMarks-the-upper-bound-fallback` | 16:50 |
+| `the-backward-half-of-a-loop-cannot-be-shown-to-go-in-reverse` | 15:30 |
+| `the-nine-shapes-the-generator-machine-refuses` | 16:50 |
+| `the-resolver-signature-greens-fifteen-not-twenty-nine` | 15:30 |
+| `transpose-tangent-parameters` | 13:10 |
+| `which-generator-does-the-dangling-node-mean` | 13:50 |
+| `does-a-loop-body-declare-its-next-state-or-compute-it` | 17:10（例子部分 18:10 撤回） |
+| `may-transpose-of-a-function-declare-its-signature-after-building-the-member` | 17:10 |
+
+以后判断"答没答"，看 `reviews/questions-2026-10-29.md` 里有没有那一页的名字，或者看 `reviews/` 里有没有同名页；不要看 `questions/` 里还剩什么，它可能是合并留下的残余。合并闸门的索引检查加一条：`questions/` 里不许出现在 `reviews/` 里已经有同名页的文件。
