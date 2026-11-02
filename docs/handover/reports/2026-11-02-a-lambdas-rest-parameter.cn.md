@@ -1537,3 +1537,78 @@ with <
 **全量 `total: 8383, pass: 8371, fail: 0, skip: 10, known failures: 2`**（基线 `8369/8357/0`，多出的 14 支正是 `feat/opt` 新增的两支 golden 用例加合并 develop 带来的用例）；
 `feat/opt` **1143/1143**；`stdlib-reference --verify-docs` 与 `diagnostics --verify-doc` 全绿；
 `docs/stdlib-reference.md`、`docs/reference/camel-for-ai-stdlib-signatures.md`、`docs/cli.md`、`docs/cli.cn.md` 同笔更新。
+
+## 47. P0：`grad` 的数组形参止在 `transpose` 的"规则表没有那条 arm"，不是某个形状
+
+**① 复现（我的树，`test/plans/feat/compile/transforms`，只走 `camel-remote.ps1 -Plan`）**
+
+`grad_of_an_array_parameter.nvm`（`h-m4b` 移交的 `vjp` 版本）在我树上**第一次跑**（未应用 `beeb887f4` 那行端口类型修改）：
+
+```
+[FAIL] grad_of_an_array_parameter.nvm.nvm
+[INFO] expected exit 0, got 1
+[stdout] … REINTERP split function=jvp_of_g forward=88 backward=89 type=(float[]) => (float, (int, float, int, float)) pure residuals=4
+[stdout] 6.0
+[stdout] TRANSPOSE function=autodiff::mul_tangent<float> graph=91 type=(float, float, float, float, float) => (float, float, float, float) nodes=7
+[stdout] TRANSPOSE function=rulesets.jvp::index_into<float> skip=law rule=idx_arr_t uri=:op/idx_arr
+[stdout] TRANSPOSE function=split_of_jvp_of_g_backward skip=call node=5 callee=rulesets.jvp::index_into<float>
+[stdout] (vjp)…/stdlib/vjp.cml:72:47: [Error]: An error has occurred: transforms: transpose has no transpose for …
+[stderr] (empty)
+```
+
+**应用 `beeb887f4`（`buildTransposeMember` 的普通参数端口改成取参数自己的类型）之后重跑：输出逐行相同**——`skip=law rule=idx_arr_t` 与 `transpose has no transpose` 一字不差。**⇒ 端口类型那个缺陷是真的（端口把 `float[]` 记成了 `float`），但它不是这条中止的原因**，两个状态止在同一处。
+
+**② 四条形状（判据 2，一次跑完，四个程序各改一件事）**
+
+| 程序 | 形参用法 | `rc` | 止在哪 |
+|---|---|---|---|
+| `grad_array_one_element.cml` | `xs[0]`，实参 `[3.0]`（单元素） | 1 | `skip=law rule=idx_arr_t` |
+| `grad_array_two_elements_first.cml` | `xs[0]`，实参 `[3.0, 2.0]` | 1 | 同上 |
+| `grad_array_sum.cml` | `xs[0] + xs[1]` | 1 | 同上 |
+| `grad_array_product.cml` | `xs[0] * xs[1]` | 1 | 同上 |
+| `grad_of_an_array_parameter.cml`（移交件） | `xs[1] * xs[0]`，读 `cotangents.0` | 1 | 同上 |
+
+**五条（连移交件）全部停在同一条 `skip=law rule=idx_arr_t uri=:op/idx_arr`**。**⇒ 不是"某个形状"，是"数组元素读这一条 law 没有 arm"。**
+
+**③ 中止点定到了：`modules/transforms/transpose.cpp:1354-1358` 的兜底 `else`**
+
+```cpp
+                } else if (law == "mul_t" || law == "div_t") {
+                    …
+                } else {
+                    os << "TRANSPOSE function=" << function->name() << " skip=law rule=" << law
+                       << " uri=" << uri << '\n';
+                    return false;
+                }
+```
+
+**转置器只认算术那几条 law**（`add_t`、`mul_t`、`div_t`……），**而 `idx_arr_t` 在规则库里是有的**（`stdlib/rulesets/transpose.cml:73`）：
+
+```camel
+export rule idx_arr_t::<T>(xs: T[], i: int) {
+    index_into(xs, i) => (ct: T) => scatter_into(zeros_like(xs), i, ct)
+}
+```
+
+**⇒ 缺口不是"算错了"，是"规则库声明了一条 law，转置器没有对应的 arm，于是点名拒绝"**——拒绝本身是对的（`else` 的注释写明"refused by name rather than answered with a cotangent from nowhere"），**缺的是这条 law 的转置**。
+
+**④ 判据 3：中止形状单独确认——`got null` 在我树上没有观测到**
+
+移交单上写的是 `got null` + `[stderr] (empty)`（没有退出码），**那是 `h-m4b` 树上的读数**；**我这棵树两次运行都是 `got 1`**（有退出码 1），**stderr 空、stdout 末尾是 `vjp.cml:72` 的 `[Error]`**。
+**我在 plan 日志里搜过 `signal`/`Segmentation`/`Aborted`/`core dumped`：一处都没有——没有观测到信号中止。** **所以"静默中止"这个形状我在自己的树上没有复现出来**，写在这里而不是当成结论。
+
+**⑤ 同一条路的另一侧已经有实现**：`modules/autodiff/pullback.cpp:2146-2161` 处理数组元素读时**就散一个 slot**——`":tangent/scatter_add_arr"`，而 `tensor:zeros_like` 是现成的（`modules/tensor/ops/gradient_ops.cpp`）。
+**⇒ 缺的 arm 有现成材料可借**：转置器要发的正是 `scatter_add_arr(zeros_like(xs), i, ct)`。
+
+**⑥ 默认建议（给作者的问题，一页一问）**：
+
+> **问题**：`transpose` 是否应当认 `idx_arr_t` 这条 law——即对 `xs[i]` 的余切发出 `scatter_add_arr(zeros_like(xs), i, ct)`，与 `pullback` 那条路发的同一条？
+>
+> **默认建议**：**应当**。理由三条：(a) 规则库已经把这条 law 写出来，转置器不认它就是"声明了不实现"；(b) `pullback` 已经这么做，两条路对同一个值给出同一个余切；(c) 这条 arm 不会改变任何现有读数（今天它在 `else` 里直接 `return false`）。
+>
+> **代价**：转置图的余切槽今天是 `float`（`cotangentIn` 在 `transpose.cpp:263-265` 建成 `Type::Float64()`），数组元素读的余切是 `float[]`——**这条 arm 会第一次让转置器处理"非标量余切"**，也就是 `transposeSignatures`/`addCotangent` 的类型从"一律浮点"变成"跟着值走"。**这是设计层面的改动，不是补一个分支**，所以我没有动它。
+
+**⑦ 本轮改了什么**：应用了 `h-m4b` 的端口类型修复（`transpose.cpp:252-253`，`bundlesResiduals` 之外取 `normTypeAt(i)`），**并把五条形状钉成用例**（`expect_exit = 1` + `skip=law rule=idx_arr_t` 与 `transpose has no transpose` 两条断言）——**将来那条 arm 落地时，这五条会一起红，正好提醒改成数值断言。**
+**⑧ 读数与去向**：`feat/compile/transforms` 里新增五条用例，全量 **`total: 8388, pass: 8376, fail: 0, skip: 10, known failures: 2`**（上一轮 `8383/8371/0`，多出的 5 支正是这五条）。
+问作者的一页在 `docs/handover/reviews/questions-2026-11-02-whether-the-transpose-honours-the-array-index-law.md`，
+缺陷单 `docs/handover/reports/eval-defects-2026-11-01/README.md` 增 **A10**，并把 A8/A9 标成"已在 `lane-lit2` 修好"（附 commit）。
