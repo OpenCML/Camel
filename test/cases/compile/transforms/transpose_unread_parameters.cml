@@ -7,6 +7,15 @@
 // 2: the two operands' zeros, which the calling half drops, and the two tangents' ones, which it
 // keeps and which double with the seed. A refusal here would refuse `grad((x) => x + 1.0)`, whose
 // tangent function is exactly this one.
+//
+// The function that is transposed has to be the four-parameter one, because a transposed function
+// answers **one cotangent per parameter** and a call hands it the cotangent and nothing else: the
+// four numbers can only be read from a function of four. Wrapping the call in a closure of the two
+// tangents (`(dx, dw) => at(3.0, 2.0, dx, dw)`) asks a different question and answers two numbers --
+// `(1.0, 1.0)`, which is the derivative of `dx + dw` and is not wrong, it is the answer to something
+// else. `transpose(at)(3.0, 2.0, 1.0, 0.0, 1.0)` was the old spelling of this case, when a transposed
+// function took its values as parameters; `lin(x, w, dx, dw) = at(x, w, dx, dw)` is the same
+// observation under the ruling of 2026-11-02 11:30, and it reads the same four numbers.
 import rulesets.transpose
 import { jvp, split, transpose } from transforms
 import { add_tangent } from autodiff
@@ -16,7 +25,10 @@ func at(x: float, w: float, dx: float, dw: float): float {
 }
 import rulesets.jvp
 func main(): int sync {
-    let lin = (dx: float, dw: float) => at(3.0, 2.0, dx, dw)
+    // The observation: a transposed function answers one cotangent per parameter, so the four numbers
+    // need a function of four parameters. `x` and `w` are read by nothing in the body, and their
+    // answers are the zeros this case is about.
+    let lin = (x: float, w: float, dx: float, dw: float) => at(x, w, dx, dw)
     println(transpose(lin)(1.0))
     println(transpose(lin)(2.0))
     return 0

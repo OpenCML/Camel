@@ -714,14 +714,14 @@ timeout_ms = 20000
 # a refusal: `add_tangent(x, w, dx, dw) = dx + dw` does not depend on `x` or `w` at all.
 [[tests]]
 name = "transpose_unread_parameters"
-desc = "`transpose(at)` where `at(x, w, dx, dw) = add_tangent(x, w, dx, dw) = dx + dw`: the operand parameters are in the signature and nowhere in the body, so the walk finds no cotangent for them, and the transposed graph answers a zero for each rather than refusing the whole function. The four answers at (3, 2, 1, 0) are `(0.0, 0.0, 1.0, 1.0)` at cotangent 1 and `(0.0, 0.0, 2.0, 2.0)` at cotangent 2 -- the two zeros that say the sum does not depend on its summands, and the two ones that double with the seed. Both graphs are five nodes (four ports and the sum) and the law is `add_t`, read off the walk: nothing here knows what `add_tangent` computes, and no rule was written for it."
+desc = "`transpose(at)` where `at(x, w, dx, dw) = add_tangent(x, w, dx, dw) = dx + dw`: the operand parameters are in the signature and nowhere in the body, so the walk finds no cotangent for them, and the transposed graph answers a zero for each rather than refusing the whole function. The four answers at (3, 2, 1, 0) are `(0.0, 0.0, 1.0, 1.0)` at cotangent 1 and `(0.0, 0.0, 2.0, 2.0)` at cotangent 2 -- the two zeros that say the sum does not depend on its summands, and the two ones that double with the seed. The observation is a function of four parameters, because a transposed function answers one cotangent per parameter and is called with the cotangent alone (author, 2026-11-02 11:30): `let lin = (x, w, dx, dw) => at(x, w, dx, dw)` then `transpose(lin)(1.0)`, which is the old `transpose(at)(3.0, 2.0, 1.0, 0.0, ct)` with its values dropped -- the same four numbers, asked the way a transposition is asked now. Both graphs are five nodes (four ports and the sum) and the law is `add_t`, read off the walk: nothing here knows what `add_tangent` computes, and no rule was written for it. The member's own type is `(float) => (float, float, float, float)`: `add_t`'s right side reads no operand value, so nothing has to be captured and the transposed function takes the cotangent alone."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_unread_parameters.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=autodiff::add_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=5 arms=0 rhs=add_t", "TRANSPOSE function=at graph=", "nodes=5 arms=0 rhs=-", "(0.0, 0.0, 1.0, 1.0)", "(0.0, 0.0, 2.0, 2.0)"]
+expect_output_contains = ["TRANSPOSE function=autodiff::add_tangent<float> graph=", "type=(float) => (float, float, float, float) nodes=5 arms=0 rhs=add_t", "TRANSPOSE function=at graph=", "nodes=5 arms=0 rhs=-", "(0.0, 0.0, 1.0, 1.0)", "(0.0, 0.0, 2.0, 2.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
