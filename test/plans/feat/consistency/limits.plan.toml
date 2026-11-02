@@ -118,6 +118,160 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 # question as the mutual recursion of depth_value.cml (inline / saturate / std::opt move its
 # boundary from 50 levels to 100). Both are with the author; see
 # docs/handover/reviews/questions-2026-10-29.md, the matrix section of 2026-11-02.
+
+# --- the twelve cells a pass moves, pinned, and the row without passes beside them ------------
+#
+# Twelve cells differ from the row without passes, and by 9.6's third rule they are allowed to: a
+# pass that changes the call structure changes the graph the limit counts, so the limit reaches a
+# different number of levels. They are pinned not to say that this is right, but so that "yet
+# another pass moved the limit" turns red at once; and the row without passes is pinned at the same
+# limit and depth beside them, so that a pipeline which simply never faults cannot pass either.
+#
+# Readings, --max-recursion-depth 10 for depth_direct and 100 for depth_value, nvm/fvm/jit
+# identical (prl measured the same and is not pinned here):
+#   depth_direct without passes N=10 -> 1; after std::opt N=10 -> 0 and N=11 -> 1 -- one level: the
+#     inline stage of std::opt puts main's body into the entry graph, so the activation the room
+#     check subtracts for the entry's call of main is not there to subtract.
+#   depth_value without passes N=50 -> 1; after std::opt::inline N=50 -> 0 and N=100 -> 0,
+#     N=101 -> 1; after std::opt::saturate N=50 -> 0, N=100 -> 1; after std::opt N=50 -> 0 and
+#     N=100 -> 0, N=101 -> 1 -- the mutual recursion of step and via is compacted to one call per
+#     level, so the boundary moves from 50 levels to 100.
+
+[[tests]]
+name = "limit.moved.direct.without_passes.exceeds"
+desc = "Limit 10, nothing added: depth(10) stops, so the boundary the cells below move away from is the one pinned here."
+args = ["--max-recursion-depth", "10", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+envs = ["N=10"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 38
+expect_stdout_starts_with = "start\n"
+expect_output_contains = ["Maximum recursion depth (10) exceeded"]
+expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "limit.moved.value.without_passes.exceeds"
+desc = "Limit 100, nothing added: step(50) stops, the other boundary the cells below move away from."
+case = "../../../cases/consistency/limits/depth_value.cml"
+args = ["--max-recursion-depth", "100", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+envs = ["N=50"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 38
+expect_stdout_starts_with = "start\n"
+expect_output_contains = ["Maximum recursion depth (100) exceeded"]
+expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "limit.moved.direct.after_std_opt.runs"
+desc = "Limit 10, the whole std::opt: depth(10) runs -- the pipeline buys one level (allowed, 9.6), and this is where it shows."
+args = ["--max-recursion-depth", "10", "${case}", "std::opt", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+envs = ["N=10"]
+expect_exit = 0
+expect_stdout_starts_with = "start\n10\ndone\n"
+
+[[tests]]
+name = "limit.moved.direct.after_std_opt.still_stops"
+desc = "Limit 10, the whole std::opt, one deeper: depth(11) stops. The level it bought is one, not all of them."
+args = ["--max-recursion-depth", "10", "${case}", "std::opt", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+envs = ["N=11"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_output_contains = ["Maximum recursion depth (10) exceeded"]
+expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "limit.moved.value.after_inline.runs"
+desc = "Limit 100 after std::opt::inline: step(50) runs -- the inliner compacts the mutual recursion to one call per level."
+case = "../../../cases/consistency/limits/depth_value.cml"
+args = ["--max-recursion-depth", "100", "${case}", "std::opt::inline", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+envs = ["N=50"]
+expect_exit = 0
+expect_stdout_starts_with = "start\n50\ndone\n"
+
+[[tests]]
+name = "limit.moved.value.after_inline.at_the_doubled_boundary"
+desc = "Limit 100 after std::opt::inline: step(100) runs, the boundary having moved from 50 levels to 100."
+case = "../../../cases/consistency/limits/depth_value.cml"
+args = ["--max-recursion-depth", "100", "${case}", "std::opt::inline", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+envs = ["N=100"]
+expect_exit = 0
+expect_stdout_starts_with = "start\n100\ndone\n"
+
+[[tests]]
+name = "limit.moved.value.after_inline.past_it.still_stops"
+desc = "Limit 100 after std::opt::inline, one level past the doubled boundary: step(101) stops."
+case = "../../../cases/consistency/limits/depth_value.cml"
+args = ["--max-recursion-depth", "100", "${case}", "std::opt::inline", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+envs = ["N=101"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_output_contains = ["Maximum recursion depth (100) exceeded"]
+expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "limit.moved.value.after_saturate.runs"
+desc = "Limit 100 after std::opt::saturate: step(50) runs; this pass moves the boundary too."
+case = "../../../cases/consistency/limits/depth_value.cml"
+args = ["--max-recursion-depth", "100", "${case}", "std::opt::saturate", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+envs = ["N=50"]
+expect_exit = 0
+expect_stdout_starts_with = "start\n50\ndone\n"
+
+[[tests]]
+name = "limit.moved.value.after_saturate.still_stops"
+desc = "Limit 100 after std::opt::saturate: step(100) stops -- this pass moves the boundary to 99 levels, not past them."
+case = "../../../cases/consistency/limits/depth_value.cml"
+args = ["--max-recursion-depth", "100", "${case}", "std::opt::saturate", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+envs = ["N=100"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_output_contains = ["Maximum recursion depth (100) exceeded"]
+expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "limit.moved.value.after_std_opt.runs"
+desc = "Limit 100 after the whole std::opt: step(50) runs."
+case = "../../../cases/consistency/limits/depth_value.cml"
+args = ["--max-recursion-depth", "100", "${case}", "std::opt", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+envs = ["N=50"]
+expect_exit = 0
+expect_stdout_starts_with = "start\n50\ndone\n"
+
+[[tests]]
+name = "limit.moved.value.after_std_opt.at_the_doubled_boundary"
+desc = "Limit 100 after the whole std::opt: step(100) runs."
+case = "../../../cases/consistency/limits/depth_value.cml"
+args = ["--max-recursion-depth", "100", "${case}", "std::opt", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+envs = ["N=100"]
+expect_exit = 0
+expect_stdout_starts_with = "start\n100\ndone\n"
+
+[[tests]]
+name = "limit.moved.value.after_std_opt.past_it.still_stops"
+desc = "Limit 100 after the whole std::opt, one level past the doubled boundary: step(101) stops."
+case = "../../../cases/consistency/limits/depth_value.cml"
+args = ["--max-recursion-depth", "100", "${case}", "std::opt", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+envs = ["N=101"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_output_contains = ["Maximum recursion depth (100) exceeded"]
+expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
+
 [[tests]]
 name = "limit.map.fits"
 desc = "Limit 100, recursion inside a map element (one more call open): depth(98) runs."
