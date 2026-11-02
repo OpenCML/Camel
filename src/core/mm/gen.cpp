@@ -1475,11 +1475,17 @@ void GenerationalAllocatorWithGC::clearMarks() {
     elderGenSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
     largeObjSpace_.iterateAllocated([](ObjectHeader *header) { header->unmark(); });
 
-    // Graph carriers are also traced through Function values (Function::updateRefs traces the
-    // runtime graph so runtime-created graphs keep their static constants alive). Those graphs
-    // are not necessarily in a registered root set, so unmark the whole graph space instead of only
-    // the registered roots, or a later collection would skip them and miss their edges.
-    graphSpace().iterateAllocated([](ObjectHeader *header) { header->unmark(); });
+    // The marks a root path cannot reach: markObject recorded every object it marked, and an object
+    // marked through a root set in an earlier cycle may be in no root set now (the contexts clear
+    // and refill gcRoots_), so walking the roots cannot find it. Unmark the ledger instead of
+    // scanning the whole graph space, and check the address first: an entry whose object was freed
+    // and whose address was reused must not be unmarked.
+    for (rtdata::Object *marked : markedSinceClear_) {
+        if (marked != nullptr && graphSpace().isAllocated(marked)) {
+            headerOf(marked)->unmark();
+        }
+    }
+    markedSinceClear_.clear();
 
     for (const ObjectRootSetEntry &entry : objectRootSets_) {
         if (entry.set == nullptr) {
@@ -1519,6 +1525,7 @@ void GenerationalAllocatorWithGC::markObject(rtdata::Object *obj, const type::Ty
             continue;
 
         header->mark();
+        markedSinceClear_.insert(current);
         recordObjectTypeUnlocked(current, entry.type);
 
         // The parent layout supplies refType wherever static slot metadata is available.
