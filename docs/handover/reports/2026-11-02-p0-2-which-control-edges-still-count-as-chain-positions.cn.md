@@ -41,3 +41,16 @@
 ## 五、那两条 `known_fail` 与这一步是同一件事
 
 `test/plans/feat/linear/effects_model_edges.plan.toml` 的两条标记（owner 已改成 `P0-2 (batch item 9, ruled 23:30)`）**会在 P0-2 落地时变绿，所以"谁做 P0-2"和"标记什么时候摘"是同一件事：标记在落地的同一笔里摘掉。**
+## 第二格有读数了：4192 条红（2026-11-02 实测）
+
+在一次性分支 `probe/ctrl-off` 上把 `src/compile/gir/builder_support.h` 的 `case LinkType::Ctrl:` 改成 `return runtime::DraftEdgeKind::Sync;`，构建后跑 `-Tier fast`：
+
+**`total: 8447, pass: 4245, fail: 4192, skip: 10`** —— 按前缀分组前 10：`fault` 172、`attempt` 146、`stdlib` 144、`limit` 140、`rules` 129、`examples` 107、`tutorial` 94、`stream` 92、`entering` 77、`boundary64` 56。
+
+**为什么映射成 `Sync` 而不是 `Data`**：终局是"等待由 sync 链承担"，`Ctrl→Sync` 直接探那个终局；`Ctrl→Data` 测的是把等待降级成数据依赖，红表不可解释，所以没选。
+
+**为什么只跑 fast**：`fault`/`limit`/`stream`/`entering` 这些行为类都红了 —— **记账类只会红 canonical/gir 快照那一小撮** —— 所以 fast 已经足够说明"不是记账、是承重"，milestone 再加一遍不会改变结论。
+
+**结论：P0-2 不是"删一条边"，是"给依赖控制边的 pass 换判据"。** 最小一步因此改成：**选一个族、换它的判据，读数是红数下降多少**（默认从红数最大的 `fault` 172 条起）。
+
+**撤净证明**：`git status --porcelain` 空；`git branch --contains <探针提交>` 空；`Deleted branch probe/ctrl-off (was 6938afa67)`；车道 HEAD 与实验前逐字相同。
