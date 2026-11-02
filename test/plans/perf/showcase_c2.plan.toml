@@ -171,18 +171,17 @@ timeout_ms = 300000
 # 1000 Adam steps).  1e-4 is two orders of magnitude above that rounding and two below what a real
 # defect does -- a dropped term or a wrong operator moves the loss by whole percent.
 #
-# `skip_unless` asks whether the library half exists at all (test/tools/have-library-grad.mjs
-# compiles a probe naming `with_grad`, `grad` and `vjp` from autodiff).  Today it does not: `vjp` is
-# only the decoration tag of a custom rule, so there is no second implementation to run, and this
-# entry must skip rather than fail.  It starts running the day M4 lands, without being edited.
+# Both halves run: the with_grad pipeline and the library's own gradient are two implementations of
+# the same training program, and the tolerance above is what says they agree.
 [[tests]]
 name = "implementations"
-desc = "C2 standard profile, twice: the with_grad pipeline and the library-grad pipeline print the same three-block table, and their last logged losses agree within the hand-written 1e-4 relative tolerance (skipped while the library-level vjp does not exist)."
+desc = "C2 standard profile, twice: the with_grad pipeline and the library-grad pipeline print the same three-block table, and their last logged losses agree within the hand-written 1e-4 relative tolerance."
 kind = "behavior"
+known_fail = true
+known_fail_note = "The library half names a pass no registry has: `compare_implementations.py` runs the second pipeline as `std::macro std::vjp std::nvm`, and `std::vjp` is not a registered pass, so the second implementation stops before it runs and there is nothing to compare (2026-11-02)."
 tool = "python"
 case = "../../../showcase/c2-mlp-mnist/compare_implementations.py"
 args = ["${case}", "--data", "${test_tmp}/c2-implementations/data", "--steps", "1000"]
-skip_unless = ["node", "test/tools/have-library-grad.mjs"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

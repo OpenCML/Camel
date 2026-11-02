@@ -903,3 +903,27 @@ expect_exit = 0
 expect_stdout_exact = "2\n2\n0\n2\n7\n6\n0\n7\n10\n4\n5\n10\n3\n"
 timeout_ms = 20000
 
+
+[[tests]]
+name = "handles_compare_by_reference"
+desc = "A handle of the `graph` module compares with `==` and `!=`: `==` is the declaration in stdlib/graph.cml, two handles are equal when they name the same thing of the same Program, and `!=` is `!(==)` on it -- the module keeps no entry in `__neq__` for either, and nothing in the graph is named `graph:ne`."
+kind = "behavior"
+case = "../../../cases/modules/graph_handles_compare.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = """true false
+false true
+true false
+"""
+
+[[tests]]
+name = "handles_compare_in_the_graph"
+desc = "The same program printed as a graph: a handle's `!=` is `graph:eq` and `:op/not` on its answer, and nothing in the graph is named `graph:ne` -- the group `__neq__` has no entry for a declared handle `==`."
+kind = "behavior"
+case = "../../../cases/modules/graph_handles_compare.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["label=\"graph:eq\"", "label=\":op/not\""]
+expect_output_not_contains = ["graph:ne"]

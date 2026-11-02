@@ -1,0 +1,25 @@
+/**
+ * The twelve `^` of the scalar arithmetic, one row per type pair.
+ *
+ * `^` is `__pow__` (operator_names.cpp), and the group holds one row per pair of types the
+ * arithmetic answers for: the two integers, the two floats, the two reduced floats, the two
+ * complexes, and each complex with an integer exponent of either width. The rows are not
+ * interchangeable and none of them is a spelling of another: the integers are the repeated
+ * squaring form, the floats are the runtime's power, the reduced floats are that same power
+ * rounded through f32, and the complexes are the runtime's complex power with its own branch
+ * rule. That is why this case asks the graph for all twelve rather than for the answer of one
+ * of them -- an integer exponent that is a value keeps the complex base and selects the row
+ * whose second parameter is an integer, while an integer literal exponent becomes a complex
+ * literal and selects the complex-to-complex row.
+ *
+ * Every parameter is read, so nothing folds: a `^` of two literals answers at compile time and
+ * leaves no row to see.
+ */
+
+func main(i: int, l: i64, f: f32, d: f64, a: c64, b: c128, p: i32, h: bf16, g: f16): int sync {
+    println(i ^ i, l ^ l, f ^ f, d ^ d, p ^ p)
+    println(a ^ a, a ^ p, a ^ i)
+    println(b ^ b, b ^ p, b ^ i)
+    println(h ^ h, g ^ g)
+    return 0
+}

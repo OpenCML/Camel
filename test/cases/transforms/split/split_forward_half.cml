@@ -7,8 +7,7 @@
 // left is this case's spelling: bind it to one name and hand it on whole -- printing it prints an empty
 // tuple, the members not being a signature's to name.
 //
-// This case runs when `split` exists (design doc 4.2); test/tools/have-split.mjs lets a tree without
-// `modules/transforms/split.cpp` skip.
+// `split` exists (design doc 4.2) and this case reads what its forward half hands back.
 import rulesets.jvp
 import { jvp, split } from transforms
 

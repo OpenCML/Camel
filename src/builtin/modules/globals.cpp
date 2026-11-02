@@ -1428,14 +1428,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
         OperatorGroup::create(
             "__neq__",
             {
-                // `!=` does not resolve in this group: the front end builds it as the negation of
-                // `==` and names `==`'s group, so `==`'s rules -- the scalar entries above, the
-                // composite entry below and any a module declares -- are the ones a program's
-                // `!=` uses (builder_operators.cpp, `negatedWholeOf`). The `ne_*` kernels are
-                // registered nowhere now, and with them goes the copy `__strict_neq__` took from
-                // this group, which is why `!==` is built as the negation of `===` instead
-                // (gct/builder.cpp). What is left here is the composite entry, unreachable
-                // through `!=`; taking the group itself out is a later step.
+                // `!=` is built as the negation of `==` (design principles 4.2), and the operand
+                // type decides which `==` that is: the built-in comparison of a primitive, the
+                // composite entry above for an array, a tuple or a struct compared by content, or
+                // a declared `==` when the program writes one for its own type. A type whose `==`
+                // is declared still needs an entry here: without one, `!=` on that type has no
+                // overload to resolve through and is a located compile-time error (a `==` written
+                // with a tolerance is the case that needs it -- struct_equality.cml).
                 {
                     ":op/ne",
                     DynamicFuncTypeResolver::create(

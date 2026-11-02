@@ -33,8 +33,7 @@
 #     that did not grow.
 #
 # The five readings run by themselves: `split` exists and its forward half hands the residual tuple on,
-# so there is nothing left for a gate to ask. The identity entry keeps `test/tools/have-split.mjs` (a
-# tree without `modules/transforms/split.cpp` skips instead of failing).
+# so there is nothing for a gate to ask.
 [[tests]]
 name = "split_forward_half"
 desc = "The forward half of split(reinterp<jvp>(g)) for g(x) = x*x at x = 3: it computes what the present inputs allow and hands the residuals on whole. Reads `forward y= 9.0`, `residuals whole= ()` and the tangent 6.0; `residuals=2` is the graph's count -- the pair the body computes, plus the parameter's value port, which crosses now that the tangent side reads its tangent, and the members are the graph's answer, not a signature's."
@@ -148,13 +147,12 @@ timeout_ms = 20000
 
 [[tests]]
 name = "split_identity_pipeline"
-desc = "The identity graph: `reinterp<jvp>` builds a body with no operator in it, so `split` has nothing to move and the reading is the pipeline itself. The forward half gives the value the caller passed (3.0) and a one-member residual tuple -- `(3.0, (x,))`, which the diagnostic reports as `residuals=1` and the forward half's type as `(float) => (float, (float,))` -- and the backward half gives the tangent back (1.0) without reading the residual: nothing is computed on the forward side of the cut, but the tangent side reads the tangent of parameter 0, and what the reverse reads crosses. Gated on `split` existing (`test/tools/have-split.mjs`)."
+desc = "The identity graph: `reinterp<jvp>` builds a body with no operator in it, so `split` has nothing to move and the reading is the pipeline itself. The forward half gives the value the caller passed (3.0) and a one-member residual tuple -- `(3.0, (x,))`, which the diagnostic reports as `residuals=1` and the forward half's type as `(float) => (float, (float,))` -- and the backward half gives the tangent back (1.0) without reading the residual: nothing is computed on the forward side of the cut, but the tangent side reads the tangent of parameter 0, and what the reverse reads crosses."
 kind = "behavior"
 case = "../../../cases/compile/transforms/split_identity_pipeline.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["identity y= 3", "identity dx1= 1", "type=(float) => (float, (float,)) pure residuals=1"]
-skip_unless = ["node", "test/tools/have-split.mjs"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
