@@ -1,0 +1,32 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/*
+ * `!` on the two reduced-precision floats, and the `!=` it is the other half of.
+ *
+ * A bf16 or f16 is not a bool, and its truth is `x != 0` computed in f32 by the one arithmetic path
+ * the type has (design principles 7.3). This case pins that `!x` answers true exactly for zero, and
+ * that `a != b` gives the same answer as the negation of the equality it is built from -- which is
+ * what `!=` becomes once its own `:op/ne_bf` / `:op/ne_f6` arms are gone. Where `ne` exists, `not`
+ * has to exist; this is the check that it does, for both types.
+ */
+
+func main(): int sync {
+    let zeroBf: bf16 = bf16(0.0)
+    let twoBf: bf16 = bf16(2.0)
+    let zeroF6: f16 = f16(0.0)
+    let oneF6: f16 = f16(1.5)
+
+    println(!zeroBf)
+    println(!twoBf)
+    println(!zeroF6)
+    println(!oneF6)
+
+    // `a != b` and `!(a == b)` are the same answer, at both types.
+    println(twoBf != zeroBf)
+    println(!(twoBf == zeroBf))
+    println(oneF6 != oneF6)
+    println(!(oneF6 == oneF6))
+
+    return 0
+}

@@ -116,6 +116,8 @@ std::string_view kindText(ParamKind kind) {
         return "Bytes";
     case ParamKind::IntArray:
         return "int[]";
+    case ParamKind::BoolArray:
+        return "bool[]";
     }
     return "?";
 }
