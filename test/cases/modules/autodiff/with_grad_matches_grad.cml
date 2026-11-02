@@ -1,0 +1,20 @@
+import { grad } from autodiff
+import { with_grad } from autodiff
+
+// The transform `with_grad(f)` gives the value of `f` and the gradient `grad(f)` gives: the two
+// readings below are the same number when the transform is right, so a program that prints both
+// is the cross-check that keeps the pair together. `loss(x) = w * x + w * x` at `w = 2, x = 3`
+// is 12, and its derivative in `w` (`x + x`) is 6.
+with <w: float>
+func loss(x: float): float {
+    return w * x + w * x
+}
+
+func main(): int sync {
+    let g = loss->grad
+    let wg = loss->with_grad
+    let value_and_gradient = wg<2.0>(3.0)
+    println(g<2.0>(3.0))
+    println(value_and_gradient)
+    return 0
+}

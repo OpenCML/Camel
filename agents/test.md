@@ -199,3 +199,25 @@ Ask whether a thing is there and the answer is a boolean; ask how many lines car
 A probe log that records only `[FAIL] <name> <ms>` can count failures and cannot group them: the first diagnostic line is what turns forty reds into one root cause or ten. Print that line, and print it even when jobs run in parallel.
 
 - 主检出 `D:\Projects\Camel` 只用来 `pull --ff-only`；所有编辑都用工作树内的相对路径，或 `D:\Projects\Camel-wt\<lane>\...` 的绝对路径。写完用 `git -C <树> status --porcelain` 自检，不要用 `git status`（它按进程 CWD 解析，会看到另一棵树）。
+## Check the input before you believe the reading
+
+A measurement is a reading of two things: the program and the input. When they disagree with
+expectation, the input is as likely to be wrong as the code, and an input that is silently the wrong
+file looks exactly like a defect in the compiler. Before taking a reading on a file that was copied,
+extracted from another branch or written by a script, check three things: **the size**, **the first
+bytes** (`head -c 32 | od -c`), and **the top-level statement count** (`camel-parsecheck dump <file>`
+prints `Stmts*` with its count).
+
+Two readings of 2026-11-02 were wrong for this reason and neither was a code defect:
+
+- `--write` "needs two passes": it was run once before the plan entry that names the new diagnostic
+  existed, so nothing could be pinned. The writer is idempotent (two runs in a row write nothing).
+- "The reported case still ends with `EntryModuleMissingMain`": the file measured was 458 bytes of a
+  709 byte test case left behind by a copy, and a truncated file **parses as `ACCEPT` with an empty
+  module** (`Module @0..0`, `Stmts* @1..2`), so the module had no declarations and the entry had no
+  `main`. Written byte for byte from its branch (472 bytes) the same input gives the diagnostic the
+  fix had already added.
+
+**An `ACCEPT` from `parsecheck` proves the text it was given parses, not that the text is the file
+you meant to give it.** A parser that accepts a truncated file is not evidence of completeness; the
+size and the statement count are what cross-check it.
