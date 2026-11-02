@@ -6005,6 +6005,10 @@ node_ptr_t Builder::visitGeneratorBody(
                     stmt->loadAs<AST::ExitStmtLoad>()->exitType() == AST::ExitType::Yield) {
                     // The answer: the element and the stream that continues after this point.
                     const auto &values = stmt->atAs<AST::RepeatedLoad>(0);
+                    // Not reachable from source today: the statement parser requires an expression after
+                    // `yield`, so a bare `yield` is a syntax error before this point. The refusal stays
+                    // because everything below reads `values`; it is a guard on the shape of the node,
+                    // not a gate this version chose to keep shut.
                     // `yield a, b` hands out the tuple `(a, b)`, the same element `yield (a, b)`
                     // writes. A `yield` with no value has no element to hand out and keeps the
                     // named refusal.
