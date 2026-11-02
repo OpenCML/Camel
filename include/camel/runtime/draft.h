@@ -999,6 +999,11 @@ std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphTransaction &transact
 /// whether a node takes an order edge, which must not change as types are refined.
 bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byShape = false);
 
+/// `nodeMayFault` (camel/runtime/graph.h) asked of a node of a draft, with the same `byShape`
+/// reading of an elementwise operator. It is the fault half of `nodeIsFreelySchedulable` above,
+/// so a caller that has already asked whether the operator may be recomputed asks this alone.
+bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape = false);
+
 /// Whether a node carries the program's order instead of being a value a pass may compute for
 /// itself: a call runs a graph, a branch, join, sync or loop runs (or orders) what it holds, a gate
 /// waits -- for its control inputs, or for the sync edge the chain of a `sync` block is written as

@@ -2,7 +2,7 @@
   "comment": "The baseline of the direct-connection ledger (graph-store step 2 b): the numbers below may only fall, and the last step is all of them at zero. `sites` records where each number comes from, as `file#symbol` (a line number moves with every edit above it, a symbol does not); it is diagnostics for a red and never decides the verdict. Record a new row after a commit with check.mjs --record.",
   "numbers": {
     "files": 35,
-    "references": 304,
+    "references": 306,
     "constructions": 1,
     "decode": 4
   },
@@ -50,7 +50,7 @@
       "include/camel/core/tags.h#effectivePermissions": 3,
       "include/camel/core/type/composite/func.h#-": 1,
       "include/camel/runtime/draft.h#-": 1,
-      "include/camel/runtime/draft.h#isDataPortSlot": 17,
+      "include/camel/runtime/draft.h#isDataPortSlot": 18,
       "include/camel/runtime/draft.h#ungated": 1,
       "include/camel/runtime/draft_inline.h#-": 1,
       "include/camel/runtime/draft_inline.h#devirtualizeStaticCallInDraft": 1,
@@ -58,7 +58,7 @@
       "include/camel/runtime/draft_types.h#-": 1,
       "include/camel/runtime/draft_writes.h#operatorOverloadType": 1,
       "include/camel/runtime/graph.h#makeFillPayload": 1,
-      "include/camel/runtime/graph.h#nodeIsFreelySchedulable": 2,
+      "include/camel/runtime/graph.h#nodeMayFault": 2,
       "include/camel/runtime/loop.h#loopOf": 4,
       "include/camel/runtime/node_ref.h#-": 4,
       "include/camel/runtime/operator_instance.h#-": 1,
@@ -69,7 +69,8 @@
       "modules/tiles/src/region_extract.cpp#copyLoopNodes": 1,
       "modules/tiles/src/region_extract.cpp#makeLoopRegions": 1,
       "modules/tiles/src/region_outline.cpp#transferAggregate": 1,
-      "modules/transforms/split.cpp#fillTuple": 3,
+      "modules/transforms/split.cpp#fillTuple": 1,
+      "modules/transforms/split.cpp#parameterOfPort": 2,
       "src/compile/gir/builder_support.h#nodeDraftOf": 1,
       "src/compile/gir/draft_graph_builder.cpp#draftOwners": 2,
       "src/compile/gir/draft_graph_builder.cpp#fromDraft": 1,
@@ -241,6 +242,7 @@
       "src/runtime/draft_regions.cpp#nodeRegion": 1,
       "src/runtime/draft_regions.cpp#regionWithin": 1,
       "src/runtime/draft_regions.cpp#retireRegion": 1,
+      "src/runtime/draft_regions.cpp#setBrchJoin": 1,
       "src/runtime/draft_regions.cpp#setNodeRegion": 1,
       "src/runtime/draft_regions.cpp#setRegionAttrs": 1,
       "src/runtime/draft_regions.cpp#setRegionInline": 1,
@@ -266,6 +268,7 @@
       "src/runtime/graph.cpp#emitDraftPayload": 1,
       "src/runtime/graph.cpp#isUnanchoredPure": 1,
       "src/runtime/graph.cpp#nodeIsFreelySchedulable": 1,
+      "src/runtime/graph.cpp#nodeMayFault": 1,
       "src/runtime/graph.cpp#planDraftPayload": 1,
       "src/runtime/graph.cpp#recordDraftDebugData": 1,
       "src/runtime/graph_build.h#-": 1,
@@ -280,8 +283,7 @@
       "src/runtime/writings.cpp#extract": 1,
       "src/runtime/writings.cpp#lookupOrAdd": 1,
       "src/runtime/writings.cpp#rewrite": 1,
-      "src/runtime/writings.cpp#saturate": 1,
-      "src/runtime/draft_regions.cpp#setBrchJoin": 1
+      "src/runtime/writings.cpp#saturate": 1
     },
     "constructions": {
       "src/runtime/draft.cpp#decode": 1

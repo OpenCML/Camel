@@ -148,6 +148,8 @@ class GraphModule final : public BuiltinModule {
                 {"op", true},
                 {"op_name", true},
                 {"is_pure", true},
+                {"may_be_recomputed", true},
+                {"may_fault", true},
                 {"type_of", true},
                 {"type_name", true},
                 {"callee", true},
