@@ -10,6 +10,9 @@
 
 const camel::runtime::Program *
 OptimizeRewritePass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    // A run starts from zero: what an earlier run of this instance counted was about a program this
+    // one does not have (the count of not-settling runs is per run, and this is where a run starts).
+    settleStreak_ = SettleStreak{};
     return simplifyGraph(context_, program, config_, os, 16, this);
 }
 

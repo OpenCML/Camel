@@ -1,0 +1,14 @@
+// Calling the fallible result of loss->cse->with_grad without handling its error: the pinned
+// compiler aborts (invariant in Builder::visitLinkNode) instead of giving a diagnostic.
+// intro_pipeline.cml is the handled form, which runs.
+import { cse } from opt
+import { with_grad } from autodiff
+with <w: float>
+func loss(x: float): float {
+    return w * x + w * x
+}
+func main(): int sync {
+    let step = loss->cse->with_grad
+    println(step<2.0>(3.0))
+    return 0
+}
