@@ -105,7 +105,7 @@ std::vector<node_handle_t> Builder::expandRestArgument(
                 std::vector<node_handle_t> values;
                 values.reserve(with.size());
                 for (const auto ref : with) {
-                    values.emplace_back(nodeDraftOf(value), ref);
+                    values.push_back(nodeDraftOf(value)->ref(ref));
                 }
                 return values;
             }
