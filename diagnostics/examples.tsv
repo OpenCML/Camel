@@ -185,7 +185,6 @@ SemanticDiag::PureAndUses	test/cases/effects/err_pure_and_uses.cml
 SemanticDiag::RangeStepZero	test/cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml
 SemanticDiag::Redeclaration	test/cases/compile/generics/err_redecl.cml
 SemanticDiag::ReservedIdentifier	test/cases/compile/surface/reserved_function_name.cml
-SemanticDiag::ResidualsAreNotVisible	test/cases/compile/transforms/split_residuals_destructured.cml
 SemanticDiag::ResourceGroupCycle	test/cases/effects/err_group_cycle.cml
 SemanticDiag::RestArgumentNotLast	test/cases/compile/rest_params/rest_arg_not_last.cml
 SemanticDiag::RestArgumentNotTuple	test/cases/compile/rest_params/rest_arg_not_tuple.cml

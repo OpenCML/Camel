@@ -1936,3 +1936,15 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 - 顺便说一句：这一批有几笔提交信息是中文（`perf:` 那一串）。仓库要公开，提交信息统一用英文。
 
 页面挪到 `reviews/` 留档。
+
+
+## 催办（2026-11-02 12:50，决策者）：两小时零笔代码进 develop；残差那一笔现在合
+
+两小时零笔代码进 develop（过去两小时 15 笔全是合并闸门、脚本头与文档）。`lane-resid` 的残差闭包已在 12:22 合成一笔，本轮合入。
+
+- **已到的读数**：`lin(1, 0) = 12.0`、`lin(0, 1) = 9.0`（程序是 `value=18.0` 的最小例，命令与 stdout 见该笔的合并信息），由 `lane-resid` 给。
+- **`transpose(lin)(1) = (12, 9)` 本笔给不出**：`transpose has no transpose for this function`，stderr `TRANSPOSE function=split_of_jvp_of_f_backward skip=call node=8 arg=4`。对 `split` / `jvp` 求转置属 `transpose` 那笔（b2）的验收，归档在那里。
+- **`vjp_arities` 与 `remat.split` 在 `--gc-check poison` 下**：现在是红的，而且不是 GC 报告 —— 是编译期 `SemanticDiag::TypeNotIndexable`，旧 `split` 形状的用例还在等那一对。`--gc-check poison` 也不是 runner 的标志（poison 只按计划条目的 `args` 注入）。
+- **"收集器按上界扫的兜底"未找到**：`upper` 在 `src/runtime` 只命中 stream 与注释 6 处；`free_list.h` 的 `Step 2: scan the entire memory region` 是分配器自检；`src/core/mm` 没有上界扫循环。请车道给出符号名再删。
+- **生成器悬垂节点**：已复现，有 ASan 栈（`fastvm.cpp:1017` 的 SEGV、`frame.h:436` 的 invalid vptr），现由 `lane-guard-dbg` 接手，处在"修"这一步而不是"定位"。
+- **P0-2 的两处改写**：在 `lane-m4b2`，3757 红，仍在车道；两处是链条件的两份拷贝合成一份。**待 `lane-m4b2` 报**（2026-11-02 21:10 记）。
