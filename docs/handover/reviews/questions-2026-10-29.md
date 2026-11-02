@@ -1936,3 +1936,18 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 - 顺便说一句：这一批有几笔提交信息是中文（`perf:` 那一串）。仓库要公开，提交信息统一用英文。
 
 页面挪到 `reviews/` 留档。
+
+
+## 催办（2026-11-02 12:50，决策者）：两小时零笔代码进 develop；残差那一笔现在合
+
+两小时零笔代码进 develop（过去两小时 15 笔全是合并闸门、脚本头与文档）。`lane-resid` 的残差闭包已在 12:22 合成一笔，本轮合入。
+
+- **已到的读数**：`lin(1, 0) = 12.0`、`lin(0, 1) = 9.0`（程序是 `value=18.0` 的最小例，命令与 stdout 见该笔的合并信息），由 `lane-resid` 给。
+- **`transpose(lin)(1) = (12, 9)` 本笔给不出**：`transpose has no transpose for this function`，stderr `TRANSPOSE function=split_of_jvp_of_f_backward skip=call node=8 arg=4`。对 `split` / `jvp` 求转置属 `transpose` 那笔（b2）的验收，归档在那里。
+- **`vjp_arities` 与 `remat.split` 在 `--gc-check poison` 下**：现在是红的，而且不是 GC 报告 —— 是编译期 `SemanticDiag::TypeNotIndexable`，旧 `split` 形状的用例还在等那一对。`--gc-check poison` 也不是 runner 的标志（poison 只按计划条目的 `args` 注入）。
+- **"收集器按上界扫的兜底"：找到了，而且它不是死代码。** 位置是 `src/core/mm/gen.cpp` 的 `GenerationalAllocatorWithGC::clearMarks()`，`markPhase()` 第一句就调它，`graphSpace().iterateAllocated([](ObjectHeader *h){ h->unmark(); })` 把整个图空间扫一遍；"按上界扫"就是 `iterateAllocated` 本体（`bump_ptr.h:223`：`current = begin_; topSnapshot = top_.load(); while (current < topSnapshot) …`）。判它是兜底的三条：精确集合 `objectRootSets_` 就在同一个函数里、不在 `#if` 或异常路径上、注释自认精确集合不够（`Graph carriers are also traced through Function values … not necessarily in a registered root set, so unmark the whole graph space … or a later collection would skip them and miss their edges.`）。
+  - **所以这一条没有在同一笔删掉，是与您原话的唯一偏离，请您裁**：删它要先**把经 `Function::updateRefs` 追到的图登记为根**（车道正在做）。判据：登记不改变行为 → 再删整空间扫 → 全量 + `feat/mm` + `--gc-check poison` 全绿；否则回退，并给出"哪个对象被漏掉"。**这是 GC 语义改动，不是删死代码。**
+- **生成器悬垂节点**：ASan 层已复现（`fastvm.cpp:1017` 的 SEGV、`frame.h:436` 的 invalid vptr，由 `lane-guard-dbg` 修）；**GIR 层已扫完 24 条，结论是不成立**：`test/cases/compile/stream/{generators,yield}_*.cml` 24 条逐条 `std::gir`、逐条跑两次，24/24 逐字节相同；19 条有图的用例里 `no-reader` 的 kind 计数一律只有 `EXIT`；5 条红是拒绝用例（`nodes=0`，本来没有图）。**字节码层没有"读者"这个概念**（值是槽的活跃性）。若您指的是另一层，请给那一层"读"的定义。
+- **`44 → 30 → 29`（实测，`718ae47e6`）**：44 是 develop 上"旧期望 + 新编译器"的数；30 是迁完用例后的数；29 是再把一条负例的期望行号从 27 改到 28 之后的数（用例重写后 `linear` 的解构落在第 28 行）。**这不是"弄坏再修好 15 条"**，是同一批用例从旧形状改到新形状，外加一个坐标。
+- **29 条的根：28 条是 `stdlib/vjp.cml:73:47`**（`Function of type '(float, float) => float' cannot be called`，即库里那条 `with_grad` 导出，属 b2 的账）；**另 1 条是 `registry.docs_complete` 与 `tools.autodiff_migration_ledger.ratchet` 这两个"跑程序数数"的判据**，它们读的就是被 73:47 挡下的那些例子，根同一条。
+- **P0-2 的两处改写**：在 `lane-m4b2`，3757 红，仍在车道；两处是链条件的两份拷贝合成一份。**待 `lane-m4b2` 报**（2026-11-02 21:10 记）。

@@ -36,13 +36,13 @@
 # so there is nothing for a gate to ask.
 [[tests]]
 name = "split_forward_half"
-desc = "The forward half of split(reinterp<jvp>(g)) for g(x) = x*x at x = 3: it computes what the present inputs allow and hands the residuals on whole. Reads `forward y= 9.0`, `residuals whole= ()` and the tangent 6.0; `residuals=2` is the graph's count -- the pair the body computes, plus the parameter's value port, which crosses now that the tangent side reads its tangent, and the members are the graph's answer, not a signature's."
+desc = "The forward half of split(reinterp<jvp>(g)) for g(x) = x*x at x = 3, under the closure ABI (2026-11-02): it computes what the present inputs allow and hands the linear map back closed over the residuals it carried, so the map takes the tangent direction alone. Reads `forward y= 9` and `tangent dx1= 6`; `residuals=2` is the graph's count -- the pair the body computes, plus the parameter's value port, which crosses now that the tangent side reads its tangent, and the members are the graph's answer, not a signature's, which is why no value and no type carries them."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_forward_half.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_output_contains = ["forward y= 9", "residuals whole= ()", "tangent dx1= 6", "residuals=2"]
+expect_output_contains = ["forward y= 9", "tangent dx1= 6", "residuals=2"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -77,10 +77,21 @@ case = "../../../cases/transforms/split/split_two_params.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_output_contains = ["value= 18.0", "dfdx= 12.0", "dfdy= 9.0", "forward y= 18.0", "tangent dx= 12.0", "tangent dy= 9.0", "type=(float, float) => (float, (float, float, float, float, float)) pure residuals=5"]
+expect_output_contains = ["value= 18.0", "dfdx= 12.0", "dfdy= 9.0", "forward y= 18.0", "lin dx= 12.0", "lin dy= 9.0", "type=(float, float) => (float, (float, float) => float pure) pure residuals=5"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+[[tests]]
+name = "residuals_in_the_closure"
+desc = "The transposed linear half, reading the cut's residuals out of the closure (2026-11-02). `lin` is the backward graph closed over the five values the cut carried, so `transpose(lin)` declares one **capture port** per residual, in the closure's order, and gets them because `transpose(f)` keeps `f`'s closure. The two leading arguments are the tangent values the type law still asks for (`Transpose<F>` is unchanged by this step) and they are passed as **zeros on purpose**: a coefficient read from a parameter would be 0 and the answer would be (0, 0). It is (12, 9) -- 2xy and x^2 for f(x, y) = x*x*y at x = 3, y = 2 -- which says the values came out of the closure and out of nowhere else. The counts are read too: the transposed graph is `(float, float, float) => (float, float)` (two tangents, the cotangent, two cotangents out), and the `mul_tangent` call inside it is transposed as the linear map it is (`(float, float, float) => (float, float)`), which is the participating set the arm path always built and the straight-line body now builds as well."
+kind = "behavior"
+case = "../../../cases/transforms/transpose/residuals_in_the_closure.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["value=  18.0", "back dx=  12.0  back dy=  9.0", "TRANSPOSE function=split_of_jvp_of_f_backward graph=", "TRANSPOSE function=autodiff::mul_tangent<float>"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
 [[tests]]
 name = "split_product_chain"
 desc = "A chain of multiplies, both ends of the composition: `f3(x) = x*x*x` and `f4(x) = x*x*x*x` at x = 2. The derivatives are the analytic ones read through the backward half -- 12 = 3x^2 and 32 = 4x^3 -- and the cut carries 3 residuals for the cubic and 4 for the quartic (`x`, `x*x`; plus `x*x*x`; plus the parameter's value port, which crosses because the tangent side reads its tangent). The forward half's type reads `(float) => (float, (float, float, float))` and `(float) => (float, (float, float, float, float))` -- the arity the graph gave it."
@@ -89,7 +100,7 @@ case = "../../../cases/transforms/split/split_product_chain.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_output_contains = ["cubic y= 8.0", "cubic dx1= 12.0", "quartic y= 16.0", "quartic dx1= 32.0", "type=(float) => (float, (float, float, float)) pure residuals=3", "type=(float) => (float, (float, float, float, float)) pure residuals=4", "REINTERP split function=jvp_of_cubic", "REINTERP split function=jvp_of_quartic"]
+expect_output_contains = ["cubic y= 8.0", "cubic dx1= 12.0", "quartic y= 16.0", "quartic dx1= 32.0", "type=(float) => (float, (float) => float pure) pure residuals=3", "type=(float) => (float, (float) => float pure) pure residuals=4", "REINTERP split function=jvp_of_cubic", "REINTERP split function=jvp_of_quartic"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -115,7 +126,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_output_contains = ["REINTERP split function=jvp_of_leaky", "type=(float) => (float, (float, bool)) pure residuals=2 arms=2", "branch x=2.0 value=4.0", "branch x=2.0 dgdx=4.0", "branch x=-1.0 value=-0.5", "branch x=-1.0 dgdx=0.5", "WALK half=backward region=1 arm=0 branch=6 members=3 ports=0 nested=0 outside=2", "ARM half=backward arm=1 region=2 yield=15 members=2 value=10 tangent=11"]
+expect_output_contains = ["REINTERP split function=jvp_of_leaky", "type=(float) => (float, (float) => float pure) pure residuals=2 arms=2", "branch x=2.0 value=4.0", "branch x=2.0 dgdx=4.0", "branch x=-1.0 value=-0.5", "branch x=-1.0 dgdx=0.5", "WALK half=backward region=1 arm=0 branch=6 members=3 ports=0 nested=0 outside=2", "ARM half=backward arm=1 region=2 yield=15 members=2 value=10 tangent=11"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -128,7 +139,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_output_contains = ["REINTERP split function=jvp_of_f", "REINTERP split function=jvp_of_f", "type=(float) => (float, (float, bool)) pure residuals=2 arms=2", "author x=2.0 value=4.0", "author x=2.0 dfdx=4.0", "author x=-2.0 value=-6.0", "author x=-2.0 dfdx=3.0"]
+expect_output_contains = ["REINTERP split function=jvp_of_f", "REINTERP split function=jvp_of_f", "type=(float) => (float, (float) => float pure) pure residuals=2 arms=2", "author x=2.0 value=4.0", "author x=2.0 dfdx=4.0", "author x=-2.0 value=-6.0", "author x=-2.0 dfdx=3.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -153,6 +164,6 @@ case = "../../../cases/compile/transforms/split_identity_pipeline.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_output_contains = ["identity y= 3", "identity dx1= 1", "type=(float) => (float, (float,)) pure residuals=1"]
+expect_output_contains = ["identity y= 3", "identity dx1= 1", "type=(float) => (float, (float) => float pure) pure residuals=1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

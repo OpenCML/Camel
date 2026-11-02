@@ -195,6 +195,13 @@ FunctionType *FunctionType::intern(const Parts &parts) {
         key.push_back(internSymbol(parts.resources.allocates->name));
     }
     key.push_back(parts.resources.external ? 1 : 0);
+    // A closed half -- the backward half `split` hands out, whose parameters are the tangents and
+    // whose values are its captures -- is part of what the signature is: two signatures that differ
+    // there are not one type, because `transpose` answers them different shapes. It is in the **key
+    // only**, the way parameter names are (see the comment at the top of intern()): a type prints it
+    // nowhere and `equals` ignores it (text.cpp: sameTypeWith compares the parameters, the result and
+    // the resources), so a marked signature is compatible with the plain one and is accepted where
+    // the plain type is expected.
     // The head ends here; the parameters and the names follow, so the canonical key can reuse it.
     const size_t head = key.size();
     for (const auto &[type, isVar] : parts.params) {
@@ -278,7 +285,6 @@ FunctionType *FunctionType::withExitType(Type *exitType) const {
     changed.exitType = exitType;
     return intern(changed);
 }
-
 FunctionType *FunctionType::withResources(const sem::ResourceSignature &resources) const {
     if (resources_ == resources) {
         return const_cast<FunctionType *>(this);
