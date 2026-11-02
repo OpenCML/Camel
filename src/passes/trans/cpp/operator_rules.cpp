@@ -398,7 +398,7 @@ Rules buildRules() {
     r[":op/ltol"] = identity();
     r[":op/ftof"] = identity();
     r[":op/dtod"] = identity();
-    r[":op/stos"] = identity();
+    r[":op/atos"] = runtimeFunction("toText");
     r[":op/itol"] = cast("int64_t");
     r[":op/itof"] = cast("float");
     r[":op/ltof"] = cast("float");
@@ -468,8 +468,6 @@ Rules buildRules() {
     }
     r[":op/ztoc"] = complexFromComplex("float");
     r[":op/ctoz"] = complexFromComplex("double");
-    r[":op/ctos"] = runtimeFunction("toText");
-    r[":op/ztos"] = runtimeFunction("toText");
 
     // ---- Strings (ops.cpp __builtin__add_ss__, __builtin__idx__; struct.cpp) ----
     r[":op/add_s"]            = infix("+");

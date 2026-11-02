@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace camel::core::context {
@@ -181,5 +182,25 @@ uint64_t registerGenericRule(
 size_t genericRuleInstance(
     camel::core::context::Context &context, uint64_t ruleId,
     const std::vector<camel::core::type::Type *> &types, const RuleWithArguments &with);
+
+/// The instance of the rule *named* `name`, at `types` and with the `with` values `with`.
+///
+/// A transform that reaches a rule through the index has the rule's name, never the id the context
+/// files it under: the index answers a name (`forwardRuleOf`, `transposeRuleOf`), because a name is
+/// what a ruleset module writes, and the id is the compiler's own bookkeeping. This is that walk,
+/// in one place, so a transform that runs no rule itself -- `transpose` -- can still read the rule's
+/// instantiated right side instead of writing the law again in C++.
+///
+/// Nothing is instantiated twice: the walk only finds the id, and `genericRuleInstance` is what
+/// decides whether the pair is new. That is why this asks it rather than reaching into the entry
+/// itself -- the cache and the one place an instance is made both stay where they were.
+///
+/// Answers null when the name names no rule of this context (the index can name a rule the loaded
+/// modules never declared) or when the instance did not come about (the rule is not written for the
+/// tuple); `why` says which, and the entry's instance says why it could not be made.
+const GenericRuleInstance *genericRuleInstanceByName(
+    camel::core::context::Context &context, std::string_view name,
+    const std::vector<camel::core::type::Type *> &types, const RuleWithArguments &with,
+    std::string &why);
 
 } // namespace camel::compile::gir
