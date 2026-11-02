@@ -5717,7 +5717,7 @@ node_ptr_t Builder::visitGeneratorBody(
     // does not build it
     const auto reportUnbuiltShape = [&](const AST::node_ptr_t &atNode) -> void {
         const AST::node_ptr_t atYield = firstOwnYield(atNode);
-        diags_->of(InternalDiag::UnknownInternalError)
+        diags_->of(InternalDiag::GeneratorInitialValueShapeUnsupported)
             .at((atYield != nullptr ? atYield : atNode)->load()->tokenRange())
             .commit(
                 "the generator machine does not build this shape: a generator `loop` takes its initial "
