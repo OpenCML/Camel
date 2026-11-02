@@ -51,9 +51,11 @@ expect_stdout_contains = ["PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # 129 programs, about 150 s of CPU at 8 jobs. The margin rule wants the bound to be at least four
-# times the work, and 600 s sat just under that line; 900 s is six times, and it is still the
-# runner's kill rather than a verdict, so a program that hangs is reported as one.
-timeout_ms = 900000
+# times the work, and 600 s sat just under that line; 900 s is six times this host's reading. The
+# two-core CI runner reads the same work slower -- 511.5 s of CPU for the 174-program form of this
+# case -- so 900 s is not four times what that host does; 2400 s is, and it is still the runner's
+# kill rather than a verdict, so a program that hangs is reported as one.
+timeout_ms = 2400000
 
 [[tests]]
 name = "link_line_keeps_the_compilers_stdlib"
@@ -226,7 +228,11 @@ expect_exit = 0
 expect_stdout_contains = ["program(s) need no Camel runtime", "link it, all in the baseline"]
 expect_output_not_contains = ["FAIL:", "is not in the baseline", "no longer links the runtime"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 900000
+# 2100 s: the same 129 translations and builds as agree_with_fvm plus an `ldd` of each. On this host
+# 900 s was already six times the work, but the two-core CI runner reads it slower -- 493.3 s of CPU
+# for the 174-program form of this case -- which 900 s was 1.8x, under the four the rule asks for.
+# 2100 s is 4.3x that figure.
+timeout_ms = 2100000
 
 [[tests]]
 name = "fault_narrow_text_number"
