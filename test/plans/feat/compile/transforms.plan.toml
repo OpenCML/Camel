@@ -1114,3 +1114,16 @@ expect_exit = 0
 expect_output_contains = ["REINTERP jvp function=p graph=", "rules=jvp_pow", "REINTERP jvp function=q graph=", "REINTERP jvp function=s graph=", "9.0", "6.0", "-6.0", "56.66253179403897", "-0.037037037037037035", "nan"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "tangent_of_a_pack_keeps_every_parameter"
+desc = "A type function applied to a pack answers one member per member. `..Tangent<ParamsOf<F>>` in a function type's parameter list -- the splice `types` writes to declare `Jvp<F>` and `Vjp<F>` -- read as the empty tuple for every parameter, so a function whose parameters are arrays declared no tangent at all and the call that its own declaration asked for was refused. `Tangent<float[..]>` is `float[..]` and `Tangent<int[..]>` is `()`, so the reading agrees with the declared type for a function of `int`, `string` and `bool` (where every tangent is `()`) and disagrees only for a parameter that has something to differentiate: `(a: float[..], b: int[..], c: int[..]) => float` is six parameters at `(..ParamsOf<F>, ..Tangent<ParamsOf<F>>)`, three values and then the tangent of each, with both `int[..]` parameters still in place though their tangents are the same type. `Vjp<F3>` then equals the type written out by hand, pullback and all. The last line is the case that must not change: a function of two floats keeps two tangents, both `float` -- the reading that already worked, and the one a splice that merged members by type would have broken."
+kind = "behavior"
+case = "../../../cases/compile/transforms/tangent_of_a_pack_keeps_every_parameter.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["tangent_of_float_array true", "tangent_of_int_array true", "params_of_f3 true", "params_and_tangents true", "vjp_of_f3 true", "tangents_of_two_floats true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

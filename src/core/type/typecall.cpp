@@ -105,6 +105,29 @@ Type *TypeCallType::evaluate(
         return nullptr;
     }
     Type *type = arguments.front();
+    // A type function applied to a pack of known members is applied to each member, and the pack of
+    // the answers is its answer: `Tangent<ParamsOf<F>>` is one tangent per parameter of `F`, and
+    // `..Tangent<ParamsOf<F>>` in a parameter list is one parameter per member (design 5.6). Without
+    // this rule the pack arrives as a single type that is neither a float nor a tuple, and the empty
+    // tuple -- the tangent of an integer -- is the answer for every parameter of `F`; a function
+    // whose parameters are arrays then declares no tangent at all, and the call that was typed by
+    // this rule is refused for the wrong reason.
+    if (TypeCallType::isPack(type)) {
+        const std::span<Type *const> members = TypeCallType::packMembers(type);
+        std::vector<Type *> mapped;
+        mapped.reserve(members.size());
+        for (Type *member : members) {
+            const std::span<Type *const> one(&member, 1);
+            std::string inner;
+            Type *computed = TypeCallType::evaluate(name, one, inner);
+            if (computed == nullptr) {
+                error = inner;
+                return nullptr;
+            }
+            mapped.push_back(computed);
+        }
+        return makePack(mapped);
+    }
     if (name == "Tangent") {
         return tangentSpaceOf(type);
     }
