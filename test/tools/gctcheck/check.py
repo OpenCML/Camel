@@ -7,6 +7,7 @@
     python3 test/tools/gctcheck/check.py dump OUT_DIR [--camel-home HOME] [--jobs N]
     python3 test/tools/gctcheck/check.py compare DIR_A DIR_B
     python3 test/tools/gctcheck/check.py control
+    python3 test/tools/gctcheck/check.py shape DUMP_DIR
 
 `dump` runs `camel inspect --gct` on every .cml file of the repository (tests, examples,
 exemplars, benchmarks, the standard library) and writes, per file, one record to OUT_DIR. The
@@ -149,6 +150,71 @@ def differences(left_text: str, right_text: str) -> list:
     return []
 
 
+def parse_line(line: str):
+    """(depth, is_last, label) for one dump line, or None when the indentation is not the grammar."""
+    depth, i = 0, 0
+    while True:
+        if line.startswith("|-", i) or line.startswith("\\-", i):
+            return depth, line[i] == "\\", line[i + 2:]
+        if line.startswith("|  ", i):
+            depth, i = depth + 1, i + 3
+            continue
+        if line.startswith("   ", i):
+            depth, i = depth + 1, i + 3
+            continue
+        return (depth, False, line[i:]) if i == 0 else None
+
+
+def cmd_shape(args) -> int:
+    """The inventory a reader of the dump is written against: what the text carries, and how much
+    of it there is. A line the indentation cannot place is a failure, because it would be a node a
+    reader could not put anywhere."""
+    root = Path(args.dump_dir)
+    records = sorted(root.glob("*.txt"))
+    if not records:
+        print(f"gctcheck: no record in {root}; nothing was read")
+        return 2
+    trees = refusals = 0
+    lines_total = depth_max = largest = 0
+    labels: dict = {}
+    anomalies = []
+    for record in records:
+        text = record.read_text(encoding="utf-8").splitlines()
+        fields, body, i = {}, text[1:], 0
+        while i < len(body) and body[i].split(":")[0] in ("kind", "exit", "codes"):
+            key, _, value = body[i].partition(":")
+            fields[key] = value.strip()
+            i += 1
+        if fields.get("kind") != "tree":
+            refusals += 1
+            continue
+        trees += 1
+        body = body[i:]
+        lines_total += len(body)
+        largest = max(largest, len(body))
+        previous = -1
+        for number, line in enumerate(body):
+            parsed = parse_line(line)
+            if parsed is None:
+                anomalies.append((record.name, f"line {number + 1}: {line[:60]!r}"))
+                continue
+            depth, _, label = parsed
+            depth_max = max(depth_max, depth)
+            if depth > previous + 1:
+                anomalies.append((record.name, f"line {number + 1}: depth {depth} after {previous}"))
+            previous = depth
+            name = label.split(":")[0].strip() or label.strip()
+            labels[name] = labels.get(name, 0) + 1
+    print(f"gctcheck: {len(records)} records, {trees} trees, {refusals} refusals")
+    print(f"gctcheck: {lines_total} tree lines, deepest indent {depth_max}, largest tree {largest} lines")
+    print(f"gctcheck: {len(labels)} node labels, {len(anomalies)} lines the grammar cannot place")
+    for name, count in sorted(labels.items(), key=lambda pair: -pair[1])[:20]:
+        print(f"  {count:7d}  {name}")
+    for record, why in anomalies[:10]:
+        print(f"ANOMALY {record}: {why}")
+    return 1 if anomalies else 0
+
+
 def cmd_compare(args) -> int:
     a, b = Path(args.dir_a), Path(args.dir_b)
     names = sorted({p.name for p in a.glob("*.txt")} | {p.name for p in b.glob("*.txt")})
@@ -229,6 +295,9 @@ def main(argv=None) -> int:
     p.set_defaults(fn=cmd_compare)
     p = sub.add_parser("control")
     p.set_defaults(fn=cmd_control)
+    p = sub.add_parser("shape")
+    p.add_argument("dump_dir")
+    p.set_defaults(fn=cmd_shape)
     args = ap.parse_args(argv)
     return args.fn(args)
 
