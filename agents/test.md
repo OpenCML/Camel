@@ -162,6 +162,27 @@ Three zero-hit readings on 2026-11-02 were all the same mistake, and none of the
 
 **A zero is not a reading until the search space has been shown to contain the thing.** State the command, the file or the ref it read, and which tree that ref or file belongs to.
 
+## Guess the name and the count is wrong, not small
+
+Three counts on 2026-11-02 were wrong because the name was invented rather than read out of the
+header, and each one was wrong in a way that looked like a finding:
+
+- `setTagUses`, `setFieldTagUses`, `setOperRef`, `setNativeValueType` all counted **0 call sites**,
+  which read as "four of the fifteen per-node side tables of the construction tree are never
+  filled, so a serializer can drop them". The tables are all live: the setters are named
+  `addTagUses`, `addFieldTagUses`, `markNativeValue`, and the operator reference is written
+  `operRefs_[node]` directly. Every one of the fifteen has 1 to 8 write sites.
+- A `shape` count of tree lines was 9,381 lines too high -- exactly `3 x 3,127`, the three record
+  header lines of every dump -- because the header loop advanced an index and the body loop then
+  walked the list from the start. A throwaway script written first had it right; the tool did not.
+- A pass named `upper` was searched for and found nowhere, because no pass is called that.
+
+**Before counting a setter, an accessor or a pass, read the family out of the header**: setters here
+are `set*`, `add*`, `mark*` or a direct map write, and a pass name is in `stdlib/std.cml`. A zero
+from a guessed name says the name is wrong, not that the code is missing -- and the difference
+matters, because the first version of the four-table reading above was about to be reported as a
+finding about the model.
+
 ## A wall clock on this host is not a cost, and a phase is not a sum with its children
 
 Two readings taken on 2026-11-02, from one command, wrong in the two ways that make a performance
