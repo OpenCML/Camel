@@ -3860,6 +3860,20 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             // reads this pull from the data edge the call writes.
             dataType = tt::as_ptr<StreamType>(dataType)->stepType();
         }
+        // A `T!` called as a function: what the call would run is the result the value may hold,
+        // and the error it may hold instead has nowhere to go, so the call cannot be built. That
+        // is a fact about the input rather than about the compiler, and it is an error, not a
+        // warning: a warning would let the statement be dropped and the run go on as if the call
+        // had been made (`UnusedFallibleValue` is the other case, a value whose loss the writer
+        // may choose). The `GUARD` below keeps its own case -- a target that is neither a function
+        // nor an operator and is not fallible either -- where the type says something the builder
+        // cannot explain and stopping the process is the honest answer.
+        if (asFallible(dataType) != nullptr) {
+            diags_->of(SemanticDiag::CalledFallibleValue)
+                .atOrigin(gct->origin())
+                .commit(dataType->toString());
+            throw BuildAbortException();
+        }
         GUARD(
             dataType->code() == TypeCode::Function,
             "Target node of LINK must be a function or operator node.");

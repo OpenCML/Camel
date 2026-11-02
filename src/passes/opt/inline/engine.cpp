@@ -1345,15 +1345,19 @@ const camel::runtime::Program *applyOptimizeRewritePass(
     // the diagnostics after the pass) and ends the run with a non-zero code. The growth budget is
     // not the bound that stops it: a pipeline that leaves the budget open has none to reach.
     if (changed && lastChangedGraph != nullptr) {
-        static std::string streakGraph;
-        static size_t streak = 0;
-        if (streakGraph == lastChangedGraph->name()) {
-            ++streak;
+        // The count lives in the state of the run (OptimizeRewriteConfig::settleStreak), never in a
+        // static: two programs in one process each start from zero, and so does a second run of the
+        // pass. A run that is given no state has one of its own, which is the same thing for a
+        // caller that runs the engine once.
+        SettleStreak ownStreak;
+        SettleStreak &streak = config.settleStreak ? *config.settleStreak : ownStreak;
+        if (streak.graph == lastChangedGraph->name()) {
+            ++streak.runs;
         } else {
-            streakGraph = lastChangedGraph->name();
-            streak      = 1;
+            streak.graph = lastChangedGraph->name();
+            streak.runs  = 1;
         }
-        if (streak >= config.settleRuns) {
+        if (streak.runs >= config.settleRuns) {
             context->rtmDiags()
                 ->of(camel::core::error::RuntimeDiag::PassInternalError)
                 .commit(
