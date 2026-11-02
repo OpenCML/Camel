@@ -2027,7 +2027,7 @@ class Builder {
                         os << "<invalid>";
                         return;
                     }
-                    auto *graph = DraftGraphBuilder::fromDraft(value.draft);
+                    auto *graph = DraftGraphBuilder::fromRef(value);
                     os << (graph ? graph->name() : std::string{"<detached>"}) << "#" << value.id;
                 });
             CAMEL_LOG_DEBUG_S("GIR Builder", "Accessing node '{}' from scope {}", name, ss.str());
