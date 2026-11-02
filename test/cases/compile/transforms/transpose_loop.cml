@@ -23,10 +23,10 @@ func quad(x: float): float {
 func main(): int sync {
     let three_back = transpose(thrice)
     println(thrice(1.0))
-    println(three_back(1.0))
-    println(three_back(2.0))
+    println(three_back(1.0, 1.0))
+    println(three_back(1.0, 2.0))
     let quad_back = transpose(quad)
     println(quad(1.0))
-    println(quad_back(1.0))
+    println(quad_back(1.0, 1.0))
     return 0
 }
