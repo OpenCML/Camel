@@ -282,6 +282,38 @@ print family, and this operator's configuration is not a string, so its call has
 
 
 
+
+**2026-11-02 拒绝原因普查：1814 条按理由归成 53 族，前十族占 81.8%**
+
+口径（写死，下一个人复算时照此）：**语料 3377 个 `.cml`**，仓库 `/home/zjwei/camel-work/h-m5`，`origin/develop = e8fa221a0` 已并入本车道，`CAMEL_HOME=$PWD/out/latest`，用 `node test/tools/cml-sweep.mjs --jobs 16` 在**绝对路径**下跑（`printed=559 refused=1814 frontend=1004`，见 `/tmp/sw54.txt`），理由串取 `reasonOf` 的归一化形式（变量名/图 id/数字都掩成 `<name>`/`<n>`）。
+
+**分组自检**：`grep '^REFUSAL '` 的 53 行求和 = **1814**，与 `refused` 相等 ⇒ 没有把不同原因并了、也没有把同一原因拆了。
+
+| # | 计数 | 理由（归一化） | 最小例子（字节） |
+| --- | --- | --- | --- |
+| 1 | 374 | 算符没有可打印的名字：它是**无体的 kernel 声明**，程序不写那个名字 | `modules/math_calls/err_shl_int.cml`（89） |
+| 2 | 353 | 图名不是源标识符 | `compile/namespace_rules/lib2.cml`（72） |
+| 3 | 306 | 算符 `<name>`（没有声明可依据） | `trans/cpp/fault_tensor_negative_shape.cml`（162） |
+| 4 | 86 | 参数是命名类型 | `modules/tensor/shape_inference/loaded_struct_as.cml`（344） |
+| 5 | 85 | 参数的类型打印器不写 | `compile/enum/warn_redundant_wildcard.cml`（261） |
+| 6 | 73 | 返回类型是带 tag／可空／cell 的元组 | `consistency/unused_fallible/main_declared.cml`（150） |
+| 7 | 57 | 图带节点属性或 tag | `trans/cml/refuse/tagged_node.cml`（275） |
+| 8 | 51 | 区域既不是分支也不是循环 | `compile/diag_render/runtime_chunk_range.cml`（131） |
+| 9 | 51 | 参数是命名类型（另一种位置） | `consistency/operator_overloads/mods/plus_b.cml`（81） |
+| 10 | 48 | 返回类型是打印器不写的类型 | `compile/enum/wildcard_only.cml`（291） |
+
+**前十族 = 1484 / 1814 = 81.8%**（其余 43 族共 330 条）。分布是**长尾重头**：三族（374 + 353 + 306 = 1033，**56.9%**）就占了多半。
+
+**前十里"本该能打"的三族，各自缺什么**（这是本普查的目的：打印机下一步做什么）：
+
+- **第 2 族（353）"图名不是源标识符"**：用同一套归一化再分一次，353 条正好分成三块——**149 条 `A::B`（纯命名空间，没有泛型实参）**、**113 条 `name<T>`（泛型实例）**、**91 条 `A::B<T>`（两者都有）**，合计 353。其中**149 条是纯打印器侧**：源里写的就是 `namespace Tools { export func inc ... }`，打印器只要会写那层 `namespace` 包装；**缺的东西打印器自己就有**，不需要任何人裁定。剩下 204 条要写泛型实参 `<T>`，那是"泛型实例"这一整类被拒的一部分（见第 1 族的同一原因），要作者裁定。
+- **第 1 族（374）"无体 kernel 声明"**：例子里是 `1->shl<64>`。算符节点带的是 `math:shl_l`，`CallForm` 说得出公有的调用形状，但那个名字是模块**保私有**的 kernel（`kernelDeclaration`），而且源写法还带括号实参 `<64>`，打印器没有位置记它。⇒ 要打出来需要三样东西（可写的名字、括号实参、接收者箭头写法），其中"造一个导出名"会替作者决定语义（设计原则 6.4 禁止）。**这一族要作者裁定，不是打印机自己能闭合的。**
+- **第 3 族（306）"算符 `<name>`"**：连 `CallForm` 都没有，说明算符没人声明过或没登记进组。**先要回答"这个算符从哪来"**，不是打印器的问题。
+
+⇒ 下一步在**第 2 族的 149 条子族**（`A::B`，无泛型实参）：前十族里唯一"缺的东西在打印器内部"的一块，判据可以写成"输出里 `namespace` 包装与源一致"，不碰语义。
+
+**一个口径坑（记下来）**：同一个普查脚本改成用**相对路径**跑（`camel test/cases/...`），读数变成 `printed=551 refused=1701 frontend=1125`——**和 `cml-sweep.mjs` 的 559/1814/1004 差 113 条**。`cml-sweep.mjs` 用 `ROOT` 绝对路径 + `cwd: ROOT`；复算必须照它，否则先差出 113 条再讨论分组。
+
 **2026-11-02 第二十四刀：五次都没落地，交班（页：`docs/handover/questions/2026-11-02-cml-sync-tail-write.md`）**
 
 按第二十三刀的入口判据动手，**只改入口**（`handsTail` 认"`tail` 站在退出链上"+ 放开 `regionNeedsSync(0)`），探针原文：
