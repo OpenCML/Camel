@@ -12,14 +12,15 @@
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：2 页
+## 现在在等作者：3 页
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
 | --- | --- | --- | --- | --- |
+| [`2026-11-02-the-generator-reads-a-draft-node-after-its-builder`](2026-11-02-the-generator-reads-a-draft-node-after-its-builder.cn.md) | `stream.*` 的 11 条在 Windows 上崩在 `nodeGraphOf(): builder != nullptr`，同一棵树 Linux 两条腿全绿，`.fvm/.nvm/.prl/.jit/.gir` 五个后端都崩（所以是建图不是调度）：谁去找那个节点的 owner，修好前 Windows 腿要不要继续红（默认：先在 Linux 上用 ASan 拿栈，暂不标 `known_fail`） | 待裁 | — | Windows 腿那 11 条红；生成器 lowering 的其余读数 |
 | [`2026-11-02-what-counts-as-a-statement-of-a-chain`](2026-11-02-what-counts-as-a-statement-of-a-chain.cn.md) | 链上语句是否含 `Func`/`Join`（默认：都不含，`Call` 含；实测旧标记与新谓词在 17,753 处不一致、两个方向都有） | 待裁 | — | `sync` 边终点不变量能否改成"按节点性质判"；旧标记与新判据的差要逐处定性 |
 | [`2026-11-02-the-member-count-stated-twice`](2026-11-02-the-member-count-stated-twice.cn.md) | 余量元组在没有图时该不该有"未知元数"的类型（元组成员数与类型声明不符的检查落地后，21 条里 15 条真绿、6 条只是症状变了） | 待裁 | — | 元数不一致的检查从此是守卫 |
 
-**这一节的行数 = 目录里的页数**（现在 2 = 2）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。
+**这一节的行数 = 目录里的页数**（现在 3 = 3）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。
 
 2026-11-02 04:30 与 04:50 裁掉的两页（`ne_` 那 22 行与 P0-2 的顺序）已 `git mv` 进 `reviews/`，页末各写了裁定；03:30 的两页（另一层的 30 个零、私有 kernel 的名字）同样在 `reviews/`。
 
