@@ -95,3 +95,9 @@ Re-run without -NoBuild (it builds this tree and stamps the install), or pass -A
 a run that did not happen, and reading it as a failure sends you off to diagnose a test that never
 started. This is the instrument doing its job - it refused a run of the old binary that would have
 produced a green about a tree nobody built - so it belongs here as correct behaviour, not as a trap.
+
+A red also changes hands when the bookkeeping changes: the milestone layer s last red,
+`rules.every_exported_rule_enters_the_check`, disappeared in a merge that touched neither the test
+nor its plan file (`git log 4fa772787..d526043da -- test/plans/feat/modules/rules.plan.toml` is
+empty, and the plan runs 173/173 on `2227c21c1`), because `a01fcdfdc` changed how `known_fail` is
+read. **A count belongs to a tip and to the rules that counted it.**
