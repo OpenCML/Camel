@@ -258,6 +258,47 @@ function checkQuestionsIndex() {
     return 1
 }
 
+// The author's 18:30 ruling: whether a page has been answered is decided by `reviews/`, not by
+// what is left in `questions/` -- a merge can leave the answered page behind, and a leftover reads
+// as an unanswered question nobody is working on. So a page in `questions/` that already has a
+// page of its own in `reviews/` is a stale copy, and this check names the two files.
+const REVIEWS_DIR = path.join(root, 'docs', 'handover', 'reviews')
+
+function pageStem(name) {
+    return name.replace(/\.cn\.md$|\.md$/, '')
+}
+
+function checkAnsweredPages() {
+    if (!fs.existsSync(QUESTIONS_DIR) || !fs.existsSync(REVIEWS_DIR)) return 0
+    const reviews = fs.readdirSync(REVIEWS_DIR).filter((name) => name.endsWith('.md'))
+    const problems = []
+    for (const page of fs.readdirSync(QUESTIONS_DIR)) {
+        if (!page.endsWith('.md') || page === 'README.md') continue
+        const stem = pageStem(page)
+        const answered = reviews.filter((review) => {
+            const reviewStem = pageStem(review)
+            return reviewStem === stem || reviewStem.endsWith(`-${stem}`) || reviewStem.endsWith(stem)
+        })
+        if (answered.length > 0) {
+            problems.push(
+                `docs/handover/questions/${page}: already answered by ` +
+                    answered.map((review) => `docs/handover/reviews/${review}`).join(', ') +
+                    ' -- the page was read and the reply is in reviews/, so this copy is left over',
+            )
+        }
+    }
+    for (const problem of problems) console.log(problem.replace(/\\/g, '/'))
+    if (problems.length > 0) {
+        console.log(
+            `${problems.length} answered page(s) still in questions/: the reviewer's ruling lives in ` +
+                'reviews/, and a page left behind reads as a question nobody is answering',
+        )
+        return 1
+    }
+    console.log('no answered page is left in questions/: every page there is still waiting')
+    return 0
+}
+
 function checkTechnicalIndex() {
     if (!fs.existsSync(TECHNICAL_INDEX)) {
         console.log('docs/technical/README.md: no such file')
@@ -563,7 +604,10 @@ if (args.includes('--citations')) {
     process.exit(checkCitations())
 }
 if (args.includes('--questions-index')) {
-    process.exit(args.includes('--write') ? writeQuestionsIndex() : checkQuestionsIndex())
+    if (args.includes('--write')) process.exit(writeQuestionsIndex())
+    const indexCode = checkQuestionsIndex()
+    const answeredCode = checkAnsweredPages()
+    process.exit(indexCode !== 0 ? indexCode : answeredCode)
 }
 if (args.includes('--technical-index')) {
     process.exit(checkTechnicalIndex())
