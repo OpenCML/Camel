@@ -1732,8 +1732,29 @@ class CmlPrinter {
             emit(std::format(
                 "{}let {}{} = {}", indent_, name, annotationOf(node->dataType()), value.text));
         } else if (users == 0) {
-            // A value nothing reads is not part of the printed program, unless it is the tail
-            // of a region, which `buildBody` still writes as the block's value.
+            // A value nothing reads is not part of the printed program -- but a region is not a
+            // value. A `loop` or an `if` the source wrote is program structure, and a region whose
+            // value nothing reads still runs its parts: dropping it changes no value that anything
+            // answers, which is exactly why it is tempting, and it is still wrong, because the
+            // printed text then is not the program. `linear/runtime/var_read_before_region.cml`'s
+            // `nothing_written` lost a whole LOOP this way: 15 vertices and 2 regions on the left,
+            // 5 vertices and 0 regions on the right, and the round trip stopped being an
+            // isomorphism. The rule is the graph's own: a region in the graph is printed.
+            const camel::runtime::GCNodeKind region = node->kind;
+            if (region == camel::runtime::GCNodeKind::Loop ||
+                region == camel::runtime::GCNodeKind::Brch) {
+                // The statement form the source writes: `loop ... do ...` / `if ... then ...`. A
+                // JOIN is not written here -- it is the branch's merge point and `expression` of
+                // the BRCH already writes it.
+                branchAsStatement_ = true;
+                const std::string text = expression(ref).text;
+                branchAsStatement_     = false;
+                emit(indent_ + text);
+                if (ref == tail) {
+                    tailPrintedAsStatement = true;
+                }
+                return;
+            }
             return;
         }
     }

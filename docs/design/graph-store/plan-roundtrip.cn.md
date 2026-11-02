@@ -274,13 +274,45 @@ print family, and this operator's configuration is not a string, so its call has
 
 
 
+
+**2026-11-02 第十七刀（没人用的区域）：先答"它有没有语句形式"，再改。** 裁下来的问题是"那张图左边那个 `LOOP`，值没人用、什么也不写，它在 CML 里有没有**语句形式**"。
+
+**答：有，而且源程序本身就是那种写法**——`nothing_written` 里的 `loop i = 0 while i < 2 do sync { i + 1 }` 就是一个其值无人读的循环**语句**。所以不是语言层的缺口，**打印器应当印出来**。
+
+改法（`CmlPrinter::processNode` 的 `users == 0` 分支）：**丢弃仍然对纯值成立**（那是 DCE），**但 `LOOP`/`BRCH` 节点不是值，图里有就印成语句**（`JOIN` 不在这里印——它是分支的汇合点，`expression(BRCH)` 已经写了它）。
+
+**双向读数（同一份程序，两次构建）**：
+
+| 构建 | 打印出来的 `spin` | 回程 |
+| --- | --- | --- |
+| 改前 | `func spin(): int sync { return 0 }`——**整个循环消失** | `DIFFERENT`（缺 `DATA 2` 一类，左边多一个顶点） |
+| 改后 | `loop i = 0 while i < 2 do sync { return i + 1 }` 保留 | **`EQUAL: the two canonical documents are equivalent (29 vertices, 92 edges)`** |
+
+两侧输出都是空（循环不产生输出），`std::nvm` 逐行相同。
+
+判据（基线 `557 / 1813 / 547 / 507 / 40 / 10 / 53`，语料 3374；本刀之后语料 3375，因为新增了用例）：
+
+| 读数 | 基线 | 本刀 |
+| --- | --- | --- |
+| `printed` | 557 | **558**（新增用例） |
+| `equivalent` | 507 | **508**（新增用例就是那一条） |
+| `not_equivalent` | 40 | **40** |
+| `refused` | 1813 | **1813** |
+| `unfaithful` | 10 | **10**（同一批文件名） |
+| `DIFFERENT` | 50 行 | **50 行，新增 0** |
+| `families` | 53 | **53** |
+
+**用例**：`test/cases/trans/cml/unused_loop.cml`（进 `cml_contract.py` 的 `CORPUS`/`MARKERS`）——改前它是 `DIFFERENT`，改后 `EQUAL`。
+
+**`var_read_before_region` 仍未 `EQUAL`，剩下的不是打印器的事**：那张图的差已经缩到 `DATA 7 -> COPY`（左边，一个 COPY 喂 `println` 两个槽）对右边两个独立 `DATA 7`。**没有任何文本能产出左边那个形状**——`let x = 7; println(x, x)` 编译出来是 `DATA 7` 直接喂两个槽（实测），而那个 COPY 是**编译器消掉 `var n = 7` 之后留下的悬空拷贝**（`var n = 7` 没人写，`n` 被折成常量，`COPY` 留在图上）。⇒ **这是编译器 DCE 的残留，不是打印器的选择**；要它 `EQUAL` 得先由编译器那一侧清掉那个拷贝。
+
 **2026-11-02 查证（`return i + 1` 与 `:var/new` 那个结构类）：两条都不是缺陷，且"不是同一处"是量出来的**
 
 **一、尾值的 `return` 不是缺陷，别再改。** 最小用例（循环体尾值 `i + 1` → 打印 `return i + 1`）回程 `EQUAL: the two canonical documents are equivalent (37 vertices, 125 edges)`。它不是"尾值没名字"，是"尾值需要一个带门的返回"（`CmlPrinter::buildBody`："a bare last expression yields the value without that gate"）。**"修"它就会修坏一个正确的打印。**
 
 **二、`git grep -n 'var/new' src modules stdlib`**：建图器在 `builder.h`/`builder_expr.cpp`（`var v = e` 就是 `:var/new`），执行器在 `src/builtin/executors/builtin.cpp`，`stdlib` **一处都没有**。
 
-**三、`var_read_before_region` 丢的不是 `:var/new`，是整个**没人用的区域**。** 那份 canonical 文档里两边各有 4 个 `:var/new`，**数量一样**；差的是 `nothing_written` 那张图：**左 15 个顶点、2 个区域，右 5 个顶点、0 个区域**。而左图**本来就没有 `:var/new`**——`var n = 7` 没人写，编译器早已把它折成常量 `7`（`n0 DATA 7 -> n1 COPY`，那个 COPY 悬空），打印器又把这个**值没人用、什么也不写**的 `LOOP` 整段丢了。所以检查器那行 `{"op": ":var/new@1.0"}` 只是**它在整份文档里挑给"右缺失"的代表**，不是病因；**病因是"没人用的区域被丢"**，与 `:var/new` 无关。
+**三、`var_read_before_region` 丢的不是 `:var/new`，是整个**没人用的区域**。** 那份 canonical 文档里两边各有 4 个 `:var/new`，**数量一样**；差的是 `nothing_written` 那张图：**左 15 个顶点、2 个区域，右 5 个顶点、0 个区域**。而左图**本来就没有 `:var/new`**——`var n = 7` 没人写，编译器早已把它折成常量 `7`（`n0 DATA 7 -> n1 COPY`，那个 COPY 悬空），打印器又把这个**值没人用、什么也不写**的 `LOOP` 整段丢了。所以检查器那行 `{"op": ":var/new@1.0"}` 只是**它在整份文档里挑给"右缺失"的代表**，不是病因；**病因是"没人用的区域被丢"**，与 `:var/new` 无关。**由此得第二条仪器规则：结构差异检查器报的"某个 op 少了 1 个"可能只是它挑的代表**——要看**顶点数与区域数**才知道丢的是哪一个量级（15/2 对 5/0 是"整段区域没了"，65/6 对 63/6 才是"少了两个顶点"）。今晚这是第二次"仪器报的东西不是病因"（第一次是按 kernel 条数认 `:op/atos`）。
 
 **四、`order_edges_regions` 是另一处，不是同一处。** 左 65 顶点 / 6 区域、右 63 顶点 / 6 区域（区域没丢，只少两个顶点），形状差是：左 `GATE(2 入)` 2 个、`:var/get` 3 个、`:var/peek` 0 个；右对应 0 / 2 / 1。**同一族两个用例，两种病因**——所以这两条要分开修。
 
