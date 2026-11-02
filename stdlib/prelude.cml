@@ -299,6 +299,23 @@ export func operator []::<K, V>(m: Map<K, V>, key: K): V?
 #op(':op/idx_take')
 export func operator []::<T>(arr: T[], indices: int[], axis: int): T[]
 
+// ---- the unary operators ----
+
+/// The bitwise complement of a 32-bit integer.
+/// @example ~i32(0)    // -1
+#op(':op/inv_i')
+export func operator ~(x: i32): i32
+
+/// The bitwise complement of a 64-bit integer.
+/// @example ~0    // -1
+#op(':op/inv_l')
+export func operator ~(x: int): int
+
+/// The negation of a boolean.
+/// @example !true    // false
+#op(':op/not')
+export func operator !(x: bool): bool
+
 // ---- comparison ----
 //
 // `==` and `!=` are operators of their own group (`__eq__`, `__ne__`; operator_names.h), and the
