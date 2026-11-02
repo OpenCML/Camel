@@ -41,8 +41,16 @@ FunctionType *transposeSignature(
     if (function == nullptr) {
         return nullptr;
     }
-    if (function->withTypesCount() != 0 || function->normTypesCount() == 0) {
+    if (function->normTypesCount() == 0) {
         return nullptr;
+    }
+    // A `with` parameter is a value the function is configured with, not one it is applied to: it is
+    // a known value where the transposed function reads it, so it is carried over as a `with`
+    // parameter of the transposed function and never appears among the cotangents. Its value rides
+    // in the closure the transposed function value keeps (`transposeKernel` copies the tuple).
+    camel::core::type::param_vec_t withParams;
+    for (size_t i = 0; i < function->withTypesCount(); ++i) {
+        withParams.emplace_back(function->withTypeAt(i), false);
     }
     // `Tangent<ResultOf<F>>`: the cotangent that goes in is of the result's own tangent space, and a
     // function is transposable exactly when its result has one. A `float` result answers `float`, so
@@ -101,7 +109,7 @@ FunctionType *transposeSignature(
         }
         params.emplace_back(seed, false);
         return FunctionType::create(
-            camel::core::type::param_vec_t{}, params,
+            withParams, params,
             camel::core::type::TupleType::create(cotangentsOfParticipants));
     }
     if (count >= 2) {
@@ -137,7 +145,7 @@ FunctionType *transposeSignature(
             }
             params.emplace_back(seed, false);
             return FunctionType::create(
-                camel::core::type::param_vec_t{}, params,
+                withParams, params,
                 camel::core::type::TupleType::create(cotangentsOfAll));
         }
         // A residual's cotangent space may be empty: a branch's condition crosses the cut as a
@@ -166,7 +174,7 @@ FunctionType *transposeSignature(
             }
         }
         return FunctionType::create(
-            camel::core::type::param_vec_t{}, params,
+            withParams, params,
             camel::core::type::TupleType::create(tangents));
     }
     if (count != 1) {
@@ -188,7 +196,7 @@ FunctionType *transposeSignature(
         answersOf->push_back(0);
     }
     return FunctionType::create(
-        camel::core::type::param_vec_t{}, params, parameterSpace.space);
+        withParams, params, parameterSpace.space);
 }
 
 /// A loop whose body let a cotangent escape carries that cotangent as a state of its own.

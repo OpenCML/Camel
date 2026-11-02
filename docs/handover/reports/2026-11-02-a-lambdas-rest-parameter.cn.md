@@ -2321,3 +2321,34 @@ and a `bool` has none, so there is no cotangent for the transposed function to t
 
 **⑤ 仍排在最后**：`{Float64()}` 三处、`:op/ftod`。`f32→float` 隐式转换一字未动。
 **⑥ 本轮无代码改动**：树干净，58/58 与全量基准都未动。
+
+
+## 69. 1a 落地一半：签名收 `with` 了，值还没有落脚点 —— 这就是"`with` 端口去哪了"那一格的答案
+
+**① 做了的**：`transposeSignature` 不再拒绝 `withTypesCount() != 0`；`with` 形参**原样带进转置后的函数类型**
+（`withParams` 成了四处 `FunctionType::create` 的第一个实参），**不进切线、不进 cotangent 元组**；
+`transpose_operator.cpp#explainRejection` 里那条"`transpose` takes a function without `with` parameters"**已删**（它不再是一个原因）。
+**判据 ① 前半成立**：`transpose(f)<3.0>(…)` 不再报编译期拒绝。
+
+**② 判据 ③（`with` 端口在哪）：读数 —— 它今天没有落脚点。**
+```
+TRANSPOSE function=times skip=cotangent-needs-a-value uri=:op/mul_d position=0
+          reason=the rule's right side reads a value the caller does not carry
+error: transforms: transpose has no transpose for this function.
+```
+`f(x) = x * c`（`c` 是 `with`）转置后，`mul_t` 的右式要读 `c`，而 `c` 在转置后的函数里**既不是普通参数、也不是已知值** ——
+**`with` 的值今天只能从闭包元组读**（`transposeKernel` 已经 `function->tuple()` 逐槽拷贝，闭包是在的），
+**但"把 `with` 输入节点变成从闭包读的节点"这一步在 `buildTransposeGraph` 里不存在**。
+⇒ **判据 ③ 的答案是：`with` 参数必须变成"从闭包读的捕获"，而今天没有这条路；这是第二个新本事，也是 1b 能不能做的判定格。**
+
+**③ 判据 ①②（数值）**：**取不到** —— 数值要等"从闭包读"到位。**没有报"3"或别的数，因为函数根本没转置出来。**
+**判据 ④**：`feat/compile/transforms` **58/58 绿**（签名放宽没有让任何既有用例改变行为）；全量待下一步一起量。
+
+**④ 与父代理那条纪律的关系**：1a 只"收"，**没有**动 `split`、`vjp.cml`、`isResiduals` —— 照做。
+但**它没能在"只收"的范围内自洽**：**签名收得下，值落不下**。
+这不是"耦合"，是**同一件事的两半**：形状（`with` 进签名）**能单独落地并绿**，值（`with` 从闭包读）**必须单独做**。
+**⇒ 建议把 1a 再切成 1a-形状（已完成、已绿）与 1a-值（从闭包读 `with`）**，1a-值 才是 1b 的前置。
+
+**⑤ 页里给作者那句话（父代理让写的）**：**作者 05:10 那条要两个今天不存在的本事（运行时造闭包、`transpose` 收 `with`），所以它不是一个晚上的一笔，已切成 1a/1b/1c；其中 1a 又分成"收得下"与"读得到"两半。**
+
+**⑥ 边界**：`f32→float` 隐式转换一字未动；`{Float64()}` 三处仍在（删 0）；`:op/ftod` 未动；探针用例已删，树干净。

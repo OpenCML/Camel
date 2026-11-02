@@ -88,11 +88,7 @@ class TransposeResolver final : public FuncTypeResolver {
         if (transposeSignature(const_cast<FunctionType *>(function)) != nullptr) {
             return std::nullopt;
         }
-        if (function->withTypesCount() != 0) {
-            return std::string(
-                "`transpose` takes a function without `with` parameters: the transform builds a "
-                "graph of its own and a captured value has no port to enter it by");
-        }
+
         // Why the result is refused, when it is: the cotangent that goes in lives in the result's
         // tangent space, so a result with no space has nowhere for one to go. `float` is not the
         // rule -- a `f32` result answers a `f32` cotangent -- and the space is what answers.
