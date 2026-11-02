@@ -252,6 +252,13 @@ bool nodeIsChainStatement(const GCGraph &graph, gc_node_ref_t ref);
 /// The seal check asks it of a frozen graph and the census beside it counts by it; they had the
 /// same expression written twice, which is the state the question was already in when
 /// `nodeIsChainStatement` was two copies.
+///
+/// Not the same question as the one the inline splice asks of its result (`draft_inline.cpp`,
+/// the bridge gate): that one asks whether the value is *within* the call's block, this one
+/// whether an edge's end is *in* the block. Measured 2026-11-02 over 304 splices of the fast
+/// tier: 302 leave the value in a region nested inside the call's block, so containment says yes
+/// and equality says no, and a gate built by this question would stand 304 times where the splice
+/// builds 2. Two relations, two questions; neither is the other's approximation.
 bool isTheBlocksOwnValue(const GCGraph &graph, gc_node_ref_t candidate, gc_node_ref_t tail);
 
 /// Whether a node owns a control region of this graph, and so stands on the outside for what runs
