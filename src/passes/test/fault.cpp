@@ -122,8 +122,11 @@ OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostr
             // its first value input otherwise. The edge is what keeps the effect in the graph (a
             // node with no edge at all is not a graph).
             camel::runtime::gc_node_ref_t anchor = camel::runtime::kInvalidNodeRef;
-            if (!draft.ctrlInputsOf(id).empty()) {
-                anchor = draft.ctrlInputsOf(id).front();
+            // The predecessor this effect waits for, asked of the chain that carries a wait rather
+            // than of the control kind: a control link is written as a sync edge once P0-2 lands,
+            // and then the branch below would be empty for every node (P0-2 report, fault sample).
+            if (!draft.syncInputsOf(id).empty()) {
+                anchor = draft.syncInputsOf(id).front();
             } else if (!draft.normInputsOf(id).empty()) {
                 anchor = draft.normInputsOf(id).front();
             }
