@@ -2085,7 +2085,7 @@ const EXAMPLE_STOPS = {
     // `@example-fragment` marker whose reason names what it is missing. A number here that moved
     // says a shape changed; a number here that was lowered without a reason would be the same
     // silence as a relaxed gate.
-    'a semantic error': 38,
+    'a semantic error': 40,
     // `split`'s example reaches the compiler with a function-typed parameter bound by name and the
     // compile graph keeps a live dereference node (`internal error: Compile graph '__doc_example'
     // still contains a live DREF node`). That is the compiler's own class, not the example's.

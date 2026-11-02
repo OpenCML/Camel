@@ -195,3 +195,20 @@ Agents should prefer explicit verification over visual guesswork from partial hi
 - Do not merge `develop` into `main` until both version confirmation and `changes.log` confirmation have been completed with the user.
 - Never write a merge commit subject that only describes the mechanical act of merging.
 - Never run `checkout`, `merge`, `rebase`, `commit`, `tag`, `reset`, or `stash` in parallel with another git write operation.
+
+## Collapsing a Lane
+A lane that must land as one commit is collapsed against the base it will land on, and the measurement
+that says "only my content is in it" is the **two-dot** diff, `git diff <base>..HEAD`.
+
+- **`...` (three dots) hides what you reverted.** `git diff <base>...HEAD` is the difference from the
+  *merge-base*, so a file the base changed after your merge-base appears as **your** change -- and if
+  your branch still holds the older copy, what it shows as "your edit" is in fact you putting someone
+  else's work back. Wrong: collapse a lane on a three-dot stat and push it. Right: `git diff <base>..HEAD`
+  after `git reset --hard <base>` and re-applying only the paths you own. This has bitten this branch:
+  a three-dot stat read "10 files, mine" while `reset --soft` revealed `agents/test.md`,
+  `src/execute/pass.cpp` and `src/passes/test/fault.cpp` staged as reverts of the base's newer work.
+- **Collapse by resetting to the base and re-taking your paths**, not by rewording history one commit at
+  a time: `git reset --hard <base>; git checkout <old-tip> -- <paths>`, then one commit. The tree is what
+  lands; the base's newer files are untouched because they were never in your paths.
+- **Force-push a shared lane with `--force-with-lease` only.** Another lane may have written to it, and
+  the lease is what turns "I am replacing what I saw" into a refusal when that is no longer true.
