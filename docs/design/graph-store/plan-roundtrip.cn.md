@@ -271,6 +271,33 @@ print family, and this operator's configuration is not a string, so its call has
 | `DIFFERENT` | 53 行 | **51 行，新增 0** |
 | `families` | 52 | **52** |
 
+
+**2026-11-02 第十五刀（A7 第 3、7、8 条，同一机制）：`let before = z` 消失，读版本打成变量名。** 三条用例（`var_read_before_region`、`var_read_before_write`、`order_edges_regions`）是**一件事**，不是三件：`:var/get` 只打 `cellName(cellReadBy(...))`，**读的是哪一版它不打**。
+
+**判据不是"有没有 ORDER 边"这种猜测，而是建图器自己写的那句话**（`src/compile/gir/builder_expr.cpp#recordWrite`）："读要看见写之前的值……读在写之前由一条 order 边排定"。图上就是 `N03 -> N0E [ORDER]` 这样的边：**一个读若被排在一次写之前，它的版本就一定比文本在该处写到的旧**——因为文本里变量名只表示"文本此刻写到的那一版"。
+
+改法（两档，按父裁的默认）：
+
+1. **能便宜地忠实 ⇒ 忠实**：`orderUsersOf(ref)` 非空 ⇒ 这个读落成一条 `let`，位置不变（源里有名字就用源名字：`let before: int = z`；没有就给 `cmlN`）。
+2. **便宜不了 ⇒ 具名拒绝**：诊断写"这条读的版本在文本里无法表达"。**本语料里一次没触发**——ORDER 边保证读在写之前，落 `let` 总是安全的。
+3. **版本号不进文本**：位置决定次序。
+
+三条卡两侧输出（`std::nvm`）**逐行相同**：`0 2`/`0 3`/`0 5 1`；`int 2 1`/`int 2 1`/`array [7, 7] [1, 1]`；`exit 56`。
+
+判据（基线 `553 / 1807 / 543 / 503 / 40 / 10 / 52`，语料 3361 个文件，即合并 `01ff08254` 之后）：
+
+| 读数 | 基线 | 本刀 |
+| --- | --- | --- |
+| `printed` | 553 | **553** |
+| `equivalent` | 503 | **504** |
+| `not_equivalent` | 40 | **39**（`var_read_before_write`） |
+| `refused` | 1807 | **1807**（具名拒绝没触发） |
+| `unfaithful` | 10 | **10** |
+| `DIFFERENT` | 50 行 | **49 行，新增 0** |
+| `families` | 52 | **52** |
+
+**这一刀没做、要单独一刀的**：①**区域内的读**（`arm_write.cml` 读的是分支留下的版本，那里变量名本来就对）；②另外两条**行为已相同**但 canonical 仍差，差的是**另一个缺陷**——循环/分支体的尾值打印成 `return i + 1` / `return println(2)`。问题页：`docs/handover/questions/2026-11-02-cml-var-version-in-printed-text.md`。
+
 **2026-11-02 第十四刀（A7 第 4 条）：前缀 `-` 比 `^` 松，括号表把它放严了一级。** 缺陷原文：`parse/rulings/power` 原程序第二行 `-9 9 -4 -4 12`；打印版 `-9 -9 -4 -4 12`——`(-x) ^ 2` 被打成 `-x ^ 2`，而解析器读它是 `-(x ^ 2)`，9 变成 -9。
 
 **这一格的原话是解析器写的，不是打印机猜的**（`src/parse/syntax/parser_expr.cpp`）：

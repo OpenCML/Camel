@@ -370,6 +370,8 @@ class CmlPrinter {
     bool isRoot_    = false;
     std::unordered_set<gc_node_ref_t> skip_;
     std::vector<gc_node_ref_t> topo_;
+
+
     std::unordered_map<gc_node_ref_t, std::string> params_;
     std::unordered_map<gc_node_ref_t, std::string> declared_;
     std::unordered_map<gc_node_ref_t, std::string> cells_;
@@ -932,6 +934,28 @@ class CmlPrinter {
             // nodes from the printed program.
             topo_ = std::move(nodes);
         }
+    }
+
+    /// The cell a version node belongs to: the chain of writes and `:var/after` versions ends at
+    /// the `:var/new` node that made the cell.
+    gc_node_ref_t cellOf(gc_node_ref_t version) const {
+        for (int guard = 0; guard < 64; ++guard) {
+            const camel::runtime::GCNode *node = graph_->node(version);
+            if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Oper) {
+                return version;
+            }
+            const std::string_view uri =
+                graph_->nodeBodyAs<camel::runtime::GCOperBody>(version)->uri();
+            if (!uri.starts_with(":op/assn") && uri != ":var/after") {
+                return version;
+            }
+            const auto inputs = graph_->normInputsOf(version);
+            if (inputs.empty()) {
+                return version;
+            }
+            version = inputs.front();
+        }
+        return version;
     }
 
     // ---- needs ---------------------------------------------------------------------------
@@ -1630,6 +1654,14 @@ class CmlPrinter {
                 }
                 return;
             }
+            if (uri == ":var/get" || uri == ":var/peek") {
+                if (!materialiseRead(ref)) {
+                    return;
+                }
+                // A read the source named and the text cannot name by the variable's name: the
+                // generic statement logic below writes it as the `let` it was in the source.
+                break;
+            }
             if (uri.starts_with(":var/")) {
                 return;
             }
@@ -1735,6 +1767,51 @@ class CmlPrinter {
             "{}var {}{} = {}", indent_, name, annotationOf(valueType), initial.text));
     }
 
+    /// Gives a read of a `var` a name of its own when the variable's name would not say what it
+    /// reads. The name in the text means "the version the text has written so far", so a read the
+    /// builder ordered before a write (`recordWrite`: "the read has to see the value as it was
+    /// before the write changes it") is a version the text has not reached yet at that place:
+    /// `println(before, z)` after a loop that writes `z` printed `z` twice (the A7 cases
+    /// `var_read_before_region`, `var_read_before_write`, `order_edges_regions`). The read is
+    /// written as a `let` where it stands, and the name the source gave it comes back:
+    ///
+    ///     var z = 0
+    ///     let cml1 = z        // the read, at the place it stands
+    ///     loop ...
+    ///     println(cml1, z)    // the old version, then the one the loop left
+    ///
+    /// No version number enters the text: the position of the `let` is what carries the order, and
+    /// a printed program is a program -- it has to answer the same values, and it does.
+    /// Answers true when the read should be written by the generic statement logic as a `let`: the
+    /// source named it, and the variable's name would not say the version it reads.
+    bool materialiseRead(gc_node_ref_t ref) {
+        if (control_->controlOf(ref) != 0) {
+            return false;
+        }
+        const auto inputs = graph_->normInputsOf(ref);
+        if (inputs.size() != 1) {
+            return false;
+        }
+        // The order edge to the write it must see past is what makes the read's version older than
+        // the text at the place the read stands. A read whose value path already carries that order
+        // (`n + 1` reading `n` before writing it) has no such edge, and the variable's name says it.
+        if (graph_->orderUsersOf(ref).empty()) {
+            return false;
+        }
+        if (declared_.contains(ref)) {
+            return false;
+        }
+        if (!sourceName(ref).empty()) {
+            return true;
+        }
+        const camel::runtime::GCNode *node = graph_->node(ref);
+        const std::string name             = freshName();
+        declared_[ref]                     = name;
+        emit(std::format(
+            "{}let {}{} = {}", indent_, name, annotationOf(node->dataType()),
+            cellName(cellOf(inputs.front()))));
+        return false;
+    }
     void emitAssignment(gc_node_ref_t ref, std::string_view uri) {
         if (isRoot_) {
             fail(ref, "a top-level assignment");
