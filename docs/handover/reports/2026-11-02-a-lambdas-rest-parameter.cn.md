@@ -1201,6 +1201,8 @@ A2（`p.1` on a struct）已经在 `assert` 审计里证明这条路有效一次
 > **撤回（2026-11-02，作者 00:50 裁定）：这一节加的诊断撤掉了。** `a..(b->f)` 是合法程序——原则 4（`design-principles.cn.md:288` 一带）的规则是 `->` 比二元运算符都结合得紧，`..` 照这条走，没有例外：`0..xs->len` 就是 `0..(xs->len)`，是正常写法。**只对 `..` 一个运算符加拒绝，等于给语言加了一条限制**（`a + b->f` 同样读成 `a + (b->f)`，却不报错）。所以 `RangeRightIsLink` 连同它的用例、计划条目、注册表行（307 → 306）与生成物一起撤销；**优先级不动**（把 `..` 改成比 `->` 紧反而会破坏那一条）。**正解是改生成器，让它写 `(a..b)->reduce(f)`**——见 §38 的更正与读数。下面的原记录保留，其中"③ 改法""⑤ 新码怎么加的"两段只作为"当时怎么想的"的记录，不再是现状。
 >
 > **归类一句（这一条要记住）**：**"拒绝合法程序"与"拒绝不支持的形状"是两类**。后者是能力缺口（`skip=law`，例：`idx_arr_t` 少一条 arm，程序该跑而暂不能跑），记成债、等能力补上；前者是语言被改窄（例：这一条 `RangeRightIsLink`，程序本可以跑却被拒），**当轮撤掉，不能留在树上**。
+>
+> **撤后的读数**：`feat/parse` **45/45**（撤前 46，差的就是撤掉的那支）；全量 `[SUMMARY] total: 8441, pass: 8428, fail: 0, skip: 10, known failures: 3`、`RUN_EXIT=0`；`diagnostics-catalog` 的 `--check` / `--coverage-check` / `--pinned-coverage-check`（289 of 306 named）/ `--verify-doc` 四条与 `camel-for-ai --check` 全绿；注册表 **307 → 306**，`--verify-ops` 的两支（`registry.signatures_match`、`registry.result_types_match`）在闸门里过。
 
 **① 最小程序的读数（`minimal/generator_reject.cml` 原样）**：
 
