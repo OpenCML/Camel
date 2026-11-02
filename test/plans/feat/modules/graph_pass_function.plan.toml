@@ -26,3 +26,14 @@ args = ["${case}", "over_function::refuse", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_output_not_contains = ["42"]
+
+[[tests]]
+name = "commit_refuses_an_arm_reading_its_join"
+desc = "An edit that makes an arm's node the value a node after the branch reads: `replace` rewires every user of `x + 1` to the arm's `x * 7`, so the node that ran after the branch now runs in arm 0 and reads the JOIN, which runs after every arm. `commit` refuses it as `GraphInvalid` and names both nodes, the BRCH and the arm; the cycle the back end used to report (`Cycle detected while building runtime execution topo`) never happens, because the graph is judged at the commit that made it (design principles 1.2, invariants 1 and 3)."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/arm_join_target.cml"
+args = ["${case}", "cross_arm::move", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_output_contains = ["GraphInvalid", "breaks the branch-arm invariant", "runs in arm 0 of BRCH", "reads its JOIN"]
+expect_output_not_contains = ["Cycle detected"]
