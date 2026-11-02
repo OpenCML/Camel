@@ -2021,3 +2021,10 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 **已知、仍在进行、本次不重复**：核心图上为求导加的三个字段（18:40 已裁删）、"效应凭据"多处实现（随 P0-2 收口）、`:op/keep` 换 `GATE`（已裁）。
 
 **排序**：残差藏进闭包（同时修段错误）→ 本次第 2 条（静默错数）→ 第 1 条（被冲掉的修复）→ 生成器悬垂节点 → P0-2 → 其余。
+
+## 转交（2026-11-02 08:10）：评估缺陷 A10——Camel 写的 `opt::dce` 删掉了可能出故障的无人读语句
+
+`camel test/cases/opt/fault_preservation/dce_chained_division.cml opt::dce std::nvm` 打印 "before" "after"，退出码 0；不加遍、或者用 `std::opt::dce`，都在 "before" 之后报 `DivisionByZero`。`div_l`、`dtol`/`ltod`、`CAST`、`idx_arr`、`tensor:one_hot` 同样如此。根在 `stdlib/opt.cml:148` 的 `value_only`：它用 `is_pure(n)` 判断"可删"，可"纯"只是"声明为纯"，不等于"不会出故障"。原则 3.4 规定，可能出故障的计算不能被删掉，故障是可观察的。这和审查 P1 里"Camel 遍要守与原生遍同一份约定"（A8、A9）是同一类。
+- **返工**：`stdlib/graph.cml` 给节点补一个 `may_fault(n)` 查询（读算子表的同一个特征，原生 DCE 读的也是它；图级的 `effects(g).may_fault` 已经有了），`value_only` 改成 `is_pure(n) && !may_fault(n)`。`CAST`、`ACCS` 这类节点种类也按同一个查询判断，不按种类一律放行。
+- 读数：上面那条命令在 `opt::dce` 下报 `DivisionByZero`，与原生一致；条目详情和最小程序已追加到 `docs/handover/reports/eval-defects-2026-11-01/README.md`。
+- 照 A8 那笔提交信息里的教训：把原生遍改写成 Camel 遍，要从原生遍的约束清单出发逐条核对。请对 `opt::cse`、`opt::fold`、`opt::dce` 各做一遍这样的清单对照，一次补齐，不要等评估一条条报。

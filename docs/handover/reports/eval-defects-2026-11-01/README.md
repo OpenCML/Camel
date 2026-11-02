@@ -353,3 +353,30 @@ In `Document._type` the edge from a type to its declaration is built to the vert
 - **`std::cml` prints none of the compiling generator programs.** Default features: 0 of 1,765 (first refusals: an operator on a named struct type 1,482, a `dead` region 283). With `-opover,-struct,-tuple,-nullable,-partial,-macro,-comprehension`: 0 of 1,657 (`dead` region 1,040, operators 411, closures 149). The generator half of E2 is empty at this pin.
 - **`opt::saturate` and `std::opt::saturate` time out (120 s) on 3 programs** (`both_fail` in `e3_all_stride4.jsonl`).
 - **E6 "refused without a position" is 185, all of them files without a `main`** (library modules); it is 0 for the 3,088 files that declare `main` (`e6_summary.json`).
+
+---
+
+### A10. The Camel stage `opt::dce` erases unread statements that may fault
+Stage `opt::dce` (stdlib/opt.cml), E3. Found in the per-function differences of `e3_*_functions.jsonl`: the Camel stage erases
+`div_l`, `dtol`/`ltod`, `CAST`, `idx_arr` and `tensor:one_hot` nodes that the native stage keeps (e.g. `opt/fault_preservation/dce_chained_division`,
+`chained_cast`, `modules/tensor/one_hot_oob`). Not produced by `write_defects.py`; added by hand after two independent manual re-runs on 2026-11-02.
+Command `camel test/cases/opt/fault_preservation/dce_chained_division.cml opt::dce std::nvm`. Observed: prints `before`, `after`, exit 0.
+Expected (no pass, or `std::opt::dce`): prints `before`, then `DivisionByZero`, exit 1. Likely cause: `value_only` uses `is_pure`, which
+`stdlib/graph.cml` documents as "declared pure", not "cannot fault". Unchanged on fsh-dev at b1bd72af6.
+
+```
+func check(z: int): int sync {
+    let r = 5 / z
+    println('after')
+    return 0
+}
+
+func main(): int sync {
+    println('before')
+    return check(0)
+}
+```
+
+## B. Defects of the measuring instruments (test tools)
+
+### B1. `test/tools/cml_roundtrip.py` reports a document as different from itself
