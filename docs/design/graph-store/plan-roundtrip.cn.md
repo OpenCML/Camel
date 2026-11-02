@@ -285,6 +285,31 @@ print family, and this operator's configuration is not a string, so its call has
 
 
 
+
+**2026-11-02 第二十七刀：族 4 + 族 9 是同一个理由，而闭合它要的不是一处改动（只查未改）**
+
+**先答"两族是不是同一个理由"：是。** 两族的拒绝原文都出自 `checkType` 的同一个分支（`case TypeCode::Struct` 里 `record->named()` 那一次 `fail`），只是位置不同：
+
+| 族 | 计数 | 最小例子 | 拒绝原文 |
+| --- | --- | --- | --- |
+| 4 | 86 | `modules/tensor/shape_inference/loaded_struct_as.cml` | `std::cml cannot print f: a 'with' parameter is the named type 'P'.` |
+| 9 | 51 | `consistency/operator_overloads/mods/plus_b.cml` | `std::cml cannot print __add__: a parameter is the named type 'V'.` |
+
+`where` 那个参数是 `"a 'with' parameter"` 还是 `"a parameter"`，判据是同一个 `record->named()`。
+
+**为什么不能只把名字打出来**：打印器现在能拿到名字（`type->toString()` 给的是 `P`/`V`），但**打出来的程序里没有这个类型**。实测（手写打印器将要产出的形状，不经过打印器）：
+
+```
+func f(x: V): int { return 0 }            -> status=1  UnresolvedTypeReference: 'V'
+type V = { x: int }  +  同一个 func f      -> status=0
+```
+
+⇒ **只放开 `checkType` 会把"明拒"换成"打出来编译不过"**，正是作者立的那条禁令的形状。要闭合它需要两半：①`checkType` 接受命名结构类型；②**把类型声明打出来**（`type V = { … }`，字段表在 `StructType::size()/typeAt(i)` 里），或者在打印的程序里 `import` 声明它的模块——而打印器**既没有 `type` 声明发射器，也没有"类型来自哪个模块"的导入收集**（现在的 `collectImports` 只收算符调用）。
+
+**判据没有达成，也没有开工**：这一刀的形状是"新增一个声明发射器 + 名字作用域"，不是一处判据；按"连续不落地就交班"的规矩，这里只留查证与实测，不再试。
+
+**下一刀的形状（给接的人）**：先在 `typeText`/`checkType` 之外加一个"本图用到的命名类型"集合，逐个问它能不能写出声明（字段表可读）或能不能写成导入；两者都不行就维持拒绝、并在拒绝文本里说清是哪一半缺。判据：`printed ≥ 590`、`refused ≤ 1780`、`equivalent 515 / not_equivalent 40 / DIFFERENT 47 / unfaithful 7` 不回退，**核心是"输出里的类型名与源里的一致、且该类型在输出里有声明或导入"**。
+
 **2026-11-02 第二十六刀（`sync` 体的尾写）：作者裁定后一次落地，`closure_var` 回程 `EQUAL`**
 
 作者裁定："`sync` 体以一次写结尾——这是打印器的缺陷，不需要裁……修那一处识别，让退出节点是一次写时走它"。本刀只改这一处：`blockValueWrite` 去掉 `regionNeedsSync(0)` 的早退，`handsTail` 从"`tail` 必须是退出节点的直接 normal 输入"改成"沿退出链往下走，`tail` 站在链上任何一点都算"，交给 `assignmentHandingOn` 的是链底那个非闸门节点。
@@ -315,7 +340,7 @@ print family, and this operator's configuration is not a string, so its call has
 
 **结果（语料 3377）**：`printed 562`、`refused 1811`、`frontend 1004`、`checked 555`、`equivalent 514`、`not_equivalent 41`、`unfaithful 7`、`families 57`、`DIFFERENT 48` 行——**`DIFFERENT` 与 `unfaithful` 一条没动，三条新印出来的全是 `EQUAL`**。
 
-**149 这个上界错在哪**：`graph name is not a source identifier` 那一族从 **353 掉到 216**（137 条走过了这一关），**但只有 3 条变成"能打印"**，其余 **134 条紧接着撞上别的拒绝**——最多的三类是"无体 kernel 声明"（374→377）、"算符 `<name>`"（306→311）、"参数/返回是命名类型"（51→53、45→48）。⇒ **`namespace` 包装是这 149 条的最后一层，不是唯一一层**；判据一（`printed ≥ 700`）与判据二（`refused ≤ 1665`）**未达，差的 134 条各有各的下一个理由，不是这一刀没做好。**
+**这一刀把 137 条从族 2 挪到了族 1/3，净印出 3 条**（净收益是 3，不是 149）：`graph name is not a source identifier` 那一族从 **353 掉到 216**（137 条走过了这一关），**但只有 3 条变成"能打印"**，其余 **134 条紧接着撞上别的拒绝**——最多的三类是"无体 kernel 声明"（374→377）、"算符 `<name>`"（306→311）、"参数/返回是命名类型"（51→53、45→48）。⇒ **`namespace` 包装是这 149 条的最后一层，不是唯一一层**；判据一（`printed ≥ 700`）与判据二（`refused ≤ 1665`）**未达，差的 134 条各有各的下一个理由，不是这一刀没做好。**
 
 **自检**：`lib2.cml`（最小例子）打印后往返 **`EQUAL (14 vertices, 24 edges)`**；契约计划 `feat.trans.cml` `1/1` 通过；全量 fast suite **`8390 / 8374 / 0`**（skip 10、known failures 6）。
 
