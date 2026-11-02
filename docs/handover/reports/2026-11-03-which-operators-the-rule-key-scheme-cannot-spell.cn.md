@@ -147,7 +147,7 @@ REINTERP jvp function=p skip=rule uri=:op/pow_d reason=the operator has no forwa
 
 第 1–25 行是**同一个形状**：一个写法、一个目的地、若干源。第 26–32 行各自有形状（数组转换、可失败解析、两个没有 token 的数组算子），不能靠同一条规则救。
 
-## 5. 修法二选一：两栏代价
+## 5. 修法二选一：两栏代价（**作者选 (b)，但 (b) 经复核不成立，见 §5.1**）
 
 | | **(a) 每 uri 一行例外** | **(b) 让 `ruleKeyOf` 从 `<源>to<目的>` 推键** |
 |---|---|---|
@@ -160,6 +160,38 @@ REINTERP jvp function=p skip=rule uri=:op/pow_d reason=the operator has no forwa
 
 **为什么律省不下来（两栏共同的硬约束）**：一条律右式的实参个数 = 它有切空间的操作数个数。`dst(x)` 的源可能是 `int`（无切空间 ⇒ 0 个实参 ⇒ 答 `0.0`）、也可能是 `float`（1 个 ⇒ 答 `dst(dx)`），**同一个键下这两件事写不进一条律**（泛型 `T` 的实参表在一条律里是固定的）——`jvp_ltod` 钉 `is_same::<T, int>()` 正是这条限制的产物，而今天那条 `jvp_pow` 能用一条律盖四个 uri，恰恰是因为它的两个操作数**都有**切空间、实参个数不随类型变。
 
+### 5.1 复核 (b)：一条键只放一条律，所以"从名字推键"建不起来（实测）
+
+作者 2026-11-03 选了 (b)（例外 3→6、覆盖 29/32、律仍 20 条），并要求先答"这个名字可信吗"。答：**名字作为数据是可信的，但从名字推出来的键装不下 20 条律**——(b) 的算术假设了"键能编码源类型"，而键是**拼写**。
+
+**名字是谁写的**：`#op(':op/<name>')` 是写在每条声明上方的**手写标注**（`stdlib/prelude.cml:643` 起），不是从类型推出来的。而且 `:op/dt od` 这一条 uri 在 `float(x: float)` 与 `f64(x: float)` 上**各写一次**——同一个 uri 对应两种拼写；反过来，拼写 `float(x)` 在**7 条**源类型声明上重复出现。没有任何测试检查字母与类型是否一致（`--verify-ops` 检查的是"uri 在注册里存在"，不是"`ltod` 就是 int→double"）。所以"名字可信"只在"它是人写的、有意的"这个意义上成立，它不携带机器可校验的源类型。
+
+**从名字推键之后会怎样（关键读数）**：把 32 条缺口按"它们各自需要的那条律的写法定键"归一下类（脚本按 `stdlib/prelude.cml` 的 `#op` + 声明统计）：
+
+- prelude 里带转换 uri 的声明 **75 条**，转换 uri **59 个**，拼写（函数名）**11 个**，目的地类型 **4 个**（`float f32 f16 bf16`，外加复数 `c64 c128` 未算）；
+- 32 条缺口里 **29 条**在 prelude 里（每条 `#op` 都写在声明上方），按"它那条律必须定在哪个键上"归属：
+
+      f32/1   <-  atof bftof dtof f6tof ftof itof ltof stof        8 条
+      f16/1   <-  atof6 dtof6 f6tof6 ftof6 itof6 ltof6 stof6       7 条
+      bf16/1  <-  atobf bftobf dtobf ftobf itobf ltobf stobf       7 条
+      float/1 <-  atod bftod dtod f6tod ftod itod stod             7 条
+      f64/1   <-  atod bftod dtod f6tod ftod itod stod             同 7 条（`f64` 是同一 uri 的第二种拼写）
+
+  （剩下 3 条 `parse_float`/`idx_take`/`slice_sub` 不是转换形状。）**29 条缺口只落在 5 个键上**，而它们至少需要 **20 条标量律 + 4 条数组律**——`float/1` 一个键要同时装 `itod`（源无切空间，0 实参）、`dtod`（1 实参）、`atod`（数组，1 个数组实参）三种形状。**5 个键放不下 24 条律。**
+
+**代码里的硬约束**（两处，同一句话）：`include/camel/parse/ast/rule_head.h:101-105` 的 `indexRule`——"The name of a *different* rule already filed under that key is returned -- the caller reports the duplicate, and **the two are never silently merged**"；`src/core/forward.cpp:57` 把同一句话当作 `tensor:multiply` 那条例外的**理由**——"`*/2` is already `:op/mul_d`'s key and **one key holds one rule**"。
+
+**所以 (b) 的两种结局都不好**：说 `float(x)` 的律只能有一条，其余 5 条在装载时按重复键报错（rulesets 直接红、家族建不起来）；若真按"先到先得"放过去，`dtod`（源有切空间，实参 1 个）会被派到 `ltod` 那条零实参的律上——**实参个数不符**，正是本分支早先撞过的 `Runtime indirect call norm-arity mismatch`。这不是"缺规则"，是"套错规则"，比拒绝更糟。
+
+**三项候选（等作者裁）**：
+
+| | 做法 | 例外表 | core 改动 | 代价 |
+|---|---|---|---|---|
+| (a) | 每 uri 一行例外（已写进 §4 的 32 行） | 3 → 35 | 纯数据 32 行 | 表长；但每条都写着"为什么"，且 20 条律全部可以用具名调用写（`float_of_int(n)` 那样） |
+| (b') | **键 = 拼写 + 操作数类型**：`indexRule` 允许同一拼写下多条律，靠各自的 `when` 约束（`float::<T>(x: T) when is_same::<T, float>()`）分派；`lookupRule` 收操作数类型 | 3 → 2 | 索引身份改变（重复判定要改成"约束真重叠才算重"）+ 约 8 处调用点传类型 | 20 条律终于写得下；代价是律的约束写错会变成**静默套错律** |
+| (c) | **键 = 算子 uri 本身**：`ruleKeyOf` 整张表与 3 条例外全部消失，律自己声明它给哪些 uri | 3 → 0 | 规则集语法 + 索引重定键 + 现有约 100 条律要带 uri | 最彻底，也最大 |
+
+**(b') 是 (b) 的真身**：它保留"从名字推"的便宜（例外 3→2），把省不下的那条硬约束（20 条律）放到索引里解决，而不是假装它不存在。**我不擅自改索引身份**——那是设计决定；这一节只把"选 (b) 会撞到什么"钉在纸上。
 ## 6. 一句话结论
 
 **这条缝是方案性的，不是少数特例**：按"结果有切空间却拼不出键"计，**32 条**（把复数算进去 50 条），而例外表只能一条一条地救——今天救了两条、补了一条（`^`）。缺口的形状有两个：
