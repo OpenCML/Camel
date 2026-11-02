@@ -31,3 +31,4 @@ if ((pred->flags & kGCNodeFlagSyncStatement) == 0) {
 ## 与那两条 `known_fail` 的关系
 
 `test/plans/feat/linear/effects_model_edges.plan.toml` 的两条标记（owner 已改成 `P0-2 (batch item 9, ruled 23:30)`）**在 P0-2 落地的同一笔里摘掉**。
+**裁定于 2026-11-02 04:50**：甲——先把 sync 边终点不变量改对（按节点性质判），再逐遍改判据。见 eviews/questions-2026-10-29.md。

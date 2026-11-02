@@ -47,6 +47,11 @@ enum class ParamKind {
     String,
     Bytes,
     IntArray, // int[]
+    /// An array of `bool`: a mask. `!` is the only operator that takes one, and it is a separate
+    /// category rather than `TensorLike` because a bool array is not a numeric array at all
+    /// (`isTensorType` answers for numeric ones), so the signature an error quotes has to say
+    /// `bool[]` and not `float[..]`.
+    BoolArray,
 };
 
 struct ParamSpec {
