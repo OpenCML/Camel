@@ -750,7 +750,7 @@ expect_exit = 0
 expect_stdout_contains = ["6.0", "[2.0, 3.0]"]
 timeout_ms = 15000
 known_fail = ["fvm"]
-known_fail_note = "Owner: lane-m4b, whose answersOf work landed the element read's transpose arm. Two element reads beside a mul give five residuals, and under std::fvm this case is not refused any more and does not finish either: the process is killed at the timeout with exit null, while the same program under std::nvm prints the forward value and no cotangent. Both belong to the same member -- the answer tuple whose first slot reaches no line of stdout -- and the runner reports a marked case that passes as a failure, which is what asks for the mark's removal."
+known_fail_note = "Owner: lane-m4b. Today this is a SIGSEGV: the runner reports `expected exit 0, got signal SIGSEGV (rc=139)` and the four marked cases of this family die in 1.24, 2.24, 3.20 and 4.21 s, so the note this carried before - `the process is killed at the timeout with exit null` - was wrong about the cause: the runner could not tell a signal death from a timeout, the case never timed out. The crash is the array cotangent summed as one number rather than an array, repaired on lane-lit2 in 19f0b05e8 and 0aed45eb6 and not yet merged; the mark comes off in the commit that merges it, which is also what the runner asks for when a marked case starts passing."
 
 [[tests]]
 name = "grad_array_with_int.fvm"
@@ -854,7 +854,7 @@ expect_stdout_contains = ["skip=law rule=idx_arr_t uri=:op/idx_arr", "transpose 
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 known_fail = ["nvm"]
-known_fail_note = "Owner: lane-m4b, whose answersOf work landed the element read's transpose arm. With two residuals the pullback answers the array and the case reads it; with five residuals (two element reads beside an add or a mul) the pullback answers a tuple and the first member reaches no line of stdout -- the program prints the forward value and nothing else, exit 0. So the case is not refused and not passing either: the cotangent is computed and does not arrive. The runner reports a marked case that passes as a failure, which is what asks for the mark's removal once the tuple's first slot prints."
+known_fail_note = "Owner: lane-m4b. Today this is a SIGSEGV: the runner reports `expected exit 0, got signal SIGSEGV (rc=139)` and the four marked cases of this family die in 1.24, 2.24, 3.20 and 4.21 s, so the note this carried before - `the process is killed at the timeout with exit null` - was wrong about the cause: the runner could not tell a signal death from a timeout, the case never timed out. The crash is the array cotangent summed as one number rather than an array, repaired on lane-lit2 in 19f0b05e8 and 0aed45eb6 and not yet merged; the mark comes off in the commit that merges it, which is also what the runner asks for when a marked case starts passing."
 
 # the product: xs[0] * xs[1] over [3.0, 2.0]. The cotangent of a function of an array should come back as an array, but the transpose
 # stops at the law the rule library declares for the element read (`idx_arr_t`, stdlib/rulesets/transpose.cml)
@@ -871,7 +871,7 @@ expect_stdout_contains = ["skip=law rule=idx_arr_t uri=:op/idx_arr", "transpose 
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 known_fail = ["nvm"]
-known_fail_note = "Owner: lane-m4b, whose answersOf work landed the element read's transpose arm. With two residuals the pullback answers the array and the case reads it; with five residuals (two element reads beside an add or a mul) the pullback answers a tuple and the first member reaches no line of stdout -- the program prints the forward value and nothing else, exit 0. So the case is not refused and not passing either: the cotangent is computed and does not arrive. The runner reports a marked case that passes as a failure, which is what asks for the mark's removal once the tuple's first slot prints."
+known_fail_note = "Owner: lane-m4b. Today this is a SIGSEGV: the runner reports `expected exit 0, got signal SIGSEGV (rc=139)` and the four marked cases of this family die in 1.24, 2.24, 3.20 and 4.21 s, so the note this carried before - `the process is killed at the timeout with exit null` - was wrong about the cause: the runner could not tell a signal death from a timeout, the case never timed out. The crash is the array cotangent summed as one number rather than an array, repaired on lane-lit2 in 19f0b05e8 and 0aed45eb6 and not yet merged; the mark comes off in the commit that merges it, which is also what the runner asks for when a marked case starts passing."
 
 [[tests]]
 name = "grad_of_a_division"
