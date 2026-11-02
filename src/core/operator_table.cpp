@@ -303,9 +303,27 @@ void OperatorTable::declareCallForm(std::string_view uri, const CallForm &form) 
         existing.withCount = std::min(existing.withCount, form.withCount);
         // A module that states the shape itself keeps saying so, whichever declaration came first.
         existing.declaredByModule = existing.declaredByModule || form.declaredByModule;
+        existing.exported         = existing.exported || form.exported;
         return;
     }
     callForms_.emplace_back(std::string(uri), form);
+}
+
+void OperatorTable::markExported(std::string_view uri) {
+    std::unique_lock lock(mutex_);
+    for (auto &[declared, form] : callForms_) {
+        // A declaration may cover a family of operators with one `*` (`:op/*tos`), and the export
+        // names one operator of that family: the family's shape is the one a program writes.
+        const size_t star  = declared.find('*');
+        const bool family = star != std::string::npos && uri.size() + 1 >= declared.size() &&
+                            uri.starts_with(std::string_view(declared.data(), star)) &&
+                            uri.ends_with(std::string_view(
+                                declared.data() + star + 1, declared.size() - star - 1));
+        if (declared == uri || family) {
+            form.exported = true;
+            return;
+        }
+    }
 }
 
 std::optional<OperatorTable::CallForm> OperatorTable::callFormOf(std::string_view uri) const {

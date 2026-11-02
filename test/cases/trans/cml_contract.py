@@ -72,6 +72,7 @@ CORPUS = [
     CML / "write_value.cml",
     CML / "string_conversion.cml",
     CML / "named_type.cml",
+    CML / "map_with_closure.cml",
     CASES / "trans/jgir_duplicate.cml",
     CASES / "linear/nvm/hello.cml",
 ]
@@ -104,6 +105,7 @@ MARKERS = {
     "write_value": ["var "],
     # The declaration is the half the printed program was missing: the name alone does not compile.
     "named_type": ["type P = { x: int, y: int }", "with <m: P>", "p: P", "): P"],
+    "map_with_closure": ["map<", "=>", "let ys"],
 }
 # What the printed text must not spell, per corpus program: the defect each case pins. An arm whose
 # value is the value its write wrote ends with the write; a `return <temp>` there hands the value on
@@ -310,7 +312,16 @@ def main():
     check_refusal(
         CML / "refuse/tagged_node.cml", "CmlUnsupportedConstruct", contains=("attributes",)
     )
-    check_refusal(CML / "refuse/operator.cml", "CmlUnsupportedConstruct", contains=("operator",))
+    # An operator whose declaration is body-less *and not exported* is still a refusal, and the
+# message says which: `array:sort_l` is the kernel behind `array::sort`, which the module keeps
+# to itself. "Body-less" alone is not the test -- `map` states its shape in a declaration with no
+# body too, and that one the module exports, so the printer writes the call (see
+# `map_with_closure.cml`, which used to be this fixture).
+    check_refusal(
+        CASES / "modules/stdlib/array_kernels_read_back.cml",
+        "CmlUnsupportedConstruct",
+        contains=("body-less kernel declaration", "array:sort_l"),
+    )
     check_refusal(CML / "refuse/partial_value.cml", "CmlUnsupportedConstruct")
     check_refusal(
         CML / "refuse/inline_region.cml",
