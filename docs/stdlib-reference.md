@@ -1560,19 +1560,6 @@ the `.0` added: the pullback always answers a tuple). Read `grad(f)` as a name f
 - Example (a fragment, not compiled): `let slope = grad(f)`
 - Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
 
-#### `with_grad`
-
-```camel
-with_grad: (f: F) => F when is_function::<F>()
-```
-
-The gradient of the first `with` parameter of `f` (design principles 9.9): the same `vjp`, taken
-with respect to a captured value instead of a parameter.
-
-- Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example (a fragment, not compiled): `let slope_over_the_capture = with_grad(f)`
-- Why it is not compiled: `f` captures the value it differentiates against, so the example is a fragment of a program that declares one
-
 <a id="tensor"></a>
 
 ## `tensor`: multi-dimensional numeric arrays

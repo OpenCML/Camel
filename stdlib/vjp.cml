@@ -6,7 +6,12 @@
  *
  *     vjp(f) = transpose(split(reinterp<jvp>(f)))
  *     grad(f)              -- `vjp` read at one number, the seed 1
- *     with_grad(f)         -- the same for the first `with` parameter (design principles 9.9)
+ *
+ * The library used to carry a second name, `with_grad`, which returned `vjp(f)` under a declared
+ * type of `F`: a declaration whose implementation was a different function. The author struck it
+ * at 11:50 and again at 13:30 -- a library export comes back when M4 lifts `with` parameters and
+ * can answer a gradient at one. The engine's own `with_grad` (stdlib/signatures/autodiff.cml) is
+ * the real one, and stays until buildGradientGraph retires.
  *
  * This is the assembly the design asks for, written out rather than described. `split(jvp(f))`
  * answers the forward half, and the forward half called at the point answers `(value, lin)`: the
@@ -88,12 +93,4 @@ export func grad(f: (x: float) => float): (x: float) => float {
         let cotangents = pullback(1.0)
         cotangents.0
     }
-}
-
-/// The gradient of the first `with` parameter of `f` (design principles 9.9): the same `vjp`, taken
-/// with respect to a captured value instead of a parameter.
-/// @example-fragment `f` captures the value it differentiates against, so the example is a fragment of a program that declares one
-/// @example let slope_over_the_capture = with_grad(f)
-export func with_grad::<F>(f: F): F when is_function::<F>() {
-    return vjp(f)
 }

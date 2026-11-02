@@ -922,7 +922,14 @@ class ModelBuilder {
             auto *value =
                 static_cast<camel::compile::gir::ExportedValue *>(EntityAccess::node(entity));
             const auto node = value != nullptr ? value->node : camel::runtime::DraftNodeRef{};
-            const auto *header = node ? node.draft->header(node.id) : nullptr;
+            // A handle names its draft by the address *and* the epoch the draft was made with
+            // (`include/camel/runtime/draft.h#isNamedBy`), and this one is read while the graph it
+            // was made in may already have been handed over and released: the exported value
+            // outlives the builder, so the address it names can hold a later draft whose node 0 is
+            // another node. Asking the draft costs one comparison and keeps the type below from
+            // being read out of a graph this value does not belong to.
+            const auto *header =
+                node && node.draft->isNamedBy(node) ? node.draft->header(node.id) : nullptr;
             if (header != nullptr && header->dataType != nullptr) {
                 ext.signatures.push_back(sourceSpelling(header->dataType->toString()));
             }
