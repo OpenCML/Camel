@@ -1391,7 +1391,13 @@ const PINNED_COVERAGE_EXCEPTIONS = [
     },
 ]
 
-const PINNED_COVERAGE_RECORDED = 16
+// 17, not 16, since `SemanticDiag::ResidualsAreNotVisible` lost the only case that asserted it: the
+// residual tuple has no producer left, so `split_residuals_destructured` now refuses at
+// `let (dx, dy) = linear` with `SemanticDiag::TypeNotIndexable` (`3765513d5`), and no case can be
+// written for a refusal that cannot fire. The number moves because coverage moved, not because the
+// gate was relaxed: the code joins the enumerated set instead of gaining an exception, and it falls
+// back to 16 when the diagnostic itself is deleted.
+const PINNED_COVERAGE_RECORDED = 17
 
 if (mode === '--pinned-coverage' || mode === '--pinned-coverage-check') {
     const entries = catalogEntries(records)
