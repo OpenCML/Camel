@@ -1539,12 +1539,26 @@ SplitGraph cutLoopGraph(
         const uint32_t region =
             draft.addRegion(rt::GCRegionKind::LoopBody, 0, backwardLoop, 1);
         draft.setInsertRegion(region);
-        const gc_node_ref_t tapeElement = draft.addPortNode(
-            tapeElementType, draft.allocateRuntimeSlot(tapeElementType));
+        // The round this body runs over is a place in the tape, not the tape's element: the backward
+        // half walks the rounds from the last to the first (design 4.2, 4.3; the reverse pass in
+        // `modules/autodiff/pullback.cpp` walks them the same way), so the element the loop hands the
+        // body is that round's index and the tape is read at it. The tape is a capture of the
+        // backward half, so the round reads it where it stands rather than through the loop.
+        const gc_node_ref_t roundIndex = draft.addPortNode(
+            Type::Int64(), draft.allocateRuntimeSlot(Type::Int64()));
         const gc_node_ref_t state = draft.addPortNode(
             cut.stateTangentType, draft.allocateRuntimeSlot(cut.stateTangentType));
-        std::vector<gc_node_ref_t> regionPorts{tapeElement, state};
+        std::vector<gc_node_ref_t> regionPorts{roundIndex, state};
         // The round's residuals, read out of the tape's element by position, and the tangent state.
+        // The element is `xs[i]` -- the operator the language builds `xs[i]` from (`:op/idx_arr`,
+        // whose rule's head is `index_into`), not one this cut makes up. A tape with no residual
+        // (`countingOnly`) is read by nothing, so no read is made for it.
+        gc_node_ref_t tapeElement = rt::kInvalidNodeRef;
+        if (!cut.tape.empty()) {
+            const std::array<gc_node_ref_t, 2> at{tapePort, roundIndex};
+            tapeElement = draft.addOperNode(tapeElementType, nullptr, ":op/idx_arr");
+            draft.setNormInputs(tapeElement, std::span<const gc_node_ref_t>(at.data(), at.size()));
+        }
         for (size_t i = 0; i < cut.tape.size(); ++i) {
             Type *type = function->node(cut.tape[i])->dataType();
             const gc_node_ref_t part = draft.addAccsNode(type, static_cast<uint32_t>(i));
@@ -1563,8 +1577,10 @@ SplitGraph cutLoopGraph(
         draft.setInsertRegion(0);
         draft.setRegionPorts(region, regionPorts);
         draft.setRegionResult(region, backward.copyOf[cut.tangentRoot]);
-        // The loop's inputs: the tape it iterates, then the first tangent -- the tangent half of the
-        // pair `jvp` made for the first state.
+        // The loop's inputs: `range(n - 1, -1, -1)` -- the tape's rounds, the last one first -- and
+        // then the first tangent, the tangent half of the pair `jvp` made for the first state. `n` is
+        // the tape's own length, so a tape of no round is an empty range and the loop runs no round,
+        // which is what the forward half's zero-round tape means.
         gc_node_ref_t firstTangent = rt::kInvalidNodeRef;
         {
             const gc_node_ref_t half = initialHalves[1];
@@ -1577,7 +1593,28 @@ SplitGraph cutLoopGraph(
             }
             firstTangent = backward.copyOf[half];
         }
-        const std::array<gc_node_ref_t, 2> backwardInputs{tapePort, firstTangent};
+        const auto intConstant = [&](int64_t value) {
+            return draft.materializeStaticValue(
+                camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(value),
+                Type::Int64(),
+                rt::kGCNodeFlagConstant);
+        };
+        const std::array<gc_node_ref_t, 1> tapeOnly{tapePort};
+        const gc_node_ref_t roundCount = draft.addOperNode(Type::Int64(), nullptr, ":struct/len_arr");
+        draft.setNormInputs(
+            roundCount, std::span<const gc_node_ref_t>(tapeOnly.data(), tapeOnly.size()));
+        const std::array<gc_node_ref_t, 2> lastRound{roundCount, intConstant(1)};
+        const gc_node_ref_t lastIndex = draft.addOperNode(Type::Int64(), nullptr, ":op/sub_l");
+        draft.setNormInputs(
+            lastIndex, std::span<const gc_node_ref_t>(lastRound.data(), lastRound.size()));
+        const std::array<gc_node_ref_t, 3> roundsBackwards{
+            lastIndex, intConstant(-1), intConstant(-1)};
+        Type *const rangeType = ArrayType::create(Type::Int64());
+        const gc_node_ref_t backwardsRange = draft.addOperNode(rangeType, nullptr, ":struct/range");
+        draft.setNormInputs(
+            backwardsRange,
+            std::span<const gc_node_ref_t>(roundsBackwards.data(), roundsBackwards.size()));
+        const std::array<gc_node_ref_t, 2> backwardInputs{backwardsRange, firstTangent};
         draft.setNormInputs(
             backwardLoop,
             std::span<const gc_node_ref_t>(backwardInputs.data(), backwardInputs.size()));
