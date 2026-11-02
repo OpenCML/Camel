@@ -319,6 +319,28 @@ function=ftod   rules=jvp_ftod     见下面的安全阀
 **⑤ 读数**：`rulesets` **67/67**（27 条律全部归档、无重复键报警）；`transforms` **48/61**（同一份 13 条红，新增红 0）；全量见下。
 
 **⑥ 页里被纠正的一句**：§5.3 说"类型分派是引擎已有的能力"——**实测证明这条路径上没有**，纠正它的是 `:op/ftod` 那行 `rules=jvp_dtod`，不是文档推断。§5.3 的标题已标注。
+### 5.6 四条数组转换律：`export` 不是障碍，**`ruleElementTypeOf` 是**（实测，已回退）
+
+作者裁"给 `is_compact_array` 加 `export` 再写 4 条数组律"。**`export` 做了，律也写了，仍然选不中**——两处读数：
+
+**① 谓词该在 `types`，不在 `prelude`。** `prelude` 里的 `is_compact_array` 是私有的 `func`；只加 `export` 还不够，因为 `rulesets.jvp` 里 `is_float`/`is_same` 都来自 `types`，而 `prelude` 的导出面不被规则库当作名字来源。所以试的是：**把 `is_compact_array` 移到 `stdlib/types.cml` 并 `export`**（`types` 是类型谓词的家，`is_array`/`is_numeric` 都在那儿），`prelude` 改成 `import { …, is_compact_array, … } from types`，`jvp.cml` 也 import 它。这一版**编译通过**，说明"写得出"这一步是成立的。
+
+**② 但选不中：`ruleElementTypeOf` 把数组压成元素类型。** 4 条律的探针（`jvp(atod)(xs, [1.0, 1.0])`）给出的日志是：
+
+```
+REINTERP jvp function=atod graph=242 ... tangent=computed source=ruleset rules=jvp_dtod
+[SUMMARY] total: 1, pass: 0, fail: 1, killed by a signal: 1
+```
+
+`:op/at od` 是**数组**算子，答它的却是 `jvp_dtod`（标量 float→float 的律）——因为 `modules/transforms/rule_types.h#ruleElementTypeOf` **刻意把数组剥到元素类型**（注释写明：正是这一条让 `index_into<T>` 在 `float[]` 上被按 `float` 归档，review P1-9）。实例因此在 `float` 上成立，我的数组律（条件 `is_compact_array::<A>()`，A 必须是数组类型）永远不成立。**这不是"谓词私有"能解的**。
+
+**③ 而且它崩了。** 同一份探针在**有律**和**无律**两种情况下读数完全一样（`rules=jvp_dtod`、`killed by a signal: 1`），所以崩溃是**数组 lift 既有路径**的问题，不是这 4 条律引起的——与 `grad_array_*` 一直是红的一致。但它同时说明另一件事：**标量律被套到数组算子上，而且这一套就崩**。`when` 门在这里救不了，因为实例是按 `float` 问的、`jvp_dtod` 的条件在 `float` 上真成立。
+
+**按 ⚠️(二) 回退**：`stdlib/types.cml`、`stdlib/prelude.cml`、`stdlib/rulesets/jvp.cml` 全部 `git checkout` 回 `04720eb7c`；读数不动（`rulesets` 67/67、`transforms` 48/61、全量 8527/8493/14）。页里只留这一节。
+
+**这两条要作者裁（记成缺陷，不自己决定）**：
+1. **数组算子的律该按什么类型归档**——`ruleElementTypeOf` 的"剥到元素"是 P1-9 的决定，改它要重开那一页；不改，则数组转换永远没有律。
+2. **标量律被数组算子选中并崩**（`rules=jvp_dtod` + `killed by a signal`）：这是"选错律"的数组版本，和 §5.5 修掉的 `:op/ftod` 是同一类，只是入口不同——该在 `ruleElementTypeOf` 里挡，还是在"实例的端口类型与算子端口类型不符"时挡？
 ## 6. 一句话结论
 
 **这条缝是方案性的，不是少数特例**：按"结果有切空间却拼不出键"计，**32 条**（把复数算进去 50 条），而例外表只能一条一条地救——今天救了两条、补了一条（`^`）。缺口的形状有两个：
