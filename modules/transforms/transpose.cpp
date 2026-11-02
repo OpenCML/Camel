@@ -101,7 +101,14 @@ FunctionType *transposeSignature(
     // nothing else. Two things stand before that cotangent instead of being passed as themselves:
     // a parameter whose type has no tangent space (an `int`, a `bool`, a string) is a value the call
     // site still fills, and so is a value the body reads from outside; which parameters those are is
-    // a fact of the body, read below from the function rather than from its type. A fixed value a
+    // a fact of the body, read below from the function rather than from its type.
+    //
+    // The declaration in `stdlib/types.cml#Transpose` is the contract (author, 2026-11-03,
+    // `origin/fsh-dev` `6eceaa89d`): a declaration is what the builder makes, and no declaration is
+    // approximate. That the two do not agree today is a missing capability of the type-bundle splice
+    // -- multiplicity is lost, and the exact shape needs an operation saying which parameters stand
+    // before the cotangent -- so this build is the side that has to move once the splice can write
+    // it, and the difference is a defect to be closed rather than a wording to be kept. A fixed value a
     // body needs is not a parameter: it is
     // captured by the function that is transposed -- `transpose((dx) => f_lin(x, dx))(y-bar)` -- and
     // that is the caller's spelling. What it buys is that the type of a function says nothing about

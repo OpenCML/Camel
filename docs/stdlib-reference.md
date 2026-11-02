@@ -1456,11 +1456,14 @@ is a value, and the cotangent of an arm only means something for the arm that ra
 Which values those are is a property of `f`'s body, not of its type: a parameter that takes a
 cotangent is not passed (the cotangent carries it), a parameter with no tangent space (an `int`,
 a `bool`, a string) stands there as a value, and a value the body reads from outside stands there
-too. So for a one-`float` function the call is `transpose(f)(1.0)` and for a function that branches
-on a condition the condition is read by the transposed body and not passed to it -- a reader writes
-the call the body asks for, and the build writes the exact shape
-(`modules/transforms/transpose.cpp#transposeSignature`). See `stdlib/types.cml#Transpose` for why
-the declaration is the loose `(..ParamsOf<F>, ct: Tangent<ResultOf<F>>)` and what it approximates.
+too. So for a one-`float` function the call is `transpose(f)(1.0)`.
+
+**`stdlib/types.cml#Transpose` is the contract, not an approximation** (author, 2026-11-03,
+`origin/fsh-dev` `6eceaa89d`): the build makes the declared type. The declaration cannot write
+that shape exactly today because the type-bundle splice loses multiplicity and lacks "the value
+parameters the call site still passes" -- a missing capability of the splice, to be fixed, not a
+wording to be kept. `modules/transforms/transpose.cpp#transposeSignature` is the build that has to
+come to agree with it.
 
 - Example (a fragment, not compiled): `let back = transpose(f)`
 - Why it is not compiled: `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
