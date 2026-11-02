@@ -295,3 +295,31 @@
 #           ^ keyword.operator.assignment.camel
 #                 ^ punctuation.accessor.camel
 #                  ^ constant.numeric.integer.index.camel
+>
+>// RAWS: r"..." and r#"..."# -- nothing between the delimiters is an escape, and the closing
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>// quote is followed by as many '#' as the opening one
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>let rawPlain = r"C:\dir\q"
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#             ^ keyword.operator.assignment.camel
+#               ^^ string.quoted.raw.camel punctuation.definition.string.begin.camel
+#                 ^^^^^^^^ string.quoted.raw.camel
+#                         ^ string.quoted.raw.camel punctuation.definition.string.end.camel
+>let rawHash = r#"a"b"#
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#            ^ keyword.operator.assignment.camel
+#              ^^^ string.quoted.raw.camel punctuation.definition.string.begin.camel
+#                 ^^^ string.quoted.raw.camel
+#                    ^^ string.quoted.raw.camel punctuation.definition.string.end.camel
+>let rawTwoHashes = r##"a"#b"##
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#                 ^ keyword.operator.assignment.camel
+#                   ^^^^ string.quoted.raw.camel punctuation.definition.string.begin.camel
+#                       ^^^^ string.quoted.raw.camel
+#                           ^^^ string.quoted.raw.camel punctuation.definition.string.end.camel

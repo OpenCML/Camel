@@ -2934,6 +2934,10 @@ Value Builder::visitPattern(cst::Pattern context) {
     if (context->get<cst::Literal>()) {
         Literal literal = value_cast<Literal>(visitLiteral(context->get<cst::Literal>()));
         res             = createNodeAs<LiteralLoad>(literal);
+        if (context->get<cst::Literal>()->tok(TK::RawString)) {
+            // `case r"C:\dir"`: the pattern's value is the text, not what escapes would make.
+            unwrapNodeAs<LiteralLoad>(res)->setFromRawString();
+        }
         setNodeTokenRangeByContext(res, context->get<cst::Literal>());
     } else if (context->text() == "_") {
         res = createNodeAs<NullLoad>();
@@ -4604,6 +4608,10 @@ Value Builder::visitLiteralData(cst::Literal context) {
     }
     Literal literal = value_cast<Literal>(visitLiteral(context));
     node_ptr_t res  = createNodeAs<LiteralLoad>(literal);
+    if (context->tok(TK::RawString)) {
+        // A raw string's text is its value: the GCT must not decode anything in it.
+        unwrapNodeAs<LiteralLoad>(res)->setFromRawString();
+    }
     setNodeTokenRangeByContext(res, context);
     return res;
 }
@@ -4887,6 +4895,21 @@ Value Builder::visitLiteral(cst::Literal context) {
         // strings of an expression go to visitFStringData (visitLiteralData), and the pattern
         // production no longer takes one, so what arrives here is a plain string.
         data = data.substr(1, data.size() - 2); // Remove quotes
+        type = LiteralType::String;
+    } else if (context->tok(TK::RawString)) {
+        // `r"..."` and `r#"..."#`: the text between the delimiters is the value, with nothing
+        // decoded. Strip `r`, the `#`s that open it and the quote, then the quote and the same
+        // number of `#`s at the end; the caller marks the load raw so that the GCT does not run
+        // the escape table over it (a `\n` written in a raw string is a backslash and an `n`).
+        size_t hashes = 0;
+        while (1 + hashes < data.size() && data[1 + hashes] == '#') {
+            ++hashes;
+        }
+        const size_t inner = hashes + 2; // `r`, the `#`s, the opening quote
+        GUARD(
+            data.size() >= inner + hashes + 1,
+            "A raw string token is `r`, some `#`, `\"`, its text, `\"` and the same `#`.");
+        data = data.substr(inner, data.size() - inner - 1 - hashes);
         type = LiteralType::String;
     } else if (context->tok(TK::MultiStr)) {
         data = data.substr(3, data.size() - 6); // Remove triple quotes

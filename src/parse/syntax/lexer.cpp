@@ -134,6 +134,7 @@ constexpr bool endsAngleHost(TokenKind kind) {
     case TokenKind::Integer:
     case TokenKind::Real:
     case TokenKind::String:
+    case TokenKind::RawString:
     case TokenKind::MultiStr:
     case TokenKind::FString:
     case TokenKind::KwTrue:
@@ -506,6 +507,61 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
             lines.push_back(static_cast<uint32_t>(++i));
             continue;
         case kIdentStart: {
+            // RAWS: `r"..."` with no `#`, and `r#"..."#`, `r##"..."##` with any number of them.
+            // The `r` is not a name here only when a run of `#` (possibly empty) is followed by
+            // the opening quote; `r#tag` is the name `r` and a tag. Nothing in the text is an
+            // escape -- not `\\`, not `\"` -- so the delimiter is the only thing that ends it:
+            // the closing quote must be followed by exactly as many `#` as the opening one.
+            size_t hashes = 0;
+            if (c == 'r') {
+                while (at(i + 1 + hashes) == '#') {
+                    ++hashes;
+                }
+            }
+            if (c == 'r' && at(i + 1 + hashes) == '"') {
+                const size_t open      = i + 1 + hashes; // the opening quote
+                size_t j               = open + 1;
+                const size_t lineCount = lines.size();
+                bool closed            = false;
+                while (j < n) {
+                    if (s[j] == '\n') {
+                        lines.push_back(static_cast<uint32_t>(j + 1));
+                    }
+                    if (s[j] == '"') {
+                        size_t k    = j + 1;
+                        size_t seen = 0;
+                        while (k < n && s[k] == '#' && seen < hashes) {
+                            ++k;
+                            ++seen;
+                        }
+                        if (seen == hashes) {
+                            closed = true;
+                            j      = k;
+                            break;
+                        }
+                    }
+                    ++j;
+                }
+                if (closed) {
+                    emit(TokenKind::RawString, i, j);
+                    i = j;
+                    continue;
+                }
+                // Unclosed: the error is on the line the opening quote is on, and what follows
+                // is source again (the lines the scan passed are noted again as it reaches
+                // them), exactly as for a string with escapes.
+                lines.resize(lineCount);
+                const void *lineEnd = std::memchr(s + i, '\n', n - i);
+                const size_t errorEnd =
+                    lineEnd == nullptr ? n : static_cast<size_t>(static_cast<const char *>(lineEnd) - s);
+                buffer.errors_.push_back(
+                    {LexErrorKind::UnclosedString,
+                     static_cast<uint32_t>(open),
+                     static_cast<uint32_t>(errorEnd)});
+                emitTrivia(TokenKind::Error, i, errorEnd, false);
+                i = errorEnd;
+                continue;
+            }
             size_t j = i + 1;
             while (j < n && isIdentPart(static_cast<unsigned char>(s[j]))) {
                 ++j;

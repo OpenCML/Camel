@@ -8,15 +8,17 @@
  * here -- the printed source is regenerated and looks nothing like the origin -- so what this tool
  * compares is what a user would notice: the exit status and every byte of standard output.
  *
- * The eight cases are the ones the author's defect list (A7) named as behaving differently after a
- * print. They are green today; this tool is the lock, not the fix. Its own discriminability is
+ * The eight cases of the author's defect list (A7) are the ones that behaved differently after a
+ * print; a ninth (`compile/escapes/raw_roundtrip`) is the printer's raw form for a string with
+ * several backslashes, which is a literal rather than a graph shape. They are green today, and
+ * this tool is the lock, not the fix. Its own discriminability is
  * checked by `--negative <case>`: the printed body has two of its `println` statements swapped and
  * the tool must report a difference -- a harness that cannot see a swap it planted itself would
  * report "identical" for everything, which is the failure mode this file exists to avoid.
  *
  * Usage: node roundtrip-compare.mjs [--camel <path>] [--negative <case>]
  *
- * One line per case, always, so that "8 of 8 identical" is a reading and not an absence:
+ * One line per case, always, so that "9 of 9 identical" is a reading and not an absence:
  *   case=<name> rc=<n> stdout=identical
  *   case=<name> rc=<n> stdout=differs at line k
  */
@@ -78,6 +80,7 @@ const CASES = [
     'parse/rulings/power',
     'trans/cpp/exec/print_formats',
     'consistency/values/float_special',
+    'compile/escapes/raw_roundtrip',
 ]
 
 const SCRATCH = path.join(tmpdir(), `camel-roundtrip-${process.pid}`)

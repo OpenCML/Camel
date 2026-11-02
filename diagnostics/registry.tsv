@@ -4,10 +4,7 @@ lexical	IllegalCharacter	0x000000	error	Illegal character '{0}'.	No token starts
 lexical	InvalidNumberFormat	0x000001	error	Invalid number format: '{0}'.	A number is decimal digits without a leading zero in its whole part (an integer or a real: '0.5' is a number, '007' and '007.5' are not), or '0x', '0b' or '0o' followed by digits of that base: octal 63 is '0o77', not '077'; '09' and '077' are not number tokens. An entry argument is read by the same rule; a conversion text is data, and reads '077' as 77.	edit
 lexical	UnclosedStringLiteral	0x000002	error	This string literal is not closed.	A string ends with the quote character it starts with ({0}). Add the closing quote; to put a quote character inside the string, write it with a backslash.	edit
 lexical	UnterminatedComment	0x000003	error	Unterminated comment: {0}.	Close the comment with '*/'.	edit
-#
-# severity = 1 (Warning). The value used to be 0x010000, which has the severity bits of
-# an error; nothing reports this code yet, so the number could be put right.
-lexical	InvalidEscapeSequence	0x100000	warn	Invalid escape sequence in string: {0}.	Check and correct the escape sequence.	none: choice: the text to write instead is the writer's
+lexical	InvalidEscapeSequence	0x000004	error	Invalid escape sequence in string: {0}.	A string decodes '\n', '\t', '\r', '\a', '\b', '\f', '\v', '\0', '\\', '\'', '\"', '\`', '\$', '\xHH' and the braced Unicode form '\u{{...}}'. Any other pair is refused rather than kept: a string that silently becomes something else is dearer than one that does not build. To write a backslash itself, write '\\' or use a raw string, in which nothing is an escape: r"C:\dir".	none: choice: the text to write instead is the writer's
 syntax	MissingClosingDelimiter	0x000001	error	Expected '{0}' before {2}, to close the '{1}'.	Every '{1}' needs its '{0}'. The note shows the '{1}' that is still open here.	edit
 syntax	UnmatchedClosingDelimiter	0x000002	error	Unexpected '{0}': no '{1}' is open here.	Remove the '{0}', or add the '{1}' it was meant to close.	edit
 syntax	MissingThen	0x000003	error	Expected 'then' after the condition of the 'if', before {0}.	A conditional is written: if <condition> then <value> else <value>. Each branch may be a block: if c then {{ ... }} else {{ ... }}.	edit

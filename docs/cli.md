@@ -447,7 +447,7 @@ Running the program without passes (`camel m.cml`) keeps working: `export_model`
 
 ### Warnings
 
-A warning (a `[Warn]` diagnostic) does not stop a program. The table lists the compiler's warnings about effects and the warnings of the pipeline; for the others (`InvalidEscapeSequence`, `ExitInUnusedBranch`, `MatchWithoutDefault`) see [diagnostics.md](diagnostics.md).
+A warning (a `[Warn]` diagnostic) does not stop a program. The table lists the compiler's warnings about effects and the warnings of the pipeline; for the others (`ExitInUnusedBranch`, `MatchWithoutDefault`) see [diagnostics.md](diagnostics.md).
 
 | Name | Code | Where | Meaning |
 |---|---|---|---|
