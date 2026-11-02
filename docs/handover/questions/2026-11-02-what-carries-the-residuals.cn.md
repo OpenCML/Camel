@@ -47,10 +47,13 @@
 
 ## 落地要动的地方（按 Commit 顺序）
 
+**一条读数先钉住**：裁定里那两个数不是新编的，就是 `test/cases/transforms/split/split_two_params.cml`（作者为这一层点名的读数程序：`f(x, y) = x*x*y` 在 x = 3、y = 2，今天印 `value= 18.0`、`tangent dx= 12.0`、`tangent dy= 9.0`、`residuals=5`）。裁定里的 `lin(1, 0) = 12` 就是它的后半段在切向 (1, 0) 上的读数，`transpose(lin)(1) = (12, 9)` 就是它的转置读数（`2xy = 12`、`x² = 9`）。所以这一步的验收拿这条用例做，不新写一条。
+
 1. **`split` 的后半段 + 前半段的出口**（`modules/transforms/split.cpp`）：`splitHalvesWith` 不再把残差当 `backwardParams.front()`；两条建图路（直线 `buildSplitGraph` 与分支 `cutBranchGraph`）把 `residualsPort` 换成 N 个闭包口；`Half::projectResidual` 从 `Accs` 改成直接返回那个闭包口；前半段的出口从"填元组 `(result, residuals)`"改成"`Fill(FunctionClosure)` 造 `lin`，再填 `(result, lin)`"；kernel 用后半段的 `closureNodes` 类型造静态函数值。读数：`lin(1, 0) = 12`。
 2. **`transpose` 读残差的入口**（`modules/transforms/transpose.cpp`）。这一条是本页新查出来的**耦合**，也是把它算成"三模块一笔"的原因：目前 `transpose` 把线性函数的**第一个普通参数**当残差束读（`:441`、`:527`、`:839`、`:1086-1087`、`:1235`、`:1851` 都是 `normPorts()`）。残差进了闭包之后，它要改成从**函数值的闭包元组**读，并把那些值做成交出来的转置图自己的捕获口。读数：`transpose(lin)(1) = (12, 9)`。
 3. **两张空成员表**（`modules/transforms/split.cpp:842`、`modules/transforms/split_operator.cpp:59`）：第 1、2 步落地后残差不再是一个类型，两张表没有存在的理由；不变量 `git grep -c 'residuals(' -- src include` 的"造空表"两处降到 0。本页原来写"在 A 落地前不要删它们"——**那条已经作废**：C 落地后不是"根本没有类型"，而是"残差根本不是类型的一部分"，读数只会更干净。
 4. **库**（`stdlib/vjp.cml`）：`let forward = split(jvp(f))`，`let (value, lin) = forward(..xs)`，`transpose(lin)(ct)`——`res` 不再过手。
+5. **钉住旧类型串的读数**（这一条是第 1 步之后必然要跟着改的，先数清楚）：`split` 的前半段今天把残差元组写进自己的**类型**里，所以有四处计划条目直接钉着那个串 —— `test/plans/feat/transforms/split.plan.toml:80`（`type=(float, float) => (float, (float, float, float, float, float)) pure residuals=5`）、`:92`（`=> (float, (float, float, float)) pure residuals=3` 与四项的那条）、`test/plans/feat/modules/remat.plan.toml:62`、`test/plans/feat/transforms/compositions.plan.toml:20`（`residuals=2`）。改完之后前半段的类型里只剩 `(result, lin)`，这些串要一起换；`residuals=` 这个计数是图给的，可以留着。
 
 ## 现状
 
