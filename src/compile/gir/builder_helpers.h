@@ -703,16 +703,59 @@ inline void writeSyncStatement(node_handle_t from, node_handle_t to) {
     writeControlLink(from, to);
 }
 
+/// The statement a chain link may start at: `from` itself when the model lets an order sit on it,
+/// and otherwise the statement it waits on -- the chain's tail behind the value.
+///
+/// The builder's chain tail is not always a statement. `lastSyncedNode_` is set to a value at the
+/// places where a statement turned out to be one: a variable read (`Builder::readVariable`), the
+/// cast a value enters its declared type by (`Builder::castTo`), the `JOIN` a branch hands its value
+/// on from, and the `GATE` a block value is forwarded behind. A sync edge drawn from one of those
+/// starts at a node that is not a statement of a chain, which is the design being violated
+/// (docs/design/effects/edges.cn.md 1 and 4.6) and which the seal check refuses
+/// (src/runtime/graph_edges.cpp). The value keeps its readers; what is written after the chain
+/// follows the statement the value waits on.
+inline node_handle_t chainTailBehind(node_handle_t from) {
+    node_handle_t tail = from;
+    for (int hop = 0; hop < 32 && tail != nullptr && !nodeTakesAnOrder(tail); ++hop) {
+        node_handle_t behind = nullptr;
+        for (const auto pred : syncInputsOf(tail)) {
+            const node_handle_t candidate = nodeDraftOf(tail)->ref(pred);
+            if (candidate != nullptr && nodeGraphOf(candidate) == nodeGraphOf(tail)) {
+                behind = candidate;
+            }
+        }
+        if (behind == nullptr) {
+            for (const auto pred : ctrlInputsOf(tail)) {
+                const node_handle_t candidate = nodeDraftOf(tail)->ref(pred);
+                if (candidate != nullptr && nodeGraphOf(candidate) == nodeGraphOf(tail)) {
+                    behind = candidate;
+                }
+            }
+        }
+        tail = behind;
+    }
+    return tail != nullptr && nodeTakesAnOrder(tail) ? tail : nullptr;
+}
+
 /// A link of the chain between two statements of a `sync` block, written only if it says something
 /// (`chainLinkSaysSomething`). What is not here: the edge that orders a `var` write and the read of
 /// it. The read has no data edge from the write yet, and an edge that only orders would leave it
 /// with the value from before the write (Builder::orderAfterLastWriter, builder_expr.cpp) -- that
 /// pair waits until the read is a data edge from the nearest write.
+///
+/// Both ends are asked whether an order may sit on them: `to` by `chainLinkSaysSomething`, and
+/// `from` here, because the chain's tail a caller hands over can be a value (`chainTailBehind`).
+/// A link from a value is the one the seal check refuses, and stepping over the value to the
+/// statement behind it is what keeps the pair ordered.
 inline void linkSyncStatement(node_handle_t from, node_handle_t to) {
-    if (!chainLinkSaysSomething(from, to)) {
+    const node_handle_t tail = chainTailBehind(from);
+    if (tail == nullptr || tail == to) {
         return;
     }
-    writeSyncStatement(from, to);
+    if (!chainLinkSaysSomething(tail, to)) {
+        return;
+    }
+    writeSyncStatement(tail, to);
 }
 
 inline camel::source::SemanticPart semanticPart(
