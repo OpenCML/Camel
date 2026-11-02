@@ -74,6 +74,16 @@ GenerationalAllocatorWithGC::GenerationalAllocatorWithGC(const Config &config)
               static_cast<double>(config.birthSize) *
               std::clamp(static_cast<double>(config.minorGCTriggerRatio), 0.1, 1.0))),
       heapLimitBytes_(config.heapLimitBytes), enableYoungGenCopying_(config.enableYoungGenCopying) {
+
+    // A threshold the age field cannot reach silently disables promotion: `incAge` saturates at
+    // 15 (a four-bit field, and `setAge` guards the same bound), so a threshold of 16 leaves every
+    // object short of it forever and nothing is ever promoted.
+    if (promotionAgeThreshold_ > 15) {
+        throw std::runtime_error(
+            "GC promotionAgeThreshold is " + std::to_string(promotionAgeThreshold_) +
+            ", but the age field saturates at 15: a threshold the age field cannot reach silently "
+            "disables promotion");
+    }
     // Reserve the first elder segment now (untouched pages cost nothing), so the space shows
     // up in snapshots from the start as it did when it was a single block.
     elderGenSpace_.free(elderGenSpace_.alloc(sizeof(slot_t)));

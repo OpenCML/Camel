@@ -1654,3 +1654,174 @@ graph '…' node 14 (10): calls 'transpose_of_rulesets.jvp::index_into<float>', 
 
 **⑥ 本轮读数**：树干净（`transpose.cpp` 已 `git checkout` 回 `f14f65031` 的状态，端口类型修复在），五条用例仍钉 `skip=law rule=idx_arr_t`，
 **全量 `8388 total, pass 8376, fail 0`**（与上一轮同一个数）。
+
+
+## 49. 实例化写死 + 签名只算一份：四条不变量 **4 → 0**，露出来的是"0 长度数组进余切"的运行期缺陷
+
+**作者的裁定（00:30）把诊断改了一个说法，照改**：不是"两处字面量"，是**"调用节点的签名不是从 `transposeSignature` 取的"**，
+**类型与实参次序是它的两个症状**；**同 `beeb887f4` 同一族，但这一处是"签名算了第二遍"**。
+
+**落地的三笔**（各一次构建、各一次跑）：
+
+| 笔 | commit | 读数 |
+| --- | --- | --- |
+| 答案类型取签名 | `2c0b12f80` | `feat/compile/transforms` 57/57，不动 |
+| 答案槽数/槽类型取签名 | `033e566fe` | 57/57；与 arm 一起量时 **8 → 4** 条不变量 |
+| 规则按被匹配节点的元素类型实例化（P1-9） | `cbdf86498` | 57/57；与 arm 一起量时 **4 → 0** 条不变量 |
+
+**"签名算两遍"的三处位置**（都在 `transpose.cpp` 同一个调用点）：`answerType` 用 `calleeParams` 重算（1745-1749）、
+被调值写成 `Type::Float64()`（1759）、答案槽数按 `calleeParams` 给而不是按"有切空间的参数"给（1785-1793）。
+**三处都改成从 `transposeSignature` 的返回值读**。
+
+**实例化写死（审查 P1-9）的改法**：把"规则在什么类型上是泛型的"从一个答案变成一处实现——
+`modules/transforms/rule_types.h` 的 `ruleElementTypeOf`/`firstOperandTypeOf`，**从 `vmap.cpp` 原样搬出**，
+`vmap` 与 `jvp` 都读它；`buildRuleTangent` 因此收一个 `elementType` 参数，不再把 `float` 写进去。
+**注意 `module.cpp:74` 那处（`printRuleUris`）没有"被匹配节点"可问**——它是列出规则名与算子的诊断，按 `float` 实例化只是取 `lhsOperatorUri`，
+这一处留原样，理由写在这里免得下一个人以为是漏改。
+
+**合起来量（arm 在场）**：
+
+| 量 | 改前 | 改后 |
+| --- | --- | --- |
+| `breaks its edge invariants` | **4** 条（全是 `passes a int as ordinary argument 0 of index_into`） | **0** |
+| `skip=law rule=idx_arr_t` | 存在 | **不存在** |
+| 运行期 | 到不了 | **`Camel Invariant Violation: Array::getSlot`，`element 0 of an array that holds 0`**，`expected exit 1, got null` |
+
+**⇒ 最值钱的一条：移交单里"静默中止、`got null`"是真的**，**它一直被"拒绝"挡在后面**；今天图能建、叫得对，
+剩下的是**一个 0 元素的数组进到了 `:tangent/zeros_arr`/`scatter_add_arr`**（`struct.cpp:1063-1085` 用 `value->shapeSpan()` 建零数组）。
+
+**身份裁定记下**：**被转置成员只靠图 id 认身份，名字只给人读**；`state.callees`（`transpose.cpp:1702-1716`）**已经是按 id 的记忆**，
+所以"同一次转置里重复建成员图"今天不存在，不必再加一层。**`T[?]`/命名那一支不走名字。**
+
+
+## 50. `zeros_like(xs)` 这条建议我先核了前提：`zeros_arr` 今天**已经**是从 `xs` 取值建零数组的，空的不是它
+
+作者的建议是"数组的余切零由残差里的 `xs` 给出（`zeros_like(xs)`），用 Camel 的造零函数"。**我核了这条的前提，结论是：这条改动打在空处的上游。**
+
+**① arm 里加了一行读数（探针，未提交）**：
+```
+TRANSPOSE arm=idx_arr_t function=rulesets.jvp::index_into<float> xs=0 xsType=float[] at=1 ctType=float[]
+```
+**`xs` 就是那个参数端口（`0`），它的类型是 `float[]`（开放秩），`at` 是常量 `1`，余切类型 `float[]`。**⇒ **arm 拿到的 `xs` 是对的，没有"另发明零数组"。**
+
+**② `zeros_arr` 今天就是从 `xs` 的值建零数组**（`src/builtin/operators/struct.cpp:1063-1086`）：
+```cpp
+auto *value = norm.get<Array *>(0);
+Array *zero = Array::create(mm::autoSpace(), tangentArray, value->shapeSpan());
+for (uint64_t i = 0; i < value->numel(); ++i) { … }
+```
+**形状取的是 `xs` 的值自己的 `shapeSpan()`——正是"`zeros_like(xs)`"。** 也就是说**这条建议的实现已经在**，不是缺实现。
+
+**③ 而 `scatter_add_arr` 也不会给出这条错**（同文件 `1103-1121`）：下界是 `base->dim(at)`，
+越界走的是 `RuntimeDiag::IndexOutOfRange`（一条**带诊断的运行期错误**），**不是不变量违例**。
+
+**④ 所以"`element 0 of an array that holds 0`"这条读的不是 `zeros_arr` 的循环、也不是 `scatter` 的越界检查，而是别处的 `getSlot(0)`**；
+**空数组是从上游进来的**（`xs=0` 这个端口的**运行期值**是空的，或答案元组那一侧读到了空数组）。
+**⇒ 我没有把 `zeros_arr` 改成"取残差的 `xs`"——它已经是了；改了只会是同一件事的第二种写法。**（"查不到 ≠ 不存在"，前提先核，这条照旧。）
+
+**⑤ 下一个探针应该看的地方**（写下来省下一次摸索）：**不是 `struct.cpp`，是"传进被转置成员的那个实参数组在运行期有几个元素"**——
+`xs=0` 是**图的端口**，运行期值由调用点给；`transpose_of_index_into` 的实参是 `[forward(xs), forward(i), ct]`，
+**先量 `forward(xs)` 落在这个端口上的数组的 `numel()`**，再决定改哪一层。
+
+
+## 51. 仪器打到了：`numel=0 rank=0 size=0 storage=0 elemSize=0` —— 读的不是"空数组"，是**一个没被建起来的 Array**，凶手在**答案装配**
+
+**两个临时探针（各一次构建，已删）**：
+
+**探针一（`zeros_arr` 入口）**：
+```
+PROBE zeros_arr numel=2 rank=1 type=float[] tangent=float[]
+```
+⇒ **`xs` 到 `zeros_arr` 时有 2 个元素，形状是对的**（与 §50 的结论一致：上游没问题，`zeros_arr` 也没问题）。
+
+**探针二（`Array::getSlot` 的守卫前面）**：
+```
+PROBE getSlot flat=0 numel=0 rank=0 size=0 storage=0 elemSize=0
+```
+⇒ **`rank=0`、`elemSize=0`、`storage=0`（compact）**：**这不是"一个 0 元素的 `float[]`"，而是一个"默认构造/零初始化过的 `Array` 头"**——
+**有人把 `null` 或一块没写过的对象当成数组读它的第 0 个元素。**（一个真的 0 元素 `float[]` 会是 `rank=1, elemSize=8`。）
+
+**⇒ 凶手位置（今晚第五个"不在被怀疑那一处"）**：`modules/transforms/transpose.cpp:1833-1846`，**被转置成员的答案装配**：
+
+```cpp
+for (size_t i = firstPort; i < ports.size(); ++i) {
+    if (partial && !participatesOf(i)) { continue; }
+    parts.push_back(hasCotangent[ports[i]] ? cotangent[ports[i]] : zero());   // ① 每个端口一个槽
+}
+…
+for (size_t i = 0; i < parts.size(); ++i) { partTypes.push_back(Type::Float64()); slots.push_back(i); }  // ② 槽类型一律 float
+```
+
+**两处毛病，都是"签名算了第二遍"的第 4、5 个实例**：
+1. **每个端口都进一个槽** —— 而签名（`transposeSignature`，早已正确）只给"有切空间的参数"一个槽：`index_into<float>` 的 `i: int` **不该有槽**；
+2. **槽类型写死 `Type::Float64()`** —— `xs` 的槽装的是一个 `float[]`，元组却说它是 `float`。
+
+**⇒ 序号对上了**：`(float[], float)` 这种元组类型 vs. 实际槽里的数组 ⇒ 调用侧按下标读它、按 `float` 解释它 ⇒ 读到 `null` 当成数组 ⇒ `getSlot` 报 `holds 0`。
+
+**下一笔的改法（两处，一起改才绿）**：① `parts` 只收"`tangentSpaceOf(端口的值的类型).hasSpace()`"的端口；② `partTypes` 取该端口值的切空间，**不写字面量**。
+**判据**：`grad_of_an_array_parameter` 从 `expected exit 1, got null` 变 `expected exit 0`，且 `feat/compile/transforms` 不开新红。
+**这条修好之后才谈撤 `known_fail` 标。**
+
+
+## 52. 答案装配改对之后：图建成了、签名对了、跑起来了——新的墙是 `:tangent/add_arr` 的"长度不同"
+
+**这一笔把 §51 指出的两处改了**（`parts` 只收有切空间的端口 + 槽类型取该端口的切空间 + 数组端口的零走 `:tangent/zeros_arr`），
+与 `idx_arr_t` 的 arm 一起量（**未提交，回退了**，理由见末尾）：
+
+**① 被转置成员这一行是"签名终于对上了"的铁证**：
+```
+TRANSPOSE function=rulesets.jvp::index_into<float> graph=92 type=(float[], int, float) => (float[],) nodes=3 rules=idx_arr_t
+```
+**`(float[], int, float) => (float[],)`——参数照原样、`int` 不占答案槽、答案是一个 `float[]` 的元组。** 与 `transposeSignature` 逐字一致。
+
+**② `null` 那条消失了**：`element 0 of an array that holds 0` **不再出现**，`expected exit 1, got null` 变成**有名字的运行期诊断**：
+```
+[Error] autodiff: tangent arrays added that have different lengths.
+```
+**⇒ 从"读一个默认构造的 Array"推进到"两个余切数组长度不一致"**，这是**性质完全不同**的一步：前者是类型撒谎，后者是算术对不上。
+
+**③ 六个用例仍红，所以这一笔没有提交**——按"一条失败的层比一张精确的图更糟"，`transpose.cpp` 已 `git checkout` 回 `b4223ee67`。
+
+**④ 下一个探针（省一次摸索）**：`:tangent/add_arr` 的两侧长度各是多少、分别是谁造的。
+数组 `xs` 的两条余切一条来自 `scatter_add_arr(zeros_arr(xs), i, ct)`（长度 = `xs` 的元素数），
+**另一条如果不是数组长度而是标量/种子，就是 `addCotangent` 在数组目标上收到了标量余切**——
+`add_t` 那一支把 `ct` 原样下发时没有检查目标是不是数组（`transpose.cpp` 的 `add_t` 分支），这是下一个要看的地方。
+
+**⑤ 归类一条（承接你说的共同点）**：**一个能解释现象的候选不等于原因；只有"改掉它现象消失、改回它现象回来"才是原因。**
+今晚五次"原因不在被怀疑的地方"，被怀疑的那一处**确实都有毛病**（`zeros_arr` 的零、`scatter` 的边界、`transposeSignature` 的签名、答案装配的槽），
+**只是每次都不是"这一处"**——所以每条都要走到"改掉/改回"那一步才算数。
+
+
+## 53. 收尾：`idx_arr_t` 的 arm 落地，五种形状给出微积分该给的数，全量 **8388 / 8376 / 0**
+
+**这一笔（`ccb99a07d` + `8ca2fa701`）是"数组参数求梯度"这条链的收尾。**
+
+**① 五种形状的读数**（`expect_stdout_contains` 已从"钉住拒绝"换成数值断言）：
+
+| 形状 | 读数 |
+| --- | --- |
+| `xs[0]`（单元素） | `[1.0]` |
+| `xs[0]`（两元素） | `[1.0, 0.0]` |
+| `xs[0] + xs[1]` | `[1.0, 1.0]` |
+| `xs[0] * xs[1]` | `[2.0, 3.0]` |
+| 移交件 `xs[1] * xs[0]` | `6.0` 然后 `[2.0, 3.0]` |
+
+**② 一路推过来的六道墙，每一道都是"类型写成了字面量"的同一族**：
+1. law 分派没有 `idx_arr_t` 的 arm（`transpose.cpp` 的兜底 `else` 点名拒绝）；
+2. 调用点的**答案类型**按参数个数重算（`(float, float)` vs `(float[])`）——改取 `calleeType->exitType()`；
+3. 调用点的**答案槽数**按参数个数给，而不是按"有切空间的参数"——改成按签名的槽；
+4. **答案装配**每个端口一个槽、槽类型一律 `float`——改成只收有切空间的端口、槽类型取切空间；
+5. **单答案下发**把一个 `(float[])` 元组整体交出去（`numel` 其实是地址）——改成读它的槽 0；
+6. 规则的**实例化**写死 `{Type::Float64()}`（审查 P1-9）——改成取被匹配操作数的元素类型。
+
+**③ `known_fail` 撤标**：`grad_of_an_array_parameter.nvm` 的标**在让它通过的那一笔里撤掉**（`ccb99a07d`），
+**理由写进提交信息与页**："arm 落地、用例通过"，不是"断言被放松"。**撤标之后 runner 的"marked known_fail but passes"不再出现。**
+
+**④ 三笔读数**：
+- `feat/compile/transforms`：**57 / 57**；
+- `doc_readings`：**10 / 10**（`transpose.cpp` 1880 → **1963**、`jvp.cpp` 1396 → **1401**，原因写进页与提交）；
+- **全量 fast：`total: 8388, pass: 8376, fail: 0, skip: 10, known failures: 2`，`RUN_EXIT=0`**。
+
+**⑤ 教训收在这里**（今晚最贵的一条）：**一个能解释现象的候选不等于原因；只有"改掉它现象消失、改回它现象回来"才是原因。**
+六道墙里有五处"看着就是它"的地方**确实都有毛病**（`zeros_arr`、`scatter`、`transposeSignature`、答案装配、`add_arr` 的入参），
+**但真正卡住的那一处每次都不是被怀疑的那一处**——**所以每一道都要用探针把读数打出来，再动改。**

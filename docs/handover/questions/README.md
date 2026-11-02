@@ -12,14 +12,9 @@
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：1 页
+## 现在在等作者：0 页
 
-| 页 | 问什么 | 状态 | 裁定 | 还堵着 |
-| [`2026-11-02-p1-13-eleven-ne-rules-name-nothing`](2026-11-02-p1-13-eleven-ne-rules-name-nothing.md) | `:op/ne_*` 那 11 个名字、22 行规则命名不到任何东西：删不删 | 待裁 | — | 一次删除的候选，删不删由作者定；`lane-gs6` 的通配清理把这块照了出来 |
-
-**这一节的行数 = 目录里的页数**（现在 1 = 1）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。
-
-2026-11-02 01:30：`cml-var-version-in-printed-text`（01:10）与 `whether-the-release-gate-names-plans-or-runs-the-tree`（01:30）都已裁，在 `reviews/`，裁定见 `reviews/questions-2026-10-29.md`。
+2026-11-02 02:30 的 `cml-sync-tail-write` 与 `whether-the-when-clause-belongs-on-the-declaration` 已裁，在 `reviews/`。
 
 ## 已裁：按还堵着的活排
 

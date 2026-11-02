@@ -33,7 +33,7 @@ void GenerationalAllocatorWithGC::configureDebug(DebugConfig config) {
         // Nothing is promoted by age: an object in the elder space no longer moves, and a
         // stale pointer to it would go unnoticed. (A survivor space that is full still
         // promotes.)
-        promotionAgeThreshold_ = 16;
+        promotionAgeThreshold_ = 15;
     }
     debugConfig_                = config;
     recordLayouts_              = recordLayouts_ || config.verifyBeforeGC || config.verifyAfterGC;
