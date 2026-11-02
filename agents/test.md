@@ -9,7 +9,7 @@
 - **Before writing a file, print the target's absolute path.** `[System.IO.File]::WriteAllText` and shell redirection (`>` , `Out-File`) resolve a *relative* path against the process's working directory, not against the directory a previous `cd` put the shell in -- and that working directory is not always the worktree the reader assumes. On 2026-11-02 six writes landed in the main checkout `D:\Projects\Camel` that way, two of them as **0-byte** files: a 0-byte file is the worst shape, because it looks like "I created it" while nothing was written. So: derive the path from an absolute root (or `$PSScriptRoot`), print it with `Resolve-Path -LiteralPath` / `[IO.Path]::GetFullPath()`, and end a round with `git -C D:\Projects\Camel status --porcelain`, which must print nothing.
 - **A commit that no remote branch contains does not exist for anyone else.** The last command of a round is `git branch -r --contains HEAD`: an empty list means the round's work is invisible to every other lane, however green its readings were. On 2026-11-02 four commits sat on a local branch while another lane reported, in good faith, that the rule it needed was not in the tree -- "I committed it" is not "it can be merged". Push the branch (or hand the merge lane a branch that is pushed) before saying a round is done.
 - **Only a tip that `origin/<branch>` resolves to is a reading that can be merged.** `git cat-file -t <sha>` answering `commit` proves the object is in *this* repository and nothing more; `git branch -r --contains <sha>` printing nothing proves no remote branch carries it. Both together mean the reading cannot be checked by anyone else, which is the same class of problem as a change written into somebody else's checkout: the numbers may be right and nobody can reproduce them. On 2026-11-02 the fix for the Debug link error `typeinfo for camel::rewritemod::ProofObject` was reported at `41f2303d7` -- a commit that existed locally and that no remote branch contained. A merge lane's answer to "is this ready" is therefore `git ls-remote --heads origin | grep <branch>` and a `rev-parse` of that ref, never "the lane says its branch is at <sha>".
-- **A merge runs three instruments first, and any one of them red stops the merge.** `git grep -n '^<<<<<<< '` for conflict markers -- including the four `|||||||` lines a diff3 conflict leaves, which that grep does not match; `node scripts/diagnostics-catalog.mjs --check` for a code registry that still names what the tree emits; and `node scripts/check-doc-links.mjs --questions-index`, because `docs/handover/questions/` is a table whose row count is maintained by hand and whose pages move to `reviews/` when the author rules on them. The index rule is one line: **the page count in the header and the rows are enforced by `--questions-index`; when it is red the pages and the index disagree, and the fix is the table, never the check.** On 2026-11-02 that check went red three separate times during merges -- once as `3 pending-index problem(s)`, once as a row for a page that had moved to `reviews/`, once as a header one behind the directory -- and in each case the rows were rebuilt from the directory and the check was left alone. The check is not to be given a `--write`: the author's 05:30 ruling stops new ledger tooling, and a check that rewrites what it checks stops being a check.
+- **A merge runs three instruments first, and any one of them red stops the merge.** `git grep -n '^<<<<<<< '` for conflict markers -- including the four `|||||||` lines a diff3 conflict leaves, which that grep does not match; `node scripts/diagnostics-catalog.mjs --check` for a code registry that still names what the tree emits; and `node scripts/check-doc-links.mjs --questions-index`, because `docs/handover/questions/` is a table whose row count is maintained by hand and whose pages move to `reviews/` when the author rules on them. The index rule is one line: **the page is generated, not written.** ode scripts/check-doc-links.mjs --questions-index --write builds it from the directory -- one row per page, the page title as the sentence, the header counting the directory -- and --questions-index without --write compares the file with exactly that text, so a hand edit is a red that names the line and prints both versions. The fix is always to regenerate. The author made this the rule at 11:10, after a night in which the same table broke three times in three merges (3 pending-index problems, a row for a page that had moved to reviews/, a header one behind the directory) and after he retired every hand-kept state table at 08:10: an index kept by hand beside a directory is two sources for one fact.
 
 ## Verification Style
 - Always define explicit acceptance criteria for an implementation plan and validate against them.
@@ -219,3 +219,25 @@ Ask whether a thing is there and the answer is a boolean; ask how many lines car
 A probe log that records only `[FAIL] <name> <ms>` can count failures and cannot group them: the first diagnostic line is what turns forty reds into one root cause or ten. Print that line, and print it even when jobs run in parallel.
 
 - 主检出 `D:\Projects\Camel` 只用来 `pull --ff-only`；所有编辑都用工作树内的相对路径，或 `D:\Projects\Camel-wt\<lane>\...` 的绝对路径。写完用 `git -C <树> status --porcelain` 自检，不要用 `git status`（它按进程 CWD 解析，会看到另一棵树）。
+## Check the input before you believe the reading
+
+A measurement is a reading of two things: the program and the input. When they disagree with
+expectation, the input is as likely to be wrong as the code, and an input that is silently the wrong
+file looks exactly like a defect in the compiler. Before taking a reading on a file that was copied,
+extracted from another branch or written by a script, check three things: **the size**, **the first
+bytes** (`head -c 32 | od -c`), and **the top-level statement count** (`camel-parsecheck dump <file>`
+prints `Stmts*` with its count).
+
+Two readings of 2026-11-02 were wrong for this reason and neither was a code defect:
+
+- `--write` "needs two passes": it was run once before the plan entry that names the new diagnostic
+  existed, so nothing could be pinned. The writer is idempotent (two runs in a row write nothing).
+- "The reported case still ends with `EntryModuleMissingMain`": the file measured was 458 bytes of a
+  709 byte test case left behind by a copy, and a truncated file **parses as `ACCEPT` with an empty
+  module** (`Module @0..0`, `Stmts* @1..2`), so the module had no declarations and the entry had no
+  `main`. Written byte for byte from its branch (472 bytes) the same input gives the diagnostic the
+  fix had already added.
+
+**An `ACCEPT` from `parsecheck` proves the text it was given parses, not that the text is the file
+you meant to give it.** A parser that accepts a truncated file is not evidence of completeness; the
+size and the statement count are what cross-check it.

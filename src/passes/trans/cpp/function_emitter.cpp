@@ -1178,7 +1178,8 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
             g,
             ref,
             std::format(
-                "{} uses the operator '{}' on values{} std::cpp does not translate it for yet",
+                "{} uses the operator '{}' on values{}, and std::cpp does not translate "
+                "this operator",
                 describeFunction(g),
                 uri,
                 types.empty() ? std::string() : " of type " + types));

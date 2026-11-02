@@ -22,12 +22,6 @@ using camel::runtime::GraphId;
 
 namespace {
 
-/// Whether a rule's expansion records how many of the arguments of the call it produces are tangents
-/// (`addFuncNode`'s last argument, `GCNode::tangentArgs`). On, the fact lives on the node and
-/// `transpose` reads it there. Off, the call records nothing, and the transpose of a kernel inside an
-/// arm stops again at the tangent that has no value -- the A/B of the two readings.
-constexpr bool kRecordTangentArgs = true;
-
 /// The graph a rule's right side answers with, read from the right side itself.
 ///
 /// The right side of `x * w => (dx, dw) => mul_tangent(x, w, dx, dw)` is a graph that builds the
@@ -362,7 +356,7 @@ gc_node_ref_t expandRuleRightSide(
             // the node rather than re-deriving the split from a name, and there is no second table to
             // keep in step when a rule is added.
             uint16_t tangentArgs = 0;
-            if (kRecordTangentArgs && !inputs.empty() && !tangents.empty()) {
+            if (!inputs.empty() && !tangents.empty()) {
                 for (size_t i = inputs.size(); i-- > 0;) {
                     if (std::find(tangents.begin(), tangents.end(), inputs[i]) == tangents.end()) {
                         break;
