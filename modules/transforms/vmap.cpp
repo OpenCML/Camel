@@ -10,6 +10,7 @@
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
@@ -19,6 +20,7 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph_txn.h"
 
+#include <algorithm>
 #include <cstring>
 #include <format>
 #include <span>
@@ -233,7 +235,7 @@ std::string askedFoundMissing(const VmapGraph &graph) {
 
 VmapGraph buildVmapGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    camel::runtime::GCGraph *function, std::ostream &os) {
+    camel::runtime::GCGraph *function, const ::Tuple *captured, std::ostream &os) {
     if (program == nullptr || function == nullptr) {
         return VmapGraph{};
     }
@@ -243,6 +245,21 @@ VmapGraph buildVmapGraph(
         return VmapGraph{};
     }
     const Type *liftedParameter = signature->normTypeAt(0);
+    // The values the function under the transform captured where it was written. They are part of
+    // the function *value* -- its closure tuple -- and they are a *constant* of the batched graph:
+    // the transform copies the value in, lifted the way a constant written in the body is lifted,
+    // so the batched body reads the capture and not the batch element. Before this, every port of
+    // the source graph was answered with the batch parameter, the capture port among them, so
+    // `x + c` computed `2x` and answered `[2.0, 4.0, 6.0]` where `[4.0, 5.0, 6.0]` is the answer
+    // (author's review of 2026-11-02, high-2).
+    const auto captures         = function->closureNodes();
+    const auto sourceParameters = function->normPorts();
+    // Where a capture port's value is in the closure tuple: the tuple is in capture order, so the
+    // port that is the i-th entry of `closureNodes` is the i-th slot.
+    std::vector<size_t> captureSlot(function->nodeCount(), static_cast<size_t>(-1));
+    for (size_t at = 0; at < captures.size(); ++at) {
+        captureSlot[captures[at]] = at;
+    }
 
     VmapGraph refused;
     size_t copiedKinds = 0;
@@ -261,6 +278,9 @@ VmapGraph buildVmapGraph(
         const gc_node_ref_t port = draft.addPortNode(
             const_cast<Type *>(liftedParameter), draft.allocateRuntimeSlot(const_cast<Type *>(liftedParameter)));
         draft.appendNormPort(port);
+
+        // The batched graph captures nothing: every capture is a constant of it (see the walk
+        // below), so the value made of it carries an empty closure.
 
         // A constant lifted: the batch of one row. `[3.0]` is what a constant becomes, and every
         // rule broadcasts it over the batch it meets (`at` in `rulesets/vmap.cml` reads one row as
@@ -440,9 +460,48 @@ VmapGraph buildVmapGraph(
             ++seenKinds;
             switch (node->kind) {
             case rt::GCNodeKind::Port: {
-                // The one parameter of the body is the batch the caller passes; a second port that
-                // is not a parameter has no reading in this tier.
+                // A port of the body is one of two things, and where the source graph lists it
+                // decides which. The ordinary parameter is the batch the caller passes. A capture
+                // is a value the function value carries, so it enters the batched graph as a
+                // *constant* -- the value read out of the closure tuple, lifted the way a constant
+                // written in the body is lifted -- and the body reads it, in the source graph's own
+                // capture order. Anything else is a port this tier has no reading for, and it is
+                // refused instead of being answered with the batch: a silent `2x` is worse than a
+                // refusal (design principles 9.9).
                 if (copyOf[ref] != rt::kInvalidNodeRef) {
+                    break;
+                }
+                if (captureSlot[ref] != static_cast<size_t>(-1)) {
+                    const size_t at = captureSlot[ref];
+                    if (captured == nullptr || at >= captured->size()) {
+                        refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                        refused.refusedUri    = "a capture";
+                        refused.refusedWhy    = "the function value does not carry the value it captures";
+                        complete              = false;
+                        break;
+                    }
+                    copyOf[ref] =
+                        liftConstant(node->dataType(), rowsOfType(node->dataType()),
+                                     captured->get<slot_t>(at), why);
+                    if (copyOf[ref] == rt::kInvalidNodeRef) {
+                        refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                        refused.refusedUri    = "a capture";
+                        refused.refusedWhy    = why;
+                        complete              = false;
+                        break;
+                    }
+                    ++copiedKinds;
+                    break;
+                }
+                if (std::find(sourceParameters.begin(), sourceParameters.end(), ref) ==
+                    sourceParameters.end()) {
+                    refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                    refused.refusedConstruct = "a port";
+                    refused.refusedUri       = "a port";
+                    refused.refusedWhy =
+                        "a port that is neither the parameter nor a capture of the function has no "
+                        "reading in the elementwise tier";
+                    complete = false;
                     break;
                 }
                 copyOf[ref] = port;
