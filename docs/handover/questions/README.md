@@ -20,6 +20,7 @@
 | [`2026-11-02-is-p0-2-now-a-pass-by-pass-judgement-change`](2026-11-02-is-p0-2-now-a-pass-by-pass-judgement-change.cn.md) | P0-2 是否改成两件一起做：① 修正 sync 边终点不变量；② 让依赖控制边的 pass 改读 sync 边（默认建议：甲） | 待裁 | — | P0-2 全批：两条 `known_fail` 标记等它落地才摘 |
 
 | [`2026-11-02-what-counts-as-a-statement-of-a-chain`](2026-11-02-what-counts-as-a-statement-of-a-chain.cn.md) | 链上语句是否含 `Func`/`Join`（默认：都不含，`Call` 含；实测 17753 处与标记不一致） | 待裁 | — | 不变量能否改成"按节点性质判" |
+| [`2026-11-02-when-should-an-underivable-sync-edge-be-dropped`](2026-11-02-when-should-an-underivable-sync-edge-be-dropped.cn.md) | 同步边"推不出来就别建"该在建图时判还是图定型后判；冻结图没有重发 payload 的通路 | 未裁 |
 
 **这一节的行数 = 目录里的页数**（现在 3 = 3）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。
 
