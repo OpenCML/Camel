@@ -341,6 +341,42 @@ REINTERP jvp function=atod graph=242 ... tangent=computed source=ruleset rules=j
 **这两条要作者裁（记成缺陷，不自己决定）**：
 1. **数组算子的律该按什么类型归档**——`ruleElementTypeOf` 的"剥到元素"是 P1-9 的决定，改它要重开那一页；不改，则数组转换永远没有律。
 2. **标量律被数组算子选中并崩**（`rules=jvp_dtod` + `killed by a signal`）：这是"选错律"的数组版本，和 §5.5 修掉的 `:op/ftod` 是同一类，只是入口不同——该在 `ruleElementTypeOf` 里挡，还是在"实例的端口类型与算子端口类型不符"时挡？
+### 5.7 数组 lift 的崩改成具名拒绝（作者把"不许崩"排在写律之前）
+
+§5.6 里那张读数表还有一行没被读懂：
+
+```
+REINTERP jvp function=atod ... tangent=computed source=ruleset rules=jvp_dtod
+[SUMMARY] total: 1, pass: 0, fail: 1, killed by a signal: 1
+```
+
+前一行说"算完了"，后一行说"进程被打死"。按"对 > 明确拒绝 > 错数 > 崩"的排序，**这是最坏的一格，而它一直挂在 `grad_array_*` 名下当一个红**。
+
+**崩因**：规则是**按操作数的元素类型**问的（`rule_types.h#ruleElementTypeOf` 刻意剥掉数组，注释写明那是让 `index_into<T>` 能在 `float[]` 上按 `float` 归档的同一件事，review P1-9）。于是 `:op/at od`（`float[]` → `float[]`）问到的实例是 `jvp_dtod`——一条端口类型为 `float` 的标量律。`expandRuleRightSide` 把 `float[]` 的操作数接到 `float` 的端口上，建出来的图不是任何编码器/VM 能跑的，运行时就那么死了。
+
+**改法（一处，`modules/transforms/jvp.cpp`）**：候选律在展开之前，先比**形状**——
+
+```cpp
+if (!portsTakeOperands(instance, operandTypes, why)) { shapeWhy = why; continue; }
+```
+
+`portsTakeOperands` 拿实例左侧的 `normTypeAt(i)` 和算子各操作数的**自身类型**逐个 `equals`；对不上就换下一条候选，全不成时用**形状那条**原因（比"条件不成立"更具体）。`operandTypes` 由调用点在 `originals` 上读出，穿进 `buildRuleTangent`。
+
+**改前 / 改后（同一份探针，`jvp(atod)(xs, [1.0, 1.0])`）**：
+
+```
+改前: REINTERP jvp function=atod ... rules=jvp_dtod
+      [SUMMARY] total: 1, pass: 0, fail: 1, killed by a signal: 1
+
+改后: REINTERP jvp function=atod skip=rule uri=:op/atod
+          reason=the rule takes (float), and the operator has (float[])
+      [Error]: transforms: jvp has no forward rule for `:op/atod`
+               (the rule takes (float), and the operator has (float[])).
+```
+
+**这一笔只挡实测到的这一处**（⚠️(i)）：`buildRuleTangent` 的候选循环；数组路径上**其他**崩点没有被走过，也就不在这里假装挡住。
+
+**读数**：`rulesets` **67/67**；`transforms` 见下（新增红 0 才算过）；全量见下（**`killed` 必须是 0**，这是本笔的关键读数）。
 ## 6. 一句话结论
 
 **这条缝是方案性的，不是少数特例**：按"结果有切空间却拼不出键"计，**32 条**（把复数算进去 50 条），而例外表只能一条一条地救——今天救了两条、补了一条（`^`）。缺口的形状有两个：
