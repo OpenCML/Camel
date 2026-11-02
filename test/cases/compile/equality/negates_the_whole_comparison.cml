@@ -1,0 +1,27 @@
+/**
+ * `!=` on a composite is the negation of the whole `==`.
+ *
+ * The front end builds `!=` as `!(==)` for every operand type (design principles 4.2): what the
+ * graph holds is the whole comparison's own operator -- `:op/eq`, the entry that compares an array,
+ * a tuple or a struct by content -- and `:op/not` on the bool it answers. There is no separate
+ * not-equal node for a composite: what the group `__neq__` holds is the entry that lets a type
+ * whose `==` is declared have a `!=` at all, not a node the graph draws.
+ *
+ * This case is the graph's side of that rule: the values are pinned by
+ * `consistency/values/content_equality.cml` on the four back ends, and here the same shapes must
+ * show the equality and the negation and nothing named `:op/ne`.
+ */
+
+type Point = { x: int, y: int }
+
+func main(): int sync {
+    let a: f32[3] = [1.0, 2.0, 3.0]
+    let b: f32[3] = [1.0, 2.0, 3.5]
+    let p: Point = { x: 1, y: 2 }
+    let q: Point = { x: 1, y: 3 }
+    println(a != b, a == b)
+    println(p != q, p == q)
+    println((1, 2) != (1, 3), (1, 2) == (1, 3))
+    println("ab" != "ab", "ab" != "ac")
+    return 0
+}

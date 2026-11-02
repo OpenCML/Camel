@@ -1,0 +1,24 @@
+/**
+ * A map and a set are compared by content, and their `!=` is the negation of that comparison.
+ *
+ * `==` on two maps or two sets is `:coll/eq`, the collection's own comparison; `!=` is
+ * `!(==)`, so the graph holds that same node and `:op/not` on the bool it answers. Nothing in
+ * the graph is named `:coll/neq`: a collection reaches its `!=` through the equality it already
+ * owns, not through a second node that repeats the comparison and negates it.
+ *
+ * The two maps here hold the same entries and the two sets the same members, so the comparison
+ * is content and not shape; the last pair of each differs in one value and one member.
+ */
+
+func main(): int sync {
+    let m = [(1, 1), (2, 2)] as Map<int, int>
+    let n = [(1, 1), (2, 3)] as Map<int, int>
+    let s = [1, 2] as Set<int>
+    let t = [2, 1] as Set<int>
+    let u = [3, 1] as Set<int>
+    println(m == m, m != m)
+    println(m == n, m != n)
+    println(s == t, s != t)
+    println(s == u, s != u)
+    return 0
+}

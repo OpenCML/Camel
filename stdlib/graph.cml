@@ -26,8 +26,8 @@
 //
 // `operator ==` is declared as the reserved group `__eq__`. `operator !=` cannot be declared
 // (design principles 4.3: an overload of `==` gives it, and `operator !=` is
-// OperatorNotOverloadable), and the compiler negates a Camel overload of `==`, not a native one,
-// so `modules/graph` keeps the `__neq__` group the compiler asks for.
+// OperatorNotOverloadable), and a declared `==` is negated by the compiler -- the graph holds
+// this declaration and the negation -- so no entry in `__neq__` is needed for the handle types.
 
 import { is_function, is_ordered } from types
 

@@ -1302,6 +1302,10 @@ LoweringRegistry::LoweringRegistry() {
     add("tensor:ge", compareOp("GreaterOrEqual", false));
     add("tensor:strict_eq", compareOp("Equal", false));
     add("tensor:strict_neq", compareOp("Equal", true));
+    // The negation `!=` and `!==` are built from: `!(==)` and `!(===)` (builder_operators.cpp,
+    // gct/builder.cpp). It takes a `bool[]` and answers one, elementwise, which is ONNX `Not` on
+    // the boolean tensor the comparison produced.
+    add("tensor:not", sameTypeOp("Not", 1));
 
     // Elementwise unary.
     add("tensor:neg", sameTypeOp("Neg", 1));
@@ -1373,8 +1377,9 @@ LoweringRegistry::LoweringRegistry() {
         add(":op/gt_" + t, scalarCompare("Greater", false));
         add(":op/ge_" + t, scalarCompare("GreaterOrEqual", false));
         add(":op/eq_" + t, scalarCompare("Equal", false));
-        // `:op/ne_*` is gone with the `ne_*` kernels: `!=` is `!(==)` (builder_operators.cpp),
-        // so the not-equal of a scalar is exported as Equal followed by Not, not as a row here.
+        // `!=` is `!(==)`: a scalar comparison's negation exports as `Equal` followed by `Not`,
+        // so the table has one row for the equality and one for the negation, and none for a
+        // not-equal node.
     }
     add(":op/and", scalarOp("And", 2));
     add(":op/or", scalarOp("Or", 2));
