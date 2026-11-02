@@ -62,3 +62,18 @@ func report(second: bool): int sync {
 **实测二：让 seal 把 `JOIN` 也当链语句（`nodeIsChainStatement` 加一个 `case`）。** 全量 8519 / pass 4701 / fail 3798，**比不放开更差 39 条**；所以"是不是语句"这一问 seal 拒得对，缺的不是放宽，而是建图侧在块撞上 join 时该把链位交给谁。
 
 **还缺的那一句**：一个块的分支之后如果还有语句，链位应延续到那些语句；如果 join 之后没有语句，链位应停在 join 之前最后一条语句 —— join 自己是控制流的汇合，不是"做过一件事"。按这个说法，`lastSyncedNode_ = joinNode` 就是这次实测暴露的那一行；但它是上面那段注释刻意写的，改它之前要先回答"分支的块值由谁当"，所以仍归作者。
+## 2026-11-02 夜：默认 (b) 试过了，代价是分支不再执行
+
+按"join 不是语句、链位停在 join 之前"（默认 b）改了一行 —— 保留 `linkNodes(LinkType::Sync, lastSyncedNode_, joinNode)`（布局要读它），但**不再** `lastSyncedNode_ = joinNode`、也不再给 join 打语句标记：
+
+```cpp
+if (lastSyncedNode_ != nullptr && linkCheek(lastSyncedNode_, joinNode)) {
+    markSyncStatement(lastSyncedNode_);
+    linkNodes(LinkType::Sync, lastSyncedNode_, joinNode);   // 边照写
+}
+chainedNodes_.insert(brchNode);                              // 链位不动
+```
+
+读数（在"值退出链位"那笔之上）：全量 **8521 / pass 5518 / fail 2983**，比只有前一半时的 8521/5377/3124 **再少 141 条红**，`sync chain forks` 仍为 **0**。`tutorial.examples.10_sync_block.{nvm,fvm,jit,prl}` **不再被 seal 拒**，程序跑起来了 —— 但输出只剩 `the body is a sync block` 和 `0`，而 golden 要的是分支里的 `three/four/five/six`，编译器的警告正是 `The branch has side effects but is never executed`。
+
+⇒ **这是"链位不动"的直接代价：分支里的语句再没有谁等它们，副作用被丢掉。** 比 seal 拒绝更坏（拒绝是明显的，丢弃是安静的），所以这一行已回退（`git checkout --`）。默认 (b) 不成立，问题回到作者那句："分支的块值由谁当" —— 分支必须继续有东西等它，而那个东西现在只能是 join。
