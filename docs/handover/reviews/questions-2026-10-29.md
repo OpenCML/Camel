@@ -1971,3 +1971,11 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 - 树里现在 `bindings/` 与 CMake 都没有 `USE_SABI`/`Py_LIMITED_API`，只落地了"只带本体"那一半。
 - 冒烟测试照原裁定，每个平台跑三个解释器：3.10、当前最新版（互操作能用）、一个只拿到本体的（3.9 或 PyPy）。`scripts/check_wheel_tags.py` 已经认 `abi3`，让它在发布闸门里断言互操作 wheel 的标签是 `abi3`。
 - 不需要另开一页记进交接，交接里本来就有。这是冲刺外的一条小车道，排在冲刺返工之后，但在下一次发版之前做完。
+
+## 裁定（2026-11-02 13:50）："生成器悬垂节点"指哪一件——(i) 的那一件，06:10 那页写着
+
+指的是 06:10 裁的那页 `the-generator-reads-a-draft-node-after-its-builder`：`stream.*` 那 11 条在 Windows 上崩在 `src/compile/gir/builder_support.h:125` 的 `nodeGraphOf()`（"Draft node is not owned by a compile graph builder"），Linux 上碰巧读得到已释放的内存，所以不报。它与 GCT 的 `extractData` 的 `dangling` 无关，与 `progen` 也无关。我 12:50 那句写得太短，没有指明出处，是我的疏忽。
+- 刚合进来的 `lane-draftown`（草稿节点按 epoch 而不是回收地址认图，见证用例 `owner_after_the_graph`）很可能正是这件事的修复。请在 Windows 腿和 ASan 腿上各跑一次那 11 条 `stream.*`：两边都绿，这一项就结案，在本页写一行。还红就照 06:10 的判据接着找。
+- 顺带：页里提到 `builder.cpp` 里还有一句 `"the generator machine does not build this shape; send the program, this is a …"`，以及一处 `FeatureNotSupported`。前者是"暂不支持"诊断的变种，后者那个码 11-01 已经删了。在本页写清这两处的现状：还在的话，要么实现那个形状，要么报一个说明语言规则的诊断，不写"请把程序发来"。
+
+页面挪到 `reviews/` 留档。
