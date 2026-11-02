@@ -1,0 +1,15 @@
+/**
+ * `!==` on two arrays, exported: the comparison itself and one negation.
+ *
+ * `!==` is built as `!(===)` (design principles 4.2; gct/builder.cpp), so the graph the exporter
+ * sees is the elementwise equality and the tensor module's `not`. The model therefore holds ONNX
+ * `Equal` followed by `Not` -- the negation is a row of the lowering registry in its own right --
+ * and no `NotEqual` node, because the language has no not-equal operator left to export.
+ */
+
+import { reshape } from tensor
+
+func main(x: float[3]): bool[3] {
+    let y = reshape<[3]>([1.0, 2.0, 4.0])
+    return x !== y
+}
