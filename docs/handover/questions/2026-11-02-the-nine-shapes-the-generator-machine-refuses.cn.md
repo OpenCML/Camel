@@ -115,6 +115,8 @@ error[InternalDiag::UnknownInternalError]: An error has occurred: the generator 
 | `git` 通道（58×`status --porcelain` + 58×`rev-parse HEAD`） | 2.0 s | 3.2% |
 | 余下 | 约 57 s | 未归属 |
 
+**哪些数来自改动过的树**：`git` 通道那一行（116 次 / 2.0 s）是在主机侧临时加了计数行（`test/tools/run-tests.mjs`）的树上取的，测完已 `git checkout --` 复原、`git status --porcelain` 为空；**该数只用于「git 占 3.2%」这一句，不代表任何其它结论**。其余各数（`[SLOT]`、62.3 s、153 个包装进程、trivial 0.015-0.02 s、1278 条、内层 96.6%）都在干净树上取的。
+
 **未归属的 57 s**：**运行器自身的固定工作 + 每测试起进程**（153 个包装进程：`node` 104、`camel` 45、`python3` 4）。
 
 **这条线程到此为止：已归属 18%，其余 82% 未归属；继续追需要新的测量手段，收益低于它占的时间。** 别从头再来 —— 上面这张表就是起点。
