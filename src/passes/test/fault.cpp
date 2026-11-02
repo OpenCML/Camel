@@ -136,6 +136,40 @@ OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostr
             for (camel::runtime::gc_node_ref_t pred : draft.syncInputsOf(id)) {
                 draft.unlinkInput(DraftEdgeKind::Sync, id, pred);
             }
+            // Both directions: an effect another node reads, or a chain that holds it as its
+            // predecessor, still stands on that edge, so those edges go too.
+            for (camel::runtime::gc_node_ref_t user : draft.normUsersOf(id)) {
+                draft.unlinkInput(DraftEdgeKind::Data, user, id);
+            }
+            for (camel::runtime::gc_node_ref_t user : draft.withUsersOf(id)) {
+                draft.unlinkInput(DraftEdgeKind::Data, user, id, camel::runtime::PortRole::Context);
+            }
+            for (camel::runtime::gc_node_ref_t user : draft.ctrlUsersOf(id)) {
+                draft.unlinkInput(DraftEdgeKind::Ctrl, user, id);
+            }
+            for (camel::runtime::gc_node_ref_t user : draft.syncUsersOf(id)) {
+                draft.unlinkInput(DraftEdgeKind::Sync, user, id);
+            }
+            // The effect keeps one edge and only one: an order edge out of it, to a node of its own
+            // region (an order edge that enters a region breaks edges.cn.md 4.6 first, and that
+            // refusal is not the one this instrument is for). Order is not a credential (3.1,
+            // edges.cn.md 1.5; the author struck it on 2026-11-01), so what is left of the effect is
+            // the mark alone, and the order edge is what keeps the node from being dropped as dead
+            // before the credential check sees it.
+            camel::runtime::gc_node_ref_t other = camel::runtime::kInvalidNodeRef;
+            for (camel::runtime::gc_node_ref_t candidate = 0; candidate < draft.nodeSlotCount();
+                 ++candidate) {
+                if (candidate == id || draft.header(candidate) == nullptr ||
+                    draft.nodeRegion(candidate) != draft.nodeRegion(id)) {
+                    continue;
+                }
+                other = candidate;
+                break;
+            }
+            if (other != camel::runtime::kInvalidNodeRef && draft.orderInputsOf(other).empty()) {
+                const camel::runtime::gc_node_ref_t orders[1] = {id};
+                draft.setOrderInputs(other, orders);
+            }
             return session.commit();
         }
     }
