@@ -117,3 +117,19 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "LexicalDiag::UnclosedStringLiteral"
 expect_output_contains = ["raw_unclosed.cml:8:14"]
+
+[[tests]]
+name = "escapes.raw_roundtrip_runs"
+desc = "The program trans.cml prints and runs again, run once here as itself: a path with three backslashes prints as that path (11 characters), and a value holding a backslash, a quote and a line feed is 6. This is also the read that keeps the case in the tree -- the round-trip tool names it without the extension, which the inventory does not count as a read."
+kind = "behavior"
+case = "../../../cases/compile/escapes/raw_roundtrip.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const bs = String.fromCharCode(92)
+const want = ['C:' + bs + 'dir' + bs + 'file', '11', '6'].join('\n')
+assert(input.normalized.stdout.trim() === want, 'stdout: ' + input.normalized.stdout)
+assert(input.normalized.stderr.trim() === '', 'no diagnostic: ' + input.normalized.stderr)
+}
+"""

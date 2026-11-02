@@ -511,20 +511,11 @@ Invalid escape sequence in string: {0}.
 A string decodes '\n', '\t', '\r', '\a', '\b', '\f', '\v', '\0', '\\', '\'', '\"', '\`', '\$', '\xHH' and the braced Unicode form '\u{...}'. Any other pair is refused rather than kept: a string that silently becomes something else is dearer than one that does not build. To write a backslash itself, write '\\' or use a raw string, in which nothing is an escape: r"C:\dir".
 ```
 
-**Example** (`test/cases/compile/escapes/plain.cml`, run as `camel test/cases/compile/escapes/plain.cml`)
+**Example** (`test/cases/compile/escapes/unknown.cml`, run as `camel test/cases/compile/escapes/unknown.cml`)
 
 ```camel
 func main(): int sync {
-    println('101', len('\101'))
-    println('0', len('\0'))
-    println('x41', len('\x41'), '\x41')
-    println('u', len('\u{1F600}'))
-    println('n', len('\n'))
-    println('8', len('\8'), '\8')
-    println('0x', len('\0x'))
-    println('01', len('\01'))
-    println('012', len('\012'))
-    println('033', len('\033'))
+    println('\q')
     return 0
 }
 ```
