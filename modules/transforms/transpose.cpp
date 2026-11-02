@@ -112,7 +112,6 @@ FunctionType *transposeSignature(
     // known values this signature's first parameter names -- the ruling of 2026-11-01 06:50 kept the
     // shape and changed where the known values come from.
     const size_t count = function->normTypesCount();
-    if (!participates.empty()) {
     // A **closed half** -- `split`'s backward graph, whose parameters are the tangents and whose
     // values ride in its closure -- is transposed to a function that takes the cotangent alone and
     // answers one cotangent per tangent. The bit is on the type because a resolver is handed nothing
@@ -148,6 +147,7 @@ FunctionType *transposeSignature(
             camel::core::type::param_vec_t{}, params,
             camel::core::type::TupleType::create(cotangentsOfTangents));
     }
+    if (!participates.empty()) {
         // The participating-set form: only the plain-parameter shape has it (a kernel is a function of
         // floats), and there must be one flag per parameter.
         if (participates.size() != count) {
