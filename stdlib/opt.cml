@@ -108,12 +108,14 @@ func same_node(a: Node, b: Node): bool {
 // itself when it is the first. That first node is never a node the same round merges away, which
 // is what makes one transaction enough for a round.
 func keep_of(ns: Node[], n: Node): Node {
-    let earlier = ns->filter<(m: Node): bool => id(m) < id(n) && same_node(n, m)>
+    let earlier = ns->filter<(m: Node): bool => id(m) < id(n) && !is_anchor(m) && same_node(n, m)>
     return if len(earlier) == 0 then n else earlier[0]
 }
 
 func is_hit(ns: Node[], n: Node): bool {
-    return keep_of(ns, n) != n
+    // A node that anchors its graph is not merged away: the transaction does not replace or erase
+    // it, and a round that tried would stop on the refusal instead of merging the rest.
+    return !is_anchor(n) && keep_of(ns, n) != n
 }
 
 func graph_has_hit(g: Graph): bool {
