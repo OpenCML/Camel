@@ -1113,7 +1113,7 @@ bool buildTransposeMember(
                                 return madePart;
                             }
                         }
-if (sourced->kind == rt::GCNodeKind::Oper) {
+                        if (sourced->kind == rt::GCNodeKind::Oper) {
                             // A value the arm *computes* and hands to a call: `merged(x) = 2x + 5x`
                             // lifts to a sum whose rule binds the two summands, so the arm's
                             // `add_tangent(2x, 5x, dx, dc)` is passed two numbers that are not
@@ -1146,15 +1146,7 @@ if (sourced->kind == rt::GCNodeKind::Oper) {
                                 }
                             }
                         }
-                        // Anything else the round needs is a value the body computes or reads --
-                        // a residual taken out of the tape, a product the round makes, a call it
-                        // hands to a rule -- and the forward copy the main walk makes answers all
-                        // three: `forward` reads a closure port, a parameter, a constant, an
-                        // `Accs` and an operator alike. Refusing here said the value was nowhere
-                        // to be had, which is true of a user-written loop's own state and false of
-                        // everything `split` tapes: the backward half reads those per round out of
-                        // the element port the line above forwards.
-                        return forward(value);
+                        return rt::kInvalidNodeRef;
                     };
                     const auto callInputs = function->normInputsOf(ref);
 

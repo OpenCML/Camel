@@ -1,0 +1,33 @@
+// A loop whose state is an array, not a float. Every round maps `x = (a, b)` to `(b, a + k*b)`, so
+//   f(s) = loop x = s for k in [1.0, 10.0] do [x[1], x[0] + x[1] * k]
+// has the per-round map `M_k = [[0, 1], [1, k]]`, and two rounds of k = 1 then k = 10 are
+//   M = M_10 * M_1 = [[1, 1], [10, 11]]
+// on paper: f(1, 2) = (3, 32), and the columns of M are the two seeds --
+//   f'(s) * (1, 0) = (1, 10),   f'(s) * (0, 1) = (1, 11).
+//
+// The state is an array of floats, so the lifted pair is `(float[], float[])`: `pairTypeOf` carries
+// an array (an array of floats is its own tangent space, design principles 9.9), the body region's
+// result is a FILL and its tangent is the same FILL over the members' tangents, and the round's
+// element `k` arrives through the iterable, which is copied as it stands rather than paired --
+// the rounds are the sequence the loop takes, not a value of the parameters.
+//
+// What this case does not pin: a tuple or a struct state still stops at the body (`skip=body`, a
+// different shape that needs its members carried), and no walk order is observable here -- the rules
+// are elementwise, so every order gives these numbers until `transpose` walks a loop's rounds
+// backwards.
+import rulesets.jvp
+import { jvp } from transforms
+
+func f(s: float[]): float[] {
+    return loop x = s for k in [1.0, 10.0] do [x[1], x[0] + x[1] * k]
+}
+
+func main(): int sync {
+    let lifted = jvp(f)
+    let (value, dx) = lifted([1.0, 2.0], [1.0, 0.0])
+    println("value=", value)
+    println("dx=", dx)
+    let (_, dy) = lifted([1.0, 2.0], [0.0, 1.0])
+    println("dy=", dy)
+    return 0
+}

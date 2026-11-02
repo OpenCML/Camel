@@ -9,9 +9,11 @@
 #include "camel/compile/gir/rule_templates.h"
 #include "camel/core/forward.h"
 #include "camel/core/mm.h"
+#include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/tangent_space.h"
+#include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/parse/ast/rule_head.h"
 #include "camel/runtime/draft.h"
@@ -31,6 +33,7 @@ namespace camel::transforms {
 
 namespace mm = camel::core::mm;
 namespace rt = camel::runtime;
+using camel::core::type::ArrayType;
 using camel::core::type::FunctionType;
 using camel::core::type::TupleType;
 using camel::core::type::Type;
@@ -509,9 +512,20 @@ bool liftGraph(
         const auto fillWithPayload = [&draft](
                                          Type *type, std::span<const std::byte> payload,
                                          std::span<const gc_node_ref_t> members) -> gc_node_ref_t {
-            ::Tuple *emptyMembers = ::Tuple::create(members.size(), mm::autoSpace());
-            const gc_node_ref_t source = draft.materializeStaticValue(
-                camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(emptyMembers), type);
+            // The template is the shape the fill reads the slots it does not list from: a tuple of
+            // that arity for a tuple, an array of that length for an array. `Array::create` takes
+            // the element type from the array type, so the template's elements are the type the
+            // members are written at; a tuple of two and an array of two are different shapes, and
+            // a template of the wrong one is written into a value that holds one element (measured:
+            // an array state's tangent, "Array flat index out of range: write of element 1 of an
+            // array that holds 1").
+            const slot_t templateSlot =
+                type != nullptr && type->code() == camel::core::type::TypeCode::Array
+                    ? camel::core::rtdata::toSlot(::Array::create(
+                          mm::autoSpace(), static_cast<ArrayType *>(type), members.size()))
+                    : camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(
+                          ::Tuple::create(members.size(), mm::autoSpace()));
+            const gc_node_ref_t source = draft.materializeStaticValue(templateSlot, type);
             const gc_node_ref_t fill = draft.addFillNode(type, payload);
             draft.setNormInputs(fill, std::span<const gc_node_ref_t>(&source, 1));
             draft.setWithInputs(fill, members);
@@ -966,10 +980,19 @@ bool liftGraph(
                 copyOf[ref] = made;
                 copied[ref] = true;
                 ++copiedKinds;
-                if (typeIsTuple && pairOf(node->dataType()) != nullptr) {
+                if (pairOf(node->dataType()) != nullptr) {
                     // The components in slot order, with a zero for every slot the payload leaves to
-                    // the template.
-                    const auto *tuple      = static_cast<TupleType *>(node->dataType());
+                    // the template. A tuple's components are its fields, at their own types; an
+                    // array's are its elements, all at the element type -- both are `Self` only when
+                    // every component is, which is what `pairOf` answers, so the tangent is one fill
+                    // of the same shape over the components' tangents (design principles 9.9).
+                    const auto *tuple      = typeIsTuple ? static_cast<TupleType *>(node->dataType())
+                                                         : nullptr;
+                    const auto *array      = node->dataType() != nullptr &&
+                                                     node->dataType()->code() ==
+                                                         camel::core::type::TypeCode::Array
+                                                 ? static_cast<ArrayType *>(node->dataType())
+                                                 : nullptr;
                     const auto listed      = fill != nullptr
                                                  ? fill->slots()
                                                  : std::span<const rt::gc_slot_idx_t>{};
@@ -985,7 +1008,8 @@ bool liftGraph(
                     }
                     for (size_t s = 0; complete && s < arity; ++s) {
                         if (components[s] == rt::kInvalidNodeRef) {
-                            components[s] = zeroConstantFor(tuple->typeAt(s));
+                            components[s] = zeroConstantFor(
+                                tuple != nullptr ? tuple->typeAt(s) : array->elemType());
                             complete      = components[s] != rt::kInvalidNodeRef;
                         }
                     }
@@ -994,8 +1018,9 @@ bool liftGraph(
                         for (size_t s = 0; s < arity; ++s) {
                             slots[s] = s;
                         }
-                        const std::vector<std::byte> tangentPayload =
-                            rt::makeFillPayload(rt::GCFillKind::Tuple, slots);
+                        const std::vector<std::byte> tangentPayload = rt::makeFillPayload(
+                            tuple != nullptr ? rt::GCFillKind::Tuple : rt::GCFillKind::Array,
+                            slots);
                         tangentOf[ref] =
                             fillWithPayload(node->dataType(), tangentPayload, components);
                     }
