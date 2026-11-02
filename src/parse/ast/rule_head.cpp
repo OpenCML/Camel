@@ -19,9 +19,25 @@ namespace {
 
 std::mutex registryMutex;
 std::map<std::string, std::vector<RuleHead>> registry;
-// The index a ruleset module answers questions from: family -> ("head@arity" -> rule name). A
-// sorted map, so a lookup is one binary search and a family's rules are printable in a fixed order.
-std::map<std::string, std::map<std::string, std::string>> indexed;
+// The index a ruleset module answers questions from: family -> ("head@arity" -> the rules filed
+// there, in filing order). A sorted map, so a lookup is one binary search and a family's rules are
+// printable in a fixed order.
+//
+// A key holds **one or more** rules. An operator whose spelling several operators share -- `float`
+// at one operand is `float(x: float)`, `float(x: int)`, `float(x: string)` and the rest -- has one
+// rule per operand type, and *which* of them answers is decided by the engine, which instantiates a
+// rule at the operand's own type and refuses by name when there is no instance. The index answers
+// names; the type is not its to encode.
+// One rule filed under a key: its name, and the condition it answers by. The condition is part of
+// what a slot is, because two rules of one operator are a family the engine dispatches over
+// (`lookupRules`) -- and two with the same condition are a duplicate, since nothing could choose
+// between them.
+struct RuleSlot {
+    std::string rule;
+    std::string condition;
+};
+
+std::map<std::string, std::map<std::string, std::vector<RuleSlot>>> indexed;
 // family -> rule name -> the function the rule's right side calls (`add_tangent`, ...). Kept by
 // rule name because that is what a lookup answers with: a transform reads the rule, then asks what
 // it calls.
@@ -278,6 +294,7 @@ void collectRuleHead(
     std::string shape,
     std::string variables,
     std::string outerUses,
+    std::string condition,
     uint32_t arity,
     uint32_t tokenStart,
     uint32_t tokenEnd) {
@@ -289,6 +306,7 @@ void collectRuleHead(
         std::move(shape),
         std::move(variables),
         std::move(outerUses),
+        std::move(condition),
         arity,
         tokenStart,
         tokenEnd});
@@ -307,19 +325,44 @@ std::vector<RuleHead> takeRuleHeads(const std::string &module) {
 
 std::string indexRule(const std::string &family, const RuleHead &rule) {
     std::lock_guard<std::mutex> lock(registryMutex);
-    std::map<std::string, std::string> &rules = indexed[family];
+    std::map<std::string, std::vector<RuleSlot>> &rules = indexed[family];
     const std::string key = rule.head + "@" + std::to_string(rule.arity);
-    const auto at         = rules.find(key);
-    if (at == rules.end()) {
-        rules.emplace(key, rule.rule);
-        callees[family][rule.rule]   = rule.rhsCallee;
-        variables[family][rule.rule] = rule.variables;
-        return {};
+    std::vector<RuleSlot> &slots = rules[key];
+    for (const RuleSlot &slot : slots) {
+        if (slot.rule == rule.rule) {
+            return {}; // one module built twice files its rules twice
+        }
+        // Two rules of one operator that cannot be told apart -- one spelling, one operand count,
+        // one condition -- are a duplicate: neither can be preferred, and a family that holds both
+        // would answer by filing order. Two that differ in their condition are not: the engine
+        // instantiates each at the operand's type and at most one of them answers.
+        if (slot.condition == rule.condition) {
+            return slot.rule;
+        }
     }
-    if (at->second == rule.rule) {
-        return {};
+    slots.push_back(RuleSlot{rule.rule, rule.condition});
+    callees[family][rule.rule]   = rule.rhsCallee;
+    variables[family][rule.rule] = rule.variables;
+    return {};
+}
+
+std::vector<std::string>
+lookupRules(const std::string &family, const std::string &head, uint32_t arity) {
+    std::lock_guard<std::mutex> lock(registryMutex);
+    std::vector<std::string> names;
+    const auto familyAt = indexed.find(family);
+    if (familyAt == indexed.end()) {
+        return names;
     }
-    return at->second;
+    const auto at = familyAt->second.find(head + "@" + std::to_string(arity));
+    if (at == familyAt->second.end()) {
+        return names;
+    }
+    names.reserve(at->second.size());
+    for (const RuleSlot &slot : at->second) {
+        names.push_back(slot.rule);
+    }
+    return names;
 }
 
 RuleMatch lookupRule(const std::string &family, const std::string &head, uint32_t arity) {
@@ -329,10 +372,16 @@ RuleMatch lookupRule(const std::string &family, const std::string &head, uint32_
         return RuleMatch{RuleLookup::NoSuchFamily, {}};
     }
     const auto at = familyAt->second.find(head + "@" + std::to_string(arity));
-    if (at == familyAt->second.end()) {
+    if (at == familyAt->second.end() || at->second.empty()) {
         return RuleMatch{RuleLookup::NoRuleForPrimitive, {}};
     }
-    return RuleMatch{RuleLookup::Found, at->second};
+    // One answer when the key holds one rule. A key that holds several is a family the engine
+    // dispatches over, and this question -- "which rule is it" -- has no single answer: the caller
+    // that has to choose asks `lookupRules` and lets the engine decide.
+    if (at->second.size() > 1) {
+        return RuleMatch{RuleLookup::NoRuleForPrimitive, {}};
+    }
+    return RuleMatch{RuleLookup::Found, at->second.front().rule};
 }
 
 std::optional<uint32_t> arityOfHead(const std::string &family, const std::string &head) {
@@ -388,12 +437,14 @@ std::vector<RuleEntry> rulesOf(const std::string &family) {
         return entries;
     }
     entries.reserve(at->second.size());
-    for (const auto &[key, rule] : at->second) {
+    for (const auto &[key, slots] : at->second) {
         const size_t at2 = key.rfind('@');
         if (at2 == std::string::npos) {
             continue;
         }
         const auto familyVars = variables.find(family);
+        for (const RuleSlot &slot : slots) {
+        const std::string &rule = slot.rule;
         std::string names;
         if (familyVars != variables.end()) {
             const auto at3 = familyVars->second.find(rule);
@@ -406,6 +457,7 @@ std::vector<RuleEntry> rulesOf(const std::string &family) {
             static_cast<uint32_t>(std::strtoul(key.c_str() + at2 + 1, nullptr, 10)),
             rule,
             names});
+        }
     }
     return entries;
 }

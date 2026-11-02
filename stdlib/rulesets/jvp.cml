@@ -21,6 +21,7 @@
 
 import { is_float, is_same, Tangent } from types
 import { matmul, zeros_like } from tensor
+import { log, pow } from math
 import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
 
 /// A value of type `T` with its tangent: what a forward transform carries for one value.
@@ -184,4 +185,79 @@ func index_into::<T>(x: T[], i: int): T {
 /// @example index_into([0.5, 0.25], 1)    // the tangent of `xs[1]` when `dxs` is `[0.5, 0.25]`
 export rule jvp_idx_arr::<T>(xs: T[], i: int) {
     index_into(xs, i) => (dxs: T[]) => index_into(dxs, i)
+}
+
+// ---- the forward rule of `:op/ltod` ----
+//
+// `float(n)` where `n` is an `int`. An integer is a **zero tangent space**
+// (`camel/core/tangent_space.h`: `float` and the float arrays are their own space, an integer and a
+// string have none), so there is no tangent for the conversion to carry and its derivative is zero.
+// The rule is written the way `jvp_idx_arr` above treats an `int` operand -- it *does not enter the
+// right side*, because `Tangent<int>` is `()` -- and the answer here is the zero of the **result's**
+// space, which is a `float`: `float(n)` reads an integer and contributes nothing of its own.
+//
+// The key is the operator's own spelling: `ltod` is `float(x: int)`, `ruleKeyOf` reads the
+// destination's letter (`d` -> `float`) and the arity (one), and the family files this rule under
+// `float` at one operand. The *source* is not in the key, and does not have to be: several
+// conversions share that spelling (`float(x: i32)`, `float(x: float)`, ...), so a key holds several
+// rules and the engine decides -- it instantiates a rule at the operand's own type, and a law whose
+// condition (`is_same::<T, int>()`) does not hold there is refused by name instead of applied.
+// `ltod` used to be an exception for the opposite reason (one key held one rule); it is not one now.
+
+/// `float(n)` where `n` is an `int`. Not `export`ed: nothing calls it -- the rule below answers
+/// with the zero of the result's space directly -- but it is the body `:op/ltod` is, written down
+/// once where the conversion's own documentation can point at it.
+/// `is_same` is how a rule here names one type (`sum_kernel` in `array.cml` does the same), and it
+/// is also what lets the body convert: `float` is a different operator for `i32` than for `int`.
+/// @example float_of_int(3)    // 3.0
+func float_of_int::<T>(n: T): float when is_same::<T, int>() {
+    return float(n)
+}
+
+/// `d(float(n)) = 0`: an integer is a step, not a slope. `int(3x)` is constant between its jumps, so
+/// its derivative is zero wherever it exists, and `float(n)` reads that integer without adding
+/// anything -- the value is real (`int_escape(1.0)` is 10.0) and its derivative is 0.
+/// @example float_of_int(3)    // 3.0; lifted, its tangent is 0.0
+export rule jvp_ltod::<T>(n: T) when is_same::<T, int>() {
+    float(n) => () => 0.0
+}
+
+// ---- the forward rule of `^` (a power) ----
+
+/// The tangent of `x ^ w` along `(dx, dw)`: `w * x^(w-1) * dx + x^w * log(x) * dw`.
+///
+/// The two terms answer two different questions, and keeping them apart is what makes the negative
+/// base honest. The first term is the derivative with respect to the **base**, and it is defined
+/// wherever `x ^ w` is. The second is the derivative with respect to the **exponent**, and it is
+/// `x^w * log(x)`: for `x <= 0` that has no real value, because a real power of a negative number
+/// exists only for integer exponents and has no derivative in the exponent there.
+///
+/// So the second term is computed only where it contributes. A tangent is a number, and a constant
+/// exponent's tangent is a zero constant (`jvp.cpp`'s `zeroConstantFor`: "the tangent a constant
+/// gets: the zero of the value's own type"), so `dw = 0` is a *zero* tangent, not a missing one --
+/// and the product it multiplies is exactly zero. Multiplying that zero by `log(x)` in floating
+/// point is not zero, it is `NaN` (the log of a negative number), which would turn an ordinary
+/// `(-3.0) ^ 2.0` into `NaN` for a term that is arithmetically nothing. The zero is therefore taken
+/// where it is, and where `dw` is not zero the log is asked for and left to answer `NaN`: an
+/// undefined derivative says so, and is not written as a zero.
+/// @example pow_tangent(3.0, 2.0, 1.0, 0.0)    // 6.0
+/// @example pow_tangent(-3.0, 2.0, 1.0, 0.0)    // -6.0
+export func pow_tangent::<T>(x: T, w: T, dx: T, dw: T): T when is_float::<T>() {
+    let throughExponent = if dw == T(0) then T(0) else pow(x, w) * log(x) * dw
+    return w * pow(x, w - T(1)) * dx + throughExponent
+}
+
+/// `d(x ^ w) = w * x^(w-1) * dx + x^w * log(x) * dw`, written out in `pow_tangent` above. The
+/// operator is spelled `^`, and its key is derived from its name -- `pow` is one of the written
+/// operations `src/core/forward.cpp` lists -- so nothing here is filed under a call.
+///
+/// The tangent helper lives here rather than in `autodiff` with its siblings for one measured
+/// reason: it needs `log` and `pow`, which belong to `math`, and a module dependency added to
+/// `autodiff` adds that module's declaration rows to every profile report that declares `autodiff`
+/// -- the golden of `test/cases/modules/tensor/fusion_group_profile.py` moved by exactly those rows
+/// when this was first written. A ruleset is where a program that wants the rule goes, so the cost
+/// lands here instead.
+/// @example 3.0 ^ 2.0    // 9.0
+export rule jvp_pow::<T>(x: T, w: T) when is_float::<T>() {
+    x ^ w => (dx: T, dw: T) => pow_tangent(x, w, dx, dw)
 }

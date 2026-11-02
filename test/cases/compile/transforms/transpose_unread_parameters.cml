@@ -7,6 +7,17 @@
 // 2: the two operands' zeros, which the calling half drops, and the two tangents' ones, which it
 // keeps and which double with the seed. A refusal here would refuse `grad((x) => x + 1.0)`, whose
 // tangent function is exactly this one.
+//
+// The function transposed is `at` itself, and it has to be a function of four, because a transposed
+// function answers **one cotangent per parameter** and is called with the cotangent and nothing else
+// (author, 2026-11-02 11:30): `transpose(at)(1.0)`. The old spelling `transpose(at)(3.0, 2.0, 1.0,
+// 0.0, 1.0)` passed the values as parameters, which a transposition no longer takes.
+//
+// Nothing is captured, and that is the point of the case rather than an accident: `add_t`'s right side
+// reads **no operand value** (`add_cotangent(ct)`, `add_cotangent_c(ct)`), so the member needs no value
+// the caller would have to supply, its signature is `(float) => (float, float, float, float)`, and the
+// top-level call is a call. A body that read one of its parameters' values would need it in the
+// transposed function's closure and would be refused without it (see `transpose_many_parameters`).
 import rulesets.transpose
 import { jvp, split, transpose } from transforms
 import { add_tangent } from autodiff
@@ -16,8 +27,11 @@ func at(x: float, w: float, dx: float, dw: float): float {
 }
 import rulesets.jvp
 func main(): int sync {
-    let lin = (dx: float, dw: float) => at(3.0, 2.0, dx, dw)
-    println(transpose(lin)(1.0))
-    println(transpose(lin)(2.0))
+    // The observation: a transposed function answers one cotangent per parameter, so the four numbers
+    // need a function of four parameters. `x` and `w` are read by nothing in the body, and their
+    // answers are the zeros this case is about. Two seeds, because one seed alone cannot tell a
+    // pullback from the derivatives themselves -- at ct = 1 the two are the same numbers.
+    println(transpose(at)(1.0))
+    println(transpose(at)(2.0))
     return 0
 }
