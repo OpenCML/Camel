@@ -152,7 +152,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=split_of_jvp_of_f_backward arm-call region=1 node=7 callee=autodiff::mul_tangent<float> args=4 tangent-args=2", "TRANSPOSE function=autodiff::mul_tangent<float>", "type=(float, float, float) => (float, float)", "author vjp value=4.0 dfdx=4.0", "author vjp value=-6.0 dfdx=3.0"]
+expect_output_contains = ["TRANSPOSE function=split_of_jvp_of_f_backward arm-call region=1 node=6 callee=autodiff::mul_tangent<float> args=4 tangent-args=2", "TRANSPOSE function=autodiff::mul_tangent<float>", "type=(float, float, float) => (float, float)", "author vjp value=4.0 dfdx=4.0", "author vjp value=-6.0 dfdx=3.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

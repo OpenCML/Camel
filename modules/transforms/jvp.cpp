@@ -92,58 +92,68 @@ gc_node_ref_t buildRuleTangent(
     std::string_view uri, const std::vector<gc_node_ref_t> &values,
     const std::vector<gc_node_ref_t> &tangents, camel::core::type::Type *elementType,
     std::string &ruleName, std::string &why) {
-    const auto match = camel::core::forwardRuleOf(std::string(uri));
-    if (!match.has_value()) {
-        why = "the operator has no forward rule bound at all";
+    // The candidates, in the order the family filed them. A key can hold several rules -- one
+    // spelling names several operators (`float(x: float)` and `float(x: int)` are both `float` at
+    // one operand) -- and the type decides: the instance is asked for at the type the *operand* is
+    // made of (`rule_types.h` answers that question for both transforms; writing
+    // `Type::Float64()` here was the review's P1-9), and a rule whose condition does not hold there
+    // is skipped rather than applied. The last refusal is reported, so a caller that tried
+    // everything says the closest thing to why.
+    const auto candidates = camel::core::forwardRulesOf(std::string(uri));
+    if (candidates.empty()) {
+        const auto match = camel::core::forwardRuleOf(std::string(uri));
+        if (!match.has_value()) {
+            why = "the operator has no forward rule bound at all";
+        } else if (match->status == camel::parse::ast::RuleLookup::NoSuchFamily) {
+            why = "no ruleset module is loaded (import rulesets.jvp)";
+        } else {
+            why = "the ruleset holds no rule for this operator and operand count";
+        }
         return rt::kInvalidNodeRef;
     }
-    if (match->status != camel::parse::ast::RuleLookup::Found) {
-        why = match->status == camel::parse::ast::RuleLookup::NoSuchFamily
-                  ? "no ruleset module is loaded (import rulesets.jvp)"
-                  : "the ruleset holds no rule for this operator and operand count";
-        return rt::kInvalidNodeRef;
-    }
-    ruleName        = match->rule;
-    uint64_t ruleId = 0;
-    {
-        const auto &table = camel::compile::gir::genericRuleTable(context);
+    const auto &table = camel::compile::gir::genericRuleTable(context);
+    for (const camel::parse::ast::RuleMatch &match : candidates) {
+        if (match.status != camel::parse::ast::RuleLookup::Found) {
+            continue;
+        }
+        uint64_t ruleId = 0;
         for (size_t i = 0; i < table.size(); ++i) {
-            if (table[i] != nullptr && table[i]->name == ruleName) {
+            if (table[i] != nullptr && table[i]->name == match.rule) {
                 ruleId = static_cast<uint64_t>(i) + 1;
                 break;
             }
         }
+        if (ruleId == 0) {
+            why = "the rule is named in the index but its templates are not registered";
+            continue;
+        }
+        const size_t at = camel::compile::gir::genericRuleInstance(
+            context, ruleId, std::vector<camel::core::type::Type *>{elementType}, {});
+        const auto *entry = camel::compile::gir::genericRuleEntry(context, ruleId);
+        if (entry == nullptr || at >= entry->instances.size()) {
+            why = "no instance of the rule at " +
+                  (elementType != nullptr ? elementType->toString() : std::string("no type"));
+            continue;
+        }
+        const auto &instance = entry->instances[at];
+        if (!instance.made || instance.program == nullptr || instance.rhs == nullptr) {
+            why = instance.why.empty()
+                      ? "no instance of the rule at " +
+                            (elementType != nullptr ? elementType->toString()
+                                                    : std::string("no type"))
+                      : instance.why;
+            continue;
+        }
+        ruleName = match.rule;
+        return expandRuleRightSide(
+            group, transaction, instance,
+            [&values](size_t slot) {
+                return slot < values.size() ? values[slot] : rt::kInvalidNodeRef;
+            },
+            tangents, why);
     }
-    if (ruleId == 0) {
-        why = "the rule is named in the index but its templates are not registered";
-        return rt::kInvalidNodeRef;
-    }
-    // The instance is asked for at the type the *operand* is made of, not at a type written here:
-    // `rule_types.h` answers that question for both transforms (a condition is not a value arm, and
-    // a node's own type is not its operand's -- `argmax_axis` answers `int64` about floats). Writing
-    // `Type::Float64()` here was the review's P1-9.
-    const size_t at = camel::compile::gir::genericRuleInstance(
-        context, ruleId, std::vector<camel::core::type::Type *>{elementType}, {});
-    const auto *entry = camel::compile::gir::genericRuleEntry(context, ruleId);
-    if (entry == nullptr || at >= entry->instances.size()) {
-        why = "no instance of the rule at " + (elementType != nullptr ? elementType->toString()
-                                                                     : std::string("no type"));
-        return rt::kInvalidNodeRef;
-    }
-    const auto &instance = entry->instances[at];
-    if (!instance.made || instance.program == nullptr || instance.rhs == nullptr) {
-        why = instance.why.empty()
-                  ? "no instance of the rule at " +
-                        (elementType != nullptr ? elementType->toString() : std::string("no type"))
-                  : instance.why;
-        return rt::kInvalidNodeRef;
-    }
-    return expandRuleRightSide(
-        group, transaction, instance,
-        [&values](size_t slot) {
-            return slot < values.size() ? values[slot] : rt::kInvalidNodeRef;
-        },
-        tangents, why);
+    // Every candidate refused: `why` holds the closest reason (the last one reached).
+    return rt::kInvalidNodeRef;
 }
 
 } // namespace

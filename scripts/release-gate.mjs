@@ -139,7 +139,12 @@ const STATIC_CHECKS = [
     // SKIPPED banner naming what to install and still exits zero; that banner is in this layer's
     // output, so a machine without one records that no proof was taken instead of the gate
     // reporting a proof it never took.
-    { name: 'rule library: every rule holds under its own numeric licence', args: ['scripts/rule-proofs.mjs'] },
+    // `--require-solver` is the difference between a check and a line that prints a reason and
+    // exits 0: without a solver every rule is unproved, and a gate that cannot tell that from
+    // "every rule holds" is worse than no gate (see the audit of 2026-11-03). The host that runs
+    // the gate has Z3 at $HOME/.local/bin/z3, so this is reachable where it matters, and a host
+    // without one now says so instead of passing.
+    { name: 'rule library: every rule holds under its own numeric licence', args: ['scripts/rule-proofs.mjs', '--require-solver'] },
 ]
 
 // The command line of one static check, with the install this gate found when the check reads one.
