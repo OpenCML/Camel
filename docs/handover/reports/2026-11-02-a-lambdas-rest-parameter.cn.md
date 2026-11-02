@@ -2158,3 +2158,5 @@ static_cast<size_t>(init.dataIndex) < runtimeSlotTypes_.size()` —— **越界�
 
 **⑤ 边界照旧**：`f32 → float` 隐式转换**一个字没动**；`:op/ftod` 的前向规则、`vjp` 把结果限死成 `float` 这两件**没开始**。
 **⑥ 树干净**：重构已提交；`feat/compile/transforms` **58/58**。
+**⑦ 基准（在新 `develop = 274abfb3a` 上量，全量 fast）**：`[SUMMARY] total: 8447, pass: 8435, fail: 0, skip: 10, known failures: 2`，`RUN_EXIT=0`
+——**与作者给的基准逐项相同**。`{Float64()}` 三处**一处没删**（`jvp.cpp:91`、`rule_expand.cpp:428`、`module.cpp:74`），删掉的数 = **0**。
