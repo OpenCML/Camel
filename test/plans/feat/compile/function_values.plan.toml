@@ -315,3 +315,54 @@ expect_output_contains = ["'p' is used as a value here, but it names an operator
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "captured_var_in_two_arms.nvm"
+desc = "A call writes a captured `var` and both arms of an `if` read it: the one access node was made in the arm the first reader stood in, so the graph broke the branch-arm invariant (progen A3) (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/function_values/captured_var_in_two_arms.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["2", "2", "4", "22"].join(' ')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "captured_var_in_two_arms.fvm"
+desc = "A call writes a captured `var` and both arms of an `if` read it: the one access node was made in the arm the first reader stood in, so the graph broke the branch-arm invariant (progen A3) (fvm)"
+kind = "behavior"
+case = "../../../cases/compile/function_values/captured_var_in_two_arms.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["2", "2", "4", "22"].join(' ')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "captured_var_in_two_arms.jit"
+desc = "A call writes a captured `var` and both arms of an `if` read it: the one access node was made in the arm the first reader stood in, so the graph broke the branch-arm invariant (progen A3) (jit)"
+kind = "behavior"
+case = "../../../cases/compile/function_values/captured_var_in_two_arms.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["2", "2", "4", "22"].join(' ')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000

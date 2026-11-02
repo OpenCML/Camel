@@ -803,7 +803,7 @@ EXAMPLE_STOPS['a semantic error'] records 39, and the run found 40: update the n
 **第 40 条是 `vjp` 自己的例子**：`stdlib/vjp.cml:68` 的 `@example` 仍把 `f` 当值写，而声明已把它当类型参数 ⇒
 `UnresolvedReference: 'f'`。**这是例子自己的欠账，不是"豁免"**——所以数字改成 40，并在旁边写明为什么。
 
-**④ `docs.doc_readings.current`**：`check-doc-readings.mjs` 量的四份文件是
+**④ `docs.doc_readings.current`**（该计划条目已随工具在 05:30 删除）：它量的四份文件是
 `split_operator.cpp, jvp_operator.cpp, stdlib/signatures/transforms.cml, stdlib/vjp.cml`：
 
 | 文档记的 | 树上量的 | 哪一份 |
@@ -822,7 +822,7 @@ EXAMPLE_STOPS['a semantic error'] records 39, and the run found 40: update the n
 页上 104→98 并注明是 `9048c30ea`。**没有删任何断言、没有加任何豁免。**
 
 **⑥ 读数**：`docs` + `stdlib_registry` = **16/16**，`fail 0`；本地 `--verify-doc` = `up to date`，
-`check-doc-readings.mjs` = `the readings are the ones the pages state: 10 of 10`。
+那份读数检查工具已在 2026-11-02 05:30 被作者删掉（设计稿与交接页不写会随代码变的数字）。
 
 ## 24. `9048c30ea` 三问：作者自己的、`Vjp<F>` 真的存在、文档记的是真签名
 
@@ -861,7 +861,7 @@ stdlib/vjp.cml:68:    export func vjp::<F>(f: F): Vjp<F> when is_function::<F>()
 | 检查 | 改前 | 改后 |
 |---|---|---|
 | `stdlib-reference.mjs --verify-doc` | `docs/stdlib-reference.md is out of date: run … --write`（**rc=1**） | `docs/stdlib-reference.md is up to date`（**rc=0**） |
-| `check-doc-readings.mjs` | `stale transforms-module.lines … 1 reading(s) are not the ones the tree has`（**rc=1**） | `the readings are the ones the pages state: 10 of 10`（**rc=0**） |
+| 读数检查工具（05:30 已删） | `stale transforms-module.lines … 1 reading(s) are not the ones the tree has`（**rc=1**） | `the readings are the ones the pages state`（**rc=0**） |
 
 ## 25. A6：没找到它的最小程序
 
@@ -1198,6 +1198,12 @@ A2（`p.1` on a struct）已经在 `assert` 审计里证明这条路有效一次
 
 ## 36. `a..b->f` 的优先级：读数钉死，加了一条点名优先级的诊断（不改优先级）
 
+> **撤回（2026-11-02，作者 00:50 裁定）：这一节加的诊断撤掉了。** `a..(b->f)` 是合法程序——原则 4（`design-principles.cn.md:288` 一带）的规则是 `->` 比二元运算符都结合得紧，`..` 照这条走，没有例外：`0..xs->len` 就是 `0..(xs->len)`，是正常写法。**只对 `..` 一个运算符加拒绝，等于给语言加了一条限制**（`a + b->f` 同样读成 `a + (b->f)`，却不报错）。所以 `RangeRightIsLink` 连同它的用例、计划条目、注册表行（307 → 306）与生成物一起撤销；**优先级不动**（把 `..` 改成比 `->` 紧反而会破坏那一条）。**正解是改生成器，让它写 `(a..b)->reduce(f)`**——见 §38 的更正与读数。下面的原记录保留，其中"③ 改法""⑤ 新码怎么加的"两段只作为"当时怎么想的"的记录，不再是现状。
+>
+> **归类一句（这一条要记住）**：**"拒绝合法程序"与"拒绝不支持的形状"是两类**。后者是能力缺口（`skip=law`，例：`idx_arr_t` 少一条 arm，程序该跑而暂不能跑），记成债、等能力补上；前者是语言被改窄（例：这一条 `RangeRightIsLink`，程序本可以跑却被拒），**当轮撤掉，不能留在树上**。
+>
+> **撤后的读数**：`feat/parse` **45/45**（撤前 46，差的就是撤掉的那支）；全量 `[SUMMARY] total: 8441, pass: 8428, fail: 0, skip: 10, known failures: 3`、`RUN_EXIT=0`；`diagnostics-catalog` 的 `--check` / `--coverage-check` / `--pinned-coverage-check`（289 of 306 named）/ `--verify-doc` 四条与 `camel-for-ai --check` 全绿；注册表 **307 → 306**，`--verify-ops` 的两支（`registry.signatures_match`、`registry.result_types_match`）在闸门里过。
+
 **① 最小程序的读数（`minimal/generator_reject.cml` 原样）**：
 
 ```camel
@@ -1254,8 +1260,19 @@ help: The interval is an expression, and the call is written after it in parenth
 - 于是报的是 **`NoMatchingFunction … (int)`**——**一条与作者意图无关、也指不出病因的诊断**；
 - **同一个程序加一对括号 `(a..b)->reduce<…>` 就编过**（`rc=0`）——**所以这不是"函数不存在"，是"优先级读法不同"**。
 
-**这条现在会直接点名**：`SyntaxDiag::RangeRightIsLink`（`0x02000013`）说"`..` 比 `->` 弱，调用落在最后一个值上，要加括号"。
-**优先级本身没改**（改不改是作者的裁决）；**改的只是"被误解时不至于只看到一条签名不匹配"**。
+**更正（2026-11-02，作者 00:50 裁定）：这一条不是"该被点名"，是"语言不许拒"。** 生成器写错括号，改生成器；拒绝合法程序那条诊断已撤（§36 的撤回块）。改法：`test/tools/progen/model.py` 的 `post()`（后缀形式的接收者）对 `range` 节点加括号，`(a..b)->reduce<f, x>`；生成器版本 6 → 7（那些归档种子的文本按版本钉住，不能悄悄换意思）。
+
+**读数（固定种子 1–500，默认 features、size 1，两侧同一份程序、只差一对括号）**：
+
+| | 旧生成器（无括号） | 新生成器（有括号） |
+| --- | --- | --- |
+| 编译失败 | **68 / 500（13.6%）** | **14 / 500（2.8%）** |
+| 转绿 / 转红 | — | **转绿 54 条，转红 0 条** |
+| 文本不同的程序 | — | 86 / 500（17.2% 含"区间当接收者"） |
+
+评估报告那份 `e2_progen.jsonl`（2,000 条里的 235 条，11.8%）**不在树里，不能重跑**，所以上面是同一工具、同一种子区间上的重新测量，不是对那份报告的重算；两者基线率相当（13.6% 对 11.8%），可比的是"54 条转绿、0 条转红"这个方向。
+
+`test/tools/progen/README.md` 说归档程序"no check re-draws them"，所以版本号一升，旧归档仍按 v6 读，不会被新生成器改写。
 
 ## 39. `let f: (float, float) => float = g`：真因是"类型位置里的函数类型必须给参数起名"
 
@@ -1825,3 +1842,156 @@ TRANSPOSE function=rulesets.jvp::index_into<float> graph=92 type=(float[], int, 
 **⑤ 教训收在这里**（今晚最贵的一条）：**一个能解释现象的候选不等于原因；只有"改掉它现象消失、改回它现象回来"才是原因。**
 六道墙里有五处"看着就是它"的地方**确实都有毛病**（`zeros_arr`、`scatter`、`transposeSignature`、答案装配、`add_arr` 的入参），
 **但真正卡住的那一处每次都不是被怀疑的那一处**——**所以每一道都要用探针把读数打出来，再动改。**
+
+
+## 54. 数组余切的两处"类型写成字面量"：一个 `add_d` 让三条用例段错误，一条拒绝让三条动不了
+
+**合并 `develop` 之后（`e8fa221a0` → `6dee3f03f`）动的行号**：`addCotangent` 在 **449–453**（改后 **461–470**），`primitive` 在 **289**（旁边新增 `primitiveOf`），拒绝块 `skip=unread-parameter` 在 **1867**（改后 **1887**），新增的零分支在 **1863**。
+
+**① 段错误（这是这一夜第一个"有信号的"读数）**：
+```
+$ ./out/latest/bin/camel test/cases/compile/transforms/grad_array_sum.cml std::nvm
+5.0
+Segmentation fault (core dumped)        EXIT=139
+```
+`addCotangent` 把**每一次**余切交付都写成 `:op/add_d`（数字的加）。**一次元素读取只有一份余切、从不求和**，所以 `one_element` 与 `two_elements_first` 绿；**求和/乘法/移交件这三条要加两份数组余切**，就把 `float[]` 当数字加 ⇒ 段错误。
+**改法**：加法的算子与节点类型都取自"余切落在什么空间"——数组空间用 `:tangent/add_arr`，数字用 `:op/add_d`，节点用该空间定型（`primitiveOf`）。
+
+**② 拒绝改成构造零**（你定的那条）：数组形参没收到余切 ⇒ 答案是它的零，由 `:tangent/zeros_arr` 按端口上的值造（`idxArrayVjp` 用的同一个算子）。**零余切是 pullback 那个求和的单位元，所以"答零"与"不答"是同一件事，只是类型对。**
+
+**③ 一次构建出的三条读数**：`5.0` → `[1.0, 1.0]`；`6.0` → `[2.0, 3.0]`；`6.0` → `[2.0, 3.0]`。
+两条仍叛着"拒绝"的钉换成这三个数，**四条 `known_fail` 在让它们通过的这一笔里全部撤掉**（`sum`/`product`/`of_an_array_parameter` 的 nvm、`no_int` 的 fvm）——**撤标的理由是"答案来了"，不是"断言松了"。**
+
+**④ 读数**：`feat/compile/transforms` **58 / 58**；全量 fast **`total: 8390, pass: 8378, fail: 0, skip: 10, known failures: 2`，`RUN_EXIT=0`**；`doc_readings` **10/10**（`transpose.cpp` 1927 → **1970**）。
+
+**⑤ 父级交来的两条 `poison` 用例：诊断原文，以及"不是同一个缺陷"的判定**：
+```
+$ ./out/latest/bin/camel --gc-check poison --gc mark-sweep -vv …grad_array_one_element.cml std::nvm
+camel: fatal: the minor collection started for 'nodevm graph boundary' threw
+  (The auto.elder space (run-time values) is exhausted: an allocation of 119370353.0 MB does not fit,
+   0 bytes of the limit of 67108864.0 MB are in use; the limit is fixed);
+  the heap is half relocated and cannot be used again
+terminate called after throwing an instance of 'camel::core::mm::MemoryExhausted'
+```
+`two_elements_first` 同形，`129402773.0 MB`。**判定：不是同一条缺陷**，两条理由：
+1. **这两条的数组形参都被反半读到**，`skip=unread-parameter` 那条分支**根本走不到**，我这一刀的零构造不参与；
+2. **失败形态不同**：我修的是"把数组当数字加/把没读到的形参拒掉"，**这里是 `--gc-check poison` 下 `nodevm graph boundary` 的小回收里读出一个巨大的分配量**（`119370353 MB` ≈ 一个地址或被搬动过的头被当成元素数），**不加 poison 时这两条绿**。
+⇒ **这是 GC 搬动/根化那一侧的事，不在 `transpose.cpp` 的 lit2 区域，我没改、也不该在这一刀里改。**
+
+
+## 55. `{Float64()}` 的用例写不出来，所以代码不动——而挡住它的是两条正当的拒绝
+
+**① 撤标的顺序确认（你问的那条）**：`test/tools/run-tests.mjs:2856` 把"标了却通过"直接改成 `fail` 并附
+`marked known_fail on '<backend>' but passes: remove the mark`。**上一笔我是"先撤标、再同一次构建里跑"，一次就 58/58**，没有出现那条检查的红。
+
+**② 要写 `f32[]` 用例，三道探针全部被拒**（原文，逐层）：
+
+| 探针 | 结果 |
+|---|---|
+| `func g(xs: f32[]): f32` | `Invalid call to 'transpose' … : 'transpose' takes a function that returns a 'float'`（`stdlib/vjp.cml:73`） |
+| `func g(xs: f32[]): float { return xs[0] as float }` | `DynamicCastForbidden: Dynamic cast from 'f32' to 'float' is not allowed` |
+| `func g(xs: f32[]): float { return float(xs[0]) }` | `RuntimeDiag: transforms: jvp has no forward rule for ':op/ftod' (the operator has no forward rule bound at all)` |
+
+**⇒ 今天没有任何一条能进到"规则实例化"那一步**：`vjp` 只接受返回 `float` 的函数（`transpose` 的单参支要求 `Float64` 出口），
+而唯一的加宽通路 `float(f32)` 是 `:op/ftod`，它连前向规则都没有。**`int[]` 同理：元素读取回答 `int`，被同一条出口检查挡住。**
+
+**③ 结论（按你的规矩：写不出用例 ⇒ 写页，不动代码）**：`rule_expand.cpp:428` 与 `jvp.cpp:91` 的 `{Float64()}` **今天不是缺陷，
+是"可微的东西只有 float64"这句话的后果**。两条拒绝就是保住这个字面量的那道闸：闸在，实例化类型永远只能是 float64。
+
+**④ 但那天闸一开，它就是缺陷**——写清楚留给下一个人：`expandRuleByName` 手里有 `tangents` 和 `position`，
+**元素类型从 `position` 那个位置的值/余切类型取**（`firstOperandTypeOf`/`ruleElementTypeOf` 已经为 `vmap` 与 `jvp` 做同一件事）。
+判据：`f32[]` 用例能跑通的那一笔，`TRANSPOSE … rules=idx_arr_t` 那一行的实例化类型从 `float64` 变成 `f32`。
+
+**⑤ 这一夜 `Type::Float64()` 的账最终是**：132 行 / 30 文件，**83 合法、12 测试、6 默认值、3 其它、28 形似缺陷**，
+而这 28 里**已经改掉 8 处**（`primitive`、`zero`、`tupleOf` 的类型、`addCotangent` 的加法与定型、`skip=unread-parameter` 的零构造），
+**剩下 20 处"待证"，2 处（`rule_expand.cpp:428`、`jvp.cpp:91`）等用例**。**没有一处是因为"看着像"而改的。**
+
+
+## 56. `poison:transforms` 那 10 条：**同一句诊断**，而且是**类型**上的越界，不是 `guard` 那族的裸指针
+
+**① 10 条全部直跑过（不经 runner），一条原文**：
+```
+$ ./out/latest/bin/camel --gc-check poison test/cases/compile/transforms/vjp_arities.cml std::nvm
+EXIT=134
+
+Camel Invariant Violation:
+    Location   : ../include/camel/core/type/composite/tuple.h(143)
+    Function   : Type *camel::core::type::TupleType::typeAt(size_t) const
+    Guarantee  : index < size_
+    Reading    : TupleType: index out of range
+```
+**② 十条同一句**（`vjp_arities` nvm/fvm/jit/prl、`vjp_api.analytic_gradient` nvm/fvm/jit/prl、
+`grad_where_the_tangent_ignores_the_operands.nvm`、`vjp_api.carries_its_own_ruleset.nvm`）：
+**`Location: tuple.h(143)` + `Reading: TupleType: index out of range`，exit 全部 134（SIGABRT）**。
+**⇒ 按"同族的判据是同一句诊断文本"：这 10 条是一族，一个根因的 10 个外观。**
+
+**③ 判据 1 的答案：不是 `guard` 那族。** `guard` 追的是 `a raw pointer was kept across a safepoint`（搬动后的指针被用）；
+这里是**类型元组被用越界的下标去取**（`typeAt(k)`，`k >= size_`）。**两个句子不同，不是一个缺陷。**
+
+**④ 而且是"poison 专属"**：同一条用例**不加 `--gc-check poison` 时 exit 0 并印出 `24.0 / 12.0 / 8.0 / 6.0`**。
+所以它不是一条普通的红，是**"搬动之后读到一个错的类型/下标"**——与 `guard` 那族的**形状相同**（跨 safepoint 之后读到搬动前的东西），
+**只是落在类型上，于是被类型的不变量接住，而不是被"指针被搬动"的报告接住。**
+
+**⑤ 下一步的探针（没做，等点头）**：在 `include/camel/core/type/composite/tuple.h:143` 的守卫里**加上 `this` 的 `size_` 与实际下标**，
+以及 `modules/autodiff/pullback.cpp` 里 13 处 `typeAt(...)` 各是哪一处（判据：加了下标与 size 之后，一次构建就能指出是哪个调用点、下标记成了几）。
+**这是 `type/composite/tuple.h` 与本报告之外的 `pullback.cpp`，按规矩先报不动。**
+
+
+## 57. 探针装上了：`size=0`、`index` 每次都不一样、元组本身**没被搬动**
+
+**探针（已按规矩删掉，三行，贴在这里以便复现）**：在 `include/camel/core/type/composite/tuple.h` 的 `typeAt` 前加
+`Type *typeAt(size_t index, const char *why)`（默认参数 `"?"`，现有调用点不动），守卫前打印
+`why / this / size_ / index / __builtin_return_address(0)`，打印后再取一次 `this` 与 `size_` 比较 `same/MOVED`；
+再把 `pullback.cpp`（13 处）、`split.cpp`（3 处）、`transpose.cpp`（2 处）的 `typeAt` 调用逐个带上 `"文件名:行号"`。
+
+**读数（`vjp_arities.cml std::nvm`，`--gc-check poison`）**：
+```
+PROBE typeAt why=? this=0x7bf8c8646188 size=0 index=4 caller=0x7bf8ce125356
+PROBE typeAt after this=0x7bf8c8646188 size=0 sameness=same
+```
+**换一次运行（`setarch -R` 关 ASLR）**：`this=0x7ffff1646188 size=0 index=2` —— **下标从 4 变成 2。**
+
+**① 三个事实**：
+1. **`size=0`**：被索引的那个 `TupleType` **一个成员都没有**；
+2. **`index` 两次运行不同（4 / 2）**：**下标不是算错的常量，是从别处走出来的**；
+3. **`sameness=same`**：**元组自己没被搬动**（前后同址同 size）。
+
+**② 判据的答案：两个都错，而且错在"这个元组是空的"。** 一个真的 5 成员元组被索引 4 会得到 `size=5`；
+这里 `size=0`，所以**不是"对正确的元组用了错的下标"，是"拿到了一个空元组"**——**而空元组正是 default 构造的那个形状**：
+**今夜早些时候 `Array::getSlot` 那次 `element 0 of an array that holds 0`，是一个 default 构造的 `Array` 头被当作真数组用；
+这里是 default 构造的 `TupleType`（`size_ = 0`）被当作真的有布局用。同一族。**
+
+**③ `why=?` ⇒ 这个调用点不在我注解的 18 处里。** 剩下的候选集中在 `include/camel/core/context/frame.h:719/720`
+（`runtimeDataType_->typeAt(...)` / `staticDataType_->typeAt(...)`：**帧按数据槽位问布局的类型**），
+以及 `type/tree.h:46-47`、`execute/loop_driver.h` 与 `json`/`onnx` 模块。**`frame.h` 是最像的一处：一个零成员的"运行时数据类型"被问第 4 个槽。**
+
+**④ 下一刀（要一次全量重建，因为你批的探针要加在 `frame.h`）**：把 `why` 只加到 `frame.h:719/720`，
+判据是那行 `PROBE typeAt why=frame.h:719` 出现（或 `why=?` 仍在 ⇒ 往下继续缩）。
+**这一刀是"缩范围"，不是修。**
+
+
+## 58. 缩范围第二轮：`frame.h` 7 处、`tree.h` 的 `childType` 全部**排除**；`-vvv` 把时刻钉在**闭包调用的装填**上
+
+**① 这一轮排除的（都打过名字、都没响）**：
+`include/camel/core/context/frame.h` 的 **7 处**（98/110/230/273/288 数据布局与动态区、719/720 `ArgsView`），
+`include/camel/core/type/tree.h` 的 `childType`（连它在 `i >= arity` 时的自打点都**没响**）。
+加上**上一轮已排除**的 `pullback.cpp` 13 处、`split.cpp` 3 处、`transpose.cpp` 2 处 ⇒ **25 处具名候选全部不是现场。**
+
+**② `-vvv` 把时刻钉住了**（不用猜）：
+```
+[INFO] <GraphExec> Indirect call bind: caller='main' node=37 target='__g_75__' callerNorm=1 callerWith=1 targetNorm=1 targetWith=0 targetClosure=2
+Camel Invariant Violation: … tuple.h(160) … TupleType: index out of range
+```
+**⇒ 崩在"给 `main` 的 37 号节点装填一次闭包间接调用（目标 `__g_75__`，`targetClosure=2`）"的当口**，不是 pullback 内部、不是帧的布局读取。
+**这正是你②问的"谁把这个类型设进帧槽"的那一段：装填闭包参数/闭包槽的时候。**
+
+**③ 地址那条路走不通（记下来，省下一班一次构建）**：release 版**没有调试信息**（`addr2line` 打回来 `??:?`），
+`nm` 里连我加的锚符号都没有（`inline` 空函数被折叠），**所以 `delta=400208` 无法换算成 `file:line`**。
+⇒ **缩范围只能靠 `why` 打名字**，而全树还**剩 272 处 `typeAt(`、约 60 个文件**（`src/execute`、`src/runtime`、`src/compile/gir` 最密）。
+
+**④ 下一刀的两个选择（都要你点头，因为都不便宜）**：
+- **甲**：只给**闭包装填那一段**（`src/execute/graph_runtime_support.cpp` 附近、`src/execute/graph_runtime*.cpp`、`src/runtime/frame*.cpp`）的 `typeAt` 打名字——候选约十几处，**一次构建**；
+- **乙**：让 `-Tier fast` 带上 `-g`（或另开一档 `Tier debug`），**一次构建换回 `addr2line` 的能力**，`delta` 立刻变成 `file:line`。
+**我倾向乙：它一次解决 272 处，甲只是再缩一轮。**
+
+**⑤ 另：`Array` 那条与这条的并法按你④的裁决记的——只并措辞，不并缺陷**（那条是阈值过期，这条是容器头没设）。见下一节。

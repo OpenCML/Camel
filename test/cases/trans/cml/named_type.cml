@@ -1,0 +1,28 @@
+// A named struct type: the printer used to refuse it, because writing the name is only half of
+// what the printed program needs (`func f(x: P): int` alone is `UnresolvedTypeReference: 'P'`).
+// The field table is on the type, so the printer writes `type P = { x: int, y: int }` as well, and
+// the name in a signature then means what it meant in the source. Both halves of the family are
+// here: `get`/`keep` take and return the named type (family 9's "a parameter is the named type"),
+// and `take` reads it as a `with` parameter (family 4's "a 'with' parameter is the named type").
+type P = { x: int, y: int }
+
+with <m: P>
+func take(): int {
+    return m.x
+}
+
+func get(p: P): int {
+    return p.x + p.y
+}
+
+func keep(p: P): P {
+    return p
+}
+
+func main(): int sync {
+    println(take<{ x: 3, y: 4 }>())
+    println(get({ x: 1, y: 2 }))
+    let q = keep({ x: 5, y: 6 })
+    println(q.y)
+    return 0
+}

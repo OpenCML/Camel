@@ -57,7 +57,9 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # 174 programs, 214.8 s of CPU alone and more under the gate's contention. The margin rule wants the
 # bound to be at least four times the work: 1200 s is 5.6x the alone figure and 5x the loaded one,
 # and it is still the runner's kill rather than a verdict, so a program that hangs is reported as one.
-timeout_ms = 1200000
+# The shared host is the fast one, though: the two-core CI runner measured 511.5 s of CPU for the same
+# 174 programs, which 1200 s was 2.3x -- under the four the rule asks for. 2400 s is 4.7x that figure.
+timeout_ms = 2400000
 
 [[tests]]
 name = "link_line_keeps_the_compilers_stdlib"
@@ -96,6 +98,62 @@ kind = "behavior"
 case = "../../../cases/trans/cpp/main_io.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "main_after_devirtualize"
+# The root's call of `main` has two spellings: an indirect call of the function value (CALL) and,
+# once a pass has settled the callee, a FUNC node that names its graph (`std::opt::devirtualize`
+# writes that one). The writer read only the first, so it refused every program devirtualize had
+# touched as "the program has no call of 'main' std::cpp can find": 132 of the 132 translatable
+# programs of test/tools/cppexec/expect.txt (the defect the 2026-11-01 eval report counted as
+# "about 55%"). The graph such a node names is still main, found by its name; nothing was inlined
+# away, and this case is the reading that keeps the writer reading both spellings.
+desc = "After `std::opt::devirtualize` the root still calls main and the writer translates the program instead of refusing it: the entry is the graph the root's FUNC node names, found by its name."
+kind = "behavior"
+case = "../../../cases/trans/cpp/main_io.cml"
+args = ["${case}", "std::opt::devirtualize", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["int main(int argc, char **argv)"]
+expect_output_not_contains = ["TranslationRefused", "no call of 'main'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "computed_top_level_after_devirtualize"
+# A value the top level computes before main starts (`let k = seven()`, design principles 10.1) is
+# not a limit of the language and not one of this writer: with the entry call indirect the root
+# graph is emitted as `top_level`, which computes the value and calls main with it. With the call
+# direct (`std::opt::devirtualize`) that value is the entry call's own normal input rather than
+# something the closure holds, and the writer read only the closure -- so it refused the program as
+# one whose top-level value only a literal could be. The program the writer now emits prints `7`,
+# which is what std::fvm prints; agree_with_fvm reads that, and this entry pins that it is
+# translated at all.
+desc = "A value the top level computes reaches main as the entry call's own argument once the call is direct; the writer translates the program (the root graph as `top_level`) instead of refusing it as a value only a literal could be."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/d4_cpp_computed.cml"
+args = ["${case}", "std::opt::devirtualize", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["int main(int argc, char **argv)", "seven("]
+expect_output_not_contains = ["TranslationRefused", "top level of the module"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "top_level_fault_after_devirtualize"
+# The same shape with a fault in it: `let BAD = 10 / ZERO` is computed before main prints
+# anything, so the program stops there (design principles 10.1). Translated as the root graph, the
+# division is the program's first statement and its site carries the interpreter's sentence; the
+# built program prints the report at 6:14 and exits 1, as std::fvm does, and `not reached` prints
+# in neither.
+desc = "A fault in a value the top level computes is the program's first statement, whether the entry call is indirect or direct: the writer translates the program, and the report at the division is the interpreter's."
+kind = "behavior"
+case = "../../../cases/consistency/faults/top_level_fault.cml"
+args = ["${case}", "std::opt::devirtualize", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["int main(int argc, char **argv)", "Attempted division by zero."]
+expect_output_not_contains = ["TranslationRefused", "top level of the module"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
@@ -230,7 +288,10 @@ expect_exit = 0
 expect_stdout_contains = ["program(s) need no Camel runtime", "link it, all in the baseline"]
 expect_output_not_contains = ["FAIL:", "is not in the baseline", "no longer links the runtime"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 900000
+# 2100 s: the same 174 translations and builds as agree_with_fvm plus an `ldd` of each, and the
+# two-core CI runner measured 493.3 s of CPU for it, which 900 s was 1.8x -- under the four the
+# margin rule asks for. 2100 s is 4.3x that figure.
+timeout_ms = 2100000
 
 [[tests]]
 name = "fault_narrow_text_number"

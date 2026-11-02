@@ -875,9 +875,15 @@ slot_t FastVMSchedPass::invokeOwnedJitFrame(JitEntryFn fn, Frame *frame, void *j
     slot_t *slots = frame->slotBase();
     slots[0]      = reinterpret_cast<slot_t>(frame);
     auto *jc      = static_cast<JitContext *>(jitCtx);
-    // Compiled code counts its own nested calls against what the interpreter's stack has left,
-    // so that a recursion ends at the same call whichever of the two runs it.
-    jc->depthBudget = maxRecursionDepth_ - std::min(stackDepth_, maxRecursionDepth_);
+    // Compiled code counts its own nested calls against what the interpreter's stack has left, so
+    // that a recursion ends at the same call whichever of the two runs it. What is left is the
+    // room the interpreters' own check allows -- the limit plus the entry call kEntryCalls exempts
+    // (push(), requireNestedCallRoom()) -- less the calls already open, whichever spelling put
+    // them there: push() for a direct call, nestedCalls_ for a call through a function value.
+    // Both are subtracted, because the count must not depend on the spelling
+    // (camel/execute/limits.h) after std::opt::devirtualize rewrites one into the other.
+    const size_t room = maxRecursionDepth_ + camel::execute::kEntryCalls;
+    jc->depthBudget   = room - std::min(stackDepth_ + nestedCalls_, room);
     // The count does not bound the machine stack its native calls use: they also stop above
     // the reserve of the stack of the thread that runs them, as the interpreters' nested calls.
     jc->stackLimit = camel::execute::nativeStackFloor();

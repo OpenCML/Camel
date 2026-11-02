@@ -3206,3 +3206,18 @@ expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/pass_quiet.onnx"]
 expect_output_not_contains = ["[onnx]", "ONNX_PREP_STATS", "digraph GraphIR {"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+
+[[tests]]
+name = "export_entry_impure_recursion"
+desc = "The export of the entry function refuses an impure program at the impure operator, before its own simplification runs: a recursion whose depth is a constant used to be unrolled until the rewrite budget ran out, and the program was reported as a defect of the compiler (`Pass 'std::opt' failed with an internal error: the rewrite ... did not settle`) instead of being refused (defect A5)"
+kind = "negative"
+case = "../../../cases/modules/onnx/export_entry_impure_recursion.cml"
+args = ["${case}", "std::macro", "std::opt", 'onnx::export out="${test_tmp}/impure_recursion.onnx"']
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_line = 16
+expect_diagnostic_column = 5
+expect_output_contains = ["impure operator ':io/println' cannot be exported"]
+expect_output_not_contains = ["PassInternalError", "did not settle", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000

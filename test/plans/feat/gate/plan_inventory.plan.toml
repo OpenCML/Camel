@@ -2,7 +2,7 @@ id = "gate.plan_inventory"
 order = 921
 tier = "fast"
 tags = ["feat", "tools", "gate"]
-desc = "Every plan file under test/plans has a layer -- a fast target reaches it, SLOW_PLANS names it, FORBIDDEN names it (its own file says `tier = \"milestone\"`), or it is a debug or milestone plan -- so no plan file's tests are silently UNKNOWN"
+desc = "Every plan file under test/plans has a layer -- the whole tree at `--tier fast` reaches it, SLOW_PLANS names it, its own tier line makes it a milestone or debug plan, or it is one of the plan files the gate cannot start -- so no plan file's tests are silently UNKNOWN"
 
 # `scripts/plan-inventory.mjs` holds the tables and the check that every plan file
 # belongs to a layer; `scripts/release-gate.mjs` imports the same module, so this entry and the
@@ -18,7 +18,7 @@ desc = "Every plan file under test/plans has a layer -- a fast target reaches it
 
 [[tests]]
 name = "gate.plan_inventory"
-desc = "Every plan file under test/plans is reached by a fast target, named in SLOW_PLANS, named in FORBIDDEN, or a debug or milestone plan; a file the tables name exists, and the walk examined at least one plan. The check prints every problem at once and exits 1."
+desc = "Every plan file under test/plans is reached by the fast layer (the whole tree at `--tier fast`), named in SLOW_PLANS, a milestone or debug plan by its own tier line, or a file the gate cannot start; a file a table names exists, and the walk examined at least one plan. The check prints every problem at once and exits 1."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/plan-inventory.mjs"
@@ -26,4 +26,6 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["plan files, every one of them has a destination"]
 normalizers = ["normalize_newlines"]
-timeout_ms = 30000
+# 45 s, not 30: the walk reads 331 plan files and 3488 case files, and the CI runner measured 9410 ms
+# of CPU for it -- 3.2x the bound, under the 4x the margin rule asks for. 45 s is 4.8x that figure.
+timeout_ms = 45000

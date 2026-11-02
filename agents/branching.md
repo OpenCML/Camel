@@ -63,6 +63,35 @@ file list shown in the merge message. Documents cannot make code green or red, s
 Being behind by a commit that touches code is not an exception — it is the thing the check exists
 to catch.
 
+### When a ruling and a reading disagree
+
+A ruling is a decision about what the language should be; a reading is what the tree does today. They
+can disagree, and when they do, **do neither of the two easy things**: do not execute the ruling as
+if the reading were noise, and do not stop and wait.
+
+- **Take the default the page itself wrote down.** If the page that asked the question names a
+  default and a criterion for abandoning it ("if the suite drops, something calls it directly and it
+  is not a candidate"), the measurement is what applies that criterion. A reading of 508 failing
+  cases is the criterion answering.
+- **Write the conflict as a question page** and put it in `questions/`, with the reading, what was
+  tried, and the paths: the ruling stands as written in the record, and the person who ruled gets to
+  rule again knowing the number.
+- **Say in the merge or fix commit that the ruling was not executed, and why.** Otherwise the next
+  reader finds a ruling on `develop` and assumes it was carried out.
+
+The example on record: the ruling said the eleven `:op/ne_*` rows are a second implementation of
+`==` and should go. Deleting them took the suite from `8390/8374/0` to `8390/7866/508`, because
+`modules/graph/module.cpp#neKernel` builds a `__neq__` group for the types that have no `==` to fall back
+on. The rows stayed, a question page carried the reading, and the ruling's own text stayed in the
+record untouched.
+
+**The conflict ends when the ruling comes back with a path.** If the person who ruled responds with
+how to do it — change the call sites to an equivalent form first, then delete — the state is no
+longer "ruling vs reading": it is a migration with an order, and the lane does it. Move the page to
+`reviews/` at that point, because a ruled page left in `questions/` turns the index into a list of
+questions that have been answered. The example above ended exactly this way: the author answered with
+"grep for the URI, read `==` and negate, then delete", and the page went to `reviews/`.
+
 ## Coordinator Workflow: Handover Branches And `wzj-dev`
 
 The coordinator's own work follows a two-step integration so the remote stays quiet and the task book's readers still see progress.
@@ -71,6 +100,26 @@ The coordinator's own work follows a two-step integration so the remote stays qu
 - Merge each finished handover branch into `wzj-dev` first (`git merge --no-ff`), and promote `wzj-dev` into `develop` in batches — at least every half hour, so an AI reading `develop` sees the progress quickly. Pushing `develop` and `wzj-dev` is what makes the work visible.
 - As soon as a handover branch is merged into `wzj-dev` and its worktree is removed, delete the branch. If an older remote `handover/...` branch still exists from before this rule, delete it too; the commits are in `develop`.
 - The rules above still hold: merge commits only, never rebase `develop`, never force-push, never touch `main`.
+
+## The `release` Branch: Where A Version Is Assembled
+
+- `release` is the branch a version is assembled on and the only branch a tag is made from; `main`
+  is moved to the tagged commit afterwards. It is cut from `develop` and lives one version.
+- Assemble a version there with `git merge --no-ff <develop boundary>` -- the boundary is the last
+  `develop` commit that version ships -- then write its `changes.log` section, tag, and run
+  `node scripts/setver.js <next>` for the following development version.
+- Push `release` **before** creating the tag. `.github/workflows/ci.yml` and `build-pypi.yml` run on
+  that push (about 40 minutes, in parallel), so the tag, `main` and the published wheel only move
+  once the run is green. A red run on `release` costs a push; a red run on the tag costs a
+  published version that cannot be taken back.
+- A fix that run asks for is made on `release` when it is a build, test or timing bound. A fix that
+  changes meaning is made on `develop` and `git cherry-pick -x`-ed onto `release`, so both sides
+  hold the same content and the later merge is a no-op.
+- After the tag, merge `release` back into `develop` with `git merge --no-ff release`, which is how
+  the notes, the version bump and any release-branch fix reach the next version.
+  `git merge-base --is-ancestor release develop` must be true afterwards.
+- `develop` is not a trigger of either workflow: it takes a merge every few minutes, and a leg that
+  started on it would spend 40 minutes measuring a tree nobody releases.
 
 ## `develop` To `main`
 
@@ -84,7 +133,10 @@ The coordinator's own work follows a two-step integration so the remote stays qu
 - Before merging `develop` into `main`, check whether `changes.log` already contains the release notes for the pending release.
 - If `changes.log` is missing the release notes, summarize them from the relevant git commit history and prepare a `changes.log` update on `develop`.
 - Before committing that `changes.log` update on `develop`, ask the user to confirm that the proposed release-note content is appropriate.
-- After the merge commit is created on `main`, immediately create a version tag in the form `vx.x.x`.
+- The version tag is created on the `release` commit that carries the notes, once that commit's run
+  is green; `main` is then moved to that same commit, so the tag, `main` and `release` name one
+  tree. `main` is an ancestor of it (every earlier release is in `release`'s history), so the move
+  is a fast-forward; when it is not, stop and read the graph rather than forcing it.
 - The release merge commit on `main` should name the key released changes; avoid redundant action words such as `publish`, `merge`, or the branch name unless they are necessary to keep the subject clear.
 
 ## Post-Release Version Bump

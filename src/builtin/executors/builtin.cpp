@@ -114,9 +114,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         // the element type, which is what a bf16 or f16 value is a member of. `bf` is bf16 and
         // `f6` is f16.
         {"op/eq_bf", __builtin__eq__},
-        {"op/ne_bf", __builtin__ne__},
         {"op/eq_f6", __builtin__eq__},
-        {"op/ne_f6", __builtin__ne__},
         {"op/lt_bf", __builtin__lt_bf__},
         {"op/le_bf", __builtin__le_bf__},
         {"op/gt_bf", __builtin__gt_bf__},
@@ -250,14 +248,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/eq_z", __builtin__eq__},
         {"op/eq", __builtin__eq__},
 
-        {"op/ne_i", __builtin__ne__},
-        {"op/ne_l", __builtin__ne__},
-        {"op/ne_f", __builtin__ne__},
-        {"op/ne_d", __builtin__ne__},
-        {"op/ne_b", __builtin__ne__},
-        {"op/ne_s", __builtin__ne__},
-        {"op/ne_c", __builtin__ne__},
-        {"op/ne_z", __builtin__ne__},
         {"op/ne", __builtin__ne__},
 
         {"op/lt_i", __builtin__lt__<Int32>},
@@ -340,7 +330,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"struct/len_bytes", __len_bytes__},
         {"op/add_bytes", __add_bytes__},
         {"op/eq_bytes", __eq_bytes__},
-        {"op/ne_bytes", __ne_bytes__},
 
         {"op/not", __builtin__not__},
 
@@ -478,7 +467,6 @@ void registerBuiltinOperatorTraits() {
         "struct/len_bytes",
         "op/add_bytes",
         "op/eq_bytes",
-        "op/ne_bytes",
         "struct/range",
         "struct/concat_arr",
         "struct/append_arr",
@@ -537,21 +525,13 @@ void registerBuiltinOperatorTraits() {
         "op/mul_d",
         "op/neg_d",
         "op/eq_i",
-        "op/ne_i",
         "op/eq_l",
-        "op/ne_l",
         "op/eq_f",
-        "op/ne_f",
         "op/eq_d",
-        "op/ne_d",
         "op/eq_b",
-        "op/ne_b",
         "op/eq_s",
-        "op/ne_s",
         "op/eq_c",
-        "op/ne_c",
         "op/eq_z",
-        "op/ne_z",
         "op/lt_s",
         "op/le_s",
         "op/gt_s",
@@ -611,13 +591,12 @@ void registerBuiltinOperatorTraits() {
         // The read-only helpers of `prelude.cml`: `contains` over an array walks it comparing
         // elements by content, `contains` over a string searches it, `len` of `Bytes` reads a
         // length and `==`/`!=` of two `Bytes` compare them (struct.cpp#__contains_arr__,
-        // #__contains_str__, #__len_bytes__, #__eq_bytes__, #__ne_bytes__). None of them builds a
+        // #__contains_str__, #__len_bytes__, #__eq_bytes__). None of them builds a
         // value, so a failed allocation is not among their paths either.
         "struct/contains_arr",
         "struct/contains_str",
         "struct/len_bytes",
         "op/eq_bytes",
-        "op/ne_bytes",
     };
     // The conversions of an array apply to each element on its own.
     const auto isArrayConversion = [](std::string_view key) {

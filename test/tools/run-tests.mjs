@@ -19,6 +19,8 @@ import {
 } from './cuda-visibility.mjs'
 import { CUDA_DEVICE_ORDER, PCI_BUS_ID, chooseFreeDevice } from './free-device.mjs'
 import { RUN_DIRS_KEPT, SCRATCH_DIR, formatRetention, pruneRunnerOutput, runnerOutputPath } from './runner-output.mjs'
+import { argProblems } from './cli-arg-domains.mjs'
+import { tierAccountingLine, tierAccountingProblems } from './tier-accounting.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const TOOLS_ROOT = path.dirname(__filename)
@@ -73,6 +75,7 @@ const TEST_FIELDS = new Set([
     'backends', 'backends_agree', 'compare_to', 'compare_fields',
     'golden', 'snapshot_stream', 'snapshot_compare', 'normalizers',
     'expect_exit', 'expect_stdout_contains', 'expect_stdout_exact', 'expect_stdout',
+    'expect_stdout_matches',
     'expect_stdout_starts_with', 'expect_stdout_not_contains', 'expect_stderr_contains',
     'expect_output_contains', 'expect_output_not_contains',
     'expect_diagnostic_name', 'expect_diagnostic_code',
@@ -198,6 +201,24 @@ function validatePlanSchema(doc, planPath) {
         if (!entry) continue
         checkFieldType(planPath, entry, 'expect_stdout_exact', where, 'string')
         checkFieldType(planPath, entry, 'expect_stdout', where, 'string')
+        // A pattern, or a list of them, every one of which has to find a line. The shape is typed
+        // here; whether the pattern compiles and whether it contradicts another stdout assertion is
+        // the load-time plan check (`assertionProblems`), which names `plan:line`.
+        if (entry.expect_stdout_matches !== undefined) {
+            const value = entry.expect_stdout_matches
+            const list = Array.isArray(value) ? value : [value]
+            if (typeof value !== 'string' && !Array.isArray(value)) {
+                throw new PlanSchemaError(
+                    `${planLabel(planPath)}: ${where}: expect_stdout_matches must be a string or a list of strings, got ${JSON.stringify(value)}`
+                )
+            }
+            const bad = list.find((item) => typeof item !== 'string')
+            if (bad !== undefined) {
+                throw new PlanSchemaError(
+                    `${planLabel(planPath)}: ${where}: expect_stdout_matches holds ${JSON.stringify(bad)}, which is not a string`
+                )
+            }
+        }
         checkFieldType(planPath, entry, 'perf_budget_platform', where, 'string')
         checkFieldType(planPath, entry, 'cuda_devices', where, 'boolean')
         checkFieldType(planPath, entry, 'cuda_free_device', where, 'boolean')
@@ -951,6 +972,34 @@ function printDetailLines(lines) {
 }
 
 /**
+ * A regular expression that matched nothing says so with the two things a reader needs to fix it or
+ * to know it is a real defect: the pattern as it was written, and the head of the output it was
+ * matched against. The head, not the tail: a shape assertion is about how the output opens, and the
+ * tail is what `printFailedOutput` already shows. Twelve lines, the same bound that function uses.
+ */
+function printMatchDiagnostics(diagnostics) {
+    const maxLines = 12
+    const maxWidth = 240
+    for (const entry of diagnostics || []) {
+        const lines = String(entry.stdout).replace(/\n$/, '').split('\n')
+        const shown = lines.slice(0, maxLines)
+        console.log(`    ${COLORS.cyan}[match]${COLORS.reset} pattern /${entry.pattern}/ -- a legal regular expression that matched no line`)
+        if (shown.length === 0 || (shown.length === 1 && shown[0] === '')) {
+            console.log(`    ${COLORS.cyan}[stdout head]${COLORS.reset} (empty)`)
+            continue
+        }
+        console.log(
+            `    ${COLORS.cyan}[stdout head]${COLORS.reset} ${shown.length} of ${lines.length} line(s)` +
+                (lines.length > shown.length ? ', the rest is in the output file above' : ''),
+        )
+        for (const line of shown) {
+            const text = line.length > maxWidth ? `${line.slice(0, maxWidth)}...` : line
+            console.log(`      ${text}`)
+        }
+    }
+}
+
+/**
  * The end of what a failed test wrote, for a log that is all there is to read (continuous
  * integration, where the files of test/results are not at hand): with CI or
  * CAMEL_TEST_SHOW_OUTPUT set, the last lines of standard output and standard error follow the
@@ -981,6 +1030,19 @@ function printFailedOutput(result) {
             console.log(`    ${COLORS.cyan}[${name}]${COLORS.reset} ${clipped}`)
         }
     }
+}
+
+/**
+ * Where a failed test's whole output is. The log keeps twelve lines of it (`printFailedOutput`,
+ * and only under CI), which is enough to see the shape of a failure and not enough to read the
+ * cause: twice on 2026-11-02 a conclusion was drawn from a truncated fragment whose first line --
+ * the one that said what happened -- was above the cut. The runner already writes every test's
+ * stdout, stderr, merged output and meta.json into its run directory; this line is the pointer to
+ * it, relative to the checkout so it reads the same on a build machine as here.
+ */
+function fullOutputLine(statusDir) {
+    const relative = path.relative(REPO_ROOT, statusDir).split(path.sep).join('/')
+    return `full output: ${relative}/ (stdout.txt, stderr.txt, output.txt, meta.json)`
 }
 
 function printRunSummary(summary) {
@@ -1400,6 +1462,74 @@ function lookupCompleted(context, name) {
     return scoped ?? context.completed.get(name)
 }
 
+/**
+ * The patterns of `expect_stdout_matches`: a string, or a list of them, every one of which has to
+ * find a line. The field takes a list for the same reason `expect_stdout_contains` does.
+ */
+function stdoutMatchPatterns(test) {
+    const raw = test.expect_stdout_matches
+    if (raw === undefined || raw === null) return []
+    if (Array.isArray(raw)) return raw.map((entry) => String(entry))
+    return [String(raw)]
+}
+
+/**
+ * Line by line, because that is what the assertion says: "some line of the output looks like this".
+ * Not the whole output at once (then `^` and `$` would anchor the file, not a line, and a plan
+ * cannot say "a line that starts with ..."), and not every line (`no test wants that, and one extra
+ * printed line would turn it red -- that is a different assertion`).
+ */
+function matchesAnyLine(regex, text) {
+    const lines = String(text).split('\n')
+    if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop()
+    return lines.some((line) => regex.test(line))
+}
+
+/**
+ * What a plan gets wrong about its stdout assertions *before* any test runs: a regular expression
+ * that does not compile, an empty pattern (it matches everything and would be green forever), and
+ * two assertions on the same stdout (`expect_stdout_matches` with `expect_stdout_contains` or
+ * `expect_stdout_exact`) -- the last combination has no meaning a reader could guess, so it is
+ * refused rather than ordered. These are plan errors, not failing tests: the runner refuses to
+ * start, and the message names `plan:line`.
+ */
+function assertionProblems(test) {
+    const problems = []
+    const patterns = stdoutMatchPatterns(test)
+    if (patterns.length === 0) return problems
+    for (const field of ['expect_stdout_contains', 'expect_stdout_exact', 'expect_stdout']) {
+        const value = test[field]
+        if (value === undefined || value === null) continue
+        if (Array.isArray(value) && value.length === 0) continue
+        problems.push({
+            word: `expect_stdout_matches with ${field}`,
+            needle: field,
+            reason: 'both assert the same stdout, and which of them wins is not written anywhere: keep one',
+        })
+        break
+    }
+    for (const pattern of patterns) {
+        if (pattern === '') {
+            problems.push({
+                word: 'expect_stdout_matches: ""',
+                needle: 'expect_stdout_matches',
+                reason: 'an empty pattern matches every line, so the assertion would be green forever: write the line you mean',
+            })
+            continue
+        }
+        try {
+            new RegExp(pattern)
+        } catch (error) {
+            problems.push({
+                word: `expect_stdout_matches: /${pattern}/`,
+                needle: pattern,
+                reason: `is not a regular expression (${error.message}); it is one pattern a single line must match, not a glob`,
+            })
+        }
+    }
+    return problems
+}
+
 async function validateTest(test, result, context) {
     const failures = []
     const scope = context.scope || {}
@@ -1410,6 +1540,28 @@ async function validateTest(test, result, context) {
         const needle = expandTextTokens(rawNeedle, scope)
         if (!result.normalized.stdout.includes(needle)) {
             failures.push(`stdout does not contain '${needle}'`)
+        }
+    }
+    // A regular expression is the assertion for a line whose shape is what matters and whose values
+    // are not pinned (`^shape \d+ x \d+$`). It reads the output the way `expect_stdout_contains`
+    // does -- is there a line like this? -- and it is checked line by line, so `^` and `$` anchor a
+    // line and an unanchored pattern is a substring of a line (docs/test-plans.md has both
+    // examples). The pattern was compiled at load (a bad one is a plan error, see
+    // `assertionProblems`); the failure names the pattern, says the regex is legal, and prints the
+    // head of the output, because "did not match" without either is not a reading.
+    for (const rawPattern of stdoutMatchPatterns(test)) {
+        const pattern = expandTextTokens(rawPattern, scope)
+        let regex
+        try {
+            regex = new RegExp(pattern)
+        } catch (error) {
+            failures.push(`expect_stdout_matches: /${pattern}/ is not a regular expression (${error.message})`)
+            continue
+        }
+        if (!matchesAnyLine(regex, result.normalized.stdout)) {
+            failures.push(`expect_stdout_matches: /${pattern}/ (a legal regular expression) matches no line of the normalized stdout`)
+            result.matchDiagnostics = result.matchDiagnostics || []
+            result.matchDiagnostics.push({ pattern, stdout: result.normalized.stdout })
         }
     }
     // `expect_stdout` is the legacy name of the same byte-exact comparison: a plan written
@@ -1841,8 +1993,13 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
  * file was rewritten once for every test in it. See test/tools/runner-output.mjs, and
  * docs/test-plans.md, "Runner Output".
  */
+/** The directory one test's log files go into: `<run>/<status>/<plan>/<test>/`. */
+function logPathOf(plan, test, status, logDir) {
+    return path.join(logDir, status, sanitizeSegment(plan.id), sanitizeSegment(test.name))
+}
+
 function writeLogFiles(plan, test, result, status, logDir) {
-    const statusDir = path.join(logDir, status, sanitizeSegment(plan.id), sanitizeSegment(test.name))
+    const statusDir = logPathOf(plan, test, status, logDir)
     ensureDir(statusDir)
     fs.writeFileSync(path.join(statusDir, 'stdout.txt'), result.stdout)
     fs.writeFileSync(path.join(statusDir, 'stderr.txt'), result.stderr)
@@ -1912,15 +2069,42 @@ function writeLogFiles(plan, test, result, status, logDir) {
 }
 
 /**
+/**
  * A test with `backends = ["nvm", "fvm", ...]` is one test per back end, named
  * `<name>.<backend>`, in that order. `${backend}` in its `args` is the pass list `run_<backend>`
  * of test/vars.toml. Every assertion of the entry holds for each of them; in addition, each back
  * end after the first must equal the first on the fields listed in `backends_agree`. A back end
  * listed in `known_fail` is expected to fail (see main).
+ *
+ * A test with no `backends` list is one run, and its mark is `known_fail = true`. The mark used to
+ * be read *after* the early return for that shape, so `known_fail` on such a test did nothing at
+ * all: the case failed, the run went red, and the mark was never mentioned. `20860eb01` found it
+ * and fixed the one case where it showed -- by giving that case a `fvm` back end so the mark
+ * applied -- which fixed the symptom; the author's 01:50 ruling asked for the mechanism. Now the
+ * shape decides how the mark is written, and a mark written in the other shape's words is refused
+ * by name instead of being ignored.
  */
 function expandBackends(test) {
-    if (!Array.isArray(test.backends)) return [test]
-    const knownFail = new Set(test.known_fail || [])
+    const marked = test.known_fail ?? false
+    if (!Array.isArray(test.backends)) {
+        if (marked === false || (Array.isArray(marked) && marked.length === 0)) return [test]
+        if (marked !== true) {
+            throw new Error(
+                `known_fail on ${test.name} names back ends (${JSON.stringify(marked)}), but the test has no ` +
+                    `backends list, so no back end of that name runs here: write known_fail = true`,
+            )
+        }
+        return [{ ...test, __knownFail: true }]
+    }
+    if (marked === true) {
+        throw new Error(
+            `known_fail on ${test.name} is true, but the test has backends: name the back ends that fail`,
+        )
+    }
+    if (marked !== false && !Array.isArray(marked)) {
+        throw new Error(`known_fail on ${test.name} must be true or a list of back ends; it is ${JSON.stringify(marked)}`)
+    }
+    const knownFail = new Set(marked === false ? [] : marked)
     for (const backend of knownFail) {
         if (!test.backends.includes(backend)) {
             throw new Error(`known_fail names '${backend}', which is not in backends of ${test.name}`)
@@ -2119,6 +2303,20 @@ export function testTier(plan, test) {
  * `tier = "debug"`. `all` therefore leaves those tests out: it runs on the Release binary, where
  * the debug layer's abort case would not abort.
  */
+// The layers a run of `tier` claims to cover: a plan of one of them that starts nothing in this run
+// is a failure, and a plan of another layer is expected to be empty here. `compileOnly` covers the
+// non-fast entries wherever they live, so no plan is "expected empty" in that mode.
+function coveredTiers(tier, compileOnly = false) {
+    if (compileOnly) return new Set(['fast', 'slow', 'milestone', 'debug'])
+    if (tier === 'all') return new Set(['fast', 'slow', 'milestone'])
+    if (tier === 'debug') return new Set(['debug'])
+    return new Set([tier])
+}
+
+// A plan path as a reader names it: relative to the repository root, forward slashes.
+function relPath(abs) {
+    return path.relative(path.resolve(TEST_ROOT, '..'), abs).split(path.sep).join('/')
+}
 function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
     const order = []
     for (const plan of plans) {
@@ -2168,6 +2366,21 @@ function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
     }
     const kept = new Set(selected)
     const selectedPlans = []
+    // Declared against started, per plan, for the layer this run covers. Both are counted from the
+    // loaded plans -- `declared` the entries whose own tier is this layer's, `started` the ones the
+    // run launches (companions included). Never computed from `backends.length`: a swept copy
+    // carries the source's list, and the multiplication reads 7339 for a layer that starts 3404.
+    const tierAccounting = []
+    // A plan the run reaches but starts nothing in is not a pass: nothing about it was read. Two
+    // shapes must not be confused, and the author's 01:30 ruling asks for the difference to be a
+    // rule rather than a habit: a plan whose own tier is another layer is *expected* to contribute
+    // nothing here (the milestone layer under a fast run), and is counted so the zero is explained
+    // instead of silent; a plan whose own tier is the layer this run covers and starts nothing is a
+    // failure, because a plan of this layer that gives this layer no test is in the run by name
+    // only. A plan that declares no test at all is a failure in every layer.
+    const covered = coveredTiers(tier, compileOnly)
+    const emptyByLayer = []
+    const unproven = []
     let cursor = 0
     for (const plan of plans) {
         const tests = []
@@ -2175,9 +2388,84 @@ function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
             if (kept.has(cursor)) tests.push(test)
             cursor++
         }
-        if (tests.length > 0) selectedPlans.push({ ...plan, tests })
+        if (tests.length > 0) {
+            selectedPlans.push({ ...plan, tests })
+            let declaredHere = 0
+            for (const test of plan.tests) if (wants(plan, test)) declaredHere++
+            tierAccounting.push({
+                plan: relPath(plan.__planPath),
+                declared: declaredHere,
+                started: tests.length,
+            })
+            continue
+        }
+        const key = relPath(plan.__planPath)
+        const declared = plan.tests.length
+        const own = plan.__planError ? 'failing' : plan.tier ?? 'fast'
+        if (plan.__planError) {
+            // A schema error already fails this plan; it is counted here as read, not as unproven.
+            emptyByLayer.push(plan.__planPath)
+        } else if (declared === 0) {
+            unproven.push(`${key}: the plan declares no test at all, so this run proves nothing about it`)
+        } else if (covered.has(own)) {
+            unproven.push(
+                `${key}: its own tier is '${own}', the layer this run covers, and it declares ` +
+                    `${declared} test(s) none of which this run selects -- a plan that starts no test ` +
+                    'proves nothing',
+            )
+        } else {
+            emptyByLayer.push(plan.__planPath)
+        }
     }
-    return selectedPlans
+    // The options a plan writes are the CLI's words, and a value the CLI does not take is a *plan*
+    // error, not a red test: the CLI refuses it while parsing, so the test would fail with an exit
+    // code that says nothing about the program. Six entries of `jit_framed` were read that way for
+    // a night (`--gc-check verify=1`, diagnosed as a GC defect). The domains live in
+    // `cli-arg-domains.mjs`, which checks itself against `tools/camel-cli/config.cpp`.
+    //
+    // The same shape, one field over: a regex that does not compile, an empty pattern, and two
+    // assertions on one stdout are plan errors too (`assertionProblems`), found here so a run
+    // refuses instead of starting a test whose verdict is already meaningless.
+    const argProblemsOfPlans = []
+    const reportedArgs = new Set()
+    for (const plan of selectedPlans) {
+        for (const test of plan.tests) {
+            const found = [
+                ...argProblems(test.args),
+                ...assertionProblems(test),
+            ]
+            for (const problem of found) {
+                const line = planLineOf(plan.__planPath, problem.needle ?? problem.word) ?? planLineOf(plan.__planPath, problem.option)
+                const word = problem.option ? `${problem.option} ${problem.word}` : problem.word
+                const key = `${plan.__planPath}|${line}|${word}`
+                if (reportedArgs.has(key)) continue
+                reportedArgs.add(key)
+                argProblemsOfPlans.push({ planPath: plan.__planPath, line, testName: test.name, word, reason: problem.reason })
+            }
+        }
+    }
+    return { plans: selectedPlans, emptyByLayer, unproven, argProblems: argProblemsOfPlans, tierAccounting, tier }
+}
+
+/**
+ * The line of a plan file where a word is written, so a plan error can be reported as
+ * `plan:line`. The word came from the file, so it is in there; a word assembled by the runner
+ * (an expanded `${case}`, say) is not, and then the caller falls back to the option's line.
+ */
+const PLAN_TEXT = new Map()
+function planLineOf(planPath, needle) {
+    if (!needle) return null
+    let lines = PLAN_TEXT.get(planPath)
+    if (!lines) {
+        try {
+            lines = fs.readFileSync(planPath, 'utf8').split(/\r?\n/)
+        } catch {
+            return null
+        }
+        PLAN_TEXT.set(planPath, lines)
+    }
+    const index = lines.findIndex((line) => line.includes(needle))
+    return index === -1 ? null : index + 1
 }
 
 function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false) {
@@ -2715,7 +3003,15 @@ async function executePlans(plans, options, sharedVars, logDir) {
             if (note) {
                 printDetailLines([`note: ${note}`])
             }
+            if (outcome.status === 'fail') {
+                // The pointer comes before the twelve-line tail: a reader who stops at the tail must
+                // still have been told where the rest is.
+                printDetailLines([fullOutputLine(logPathOf(plan, test, outcome.status, logDir))])
+            }
             printDetailLines(outcome.failures)
+            // A regex that matched nothing prints its pattern and the head of what it read, before
+            // the tail: the two ends of the output are two different readings.
+            if (outcome.status === 'fail') printMatchDiagnostics(outcome.result && outcome.result.matchDiagnostics)
             if (outcome.status === 'fail') printFailedOutput(outcome.result)
         }
         const writeStarted = performance.now()
@@ -2853,7 +3149,10 @@ async function executePlans(plans, options, sharedVars, logDir) {
                     } else {
                         result.status = 'fail'
                         result.failures.push(
-                            `marked known_fail on '${entry.test.__backend}' but passes: remove the mark`
+                            `marked known_fail` +
+                                (entry.test.__backend
+                                    ? ` on '${entry.test.__backend}' but passes: remove the mark`
+                                    : ' but passes, so the mark is out of date and must be removed'),
                         )
                     }
                 }
@@ -2921,7 +3220,66 @@ async function main() {
             return false
         }
     })
-    const plans = loadPlans(options.targets, options.tier, options.layeredPlans, options.compileOnly === true)
+    const selected = loadPlans(options.targets, options.tier, options.layeredPlans, options.compileOnly === true)
+    const plans = selected.plans
+    // A plan that names an option value the CLI does not take is a plan error, and the run refuses
+    // instead of starting it: the CLI would exit 1 while parsing, and that exit code is not a
+    // reading about the program under test. `plan:line` and the legal values are in the message so
+    // the fix is at the file, not in a GC investigation.
+    if (selected.argProblems.length > 0) {
+        for (const problem of selected.argProblems) {
+            const where = problem.line ? `${relPath(problem.planPath)}:${problem.line}` : relPath(problem.planPath)
+            console.error(
+                `${COLORS.red}[PLAN ERROR]${COLORS.reset} ${where}: test '${problem.testName}': ` +
+                    `${problem.word} -- ${problem.reason}; the plan cannot say that`,
+            )
+        }
+        console.error(
+            `${COLORS.red}[PLAN ERROR]${COLORS.reset} ${selected.argProblems.length} problem(s) in ` +
+                'the plans this run selected make their verdict meaningless, so nothing was started: this ' +
+                'is a plan error, not a failing test. Option values are listed in ' +
+                'test/tools/cli-arg-domains.mjs (checked against tools/camel-cli/config.cpp); the stdout ' +
+                'assertions are described in docs/test-plans.md.',
+        )
+        process.exitCode = 2
+        return 2
+    }
+    // A plan this run reaches and starts nothing in is not a silent zero. The ones whose own tier
+    // is another layer are counted and named on one line -- the milestone layer under a fast run is
+    // the usual case -- and the ones whose own tier is this layer are failures: the run would print
+    // a [SUMMARY] that says nothing about them.
+    if (selected.unproven.length > 0) {
+        for (const problem of selected.unproven) console.error(`${COLORS.red}[FAIL]${COLORS.reset} ${problem}`)
+        console.error(
+            `${COLORS.red}[FAIL]${COLORS.reset} ${selected.unproven.length} plan file(s) started no test ` +
+                'in this run and their own tier is the layer it covers; the run proves nothing about them',
+        )
+        process.exitCode = 1
+        return 1
+    }
+    // What the layer declares against what this run starts. The two numbers differ for a reason
+    // that is not a defect -- `backends` expands one entry into several tests, `compare_to` pulls a
+    // companion in -- and for a whole night the layer's size was quoted as one of them while a run
+    // of it was the other (`3330 declared / 3404 started`). Printing both is the cure; the check is
+    // the direction that is a defect: an entry declared for this layer that neither ran nor was
+    // skipped appears in no summary, so a plan would prove less than its file says while looking
+    // green. The started count is counted, never computed: `backends.length` times the entries reads
+    // 7339 for a layer that starts 3404.
+    {
+        const rows = selected.tierAccounting || []
+        console.log(`${COLORS.cyan}[tier]${COLORS.reset} ${tierAccountingLine(selected.tier, rows)}`)
+        const dropped = tierAccountingProblems(rows)
+        if (dropped.length > 0) {
+            for (const problem of dropped) console.error(`${COLORS.red}[FAIL]${COLORS.reset} ${problem}`)
+            console.error(
+                `${COLORS.red}[FAIL]${COLORS.reset} ${dropped.length} plan file(s) declare more tests of ` +
+                    `the '${selected.tier}' layer than this run started; a declared entry that neither runs ` +
+                    'nor is skipped is a defect in the selection, not a plan that proves nothing',
+            )
+            process.exitCode = 1
+            return 1
+        }
+    }
     // The pid keeps two runs started in the same second (the self-test does this) out of one
     // directory, whose logs and summary.json would otherwise overwrite each other.
     const logDir = path.join(LOG_ROOT, `${timestamp()}_${process.pid}`)
@@ -2949,6 +3307,25 @@ async function main() {
     console.log(
         `${COLORS.cyan}[INFO]${COLORS.reset} tier: ${options.tier}, tests: ${testCount}, jobs: ${options.jobs}`
     )
+    if (testCount === 0 && options.targets.length > 0) {
+        // A run that starts nothing is not a pass: every claim it could make is about tests it did
+        // not run. (No target at all is `scripts/test.js --changed` finding nothing to run, which is
+        // a legitimate no-op and says so, not a green run.)
+        console.error(
+            `${COLORS.red}[FAIL]${COLORS.reset} this run selected no test at all: ` +
+                `${plans.length} plan file(s) were reached and none of their entries is in this layer`,
+        )
+        process.exitCode = 1
+        return 1
+    }
+    if (selected.emptyByLayer.length > 0) {
+        // Named, so that a zero is a reading and not an absence: these plan files were reached and
+        // started nothing because their own tier says they belong to another layer.
+        console.log(
+            `${COLORS.cyan}[INFO]${COLORS.reset} plans of another layer, started nothing here: ` +
+                `${selected.emptyByLayer.length} (their own tier selects them: --tier slow, --tier milestone, --tier debug)`
+        )
+    }
     if (!CAN_READ_CHILD_CPU) {
         // Said once, and only where it changes what the run means: on this host no test's timeout
         // margin is judged, because the kernel offers no CPU figure and the wall clock is not a

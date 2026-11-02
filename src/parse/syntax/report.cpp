@@ -669,9 +669,7 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
             continue;
         }
 
-        // 6c. `a..b->f`: the '->' of the right operand, not of the interval. `..` binds looser,
-        //     so the call lands on the last value; the parentheses are what makes it an interval call.
-        // 6d. An annotation that is a list of types and then a `=>`: a function type names its
+        // 6c. An annotation that is a list of types and then a `=>`: a function type names its
         //     parameters, and `(float, float)` in a type position is a tuple type. The `=>`
         //     is where the writer expected `=`, so the diagnosis is about the type and not
         //     about a token that happens to fit nothing.
@@ -680,13 +678,6 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
                       static_cast<uint8_t>(TokenKind::Assign)) != error.expected.end()) {
             if (once(SyntaxDiag::FuncTypeNeedsNames, offending)) {
                 diagnostics.of(SyntaxDiag::FuncTypeNeedsNames).at(at(offending)).commit();
-            }
-            continue;
-        }
-
-        if (error.kind == SyntaxError::Kind::RangeRightIsLink) {
-            if (once(SyntaxDiag::RangeRightIsLink, offending)) {
-                diagnostics.of(SyntaxDiag::RangeRightIsLink).at(at(offending)).commit();
             }
             continue;
         }
