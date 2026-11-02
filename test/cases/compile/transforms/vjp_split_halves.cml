@@ -1,8 +1,11 @@
 // The two halves of `split`, asked for by hand: `f(x) = x*x*x`, so the first half answers with the
-// value `27.0` and the residuals the backward half reads, and the second half turns those residuals
-// and the cotangent `1.0` back into `27.0`. The residuals are the compiler's type function
-// (`ResidualsOf<F>`, `stdlib/signatures/transforms.cml`), so nothing here names their type -- only
-// what they are worth. Skipped while `split` has no implementation (the plan's `skip_unless`).
+// value `27.0` and the linear map the backward half is, and the map turns the cotangent `1.0` back
+// into `27.0`. The residuals it was built over stay in the transform's closure, so nothing here
+// names their type and nothing passes them -- that is the closure ABI (author, 2026-11-02).
+//
+// Before it, this case spelled the binary-tuple ABI: `let (forward, backward) = split(jvp(f))`,
+// `let (value, residuals) = forward(3.0)` and `backward(residuals, 1.0)`, with the residual bundle
+// passed back in as a value of the compiler's type function `ResidualsOf<F>`.
 import rulesets.jvp
 import { jvp, split } from transforms
 
@@ -11,9 +14,9 @@ func f(x: float): float {
 }
 
 func main(): int sync {
-    let (forward, backward) = split(jvp(f))
-    let (value, residuals) = forward(3.0)
+    let forward = split(jvp(f))
+    let (value, backward) = forward(3.0)
     println(value)
-    println(backward(residuals, 1.0))
+    println(backward(1.0))
     return 0
 }

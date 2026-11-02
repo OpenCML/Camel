@@ -713,14 +713,14 @@ timeout_ms = 20000
 # line, and the sentence the writer reads.
 [[tests]]
 name = "split_residuals_destructured"
-desc = "`split(jvp(f))` for `f(x, y) = x*x*y*y`, destructured: refused. The residual tuple is `TupleType::residuals` -- its members are the graph's answer (four here) and a program does not read them -- so `let (r0, r1) = residuals` is `SemanticDiag::ResidualsAreNotVisible` at the `let`, and the second half still gets the tuple whole (`transpose(linear)(residuals, ct)` is the shape that stays). Before this the same program compiled and dropped the two products in silence."
+desc = "`split(jvp(f))` for `f(x, y) = x*x*y*y`: its halves are not a pair the program can take apart, and that is refused. Under the closure ABI `split(jvp(f))` is the forward function, `forward(3.0, 2.0)` answers `(value, linear)` and `linear` is a function closed over the residuals it carried, so `let (dx, dy) = linear` has nothing to index and stops with `SemanticDiag::TypeNotIndexable` at that `let`. The case used to pin `SemanticDiag::ResidualsAreNotVisible` -- the binary-tuple ABI handed the residuals back as a value of the transform's own tuple type -- and that mechanism has no producer left on this tree (`TupleType::residuals` is only its definition), so the assertion moved to the same wish spelled against the new shape: give me the carried values one by one."
 kind = "negative"
 case = "../../../cases/compile/transforms/split_residuals_destructured.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ResidualsAreNotVisible"
-expect_diagnostic_line = 18
-expect_output_contains = ["SemanticDiag::ResidualsAreNotVisible", "The residuals `split` collects are not visible to the program"]
+expect_diagnostic_name = "SemanticDiag::TypeNotIndexable"
+expect_diagnostic_line = 27
+expect_output_contains = ["SemanticDiag::TypeNotIndexable", "does not support index access"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 

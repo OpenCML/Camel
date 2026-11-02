@@ -1,24 +1,32 @@
-// The residuals of a `split`, destructured: refused.
+// The halves of a `split` are not a pair the program can take apart: refused.
 //
-// `f(x, y) = x*x*y*y` crosses the cut with four values (`residuals=4`), and the tuple a program gets
-// is the transform's own (`TupleType::residuals`): its members are the graph's answer, so a program
-// does not read them. `let (r0, r1) = residuals` is `SemanticDiag::ResidualsAreNotVisible` at the
-// `let`; the tuple goes to the second half whole, as the last line below does.
+// Under the closure ABI (author, 2026-11-02) `split(jvp(f))` **is** the forward function; for
+// `f(x, y) = x*x*y*y` at `(3.0, 2.0)` it answers `(value, linear)`, and `linear` is a function --
+// the residuals it was built over live in its closure, in no value and in no type. So
+// `let (dx, dy) = linear` cannot mean "read the two directions out of it": there is nothing to
+// index, and the refusal is `SemanticDiag::TypeNotIndexable` at that `let`.
+//
+// What this case asserted before: the binary-tuple ABI handed the residuals back as a value of the
+// transform's own tuple type (`TupleType::residuals`), and `let (r0, r1) = residuals` was refused
+// with `SemanticDiag::ResidualsAreNotVisible`. That mechanism has no producer left on this tree
+// (`TupleType::residuals` is only its definition now; see
+// `docs/handover/reports/2026-11-02-the-residual-chain-is-dead-and-four-spots-to-remove.cn.md`), so
+// the old assertion had no object left to speak about. The wish it was guarding is the same wish,
+// spelled against the new shape -- "give me the carried values, one by one" -- and that is what is
+// refused here.
 import rulesets.jvp
-import rulesets.transpose
-import { jvp, split, transpose } from transforms
+import { jvp, split } from transforms
 
 func f(x: float, y: float): float {
     return x * x * y * y
 }
 
 func main(): int sync {
-    let (forward, linear) = split(jvp(f))
-    let (value, residuals) = forward(3.0, 2.0)
-    let (r0, r1) = residuals
+    let forward = split(jvp(f))
+    let (value, linear) = forward(3.0, 2.0)
+    let (dx, dy) = linear
     println("value=", value)
-    println("r0=", r0)
-    println("r1=", r1)
-    println("tangent=", transpose(linear)(residuals, 1.0))
+    println("dx=", dx)
+    println("dy=", dy)
     return 0
 }
