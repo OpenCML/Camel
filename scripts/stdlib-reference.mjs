@@ -2085,7 +2085,12 @@ const EXAMPLE_STOPS = {
     // `@example-fragment` marker whose reason names what it is missing. A number here that moved
     // says a shape changed; a number here that was lowered without a reason would be the same
     // silence as a relaxed gate.
-    'a semantic error': 40,
+    // This was 40 until the library's `with_grad` export was deleted (the author's ruling of
+    // 2026-11-02 11:50): its example `let slope_over_the_capture = with_grad(f)` stopped in this
+    // class -- `f` is a name only the description introduces -- so the example went with the
+    // declaration and the class is one smaller. No example was fixed and none was excused; one was
+    // deleted with the name it named.
+    'a semantic error': 39,
     // `split`'s example reaches the compiler with a function-typed parameter bound by name and the
     // compile graph keeps a live dereference node (`internal error: Compile graph '__doc_example'
     // still contains a live DREF node`). That is the compiler's own class, not the example's.
