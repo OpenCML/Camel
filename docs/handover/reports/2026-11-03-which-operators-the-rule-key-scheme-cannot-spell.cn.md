@@ -415,7 +415,7 @@ git grep -n -E 'ctrlInputsOf|ctrlEdgesOf|orderPredsOf' -- src modules include
 **⚠️ 写边被单独分组**：`setCtrlInputs(..., ctrlInputsOf(...))` 这类（`draft_inline` 12 处、`draft_clone` 4 处、`pullback.cpp:1662/2646/2719`、`defunctionalize.cpp:304`、`rewrite.cpp:323`、`region_outline.cpp:518`）是**把已有的等待边原样搬走**，读是为了写，和"读边判断"不是一件事，不混进上表。
 
 **本轮不改代码。**
-### 5.9 P0-2 第二半 · 第 1 处：`algebra.cpp#constant` 加读 sync（已落地）
+### 5.9 P0-2 第二半 · 第 1 处：`algebra.cpp#constant` 加读 sync —— **实测不生效，已撤**
 
 §5.8 清单里挑出的最小一处。改动是一行合取项：
 
@@ -437,9 +437,26 @@ killed   log 里出现 0 次
 feat/opt     1171 / 1171 全绿
 ```
 
-**"更保守"没有体现在任何一条用例上**——因为**今天的用例里没有一个"带 sync 等待、又长得像常量"的节点**。也就是说：这一笔在语义上是补对了，但**没有一条用例能证明它在起作用**（对比 §5.5 那道门有突变读数）。要把它变成"被证明过的守卫"，需要一个先造一个 sync 链上的常量候选、再看它折不折的用例；那是用例，不是闸门检查项（本 sprint 不许新增闸门检查项）。
+**停手探针（作者裁：造不出来就撤）**：手工探针
 
-**这一笔只有一行 diff、零行为变化**——也正是"补对了但还没有读数"的诚实状态，留着等第 2–9 处做完一起验。
+```cml
+func main(): int sync {
+    var total = 0
+    let k = 2 + 3        // 常量折叠的候选
+    total = total + k
+    println(total)
+    return 0
+}
+```
+
+`std::opt std::stats` 读数 **有这一行 21 节点 / 去掉这一行 21 节点**——**两次相同**。为什么：
+
+**builder 把 sync 边和 ctrl 边成对写**。`builder_helpers.h#writeSyncStatement` 就是
+`writeSyncLink(from, to); writeControlLink(from, to);`——所以**任何挂在 sync 链上的语句，`ctrlInputsOf` 本来就非空**，再加一个 `syncInputsOf` 合取项**永远改不了答案**。这不是"用例没覆盖"，是**这行今天不可达**。
+
+**这一行已撤**（`git checkout` 回 `ede6d0e54` 之前的 `algebra.cpp`）。结论记在这里的是**负结果**：今天没有任何程序能把"常量候选且只有 sync 等待"的节点放到图上——`constant()` 的候选是无输入的数据槽节点，而 `sync` 链上的节点从出生起就带着 ctrl 边。**只有某个 pass 把 ctrl 边单独丢掉之后，这行才会咬人**；那一天的到来，本身就是一个该立用例的事件。
+
+因此 §5.8 里"9 处该补 sync"要修正为 **8 处**：这一处经实测证明**不必补**（补了也不生效）。
 ## 6. 一句话结论
 
 **这条缝是方案性的，不是少数特例**：按"结果有切空间却拼不出键"计，**32 条**（把复数算进去 50 条），而例外表只能一条一条地救——今天救了两条、补了一条（`^`）。缺口的形状有两个：
