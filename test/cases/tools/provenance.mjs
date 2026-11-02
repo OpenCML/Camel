@@ -127,8 +127,13 @@ const plan = writePlan('clean')
         check('the clean tip is this checkout\'s HEAD, character for character', line !== null && line.includes(`tip ${head} |`), `${line} vs ${head}`)
         check('the binary field is an ISO time', /binary built \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}/.test(line || ''), line)
         check('the tree field is the checkout the tests ran in', (line || '').includes(`tree ${REPO_ROOT}`), line)
-        check('the provenance line comes right before the summary', /\[provenance\][^\n]*\n\[SUMMARY\]/.test(out.output), out.output)
-        check('the run is green and the summary keeps its shape', out.status === 0 && /\[SUMMARY\] total: 1, pass: 1, fail: 0$/.test(out.output), out.output)
+        // The summary block opens with a blank line, so "right before" is one blank line away.
+        check('the provenance line comes right before the summary', /\[provenance\][^\n]*\n\s*\n\[SUMMARY\]/.test(out.output), out.output)
+        check(
+            'the run is green and the summary keeps its shape',
+            out.status === 0 && /^\[SUMMARY\] total: 1, pass: 1, fail: 0$/m.test(out.output),
+            out.output,
+        )
     } else {
         console.log(`ok   (skipped the clean reading: this checkout has ${before} changed file(s) -- its provenance is the dirty case below)`)
     }
