@@ -15,12 +15,11 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-308 diagnostics: 288 errors, 20 warnings. 15 carry a machine-applicable edit, 293 say why they carry none.
+307 diagnostics: 287 errors, 20 warnings. 15 carry a machine-applicable edit, 292 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
 | `0x00000000` | [InternalDiag::UnknownInternalError](#unknowninternalerror) | Error | no |
-| `0x00000001` | [InternalDiag::GeneratorInitialValueShapeUnsupported](#generatorinitialvalueshapeunsupported) | Error | no |
 | `0x01000000` | [LexicalDiag::IllegalCharacter](#illegalcharacter) | Error | yes |
 | `0x01000001` | [LexicalDiag::InvalidNumberFormat](#invalidnumberformat) | Error | yes |
 | `0x01000002` | [LexicalDiag::UnclosedStringLiteral](#unclosedstringliteral) | Error | yes |
@@ -268,7 +267,7 @@ prints one entry.
 | `0x03000205` | [SemanticDiag::DuplicateRuleForOperator](#duplicateruleforoperator) | Error | no |
 | `0x03000206` | [SemanticDiag::YieldRequiresStreamHead](#yieldrequiresstreamhead) | Error | no |
 | `0x03000207` | [SemanticDiag::RuleRightUsesOuterVariable](#rulerightusesoutervariable) | Error | no |
-| `0x03000208` | [SemanticDiag::GeneratorLoopBodyNeedsNextState](#generatorloopbodyneedsnextstate) | Error | no |
+| `0x03000208` | [SemanticDiag::LoopBodyNeedsNextState](#loopbodyneedsnextstate) | Error | no |
 | `0x03000209` | [SemanticDiag::CalledFallibleValue](#calledfalliblevalue) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
@@ -347,7 +346,7 @@ An error has occurred: {0}.
 **Help**
 
 ```text
-The compiler reached a state it has no code for, so nothing in the program is known to be wrong. Report it together with the program that reached it.
+The compiler reached a state it has no code for. This is a known limitation of this compiler version, and nothing in the program is wrong.
 ```
 
 **Example** (`test/cases/compile/collections/err_key_float.cml`, run as `camel test/cases/compile/collections/err_key_float.cml`)
@@ -358,45 +357,6 @@ The compiler reached a state it has no code for, so nothing in the program is kn
 func main(): int sync {
     let m = [(1.5, 1)] as Map<float, int>
     println("never printed")
-    return 0
-}
-```
-
-### GeneratorInitialValueShapeUnsupported
-
-`0x00000001` · Error · `InternalDiag::GeneratorInitialValueShapeUnsupported`
-
-**Fix**
-
-None: internal: this version does not build the shape, so there is nothing in the program to change
-
-**Message**
-
-```text
-An error has occurred: {0}.
-```
-
-**Help**
-
-```text
-The generator machine does not build this shape yet: a generator 'loop' takes its initial value written as a literal at the loop, and a value computed there or held in a local is not built. This is a known limitation of this compiler version, and nothing in the program is wrong, so there is nothing to change in the program and no repair to suggest.
-```
-
-**Example** (`test/cases/compile/stream/generators_loop_call_initialiser.cml`, run as `camel test/cases/compile/stream/generators_loop_call_initialiser.cml`)
-
-```camel
-func f(): int {
-    return 0
-}
-
-func g(): int.. sync {
-    loop i = f() while i < 3 do {
-        yield i
-        i + 1
-    }
-}
-
-func main(): int sync {
     return 0
 }
 ```
@@ -8820,9 +8780,9 @@ func main(): int sync {
 }
 ```
 
-### GeneratorLoopBodyNeedsNextState
+### LoopBodyNeedsNextState
 
-`0x03000208` · Error · `SemanticDiag::GeneratorLoopBodyNeedsNextState`
+`0x03000208` · Error · `SemanticDiag::LoopBodyNeedsNextState`
 
 **Fix**
 
@@ -8831,13 +8791,13 @@ None: choice: the body has to end with the value the next round starts from, and
 **Message**
 
 ```text
-A generator loop body ends with the next value of its state, and this one ends without writing one: the pull after the yield has nowhere to go on from.
+A loop body ends with the next value of its state, and this one ends without writing one: the round after this one has nowhere to go on from.
 ```
 
 **Help**
 
 ```text
-The body of a loop in a generator is cut at its yield: the pull that hands an element out stops there, and the pull after it runs the rest of the body and the condition again, so the last statement of the body has to write the loop's next state value. Writing 'yield i' and then 'i + 1' moves the loop on; a body of only 'yield i' reads a fresh i on every pull, so the loop never moves on.
+The body of a loop is cut at its yield: the pull that hands an element out stops there, and the pull after it runs the rest of the body and the condition again, so the last statement of the body has to write the loop's next state value. Writing 'yield i' and then 'i + 1' moves the loop on; a body of only 'yield i' reads a fresh i on every pull, so the loop never moves on.
 ```
 
 **Example** (`test/cases/compile/stream/generators_loop_body_without_next_state.cml`, run as `camel test/cases/compile/stream/generators_loop_body_without_next_state.cml`)
