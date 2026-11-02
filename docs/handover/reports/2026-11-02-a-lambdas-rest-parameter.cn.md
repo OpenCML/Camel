@@ -1761,3 +1761,32 @@ for (size_t i = 0; i < parts.size(); ++i) { partTypes.push_back(Type::Float64())
 **下一笔的改法（两处，一起改才绿）**：① `parts` 只收"`tangentSpaceOf(端口的值的类型).hasSpace()`"的端口；② `partTypes` 取该端口值的切空间，**不写字面量**。
 **判据**：`grad_of_an_array_parameter` 从 `expected exit 1, got null` 变 `expected exit 0`，且 `feat/compile/transforms` 不开新红。
 **这条修好之后才谈撤 `known_fail` 标。**
+
+
+## 52. 答案装配改对之后：图建成了、签名对了、跑起来了——新的墙是 `:tangent/add_arr` 的"长度不同"
+
+**这一笔把 §51 指出的两处改了**（`parts` 只收有切空间的端口 + 槽类型取该端口的切空间 + 数组端口的零走 `:tangent/zeros_arr`），
+与 `idx_arr_t` 的 arm 一起量（**未提交，回退了**，理由见末尾）：
+
+**① 被转置成员这一行是"签名终于对上了"的铁证**：
+```
+TRANSPOSE function=rulesets.jvp::index_into<float> graph=92 type=(float[], int, float) => (float[],) nodes=3 rules=idx_arr_t
+```
+**`(float[], int, float) => (float[],)`——参数照原样、`int` 不占答案槽、答案是一个 `float[]` 的元组。** 与 `transposeSignature` 逐字一致。
+
+**② `null` 那条消失了**：`element 0 of an array that holds 0` **不再出现**，`expected exit 1, got null` 变成**有名字的运行期诊断**：
+```
+[Error] autodiff: tangent arrays added that have different lengths.
+```
+**⇒ 从"读一个默认构造的 Array"推进到"两个余切数组长度不一致"**，这是**性质完全不同**的一步：前者是类型撒谎，后者是算术对不上。
+
+**③ 六个用例仍红，所以这一笔没有提交**——按"一条失败的层比一张精确的图更糟"，`transpose.cpp` 已 `git checkout` 回 `b4223ee67`。
+
+**④ 下一个探针（省一次摸索）**：`:tangent/add_arr` 的两侧长度各是多少、分别是谁造的。
+数组 `xs` 的两条余切一条来自 `scatter_add_arr(zeros_arr(xs), i, ct)`（长度 = `xs` 的元素数），
+**另一条如果不是数组长度而是标量/种子，就是 `addCotangent` 在数组目标上收到了标量余切**——
+`add_t` 那一支把 `ct` 原样下发时没有检查目标是不是数组（`transpose.cpp` 的 `add_t` 分支），这是下一个要看的地方。
+
+**⑤ 归类一条（承接你说的共同点）**：**一个能解释现象的候选不等于原因；只有"改掉它现象消失、改回它现象回来"才是原因。**
+今晚五次"原因不在被怀疑的地方"，被怀疑的那一处**确实都有毛病**（`zeros_arr` 的零、`scatter` 的边界、`transposeSignature` 的签名、答案装配的槽），
+**只是每次都不是"这一处"**——所以每条都要走到"改掉/改回"那一步才算数。
