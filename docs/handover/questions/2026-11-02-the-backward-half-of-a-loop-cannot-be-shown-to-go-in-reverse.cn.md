@@ -57,6 +57,21 @@
 **(4) 前置条件。**
 `stdlib/vjp.cml#vjp` 里那一行（`transpose(lin)(ct)`，`Transpose<F>` 的类型律）先进 develop——**`lane-typelaw` 在做**。那条一落地，胶带才有可能作为 `transpose` 的输入过切口，「倒序」也才有东西可读；再往后才是第 3 节的判别用例。
 
+## 7. P1-9 是四处，不是一处
+
+作者 15:30 的裁定把「聚合状态成对」列进 P1-9，而且是按**一处**（`pairTypeOf`）在排优先级。**实际是四处**，都在 `jvp` 的 lift 路径里；任何一处不落，元组状态都进不了循环体。唯一能分辨进度的指示灯只有一行：`REINTERP jvp function=f skip=body` 是否消失（`modules/transforms/jvp.cpp#liftGraph` 的 `skip=body` 出口）。今天它出现，而前向原程序跑得通（第 3 节）——缺的是 lift，不是语言。
+
+按依赖排，四处与各自的理由：
+
+1. **`pairTypeOf`**（`modules/transforms/jvp.cpp#pairTypeOf`，今天只认浮点标量）。入口：它不回答，后面三处的代码根本走不到。
+2. **循环体的端口配对**（`liftGraph` 的 `Port` 分支）。合体之后 body 的区域端口（状态口）必须拿到 pair；今天只有 `pairOf(dataType) != nullptr` 的端口才配，元组端口在这里掉出去。
+3. **聚合体的零**（`zeroConstantFor`）。今天写的是标量 `0.0`；元组/数组"没被读到的位置"要按 `tangentSpaceOf` 造零，否则第 2 处配出来的对里会有一个假数字。
+4. **`Accs` 投影配对**。状态是元组时，body 里读 `s.0` 是 `Accs(statePort, 0)`，每个投影自己也要成对——这一处不落，元组状态进去了也会在第一个成员上断掉。
+
+顺序就是 **1 → 2 → 3 → 4**：按"能不能进得去"排，每落一处看一次那行指示灯，直到第 4 处它才必然消失。四处全落完，才是第 3 节那个 2×2 非交换矩阵的判别（正序 Y1 / 倒序 Y2 / `Y1 ≠ Y2` / `vjp` 给倒序那个）。
+
+**同一轮顺带否掉一个想法（会改动第 5 节第 (2) 条的估算）**：`:struct/slice_arr` **不在算子注册表里**——`src/builtin/operators/struct.cpp` 的 `:struct/*` 只有 `concat_arr`、`copy_arr`、`len_arr`、`append_arr*`、`zip`、`range` 这些，没有切片；`xs[a:b:s]` 的降级走 `src/compile/gir/builder_operators.cpp` 的路径机制，`step` 只作为 `:tangent/scatter_slice_arr` 的梯度实参出现。所以「拿现成切片算子构造 `reverse(range)`」**在建图 API 上没有现成口**：要么给 draft 加一个数组反转助手，要么在 body 里用整数索引倒着取（即第 5 节说的"更麻烦"那条）。
+
 ## 要作者答的一句
 
 **「循环反向半程的『按轮倒序』在今天的树上不可观测（能到达 `split` 的循环状态只能是 `float`，逐轮映射可交换），而『倒序』本身属 4.3、`transpose` 仍原样复制区间：我按 4.2 落了『每轮一条残差』、没落倒序，并写明『倒序未实现、不可观测』，等聚合状态能 lift 后再补判别用例——除非你要先放宽 `pairTypeOf`。」**
