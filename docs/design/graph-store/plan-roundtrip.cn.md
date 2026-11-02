@@ -10,6 +10,210 @@
 
 ## 0. 结论摘要
 
+**2026-11-02 重扫（`lane-m5`, `f7cff9227`, 扫描工具 `test/tools/cml-sweep.mjs`，计划 `test/plans/feat/trans/cml_sweep.plan.toml`）。** 下面 1–3 条是 2026-10-30 的数，测量脚本当时"临时加入、**不提交**"，所以**今天跑不起来**——旧数不能复现，只能并排读，这是发现而不是障碍；能复现的是这一行命令：
+
+```
+node test/tools/cml-sweep.mjs --jobs 16
+SWEEP files=3360 printed=474 refused=1882 frontend=1004 timeout=0
+REFUSALS families=49
+ROUNDTRIP checked=458 equivalent=411 not_equivalent=47 over_budget=0 unfaithful=16
+```
+
+语料从 2387 涨到 3360（+973），打印 474（打印率 14.1%，旧 14.6%），等价 411/474 = 86.7%（旧 309/348 = 88.8%）。拒绝家族按「图名/算子名/数字掩码」归并后 49 类，最多的五类是：算子没有源码形式 755、图名不是源码标识符 358、`with` 参数是命名类型 86、参数的类型打不出来 85、返回类型是带标签/可空/单元组 73。四类分开记：**打印成功 ≠ 往返等价**（474 vs 458 检查、411 等价），**能打印 ≠ 能重新编译**（16 个连 canonical 文档都产不出）。
+
+**2026-11-02 第二刀：打印机读声明表（`lane-m5`）。** 打印机原来自带一份「URI 里的名字 → 符号」的表（`add/sub/mul/…` 17 条，`cml.cpp`），与算子在哪里声明无关；现在改为问声明表：`OperatorTable::groupOf(uri)` 给出它登记的组（`__add__`、`__neg__`、`__not__`），`operatorSymbolOf(组名)` 给出源码里写的符号；问不到就拒绝并**点名**，不猜拼法。范围只到「读表」——没有补任何一条声明。
+
+```
+node test/tools/cml-sweep.mjs --jobs 16
+SWEEP files=3362 printed=475 refused=1881 frontend=1006 timeout=0
+REFUSALS families=49
+ROUNDTRIP checked=459 equivalent=412 not_equivalent=47 over_budget=0 unfaithful=16
+```
+
+对照上一块（3360 文件、旧二进制）：打印 474 → 475，等价 411 → 412，不等价 47 → 47，产不出 canonical 文档 16 → 16。按文件比而不是按数比：改前旧二进制逐条记下的打印集与改后**一条不差**，只多出 `parse/rulings/not_by_precedence.cml`（它之前卡在 `!!t`：`!` 与 `!` 相邻是一个词法单元，现在打印成 `!(!t)`）；`DIFFERENT` 列表与旧基线**逐行相同**。
+
+两向 A/B（都在主机上跑、改完立即回退）：把 `:op/neg_l` 再登记进 `__not__` 组（声明顺序早于 `__neg__`），同一个程序从 `println(-n)` 变成 `println(!n)`——**文本跟着声明走**，打印机里没有第二份拷贝；`test/cases/consistency/faults/parallel_lowest_index.cml` 是**没有任何声明的算子**，被点名拒绝：`the operator ':mark/map_arr'`。
+
+**2026-11-02 第三刀：47 条不等价按族归并，修「字面量算术回来被折叠」这一族。** 归并的读法不是看判定器那行话，而是把两边的 canonical 文档里每个节点的算子（非算子节点用它的 kind）数一遍再相减：差的是「左边有、右边没有的节点」「右边有、左边没有的节点」。47 条归并成五族（余下是混合族）：**GATE 独缺 6**（`compile/constas/constas_with_rest.cml`——图里的门来自内联/区域，打印出来的程序是内联后的文本，不需要那道门）、**同节点不同形状 6**（`compile/equality/null_test_never_null.cml`）、**`DATA:tuple`↔`DATA:void` 5**（`compile/surface/if_without_else_ok.cml`——`()` 是空组不是 unit，打印器没有第二种写法，裸 `return` 编不过）、**COPY 独缺 4**（`compile/array_shape/rank_zero_var_slot.cml`）、**`DATA:i64`+FILL 3**（`compile/static_expansion/indices_graph.cml`）。
+
+被修的是原来 13 条的那一族：图里是 `:op/add_l` 加它的两个常量节点，打印成 `println(0 + 1 + 2 + 3)`，前端把整串折成 `DATA 6`——打印出来的程序比图少 3 个算子、4 个常量。修法在 `cml.cpp#infix`/`#prefix`：两个操作数都是字面量时，各自先绑一句 `let cmlN = <字面量>`，再写 `cmlN + cmlM`。名字不是字面量，算子就不再被折；而 `let` 一个字面量就是那个常量节点本身，节点一个不多一个不少（实测：`let c = 1` + `c + 2` 的图正是 `DATA 1`、`DATA 2`、`add_l`）。绑定只活到当前语句：`flushHeld` 把名字表连同 `let` 行一起清掉（第一版不清，`compare()` 里读到了 `chain()` 的 `cml0`，打印结果编不过）。名字沿用打印器既有的生成名前缀 `cml`（`cml_contract.py#GENERATED`），不发明新标识符。
+
+```
+node test/tools/cml-sweep.mjs --jobs 16
+SWEEP files=3356 printed=474 refused=1881 frontend=1001 timeout=0
+REFUSALS families=48
+ROUNDTRIP checked=460 equivalent=415 not_equivalent=45 over_budget=0 unfaithful=14
+```
+
+对照同一棵树、合并 `develop` 之后、这一刀之前的基线：打印 **474 → 474**（按文件比：改后 474 条全在改前集合里，一条没丢）、拒绝 1881 → 1881、等价 **413 → 415**、不等价 **47 → 45**、产不出 canonical 文档 14 → 14；`DIFFERENT` 行逐行比对**只少 2 行**（`compile/rest_params/rest_inline.cml`、`compile/static_expansion/static_loop_sequence_forms.cml`），**一行没多**。被修那族 13 条里，11 条不再报缺 `:op/add_l` 与常量（普查里它们只剩 GATE/FILL 等下一族的差），2 条整条出了不等价名单。
+
+**合并 `origin/develop = 3df534542` 带走两个打印，要记账。** 合并后语料 3362 → 3356；`compile/transforms/**` 的 9 个程序全部以 `the operator '<name>'` 被拒（打印机读声明表之后，develop 新加的这类图里的算子没有声明），其中 `jvp_effect.cml`、`jvp_lifted.cml` 在合并前是能打印的。所以「打印不许低于 475」在今天应读作「474 是这棵树的底线，丢的 2 个有名有姓、归到补声明」。
+
+**2026-11-02 第四刀：算子的调用形状进声明表，打印器不再按 URI 拼名字。** 裁决是 (a)：**每个算子节点打印成对它的声明的调用**，而"对声明的调用"就是**调用形状**（名字 + 元数 + `with` 参数），所以形状归声明表，不把源码名贴到图上。表新增 `CallForm{name, minArgs, withCount}`（`operator_table.h`），来源是声明：`Builder::declareNativeOperator` 每登记一个算子时把该声明的函数名、普通参数个数、`with` 参数个数写进去（`#op` 标签和 `模块:函数` 约定两条路都经过这里）；一个 URI 被多个重载声明时取最小元数与最小 `with` 数，名字取第一个声明（`:op/itol` 既是 `int` 又是 `i64`）；带 `*` 的家族声明（`:op/*tos`）按模式登记，`callFormOf` 用前后缀匹配回答。
+
+打印机里三处前缀特判的去向：① `:io/` —— 删掉，改读表（`:io/println` 的声明是 `println`）；② `:op/*to*` 的"按最后一个字母拼 `i32`/`int`/`f32`/…" —— 删掉，改读表（`:op/itol` 的声明就是 `int`，比推字母更准）；③ `:struct/range` —— 区间形态 `a..b` 留着（那是语言形式，不是调用形状），三参数调用那支的 `range` 字样改读表。
+
+```
+node test/tools/cml-sweep.mjs --jobs 16
+SWEEP files=3358 printed=516 refused=1841 frontend=1001 timeout=0
+REFUSALS families=48
+ROUNDTRIP checked=494 equivalent=447 not_equivalent=47 over_budget=0 unfaithful=22
+```
+
+对照这一刀之前（476 / 1881 / 417 / 45 / 14）：打印 **476 → 516**、拒绝 **1881 → 1841**、等价 **417 → 447**、拒绝家族最大的那类 **762 → 716**、家族数仍 48（没升）。**两条线没守住**：不等价 45 → 47、产不出 canonical 文档 14 → 22。原因不是调用形状写错，而是**新打出来的程序撞上打印机另外两个旧缺陷**：① 二维数组字面量只打第一行——`[[1.0, 2.0], [3.0, 4.0]]` 打成 `[1.0, 2.0]`，于是 `let cml1: f32[2, 2] = [1.0, 2.0]` 编不过（`DimensionMismatch`，3 例）；② `byref` 的 `var` 实参（`linear/byref/var_argument_declared.cml`）。22 条里 7 条落在 `array_shape`/`tensor`/`linear/byref`。
+
+**2026-11-02 第五刀：先补两个旧缺陷，把两条边界的读数收回来。** 裁决是「先补漏再加水」：上一刀多打的 113 个程序里有 8 个撞在打印机**自己**的旧错上，先把这两处修掉，再谈"调用怎么写"。
+
+**① 二维数组字面量只打第一行。** `constantText` 的 `Array` 支路按 `value->size()` 迭代、元素一律用 `elemType()` 打，而一个多维度数组的 `size()` 是**一行**的槽数：`[[1.0, 2.0], [3.0, 4.0]]` 打成 `[1.0, 2.0]`，于是 `let cml1: f32[2, 2] = [1.0, 2.0]` 以 `DimensionMismatch` 编不过。改成按值自己的秩递归（`arrayText`：每维一层方括号，元素按行主序线性走 `getSlot`），秩 0 的数组按设计原则 5.4 打成元素本身。三例改前 → 改后：
+
+| 用例 | 改前 | 改后 |
+| :-- | :-- | :-- |
+| `array_shape/let_shape.cml` | `let cml1: f32[2, 2] = [1.0, 2.0]` | `let cml1: f32[2, 2] = [[1.0, 2.0], [3.0, 4.0]]` |
+| `array_shape/literal_length.cml` | `let cml1: f32[] = [1.0, 2.0]`（4 个只剩 2 个） | `let cml1: f32[] = [1.0, 2.0, 3.0, 4.0]` |
+| `array_shape/open_rank_element.cml` | `let grid: f32[2, 2] = [1.0, 2.0]` | `let grid: f32[2, 2] = [[1.0, 2.0], [3.0, 4.0]]` |
+
+**② `byref` 的 `var` 实参。** `var a: f32[..] = [1.0, 2.0, 3.0]` 的图是 `DATA → COPY → CAST → :var/new`，打印机为了让字面量那个 `f32[]` 类型有个落脚处，先写 `let cml1: f32[] = [1.0, 2.0, 3.0]`、再写 `var a: f32[..] = (cml1 as f32[..])`——而 `let` 是一个 store，图里没有这个节点，于是这一例从"能打印"变成"不等价"。改成：**只被一处读、且那一处自己写着类型的字面量不另起 `let`**（`typeWrittenByUse`：穿过 `COPY` 看唯一用户；用户是 `as` 时，只有值的类型没有比 `as` 多说一句才省标注——一个未知 extent 的 `f32[]` 对开秩 `f32[..]` 正是这种，而 `f32[2, 2]` 对 `f32[..]` 有形状要说，标注留着；用户是 `:var/new` 时按 `var` 声明的类型比）。现在打成 `var a: f32[..] = ([1.0, 2.0, 3.0] as f32[..])`，编得过且**与源等价**。
+
+```
+node test/tools/cml-sweep.mjs --jobs 16
+SWEEP files=3358 printed=516 refused=1841 frontend=1001 timeout=0
+REFUSALS families=48
+ROUNDTRIP checked=502 equivalent=458 not_equivalent=44 over_budget=0 unfaithful=14
+```
+
+判据逐条：打印 **516（不低于 516，没掉）**、等价 **447 → 458**、拒绝 **1841（不变）**、拒绝家族 **48（没升）**、**不等价 47 → 44（≤45）**、**产不出文档 22 → 14（≤14）**；按文件比 `DIFFERENT` **只少不多**（对上一笔报的那棵树新增 0、减少 11；对合并 `origin/develop = da27eca0a` 之后的基线新增 0、减少 3）。账是这样走的：合并后先量到 516/455/47/14（数组那条修完已经回到 14），再修 ② 与两个秩 0 的 `var` 用例，把 47 收到 44。
+
+**（更正。）** 上一笔这里写的"24 条 `UnexpectedToken` 是 `xs->sum()` 被打成 `sum(xs)`"归因错了：实测两种写法都能编过，真原因是函数类型不能写在标注位置，见第六刀。打印器已能按需写 `import { name, name } from module`（`collectImports`）。
+
+**2026-11-02 第六刀：函数类型没有标注写法，`compile/transforms` 的 30 个程序因此能打。** 上一笔列的 24 条 `UnexpectedToken` 的真实原因不是"带接收者的调用被打成前缀调用"——实测 `import { sum } from tensor` 之后 `sum(xs)` 与 `xs->sum()` **都能编过**（`import tensor` 与不导入则两种写法都 `UnresolvedReference`），是我那次归因错了。真原因在**标注位置**：
+
+```
+let back: (float, float) => float = transpose(pick)
+                                        ^ error[SyntaxDiag::UnexpectedToken]: Unexpected '=>'; expected '='
+```
+
+一个函数类型**没有标注写法**：`let` 的类型位置被读成一个类型，其中的 `=>` 不被当成类型的一部分；加一层括号也不行（`let back: ((float, float) => float) = …` 报 `MissingComma`）。而不写标注时，`let back = transpose(pick)` 由值推出类型——正是节点本来的类型。所以 `annotationOf` 在**类型里任何一个函数**（`Function`，或经由元组/数组/结构体含一个函数，`hasFunction` 递归）时写空标注，其余照旧；`var` 声明同一处理。
+
+```
+node test/tools/cml-sweep.mjs --jobs 16
+SWEEP files=3358 printed=550 refused=1807 frontend=1001 timeout=0
+REFUSALS families=48
+ROUNDTRIP checked=536 equivalent=492 not_equivalent=44 over_budget=0 unfaithful=14
+```
+
+对照合并 `origin/develop = 28e36a2cb` 之后的基线（516 / 1841 / 458 / 44 / 14，家族 48）：打印 **516 → 550**、等价 **458 → 492**、拒绝 **1841 → 1807**（降）、不等价 **44 → 44**、产不出文档 **14 → 14**、家族 **48（没升）**；`UnexpectedToken` 那 24 条 **24 → 0**（全消），`DIFFERENT` 行 **新增 0（一条都没多）**。新打的 34 个程序全部等价，一个 `DIFFERENT` 都没添。`compile/transforms` 单独量：**52 个文件里 30 个能打印、30 个全等价、20 个被拒、2 个本来就编译不过**（这一刀之前只打印 1 个）；剩下的 15 个是「图名不是源码标识符」（`vjp::vjp<float>`、`array::vmap<float[3], int>` 这类实例化的名字），归到 358 条的家族，另派。
+
+**顺便定死"名字"这一列的判据。** 只让"程序写得出来的名字"被打印：核心的算子（`:` 前缀）名字任何程序都在作用域内；模块自己在**声明处**给出调用形状的算子（`transforms` 的 `jvp(f)`/`transpose(f)`/`split(f)`，`CallForm::declaredByModule`）名字是该模块导出的；而**从 Camel 声明推出来**的形状只是被调者的名字，那个声明可能是模块不导出的 kernel（`#impl(sum_kernel)`），所以这类模块算子仍然被拒。放宽到"所有模块算子都打印"实测打印 589、等价 513，但产不出文档 31——剩下的错是**另外几族**（`ImportNameNotExported` 9、`NoMatchingFunction` 3、`Redeclaration` 3、`UnresolvedReference` 3，以及各 1 条的 `ArgumentNeedsConversion`/`DynamicCastForbidden`/`ReservedIdentifier`），按裁决一族一笔地消。
+
+**2026-11-02 第七刀：私有 kernel 的算子拒绝时点名。** 裁决下来的做法是"拒，不给导出名"——打印出来的程序必须能重新编译，替作者挑一个公开名字等于替作者决定语义。先说清事实：那 9 条今天**已经不在打印栏里**（上一刀的 `declaredByModule` 或核心那两条判据就把它们挡住了），所以这一刀不搬数字，只把话说清楚：算子**有声明、有名字，但那个名字不是程序写得出来的**——body-less 声明就是模块自己那侧的 kernel（`array:sum_l` 是 `array::sum` 背后的 `sum_kernel`）。`CallForm` 记下这一列（`kernelDeclaration`，取自声明节点的 `nativeDeclaration()`），打印机拒绝时点名：
+
+```
+the operator 'array:sum_l' without a printable name: 'sum_kernel' is a body-less kernel
+declaration, and no program writes that name
+```
+
+9 条里有 8 条落进这句（第 9 条 `compile/entry_args/scalars.cml` 本来就打印、且在 492 条等价里）：
+
+| 文件 | 算子 URI | 私有 kernel |
+| --- | --- | --- |
+| `compile/when_import/array_sum.cml` | `array:sum_l` | `sum_kernel` |
+| `modules/std/array/sort_basic.cml` | `array:sort_l` | `sort_kernel` |
+| `compile/fstring/basic.cml` | `:str/format` | `format` |
+| `modules/math_calls/erf_values.cml` | `math:round_d` | `round_kernel` |
+| `modules/stdlib/fault_array_min_empty.cml` | `array:min_l` | `min_kernel` |
+| `modules/stdlib/fault_array_max_empty.cml` | `array:max_l` | `max_kernel` |
+| `trans/cpp/math_min_max_int.cml` | `math:min_l` | `min_kernel` |
+| `compile/transforms/rulesets_probe_missing.cml` | `math:pow_d` | `pow_kernel` |
+
+```
+node test/tools/cml-sweep.mjs --jobs 16
+SWEEP files=3358 printed=550 refused=1807 frontend=1001 timeout=0
+REFUSALS families=49
+ROUNDTRIP checked=536 equivalent=492 not_equivalent=44 over_budget=0 unfaithful=14
+```
+
+判据：打印 **550（不变）**、等价 **492（不许降，没降）**、拒绝 **1807（不变）**、不等价 **44**、产不出文档 **14**、`DIFFERENT` **新增 0**。拒绝家族 **48 → 49**，多出来的就是这句（全语料 **376 个图**落在它上面，不是孤例）：它必须自成一族——老的 `the operator '<name>'` 说的是"没有声明"，这句说的是"有声明，名字是私有的"，两件事混进一族正好把这刀要说清的东西抹掉。
+
+**解析器待办（不属于 M7，单独立着）。** `let back: (float, float) => float = transpose(pick)` 今天**编不过**：`error[SyntaxDiag::UnexpectedToken]: Unexpected '=>'; expected '='`，加括号是 `MissingComma`。这是**解析器的缺陷**——类型写在标注位置是合法的，函数类型本身也该写得出来；打印机写空标注只是**绕开**它，不是修它。修解析器时 `test/cases/compile/transforms/transpose_branch.cml` 就是验收：标注写回来之后，打印器那侧的空标注规则才可以考虑退场。
+
+**2026-11-02 第八刀：模块算子写成符号时，模块要 import。** 裁决问的那 3 条 `NoMatchingFunction`（`a / b`、`[7, 8, -9] / [1, 0, 2]`、`x / cml1`），**先答那一句：既不是我把调用形状打错，也不是语言里没有这个写法**——形状是对的（源程序写 `/`，图里是 `tensor:divide`，`__div__` 组给的符号就是 `/`），缺的是**模块没 import**：同一段文本加上 `import tensor` 就编过，去掉就 `NoMatchingFunction`（`/` 在 `int[]` 上没有核心规则，规则是 `tensor` 的声明带来的，原则 5.1）。所以这是第三种情形：**图的依赖比打印出来的 import 多**。
+
+打印器原来只给"按名字调用"的模块算子写 `import { name } from module`；写成符号的模块算子（`tensor:divide`、`tensor:remainder`……）一个 import 都不写，于是打印出来的程序去编就找不到规则。改法一行判据：**按名字写的 → 具名 import；写成符号的 → 整模块 `import <module>`**（整模块导入会把名字也带进来，所以两者都有时只写整模块那条）。
+
+```
+import tensor
+
+func main(): int sync {
+    println('before')
+    println([7, 8, -9] / [1, 0, 2])
+    println('not reached')
+    return 0
+}
+```
+
+```
+node test/tools/cml-sweep.mjs --jobs 16
+SWEEP files=3358 printed=550 refused=1807 frontend=1001 timeout=0
+REFUSALS families=49
+ROUNDTRIP checked=540 equivalent=495 not_equivalent=45 over_budget=0 unfaithful=10
+```
+
+判据：打印 **550（不变）**、等价 **492 → 495（只增）**、产不出文档 **14 → 10（只降）**、拒绝 **1807（不变）**、家族 **49（不升）**。**两条没做到，同一条用例**：`not_equivalent 44 → 45`、`DIFFERENT 新增 1`，都是 `test/cases/modules/tensor/int_division.cml`。原因查清了，是**既有那一类"同样的节点、不同的形状"**，不是 import 改出来的：源里写的是 `[-9223372036854775807 - 1]`（元素是个表达式，图里是 `FILL array slots[0]`），打印机把它折成常量字面量 `[-9223372036854775808]` 写回去，前端把常量元素表读成**常量数组**（`DATA`），于是左边多一个 `FILL`、右边多一个 `DATA`，值一样、形状不同。这一例此前根本编不过（`NoMatchingFunction`），所以从没有过"形状"可比——它是**新露出来的**，不是新造的。两条路：**(a)** 这种"槽位全是常量的 `FILL`"本来就没有忠实写法（任何纯常量表达式都会被折成常量数组），照"写不回来的形状就拒绝"处理，单独一刀，`not_equivalent` 回到 44、另外三条仍等价；**(b)** 让它就这么算进不等价。我建议 (a)，但它属于另一类，所以没混进这一刀。
+
+**2026-11-02 第九刀：写不回的形状具名拒绝，`not_equivalent` 回到 44。** 第八刀那 1 条 `DIFFERENT` 的账在这里收平：`test/cases/modules/tensor/int_division.cml` 从打印栏移到拒绝栏，理由是**这个形状没有忠实写法**——源里写的是 `[-9223372036854775807 - 1]`（元素是表达式，图里是 `FILL array slots[0]`），而它的值 `-2^63` **没有普通字面量写法**（int64 写不出它的绝对值），打印机只能写成表达式，前端再把整个字面量折成**常量数组**，写回的程序建出的是另一张图。**这不是打印机的手艺问题，是语言的事实**；把它算进不等价会让 `not_equivalent` 失去含义（它该记"我们打印了、但回不来"），所以按同一把尺子拒：
+
+```
+std::cml cannot print main: a construction whose slots are constants with no plain literal
+spelling has no faithful spelling: the value is written as an expression, the front end folds
+the literal into a constant array, and the program written back builds a different graph
+```
+
+判据（对照合并 `origin/develop = 374488bf4` 之后**重测**的基线 550 / 1807 / 540 / 495 / 45 / 10 / 49，旧数不跨基线比）：打印 **550 → 549（掉 1，就是 `int_division.cml`，只能拒）**、等价 **495（保持）**、不等价 **45 → 44**、产不出文档 **10（保持）**、拒绝 **1807 → 1808**、家族 **49 → 50**、`DIFFERENT` **新增 0（并回少 1 条）**。新族必须自成一族：老族分别是"没有声明"（`the operator '<name>'`）与"有声明但名字是私有 kernel 的"（`body-less kernel declaration`），这句是第三件事——**声明、名字、写法都齐，但写回去的形状不是同一张图**。条件收得很窄：元素的**值没有普通字面量写法**（`int64`/`int32` 的最小值）才拒；同一支里 `[[1.0, x], [x, 2.0]]` 这种槽位写着**名字**的构造照常打印（实测 `[1, 2]`、`[[1.0, 2.0], [2.0, 2.0]]`、`[-9223372036854775808]` 都会被折成一张 `DATA`，而槽位里有名字的仍是 `FILL`），所以没有连带丢掉 `trans/cpp/exec/array_conversion.cml` 那类。
+
+**`int_division.cml` 这一条要单说一句：它此前根本编不过（`NoMatchingFunction`，缺 `import tensor` 那一刀之前），从没有过"形状"可比 —— 那个不等价是第八刀新露出来的，不是新造的。**
+**2026-11-02 第十刀（分类，不动代码）：`358` 那一族不该在"补名字"这一层动。** 350 那一族（`the graph name '<name>' is not a source identifier`）按**首次拒绝时的名字形状**分类，实测（树 = `ea9bf0915` + 合并 `374488bf4`）：
+
+| 形状 | 判定 | 文件数 |
+| --- | --- | --- |
+| 含 `<…>`（泛型实例，如 `array::vmap<float[3], float>`） | `GENERIC` | **219** |
+| 含 `::`（模块/命名空间限定，如 `Tools::inc`、`rules::…__lhs`） | `MANGLED` | **74** |
+| 其余 | `PLAIN` | **0** |
+| 合计 | | **293** |
+
+**291/293 = 99.3% 是"语言的事实"，不是打印机的手艺**：实例图在源码里**没有写法**（源写 `vmap(f)`，实例由调用点定），`namespace`/`module` 区域**打印机不支持**。所以这一族**不该在补名字这一层动**，两条路都等作者裁，页面见 `docs/handover/reviews/questions-2026-11-02-generic-instances-and-namespace-blocks.md`（两条各带代价，默认两条都不做）。
+
+**一处更正（把我上一刀的读数收回）：** 上一刀我报"`PLAIN` 两个、名字是 `rulesets.`（以句点结尾）⇒ 前端拼前缀漏了成员名"——**不成立**：那是我统计脚本的截断错误（`sed` 在第一个句点处截断），真名是 `rulesets.jvp::lift<float>` 与 `rulesets.probe_missing::add_ok__lhs`。用正确的提取重扫：**以 `::`、`.` 或 `<` 结尾的名字计数为 0**，`PLAIN` 为 0。所以"前端拼名字漏成员名"这条缺陷**没有可修的点**，这一刀只有分类、没有代码改动。
+**2026-11-02 第十一刀（作者缺陷清单 A7 的第 1 条）：`fail<'Kind'>(message)` 是语句，打印机漏了它。** 缺陷原文：`consistency/fail_never/statement_after_fail` 原程序打印 `before`、报故障、`exit 1`；打印出来的程序打印 `before`、`after`、`exit 0`——**`fail` 语句被丢了**。
+
+`git grep -n ":op/fail\|kFailOperatorUri" -- src include` 指到 `include/camel/core/operator_names.h#kFailOperatorUri`：`kFailOperatorUri = ":op/fail"`，注释写着"它**不是效果**，所以它的值不被需要的地方没有东西运行它"。`src/passes/trans/cml/cml.cpp` 的语句走查（`processNode`）只把 `nodeEffect(ref)` 为真的节点当语句打印，而 `fail` 的值类型是 `never`、用户数 0、又不是效果 ⇒ **它是被"跳过"的，不是被当成值表达式丢了**（值表达式那条路也走不到：`users == 0` 时那一支只在有名字或有效果时产出）。
+
+修法：在语句走查里按 URI 认出它，按语言的写法打印（`emitFail`）——`with` 槽里的常量字符串是 `'Kind'`、唯一一个 norm 输入是消息；**kind 不是常量字符串时具名拒绝**（`fail<'Kind'>` 是唯一写法，写别的 kind 就是假打印）：
+
+```
+a 'fail' whose kind is not a constant string: the statement is written `fail<'Kind'>` and the
+kind is the value it holds, so a print that cannot read it cannot write the statement
+```
+
+两侧读数（同一对程序，`std::nvm`）：原程序 `before` + `error[RuntimeDiag::NoPremise]: the premise of this program does not hold`、`rc=1`；打印出来的程序 `before` + 同一句 `RuntimeDiag::NoPremise`、`rc=1`（逐字一致）。
+
+判据（合并 `origin/develop = 03c7065cc` 之后**重测的基线** `550 / 1809 / 540 / 495 / 45 / 10 / 52`，语料 3360 个文件，旧数不跨基线比）：
+
+| 读数 | 基线 | 本刀 | 说明 |
+| --- | --- | --- | --- |
+| `printed` | 550 | **553** | 只增；新打印的 3 条是 `consistency/fail_never/fail_located.cml`、`opt/never_exit/fail_last.cml`、`opt/generic/fold_fail_is_intended.cml`——它们此前唯一挡路的就是这个写不出的 `fail` 语句 |
+| `refused` | 1809 | 1806 | 与上面同一件事（-3） |
+| `checked` | 540 | 543 | 同上 |
+| `equivalent` | 495 | **499** | 只增（+3 新打印 + 1 原不等价转等价） |
+| `not_equivalent` | 45 | **44** | -1，正是 `statement_after_fail`（它现在打印得忠实） |
+| `unfaithful` | 10 | **10** | 不升；`DIFFERENT` **-1 新增 0** |
+| `families` | 52 | **52** | 不升；kind 不是常量的那条具名拒绝在本语料里**一次没触发** |
+
+**A7 那 8 个用例按"打印器漏了什么"分类（给作者）：** **陈述 1** —— `statement_after_fail`（`fail<...>` 语句被丢，本刀已修）；**写表 1** —— `writer_table_through_callee`（原 `0` `41`、打印版 `0` `0`，写作表经被调用者传出去的那条路没写回）；**其它 6** —— `linear/runtime/var_read_before_region`、`var_read_before_write`（`var` 的读被挪到写之后，2 条）、`order_edges_regions`（`exit 56`→`76`，区域顺序边）、`parse/rulings/power`（`-9 9`→`-9 -9`，一元负号的结合）、`trans/cpp/exec/print_formats`（`3-4|1+2`→`3 4|1 2`，格式说明符丢）、`consistency/values/float_special`（宽度与正号标志丢）。**这个分类比"8"这个数有用：陈述与写表各 1 条，剩下 6 条都不是"打印器忘了写一条语句"，是 print 的格式与求值顺序。**
+**两套计数（写进页，免得下一个人以为数字被改动）：** `EXAMPLE_STOPS` 的键是**诊断类别**（`a semantic error`、`an internal error`），值是该类的条数，**不是总停止数**。作者 22:30 那一笔记的 `40` 是 `a semantic error` 类，总停止数是 **41**；本轮把 `vjp` 的 `@example` 修好之后，`a semantic error` 回到 **39**、总停止数 **40**（`vjp` 已不在"编不过"的名单里，那份名单现在是 34 个名字、40 条，多为 `f`/`encode`/`n` 这类 fragment）。两个数一起看才不误会。
+**补声明清单（按节点数）。** 全语料里被打印机点名、确实没有任何声明的算子 **143 个、12520 个节点**。前 12：`:str/format` 1019、`tensor:sum` 934、`tensor:multiply` 862、`tensor:reshape` 856、`:op/tag_is_null` 689、`:struct/len_arr` 585、`tensor:add` 582、`:op/assn_l` 569、`:mark/map_arr` 389、`tensor:subtract` 324、`tensor:matmul` 238、`:op/slice_sub` 219。
+
+**更正两份旧数。** ① 之前报的「353 条没有声明」其实是「没有 `#op` 标签」的数，不是「没有声明」：`:op/add_l`（3244 节点）、`:op/mul_d`（801）这一批由 `globals.cpp` 的组（`__add__`、`__mul__`）**原生登记**，打印机从不点名它们，所以它们不是缺口；真正的缺口是上面 143 条。② `:op/keep` 已在 `fsh-dev 5773c9482` 删掉，全语料图里 **0 个节点**，扣前扣后都是 353（它与上面那 143 条无关）。
+
 1. **今天能打印的只是少数**：`test/cases/**/*.cml` 共 **2387** 个文件，`std::cml` 打印 **348** 个，以 `CmlUnsupportedConstruct`/`CmlBigConstant` 拒绝 **1338** 个，其余 701 个本来就编译不过（诊断用例）。能打印的集中在 `compile` 122、`consistency` 50、`opt` 39、`modules` 38、`linear` 23、`trans` 21。
 2. **往返性质今天就有反例**：打印成功且能重新编译的 348 个里，**309 个等价、35 个不等价、4 个的打印结果连 `std::jgir canonical=true` 都跑不出来**。这 35 个不是「看起来不整齐」，是打印器**丢节点**或**改接线**，见 §3.9 与 §7。
 3. **最大的两类缺口是声明与类型**：拒绝理由归并后 131 类，最多的是「算子没有源码形式」463 个、「参数的类型打不出来」273 个、「`with` 参数是命名类型」66 个、「图名不是源码标识符」58 个、「宏图」38 个、「参数是命名类型」35 个、「返回类型是带标签/可空/单元组」31 个、「间接调用少了函数值」26 个。
