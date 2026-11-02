@@ -2,9 +2,11 @@
 
 > 一页一问。作者把读过的页整体挪进 `reviews/`；这里只放**还在等回答**的页。
 
-## 现在在等作者：0 页
+## 现在在等作者：1 页
 
-（目录为空：十页都已由作者读过并挪进 `reviews/`。）
+| 页 | 问什么 | 状态 | 裁定 | 还堵着 |
+| --- | --- | --- | --- | --- |
+| [`2026-11-02-can-a-known-failure-be-per-tier`](2026-11-02-can-a-known-failure-be-per-tier.cn.md) | 一个用例在 Release 通过、在 Debug 失败时，全局的 `known_fail` 表达不了它（标了就要它在 Release 也失败，否则整轮红）；四条路与代价，我方默认 (c) 现状 + 写清账 | 待裁 | — | Debug 层那 1 条红怎么记账 |
 
 **这张表由 `node scripts/check-doc-links.mjs --questions-index` 对着目录核对**：行数与页数不符、或者某一行指向目录里没有的页，它都会红。
 
