@@ -80,3 +80,22 @@ export rule idx_arr_t::<T>(xs: T[], i: int) {
   原先一律 `Type::Float64()`）——**读数一字未变**，说明它不是本条的原因，但它本身是真缺陷（端口把 `float[]` 记成 `float`）。
 - 五条形状钉成用例（`expect_exit = 1` + `skip=law rule=idx_arr_t`、`transpose has no transpose` 两条断言）。
   **将来那条 arm 落地时这五条会一起红**，正好提醒把它们改成数值断言（`[2.0, 3.0]` 等）。
+
+## 五、arm 试过的结果（11-02 晚补）
+
+**这不是新增特例，是 `beeb887f4` 的同一根因在余切类型上的第二次发作**：那边是"参数端口一律 `float`"，这边是"余切一律 `float`"——
+**同一个坏形状：类型写成了字面量，而不是被微分那个东西的切空间。**
+
+`transposeSignature` 那一层**不用改**（`transpose.cpp:107-119` 已经逐参数取 `tangentSpaceOf`，`index_into<float>` 的转置签名早已是 `(float[], int, float) => (float[])`）。
+按上面"三处改动"落地后，**`skip=law` 的拒绝消失**，露出来的是调用点：
+
+```
+node 14 (10): calls 'transpose_of_rulesets.jvp::index_into<float>', whose value is a (float[],),
+    and is a (float, float)
+node 6 (10): passes a int as ordinary argument 0 of 'rulesets.jvp::index_into<float>', which takes a float[]
+```
+
+**⇒ 调用点的实参列表与结果类型都还是"一律浮点"的老形状**（同一个根因的第三次发作）。两处一起改才绿，
+**下一笔从这里开始**：先结果类型、再实参列表、最后落 arm、最后把五条用例换成数值断言。
+
+`transpose.cpp:1354` 的兜底 `else` 的行为（点名拒绝 `skip=law rule=…`）**是对的**，记在这里免得有人把它当成缺陷删掉。

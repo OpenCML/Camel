@@ -1612,3 +1612,45 @@ export rule idx_arr_t::<T>(xs: T[], i: int) {
 **⑧ 读数与去向**：`feat/compile/transforms` 里新增五条用例，全量 **`total: 8388, pass: 8376, fail: 0, skip: 10, known failures: 2`**（上一轮 `8383/8371/0`，多出的 5 支正是这五条）。
 问作者的一页在 `docs/handover/reviews/questions-2026-11-02-whether-the-transpose-honours-the-array-index-law.md`，
 缺陷单 `docs/handover/reports/eval-defects-2026-11-01/README.md` 增 **A10**，并把 A8/A9 标成"已在 `lane-lit2` 修好"（附 commit）。
+
+
+## 48. `idx_arr_t` 的 arm 我试了（三处改动），拒绝消失了，露出的是下一层的两个"字面量 `float`"——已回退，记账留图
+
+**先记一句判性的话（你的裁定已落页）**：**这不是"给数组开一个特例"，是 `beeb887f4` 的同一根因在余切类型上的第二次发作**——
+`beeb887f4` 把"普通参数端口一律 `float`"改成"取参数自己的切空间"；**这次是"余切一律 `float`"**。
+**同一个坏形状：类型写成了字面量，而不是被微分那个东西的切空间。** 另外记明：**`transpose.cpp:1354` 那个兜底 `else` 的行为是"点名拒绝"，这本身是对的**（`skip=law rule=…`），缺的只是这条 law 的 arm。
+
+**① 已确认：签名那一层根本不用改。** `transposeSignature` 的"多参数普通形"分支（`transpose.cpp:107-119`）**已经**逐个参数取 `tangentSpaceOf`，
+所以 `rulesets.jvp::index_into<float>` 的转置签名是 **`(float[], int, float) => (float[])`**——**数组参数答一个数组余切，`int` 答零个**。**签名早就对了，错的是图的体。**
+
+**② 我改的三处**（都在 `modules/transforms/transpose.cpp`，一处一改、一次一跑）：
+1. `primitive` 旁边加 `primitiveOf(Type*, uri, inputs)`，`primitive` 变成 `primitiveOf(Type::Float64(), …)` 的薄包装——**"算子节点的类型从哪里来"从字面量变成参数**；
+2. 加 `arrayTangentOf(ref)`：`tangentSpaceOf(值的类型).space` 是 `Array` 就真——**`addCotangent` 于是按元素相加（`:tangent/add_arr`）而不是 `:op/add_d`**；
+3. 在 law 分派里给 `idx_arr_t` 加 arm：`knownValue(xs)` → `:tangent/zeros_arr` → `:tangent/scatter_add_arr(zero, i, ct)` → `addCotangent(xs, …)`，
+   **逐字照规则库那条 law 与 `derivative.cpp:196-222`（`idxArrayVjp`）已经发过的同一组节点**。
+
+**③ 跑出来的读数（这一笔最值钱的部分）**：**拒绝没了**，五个用例改成**图的边不变量破裂**，而且说的是什么很清楚：
+
+```
+graph 'transpose_of_split_of_jvp_of_g_backward' node 6 (10): passes a int as ordinary argument 0 of
+    'rulesets.jvp::index_into<float>', which takes a float[]
+graph '…' node 14 (10): calls 'transpose_of_rulesets.jvp::index_into<float>', whose value is a (float[],),
+    and is a (float, float)
+```
+
+**⇒ 下一层的两个"字面量 `float`"就在这里**：
+- **调用点的实参列表**：调 `index_into`/`transpose_of_index_into` 时把 `int` 当成了第 0 个实参（`xs` 的位置）——**实参列表还是按"全是浮点/全是参与集"的老形状拼的**；
+- **调用点的结果类型**：被调者已经答 `(float[])`，**调用点仍写着 `(float, float)`**——**同一个"类型写成字面量"的第三次发作**。
+
+**④ 我为什么把这三处回退**：arm 落地后 **`grad_array_no_int.fvm`（一条原本绿的用例）也一起红了**（同一个不变量破裂），
+**五条新用例的钉法也失效**。**今晚剩下的时间不够把"调用点实参 + 调用点结果类型"两处一起改对并验证**（每轮构建 5 分钟，六处一次改完的教训就在今晚）。
+**一条红的层比一张精确的图更糟**，所以回退，把图留在这里。
+
+**⑤ 下一步交出去的顺序（省掉下一个人的摸索）**：
+1. 先改**调用点的结果类型**（`(float, float)` → 被调者的实际答案类型）——**这一处改对，`calls … whose value is a (float[])` 那两条就该消失**；
+2. 再改**调用点的实参列表**（`int` 出现在 `float[]` 的位置）——**这说明拼实参时把"参与集/全浮点"的假设用在了 `float[]` 参数上**；
+3. 两处都对了再落 `idx_arr_t` 的 arm（我在 §48 ② 写的那三处，可直接复用）；
+4. **最后把五条用例的 `expect_exit = 1` 换成数值断言**（`[2.0, 3.0]` / `[1.0]` / `[1.0, 1.0]`），**别留着"钉住当前失败"的形状**。
+
+**⑥ 本轮读数**：树干净（`transpose.cpp` 已 `git checkout` 回 `f14f65031` 的状态，端口类型修复在），五条用例仍钉 `skip=law rule=idx_arr_t`，
+**全量 `8388 total, pass 8376, fail 0`**（与上一轮同一个数）。
