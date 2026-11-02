@@ -139,6 +139,21 @@ held a test back and `, known failures: <n>` when a `known_fail` mark did; and
 `[gate] held by policy for the milestone layer: <n> plan files, <n> cases`, read from the same plan
 files through the runner's own loader.
 
+Every run also prints the layer twice, because the layer's size is two numbers and each was read as
+the layer on its own (`3330` was quoted while a run of that layer started `3404`):
+
+```
+[tier] milestone: 27 plan file(s), 3330 declared test entries, 3404 started
+```
+
+`declared` counts the entries the plan files name for this layer; `started` counts the tests the run
+launches. **Started above declared is normal**: a test that names `backends` becomes one test per
+back end, and a `compare_to` companion joins the run without being declared for the layer. **Declared
+above started is a defect** -- an entry the file declares for this layer that neither ran nor was
+skipped appears in no summary, so the plan proves less than its file says while printing green -- and
+it names the plan and fails the run. Both numbers are counted, never computed: multiplying by
+`backends.length` reads `7339` for a layer that starts `3404`.
+
 Rules for a new test:
 
 - It is fast by default: do not mark a test slow to make the default set look fast.

@@ -20,6 +20,7 @@ import {
 import { CUDA_DEVICE_ORDER, PCI_BUS_ID, chooseFreeDevice } from './free-device.mjs'
 import { RUN_DIRS_KEPT, SCRATCH_DIR, formatRetention, pruneRunnerOutput, runnerOutputPath } from './runner-output.mjs'
 import { argProblems } from './cli-arg-domains.mjs'
+import { tierAccountingLine, tierAccountingProblems } from './tier-accounting.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const TOOLS_ROOT = path.dirname(__filename)
@@ -2365,6 +2366,11 @@ function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
     }
     const kept = new Set(selected)
     const selectedPlans = []
+    // Declared against started, per plan, for the layer this run covers. Both are counted from the
+    // loaded plans -- `declared` the entries whose own tier is this layer's, `started` the ones the
+    // run launches (companions included). Never computed from `backends.length`: a swept copy
+    // carries the source's list, and the multiplication reads 7339 for a layer that starts 3404.
+    const tierAccounting = []
     // A plan the run reaches but starts nothing in is not a pass: nothing about it was read. Two
     // shapes must not be confused, and the author's 01:30 ruling asks for the difference to be a
     // rule rather than a habit: a plan whose own tier is another layer is *expected* to contribute
@@ -2384,6 +2390,13 @@ function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
         }
         if (tests.length > 0) {
             selectedPlans.push({ ...plan, tests })
+            let declaredHere = 0
+            for (const test of plan.tests) if (wants(plan, test)) declaredHere++
+            tierAccounting.push({
+                plan: relPath(plan.__planPath),
+                declared: declaredHere,
+                started: tests.length,
+            })
             continue
         }
         const key = relPath(plan.__planPath)
@@ -2431,7 +2444,7 @@ function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
             }
         }
     }
-    return { plans: selectedPlans, emptyByLayer, unproven, argProblems: argProblemsOfPlans }
+    return { plans: selectedPlans, emptyByLayer, unproven, argProblems: argProblemsOfPlans, tierAccounting, tier }
 }
 
 /**
@@ -3243,6 +3256,29 @@ async function main() {
         )
         process.exitCode = 1
         return 1
+    }
+    // What the layer declares against what this run starts. The two numbers differ for a reason
+    // that is not a defect -- `backends` expands one entry into several tests, `compare_to` pulls a
+    // companion in -- and for a whole night the layer's size was quoted as one of them while a run
+    // of it was the other (`3330 declared / 3404 started`). Printing both is the cure; the check is
+    // the direction that is a defect: an entry declared for this layer that neither ran nor was
+    // skipped appears in no summary, so a plan would prove less than its file says while looking
+    // green. The started count is counted, never computed: `backends.length` times the entries reads
+    // 7339 for a layer that starts 3404.
+    {
+        const rows = selected.tierAccounting || []
+        console.log(`${COLORS.cyan}[tier]${COLORS.reset} ${tierAccountingLine(selected.tier, rows)}`)
+        const dropped = tierAccountingProblems(rows)
+        if (dropped.length > 0) {
+            for (const problem of dropped) console.error(`${COLORS.red}[FAIL]${COLORS.reset} ${problem}`)
+            console.error(
+                `${COLORS.red}[FAIL]${COLORS.reset} ${dropped.length} plan file(s) declare more tests of ` +
+                    `the '${selected.tier}' layer than this run started; a declared entry that neither runs ` +
+                    'nor is skipped is a defect in the selection, not a plan that proves nothing',
+            )
+            process.exitCode = 1
+            return 1
+        }
     }
     // The pid keeps two runs started in the same second (the self-test does this) out of one
     // directory, whose logs and summary.json would otherwise overwrite each other.
