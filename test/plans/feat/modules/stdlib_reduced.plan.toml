@@ -212,19 +212,19 @@ expect_exit = 0
 expect_stdout = "1.0 2.0 1.0 2.0\n128 63 0 64\n0 60 0 64\ntrue true true\n0 128 0 0\ntrue true\n0 128 0 0\n0 0 0 0\n3.5 3.5 2.0 2.0\n1.0 2.0\n0 128\n0 0\ntrue true true\n-1.0 65500.0\n255 123\n0.1 205\n1.0 true 128 63\n1.01 true 129 63\n1.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
-# `!` on the two reduced types: the negation their `!=` is built from. `:op/ne_bf` and
-# `:op/ne_f6` are the only place the equality of these types is negated in their own group, so once
-# they go, `a != b` has to be `!(a == b)` -- and that needs a `not` that takes a bf16 or an f16.
-# The rule the case states: wherever `ne` exists, `not` exists.
+# `!=` on the two reduced types, written as the negation of their equality. These two are the types
+# whose `!=` used to be its own arm (`:op/ne_bf`, `:op/ne_f6`), so the decomposition is pinned here:
+# it is what has to stay true once those arms go. `==` answers a bool whatever its operands are, so
+# the negation only ever takes a bool and no `not` for a bf16 or an f16 is needed.
 [[tests]]
-name = "reduced_not"
-desc = "`!x` on a bf16 and on an f16 is true exactly for zero -- the truth of the value, computed in f32 by the one arithmetic path of the type -- and `a != b` agrees with `!(a == b)` at both types. Before this change the two types had no `not`: `__not__` held one arm, `(bool) => bool`, so the negation of a bf16 or an f16 had no overload and the `!=` of the two types had no spelling beyond its own `ne` arm."
+name = "reduced_neq_is_the_negated_eq"
+desc = "`a != b` and `!(a == b)` give the same answer for bf16 and for f16, equal and unequal pairs alike (2.0 != 0.0 is true and !(2.0 == 0.0) is true; 2.0 != 2.0 is false and !(2.0 == 2.0) is false; 1.5 != 0.0 and 1.5 != 1.5 the same at f16). The point is the shape of the decomposition rather than the eight values: `==` answers a bool whatever its operands are, so `!(a == b)` needs a `not` on a bool and nothing else, which is why deleting these two types' `ne` arms takes no `not` for the two types with it."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/not_reduced.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout = "true\nfalse\ntrue\nfalse\ntrue\ntrue\nfalse\nfalse\n"
+expect_stdout = "true\ntrue\nfalse\nfalse\ntrue\ntrue\nfalse\nfalse\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
