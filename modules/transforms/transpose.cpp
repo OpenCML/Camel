@@ -1782,14 +1782,34 @@ bool buildTransposeMember(
                     draft.setWithInputs(
                         made, std::span<const gc_node_ref_t>(&calleeValue, size_t(1)));
                 }
-                for (size_t i = 0; i < calleeParams; ++i) {
-                    if (calleeParams == 1) {
-                        addCotangent(inputs[argumentAt], made);
+                // The answers are the signature's slots, one per parameter that has a tangent space,
+                // in the order those parameters stand -- not one per parameter. A parameter with no
+                // space (the `i` of `xs[i]`) contributes no slot, and a call site that reads a slot
+                // per parameter reads past the end of a one-slot answer.
+                {
+                    std::vector<size_t> answered;
+                    for (size_t i = 0; i < calleeParams; ++i) {
+                        if (camel::core::tangentSpaceOf(callee->funcType()->normTypeAt(i)).hasSpace()) {
+                            answered.push_back(i);
+                        }
+                    }
+                    const auto *answerTuple =
+                        dynamic_cast<const camel::core::type::TupleType *>(answerType);
+                    if (answered.empty()) {
                         break;
                     }
-                    const gc_node_ref_t part = draft.addAccsNode(Type::Float64(), static_cast<uint32_t>(i));
-                    draft.setNormInputs(part, std::span<const gc_node_ref_t>(&made, 1));
-                    addCotangent(inputs[argumentAt + i], part);
+                    if (answered.size() == 1) {
+                        addCotangent(inputs[argumentAt + answered[0]], made);
+                        break;
+                    }
+                    for (size_t k = 0; k < answered.size(); ++k) {
+                        Type *const slotType =
+                            answerTuple != nullptr ? answerTuple->typeAt(k) : Type::Float64();
+                        const gc_node_ref_t part =
+                            draft.addAccsNode(slotType, static_cast<uint32_t>(k));
+                        draft.setNormInputs(part, std::span<const gc_node_ref_t>(&made, 1));
+                        addCotangent(inputs[argumentAt + answered[k]], part);
+                    }
                 }
                 break;
             }
