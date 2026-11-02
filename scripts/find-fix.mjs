@@ -1,5 +1,6 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
+
 /**
  * Before treating a red as a new defect: has somebody already fixed it on another branch?
  *
