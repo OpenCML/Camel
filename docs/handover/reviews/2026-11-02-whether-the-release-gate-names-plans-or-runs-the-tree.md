@@ -27,3 +27,28 @@
 
 `jit_framed` 那两条 `gc_stress` 长期被记作"既有红"，实测是计划里写错了参数（`--gc-check verify=1`，CLI 收 `before|after|both`），**从写下的那天起一次都没跑起来过**。改成 `verify=both` 后 **57/57/0**。
 ⇒ **一条测试如果从来没跑起来过，它的"红"和"绿"都不是读数。**
+## 结果：按 A 落地（2026-11-02 11:00 前后，`lane-a3`，`381e55b45`）
+
+**新的快层定义**：`FAST_TARGETS = ['test/plans']`——整个计划树配 `--tier fast`，与 `npm run test` 在同一条命令上。`FORBIDDEN` 改名为 `CANNOT_START`（空表），只留给"这条命令本身起不动"的计划；里程碑层不再靠表，改成**按树读**：每一条 `tier = "milestone"` 的用例，用 runner 自己的 loader 数。
+
+**上面第 10 行那个"464 条"是错的，这一条要改过来**：`FAST_TARGETS` 里 `test/plans/feat` 是**目录**，目录是被走到的、不是被点名的，所以 `feat/` 下那些 `FORBIDDEN` 文件的 fast 用例**一直在跑**（`jit_framed` 51 条也在）。实测：
+
+| | 计划文件 | fast 用例 |
+| --- | --- | --- |
+| 旧名单（smoke + feat + 两个 gpu 文件） | 308 | **8442** |
+| 整棵树 | 309 | **8443** |
+
+**差的是 1 条，而且它有名有姓**：`test/plans/gpu/tiles.plan.toml` 的 1 条 fast 用例（旧名单里两个 `gpu` 文件都不是它）。所以这一改的收益不是覆盖率，而是**报告不再说谎**：25 个文件印着"by policy 不跑"，而同一遍在跑它们的 fast 用例。
+
+**读数**（`node scripts/release-gate.mjs --only fast`，本树）：
+
+```
+[gate] not run here: the milestone layer -- 27 plan file(s), 3330 test entries, selected by `--tier milestone`
+[SUMMARY] total: 8443, pass: 8427, fail: 0, skip: 10, known failures: 6
+[gate] fast layer  PASS (total 8443, pass 8427, fail 0, skip 10; 221.9 s)
+[gate] GATE: all selected phases passed        (exit 0)
+```
+
+**没有出现被 `FORBIDDEN` 藏起来的红。** 但第一次量的时候出现过两个：`agree_with_fvm`、`every_fault_program_says_what_fvm_says`，同时 skip 从 10 涨到 43——原因是**闸门没在计划跑批的环境里起**（裸 ssh：没有 eval venv 的 `PATH`、没有 `LD_LIBRARY_PATH=$C/lib`、没有 `CC=clang`）。在正常环境里那个计划是 **55/55**，闸门是 `fail 0, skip 10`。⇒ **闸门量的是树，所以必须用跑树的方式起它。**
+
+**里程碑那两个数不是一回事**：这些文件**声明 3330 条**，而 `--tier milestone` 实跑报 **`tests: 3404`**（`backends` 会展开、`compare_to` 的伴随用例会加入）。闸门印的是前者，并且写的是"test entries"，不写"cases"。

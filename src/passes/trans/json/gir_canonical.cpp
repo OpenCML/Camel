@@ -79,6 +79,17 @@ constexpr int kMaxValueDepth = 64;
 
 std::string hex64(uint64_t value) { return std::format("0x{:016x}", value); }
 
+/// FNV-1a, 32 bits of a string's bytes: the same number in every process, whatever was loaded
+/// before it. The document needs it for a type the core does not know by structure, whose runtime
+/// `TypeCode` is not an identity but a position in a registry (see `typeJson`'s `other` entry).
+uint32_t stableCodeOf(std::string_view text) {
+    uint32_t hash = 0x811c9dc5u;
+    for (const unsigned char c : text) {
+        hash = (hash ^ c) * 0x01000193u;
+    }
+    return hash;
+}
+
 std::string regionKindName(GCRegionKind kind) {
     switch (kind) {
     case GCRegionKind::Root:
@@ -609,11 +620,23 @@ class CanonicalDocument {
         if (type::isBytesType(t))
             return json{{"k", "bytes"}};
         // A type the core does not know by structure (a module's): its spelling is the only
-        // stable description; no named declaration of the program is spelled into it.
+        // stable description; no named declaration of the program is spelled into it. Its
+        // `TypeCode` is not written: an `Other` type is given one by the registry's counter in the
+        // order the modules were first registered (core/type/other.h,
+        // OtherTypeRegistry::registerType), so two spellings of one pipeline that load different
+        // modules -- `std::opt::saturate` and `opt::saturate` -- wrote documents differing only in
+        // those numbers (defect B2 of the 2026-11-01 eval report: `Node<int>` as 2684354570 in one
+        // and 2684354568 in the other). The code is a hash of what the program shows, the spelling,
+        // so the document says the same thing whichever modules the run happened to load.
+        // `canonical=false` keeps the registry's number: it is a reading for a person debugging a
+        // load order, and there the number is the fact being read.
+        const std::string spelling = type::sourceTypeSpelling(t->toString());
+        // The kind goes into the hash with the spelling: two types of different kinds that spell
+        // the same are two types, and a collision must not make the document name them one.
         return json{
             {"k", "other"},
-            {"code", static_cast<uint32_t>(t->code())},
-            {"spelling", type::sourceTypeSpelling(t->toString())}};
+            {"code", stableCodeOf("other:" + spelling)},
+            {"spelling", spelling}};
     }
 
     void collectTypes() {

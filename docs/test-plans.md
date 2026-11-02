@@ -139,6 +139,21 @@ held a test back and `, known failures: <n>` when a `known_fail` mark did; and
 `[gate] held by policy for the milestone layer: <n> plan files, <n> cases`, read from the same plan
 files through the runner's own loader.
 
+Every run also prints the layer twice, because the layer's size is two numbers and each was read as
+the layer on its own (`3330` was quoted while a run of that layer started `3404`):
+
+```
+[tier] milestone: 27 plan file(s), 3330 declared test entries, 3404 started
+```
+
+`declared` counts the entries the plan files name for this layer; `started` counts the tests the run
+launches. **Started above declared is normal**: a test that names `backends` becomes one test per
+back end, and a `compare_to` companion joins the run without being declared for the layer. **Declared
+above started is a defect** -- an entry the file declares for this layer that neither ran nor was
+skipped appears in no summary, so the plan proves less than its file says while printing green -- and
+it names the plan and fails the run. Both numbers are counted, never computed: multiplying by
+`backends.length` reads `7339` for a layer that starts `3404`.
+
 Rules for a new test:
 
 - It is fast by default: do not mark a test slow to make the default set look fast.
@@ -313,7 +328,18 @@ whatever their age or their place in the order:
 - a directory whose `<pid>` is a process that is still alive: the runner's own self-test starts nested
   runs beside an outer one, and they write into the same tree;
 - a directory the runner did not write, whose name is not `<timestamp>_<pid>`: it is counted and
-  reported, not deleted.
+  reported, not deleted;
+- a directory whose `summary.json` records a failed test: a green run's twelve-line tail may age out,
+  a red run's whole output is the record someone has to read the next morning, so the bound keeps it
+  (`[RETAIN]` counts them as "kept because they recorded failures"). This is the one place where the
+  bound is not about size: a directory of failures is why the tree keeps a record at all.
+
+A failed test's log entry ends with one line naming where its whole output is,
+`[INFO] full output: test/results/log/<run>/fail/<plan>/<test>/ (stdout.txt, stderr.txt, output.txt,
+meta.json)`, with the path relative to the checkout so it reads the same on a build machine. What
+follows in the log is at most the last twelve lines of stdout and stderr, and only with `CI` or
+`CAMEL_TEST_SHOW_OUTPUT` set: it is enough to see the shape of a failure and not enough to read its
+cause. Read the file.
 
 A scratch root `tmp/test/run-<pid>` goes when its run is gone and the root has not been touched for an
 hour. The runner keeps its root when a test failed precisely so that the files can be read, and that
@@ -646,10 +672,24 @@ everywhere is written once:
   below (`exit_code`, `stdout_normalized`, `stderr_normalized`, `output_normalized`) and
   `diagnostics` (name, code, line and column of every diagnostic, in the order printed).
 - `known_fail`
-  Back ends of `backends` on which the test is known to fail. Such a test is reported as
+  How a test that is expected to fail is marked. **One spelling per shape of the entry**, and the
+  runner refuses the other at load, by name:
+  - with `backends = [...]`, a list of back ends of that list, `known_fail = ["nvm"]`; a name that
+    is not in `backends` is refused;
+  - without a `backends` list the entry is one run, and the mark is `known_fail = true`. A list
+    here is refused (`names back ends (...), but the test has no backends list, so no back end of
+    that name runs here: write known_fail = true`), because it used to be read by nobody: the
+    expansion returned the entry before the mark was read, so the case failed, the run went red and
+    the mark was never mentioned (fixed 2026-11-02, `test/tools/run-tests.mjs`).
+
+  A marked test is reported as
   `[XFAIL]`, counted apart in the summary (`known failures: N`) and does not fail the run. When
   it passes it fails the run, with the request to remove the mark: a mark cannot go stale
-  unnoticed.
+  unnoticed. `known failures: N` can rise without anything regressing -- a mark only applies to a
+  run that happens, so a case that skipped before and starts now turns its mark into an `[XFAIL]`
+  for the first time (2026-11-02: compiling `modules/transforms` moved `skip 43 -> 10` and
+  `known failures 3 -> 6` in the same run). Read the two numbers together before calling it a
+  regression.
 - `known_fail_note`
   Printed with an `[XFAIL]`: why, and what will fix it.
 
@@ -753,6 +793,7 @@ Behavior-style tests may combine:
 - `expect_stdout_contains`
 - `expect_stdout_exact`
 - `expect_stdout`
+- `expect_stdout_matches`
 - `expect_stdout_starts_with`
 - `expect_stderr_contains`
 - `expect_output_contains`
@@ -790,6 +831,43 @@ A multiline value written as `"""` followed by a newline starts with that newlin
 specifies; put the first output line on the same line as the opening `"""` when the program does
 not print a leading blank line. The reader of a failing test should not have to discover that
 difference by hand.
+
+### `expect_stdout_matches`
+
+A pattern -- or a list of patterns -- each of which must match some line of the normalized standard
+output. **It is a search, line by line: any line matching passes.** It is not "the whole output
+matches" (then `^` and `$` would anchor the file instead of a line, and no plan could say "a line
+that starts with ...") and it is not "every line matches" -- no test wants that, and it would turn
+one extra printed line into a red, which is a different assertion.
+
+The anchor is the difference between the two most common mistakes, so both are spelled out. With
+`expect_stdout_matches = ["24\\.0"]` a line containing `24.0` anywhere passes -- `width 24.0 height
+7` passes. With `expect_stdout_matches = ["^24\\.0$"]` only a line that is exactly `24.0` passes,
+and `width 24.0 height 7` does not. An unanchored pattern is a substring of a line; add the anchors
+when the line's whole shape is what the test is about.
+
+Use it for output whose shape is what matters and whose values are not pinned
+(`^width \\d+\\.\\d+ height \\d+$`); use `expect_stdout_exact` when every line is pinned.
+
+Three shapes are **plan errors**, refused at load with `plan:line`, and the run starts nothing:
+a pattern that does not compile (`"["`), an empty pattern (`""`, which matches every line and would
+be green forever), and this field together with `expect_stdout_contains`, `expect_stdout_exact` or
+`expect_stdout` -- two assertions on one stdout, whose precedence is written nowhere, so the plan
+states one of them.
+
+A pattern that is legal and matches nothing is a **failing test**, and its message carries the
+pattern as written, that the expression is legal, and the head of the output (twelve lines) it
+matched against:
+
+```
+[FAIL] probe.missing.entry
+    [INFO] expect_stdout_matches: /^never printed$/ (a legal regular expression) matches no line of the normalized stdout
+    [match] pattern /^never printed$/ -- a legal regular expression that matched no line
+    [stdout head] 3 of 3 line(s)
+      width 24.0 height 7
+      24.0
+      done
+```
 
 ### `expect_stdout_starts_with`
 
@@ -1289,6 +1367,20 @@ instances run at the same time without seeing each other's files. A case run out
   of the wrong type for the fields it types) with an error naming the plan file, the test and
   the key; fix the plan, do not work around the runner. A new field is added to the runner and
   to this document in the same change, so the next plan can rely on it.
+- **`args` is checked against the CLI's own option values at load.** `--gc-check`, `--gc-stress`
+  and `--gc` take a closed set of words, and a plan that names anything else is a **plan error**:
+  the run prints `[PLAN ERROR] <plan>:<line>: test '<name>': <word> -- <what the option takes>`
+  and starts nothing (exit 2). It is not a failing test, and must not be read as one: the CLI
+  refuses the word while parsing, so the exit code it produces says nothing about the program the
+  test runs. Six entries of `test/plans/feat/linear/jit_framed.plan.toml` were investigated as a
+  GC defect over `--gc-check verify=1` before anyone read the option.
+  The values are `moves, poison, config, verify=before|after|both` (also `pre`, `post`) for
+  `--gc-check`; `kind=minor|major|both, alloc=<n>, safepoint=<n>` for `--gc-stress`; and
+  `generational|gen|1|mark-sweep|marksweep|0` for `--gc`. The table lives in
+  `test/tools/cli-arg-domains.mjs`, which reads those values out of `tools/camel-cli/config.cpp`
+  and `src/core/mm/mm.cpp` and fails when either side moves (`cli.arg_domains_match_the_cli`).
+  Compound values (`alloc=3,safepoint=1,kind=major`, `poison,verify=both`) and pass parameters
+  (`std::opt safe_fp=true`) are not run options and are left alone.
 - Prefer explicit `expect_exit = 0` for successful behavior tests.
 - Prefer `verify_script` over `verify_script_path` for short, local checks.
 - Prefer `verify_script_path` for reusable or multi-test logic.

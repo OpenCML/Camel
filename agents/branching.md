@@ -82,8 +82,15 @@ if the reading were noise, and do not stop and wait.
 The example on record: the ruling said the eleven `:op/ne_*` rows are a second implementation of
 `==` and should go. Deleting them took the suite from `8390/8374/0` to `8390/7866/508`, because
 `modules/graph/module.cpp#neKernel` builds a `__neq__` group for the types that have no `==` to fall back
-on. The rows stayed, the question went back to `questions/`, and the ruling's own text stayed in the
+on. The rows stayed, a question page carried the reading, and the ruling's own text stayed in the
 record untouched.
+
+**The conflict ends when the ruling comes back with a path.** If the person who ruled responds with
+how to do it — change the call sites to an equivalent form first, then delete — the state is no
+longer "ruling vs reading": it is a migration with an order, and the lane does it. Move the page to
+`reviews/` at that point, because a ruled page left in `questions/` turns the index into a list of
+questions that have been answered. The example above ended exactly this way: the author answered with
+"grep for the URI, read `==` and negate, then delete", and the page went to `reviews/`.
 
 ## Coordinator Workflow: Handover Branches And `wzj-dev`
 
