@@ -1975,3 +1975,9 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 - **生成器悬垂节点**（`9f5ea8bad`）：epoch 认图之后，11 条 `stream.*` 在 Debug 下全绿，这是进展。但 06:10 那页要的是 Windows 腿和 ASan 腿，而这两条腿都没跑。CI 的 ASan 腿在 `67f88a8ac` 已经扩到 `stream` 和 `transforms`，下一次 CI 运行的结果就是读数。两条腿都绿了再结案，在这之前页面保持"未结"。
 - **新缺陷，排在 P0 之后第一个修**：同一次 Debug 运行里，`stream` 计划有 25 条用例中止在 `std::vector<GCRegion>::operator[]`：`settleStreamLinearity` 向 `GraphDraft::region` 要一个草稿里没有的区域（`id=0`，向量为空）。Debug 会检查下标，所以中止；Release 不检查，所以这 25 条在 Release 下是静默越界读，读到什么全凭运气。修根：先查 `settleStreamLinearity` 为什么在没有区域的草稿上问区域（也许根区域在草稿里不显式存在，`region 0` 应当由 `GraphDraft::region` 自己回答）；`GraphDraft::region` 的入口对越界给 `GUARD`，Release 也查。
 - `f5a455f62` 让计划能断言"进程被某个信号杀死"，用于测试那些专门让进程停下来的守卫，不许用它来接受崩溃。在 `docs/test-plans.md` 写一句：`expect_signal` 只用于断言一个守卫按设计中止了进程，段错误这类信号不许出现在期望里。
+
+## 抽查（2026-11-02 14:50）
+
+- **好**：`04dcf4dd2` 落地了 10-25 的 abi3 裁定，每个平台一次原生构建，出 `cp310-abi3` 互操作 wheel 和 `py3-none` 本体 wheel。13:40 下达，一小时内落地。冒烟测试的三个解释器（3.10、最新版、只装本体的那个）在下一次 CI 发版里看读数。
+- **返工（小）**：`7e36f423e` 又在页面上写了"六个行数，附 sha 和命令"。05:30 的规矩是文档不写会随代码变的数字，带不带 sha 都一样，读数放进提交信息。删掉这些句子。
+- **催办**：`transpose_operator.cpp:110` 的旧签名还在，那 29 条红在等它；`settleStreamLinearity` 的越界读排在它后面。两件都是一行到一小处的改动，这一轮做。
