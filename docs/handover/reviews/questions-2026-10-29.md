@@ -1816,6 +1816,8 @@ P0-1、P0-3 的主体都落了，下一步是 P0-2（控制边，批次项 9）�
 | `lane-lit2` | 49 笔整支（`12509f812`，先按 diff 取过的四笔在合并信息里逐个点名） | 0；新推的 10 笔**未合**（它报不出"最后一次全绿"，按规矩不合） | `total: 8388, pass: 8375, fail: 0, skip: 10, known failures: 3` |
 | `lane-m5` | 32 笔整支（`7037652a9`） | 0 | `total: 8388, pass: 8375, fail: 0, skip: 10, known failures: 3` |
 
+**RangeRightIsLink 的落处（2026-11-02 11:00 补，读数落在这里而不是只在合并信息里）**：撤除随 lane-a3 整支合并落地。git grep -c 'RangeRightIsLink' -- diagnostics/registry.tsv = **0 命中**，diagnostics/registry **307 → 306 码**，
+ode scripts/camel-for-ai.mjs --write 输出 `already what the sources produce (nothing written)`、git status --porcelain **为空** ⇒ 四处一致。作者 00:50 的判断是"它把 ..(b->f) 这种合法程序拒了，而同样的优先级在  + b->f 上不报错"。
 **代价记一笔**：整支合之后，`8582dc7a0`（`RangeRightIsLink`）只能在 `develop` 上撤，不能"从车道里摘掉"——这是整支合并的第一次代价，不是对那个决定的抱怨。
 
 
