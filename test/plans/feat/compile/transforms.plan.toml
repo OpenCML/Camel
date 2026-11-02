@@ -577,20 +577,19 @@ timeout_ms = 20000
 # it.
 [[tests]]
 name = "transpose_loop_escape.names_the_value_one_read"
-desc = "`read_one(x) = loop s = x for i in 0..3 do 2.0*s + x` reads the parameter inside the loop body, so every round's cotangent lands on `x` and has to leave the loop. The loop carries it as a second state and answers 15 -- `s = 2s + x` three times is `8x + 7x`, the state's own cotangent 8 plus the carried sum 7 -- where before this cut it refused with `skip=state`. The reading is kept: `carried=1` in place of `skip=state`, `answer=summed` because the escaped value is the one the state starts from, `captures=1`, and the `ESCAPE` line still names the parameter port as the target and the body's `add` as the product that handed the cotangent out. A channel that dropped that line when it started working could not be compared with the refusal it replaced."
+desc = "`read_one(x) = loop s = x for i in 0..3 do 2.0*s + x` reads the parameter inside the loop body, so every round's cotangent lands on `x` and has to leave the loop. The loop carries it as a second state and answers 15 -- `s = 2s + x` three times is `8x + 7x`, the state's own cotangent 8 plus the carried sum 7 -- where before this cut it refused with `skip=state`. The reading is kept: `carried=1` in place of `skip=state`, `answer=summed` because the escaped value is the one the state starts from, `captures=1`, and the `ESCAPE` line still names a port as the target and the product that handed the cotangent out as its source -- a `Func` node now (`kindOfFrom=10`, the tangent rule's `add_tangent` call), where it was the body's own `add` (`11`, `Oper`) while `jvp`'s loop was still uncut. A channel that dropped that line when it started working could not be compared with the refusal it replaced."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_loop_escape_reads_one.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 0
-# pinned before 17:10; update when jvp supports loop
-# `type=(float, float) => float` below is the pre-ruling member shape: a transposition of a
-# one-parameter function answers `(float) => (float,)` now. The shape is left as it stands because
-# the case cannot run at all until `jvp` has a forward transform for a loop (`REINTERP jvp
-# function=read_one skip=loop`, lane-loopreverse); re-pinning it before that would be a guess, and
-# the right shape is best read off the run that gets there.
-expect_output_contains = ["TRANSPOSE function=read_one carried=1 node=10 origin=0 captures=1 answer=summed", "ESCAPE target=0 from=9 kindOfFrom=11 kindOfTarget=1 typeOfTarget=float norm=[3,0,] with=[9,11,]", "TRANSPOSE function=read_one graph=", "type=(float, float) => float", "15.0"]
+# Re-pinned 2026-11-03 against the first run that gets here: `split` cuts the interval loop now, so
+# the transposed graph is `split_of_jvp_of_read_one_backward` rather than `read_one`, its member is
+# `(float) => (float,)`, and the cotangent leaves through the tangent rule's `add_tangent` call. The
+# number is checked on paper, not taken from that run: `s = 2s + x` for the three rounds of `0..3` is
+# `2s = 2(2(2x + x) + x) + x = 8x + 7x = 15x`, so the transposed member answers 15 at `x = 1`.
+expect_output_contains = ["REINTERP split function=jvp_of_read_one", "residuals=2 loop=1 tape=2 invariants=1", "TRANSPOSE function=split_of_jvp_of_read_one_backward carried=1 node=3 origin=0 captures=1 answer=summed", "ESCAPE target=2 from=11 kindOfFrom=10 kindOfTarget=1 typeOfTarget=float norm=[1,2,] with=[11,12,]", "TRANSPOSE function=split_of_jvp_of_read_one_backward graph=", "type=(float) => (float,)", "15.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -603,7 +602,12 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=read_twice carried=1 node=11 origin=0 captures=1 answer=summed", "ESCAPE target=0 from=10 kindOfFrom=11 kindOfTarget=1 typeOfTarget=float norm=[3,0,] with=[10,12,]", "22.0"]
+# Re-pinned 2026-11-03 with the entry above: the cut reaches this loop now, so the transposed graph
+# is `split_of_jvp_of_read_twice_backward` and the source of the escape is `add_tangent` (`Func`,
+# 10) rather than the body's own `add` (`Oper`, 11). On paper `s = 2s + 2x` for the three rounds of
+# `0..3` is `8x + 14x = 22x`, so the transposed member answers 22 at `x = 1` -- and 15 would be the
+# answer if one of the two reads were dropped, which is what `captures=1` rules out.
+expect_output_contains = ["REINTERP split function=jvp_of_read_twice", "residuals=2 loop=1 tape=3 invariants=1", "TRANSPOSE function=split_of_jvp_of_read_twice_backward carried=1 node=3 origin=0 captures=1 answer=summed", "ESCAPE target=2 from=13 kindOfFrom=10 kindOfTarget=1 typeOfTarget=float norm=[1,2,] with=[13,14,]", "TRANSPOSE function=split_of_jvp_of_read_twice_backward graph=", "type=(float) => (float,)", "22.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
