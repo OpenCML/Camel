@@ -1,0 +1,41 @@
+/**
+ * A read inside an arm, before the arm's own write: the read takes the version the arm was entered
+ * with, not the one the write leaves on the way out.
+ *
+ * The arm's nodes are the block's own graph -- `controlOf` says which region lays them out, not
+ * which graph records their versions -- so the read is ordered before the write by the same edge a
+ * block read gets (`Builder::recordWrite`: "the read has to see the value as it was before the
+ * write changes it"; the arm's `:var/get` and the arm's `:op/assn_l` are two nodes of one graph and
+ * the edge between them is an ORDER edge). The printer writes the read where it stands:
+ *
+ *     let before: int = t
+ *     t = t + 1
+ *     report('int', before, t)
+ *
+ * Printing it as the variable's name would answer `int 4 4` where the source answers `int 3 4`.
+ *
+ * Expected output:
+ *   int 3 4                 the read inside the arm keeps the value it was entered with
+ *   int 0 3                 the other arm reads that same version, untouched
+ */
+
+func report(tag: string, a: int, b: int): int sync {
+    println(tag, a, b)
+    return 0
+}
+
+func picked(c: bool): int sync {
+    var t = 3
+    if c then {
+        let before = t
+        t += 1
+        report("int", before, t)
+    } else {
+        report("int", 0, t)
+    }
+    return t
+}
+
+func main(): int sync {
+    return picked(true) + picked(false)
+}
