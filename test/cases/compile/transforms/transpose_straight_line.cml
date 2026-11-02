@@ -1,0 +1,29 @@
+// The transpose of a straight-line linear function: the data flow runs backwards, each primitive is
+// replaced by the rule the transpose family files under it, and a value used k times receives k
+// cotangents that add.
+//
+// `sum_of_scaled(x) = 2*x + 3*x` uses its parameter twice: transposed at the cotangent 1.0 the two
+// uses contribute 2 and 3 and the answer is 5. `scaled_chain(x) = (x*2 + x*3) * 4` puts a multiply
+// between them: the 1.0 arrives at the sum as 4, so the parameter's cotangent is 4*2 + 4*3 = 20.
+// The transposed function takes the parameters of `f` first and the cotangent last: a pullback may
+// need the value it is transposing at (a branch's condition is a value), so the shape is
+// `transpose(f)(x, 1.0)`. A straight-line function does not use `x`; the port is there anyway,
+// because that shape is the same for every function.
+import { transpose } from transforms
+import rulesets.transpose
+
+func sum_of_scaled(x: float): float {
+    return 2.0 * x + 3.0 * x
+}
+
+func scaled_chain(x: float): float {
+    return (x * 2.0 + x * 3.0) * 4.0
+}
+
+func main(): int sync {
+    let back = transpose(sum_of_scaled)
+    println(back(2.0, 1.0))
+    let chain_back = transpose(scaled_chain)
+    println(chain_back(2.0, 1.0))
+    return 0
+}

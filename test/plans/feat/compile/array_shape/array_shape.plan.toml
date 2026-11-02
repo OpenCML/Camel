@@ -988,3 +988,47 @@ expect_exit = 0
 expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+# The open rank's position reads the element the value holds: position 3 of a `float[2, 2]` is its
+# fourth element and the bound is the four elements, not the first dimension's two. Before this, the
+# read took the element (`Array::getSlot`) while the check counted a dimension, so `at(xs, 3)` was
+# refused as out of range for a length-2 first dimension.
+[[tests]]
+name = "open_rank_reads_its_elements"
+desc = "A position on an open-rank value is flat (design principles 5.4): `at(x: float[..], i: int)` on a `float[2, 2]` answers 1.0, 4.0, 2.0 and 3.0 for 0, 3, 1 and 2 -- the elements in row order, not rows -- and 4 is the fault `Index 4 is out of range for the elements of length 4`, which names what was counted. The same check refused the pullback of an array literal's third computed element (test/cases/modules/autodiff/literal_pullback.cml)."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/open_rank_reads_its_elements.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n4.0\n2.0\n3.0\nerror IndexOutOfRange: Index 4 is out of range for the elements of length 4.\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "open_rank_reads_its_elements_fvm"
+desc = "The same readings on the bytecode VM: the bound is the kernel's, so every scheduler counts the same elements and answers the same four numbers and the same fault."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/open_rank_reads_its_elements.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n4.0\n2.0\n3.0\nerror IndexOutOfRange: Index 4 is out of range for the elements of length 4.\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+# The index family on a value of two dimensions: the bound and the read agree at every step, and the
+# fault names the thing whose length it counted -- the row a `xs[i, j]` takes with its first word
+# ("an array of length 2", the row's own length), the first dimension of a deeper value ("the first
+# dimension of the input array"), and the dimension an axis word names ("dimension 1 of the input
+# array"). These readings are the sweep's control group: the counts differ (2 rows, 4 elements) and
+# a position is compared with the one it addresses.
+[[tests]]
+name = "index_on_a_rank_two_value"
+desc = "`xs[i, j]`, `xs[i][j]` and a rank-1 subscript on a `float[2, 2]`: `xs[1, 0]` answers 3.0 and `xs[1][1]` 4.0; the row read of `xs[i0, 0]` (i0 = 2) is `Index 2 is out of range for an array of length 2` -- the row it takes has two elements -- `xs[0, i1]` (i1 = 5) is `dimension 1 of the input array of length 2`, `xs[i0][0]` is `the first dimension of the input array of length 2`, and a rank-1 subscript is `an array of length 3`. The four counts are different numbers and each read is compared with the one it addresses."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/index_on_a_rank_two_value.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "3.0\nerror IndexOutOfRange: Index 2 is out of range for an array of length 2.\nerror IndexOutOfRange: Index 5 is out of range for dimension 1 of the input array of length 2.\nerror IndexOutOfRange: Index 3 is out of range for an array of length 3.\n4.0\nerror IndexOutOfRange: Index 2 is out of range for the first dimension of the input array of length 2.\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

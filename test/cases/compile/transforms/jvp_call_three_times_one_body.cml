@@ -1,0 +1,27 @@
+// One lifted body per callee, not one per call: `g` is called three times and the lift makes one
+// graph for it.
+//
+//   g(x) = x * x        f(x) = g(x) + g(x) + g(x) = 3 x^2
+//   f(3) = 27           f'(x) = 6 x            f'(3) = 18
+//
+// The reading is the count: `REINTERP jvp callees=1` is one lifted body for a function called
+// three times -- the callee map is keyed by the callee's graph, so the second and third call find
+// the body the first one made.
+import rulesets.jvp
+import { jvp } from transforms
+
+func g(x: float): float {
+    return x * x
+}
+
+func f(x: float): float {
+    return g(x) + g(x) + g(x)
+}
+
+func main(): int sync {
+    let (value, tangent) = jvp(f)(3.0, 1.0)
+    println(value)
+    println(tangent)
+    println(f(3.0))
+    return 0
+}

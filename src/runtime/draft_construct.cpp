@@ -268,12 +268,12 @@ gc_node_ref_t GraphDraft::addCallNode(
 
 gc_node_ref_t GraphDraft::addFuncNode(
     GraphId calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags,
-    gc_slot_idx_t dataIndex, uint32_t writtenCaptures) {
+    gc_slot_idx_t dataIndex, uint32_t writtenCaptures, uint16_t tangentArgs) {
     ++mutations_;
     dataIndex = ensureValueSlot(*this, type, dataIndex);
     GCFuncRef body{.ref = payloadGraphIndexOf(calleeGraph), .reserved = writtenCaptures};
     const auto payload = bytesForStruct(body);
-    return addNode(
+    const gc_node_ref_t made = addNode(
         DraftNodeInit{
             .dataIndex    = dataIndex,
             .dataType     = type,
@@ -281,6 +281,16 @@ gc_node_ref_t GraphDraft::addFuncNode(
             .runtimeFlags = runtimeFlags,
             .payload      = payload,
         });
+    // How many of the call's trailing arguments are tangents, when the caller knows (a rule's
+    // expansion does: the values are the captures it bound, the tangents are the lambda's own
+    // parameters). A fact about the call, frozen with it and read by `transpose` at a call inside a
+    // branch arm.
+    if (tangentArgs > 0) {
+        DraftNode *draftNode = node(made);
+        GUARD(draftNode != nullptr, "the call just added has no node record");
+        draftNode->header.tangentArgs = tangentArgs;
+    }
+    return made;
 }
 
 uint32_t GraphDraft::funcWriteMaskOf(gc_node_ref_t id) const {
@@ -307,8 +317,6 @@ gc_node_ref_t GraphDraft::addLoopNode(
     const GCLoopRef ref{
         .kind            = body.kind,
         .iterableForm    = body.iterableForm,
-        .condRef         = payloadGraphIndexOf(body.condGraph),
-        .bodyRef         = payloadGraphIndexOf(body.bodyGraph),
         .collectionCount = body.collectionCount,
     };
     const auto payload = bytesForStruct(ref);

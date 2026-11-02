@@ -1,0 +1,33 @@
+// `split` at a branch: the arm is picked, and both arms' derivatives come out as numbers.
+//
+// `jvp` gives a branch's Join the lifted type (the arm the condition picks writes the pair
+// (result, tangent) into it), so the exit of a lifted branching body is a Join and not a tuple fill.
+// `split` used to answer `skip=exit`, then a reading, then a construction, and now it builds: each half
+// gets its own Brch and Join, one region per arm, and the arm's half of the pair copied into it.
+//
+// The rule is the author's (design 4.2): **the condition itself is a residual**. It is not an arm's
+// input -- it is a value of the region the branch stands in -- so carrying it across the cut as a
+// residual is what lets the backward half pick the arm by the *same* value the forward half picked it
+// by, instead of computing the comparison a second time.
+//
+// The acceptance numbers were written down before this case could read them
+// (`docs/handover/reviews/m2-split-call-and-branch.cn.md` §6): `d/dx (x*x) = 2x` is 4.0 at x = 2.0, and
+// `d/dx (0.5*x) = 0.5` at any x. Both arms are exercised here, because a cut that only walks one arm is
+// not a cut of a branch.
+import rulesets.jvp
+import { jvp, split } from transforms
+
+func leaky(x: float): float {
+    return if x > 0.0 then x * x else 0.5 * x
+}
+
+func main(): int sync {
+    let (forward, backward) = split(jvp(leaky))
+    let (up, upResiduals)   = forward(2.0)
+    'branch x=2.0 value={}'->format<up>->println
+    'branch x=2.0 dgdx={}'->format<backward(upResiduals, 1.0)>->println
+    let (down, downResiduals) = forward(-1.0)
+    'branch x=-1.0 value={}'->format<down>->println
+    'branch x=-1.0 dgdx={}'->format<backward(downResiduals, 1.0)>->println
+    return 0
+}

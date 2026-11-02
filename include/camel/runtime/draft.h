@@ -132,6 +132,13 @@ struct DraftNodeHeader {
 
     GCNodeKind kind                  = GCNodeKind::Data;
     uint8_t runtimeFlags             = 0;
+    /// How many of a FUNC node's arguments are tangents. A rule's right side is
+    /// `(dx, dw) => mul_tangent(x, w, dx, dw)`: the values are the captures the expansion bound and the
+    /// tangents are the lambda's own parameters, so the expansion knows the count and records it here,
+    /// on the call it produces. One source: the rule. Nothing re-derives the boundary from a name or a
+    /// spelling, and a reader that needs it (`transpose`, at a call inside a branch arm) reads the
+    /// node. 0 for every node that is not a rule's tangent call.
+    uint16_t tangentArgs             = 0;
     DraftNodeStorageClass storageCls = DraftNodeStorageClass::Slab64;
     // The numeric permissions the program granted to the node with the standard permission
     // tags (camel/core/operator_semantics.h, PermissionMask; design principles 7.5), 0 when none.
@@ -452,6 +459,9 @@ class GraphDraft {
     /// in the reference table so that they are part of the program, and read back by the pass
     /// that owns the tag.
     const std::vector<GraphId> &ruleGraphs() const { return ruleGraphs_; }
+    /// The graph this draft was lifted from, empty when it was not lifted: `jvp` writes it on the
+    /// graph it builds from a primal, and it survives into the encoded graph's reference table.
+    const std::vector<GraphId> &liftedFromRefs() const { return liftedFromRefs_; }
 
     /// The normal-role ports of a node: the view of the data ports that a pass caring about the
     /// role reads (`normInputsOf`); `withInputsOf` is the context-role view of the same list.
@@ -567,26 +577,29 @@ class GraphDraft {
     GraphId calleeIdOf(gc_node_ref_t id) const;
     GCGraph *calleeGraphOf(gc_node_ref_t id) const;
     void setCalleeGraph(gc_node_ref_t id, GraphId callee);
-    /// What LOOP node `id` names: its condition graph (invalid for a For loop), its body graph,
-    /// its form and its collection count.
+    /// What LOOP node `id` is: its form, its iterable form and its collection count. A loop names no
+    /// graph -- the condition and the body are regions of the graph it is written in (design
+    /// principles 3.10).
     GCLoopBody loopGraphsOf(gc_node_ref_t id) const;
-    void setLoopGraphs(gc_node_ref_t id, GraphId cond, GraphId body);
     /// The graphs the payloads of FUNC and LOOP nodes index (GCFuncRef, GCLoopRef): the
     /// reference table of the graph the draft was decoded from, then the graphs added since.
     std::span<const GraphId> payloadGraphs() const { return payloadGraphs_; }
     /// The index of `graph` in payloadGraphs(), added when it is not there; kNoLoopGraph for
     /// an invalid id.
     uint32_t payloadGraphIndexOf(GraphId graph);
+    /// `tangentArgs` is how many of the call's trailing arguments are tangents, when the caller knows
+    /// (see DraftNodeHeader::tangentArgs): a rule's expansion does, because the values are the captures
+    /// it bound and the tangents are the lambda's own parameters. 0 for a call that is not one.
     gc_node_ref_t addFuncNode(
         GraphId calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags = 0,
-        gc_slot_idx_t dataIndex = 0, uint32_t writtenCaptures = 0);
+        gc_slot_idx_t dataIndex = 0, uint32_t writtenCaptures = 0, uint16_t tangentArgs = 0);
     /// Which of a FUNC node's callee's captured variables the call writes, as a bit per capture
     /// of the callee's capture table, in the order its captures were made: the value the call
     /// hands on carries the new version of each (camel::runtime::GCFuncRef::reserved).
     uint32_t funcWriteMaskOf(gc_node_ref_t id) const;
     void setFuncWriteMask(gc_node_ref_t id, uint32_t writtenCaptures);
-    /// A LOOP node calling `body.condGraph` and `body.bodyGraph` (camel/runtime/loop.h); the
-    /// caller links its inputs and keeps the two graphs among the draft's dependencies.
+    /// A LOOP node (camel/runtime/loop.h): its form, its collection count and its iterable form. The
+    /// caller links its inputs and writes the body's regions on the draft it is made in.
     gc_node_ref_t
     addLoopNode(const GCLoopBody &body, camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addOperNode(
@@ -830,6 +843,7 @@ class GraphDraft {
     void addSubGraph(GraphId graph);
     void addStaticGraphRef(GraphId graph);
     void addRuleGraphRef(GraphId graph);
+    void addLiftedFromRef(GraphId graph);
 
     GCGraph *encode(const std::string &mangledName, const std::string &name) const;
 
@@ -940,6 +954,7 @@ class GraphDraft {
     std::vector<GraphId> subGraphs_;
     std::vector<GraphId> staticGraphRefs_;
     std::vector<GraphId> ruleGraphs_;
+    std::vector<GraphId> liftedFromRefs_;
 };
 
 /// The control region a node's code lies in: the innermost region that is an arm of a branch or a

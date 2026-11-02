@@ -124,7 +124,34 @@ inline constexpr OperId VarNewEmpty     = 20; // ":var/new/empty"
 /// may be `void`). The result is the cell itself; the call is an input so that taking the value
 /// makes the call run (design principles 3.1).
 inline constexpr OperId VarAfter        = 21; // ":var/after"
-inline constexpr OperId kWellKnownCount = 22; // kNoOper included
+/// `:op/keep(x, v)`: the value `v`, with `x` as an input whose value no result takes. A pass that
+/// removes the last use of a node whose running is observed (an effect, or a computation that may
+/// fault) routes that node through this operator instead of dropping it, so the node stays in the
+/// data-use set the liveness function reads while `v` stands where the node's value did (design
+/// principles 3.3). Its traits are the conservative ones an undeclared operator gets -- it has an
+/// effect and may fault -- because an operator a pass could drop, merge, move or compute early
+/// would undo the reason it was inserted.
+///
+/// When it is written: `keepThroughValue` (src/passes/opt/generic/rewrite.cpp), called by
+/// `replaceNode` for a node that has no sync user -- one that holds no place in a `sync` block's
+/// chain. That shape is not hypothetical, so the operator is not unreachable today: `std::opt` over
+/// test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml already draws two of these nodes.
+/// What 3.3 still leans on for the graphs the builder writes is the chain: an effect written inside
+/// a `sync` block has a place in it, and a pass that removes the statement hands that place on
+/// instead of reaching for this operator (rewrite.h, replaceNode). This operator is for the read
+/// that has no such place -- and a graph that keeps neither is refused at the commit ("effect node
+/// ... with neither a read of its value nor a place in its chain"), which is what
+/// `test::keepshape` measures.
+///
+/// The insertion is also exercised by construction, in src/passes/test/keepnode.cpp and
+/// test/plans/feat/opt/keep_node.plan.toml: measured there, `KEEPNODE keep=1 reads_the_divisor=1`,
+/// and the same pass with the insertion switched off reads `keep=0`. An earlier version of this
+/// comment said no program reached the insertion. The counts that refuted it are 3 of the 5
+/// programs under test/cases/opt/effects/ (each holding two nodes) and 7 in the whole
+/// test/cases/opt tree; both counts, their per-file node counts and their names are pinned by
+/// `keep_shape.reachability`, so a rule that starts or stops writing this node is a red run.
+inline constexpr OperId Keep            = 22; // ":op/keep"
+inline constexpr OperId kWellKnownCount = 23; // kNoOper included
 
 /// Reading a variable: `:var/get`, or `:var/peek`, the same read for a value that only goes to
 /// operations that cannot keep it (it leaves the variable's sole-reference mark set; see
@@ -157,6 +184,7 @@ inline constexpr std::string_view kWellKnownOperatorUris[oper::kWellKnownCount] 
     ":macro/cmp",
     ":var/new/empty",
     ":var/after",
+    ":op/keep",
 };
 
 /**

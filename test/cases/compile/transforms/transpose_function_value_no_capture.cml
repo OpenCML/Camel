@@ -1,0 +1,45 @@
+// The boundary of the last case, cut finer: a function value with no capture.
+//
+// `double(x) = 2x` is a top-level function, and `g(x) = let h = double; h(x)` puts *the function itself*
+// -- not a closure -- into a local before calling it. That is a different value from the one the
+// companion case uses: it is a plain function value, its graph id is what the binding holds, and there is
+// no capture beside it to carry.
+//
+// It answers now, and the answer is the paper one: the reading is 2.0 at cotangent 1 and 4.0 at
+// cotangent 2, with `TRANSPOSE function=g graph=50 ... nodes=3`.
+//
+// What changed is the *name*, not the shape. `let h = double` is a DATA node holding a static function
+// (`Function(graph=double, tupleSlots=0)` in the GIR), and `GCGraph::calleeIdOf` reads a graph id out of
+// `GCNodeKind::Func` nodes only -- a call written by name (`g(x)`, transpose_call.cml) lowers to one of
+// those, a value in a local does not. The one entry that turns a value into a name is
+// `GCGraph::staticFunctionGraphOf`, beside `calleeIdOf`: it asks the node's type for a function, its
+// static slot for a function value, and that value for the graph it names, and it requires that graph to
+// be one this graph records as a static reference. Anything else is a refusal with the check's name in
+// it, never a slot read as an id.
+//
+// The transposed call also had to put the callee back where the original had it: a `with` input, as a
+// static function of the transposed graph with an empty closure. A callee value in the wrong place is a
+// CALL node without a callee, which is how this case failed while it was being fixed.
+//
+// The companion case adds the capture back; there the name is found too and the refusal moves on to
+// `reason=function-closure`. That pair is what says the capture is the remaining piece.
+import { transpose } from transforms
+import rulesets.transpose
+
+func double(x: float): float {
+    return 2.0 * x
+}
+
+func g(x: float): float {
+    let h = double
+    return h(x)
+}
+
+func main(): int sync {
+    println(g(1.0))
+    let back = transpose(g)
+    println(back(1.0, 1.0))
+    // Twice the cotangent, 4: a number no forward line prints, so the claim is about the transpose.
+    println(back(1.0, 2.0))
+    return 0
+}

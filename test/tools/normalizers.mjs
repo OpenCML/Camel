@@ -93,6 +93,21 @@ export function applyNormalizers(text, names) {
                 }
                 return `${graph}::node#${label}`
             })
+        } else if (name === 'normalize_graph_ids') {
+            // A transform's reading names the graph it made (`REINTERP remat ... graph=49`,
+            // `REINTERP jvp ... graph=56`). That number is the per-run allocation index of the
+            // graph, not the reading: it moves when any other declaration module adds a graph (the
+            // same reason `normalize_origins` exists for source positions), while the transform
+            // still made one graph and set the same bits on it. Replacing it with `<GRAPH>` keeps
+            // what the line asserts -- that a graph was reserved and named here -- and drops the
+            // snapshot of the run's counter, so a plan can pin the whole line with
+            // `expect_stdout_exact` instead of matching a fragment.
+            output = output
+                .split('\n')
+                .map((line) =>
+                    line.startsWith('REINTERP ') ? line.replace(/\bgraph=\d+/g, 'graph=<GRAPH>') : line
+                )
+                .join('\n')
         } else if (name === 'normalize_duration_seconds') {
             output = output.replace(/computed in [0-9]+\.[0-9]+ seconds/g, 'computed in <TIME> seconds')
         }

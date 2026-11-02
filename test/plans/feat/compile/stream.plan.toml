@@ -1062,7 +1062,7 @@ case = "../../../cases/compile/stream/generators_local_across_yield.cml"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "1\n6\n"
-expect_output_not_contains = ["[Error]", "UnresolvedReference", "FeatureNotSupported"]
+expect_output_not_contains = ["[Error]", "UnresolvedReference"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
@@ -1088,7 +1088,7 @@ case = "../../../cases/compile/stream/generators_destructured_local.cml"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "b\n3b\n"
-expect_output_not_contains = ["[Error]", "FeatureNotSupported"]
+expect_output_not_contains = ["[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 

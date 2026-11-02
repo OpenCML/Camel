@@ -59,6 +59,11 @@
             "plans": ["smoke", "feat/consistency/runner.plan.toml"]
         },
         {
+            "comment": "The doc-readings check is a plan whose case is a tool under test/tools: a change here runs the plan that reads the readings the hand-written pages state, so the numbers a change moves are re-measured beside it.",
+            "paths": ["test/tools/check-doc-readings.mjs"],
+            "plans": ["feat/docs/doc_readings.plan.toml"]
+        },
+        {
             "comment": "The debugger harness (the DAP race harness): the plan whose slow DAP cases it drives. A harness change is not a plan change, but this is the plan that would catch a regression in it.",
             "paths": ["test/tools/debugger/"],
             "plans": ["feat/tools/debugger.plan.toml"]
@@ -277,9 +282,14 @@
             "plans": ["feat/modules/stdlib_registry.plan.toml"]
         },
         {
-            "comment": "The grammar generator/checker: parse.frontend's grammar.reference_in_step keeps the generated reference, the parser productions and the token/node tables in step.",
+            "comment": "The grammar generator/checker: parse.frontend's grammar.reference_in_step keeps the reference in step with the grammar.",
             "paths": ["scripts/check-grammar.mjs"],
             "plans": ["feat/parse/frontend.plan.toml"]
+        },
+        {
+            "comment": "The autodiff migration ledger reads the old autodiff cases and prints what stops them: a change to it re-runs the plans those cases live in.",
+            "paths": ["scripts/autodiff-migration-ledger.mjs"],
+            "plans": ["feat/modules/autodiff.plan.toml", "feat/modules/autodiff_value_with.plan.toml", "feat/modules/autodiff_inspection.plan.toml"]
         },
         {
             "comment": "The reference for AI readers and the script that generates its four regions from the token table, the parser productions, the diagnostics registry and the stdlib page: docs_ai_reference re-checks the regions, the diagnostic names and the character budget, and compiles every counter-example against the compiler; docs_links compiles and runs the page's snippets like any other reader-facing page.",

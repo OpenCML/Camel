@@ -46,3 +46,163 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # The timeout below stays; it is only the liveness bound.
 cpu_budget_ms = 13000
 timeout_ms = 180000
+
+# The two readings of a training run, as bounds a plan can hold: the time it takes against the
+# baseline's time, and the loss falling from the first logged step to the last.
+#
+# Why a ratio and not a number of seconds: both sides run this profile on this host in the same
+# window, so contention on a shared machine moves both columns and leaves the ratio roughly where it
+# was.  The single-run value is recorded here anyway, as the loosening rule asks -- on 2026-10-31 the
+# small profile measured 0.321265 s (Camel) against 0.853344 s (PyTorch), a ratio of 0.376, and the
+# three serial samples either side of it read 0.129045 / 0.127260 / 0.128581 s.  The 1.5 bound is
+# 4x the recorded ratio: room for one side to be scheduled badly, not room for a regression.
+# Nothing in the agreement entry above is loosened by this one: it reads the bounds of its own
+# readings (time and the curve), not the numeric tolerances.
+[[tests]]
+name = "bounds"
+desc = "C2 small configuration: the Camel training run stays within 1.5x of the PyTorch baseline's training time on the same data, batch and host, and its logged loss falls from the first step to the last (the same two readings the report's Performance and Loss curve tables carry)."
+kind = "behavior"
+tool = "python"
+case = "../../../showcase/c2-mlp-mnist/compare.py"
+args = ["${case}", "--profile", "small", "--data", "${test_tmp}/c2-showcase-bounds", "--results", "${test_tmp}/c2-showcase-bounds/RESULTS.md"]
+skip_unless = ["${python}", "-c", "import numpy, torch, psutil"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('node:fs')
+const lines = fs.readFileSync(input.test_tmp + '/c2-showcase-bounds/RESULTS.md', 'utf8').split(String.fromCharCode(10))
+const cells = (prefix) => {
+  const row = lines.find((x) => x.startsWith(prefix))
+  assert(row !== undefined, 'the report has no row starting with ' + prefix)
+  return row.split('|').slice(1, -1).map((c) => c.trim())
+}
+const time = cells('| training time')
+const camel = Number(time[1])
+const baseline = Number(time[2])
+assert(Number.isFinite(camel) && Number.isFinite(baseline) && baseline > 0, 'unreadable training time row: ' + time.join(' / '))
+const ratio = camel / baseline
+assert(ratio <= 1.5, 'Camel trains in ' + camel.toFixed(6) + ' s against the baseline s ' + baseline.toFixed(6) + ': ' + ratio.toFixed(3) + 'x, past the 1.5x bound')
+const start = lines.findIndex((x) => x.startsWith('| step |'))
+assert(start > 0, 'the report carries no loss curve')
+const curve = []
+for (let i = start + 2; i < lines.length && lines[i].startsWith('|'); ++i)
+  curve.push(lines[i].split('|').slice(1, -1).map((c) => c.trim()))
+assert(curve.length >= 2, 'the loss curve has ' + curve.length + ' row(s)')
+const first = Number(curve[0][1])
+const last = Number(curve[curve.length - 1][1])
+assert(Number.isFinite(first) && Number.isFinite(last), 'unreadable loss: ' + curve[0].join(' / ') + ' .. ' + curve[curve.length - 1].join(' / '))
+assert(last < first, 'the loss does not fall: step ' + curve[0][0] + ' is ' + first + ', step ' + curve[curve.length - 1][0] + ' is ' + last)
+const firstBaseline = Number(curve[0][2])
+const lastBaseline = Number(curve[curve.length - 1][2])
+assert(lastBaseline < firstBaseline, 'the baseline loss does not fall: ' + firstBaseline + ' -> ' + lastBaseline)
+}
+"""
+timeout_ms = 180000
+
+# Where one training step's time goes, as a table the plan can hold: the standard profile run once
+# through `std::profile json=...`, its per-operator rows bucketed into the forward pass, the backward
+# pass and the optimizer (`showcase/c2-mlp-mnist/phases.py`).
+#
+# The bound is the one the reading itself carries (docs/handover/reports/s2-with-grad-time-split.md):
+# the three blocks add up to the time the loop reports, within 5 %.  It held at 100.4 % when it was
+# written (0.996 s of blocks against 0.992 s of loop, 1000 steps, batch 100, one thread), and the
+# operators outside the loop -- loading the data, the checkpoint, the setup -- are in neither the
+# blocks nor the denominator, which is what makes the two numbers comparable at all.  The lower bound
+# is not an acceptance bound: a table that lost a block would read well under 0.85 and would mean the
+# measurement stopped measuring, so it is asserted too.
+#
+# The other two readings are the shape of the step, not its speed: backward costs more than forward
+# on this network (0.485 s against 0.343 s), and the optimizer's own 0.168 s is measured rather than
+# lost in the interpreter's per-node time.  Neither says how fast anything should be -- they say the
+# three blocks are three blocks and not one block counted three ways.
+[[tests]]
+name = "phases"
+desc = "C2 standard profile: one training step's time splits into forward, backward and optimizer blocks that add up to the loop's own seconds within 5%, with backward the largest of the three; the table is printed and the last logged loss is read back."
+kind = "behavior"
+tool = "python"
+case = "../../../showcase/c2-mlp-mnist/phases.py"
+args = ["${case}", "--data", "${test_tmp}/c2-phases/data", "--steps", "1000"]
+skip_unless = ["${python}", "-c", "import numpy, psutil"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+const block = (name) => {
+  const line = lines.find((x) => x.startsWith('phases ' + name + ' '))
+  assert(line !== undefined, 'the table has no ' + name + ' line: ' + lines.slice(0, 3).join(' | '))
+  const value = Number(line.split(String.fromCharCode(32))[2])
+  assert(Number.isFinite(value), 'unreadable ' + name + ' time: ' + line)
+  return value
+}
+const forward = block('forward')
+const backward = block('backward')
+const optimizer = block('optimizer')
+assert(forward > 0 && backward > 0 && optimizer > 0, 'a block reads zero: ' + [forward, backward, optimizer].join(' / '))
+assert(backward > forward, 'backward ' + backward + ' ms is not above forward ' + forward + ' ms')
+const summary = lines.find((x) => x.startsWith('phases sum='))
+assert(summary !== undefined, 'the table has no summary line')
+const fields = {}
+summary.split(' ').forEach((piece) => {
+  const at = piece.indexOf('=')
+  if (at > 0) fields[piece.slice(0, at)] = piece.slice(at + 1)
+})
+const ratio = Number(fields.ratio)
+const loss = Number(fields.last_loss)
+assert(Number.isFinite(ratio), 'unreadable ratio: ' + summary)
+assert(ratio <= 1.05, 'the three blocks are ' + ratio.toFixed(4) + 'x the loop, past the 1.05 bound: ' + summary)
+assert(ratio >= 0.85, 'the three blocks are only ' + ratio.toFixed(4) + 'x the loop: a block is missing: ' + summary)
+assert(Number.isFinite(loss) && loss > 0, 'unreadable last loss: ' + summary)
+}
+"""
+timeout_ms = 300000
+
+# The same table twice, once per gradient implementation, and the two runs' last loss compared.
+#
+# `with_grad(loss)` is one call either way; what differs between the two pipelines is which machinery
+# answers it -- today the native gradient builder behind the pass, after M4 the library's own
+# `vjp = transpose . split . reinterp<jvp>`.  So no run changes what a step computes, and the
+# comparison is on the outcome: the last logged loss of each run.
+#
+# The tolerance is hand-written, not read off a run: the two implementations compute the same
+# gradient, so what they cannot share is the order the sum is taken in (the same factors, summed in
+# another order, and a training run carries an f32 rounding difference of about 6e-8 relative through
+# 1000 Adam steps).  1e-4 is two orders of magnitude above that rounding and two below what a real
+# defect does -- a dropped term or a wrong operator moves the loss by whole percent.
+#
+# `skip_unless` asks whether the library half exists at all (test/tools/have-library-grad.mjs
+# compiles a probe naming `with_grad`, `grad` and `vjp` from autodiff).  Today it does not: `vjp` is
+# only the decoration tag of a custom rule, so there is no second implementation to run, and this
+# entry must skip rather than fail.  It starts running the day M4 lands, without being edited.
+[[tests]]
+name = "implementations"
+desc = "C2 standard profile, twice: the with_grad pipeline and the library-grad pipeline print the same three-block table, and their last logged losses agree within the hand-written 1e-4 relative tolerance (skipped while the library-level vjp does not exist)."
+kind = "behavior"
+tool = "python"
+case = "../../../showcase/c2-mlp-mnist/compare_implementations.py"
+args = ["${case}", "--data", "${test_tmp}/c2-implementations/data", "--steps", "1000"]
+skip_unless = ["node", "test/tools/have-library-grad.mjs"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+const left = lines.findIndex((x) => x.startsWith('implementations A'))
+const right = lines.findIndex((x) => x.startsWith('implementations B'))
+assert(left >= 0 && right > left, 'the two runs are not both in the output: ' + lines.slice(0, 3).join(' | '))
+const compare = lines.find((x) => x.startsWith('compare last_loss'))
+assert(compare !== undefined, 'the comparison line is missing')
+const fields = {}
+compare.split(' ').forEach((piece) => {
+  const at = piece.indexOf('=')
+  if (at > 0) fields[piece.slice(0, at)] = piece.slice(at + 1)
+})
+const difference = Number(fields.difference)
+const tolerance = Number(fields.tolerance)
+assert(Number.isFinite(difference) && Number.isFinite(tolerance), 'unreadable comparison: ' + compare)
+assert(difference <= tolerance, 'the two implementations disagree by ' + difference + ' over ' + tolerance + ': ' + compare)
+assert(compare.trim().endsWith('PASS'), 'the comparison did not pass: ' + compare)
+}
+"""
+timeout_ms = 600000

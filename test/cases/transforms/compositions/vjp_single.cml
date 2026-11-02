@@ -1,0 +1,27 @@
+/**
+ * The base the M6 compositions stand on, and the one of them that runs today: `vjp` on a
+ * single-parameter function.
+ *
+ * `f(x) = x * x * x`, so `f(3) = 27` and the pullback of the cotangent `1` is `3 * x * x = 27`.
+ * The library composes `vjp = transpose . split . reinterp<jvp>`, and on a body of primitives with
+ * one parameter every step of that composition builds -- the reading below is what a reader sees:
+ * `residuals=2` for the cut, and `mul_tangent` transposed with `add_t`/`mul_t`.
+ *
+ * The four combinations in this directory need more than this: a batch axis (`vmap`), a call
+ * inside the differentiated body (`grad` of an indirect call), or a pair-typed result (`jvp` of
+ * `vjp`). This case pins the number they all have to keep agreeing with, and it is not skipped:
+ * it runs, so a regression here is a regression.
+ */
+import { vjp } from vjp
+
+func f(x: float): float {
+    return x * x * x
+}
+
+func main(): int sync {
+    let (y, pullback) = vjp(f)(3.0)
+    let cotangents = pullback(1.0)
+    let dx = cotangents.0
+    'vjp_single y={} dfdx={}'->format<y, dx>->println
+    return 0
+}

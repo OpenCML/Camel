@@ -1,0 +1,26 @@
+// The library keeps its own promise: a program that imports `vjp` and nothing else gets a
+// derivative. `vjp` is `transpose(split(reinterp<jvp>(f)))`, so it needs the forward rules
+// (`rulesets.jvp`) and the backward ones (`rulesets.transpose`), and `stdlib/vjp.cml` imports both
+// -- a library that makes its callers know its insides is not a library, which is the same reading
+// as a pass's precondition: it is the library's job, and it diagnoses what it cannot do.
+//
+// That is the property this case holds, and its only import is `vjp`. Take either ruleset import
+// out of `stdlib/vjp.cml` and this goes red at the library's own line -- `transpose has no
+// transpose for this function`, or `jvp has no forward rule for :op/mul_d` -- on the call
+// `stdlib/vjp.cml` composes, never in this file and never in a sentence of the form "not
+// implemented yet". `f(x) = x*x*x` at 3 gives the value 27, the cotangent `(27.0,)` -- one member,
+// because a pullback answers one cotangent per parameter and `f` has one -- and the gradient 27: two
+// numbers and the tuple they come out of.
+import { grad, vjp } from vjp
+
+func f(x: float): float {
+    return x * x * x
+}
+
+func main(): int sync {
+    let (value, backward) = vjp(f)(3.0)
+    println(value)
+    println(backward(1.0))
+    println(grad(f)(3.0))
+    return 0
+}

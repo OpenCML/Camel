@@ -1,0 +1,19 @@
+// The two halves of `split`, asked for by hand: `f(x) = x*x*x`, so the first half answers with the
+// value `27.0` and the residuals the backward half reads, and the second half turns those residuals
+// and the cotangent `1.0` back into `27.0`. The residuals are the compiler's type function
+// (`ResidualsOf<F>`, `stdlib/signatures/transforms.cml`), so nothing here names their type -- only
+// what they are worth. Skipped while `split` has no implementation (the plan's `skip_unless`).
+import rulesets.jvp
+import { jvp, split } from transforms
+
+func f(x: float): float {
+    return x * x * x
+}
+
+func main(): int sync {
+    let (forward, backward) = split(jvp(f))
+    let (value, residuals) = forward(3.0)
+    println(value)
+    println(backward(residuals, 1.0))
+    return 0
+}

@@ -177,6 +177,15 @@ std::string dumpJsonRuntimeGraph(
     const auto nodeId = [&](GCGraph *g, gc_node_ref_t n) {
         return std::format("{}n{}", ids.at(g), n);
     };
+    // A graph names the node its result comes from, and a document may name only nodes it holds:
+    // `null` when the graph has none, the same answer `dumpCanonicalRuntimeGraph` gives
+    // (src/passes/trans/json/gir_canonical.cpp#CanonicalDocument) and the one the dot dump cannot
+    // give, because a drawing has no null -- it guards instead
+    // (src/passes/trans/dot/graphviz.cpp#dumpGraph).
+    const auto exitId = [&](GCGraph *g) -> json {
+        const gc_node_ref_t exit = g->exitNodeRef();
+        return g->node(exit) == nullptr ? json(nullptr) : json(nodeId(g, exit));
+    };
     json document{
         {"format", "camel.gir"},
         {"version", 1},
@@ -193,7 +202,7 @@ std::string dumpJsonRuntimeGraph(
             {"normalPorts", json::array()},
             {"contextPorts", json::array()},
             {"capturePorts", json::array()},
-            {"exit", nodeId(g, g->exitNodeRef())}};
+            {"exit", exitId(g)}};
         program.traceGraphs(*g, [&](GCGraph *dep) {
             if (ids.contains(dep))
                 graph["dependencies"].push_back(ids.at(dep));
@@ -306,8 +315,6 @@ std::string dumpJsonRuntimeGraph(
             if (node->kind == GCNodeKind::Loop) {
                 value["loop"] = {
                     {"kind", camel::core::loopKindName(g->loopKindOf(ref))},
-                    {"condition", graphId(program.loopCondOf(*g, ref))},
-                    {"body", graphId(program.loopBodyOf(*g, ref))},
                     {"conditionRegion", g->loopRegionOf(ref, camel::runtime::GCRegionKind::LoopCond)},
                     {"bodyRegion", g->loopRegionOf(ref, camel::runtime::GCRegionKind::LoopBody)}};
             }

@@ -30,9 +30,289 @@ using camel::core::type::FunctionType;
 using camel::core::type::TupleType;
 using camel::core::type::Type;
 using camel::runtime::gc_node_ref_t;
+using camel::compile::gir::FrozenGraphRead;
+using camel::compile::gir::GraphRead;
+using camel::compile::gir::NodeFace;
 using camel::runtime::GraphId;
 
 namespace {
+
+/// Whether a rule's expansion records how many of the arguments of the call it produces are tangents
+/// (`addFuncNode`'s last argument, `GCNode::tangentArgs`). On, the fact lives on the node and
+/// `transpose` reads it there. Off, the call records nothing, and the transpose of a kernel inside an
+/// arm stops again at the tangent that has no value -- the A/B of the two readings.
+constexpr bool kRecordTangentArgs = true;
+
+/// The graph a rule's right side answers with, read from the right side itself.
+///
+/// The right side of `x * w => (dx, dw) => mul_tangent(x, w, dx, dw)` is a graph that builds the
+/// closure `(dx, dw) => mul_tangent(x, w, dx, dw)` over the values the left side bound: its exit is
+/// a FILL of the `FunctionClosure` kind, whose static input names the graph the closure runs, and
+/// whose `with` inputs are the captured values, in slot order. That inner graph is the body a call
+/// of the closure would run, and its two port lists say what the call would pass:
+///
+///   `normPorts`    the parameters -- the tangents, `dx, dw`;
+///   `closureNodes` the captures -- the values the left side bound, `x, w`.
+///
+/// Reading the body from here is what keeps the argument order out of C++: `mul_tangent(x, w, dx,
+/// dw)` is the order the body's own call node already has, not a rule about how a right side is
+/// written.
+struct RuleRightSide {
+    /// The body, a graph of the instance's own program.
+    const camel::runtime::GCGraph *body = nullptr;
+    /// The values the closure captures, as nodes of the right side's graph, in slot order.
+    std::vector<gc_node_ref_t> captures;
+};
+
+/// Fills `found` from the instance's right side, or says in `why` what about it is not a function of
+/// the tangents.
+bool findRuleRightSide(
+    const camel::compile::gir::GenericRuleInstance &instance, RuleRightSide &found,
+    std::string &why) {
+    const rt::GCGraph *rhs = instance.rhs;
+    // The exit node is the graph's value-producing node; a gate may stand in front of it when the
+    // value is carried out of a block.
+    gc_node_ref_t fill = rhs->exitNodeRef();
+    for (size_t guard = 0; guard < 8 && fill != rt::kInvalidNodeRef; ++guard) {
+        const rt::GCNode *node = rhs->node(fill);
+        if (node == nullptr || node->kind != rt::GCNodeKind::Gate) {
+            break;
+        }
+        const auto carried = rhs->normInputsOf(fill);
+        fill = carried.empty() ? rt::kInvalidNodeRef : carried.front();
+    }
+    const rt::GCNode *exit = fill == rt::kInvalidNodeRef ? nullptr : rhs->node(fill);
+    if (exit == nullptr || exit->kind != rt::GCNodeKind::Fill) {
+        why = "the rule's right side does not answer with a function of the tangents";
+        return false;
+    }
+    const auto *fillBody = rhs->nodeBodyAs<rt::GCFillBody>(fill);
+    if (fillBody == nullptr || fillBody->fillKind != rt::GCFillKind::FunctionClosure) {
+        why = "the rule's right side does not answer with a function of the tangents";
+        return false;
+    }
+    // The graph the closure runs is the static function value the FILL fills its slots with.
+    const std::span<const slot_t> slots = rhs->staticSlots();
+    for (gc_node_ref_t input : rhs->normInputsOf(fill)) {
+        const rt::GCNode *node = rhs->node(input);
+        if (node == nullptr || node->kind != rt::GCNodeKind::Data || node->dataIndex >= 0) {
+            continue;
+        }
+        const size_t at = static_cast<size_t>(-static_cast<std::ptrdiff_t>(node->dataIndex));
+        if (at >= slots.size()) {
+            continue;
+        }
+        const auto *function = camel::core::rtdata::fromSlot<const ::Function *>(slots[at]);
+        if (function == nullptr) {
+            continue;
+        }
+        found.body = instance.program->graph(function->graphId());
+        if (found.body == nullptr) {
+            break;
+        }
+        for (gc_node_ref_t capture : rhs->withInputsOf(fill)) {
+            found.captures.push_back(capture);
+        }
+        return true;
+    }
+    why = "the rule's right side names no graph for the function it answers with";
+    return false;
+}
+
+/// The rule's right side expanded at the match site: the body of the closure it answers with is
+/// copied into this graph, its captures bound to the operands and its parameters to the tangents,
+/// and the copy's exit is the operator's derivative.
+///
+/// This is one lambda layer, not a general inliner. A body that is more than a straight line of
+/// computations -- a region, an indirect call, a function value -- is refused by name, the way a
+/// primitive with no rule is: the transform has no reading for it, and a copy that guessed would
+/// compute something else.
+gc_node_ref_t expandRuleRightSide(
+    camel::runtime::GraphDraftGroup &group, camel::runtime::GraphTransaction &transaction,
+    const camel::compile::gir::GenericRuleInstance &instance,
+    const std::vector<gc_node_ref_t> &values, const std::vector<gc_node_ref_t> &tangents,
+    std::string &why) {
+    RuleRightSide right;
+    if (!findRuleRightSide(instance, right, why)) {
+        return rt::kInvalidNodeRef;
+    }
+    // The body's calls name graphs of the instance's own program, and a FUNC node reaches its
+    // callee through this program's table: the graphs the rule was instantiated into belong to the
+    // program this lift builds on, the way a callee the lifted function calls does.
+    group.adopt(*instance.program);
+    const rt::GCGraph *body      = right.body;
+    const auto capturePorts     = body->closureNodes();
+    const auto parameterPorts   = body->normPorts();
+    if (capturePorts.size() != right.captures.size() || parameterPorts.size() != tangents.size()) {
+        why = "the rule's right side does not take the values and tangents the rule binds";
+        return rt::kInvalidNodeRef;
+    }
+    // A capture is a port of the right side's graph, which is one of the arguments the rule is
+    // called with: the operands, in the order the left side writes them.
+    const auto rhsPorts = instance.rhs->normPorts();
+    std::unordered_map<gc_node_ref_t, gc_node_ref_t> bound;
+    for (size_t i = 0; i < capturePorts.size(); ++i) {
+        const auto at = std::find(rhsPorts.begin(), rhsPorts.end(), right.captures[i]);
+        if (at == rhsPorts.end()) {
+            why = "a value the rule's right side captures is not one of its parameters";
+            return rt::kInvalidNodeRef;
+        }
+        const size_t argument = static_cast<size_t>(at - rhsPorts.begin());
+        if (argument >= values.size()) {
+            why = "the rule's right side captures more values than the rule binds";
+            return rt::kInvalidNodeRef;
+        }
+        bound[capturePorts[i]] = values[argument];
+    }
+    for (size_t i = 0; i < parameterPorts.size(); ++i) {
+        bound[parameterPorts[i]] = tangents[i];
+    }
+
+    auto &draft                                = transaction.edit();
+    std::unordered_map<gc_node_ref_t, gc_node_ref_t> copied;
+    const std::span<const slot_t> staticSlots = body->staticSlots();
+    for (gc_node_ref_t ref = 0; ref < body->nodeCount(); ++ref) {
+        const rt::GCNode *node = body->node(ref);
+        if (node == nullptr) {
+            continue;
+        }
+        if (node->kind == rt::GCNodeKind::Port) {
+            // A port of the body is a value the call passes: bound, never copied, so the copy has
+            // no parameters of its own.
+            const auto at = bound.find(ref);
+            if (at == bound.end()) {
+                why = "the rule's right side reads a value that is neither a capture nor a tangent";
+                return rt::kInvalidNodeRef;
+            }
+            copied[ref] = at->second;
+            continue;
+        }
+        if (body->nodeRegion(ref) != 0) {
+            why = "the rule's right side is not a straight line: it has a region";
+            return rt::kInvalidNodeRef;
+        }
+        std::vector<gc_node_ref_t> inputs;
+        for (gc_node_ref_t input : body->normInputsOf(ref)) {
+            const auto at = copied.find(input);
+            if (at == copied.end()) {
+                why = "the rule's right side uses a node written after it";
+                return rt::kInvalidNodeRef;
+            }
+            inputs.push_back(at->second);
+        }
+        if (!body->withInputsOf(ref).empty()) {
+            why = "the rule's right side passes a context argument of its own";
+            return rt::kInvalidNodeRef;
+        }
+        const bool isFunctionValue =
+            node->dataType() != nullptr &&
+            node->dataType()->code() == camel::core::type::TypeCode::Function;
+        switch (node->kind) {
+        case rt::GCNodeKind::Data: {
+            // A constant of the body: the same value, in this graph. A function value is not a
+            // constant to copy -- it is the closure this expansion exists to avoid.
+            if (isFunctionValue) {
+                why = "the rule's right side answers with a function value";
+                return rt::kInvalidNodeRef;
+            }
+            const std::ptrdiff_t index = -static_cast<std::ptrdiff_t>(node->dataIndex);
+            if (node->dataIndex >= 0 || index < 0 ||
+                static_cast<size_t>(index) >= staticSlots.size()) {
+                why = "the rule's right side reads a value that is not a constant of its graph";
+                return rt::kInvalidNodeRef;
+            }
+            copied[ref] = draft.materializeStaticValue(
+                staticSlots[static_cast<size_t>(index)], node->dataType(),
+                rt::kGCNodeFlagConstant);
+            break;
+        }
+        case rt::GCNodeKind::Oper: {
+            const auto *oper = body->nodeBodyAs<rt::GCOperBody>(ref);
+            if (oper == nullptr) {
+                why = "the rule's right side has an operator node with no operator";
+                return rt::kInvalidNodeRef;
+            }
+            const gc_node_ref_t made = draft.addOperNode(node->dataType(), nullptr, oper->uri());
+            if (!inputs.empty()) {
+                draft.setNormInputs(made, inputs);
+            }
+            copied[ref] = made;
+            break;
+        }
+        case rt::GCNodeKind::Func: {
+            // A call to a named function: what the rule's right side is for, and what stays a call.
+            if (isFunctionValue) {
+                why = "the rule's right side answers with a function value";
+                return rt::kInvalidNodeRef;
+            }
+            const GraphId callee = body->calleeIdOf(ref);
+            if (!rt::isValid(callee)) {
+                why = "the rule's right side calls a function it does not name";
+                return rt::kInvalidNodeRef;
+            }
+            // How many of the call's arguments are tangents -- the rule's own split, recorded on the
+            // call the rule produced. The right side binds the values as its captures and takes the
+            // tangents as its own parameters (`x * w => (dx, dw) => mul_tangent(x, w, dx, dw)`), so an
+            // argument that is one of this expansion's tangent ports is a tangent, and the count is
+            // read off the rule. This is the one place the fact exists in the tree: `transpose` reads
+            // the node rather than re-deriving the split from a name, and there is no second table to
+            // keep in step when a rule is added.
+            uint16_t tangentArgs = 0;
+            if (kRecordTangentArgs && !inputs.empty() && !tangents.empty()) {
+                for (size_t i = inputs.size(); i-- > 0;) {
+                    if (std::find(tangents.begin(), tangents.end(), inputs[i]) == tangents.end()) {
+                        break;
+                    }
+                    ++tangentArgs;
+                }
+            }
+            const gc_node_ref_t made = draft.addFuncNode(
+                callee, node->dataType(), 0, draft.allocateRuntimeSlot(node->dataType()), 0,
+                tangentArgs);
+            if (!inputs.empty()) {
+                draft.setNormInputs(made, inputs);
+            }
+            // The call reaches its callee through this node, so that graph is a dependency of this
+            // one by the reference table's own rule (a FUNC node names its callee).
+            draft.addDependency(callee);
+            copied[ref] = made;
+            break;
+        }
+        case rt::GCNodeKind::Gate: {
+            const gc_node_ref_t made =
+                draft.addGateNode(node->dataType(), draft.allocateRuntimeSlot(node->dataType()));
+            if (!inputs.empty()) {
+                draft.setNormInputs(made, inputs);
+            }
+            copied[ref] = made;
+            break;
+        }
+        default:
+            why = "the rule's right side is not a straight line of computations";
+            return rt::kInvalidNodeRef;
+        }
+    }
+    // The body's exit is the value the call of the closure would answer with; a gate in front of it
+    // carries the same value.
+    gc_node_ref_t out = body->exitNodeRef();
+    for (size_t guard = 0; guard < 8; ++guard) {
+        const rt::GCNode *node = body->node(out);
+        if (node == nullptr || node->kind != rt::GCNodeKind::Gate) {
+            break;
+        }
+        const auto carried = body->normInputsOf(out);
+        if (carried.empty()) {
+            break;
+        }
+        out = carried.front();
+    }
+    const auto at = copied.find(out);
+    if (at == copied.end()) {
+        why = "the rule's right side has no exit the transform can read";
+        return rt::kInvalidNodeRef;
+    }
+    return at->second;
+}
 
 /// The tangent of one primitive: the rule `stdlib/rulesets/jvp.cml` files for its operator, applied
 /// to the operands' values and their tangents.
@@ -43,19 +323,18 @@ namespace {
 /// kernel started with and the thing that had to go, because two tables that can disagree is worse
 /// than one that is missing.
 ///
-/// A rule's right side as an instance is curried, not closed over: `(x, w) => ((dx, dw) =>
-/// Tangent<T>)`. So the graph calls it once with the operands the primitive is about, and calls what
-/// it answers with the tangents. Nothing is captured and no closure is built -- the operands are the
-/// rule's own parameters.
+/// A rule is a rewrite, and its right side is a function of the tangents. `reinterp` applies it
+/// *at the match site*: the one lambda layer is expanded here, so what stands where the operator
+/// stood is a direct call to the named rule function -- `mul_tangent(x, w, dx, dw)`, with the
+/// operands the rule captured as the first ports and the tangents after them. The alternative --
+/// calling the right side and calling what it answers -- is what a rule rewritten as a *runtime*
+/// call produces: a closure-valued node and a call that answers with a closure, neither of which
+/// belongs in a graph the transform builds at compile time.
 gc_node_ref_t buildRuleTangent(
-    camel::core::context::Context &context, camel::runtime::GraphTransaction &transaction,
+    camel::core::context::Context &context, camel::runtime::GraphDraftGroup &group,
+    camel::runtime::GraphTransaction &transaction,
     std::string_view uri, const std::vector<gc_node_ref_t> &values,
     const std::vector<gc_node_ref_t> &tangents, std::string &ruleName, std::string &why) {
-    // The graph is written through the transaction that holds it, never through a reference taken
-    // beside it: `GraphTransaction::borrow` exists for a caller that has a draft whose owner is not a
-    // transaction at hand, and the ledger of direct connections to the graph store counts the ones
-    // that skip it.
-    auto &draft = transaction.edit();
     const auto match = camel::core::forwardRuleOf(std::string(uri));
     if (!match.has_value()) {
         why = "the operator has no forward rule bound at all";
@@ -94,38 +373,7 @@ gc_node_ref_t buildRuleTangent(
         why = instance.why.empty() ? "no instance of the rule at float" : instance.why;
         return rt::kInvalidNodeRef;
     }
-    // The right side as an instance is curried, not closed over: `(x, w) => ((dx, dw) => Tangent<T>)`.
-    // It takes the operands it is about and answers with the function that takes the tangents, so the
-    // graph asks it once with the operands and calls what comes back with the tangents. No closure is
-    // built and nothing is captured: the operands become arguments, which is the whole shape.
-    auto *rhsType = instance.rhs->funcType();
-    if (rhsType == nullptr || !rhsType->hasExitType() || rhsType->exitType() == nullptr ||
-        rhsType->exitType()->code() != camel::core::type::TypeCode::Function) {
-        why = "the rule's right side does not answer with a function of the tangents";
-        return rt::kInvalidNodeRef;
-    }
-    auto *partialType = tt::as_ptr<FunctionType>(rhsType->exitType());
-    // A rule's right side captures nothing: the operands it is about are its own parameters, so its
-    // closure is the empty tuple (`Function::create` asks for one rather than for none).
-    const camel::core::type::TupleType *closureType = instance.rhs->closureType();
-    if (closureType == nullptr) {
-        closureType = TupleType::create(std::vector<Type *>{});
-    }
-    auto *function = ::Function::create(
-        instance.program, instance.rhs->id(), closureType, mm::autoSpace());
-    if (function == nullptr) {
-        why = "the rule's right side is not a graph a function value can name";
-        return rt::kInvalidNodeRef;
-    }
-    const gc_node_ref_t rule = draft.materializeStaticValue(
-        camel::core::rtdata::toSlot<::Function *>(function), rhsType);
-    const gc_node_ref_t partial = draft.addCallNode(partialType);
-    draft.setNormInputs(partial, values);
-    draft.setWithInputs(partial, std::span<const gc_node_ref_t>(&rule, 1));
-    const gc_node_ref_t tangent = draft.addCallNode(partialType->exitType());
-    draft.setNormInputs(tangent, tangents);
-    draft.setWithInputs(tangent, std::span<const gc_node_ref_t>(&partial, 1));
-    return tangent;
+    return expandRuleRightSide(group, transaction, instance, values, tangents, why);
 }
 
 } // namespace
@@ -183,36 +431,25 @@ bool fail(JvpGraph &refusal, const JvpGraph &why) {
 }
 
 bool liftGraph(
-    LiftState &state, const camel::runtime::GCGraph *function, camel::runtime::GraphId member,
-    std::ostream &os, JvpGraph &refusal);
+    LiftState &state, const GraphRead &function, std::string_view name,
+    camel::runtime::GraphId source, camel::runtime::GraphId member, std::ostream &os,
+    JvpGraph &refusal);
 
 } // namespace
 
-JvpGraph buildJvpGraph(
+/// The build itself, for a caller that has already decided which program the lift's graphs go into:
+/// the draft group's. `program` is the program the callee graphs of a body are looked up in (the
+/// frozen graph's own for a run-time lift, nothing for one of the lift's own), and `group` is where
+/// the lifted graphs are written.
+JvpGraph buildJvpGraphInGroup(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    camel::runtime::GCGraph *function, std::ostream &os) {
-    if (program == nullptr || function == nullptr) {
-        return JvpGraph{};
-    }
-    FunctionType *signature = jvpSignature(function->funcType());
-    if (signature == nullptr) {
-        os << "REINTERP jvp function=" << function->name() << " skip=signature\n";
-        return JvpGraph{};
-    }
-    // One parameter, for now: with two the exit would need a way to combine two lifted pairs into
-    // the one lifted result, and that is a node in the body -- step 3's business, not this one's.
-    if (function->funcType()->normTypesCount() != 1) {
-        os << "REINTERP jvp function=" << function->name()
-           << " skip=params " << function->funcType()->normTypesCount() << "\n";
-        return JvpGraph{};
-    }
-
-    camel::runtime::GraphDraftGroup group(context, program);
+    camel::runtime::GraphDraftGroup &group, const GraphRead &function, std::string_view name,
+    camel::runtime::GraphId self, std::ostream &os) {
     const GraphId member = group.reserve(
-        "jvp_of_" + std::string(function->name()), "jvp_of_" + std::string(function->name()));
+        "jvp_of_" + std::string(name), "jvp_of_" + std::string(name));
     LiftState state{context, program, group};
     JvpGraph refusal;
-    if (!liftGraph(state, function, member, os, refusal)) {
+    if (!liftGraph(state, function, name, self, member, os, refusal)) {
         return refusal;
     }
     // The count the "one graph per callee" rule is read from: the callee graphs this lift made, in
@@ -223,15 +460,69 @@ JvpGraph buildJvpGraph(
     return JvpGraph{group.program(), const_cast<camel::runtime::GCGraph *>(made)};
 }
 
+/// The same build for a caller that holds a frozen graph: the face is made here and lives for the
+/// call. The name and the identity are the caller's because they are the two facts a draft does
+/// not have (it is named and numbered when it is encoded).
+JvpGraph buildJvpGraph(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    camel::runtime::GCGraph *function, std::ostream &os) {
+    if (function == nullptr) {
+        return JvpGraph{};
+    }
+    const FrozenGraphRead face(*function);
+    return buildJvpGraph(context, program, face, function->name(), function->id(), os);
+}
+JvpGraph buildJvpGraph(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    const GraphRead &function, std::string_view name, camel::runtime::GraphId self,
+    std::ostream &os) {
+    if (program == nullptr) {
+        return JvpGraph{};
+    }
+    FunctionType *signature = jvpSignature(function.funcType());
+    if (signature == nullptr) {
+        os << "REINTERP jvp function=" << name << " skip=signature\n";
+        return JvpGraph{};
+    }
+    // A function of any number of `float` parameters: every one of them becomes a pair, so the
+    // lifted signature is `(v1, d1, ..., vn, dn) => (value, tangent)`. The tangent of the result is
+    // the sum of the directions the caller seeded -- one run reads one direction, and a caller that
+    // wants `df/dx` and `df/dy` separately runs it twice with (1, 0) and (0, 1).
+
+    camel::runtime::GraphDraftGroup group(context, program);
+    return buildJvpGraphInGroup(context, program, group, function, name, self, os);
+}
+JvpGraph buildJvpGraphOfItsOwn(
+    const camel::core::context::context_ptr_t &context, const GraphRead &function,
+    std::string_view name, camel::runtime::GraphId self, std::ostream &os) {
+    if (context == nullptr) {
+        return JvpGraph{};
+    }
+    FunctionType *signature = jvpSignature(function.funcType());
+    if (signature == nullptr) {
+        os << "REINTERP jvp function=" << name << " skip=signature\n";
+        return JvpGraph{};
+    }
+    // The program the lift's own graphs go into: an empty program of the context's, reserved here
+    // and kept by the context for as long as the value that names it lives. The graph the lift
+    // reads is a draft of the caller's, so there is no program of its to extend; the graph the
+    // caller's body calls is a graph of its own, the way the run-time kernel makes one, and this is
+    // the same build writing into it.
+    camel::runtime::Program *base = context->reserveProgram();
+    camel::runtime::GraphDraftGroup group(context, base);
+    return buildJvpGraphInGroup(context, base, group, function, name, self, os);
+}
+
 namespace {
 
 bool liftGraph(
-    LiftState &state, const camel::runtime::GCGraph *function, camel::runtime::GraphId member,
-    std::ostream &os, JvpGraph &refusal) {
+    LiftState &state, const GraphRead &function, std::string_view name,
+    camel::runtime::GraphId source, camel::runtime::GraphId member, std::ostream &os,
+    JvpGraph &refusal) {
     const camel::core::context::context_ptr_t &context = state.context;
     const camel::runtime::Program *program             = state.program;
     camel::runtime::GraphDraftGroup &group             = state.group;
-    FunctionType *signature                            = jvpSignature(function->funcType());
+    FunctionType *signature                            = jvpSignature(function.funcType());
     if (signature == nullptr) {
         return fail(refusal);
     }
@@ -248,16 +539,38 @@ bool liftGraph(
         auto &transaction = group.transaction(member);
         auto &draft       = transaction.edit();
         draft.setFuncType(signature);
-        const gc_node_ref_t value =
-            draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
-        const gc_node_ref_t tangent =
-            draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
-        // A port node is a node; the graph's *parameters* are the port nodes it lists as its norm
-        // ports, and a call is checked against that list ("has 0 norm ports" is how a graph with
-        // the two nodes but no entries in the list refused the call). The lifted signature has two
-        // parameters -- the value and its tangent -- and these are the two the caller passes.
-        draft.appendNormPort(value);
-        draft.appendNormPort(tangent);
+        // The graph this one is a lift of: a fact about the graph, not a comment about the call.
+        // `split` reads it when it has to carry a call of a lifted graph into a half, so that the
+        // value half can call the primal instead of the lift (whose first parameter is the pair).
+        // Every member the lift makes gets it, the top-level `jvp_of_f` and each `jvp_of_callee`.
+        // The id is the caller's, like the name: a draft is numbered when it is encoded.
+        draft.addLiftedFromRef(source);
+        // One pair of ports per parameter of `f`, in its order: the value the caller passes and the
+        // seed of that direction. A port node is a node; the graph's *parameters* are the port nodes
+        // it lists as its norm ports, and a call is checked against that list ("has 0 norm ports" is
+        // how a graph with the nodes but no entries in the list refused the call) -- so the lifted
+        // signature's 2n parameters are these 2n ports, in the same order.
+        const size_t parameterCount = function.funcType()->normTypesCount();
+        std::vector<gc_node_ref_t> valuePorts;
+        std::vector<gc_node_ref_t> tangentPorts;
+        valuePorts.reserve(parameterCount);
+        tangentPorts.reserve(parameterCount);
+        for (size_t i = 0; i < parameterCount; ++i) {
+            const gc_node_ref_t value =
+                draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
+            draft.appendNormPort(value);
+            valuePorts.push_back(value);
+            const gc_node_ref_t tangent =
+                draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
+            draft.appendNormPort(tangent);
+            tangentPorts.push_back(tangent);
+        }
+        // Which parameter a port of the original body is, by its place in that list.
+        std::unordered_map<gc_node_ref_t, size_t> parameterOf;
+        const std::vector<gc_node_ref_t> originalPorts = function.normPorts();
+        for (size_t i = 0; i < originalPorts.size(); ++i) {
+            parameterOf[originalPorts[i]] = i;
+        }
         // Step 3, first layer: the body is copied node by node. A port reads the caller's value, a
         // constant is written again with the same value, and a primitive keeps its operator and gets
         // its inputs from the copies. Nothing is differentiated here -- no rule closure is built --
@@ -265,11 +578,11 @@ bool liftGraph(
         // NodeIds are 0 .. nodeCount() - 1 (include/camel/runtime/graph.h), so the walk starts at 0:
         // starting at 1 skipped the port, and a primitive that read it then read node 0 of the new
         // graph -- the value came out of an input nobody had copied.
-        std::vector<gc_node_ref_t> copyOf(function->nodeCount(), rt::kInvalidNodeRef);
-        std::vector<bool> copied(function->nodeCount(), false);
+        std::vector<gc_node_ref_t> copyOf(function.nodeCount(), rt::kInvalidNodeRef);
+        std::vector<bool> copied(function.nodeCount(), false);
         // The value a node hands to a reader: the copy itself, except where the copy is a lifted
         // pair -- a loop's state port -- and the reader wants the value half.
-        std::vector<gc_node_ref_t> valueOf(function->nodeCount(), rt::kInvalidNodeRef);
+        std::vector<gc_node_ref_t> valueOf(function.nodeCount(), rt::kInvalidNodeRef);
         bool complete = true;
         // Step 3, second layer: a tangent for every node. A constant's tangent is zero, a port's is
         // the tangent parameter the caller passed, and a primitive's is the forward rule the ruleset
@@ -277,7 +590,7 @@ bool liftGraph(
         // index at this moment, not from a table written here. A primitive with no rule is refused
         // *by name* rather than answered with 0 or 1, because a wrong derivative that looks like a
         // derivative is the expensive kind of wrong.
-        std::vector<gc_node_ref_t> tangentOf(function->nodeCount(), rt::kInvalidNodeRef);
+        std::vector<gc_node_ref_t> tangentOf(function.nodeCount(), rt::kInvalidNodeRef);
         gc_node_ref_t zeroConstant = rt::kInvalidNodeRef;
         // The lifted pair: a value and its tangent, in the one shape the lifted types are written in.
         // The exit of the transformed body and the exit of an arm are both this pair, so it is made
@@ -302,9 +615,9 @@ bool liftGraph(
         // branch uses (src/passes/opt/defun/defunctionalize.cpp); what a branch means for `jvp` is
         // decided here and nowhere else.
         std::vector<uint32_t> liftedRegion(
-            function->regionCount() > 0 ? function->regionCount() : 1, 0);
-        for (uint32_t r = 1; r < function->regionCount(); ++r) {
-            const rt::GCRegion *from = function->region(r);
+            function.regionCount() > 0 ? function.regionCount() : 1, 0);
+        for (uint32_t r = 1; r < function.regionCount(); ++r) {
+            const rt::GCRegion *from = function.region(r);
             if (from == nullptr) {
                 continue;
             }
@@ -314,16 +627,17 @@ bool liftGraph(
         }
         std::unordered_map<gc_node_ref_t, gc_node_ref_t> liftedJoin; // the original Join -> its copy
         std::unordered_map<gc_node_ref_t, gc_node_ref_t> joinOfBrch; // a Brch -> the Join it names
-        for (gc_node_ref_t ref = 0; ref < function->nodeCount(); ++ref) {
-            const camel::runtime::GCNode *node = function->node(ref);
+        for (gc_node_ref_t ref = 0; ref < function.nodeCount(); ++ref) {
+            const NodeFace *node = function.node(ref);
             if (node == nullptr || node->kind != rt::GCNodeKind::Brch) {
                 continue;
             }
-            const auto *body = function->nodeBodyAs<rt::GCBrchBody>(ref);
+            rt::GCBrchBody brchBody{};
+            const auto *body = function.bodyOf(ref, brchBody) ? &brchBody : nullptr;
             if (body == nullptr || body->join == rt::kInvalidNodeRef) {
                 continue;
             }
-            const camel::runtime::GCNode *join = function->node(body->join);
+            const NodeFace *join = function.node(body->join);
             if (join == nullptr) {
                 continue;
             }
@@ -338,7 +652,7 @@ bool liftGraph(
         // of one function one graph.
         std::unordered_map<gc_node_ref_t, GraphId> liftedCalleeOf;
         auto liftFuncValue = [&](gc_node_ref_t ref) -> bool {
-            const GraphId calleeId = function->calleeIdOf(ref);
+            const GraphId calleeId = function.calleeIdOf(ref);
             if (!rt::isValid(calleeId)) {
                 return false;
             }
@@ -346,6 +660,10 @@ bool liftGraph(
             if (callee == nullptr) {
                 return false;
             }
+            // The callee is read through the same kind of face as the caller: a frozen graph here,
+            // because this build starts from one.
+            const FrozenGraphRead calleeFace(*callee);
+            const std::string_view calleeName = callee->name();
             GraphId liftedCallee;
             const auto at = state.callees.find(rt::toValue(calleeId));
             if (at == state.callees.end()) {
@@ -354,7 +672,7 @@ bool liftGraph(
                     "jvp_of_" + std::string(callee->name()));
                 state.callees.emplace(rt::toValue(calleeId), liftedCallee);
                 JvpGraph sub;
-                if (!liftGraph(state, callee, liftedCallee, os, sub)) {
+                if (!liftGraph(state, calleeFace, calleeName, calleeId, liftedCallee, os, sub)) {
                     refusal = sub;
                     return false;
                 }
@@ -371,8 +689,8 @@ bool liftGraph(
             draft.addDependency(liftedCallee);
             return true;
         };
-        for (gc_node_ref_t ref = 0; ref < function->nodeCount(); ++ref) {
-            const camel::runtime::GCNode *node = function->node(ref);
+        for (gc_node_ref_t ref = 0; ref < function.nodeCount(); ++ref) {
+            const NodeFace *node = function.node(ref);
             if (node == nullptr || node->kind != rt::GCNodeKind::Func) {
                 continue;
             }
@@ -380,39 +698,10 @@ bool liftGraph(
                 return fail(refusal);
             }
         }
-        // A loop whose rounds are a region of this graph is lifted with the rest; one that keeps a
-        // condition graph and a body graph for a call a round is refused here, at the loop. The
-        // presence of the region, not the payload's graph ids, tells the two apart (a lowered loop
-        // keeps the ids it was built with).
-        for (gc_node_ref_t ref = 0; ref < function->nodeCount(); ++ref) {
-            const camel::runtime::GCNode *node = function->node(ref);
-            if (node == nullptr || node->kind != rt::GCNodeKind::Loop) {
-                continue;
-            }
-            bool hasRounds = false;
-            for (uint32_t r = 1; r < function->regionCount(); ++r) {
-                const rt::GCRegion *part = function->region(r);
-                if (part != nullptr && part->owner == ref &&
-                    part->kind == rt::GCRegionKind::LoopBody) {
-                    hasRounds = true;
-                    break;
-                }
-            }
-            if (!hasRounds) {
-                JvpGraph refused;
-                refused.refusedOrigin =
-                    static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
-                refused.refusedConstruct = "a loop that runs its rounds as calls";
-                refused.refusedWhy =
-                    "its body is a graph of its own, and only a loop whose rounds are a region of "
-                    "this graph is lifted yet";
-                return fail(refusal, refused);
-            }
-        }
         for (std::uint8_t kind = 0; kind <= static_cast<std::uint8_t>(rt::GCNodeKind::Dref); ++kind) {
             bool seen = false;
-            for (camel::runtime::gc_node_ref_t ref = 0; ref < function->nodeCount(); ++ref) {
-                const camel::runtime::GCNode *node = function->node(ref);
+            for (camel::runtime::gc_node_ref_t ref = 0; ref < function.nodeCount(); ++ref) {
+                const NodeFace *node = function.node(ref);
                 if (node != nullptr && static_cast<std::uint8_t>(node->kind) == kind) {
                     seen = true;
                     break;
@@ -422,23 +711,26 @@ bool liftGraph(
                 ++seenKinds;
             }
         }
-        for (camel::runtime::gc_node_ref_t ref = 0; ref < function->nodeCount(); ++ref) {
-            const camel::runtime::GCNode *node = function->node(ref);
+        for (camel::runtime::gc_node_ref_t ref = 0; ref < function.nodeCount(); ++ref) {
+            const NodeFace *node = function.node(ref);
             if (node == nullptr) {
                 continue;
             }
             // A node written inside an arm is copied into that arm: the arms stay arms, and an
             // operator only one arm uses is not computed for the arm that was not taken.
-            const uint32_t region = function->nodeRegion(ref);
+            const uint32_t region = function.nodeRegion(ref);
             draft.setInsertRegion(
                 region != 0 && region < liftedRegion.size() ? liftedRegion[region] : 0);
             switch (node->kind) {
             case rt::GCNodeKind::Port: {
-                // The lifted graph has one ordinary parameter, so the one port the original body
-                // reads is the value the caller passes. Its tangent is the second parameter.
-                if (!function->normPorts().empty() && function->normPorts().front() == ref) {
-                    copyOf[ref]    = value;
-                    tangentOf[ref] = tangent;
+                // A parameter of the body is one of the caller's pairs: the value is the first port
+                // of that pair, the tangent -- the seed of that direction -- is the second. The
+                // chain then adds every direction's contribution, so the exit is the derivative in
+                // the direction the caller seeded.
+                const auto parameter = parameterOf.find(ref);
+                if (parameter != parameterOf.end() && parameter->second < valuePorts.size()) {
+                    copyOf[ref]    = valuePorts[parameter->second];
+                    tangentOf[ref] = tangentPorts[parameter->second];
                     copied[ref]    = true;
                     ++copiedKinds;
                     break;
@@ -446,9 +738,9 @@ bool liftGraph(
                 // A port of a loop's body region is a loop variable, and a `float` one is the
                 // carried state: the loop carries the pair, so this port is a pair port and the
                 // body reads its halves through projections.
-                const uint32_t portRegion = function->nodeRegion(ref);
+                const uint32_t portRegion = function.nodeRegion(ref);
                 const rt::GCRegion *portRegionBody =
-                    portRegion != 0 ? function->region(portRegion) : nullptr;
+                    portRegion != 0 ? function.region(portRegion) : nullptr;
                 if (portRegionBody != nullptr &&
                     portRegionBody->kind == rt::GCRegionKind::LoopBody) {
                     const bool carried                     = node->dataType() == Type::Float64();
@@ -477,8 +769,9 @@ bool liftGraph(
                 break;
             }
             case rt::GCNodeKind::Data: {
-                const std::span<const slot_t> slots =
-                    function->staticSlots();
+                const std::vector<slot_t> slotValues(
+                    function.staticSlots().begin(), function.staticSlots().end());
+                const std::span<const slot_t> slots = slotValues;
                 const std::ptrdiff_t index = -static_cast<std::ptrdiff_t>(node->dataIndex);
                 if (node->dataIndex < 0 && index >= 0 &&
                     static_cast<size_t>(index) < slots.size()) {
@@ -517,7 +810,8 @@ bool liftGraph(
                 // reached yet. What the branch does not change is the condition itself: it is
                 // copied as written and read by the Brch, never differentiated -- the choice of arm
                 // is not a value the derivative flows through.
-                const auto *body = function->nodeBodyAs<rt::GCBrchBody>(ref);
+                rt::GCBrchBody brchBody{};
+            const auto *body = function.bodyOf(ref, brchBody) ? &brchBody : nullptr;
                 const auto at    = joinOfBrch.find(ref);
                 if (body == nullptr || at == joinOfBrch.end()) {
                     complete = false;
@@ -539,7 +833,7 @@ bool liftGraph(
                 if (at == liftedCalleeOf.end()) {
                     return fail(refusal);
                 }
-                camel::runtime::GCGraph *callee = program->graph(function->calleeIdOf(ref));
+                camel::runtime::GCGraph *callee = program->graph(function.calleeIdOf(ref));
                 if (callee == nullptr) {
                     return fail(refusal);
                 }
@@ -550,14 +844,14 @@ bool liftGraph(
                 const bool isValue = node->dataType() != nullptr &&
                                      node->dataType()->code() == camel::core::type::TypeCode::Function;
                 std::vector<gc_node_ref_t> arguments;
-                for (gc_node_ref_t input : function->normInputsOf(ref)) {
-                    if (input >= function->nodeCount() || !copied[input]) {
+                for (gc_node_ref_t input : function.normInputsOf(ref)) {
+                    if (input >= function.nodeCount() || !copied[input]) {
                         return fail(refusal);
                     }
                     if (isValue) {
                         break;
                     }
-                    const camel::runtime::GCNode *in = function->node(input);
+                    const NodeFace *in = function.node(input);
                     if (in != nullptr && in->dataType() == Type::Float64()) {
                         if (tangentOf[input] == rt::kInvalidNodeRef) {
                             return fail(refusal);
@@ -581,8 +875,8 @@ bool liftGraph(
                         draft.setNormInputs(made, arguments);
                     }
                     std::vector<gc_node_ref_t> carries;
-                    for (gc_node_ref_t input : function->withInputsOf(ref)) {
-                        if (input >= function->nodeCount() || !copied[input]) {
+                    for (gc_node_ref_t input : function.withInputsOf(ref)) {
+                        if (input >= function.nodeCount() || !copied[input]) {
                             return fail(refusal);
                         }
                         carries.push_back(copyOf[input]);
@@ -610,8 +904,8 @@ bool liftGraph(
                 // argument goes in as `(value, tangent)`.
                 std::vector<gc_node_ref_t> args;
                 bool isCallee = true;
-                for (gc_node_ref_t input : function->normInputsOf(ref)) {
-                    if (input >= function->nodeCount() || !copied[input]) {
+                for (gc_node_ref_t input : function.normInputsOf(ref)) {
+                    if (input >= function.nodeCount() || !copied[input]) {
                         return fail(refusal);
                     }
                     if (isCallee) {
@@ -619,7 +913,7 @@ bool liftGraph(
                         isCallee = false;
                         continue;
                     }
-                    const camel::runtime::GCNode *in = function->node(input);
+                    const NodeFace *in = function.node(input);
                     if (in != nullptr && in->dataType() == Type::Float64()) {
                         if (tangentOf[input] == rt::kInvalidNodeRef) {
                             return fail(refusal);
@@ -640,8 +934,8 @@ bool liftGraph(
                 const gc_node_ref_t made = draft.addCallNode(lifted, rt::GCCallBody{});
                 draft.setNormInputs(made, args);
                 std::vector<gc_node_ref_t> captures;
-                for (gc_node_ref_t input : function->withInputsOf(ref)) {
-                    if (input >= function->nodeCount() || !copied[input]) {
+                for (gc_node_ref_t input : function.withInputsOf(ref)) {
+                    if (input >= function.nodeCount() || !copied[input]) {
                         return fail(refusal);
                     }
                     captures.push_back(copyOf[input]);
@@ -667,15 +961,10 @@ bool liftGraph(
                 // node's type is the pair, the body's state port is a pair port (whose halves the
                 // body reads through projections), and the region's result is the pair of the
                 // body's new value and its tangent. The inputs and the region are wired after the
-                // walk. The payload names no graph: the rounds are the region (a region-form loop),
-                // and the ids a lowered loop still carries name graphs of the *other* program.
-                // The payload is a `GCLoopRef` (reference-table indexes), not a `GCLoopBody`
-                // (graphs): reading it through the wrong struct gives a node whose kind is 255 and
-                // whose graphs are none. `loopBodyOf` is the reading that converts.
-                const rt::GCLoopBody body = rt::loopBodyOf(*function, ref);
+                // walk. The node names no graph: the rounds are the region (design principles 3.10).
+                rt::GCLoopBody body{};
+                function.bodyOf(ref, body);
                 rt::GCLoopBody liftedBody = body;
-                liftedBody.condGraph      = camel::runtime::kInvalidGraphId;
-                liftedBody.bodyGraph      = camel::runtime::kInvalidGraphId;
                 copyOf[ref]               = draft.addLoopNode(liftedBody, lifted);
                 liftedLoopNode            = copyOf[ref];
                 copied[ref]               = true;
@@ -683,16 +972,17 @@ bool liftGraph(
                 break;
             }
             case rt::GCNodeKind::Oper: {
-                const auto *body = function->nodeBodyAs<camel::runtime::GCOperBody>(ref);
+                camel::runtime::GCOperBody operBody{};
+            const auto *body = function.bodyOf(ref, operBody) ? &operBody : nullptr;
                 const gc_node_ref_t made =
                     draft.addOperNode(node->dataType(), nullptr, body->uri());
                 std::vector<gc_node_ref_t> originals;
                 std::vector<gc_node_ref_t> inputs;
-                for (gc_node_ref_t input : function->normInputsOf(ref)) {
+                for (gc_node_ref_t input : function.normInputsOf(ref)) {
                     // A primitive whose input was not copied cannot be reproduced: the copy would
                     // name a node that is not there, and the transform would answer with a graph
                     // that computes something else. The build says so and gives nothing.
-                    if (input >= function->nodeCount() || !copied[input]) {
+                    if (input >= function.nodeCount() || !copied[input]) {
                         complete = false;
                         break;
                     }
@@ -714,9 +1004,9 @@ bool liftGraph(
                 // the statements written before it.
                 {
                     std::vector<gc_node_ref_t> waits;
-                    for (const rt::GCGraphSyncEdge &edge : function->syncPredsOf(ref)) {
-                        if (edge.pred < function->nodeCount() && copied[edge.pred]) {
-                            waits.push_back(copyOf[edge.pred]);
+                    for (gc_node_ref_t edge : function.syncInputsOf(ref)) {
+                        if (edge < function.nodeCount() && copied[edge]) {
+                            waits.push_back(copyOf[edge]);
                         }
                     }
                     if (!waits.empty()) {
@@ -770,17 +1060,19 @@ bool liftGraph(
                 std::string ruleName;
                 std::string ruleWhy;
                 tangentOf[ref] =
-                    buildRuleTangent(*context, transaction, uri, inputs, tangents, ruleName, ruleWhy);
+                    buildRuleTangent(
+                        *context, state.group, transaction, uri, inputs, tangents,
+                        ruleName, ruleWhy);
                 if (tangentOf[ref] == rt::kInvalidNodeRef) {
                     // Named, not guessed: the transform has no derivative for this operator, and
                     // the refusal carries the place the primitive was written -- the node's origin,
                     // which the kernel turns into a fault at that `file:line` -- so the error names
                     // the operator in `f`, not the call that asked for `jvp`.
-                    os << "REINTERP jvp function=" << function->name() << " skip=rule uri=" << uri
+                    os << "REINTERP jvp function=" << name << " skip=rule uri=" << uri
                        << " reason=" << ruleWhy << '\n';
                     JvpGraph refused;
                     refused.refusedOrigin = static_cast<camel::source::origin_id_t>(
-                        function->nodeOrigin(ref));
+                        function.nodeOrigin(ref));
                     refused.refusedUri = std::string(uri);
                     refused.refusedWhy = ruleWhy;
                     return fail(refusal, refused);
@@ -795,7 +1087,7 @@ bool liftGraph(
             }
         }
         if (!complete) {
-            os << "REINTERP jvp function=" << function->name() << " skip=body\n";
+            os << "REINTERP jvp function=" << name << " skip=body\n";
             return fail(refusal);
         }
         draft.setInsertRegion(0);
@@ -803,20 +1095,21 @@ bool liftGraph(
         // tangent, the Join names the Brch and those pairs, and the Brch names its condition and
         // its Join. Which arm is which, and what each arm yields, is read from the original graph;
         // nothing about branches is decided a second time here.
-        for (gc_node_ref_t ref = 0; complete && ref < function->nodeCount(); ++ref) {
-            const camel::runtime::GCNode *node = function->node(ref);
+        for (gc_node_ref_t ref = 0; complete && ref < function.nodeCount(); ++ref) {
+            const NodeFace *node = function.node(ref);
             if (node == nullptr || node->kind != rt::GCNodeKind::Brch) {
                 continue;
             }
-            const auto *body     = function->nodeBodyAs<rt::GCBrchBody>(ref);
+            rt::GCBrchBody brchBody{};
+            const auto *body     = function.bodyOf(ref, brchBody) ? &brchBody : nullptr;
             const gc_node_ref_t brch = copyOf[ref];
             if (body == nullptr || brch == rt::kInvalidNodeRef) {
                 complete = false;
                 break;
             }
             std::vector<gc_node_ref_t> condition;
-            for (gc_node_ref_t input : function->normInputsOf(ref)) {
-                if (input >= function->nodeCount() || !copied[input]) {
+            for (gc_node_ref_t input : function.normInputsOf(ref)) {
+                if (input >= function.nodeCount() || !copied[input]) {
                     complete = false;
                     break;
                 }
@@ -832,8 +1125,8 @@ bool liftGraph(
             for (rt::gc_cnt_t k = 0; k < body->armCount; ++k) {
                 const rt::GCRegion *arm = nullptr;
                 uint32_t armRegion      = 0;
-                for (uint32_t r = 1; r < function->regionCount(); ++r) {
-                    const rt::GCRegion *candidate = function->region(r);
+                for (uint32_t r = 1; r < function.regionCount(); ++r) {
+                    const rt::GCRegion *candidate = function.region(r);
                     if (candidate != nullptr && candidate->kind == rt::GCRegionKind::Arm &&
                         candidate->owner == ref && candidate->index == static_cast<uint32_t>(k)) {
                         arm       = candidate;
@@ -876,15 +1169,15 @@ bool liftGraph(
             draft.rewriteNode(join, init);
         }
         if (!complete) {
-            os << "REINTERP jvp function=" << function->name() << " skip=branch\n";
+            os << "REINTERP jvp function=" << name << " skip=branch\n";
             return fail(refusal);
         }
         // A loop's wiring: its state input becomes a pair (the initial state and its zero tangent),
         // its body region keeps its ports -- the state port now a pair -- and its result becomes the
         // pair the body computes. The loop's value is then a lifted value like any other, so a
         // reader of it needs nothing special, including the body's exit.
-        for (gc_node_ref_t ref = 0; complete && ref < function->nodeCount(); ++ref) {
-            const camel::runtime::GCNode *node = function->node(ref);
+        for (gc_node_ref_t ref = 0; complete && ref < function.nodeCount(); ++ref) {
+            const NodeFace *node = function.node(ref);
             if (node == nullptr || node->kind != rt::GCNodeKind::Loop) {
                 continue;
             }
@@ -897,16 +1190,16 @@ bool liftGraph(
             // node's *first with-input* is that same result (LoopView::bodyResult reads it there),
             // so it has to be the pair and not the copy of the old exit.
             gc_node_ref_t newState = rt::kInvalidNodeRef;
-            for (uint32_t r = 1; r < function->regionCount(); ++r) {
-                const rt::GCRegion *part = function->region(r);
+            for (uint32_t r = 1; r < function.regionCount(); ++r) {
+                const rt::GCRegion *part = function.region(r);
                 if (part == nullptr || part->owner != ref ||
                     part->kind != rt::GCRegionKind::LoopBody) {
                     continue;
                 }
                 draft.setRegionOwner(liftedRegion[r], loopCopy, part->index);
                 std::vector<gc_node_ref_t> ports;
-                for (gc_node_ref_t port : function->regionPorts(r)) {
-                    if (port >= function->nodeCount() || !copied[port]) {
+                for (gc_node_ref_t port : function.regionPorts(r)) {
+                    if (port >= function.nodeCount() || !copied[port]) {
                         complete = false;
                         break;
                     }
@@ -934,12 +1227,12 @@ bool liftGraph(
                 break;
             }
             std::vector<gc_node_ref_t> loopInputs;
-            for (gc_node_ref_t input : function->normInputsOf(ref)) {
-                if (input >= function->nodeCount() || !copied[input]) {
+            for (gc_node_ref_t input : function.normInputsOf(ref)) {
+                if (input >= function.nodeCount() || !copied[input]) {
                     complete = false;
                     break;
                 }
-                const camel::runtime::GCNode *in = function->node(input);
+                const NodeFace *in = function.node(input);
                 const gc_node_ref_t copy         = copyOf[input];
                 if (in != nullptr && in->dataType() == Type::Float64()) {
                     if (tangentOf[input] == rt::kInvalidNodeRef) {
@@ -961,10 +1254,10 @@ bool liftGraph(
             // what the body reads from outside) are copied as they are.
             std::vector<gc_node_ref_t> loopWith;
             loopWith.push_back(newState);
-            const auto loopWithOriginals = function->withInputsOf(ref);
+            const auto loopWithOriginals = function.withInputsOf(ref);
             for (size_t i = 1; i < loopWithOriginals.size(); ++i) {
                 const gc_node_ref_t input = loopWithOriginals[i];
-                if (input >= function->nodeCount() || !copied[input]) {
+                if (input >= function.nodeCount() || !copied[input]) {
                     complete = false;
                     break;
                 }
@@ -976,33 +1269,33 @@ bool liftGraph(
             draft.setWithInputs(loopCopy, loopWith);
         }
         if (!complete) {
-            os << "REINTERP jvp function=" << function->name() << " skip=loop\n";
+            os << "REINTERP jvp function=" << name << " skip=loop\n";
             return fail(refusal);
         }
         // The value the copied chain produces: the node the original graph's exit names. The exit
         // node *is* the value-producing node of a compiled graph (its inputs are that node's
         // operands), so the value is the copy of the exit itself -- and a Gate only forwards, so it
         // is followed to what it carries.
-        gc_node_ref_t oldValue = function->exitNodeRef();
+        gc_node_ref_t oldValue = function.exitNodeRef();
         while (oldValue != rt::kInvalidNodeRef) {
-            const camel::runtime::GCNode *node = function->node(oldValue);
+            const NodeFace *node = function.node(oldValue);
             if (node == nullptr || node->kind != rt::GCNodeKind::Gate) {
                 break;
             }
-            const auto norm = function->normInputsOf(oldValue);
+            const auto norm = function.normInputsOf(oldValue);
             if (!norm.empty()) {
                 oldValue = norm.back();
                 continue;
             }
-            const auto with = function->withInputsOf(oldValue);
+            const auto with = function.withInputsOf(oldValue);
             if (!with.empty()) {
                 oldValue = with.back();
                 continue;
             }
             oldValue = rt::kInvalidNodeRef;
         }
-        if (oldValue >= function->nodeCount() || !copied[oldValue]) {
-            os << "REINTERP jvp function=" << function->name() << " skip=value\n";
+        if (oldValue >= function.nodeCount() || !copied[oldValue]) {
+            os << "REINTERP jvp function=" << name << " skip=value\n";
             return fail(refusal);
         }
         const gc_node_ref_t chainValue = copyOf[oldValue];
@@ -1013,7 +1306,7 @@ bool liftGraph(
         const rt::DraftNodeHeader *chain = draft.header(chainValue);
         const bool alreadyLifted = chain != nullptr && chain->dataType == lifted;
         if (chainTangent == rt::kInvalidNodeRef && !alreadyLifted) {
-            os << "REINTERP jvp function=" << function->name() << " skip=tangent\n";
+            os << "REINTERP jvp function=" << name << " skip=tangent\n";
             return fail(refusal);
         }
         // The exit is the lifted result: the value the copied chain computes and the tangent the
@@ -1025,21 +1318,21 @@ bool liftGraph(
         // that keeps an effect whose result nobody reads from being dropped. The lifted exit is a
         // gate over the pair with the same waits, so the effect runs once, at the same point.
         gc_node_ref_t exit = out;
-        const gc_node_ref_t originalExit = function->exitNodeRef();
-        if (originalExit < function->nodeCount() && function->node(originalExit) != nullptr &&
-            function->node(originalExit)->kind == rt::GCNodeKind::Gate) {
+        const gc_node_ref_t originalExit = function.exitNodeRef();
+        if (originalExit < function.nodeCount() && function.node(originalExit) != nullptr &&
+            function.node(originalExit)->kind == rt::GCNodeKind::Gate) {
             const gc_node_ref_t gate = draft.addGateNode(lifted, draft.allocateRuntimeSlot(lifted));
             draft.setNormInputs(gate, std::span<const gc_node_ref_t>(&out, 1));
             std::vector<gc_node_ref_t> waits;
-            for (const rt::GCGraphSyncEdge &edge : function->syncPredsOf(originalExit)) {
-                if (edge.pred < function->nodeCount() && copied[edge.pred]) {
-                    waits.push_back(copyOf[edge.pred]);
+            for (gc_node_ref_t edge : function.syncInputsOf(originalExit)) {
+                if (edge < function.nodeCount() && copied[edge]) {
+                    waits.push_back(copyOf[edge]);
                 }
             }
             if (!waits.empty()) {
                 draft.setSyncInputs(gate, waits);
             }
-            if (function->node(originalExit)->hasFlag(rt::kGCNodeFlagSyncStatement)) {
+            if (function.node(originalExit)->hasFlag(rt::kGCNodeFlagSyncStatement)) {
                 draft.setNodeRuntimeFlags(gate, static_cast<uint8_t>(rt::kGCNodeFlagSyncStatement));
             }
             exit = gate;
@@ -1053,11 +1346,27 @@ bool liftGraph(
         for (const std::string &rule : usedRules) {
             rules += (rules.empty() ? "" : ",") + rule;
         }
-        os << "REINTERP jvp function=" << function->name() << " graph=" << rt::toValue(member)
-           << " type=" << signature->toString() << " nodes=" << function->nodeCount()
+        os << "REINTERP jvp function=" << name << " graph=" << rt::toValue(member)
+           // The graph the lift was asked about. A run-time lift knows it -- it is the callee graph
+           // the call named -- and prints its id there. A build-time lift does not and cannot: the
+           // callee's runtime id is handed out when the program is encoded, which is after this
+           // build, and a number here would read as the id of some graph. So the reading is a word
+           // for "not assigned yet" rather than a number that looks like an answer.
+           << " liftedFrom="
+           << (rt::isValid(source) ? std::to_string(rt::toValue(source)) : std::string("unassigned"))
+           << " type=" << signature->toString() << " nodes=" << function.nodeCount()
            << " kinds=" << copiedKinds << '/' << seenKinds
            << " exit=Tuple{chain,tangent} tangent=computed source=ruleset rules="
            << (rules.empty() ? "-" : rules) << '\n';
+        // The reading the next step needs: the graph the lift has just finished, in one line.
+        // `graph` is the member it was reserved as, `nodes` and `regions` are what the draft holds
+        // at this moment -- before the group is encoded, which only numbers what is here -- and
+        // `exit` is the node the graph answers with, the pair or the gate over it. Nothing is read
+        // back and nothing is decided here: the line is printed and the build goes on exactly as it
+        // did, so moving this build to compile time can be checked by the same numbers.
+        os << "REINTERP jvp built graph=" << rt::toValue(member) << " nodes=" << draft.nodeCount()
+           << " exit=" << exit << " regions=" << draft.regionCount() << " function=" << name
+           << '\n';
     }
     return true;
 }

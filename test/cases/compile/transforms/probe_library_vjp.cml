@@ -1,0 +1,29 @@
+/**
+ * The precondition's own program: it only asks whether the library's `vjp` can be built.
+ *
+ * `test/tools/have-library-vjp.mjs` runs this and skips `vjp_api.analytic_gradient` when it fails.
+ * No expected number lives here -- the program builds the composition once, calls it the way the
+ * library declares it (`vjp(f)(x)` is `(y, pullback)`, `pullback(ct)` is the cotangent), and prints
+ * what came back -- so it fails exactly when `stdlib/vjp.cml` cannot be assembled, and says nothing
+ * about whether the answer is right (that is the comparison case's business).
+ *
+ * `f` takes the two parameters of the author's comparison on purpose. The wall is inside the
+ * library, not here: `split` hands back the pair of halves -- the forward one, then the one that
+ * reads the residuals and the cotangent -- and the walk `transpose` runs refuses a construct inside
+ * that second half, so the pullback raises where the library composes it. No ruleset import lives
+ * here either: `stdlib/vjp.cml` imports the two it composes, so this program's only import is the
+ * library, and a ruleset that stopped being imported is the library's red and not this file's.
+ */
+
+import { vjp } from vjp
+
+func f(x: float, y: float): float {
+    return x * x * y
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(f)(3.0, 2.0)
+    let (dx, dy) = pullback(1.0)
+    println(value + dx + dy)
+    return 0
+}

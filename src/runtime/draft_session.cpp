@@ -382,13 +382,8 @@ void visitDraftGraphs(
         }
         const DraftNodeHeader *header = draft.header(id);
         if (header && header->kind == GCNodeKind::Loop) {
-            const GCLoopBody loop = draft.loopGraphsOf(id);
-            if (isValid(loop.condGraph)) {
-                visitor(loop.condGraph, nullptr);
-            }
-            if (isValid(loop.bodyGraph)) {
-                visitor(loop.bodyGraph, nullptr);
-            }
+            // A loop names no graph: the condition and the body are regions of the graph it is
+            // written in, so it visits nothing (design principles 3.10).
             continue;
         }
         if (!header || header->kind != GCNodeKind::Func) {
@@ -423,10 +418,7 @@ std::vector<GraphId> collectDraftDependencyGraphs(const GraphTransaction &transa
         }
         const DraftNodeHeader *header = draft.header(id);
         if (header && header->kind == GCNodeKind::Loop) {
-            // A LOOP node calls its two graphs each round: they are callees too.
-            const GCLoopBody loop = draft.loopGraphsOf(id);
-            pushUniqueGraph(dependencies, loop.condGraph);
-            pushUniqueGraph(dependencies, loop.bodyGraph);
+            // A loop names no graph: its rounds are a region of this graph (design principles 3.10).
             continue;
         }
         if (!header || header->kind != GCNodeKind::Func) {
@@ -536,6 +528,7 @@ GCGraph *encodeDraftGraph(
         subGraphs,
         staticGraphRefs,
         ruleGraphs,
+        draft.liftedFromRefs(),
         payloadShape,
         [&](GCGraphPayloadArena &payload) { emitDraftNativePayload(draft, payload); },
         staticSlots);
@@ -563,6 +556,9 @@ size_t draftGraphBytes(
     const std::vector<GraphId> ruleGraphPlaceholders(
         draft.ruleGraphs().size(),
         kInvalidGraphId);
+    const std::vector<GraphId> liftedFromPlaceholders(
+        draft.liftedFromRefs().size(),
+        kInvalidGraphId);
     std::vector<slot_t> staticSlots(draft.staticSlots().begin(), draft.staticSlots().end());
     if (staticDataType && staticSlots.size() < staticDataType->size()) {
         staticSlots.resize(staticDataType->size(), NullSlot);
@@ -572,6 +568,7 @@ size_t draftGraphBytes(
         subGraphPlaceholders,
         staticRefPlaceholders,
         ruleGraphPlaceholders,
+        liftedFromPlaceholders,
         describeDraftNativePayload(draft),
         staticSlots,
         draft.frameSlotTypes());

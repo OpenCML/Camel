@@ -1,0 +1,37 @@
+// The comparison the author named (ruling of 2026-11-01 06:30 and 06:50): `f(x, y) = x*x*y` at
+// `x = 3`, `y = 2`. The derivative written by hand is `df/dx = 2*x*y = 12` and `df/dy = x*x = 9`,
+// and the library's own gradient -- `transpose(split(reinterp<jvp>(f)))`, the composition
+// `stdlib/vjp.cml` writes -- has to answer the same two numbers from the same `f`. The two readings
+// are printed one under the other, so what a reader sees is a comparison and not a promise:
+// `library` is what the composition answered, `analytic` is the derivative worked out on paper.
+//
+// The shape is JAX's, which is the shape the standard library declares: `vjp(f)(x)` is the pair
+// `(y, pullback)` and `pullback(ct)` is the cotangent of `f`'s parameters, so the call is
+// `vjp(f)(3.0, 2.0)` and then `pullback(1.0)`. The juxtaposed `(parameters, cotangent)` call
+// `transpose` writes is the internal assembly and does not reach this file.
+//
+// Skipped, not red, while the composition cannot be run: the module compiles against the pair
+// `split` hands back, and the walk `transpose` runs still refuses a call whose callee takes several
+// parameters (`mul_tangent(x, w, dx, dw)` in the backward half), so the pullback raises where the
+// library composes it. The plan asks `test/tools/have-library-vjp.mjs` first and prints its reason
+// with the skip; the day the walk takes that call, this case runs and the two columns are printed
+// one under the other. The rulesets the composition needs are `stdlib/vjp.cml`'s own imports, so
+// this program imports the library and nothing else.
+import { vjp } from vjp
+
+func f(x: float, y: float): float {
+    return x * x * y
+}
+
+func main(): int sync {
+    let value = f(3.0, 2.0)
+    let (pair_value, pullback) = vjp(f)(3.0, 2.0)
+    let (dx, dy) = pullback(1.0)
+    println(`f(3, 2) = ${value:.1f}`)
+    println(`library  y = ${pair_value:.1f}`)
+    println(`library  df/dx = ${dx:.1f}`)
+    println(`analytic df/dx = 12.0`)
+    println(`library  df/dy = ${dy:.1f}`)
+    println(`analytic df/dy = 9.0`)
+    return 0
+}

@@ -52,6 +52,7 @@ Not in this reference: the profiler (`perf`).
 | [ckpt](#ckpt) | `import { ... } from ckpt` | C++ |
 | [tree](#tree) | `import { ... } from tree` | Camel |
 | [transforms](#transforms) | `import { ... } from transforms` | C++ |
+| [vjp](#vjp) | `import { ... } from vjp` | Camel |
 | [tensor](#tensor) | `import { ... } from tensor` | C++ |
 | [types](#types) | `import { ... } from types` | Camel |
 | [array](#array) | `import { ... } from array` | Camel |
@@ -88,6 +89,7 @@ Not in this reference: the profiler (`perf`).
 | [ckpt](#ckpt) | `import { ... } from ckpt` |  |
 | [tree](#tree) | `import { ... } from tree` |  |
 | [transforms](#transforms) | `import { ... } from transforms` |  |
+| [vjp](#vjp) | `import { ... } from vjp` |  |
 | [tensor](#tensor) | `import { ... } from tensor` |  |
 | [types](#types) | `import { ... } from types` |  |
 | [array](#array) | `import { ... } from array` |  |
@@ -596,9 +598,8 @@ carry `start` towards `end`. A `for` over an interval is fused by the compiler a
 array; this call builds one.
 
 - Failure: fault `InvalidArgument` when the step is 0.
-- Example (a fragment, not compiled): `range(0, 10, 3)` gives `[0, 3, 6, 9]`
-- Example (a fragment, not compiled): `range(10, 0, -3)` gives `[10, 7, 4, 1]`
-- Why it is not compiled: the interval is written `a..b`; the stepped form is `range(a, b, step)`
+- Example: `range(0, 10, 3)` gives `[0, 3, 6, 9]`
+- Example: `range(10, 0, -3)` gives `[10, 7, 4, 1]`
 
 #### `last`
 
@@ -649,7 +650,8 @@ slice: <axis: int, start: int, end: int, step: int = 1> (x: Bytes) => Bytes
 The same slice of a `Bytes`, by byte: it has the one axis 0, and the result is a `Bytes`.
 `b[1:3]` and `b->slice<0, 1, 3>` are the same bytes.
 
-- Example: `encode('hello')->slice<0, 1, 4>` gives `the bytes of 'ell'`
+- Example (a fragment, not compiled): `encode('hello')->slice<0, 1, 4>` gives `the bytes of 'ell'`
+- Why it is not compiled: the example names `encode`, which is `bytes`'s, and a doc example is compiled with this module's names only
 
 #### `concat`
 
@@ -1299,8 +1301,7 @@ next `save_tree` restores it before replacing it. Only one writer may save to a 
 time; one of two racing saves fails, and a reader still sees a complete checkpoint.
 
 - Failure: error value `PermissionDenied` when the file system refuses a write; error value `IOError` when the directory cannot be written or published, or a symbolic link is in the way.
-- Example (a fragment, not compiled): `{ w: 1.0, step: 10 }->save_tree<dir: 'out/ckpt'>`
-- Why it is not compiled: the tree comes from the surrounding program
+- Example: `{ w: 1.0, step: 10 }->save_tree<dir: 'out/ckpt'>`
 
 #### `load_tree`
 
@@ -1406,6 +1407,169 @@ together with the derivative of `f` at 2 in the direction 1.
 
 - Example (a fragment, not compiled): `let forward = jvp(f)`
 - Why it is not compiled: `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
+
+#### `split`
+
+```camel
+split: (f: (v: float, d: float) => (float, float)) => (v: float, d: float) => (float, float)
+```
+
+The step of `vjp` that separates a lifted function into the part computable now and the linear
+residue (design 4.2, 4.4). Implemented for the straight-line tier (`modules/transforms/split.cpp`):
+the halves are built from the graph, and what crosses the cut -- the residuals -- is read off the
+graph too, so a body that needs a value it computed carries it instead of computing it again.
+
+The cut, as the author writes it (15:25; revised 2026-11-01): the first half takes the ordinary
+parameters and answers with the result and the *residuals* -- the values the second half reads --
+and the second takes the residuals and the `with` parameters and answers with the result.
+
+    type Split<F> = ((..ParamsOf<F>) => (ResultOf<F>,  _),
+                     (_, ..WithOf<F>) => ResultOf<F>)
+
+The residual position is written `_` and is not a type a program can name: the residuals are a
+property of `f`'s graph, so their number and their types are read where the graph is in hand, and
+the compiler fills the position at instantiation (`ResidualsOf<F>` was the earlier spelling of a
+type function doing that, and it is gone). The second half is linear in the cotangent it is given
+-- that is the condition the transpose step (M3) reads -- and both halves speak in `Tangent<T>`
+at the top of this file.
+fragment of the composition: `let (fwd, lin) = split(jvp(f))`.
+
+- Example (a fragment, not compiled): `let step = split`
+- Why it is not compiled: `split` takes the lifted function a `jvp` call writes, so the example is a
+
+#### `transpose`
+
+```camel
+transpose: (f: F) => Transpose<F> when is_function::<F>()
+```
+
+The transpose of a linear function: `transpose(f)` takes the cotangent of `f`'s result and
+gives the cotangent of its parameter. The data flow runs backwards -- each primitive is replaced
+by the rule the `rulesets.transpose` family files under it, and a value used k times receives k
+cotangents that add. `f(x) = 2*x + 3*x` transposed at the cotangent `1.0` gives `5.0`.
+
+The transposed function takes the parameters of `f` first and the cotangent last --
+`transpose(f)(x, 1.0)` -- because a pullback may need the value it is transposing at: a branch's
+condition is a value, and the cotangent of an arm only means something for the arm that ran.
+The shape is the same for every `f`, so a reader writes the same call whether the body branches
+or not. The type is `(..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)`.
+
+- Example (a fragment, not compiled): `let back = transpose(f)`
+- Why it is not compiled: `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
+
+#### `vmap`
+
+```camel
+vmap: (f: F) => Vmap<F> when is_function::<F>()
+```
+
+Batching: `vmap(f)` gives the function that applies `f` to every row of a batch. A row is one
+dimension less than the batch: for `f: (f32) => f32` it is `(f32[]) => f32[]`, and for
+`f: (f32[3]) => f32` it is `(f32[?, 3]) => f32[]` -- `Lift<T> = RowsOf<T>`, the value with one
+dimension of unknown length in front of it (`stdlib/types.cml`). The arithmetic of every
+elementwise primitive is that primitive (`bx + bw` is `x + w` element by element), which is why
+`vmap(f)(xs)` and the row-by-row `map` answer the same bits.
+
+The rules come from `stdlib/rulesets/vmap.cml`: the transform asks that family, by the operator's
+key, for every primitive of `f`, and calls the function the rule names with the batches. An
+operator with no rule is refused by name at the primitive, never batched by a guess; a call, a
+branch or a loop in the body is refused the same way, because the elementwise tier batches
+straight-line bodies.
+
+- Example (a fragment, not compiled): `let batched = vmap(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
+#### `remat`
+
+```camel
+remat: (f: F) => F when is_function::<F>()
+```
+
+Memory for recomputation: `remat(f)` gives a function whose graph is `f`'s graph with the
+property "a call of it is recomputed on the backward pass instead of kept" (the author's ruling
+of 2026-11-01). The property is the graph's, not the call site's and not a tag's: the call
+answers with a new graph whose body is the body it was given, so a call through it is a call of
+the same function and no value changes -- what changes is what a step that cuts the graph in two
+has to keep across the cut. `split` reads the property: the values of a marked graph that cannot
+be recomputed from the parameters are not residuals, and the backward half computes them again
+(`modules/transforms/split.cpp`). JAX writes the same transform as `jax.checkpoint`, whose other
+name is `jax.remat`; in this tree "checkpoint" is the persistence module `ckpt`, so the transform
+takes the other word.
+
+The type is the argument's own: a function in, the same function out, which is the whole of what
+the name says. `modules/transforms/remat_operator.cpp` answers `(f: F) => F` and builds the graph
+the value stands on; the shapes a call site can write today are the ones `jvp`'s and `split`'s
+declarations show, because the result of a call is the exit type its resolver gives.
+
+- Example (a fragment, not compiled): `let remembered = remat(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
+<a id="vjp"></a>
+
+## `vjp`: the derivative, as a library
+
+#### `vjp`
+
+```camel
+vjp: (f: (x: T) => float) => (x: T) => (float, (ct: float) => (T,))
+```
+
+The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
+`(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters, `ct`'s own weight one
+member per parameter. The juxtaposed call `transpose(residuals, ct)` is the internal step, not this
+signature.
+
+The pullback answers a tuple in every case, one member per parameter, so a function of one
+parameter has a one-long one -- `(27.0)` for `vjp(cube)(3.0)`'s pullback at `ct = 1.0` -- and the
+number a gradient is comes out of it by position: `grad(f)(x)` is `vjp(f)(x).1(1.0).0` (author's
+ruling of 2026-11-01 14:30: one rule for every arity, no exception for one parameter, no type
+function that takes an element out of a one-long tuple).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let reading = vjp(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
+#### `vjp`
+
+```camel
+vjp: (f: (x: T, y: U) => float) => (x: T, y: U) => (float, (ct: float) => (T, U))
+```
+
+The same transform for a function of two parameters: `vjp(f)(x, y)` is `(value, pullback)` and
+`pullback(ct)` gives both cotangents, in the order `f` takes the parameters.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let reading_of_two = vjp(f)`
+- Why it is not compiled: `f` is a function value of two parameters, so the example is a fragment of a program that declares one
+
+#### `grad`
+
+```camel
+grad: (f: (x: float) => float) => (x: float) => float
+```
+
+The gradient of a function of one parameter: `vjp` with the seed 1, its second half taken, and the
+one member a one-parameter pullback answers read out by position --
+`grad(f)(x)` is `vjp(f)(x).1(1.0).0` (author's ruling of 2026-11-01 14:30, the 06:50 formula with
+the `.0` added: the pullback always answers a tuple). Read `grad(f)` as a name for that reading of
+`vjp`, not as a second transform.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let slope = grad(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
+#### `with_grad`
+
+```camel
+with_grad: (f: F) => F when is_function::<F>()
+```
+
+The gradient of the first `with` parameter of `f` (design principles 9.9): the same `vjp`, taken
+with respect to a captured value instead of a parameter.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let slope_over_the_capture = with_grad(f)`
+- Why it is not compiled: `f` captures the value it differentiates against, so the example is a fragment of a program that declares one
 
 <a id="tensor"></a>
 
@@ -1706,15 +1870,15 @@ The entries of the first axis that indices name, in that order.
 #### `one_hot`
 
 ```camel
-one_hot: (labels: int64[..] | number[], classes: int) => int64[..]
+one_hot: (labels: int64[..] | number[], classes: int) => f32[..]
 ```
 
 Each label (an integer below classes) expanded to a row of classes with a 1 at its position:
-an `int64` tensor of shape [labels, classes].
+a `f32` tensor of shape [labels, classes], each row a distribution over the classes.
 
 - Pure.
 - Failure: fault `IndexOutOfRange` when a label is outside [0, classes), and fault `InvalidArgument` when classes is negative.
-- Example: `one_hot([0, 2] as int[], 3)` gives `[[1, 0, 0], [0, 0, 1]]`
+- Example: `one_hot([0, 2] as int[], 3)` gives `[[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]`
 
 #### `shape`
 
@@ -1775,7 +1939,7 @@ its element type, `bool` as `int64`.
 #### `sum`
 
 ```camel
-sum: (t: float[..], axis: int, keepdims?: bool) => float[..]
+sum: (t: T[..], axis: int, keepdims?: bool) => T[..]
 ```
 
 The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis with extent 1.
@@ -1804,7 +1968,7 @@ is a fault.
 #### `mean`
 
 ```camel
-mean: (t: float[..], axis: int, keepdims?: bool) => float[..]
+mean: (t: T[..], axis: int, keepdims?: bool) => T[..]
 ```
 
 The same mean over one axis; keepdims keeps the axis with extent 1.
@@ -1816,7 +1980,62 @@ The same mean over one axis; keepdims keeps the axis with extent 1.
 #### `max`
 
 ```camel
-max: (t: float[..], axis: int, keepdims?: bool) => float[..]
+max: (t: T[..]) => T
+```
+
+IEEE 754-2019 maximum of every element (design principles 7.7): a NaN anywhere gives `nan`, and
+-0 is below +0. An extremum has no identity, so a tensor with no element is a fault rather than
+an answer. The axis form below is the same name, chosen by arity (design principles 7.3).
+
+- Pure.
+- Failure: fault `InvalidArgument` when the tensor has no element.
+- Example: `max([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `4.0`
+
+#### `min`
+
+```camel
+min: (t: T[..]) => T
+```
+
+IEEE 754-2019 minimum of every element: a NaN anywhere gives `nan`, and -0 is below +0. A tensor
+with no element is a fault.
+
+- Pure.
+- Failure: fault `InvalidArgument` when the tensor has no element.
+- Example: `min([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `1.0`
+
+#### `argmax`
+
+```camel
+argmax: (t: T[..]) => int
+```
+
+The position of the maximum of every element, counted in row-major order and answered as an
+`int`: the first NaN's position if there is one, +0 above -0, and the earliest position on a
+tie (design principles 7.7). A tensor with no element is a fault.
+
+- Pure.
+- Failure: fault `InvalidArgument` when the tensor has no element.
+- Example: `argmax([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `3`
+
+#### `argmin`
+
+```camel
+argmin: (t: T[..]) => int
+```
+
+The position of the minimum of every element, counted in row-major order and answered as an
+`int`: the first NaN's position if there is one, -0 below +0, and the earliest position on a
+tie. A tensor with no element is a fault.
+
+- Pure.
+- Failure: fault `InvalidArgument` when the tensor has no element.
+- Example: `argmin([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `0`
+
+#### `max`
+
+```camel
+max: (t: T[..], axis: int, keepdims?: bool) => T[..]
 ```
 
 IEEE 754-2019 maximum over the axis (exactly associative and commutative: any order gives
@@ -1829,7 +2048,7 @@ the same bits); keepdims keeps the axis with extent 1.
 #### `min`
 
 ```camel
-min: (t: float[..], axis: int, keepdims?: bool) => float[..]
+min: (t: T[..], axis: int, keepdims?: bool) => T[..]
 ```
 
 IEEE 754-2019 minimum over the axis (exactly associative and commutative); keepdims keeps the
@@ -1876,6 +2095,19 @@ definition in Camel, in `f32`.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `softmax([1.0, 1.0] as f32[])` gives `[0.5, 0.5]`
+
+#### `softmax`
+
+```camel
+softmax: (t: float[..], axis?: int) => float[..]
+```
+
+The same softmax of an `f64` tensor: the kernel takes the element type of the tensor it is
+given, so the result is `f64` as well.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
 - Example: `softmax([[1.0, 1.0]] as float[1, 2])` gives `[[0.5, 0.5]]`
 
 #### `log_softmax`
@@ -1886,6 +2118,18 @@ log_softmax: (t: f32[..], axis?: int) => f32[..]
 
 The log of the softmax over the axis (-1 by default), computed as its normative definition in
 Camel, in `f32`.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `log_softmax([1.0, 1.0] as f32[])` gives `[-0.6931472, -0.6931472]`
+
+#### `log_softmax`
+
+```camel
+log_softmax: (t: float[..], axis?: int) => float[..]
+```
+
+The same log softmax of an `f64` tensor, in `f64`.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank.
@@ -1903,6 +2147,18 @@ The gradient of the softmax of y with the incoming gradient dy, over the axis (-
 - Failure: fault `RuntimeError` when the axis is outside the rank.
 - Example: `softmax_grad(y, dy)`
 
+#### `softmax_grad`
+
+```camel
+softmax_grad: (y: float[..], dy: float[..], axis?: int) => float[..]
+```
+
+The same gradient in `f64`: y and dy are `f64` tensors and the result is one too.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `softmax_grad(y, dy)`
+
 #### `layer_norm`
 
 ```camel
@@ -1911,6 +2167,19 @@ layer_norm: (x: f32[..], gamma: f32[..], beta: f32[..], eps?: number) => f32[..]
 
 Layer normalization of x with gamma and beta, whose extents are the trailing ones of x, over
 the trailing axes; eps is 1e-5 by default. The result is `f32`.
+
+- Pure.
+- Failure: fault `TensorDimensionMismatch` when gamma or beta does not match the trailing extents of x.
+- Example: `layer_norm(x, gamma, beta)`
+
+#### `layer_norm`
+
+```camel
+layer_norm: (x: float[..], gamma: float[..], beta: float[..], eps?: number) => float[..]
+```
+
+The same normalization of `f64` tensors, in `f64`: x, gamma and beta are `f64` and the result
+is one too.
 
 - Pure.
 - Failure: fault `TensorDimensionMismatch` when gamma or beta does not match the trailing extents of x.
@@ -1939,6 +2208,19 @@ linear: (x: f32[..], weight: f32[..], bias?: f32[..]) => f32[..]
 
 The affine transform of x by a rank-2 weight [in, out] whose rows are the features of x, plus
 a rank-1 bias [out] when given.
+
+- Pure.
+- Failure: fault `TensorDimensionMismatch` when the features of x are not the rows of weight, or bias is not rank 1 of the output extent.
+- Example: `linear(x, weight, bias)`
+
+#### `linear`
+
+```camel
+linear: (x: float[..], weight: float[..], bias?: float[..]) => float[..]
+```
+
+The same transform of `f64` operands, in `f64`: it takes the element type of its operands
+(the `f32` path is the fused one, the other element types go through `matmul` and the addition).
 
 - Pure.
 - Failure: fault `TensorDimensionMismatch` when the features of x are not the rows of weight, or bias is not rank 1 of the output extent.
@@ -3140,8 +3422,7 @@ The result is a tuple, and taking it apart is what consumes the two streams; the
 themselves are values like any other, so a `tee` of one of them is another `tee`.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example (a fragment, not compiled): `let (left, right) = unfold(3, (n: int) => if n > 0 then (n, n - 1) else null)->tee<2>`
-- Why it is not compiled: a pair of streams is bound by a destructuring `let`, a statement
+- Example: `let (left, right) = unfold(3, (n: int) => if n > 0 then (n, n - 1) else null)->tee<2>`
 
 <a id="math"></a>
 
@@ -4090,8 +4371,7 @@ file in the same directory and then renamed over the destination, so a reader se
 content or the new, never half of it.
 
 - Failure: error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason (no space left included).
-- Example (a fragment, not compiled): `'done'->write_text<'out/log.txt'>`
-- Why it is not compiled: writes the file system when it runs, and the example only has the `void!` result to show
+- Example: `'done'->write_text<'out/log.txt'>`
 
 #### `write_bytes`
 
@@ -4105,7 +4385,7 @@ Replaces the content of the file at path with bytes; creating, atomic and errors
 - With effects: writes a file.
 - Failure: error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason (no space left included).
 - Example (a fragment, not compiled): `encode('abc')->write_bytes<'payload.bin', atomic: true>`
-- Why it is not compiled: writes the file system when it runs, and the example only has the `void!` result to show
+- Why it is not compiled: the example builds its `Bytes` with `encode` from the `bytes` module, which this page does not import
 
 #### `append_text`
 
@@ -4117,8 +4397,7 @@ Adds a text to the end of the file at path, creating the file and its parent dir
 they are not there.
 
 - Failure: error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason.
-- Example (a fragment, not compiled): `'one more line\n'->append_text<'out/log.txt'>`
-- Why it is not compiled: writes the file system when it runs, and the example only has the `void!` result to show
+- Example: `'one more line\n'->append_text<'out/log.txt'>`
 
 #### `append_bytes`
 
@@ -4131,7 +4410,7 @@ Adds bytes to the end of the file at path; creating and errors as for `append_te
 - With effects: writes a file.
 - Failure: error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason.
 - Example (a fragment, not compiled): `encode('abc')->append_bytes<'payload.bin'>`
-- Why it is not compiled: writes the file system when it runs, and the example only has the `void!` result to show
+- Why it is not compiled: the example builds its `Bytes` with `encode` from the `bytes` module, which this page does not import
 
 ### Questions about a path
 
@@ -4206,8 +4485,7 @@ Creates one directory. The parent directory must exist, and the directory must n
 
 - With effects: changes the file system.
 - Failure: error value `AlreadyExists` when something exists at the path; error value `NotFound` when the parent directory does not exist; error value `PermissionDenied` when the file system refuses; error value `IOError` otherwise.
-- Example (a fragment, not compiled): `'out'->mkdir`
-- Why it is not compiled: creates a directory when it runs, and the example only has the `void!` result to show
+- Example: `'out'->mkdir`
 
 #### `mkdirs`
 
@@ -4220,8 +4498,7 @@ error, so the call can be repeated.
 
 - With effects: changes the file system.
 - Failure: error value `AlreadyExists` when a file, not a directory, exists at the path; error value `PermissionDenied` when the file system refuses; error value `IOError` otherwise.
-- Example (a fragment, not compiled): `'out/logs/today'->mkdirs`
-- Why it is not compiled: creates a directory when it runs, and the example only has the `void!` result to show
+- Example: `'out/logs/today'->mkdirs`
 
 #### `remove`
 
@@ -4234,8 +4511,7 @@ Removes a file or a symbolic link; a directory, even an empty one, is an error (
 
 - With effects: removes a file.
 - Failure: error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the removal; error value `IOError` when the path is a directory or the removal fails for another reason.
-- Example (a fragment, not compiled): `'notes.txt'->remove`
-- Why it is not compiled: removes a file when it runs, and the example only has the `void!` result to show
+- Example: `'notes.txt'->remove`
 
 #### `remove_dir`
 
@@ -4248,8 +4524,7 @@ delete; a file or a symbolic link is an error too.
 
 - With effects: removes a directory.
 - Failure: error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the removal; error value `IOError` when the path is a file, a symbolic link, or a directory that is not empty.
-- Example (a fragment, not compiled): `'out/old'->remove_dir`
-- Why it is not compiled: removes a directory when it runs, and the example only has the `void!` result to show
+- Example: `'out/old'->remove_dir`
 
 <a id="io"></a>
 
@@ -4271,8 +4546,7 @@ off always succeeds. Raw mode is left again when the program ends.
 
 - With effects: changes the terminal.
 - Failure: error value `NotATerminal` when raw mode is asked for and standard input is not a terminal (a pipe, a file); error value `IOError` when the terminal refuses.
-- Example (a fragment, not compiled): `set_terminal_raw_mode(true)`
-- Why it is not compiled: changes the terminal when it runs, and the example only has the `void!` result to show
+- Example: `set_terminal_raw_mode(true)`
 
 #### `input`
 
@@ -4283,8 +4557,7 @@ input: (prompt: string) => string
 Writes prompt to standard output and reads one line from standard input, without its line end.
 
 - With effects: writes standard output, reads standard input.
-- Example (a fragment, not compiled): `input('name: ')`
-- Why it is not compiled: waits for a line the example program is not given
+- Example: `input('name: ')`
 
 #### `has_input`
 
@@ -4797,8 +5070,7 @@ passed, and gives how many calls met (after a timeout, how many were waiting). A
 showing that calls really run at the same time.
 
 - Failure: fault `InvalidArgument` when parties is below 1 or timeout is negative.
-- Example (a fragment, not compiled): `rendezvous(2, 1.0)` gives `2 when another call arrived in time`
-- Why it is not compiled: waits for another call, which a page cannot supply
+- Example: `rendezvous(2, 1.0)` gives `2 when another call arrived in time`
 
 #### `thread_count`
 
@@ -5029,7 +5301,7 @@ op_name: (o: Op) => string
 The URI of the operator, such as `:op/add_l`.
 
 - Example (a fragment, not compiled): `op_name(o)`
-- Why it is not compiled: o is the operator of a node of the surrounding pass
+- Why it is not compiled: `o` is an operator taken from a node of the surrounding pass
 
 #### `is_pure`
 
@@ -5262,7 +5534,7 @@ The number a graph, a node or an operator is known by inside its function: the G
 NodeId or the OperId. Stable for the function, so a pass can key a map by it.
 
 - Example (a fragment, not compiled): `id(n)`
-- Why it is not compiled: n is a node of the surrounding pass
+- Why it is not compiled: `n` is the graph the pass runs on
 
 ### Facts
 
@@ -5310,8 +5582,7 @@ open: (f: F) => Txn<F> when is_function::<F>()
 Opens a transaction on a function: a private workspace in which its graphs are edited.
 Nothing changes until `commit`.
 
-- Example (a fragment, not compiled): `let t = open((x: int): int => x + 1)`
-- Why it is not compiled: the transaction is closed by commit or abort
+- Example: `let t = open((x: int): int => x + 1)`
 
 #### `replace`
 
@@ -5503,7 +5774,7 @@ check_text: (r: CheckReport) => string
 The report's fixed rendering, one line per row, for a caller that wants it as a value.
 
 - Example (a fragment, not compiled): `check_text(report)` gives `'sampled add_zero: proposition equality, evidence samples 100, ...'`
-- Why it is not compiled: a report comes from a check
+- Why it is not compiled: `report` is the report a check gives back: the example writes what reads it, and a doc example has no check to run
 
 #### `coverage_table`
 
@@ -5578,7 +5849,7 @@ rule_name: (r: Rule) => string
 The name of the rule `r`.
 
 - Example (a fragment, not compiled): `rule_name(r)` gives `'int_add_zero'`
-- Why it is not compiled: a rule comes from the library
+- Why it is not compiled: `r` is a rule of the library: the example writes the question, and a doc example has no library to take one from
 
 #### `rule_two_way`
 
@@ -5589,7 +5860,7 @@ rule_two_way: (r: Rule) => bool
 Whether the rule `r` may also be applied from right to left.
 
 - Example (a fragment, not compiled): `rule_two_way(r)` gives `false`
-- Why it is not compiled: a rule comes from the library
+- Why it is not compiled: `r` is a rule of the library: the example writes the question, and a doc example has no library to take one from
 
 #### `rule_needs`
 
@@ -5600,7 +5871,7 @@ rule_needs: (r: Rule) => int
 How many rewrites the rule `r` needs before it may fire.
 
 - Example (a fragment, not compiled): `rule_needs(r)` gives `0`
-- Why it is not compiled: a rule comes from the library
+- Why it is not compiled: `r` is a rule of the library: the example writes the question, and a doc example has no library to take one from
 
 #### `rule_consts`
 
@@ -5611,7 +5882,7 @@ rule_consts: (r: Rule) => int
 How many constants the rule `r` adds to the function.
 
 - Example (a fragment, not compiled): `rule_consts(r)` gives `0`
-- Why it is not compiled: a rule comes from the library
+- Why it is not compiled: `r` is a rule of the library: the example writes the question, and a doc example has no library to take one from
 
 <a id="tiles"></a>
 
@@ -5648,7 +5919,7 @@ with, alone or inside a tuple or a struct -- and gives the same tree with each l
 `Device<...>`. A leaf of any other type is refused when the call is compiled.
 
 - Example (a fragment, not compiled): `host->upload` gives `a Device<f32[..]>`
-- Why it is not compiled: the value comes from the caller
+- Why it is not compiled: `host` is a host tensor the caller has: the example writes the move, and a doc example has no device to move a value to
 
 #### `download`
 
@@ -5660,7 +5931,7 @@ Downloads every device leaf of the value and gives the host value it came from. 
 leaf that is not a device value is refused when the call is compiled.
 
 - Example (a fragment, not compiled): `resident->download` gives `the array resident holds`
-- Why it is not compiled: the value comes from the caller
+- Why it is not compiled: `resident` is a value already on the device: the example writes the download, and a doc example has no device to take one from
 
 #### `run_preferred_resident`
 
@@ -5821,8 +6092,7 @@ Runs Python statements in the interpreter. Definitions and assignments stay visi
 calls, as in a Python session.
 
 - Failure: error value `PythonError` when the code raises.
-- Example (a fragment, not compiled): `exec('x = 1')`
-- Why it is not compiled: runs Python code when it runs, and the example only has the `void!` result to show
+- Example: `exec('x = 1')`
 
 #### `eval`
 
@@ -5844,8 +6114,7 @@ run_file: (path: string) => void!
 Runs the Python script at the path.
 
 - Failure: error value `PythonError` when the file cannot be read or the script raises.
-- Example (a fragment, not compiled): `'scripts/hello.py'->run_file`
-- Why it is not compiled: runs Python code when it runs, and the example only has the `void!` result to show
+- Example: `'scripts/hello.py'->run_file`
 
 #### `import_module`
 
@@ -6183,8 +6452,7 @@ created when missing.
 
 - With effects: writes files under `dir`.
 - Failure: fault `RuntimeError` when the directory cannot be created or a leaf cannot be written.
-- Example (a fragment, not compiled): `save_params({ w: [1.0, 2.0] as float[], b: [0.0] as float[] }, 'checkpoints/step-1')`
-- Why it is not compiled: the example builds its tensors with `new` from the `tensor` module, which this page does not import
+- Example: `save_params({ w: [1.0, 2.0] as float[], b: [0.0] as float[] }, 'checkpoints/step-1')`
 
 <a id="optim"></a>
 
@@ -6370,12 +6638,12 @@ scalar (it gives the result and the pullback from the cotangent of the result to
 and `jvp` is forward mode (the result and its tangent along a direction); both land with the
 autodiff lane, not before they work.
 
-The transform that trades memory for recomputation -- the same values, with the annotated section
-recomputed in the backward pass instead of kept -- is named `remat` here. JAX calls it
-`jax.checkpoint` and, by its other name, `jax.remat`; in this tree "checkpoint" is the persistence
-module `stdlib/ckpt.cml` and stays that, so the transform takes the other word and there is no
-second name for a reader to disambiguate. It is not implemented yet: the name is not a value, and
-a call to it is refused like any other name that does not resolve.
+The memory-for-recomputation transform -- `remat` -- is not here: it is a transform of the
+`transforms` module (`stdlib/signatures/transforms.cml`), because what it changes is a property of
+a graph and a call site, not a derivative. JAX calls the same transform `jax.checkpoint` and, by
+its other name, `jax.remat`; in this tree "checkpoint" is the persistence module
+`stdlib/ckpt.cml` and stays that, so the transform takes the other word and there is no second
+name for a reader to disambiguate.
 
 `stop_gradient` marks a value as a constant, and the mathematics of the local rules is written
 here, where the library keeps one statement of it: `add_tangent` and its siblings are the tangent
@@ -6688,10 +6956,19 @@ A rule's right side takes the *lifted* operands and answers the *lifted* result.
 elementwise tier is therefore one rule per primitive, each of them the primitive itself: the
 batching of an elementwise operator is that operator.
 
-This round writes the elementwise tier only. `matmul`, the reductions (`sum`, `sum_axis`, `mean`),
-`reshape` and the broadcasting moves need a rule each that says *which* axis the batch is on --
-`sum` over a batch sums each row, not the batch -- and they come next, in the same module, with
-`RowsOf` doing the work (`reshape` of `RowsOf<T>` is a reshape that keeps the batch dimension).
+This round writes the elementwise tier, `matmul`, the six reductions along an axis, and the six
+over every axis. The first group need a rule that says *which* axis the batch is on: a batch of
+rows under `matmul` is the axes before its last two, and a reduction along an axis keeps the axis
+it reduces and gains the batch axis in front, so its rule is written in terms of the operator's
+own axis argument (`batched_axis`). A reduction over every axis takes no axis at all -- there is
+none of the operator's to shift -- so its rule keeps the batch axis in front and folds away the
+axes the row had after it, over the rank the value itself carries (`shape`). `sum`, `mean`, `max`
+and `min` are written that way. `argmax` and `argmin` answer a *position*, which no fold of axis
+positions produces (`argmax` of a `float[2, 3]` row is 5, not `[1, 2]`), so their rule reads the
+batch as one line instead: `reshape<[shape(xs)[0], -1]>(xs)` puts a row's elements on its last
+axis, and `argmax_axis` along that axis counts them -- see the section below `vmap_rule_min`.
+
+`reshape` and the broadcasting moves are the next tier.
 
 Adding a rule changes docs/stdlib-reference.md; regenerate it with
 `node scripts/stdlib-reference.mjs --write`.
@@ -6708,6 +6985,480 @@ array as that value at every element).
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `lift(3.0)` gives `[3.0]`
+
+### The elementwise tier
+
+A rule is filed in its ruleset module under the head of its left side -- an operator's token, or
+the name a call writes -- and the number of operands that head takes, and a transform reads it
+from there (`lookupRule("rulesets.vmap", head, arity)`); a rule is not a function a program calls,
+so the rules below and the functions they call are two things with different names.
+
+The right side of each rule *names* the function that does the batched arithmetic
+(`vmap_add(bx, bw)`), and that name is the part a batching transform reads. A rule's right side is
+two arrows: the outer one takes the primitive's operands, the inner one takes the lifted half. A
+batched graph has no unbatched operands to give the outer one -- `Lift<T>` replaced the whole
+chain with batches -- so the transform calls the named function with the batches instead, and the
+rule mechanism is unchanged. `rhsCalleeOf("rulesets.vmap", "vmap_rule_add")` is `vmap_add`.
+
+Five keys cover the scalar arithmetic: `+`, `-`, `*`, `/` at two operands and `-` at one. `-x` and
+`x - w` are two primitives that share one token, which is why the operand count is part of the
+key (stdlib/rulesets/jvp.cml files the same five).
+
+#### `vmap_add`
+
+```camel
+vmap_add: (a: T[], b: T[]) => T[] when is_numeric::<T>()
+```
+
+`x + w` of one row, batched: the same addition, element by element.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_add([1.0, 2.0], [3.0, 4.0])` gives `[4.0, 6.0]`
+
+#### `vmap_sub`
+
+```camel
+vmap_sub: (a: T[], b: T[]) => T[] when is_numeric::<T>()
+```
+
+`x - w` of one row, batched.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_sub([3.0, 4.0], [1.0, 2.0])` gives `[2.0, 2.0]`
+
+#### `vmap_mul`
+
+```camel
+vmap_mul: (a: T[], b: T[]) => T[] when is_numeric::<T>()
+```
+
+`x * w` of one row, batched.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_mul([1.0, 2.0], [3.0, 4.0])` gives `[3.0, 8.0]`
+
+#### `vmap_div`
+
+```camel
+vmap_div: (a: T[], b: T[]) => T[] when is_numeric::<T>()
+```
+
+`x / w` of one row, batched.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_div([3.0, 8.0], [3.0, 4.0])` gives `[1.0, 2.0]`
+
+#### `vmap_neg`
+
+```camel
+vmap_neg: (a: T[]) => T[] when is_numeric::<T>()
+```
+
+`-x` of one row, batched. The key is `-` at one operand, not `-` at two.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_neg([1.0, -2.0])` gives `[-1.0, 2.0]`
+
+### The product of two arrays
+
+The five keys above are the *scalar* arithmetic: `x * w` on two `f32` is `:op/mul_d`. On two
+arrays the same spelling resolves to another primitive, `tensor:multiply`, and the two are one law
+at two ranks -- the product, element by element -- but they are not one rule, because a rule is
+instantiated at its primitive's *element* type (`ruleElementTypeOf`, modules/transforms/vmap.cpp):
+`f32` here, the same `T` the scalar rule gets, while the two operators are different primitives and
+a key holds one rule each.
+
+So the operand is written as the open rank `T[..]`: the batch of a row is that row's element type at
+any rank, and the operator walks all of the ranks it is given. `mul_tensor(x, w)` is the same
+product at whatever rank the row had, and its right side multiplies the whole batch at once -- the
+primitive applied to the batch instead of to each row, which is the same operator and so the same
+bits.
+
+The key is `mul_tensor`, a call, because the array product has no infix spelling a rule's left side
+could be written with -- `r * r` resolves to the operator, but the operator is not a token. A call
+is a key like any other (`f(a, b)` is `f` at two operands), and `tensor:multiply` is bound to this
+one where the operator is declared: `modules/tensor/module.cpp`, `bindVmapRule` -- the batching
+table, which is what a batching transform reads. An operator with no binding is an operator no rule
+is reachable for, and the transform says so by name at the primitive. The right side names a
+*different* function than the left side does, which the index requires: a name the left side binds
+is a pattern variable to the right side, and this family's transform reads the callee's name and
+calls it with the batch -- it never binds the pattern.
+
+#### `vmap_mul_tensor`
+
+```camel
+vmap_mul_tensor: (a: T[..], b: T[..]) => T[..] when is_numeric::<T>()
+```
+
+The product of two batches: the whole batch multiplied at once, which for an elementwise product is
+the batch of the row-by-row products. The parameters are the open rank for the reason `vmap_matmul`
+gives below: a lifted type does not name the element to a call's inference.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_mul_tensor([[1.0, 2.0], [3.0, 4.0]] as f32[2, 2], [[10.0, 10.0], [10.0, 10.0]] as f32[2, 2])` gives `[[10.0, 20.0], [30.0, 40.0]]`
+
+### The element of a row
+
+`r[0]` on a row is `:op/idx_arr`, and batching it gathers one element per row. This is the one rank
+where the rule's type parameter is not the type the operand has: a rule is instantiated at its
+primitive's *result* type (`modules/transforms/vmap.cpp`, `elementType = node->dataType()`), which
+for an index is the element (`f32`) while the value being indexed is the row (`f32[3]`). So the row
+is spelled from the element -- `T[]`, an array of `T` -- and the batch of rows is one dimension in
+front of that, `Lift<T[]>`, which for a row of `f32` is `f32[?, ?]`. The index is a batch as well
+(a constant in the body lifts to a batch of one row), so the gather reads it through `at`, the
+one-row broadcast every helper here uses.
+
+#### `idx_batch`
+
+```camel
+idx_batch: (xs: Lift<T[]>, i: int[]) => Lift<T>
+```
+
+One element per row: row `j` of the batch contributes `xs[j][i[j]]`, and the results are the batch
+`Lift<T>`. Cost is one strided read per row -- `len(xs)` of them, no copy of any row.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `idx_batch::<f32>([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3], [2, 1])` gives `[3.0, 5.0]`
+
+### Matmul
+
+A batched matrix product adds the batch axis in front of both operands (`[b, m, k] x [b, k, n]`),
+and those are exactly the axes `matmul` already walks as its batch axes (its last two are the
+product's). So the rule is the operator over the lifted operands and nothing else: no row loop, no
+reshape. An operand that is a constant of the body is the batch of one row (`lift`), and one row
+broadcasts over a batch of many -- the operator's own broadcasting, which is the same rule the
+operator states, not a second one of ours.
+
+#### `vmap_matmul`
+
+```camel
+vmap_matmul: (lhs: T[..], rhs: T[..]) => T[..] when is_numeric::<T>()
+```
+
+`matmul(lhs, rhs)` batched: the product of each row of `lhs` with the row the batch of `rhs` gives
+it. A batch of one row is that row at every index.
+
+The parameters are the open rank `T[..]` rather than `Lift<T[..]>` even though the batch is what
+they are given: the transform passes the lifted operands, and a parameter written `Lift<T[..]>`
+says nothing about `T` to a call's inference (the element is one layer down a type computation),
+so the rule's right side could not call this function without naming the type again -- and a
+right side that names a type argument is a right side no transform can read the callee from
+(`rhsCalleeOf`, include/camel/parse/ast/rule_head.h). An open rank takes the batch all the same:
+it is the type that states nothing about the extents, and the batch's own extents are the value's.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_matmul([[1.0, 2.0]] as float[1, 2], [[3.0], [4.0]] as float[2, 1])` gives `[[11.0]]`
+
+### The reductions along an axis
+
+A reduction keeps the axis it reduces -- as an extent of one with `keepdims`, as nothing without
+it -- and the batch adds one axis in front. So the rule is written in terms of the operator's own
+axis argument, and the only thing to translate is that argument: the row's axis `a` is the axis
+one place further in the lifted value, and an axis counted from the last (`-1`) stays what it was,
+because the last axis of the lifted value is the last axis of the row. Nothing is reshaped: the
+batch is an axis these operators already walk.
+
+#### `vmap_sum_axis`
+
+```camel
+vmap_sum_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
+```
+
+`sum_axis(xs, axis, keepdims)` batched: each row's sum along the axis it was given. The parameters
+are the open rank for the reason `vmap_matmul` gives: a lifted type does not name the element to a
+call's inference, and a right side may not name it either.
+
+The axis argument is the *row's*, so the example below reduces the row's axis 1 -- the sum of each
+row of the value -- and not its axis 0: the batch is one axis in front of the one the row counts
+from (`batched_axis`).
+
+- A native operator of this module: an opaque node, pure.
+- Example: `vmap_sum_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[3.0, 7.0]`
+
+#### `vmap_mean_axis`
+
+```camel
+vmap_mean_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
+```
+
+`mean_axis(xs, axis, keepdims)` batched: each row's mean along the axis it was given.
+
+- A native operator of this module: an opaque node, pure.
+- Example: `vmap_mean_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[1.5, 3.5]`
+
+#### `vmap_max_axis`
+
+```camel
+vmap_max_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
+```
+
+`max_axis(xs, axis, keepdims)` batched: each row's largest element along the axis it was given.
+
+- A native operator of this module: an opaque node, pure.
+- Example: `vmap_max_axis([[1.0, 5.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[5.0, 4.0]`
+
+#### `vmap_min_axis`
+
+```camel
+vmap_min_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
+```
+
+`min_axis(xs, axis, keepdims)` batched: each row's smallest element along the axis it was given.
+
+- A native operator of this module: an opaque node, pure.
+- Example: `vmap_min_axis([[1.0, 5.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[1.0, 3.0]`
+
+### The positions along an axis
+
+`argmax_axis` and `argmin_axis` are the reductions whose *result* element is not the operand's:
+they take any numeric tensor and answer `int` positions (the operator's own signature spells that
+type `int64`). That is why their rules are the ones that show what a batching rule is generic in
+-- the element the operands are made of, read from an operand, never from the type of the node the
+result is (`modules/transforms/vmap.cpp`'s `firstOperandTypeOf`). A rule instantiated at the
+result's element type would be a rule about `int` arrays applied to floats.
+
+#### `vmap_argmax_axis`
+
+```camel
+vmap_argmax_axis: (xs: T[..], axis: int[], keepdims: bool[]) => int[..]
+```
+
+`argmax_axis(xs, axis, keepdims)` batched: each row's position of its largest element along the
+axis it was given. The positions are `int` whatever the operand's element is, so the type this
+function is generic in is the operand's (`T`), not its result's.
+    // [1, 2]
+
+- A native operator of this module: an opaque node, pure.
+- Example: `vmap_argmax_axis([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3], [0], [false])`
+
+#### `vmap_argmin_axis`
+
+```camel
+vmap_argmin_axis: (xs: T[..], axis: int[], keepdims: bool[]) => int[..]
+```
+
+`argmin_axis(xs, axis, keepdims)` batched: each row's position of its smallest element along the
+axis it was given, with the earlier position on a tie.
+    // [0, 0]
+
+- A native operator of this module: an opaque node, pure.
+- Example: `vmap_argmin_axis([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3], [0], [false])`
+
+### The reductions over every axis
+
+`sum(xs)` and `mean(xs)` take no axis at all, so there is none of the operator's to move one place
+in. What they do to a batch is keep the batch axis in front and fold away the axes the row had
+after it: a batch of rows arrives as one number per row, which is the shape the batch axis
+already is. The fold is written over the value's own rank (`shape`), because the rank is a fact
+about the value and not about the type -- `T[..]` says a tensor, never how many axes.
+
+#### `vmap_sum`
+
+```camel
+vmap_sum: (xs: T[..]) => T[..] when is_numeric::<T>()
+```
+
+`sum(xs)` batched: one sum per row. The batch axis stays in front; each of the row's axes is
+folded away in turn, so a batch of `float[3]` rows answers one number per row.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_sum([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])` gives `[6.0, 15.0]`
+
+#### `vmap_mean`
+
+```camel
+vmap_mean: (xs: T[..]) => T[..] when is_float::<T>()
+```
+
+`mean(xs)` batched: one mean per row, folded the same way `sum` is. A mean is of a float: an
+integer row's mean is `f32`, which is not the element the rule would be written in.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_mean([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])` gives `[2.0, 5.0]`
+
+#### `vmap_max`
+
+```camel
+vmap_max: (xs: T[..]) => T[..] when is_numeric::<T>()
+```
+
+`max(xs)` batched: one maximum per row. The row's axes are flattened into one (`shape(xs)[0]`
+is the batch extent, `-1` the rest) and the maximum is taken over that axis in one pass: IEEE
+754-2019 maximum carries an element and is exactly associative and commutative (design
+principles 7.7), so the axes of a row may be folded away in any order -- or in one pass over
+the flattened row -- and the bits are the same: -0 below +0, a NaN anywhere beyond every
+number, in either shape.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_max([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])` gives `[5.0, 4.0]`
+
+#### `vmap_min`
+
+```camel
+vmap_min: (xs: T[..]) => T[..] when is_numeric::<T>()
+```
+
+`min(xs)` batched: the same one-pass minimum over the flattened row, with the IEEE 754-2019
+`minimum`. -0 is below +0 and a NaN is beyond every number, so the answer is the one the
+whole-tensor form gives.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_min([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])` gives `[1.0, 0.0]`
+
+### The positions over every axis
+
+`argmax(xs)` and `argmin(xs)` answer one position over the whole row, counted in row-major order,
+and no fold of axis positions produces that number: folding a row's axes hands back a position per
+axis (`argmax` of a `float[2, 3]` row is 5, not `[1, 2]`). What produces it is the shape the row's
+own elements form as one line. `reshape<[shape(xs)[0], -1]>(xs)` is the batch read as
+`[rows, -1]`, which lays the rows' elements end to end, so its *last* axis counts exactly one
+row's elements and a position along it is the position over that row.
+
+The shape `reshape` takes is written in angle brackets and may hold a value (`shape(xs)[0]`), not
+only a constant: it is checked where the shape is known, so `-1` stands for the extent the value
+itself states (design principles 5.4).
+
+#### `vmap_argmax`
+
+```camel
+vmap_argmax: (xs: T[..]) => int[..] when is_numeric::<T>()
+```
+
+`argmax(xs)` batched: one row-major position per row, read as a reshape of the batch to
+`[rows, -1]` and a reduction of its last axis -- which is one row's elements.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_argmax([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])` gives `[1, 2]`
+
+#### `vmap_argmin`
+
+```camel
+vmap_argmin: (xs: T[..]) => int[..] when is_numeric::<T>()
+```
+
+`argmin(xs)` batched: the same reading of the batch as `[rows, -1]`, with the earlier position on
+a tie.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_argmin([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])` gives `[0, 0]`
+
+### Reshape
+
+`reshape<dims>(x)` is the batching rule whose answer is a *shape*: a row's elements are already in
+row-major order and a batch's rows are contiguous, so the batched reshape is the same elements
+with the batch's axis written in front of the row's target.
+
+The target is the operator's second argument, in `with` position (`OpDef::params` is `t` then
+`shape`, `withAfterNorm`), and a `with` argument reaches a rule like any other: lifted to the batch
+of one row. One row of a batch is contiguous, so its flat reading *is* the target's extents in
+order -- that is the whole trick, and it is why the shape position takes a runtime value: the
+written extents are a value, not something this rule's text could spell. `reshape<...>` takes an
+`int[]` computed at runtime (it already takes `shape(xs)[0]` in the reductions above), so the
+batched shape is `[the batch's rows, the written extents...]`.
+
+#### `vmap_reshape`
+
+```camel
+vmap_reshape: (xs: T[..], dims: int[..]) => T[..] when is_numeric::<T>()
+```
+
+`reshape<dims>(xs)` batched: each row laid out in the shape the call wrote, the batch's axis in
+front of it.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_reshape([[1.0, 2.0, 3.0, 4.0]] as float[1, 4], [2, 2])` gives `[[[1.0, 2.0], [3.0, 4.0]]]`
+
+### Unsqueeze
+
+`unsqueeze<axis>(x)` adds an axis of extent one *inside* the row, so the batch's axis is in front
+of it: the written axis moves one place in, exactly as a reduction's axis does (`batched_axis`).
+
+#### `vmap_unsqueeze`
+
+```camel
+vmap_unsqueeze: (xs: T[..], axis: int[]) => T[..] when is_numeric::<T>()
+```
+
+`unsqueeze<axis>(xs)` batched: the row's axis of extent one, one place further in.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_unsqueeze([[1.0, 2.0]] as float[1, 2], [0])` gives `[[[1.0, 2.0]]]`
+
+### Transpose, permute, concat and dim
+
+The rest of the layout tier whose axis or permutation is written in angle brackets: each is a
+`with` argument, so each arrives as the batch of one row and the rule shifts it the same way a
+reduction's axis is shifted. `transpose` writes no axis at all -- the operator swaps the last two
+axes of whatever it is given, and a batch's last two axes are the row's -- so its rule is the
+operator over the batch and nothing else.
+
+#### `vmap_transpose`
+
+```camel
+vmap_transpose: (xs: T[..]) => T[..] when is_numeric::<T>()
+```
+
+`transpose(xs)` batched: the operator swaps the last two axes, and a batch's last two axes are the
+row's last two.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_transpose([[[1.0, 2.0], [3.0, 4.0]]] as float[1, 2, 2])` gives `[[[1.0, 3.0], [2.0, 4.0]]]`
+
+#### `vmap_permute`
+
+```camel
+vmap_permute: (xs: T[..], perm: int[..]) => T[..] when is_numeric::<T>()
+```
+
+`permute<perm>(xs)` batched: the row's axes in the written order, the batch's axis in front.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_permute([[[1.0, 2.0], [3.0, 4.0]]] as float[1, 2, 2], [1, 0])` gives `[[[1.0, 3.0], [2.0, 4.0]]]`
+
+#### `vmap_concat`
+
+```camel
+vmap_concat: (a: T[..], b: T[..], axis: int[]) => T[..] when is_numeric::<T>()
+```
+
+`concat<axis>(xs, ys)` batched: the axis the row joins along is one place further in, and the two
+operands are the batch's rows, so the join is along the row's axis of the batch.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_concat([[1.0]] as float[1, 1], [[2.0]] as float[1, 1], [0])` gives `[[[1.0], [2.0]]]`
+
+#### `vmap_dim`
+
+```camel
+vmap_dim: (xs: T[..], axis: int[]) => int[] when is_numeric::<T>()
+```
+
+`dim<axis>(xs)` batched: one extent per row, each being the batch's extent one place further in.
+The answer of a batched `dim` is a *batch of extents* (an `int[]`), not one `int`: every row has
+the same extent, because the batch's axis adds nothing to the row's.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_dim([[[1.0, 2.0], [3.0, 4.0]]] as float[1, 2, 2], [1])` gives `[2]`
+
+### Where
+
+`where(cond, a, b)` is elementwise on three arrays of the row's shape, and the condition is one of
+them: the batch's axis is in front of all three, and a condition that is a constant of the row's
+shape is lifted to a batch of one row, which broadcasts against the batch. The rule is the
+operator over the batch, and it is instantiated on the element of the *arms* -- a condition is a
+`bool` and the answer is the arms' element, so the transform reads the first port that is not a
+condition to name the rule's `T`.
+
+#### `vmap_where`
+
+```camel
+vmap_where: (cond: bool[..], a: T[..], b: T[..]) => T[..] when is_numeric::<T>()
+```
+
+`where(cond, a, b)` batched: the operator over the batch, all three operands one axis in front.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_where([[true, false, true]] as bool[1, 3], [[1.0, 2.0, 3.0]] as float[1, 3], [[4.0, 5.0, 6.0]] as float[1, 3])` gives `[[1.0, 5.0, 3.0]]`
 
 <a id="sim"></a>
 

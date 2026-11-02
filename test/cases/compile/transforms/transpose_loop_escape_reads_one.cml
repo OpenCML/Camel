@@ -1,0 +1,23 @@
+// A loop body that reads the function's own parameter: every round's cotangent lands on `x`, a value
+// the round only read, so it has to leave the loop through a capture channel. The loop carries it as
+// a second state -- the running sum of what escaped -- and the answer is the state's own cotangent
+// (8) plus that sum (7).
+//
+// `read_one(x) = loop s = x for i in 0..3 do 2.0*s + x` is `s = 2s + x` three times, `8x + 7x = 15x`
+// on paper, so `transpose(read_one)(1, 1)` answers 15. The reading is kept beside it: the loop still
+// says how many values escaped and which product handed each one out, `carried=1` in place of
+// `skip=state` -- nothing is skipped now -- and the ESCAPE line still names the parameter port and
+// the body's `add`, because a reading that vanished when the fix landed could not be compared with
+// the refusal it replaced.
+import { transpose } from transforms
+import rulesets.transpose
+
+func read_one(x: float): float {
+    return loop s = x for i in 0..3 do 2.0 * s + x
+}
+
+func main(): int sync {
+    let back = transpose(read_one)
+    println(back(1.0, 1.0))
+    return 0
+}

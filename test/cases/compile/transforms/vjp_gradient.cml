@@ -1,0 +1,21 @@
+// The gradient, the day the library is written: `f(x) = x*x*x`, so `f(3) = 27` and `f'(3) = 27`.
+// The surface is JAX's (author's ruling of 2026-11-01), so `vjp(f)(3.0)` is the pair
+// `(27.0, pullback)` and `pullback(1.0)` is `27.0`; `grad(f)(3.0)` is the same number read through
+// the wrapper. All three come from the library's own composition --
+// `transpose(split(reinterp<jvp>(f)))` -- and not from the C++ autodiff; the rulesets that
+// composition needs are the library's own imports, so this file imports `vjp` and nothing else.
+// Skipped while the composition cannot be run: the walk `transpose` runs refuses a call whose
+// callee takes several parameters (the plan's `skip_unless`).
+import { grad, vjp } from vjp
+
+func f(x: float): float {
+    return x * x * x
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(f)(3.0)
+    println(value)
+    println(pullback(1.0))
+    println(grad(f)(3.0))
+    return 0
+}

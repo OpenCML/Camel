@@ -103,7 +103,6 @@ SemanticDiag::FactCaseDefaultMissing	test/cases/modules/rules/fact_no_default.cm
 SemanticDiag::FactConstCaseTypeRequired	test/cases/modules/rules/fact_const_case_without_type.cml
 SemanticDiag::FactJoinRequired	test/cases/modules/rules/fact_no_join.cml
 SemanticDiag::FailNotExecuted	test/cases/consistency/fail_never/fail_not_executed.cml
-SemanticDiag::FeatureNotSupported	test/cases/compile/stream/yield_lowering.cml
 SemanticDiag::FoldCallArgumentNotConstant	test/cases/compile/fold_calls/argument.cml
 SemanticDiag::FoldCallHasEffects	test/cases/compile/fold_calls/effect.cml
 SemanticDiag::FoldCallNotEvaluable	test/cases/compile/fold_calls/not_evaluable.cml
@@ -185,6 +184,7 @@ SemanticDiag::PureAndUses	test/cases/effects/err_pure_and_uses.cml
 SemanticDiag::RangeStepZero	test/cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml
 SemanticDiag::Redeclaration	test/cases/compile/generics/err_redecl.cml
 SemanticDiag::ReservedIdentifier	test/cases/compile/surface/reserved_function_name.cml
+SemanticDiag::ResidualsAreNotVisible	test/cases/compile/transforms/split_residuals_destructured.cml
 SemanticDiag::ResourceGroupCycle	test/cases/effects/err_group_cycle.cml
 SemanticDiag::RestArgumentNotLast	test/cases/compile/rest_params/rest_arg_not_last.cml
 SemanticDiag::RestArgumentNotTuple	test/cases/compile/rest_params/rest_arg_not_tuple.cml
@@ -196,6 +196,7 @@ SemanticDiag::ReturnNeedsConversion	test/cases/compile/array_shape/err_return_sh
 SemanticDiag::ReturnTypeMismatch	test/cases/compile/return_type/string_as_int.cml
 SemanticDiag::RuleConstParamNotMatched	test/cases/modules/rules/const_param_unbound.cml
 SemanticDiag::RuleLeftIsNotAnOperator	test/cases/compile/rulesets/rulesets.err_left_not_operator.cml
+SemanticDiag::RuleRightUsesOuterVariable	test/cases/compile/transforms/vmap_rule_outer_variable.cml
 SemanticDiag::RuleTagNotRequires	test/cases/modules/rules/err_rule_tag.cml
 SemanticDiag::RuleWithArgumentNotConstant	test/cases/modules/rules/err_rule_with_not_constant.cml
 SemanticDiag::RuleWithParameterUnbound	test/cases/modules/rules/err_rule_with_unbound.cml

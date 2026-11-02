@@ -1,0 +1,25 @@
+/**
+ * A position on an open-rank value reads the element the value holds (design principles 5.4): the
+ * type states no dimension to walk, so position 3 of a `float[2, 2]` is its fourth element and not a
+ * row, and the bound is the four elements rather than the first dimension's two. Reading past the
+ * last element is a fault that names what was counted -- `the elements`, not `the first dimension`.
+ *
+ * These readings were a fault before: `at(xs, 3)` answered "Index 3 is out of range for the first
+ * dimension of the input array of length 2" although the value holds four elements, because the read
+ * takes the element (`Array::getSlot`) while the check counted a dimension (`__index_arr__`,
+ * src/builtin/operators/struct.cpp). The same check refused the pullback of an array literal's third
+ * computed element, which is the case next to this one in test/cases/modules/autodiff.
+ */
+func at(x: float[..], i: int): float {
+    return x[i]
+}
+
+func main(): int sync {
+    let xs: float[2, 2] = [[1.0, 2.0], [3.0, 4.0]]
+    println(at(xs, 0))
+    println(at(xs, 3))
+    println(at(xs, 1))
+    println(at(xs, 2))
+    println(attempt(at)(xs, 4))
+    return 0
+}

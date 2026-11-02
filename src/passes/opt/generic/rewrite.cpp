@@ -178,6 +178,138 @@ std::vector<gc_node_ref_t> orderedSources(const camel::runtime::GraphTransaction
     return sources;
 }
 
+namespace {
+
+/// Whether the node's running is something the program observes, apart from its value being read:
+/// an operator with an effect or one that may fault (design principles 3.4's predicate, asked with
+/// the shapes of the types so that an elementwise operator over fixed shapes is a computation that
+/// cannot fail), a conversion that can fail, or a call -- the callee may do either.
+///
+/// An arm, a join, a gate, a loop or a function value is structure, and removing the last read of
+/// one removes no running of its own: the read a branch hands on is its arms' running, not the
+/// branch's.
+///
+/// It asks through the transaction, the way `orderedSources` does, and names no draft type: the
+/// draft is on its way out (graph-store step 2 b's direct-connection ledger), and every question
+/// here reaches it through `transaction.graph()` rather than by adding a new connection to it.
+bool isObservedRun(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft  = transaction.graph();
+    const auto *header = draft.header(id);
+    if (header == nullptr) {
+        return false;
+    }
+    switch (header->kind) {
+    case GCNodeKind::Oper:
+    case GCNodeKind::Cast:
+        return !camel::runtime::nodeIsFreelySchedulable(draft, id, true);
+    case GCNodeKind::Call:
+        return true;
+    default:
+        return false;
+    }
+}
+
+/// The nodes `removed` reads whose last read removing it takes: the nodes that carry ordering
+/// (an effect, a call, a computation that may fault) that its value is computed from, that nothing
+/// else reads. Reads by a node `alsoGoing` names do not count: they are about to go away as well
+/// (a dissolved branch and its join, the code of an arm that is not taken).
+std::vector<gc_node_ref_t> lastReadsGoingOut(
+    const camel::runtime::GraphTransaction &transaction, gc_node_ref_t removed,
+    const std::function<bool(gc_node_ref_t)> &alsoGoing) {
+    const auto &draft = transaction.graph();
+    std::vector<gc_node_ref_t> lastRead;
+    for (gc_node_ref_t source : orderedSources(transaction, removed)) {
+        if (!draft.alive(source) || (alsoGoing && alsoGoing(source)) ||
+            !isObservedRun(transaction, source)) {
+            continue;
+        }
+        bool readElsewhere = false;
+        for (auto group : {draft.normUsersOf(source),
+                           draft.withUsersOf(source),
+                           draft.ctrlUsersOf(source),
+                           draft.syncUsersOf(source)}) {
+            for (gc_node_ref_t user : group) {
+                if (user == source || user == removed) {
+                    continue;
+                }
+                readElsewhere = readElsewhere || !alsoGoing || !alsoGoing(user);
+            }
+        }
+        if (!readElsewhere) {
+            lastRead.push_back(source);
+        }
+    }
+    // Source order is creation order: the effects of one expression are made in the order they are
+    // written, and they run in that order.
+    std::sort(lastRead.begin(), lastRead.end());
+    lastRead.erase(std::unique(lastRead.begin(), lastRead.end()), lastRead.end());
+    return lastRead;
+}
+
+} // namespace
+
+gc_node_ref_t keepThroughValue(
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t removed, gc_node_ref_t value,
+    const std::function<bool(gc_node_ref_t)> &alsoGoing) {
+    auto &draft = transaction.edit();
+    // A value that is invalid is the removal with nothing in its place: the node going away is read
+    // by no one, so there is no reader to hand an effect's value to, and the operator carries the
+    // effect's own value -- it is the statement that reads it and stands where the node stood.
+    const bool carried = value != kInvalidNodeRef;
+    if (carried && !draft.alive(value)) {
+        return value;
+    }
+    const auto lastRead = lastReadsGoingOut(transaction, removed, alsoGoing);
+    if (lastRead.empty()) {
+        return value;
+    }
+    // A node the value itself is computed from keeps a read through it: the readers of the value
+    // read that node on the way, so the removal takes no read of it.
+    std::vector<gc_node_ref_t> goingOut;
+    for (gc_node_ref_t source : lastRead) {
+        if (!carried) {
+            goingOut.push_back(source);
+        } else if (source != value && !reaches(transaction, source, value)) {
+            goingOut.push_back(source);
+        }
+    }
+    if (goingOut.empty()) {
+        return value;
+    }
+    gc_node_ref_t kept = value;
+    // The node stands where the removed node stood: it is body of the same block, so it is written
+    // into the same region and not into whichever one the draft last inserted into.
+    const uint32_t region   = draft.nodeRegion(removed);
+    const uint32_t insertAt = draft.insertRegion();
+    if (region != insertAt) {
+        draft.setInsertRegion(region);
+    }
+    for (gc_node_ref_t source : goingOut) {
+        const gc_node_ref_t passed = carried ? kept : source;
+        const auto *header         = draft.header(passed);
+        if (header == nullptr || header->dataType == nullptr) {
+            break;
+        }
+        const gc_node_ref_t node = draft.addOperNode(
+            header->dataType, nullptr, camel::core::kWellKnownOperatorUris[camel::core::oper::Keep]);
+        if (node == kInvalidNodeRef) {
+            break;
+        }
+        const gc_node_ref_t inputs[2] = {source, passed};
+        draft.setNormInputs(node, inputs);
+        // Diagnostics on the value the operator passes on point where the effect was written: the
+        // node the readers see is the one that took its place in the value.
+        if (draft.nodeOrigin(node) == 0) {
+            draft.setNodeOrigin(node, draft.nodeOrigin(source));
+        }
+        kept = node;
+    }
+    if (region != insertAt) {
+        draft.setInsertRegion(insertAt);
+    }
+    return kept;
+}
+
 void replaceNode(
     camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, gc_node_ref_t replacement) {
     auto &draft = transaction.edit();
@@ -251,11 +383,35 @@ void replaceNode(
     }
 
     if (replacement != kInvalidNodeRef) {
-        draft.replaceAllValueUses(id, replacement);
+        // The value this node's readers take is the replacement, with every node whose last read
+        // this removal takes routed through `:op/keep(x, v)` on the way (design principles 3.3):
+        // the readers' data use is what keeps an effect, or a computation that may fault, running,
+        // and an order edge is not one (3.3 as amended, 9.7). A statement of a `sync` block is not
+        // this case: the block's chain hands it a place below, and that path is left as it is.
+        const gc_node_ref_t stood =
+            syncUsers.empty() ? keepThroughValue(transaction, id, replacement) : replacement;
+        draft.replaceAllValueUses(id, stood);
         // A value computed elsewhere (a constant, a forwarded input) now stands for this node's
         // source: diagnostics on it point where the replaced node came from.
-        if (draft.nodeOrigin(replacement) == 0) {
-            draft.setNodeOrigin(replacement, draft.nodeOrigin(id));
+        if (draft.nodeOrigin(stood) == 0) {
+            draft.setNodeOrigin(stood, draft.nodeOrigin(id));
+        }
+        // A graph names the node its result comes from, and that name is a value use like any
+        // other: when the removed node was the one named, the node that stands for its value takes
+        // the name. `eraseNode` clears a name that points at a node it removes
+        // (src/runtime/draft.cpp#eraseNode), so a caller that replaces the node the
+        // program returns leaves the graph with no result at all -- which is what a graph that runs
+        // but cannot be drawn looked like: `std::nvm` ran it, `std::jgir` named a node the document
+        // did not hold, and `std::gir` stopped at "Runtime graph exit node is missing"
+        // (src/passes/trans/dot/graphviz.cpp#dumpGraph).
+        if (draft.exitNode() == id) {
+            draft.setExitNode(stood);
+        }
+        if (draft.outputNode() == id) {
+            draft.setOutputNode(stood);
+        }
+        if (draft.returnNode() == id) {
+            draft.setReturnNode(stood, draft.returnKind());
         }
     }
     for (gc_node_ref_t user : ctrlUsers) {

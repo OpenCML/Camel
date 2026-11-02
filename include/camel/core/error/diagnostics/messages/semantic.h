@@ -62,7 +62,6 @@ enum class SemanticDiag : uint32_t {
     // An error: the construct it reports is not compiled, so a program that uses it must not
     // run. It used to be a warning (0x100000), and the declaration that used the feature was
     // dropped while the rest of the program went on.
-    FeatureNotSupported = 0x000040,
     // Generic functions and type functions (design principles 5.6).
     TypeVariableRedeclared      = 0x000051,
     TypeVariableNotBindable     = 0x000052,
@@ -462,12 +461,14 @@ enum class SemanticDiag : uint32_t {
     /// A `const` case whose constant has no type to take.
     FactConstCaseTypeRequired = 0x0001F7,
     /// A case whose pattern names no variable.
-    FactCaseBindsNoVariable   = 0x0001F8,
-    TypeFunctionNotApplicable = 0x0001FE,
-    StatementAfterReturn      = 0x000201,
-    YieldRequiresStreamHead   = 0x000206,
-    RuleLeftIsNotAnOperator   = 0x000204,
-    DuplicateRuleForOperator  = 0x000205,
+    FactCaseBindsNoVariable    = 0x0001F8,
+    TypeFunctionNotApplicable  = 0x0001FE,
+    StatementAfterReturn       = 0x000201,
+    YieldRequiresStreamHead    = 0x000206,
+    RuleLeftIsNotAnOperator    = 0x000204,
+    DuplicateRuleForOperator   = 0x000205,
+    RuleRightUsesOuterVariable = 0x000207,
+    ResidualsAreNotVisible     = 0x000208,
 
     // Warnings
     IgnoredSideEffect = 0x100002,

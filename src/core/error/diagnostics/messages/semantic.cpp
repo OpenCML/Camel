@@ -269,14 +269,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::FeatureNotSupported,
-            {
-                "FeatureNotSupported",
-                "The feature '{0}' is not supported yet.",
-                "Check the documentation for supported features.",
-            },
-        },
-        {
             SemanticDiag::TypeVariableRedeclared,
             {
                 "TypeVariableRedeclared",
@@ -1786,6 +1778,22 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "DuplicateRuleForOperator",
                 "The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side, and one ruleset has one rule per operator.",
                 "A transform looks up the rules of a primitive by the operator its left side is written with and the number of operands it takes, so a second rule under the same operator with the same number of operands has no way to be chosen: which of the two applies would be decided by the order they are written in, and the program would mean different things depending on where a rule sits. Merge the two into one rule whose right side covers both cases, or give one of them a left side with a different operator -- and remember that `-x` and `x - w` are two primitives, not one.",
+            },
+        },
+        {
+            SemanticDiag::RuleRightUsesOuterVariable,
+            {
+                "RuleRightUsesOuterVariable",
+                "The rule '{0}' reads '{1}' on its right side, and '{1}' is a name its left side binds: in this ruleset the right side names the function the transform calls, and the pattern's names are never bound.",
+                "A family whose transform reads a rule's callee and calls it with the batch never calls the rule's right side as a function, so nothing binds the names the left side's pattern writes ('x', 'w'): the batched graph has batches where those values used to be, and a reference to one is a value the graph has none of. Write the right side so it reads only the names its own arrow declares -- the batch parameters -- and passes them to the named function: 'x + w => (bx: Lift<T>, bw: Lift<T>) => vmap_add(bx, bw)'.",
+            },
+        },
+        {
+            SemanticDiag::ResidualsAreNotVisible,
+            {
+                "ResidualsAreNotVisible",
+                "The residuals `split` collects are not visible to the program: they are handed on whole to the second half, and neither a destructuring nor an element read takes them apart.",
+                "A `split`'s forward half answers `(result, residuals)` -- the forward values the backward half's rules multiply by. Their number is the body's: `f(x) = x` crosses with none and `f(x, y) = x*x*y*y` with four, and two bodies with one lifted type can differ (design principles 4.4, the cut between now and later). The tuple travels for one reason, as one value: `let (value, residuals) = forward(xs)` and then `backward(residuals, dx)`, or the same tuple passed to the transposed function beside the cotangent. A program that destructured it, or read `residuals.0`, would depend on a count the graph chose, so both are refused here, at the `let` or the read. Pass the tuple as it stands: which members the second half reads is the transform's decision, made while the graph is built.",
             },
         },
         {

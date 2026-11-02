@@ -11,19 +11,30 @@
  * from `jvpSignature(f)` in modules/transforms/jvp.cpp.
  *
  * `Jvp<F>` names the result type the resolver computes:
- *   - every ordinary parameter of `F` becomes two parameters, the value and its tangent (one
- *     parameter today: the transform copies one body -- the pass prints `skip=params` for more);
+ *   - every ordinary parameter of `F` becomes two parameters, the value and its tangent, so
+ *     `jvp(f)` for `f(x, y)` takes `(x, dx, y, dy)`;
  *   - the result is the pair `(value, tangent)`, the same shape in and out;
- *   - `F` must take no `with` parameter and must have a single `float` parameter and a `float`
- *     result, because a captured value has no port to enter the copied graph by.
+ *   - `F` must take no `with` parameter, at least one parameter, every parameter a `float` and a
+ *     `float` result, because a captured value has no port to enter the copied graph by and a
+ *     tangent is a `float` direction.
  * The tangent of an input is the seed: `jvp(f)(2.0, 1.0)` asks for the derivative in the
  * direction 1, and `jvp(f)(2.0, 2.0)` for twice it. Nothing here picks the direction for the
- * caller.
+ * caller, so a function of several parameters is read one direction per run (`jvp(f)(3.0, 1.0, 2.0,
+ * 0.0)` is `df/dx` at (3, 2)).
  * It is not a type a program can write.
  *
  * For reference only: these declarations are not compiled. They are checked against the operators
  * the module registers, and docs/stdlib-reference.md is generated from them.
  */
+
+/// The tangent space of `T` (design principles 9.9); `stdlib/types.cml` declares it, and it is
+/// named again here because it is the whole vocabulary of what follows. A forward transform carries
+/// `Lift<T> = (T, Tangent<T>)` (`stdlib/rulesets/jvp.cml`), so the cut `split` makes between "the
+/// part computable now" and "the part computable later" is the cut between those two components --
+/// not a position among the parameters (author, 15:25).
+/// @example is_same::<Tangent<float>, float>()    // true
+export type Tangent<T>
+
 
 /// Forward mode: `jvp(f)` gives a function that takes the parameters of `f` followed by their
 /// tangents and returns the pair `(value, tangent)`. `jvp(f)(2.0, 1.0)` is the value `f(2.0)`
@@ -31,3 +42,75 @@
 /// @example-fragment `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
 /// @example let forward = jvp(f)
 export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()
+/// The step of `vjp` that separates a lifted function into the part computable now and the linear
+/// residue (design 4.2, 4.4). Implemented for the straight-line tier (`modules/transforms/split.cpp`):
+/// the halves are built from the graph, and what crosses the cut -- the residuals -- is read off the
+/// graph too, so a body that needs a value it computed carries it instead of computing it again.
+///
+/// The cut, as the author writes it (15:25; revised 2026-11-01): the first half takes the ordinary
+/// parameters and answers with the result and the *residuals* -- the values the second half reads --
+/// and the second takes the residuals and the `with` parameters and answers with the result.
+///
+///     type Split<F> = ((..ParamsOf<F>) => (ResultOf<F>,  _),
+///                      (_, ..WithOf<F>) => ResultOf<F>)
+///
+/// The residual position is written `_` and is not a type a program can name: the residuals are a
+/// property of `f`'s graph, so their number and their types are read where the graph is in hand, and
+/// the compiler fills the position at instantiation (`ResidualsOf<F>` was the earlier spelling of a
+/// type function doing that, and it is gone). The second half is linear in the cotangent it is given
+/// -- that is the condition the transpose step (M3) reads -- and both halves speak in `Tangent<T>`
+/// at the top of this file.
+/// @example-fragment `split` takes the lifted function a `jvp` call writes, so the example is a
+/// fragment of the composition: `let (fwd, lin) = split(jvp(f))`.
+/// @example let step = split
+export func split(f: (v: float, d: float) => (float, float)): (v: float, d: float) => (float, float)
+
+/// The transpose of a linear function: `transpose(f)` takes the cotangent of `f`'s result and
+/// gives the cotangent of its parameter. The data flow runs backwards -- each primitive is replaced
+/// by the rule the `rulesets.transpose` family files under it, and a value used k times receives k
+/// cotangents that add. `f(x) = 2*x + 3*x` transposed at the cotangent `1.0` gives `5.0`.
+///
+/// The transposed function takes the parameters of `f` first and the cotangent last --
+/// `transpose(f)(x, 1.0)` -- because a pullback may need the value it is transposing at: a branch's
+/// condition is a value, and the cotangent of an arm only means something for the arm that ran.
+/// The shape is the same for every `f`, so a reader writes the same call whether the body branches
+/// or not. The type is `(..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)`.
+/// @example-fragment `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
+/// @example let back = transpose(f)
+export func transpose::<F>(f: F): Transpose<F> when is_function::<F>()
+
+
+/// Batching: `vmap(f)` gives the function that applies `f` to every row of a batch. A row is one
+/// dimension less than the batch: for `f: (f32) => f32` it is `(f32[]) => f32[]`, and for
+/// `f: (f32[3]) => f32` it is `(f32[?, 3]) => f32[]` -- `Lift<T> = RowsOf<T>`, the value with one
+/// dimension of unknown length in front of it (`stdlib/types.cml`). The arithmetic of every
+/// elementwise primitive is that primitive (`bx + bw` is `x + w` element by element), which is why
+/// `vmap(f)(xs)` and the row-by-row `map` answer the same bits.
+///
+/// The rules come from `stdlib/rulesets/vmap.cml`: the transform asks that family, by the operator's
+/// key, for every primitive of `f`, and calls the function the rule names with the batches. An
+/// operator with no rule is refused by name at the primitive, never batched by a guess; a call, a
+/// branch or a loop in the body is refused the same way, because the elementwise tier batches
+/// straight-line bodies.
+/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
+/// @example let batched = vmap(f)
+export func vmap::<F>(f: F): Vmap<F> when is_function::<F>()
+
+/// Memory for recomputation: `remat(f)` gives a function whose graph is `f`'s graph with the
+/// property "a call of it is recomputed on the backward pass instead of kept" (the author's ruling
+/// of 2026-11-01). The property is the graph's, not the call site's and not a tag's: the call
+/// answers with a new graph whose body is the body it was given, so a call through it is a call of
+/// the same function and no value changes -- what changes is what a step that cuts the graph in two
+/// has to keep across the cut. `split` reads the property: the values of a marked graph that cannot
+/// be recomputed from the parameters are not residuals, and the backward half computes them again
+/// (`modules/transforms/split.cpp`). JAX writes the same transform as `jax.checkpoint`, whose other
+/// name is `jax.remat`; in this tree "checkpoint" is the persistence module `ckpt`, so the transform
+/// takes the other word.
+/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
+/// @example let remembered = remat(f)
+///
+/// The type is the argument's own: a function in, the same function out, which is the whole of what
+/// the name says. `modules/transforms/remat_operator.cpp` answers `(f: F) => F` and builds the graph
+/// the value stands on; the shapes a call site can write today are the ones `jvp`'s and `split`'s
+/// declarations show, because the result of a call is the exit type its resolver gives.
+export func remat::<F>(f: F): F when is_function::<F>()

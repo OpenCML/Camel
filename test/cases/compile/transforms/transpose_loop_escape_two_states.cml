@@ -1,0 +1,53 @@
+// The fourth shape: the loop already carries two states of its own before anything escapes, so the
+// capture channel has to put its accumulators after them -- `k = states + #escapes`, not
+// `1 + #escapes`.
+//
+// `carried(x) = let q = 2x; (loop s = x, p = x for i in 0..3 do (s + p, p + q)).0` is, on paper,
+// the two round rules `s' = s + p` and `p' = p + q` started at `s = p = x`, with `q = 2x` read from
+// outside the body (one escape), so
+//     round 0: s = x,     p = x
+//     round 1: s = 2x,    p = 3x
+//     round 2: s = 5x,    p = 5x
+//     round 3: s = 10x,   p = 7x
+// and the value taken out is `s`, so `carried(x) = 10x` and the pullback of 1.0 at x = 1 is 10. `p`
+// is 7 on the way, and the forward evaluator prints both before anything is transposed, so the
+// algebra is checked against the compiler rather than asserted in this comment.
+//
+// The two states reach the answer in different ways, which is what makes 10 a real check: `s` is the
+// value read out of the loop, so its cotangent arrives as 1, while `p` is never read at all and its
+// cotangent arrives as 0 -- and comes back as 3, because `p` feeds `s` in all three rounds. The
+// escape `q` adds the three rounds' worth of `p`'s cotangent, which `q = 2x` turns into 6. So the
+// answer is 1 + 3 + 6, and an accumulator put before the states, or a loop value read with the sums
+// first, would not land on it.
+//
+// The reverse loop therefore carries one cotangent per state plus one sum per escaped value, and what
+// starts it is the component read: reading `t.0` of a tuple fills slot 0 of that tuple's cotangent
+// and leaves the other slots zero.
+//
+// The shape this page was first written to leave open -- an escape whose target is not a float -- is
+// answered now, and not here: `transpose_loop_escape_int.cml` reads 1.0 for
+// `int_escape(x) = let n = int(3x); loop s = x for i in 0..3 do s + float(n)`, because an integer is a
+// zero tangent space and the reading prints which value contributes the zero. What this page said was
+// that the shape refused with `skip=state` and that the cut changing it was a different one; it was,
+// and it has landed.
+import { transpose } from transforms
+import rulesets.transpose
+
+func carried(x: float): float {
+    let q = 2.0 * x
+    return (loop s = x, p = x for i in 0..3 do (s + p, p + q)).0
+}
+
+func main(): int sync {
+    // The algebra first, forward and un-transposed: 10 through `s`, 7 through `p`.
+    println(carried(1.0))
+    let (a, b) = loop s = 1.0, p = 1.0 for i in 0..3 do (s + p, p + 2.0)
+    println(a)
+    println(b)
+    let back = transpose(carried)
+    println(back(1.0, 1.0))
+    // Twice the cotangent, 20: a number no forward line above prints, so the plan's claim about the
+    // transform cannot be met by the forward algebra alone.
+    println(back(1.0, 2.0))
+    return 0
+}

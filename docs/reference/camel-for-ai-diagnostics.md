@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 222
+**Semantic — errors** (`SemanticDiag`) — 223
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -93,7 +93,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ReturnNeedsConversion` | The returned value needs an explicit conversion to the function's declared return type '{0}': {1}. |
 | `VarArgumentTypeMismatch` | The argument of '{0}' at the 'var' parameter '{1}' has type {3}, and a 'var' argument is read and written by the callee: it is accepted only when its type and the parameter's type {2} accept each other's values. |
 | `ImportNameConflict` | The name '{0}' is imported from the modules '{1}' and '{2}' with {3}. |
-| `FeatureNotSupported` | The feature '{0}' is not supported yet. |
 | `TypeVariableRedeclared` | The type parameter '{0}' is declared twice at the head of this declaration. |
 | `TypeVariableNotBindable` | The type variable '{0}' of '{1}' can never be bound: {2}. |
 | `GenericArgumentsMismatch` | The generic function '{0}' cannot be called with argument types {1}: {2}. |
@@ -283,6 +282,8 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `YieldRequiresStreamHead` | A function whose body writes 'yield' hands out a stream, and this function's head does not write one. |
 | `RuleLeftIsNotAnOperator` | The rule '{0}' has a left side that is not one operator; it is written as '{1}', and a ruleset indexes its rules by the head of the left side. |
 | `DuplicateRuleForOperator` | The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side, and one ruleset has one rule per operator. |
+| `RuleRightUsesOuterVariable` | The rule '{0}' reads '{1}' on its right side, and '{1}' is a name its left side binds: in this ruleset the right side names the function the transform calls, and the pattern's names are never bound. |
+| `ResidualsAreNotVisible` | The residuals `split` collects are not visible to the program: they are handed on whole to the second half, and neither a destructuring nor an element read takes them apart. |
 
 **Semantic — warnings** (`SemanticDiag`) — 15
 

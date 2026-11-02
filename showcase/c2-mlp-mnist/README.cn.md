@@ -14,6 +14,8 @@ showcase/c2-mlp-mnist/
   baseline/train_torch.py  PyTorch 对照（nn.Linear、F.cross_entropy、torch.optim.Adam、state_dict）
   make_data.py             数据与初始权重的生成脚本（MNIST 或确定性的合成替身）
   compare.py               运行两边、比较、度量、写 RESULTS.md；比较失败时以非 0 退出
+  phases.py                把一步拆成前向、反向、优化器三块（读 `std::profile` 的逐算子行）
+  compare_implementations.py  同一个程序跑两条求导管线，比较两次运行的末轮 loss
   RESULTS.md               最近一次 `--profile standard` 的结果（由 compare.py 生成，勿手改）
   README.cn.md             本文件
   README.md                英文版

@@ -66,8 +66,21 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "rulesets_arity_of_a_call_counts_its_arguments"
+desc = "A rule whose left side is a call is filed under the head of that call and the number of arguments it writes: `one(a)` is `one/1`, `two(a, b)` is `two/2`, `three(a, b, c)` is `three/3`. The count is the arguments, not the children of the call's bracket node -- those are the same three (bracket, argument list, bracket) for every call, which files all three rules under three and leaves the one- and two-argument rules unreachable by the operator that writes them. The arity is part of the key, so it is pinned through the pass that prints the index: `std::rulesets`."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/rulesets.probe_call_arity.cml"
+args = ["${case}", "std::rulesets", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "RULESET rulesets.probe_call_arity one/1 -> one_rule (rhs one)\nRULESET rulesets.probe_call_arity three/3 -> three_rule (rhs three)\nRULESET rulesets.probe_call_arity two/2 -> two_rule (rhs two)\n1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "rulesets_lookup_answers_and_says_why_not"
-desc = "The index is asked through `lookupRule(family, head, arity)` -- the function a transform asks -- by the `std::rulesets` pass (`query=`), and the answers are pinned: `-` with one operand in `rulesets.jvp` is `jvp_neg`, `-` with two is `jvp_sub` (two primitives, one token), `-` with three has no rule, and a family no module declares is unknown. The two ways of not finding a rule are named apart, because the repairs differ: write the rule, or import the ruleset. A program that asks nothing prints nothing."
+desc = "The index is asked through `lookupRule(family, head, arity)` -- the function a transform asks -- by the `std::rulesets` pass (`query=`), and the answers are pinned: `-` with one operand in `rulesets.jvp` is `jvp_neg`, `-` with two is `jvp_sub` (two primitives, one token), `-` with three has no rule, and a family no module declares is unknown. The two ways of not finding a rule are named apart, because the repairs differ: write the rule, or import the ruleset. A program that asks nothing prints nothing. The three binding tables are then checked against the index the same pass printed, and nothing in the case counts rules: every binding resolves, asking the index for that key answers the same rule the binding printed, and each family holds exactly the keys its table binds -- so a rule or a binding added to either half is checked as it is added, instead of a written number going red for the one change that cannot be wrong."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/compile/rulesets/rulesets_lookup.py"
@@ -113,13 +126,13 @@ args = ["${case}", "std::rulesets", "query=rulesets.vmap|+|2;rulesets.vmap|-|2;r
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["RULESET rulesets.vmap +/2 -> vmap_add", "RULESET rulesets.vmap -/2 -> vmap_sub", "RULESET rulesets.vmap -/1 -> vmap_neg", "RULESET rulesets.vmap */2 -> vmap_mul", "RULESET rulesets.vmap //2 -> vmap_div", "LOOKUP rulesets.vmap +/2 -> vmap_add", "LOOKUP rulesets.vmap -/2 -> vmap_sub", "LOOKUP rulesets.vmap -/1 -> vmap_neg", "LOOKUP rulesets.vmap */2 -> vmap_mul", "LOOKUP rulesets.vmap //2 -> vmap_div", "LOOKUP rulesets.vmap +/3 -> no rule"]
+expect_stdout_contains = ["RULESET rulesets.vmap +/2 -> vmap_rule_add", "RULESET rulesets.vmap -/2 -> vmap_rule_sub", "RULESET rulesets.vmap -/1 -> vmap_rule_neg", "RULESET rulesets.vmap */2 -> vmap_rule_mul", "RULESET rulesets.vmap //2 -> vmap_rule_div", "LOOKUP rulesets.vmap +/2 -> vmap_rule_add", "LOOKUP rulesets.vmap -/2 -> vmap_rule_sub", "LOOKUP rulesets.vmap -/1 -> vmap_rule_neg", "LOOKUP rulesets.vmap */2 -> vmap_rule_mul", "LOOKUP rulesets.vmap //2 -> vmap_rule_div", "LOOKUP rulesets.vmap +/3 -> no rule"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
 name = "vmap_elementwise_agrees_with_row_by_row_map"
-desc = "A batched value is the value with one dimension in front (`Lift<T> = RowsOf<T>`), so an elementwise primitive applied to a batch is that primitive applied element by element: `vmap(f)(xs)` and `xs->map(f)` are the same numbers, bit for bit, and `lift(3.0)` is the batch of one row (`[3.0]`). The case prints each pair -- `[1.5, 4.0, 6.5, 0.25]` for `x*2.0 + x/2.0 - 1.0` and `[0.375, 6.0, -9.0]` for its negation -- and the pairs are compared with each other rather than with a written golden, because what this pins is that the two writings are one computation. `reinterp<vmap>` -- the transform that reads this ruleset -- is not written yet: the row-writing is what `vmap` is today, and the ruleset is the half of the equivalence that does not depend on the transform."
+desc = "The ruleset alone, with no transform: `array.vmap` is a row-writing `map`, and these are the numbers a batched function has to answer -- `[1.5, 4.0, 6.5, 0.25]` for `x*2.0 + x/2.0 - 1.0`, `[0.375, 6.0, -9.0]` for its negation, and `lift(3.0)` the batch of one row (`[3.0]`). The pairs are compared with each other rather than with a written golden, because what this pins is that the two writings are one computation; `vmap_transform_agrees_with_row_by_row_map` below is the same comparison for the transform that reads this ruleset, and the two readings must agree."
 kind = "behavior"
 case = "../../../cases/compile/rulesets/vmap_ruleset.cml"
 args = ["${case}", "${backend}"]
@@ -134,5 +147,341 @@ assert(out[2] === out[3] && out[2] === '[0.375, 6.0, -9.0]', `g: ${out[2]} vs ${
 assert(out[4] === '[3.0]', `lift: ${out[4]}`)
 }
 """
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vmap_transform_agrees_with_row_by_row_map"
+desc = "`reinterp<vmap>` -- the transform -- against the row-by-row `map` of the same function: `vmap(f)(xs)` and `xs->map(f)` print the same numbers bit for bit, and so do `vmap(g)(ys)` and `ys->map(g)`. The transform asks `rulesets.vmap` for every primitive of the body and calls the function the rule names with the batches, so the reading beside the values is the count: `asked=4 found=4` for `f` and `asked=5 found=5` for `g`, with the five rules named in the order the walk asked. A ruleset that is written is not a ruleset that is used, and this is the cell that says it was asked."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_elementwise.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP vmap function=f graph=", "kinds=8/8 asked=4 found=4 missing=0 rules=vmap_rule_mul,vmap_rule_div,vmap_rule_add,vmap_rule_sub", "REINTERP vmap function=g graph=", "kinds=9/9 asked=5 found=5 missing=0 rules=vmap_rule_mul,vmap_rule_div,vmap_rule_add,vmap_rule_sub,vmap_rule_neg", "REINTERP vmap op signature=(f: (f32) => f32) => (f32[]) => f32[]", "same=yes"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
+assert(values.length === 4, `printed ${values.length} values: ${JSON.stringify(values)}`)
+assert(values[0] === values[1] && values[0] === '[1.5, 4.0, 6.5, 0.25]', `f: ${values[0]} vs ${values[1]}`)
+assert(values[2] === values[3] && values[2] === '[0.375, 6.0, -9.0]', `g: ${values[2]} vs ${values[3]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vmap_batches_the_product_of_two_arrays"
+desc = "`r * r` on a row, batched: `tensor:multiply` is not `:op/mul_d` and it has no token a rule's left side could be written with, so its rule is filed under a call -- `mul_tensor` at two operands -- and the operator is bound to that key where it is declared. The reading says the rule was reached (`asked=1 found=1 missing=0 rules=vmap_rule_mul_tensor`), and the values say the two writings are one computation: `[[1, 2, 3], [4, 5, 6]]` squared is `[[1.0, 4.0, 9.0], [16.0, 25.0, 36.0]]` row by row and by the transform, and a batch of one row is still one row (`[[4.0, 9.0, 16.0]]`). The batch is `Lift<f32[3]>` = `f32[?, 3]`, one dimension in front of the row, and the transform multiplies the whole batch at once -- the same operator, so the same bits."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/vmap_array_product.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP vmap op signature=(f: (f32) => f32) => (f32[]) => f32[]", "type=(f32[?, 3]) => f32[?, 3]", "asked=1 found=1 missing=0 rules=vmap_rule_mul_tensor", "same=yes"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
+assert(values.length === 4, `printed ${values.length} values: ${JSON.stringify(values)}`)
+assert(values[0] === values[1] && values[0] === '[[1.0, 4.0, 9.0], [16.0, 25.0, 36.0]]', `rows: ${values[0]} vs ${values[1]}`)
+assert(values[2] === values[3] && values[2] === '[[4.0, 9.0, 16.0]]', `one row: ${values[2]} vs ${values[3]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vmap_batches_the_element_of_a_row"
+desc = "`r[0] + r[1]` on a row, batched: `:op/idx_arr` is the one primitive of the elementwise tier that reduces rank, so it is the one whose rule's type parameter is not its operand's type -- a rule is instantiated at the primitive's result type (`f32`), while the value indexed is the row (`f32[3]`). The rule states the row as `T[]` and its batch as `Lift<T[]>` (`f32[?, ?]`), hands back `Lift<T>` (one element per row), and costs one strided read per row. The reading says the rules were reached -- `asked=3 found=3 missing=0 rules=vmap_rule_idx,vmap_rule_idx,vmap_rule_add` -- and the values say the two writings are one computation: `[[1, 2, 3], [4, 5, 6]]` gives `[3.0, 9.0]` both ways, and a batch of one row gives `[15.0]`."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/vmap_row_element.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["type=(f32[?, 3]) => f32[]", "asked=3 found=3 missing=0 rules=vmap_rule_idx,vmap_rule_idx,vmap_rule_add", "same=yes"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
+assert(values.length === 4, `printed ${values.length} values: ${JSON.stringify(values)}`)
+assert(values[0] === values[1] && values[0] === '[3.0, 9.0]', `rows: ${values[0]} vs ${values[1]}`)
+assert(values[2] === values[3] && values[2] === '[15.0]', `one row: ${values[2]} vs ${values[3]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vmap_matmul_agrees_with_row_by_row_map"
+desc = "`matmul` batched: the batch is one axis in front of both operands, which is exactly the axes `matmul` already walks as batch axes, so the rule is the operator over the lifted operands -- no row loop, no reshape. `f` multiplies by the matrix it writes (`w = [[1, 2], [3, 4]]`, which is the batch of one row), and the two rows `[[1, 2], [3, 4]]` and `[[5, 6], [7, 8]]` answer `[[7, 10], [15, 22]]` and `[[23, 34], [31, 46]]` -- read by hand from `p + 3q` and `2p + 4q`. The second line is the row-by-row `array.vmap` of the same function and the plan compares the two strings rather than a written golden, because what this pins is that the two writings are one computation; the reading above them says the rule was asked for and answered: `asked=1 found=1 missing=0 rules=vmap_rule_matmul`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_matmul.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP vmap function=f graph=", "asked=1 found=1 missing=0 rules=vmap_rule_matmul", "[[[7.0, 10.0], [15.0, 22.0]], [[23.0, 34.0], [31.0, 46.0]]]"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
+assert(values.length === 2, `printed ${values.length} values: ${JSON.stringify(values)}`)
+assert(values[0] === values[1], `batched: ${values[0]} vs row by row: ${values[1]}`)
+assert(values[0] === '[[[7.0, 10.0], [15.0, 22.0]], [[23.0, 34.0], [31.0, 46.0]]]', `values: ${values[0]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vmap_argmax_shifts_the_axis_and_agrees_with_row_by_row_map"
+desc = "The two reductions whose result element is not their operand's, batched: `argmax_axis` and `argmin_axis` take a numeric tensor and answer `int64` positions, so their rules are the ones that show what a batching rule is generic in -- the element the operands are made of, read from an operand by the transform (`firstOperandTypeOf`), not from the node, whose type is the positions. The batch is three rows of `float[2, 3]` -- `[[1, 9, 3], [4, 5, 6]]`, `[[7, 2, 5], [0, 8, 1]]`, `[[2, 2, 1], [3, 1, 3]]` -- so down the columns the largest positions are `[1, 0, 1]`, `[0, 1, 0]`, `[1, 0, 1]`, the smallest ones kept as a row are `[[0, 1, 0]]`, `[[1, 0, 1]]`, `[[0, 1, 0]]`, and along the rows the largest positions are `[1, 2]`, `[0, 1]`, `[0, 0]` (the third row ties, and a tie keeps the earlier position). Each batched result is printed beside the row-by-row `array.vmap` of the same function and the plan compares the pairs; the elements print as integers and every `f` declares `int64[..]`, so positions are compared as positions."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_argmax.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_argmax_axis elements=float", "asked=1 found=1 missing=0 rules=vmap_rule_argmin_axis elements=float", "[[1, 0, 1], [0, 1, 0], [1, 0, 1]]", "[[[0, 1, 0]], [[1, 0, 1]], [[0, 1, 0]]]", "[[1, 2], [0, 1], [0, 0]]"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
+assert(values.length === 6, `printed ${values.length} values: ${JSON.stringify(values)}`)
+for (let i = 0; i < 3; i += 1) {
+    assert(values[2 * i] === values[2 * i + 1], `pair ${i}: batched ${values[2 * i]} vs row by row ${values[2 * i + 1]}`)
+}
+assert(!values.some(line => line.includes('.')), `a position came back as a float: ${JSON.stringify(values)}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vmap_reductions_shift_the_axis_and_agree_with_row_by_row_map"
+desc = "The reductions along an axis, batched: the reduction keeps the axis it reduces -- as an extent of one with `keepdims`, as nothing without it -- and the batch adds one axis in front, so the rule is written in terms of the operator's own axis argument and translates only that argument (`batched_axis`: the row's axis `a` is `a + 1` in the lifted value, and an axis counted from the last stays as written). The batch is three rows of `float[2, 3]` -- `[[1, 2, 3], [4, 5, 6]]`, `[[10, 20, 30], [40, 50, 60]]`, `[[-1, 0, 1], [2, 4, 8]]` -- so the column sums are `[5, 7, 9]`, `[50, 70, 90]`, `[1, 4, 9]`; the row sums kept as a column are `[[6], [15]]`, `[[60], [150]]`, `[[0], [14]]`; the column maxima are `[4, 5, 6]`, `[40, 50, 60]`, `[2, 4, 8]`; the row minima are `[1, 4]`, `[10, 40]`, `[-1, 2]`; the column means are `[2.5, 3.5, 4.5]`, `[25, 35, 45]`, `[0.5, 2, 4.5]`. Every batched result is printed beside the row-by-row `array.vmap` of the same function and the plan compares the pairs, so what is pinned is that the two writings are one computation; the readings say each rule was asked for and answered (`asked=1 found=1` with the rule's own name, five times over)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_reductions.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_sum_axis", "asked=1 found=1 missing=0 rules=vmap_rule_max_axis", "asked=1 found=1 missing=0 rules=vmap_rule_min_axis", "asked=1 found=1 missing=0 rules=vmap_rule_mean_axis", "[[5.0, 7.0, 9.0], [50.0, 70.0, 90.0], [1.0, 4.0, 9.0]]", "[[[6.0], [15.0]], [[60.0], [150.0]], [[0.0], [14.0]]]", "[[4.0, 5.0, 6.0], [40.0, 50.0, 60.0], [2.0, 4.0, 8.0]]", "[[1.0, 4.0], [10.0, 40.0], [-1.0, 2.0]]", "[[2.5, 3.5, 4.5], [25.0, 35.0, 45.0], [0.5, 2.0, 4.5]]"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
+assert(values.length === 10, `printed ${values.length} values: ${JSON.stringify(values)}`)
+for (let i = 0; i < 5; i += 1) {
+    assert(values[2 * i] === values[2 * i + 1], `pair ${i}: batched ${values[2 * i]} vs row by row ${values[2 * i + 1]}`)
+}
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vmap_whole_reduction_keeps_the_batch_axis_and_agrees_with_row_by_row_map"
+desc = "A reduction over every axis, batched: `sum(xs)` takes no axis, so there is none of the operator's to move one place in -- the rule keeps the batch axis in front and folds away each axis the row had after it, over the rank the value carries (`shape`), so a batch of `float[3]` rows answers one number per row, `float[?]`. The three rows `[1, 2, 3]`, `[4, 5, 6]` and `[-1, 0, 1]` sum to `6`, `15` and `0`, their means are `2`, `5` and `0`, and their sums doubled are `12`, `30` and `0`. This entry was a refusal before the rules existed -- `asked=1 found=0 missing=1` at `tensor:sum` -- and it is a reading now: `asked=1 found=1 missing=0` for the sum and for the mean, and `asked=2 found=2 missing=0` for the body that sums and then multiplies."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_whole_reduction.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_sum elements=float", "asked=1 found=1 missing=0 rules=vmap_rule_mean elements=float", "asked=2 found=2 missing=0 rules=vmap_rule_sum,vmap_rule_mul elements=float", "[6.0, 15.0, 0.0]", "[12.0, 30.0, 0.0]", "[2.0, 5.0, 0.0]"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
+assert(values.length === 6, `printed ${values.length} values: ${JSON.stringify(values)}`)
+for (let i = 0; i < 3; i += 1) {
+    assert(values[2 * i] === values[2 * i + 1], `pair ${i}: batched ${values[2 * i]} vs row by row ${values[2 * i + 1]}`)
+}
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vmap_whole_extrema_keep_the_batch_axis_and_agree_with_row_by_row_map"
+desc = "`max(xs)` and `min(xs)` over every element, batched: no axis of the operator's to move one place in, so the rule keeps the batch axis in front and folds away each axis the row had after it -- and IEEE 754-2019 maximum/minimum carry an element and are exactly associative and commutative (design principles 7.7), so the folded answer is the row's own extremum. The rows `[1, 2, 3]`, `[4, 5, 6]`, `[-1, 0, 1]` answer maxima `3`, `6`, `1` and minima `1`, `4`, `-1`; a row of signed zeros answers `0.0` for the maximum and `-0.0` for the minimum (-0 is below +0); a row holding a NaN answers `nan` for both; and a row of two axes keeps folding until the batch axis is the only one left, so a plane answers its own maximum. The readings name the rule and the element its instance was made at: `asked=1 found=1 missing=0 rules=vmap_rule_max elements=float`, the same for `min`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_whole_extrema.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_max elements=float", "asked=1 found=1 missing=0 rules=vmap_rule_min elements=float", "[3.0, 6.0, 1.0]", "[1.0, 4.0, -1.0]", "[0.0, 0.0]", "[-0.0, -0.0]", "[nan, nan]", "[6.0, 7.0]"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
+assert(values.length === 10, `printed ${values.length} values: ${JSON.stringify(values)}`)
+for (const pair of [[0, 1], [2, 3], [8, 9]]) {
+    assert(values[pair[0]] === values[pair[1]], `pair: batched ${values[pair[0]]} vs row by row ${values[pair[1]]}`)
+}
+const nanLines = values.filter(line => line === '[nan, nan]')
+assert(nanLines.length === 2, `NaN rows printed ${nanLines.length} times: ${JSON.stringify(values)}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vmap_transform_refuses_a_call_by_name"
+desc = "A call in the body, answered rather than walked past: `g` calls `f`, and a batched graph has no body for `f` unless the family holds a rule filed under it, so `vmap(g)` stops at that call -- `construct=a call`, `uri=f`, and the count `asked=1 found=0 missing=1`. The ask is the point: the transform builds the key a call already has (the callee's name and its argument count), asks `rulesets.vmap`, and reports the hole. `asked=0` is what this used to print and it was the wrong answer -- 'the walk never got here' is not 'the family has nothing for this call'. The row-by-row writing prints `[3.0, 5.0, 7.0]` first and keeps working, which is the answer the batched writing does not have."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_call_refused.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 1
+expect_stdout_contains = ["REINTERP vmap function=g skip=body construct=a call uri=f", "asked=1 found=0 missing=1", "[3.0, 5.0, 7.0]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vmap_rule_may_not_read_its_pattern_name"
+desc = "A rule of a family whose transform calls only the callee its right side names may not read a name its left side's pattern binds: nothing binds it in a batched graph, because the outer arrow is never called (the author's ruling of 2026-11-01 05:10). The refusal is a compile error at the rule, where it is written, and it names the rule and the name: `probe_rule_mul` reads `w`. The fixture `rulesets.probe_batch` is the reachable copy of that shape, the way `rulesets.probe_missing` is a copy of `jvp`'s family with a hole in it."
+kind = "negative"
+case = "../../../cases/compile/transforms/vmap_rule_outer_variable.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RuleRightUsesOuterVariable"
+expect_diagnostic_code = "0x03000207"
+expect_stdout_contains = ["probe_rule_mul"]
+# The whole-tensor argmax and argmin, batched: their answer is the row-major position over the row,
+# and no fold of axis positions produces it, so the rule reads the batch as one line instead --
+# `reshape<[shape(xs)[0], -1]>(xs)` puts a row's elements on its last axis and the reduction along
+# that axis counts them. Each batched answer is printed beside the row-by-row array.vmap of the same
+# function and the plan compares the pairs, because what this pins is that the two writings agree.
+[[tests]]
+name = "vmap_whole_argmax_reads_each_row_as_one_line"
+desc = "The whole-tensor argmax and argmin batched: the rule is a reshape of the batch to `[rows, -1]` and a reduction of its last axis, which is one row's elements -- no fold at all, because folding a row's axes answers a position per axis (`argmax` of a `float[2, 3]` row is 5, not `[1, 2]`). The rows `[1, 2, 3]`, `[4, 9, 6]`, `[7, 8, 5]` answer `[2, 1, 1]` for the maximum and `[0, 0, 2]` for the minimum, a row of two axes is counted as one line too (`[1, 0]` for `[[1, 5], [3, 2]]` and `[9, 1]`), and every batched line equals the row-by-row `array.vmap` printed beside it. Readings: `asked=1 found=1 missing=0 rules=vmap_rule_argmax elements=float`, the same for `argmin`. This entry was a refusal (`asked=1 found=0 missing=1`) while the operator had no key."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_whole_argmax.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_argmax elements=float", "asked=1 found=1 missing=0 rules=vmap_rule_argmin elements=float", "[2, 1, 1]", "[0, 0, 2]", "[1, 0]"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
+assert(values.length === 6, `printed ${values.length} values: ${JSON.stringify(values)}`)
+for (let i = 0; i < 3; i += 1) {
+    assert(values[2 * i] === values[2 * i + 1], `pair ${i}: batched ${values[2 * i]} vs row by row ${values[2 * i + 1]}`)
+}
+assert(values[0] === '[2, 1, 1]', `the maxima are ${values[0]}`)
+assert(values[2] === '[0, 0, 2]', `the minima are ${values[2]}`)
+assert(values[4] === '[1, 0]', `the two-axis row answered ${values[4]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+# The row-wise `max` and `min` of a batch are one `reshape` and one axis reduction, not a fold over
+# the row's axes: IEEE 754-2019 maximum carries an element and is exactly associative and
+# commutative (design principles 7.7), so a single pass over the flattened row answers the same bits
+# the fold answered, and the fold was a duplicate. `sum` and `mean` keep their fold: folding rounds
+# the row's axes once each, and one pass over the flattened row rounds once, which is a different
+# number for a float. The readings below are what both spellings printed, bit for bit -- the -0 of a
+# row that holds one, the NaN of a row that holds one, and a row of two axes on both sides.
+[[tests]]
+name = "vmap_row_max_and_min_are_one_pass"
+desc = "The batched `max`/`min` of a row through the batching transform (`vmap` from `transforms`, not the row-by-row helper in `array`, which takes the same values through another path and would prove nothing about a rule): `[[1.0, -0.0, 2.0], [3.0, 5.0, 4.0], [nan, 1.0, 2.0]]` answers `[2.0, 5.0, nan]` and `[-0.0, 3.0, nan]`, a row of two axes answers `[6.0, nan]` and `[1.0, nan]`, and an `int` batch answers `[5, 4]` and `[1, 0]`. The control beside them is `sum`, which keeps its fold (two roundings of a float row are not one), so its `[3.0, 12.0, nan]` is unchanged. The readings name the rule that answered -- `asked=1 found=1 missing=0 rules=vmap_rule_max elements=float`, the same for `vmap_rule_min`, for `elements=int`, and `rules=vmap_rule_sum elements=float` for the control -- which is what makes this the transform's path. The helper the fold used to be (`fold_max_axes`, `fold_min_axes`) is gone: `deleted_row_reduction_helpers.mjs` asserts the names are not in the ruleset and that the two keys still name their callees, so the replacement is the operator and the key is intact."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_row_reductions.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["[2.0, 5.0, nan]", "[-0.0, 3.0, nan]", "[3.0, 12.0, nan]", "[6.0, nan]", "[1.0, nan]", "[5, 4]", "[1, 0]", "rules=vmap_rule_max elements=float", "rules=vmap_rule_min elements=float", "rules=vmap_rule_max elements=int", "rules=vmap_rule_min elements=int", "rules=vmap_rule_sum elements=float"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The layout tier writes its axis, its target shape or its permutation in angle brackets, and that
+# argument is a `with` parameter of the operator, not an ordinary operand -- the transform used to
+# hand a rule only the norm inputs, so `reshape`'s call was built with one argument against a callee
+# with two. It now hands over the ports in port order (the normal ones, then the context ones), and
+# the six readings below are the same rules answering where they used to fail with
+# `has 1 args, target graph ... has 2 norm ports`. `reshape<[2, 2]>` of a four-element row is a 2x2
+# and three of them at once are `[3, 2, 2]`; `unsqueeze<0>` and `unsqueeze<-1>` put the row's axis of
+# extent one first and last; `transpose` and `permute<[1, 0]>` answer the same thing because a batch's
+# last two axes are the row's; `concat<1>` of a 2x2 row with itself is a 2x4 row; `dim<1>` is one
+# extent per row. The row-wise reshape printed beside the batch is the same numbers without the
+# batch's axis -- the batch's first row *is* that value.
+[[tests]]
+name = "vmap_layout_ops_are_batched_through_their_written_arguments"
+desc = "The six layout operators whose axis or shape is a `with` argument, batched through the transform: `reshape<[2, 2]>` of a row of four is a 2x2 and three rows at once are `[3, 2, 2]` (`[[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]], [[9.0, 1.0], [2.0, 3.0]]]`), `reshape<[2, 2, 1]>` keeps the trailing axis of extent one, `unsqueeze<0>` and `unsqueeze<-1>` put it first and last, `transpose` and `permute<[1, 0]>` both answer `[[[1.0, 3.0], [2.0, 4.0]], [[5.0, 7.0], [6.0, 8.0]]]`, `concat<1>` joins a row to itself into a 2x4, and `dim<1>` answers `[2, 2]`. The row's own reshape is printed beside the batch as the control. Each reading names its rule: `rules=vmap_rule_reshape`, `vmap_rule_unsqueeze`, `vmap_rule_transpose`, `vmap_rule_permute`, `vmap_rule_concat`, `vmap_rule_dim`, all `elements=float`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_layout_ops.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["[[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]], [[9.0, 1.0], [2.0, 3.0]]]", "[[[[1.0], [2.0]], [[3.0], [4.0]]], [[[5.0], [6.0]], [[7.0], [8.0]]], [[[9.0], [1.0]], [[2.0], [3.0]]]]", "[[[1.0, 2.0, 3.0]], [[4.0, 5.0, 6.0]]]", "[[[1.0], [2.0], [3.0]], [[4.0], [5.0], [6.0]]]", "[[[1.0, 3.0], [2.0, 4.0]], [[5.0, 7.0], [6.0, 8.0]]]", "[[[1.0, 2.0, 1.0, 2.0], [3.0, 4.0, 3.0, 4.0]], [[5.0, 6.0, 5.0, 6.0], [7.0, 8.0, 7.0, 8.0]]]", "[2, 2]", "rules=vmap_rule_reshape elements=float", "rules=vmap_rule_unsqueeze elements=float", "rules=vmap_rule_transpose elements=float", "rules=vmap_rule_permute elements=float", "rules=vmap_rule_concat elements=float", "rules=vmap_rule_dim elements=float"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+# `where`'s first operand is a condition, not a value arm: its element is `bool` and the answer's
+# element is the arms'. The transform used to instantiate a rule on the first port, so `where` was
+# asked for a `bool` rule and refused (`No candidate of 'vmap_where' applies to (bool[?, ..], ...)`).
+# It now reads the first port that is not a condition, and the reading says which element the rule
+# was made for: `elements=float`, not `bool`. The mask and the second arm are constants of the row's
+# shape, so they are the batch of one row and broadcast -- the batch's rows are the row-wise answers.
+[[tests]]
+name = "vmap_where_is_instantiated_on_the_value_arms"
+desc = "`where(cond, a, b)` batched: a constant mask `[true, false, true]` over `[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]` answers `[[1.0, 0.0, 3.0], [4.0, 0.0, 6.0]]` and with a constant second arm `[[1.0, 20.0, 3.0], [4.0, 20.0, 6.0]]`; the row-wise `where` printed beside them is `[1.0, 20.0, 3.0]`, the same numbers without the batch's axis. The reading is `asked=1 found=1 missing=0 rules=vmap_rule_where elements=float` -- instantiated on the arms' element, not on the condition's `bool`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_where_condition.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["[[1.0, 0.0, 3.0], [4.0, 0.0, 6.0]]", "[[1.0, 20.0, 3.0], [4.0, 20.0, 6.0]]", "[1.0, 20.0, 3.0]", "rules=vmap_rule_where elements=float"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+# The batching index has two doors, and this entry is the second door of the table below: a program
+# with one body per key asks the transform for each, and the check compares what the transform
+# answers with what the table prints. `printed=20 looked=20 hit=18` is the reading: the table holds
+# twenty keys, the index answers all twenty with the same rule names, and the program's eighteen
+# bodies reach eighteen of them (`mul_tensor/2` and `index_into/2` have no source spelling -- they
+# are the keys of a rule's own right side). The eight keys that a reader of the *tail* of a long
+# stdout does not see -- the five arithmetic tokens and `argmax/1`, `argmax_axis/3`, `argmin/1` --
+# are asserted by name, because a table that prints twenty-seven rows and is read as twelve is the same
+# table as a table of twelve to anyone who reads the tail.
+[[tests]]
+name = "ruleset_index_agrees_with_the_transform"
+desc = "Both doors of the batching index, compared on one program: the table `std::rulesets` prints (twenty-seven rows, `RULESET rulesets.vmap <head>/<arity> -> <rule> (rhs <callee>)`), the answers `lookupRule` gives for the same twenty-seven keys (`LOOKUP ... -> <rule>`), and the `asked=1 found=1 missing=0 rules=<rule>` readings the transform prints for the twenty-five primitives a body reaches. All three have to say the same thing: the table's size is the index's, every answer is the table's rule for that key, and every hit is a row of the table with the same rule name. The eight keys a tail-reading of the output does not show (`*/2`, `+/2`, `-/1`, `-/2`, `//2`, `argmax/1`, `argmax_axis/3`, `argmin/1`) are asserted by name."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/compile/rulesets/ruleset_index_agrees_with_the_transform.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "printed=27 looked=27 hit=25 six_eights=8 first=*/2 last=where/3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+# The table itself, once, with nothing else in the output: twenty lines in key order. A key added or
+# dropped is red here, which is the half of the pair that the plan report cannot show on its own --
+# a long stdout is elided as `... N line(s) before`, so a reader counting the visible rows of a
+# twenty-row table reads twelve.
+[[tests]]
+name = "ruleset_index_table_is_the_whole_index"
+desc = "The whole `rulesets.vmap` table, twenty lines in key order, printed by a program that does nothing but import the ruleset (so no transform adds a reading of its own): `*/2`, `+/2`, `-/1`, `-/2`, `//2`, `argmax/1`, `argmax_axis/3`, `argmin/1`, `argmin_axis/3`, `index_into/2`, `matmul/2`, `max/1`, `max_axis/3`, `mean/1`, `mean_axis/3`, `min/1`, `min_axis/3`, `mul_tensor/2`, `sum/1`, `sum_axis/3`. Twenty keys, each with the rule and the callee the index holds -- a key added or dropped is red, and the first five plus the arg* family are the ones the plan report elides as `... N line(s) before` from the head of the output."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/ruleset_index_only.cml"
+args = ["${case}", "std::rulesets"]
+expect_exit = 0
+expect_stdout_exact = "RULESET rulesets.vmap */2 -> vmap_rule_mul (rhs vmap_mul)\nRULESET rulesets.vmap +/2 -> vmap_rule_add (rhs vmap_add)\nRULESET rulesets.vmap -/1 -> vmap_rule_neg (rhs vmap_neg)\nRULESET rulesets.vmap -/2 -> vmap_rule_sub (rhs vmap_sub)\nRULESET rulesets.vmap //2 -> vmap_rule_div (rhs vmap_div)\nRULESET rulesets.vmap argmax/1 -> vmap_rule_argmax (rhs vmap_argmax)\nRULESET rulesets.vmap argmax_axis/3 -> vmap_rule_argmax_axis (rhs vmap_argmax_axis)\nRULESET rulesets.vmap argmin/1 -> vmap_rule_argmin (rhs vmap_argmin)\nRULESET rulesets.vmap argmin_axis/3 -> vmap_rule_argmin_axis (rhs vmap_argmin_axis)\nRULESET rulesets.vmap concat/2 -> vmap_rule_concat (rhs vmap_concat)\nRULESET rulesets.vmap dim/1 -> vmap_rule_dim (rhs vmap_dim)\nRULESET rulesets.vmap index_into/2 -> vmap_rule_idx (rhs idx_batch)\nRULESET rulesets.vmap matmul/2 -> vmap_rule_matmul (rhs vmap_matmul)\nRULESET rulesets.vmap max/1 -> vmap_rule_max (rhs vmap_max)\nRULESET rulesets.vmap max_axis/3 -> vmap_rule_max_axis (rhs vmap_max_axis)\nRULESET rulesets.vmap mean/1 -> vmap_rule_mean (rhs vmap_mean)\nRULESET rulesets.vmap mean_axis/3 -> vmap_rule_mean_axis (rhs vmap_mean_axis)\nRULESET rulesets.vmap min/1 -> vmap_rule_min (rhs vmap_min)\nRULESET rulesets.vmap min_axis/3 -> vmap_rule_min_axis (rhs vmap_min_axis)\nRULESET rulesets.vmap mul_tensor/2 -> vmap_rule_mul_tensor (rhs vmap_mul_tensor)\nRULESET rulesets.vmap permute/1 -> vmap_rule_permute (rhs vmap_permute)\nRULESET rulesets.vmap reshape/1 -> vmap_rule_reshape (rhs vmap_reshape)\nRULESET rulesets.vmap sum/1 -> vmap_rule_sum (rhs vmap_sum)\nRULESET rulesets.vmap sum_axis/3 -> vmap_rule_sum_axis (rhs vmap_sum_axis)\nRULESET rulesets.vmap transpose/1 -> vmap_rule_transpose (rhs vmap_transpose)\nRULESET rulesets.vmap unsqueeze/1 -> vmap_rule_unsqueeze (rhs vmap_unsqueeze)\nRULESET rulesets.vmap where/3 -> vmap_rule_where (rhs vmap_where)\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 40000
+
+[[tests]]
+name = "vmap_fold_helpers_are_gone"
+desc = "The two fold helpers the row-wise `max` and `min` used are deleted from `stdlib/rulesets/vmap.cml`, and what replaced them is the operator: `max_axis(reshape<[shape(xs)[0], -1]>(xs), 1, false)` and the same with `min_axis`. The keys `max/1` and `min/1` still name `vmap_max` and `vmap_min` -- the deletion is a helper's, not a key's -- and `sum`/`mean` still fold, because a float row folded twice is two roundings and flattened once is one."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/compile/rulesets/deleted_row_reduction_helpers.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["deleted_helpers: ok"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

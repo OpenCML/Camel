@@ -2242,8 +2242,6 @@ void buildReverseClosure(
     const Type *valueType =
         stateTypes.size() == 1 ? stateTypes.front() : TupleType::create(stateTypes);
     const rt::GCLoopBody payload{
-        .condGraph       = rt::kInvalidGraphId,
-        .bodyGraph       = rt::kInvalidGraphId,
         .kind            = camel::core::LoopKind::While,
         .collectionCount = 0};
     const gc_node_ref_t round    = addPort(transaction, Type::Int64());

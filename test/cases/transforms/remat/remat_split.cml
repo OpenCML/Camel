@@ -1,0 +1,35 @@
+// The mark read where it matters: the cut. `h(x, y) = x * x * y` lifted by `jvp` crosses the cut
+// with three values -- x, y, and the product x*x that the backward half's rule for the second `mul`
+// reads. The same lifted function marked by `remat` crosses with two: the parameters are the whole
+// of what the cut keeps, and the backward half makes x*x again from x. What the four numbers say is
+// that the mark moved none of them, and what the two `REINTERP split` lines say is what changed --
+// `residuals=3` and `residuals=2 recompute=1`.
+//
+// The shape is the whole-section one: `remat(jvp(h))` marks the lifted graph itself, which is the
+// extreme form of the rule (`docs/design/program-transforms/m6-combination-numbers.cn.md` 4: a
+// section that is wholly recomputed keeps only its entry values). The nested shape -- `g(x, y) =
+// remat(h)(x, y) * y`, where the marked graph is a call *inside* the graph being split -- needs the
+// mark to be on the call's callee when `split` walks the lifted body, which is what the compile-time
+// instantiation step gives; until then the cut reads the graph it is handed.
+import rulesets.jvp
+import { jvp, remat, split } from transforms
+
+func h(x: float, y: float): float {
+    return x * x * y
+}
+
+func main(): int sync {
+    let lifted                       = jvp(h)
+    let (plainForward, plainBackward) = split(lifted)
+    let (plainValue, plainResiduals)  = plainForward(3.0, 2.0)
+    'split_remat plain value={} dfdx={} dfdy={}'->format<
+        plainValue, plainBackward(plainResiduals, 1.0, 0.0), plainBackward(plainResiduals, 0.0, 1.0)
+    >->println
+    let marked                       = remat(lifted)
+    let (markForward, markBackward) = split(marked)
+    let (markValue, markResiduals)  = markForward(3.0, 2.0)
+    'split_remat marked value={} dfdx={} dfdy={}'->format<
+        markValue, markBackward(markResiduals, 1.0, 0.0), markBackward(markResiduals, 0.0, 1.0)
+    >->println
+    return 0
+}

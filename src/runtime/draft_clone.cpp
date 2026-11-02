@@ -46,12 +46,10 @@ remapNodeSpan(std::span<const gc_node_ref_t> refs, const std::vector<gc_node_ref
 }
 
 std::vector<std::byte> loopPayloadBytes(GraphTransaction &transaction, const GCLoopBody &loop) {
-    auto &owner = transaction.edit();
+    (void)transaction;
     const GCLoopRef ref{
         .kind            = loop.kind,
         .iterableForm    = loop.iterableForm,
-        .condRef         = owner.payloadGraphIndexOf(loop.condGraph),
-        .bodyRef         = owner.payloadGraphIndexOf(loop.bodyGraph),
         .collectionCount = loop.collectionCount,
     };
     std::vector<std::byte> bytes(sizeof(GCLoopRef));
@@ -273,6 +271,9 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(
     for (GraphId graph : sourceGraph->ruleGraphs()) {
         owner.addRuleGraphRef(graph);
     }
+    for (GraphId graph : sourceGraph->refsWithRole(kGraphRefLiftedFrom)) {
+        owner.addLiftedFromRef(graph);
+    }
     CAMEL_LOG_INFO_S("DraftClone", "Clone copied cross-graph registries.");
 
     DraftGraphCloneResult result;
@@ -476,6 +477,9 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(
     }
     for (GraphId graph : sourceDraft.ruleGraphs()) {
         owner.addRuleGraphRef(graph);
+    }
+    for (GraphId graph : sourceDraft.liftedFromRefs()) {
+        owner.addLiftedFromRef(graph);
     }
 
     DraftGraphCloneResult result;

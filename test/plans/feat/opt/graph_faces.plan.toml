@@ -1,0 +1,25 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
+id = "lit2.graph_faces"
+order = 478
+tier = "fast"
+tags = ["feat", "compile", "graph_read"]
+desc = """
+The facts a face answers beside a node's record, printed with both sides together. The encoder
+compares a draft's reading with the encoding's on every graph of every program and refuses a
+graph whose readings disagree, and a comparison that holds prints nothing: these lines are what
+makes a change in either answer visible.
+"""
+
+[[tests]]
+name = "graph_faces.readings"
+desc = "Five regions, the same answer node and two static slots on both faces; an id past the end answering nothing on both; a node erased in the draft answering nothing there while the encoding still answers a record; and the branch's two arms out of the payload on both."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "test::regions", "test::graph_faces", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["[GF] regions 5/5 exit 5/5 slots 2/2 node 0 0/0", "[NF] dead 16 draft=null frozen=null", "[NF] erased 10 draft=null frozen=record", "[BF] brch 6 arms 2/2"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

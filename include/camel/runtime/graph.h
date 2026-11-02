@@ -238,6 +238,14 @@ enum GCGraphFlag : uint8_t {
     /// see inside (autodiff, fusion, export, a rule) reads this graph. `Program::implBodies`
     /// lists the graphs that carry it.
     kGraphFlagImplBody = 1 << 3,
+    /// A call of the graph may be *recomputed* on the backward pass instead of kept: the same
+    /// values, with nothing of the body carried across a cut that can compute it again. `remat` sets
+    /// the bit (`transforms:remat`, stdlib/signatures/transforms.cml) on a copy of the function's
+    /// graph, so the body a program runs is unchanged; a step that cuts a graph in two reads it
+    /// (`split`, modules/transforms/split.cpp) and keeps only what cannot be recomputed -- the
+    /// parameters the call is given. It says nothing about the values: a call of a marked graph is
+    /// the same call, so no number moves.
+    kGraphFlagRecomputeBackward = 1 << 4,
 };
 
 /// kWritingDerived: congruence closure found the equivalence, it need not be stored.
@@ -291,7 +299,12 @@ static_assert(std::is_trivially_copyable_v<GCGraphSyncEdge>);
 struct GCNode {
     GCNodeKind kind         = GCNodeKind::Data;
     uint8_t flags           = 0;
-    uint16_t reserved       = 0;
+    /// How many of a FUNC node's trailing arguments are tangents: what a rule's expansion recorded on
+    /// the call it produced (`DraftNodeHeader::tangentArgs`, `addFuncNode's last argument`). The
+    /// rule is the one source of which arguments are values and which are tangents; `transpose` reads
+    /// the count off the node rather than deriving it again. 0 for every other node, and for a call
+    /// that is not a rule's tangent function.
+    uint16_t tangentArgs    = 0;
     gc_slot_idx_t dataIndex = 0;
     /// The type of the node's value (camel/core/type/intern.h); kNoTypeId when it has none.
     camel::core::type::TypeId typeId = camel::core::type::kNoTypeId;
@@ -329,6 +342,7 @@ enum GCGraphRefRole : uint8_t {
     kGraphRefNested = 1 << 1, // written inside this graph (a lambda, a branch arm)
     kGraphRefStatic = 1 << 2, // the graph of a function constant of the static area
     kGraphRefRule   = 1 << 3, // the graph a declaration tag of the graph names (a derivative rule)
+    kGraphRefLiftedFrom = 1 << 4, // the graph a lift of this one took its body from (`jvp`)
 };
 
 /// "No graph" in a GCFuncRef or a GCLoopRef: a FUNC node that names no callee yet, the condition
@@ -343,28 +357,23 @@ struct GCFuncRef {
 };
 static_assert(std::is_trivially_copyable_v<GCFuncRef>);
 
-/// Payload of a LOOP node in a frozen graph: its form, the indexes of its condition graph
-/// (kNoLoopGraph for For) and of its body graph in the graph's reference table, where both are
-/// marked callee and nested (the LOOP node calls them each round; they are written inside the
-/// graph), how many values the loop collects into arrays (its collection slots; 0 for a
-/// loop the source wrote, which has none), and where its elements come from
-/// (camel::core::LoopIterableForm: an array, or the pair of the interval's two bounds).
+/// Payload of a LOOP node in a frozen graph: its form, how many values the loop collects into
+/// arrays (its collection slots; 0 for a loop the source wrote, which has none), and where its
+/// elements come from (camel::core::LoopIterableForm: an array, or the pair of the interval's two
+/// bounds). A loop is its body *region* -- the condition and the body are two control regions of the
+/// same graph, sharing the frame of the computation around them (design principles 3.10) -- so the
+/// node names no graph at all.
 struct GCLoopRef {
     camel::core::LoopKind kind                        = camel::core::LoopKind::While;
     camel::core::LoopIterableForm iterableForm        = camel::core::LoopIterableForm::Array;
     uint16_t reserved1                                = 0;
-    uint32_t condRef                                  = kNoLoopGraph;
-    uint32_t bodyRef                                  = kNoLoopGraph;
     uint32_t collectionCount                          = 0;
 };
 static_assert(std::is_trivially_copyable_v<GCLoopRef>);
-static_assert(sizeof(GCLoopRef) == 16, "A LOOP payload is two words.");
+static_assert(sizeof(GCLoopRef) == 8, "A LOOP payload is one word.");
 
-/// What a LOOP node names, as values: the graphs themselves instead of their reference-table
-/// indexes (GraphDraft::loopGraphsOf, GCGraph's loopBodyOf).
+/// What a LOOP node is, as values: the payload's fields.
 struct GCLoopBody {
-    GraphId condGraph                                 = kInvalidGraphId; // invalid for a For loop
-    GraphId bodyGraph                                 = kInvalidGraphId;
     camel::core::LoopKind kind                        = camel::core::LoopKind::While;
     camel::core::LoopIterableForm iterableForm        = camel::core::LoopIterableForm::Array;
     uint16_t reserved1                                = 0;
@@ -590,6 +599,18 @@ struct GCGraphDerivation;
 struct GCGraphBuildAccess;
 class GCGraph;
 
+/// What `GCGraph::staticFunctionGraphOf` answered: the graph a function constant names, or the
+/// reason it named none. The reason is empty exactly when a graph was answered, so a caller cannot
+/// read a graph and a reason at once.
+struct GCStaticFunctionAnswer {
+    GraphId graph           = kInvalidGraphId;
+    std::string_view reason = {};
+
+    bool hasGraph() const { return graph != kInvalidGraphId; }
+    /// `graph=<id>`, or `none reason=<why>`.
+    std::string describe() const;
+};
+
 class GCGraph : public camel::core::rtdata::Object {
   public:
     // These accessors expose cold compile/debug metadata only. Runtime passes
@@ -667,6 +688,10 @@ class GCGraph : public camel::core::rtdata::Object {
     /// function is a call of its kernel operator, and this graph is what an expansion reads
     /// (design principles 10.4).
     bool isImplBody() const { return (flags_ & kGraphFlagImplBody) != 0; }
+    /// A call of this graph may be recomputed on the backward pass instead of kept
+    /// (kGraphFlagRecomputeBackward): `remat` set it on this graph, and `split` reads it to decide
+    /// what crosses a cut. The body is the same code either way; only what a cut stores changes.
+    bool recomputesOnBackward() const { return (flags_ & kGraphFlagRecomputeBackward) != 0; }
     /// The kernel the semantic body of an `#impl` function implements (design principles 10.4):
     /// the operator URI a direct call of the function is compiled to, empty for every other
     /// graph. A consumer that must see inside the function (autodiff, fusion, export, a rule)
@@ -725,6 +750,13 @@ class GCGraph : public camel::core::rtdata::Object {
     std::vector<GraphId> subGraphs() const { return refsWithRole(kGraphRefNested); }
     std::vector<GraphId> staticGraphRefs() const { return refsWithRole(kGraphRefStatic); }
     std::vector<GraphId> ruleGraphs() const { return refsWithRole(kGraphRefRule); }
+    /// The graph this one was lifted from, and kInvalidGraphId for a graph that was not lifted.
+    /// `jvp` writes it on every graph it builds from a primal, so a transform looking at a call of
+    /// a lifted graph can reach the function the call meant without guessing from the name.
+    GraphId liftedFrom() const {
+        const auto refs = refsWithRole(kGraphRefLiftedFrom);
+        return refs.empty() ? kInvalidGraphId : refs.front();
+    }
     std::span<const slot_t> staticSlots() const;
 
     bool hasNodePayload() const;
@@ -756,10 +788,23 @@ class GCGraph : public camel::core::rtdata::Object {
     gc_node_ref_t nodeRef(const GCNode *node) const;
     /// FUNC node `ref`: the callee (invalid when `ref` is not a FUNC node).
     GraphId calleeIdOf(gc_node_ref_t ref) const;
-    /// LOOP node `ref`: its condition graph (invalid for a For loop, or when `ref` is not a
-    /// LOOP node) and its body graph (invalid when `ref` is not a LOOP node).
-    GraphId loopCondIdOf(gc_node_ref_t ref) const;
-    GraphId loopBodyIdOf(gc_node_ref_t ref) const;
+    /// How many of FUNC node `ref`'s trailing arguments are tangents: the count a rule's expansion
+    /// recorded when it produced the call (`GCNode::tangentArgs`), 0 when the node is not such a call.
+    /// A kernel's parameters are the values the rule bound followed by the tangents it took, so the
+    /// values are the arguments before this count.
+    uint16_t callTangentArgsOf(gc_node_ref_t ref) const;
+    /// The graph a function constant of the static area names, with the reason when it names none.
+    ///
+    /// `calleeIdOf` answers for a FUNC node -- a call written by name. A function value kept in a
+    /// `let` or passed as an argument arrives as a DATA node holding a static function, and this is
+    /// the one entry that turns such a value into a graph id. It refuses rather than guesses, and
+    /// the reason says which check refused: a static slot is never read as an id. The node has to be
+    /// a DATA node of function type (`not-a-data-node`, `no-static-slot`, `not-a-function-type`),
+    /// its slot has to hold a function value that names a graph (`no-function-value`,
+    /// `function-names-no-graph`), and that graph has to be one this graph records as a static
+    /// reference (`not-a-static-reference`) -- a value whose graph is not in the reference table is
+    /// a value from another program, and following it would run a graph this one does not call.
+    GCStaticFunctionAnswer staticFunctionGraphOf(gc_node_ref_t ref) const;
     /// LOOP node `ref`: its form. The node must be a LOOP node.
     camel::core::LoopKind loopKindOf(gc_node_ref_t ref) const {
         return nodeBodyAs<GCLoopRef>(ref)->kind;
@@ -1098,11 +1143,9 @@ uint32_t funcWriteMaskOf(const GCGraph &graph, gc_node_ref_t ref);
 /// frozen graph, which is what the box check and the backends have.
 camel::core::type::Type *callValueTypeOf(const GCGraph &callee, uint32_t writtenCaptures);
 
-/// The draft payload of the LOOP node `ref` of a frozen graph: the graphs its GCLoopRef names.
+/// The payload of the LOOP node `ref` of a frozen graph, as values.
 inline GCLoopBody loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) {
     return GCLoopBody{
-        .condGraph       = graph.loopCondIdOf(ref),
-        .bodyGraph       = graph.loopBodyIdOf(ref),
         .kind            = graph.loopKindOf(ref),
         .iterableForm    = graph.loopIterableFormOf(ref),
         .collectionCount = graph.loopCollectionCountOf(ref),

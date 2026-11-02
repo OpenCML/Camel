@@ -1,0 +1,53 @@
+/**
+ * `max`, `min`, `argmax` and `argmin` over every element: the same names the axis forms use,
+ * chosen by arity (design principles 7.3), and the readings design principles 7.7 pins read from
+ * the whole tensor rather than from one axis:
+ *
+ *   - `argmax`/`argmin` answer the position counted in **row-major** order, so a 2x3 grid whose
+ *     maximum is the third element answers `2`, which no axis form says (they answer `[1, 0]` for
+ *     the same grid, the position inside its row).
+ *   - A NaN is beyond every number: it wins `max`/`min` (which propagate it) and takes the
+ *     position, and it is the *first* NaN that answers, here `1`.
+ *   - -0 is below +0: `max` of a row of signed zeros is `0.0`, `min` is `-0.0`, `argmax` is the
+ *     first `0.0` and `argmin` the first `-0.0`.
+ *   - A tie keeps the earliest position: `argmax([1.0, 3.0, 3.0, ...])` is `1`, `argmin` of the
+ *     two `-2.0`s is `3`.
+ *
+ * Each whole answer is printed beside the axis form folded by hand, so the two forms are compared
+ * rather than asserted twice; `argmax` has no such fold (folding axis positions is not the
+ * row-major position), and its comment above is the reading instead.
+ */
+import { argmax, argmin, max, min, reshape } from tensor
+
+func main(): int sync {
+    let grid = reshape<[2, 3]>([4.0, 1.0, 6.0, 3.0, 2.0, 5.0])
+    println(max(grid))
+    println(max(max<0, false>(grid)))
+    println(min(grid))
+    println(min(min<0, false>(grid)))
+    println(argmax(grid))
+    println(argmin(grid))
+
+    let zeros = reshape<[4]>([-0.0, 0.0, -0.0, 0.0])
+    println(max(zeros))
+    println(min(zeros))
+    println(argmax(zeros))
+    println(argmin(zeros))
+
+    let holes = reshape<[4]>([1.0, 5.0, 1.0, -9.0]) * (reshape<[4]>([1.0, 0.0, 1.0, 0.0]) / reshape<[4]>([1.0, 0.0, 1.0, 0.0]) + 1.0)
+    println(max(holes))
+    println(min(holes))
+    println(argmax(holes))
+    println(argmin(holes))
+
+    let tie = reshape<[5]>([1.0, 3.0, 3.0, -2.0, -2.0])
+    println(argmax(tie))
+    println(argmin(tie))
+
+    let ints = reshape<[5]>([3, 7, 7, 1, 1])
+    println(max(ints))
+    println(min(ints))
+    println(argmax(ints))
+    println(argmin(ints))
+    return 0
+}

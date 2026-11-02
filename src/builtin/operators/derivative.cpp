@@ -528,6 +528,30 @@ template <typename F> void registerFloatTransposeRules() {
     camel::core::bindTransposeRule({std::string(F::neg), "rulesets.transpose", "-", 1});
 }
 
+/// The array index -- `xs[i]`, `:op/idx_arr` -- has a batching rule as well, and it is keyed
+/// differently from the five above: `xs[i]` is a bracket form, which is none of `a <op> b`, `<op> a`
+/// or `f(a, b)`, so the operator has no token a rule's left side could be written with. Its rule is
+/// therefore filed under a call -- `index_into(x, i)`, the function whose body is the operator
+/// (stdlib/rulesets/vmap.cml). It goes in the batching table, `bindVmapRule`, which is the one a
+/// batching transform reads: a rule written in `rulesets.vmap` is the batching family's rule, and the
+/// forward table is what a *differentiating* transform reads.
+void registerArrayBatchingRules() {
+    camel::core::bindVmapRule({":op/idx_arr", "rulesets.vmap", "index_into", 2});
+}
+
+/// The batching rules of the same five are written down in `rulesets.vmap`, under the same five
+/// keys: an operator's key is which token its rule's left side writes and how many operands that
+/// token takes, so the two families that already share it share it again. What is bound here is the
+/// key and the family; the rule's name is read from the family's index when a batching transform
+/// asks (camel/core/forward.h), so no name is remembered from registration time.
+template <typename F> void registerFloatVmapRules() {
+    camel::core::bindVmapRule({std::string(F::add), "rulesets.vmap", "+", 2});
+    camel::core::bindVmapRule({std::string(F::sub), "rulesets.vmap", "-", 2});
+    camel::core::bindVmapRule({std::string(F::mul), "rulesets.vmap", "*", 2});
+    camel::core::bindVmapRule({std::string(F::div), "rulesets.vmap", "/", 2});
+    camel::core::bindVmapRule({std::string(F::neg), "rulesets.vmap", "-", 1});
+}
+
 void registerBuiltinDerivatives() {
     auto &registry = DerivativeRegistry::instance();
     registerFloatRules<F64>(registry);
@@ -536,6 +560,9 @@ void registerBuiltinDerivatives() {
     registerFloatForwardRules<F32>();
     registerFloatTransposeRules<F64>();
     registerFloatTransposeRules<F32>();
+    registerArrayBatchingRules();
+    registerFloatVmapRules<F64>();
+    registerFloatVmapRules<F32>();
     registry.setRule(":op/dtod", identityVjp);
     registry.setRule(":op/ftof", identityVjp);
     registry.setRule(":op/dtof", dtofVjp);

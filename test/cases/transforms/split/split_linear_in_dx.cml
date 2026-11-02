@@ -1,0 +1,27 @@
+// The backward half of split(reinterp<jvp>(g)) is LINEAR in the tangent direction, and that is what
+// this case asserts: g(x) = x*x at x = 3 is the linear function dx -> 6·dx, so doubling the input
+// doubles the output (dx = 2 gives 12) and zero gives zero (dx = 0 gives 0). Linearity is exactly
+// "the input doubles, the output doubles"; a case that only reads dx = 1 cannot tell 6 + 6 from
+// 2·6 + 1.
+//
+// The case runs when `split` exists (design doc 4.2); the plan skips it until then.
+import rulesets.jvp
+import { jvp, split } from transforms
+
+func g(x: float): float {
+    return x * x
+}
+
+func main(): int sync {
+    let f = jvp(g)
+    let (fwd, lin) = split(f)
+    let (_y, r0) = fwd(3.0)
+    let once = lin(r0, 1.0)
+    let twice = lin(r0, 2.0)
+    let none = lin(r0, 0.0)
+    println("dx1=", once)
+    println("dx2=", twice)
+    println("dx0=", none)
+    println("doubles=", twice == once + once)
+    return 0
+}

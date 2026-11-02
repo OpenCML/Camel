@@ -35,6 +35,9 @@
 #include "camel/parse/ast/rule_head.h"
 #include "camel/runtime/graph.h"
 
+#include "camel/compile/gir/compile_time.h"
+#include "camel/compile/gir/reachable.h"
+
 #include <algorithm>
 #include <cctype>
 #include <format>
@@ -192,6 +195,22 @@ void collectBoundNames(const GCT::node_ptr_t &node, std::vector<std::string> &na
 bool isWrittenName(const std::string &name) {
     return !name.empty() && !std::isdigit(static_cast<unsigned char>(name.front())) &&
            name.front() != '$';
+}
+
+/// Whether `family`'s transform reads a rule's callee name and calls *that* function, never the
+/// rule's right side: such a family has nothing to bind its pattern's names with, so its rules may
+/// not read them (`SemanticDiag::RuleRightUsesOuterVariable`).
+///
+/// `rulesets.jvp` is not one of these: `jvp` calls the right side itself, once with the operands and
+/// then with what it answers, so its rules write `x` and `w` on the right side and must
+/// (`modules/transforms/jvp.cpp`). `rulesets.vmap` is: the batched graph has no unbatched value to
+/// give the outer arrow, so the transform reads `rhsCalleeOf` and calls the named function with the
+/// batch (`modules/transforms/vmap.cpp`), and a rule that reads `x` has nothing to read.
+bool familyCallsOnlyItsCallee(const std::string &family) {
+    // `rulesets.probe_batch` is the fixture of the same shape: the refusal is reachable on purpose
+    // there (stdlib/rulesets/probe_batch.cml), the way `rulesets.probe_missing` makes a missing rule
+    // reachable for `jvp`.
+    return family == "rulesets.vmap" || family == "rulesets.probe_batch";
 }
 
 } // namespace
@@ -847,6 +866,18 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                     diag.commit(rule.rule, rule.shape);
                     continue;
                 }
+                // A family whose transform reads a rule's callee name and calls that function with
+                // the batch never calls the rule's right side itself, so nothing binds the names its
+                // left side's pattern writes. A rule that reads one of them is a rule no such
+                // transform can use -- and the place to say so is here, where the rule is written,
+                // not the call that would have used it (the author's ruling of 2026-11-01 05:10:
+                // the outer arrow is not called, so nothing may depend on it).
+                if (familyCallsOnlyItsCallee(ruleset) && !rule.outerUses.empty()) {
+                    auto diag = unit->diags->of(SemanticDiag::RuleRightUsesOuterVariable);
+                    diag.at(TokenRange{rule.tokenStart, rule.tokenEnd});
+                    diag.commit(rule.rule, rule.outerUses);
+                    continue;
+                }
                 const std::string first =
                     camel::parse::ast::indexRule(ruleset, rule);
                 if (!first.empty()) {
@@ -903,6 +934,12 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         // Before the graphs are encoded: the reads whose value cannot be kept leave the mark
         // that lets `acc = acc->append<v>` append in place (design principles 11.3).
         markNonRetainingReads();
+        // A call whose value is a function is answered here, while the graphs it is written among
+        // are still being built and nothing has been encoded: the transform's graph becomes a
+        // value of the program rather than a graph made the first time the call runs
+        // (compile_time.h). Last, because a transform reads the bodies it is given and may not
+        // see a graph the steps above still change.
+        instantiateCompileTimeTransforms();
         for (ModuleUnit *unit : order) {
             UnitContext context(*this, *unit);
             try {
@@ -963,6 +1000,46 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         }
     }
     return ok;
+}
+
+void Builder::instantiateCompileTimeTransforms() {
+    resetCompileTimeInstantiations();
+    // Every graph the program is made of, not only the root's own: a call written in a function
+    // the root never names is a call of the program all the same.
+    size_t answered = 0;
+    for (const graph_ptr_t &graph : collectReachableGraphs(rootGraph_)) {
+        // The calls this graph was built with: a transform appends the nodes it stands for, and
+        // those are not calls of their own.
+        const size_t callCount = graph->view().nodeSlotCount();
+        for (size_t index = 0; index < callCount; ++index) {
+            const draft_node_ref_t node = static_cast<draft_node_ref_t>(index);
+            if (!graph->view().alive(node)) {
+                continue;
+            }
+            const auto *header = graph->view().header(node);
+            if (header == nullptr || header->kind != camel::runtime::GCNodeKind::Oper) {
+                continue;
+            }
+            const oper_idx_ptr_t &op = graph->operTarget(node);
+            if (op == nullptr) {
+                continue;
+            }
+            const CompileTimeTransform *transform = compileTimeTransformOf(op->uri());
+            if (transform == nullptr) {
+                continue;
+            }
+            CompileTimeCall call{context_, graph, node, std::cout};
+            if ((*transform)(call).has_value()) {
+                ++answered;
+            }
+        }
+    }
+    if (answered != 0) {
+        // A count, because the point of the step is that the call did not survive into the
+        // program: a run of the same program with the transform answering nothing reads zero
+        // here and lifts the same value at run time.
+        std::cout << "REINTERP compile-time instantiated=" << answered << " calls\n";
+    }
 }
 
 } // namespace camel::compile::gir

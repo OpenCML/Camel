@@ -390,17 +390,13 @@ slot_t loopCollectedValue(const LoopView &loop, slot_t value, size_t c) {
 void validateRuntimeLoopInterface(
     const Program &program, const GCGraph *graph, gc_node_ref_t node) {
     const LoopKind kind = graph->loopKindOf(node);
-    const GCGraph *cond = program.loopCondOf(*graph, node);
-    const GCGraph *body = program.loopBodyOf(*graph, node);
-    const bool regions  = body == nullptr;
-    const uint32_t condRegion = regions ? graph->loopRegionOf(node, GCRegionKind::LoopCond) : 0;
-    const uint32_t bodyRegion = regions ? graph->loopRegionOf(node, GCRegionKind::LoopBody) : 0;
-    if (regions ? (bodyRegion == 0 || (loopHasCondition(kind) != (condRegion != 0)))
-                : (loopHasCondition(kind) != (cond != nullptr))) {
+    // A loop names no graph: the condition and the body are regions of this graph (design
+    // principles 3.10), so the form it declares is exactly the regions it has.
+    (void)program;
+    const uint32_t condRegion = graph->loopRegionOf(node, GCRegionKind::LoopCond);
+    const uint32_t bodyRegion = graph->loopRegionOf(node, GCRegionKind::LoopBody);
+    if (bodyRegion == 0 || (loopHasCondition(kind) != (condRegion != 0))) {
         loopFails(graph, node, "its parts do not match its form");
-    }
-    if (!regions && (!body->hasNodePayload() || (cond && !cond->hasNodePayload()))) {
-        loopFails(graph, node, "a graph of the loop is not encoded");
     }
     const auto norm         = graph->normInputsOf(node);
     const size_t iterableAt = loopHasIterable(kind) ? 1 : 0;
@@ -413,70 +409,40 @@ void validateRuntimeLoopInterface(
     // The ports of the two parts: the element (body) and the k values of the state, as the ports
     // of the part's graph or of its region.
     const auto bodyPorts = [&]() -> std::span<const gc_node_ref_t> {
-        return regions ? graph->regionPorts(bodyRegion) : body->normPorts();
+        return graph->regionPorts(bodyRegion);
     };
     const auto condPorts = [&]() -> std::span<const gc_node_ref_t> {
-        return regions ? graph->regionPorts(condRegion) : cond->normPorts();
+        return graph->regionPorts(condRegion);
     };
-    const auto bodyType = [&](gc_node_ref_t port) {
-        return (regions ? graph : body)->node(port)->dataType();
-    };
-    const auto condType = [&](gc_node_ref_t port) {
-        return (regions ? graph : cond)->node(port)->dataType();
-    };
+    const auto bodyType = [&](gc_node_ref_t port) { return graph->node(port)->dataType(); };
+    const auto condType = [&](gc_node_ref_t port) { return graph->node(port)->dataType(); };
 
-    // I19: the ports. Both parts take the k values of the state (the body the element first)
-    // and, in graph form, the m captures, in the order of the node's With inputs. A loop in
-    // region form captures nothing: its parts read the values where they are, and its With inputs
-    // are the results of the parts.
-    if (regions && m != (condRegion != 0 ? 3u : 2u)) {
-        loopFails(
-            graph,
-            node,
-            "a loop in region form has the results of its parts and its round as With inputs");
+    // I19: the ports. Both parts take the k values of the state (the body the element first); a loop
+    // captures nothing, because its parts read the values where they are (one frame), and its With
+    // inputs are the results of the parts and the round.
+    if (m != (condRegion != 0 ? 3u : 2u)) {
+        loopFails(graph, node, "a loop has the results of its parts and its round as With inputs");
     }
-    if (bodyPorts().size() != iterableAt + k || (!regions && capturePortsOf(body).size() != m)) {
+    if (bodyPorts().size() != iterableAt + k) {
         loopFails(
             graph,
             node,
             std::format(
-                "its body takes {} values and {} captures, the node passes {} and {}",
+                "its body takes {} values, the node passes {}",
                 bodyPorts().size(),
-                regions ? 0 : capturePortsOf(body).size(),
-                iterableAt + k,
-                m));
+                iterableAt + k));
     }
-    if ((regions ? condRegion != 0 : cond != nullptr) &&
-        (condPorts().size() != k || (!regions && capturePortsOf(cond).size() != m))) {
+    if (condRegion != 0 && condPorts().size() != k) {
         loopFails(
             graph,
             node,
-            std::format(
-                "its condition takes {} values and {} captures, the node passes {} and {}",
-                condPorts().size(),
-                regions ? 0 : capturePortsOf(cond).size(),
-                k,
-                m));
-    }
-    for (size_t c = 0; !regions && cond && c < m; ++c) {
-        Type *a = cond->node(capturePortsOf(cond)[c])->dataType();
-        Type *b = body->node(capturePortsOf(body)[c])->dataType();
-        if (a != b && !(a && b && a->equals(b))) {
-            loopFails(
-                graph,
-                node,
-                std::format(
-                    "capture {} is a '{}' in the condition graph and a '{}' in the body graph",
-                    c,
-                    typeText(a),
-                    typeText(b)));
-        }
+            std::format("its condition takes {} values, the node passes {}", condPorts().size(), k));
     }
 
     // I18: the types. The state types are those of the body's state ports; the condition's
     // ports agree with them; each first value can be assigned to its state; the body returns
     // the state; the condition returns bool; the element port takes the array's elements.
-    const bool hasCondPart = regions ? condRegion != 0 : cond != nullptr;
+    const bool hasCondPart = condRegion != 0;
     std::vector<Type *> stateTypes;
     for (size_t j = 0; j < k; ++j) {
         stateTypes.push_back(bodyType(bodyPorts()[iterableAt + j]));
@@ -578,8 +544,7 @@ void validateRuntimeLoopInterface(
         }
         expectedValue = TupleType::create(std::move(valueTypes));
     }
-    Type *bodyExit = regions ? graph->node(LoopView(program, *graph, node).nextState())->dataType()
-                             : (body->funcType() ? body->funcType()->exitType() : nullptr);
+    Type *bodyExit = graph->node(LoopView(program, *graph, node).nextState())->dataType();
     if (bodyExit == nullptr ||
         (s == 0 ? !expected->assignableFrom(bodyExit) : !expected->equals(bodyExit))) {
         loopFails(
@@ -602,9 +567,7 @@ void validateRuntimeLoopInterface(
                 typeText(expectedValue)));
     }
     if (hasCondPart) {
-        Type *condExit =
-            regions ? graph->node(LoopView(program, *graph, node).condResult())->dataType()
-                    : (cond->funcType() ? cond->funcType()->exitType() : nullptr);
+        Type *condExit = graph->node(LoopView(program, *graph, node).condResult())->dataType();
         if (condExit == nullptr || condExit->code() != TypeCode::Bool) {
             loopFails(
                 graph,

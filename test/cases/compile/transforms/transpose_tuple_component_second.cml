@@ -1,0 +1,27 @@
+// The other slot of the same tuple: `second(x) = let t = (x, 2x); t.1`.
+//
+// On paper the value is `2x`, so the pullback of 1.0 is 2. This is the case that says the channel is
+// not "answer 1 whenever a tuple is read": the same tuple, the same graph, one slot over, and the
+// number doubles because the read component changed. A walk that gave the tuple's cotangent to every
+// component, or to the first one always, answers 1 here and 3 for `first`-plus-`second`, and neither
+// number is this one.
+//
+// It also pins the zero on the other side: `x` is not read directly here, only through `2x`, so the
+// slot for the first component is zero and `x` gets its 2 only from the product.
+import { transpose } from transforms
+import rulesets.transpose
+
+func second(x: float): float {
+    let t = (x, 2.0 * x)
+    return t.1
+}
+
+func main(): int sync {
+    println(second(1.0))
+    let back = transpose(second)
+    println(back(1.0, 1.0))
+    // Twice the cotangent, four times the answer: the last reading is 4, which is not on any other
+    // line, so the plan's claim about the transpose cannot be met by the forward reading.
+    println(back(1.0, 2.0))
+    return 0
+}

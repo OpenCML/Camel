@@ -14,6 +14,7 @@
 #include "jvp_operator.h"
 
 #include "jvp.h"
+#include "transpose_operator.h"
 
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
@@ -22,6 +23,7 @@
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/tangent_space.h"
 #include "camel/core/type/resolver.h"
 #include "camel/utils/type.h"
 
@@ -55,11 +57,12 @@ FunctionType *jvpOperatorSignature(FunctionType *function) {
     if (function == nullptr) {
         return nullptr;
     }
-    // What `buildJvpGraph` can build, and nothing else: it copies one body, so it takes one
-    // ordinary parameter, and it has no node that reads a captured value into a port, so the
-    // function has no `with` parameters. A function outside that shape is refused where it is
-    // written, not left to fail when the call runs.
-    if (function->withTypesCount() != 0 || function->normTypesCount() != 1) {
+    // What `buildJvpGraph` can build, and nothing else: it copies one body and gives every `float`
+    // parameter of that body a pair of ports, so it takes any number of them (at least one), and it
+    // has no node that reads a captured value into a port, so the function has no `with` parameters.
+    // A function outside that shape is refused where it is written, not left to fail when the call
+    // runs.
+    if (function->withTypesCount() != 0 || function->normTypesCount() == 0) {
         return nullptr;
     }
     FunctionType *lifted = jvpSignature(function);
@@ -72,9 +75,10 @@ FunctionType *jvpOperatorSignature(FunctionType *function) {
     return factory.build();
 }
 
-/// jvp: (f: (float) => float) => (float, float) => (float, float). The lifted signature is the pair
-/// `(value, tangent)` in and the pair `(value, tangent)` out (jvp.h); the seed is the tangent the
-/// caller passes, so `jvp(f)(2.0, 1.0)` is the derivative in the direction 1.
+/// jvp: (f: (float) => float) => (float, float) => (float, float). One pair `(value, tangent)` in
+/// per parameter of `f` and the pair `(value, tangent)` out (jvp.h); the seed is the tangent the
+/// caller passes, so `jvp(f)(2.0, 1.0)` is the derivative in the direction 1, and for a function of
+/// two parameters `jvp(f)(x, dx, y, dy)` is the derivative in the direction `(dx, dy)`.
 class JvpResolver final : public FuncTypeResolver {
   public:
     std::optional<FunctionType *> resolve(
@@ -103,13 +107,38 @@ class JvpResolver final : public FuncTypeResolver {
                 "`jvp` takes a function without `with` parameters: the transform copies the body "
                 "into a new graph, and a captured value has no port to enter it by");
         }
-        if (function->normTypesCount() != 1) {
-            return std::string("`jvp` takes a function of exactly one parameter");
+        if (function->normTypesCount() == 0) {
+            return std::string("`jvp` takes a function of at least one `float` parameter");
         }
-        if (function->normTypeAt(0) != Type::Float64() || function->exitType() != Type::Float64()) {
+        for (size_t i = 0; i < function->normTypesCount(); ++i) {
+            const camel::core::type::Type *parameter = function->normTypeAt(i);
+            const camel::core::TangentSpaceAnswer space =
+                camel::core::tangentSpaceOf(parameter);
+            if (!space.hasSpace()) {
+                return std::format(
+                    "`jvp` takes a function whose every parameter has a tangent space, and "
+                    "parameter {} is a `{}`, which has none",
+                    i,
+                    parameter->toString());
+            }
+            if (parameter != Type::Float64()) {
+                // The type answers what its tangent space is; that it is not `float` is the
+                // transform's own state, and is said as such: the lift builds one `(float, float)`
+                // pair per parameter, so a parameter whose space is itself of another type has a
+                // space and is not lifted yet.
+                return std::format(
+                    "`jvp` lifts a `float` parameter into the pair `(value, tangent)`, and "
+                    "parameter {} is a `{}`, whose tangent space is {} and which this transform "
+                    "does not lift yet",
+                    i,
+                    parameter->toString(),
+                    space.describe());
+            }
+        }
+        if (function->exitType() != Type::Float64()) {
             return std::string(
-                "`jvp` takes a function of one `float` parameter that returns a `float`: the "
-                "lifted signature is `(float, float) => (float, float)`");
+                "`jvp` takes a function whose result is a `float`: the lifted signature answers the "
+                "pair `(value, tangent)`");
         }
         return std::nullopt;
     }
@@ -171,17 +200,7 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     // `pure` clause, which a declaration cannot write and `--verify-ops` does not compare. What has
     // to be one string, and is what the call site relies on, is the lifted half: the type the
     // operator says it returns and the type of the graph it hands back.
-    const std::string spelled = JvpResolver{}.signature();
-    const auto resolved = JvpResolver{}.resolve({}, type_vec_t{function->graph()->funcType()});
-    const std::string produced = resolved ? (*resolved)->toString() : std::string("-");
-    const std::string lifted =
-        (resolved && (*resolved)->hasExitType()) ? (*resolved)->exitType()->toString()
-                                                 : std::string("-");
-    const std::string handedBack =
-        built.graph->funcType() != nullptr ? built.graph->funcType()->toString() : "-";
-    std::cout << "REINTERP jvp op signature=" << spelled << " resolved=" << produced
-              << " lifted=" << lifted << " graph=" << handedBack
-              << " same=" << (lifted == handedBack ? "yes" : "no") << '\n';
+    printJvpCallReading(std::cout, function->graph()->funcType(), built.graph->funcType(), "run");
     auto *result = ::Function::create(
         built.program, built.graph->id(), function->tupleType(), mm::autoSpace());
     if (::Tuple *closure = function->tuple()) {
@@ -194,6 +213,25 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 } // namespace
 
+void printJvpCallReading(
+    std::ostream &os, FunctionType *function, const FunctionType *answered, std::string_view at) {
+    const std::string spelled = JvpResolver{}.signature();
+    const auto resolved =
+        function != nullptr ? JvpResolver{}.resolve({}, type_vec_t{function}) : std::nullopt;
+    const std::string produced = resolved ? (*resolved)->toString() : std::string("-");
+    const std::string lifted =
+        (resolved && (*resolved)->hasExitType()) ? (*resolved)->exitType()->toString()
+                                                 : std::string("-");
+    const std::string handedBack = answered != nullptr ? answered->toString() : "-";
+    os << "REINTERP jvp op lifted-at=" << at << " signature=" << spelled
+       << " resolved=" << produced << " lifted=" << lifted << " graph=" << handedBack
+       << " same=" << (lifted == handedBack ? "yes" : "no") << '\n';
+}
+
+// The two steps of `vjp` (stdlib/vjp.cml) have rules of their own -- `split` in
+// modules/transforms/split_operator.cpp and `transpose` in modules/transforms/transpose_operator.cpp
+// -- so the stand-ins that answered "this step is not bound for this function" are gone with them:
+// a step either has a rule or says it has none, and it no longer has a shape without one.
 const std::vector<oper_group_ptr_t> &operatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         // One rule: `jvp` takes a function and gives its forward transform (design principles 9.9
@@ -206,19 +244,25 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
 }
 
 std::unordered_map<std::string, operator_t> operatorKernels() {
-    return {
-        {"jvp", &jvpKernel},
-    };
+    std::unordered_map<std::string, operator_t> kernels = transposeOperatorKernels();
+    kernels["jvp"] = &jvpKernel;
+    return kernels;
 }
 
 void registerOperatorMetadata() {
     // It builds a graph: the call does something the compiler cannot see from the arguments alone,
     // so it is declared, as every operator must be (design principles 3.3), as not pure.
-    camel::core::OperatorTable::instance().declare("transforms", {{"jvp", false}});
+    camel::core::OperatorTable::instance().declare(
+        "transforms", {{"jvp", false}, {"transpose", false}});
     // `jvp` reads the graph of the function value it receives -- that is the whole transform -- so
     // it refuses a loop there as `grad` does (OperatorTraits::readsGraphs; op-semantics 11.4).
     camel::core::OperatorTable::instance().set(
         "transforms:jvp", {.pure = false, .readsGraphs = true});
+    // `transpose` builds a graph of its own from the one it is handed, for the same two reasons.
+    // Its declaration is the one above, beside `jvp` and `split`: a name declared twice says nothing
+    // the first one did not.
+    camel::core::OperatorTable::instance().set(
+        "transforms:transpose", {.pure = false, .readsGraphs = true});
 }
 
 } // namespace camel::transforms

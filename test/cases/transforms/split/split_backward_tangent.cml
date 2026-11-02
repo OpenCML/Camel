@@ -1,0 +1,19 @@
+// The same function as split_forward_half, with only the backward half read out: g(x) = x*x,
+// f = reinterp<jvp>(g), x = 3, dx = 1. The backward half takes the residuals the forward half
+// collected (r0 = 3) and the tangent direction, and gives the tangent: 2x·dx = 6.
+//
+// The case runs when `split` exists (design doc 4.2); the plan skips it until then.
+import rulesets.jvp
+import { jvp, split } from transforms
+
+func g(x: float): float {
+    return x * x
+}
+
+func main(): int sync {
+    let f = jvp(g)
+    let (fwd, lin) = split(f)
+    let (_y, r0) = fwd(3.0)
+    println("tangent dx1=", lin(r0, 1.0))
+    return 0
+}

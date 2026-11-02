@@ -1,0 +1,36 @@
+// The identity graph, as a case: the forward transform of `f(x) = x` is two parameter ports and one
+// tuple fill (the value and its tangent, in and out), so `split` of it has nothing to move -- and
+// that is exactly what makes it the first readout. The forward half gives the value the caller
+// passed (3.0) and the backward half gives the tangent back (1.0) without reading any residual: no
+// value the body computes crosses the cut.
+//
+// The residual tuple is therefore **empty**: the forward half answers `(3.0, ())`. The residuals are
+// read off the *graph* (which values the backward half reads), and this graph has none, so nothing
+// is carried. The count printed by an earlier version of this case came from `indices` on the
+// residual tuple -- i.e. from the *type*, which is a placeholder here -- so it is not in the reading
+// any more: the diagnostic's `residuals=0` is the graph's answer, and the tuple is empty.
+//
+// The spelling is `jvp(g)` -- `reinterp<jvp>(f)` as a call, which is what the operator half of
+// modules/transforms is (jvp_operator.h) -- because `transforms::reinterp::<jvp>(g)`, the spelling
+// the design writes for the eventual pass, has no kernel behind it yet (stdlib/transforms.cml
+// declares it and no module registers it). The readings do not change with the spelling: they are
+// about the graph the transform hands back.
+//
+// Gated the same way as the other three (test/tools/have-split.mjs): while `split` does not exist
+// the plan skips, so this case is not red for a reason that is not a defect.
+import rulesets.jvp
+import { jvp, split } from transforms
+
+func g(x: float): float {
+    return x
+}
+
+func main(): int sync {
+    let f = jvp(g)
+    let (fwd, lin) = split(f)
+    let (y, r0) = fwd(3.0)
+    println("identity y=", y)
+    let dy = lin(r0, 1.0)
+    println("identity dx1=", dy)
+    return 0
+}

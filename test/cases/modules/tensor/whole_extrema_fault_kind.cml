@@ -1,0 +1,37 @@
+/**
+ * An extremum has no identity, so `max`, `min`, `argmax` and `argmin` of a tensor with no element
+ * are a fault and not an answer (design principles 7.7), and the *kind* is the reading: it is
+ * `InvalidArgument`, and the message names the operator that was asked -- four messages, one kind,
+ * because 7.7 says which operator has no identity, not "a reduction".
+ *
+ * `attempt` isolates the fault at the function's boundary (design principles: the boundary of the
+ * subgraph is the boundary of the fault), so the program prints what the fault carried and goes on.
+ * Without isolation the same call stops the program, which is what a fault is and not a refusal at
+ * compile time (`whole_extrema_on_an_empty_tensor.cml`).
+ */
+import { argmax, argmin, max, min } from tensor
+
+func wholeMax(t: f32[]): f32 {
+    return max(t)
+}
+
+func wholeMin(t: f32[]): f32 {
+    return min(t)
+}
+
+func wholeArgMax(t: f32[]): int {
+    return argmax(t)
+}
+
+func wholeArgMin(t: f32[]): int {
+    return argmin(t)
+}
+
+func main(): int sync {
+    let none: f32[0] = []
+    println(attempt(wholeMax)(none))
+    println(attempt(wholeMin)(none))
+    println(attempt(wholeArgMax)(none))
+    println(attempt(wholeArgMin)(none))
+    return 0
+}

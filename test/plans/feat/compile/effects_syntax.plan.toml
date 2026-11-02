@@ -26,6 +26,27 @@ expect_exit = 0
 expect_output_not_contains = ["PassBoundaryResources", "changed the ambient resources", "failed with an internal error"]
 
 [[tests]]
+name = "pass_boundary.resources_use_changed"
+desc = "The same boundary, one class further in: the set of resources is not the whole invariant -- the way each is used is part of it. `test::bounds_flip` keeps the name and turns the program's write of `stdout` into a read of it, which no name comparison can see, and the run is red with the resource and both ways named. The control beside it (`pass_boundary.resources_use_kept`) takes the same program through `std::opt` and stays silent, so the red is the class and not the check."
+kind = "behavior"
+case = "../../../cases/opt/effects/keep_node_shape.cml"
+args = ["${case}", "test::bounds_flip", "std::nvm"]
+expect_exit = 1
+expect_stdout_contains = ["BOUNDS_FLIP flipped=2 kind=ambient_use name=stdout before=write after=read"]
+expect_stderr_contains = ["PassBoundaryResources", "before stdout (write), after stdout (read)"]
+expect_output_not_contains = ["PassBoundaryNodes", "PassBoundaryPorts", "effect order"]
+
+[[tests]]
+name = "pass_boundary.resources_use_kept"
+desc = "The control: the same program through the optimizer, no violation of this class and none of the others -- the check prints nothing, the diagnostics stay away, and the program prints what it printed."
+kind = "behavior"
+case = "../../../cases/opt/effects/keep_node_shape.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "side\n2\n"
+expect_output_not_contains = ["PassBoundaryResources", "PassBoundaryNodes", "PassBoundaryPorts", "BOUNDS_FLIP"]
+
+[[tests]]
 name = "pass_boundary.entry_and_exit_kept"
 desc = "The other half of the pass boundary, and a diagnostic of its own (`RuntimeDiag::PassBoundaryNodes`, 0x0400000F): after every pass the program's root graph still has an entry node it can start at and an exit node whose value it returns, or the pass that returned it is named. Kept apart from `PassBoundaryResources` on purpose -- two invariants that can go red separately are two invariants, and one red then says which of them broke. No pass in the tree breaks this one today, which is what this pins: the check is silent on a program put through two rewriting passes."
 kind = "behavior"

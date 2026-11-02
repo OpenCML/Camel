@@ -1,0 +1,104 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/*
+ * The derivative, as a library (design 4.4, `docs/design/program-transforms/README.cn.md`).
+ *
+ *     vjp(f) = transpose(split(reinterp<jvp>(f)))
+ *     grad(f)              -- `vjp` read at one number, the seed 1
+ *     with_grad(f)         -- the same for the first `with` parameter (design principles 9.9)
+ *
+ * This is the assembly the design asks for, written out rather than described. `split(jvp(f))`
+ * answers the pair of halves, so the body takes the pair apart by name -- the forward half and the
+ * linear one -- and hands the linear one to `transpose`, which is the only shape that turns it
+ * round. The forward half runs at the point and answers the residuals with the value; the backward
+ * half reads those residuals and a seed; `transpose` walks it backwards from the cotangent.
+ *
+ * The surface is JAX's (author's ruling of 2026-11-01): `vjp(f)(x)` is the pair `(y, pullback)` and
+ * `pullback(ct)` is the cotangent of `f`'s parameters, so `grad(f)(x)` is `vjp(f)(x).1(1.0)`. The
+ * juxtaposed shape `transpose` writes -- known values, then cotangent -- is the internal step and is
+ * not a signature: nothing outside this file writes it.
+ *
+ * The module imports the rulesets it composes. `jvp` walks forward with the rules in
+ * `rulesets.jvp` and `transpose` walks the backward half with the rules in `rulesets.transpose`,
+ * so those two imports are part of this file and not of the program that calls it: a library that
+ * makes its caller know how it is put together is not a library, the same reading as a pass's
+ * precondition. Take either import out and the pullback raises at the call below instead, on this
+ * file's own line: `transpose has no transpose for this function` without `rulesets.transpose`, and
+ * `jvp has no forward rule for ':op/mul_d'` without `rulesets.jvp` -- which is what
+ * `test/cases/compile/transforms/vjp_carries_its_ruleset.cml` holds it to.
+ *
+ * The signatures are stand-ins for `Vjp<F>`, `Split<F>` and `ParamsOf<F>` (design 6.1 is their
+ * step), so `vjp` is declared once per arity rather than once for every `F` -- the same rule
+ * `tensor` follows for a name that is declared once per type it accepts. The generic form replaces
+ * these declarations, not their bodies, and the names stay in any case: a program says `grad`, and
+ * which transforms answer it is the library's business (author, 2026-10-31).
+ */
+
+import rulesets.jvp
+import rulesets.transpose
+import { is_function } from types
+import { jvp, split, transpose } from transforms
+
+/// The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
+/// `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters, `ct`'s own weight one
+/// member per parameter. The juxtaposed call `transpose(residuals, ct)` is the internal step, not this
+/// signature.
+///
+/// The pullback answers a tuple in every case, one member per parameter, so a function of one
+/// parameter has a one-long one -- `(27.0)` for `vjp(cube)(3.0)`'s pullback at `ct = 1.0` -- and the
+/// number a gradient is comes out of it by position: `grad(f)(x)` is `vjp(f)(x).1(1.0).0` (author's
+/// ruling of 2026-11-01 14:30: one rule for every arity, no exception for one parameter, no type
+/// function that takes an element out of a one-long tuple).
+/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
+/// @example let reading = vjp(f)
+export func vjp::<T>(f: (x: T) => float): (x: T) => (float, (ct: float) => (T,)) {
+    let (forward, linear) = split(jvp(f))
+    return (x: T) => {
+        let (value, residuals) = forward(x)
+        (value, (ct: float) => {
+            // `transpose` answers the cotangents of the parameters as one tuple, and the pullback
+            // hands it on as it is: a function of one parameter's cotangents are the one-long tuple
+            // `(d, )`, which is what a caller destructures with `.0`.
+            let cotangents = transpose(linear)(residuals, ct)
+            (cotangents.0, )
+        })
+    }
+}
+
+/// The same transform for a function of two parameters: `vjp(f)(x, y)` is `(value, pullback)` and
+/// `pullback(ct)` gives both cotangents, in the order `f` takes the parameters.
+/// @example-fragment `f` is a function value of two parameters, so the example is a fragment of a program that declares one
+/// @example let reading_of_two = vjp(f)
+export func vjp::<T, U>(f: (x: T, y: U) => float): (x: T, y: U) => (float, (ct: float) => (T, U)) {
+    let (forward, linear) = split(jvp(f))
+    return (x: T, y: U) => {
+        let (value, residuals) = forward(x, y)
+        (value, (ct: float) => transpose(linear)(residuals, ct))
+    }
+}
+
+/// The gradient of a function of one parameter: `vjp` with the seed 1, its second half taken, and the
+/// one member a one-parameter pullback answers read out by position --
+/// `grad(f)(x)` is `vjp(f)(x).1(1.0).0` (author's ruling of 2026-11-01 14:30, the 06:50 formula with
+/// the `.0` added: the pullback always answers a tuple). Read `grad(f)` as a name for that reading of
+/// `vjp`, not as a second transform.
+/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
+/// @example let slope = grad(f)
+export func grad(f: (x: float) => float): (x: float) => float {
+    let reading = vjp(f)
+    return (x: float) => {
+        let (value, pullback) = reading(x)
+        let _ = value
+        let cotangents = pullback(1.0)
+        cotangents.0
+    }
+}
+
+/// The gradient of the first `with` parameter of `f` (design principles 9.9): the same `vjp`, taken
+/// with respect to a captured value instead of a parameter.
+/// @example-fragment `f` captures the value it differentiates against, so the example is a fragment of a program that declares one
+/// @example let slope_over_the_capture = with_grad(f)
+export func with_grad::<F>(f: F): F when is_function::<F>() {
+    return vjp(f)
+}

@@ -25,6 +25,12 @@
 
 #include "jvp.h"
 #include "jvp_operator.h"
+#include "remat_operator.h"
+#include "split.h"
+#include "split_operator.h"
+#include "transpose_operator.h"
+#include "vmap.h"
+#include "vmap_operator.h"
 
 #include "camel/compile/gir/rule_templates.h"
 #include "camel/compile/gir/static_function.h"
@@ -279,19 +285,60 @@ class ReinterpPass : public RuntimeGraphRewritePass {
 
 } // namespace
 
-/// The executors this module's operators run on: `jvp` is the only one, and its kernel builds the
-/// transform's graph when the call runs (jvp_operator.cpp).
+/// The executors this module's operators run on: `jvp`, `vmap` and `split`, whose kernels build the
+/// transform's graph when the call runs (jvp_operator.cpp, vmap_operator.cpp, split_operator.cpp).
+/// One executor per module, so the kernel tables are handed over as one.
 class TransformsExecutor : public Executor {
   public:
-    explicit TransformsExecutor(context_ptr_t ctx)
-        : Executor(std::move(ctx), camel::transforms::operatorKernels()) {}
+    explicit TransformsExecutor(context_ptr_t ctx) : Executor(std::move(ctx), kernels()) {}
+
+  private:
+    static std::unordered_map<std::string, operator_t> kernels() {
+        auto all = camel::transforms::operatorKernels();
+        for (auto &[name, kernel] : camel::transforms::vmapOperatorKernels()) {
+            all[name] = kernel;
+        }
+        for (auto &[name, kernel] : camel::transforms::splitOperatorKernels()) {
+            all[name] = kernel;
+        }
+        for (auto &[name, kernel] : camel::transforms::rematOperatorKernels()) {
+            all[name] = kernel;
+        }
+        return all;
+    }
 };
 
 TransformsModule::TransformsModule(context_ptr_t ctx) : BuiltinModule("transforms", ctx) {
-    // `jvp` is one of the module's operators, beside the pass: `reinterp<jvp>(f)` is a value-level
-    // transform (jvp.h), so it is reached as a call and not as a pass.
+    // `jvp`, `vmap` and `split` are the module's operators, beside the pass: `reinterp<jvp>(f)`,
+    // `reinterp<vmap>(f)` and `split(f)` are value-level transforms (jvp.h, vmap.h, split.h), so
+    // they are reached as calls and not as passes.
     camel::transforms::registerOperatorMetadata();
+    camel::transforms::registerVmapOperatorMetadata();
+    camel::transforms::registerSplitOperatorMetadata();
+    camel::transforms::registerRematOperatorMetadata();
+    // The half the front end asks for while it builds a caller's graph: `jvp(f)` with `f` written
+    // where the call is. Declared here with the operators, because it is the same operator and the
+    // table it fills is the one a build asks (compile/gir/compile_time.h).
+    camel::transforms::registerCompileTimeTransforms();
     for (const auto &group : camel::transforms::operatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+    // `transpose` is the second one, and it is the same kind of value: the pullback of a linear
+    // function's graph, built when the call runs (transpose.cpp).
+    for (const auto &group : camel::transforms::transposeOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+    for (const auto &group : camel::transforms::vmapOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+    // `split` cuts a lifted function into the two halves `vjp` is written with (split.cpp).
+    for (const auto &group : camel::transforms::splitOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+    // `remat` marks a function's graph as recomputable on the backward pass (remat_operator.cpp);
+    // the values are the function's, so the mark is a property of the graph and not a second
+    // meaning of the call.
+    for (const auto &group : camel::transforms::rematOperatorGroups()) {
         exportEntity(group->name(), group);
     }
 }
