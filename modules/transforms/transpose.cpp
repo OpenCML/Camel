@@ -1096,22 +1096,16 @@ bool buildTransposeMember(
                             return constantValue(value);
                         }
                         if (sourced->kind == rt::GCNodeKind::Accs) {
-                            // A residual read first: the forward copy answers it -- a member of the
-                            // tape element, or of the tuple a parameter carries -- which is where a
-                            // `split` half's per-round values are read from.
-                            if (const gc_node_ref_t copied = forward(value);
-                                copied != rt::kInvalidNodeRef) {
-                                return copied;
-                            }
-                            const auto *body = function->nodeBodyAs<rt::GCAccsBody>(value);
-                            if (body != nullptr && !paramPorts.empty()) {
-                                const gc_node_ref_t madePart =
-                                    draft.addAccsNode(sourced->dataType(), body->value);
-                                const gc_node_ref_t holder = paramPorts.front();
-                                draft.setNormInputs(
-                                    madePart, std::span<const gc_node_ref_t>(&holder, 1));
-                                return madePart;
-                            }
+                            // A residual read: the forward copy answers it -- a member of the tape
+                            // element, or of the tuple a parameter carries -- which is where a
+                            // `split` half's per-round values are read from. Nothing else is read
+                            // here: an `Accs` the forward walk cannot copy is a value this member
+                            // has no other way to reach, and the arm stops by name (author's ruling
+                            // of 2026-11-03, `origin/fsh-dev = ad7e716b0`: the legacy path that
+                            // answered it from `paramPorts` is dropped -- it named a parameter as
+                            // the holder of a value nobody had established it held, which is the
+                            // same claim `state-unread` refuses to make one branch below).
+                            return forward(value);
                         }
                         if (sourced->kind == rt::GCNodeKind::Oper) {
                             // A value the arm *computes* and hands to a call: `merged(x) = 2x + 5x`
