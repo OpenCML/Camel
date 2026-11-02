@@ -19,15 +19,24 @@
 //
 // What a *single* float state cannot pin is the order the backward half walks the rounds in: the
 // per-round maps here are the scalars 2, 3, 5, they commute, and every walk order prints the same
-// 30. An order-sensitive case needs two states whose per-round maps do not commute -- A = [[1,1],
-// [0,1]] and B = [[1,0],[1,1]] alternate: A.B = [[2,3],[3,5]] and B.A = [[5,3],[3,2]], so the
-// tangent of (1,0) would be (2,3) walking one way and (5,3) the other. That case cannot be written
-// yet, and not because of this cut: `jvp` refuses to lift a loop with more than one state (it would
-// have to pair the tuple the body yields, and it answers `skip=loop` instead), so the graph never
-// reaches `split`. The split's own rounds are the linearization's, and they run forward by
-// definition; the reverse walk the design asks for is `transpose`'s (4.3: 倒着走，逐轮取 `split`
-// 留下的残差), and `transpose` still copies a loop's range as it stands. Until those two land, this
-// case holds the cut to what it can be held to on its own: the tape is per round, and it carries
+// 30. Nor can any other loop in this tree pin it, and that is a statement about the lift rather than
+// about this cut: `jvp` gives a pair to a floating scalar and to nothing else (`pairTypeOf`,
+// modules/transforms/jvp.cpp:59-72), so a loop's state can only be a float -- and one float's
+// per-round maps are scalars, so the derivative is the same product however it is walked. The
+// construct that would break the tie is one state holding a 2x2 matrix (four floats as a tuple),
+// with round maps Mk = [[1, k], [k*k, 1]] that do not commute, so that walking the rounds the other
+// way multiplies them in the other order. Measured: the primal runs (a four-tuple state is a value
+// the language takes), and `jvp` answers
+//
+//     REINTERP jvp function=f skip=body
+//
+// (modules/transforms/jvp.cpp:995) instead of lifting it, so `split(jvp(f))` never sees such a loop.
+// An order-sensitive case therefore waits on the lift of an aggregate state, not on this cut.
+//
+// The reverse walk itself is `transpose`'s (4.3: 倒着走，逐轮取 `split` 留下的残差), and `transpose`
+// still copies a loop's range as it stands -- so `vjp` over a loop is not order-correct yet either.
+// That is design 4.2's next gap: one page of its own, neither widened nor closed here. This case
+// holds the split to what it can be held to on its own -- the tape is per round, and it carries
 // exactly what the backward half reads from that round.
 import rulesets.jvp
 import { jvp, split } from transforms
