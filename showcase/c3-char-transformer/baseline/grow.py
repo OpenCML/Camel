@@ -146,7 +146,8 @@ START4 = [
 ]
 
 
-def loss_stage4(w):
+def forward4(w):
+    """The stage-4 model's output rows for TOKENS, before the final normalisation."""
     emb = np.array(w[0:4]).reshape(2, 2)
     g1a, b1a = np.array(w[4:6]), np.array(w[6:8])
     wq1 = np.array(w[8:12]).reshape(2, 2)
@@ -173,8 +174,12 @@ def loss_stage4(w):
     first = attended1 + hidden1 @ f2_1 + fb2_1
     attended2 = first + attention(ln(first, g2a, b2a), wq2, wk2, wv2)
     hidden2 = relu(ln(attended2, g2b, b2b) @ f1_2 + fb1_2)
-    second = attended2 + hidden2 @ f2_2 + fb2_2
-    return ln(second, gout, bout).sum()
+    return attended2 + hidden2 @ f2_2 + fb2_2
+
+
+def loss_stage4(w):
+    gout, bout = np.array(w[88:90]), np.array(w[90:92])
+    return ln(forward4(w), gout, bout).sum()
 
 
 STAGES[4] = (NAMES4, START4, loss_stage4)
