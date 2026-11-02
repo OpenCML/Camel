@@ -334,6 +334,14 @@ Array *out = createTensor(TypeCode::Float32, ws->shapeSpan(), allocator, true); 
 
 ## 墙 12 的更正：`matmul_grad` **不是**墙，3e-6 是参照自己的误差
 
+**结论与三条证据（2026-11-03 复核，撤稿成立）**：
+
+1. **控位**：stage2 跑 3 步，引擎 `-0.008000314590` 对参照 `-0.008000314670`，**绝对差 8.0e-11**（对 ~8.0e-3 的量 ⇒ 相对 ~1e-8）；到第 50 步放大成 3.0e-6。
+2. **复步参照 12 位一致**：用 `grow.py --exact`（`loss(x + ih)` 的虚部即导数，无相减抵消）重算，参照与引擎在 12 位上一个字都不差 ⇒ 原来的中心差分参照自己是误差源。
+3. **`matmulGradGemm` 的 dtype 门**：`lhs/rhs/dy` 任一不是 `Float32` 就 `return nullptr` ⇒ f64 物理上走不到那条 f32 快路（`modules/tensor/kernels/gradient.cpp#matmulGradGemm`）；且真有 f32 存货会给出 ~1e-7 相对（≈8e-10 绝对），比实测大一个量级。
+
+**第四项：闭式标量算术（2026-11-03，不用 `vjp`/`grad` 的矩阵路径）**：`A = [[1,2],[3,4]]`、`B = [[5,6],[7,8]]`、`dC = 全 1` 时纸面 `dL/dA = dC·Bᵀ = [[11,15],[11,15]]`、`dL/dB = Aᵀ·dC = [[4,4],[6,6]]`。用八个**单参数标量函数**（把待测元素当唯一参数、其余写死）跑 `grad`，逐个取该元素的导数：`dL/da00` 实测 **11.0**，与纸面逐位一致；其余七个在此树上撞到**另一堵**既有墙（`transforms: split does not build this function (an operand of the node is not reachable from the half's exit)`），与 `matmul_grad` 无关，故只报 1/8 已测。
+
 我按"下一个写死 f32 的是 `matmul_grad`"报过一次，**这个判断错了**，两处证据：
 
 **一、`matmul_grad` 的 f32 存货对 f64 根本走不到。**
