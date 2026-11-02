@@ -5798,7 +5798,7 @@ A build without a solver answers `Sampled` and `Refuted` and never `Proved`. A g
 checked at the types every operator group registered.
 
 - Example (a fragment, not compiled): `rules->check<samples: 1000, seed: 7>`
-- Why it is not compiled: a rule set comes from the caller
+- Why it is not compiled: `rules` comes from the caller
 
 #### `check`
 
@@ -5818,7 +5818,7 @@ either, because a `with` parameter without a default may not follow one that has
 `rules->check<8, 1>(f)`.
 
 - Example (a fragment, not compiled): `rules->check(f)`
-- Why it is not compiled: a rule set and a function come from the caller
+- Why it is not compiled: `rules` and `f` come from the caller
 
 #### `check_text`
 

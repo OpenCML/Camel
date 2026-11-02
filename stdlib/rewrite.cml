@@ -136,7 +136,7 @@ export func run::<F>(f: F): Run<F>! when is_function::<F>()
 /// instance's type tuple), not its place in `rules`, so a rule draws the same samples in any call.
 /// A build without a solver answers `Sampled` and `Refuted` and never `Proved`. A generic law is
 /// checked at the types every operator group registered.
-/// @example-fragment a rule set comes from the caller
+/// @example-fragment `rules` comes from the caller
 /// @example rules->check<samples: 1000, seed: 7>
 with <samples: int = 100, seed: int = 0>
 export func check(rules: Rule[]): CheckReport
@@ -151,7 +151,7 @@ export func check(rules: Rule[]): CheckReport
 /// (`WithParameterAfterDefault`), and a function-typed one takes no default (`null` has type
 /// `void`, and `F?` leaves `F` unbound). Written first, it is the argument the arrow carries:
 /// `rules->check<8, 1>(f)`.
-/// @example-fragment a rule set and a function come from the caller
+/// @example-fragment `rules` and `f` come from the caller
 /// @example rules->check(f)
 #op('rewrite:check_over')
 with <samples: int = 100, seed: int = 0>
