@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：14 页
+## 现在在等作者：16 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -21,5 +21,7 @@
 | [`2026-11-03-does-a-loop-body-declare-its-next-state-or-compute-it`](2026-11-03-does-a-loop-body-declare-its-next-state-or-compute-it.cn.md) | 一页一问：`loop` 的下一个状态是"体算出来的"，还是"臂声明的"？ |
 | [`2026-11-03-how-does-a-member-of-an-operator-graph-get-its-operands`](2026-11-03-how-does-a-member-of-an-operator-graph-get-its-operands.cn.md) | 一页一问：算子图里的"成员"怎么拿到操作数？ |
 | [`2026-11-03-how-does-a-pattern-binding-outlive-a-yield`](2026-11-03-how-does-a-pattern-binding-outlive-a-yield.cn.md) | 一页一问：生成器里 `match` 臂的绑定，怎么活过 `yield`？ |
+| [`2026-11-03-is-there-a-chain-edge-between-two-effects-in-a-sync-block`](2026-11-03-is-there-a-chain-edge-between-two-effects-in-a-sync-block.cn.md) | 一页一问：`sync` 块里两条副作用语句之间，该不该有一条链边？ |
 | [`2026-11-03-may-transpose-of-a-function-declare-its-signature-after-building-the-member`](2026-11-03-may-transpose-of-a-function-declare-its-signature-after-building-the-member.cn.md) | 一页一问：`transpose(f)` 的类型能不能在"建完成员之后"才定？ |
+| [`2026-11-03-the-loop-example-is-type-correct-and-the-rule-already-fires`](2026-11-03-the-loop-example-is-type-correct-and-the-rule-already-fires.cn.md) | 更正：`do { println(s) }` 类型合法，`LoopBodyTypeMismatch` 今天就会报 |
 | [`2026-11-03-what-tells-the-seal-a-statement-is-on-a-chain`](2026-11-03-what-tells-the-seal-a-statement-is-on-a-chain.cn.md) | 一页一问：封口检查怎么知道"这个节点在链上有位置"？ |
