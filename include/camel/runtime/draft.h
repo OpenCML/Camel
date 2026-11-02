@@ -29,9 +29,11 @@
 #include "camel/runtime/graph.h"
 #include "camel/runtime/node_ref.h"
 #include "camel/runtime/program.h"
+#include "camel/utils/assert.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <memory>
 #include <optional>
 #include <span>
@@ -751,11 +753,32 @@ class GraphDraft {
     /// Regions (GCRegion). A draft has region 0, the body, once it has any other. Ids are not
     /// reused.
     size_t regionCount() const { return regions_.size(); }
-    const GCRegion &region(uint32_t id) const { return regions_[id]; }
+    /// The region `id`, which has to name one this draft has.
+    ///
+    /// A draft with no regions of its own has none to hand back -- region 0 is the body and it
+    /// exists only once there is another region (`regionCount`) -- while `nodeRegion` answers 0 for
+    /// every node of such a draft, because a node with no control region of its own is in the body.
+    /// So a reader that starts from `nodeRegion` asks `regionCount()` first; one that asks anyway
+    /// gets this reading instead of the element past the end of the vector. The reading is a
+    /// `GUARD`, not an `ASSERT`: it stays in every build, because the build that read past the end
+    /// without saying anything was the one where only a Debug build's standard library would have
+    /// reported it, and 24 tests of `feat/compile/stream` found it that way on 2026-11-02.
+    const GCRegion &region(uint32_t id) const {
+        GUARD(
+            id < regions_.size(),
+            std::format(
+                "A draft names a region by id, and this one has {}: id {} is neither the body "
+                "(region 0 exists once the draft has another region) nor a control region it "
+                "carries. A reader that starts from `nodeRegion` asks `regionCount()` first.",
+                regions_.size(),
+                id));
+        return regions_[id];
+    }
     size_t regionPortCount() const { return regionPorts_.size(); }
     gc_node_ref_t regionPort(size_t index) const { return regionPorts_[index]; }
     std::span<const gc_node_ref_t> regionPortsOf(uint32_t id) const {
-        return {regionPorts_.data() + regions_[id].portBegin, regions_[id].portCount};
+        const GCRegion &record = region(id);
+        return {regionPorts_.data() + record.portBegin, record.portCount};
     }
     /// The equivalences between the nodes of the draft (writings.h): the draft is not in the
     /// executable state while there are any. Until they are extracted, the nodes can only be
