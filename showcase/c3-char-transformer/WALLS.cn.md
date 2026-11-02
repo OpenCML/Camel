@@ -585,14 +585,17 @@ argmax **[1, 0]（两行都对）**。
 
 **三个 stage 并排**：stage6（位置）**0.9496** ← stage8（位置 + 因果注意力）**1.2813** ← stage7（位置 + 无 mask 注意力）**1.3871** ← 弃权地板 **1.386294**。
 
-## 墙 13（新）：端口由体加、由调用点填，中间没有一处数个数（norm 侧与 with 侧）
+## 墙 13（新，**潜在**）：端口由体加、由调用点填，中间没有一处数个数（norm 侧与 with 侧）
+
+**2026-11-03 复测：本条在 `579d2c7ad`（以及本树基座）上不可复现。** 被**更早一步**挡住 —— `transpose_loop_escape.reads_outer` 停在 `split skip=loop (this loop iterates an interval, and the interval form is not lifted by 'jvp' yet, so there is no lifted loop to cut)`，接着是 `transforms: split has no rule for this function`；**从没走到 `transpose`**，所以 `TRANSPOSE function=read_outer carried=2` 与 `Runtime indirect call norm-arity mismatch` 都不出现。挡它的正是本表**墙 14** 那类具名拒绝。
 
 - **判据**：成员构造时按"体需要的值"加端口，调用点仍按原形状填；**两侧的个数没有一处对齐校验**，于是
   norm 侧与 with 侧都以内部故障收场，而不是以一条语言诊断。
-- **证据（norm 侧）**：`transpose_loop_escape.reads_outer` 读数 `carried=2 captures=2` 对调用点 `has 1 args`
+- **证据（norm 侧，当时读数）**：`transpose_loop_escape.reads_outer` 读数 `carried=2 captures=2` 对调用点 `has 1 args`（`needs 2 / supplied 1` 那一对数的出处是**一页里已撤回的实验**，只作为当时的观测保留）
   ⇒ 抛 `Runtime indirect call norm-arity mismatch`（运行期内部错误）。
 - **证据（with 侧）**：`grad_of_a_division` 的 with-arity 读数（该族之外的第一条），结果不是诊断而是错值/内部错误。
-- **现状**：两侧同根，**一堵墙两个面**；只改一面会留下另一面同样的故障。
+- **现状**：两侧同根，**一堵墙两个面**；只改一面会留下另一面同样的故障。**但它今天不咬人**：挡在更早一步，所以它仍在"十三条"里算一条**潜在**墙，不是"不是墙"。
+- **重开条件**：哪天 `split`（进而 `jvp`）能抬升 interval 形式的循环、`transpose` 真的被走到，`norm-arity mismatch` 会重新出现，这条就回到"正在咬人"。
 
 ## 墙 14（新，暂记）：`split` 拒绝"操作数不在半程出口可达集里"的函数
 
