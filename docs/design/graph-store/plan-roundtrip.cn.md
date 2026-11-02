@@ -284,6 +284,31 @@ print family, and this operator's configuration is not a string, so its call has
 
 
 
+
+**2026-11-02 第二十六刀（`sync` 体的尾写）：作者裁定后一次落地，`closure_var` 回程 `EQUAL`**
+
+作者裁定："`sync` 体以一次写结尾——这是打印器的缺陷，不需要裁……修那一处识别，让退出节点是一次写时走它"。本刀只改这一处：`blockValueWrite` 去掉 `regionNeedsSync(0)` 的早退，`handsTail` 从"`tail` 必须是退出节点的直接 normal 输入"改成"沿退出链往下走，`tail` 站在链上任何一点都算"，交给 `assignmentHandingOn` 的是链底那个非闸门节点。
+
+**探针**（这是第二十二至二十五刀四次无效的根因，现在过了）：
+
+```
+修复前：[cml-probe2] region=0 tail=2 exit=6 sync=1 write=-1
+修复后：[cml-probe2] region=0 tail=2 exit=6 sync=1 write=4
+```
+
+**判据四样全过**：
+
+| 判据 | 读数 |
+| --- | --- |
+| 最小程序（`sync { t = t + y }`） | 往返 **`EQUAL (33 vertices, 105 edges)`**，两侧答案 `1` |
+| `g2` / `g3` | **12 对 12**、**8 对 8** |
+| `closure_var` | 往返 **`EQUAL (64 vertices, 244 edges)`**，答案 `3 / 24 / 249` 两侧相同 |
+| 六项读数 | `equivalent 514 → 515`、`not_equivalent 41 → 40`、`DIFFERENT 48 → 47`（差集**正好**是 `closure_var`）；`printed 562`、`checked 555`、`unfaithful 7`、`families 57` 不动 |
+
+**契约用例 `var_param` 通过**——它正是当初"放开 `regionNeedsSync` 守卫会打坏"的那条：那时打坏它的是"守卫去掉但链没认对"，链认对之后它不再坏。⇒ **"去掉守卫"本身不是病因，"只去掉守卫"才是。**
+
+**文本形状变了但答案没变**：`step` 的体现在打成 `let cml1 = t + y; t = cml1`（两句，不是源的一句 `t = t + y`），但不再有 `return`，重编译后与源图**同构**。⇒ "少一句"不是判据，"同构"才是。
+
 **2026-11-02 第二十五刀（命名空间包装）：`printed 559 → 562`，`equivalent 511 → 514`，判据没到 700，原因查清了**
 
 普查说第 2 族有 149 条只差一层 `namespace` 包装。本刀就补那一层：`printFunction` 认 `A::B` 形式的图名，把函数原样放进 `namespace A { … }`，函数名用末段（`Tools::inc` 打成 `namespace Tools { func inc(...) }`）；拒绝判据从"必须是标识符"放宽到"标识符或命名空间名"（`isNamespaceName`，段间 `::`，含 `<` 的不算）。

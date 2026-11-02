@@ -1482,6 +1482,7 @@ class CmlPrinter {
         // the write behind a value that reaches nothing (see `regionValueWrite`).
         const gc_node_ref_t valueWrite =
             region == 0 ? blockValueWrite(tail) : regionValueWrite(region, tail);
+
         if (valueWrite != camel::runtime::kInvalidNodeRef) {
             tailPrintedAsStatement = true;
         }
@@ -1566,7 +1567,7 @@ class CmlPrinter {
     /// a block with a chain runs its statements anyway, and a value that is no write's value has
     /// nothing behind it.
     gc_node_ref_t blockValueWrite(gc_node_ref_t tail) const {
-        if (tail == camel::runtime::kInvalidNodeRef || regionNeedsSync(0)) {
+        if (tail == camel::runtime::kInvalidNodeRef) {
             return camel::runtime::kInvalidNodeRef;
         }
         const gc_node_ref_t exitRef = graph_->exitNodeRef();
@@ -1574,14 +1575,40 @@ class CmlPrinter {
             graph_->node(exitRef)->kind != camel::runtime::GCNodeKind::Gate) {
             return camel::runtime::kInvalidNodeRef;
         }
-        bool handsTail = false;
-        for (const gc_node_ref_t input : graph_->normInputsOf(exitRef)) {
-            handsTail = handsTail || input == tail;
+        // A `sync` block writes its value out through a gate that waits on the write: the exit chain
+        // is `GATE(<value>, sync <- write)` and then `GATE(<that>, control <- write)`, so the tail the
+        // printer resolves is the value node at the bottom of it, not the exit's own input. Walk the
+        // chain down its normal inputs and accept the tail wherever it stands on that path; the value
+        // handed on is the first node on it that is not a gate.
+        gc_node_ref_t current = exitRef;
+        gc_node_ref_t value   = camel::runtime::kInvalidNodeRef;
+        bool handsTail        = false;
+        for (int guard = 0; guard < 16; ++guard) {
+            if (tail == current) {
+                handsTail = true;
+            }
+            const auto below = graph_->normInputsOf(current);
+            if (below.empty()) {
+                break;
+            }
+            const gc_node_ref_t next = below.back();
+            const camel::runtime::GCNode *nextNode = graph_->node(next);
+            if (nextNode != nullptr &&
+                (nextNode->kind == camel::runtime::GCNodeKind::Gate ||
+                 nextNode->kind == camel::runtime::GCNodeKind::Copy)) {
+                current = next;
+                continue;
+            }
+            value = next;
+            break;
         }
-        if (!handsTail) {
+        if (tail == value) {
+            handsTail = true;
+        }
+        if (!handsTail || value == camel::runtime::kInvalidNodeRef) {
             return camel::runtime::kInvalidNodeRef;
         }
-        return assignmentHandingOn(exitRef, 0, tail);
+        return assignmentHandingOn(exitRef, 0, value);
     }
 
     /// The assignment a block hands a value on behind: one of `gate`'s control inputs is a write
