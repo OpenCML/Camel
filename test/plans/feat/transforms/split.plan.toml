@@ -71,13 +71,13 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 [[tests]]
 name = "split_two_params"
-desc = "The reading program the author named for this tier (f(x, y) = x*x*y at x = 3, y = 2), read at both ends of the composition. The lift takes the four numbers (x, dx, y, dy) and answers the value 18.0 with the derivative in the direction the caller seeded: 12.0 for (1, 0) and 9.0 for (0, 1), which is 2xy and x^2. `split` of that lift cuts at the pair, and what crosses the cut is read off the graph: **five** residuals -- `x`, `y`, `x*x`, the product the backward half's rule for the second `mul` reads, and the two parameters' value ports, which cross because the tangent side reads their tangents -- so the forward half answers a five-member tuple and the backward half turns (1, 0) into 12.0 and (0, 1) into 9.0 without computing that product again. The diagnostic reads `residuals=5` and the forward half's type is `(float, float) => (float, (float, float, float, float, float))`: the arity is the graph's, not the signature's."
+desc = "The reading program the author named for this tier (f(x, y) = x*x*y at x = 3, y = 2), read at both ends of the composition. The lift takes the four numbers (x, dx, y, dy) and answers the value 18.0 with the derivative in the direction the caller seeded: 12.0 for (1, 0) and 9.0 for (0, 1), which is 2xy and x^2. `split` of that lift cuts at the pair, and what crosses the cut is read off the graph: **five** residuals -- `x`, `y`, `x*x`, the product the backward half's rule for the second `mul` reads, and the two parameters' value ports, which cross because the tangent side reads their tangents. Those five ride in `lin`'s **closure** (author, 2026-11-02 08:30), so `lin` takes the tangent direction alone: `lin(1, 0)` is 12.0 and `lin(0, 1)` is 9.0, without computing that product again. The diagnostic still reads `residuals=5` -- the count is the graph's -- while `lin`'s type states none of them: the forward half's exit is `(float, (float, float) => float)`, an ordinary function type at the call site."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_two_params.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["value= 18.0", "dfdx= 12.0", "dfdy= 9.0", "forward y= 18.0", "tangent dx= 12.0", "tangent dy= 9.0", "type=(float, float) => (float, (float, float, float, float, float)) pure residuals=5"]
+expect_stdout_contains = ["value= 18.0", "dfdx= 12.0", "dfdy= 9.0", "forward y= 18.0", "lin dx= 12.0", "lin dy= 9.0", "type=(float, float) => (float, (float, float) => float pure) pure residuals=5"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

@@ -1411,7 +1411,7 @@ together with the derivative of `f` at 2 in the direction 1.
 #### `split`
 
 ```camel
-split: (f: (v: float, d: float) => (float, float)) => (v: float, d: float) => (float, float)
+split: (f: (v: float, d: float) => (float, float)) => (v: float, d: float) => (float, (float, float) => float)
 ```
 
 The step of `vjp` that separates a lifted function into the part computable now and the linear
@@ -1419,20 +1419,21 @@ residue (design 4.2, 4.4). Implemented for the straight-line tier (`modules/tran
 the halves are built from the graph, and what crosses the cut -- the residuals -- is read off the
 graph too, so a body that needs a value it computed carries it instead of computing it again.
 
-The cut, as the author writes it (15:25; revised 2026-11-01): the first half takes the ordinary
-parameters and answers with the result and the *residuals* -- the values the second half reads --
-and the second takes the residuals and the `with` parameters and answers with the result.
+The cut, as the author rules it (15:25; revised 2026-11-01 and 2026-11-02 08:30): the front half
+takes the ordinary parameters and answers `(result, lin)`; `lin` is the back half, closed over the
+residuals -- the values it reads -- and takes the tangents and nothing else.
 
-    type Split<F> = ((..ParamsOf<F>) => (ResultOf<F>,  _),
-                     (_, ..WithOf<F>) => ResultOf<F>)
+    split(f) = (fwd)  where  fwd(..values) = (result, lin)
+    lin      = the back half, its residuals captured rather than passed
 
-The residual position is written `_` and is not a type a program can name: the residuals are a
-property of `f`'s graph, so their number and their types are read where the graph is in hand, and
-the compiler fills the position at instantiation (`ResidualsOf<F>` was the earlier spelling of a
-type function doing that, and it is gone). The second half is linear in the cotangent it is given
--- that is the condition the transpose step (M3) reads -- and both halves speak in `Tangent<T>`
+The residuals are therefore **not a position in any type**: they are `lin`'s closure tuple, whose
+layout the run-time kernel reads off the back half's graph (the capture ports the graph declares),
+one member per residual, in the order the graph names them. At a call site `lin` is an ordinary
+function type, so no signature states a count it cannot know and no guard has to admit one
+(`ResidualsOf<F>`, and the `_` position before it, are both gone). `lin` is linear in the tangent
+it is given -- the condition the transpose step (M3) reads -- and both halves speak in `Tangent<T>`
 at the top of this file.
-fragment of the composition: `let (fwd, lin) = split(jvp(f))`.
+fragment of the composition: `let fwd = split(jvp(f))`, then `let (y, lin) = fwd(x)`.
 
 - Example (a fragment, not compiled): `let step = split`
 - Why it is not compiled: `split` takes the lifted function a `jvp` call writes, so the example is a

@@ -49,27 +49,28 @@ using camel::core::type::Type;
 using camel::core::type::type_vec_t;
 using camel::core::type::TypeCode;
 
-/// The type of `split(f)` for a function of this type: the call, whose result is the pair of the two
-/// halves. nullptr when the function is outside what the step takes. Its residuals member is the
-/// transform's own residuals tuple with no members: the members are the graph's answer.
+/// The type of `split(f)` for a function of this type: the call answers the forward half, whose own
+/// call answers `(result, lin)` with `lin` an ordinary function of the tangents. nullptr when the
+/// function is outside what the step takes. The residuals are `lin`'s closure, so no position in this
+/// signature states them: with no graph there is nothing to name, and the count a reading states comes
+/// from the graph (`residuals=`).
 FunctionType *splitOperatorSignature(FunctionType *function) {
     if (function == nullptr) {
         return nullptr;
     }
-    const SplitHalves halves = splitHalvesWith(function, TupleType::residuals({}));
+    const SplitHalves halves = splitHalvesWith(function, nullptr);
     if (halves.pair == nullptr) {
         return nullptr;
     }
     FunctionTypeFactory factory;
     factory.addNormArg("f", function, false);
-    factory.setExitType(const_cast<TupleType *>(halves.pair));
+    factory.setExitType(const_cast<Type *>(halves.pair));
     return factory.build();
 }
 
-/// split: a lifted function in, its two halves out. `f`'s every parameter is `Lift<T> = (T, Tangent)`
+/// split: a lifted function in, its forward half out. `f`'s every parameter is `Lift<T> = (T, Tangent)`
 /// and its result is `(result, tangent)`, so the forward half takes the values and answers
-/// `(result, residuals)` while the backward half takes the residuals and the tangents and answers
-/// the tangent.
+/// `(result, lin)`, where `lin` is the backward half closed over the residuals and takes the tangents.
 class SplitResolver final : public FuncTypeResolver {
   public:
     std::optional<FunctionType *> resolve(
@@ -93,7 +94,7 @@ class SplitResolver final : public FuncTypeResolver {
             norm[0]->code() != TypeCode::Function) {
             return std::nullopt;
         }
-        // The reason only: no graph, so the residuals tuple stays the transform's own, with no members.
+        // The reason only: no graph, so `lin` captures nothing and there is nothing to name.
         const SplitHalves halves = splitHalvesWith(tt::as_ptr<FunctionType>(norm[0]), nullptr);
         if (!halves.why.empty()) {
             return halves.why;
@@ -102,13 +103,11 @@ class SplitResolver final : public FuncTypeResolver {
     }
 
     /// The text is the one the declaration writes (`stdlib/signatures/transforms.cml`), and it is used
-    /// for one thing: naming the overload in a refusal that lists what the operator accepts. The
-    /// residual position in it is the compiler's (author, 2026-11-01), so it is not a reading of
-    /// anything -- the count the step prints comes from the graph (`residuals=`) and the halves' types
-    /// come from the graphs (`type=`), never from this spelling.
+    /// for one thing: naming the overload in a refusal that lists what the operator accepts. No
+    /// position in it states the residuals -- they are `lin`'s closure, and the count the step prints
+    /// comes from the graph (`residuals=`).
     std::string signature() const override {
-        return "(f: (float, float) => (float, float)) => ((float) => (float, (float)), ((float), "
-               "float) => float)";
+        return "(f: (float, float) => (float, float)) => (float, float) => (float, (float) => float)";
     }
 
     bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
@@ -119,8 +118,7 @@ class SplitResolver final : public FuncTypeResolver {
     }
 };
 
-/// split(f) at run time: the pair of the two graphs, as two function values in one tuple. `f`'s
-/// graph is read, never changed.
+/// split(f) at run time: the forward half, as a function value. `f`'s graph is read, never changed.
 slot_t splitKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
     auto *function = norm.get<::Function *>(0);
@@ -152,25 +150,17 @@ slot_t splitKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
     auto *forwardFunction = ::Function::create(
         built.program, built.forward->id(), function->tupleType(), mm::autoSpace());
-    auto *backwardFunction = ::Function::create(
-        built.program, built.backward->id(), function->tupleType(), mm::autoSpace());
     if (::Tuple *closure = function->tuple()) {
         for (size_t i = 0; i < closure->size(); ++i) {
             forwardFunction->tuple()->set<slot_t>(
                 i, closure->get<slot_t>(i), function->tupleType());
-            backwardFunction->tuple()->set<slot_t>(
-                i, closure->get<slot_t>(i), function->tupleType());
         }
     }
-    // The pair is two function values: the field a typed write would materialise is an aggregate,
-    // and a function is not one. The placeholder the kernel used to type it with, and the
-    // declaration text it used to print, are both gone (author, 2026-11-01).
-    auto *pair = ::Tuple::create(2, mm::autoSpace());
-    pair->set<slot_t>(0, toSlot<::Function *>(forwardFunction));
-    pair->set<slot_t>(1, toSlot<::Function *>(backwardFunction));
-    // The call's reading: which graph the two halves were built from.
+    // The answer is the forward half alone: `fwd(x)` is `(y, lin)`, and `lin` is built inside that
+    // graph, closed over the residuals the call computes (author, 2026-11-02 05:10). The backward
+    // graph is reachable only through that `lin`, which is why the call hands out no second value.
     printSplitCallReading(std::cout, function->graph()->name());
-    return toSlot<::Tuple *>(pair);
+    return toSlot<::Function *>(forwardFunction);
 }
 
 } // namespace
