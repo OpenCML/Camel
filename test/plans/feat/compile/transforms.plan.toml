@@ -219,7 +219,6 @@ case = "../../../cases/compile/transforms/vjp_carries_its_ruleset.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "stdout"]
-skip_unless = ["node", "test/tools/have-library-vjp.mjs"]
 expect_exit = 0
 expect_stdout_contains = ["vjp_ruleset value=8.0", "(12.0)", "vjp_ruleset cotangent=12.0", "vjp_ruleset grad=12.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

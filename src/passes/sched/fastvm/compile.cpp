@@ -99,9 +99,6 @@ const std::unordered_map<camel::core::OperId, OpCode> &getSupportedInlineOperato
         {":op/eq_i", OpCode::IEQ},   {":op/eq_l", OpCode::LEQ},
         {":op/eq_f", OpCode::FEQ},   {":op/eq_d", OpCode::DEQ},
 
-        {":op/ne_i", OpCode::INE},   {":op/ne_l", OpCode::LNE},
-        {":op/ne_f", OpCode::FNE},   {":op/ne_d", OpCode::DNE},
-
         {":op/le_i", OpCode::ILE},   {":op/le_l", OpCode::LLE},
         {":op/le_f", OpCode::FLE},   {":op/le_d", OpCode::DLE},
 

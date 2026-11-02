@@ -143,10 +143,6 @@ slot_t __coll_eq__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return toSlot<Bool>(norm.get<Table *>(0)->equals(norm.get<Table *>(1), norm.type(0), true));
 }
 
-slot_t __coll_neq__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    return toSlot<Bool>(!norm.get<Table *>(0)->equals(norm.get<Table *>(1), norm.type(0), true));
-}
-
 const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
     using std::nullopt;
     using std::optional;
@@ -289,16 +285,7 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
                   [=](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
                       return boolIf(sameCollections(norm) != nullptr);
                   })}}),
-        OperatorGroup::create(
-            "__neq__",
-            {{":coll/neq",
-              typed(
-                  0,
-                  2,
-                  "(a: Map<K, V> | Set<T>, b: Map<K, V> | Set<T>) => bool",
-                  [=](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
-                      return boolIf(sameCollections(norm) != nullptr);
-                  })}}),
+
     };
     return groups;
 }
