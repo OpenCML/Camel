@@ -271,18 +271,47 @@ function pageStem(name) {
 function checkAnsweredPages() {
     if (!fs.existsSync(QUESTIONS_DIR) || !fs.existsSync(REVIEWS_DIR)) return 0
     const reviews = fs.readdirSync(REVIEWS_DIR).filter((name) => name.endsWith('.md'))
+    // A page is answered when the reviewer's index names it, whichever way that reads: a page of
+    // its own in reviews/, or its name inside the index of a batch of questions
+    // (`reviews/questions-<date>.md`), where the reply is a line and not a file. Both are the
+    // author's rule of 18:30, and reading only the first would leave every page of a batch
+    // looking unanswered.
+    const indexFiles = reviews.filter((name) => name.startsWith('questions-'))
+    const indexLines = indexFiles.map((name) => ({
+        name,
+        lines: fs.readFileSync(path.join(REVIEWS_DIR, name), 'utf8').split(/\r?\n/),
+    }))
     const problems = []
     for (const page of fs.readdirSync(QUESTIONS_DIR)) {
         if (!page.endsWith('.md') || page === 'README.md') continue
         const stem = pageStem(page)
         const answered = reviews.filter((review) => {
+            if (review.startsWith('questions-')) return false
             const reviewStem = pageStem(review)
             return reviewStem === stem || reviewStem.endsWith(`-${stem}`) || reviewStem.endsWith(stem)
         })
-        if (answered.length > 0) {
+        // A stem shorter than this is a word rather than a page name, and matching one would
+        // report a page nobody answered; a wrong report here blocks the next real question, which
+        // is worse than a miss.
+        const namedIn =
+            stem.length < 20
+                ? []
+                : indexLines
+                      .map(({ name, lines }) => {
+                          const hits = []
+                          lines.forEach((line, i) => {
+                              if (line.includes(stem)) hits.push(i + 1)
+                          })
+                          return { name, hits }
+                      })
+                      .filter((entry) => entry.hits.length > 0)
+        const where = [
+            ...answered.map((review) => `docs/handover/reviews/${review}`),
+            ...namedIn.map((entry) => `docs/handover/reviews/${entry.name}:${entry.hits.join(',')}`),
+        ]
+        if (where.length > 0) {
             problems.push(
-                `docs/handover/questions/${page}: already answered by ` +
-                    answered.map((review) => `docs/handover/reviews/${review}`).join(', ') +
+                `docs/handover/questions/${page}: already answered by ${where.join('; ')}` +
                     ' -- the page was read and the reply is in reviews/, so this copy is left over',
             )
         }
