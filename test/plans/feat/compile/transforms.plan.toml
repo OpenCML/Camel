@@ -591,6 +591,12 @@ timeout_ms = 20000
 # reading already satisfies cannot tell a working transpose from a silent zero -- `nested` answered 0.0
 # for exactly that reason until the tuple-in-a-tuple rule was written, and its forward 2.0 had hidden
 # it.
+# A better pin for these two cases is derived and is not here on purpose: lane-norm-arity re-pins both
+# to `split(jvp(...))` at `x = 2` (value 30, cotangent 15 -- at `x = 1` both are 15, so a run that
+# answered the value where the cotangent belongs would look right). Measured on this tree that pin fails
+# with "transpose has no transpose for this function: a loop carries...", because the reverse walk
+# `split(jvp(...))` needs is not on develop yet, and taking it here would have added two reds. The pin
+# lands when the walk does; this note is what tells the next reader why the better pin is absent.
 [[tests]]
 name = "transpose_loop_escape.names_the_value_one_read"
 desc = "`read_one(x) = loop s = x for i in 0..3 do 2.0*s + x` reads the parameter inside the loop body, so every round's cotangent lands on `x` and has to leave the loop. The loop carries it as a second state and answers 15 -- `s = 2s + x` three times is `8x + 7x`, the state's own cotangent 8 plus the carried sum 7 -- where before this cut it refused with `skip=state`. The reading is kept: `carried=1` in place of `skip=state`, `answer=summed` because the escaped value is the one the state starts from, `captures=1`, and the `ESCAPE` line still names the parameter port as the target and the body's `add` as the product that handed the cotangent out. A channel that dropped that line when it started working could not be compared with the refusal it replaced."
