@@ -803,19 +803,30 @@ EXAMPLE_STOPS['a semantic error'] records 39, and the run found 40: update the n
 **第 40 条是 `vjp` 自己的例子**：`stdlib/vjp.cml:68` 的 `@example` 仍把 `f` 当值写，而声明已把它当类型参数 ⇒
 `UnresolvedReference: 'f'`。**这是例子自己的欠账，不是"豁免"**——所以数字改成 40，并在旁边写明为什么。
 
-**④ `docs.doc_readings.current`**（该计划条目已随工具在 05:30 删除）：它量的四份文件是
-`split_operator.cpp, jvp_operator.cpp, stdlib/signatures/transforms.cml, stdlib/vjp.cml`：
+**④ `docs.doc_readings.current`**（该计划条目已随工具在 05:30 删除）：它量的是下面这六个文件。
 
-| 文档记的 | 树上量的 | 哪一份 |
+**measured on `origin/develop` @ `99c0ee065`** —— 命令 `git show 99c0ee065:<路径> | wc -l`，六个各量一次：
+
+| 文件（develop 上的路径） | `wc -l` @ `99c0ee065` | 旧页写的 |
 |---|---|---|
-| 202 | 202 | `split_operator.cpp` |
-| 268 | 268 | `jvp_operator.cpp` |
-| 116 | 116 | `stdlib/signatures/transforms.cml` |
-| **104** | **98** | **`stdlib/vjp.cml`** ← 少了 6 行 |
-| 1531 | 1531 | （页上第五个数） |
-| 1396 | 1396 | （页上第六个数） |
+| `modules/transforms/split_operator.cpp` | **199** | 202 |
+| `modules/transforms/jvp_operator.cpp` | **280** | 268 |
+| `stdlib/signatures/transforms.cml` | **117** | 116 |
+| `stdlib/vjp.cml` | **96** | 98 |
+| `modules/transforms/split.cpp` | **2224** | 1531 |
+| `modules/transforms/jvp.cpp` | **1289** | 1396 |
 
-**同一笔 `9048c30ea` 把 `vjp.cml` 缩短了 6 行** ⇒ 页上 104 改 98。**本车道没写过 `stdlib/vjp.cml`**（上面那条 `git log` 就是证明）。
+这一版是**勘误**：旧页那六个数（202/268/116/98/1531/1396）是在**车道树**上量的，却被当成 develop 的读数引用，
+树一动就全错——两列相差最大的两处（1531 → 2224、1396 → 1289）就是车道树与 develop 中间隔着的那些提交。
+上表才是 develop 上的数，**要引用就带这个 sha 与这条命令重数一次**，不要引本文。
+
+两处口径：`split_operator.cpp` 不以换行结尾，所以 `wc -l` 报 **199**、`cat` 数则是 200 行；`transforms.cml`
+这一行指的是 `stdlib/signatures/transforms.cml`（**117** 行，签名声明），`stdlib/transforms.cml` 是同名的另一份、
+只有 **25** 行，照那个名字去数会数到另一份。旧页的"第五个数""第六个数"没有写是哪一份文件，**拿到但分辨不出**：
+它们无法归到某个路径上，上表按路径重量出来的才是可引用的数。
+
+**同一笔 `9048c30ea` 把 `vjp.cml` 缩短了 6 行** ⇒ 页上 104 改 98；那一笔之后它在 develop 上已是 **96** 行（上表）。
+**本车道没写过 `stdlib/vjp.cml`**（上面那条 `git log` 就是证明）。
 
 **⑤ 落到一句可执行的话**：**属于 (b) 文档数错了** ——
 `docs/stdlib-reference.md` 用 `--write` 重生成（不手改），`EXAMPLE_STOPS['a semantic error']` 39→40 并注明是 `vjp` 的例子，

@@ -3933,9 +3933,16 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         //
         // Every escape form is decoded here, so an unknown escape is reported here too, once per
         // spelling, in the lexical catalogue: an octal escape is simply unknown, and so is
-        // `\q`. The text keeps the pair as written; a warning does not stop the program.
+        // `\q`. The text keeps the pair as written; the diagnostic is an error, so a program
+        // that writes one does not compile (the author's ruling of 2026-11-02: a string that
+        // silently becomes something else is dearer than one that refuses to build).
+        //
+        // A raw string (`r"C:\dir"`) is not decoded at all: its text is the value, so a backslash
+        // in it is a backslash -- there is no escape to be unknown, and the table is not run.
         std::vector<std::string> unknownEscapes;
-        std::string decoded = decodeEscapes(str, literal->fromFormattedString(), &unknownEscapes);
+        std::string decoded = literal->fromRawString()
+                                ? str
+                                : decodeEscapes(str, literal->fromFormattedString(), &unknownEscapes);
         for (const std::string &escape : unknownEscapes) {
             diags_->of(LexicalDiag::InvalidEscapeSequence)
                 .at(ast->load()->tokenRange())

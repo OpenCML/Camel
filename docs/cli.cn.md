@@ -254,7 +254,7 @@
 
 ### 警告
 
-警告（`[Warn]` 诊断）不会让程序停下。下表是编译器关于效应的警告和流水线的警告；其余的警告（`InvalidEscapeSequence`、`ExitInUnusedBranch`、`MatchWithoutDefault`）见 [diagnostics.md](diagnostics.md)。
+警告（`[Warn]` 诊断）不会让程序停下。下表是编译器关于效应的警告和流水线的警告；其余的警告（`ExitInUnusedBranch`、`MatchWithoutDefault`）见 [diagnostics.md](diagnostics.md)。
 
 | 名字 | 代码 | 位置 | 含义 |
 |---|---|---|---|

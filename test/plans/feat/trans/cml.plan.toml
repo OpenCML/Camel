@@ -24,7 +24,7 @@ tool = "node"
 case = "../../../tools/roundtrip-compare.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["ROUNDTRIP cases=8 identical=8 differs=0", "case=linear/runtime/var_read_before_region rc=0 stdout=identical", "case=linear/runtime/order_edges_regions rc=56 stdout=identical"]
+expect_stdout_contains = ["ROUNDTRIP cases=9 identical=9 differs=0", "case=linear/runtime/var_read_before_region rc=0 stdout=identical", "case=linear/runtime/order_edges_regions rc=56 stdout=identical", "case=compile/escapes/raw_roundtrip rc=0 stdout=identical"]
 timeout_ms = 120000
 
 [[tests]]

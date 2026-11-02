@@ -24,15 +24,12 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `UnknownInternalError` | An error has occurred: {0}. |
 | `GeneratorInitialValueShapeUnsupported` | An error has occurred: {0}. |
 
-**Lexical — errors** (`LexicalDiag`) — 4
+**Lexical — errors** (`LexicalDiag`) — 5
 
 | `IllegalCharacter` | Illegal character '{0}'. |
 | `InvalidNumberFormat` | Invalid number format: '{0}'. |
 | `UnclosedStringLiteral` | This string literal is not closed. |
 | `UnterminatedComment` | Unterminated comment: {0}. |
-
-**Lexical — warnings** (`LexicalDiag`) — 1
-
 | `InvalidEscapeSequence` | Invalid escape sequence in string: {0}. |
 
 **Syntax — errors** (`SyntaxDiag`) — 19

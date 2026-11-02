@@ -49,7 +49,7 @@ const std::unordered_map<LexicalDiag, DiagInfo> &getLexicalDiagInfoMap() {
             {
                 "InvalidEscapeSequence",
                 "Invalid escape sequence in string: {0}.",
-                "Check and correct the escape sequence.",
+                "A string decodes '\\n', '\\t', '\\r', '\\a', '\\b', '\\f', '\\v', '\\0', '\\\\', '\\'', '\\\"', '\\`', '\\$', '\\xHH' and the braced Unicode form '\\u{{...}}'. Any other pair is refused rather than kept: a string that silently becomes something else is dearer than one that does not build. To write a backslash itself, write '\\\\' or use a raw string, in which nothing is an escape: r\"C:\\dir\".",
             },
         },
     };
