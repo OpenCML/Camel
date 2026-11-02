@@ -9,6 +9,12 @@
  * frame -- on one build it read as empty for `0.1 as bf16`, and an empty digit string lays out a
  * text with no digits in it. This case pins the digits themselves, for both reduced types, on the
  * values the search trims and the values it does not.
+ *
+ * This is not the regression test of that read: whether a frame is reused is up to the build, so a
+ * compiler that leaves the buffer alone prints these values correctly with the view still pointing
+ * at it. What is pinned here is the text the language promises, on both platforms; the read of the
+ * dead frame has its one reading on the Windows leg, where a check's report stopped inside a bf16
+ * counterexample (2026-11-02, `rules.library_verdicts_are_exactly_these`).
  */
 
 func main(): int sync {
