@@ -191,7 +191,7 @@ timeout_ms = 120000
 name = "grow.params_after_20_steps"
 desc = "Twenty Adam steps of the stage-2 model, then the ten tensors printed, against `baseline/grad_first_step.py --stage 2 --params 20`.  The first-step gradient matching says the pullback is right; twenty steps matching says the update, `adam`'s two averages and the next step's gradient are wired up too.  The pinned values are the reference's own to nine significant digits, and the element-by-element verdict is the comparison script's."
 case = "../../../showcase/c3-char-transformer/grow/params_after_20_steps.cml"
-args = ["${case}"]
+args = ["${case}", "--arg", "count=20"]
 kind = "behavior"
 expect_exit = 0
 expect_stdout_contains = ["param steps=20 loss=", "param wq1 [[0.964079930726", "param g1 [1.029526109", "param b1 [0.02839496349", "param g2 [0.95796927601", "param b2 [-0.03999999979"]

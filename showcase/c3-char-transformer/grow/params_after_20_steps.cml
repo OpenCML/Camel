@@ -57,18 +57,18 @@ func initial(): Model {
     }
 }
 
-func main(): int sync {
+func main(count: int): int sync {
     let x = [[1.0, 0.5], [0.5, 1.0]] as float[2, 2]
     let model0 = initial()
     let (final, state, steps) = loop m = model0, opt = adam_state(model0), step = 0
-        while step < 20
+        while step < count
         do {
             let (value, g) = with_grad(block)<m>(x)
             let next = adam(m, g, opt, 0.002)
             return (next.0, next.1, step + 1)
         }
     let loss = with_grad(block)<final>(x).0
-    `param steps=${steps} loss=${loss:.12f}`->println
+    `param steps=${count} loss=${loss:.12f}`->println
     "param wq1 "->print; final.wq1->println
     "param wk1 "->print; final.wk1->println
     "param wv1 "->print; final.wv1->println
