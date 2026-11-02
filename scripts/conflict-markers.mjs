@@ -1,15 +1,22 @@
-// Two-line header: name, purpose.
-// conflict-markers: no file carries the leftovers of an unfinished merge.
+#!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// Looks for the leftovers of an unfinished merge in every tracked text file: the hunk head, the
+// diff3 base block, the separator and the tail.
 //
 // Why this exists beside the one-liner we used to type: on 2026-11-02 a merge that had been aborted
 // was committed as 407a7ee9f, and test/plans/feat/trans/cml.plan.toml went into the tree carrying
 // the diff3 base block `||||||| bbc9b2b65`. The gate we ran was `git grep -n '^<<<<<<< '`, which
-// cannot see that marker, nor a trailing `=======` or `>>>>>>>`: the half of a conflict that sits
-// below the base is exactly the half nobody looks at, and a plan file with a base block in it still
-// parses far enough to be reported as a case. So all four forms are checked here, and the reason a
-// bare `=======` needs care is that in Markdown it is a valid setext heading underline -- hence the
-// rule that a `=======` counts only when a `<<<<<<<` or `|||||||` line is inside the same hunk, i.e.
-// within the previous few lines.
+// cannot see that marker, nor a trailing separator or tail: the half of a conflict below the base is
+// the half nobody looks at, and a plan file with a base block in it still parses far enough to be
+// reported as a case. A bare `=======` is not a marker by itself -- in Markdown it is a setext
+// heading underline -- so it counts only where a hunk head or a base block precedes it in the same
+// block.
+//
+//   node scripts/conflict-markers.mjs             check the tree, print every marker it finds
+//   node scripts/conflict-markers.mjs --self-test on a probe file with all four forms, catch four
+//                                                lines; the old one-liner catches one
 
 import fs from 'node:fs';
 import path from 'node:path';
