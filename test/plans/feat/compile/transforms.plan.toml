@@ -375,6 +375,38 @@ expect_stdout_not_contains = ["callees=3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# A rule is instantiated at the type of the operand it was matched on, not at `float`.
+#
+# `f32` is the smallest program that tells the two writings apart: its tangent space is the value's
+# own type, and it is not `float`. An array operand cannot show it -- the rule's `T` is the array's
+# *element*, so `sum_axis` over a `float[]` is filed at `float` either way -- which is why the
+# question is `rule_types.h`'s (the element of the first value operand) and not the operand's type.
+#
+# With `{Type::Float64()}` written into the instance call, this program did not read a wrong number:
+# it built `autodiff::mul_tangent<float>` around `f32` operands and the pass refused the graph it was
+# handed -- "passes a f32 as ordinary argument 0 of 'autodiff::mul_tangent<float>', which takes a
+# float", four edges. `g(x) = x * x` at 1 reads `(1, 2)`.
+[[tests]]
+name = "jvp_rule_instance_at_the_operand_type.f32"
+desc = "`g(x: f32) = x * x` differentiated by `jvp`: every value in the body is an `f32`, so the rule the ruleset files for `*` has to be instantiated at `f32` -- the operand's own type -- and the lifted signature and the pair it answers with are `(f32, f32)`. Instantiating it at `float` instead builds `mul_tangent<float>` around `f32` values and the pass refuses the graph (four broken edges), so this case reads `1.0` and `2.0` only when the type argument comes from the operand."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_rule_at_the_operand_type.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "stdout"]
+expect_exit = 0
+# The reading spans both streams: the two numbers are the program's output, and the
+# `REINTERP` lines that name the rule instance and the type it was asked for are the pass
+# talking, which goes to stderr. Asserting both against stdout made this case look broken on a
+# tree where the fix is present -- the run of 2026-11-02 18:45 printed exactly the expected
+# stderr lines and failed on four needles that were never on that stream. `expect_output_*`
+# reads the two streams as one, which is what a case reports when its verdict is a sentence the
+# program and the pass together print.
+expect_output_contains = ["rules=jvp_mul", "type=(f32, f32) => (f32, f32)", "1.0", "2.0"]
+expect_output_not_contains = ["mul_tangent<float>", "which takes a float"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 [[tests]]
 name = "transpose_walks_each_arm_of_a_branch"
 desc = "`transpose` of a function with a branch: each arm is a linear chain of its own, the cotangent runs backwards inside the arm that produced the value, and the condition is read as it was -- the same predicate, at the values the caller passed -- choosing the other arm. The transposed function therefore takes the parameters of `f` first and the cotangent last, which is the one shape for every function: `transpose(f)(x, 1.0)`. For `pick(x)` returning `2*x` when `x > 0` and `3*x` otherwise, the cotangent 1.0 pulls back to 2 at a positive x and 3 at a negative one. `merged(x)` uses its parameter twice on one side only (`2*x + 5*x`, else `4*x`), so the two sides answer 7 and 4: within an arm two cotangents add, while the two arms' cotangents are joined rather than added, because only the arm that ran contributed one. The reading names the arms it built (`arms=2`), the rules it applied, and the type the resolver and the graph agree on."
