@@ -190,14 +190,18 @@ class EdgeChecker {
     /// itself and the operator table, as edges.cn.md 1 and 4.6 define it, not from a marker the
     /// builder wrote (author ruling 2026-11-02 04:50: a marker that can be derived should not be
     /// stored).
-    bool isChainStatement(const GCNode *node) const {
+    bool isChainStatement(gc_node_ref_t ref) const {
+        const GCNode *node = graph_.node(ref);
+        if (node == nullptr) {
+            return false;
+        }
         switch (node->kind) {
         case GCNodeKind::Brch:
         case GCNodeKind::Loop:
         case GCNodeKind::Call:
             return true;
         case GCNodeKind::Oper: {
-            const auto *body = graph_.nodeBodyAs<GCOperBody>(node);
+            const auto *body = graph_.nodeBodyAs<GCOperBody>(ref);
             if (body == nullptr || body->oper == camel::core::kNoOper) {
                 return false;
             }
