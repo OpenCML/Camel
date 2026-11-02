@@ -280,6 +280,26 @@ print family, and this operator's configuration is not a string, so its call has
 
 
 
+
+**2026-11-02 第二十三刀试过并回退：改"值节点有几个使用者"打坏了 `var_param`，而 `closure_var` 一字未动**
+
+按上一刀的形状动手，四步都试了：把退出链（`GATE`/`COPY`，从 exit 往下）从 `valueUsers` 里排除、让 `blockValueWrite` 对 `sync` 体也生效、在 `assignmentHandingOn` 里穿过闸门找写的值、以及把"退出链的尾就是值"这条也认了。**结果：`closure_var` 的打印文本一字未变，而 `test/cases/trans/cml/var_param.cml` 的契约用例坏了**（`feat.trans.cml` 报 `AssertionError: var_param.before.json / after.json`）⇒ **按"不许把结构差换成语义差"的纪律，全部回退。**
+
+**探针给的新事实（这次是它省了一整晚）**：
+
+```
+[cml-probe2] region=0 tail=4 exit=7 sync=1 write=-1
+[cml-probe2] region=0 tail=4 exit=7 sync=1 write=-1   (两张 lambda 图各一行)
+```
+
+- `tail=4` **是值节点本身**（`n4`，那个 `:op/add_l`），不是退出闸门、也不是它直接带的那个 `sync` 闸门 `n6`；
+- 而 `blockValueWrite` 要求 `tail` 是 exit 的**直接** normal 输入（`exit=7` 的直接输入是 `n6`）⇒ **`write=-1`，认写这一步从入口就没生效**；
+- 所以"穿过闸门链"那一步再怎么改都看不到效果——**它根本没被调用到**。
+
+**四次尝试的读数完全一致**（同语料 3377）：`printed 559`、`checked 552`、`equivalent 511`、`not_equivalent 41`、`unfaithful 7`、`families 53`、`DIFFERENT 48` 行，且 `DIFFERENT` 集合与回退后**逐行相同**（`diff` 空）。⇒ 这一刀对语料**零影响**，只在 `var_param` 上造出一处坏。
+
+**下一刀要改的是入口，不是链**：`blockValueWrite` 的 `handsTail` 判据要以**"`tail` 在退出链上"**为准（`tail` 可以是值节点本身，也可以是链上任何闸门），而不是"`tail` 是 exit 的直接 normal 输入"；改完先用 `CAMEL_CML_PROBE2` 确认 `write != -1`，再谈文本。
+
 **2026-11-02 第二十二刀没下：`sync` 闸门是"区域的值等它自己的写"，而三句文本把一次写拆成了三句（只查未改）**
 
 `closure_var` 剩下的差是两张 lambda 图各少一个带 `sync` 输入的 `GATE`。查下来三条判据各有答案：
