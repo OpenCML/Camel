@@ -2113,6 +2113,10 @@ size_t GraphDraft::dissolveUnorderedGates() {
             // with its entries in test/plans/feat/opt/effects_kept.plan.toml -- that plan's subject
             // is "a pass never changes which effects run", which is this defect; the `trans` plans
             // are dumps and traces and do not run programs.
+            // The guard asks the pass layer's own question -- `carriesOrdering` with the shape rule,
+            // the predicate `pruneBranch` and `replaceNode` read: a node another reader keeps is not
+            // the one this erase endangers, and a node whose running the program does not observe has
+            // no place to lose.
             const bool holdsEffectPlace =
                 normUsersOf(id).empty() && withUsersOf(id).empty() &&
                 normUsersOf(value).size() + withUsersOf(value).size() == 1 &&
