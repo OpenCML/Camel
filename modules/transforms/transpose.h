@@ -52,7 +52,7 @@ struct TransposeGraph {
 /// answer's slots and the callee's parameters are not the same list.
 camel::core::type::FunctionType *transposeSignature(
     camel::core::type::FunctionType *function, const std::vector<bool> &participates = {},
-    std::vector<size_t> *answersOf = nullptr, bool honourClosedHalf = true);
+    std::vector<size_t> *answersOf = nullptr);
 
 /// Builds the graph of `transpose(f)` for the graph `function` of `program`. The graph `function`
 /// is read, never changed. `os` receives what was built: which rule every primitive on the path was

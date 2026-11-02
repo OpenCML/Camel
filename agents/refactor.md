@@ -118,6 +118,14 @@ answer, so a test that merely passes does not catch it.
   rank that are not the same type never merge: a rule that merges them changes the language to
   make a report go away.
 
+- **Delete code by matching it, not by counting lines.** A script that says "remove lines 900..901"
+  is decided against a listing that may already be stale by the time it runs, and the damage is
+  silent: it compiles nowhere, or worse, it compiles. Wrong: `Get-Content | Select-Object -Skip 899 |
+  Select-Object -First 2` and a hand-rolled index per file. Right: the exact text of the lines being
+  removed, matched once, plus a diff read before committing. This happened on 2026-11-02: a removal
+  by line number took `Parts`' closing brace, the `open_` field, three comment lines and a
+  `halves.closure = closure;` assignment with it, in files that then still had to compile. Every one
+  of those was found by reading the diff, not by the compiler.
 ## Architecture Reporting
 - During major refactors, identify the primary structural contradiction early.
 - If a deeper dependency blocks progress, surface that blocker directly instead of only cleaning peripheral symptoms.

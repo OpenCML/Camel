@@ -81,7 +81,7 @@ Type *resultCotangentType(const camel::runtime::GCGraph *function) {
 
 FunctionType *transposeSignature(
     FunctionType *function, const std::vector<bool> &participates,
-    std::vector<size_t> *answersOf, bool honourClosedHalf) {
+    std::vector<size_t> *answersOf) {
     if (answersOf != nullptr) {
         answersOf->clear();
     }
@@ -113,41 +113,6 @@ FunctionType *transposeSignature(
     // shape and changed where the known values come from.
     const size_t count = function->normTypesCount();
     if (!participates.empty()) {
-    // A **closed half** -- `split`'s backward graph, whose parameters are the tangents and whose
-    // values ride in its closure -- is transposed to a function that takes the cotangent alone and
-    // answers one cotangent per tangent. The bit is on the type because a resolver is handed nothing
-    // else, and a closed half's type is otherwise identical to a plain function of the same
-    // parameters (FunctionType::withClosedHalf). Every shape below is a plain function: it keeps
-    // taking the values it is transposed at, because there is no other place they could come from.
-    //
-    // `honourClosedHalf` is false when the shape is asked for a graph being *built* from a closed
-    // halfer's ports: until the graph side learns where a tangent's cotangent lands (the step after
-    // this one), that graph still takes the tangents as ports, so the shape it can honour is the
-    // plain one. The two disagreeing is what this step is for: `same=no` says exactly that.
-    if (honourClosedHalf && function->isClosedHalf()) {
-        if (!participates.empty()) {
-            return nullptr;
-        }
-        camel::core::type::param_vec_t params;
-        std::vector<Type *> cotangentsOfTangents;
-        for (size_t i = 0; i < count; ++i) {
-            camel::core::type::Type *parameter = function->normTypeAt(i);
-            const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(parameter);
-            if (space.hasSpace()) {
-                cotangentsOfTangents.push_back(space.space);
-                if (answersOf != nullptr) {
-                    answersOf->push_back(i);
-                }
-            }
-        }
-        if (cotangentsOfTangents.empty()) {
-            return nullptr;
-        }
-        params.emplace_back(resultCotangentType(function), false);
-        return FunctionType::create(
-            camel::core::type::param_vec_t{}, params,
-            camel::core::type::TupleType::create(cotangentsOfTangents));
-    }
         // The participating-set form: only the plain-parameter shape has it (a kernel is a function of
         // floats), and there must be one flag per parameter.
         if (participates.size() != count) {
@@ -315,7 +280,7 @@ bool buildTransposeMember(
     // resolver, which sees only the type) and this graph still takes the tangents, which is what
     // `same=no` reports until the graph side learns where their cotangents land.
     FunctionType *signature =
-        transposeSignature(function->funcType(), participates, nullptr, /*honourClosedHalf=*/false);
+        transposeSignature(function->funcType(), participates);
     if (signature == nullptr) {
         os << "TRANSPOSE function=" << function->name() << " skip=signature\n";
         return false;

@@ -1535,8 +1535,8 @@ One declaration for every arity: `F` is the function, `Vjp<F>` says the paramete
 pullback's cotangents are too (stdlib/types.cml), and `(..xs)` takes the parameters the instantiated
 `Vjp<F>` has -- the ordinary rule that a lambda takes its parameters' types from the position it
 stands in, applied to a pack (author's ruling of 2026-11-01 19:10). The lambda's rest parameter is a
-value in its body: `xs` is the tuple of those parameters, and `forward(..xs)` spreads it into the
-call, which is the rule the language already had for spreading a tuple.
+value in its body: `xs` is the tuple of those parameters, and `split(jvp(f))(..xs)` spreads it into
+the call of the forward half, which is the rule the language already had for spreading a tuple.
 The whole reading in one line: the function is written where the call is, so the example is a
 program of its own -- `y` is `x * x` at 3, and the pullback read at `ct = 1.0` answers the
 derivative there, one member per parameter.

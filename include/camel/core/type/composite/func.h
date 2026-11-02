@@ -180,16 +180,6 @@ class FunctionType : public CompositeType {
     /// The interned signature equal to this one in everything but its resources.
     FunctionType *withResources(const sem::ResourceSignature &resources) const;
 
-    /// This signature marked as a **closed half**: the backward graph `split` hands out, whose
-    /// parameters are the tangents and whose values are its captures. A type is the only thing an
-    /// operator resolver is handed, and a closed half's type is otherwise byte-identical to a plain
-    /// function of the same parameters, so the fact has to be on the type. It takes part in the
-    /// interning key (two signatures that differ there are not the same type) and not in `equals`,
-    /// exactly as parameter names do -- a marked signature is still accepted where the plain type is
-    /// expected, and it prints the same.
-    FunctionType *withClosedHalf(bool closedHalf = true) const;
-    bool isClosedHalf() const { return closedHalf_; }
-
     /// This signature as an OpenFunctionType, or nullptr when it is not open.
     OpenFunctionType *asOpen() const;
     bool isOpen() const { return open_; }
@@ -313,8 +303,9 @@ class FunctionType : public CompositeType {
         std::vector<uint16_t> withConstIndices;
         std::vector<SymId> names;
         sem::ResourceSignature resources;
-        /// The signature is `split`'s backward half (see withClosedHalf).
-        bool closedHalf = false;
+        /// The signature is `split`'s backward half: its parameters are the tangents, and the values it
+        /// reads are in its closure. Nothing on the type says so -- `transpose` treats every parameter
+        /// as linear (author's ruling of 2026-11-02 11:30).
     };
 
     FunctionType(const Parts &parts, bool open);
@@ -364,8 +355,6 @@ class FunctionType : public CompositeType {
     /// `with` parameters (see FunctionTypeFactory::addWithArg).
     std::vector<uint16_t> withConstIndices_;
     bool open_          = false;
-    /// See withClosedHalf: in the interning key, not in `equals`.
-    bool closedHalf_    = false;
     /// The resources the signature publishes (Generic when it says nothing).
     sem::ResourceSignature resources_;
     // Followed in memory by the parameter arrays (see the file comment).
