@@ -24,6 +24,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace camel::transforms {
@@ -545,6 +546,38 @@ bool liftGraph(
                 ++seenKinds;
             }
         }
+        // The *element* port of a `for` loop's body region: the value one round takes out of the
+        // array the loop iterates. It is not the loop's state, and it is not lifted into a pair --
+        // the array it comes from is not a differentiated value (design principles 9.9: a loop may
+        // read an iterable, and the gradient stops at the read), so the round's element arrives as
+        // it stands and its tangent is the zero of its own type. Pairing it -- which `pairOf` does
+        // for any `float` -- makes the body take `(float, float)` out of an array of `float`, and
+        // no back end accepts a loop whose element type and array element type differ
+        // (`Runtime graph ... has LOOP node N: its body takes elements of type '(float, float)'
+        // from an array of 'float'`).
+        std::unordered_set<gc_node_ref_t> loopElementPorts;
+        for (gc_node_ref_t ref = 0; ref < function.nodeCount(); ++ref) {
+            const NodeFace *node = function.node(ref);
+            if (node == nullptr || node->kind != rt::GCNodeKind::Loop) {
+                continue;
+            }
+            rt::GCLoopBody loopBody{};
+            if (!function.bodyOf(ref, loopBody) ||
+                loopBody.kind == camel::core::LoopKind::While) {
+                continue;
+            }
+            for (uint32_t region = 0; region < function.regionCount(); ++region) {
+                const rt::GCRegion *part = function.region(region);
+                if (part == nullptr || part->owner != ref ||
+                    part->kind != rt::GCRegionKind::LoopBody) {
+                    continue;
+                }
+                const std::vector<gc_node_ref_t> ports = function.regionPorts(region);
+                if (!ports.empty()) {
+                    loopElementPorts.insert(ports.front());
+                }
+            }
+        }
         for (camel::runtime::gc_node_ref_t ref = 0; ref < function.nodeCount(); ++ref) {
             const NodeFace *node = function.node(ref);
             if (node == nullptr) {
@@ -575,6 +608,17 @@ bool liftGraph(
                 const uint32_t portRegion = function.nodeRegion(ref);
                 const rt::GCRegion *portRegionBody =
                     portRegion != 0 ? function.region(portRegion) : nullptr;
+                if (loopElementPorts.contains(ref)) {
+                    // The round's element: a value the array hands in, with no tangent of its own.
+                    copyOf[ref] = draft.addPortNode(
+                        node->dataType(), draft.allocateRuntimeSlot(node->dataType()));
+                    if (pairOf(node->dataType()) != nullptr) {
+                        tangentOf[ref] = zeroConstantFor(node->dataType());
+                    }
+                    copied[ref] = true;
+                    ++copiedKinds;
+                    break;
+                }
                 if (portRegionBody != nullptr &&
                     portRegionBody->kind == rt::GCRegionKind::LoopBody) {
                     TupleType *statePair           = pairOf(node->dataType());
