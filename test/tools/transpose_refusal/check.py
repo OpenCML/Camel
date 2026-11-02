@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
 """Every word `transpose` can write into its reading log has a readable landing.
 
 `buildTransposeGraph` answers a null graph for every cause and names the cause in its log as
