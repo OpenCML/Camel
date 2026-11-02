@@ -346,7 +346,7 @@ An error has occurred: {0}.
 **Help**
 
 ```text
-The compiler reached a state it has no code for. This is a known limitation of this compiler version, and nothing in the program is wrong.
+The compiler reached a state it has no code for. This is a defect of the compiler, not an error of the program.
 ```
 
 **Example** (`test/cases/compile/collections/err_key_float.cml`, run as `camel test/cases/compile/collections/err_key_float.cml`)
