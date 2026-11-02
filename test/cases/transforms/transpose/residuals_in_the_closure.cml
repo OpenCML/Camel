@@ -1,0 +1,39 @@
+// The transposed linear half, reading its residuals out of the closure (2026-11-02).
+//
+// `split` now hands out a forward half whose second member is the backward graph closed over the
+// values the cut carried: `lin` takes the tangents and nothing else, and the five residuals ride in
+// its closure (`split_two_params.cml` reads that side). This case reads the other side: `transpose`
+// of that same `lin`. The residuals are the transposed graph's **capture ports**, one per residual in
+// the closure's order, and they arrive because `transpose(f)` keeps `f`'s closure (the kernel copies
+// it) -- so `transpose(lin)` captures x = 3, y = 2 and the products, and nothing crosses a parameter.
+//
+// The two leading arguments are the tangent values, which the type law still asks for
+// (`Transpose<F> = (..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)`, unchanged by
+// this step). They are passed as **zeros on purpose**: a coefficient that came from a parameter would
+// read 0 there, and the answer would be (0, 0). It is (12, 9) -- 2xy and x^2 for f(x, y) = x*x*y at
+// x = 3, y = 2 -- which is the statement that the values the transposition needs were read out of the
+// closure and out of nowhere else.
+//
+// Whether the transposed function of a *closed* half should stop asking for those two arguments (the
+// author's `transpose(lin)(1) = (12, 9)` reads one argument) is the type law's question: `lin`'s
+// static type is an ordinary `(float, float) => float`, the same string a plain two-parameter function
+// prints, so `Transpose<F>` cannot tell the two shapes apart and the operator resolver only sees the
+// type. That is the step after this one.
+import rulesets.jvp
+import rulesets.transpose
+import { jvp, split, transpose } from transforms
+
+func f(x: float, y: float): float {
+    return x * x * y
+}
+
+func main(): int sync {
+    let lifted = jvp(f)
+    let fwd = split(lifted)
+    let (value, lin) = fwd(3.0, 2.0)
+    let back = transpose(lin)
+    let (bx, by) = back(0.0, 0.0, 1.0)
+    println("value= ", value)
+    println("back dx= ", bx, " back dy= ", by)
+    return 0
+}

@@ -82,6 +82,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "residuals_in_the_closure"
+desc = "The transposed linear half, reading the cut's residuals out of the closure (2026-11-02). `lin` is the backward graph closed over the five values the cut carried, so `transpose(lin)` declares one **capture port** per residual, in the closure's order, and gets them because `transpose(f)` keeps `f`'s closure. The two leading arguments are the tangent values the type law still asks for (`Transpose<F>` is unchanged by this step) and they are passed as **zeros on purpose**: a coefficient read from a parameter would be 0 and the answer would be (0, 0). It is (12, 9) -- 2xy and x^2 for f(x, y) = x*x*y at x = 3, y = 2 -- which says the values came out of the closure and out of nowhere else. The counts are read too: the transposed graph is `(float, float, float) => (float, float)` (two tangents, the cotangent, two cotangents out), and the `mul_tangent` call inside it is transposed as the linear map it is (`(float, float, float) => (float, float)`), which is the participating set the arm path always built and the straight-line body now builds as well."
+kind = "behavior"
+case = "../../../cases/transforms/transpose/residuals_in_the_closure.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["value=  18.0", "back dx=  12.0  back dy=  9.0", "TRANSPOSE function=split_of_jvp_of_f_backward graph=", "TRANSPOSE function=autodiff::mul_tangent<float>"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "split_product_chain"
 desc = "A chain of multiplies, both ends of the composition: `f3(x) = x*x*x` and `f4(x) = x*x*x*x` at x = 2. The derivatives are the analytic ones read through the backward half -- 12 = 3x^2 and 32 = 4x^3 -- and the cut carries 3 residuals for the cubic and 4 for the quartic (`x`, `x*x`; plus `x*x*x`; plus the parameter's value port, which crosses because the tangent side reads its tangent). The forward half's type reads `(float) => (float, (float, float, float))` and `(float) => (float, (float, float, float, float))` -- the arity the graph gave it."
 kind = "behavior"
