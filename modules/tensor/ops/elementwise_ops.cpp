@@ -200,6 +200,18 @@ InferFn unaryInfer(bool producesFloat) {
     };
 }
 
+/// `!` of a tensor: `bool[]` in, `bool[]` out, and nullopt for every other element type -- a
+/// negation of a number is not a value this language has. Written as its own inference rather
+/// than as `unaryInfer(false)` because that one keeps whatever element type it is given, and a
+/// call that cannot be answered must not match an overload at all.
+std::optional<Type *> notInfer(const InferContext &ctx) {
+    const TensorFacts in = ctx.facts(0);
+    if (!in.dtype || *in.dtype != TypeCode::Bool) {
+        return std::nullopt;
+    }
+    return tensorOf(in.dtype, in.shape);
+}
+
 const std::vector<ParamSpec> kBinaryParams = {
     {"lhs", ParamKind::TensorOrScalar},
     {"rhs", ParamKind::TensorOrScalar},
