@@ -40,7 +40,7 @@
 
 | the entry | write |
 | --- | --- |
-| has a `backends` list | `known_fail = ["<be>"]` — a name that is not in `backends` is refused at load |
+| has a `backends` list | `known_fail = ["<be>"]`; a name that is not a back end is refused: `known_fail names 'fvm', which is not in backends of …` |
 | has no `backends` list | `known_fail = true` |
 | mixing the two | refused: `known_fail on <test> names back ends (["fvm"]), but the test has no backends list, so no back end of that name runs here: write known_fail = true` |
 | `known_fail = true` with a `backends` list | refused: `name the back ends that fail` |
@@ -53,3 +53,10 @@ tests, and `-Plan <a subdirectory>` still covers the whole layer, because `tier`
 file. The first run of this layer, on 2026-11-02, was `total 3302 / pass 3286 / fail 16` on
 `2c1a7b6c4`; on `37dcd074a` it is 15, and the two that left are the GC self-tests whose thresholds
 and collection counts the field could not reach. A count without a tip is not a count.
+## Killing a stale run on the shared host
+
+Two ways to name a process, and only two: `kill <PID>`, or `pkill -f '~/camel-work/<your own tree>/'`.
+
+`pkill -f 'run-tests.mjs'` and `pkill node` are forbidden. On 2026-11-02 one lane used the first while five lanes were running: every one of them was inside that pattern, and only the accident that `pkill` matched the killing shell's own `bash -c` first kept them alive; a `pgrep` afterwards found all five still running. **Alive was luck, not judgement.**
+
+The same day made the other half of the point with a check instead of an accident: with the "zero tests started" gate in place, 31 of the tree's 309 plans turned out to be silent zeros - their tier puts them out of an ordinary run, and until the gate existed they said nothing at all - and the first real defect came with them, `test/plans/feat/trans/cml_sweep.plan.toml` missing a plan-level `tier`, calling itself fast while its only test is slow, reddening the whole fast pass. **Green because nothing ran is not green.**
