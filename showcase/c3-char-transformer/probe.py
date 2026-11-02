@@ -83,6 +83,26 @@ def first_reason(text):
     return interesting[-1]
 
 
+def compact_reason(text, limit=150):
+    """A refusal in one line: where it was, what it said, and the name the compiler files it under.
+
+    A run whose output a reader only sees the tail of still has to show which wall each probe hit,
+    so this keeps the position, the message and the diagnostic's name, and drops the rest.
+    """
+    for line in text.splitlines():
+        match = re.search(r"/([^/]+\.cml:\d+:\d+): \[(Error|Warn|Fault)\]: (.*)", line)
+        if match:
+            message = match.group(3).split(" (name=")[0].strip()
+            named = re.search(r"name=([A-Za-z_:]+)", line)
+            tag = f" [{named.group(1)}]" if named else ""
+            return f"{match.group(1)}: {message[:limit]}{tag}"
+    for line in text.splitlines():
+        if line.strip():
+            head = line.strip()
+            return head[:limit]
+    return "(no output)"
+
+
 def wrap(line, width):
     """`line` cut into pieces of at most `width` characters, so a reader sees all of it."""
     if not line:
@@ -136,6 +156,9 @@ def main():
         raise SystemExit(f"no probes under {PROBES}")
 
     readings = []
+    version = run_probe(camel, Path("--version"), [])
+    print(f"camel binary={camel} version={version['stdout'].strip() or version['stderr'].strip()} "
+          f"version_exit={version['exit']}")
     for path in paths:
         result = run_probe(camel, path, passes)
         combined = result["stdout"] + result["stderr"]
@@ -163,6 +186,27 @@ def main():
     ok = sum(1 for r in readings if r["verdict"] == "ok")
     refused = len(readings) - ok
     print(f"probes total={len(readings)} ok={ok} refused={refused} passes={' '.join(passes) or '(default)'}")
+
+    # The inventory, grouped by the wall each probe hit: one group per distinct refusal, with the
+    # probes that reached it.  This is the list WALLS.cn.md is written from, and it is last so that
+    # a run whose output is shown by its tail still shows the whole of it.
+    groups = []
+    for reading in readings:
+        if reading["verdict"] == "ok":
+            continue
+        reason = compact_reason(reading["stdout"] + reading["stderr"])
+        for group in groups:
+            if group["reason"] == reason:
+                group["probes"].append(reading["probe"])
+                break
+        else:
+            groups.append({"reason": reason, "probes": [reading["probe"]]})
+    for group in groups:
+        joined = ",".join(group["probes"])
+        for chunk in wrap(f"probes={joined} :: {group['reason']}", 96):
+            print(f"probe-group refused {chunk}")
+    answered = ",".join(r["probe"] for r in readings if r["verdict"] == "ok")
+    print(f"probe-groups total={len(groups)} answered={answered or '(none)'}")
     if args.json:
         Path(args.json).write_text(json.dumps({"readings": readings}, indent=2), encoding="utf-8")
         print(f"probes json={args.json}")

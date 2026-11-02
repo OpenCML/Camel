@@ -107,11 +107,37 @@ def relative(left, right):
     return abs(left - right) / max(abs(left), abs(right), 1e-12)
 
 
+def camel_version(camel):
+    """The binary's own version line, so a report says which build it measured."""
+    try:
+        result = subprocess.run([str(camel), "--version"], stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True, encoding="utf-8",
+                                errors="replace", env=camel_env())
+        return (result.stdout.strip() or result.stderr.strip() or "(no version line)")
+    except OSError as problem:
+        return f"(cannot run: {problem})"
+
+
 def wrap(line, width):
     """`line` cut into pieces of at most `width` characters, so a reader sees all of it."""
     if not line:
         return [""]
     return [line[at:at + width] for at in range(0, len(line), width)]
+
+
+def compact_reason(text, limit=150):
+    """A refusal in one line: where it was, what it said, and the diagnostic's own name."""
+    for line in text.splitlines():
+        match = re.search(r"/([^/]+\.cml:\d+:\d+): \[(Error|Warn|Fault)\]: (.*)", line)
+        if match:
+            message = match.group(3).split(" (name=")[0].strip()
+            named = re.search(r"name=([A-Za-z_:]+)", line)
+            tag = f" [{named.group(1)}]" if named else ""
+            return f"{match.group(1)}: {message[:limit]}{tag}"
+    for line in text.splitlines():
+        if line.strip():
+            return line.strip()[:limit]
+    return "(no output)"
 
 
 def report_failure(label, result, width=96):
@@ -156,9 +182,10 @@ def main():
     forward = run([camel, str(HERE / "block_forward.cml")])
     engine = run([camel, str(HERE / "block_engine_grad.cml")])
     library = run([camel, str(HERE / "block_library_grad.cml")])
+    failures = {}
     for label, result in (("forward", forward), ("engine", engine), ("library", library)):
         if result["exit"] != 0:
-            report_failure(label, result)
+            failures[label] = result
 
     rows = []
 
@@ -227,6 +254,7 @@ def main():
 
     print(f"c3 compare method={method} tolerance.forward={TOL_FORWARD:g} "
           f"tolerance.gradient={TOL_GRADIENT:g}")
+    print(f"c3 compare camel={camel} version={camel_version(camel)}")
     for row in rows:
         if row["error"] is None:
             print(f"c3 compare row={row['reading']} camel=absent error=- tolerance={row['tolerance']:g} "
@@ -242,6 +270,12 @@ def main():
 
     write_results(Path(args.results), rows, method, worst, dx_note, forward, engine, library, camel)
     print(f"c3 compare results={args.results}")
+    # The walls, last and in one line each: a reader who sees only the end of this output still
+    # sees why each program stopped, where, and under which diagnostic name.
+    for label, result in failures.items():
+        for chunk in wrap(f"c3 compare wall.{label} "
+                          f"{compact_reason(result['stdout'] + result['stderr'])}", 96):
+            print(chunk)
     if args.json:
         Path(args.json).write_text(json.dumps({
             "method": method,
