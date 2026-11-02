@@ -8,15 +8,16 @@
 // keeps and which double with the seed. A refusal here would refuse `grad((x) => x + 1.0)`, whose
 // tangent function is exactly this one.
 import rulesets.transpose
-import { transpose } from transforms
+import { jvp, split, transpose } from transforms
 import { add_tangent } from autodiff
 
 func at(x: float, w: float, dx: float, dw: float): float {
     return add_tangent(x, w, dx, dw)
 }
-
+import rulesets.jvp
 func main(): int sync {
-    println(transpose(at)(3.0, 2.0, 1.0, 0.0, 1.0))
-    println(transpose(at)(3.0, 2.0, 1.0, 0.0, 2.0))
+    let lin = (dx: float, dw: float) => at(3.0, 2.0, dx, dw)
+    println(transpose(lin)(1.0))
+    println(transpose(lin)(2.0))
     return 0
 }
