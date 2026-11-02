@@ -48,7 +48,9 @@
 （都用 `std::nvm`，那是本机必崩的后端）。拿到栈就是 A 的入口。在拿到栈之前，**不要**把 11 条标成
 `known_fail`：这张页存在的意义正是"腿绿不等于树对"，标掉它等于把这句话反着写。
 
-## 结案：11 条在必崩守卫下全绿（2026-11-02 21:55，`lane-draftown` @ `f5a455f62`）
+## 未结：Debug 腿 11 条全绿，Windows 腿与 ASan 腿未跑（2026-11-02，`lane-draftown` @ `2074a0269`）
+
+> **未结**：Debug 腿 11 条全绿（`build` 必崩守卫下不崩）；Windows 腿与 ASan 腿未跑，CI 的 ASan 腿（`67f88a8ac`）下一次运行给出读数；两条都绿才结案。
 
 认图的那一笔是 `3609d015a`（草稿节点按 `(地址, epoch)` 认图，不再按回收地址），见证用例是
 `test/plans/feat/runtime/draft_node_owner.plan.toml`。判据不是"Linux 绿"——那正是这张页不信任的东西——
@@ -62,15 +64,20 @@
   `stream.generator_loop_two_states_gir`、`stream.generators_shapes_consumed.{nvm,fvm,jit,prl}`；
 - `test/plans/feat/showcase_s1.plan.toml`：`stream_fib.default.nvm`、`stream_fib.default.prl` 两条 `[PASS]`。
 
-**11 条在必崩守卫下全绿，故 Linux 的绿不是运气。** 修复后这个形状不是"地址被复用、恰好读到对的图"，
+**11 条在必崩守卫下全绿，Debug 腿因此不是运气。** 修复后这个形状不是"地址被复用、恰好读到对的图"，
 而是那个 handle 根本不会带着旧 epoch 被解引用：epoch 对不上就在 `nodeDraftOf` 停下，并打印两个 epoch 与地址
 （本线上一次实测：`... made in epoch 48 at 0x55e420207380, and that address now holds epoch 49`）。
 
-**未跑，两条腿，理由是硬的**：Windows 腿——本地禁止构建（蓝屏），远端 wrapper 只跑 Linux 计划；
-ASan 腿——`camel-remote.ps1` 只有 `Release`/`Debug` 两种 `-Config`，没有 sanitizer 配置，`ci.yml` 的 ASan 腿只跑 `smoke`。
-所以"Windows 上不再崩"是由"必崩守卫下不崩"推出来的，不是直接读数。
+**未跑，两条腿，理由现在是硬的**：Windows 腿——本地禁止构建（蓝屏），远端 wrapper 只跑 Linux 计划，
+所以"Windows 上不再崩"是由"必崩守卫下不崩"推出来的，不是直接读数；ASan 腿——`camel-remote.ps1` 只有
+`Release`/`Debug` 两种 `-Config`，没有 sanitizer 配置，这条腿只能在 CI 里跑：`67f88a8ac` 已把它的测试步
+扩到 `test/plans/feat/compile/stream.plan.toml` 与 `test/plans/feat/compile/transforms.plan.toml`，
+所以下一次 CI 运行就是这两条腿里 ASan 那条的读数（此前写"只跑 `smoke`"，那是扩展之前的范围）。
 
-**顺带（与本条无关，Debug 腿新发现）**：同一张 `stream` 计划在 Debug 下有 25 条红，全部崩在
-`std::vector<GCRegion>::operator[]` 越界，`GraphDraft::region()` 拿到空 regions 的 `id=0`，
-调用点是 `src/compile/gir/builder_linearity.cpp#settleStreamLinearity`。这是 Debug 才有的既有缺陷
-（Release 的 `vector::operator[]` 不做边界检查），与草稿节点的身份无关，归到别处修。
+**顺带（与本条无关，Debug 腿新发现，已修）**：同一张 `stream` 计划在 Debug 下有 25 条红，其中 24 条崩在
+`std::vector<GCRegion>::operator[]` 越界：`GraphDraft::region()` 拿到空 regions 的 `id=0`，调用点是
+`src/compile/gir/builder_linearity.cpp#settleStreamLinearity`。根因是草稿的约定缺了一半——`addRegion` 只在
+加第一个控制区域时才写下 body 的记录，所以"表为空"是草稿的合法状态，而 `nodeRegion` 对其中每个节点都答 0；
+`2074a0269` 让 `region(0)` 在这种状态下答 body（一个不拥有任何 loop、不带端口的 `GCRegion{}`），并给其余的 id
+留了常驻 `GUARD`。剩下 1 条 `stream.generator_body_fault_ends_stream.jit` 是另一个缺陷（`FramePool::release`
+在非栈顶释放），与本页无关。

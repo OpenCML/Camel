@@ -600,7 +600,11 @@ Every `[[tests]]` entry may use these common fields:
   signal. It stands in place of `expect_exit`, so the entry is green when the process dies of
   exactly that signal and red otherwise, and the failure prints what happened instead
   (`expected signal SIGSEGV, got signal SIGABRT (rc=134, 0.03 s)`); a signal that did not arrive
-  is `expected signal SIGABRT, got exit 0`. Before this field existed, the only way to record "this
+  is `expected signal SIGABRT, got exit 0`. **It is only for a guard that stops the process by
+  design** -- the always-on invariants, which abort on purpose when a precondition does not hold. A
+  crash signal has no place in an expectation: `SIGSEGV` (or a second `SIGABRT`) written here would
+  accept exactly the defect the test exists to find, and it would accept it in the build where the
+  guard is the only instrument. Before this field existed, the only way to record "this
   run is meant to die" was `known_fail`, which says the run is wrong today and turns the entry green
   again the day the process stops dying -- the opposite of what the entry is for. See
   `test/tools/selftest/signal/` for the fixture that pins both directions.
