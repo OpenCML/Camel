@@ -1968,3 +1968,9 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 **一个用例能不能只在某一层算已知失败**——不加按层的标记，修那条断言。Debug 下 `Type::assignableFrom` 遇到 `Ref` 就中止，断言注释自己写着"合法程序到处都会走到这里，17 条用例"。这不是测试工具缺能力，而是编译器把一个合法程序的情况写成了断言。10 月我裁过一次：`Ref` 在**每个类型判断的入口**先解析掉，不要求调用者各自记得解析。照这一条做：`assignableFrom`、`equals` 等判断的入口先把 `Ref` 解析成它指向的类型，断言随之删掉（它挡的是一个本该处理的输入），17 条用例在 Debug 下转绿。在那之前，Debug 腿上这些用例照常红，不许为了让它绿去加按层标记或改测试。
 
 页面挪到 `reviews/` 留档。
+
+## 抽查（2026-11-02 14:30）：生成器那页还不能结案；Debug 又查出一个 Release 里静默越界的读
+
+- **生成器悬垂节点**（`9f5ea8bad`）：epoch 认图之后，11 条 `stream.*` 在 Debug 下全绿，这是进展。但 06:10 那页要的是 Windows 腿和 ASan 腿，而这两条腿都没跑。CI 的 ASan 腿在 `67f88a8ac` 已经扩到 `stream` 和 `transforms`，下一次 CI 运行的结果就是读数。两条腿都绿了再结案，在这之前页面保持"未结"。
+- **新缺陷，排在 P0 之后第一个修**：同一次 Debug 运行里，`stream` 计划有 25 条用例中止在 `std::vector<GCRegion>::operator[]`：`settleStreamLinearity` 向 `GraphDraft::region` 要一个草稿里没有的区域（`id=0`，向量为空）。Debug 会检查下标，所以中止；Release 不检查，所以这 25 条在 Release 下是静默越界读，读到什么全凭运气。修根：先查 `settleStreamLinearity` 为什么在没有区域的草稿上问区域（也许根区域在草稿里不显式存在，`region 0` 应当由 `GraphDraft::region` 自己回答）；`GraphDraft::region` 的入口对越界给 `GUARD`，Release 也查。
+- `f5a455f62` 让计划能断言"进程被某个信号杀死"，用于测试那些专门让进程停下来的守卫，不许用它来接受崩溃。在 `docs/test-plans.md` 写一句：`expect_signal` 只用于断言一个守卫按设计中止了进程，段错误这类信号不许出现在期望里。
