@@ -2010,3 +2010,39 @@ PROBE typeAt why=? this=0x7a2b59846188 size=0 index=4 emptyBuilt=5 mine=yes
 **⑥ 下一步（不构建也能做的）**：读**闭包装填**那一段（`src/execute/graph_runtime_support.cpp` 的 bind 附近，
 及其调用的 `Frame`/闭包槽装填函数），找出"闭包环境应有几个槽"的那个来源，与"实际设进槽的类型"对照——
 **判据：`targetClosure=2` 说的是应有 2 个，而读的是第 4 个 ⇒ 先看这两个数字是各自由谁算出来的。**
+
+
+## 60. 「谁算 4、谁算 0」读出来了：**两个不同的函数**，一个是给槽发下标的，一个是把布局**强制设成"没有槽"**的
+
+**① `0` 的来源（布局的成员数为 0）**
+`src/compile/gir/graph_encode.cpp:391-394`，`prepareGraph` 里：
+```cpp
+// Every compiled graph has a frame layout, one without slots included.
+if (!graph->view().hasFrameLayout()) {
+    graph->edit().setRuntimeSlotTypes({});     // ⇒ hasFrameLayout_ = true，槽数 0
+}
+```
+`setRuntimeSlotTypes`（`include/camel/runtime/draft.h:533-538`）的注释自己就写着**"possibly one without slots"**；
+于是 `src/runtime/graph.cpp:1799-1803` 用这个空 span 建出**成员数为 0 的 `TupleType`**。
+⇒ **`size_ = 0` 是"编码器给每个编译图补一个没有槽的布局"这条规则的产物，是一个合法的空布局。**
+
+**② `4` 的来源（节点的 dataIndex）**
+`src/runtime/draft.cpp:2160-2178` 的 `GraphDraft::allocateRuntimeSlot`：空表时先塞 `Void()` 占 0 号槽，再 `push_back(type)`，**返回新下标**。
+节点拿这个下标写 `header.dataIndex`。⇒ **下标是"发槽"的那个函数发的，它发的每一个都真实存在于 `runtimeSlotTypes_` 里。**
+
+**③ 判据的答案：两个数字来自两个函数 ⇒ 混用成立。**
+`0` 来自**编码器补布局**的那一处（`graph_encode.cpp:391`），`4` 来自**draft 发槽**的那一处（`draft.cpp:2167`）。
+**中间没有任何一处核对"节点的 dataIndex 必须小于布局的成员数"。** 唯一沾边的一处是
+`src/runtime/draft_construct.cpp:555-558`，而它的条件里写着 `init.dataIndex > 0 &&
+static_cast<size_t>(init.dataIndex) < runtimeSlotTypes_.size()` —— **越界的下标被这个 `&&` 直接跳过，不报。**
+
+**④ ⇒ 缺陷形态（先报不改）**：**"布局被补成空的"与"节点已被发过下标"两件事都能各自成立，而它们之间没有一致性检查。**
+一旦某个图的布局在节点发完下标之后被补成 `{}`（或它的运行时对照物照搬了一个空布局），
+**每个 `dataIndex ≥ 0` 的节点都会在 `typeAt` 上撞墙**，而撞墙的句子是"下标越界"，**看上去像下标错，其实是布局空**。
+**这正是 `mine=yes` 那个读数的意义：元组是真的，布局是空的。**
+
+**⑤ 为什么它只在 `--gc-check poison` 下发生（待验，但方向明确）**：poison 让每次 safepoint 搬动年轻对象，
+**某条路径在搬动后重建了运行时图、而布局走了"补空"那条支路**（`prepareGraph` 的补空只在 `!hasFrameLayout()` 时执行，
+`hasFrameLayout` 为真但槽数为 0 的状态因而会被"沿用"下去）。**这一条要下一轮验证，不在本轮结论里。**
+
+**⑥ 按你④：这两句（①与②）是语义层的交接，牵到"帧布局由谁声明"，先报不改。**
