@@ -352,6 +352,28 @@ struct Half {
         seen[ref]   = 1;
     }
 
+    /// The copy of a source constant, or `kInvalidNodeRef` when `ref` is not a constant or the slot
+    /// of one is not readable. A constant has no producer on either side of the cut, so a half that
+    /// reads one writes the value the source holds rather than taking it from the tuple (vmap's
+    /// `liftConstant` does the same for its constants). This is the one writer: the reachability walk
+    /// and the DATA case both write a constant through it, so the two cannot disagree about how a
+    /// constant becomes a node of a half.
+    gc_node_ref_t writeConstant(gc_node_ref_t ref) {
+        if (ref >= source->nodeCount()) {
+            return rt::kInvalidNodeRef;
+        }
+        const rt::GCNode *node = source->node(ref);
+        if (node == nullptr || node->kind != rt::GCNodeKind::Data) {
+            return rt::kInvalidNodeRef;
+        }
+        const std::span<const slot_t> slots = source->staticSlots();
+        const std::ptrdiff_t index         = -static_cast<std::ptrdiff_t>(node->dataIndex);
+        if (node->dataIndex >= 0 || index < 0 || static_cast<size_t>(index) >= slots.size()) {
+            return rt::kInvalidNodeRef;
+        }
+        return draft.materializeStaticValue(slots[static_cast<size_t>(index)], node->dataType());
+    }
+
     /// The copy of one source node, its inputs already copied. The kinds below are the tier the
     /// plumbing copies; every other kind is refused at the node.
     bool makeCopy(gc_node_ref_t ref, SplitGraph &refusal) {
@@ -407,21 +429,14 @@ struct Half {
         for (gc_node_ref_t input : halfInputsOf(ref)) {
             // A constant has no producer, so either half can write it again: a half that reads one
             // takes it as available rather than as an operand that failed to arrive. Without this the
-            // answer depends on the shape of the expression and not on its type -- a body whose only
-            // peculiarity is a bare constant on a value operand (`f(x) = 5.0 + x * 7.0`) is refused
-            // for an input "not reachable from the half's exit" (measured 2026-11-03: `fa00` cuts,
-            // `fa11` refused, and the whole difference is a `5.0` feeding `:op/add_d`'s value port).
+            // answer would turn on where a literal sits and not on what the half computes -- a constant
+            // on a value operand is a value like any other, so a body whose only peculiarity is a bare
+            // constant there cuts like any other body. A constant whose slot this build cannot read is
+            // not written here, and the operand then fails to arrive.
             if (input < source->nodeCount() && copyOf[input] == rt::kInvalidNodeRef) {
-                const rt::GCNode *const constant = source->node(input);
-                if (constant != nullptr && constant->kind == rt::GCNodeKind::Data) {
-                    const std::span<const slot_t> slots = source->staticSlots();
-                    const std::ptrdiff_t slotIndex =
-                        -static_cast<std::ptrdiff_t>(constant->dataIndex);
-                    if (constant->dataIndex < 0 && slotIndex >= 0 &&
-                        static_cast<size_t>(slotIndex) < slots.size()) {
-                        copyOf[input] = draft.materializeStaticValue(
-                            slots[static_cast<size_t>(slotIndex)], constant->dataType());
-                    }
+                const gc_node_ref_t written = writeConstant(input);
+                if (written != rt::kInvalidNodeRef) {
+                    copyOf[input] = written;
                 }
             }
             if (input < source->nodeCount() && copyOf[input] == rt::kInvalidNodeRef &&
@@ -470,16 +485,15 @@ struct Half {
                     ", and it is not one of the values the cut carries");
         }
         case rt::GCNodeKind::Data: {
-            // A constant stands for the same value in the copy: the slot is written again with the
-            // value the source holds (vmap's `liftConstant` does the same for its constants).
-            const std::span<const slot_t> slots = source->staticSlots();
-            const std::ptrdiff_t index         = -static_cast<std::ptrdiff_t>(node->dataIndex);
-            if (node->dataIndex >= 0 || index < 0 || static_cast<size_t>(index) >= slots.size()) {
+            // A constant stands for the same value in the copy; `writeConstant` is that writer, so the
+            // DATA case and the reachability walk write it the same way. A constant whose slot is not
+            // readable has no copy.
+            const gc_node_ref_t written = writeConstant(ref);
+            if (written == rt::kInvalidNodeRef) {
                 return refuseAt(
                     refusal, source, ref, "a constant", "the slot of the constant is not readable");
             }
-            copyOf[ref] = draft.materializeStaticValue(
-                slots[static_cast<size_t>(index)], node->dataType());
+            copyOf[ref] = written;
             return true;
         }
         case rt::GCNodeKind::Oper: {
