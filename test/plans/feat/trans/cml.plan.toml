@@ -14,3 +14,25 @@ args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["cml round trip: PASS"]
 timeout_ms = 180000
+
+[[tests]]
+name = "print_then_run_agrees_with_the_origin"
+desc = "The `std::cml` round trip measured as behaviour, not as text: each of the eight cases the defect list (A7) named as behaving differently after a print is printed, the printed program is run, and its `rc` and `stdout` are compared with the origin's (a diagnostic's file path is normalized to `<PATH>`, because the printed program lives in a scratch directory). One line per case -- `case=<name> rc=<n> stdout=identical` -- so the reading says which cases ran, not just that the whole thing passed."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/roundtrip-compare.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["ROUNDTRIP cases=8 identical=8 differs=0", "case=linear/runtime/var_read_before_region rc=0 stdout=identical", "case=linear/runtime/order_edges_regions rc=56 stdout=identical"]
+timeout_ms = 120000
+
+[[tests]]
+name = "print_then_run_negative_swap_is_seen"
+desc = "The round trip tool's own discriminability: two `println` statements of a printed body are swapped and the tool must report a difference. A harness that cannot see a swap it planted itself reports `identical` for everything, which is the failure this entry exists to catch -- so the expected line names the planted swap and the difference it produced."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/roundtrip-compare.mjs"
+args = ["${case}", "--negative", "effects/writer_table_through_callee"]
+expect_exit = 0
+expect_stdout_contains = ["negative=seen", "stdout=differs at line", "planted: println at line"]
+timeout_ms = 120000
