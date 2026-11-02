@@ -1,28 +1,17 @@
-# 待裁索引：谁在等作者，堵着什么
+# 待裁索引
 
-> **一页一问；索引按"堵住多少工作"排序，因为作者的时间应该花在最贵的那页上。**
+> 一页一问。作者把读过的页整体挪进 `reviews/`；这里只放**还在等回答**的页。
 
-> **索引的价值在于与目录一一对应；一旦少一页，读者就会以为没有那一问。**
+## 现在在等作者
 
-> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 questions/ 里有 3 页**，表里只有已裁的行。其余已裁完、整体挪进 `reviews/`。
->
-> **索引以目录为准**：这张表曾经列着三页早就挪进 `reviews/` 的文件名，而目录里的另外三页不在表上——**一条指向不存在文件的索引，比没有索引更坏**（读者会以为那一问还在，而去回答一个已经裁过的形状）。以后每次并入前先数目录，再改这张表。
->
-> **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
+- `2026-11-02-the-generator-reads-a-draft-node-after-its-builder` —— `stream.*` 的几条在 Windows 上崩在 `builder_support.h#nodeGraphOf`（草稿节点不属于任何 compile graph builder），同树 Linux 全绿、五个后端都崩，所以是建图不是调度；问该谁去找那个节点的 owner、修好前 Windows 腿要不要继续红。
 
-状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
+### 已裁、在 `reviews/` 留档
 
-## 现在在等作者：3 页
-
-| 页 | 问什么 | 状态 | 裁定 | 还堵着 |
-| --- | --- | --- | --- | --- |
-| [`2026-11-02-the-generator-reads-a-draft-node-after-its-builder`](2026-11-02-the-generator-reads-a-draft-node-after-its-builder.cn.md) | `stream.*` 的 11 条在 Windows 上崩在 `nodeGraphOf(): builder != nullptr`，同一棵树 Linux 两条腿全绿，`.fvm/.nvm/.prl/.jit/.gir` 五个后端都崩（所以是建图不是调度）：谁去找那个节点的 owner，修好前 Windows 腿要不要继续红（默认：先在 Linux 上用 ASan 拿栈，暂不标 `known_fail`） | 待裁 | — | Windows 腿那 11 条红；生成器 lowering 的其余读数 |
-| [`2026-11-02-what-counts-as-a-statement-of-a-chain`](2026-11-02-what-counts-as-a-statement-of-a-chain.cn.md) | 链上语句是否含 `Func`/`Join`（默认：都不含，`Call` 含；实测旧标记与新谓词在 17,753 处不一致、两个方向都有） | 待裁 | — | `sync` 边终点不变量能否改成"按节点性质判"；旧标记与新判据的差要逐处定性 |
-| [`2026-11-02-the-member-count-stated-twice`](2026-11-02-the-member-count-stated-twice.cn.md) | 余量元组在没有图时该不该有"未知元数"的类型（元组成员数与类型声明不符的检查落地后，21 条里 15 条真绿、6 条只是症状变了） | 待裁 | — | 元数不一致的检查从此是守卫 |
-
-**这一节的行数 = 目录里的页数**（现在 3 = 3）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。
-
-2026-11-02 04:30 与 04:50 裁掉的两页（`ne_` 那 22 行与 P0-2 的顺序）已 `git mv` 进 `reviews/`，页末各写了裁定；03:30 的两页（另一层的 30 个零、私有 kernel 的名字）同样在 `reviews/`。
+- `2026-11-02-what-counts-as-a-statement-of-a-chain` —— 链上语句含不含 `Func`/`Join`；裁：含 `Call`，不含这两个。
+- `2026-11-02-the-member-count-stated-twice` —— 余量元组没有图时的元数；裁：`split` 不再交出残差元组，检查从此是守卫。
+- `2026-11-02-does-the-neq-cut-take-the-strict-neq-group-with-it` —— `ne_` 那批注册行；裁：补逐元素 `!`，然后删净。
+- `2026-11-02-is-p0-2-now-a-pass-by-pass-judgement-change` —— P0-2 的顺序；裁：先修不变量，按节点性质判。
 
 ## 已裁：按还堵着的活排
 

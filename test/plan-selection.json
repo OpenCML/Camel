@@ -69,11 +69,6 @@
             "plans": ["feat/tools/diagnostic_form_readers.plan.toml"]
         },
         {
-            "comment": "The doc-readings check is a plan whose case is a tool under test/tools: a change here runs the plan that reads the readings the hand-written pages state, so the numbers a change moves are re-measured beside it.",
-            "paths": ["test/tools/check-doc-readings.mjs"],
-            "plans": ["feat/docs/doc_readings.plan.toml"]
-        },
-        {
             "comment": "The debugger harness (the DAP race harness): the plan whose slow DAP cases it drives. A harness change is not a plan change, but this is the plan that would catch a regression in it.",
             "paths": ["test/tools/debugger/"],
             "plans": ["feat/tools/debugger.plan.toml"]

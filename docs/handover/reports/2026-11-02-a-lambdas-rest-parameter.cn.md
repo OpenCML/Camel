@@ -803,7 +803,7 @@ EXAMPLE_STOPS['a semantic error'] records 39, and the run found 40: update the n
 **第 40 条是 `vjp` 自己的例子**：`stdlib/vjp.cml:68` 的 `@example` 仍把 `f` 当值写，而声明已把它当类型参数 ⇒
 `UnresolvedReference: 'f'`。**这是例子自己的欠账，不是"豁免"**——所以数字改成 40，并在旁边写明为什么。
 
-**④ `docs.doc_readings.current`**：`check-doc-readings.mjs` 量的四份文件是
+**④ `docs.doc_readings.current`**（该计划条目已随工具在 05:30 删除）：它量的四份文件是
 `split_operator.cpp, jvp_operator.cpp, stdlib/signatures/transforms.cml, stdlib/vjp.cml`：
 
 | 文档记的 | 树上量的 | 哪一份 |
@@ -822,7 +822,7 @@ EXAMPLE_STOPS['a semantic error'] records 39, and the run found 40: update the n
 页上 104→98 并注明是 `9048c30ea`。**没有删任何断言、没有加任何豁免。**
 
 **⑥ 读数**：`docs` + `stdlib_registry` = **16/16**，`fail 0`；本地 `--verify-doc` = `up to date`，
-`check-doc-readings.mjs` = `the readings are the ones the pages state: 10 of 10`。
+那份读数检查工具已在 2026-11-02 05:30 被作者删掉（设计稿与交接页不写会随代码变的数字）。
 
 ## 24. `9048c30ea` 三问：作者自己的、`Vjp<F>` 真的存在、文档记的是真签名
 
@@ -861,7 +861,7 @@ stdlib/vjp.cml:68:    export func vjp::<F>(f: F): Vjp<F> when is_function::<F>()
 | 检查 | 改前 | 改后 |
 |---|---|---|
 | `stdlib-reference.mjs --verify-doc` | `docs/stdlib-reference.md is out of date: run … --write`（**rc=1**） | `docs/stdlib-reference.md is up to date`（**rc=0**） |
-| `check-doc-readings.mjs` | `stale transforms-module.lines … 1 reading(s) are not the ones the tree has`（**rc=1**） | `the readings are the ones the pages state: 10 of 10`（**rc=0**） |
+| 读数检查工具（05:30 已删） | `stale transforms-module.lines … 1 reading(s) are not the ones the tree has`（**rc=1**） | `the readings are the ones the pages state`（**rc=0**） |
 
 ## 25. A6：没找到它的最小程序
 
