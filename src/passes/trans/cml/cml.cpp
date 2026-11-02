@@ -316,6 +316,7 @@ class CmlPrinter {
         collectNamedTypes();
         checkNamedTypeNames();
         orderNamedTypes();
+        collectMatchPatterns();
         for (GCGraph *graph : graphs_) {
             validateGraph(graph, graph == root);
         }
@@ -443,6 +444,16 @@ class CmlPrinter {
     /// The named types the printed text actually names: only these are declared, so a type the
     /// graph carries where nothing prints it does not add a declaration the source never had.
     std::unordered_set<const StructType *> namedTypeUsed_;
+    /// The names the block being printed has bound. A second `let` of one name in one block is a
+    /// `Redeclaration` in the program the text would be, so it is refused where it is found (a
+    /// `static for` expands one source binding once per field, and the graph then holds two nodes
+    /// with that name in one body: `parse/rulings/static_for_head_names.cml`).
+    std::unordered_set<std::string> blockNames_;
+    /// The constants the arms of a `match` test. The printed text has to write each as a literal: a
+    /// name is not a pattern, and materialising one as a `let` wrote `case cml1`, which the front
+    /// end refuses (`IdentifierPatternNeedsNullableOrErrorType`,
+    /// `compile/literals/context_data_literal.cml`).
+    std::unordered_set<gc_node_ref_t> patternRefs_;
     /// The program's text without its header. The header carries one `type` statement per named
     /// type the text names, and that is known only after the text is written.
     std::string body_;
@@ -1625,6 +1636,21 @@ class CmlPrinter {
         }
     }
 
+    /// The constants the arms of a `match` test, collected before anything is printed: no `let` may
+    /// be written for one of them, because the pattern position has to be the literal itself.
+    void collectMatchPatterns() {
+        for (const GCGraph *graph : graphs_) {
+            for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+                if ((*it)->kind != camel::runtime::GCNodeKind::Brch) {
+                    continue;
+                }
+                for (const gc_node_ref_t pattern : graph->withInputsOf(it.ref())) {
+                    patternRefs_.insert(pattern);
+                }
+            }
+        }
+    }
+
     /// A type statement has to be readable: its name is a name of the printed module, so it
     /// cannot be a name the module gives something else, and two different types cannot share it.
     void checkNamedTypeNames() {
@@ -1846,6 +1872,9 @@ class CmlPrinter {
     void printStatements() {
         gc_node_ref_t tail = camel::execute::resolveRuntimeTailValueRef(graph_);
         bool tailPrintedAsStatement = false;
+        // The names of one function's block are not the names of the next: two functions may both
+        // bind `base` (the corpus' `linear.cml` does), and only one block's names are in scope.
+        blockNames_.clear();
 
         // A block with no chain of its own runs the write it yields only because the value is
         // taken from that write: the source ends such a body with the write, and `return v` after
@@ -1891,6 +1920,8 @@ class CmlPrinter {
         auto savedParams   = params_;
         auto savedDeclared = declared_;
         auto savedCells    = cells_;
+        auto savedBlockNames = std::move(blockNames_);
+        blockNames_.clear();
         auto savedHeld     = std::move(held_);
         auto savedHeldNames = std::move(heldNames_);
         auto savedLines    = std::move(lines_);
@@ -1952,6 +1983,7 @@ class CmlPrinter {
         params_    = std::move(savedParams);
         declared_  = std::move(savedDeclared);
         cells_     = std::move(savedCells);
+        blockNames_ = std::move(savedBlockNames);
         held_      = std::move(savedHeld);
         heldNames_ = std::move(savedHeldNames);
         indent_    = savedIndent;
@@ -2246,6 +2278,19 @@ class CmlPrinter {
         // answer with the name the declaration is about to give the node.
         if (named) {
             const std::string name = sourceName(ref);
+            // Two nodes of one block with one source name: the printed program would declare the
+            // name twice in that block, which is a `Redeclaration`. A `static for` over the fields
+            // of a type expands one source binding once per field and the graph keeps the name on
+            // every one of them (`parse/rulings/static_for_head_names.cml` printed `let v` twice).
+            if (!blockNames_.insert(name).second) {
+                fail(
+                    ref,
+                    std::format(
+                        "two bindings of the name '{}' in one block: one expansion of a `static "
+                        "for` keeps the source name on every copy, and a block cannot declare one "
+                        "name twice",
+                        name));
+            }
             const Expr value       = expression(ref);
             declared_[ref]         = name;
             emit(std::format(
@@ -2290,7 +2335,8 @@ class CmlPrinter {
                     tailPrintedAsStatement = true;
                 }
             }
-        } else if ((users > 1 || needsAnnotation(ref)) && !typeWrittenByUse(ref)) {
+        } else if ((users > 1 || needsAnnotation(ref)) && !typeWrittenByUse(ref) &&
+                   !(patternRefs_.contains(ref) && users <= 1)) {
             const Expr value       = expression(ref);
             const std::string name = freshName();
             declared_[ref]         = name;
@@ -2345,6 +2391,14 @@ class CmlPrinter {
         std::string name = sourceName(ref);
         if (name.empty()) {
             name = freshName();
+        } else if (!blockNames_.insert(name).second) {
+            // The same rule as a `let`: a block cannot declare one name twice.
+            fail(
+                ref,
+                std::format(
+                    "two bindings of the name '{}' in one block: a `var` and the bindings beside "
+                    "it share the source's names, and a block declares one name once",
+                    name));
         }
         const Expr initial = expression(inputs.front());
         cells_[ref]        = name;
@@ -2583,7 +2637,29 @@ class CmlPrinter {
                     static_cast<const StructType *>(node->dataType()),
                     static_cast<const StructType *>(from)) !=
                     camel::core::type::StructRelation::None) {
-                return inner;
+                // ... but only when the value already *is* the type, field for field: the position
+                // supplies the conversion, and a position does not build the fields of a value
+                // that has none. A struct with no fields converted to one with a field has no
+                // spelling at all (`({  } as Inner)` is `LiteralNotRepresentable`,
+                // `compile/array_shape/rank_zero_slot_nested_field.cml`), so it is refused rather
+                // than written as the empty literal it is not.
+                const auto *target = static_cast<const StructType *>(node->dataType());
+                const auto *value  = static_cast<const StructType *>(from);
+                bool sameFields    = target->size() == value->size();
+                for (size_t i = 0; sameFields && i < target->size(); ++i) {
+                    sameFields = std::string_view(target->fieldName(i)) == value->fieldName(i) &&
+                                 target->typeAt(i) == value->typeAt(i);
+                }
+                if (sameFields) {
+                    return inner;
+                }
+                fail(
+                    ref,
+                    std::format(
+                        "a conversion of '{}' to the named type '{}': the two do not have the same "
+                        "fields, and the language has no spelling for the conversion itself",
+                        value->toString(),
+                        target->toString()));
             }
             return {
                 std::format("({} as {})", parenthesize(inner, 80), writtenTypeText(node->dataType())),
@@ -3047,6 +3123,42 @@ class CmlPrinter {
             }
             items[at]  = expression(with[i]).text;
             filled[at] = true;
+            // A field of a struct type written with a struct value of another shape: the position
+            // converts a literal that *is* the field's type (`{ x: 1, y: 2 }` as a `Point`), and it
+            // converts nothing else. A value with no fields where the field has one has no
+            // spelling here at all and would be printed as the empty literal it is not
+            // (`compile/array_shape/rank_zero_slot_nested_field.cml` printed `{ inner: {  } }` for
+            // an `Inner`, and the front end answered `DeclaredTypeMismatch`).
+            if (type->code() == TypeCode::Struct) {
+                const auto *record    = static_cast<const StructType *>(type);
+                const camel::runtime::GCNode *written = graph_->node(with[i]);
+                const Type *writtenType = written != nullptr ? written->dataType() : nullptr;
+                const Type *fieldType   = record->typeAt(at);
+                if (writtenType != nullptr && fieldType != nullptr &&
+                    writtenType->code() == TypeCode::Struct &&
+                    fieldType->code() == TypeCode::Struct) {
+                    const auto *writtenRecord = static_cast<const StructType *>(writtenType);
+                    const auto *fieldRecord    = static_cast<const StructType *>(fieldType);
+                    bool sameFields            = writtenRecord->size() == fieldRecord->size();
+                    for (size_t k = 0; sameFields && k < fieldRecord->size(); ++k) {
+                        sameFields =
+                            std::string_view(writtenRecord->fieldName(k)) ==
+                                fieldRecord->fieldName(k) &&
+                            writtenRecord->typeAt(k) == fieldRecord->typeAt(k);
+                    }
+                    if (!sameFields) {
+                        fail(
+                            ref,
+                            std::format(
+                                "the field '{}' is written with a value of type '{}', which is not "
+                                "'{}': a literal becomes the field's type by having its fields, and "
+                                "this one has no spelling for that conversion",
+                                record->fieldName(at),
+                                writtenType->toString(),
+                                fieldType->toString()));
+                    }
+                }
+            }
             const camel::runtime::GCNode *written = graph_->node(with[i]);
             if (written != nullptr && written->kind == camel::runtime::GCNodeKind::Data &&
                 written->dataIndex < 0) {
@@ -3155,6 +3267,20 @@ class CmlPrinter {
         if (uri == ":op/idx_arr" || uri == ":op/idx_str" || uri == ":op/idx") {
             if (inputs.size() != 2 && inputs.size() != 3) {
                 fail(ref, "an index without a value and an index");
+            }
+            // The language's `[]` takes an array or a string; a subscript on a struct exists only
+            // because the program declared an overload with its own signature, and a body-less
+            // declaration is not written by this printer. The printed program would resolve `[]`
+            // to the built-in and refuse the call (`compile/native/idx_field_missing.cml`: the
+            // source says so itself, and `s['y']` is `NoMatchingFunction` when recompiled).
+            const camel::runtime::GCNode *indexed = graph_->node(inputs[0]);
+            const Type *indexedType = indexed != nullptr ? indexed->dataType() : nullptr;
+            if (indexedType != nullptr && indexedType->code() == TypeCode::Struct) {
+                fail(
+                    ref,
+                    "a subscript on a struct: the '[]' of the language takes an array or a string, "
+                    "so this one comes from a declaration in this program, and the printed program "
+                    "would resolve '[]' to the built-in and refuse the call");
             }
             Expr base  = expression(inputs[0]);
             Expr index = expression(inputs[1]);
@@ -3623,6 +3749,20 @@ class CmlPrinter {
         case TypeCode::Struct: {
             const auto *value  = fromSlot<Struct *>(slot);
             const auto *record = static_cast<const StructType *>(type);
+            // A template value of a struct type that holds no struct: the fields the type has are
+            // not in the value, so the literal written from it is `{  }` -- an empty struct where
+            // the type has fields, which the front end refuses (`DeclaredTypeMismatch`,
+            // `compile/array_shape/rank_zero_slot_nested_field.cml`). No spelling of the type is a
+            // value that has none of its fields.
+            if (value == nullptr && record->size() > 0) {
+                fail(
+                    camel::runtime::kInvalidNodeRef,
+                    std::format(
+                        "a template value of '{}' that holds no struct: the literal written from it "
+                        "would be an empty struct where the type has {} field(s)",
+                        record->toString(),
+                        record->size()));
+            }
             std::string text   = "{ ";
             for (size_t i = 0; value != nullptr && i < record->size(); ++i) {
                 text += (i ? ", " : "") + std::string(record->fieldName(i)) + ": " +

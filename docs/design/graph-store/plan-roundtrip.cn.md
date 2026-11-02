@@ -307,30 +307,40 @@ print family, and this operator's configuration is not a string, so its call has
 ```
 改前  SWEEP files=3377 printed=562 refused=1811 frontend=1004 timeout=0
       ROUNDTRIP checked=555 equivalent=515 not_equivalent=40 over_budget=0 unfaithful=7   (DIFFERENT 47, families 57)
-改后  SWEEP files=3377 printed=596 refused=1772 frontend=1009 timeout=0
-      ROUNDTRIP checked=585 equivalent=542 not_equivalent=43 over_budget=0 unfaithful=11  (DIFFERENT 54, families 54)
+改后  SWEEP files=3377 printed=589 refused=1779 frontend=1009 timeout=0
+      ROUNDTRIP checked=586 equivalent=543 not_equivalent=43 over_budget=0 unfaithful=3   (DIFFERENT 46, families 57)
 ```
 
-`printed +34`（判据二达成：≥590）、`refused −39`（达成：≤1780）、`equivalent +27`、`families 57 → 54`。**判据三未达成**：`not_equivalent +3`、`unfaithful +4`，`DIFFERENT 47 → 54`。逐条算账：34 条新印出来的里 **26 条 EQUAL、8 条 DIFFERENT**，另有 1 条基线就 DIFFERENT 的（`plus_a.cml`）变 EQUAL，所以等价 515+26+1 = 542、DIFFERENT 47+8−1 = 54。8 条是：
+`printed +27`（562→589）、`equivalent +28`（515→543）、`unfaithful 7 → 3`、`families 57 → 57`。**判据二（`printed ≥ 590`）差 1**，原因写在下面：这 7 条不是"少印"，是 7 条**从"印出来但不对"或"印出来但会报错"退回成安全的拒绝**。
 
-| 文件 | 判定 | 下一道墙（逐条实测，都不在本刀范围） |
-| --- | --- | --- |
-| `compile/native/idx_field_missing.cml` | unfaithful | 程序自己声明的无体内核 `#op(':op/idx_str')` 的调用被打印成内建符号 `s['y']`；源文件写明内建 `[]` 对该结构不成立 → `NoMatchingFunction` |
-| `trans/cpp/field_name_missing.cml` | unfaithful | 同上（同一个 `#op/idx_str` 形状） |
-| `compile/literals/context_data_literal.cml` | unfaithful | 常量名当 `match` 模式：`case cml1` 被写成标识符模式 → `IdentifierPatternNeedsNullableOrErrorType` |
-| `parse/rulings/static_for_head_names.cml` | unfaithful | 同一个源码名在一个块里绑两次（`let v` 两行）→ `Redeclaration: 'v'` |
-| `compile/array_shape/rank_zero_slot_nested_field.cml` | unfaithful | 匿名结构类型的转换打印成空字面量 `{ inner: {  } }` → `DeclaredTypeMismatch` |
-| `compile/casts/same_type.cml` | not_equivalent | 显式 `as` 自转换的节点数差异 |
-| `compile/struct_join/join_arms.cml` | not_equivalent | 分支合流的形状差异 |
-| `loops/struct_state.cml` | not_equivalent | 结构状态的形状差异 |
+逐条算账（三块，原因不同，处置也不同）：
 
-⇒ **下一刀的形状**：`printed` 的上界现在由"打印器写出来的程序与图是不是同一个程序"卡住，而且这 8 条各自是**不同的**一道墙（无体内核被写成内建符号 2、常量名当模式 1、同名重绑 1、匿名结构转换 1、canonical 形状差异 3），不是一处判据能一起收的。本刀只是让它们从"被命名类型挡住"变成"可测量"。
+1. **本刀新增的 5 条 `unfaithful`，全部处置**（不是"新露出来的墙"就算完 —— 以前是拒绝、现在是"印出来但不对"，方向反了，所以退回拒绝）：
+   | 文件 | 原来印出来错在哪 | 现在 |
+   | --- | --- | --- |
+   | `compile/native/idx_field_missing.cml` | 程序自己声明的无体 `#op(':op/idx_str')` 被写成内建符号 `s['y']` → 重编译 `NoMatchingFunction`（源文件自己写明内建 `[]` 对该结构不成立） | 拒绝：`a subscript on a struct: the '[]' of the language takes an array or a string, so this one comes from a declaration in this program` |
+   | `trans/cpp/field_name_missing.cml` | 同上（同一个 `#op/idx_str` 形状） | 同上 |
+   | `parse/rulings/static_for_head_names.cml` | 一个源码名在一个块里绑两次（`let v: int` 两行）→ `Redeclaration: 'v'` | 拒绝：`two bindings of the name 'v' in one block: one expansion of a 'static for' keeps the source name on every copy` |
+   | `compile/array_shape/rank_zero_slot_nested_field.cml` | 模板值里那个 `Inner` 字段没有 struct → 打印成 `{ inner: {  } }` → `DeclaredTypeMismatch` | 拒绝：`a template value of 'Inner' that holds no struct: the literal written from it would be an empty struct where the type has 1 field(s)` |
+   | `compile/literals/context_data_literal.cml` | 匹配模式被物化成 `let cml1` 再写成 `case cml1`（名字不是模式）→ `IdentifierPatternNeedsNullableOrErrorType` | **修好**（不是退回）：模式不再物化，写 `case 3.0`，往返 **EQUAL (43 顶点 / 120 边)** |
+2. **同一个守卫顺带收了 3 条基线就 `unfaithful` 的程序**（`compile/static_expansion/comprehensions.cml`、`compile/static_expansion/fields_and_access.cml`、`parse/constructs/comprehensions.cml`）：它们也是"一个块里同名重绑"，以前印出来就编不过。方向与第 1 块相同（把响亮的错换成安静的拒绝），所以没有为保住 `printed` 而给守卫加范围。**这就是 `printed` 589 而不是 592 的全部原因。**
+3. **`not_equivalent 40 → 43` 三条留着，但要说清它们不是"等价只是形状不同"**（我上一版这么写过，是错的）：`compile/casts/same_type.cml`、`compile/struct_join/join_arms.cml`、`loops/struct_state.cml`，判定器实测两边 canonical 文档不等价。**它们不是新露出来的墙，是真正没解决的三条**，下一刀单独看。
+
+⇒ **下一刀的形状**：`printed` 的上界现在由"打印器写出来的程序与图是不是同一个程序"卡住，而且这几条各自是**不同的**一道墙（无体外核被写成内建符号、同名重绑、模板缺 struct、canonical 形状差异 3），不是一处判据能一起收的。
 
 **仍拒绝的 9 条**（`REFUSAL` 行，文本逐条点出缺哪一半）：6 条名字不是源标识符（`ns::T`）、2 条泛型声明（"the printer writes no type parameters"）、1 条 `#resource` 声明（"the tag is not readable from the type"）。
 
 **已知缺口，没加守卫**：`namedTypeText` 只写字段名与字段类型，字段上的 `#tag(...)`（`parse/rulings/static_for_head_names.cml` 的 `type Box = { #width(8) low: int }`）写不出来。这一刀没有为它加拒绝，因为还没有一条能证明"打印出来的程序读字段标签、结果与源不同"的最小例子；加一条打不响的守卫比没有更糟，先记在这里，下一刀补例子或补 `namedTypeObstacle`。
 
-**自检**：`test/plans/feat/trans/cml.plan.toml` `1/1` 通过（新增 `test/cases/trans/cml/named_type.cml` 的往返、`check_declarations` 判"用到的类型必须在输出里有声明"、以及一条负例读数：把打印结果里那行 `type P = ...` 删掉再编译 → `UnresolvedTypeReference`，说明声明是承重的那一半）；`docs.doc_readings` 的 `case TypeCode::` 读数 1028 → 1043（本刀在 `cml.cpp` 加了四个 `TypeCode` 走查），页已同步；全量 fast suite **`8390 / 8374 / 0`**（skip 10、known failures 6）。
+**作者裁的一页（`fsh-dev = d2face663`，2026-11-03 03:30）直接指向本刀的相邻判据，逐字留档：**
+
+> 「私有 kernel 要不要可写名字：**前提不成立**，A、B、C 都不选。最小例子里 `shl` 不是私有的：`stdlib/math.cml:627-632` 写着 `#op('math:shl_i') export func shl::<T>(x: T): T when is_same::<T, i32>()`，`shl_l` 同理。它是**导出的**无体声明，程序也确实写了 `1->shl<64>`。打印器那条判据『无体 kernel 声明，没有程序写这个名字』**错在把『无体』当成了『私有』**：无体只说明实现在 C++ 里，名字照样可写。」
+
+⇒ **"无体"说的是实现在哪，"私有"说的是名字能不能写，两件事。** 本刀没有动这条判据（`operatorExpression` 里 `kernelDeclaration` 那一支仍然拒绝），所以这一族的读数照旧：**411 条**（`REFUSAL 411 ... <name> is a body-less kernel declaration, and no program writes that name`），是重扫里最大的一族，全量 3377 个文件里占 12.2%。按作者的修法——算子由一条**导出的**声明绑定时，打印那条声明的名字（`x->shl<64>`），重编译时重载按类型选回 `shl_l`；只有确实没有任何导出声明能到达的算子才算"没有可写名字"——是下一刀的事。
+
+**另一处仪器问题，与"仪器先坏"同族**：`test/tools/cml_roundtrip.py` 把类型的 `decl` 指向 `T:<类型表下标>` 而不是 `D:<声明顶点>`，于是**任何带命名类型的 canonical 文档都被判 `unknown vertex T:d0`**——这个 bug 一直把命名类型挡在"可测量"的门外；不修它，本刀连基线都量不出来。
+
+**自检**：`test/plans/feat/trans/cml.plan.toml` `1/1` 通过（新增 `test/cases/trans/cml/named_type.cml` 的往返、`check_declarations` 判"用到的类型必须在输出里有声明"、以及一条负例读数：把打印结果里那行 `type P = ...` 删掉再编译 → `UnresolvedTypeReference`，说明声明是承重的那一半）；`docs.doc_readings` 的 `case TypeCode::` 读数 1028 → 1043（本刀在 `cml.cpp` 加了几个 `TypeCode` 走查），页已同步；全量 fast suite **`8390 / 8374 / 0`**（skip 10、known failures 6）。
 
 **先答"两族是不是同一个理由"：是。** 两族的拒绝原文都出自 `checkType` 的同一个分支（`case TypeCode::Struct` 里 `record->named()` 那一次 `fail`），只是位置不同：
 
