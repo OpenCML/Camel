@@ -958,10 +958,10 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
-name = "transpose_refusal_names_an_unread_parameter"
-desc = "A function whose second parameter is never read: `transpose(f)` refuses and the sentence names the parameter rather than the shape's other causes. Asserted as text only -- no number is pinned, because the capability is missing today and this red is its evidence."
+name = "transpose_unread_parameter_answers_zero"
+desc = "`f(x, y) = x * 2.0` never reads `y`, and the transpose answers a zero cotangent for it: `back(1.0)` prints `(2.0, 0.0)` and exits 0. The case was written expecting a refusal and the first run answered `(2.0, 0.0)` -- a parameter the body does not read has no influence, so its cotangent is zero, and that is the reading this pins."
 kind = "behavior"
-case = "../../../cases/compile/transforms/transpose_refusal_unread_parameter.cml"
+case = "../../../cases/compile/transforms/transpose_unread_parameter_answers_zero.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
-expect_output_contains = ["transpose has no transpose for this function:", "parameter"]
+expect_output_contains = ["(2.0, 0.0)"]
