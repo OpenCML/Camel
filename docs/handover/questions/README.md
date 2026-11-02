@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：15 页
+## 现在在等作者：16 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -24,3 +24,4 @@
 | [`2026-11-03-does-a-loop-body-declare-its-next-state-or-compute-it`](2026-11-03-does-a-loop-body-declare-its-next-state-or-compute-it.cn.md) | 一页一问：`loop` 的下一个状态是"体算出来的"，还是"臂声明的"？ |
 | [`2026-11-03-does-a-mark-encode-shape-or-history`](2026-11-03-does-a-mark-encode-shape-or-history.cn.md) | 一处标记编码的是"形状"还是"已发生过的事件"？ |
 | [`2026-11-03-may-transpose-of-a-function-declare-its-signature-after-building-the-member`](2026-11-03-may-transpose-of-a-function-declare-its-signature-after-building-the-member.cn.md) | 一页一问：`transpose(f)` 的类型能不能在"建完成员之后"才定？ |
+| [`2026-11-03-reversing-a-backward-can-only-be-pinned-when-a-loop-state-is-not-a-float`](2026-11-03-reversing-a-backward-can-only-be-pinned-when-a-loop-state-is-not-a-float.cn.md) | 反传倒着走要能钉住，先要循环状态不是浮点标量 |
