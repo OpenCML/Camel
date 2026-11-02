@@ -956,7 +956,6 @@ expect_exit = 1
 expect_stdout_contains = ["transforms: jvp has no forward transform for this function"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
-||||||| parent of 36d65aec7 (test: two cases that reach the refusal through the shape the language uses now)
 
 [[tests]]
 name = "transpose_refusal_names_an_unread_parameter"
