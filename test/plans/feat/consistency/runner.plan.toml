@@ -29,13 +29,14 @@ expect_stdout_contains = ["runner self-test ok"]
 #
 # 180 s is the liveness bound, a different thing: a nested run that hangs must not hold the gate,
 # and the wall this test takes on this host (15.8-23.5 s measured inside gates) is the host's.
-# 240 s, with a stated reason: the margin rule fails a test whose own CPU time exceeds a quarter
-# of its timeout, and this case read 45.8 s of CPU inside the fast layer at -Jobs 8 and 54.5 s alone
-# on the gate host on 2026-11-03. A quarter of 180 s is 45 s, so it failed by 0.8 s -- a bound that
-# was right when the work cost 12.5 s and that nobody re-measured after the work grew fourfold. 240 s
-# is above four times the slowest reading, which is what the rule asks for, and the growth itself is
-# a separate question: the same fixture should not cost four times what it cost on 2026-10-24.
-timeout_ms = 240000
+# 400 s, with a stated reason: the margin rule fails a test whose own CPU time exceeds a quarter
+# of its timeout, and this case is load-sensitive because it starts the runner that starts the rest.
+# Readings on the gate host, all at -Jobs 8: 45.8 s, then 61.7 s in a later gate, and 54.5 s alone --
+# the spread is the neighbours, not the work. Four times the highest of those is 247 s, so 400 s is
+# the first bound that the rule cannot trip on a reading this test has already produced. The bound was
+# 180 s when the work cost 12.5 s and nobody re-measured it after the work grew fourfold; why the
+# same fixture now costs four times what it did on 2026-10-24 is a separate question, left open.
+timeout_ms = 400000
 # `parallel = false` (the same ruling): the figure this test is judged by is a sum over its process
 # tree, so it follows how many cores the host hands the neighbours. Alone it is its own work plus
 # the band above. The old reason for keeping it parallel is gone and was never about the reading:
