@@ -1,7 +1,9 @@
 /**
  * `check` has two forms (design principles 4.4): the rules alone, and the rules with `over`, the
  * function the check is about. `samples` and `seed` have defaults in both, so a call may leave
- * them out.
+ * them out. `over` is an ordinary argument rather than a `with` one, so that the two declarations
+ * name each `with` position the same way: `check<samples: 1000>` reaches position 0 of both, and
+ * the function is the argument the arrow carries.
  *
  * A generic law's candidate set is the types the operator groups registered, and then the types
  * of the function `over` names: `sum_swap` has no instance at `Vec` unless the function names it,
@@ -26,7 +28,7 @@ func main(): int sync {
     // `over` left out: the law is checked at the types the registered operator groups give.
     println(check_text([add_zero, sum_swap]->check<100, 1>))
     // `over` given: the program's own types join the candidate set.
-    println(check_text([add_zero, sum_swap]->check<main, 100, 1>))
+    println(check_text([add_zero, sum_swap]->check<100, 1>(main)))
     // Every parameter but the rules left out.
     println(check_text([add_zero, sum_swap]->check))
     return 0

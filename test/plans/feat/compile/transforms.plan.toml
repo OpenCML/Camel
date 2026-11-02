@@ -10,7 +10,7 @@ args = ["${case}", "transforms::reinterp", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["REINTERP uri :op/add_d -> rule jvp_add -> rhs ", "REINTERP uri :op/mul_d -> rule jvp_mul -> rhs ", "REINTERP uri :op/div_d -> rule jvp_div -> rhs ", "vars=x,w count=2", "fill=FunctionClosure slots=2", "type=(dx: float, dw: float) => float", "REINTERP closure graph=107 layout=(float, float) built=yes slots=x,w", "REINTERP target=f primitives=1 other=2 graph=", "nodes=1", "1.5"]
+expect_output_contains = ["REINTERP uri :op/add_d -> rule jvp_add -> rhs ", "REINTERP uri :op/mul_d -> rule jvp_mul -> rhs ", "REINTERP uri :op/div_d -> rule jvp_div -> rhs ", "vars=x,w count=2", "fill=FunctionClosure slots=2", "type=(dx: float, dw: float) => float", "REINTERP closure graph=107 layout=(float, float) built=yes slots=x,w", "REINTERP target=f primitives=1 other=2 graph=", "nodes=1", "1.5"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -23,7 +23,8 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_div,jvp_add", "REINTERP jvp op signature=(f: (float) => float) => (float, float) => (float, float)", "lifted=(float, float) => (float, float) pure graph=(float, float) => (float, float) pure same=yes", "REINTERP jvp built graph=56 nodes=12 exit=11 regions=0 function=f", "5.5", "3.25"]
+expect_output_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_div,jvp_add", "REINTERP jvp op signature=(f: (float) => float) => (float, float) => (float, float)", "lifted=(float, float) => (float, float) pure graph=(float, float) => (float, float) pure same=yes", "REINTERP jvp built graph=56 nodes=12 exit=11 regions=0 function=f", "5.5", "3.25"]
+expect_stdout_not_contains = ["TRANSPOSE function=", "REINTERP "]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -40,7 +41,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["REINTERP jvp function=f graph=", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_neg", "4419"]
+expect_output_contains = ["REINTERP jvp function=f graph=", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_neg", "4419"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -60,7 +61,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_add", "36", "24"]
+expect_output_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_add", "36", "24"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -76,7 +77,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "4.0", "0.0"]
+expect_output_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "4.0", "0.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -93,7 +94,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["REINTERP jvp function=f graph=", "81.0", "108.0"]
+expect_output_contains = ["REINTERP jvp function=f graph=", "81.0", "108.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -112,7 +113,7 @@ expect_exit = 0
 # lines appear (the plain call's print, then the lifted call's print) -- a third would mean the
 # lift ran the effect again, and a single one would mean it dropped it. `9.0` and `6.0` are the
 # value and the tangent of the lifted call, and the plain call's `9.0` is the third.
-expect_stdout_contains = ["REINTERP jvp function=g graph=", "3.0\n9.0\n6.0"]
+expect_output_contains = ["REINTERP jvp function=g graph=", "3.0\n9.0\n6.0"]
 expect_stdout_not_contains = ["3.0\n3.0\n3.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
@@ -130,7 +131,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["REINTERP jvp function=g graph=", "REINTERP jvp function=f graph=", "REINTERP jvp callees=1", "18.0", "12.0"]
+expect_output_contains = ["REINTERP jvp function=g graph=", "REINTERP jvp function=f graph=", "REINTERP jvp callees=1", "18.0", "12.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -252,7 +253,7 @@ tool = "node"
 case = "../../../../test/tools/check-vjp-ruleset.mjs"
 args = ["${case}", "--drop", "rulesets.transpose"]
 expect_exit = 0
-expect_stdout_contains = ["the library imports rulesets.transpose", "transpose has no transpose for this function", "skip=rule uri=:op/add_d reason=no-such-family", "stdlib/vjp.cml:", "prints 4 of 4 readings"]
+expect_output_contains = ["the library imports rulesets.transpose", "transpose has no transpose for this function", "skip=rule uri=:op/add_d reason=no-such-family", "stdlib/vjp.cml:", "prints 4 of 4 readings"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
 
@@ -337,7 +338,8 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=sum_of_scaled graph=", "type=(float, float) => float nodes=6 arms=0 rhs=add_t,mul_t", "TRANSPOSE function=scaled_chain graph=", "rhs=mul_t,add_t", "TRANSPOSE op signature=(f: (float) => float | ((..Residuals), float, ...) => float) => (knowns.., cotangent) => (cotangents..)", "transposed=(float, float) => float", "same=yes", "5.0", "20.0"]
+expect_output_contains = ["TRANSPOSE function=sum_of_scaled graph=", "type=(float, float) => float nodes=6 arms=0 rhs=add_t,mul_t", "TRANSPOSE function=scaled_chain graph=", "rhs=mul_t,add_t", "TRANSPOSE op signature=(f: (float) => float | ((..Residuals), float, ...) => float) => (knowns.., cotangent) => (cotangents..)", "transposed=(float, float) => float", "same=yes", "5.0", "20.0"]
+expect_stdout_not_contains = ["TRANSPOSE function=", "REINTERP "]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -353,7 +355,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "stdout"]
 expect_exit = 0
-expect_stdout_contains = ["6561.0", "17496.0", "REINTERP jvp function=f graph="]
+expect_output_contains = ["6561.0", "17496.0", "REINTERP jvp function=f graph="]
 expect_stdout_not_contains = ["0.0\n0.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
@@ -368,7 +370,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "stdout"]
 expect_exit = 0
-expect_stdout_contains = ["27.0", "18.0", "REINTERP jvp callees=1"]
+expect_output_contains = ["27.0", "18.0", "REINTERP jvp callees=1"]
 expect_stdout_not_contains = ["callees=3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
@@ -382,7 +384,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=pick graph=", "type=(float, float) => float nodes=9 arms=2 rhs=mul_t", "TRANSPOSE function=merged graph=", "nodes=12 arms=2 rhs=add_t,mul_t", "2.0", "3.0", "7.0", "4.0"]
+expect_output_contains = ["TRANSPOSE function=pick graph=", "type=(float, float) => float nodes=9 arms=2 rhs=mul_t", "TRANSPOSE function=merged graph=", "nodes=12 arms=2 rhs=add_t,mul_t", "2.0", "3.0", "7.0", "4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -395,7 +397,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=thrice graph=", "type=(float, float) => float", "nodes=11 arms=0 rhs=mul_t", "TRANSPOSE function=quad graph=", "8.0", "16.0"]
+expect_output_contains = ["TRANSPOSE function=thrice graph=", "type=(float, float) => float", "nodes=11 arms=0 rhs=mul_t", "TRANSPOSE function=quad graph=", "8.0", "16.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -602,6 +604,22 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "transpose_no_tangent.a_refusal_is_a_diagnostic_not_the_programs_output"
+desc = "The channel a refusal is spoken on, pinned so it cannot drift back: the same shape as `function_value_is_refused` (`g2(x) = let h = (y: float) => y*x; h(2)`, refused at the call because `h` is a closure with no graph at that point), asserted as `expect_stdout_exact = \"2.0\\n\"` -- the program prints one line and the transform says nothing into it -- with the reason itself on the diagnostic side (`TRANSPOSE function=g2 skip=call node=4 callee=none` and `reason=function-closure`), and `expect_stdout_not_contains` naming both prefixes so a reading that came back to stdout fails here. This is the author's review item, high-3 second half: the refusal reason used to exist only in the program's own output, where a caller collecting diagnostics never saw it and a caller collecting output was handed the transform's debugging. The refusal also carries the reason to the reader as an error (`transpose has no transpose for this function`, on the library's own line)."
+kind = "negative"
+case = "../../../cases/compile/transforms/a_refusal_keeps_stdout_to_the_program.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 1
+expect_stdout_starts_with = "2.0\n"
+expect_stdout_not_contains = ["TRANSPOSE function=", "REINTERP "]
+expect_stderr_contains = ["TRANSPOSE function=g2 skip=call node=4 callee=none", "reason=function-closure"]
+expect_output_contains = ["transpose has no transpose for this function"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "transpose_no_tangent.tuple_member"
 desc = "A tuple with one member that has no tangent space: `k(x) = let t = (x, 3); float(t.1) + t.0`, whose paper answer is `3 + x` -- 5 at x = 2, pullback 1. This is the sentence the integer rule was written on, `a tuple with one member without a space stops only that member`, as two numbers: 0 is `stopped too early` (the whole tuple given no space) and 2 is `did not stop` (the integer path counted as an identity), and 1 is what neither of them answers. The zero is named by type -- `type=int space=none` on the component read of the second slot. Asked at cotangent 1 and 3, so 1 then 3."
 kind = "behavior"
@@ -623,7 +641,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=g graph=", "TRANSPOSE function=f graph=", "rhs=add_t", "4.0"]
+expect_output_contains = ["TRANSPOSE function=g graph=", "TRANSPOSE function=f graph=", "rhs=add_t", "4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 # A rule's tangent function is a plain function of several floats: `mul_tangent(x, w, dx, dw)` is
@@ -640,7 +658,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=autodiff::mul_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=7 arms=0 rhs=add_t,mul_t", "TRANSPOSE function=mt graph=", "nodes=5 arms=0 rhs=-", "(0.0, 1.0, 2.0, 3.0)"]
+expect_output_contains = ["TRANSPOSE function=autodiff::mul_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=7 arms=0 rhs=add_t,mul_t", "TRANSPOSE function=mt graph=", "nodes=5 arms=0 rhs=-", "(0.0, 1.0, 2.0, 3.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -671,7 +689,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=autodiff::add_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=5 arms=0 rhs=add_t", "TRANSPOSE function=at graph=", "nodes=5 arms=0 rhs=-", "(0.0, 0.0, 1.0, 1.0)", "(0.0, 0.0, 2.0, 2.0)"]
+expect_output_contains = ["TRANSPOSE function=autodiff::add_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=5 arms=0 rhs=add_t", "TRANSPOSE function=at graph=", "nodes=5 arms=0 rhs=-", "(0.0, 0.0, 1.0, 1.0)", "(0.0, 0.0, 2.0, 2.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -715,7 +733,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "stdout"]
 expect_exit = 0
-expect_stdout_contains = ["1.0", "27.0", "6.0", "TRANSPOSE function=autodiff::add_tangent<float> graph="]
+expect_output_contains = ["1.0", "27.0", "6.0", "TRANSPOSE function=autodiff::add_tangent<float> graph="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -877,6 +895,6 @@ case = "../../../cases/compile/transforms/grad_of_a_division.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["3.0", "1.0", "-1.0", "0.25", "-1.0", "TRANSPOSE function=autodiff::div_tangent<float> graph="]
+expect_output_contains = ["3.0", "1.0", "-1.0", "0.25", "-1.0", "TRANSPOSE function=autodiff::div_tangent<float> graph="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

@@ -24,6 +24,6 @@ func main(): int sync {
     let e = s->extract<unit_cost> !! s
     println(e(5))
     println(len(check_text(rules->check<8, 1>)) > 0)
-    println(len((rules->check<target, 8, 1>).rows))
+    println(len((rules->check<8, 1>(target)).rows))
     return 0
 }
