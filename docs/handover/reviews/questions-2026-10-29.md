@@ -1979,3 +1979,11 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 - 顺带：页里提到 `builder.cpp` 里还有一句 `"the generator machine does not build this shape; send the program, this is a …"`，以及一处 `FeatureNotSupported`。前者是"暂不支持"诊断的变种，后者那个码 11-01 已经删了。在本页写清这两处的现状：还在的话，要么实现那个形状，要么报一个说明语言规则的诊断，不写"请把程序发来"。
 
 页面挪到 `reviews/` 留档。
+
+## 裁定（2026-11-02 14:10，负责人定）：字符串里的未知转义是编译错误
+
+负责人定：未知转义（如 `"\C"`）改为编译错误，不再是警告。这与 Java、C#、Go、Rust、Swift、Kotlin、Zig 一致；Python 也在从警告往错误走。
+- `LexicalDiag::InvalidEscapeSequence` 由 `warn` 改成 `error`，消息点名那个转义和它的位置，提示写成"合法的转义是……；要写反斜杠本身，写 `\`"。`diagnostics/registry.tsv`、`docs/diagnostics.md`、`docs/language/02_lexical.md` 的转义表同一笔改。
+- 全树扫一遍今天靠"未知转义原样保留"才编得过的源码（用例、示例、标准库文档例子、夹具），改成 `\` 或正斜杠。夹具生成的路径一律用正斜杠。
+- 原始字符串要不要加，另等负责人一句话，这一笔不加。
+页面挪到 `reviews/` 留档。
