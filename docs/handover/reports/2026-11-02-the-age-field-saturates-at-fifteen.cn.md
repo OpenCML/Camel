@@ -44,3 +44,21 @@ src/core/mm/gc_debug.cpp:36               promotionAgeThreshold_ = 16;
 所以这一条不是"分配路径错"，是**期望过期**：那个 8 与阈值 15 不是同一套数。改法是把"固定 8 次"换成"收集到 `isObjectAddressStable` 为真，最多 64 次"——**上界是给坏掉的晋升路径留的响**，不是给循环兜底。
 
 `gc.plan.toml` 至此 **45 条 / 45 绿**，layer 里那两条"出生即红"的自检第一次真的跑过并通过。
+## 第三种实例：`hint 2 → peak 20` 在 poison 下不再出现
+
+`poison:` 变体的 `stream.tee_report` 报 `stdout does not contain 'STREAM_TEE {"tee":1,…,"elements":20,"peak":20,…,"hint":2,…}'`。用工具本来的入口直跑（`ssh 88zjwei`，`LD_LIBRARY_PATH` 取 `camel-remote.ps1:162` 的默认值，否则二进制报 `GLIBCXX_3.4.36 not found`——**空输出有两种：用例什么都没做，或仪器根本没起来**）：
+
+```
+STREAM_TEE {"tee":1,…,"elements":1,"peak":1,…,"hint":2,"cap":64}
+STREAM_TEE {"tee":2,…,"elements":20,"peak":20,…,"hint":2,"cap":64}
+STREAM_TEE {"tee":3,…,"elements":1,"peak":1,…,"hint":64,"cap":64}
+STREAM_TEE {"tee":4,…,"elements":3,"peak":3,…,"hint":64,"cap":64}
+```
+
+六条、hint `2,2,64,64,…`；期望写的是三条、hint `2,64,8`。**报告打了，而且打得更细——过期的是"第一个 tee 的侧先把 20 个元素读完"这个交错前提，而交错不是契约。**
+
+三个实例现在是同一族：`16` vs `15`（永不晋升）、`8` vs `15`（没晋升就要求稳定地址）、`hint 2 → peak 20`（poison 下不出现的交错）。**共同点：测试在测另一个世界。**
+
+## 为什么把不变量交给 runner，而不是让用例自己校验
+
+**A**：用例自己校验自己的输出，等于让被测者当裁判。**B**：给 `run-tests.mjs` 加 `expect_stdout_matches`（正则），加的是表达能力，受益的是所有"每条都必须满足 P"的用例，不只这一条。今天先用 `STREAM_TEE {` 与 `"cap":64` 两条字面断言止住红——它仍能抓到"报告没打"和"cap 写错"，**抓不到 `peak <= cap`，那一条等正则落地再补**。
