@@ -89,11 +89,3 @@ export func grad(f: (x: float) => float): (x: float) => float {
         cotangents.0
     }
 }
-
-/// The gradient of the first `with` parameter of `f` (design principles 9.9): the same `vjp`, taken
-/// with respect to a captured value instead of a parameter.
-/// @example-fragment `f` captures the value it differentiates against, so the example is a fragment of a program that declares one
-/// @example let slope_over_the_capture = with_grad(f)
-export func with_grad::<F>(f: F): F when is_function::<F>() {
-    return vjp(f)
-}
