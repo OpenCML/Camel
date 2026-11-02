@@ -71,6 +71,14 @@ bool isTerminal() {
 // keeps `_kbhit`, a pipe is peeked without consuming a byte, and a file is read while its pointer
 // is short of its end. Nothing waiting is "no input", whether the end of the pipe has come or the
 // writer has not written yet.
+//
+// The three answers of standard input that is none of these, measured on Windows with a pipe, a
+// file, the `NUL` device and a closed handle: `NUL` fails the peek (`ERROR_INVALID_FUNCTION`) and
+// answers the size question with an empty file, so it reads as nothing waiting and its `ReadFile`
+// returns 0 bytes; a closed handle fails both questions (`ERROR_INVALID_HANDLE`) and reads as
+// nothing waiting too; and a console is asked `_kbhit` before anything else -- a key put into the
+// console's input buffer answers `true` there and comes off `_getch`, so the console path is not
+// the fallback of a pipe question, it is the first question on a console.
 bool hasInput() {
     if (isTerminal()) {
         return _kbhit() != 0;
