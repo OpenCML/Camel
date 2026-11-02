@@ -93,7 +93,9 @@ error[InternalDiag::UnknownInternalError]: An error has occurred: the generator 
 
 所以 `LoopBodyNeedsNextState` **今天只在生成器路径上落地**。要让参考里那句「与所有 `loop` 一样」在两侧都成立，普通 `loop` 的降低也得报同一个码；这一条**尚未做**，记在这里。
 
-**一个单独记下的事实（2026-11-03）**：普通 `loop` 的**体值从来没有被读过**。`visitLoopExpr` 把 `visitStmtBlock` 的返回（整块的那个 exec 节点）直接挂成 `loop` 节点的体（`builder.cpp:3438` `*loopNode << bodyValue;`），而块里最后一句 `s + 1` 只是这个 exec 链上的一个叶子。所以 `loop s = 0 for i in [0, 1, 2] do { println(s) }` 里 `s` 一次都没被改写、**连"体没给下一个状态"都没有报**：规则缺的不是一句诊断，而是**"体的值"这个位置本身**。要判"体值类型 vs 状态类型"，得在**类型检查期**做，降低期拿不到类型。
+**一个单独记下的事实（2026-11-03）**：普通 `loop` 的**体值从来没有被读过**。`visitLoopExpr` 把 `visitStmtBlock` 的返回（整块的那个 exec 节点）直接挂成 `loop` 节点的体（`builder.cpp:3438` `*loopNode << bodyValue;`），而块里最后一句 `s + 1` 只是这个 exec 链上的一个叶子。所以 `loop s = 0 for i in [0, 1, 2] do { println(s) }` 里 `s` 一次都没被改写、**连"体没给下一个状态"都没有报**。**但原因不是"体值没被读"（2026-11-03 更正）**：`stdlib/prelude.cml:858` 的 `export func println::<T>(x: T, ..rest): T` —— **`println` 返回它自己的参数**，所以 `println(s): int`，**`do { println(s) }` 是 `s` 的不动点（`s_{n+1} = s_n`），不是漏写**。**拿它当"没写出下一个状态"的例子是错的。**
+
+**真正的靶子今天就已经会报（2026-11-03 实测，两例）**：**(a)** 体末尾是返回 `void` 的调用 —— `loop s = 0 for i in [0, 1, 2] do { emit(s) }`（`func emit(x: int): void`）⇒ `error[SemanticDiag::LoopBodyTypeMismatch]: The body of this loop gives a value of type 'void'; the state of the loop has type 'int'.`（`2:40`）；**(b)** 状态 `int`、体末尾 `string` ⇒ 同一个码，`'string'` vs `'int'`（`2:40`）。**⇒ 这条规则不缺，也不在"类型检查期"缺 —— `builder_control.cpp:3274-3288` 用 `stateType->assignableFrom(bodyType)` 已经在做，`bodyType` 就是体最后一条语句的类型**（`ArmBuild::type` 由 `setArmResult` 从末句的值节点取，`builder_control.cpp:1583-1585`，只有 GATE 才向下取一次）。
 
 **这个判定在仓库里是有的，缺的是有人调它（2026-11-03 第二轮）**：可赋值性由 `Type::assignableFrom(Type *sourceType) const` 给出（`include/camel/core/type/base.h:275`，各类型各自重写：`bytes.h:17`、`collection.h:68`、`array.h:194`、`func.h:289`），`void` 的规则在 `func.h:385-388`。也就是说"体值能否作为下一个状态"这句话**有现成的语言判定可以依据**，`LoopBodyNeedsNextState` 今天之所以只在生成器的手工走查里落地，不是因为编译器没有这个判定，而是因为**没有任何一层拿它来问 `loop` 这件事**。要落地就在 GIR 层（`gir/builder_control.cpp:2953` 起，`gct->loopKind()` 与类型都在手上）调它，普通 `loop` 与生成器一条规则、一个检查。
 
