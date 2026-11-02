@@ -7,6 +7,7 @@
 
 #include "camel/core/operator_table.h"
 #include "camel/core/node_attrs.h"
+#include "camel/core/operator_names.h"
 #include "camel/core/type/typevar.h"
 
 #include "camel/utils/assert.h"
@@ -362,14 +363,31 @@ std::vector<std::string> OperatorTable::groupOperators(std::string_view group) c
 
 std::string OperatorTable::groupOf(std::string_view uri) const {
     std::shared_lock lock(mutex_);
+    // One operator may belong to more than one group: `tensor:matmul` is registered in `__mat__`
+    // (the language's `@`) and in `matmul` (the name the module exports), because the same
+    // `OpDef` names it both ways. Both answers are true, and the question "which group is this
+    // operator's" has two answers that matter differently: a program writes the sign of the
+    // language group, and the module's own name is what an import gives it.
+    //
+    // The first group that holds the URI is not the right answer to "how does a program write
+    // this": it depends on registration order, and a module that registers the exported name
+    // first hid the language's symbol from the printer, which then refused every `@` node. A
+    // group with a symbol is the source spelling, so it is preferred; the first group otherwise.
+    std::string first;
     for (const auto &[name, declared] : groups_) {
         for (const std::string &member : declared) {
             if (member == uri) {
-                return name;
+                if (operatorSymbolOf(name) != nullptr) {
+                    return name;
+                }
+                if (first.empty()) {
+                    first = name;
+                }
+                break;
             }
         }
     }
-    return {};
+    return first;
 }
 
 std::vector<type::Type *> OperatorTable::registeredTypes(std::string_view group) const {

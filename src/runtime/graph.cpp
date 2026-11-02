@@ -557,11 +557,13 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             // predecessor). The control input is what that wait used to be written as; the paths
             // this lane has not moved onto the sync edge yet still carry one, and the ones that
             // have carry the sync edge instead.
-            // Asked through the facts every pass asks (camel/runtime/effect_liveness.h): the wait a
-            // GATE carries is either a block's chain or an edge of its own, and the two are named
-            // there instead of here. A GATE with neither waits on nothing, which is what this
-            // refuses.
-            //
+            // The wait a GATE carries is either a block's chain or an edge of its own, and this
+            // refuses a gate with neither. It is a structural reading, and it is written where it is
+            // read: `EffectLivenessFacts` no longer carries it (camel/runtime/effect_liveness.h
+            // says why -- four call sites filled that field in three spellings, and none of them
+            // was the liveness answer).
+            const bool hasWaitEdge     = !graph->ctrlInputsOf(ref).empty();
+            const bool isSyncStatement = !graph->syncPredsOf(ref).empty();
             // This is an assertion, not a rule programs reach. Measured: payload validation does run
             // on the execution path (three graphs validated for a small program, five with a
             // fault-injection pass in the pipeline), but a gate whose waits are all taken away never
@@ -571,10 +573,7 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             // and ran with no error, and that gate was gone afterwards (2 gates before it, 1 after).
             // If this ever fires, either `dceDraft` stopped removing such a gate or the builder
             // started writing one that nothing waits on.
-            EffectLivenessFacts facts;
-            facts.hasWaitEdge     = !graph->ctrlInputsOf(ref).empty();
-            facts.isSyncStatement = !graph->syncPredsOf(ref).empty();
-            if (!facts.hasWaitEdge && !facts.isSyncStatement) {
+            if (!hasWaitEdge && !isSyncStatement) {
                 throw std::runtime_error(
                     std::format(
                         "Runtime graph '{}' has GATE node {} without a wait: no sync predecessor "

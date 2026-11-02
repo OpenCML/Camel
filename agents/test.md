@@ -15,6 +15,27 @@
 - A plan entry may use only the fields `docs/test-plans.md` defines. The runner rejects an unknown key (and a wrong type on the fields it types) with an error naming the plan file, the test and the key, and fails that plan; the other plans still run. Do not rename an assertion to something the runner ignores: it would pass while asserting nothing. `expect_stdout_exact` (or its legacy name `expect_stdout`) compares the whole normalized stdout; `expect_stdout_contains` does not.
   **The three stdout assertions, and what each one answers.** `expect_stdout_exact` -- is the whole output this text, character for character. `expect_stdout_contains` -- does the output contain this substring, anywhere. `expect_stdout_matches` -- does **some line** of the output match this regular expression (a search, line by line, like `contains`; `^`/`$` anchor a line, and an unanchored pattern is a substring of a line -- `24\.0` passes on `width 24.0 height 7`, `^24\.0$` does not). A pattern that does not compile, an empty pattern, and `expect_stdout_matches` written beside `expect_stdout_contains`/`expect_stdout_exact` are **plan errors** (`exit 2`, `plan:line`, nothing started): a plan states one thing about its stdout, not two whose order nobody wrote down. A legal pattern that matches nothing is a normal red, and prints the pattern, that it is legal, and the head of the output.
 - When you add a plan field, add it to the runner and to `docs/test-plans.md` in the same change; when you remove one, remove it from both and fix the plans that use it.
+- **Every reading carries its artifact.** A run prints, right before `[SUMMARY]`,
+  `[provenance] tip <sha> | binary built <ISO> | tree <abs> | tier <fast> | jobs <n>`. Quote `tip` from
+  the **tested tree's** `git rev-parse HEAD`, never from a branch ref, and never quote a sha for a
+  dirty tree -- that line prints `(dirty: N files)` for exactly that reason. `binary built` is the
+  executable's mtime, not the build log's: four rewrites in one night came from a correct number
+  attributed to the wrong artifact (a stale `refs/remotes`, `build.ninja` for `build-Release.ninja`, a
+  lane's readings filed as `develop`'s, a `-NoBuild` exit code read as a failure).
+- **Before treating a red as a new defect, ask whether somebody already fixed it on another branch.**
+  Twice in one night the answer was yes: `grad_array_sum` was about to get a probe written for it
+  while the fix sat on `origin/lane-lit2` (`19f0b05e8`, `0aed45eb6`), and a `GUARD` question was
+  answered the same way. The tool carries the rule so it stops depending on who remembers it:
+  ```
+  node scripts/find-fix.mjs test/plans/feat/compile/transforms.plan.toml:grad_array_sum,cotangent
+  ```
+  It fetches first, prints the branches that changed **that case's entry** since `origin/develop`, the
+  commits on any remote branch whose message carries the case name or a keyword (each with the branches
+  that hold it and `merged`/`not merged`), and the merged count. Read the exit code as the verdict:
+  `0` found a candidate, `1` found nothing (so far a new defect -- an empty reading is not a pass), `2`
+  could not read (`git fetch` failed, so `refs/remotes` may be stale and would report a false "no
+  branch has it"). It writes nothing; `--offline` skips the fetch and says the reading is stale.
+- **`null` is not an exit code; it is the absence of one.** A run that ends without an exit code ended in one of three ways, and the runner names which: `got signal SIGSEGV (rc=139, 0.03 s)` (the shell's `128 + n`), `got timeout after 30000 ms` (only a real timeout says this), `could not start: <message>` (the process never existed). `[SUMMARY]` separates the last two for `fail` counts: `, timed out: <n>` and `, killed by a signal: <n>`, printed only when one happened. **Read the exit line before reading a timing**: `got null` was read as a hang for two rounds while the process was dying of SIGSEGV in 0.03 s, and both directions of that diagnosis were wrong.
 - **A layer's size is two numbers, and every run prints both**: `[tier] milestone: 27 plan file(s), 3330 declared test entries, 3404 started`. Read the second one as "what this run covers" and the first as "what the files declare"; quoting either alone as "the layer" is how `3330` and `3404` were both read as the same thing. `declared > started` is a defect (an entry that neither ran nor was skipped, so it is in no summary) and fails the run; `declared < started` is normal (`backends` expands an entry, a `compare_to` companion joins). Both are counted, never computed -- `backends.length` multiplication reads `7339` for a layer that starts `3404`.
 - **"Full" is not a layer; say which one.** The same tree answers two very different numbers: the whole-tree **fast** layer (`--plan all --tier fast`) is the acceptance reading -- 8447 total, 8435 pass, 0 fail, 10 skip, 2 known failures on 2026-11-02, which is what `develop` itself reads -- while `--tier all` over the whole tree is 11874 and adds the milestone, perf and stress plans that "Run the plans your change touches" says a lane must not start. A report that says "the full suite" without naming the tier cannot be compared with another report, and the two numbers have been read as one thing. Quote the tier, the total, and the pass/fail beside it.
 - **A guard must be able to fail.** Say in its comment which change to the tree makes it red, and record that red run (a plan case, a test, or the report with the failing output). A number a verdict rests on comes from the tree — the files, the parser, the registered operators — never from a literal list inside the guard; where a literal is a pin, a plan pins it so a change is visible. A guard that examined zero things fails; it never reports a pass.
@@ -84,6 +105,19 @@ Three zero-hit readings on 2026-11-02 were all the same mistake, and none of the
 - A `git grep` for a tool's own message hit nothing because the main checkout was three commits behind the tree that contained it, so "the tool isn't there" was really "this tree predates the tool".
 
 **A zero is not a reading until the search space has been shown to contain the thing.** State the command, the file or the ref it read, and which tree that ref or file belongs to.
+
+## A timeout budget is a change like any other
+
+A `timeout_ms` in a plan file is not housekeeping: it decides whether a slow machine reports a red or
+a slower red. So it goes through a lane branch like code does, and its commit says **which red goes
+away because of it and what the two-core CI measured in CPU**, because those are the two numbers that
+tell a budget that was too small from a test that got slow.
+
+A plan edited in the main checkout, or in someone else's worktree, is a change with no author and no
+reading: on 2026-11-02 five plan files with raised timeouts appeared in the main checkout that way
+(`diag_catalog`, `new_values`, `case_ledger`, `plan_inventory`, `trans/cpp`), quoting two-core CI
+figures in their comments. The content may well be right; it still cannot land, because nobody can say
+which red it removed. The patch is kept outside the tree, and whoever wrote it re-does it on a lane.
 
 ## `-NoBuild` after a merge: `exit 4` is the runner refusing, not a failing test
 

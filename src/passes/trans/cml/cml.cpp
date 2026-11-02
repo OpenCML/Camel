@@ -363,26 +363,12 @@ class CmlPrinter {
         // program *writes* its name, and a type the graph carries in a place nothing prints needs
         // no declaration (writing one would add a declaration the source never had).
         orderNamedTypes();
-        // A module imported for its operators is imported whole (`import tensor`): the program
-        // does not write a name of it, and the module's declarations are what give the signs their
-        // rules. A module whose names are written is imported by name, and a module that needs both
-        // is imported whole, which brings the names in too.
+        // Every import is whole (`import tensor`): a module operator is written `module::name`, and a
+        // sign a program writes needs the module that declares its rule, so no name is imported.
         for (const std::string &module : moduleImports_) {
             out_ << "import " << module << '\n';
         }
-        for (const auto &[module, names] : imports_) {
-            if (moduleImports_.contains(module)) {
-                continue;
-            }
-            out_ << "import { ";
-            bool first = true;
-            for (const std::string &name : names) {
-                out_ << (first ? "" : ", ") << name;
-                first = false;
-            }
-            out_ << " } from " << module << '\n';
-        }
-        if (!imports_.empty() || !moduleImports_.empty()) {
+        if (!moduleImports_.empty()) {
             out_ << '\n';
         }
         // One `type` statement per named struct type the program names, before the text that names
@@ -433,11 +419,9 @@ class CmlPrinter {
     std::unordered_map<gc_node_ref_t, std::string> cells_;
     std::unordered_set<std::string> usedNames_;
     std::vector<std::string> lines_;
-    /// The modules whose operators the printed program calls by name, and the names it calls of each
-    /// (see `collectImports`).
-    std::map<std::string, std::set<std::string>> imports_;
-    /// The modules whose operators the printed program writes with a sign (see `collectImports`):
-    /// the module is imported whole, since the sign is bound to its operator by its declarations.
+    /// The modules the printed program names (see `collectImports`): every operator the printer writes
+    /// -- as a sign or as `module::name` -- is bound by a declaration of its module, and a module
+    /// imported whole brings the declaration in.
     std::set<std::string> moduleImports_;
     /// The named struct types the printed program mentions, in discovery order, and the ones for
     /// which no `type` statement can be written, with the reason (see `collectNamedTypes`).
@@ -1450,24 +1434,21 @@ class CmlPrinter {
                     continue;
                 }
                 const std::string module(uri.substr(0, colon));
-                const auto form = camel::core::OperatorTable::instance().callFormOf(uri);
-                // A module operator the printer writes as a call imports the declaration's name; one
-                // it writes with a sign imports the module (`/` for `int[]` is a rule of `math`,
-                // which the sign needs in scope). An exported body-less declaration is a call too
-                // (`shl` is `export func shl::<T>(x: T)` with `#op('math:shl_i')` and no body), and
-                // printing it without the import wrote `shl<4>(1)` under a bare `import math`, which
-                // the front end answered with `UnresolvedReference: 'shl'` (the author's minimal
-                // example, measured).
-                const bool written = camel::core::operatorSymbolOf(
-                                         camel::core::OperatorTable::instance().groupOf(uri)) !=
-                                     nullptr;
-                const bool byName =
-                    !written && form.has_value() && (form->declaredByModule || form->exported);
-                if (byName) {
-                    imports_[module].insert(form->name);
-                } else {
-                    moduleImports_.insert(module);
-                }
+                // What the printed file writes for a module operator is `module::name`, the
+                // qualified call (`tensor::sum([1.0])` compiles to `tensor:sum`, measured), and the
+                // module is imported whole -- the one import that makes a qualified call resolve and
+                // that a sign also needs (`/` for `int[]` is a rule of `math`).
+                //
+                // Importing the *name* instead was wrong in a way the corpus caught: a program that
+                // uses both an operator the printer spells as a sign (`@`, which imports the module
+                // whole) and one it spells by name pulled the module into `moduleImports_` and the
+                // name into `imports_`, and the emission dropped the by-name clause for a module it
+                // had already imported whole -- `import { tanh } from tensor` came out as
+                // `import tensor` beside a bare `tanh(...)`, which the front end answered with
+                // `UnresolvedReference: 'tanh'` (`compile/entry_args/struct_param`, measured). A
+                // qualified name does not depend on which clauses were collected, so the variable is
+                // gone rather than fixed.
+                moduleImports_.insert(module);
             }
         }
     }
@@ -1692,9 +1673,6 @@ class CmlPrinter {
                 continue;
             }
             bool imported = false;
-            for (const auto &[module, names] : imports_) {
-                imported = imported || module == name || names.contains(name);
-            }
             for (const std::string &module : moduleImports_) {
                 imported = imported || module == name;
             }
@@ -3391,7 +3369,14 @@ class CmlPrinter {
                               // types happened not to fit.
                               !writtenFunctionNames_.contains(callForm->name);
         if (writable) {
-            name = callForm->name;
+            // A module operator is written qualified (`tensor::sum`), which is the only spelling that
+            // names one operator without depending on what else the printed file imports: a bare
+            // `sum` is the language's own function as well, and a bare `tanh` is `math`'s. A core
+            // operator (`:op/print`) has no module to qualify with and keeps its plain name.
+            const size_t colonAt = uri.find(':');
+            name                 = colonAt == std::string::npos || colonAt == 0
+                                       ? callForm->name
+                                       : std::string(uri.substr(0, colonAt)) + "::" + callForm->name;
         } else if (callForm.has_value() && callForm->kernelDeclaration && !languageOwned &&
                    !callForm->exported) {
             // There is a declaration and it has a name, but the module did not export it: a
@@ -3509,7 +3494,7 @@ class CmlPrinter {
         if (symbol == "+" || symbol == "-") {
             return 40;
         }
-        if (symbol == "*" || symbol == "/" || symbol == "%") {
+        if (symbol == "*" || symbol == "/" || symbol == "%" || symbol == "@") {
             return 50;
         }
         if (symbol == "^") {

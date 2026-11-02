@@ -28,11 +28,15 @@
 # 3) Actions → Run workflow → publish_to = pypi | testpypi (builds matrix, then OIDC upload).
 #    "none" = build only; artifacts on the run.
 # 4) Pushing v* / V* tags builds and publishes to PyPI after the full matrix succeeds.
+# 5) Pushing `release` builds the wheels and runs the smoke installs without publishing, so a wheel
+#    that does not install is found before a tag names it (agents/branching.md).
 
 name: Build and package (PyPI wheel)
 
 on:
   push:
+    branches:
+      - release
     tags:
       - "v*"
       - "V*"
@@ -424,7 +428,9 @@ jobs:
           # that carried two copies of libcamel ran `println("Hello, Camel!")` and exited 0, and
           # died on every program that imported anything (`camel hello.cml` with
           # `import { whoami } from process` printed its line and then aborted, exit 134).
-          printf 'module main\n\nimport { sqrt } from math\n\nfunc main() sync {\n    println(string(sqrt(2.0)))\n    return 0\n}\n' > "$RUNNER_TEMP/hello.cml"
+          # `module main` used to open a program; the language retired the keyword, so a file is its
+          # module now and these smoke programs are written in today's language.
+          printf 'import { sqrt } from math\n\nfunc main() sync {\n    println(string(sqrt(2.0)))\n    return 0\n}\n' > "$RUNNER_TEMP/hello.cml"
           "$BIN/camel" --version
           "$BIN/camel" "$RUNNER_TEMP/hello.cml"
           "$BIN/camel" "$RUNNER_TEMP/hello.cml" std::jit
@@ -495,11 +501,11 @@ jobs:
           mkdir -p "$RUNNER_TEMP/shared"
           # The same program the native smoke uses, and for the same reason: it imports a stdlib
           # module, so the run reaches the `.cmo` path where the duplicate-library defect lived.
-          printf 'module main\n\nimport { sqrt } from math\n\nfunc main() sync {\n    println(string(sqrt(2.0)))\n    return 0\n}\n' > "$RUNNER_TEMP/shared/hello.cml"
+          printf 'import { sqrt } from math\n\nfunc main() sync {\n    println(string(sqrt(2.0)))\n    return 0\n}\n' > "$RUNNER_TEMP/shared/hello.cml"
           # A module of our own with one array entry point, so the interop run below calls a
           # function rather than only reading the names of the surface: `totals: f32[]` is the
           # shape `examples/python/rules/rules.cml` exports.
-          printf 'module rules\n\nexport func double_totals(values: f32[]): f32[] {\n    return values->map<(value: f32): f32 => f32(float(value) * 2.0)>\n}\n' > "$RUNNER_TEMP/shared/rules.cml"
+          printf 'export func double_totals(values: f32[]): f32[] {\n    return values->map<(value: f32): f32 => f32(float(value) * 2.0)>\n}\n' > "$RUNNER_TEMP/shared/rules.cml"
           cat > "$RUNNER_TEMP/shared/smoke.sh" <<'SMOKE'
           set -eu
           # A clean container with nothing but the wheel: 5.37 item 4. `numpy` is what the

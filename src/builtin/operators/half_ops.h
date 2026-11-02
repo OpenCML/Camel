@@ -32,14 +32,12 @@ slot_t __builtin__pow_f6f6__(ArgsView &with, ArgsView &norm, camel::core::contex
 
 slot_t __builtin__eq_bf__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__ne_bf__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-slot_t __builtin__not_bf__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__lt_bf__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__le_bf__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__gt_bf__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__ge_bf__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__eq_f6__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__ne_f6__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-slot_t __builtin__not_f6__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__lt_f6__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__le_f6__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__gt_f6__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
