@@ -4,6 +4,7 @@
 #include "jvp.h"
 
 #include "rule_expand.h"
+#include "rule_types.h"
 
 #include "camel/compile/gir/rule_templates.h"
 #include "camel/core/forward.h"
@@ -40,6 +41,35 @@ using camel::runtime::GraphId;
 
 namespace {
 
+/// The type of the lifted *pair* of a value: `(v, dv)`, written at the value's own type, because
+/// the tangent of a floating scalar is a value of the same type (`tangentSpaceOf`'s `Self`). Null
+/// when this transform does not carry a pair for the value.
+///
+/// The question is `tangentSpaceOf`'s (design principles 9.9: what a value's tangent is belongs to
+/// its type), and the answer is the value's own type -- so `jvp` of an `f32` function is pairs of
+/// `f32`, not of `float`. Until 2026-11-02 this was `Type::Float64()`, one member of the floating
+/// family written down as if it were the family: the rule instance came out as `mul_tangent<float>`
+/// around `f32` values and the pass gave up on four broken edges (the author's review, #1 and #11).
+/// Two things are asked of the type, and both are asked here so that the next answer cannot be a
+/// second one: *is its tangent space its own type* (`tangentSpaceOf`), and *is the pair written for
+/// this shape* -- a floating scalar today, because the halves are read by `Accs` and the zero is a
+/// static `0.0`. An aggregate is `Self` too and its pair is the array-cotangent round's work; asking
+/// for it here would write a scalar pair around an array value, which is worse than a refusal.
+camel::core::type::TupleType *pairTypeOf(camel::core::type::Type *type) {
+    if (type == nullptr) {
+        return nullptr;
+    }
+    const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(type);
+    if (space.kind != camel::core::TangentSpaceKind::Self || space.space != type) {
+        return nullptr;
+    }
+    if (!camel::core::type::isFloatingScalar(type->code())) {
+        return nullptr;
+    }
+    return camel::core::type::TupleType::create(
+        std::vector<camel::core::type::Type *>{type, type});
+}
+
 /// The tangent of one primitive: the rule `stdlib/rulesets/jvp.cml` files for its operator, applied
 /// to the operands' values and their tangents.
 ///
@@ -60,7 +90,8 @@ gc_node_ref_t buildRuleTangent(
     camel::core::context::Context &context, camel::runtime::GraphDraftGroup &group,
     camel::runtime::GraphTransaction &transaction,
     std::string_view uri, const std::vector<gc_node_ref_t> &values,
-    const std::vector<gc_node_ref_t> &tangents, std::string &ruleName, std::string &why) {
+    const std::vector<gc_node_ref_t> &tangents, camel::core::type::Type *elementType,
+    std::string &ruleName, std::string &why) {
     const auto match = camel::core::forwardRuleOf(std::string(uri));
     if (!match.has_value()) {
         why = "the operator has no forward rule bound at all";
@@ -87,16 +118,24 @@ gc_node_ref_t buildRuleTangent(
         why = "the rule is named in the index but its templates are not registered";
         return rt::kInvalidNodeRef;
     }
+    // The instance is asked for at the type the *operand* is made of, not at a type written here:
+    // `rule_types.h` answers that question for both transforms (a condition is not a value arm, and
+    // a node's own type is not its operand's -- `argmax_axis` answers `int64` about floats). Writing
+    // `Type::Float64()` here was the review's P1-9.
     const size_t at = camel::compile::gir::genericRuleInstance(
-        context, ruleId, std::vector<camel::core::type::Type *>{Type::Float64()}, {});
+        context, ruleId, std::vector<camel::core::type::Type *>{elementType}, {});
     const auto *entry = camel::compile::gir::genericRuleEntry(context, ruleId);
     if (entry == nullptr || at >= entry->instances.size()) {
-        why = "no instance of the rule at float";
+        why = "no instance of the rule at " + (elementType != nullptr ? elementType->toString()
+                                                                     : std::string("no type"));
         return rt::kInvalidNodeRef;
     }
     const auto &instance = entry->instances[at];
     if (!instance.made || instance.program == nullptr || instance.rhs == nullptr) {
-        why = instance.why.empty() ? "no instance of the rule at float" : instance.why;
+        why = instance.why.empty()
+                  ? "no instance of the rule at " +
+                        (elementType != nullptr ? elementType->toString() : std::string("no type"))
+                  : instance.why;
         return rt::kInvalidNodeRef;
     }
     return expandRuleRightSide(
@@ -253,7 +292,31 @@ bool liftGraph(
 
     // Steps 1 and 2: a new member with the lifted signature, and one port per parameter, the port
     // itself being the lifted pair `(value, tangent)` the caller passes.
-    auto *lifted = TupleType::create(std::vector<Type *>{Type::Float64(), Type::Float64()});
+    //
+    // The pair is written at the value's own type (`pairTypeOf`): `jvp` of an `f32` function lifts
+    // `f32` values into `(f32, f32)`. One instance per type is kept, because a node's type is
+    // compared with it by identity where the lift asks "is this chain already the pair?".
+    std::unordered_map<const Type *, TupleType *> pairTypes;
+    const auto pairOf = [&pairTypes](Type *type) -> TupleType * {
+        if (type == nullptr) {
+            return nullptr;
+        }
+        const auto at = pairTypes.find(type);
+        if (at != pairTypes.end()) {
+            return at->second;
+        }
+        TupleType *made = pairTypeOf(type);
+        pairTypes.emplace(type, made);
+        return made;
+    };
+    // The type of the value the *original* node at `ref` produces: the type its pair is written at.
+    const auto valueTypeOf = [&function](gc_node_ref_t ref) -> Type * {
+        if (ref >= function.nodeCount()) {
+            return nullptr;
+        }
+        const NodeFace *node = function.node(ref);
+        return node != nullptr ? node->dataType() : nullptr;
+    };
     size_t copiedKinds = 0;
     size_t seenKinds   = 0;
     std::vector<std::string> usedRules;
@@ -263,6 +326,32 @@ bool liftGraph(
         auto &transaction = group.transaction(member);
         auto &draft       = transaction.edit();
         draft.setFuncType(signature);
+        // The tangent a constant or an effect's result gets: the zero of the value's own type. One
+        // node per type, because every rule of that type shares it. Written for the two types whose
+        // slot is a machine double or float; a narrower float has no zero here yet, and gets none --
+        // a refusal downstream instead of a zero of the wrong type.
+        std::unordered_map<const Type *, gc_node_ref_t> zeroConstants;
+        const auto zeroConstantFor = [&draft, &zeroConstants](Type *type) -> gc_node_ref_t {
+            const auto at = zeroConstants.find(type);
+            if (at != zeroConstants.end()) {
+                return at->second;
+            }
+            gc_node_ref_t made = rt::kInvalidNodeRef;
+            switch (type->code()) {
+            case camel::core::type::TypeCode::Float64:
+                made = draft.materializeStaticValue(
+                    camel::core::rtdata::toSlot<double>(0.0), type, rt::kGCNodeFlagConstant);
+                break;
+            case camel::core::type::TypeCode::Float32:
+                made = draft.materializeStaticValue(
+                    camel::core::rtdata::toSlot<float>(0.0f), type, rt::kGCNodeFlagConstant);
+                break;
+            default:
+                break;
+            }
+            zeroConstants.emplace(type, made);
+            return made;
+        };
         // The graph this one is a lift of: a fact about the graph, not a comment about the call.
         // `split` reads it when it has to carry a call of a lifted graph into a half, so that the
         // value half can call the primal instead of the lift (whose first parameter is the pair).
@@ -330,25 +419,27 @@ bool liftGraph(
         // *by name* rather than answered with 0 or 1, because a wrong derivative that looks like a
         // derivative is the expensive kind of wrong.
         std::vector<gc_node_ref_t> tangentOf(function.nodeCount(), rt::kInvalidNodeRef);
-        gc_node_ref_t zeroConstant = rt::kInvalidNodeRef;
-        // The lifted pair: a value and its tangent, in the one shape the lifted types are written in.
-        // The exit of the transformed body and the exit of an arm are both this pair, so it is made
-        // in one place.
-        const auto liftedPair = [&draft, lifted](gc_node_ref_t half, gc_node_ref_t halfTangent) {
+        // The lifted pair: a value and its tangent, in the one shape the lifted types are written in
+        // -- the pair of the value's own type, which is the caller's answer. The exit of the
+        // transformed body and the exit of an arm are both this pair, so it is made in one place.
+        const auto liftedPair = [&draft, &pairOf](
+                                    Type *valueType, gc_node_ref_t half,
+                                    gc_node_ref_t halfTangent) {
+            TupleType *pairType = pairOf(valueType);
             ::Tuple *emptyTuple = ::Tuple::create(2, mm::autoSpace());
             const gc_node_ref_t source = draft.materializeStaticValue(
-                camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(emptyTuple), lifted);
+                camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(emptyTuple), pairType);
             const gc_node_ref_t pair = draft.addFillNode(
-                lifted, rt::makeFillPayload(rt::GCFillKind::Tuple, std::vector<size_t>{0, 1}));
+                pairType, rt::makeFillPayload(rt::GCFillKind::Tuple, std::vector<size_t>{0, 1}));
             draft.setNormInputs(pair, std::span<const gc_node_ref_t>(&source, 1));
             const std::array<gc_node_ref_t, 2> halves{half, halfTangent};
             draft.setWithInputs(pair, halves);
             return pair;
         };
         // A branch is a property of the *graph*, not of a node: its arms are regions, the value they
-        // yield is the Join's, and an arm that yields a `float` yields the pair in the lifted graph
-        // -- so the Join's type is the lifted one, and the Join has to exist before the Brch that
-        // names it. Regions and the two nodes are made here; the walk copies nodes as it does
+        // yield is the Join's, and an arm yields the pair of that value in the lifted graph -- so the
+        // Join's type is the pair of the value it yields, and the Join has to exist before the Brch
+        // that names it. Regions and the two nodes are made here; the walk copies nodes as it does
         // anywhere else; the wiring (condition, arm exits, back-references) is done after it, from
         // the original graph's own structure. The action *sequence* is the one every writer of a
         // branch uses (src/passes/opt/defun/defunctionalize.cpp); what a branch means for `jvp` is
@@ -380,7 +471,11 @@ bool liftGraph(
             if (join == nullptr) {
                 continue;
             }
-            Type *joinType = join->dataType() == Type::Float64() ? lifted : join->dataType();
+            // The Join's type is the pair of the value it yields: an arm yields the pair in the
+            // lifted graph, so the node that joins the arms is the pair's type -- the value's own
+            // (`pairTypeOf`), not one type written for the whole transform.
+            TupleType *joinPairType = pairOf(join->dataType());
+            Type *joinType = joinPairType != nullptr ? joinPairType : join->dataType();
             const gc_node_ref_t made = draft.addJoinNode(joinType, rt::kInvalidNodeRef, body->armCount);
             liftedJoin[body->join]   = made;
             joinOfBrch[ref]          = made;
@@ -474,22 +569,26 @@ bool liftGraph(
                     ++copiedKinds;
                     break;
                 }
-                // A port of a loop's body region is a loop variable, and a `float` one is the
-                // carried state: the loop carries the pair, so this port is a pair port and the
-                // body reads its halves through projections.
+                // A port of a loop's body region is a loop variable, and one the transform carries a
+                // pair for is the carried state: the loop carries the pair, so this port is a pair
+                // port and the body reads its halves through projections.
                 const uint32_t portRegion = function.nodeRegion(ref);
                 const rt::GCRegion *portRegionBody =
                     portRegion != 0 ? function.region(portRegion) : nullptr;
                 if (portRegionBody != nullptr &&
                     portRegionBody->kind == rt::GCRegionKind::LoopBody) {
-                    const bool carried                     = node->dataType() == Type::Float64();
-                    camel::core::type::Type *portType = carried ? lifted : node->dataType();
+                    TupleType *statePair           = pairOf(node->dataType());
+                    const bool carried             = statePair != nullptr;
+                    camel::core::type::Type *portType =
+                        carried ? static_cast<Type *>(statePair) : node->dataType();
                     copyOf[ref] = draft.addPortNode(portType, draft.allocateRuntimeSlot(portType));
                     if (carried) {
                         const gc_node_ref_t pairOfState = copyOf[ref];
-                        const gc_node_ref_t half = draft.addAccsNode(Type::Float64(), 0);
+                        const gc_node_ref_t half =
+                            draft.addAccsNode(node->dataType(), 0);
                         draft.setNormInputs(half, std::span<const gc_node_ref_t>(&pairOfState, 1));
-                        const gc_node_ref_t halfTangent = draft.addAccsNode(Type::Float64(), 1);
+                        const gc_node_ref_t halfTangent =
+                            draft.addAccsNode(node->dataType(), 1);
                         draft.setNormInputs(
                             halfTangent, std::span<const gc_node_ref_t>(&pairOfState, 1));
                         valueOf[ref]   = half;
@@ -517,15 +616,12 @@ bool liftGraph(
                     copyOf[ref] = draft.materializeStaticValue(
                         slots[static_cast<size_t>(index)], node->dataType(),
                         rt::kGCNodeFlagConstant);
-                    // A constant does not move: its tangent is the one zero every rule shares. A
-                    // constant of a discrete type (a `bool` condition) has no tangent at all.
-                    if (node->dataType() == Type::Float64()) {
-                        if (zeroConstant == rt::kInvalidNodeRef) {
-                            zeroConstant = draft.materializeStaticValue(
-                                camel::core::rtdata::toSlot<double>(0.0), Type::Float64(),
-                                rt::kGCNodeFlagConstant);
-                        }
-                        tangentOf[ref] = zeroConstant;
+                    // A constant does not move: its tangent is the one zero every rule shares -- the zero
+                    // of the constant's own type, since a tangent is a value of the value's space. A
+                    // constant of a discrete type (a `bool` condition) has no tangent at all, and
+                    // neither has one whose zero this transform does not write.
+                    if (pairOf(node->dataType()) != nullptr) {
+                        tangentOf[ref] = zeroConstantFor(node->dataType());
                     }
                     copied[ref]    = true;
                     ++copiedKinds;
@@ -533,7 +629,8 @@ bool liftGraph(
                 break;
             }
             case rt::GCNodeKind::Join: {
-                // Made before the walk (its type is the lifted one). Its inputs are wired after it.
+                // Made before the walk (its type is the pair of the value it yields). Its inputs are
+                // wired after it.
                 const auto at = liftedJoin.find(ref);
                 if (at == liftedJoin.end()) {
                     complete = false;
@@ -591,22 +688,29 @@ bool liftGraph(
                         break;
                     }
                     const NodeFace *in = function.node(input);
-                    if (in != nullptr && in->dataType() == Type::Float64()) {
+                    if (in != nullptr && pairOf(in->dataType()) != nullptr) {
                         if (tangentOf[input] == rt::kInvalidNodeRef) {
                             return fail(refusal);
                         }
                         const gc_node_ref_t half =
                             valueOf[input] != rt::kInvalidNodeRef ? valueOf[input] : copyOf[input];
                         // The lifted callee takes the value and its tangent as two ordinary
-                        // arguments (the signature is (float, float) => ...), not as one tuple.
+                        // arguments (the signature is `(T, T) => ...`), not as one tuple.
                         arguments.push_back(half);
                         arguments.push_back(tangentOf[input]);
                     } else {
                         arguments.push_back(copyOf[input]);
                     }
                 }
+                TupleType *resultPair = pairOf(node->dataType());
+                if (!isValue && resultPair == nullptr) {
+                    // A call whose answer this transform carries no pair for: the lifted callee would
+                    // answer one, so the call cannot be copied either. Refused, not guessed.
+                    return fail(refusal);
+                }
                 camel::core::type::Type *valueType =
-                    isValue ? static_cast<camel::core::type::Type *>(calleeSignature) : lifted;
+                    isValue ? static_cast<camel::core::type::Type *>(calleeSignature)
+                            : static_cast<camel::core::type::Type *>(resultPair);
                 const gc_node_ref_t made = draft.addFuncNode(
                     at->second, valueType, 0, draft.allocateRuntimeSlot(valueType), 0);
                 if (!isValue) {
@@ -626,9 +730,9 @@ bool liftGraph(
                 }
                 copyOf[ref] = made;
                 if (!isValue) {
-                    const gc_node_ref_t half = draft.addAccsNode(Type::Float64(), 0);
+                    const gc_node_ref_t half = draft.addAccsNode(node->dataType(), 0);
                     draft.setNormInputs(half, std::span<const gc_node_ref_t>(&made, 1));
-                    const gc_node_ref_t halfTangent = draft.addAccsNode(Type::Float64(), 1);
+                    const gc_node_ref_t halfTangent = draft.addAccsNode(node->dataType(), 1);
                     draft.setNormInputs(halfTangent, std::span<const gc_node_ref_t>(&made, 1));
                     valueOf[ref]   = half;
                     tangentOf[ref] = halfTangent;
@@ -639,8 +743,8 @@ bool liftGraph(
             }
             case rt::GCNodeKind::Call: {
                 // A call passes the lifted callee its arguments as pairs and answers with a pair.
-                // The first norm input is the function value, the rest are the arguments; a `float`
-                // argument goes in as `(value, tangent)`.
+                // The first norm input is the function value, the rest are the arguments; an
+                // argument the transform carries a pair for goes in as `(value, tangent)`.
                 std::vector<gc_node_ref_t> args;
                 bool isCallee = true;
                 for (gc_node_ref_t input : function.normInputsOf(ref)) {
@@ -653,14 +757,14 @@ bool liftGraph(
                         continue;
                     }
                     const NodeFace *in = function.node(input);
-                    if (in != nullptr && in->dataType() == Type::Float64()) {
+                    if (in != nullptr && pairOf(in->dataType()) != nullptr) {
                         if (tangentOf[input] == rt::kInvalidNodeRef) {
                             return fail(refusal);
                         }
                         const gc_node_ref_t half =
                             valueOf[input] != rt::kInvalidNodeRef ? valueOf[input] : copyOf[input];
                         // Two ordinary arguments, not one tuple: the lifted signature takes
-                        // `(value, tangent)` as two floats.
+                        // `(value, tangent)` as two values of the argument's own type.
                         args.push_back(half);
                         args.push_back(tangentOf[input]);
                     } else {
@@ -670,7 +774,10 @@ bool liftGraph(
                 if (args.empty()) {
                     return fail(refusal);
                 }
-                const gc_node_ref_t made = draft.addCallNode(lifted, rt::GCCallBody{});
+                TupleType *callPair = pairOf(node->dataType());
+                const gc_node_ref_t made = draft.addCallNode(
+                    callPair != nullptr ? static_cast<Type *>(callPair) : node->dataType(),
+                    rt::GCCallBody{});
                 draft.setNormInputs(made, args);
                 std::vector<gc_node_ref_t> captures;
                 for (gc_node_ref_t input : function.withInputsOf(ref)) {
@@ -684,9 +791,9 @@ bool liftGraph(
                 }
                 copyOf[ref] = made;
                 // The call's value is the pair: a reader wants the value half, a rule the tangent.
-                const gc_node_ref_t half = draft.addAccsNode(Type::Float64(), 0);
+                const gc_node_ref_t half = draft.addAccsNode(node->dataType(), 0);
                 draft.setNormInputs(half, std::span<const gc_node_ref_t>(&made, 1));
-                const gc_node_ref_t halfTangent = draft.addAccsNode(Type::Float64(), 1);
+                const gc_node_ref_t halfTangent = draft.addAccsNode(node->dataType(), 1);
                 draft.setNormInputs(halfTangent, std::span<const gc_node_ref_t>(&made, 1));
                 valueOf[ref]   = half;
                 tangentOf[ref] = halfTangent;
@@ -704,7 +811,10 @@ bool liftGraph(
                 rt::GCLoopBody body{};
                 function.bodyOf(ref, body);
                 rt::GCLoopBody liftedBody = body;
-                copyOf[ref]               = draft.addLoopNode(liftedBody, lifted);
+                TupleType *loopPair       = pairOf(node->dataType());
+                copyOf[ref]               = draft.addLoopNode(
+                    liftedBody,
+                    loopPair != nullptr ? static_cast<Type *>(loopPair) : node->dataType());
                 liftedLoopNode            = copyOf[ref];
                 copied[ref]               = true;
                 ++copiedKinds;
@@ -777,13 +887,8 @@ bool liftGraph(
                 // the lift has no business touching. The copy keeps the operator and its inputs, so
                 // the effect runs the same number of times it ran before.
                 if (camel::core::OperatorTable::instance().hasExternalEffect(uri)) {
-                    if (node->dataType() == Type::Float64()) {
-                        if (zeroConstant == rt::kInvalidNodeRef) {
-                            zeroConstant = draft.materializeStaticValue(
-                                camel::core::rtdata::toSlot<double>(0.0), Type::Float64(),
-                                rt::kGCNodeFlagConstant);
-                        }
-                        tangentOf[ref] = zeroConstant;
+                    if (pairOf(node->dataType()) != nullptr) {
+                        tangentOf[ref] = zeroConstantFor(node->dataType());
                     }
                     break;
                 }
@@ -809,9 +914,15 @@ bool liftGraph(
                 }
                 std::string ruleName;
                 std::string ruleWhy;
+                // The rule is generic in the element of the operand it was matched on: `+` over
+                // `f32` is a rule at `f32`, and `sum_axis` over a `float[]` is one at `float`
+                // (the array's rows are the batch, not the type of the rule). `rule_types.h` is
+                // that answer, and it is the same one `vmap` asks for.
+                Type *ruleElementType = camel::transforms::rules::ruleElementTypeOf(
+                    camel::transforms::rules::firstOperandTypeOf(function, ref));
                 tangentOf[ref] =
                     buildRuleTangent(
-                        *context, state.group, transaction, uri, inputs, tangents,
+                        *context, state.group, transaction, uri, inputs, tangents, ruleElementType,
                         ruleName, ruleWhy);
                 if (tangentOf[ref] == rt::kInvalidNodeRef) {
                     // Named, not guessed: the transform has no derivative for this operator, and
@@ -890,7 +1001,8 @@ bool liftGraph(
                     break;
                 }
                 draft.setInsertRegion(liftedRegion[armRegion]);
-                const gc_node_ref_t pair = liftedPair(copyOf[arm->result], tangentOf[arm->result]);
+                const gc_node_ref_t pair = liftedPair(
+                    valueTypeOf(arm->result), copyOf[arm->result], tangentOf[arm->result]);
                 draft.setRegionOwner(liftedRegion[armRegion], brch, static_cast<uint32_t>(k));
                 draft.setRegionResult(liftedRegion[armRegion], pair);
                 draft.setInsertRegion(0);
@@ -968,7 +1080,7 @@ bool liftGraph(
                     break;
                 }
                 draft.setInsertRegion(liftedRegion[r]);
-                newState = liftedPair(copyOf[exit], tangentOf[exit]);
+                newState = liftedPair(valueTypeOf(exit), copyOf[exit], tangentOf[exit]);
                 draft.setRegionResult(liftedRegion[r], newState);
                 draft.setInsertRegion(0);
             }
@@ -984,12 +1096,12 @@ bool liftGraph(
                 }
                 const NodeFace *in = function.node(input);
                 const gc_node_ref_t copy         = copyOf[input];
-                if (in != nullptr && in->dataType() == Type::Float64()) {
+                if (in != nullptr && pairOf(in->dataType()) != nullptr) {
                     if (tangentOf[input] == rt::kInvalidNodeRef) {
                         complete = false;
                         break;
                     }
-                    loopInputs.push_back(liftedPair(copy, tangentOf[input]));
+                    loopInputs.push_back(liftedPair(in->dataType(), copy, tangentOf[input]));
                 } else {
                     loopInputs.push_back(copy);
                 }
@@ -1050,11 +1162,13 @@ bool liftGraph(
         }
         const gc_node_ref_t chainValue = copyOf[oldValue];
         const gc_node_ref_t chainTangent = tangentOf[oldValue];
-        // A body that ends at a branch already yields the pair -- the Join's type is the lifted one
-        // -- so the exit is that value itself. A straight-line body yields a value the rules gave a
-        // tangent for, and the exit is the pair built from the two.
+        // A body that ends at a branch already yields the pair -- the Join's type is the pair of the
+        // value it yields -- so the exit is that value itself. A straight-line body yields a value
+        // the rules gave a tangent for, and the exit is the pair built from the two.
         const rt::DraftNodeHeader *chain = draft.header(chainValue);
-        const bool alreadyLifted = chain != nullptr && chain->dataType == lifted;
+        TupleType *exitPair              = pairOf(valueTypeOf(oldValue));
+        const bool alreadyLifted =
+            chain != nullptr && exitPair != nullptr && chain->dataType == exitPair;
         if (chainTangent == rt::kInvalidNodeRef && !alreadyLifted) {
             os << "REINTERP jvp function=" << name << " skip=tangent\n";
             return fail(refusal);
@@ -1062,7 +1176,9 @@ bool liftGraph(
         // The exit is the lifted result: the value the copied chain computes and the tangent the
         // rules computed for it, which is the derivative of the chain at the values the caller
         // passed. Nothing is read back from the original graph: both halves are this graph's.
-        const gc_node_ref_t out = alreadyLifted ? chainValue : liftedPair(chainValue, chainTangent);
+        const gc_node_ref_t out = alreadyLifted
+                                       ? chainValue
+                                       : liftedPair(valueTypeOf(oldValue), chainValue, chainTangent);
         // The `sync` block's own ordering: in the original graph the exit passes through a GATE that
         // waits on the block's statements -- a print among them -- and that wait is the only thing
         // that keeps an effect whose result nobody reads from being dropped. The lifted exit is a
@@ -1071,7 +1187,10 @@ bool liftGraph(
         const gc_node_ref_t originalExit = function.exitNodeRef();
         if (originalExit < function.nodeCount() && function.node(originalExit) != nullptr &&
             function.node(originalExit)->kind == rt::GCNodeKind::Gate) {
-            const gc_node_ref_t gate = draft.addGateNode(lifted, draft.allocateRuntimeSlot(lifted));
+            Type *gateType =
+                exitPair != nullptr ? static_cast<Type *>(exitPair) : valueTypeOf(oldValue);
+            const gc_node_ref_t gate =
+                draft.addGateNode(gateType, draft.allocateRuntimeSlot(gateType));
             draft.setNormInputs(gate, std::span<const gc_node_ref_t>(&out, 1));
             std::vector<gc_node_ref_t> waits;
             for (gc_node_ref_t edge : function.syncInputsOf(originalExit)) {
