@@ -1536,11 +1536,12 @@ pullback's cotangents are too (stdlib/types.cml), and `(..xs)` takes the paramet
 stands in, applied to a pack (author's ruling of 2026-11-01 19:10). The lambda's rest parameter is a
 value in its body: `xs` is the tuple of those parameters, and `forward(..xs)` spreads it into the
 call, which is the rule the language already had for spreading a tuple.
+The whole reading in one line: the function is written where the call is, so the example is a
+program of its own -- `y` is `x * x` at 3, and the pullback read at `ct = 1.0` answers the
+derivative there, one member per parameter.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example (a fragment, not compiled): `let reading = vjp(f)`
-- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
-- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+- Example: `let (y, pullback) = vjp((x: float) => x * x)(3.0)` gives `y = 9.0, and pullback(1.0) is (6.0)`
 
 #### `grad`
 
