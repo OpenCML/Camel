@@ -744,13 +744,13 @@ timeout_ms = 20000
 name = "grad_array_no_int.fvm"
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_no_int.cml"
-args = ["${case}", "std::fvm"]
-expect_exit = 1
-expect_output_contains = ["transpose has no transpose for this function"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+args = ["${case}", "${backend}"]
+backends = ["fvm"]
+expect_exit = 0
+expect_stdout_contains = ["6.0", "[2.0, 3.0]"]
 timeout_ms = 15000
-known_fail = ["nvm"]
-known_fail_note = "Owner: lane-m4b, whose answersOf work landed the element read's transpose arm. With two residuals the pullback answers the array and the case reads it; with five residuals (two element reads beside an add or a mul) the pullback answers a tuple and the first member reaches no line of stdout -- the program prints the forward value and nothing else, exit 0. So the case is not refused and not passing either: the cotangent is computed and does not arrive. The runner reports a marked case that passes as a failure, which is what asks for the mark's removal once the tuple's first slot prints."
+known_fail = ["fvm"]
+known_fail_note = "Owner: lane-m4b, whose answersOf work landed the element read's transpose arm. Two element reads beside a mul give five residuals, and under std::fvm this case is not refused any more and does not finish either: the process is killed at the timeout with exit null, while the same program under std::nvm prints the forward value and no cotangent. Both belong to the same member -- the answer tuple whose first slot reaches no line of stdout -- and the runner reports a marked case that passes as a failure, which is what asks for the mark's removal."
 
 [[tests]]
 name = "grad_array_with_int.fvm"
