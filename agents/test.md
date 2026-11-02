@@ -162,6 +162,18 @@ Three zero-hit readings on 2026-11-02 were all the same mistake, and none of the
 
 **A zero is not a reading until the search space has been shown to contain the thing.** State the command, the file or the ref it read, and which tree that ref or file belongs to.
 
+The same is true of a non-zero that arrives too easily. `(Get-Process -Id $pid).Threads | % StartAddress`
+answers `RtlUserThreadStart` -- an address inside ntdll -- for **every** thread of a process,
+including the main one and every thread the program started itself, because that is the stub every
+Windows thread begins in rather than the routine the caller passed to `CreateThread`. A count built
+on it reads "this process is nothing but operating-system pool workers", which is not a fact about
+the process at all. `test_support`'s `thread_count` asks instead with
+`NtQueryInformationThread(ThreadQuerySetWin32StartAddress)`, which reports the start routine the
+thread was created with: on `-t 1` the same camel process is 4 threads, of which 1 is the run's own
+(address outside ntdll) and 3 are the operating system's (address inside it), so the answer is 1,
+which is what `count.timeit_cli_one_serial` expects. **When a Windows API's reading looks
+surprising, check whether it is the API that answers a different question than the one you asked.**
+
 ## A timeout budget is a change like any other
 
 A `timeout_ms` in a plan file is not housekeeping: it decides whether a slow machine reports a red or
