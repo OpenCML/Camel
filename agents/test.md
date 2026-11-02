@@ -21,4 +21,17 @@
 - Use `std::gir` for graph inspection, `std::nvm` for baseline runtime behavior, and `std::fvm` or `std::jit` for scheduler/runtime verification when relevant.
 - Prefer routine verification in `npm run build`; use `npm run debug` only when diagnosing logging or debug-only code paths.
 - **Run the plans your change touches, not the whole tree.** The full suite (`test/plans`), the GC poison sweep, the GC stress plans (`gc.collection_trees_*`, `gc_elder_*`), the progen random-program checks, the PyTorch comparisons and the perf/timeit plans are heavy: they saturate every core for minutes and are worth running only at a milestone, by the coordinator, on a quiet machine. During development a targeted plan list plus `smoke` is the expected verification. Never start a full-suite or stress run to "be safe", and do not leave one running when you stop.
+  **What the milestone layer actually is, and what it looked like when it was first
+  measured (2026-11-02).** `--tier milestone` selects 27 plan files and 3390 tests: `tier` is a
+  property of the *file*, so naming a file runs it whole and the layer is that whole batch. The
+  13 entries in `plan-inventory.mjs`'s `FORBIDDEN` are a subset of it, not another layer. That
+  day's run gave `total: 3390, pass: 3369, fail: 20, skip: 1` — 16 of the 20 are real reds and 4
+  are budgets, below. Nobody had run this layer before, so a red here is not evidence that today's
+  change broke it: two of them (`gc.remembered_set_minor_copying`, `gc.foreign_resource_lifetime`)
+  are self-tests that shipped with the features they test and had never executed once.
+
+  **Its budgets are calibrated for 8 concurrent jobs.** `progen_check` (132.9 s of 150),
+  `collfuzz.many_small` (154.7 s of 151), `rules.every_exported_rule_enters_the_check` (132.4 s)
+  and `small` (6.19 s of 6.00) are not slow machines: they sit against their ceilings, so a run
+  that is wider or narrower than 8 jobs has to re-calibrate them rather than read them as red.
 
