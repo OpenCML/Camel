@@ -12,12 +12,13 @@
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：1 页
+## 现在在等作者：2 页
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
 | [`2026-11-02-whether-a-private-kernel-gets-a-writable-name`](2026-11-02-whether-a-private-kernel-gets-a-writable-name.md) | 没有体的 kernel 声明要不要给它一个可写出来的名字（默认建议：不动，先记着） | 待裁 | — | 拒绝原因普查的第 1 族：1814 条拒绝里这一族最大，给了名字打印器才写得回去 |
+| [`2026-11-02-are-thirty-plans-of-another-layer-a-defect`](2026-11-02-are-thirty-plans-of-another-layer-a-defect.cn.md) | 那 31 个"沉默的零"是别的层的计划、不是缺陷，要不要把它们改成快层（默认建议：不处置） | 待裁 | — | 发布闸门的"绿"只盖快层；改层就等于改"我们声称绿的"是什么意思 |
 
-**这一节的行数 = 目录里的页数**（现在 1 = 1）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。
+**这一节的行数 = 目录里的页数**（现在 2 = 2）。收页时先数目录，再改这一节：多一行或少一行都是索引坏了。
 
 2026-11-02 02:30 的 `cml-sync-tail-write` 与 `whether-the-when-clause-belongs-on-the-declaration` 已裁，在 `reviews/`；`the-neq-group-is-the-fallback-of-ne-with-no-eq-to-negate` 也已裁定并留在 `reviews/`（作者给了执行路径，冲突状态结束）。
 

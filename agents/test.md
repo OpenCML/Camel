@@ -79,3 +79,19 @@ Three zero-hit readings on 2026-11-02 were all the same mistake, and none of the
 - A `git grep` for a tool's own message hit nothing because the main checkout was three commits behind the tree that contained it, so "the tool isn't there" was really "this tree predates the tool".
 
 **A zero is not a reading until the search space has been shown to contain the thing.** State the command, the file or the ref it read, and which tree that ref or file belongs to.
+
+## `-NoBuild` after a merge: `exit 4` is the runner refusing, not a failing test
+
+After a merge the tree no longer matches the installed binary and `out/latest/stdlib`, and
+`camel-remote.ps1` says so and stops:
+
+```
+The plan would run the old binary and the old out/latest/stdlib, not this tree.
+Re-run without -NoBuild (it builds this tree and stamps the install), or pass -AllowStale to run anyway.
+[camel-remote] h-m4b exit 4 (transfer 2.8 s, build 0.2 s; total 3 s)
+```
+
+**`exit 4` means nothing ran.** A log with no `[SUMMARY]` is not a run that passed or failed; it is
+a run that did not happen, and reading it as a failure sends you off to diagnose a test that never
+started. This is the instrument doing its job - it refused a run of the old binary that would have
+produced a green about a tree nobody built - so it belongs here as correct behaviour, not as a trap.
