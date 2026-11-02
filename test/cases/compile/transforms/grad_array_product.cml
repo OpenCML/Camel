@@ -1,0 +1,16 @@
+// the product: xs[0] * xs[1] over [3.0, 2.0]
+import rulesets.jvp
+import rulesets.transpose
+import { vjp } from vjp
+
+func g(xs: float[]): float {
+    return xs[0] * xs[1]
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(g)([3.0, 2.0])
+    println(value)
+    let cotangents = pullback(1.0)
+    println(cotangents.0)
+    return 0
+}

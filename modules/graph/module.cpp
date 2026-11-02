@@ -152,6 +152,7 @@ class GraphModule final : public BuiltinModule {
                 {"users", true},
                 {"value_users", true},
                 {"is_constant", true},
+                {"constant_bytes", true},
                 {"kind", true},
                 {"op", true},
                 {"op_name", true},
