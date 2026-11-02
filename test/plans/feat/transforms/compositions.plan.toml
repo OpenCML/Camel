@@ -31,7 +31,7 @@ timeout_ms = 30000
 name = "compositions.grad_vmap_f"
 desc = "grad(vmap(f)) with f(x) = x*x at x = [1, 2, 3]: the gradient of sum_j x_j^2 is [2, 4, 6]."
 known_fail = ["nvm", "fvm"]
-known_fail_note = "The library's batch step has no rule for a function value: the case stops with `autodiff: cannot differentiate through this call of a function value: which function it calls is not evident`, so `grad(vmap(f))` cannot be built yet (2026-11-02)."
+known_fail_note = "Wall: the pullback pass has no rule for a call of a function value -- `modules/autodiff/pullback.cpp:3759` refuses with `cannot differentiate through this call of a function value: which function it calls is not evident` -- so `grad(vmap(f))` cannot be built. It used to be skipped behind `have-library-vjp.mjs`; the skip is gone and this is the red it hid (2026-11-02)."
 kind = "behavior"
 case = "../../../cases/transforms/compositions/grad_vmap_f.cml"
 args = ["${case}", "${backend}"]
@@ -52,7 +52,7 @@ timeout_ms = 30000
 name = "compositions.vmap_grad_f"
 desc = "vmap(grad(f)) with the same f and the same batch: [2, 4, 6] again, bit for bit the same as grad(vmap(f)) -- swapping the two axes must not change the answer."
 known_fail = ["nvm", "fvm"]
-known_fail_note = "The batch step refuses a constant: the case stops with `transforms: vmap has no rule for `a constant``, so `vmap(grad(f))` cannot be built yet (2026-11-02)."
+known_fail_note = "Wall: the batch pass has no rule for a constant -- `modules/transforms/vmap_operator.cpp:136` refuses with `vmap has no rule for `a constant`` -- so `vmap(grad(f))` cannot be built. It used to be skipped behind `have-library-vjp.mjs`; the skip is gone and this is the red it hid (2026-11-02)."
 kind = "behavior"
 case = "../../../cases/transforms/compositions/vmap_grad_f.cml"
 args = ["${case}", "${backend}"]
@@ -73,7 +73,7 @@ timeout_ms = 30000
 name = "compositions.jvp_vjp_f"
 desc = "jvp(vjp(f)) with f(x) = x*x, cotangent 1 and direction [0.5, 1.0, 1.5]: the pullback is 2vx, its derivative in x is 2v, so the directional derivative is [1, 2, 3]."
 known_fail = ["nvm", "fvm"]
-known_fail_note = "The composition of the two transforms does not assemble: `stdlib/vjp.cml:73` cannot call `transpose` on a function that returns a pair, so `jvp`-then-`vjp` stops there (2026-11-02)."
+known_fail_note = "Wall: `stdlib/vjp.cml:73` calls `transpose(linear)` on a function that returns a pair, and `transpose` takes no function whose result is a pair -- the composition of the two transforms does not assemble. It used to be skipped behind `have-library-vjp.mjs`; the skip is gone and this is the red it hid (2026-11-02)."
 kind = "behavior"
 case = "../../../cases/transforms/compositions/jvp_vjp_f.cml"
 args = ["${case}", "${backend}"]
@@ -94,7 +94,7 @@ timeout_ms = 30000
 name = "compositions.grad_vjp_g_zero"
 desc = "grad(vjp(g)) with g(v) = sum(v*v) at v = [1, 2, 3, 4] must be all zeros: the pullback is linear in v, so its derivative is a constant and the gradient of a constant is 0. This is the one check the three combinations cannot make."
 known_fail = ["nvm", "fvm"]
-known_fail_note = "Same wall as the pair-typed combination: `stdlib/vjp.cml:73` cannot call `transpose` on a function that returns an array, so the sum-of-squares gradient stops there (2026-11-02)."
+known_fail_note = "Wall: same line as the pair-typed combination, `stdlib/vjp.cml:73`, where `transpose` takes no function whose result is an array -- the sum-of-squares gradient stops there. It used to be skipped behind `have-library-vjp.mjs`; the skip is gone and this is the red it hid (2026-11-02)."
 kind = "behavior"
 case = "../../../cases/transforms/compositions/grad_vjp_g_zero.cml"
 args = ["${case}", "${backend}"]

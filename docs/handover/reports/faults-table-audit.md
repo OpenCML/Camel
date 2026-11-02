@@ -322,16 +322,19 @@
 | `pow_*`（12 行，含 4 行整数指数） | 12 | 是（扫描 10 行；`pow_c_i`/`pow_z_i` 由 `pow_rows.cml` 钉住） | 是 | 留 |
 | `neg_*`、`inv_i`、`inv_l` | 10 | 是（`-x`、`~x`） | 是 | 留 |
 | `not`、`and`、`or`、`eq`（复合） | 4 | 是 | 是 | 留 |
-| `lt/le/gt/ge` 七类型（`bf d f f6 i l s`）+ `eq_*` 十一类型 | 39 | 是，38 行画出（含字符串序 4 行）；`eq_bytes` 待量 | 是 | 留 |
+| `lt/le/gt/ge` 七类型（`bf d f f6 i l s`）+ `eq_*` 十一类型 | 39 | 是，39 行画出（含字符串序 4 行与 `eq_bytes`，`encode('ab') == encode('ab')`） | 是 | 留 |
 | 赋值主干 `assn`、`assn_b/d/f/i/l/s`、`assn_owned` | 8 | 是 | 是 | 留 |
 | **复合赋值** `assn_{add,sub,mul,div,pow,mod,and,or}_*` | **51** | **否**：`x op= y` 先写成 `x = x op y`；局部变量、字段、下标三种写法都只画出 `assn` 与二元算子 | **否**：没有声明、没有求解路径 | **已有裁定：留**（`globals.cpp` 175–186 的注释带作者自己的量：删 `:op/assn_pow_bf` 绿、删 `:op/add_bf` 红；理由是每组按算子结构一致） |
 | 标量转换 `XtoY`（非恒等，44 行） | 44 | **是**，44 行全画出。**写法 `T(x)`**：`f64(h)`、`i32(d)`、`i64(s)`、`c64(d)`、`bf16(d)` 等 | 是（`prelude.cml` 里 `T(x)` 的 `#op` 标签） | 留 |
 | **恒等转换** `itoi`、`ltol`、`bftobf`、`f6tof6`、`ctoc`、`ztoz` | 6 | **是**。**写法 `T(x)`**：`i32(j)`（`j` 已是 i32）画出 `:op/itoi`；**`x as T` 这种转写被前端省掉**（同一族用两种写法会得到相反答案） | 是（声明在 `prelude.cml`） | 留 |
 | 数组逐元素转换 `ato*`（`atobf atod atof atof6 atoi atol atos`） | 7 | **是**，7 行全画出。**写法 `T(arr)`**：`f64(a)`、`i32(a)`、`bf16(a)`、`f16(a)`、`i64(a)`、`f32(a)`、`string(x)` | 是（同一组声明，`is_compact_array` 约束） | 留 |
 | 下标/切片/写字段 `idx_arr`、`idx_str`、`idx_take` | 3 | **是**：`a[0]`、`s[1]`、`a[1..2]` 各画一条 | 是 | 留 |
-| `slice_bytes`、`slice_str`、`slice_sub`、`set_field`、`set_index`、`mem_blocks` | 6 | 待量 | 待量 | 待量 |
-| 错误/标签 `error_new`、`fail`、`parse_int`、`parse_float`、`tag_*` | 10 | 待量 | 待量 | 待量 |
-| `add_bytes`、`eq_bytes` | 2 | 待量（探测程序里 `bytes` 这个名字不可见） | 待量 | 待量 |
+| `slice_bytes`、`slice_str`、`slice_sub` | 3 | **是**，三条各一种写法：`xs->slice<0, 1, 3>`（`int[]`）、`'hello'->slice<0, 1, 3>`（string）、`encode('hello')->slice<0, 1, 3>`（Bytes） | 是（`prelude.cml` 的 `#op` 标签） | 留 |
+| `set_field`、`set_index` | 2 | `set_field` **是**：`var p: Point = { x: 1, y: 2 }; p.x = 9` 画出 `:op/set_field`；`set_index` **否**：同一个写法画的是 `:op/set_index_in_place`（另有 `:op/assn_owned`、`:op/idx_arr`），没有任何写法画到 `:op/set_index` | `set_field` 是；`set_index` 声明的 `#op` 在 `set_value.h`，但无写法到达 | `set_field` 留；`set_index` **待裁**（删，还是补一种写法） |
+| `mem_blocks` | 1 | **是**：`std::mem::blocks()` | 是 | 留 |
+| 错误 `error_new`、`fail`、`parse_int`、`parse_float` | 4 | **是**：`error('K', 'm')`、`fail<'P'>('m')`、`parse_int('42')`、`parse_float('2.5')` 各画一条 | 是 | 留 |
+| 标签 `tag_error_info`、`tag_error_value`、`tag_is_error`、`tag_is_null`、`tag_null_value`、`tag_throw` | 6 | **是**：`e.kind`、`case error e`、`is_error` 路径、`maybe(99) == null`、`null as int?`、`!`/`!!` 都画出 | 是（`src/builtin/operators/tagged.cpp`） | 留 |
+| `add_bytes`、`eq_bytes` | 2 | **是**：`encode('ab') + encode('cd')`、`a == b` | 是 | 留 |
 
 复合赋值那一族下面贴的是裁定原文（`src/builtin/modules/globals.cpp`，`CAMEL_HALF_ASSIGN` 上方）：
 
@@ -345,9 +348,12 @@
 > is structured per operator and the assignment operators of every other type are declared here;
 > they are not a gap and not an untested path that a program could take.
 **结论**：转换一族（44 标量 + 6 恒等 + 7 数组）**57 行全部画得出**，问 2 也全是声明的
-`#op` 标签，所以没有可删的行。全表 237 行里，到这一轮为止**168 行有"画得出"的正读数**，
-**51 行**是复合赋值（两问皆否、有裁定、留），**18 行待量**（`slice_*`/`set_field`/`set_index`/
-`mem_blocks` 六行、`error_new`/`fail`/`parse_*`/`tag_*` 十行、`add_bytes`/`eq_bytes` 两行）。
+`#op` 标签，所以没有可删的行。最后一轮把剩下的 18 行也量完了（`slice_*` 3、`set_field`/
+`set_index` 2、`mem_blocks` 1、错误 4、标签 6、`add_bytes`/`eq_bytes` 2）：**17 行画得出**，
+**1 行画不出** —— `:op/set_index`，因为程序能写的写法（`var ys = xs; ys[1] = 9`）画的是
+`:op/set_index_in_place`，`:op/set_index` 没有任何写法能到达。全表 237 行现在是：
+**185 行有"画得出"的正读数**、**51 行**复合赋值（两问皆否、有裁定、留）、**1 行**（`set_index`）
+画不出且无裁定 —— 这一行要作者裁，是删还是补写法。
 
 **问 1 的答案是"哪种写法"决定的**，不是算子决定的：同一族里 `T(x)` 调用画出 `:op/itoi`，而写成
 `x as T` 时前端直接省掉。所以表里每一族都记了**探测写法**；换一种写法得到相反答案时，先怀疑写法。
