@@ -654,6 +654,10 @@ struct Half {
             // A fact about the call, not about the half it is copied into: when the rule's expansion
             // recorded how many of the call's trailing arguments are tangents, the copy is the same
             // call and says the same thing. It is what `transpose` reads at a call inside an arm.
+            // The record is a **count of the call's trailing arguments**, not a mask of positions
+            // (`GCNode::tangentArgs`, `GCGraph::callTangentArgsOf`): both readers -- the copy here,
+            // and `transpose.cpp`'s `calleeParams - tangentArgs` -- have to take it that way, and a
+            // call whose tangents are not its trailing arguments has no record that says so.
             const gc_node_ref_t made = draft.addFuncNode(
                 callee, node->dataType(), 0, draft.allocateRuntimeSlot(node->dataType()), 0,
                 source->callTangentArgsOf(ref));
