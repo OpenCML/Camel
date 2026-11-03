@@ -743,7 +743,8 @@ everywhere is written once:
   law, which missing slot -- written in one of the three shapes this tree already records walls in:
   - the refusal or the law in backticks: `` `skip=rule uri=tensor:sum reason=unbound` ``;
   - the file and the symbol that refuses: `modules/transforms/vmap.cpp#liftConstant`;
-  - the page that decides the question: `docs/handover/questions/…cn.md`.
+  - the page that decides the question:
+    `docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md`.
 
   It is refused at load with the same refusal the owner gets, and three more shapes are refused with
   it: an empty value, a stock phrase (`待修`, `todo`, `known issue`, …) and a sentence that names no
