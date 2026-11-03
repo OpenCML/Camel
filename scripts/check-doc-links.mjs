@@ -454,6 +454,20 @@ function isComment(file, text, index) {
 
 // A fenced block shows an example, often of a file that a plan *will* create; it is not a citation.
 // A fence may be indented, as it is inside a list item.
+//
+// This function and `lineAt` below both read the whole prefix of a document, which looks quadratic
+// and was twice mistaken for the reason this check is slow: it is not, and the numbers are here so
+// that nobody pays for them again (measured 2026-11-03). `lineAt` is called *only when a problem is
+// reported*, so on a tree whose citations all resolve it is called zero times. `inFence` is called
+// only for a match inside a markdown document, which is a small part of the walk. Neither is on the
+// main path: a run over this tree is 1.43 s on the build host and about 3 s locally, of which
+// roughly half is reading the 33.7 MB of the 6027 scanned files and the rest is the regexes. An
+// index of line starts and of fence ends, asked by binary search, was written and measured: the
+// report was byte-identical, the wall clock did not move (2.94 s before, 3.04 s after, with 240 ms
+// of the "after" being the index build itself), so it was dropped. What that index did buy is the
+// red tree -- 487 KB holding 4000 unresolvable citations went from 1.00 s to 0.41 s -- and a red
+// tree is a report, not a check. If this ever does need to be fast, the walk is the thing to
+// measure, not this.
 function inFence(text, index) {
     const fences = (text.slice(0, index).match(/^\s*(?:```|~~~)/gm) || []).length
     return fences % 2 === 1

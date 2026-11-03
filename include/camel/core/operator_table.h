@@ -459,7 +459,7 @@ class OperatorTable {
     // ---- Conversions (the fact a rule's key is read from) -----------------------------------
     //
     // A conversion of the language is written `op/<source>to<destination>` and its rule is filed
-    // under the destination's spelling (`camel/core/forward.h#conversionKeyOf`). The two types are
+    // under the destination's spelling (`src/core/forward.cpp#conversionKeyOf`). The two types are
     // what the operator *is*, so they are declared with it when it is registered, and the key is
     // read from this declaration rather than decoded from the letters of the URI.
 
