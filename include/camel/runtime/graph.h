@@ -43,6 +43,7 @@
 #include "camel/core/symbol.h"
 #include "camel/core/type/intern.h"
 #include "camel/runtime/graph_id.h"
+#include "camel/utils/assert.h"
 
 #include <algorithm>
 #include <atomic>
@@ -688,11 +689,15 @@ class GCGraph : public camel::core::rtdata::Object {
     const GCRegion *region(uint32_t id) const {
         return id < nativePayload_.regionCount ? nativePayload_.regionTable + id : nullptr;
     }
-    /// The region node `ref` is in: the innermost; 0 for the body.
+    /// The region node `ref` is in: the innermost; 0 for the body. A ref that names no node of
+    /// this graph has no region, and 0 would say it is in the body -- a region the graph really
+    /// has (the body's record exists even when the table holds nothing else), so the answer would
+    /// be a membership the program does not have. Fail instead of naming the body.
     uint32_t nodeRegion(gc_node_ref_t ref) const {
-        if (!containsNodeRef(ref)) {
-            return 0;
-        }
+        GUARD(
+            containsNodeRef(ref),
+            "Region of a node that is not in the graph: the ref is kInvalidNodeRef or past "
+            "nodeCount(), and region 0 is the body, not the answer for a node that is not there.");
         const GCNodeChunk &c = chunkOf(ref);
         return c.regions ? c.regions[ref & (kNodeChunkNodes - 1)] : 0;
     }
