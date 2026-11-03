@@ -1220,9 +1220,9 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
             found.push_back(call);
         }
     }
-    // The parameters' values come first, each in its own parameter's slot, because that is the order
-    // a reader of the closure goes by: "slot `at` is parameter `at`'s value"
-    // (`modules/transforms/transpose.cpp`). The walk can reach one value by two routes -- a
+    // The parameters' values come first, each in its own parameter's slot, so that a closure two
+    // programs of one type build cannot mean two different things. The walk can reach one value by
+    // two routes -- a
     // parameter's value port seen as a value that crosses the cut, and the same port seen as what a
     // parameter the tangent side reads stands for (`ports[valuePort]` below) -- and while a second
     // copy of a value is not lost information, it must not take a slot that belongs to another
@@ -1953,7 +1953,7 @@ bool readLoopCut(
     }
     // **A residual computed from the loop's own result is taken after the loop** (author, 2026-11-03
     // 11:10: 凡是由前一半循环的输出算出来的残差，在循环建好之后再取). `jvp_idx_arr` states the length
-    // of the array it reads (`element_at(dxs, extent_pair(i, len(xs)))`) instead of letting the
+    // of the array it reads (`pick_at(dxs, extent_pair(i, len(xs)))`) instead of letting the
     // transposed rule read a linear operand, so the tangent side of an escape reads `len(xs)` where
     // `xs` is the loop's *value*: a node above the cell, which exists only once the forward half's
     // loop has run. Nothing before the loop can compute it, so it is not an invariant.
@@ -2638,10 +2638,10 @@ enum class ExitShape { Straight, Branch, Loop, NotAPair };
 ///
 /// The two components are kept apart rather than folded into one "which component" answer: a chain
 /// may read *both*, and that is not the same fact as reading one. `jvp_idx_arr` states the length of
-/// the array it reads (`element_at(dxs, extent_pair(i, len(xs)))`) so that the transposed rule never
+/// the array it reads (`pick_at(dxs, extent_pair(i, len(xs)))`) so that the transposed rule never
 /// reads a linear operand, and the tangent side of an escape therefore reads `len(xs)` off the loop's
 /// **value** while the tangent itself comes from the loop's **tangent** (measured 2026-11-04 on
-/// `vjp_loop.rounds_are_undone_in_reverse`: the tangent root is `element_at(35, extent_pair(0,
+/// `vjp_loop.rounds_are_undone_in_reverse`: the tangent root is `pick_at(35, extent_pair(0,
 /// len(34)))`, 34 reading component 0 and 35 component 1). One answer for "which component" cannot
 /// hold that, and refusing it made the exit unreadable.
 struct LoopReach {

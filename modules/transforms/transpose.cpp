@@ -870,7 +870,7 @@ bool buildTransposeMember(
     // record it -- a parameter's index per member, handed to the call site so it could forward the
     // value from the closure -- is gone with the read that filled it by position: a rule that needs a
     // value beside the cotangent reads it as an **operand of the call it expands**
-    // (`element_at(dxs, [i, len(xs)])` states the length), so the value travels in the call and the
+    // (`pick_at(dxs, [i, len(xs)])` states the length), so the value travels in the call and the
     // member stands on no capture of its own. `needs` is therefore empty for every member built here;
     // the parameter stays because the call site and `transposeSignature` are written from it.
     gc_node_ref_t result = rt::kInvalidNodeRef;
@@ -995,14 +995,6 @@ bool buildTransposeMember(
         if (carriesClosure && function->closureType() != nullptr) {
             draft.setClosureType(const_cast<camel::core::type::TupleType *>(function->closureType()));
         }
-        // Where a parameter's own value sits among the residuals, and why a *parameter's number* is the
-        // place rather than a type. `residualsOf` numbers the residuals as the parameters by their
-        // index and then the values the body computed (`modules/transforms/split.cpp`, "program
-        // order"), one residual per parameter the tangent side reads -- so slot `at` is parameter
-        // `at`'s value, and this graph declares one closure port per residual in that order. Which
-        // parameter this is therefore decides the slot: two arrays of one element type are two
-        // parameters, and the shape an answer must be written in is *this* parameter's, not the
-        // first member's of that type.
         // A closure member is forwarded to the member the transposed graph carries, and nothing
         // about where it came from is asked (author, 2026-11-03 08:50). A member the cut wrote and
         // a member a caller closed by hand are the same shape -- a port the function is handed --
@@ -1202,11 +1194,24 @@ bool buildTransposeMember(
                << " type=" << (type != nullptr ? type->toString() : std::string("?"))
                << " space=none from=" << from << '\n';
         };
-        // Whether a cotangent landing on `target` is one the answer holds. An ordinary transposition answers
-// for every value; a partial one answers only for its participating parameters, and a parameter
-// outside the set is a value the graph reads, not an answer it gives.
+        // Whether a cotangent landing on `target` is one the answer holds. A closure member's is not
+        // (below); an ordinary transposition answers for every other value; a partial one answers
+        // only for its participating parameters, and a parameter outside the set is a value the
+        // graph reads, not an answer it gives.
         const auto wantsCotangent = [&](gc_node_ref_t target) {
-            if (!partial || target >= nodeCount) {
+            if (target >= nodeCount) {
+                return true;
+            }
+            // A closure member is a **known value** -- a capture a caller closed over, a residual the
+            // cut carried -- and not a linear input of the transposition. The answer is one cotangent
+            // per parameter the caller differentiates (`Transpose<F>`, 2026-11-02 11:30), and a
+            // member is not one of them: it is a constant of this differentiation, like a `with`
+            // port, and no cotangent has a slot to land in (author, 2026-11-03 19:55). Asked before
+            // the sets below, because a member is neither a parameter nor an answer for one.
+            if (closurePortOf.find(target) != closurePortOf.end()) {
+                return false;
+            }
+            if (!partial) {
                 return true;
             }
             const camel::runtime::GCNode *node = function->node(target);
@@ -1233,12 +1238,22 @@ bool buildTransposeMember(
         // answer has no member for it -- so grinding a law there asks the law for the value of a
         // *participating* operand, which is the one thing this graph does not have.
         //
+        // The question is asked of every transposition, and not only of a partial one. A plain
+        // transposition answers for every parameter that has a tangent space, so a value computed
+        // from one of them is reachable -- but a value computed from **nothing but a closure member
+        // and constants** is not: `exp(x) * dx` in a cut's second half reads `exp(x)` out of the
+        // closure, and the cotangent of `exp(x)` is an answer no parameter holds. Asking the product's
+        // law for it asks for `dx`'s value, the one value a transposition never has -- which is where
+        // `exp`/`sigmoid`/`tanh`/`relu` and both array-product readings stopped
+        // (`skip=cotangent-needs-a-value uri=tensor:multiply position=0`). Reading the reach only
+        // under a participating set was the reason the closure-borne operand looked answerable.
+        //
         // `grad_of_a_division` is the shape that needs it: `div_tangent`'s body divides a linear
         // numerator by the kernel's own denominator, and the law's answer for the denominator is
         // written in the numerator's -- the tangent's -- value.
         std::vector<int8_t> participantReach(nodeCount, -1);
         std::function<bool(gc_node_ref_t)> reachesAParticipant = [&](gc_node_ref_t target) -> bool {
-            if (!partial || target >= nodeCount) {
+            if (target >= nodeCount) {
                 return true;
             }
             if (participantReach[target] >= 0) {
@@ -1253,10 +1268,24 @@ bool buildTransposeMember(
                 if (node->kind == rt::GCNodeKind::Port) {
                     reach = wantsCotangent(target);
                 } else if (node->kind != rt::GCNodeKind::Data) {
+                    // Both input lists, because a value is computed from both: a tuple's components
+                    // are the `<>` inputs of the `Fill` that builds it (its only normal input is the
+                    // static template of the shape), so reading the normal list alone answered "this
+                    // tuple reaches no parameter" for `let t = (x, 2x)` and dropped the cotangent
+                    // both of its components needed (`transpose_tuple_component`). `forward` copies
+                    // the two lists for the same reason.
                     for (const gc_node_ref_t input : function->normInputsOf(target)) {
                         if (reachesAParticipant(input)) {
                             reach = true;
                             break;
+                        }
+                    }
+                    if (!reach) {
+                        for (const gc_node_ref_t input : function->withInputsOf(target)) {
+                            if (reachesAParticipant(input)) {
+                                reach = true;
+                                break;
+                            }
                         }
                     }
                 }
@@ -1438,11 +1467,11 @@ bool buildTransposeMember(
                         // A participating one has no port at all -- it is what the answer is a
                         // cotangent of -- and nothing here invents a value for it: what a rule needs
                         // beside the cotangent arrives as an operand of the call it is expanding
-                        // (`element_at(dxs, [i, len(xs)])` states the length), so the value is a slot
+                        // (`pick_at(dxs, [i, len(xs)])` states the length), so the value is a slot
                         // of that call rather than a member of this closure picked by position.
                         forwardOf[ref] =
                             at < portOfParam.size() ? portOfParam[at] : rt::kInvalidNodeRef;
-if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
+                        if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                             // Neither a port nor a closure slot hands this parameter in, and the
                             // law's right side reads its value. What the law reads it for is the
                             // **shape** the parameter's type states (author, 2026-11-03 17:55:
@@ -2215,7 +2244,7 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                     }
                     if (!hasTangentSpace(inputs[i])) {
                         // An operand that cannot hold a cotangent is not a position the law has to
-                        // answer for: `element_at(dxs, at)` states the length in an `int[]`, and the
+                        // answer for: `pick_at(dxs, at)` states the length in an `int[]`, and the
                         // law's right side answers the array alone. Asking it for the position of the
                         // length is a question with no answer, and answering it "the rule's right side
                         // answers one name" is not what the reader did. Recorded as the zero it is,
