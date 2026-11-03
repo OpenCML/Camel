@@ -2696,7 +2696,21 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                                                 p < portParameter.size() ? portParameter[p]
                                                                          : paramCount;
                                             if (param < paramCount) {
-                                                return param;
+                                                // Only a declaration that leaves the shape open is
+                                                // the repair: a parameter that states its extents has
+                                                // done its part, and the type that failed to state
+                                                // one belongs to a value the walk computed (an
+                                                // operator whose result type is open), which no
+                                                // declaration of this function can fix.
+                                                const Type *const declared =
+                                                    function->funcType()->normTypeAt(param);
+                                                if (declared != nullptr &&
+                                                    declared->code() ==
+                                                        camel::core::type::TypeCode::Array &&
+                                                    !camel::core::type::statedExtentsOf(declared)
+                                                         .has_value()) {
+                                                    return param;
+                                                }
                                             }
                                         }
                                         continue;
@@ -2725,6 +2739,11 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                                 }
                             }
                             refuse(TransposeRefusalCause::ParameterShape, *unstated);
+                            // The sentence a reader is handed names the declaration to edit, so the
+                            // name and the type travel with the refusal rather than only the number.
+                            state.refusal.paramName =
+                                state.shapeName;
+                            state.refusal.paramType = state.shapeType;
                             os << " uri=" << uri << " node=" << ref << " param=" << *unstated
                                << " param-type="
                                << (paramType != nullptr ? paramType->toString() : std::string("?"))

@@ -1,0 +1,20 @@
+// `extent_of::<A>()` answers the extents the type argument writes down.
+//
+// The value is a fact of the call and of nothing else, and it is settled where the call is built:
+// an OPER node records the instantiated type of the call but not the type argument it was written
+// with, so the kernel has nothing to read. Measured 2026-11-04 on the base tree (`c4391db57`) this
+// program reached that kernel and failed with
+//
+//   error[RuntimeDiag::PassInternalError]: Pass 'calling `extent_of`' failed with an internal
+//   error: the extents of `A` are a fact of the type the call names, and an OPER node records the
+//   instantiated type of the call but not the type argument it was written with ...
+//
+// which is a compiler's own sentence about a program that is right. The list is a constant of the
+// graph now, and the run reads it.
+
+func main(): int sync {
+    let shape = extent_of::<float[2, 3]>()
+    println(shape)
+    println(shape[1])
+    return 0
+}
