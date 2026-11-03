@@ -26,10 +26,6 @@ struct DraftGraphCloneResult {
     std::vector<gc_node_ref_t> normPorts;
     std::vector<gc_node_ref_t> withPorts;
     std::vector<gc_node_ref_t> closureNodes;
-    /// The cloned closure members that hold a parameter's own value, by cloned member: what the
-    /// source recorded (GCGraph::closureParameterOf) and, for a draft source,
-    /// the draft's `closureParameterOf`. A member the source recorded nothing for is absent.
-    std::unordered_map<gc_node_ref_t, size_t> closureParameterOf;
     gc_node_ref_t entryNode  = kInvalidNodeRef;
     gc_node_ref_t exitNode   = kInvalidNodeRef;
     gc_node_ref_t outputNode = kInvalidNodeRef;

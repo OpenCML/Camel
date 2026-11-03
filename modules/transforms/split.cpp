@@ -696,14 +696,6 @@ void addResidualCaptures(Draft &draft, const std::vector<Residual> &residuals, H
         const gc_node_ref_t port =
             draft.addPortNode(residual.type, draft.allocateRuntimeSlot(residual.type));
         draft.appendClosureNode(port);
-        // The member's identity, not its place: a residual that is a parameter's own value is
-        // recorded as that parameter's (author, 2026-11-03 03:10). A transposed member reads the
-        // number from here and nowhere else -- the residuals are in `residualsOf`' program order,
-        // not in parameter order, so a member's index would name the wrong parameter as soon as the
-        // program reads two of them out of order (`f(x, y) = y * y` puts parameter 1 in slot 0).
-        if (residual.parameter != Residual::kNotAParameter) {
-            draft.setClosureParameterOf(port, residual.parameter);
-        }
         backward.closurePorts.push_back(port);
     }
 }
