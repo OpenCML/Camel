@@ -22,7 +22,7 @@ args = ["${case}", "${run_jit}"]
 silenced_warnings = []
 skip_unless = ["node", "test/tools/have-native-jit.mjs", "--absent"]
 expect_exit = 0
-expect_stderr_contains = ["[Warn]:", "no native code generator in this build"]
+expect_stderr_contains = ["[Warn]:", "no native code generator in this build", "(name=RuntimeDiag::JitWithoutCodeGenerator, code=0x04100018)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
