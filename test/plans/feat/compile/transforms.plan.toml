@@ -1489,6 +1489,18 @@ expect_stdout_not_contains = ["value=0.12500000000000000"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
+[[tests]]
+name = "transforms.with_grad_from_the_library"
+desc = "The criterion with an object: `stdlib/vjp.cml#with_grad` against the engine's `with_grad`, on the four groups of `grad_first_with_parameter.cml` (`gx/vg`, `pg/pvg`, `wg/wvg`, `sk/sx`), one line per group. Before this entry the criterion '库层 `with_grad` 在 `grad_first_with_parameter` 上与引擎同答' (author, 2026-11-03 17:55) named nothing that could be called: `stdlib/vjp.cml` exported `vjp` and a one-parameter `grad`, and `stdlib/signatures/autodiff.cml#with_grad` is a reference declaration that does not compile. The library now exports a `with_grad`, and it refuses on all four groups, so this entry holds both halves of the measurement: the engine's four answers, which are the numbers the composition owes, and four `RuntimeError` refusals with the sentence that says why. It is deliberately not a number on either side: the composition every `with_grad` has (`vjp` of a lambda that moves the weight to an ordinary parameter) cannot see the tangent of a value the body hands back to a call's `with` list -- forward mode answers that tangent as the zero of its type, `jvp((ww: float) => x_times_y<ww>(2.0))(3.0, 1.0)` reading `value=6.0 tangent=0.0` where the derivative it owes is 2.0 -- so a composition written straight through answers `0.0` where `weighted` owes `3.0`, and a zero gradient is not distinguishable from a refusal. The day forward mode carries that tangent, the four `library=` fields carry tuples, this entry goes red on the pin below, and the case and `stdlib/vjp.cml#with_grad` turn over together. `with_grad_composition_meets_the_split_wall` stays as it is: it pins the cut's own wall, which is a different one and still stands."
+kind = "behavior"
+case = "../../../cases/compile/transforms/with_grad_from_the_library.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout = "gx/vg  engine=(9.0, 3.0) library=RuntimeError\npg/pvg engine=(11.0, { a: 4.0, b: 1.0 }) library=RuntimeError\nwg/wvg engine=(32.0, [4.0, 5.0, 6.0]) library=RuntimeError\nsk/sx  engine=6.0 4.0 library=RuntimeError\nwhy=vjp is transpose(split(jvp(f))), and forward mode answers the tangent of a value handed to a call's `with` list as the zero of its type, so a `with_grad` built on this composition would answer the zero of the gradient's type for every weight that reaches the body through that list. Read the gradient of a first `with` parameter with `grad(f)<w>(..)` from the autodiff module, and the derivatives of the ordinary parameters with `vjp(f)`.\n"
+expect_output_not_contains = ["Warning", "[Error]", "library=(0.0", "library=(9.0, 0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
 # The anchor of the D1 difference set in
 # `docs/handover/reports/2026-11-03-what-deleting-the-engine-pullback-takes.cn.md`: `^` on two floats.
 # Three entries: the engine's number, the library's number for the same arithmetic under the spelling
