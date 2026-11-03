@@ -410,14 +410,18 @@ struct Half {
         case rt::GCNodeKind::Join:
             return refuseAt(refusal, source, ref, "a branch", "the plumbing copies straight-line bodies");
         case rt::GCNodeKind::Loop:
-            // The loop cell is entered when the *exit* is the loop (cutLoopGraph): the exit of
-            // jvp(loop body) of one state is the LOOP node itself. Here the loop is inside the chain
-            // the exit reads -- the value half of the exit's pair, or a value one of them computes --
-            // and this half would have to copy a body region, which the plumbing does not do.
+            // A loop the cut can copy is one the exit reads through its two projections: `exitShapeOf`
+            // answers that shape, records the pair of `TupleIndex` reads and seeds each half with its
+            // own value for the component it reads, so the walk stops at the projection and the cell is
+            // never entered. A loop reached here is on the chain the exit reads without that pairing --
+            // read whole, or from one side only -- and a loop cell is not a value: its inputs are the
+            // body's yield, a node of another region, and the round counter it writes into a port that
+            // is nobody's parameter. Copying it means copying a body region.
             return refuseAt(
                 refusal, source, ref, "a loop",
-                "the cut enters a loop through the loop cell, and that cell is the exit: this loop "
-                "is inside the chain the exit reads, so the half would have to copy a body region");
+                "this loop is on the chain the exit reads and neither half has a value for it: the cut "
+                "copies a loop where the exit reads its two components through one projection each, and "
+                "here the half would have to copy a body region");
         default:
             break;
         }
