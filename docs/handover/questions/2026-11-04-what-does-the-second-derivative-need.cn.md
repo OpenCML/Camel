@@ -13,9 +13,9 @@
 | 写法 | 退出码 | 读数 |
 | --- | --- | --- |
 | `grad(grad(cube))<2.0>()` | **0** | `nested=12.0` |
-| `grad(<x: float> () => grad(cube)<x>())<2.0>()` | **0** | `lambda=12.0` |
+| `grad(<x: float>() => grad(cube)<x>())<2.0>()` | **0** | `lambda=12.0` |
 | `grad(dcube)<2.0>()`（`dcube` 是具名函数，体内 `grad(cube)<x>()`） | **0** | `12.0` |
-| `let g = dcube; grad(<x: float> () => g<x>())`（内层变换**当成值**捕获） | 1 | 见下 R1 |
+| `let g = dcube; grad(<x: float>() => g<x>())`（内层变换**当成值**捕获） | 1 | 见下 R1 |
 | `vjp(vjp(cube))` | 1 | 见下 R2（类型层，先于那道门） |
 | `grad(vjp_value)`，`vjp_value` 体内 `vjp(cube)(x).0` | 1 | 见下 R3 |
 | `grad(slope)`，`slope` 体内 `vjp(cube)(x).1(1.0)` | 1 | R3 + 见下 R4 |
