@@ -470,15 +470,30 @@ template <std::floating_point T> NumberTextStatus parseNumberToken(std::string_v
     return number_text_detail::realValue(text, negative, out);
 }
 
-/// Whether `f32` reads the digits of `scientific` back as the f32 they were written from, by
+/// Whether `T` reads the digits of `scientific` back as the value they were written from, by
 /// parsing them and comparing the bits: the test the text of a reduced-precision type is held to
 /// after its own rounding (below). The digits are correctly rounded by `to_chars`, so a text
 /// inside the rounding interval of the value parses to exactly that value; a text outside it
 /// parses to a neighbour and the bits differ.
-inline bool scientificParsesBack(std::string_view scientific, float &parsed) {
-    const auto [end, ec] =
-        std::from_chars(scientific.data(), scientific.data() + scientific.size(), parsed);
-    return ec == std::errc() && end == scientific.data() + scientific.size();
+///
+/// `T` is a parameter of the function so that the parse can be chosen by what the library provides
+/// (as in `realValue` above): libc++ before version 20 has no floating-point `from_chars` and
+/// declares the overload deleted, which a build of another library has to be able to compile.
+template <std::floating_point T> inline bool scientificParsesBack(std::string_view scientific, T &parsed) {
+    if constexpr (requires(const char *p, T &v) { std::from_chars(p, p, v); }) {
+        const auto [end, ec] =
+            std::from_chars(scientific.data(), scientific.data() + scientific.size(), parsed);
+        return ec == std::errc() && end == scientific.data() + scientific.size();
+    } else {
+        // The C library reads the decimal point of the C locale, which Camel never changes from
+        // "."; `to_chars` wrote the text under the same rule, so the round trip is the same one.
+        const std::string numeral(scientific);
+        char *end = nullptr;
+        parsed    = static_cast<T>(
+            sizeof(T) <= sizeof(float) ? std::strtof(numeral.c_str(), &end)
+                                       : std::strtod(numeral.c_str(), &end));
+        return end == numeral.c_str() + numeral.size();
+    }
 }
 
 /// The shortest scientific text -- `[-]d[.ddd]e[+-]dd`, correctly rounded by `to_chars` -- whose
