@@ -200,12 +200,24 @@ InferFn gradientLikeTyped(size_t index) {
     };
 }
 
+/// layer_norm_grad(x, gamma, dy, which, eps?): the answer is written at the input's element type --
+/// `layerNormGradArm<Code>` is chosen by `x`'s dtype and writes all three answers at it (design
+/// principles 9.9: a gradient is the width of the value it belongs to). This stated `f32` whatever
+/// the input was, which is not what the kernel does: for an `f64` input the two statements disagree,
+/// and this is the half that was wrong. Aligning it moves no value -- an `f64` model's gradient
+/// already read as `f64` through the VJP that emits this operator (`to_bytes` 48 bytes for an `f64`
+/// [2, 3], and the derivative's own numbers, measured before and after this line) -- so what changes
+/// is the answer to "what does this operator produce", not an answer anybody read. The kernels whose
+/// storage and declared width really did disagree are `#geluGrad` and `#erfGrad`.
 std::optional<Type *> layerNormGradInfer(const InferContext &ctx) {
     const auto which = ctx.constInt(3);
+    const auto dtype = ctx.facts(0).dtype;
+    const std::optional<TypeCode> code =
+        dtype && *dtype == TypeCode::Float64 ? TypeCode::Float64 : TypeCode::Float32;
     if (!which) {
-        return tensorOf(TypeCode::Float32, std::nullopt);
+        return tensorOf(code, std::nullopt);
     }
-    return tensorOf(TypeCode::Float32, ctx.facts(*which == 0 ? 0 : 1).shape);
+    return tensorOf(code, ctx.facts(*which == 0 ? 0 : 1).shape);
 }
 
 std::optional<Type *> castLikeInfer(const InferContext &ctx) {
