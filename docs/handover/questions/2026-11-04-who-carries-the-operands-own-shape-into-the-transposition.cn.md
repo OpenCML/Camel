@@ -147,6 +147,36 @@ transpose_hand_closed_lambda: cut ct1= (6.0)  cut ct3= (18.0)  hand ct1= (6.0)  
 
 （读数六全程只读代码与既有日志：`modules/transforms/` 一个字没动，两个探针都只跑在别处已撤回的树上。）
 
+## 读数七：节点上确实有"哪几个实参是切线"这个槽，但它只记**尾部的个数**，而这条规则的切线在第 0 个
+
+1. **形状与位置**：`uint16_t tangentArgs`，语义是"这次调用的**尾部**有多少个实参是切线"——**个数，不是下标集合，
+   也不是位掩码**。它记在**节点上**（`GCNode::tangentArgs`，`GCNode` 定长记录的一个字段），建节点时由
+   `addFuncNode` 的最后一个实参写进 `DraftNodeHeader::tangentArgs`、编码时落到节点（`src/runtime/graph.cpp`），
+   读法是 `GCGraph::callTangentArgsOf`。原文：`graph.h#GCNode` 那段的"`transpose` reads the count off the node
+   rather than deriving it again"、`draft.h#addFuncNode` 的"how many of the call's trailing arguments are
+   tangents"。**这是节点上的字段，不是旁表。**
+2. **转置侧能不能只读它就知道"实参 0 是切线"**：**不能**，但这个"不能"很有内容。`transpose.cpp#buildTransposeMember`
+   的 `Func` 分支**已经在读它**，把尾部 `tangentArgs` 个实参标成"成员要答的位置"
+   （`participates[i] = i >= calleeParams - tangentArgs`）——路径本来就通，卡在上游的**写法**：
+   `rule_expand.cpp` 是从最后一个实参往回数、一路数到"不是切线"为止，**只数尾部连续段**。而
+   `stdlib/rulesets/jvp.cml#jvp_idx_arr` 的右侧是
+   `index_into(xs, i) => (dxs: T[]) => index_into(dxs, i)`：规则把 `xs`、`i` 绑成捕获，**只把 `dxs` 当自己的
+   参数**，展开出的调用因此是 `index_into(dxs, i)`——**切线在第 0 个实参，`i` 在最后**。尾部连续段是 0，于是
+   `tangentArgs` 记 0，`transpose` 就把两个实参都当"要值的位置"。对照 `mul_tangent`：
+   `x * w => (dx, dw) => mul_tangent(x, w, dx, dw)`，切线在尾部，数得对，那条路一直是通的。
+3. **所以**：槽在节点上、`transpose` 也读它，**但它今天表达不了这条规则**——事实在展开那一刻是齐的
+   （`rule_expand` 手上有 `inputs` 与 `tangents` 两个列表），丢在"编码成尾部个数"这一步。把槽从"尾部个数"换成
+   "位置集合"（16 位正好当掩码）就够，**不需要新字段**。
+
+**但要说清一件事，否则会得出过强的结论**：这 18 条命中**不是**由这个槽决定的。`index_into` 的参数
+`(float[], int)` 里数组那一格有没有切线空间，`tangentSpaceOf` 已经答对了（成员签名
+`(int, float[], float) => (float[],)` 就是证据：`i` 作为值、数组作为捕获端口、再加进门的余切）；命中来自
+`calleeNeeds`——**成员要那个实参的「值」去做形状**（`buildTransposeMember` 先用一次探测把成员要的值找出来），
+而这条调用的那一格是 `dxs`。所以这个槽**是**"该不该拿原值顶替切线"的开关，**不是**这 18 条有无的开关。
+
+（读数七只读源码：`graph.h#GCNode`、`draft.h#addFuncNode`、`rule_expand.cpp`、`transpose.cpp` 的 `Func` 分支与
+`calleeNeeds`、`stdlib/rulesets/jvp.cml#jvp_idx_arr`。没插桩、没改码、没跑计划。）
+
 ## 三条路，各带代价
 
 - **甲：切点带身份。** `split` 把每个残差"是谁的值"记下来（`Residual::parameter` 已经在手边，
