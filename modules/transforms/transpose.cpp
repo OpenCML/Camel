@@ -143,7 +143,8 @@ RuleChoice chooseTransposedRule(
     camel::core::context::Context &context, std::string_view uri,
     std::span<const gc_node_ref_t> inputs, size_t dataOperandCount,
     const std::function<const Type *(gc_node_ref_t)> &typeOf, const Type *cotangentType,
-    const std::vector<bool> *answered, const std::vector<Type *> *offeredOperands = nullptr) {
+    const std::vector<bool> *answered, const std::vector<Type *> *offeredOperands = nullptr,
+    bool *lawFits = nullptr) {
     std::vector<Type *> actual;
     actual.reserve(inputs.size() + 1);
     if (offeredOperands != nullptr) {
@@ -210,12 +211,18 @@ RuleChoice chooseTransposedRule(
         // not "no law for this step" -- the index has one -- so the walk is handed the law's name and
         // the expansion says what it could not build (`rule-ranks`). An empty key is the case this
         // class exists for, and it stays empty here.
+        //
+        // The name is synthesized, and it is told apart from a fit the index really made: a caller
+        // that wants to ask a second question (the extents a law of the reduction family names) must
+        // not read a name handed back for its *message* as an answer.
         const std::vector<camel::parse::ast::RuleMatch> filed =
             camel::core::transposeRulesOf(std::string(uri));
         if (!filed.empty()) {
             choice.rule = filed.front().rule;
             choice.why.clear();
         }
+    } else if (lawFits != nullptr) {
+        *lawFits = choice.found();
     }
     return choice;
 }
@@ -2597,13 +2604,14 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                     answered.push_back(
                         !isConstant(input) && wantsCotangent(input) && hasTangentSpace(input));
                 }
+                bool fits = false;
                 RuleChoice choice = chooseTransposedRule(
                     *state.context, uri, inputs, normOperands.size(),
                     [&](gc_node_ref_t node) -> const Type * {
                         const camel::runtime::GCNode *at = function->node(node);
                         return at != nullptr ? at->dataType() : nullptr;
                     },
-                    cotangentTypeOf(ref, Type::Float64()), &answered);
+                    cotangentTypeOf(ref, Type::Float64()), &answered, nullptr, &fits);
                 // A law that has no extents in hand names one port more than its operator has and is
                 // handed them: the extents of the first operand whose type writes them down, read by
                 // `extent_of`'s rule and no value of the program. It is *offered* second, so every
@@ -2612,7 +2620,7 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                 Type *extentsOf   = nullptr;
                 bool offeredExtents = false;
                 gc_node_ref_t extentsNode = rt::kInvalidNodeRef;
-                if (choice.rule.empty()) {
+                if (!fits) {
                     for (const gc_node_ref_t input : inputs) {
                         const camel::runtime::GCNode *inputNode = function->node(input);
                         Type *const type =
@@ -2626,31 +2634,34 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                     if (extentsOf != nullptr) {
                         std::vector<Type *> widened = operandTypes;
                         widened.push_back(intArrayTypeOf());
+                        bool widenedFits = false;
                         RuleChoice withExtents = chooseTransposedRule(
                             *state.context, uri, inputs, normOperands.size(),
                             [&](gc_node_ref_t node) -> const Type * {
                                 const camel::runtime::GCNode *at = function->node(node);
                                 return at != nullptr ? at->dataType() : nullptr;
                             },
-                            cotangentTypeOf(ref, Type::Float64()), &answered, &widened);
-                        if (!withExtents.rule.empty()) {
+                            cotangentTypeOf(ref, Type::Float64()), &answered, &widened,
+                            &widenedFits);
+                        if (widenedFits) {
                             choice         = withExtents;
                             operandTypes   = widened;
                             offeredExtents = true;
+                            fits           = true;
                             extentsNode    = statedExtentsNodeOf(draft, extentsOf);
                         }
                     }
                 }
-                if (choice.rule.empty()) {
+                if (!fits) {
                     // A law of the reduction family wants an operand's extents, and no operand of
                     // this step states one: the operand is a value that came from a parameter whose
                     // type does not write its shape down (`float[..]`), and the extents the law needs
                     // are exactly the part of that type that is missing. The repair is a declaration,
                     // so the refusal names it (`parameter-shape`) instead of the step that noticed.
                     //
-                    // Only a step the choice could not answer at all is recorded this way, and only
-                    // when an operand's own type is an array that states no shape: a step whose law
-                    // answered is not asked for anything here.
+                    // Only a step with no law that fits is recorded this way, and only when an
+                    // operand's own type is an array that states no shape: a step whose law answered
+                    // is not asked for anything here.
                     if (extentsOf == nullptr) {
                         const auto unstatedArrayBehind = [&]() -> std::optional<size_t> {
                             const auto ports = function->normPorts();
@@ -2732,7 +2743,11 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                     // reader needs -- which node, which operator, and what the two type lists are --
                     // go into the record the sentence is rendered from, and the log says them here
                     // so the reading above can be grepped to the same node.
-                    if (choice.refusal == RuleRefusal::Shape) {
+                    if (!choice.rule.empty()) {
+                        // The name is the one `chooseTransposedRule` synthesized for a law no
+                        // instance of which could be made: the expansion reports `rule-ranks` from
+                        // the real instance count, so the walk leaves this step to it.
+                    } else if (choice.refusal == RuleRefusal::Shape) {
                         // The sentence this family has always written for the class: "the rule"
                         // (the index entry a reader can go and look up), the law's own parameter
                         // list, and the operands it was offered. Built here and not inherited from
@@ -2749,10 +2764,11 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                         os << " uri=" << uri << " node=" << ref
                            << " operands=" << normOperands.size() << " reason=" << shape << '\n';
                         return false;
+                    } else {
+                        refuse(TransposeRefusalCause::Rule);
+                        os << " uri=" << uri << " reason=" << choice.why << '\n';
+                        return false;
                     }
-                    refuse(TransposeRefusalCause::Rule);
-                    os << " uri=" << uri << " reason=" << choice.why << '\n';
-                    return false;
                 }
                 noteRule(choice.rule);
                 const std::string &chosenRule = choice.rule;
