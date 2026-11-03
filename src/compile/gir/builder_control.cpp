@@ -1130,6 +1130,12 @@ data_ptr_t Builder::compositeWithHolesInType(
             }
             factory.add(converted);
         }
+        // Where the computed elements sit in the value the fill reads. An array is positional, so
+        // the slot of a computed element is the index it was written at -- the same answer the
+        // struct branch works out by name below. Said here rather than left to the caller's
+        // pre-seeded copy: a function that has worked out where the values go hands that out, so a
+        // caller that does not pre-seed cannot end up reading the literal's own indexes instead.
+        holeSlots = refHoles;
         return factory.build();
     }
     if (position->code() == TypeCode::Struct) {
