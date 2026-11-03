@@ -15,11 +15,11 @@
    缩放因子 `numel(xs)/numel(ct) = 2` 是**一个标量**，轴语义没有让降维后的形状把缩放因子变成数组。
    律的算术照原样跑一遍就是判据要的那组数：`probe spread=[[0.5, 1.0, 1.5], [0.5, 1.0, 1.5]]`。
    **所以卡的既不是形状，也不是数字。**
-2. **改写右手边不影响拒绝**：`mean_axis(x, 0, false)` 的节点有三个常规操作数，走查在拿到律之后立刻按个数拒；把律的右手边换成只读 `ct`（`return ct`）实测仍是同一条拒绝。
+2. **改写右手边不影响拒绝**：`mean_axis(x, 0, false)` 的节点有三个常规操作数，走查在**拿到律之后、实例化之前**按个数拒（`modules/transforms/transpose.cpp`，`TransposeRefusalCause::Arity` 那一段）。这不是"没有律"：同一棵树里 `mean_axis_t` 确实被找到并实例化过（见 #3 的 `rhs=…,mean_axis_t`），所以拒绝只关于个数，而个数这一关在律的右手边被读之前就结束了——右手边写成什么都不会被读到。
 3. **角括号拼写能过闸，但撞上端口缺口**：把同一个算子写成 `mean<0, false>(x)`（一个常规操作数 + 两个 context 参数）之后，`TRANSPOSE function=loss_mean_angle … nodes=8 rhs=dtod_t,sum_t,mul_tensor_t,mean_axis_t` —— `mean_axis_t` **真的被实例化了**，接着停在这里：
    `transposed=(float) => (float[..],)` 对 `graph=(float[..], float) => (float[..],)`，`same=no`，随后
    `Runtime indirect call norm-arity mismatch: caller graph 'main' node 3 has 1 args, target graph 'transpose_of_loss_mean_angle' has 2 norm ports`。
-4. **那个多出来的端口不是律读出来的**（这一条纠正 `docs/handover/questions/2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md` 的"律读参数或常量不需要残差"）：律写成只读 `ct` 仍是两端口；连 `f(x) = sum(x)` 这种既无 mean 又无乘积的函数，直接转置也是 `graph=(float[..], float)` 对 `transposed=(float) => (float[..],)`。**直接转置的非线性（乃至 `sum`）函数今天一律长出一个捕获端口，而调用侧的类型不知道它** —— 这就是那两条已知红（`transpose_loop_escape.two_values_of_two_kinds`、`.second_state_of_the_same_loop`）的同一个 `same=no`。
+4. **那个多出来的端口不是律读出来的**（这一条纠正 `docs/handover/questions/2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md` 的"律读参数或常量不需要残差"）：在能过闸的角括号拼写上把律写成只读 `ct`（`return ct`），端口仍是两个；连 `f(x) = sum(x)` 这种既无 mean 又无乘积的函数，直接转置也是 `graph=(float[..], float)` 对 `transposed=(float) => (float[..],)`。**直接转置非线性（乃至 `sum`）的函数今天一律长出一个捕获端口，而调用侧的类型不知道它** —— 这就是那两条已知红（`transpose_loop_escape.two_values_of_two_kinds`、`.second_state_of_the_same_loop`）的同一个 `same=no`。
 5. **`vjp` 那条路撞同一道闸**：`vjp(loss_mean)` 走 `split`，线性半边里是 `jvp_mean_axis` 的右手边，也就是 `mean_axis(dxs, axis, keepdims)`，转置它得到
    `TRANSPOSE function=split_of_jvp_of_loss_mean_backward skip=arity uri=tensor:mean_axis operands=3`。
 6. **旁证**：`sum_axis(x, 0, false)` 在直接转置里连律都没有（`skip=rule uri=tensor:sum_axis reason=unbound`），同一族的三操作数归约没有一条能走。
