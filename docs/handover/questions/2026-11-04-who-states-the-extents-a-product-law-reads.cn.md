@@ -72,3 +72,33 @@
 本轮我已按甲把**本车道能做的**都落地了：`wantsCotangent` 对闭包端口答 `false`、`reachesAParticipant` 对每个转置都算且看两条输入表（否则元组用例静默变零）。手的闭包那条已回基线四个数并去掉 `known_fail`；另 6 条保留 `known_fail`，pin 改成 `skip=cotangent-needs-a-value uri=tensor:multiply`（不带位置——位置从 0 挪到 1 是同一成因往前走了一步，不该被当成换了个毛病）。
 
 **阈值**：甲落地时若发现除这 6 条之外还要改别处的期望，退到乙，并在那一页里写清"库这条路的参数形状必须写在类型里"。
+
+## 5. 仍未解，且多了一条"不能这么写"（2026-11-04，`lane-multensor`）
+
+**甲原样落地不了；甲的一种变形——"每一侧读另一个操作数"——实测会答错广播的形状，已回退。** 6 条留在 `known_fail`。
+
+先说两条死路，都是量出来的，不是推的：
+
+1. `sum_to` 的第二个实参要的是一个**值**，形状只是它被读的那一面。要让律"只读长度"，得有一个 `sum_to_stated(t, at: int[])` 这样的孪生算子。`git grep sum_to_stated` 在整棵树和所有分支里都是 0——它不存在，而新加它要动 `modules/tensor`（本车道按派工不碰）。
+2. `extent_of::<X>()` 这条路对开秩类型没有答案：`float[..]` 不写死形状，`extent_of` 在实例化处就被拒（`extent_of_needs_a_type_that_states_its_shape` 守着的正是这一侧）。6 条用例的参数全是 `float[..]`／`float[]`。所以"长度从类型来"对这 6 条**没有可读的长度**；把它当宽化端口（`*_from_type` 那族写法）交出来也一样，交出来的就是 `extent_of` 的答案。
+
+然后是这个变形为什么不能留着。`sum_to(t, like)` 的第二实参是**归约目标形状**，不是"一个和它一样大的东西"。改成读另一个操作数：
+
+```
+mul_tensor(x, w) => (ct: T[..]) => (sum_to(ct * w, w), sum_to(ct * x, x))
+```
+
+在两侧同形状（逐元素乘积）时对——6 条确实逐位回到原数；`x=[1,2,3]`、`w=[2]` 的广播乘积上就错：
+
+| 腿 | `d/dx` | `d/dw` |
+| --- | --- | --- |
+| 手算 / 引擎（`grad`） | `[2.0, 2.0, 2.0]`，numel 3 | `[6.0]`，numel 1 |
+| 新写法（`vjp` 走库层律） | `[6.0]`，numel 1 | `[1.0, 2.0, 3.0]`，numel 3 |
+
+`float[..]`／`float[..]` 与 `float[3]`／`float[1]` 报的是同一对错数。所以这一律**只能**读被给余切那个操作数自己的形状——引擎也是这么做的（`modules/tensor/ops/vjp.cpp#accumulateOperand` 拿操作数自己当 `sum_to` 的目标，它手上有前值，库层的转置没有）。而"两侧形状相等"在开秩类型上是看不见的（两侧类型一模一样），所以没有任何写法能既答对等形状、又对广播安全。
+
+**回退**：律回到 `sum_to(ct * w, x), sum_to(ct * x, w)`，6 条 `known_fail` 回原位，pin 仍是 `skip=cotangent-needs-a-value uri=tensor:multiply`。按严重性次序，按名拒绝比方说更差的错数。
+
+**那么这条问题真正的答案是什么**：要么在 `modules/tensor` 给 `sum_to` 加一个"目标形状当实参"的孪生（`sum_to_stated(t, at: int[])`），要么按第 4 节的乙——那 6 条的参数形状必须写进类型（`float[3]` 而不是 `float[..]`）。律层没有第三条路。
+
+读数与判据见 `docs/handover/reports/2026-11-04-the-product-law-cannot-read-the-other-operand.cn.md`。

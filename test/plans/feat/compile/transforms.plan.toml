@@ -1666,7 +1666,7 @@ expect_stderr_contains = ["rules=jvp_relu"]
 expect_output_not_contains = ["skip=rule uri=tensor:relu", "skip=call-no-transpose"]
 known_fail = ["nvm"]
 known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply"
-known_fail_note = "Waits on the rule layer, not on this transform. Measured 2026-11-04 at 34b659107 with the closure-member rules landed (modules/transforms/transpose.cpp#buildTransposeMember: a closure member takes no cotangent -- author, 2026-11-03 19:55 -- and a value computed only from closure members is not asked for one): the walk no longer asks the product law for the closed-over operand's cotangent, and stops one step further on, where the law reads the operand **whose cotangent it is answering** for sum_to's shape -- sum_to(ct * w, x) reads x, sum_to(ct * x, w) reads w. That operand is a tangent, so what the law wants is the shape of a tangent, and float[..] does not state it: shapeCarrierOf answers only for a stated shape (float[2]), which is the author's 2026-11-03 16:15 rule. So forward and the closure are not what is missing any more -- the law reads a linear operand, the 2026-11-03 17:35 item the index family got (element_at(dxs, extent_pair(i, len(xs)))) and the multiply family has not (stdlib/rulesets/transpose.cml#mul_tensor_t). The number comes back when that law hands the extents as a known argument, the way sum_stated_t and take_stated_t do; the expected numbers are unchanged."
+known_fail_note = "Waits on the rule layer, not on this transform. Measured 2026-11-04 at 34b659107 with the closure-member rules landed (modules/transforms/transpose.cpp#buildTransposeMember: a closure member takes no cotangent -- author, 2026-11-03 19:55 -- and a value computed only from closure members is not asked for one): the walk no longer asks the product law for the closed-over operand's cotangent, and stops one step further on, where the law reads the operand **whose cotangent it is answering** for sum_to's shape -- sum_to(ct * w, x) reads x, sum_to(ct * x, w) reads w. That operand is a tangent, so what the law wants is the shape of a tangent, and float[..] does not state it: shapeCarrierOf answers only for a stated shape (float[2]), which is the author's 2026-11-03 16:15 rule. So forward and the closure are not what is missing any more -- the law reads a linear operand, the 2026-11-03 17:35 item the index family got (element_at(dxs, extent_pair(i, len(xs)))) and the multiply family has not (stdlib/rulesets/transpose.cml#mul_tensor_t). The number comes back when that law hands the extents as a known argument, the way sum_stated_t and take_stated_t do; the expected numbers are unchanged. Measured 2026-11-04: the other way of satisfying 17:35 -- naming the operand the side is *not* answering for, `sum_to(ct * w, w)` -- is not it. On a broadcasting product (`x=[1,2,3]`, `w=[2]`, product shape (3,)) that spelling answers `d/dx numel=1 d/dx=[6.0]` and `d/dw numel=3 d/dw=[1.0, 2.0, 3.0]`, where the answer is `d/dx=[2.0, 2.0, 2.0]` (numel 3) and `d/dw=[6.0]` (numel 1), and it answers those wrong shapes for `float[..]` and for `float[3]`/`float[1]` alike, because `sum_to`'s second argument is the *target shape* and only the operand whose cotangent is being built carries it. A wrong number is worse than this named refusal, so `stdlib/rulesets/transpose.cml#mul_tensor_t` stays as it is."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1751,7 +1751,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 known_fail = ["nvm"]
 known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply"
-known_fail_note = "Waits on the rule layer, not on this transform. Measured 2026-11-04 at 34b659107 with the closure-member rules landed (modules/transforms/transpose.cpp#buildTransposeMember: a closure member takes no cotangent -- author, 2026-11-03 19:55 -- and a value computed only from closure members is not asked for one): the walk no longer asks the product law for the closed-over operand's cotangent, and stops one step further on, where the law reads the operand **whose cotangent it is answering** for sum_to's shape -- sum_to(ct * w, x) reads x, sum_to(ct * x, w) reads w. That operand is a tangent, so what the law wants is the shape of a tangent, and float[..] does not state it: shapeCarrierOf answers only for a stated shape (float[2]), which is the author's 2026-11-03 16:15 rule. So forward and the closure are not what is missing any more -- the law reads a linear operand, the 2026-11-03 17:35 item the index family got (element_at(dxs, extent_pair(i, len(xs)))) and the multiply family has not (stdlib/rulesets/transpose.cml#mul_tensor_t). The number comes back when that law hands the extents as a known argument, the way sum_stated_t and take_stated_t do; the expected numbers are unchanged."
+known_fail_note = "Waits on the rule layer, not on this transform. Measured 2026-11-04 at 34b659107 with the closure-member rules landed (modules/transforms/transpose.cpp#buildTransposeMember: a closure member takes no cotangent -- author, 2026-11-03 19:55 -- and a value computed only from closure members is not asked for one): the walk no longer asks the product law for the closed-over operand's cotangent, and stops one step further on, where the law reads the operand **whose cotangent it is answering** for sum_to's shape -- sum_to(ct * w, x) reads x, sum_to(ct * x, w) reads w. That operand is a tangent, so what the law wants is the shape of a tangent, and float[..] does not state it: shapeCarrierOf answers only for a stated shape (float[2]), which is the author's 2026-11-03 16:15 rule. So forward and the closure are not what is missing any more -- the law reads a linear operand, the 2026-11-03 17:35 item the index family got (element_at(dxs, extent_pair(i, len(xs)))) and the multiply family has not (stdlib/rulesets/transpose.cml#mul_tensor_t). The number comes back when that law hands the extents as a known argument, the way sum_stated_t and take_stated_t do; the expected numbers are unchanged. Measured 2026-11-04: the other way of satisfying 17:35 -- naming the operand the side is *not* answering for, `sum_to(ct * w, w)` -- is not it. On a broadcasting product (`x=[1,2,3]`, `w=[2]`, product shape (3,)) that spelling answers `d/dx numel=1 d/dx=[6.0]` and `d/dw numel=3 d/dw=[1.0, 2.0, 3.0]`, where the answer is `d/dx=[2.0, 2.0, 2.0]` (numel 3) and `d/dw=[6.0]` (numel 1), and it answers those wrong shapes for `float[..]` and for `float[3]`/`float[1]` alike, because `sum_to`'s second argument is the *target shape* and only the operand whose cotangent is being built carries it. A wrong number is worse than this named refusal, so `stdlib/rulesets/transpose.cml#mul_tensor_t` stays as it is."
 
 # `sigmoid` on the D1 difference set: its slope needs a forward value the program text never computes.
 [[tests]]
@@ -1783,7 +1783,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 known_fail = ["nvm"]
 known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply"
-known_fail_note = "Waits on the rule layer, not on this transform. Measured 2026-11-04 at 34b659107 with the closure-member rules landed (modules/transforms/transpose.cpp#buildTransposeMember: a closure member takes no cotangent -- author, 2026-11-03 19:55 -- and a value computed only from closure members is not asked for one): the walk no longer asks the product law for the closed-over operand's cotangent, and stops one step further on, where the law reads the operand **whose cotangent it is answering** for sum_to's shape -- sum_to(ct * w, x) reads x, sum_to(ct * x, w) reads w. That operand is a tangent, so what the law wants is the shape of a tangent, and float[..] does not state it: shapeCarrierOf answers only for a stated shape (float[2]), which is the author's 2026-11-03 16:15 rule. So forward and the closure are not what is missing any more -- the law reads a linear operand, the 2026-11-03 17:35 item the index family got (element_at(dxs, extent_pair(i, len(xs)))) and the multiply family has not (stdlib/rulesets/transpose.cml#mul_tensor_t). The number comes back when that law hands the extents as a known argument, the way sum_stated_t and take_stated_t do; the expected numbers are unchanged."
+known_fail_note = "Waits on the rule layer, not on this transform. Measured 2026-11-04 at 34b659107 with the closure-member rules landed (modules/transforms/transpose.cpp#buildTransposeMember: a closure member takes no cotangent -- author, 2026-11-03 19:55 -- and a value computed only from closure members is not asked for one): the walk no longer asks the product law for the closed-over operand's cotangent, and stops one step further on, where the law reads the operand **whose cotangent it is answering** for sum_to's shape -- sum_to(ct * w, x) reads x, sum_to(ct * x, w) reads w. That operand is a tangent, so what the law wants is the shape of a tangent, and float[..] does not state it: shapeCarrierOf answers only for a stated shape (float[2]), which is the author's 2026-11-03 16:15 rule. So forward and the closure are not what is missing any more -- the law reads a linear operand, the 2026-11-03 17:35 item the index family got (element_at(dxs, extent_pair(i, len(xs)))) and the multiply family has not (stdlib/rulesets/transpose.cml#mul_tensor_t). The number comes back when that law hands the extents as a known argument, the way sum_stated_t and take_stated_t do; the expected numbers are unchanged. Measured 2026-11-04: the other way of satisfying 17:35 -- naming the operand the side is *not* answering for, `sum_to(ct * w, w)` -- is not it. On a broadcasting product (`x=[1,2,3]`, `w=[2]`, product shape (3,)) that spelling answers `d/dx numel=1 d/dx=[6.0]` and `d/dw numel=3 d/dw=[1.0, 2.0, 3.0]`, where the answer is `d/dx=[2.0, 2.0, 2.0]` (numel 3) and `d/dw=[6.0]` (numel 1), and it answers those wrong shapes for `float[..]` and for `float[3]`/`float[1]` alike, because `sum_to`'s second argument is the *target shape* and only the operand whose cotangent is being built carries it. A wrong number is worse than this named refusal, so `stdlib/rulesets/transpose.cml#mul_tensor_t` stays as it is."
 # `tanh` on the D1 difference set: the slope is one minus the output squared, and the tangent recomputes
 # an x-only value (the shape `exp` proved the cut carries).
 [[tests]]
@@ -1815,7 +1815,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 known_fail = ["nvm"]
 known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply"
-known_fail_note = "Waits on the rule layer, not on this transform. Measured 2026-11-04 at 34b659107 with the closure-member rules landed (modules/transforms/transpose.cpp#buildTransposeMember: a closure member takes no cotangent -- author, 2026-11-03 19:55 -- and a value computed only from closure members is not asked for one): the walk no longer asks the product law for the closed-over operand's cotangent, and stops one step further on, where the law reads the operand **whose cotangent it is answering** for sum_to's shape -- sum_to(ct * w, x) reads x, sum_to(ct * x, w) reads w. That operand is a tangent, so what the law wants is the shape of a tangent, and float[..] does not state it: shapeCarrierOf answers only for a stated shape (float[2]), which is the author's 2026-11-03 16:15 rule. So forward and the closure are not what is missing any more -- the law reads a linear operand, the 2026-11-03 17:35 item the index family got (element_at(dxs, extent_pair(i, len(xs)))) and the multiply family has not (stdlib/rulesets/transpose.cml#mul_tensor_t). The number comes back when that law hands the extents as a known argument, the way sum_stated_t and take_stated_t do; the expected numbers are unchanged."
+known_fail_note = "Waits on the rule layer, not on this transform. Measured 2026-11-04 at 34b659107 with the closure-member rules landed (modules/transforms/transpose.cpp#buildTransposeMember: a closure member takes no cotangent -- author, 2026-11-03 19:55 -- and a value computed only from closure members is not asked for one): the walk no longer asks the product law for the closed-over operand's cotangent, and stops one step further on, where the law reads the operand **whose cotangent it is answering** for sum_to's shape -- sum_to(ct * w, x) reads x, sum_to(ct * x, w) reads w. That operand is a tangent, so what the law wants is the shape of a tangent, and float[..] does not state it: shapeCarrierOf answers only for a stated shape (float[2]), which is the author's 2026-11-03 16:15 rule. So forward and the closure are not what is missing any more -- the law reads a linear operand, the 2026-11-03 17:35 item the index family got (element_at(dxs, extent_pair(i, len(xs)))) and the multiply family has not (stdlib/rulesets/transpose.cml#mul_tensor_t). The number comes back when that law hands the extents as a known argument, the way sum_stated_t and take_stated_t do; the expected numbers are unchanged. Measured 2026-11-04: the other way of satisfying 17:35 -- naming the operand the side is *not* answering for, `sum_to(ct * w, w)` -- is not it. On a broadcasting product (`x=[1,2,3]`, `w=[2]`, product shape (3,)) that spelling answers `d/dx numel=1 d/dx=[6.0]` and `d/dw numel=3 d/dw=[1.0, 2.0, 3.0]`, where the answer is `d/dx=[2.0, 2.0, 2.0]` (numel 3) and `d/dw=[6.0]` (numel 1), and it answers those wrong shapes for `float[..]` and for `float[3]`/`float[1]` alike, because `sum_to`'s second argument is the *target shape* and only the operand whose cotangent is being built carries it. A wrong number is worse than this named refusal, so `stdlib/rulesets/transpose.cml#mul_tensor_t` stays as it is."
 # `log_softmax` on the D1 difference set: the jacobian is `I - 1 pᵀ`, and the two readings differ by a
 # broadcast, so the whole array is the criterion.
 [[tests]]
@@ -2178,5 +2178,100 @@ backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
 expect_stdout_contains = ["weighted engine=3.0 value=9.0 grad=3.0", "both value=18.0 pullback=(6.0, 3.0)", "twoparam value=6.0 pullback=(2.0, 3.0)"]
 expect_output_not_contains = ["Warning", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+timeout_ms = 20000
+# `exp` with its shape in the type: the fixed-shape half of the open-rank gap the four library cases
+# below still record. The walk answers a tangent's shape through `shapeCarrierOf`, which answers a
+# stated type and nothing else (author, 2026-11-03 16:15), so `float[2]` answers where `float[]` refuses.
+[[tests]]
+name = "exp_gradient_of_a_stated_shape"
+desc = "`sum(exp(x))` with `x: float[2]` instead of `float[]`, through **both** legs in one program: the engine's own pullback (`grad`) and the library's rules (`vjp` -> `split(jvp)` -> `transpose`). Hand: `exp([1.0, 2.0]) = [2.718281828459045, 7.38905609893065]`, `value = 10.107337927389695`, and `sum`'s adjoint is one per lane. Both lines are pinned, so a change to either leg shows up as a difference between two lines of one program. This is the fixed-shape half of the pair: the open-rank `exp_gradient_through_the_library` still refuses, because `mul_tensor_t` reads the tangent's own shape for `sum_to` and `float[..]` states no extents -- keeping both is what keeps the refusal visible while the answering path is covered."
+kind = "behavior"
+case = "../../../cases/compile/transforms/exp_gradient_of_a_stated_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["exp stated engine d=[2.718281828459045, 7.38905609893065]", "exp stated library value=10.107337927389695 d=[2.718281828459045, 7.38905609893065]"]
+expect_output_not_contains = ["skip=cotangent-needs-a-value", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The clock for the one spelling of the product law that answers a wrong shape: a broadcasting
+# product's adjoint reduces to each operand's own shape, so reading the *other* operand for `sum_to`
+# is right only while the two shapes are equal.
+[[tests]]
+name = "broadcast_product_gradient_of_a_stated_shape"
+desc = "`sum(x * w)` with `x: float[3]`, `w: float[1]` -- a broadcasting product, both shapes in the types -- through both legs. Hand: product `[2.0, 4.0, 6.0]`, `value = 12.0`; the cotangent arriving is `[1.0, 1.0, 1.0]`, so `d/dx = broadcast(w) = [2.0, 2.0, 2.0]` (numel 3, `x`'s shape) and `d/dw = sum(ct * x) = [6.0]` (numel 1, `w`'s shape). The numbers are the two legs' common answer, element for element. **This case is a clock**: writing `mul_tensor_t` to read the operand each side is not answering for (`sum_to(ct * w, w)`) removes a refusal and answers `d/dx numel=1 d/dx=[6.0]`, `d/dw numel=3 d/dw=[1.0, 2.0, 3.0]` here -- measured 2026-11-04 -- and nothing under `test/plans/` covered a broadcasting product before this case."
+kind = "behavior"
+case = "../../../cases/compile/transforms/broadcast_product_gradient_of_a_stated_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["engine d/dx numel=3 d/dx=[2.0, 2.0, 2.0]", "engine d/dw numel=1 d/dw=[6.0]", "library value=12.0 d/dx numel=3 d/dx=[2.0, 2.0, 2.0] d/dw numel=1 d/dw=[6.0]"]
+expect_output_not_contains = ["skip=cotangent-needs-a-value", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The same program with open types: the refusal, and the case that catches bending the law instead.
+[[tests]]
+name = "broadcast_product_gradient_of_an_open_rank"
+desc = "The same broadcasting product with `float[..]` for both operands. The desired reading is the stated twin's answer exactly -- `value=12.0`, `d/dx numel=3 d/dx=[2.0, 2.0, 2.0]`, `d/dw numel=1 d/dw=[6.0]` -- and it is not reachable today: `mul_tensor_t`'s `sum_to` reads the operand whose cotangent is being built for its shape, that operand is a tangent, and `float[..]` states no extents (`shapeCarrierOf` answers a stated type only, author 2026-11-03 16:15), so the walk stops at `skip=cotangent-needs-a-value uri=tensor:multiply position=0`. The mark pins that refusal and the desired numbers at once. **Why it must stay marked rather than removed**: the tempting fix -- make each side read the operand it is not answering for -- clears the refusal and answers `d/dx numel=1 d/dx=[6.0]`, `d/dw numel=3 d/dw=[1.0, 2.0, 3.0]`, because `sum_to`'s second argument is the *target shape* and 'the two shapes are equal' is invisible on an open rank. A named refusal is better than a wrong number, and this case turns green only when the library can answer a broadcast adjoint."
+kind = "behavior"
+case = "../../../cases/compile/transforms/broadcast_product_gradient_of_an_open_rank.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["open value=12.0 d/dx numel=3 d/dx=[2.0, 2.0, 2.0] d/dw numel=1 d/dw=[6.0]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+known_fail = ["nvm"]
+known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply"
+known_fail_note = "The open-rank half of the product law's gap, kept as the clock for the one wrong spelling. Desired: value=12.0, d/dx numel=3 d/dx=[2.0, 2.0, 2.0], d/dw numel=1 d/dw=[6.0] (hand: product [2,4,6], ct [1,1,1], d/dx = broadcast(w), d/dw = sum(ct*x)). Today: the walk asks stdlib/rulesets/transpose.cml#mul_tensor_t for the tangent's cotangent, the law's sum_to reads that operand for its shape, that operand is a tangent, and float[..] states no extents -- shapeCarrierOf answers a stated type only (author 2026-11-03 16:15) -- so it stops at skip=cotangent-needs-a-value uri=tensor:multiply position=0. Two dead ends for closing it, both measured: extent_of answers nothing for float[..] (extent_of_needs_a_type_that_states_its_shape guards that side), and sum_to's second argument wants a value, so read-only-the-length needs a sum_to_stated(t, at: int[]) twin that git grep finds in no branch and that would live in modules/tensor. And the shortcut must not be taken: naming the operand each side is NOT answering for (sum_to(ct * w, w)) clears the refusal and answers d/dx numel=1 d/dx=[6.0] and d/dw numel=3 d/dw=[1.0, 2.0, 3.0], measured 2026-11-04, because sum_to's second argument is the target shape and the two shapes being equal is invisible on an open rank. A named refusal is better than a wrong number."
+# The other three D1 activations with their shapes in the type: the same pair of legs in one program,
+# on inputs chosen so a wrong law separates without a tolerance.
+[[tests]]
+name = "relu_gradient_of_a_stated_shape"
+desc = "`sum(relu(x))` with `x: float[4] = [-1.5, 0.0, 2.5, 0.25]`, through both legs in one program -- the engine's (`grad`, whose mask is `y > 0`) and the library's (`vjp` -> `split(jvp)` -> `transpose`, whose mask is `x > 0`). Hand: `mask = [0.0, 0.0, 1.0, 1.0]` and `value = 0 + 0 + 2.5 + 0.25 = 2.75`. The input holds a negative, the boundary itself and two positives, so an answer that took either side at zero (`[0.0, 1.0, 1.0, 1.0]`) or that answered `ct` everywhere (`[1.0, 1.0, 1.0, 1.0]`) is separated element by element. The fixed-shape half of the pair: `relu_gradient_through_the_library` (`float[]`) still refuses, because the product law reads the tangent's own shape and `float[..]` states no extents."
+kind = "behavior"
+case = "../../../cases/compile/transforms/relu_gradient_of_a_stated_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["relu stated engine d=[0.0, 0.0, 1.0, 1.0]", "relu stated library value=2.75 d=[0.0, 0.0, 1.0, 1.0]"]
+expect_output_not_contains = ["skip=cotangent-needs-a-value", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "sigmoid_gradient_of_a_stated_shape"
+desc = "`sum(sigmoid(x))` with `x: float[2] = [0.0, 2.0]`, through both legs in one program. Hand: `s(0) = 0.5`, `s(2) = 1/(1+e^-2) = 0.8807970779778823`, `value = 1.3807970779778822`, and the slope is `s(x)(1-s(x))`, so `d = [0.25, 0.10499358540350662]`. The points are chosen to separate the wrong laws: near zero every candidate looks alike, here the two components are unequal and both well away from zero, so `ct` (`[1.0, 1.0]`) and `ct * s(x)` with the `1 - s(x)` factor dropped (`[0.5, 0.8807970779778823]`) are both separated without a tolerance. The fixed-shape half of the pair: `sigmoid_gradient_through_the_library` (`float[]`) still refuses."
+kind = "behavior"
+case = "../../../cases/compile/transforms/sigmoid_gradient_of_a_stated_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["sigmoid stated engine d=[0.25, 0.10499358540350662]", "sigmoid stated library value=1.3807970779778822 d=[0.25, 0.10499358540350662]"]
+expect_output_not_contains = ["skip=cotangent-needs-a-value", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "tanh_gradient_of_a_stated_shape"
+desc = "`sum(tanh(x))` with `x: float[2] = [1.5, -2.0]`, through both legs in one program. Hand: `tanh(1.5) = 0.9051482536448664`, `tanh(-2.0) = -0.9640275800758169`, `value = -0.05887932643095051`, and the slope is `1 - tanh^2(x)`, so `d = [0.18070663892364858, 0.07065082485316443]`. Both components differ and both sit away from zero, so `ct` (`[1.0, 1.0]`) and `1 - tanh(x)` are separated without a tolerance. The fixed-shape half of the pair: `tanh_gradient_through_the_library` (`float[]`) still refuses, because the product law reads the tangent's own shape for `sum_to` and `float[..]` states no extents (`shapeCarrierOf` answers a stated type only, author 2026-11-03 16:15)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/tanh_gradient_of_a_stated_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["tanh stated engine d=[0.18070663892364858, 0.07065082485316443]", "tanh stated library value=-0.05887932643095051 d=[0.18070663892364858, 0.07065082485316443]"]
+expect_output_not_contains = ["skip=cotangent-needs-a-value", "defect of the compiler"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
