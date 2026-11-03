@@ -5340,6 +5340,24 @@ pass may drop, move or merge away, whatever the purity of its operator.
 - Example (a fragment, not compiled): `may_fault(n)`
 - Why it is not compiled: n is a node of the surrounding pass
 
+#### `may_be_rearranged`
+
+```camel
+may_be_rearranged: (n: Node) => bool
+```
+
+Whether a pass may arrange the node anywhere: drop it, move it, merge it with an identical
+call, or leave it with no order edge after an inline. The node must be pure *and* unable to
+fault (design principles 3.4); a pure operator that must run where the program writes it, one
+that may fault, one nobody declared, a call, a loop or a gate are not free. This is the one
+predicate behind that question on both sides of the boundary: `graph::may_be_rearranged`
+(camel/runtime/graph.h) is its implementation, the C++ passes read it under its older name
+`nodeIsFreelySchedulable`, and a pass written in Camel reads this name. Ask it rather than
+writing `is_pure(n) && may_be_recomputed(n) && !may_fault(n)`: the two writings drift apart.
+
+- Example (a fragment, not compiled): `may_be_rearranged(n)`
+- Why it is not compiled: n is a node of the surrounding pass
+
 #### `is_anchor`
 
 ```camel
