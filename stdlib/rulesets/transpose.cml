@@ -87,14 +87,30 @@ export rule dtod_t::<T>(x: T) when is_same::<T, float>() {
 // the way `rulesets.jvp` declares its own: a module cannot read another module's private function.
 //
 // It is the adjoint of `jvp_mul_tensor`: a product is linear in each operand while the other is a
-// known value, so an operand's cotangent is `ct * other`, and the second half of the law is "then
-// summed back to the shape the operand states". That second half is not a detail. The operator is
-// called with an array and a *number* as well as with two arrays, and the number's cotangent is a
-// reduction: the number fed every lane the broadcast spread it over, so its cotangent is the sum
-// of what it fed. One law covers both shapes because it names the shape instead of assuming it --
-// `sum_to(ct * other, operand)` is the identity when the shapes are equal, and `T[..]` includes
-// rank 0, a rank-zero array being that element and nothing else (design principles 5.4), so the
-// number's shape is a shape like any other and its reduction is the total sum.
+// known value, so an operand's cotangent is `ct * other`, summed back to the shape that operand
+// states. The sum is the engine's own reduction for the same operand
+// (`modules/tensor/ops/vjp.cpp#accumulateOperand`: a tensor operand gets `tensor:sum_to`, a float
+// one gets `tensor:sum`), read here as one expression rather than as a branch on the type.
+//
+// **Which value may be read is the whole of this law.** `sum_to`'s second argument is read for its
+// shape and for nothing else, and a transposition is handed the cotangent and no forward value of
+// the operand it is answering for (design principles 4.3) -- that operand is a tangent, and a
+// tangent has no value in the transposed graph. So each side names the operand it is **not**
+// answering for: `sum_to(ct * w, w)` reads `w` and nothing else, `sum_to(ct * x, x)` reads `x` and
+// nothing else. The value is then a value the caller does carry, which is the author's 2026-11-03
+// 17:35 rule, and the index family's shape (`jvp_idx_arr`'s `element_at(dxs, extent_pair(i,
+// len(xs)))`: the length the law needs is computed by the half that has the value).
+//
+// This is what `sum_to(ct * w, x)` was not. Reading `x` for the shape of `x`'s own answer looks
+// harmless and is not: `x` is the operand whose cotangent is being built, so the law asked the walk
+// for the shape of a tangent. `shapeCarrierOf` answers a stated type (`float[2]`) and refuses
+// `float[..]`, which is how `relu`, `exp`, `sigmoid` and `tanh` through the library and both array
+// products stopped at `skip=cotangent-needs-a-value uri=tensor:multiply`.
+//
+// `tensor:multiply` is element-wise -- its engine twin accumulates `multiply(dy, rhs)` into `lhs`
+// (`modules/tensor/ops/elementwise_ops.cpp#multiplyVjp`) with no reduction of its own -- so the
+// product's shape and the other operand's shape are one shape, and either operand states it. The
+// rank-0 operand `accumulateOperand` also covers is `:op/mul_d`'s shape, and `mul_t` is its law.
 //
 // This is one rule and cannot be two: the index tells two rules of one key apart by their `when`
 // condition, so a second rule `(T[..], T)` -- no position of which overlaps the shapes above --
@@ -103,12 +119,9 @@ export rule dtod_t::<T>(x: T) when is_same::<T, float>() {
 //     The rule 'mul_tensor_t' and the rule 'mul_tensor_scalar_t' both have 'mul_tensor' with 2
 //     operand(s) as the head of their left side, and one ruleset has one rule per operator.
 //
-// The shapes differ in the operand list, not in the condition, so no wording of the condition
-// lets them share this key; past that the walk asks for one rule per key by name
-// (`camel/core/forward.cpp#transposeRuleOf`). Writing the reduction into the law is what makes the
-// one rule correct for both shapes, and the sum is the engine's own reduction for the same operand
-// (`modules/tensor/ops/vjp.cpp#accumulateOperand`: a tensor operand gets `tensor:sum_to`, a float
-// one gets `tensor:sum`) -- read here as one expression rather than as a branch on the type.
+// The shapes differ in the operand list, not in the condition, so no wording of the condition lets
+// them share this key; past that the walk asks for one rule per key by name
+// (`camel/core/forward.cpp#transposeRuleOf`).
 
 /// `x + w` on two arrays: what `tensor:add` means, and the left side this rule is filed under.
 func add::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
@@ -133,11 +146,12 @@ func mul_tensor::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
     return x * w
 }
 
-/// The transpose of `x * w`: `ct * w` reduced to `x`'s shape for `x`, `ct * x` reduced to `w`'s
-/// shape for `w`. The reduction is the one `sum_to` names, so the law is written once for both
-/// shapes the operator is called with -- two arrays, and an array and a number.
+/// The transpose of `x * w`: `ct * w` summed back to `x`'s shape for `x`, `ct * x` summed back to
+/// `w`'s shape for `w`. Each side is written over the operand it is not answering for --
+/// `sum_to(ct * w, w)` reads `w` for its value and its shape, `sum_to(ct * x, x)` reads `x` -- so no
+/// side reads the tangent it is answering for, which has no value to read.
 export rule mul_tensor_t::<T, X, W>(x: X, w: W) {
-    mul_tensor(x, w) => (ct: T[..]) => (sum_to(ct * w, x), sum_to(ct * x, w))
+    mul_tensor(x, w) => (ct: T[..]) => (sum_to(ct * w, w), sum_to(ct * x, x))
 }
 
 /// `relu(x) = maximum(x, 0)` per element: the cotangent is `ct` where the input was positive and
