@@ -2438,6 +2438,44 @@ with the tensor's shape, or the axis is outside the rank
 - Failure: fault `RuntimeError` when the list is shorter than three entries, the extents disagree.
 - Example: `mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0, 1, 2, 2])` gives `[[2.0, 3.0]]`
 
+#### `sum_axis_stated`
+
+```camel
+sum_axis_stated: (t: T[..], at: int[]) => T[..] when is_numeric::<T>()
+```
+
+The sum of each lane along one axis, with the axis, `keepdims` and the operand's extents stated in
+one list: `[axis, keepdims, d0, ..., d(rank-1)]` is `sum_axis(t, axis, keepdims)`.
+
+The value needs the axis and the flag -- `k::reduceAxis` is the kernel the axis form runs, so the
+accumulation in `f64`, the element type and the one rounding are the definition's own -- and the
+extents after the two scalars are checked against the tensor's shape. `rulesets.transpose`'s
+`sum_axis_stated_t` reads the list and nothing of the operand: the adjoint of a lane sum spreads
+each lane's cotangent back over the lane, which is a shape of the primal. A negative axis counts
+from the last one, as it does in the axis form: the reduction normalizes it on entry and this
+spelling hands it over unchanged.
+
+- Pure.
+- Failure: fault `RuntimeError` when the list is shorter than three entries, the extents disagree with the tensor's shape, or the axis is outside the rank.
+- Example: `sum_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0, 0, 2, 2])` gives `[4.0, 6.0]`
+
+#### `mean_stated`
+
+```camel
+mean_stated: (t: T[..], at: int[]) => T when is_numeric::<T>()
+```
+
+The mean of every element, with the operand's extents stated: `mean(t)`, and `at` is `shape(t)`.
+
+The value is the mean -- the sum and the division both in `f64`, rounded into the element type
+once, which is `mean`'s own definition -- and the extents are what its adjoint needs: the reverse
+law (`rulesets.transpose`'s `mean_stated_t`) divides the cotangent by the number of elements and
+spreads it over those extents, and neither number is in the cotangent's type.
+
+- Pure.
+- Failure: fault `RuntimeError` when `at` disagrees with the tensor's shape, or the tensor has no element.
+- Example: `mean_stated([1.0, 2.0, 3.0, 4.0] as float[], [4])` gives `2.5`
+
 ### Module state
 
 #### `num_threads`

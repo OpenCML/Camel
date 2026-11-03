@@ -164,8 +164,7 @@ export func mean_axis_stated::<T>(t: T[..], at: int[]): T[..] when is_numeric::<
 /// from the last one, as it does in the axis form: the reduction normalizes it on entry and this
 /// spelling hands it over unchanged.
 /// @pure
-/// @fails fault `RuntimeError` when the list is shorter than three entries, the extents disagree
-/// with the tensor's shape, or the axis is outside the rank
+/// @fails fault `RuntimeError` when the list is shorter than three entries, the extents disagree with the tensor's shape, or the axis is outside the rank
 /// @example sum_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0, 0, 2, 2])    // [4.0, 6.0]
 export func sum_axis_stated::<T>(t: T[..], at: int[]): T[..] when is_numeric::<T>()
 
@@ -176,8 +175,7 @@ export func sum_axis_stated::<T>(t: T[..], at: int[]): T[..] when is_numeric::<T
 /// law (`rulesets.transpose`'s `mean_stated_t`) divides the cotangent by the number of elements and
 /// spreads it over those extents, and neither number is in the cotangent's type.
 /// @pure
-/// @fails fault `RuntimeError` when `at` disagrees with the tensor's shape, or the tensor has no
-/// element
+/// @fails fault `RuntimeError` when `at` disagrees with the tensor's shape, or the tensor has no element
 /// @example mean_stated([1.0, 2.0, 3.0, 4.0] as float[], [4])    // 2.5
 export func mean_stated::<T>(t: T[..], at: int[]): T when is_numeric::<T>()
 
