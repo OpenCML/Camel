@@ -7,6 +7,7 @@
 #include "rule_expand.h"
 #include "split.h"
 
+#include "camel/core/derivative.h"
 #include "camel/core/forward.h"
 #include "camel/core/loop_kind.h"
 #include "camel/core/mm.h"
@@ -1056,8 +1057,14 @@ bool buildTransposeMember(
             return space.hasSpace() && space.space != nullptr ? space.space : fallback;
         };
         // The zero of the space a value's cotangent lives in: a number's is `0.0`, and an array's is
-        // the array of zeros built from the value's own shape (`:tangent/zeros_arr`, the operator
-        // the pullback already builds for the same purpose).
+        // the array of zeros the space itself names. **The operator is the space's answer, not a
+        // name written here** (`TangentSpace::zerosLikeUri`, camel/core/derivative.h): the array
+        // code is shared by two kinds whose zeros are different operators -- a numeric array's is
+        // `tensor:zeros_like`, an array of values the core holds one slot each is
+        // `:tangent/zeros_arr` -- and one name for both is how a `float[..]` value was handed to
+        // `:tangent/zeros_arr`, whose kernel answers only the second kind and threw
+        // "autodiff: a zero tangent array needs an array with a tangent" for the first
+        // (`vjp` of a constant function of an array).
         const auto zeroOf = [&](gc_node_ref_t valueRef) -> gc_node_ref_t {
             const camel::runtime::GCNode *node = function->node(valueRef);
             const Type *type                   = node != nullptr ? node->dataType() : nullptr;
@@ -1066,12 +1073,67 @@ bool buildTransposeMember(
                                 : camel::core::tangentSpaceOf(type);
             if (space.hasSpace() && space.space != nullptr &&
                 space.space->code() == camel::core::type::TypeCode::Array) {
-                const gc_node_ref_t zeros =
-                    draft.addOperNode(space.space, nullptr, ":tangent/zeros_arr");
-                draft.setNormInputs(zeros, std::span<const gc_node_ref_t>(&valueRef, 1));
-                return zeros;
+                const camel::core::TangentSpace *const registered =
+                    camel::core::DerivativeRegistry::instance().findTangentSpace(type);
+                if (registered != nullptr && !registered->zerosLikeUri.empty()) {
+                    const gc_node_ref_t zeros =
+                        draft.addOperNode(space.space, nullptr, registered->zerosLikeUri);
+                    draft.setNormInputs(zeros, std::span<const gc_node_ref_t>(&valueRef, 1));
+                    return zeros;
+                }
             }
             return zero();
+        };
+        // The zero of a value's cotangent that this member holds **no value for**: the shape has to
+        // come out of the type, because the transposed function is handed the cotangent and nothing
+        // else (author's ruling of 2026-11-02 11:30) and the operator that builds a numeric zero
+        // (`tensor:zeros_like`, the space's `zerosLikeUri`) reads its operand's shape.
+        //
+        // A type whose extents are all stated has a zero that can be written down while the graph is
+        // built -- an array of that shape with every element zero -- which is the same rule, in the
+        // same words, as `jvp`'s `zeroConstantFor` (modules/transforms/jvp.cpp). A type that leaves a
+        // dimension open states no size for it, so the zero the type states has 0 elements there:
+        // every element of it is zero because it has none, and a later reader that needs the
+        // parameter's own shape meets an empty array and says so instead of meeting a number of the
+        // wrong extent. `T[..]` states no dimension at all and is written as one dimension of length
+        // 0: `Array::create`'s empty extent list answers a rank-zero array, and a rank-zero array is
+        // the element itself, not an array of zeros.
+        //
+        // Invalid means "this type's zero cannot be written here" (an array whose element is not a
+        // numeric scalar, whose elements' zeros are the space's business and not one value's); the
+        // caller refuses by name rather than answer a value the slot does not promise.
+        const auto zeroOfType = [&](const Type *primal, Type *tangentType) -> gc_node_ref_t {
+            if (primal == nullptr || primal->code() != camel::core::type::TypeCode::Array ||
+                tangentType == nullptr || tangentType != primal) {
+                return rt::kInvalidNodeRef;
+            }
+            const auto *const arrayType = tt::as_ptr<ArrayType>(const_cast<Type *>(primal));
+            if (arrayType->elemType() == nullptr ||
+                !camel::core::type::isFloatingScalar(arrayType->elemType()->code())) {
+                return rt::kInvalidNodeRef;
+            }
+            const std::span<const camel::core::type::ExtentForm> stated = arrayType->extents();
+            std::vector<int64_t> extents;
+            bool exact = !stated.empty();
+            for (size_t i = 0; exact && i < stated.size(); ++i) {
+                if (const std::optional<int64_t> size = stated[i].evaluate({})) {
+                    extents.push_back(*size);
+                } else {
+                    exact = false;
+                }
+            }
+            if (!exact) {
+                extents.assign(stated.empty() ? 1 : stated.size(), int64_t{0});
+            }
+            ::Array *const zeros = ::Array::create(
+                mm::autoSpace(), arrayType, std::span<const int64_t>(extents),
+                /*zeroInit=*/true);
+            if (zeros == nullptr) {
+                return rt::kInvalidNodeRef;
+            }
+            return draft.materializeStaticValue(
+                camel::core::rtdata::toSlot<::Array *>(zeros), const_cast<Type *>(primal),
+                rt::kGCNodeFlagConstant);
         };
         // A tuple of these values, as a node of the new graph, and the type that names it: the Fill
         // the builder writes for a state tuple (`builder_control.cpp`, `gir.loop.split`), so a loop
@@ -3741,24 +3803,27 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                     continue;
                 }
                 if (space.space->code() == camel::core::type::TypeCode::Array) {
-                    // An array parameter the backward half never read. Its cotangent is the
-                    // zero of its own space, and the zero of an array's tangent space is the
-                    // array of zeros built from the value's shape -- `:tangent/zeros_arr`,
-                    // the operator the pullback already builds for the same purpose
-                    // (`idxArrayVjp`, builtin/operators/derivative.cpp). The parameter's port
-                    // carries the value the shape comes from, so the zero is built where the
-                    // value already stands. A zero cotangent is the identity of the sum the
-                    // pullback takes, so answering it is the same as answering nothing, in the
-                    // type the slot promises; refusing the call instead stops a function that
-                    // is written correctly -- providing the parameter is read by the forward
-                    // half, which is why a parameter with no tangent space was already let
-                    // through above.
-                    const gc_node_ref_t zeros =
-                        draft.addOperNode(space.space, nullptr, ":tangent/zeros_arr");
-                    draft.setNormInputs(zeros, std::span<const gc_node_ref_t>(&ports[port], 1));
-                    parts.push_back(zeros);
-                    partTypes.push_back(space.space);
-                    continue;
+                    // An array parameter the backward half never read. Its cotangent is the zero of
+                    // its own space, and a zero cotangent is the identity of the sum the pullback
+                    // takes, so answering it is the same as answering nothing, in the type the slot
+                    // promises; refusing the call instead stops a function that is written
+                    // correctly -- providing the parameter is read by the forward half, which is why
+                    // a parameter with no tangent space was already let through above.
+                    //
+                    // **The zero is not built from this port.** A parameter a cotangent is answered
+                    // for is not a port of the new graph (`portOfParam` above: it is what the answer
+                    // is *about*, and the caller has no value to pass for it), so `ports[port]` --
+                    // the **source** graph's port -- names no node of this one: it is an index into
+                    // another numbering, and it landed on the cotangent port, whose type is the
+                    // result's. That is the second half of the same fault: the zero reached
+                    // `:tangent/zeros_arr` holding a `float`. The shape comes from the type through
+                    // `zeroOfType`, which answers the zero the type states or says it cannot.
+                    const gc_node_ref_t zeros = zeroOfType(portType, space.space);
+                    if (zeros != rt::kInvalidNodeRef) {
+                        parts.push_back(zeros);
+                        partTypes.push_back(space.space);
+                        continue;
+                    }
                 }
                 // A value with a cotangent space and no cotangent: the graph never read it. A zero of
                 // its own space would have to be built from the value's shape, which this walk does

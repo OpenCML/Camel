@@ -480,6 +480,74 @@ expect_output_contains = ["h value= 8.0", "h vjp value= 8.0", "h pullback(1.0)= 
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
+# The zero a parameter that is never read answers, when the parameter is an **array**: the two
+# readings above are about a number, whose zero is the constant `0.0`, and an array's is an array of
+# zeros whose shape is the parameter's. That shape is what the two halves of the answer wear, and
+# both of them were wrong in the same place (`buildTransposeMember`'s answer section,
+# modules/transforms/transpose.cpp):
+#
+#   * the member built the zero with the operator name `:tangent/zeros_arr` written in the source.
+#     The array code is shared by two kinds whose zeros are different operators -- a numeric array's
+#     is `tensor:zeros_like` (`modules/tensor/ops/gradient_ops.cpp#registerTensorTangentSpace`) and an
+#     array of values the core holds one slot each is `:tangent/zeros_arr`
+#     (`src/builtin/operators/derivative.cpp#registerBuiltinDerivatives`) -- so a `float[..]` value
+#     reached a kernel that answers only the second kind and threw
+#     "autodiff: a zero tangent array needs an array with a tangent".
+#   * and it handed that operator `ports[port]`, a node of the **source** graph. A parameter a
+#     cotangent is answered for is not a port of the member at all (the caller has no value to pass
+#     for it), so the ref was an index into another numbering: it landed on the cotangent port, whose
+#     type is the result's -- the `float` in the message.
+#
+# The zero is now the space's own operator when the member holds a value, and the zero the *type*
+# states when it does not (the same rule as `jvp`'s `zeroConstantFor`), so `float[3]` answers
+# `[0.0, 0.0, 0.0]`. A type that states no extent (`float[..]`) is the reading the case records as
+# `[]` and names its successor in its own comment.
+#
+# Both array halves were exit 1 before the fix; the scalar half was already `(0.0)`.
+[[tests]]
+name = "vjp_const_function_answers_zero.nvm"
+desc = "The derivative of a constant function of an array: `vjp(const_fixed)([2.0, 3.0, 4.0])`'s pullback answers `([0.0, 0.0, 0.0])` at a cotangent of 1 and of 2, and the open-rank parameter, whose type states no extent, answers `([])` -- the zero the type states. A constant function of a number is the control and answers `(0.0)`. On paper `f(x) = 1.0` for every x, so f' = 0. Before the fix the two array halves threw `autodiff: a zero tangent array needs an array with a tangent` (exit 1)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_const_function_answers_zero.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_output_contains = ["fixed value= 1.0", "fixed pullback(1.0)= ([0.0, 0.0, 0.0])", "fixed pullback(2.0)= ([0.0, 0.0, 0.0])", "open value= 1.0", "open pullback(1.0)= ([])", "scalar value= 1.0", "scalar pullback(1.0)= (0.0)", "scalar pullback(2.0)= (0.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vjp_const_function_answers_zero.fvm"
+desc = "The same case on the bytecode VM: the zero array is a value the transposed graph carries -- a static constant for the stated shape -- so the schedule that runs it answers the same three arrays."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_const_function_answers_zero.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_output_contains = ["fixed pullback(1.0)= ([0.0, 0.0, 0.0])", "fixed pullback(2.0)= ([0.0, 0.0, 0.0])", "open pullback(1.0)= ([])", "scalar pullback(1.0)= (0.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vjp_const_function_answers_zero.jit"
+desc = "The same case with the JIT: the transposed graph is built once and called twice per function, and the second call answers the same zero rather than the first call's cotangent."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_const_function_answers_zero.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+expect_output_contains = ["fixed pullback(1.0)= ([0.0, 0.0, 0.0])", "fixed pullback(2.0)= ([0.0, 0.0, 0.0])", "open pullback(1.0)= ([])", "scalar pullback(1.0)= (0.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vjp_const_function_answers_zero.prl"
+desc = "The same case on the parallel scheduler: the answer is a constant of the transposed graph and no task computes it, so the schedule that spreads the graph over its lanes answers the same arrays."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_const_function_answers_zero.cml"
+args = ["${case}", "std::prl"]
+expect_exit = 0
+expect_output_contains = ["fixed pullback(1.0)= ([0.0, 0.0, 0.0])", "fixed pullback(2.0)= ([0.0, 0.0, 0.0])", "open pullback(1.0)= ([])", "scalar pullback(1.0)= (0.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
 # A refusal is one cause, and the cause is a value: the header declares it
 # (`enum class TransposeRefusalCause`), `transposeRefusalWord` spells it into the reading log,
 # `refusalSentence` renders the sentence a reader is handed from it, and a refusal site records it
