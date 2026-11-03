@@ -1357,8 +1357,21 @@ struct LoopCut {
     gc_node_ref_t stateTangent = rt::kInvalidNodeRef;
     /// What the backward half reads from the round: this is the tape, in node order.
     std::vector<gc_node_ref_t> tape;
-    /// What the backward half reads from outside the loop: the invariants that cross the cut.
+    /// What the backward half reads from outside the loop: the invariants that cross the cut, then the
+    /// values it reads *above* the loop -- the ones computed from the loop's own result, marked
+    /// `afterLoop` (author, 2026-11-03 11:10: 凡是由前一半循环的输出算出来的残差，在循环建好之后再取).
+    /// One list because both cross the cut the same way, one closure member each; the flag says where
+    /// the forward half takes the value, before the loop or after it.
     std::vector<Residual> outside;
+    /// The nodes that read one component of the loop's pair through `GCAccsKind::TupleIndex` and stand
+    /// outside the body: a half seeds each of them with its own value for that component (the forward
+    /// half's `(state, tape)` component 0, the backward half's tangent state), so the chain above the
+    /// loop is copied without the walk ever entering the loop cell. `valueProjections` is every node
+    /// that reads component 0, including the ones only the tangent chain reads (they feed a residual
+    /// taken after the loop); `tangentProjections` is the component-1 ones, and only those -- a
+    /// component-0 projection seeded in the backward half would carry the wrong value.
+    std::vector<gc_node_ref_t> valueProjections;
+    std::vector<gc_node_ref_t> tangentProjections;
     Type *stateValueType   = nullptr;
     Type *stateTangentType = nullptr;
     Type *elementType      = nullptr;
@@ -1370,13 +1383,6 @@ struct LoopCut {
     /// is the cell itself, which is the shape `jvp` gives a loop a function returns whole.
     gc_node_ref_t exitValueRoot   = rt::kInvalidNodeRef;
     gc_node_ref_t exitTangentRoot = rt::kInvalidNodeRef;
-    /// The nodes that read one component of the loop's pair through `GCAccsKind::TupleIndex` and stand
-    /// outside the body: a half seeds each of them with its own value for that component (the forward
-    /// half's `(state, tape)` component 0, the backward half's tangent state), so the chain above the
-    /// loop is copied without the walk ever entering the loop cell. Component 0's list is the value
-    /// side's, component 1's is the tangent side's.
-    std::vector<gc_node_ref_t> valueProjections;
-    std::vector<gc_node_ref_t> tangentProjections;
 };
 
 /// The nodes of `region` that `root` reads, `root` among them, and the nodes outside the region it
@@ -1651,6 +1657,61 @@ bool readLoopCut(
         }
         cut.outside.push_back(one);
     }
+    // **A residual computed from the loop's own result is taken after the loop** (author, 2026-11-03
+    // 11:10: 凡是由前一半循环的输出算出来的残差，在循环建好之后再取). `jvp_idx_arr` states the length
+    // of the array it reads (`element_at(dxs, extent_pair(i, len(xs)))`) instead of letting the
+    // transposed rule read a linear operand, so the tangent side of an escape reads `len(xs)` where
+    // `xs` is the loop's *value*: a node above the cell, which exists only once the forward half's
+    // loop has run. Nothing before the loop can compute it, so it is not an invariant.
+    //
+    // What is taken is the smallest set the forward half can finish: every node above the cell that
+    // reads one of the cell's value projections, and nothing below it (a node reading such a node is
+    // copied on top of the residual by the half that needs it). The descent stops there, so the walk
+    // never enters the cell.
+    if (cut.exitTangentRoot != rt::kInvalidNodeRef) {
+        std::vector<gc_node_ref_t> above;
+        std::vector<gc_node_ref_t> stack{cut.exitTangentRoot};
+        std::unordered_set<gc_node_ref_t> visited;
+        while (!stack.empty()) {
+            const gc_node_ref_t ref = stack.back();
+            stack.pop_back();
+            if (ref >= function->nodeCount() || ref == cut.loop || !visited.insert(ref).second) {
+                continue;
+            }
+            const rt::GCNode *node = function->node(ref);
+            if (node == nullptr || node->kind == rt::GCNodeKind::Data) {
+                continue;
+            }
+            const std::vector<gc_node_ref_t> inputs = dataInputsOf(function, ref);
+            const bool readsTheCellsValue =
+                std::any_of(inputs.begin(), inputs.end(), [&cut](gc_node_ref_t input) {
+                    return std::find(
+                               cut.valueProjections.begin(), cut.valueProjections.end(), input) !=
+                           cut.valueProjections.end();
+                });
+            if (readsTheCellsValue) {
+                above.push_back(ref);
+                continue;
+            }
+            for (gc_node_ref_t input : inputs) {
+                stack.push_back(input);
+            }
+        }
+        std::sort(above.begin(), above.end());
+        for (gc_node_ref_t ref : above) {
+            const rt::GCNode *node = function->node(ref);
+            if (node == nullptr || node->dataType() == nullptr) {
+                return refuse(
+                    "a value the backward half computes from the loop's result has no type");
+            }
+            Residual one;
+            one.node      = ref;
+            one.parameter = Residual::kNotAParameter;
+            one.type      = node->dataType();
+            one.afterLoop = true;
+            cut.outside.push_back(one);
+        }
+    }
     return true;
 }
 
@@ -1685,9 +1746,9 @@ SplitGraph cutLoopGraph(
     }
     Type *tapeElementType = TupleType::create(tapeMemberTypes);
     Type *tapeType        = ArrayType::create(tapeElementType);
-    // What crosses the cut: the invariants the backward half reads from outside the loop, then the
-    // tape. The tape has no source node -- it is a value the cut makes -- so it is not in
-    // `residualIndexOf`, and the only thing that reads it is the backward half's loop.
+    // What crosses the cut: the invariants the backward half reads from outside the loop, the values it
+    // reads from the loop's own result (taken after the loop, `afterLoop`), then the tape. That order
+    // is the closure's: invariants, after-loop values, tape.
     std::vector<Residual> cuts = cut.outside;
     {
         Residual tape;
@@ -1771,6 +1832,11 @@ SplitGraph cutLoopGraph(
         // The invariants are computed before the loop, in region 0: they are one value each, not one
         // per round.
         for (const Residual &one : cut.outside) {
+            if (one.afterLoop) {
+                // Computed from the loop this half is about to build, so there is nothing to copy yet:
+                // it is taken below, once the loop and its projections are in place.
+                continue;
+            }
             if (!forward.copyHalf(one.node, built)) {
                 os << "REINTERP split function=" << function->name()
                    << " skip=forward construct=" << built.refusedConstruct
@@ -1865,11 +1931,32 @@ SplitGraph cutLoopGraph(
         // are seeded for the *whole* cell's pair, so the walk never reaches the loop node and no body
         // region is copied -- what crosses from the cell into the chain is the one value the half has
         // for that component, and nothing else.
+        //
+        // The seeding is done here, before anything above the loop is copied and whatever the exit is: a
+        // residual taken *after* the loop reads one of these projections, so its copy needs them in
+        // place even when the program's own exit is the cell itself.
+        for (gc_node_ref_t projection : cut.valueProjections) {
+            forward.seed(projection, value);
+        }
+        // The residuals computed from the loop's result: copied once, here -- after the loop, after its
+        // projections, and outside the body region, so one value for the whole loop and never one per
+        // round. A residual whose read sat inside the body region could not be taken here at all, and
+        // none can be: `readLoopCut` finds these on the exit chain above the cell, while a read inside
+        // the region reads the round's element or the state, which the tape carries.
+        for (const Residual &one : cut.outside) {
+            if (!one.afterLoop) {
+                continue;
+            }
+            if (!forward.copyHalf(one.node, built)) {
+                os << "REINTERP split function=" << function->name()
+                   << " skip=forward construct=" << built.refusedConstruct
+                   << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
+                   << " why=" << built.refusedWhy << '\n';
+                return built;
+            }
+        }
         gc_node_ref_t answered = value;
         if (cut.exitValueRoot != rt::kInvalidNodeRef) {
-            for (gc_node_ref_t projection : cut.valueProjections) {
-                forward.seed(projection, value);
-            }
             if (!forward.copyHalf(cut.exitValueRoot, built)) {
                 os << "REINTERP split function=" << function->name()
                    << " skip=forward construct=" << built.refusedConstruct
@@ -1913,6 +2000,14 @@ SplitGraph cutLoopGraph(
             backward.portOf[i] = port;
         }
         for (const Residual &one : cut.outside) {
+            // An `afterLoop` residual is one of these as well, and it is read the same way --
+            // `crossesCut` answers it with its closure port. But it is not walked from here: what it is
+            // computed from is the loop cell, which this half cannot copy, and it sits above the exit
+            // chain that reads it, so the walk that needs it takes the port. Nothing is recomputed on
+            // this side of the cut, and no node is made for a value this half only reads.
+            if (one.afterLoop) {
+                continue;
+            }
             if (!backward.copyHalf(one.node, built)) {
                 os << "REINTERP split function=" << function->name()
                    << " skip=backward construct=" << built.refusedConstruct
@@ -2012,13 +2107,23 @@ SplitGraph cutLoopGraph(
     const rt::GCGraph *forwardMade  = group.encoded(forwardId);
     const rt::GCGraph *backwardMade = group.encoded(backwardId);
     built.residuals                 = cuts.size();
+    // `invariants` counts what the forward half takes *before* the loop -- the reading this cell has
+    // always printed -- and `after` what it takes from the loop's result, printed only when there is
+    // such a value, so that a cut that has none reads exactly as it did.
+    size_t takenAfterTheLoop = 0;
+    for (const Residual &one : cut.outside) {
+        takenAfterTheLoop += one.afterLoop ? 1 : 0;
+    }
     os << "REINTERP split function=" << function->name() << " forward=" << rt::toValue(forwardId)
        << " backward=" << rt::toValue(backwardId)
        << " type=" << (forwardMade != nullptr && forwardMade->funcType() != nullptr
                            ? forwardMade->funcType()->toString()
                            : std::string("-"))
        << " residuals=" << built.residuals << " loop=1 tape=" << cut.tape.size()
-       << " invariants=" << cut.outside.size();
+       << " invariants=" << (cut.outside.size() - takenAfterTheLoop);
+    if (takenAfterTheLoop != 0) {
+        os << " after=" << takenAfterTheLoop;
+    }
     if (function->recomputesOnBackward()) {
         os << " recompute=1";
     }
@@ -2231,16 +2336,26 @@ SplitGraph cutBranchGraph(
 /// is a cell too, so that its refusal stays named instead of becoming a fall-through.
 enum class ExitShape { Straight, Branch, Loop, NotAPair };
 
-/// One half of a lifted exit, read back to the LOOP cell it comes from: the loop, which of its two
-/// components this half reads (0 the value, 1 the tangent), and the nodes that read that component
-/// (the projections a half seeds with its own value for the component, so the chain above the loop is
-/// copied without the walk entering the cell). `ok` is false when the half reads no loop, or reads
-/// two, or reaches one other than through a `TupleIndex` of it.
+/// One half of a lifted exit, read back to the LOOP cell it comes from: the loop, and the nodes that
+/// read each of its two components (0 the value, 1 the tangent), which are the projections a half
+/// seeds with its own value for the component, so the chain above the loop is copied without the walk
+/// entering the cell. `ok` is false when the half reads no loop, or reads two, or reaches one other
+/// than through a `TupleIndex` of it.
+///
+/// The two components are kept apart rather than folded into one "which component" answer: a chain
+/// may read *both*, and that is not the same fact as reading one. `jvp_idx_arr` states the length of
+/// the array it reads (`element_at(dxs, extent_pair(i, len(xs)))`) so that the transposed rule never
+/// reads a linear operand, and the tangent side of an escape therefore reads `len(xs)` off the loop's
+/// **value** while the tangent itself comes from the loop's **tangent** (measured 2026-11-04 on
+/// `vjp_loop.rounds_are_undone_in_reverse`: the tangent root is `element_at(35, extent_pair(0,
+/// len(34)))`, 34 reading component 0 and 35 component 1). One answer for "which component" cannot
+/// hold that, and refusing it made the exit unreadable.
 struct LoopReach {
-    bool ok           = false;
+    bool ok            = false;
     gc_node_ref_t loop = rt::kInvalidNodeRef;
-    uint32_t component = 0;
-    std::vector<gc_node_ref_t> projections;
+    /// The `TupleIndex` nodes that read component 0 (the value) and component 1 (the tangent).
+    std::vector<gc_node_ref_t> valueProjections;
+    std::vector<gc_node_ref_t> tangentProjections;
 };
 
 /// The loop a half of the exit comes from. The walk follows the ordinary data edges and stops at a
@@ -2287,12 +2402,14 @@ LoopReach loopBehindExit(const rt::GCGraph *function, gc_node_ref_t root) {
                 body->accsKind != rt::GCAccsKind::TupleIndex || body->value > 1) {
                 return LoopReach{};
             }
-            const uint32_t component = static_cast<uint32_t>(body->value);
-            if (!reach.projections.empty() && reach.component != component) {
-                return LoopReach{}; // one half reads both components: not a projection of one
+            // Which component, kept as which component. A chain that reads both is not refused here:
+            // the half that reads the *other* component is reading a value computed from the loop's
+            // result, which crosses the cut as a residual taken after the loop (`afterLoop`).
+            std::vector<gc_node_ref_t> &into =
+                body->value == 0 ? reach.valueProjections : reach.tangentProjections;
+            if (std::find(into.begin(), into.end(), ref) == into.end()) {
+                into.push_back(ref);
             }
-            reach.component = component;
-            reach.projections.push_back(ref);
         }
         for (gc_node_ref_t input : inputs) {
             if (input < function->nodeCount() && visited[input] == 0) {
@@ -2300,7 +2417,8 @@ LoopReach loopBehindExit(const rt::GCGraph *function, gc_node_ref_t root) {
             }
         }
     }
-    reach.ok = reach.loop != rt::kInvalidNodeRef && !reach.projections.empty();
+    reach.ok = reach.loop != rt::kInvalidNodeRef &&
+               (!reach.valueProjections.empty() || !reach.tangentProjections.empty());
     return reach;
 }
 
@@ -2323,13 +2441,36 @@ ExitShape exitShapeOf(const rt::GCGraph *function, gc_node_ref_t exit, LoopCut &
             const std::span<const gc_node_ref_t> halves = function->withInputsOf(exit);
             const LoopReach value   = loopBehindExit(function, halves[0]);
             const LoopReach tangent = loopBehindExit(function, halves[1]);
-            if (value.ok && tangent.ok && value.loop == tangent.loop && value.component == 0 &&
-                tangent.component == 1) {
-                cut.loop             = value.loop;
-                cut.exitValueRoot    = halves[0];
-                cut.exitTangentRoot  = halves[1];
-                cut.valueProjections = value.projections;
-                cut.tangentProjections = tangent.projections;
+            // What each chain must answer: the value chain the cell's value and nothing of its tangent,
+            // the tangent chain the cell's tangent. A value-side read *on the tangent chain* is allowed
+            // and is not the tangent half answering the value: it is a value computed from the loop's
+            // result (the length `jvp_idx_arr` states), which crosses the cut as a residual taken after
+            // the loop (author, 2026-11-03 11:10: 凡是由前一半循环的输出算出来的残差，在循环建好之后再取).
+            // The converse is not: a value that read the tangent would need a tangent the forward half
+            // does not have.
+            const bool valueIsTheValue = value.ok && value.loop == tangent.loop &&
+                                         value.tangentProjections.empty() &&
+                                         !value.valueProjections.empty();
+            const bool tangentIsTheTangent =
+                tangent.ok && tangent.loop == value.loop && !tangent.tangentProjections.empty();
+            if (valueIsTheValue && tangentIsTheTangent) {
+                cut.loop            = value.loop;
+                cut.exitValueRoot   = halves[0];
+                cut.exitTangentRoot = halves[1];
+                // Every component-0 projection either chain reads: the forward half seeds them all with
+                // the cell's value, because a residual taken after the loop may read one of them.
+                cut.valueProjections = value.valueProjections;
+                for (gc_node_ref_t projection : tangent.valueProjections) {
+                    if (std::find(
+                            cut.valueProjections.begin(), cut.valueProjections.end(), projection) ==
+                        cut.valueProjections.end()) {
+                        cut.valueProjections.push_back(projection);
+                    }
+                }
+                std::sort(cut.valueProjections.begin(), cut.valueProjections.end());
+                // Only the component-1 projections: the backward half seeds these with its own tangent
+                // state, and a component-0 one seeded there would carry the wrong value.
+                cut.tangentProjections = tangent.tangentProjections;
                 return ExitShape::Loop;
             }
             return ExitShape::Straight;

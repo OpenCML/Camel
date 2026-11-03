@@ -106,6 +106,13 @@ struct Residual {
     /// The parameter it is the value of, when it is a parameter; `kNotAParameter` when it is a value
     /// the forward half computes.
     size_t parameter = 0;
+    /// True when the value is computed **from the loop the cut is about to build**, so it does not
+    /// exist until that loop has run (author, 2026-11-03 11:10: 凡是由前一半循环的输出算出来的残差，
+    /// 在循环建好之后再取). The forward half takes such a residual *after* the loop it made and after
+    /// seeding the cell's projections; an unflagged residual is computed before the loop. Only the
+    /// loop's cut uses the flag, and it says where the copy goes -- not what the closure holds: a
+    /// member is one value either way, and the closure's order is invariants, then these, then the tape.
+    bool afterLoop = false;
     static constexpr size_t kNotAParameter = static_cast<size_t>(-1);
 };
 
