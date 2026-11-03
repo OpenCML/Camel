@@ -548,6 +548,30 @@ expect_output_contains = ["fixed pullback(1.0)= ([0.0, 0.0, 0.0])", "fixed pullb
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
+# What the `[]` above **does** when it meets a real array -- the reading that decides whether the
+# answer with no stated extent is a loud refusal or a quiet wrong number. Measured 2026-11-04 on the
+# same tree: it is 1 dimension of length 0 (`shape(dx)= [0]`, not a rank-zero array, which would act as
+# the scalar `0.0`), and both `dx * x` and `dx + x` are refused by name at the line that asked --
+# `Array shape mismatch in 'multiply': cannot broadcast [0] with [3].` The one place that answers a
+# number is `sum(dx)= 0.0`, the sum of zero elements, and it is printed before the refusal on purpose:
+# it is addition's identity and not a claim about the three elements of `x`.
+#
+# Pinned as a reading, not as an exit code: the exit is 1 because the program asks for something the
+# shapes do not allow, which is the point. The day the answer gets a width (a value port or a split
+# residual -- `docs/handover/questions/2026-11-04-what-shape-a-zero-with-no-stated-extent-has.cn.md`,
+# road 丙) this entry is red on `dx= []` and says so, and the control next door
+# (`vjp_const_function_answers_zero`, `float[3]`) is what the new reading has to match.
+[[tests]]
+name = "vjp_const_function_open_rank_zero_is_refused_by_a_real_array.nvm"
+desc = "The zero of a `float[..]` parameter is an array of no elements: `shape(dx)= [0]`, `sum(dx)= 0.0` (the sum of zero elements), and `sum(dx * x)` -- the same zero meeting `[1.0, 2.0, 3.0]` -- is refused with `Array shape mismatch in 'multiply': cannot broadcast [0] with [3].` at the line that asked. So an answer whose width the type did not state makes the consumer say so; it does not quietly become 0 or broadcast."
+kind = "negative"
+case = "../../../cases/compile/transforms/vjp_const_function_open_rank_zero_is_refused_by_a_real_array.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_stdout_contains = ["dx= []", "shape(dx)= [0]", "sum(dx)= 0.0", "Array shape mismatch in 'multiply': cannot broadcast [0] with [3]."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
 # A refusal is one cause, and the cause is a value: the header declares it
 # (`enum class TransposeRefusalCause`), `transposeRefusalWord` spells it into the reading log,
 # `refusalSentence` renders the sentence a reader is handed from it, and a refusal site records it
