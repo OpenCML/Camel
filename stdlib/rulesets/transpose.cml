@@ -85,6 +85,24 @@ export rule neg_t::<T>(x: T) when is_float::<T>() {
 // Dispatching over a key's candidates by operand type is what `jvp.cpp#buildRuleTangent` already
 // does; `transpose.cpp` would have to do the same, and that is core work, not a law still missing.
 
+/// `x + w` on two arrays: what `tensor:add` means, and the left side this rule is filed under.
+func add::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
+    return x + w
+}
+
+/// The transpose of `x + w` on two arrays: each operand's cotangent is `ct`. A sum is its own
+/// adjoint, which is what the engine's own `addVjp` says too (`modules/tensor/ops/elementwise_ops.cpp`:
+/// both operands accumulate `dy`).
+///
+/// It is here because the array product's law is unreachable without it: the product rule's right
+/// side is `dx * w + x * dw`, so the linear graph a product's pullback walks holds an array add, and
+/// the walk refused there -- `TRANSPOSE ... skip=rule uri=tensor:add reason=unbound` -- before this
+/// rule existed. Filed under the call `add(x, w)` for the same reason `mul_tensor` is: the key is
+/// the operator's own name, and `+` at two operands is `:op/add_d`'s.
+export rule add_tensor_t::<T>(x: T[..], w: T[..]) when is_float::<T>() {
+    add(x, w) => (ct: T[..]) => (ct, ct)
+}
+
 /// `x * w` on two arrays: what `tensor:multiply` means, and the left side this rule is filed under.
 func mul_tensor::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
     return x * w
