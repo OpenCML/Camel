@@ -429,6 +429,29 @@ bool buildTransposeMember(
         if (carriesClosure && function->closureType() != nullptr) {
             draft.setClosureType(const_cast<camel::core::type::TupleType *>(function->closureType()));
         }
+        // A value the transposed body needs and this graph has no port for: the graph it was handed
+        // already carries one. `index_into(xs, i)`'s transpose writes its cotangent into
+        // `zeros_like(xs)` (`stdlib/rulesets/transpose.cml#idx_arr_t`), and a `T[]`'s length is not
+        // a thing its type carries, so the answer is sized by an array of that shape. The operand
+        // that read it is a linear input of a linear function, so it stands for no value here -- but
+        // the closure does hold an array of the operand's own type, and that is the value taken.
+        //
+        // What is read is **the value the graph carries of the type the ask is for**, and nothing
+        // about where a member came from: a member the cut wrote and a member a caller closed over
+        // by hand are the same thing to this table. The table answers only when the closure holds
+        // exactly one member of that type -- a second one would make the choice a guess, and a guess
+        // is not an answer, so the ask is refused by name exactly as it was before.
+        std::unordered_map<std::string, gc_node_ref_t> carriedPortOf;
+        std::unordered_map<std::string, size_t> carriedCount;
+        for (size_t i = 0; i < closureOf.size() && i < closurePorts.size(); ++i) {
+            const camel::runtime::GCNode *member = function->node(closureOf[i]);
+            const Type *memberType = member != nullptr ? member->dataType() : nullptr;
+            if (memberType == nullptr) {
+                continue;
+            }
+            ++carriedCount[memberType->toString()];
+            carriedPortOf[memberType->toString()] = closurePorts[i];
+        }
         // A closure member is forwarded to the member the transposed graph carries, and nothing
         // about where it came from is asked (author, 2026-11-03 08:50). A member the cut wrote and
         // a member a caller closed by hand are the same shape -- a port the function is handed --
@@ -765,6 +788,16 @@ bool buildTransposeMember(
                         // caller's to capture, not this graph's to invent.
                         forwardOf[ref] =
                             at < portOfParam.size() ? portOfParam[at] : rt::kInvalidNodeRef;
+                        if (forwardOf[ref] == rt::kInvalidNodeRef && at < paramCount) {
+                            // The operand's own value, taken from the closure: see `carriedPortOf`.
+                            if (const auto carried =
+                                    carriedPortOf.find(function->funcType()->normTypeAt(at)->toString());
+                                carried != carriedPortOf.end() &&
+                                carriedCount[carried->first] == 1) {
+                                forwardOf[ref] = carried->second;
+                                return forwardOf[ref];
+                            }
+                        }
                         if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount &&
                             std::find(wantedValues.begin(), wantedValues.end(), at) ==
                                 wantedValues.end()) {
