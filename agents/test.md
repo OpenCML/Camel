@@ -252,6 +252,49 @@ The same applies to a plan that must stay out of an ordinary change: `SLOW_PLANS
 rules are two halves of one fact — a plan is either reachable on purpose or named in the slow list on
 purpose, never neither.
 
+## Guess the name and the count is wrong, not small
+
+Three counts on 2026-11-02 were wrong because the name was invented rather than read out of the
+header, and each one was wrong in a way that looked like a finding:
+
+- `setTagUses`, `setFieldTagUses`, `setOperRef`, `setNativeValueType` all counted **0 call sites**,
+  which read as "four of the fifteen per-node side tables of the construction tree are never
+  filled, so a serializer can drop them". The tables are all live: the setters are named
+  `addTagUses`, `addFieldTagUses`, `markNativeValue`, and the operator reference is written
+  `operRefs_[node]` directly. Every one of the fifteen has 1 to 8 write sites.
+- A `shape` count of tree lines was 9,381 lines too high -- exactly `3 x 3,127`, the three record
+  header lines of every dump -- because the header loop advanced an index and the body loop then
+  walked the list from the start. A throwaway script written first had it right; the tool did not.
+- A pass named `upper` was searched for and found nowhere, because no pass is called that.
+
+**Before counting a setter, an accessor or a pass, read the family out of the header**: setters here
+are `set*`, `add*`, `mark*` or a direct map write, and a pass name is in `stdlib/std.cml`. A zero
+from a guessed name says the name is wrong, not that the code is missing -- and the difference
+matters, because the first version of the four-table reading above was about to be reported as a
+finding about the model.
+
+## A wall clock on this host is not a cost, and a phase is not a sum with its children
+
+Two readings taken on 2026-11-02, from one command, wrong in the two ways that make a performance
+number unusable:
+
+- **`--time-phases` scopes nest.** `compile` is the scope around `mainModule->compile(Done)`
+  (`tools/camel-cli/main.cpp`), so `parse prelude`, `gct prelude` and `declare prelude` are reported
+  at depth 1, inside it. A report that added 11.22 ms of prelude phases to a `compile` that had
+  grown by 10.96 ms counted the same work twice and read 22.2 ms where the truth was 11.2. **A
+  child's time is inside its parent's: read `depth` before adding anything up, and sum one depth.**
+- **A wall clock on this host measures the other lanes.** The same command read `imports_nothing`
+  6.00 ms of wall time on one run and 30.12 ms on the next, while the top-level CPU phases of the
+  two runs read 5.60 and 17.09 ms: eight lanes run suites on 32 threads, so a wall clock is the
+  queue and the CPU time is the work. `total_ns` in the phase report is wall; `cpu_ns` per phase is
+  the half that does not move with load. **Compare CPU, quote CPU, and when a wall number has to
+  appear, say what other load the two runs met.**
+
+The pair matters because it fails in opposite directions: the nesting makes a cost look twice as
+large as it is, and the shared host makes it look arbitrary. A performance reading in this tree is
+`cpu_ns` summed over one depth, from two binaries whose `camel --version` lines are quoted beside
+it.
+
 ## A timeout budget is a change like any other
 
 A `timeout_ms` in a plan file is not housekeeping: it decides whether a slow machine reports a red or

@@ -5,11 +5,12 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：25 页
+## 现在在等作者：26 页
 
 | 页 | 问什么 |
 | --- | --- |
 | [`2026-11-02-is-a-chain-start-the-same-question-as-an-order-carrier`](2026-11-02-is-a-chain-start-the-same-question-as-an-order-carrier.cn.md) | `nodeTakesAnOrder` 与 `isChainStatement`：一个问题还是两个？ |
+| [`2026-11-02-the-gc-soak-step-is-not-the-eq-rewrite`](2026-11-02-the-gc-soak-step-is-not-the-eq-rewrite.cn.md) | `gc_soak` 的那一跳不是 `!=` 改 `!(==)` 造成的 —— 作者 12:10 的机制假设被读数证伪，预算怎么办 |
 | [`2026-11-02-what-carries-the-residuals`](2026-11-02-what-carries-the-residuals.cn.md) | 残差用什么承载？ |
 | [`2026-11-02-who-carries-the-chain-place-after-a-branch`](2026-11-02-who-carries-the-chain-place-after-a-branch.cn.md) | 分支之后，链位由谁承接？ |
 | [`2026-11-03-a-structural-nodes-chain-position-belongs-to-its-join`](2026-11-03-a-structural-nodes-chain-position-belongs-to-its-join.cn.md) | 结构节点的链位在它的 JOIN 之后，不在它自己身上 |
