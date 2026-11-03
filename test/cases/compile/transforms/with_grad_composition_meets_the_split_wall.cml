@@ -14,7 +14,7 @@
 // Both readings are kept here on purpose, because the difference between them is what this case
 // records: a reader who finds only the second cannot tell that the first ever stood, and the next
 // person to widen the cut needs to know which refusal was answered and which was not. The wall as
-// it stood until the lift stopped hydrating (exit 1, `stdlib/vjp.cml:87`):
+// it stood until the lift stopped hydrating (exit 1, `stdlib/vjp.cml#vjp`):
 //
 //     transforms: split does not build this function (a lifted function answers with the pair
 //     (result, tangent); here the pair is a call's result -- the differentiated lambda ends in a
