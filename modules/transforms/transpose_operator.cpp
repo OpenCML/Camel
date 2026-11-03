@@ -197,6 +197,14 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
         // A part the walk recorded as nothing is said to be missing rather than dropped: a gap
         // reads as "there is no such thing", which is the reading this sentence exists to prevent.
         {
+            // Each of the three slots below can say "the walk recorded nothing here", and none of
+            // those three sentences is reachable today: every graph the walk can enter has a name --
+            // a written-out lambda gets a synthesised one (`__g_48__` in the probe that measured
+            // it, 2026-11-03) -- and the one site that records a `Rule` refusal always knows the
+            // node and its operator. They are written out rather than left as a gap because a gap
+            // reads as "there is no such thing"; and if one of them ever fires, the reading is that
+            // naming or the site's record is where the defect is, not the program -- so the shape
+            // that reaches one is a compiler defect to fix, never a sentence to widen.
             std::string about = "a step";
             about += refusal.graph.empty() ? " of a graph the walk did not name"
                                            : " of `" + refusal.graph + "`";
