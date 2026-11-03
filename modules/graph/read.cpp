@@ -832,13 +832,23 @@ slot_t regionOfKernel(ArgsView &, ArgsView &norm, Context &) {
     return toSlot(region);
 }
 
-/// The body of a graph whose region table is empty; region 0 is always the body.
-const GCRegion &bodyRegion() {
-    static const GCRegion body;
-    return body;
-}
+/// The body of a graph whose region table is empty: the same record the encoder writes for the
+/// body of every other graph, made here because that graph has no table to point into.
+///
+/// What it holds is not a guess. A body region never carries a result -- `setRegionResult` takes
+/// only ids above 0, because it is an arm, a part of a loop or an inlined body that yields a value
+/// -- and it has no owner, no ports and no parameters. A graph whose table is empty is also one
+/// whose body carried no tag: a tag on the body writes the record, and a draft is made with its
+/// body, so an empty table means the body says nothing. The body of such a graph is therefore
+/// exactly a default `GCRegion`.
+///
+/// It is returned by value rather than as a shared static: the answer belongs to the graph that
+/// was asked about, and a caller that compares two answers must not get one object.
+GCRegion bodyRegion() { return GCRegion{}; }
 
-const GCRegion &regionOf(const Handle *handle, const char *site) {
+/// The region `handle` names. By value: the body of a graph with no region table is not in that
+/// table, so there is nothing to return a reference to.
+GCRegion regionOf(const Handle *handle, const char *site) {
     const GCGraph &graph = graphOf(handle, site);
     if (handle->index() == 0) {
         return graph.region(0) != nullptr ? *graph.region(0) : bodyRegion();

@@ -1,11 +1,14 @@
 /**
- * A `match` arm that binds a name and then `yield`s it. The binding lives in the arm's own graph,
- * so it cannot outlive the `yield`: the shape is refused today, and the refusal is pinned here so
- * that whoever builds the shape has to delete this case on purpose.
+ * A `match` arm that binds a name and then `yield`s it. A binding is a local like any other, and a
+ * local that lives across a `yield` is part of the state of the generator (design principles 5.4),
+ * so the arm builds: the name is a cell of the body, written where the case's value is in hand and
+ * read again by the pull that resumes after the `yield`.
  *
- * The sentence "This is a defect of the compiler, not an error of the program. Please report it
- * with the program that shows it." must not come back: a refusal is a known limitation, and the
- * program is not at fault.
+ * The second `yield` is what makes that visible: it stands after the first `yield`, so it runs on
+ * the next pull, and the `v` it reads is the one the earlier pull wrote -- not a fresh one.
+ *
+ * `g(Option::Some(7))` hands out `7` and then `17`; the loop counts two elements and `main`
+ * returns 0.
  */
 
 type Option = enum {
@@ -17,6 +20,7 @@ func g(o: Option): int.. sync {
     match o {
         case Option::Some(v) => {
             yield v
+            yield v + 10
         }
         case Option::None => {
             yield 0

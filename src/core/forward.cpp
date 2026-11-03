@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "camel/core/forward.h"
+#include "camel/core/operator_table.h"
+#include "camel/core/type/base.h"
 
 #include <array>
 
@@ -65,28 +67,15 @@ std::string operationOf(const std::string &name) {
     return underscore == std::string::npos ? name : name.substr(0, underscore);
 }
 
-/// The spelling a conversion's destination is written with, from the letters its name ends in: `d`
-/// is `float`, `f` is `f32`, `f6` is `f16`, `bf` is `bf16`, `c` and `z` are the two complex types.
-/// These are the spellings the *declarations* use (`float(x: i32)`, `f32(x: float)`), so the key
-/// this answers is the one a law's left side is filed under.
-std::optional<std::string> spellingOfDestination(const std::string &letters) {
-    struct Spelling {
-        const char *letters;
-        const char *head;
-    };
-    static const Spelling kSpellings[] = {
-        {"bf", "bf16"}, {"f6", "f16"}, {"d", "float"}, {"f", "f32"}, {"c", "c64"}, {"z", "c128"},
-    };
-    for (const Spelling &spelling : kSpellings) {
-        if (letters == spelling.letters) {
-            return std::string(spelling.head);
-        }
-    }
-    return std::nullopt;
-}
-
-/// The key of a conversion named `<source>to<destination>`: the destination's spelling at one
-/// operand, and nothing else.
+/// The key of a conversion: the destination's spelling at one operand, and nothing else.
+///
+/// Which operators are conversions, and which types each one converts between, is written where
+/// the operator is registered (`builtin/executors/builtin.cpp#kConversions`, handed to
+/// `OperatorTable::declareConversion`): the registration that gives the operator its
+/// implementation also gives its two types, because they are what the operator *is*. This used to
+/// be read off the letters of the name instead (`d` is float, `f` is f32, ...), which called
+/// every name containing `to` a conversion, and `:op/var/get` -- an operator whose result is a
+/// float and which converts nothing -- then got a conversion's key.
 ///
 /// The *source* is deliberately not in the key. One spelling names several operators -- `float` at
 /// one operand is `float(x: float)`, `float(x: int)`, `float(x: string)` and the rest -- so a key
@@ -94,16 +83,12 @@ std::optional<std::string> spellingOfDestination(const std::string &letters) {
 /// does: it instantiates a rule at the operand's own type and refuses by name when no instance is
 /// made. The family files one rule per operand type under the spelling and `lookupRules` answers
 /// them all; which of them answers is not the index's question.
-std::optional<RuleKey> conversionKeyOf(const std::string &name) {
-    const size_t to = name.find("to");
-    if (to == std::string::npos || to == 0 || to + 2 >= name.size()) {
+std::optional<RuleKey> conversionKeyOf(const std::string &uri) {
+    const auto conversion = camel::core::OperatorTable::instance().conversionTypesOf(uri);
+    if (!conversion.has_value()) {
         return std::nullopt;
     }
-    const auto head = spellingOfDestination(name.substr(to + 2));
-    if (!head.has_value()) {
-        return std::nullopt;
-    }
-    return RuleKey{*head, 1};
+    return RuleKey{camel::core::type::typeCodeToString(conversion->target), 1};
 }
 
 std::optional<camel::parse::ast::RuleMatch>
@@ -145,10 +130,11 @@ std::optional<RuleKey> ruleKeyOf(const std::string &family, const std::string &u
                 return RuleKey{written.head, written.arity};
             }
         }
-        // A conversion: `itod` is `float(x: i32)` and `dtod` is `float(x: float)` -- one spelling at
-        // one operand, seven sources. The key is the destination's spelling; the source is the
-        // engine's business, not the index's.
-        if (const auto conversion = conversionKeyOf(uri.substr(kLanguageOperator.size()))) {
+        // A conversion: `itod` is `float(x: i32)` and `dtod` is `float(x: float)` -- one spelling
+        // at one operand, seven sources. The key is the destination's spelling; the source is the
+        // engine's business, not the index's. The registration says which operators are conversions
+        // and between which types; the URI is passed whole because that is how it is registered.
+        if (const auto conversion = conversionKeyOf(uri)) {
             return conversion;
         }
         // Another `:op/` name -- a call of a function (`:op/fail`), a variable read
