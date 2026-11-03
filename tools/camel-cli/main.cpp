@@ -196,7 +196,7 @@ int runCommand(int argc, char *argv[]) {
     // a diagnostic prints before the position is the entry module's, `counts` for `counts.cml`.
     // A `module X` declaration in the file still overrides it in the parser (setModuleName).
     const std::string entryModuleName = camel::utils::moduleNameOfFile(targetFile);
-    diagnostics_ptr_t diagnostics = make_shared<Diagnostics>(entryModuleName, targetFile);
+    diagnostics_ptr_t diagnostics     = make_shared<Diagnostics>(entryModuleName, targetFile);
     diagnostics->setConfig(compileDiagsConfig);
 
     bool useJsonFormat = (errorFormat == "json");
@@ -224,7 +224,8 @@ int runCommand(int argc, char *argv[]) {
     auto searchPaths     = camel::utils::buildModuleSearchPaths(
         entryDir,
         camel::utils::ModuleSearchPathOptions{
-            .stdlibOverride = Run::stdLibPath, .includeDirs = Run::includeDirs});
+            .stdlibOverride = Run::stdLibPath,
+            .includeDirs    = Run::includeDirs});
     {
         auto installRoot = camel::utils::resolveInstallRoot();
         std::size_t n    = 0;
@@ -279,7 +280,7 @@ int runCommand(int argc, char *argv[]) {
     // The entry module's name is its file's name (design principles 10.2). Nothing is loaded under
     // the placeholder `main`: the name is what the entry module's own qualified references
     // (`counts::twice` in `counts.cml`) and the tags it declares are written with.
-    auto mainModule     = make_shared<UserDefinedModule>(entryModuleName, targetFile, ctx, parser);
+    auto mainModule = make_shared<UserDefinedModule>(entryModuleName, targetFile, ctx, parser);
     ctx->setMainModule(mainModule);
     // The pass list is resolved against a context that has the program's module. Doing it
     // before the build leaves the entry requirement decided before anything is compiled.
@@ -349,8 +350,7 @@ int runCommand(int argc, char *argv[]) {
             // a bare `SyntaxDiag`, would answer a question the user did not ask.
             camel_cli::reportModuleFailures(
                 ctx,
-                camel_cli::findModuleFailures(
-                    ctx, camel_cli::ModuleScope::ProgramDependencies),
+                camel_cli::findModuleFailures(ctx, camel_cli::ModuleScope::ProgramDependencies),
                 os,
                 useJsonFormat);
             compileSummary(false);
@@ -541,6 +541,13 @@ int runCommand(int argc, char *argv[]) {
                     commandLineWarnings.push_back(std::move(unread));
                 }
             }
+            // `std::jit` in a build whose JIT has no code generator for this processor: the pass
+            // is accepted, and what it does here is run the bytecode interpreter.
+            if (auto noJit = jitWithoutCodeGeneratorWarning(Run::resolvedPassList, ctx)) {
+                if (applyWarningPolicy(*noJit)) {
+                    commandLineWarnings.push_back(std::move(*noJit));
+                }
+            }
         }
         ctx->dumpModuleWarnings(std::cerr, useJsonFormat, commandLineWarnings);
         for (const Diagnostic &warning : commandLineWarnings) {
@@ -588,9 +595,8 @@ int runCommand(int argc, char *argv[]) {
                     // when it loads) and nothing has run yet. A program that never reaches a
                     // device operation reports a device that is not there all the same.
                     if (auto failure = camel::execute::validateSelectedDevices()) {
-                        auto diagnostic =
-                            DiagnosticBuilder::of(RuntimeDiag::DeviceUnavailable)
-                                .commit(failure->ordinal, failure->reason);
+                        auto diagnostic = DiagnosticBuilder::of(RuntimeDiag::DeviceUnavailable)
+                                              .commit(failure->ordinal, failure->reason);
                         // The run's configuration, not a line of the program: the runtime sink
                         // is created without a module, so name the entry file here and leave the
                         // position unknown (the short format writes `?`).
@@ -638,8 +644,8 @@ int runCommand(int argc, char *argv[]) {
                         fs::create_directories(passDump.dir, ec);
                         if (ec) {
                             std::cerr << "Error: cannot create snapshot directory "
-                                      << camel::utils::pathToUtf8(passDump.dir)
-                                      << ": " << ec.message() << endl;
+                                      << camel::utils::pathToUtf8(passDump.dir) << ": "
+                                      << ec.message() << endl;
                             return 1;
                         }
                         writePassDump(passDump, "input", program->root());
@@ -684,7 +690,9 @@ int runCommand(int argc, char *argv[]) {
                         // error is reported the way an error value nobody handled is (design
                         // principles 9.1, 3.9) -- standard error, and a non-zero exit code.
                         return camel::execute::reportPassErrorValue(
-                            ctx, result.errorValue, useJsonFormat);
+                            ctx,
+                            result.errorValue,
+                            useJsonFormat);
                     }
                     if (result.failed()) {
                         const auto &diags = ctx->runtimeDiagSink();
@@ -702,7 +710,9 @@ int runCommand(int argc, char *argv[]) {
                         program = fallbackResult.program;
                         if (fallbackResult.errored()) {
                             return camel::execute::reportPassErrorValue(
-                                ctx, fallbackResult.errorValue, useJsonFormat);
+                                ctx,
+                                fallbackResult.errorValue,
+                                useJsonFormat);
                         }
                         if (fallbackResult.failed()) {
                             const auto &diags = ctx->runtimeDiagSink();
@@ -729,7 +739,8 @@ int runCommand(int argc, char *argv[]) {
                 // program was being compiled, which the runtime sink holds no place for -- nothing
                 // has been said about why. Standard error, in the form of the dump, so that a
                 // diagnostics array on standard output stays an array and a JSON one stays JSON.
-                const std::array<camel_cli::DumpedSink, 1> dumped{camel_cli::dumpedSink(diags.get())};
+                const std::array<camel_cli::DumpedSink, 1> dumped{
+                    camel_cli::dumpedSink(diags.get())};
                 camel_cli::reportLimitLine(e, dumped, std::cerr, useJsonFormat);
                 return 1;
             }
