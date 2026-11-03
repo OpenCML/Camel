@@ -41,16 +41,71 @@
 | `take` / `idx_take` | ✓ | ✓ `take_t` / `idx_arr_t` | ✓ |
 | 标量 `+ - * /`、一元负、`float()` | 核里另有 | ✓ | ✓ |
 | `pow`（`^`） | ✓ | **✗**（实测 `skip=rule uri=math:pow_d reason=unbound`） | ✓ `jvp_pow` |
+| `relu` | ✓ | **✓** `relu_t`（2026-11-03 补齐，见下） | **✓** `jvp_relu` |
+| `exp` | ✓ | **✓** `exp_t`（2026-11-03 补齐，见下） | **✓** `jvp_exp` |
+| `sigmoid` | ✓ | **✓** `sigmoid_t`（2026-11-04 补齐） | **✓** `jvp_sigmoid` |
+| `tanh` | ✓ | **✓** `tanh_t`（2026-11-04 补齐） | **✓** `jvp_tanh` |
 | `reshape` | ✓ | **✗** | ✓ |
-| `softmax` | ✓ | **✗** | ✓ |
-| 其余 ~42 个张量算子 | ✓ | **✗** | **✗** |
+| `softmax` | ✓ | **✗**（不是差 `softmax_t`：库层在 `split` 就停，走查未开始；见下） | ✓ |
+| 其余 ~41 个张量算子 | ✓ | **✗** | **✗** |
 
-**缺口（= "对齐"的度量）**：引擎 61 个张量名字里，库 `transpose` 只覆盖 7–8 个，
-**约 42 个只能走引擎**（`relu`、`gelu`、`sigmoid`、`tanh`、`exp`、`log`、`sqrt`、`rsqrt`、`abs`、
+**差集进度**：`relu` 已从"只能走引擎"移到"两侧都有"（引擎 `reluVjp` 与库层
+`jvp_relu` + `relu_t` 在 `[-2.0, 0.0, 3.0, -0.5]` 上逐元素同答 `[0.0, 0.0, 1.0, 0.0]`；
+用例 `test/cases/compile/transforms/relu_gradient_through_{the_engine,the_library}.cml`）。
+`exp` 也已移过去（`lane-exp` `ab1e7113c`）：`jvp_exp` = `exp(x) * dx`、`exp_t` = `ct * exp(x)`，
+在 `[1.0, 2.0]` 上两侧逐元素同答 `[2.718281828459045, 7.38905609893065]`。
+`sigmoid`（`lane-sigmoid` `b93074169`）与 `tanh`（`lane-tanh` `0f9b577f8`）也移过去了：在
+`[-1.0, 0.0, 1.0]` 上 `[0.19661193324148185, 0.25, 0.19661193324148185]`、在 `[0.5, -1.0]` 上
+`[0.7864477329659274, 0.41997434161402614]`，两侧逐元素相同。
+`^`（`math:pow_d`）仍在"只有引擎"。
+
+**这条墙的判据（2026-11-04 修订，替换旧句——旧句把"重算"当成了条件，`log_softmax` 把它推翻了）：**
+**被拒的不是"重算"，是"`<>` 参数（context 边上的常量）在出口不可达"：`exp`/`relu`/`sigmoid`/`tanh`
+的重算都不带 `<>`，所以过；`softmax<1>`/`sum<0,true>`/`log_softmax` 的重算带着 `<>`，所以拒。
+`sum<0,true>` 甚至连重算都没有——它的值是后半边的数，`<>` 里才是常量。**
+
+四例通过（`relu` 的掩码、`exp`、`sigmoid`、`tanh`；`exp` 实测 `residuals=2`、
+`rhs=sum_t,mul_tensor_t,exp_t`），三例被拒（`softmax<1>`、`sum<0,true>`、`vjp_loop` 里
+`index_into` 的数组参数）。新句比旧句强的地方：它解释了为什么 `log_softmax` 拒而 `mean_axis`
+改完就过——`mean_axis` 的 `axis` 现在是**操作数**，不是 `<>`。判据与代价写在
+`docs/handover/questions/2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it.cn.md`。
+
+**第三边界单记一行（不计入"过"）**：`log_softmax`（`lane-logsoftmax` `a65be8a25`）**律对、库层仍拒**。
+`jvp_log_softmax` + `log_softmax_t` 已写，引擎数 `[0.7299082804888587, 0.2658145868356071,
+-0.9957228673244654]`（`value=-4.222817893333142`），两条错律 `ct`→`[1.0, 1.0, 1.0]`、把 cotangent
+写成未转置方向 `ct - sum(p*ct)`→每个分量 ~3.3e-16；**这三种数组都和为 0**（`sum(1-3p)=3-3=0`，
+错的那条处处为 0），所以它只能逐元素判、和不是判据——"判据分辨不了对错就不算判据"的实例，已写进用例说明。
+被拒原文与 `softmax` 一字不差：`REINTERP split function=jvp_of_total skip=backward construct=a node
+whose input was not copied uri=- why=an operand of the node is not reachable from the half's exit`，之后没有
+`TRANSPOSE`。用例 `log_softmax_gradient_stops_at_split.cml`（`kind="negative"`）钉住这段原文。
+
+**下一个候选**：`gelu` / `erf` / `erfc`（一元、切线只依赖 `x`、不带 `<>`，按新句应当过；引擎侧三个
+都有 vjp，但用的是融合算子 `tensor:gelu_grad` / `tensor:erf_grad`，库里要用原语写出同一斜率）。
+`softmax` 与 `log_softmax` 今天仍是"缺一次 cut 的裁定"，不是缺律；能不能推进只看
+`writeConstant` 能不能重写那条常量。
+
+**两个被实测改口的结论**（2026-11-03 深夜）：
+
+1. "`softmax` 只差一条律"错了（`lane-softmax` `f5dbca977`）：补 `softmax_t` 没有用，库层在**走查
+   之前**就停——`REINTERP split function=jvp_of_total skip=backward construct=a node whose input was
+   not copied uri=- why=an operand of the node is not reachable from the half's exit`，整份输出里
+   没有一行 `TRANSPOSE`。引擎侧同一条损失答得出（`[[-0.17007706463866937, -0.37517307550291684,
+   -0.5460605174868518, 1.0913106576284373], [0.10848803305563078, -0.046500634627606695,
+   -0.22389029087827908, 0.16190289245025496]]`，与手算到 1e-16 一致）。
+2. "cut 会拦一切重算"也错了（`lane-exp` `ab1e7113c`）：`exp` 的切线在**后半边重算 `exp(x)`**，
+   而 cut 把它当残差带过去了——`REINTERP split … residuals=2`、
+   `TRANSPOSE … rhs=sum_t,mul_tensor_t,exp_t`，库层因此过。所以 `relu`（掩码只依赖 `x`）与 `exp`
+   都过，被拦的是**重算的调用带着出口不可达的参数**（`softmax<1>` 的轴、`sum<1,true>` 的
+   `keepdims`、`vjp_loop` 里 `index_into` 的数组），这正是 `mean_axis` 那条 `skip=arity` 的另一面。
+   收窄后的问题与两条路的代价写在
+   `docs/handover/questions/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`。
+
+**缺口（= "对齐"的度量）**：引擎 61 个张量名字里，库 `transpose` 覆盖 8–9 个，
+**约 38 个只能走引擎**（`gelu`、`log`、`sqrt`、`rsqrt`、`abs`、
 `erf`、`erfc`、`maximum`、`minimum`、`where`、`log_softmax`、`layer_norm`、`mean`、`max`、`min`、
 `sum_axis`、`max_axis`、`min_axis`、`sum_to`、`broadcast_like`、`expand_axis`、`cast_like`、
 `permute`、`permute_inverse`、`transpose`、`unsqueeze`、`concat`、`shape`、`linear`…），
-再加 3 个数学、1 个 `autodiff:stop_gradient`。
+再加 3 个数学、1 个 `autodiff:stop_gradient`。（`relu` 与 `exp` 已补齐，故本行按补齐后的口径数。）
 
 ## 3. 删它需要哪几件事同时成立（每条可判定）
 
