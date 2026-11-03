@@ -6,33 +6,34 @@
 // asked twice: the engine's own rule (`sumAxisVjp`, `modules/tensor/ops/reduction_ops.cpp`) and the
 // library's, and the reading is that their answers are the same numbers, bit for bit.
 //
-// The differentiated value is `sum(lane * lane)`, not `sum(lane)`: a plain sum would have an
-// all-ones gradient whatever lane it was spread along, and the reading has to say *which* axis the
-// cotangent went back along. With the square, each lane's cotangent is twice its own value.
+// The readout is `pick_at(lane, [1, 3])` -- the middle column's sum -- and not `sum(lane)`: a sum
+// of the lanes answers an all-ones gradient whatever lane the cotangent was spread along, and this
+// reading has to say which one it went back along. Picking one lane puts the whole cotangent on the
+// column that lane summed, and the two zeros in each row are as much of the answer as the one.
 //
 //     x    = [[1.0, 2.0, 3.0],
 //             [4.0, 5.0, 6.0]]
 //     lane = sum_axis(x, 0, false) = [5.0, 7.0, 9.0]        (one lane per column)
-//     value = sum(lane * lane)     = 25 + 49 + 81 = 155.0
-//     dL/dx = 2 * lane spread down the rows = [[10.0, 14.0, 18.0],
-//                                             [10.0, 14.0, 18.0]]
+//     value = pick_at(lane, [1, 3]) = 7.0
+//     dL/dx = [[0.0, 1.0, 0.0],
+//              [0.0, 1.0, 0.0]]                            (column 1, both rows)
 //
 //     camel test/cases/compile/transforms/stated_sum_axis_gradient.cml
 import { grad } from autodiff
 import { vjp } from vjp
-import { abs, sum, sum_axis } from tensor
+import { abs, pick_at, sum, sum_axis } from tensor
 
 /// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
 with <w: float[..]>
 func total(): float {
     let lane = sum_axis(w, 0, false)
-    return sum(lane * lane)
+    return pick_at(lane, [1, 3])
 }
 
 /// The library's spelling: the same function with the value as an ordinary parameter.
 func total_plain(x: float[..]): float {
     let lane = sum_axis(x, 0, false)
-    return sum(lane * lane)
+    return pick_at(lane, [1, 3])
 }
 
 func main(): int sync {

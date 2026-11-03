@@ -6,32 +6,32 @@
 // `sum_axis_stated_t` normalizes it, because the reduction resolves it on entry -- and the stated
 // extents are what let the adjoint put the lane's number back on the axis that was reduced.
 //
-//     x    = [[1.0, 2.0, 3.0],
-//             [4.0, 5.0, 6.0]]
-//     lane = sum_axis(x, -1, false) = [6.0, 15.0]           (one lane per row)
-//     value = sum(lane * lane)      = 36 + 225 = 261.0
-//     dL/dx = 2 * lane spread along the rows = [[12.0, 12.0, 12.0],
-//                                               [30.0, 30.0, 30.0]]
+//     x     = [[1.0, 2.0, 3.0],
+//              [4.0, 5.0, 6.0]]
+//     lane  = sum_axis(x, -1, false) = [6.0, 15.0]          (one lane per row)
+//     value = pick_at(lane, [1, 2])  = 15.0
+//     dL/dx  = [[0.0, 0.0, 0.0],
+//               [1.0, 1.0, 1.0]]                           (row 1, all three columns)
 //
-// The rows answer two different numbers, which is what tells this reading from one where the
-// cotangent `[12.0, 30.0]` had been spread down the columns: a lane's number stays on its lane.
+// The second row answering three ones and the first row three zeros is what tells this reading
+// from one where the lane's cotangent had been spread down the columns instead of along the row.
 //
 //     camel test/cases/compile/transforms/stated_sum_axis_gradient_negative_axis.cml
 import { grad } from autodiff
 import { vjp } from vjp
-import { abs, sum, sum_axis } from tensor
+import { abs, pick_at, sum, sum_axis } from tensor
 
 /// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
 with <w: float[..]>
 func total(): float {
     let lane = sum_axis(w, -1, false)
-    return sum(lane * lane)
+    return pick_at(lane, [1, 2])
 }
 
 /// The library's spelling: the same function with the value as an ordinary parameter.
 func total_plain(x: float[..]): float {
     let lane = sum_axis(x, -1, false)
-    return sum(lane * lane)
+    return pick_at(lane, [1, 2])
 }
 
 func main(): int sync {
