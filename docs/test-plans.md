@@ -728,6 +728,17 @@ everywhere is written once:
   regression.
 - `known_fail_note`
   Printed with an `[XFAIL]`: why, and what will fix it.
+- `known_fail_msg`
+  A fragment of the reason a marked test fails with, so the reason is pinned and not only the
+  failure. When a marked test fails and the fragment does not appear in its output, the case stays
+  `fail` and the runner prints
+  `known failure changed its mind: expected "<pinned>", got "<first line>"` (`test/tools/run-tests.mjs`,
+  `executePlans`): a pin whose reason drifted is reported instead of staying a quiet `[XFAIL]`. A
+  fragment identifies the reason -- the words the refusal uses, not a whole message. Absent is legal
+  and pins nothing: `expandBackends` reads the field as `null`, so every mark written before it
+  existed keeps working, and the mechanism grows by pinning cases one at a time rather than by a
+  migration. A mark without this field is therefore still legal; one that carries it is the only kind
+  that can say its reason moved.
 
 `test/tools/selftest/run.mjs` checks these fields on fixture plans, together with the parallel
 ordering (the same status lines as a serial run, tests really overlapping), the serial mark (a
