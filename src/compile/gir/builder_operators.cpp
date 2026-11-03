@@ -3909,18 +3909,49 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         // is a fact about the input rather than about the compiler, and it is an error, not a
         // warning: a warning would let the statement be dropped and the run go on as if the call
         // had been made (`UnusedFallibleValue` is the other case, a value whose loss the writer
-        // may choose). The `GUARD` below keeps its own case -- a target that is neither a function
-        // nor an operator and is not fallible either -- where the type says something the builder
-        // cannot explain and stopping the process is the honest answer.
+        // may choose).
         if (asFallible(dataType) != nullptr) {
             diags_->of(SemanticDiag::CalledFallibleValue)
                 .atOrigin(gct->origin())
                 .commit(dataType->toString());
             throw BuildAbortException();
         }
-        GUARD(
-            dataType->code() == TypeCode::Function,
-            "Target node of LINK must be a function or operator node.");
+        // A call runs the function the target value holds, so the target of a LINK is a function
+        // or an operator node: that is the builder's own contract, and it is what the cast below
+        // needs. A program can stand a value of another type there -- a number, a tuple, the answer
+        // a transform hands back before the member it names is built -- and an ordinary program
+        // that does is not a broken builder. Reporting it and refusing the call is what keeps the
+        // contract: the assertion that used to stand here stopped the process instead, which is
+        // what the fallible case above left it doing for every other type (536999073). A target
+        // whose type the *builder* failed to record is the one case left for a `GUARD`, and it is
+        // the precondition of the cast and nothing a program can write.
+        if (dataType == nullptr || dataType->code() != TypeCode::Function) {
+            const std::string argTypesStr = std::format(
+                "<{}> ({})",
+                strutil::join(withInputTypes, ", ", [](Type *t) { return t->toString(); }),
+                strutil::join(normInputTypes, ", ", [](Type *t) { return t->toString(); }));
+            const std::string calleeType =
+                dataType != nullptr ? dataType->toString() : std::string("void");
+            // What the report names as the callee: the name the program wrote where it wrote one
+            // (`t`), and the type the value has where the callee is an expression
+            // (`transpose(f)(1.0, 1.0)` -- there is no name to quote, and the type is what the
+            // reader has to look at). The reason says the same thing either way: this type holds
+            // no function, so a call of it has nothing to run.
+            const std::string writtenName = writtenCalleeName(gct->at(0));
+            const bool namesCallee         = !writtenName.empty();
+            diags_->of(SemanticDiag::ArgumentsRejected)
+                .atOrigin(gct->origin())
+                .commit(
+                    namesCallee ? writtenName : calleeType,
+                    argTypesStr,
+                    (namesCallee ? "the value this call stands on has type '" + calleeType +
+                                       "', and that"
+                                 : std::string("a value of that type")) +
+                        " is not a function: a call runs the function a value holds, so there is "
+                        "nothing here to call");
+            throw BuildAbortException();
+        }
+        GUARD(dataType != nullptr, "A LINK target node must have a type.");
         auto *funcType = tt::as_ptr<FunctionType>(dataType);
         if (!accepts(funcType, false) && !accepts(funcType, true)) {
             yieldToPipe(gct);
