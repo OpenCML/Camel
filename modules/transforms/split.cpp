@@ -683,8 +683,10 @@ struct Half {
 /// what the transaction hands it, and a parameter written as the type is one more of the direct
 /// connections `runtime.graph_draft_ledger` counts, which may only fall.
 template <typename Draft>
-void addResidualCaptures(Draft &draft, const std::vector<Residual> &residuals, Half &backward) {
-    backward.closurePorts.reserve(residuals.size());
+void addResidualCaptures(
+    Draft &draft, const std::vector<Residual> &residuals,
+    std::span<Type *const> parameterValues, Half &backward) {
+    backward.closurePorts.reserve(residuals.size() + parameterValues.size());
     for (const Residual &residual : residuals) {
         if (residual.type == nullptr) {
             continue;
@@ -693,6 +695,27 @@ void addResidualCaptures(Draft &draft, const std::vector<Residual> &residuals, H
             draft.addPortNode(residual.type, draft.allocateRuntimeSlot(residual.type));
         draft.appendClosureNode(port);
         backward.closurePorts.push_back(port);
+    }
+    // The parameters' own values stand after the residuals, in parameter order: the tail the
+    // transpose reads a parameter's value out of (author, 2026-11-03 00:50 ①). `residualsOf` numbered
+    // the members before them, so the slot for parameter k is `residuals + k` -- the number the
+    // transposed member computes on its own side from the closure it inherited, which is this tuple.
+    // The mark is what says the tail is this and not a closure some caller closed a member over: a
+    // graph without it goes on refusing a parameter it cannot hand over, by name.
+    bool appended = false;
+    for (Type *parameter : parameterValues) {
+        if (parameter == nullptr) {
+            continue;
+        }
+        const gc_node_ref_t port =
+            draft.addPortNode(parameter, draft.allocateRuntimeSlot(parameter));
+        draft.appendClosureNode(port);
+        backward.closurePorts.push_back(port);
+        appended = true;
+    }
+    if (appended) {
+        draft.setFlags(
+            static_cast<uint8_t>(draft.flags() | rt::kGraphFlagClosureCarriesParameters));
     }
 }
 
@@ -1567,7 +1590,7 @@ SplitGraph cutLoopGraph(
         auto &draft = group.transaction(backwardId).edit();
         draft.setFuncType(halves.backward);
         Half backward(draft, function, program, true, &cut.outside, &residualIndexOf);
-        addResidualCaptures(draft, cuts, backward);
+        addResidualCaptures(draft, cuts, std::span<Type *const>(), backward);
         for (size_t i = 1; i < sourcePorts.size(); i += 2) {
             Type *type               = function->funcType()->normTypeAt(i);
             const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
@@ -1809,7 +1832,7 @@ SplitGraph cutBranchGraph(
         auto &draft = group.transaction(backwardId).edit();
         draft.setFuncType(branchHalves.backward);
         Half backward(draft, function, program, true, &cuts, &residualIndexOf);
-        addResidualCaptures(draft, cuts, backward);
+        addResidualCaptures(draft, cuts, std::span<Type *const>(), backward);
         for (size_t i = 1; i < sourcePorts.size(); i += 2) {
             Type *type               = function->funcType()->normTypeAt(i);
             const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
@@ -1928,6 +1951,23 @@ SplitGraph buildSplitGraph(
         }
         residualTypes.push_back(residual.type);
     }
+    // The parameters' own values ride at the tail of the same tuple, after the residuals and in
+    // parameter order. A transposed member answers a parameter's value out of the closure the call
+    // handed it instead of being handed one as an argument (author, 2026-11-03 00:50 ①), and this
+    // tail is where that value comes from: `residualsOf` numbered the residuals, so the appended
+    // member for parameter k sits at `residuals + k`, and the transposed member reads it there.
+    // The value is the parameter's own -- what the forward half is given, and what it has a port for.
+    std::vector<Type *> parameterValues;
+    parameterValues.reserve(function->funcType()->normTypesCount() / 2);
+    for (size_t i = 0; i < function->funcType()->normTypesCount(); i += 2) {
+        Type *const type = function->funcType()->normTypeAt(i);
+        if (type == nullptr) {
+            parameterValues.clear();
+            break;
+        }
+        parameterValues.push_back(type);
+    }
+    residualTypes.insert(residualTypes.end(), parameterValues.begin(), parameterValues.end());
     Type *residualsType = TupleType::create(residualTypes);
     const SplitHalves halves = splitHalvesWith(function->funcType(), residualsType);
     if (halves.forward == nullptr || halves.backward == nullptr) {
@@ -2218,6 +2258,18 @@ SplitGraph buildSplitGraph(
             }
             residualMembers.push_back(value);
         }
+        // The parameters' own values, in the tail order the closure type names: the value port the
+        // forward half declares for each parameter is the value itself, and handing it on here is
+        // what makes the tail readable on the other side of the merge.
+        for (size_t i = 0; i < function->funcType()->normTypesCount(); i += 2) {
+            if (i >= forward.portOf.size() || forward.portOf[i] == rt::kInvalidNodeRef) {
+                os << "REINTERP split function=" << function->name()
+                   << " skip=residual (the forward half declares no port for a parameter the "
+                      "closure tail carries)\n";
+                return built;
+            }
+            residualMembers.push_back(forward.portOf[i]);
+        }
         // `lin`: the backward graph closed over those values, built here because here is where they
         // exist. Its closure layout is the one this build read from the backward graph, so the
         // collector scans it by exactly the type the graph states.
@@ -2242,7 +2294,9 @@ SplitGraph buildSplitGraph(
             residualIndexOf[graphResiduals[i].node] = i;
         }
         Half backward(draft, function, program, true, &graphResiduals, &residualIndexOf);
-        addResidualCaptures(draft, graphResiduals, backward);
+        addResidualCaptures(
+            draft, graphResiduals,
+            std::span<Type *const>(parameterValues.data(), parameterValues.size()), backward);
         for (size_t i = 1; i < sourcePorts.size(); i += 2) {
             Type *type       = function->funcType()->normTypeAt(i);
             const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
