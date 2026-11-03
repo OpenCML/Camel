@@ -1082,13 +1082,22 @@ if (problems.length > 0) {
     process.exit(1)
 }
 console.log('runner self-test ok')
-// The three numbers, printed and used by nothing: what this run cost on this host, and how many
-// child runs it took to cost it. `timeout_ms` is untouched -- that is what makes this line safe to
-// add, and why it is a reading rather than a decision.
-const spent = process.cpuUsage(cost.cpuStart)
-const spentCpu = (spent.user + spent.system) / 1e6
+// Two numbers, printed and used by nothing: how many child runs it took, and what this run cost in
+// wall time on this host. `timeout_ms` is untouched -- that is what makes this line safe to add, and
+// why it is a reading rather than a decision.
+//
+// The CPU figure this line used to print is gone, and it is not coming back as `process.cpuUsage()`:
+// that call charges this process only, and nearly all of the work here is in children, so it read
+// close to 0 -- a number of the wrong kind, printed beside one of the right kind. The reading that
+// decides is the runner's: every test, this file included, runs under `test/tools/child-cpu.mjs`,
+// which reaps exactly one command and reports the CPU the kernel charged it and every process it
+// waited for, this file's children and their children among them. See the measurements in
+// test/plans/feat/consistency/runner.plan.toml.
+//
+// Reading the children from here instead would mean running each one through child-cpu.mjs, and that
+// wrapper is a Node process of its own: ~40 ms of CPU apiece over the ~120 child runs below, added to
+// the very figure it measures -- seconds against a bound (13.0 s of work plus a 0.5 s band) that this
+// file's own runs are judged by. A measurement that moves the thing it measures is worse than the
+// number it replaces, so the reading stays where the runner makes it.
 const spentWall = Number(process.hrtime.bigint() - cost.wallStart) / 1e9
-console.log(
-    `[calibration] child-runs=${cost.children}; measured=${spentCpu.toFixed(1)} s cpu; ` +
-        `wall=${spentWall.toFixed(1)} s`,
-)
+console.log(`[calibration] child-runs=${cost.children}; wall=${spentWall.toFixed(1)} s`)

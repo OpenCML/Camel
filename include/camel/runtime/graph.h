@@ -43,6 +43,7 @@
 #include "camel/core/symbol.h"
 #include "camel/core/type/intern.h"
 #include "camel/runtime/graph_id.h"
+#include "camel/utils/assert.h"
 
 #include <algorithm>
 #include <atomic>
@@ -180,21 +181,36 @@ enum GCNodeFlag : uint8_t {
 /// conversion the type does not call safe checks the value (an array's shape, a number's range).
 bool castMayFault(const camel::core::type::Type *target, const camel::core::type::Type *source);
 
-/// The one question a pass asks before it drops, moves, merges or reorders a node, or before it
-/// decides that a node needs an order edge: is the node pure *and* unable to fault? Such a node
-/// can be arranged anywhere -- off the sync chain, out of a loop body or an arm, away when a rewrite
-/// drops it (design principles 3.4), and without an order edge after an inline (docs/design/effects/
-/// edges.cn.md 5.7). An operator that may fault is not free: what it does when it fails is
-/// observable, so its place is kept. An operator nobody declared is not known never to fault, so it
-/// is not free either; neither is an operator that must run where the program writes it
-/// (`OperatorTable::mayBeRecomputed`). A CAST is free when its conversion cannot fail
+/// `graph::may_be_rearranged` -- the one question a pass asks before it drops, moves, merges or
+/// reorders a node, or before it decides that a node needs an order edge: is the node pure *and*
+/// unable to fault? Such a node can be arranged anywhere -- off the sync chain, out of a loop body
+/// or an arm, away when a rewrite drops it (design principles 3.4), and without an order edge after
+/// an inline (docs/design/effects/edges.cn.md 5.7). An operator that may fault is not free: what it
+/// does when it fails is observable, so its place is kept. An operator nobody declared is not known
+/// never to fault, so it is not free either; neither is an operator that must run where the program
+/// writes it (`OperatorTable::mayBeRecomputed`). A CAST is free when its conversion cannot fail
 /// (`castMayFault`), and is asked with the types it converts between: without them it is not free.
 /// `oper` is `kNoOper` for every kind but OPER. An elementwise operator (tensor arithmetic) fails
 /// only when its operands' shapes do not broadcast: asked with `fixedShapes` (every operand and
 /// the result have shapes the type states in full, `shapesAreFixed`) it cannot.
-bool nodeIsFreelySchedulable(
+///
+/// This is the answer to that question and nothing else. The C++ passes and the passes written in
+/// Camel both read it -- the module `graph` exports it as `may_be_rearranged`, the builtin that
+/// `stdlib/graph.cml` declares -- so a pass on either side of the boundary asks one implementation.
+/// `nodeIsFreelySchedulable` below is the older name of this same function and forwards to it.
+namespace graph {
+bool may_be_rearranged(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget = nullptr,
     const camel::core::type::Type *castSource = nullptr, bool fixedShapes = false);
+} // namespace graph
+
+/// The older name of `graph::may_be_rearranged`, kept for the C++ passes that still read it: it
+/// forwards, so there is one implementation and the two names cannot answer differently.
+inline bool nodeIsFreelySchedulable(
+    GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget = nullptr,
+    const camel::core::type::Type *castSource = nullptr, bool fixedShapes = false) {
+    return graph::may_be_rearranged(kind, oper, castTarget, castSource, fixedShapes);
+}
 
 /// The fault half of `nodeIsFreelySchedulable`, on its own: whether running a node of this kind
 /// can raise a fault (`castMayFault`, `OperatorTraits::mayFault`; design principles 3.9) where it
@@ -212,9 +228,16 @@ bool nodeMayFault(
 bool shapesAreFixed(const camel::core::type::Type *type);
 
 class GCGraph;
-/// The same question of a node of a graph; a CAST is asked with its result type and the type of
-/// its input.
-bool nodeIsFreelySchedulable(const GCGraph &graph, gc_node_ref_t ref);
+/// `graph::may_be_rearranged` of a node of a graph; a CAST is asked with its result type and the
+/// type of its input.
+namespace graph {
+bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref);
+} // namespace graph
+
+/// The older name of the overload above, forwarding to it.
+inline bool nodeIsFreelySchedulable(const GCGraph &graph, gc_node_ref_t ref) {
+    return graph::may_be_rearranged(graph, ref);
+}
 
 /// `nodeMayFault` of a node of a graph, read the way `nodeIsFreelySchedulable(const GCGraph &)`
 /// reads its operands and types.
@@ -261,17 +284,11 @@ enum GCGraphFlag : uint8_t {
     /// parameters the call is given. It says nothing about the values: a call of a marked graph is
     /// the same call, so no number moves.
     kGraphFlagRecomputeBackward = 1 << 4,
-    /// The tail of this graph's closure is the parameters' own values: one member per parameter, in
-    /// parameter order, written after the residuals `residualsOf` numbered (`split`'s backward half,
-    /// modules/transforms/split.cpp#addResidualCaptures). The author's ruling of 2026-11-03 00:50 ①
-    /// is what it is for: a transposed member answers a parameter's value out of the closure the
-    /// call handed it, so the slot for parameter k is `residuals + k` on both sides of one merge --
-    /// the tuple the forward half builds and the type the transposed graph declares. The mark is
-    /// needed because a closure says nothing about where its members came from: a member closed by
-    /// a caller (`transpose(lin)` on a hand-closed lambda) has a tail of its own that is not this,
-    /// and such a member goes on refusing by name instead of reading a number it was not given.
-    kGraphFlagClosureCarriesParameters = 1 << 5,
 };
+
+/// The closure-member identity a graph records, for a member that is no parameter's value: a value
+/// the cut computed, or a member a caller closed by hand (GCGraph::closureParameterOf).
+inline constexpr int32_t kNoClosureParameter = -1;
 
 /// kWritingDerived: congruence closure found the equivalence, it need not be stored.
 inline constexpr uint8_t kWritingDerived = 1 << 0;
@@ -568,6 +585,10 @@ struct GCGraphNativePayload {
     gc_node_ref_t *normPorts   = nullptr;
     gc_node_ref_t *withPorts   = nullptr;
     gc_node_ref_t *closure     = nullptr;
+    // One entry per closure member: the parameter whose *value* the member holds, or
+    // kNoClosureParameter (GCGraph::closureParameterOf). Null when the graph records no identity,
+    // which is every closure but the ones a cut wrote.
+    int32_t *closureParameters = nullptr;
     // The order edges of the graph, sorted by (user, pred); null when the graph has none. Not in
     // the nodes' input runs: an order edge is not a port (GCGraph::orderPredsOf).
     GCGraphOrderEdge *orderEdges = nullptr;
@@ -668,11 +689,15 @@ class GCGraph : public camel::core::rtdata::Object {
     const GCRegion *region(uint32_t id) const {
         return id < nativePayload_.regionCount ? nativePayload_.regionTable + id : nullptr;
     }
-    /// The region node `ref` is in: the innermost; 0 for the body.
+    /// The region node `ref` is in: the innermost; 0 for the body. A ref that names no node of
+    /// this graph has no region, and 0 would say it is in the body -- a region the graph really
+    /// has (the body's record exists even when the table holds nothing else), so the answer would
+    /// be a membership the program does not have. Fail instead of naming the body.
     uint32_t nodeRegion(gc_node_ref_t ref) const {
-        if (!containsNodeRef(ref)) {
-            return 0;
-        }
+        GUARD(
+            containsNodeRef(ref),
+            "Region of a node that is not in the graph: the ref is kInvalidNodeRef or past "
+            "nodeCount(), and region 0 is the body, not the answer for a node that is not there.");
         const GCNodeChunk &c = chunkOf(ref);
         return c.regions ? c.regions[ref & (kNodeChunkNodes - 1)] : 0;
     }
@@ -690,20 +715,24 @@ class GCGraph : public camel::core::rtdata::Object {
             at = one->parent;
         }
     }
-    /// True when the node `reader` may read a port of the region `portRegion`. Three readers may:
-    /// a node of that region, a node of a region `portRegion` sits in, and the node that owns it
-    /// (`region(portRegion)->owner`). A branch arm reading the function's own parameter is the
-    /// second; a LOOP node reading the port its own body region ends in is the third. Anyone else
-    /// is outside the frame the port lives in: a port of a region inside the reader is a value that
-    /// region produces, and it is not there before that region runs -- a loop body's port is a
-    /// different value every round, and the reader of the rounds is the loop node, not its
-    /// neighbours.
-    bool regionIsVisibleFrom(uint32_t portRegion, gc_node_ref_t reader) const {
+    /// True when the node `reader` may read the port `port` of the region `portRegion`. Two readers
+    /// may: a node of a region `portRegion` contains -- the region itself and every region inside
+    /// it -- and the node that owns the region (`region(portRegion)->owner`), but that one only the
+    /// region's **exit** (`region.result`; a loop's condition region has one too).
+    ///
+    /// The owner's read is the rule's one exception and it is written on the port, not on the
+    /// reader's identity or on the exit's node kind (author ruling 2026-11-03 08:10): a `LOOP`
+    /// consumes its body's exit round by round, and a body written `do s` ends in the state port
+    /// while one written `do s + 1` ends in an Oper -- the same thing to the loop, so a rule that
+    /// told the two apart would be a special case. Any *other* port of the region is refused to the
+    /// owner as well: it is a value that region produces, and it is not there when the owner looks
+    /// at it.
+    bool regionIsVisibleFrom(uint32_t portRegion, gc_node_ref_t port, gc_node_ref_t reader) const {
         if (isAncestorOf(portRegion, nodeRegion(reader))) {
             return true;
         }
         const GCRegion *one = region(portRegion);
-        return one != nullptr && one->owner == reader;
+        return one != nullptr && one->owner == reader && one->result == port;
     }
     /// The LoopCond or LoopBody region (`part`) of the LOOP node `ref`; 0 when it has none: a For
     /// loop has no condition, and a loop in graph form has no regions.
@@ -746,14 +775,6 @@ class GCGraph : public camel::core::rtdata::Object {
     /// (kGraphFlagRecomputeBackward): `remat` set it on this graph, and `split` reads it to decide
     /// what crosses a cut. The body is the same code either way; only what a cut stores changes.
     bool recomputesOnBackward() const { return (flags_ & kGraphFlagRecomputeBackward) != 0; }
-    /// The tail of this graph's closure is one member per parameter, in parameter order, after the
-    /// residuals (kGraphFlagClosureCarriesParameters): `split`'s backward half wrote them, and
-    /// `transpose` reads a parameter's value out of that slot instead of asking its caller for one.
-    /// A graph without the mark has a closure of some other origin, and its parameters are refused
-    /// by name when the body reads one.
-    bool closureCarriesParameters() const {
-        return (flags_ & kGraphFlagClosureCarriesParameters) != 0;
-    }
     /// The kernel the semantic body of an `#impl` function implements (design principles 10.4):
     /// the operator URI a direct call of the function is compiled to, empty for every other
     /// graph. A consumer that must see inside the function (autodiff, fusion, export, a rule)
@@ -1071,6 +1092,12 @@ class GCGraph : public camel::core::rtdata::Object {
     std::span<const gc_node_ref_t> normPorts() const;
     std::span<const gc_node_ref_t> withPorts() const;
     std::span<const gc_node_ref_t> closureNodes() const;
+    /// For each of `closureNodes()`, the parameter whose *value* the member holds -- the numbering a
+    /// cut gives its residuals (`Residual::parameter`, modules/transforms/split.cpp#residualsOf) --
+    /// or kNoClosureParameter. Empty when the graph records no identity: a closure a caller closed
+    /// over its own values has no parameters behind it, and a reader then refuses to name one
+    /// instead of reading a member by its place in the list.
+    std::span<const int32_t> closureParameterOf() const;
     /// The number of arms of the BRCH `brchRef` (0 for another node).
     gc_cnt_t armCountOf(gc_node_ref_t brchRef) const;
 

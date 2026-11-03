@@ -21,14 +21,14 @@ timeout_ms = 20000
 
 [[tests]]
 name = "jvp_is_a_function_value"
-desc = "`reinterp<jvp>(f)` is the operator `jvp(f)`, and it produces a new function (the author's ruling a824031aa), not a rewritten graph: the call builds a graph of the transform's own and answers with a function value naming it. The lifted signature is `(float, float) => (float, float)` -- the ordinary parameter becomes a value and its tangent, and the result is the pair -- so `jvp(f)(2.0, 1.0)` passes two numbers and reads back `(value, tangent)`. Both halves are computed by the new graph: for `f(x) = x*x + 3/x` at 2 the chain gives `f(2) = 5.5`, and the forward rules along it give `f'(2) = 3.25` (2x - 3/x^2, seeded with the 1.0 the caller passed). The rules are the ruleset's: the reading says `source=ruleset` and names what it applied (`jvp_mul`, `jvp_div`, `jvp_add`), because the transform reads `stdlib/rulesets/jvp.cml`'s index at the moment it builds -- there is no second table of laws in C++. A primitive with no rule there is refused by name (`skip=rule uri=...`), never answered with 0 or 1. The operator's own line, `REINTERP jvp op ...`, prints the spelling a declaration writes, the type the call resolved to, the lifted half, and the type of the graph the call answered with: the two have to be one string, and they are. The build also says what it made -- `REINTERP jvp built graph=236 nodes=12 exit=11 regions=0 function=f` -- the member the lift reserved, the nodes and regions the draft holds before it is encoded, and the node the graph exits at. The lift is the run-time kernel's, on every shape: there is one implementation of the transform and the call reaches it as a call."
+desc = "`reinterp<jvp>(f)` is the operator `jvp(f)`, and it produces a new function (the author's ruling a824031aa), not a rewritten graph: the call builds a graph of the transform's own and answers with a function value naming it. The lifted signature is `(float, float) => (float, float)` -- the ordinary parameter becomes a value and its tangent, and the result is the pair -- so `jvp(f)(2.0, 1.0)` passes two numbers and reads back `(value, tangent)`. Both halves are computed by the new graph: for `f(x) = x*x + 3/x` at 2 the chain gives `f(2) = 5.5`, and the forward rules along it give `f'(2) = 3.25` (2x - 3/x^2, seeded with the 1.0 the caller passed). The rules are the ruleset's: the reading says `source=ruleset` and names what it applied (`jvp_mul`, `jvp_div`, `jvp_add`), because the transform reads `stdlib/rulesets/jvp.cml`'s index at the moment it builds -- there is no second table of laws in C++. A primitive with no rule there is refused by name (`skip=rule uri=...`), never answered with 0 or 1. The operator's own line, `REINTERP jvp op ...`, prints the spelling a declaration writes, the type the call resolved to, the lifted half, and the type of the graph the call answered with: the two have to be one string, and they are. The build also says what it made -- `REINTERP jvp built graph=236 nodes=12 exit=11 regions=1 function=f` -- the member the lift reserved, the nodes and regions the draft holds before it is encoded, and the node the graph exits at. The one region is the draft's body: a draft is made with its body region (`GraphDraft`), so a graph with no control region still holds that one region and `region(0)` never has to answer with a record the draft does not have. The lift is the run-time kernel's, on every shape: there is one implementation of the transform and the call reaches it as a call."
 kind = "behavior"
 case = "../../../cases/compile/transforms/jvp_lifted.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_output_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_div,jvp_add", "REINTERP jvp op signature=(f: (..) => any) => (the parameters and their tangents) => (value, tangent)", "lifted=(float, float) => (float, float) pure graph=(float, float) => (float, float) pure same=yes", "REINTERP jvp built graph=236 nodes=12 exit=11 regions=0 function=f", "5.5", "3.25"]
+expect_output_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_div,jvp_add", "REINTERP jvp op signature=(f: (..) => any) => (the parameters and their tangents) => (value, tangent)", "lifted=(float, float) => (float, float) pure graph=(float, float) => (float, float) pure same=yes", "REINTERP jvp built graph=236 nodes=12 exit=11 regions=1 function=f", "5.5", "3.25"]
 expect_stdout_not_contains = ["TRANSPOSE function=", "REINTERP "]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
@@ -124,11 +124,23 @@ timeout_ms = 20000
 # same refusal stands with and without the reverse walk in `modules/transforms/transpose.cpp` -- the
 # walk is behind this wall, not in front of it, so the number this case asks for is not readable until
 # the array argument at that call is carried instead of recomputed.
-# Owner: the cut's residual set for a loop the exit reads into. Two other cases are red on the same
-# `split` side (`transpose_loop_escape.second_state_of_the_same_loop`,
-# `transpose_loop_escape.int_is_a_zero_tangent_space`: `skip=forward ... the cut copies a loop where
-# the exit reads its two components`, and `skip=backward ... the backward half reads the value of
-# parameter 0`), so the three go together.
+# Owner, re-read after the closure item landed (2026-11-03, `34788b554`: a closure member carries the
+# parameter it is the value of, so a parameter value the second half reads is a residual): still the
+# cut's residual set, and **not** the parameter tail. Measured again on that tree, the line has not
+# moved by one field:
+#   REINTERP split function=jvp_of_g forward=276 backward=277 type=(float[]) => (float, (float[]) =>
+#     float pure) pure residuals=1 loop=1 tape=5 invariants=0
+#   TRANSPOSE function=split_of_jvp_of_g_backward skip=call-value-missing param=0 node=23 arg=2
+# `invariants=0` is the whole reason the closure item cannot be the owner: this backward half reads no
+# parameter's value, so there is no member for the identity table to name and nothing for it to
+# carry. The callee's member *was* built (`TRANSPOSE function=rulesets.jvp::index_into<float>
+# graph=289 type=(int, float[], float) => (float[],) nodes=3 arms=0 rhs=idx_arr_t`, and its own zero
+# reading `contribution=0 node=1 type=int space=none from=2` is printed because that index *is* handed
+# a cotangent) -- what the call site cannot hand it is the array, which the backward half recomputes.
+# So the missing thing is a residual for a value the half computes and then reads back, not a residual
+# for a parameter. `transpose_loop_escape.int_is_a_zero_tangent_space` is not in this group any more
+# (it answers its numbers on the same tree); `transpose_loop_escape.second_state_of_the_same_loop`
+# still is.
 #
 # The reverse walk itself is *not* behind that wall any more (2026-11-03): `transpose`'s loop case now
 # iterates `range(n - 1, -1, -1)` and reads each round's element with `:op/idx_arr` instead of copying
@@ -146,7 +158,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 known_fail = ["nvm"]
 known_fail_msg = "split_of_jvp_of_g_backward skip=call-value-missing param=0 node=23"
-known_fail_note = "倒序本身已经做了（`transpose` 侧不再照抄 iterable）；这条用例仍红是因为 backwards 里 `index_into` 的数组参数是重算的、不是残差 -- 那一项归闭包返工（作者第 1 项）。`split` builds both halves; the refusal is one step before the walk, at the call the backward half recomputes (`index_into(dxs, 0)`), whose array argument is not a residual the cut carries."
+known_fail_note = "倒序本身已经做了（`transpose` 侧不再照抄 iterable）；这条用例仍红是因为 backwards 里 `index_into` 的数组参数是重算的、不是残差。**这一项不是作者第 1 项**：那一项（参数原值作为残差进闭包）已于 `34788b554` 落地，而这半的 `invariants=0` —— 它不读任何参数的值，身份表里没有成员可写，所以它不可能被那一项修好；缺的是"这半自己算出来又读回去的值"的残差。摘标记的前提是先有 `grad= [1.0, 1.0]` 这个读数，今天没有。`split` builds both halves; the refusal is one step before the walk, at the call the backward half recomputes (`index_into(dxs, 0)`), whose array argument is not a residual the cut carries."
 expect_exit = 0
 expect_output_contains = ["value= 3.0", "grad= [1.0, 1.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -831,14 +843,14 @@ timeout_ms = 20000
 
 [[tests]]
 name = "transpose_loop_escape.int_is_a_zero_tangent_space"
-desc = "An escape whose target is not a float: `int_escape(x) = let n = int(3x); loop s = x for i in 0..3 do s + float(n)` reads an integer inside the loop body, and the answer is 1.0 -- `x` contributes 1 and the truncation contributes 0, because an integer is a zero tangent space and `float(int(3x))` is a step function that is constant between its jumps. The number and the reason are printed together: the forward reading is 10.0 (1 plus three rounds of `int(3)`), so the integer is really there and really used, and `TRANSPOSE function=int_escape contribution=0 node=<n> type=int space=none from=<cast>` says which value contributes the zero. The two controls are the other half: `g(x) = float(int(5x)) + x` is 1.0 (an integer branch beside a float one does not swallow it), `h(x) = x + x` is 2.0 (no integer anywhere, and not 1). Every transpose is asked twice at different cotangents and the plan asserts the second answers -- 5, 3, 4 -- so the answers must scale with the cotangent and cannot be satisfied by a forward reading; `skip=` must not appear at all, because this shape used to answer a refusal and a refusal is not an answer."
+desc = "An escape whose target is not a float: `int_escape(x) = let n = int(3x); loop s = x for i in 0..3 do s + float(n)` reads an integer inside the loop body, and the answer is 1.0 -- `x` contributes 1 and the truncation contributes 0, because an integer is a zero tangent space and `float(int(3x))` is a step function that is constant between its jumps. The forward reading is pinned with it: 10.0 is 1 plus three rounds of `int(3)`, so the integer is really there and really used. The two controls are the other half: `g(x) = float(int(5x)) + x` is 1.0 (an integer branch beside a float one does not swallow it), `h(x) = x + x` is 2.0 (no integer anywhere, and not 1). Every transpose is asked twice at different cotangents, and the second answer -- 5.0, 3.0, 4.0 -- is on no forward line, so the answer has to scale with the cotangent and cannot be satisfied by a reading of the value; `skip=` must not appear at all, because this shape used to answer a refusal and a refusal is not an answer. The zero is not printed by a reading of its own: the integer is a closure capture port of the backward half, no cotangent is handed to a capture port, and `noteZero` therefore has no delivery to name (docs/handover/questions/2026-11-03-does-note-zero-cover-a-closure-capture-port.cn.md). What the numbers say is the whole claim."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_loop_escape_int.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=int_escape contribution=0 node=", "type=int space=none", "TRANSPOSE function=int_escape graph=", "10.0", "5.0", "3.0", "4.0"]
+expect_output_contains = ["10.0", "(1.0)", "(5.0)", "(1.0)", "(3.0)", "(2.0)", "(4.0)"]
 expect_output_not_contains = ["skip="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

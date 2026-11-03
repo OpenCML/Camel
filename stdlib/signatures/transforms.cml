@@ -63,8 +63,6 @@ export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()
 /// (`ResidualsOf<F>`, and the `_` position before it, are both gone). `lin` is linear in the tangent
 /// it is given -- the condition the transpose step (M3) reads -- and both halves speak in `Tangent<T>`
 /// at the top of this file.
-/// @example-fragment `split` takes the lifted function a `jvp` call writes, so the example is a
-/// fragment of the composition: `let fwd = split(jvp(f))`, then `let (y, lin) = fwd(x)`.
 /// @example let step = split
 export func split(f: (v: float, d: float) => (float, float)): (v: float, d: float) => (float, (float, float) => float)
 

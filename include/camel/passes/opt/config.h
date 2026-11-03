@@ -171,6 +171,10 @@ struct OptimizeRewriteConfig {
     /// OptimizeRewritePass) and therefore cleared when a run starts. Not a static in the engine: a
     /// count that outlived the program it was counting would report a run of one program against
     /// the next, and nothing in a count of runs belongs to the process rather than to a pass.
+    /// **Required** by `applyOptimizeRewritePass`: every pass that runs the rewrite keeps one
+    /// (`std::opt`, `std::opt::inline`, `std::opt::devirtualize`, `std::opt::specialize`), and a
+    /// run given none is refused rather than counted from zero in a local, which would hide the
+    /// rewrite that never settles (engine.cpp).
     SettleStreak *settleStreak = nullptr;
     bool checkScreens = false;
 };
