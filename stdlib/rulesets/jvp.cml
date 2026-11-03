@@ -168,6 +168,17 @@ func mul_tensor::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
 }
 
 /// `d(x * w) = dx * w + x * dw`, element by element.
+///
+/// One rule answers both of the operator's shapes. Its parameters are `(T[..], T[..])`, and a scalar
+/// operand is taken by that second port the way a call takes it -- a rank-zero array is the element it
+/// is made of (`docs/design/arrays-memory` section 5.4), which is why `T` fits `T[..]` and not the
+/// other way round. The law does not need a second writing for `mul_tensor(x, w)` with one number as
+/// `w`: a tangent is a value of the value's own space, so the node's tangent is `dx * w + x * dw`, an
+/// array either way, and the scalar operand's tangent stays the caller's seed. A second rule under this
+/// key -- the shape `(T[..], T)` -- is the way the author ruled on 2026-11-03 (`a9061b77a`: a key holds
+/// several rules and the engine picks by the operand types), and it is not available here: this tree's
+/// index still refuses two rules on one key, `The rule 'jvp_mul_tensor' and the rule
+/// 'jvp_mul_tensor_scalar' both have 'mul_tensor' with 2 operand(s) as the head of their left side`.
 export rule jvp_mul_tensor::<T>(x: T[..], w: T[..]) when is_float::<T>() {
     mul_tensor(x, w) => (dx: T[..], dw: T[..]) => mul_tensor(x, dw) + mul_tensor(dx, w)
 }
