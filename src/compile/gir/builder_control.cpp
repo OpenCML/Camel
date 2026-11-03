@@ -2822,7 +2822,7 @@ node_handle_t Builder::buildBranch(
             markSyncStatement(joinNode);
             linkNodes(LinkType::Sync, lastSyncedNode_, joinNode);
         }
-        lastSyncedNode_ = joinNode;
+        lastSyncedNode_ = chainPlaceForNode(joinNode);
         chainedNodes_.insert(brchNode);
         chainedNodes_.insert(joinNode);
     }
@@ -3688,7 +3688,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         // follows into it by a sync edge (the control edge the kind names the same pair with goes
         // beside it).
         linkSyncStatement(lastSyncedNode_, loopNode);
-        lastSyncedNode_ = loopNode;
+        lastSyncedNode_ = chainPlaceForNode(loopNode);
         chainedNodes_.insert(loopNode);
     }
     // The program sees the states, not the collection slots beside them. One state is its own
@@ -4091,7 +4091,7 @@ node_handle_t Builder::buildStreamLoop(
         // follows into it by a sync edge (the control edge the kind names the same pair with goes
         // beside it).
         linkSyncStatement(lastSyncedNode_, loopNode);
-        lastSyncedNode_ = loopNode;
+        lastSyncedNode_ = chainPlaceForNode(loopNode);
         chainedNodes_.insert(loopNode);
     }
 

@@ -3156,6 +3156,16 @@ class Builder {
     std::unordered_map<const GCT::Node *, const DraftGraphBuilder *> lambdaGraphs_;
     std::vector<node_handle_t> syncedReads_;
     std::unordered_set<node_handle_t> chainedNodes_;
+    /// The `GATE`s this builder made to be a chain's place (`chainPlaceFor`): where a value stood
+    /// where the chain may stand, the chain stands on one of these instead. Nothing on the graph
+    /// says so and nothing may (author ruling 2026-11-03: no mark on the edge); the builder's own
+    /// record is enough, because the one place that has to tell a place apart from a block's value
+    /// is a builder diagnostic, and it runs while the builder is still here.
+    std::unordered_set<node_handle_t> chainPlaceGates_;
+    /// The place the chain may stand on at `node` -- `chainPlaceFor`, and the `GATE` it makes is
+    /// recorded in `chainPlaceGates_` when it makes one. The free function is the rule; this is
+    /// the rule plus the record of where it was applied.
+    node_handle_t chainPlaceForNode(node_handle_t node);
     /// Once every body is built: turns into `:var/peek` each read whose value cannot be kept by
     /// anything but the variable, so that the read leaves the variable's sole-reference mark
     /// set and the next `acc = acc->append<v>` still appends in place

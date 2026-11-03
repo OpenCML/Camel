@@ -40,6 +40,14 @@ using namespace camel::core::type;
 
 namespace camel::compile::gir {
 
+node_handle_t Builder::chainPlaceForNode(node_handle_t node) {
+    const node_handle_t place = chainPlaceFor(node);
+    if (place != node) {
+        chainPlaceGates_.insert(place);
+    }
+    return place;
+}
+
 void Builder::ensureRootGraph() {
     if (rootGraph_) {
         return;

@@ -1742,11 +1742,16 @@ node_handle_t Builder::readVariableThrough(
         // written at all.
         syncedReads_.push_back(value);
         if (nodeKindOf(variable) == camel::runtime::GCNodeKind::Port) {
-            if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, value)) {
-                writeControlLink(lastSyncedNode_, value);
+            // The read takes a place of its own on the block's chain (edges.cn.md 5.5), and the
+            // place is asked once, before the wait is written: the wait ends where the chain may
+            // stand, and the statements written after the read follow that same place.
+            const node_handle_t place = chainPlaceForNode(value);
+            if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, place)) {
+                writeControlLink(lastSyncedNode_, place);
             }
-            lastSyncedNode_ = value;
+            lastSyncedNode_ = place;
             chainedNodes_.insert(value);
+            chainedNodes_.insert(place);
         }
     }
     return value;
