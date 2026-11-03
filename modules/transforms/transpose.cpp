@@ -431,7 +431,7 @@ bool buildTransposeMember(
         }
         // Which closure member holds the value of which parameter. The answer is the member's own:
         // the cut that wrote it recorded the parameter number with it
-        // (`GraphDraft::setClosureParameterOf`, `Residual::parameter`), and this reads it here --
+        // (`setClosureParameterOf` on the draft, `Residual::parameter`), and this reads it here --
         // never a place in the list. Places were the shape that broke: `residualsOf` numbers
         // residuals in program order, which is not parameter order, so `f(x, y) = y * y` puts
         // parameter 1 in slot 0 and a member's index named the wrong parameter. A closure a caller

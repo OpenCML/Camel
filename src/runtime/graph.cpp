@@ -942,7 +942,7 @@ GCGraphPayloadShape describeDraftPayload(const GraphDraft &draft, const DraftPay
         .withPortCount    = static_cast<gc_cnt_t>(draft.withPorts().size()),
         .closureCount   = static_cast<gc_cnt_t>(draft.closureNodes().size()),
         // The identity a cut recorded for its closure members: present only when some member holds
-        // a parameter's own value (`GraphDraft::closureParameterOf`).
+        // a parameter's own value (the draft's `closureParameterOf`).
         .closureParameters = std::any_of(
             draft.closureNodes().begin(), draft.closureNodes().end(),
             [&draft](gc_node_ref_t ref) {
