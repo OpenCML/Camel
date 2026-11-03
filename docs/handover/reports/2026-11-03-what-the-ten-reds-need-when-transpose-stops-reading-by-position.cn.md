@@ -124,3 +124,11 @@ POSPROBE fn=split_of_jvp_of_g_backward ref=5 at=0 paramCount=1 i=0 portParameter
 **所以"按身份取"要回答的问题变成**：`split_of_jvp_of_g_backward` 的**参数 0**（node 5）与它的**闭包成员 0**（node 0）之间，有没有一条今天就能读到的身份链？插桩量到的现有材料里**没有**：`closureNodes()` 只给出成员节点号，`Accs` 只给出元组里的格号，两者都不写"这个成员是哪个前向参数的値"。要凭空造出这条链，就得在 `split` 造后一半时把映射记下来——**那就是乙（把私下约定从位置换成字段），作者明确否了**。
 
 **结论：第一笔不能按"在 `transpose` 里换一种查法"来做。** 真正的身份链只能在**切点造图时**成立：后一半需要的前向值必须以残差身份出现，且它的"是哪一位"由残差表本身（不是端口顺序）说出。这一处与 `withres` 的捕获、与 `jvp` 侧的 `wantedValues` 是同一块，**不在 `transpose.cpp` 内部**。按纪律停在这里，报给派工的人定。
+
+## 10. 起点（一行结论 + 三行取证位置）
+
+三轮实验证明的是同一件事：**`transpose` 抱怨的那个 `ref=5` 是后一半自己的参数端口**，由 `split` 建后一半签名时 `addPortNode` 出来，**不经过 `makeCopy`**；因此"体里经参数端口读值"这条路的源头在**建签名/端口表那段**，不在复制源图那段。
+
+- `split.cpp:1849` 起的后一半构建：`Half backward(...)` 之后 `addResidualCaptures(draft, cuts, backward)`（残差 → 闭包端口），随后 `for (size_t i = sourcePorts.size() / 2; i < sourcePorts.size(); ++i)` 逐个 `addPortNode` + `appendNormPort` + `backward.portOf[i] = port`——**参数端口只在这一处建，且以端口下标为键**。
+- `split.cpp:388` `makeCopy` 的 `crossesCut` 先把残差读换成 `Accs`；`split.cpp:479` 的 `portIndex` 分支只在**复制源图节点**时才进——插桩 `POSPROBE-PORT` 全程零进入，所以这条读不是它造的。
+- `split.cpp:924` 那段注释写明了约定："slot `at` is parameter `at`'s value"，即残差表**按参数顺序排头**，`transpose` 才敢用位置取。这是两个文件之间的私下约定本身。
