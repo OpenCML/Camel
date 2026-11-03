@@ -20,8 +20,15 @@
  */
 
 import { is_float, is_integer, is_same, is_string, Tangent } from types
-import { exp, log_softmax, matmul, mean_axis, relu, reshape, shape, sigmoid, softmax, sum, take, tanh, where, zeros_like } from tensor
-import { log, pow } from math
+import { abs, exp, log, log_softmax, matmul, maximum, mean_axis, minimum, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, sum, take, tanh, where, zeros_like } from tensor
+// `log as math_log`: this module files the **array** `log`'s forward rule below (`jvp_log`), and a
+// rule's left side has to spell its operator with the operator's own name, so the plain `log` here
+// is `tensor:log`. The scalar `log` is what `pow_tangent` needs, and one module holds one `log`: the
+// second import of a name does not add an overload to the first, it hides it (measured 2026-11-04 --
+// with both imported, `pow_tangent`'s `log(x)` stopped resolving and `jvp_pow`'s two plan entries in
+// `test/plans/feat/compile/transforms.plan.toml` went red with "No matching function found for
+// argument types: <> (float)"). So the scalar one is named here instead.
+import { log as math_log, pow } from math
 import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
 
 /// A value of type `T` with its tangent: what a forward transform carries for one value.
@@ -375,6 +382,116 @@ export rule jvp_sigmoid::<T>(x: T[..]) when is_float::<T>() {
 export rule jvp_tanh::<T>(x: T[..]) when is_float::<T>() {
     tanh(x) => (dx: T[..]) => (1.0 - tanh(x) * tanh(x)) * dx
 }
+
+// ---- the forward rules of the eight basic elementwise operators ----
+//
+// `neg`, `abs`, `sqrt`, `log`, `rsqrt`, `maximum`, `minimum`, `divide`: one elementwise kernel each,
+// no state, no axis, no shape of their own beyond the broadcast the binary ones already share. They
+// are the first tranche of the deletion difference set -- the operators the engine can differentiate
+// (`setVjp` at `modules/tensor/ops/elementwise_ops.cpp`, its helper in `modules/tensor/ops/vjp.cpp`)
+// and the library could not, because neither family had a rule for them
+// (`docs/handover/reports/2026-11-03-what-deleting-the-engine-pullback-takes.cn.md`).
+//
+// **Every right side below is a straight line and none of them branches.** A rule's right side is
+// expanded where the transform builds its graph, and a branch on it is refused by the expander
+// (`the rule's right side is not a straight line of computations`, `GCNodeKind::Brch` has no
+// branch). So the sign of `abs` and the selection of `maximum`/`minimum` are written as a **mask**,
+// `where(cond, 1.0, -1.0)`, and never as `if` or as a three-operand `where` over the tangents: the
+// mask depends on the operands alone, so `split` computes it in the forward half and carries it,
+// and the linear half stays one `mul_tensor` the walk already has a law for (`jvp_relu` above is the
+// same shape, and its note measures the alternative: `skip=arity uri=tensor:where operands=3`).
+//
+// The masks are the engine's masks, not merely correct ones. `abs` has no derivative at `0`, so a
+// law has to choose a side there: the engine's `absVjp` asks `tensor:ge` (`x >= 0`), so `0.0` keeps
+// its cotangent's sign, and the mask here is `x >= 0.0` for the same reason. `maximum`/`minimum`
+// have no derivative at a tie, and the engine (`extremumVjp`) gives the tie to the **left** operand
+// (`tensor:ge` for `maximum`, `tensor:le` for `minimum`), so both laws ask the same comparison and
+// the tie lane answers 1 for `dx` and 0 for `dw`.
+//
+// The two rules whose slope needs a value the operator produced (`sqrt`, `rsqrt`) recompute it from
+// the operand, which is the channel `jvp_exp` established; `log`'s slope needs only the operand, and
+// `divide`'s needs both operands. None of the eight names a helper on the right: a helper becomes a
+// call in the linear half, and a call with no transpose of its own stops the backward walk
+// (`skip=call-no-transpose`, measured on `rulesets.jvp::pow_tangent`).
+
+/// `-x` on an array: what `tensor:neg` is, and the name its rule is filed under. `x * w`'s array
+/// form needed the same stand-in (`mul_tensor`, `stdlib/rulesets/transpose.cml`) for the same
+/// reason: a rule's left side is a call, and `tensor:neg` has no spelling a program writes.
+func neg::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return -x
+}
+
+/// `d(-x) = -dx`: negation is its own derivative.
+export rule jvp_neg_tensor::<T>(x: T[..]) when is_float::<T>() {
+    neg(x) => (dx: T[..]) => -dx
+}
+
+/// `d|x| = sign(x) * dx`, the sign as the mask `where(x >= 0.0, 1.0, -1.0)`.
+///
+/// The zero is the one input the maths leaves open and the law does not: `0.0` is not negative, and
+/// the engine's `absVjp` says so with `tensor:ge`, so the right side is `>=` and not `>`. The two
+/// legs of a `grad` are compared bit for bit, and this is the lane where two defensible laws
+/// disagree.
+export rule jvp_abs::<T>(x: T[..]) when is_float::<T>() {
+    abs(x) => (dx: T[..]) => (where(x >= 0.0, 1.0, -1.0) * dx)
+}
+
+/// `d(sqrt(x)) = dx * 0.5 / sqrt(x)`: the slope is one over twice the root, and the root is
+/// recomputed from the operand -- the x-only channel `jvp_exp` carries. The engine's `sqrtVjp`
+/// multiplies by `0.5` first and divides by the output second; the order here is the same, so the
+/// two halves round the same way.
+export rule jvp_sqrt::<T>(x: T[..]) when is_float::<T>() {
+    sqrt(x) => (dx: T[..]) => (dx * 0.5) / sqrt(x)
+}
+
+/// `d(log(x)) = dx / x`: this is the one law in the tranche that reads nothing but the operand the
+/// node was handed -- no recomputation, no carried value.
+export rule jvp_log::<T>(x: T[..]) when is_float::<T>() {
+    log(x) => (dx: T[..]) => dx / x
+}
+
+/// `d(rsqrt(x)) = -0.5 * y * (y * y) * dx` with `y = rsqrt(x)`, which is the engine's grouping
+/// (`rsqrtVjp`: `cube = y * (y * y)`, `scaled = ct * -0.5`, `scaled * cube`). `y` is recomputed from
+/// the operand like `sqrt`'s.
+export rule jvp_rsqrt::<T>(x: T[..]) when is_float::<T>() {
+    rsqrt(x) => (dx: T[..]) => (dx * (-0.5)) * (rsqrt(x) * (rsqrt(x) * rsqrt(x)))
+}
+
+/// `d(maximum(x, w)) = mask * dx + (1 - mask) * dw` with `mask = where(x >= w, 1.0, 0.0)`.
+///
+/// A tie goes to the left operand, because the engine's `extremumVjp` asks `tensor:ge`: at `x == w`
+/// the mask is 1, the tangent is `dx`, and the cotangents of the two legs are `ct` for `x` and `0`
+/// for `w`. `1.0 - mask` is written rather than a second `where` so the two masks cannot be read as
+/// two different comparisons; both depend on the operands alone, so both are carried, and the
+/// linear half is two `mul_tensor` and one `add`.
+export rule jvp_maximum::<T>(x: T[..], w: T[..]) when is_float::<T>() {
+    maximum(x, w) => (dx: T[..], dw: T[..]) =>
+        (where(x >= w, 1.0, 0.0) * dx + (1.0 - where(x >= w, 1.0, 0.0)) * dw)
+}
+
+/// `d(minimum(x, w)) = mask * dx + (1 - mask) * dw` with `mask = where(x <= w, 1.0, 0.0)`: the
+/// mirror of `jvp_maximum`, and its own rule because the comparison is the law. A tie goes to the
+/// left operand again (`tensor:le`, the engine's choice).
+export rule jvp_minimum::<T>(x: T[..], w: T[..]) when is_float::<T>() {
+    minimum(x, w) => (dx: T[..], dw: T[..]) =>
+        (where(x <= w, 1.0, 0.0) * dx + (1.0 - where(x <= w, 1.0, 0.0)) * dw)
+}
+
+/// `x / w` on two arrays: what `tensor:divide` is, and the name its rule is filed under -- the same
+/// stand-in `subtract` above needs, because `tensor:divide`'s exported spellings are `__div__` and
+/// the infix form, neither of which is a call a left side can be written with.
+func divide::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
+    return x / w
+}
+
+/// `d(x / w) = dx / w - (x / w) * dw / w`: the quotient rule, in the grouping the engine's
+/// `divideVjp` implies -- its two cotangents are `ct / w` and `-(ct / w) * (x / w)`, and the
+/// transpose of this right side answers exactly those two (the `dx / w` node gives `ct / w`, and the
+/// `((x / w) * dw) / w` node gives `-(ct / w) * (x / w)`), so the division that produces the
+/// cotangent is the same division and rounds the same way.
+export rule jvp_divide::<T>(x: T[..], w: T[..]) when is_float::<T>() {
+    divide(x, w) => (dx: T[..], dw: T[..]) => dx / w - ((x / w) * dw) / w
+}
 // ---- the forward rule of `:op/idx_arr` ----
 //
 // `xs[i]` is the one operator a function of an array meets before any other: `f(xs) = xs[0] * xs[1]`
@@ -423,7 +540,7 @@ export rule jvp_idx_arr::<T>(xs: T[], i: int) {
 /// @example pow_tangent(3.0, 2.0, 1.0, 0.0)    // 6.0
 /// @example pow_tangent(-3.0, 2.0, 1.0, 0.0)    // -6.0
 export func pow_tangent::<T>(x: T, w: T, dx: T, dw: T): T when is_float::<T>() {
-    let throughExponent = if dw == T(0) then T(0) else pow(x, w) * log(x) * dw
+    let throughExponent = if dw == T(0) then T(0) else pow(x, w) * math_log(x) * dw
     return w * pow(x, w - T(1)) * dx + throughExponent
 }
 

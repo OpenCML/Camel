@@ -1717,3 +1717,136 @@ expect_stderr_contains = ["skip=backward construct=a node whose input was not co
 expect_output_not_contains = ["TRANSPOSE function="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# ---- the tranche of eight laws: `neg`, `abs`, `sqrt`, `log`, `rsqrt`, `maximum`, `minimum`,
+# `divide` ----
+# One entry an operator, and one program an entry: the engine's `grad` leg first, then the library's
+# `vjp` leg on the same input, then whether the two arrays agree lane for lane. The pair of legs is
+# the criterion the deletion audit asks for (`docs/handover/reports/2026-11-03-what-deleting-the-engine-pullback-takes.cn.md`,
+# D1), and every entry pins the whole array rather than an aggregate, because a sum can be made to
+# match by a law that is wrong in every lane (`log_softmax`'s note is the worked example).
+#
+# Measured on 2026-11-04 (worktree `tranche` = `origin/develop` 545b24d92 + this lane's changes,
+# load 19-25, `[SUMMARY] total: 8, pass: 8`), one line an operator, `rhs=` being the transpose walk's
+# own list of the laws it read for that program:
+#
+#     neg      engine [-1.0, -1.0, -1.0]                     library same=true  rhs=sum_t,neg_tensor_t
+#     abs      engine [-1.0, 1.0, 1.0, -1.0]                 library same=true  rhs=sum_t,mul_tensor_t
+#     sqrt     engine [0.25, 0.3333333333333333, 1.0]        library same=true  rhs=sum_t,divide_t,mul_tensor_t,sqrt_t
+#     log      engine [1.0, 0.5, 0.25]                       library same=true  rhs=sum_t,divide_t
+#     rsqrt    engine [-0.0625, -0.5, -4.0]                  library same=true  rhs=sum_t,mul_tensor_t,rsqrt_t
+#     maximum  engine dx [0.0, 1.0, 1.0, 0.0] dw [1.0, 0.0, 0.0, 1.0]         library same=true  rhs=sum_t,add_tensor_t,mul_tensor_t,subtract_t
+#     minimum  engine dx [1.0, 1.0, 0.0, 1.0] dw [0.0, 0.0, 1.0, 0.0]         library same=true  rhs=sum_t,add_tensor_t,mul_tensor_t,subtract_t
+#     divide   engine dx [0.5, 0.25, 0.125] dw [-1.5, 0.1875, -0.015625]      library same=true  rhs=sum_t,subtract_t,divide_t,mul_tensor_t
+#
+# **Four laws are walked and four are not**, and the four that are not are not a defect: the walk asks
+# for a law at the nodes the *linear half* holds, and a nonlinear operator's forward rule puts its
+# slope there as a mask or a product instead of the operator (`abs`'s two masks, `maximum`/`minimum`'s
+# `where` and `1 - where`, `log`'s `dx / x`). `sqrt_t` and `rsqrt_t` are walked because those forward
+# rules *recompute* the operator from the operand and the cut carries the recomputation; `neg_tensor_t`
+# is walked because `-dx` is the operator on a linear value. So the number in each reading is the
+# engine's number whether or not the law was reached, and the `rhs=` list is the measurement that says
+# which happened -- the reason it is written down here instead of being assumed.
+[[tests]]
+name = "neg_gradient_both_legs"
+desc = "`sum(-x)` on `[-2.0, 0.5, 3.0]` through both legs: the engine's `negVjp` answers `[-1.0, -1.0, -1.0]` and the library's `neg_tensor_t` must answer the same three lanes, so `same=true`. `neg`'s slope is `-1` and reads nothing off the operand, which is why its law is the pure cotangent form `-ct` and why this is the first member of the tranche: a law written `ct` (the sign dropped) answers `[1.0, 1.0, 1.0]` and the three lanes tell the two apart without a tolerance. Walk `rhs=sum_t,neg_tensor_t`: the law is walked, because `jvp_neg_tensor`'s right side is `-dx`, the operator on a linear value."
+kind = "behavior"
+case = "../../../cases/compile/transforms/neg_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["neg engine=[-1.0, -1.0, -1.0]", "neg: engine=[-1.0, -1.0, -1.0] library=[-1.0, -1.0, -1.0] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "abs_gradient_both_legs"
+desc = "`sum(abs(x))` on `[-2.0, 0.0, 3.0, -0.5]` through both legs: the engine's `absVjp` answers `[-1.0, 1.0, 1.0, -1.0]` and the library's `abs_t` must answer the same four lanes, so `same=true`. The input holds both signs AND the zero, which is the point: `abs` has no derivative at `0`, so a law has to say which side it takes there, and the engine asks `tensor:ge` (`x >= 0`), which puts the zero on the positive side. A law written `x > 0` answers `[-1.0, -1.0, 1.0, -1.0]` -- one lane different, and it is the lane where the maths cannot say which is right. Walk `rhs=sum_t,mul_tensor_t`: `abs_t` is not walked on this program, because `jvp_abs` puts the sign in the linear half as two masks; the law is what a walk that meets `abs` on a linear value reads, and this entry pins the number the two routes have to share."
+kind = "behavior"
+case = "../../../cases/compile/transforms/abs_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["abs engine=[-1.0, 1.0, 1.0, -1.0]", "abs: engine=[-1.0, 1.0, 1.0, -1.0] library=[-1.0, 1.0, 1.0, -1.0] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "sqrt_gradient_both_legs"
+desc = "`sum(sqrt(x))` on `[4.0, 2.25, 0.25]` through both legs: `[0.25, 0.3333333333333333, 1.0]` from `sqrtVjp` and from the library's `sqrt_t`, so `same=true`. The slope needs `sqrt(x)`, which is a function of the operand alone, so the law recomputes it -- the channel `exp_t` measured -- and the operand is the only value the cut carries. The law is written in the engine's order, `(ct * 0.5) / sqrt(x)`, and not as the algebraically equal `ct / (2.0 * sqrt(x))`, because the legs are compared bit for bit and the two orders round differently for some inputs. The third asserted line is the domain boundary on `[0.0, -1.0]`: `[inf, nan]` on both legs, because neither refuses an input the derivative is not finite at and a law must not either. Walk `rhs=sum_t,divide_t,mul_tensor_t,sqrt_t` -- `sqrt_t` is walked here, because the forward rule recomputes `sqrt(x)` and the cut carries the recomputation into the backward half."
+kind = "behavior"
+case = "../../../cases/compile/transforms/sqrt_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["sqrt engine=[0.25, 0.3333333333333333, 1.0]", "sqrt: engine=[0.25, 0.3333333333333333, 1.0] library=[0.25, 0.3333333333333333, 1.0] same=true", "sqrt boundary engine=[inf, nan] library=[inf, nan]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "log_gradient_both_legs"
+desc = "`sum(log(x))` on `[1.0, 2.0, 4.0]` through both legs: `[1.0, 0.5, 0.25]` from `logVjp` and from the library's `log_t`, so `same=true`. The slope is the reciprocal of the operand, so nothing is recomputed and nothing is carried beyond `x` itself: this is the member of the tranche that says the set is not \"every law needs a carried value\". `ct` (the identity) answers `[1.0, 1.0, 1.0]` and `ct * x` answers `[1.0, 2.0, 4.0]`, so the three lanes separate all three laws. The third asserted line is the domain boundary on `[0.0, -1.0]`: `[inf, -1.0]` on both legs -- `-1.0` and not `nan`, because the cotangent is `ct / x` and never reads the output `log(x)`, so a negative operand gets a finite cotangent for a function that has no value there. Walk `rhs=sum_t,divide_t`: `log_t` is not walked on this program (the forward rule's linear half is the division itself), and the number still matches because both halves write the same quotient."
+kind = "behavior"
+case = "../../../cases/compile/transforms/log_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["log engine=[1.0, 0.5, 0.25]", "log: engine=[1.0, 0.5, 0.25] library=[1.0, 0.5, 0.25] same=true", "log boundary engine=[inf, -1.0] library=[inf, -1.0]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rsqrt_gradient_both_legs"
+desc = "`sum(rsqrt(x))` on `[4.0, 1.0, 0.25]` through both legs: `[-0.0625, -0.5, -4.0]` from `rsqrtVjp` and from the library's `rsqrt_t`, so `same=true`. The slope is `-0.5 * y^3` with `y = rsqrt(x)`, so the law recomputes `y` and writes the engine's grouping -- `cube = y * (y * y)`, `scaled = ct * -0.5`, `scaled * cube` -- because `(ct * y) * (y * y) * -0.5` is the same real number and a different last bit for some inputs. A law that drops the sign answers `[0.0625, 0.5, 4.0]` and one that drops the cube answers `[-0.25, -0.5, -1.0]`, so the three lanes separate all three. The third asserted line is the domain boundary on `[0.0, -1.0]`: `[-inf, nan]` on both legs. Walk `rhs=sum_t,mul_tensor_t,rsqrt_t` -- `rsqrt_t` is walked, because the forward rule recomputes `rsqrt(x)` and the cut carries it."
+kind = "behavior"
+case = "../../../cases/compile/transforms/rsqrt_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["rsqrt engine=[-0.0625, -0.5, -4.0]", "rsqrt: engine=[-0.0625, -0.5, -4.0] library=[-0.0625, -0.5, -4.0] same=true", "rsqrt boundary engine=[-inf, nan] library=[-inf, nan]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "maximum_gradient_both_legs"
+desc = "`sum(maximum(x, w))` on `x = [-2.0, 0.0, 3.0, -0.5]`, `w = [1.0, 0.0, 1.0, 2.0]` through both legs, **differentiating both operands**: `[0.0, 1.0, 1.0, 0.0]` for `x` and `[1.0, 0.0, 0.0, 1.0]` for `w`, from `extremumVjp` and from the library's `maximum_t`, so `same=true` on both halves. Each operand's engine leg is its own `with` parameter and the library leg reads both halves of one `pullback`: a reading that only read `dx` could not tell a swapped law from a right one, and `dw` is exactly the lane a `where` with its arms exchanged would get wrong. The input carries a tie (`x = 0.0`, `w = 0.0`) because a tie belongs to the left operand and both halves must say so -- the engine asks `tensor:ge`, so the law writes `>=` and not `>`. The law reduces each answer to its own operand's shape with `sum_to`, which is the identity for these equal shapes and the reduction half for the `(T[..], T)` shape the operator is also called with. Measured readings: `maximum engine dx=[0.0, 1.0, 1.0, 0.0] dw=[1.0, 0.0, 0.0, 1.0]`, and the transpose walk reports `rhs=sum_t,add_tensor_t,mul_tensor_t,subtract_t` -- the law itself is not walked on this program, because the forward rule puts the two masks and the two products in the linear half and the operator never appears there."
+kind = "behavior"
+case = "../../../cases/compile/transforms/maximum_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["maximum engine dx=[0.0, 1.0, 1.0, 0.0] dw=[1.0, 0.0, 0.0, 1.0]", "maximum: engine=[0.0, 1.0, 1.0, 0.0] library=[0.0, 1.0, 1.0, 0.0] same=true", "maximum dw: engine=[1.0, 0.0, 0.0, 1.0] library=[1.0, 0.0, 0.0, 1.0] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "minimum_gradient_both_legs"
+desc = "The mirror of the `maximum` entry on the same input, both operands again: `sum(minimum(x, w))` answers `[1.0, 1.0, 0.0, 1.0]` for `x` and `[0.0, 0.0, 1.0, 0.0]` for `w`, from `extremumVjp` and from the library's `minimum_t`, so `same=true` on both halves. It is a separate case because the law is a different comparison (`<=`) and not a negation of the other's: the tie lane is again the left operand's, and a law that used `>=` would answer `[0.0, 1.0, 1.0, 0.0]` for `x` and `[1.0, 0.0, 0.0, 1.0]` for `w` -- exactly the `maximum` reading on the same input, which is the wrong law a reader is most likely to arrive at by copying. Measured: `minimum engine dx=[1.0, 1.0, 0.0, 1.0] dw=[0.0, 0.0, 1.0, 0.0]`, walk `rhs=sum_t,add_tensor_t,mul_tensor_t,subtract_t`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/minimum_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["minimum engine dx=[1.0, 1.0, 0.0, 1.0] dw=[0.0, 0.0, 1.0, 0.0]", "minimum: engine=[1.0, 1.0, 0.0, 1.0] library=[1.0, 1.0, 0.0, 1.0] same=true", "minimum dw: engine=[0.0, 0.0, 1.0, 0.0] library=[0.0, 0.0, 1.0, 0.0] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "divide_gradient_both_legs"
+desc = "`sum(x / w)` on `x = [6.0, -3.0, 1.0]`, `w = [2.0, 4.0, 8.0]` through both legs, **differentiating both operands**: `[0.5, 0.25, 0.125]` for `x` and `[-1.5, 0.1875, -0.015625]` for `w`, from `divideVjp` and from the library's `divide_t`, so `same=true` on both halves. This is the member of the tranche where measuring both matters most: the second cotangent `dw = -(ct / w) * (x / w)` is where the two ways of writing the quotient rule part company, and the law writes the engine's grouping (and `jvp_divide` is written so that its transpose produces exactly it) rather than the algebraically equal `-(ct * x) / (w * w)`, which rounds differently. The three lanes are all distinct, and `ct` alone answers `[1.0, 1.0, 1.0]` while `ct * w` answers `[2.0, 4.0, 8.0]`, so they separate the likely wrong laws. Measured: `divide engine dx=[0.5, 0.25, 0.125] dw=[-1.5, 0.1875, -0.015625]`, walk `rhs=sum_t,subtract_t,divide_t,mul_tensor_t` (the law is walked here: the linear half holds `dx / w` and `((x / w) * dw) / w`)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/divide_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["divide engine dx=[0.5, 0.25, 0.125] dw=[-1.5, 0.1875, -0.015625]", "divide: engine=[0.5, 0.25, 0.125] library=[0.5, 0.25, 0.125] same=true", "divide dw: engine=[-1.5, 0.1875, -0.015625] library=[-1.5, 0.1875, -0.015625] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

@@ -1,0 +1,37 @@
+// `neg`'s gradient through the engine and through the library, in one program: the engine's number
+// first, then the library's, then whether the two agree lane for lane.
+//
+// `neg` is the cheapest member of the difference set: its slope is `-1`, so no value of the operand
+// is needed and the law is the pure cotangent form `-ct`. A law written `ct` (the sign dropped)
+// answers `[1.0, 1.0, 1.0]` on the input below and the correct one answers `[-1.0, -1.0, -1.0]`, so
+// the three lanes are the criterion and no tolerance is needed.
+//
+// The engine's rule is `negVjp` (`modules/tensor/ops/elementwise_ops.cpp`), which is one
+// `tensor:neg` of its cotangent; the library's law has to be the same one node, or the two legs
+// differ in the last bit of a value the operator only ever flips the sign of.
+//
+//     camel test/cases/compile/transforms/neg_gradient_both_legs.cml
+import { grad } from autodiff
+import { vjp } from vjp
+import { abs, sum } from tensor
+
+/// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
+with <x: float[..]>
+func total(): float {
+    return sum(-x)
+}
+
+/// The library's spelling: the same function with the value as an ordinary parameter.
+func total_plain(x: float[]): float {
+    return sum(-x)
+}
+
+func main(): int sync {
+    let engine = grad(total)<[-2.0, 0.5, 3.0] as float[]>()
+    `neg engine={}`->format<engine>->println
+    let (_, pullback) = vjp(total_plain)([-2.0, 0.5, 3.0] as float[])
+    let library = pullback(1.0).0
+    let same = sum(abs(engine - library)) == 0.0
+    `neg: engine={} library={} same={}`->format<engine, library, same>->println
+    return 0
+}
