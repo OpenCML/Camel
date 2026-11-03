@@ -52,6 +52,112 @@ timeout_ms = 20000
 
 
 [[tests]]
+name = "stated_sum_axis_gradient"
+desc = "The gradient of `pick_at(sum_axis(x, 0, false), [1, 3])` over a `[2, 3]` tensor, through the engine and through the library in one program: `jvp_sum_axis` states `[0, 0, 2, 3]` in the linear call and `sum_axis_stated_t` spreads each column's cotangent back down the column. The reading is `value=7.0` -- the middle column's lane, picked -- and `same=true`: the two legs answer the same numbers bit for bit. Picking one lane rather than summing the lanes is what makes the reading name the axis the cotangent went back along: the answer is `[[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]]`, and an all-ones gradient would have said nothing about where it went."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_sum_axis_gradient.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["sum_axis: value=7.0", "same=true"]
+expect_stderr_contains = ["sum_axis_stated_t"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "stated_sum_axis_gradient_negative_axis"
+desc = "The same reading with the axis written `-1`: `sum_axis(x, -1, false)` sums each row, so the lanes are `[6.0, 15.0]`, the picked lane is `15.0` and the gradient is `[[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]]`. The axis reaches the stated operator exactly as the call wrote it -- the reduction resolves it on entry and no law normalizes it a second time -- and the ones landing on row 1 and not down column 1 is what rules out a spread along the wrong axis. Both legs `same=true`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_sum_axis_gradient_negative_axis.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["sum_axis -1: value=15.0", "same=true"]
+expect_stderr_contains = ["sum_axis_stated_t"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "stated_mean_gradient"
+desc = "The gradient of `mean(x) * 2.0` over a `[2, 3]` tensor, both legs: the mean of `[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]` is `3.5`, the value is `7.0`, and every one of the six positions gets `2.0 / 6`, `0.3333333333333333`. `jvp_mean` states `shape(xs)` and `mean_stated_t` divides the cotangent by the product of those extents and spreads it, which is the engine's `dy / count` broadcast element for element; the reading is `same=true`. The multiplier is what makes the cotangent `2.0` instead of the `1.0` a bare sum ends in: with `1.0` a law that divided and one that multiplied would be hard to tell apart."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_mean_gradient.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["mean: value=7.0", "same=true"]
+expect_stderr_contains = ["mean_stated_t"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+
+[[tests]]
+name = "stated_max_axis_gradient_tie"
+desc = "The gradient of `sum(max_axis(x, 1, false))` where one row holds its maximum twice: the lanes are `[3.0, 2.0]`, the value is `5.0`, and the gradient is `[[0.0, 1.0, 1.0], [0.0, 0.0, 1.0]]` -- both tied positions get the whole cotangent. The tie is what discriminates the law: taking the first tied position answers `[[0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]` and sharing the cotangent answers `[[0.0, 0.5, 0.5], [0.0, 0.0, 1.0]]`, and only the first reading is what the engine's `extremumAxisVjp` answers, which the `same=true` on the two legs says."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_max_axis_gradient_tie.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["max_axis tie: value=5.0", "same=true"]
+expect_stderr_contains = ["max_axis_stated_t"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "stated_min_axis_gradient_negative_axis"
+desc = "The gradient of `sum(min_axis(x, -1, false))` with a tie in one row: the lanes are `[1.0, 4.0]`, the value is `5.0`, and the gradient is `[[0.0, 1.0, 1.0], [0.0, 1.0, 0.0]]`. The axis written `-1` is the second reading in the case -- it reaches `min_axis_stated` unresolved and the stated extents decide where the lane's cotangent goes -- and the tie is the first: a law that kept only the first tied position would answer `[[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]]`, and one that spread the cotangent over the lane would answer `[[1.0, 1.0, 1.0], [0.0, 1.0, 0.0]]`. Both legs `same=true`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_min_axis_gradient_negative_axis.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["min_axis -1: value=5.0", "same=true"]
+expect_stderr_contains = ["min_axis_stated_t"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+
+[[tests]]
+name = "stated_mean_axis_gradient_square_axis"
+desc = "The gradient of `sum(take(mean_axis(x, 1, false), [1]))` over a `[2, 2]` tensor: the lanes are `[1.5, 3.5]`, the value is `3.5`, and the gradient is `[[0.0, 0.0], [0.5, 0.5]]`. The reading exists to pin the number a trailing broadcast answers instead: `[[0.0, 0.5], [0.0, 0.5]]`, the same two halves spread down the columns rather than along the row, with a square tensor's shapes agreeing so that nothing objects. Both legs `same=true` -- before the reverse law put the reduced axis back, this one printed `same=false` and the library leg answered the column array."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_mean_axis_gradient_square_axis.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["mean_axis square: value=3.5", "same=true"]
+expect_output_not_contains = ["skip=", "same=false"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "stated_mean_axis_gradient_nonsquare_axis"
+desc = "The same reading on `[2, 3]`: the lanes are `[2.0, 5.0]`, the value is `5.0`, and the gradient is `[[0.0, 0.0, 0.0], [0.3333333333333333, 0.3333333333333333, 0.3333333333333333]]`. On this shape the old broadcast could not stay quiet -- a `[2]` cotangent against `[2, 3]` extents matches nothing, so the library leg stopped with a dimension mismatch while the engine answered -- and the pair with the square case is the point: this one says the law refused, that one says it answered the wrong array."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_mean_axis_gradient_nonsquare_axis.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["mean_axis nonsquare: value=5.0", "same=true"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+
+[[tests]]
 name = "stated_sum_extents_refused"
 desc = "A stated extent the tensor does not have is a fault: `sum_stated(x, [2])` over four elements stops on the operator's own line with `states extent 2 at dimension 0 and the tensor has 4`, and the program never prints its reading. This is the check the forward half's `shape(xs)` makes unnecessary and no less necessary: the value does not read the list, so nothing but this comparison can say it is wrong, and an extent nobody compared is a gradient of the wrong shape."
 kind = "behavior"

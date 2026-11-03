@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_integer, is_same, is_string, Tangent } from types
-import { abs, erf, erfc, exp, gelu, linear, log, log_softmax, matmul, max, maximum, mean_axis, mean_axis_stated, min, minimum, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, sum, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
+import { abs, erf, erfc, exp, gelu, linear, log, log_softmax, matmul, max, max_axis, max_axis_stated, maximum, mean, mean_axis, mean_axis_stated, mean_stated, min, min_axis, min_axis_stated, minimum, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, sum, sum_axis, sum_axis_stated, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
 // `log as math_log`: this module files the **array** `log`'s forward rule below (`jvp_log`), and a
 // rule's left side has to spell its operator with the operator's own name, so the plain `log` here
 // is `tensor:log`. The scalar `log` is what `pow_tangent` needs, and one module holds one `log`: the
@@ -309,6 +309,52 @@ export rule jvp_sum::<T>(xs: T[..]) when is_float::<T>() {
 /// operator that takes them is `mean_axis_stated`, and `mean_axis_stated_t` reads that list alone.
 export rule jvp_mean_axis::<T>(xs: T[..], axis: int, keepdims: bool) when is_float::<T>() {
     mean_axis(xs, axis, keepdims) => (dxs: T[..]) => mean_axis_stated(dxs, stated_axis_shape(axis, keepdims, shape(xs)))
+}
+
+/// `d(sum_axis(xs, axis, keepdims)) = sum_axis(dxs, axis, keepdims)`: a lane sum adds up the
+/// elements of each lane, so it is linear and the tangent of the lane sum is the lane sum of the
+/// tangents. It is the operator and not a decomposition, so the accumulation, the element type and
+/// the one rounding are the definition's own.
+///
+/// A lane sum forgets each lane's length, and its adjoint spreads the lane's cotangent back over
+/// exactly those elements, so the tangent call states the axis, the flag and the extents in one
+/// list -- `sum_axis_stated` -- and `sum_axis_stated_t` reads that list and nothing of `dxs`. The
+/// axis is handed over as the call wrote it, negative included: the reduction normalizes it on
+/// entry, and a second normalization here would be a statement about a value the operation has
+/// already resolved.
+export rule jvp_sum_axis::<T>(xs: T[..], axis: int, keepdims: bool) when is_float::<T>() {
+    sum_axis(xs, axis, keepdims) => (dxs: T[..]) => sum_axis_stated(dxs, stated_axis_shape(axis, keepdims, shape(xs)))
+}
+
+/// `d(max_axis(xs, axis, keepdims)) = max_axis(dxs, axis, keepdims)` where the lane's largest element
+/// is: a max is a selection, and the tangent of a selection is the tangent of the element it chose.
+///
+/// The selection is what the stated call carries. `xs >= max_axis(xs, axis, true)` is `true` exactly
+/// at the positions that hold the lane's largest element -- every tied one, since a value is greater
+/// than or equal to the max of its lane iff it is that max -- and the inner call states `keepdims` so
+/// that the comparison broadcasts against `xs` whatever axis was reduced. The mask depends on `xs`
+/// alone, so the cut carries it and the reverse law multiplies by it
+/// (`max_axis_stated_t`). NaN selects nothing on either side, which is the engine's `strict_eq`
+/// reading too (`extremumAxisVjp`).
+export rule jvp_max_axis::<T>(xs: T[..], axis: int, keepdims: bool) when is_float::<T>() {
+    max_axis(xs, axis, keepdims) => (dxs: T[..]) => max_axis_stated(dxs, xs >= max_axis(xs, axis, true), stated_axis_shape(axis, keepdims, shape(xs)))
+}
+
+/// `d(min_axis(xs, axis, keepdims)) = min_axis(dxs, axis, keepdims)` where the lane's smallest element
+/// is: the same selection as the max's, read with `<=`.
+export rule jvp_min_axis::<T>(xs: T[..], axis: int, keepdims: bool) when is_float::<T>() {
+    min_axis(xs, axis, keepdims) => (dxs: T[..]) => min_axis_stated(dxs, xs <= min_axis(xs, axis, true), stated_axis_shape(axis, keepdims, shape(xs)))
+}
+
+/// `d(mean(xs)) = mean(dxs)`: the mean of every element is a sum divided by a count, and the
+/// division reads the count and not the value, so it is linear and the tangent of the mean is the
+/// mean of the tangents.
+///
+/// The adjoint gives a `numel(xs)`-th of the cotangent to every element, and neither the count nor
+/// the operand's shape is in the cotangent's type, so the tangent call states the extents --
+/// `mean_stated` -- and `mean_stated_t` divides and spreads from that list.
+export rule jvp_mean::<T>(xs: T[..]) when is_float::<T>() {
+    mean(xs) => (dxs: T[..]) => mean_stated(dxs, shape(xs))
 }
 
 /// `d(reshape(x)) = reshape(dx)`: a reshape moves no element, so the tangent moves with the value.

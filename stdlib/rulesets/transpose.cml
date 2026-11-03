@@ -39,7 +39,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, max, maximum, mean_axis, mean_axis_stated, min, minimum, numel, pick_at, relu, rsqrt, sigmoid, sqrt, subtract, sum, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
+import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, max, max_axis_stated, maximum, mean_axis, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, numel, pick_at, relu, reshape, rsqrt, sigmoid, sqrt, subtract, sum, sum_axis_stated, sum_stated, sum_to, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 // `log as math_log`, for the reason `rulesets.jvp` records: the plain `log` here is the **array**
 // one (`log_t` files its law below), and a second import of one name hides the first instead of
 // overloading it, so `pow_d_t`'s scalar `log(x)` is spelled `math_log`.
@@ -498,6 +498,76 @@ export rule sum_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
     sum_stated(t, at) => (ct: T) => spread_over(ct, at)
 }
 
+// ---- the transpose rules of the lane sum and of the whole-tensor mean ----
+//
+// Both are linear in their data, so each adjoint is the move the operation makes read backwards: a
+// lane sum's spreads each lane's cotangent back over the lane it added up, and the mean's spreads a
+// `numel(t)`-th of the cotangent over every element. The extents are the operand's shape, which is a
+// value of the primal and not of the cotangent, so the forward halves state them
+// (`stdlib/rulesets/jvp.cml#jvp_sum_axis`, `#jvp_mean`) and the two laws below read the list and
+// nothing of the tensor.
+
+/// The extents of a reduction's operand with an extent of one on the axis it reduced: the shape a
+/// lane's cotangent is read at, so that `full(extents, 1.0) * ct` broadcasts over the axis the
+/// reduction took instead of over the last one.
+///
+/// The axis arrives as the call wrote it and may be negative; it is brought into `0 .. rank-1` here
+/// because a list is indexed by a position, which is a different reading from the reduction's own
+/// (that one resolves the axis on entry, `modules/tensor/kernels/reduce.cpp#normalizeAxis`, and the
+/// list this law receives is the resolved shape).
+func lane_shape(extents: int[], axis: int): int[] {
+    let a = if axis < 0 then axis + len(extents) else axis
+    return range(0, len(extents), 1)->map<(i: int): int => if i == a then 1 else extents[i]>
+}
+
+/// `ct` spread back over `extents` along `axis`: the shape a lane's cotangent takes.
+///
+/// With `keepdims` the cotangent already has one extent per axis -- one of them is 1 -- so the
+/// broadcast is the whole of it. Without the flag the reduced axis is gone from the cotangent, and
+/// it is put back as an extent of one before the broadcast: `reshape` is what inserts it, and the
+/// multiplication by `full(extents, 1.0)` is what repeats the lane's number over the lane. Both
+/// steps copy and neither rounds, so the answer is the engine's `tensor:expand_axis` element for
+/// element.
+func lane_spread::<T>(ct: T[..], extents: int[], axis: int, keepdims: bool): T[..] {
+    return if keepdims then full(extents, 1.0) * ct
+    else full(extents, 1.0) * reshape<lane_shape(extents, axis)>(ct)
+}
+
+/// The cotangent of `sum_axis_stated(t, at)`: each lane's `ct` spread back over the lane it summed,
+/// where `at = [axis, keepdims, d0, ..., d(rank-1)]`.
+export rule sum_axis_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
+    sum_axis_stated(t, at) => (ct: T[..]) => lane_spread(ct, at[2:len(at)], at[0], at[1] != 0)
+}
+
+/// The cotangent of `mean_stated(t, at)`: the one number it answers is the mean of every element, so
+/// its adjoint gives a `numel(t)`-th of that number to every element of the extents `at` states.
+///
+/// The count is `at`'s product -- the same number the mean divided by -- and the division is one
+/// operation per element over the spread, which is the engine's `(dy / count)` broadcast exactly:
+/// the two orders divide the same values by the same count.
+export rule mean_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
+    mean_stated(t, at) => (ct: T) => spread_over(ct, at) / float(extent_product(at))
+}
+
+/// The cotangent of `max_axis_stated(t, mask, at)`: the lane's cotangent, spread back along the axis
+/// the extremum took, and kept only where `mask` says the operand holds the lane's largest element.
+///
+/// The mask is the whole of an extremum's reverse rule. An extremum is not linear, so its adjoint is
+/// not a spread of `ct` but a *selection*: every position that holds the lane's largest element gets
+/// the whole `ct`, and one that does not gets nothing (`modules/tensor/ops/reduction_ops.cpp`'s
+/// `extremumAxisVjp` answers exactly that, with `strict_eq` against the broadcast output). Two laws a
+/// reader might write instead -- the first position only, or `ct` divided among the tied ones -- are
+/// different numbers on a tie, which is what the case's reading says.
+export rule max_axis_stated_t::<T, X, M, A>(t: X, mask: M, at: A) when is_float::<T>() {
+    max_axis_stated(t, mask, at) => (ct: T[..]) => where(mask, lane_spread(ct, at[2:len(at)], at[0], at[1] != 0), 0.0)
+}
+
+/// The cotangent of `min_axis_stated(t, mask, at)`: `max_axis_stated_t`'s rule, on the mask of the
+/// lane's smallest elements.
+export rule min_axis_stated_t::<T, X, M, A>(t: X, mask: M, at: A) when is_float::<T>() {
+    min_axis_stated(t, mask, at) => (ct: T[..]) => where(mask, lane_spread(ct, at[2:len(at)], at[0], at[1] != 0), 0.0)
+}
+
 // ---- the transpose rule of `:op/idx_arr` ----
 //
 // `ct` goes back to position `i` and every other position is zero: the cotangent of `xs[i]` is that
@@ -633,10 +703,22 @@ export rule take_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
 
 /// The cotangent of `mean_axis_stated(t, at)`: each lane's `ct` spread back over the lane it was
 /// averaged from, where `at = [axis, keepdims, d0, ..., d(rank-1)]`.
+///
+/// The spread is `lane_spread`'s and not a bare `full(extents, 1.0) * ct`: a cotangent of the reduced
+/// shape against the extents broadcasts by **trailing** alignment, which is the right answer only
+/// when the reduced axis is the leading one. On `[2, 2]` along axis 1 the broadcast succeeds and
+/// answers the column array -- `[0.0, 0.5]` down the columns where the row's `[0.5, 0.5]` belongs,
+/// measured before this fix -- and on `[2, 3]` it stops with a dimension mismatch. `lane_spread` puts
+/// the reduced axis back as an extent of one and *then* broadcasts, which is the array the engine's
+/// `tensor:expand_axis` builds for any axis.
+///
+/// The lane length is `numel(t) / numel(ct)` -- the count the mean divided by -- read off the stated
+/// extents and the cotangent; the division is one operation per lane, applied before the spread, so
+/// the answer divides the same values by the same count as the engine's.
 func mean_axis_cotangent::<T>(ct: T[..], at: int[]): T[..] when is_float::<T>() {
     let extents = at[2:len(at)]
     let lanes = float(extent_product(extents)) / float(numel(ct))
-    return full(extents, 1.0) * (ct / lanes)
+    return lane_spread(ct / lanes, extents, at[0], at[1] != 0)
 }
 /// The number of positions a shape holds: what a lane mean divided by.
 func extent_product(extents: int[]): int {

@@ -294,6 +294,91 @@ std::optional<Type *> meanAxisStatedInfer(const InferContext &ctx) {
     return tensorOf(reductionDtype(k::ReduceOp::Mean, ctx.facts(0).dtype), std::nullopt);
 }
 
+/// `sum_axis_stated(t, at)`: the lane sum, with `at` = `[axis, keepdims, d0, ..., d(rank-1)]`.
+///
+/// The value is `sum_axis(t, axis, keepdims)` -- `k::reduceAxis` is the kernel the axis form runs,
+/// so the accumulation, the element type and the one rounding are the definition's own -- and the
+/// extents after the two scalars are checked against the operand's shape
+/// (`support.h#checkStatedExtents`). It exists beside `mean_axis_stated` for the same reason:
+/// the adjoint of a lane reduction spreads each lane's cotangent back over the lane, and the
+/// transpose side has no operand to read that shape from.
+slot_t sumAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    const Array *t               = tensorArg(norm, 0);
+    const std::vector<int64_t> at = intListArg(norm, 1, "sum_axis_stated");
+    if (at.size() < 3) {
+        reportShapeError(
+            "sum_axis_stated",
+            "expects an integer list: the axis, the keepdims flag and the tensor's extents");
+    }
+    const int64_t axis  = at[0];
+    const bool keepDims = at[1] != 0;
+    checkStatedExtents(t, at, 2, "sum_axis_stated");
+    return runKernel("sum_axis_stated", [&] {
+        return wrap(
+            norm.resultType(),
+            k::reduceAxis(k::ReduceOp::Sum, t, axis, keepDims, resultAllocator()));
+    });
+}
+
+/// The stated lane sum's result: `sum_axis`'s element type at the rank the axis and the flag
+/// decide, and both are values of the run in this spelling, so the rank stays open.
+std::optional<Type *> sumAxisStatedInfer(const InferContext &ctx) {
+    return tensorOf(reductionDtype(k::ReduceOp::Sum, ctx.facts(0).dtype), std::nullopt);
+}
+
+/// `max_axis_stated(t, mask, at)` / `min_axis_stated(t, mask, at)`: the lane extremum, with the tie
+/// selection, the axis, the flag and the extents stated.
+///
+/// The value is `max_axis(t, axis, keepdims)` -- `k::reduceAxis` again, so the element type and the
+/// comparison are the axis form's own -- and `at` is `[axis, keepdims, d0, ..., d(rank-1)]`, checked
+/// like the lane sum's list. `mask` is not read for the value: it is the *selection* the reverse law
+/// needs, and an extremum's adjoint is not a spread but "the whole cotangent for every position that
+/// holds the extremum" (`extremumAxisVjp` answers exactly that), so the forward half carries
+/// `t >= spread(output)` beside the linear call. A mask of another shape is answered where it is
+/// used: the reverse law's `where` broadcasts it against the extents `at` states.
+template <k::ReduceOp Op> slot_t extremumAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    constexpr std::string_view name =
+        Op == k::ReduceOp::Max ? "max_axis_stated" : "min_axis_stated";
+    const Array *t                = tensorArg(norm, 0);
+    const std::vector<int64_t> at = intListArg(norm, 2, name);
+    if (at.size() < 3) {
+        reportShapeError(
+            name, "expects an integer list: the axis, the keepdims flag and the tensor's extents");
+    }
+    const int64_t axis  = at[0];
+    const bool keepDims = at[1] != 0;
+    checkStatedExtents(t, at, 2, name);
+    return runKernel(name, [&] {
+        return wrap(
+            norm.resultType(), k::reduceAxis(Op, t, axis, keepDims, resultAllocator()));
+    });
+}
+
+/// The stated extremum's result, for the reason the stated lane sum's is open: the two values of the
+/// list it reads decide the rank after the call is built.
+template <k::ReduceOp Op> InferFn extremumAxisStatedInfer() {
+    return [](const InferContext &ctx) -> std::optional<Type *> {
+        return tensorOf(reductionDtype(Op, ctx.facts(0).dtype), std::nullopt);
+    };
+}
+
+/// `mean_stated(t, at)`: the whole-tensor mean, with `at` the operand's extents.
+///
+/// The value is `mean(t)` -- `meanAllKernel` below is the same kernel, so the accumulation in
+/// `f64` and the one rounding are the definition's own -- and `at` is checked against the
+/// operand's shape. `mean` is the whole-tensor twin `sum_stated` already has: its adjoint divides
+/// the cotangent by the number of elements, and that count is a value of the primal, so the
+/// forward half states it as the extents the reverse law multiplies out.
+slot_t meanStatedKernel(ArgsView &with, ArgsView &norm, context::Context &ctx) {
+    const std::vector<int64_t> at = intListArg(norm, 1, "mean_stated");
+    checkStatedExtents(tensorArg(norm, 0), at, 0, "mean_stated");
+    return meanAllKernel(with, norm, ctx);
+}
+
+std::optional<Type *> meanStatedInfer(const InferContext &ctx) {
+    return Type::create(wholeReductionDtype(k::ReduceOp::Mean, ctx.facts(0).dtype));
+}
+
 /// The name a whole-tensor extremum reports its fault under: design principles 7.7 gives the
 /// operator whose identity does not exist the fault, so the reading says which of the four was
 /// asked about a tensor with no element.
@@ -648,6 +733,48 @@ std::vector<OpDef> reductionOps() {
         .resultDoc = "T[..]",
         .infer     = meanAxisStatedInfer,
         .kernel    = &meanAxisStatedKernel,
+        .traits    = {}});
+    // The two stated twins the lane reductions and the whole-tensor mean were missing
+    // (`sumAxisStatedKernel`, `meanStatedKernel`): the same value as the operator above them, with
+    // the extents the reverse law reads as one integer list beside it.
+    defs.push_back(OpDef{
+        .name      = "sum_axis_stated",
+        .exports   = {"sum_axis_stated"},
+        .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
+        .resultDoc = "T[..]",
+        .infer     = sumAxisStatedInfer,
+        .kernel    = &sumAxisStatedKernel,
+        .traits    = {}});
+    defs.push_back(OpDef{
+        .name      = "mean_stated",
+        .exports   = {"mean_stated"},
+        .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
+        .resultDoc = "T",
+        .infer     = meanStatedInfer,
+        .kernel    = &meanStatedKernel,
+        .traits    = {}});
+    // The two stated extrema (`extremumAxisStatedKernel`): the value is the axis form's, and the
+    // mask is the selection its adjoint needs -- an extremum sends the whole cotangent to every
+    // position that holds it, which is not a spread the extents alone could rebuild.
+    defs.push_back(OpDef{
+        .name      = "max_axis_stated",
+        .exports   = {"max_axis_stated"},
+        .params    = {{"t", ParamKind::Tensor},
+                      {"mask", ParamKind::BoolArray},
+                      {"at", ParamKind::IntArray}},
+        .resultDoc = "T[..]",
+        .infer     = extremumAxisStatedInfer<k::ReduceOp::Max>(),
+        .kernel    = &extremumAxisStatedKernel<k::ReduceOp::Max>,
+        .traits    = {}});
+    defs.push_back(OpDef{
+        .name      = "min_axis_stated",
+        .exports   = {"min_axis_stated"},
+        .params    = {{"t", ParamKind::Tensor},
+                      {"mask", ParamKind::BoolArray},
+                      {"at", ParamKind::IntArray}},
+        .resultDoc = "T[..]",
+        .infer     = extremumAxisStatedInfer<k::ReduceOp::Min>(),
+        .kernel    = &extremumAxisStatedKernel<k::ReduceOp::Min>,
         .traits    = {}});
     defs.push_back(reduceAxisDef<k::ReduceOp::Max>("max_axis", "max", "T[..]"));
     defs.push_back(reduceAxisDef<k::ReduceOp::Min>("min_axis", "min", "T[..]"));

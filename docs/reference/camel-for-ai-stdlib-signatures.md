@@ -216,7 +216,7 @@ vjp: (f: F) => Vjp<F> when is_function::<F>()
 grad: (f: (x: float) => float) => (x: float) => float
 ```
 
-**`tensor`** — import { ... } from tensor — 75 name(s)
+**`tensor`** — import { ... } from tensor — 79 name(s)
 
 ```text
 zeros: (shape: int[]) => T[..] when is_numeric::<T>()
@@ -282,6 +282,10 @@ save_npy: (t: T[..], path: string) => void when is_numeric::<T>()
 sum_stated: (t: T[..], at: int[]) => T when is_numeric::<T>()
 take_stated: (t: T[..], at: int[]) => T[..] when is_numeric::<T>()
 mean_axis_stated: (t: T[..], at: int[]) => T[..] when is_numeric::<T>()
+sum_axis_stated: (t: T[..], at: int[]) => T[..] when is_numeric::<T>()
+mean_stated: (t: T[..], at: int[]) => T when is_numeric::<T>()
+max_axis_stated: (t: T[..], mask: bool[..], at: int[]) => T[..] when is_numeric::<T>()
+min_axis_stated: (t: T[..], mask: bool[..], at: int[]) => T[..] when is_numeric::<T>()
 num_threads: () => int
 set_num_threads: (n: int) => void
 set_num_threads: (n: i32) => void
