@@ -582,6 +582,36 @@ The number of bytes of a `Bytes`.
 - Example (a fragment, not compiled): `len(encode('h€'))` gives `4`
 - Why it is not compiled: the example builds its `Bytes` with `encode` from the `bytes` module, which this page does not import
 
+#### `extent_of`
+
+```camel
+extent_of: () => int[] when is_array::<A>()
+```
+
+The extents an array type writes down, in order: `extent_of::<float[2, 3]>()` is `[2, 3]`.
+
+The answer is a fact of the type argument and of nothing else, so the call takes no argument and
+names one type: `A` is the whole array type, the way a transposition law names one (`matmul_t::<T,
+A, B>`). Every extent of `A` has to be a number written in the type; a type that leaves one open
+states no shape -- `float[]` (= `float[?]`) states one dimension and no length, and `float[..]`
+states neither the rank nor a length -- and is refused where the call is instantiated. A shape
+that is a fact of a *value* is `shape(x)`, which is a question about the value and not the type.
+
+A transposition is where this is needed: the adjoint of a map is a function of the cotangent and
+of the shape of the map's domain, and a parameter whose cotangent is what the transposed function
+takes has no value to read (`func pick(x: float[3])`). `transpose(pick)` answers
+`([0.0, 1.0, 0.0])` because the shape the law spreads its cotangent over is written in the type
+`x` is declared with, and this is the language's one spelling of "the shape a type writes down" --
+the transposition walk asks the same rule (`statedExtentsOf`).
+
+The value is settled where the call is built, and the graph holds the list itself: the operator
+records the instantiated type of the call but not the type argument it was written with, so the
+run has nothing left to read (`src/compile/gir/builder_operators.cpp`, the `:op/extent_of`
+settlement).
+
+- Pure.
+- Example: `extent_of::<float[2, 3]>()` gives `[2, 3]`
+
 ### Arrays
 
 #### `range`
