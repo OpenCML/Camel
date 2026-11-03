@@ -397,3 +397,27 @@ walks through it`），它把"链尾"从语句节点改成了**位门**，五处
 
 **停手报作者**（按"两者都不是就停手"）。下一支探针要打的是：`bodyPart->output` 的 id 与 kind、循环节点的
 `with` 输入列表、以及 29/72/114 各自的使用者——这三格决定 `With` 是在哪一步丢的。
+### 标号读数：`site=8`，是**块的值门**（`builder.cpp:1854`），不是位门
+
+给每个造门点一个标号（1 = `chainPlaceForNode`，2 = `visitLoopNode`，3 = `buildStreamLoop`，
+4 = `buildBranch` 的 join，6 = `readVariableThrough`，7 = 调用点，8 = 块的值门），再在 bail 处打出
+门的标号、四种使用者、以及门的数据输入各自的使用者：
+
+```
+[P02GATE] site=8 from=30  gate=31  kind=13 place=0 dataIn=[29 ] dataUsers=[] withUsers=[] ctrlUsers=[] syncUsers=[] feeds=[29:d=30 31  w=33  c= s=]
+[P02GATE] site=8 from=73  gate=74  kind=13 place=0 dataIn=[72 ] dataUsers=[] withUsers=[] ctrlUsers=[] syncUsers=[] feeds=[72:d=73 74  w=76  c= s=]
+[P02GATE] site=8 from=115 gate=116 kind=13 place=0 dataIn=[114] dataUsers=[] withUsers=[] ctrlUsers=[] syncUsers=[] feeds=[114:d=115 116 w=118 c= s=]
+```
+
+- **标号 = 8**：门造在 `src/compile/gir/builder.cpp:1854`（`visitExecNode` 的 `if (!operands)` 分支，
+  "块的值放上链"那一处：`addGateNode` + `Norm(res, gate)` + `writeSyncStatement(tail, gate)` + `res = gate`）。
+  它是**块的值门**，按设计**本来就不该进 `chainPlaceGates_`**（位门才是位置，值门是链的最后一站），
+  所以这不是"绕过登记"。
+- **值 29 有三个读者**：数据 30、31，`With` 33（= 循环节点）；**门 31 一个读者都没有**。
+  也就是说：块的值被包进了门，而取块值的那一端（循环的 `With`）读的是**裸值 29**，不是门。
+
+### 结论：门造晚了——消费者在门出现之前就接好了
+
+`res = gate` 之后，`bodyPart->output` / 区域结果那一线拿到的仍是 29，所以循环读 29、门 31 悬空。
+下一支探针要打的是**时序**：`visitBodyNode` 返回的是门还是 29、`setArmResult` 收的是哪一个、
+`linkNodes(LinkType::With, bodyPart->output, loopNode)` 那一刻 `bodyPart->output` 是谁。
