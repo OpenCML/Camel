@@ -50,9 +50,9 @@
 
 | 路 | 做法 | 代价 |
 |---|---|---|
-| **甲：删掉第三问** | `modules/transforms/transpose.cpp#buildTransposeMember` 里 `calleeId = calleeIdOf(inputs.front()); argumentAt = 1;` 两行去掉；被调值无可命名的图时，落到已有的 `callee == nullptr` 那支，按 `staticFunctionGraphOf` 的 `reason` 拒绝（闭包 `function-closure`、调用的值 `not-a-data-node`）。`argumentAt` 退回只有 0 一值 | 那条分支与其后的 `addFuncNode` 写法一并作废（**这就是正在被另一条车道重写的那一段**，冲突面最大）；三条本页新增的负向用例从 `known_fail` 转正；**没有任何现成用例的读数会变**（全 `feat/compile` 命中 0，已量） |
+| **甲：删掉第三问** | `modules/transforms/transpose.cpp#buildTransposeMember` 里 `calleeId = calleeIdOf(inputs.front()); argumentAt = 1;` 两行去掉；被调值无可命名的图时，落到已有的 `callee == nullptr` 那支，按 `staticFunctionGraphOf` 的 `reason` 拒绝（闭包 `function-closure`、调用的值 `not-a-data-node`）。`argumentAt` 退回只有 0 一值 | 那条分支与其后的 `addFuncNode` 写法一并作废（**这就是正在被另一条车道重写的那一段**，冲突面最大）；三条本页新增的负向用例从 `known_fail` 转正；**存量用例一条都不用改**（3494 个 `.cml` 全扫，命中只有本页那三条新程序，已量） |
 | **乙：教它写对位置** | 保留第三问，但写出的 CALL 把被调值放进 **`with`**（与全仓一致），`argumentAt` 只用来定位实参偏移 | 分支“合法化”了，可**它的前提仍然是错的**：`inputs.front()` 是这次调用的**第一个实参**，不是被调方；写对位置只会让误读的图跑起来，可能给出**错数**（`g` 线性时 `g_t` 会拿到第一个实参的值当参数，实测 `2x²` 的导数是 12，会读成 2）——按今晚的次序，这比“拒绝”差 |
-| 丙：先不动 | 只留本页与三条负向用例（已入库，两条带 `known_fail`） | 分支继续躺着一个“看起来可达、实际只被误读可达”的读法；下一个人仍会以为它守着一种真实形状 |
+| 丙：先不动 | 只留本页与五条用例（已入库，其中三条带 `known_fail`） | 分支继续躺着一个“看起来可达、实际只被误读可达”的读法；下一个人仍会以为它守着一种真实形状 |
 
 ## 4. 我方默认
 
