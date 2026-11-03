@@ -25,6 +25,7 @@ RuntimeDiag::IndexOutOfRange	test/cases/compile/match_guard/faulting_guard.cml
 RuntimeDiag::InvalidArgument	test/cases/compile/stream/range_step_runtime.cml
 RuntimeDiag::InvalidNumberText	test/cases/consistency/faults/int_text_trailing.cml
 RuntimeDiag::InvalidPassParameter	test/cases/modules/graph_pass/tiny.cml
+RuntimeDiag::JitWithoutCodeGenerator	test/cases/linear/jit/native_registers.cml
 RuntimeDiag::MacroEvaluationFailed	test/cases/compile/collections/refuse_grad.cml
 RuntimeDiag::MaxRecursionDepthExceeded	test/cases/consistency/limits/depth_direct.cml
 RuntimeDiag::MemoryExhausted	test/cases/compile/stream/interval_loop_not_materialised.cml

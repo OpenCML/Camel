@@ -353,7 +353,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             {
                 "JitWithoutCodeGenerator",
                 "`std::jit` has no native code generator in this build; the program runs on the bytecode interpreter, as under `std::fvm`, and the result is the same.",
-                "The JIT generates code for x86-64 only. Every other processor turns ENABLE_FASTVM_JIT off in cmake/Options.cmake (arm64 Linux and Apple Silicon), and a build may switch it off by hand. The pass is accepted rather than refused, because a command line has to run on every platform, so this says what the pass does here instead: the program is interpreted. Silence it with `-Wno-jit-without-code-generator`, or make it an error with `-Werror`.",
+                "The JIT generates code for x86-64 only: every other processor turns ENABLE_FASTVM_JIT off in cmake/Options.cmake (arm64 Linux and Apple Silicon), and a build may switch it off by hand. The pass is accepted rather than refused, because a command line has to run on every platform, so this says what the pass does here instead: the program is interpreted. Silence it with `-Wno-jit-without-code-generator`, or make it an error with `-Werror`.",
             },
         },
     };

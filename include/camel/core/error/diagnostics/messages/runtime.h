@@ -106,11 +106,10 @@ enum class RuntimeDiag : uint32_t {
     ConstantExpressionFaults      = 0x100015,
     TranslationLinksRuntime       = 0x100016,
     DefunctionalizationIncomplete = 0x100017,
-    // `std::jit` in a build whose JIT has no code generator for this processor (x86-64 is the only
-    // one; cmake/Options.cmake turns ENABLE_FASTVM_JIT off everywhere else, so an arm64 build and the
-    // manual no-JIT leg both land here). The pipeline is accepted and the program runs on the
-    // bytecode interpreter with the same result, so this is a warning and not an error: what it
-    // reports is that the pass named does less here than its name says.
+    // `std::jit` in a build whose JIT has no code generator for this processor: x86-64 is the only
+    // one, so an arm64 build and the manual no-JIT leg of CI both land here. The pipeline is accepted
+    // and the program runs on the bytecode interpreter with the same result, which is why this is a
+    // warning and not an error: what it reports is that the pass named does less here than its name says.
     JitWithoutCodeGenerator = 0x100018,
 };
 
