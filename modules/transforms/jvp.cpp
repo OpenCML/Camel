@@ -2184,6 +2184,29 @@ bool liftGraph(
             os << "REINTERP jvp function=" << name << " skip=tangent\n";
             return fail(refusal);
         }
+        // Route B (author's ruling of 2026-11-03 15:15: 抬升后的图一律以两元 tuple `Fill` 收尾): a
+        // lifted graph always ends in a two-member tuple `Fill`, so `split` keeps its one cuttable
+        // shape and its criterion is not widened by a second one.
+        //
+        // `alreadyLifted` above says the exit's copy *is* the pair -- but not why. When an
+        // application answered it, the pair is a callee's answer and not a `Fill` this graph writes,
+        // and that is the shape `split` refuses (`ExitShape::NotAPair`; measured 2026-11-03: the
+        // exit node is the application itself, `kind=GCNodeKind::Func`, two `with` inputs and two
+        // ordinary ones, its lifted copy's type `(float, float)`). Hydrating it is writing the two
+        // halves this graph already holds into the shape: `valueOf`/`tangentOf` are the projections
+        // of the call's pair, made where the call was lifted. Both members are written, so neither
+        // half is a hole a reader has to resolve through the callee.
+        //
+        // Only an application is hydrated. A branch's Join and a one-state loop also answer with the
+        // pair, and their exits are the shapes `split` already cuts as `Branch` and `Loop`; wrapping
+        // those in a `Fill` would hide a region behind a tuple and turn a cuttable exit into a wall.
+        const NodeFace *exitSource = function.node(oldValue);
+        const bool exitIsApplication =
+            exitSource != nullptr &&
+            (exitSource->kind == rt::GCNodeKind::Call || exitSource->kind == rt::GCNodeKind::Func);
+        const bool hydrateExitPair =
+            alreadyLifted && exitIsApplication && valueOf[oldValue] != rt::kInvalidNodeRef &&
+            tangentOf[oldValue] != rt::kInvalidNodeRef;
         // The exit is the lifted result: the value the copied chain computes and the tangent the
         // rules computed for it, which is the derivative of the chain at the values the caller
         // passed. Nothing is read back from the original graph: both halves are this graph's. A
@@ -2193,7 +2216,10 @@ bool liftGraph(
             !alreadyLifted && valueOf[oldValue] != rt::kInvalidNodeRef ? valueOf[oldValue]
                                                                       : chainValue;
         const gc_node_ref_t out =
-            alreadyLifted ? chainValue : liftedPair(valueTypeOf(oldValue), exitValue, chainTangent);
+            hydrateExitPair
+                ? liftedPair(valueTypeOf(oldValue), valueOf[oldValue], tangentOf[oldValue])
+                : (alreadyLifted ? chainValue
+                                 : liftedPair(valueTypeOf(oldValue), exitValue, chainTangent));
         // The `sync` block's own ordering: in the original graph the exit passes through a GATE that
         // waits on the block's statements -- a print among them -- and that wait is the only thing
         // that keeps an effect whose result nobody reads from being dropped. The lifted exit is a

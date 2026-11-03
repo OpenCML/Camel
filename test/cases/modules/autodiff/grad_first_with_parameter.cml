@@ -6,6 +6,37 @@
  *
  * Differentiating a value that is not the first `with` parameter needs a lambda that makes it
  * the first `with` parameter (an adversarial example, a target, a second weight).
+ *
+ * The criterion is per element, not a sum or a product (author's ruling of 2026-11-03 15:15: 判据
+ * 分辨不了对错——不算判据). Every number this case prints is asserted by both plan entries, the
+ * tensor gradient's three members included, and each group is here because a wrong law answers
+ * something else:
+ *
+ *   - `dot`, w = [1, 2, 3], x = [4, 5, 6]: the gradient of `w` is `x`, member by member --
+ *     [4.0, 5.0, 6.0]. The law that differentiates the ordinary parameter instead answers `w` =
+ *     [1.0, 2.0, 3.0]; the law that hands the cotangent back unchanged (`pb(ct) = ct`) answers
+ *     [1.0, 1.0, 1.0]. The sums of those three answers are 15, 6 and 3, so the array itself is
+ *     the assertion -- a sum would have to be told which wrong answer it is looking at.
+ *   - `scaled`, k = 2.0, x = 3.0: `sk` is d/dk = x * 2 = 6.0. A law that differentiated the
+ *     *second* `with` parameter answers d/dx = k * 2 = 4.0, which is exactly what `sx` prints --
+ *     so `sk` and `sx` on one line separate "first" from "second" by two different numbers, and
+ *     the identity law answers 1.0 for `sk`.
+ *   - `point_loss`, p = { a: 2.0, b: 3.0 }, y = 4.0: the gradient is the `Point`
+ *     `{ a: 4.0, b: 1.0 }`. The ordinary-parameter law answers 2.0 -- a float where the gradient
+ *     is a struct, so it is refused by type before it can print; the identity law answers
+ *     `{ a: 1.0, b: 1.0 }`, the same shape with different data.
+ *   - `weighted`, x = 3.0, y = 2.0: `vg`'s gradient is y + 1 = 3.0, and **this group alone cannot
+ *     separate the two laws**: the ordinary-parameter law answers d/dy = x = 3.0, the very same
+ *     number (the identity law answers 2.0). That is why the case carries the other three groups,
+ *     and why a bare `3.0` printed on its own is the shape of criterion the ruling rejects.
+ *
+ * The library's `with_grad` would be the same transform written as the composition
+ * `vjp((ww: float) => f<ww>(..))(w)` with the seed 1 read off the first member (design principles
+ * 9.9), and it is not in `stdlib/vjp.cml` today: `3a2e8fc90` deleted the export that returned
+ * `vjp(f)` under a declared type of `F`, and nothing has replaced it. So both plan entries measure
+ * the engine's `with_grad` only. Writing the composition makes the differentiated lambda end in a
+ * call to a `with`-parameterised function, and the cut refuses that graph in two places, measured:
+ * `2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-split-cut.cn.md`.
  */
 
 import { grad, with_grad } from autodiff

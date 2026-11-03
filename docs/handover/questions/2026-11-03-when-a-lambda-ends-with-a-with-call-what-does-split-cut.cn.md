@@ -84,3 +84,34 @@ function (the port is not a parameter of the graph, so neither half takes it). �
 - 已**回滚**（树与 `7432f65cc` 相同，`git status` 空）。读数：`transforms` 87 = 84/2/1 复原；那一版里除了本页对应的负向用例因报文变化而红，**84 条通行用例一条没红**（`grep '[FAIL]'` 只有两条已知红 + 本用例）。
 
 所以本页的排期变成两件：**B（水合出口，本页默认）→ 闭包 port 归类**。两件都不做，库层 `with_grad` 出不了数。
+## 七、库层 `with_grad` 今天不存在，第 3 项是从零写起（2026-11-03 23:5x，`lane-withgrad`）
+
+**前提事实，先记下来**：库层 `with_grad` 现在**没有**。`3a2e8fc90` 删掉了那一行导出——它声明 `F`、实际返回 `Vjp<F>`、也从不对方程里的 `with` 参数求值——`stdlib/vjp.cml` 只剩 `vjp` 与 `grad`。所以 `grad_first_with_parameter` 的两组用例（`.macro.nvm`、`.runtime.nvm`）都 `import { grad, with_grad } from autodiff`，走的是**引擎**那一份（`stdlib/signatures/autodiff.cml` 声明、`modules/autodiff` 实现），两组读数相同、无 skip 报文：
+
+```
+grad_first_with_parameter gx=3.0 vg=(9.0, 3.0) gy=3.0 gl=3.0
+grad_first_with_parameter pg={ a: 4.0, b: 1.0 } pvg=(11.0, { a: 4.0, b: 1.0 })
+grad_first_with_parameter wg=[4.0, 5.0, 6.0] wvg=(32.0, [4.0, 5.0, 6.0])
+grad_first_with_parameter sk=6.0 sx=4.0
+```
+
+**第三行原本两组用例都没断言**（只断到 `gx/vg`、`pg/pvg`、`sk/sx`），这正是 15:15 说的"判据分辨不了对错"：一个错的律也能印出前三行那些数。现已按裁定补齐，四行全断言、`wg` 逐元素。
+
+**三步走到哪**：
+
+1. **B（出口水合）已落**：`modules/transforms/jvp.cpp` 里"出口的副本就是那个对、且那个对是应用结点作答"时，把 `valueOf`/`tangentOf` 这两个已经算好的投影写成一个两元 tuple `Fill`。读数：那堵 `skip=exit` 不再出现，抬升图 `nodes=9 exit=6` → `nodes=11 exit=10`（多出的正是 `Fill`），与本页第六节试出来的数一致。
+2. **捕获声明成闭包端口：本页第六节说的"第二件"的一半其实已经在树里**。`jvp.cpp` 早有一段把 `function.closureNodesOf()` 的每个捕获做成 port 并 `appendClosureNode`、再 `setClosureType`（`skip=body` 那一版就是它修的）。缺口不在"声明"，在 **`split` 认不认这些 port**。
+3. **第 ③ 步（`split` 把后一半读到的闭包端口当残差）未做**，`split.cpp` 归另一支。四个形状在这一步之后停下的原文：
+
+```
+# 无捕获的 float 形状（vjp((ww) => weighted<ww>(2.0))(3.0)）
+REINTERP split function=jvp_of___g_247__ skip=backward construct=a parameter uri=- why=the backward half reads the value of parameter 0, and it is not one of the values the cut carries
+# 捕获了数组的 tensor 形状（vjp((ww) => dot<ww>(x))(w)）
+REINTERP split function=jvp_of___g_248__ skip=forward construct=a port uri=- why=the port is not a parameter of the graph, so neither half takes it
+```
+
+两个形状各停在一处，**都不是出口形状**了，也都不在库层能改的范围：一处是后一半读参数原值没进残差清单，一处是闭包 port 没被当成半边的端口。
+
+**路线 C 有了读数**（本页第三节说"没试过"）：把体的结果包一层（`vjp((ww) => weighted<ww>(2.0) + 0.0)`）绕出口形状，报文变成 `skip=residual (the forward half does not compute a value the cut carries)`——**绕不过去**，与第三节的判断一致。
+
+另：结构体形状（`point_loss`）与两个 `with` 参数形状（`scaled`）更早就停，报文是 `REINTERP jvp function=point_loss skip=body` 与 `transforms: jvp has no forward transform for this function`，连 `split` 都没到。这两条是 `jvp` 侧的另两件，不在本页的三步里。
