@@ -3,6 +3,7 @@
 
 #include "vmap.h"
 
+#include "rule_expand.h"
 #include "rule_types.h"
 
 #include "camel/compile/gir/draft_graph_builder.h"
@@ -101,6 +102,122 @@ uint64_t ruleIdOf(camel::core::context::Context &context, const std::string &nam
         }
     }
     return 0;
+}
+
+/// The rule of `rulesets.vmap` that answers `uri` here: the key's one law, or -- when a key holds
+/// several -- the law the operands' own types pick.
+///
+/// This family is the same choice the transpose family makes (`modules/transforms/
+/// transpose.cpp#chooseTransposedRule`) with one difference in what is compared: an instance here is
+/// made at the **element** type of the operand, because that is the type a rule of this family is
+/// generic in, and its ports are then compared with the operands' *batched* types -- `vmap_rule_idx::
+/// <T>(xs: T[], i: int)` at `T = float` takes a `float[2, 3]` batch through its `float[]` port. The
+/// relation is the call's (`Type::assignableFrom`, the port takes the operand), and among the laws
+/// that take them the narrowest wins (`narrowerPortsThan`); two that both take them with neither
+/// narrower are refused by name rather than picked by filing order.
+std::optional<camel::parse::ast::RuleMatch> chooseRuleOfUri(
+    camel::core::context::Context &context, const camel::runtime::GCGraph &function,
+    gc_node_ref_t ref, const std::string &uri, std::string &why) {
+    const std::vector<camel::parse::ast::RuleMatch> candidates = camel::core::vmapRulesOf(uri);
+    if (candidates.empty()) {
+        // One law, or no key, or no law: `ruleOfUri` says which, in the two reasons it already
+        // spells.
+        return ruleOfUri(uri, why);
+    }
+    const Type *operand = firstOperandTypeOf(function, ref);
+    Type *elementType   = ruleElementTypeOf(
+        operand != nullptr
+                ? const_cast<Type *>(operand)
+                : (function.node(ref) != nullptr ? function.node(ref)->dataType() : nullptr));
+    std::vector<Type *> actual;
+    for (const gc_node_ref_t input : function.normInputsOf(ref)) {
+        const camel::runtime::GCNode *node = function.node(input);
+        actual.push_back(node != nullptr ? node->dataType() : nullptr);
+    }
+    // The ports past the data operands are the operator's own configuration -- `reshape`'s target
+    // shape comes in `<>` position -- and a rule names them beside the value it batches, in port
+    // order (`transpose.cpp` says the same about the pullback's list). Without them a law that names
+    // its shape would look like a law that names more ports than the operator has.
+    for (const gc_node_ref_t input : function.withInputsOf(ref)) {
+        const camel::runtime::GCNode *node = function.node(input);
+        actual.push_back(node != nullptr ? node->dataType() : nullptr);
+    }
+    const auto typesText = [](const std::vector<Type *> &types) {
+        std::string text;
+        for (const Type *type : types) {
+            text += (text.empty() ? "(" : ", ");
+            text += type != nullptr ? type->toString() : std::string("?");
+        }
+        return text.empty() ? std::string("()") : text + ")";
+    };
+    std::vector<std::string> taking;
+    std::vector<std::vector<Type *>> takingPorts;
+    std::string lastWhy;
+    for (const camel::parse::ast::RuleMatch &candidate : candidates) {
+        if (candidate.status != camel::parse::ast::RuleLookup::Found) {
+            continue;
+        }
+        const uint64_t ruleId = ruleIdOf(context, candidate.rule);
+        if (ruleId == 0) {
+            lastWhy = "the rule '" + candidate.rule + "' is named in the index but not registered";
+            continue;
+        }
+        const size_t at = camel::compile::gir::genericRuleInstance(
+            context, ruleId, std::vector<Type *>{elementType}, {});
+        const auto *entry = camel::compile::gir::genericRuleEntry(context, ruleId);
+        if (entry == nullptr || at >= entry->instances.size() || !entry->instances[at].made) {
+            lastWhy = entry != nullptr && at < entry->instances.size() &&
+                              !entry->instances[at].why.empty()
+                          ? entry->instances[at].why
+                          : "no instance of '" + candidate.rule + "' at this type";
+            continue;
+        }
+        std::vector<Type *> ports = rulePortsOf(entry->instances[at]);
+        if (ports.size() > actual.size()) {
+            lastWhy = "the law takes " + typesText(ports) + ", and the operator has " +
+                      typesText(actual);
+            continue;
+        }
+        bool takes = true;
+        for (size_t i = 0; i < ports.size() && takes; ++i) {
+            takes = ports[i] != nullptr && actual[i] != nullptr &&
+                    ports[i]->assignableFrom(actual[i]);
+        }
+        if (!takes) {
+            lastWhy = "the law takes " + typesText(ports) + ", and the operator has " +
+                      typesText(actual);
+            continue;
+        }
+        taking.push_back(candidate.rule);
+        takingPorts.push_back(std::move(ports));
+    }
+    if (taking.empty()) {
+        why = lastWhy.empty() ? "no law of the family takes these operands" : lastWhy;
+        return std::nullopt;
+    }
+    std::vector<size_t> kept;
+    for (size_t i = 0; i < taking.size(); ++i) {
+        bool outranked = false;
+        for (size_t j = 0; j < taking.size() && !outranked; ++j) {
+            outranked = i != j && narrowerPortsThan(takingPorts[j], takingPorts[i]);
+        }
+        if (!outranked) {
+            kept.push_back(i);
+        }
+    }
+    if (kept.size() > 1) {
+        std::string names;
+        for (const size_t at : kept) {
+            names += names.empty() ? "'" : " and '";
+            names += taking[at];
+            names += "'";
+        }
+        why = "two laws both accept these operands: " + names + " (the operator has " +
+              typesText(actual) + ")";
+        return std::nullopt;
+    }
+    return camel::parse::ast::RuleMatch{camel::parse::ast::RuleLookup::Found,
+                                       taking[kept.front()]};
 }
 
 // The lifting of a constant is a lambda beside the draft it writes through, not a free function:
@@ -502,7 +619,7 @@ VmapGraph buildVmapGraph(
                 const auto *body   = function->nodeBodyAs<rt::GCOperBody>(ref);
                 const std::string uri(body->uri());
                 ++refused.asked;
-                const auto match = ruleOfUri(uri, why);
+                const auto match = chooseRuleOfUri(*context, *function, ref, uri, why);
                 if (!match.has_value() || match->status != camel::parse::ast::RuleLookup::Found) {
                     refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
                     refused.refusedUri    = uri;

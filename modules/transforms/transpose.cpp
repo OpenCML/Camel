@@ -2103,8 +2103,10 @@ bool buildTransposeMember(
                     // (`mean_axis_cotangent` reads `xs`) makes the walk declare a port the caller was
                     // never told to fill, and the call dies on `nargs.size() == normPorts.size()` --
                     // a signal, which is worse than this refusal. A law that reads a *parameter* or a
-                    // constant (`sum_t`, `mul_t`, `mul_tensor_t`, `dtod_t`) needs no residual, which is
-                    // why every reachable transpose rule is of that shape.
+                    // constant (`sum_t`, `mul_t`, `dtod_t`) needs no residual, which is why every
+                    // reachable transpose rule is of that shape. (The array product's transposed law is
+                    // the one that would *not* be: `mul_tensor_t` is not in this tree yet -- it is the
+                    // half `lane-mulsc` is writing -- so the list here names only what exists.)
                     //
                     // The count came in with `a64136b6a` ("transpose of a straight-line linear graph,
                     // built from the index's rules"), when the walk knew unary and binary primitives
