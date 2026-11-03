@@ -24,8 +24,13 @@
  *         was averaged over that row's 3 positions, so the cotangent at ct = 1.0 is w[i] / 3,
  *         constant along the row:
  *
- *           [[3.333333333333333, 3.333333333333333, 3.333333333333333],
- *            [6.666666666666666, 6.666666666666666, 6.666666666666666]]
+ *           [[3.3333333333333335, 3.3333333333333335, 3.3333333333333335],
+ *            [6.666666666666667, 6.666666666666667, 6.666666666666667]]
+ *
+ * `w[i] / 3` is a division, and those are `10.0 / 3.0` and `20.0 / 3.0` rounded to double. They
+ * were written `3.333333333333333` and `6.666666666666666` until 2026-11-04, which is
+ * `10.0 * (1.0 / 3.0)` -- one ulp lower in the last place, the shape of a reciprocal multiply
+ * (`ct * (1/n)`) rather than of the division this paragraph writes down. Nothing else moves.
  *
  * What a wrong length answers on the same input (author's criterion ruling, 2026-11-03 15:15: a
  * criterion reads the array, not an aggregate of it):
