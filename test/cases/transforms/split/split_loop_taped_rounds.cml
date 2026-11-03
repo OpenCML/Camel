@@ -33,11 +33,14 @@
 // (modules/transforms/jvp.cpp#liftGraph) instead of lifting it, so `split(jvp(f))` never sees such a loop.
 // An order-sensitive case therefore waits on the lift of an aggregate state, not on this cut.
 //
-// The reverse walk itself is `transpose`'s (4.3: 倒着走，逐轮取 `split` 留下的残差), and `transpose`
-// still copies a loop's range as it stands -- so `vjp` over a loop is not order-correct yet either.
-// That is design 4.2's next gap: one page of its own, neither widened nor closed here. This case
-// holds the split to what it can be held to on its own -- the tape is per round, and it carries
-// exactly what the backward half reads from that round.
+// The reverse walk itself is `transpose`'s (4.3: 倒着走，逐轮取 `split` 留下的残差): its loop case
+// iterates `range(n - 1, -1, -1)` and reads each round's element at the round number with
+// `:op/idx_arr`, so a loop's rounds come back in the other direction while `lin` -- the
+// *linearization* -- keeps running forward, which is what `lin`'s columns here are. `vjp` over a loop
+// is still not order-correct end to end, and for a reason that is not the walk: `transpose` stops one
+// step earlier, at the call the backward half recomputes (`vjp_loop.rounds_are_undone_in_reverse`
+// pins that refusal). This case holds the split to what it can be held to on its own -- the tape is
+// per round, and it carries exactly what the backward half reads from that round.
 import rulesets.jvp
 import { jvp, split } from transforms
 

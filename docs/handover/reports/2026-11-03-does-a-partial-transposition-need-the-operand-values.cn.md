@@ -1,6 +1,6 @@
 # 部分转置需不需要操作数的值
 
-**读数树**：`lane-tloop @ 843d38025`（`origin/develop 00c59b0c6` + `lane-portgate`）。Release 构建。
+**读数树**：`lane-tloop @ 843d38025`（`origin/develop 00c59b0c6` + `a1f648fb4`，原 `lane-portgate`，该分支已删）。Release 构建。
 **第五节是后续车道在同一分支 `719e81272` 上的更正与读数，它作废本文第三节第 2 点与第四节。**
 
 **问题**：一条转置规则（`mul_t`）的右式要操作数的**值**（`ct * c` 里的 `c`），而部分转置的图
@@ -183,7 +183,7 @@ TRANSPOSE function=mt skip=call node=4 callee=autodiff::mul_tangent<float>
 `…is_linear_in_the_cotangent` 随之删除；它独有的"一个种子分不出 pullback 与导数表"并进
 `transpose_unread_parameters`（那条本来就跑 ct=1 和 ct=2 并钉两个元组）。
 
-## 八、跨区域读 Port 的结构校验：检测力够，但今天的图不合法（2026-11-03，`lane-norm-arity`）
+## 八、跨区域读 Port 的结构校验：检测力够，但今天的图不合法（2026-11-03，`97fdb234f`，原 `lane-norm-arity`，该分支已删）
 
 作者 22:50 裁的"结构校验补一条"（区域里的节点只能读本区域的节点、本区域的端口和常量；读外层
 区域的 Port 而不经循环／分支的输入，`commit` 时拒绝，点名节点与区域）已经写出来过，**检测力够，
@@ -234,7 +234,7 @@ body**、**5 条读在 arm**（`pick`、两个 `if` 程序的 `f`、`rulesets.jv
 
 那 5 条是**另一种构造**：分支臂也要把捕获复制成 arm 输入，不在循环那条修的范围里。
 
-## 九、只打印版的全量测量：建图器自己就跨区域读外层端口（2026-11-03，`lane-norm-arity`）
+## 九、只打印版的全量测量：建图器自己就跨区域读外层端口（2026-11-03，`97fdb234f`，原 `lane-norm-arity`，该分支已删）
 
 作者把 22:50 那半句（"跨区域读会让帧槽读错"）撤回为待查，并要一次测量：把第八节那条校验挂在
 全量 fast 上**只打印不拒绝**，看**建图器自己**造出来的图有没有跨区域读外层端口。这一节是那次测量。
@@ -298,7 +298,7 @@ REGION-PORT graph=pick node=5 region=1 regionKind=Arm port=1 portRegion=0 portRe
 
 patch 位置：`D:\Temp\region-port-printonly.patch`（只打印版，4809 B）。
 
-## 十、同链判据落地：一条检查、一张带 body 的图、一组关系式断言（2026-11-03，`lane-sortchain @ 810f58818`）
+## 十、同链判据落地：一条检查、一张带 body 的图、一组关系式断言（2026-11-03，`810f58818`，原 `lane-sortchain`，该分支已删）
 
 第九节末尾说"只拦兄弟读的版本今天 0 命中 ⇒ 不合入"。这一节是它**合入**的那次，因为判据与测试载体
 都被换掉了 —— 不是把第九节那个结论推翻，而是把它说的两个障碍各自修掉。
@@ -368,8 +368,8 @@ graph '<名>' node <n> in region <r> (<Kind> parent <p>): it reads port <q> of r
 
 | 基 | `[SUMMARY]` | 新增红 |
 | --- | --- | --- |
-| 旧基 `lane-norm-arity @ 97fdb234f` | 8542 = 8509 通过 / 13 失败 / skip 10 / known 10 / killed 0 | 0（与基准 13 条逐名相同） |
-| 新基 `lane-sortchain @ 810f58818`（`origin/develop fa85a5e7f`） | 8551 = 8525 通过 / 5 失败 / skip 10 / known 11 / killed 0 | 0 |
+| 旧基 `97fdb234f`（原 `lane-norm-arity`，该分支已删） | 8542 = 8509 通过 / 13 失败 / skip 10 / known 10 / killed 0 | 0（与基准 13 条逐名相同） |
+| 新基 `810f58818`（原 `lane-sortchain`，该分支已删；`origin/develop fa85a5e7f`） | 8551 = 8525 通过 / 5 失败 / skip 10 / known 11 / killed 0 | 0 |
 
 新基上五条红逐名：`python_binding.session`、`registry.docs_complete`、
 `transpose_loop_escape.{int_is_a_zero_tangent_space, second_state_of_the_same_loop, two_values_of_two_kinds}.nvm`。

@@ -78,7 +78,7 @@ stdout 是：
 重开条件等到先决条件落地，重开时用读数（不是纸面算术）决定走拒绝还是闭包透传。
 
 > 本页对应的那 12 行（`skip=norm-arity needs=N supplied=M` 与 `refusalCause` 的一句）已在
-> `lane-norm-arity` 上撤掉，未合入任何分支。
+> `97fdb234f`（原 `lane-norm-arity`，该分支已删）上撤掉；同一补丁后来以 `810f58818` 合入 `develop`（`3ff14cbf8`）。
 
 ## 8 读数（基线，不是某一笔的成果；本机不构建，全部走主机）
 
