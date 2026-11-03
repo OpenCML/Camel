@@ -2418,7 +2418,7 @@ disagree with the tensor's shape, or an index is outside the first dimension
 
 - Pure.
 - Failure: fault `RuntimeError` when the list's first entry is not its index count, the extents.
-- Example: `take_stated([[1.0, 2.0], [3.0, 4.0]] as float[..], [1, 1, 2, 2])` gives `[[3.0, 4.0]]`
+- Example: `take_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1, 1, 2, 2])` gives `[[3.0, 4.0]]`
 
 #### `mean_axis_stated`
 
@@ -2436,7 +2436,7 @@ with the tensor's shape, or the axis is outside the rank
 
 - Pure.
 - Failure: fault `RuntimeError` when the list is shorter than three entries, the extents disagree.
-- Example: `mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[..], [0, 1, 2, 2])` gives `[[2.0, 3.0]]`
+- Example: `mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0, 1, 2, 2])` gives `[[2.0, 3.0]]`
 
 ### Module state
 

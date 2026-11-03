@@ -138,7 +138,7 @@ export func sum_stated::<T>(t: T[..], at: int[]): T when is_numeric::<T>()
 /// @pure
 /// @fails fault `RuntimeError` when the list's first entry is not its index count, the extents
 /// disagree with the tensor's shape, or an index is outside the first dimension
-/// @example take_stated([[1.0, 2.0], [3.0, 4.0]] as float[..], [1, 1, 2, 2])    // [[3.0, 4.0]]
+/// @example take_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1, 1, 2, 2])    // [[3.0, 4.0]]
 export func take_stated::<T>(t: T[..], at: int[]): T[..] when is_numeric::<T>()
 
 /// The mean of each lane along one axis, with the axis, `keepdims` and the operand's extents stated
@@ -150,7 +150,7 @@ export func take_stated::<T>(t: T[..], at: int[]): T[..] when is_numeric::<T>()
 /// @pure
 /// @fails fault `RuntimeError` when the list is shorter than three entries, the extents disagree
 /// with the tensor's shape, or the axis is outside the rank
-/// @example mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[..], [0, 1, 2, 2])    // [[2.0, 3.0]]
+/// @example mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0, 1, 2, 2])    // [[2.0, 3.0]]
 export func mean_axis_stated::<T>(t: T[..], at: int[]): T[..] when is_numeric::<T>()
 
 // ---- binary form ----
