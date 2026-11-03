@@ -313,6 +313,64 @@ expect_output_contains = ["vjp_loop value=90.0", "(60.0)", "vjp_loop cotangent=6
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
+# A loop whose state starts at a constant, and the parameter it never reads: `k(x) = loop s = 0.0 for
+# i in [1, 2, 3] do s + 2.0` is `6.0` for every `x`, so `k'(x) = 0`. The loop is the whole answer and
+# the value its state starts from answers no parameter, so the cotangent of the loop's value is the
+# zero of its cotangent space -- the reading 48bfa6778 took for a straight line ("a parameter the body
+# never reads answers a zero cotangent, not a refusal"), read for a loop (author's ruling of 2026-11-03,
+# `origin/fsh-dev = ad7e716b0`, fourth of four).
+#
+# Two things make the zero a pin and not a shrug: it is *linear* -- `pullback(2.0)` answers `0.0`, where
+# the constant `1.0` this shape answered before the loop branch existed would answer `2.0` -- and `m`,
+# whose state starts at the parameter, keeps answering `1.0` for `m(x) = x + 6`, so the branch answers a
+# zero only where nothing reaches the parameter and not on the way past the loop that does reach it.
+# The half that carries a closure still refuses the shape by name (`skip=state-unread`): a member that
+# carries a value and reads none is the graph that took the process down when this was answered with a
+# constant, so the ruling lands on the half that can take it.
+[[tests]]
+name = "transpose_unread_state_answers_zero.nvm"
+desc = "A parameter the loop never reads answers a zero cotangent: `transpose(k)` for `k(x) = loop s = 0.0 for i in [1, 2, 3] do s + 2.0` answers `(0.0)` for a cotangent of 1 and 0 (linear), where the same shape used to be refused with `skip=state-unread`; `m(x) = loop s = x ...` is the control and answers `(1.0)`. On paper `k(x) = 6` for all `x` so `k' = 0`, and `m(x) = x + 6` so `m' = 1`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_unread_state_answers_zero.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_output_contains = ["k value= 6.0", "k pullback(1.0)= (0.0)", "k pullback(2.0)= (0.0)", "m value= 9.0", "m pullback(1.0)= (1.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_unread_state_answers_zero.fvm"
+desc = "The same case on the bytecode VM: the zero is a value the graph carries, so the schedule that runs it answers the same three numbers."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_unread_state_answers_zero.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_output_contains = ["k value= 6.0", "k pullback(1.0)= (0.0)", "k pullback(2.0)= (0.0)", "m value= 9.0", "m pullback(1.0)= (1.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_unread_state_answers_zero.jit"
+desc = "The same case with the JIT: the transposed graph is built once and called twice, and the second call still answers the zero rather than the first call's cotangent."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_unread_state_answers_zero.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+expect_output_contains = ["k value= 6.0", "k pullback(1.0)= (0.0)", "k pullback(2.0)= (0.0)", "m value= 9.0", "m pullback(1.0)= (1.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_unread_state_answers_zero.prl"
+desc = "The same case on the parallel scheduler: the reverse half's accumulator sees no delivery and answers the zero its slot holds."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_unread_state_answers_zero.cml"
+args = ["${case}", "std::prl"]
+expect_exit = 0
+expect_output_contains = ["k value= 6.0", "k pullback(1.0)= (0.0)", "k pullback(2.0)= (0.0)", "m value= 9.0", "m pullback(1.0)= (1.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
 # The transform's refusals are two files: the words it writes into its reading log
 # (`modules/transforms/transpose.cpp`) and the sentences it answers them with
 # (`modules/transforms/transpose_operator.cpp`). One can gain a word the other has never heard of, and
@@ -591,6 +649,12 @@ timeout_ms = 20000
 # reading already satisfies cannot tell a working transpose from a silent zero -- `nested` answered 0.0
 # for exactly that reason until the tuple-in-a-tuple rule was written, and its forward 2.0 had hidden
 # it.
+# A better pin for these two cases is derived and is not here on purpose: lane-norm-arity re-pins both
+# to `split(jvp(...))` at `x = 2` (value 30, cotangent 15 -- at `x = 1` both are 15, so a run that
+# answered the value where the cotangent belongs would look right). Measured on this tree that pin fails
+# with "transpose has no transpose for this function: a loop carries...", because the reverse walk
+# `split(jvp(...))` needs is not on develop yet, and taking it here would have added two reds. The pin
+# lands when the walk does; this note is what tells the next reader why the better pin is absent.
 [[tests]]
 name = "transpose_loop_escape.names_the_value_one_read"
 desc = "`read_one(x) = loop s = x for i in 0..3 do 2.0*s + x` reads the parameter inside the loop body, so every round's cotangent lands on `x` and has to leave the loop. The loop carries it as a second state and answers 15 -- `s = 2s + x` three times is `8x + 7x`, the state's own cotangent 8 plus the carried sum 7 -- where before this cut it refused with `skip=state`. The reading is kept: `carried=1` in place of `skip=state`, `answer=summed` because the escaped value is the one the state starts from, `captures=1`, and the `ESCAPE` line still names the parameter port as the target and the body's `add` as the product that handed the cotangent out. A channel that dropped that line when it started working could not be compared with the refusal it replaced."
