@@ -2503,6 +2503,14 @@ uint16_t GCGraph::callTangentArgsOf(gc_node_ref_t ref) const {
     return n != nullptr && n->kind == GCNodeKind::Func ? n->tangentArgs : 0;
 }
 
+bool GCGraph::isTangentArgument(gc_node_ref_t ref, size_t index) const {
+    if (index >= kTangentArgumentBits) {
+        return false;
+    }
+    const uint16_t mask = callTangentArgsOf(ref);
+    return (mask & static_cast<uint16_t>(uint16_t{1} << index)) != 0;
+}
+
 std::string GCStaticFunctionAnswer::describe() const {
     if (hasGraph()) {
         return std::format("graph={}", toValue(graph));

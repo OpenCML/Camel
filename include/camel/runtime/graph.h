@@ -345,6 +345,12 @@ static_assert(std::is_trivially_copyable_v<WritingUnion>);
 /// No payload: the value of GCNode::payload for a node that carries nothing beyond its record.
 inline constexpr gc_off_t kNoPayload = static_cast<gc_off_t>(-1);
 
+/// How many argument positions a FUNC node's tangent record holds (GCNode::tangentArgs): one bit
+/// per position, so the record covers the first `kTangentArgumentBits` arguments of a call. A rule
+/// whose right side calls a function with a tangent past that position is refused where it is
+/// expanded (modules/transforms/rule_expand.cpp) rather than recorded as a call of values only.
+inline constexpr size_t kTangentArgumentBits = sizeof(uint16_t) * 8;
+
 /// One order edge of a graph (docs/design/effects/edges.cn.md section 1.5): `pred` runs before
 /// `user` when both run, and nothing travels along it. Order edges are not data, so they are not
 /// in a node's input port list, and they are not control inputs either: liveness does not follow
@@ -376,11 +382,14 @@ static_assert(std::is_trivially_copyable_v<GCGraphSyncEdge>);
 struct GCNode {
     GCNodeKind kind         = GCNodeKind::Data;
     uint8_t flags           = 0;
-    /// How many of a FUNC node's trailing arguments are tangents: what a rule's expansion recorded on
-    /// the call it produced (`DraftNodeHeader::tangentArgs`, `addFuncNode's last argument`). The
-    /// rule is the one source of which arguments are values and which are tangents; `transpose` reads
-    /// the count off the node rather than deriving it again. 0 for every other node, and for a call
-    /// that is not a rule's tangent function.
+    /// Which of a FUNC node's arguments are tangents, as one bit per argument position: bit `i` is
+    /// set when the call's i-th normal input is a tangent. What a rule's expansion recorded on the
+    /// call it produced (`DraftNodeHeader::tangentArgs`, `addFuncNode's last argument`). The rule is
+    /// the one source of which arguments are values and which are tangents, and a rule may write a
+    /// tangent wherever its right side writes one -- `mul_tangent(x, w, dx, dw)` ends with its two,
+    /// `index_into(dxs, i)` begins with one -- so the record is a set of positions and not a count of
+    /// trailing ones. `transpose` reads the positions off the node rather than deriving them again.
+    /// 0 for every other node, and for a call that is not a rule's tangent function.
     uint16_t tangentArgs    = 0;
     gc_slot_idx_t dataIndex = 0;
     /// The type of the node's value (camel/core/type/intern.h); kNoTypeId when it has none.
@@ -902,11 +911,17 @@ class GCGraph : public camel::core::rtdata::Object {
     gc_node_ref_t nodeRef(const GCNode *node) const;
     /// FUNC node `ref`: the callee (invalid when `ref` is not a FUNC node).
     GraphId calleeIdOf(gc_node_ref_t ref) const;
-    /// How many of FUNC node `ref`'s trailing arguments are tangents: the count a rule's expansion
-    /// recorded when it produced the call (`GCNode::tangentArgs`), 0 when the node is not such a call.
-    /// A kernel's parameters are the values the rule bound followed by the tangents it took, so the
-    /// values are the arguments before this count.
+    /// The arguments of FUNC node `ref` that are tangents, one bit per argument position (bit `i`
+    /// set when the i-th normal input is a tangent): the record a rule's expansion wrote when it
+    /// produced the call (`GCNode::tangentArgs`), 0 when the node is not such a call.
     uint16_t callTangentArgsOf(gc_node_ref_t ref) const;
+    /// Whether argument `index` of FUNC node `ref` is a tangent: bit `index` of
+    /// `callTangentArgsOf(ref)`. The one entry a reader asks instead of counting a run of trailing
+    /// arguments -- a rule writes a tangent where its right side writes it, and `index_into(dxs, i)`
+    /// writes one first and a value last. False for a node that is not a FUNC node, and for an index
+    /// past the record's `kTangentArgumentBits` positions (a call that long is refused where the rule
+    /// is expanded).
+    bool isTangentArgument(gc_node_ref_t ref, size_t index) const;
     /// The graph a function constant of the static area names, with the reason when it names none.
     ///
     /// `calleeIdOf` answers for a FUNC node -- a call written by name. A function value kept in a

@@ -408,26 +408,48 @@ FunctionType *transposeSignature(
     // which sees a type and nothing else -- has every fact it needs.
     //
     // `participates` is the one exception, and it is a fact of a *call site* rather than of a type:
-    // where a call records how many of its trailing arguments are tangents, those are the parameters
-    // a cotangent is answered for and the rest are values the caller still passes. That is the shape
-    // a rule's tangent function has -- `mul_tangent(x, w, dx, dw)` is linear in `(dx, dw)`, so the
-    // cotangent of such a call is the cotangent of its last two arguments while its first two remain
-    // values. Empty means every parameter participates, which is the ordinary transposition of an
-    // entry.
+    // where a call records which of its arguments are tangents, those are the parameters a cotangent
+    // is answered for and the rest are values the caller still passes. The record is a position per
+    // argument (`GCNode::tangentArgs`), not a count of trailing ones, because a rule writes a tangent
+    // where its right side writes it. That is the shape a rule's tangent function has --
+    // `mul_tangent(x, w, dx, dw)` is linear in `(dx, dw)`, so the cotangent of such a call is the
+    // cotangent of its two tangents while its first two arguments remain values, and
+    // `index_into(dxs, i)` is linear in its first argument while the index stays a value. Empty means
+    // every parameter participates, which is the ordinary transposition of an entry.
     //
     // A parameter with no tangent space (an integer, a `bool`, a string) cannot be what a cotangent
     // is, and is read as a value: nothing enters or leaves its place in the answer. A function whose
     // parameters all lack a space has no transpose at all.
     const size_t count = function->normTypesCount();
     if (!participates.empty()) {
-        // The participating-set form is a kernel's: a function of plain numbers, with one flag per
-        // parameter. Anything else is refused here rather than answered with a signature whose
-        // ports a call site cannot fill.
+        // The participating-set form is a **call site's**: one flag per parameter of the callee,
+        // saying which places a cotangent is answered for. What it requires is the same thing the
+        // loop below requires of any signature, and nothing about the *types*: a place a cotangent is
+        // answered for must have a tangent space (there is no type to put in the answer otherwise,
+        // and the loop below refuses that place by name), and a place it is not is a value the call
+        // site fills, of whatever type that value has.
+        //
+        // This used to demand `Type::Float64()` of **every** parameter, on the grounds that the form
+        // began as a rule kernel's (`mul_tangent`'s four numbers) and "a function of plain numbers" is
+        // what a kernel is. That is the record's shape, not the shape's: a rule's right side is linear
+        // in its tangents and its values keep their own types, so a parameter that is not a number is a
+        // value and not a reason to refuse. The array element's law is the one that shows it --
+        // `index_into(xs: float[], i: int)` answers a cotangent for the array and reads the index, and
+        // its member signature `(int, float[], float) => (float[],)` is that shape, built and run by
+        // the type-based reading since before this form existed. Keeping the `float` demand while the
+        // record named only a trailing run hid the difference, because the record was empty for that
+        // call; once the record names positions it is not (measured 2026-11-04: `grad_array_no_int` and
+        // eight others read `TRANSPOSE function=rulesets.jvp::index_into<float> skip=signature`).
         if (participates.size() != count) {
             return nullptr;
         }
         for (size_t i = 0; i < count; ++i) {
-            if (function->normTypeAt(i) != Type::Float64()) {
+            if (!participates[i]) {
+                continue;
+            }
+            const camel::core::TangentSpaceAnswer space =
+                camel::core::tangentSpaceOf(function->normTypeAt(i));
+            if (!space.hasSpace() || space.space == nullptr) {
                 return nullptr;
             }
         }
@@ -544,12 +566,13 @@ FunctionType *transposeSignature(
 /// where it stands -- which is what the transform did before this rule, and what the A/B of the case
 /// below flips back to: `skip=state`, with no answer at all. (The switch is gone; the rule and the`r`n/// reading are what remain.)
 
-/// A call's recorded tangent-argument count is read (`GCNode::tangentArgs`: how many of the
-/// call's trailing arguments a rule's expansion said are tangents). A kernel call inside an arm is
-/// transposed as the linear map it is -- the values are ports, the tangents are what the answer is a
-/// cotangent of, and the call site passes the values and the cotangent only. Before this, the count is unread,
-/// the call is a plain function of all its parameters, and the arm stops at the tangent that has no
-/// value: `arm-stop region=1 node=7 arg=1 callee=autodiff::mul_tangent<float>`. The A/B of the two readings.
+/// A call's recorded tangent-argument positions are read (`GCNode::tangentArgs`, one bit per
+/// argument: which of the call's arguments a rule's expansion said are tangents). A kernel call inside
+/// an arm is transposed as the linear map it is -- the values are ports, the tangents are what the
+/// answer is a cotangent of, and the call site passes the values and the cotangent only. Before this,
+/// the record is unread, the call is a plain function of all its parameters, and the arm stops at the
+/// tangent that has no value: `arm-stop region=1 node=7 arg=1 callee=autodiff::mul_tangent<float>`.
+/// The A/B of the two readings.
 
 /// A callee that arrives as a *value* is named. `calleeIdOf` answers for a FUNC node -- a call
 /// written by name; a function value put into a `let` and called is a DATA node holding a static
@@ -1536,10 +1559,11 @@ bool buildTransposeMember(
                     // tangents, so its transposition answers for the tangents only and takes the values
                     // as ports. Which arguments are tangents is **the rule's** fact, recorded on this
                     // node when `reinterp` expanded the rule that produced it (`GCNode::tangentArgs`,
-                    // `addFuncNode`'s last argument): the values are the captures the rule bound,
-                    // the tangents are the lambda's own parameters. The rule is the one source;
-                    // nothing here re-derives the split, and there is no second table to keep in step
-                    // when a rule is added.
+                    // `addFuncNode`'s last argument), one bit per argument position: the values are the
+                    // captures the rule bound, the tangents are the lambda's own parameters, and the
+                    // rule writes a tangent wherever its right side writes it. The rule is the one
+                    // source; nothing here re-derives the split, and there is no second table to keep
+                    // in step when a rule is added.
                     const uint16_t tangentArgs =
                         function->callTangentArgsOf(ref);
                     // The values a call inside an arm takes: a parameter (a stop), a residual projection, a
@@ -1656,9 +1680,9 @@ bool buildTransposeMember(
                     // The parameters the transposition answers for. Empty = every parameter, which is
                     // what a lifted call and a plain call need; a kernel answers for its tangents.
                     std::vector<bool> participates;
-                    size_t valueCount = callee->funcType()->normTypesCount();
-                    size_t tangentBase = 0;
-                    size_t answerCount = valueCount;
+                    const size_t calleeParams = callee->funcType()->normTypesCount();
+                    size_t valueCount = calleeParams;
+                    size_t answerCount = calleeParams;
                     // Which argument each member of the callee's answer is the cotangent of, as a
                     // position among the call's normal inputs; and which arguments are values the
                     // member reads. Both follow from the same predicate the member's signature was
@@ -1666,31 +1690,44 @@ bool buildTransposeMember(
                     // and answers one cotangent, and the two lists are the parameters' places.
                     std::vector<size_t> answerAt;
                     std::vector<size_t> valueAt;
-                    if (tangentArgs > 0) {
-                        const size_t calleeParams = callee->funcType()->normTypesCount();
+                    if (tangentArgs != 0) {
+                        size_t tangentCount = 0;
+                        for (size_t i = 0; i < calleeParams; ++i) {
+                            if (function->isTangentArgument(ref, i)) {
+                                ++tangentCount;
+                            }
+                        }
                         os << "TRANSPOSE function=" << function->name() << " arm-call region="
                            << oldRegion << " node=" << ref << " callee=" << callee->name()
-                           << " args=" << callInputs.size() << " tangent-args=" << tangentArgs << '\n';
-                        if (tangentArgs > calleeParams) {
+                           << " args=" << callInputs.size() << " tangent-args=" << tangentCount << '\n';
+                        // A mark past the call's last argument says the record and the call do not
+                        // belong together: the rule's right side put a tangent somewhere this call
+                        // has no argument, and reading the rest of the marks would answer a shape the
+                        // call cannot fill.
+                        bool markedPastTheCall = false;
+                        for (size_t i = calleeParams; i < rt::kTangentArgumentBits; ++i) {
+                            markedPastTheCall = markedPastTheCall || function->isTangentArgument(ref, i);
+                        }
+                        if (markedPastTheCall) {
                             os << "TRANSPOSE function=" << function->name() << " arm-stop region="
-                               << oldRegion << " node=" << ref << " tangent-args=" << tangentArgs
+                               << oldRegion << " node=" << ref << " tangent-args=" << tangentCount
                                << " params=" << calleeParams << '\n';
                             armsOk = false;
                             return {};
                         }
-                        valueCount  = calleeParams - tangentArgs;
-                        tangentBase = valueCount;
-                        answerCount = tangentArgs;
+                        // Every mark is the position of a tangent, wherever the rule wrote it: the
+                        // answered parameters are the marked positions and the values are the rest.
                         participates.assign(calleeParams, false);
-                        for (size_t i = valueCount; i < calleeParams; ++i) {
-                            participates[i] = true;
+                        for (size_t i = 0; i < calleeParams; ++i) {
+                            if (function->isTangentArgument(ref, i)) {
+                                participates[i] = true;
+                                answerAt.push_back(i);
+                            } else {
+                                valueAt.push_back(i);
+                            }
                         }
-                        for (size_t i = 0; i < valueCount; ++i) {
-                            valueAt.push_back(i);
-                        }
-                        for (size_t i = 0; i < answerCount; ++i) {
-                            answerAt.push_back(tangentBase + i);
-                        }
+                        valueCount  = valueAt.size();
+                        answerCount = answerAt.size();
                     } else if (rt::isValid(primalId)) {
                         camel::runtime::GCGraph *primal = state.program->graph(primalId);
                         const size_t primalParams =
@@ -1704,20 +1741,18 @@ bool buildTransposeMember(
                         }
                         calleeToTranspose = primal;
                         valueCount        = primalParams;
-                        tangentBase       = primalParams;
                         answerCount       = primalParams;
                         // A primal's parameters are the values the lift was applied to, and every one
                         // of them is a linear input of the transposition: the member reads none of
                         // them and answers one cotangent per tangent (author, 2026-11-02 11:30).
                         for (size_t i = 0; i < answerCount; ++i) {
-                            answerAt.push_back(tangentBase + i);
+                            answerAt.push_back(primalParams + i);
                         }
                     } else {
                         // An ordinary call: a parameter whose type can hold a cotangent is answered
                         // for and is passed no value; a parameter that cannot -- the `int` of
                         // `xs[i]` -- is a value the member reads. The list is the parameters' places,
                         // so an answered parameter standing before a value is written correctly.
-                        const size_t calleeParams = callee->funcType()->normTypesCount();
                         answerCount = 0;
                         for (size_t i = 0; i < calleeParams; ++i) {
                             const camel::core::TangentSpaceAnswer space =
@@ -1750,7 +1785,7 @@ bool buildTransposeMember(
                         }
                         arguments.push_back(argument);
                     }
-                    if (callInputs.size() != valueCount + tangentBase) {
+                    if (callInputs.size() != calleeParams) {
                         os << "TRANSPOSE function=" << function->name() << " arm-stop region="
                            << oldRegion << " node=" << ref << " args=" << callInputs.size()
                            << " values=" << valueCount << '\n';
@@ -1832,8 +1867,10 @@ bool buildTransposeMember(
                     draft.setNormInputs(made, std::span<const gc_node_ref_t>(callArgs));
                     for (size_t i = 0; i < answerCount; ++i) {
                         // The primal's cotangent of value i is the cotangent of the tangent that
-                        // carries it; for a plain call (no lift) it is the cotangent of argument i.
-                        const gc_node_ref_t targetAt = callInputs[tangentBase + i];
+                        // carries it; for a plain call (no lift) it is the cotangent of the argument
+                        // the i-th answer belongs to, which `answerAt` states: a rule may write a
+                        // tangent before a value, so the position is read and not counted.
+                        const gc_node_ref_t targetAt = callInputs[answerAt[i]];
                         if (isConstant(targetAt)) {
                             // A constant argument is a known value: it has no cotangent to hand, the
                             // same way the operator rules skip a constant operand (`mul_t` does).
@@ -2956,7 +2993,7 @@ bool buildTransposeMember(
                 }
                 GraphId transposed = rt::kInvalidGraphId;
                 // The member is built below, once the participating set is known: a callee whose
-                // trailing arguments are tangents is transposed as the linear map it is, and its
+                // arguments the rule marked as tangents is transposed as the linear map it is, and its
                 // member answers only for those. Building it here would build the every-parameter
                 // form and then call it with the tangents' arguments missing.
                 // The member takes the callee's *non-answering* parameters as values and then the
@@ -2976,23 +3013,38 @@ bool buildTransposeMember(
                 std::vector<size_t> answersOf;
                 // A **rule kernel** call is linear in its tangents, and which arguments those are is
                 // the rule's own fact, recorded on this node when `reinterp` expanded it
-                // (`GCNode::tangentArgs`): the values are the captures the rule bound, the tangents are
-                // the lambda's parameters. The arm path has read that count since it existed; the
-                // straight-line body reads it here for the same reason -- a closed half's body is
-                // nothing but such calls, and a tangent has no value to forward.
-                const uint16_t tangentArgs = function->callTangentArgsOf(ref);
+                // (`GCNode::tangentArgs`, one bit per argument): the values are the captures the rule
+                // bound, the tangents are the lambda's parameters. The positions are read and not
+                // counted -- a rule may write a tangent before a value (`index_into(dxs, i)`), and a
+                // run of trailing ones would call that call's value a tangent. The arm path has read
+                // the record since it existed; the straight-line body reads it here for the same
+                // reason -- a closed half's body is nothing but such calls, and a tangent has no value
+                // to forward.
+                const uint16_t tangentMask = function->callTangentArgsOf(ref);
                 std::vector<bool> participates;
-                if (tangentArgs > 0) {
-                    if (tangentArgs > calleeParams) {
+                if (tangentMask != 0) {
+                    size_t tangentCount = 0;
+                    bool markedPastTheCall = false;
+                    for (size_t i = 0; i < calleeParams; ++i) {
+                        if (function->isTangentArgument(ref, i)) {
+                            ++tangentCount;
+                        }
+                    }
+                    for (size_t i = calleeParams; i < rt::kTangentArgumentBits; ++i) {
+                        markedPastTheCall = markedPastTheCall || function->isTangentArgument(ref, i);
+                    }
+                    if (markedPastTheCall) {
                         refuse(TransposeRefusalCause::CallNoTranspose);
                         os << " node=" << ref << " callee=" << callee->name()
-                           << " tangent-args=" << tangentArgs << " params=" << calleeParams
+                           << " tangent-args=" << tangentCount << " params=" << calleeParams
                            << '\n';
                         return false;
                     }
                     participates.assign(calleeParams, false);
-                    for (size_t i = calleeParams - tangentArgs; i < calleeParams; ++i) {
-                        participates[i] = true;
+                    for (size_t i = 0; i < calleeParams; ++i) {
+                        if (function->isTangentArgument(ref, i)) {
+                            participates[i] = true;
+                        }
                     }
                 }
                 // The member, built as the shape the participating set names -- the same build the arm

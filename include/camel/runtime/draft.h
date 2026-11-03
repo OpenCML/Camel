@@ -134,12 +134,15 @@ struct DraftNodeHeader {
 
     GCNodeKind kind                  = GCNodeKind::Data;
     uint8_t runtimeFlags             = 0;
-    /// How many of a FUNC node's arguments are tangents. A rule's right side is
+    /// Which of a FUNC node's arguments are tangents, one bit per argument position: bit `i` is set
+    /// when the call's i-th argument is a tangent. A rule's right side is
     /// `(dx, dw) => mul_tangent(x, w, dx, dw)`: the values are the captures the expansion bound and the
-    /// tangents are the lambda's own parameters, so the expansion knows the count and records it here,
-    /// on the call it produces. One source: the rule. Nothing re-derives the boundary from a name or a
-    /// spelling, and a reader that needs it (`transpose`, at a call inside a branch arm) reads the
-    /// node. 0 for every node that is not a rule's tangent call.
+    /// tangents are the lambda's own parameters, so the expansion knows the positions and records them
+    /// here, on the call it produces. One source: the rule. Nothing re-derives the boundary from a name
+    /// or a spelling, and a reader that needs it (`transpose`, at a call inside a branch arm) reads the
+    /// node. A rule may write a tangent anywhere its right side writes one -- `index_into(dxs, i)` puts
+    /// one first -- so the record is a set of positions, not a count of trailing ones. 0 for every node
+    /// that is not a rule's tangent call.
     uint16_t tangentArgs             = 0;
     DraftNodeStorageClass storageCls = DraftNodeStorageClass::Slab64;
     // The numeric permissions the program granted to the node with the standard permission
@@ -620,9 +623,11 @@ class GraphDraft {
     /// The index of `graph` in payloadGraphs(), added when it is not there; kNoLoopGraph for
     /// an invalid id.
     uint32_t payloadGraphIndexOf(GraphId graph);
-    /// `tangentArgs` is how many of the call's trailing arguments are tangents, when the caller knows
-    /// (see DraftNodeHeader::tangentArgs): a rule's expansion does, because the values are the captures
-    /// it bound and the tangents are the lambda's own parameters. 0 for a call that is not one.
+    /// `tangentArgs` is which of the call's arguments are tangents, one bit per argument position
+    /// (bit `i` = the i-th argument is a tangent), when the caller knows (see
+    /// DraftNodeHeader::tangentArgs): a rule's expansion does, because the values are the captures it
+    /// bound and the tangents are the lambda's own parameters. A position, not a trailing count: the
+    /// rule writes a tangent where its right side writes it. 0 for a call that is not one.
     gc_node_ref_t addFuncNode(
         GraphId calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags = 0,
         gc_slot_idx_t dataIndex = 0, uint32_t writtenCaptures = 0, uint16_t tangentArgs = 0);
