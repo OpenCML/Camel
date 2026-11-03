@@ -56,3 +56,31 @@ less exact than 'float[3]'. ... Where the value is known to fit, write the conve
 ## 6. 本车道没改
 
 补这一道要改返回表达式的构建（要不要给 `ExpectedValueScope` 声明类型），面比 `statesARank` 一句大得多，按"**发现第二份先报不统一**"的规矩**报上，未改**。本车道想加的第三条永久守卫（秩一返回位置的形状）也因此没进计划——它得等这条裁定；现在加进去只会是一条红。
+
+## 7. 作者已裁"甲：修"；这是修之前量到的机制（2026-11-03 21:35，`05f9f7439` 的树）
+
+处方是"让 `checkDeclaredReturn` 先给返回表达式期望类型再比"。**这一句已经在了**：`visitExitNode`（`src/compile/gir/builder_control.cpp:4138`）第一句就是
+
+```cpp
+ExpectedValueScope expectedScope(expectedValueType_, expectedExitTypeHere());
+```
+
+而 `expectedExitTypeHere()` 在函数体里返回 `declaredExitTypeHere()`，也就是 `float[3]`。所以缺的不是这一步。探针读数（`return [1.5, 2.5, 3.5]`，`func three(): float[3]`）：
+
+```
+EXITPROBE  declared=float[3] written=float[] array=1/1 eq=0
+EXITPROBE2 arr=1 raw=3 fits=1 elem=float
+```
+
+三件事因此确定：字面量到出口时是**已经成型的一个常量**（`ArrayData`，3 个元素，元素类型 `float`）；位置要的形状判据 `arrayLiteralFitsShape` **返回 true**，不是它挡的；`declared` 与 `written` 只差 extent 的写法（`float[3]` 对 `float[]`）。
+
+两个"看起来该用"的转换各试一次，读数：
+
+| 走法 | 结果 |
+| --- | --- |
+| `compositeDataInType(written, declaredExit, gct->at(0))` | 返回原值不变。它第一步 `type->assignableFrom(data->type())`（`builder_control.cpp:854`）就为真——`ArrayType::assignableFrom`（`src/core/type/composite/array.cpp:662-665`）对**源 extent 不是常量**的情形按"接受任意长度"处理，于是"形状相符"根本到不了下面的逐元素构建（905-913 的 `literalElementInType`） |
+| `written->convertTo(declaredExit)` | 换掉 extent、**没换元素**：`ElementTypeMismatch: Cannot insert data of type 'float' into a(n) Array with element type 'f32'`。`feat/compile` 从 2 红变 **10 红**（`expected.same_value_in_every_position` 四变体等），**已回滚** |
+
+⇒ 真正的缺口不是"给不给期望类型"，而是**一个已经成型的常量怎么按位置重建**：逐元素那条路（按写下的值转一次、不按落下来的 double 转）从没被叫到，因为 `assignableFrom` 先把话说了。动它 = 动 `compositeDataInType` / `assignableFrom` 这条**声明、传参、`as` 共用**的转换，影响面是"每个位置上的每个字面量"，不是一个出口。
+
+按"面大先报"的规矩停在这里：**回滚后本页仍是未修状态，`feat/compile` 2195 / 2190 pass / 2 fail / 3 known 不变**，两条待补的用例也没进计划。
