@@ -28,7 +28,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_output_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_div,jvp_add", "REINTERP jvp op signature=(f: (float) => float) => (float, float) => (float, float)", "lifted=(float, float) => (float, float) pure graph=(float, float) => (float, float) pure same=yes", "REINTERP jvp built graph=236 nodes=12 exit=11 regions=1 function=f", "5.5", "3.25"]
+expect_output_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_div,jvp_add", "REINTERP jvp op signature=(f: (..) => any) => (the parameters and their tangents) => (value, tangent)", "lifted=(float, float) => (float, float) pure graph=(float, float) => (float, float) pure same=yes", "REINTERP jvp built graph=236 nodes=12 exit=11 regions=1 function=f", "5.5", "3.25"]
 expect_stdout_not_contains = ["TRANSPOSE function=", "REINTERP "]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

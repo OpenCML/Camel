@@ -91,7 +91,7 @@ FunctionType *transposeSignature(
     if (function == nullptr) {
         return nullptr;
     }
-    if (function->withTypesCount() != 0 || function->normTypesCount() == 0) {
+    if (function->normTypesCount() == 0) {
         return nullptr;
     }
     if (function->exitType() != Type::Float64()) {
@@ -195,8 +195,27 @@ FunctionType *transposeSignature(
         }
     }
     params.emplace_back(resultCotangentType(function), false);
+    // The transposed function declares the source's `with` parameters, in the same order and of the
+    // same types: a body that reads a weight reads it on both sides of the transpose, and a `with`
+    // value is a value the call supplies, not a cotangent it answers for. `Transpose<F>` says the
+    // answer is one cotangent per ordinary parameter, so a `with` parameter has no member there --
+    // which is the same statement the forward transform makes when it gives a captured value the
+    // zero tangent (design principles 9.9).
+    camel::core::type::param_vec_t withParams;
+    for (size_t i = 0; i < function->withTypesCount(); ++i) {
+        Type *withType = function->withTypeAt(i);
+        if (withType == nullptr) {
+            return nullptr;
+        }
+        if (function->withIsVarAt(i)) {
+            if (Type *value = camel::core::type::valueTypeOf(withType)) {
+                withType = value;
+            }
+        }
+        withParams.emplace_back(withType, false);
+    }
     return FunctionType::create(
-        camel::core::type::param_vec_t{}, params,
+        withParams, params,
         camel::core::type::TupleType::create(cotangentsOfParticipants));
 }
 
@@ -426,6 +445,32 @@ bool buildTransposeMember(
             closurePorts.push_back(port);
             closurePortOf[ref] = port;
         }
+        // The source's `with` parameters, as `with` ports of this graph: the value a call supplies,
+        // read where the body read it. No cotangent is answered for one -- it is a constant of the
+        // differentiation -- so these ports are reads only, and the answer tuple has no member for
+        // them.
+        std::unordered_map<gc_node_ref_t, gc_node_ref_t> withPortOf;
+        {
+            const size_t withCount =
+                function->funcType() != nullptr ? function->funcType()->withTypesCount() : 0;
+            const std::span<const gc_node_ref_t> sourceWith = function->withPorts();
+            for (size_t i = 0; i < withCount && i < sourceWith.size(); ++i) {
+                camel::core::type::Type *withType = function->funcType()->withTypeAt(i);
+                if (withType == nullptr) {
+                    continue;
+                }
+                if (function->funcType()->withIsVarAt(i)) {
+                    if (camel::core::type::Type *value =
+                            camel::core::type::valueTypeOf(withType)) {
+                        withType = value;
+                    }
+                }
+                const gc_node_ref_t port =
+                    draft.addPortNode(withType, draft.allocateRuntimeSlot(withType));
+                draft.appendWithPort(port);
+                withPortOf[sourceWith[i]] = port;
+            }
+        }
         if (carriesClosure && function->closureType() != nullptr) {
             draft.setClosureType(const_cast<camel::core::type::TupleType *>(function->closureType()));
         }
@@ -654,6 +699,12 @@ bool buildTransposeMember(
             if (node == nullptr || node->kind != rt::GCNodeKind::Port) {
                 return true;
             }
+            // A `with` port is a value the call supplies and the answer says nothing about: the
+            // transposition answers one cotangent per ordinary parameter (`Transpose<F>`), and a
+            // weight is not one.
+            if (withPortOf.find(target) != withPortOf.end()) {
+                return false;
+            }
             const auto ports = function->normPorts();
             for (size_t i = 0; i < ports.size(); ++i) {
                 if (ports[i] == target) {
@@ -740,6 +791,13 @@ bool buildTransposeMember(
                 return forwardOf[ref];
             }
             if (node->kind == rt::GCNodeKind::Port) {
+                // A `with` parameter of the source: the transposed graph declares the same port, and
+                // that is where the value comes from. It is not a residual the cut carries and not a
+                // cotangent this transform answers for.
+                if (const auto with = withPortOf.find(ref); with != withPortOf.end()) {
+                    forwardOf[ref] = with->second;
+                    return forwardOf[ref];
+                }
                 // A capture the linear half declared: its value is the port the transposed graph
                 // declares for it, and that is where it comes from -- not from a parameter, not from
                 // a tuple the caller had to destructure.
