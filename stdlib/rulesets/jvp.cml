@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_integer, is_same, is_string, Tangent } from types
-import { abs, exp, log, log_softmax, matmul, maximum, mean_axis, mean_axis_stated, minimum, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, sum, sum_stated, take, take_stated, tanh, where, zeros_like } from tensor
+import { abs, erf, erfc, exp, gelu, linear, log, log_softmax, matmul, max, maximum, mean_axis, mean_axis_stated, min, minimum, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, sum, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
 // `log as math_log`: this module files the **array** `log`'s forward rule below (`jvp_log`), and a
 // rule's left side has to spell its operator with the operator's own name, so the plain `log` here
 // is `tensor:log`. The scalar `log` is what `pow_tangent` needs, and one module holds one `log`: the
@@ -792,4 +792,105 @@ export rule jvp_bf16_from_i32(x: i32) {
 /// `d(bf16(s)) = bf16(0)` where `s` is a `string`.
 export rule jvp_bf16_from_string(x: string) {
     bf16(x) => () => bf16(0)
+}
+
+// ---- the forward rules of the second tranche ----
+//
+// Eight operators the engine could already differentiate and neither half of the library could. Each
+// law below is one straight line whose right side names only registered operators: a *function* of
+// this module on a rule's right side becomes a call in the graph the linear half has to transpose,
+// and the walk refuses a call it has no transpose for (`skip=call-no-transpose`, measured on
+// `pow_tangent`). The two `erf`-family laws are written in the engine's own grouping because the
+// two legs of one `grad` are compared bit for bit; the knot each one is tied to is written where it
+// sits.
+
+/// `d(erf(x)) = 2/sqrt(pi) * exp(-x*x) * dx`.
+///
+/// **The chain's order is the law, not a style.** The engine's `erfGrad`
+/// (`modules/tensor/kernels/gradient.cpp#erfGradArm`) writes `pg * kScale * exp(-px*px)`, which is
+/// `(dy * kScale) * exp(...)`, and the transpose of a product chain reverses it: `(dx * exp(...)) *
+/// kScale` transposes to `(ct * kScale) * exp(...)` and answers the same bits, while the shorter
+/// `dx * (kScale * exp(...))` transposes to `ct * (kScale * exp(...))` and rounds in a different
+/// place. `1.1283791670955126` is the kernel's own literal (2/sqrt(pi)), and `-x*x`, `-(x*x)` and
+/// `(x*x) * -1.0` are one value: negation is exact.
+export rule jvp_erf::<T>(x: T[..]) when is_float::<T>() {
+    erf(x) => (dx: T[..]) => (dx * exp((x * x) * -1.0)) * 1.1283791670955126
+}
+
+/// `d(erfc(x)) = -2/sqrt(pi) * exp(-x*x) * dx`: the same slope as `erf` with the sign in the
+/// constant, which is where the engine puts it too (`erfcVjp` is `erf_grad(x, neg(dy))`, so its
+/// answer is `((-dy) * kScale) * exp(...)`). `(ct * -k) * e` and `((-ct) * k) * e` are the same bits
+/// -- a float's sign is a bit and the magnitude is the same product -- so the negation is folded
+/// into the constant in both halves and the chain keeps the engine's order.
+export rule jvp_erfc::<T>(x: T[..]) when is_float::<T>() {
+    erfc(x) => (dx: T[..]) => (dx * exp((x * x) * -1.0)) * -1.1283791670955126
+}
+
+/// `d(gelu(x)) = gelu'(x) * dx`, with the slope of the **tanh form** the operator is defined by and
+/// not the `Phi` form a reader may know:
+///
+///     t     = tanh(kScale * (x + kCubic * x^3))
+///     slope = 0.5 * (1 + t) + 0.5 * x * (1 - t*t) * kScale * (1 + 3 * kCubic * x*x)
+///
+/// `kScale = 0.7978845608028654` and `kCubic = 0.044715` are the kernel's literals, the tokens are
+/// in the kernel's order (`geluGradArm`'s f64 arm), and the slope is multiplied into the tangent
+/// once, last -- which is what makes the transposed chain `ct * slope` identical to the engine's
+/// `pg * slope` instead of merely equal. `t` is recomputed where it appears because a rule's right
+/// side binds no local; three `tanh` nodes answer one value.
+export rule jvp_gelu::<T>(x: T[..]) when is_float::<T>() {
+    gelu(x) => (dx: T[..]) => dx * (0.5 * (1.0 + tanh(0.7978845608028654 * (x + 0.044715 * x * x * x))) + 0.5 * x * (1.0 - tanh(0.7978845608028654 * (x + 0.044715 * x * x * x)) * tanh(0.7978845608028654 * (x + 0.044715 * x * x * x))) * 0.7978845608028654 * (1.0 + 3.0 * 0.044715 * x * x))
+}
+
+/// `d(transpose(x)) = transpose(dx)`: the last two axes swapped is its own inverse, so the linear
+/// half holds the operator again and its transpose law is the same one line
+/// (`stdlib/rulesets/transpose.cml#transpose_t`).
+export rule jvp_transpose::<T>(x: T[..]) when is_float::<T>() {
+    transpose(x) => (dx: T[..]) => transpose(dx)
+}
+
+/// `d(where(c, a, b)) = (where(c, da, db))`: the condition is a choice and not a magnitude, so it
+/// carries no tangent and the tangent of the result is the tangent of the branch that was taken.
+/// The law answers one tangent per branch, which is why its right side takes two. The backward half
+/// is the same `where` taken apart (`stdlib/rulesets/transpose.cml#where_t`); a right side that
+/// wrote `where(c, dx, 0.0)` would put a three-operand `where` in the linear half for the reduction
+/// half of the operator to answer, and this is the shape `jvp_relu` records as refused.
+export rule jvp_where::<T>(c: bool[..], a: T[..], b: T[..]) when is_float::<T>() {
+    where(c, a, b) => (da: T[..], db: T[..]) => where(c, da, db)
+}
+
+/// `d(max(xs)) = sum(where(xs >= max(xs), dxs, 0))`: an extremum is a selection, so its tangent is
+/// the tangent of every position that holds the extremum, added up.
+///
+/// The mask is a value of `xs` alone, so the cut carries it and the linear half is a `where` over
+/// the tangent and a `sum_stated` -- two operators that already had laws, which is why this one
+/// needs no new name. `>=` and not `>`: a tie selects every tied position on the engine's side too
+/// (`extremumAllVjp` compares with `strict_eq` against the broadcast output, `modules/tensor/ops/
+/// reduction_ops.cpp`), and a NaN extremum selects nothing on either side.
+export rule jvp_max::<T>(xs: T[..]) when is_float::<T>() {
+    max(xs) => (dxs: T[..]) => sum_stated(where(xs >= max(xs), dxs, 0.0), shape(xs))
+}
+
+/// `d(min(xs)) = sum(where(xs <= min(xs), dxs, 0))`: `max`'s mirror, one comparison turned round.
+/// The engine's selection rule is the same one for both extrema, so the two halves agree on a tie
+/// here for the same reason they do there.
+export rule jvp_min::<T>(xs: T[..]) when is_float::<T>() {
+    min(xs) => (dxs: T[..]) => sum_stated(where(xs <= min(xs), dxs, 0.0), shape(xs))
+}
+
+/// `d(linear(x, w)) = x @ dw + dx @ w` with `w` laid out `[in, out]`: the product rule of a matrix
+/// product, with each term keeping its own operand's place.
+///
+/// The two terms are the product's, so their transposes are `matmul_t`'s two answers and the walk
+/// needs nothing new by name: `d/dx = ct @ wᵀ` and `d/dw = xᵀ @ ct`, which is the pair the engine's
+/// `linearVjp` reaches through `tensor:matmul_grad_lhs` / `_rhs`
+/// (`modules/tensor/ops/linalg_ops.cpp`).
+///
+/// This law states **two** operands, which is the form a call writes when the bias is left out. A
+/// three-operand call has a third port and a law's parameters are the node's ports one for one, so
+/// the bias-carrying shape needs a law of its own; none is written here, and a `linear(x, w, b)`
+/// step is refused where the law's parameters meet the node rather than answered wrongly. What the
+/// bias's own cotangent is (`ct`, spread over the bias) is the addition's law's answer and not a
+/// product's, which is the second reason this one waits.
+export rule jvp_linear::<T>(x: T[..], w: T[..]) when is_float::<T>() {
+    linear(x, w) => (dx: T[..], dw: T[..]) => matmul(dx, w) + matmul(x, dw)
 }

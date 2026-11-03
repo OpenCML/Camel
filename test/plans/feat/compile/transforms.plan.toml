@@ -1990,3 +1990,117 @@ expect_exit = 0
 expect_output_contains = ["divide engine dx=[0.5, 0.25, 0.125] dw=[-1.5, 0.1875, -0.015625]", "divide: engine=[0.5, 0.25, 0.125] library=[0.5, 0.25, 0.125] same=true", "divide dw: engine=[-1.5, 0.1875, -0.015625] library=[-1.5, 0.1875, -0.015625] same=true"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+
+# ---- the second tranche: eight more operators, both halves ----
+#
+# Each entry below is one operator and one reading: the engine's `grad` beside the library's `vjp`,
+# on the same input, with `same=` the comparison of the two arrays element for element. The
+# operators were picked for what a law can state with the operators the tree already has; the ones
+# the same difference list holds and a law cannot reach (`concat`, `idx_take`, `layer_norm`,
+# `max_axis`, `min_axis`, `mean`, `min_axis`, `permute`, `reshape`, `softmax`, `sum_axis`,
+# `unsqueeze`) are refused below, where each is named with what is missing.
+
+[[tests]]
+name = "erf_gradient_both_legs"
+desc = "`erf`'s law, both legs. The slope is `2/sqrt(pi) * exp(-x*x)`, and the law chains the two products in the order whose transpose is the engine's own grouping -- `erfGrad` writes `pg * kScale * exp(-px*px)`, so the forward rule writes `(dx * exp(...)) * kScale` and the transposed product is `(ct * kScale) * exp(...)` bit for bit. The reading is three lanes with three different slopes."
+kind = "behavior"
+case = "../../../cases/compile/transforms/erf_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["erf: engine=[0.8787825789354448, 0.4151074974205947, 0.6429310691952074, 0.020666985354092053] library=[0.8787825789354448, 0.4151074974205947, 0.6429310691952074, 0.020666985354092053] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "erfc_gradient_both_legs"
+desc = "`erfc`'s law, both legs. The engine writes it as `erf_grad(x, neg(dy))`, so the answer is the `erf` slope with the sign in the constant rather than around the product -- `(-a) * b` and `-(a*b)` differ in no bit -- and the input goes through zero, where the sign of every lane separates this law from `erf`'s."
+kind = "behavior"
+case = "../../../cases/compile/transforms/erfc_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["erfc: engine=[-0.8787825789354448, -1.1283791670955126, -0.23652112244729076, -0.020666985354092053] library=[-0.8787825789354448, -1.1283791670955126, -0.23652112244729076, -0.020666985354092053] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "gelu_gradient_both_legs"
+desc = "`gelu`'s law, both legs. The slope is the one the tanh form has -- `0.5*(1+t) + 0.5*x*(1-t*t)*kScale*(1+3*kCubic*x*x)` with `t = tanh(kScale*(x + kCubic*x^3))` -- written in the engine's token order and multiplied into the cotangent once, at the end, which is what `geluGradArm`'s f64 arm does. The Phi form of the same slope over `erf` is the same number on paper and a different one in the last place, so this case measures which one the library answers."
+kind = "behavior"
+case = "../../../cases/compile/transforms/gelu_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["gelu: engine=[0.9989382561374143, -0.1277107931514331, 1.0860992566236183, 0.30464590484893955] library=[0.9989382561374143, -0.1277107931514331, 1.0860992566236183, 0.30464590484893955] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_gradient_both_legs"
+desc = "`transpose`'s law, both legs: the operator is its own inverse, so both rules are one line. The sum is taken against a weight with four different powers of ten, because `sum(transpose(x))` equals `sum(x)` and would pass under a law that did nothing at all -- with the weight, the answer is `transpose(w)` and every lane separates a reflect from an identity."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["transpose: engine=[[1.0, 100.0], [10.0, 1000.0]] library=[[1.0, 100.0], [10.0, 1000.0]] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "where_gradient_both_legs"
+desc = "`where`'s law, both legs, and both branches measured: `d/da = where(c, ct, 0.0)` and `d/db = where(c, 0.0, ct)`, which are the engine's own two nodes (`whereVjp`) over the same condition -- the reading is not merely equal to the engine's, it is the same graph. The condition is computed by the program (`a > 0.0`), so it crosses the cut as a residual, which is the shape a mask has in a training step. The forward half cannot write `where(c, dx, 0.0)` (a three-operand `where` in the linear half), so it answers `where(c, da, db)` and the transpose law is what takes it apart."
+kind = "behavior"
+case = "../../../cases/compile/transforms/where_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["where: engine=[0.0, 1.0, 1.0, 1.0] library=[0.0, 1.0, 1.0, 1.0] same=true", "where db: engine=[1.0, 0.0, 0.0, 0.0] library=[1.0, 0.0, 0.0, 0.0] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "max_gradient_both_legs"
+desc = "`max`'s law, both legs. The input carries a **tie** at the maximum, so the two laws a reader writes first are separable without any arithmetic: a single-position argmax answers one `1.0`, a shared cotangent answers two `0.5`s, and the extremum's own law answers `1.0` at both tied positions -- which is what the engine's `strict_eq` selection does (`extremumAllVjp`). The mask is a value of `xs` alone, so the cut carries it and the linear half is a `where` and a `sum_stated`, both of which already had laws."
+kind = "behavior"
+case = "../../../cases/compile/transforms/max_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["max: value=3.0 engine=[0.0, 1.0, 1.0, 0.0] library=[0.0, 1.0, 1.0, 0.0] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "min_gradient_both_legs"
+desc = "`min`'s law, both legs: `max`'s mirror with the comparison turned round, on an input whose minimum is not the value a copied `max` law would select (so a law that lost its comparison answers zeros everywhere instead of ones). The minimum is tied too, and both tied positions take the whole cotangent."
+kind = "behavior"
+case = "../../../cases/compile/transforms/min_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["min: value=-1.0 engine=[0.0, 1.0, 0.0, 1.0] library=[0.0, 1.0, 0.0, 1.0] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "linear_gradient_both_legs"
+desc = "`linear`'s law, both legs, both operands measured. `linear(x, w) = x @ w` with `w` laid out `[in, out]`, so `d/dx = ct @ wᵀ` and `d/dw = xᵀ @ ct` -- the pair the engine reaches through `tensor:matmul_grad_lhs` / `_rhs` (`linearVjp`) and the pair `matmul_t`'s law already answers for `matmul` (`matmul_transpose_law.cml`), one operator further out. A law that swapped the two answers would give a matrix of the right shape and the wrong numbers in one reading only. The law states two operands, which is the form a call writes without a bias; a three-operand call needs its own law because a law's parameters are the node's ports."
+kind = "behavior"
+case = "../../../cases/compile/transforms/linear_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["linear: value=9.75 engine=[[0.75, 1.125], [0.75, 1.125]] library=[[0.75, 1.125], [0.75, 1.125]] same=true", "linear dw: engine=[[4.0, 4.0], [6.0, 6.0]] library=[[4.0, 4.0], [6.0, 6.0]] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
