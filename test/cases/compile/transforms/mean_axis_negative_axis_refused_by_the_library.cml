@@ -1,0 +1,52 @@
+// The same gradient through the library's `vjp`: the law of a mean reads its axis.
+//
+// The cut and the walk both succeed here -- `split` builds the two halves and `transpose` turns the
+// backward one around -- so this is not a refusal at the graph's construction. What ends the run is
+// the *scale* the law of a mean divides by: `stdlib/rulesets/jvp.cml#jvp_mean_axis` writes it as
+// `T(1.0 / float(shape(xs)[axis]))`, and the axis is used as written. `-1` is how "the last axis" is
+// said without counting the rank, and it is not an index any extent array has: the extents of a 2x3
+// value are two long, so position `-1` is out of range.
+//
+//     REINTERP jvp function=f graph=325 type=(float[..], float[..]) => (float, float) pure
+//              nodes=5 exit=Tuple{chain,tangent} tangent=computed source=ruleset
+//              rules=jvp_mean_axis,jvp_sum
+//     REINTERP split function=jvp_of_f forward=348 backward=349
+//              type=(float[..]) => (float, (float[..]) => float pure) pure residuals=2
+//     TRANSPOSE function=split_of_jvp_of_f_backward contribution=0 node=5 type=int space=none from=6
+//     TRANSPOSE function=split_of_jvp_of_f_backward graph=350 type=(float) => (float[..],) nodes=12
+//              arms=0 rhs=sum_t,mul_tensor_t,dtod_t,div_t
+//     (transpose_of_split_of_jvp_of_f_backward):?:?: [Error]: Index -1 is out of range for an array
+//              of length 2. (name=RuntimeDiag::IndexOutOfRange, code=0x04000002)
+//
+// The `div_t` in the transposed body is the division by that scale, and the `int` with `space=none`
+// is the position it reads: the scale is computed inside the transposed graph rather than carried
+// as a residual, so the same extent lookup runs on the backward side with the same axis.
+//
+// The operator is not what stops. `mean<-1, true>` answers `[2.0, 5.0]` on this value and the engine
+// differentiates it -- the neighbouring `mean_axis_negative_axis_through_the_engine.cml` asks for
+// `1 / 3` at every element. The positive spelling of the same lane runs on this very path
+// (`mean_axis1_keepdims_gradient_reads_the_row_length.cml`), so the two spellings are what separates
+// "the law is missing" from "the law reads the axis in one spelling only".
+//
+// The day the axis is normalized (`axis < 0 ? axis + rank : axis`) -- or the lane's length is taken
+// from the operator's own extent rather than from `shape(xs)[axis]` -- this case must turn positive
+// and pin the engine's numbers, element for element, not by their sum:
+//
+//     [[0.3333333333333333, 0.3333333333333333, 0.3333333333333333],
+//      [0.3333333333333333, 0.3333333333333333, 0.3333333333333333]]
+//
+//     camel test/cases/compile/transforms/mean_axis_negative_axis_refused_by_the_library.cml
+import { vjp } from vjp
+import { mean, sum } from tensor
+
+/// The library's spelling: the differentiated value is an ordinary parameter (design principles 9.9).
+func f(x: float[..]): float {
+    return sum(mean<-1, true>(x))
+}
+
+func main(): int sync {
+    let input = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
+    let (value, pullback) = vjp(f)(input)
+    `mean_axis_negative library value={:.17f} d={}`->format<value, pullback(1.0).0>->println
+    return 0
+}

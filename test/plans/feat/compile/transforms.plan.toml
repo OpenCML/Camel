@@ -1717,3 +1717,43 @@ expect_stderr_contains = ["skip=backward construct=a node whose input was not co
 expect_output_not_contains = ["TRANSPOSE function="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# ---- `mean` at a negative axis: the engine's numbers, and the library's law reading the axis ----
+#
+# One lane, two spellings. `mean<-1, true>(x)` says "the last axis" without counting the rank, and
+# on a 2x3 value it names axis 1, the lane `mean<1, true>(x)` names. The two entries below are one
+# pair: the first pins the numbers the engine answers and that both spellings answer the same ones;
+# the second pins where the library's own path stops, which is `shape(xs)[axis]` in
+# `stdlib/rulesets/jvp.cml#jvp_mean_axis` -- the axis used as written, so `-1` is out of range for a
+# two-long extent array. The count half of the same expression is right (it reads the operand, per
+# the ruling of 2026-11-03 16:15), which is why the positive spelling of the lane already passes
+# (`mean_axis1_keepdims_gradient_reads_the_row_length`): what is wrong is the axis, not the law's
+# source of the length.
+#
+# The pair is therefore the reading that "the library answers what the engine answers" is measured
+# on for this operator: the day the axis is normalized, the second entry must go red, and its
+# replacement is the first entry's numbers, element for element.
+[[tests]]
+name = "mean_axis_negative_axis.engine"
+desc = "The engine's gradient of `sum(mean<axis, true>(x))` on `x = [[1, 2, 3], [4, 5, 6]]` is `1 / 3` at every element -- a mean divides by the length of the lane it reduced (three) and the surrounding `sum` hands every position the cotangent 1. Both axis spellings are printed and asserted to be the same value: `mean<-1, true>` (the last axis, without counting the rank) and `mean<1, true>` (the same lane named by position) must not be able to answer different numbers. The wrong laws separate at the FIRST element: the other extent (2) answers `0.5` and `numel(x)` (6) answers `0.16666666666666666`, so the array is the assertion rather than its sum. This is the number the library's own path has to reach for the negative spelling; the neighbouring `mean_axis_negative_axis.refused_by_the_library` entry pins where it stops today."
+kind = "behavior"
+case = "../../../cases/compile/transforms/mean_axis_negative_axis_through_the_engine.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["mean_axis_negative negative=[[0.3333333333333333, 0.3333333333333333, 0.3333333333333333], [0.3333333333333333, 0.3333333333333333, 0.3333333333333333]]", "mean_axis_negative positive=[[0.3333333333333333, 0.3333333333333333, 0.3333333333333333], [0.3333333333333333, 0.3333333333333333, 0.3333333333333333]]", "mean_axis_negative same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "mean_axis_negative_axis.refused_by_the_library"
+desc = "The same gradient through the library's `vjp` ends inside the transposed body, on the scale `stdlib/rulesets/jvp.cml#jvp_mean_axis` writes as `T(1.0 / float(shape(xs)[axis]))`. The cut and the walk both succeed -- `residuals=2`, `rhs=sum_t,mul_tensor_t,dtod_t,div_t` -- so this is not a refusal at the graph's construction: the scale is computed inside the transposed graph, and `-1` is not an index the two-long extent array of a 2x3 value has, so the run ends with `Index -1 is out of range for an array of length 2` (`RuntimeDiag::IndexOutOfRange`). Pinned as readings on both streams, not as an exit code, so the day the axis is normalized this entry fails and names what replaced it. The neighbouring `.engine` entry holds the numbers the replacement must answer, and the positive spelling of the same lane already runs on this path (`mean_axis1_keepdims_gradient_reads_the_row_length`)."
+kind = "negative"
+case = "../../../cases/compile/transforms/mean_axis_negative_axis_refused_by_the_library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["Index -1 is out of range for an array of length 2"]
+expect_stderr_contains = ["rules=jvp_mean_axis,jvp_sum", "residuals=2", "rhs=sum_t,mul_tensor_t,dtod_t,div_t"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
