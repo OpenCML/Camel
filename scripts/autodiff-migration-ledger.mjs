@@ -118,16 +118,36 @@ let loaderFailure = ''
 // do is hide a case that *stopped* being written with an array -- none did: `with` and `other` are
 // unchanged at 45 and 7, so the 3 are additions and not a shift between classes.
 //
+// Re-read on 2026-11-04, and it is the same shape a third time: `total`, `library` and `array` each
+// moved by 1 while `with` and `other` did not (45 and 7), so one case joined the corpus and nothing
+// was reclassified.
+//
+//   * `test/cases/modules/autodiff/transpose_needs_parameter_shape.cml` (`fbf31b3ed`, "transpose: a
+//     parameter's shape is written in its type, and a type that leaves it open is refused"): the
+//     negative of `rules_angle_args_mean_transpose.cml`, the same function declared with `x:
+//     float[..]`, which must be refused by `RuntimeDiag::TransposeNeedsParameterShape`.
+//
+// `array` is a ratchet and this is the rise it exists to notice, so it is written down instead of
+// left to glare -- and it is recorded as allowed because **the array spelling is the case itself**.
+// What the program pins is that a parameter type which leaves its shape open is refused, and the
+// repair the sentence names is the declaration that states the extents (`float[2, 3]`, which is what
+// the positive sibling writes). The rule is the author's (2026-11-03 16:15): a transposition is the
+// adjoint of a linear map, so the shape of the transposed function's domain has to come from the
+// type, and `x: float` states a complete one -- the refusal does not exist without an array type.
+// Rewriting this negative to dodge the spelling would delete the program, not migrate it, and since
+// it guards a refusal it is not the array step's debt in either direction: the column counts what
+// the sources are written as, not what work is left (see the header).
+//
 // `pass` stays at 12 although the run read 14: it is the one column that follows the host binary and
 // the file says it is not comparable across machines. Recording 14 here would fail the ledger on a
 // host where the same three cases do not pass, which is a red about the host and not about the
 // migration.
 const LEDGER_RECORDED = {
-    total: 131,
-    library: 122,
+    total: 132,
+    library: 123,
     pass: 12,
     with: 45,
-    array: 70,
+    array: 71,
     other: 7,
 }
 
