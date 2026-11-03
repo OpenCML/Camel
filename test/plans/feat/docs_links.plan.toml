@@ -265,3 +265,40 @@ expect_exit = 0
 expect_stdout_contains = ["catches 4 line(s)", "the old one-liner catches 1", "misses three of the four forms"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
+
+# A law's cotangent port and the body written against it. Nothing compared the two sentences until
+# this case: on 2026-11-04 `lane-rank0` measured 8 of 8 runs dying in `numelKernel`, because a law
+# handed `numel` a value the port had promised as something else, and neither the index nor the
+# transform had an opinion about the pair. `scripts/law-cotangent-ports.mjs` reads the laws of
+# `stdlib/rulesets` as text -- no build, no compiler -- and states, for each port, which requirement
+# the body's uses put on it and where that requirement is written down (`stdlib/tensor.cml#numel`
+# for an array, the module's own `spread_over` for an element). The three readings below are the
+# three the change was accepted on: the tree's own laws, and the two directions of one disagreement.
+#
+# The axis the crash itself was on -- the type the transform hands a law at build time -- is not
+# reachable from a source-only check and is recorded, with its measurement, in
+# `docs/handover/questions/2026-11-04-where-a-laws-port-disagrees-with-the-value-it-is-handed.cn.md`.
+
+[[tests]]
+name = "docs.every_laws_port_agrees_with_its_body"
+desc = "Every law of `stdlib/rulesets` states ports that the body uses at the same kind: an element port handed to a scalar helper or to `spread_over`, an array port handed to `numel` or one of the `*_cotangent` helpers that read a length. The run prints how many laws and ports it read and how many it could not witness at all -- a port the body only returns, or only multiplies by a value of unknown shape, is counted as unwitnessed rather than passed."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/law-cotangent-ports.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["no law's port disagrees with its body or its left side", "law(s) in"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.a_port_and_its_body_disagreeing_are_caught_both_ways"
+desc = "The reverse reading, so the rule cannot be a blanket: on two probe modules this script writes under the system temp directory, an element port whose body hands it to `numel` is reported with the declaration that makes it a requirement (`stdlib/tensor.cml#numel`, `t: T[..]`), an array port handed to `spread_over` is reported as the other direction, and the two laws of the library written the same way in a third probe are not reported at all."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/law-cotangent-ports.mjs"
+args = ["${case}", "--self-test"]
+expect_exit = 0
+expect_stdout_contains = ["cotangent port is 'T' but the body hands it to 'numel', which reads an array", "cotangent port is 'T[..]' but the body hands it to 'spread_over', which takes an element", "both disagreements are caught and the clean pair is not"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
