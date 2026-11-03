@@ -1,0 +1,18 @@
+// PROBE (wall 1): a captured array operand whose type STATES its shape.
+// `a` is captured by the lambda, so inside the lifted graph it is a `with` port; its tangent is
+// the zero of its own type. The type `float[2, 2]` states both extents, so a static zero exists.
+// matmul(a, x) picks the row, [0] reads one element of a rank-one `float[..]`.
+import { matmul } from tensor
+import rulesets.jvp
+import { jvp } from transforms
+
+func main(): int sync {
+    let a = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
+    let x = [1.0, 2.0] as float[]
+    let g = (t: float[]): float => matmul(a, t)[0]
+    let (v0, d0) = jvp(g)(x, [1.0, 0.0] as float[])
+    let (v1, d1) = jvp(g)(x, [0.0, 1.0] as float[])
+    `probe stated value=${v0} tangent=${d0}`->println
+    `probe stated value=${v1} tangent=${d1}`->println
+    return 0
+}
