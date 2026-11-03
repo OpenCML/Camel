@@ -43,6 +43,11 @@
 `POSPROBE-LAND fn=__g_317__ ports=[p0@0:part:ct] closure=[c0@2:ct] stray=2` —— 闭包成员 `x` 收到了一个
 余切，之后没有任何人读它。所以它算的那份数是死的：**余切空转、值也取错了（取到 `x`，问的是 `dx`）**。
 
+> **按语（这条缺陷的形态，值得进坑表）**：一个错误的值之所以没被任何用例抓住，是因为读它的那笔余切根本
+> 没人要 —— **两处缺陷互相遮盖**。这类缺陷不会以红的形式出现，只会以"这段代码看起来多余"的形式出现，
+> 所以删它之前的判据必须是**"有没有人读这笔余切"**，不是"它有没有接住参数"。今天按后者判就会判成空转
+> 并删掉，然后死在签名上（见下一节）。
+
 ## 空转那条为什么也丢不得（实测，不是推断）
 
 只丢这一条（`fn=__g_317__ node=4 pos=0`），其余一律不动，跑 `feat/compile/transforms`：
@@ -70,6 +75,10 @@ caller graph 'main' node 3 has 1 args, target graph 'transpose_of_read_outer' ha
   试探性构建）里的重复也数进去；
 - **11**：marker 版，只数**真实构建**（`probe=0`），另 2 条是探针草稿里的同一命中（`probe=1`）。
 
+**不是同一批数**：marker 版这 11 条里 `from=call-capture` 占 **9 条**（`split` 的后向半在调用点捕获
+`index_into`/`div_tangent` 成员要的值），与 env 版 22 条里那 20 条**不是同一批** —— 前者只数真实构建，
+后者含草稿重复。只看"11 vs 22"会觉得差了一倍，差的是**数了哪些构建**，不是有没有漏掉命中。
+
 跨口径比较数字，比不报数字更坏。
 
 ## 工具备注（下一个人会踩）
@@ -94,6 +103,10 @@ caller graph 'main' node 3 has 1 args, target graph 'transpose_of_read_outer' ha
 
 `transpose_hand_closed_lambda.same_answer_as_the_cut` 全程 **绿**（`cut ct1= (6.0)`、`cut ct3= (18.0)`、
 `hand ct1= (6.0)`、`hand ct3= (18.0)` 四行齐）。
+
+墙钟：`transforms` **5.0 s**（91 例）、`feat/compile` **103.7 s**（2222 例）、`split` 1.1 s、`showcase_s2` 0.5 s、
+`rulesets` 4.0 s。**这两个大数也是满载下量的**（load 18–22 / 32 核），要拿它们当性能基线，必须同时注明
+当时的负载；满载墙钟与空载墙钟不是同一个数，别把今晚的 103.7 s 当成 `feat/compile` 的基线引用。
 
 ## 默认（本轮按它开工，被推翻时只回退依赖它的那一层）
 
