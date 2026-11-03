@@ -59,58 +59,6 @@ bool refuseAt(
     return false;
 }
 
-/// Where to report a refusal made at a node of a **lifted** graph. `jvp` writes the nodes of its copy,
-/// and a written node carries no source origin (0, `DraftNodeHeader::origin`), so `refuseAt` alone
-/// would leave the refusal with no position: the sentence would name a shape and say nothing about
-/// where the program writes it. The position is then the first node of the graph that has one -- the
-/// fallback `GraphDraft::firstNodeOrigin` documents ("where to report"), which for a lifted body is
-/// the body's own first statement -- and, when the graph has none either, the first origin of the
-/// graph it was lifted from, which is a node the program wrote.
-camel::source::origin_id_t originOfRefusal(
-    const rt::GCGraph *graph, const rt::Program *program, gc_node_ref_t ref) {
-    const auto firstOrigin = [](const rt::GCGraph *of) -> camel::source::origin_id_t {
-        if (of == nullptr) {
-            return camel::source::kInvalidOriginId;
-        }
-        for (gc_node_ref_t at = 0; at < of->nodeCount(); ++at) {
-            const uint64_t origin = of->nodeOrigin(at);
-            if (origin != 0) {
-                return static_cast<camel::source::origin_id_t>(origin);
-            }
-        }
-        return camel::source::kInvalidOriginId;
-    };
-    if (graph != nullptr && ref < graph->nodeCount()) {
-        const uint64_t origin = graph->nodeOrigin(ref);
-        if (origin != 0) {
-            return static_cast<camel::source::origin_id_t>(origin);
-        }
-    }
-    const camel::source::origin_id_t inGraph = firstOrigin(graph);
-    if (inGraph != camel::source::kInvalidOriginId) {
-        return inGraph;
-    }
-    if (graph != nullptr && program != nullptr) {
-        const GraphId liftedFrom = graph->liftedFrom();
-        if (rt::isValid(liftedFrom)) {
-            return firstOrigin(program->graph(liftedFrom));
-        }
-    }
-    return camel::source::kInvalidOriginId;
-}
-
-/// `refuseAt`, for a shape the cut meets in a graph `jvp` wrote: the same sentence, with the position
-/// found for it by `originOfRefusal` when the node itself carries none.
-bool refuseAtLifted(
-    SplitGraph &refusal, const rt::GCGraph *source, const rt::Program *program, gc_node_ref_t ref,
-    std::string construct, std::string why) {
-    refuseAt(refusal, source, ref, std::move(construct), std::move(why));
-    if (refusal.refusedOrigin == camel::source::kInvalidOriginId) {
-        refusal.refusedOrigin = originOfRefusal(source, program, ref);
-    }
-    return false;
-}
-
 /// The condition of the branch whose Join is `join`, or `kInvalidNodeRef` when no branch names it: a
 /// `Brch` node holds the Join it fills and takes the condition as its input, so the condition of the
 /// branch is read off the graph and never guessed from the shape of the arms.
@@ -846,31 +794,20 @@ struct Half {
             }
             // A member of a **struct** is read by name (`qq.a`, `GCAccsKind::StructKey`) and a member
             // of a tuple by place (`qq.0`, `GCAccsKind::TupleIndex`). The draft writes both forms
-            // (`addAccsNode(type, key)` and `addAccsNode(type, index)`) and this half copies the
-            // place alone: the name is dropped, the read becomes a tuple index carrying the
-            // payload's `value` as its place, and at run time a `Struct` is indexed as if it were a
-            // `Tuple` -- `idx < t->size()`, "Tuple index out of bounds" in `nodevm.cpp` (measured
-            // 2026-11-04 on `split(jvp((qq: Point) => qq.a * 4.0 + qq.b))(p)`, a plain struct
-            // parameter and not a `with` one; `jvp` alone answers 11.0 and 4.0, so the lift is right
-            // and the cut is what loses the graph).
+            // (`addAccsNode(type, key)` and `addAccsNode(type, index)`), and the copy says whichever
+            // one the source said: a keyed read copied as a place would name another member, and on a
+            // `Struct` it would index the value as if it were a `Tuple` -- `idx < t->size()`, "Tuple
+            // index out of bounds" in `nodevm.cpp` (measured 2026-11-04 on
+            // `split(jvp((qq: Point) => qq.a * 4.0 + qq.b))(p)`, while the copy dropped the key).
             //
-            // Refused by name, at the read, rather than answered with a graph that indexes the wrong
-            // member: what the two halves number is a *place* in a tuple, and a struct's member is
-            // named, so there is no place here for either half to copy. A struct whose value is only
-            // *passed* -- no field read -- is cut as it stands, and its tangent is the struct of the
-            // members' tangents (`test/cases/transforms/split/split_struct_port.cml`); the shapes
-            // differ in exactly this: whether the body names a member.
-            if (body->accsKind == rt::GCAccsKind::StructKey) {
-                return refuseAtLifted(
-                    refusal, source, program, ref,
-                    "a field of a struct, read by name (`" + std::string(body->key()) + "`)",
-                    "the cut copies a member read by its **place** in a tuple, and a struct's member "
-                    "is read by its **name**: the name is not a place either half numbers, so a half "
-                    "that copied this read as a place would read a member the program did not name "
-                    "-- and would index a `Struct` as a `Tuple` when it ran. Both halves walk the "
-                    "ports of the lifted signature by position, and none of them carries a field's "
-                    "name, so a body that reads one is a shape this cut does not take");
-            }
+            // The name needs no place in either half's port list. A struct is a port like any other --
+            // `Tangent<Point>` is the struct of the members' tangents (design principles 9.9), so the
+            // two halves take one `Point` each and read the same member of it by the same name
+            // (`jvp.cpp#LiftState` projects a keyed access the same way, with `addAccsNode(type,
+            // key)`). What the cut was missing was the name in the copy and not the shape of the
+            // ports: `split_struct_field_read` reads `forward y= 11.0` and `lin dp= 4.0`, the two
+            // `jvp` alone already answered, and `split_struct_port` -- the same program without the
+            // field read -- reads a struct through both halves.
             if (const gc_node_ref_t call = pairTangentReadOf(*source, program, ref);
                 call != rt::kInvalidNodeRef) {
                 if (!tangent) {
@@ -902,7 +839,9 @@ struct Half {
                 return true;
             }
             const gc_node_ref_t made =
-                draft.addAccsNode(node->dataType(), body->value, 0);
+                body->accsKind == rt::GCAccsKind::StructKey
+                    ? draft.addAccsNode(node->dataType(), body->key())
+                    : draft.addAccsNode(node->dataType(), body->value);
             draft.setNormInputs(made, inputs);
             copyOf[ref] = made;
             return true;
@@ -3126,7 +3065,20 @@ SplitGraph buildSplitGraph(
     // is not part of any graph and nothing in the core knows about it (author, 2026-11-03 17:55, the
     // same shape `jvp` uses for its own recursion).
     std::unordered_map<const rt::GCGraph *, CutMember> calleeCuts;
+    // **The programs whose graphs this build stands on.** A nested build's two halves are graphs its
+    // own program owns, so adopting that program brings them; the graphs a nested build *adopted* are
+    // owned by the program they were made in, which is this list (`SplitGraph::nestedPrograms`). One
+    // list for both levels, in the order they were taken and without repeats: `Program::adoptMissing`
+    // binds what the program it reads owns and skips what is already bound, so the order says which
+    // program answers for an id and the repeat would only bump a version.
     std::vector<const rt::Program *> nestedPrograms;
+    const auto remember = [&nestedPrograms](const rt::Program *standsOn) {
+        if (standsOn != nullptr &&
+            std::find(nestedPrograms.begin(), nestedPrograms.end(), standsOn) ==
+                nestedPrograms.end()) {
+            nestedPrograms.push_back(standsOn);
+        }
+    };
     {
         CutMember self;
         self.forwardId = forwardId;
@@ -3163,61 +3115,33 @@ SplitGraph buildSplitGraph(
                    << "half of `" << callee->name() << "` declares no exit type)\n";
                 return SplitGraph{};
             }
-            // **A cut of a cut.** The forward half of `callee` that this build would call is not the
-            // whole answer when that half is itself answered by a call of *its* callee's forward half:
-            // the nested build made that second cut and adopted its two graphs into its own program,
-            // and this build adopts that program in turn -- but `Program::adoptMissing` copies only
-            // the graphs the program it reads **owns**, and an adopted graph is not one it owns. So
-            // this program would hold the halves of `callee` and not the halves of `callee`'s callee,
-            // and the call the value half writes to the deeper forward half would name a graph the
-            // program does not hold -- `runtimeTarget != nullptr`, "a direct call names a function
-            // whose graph is not in the program's graph table" in `nodevm.cpp` (measured 2026-11-04
-            // on `split(jvp(f))` where `f` calls `g` and `g` calls `h`: the cut of `jvp_of_f` answers
-            // a call of `split_of_jvp_of_g_forward`, which answers one of
-            // `split_of_jvp_of_h_forward`, and the last pair of graphs is in neither).
+            // **A cut of a cut.** The forward half of `callee` that this build calls is not the whole
+            // answer when that half is itself answered by a call of *its* callee's forward half: the
+            // nested build made that second cut and adopted its two graphs into its own program, and
+            // this build adopts that program in turn -- but `Program::adoptMissing` copies only the
+            // graphs the program it reads **owns**, and an adopted graph is not one it owns. So
+            // adopting the nested program alone would leave this one holding the halves of `callee`
+            // and not the halves of `callee`'s callee, and the call the value half writes to the
+            // deeper forward half would name a graph the program does not hold -- `runtimeTarget !=
+            // nullptr`, "a direct call names a function whose graph is not in the program's graph
+            // table" in `nodevm.cpp` (measured 2026-11-04 on `split(jvp(f))` where `f` calls `g` and
+            // `g` calls `h`: the cut of `jvp_of_f` answers a call of `split_of_jvp_of_g_forward`,
+            // which answers one of `split_of_jvp_of_h_forward`).
             //
-            // Refused at the call, by name, with the graph it names: which graphs a build adopts is a
-            // property of the build, not of the program, so "the outer program does not hold the
-            // inner halves" is a statement about this cut and not about the function. What would lift
-            // it is carrying `SplitGraph::nestedPrograms` as well (the field says which programs a
-            // cut stood on, one level down); until then
-            // this shape is one the two halves cannot be handed on for, and a program that needs it
-            // is a shape the cut names rather than a graph it builds wrongly.
-            if (!nested.nestedPrograms.empty()) {
-                const rt::GCGraph *deeper = nullptr;
-                for (const rt::GCGraph *one : pairCalleesOnValueChain(*callee, program)) {
-                    if (one != nullptr) {
-                        deeper = one;
-                        break;
-                    }
-                }
-                gc_node_ref_t call = rt::kInvalidNodeRef;
-                for (gc_node_ref_t ref = 0; ref < pending[at]->nodeCount(); ++ref) {
-                    if (pending[at]->calleeIdOf(ref) == callee->id()) {
-                        call = ref;
-                        break;
-                    }
-                }
-                SplitGraph refused;
-                refuseAtLifted(
-                    refused, pending[at], program, call,
-                    "a call to `" + std::string(callee->name()) + "`, whose own cut stands on `" +
-                        std::string(deeper != nullptr ? deeper->name() : callee->name()) + "`",
-                    "that callee answers the pair, so the value half answers its call with that "
-                    "callee's forward half -- and that half was itself answered by the forward half "
-                    "of the graph it calls, made inside the nested cut. This build adopts the graphs "
-                    "of a nested cut's program, and a program carries the graphs it *made*, not the "
-                    "ones it adopted: the deeper pair of halves belongs to neither program this "
-                    "build can reach, so the call the value half writes would name a graph its "
-                    "program does not hold -- which the run time reports as a call to a function not "
-                    "in the graph table. Both halves are wanted here and only one level of them "
-                    "travels, so a body whose calls nest twice is a shape this cut does not carry");
-                os << "REINTERP split function=" << function->name() << " skip=callee construct="
-                   << refused.refusedConstruct << " uri=- why=" << refused.refusedWhy << '\n';
-                return refused;
+            // So the list is **transitive**: the programs this build stands on are the ones the
+            // nested builds stand on, one level down and however much further, because the field is
+            // collected the same way one level out. Nothing else travels: every program in it is one
+            // a cut this build calls was built in, so the graphs are the calls' own halves and not
+            // some other function's. A depth of N cuts asks for N levels of programs, and each level adds the
+            // pair of graphs its own callee's cut made and no more: two levels read
+            // `test/cases/transforms/split/split_two_nested_cuts.cml`, three and four were probed at
+            // depth (the readings are in
+            // `docs/handover/questions/2026-11-04-who-adopts-the-graphs-of-a-nested-cut.cn.md`).
+            remember(nested.program);
+            for (const rt::Program *standsOn : nested.nestedPrograms) {
+                remember(standsOn);
             }
             calleeCuts.emplace(callee, member);
-            nestedPrograms.push_back(nested.program);
             pending.push_back(callee);
         }
     }
@@ -3371,9 +3295,10 @@ SplitGraph buildSplitGraph(
         draft.setOutputNode(out);
         draft.setReturnNode(out, rt::GCReturnKind::Self);
     }
-    // The programs of the cuts this one stands on: the graphs of those two halves join this build's
-    // program, so the calls this half wrote resolve at run time. Adopted, not rebuilt -- the ids the
-    // calls name are the graphs those builds made, and no value is recomputed.
+    // The programs of the cuts this one stands on: the graphs of those halves join this build's
+    // program, so the calls the halves wrote resolve at run time -- the two members just encoded, and
+    // the deeper pairs the nested builds only adopted. Adopted, not rebuilt: the ids the calls name
+    // are the graphs those builds made, and no value is recomputed.
     for (const rt::Program *nested : nestedPrograms) {
         group.adopt(*nested);
     }
@@ -3398,6 +3323,8 @@ SplitGraph buildSplitGraph(
     built.backward = const_cast<rt::GCGraph *>(backwardMade);
     // What this cut stands on, past the graphs `program` already holds: a caller one level out
     // cannot adopt them (`Program::adoptMissing` copies owned graphs only), so it reads this list.
+    // Transitive by construction -- the nested builds' own lists are in it -- so a caller that adopts
+    // every program named here holds every half a call of this cut can reach.
     built.nestedPrograms = nestedPrograms;
     return built;
 }

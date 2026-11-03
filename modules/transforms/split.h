@@ -172,14 +172,15 @@ struct SplitGraph {
     camel::runtime::GCGraph *forward       = nullptr;
     camel::runtime::GCGraph *backward      = nullptr;
     /// The programs of the cuts this one **stands on**: the group a callee's cut was built in, and --
-    /// one level down -- the programs *that* build adopted, in the order they were taken. A cut whose
-    /// value half calls a pair-answering callee answers the call with that callee's forward half, and
-    /// that half may itself have been answered by a call of *its* callee's forward half. The graphs
-    /// of the first level travel with `program`; the graphs of the deeper levels are listed here, and
-    /// they are what a caller of a cut one level out cannot find in its own program
-    /// (`Program::adoptMissing` copies only the graphs the program it reads *owns*, and a graph a
-    /// build adopted is not one it owns). Empty for every cut whose callees answer the pair
-    /// themselves -- which is every cut in the tree that does not nest twice.
+    /// collected transitively, however deep -- the programs *those* builds adopted, in the order they
+    /// were taken and without repeats. A cut whose value half calls a pair-answering callee answers the
+    /// call with that callee's forward half, and that half may itself have been answered by a call of
+    /// *its* callee's forward half. The graphs of the first level travel with `program`; the graphs of
+    /// the deeper levels are listed here, and they are what a caller of a cut one level out cannot find
+    /// in its own program (`Program::adoptMissing` copies only the graphs the program it reads *owns*,
+    /// and a graph a build adopted is not one it owns). A build adopts every program named here, so a
+    /// caller that does the same holds every half its calls can reach. Empty for every cut whose
+    /// callees answer the pair themselves -- which is every cut in the tree whose calls nest once.
     std::vector<const camel::runtime::Program *> nestedPrograms;
     /// Where the build stopped, when the graphs are null: the construct it could not copy, as the
     /// origin of that node in `function`.
