@@ -13,22 +13,30 @@
 
 ## 读数（可复核）
 
-同一次探针，树 `D:\Projects\Camel-wt\hasaux` @ `545b24d92`，2026-11-04 03:5x（本地），主机
-`88zjwei` load 15.7→59.6，二进制 `out/latest/bin/camel`：
+同一次探针，树 `D:\Projects\Camel-wt\hasaux` @ `545b24d92`（即实时 `origin/develop`），
+2026-11-04 03:36–03:44（本地），主机 `88zjwei` load 15.96→66.21，二进制 `out/latest/bin/camel`；
+随后同一批用例由闸门复跑，树 @`17df40332`（只有用例与文档的改动，源码未动），03:41–03:43，
+load 17.31→40.80，`[SUMMARY] total: 277, pass: 277, fail: 0`：
 
 - **引擎有 aux**：`f(w) = (w*w, w+10.0)` 在 3 → `grad(f, has_aux: true)` = `(6.0, 13.0)`，
   `with_grad(f, has_aux: true)` = `((9.0, 13.0), 6.0)`；`frozen(w) = (1.0, w*w)` → `(0.0, 9.0)`。
-  值 9.0 / 附带 13.0 / 梯度 6.0 三个数互不相同，`frozen` 的梯度 0.0 说明附带值确实只被搬运。
+  值 9.0 / 附带 13.0 / 梯度 6.0 三个数互不相同，`frozen` 的梯度 0.0 说明附带值确实只被搬运
+  （若在配对而不是配对的第 0 个元素上播种，这条答 6.0）。
+- **引擎无 aux**：`square(w) = w*w` 在 3 → `grad` = 6.0、`with_grad` = `(9.0, 6.0)`；同程序里的
+  库层 `vjp` 逐位同（`same_value=true same_grad=true`）。
 - **库层有 aux（合成）**：`vjp(value_of)(3.0)` = `(9.0, pullback)`、`pullback(1.0) = (6.0)`、
   `aux_of(3.0) = 13.0`，与引擎的三个数在程序里**逐个 float 相等**（`same_value/same_aux/same_grad`
   全 `true`）。
+- **库层无 aux**：`x*x*x` 在 2 → 值 8.0、`pullback(1.0) = (12.0)`、`grad` = 12.0（点取 2 不取 3：
+  3 上值与 `3x^2` 都是 27）。
 - **`vjp` 命名形参**：`vjp(loss, has_aux: true)` →
   `SemanticDiag::ParamArgumentUnknown: 'has_aux' is not a parameter of ...`（按名字拒）。
 - **`vjp` 收配对函数**：`vjp(loss)(3.0)` →
   `SemanticDiag::ArgumentsRejected: Invalid call to 'transpose' ... 'transpose' takes a function that
   returns a 'float'`，落在 `stdlib/vjp.cml` 的 `transpose(lin)` 那一行。
-- 四条用例在 `std::nvm` / `std::fvm` / `std::jit` / `std::prl` 与 `std::macro` 前缀上逐字节相同
-  （`test/plans/feat/modules/autodiff.plan.toml` 的 `has_aux.*`）。
+- 四条正例在 `std::nvm` / `std::fvm` / `std::jit` / `std::prl` 上逐字节相同，引擎那条另加
+  `std::macro` 前缀（编译期改写路径）也相同（`test/plans/feat/modules/autodiff.plan.toml` 的
+  `has_aux.*`）。
 
 所以"库层没有 `has_aux`"**不是功能缺口而是一种选择**：三个量今天都拿得到，且与引擎逐位相同；
 分歧只在**写法**——JAX 的用户会写 `grad(f, has_aux=True)`，库层的用户要自己写两个投影函数。
@@ -36,7 +44,8 @@
 ## 三条路，各带代价
 
 **A. 维持今天的答案（库层不加 `has_aux`，配对在哪写就在哪拆）**
-- 一行代码不改；`has_aux.*` 的八条用例把今天的行为钉住（含两条按名拒绝）。
+- 一行代码不改；`has_aux.*` 的八条声明（四形式 + `std::macro` 变体 + 三条拒绝，展开 14 次运行）
+  把今天的行为钉住。
 - 代价：库层用户写"值 + 附带 + 梯度"要自己写两个函数（`value_of` / `aux_of`），三个量靠约定对齐；
   JAX 的 `has_aux` 迁移过来时，库层那条腿要改写而不是改一个形参。
 - 好处：`vjp` 的定义保持一条（种子是 `float` 的余切），不必为"配对"在库里再开一条形状规则；
@@ -66,7 +75,9 @@
 看得出配对是在哪拆的。留 B/C 的唯一强理由是把 JAX 的 `has_aux` 当成**契约**（迁移过来的程序要
 原样编译），那不是这一条车道能替作者定的。
 
-本轮按 A 落的：`has_aux.*` 八条用例（引擎/库层 × 有/无 aux 四形式 + 三条按名拒绝），
-`docs/` 未改（无新诊断码）。作者若裁 B 或 C，改的是 `stdlib/vjp.cml` 与 `stdlib/types.cml`，
-这八条用例里的 `has_aux.library` 与 `has_aux.vjp_named` / `has_aux.vjp_pair` 要按新形状重写
+本轮按 A 落的：`has_aux.*` 八条声明（引擎/库层 × 有/无 aux 四形式 + `std::macro` 变体 +
+三条按名拒绝），声明数 218→226、展开 263→277，闸门 277/277 pass；诊断码一个没加，
+`docs/stdlib-reference.md` 与 `docs/diagnostics.md` 因此未动（本页是唯一的文档改动）。
+作者若裁 B 或 C，改的是 `stdlib/vjp.cml` 与 `stdlib/types.cml`，
+这八条声明里的 `has_aux.library` 与 `has_aux.vjp_named` / `has_aux.vjp_pair` 要按新形状重写
 （前者从"投影 + 比较"变成"一个调用 + 比较"，后两条从"拒绝"翻成"通过"）。
