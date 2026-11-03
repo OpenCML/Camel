@@ -52,6 +52,52 @@ timeout_ms = 20000
 
 
 [[tests]]
+name = "stated_sum_axis_gradient"
+desc = "The gradient of `sum(sum_axis(x, 0, false) * itself)` over a `[2, 3]` tensor, through the engine and through the library in one program: `jvp_sum_axis` states `[0, 0, 2, 3]` in the linear call and `sum_axis_stated_t` spreads each column's cotangent back down the column. The reading is `value=155.0`, `engine=library=[[10.0, 14.0, 18.0], [10.0, 14.0, 18.0]]` and `same=true`: the two legs answer the same numbers bit for bit, and the square says which axis the cotangent went back along (a plain sum would have answered all ones either way)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_sum_axis_gradient.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["sum_axis: value=155.0", "same=true"]
+expect_stderr_contains = ["rhs=sum_axis_stated_t"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "stated_sum_axis_gradient_negative_axis"
+desc = "The same reading with the axis written `-1`: `sum_axis(x, -1, false)` sums each row, so the lanes are `[6.0, 15.0]`, the value is `261.0` and the gradient is `[[12.0, 12.0, 12.0], [30.0, 30.0, 30.0]]`. The axis reaches the stated operator exactly as the call wrote it -- the reduction resolves it on entry and no law normalizes it a second time -- and the two rows answering two different numbers is what rules out a spread down the columns. Both legs `same=true`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_sum_axis_gradient_negative_axis.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["sum_axis -1: value=261.0", "same=true"]
+expect_stderr_contains = ["rhs=sum_axis_stated_t"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "stated_mean_gradient"
+desc = "The gradient of `mean(x) * 2.0` over a `[2, 3]` tensor, both legs: the mean of `[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]` is `3.5`, the value is `7.0`, and every one of the six positions gets `2.0 / 6`, `0.3333333333333333`. `jvp_mean` states `shape(xs)` and `mean_stated_t` divides the cotangent by the product of those extents and spreads it, which is the engine's `dy / count` broadcast element for element; the reading is `same=true`. The multiplier is what makes the cotangent `2.0` instead of the `1.0` a bare sum ends in: with `1.0` a law that divided and one that multiplied would be hard to tell apart."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_mean_gradient.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["mean: value=7.0", "same=true"]
+expect_stderr_contains = ["rhs=mean_stated_t"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+
+[[tests]]
 name = "stated_sum_extents_refused"
 desc = "A stated extent the tensor does not have is a fault: `sum_stated(x, [2])` over four elements stops on the operator's own line with `states extent 2 at dimension 0 and the tensor has 4`, and the program never prints its reading. This is the check the forward half's `shape(xs)` makes unnecessary and no less necessary: the value does not read the list, so nothing but this comparison can say it is wrong, and an extent nobody compared is a gradient of the wrong shape."
 kind = "behavior"
