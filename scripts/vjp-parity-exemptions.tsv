@@ -1,0 +1,129 @@
+# Every difference between the two derivative tables, and why it is a difference and not a gap.
+#
+# Read by `scripts/vjp-parity.mjs`, one row per key: the marker (the operator's name, or the token
+# a written operation is spelled with), the owner, and the reason. A key that is a difference and is
+# not here is the debt that check exists to catch -- a law with no engine rule behind it, or an
+# engine rule with no law. The three fields are the shape `known_fail` uses in the test plans (the
+# mark, who owns it, why), and a wildcard is refused: a reader must be able to ask "why is this one
+# allowed" about every row without asking anyone.
+#
+# The rows are one of these, and the reason says which:
+#
+#   甲  a gap this account is not allowed to leave open. None is left: `pick_at` is the one that
+#       was, and it is settled on `lane-pickatvjp` (below) rather than here.
+#   乙  the law belongs to the library alone: the operator is machinery the engine's own rules
+#       build (`:tangent/*`, `:struct/*`, `cast_like`, ...), or it answers an integer or a mask and
+#       has no tangent to carry.
+#   丙  the rule belongs to the engine alone: the library's forward half (`rulesets.jvp`) files no
+#       `jvp_<op>`, so the reverse question is never asked of the library at all.
+#
+# marker	owner	reason
+
+# ---- 乙: the tangent space's own operators (design principles 9.9) -----------------------------
+#
+# A gradient is summed and written with these, so a rule for them is a rule about the *tangent*
+# space, and only the engine's rules build tangent nodes. A program cannot write one: they are
+# declared with no export (`:tangent/*` in the core, `internal(...)` in the tensor module).
+
+tangent/add_arr	engine-autodiff	the tangent space's own sum: only a rule builds one, no program writes one
+tangent/zeros_arr	engine-autodiff	the tangent space's own zero: only a rule builds one, no program writes one
+tangent/scatter_add_arr	engine-autodiff	the tangent space's own scatter: only a rule builds one, no program writes one
+tangent/scatter_slice_arr	engine-autodiff	the tangent space's own slice scatter: only a rule builds one
+tangent/scatter_take_arr	engine-autodiff	the tangent space's own row scatter: only a rule builds one
+struct/append_arr	engine-autodiff	the loop-state rewrite's append: a graph-machinery node, not a program's word
+struct/append_arr_owned	engine-autodiff	the in-place form of that append: the same rewritten loop, same machinery
+struct/append_arr_in_place	engine-autodiff	the in-place rebinding's append: the same rewritten loop, same machinery
+struct/copy_arr	engine-autodiff	the private copy a rewritten loop starts from: machinery, the identity on values
+struct/concat_arr	engine-autodiff	the array concatenation the graph builder writes: machinery, not a program's word
+
+# ---- 乙: the tensor module's internal rules (declared with no export) --------------------------
+
+sum_to	engine-autodiff	a reduction to an operand's shape, written by the engine's own rules
+broadcast_like	engine-autodiff	a spread to an operand's shape, written by the engine's own rules
+expand_axis	engine-autodiff	a spread along an axis, written by the engine's own reduction rules
+cast_like	engine-autodiff	an element-type change between two rules' nodes, written by the engine
+permute_inverse	engine-autodiff	the inverse permutation a permute's adjoint needs, written by the engine
+
+# ---- 乙: locally constant, or a value with no tangent space -----------------------------------
+#
+# `design principles 9.9`: a reading of a shape, a comparison and a label are locally constant in
+# the value they read, so their contribution to a gradient is exactly zero. The engine files a rule
+# that answers no gradient because the pullback visits any operator one of whose inputs is active --
+# without the row it would refuse a shape query in a loss whose contribution is zero. A transposition
+# law has nothing to put on that side: the library's forward half states the same fact by not
+# filing a `jvp_*`.
+
+zeros_like	engine-autodiff	locally constant in its operand: the zero array is the same for every value
+ones_like	engine-autodiff	locally constant in its operand: the ones array is the same for every value
+numel	engine-autodiff	answers an integer: a discrete value's derivative is zero by definition
+dim	engine-autodiff	answers an integer: a discrete value's derivative is zero by definition
+shape	engine-autodiff	answers an integer list: a discrete value's derivative is zero by definition
+one_hot	engine-autodiff	its input is a label: locally constant, the rows do not move with it
+stop_gradient	engine-autodiff	the operator says its result carries no gradient, and the engine's row says so
+strict_eq	engine-autodiff	a comparison: a boolean has no tangent space to carry
+strict_neq	engine-autodiff	a comparison: a boolean has no tangent space to carry
+ge	engine-autodiff	a comparison: a boolean has no tangent space to carry
+gt	engine-autodiff	a comparison: a boolean has no tangent space to carry
+le	engine-autodiff	a comparison: a boolean has no tangent space to carry
+lt	engine-autodiff	a comparison: a boolean has no tangent space to carry
+i32	engine-autodiff	the conversion's destination is `i32`, a discrete type with no tangent space
+int	engine-autodiff	the conversion's destination is `int`, a discrete type with no tangent space
+
+# ---- 丙: the engine answers and the library's forward half cannot reach it ----------------------
+#
+# `rulesets.jvp` files no `jvp_<op>` for any of these, and the forward walk refuses a step it has no
+# rule for, so a program that meets one of them is stopped by the library *before* the reverse
+# question is asked. The law is therefore the engine's alone, and the engine's leg is the only leg
+# there is. The row is listed one operator at a time rather than as a class because the day one of
+# them gains a `jvp_*`, the reverse side becomes a gap and this file must say so by not holding it.
+
+abs	lane-rulesets	no `jvp_abs`: the library's forward half stops a program before the reverse is asked
+argmax	lane-rulesets	no `jvp_argmax`: the library's forward half stops a program before the reverse is asked
+argmax_axis	lane-rulesets	no `jvp_argmax_axis`: the library's forward half stops a program before the reverse is asked
+argmin	lane-rulesets	no `jvp_argmin`: the library's forward half stops a program before the reverse is asked
+argmin_axis	lane-rulesets	no `jvp_argmin_axis`: the library's forward half stops a program before the reverse is asked
+concat	lane-rulesets	no `jvp_concat`: the library's forward half stops a program before the reverse is asked
+divide	lane-rulesets	no `jvp_divide`: the library's forward half stops a program before the reverse is asked
+erf	lane-rulesets	no `jvp_erf`: the library's forward half stops a program before the reverse is asked
+erf_d	lane-rulesets	`math:erf_d` has no `jvp_erf_d`, and `math:` is a module the rulesets do not file for
+erf_f	lane-rulesets	`math:erf_f` has no `jvp_erf_f`, and `math:` is a module the rulesets do not file for
+erfc	lane-rulesets	no `jvp_erfc`: the library's forward half stops a program before the reverse is asked
+erfc_d	lane-rulesets	`math:erfc_d` has no `jvp_erfc_d`, and `math:` is a module the rulesets do not file for
+erfc_f	lane-rulesets	`math:erfc_f` has no `jvp_erfc_f`, and `math:` is a module the rulesets do not file for
+gelu	lane-rulesets	no `jvp_gelu`: the library's forward half stops a program before the reverse is asked
+layer_norm	lane-rulesets	no `jvp_layer_norm`: the library's forward half stops a program before the reverse is asked
+linear	lane-rulesets	no `jvp_linear`: the library's forward half stops a program before the reverse is asked
+log	lane-rulesets	no `jvp_log`: the library's forward half stops a program before the reverse is asked
+max	lane-rulesets	no `jvp_max`: the library's forward half stops a program before the reverse is asked
+max_axis	lane-rulesets	no `jvp_max_axis`: the library's forward half stops a program before the reverse is asked
+maximum	lane-rulesets	no `jvp_maximum`: the library's forward half stops a program before the reverse is asked
+mean	lane-rulesets	no `jvp_mean`: the forward half states a lane mean as `mean_axis`, so the whole-tensor form is unasked
+min	lane-rulesets	no `jvp_min`: the library's forward half stops a program before the reverse is asked
+min_axis	lane-rulesets	no `jvp_min_axis`: the library's forward half stops a program before the reverse is asked
+minimum	lane-rulesets	no `jvp_minimum`: the library's forward half stops a program before the reverse is asked
+permute	lane-rulesets	no `jvp_permute`: the library's forward half states a reshape, not a permutation
+pow	lane-rulesets	the law is filed under `^` for `:op/pow_d`; `tensor:pow` has no `jvp_` of its own
+neg	lane-rulesets	the law is filed under `-` for `:op/neg_d`; `tensor:neg` has no `jvp_` of its own
+rsqrt	lane-rulesets	no `jvp_rsqrt`: the library's forward half stops a program before the reverse is asked
+slice_sub	lane-rulesets	no `jvp_slice_sub`: the library's forward half stops a program before the reverse is asked
+sqrt	lane-rulesets	no `jvp_sqrt` for `tensor:sqrt` or `math:sqrt`: the forward half has no square-root law
+sqrt_d	lane-rulesets	`math:sqrt_d` has no `jvp_sqrt_d`, and `math:` is a module the rulesets do not file for
+sum_axis	lane-rulesets	no `jvp_sum_axis`: the forward half states a lane sum through `sum`'s whole-tensor law
+transpose	lane-rulesets	no `jvp_transpose`: the forward half states a reshape, and a swap of two axes is unasked
+unsqueeze	lane-rulesets	no `jvp_unsqueeze`: the forward half states a reshape, not a new axis
+where	lane-rulesets	no `jvp_where`: the library's forward half stops a program before the reverse is asked
+idx_take	lane-rulesets	the subscript read's forward law is `jvp_idx_arr` for the two-word form; the slab form has no `jvp_*`
+
+# ---- 丙: the model operators (`modules/nn`), none of which the rulesets file for ---------------
+
+avg_pool2d	lane-rulesets	an `modules/nn` operator: the rulesets declare and import nothing from `nn`
+batch_norm_train	lane-rulesets	an `modules/nn` operator: the rulesets declare and import nothing from `nn`
+conv2d	lane-rulesets	an `modules/nn` operator: the rulesets declare and import nothing from `nn`
+embedding	lane-rulesets	an `modules/nn` operator: the rulesets declare and import nothing from `nn`
+max_pool2d	lane-rulesets	an `modules/nn` operator: the rulesets declare and import nothing from `nn`
+softmax_cross_entropy	lane-rulesets	an `modules/nn` operator: the rulesets declare and import nothing from `nn`
+softmax_cross_entropy_labels	lane-rulesets	an `modules/nn` operator: the rulesets declare and import nothing from `nn`
+
+# ---- 甲, settled elsewhere: the one gap that was one ------------------------------------------
+
+pick_at	lane-pickatvjp	settled on that lane (`a7ad16758`) and not yet merged; this row goes with the merge
