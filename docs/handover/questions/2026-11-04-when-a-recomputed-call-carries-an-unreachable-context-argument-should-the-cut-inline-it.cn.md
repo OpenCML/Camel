@@ -1,6 +1,6 @@
 # 重算的调用带着出口不可达的参数时，`cut` 应当把它们算作可达，还是拒绝？
 
-日期：2026-11-04　状态：**默认"算作可达"（在后半边内联这些参数）；代价见下，未开工**
+日期：2026-11-04　状态：**默认"算作可达"（在后半边内联这些参数）；已量：轴是 `context` 边上的 `DATA` 常量节点，默认不变；未开工**
 
 ## 出处（只写有出处的）
 
@@ -58,12 +58,52 @@
   重看那条 XFAIL：若一起解开，说明两处是同一堵墙；若仍拒，说明"常量参数"与"重算的数组参数"确实是两堵
   不同的墙，这一页的结论只覆盖前一种。
 
-## 开工前先量一件事（决定这是不是同一件事）
+## 量过了（2026-11-04 00:35，只读，未改一行代码）
 
-`softmax<1>` 的轴**到底是不是节点的一个操作数**，还是已经烘进了算子实例的 key（`transpose.cpp` 里
-`normOperands` 之外的那部分）。若是后者，那么"内联"根本无从谈起——拒的原因就不在这条路上，得先
-改这一页的默认。**这一条必须最先量**：跑一次 `skip=backward` 的运行，读一次图里那个节点的操作数表
-即可（`std::gir` 或 `REINTERP` 的节点读数都行）。
+**结论一句话：轴是操作数——具体地，是节点上的一条 `context` 边，另一头是图里一个真实的 `DATA` 常量
+节点；它不在算子实例 key 里，也不是节点属性。**
+
+三样原文（本机 `camel.exe probe.cml std::jgir`，`CAMEL_HOME=D:\Projects\Camel\out\latest`）：
+
+1. **`softmax<1>(x)` 在 `jgir` 里**（`func total(x) { sum(softmax<1>(x)) }`）：
+
+   ```
+   g2n0 PORT x out=float[..]
+   g2n1 DATA 1 out=int
+   g2n2 OPER tensor:softmax out=float[..]
+   g2n3 OPER tensor:sum out=float
+     normal  g2n0 -> g2n2 [0]     <- x 是普通操作数
+     context g2n1 -> g2n2 [0]     <- 轴是 context 边，另一端是一个 DATA int 节点
+   ```
+
+   节点对象只有 `id/kind/label/origin/outputType/roles/source`，**没有**存轴的属性。
+
+2. **实例 key 里没有轴**：同一张图里 `softmax<0>` 与 `softmax<1>` 的 `label` 都是 `tensor:softmax`
+   （`g2n2` 与 `g2n4`，各自挂一条 `context` 边）；`sum<0, true>` 的 label 是 `tensor:sum_axis`，挂
+   **两条** `context` 边（`DATA 0` 与 `DATA true`）。所以轴与 `keepdims` 都在操作数表里，key 里只是
+   算子名。
+
+3. **`jvp_softmax` 今天怎么拿到它**：不绑，**写字面量**——左值是 `softmax<1>(x)`，轴 `1` 直接写在
+   模式里，所以这条律只匹配轴 1 的那一种实例（`softmax<0>` 至今没有任何前向律，原因在此，不是缺陷
+   而是这条写法）。与之配套，`modules/transforms/jvp.cpp` 在复制/提升一个调用时显式复制 `<>`
+   参数（`function.withInputsOf(ref)` → `draft.setWithInputs`），注释里写清了不复制会怎样：
+   "`softmax<1>(x)` copied without its axis is `softmax(x)` … That is a wrong number, not a missing
+   number."
+
+**默认不变**：原默认就是"算作可达、在后半边内联"，这三样读数**支持**它——轴不是 key 的一部分，
+所以不存在"key 改了律就对不上"的危险；而且它比原估计便宜：轴不是要凭空常数化的值，**它本来就是图里
+的一个节点**，`split` 要做的只是把这条 `context` 边的生产者一起复制过去，与 `jvp.cpp` 已有的写法
+同形。页里若改成"`split` 无法内联一个不在操作数表里的参数"就是错的，**没有那样改**。
+
+**但这条读数把问题挪了一格（下一步的量）**：拒绝句里是 `uri=-`——
+`REINTERP split function=jvp_of_total skip=backward construct=a node whose input was not copied
+uri=- why=an operand of the node is not reachable from the half's exit`——**没有算子名的节点**说明被拒
+的不是 `tensor:softmax` 本身，而是它上游某个非算子节点（`DATA` 没有输入，所以更像 `CAST`/`PORT` 或
+别的读法）。而 `split.cpp` 的 `halfInputsOf` 走 `dataInputsOf`，**普通与 context 输入都收**，并且有
+一段专门重写常量的分支（"A constant has no producer, so either half can write it again"，
+`writeConstant`）。所以真正要查的是：**那条常量能不能被 `writeConstant` 重写**——不能，就是这堵墙的
+实际卡点；能，则卡点在别处，得再读一层。这一条是一行 `grep` 加一次带 id 的 `REINTERP` 就能定的，
+不动代码。
 
 ## 不做的事
 
