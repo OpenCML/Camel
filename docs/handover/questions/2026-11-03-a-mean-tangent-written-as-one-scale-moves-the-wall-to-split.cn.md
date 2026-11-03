@@ -79,3 +79,44 @@ mean_axis(xs, axis, keepdims) =>
 1. **`Transpose<F>` 保持 `(ct) => (..Tangent<ParamsOf<F>>)`**，`mean_axis` 记为已知红（XFAIL），等作者裁。
 2. 一旦允许，**`Transpose<F>` 与 `Pullback<F>` 就变成同一个东西**——两者都要"切点 + 闭包 + 残差"，而作者 15:15 刚把 `Pullback<F>` 收成不带列表的那一行（`let (y, pb) = vjp(scale)<2.0>(3.0); pb(1.0)`，`with` 值只写一遍）。这等于把刚收起来的东西在另一头重新放开。
 3. **代价要写清**：走这个默认，`mean_axis`（以及同族的 `reshape`、`softmax` 那三处角度位）的转置**在库层永远做不到裸 `transpose`**，只能经 `vjp`/`split` 那条路；要改就只有两条——**改律的写法**（像本页 §1 那样把三操作数算子换成一次缩放，让切线半边不含它）或**改类型**（给 `Transpose<F>` 加残差位）。两条都不是本车道能自主决定的。
+
+## 8. 复核（lane-bcast，2026-11-04）：拒绝与轴无关，广播本身也不静默
+
+问题：`stdlib/rulesets/transpose.cml#mean_axis_cotangent` 的 `ones_like(xs) * (ct / lanes)` 是不是"只对某些轴成立"？量它是**拒绝**、**错数**还是**崩**。
+
+读数环境：`c69a110fa` 的干净构建（`Camel v0.2.43 (Build 261103_155934_c69a110fa)`），主机 `88zjwei` load 19–20/32。探针 `x = [[1,2,3],[4,5,6]]`（`float[2,3]`），`loss(x) = sum(mean_axis(x, axis, false) * w)`。
+
+| 走法 | 读数 |
+| --- | --- |
+| 裸 `transpose(loss)(1.0)`，`axis=1`，`w=[10,20]` | `TRANSPOSE function=loss skip=arity uri=tensor:mean_axis operands=3` |
+| 裸 `transpose(loss)(1.0)`，`axis=0`，`w=[10,20,30]` | **同一句**，逐字相同 |
+| `vjp(loss)(x)`，`axis=1` | `TRANSPOSE function=split_of_jvp_of_loss_backward skip=arity uri=tensor:mean_axis operands=3`，报在 `stdlib/vjp.cml#vjp` 的 `transpose(lin)` 那一行 |
+| `vjp(loss)(x)`，`axis=0` | **同一句** |
+
+⇒ **属"拒绝"，且与轴无关**：两条路都在 `modules/transforms/transpose.cpp` 的 arity 计数处停，律的右半边一次也没执行。所以本项**不改代码、不动期望**。
+
+**律的右半边自己也不是静默错数**——直接量它的算术：`ones_like(x) * (ct / 3.0)`，`ones_like` 是 `[2,3]`、`ct / 3.0` 是 `[2]`：
+
+```
+error[RuntimeDiag::TensorDimensionMismatch]: Array shape mismatch in 'multiply': cannot broadcast [2, 3] with [2].
+```
+
+Camel 的广播是右对齐（NumPy 口径），`[2,3]` 配 `[2]` 是 3 对 2，拒。**没有一条能给出 `[[1.6667,…],[3.3333,…]]` 那种错数的路**。
+
+**精确的限制面（只关于轴，不关于数）**：
+
+| `keepdims` | `axis` | 展开能不能成立 |
+| --- | --- | --- |
+| `false` | `0`（首轴） | 成立。秩 2 读 `[[5.0, 10.0, 15.0], …]`、秩 3 读 `[[[10.0, 20.0, …], …], …]`，与手算同 |
+| `false` | `1` / `2` | **拒**（静态 `cannot broadcast extents 3 and 2`；运行期同一条） |
+| `true` | 任意 | 成立：`ct` 在被缩的轴上长度 1，右对齐直接展开 |
+
+`keepdims=true` 那条读到的正是手算基准：`ones_like(x) * ([[10.0], [20.0]] as float[2,1] / 3.0)` =
+
+```
+[[3.3333333333333335, 3.3333333333333335, 3.3333333333333335], [6.666666666666667, 6.666666666666667, 6.666666666666667]]
+```
+
+**本页 §3 有一句要限定**：那里说"`1/numel` 这条路在形状上成立（`1/2` 是标量，广播进 `float[2,3]` 没有歧义）"——那只对 `axis=0` 成立。律现在写的是 `ct / lanes`（形状随 `ct`，不是标量），`axis=1`、`keepdims=false` 时它是 `[2]`，展不开。
+
+**墙倒了要改的是形状，不是数字**：`unsqueeze<1>(ct / lanes)` 得到 `[2,1]`，展开后与基准逐元素相同——但 `unsqueeze` 的轴只写在 `<>` 里（`unsqueeze<1>`），而律的 `axis` 是运行期端口，所以律今天**写不出**"按运行期轴展开"这句话。这一条记作既有限制：与残差的约定（§7 那条问句）同源，改律在墙倒下前既不能验也不该改。
