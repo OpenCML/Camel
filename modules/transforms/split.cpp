@@ -323,6 +323,14 @@ struct Half {
     /// `addWithPorts`). Kept beside `portIndex` rather than in it, because that map is the ordinary
     /// parameters' -- the pair positions `valuePortsOf` and `parameterOfPort` number.
     std::unordered_map<gc_node_ref_t, gc_node_ref_t> withPortOf;
+    /// A value the source graph **captured** from where it was written -> this half's port for it
+    /// (`addCapturePorts`). A capture is not a `with` parameter and arrives by neither of the two
+    /// roads the other maps name: it is read through a closure node of the source, and the half
+    /// receives it out of the function value's closure tuple, which the operator copies over
+    /// (`split_operator.cpp`, `splitKernel`: `f`'s tuple goes to the forward half unchanged).
+    /// Author, 2026-11-04 02:50, on a closure port: forward it into the member's own port, and the
+    /// call site fills it as it always did.
+    std::unordered_map<gc_node_ref_t, gc_node_ref_t> capturePortOf;
     std::vector<gc_node_ref_t> copyOf;
     std::vector<char> seen;
     /// Which component of every parameter this half takes: false the value, true the tangent.
@@ -584,6 +592,14 @@ struct Half {
             }
             const auto at = portIndex.find(ref);
             if (at == portIndex.end()) {
+                // A value the body captured from where it was written: the half declared a port
+                // for it out of the source's closure (`addCapturePorts`), and the read is that
+                // port. The value comes in with the function value, not as an argument.
+                const auto captured = capturePortOf.find(ref);
+                if (captured != capturePortOf.end()) {
+                    copyOf[ref] = captured->second;
+                    return true;
+                }
                 return refuseAt(
                     refusal, source, ref, "a port",
                     "the port is not a parameter of the graph, so neither half takes it");
@@ -977,6 +993,16 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
     const auto isWithPort                          = [&withPorts](gc_node_ref_t ref) {
         return std::find(withPorts.begin(), withPorts.end(), ref) != withPorts.end();
     };
+    // The values the body captured where it was written, which are a third kind of port: not a
+    // parameter (no place in the pair) and not a `with` port (no argument at the call). A capture
+    // the tangent side reads crosses the cut like the other two -- 后一半要读的东西都是残差 -- and
+    // the forward half holds the port it enters by (`addCapturePorts`), so it is carried as a
+    // residual and read out of `lin`'s closure. Without this arm the walk reached a port with no
+    // producer, went nowhere, and the cut refused at it: "the port is not a parameter of the graph".
+    const std::span<const gc_node_ref_t> captures = lifted.closureNodes();
+    const auto isCaptured                         = [&captures](gc_node_ref_t ref) {
+        return std::find(captures.begin(), captures.end(), ref) != captures.end();
+    };
     // A value the tangent side reads and the result side already computed crosses the cut: it is a
     // residual, and the walk stops at it (what is inside the forward half is not this function's
     // business). A node the result side never reaches is part of the tangent chain: the walk goes
@@ -1009,9 +1035,10 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 continue;
             }
             visited[ref] = 1;
-            if (!behindCut && isWithPort(ref)) {
-                // A `with` port has no producer on either side of the cut, so nothing is computed
-                // for it and the walk has nowhere further to go: the value is the call's, and the
+            if (!behindCut && (isWithPort(ref) || isCaptured(ref))) {
+                // A `with` port or a capture has no producer on either side of the cut, so nothing
+                // is computed for it and the walk has nowhere further to go: the value is the
+                // caller's -- an argument for one, the closure tuple for the other -- and the
                 // forward half is the half that holds the port which receives it.
                 if (std::find(found.begin(), found.end(), ref) == found.end()) {
                     found.push_back(ref);
@@ -2861,6 +2888,62 @@ bool addWithPorts(Half &half, const rt::GCGraph *function) {
     return true;
 }
 
+/// The values the source **captured** where it was written, as closure ports of one half. A capture
+/// is a port of the source graph (`GCGraph::closureNodes`) that is neither a parameter nor a `with`
+/// parameter: the lifted body reads it, and a half that declared no port for it would refuse that
+/// read with "the port is not a parameter of the graph" -- which is what the tensor-`with` shape did
+/// until this function existed (measured 2026-11-04: `vjp((ww) => dot<ww>(x))(w)`, where `x` is a
+/// capture of the lambda and `w` is `dot`'s `with` parameter; the cut of `jvp_of_dot` was fine and
+/// the cut of the lambda was refused).
+///
+/// The half declares them in the source's order and takes the source's closure type, which is the
+/// layout the operator hands over: `splitKernel` creates the forward function value with `f`'s own
+/// tuple and copies every slot into it, so the ports this declares read the caller's values and the
+/// call site fills them the way it always filled a closure. That is the author's shape for a closure
+/// port (2026-11-04 02:50: 转发成成员自己的端口、调用点照常填), and it is the same thing the `with`
+/// list does one road up -- the difference is only where the value travels: a `with` value is an
+/// argument of the call, a capture is a member of the function value.
+///
+/// Only the forward half declares them, for the reason `addWithPorts` gives: what the backward half
+/// reads is a residual, and a capture is one (`residualsOf`), so it arrives in `lin`'s closure.
+/// Declaring every capture, and not only the ones some walk reached, is what keeps this side's
+/// closure type the source's: a half that declared a subset would index a tuple it does not hold.
+bool addCapturePorts(Half &half, const rt::GCGraph *function) {
+    if (function == nullptr) {
+        return true;
+    }
+    const std::span<const gc_node_ref_t> captures = function->closureNodes();
+    if (captures.empty()) {
+        return true;
+    }
+    // The type the source states for its closure, when it states one. A capture's type is on the
+    // port node either way, and a graph whose closure layout is only in the function value that
+    // carries it (`GCGraph::closureType()` is null on it -- a lambda written where it is used is
+    // one) states nothing here: the operator supplies that tuple type when it hands the half out
+    // (`splitKernel`, `function->tupleType()`), so declaring the ports is the whole of what a half
+    // with no stated layout has to do. A stated layout that does not hold the captures is not
+    // copied: a type that names fewer members than the ports is worse than no type at all.
+    const auto *closureType = function->closureType();
+    if (closureType != nullptr && closureType->size() != captures.size()) {
+        return false;
+    }
+    for (gc_node_ref_t original : captures) {
+        const rt::GCNode *node = function->node(original);
+        Type *captureType      = node != nullptr ? node->dataType() : nullptr;
+        if (captureType == nullptr) {
+            return false;
+        }
+        const gc_node_ref_t port =
+            half.draft.addPortNode(captureType, half.draft.allocateRuntimeSlot(captureType));
+        half.draft.appendClosureNode(port);
+        half.capturePortOf[original] = port;
+    }
+    if (closureType != nullptr) {
+        half.draft.setClosureType(const_cast<camel::core::type::TupleType *>(closureType));
+    }
+    return true;
+}
+
 SplitGraph buildSplitGraph(
     const camel::core::context::context_ptr_t &context, const rt::Program *program,
     rt::GCGraph *function, std::ostream &os) {
@@ -3221,6 +3304,11 @@ SplitGraph buildSplitGraph(
                << " skip=forward (a `with` parameter of the source has no type)\n";
             return SplitGraph{};
         }
+        if (!addCapturePorts(forward, function)) {
+            os << "REINTERP split function=" << function->name()
+               << " skip=forward (the closure of the source does not name its captured values)\n";
+            return SplitGraph{};
+        }
         // The lifted list is two halves -- the values, then their tangents -- so the forward half
         // takes the first half of it, one port per parameter value.
         const size_t valueCount = sourcePorts.size() / 2;
@@ -3301,6 +3389,15 @@ SplitGraph buildSplitGraph(
                 const auto withPort = forward.withPortOf.find(residual.node);
                 if (withPort != forward.withPortOf.end()) {
                     value = withPort->second;
+                }
+            }
+            if (value == rt::kInvalidNodeRef) {
+                // A capture the backward half reads and the result side does not: same road, one
+                // port further on -- the forward half's closure port for it (`addCapturePorts`) is
+                // the value that crosses, read out of the function value the operator handed over.
+                const auto captured = forward.capturePortOf.find(residual.node);
+                if (captured != forward.capturePortOf.end()) {
+                    value = captured->second;
                 }
             }
             if (value == rt::kInvalidNodeRef) {
