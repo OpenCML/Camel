@@ -68,3 +68,39 @@
   元组是**调用它**才拿到的（`test/cases/transforms/split/split_forward_half.cml` 是样板：
   `let fwd = split(jvp(g))` 然后 `let (y, lin) = fwd(3.0)`）。
 - 所以那三条用例是在拆一个函数：**程序错，措辞够用**。改写法即可，`split*.cpp` 不该动。
+
+## 6. 落点与读数
+
+提交 `13e0b8994`（`lane-linkfn`，五个文件）；`git diff -w` 与 `git diff` 的 numstat 逐行相同
+（`37/6` 一个 hunk），无重排、无空白噪音。
+
+树 `13e0b8994`（clean，宿主 88zjwei，2026-11-04 06:2x，1 m load 15.4–16.7）+ 基线 `34b659107`
+（`statetypes-base` 自量，1 m load 22.6）：
+
+| 目标 | 我的树 | 基线 |
+| --- | --- | --- |
+| `test/plans/feat/compile` | 2245 / 2232 pass / **2 fail** / 11 known | 2243 / 2230 / **2 fail** / 11 known |
+| `feat/compile/function_values` | 19 / 19 pass / 0 fail | 17 / 17 / 0 |
+| `test/plans/feat/transforms`（目录） | 29 / 21 pass / 0 fail / 8 known | 29 / 21 / 0 / 8 |
+| `feat/transforms/split` | 19 / 19 pass / 0 fail（19 个执行项） | 19 / 19 / 0 |
+
+两处红在基线上就是那两条 `transpose_loop_escape`（`lane-loopescape` 的 `e16923e03` 修的，尚未合），
+**红数 2 = 2**。
+
+**拒绝读数**（改后）：`called_value_is_not_a_function.cml:17:14`，`SemanticDiag::ArgumentsRejected`
+`0x0300001C`，exit 1，输出里没有 `Camel Invariant Violation`；`two_arguments_to_a_one_port_member.cml`
+的两个调用 `28:17` 与 `29:34` 各一处 `SemanticDiag::ArgumentsMismatch` `0x03000010`，exit 1。
+
+**图（`std::gir`，改后的二进制）**：`N0D [DATA "Function(graph=read_outer)" value_type="(x: float) => float pure"]`
+在 `NORM` 上喂 `N0E [OPER "transforms:transpose" value_type="(float) => (float,)"]`，`N0E -> N10 WITH`、
+`N0F (1.0) -> N10 NORM`、`N10 [CALL value_type="(float,)"]`。两端口承诺落下后，`N0E` 的 `value_type`
+就是解析器答的 `(float, float) => (float,)`——节点类型只在
+`src/compile/gir/draft_graph_builder.cpp#DraftGraphBuilder::addOperNode` 取一次 `exitType()`，
+而调用语句与 `jvp` 那条完全相同：`N03 [OPER "transforms:jvp" value_type="(float, float) => (float, float) pure"]`
+→ `N06 [CALL value_type="(float, float)"]`，`WITH` + `NORM 0|0` + `NORM 0|1`。**一个实参和两个实参走的是
+同一句**，所以本轮的改动没有为两端口开任何第二条路。
+
+**调查（只报不改）**：全树 `git grep "exitType()->exitType"` **零命中**；`visitLinkNode` 里还有两处与
+本轮同类、未检查的 `as_ptr<FunctionType>`——`callDecorated`（`nodeTypeOf(decoratorInvoke)`）与重载挑选的
+`signatureOf`（`it->second->funcType()->exitType()`）：两处的类型按构造都是函数，今天成立，但若哪天不
+成立，代价仍是崩溃而不是诊断。
