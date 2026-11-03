@@ -5,6 +5,7 @@
 
 #include "jvp.h"
 #include "rule_expand.h"
+#include "split.h"
 
 #include "camel/core/forward.h"
 #include "camel/core/loop_kind.h"
@@ -687,6 +688,50 @@ struct TransposeState {
     std::string shapeName;
     std::string shapeType;
 };
+
+/// One call of a callee that answers the pair (value, tangent), as a call site describes it to
+/// `transposePairCall` below: the graph that is called, the call's own arguments, and the cotangent of
+/// the pair's **tangent** component -- which is the only component a linear half has.
+struct PairCall {
+    camel::runtime::GCGraph *callee = nullptr;
+    /// The source graph's call node: the place a refusal names.
+    gc_node_ref_t ref = rt::kInvalidNodeRef;
+    /// The call's ordinary arguments in the source graph, in the callee's parameter order.
+    std::vector<gc_node_ref_t> arguments;
+    /// The call's context (`with`) arguments in the source graph, in the callee's `with` order.
+    std::vector<gc_node_ref_t> withArguments;
+    /// This call's cotangent of the answer's tangent component.
+    gc_node_ref_t cotangent = rt::kInvalidNodeRef;
+};
+
+/// Transposes a call of a callee that answers the pair (value, tangent) **by the content of that
+/// callee**, at whichever path the call stands on -- the straight-line body and an arm both call this,
+/// so the two cannot drift apart, and nothing here reads a record of where the callee came from
+/// (author, 2026-11-03 16:55: a record of the graph a lift was taken from is the counter-example --
+/// a transformation's result must depend on the content of its input graph, and on nothing else).
+///
+/// The rule: the callee is cut (`buildSplitGraph`), the **second half** is transposed, and the call is
+/// turned into a call of that transposition. The second half is linear in the tangents, which is what
+/// makes this the transposition of the call: the cotangent of the pair's tangent is what its
+/// transposition takes, and the cotangents it answers for the tangents are where the call's tangent
+/// arguments' cotangents go.
+///
+/// The second half reads the values the forward half computed, and it reads them **out of its
+/// closure** -- so the call site does not assemble a residual argument list: it closes the second
+/// half's own graph over the values it stands on (`buildLinearClosure`, the writer the cut itself uses)
+/// and calls the transposed member through that closure value. The values are found by identity, not by
+/// position: a residual that is a parameter is that parameter's argument, and a residual that is a
+/// `with` port is that `with` argument. A residual neither of those is a value the callee computes
+/// inside itself, which this call does not stand on -- saying that is a refusal by name, never a guess
+/// at a nearby argument.
+///
+/// `forward` places a source value on the transposed side of the cut (the two paths spell that
+/// differently); `deliver` hands a cotangent to a source argument.
+bool transposePairCall(
+    TransposeState &state, rt::GraphDraft &draft, const PairCall &call,
+    const std::function<gc_node_ref_t(gc_node_ref_t)> &forward,
+    const std::function<void(gc_node_ref_t, gc_node_ref_t)> &deliver, std::ostream &os,
+    std::string &why);
 
 bool buildTransposeMember(
     TransposeState &state, camel::runtime::GCGraph *function, const GraphId member,
@@ -1799,19 +1844,12 @@ bool buildTransposeMember(
                         return rt::kInvalidNodeRef;
                     };
                     const auto callInputs = function->normInputsOf(ref);
-
-                    // A lifted call is transposed **through the graph it was lifted from**. The
-                    // tangent half of a lift is linear in the tangents, so the cotangent of tangent i
-                    // is the primal's cotangent of value i -- and that is computed from the values
-                    // only. This is not a shortcut but the requirement: the transposed graph does not
-                    // have a tangent's value (tangents are what the answer is a cotangent of), so a
-                    // transposition that needed one could never be called. `jvp` records the graph a
-                    // lift came from (`kGraphRefLiftedFrom`), which is the same record `split` reads
-                    // to retarget a call.
-                    const GraphId primalId = callee->liftedFrom();
+                    // The graph whose transposition this call calls. A kernel and a plain call are
+                    // transposed as themselves; a callee that answers the pair is transposed through
+                    // its second half, and that branch answers and moves on before this is read.
                     camel::runtime::GCGraph *calleeToTranspose = callee;
                     // The parameters the transposition answers for. Empty = every parameter, which is
-                    // what a lifted call and a plain call need; a kernel answers for its tangents.
+                    // what a plain call needs; a kernel answers for its tangents.
                     std::vector<bool> participates;
                     const size_t calleeParams = callee->funcType()->normTypesCount();
                     size_t valueCount = calleeParams;
@@ -1861,26 +1899,45 @@ bool buildTransposeMember(
                         }
                         valueCount  = valueAt.size();
                         answerCount = answerAt.size();
-                    } else if (rt::isValid(primalId)) {
-                        camel::runtime::GCGraph *primal = state.program->graph(primalId);
-                        const size_t primalParams =
-                            primal != nullptr ? primal->funcType()->normTypesCount() : 0;
-                        if (primal == nullptr || primalParams == 0 || valueCount != 2 * primalParams) {
+                    } else if (answersAPair(callee)) {
+                        // A callee that answers the pair (value, tangent). Transposed **by its
+                        // content**: the cut is made, its second half is transposed, and this call
+                        // becomes a call of that transposition, closed over the values it stands on.
+                        // The straight-line body applies the same rule through the same function
+                        // (`transposePairCall`), so the two paths cannot answer differently; nothing
+                        // here reads a record of where the callee came from (author, 2026-11-03
+                        // 16:55). A hand-written graph of the same content is the same function and is
+                        // answered the same way -- that is the point, not an accident.
+                        PairCall pairCall;
+                        pairCall.callee    = callee;
+                        pairCall.ref       = ref;
+                        pairCall.cotangent = local[ref];
+                        for (const gc_node_ref_t argument : callInputs) {
+                            pairCall.arguments.push_back(argument);
+                        }
+                        for (const gc_node_ref_t with : function->withInputsOf(ref)) {
+                            pairCall.withArguments.push_back(with);
+                        }
+                        const std::function<void(gc_node_ref_t, gc_node_ref_t)> handOver =
+                            [&](gc_node_ref_t target, gc_node_ref_t value) {
+                                if (isConstant(target)) {
+                                    return;
+                                }
+                                deliver(target, value, ref);
+                            };
+                        std::string whyPair;
+                        if (!transposePairCall(
+                                state, draft, pairCall, forwardInArm, handOver, os, whyPair)) {
                             os << "TRANSPOSE function=" << function->name() << " arm-stop region="
-                               << oldRegion << " node=" << ref << " lift=primal"
-                               << " params=" << valueCount << '/' << primalParams << '\n';
+                               << oldRegion << " node=" << ref << " pair=1 why=" << whyPair << '\n';
                             armsOk = false;
                             return {};
                         }
-                        calleeToTranspose = primal;
-                        valueCount        = primalParams;
-                        answerCount       = primalParams;
-                        // A primal's parameters are the values the lift was applied to, and every one
-                        // of them is a linear input of the transposition: the member reads none of
-                        // them and answers one cotangent per tangent (author, 2026-11-02 11:30).
-                        for (size_t i = 0; i < answerCount; ++i) {
-                            answerAt.push_back(primalParams + i);
-                        }
+                        // A rule's own tangent call is taken by the branch above, which reads the
+                        // positions its expansion recorded (`isTangentArgument`): the two answer
+                        // different questions -- which arguments are tangents, and whether the callee
+                        // answers the pair -- so neither contradicts the other.
+                        continue;
                     } else {
                         // An ordinary call: a parameter whose type can hold a cotangent is answered
                         // for and is passed no value; a parameter that cannot -- the `int` of
@@ -3164,6 +3221,54 @@ bool buildTransposeMember(
                         }
                     }
                 }
+                // A callee that answers the pair (value, tangent). **The same rule the arm path
+                // applies** -- cut the callee by its content, transpose the second half, turn this
+                // call into a call of that transposition -- through the same function, so a
+                // straight-line body and an arm cannot answer the same shape differently. A
+                // hand-written graph of the same content is answered here exactly as a lifted one is
+                // (author, 2026-11-03 16:55).
+                if (tangentMask == 0 && answersAPair(callee)) {
+                    // The cotangent this call's **tangent component** carries. The pair is read a
+                    // component at a time, so the cotangent is the tuple's slot 1 -- the slot the
+                    // component read put it in (`tupleCotangents`), which is what the component read
+                    // above stands for. A call whose answer is the pair *as a whole* has no such slot:
+                    // this step has no rule for a cotangent arriving on a pair, and saying so is the
+                    // refusal rather than reading one component's cotangent as another's.
+                    gc_node_ref_t pairCotangent = rt::kInvalidNodeRef;
+                    if (const auto slots = tupleCotangents.find(ref);
+                        slots != tupleCotangents.end() && slots->second.size() > 1) {
+                        pairCotangent = slots->second[1];
+                    }
+                    if (pairCotangent == rt::kInvalidNodeRef) {
+                        refuse(TransposeRefusalCause::CotangentNeedsAValue);
+                        os << " node=" << ref << " callee=" << callee->name()
+                           << " pair=1 why=no-cotangent-on-the-tangent-component\n";
+                        return false;
+                    }
+                    PairCall pairCall;
+                    pairCall.callee    = callee;
+                    pairCall.ref       = ref;
+                    pairCall.cotangent = pairCotangent;
+                    for (size_t i = 0; i < calleeParams; ++i) {
+                        pairCall.arguments.push_back(inputs[argumentAt + i]);
+                    }
+                    for (const gc_node_ref_t with : function->withInputsOf(ref)) {
+                        pairCall.withArguments.push_back(with);
+                    }
+                    const std::function<void(gc_node_ref_t, gc_node_ref_t)> handOver =
+                        [&](gc_node_ref_t target, gc_node_ref_t value) {
+                            addCotangent(target, value);
+                        };
+                    std::string whyPair;
+                    if (!transposePairCall(
+                            state, draft, pairCall, forward, handOver, os, whyPair)) {
+                        refuse(TransposeRefusalCause::CallNoTranspose);
+                        os << " node=" << ref << " callee=" << callee->name()
+                           << " pair=1 why=" << whyPair << '\n';
+                        return false;
+                    }
+                    break;
+                }
                 // The member, built as the shape the participating set names -- the same build the arm
                 // path asks for, one graph per callee. It is built **before** the signature is
                 // asked for, because the build is what discovers the values the member needs
@@ -3495,6 +3600,154 @@ bool buildTransposeMember(
        << " type=" << signature->toString() << " nodes=" << nodeCount
        << " arms=" << armRegionsBuilt.size() << " rhs=" << (rhs.empty() ? "-" : rhs)
        << '\n';
+    return true;
+}
+
+bool transposePairCall(
+    TransposeState &state, rt::GraphDraft &draft, const PairCall &call,
+    const std::function<gc_node_ref_t(gc_node_ref_t)> &forward,
+    const std::function<void(gc_node_ref_t, gc_node_ref_t)> &deliver, std::ostream &os,
+    std::string &why) {
+    const auto fail = [&why](std::string reason) {
+        why = std::move(reason);
+        return false;
+    };
+    // The cut. The criterion answered that the callee *is* a pair; whether the cut can be built is the
+    // cut's own question, and its answer -- in its own words -- is this call's answer. It is never a
+    // reason to fall back on another rule for the same call.
+    SplitGraph cut = buildSplitGraph(state.context, state.program, call.callee, os);
+    if (cut.forward == nullptr || cut.backward == nullptr) {
+        return fail(
+            cut.refusedWhy.empty()
+                ? "the callee answers the pair (value, tangent) and the cut does not build it"
+                : "the callee answers the pair (value, tangent) and the cut does not build it: " +
+                      cut.refusedWhy);
+    }
+    // The values the second half reads, found at the call **by identity**: a residual that is a
+    // parameter is that parameter's argument, and a residual that is a `with` port is that `with`
+    // argument. A residual neither of those is a value the callee computes inside itself, which this
+    // call does not stand on -- so the call is refused by name rather than handed a neighbouring
+    // argument ("a positional convention would make the answer depend on what the caller wrote").
+    std::vector<gc_node_ref_t> closureValues;
+    for (const Residual &residual : residualsOf(*call.callee, state.program)) {
+        gc_node_ref_t atCall = rt::kInvalidNodeRef;
+        if (residual.parameter != Residual::kNotAParameter) {
+            if (residual.parameter < call.arguments.size()) {
+                atCall = call.arguments[residual.parameter];
+            }
+        } else {
+            const std::span<const gc_node_ref_t> withPorts = call.callee->withPorts();
+            for (size_t i = 0; i < withPorts.size() && i < call.withArguments.size(); ++i) {
+                if (withPorts[i] == residual.node) {
+                    atCall = call.withArguments[i];
+                    break;
+                }
+            }
+        }
+        if (atCall == rt::kInvalidNodeRef) {
+            return fail("a value the second half reads is computed inside the callee, so this call does "
+                        "not stand on it");
+        }
+        const gc_node_ref_t placed = forward(atCall);
+        if (placed == rt::kInvalidNodeRef) {
+            return fail("a value the second half reads cannot be carried across this call");
+        }
+        closureValues.push_back(placed);
+    }
+    // The member: the transposition of the **second half**, built once per graph (the map the main
+    // walk fills too), so two calls of one callee call one member.
+    GraphId member = rt::kInvalidGraphId;
+    if (const auto known = state.callees.find(rt::toValue(cut.backward->id()));
+        known != state.callees.end()) {
+        member = known->second;
+    } else {
+        member = state.group.reserve(
+            "transpose_of_" + std::string(cut.backward->name()),
+            "transpose_of_" + std::string(cut.backward->name()));
+        state.callees.emplace(rt::toValue(cut.backward->id()), member);
+        if (!buildTransposeMember(state, cut.backward, member, os, {})) {
+            return fail("the second half of the callee cannot be transposed");
+        }
+    }
+    // What that member takes and answers. `participates` is empty -- every parameter of the second half
+    // is a linear input -- and it is the same query the member itself was built from, so the call
+    // cannot hand it a list of a different length than its ports.
+    std::vector<size_t> answersOf;
+    FunctionType *const memberType = transposeSignature(
+        cut.backward->funcType(), {}, &answersOf, &state.calleeNeeds[cut.backward]);
+    if (memberType == nullptr || memberType->exitType() == nullptr) {
+        return fail("the second half of the callee has no transposition signature");
+    }
+    // The values the member takes for the parameters it answers nothing for, and then the values the
+    // member asked for (`calleeNeeds`), in that order: the order the signature wrote them in.
+    const size_t half       = call.callee->funcType()->normTypesCount() / 2;
+    const size_t memberCount = cut.backward->funcType()->normTypesCount();
+    std::vector<gc_node_ref_t> arguments;
+    for (size_t at = 0; at < memberCount; ++at) {
+        Type *const parameter = cut.backward->funcType()->normTypeAt(at);
+        const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(parameter);
+        if (space.hasSpace() && space.space != nullptr) {
+            continue; // answered: the caller passes no value for it
+        }
+        if (isUnitType(parameter)) {
+            continue; // `()` is an answer with an empty slot, not a port nobody can fill
+        }
+        if (half + at >= call.arguments.size()) {
+            return fail("the call does not carry a value the member takes");
+        }
+        const gc_node_ref_t placed = forward(call.arguments[half + at]);
+        if (placed == rt::kInvalidNodeRef) {
+            return fail("a value the member takes cannot be carried across this call");
+        }
+        arguments.push_back(placed);
+    }
+    for (const size_t at : state.calleeNeeds[cut.backward]) {
+        if (half + at >= call.arguments.size()) {
+            return fail("the call does not carry a value the member needs");
+        }
+        const gc_node_ref_t placed = forward(call.arguments[half + at]);
+        if (placed == rt::kInvalidNodeRef) {
+            return fail("a value the member needs cannot be carried across this call");
+        }
+        arguments.push_back(placed);
+    }
+    if (arguments.size() + 1 != memberType->normTypesCount()) {
+        return fail("the values this call can hand the member are not the ones it takes");
+    }
+    // The call: an **indirect** call of a closure value. The value is the second half's own graph
+    // closed over the values above -- the writer the cut uses for `lin`, so a closure a call site
+    // makes and one the cut makes are the same value -- and the runtime fills the member's closure
+    // ports from it (`populateIndirectCallFrame`: `with`-arg 0 is the function).
+    const gc_node_ref_t calleeValue = buildLinearClosure(
+        draft, state.program, member, cut.backward->closureType(), cut.backward->funcType(),
+        std::span<const gc_node_ref_t>(closureValues.data(), closureValues.size()));
+    std::vector<gc_node_ref_t> callArgs = arguments;
+    callArgs.push_back(call.cotangent);
+    Type *const answerType = memberType->exitType();
+    const gc_node_ref_t made = draft.addCallNode(answerType, rt::GCCallBody{});
+    draft.setNormInputs(made, std::span<const gc_node_ref_t>(callArgs));
+    draft.setWithInputs(made, std::span<const gc_node_ref_t>(&calleeValue, size_t(1)));
+    draft.addDependency(cut.backward->id());
+    // The answers: one cotangent per parameter of the second half, in the member's order. Each one is
+    // the cotangent of the tangent that stands in the same place at the call -- the second half's
+    // parameter `k` is the callee's parameter `half + k`, which is the argument the call passed.
+    const auto *answerTuple =
+        answerType->code() == camel::core::type::TypeCode::Tuple
+            ? tt::as_ptr<camel::core::type::TupleType>(answerType)
+            : nullptr;
+    for (size_t k = 0; k < answersOf.size(); ++k) {
+        if (half + answersOf[k] >= call.arguments.size()) {
+            continue;
+        }
+        if (answerTuple == nullptr) {
+            deliver(call.arguments[half + answersOf[k]], made);
+            continue;
+        }
+        const gc_node_ref_t part =
+            draft.addAccsNode(answerTuple->typeAt(k), static_cast<uint32_t>(k));
+        draft.setNormInputs(part, std::span<const gc_node_ref_t>(&made, 1));
+        deliver(call.arguments[half + answersOf[k]], part);
+    }
     return true;
 }
 

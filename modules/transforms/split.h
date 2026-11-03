@@ -50,9 +50,11 @@
 #include "camel/core/source/ids.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/runtime/draft.h"
 #include "camel/runtime/graph.h"
 
 #include <iosfwd>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -125,6 +127,36 @@ struct Residual {
 /// to cut.
 std::vector<Residual> residualsOf(
     const camel::runtime::GCGraph &lifted, const camel::runtime::Program *program = nullptr);
+
+/// Whether this graph answers the pair (value, tangent) that `split` cuts -- **by its content**, not by
+/// any record of where it came from. Two questions, both of them, because either one alone names a
+/// different class of functions:
+///
+///  - the **signature** says the parameters come in two halves of equal length and the exit is a
+///    two-member tuple (`splitHalvesWith`: an even, non-zero parameter count and a `Tuple` of two);
+///  - the **graph** says the exit is that pair -- a two-member `Fill` of the tuple kind, a loop whose
+///    value is the pair, or the `Join` a branch answers with (`exitShapeOf`).
+///
+/// A hand-written graph of that content is the same function as a lifted one and is answered the same
+/// way (author, 2026-11-03 16:55): the rule a caller applies to a callee must be a function of the
+/// callee's content, or two graphs that compute the same thing are transformed differently because of
+/// where one of them was written down. `why` says which of the two questions failed.
+///
+/// What this function does **not** answer is whether the cut can be built: a graph may answer the pair
+/// and still hold a construct the cut refuses. That is `buildSplitGraph`'s answer, and a caller that
+/// reads this one must hand the refusal on by name rather than fall back to another rule.
+bool answersAPair(const camel::runtime::GCGraph *callee, std::string *why = nullptr);
+
+/// `lin`: `backwardId`'s graph as a function value closed over `residuals` -- a FILL of the
+/// `FunctionClosure` kind whose static input names the graph and whose `with` inputs are the values in
+/// the closure's order. The one writer of that shape: the cut uses it to hand the linear half out of
+/// the forward half, and a call site that transposes a pair-answering callee uses it to close the same
+/// graph over the values it stands on, so the two are the same value and neither states a count.
+camel::runtime::gc_node_ref_t buildLinearClosure(
+    camel::runtime::GraphDraft &draft, const camel::runtime::Program *program,
+    camel::runtime::GraphId backwardId, const camel::core::type::TupleType *closure,
+    camel::core::type::FunctionType *linType,
+    std::span<const camel::runtime::gc_node_ref_t> residuals);
 
 /// The two graphs of `split(f)` and the program of them.
 struct SplitGraph {

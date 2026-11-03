@@ -654,6 +654,10 @@ struct Half {
             // A fact about the call, not about the half it is copied into: when the rule's expansion
             // recorded how many of the call's trailing arguments are tangents, the copy is the same
             // call and says the same thing. It is what `transpose` reads at a call inside an arm.
+            // The record is a **count of the call's trailing arguments**, not a mask of positions
+            // (`GCNode::tangentArgs`, `GCGraph::callTangentArgsOf`): both readers -- the copy here,
+            // and `transpose.cpp`'s `calleeParams - tangentArgs` -- have to take it that way, and a
+            // call whose tangents are not its trailing arguments has no record that says so.
             const gc_node_ref_t made = draft.addFuncNode(
                 callee, node->dataType(), 0, draft.allocateRuntimeSlot(node->dataType()), 0,
                 source->callTangentArgsOf(ref));
@@ -765,6 +769,8 @@ void addResidualCaptures(Draft &draft, const std::vector<Residual> &residuals, H
     }
 }
 
+} // namespace
+
 /// `lin`: the backward graph, closed over the residuals the forward half computed.
 ///
 /// A FILL of the `FunctionClosure` kind -- the kind a rule's right side already builds for its
@@ -773,14 +779,17 @@ void addResidualCaptures(Draft &draft, const std::vector<Residual> &residuals, H
 /// inputs are the residual values in slot order. This is what "the kernel builds `lin` once it has
 /// the graph" means (author, 2026-11-02 08:30): the values do not exist before the forward half runs,
 /// so `lin` is built where they do, and what it captures is stated by no signature.
-template <typename Draft>
+///
+/// Here because *two* builds write this shape, not one: the cut hands `lin` out of the forward half,
+/// and a call site that transposes a pair-answering callee closes the same graph over the same values
+/// (`transpose.cpp`, `transposePairCall`). One writer, so a closure a cut made and a closure a call
+/// site made are the same value.
 gc_node_ref_t buildLinearClosure(
-    Draft &draft, const rt::Program *program, GraphId backwardId,
+    rt::GraphDraft &draft, const rt::Program *program, GraphId backwardId,
     const camel::core::type::TupleType *closure, FunctionType *linType,
     std::span<const gc_node_ref_t> residuals) {
-    auto *lin      = ::Function::create(program, backwardId, closure, mm::autoSpace());
-    const gc_node_ref_t source =
-        draft.materializeStaticValue(toSlot<::Function *>(lin), linType);
+    auto *lin = ::Function::create(program, backwardId, closure, mm::autoSpace());
+    const gc_node_ref_t source = draft.materializeStaticValue(toSlot<::Function *>(lin), linType);
     std::vector<size_t> slots(residuals.size());
     std::iota(slots.begin(), slots.end(), size_t{0});
     const gc_node_ref_t value =
@@ -788,23 +797,6 @@ gc_node_ref_t buildLinearClosure(
     draft.setNormInputs(value, std::span<const gc_node_ref_t>(&source, 1));
     draft.setWithInputs(value, residuals);
     return value;
-}
-
-} // namespace
-
-/// Whether `ref` is a call of a graph that records what it was lifted from. Such a call answers the
-/// pair (result, tangent): its value half is the primal's result, which is a graph of its own, and its
-/// tangent half is what the backward half computes. Both `residualsOf` and the halves read the fact
-/// the same way, from the callee's reference table and not from its name.
-static bool
-isLiftedCall(const rt::GCGraph &lifted, gc_node_ref_t ref, const rt::Program *program) {
-    if (program == nullptr || ref >= lifted.nodeCount() || lifted.node(ref) == nullptr ||
-        lifted.node(ref)->kind != rt::GCNodeKind::Func) {
-        return false;
-    }
-    const GraphId callee = lifted.calleeIdOf(ref);
-    const rt::GCGraph *calleeGraph = rt::isValid(callee) ? program->graph(callee) : nullptr;
-    return calleeGraph != nullptr && rt::isValid(calleeGraph->liftedFrom());
 }
 
 std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *program) {
@@ -894,11 +886,17 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 continue;
             }
             if (beforeCut[ref] != 0 && ref != tangentHalf) {
-                // A call of a lifted graph reads both sides of the cut and is not itself carried (see
-                // the note where the list is filtered below): what the tangent half recomputes the
-                // pair from is the values its caller passes, so the walk goes through the call and
-                // keeps the value arguments.
-                if (!isLiftedCall(lifted, ref, program)) {
+                // A call of a callee that answers the pair (value, tangent) reads both sides of the
+                // cut and is not itself carried (see the note where the list is filtered below): what
+                // the tangent half recomputes the pair from is the values its caller passes, so the
+                // walk goes through the call and keeps the value arguments. **Which callees those are
+                // is decided by the callee's content** (`answersAPair`, the same criterion the cut
+                // itself is built on) -- not by a record of what the callee was lifted from, which
+                // would answer differently for a hand-written graph of the same content.
+                const GraphId calleeId = lifted.calleeIdOf(ref);
+                const rt::GCGraph *calleeGraph =
+                    program != nullptr && rt::isValid(calleeId) ? program->graph(calleeId) : nullptr;
+                if (!answersAPair(calleeGraph)) {
                     found.push_back(ref);
                     continue;
                 }
@@ -977,17 +975,23 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
             return portIndex[ref] == Residual::kNotAParameter;
         });
     }
-    // A call of a lifted graph is not a value the cut can carry, and the reason is the same one that
-    // makes the call readable at all: the lift answers the pair (result, tangent). The value half does
-    // not read tangents, so it answers with the graph it was lifted from (a call of `f`, not of
-    // `jvp_of_f`), which is the result and not the pair; the tangent half rebuilds the pair from the
-    // values it is handed. A pair built by one half cannot be what the other half reads, so the pair
-    // is not a residual -- the values it is made of are (`x` crosses, and the value the call made
-    // crosses; the tangent does not). Without this the forward half would hand a float where the
-    // tuple says a pair, which is a type error at run time, not a refusal.
+    // A call of a callee that answers the pair (value, tangent) is not a value the cut can carry, and
+    // the reason is the same one that makes the call readable at all: the pair. The value half does
+    // not read tangents, so it answers with the graph the callee's value component comes from (a call
+    // of `f`, not of `jvp_of_f`), which is the result and not the pair; the tangent half rebuilds the
+    // pair from the values it is handed. A pair built by one half cannot be what the other half reads,
+    // so the pair is not a residual -- the values it is made of are (`x` crosses, and the value the
+    // call made crosses; the tangent does not). Without this the forward half would hand a float where
+    // the tuple says a pair, which is a type error at run time, not a refusal.
+    //
+    // The callee is named by its **content** (`answersAPair`), the same criterion the cut is built on:
+    // a hand-written graph that answers the pair is treated exactly as a graph lifted by `jvp`.
     if (program != nullptr) {
         std::erase_if(found, [&](gc_node_ref_t ref) {
-            return isLiftedCall(lifted, ref, program);
+            const GraphId calleeId = lifted.calleeIdOf(ref);
+            const rt::GCGraph *calleeGraph =
+                rt::isValid(calleeId) ? program->graph(calleeId) : nullptr;
+            return answersAPair(calleeGraph);
         });
     }
     // The parameters' values come first, each in its own parameter's slot, because that is the order
@@ -2350,6 +2354,37 @@ ExitShape exitShapeOf(const rt::GCGraph *function, gc_node_ref_t exit, LoopCut &
     }
     cut.loop = exit;
     return ExitShape::Loop;
+}
+
+bool answersAPair(const rt::GCGraph *callee, std::string *why) {
+    const auto fail = [why](std::string reason) {
+        if (why != nullptr) {
+            *why = std::move(reason);
+        }
+        return false;
+    };
+    if (callee == nullptr) {
+        return fail("there is no callee graph to ask");
+    }
+    if (callee->funcType() == nullptr) {
+        return fail("the callee has no function type, so its parameters cannot be counted");
+    }
+    // The signature side, first: it costs no walk, and a graph that is not a pair by its parameters
+    // cannot be one by its exit either (the halves are what the pair answer is written in).
+    const SplitHalves halves = splitHalvesWith(callee->funcType(), nullptr);
+    if (halves.forward == nullptr || halves.backward == nullptr) {
+        return fail(halves.why);
+    }
+    // The graph side: the exit is the pair itself -- a two-member tuple fill, a loop whose value is
+    // the pair, or the Join a branch answers with. `exitShapeOf` is the one reader of that question,
+    // so this asks it rather than restating its conditions.
+    LoopCut cut;
+    const gc_node_ref_t exit = ungated(callee, callee->exitNodeRef());
+    if (exitShapeOf(callee, exit, cut) == ExitShape::NotAPair) {
+        return fail("its exit is not the pair (value, tangent): it is neither a two-member tuple fill, "
+                    "nor a loop whose value is the pair, nor the Join a branch answers with");
+    }
+    return true;
 }
 
 /// The `with` parameters of the source, as ports of one half. A `with` parameter is a value the
