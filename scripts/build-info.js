@@ -38,7 +38,12 @@
  * untrustworthy rather than matched: it cannot prove which options produced the install.
  *
  * `--allow-stale` is the explicit override behind `camel-remote.ps1 -AllowStale`: it prints the
- * same refusal text, adds that it is continuing anyway, and exits 0. It is never implied.
+ * same refusal text, adds that it is continuing anyway, and exits 0. It is never implied, and it
+ * leaves a mark: the refusal ends with `[STALE-ALLOWED fingerprint=<install> expected-fingerprint=
+ * <tree> options=<install> expected-options=<tree>]`, which the helper carries into the plan run's
+ * environment and the runner prints on the plan line, the provenance line and the `[SUMMARY]`
+ * (`test/tools/provenance.mjs: staleAllowedMark`). A reading produced past the guard has to say so
+ * where it is read, or turning the guard off is the same as it not being there.
  *
  * Why content and not `HEAD`: a commit that only touches `docs/`, `test/` or `scripts/` changes the
  * commit but not one byte the build reads, so refusing there would cry wolf. The fingerprint covers
@@ -237,9 +242,13 @@ function printMismatch(label, stamp, current, allowStale, differs) {
             `build options ${optionsLabel(stamp.buildOptions)} (${stamp.config || 'unknown config'})`
     )
     console.log(`  this tree:  ${revisionLabel(current.git)}`)
+    // The tree's configuration is known only when the caller named the one it is about
+    // (`--config`): out/latest holds Release and RelWithDebInfo, so without the word the line says
+    // nothing rather than picking one.
+    const treeConfig = differs.config || current.config
     console.log(
         `              fingerprint ${fingerprintLabel(current.fingerprint)}, ` +
-            `build options ${optionsLabel(current.buildOptions)} (${differs.config || current.config || 'unknown config'})`
+            `build options ${optionsLabel(current.buildOptions)}${treeConfig ? ` (${treeConfig})` : ''}`
     )
     if (differs.sources) {
         printChangedFiles(stamp.fingerprint, current.fingerprint)
@@ -283,6 +292,7 @@ function printMismatch(label, stamp, current, allowStale, differs) {
     }
     if (allowStale) {
         console.log('  -AllowStale was given: continuing anyway; this result does not describe this tree.')
+        console.log(`  ${staleMarker({ stamp, current })}`)
     } else {
         console.log(
             '  Re-run without -NoBuild (it builds this tree with these options and restamps the install), ' +
@@ -291,10 +301,34 @@ function printMismatch(label, stamp, current, allowStale, differs) {
     }
 }
 
-function refuse(message, allowStale) {
+// What a run that was told to reuse a refused install carries on its own lines.
+//
+// `-AllowStale` is the one way past the guard, and a reading it produced looks exactly like a
+// correct one: the plan line, the provenance line and the `[SUMMARY]` say nothing about the install
+// being another artifact. So the refusal ends with this mark, `camel-remote.ps1` carries it into the
+// plan run's environment, and the runner prints it on those three lines (`test/tools/provenance.mjs:
+// staleAllowedMark`). Without it the hole would only have moved from "silent" to "silent once
+// somebody turns the guard off", which is not the same thing as visible.
+//
+// Both sides of each hash are printed: which install answered the question, and which one this tree
+// would have built, is the pair a reader needs to judge the number. `-` means the stamp never got far
+// enough to say (no stamp, unreadable JSON, an older schema), and `reason=` says which.
+function staleMarker({ stamp, current, reason }) {
+    const short = (value) => (typeof value === 'string' && value !== '' ? value.slice(0, 12) : '-')
+    const fields = []
+    if (reason) fields.push(`reason=${reason}`)
+    fields.push(`fingerprint=${short(stamp && stamp.fingerprint && stamp.fingerprint.hash)}`)
+    fields.push(`expected-fingerprint=${short(current && current.fingerprint && current.fingerprint.hash)}`)
+    fields.push(`options=${short(stamp && stamp.buildOptions && stamp.buildOptions.hash)}`)
+    fields.push(`expected-options=${short(current && current.buildOptions && current.buildOptions.hash)}`)
+    return `[STALE-ALLOWED ${fields.join(' ')}]`
+}
+
+function refuse(message, allowStale, { reason, current } = {}) {
     console.log(`[camel-remote] -NoBuild refused: ${message}`)
     if (allowStale) {
         console.log('  -AllowStale was given: continuing anyway; this result does not describe this tree.')
+        console.log(`  ${staleMarker({ current, reason })}`)
         return
     }
     process.exit(EXIT_STALE)
@@ -318,13 +352,35 @@ function stampTarget(options) {
 
 function commandCheck(options) {
     const { label, stampPath } = stampTarget(options)
+    // Read once, and only when something needs it: the matching path reads it to compare, a refusal
+    // reads it to say what this tree would build (`-AllowStale` prints it beside the install's own
+    // hashes).
+    let currentTree = null
+    const current = () => {
+        if (currentTree === null) {
+            currentTree = {
+                git: gitState(options.root),
+                fingerprint: sourceFingerprint(options.root),
+                buildOptions: buildOptions(options.root),
+                config: options.config
+            }
+        }
+        return currentTree
+    }
+    const refused = (message, reason) => {
+        refuse(message, options.allowStale, {
+            reason,
+            current: options.allowStale ? current() : null
+        })
+        return undefined
+    }
     if (!fs.existsSync(stampPath)) {
-        refuse(
+        refused(
             `${label} has no ${BUILD_INFO_FILE}.\n` +
                 '  The install was never built, or it was collected by an older build that did not stamp.\n' +
                 '  Without the stamp there is no way to tell which sources produced it.\n' +
                 `  Run once without -NoBuild: it builds this tree and stamps ${label}.`,
-            options.allowStale
+            'no-stamp'
         )
         return
     }
@@ -333,49 +389,44 @@ function commandCheck(options) {
     try {
         stamp = JSON.parse(fs.readFileSync(stampPath, 'utf-8'))
     } catch (error) {
-        refuse(
+        refused(
             `${label}/${BUILD_INFO_FILE} is not readable JSON (${error.message}).\n` +
                 `  Run once without -NoBuild to rebuild and restamp ${label}.`,
-            options.allowStale
+            'unreadable'
         )
         return
     }
     if (!stamp || stamp.schema !== BUILD_INFO_SCHEMA || !stamp.fingerprint ||
         stamp.fingerprint.version !== FINGERPRINT_VERSION) {
-        refuse(
+        refused(
             `${label}/${BUILD_INFO_FILE} was written by a different form of this guard ` +
                 `(schema ${stamp && stamp.schema}, fingerprint ${stamp && stamp.fingerprint && stamp.fingerprint.version}; ` +
                 `this build writes schema ${BUILD_INFO_SCHEMA}, fingerprint ${FINGERPRINT_VERSION}).\n` +
                 `  A stamp that predates the build-option record cannot prove which options produced the ` +
                 `install, so it is treated as untrustworthy rather than matched.\n` +
                 `  Run once without -NoBuild to rebuild and restamp ${label}.`,
-            options.allowStale
+            'old-schema'
         )
         return
     }
     if (!stamp.buildOptions || stamp.buildOptions.version !== BUILD_OPTIONS_VERSION) {
-        refuse(
+        refused(
             `${label}/${BUILD_INFO_FILE} records no build options (schema ${stamp.schema}, ` +
                 `options ${stamp.buildOptions ? stamp.buildOptions.version : 'missing'}; this build records ` +
                 `version ${BUILD_OPTIONS_VERSION}).\n` +
                 `  Two builds of these sources with different CMake options are two different installs, and ` +
                 `without the option record there is no way to tell this one from the other.\n` +
                 `  Run once without -NoBuild to rebuild and restamp ${label}.`,
-            options.allowStale
+            'no-options'
         )
         return
     }
 
-    const current = {
-        git: gitState(options.root),
-        fingerprint: sourceFingerprint(options.root),
-        buildOptions: buildOptions(options.root),
-        config: options.config
-    }
-    const optionLines = buildOptionDifferences(stamp.buildOptions, current.buildOptions)
+    const here = current()
+    const optionLines = buildOptionDifferences(stamp.buildOptions, here.buildOptions)
     const differs = {
-        sources: stamp.fingerprint.hash !== current.fingerprint.hash,
-        options: stamp.buildOptions.hash !== current.buildOptions.hash,
+        sources: stamp.fingerprint.hash !== here.fingerprint.hash,
+        options: stamp.buildOptions.hash !== here.buildOptions.hash,
         optionLines,
         // Only when the caller said which configuration it is about (`camel-remote.ps1` passes the
         // configuration it builds): a bare `check --tag latest` cannot tell Release from
@@ -386,7 +437,7 @@ function commandCheck(options) {
         return // The install matches these sources and this option set: no new noise on a correct run.
     }
 
-    printMismatch(label, stamp, current, options.allowStale, differs)
+    printMismatch(label, stamp, here, options.allowStale, differs)
     if (!options.allowStale) {
         process.exit(EXIT_STALE)
     }

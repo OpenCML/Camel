@@ -948,8 +948,17 @@ cd "`$R" || exit 2
 echo '__CAMEL_REMOTE_SYNCED__'
 if [ '$NoBuild' = 'True' ]; then
     if [ -f scripts/build-info.js ]; then
-        node scripts/build-info.js check --tag '$verifyTag' $guardArgs
+        # Captured rather than piped so the marker the guard prints past -AllowStale can be handed
+        # to the plan run: a reading that replayed a refused install has to carry that fact on its
+        # own lines (test/tools/provenance.mjs: staleAllowedMark), and the only copy of it is this
+        # output.
+        guard_out=`$(node scripts/build-info.js check --tag '$verifyTag' $guardArgs 2>&1)
         guard=`$?
+        printf '%s\n' "`$guard_out"
+        stale=`$(printf '%s\n' "`$guard_out" | grep -o '\[STALE-ALLOWED[^]]*\]' | head -1)
+        if [ -n "`$stale" ]; then
+            export CAMEL_GATE_STALE_ALLOWED="`$stale"
+        fi
         if [ `$guard -ne 0 ]; then
             echo '__CAMEL_REMOTE_STALE_BINARY__'
             exit `$guard

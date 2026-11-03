@@ -18,7 +18,10 @@
  *      that moved (`ENABLE_FASTVM_JIT: built ON, a rebuild would use OFF`) and says the sources are
  *      the same bytes — the one sentence the old stamp could not produce;
  *   3. check after flipping it back: exit 0 again, so refusing is not a one-way door;
- *   4. `-AllowStale`: the same refusal, then "continuing anyway" and exit 0;
+ *   4. `-AllowStale`: the same refusal, then "continuing anyway", exit 0 — and the run carries
+ *      `[STALE-ALLOWED fingerprint=<install> expected-fingerprint=<tree> options=<install>
+ *      expected-options=<tree>]`, which is what the runner prints on the plan line, the provenance
+ *      line and the `[SUMMARY]`; a refusal that is not overridden carries no mark;
  *   5. a stamp with `buildOptions` deleted: exit 4, "records no build options";
  *   6. a stamp with `schema` 2: exit 4, "different form of this guard", said to be untrustworthy
  *      rather than matched — the old stamp cannot prove which options produced the install;
@@ -198,6 +201,47 @@ check(
         stale.output.includes('-AllowStale was given: continuing anyway') &&
         stale.output.includes('does not describe this tree'),
     stale.output
+)
+// The mark a reader needs: the run went ahead on an install the guard refused, so which artifact
+// answered and which this tree would have built has to be on the reading itself. Without it the
+// hole would only have moved from "silent" to "silent once somebody passes -AllowStale".
+const MARKER = /\[STALE-ALLOWED fingerprint=([0-9a-f]{12}) expected-fingerprint=([0-9a-f]{12}) options=([0-9a-f]{12}) expected-options=([0-9a-f]{12})\]/
+const marker = stale.output.match(MARKER)
+check(
+    'the -AllowStale run carries the STALE-ALLOWED mark with both sides of both hashes',
+    marker !== null &&
+        marker[1] === sourceHash.slice(0, 12) &&
+        marker[2] === sourceHash.slice(0, 12) &&
+        marker[3] === optionsHash.slice(0, 12) &&
+        marker[4] !== optionsHash.slice(0, 12),
+    marker ? marker[0] : stale.output
+)
+check(
+    'the mark says which install answered and which options this tree would build',
+    marker !== null && marker[1] === marker[2] && marker[3] === optionsHash.slice(0, 12) && marker[4] !== marker[3],
+    marker ? marker[0] : stale.output
+)
+// The other direction: a refusal that is not overridden must not carry it, or the mark would tell
+// a reader nothing.
+check(
+    'a plain refusal (no -AllowStale) carries no STALE-ALLOWED mark',
+    !moved.output.includes('STALE-ALLOWED'),
+    moved.output
+)
+// And the runner's side of it: the mark reaches the plan line, the provenance line and the summary
+// only when the helper exported one (`camel-remote.ps1` scrapes the guard's output into
+// CAMEL_GATE_STALE_ALLOWED).
+const provenance = await import('../../../tools/provenance.mjs')
+const carried = marker ? marker[0] : '[STALE-ALLOWED missing]'
+check(
+    'a run that was not allowed past the guard prints no mark on its lines',
+    provenance.staleAllowedMark({}) === '' && provenance.staleAllowedMark({ CAMEL_GATE_STALE_ALLOWED: '  ' }) === '',
+    JSON.stringify(provenance.staleAllowedMark({ CAMEL_GATE_STALE_ALLOWED: '  ' }))
+)
+check(
+    'a run that was prints the exported mark verbatim, one space in front',
+    provenance.staleAllowedMark({ CAMEL_GATE_STALE_ALLOWED: carried }) === ` ${carried}`,
+    JSON.stringify(provenance.staleAllowedMark({ CAMEL_GATE_STALE_ALLOWED: carried }))
 )
 fs.rmSync(path.join(ROOT, '.camel-opts.json'), { force: true })
 
