@@ -211,6 +211,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `WithDefaultNotConstant` | The default of the 'with' parameter '{0}' is not a compile-time constant: {1}. |
 | `WithDefaultWrongType` | The default of the 'with' parameter '{0}' has type '{1}', not '{2}'. |
 | `WithParameterAfterDefault` | The 'with' parameter '{0}' has no default and follows '{1}', which has one. |
+| `WithPackArgumentType` | The pack '..{0}' of '{1}' takes 'with' arguments of type '{2}': argument {3} has type '{4}'. |
 | `WithArgumentCallee` | The 'with' argument '{0}' is given by name, and the signature of '{1}' is not known where the binding is written. |
 | `WithArgumentInValue` | The 'with' argument '{0}' is given by name, and this binding is used as a function value. |
 | `WhenPredicateNotImported` | '{1}' is declared in module '{2}', but that name is not imported where the 'when' condition of '{0}' is written. |
@@ -252,7 +253,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `RangeStepZero` | The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers. |
 | `SliceStepZero` | The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are. |
 | `CalledFallibleValue` | This value has type '{0}' and it is fallible: calling it as a function leaves the error it may hold nowhere to be read. |
-| `WithPackNeedsNativeDeclaration` | The pack '..{0}' among the 'with' parameters needs a declaration without a body. |
 | `ImplOnBodylessDeclaration` | The body-less declaration '{0}' cannot carry '#impl({1})': it has no Camel body. |
 | `ImplKernelUnknown` | The '#impl' tag of '{0}' names '{1}', which is no body-less declaration. |
 | `ImplKernelForeign` | The '#impl' tag of '{0}' names '{1}', which another module declares. |

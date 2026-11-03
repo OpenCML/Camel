@@ -1,0 +1,12 @@
+// The pack's own argument, carried into the body: `g<1>(2.5)` gives the pack one argument of its
+// element type (`int`), and the call is an ordinary program. While the pack's arguments were not
+// carried this same file was reported as a call with no matching function.
+with <..ws: int>
+func g(x: float): float {
+    return x
+}
+
+func main(): int sync {
+    println(g<1>(2.5))
+    return 0
+}

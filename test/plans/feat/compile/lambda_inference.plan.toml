@@ -158,3 +158,14 @@ expect_stdout = "6\n4.0\n[11, 22]\n"
 expect_output_not_contains = ["Warning", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+[[tests]]
+name = "lambda_inference.with_list_from_the_position"
+desc = "A lambda takes the `with` list it does not write from the position it stands in (design principles 5.9), as it takes the parameter types: `apply` expects `<w: float> (x: float) => float`, and `(..xs) => 7.0` there is a function of a `with` argument. Two `with` parameters keep the position's order. Before, the first line was an invariant violation -- the completion read the expected type's ordinary slots at the lambda's own numbering, past the end of `normTypeAt`."
+kind = "behavior"
+case = "../../../cases/compile/lambda_inference/with_list_from_the_position.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout = "rest_hole 7.0\nnamed_hole 30.0\ntwo_with 6.0\n"
+expect_output_not_contains = ["Warning", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
