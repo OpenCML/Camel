@@ -266,27 +266,59 @@ operandRanksText(const camel::runtime::GCGraph *function, std::span<const gc_nod
 /// makes a number's cotangent a number: `sum_to(ct * x, w)` answers `w`'s own type (`S`, the type of
 /// `like`), so the law has to be instantiated at the operand types the node really has
 /// (`rule_expand.cpp#expandRuleByName`), not at one `float` for every port.
+/// The type tuple a law has an instance at, from the types its ports are handed.
+///
+/// Usually the ports' own tuple. A law that names one type parameter for several positions
+/// (`add_t::<T>(x: T, c: T)`, every scalar law of the family) has no instance at one type per port --
+/// asking answers `it takes 1 type parameter(s), and it was asked for 3` -- and is instantiated at
+/// **one** type instead: the step's own *element* type, which is the rank-zero type of the first
+/// entry (5.4: the element of a rank-zero array type is the type itself, so this is the operand's own
+/// type for a number and `float` for a `float` array).
+///
+/// That one type was `Float64()` here until 2026-11-04, which is why an `f32` step had no instance
+/// whose ports take an `f32` operand and the walk refused by shape. Neither is it the first entry as
+/// it stands: handing an array in as `T` gives a law that writes `T[..]` a port of `T[..][..]`, and
+/// five array gradients then ran out of memory (measured). The tuple is decided here once, so the
+/// shape test, the choice and the expansion cannot disagree about which instance is under discussion.
+std::vector<Type *> lawInstanceTypes(
+    camel::core::context::Context &context, const std::string &ruleName,
+    const std::vector<Type *> &portTypes) {
+    std::string unused;
+    std::vector<Type *> types = portTypes;
+    if (types.empty()) {
+        types.push_back(Type::Float64());
+    }
+    if (camel::compile::gir::genericRuleInstanceByName(context, ruleName, types, {}, unused) !=
+        nullptr) {
+        return types;
+    }
+    Type *sole = types.front() == nullptr ? Type::Float64() : types.front();
+    if (sole->code() == camel::core::type::TypeCode::Array) {
+        if (auto *array = tt::as_ptr<camel::core::type::ArrayType>(sole)) {
+            if (Type *zero = array->rankZeroType()) {
+                sole = zero;
+            }
+        }
+    }
+    const std::vector<Type *> single{sole};
+    if (camel::compile::gir::genericRuleInstanceByName(context, ruleName, single, {}, unused) !=
+        nullptr) {
+        return single;
+    }
+    // Neither tuple has an instance: the ports' own is asked again, so the expansion says what it
+    // could not build in its own words rather than being told about a tuple nobody chose.
+    return types;
+}
+
 bool ruleTakesOperands(
     camel::core::context::Context &context, const std::string &ruleName,
     const std::vector<Type *> &operandTypes, const std::vector<bool> &answered,
     std::string &why) {
     std::string unused;
     // The same types the expansion asks for: a rule is judged at the types it will be built at.
-    std::vector<Type *> types = operandTypes;
-    if (types.empty()) {
-        types.push_back(Type::Float64());
-    }
+    const std::vector<Type *> types = lawInstanceTypes(context, ruleName, operandTypes);
     const auto *instance =
         camel::compile::gir::genericRuleInstanceByName(context, ruleName, types, {}, unused);
-    if (instance == nullptr) {
-        // The same fallback the choice makes, and for the same reason: several ports of one law can
-        // name one type parameter, and such a law is instantiated at **one** type -- the step's own,
-        // which is this list's first entry (the cotangent's element type), not a `Float64()` that
-        // no `f32` operand fits.
-        const Type *sole = types.empty() || types.front() == nullptr ? Type::Float64() : types.front();
-        types    = {const_cast<Type *>(sole)};
-        instance = camel::compile::gir::genericRuleInstanceByName(context, ruleName, types, {}, unused);
-    }
     const FunctionType *ports =
         instance != nullptr && instance->lhs != nullptr ? instance->lhs->funcType() : nullptr;
     if (ports == nullptr) {
@@ -1339,8 +1371,7 @@ bool buildTransposeMember(
         const auto ruleCotangent = [&](const std::string &ruleName,
                                        std::span<const gc_node_ref_t> inputs, size_t position,
                                        gc_node_ref_t ct, Type *ctType, std::string &why,
-                                       bool &noInstance,
-                                       const std::vector<Type *> *lawTypes) -> gc_node_ref_t {
+                                       bool &noInstance) -> gc_node_ref_t {
             const auto valueOf = [&](size_t slot) -> gc_node_ref_t {
                 return slot < inputs.size() ? knownValue(inputs[slot]) : rt::kInvalidNodeRef;
             };
@@ -1370,22 +1401,18 @@ bool buildTransposeMember(
                                            ? const_cast<Type *>(inputNode->dataType())
                                            : nullptr);
             }
-            // The types the right side is expanded at, and they are the ones the **choice** made its
-            // instance at when it says which instance that is (`lawTypes`): the same law, the same
-            // tuple, one decision instead of two.
+            // The tuple the right side is expanded at: the one the law has an instance at, decided by
+            // the same question the shape test and the choice ask (`lawInstanceTypes`), so the three
+            // cannot disagree about which instance is under discussion.
             //
-            // This is not a detail. A law that names one type parameter for several positions
-            // (`add_t::<T>(x: T, c: T)`) is instantiated at *one* type, and asking the expansion at
-            // one type per port is a question it answers with `it takes 1 type parameter(s), and it
-            // was asked for 3` -- it then falls back to a single `float` instance, and the right
-            // side was built at `float` around an `f32` cotangent: measured on 2026-11-04 as
-            // `transpose_of_autodiff::mul_tangent<f32>` passing `a f32 as ordinary argument 0 of
-            // autodiff::add_cotangent<float>, which takes a float`, which the scheduler stops on.
-            // The per-port list stays the answer for a law the choice has no instance of (a wildcard
-            // or a rank outside the set the law serves), which is the case this function is also
-            // asked about.
-            const std::vector<Type *> &at =
-                lawTypes != nullptr && !lawTypes->empty() ? *lawTypes : operandTypes;
+            // The expansion falls back to a single `float` instance on its own when the tuple it is
+            // handed has none, and at an `f32` step that `float` instance is a lie: measured on
+            // 2026-11-04, `transpose_of_autodiff::mul_tangent<f32>` passed `a f32 as ordinary argument
+            // 0 of autodiff::add_cotangent<float>, which takes a float`, and the scheduler stopped on
+            // the edge invariants. Handing it the step's own element type is what keeps the right side
+            // in the width the cotangent is in. A law with no instance at either tuple is expanded at
+            // the ports' own types, and the expansion says what it could not build in its own words.
+            const std::vector<Type *> at = lawInstanceTypes(*state.context, ruleName, operandTypes);
             return camel::transforms::expandRuleByName(
                 *state.context, group, group.transaction(member), ruleName, valueOf, {ct}, position,
                 at, why, &noInstance);
@@ -2263,9 +2290,7 @@ bool buildTransposeMember(
                     bool noInstance = false;
                     const gc_node_ref_t answer =
                         ruleCotangent(chosenRule, inputs, i, local[ref],
-                                      cotangentTypeOf(ref, Type::Float64()), why, noInstance,
-                                      armChoice.instance != nullptr ? &armChoice.instance->types
-                                                                    : nullptr);
+                                      cotangentTypeOf(ref, Type::Float64()), why, noInstance);
                     if (answer == rt::kInvalidNodeRef) {
                         armsOk = false;
                         // Two facts, and the expansion names which one it met: `noInstance` means the
@@ -2732,8 +2757,7 @@ bool buildTransposeMember(
                     bool noInstance = false;
                     const gc_node_ref_t answer = ruleCotangent(
                         chosenRule, inputs, i, ct, cotangentTypeOf(ref, Type::Float64()), why,
-                        noInstance,
-                        choice.instance != nullptr ? &choice.instance->types : nullptr);
+                        noInstance);
                     if (answer == rt::kInvalidNodeRef) {
                         // The same two facts as the arm walk above, told apart the same way: the law
                         // would not instantiate at these operand types, or the walk could not reach a
