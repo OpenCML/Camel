@@ -54,18 +54,51 @@ P02WALK graph=main start=26 startKind=11(Oper) stopGate=31 from=30
 
 ## 落地状态
 
-`loop … while …` 形态把体区出口交给循环节点的那一处在
-`src/compile/gir/builder_control.cpp#Builder::visitLoopNode`（`linkNodes(LinkType::With,
-bodyPart->output, loopNode)`，第 3640 行一带）。
+**形态确认（推翻本页初稿的一句）**：`for v in <生成器> do …` 与 `loop … while …` 走的是同一个
+`src/compile/gir/builder_control.cpp#Builder::visitLoopNode`；`visitStaticForNode` 管的是另一条。
+本页初稿写"没有 `LOOP` 节点"是**错的**——那是 grep 输出被 `head` 截断造成的误读。完整的
+`std::gir` 里三个循环节点都在：
 
-但本页这三个用例的形态是 `for v in <生成器> do …`：`std::gir` 里 27/29/30 行只剩两个节点
-（`"-"` 与 `:io/println`），**没有任何 `LOOP` 节点**。所以这条形态不走 `visitLoopNode`，体区值门
-该接的那个"循环节点"是别的节点，**落点必须先量出来再改**，不能按 `while` 形态的那一处顺手改。
+```
+N94 [label="LOOP while", type="LOOP", origin=7107, span="26:4-26:66", value_type="(int.., bool, int)"]
+NAD [... span="28:4-28:66" ...]   NC5 [... span="29:4-29:80" ...]
+```
+
+**量到的形状**（只看 `main` 自己的节点与边）：
+
+| | 在 | 不在 |
+|---|---|---|
+| 循环节点 | `N94` / `NAD` / `NC5` | |
+| 体区算出来的值 | `N8E :op/add_l`，经 `FILL`/`BRCH` 接进循环 | |
+| 体内 `println(v)` | | 不在 |
+| 链位 `GATE` | | 不在 |
+
+即：体区把**纯值**交给了循环，链那一支（`println` → 链位 → 块值 `GATE`）没有使用者，被剪掉。
+
+## 落点在 `visitBodyNode` / `visitExecNode` / `setArmResult` 这一条线上
+
+- `Builder::visitBodyNode`（`builder_control.cpp`）取 `visitExecNode(gct, tailPositionType())` 的
+  返回值，它就是体区交回去的东西；
+- `visitExecNode` 收尾（`builder.cpp` 1820–1845）有两条路：值节点为本块独有 → `res` 原样（自己当
+  链尾，`linkSyncStatement(lastSyncedNode_, res)`）；否则造一个 `GATE`（`res = gate`）并
+  `writeSyncStatement(lastSyncedNode_, gate)`。本用例走的是**造 GATE 那条**；
+- `Builder::setArmResult` 把 `arm.output = result`、`arm.value` = 该 `GATE` 的数据输入（注释写明
+  "the GATE is what the arm gives"）；
+- `buildArm` 建区域时 `synced_ = false; lastSyncedNode_ = {}`（1552–1553 行），区域自己的链从空开始；
+- 之后 `visitLoopNode` 里体区的结构被拆成分量时（`if (bodyPart->output != bodyPart->value)` 一带，
+  3536–3541 行）只写了一条 `writeControlLink(bodyPart->output, result)`（**顺序**），再把
+  `bodyPart->output = result`。区域的结果改成 `result` 之后，那个 `GATE` 就没有任何使用者了。
+
+**还差的条件**：体区交回去的必须是**链的最后一站**，而不是它转发的纯值——要么 `setRegionResult`
+仍然指向那个 `GATE`，要么循环节点直接成为它的使用者。现在的代码只把顺序交给了 `result`，
+顺序边不进活跃性，所以链那一支被剪。
+
+这两条与"链首不造 `GATE`"不冲突：链首那条管的是链**之前**没有语句的位置，这里要交回的是链的
+**最后**一站，那里有语句、有前驱。
 
 ## 待办
 
-1. 量出 `for v in` 形态里"循环节点"是哪个（体区的值应当成为它的 `with` 输入）。量法：在
-   `for` 语句建图处打印体区出口的使用者，或在 `std::gir` 里找该语句留下的 26 个节点中承接
-   体区结果的那一个。
-2. 接上之后复跑 `feat/compile/stream` 三个用例，判据是 `main` 的 `std::gir` 里重新出现
-   `:io/println`，并且 A 的 34 条掉到 0。
+1. 按上面的"还差的条件"改一处，复跑 `feat/compile/stream` 三个用例；判据是 `main` 的 `std::gir`
+   里重新出现体内的 `:io/println`，并且 A 的 34 条掉到 0（逐名报）。
+2. **分支臂的同一条线先不动**：`buildArm` / `setArmResult` 也服务分支臂，臂的那一半要用例说话，
+   先量再改。
