@@ -128,6 +128,10 @@ std::vector<gc_node_ref_t> DraftGraphRead::normPortsOf() const {
     return mappedListOf(txn_.graph().normPorts());
 }
 
+std::vector<gc_node_ref_t> DraftGraphRead::withPortsOf() const {
+    return mappedListOf(txn_.graph().withPorts());
+}
+
 uint32_t DraftGraphRead::regionOfNode(gc_node_ref_t ref) const {
     const camel::runtime::DraftNodeHeader *header = txn_.graph().header(sourceIdOf(ref));
     return header == nullptr ? 0 : header->region;
@@ -240,6 +244,11 @@ gc_cnt_t GraphRead::armCountOf(gc_node_ref_t ref) const {
 }
 std::vector<gc_node_ref_t> FrozenGraphRead::normPortsOf() const {
     const std::span<const gc_node_ref_t> ports = graph_.normPorts();
+    return std::vector<gc_node_ref_t>(ports.begin(), ports.end());
+}
+
+std::vector<gc_node_ref_t> FrozenGraphRead::withPortsOf() const {
+    const std::span<const gc_node_ref_t> ports = graph_.withPorts();
     return std::vector<gc_node_ref_t>(ports.begin(), ports.end());
 }
 

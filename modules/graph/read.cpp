@@ -495,6 +495,22 @@ slot_t mayFaultKernel(ArgsView &, ArgsView &norm, Context &) {
         camel::runtime::nodeMayFault(graphOf(handle, "graph.may_fault"), handle->index()));
 }
 
+/// Whether a pass may arrange the node anywhere -- drop it, move it, merge it with an identical
+/// call, or leave it with no order edge after an inline: pure *and* unable to fault. It is
+/// `graph::may_be_rearranged` (camel/runtime/graph.h), the one predicate the C++ passes read and
+/// that the passes written in Camel read under this name. A draft is asked with the shapes its
+/// types state (`isValueOnly` asks the same), so the two sides cannot answer differently.
+slot_t mayBeRearrangedKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle  = norm.get<Handle *>(0);
+    const NodeView node = viewOf(handle, "graph.may_be_rearranged");
+    if (node.isDraft()) {
+        return toSlot<Bool>(camel::runtime::nodeIsFreelySchedulable(node.draft(), node.ref, true));
+    }
+    return toSlot<Bool>(
+        camel::runtime::graph::may_be_rearranged(
+            graphOf(handle, "graph.may_be_rearranged"), handle->index()));
+}
+
 slot_t typeOfKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle = norm.get<Handle *>(0);
     Type *type         = viewOf(handle, "graph.type_of").dataType();
@@ -934,6 +950,7 @@ const std::vector<ReadOp> &readOps() {
         {"is_pure", isPureKernel},
         {"may_be_recomputed", mayRecomputeKernel},
         {"may_fault", mayFaultKernel},
+        {"may_be_rearranged", mayBeRearrangedKernel},
         {"type_of", typeOfKernel},
         {"type_name", typeNameKernel},
         {"callee", calleeKernel},

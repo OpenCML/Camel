@@ -468,23 +468,6 @@ class GraphDraft {
     std::span<const gc_node_ref_t> normPorts() const { return normPorts_; }
     std::span<const gc_node_ref_t> withPorts() const { return withPorts_; }
     std::span<const gc_node_ref_t> closureNodes() const { return closureNodes_; }
-    /// Records that closure member `id` holds the value of `parameter` -- a cut's numbering
-    /// (`Residual::parameter`, modules/transforms/split.cpp#residualsOf), which is what a transposed
-    /// member reads it by instead of by its place in the list. Keyed by the member, not by a
-    /// position, so reordering or erasing members cannot silently move an identity.
-    void setClosureParameterOf(gc_node_ref_t id, size_t parameter) {
-        ++mutations_;
-        closureParameterOf_[id] = parameter;
-    }
-    /// The parameter closure member `id` holds the value of, or kNoClosureParameter when the draft
-    /// records none (a member a caller closed over its own values, or a value the cut computed).
-    int32_t closureParameterOf(gc_node_ref_t id) const {
-        const auto at = closureParameterOf_.find(id);
-        if (at == closureParameterOf_.end() || at->second > kMaxClosureParameter) {
-            return kNoClosureParameter;
-        }
-        return static_cast<int32_t>(at->second);
-    }
 
     std::span<const slot_t> staticSlots() const { return staticSlots_; }
     std::span<camel::core::type::Type *const> staticSlotTypes() const { return staticSlotTypes_; }
@@ -822,7 +805,10 @@ class GraphDraft {
       private:
         GraphDraft &draft_;
     };
-    /// The region node `id` is in, 0 when it is in none but the body.
+    /// The region node `id` is in: 0 is the body, which every node the draft holds is in unless a
+    /// control region holds it. An `id` the draft does not hold (erased, or never a node of it) has
+    /// no region at all: it is not answered as 0, because 0 names the body, a region that exists.
+    /// Asking for it fails (`GUARD`), so "which region" has an answer or none, never a wrong one.
     uint32_t nodeRegion(gc_node_ref_t id) const;
     void setNodeRegion(gc_node_ref_t id, uint32_t region);
     /// A new region in `parent`; for a control region the node that owns it and its index.
@@ -1039,9 +1025,6 @@ class GraphDraft {
     std::vector<gc_node_ref_t> normPorts_;
     std::vector<gc_node_ref_t> withPorts_;
     std::vector<gc_node_ref_t> closureNodes_;
-    /// The closure members that hold a parameter's own value, by member: see closureParameterOf.
-    std::unordered_map<gc_node_ref_t, size_t> closureParameterOf_;
-    static constexpr size_t kMaxClosureParameter = 0x7fffffff;
     std::vector<slot_t> staticSlots_;
     std::vector<camel::core::type::Type *> staticSlotTypes_;
     std::vector<GraphId> dependencies_;

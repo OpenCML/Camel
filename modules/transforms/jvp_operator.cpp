@@ -58,12 +58,17 @@ FunctionType *jvpOperatorSignature(FunctionType *function) {
     if (function == nullptr) {
         return nullptr;
     }
-    // What `buildJvpGraph` can build, and nothing else: it copies one body and gives every `float`
-    // parameter of that body a pair of ports, so it takes any number of them (at least one), and it
-    // has no node that reads a captured value into a port, so the function has no `with` parameters.
-    // A function outside that shape is refused where it is written, not left to fail when the call
-    // runs.
-    if (function->withTypesCount() != 0 || function->normTypesCount() == 0) {
+    // What `buildJvpGraph` can build, and nothing else: it copies one body and gives every parameter
+    // of that body a pair of ports, so it takes any number of ordinary parameters (at least one).
+    // A `with` parameter is not a reason to refuse: the lift writes that parameter a port of its own
+    // and lists it among the lifted graph's `with` ports, so the captured value enters by a port and
+    // the body reads it as it did (design principles 9.9: what `grad` differentiates is the first
+    // `with` parameter -- the weights -- and `vjp` is `transpose(split(jvp(f)))`, so a `jvp` that
+    // refuses every function carrying a weight makes a gradient of the weights impossible to build
+    // rather than merely unwritten). Its tangent is the zero of its type, which is what a captured
+    // value's tangent is in forward mode, so the lift adds no tangent port for it. A function
+    // outside that shape is refused where it is written, not left to fail when the call runs.
+    if (function->normTypesCount() == 0) {
         return nullptr;
     }
     FunctionType *lifted = jvpSignature(function);
@@ -103,14 +108,21 @@ class JvpResolver final : public FuncTypeResolver {
             return std::nullopt;
         }
         const auto *function = tt::as_ptr<FunctionType>(norm[0]);
-        if (function->withTypesCount() != 0) {
-            return std::string(
-                "`jvp` takes a function without `with` parameters: the transform copies the body "
-                "into a new graph, and a captured value has no port to enter it by");
-        }
         if (function->normTypesCount() == 0) {
-            return std::string("`jvp` takes a function of at least one `float` parameter");
+            return std::string(
+                "`jvp` takes a function of at least one ordinary parameter: a lifted function's "
+                "parameters are the value and its tangent, and there has to be one to lift");
         }
+        // The only question asked of a parameter is the one design principles 9.9 asks of every
+        // value -- does its type have a tangent space -- and the answer is the type's own
+        // (`tangentSpaceOf`, `Tangent<T>`), never this transform's state. The two branches that
+        // stood here said more than the law does: one refused every parameter that was not a
+        // `float` ("which this transform does not lift yet") and one refused every result that was
+        // not a `float`. Neither could be reached -- `jvpSignature` already builds the pair out of
+        // the tangent space, so the call resolved and this text was never asked for -- but a
+        // rejection written outside the declaration is a second law, and this one said a supported
+        // thing was unsupported. Measured on `jvp(f)(...)`: `f32` gives `(9.0, 6.0)`, a struct
+        // `{a, b}` gives `(6.0, 3.0)`, `float[]` gives `(6.0, 2.0)`.
         for (size_t i = 0; i < function->normTypesCount(); ++i) {
             const camel::core::type::Type *parameter = function->normTypeAt(i);
             const camel::core::TangentSpaceAnswer space =
@@ -122,32 +134,28 @@ class JvpResolver final : public FuncTypeResolver {
                     i,
                     parameter->toString());
             }
-            if (parameter != Type::Float64()) {
-                // The type answers what its tangent space is; that it is not `float` is the
-                // transform's own state, and is said as such: the lift builds one `(float, float)`
-                // pair per parameter, so a parameter whose space is itself of another type has a
-                // space and is not lifted yet.
-                return std::format(
-                    "`jvp` lifts a `float` parameter into the pair `(value, tangent)`, and "
-                    "parameter {} is a `{}`, whose tangent space is {} and which this transform "
-                    "does not lift yet",
-                    i,
-                    parameter->toString(),
-                    space.describe());
-            }
         }
-        if (function->exitType() != Type::Float64()) {
-            return std::string(
-                "`jvp` takes a function whose result is a `float`: the lifted signature answers the "
-                "pair `(value, tangent)`");
+        const camel::core::TangentSpaceAnswer resultSpace =
+            camel::core::tangentSpaceOf(function->exitType());
+        if (!resultSpace.hasSpace()) {
+            return std::format(
+                "`jvp` takes a function whose result has a tangent space, and this one's result "
+                "is a `{}`, which has none: the lifted signature answers the pair "
+                "(value, tangent)",
+                function->exitType() != nullptr ? function->exitType()->toString() : "()");
         }
         return std::nullopt;
     }
 
-    /// The text is the one a declaration writes (`stdlib/signatures/transforms.cml`), and it is
-    /// the same string the resolved type prints: `((float) => float)` in, the lifted function out.
+    /// The law, not one instance of it. What `jvp(f)` is for a given `f` is `jvpSignature`'s answer
+    /// (`modules/transforms/jvp.cpp`), and the declaration the module publishes says the same thing
+    /// in prose (`stdlib/signatures/transforms.cml`, `Jvp<F>`). This string used to write one
+    /// instance -- `(f: (float) => float) => (float, float) => (float, float)` -- which stopped
+    /// being true as soon as any parameter that is not a `float` was accepted, and a diagnostic that
+    /// states a false type is worse than one that states the rule (author, A2 of 2026-11-03: the type
+    /// follows the declaration, and the declaration is the only source).
     std::string signature() const override {
-        return "(f: (float) => float) => (float, float) => (float, float)";
+        return "(f: (..) => any) => (the parameters and their tangents) => (value, tangent)";
     }
 
     /// `f` is the only parameter, in every form: `jvp(f: g)` has to bind to it.

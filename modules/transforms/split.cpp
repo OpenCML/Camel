@@ -130,7 +130,11 @@ RegionWalk walkRegion(const rt::GCGraph *graph, uint32_t regionId) {
             ++walk.nestedBrchs;
         }
         for (gc_node_ref_t input : dataInputsOf(graph, ref)) {
-            if (input < graph->nodeCount() && graph->nodeRegion(input) != regionId) {
+            // A ref that is not a node of this graph is not in any region, and the region query no
+            // longer answers the body for it: ask "is this a node" here (`containsNodeRef`), which
+            // is the question, instead of leaning on a region query's fallback for a node that is
+            // not there.
+            if (graph->containsNodeRef(input) && graph->nodeRegion(input) != regionId) {
                 const rt::GCNode *read = graph->node(input);
                 if (read != nullptr && read->kind != rt::GCNodeKind::Data) {
                     outside.insert(input);
@@ -190,28 +194,31 @@ gc_node_ref_t fillTuple(rt::GraphDraft &draft, Type *type, std::span<const gc_no
     return fill;
 }
 
-/// `Lift<T>`, read from types: a parameter contributes its value port and, when its type has a
-/// tangent space, the tangent port after it. A `T` with no tangent space -- an integer, a `bool`, a
-/// `string`, a function -- contributes its value alone, which is why counting two ports per parameter
-/// is only right while every parameter is a float. A lifted `f(n: int, x: float)` takes (n, x, dx),
-/// and an even/odd reading would take `x`'s tangent for `x` and lose `dx` (P1-10, review 2026-11-01).
+/// `Lift<T>`, read from types: the lifted parameter list is the original's, values first, and then
+/// one tangent slot per parameter in the same order (`jvpSignature`, author 2026-11-03), so the value
+/// ports are simply the first half. A slot for a parameter with no tangent space (`n: int`) is `()`
+/// and stands in the tangent half where its value stands in the value half -- the two halves keep
+/// their places position by position, which is the whole reason the slot exists.
 std::vector<size_t> valuePortsOf(const camel::core::type::FunctionType *liftedType) {
     std::vector<size_t> values;
     if (liftedType == nullptr) {
         return values;
     }
-    const size_t count = liftedType->normTypesCount();
-    for (size_t i = 0; i < count;) {
+    const size_t half = liftedType->normTypesCount() / 2;
+    values.reserve(half);
+    for (size_t i = 0; i < half; ++i) {
         values.push_back(i);
-        const Type *type    = liftedType->normTypeAt(i);
-        const bool paired   = type == nullptr || camel::core::tangentSpaceOf(type).hasSpace();
-        i += paired ? 2 : 1;
     }
     return values;
 }
 
 /// Which parameter a lifted port belongs to, and whether it is that parameter's tangent. A port that
 /// is no parameter's (a seeded value, a residual) answers `npos` and false.
+///
+/// One mapping, written once: the lift's parameters are `count / 2` values followed by `count / 2`
+/// tangents, so port `k < half` is parameter `k`'s value and port `half + k` is its tangent. Every
+/// reader of that column walks the same list, and the halves are the same length by construction
+/// (a `()` slot for a parameter without a tangent space), so no reader has to skip anything.
 std::pair<size_t, bool> parameterOfPort(
     const camel::core::type::FunctionType *liftedType, size_t port) {
     constexpr size_t kNone = static_cast<size_t>(-1);
@@ -219,16 +226,12 @@ std::pair<size_t, bool> parameterOfPort(
         return {kNone, false};
     }
     const size_t count = liftedType->normTypesCount();
-    for (size_t i = 0, parameter = 0; i < count; ++parameter) {
-        if (port == i) {
-            return {parameter, false};
-        }
-        const Type *type  = liftedType->normTypeAt(i);
-        const bool paired = type == nullptr || camel::core::tangentSpaceOf(type).hasSpace();
-        if (paired && port == i + 1) {
-            return {parameter, true};
-        }
-        i += paired ? 2 : 1;
+    const size_t half  = count / 2;
+    if (port < half) {
+        return {port, false};
+    }
+    if (port < count) {
+        return {port - half, true};
     }
     return {kNone, false};
 }
@@ -245,6 +248,12 @@ struct Half {
     const rt::Program *program;
     std::vector<gc_node_ref_t> portOf;
     std::unordered_map<gc_node_ref_t, size_t> portIndex;
+    /// A `with` parameter of the source graph -> this half's port for it. A `with` value is not a
+    /// component of a pair and not a residual: it is a value the caller supplies to the call, and
+    /// the half reads it the way the lifted body did, through a port of its own (see
+    /// `addWithPorts`). Kept beside `portIndex` rather than in it, because that map is the ordinary
+    /// parameters' -- the pair positions `valuePortsOf` and `parameterOfPort` number.
+    std::unordered_map<gc_node_ref_t, gc_node_ref_t> withPortOf;
     std::vector<gc_node_ref_t> copyOf;
     std::vector<char> seen;
     /// Which component of every parameter this half takes: false the value, true the tangent.
@@ -460,6 +469,13 @@ struct Half {
         }
         switch (node->kind) {
         case rt::GCNodeKind::Port: {
+            // A `with` parameter is a value the caller supplies, not a component of a pair: this
+            // half made a port of its own for it, and the read is that port.
+            const auto with = withPortOf.find(ref);
+            if (with != withPortOf.end()) {
+                copyOf[ref] = with->second;
+                return true;
+            }
             const auto at = portIndex.find(ref);
             if (at == portIndex.end()) {
                 return refuseAt(
@@ -696,14 +712,6 @@ void addResidualCaptures(Draft &draft, const std::vector<Residual> &residuals, H
         const gc_node_ref_t port =
             draft.addPortNode(residual.type, draft.allocateRuntimeSlot(residual.type));
         draft.appendClosureNode(port);
-        // The member's identity, not its place: a residual that is a parameter's own value is
-        // recorded as that parameter's (author, 2026-11-03 03:10). A transposed member reads the
-        // number from here and nowhere else -- the residuals are in `residualsOf`' program order,
-        // not in parameter order, so a member's index would name the wrong parameter as soon as the
-        // program reads two of them out of order (`f(x, y) = y * y` puts parameter 1 in slot 0).
-        if (residual.parameter != Residual::kNotAParameter) {
-            draft.setClosureParameterOf(port, residual.parameter);
-        }
         backward.closurePorts.push_back(port);
     }
 }
@@ -826,7 +834,9 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                     continue;
                 }
                 const std::vector<gc_node_ref_t> arguments = dataInputsOf(&lifted, ref);
-                for (size_t i = 0; i < arguments.size(); i += 2) {
+                // The lifted callee takes its values and then its tangents (`jvpSignature`), so the
+                // value arguments are the first half of what the call passes.
+                for (size_t i = 0; i < arguments.size() / 2; ++i) {
                     const gc_node_ref_t input = arguments[i];
                     if (input < nodeCount && visited[input] == 0) {
                         stack.push_back(input);
@@ -842,8 +852,12 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 // a value port is the only thing it can hand over. `xs[i]` is the shape that needs
                 // it: the transpose of the read writes its cotangent into `zeros_like(xs)`, a `T[]`'s
                 // length is not a thing its type carries, and this parameter holds the array.
-                const size_t index     = portIndex[ref];
-                const size_t valuePort = index % 2 == 0 ? index : index - 1;
+                const size_t index = portIndex[ref];
+                // Which parameter this port belongs to, asked of the one mapping that knows the layout
+                // `jvpSignature` writes (`parameterOfPort`) instead of restating it: a port below the
+                // half is its own parameter's value and one above it is the tangent whose value stands
+                // exactly `half` places earlier.
+                const size_t valuePort = parameterOfPort(lifted.funcType(), index).first;
                 // A parameter the tangent side reads crosses too: the residual set is what the
                 // backward half actually reads, whether the forward half computed it or it is a
                 // parameter itself. The ruling of 2026-11-02 00:30: the rule does not split by type.
@@ -926,17 +940,17 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
         halves.why = "there is no function to split";
         return halves;
     }
-    // One body is copied into two graphs, so no captured parameter: a `with` value would have a port
-    // in neither half (the same shape `jvp` and `vmap` state).
-    if (function->withTypesCount() != 0) {
-        halves.why = "`split` takes a function without `with` parameters: the transform copies the "
-                     "body into two new graphs, and a captured value has no port to enter them by";
-        return halves;
-    }
+    // A `with` parameter is not a reason to refuse: both halves declare it as a port of their own
+    // (`addWithPorts`), so the captured value enters each half the way the lifted body read it. It
+    // used to be refused here with "a captured value has no port to enter them by", a reason that
+    // stopped being true once the closure had capture ports of its own -- and a `jvp` that lifts a
+    // weight, which is what design principles 9.9's `vjp = transpose(split(jvp(f)))` needs, can only
+    // be cut if `split` takes such a function.
     const size_t count = function->normTypesCount();
     if (count == 0 || count % 2 != 0) {
-        halves.why = "`split` takes a lifted function, whose every parameter is the pair "
-                     "(value, tangent) and so comes in twos";
+        halves.why = "`split` takes a lifted function, whose parameters are the value of every "
+                     "parameter and then the tangent of every one, so they come in two halves of "
+                     "equal length";
         return halves;
     }
     if (!function->hasExitType() || function->exitType()->code() != TypeCode::Tuple) {
@@ -975,9 +989,52 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
 
     param_vec_t forwardParams;
     param_vec_t tangentParams;
-    for (size_t i = 0; i < count; i += 2) {
+    // The two halves are the two halves of the list: the values are ports `0 .. n`, the tangents are
+    // `n .. 2n` (`jvpSignature`, author 2026-11-03). The forward half takes the values in the
+    // parameters' order and the backward half the tangent that stands in the same place -- which is
+    // what makes a `()` slot for a parameter with no tangent space mean something rather than
+    // swallow its neighbour's tangent.
+    const size_t half = count / 2;
+    for (size_t i = 0; i < half; ++i) {
         forwardParams.emplace_back(function->normTypeAt(i), false);
-        tangentParams.emplace_back(function->normTypeAt(i + 1), false);
+        // A parameter with no tangent space stands in the lifted list as `()`, and `()` is an
+        // **answer** the backward half gives, not a parameter it takes: `Vjp<F>` is
+        // `(values...) => (result, (ct) => (tangents...))`, so only a tangent that is something can be
+        // passed in, while the answer has one slot per parameter. Getting this wrong one way makes the
+        // half take an argument nobody passes; the other way makes it answer fewer than it declares.
+        Type *tangentOfParameter = function->normTypeAt(i + half);
+        if (tangentOfParameter != nullptr &&
+            camel::core::tangentSpaceOf(tangentOfParameter).hasSpace()) {
+            tangentParams.emplace_back(tangentOfParameter, false);
+        } else {
+            // The parameter's tangent is `()`: an **answer** the half gives, not an argument it
+            // takes. It keeps its place in the half's type so that the transposed half answers one
+            // slot per parameter -- `Vjp<F>`'s pullback is `(ct) => (..Tangent<ParamsOf<F>>)`, and
+            // `Tangent<int>` is `()` -- while the half's *graph* declares no port for it, because
+            // nobody can pass a value where there is nothing to pass (the port loop below skips it by
+            // the same predicate). Losing the place here makes the pullback answer one member fewer
+            // than it declares: `grad_array_with_int.fvm` read `(float[],)` where the declaration
+            // said `(float[], ())`.
+            tangentParams.emplace_back(TupleType::create(std::vector<Type *>{}), false);
+        }
+    }
+
+    // The lift's `with` parameters, in both halves: a weight is read on both sides of the cut, and
+    // it is a value the call supplies, not a residual the cut carries. This is the list the halves'
+    // signatures declare, so the ports and the types cannot disagree.
+    param_vec_t withParams;
+    for (size_t i = 0; i < function->withTypesCount(); ++i) {
+        Type *withType = function->withTypeAt(i);
+        if (withType == nullptr) {
+            halves.why = "a `with` parameter of the function has no type";
+            return halves;
+        }
+        if (function->withIsVarAt(i)) {
+            if (Type *value = camel::core::type::valueTypeOf(withType)) {
+                withType = value;
+            }
+        }
+        withParams.emplace_back(withType, false);
     }
 
     // Each half does part of what the source does to the outside world, so each publishes the
@@ -987,13 +1044,13 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
     // type holds no residual position -- which is the whole point of the ruling: at a call site `lin`
     // is an ordinary function type, so there is no arity a signature could not know, and no guard has
     // to be loosened to admit one.
-    halves.backward = FunctionType::create(param_vec_t{}, tangentParams, tangent)
+    halves.backward = FunctionType::create(withParams, tangentParams, tangent)
                           ->withResources(function->resources());
     // The forward half answers `(result, lin)`: the value and the linear function closed over the
     // residuals it was computed with. `lin`'s type is the backward half's, so the pair's second member
     // is spelled `(tangents...) => tangent` and the closure stays where it belongs -- off the type.
     TupleType *forwardExit = TupleType::create(std::vector<Type *>{result, halves.backward});
-    halves.forward         = FunctionType::create(param_vec_t{}, forwardParams, forwardExit)
+    halves.forward         = FunctionType::create(withParams, forwardParams, forwardExit)
                          ->withResources(function->resources());
     halves.closure = closure;
     // What the call `split(f)` answers: the forward half (author, 2026-11-02 05:10 "`split` 的前半交出
@@ -1561,7 +1618,8 @@ SplitGraph cutLoopGraph(
         auto &draft = group.transaction(forwardId).edit();
         draft.setFuncType(halves.forward);
         Half forward(draft, function, program, false);
-        for (size_t i = 0; i < sourcePorts.size(); i += 2) {
+        const size_t valueCount = sourcePorts.size() / 2;
+        for (size_t i = 0; i < valueCount; ++i) {
             Type *type               = function->funcType()->normTypeAt(i);
             const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
             draft.appendNormPort(port);
@@ -1701,8 +1759,12 @@ SplitGraph cutLoopGraph(
         draft.setFuncType(halves.backward);
         Half backward(draft, function, program, true, &cut.outside, &residualIndexOf);
         addResidualCaptures(draft, cuts, backward);
-        for (size_t i = 1; i < sourcePorts.size(); i += 2) {
+        for (size_t i = sourcePorts.size() / 2; i < sourcePorts.size(); ++i) {
             Type *type               = function->funcType()->normTypeAt(i);
+            if (type == nullptr || !camel::core::tangentSpaceOf(type).hasSpace()) {
+                // A () slot is an answer this half gives, never an argument it takes.
+                continue;
+            }
             const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
             draft.appendNormPort(port);
             backward.portOf[i] = port;
@@ -1836,10 +1898,14 @@ SplitGraph cutBranchGraph(
     // forward half picked it by (design 4.2), not by computing the comparison again.
     std::vector<Residual> cuts;
     const std::span<const gc_node_ref_t> sourcePorts = function->normPorts();
-    for (size_t i = 0; i < sourcePorts.size(); i += 2) {
+    // The value half, one residual per parameter in the parameters' order: the lift writes all the
+    // values and then one tangent slot each (`jvpSignature`), so the values are the first half of
+    // the ports and port k is the k-th parameter's own value.
+    const size_t valueCount = sourcePorts.size() / 2;
+    for (size_t i = 0; i < valueCount; ++i) {
         Residual one;
         one.node      = sourcePorts[i];
-        one.parameter = i / 2;
+        one.parameter = i;
         one.type      = function->funcType()->normTypeAt(i);
         cuts.push_back(one);
     }
@@ -1892,7 +1958,8 @@ SplitGraph cutBranchGraph(
         auto &draft = group.transaction(forwardId).edit();
         draft.setFuncType(branchHalves.forward);
         Half forward(draft, function, program, false);
-        for (size_t i = 0; i < sourcePorts.size(); i += 2) {
+        const size_t valueCount = sourcePorts.size() / 2;
+        for (size_t i = 0; i < valueCount; ++i) {
             Type *type               = function->funcType()->normTypeAt(i);
             const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
             draft.appendNormPort(port);
@@ -1927,7 +1994,7 @@ SplitGraph cutBranchGraph(
             if (value == rt::kInvalidNodeRef && one.parameter != Residual::kNotAParameter) {
                 // A value parameter the arms did not happen to read still crosses: the half's port for
                 // it is the value itself, which is what a residual is for this kind of member.
-                const size_t index = one.parameter * 2;
+                const size_t index = one.parameter;
                 if (index < forward.portOf.size()) {
                     value = forward.portOf[index];
                 }
@@ -1960,8 +2027,12 @@ SplitGraph cutBranchGraph(
         draft.setFuncType(branchHalves.backward);
         Half backward(draft, function, program, true, &cuts, &residualIndexOf);
         addResidualCaptures(draft, cuts, backward);
-        for (size_t i = 1; i < sourcePorts.size(); i += 2) {
+        for (size_t i = sourcePorts.size() / 2; i < sourcePorts.size(); ++i) {
             Type *type               = function->funcType()->normTypeAt(i);
+            if (type == nullptr || !camel::core::tangentSpaceOf(type).hasSpace()) {
+                // A () slot is an answer this half gives, never an argument it takes.
+                continue;
+            }
             const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
             draft.appendNormPort(port);
             backward.portOf[i] = port;
@@ -2142,6 +2213,42 @@ ExitShape exitShapeOf(const rt::GCGraph *function, gc_node_ref_t exit, LoopCut &
     return ExitShape::Loop;
 }
 
+/// The `with` parameters of the source, as ports of one half. A `with` parameter is a value the
+/// caller supplies at the call; the lifted body reads it through a `with` port, and a half that did
+/// not list such a port would refuse that read with "the port is not a parameter of the graph".
+/// So each half declares them, in the declaration's order and of the declared type -- the same list
+/// `jvpSignature` writes for the lifted graph, minus nothing: a `with` value is not a component of a
+/// pair, so it is not halved, and it is not a residual either, so it does not travel in `lin`'s
+/// closure. A `var` `with` parameter is listed as the variable it was declared as; a half reads it
+/// and does not write it.
+bool addWithPorts(Half &half, const rt::GCGraph *function) {
+    if (function == nullptr || function->funcType() == nullptr) {
+        return true;
+    }
+    const FunctionType *type = function->funcType();
+    const size_t withCount   = type->withTypesCount();
+    if (withCount == 0) {
+        return true;
+    }
+    const std::span<const gc_node_ref_t> sourceWith = function->withPorts();
+    for (size_t i = 0; i < withCount && i < sourceWith.size(); ++i) {
+        Type *withType = type->withTypeAt(i);
+        if (withType == nullptr) {
+            return false;
+        }
+        if (type->withIsVarAt(i)) {
+            if (Type *value = camel::core::type::valueTypeOf(withType)) {
+                withType = value;
+            }
+        }
+        const gc_node_ref_t port =
+            half.draft.addPortNode(withType, half.draft.allocateRuntimeSlot(withType));
+        half.draft.appendWithPort(port);
+        half.withPortOf[sourceWith[i]] = port;
+    }
+    return true;
+}
+
 SplitGraph buildSplitGraph(
     const camel::core::context::context_ptr_t &context, const rt::Program *program,
     rt::GCGraph *function, std::ostream &os) {
@@ -2266,8 +2373,12 @@ SplitGraph buildSplitGraph(
                     // report (`probeRegion`, `probeMembers`, `probeJoin`, `conditionCopied`) are gone,
                     // and `from=[...]` now names source nodes as it always meant to.
                     Type *pairType = exitNode->dataType();
+                    // The condition that selects among the arms. A ref that is not a node of this
+                    // graph is in no region -- 0 stands for "the body, and so in none of the arms
+                    // this loop walks" -- and the region query is not asked about it, because it
+                    // would no longer answer the body for a node that is not there.
                     const uint32_t conditionRegion =
-                        condition < function->nodeCount() ? function->nodeRegion(condition) : 0;
+                        function->containsNodeRef(condition) ? function->nodeRegion(condition) : 0;
                     for (uint32_t region = 1; region < function->regionCount(); ++region) {
                         const rt::GCRegion *one = function->region(region);
                         if (one == nullptr || one->kind != rt::GCRegionKind::Arm ||
@@ -2433,7 +2544,15 @@ SplitGraph buildSplitGraph(
         auto &draft = group.transaction(forwardId).edit();
         draft.setFuncType(halves.forward);
         Half forward(draft, function, program, false);
-        for (size_t i = 0; i < sourcePorts.size(); i += 2) {
+        if (!addWithPorts(forward, function)) {
+            os << "REINTERP split function=" << function->name()
+               << " skip=forward (a `with` parameter of the source has no type)\n";
+            return SplitGraph{};
+        }
+        // The lifted list is two halves -- the values, then their tangents -- so the forward half
+        // takes the first half of it, one port per parameter value.
+        const size_t valueCount = sourcePorts.size() / 2;
+        for (size_t i = 0; i < valueCount; ++i) {
             Type *type       = function->funcType()->normTypeAt(i);
             const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
             draft.appendNormPort(port);
@@ -2462,7 +2581,7 @@ SplitGraph buildSplitGraph(
                 // member. The branch member below makes the same fallback, and the two have to
                 // agree -- `residualsOf` names the same residuals for both, and a parameter the
                 // backward half reads is one of them.
-                const size_t portIndex = residual.parameter * 2;
+                const size_t portIndex = residual.parameter;
                 if (portIndex < forward.portOf.size()) {
                     value = forward.portOf[portIndex];
                 }
@@ -2498,9 +2617,18 @@ SplitGraph buildSplitGraph(
             residualIndexOf[graphResiduals[i].node] = i;
         }
         Half backward(draft, function, program, true, &graphResiduals, &residualIndexOf);
+        if (!addWithPorts(backward, function)) {
+            os << "REINTERP split function=" << function->name()
+               << " skip=backward (a `with` parameter of the source has no type)\n";
+            return built;
+        }
         addResidualCaptures(draft, graphResiduals, backward);
-        for (size_t i = 1; i < sourcePorts.size(); i += 2) {
+        for (size_t i = sourcePorts.size() / 2; i < sourcePorts.size(); ++i) {
             Type *type       = function->funcType()->normTypeAt(i);
+            if (type == nullptr || !camel::core::tangentSpaceOf(type).hasSpace()) {
+                // A () slot is an answer this half gives, never an argument it takes.
+                continue;
+            }
             const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
             draft.appendNormPort(port);
             backward.portOf[i] = port;

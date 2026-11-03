@@ -1,0 +1,38 @@
+// The criterion of the 2026-11-03 rework, as two readings of one number: a lambda a caller closes by
+// hand and the second half `split` builds answer **the same**, because both are read as what they
+// are -- a port the function is handed -- and neither answer depends on where the graph came from.
+//
+// `g(x) = x*x` at 3: the lifted function is `(x, dx) => (x*x, x*dx + x*dx)`, so the second half is
+// `lin(dx) = 6*dx` and its transpose at the cotangent 1 is 6. A lambda written by hand over the same
+// value -- `(dx) => 2.0 * x * dx` with `x = 3` -- is the same linear map spelled without a cut: it
+// takes the direction and reads `x` from the closure. Its transpose must answer 6 as well, and at the
+// cotangent 3 both must answer 18, because 18 is on no forward line and only an answer proportional
+// to the cotangent can produce it. The pullback answers a tuple, one member per parameter, so the
+// four readings are printed `(6.0)`, `(18.0)`, `(6.0)`, `(18.0)`.
+//
+// The pair is the whole claim. `34788b554` made the cut record which parameter each closure member
+// was the value of, and a lambda closed by hand records nothing, so its transpose refused where the
+// cut's answered -- the result depended on where the graph came from, which is what the rework
+// removes. Two numbers saying the same thing is what that removal is worth.
+import rulesets.jvp
+import rulesets.transpose
+import { jvp, split, transpose } from transforms
+
+func g(x: float): float {
+    return x * x
+}
+
+func main(): int sync {
+    // The cut's second half: closed over the residuals, which hold x = 3.
+    let (_, lin) = split(jvp(g))(3.0)
+    let byCut = transpose(lin)
+    println("cut ct1=", byCut(1.0))
+    println("cut ct3=", byCut(3.0))
+    // The same map, closed by hand over the same value.
+    let x = 3.0
+    let hand = (dx: float) => 2.0 * x * dx
+    let byHand = transpose(hand)
+    println("hand ct1=", byHand(1.0))
+    println("hand ct3=", byHand(3.0))
+    return 0
+}

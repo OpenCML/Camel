@@ -1312,9 +1312,25 @@ const camel::runtime::Program *applyOptimizeRewritePass(
         return program;
     }
     const size_t growthBudget = config.growthBudget.nodes;
-    size_t ownGrowthSpent     = 0;
-    size_t &growthSpent       = config.growthSpentNodes ? *config.growthSpentNodes : ownGrowthSpent;
-    const bool hadBudget      = growthSpent < growthBudget;
+    // The count is the caller's when it has one: `std::opt` runs the engine over its rounds against
+    // one budget (`simplifyGraph` hands it the count it keeps), so `growth_budget` bounds the work
+    // of the pass. A run given none counts into a local, which is a bound on this run and on
+    // nothing else: the next run of the pass starts from zero and spends the whole budget again.
+    // Both modes are real, and which one a run is has to be readable: a count that quietly starts
+    // over is the silence the not-settling count below had when it lived in a local. Report the
+    // local one at the place it is chosen; the budget itself stays what the pass declared.
+    size_t ownGrowthSpent      = 0;
+    const bool countedByCaller = config.growthSpentNodes != nullptr;
+    size_t &growthSpent        = countedByCaller ? *config.growthSpentNodes : ownGrowthSpent;
+    if (!countedByCaller) {
+        CAMEL_LOG_WARN_S(
+            "OptimizePass",
+            "No growth count was given (OptimizeRewriteConfig::growthSpentNodes): this run starts "
+            "its budget of {} nodes from zero, so `growth_budget` bounds this run's work and not "
+            "the pass's, and the next run of the pass spends the whole budget again",
+            growthBudget);
+    }
+    const bool hadBudget = growthSpent < growthBudget;
     // A session only inlines calls that existed when it started; calls exposed by its own
     // inlining (nested helpers, devirtualized pullbacks) wait for the next session. Repeat until
     // nothing changes; the bound only guards against a rewrite that never settles.
