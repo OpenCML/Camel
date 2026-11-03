@@ -201,18 +201,18 @@ expect_output_contains = ["proj y= 32.0", "proj d1= 10.0", "proj d2= 11.0", "loo
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
-# What a **struct** is to the cut, in the two shapes that differ by one thing: whether the body names
-# a member. A struct *port* is a port like any other -- `Tangent<Point>` is the struct of the members'
-# tangents, so the two halves take one `Point` each and the halving of the lifted signature is right
-# -- and a struct *field read* is a read by **name**, which is not a place either half numbers.
+# What a **struct** is to the cut: a struct is a port like any other -- `Tangent<Point>` is the struct
+# of the members' tangents, so the two halves take one `Point` each and the halving of the lifted
+# signature is right -- and a struct field read is a read by **name**, which the two halves carry by
+# name as well (the copy keeps `GCAccsKind::StructKey` and writes `addAccsNode(type, key)`).
 #
-# That second shape used to be lost rather than refused: the copy of an `Accs` node wrote a
+# That second shape used to be lost rather than carried: the copy of an `Accs` node wrote a
 # `TupleIndex` from the payload's `value` and dropped the key, so at run time a `Struct` was indexed
 # as a `Tuple` and the VM stopped at `idx < t->size()` ("Tuple index out of bounds", nodevm.cpp).
 # `jvp` alone answers 11.0 and 4.0 on that program, so the lift was never the defect.
 [[tests]]
 name = "split_struct_port"
-desc = "A struct parameter the body only **passes** (`g(qq: Point) = qq`): the forward half answers the struct it was handed and `lin` answers the struct of the direction's members, so the reading is `{ a: 2.0, b: 3.0 }` and `{ a: 1.0, b: 0.0 }`. `residuals=1` is the parameter's value crossing, which the tangent side needs because it reads the tangent beside it. This entry is the guard for the shape the field-read refusal is *not* about: a struct port is cut, and a cut that stopped taking one would fail here first."
+desc = "A struct parameter the body only **passes** (`g(qq: Point) = qq`): the forward half answers the struct it was handed and `lin` answers the struct of the direction's members, so the reading is `{ a: 2.0, b: 3.0 }` and `{ a: 1.0, b: 0.0 }`. `residuals=1` is the parameter's value crossing, which the tangent side needs because it reads the tangent beside it. This entry is the guard beside `split_struct_field_read`: a struct port is cut, and a cut that stopped taking one would fail here first."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_struct_port.cml"
 args = ["${case}", "std::nvm"]
@@ -224,14 +224,13 @@ timeout_ms = 20000
 
 [[tests]]
 name = "split_struct_field_read"
-desc = "A struct parameter whose member the body **names** (`g(qq: Point) = qq.a * 4.0 + qq.b`): refused by name at the read, with the member's key and the reason a half cannot copy it -- a struct's member is read by name and the halves number a tuple's places. Pinned word for word because the day the key can be copied this entry has to fail and say so: the numbers it would then print are `forward y= 11.0` and `lin dp= 4.0`, the two `jvp` alone already answers. The refusal carries the position the body is written at and names the `split` call beside it; the lift's own line above it (`lift value= 11.0 tangent= 4.0`) is what separates 'the lift is right' from 'the cut lost the graph'."
-kind = "negative"
+desc = "A struct parameter whose member the body **names** (`g(qq: Point) = qq.a * 4.0 + qq.b`), read by name through both halves: the copy of an `Accs` keeps the `GCAccsKind::StructKey` and the key, so the two halves project `a` and `b` of the same struct the source named. The reading is `forward y= 11.0` and `lin dp= 4.0` -- the two `jvp` alone answers on the same program, which is what says the cut carried the graph rather than reading another member: the cut's numbers are not the lift's by construction, they are the lift's because the same reads are copied. A member read as a *place* would misnumber a `Struct` and stop the VM at `idx < t->size()`; that is the reading this entry replaced, and it stays in the case file's header."
+kind = "behavior"
 case = "../../../cases/transforms/split/split_struct_field_read.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
-expect_exit = 1
-expect_stdout_contains = ["lift value= 11.0  tangent= 4.0", "transforms: split does not copy a field of a struct, read by name", "a struct's member is read by its **name**", "split_struct_field_read.cml:17:8"]
-expect_stderr_contains = ["REINTERP split function=jvp_of_g skip=forward construct=a field of a struct, read by name"]
+expect_exit = 0
+expect_output_contains = ["lift value= 11.0  tangent= 4.0", "forward y= 11.0", "lin dp= 4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -257,20 +256,19 @@ timeout_ms = 20000
 
 # A cut of a cut. `split(jvp(f))` with `f` calling `g` and `g` calling `h`: the cut of `jvp_of_f`
 # answers f's call with the forward half of `jvp_of_g`, and the cut of that half answered g's call
-# with the forward half of `jvp_of_h` -- a pair of graphs the nested build *adopted* and therefore
-# does not own, so the outer program held one level of them and not two. Refused at the call now, by
-# name, instead of built into a program that names a graph it does not have
+# with the forward half of `jvp_of_h` -- a pair of graphs the nested build *adopted* and therefore did
+# not own, so adopting only that build's program held one level of them and not two
 # (`runtimeTarget != nullptr`, "a direct call names a function whose graph is not in the program's
-# graph table"). `split_call_one` is the same shape one level shallower and is cut.
+# graph table"). `SplitGraph::nestedPrograms` is transitive now, and every program in it is adopted.
+# `split_call_one` is the same shape one level shallower.
 [[tests]]
 name = "split_two_nested_cuts"
-desc = "Two levels of nesting (`f` calls `g`, `g` calls `h`, `split(jvp(f))`): refused at the call to `jvp_of_g`, with the graph whose own cut stands on another (`jvp_of_h`) and the reason -- a nested build adopts the graphs a program *made*, not the ones it adopted, so the deeper pair of halves belongs to neither program the outer build can reach. The position is the body the calls stand in; the two shallower cuts (`jvp_of_h`, `jvp_of_g`) print their lines above it, which is what says the refusal is about the third level and not about a callee whose own cut failed."
-kind = "negative"
+desc = "Two levels of nesting (`f` calls `g`, `g` calls `h`, `split(jvp(f))`): the cut of `jvp_of_f` names the forward half of `jvp_of_g`, and that half names the forward half of `jvp_of_h`, which the nested build only adopted -- so the outer build adopts the programs of both levels and the deeper call resolves. The numbers are `f(x) = 3·(2x + 1)` at x = 2 -- 15 -- and 6 in the direction 1.0, the ones the lift answers on the same program: a run that had lost the deeper pair would stop at the call, and one that recomputed it would print a different 6 only by luck, so both numbers are pinned. The two shallower cuts print their own lines above (`REINTERP split function=jvp_of_h forward=` and `jvp_of_g`), which is what shows the three cuts were built and in which order."
+kind = "behavior"
 case = "../../../cases/transforms/split/split_two_nested_cuts.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
-expect_exit = 1
-expect_stdout_contains = ["transforms: split does not copy a call to `jvp_of_g`, whose own cut stands on `jvp_of_h`", "a body whose calls nest twice is a shape this cut does not carry", "split_two_nested_cuts.cml:25:8"]
-expect_stderr_contains = ["REINTERP split function=jvp_of_f skip=callee construct=a call to `jvp_of_g`, whose own cut stands on `jvp_of_h`", "REINTERP split function=jvp_of_g forward="]
+expect_exit = 0
+expect_output_contains = ["REINTERP split function=jvp_of_h forward=", "REINTERP split function=jvp_of_g forward=", "REINTERP split function=jvp_of_f forward=", "f y= 15.0", "f d= 6.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

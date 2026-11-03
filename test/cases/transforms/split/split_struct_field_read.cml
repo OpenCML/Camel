@@ -1,14 +1,15 @@
 // A struct parameter whose member the body **names**: `g(qq: Point) = qq.a * 4.0 + qq.b` at
-// qq = (2.0, 3.0). `jvp` alone answers 11.0 and 4.0 -- the lift is right -- and the cut is what used
-// to lose the graph: a struct's member is read by name (`GCAccsKind::StructKey`) and the halves copy
-// a member read by place, so the copy indexed a `Struct` as a `Tuple` at run time and the VM stopped
-// at `idx < t->size()` ("Tuple index out of bounds", nodevm.cpp).
+// qq = (2.0, 3.0). `jvp` alone answers 11.0 and 4.0 -- the lift was never the question -- and the cut
+// is where the graph used to be lost: a struct's member is read by name (`GCAccsKind::StructKey`) and
+// the halves copied a member read by place, so the copy indexed a `Struct` as a `Tuple` at run time
+// and the VM stopped at `idx < t->size()` ("Tuple index out of bounds", nodevm.cpp).
 //
-// The reading is the refusal, word for word: the construct (`a field of a struct, read by name
-// (`.a`)`), the reason, and the position the program writes the body at. Nothing here is an internal
-// error: the two halves number a tuple's places, a struct's member is named, and this is a shape the
-// cut says it does not carry. `split_struct_port` is the same program without the field read, and it
-// is cut.
+// The copy now says which of the two forms the source said -- `addAccsNode(type, key)` for a name and
+// `addAccsNode(type, value)` for a place -- so the two halves read the same member of the same struct
+// by the same name, and the cut answers what the lift answered: 11.0 and, in the direction
+// (1, 0), 4.0. A struct is a port like any other on the way through the cut: `Tangent<Point>` is the
+// struct of the members' tangents, so the two halves take one `Point` each. `split_struct_port` is the
+// same program without the field read; this one is the same program with it, and both are cut.
 import rulesets.jvp
 import { jvp, split } from transforms
 
