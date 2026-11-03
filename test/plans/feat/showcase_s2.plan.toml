@@ -1,0 +1,63 @@
+id = "showcase_s2_first_step_gradient"
+order = 918
+tier = "fast"
+tags = ["feat", "showcase", "s2", "vjp", "autodiff", "gradient"]
+
+# S2 is one end-to-end training example written with the library's own derivative
+# (`docs/handover/batches-2026-10-31-72h.cn.md`). Its first step is where the library's gradient can
+# be held against the engine's, and this plan pins that step on the ONE model the library can lift
+# today. That model is SCALAR -- `pred = x * w + b`, `loss = 0.5 * (pred - t)^2`, two gradient
+# elements -- and it is not S2's tensor model: `vjp` cannot reverse a `sum` over an array, a
+# `softmax<1>`, `mean` at an axis, or a captured array operand yet
+# (`docs/handover/reports/2026-11-03-library-vjp-walls.cn.md`). The scalar numbers prove the pipe is
+# closed end to end; they are not a reading of the tensor path.
+#
+# The two Camel legs differ only in where the weight sits, which is what design principles 9.9 says
+# the two transforms mean by "differentiated": `vjp` differentiates the ordinary parameters, so the
+# library's leg writes `(w, b)` as parameters and takes `pullback(1.0)`; `grad`/`with_grad`
+# differentiate the first `with` parameter, so the engine's leg writes the weight first and moves the
+# bias to the front with a lambda. The PyTorch reading is the third leg, recorded beside the case.
+
+[[tests]]
+name = "first_step.scalar_library_vjp.nvm"
+desc = "The first step's gradient on a SCALAR model (one weight, one bias, `x = 1.5`, `t = 2.0`), by the library's `vjp(loss_plain)(0.5, 0.75)` -> `pullback(1.0)` against the engine's `with_grad(loss_with)<0.5, 0.75>(1.5, 2.0)` plus `grad` for the bias, and against the PyTorch reading recorded beside the case (torch 2.5.1+cu121, float64, cpu): loss 0.125, dL/dw -0.75, dL/db -0.5"
+kind = "behavior"
+case = "../../cases/compile/transforms/first_step_library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = '''
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10)).map((l) => l.trim())
+const parts = (line) => Object.fromEntries(line.split(' ').slice(3).filter((p) => p.includes('='))
+    .map((p) => { const i = p.indexOf('='); return [p.slice(0, i), Number(p.slice(i + 1))] }))
+const find = (prefix) => lines.find((l) => l.startsWith(prefix))
+const libraryLine = find('first_step scalar library ')
+const engineLine = find('first_step scalar engine ')
+const diffLine = find('first_step scalar diff_library_vs_engine ')
+const valueLine = find('first_step scalar value ')
+for (const [name, line] of [['library', libraryLine], ['engine', engineLine],
+                            ['diff_library_vs_engine', diffLine], ['value', valueLine]]) {
+    assert(line !== undefined, `no line reported for ${name}`)
+}
+const library = parts(libraryLine)
+const engine = parts(engineLine)
+for (const [name, values] of [['library', library], ['engine', engine]]) {
+    assert(Number.isFinite(values.w) && Number.isFinite(values.b),
+        `${name}: the weight and the bias were not both reported`)
+}
+const diffs = parts(diffLine)
+for (const key of ['w', 'b', 'value']) {
+    assert(Number.isFinite(diffs[key]), `diff_library_vs_engine: no ${key}`)
+    assert(diffs[key] <= 1e-12, `diff_library_vs_engine: ${key} differs by ${diffs[key]}, more than 1e-12`)
+}
+const worst = parts(find('first_step scalar max_abs_diff_library_vs_engine ')).e
+assert(worst === undefined || Number.isFinite(worst), 'the largest difference is not a number')
+const values = parts(valueLine)
+assert(Number.isFinite(values.library) && Number.isFinite(values.engine),
+    'the two losses were not reported on one line')
+}
+'''
+timeout_ms = 120000
