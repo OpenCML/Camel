@@ -1797,3 +1797,46 @@ timeout_ms = 20000
 known_fail = ["nvm"]
 known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply"
 known_fail_note = "The open-rank half of the product law's gap, kept as the clock for the one wrong spelling. Desired: value=12.0, d/dx numel=3 d/dx=[2.0, 2.0, 2.0], d/dw numel=1 d/dw=[6.0] (hand: product [2,4,6], ct [1,1,1], d/dx = broadcast(w), d/dw = sum(ct*x)). Today: the walk asks stdlib/rulesets/transpose.cml#mul_tensor_t for the tangent's cotangent, the law's sum_to reads that operand for its shape, that operand is a tangent, and float[..] states no extents -- shapeCarrierOf answers a stated type only (author 2026-11-03 16:15) -- so it stops at skip=cotangent-needs-a-value uri=tensor:multiply position=0. Two dead ends for closing it, both measured: extent_of answers nothing for float[..] (extent_of_needs_a_type_that_states_its_shape guards that side), and sum_to's second argument wants a value, so read-only-the-length needs a sum_to_stated(t, at: int[]) twin that git grep finds in no branch and that would live in modules/tensor. And the shortcut must not be taken: naming the operand each side is NOT answering for (sum_to(ct * w, w)) clears the refusal and answers d/dx numel=1 d/dx=[6.0] and d/dw numel=3 d/dw=[1.0, 2.0, 3.0], measured 2026-11-04, because sum_to's second argument is the target shape and the two shapes being equal is invisible on an open rank. A named refusal is better than a wrong number."
+# The other three D1 activations with their shapes in the type: the same pair of legs in one program,
+# on inputs chosen so a wrong law separates without a tolerance.
+[[tests]]
+name = "relu_gradient_of_a_stated_shape"
+desc = "`sum(relu(x))` with `x: float[4] = [-1.5, 0.0, 2.5, 0.25]`, through both legs in one program -- the engine's (`grad`, whose mask is `y > 0`) and the library's (`vjp` -> `split(jvp)` -> `transpose`, whose mask is `x > 0`). Hand: `mask = [0.0, 0.0, 1.0, 1.0]` and `value = 0 + 0 + 2.5 + 0.25 = 2.75`. The input holds a negative, the boundary itself and two positives, so an answer that took either side at zero (`[0.0, 1.0, 1.0, 1.0]`) or that answered `ct` everywhere (`[1.0, 1.0, 1.0, 1.0]`) is separated element by element. The fixed-shape half of the pair: `relu_gradient_through_the_library` (`float[]`) still refuses, because the product law reads the tangent's own shape and `float[..]` states no extents."
+kind = "behavior"
+case = "../../../cases/compile/transforms/relu_gradient_of_a_stated_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["relu stated engine d=[0.0, 0.0, 1.0, 1.0]", "relu stated library value=2.75 d=[0.0, 0.0, 1.0, 1.0]"]
+expect_output_not_contains = ["skip=cotangent-needs-a-value", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "sigmoid_gradient_of_a_stated_shape"
+desc = "`sum(sigmoid(x))` with `x: float[2] = [0.0, 2.0]`, through both legs in one program. Hand: `s(0) = 0.5`, `s(2) = 1/(1+e^-2) = 0.8807970779778823`, `value = 1.3807970779778822`, and the slope is `s(x)(1-s(x))`, so `d = [0.25, 0.10499358540350662]`. The points are chosen to separate the wrong laws: near zero every candidate looks alike, here the two components are unequal and both well away from zero, so `ct` (`[1.0, 1.0]`) and `ct * s(x)` with the `1 - s(x)` factor dropped (`[0.5, 0.8807970779778823]`) are both separated without a tolerance. The fixed-shape half of the pair: `sigmoid_gradient_through_the_library` (`float[]`) still refuses."
+kind = "behavior"
+case = "../../../cases/compile/transforms/sigmoid_gradient_of_a_stated_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["sigmoid stated engine d=[0.25, 0.10499358540350662]", "sigmoid stated library value=1.3807970779778822 d=[0.25, 0.10499358540350662]"]
+expect_output_not_contains = ["skip=cotangent-needs-a-value", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "tanh_gradient_of_a_stated_shape"
+desc = "`sum(tanh(x))` with `x: float[2] = [1.5, -2.0]`, through both legs in one program. Hand: `tanh(1.5) = 0.9051482536448664`, `tanh(-2.0) = -0.9640275800758169`, `value = -0.05887932643095051`, and the slope is `1 - tanh^2(x)`, so `d = [0.18070663892364858, 0.07065082485316443]`. Both components differ and both sit away from zero, so `ct` (`[1.0, 1.0]`) and `1 - tanh(x)` are separated without a tolerance. The fixed-shape half of the pair: `tanh_gradient_through_the_library` (`float[]`) still refuses, because the product law reads the tangent's own shape for `sum_to` and `float[..]` states no extents (`shapeCarrierOf` answers a stated type only, author 2026-11-03 16:15)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/tanh_gradient_of_a_stated_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["tanh stated engine d=[0.18070663892364858, 0.07065082485316443]", "tanh stated library value=-0.05887932643095051 d=[0.18070663892364858, 0.07065082485316443]"]
+expect_output_not_contains = ["skip=cotangent-needs-a-value", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

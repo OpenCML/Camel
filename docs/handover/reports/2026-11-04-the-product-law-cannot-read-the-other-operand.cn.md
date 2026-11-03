@@ -56,35 +56,45 @@ engine d/dw numel=1 d/dw=[6.0]
   - 回退后、加新用例前：`feat/compile/transforms` `111 = 105 / 2 / 4`；`feat/compile`
     `2249 = 2239 / 2 / 8`（`719fc2baf` 的基线是 `2238/2/9`，差的 1 条 known 是并入的 `bbfc003ec`
     回掉的 `transpose_hand_closed_lambda`）。
-  - 加三条新用例之后：`feat/compile/transforms` **`116 = 109 / 2 / 5`**；`feat/compile`
-    **`2254 = 2243 / 2 / 9`**。总数 2249→2254 正是新增的 5 个条目（exp 2 + 广播写死形状 2 + 广播开秩 1）；
-    `fail` 仍是 **2**（一直是基线那两条 `transpose_loop_escape.*`），`known failures` 8→9 是**预期**的
-    ——按裁决保留的那条开秩广播钟。
+  - 加六条新用例之后（最终）：`feat/compile/transforms` **`122 = 115 / 2 / 5`**；`feat/compile`
+    **`2260 = 2249 / 2 / 9`**。总数 2249→2260 正是新增的 11 个条目（5 条绿 × nvm+fvm + 1 条开秩
+    known_fail × nvm）；`fail` 仍是 **2**（一直是基线那两条 `transpose_loop_escape.*`），
+    `known failures` **仍是 9**——六条新用例一条都没进已知失败列表。
   - `test/plans/feat/transforms`：`29 = 21 / 0 / 8`，退出码 0，与加用例前逐字相同（红数没增）。
 - `transpose(pick)`（`transforms.plan.toml#transpose_refuses_a_parameter_value_it_cannot_be_handed`）
   仍答 `([0.0, 1.0, 0.0])`；`mean_axis1_keepdims_gradient_reads_the_row_length` 仍答
   `mean_axis1 keepdims value=120.0 cotangent=[[3.3333333333333335, 3.3333333333333335, 3.3333333333333335], [6.666666666666667, 6.666666666666667, 6.666666666666667]]`。
 
-## 2.1 补上的三条用例（乙只做一半：加固定形状的，删不动开秩的）
+## 2.1 补上的六条用例（乙只做一半：加固定形状的，删不动开秩的）
 
 派工的裁决是"固定形状是今天能对，开秩是今天拒，两者都要有；把开秩那条删掉就是把未来的钟拆了"。
-所以开秩那 6 条 `known_fail` 一个字没动，另加三条：
+所以开秩那 6 条 `known_fail` 一个字没动，另加六条。
 
-| 用例 | 类型 | 今天 | 读数 |
+| 用例 | 类型 | 今天 | 读数（同一程序里的两腿） |
 | --- | --- | --- | --- |
-| `exp_gradient_of_a_stated_shape` | `float[2]` | PASS（nvm+fvm） | 两腿都印：`exp stated engine d=[2.718281828459045, 7.38905609893065]`、`exp stated library value=10.107337927389695 d=[2.718281828459045, 7.38905609893065]` |
+| `exp_gradient_of_a_stated_shape` | `float[2]` | PASS（nvm+fvm） | `exp stated engine d=[2.718281828459045, 7.38905609893065]`、`exp stated library value=10.107337927389695 d=[2.718281828459045, 7.38905609893065]` |
+| `relu_gradient_of_a_stated_shape` | `float[4]` | PASS（nvm+fvm） | `relu stated engine d=[0.0, 0.0, 1.0, 1.0]`、`relu stated library value=2.75 d=[0.0, 0.0, 1.0, 1.0]` |
+| `sigmoid_gradient_of_a_stated_shape` | `float[2]` | PASS（nvm+fvm） | `sigmoid stated engine d=[0.25, 0.10499358540350662]`、`sigmoid stated library value=1.3807970779778822 d=[0.25, 0.10499358540350662]` |
+| `tanh_gradient_of_a_stated_shape` | `float[2]` | PASS（nvm+fvm） | `tanh stated engine d=[0.18070663892364858, 0.07065082485316443]`、`tanh stated library value=-0.05887932643095051 d=[0.18070663892364858, 0.07065082485316443]` |
 | `broadcast_product_gradient_of_a_stated_shape` | `float[3]`×`float[1]` | PASS（nvm+fvm） | `engine d/dx numel=3 d/dx=[2.0, 2.0, 2.0]`、`engine d/dw numel=1 d/dw=[6.0]`、`library value=12.0 d/dx numel=3 d/dx=[2.0, 2.0, 2.0] d/dw numel=1 d/dw=[6.0]` |
-| `broadcast_product_gradient_of_an_open_rank` | `float[..]`×`float[..]` | XFAIL（pin 拒绝） | 期望即上表的 `value=12.0 / [2,2,2] / [6.0]`；今天停在 `skip=cotangent-needs-a-value uri=tensor:multiply position=0` |
+| `broadcast_product_gradient_of_an_open_rank` | `float[..]`×`float[..]` | XFAIL（pin 拒绝） | 期望是 `value=12.0 / [2,2,2] / [6.0]`；今天停在 `skip=cotangent-needs-a-value uri:tensor:multiply position=0` |
 
-每条用例的注释里都先写手算，再写读数。固定形状两条**同时印引擎腿（`grad`）与库层腿（`vjp`）**，两腿逐位
-相同——这样任一侧的规则改动都会在**同一个程序的两行之间**显出来，而不是在两条用例之间。
+每条用例的注释里都先写手算，再写读数。四个激活的输入都是自己选的、注释里写明为什么选它——不是照抄历史
+读数：`relu` 的 `[-1.5, 0.0, 2.5, 0.25]` 同时含负、正和**恰好 0**，所以"0 处取哪一侧"分得开
+（`[0.0, 0.0, 1.0, 1.0]` 对 `[0.0, 1.0, 1.0, 1.0]`）；`sigmoid` 的 `[0.0, 2.0]` 给 `[0.25, 0.10499358540350662]`，
+两个分量不相等且都离 0 远（0 附近导数近似，错律分不开）；`tanh` 的 `[1.5, -2.0]` 给
+`[0.18070663892364858, 0.07065082485316443]`，同理。每条都**只用一个程序印两条腿**并由 plan 同时 pin，
+任一侧规则改动都会在同一程序的两行之间显出来，而不是在两条用例之间。
 
-**广播那条为什么是钟**：`sum_to` 的第二实参是归约目标形状，所以"每一侧读另一个操作数"这个写法在等形状上
-对、在广播上错。今天库层对广播的答案依赖 `shapeCarrierOf` 认的是**写死的类型**；一旦有人按那个写法改律，
-`broadcast_product_gradient_of_a_stated_shape`（绿）会立刻答成 `d/dx numel=1 d/dx=[6.0]`、
-`d/dw numel=3 d/dw=[1.0, 2.0, 3.0]` 而变红，`broadcast_product_gradient_of_an_open_rank`（known_fail）会
-从"拒绝"变成"错数"而漂移。这两条就是本次错数在用例库里的钟——**在此之前 `test/plans/` 下没有任何一条
-把 `float[1]`／秩 0 的 `w` 与 `float[3]` 的 `x` 一起送进乘积的转置**，所以那个错数一条现成的用例都抓不到。
+### 方法论：能"答对"的用例比 `known_fail` 更硬
+
+**广播那条写死形状的用例今天不是按名拒绝，是答对**——`shapeCarrierOf` 认写死的类型（`float[3]`），
+形状有了、载体就有了，所以库层能算出 `[2,2,2]` 与 `[6.0]` 并和引擎逐位相同。
+
+**因此钟是绿的，比 `known_fail` 更硬：改坏立刻红，而不是"哪天通了才红"。** 那条错数（读另一个操作数）
+一变回来，这条绿用例当场答成 `d/dx numel=1 d/dx=[6.0]`、`d/dw numel=3 d/dw=[1.0, 2.0, 3.0]`；而 `known_fail`
+在同样的情况下只是"从拒绝变成错数"，还要有人盯着已知失败列表才发现。**下一步再遇到"某个写法看着能通、
+但只在更强的前提下成立"时，先找那个最强前提下今天已经能答对的输入，把钟做成绿的。**
 
 **`ast_hashes.txt` 确认**：`test/plans/feat/parse/golden/ast_hashes.txt` 共 304 条，`compile/` 与
 `transforms/` 的条目各 0 条（只覆盖 `test/cases/parse/**` 与 probes），所以新增
