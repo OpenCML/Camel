@@ -65,6 +65,11 @@ namespace camel::transforms {
 /// residual, which the build reads off the backward graph. `pair` is the type the call `split(f)`
 /// answers with, i.e. the forward half. `why` says why there are none when the function is outside
 /// what the step takes.
+///
+/// The **forward** half is the one that carries the source's `with` list; `backward` carries none
+/// (author, 2026-11-03 15:15). A `with` value the backward half reads is a residual, so it arrives
+/// in `lin`'s closure, and `lin` stays an ordinary function of the tangents -- which is what makes
+/// `transpose(lin)` the declared `Pullback<F>` `(ct) => (..Tangent<ParamsOf<F>>)`.
 struct SplitHalves {
     camel::core::type::FunctionType *forward    = nullptr;
     camel::core::type::FunctionType *backward   = nullptr;
@@ -88,10 +93,12 @@ SplitHalves splitHalvesWith(
     camel::core::type::FunctionType *function, camel::core::type::Type *residuals);
 
 /// One residual: a value the forward half computes and the backward half reads, so that the cut
-/// between the two graphs carries it instead of recomputing it.
+/// between the two graphs carries it instead of recomputing it. A `with` port the backward half reads
+/// is one of these even though nothing computes it: the forward half holds the port that receives the
+/// value, and that port is what crosses.
 struct Residual {
-    /// The node of the lifted graph that computes the value -- a parameter port, or a node the
-    /// forward half keeps.
+    /// The node of the lifted graph that computes the value -- a parameter port, a `with` port, or a
+    /// node the forward half keeps.
     camel::runtime::gc_node_ref_t node = camel::runtime::kInvalidNodeRef;
     camel::core::type::Type *type      = nullptr;
     /// The parameter it is the value of, when it is a parameter; `kNotAParameter` when it is a value
@@ -110,7 +117,8 @@ struct Residual {
 /// the result reaches is computed before the cut, and a node the tangent reaches is computed after
 /// it. Where a walk from the tangent side arrives at a node that is already on the result side, that
 /// node's value crosses the cut -- it is a residual, and the walk stops there rather than descending
-/// into the forward half.
+/// into the forward half. A `with` port the tangent side reads crosses the same way, whether or not
+/// the result side reads it too (author, 2026-11-03 15:15: 后一半要读的东西都是残差，`with` 值也在内).
 ///
 /// Program order: parameters by their index, then computed values by their node. The answer is empty
 /// when the graph is not a lifted graph (the exit is not the pair), which is when there is nothing

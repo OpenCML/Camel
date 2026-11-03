@@ -327,6 +327,15 @@ struct Half {
                 values.push_back(all[port]);
             }
         }
+        // ...and the call's `with` arguments, which `valuePortsOf` does not name: they are not
+        // ordinary parameters of the lifted signature, they stand at the end of the data list
+        // (`dataInputsOf`), and a retargeted call still passes them to the primal. A half that takes
+        // the value ports and not these places the last value it did take in the `with` slot, which
+        // is a call the runtime refuses by name (measured 2026-11-04: `FUNC node 2 passing 0
+        // arguments and 1 'with' arguments to 'weighted', which takes 1 and 1`).
+        for (gc_node_ref_t input : source->withInputsOf(ref)) {
+            values.push_back(input);
+        }
         return values;
     }
 
@@ -381,6 +390,26 @@ struct Half {
             return rt::kInvalidNodeRef;
         }
         return draft.materializeStaticValue(slots[static_cast<size_t>(index)], node->dataType());
+    }
+
+    /// Places a call's arguments on its copy: the ordinary ones as the call's norm inputs and the
+    /// context ones as its `with` inputs. `halfInputsOf` is `dataInputsOf`, which is the ordinary
+    /// inputs followed by the context ones (`dataInputsOf` above), so a copy that hands that one list
+    /// to `setNormInputs` passes the call's `with` argument as an ordinary one -- and a call the graph
+    /// names is checked against what the callee declares at run time. Measured 2026-11-04 on the
+    /// composition `vjp((ww) => weighted<ww>(2.0))(3.0)`: `Runtime graph
+    /// 'split_of_jvp_of___g_247___forward' has FUNC node 2 passing 1 arguments and 0 'with' arguments
+    /// to 'weighted', which takes 1 and 1`.
+    void placeCallArguments(gc_node_ref_t made, gc_node_ref_t ref,
+                            const std::vector<gc_node_ref_t> &placed) {
+        size_t withCount = source->withInputsOf(ref).size();
+        if (withCount > placed.size()) {
+            withCount = placed.size();
+        }
+        const size_t normCount = placed.size() - withCount;
+        draft.setNormInputs(made, std::span<const gc_node_ref_t>(placed.data(), normCount));
+        draft.setWithInputs(made,
+                            std::span<const gc_node_ref_t>(placed.data() + normCount, withCount));
     }
 
     /// The copy of one source node, its inputs already copied. The kinds below are the tier the
@@ -504,6 +533,26 @@ struct Half {
                         std::to_string(parameterOfPort(source->funcType(), index).first) +
                     ", and it is not one of the values the cut carries");
         }
+        // What the refusal above states is the invariant this cut keeps: the tangent half reads only
+        // values that cross the cut -- the ones `residualsOf` listed -- plus what the tangent half
+        // itself computes from them. A parameter's value is one of the former whenever the tangent
+        // half reads it: `residualsOf` asks the tangent side's own walk what it reads, not which
+        // parameter index a port belongs to, and it keeps a parameter's value port on the same terms
+        // it keeps a computed value (2026-11-02 00:30: the rule does not split by type; 2026-11-03
+        // 15:15: 后一半要读的东西都是残差). That is also why the refusal is not reachable today: a
+        // parameter value the backward half reads is in the residual list before this walk runs, so
+        // `makeCopy` answers it from the tuple (`crossesCut`, above) and never arrives here.
+        //
+        // It is kept, deliberately, and not replaced by an assertion: 对 > 明确拒绝 > 错数 > 崩 is
+        // the order, and an assertion here would turn a refusal into the worst of the four. Its being
+        // unreachable in the shapes this lane measured is a reading and not a proof -- measured
+        // 2026-11-04: no case in the tree pins this message, and this lane could not construct a
+        // shape that still reaches it; another lane instrumented the same site on other shapes and
+        // saw zero entries. Zero entries and unreachable are two different conclusions, and this
+        // project has already paid once tonight for treating them as one. If it is ever *proved*
+        // unreachable for every input, delete this refusal and demote the invariant above to a
+        // comment -- do not delete it on the strength of a count. Never delete it while it is the
+        // only refusal standing between this walk and a half that reads a value nothing carries.
         case rt::GCNodeKind::Data: {
             // A constant stands for the same value in the copy; `writeConstant` is that writer, so the
             // DATA case and the reachability walk write it the same way. A constant whose slot is not
@@ -596,7 +645,7 @@ struct Half {
                     pair != nullptr ? pair->typeAt(0) : node->dataType();
                 const gc_node_ref_t made = draft.addFuncNode(
                     primal, valueType, 0, draft.allocateRuntimeSlot(valueType), 0);
-                draft.setNormInputs(made, inputs);
+                placeCallArguments(made, ref, inputs);
                 draft.addDependency(primal);
                 copyOf[ref] = made;
                 retargetedCalls.insert(ref);
@@ -608,7 +657,7 @@ struct Half {
             const gc_node_ref_t made = draft.addFuncNode(
                 callee, node->dataType(), 0, draft.allocateRuntimeSlot(node->dataType()), 0,
                 source->callTangentArgsOf(ref));
-            draft.setNormInputs(made, inputs);
+            placeCallArguments(made, ref, inputs);
             draft.addDependency(callee);
             copyOf[ref] = made;
             return true;
@@ -806,6 +855,17 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
             portIndex[ports[i]] = i;
         }
     }
+    // The `with` ports of the lifted graph: a value the call supplies, read by the body through a
+    // port of its own. A `with` port the tangent side reads crosses the cut like any other value it
+    // reads -- 后一半要读的东西都是残差，`with` 值也在内 (author, 2026-11-03 15:15) -- so it is a
+    // residual, and the backward half reads it out of `lin`'s closure instead of taking a `with` list
+    // of its own. Asking it here, and not only through the walk below, is what makes the answer
+    // independent of whether the result side happens to read the same weight: a weight only the
+    // tangent side reads is still a value that side reads.
+    const std::span<const gc_node_ref_t> withPorts = lifted.withPorts();
+    const auto isWithPort                          = [&withPorts](gc_node_ref_t ref) {
+        return std::find(withPorts.begin(), withPorts.end(), ref) != withPorts.end();
+    };
     // A value the tangent side reads and the result side already computed crosses the cut: it is a
     // residual, and the walk stops at it (what is inside the forward half is not this function's
     // business). A node the result side never reaches is part of the tangent chain: the walk goes
@@ -824,6 +884,15 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 continue;
             }
             visited[ref] = 1;
+            if (isWithPort(ref)) {
+                // A `with` port has no producer on either side of the cut, so nothing is computed
+                // for it and the walk has nowhere further to go: the value is the call's, and the
+                // forward half is the half that holds the port which receives it.
+                if (std::find(found.begin(), found.end(), ref) == found.end()) {
+                    found.push_back(ref);
+                }
+                continue;
+            }
             if (beforeCut[ref] != 0 && ref != tangentHalf) {
                 // A call of a lifted graph reads both sides of the cut and is not itself carried (see
                 // the note where the list is filtered below): what the tangent half recomputes the
@@ -835,8 +904,28 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 }
                 const std::vector<gc_node_ref_t> arguments = dataInputsOf(&lifted, ref);
                 // The lifted callee takes its values and then its tangents (`jvpSignature`), so the
-                // value arguments are the first half of what the call passes.
-                for (size_t i = 0; i < arguments.size() / 2; ++i) {
+                // value arguments are the first half of what the call passes -- of the *ordinary*
+                // arguments. `dataInputsOf` is the ordinary inputs followed by the context ones
+                // (`dataInputsOf` above), so the count to halve is the list without the call's `with`
+                // arguments: halving the whole list puts the boundary in the wrong place as soon as a
+                // lifted callee keeps a `with` list, and the value that lands on the boundary is the
+                // caller-side weight. 后一半要读的东西都是残差 (author, 2026-11-03 15:15), and this
+                // half hands the callee that weight, so the walk keeps it; dropping it is what made
+                // the composition `vjp((ww) => f<ww>(..))(w)` refuse one step past the exit, in the
+                // backward walk's own words, `the backward half reads the value of parameter 0, and it
+                // is not one of the values the cut carries` (measured 2026-11-04).
+                const size_t withArguments = lifted.withInputsOf(ref).size();
+                const size_t valueArguments =
+                    arguments.size() > withArguments ? arguments.size() - withArguments : 0;
+                for (size_t i = 0; i < valueArguments / 2; ++i) {
+                    const gc_node_ref_t input = arguments[i];
+                    if (input < nodeCount && visited[input] == 0) {
+                        stack.push_back(input);
+                    }
+                }
+                // ...and the context arguments themselves, which are values it reads just as it reads
+                // the ordinary ones.
+                for (size_t i = valueArguments; i < arguments.size(); ++i) {
                     const gc_node_ref_t input = arguments[i];
                     if (input < nodeCount && visited[input] == 0) {
                         stack.push_back(input);
@@ -1063,9 +1152,15 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
         }
     }
 
-    // The lift's `with` parameters, in both halves: a weight is read on both sides of the cut, and
-    // it is a value the call supplies, not a residual the cut carries. This is the list the halves'
-    // signatures declare, so the ports and the types cannot disagree.
+    // The lift's `with` parameters, on the **forward** half only (author, 2026-11-03 15:15: 带 `with`
+    // 的函数，pullback 带不带 `with` 列表——不带，闭包捕获). The forward half reads a weight to compute
+    // the value, and a weight is a value the call supplies, so its signature declares the list and
+    // `addWithPorts` gives it one port per member. The backward half does not: what it reads after the
+    // cut is a residual by the one rule -- 后一半要读的东西都是残差，进 `lin` 的闭包 -- and a `with`
+    // value is one of them, so `lin` is a function of the tangents alone and `transpose(lin)` is the
+    // declared `Pullback<F>` `(ct) => (..Tangent<ParamsOf<F>>)` with no list of its own. The list is
+    // still read off the lift's type, so a caller writes the `with` values once, where `vjp`'s lambda
+    // takes them.
     param_vec_t withParams;
     for (size_t i = 0; i < function->withTypesCount(); ++i) {
         Type *withType = function->withTypeAt(i);
@@ -1084,11 +1179,11 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
     // Each half does part of what the source does to the outside world, so each publishes the
     // source's effects: a half whose print nobody depends on does not run at all.
     //
-    // The backward half takes the tangents and nothing else. Its residuals are its captures, so its
-    // type holds no residual position -- which is the whole point of the ruling: at a call site `lin`
-    // is an ordinary function type, so there is no arity a signature could not know, and no guard has
-    // to be loosened to admit one.
-    halves.backward = FunctionType::create(withParams, tangentParams, tangent)
+    // The backward half takes the tangents and nothing else. Its residuals are its captures -- a
+    // `with` value among them (`residualsOf`) -- so its type holds no residual position and no `with`
+    // list: at a call site `lin` is an ordinary function type, so there is no arity a signature could
+    // not know, and no guard has to be loosened to admit one.
+    halves.backward = FunctionType::create(param_vec_t(), tangentParams, tangent)
                           ->withResources(function->resources());
     // The forward half answers `(result, lin)`: the value and the linear function closed over the
     // residuals it was computed with. `lin`'s type is the backward half's, so the pair's second member
@@ -2260,11 +2355,14 @@ ExitShape exitShapeOf(const rt::GCGraph *function, gc_node_ref_t exit, LoopCut &
 /// The `with` parameters of the source, as ports of one half. A `with` parameter is a value the
 /// caller supplies at the call; the lifted body reads it through a `with` port, and a half that did
 /// not list such a port would refuse that read with "the port is not a parameter of the graph".
-/// So each half declares them, in the declaration's order and of the declared type -- the same list
-/// `jvpSignature` writes for the lifted graph, minus nothing: a `with` value is not a component of a
-/// pair, so it is not halved, and it is not a residual either, so it does not travel in `lin`'s
-/// closure. A `var` `with` parameter is listed as the variable it was declared as; a half reads it
-/// and does not write it.
+/// So each half that declares the list also declares these ports, in the declaration's order and of
+/// the declared type -- the same list `jvpSignature` writes for the lifted graph, minus nothing: a
+/// `with` value is not a component of a pair, so it is not halved.
+///
+/// Only the forward half declares it (author, 2026-11-03 15:15). The backward half reads a `with`
+/// value it needs out of `lin`'s closure, where `residualsOf` put it as a residual, so it has no
+/// port of its own to give it and no list to state; `lin` being an ordinary function of the tangents
+/// is what keeps the pullback's type free of the `with` list.
 bool addWithPorts(Half &half, const rt::GCGraph *function) {
     if (function == nullptr || function->funcType() == nullptr) {
         return true;
@@ -2651,6 +2749,16 @@ SplitGraph buildSplitGraph(
                 }
             }
             if (value == rt::kInvalidNodeRef) {
+                // A `with` port the backward half reads: the forward half holds the port that
+                // receives that value at the call (`addWithPorts`), and that port is what crosses in
+                // the closure -- nothing is computed for it, so no walk reaches it unless the result
+                // side happens to read the same weight.
+                const auto withPort = forward.withPortOf.find(residual.node);
+                if (withPort != forward.withPortOf.end()) {
+                    value = withPort->second;
+                }
+            }
+            if (value == rt::kInvalidNodeRef) {
                 os << "REINTERP split function=" << function->name()
                    << " skip=residual (the forward half does not compute a value the cut carries)\n";
                 return built;
@@ -2673,7 +2781,9 @@ SplitGraph buildSplitGraph(
     }
     {
         // The backward half: the tangent of every parameter in -- the residuals arrive by its closure
-        // ports -- and the tangent out.
+        // ports, a `with` value among them -- and the tangent out. No `with` list is declared here
+        // (author, 2026-11-03 15:15), so there are no `with` ports to make either: a read of one is
+        // a read of the closure port `addResidualCaptures` gave it.
         auto &draft = group.transaction(backwardId).edit();
         draft.setFuncType(halves.backward);
         std::unordered_map<gc_node_ref_t, size_t> residualIndexOf;
@@ -2681,11 +2791,6 @@ SplitGraph buildSplitGraph(
             residualIndexOf[graphResiduals[i].node] = i;
         }
         Half backward(draft, function, program, true, &graphResiduals, &residualIndexOf);
-        if (!addWithPorts(backward, function)) {
-            os << "REINTERP split function=" << function->name()
-               << " skip=backward (a `with` parameter of the source has no type)\n";
-            return built;
-        }
         addResidualCaptures(draft, graphResiduals, backward);
         for (size_t i = sourcePorts.size() / 2; i < sourcePorts.size(); ++i) {
             Type *type       = function->funcType()->normTypeAt(i);

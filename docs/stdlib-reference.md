@@ -1542,13 +1542,14 @@ instantiated `Vjp<F>` has -- the `with` list and the parameters, each from the p
 stands in (author's rulings of 2026-11-01 19:10 and 2026-11-03 13:50). The packs are values in the
 body: `xs` is the tuple of the parameters and `ws` the tuple of `f`'s `with` values, so
 `split(jvp(f))<..ws>(..xs)` hands the forward half the list it declares and the parameters it
-takes. `transpose(lin)` takes no `with` argument written for it: its type already has one --
-`lin` is a function of `f`'s `with` list, because a `with` value is a constant of the transform
-rather than a residual the cut could capture, so the linear half is too, and its transpose is as
-well (`Pullback<F>` in stdlib/types.cml, author's ruling of 2026-11-03 13:50 deciding the list by
-the type). The lambda writes the pack rather than naming the `with` parameters: `Vjp<F>` splices
-`WithOf<F>` as types, and a body that read a name from there would depend on what the caller of
-`vjp` called its own parameters.
+takes. `transpose(lin)` takes no `with` argument and none is written for it: `lin` has no `with`
+list, because the `with` value the backward half reads is a residual the cut captured in its
+closure (author's ruling of 2026-11-03 15:15; `Pullback<F>` in stdlib/types.cml is
+`(ct) => (..Tangent<ParamsOf<F>>)`, no list). So the `with` values are written once, where the
+lambda receives them, and `split(jvp(f))<..ws>(..xs)` is the only place they appear. The lambda
+writes the pack rather than naming the `with` parameters: `Vjp<F>` splices `WithOf<F>` as types,
+and a body that read a name from there would depend on what the caller of `vjp` called its own
+parameters.
 The whole reading in one line: the function is written where the call is, so the example is a
 program of its own -- `y` is `x * x` at 3, and the pullback read at `ct = 1.0` answers the
 derivative there, one member per parameter.

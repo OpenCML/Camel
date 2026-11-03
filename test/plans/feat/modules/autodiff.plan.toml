@@ -2670,7 +2670,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_first_with_parameter.cml"
 args = ["${case}", "std::macro", "${run_nvm}"]
 expect_exit = 0
-expect_stdout_contains = ["gx=3.0 vg=(9.0, 3.0)", "pg={ a: 4.0, b: 1.0 }", "pvg=(11.0, { a: 4.0, b: 1.0 })", "sk=6.0 sx=4.0"]
+expect_stdout_contains = ["gx=3.0 vg=(9.0, 3.0) gy=3.0 gl=3.0", "pg={ a: 4.0, b: 1.0 } pvg=(11.0, { a: 4.0, b: 1.0 })", "wg=[4.0, 5.0, 6.0] wvg=(32.0, [4.0, 5.0, 6.0])", "sk=6.0 sx=4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -2681,7 +2681,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_first_with_parameter.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
-expect_stdout_contains = ["gx=3.0 vg=(9.0, 3.0)", "pg={ a: 4.0, b: 1.0 }", "pvg=(11.0, { a: 4.0, b: 1.0 })", "sk=6.0 sx=4.0"]
+expect_stdout_contains = ["gx=3.0 vg=(9.0, 3.0) gy=3.0 gl=3.0", "pg={ a: 4.0, b: 1.0 } pvg=(11.0, { a: 4.0, b: 1.0 })", "wg=[4.0, 5.0, 6.0] wvg=(32.0, [4.0, 5.0, 6.0])", "sk=6.0 sx=4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
