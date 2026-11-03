@@ -1,0 +1,57 @@
+/**
+ * The library's `vjp` of a mean along an axis that is NOT the last one, with `keepdims`.
+ *
+ * `jvp_mean_axis` (`stdlib/rulesets/jvp.cml#jvp_mean_axis`) writes the tangent as
+ * `dxs * (1 / shape(xs)[axis])`, so the tangent keeps the *operand's* shape while the reduced
+ * output's tangent is the reduced one. At `keepdims = false` on a non-last axis the two cannot
+ * broadcast and the run stops in the tensor kernel -- measured 2026-11-04 on
+ * `mean_axis(x, 1, false)`: `TensorDimensionMismatch: Array shape mismatch in 'multiply':
+ * cannot broadcast [2, 3] with [2]`. With `keepdims = true` and a weight of the output's own
+ * shape the two do broadcast and the numbers are CORRECT, which is what this file pins: the law
+ * is not wrong where it builds, what it lacks is the reduction of the tangent's shape
+ * (`docs/handover/questions/2026-11-04-does-a-mean-tangent-reduce-the-axis-it-averaged`).
+ *
+ * Why this reading is worth a case of its own: the `arity` wall -- a three-operand `mean_axis`
+ * node in a transposed *value* graph -- is what hides the broadcast inside `mean_axis_t`
+ * (`stdlib/rulesets/transpose.cml#mean_axis_t`) today; a naked `transpose` of this loss stops at
+ * `skip=arity uri=tensor:mean_axis operands=3` (measured the same day). When that wall falls,
+ * this entry is the guard that says these numbers must not move.
+ *
+ * The reading is ELEMENT BY ELEMENT, derived by hand and not read off a run:
+ *
+ *   mean  f(x) = sum(mean_axis(x, 1, true) * [[10], [20]]) on x = [[1, 2, 3], [4, 5, 6]]
+ *         the row means are [[2], [5]], so f = 2 * 10 + 5 * 20 = 120.0; every position of a row
+ *         was averaged over that row's 3 positions, so the cotangent at ct = 1.0 is w[i] / 3,
+ *         constant along the row:
+ *
+ *           [[3.333333333333333, 3.333333333333333, 3.333333333333333],
+ *            [6.666666666666666, 6.666666666666666, 6.666666666666666]]
+ *
+ * What a wrong length answers on the same input (author's criterion ruling, 2026-11-03 15:15: a
+ * criterion reads the array, not an aggregate of it):
+ *
+ *   * the OTHER extent, 2 -- `w[i] / 2` -- is `[[5, 5, 5], [10, 10, 10]]`, which separates from
+ *     the target at the first element: 5 against 3.333;
+ *   * the total, `numel(x) = 6` -- `w[i] / 6` -- is `[[1.666..., 1.666..., 1.666...],
+ *     [3.333..., 3.333..., 3.333...]]`, apart at the same place;
+ *   * the axis-0 sibling (`rules_angle_args_mean_transpose.cml`, weights `[10, 20, 30]` on the
+ *     same `x`) answers `[[5, 10, 15], [5, 10, 15]]` -- increasing along a row, where this one
+ *     is constant along a row -- so the two axis readings cannot be confused either.
+ */
+import rulesets.jvp
+import rulesets.transpose
+import { mean_axis, sum } from tensor
+import { vjp } from vjp
+
+func loss_row_mean(x: float[2, 3]): float {
+    return float(sum(mean_axis(x, 1, true) * ([[10.0], [20.0]] as float[2, 1])))
+}
+
+func main(): int sync {
+    let x = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
+    let (value, pullback) = vjp(loss_row_mean)(x)
+    let cotangents = pullback(1.0)
+    let row = cotangents.0
+    `mean_axis1 keepdims value={} cotangent={}`->format<value, row>->println
+    return 0
+}
