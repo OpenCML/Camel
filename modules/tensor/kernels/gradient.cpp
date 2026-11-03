@@ -389,8 +389,54 @@ detail::GeluGradFn geluGradUnit() {
     return unit;
 }
 
+/// The two arguments of a fused gradient are read at one element type, and it is the type the
+/// answer is written at. The operator's declared result is the input's own element type
+/// (gradient_ops.cpp, `gradientLikeTyped`), so an answer written at another width is a number read
+/// at the wrong width -- and a number read at the wrong width is not the derivative (design
+/// principles 9.9). Inference already matches no arm for a pair that states two element types; this
+/// is the run-time half of the same statement, for a call that did not come through inference.
+TypeCode gradientWidth(const Array *xs, const Array *gs, const char *what) {
+    if (xs->dtype() != gs->dtype()) {
+        throw std::invalid_argument(std::string(what) + ": dy element type differs from the input");
+    }
+    return xs->dtype();
+}
+
+/// The fused GELU gradient at f64, elementwise.
+///
+/// `gelu` is the tanh approximation, not the erf form (`vmath::gelu` for f32, and elementwise.cpp's
+/// `runUnaryF64` for f64):
+///   u = scale * (v + cubic * v^3),  t = tanh(u),  y = 0.5 * v * (1 + t)
+/// so its derivative is 0.5 * (1 + t) + 0.5 * v * (1 - t^2) * u' with u' = scale * (1 + 3 cubic
+/// v^2) -- the expression the f32 unit evaluates (gradient_loops.inl), here at the width the f64
+/// forward is computed at, so that the gradient is the derivative of the value the engine answered
+/// and not of another approximation of the same function. `vmath::tanh` is the f32 kernel's own; at
+/// f64 the forward calls `std::tanh`, and so does this.
+void geluGradDouble(const double *x, const double *dy, double *out, int64_t count) {
+    constexpr double kScale = 0.7978845608028654; // sqrt(2 / pi), the forward's own constant
+    constexpr double kCubic = 0.044715;
+    for (int64_t i = 0; i < count; ++i) {
+        const double v = x[i];
+        const double t = std::tanh(kScale * (v + kCubic * v * v * v));
+        out[i]         = dy[i] * (0.5 * (1.0 + t) +
+                                  0.5 * v * (1.0 - t * t) * kScale * (1.0 + 3.0 * kCubic * v * v));
+    }
+}
+
 } // namespace
 
+/// The fused GELU gradient. Both arms read the input and the incoming gradient at the element type
+/// the arguments were validated at and write the answer at it.
+///
+/// The f32 arm was the whole function, and the operator's declared result is the arguments' element
+/// type: on an `f64[..]` input it handed back a 12-byte f32 array behind an `f64[..]` type, so each
+/// element a reader took was an f32 answer's bits in the low half of a double. `grad(sum(gelu(x)))`
+/// at x = [-1.0, 0.0, 1.0] answered [0.0, 1.5769529523e-314, 0.0] -- 0.0 where the answer was 0 and
+/// a denormal where it was not, the middle reading moving with the input -- instead of
+/// [-0.08296408384578255, 0.5, 1.0829640838457826]. Nothing refused it and nothing was
+/// uninitialized: the storage was too narrow for the number of elements the type promised. The f64
+/// arm's three numbers agree with the central difference of the forwarded value at h = 1e-3
+/// ([-0.08296396, 0.5, 1.08296396]) to 1.3e-7.
 Array *geluGrad(const Array *x, const Array *dy, mm::IAllocator &allocator) {
     const Array *xs = asFloat(x, allocator);
     const Array *gs = asFloat(dy, allocator);
@@ -398,6 +444,18 @@ Array *geluGrad(const Array *x, const Array *dy, mm::IAllocator &allocator) {
         throw ShapeError("gelu gradient: dy shape differs from the input");
     }
     const int64_t n = static_cast<int64_t>(xs->numel());
+    if (gradientWidth(xs, gs, "gelu gradient") == TypeCode::Float64) {
+        Array *out       = createTensor(TypeCode::Float64, xs->shapeSpan(), allocator);
+        const double *px = xs->dataAs<double>();
+        const double *pg = gs->dataAs<double>();
+        double *po       = out->dataAs<double>();
+        // Twice the f32 arm's per-element estimate: an element is twice the bytes and the tangent
+        // is libm's rather than the inlined expansion. The number sizes the chunk only.
+        parallelFor(n, grainForWork(2.0 * kNsPerGeluGradElement), [&](int64_t begin, int64_t end) {
+            geluGradDouble(px + begin, pg + begin, po + begin, end - begin);
+        });
+        return out;
+    }
     Array *out      = createTensor(TypeCode::Float32, xs->shapeSpan(), allocator);
     const float *px = xs->dataAs<float>();
     const float *pg = gs->dataAs<float>();
@@ -411,11 +469,30 @@ Array *geluGrad(const Array *x, const Array *dy, mm::IAllocator &allocator) {
     return out;
 }
 
+/// The fused erf gradient, `dy * 2/sqrt(pi) * exp(-x^2)`, at the arguments' element type. The f32
+/// arm is the expression it always was (its bits are pinned); the f64 arm is the same derivative in
+/// double, the width the forward f64 `erf` is computed at. The same defect as `geluGrad`'s was
+/// here: an f64 input got a 12-byte f32 array behind an `f64[..]` type, and `grad(sum(erf(x)))` at
+/// x = [-1.0, 0.0, 1.0] answered [0.0, 5.098027537e-315, 0.0] instead of
+/// [0.4151074974205947, 1.1283791670955126, 0.4151074974205947] (which the central difference of
+/// the forwarded value at h = 1e-3 agrees with to 3.8e-7). `erfc`'s rule is this one with `dy`
+/// negated, so it was the same wrong number with the other sign.
 Array *erfGrad(const Array *x, const Array *dy, mm::IAllocator &allocator) {
     const Array *xs = asFloat(x, allocator);
     const Array *gs = asFloat(dy, allocator);
     if (!xs->sameShape(gs)) {
         throw ShapeError("erf gradient: dy shape differs from the input");
+    }
+    if (gradientWidth(xs, gs, "erf gradient") == TypeCode::Float64) {
+        Array *out             = createTensor(TypeCode::Float64, xs->shapeSpan(), allocator);
+        const double *px       = xs->dataAs<double>();
+        const double *pg       = gs->dataAs<double>();
+        double *po             = out->dataAs<double>();
+        constexpr double kScale = 1.1283791670955126; // 2 / sqrt(pi)
+        for (uint64_t i = 0; i < xs->numel(); ++i) {
+            po[i] = pg[i] * kScale * std::exp(-px[i] * px[i]);
+        }
+        return out;
     }
     Array *out      = createTensor(TypeCode::Float32, xs->shapeSpan(), allocator);
     const float *px        = xs->dataAs<float>();

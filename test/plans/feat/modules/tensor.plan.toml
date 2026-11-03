@@ -816,6 +816,39 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "gelu_grad.f64"
+desc = "The gradient of `gelu` on an f64 array, element by element, pinned against the value it is the derivative of: the engine's tanh approximation (the forward is 0.8411919906082768 at x = 1, not the erf form's 0.8413447460685429), so the three numbers are that function's derivative, which a central difference at h = 1e-3 reproduces to 1.3e-7. Before this was fixed the operator wrote its answer at f32 behind an `f64[..]` type: the case then read [0.0, 1.5769529523e-314, 0.0] -- zero where the answer was zero, a 1e-314-scale denormal where it was not, the reading moving with the input -- instead of [-0.08296408384578255, 0.5, 1.0829640838457826]. The f32 gradient beside it is the arm that was right all along and must keep its numbers."
+kind = "behavior"
+case = "../../../cases/modules/tensor/gelu_grad_f64.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "gelu_grad_f64 forward=[-0.15880800939172324, 0.0, 0.8411919906082768]\ngelu_grad_f64 grad=[-0.08296408384578255, 0.5, 1.0829640838457826]\ngelu_grad_f32 grad=[-0.08296409, 0.5, 1.0829641]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "erf_grad.f64"
+desc = "The gradient of `erf` on an f64 array, element by element: 2/sqrt(pi) * exp(-x^2), which a central difference of the printed forward at h = 1e-3 reproduces to 3.8e-7. Before this was fixed the operator wrote its answer at f32 behind an `f64[..]` type, so the case read [0.0, 5.098027537e-315, 0.0] -- zero where the answer was zero and a 1e-314-scale denormal where it was not, the reading moving with the input -- instead of [0.4151074974205947, 1.1283791670955126, 0.4151074974205947]. The f32 gradient beside it must keep its numbers."
+kind = "behavior"
+case = "../../../cases/modules/tensor/erf_grad_f64.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "erf_grad_f64 forward=[-0.8427007929497149, 0.0, 0.8427007929497149]\nerf_grad_f64 grad=[0.4151074974205947, 1.1283791670955126, 0.4151074974205947]\nerf_grad_f32 grad=[0.41510752, 1.1283792, 0.41510752]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "erfc_grad.f64"
+desc = "The gradient of `erfc` on an f64 array, element by element: `erfc`'s rule is `erf`'s with the incoming gradient negated, so this is -2/sqrt(pi) * exp(-x^2), which a central difference of the printed forward at h = 1e-3 reproduces to 3.8e-7. The `neg_erf` line is the identity that says the rule runs the right kernel: erfc = 1 - erf makes the two gradients exact negatives, so every element of their sum is 0.0. Before this was fixed it read [0.0, 1.570800649e-314, 0.0] -- the erf reading with its sign turned, a f32 answer hidden in the low half of each f64 element -- instead of [-0.4151074974205947, -1.1283791670955126, -0.4151074974205947]. The f32 gradient beside it must keep its numbers."
+kind = "behavior"
+case = "../../../cases/modules/tensor/erfc_grad_f64.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "erfc_grad_f64 forward=[1.842700792949715, 1.0, 0.15729920705028513]\nerfc_grad_f64 grad=[-0.4151074974205947, -1.1283791670955126, -0.4151074974205947]\nerfc_grad_f64 neg_erf=[0.0, 0.0, 0.0]\nerfc_grad_f32 grad=[-0.41510752, -1.1283792, -0.41510752]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "numeric_contract.generic_unit"
 desc = "The numeric-contract program in the portable kernel units: the same output as the default units."
 kind = "behavior"
