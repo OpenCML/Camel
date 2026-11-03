@@ -1986,14 +1986,6 @@ void GraphDraft::replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t ne
     }
 }
 
-void GraphDraft::replaceSyncStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId) {
-    ++mutations_;
-    // A sync edge into the block's value is a statement chain that ends at the value: the value
-    // node is not a separate anchor of the graph, so nothing but the run itself refers to it.
-    (void)oldId;
-    (void)newId;
-}
-
 void GraphDraft::replaceAllNormUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
     requireOneWriting("replaceAllNormUses");
     ++mutations_;
@@ -2023,14 +2015,6 @@ void GraphDraft::replaceAllOrderUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
     ++mutations_;
     std::vector<gc_node_ref_t> users(orderUsersOf(oldId).begin(), orderUsersOf(oldId).end());
     replaceUsesInList(oldId, users, oldId, newId, DraftEdgeSlot::Order);
-}
-
-void GraphDraft::replaceAllSyncUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
-    requireOneWriting("replaceAllSyncUses");
-    ++mutations_;
-    std::vector<gc_node_ref_t> users(syncUsersOf(oldId).begin(), syncUsersOf(oldId).end());
-    replaceUsesInList(oldId, users, oldId, newId, DraftEdgeSlot::Sync);
-    replaceSyncStructuralRefs(oldId, newId);
 }
 
 void GraphDraft::replaceAllValueUses(gc_node_ref_t oldId, gc_node_ref_t newId) {

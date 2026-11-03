@@ -736,7 +736,6 @@ class GraphDraft {
     void replaceAllWithUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllCtrlUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllOrderUses(gc_node_ref_t oldId, gc_node_ref_t newId);
-    void replaceAllSyncUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllValueUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     /// Removes GATEs that wait on nothing (no control input): such a gate only forwards its value,
     /// so its users read the value directly. Rewrites that remove what a gate waited on (a pruned
@@ -951,7 +950,6 @@ class GraphDraft {
     void appendInputEntry(gc_node_ref_t userId, DraftEdgeSlot slot, gc_node_ref_t inputId);
     void replaceValueStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId);
-    void replaceSyncStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceUsesInList(
         gc_node_ref_t ownerId, std::span<const gc_node_ref_t> users, gc_node_ref_t oldId,
         gc_node_ref_t newId, DraftEdgeSlot slot);
