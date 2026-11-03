@@ -47,3 +47,23 @@
 
 **怎么绕**：探针放 `test/cases/...` 与 `test/plans/...` 之外的临时目录优先；一定要走计划跑，就记下用了哪些文件，
 测完 `git status --short` 必须干净，删完再提交。探针文本落 `D:\Temp\`，别落仓库。
+## 5. 判据算出了答案却不交出去——"先算后丢"，不是"少一个 if"
+
+**症状**：`func three(): float[3] { return [1.5, 2.5, 3.5] }` 被拒，而同一份字面量在声明、传参、`as` 三处都过。
+探针读数是 `declared=float[3] written=float[] array=1/1 eq=0`、`arr=1 raw=3 fits=1 elem=float` ——**形状判据说"相符"，值却还是开放数组**。
+
+**为什么**：`arrayLiteralFitsShape`（`src/compile/gir/builder_control.cpp`）的秩一分支
+`if (extents.size() < 2) return holdsStatedLength(type, array.get());`
+**直接返回，出参 `lengths` 一次也没写过**——只有秩二那条路会填它。下游 `ArrayDataFactory` 于是按"没有 extent"建出 `f32[]`。
+判据判过了，但**判过的那个长度没交出去**；下游不是判错，是拿不到。
+
+**怎么绕**：看到"bool 返回 + 出参"的判据，**在每条 `return true` 前问一句"出参这时是全的吗"**；
+出参是可选指针（`= nullptr`）或"只在一条分支上写"的，就是这一类的候选。修的时候从**位置的声明**取值，别去下游补（下游没有那个信息）。
+
+**同类第二处（今天没坏，但同一形状）**：`Builder::compositeWithHolesInType`（同文件）只有 **struct** 分支写 `holeSlots`（末尾 `holeSlots = std::move(slots)`），
+**array 分支直接 `return factory.build()`**。今天不坏，只因为调用方 `builder_expr.cpp` 先把 `holeSlots` 预置成 `holes`（数组是位置性的，索引相同）；
+一旦有调用方不预置，读到的就是字面量自己的索引。
+
+**已核过、不属于这一类**：`flattenLiteral`（每层先 push 自己的长度，货真价实地交出去）、
+`literalShapeOf`（每层都填 `lengths`/`at`，ragged 走 `shaped=false`，调用方先看 `shaped`）、
+`ArrayType::extentForms`（`true` 时 `out` 总是整份）、`holdsStatedLength`（纯判据，没有可交的东西）。
