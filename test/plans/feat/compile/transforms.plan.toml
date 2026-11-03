@@ -143,8 +143,11 @@ timeout_ms = 20000
 # Measured 2026-11-04 on host 88zjwei (1 m load 20.8-21.0, a loaded host): `value= 3.0` and
 # `grad= [1.0, 1.0]` on `std::nvm` and on `std::fvm`, and the reading
 # `REINTERP split function=jvp_of_g ... residuals=2 loop=1 tape=5 invariants=0 after=1`
-# `transpose_loop_escape.two_values_of_two_kinds` and `second_state_of_the_same_loop` are still
-# refusals (a parameter that holds no cotangent, and a two-state loop the cut does not take).
+# Of the two `transpose_loop_escape` cases that were red beside it, `second_state_of_the_same_loop`
+# answers now (7 and 14, on the route its own pins name -- see that case); `two_values_of_two_kinds`
+# is marked known_fail, because the number it asks for is a function of a value the transposed
+# signature does not carry
+# (`docs/handover/questions/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md`).
 [[tests]]
 name = "vjp_loop.rounds_are_undone_in_reverse"
 desc = "The pullback of a two-round loop reads `(1.0, 1.0)` and not `(1.0, 10.0)`: for `loop x = s for k in [1.0, 10.0] do [x[1], x[0] + x[1] * k]` the per-round map is `M_k = [[0,1],[1,k]]`, so `M = M_10 * M_1 = [[1,1],[10,11]]`, and a pullback must apply `M_1^T` after `M_10^T` -- the rounds are undone in the other direction (design 4.2/4.3). Reading the loop's first component, the correct walk gives the gradient `(1.0, 1.0)` and a copied range gives `(1.0, 10.0)`; the two numbers separate the walks and nothing else in the program has to change. `vjp` takes a function whose result is a `float` (the cotangent of the result is the seed), so the pullback's subject is `g(s) = (loop ...)[0]` -- the same loop, the same two numbers."
@@ -798,6 +801,28 @@ expect_output_contains = ["TRANSPOSE function=read_twice carried=1 node=11 origi
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# Marked known_fail on 2026-11-04, against the author's ruling of 2026-11-03 00:30 (a case that cannot
+# pass today belongs in the plan with a mark, an owner and a reason, not outside it). The number this
+# case asks for is 29 at x = 1, and 29 is `15 + 7 * 2x`: a function of `x`, not of the cotangent alone.
+# A transposition is handed the cotangent and no operand -- the member's type here is
+# `(float) => (float,)` -- so no member can read 29 off `back(1.0)` without inventing `x = 1`; this
+# case's own paper passes two arguments (`transpose(read_outer)(1, 1)`, case comment line 13) while its
+# `main` passes one. Both routes were measured on 2026-11-04 and both refuse by name, so this is not a
+# missing rule:
+#  - `transpose(read_outer)` stops at `TRANSPOSE function=read_outer skip=cotangent-needs-a-value
+#    uri=:op/mul_d position=0 reason=the rule's right side reads a value the caller does not carry`:
+#    `k = x * x`'s law reads the other operand's value, `x` is a parameter a cotangent is answered for
+#    (so it is no port of the member), and a `float` has no shape carrier to answer it from.
+#  - `split(jvp(read_outer))` stops at `REINTERP split function=jvp_of_read_outer skip=forward
+#    construct=a tangent port why=the value half reads the tangent of parameter 0, which the forward
+#    half does not take`: the value chain of a lifted graph is a projection of a ruleset pair node, and
+#    that node takes the tangents as inputs.
+# What the case is about is already printed beside the refusal -- `TRANSPOSE function=read_outer
+# carried=2 node=12 origin=0 captures=2 answer=per-target` and both `ESCAPE` lines, `kindOfTarget` 1 and
+# 11 -- so the channel the case was written for is there and the last number is not. The mark goes away
+# in the commit that answers
+# `docs/handover/questions/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md`,
+# and the four pins above stay as the answer's, not as the refusal's.
 [[tests]]
 name = "transpose_loop_escape.two_values_of_two_kinds"
 desc = "`read_outer(x) = let k = x*x; loop s = x for i in 0..3 do 2.0*s + k + x` reads two values from outside the body, of two different kinds: `x` is the function's parameter port and `k` is a product computed before the loop. Each gets an accumulator of its own -- `carried=2` beside the one carried cotangent, one loop with three states -- and the line says `answer=per-target`, because these are two values and not two reads of one: `x`'s slot is the state's cotangent plus its sum (8 + 7 = 15) while `k`'s sum (7) goes to `k` alone and its product carries it to `x` as 7 * 2x = 14. The answer is 29 at x = 1, and 22 or 15 would be a sum taken across values that are not the same value. Both `ESCAPE` lines still print, with `kindOfTarget` 1 (a port) and 11 (an operand) -- the two kinds this cut has to tell apart."
@@ -810,6 +835,9 @@ expect_exit = 0
 expect_output_contains = ["TRANSPOSE function=read_outer carried=2 node=12 origin=0 captures=2 answer=per-target", "ESCAPE target=0 from=11 kindOfFrom=11 kindOfTarget=1 typeOfTarget=float norm=[4,0,] with=[11,13,]", "ESCAPE target=1 from=10 kindOfFrom=11 kindOfTarget=11 typeOfTarget=float norm=[4,0,] with=[11,13,]", "29.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+known_fail = ["nvm"]
+known_fail_msg = "skip=cotangent-needs-a-value uri=:op/mul_d position=0"
+known_fail_note = "Waits on docs/handover/questions/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md (does a transposed member get a port for the value of a parameter a rule reads?). Measured 2026-11-04 on this tree: the two readings the case exists for are printed (`carried=2 ... answer=per-target`, both `ESCAPE` lines with `kindOfTarget` 1 and 11), and the walk then stops at `TRANSPOSE function=read_outer skip=cotangent-needs-a-value uri=:op/mul_d position=0 reason=the rule's right side reads a value the caller does not carry` -- `k = x*x`'s law needs `x`'s value, `x` is a parameter a cotangent is answered for, and the member takes no port for it. 29 is `15 + 7*2x`, a function of `x`, so the number itself says the value has to travel; the case's paper passes two arguments and its `main` passes one, which is the same defect seen from the test's side. The mark goes away with the ruling, in the commit that answers the page and fixes that call."
 
 [[tests]]
 name = "transpose_tuple_component.reads_the_first_slot"
@@ -852,7 +880,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "transpose_loop_escape.second_state_of_the_same_loop"
-desc = "The same two-state loop read one slot over: `carried_p(x) = let q = 2x; (loop s = x, p = x for i in 0..3 do (s + p, p + q)).1`, whose paper value is `7x` -- the same rounds reach `s = 10x, p = 7x`, and this case takes `p`. The previous case gets 10 by reading `.0`, this one gets 7 by reading `.1`, and the two differ by exactly which slot the cotangent was seeded into: 0 for `s` and 1 for `p` here, against 1 and 0 there, plus the same 6 through the escape `q = 2x` (the three rounds' worth of `p`'s cotangent). A channel that always filled the first slot would answer the previous case's decomposition here too.
+desc = "The same two-state loop read one slot over: `carried_p(x) = let q = 2x; (loop s = x, p = x for i in 0..3 do (s + p, p + q)).1`, whose paper value is `7x` -- the same rounds reach `s = 10x, p = 7x`, and this case takes `p`. The previous case gets 10 by reading `.0`, this one gets 7 by reading `.1`, and the two differ by exactly which slot the cotangent was seeded into: 0 for `s` and 1 for `p` here, against 1 and 0 there, plus the same 6 through the escape `q = 2x` (the three rounds' worth of `p`'s cotangent). A channel that always filled the first slot would answer the previous case's decomposition here too. The route is the previous case's -- `transpose` on the program itself -- and `back(2.0)` answering 14 is the second half of the claim: no forward line of this program prints it."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_loop_state_second.cml"
 args = ["${case}", "${backend}"]
