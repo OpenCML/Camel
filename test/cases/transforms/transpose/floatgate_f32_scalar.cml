@@ -9,14 +9,14 @@
  *
  * The body reads `x` **twice** (`x*x` and `x*5`), so the walk has two cotangents landing on one value
  * and adds them: at `f32` that addition is `:op/add_f` and both operands are four-byte `f32` slots.
- * A walk that sums them with the `float` addition (`:op/add_d`, which is what a `Float64()` written
- * down as the answer to "what width is this cotangent" produces) does not convert the value: the
- * operator's ports take a `float`, so the step is refused by shape and this reading never prints.
- * That refusal is what the entry in `test/plans/feat/transforms/floatgate.plan.toml` measured
- * before this case turned green.
- *
  * The `float` twin is printed beside it so the two widths are one program and one reading: `f32` is
  * not a `float` and nothing here is read as one.
+ *
+ * What this case holds is the **type** and not a difference in the numbers: 11, 22 and 1 are exact in
+ * both widths, so a walk that summed them with the `float` addition would print the same three
+ * numbers (tried: with that one reading put back, this case stays green and the branch case -- whose
+ * arm cotangents reach a join -- goes red). The reading that does tell the widths apart is
+ * `TRANSPOSE ... type=(f32) => (f32,)` on stderr, which the plan pins.
  */
 import { vjp } from vjp
 
