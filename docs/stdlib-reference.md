@@ -2582,7 +2582,7 @@ broadcasts it against the extents `at` states.
 
 - Pure.
 - Failure: fault `RuntimeError` when `at` is shorter than three entries, its extents disagree with the tensor's shape, or the axis is outside the rank.
-- Example: `max_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[false, true], [false, true]], [1, 0, 2, 2])` gives `[2.0, 4.0]`
+- Example: `max_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[false, true], [false, true]] as bool[2, 2], [1, 0, 2, 2])` gives `[2.0, 4.0]`
 
 #### `min_axis_stated`
 
@@ -2596,7 +2596,7 @@ the operand's extents stated: `min_axis(t, axis, keepdims)`, laid out exactly as
 
 - Pure.
 - Failure: fault `RuntimeError` when `at` is shorter than three entries, its extents disagree with the tensor's shape, or the axis is outside the rank.
-- Example: `min_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[true, false], [true, false]], [1, 0, 2, 2])` gives `[1.0, 3.0]`
+- Example: `min_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[true, false], [true, false]] as bool[2, 2], [1, 0, 2, 2])` gives `[1.0, 3.0]`
 
 ### Module state
 
