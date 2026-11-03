@@ -20,6 +20,13 @@
 const camel::runtime::Program *
 RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     using namespace camel::runtime;
+    // A refusal is worth reading only if it is the refusal the case is about: the check's own text
+    // ends by naming what the read would have had to be ("... nor the exit of a region it owns"), so
+    // a reading that finds those words says the rule fired and not a neighbour of it -- an encoder
+    // that refused the same draft for another reason would fail this part of the line.
+    const auto saysTheRule = [](const std::string &refusal) {
+        return refusal.find("nor the exit of a region it owns") != std::string::npos;
+    };
     // The shape the commit refuses: a node of one arm reading a port the graph gives to the other
     // arm of the same branch. Nothing in the tree builds it, so the only program that asks the
     // commit to refuse it is this one; without it the check (graph.h, regionIsVisibleFrom) would
@@ -105,7 +112,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
             refusal.find(std::format("node {} in region {}", reader, readerArm)) != std::string::npos;
         os << "REGIONS sibling_refused=" << (wasRefused ? 1 : 0) << " port=" << port
            << " reader=" << reader << " arm=" << readerArm << " sibling=" << portArm
-           << " named_port=" << (namedPort ? 1 : 0) << " named_reader=" << (namedReader ? 1 : 0)
+           << " rule=" << (saysTheRule(refusal) ? 1 : 0) << " named_port=" << (namedPort ? 1 : 0) << " named_reader=" << (namedReader ? 1 : 0)
            << "\n";
     }
     // The shape the owner's exception is drawn around: the node that owns a region reading a port of
@@ -183,7 +190,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
         }
         os << "REGIONS owner_refused=" << (ownerRefused ? 1 : 0) << " port=" << bodyExit
            << " owner=" << loopNode << " region=" << bodyRegion
-           << " named_port=" << (ownerNamesPort ? 1 : 0)
+           << " rule=" << (saysTheRule(ownerRefusal) ? 1 : 0) << " named_port=" << (ownerNamesPort ? 1 : 0)
            << " named_reader=" << (ownerNamesReader ? 1 : 0) << " violations=" << violations
            << "\n";
     }

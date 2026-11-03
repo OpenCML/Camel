@@ -103,7 +103,7 @@ case = "../../../cases/opt/generic/arm_tail_gate_regions.cml"
 args = ["${case}", "test::regions", "std::nvm"]
 
 expect_exit = 0
-expect_output_contains = ["REGIONS sibling_refused=1 port=0 reader=8 arm=2 sibling=1 named_port=1 named_reader=1"]
+expect_output_contains = ["REGIONS sibling_refused=1 port=0 reader=8 arm=2 sibling=1 rule=1 named_port=1 named_reader=1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -115,6 +115,6 @@ case = "../../../cases/compile/expected_type_loop/loop_parts.cml"
 args = ["${case}", "test::regions", "std::nvm"]
 
 expect_exit = 0
-expect_output_contains = ["REGIONS sibling_refused=1 port=1 reader=6 arm=1 sibling=3 named_port=1 named_reader=1", "REGIONS owner_refused=1 port=9 owner=10 region=2 named_port=1 named_reader=1 violations=1", "REGIONS count=7 in_inner=2 in_outer=1 result=ok ports=1 within=1"]
+expect_output_contains = ["REGIONS sibling_refused=1 port=1 reader=6 arm=1 sibling=3 rule=1 named_port=1 named_reader=1", "REGIONS owner_refused=1 port=9 owner=10 region=2 rule=1 named_port=1 named_reader=1 violations=1", "REGIONS count=7 in_inner=2 in_outer=1 result=ok ports=1 within=1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
