@@ -150,6 +150,7 @@ func scatter_rows::<T>(xs: T[..], indices: int[], delta: T[..], axis: int): T[..
 /// axis `take` reads (`tensor:take` names its first dimension).
 export rule take_t::<T>(t: T[..], indices: int[]) {
     take(t, indices) => (ct: T[..]) => scatter_rows(zeros_like(t), indices, ct, 0)
+}
 
 // ---- the transpose of `mean` over an axis ----
 //
