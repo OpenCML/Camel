@@ -1015,9 +1015,6 @@ bool buildTransposeMember(
                 return made;
             }
             if (node->kind != rt::GCNodeKind::Oper) {
-                os << "PROBE-FWD function=" << (function != nullptr ? function->name() : "?")
-                   << " ref=" << ref << " kind=" << static_cast<int>(node->kind) << " type="
-                   << (node->dataType() != nullptr ? node->dataType()->toString() : "?") << '\n';
                 complete = false;
                 return rt::kInvalidNodeRef;
             }
@@ -2559,27 +2556,6 @@ bool buildTransposeMember(
                     }
                     const gc_node_ref_t argument = forward(inputs[argumentAt + i]);
                     if (argument == rt::kInvalidNodeRef) {
-                        const gc_node_ref_t arg = inputs[argumentAt + i];
-                        const camel::runtime::GCNode *argNode = function->node(arg);
-                        os << "PROBE-ARG function=" << function->name()
-                           << " callee=" << callee->name() << " param=" << i << " node=" << ref
-                           << " arg=" << arg << " kind="
-                           << (argNode != nullptr ? static_cast<int>(argNode->kind) : -1) << " type="
-                           << (argNode != nullptr && argNode->dataType() != nullptr
-                                   ? argNode->dataType()->toString()
-                                   : std::string("?"))
-                           << " argumentAt=" << argumentAt << " calleeParams=" << calleeParams
-                           << " inputs=[";
-                        for (size_t k = 0; k < inputs.size(); ++k) {
-                            const camel::runtime::GCNode *mk = function->node(inputs[k]);
-                            os << inputs[k] << ':'
-                               << (mk != nullptr ? static_cast<int>(mk->kind) : -1) << ':'
-                               << (mk != nullptr && mk->dataType() != nullptr
-                                       ? mk->dataType()->toString()
-                                       : std::string("?"))
-                               << (k + 1 < inputs.size() ? " " : "");
-                        }
-                        os << "]\n";
                         os << "TRANSPOSE function=" << function->name()
                            << " skip=call-value-missing param=" << i << " node=" << ref
                            << " arg=" << inputs[argumentAt + i] << '\n';
