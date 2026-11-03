@@ -4,7 +4,7 @@
 
 ## 1. 三方对照（标量模型，`pred = x * w + b`，`loss = 0.5 * (pred - t)^2`）
 
-字面量 `x = 1.5`、`t = 2.0`、起点 `w = 0.5`、`b = 0.75`；用例 `test/cases/compile/transforms/first_step_library.cml`，计划 `test/plans/feat/showcase_s2.plan.toml#first_step.scalar_library_vjp.nvm`（1/1 绿）。
+字面量 `x = 1.5`、`t = 2.0`、起点 `w = 0.5`、`b = 0.75`；用例 `test/cases/compile/transforms/first_step_library.cml`，计划 `test/plans/feat/showcase_s2.plan.toml#first_step.scalar_library_vjp`（1/1 绿）。
 
 | 元素 | 库层 `vjp(loss_plain)(0.5, 0.75)` → `pullback(1.0)` | 引擎 `with_grad` × `grad` | PyTorch 2.5.1+cu121 | 库层 − PyTorch |
 |---|---|---|---|---|

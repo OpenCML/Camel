@@ -188,7 +188,7 @@ TRANSPOSE function=mt skip=call node=4 callee=autodiff::mul_tangent<float>
 作者 22:50 裁的"结构校验补一条"（区域里的节点只能读本区域的节点、本区域的端口和常量；读外层
 区域的 Port 而不经循环／分支的输入，`commit` 时拒绝，点名节点与区域）已经写出来过，**检测力够，
 但没有上树**：挂点是 `src/runtime/graph_edges.cpp#checkGraphCrossReferences`（冻结图经由
-`EdgeChecker` 那一路、草稿经由 `src/runtime/draft_session.cpp#encodeDraft` 的编码前检查，一处
+`EdgeChecker` 那一路、草稿经由 `src/runtime/draft_session.cpp#encodeDraftGraph` 的编码前检查，一处
 实现两个调用点共用）。这一族既有的三项（branch↔join 互指、region 的 owner/result 在范围内）都只是
 字符串，最终形态是 `Pass 'X' failed with an internal error: … breaks its edge invariants (N
 violation(s))`，**没有诊断码**，所以它不进 `diagnostics/registry.tsv` —— 加一行只会是一行没人发的码。

@@ -4,7 +4,7 @@
 
 ## 现象到符号
 
-- 今天带 `#op(...)` 的声明只有两类：`stdlib/prelude.cml#std.mem.blocks`（`:op/mem_blocks`）与那一组转换（`:op/itol`、`:op/ltol`、`:op/ftol`、`:op/dtol`、`:op/stol`、`:op/bftol`、…）。**转换的名字就是目标类型名**（`int`、`float`、`f32`），一族里每个签名一个名字，不存在跨族的命名问题。
+- 今天带 `#op(...)` 的声明只有两类：`stdlib/prelude.cml#std::mem::blocks`（`:op/mem_blocks`）与那一组转换（`:op/itol`、`:op/ltol`、`:op/ftol`、`:op/dtol`、`:op/stol`、`:op/bftol`、…）。**转换的名字就是目标类型名**（`int`、`float`、`f32`），一族里每个签名一个名字，不存在跨族的命名问题。
 - `add` 这个名字**已经属于集合加法**：`stdlib/prelude.cml#add::<T>(s: Set<T>): Set<T>`。要挂 `:op/add_f`，最自然的是 `add(x: f32, y: f32): f32`——**同名、不同 arity**。
 - 树里**有同名重载，但没有"同名不同 arity"的先例**：`contains::<T>(xs: T[])` 与 `contains::<T>(s: Set<T>)` 同为两个参数、只是参数类型不同；`bf16`/`f16`/`c64`/`c128` 一族是同一 arity 的转换重载。`eprintln` 的两条同签名。
 - 另外每个声明名都要有描述与 `@example`（`--verify-docs` 会编译它们），所以这一步不是两行代码，是"声明 + 描述 + 例子"。
