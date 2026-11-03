@@ -163,7 +163,14 @@ export function launcherText({ tool, realName, interpreter }) {
         '            have="has at most $have"',
         '        fi',
         '        libsdir=$bindir/../libs',
-        '        real_libsdir=$(CDPATH= cd "$libsdir" 2>/dev/null && pwd -P) && libsdir=$real_libsdir',
+        '        if real_libsdir=$(CDPATH= cd "$libsdir" 2>/dev/null && pwd -P); then',
+        '            libsdir=$real_libsdir',
+        '        elif root=$(CDPATH= cd "$bindir/.." 2>/dev/null && pwd -P); then',
+        // `libs/` is the directory this install should have and does not, so it cannot be entered to
+        // be named: the advice would read `.../bin/../libs`, which is the same place written as if
+        // the reader were a shell. The install root can be entered, so the directory is named from it.
+        '            libsdir=$root/libs',
+        '        fi',
         `        printf '${tool}: cannot start: this install needs the C++ runtime %s, and %s %s.\\n' "$need" "$provider" "$have" >&2`,
         `        printf '${tool}: put a ${CXX_RUNTIME_LIBRARY} that has %s (the one the toolchain that built this install ships) into %s, and run this again.\\n' "$need" "$libsdir" >&2`,
         '        exit 1',
