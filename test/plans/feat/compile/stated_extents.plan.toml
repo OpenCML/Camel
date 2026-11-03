@@ -38,7 +38,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "stated_mean_axis_gradient"
-desc = "The gradient of `sum(mean_axis(x, 0, false))` over `[1.0, 2.0, 3.0, 4.0]`: the value is the mean, 2.5, and every position gets a quarter, `dL/dx=[0.25, 0.25, 0.25, 0.25]` -- the lane length `numel(t) / numel(ct)` the reverse law reads off the stated extents. A law that spread the whole cotangent over the lane (the sum's answer) would read 1.0 here, and one that divided by the cotangent's count would read 0.5."
+desc = "The gradient of `sum(mean_axis(x, 0, true))` over `[1.0, 2.0, 3.0, 4.0]`: the value is the mean, 2.5, and every position gets a quarter, `dL/dx=[0.25, 0.25, 0.25, 0.25]` -- the lane length `numel(t) / numel(ct)` the reverse law reads off the stated extents. A law that spread the whole cotangent over the lane (the sum's answer) would read 1.0 here, and one that divided by the cotangent's count would read 0.5. The mean keeps its axis because `transpose.cml#mean_axis_stated_t` declares its cotangent `float[..]`: without `keepdims` the mean of a rank-1 operand answers the element (design principles 5.4) and that law reads it as an array -- which is a SIGSEGV in `numelKernel`, recorded in docs/handover/questions/2026-11-04-axis-reductions-state-their-extents.cn.md, and not this case's to hide."
 kind = "behavior"
 case = "../../../cases/compile/transforms/stated_mean_axis_gradient.cml"
 args = ["${case}", "${backend}"]
@@ -47,6 +47,68 @@ backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
 expect_output_contains = ["stated mean value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]"]
 expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The law with the mean's answer an element instead of an array: `keepdims = false` on a rank-one
+# operand, which the entry above cannot be. It was eight SIGSEGVs in `numelKernel` while
+# `mean_axis_stated_t` stated its cotangent as `float[..]`
+# (docs/handover/questions/2026-11-04-a-rank-zero-cotangent-is-read-as-a-pointer.cn.md): a port that
+# looks like it already has a rank is a slot nothing converts, so `numel(ct)` read the number's bits
+# as a pointer. The law states the element now, and the language's own `T` -> `T[..]` conversion --
+# the one a call argument gets -- does the rest.
+[[tests]]
+name = "stated_mean_axis_element_gradient"
+desc = "The gradient of a lane mean whose answer is the element itself: `mean_axis(x, 0, false)` over `[1.0, 2.0, 3.0, 4.0]` is 2.5, and the adjoint gives every position a quarter, `dL/dx=[0.25, 0.25, 0.25, 0.25]`. The lane length `numel(t) / numel(ct)` divides by three extents' product over `numel(ct)`, so a cotangent read as a pointer is a SIGSEGV and one spread over the lane answers 1.0 -- the number, not just the exit, is what says the conversion happened."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_mean_axis_element_gradient.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["stated mean element value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+known_fail = ["nvm"]
+known_fail_owner = "lane-statedsig"
+known_fail_reason = "the graph is built and then refused by its own return type: `():?:?: [Error]: The value the graph 'split_of_jvp_of_total_backward' hands on has type 'float[..]', and the graph declares 'float'; the value is node 8.` -- `tensor:mean_axis`'s result is computed now (`cmp:mean_axis` answers the element at rank 0, which is what the declaration `T[..]` used to deny), and the transpose of the jvp graph still hands the rank-zero array where the split signature says `float`"
+known_fail_msg = "declares 'float'"
+known_fail_note = "This entry was green before this merge and is red after it, so it is the merge's damage and it is recorded rather than repaired: measured 2026-11-04 on this tree with `std::nvm`, `feat/compile/stated_extents` reads 15 = 14 / 1. Two experiments say where it is not: with the law's port stated `float[..]` instead of `T` the same sentence appears, so the port type is not the trigger; the trigger is the signature move, because the tree before this merge declared `tensor:mean_axis` as `(xs: T[..], axis: int, keepdims: bool): T[..] when is_numeric` in `stdlib/tensor.cml` and the merged tree computes it (`modules/tensor/ops/reduction_ops.cpp#meanAxisInfer`, recorded in `stdlib/signatures/tensor.cml`), which is the honest type and the one this entry's own doc argues for. Reverting the move by hand would put back a declaration the operator contradicts and would fail `--verify-ops`, so the repair belongs to whoever takes the rank-zero answer the last step -- `modules/transforms/split.cpp`'s return-type check over a computed result, or the walk's conversion at the boundary."timeout_ms = 20000
+
+# The signature, where it can be stated: `at` written in the call is a compile-time constant, so
+# `mean_axis_stated` answers the extents the list names instead of `T[..]`. The number is the same
+# either way; the *type* is what this pins, because that is what the reverse law reads.
+[[tests]]
+name = "stated_mean_axis_declares_the_extents"
+desc = "`mean_axis_stated(x, [0, 0, 4])` over `[1.0, 2.0, 3.0, 4.0]` states the result's extents: axis 0, no `keepdims`, four elements, so the answer is the element 2.5 and the graph's node is a `float` rather than a `float[..]` under a conversion. The value alone does not say which of the two types was read -- a rank-zero array is its element (design principles 5.4) -- so the case reads the graph: the node's `value_type` and the absence of the `CAST` a declared `T[..]` forced."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_mean_axis_declares_the_extents.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.split(String.fromCharCode(10))
+  const stated = lines.filter((l) => l.includes('tensor:mean_axis_stated') || l.includes('mean_axis_stated'))
+  assert(stated.length > 0, `no mean_axis_stated node: ${lines.join(' | ')}`)
+  const asElement = stated.filter((l) => l.includes('value_type="float"'))
+  assert(asElement.length === 1, `the stated lane mean is not a float: ${stated.join(' | ')}`)
+  const casts = lines.filter((l) => l.includes('type="CAST"') && l.includes('value_type="float"'))
+  assert(casts.length === 0, `a conversion stands between the node and the return: ${casts.join(' | ')}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "stated_mean_axis_declares_the_extents_value"
+desc = "The same program run: the stated lane mean of `[1.0, 2.0, 3.0, 4.0]` along its only axis, without `keepdims`, is the mean of the four, 2.5. It is the number the type promised, so the case that reads the graph and the case that reads the answer cannot drift apart without one of them going red."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_mean_axis_declares_the_extents.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["stated lane mean=2.5"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
