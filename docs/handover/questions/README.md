@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：40 页
+## 现在在等作者：42 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -29,6 +29,7 @@
 | [`2026-11-03-is-the-loop-halfs-missing-value-at-the-call-site`](2026-11-03-is-the-loop-halfs-missing-value-at-the-call-site.cn.md) | loop 那一半的转置要的值，在调用点存在吗？在——但那是一个循环的值 |
 | [`2026-11-03-is-the-unused-sync-block-warning-reachable-at-all`](2026-11-03-is-the-unused-sync-block-warning-reachable-at-all.cn.md) | 「这个 sync 块没人用」这句警告，今天还响得了吗？ |
 | [`2026-11-03-may-a-region-owner-read-its-own-exit`](2026-11-03-may-a-region-owner-read-its-own-exit.cn.md) | 一个区域的拥有者能不能读自己区域的端口？ |
+| [`2026-11-03-must-a-pullback-of-a-with-function-take-the-with-list`](2026-11-03-must-a-pullback-of-a-with-function-take-the-with-list.cn.md) | 带 `with` 参数的函数的 pullback，要不要把 `with` 列表写在类型上？ |
 | [`2026-11-03-one-rule-key-cannot-hold-an-array-and-a-number`](2026-11-03-one-rule-key-cannot-hold-an-array-and-a-number.cn.md) | 一个规则键只能挂一条规则，于是同一个算子的两种形状无法共存 |
 | [`2026-11-03-reversing-a-backward-can-only-be-pinned-when-a-loop-state-is-not-a-float`](2026-11-03-reversing-a-backward-can-only-be-pinned-when-a-loop-state-is-not-a-float.cn.md) | 反传倒着走要能钉住，先要循环状态不是浮点标量 |
 | [`2026-11-03-should-a-value-read-twice-be-one-residual`](2026-11-03-should-a-value-read-twice-be-one-residual.cn.md) | 同一个值被读两次，是一个残余还是两个？ |
@@ -43,6 +44,7 @@
 | [`2026-11-03-what-does-region-of-zero-answer-for-a-graph-without-regions`](2026-11-03-what-does-region-of-zero-answer-for-a-graph-without-regions.cn.md) | 一张没有区表的图，`region_of(0)` 该答真记录还是报错？ |
 | [`2026-11-03-what-does-taking-pure-nodes-off-the-chain-cost`](2026-11-03-what-does-taking-pure-nodes-off-the-chain-cost.cn.md) | 纯节点离开链位要付 59 条红和一条封存拒绝：P0-2 第二步还做吗？ |
 | [`2026-11-03-what-type-does-an-error-binding-have-across-a-yield`](2026-11-03-what-type-does-an-error-binding-have-across-a-yield.cn.md) | `case error e` 绑定的名字跨 `yield` 进状态时，那个 cell 的类型从哪来 |
+| [`2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-split-cut`](2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-split-cut.cn.md) | 被微分的 lambda 以「调用带 `with` 的函数」收尾时，`split` 该剪什么？ |
 | [`2026-11-03-where-does-the-chain-tail-service-live`](2026-11-03-where-does-the-chain-tail-service-live.cn.md) | 出口门要等的"链上最后一站"，这个服务归谁？ |
 | [`2026-11-03-where-does-the-loop-results-residual-land`](2026-11-03-where-does-the-loop-results-residual-land.cn.md) | "循环结果作为残差跨过切口"这条裁定，落在哪一格？ |
 | [`2026-11-03-which-p0-2-does-the-order-mean`](2026-11-03-which-p0-2-does-the-order-mean.cn.md) | 排序里那条 `P0-2` 指 A 还是 B？A 的两处是不是同一个条件（逐分支量：不是） |

@@ -1447,8 +1447,11 @@ class Builder {
         // 4.4 and 5.6). Both the declaration's own node and its function node answer here, or the
         // one that did not would be read as an ordinary function of the same name and refused as
         // a redeclaration. A declaration without a body is an operator implemented in C++, whose
-        // resolver takes the arguments itself, and is not one.
-        if (node != nullptr && !node->nativeDeclaration() && type != nullptr &&
+        // resolver takes the arguments itself, and is not one. A lambda is not one either: it is a
+        // value, and the pack it writes is bound to the `with` list of the position it stands in
+        // (completeLambdaSignature), so the signature of a lambda never keeps an unknown arity.
+        if (node != nullptr && !node->nativeDeclaration() && !node->name().empty() &&
+            type != nullptr &&
             type->code() == camel::core::type::TypeCode::Function &&
             static_cast<FunctionType *>(type)->hasWithRest()) {
             return true;

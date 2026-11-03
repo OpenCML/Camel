@@ -7177,6 +7177,11 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             defaults.with.push_back({nullptr, camel::source::kInvalidOriginId});
             factory.addWithRest(
                 name, paramPair->size() > 0 ? visitType(paramPair->at(0)) : nullptr);
+            // The pack takes one slot in the numbering of the parameters the function wrote, which
+            // is the numbering the unwritten parameters of a lambda are recorded against (`with`
+            // parameters first): a parameter written after it (an ordinary rest parameter, say) is
+            // one place further on than its position in the source suggests.
+            ++paramIndex;
             continue;
         }
         Type *type                = nullptr;
