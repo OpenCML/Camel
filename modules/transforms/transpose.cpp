@@ -587,7 +587,8 @@ FunctionType *transposeSignature(
 /// The type answers this (`camel/core/tangent_space.h`), not the node kind: the same rule covers the
 /// booleans, the strings and a function value. Before this, an integer in a loop body stops the body's walk
 /// where it stands -- which is what the transform did before this rule, and what the A/B of the case
-/// below flips back to: `skip=state`, with no answer at all. (The switch is gone; the rule and the`r`n/// reading are what remain.)
+/// below flips back to: `skip=state`, with no answer at all. (The switch is gone; the rule and the
+/// reading are what remain.)
 
 /// A call's recorded tangent-argument positions are read (`GCNode::tangentArgs`, one bit per
 /// argument: which of the call's arguments a rule's expansion said are tangents). A kernel call inside
@@ -1025,17 +1026,21 @@ bool buildTransposeMember(
         // that place holds afterwards. The sum is chosen by the tangent space of what is already
         // there, so an array accumulates with `:tangent/add_arr` and a number with `:op/add_d`;
         // nothing here spells an addition of its own.
-        // TODO(the program this needs): no case in the tree reaches the array side of this yet. What
-        // would reach it is a program where two cotangents land on the same array-valued node -- the
-        // `cotangent[ref]` accumulation above, run a second time for one array -- so `into` holds an
-        // array and the sum has to be `:tangent/add_arr`. The gap is a program shape, not an
-        // assertion: there is nothing to assert until such a program exists.
-        const auto accumulate = [&](gc_node_ref_t into, gc_node_ref_t node) -> gc_node_ref_t {
+        //
+        // The space is handed in, not looked up off `into`: what a place holds is very often a node
+        // this build made, and a node of the draft has no type in the source graph to ask -- asking
+        // it read as `float` and summed two array cotangents with `:op/add_d`, which is the sum
+        // `addUriFor` above exists to avoid. Every caller names the cotangent space of the place it
+        // is filling, which is a question about the value, not about the node.
+        const auto accumulate = [&](gc_node_ref_t into, gc_node_ref_t node,
+                                    Type *space) -> gc_node_ref_t {
             if (into == rt::kInvalidNodeRef) {
                 return node;
             }
-            Type *addType            = Type::Float64();
-            const char *const addUri = addUriFor(function, into, addType);
+            Type *addType = space != nullptr ? space : Type::Float64();
+            const char *const addUri =
+                addType->code() == camel::core::type::TypeCode::Array ? ":tangent/add_arr"
+                                                                      : ":op/add_d";
             return into == node ? primitiveOf(addType, addUri, {node, node})
                                 : primitiveOf(addType, addUri, {into, node});
         };
@@ -1652,7 +1657,7 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                     hasLocal[ref] = true;
                     return;
                 }
-                local[ref] = accumulate(local[ref], node);
+                local[ref] = accumulate(local[ref], node, cotangentTypeOf(ref, Type::Float64()));
             };
             // The arm's chain ends at the parameter, which lives outside the arm's region: the
             // cotangent of that parameter for this arm is what the chain hands it. Anything else
@@ -1670,11 +1675,15 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                     addLocal(target, node);
                     return;
                 }
+                // The space every accumulation below fills: a state's cotangent for a stop, the
+                // member's for a component read, the escaped value's for an escape. One answer, asked
+                // once -- the place being filled is a node this build made, so it cannot be asked here.
+                Type *const ctSpace = cotangentTypeOf(target, Type::Float64());
                 for (size_t i = 0; i < stops.size(); ++i) {
                     if (stops[i] != target) {
                         continue;
                     }
-                    portCotangents[i] = accumulate(portCotangents[i], node);
+                    portCotangents[i] = accumulate(portCotangents[i], node, ctSpace);
                     return;
                 }
                 // A residual the arm read: the cotangent goes back into the slot it came from, named
@@ -1691,7 +1700,7 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                         });
                     if (body != nullptr && onAResidualPort) {
                         auto &slot = residualBack[body->value];
-                        slot       = accumulate(slot, node);
+                        slot       = accumulate(slot, node, ctSpace);
                         os << "TRANSPOSE function=" << function->name() << " residual-return slot="
                            << body->value << " region=" << oldRegion << '\n';
                         return;
@@ -1704,7 +1713,7 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                     if (slot.cotangent == rt::kInvalidNodeRef) {
                         slot = Escape{node, from};
                     } else {
-                        slot.cotangent = accumulate(slot.cotangent, node);
+                        slot.cotangent = accumulate(slot.cotangent, node, ctSpace);
                     }
                     return;
                 }
@@ -2177,6 +2186,16 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                     if (isConstant(inputs[i])) {
                         continue;
                     }
+                    if (!hasTangentSpace(inputs[i])) {
+                        // An operand that cannot hold a cotangent is not a position the law has to
+                        // answer for: `element_at(dxs, at)` states the length in an `int[]`, and the
+                        // law's right side answers the array alone. Asking it for the position of the
+                        // length is a question with no answer, and answering it "the rule's right side
+                        // answers one name" is not what the reader did. Recorded as the zero it is,
+                        // the same way the caller's walk treats such an operand.
+                        noteZero(inputs[i], ref);
+                        continue;
+                    }
                     std::string why;
                     bool noInstance = false;
                     const gc_node_ref_t answer =
@@ -2284,7 +2303,7 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                         if (into.size() <= j) {
                             into.resize(j + 1, rt::kInvalidNodeRef);
                         }
-                        into[j] = accumulate(into[j], part);
+                        into[j] = accumulate(into[j], part, cotangentTypeOf(ref, Type::Float64()));
                     }
                     hasCotangent[parts2[body->value]] = true;
                     break;
@@ -2298,7 +2317,7 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                     break;
                 }
                 gc_node_ref_t &slot = slots[body->value];
-                slot = accumulate(slot, cotangent[ref]);
+                slot = accumulate(slot, cotangent[ref], cotangentTypeOf(ref, Type::Float64()));
                 hasCotangent[holder] = true;
                 break;
             }
@@ -2844,7 +2863,48 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                 // tuple node being walked as one value.
                 std::vector<ArmSeed> seeds;
                 if (stateCount == 1) {
-                    seeds.push_back(ArmSeed{oldBodyResult, ctPorts.front()});
+                    // The round answers one value, and for an array state that value is a FILL of
+                    // its members -- `[x[1], x[0] + x[1] * k]` is a FILL of two numbers, which is
+                    // also what the lifted body answers, element by element. Its cotangent is the
+                    // cotangent of the whole array, so the body is entered at the *members*, each
+                    // with slot i read off it (`:op/idx_arr`, the operator `xs[i]` is built from).
+                    //
+                    // Not at the fill, handing each member its slot as the walk passes: the walk is
+                    // one sweep from the highest node down, so a member it reached before the fill
+                    // would be delivered to after it was passed, and the cotangent would stop there.
+                    // A member is a node the fill was built from, so it always comes first.
+                    const camel::runtime::GCNode *const resultNode = function->node(oldBodyResult);
+                    // The kind is asked before the payload is read: `nodeBodyAs` answers the bytes a
+                    // node has, and an OPER's bytes read as a FILL are some other number.
+                    const auto *resultFill =
+                        resultNode != nullptr && resultNode->kind == rt::GCNodeKind::Fill
+                            ? function->nodeBodyAs<rt::GCFillBody>(oldBodyResult)
+                            : nullptr;
+                    const bool builtByAFill =
+                        resultFill != nullptr && resultFill->fillKind == rt::GCFillKind::Array;
+                    if (builtByAFill) {
+                        const auto members = function->withInputsOf(oldBodyResult);
+                        for (size_t i = 0; i < members.size(); ++i) {
+                            const camel::runtime::GCNode *member = function->node(members[i]);
+                            if (member == nullptr || isConstant(members[i])) {
+                                continue;
+                            }
+                            const gc_node_ref_t slot = draft.addOperNode(
+                                cotangentTypeOf(members[i], Type::Float64()), nullptr,
+                                ":op/idx_arr");
+                            const std::array<gc_node_ref_t, 2> at{
+                                ctPorts.front(),
+                                draft.materializeStaticValue(
+                                    camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
+                                        static_cast<int64_t>(i)),
+                                    Type::Int64(), rt::kGCNodeFlagConstant)};
+                            draft.setNormInputs(
+                                slot, std::span<const gc_node_ref_t>(at.data(), at.size()));
+                            seeds.push_back(ArmSeed{members[i], slot});
+                        }
+                    } else {
+                        seeds.push_back(ArmSeed{oldBodyResult, ctPorts.front()});
+                    }
                 } else {
                     const auto results = function->withInputsOf(oldBodyResult);
                     for (size_t i = 0; i < stateCount; ++i) {
@@ -2975,7 +3035,7 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                     // accumulator per value, not per product: the products that call one value
                     // add into the same sum when they are delivered (the collection above). The sum
                     // is the type's own: `:tangent/add_arr` for an array, `:op/add_d` for a number.
-                    regionParts.push_back(accumulate(accPort, entry.second.cotangent));
+                    regionParts.push_back(accumulate(accPort, entry.second.cotangent, accType));
                     componentTypes.push_back(accType);
                 }
                 gc_node_ref_t regionResult = regionParts.front();

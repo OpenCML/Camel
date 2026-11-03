@@ -117,56 +117,34 @@ timeout_ms = 20000
 # has the gradient `s0 + s1` (`(1.0, 1.0)`), and undone in the order they were written it has
 # `s0 + 10*s1` (`(1.0, 10.0)`). One cotangent, two numbers, no seed to argue about.
 #
-# Marked known_fail against the author's ruling of 2026-11-03 00:30 (a case that cannot pass today
-# belongs in the plan with a mark, an owner and a reason, not outside it): the assertion is the
-# answer the transform owes, not today's refusal, and the runner reports a marked case that passes
-# as a failure, so the mark's removal is what this case asks for.
+# This case was marked known_fail until 2026-11-04, against the author's ruling of 2026-11-03 00:30 (a
+# case that cannot pass today belongs in the plan with a mark, an owner and a reason, not outside
+# it); the mark is gone because the answer is the two numbers now, on both backends. Four facts about
+# the graph had to land, and none of them is a patch at this program:
+#  - the reverse walk. `transpose`'s loop case iterates `range(n - 1, -1, -1)` and reads each round's
+#    element with `:op/idx_arr` instead of copying the sequence (author, 2026-11-03 18:50; path B of
+#    `docs/handover/questions/2026-11-02-does-reversing-a-backward-need-a-new-operator.cn.md`), so no
+#    operator is added.
+#  - the residual taken *after* the loop. The tangent side of the exit states the length it reads
+#    (`element_at(dxs, extent_pair(0, len(xs)))`), and that length is computed from the loop's
+#    **value**, so no invariant can be it: `split`'s `Residual::afterLoop` copies it once, after the
+#    loop and after the cell's projections are seeded (author, 2026-11-03 11:10: 凡是由前一半循环的
+#    输出算出来的残差，在循环建好之后再取). Before it, `split` refused the whole cut
+#    (`skip=forward construct=a loop`), and the half now reads `invariants=0 after=1`.
+#  - the round's answer read as an array. An array state's body answers a FILL of its members, and the
+#    transpose enters the body at the members, each with `:op/idx_arr` of the state's cotangent -- not
+#    at the fill handing each member its slot, because the walk is one sweep from the highest node down
+#    and a member it had already passed would be delivered to too late.
+#  - the sum of two array cotangents is `:tangent/add_arr`. `accumulate` is handed the cotangent space
+#    of the place it fills: that place is usually a node of the draft, whose type the source graph
+#    cannot answer, and it read back as `float` and summed arrays with `:op/add_d`. This case is the
+#    program that TODO was waiting for.
 #
-# Where the wall is today, read off the run rather than off the transpose site itself: `split` now
-# builds both halves of this loop (`REINTERP split function=jvp_of_g forward=276 backward=277 ...
-# residuals=1 loop=1 tape=5 invariants=0`), because the exit reads the loop's cell through one
-# `TupleIndex` per side and those two projections are what the cut hands each half -- no body region
-# is copied. The wall is one step later and is not a loop wall at all:
-# `TRANSPOSE function=split_of_jvp_of_g_backward skip=call-value-computed-by-the-body param=0
-# node=23 arg=2` -- the exit the backward half copies is `index_into(dxs, 0)`, whose array argument
-# the backward half
-# *recomputes* (the loop is copied into that half and its cell is a node there, not a residual), so
-# the member built for the callee cannot be handed the array's **value**. (The word was
-# `call-value-missing` until 2026-11-03, when one word was split into two: that one now means "the
-# call does not carry the parameter's own value", and this refusal is the other shape -- the value is
-# one this half computes out of a loop, so carrying it means transposing the body, not passing an
-# argument. The split is in `modules/transforms/transpose.cpp`'s `unforwardedCause`, its sentence in
-# `transpose_operator.cpp`, and `test/tools/transpose_refusal/check.py` holds the two words apart.)
-# Measured 2026-11-03: the
-# same refusal stands with and without the reverse walk in `modules/transforms/transpose.cpp` -- the
-# walk is behind this wall, not in front of it, so the number this case asks for is not readable until
-# the array argument at that call is carried instead of recomputed.
-# Owner, re-read after the closure item landed (2026-11-03, `34788b554`: a closure member carries the
-# parameter it is the value of, so a parameter value the second half reads is a residual): still the
-# cut's residual set, and **not** the parameter tail. Measured again on that tree, the line has not
-# moved by one field:
-#   REINTERP split function=jvp_of_g forward=276 backward=277 type=(float[]) => (float, (float[]) =>
-#     float pure) pure residuals=1 loop=1 tape=5 invariants=0
-#   TRANSPOSE function=split_of_jvp_of_g_backward skip=call-value-computed-by-the-body param=0
-#     node=23 arg=2
-# `invariants=0` is the whole reason the closure item cannot be the owner: this backward half reads no
-# parameter's value, so there is no member for the identity table to name and nothing for it to
-# carry. The callee's member *was* built (`TRANSPOSE function=rulesets.jvp::index_into<float>
-# graph=289 type=(int, float[], float) => (float[],) nodes=3 arms=0 rhs=idx_arr_t`, and its own zero
-# reading `contribution=0 node=1 type=int space=none from=2` is printed because that index *is* handed
-# a cotangent) -- what the call site cannot hand it is the array, which the backward half recomputes.
-# So the missing thing is a residual for a value the half computes and then reads back, not a residual
-# for a parameter. `transpose_loop_escape.int_is_a_zero_tangent_space` is not in this group any more
-# (it answers its numbers on the same tree); `transpose_loop_escape.second_state_of_the_same_loop`
-# still is.
-#
-# The reverse walk itself is *not* behind that wall any more (2026-11-03): `transpose`'s loop case now
-# iterates `range(n - 1, -1, -1)` and reads each round's element with `:op/idx_arr` instead of copying
-# the sequence, which is the shape the author named at 18:50 and the one path B of
-# `docs/handover/questions/2026-11-02-does-reversing-a-backward-need-a-new-operator.cn.md` describes --
-# no operator is added. Measured on this tree: the refusal below is identical with and without it, so
-# the walk is behind the wall rather than in front of it, and the number this case asks for stays
-# unreadable until the array argument at that call is carried instead of recomputed.
+# Measured 2026-11-04 on host 88zjwei (1 m load 20.8-21.0, a loaded host): `value= 3.0` and
+# `grad= [1.0, 1.0]` on `std::nvm` and on `std::fvm`, and the reading
+# `REINTERP split function=jvp_of_g ... residuals=2 loop=1 tape=5 invariants=0 after=1`
+# `transpose_loop_escape.two_values_of_two_kinds` and `second_state_of_the_same_loop` are still
+# refusals (a parameter that holds no cotangent, and a two-state loop the cut does not take).
 [[tests]]
 name = "vjp_loop.rounds_are_undone_in_reverse"
 desc = "The pullback of a two-round loop reads `(1.0, 1.0)` and not `(1.0, 10.0)`: for `loop x = s for k in [1.0, 10.0] do [x[1], x[0] + x[1] * k]` the per-round map is `M_k = [[0,1],[1,k]]`, so `M = M_10 * M_1 = [[1,1],[10,11]]`, and a pullback must apply `M_1^T` after `M_10^T` -- the rounds are undone in the other direction (design 4.2/4.3). Reading the loop's first component, the correct walk gives the gradient `(1.0, 1.0)` and a copied range gives `(1.0, 10.0)`; the two numbers separate the walks and nothing else in the program has to change. `vjp` takes a function whose result is a `float` (the cotangent of the result is the seed), so the pullback's subject is `g(s) = (loop ...)[0]` -- the same loop, the same two numbers."
@@ -174,9 +152,6 @@ kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_loop_rounds_walk_backwards.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-known_fail = ["nvm"]
-known_fail_msg = "this loop is on the chain the exit reads and neither half has a value for it"
-known_fail_note = "倒序本身已经做了（`transpose` 侧不再照抄 iterable）；这条用例仍红是因为 backwards 里那次读的**长度**由前一半的循环积算出，而 `split` 的残差只收「循环之前」算得出的值（`readLoopCut` 的 invariants 只认端口）。作者 17:35 的判据要求它答 `(1.0, 1.0)` 并摘掉标记：长度实参（`element_at` 的 `at[1]`）已经把线性操作数的值挡在规则之外，卡住的是**循环建好之后才取得到的残差**——`split` 的循环割得把它挪到循环后面（作者 §4 那半句「凡是由前一半循环的输出算出来的残差，在循环建好之后再取」），那是循环那条车道的活。今天红的是 `REINTERP split function=jvp_of_g skip=forward construct=a loop`：后一半要读 `len(y)`（`y` 是前一半循环的值），前一半算不出来。"
 expect_exit = 0
 expect_output_contains = ["value= 3.0", "grad= [1.0, 1.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
