@@ -1403,3 +1403,34 @@ expect_exit = 0
 expect_output_contains = ["cut ct1= (6.0)", "cut ct3= (18.0)", "hand ct1= (6.0)", "hand ct3= (18.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# The anchor of the D1 difference set in
+# `docs/handover/reports/2026-11-03-what-deleting-the-engine-pullback-takes.cn.md`: `^` on two floats is
+# answered by the engine and refused by the library, whose `stdlib/rulesets/transpose.cml` has no `pow_t`.
+# Two entries because the library's refusal happens where the graph is built -- a program holding both
+# would never print the engine's number.
+[[tests]]
+name = "pow_gradient_through_the_engine"
+desc = "`d(w^2)/dw` of a function whose differentiated `with` parameter is squared: the engine's `grad` answers it (6.0 at `w = 3`), which is one half of the anchor the deletion audit counts. The other half is the neighbouring entry: through `vjp` the same function is refused by name, because the library's reverse rule `pow_t` does not exist. The forward tangent of `^` is not repeated here; `jvp_of_a_power.cml` pins it."
+kind = "behavior"
+case = "../../../cases/compile/transforms/pow_gradient_through_the_engine.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["pow engine value=9.0 dL/dw=6.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "pow_gradient_refused_by_the_library"
+desc = "The same gradient through the library's `vjp`: the forward half runs (`rules=jvp_pow`) and the transposition stops where it needs the reverse rule, which is not written -- `skip=rule uri=math:pow_d reason=unbound`, then `skip=call-no-transpose … callee=rulesets.jvp::pow_tangent<float>`, and the sentence `this call's callee has no transpose of its own`. Pinned as the reading on both streams, not as an exit code, so the day a `pow_t` is written this entry fails and names what replaced it. This is the first member of the difference set that has to be empty before the engine's `pullback.cpp` can be deleted; the engine's answer for the same function is the neighbouring entry."
+kind = "negative"
+case = "../../../cases/compile/transforms/pow_gradient_refused_by_the_library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["transpose has no transpose for this function: this call's callee has no transpose of its own, so the call cannot be turned around"]
+expect_stderr_contains = ["skip=rule uri=math:pow_d reason=unbound", "skip=call-no-transpose node=6 callee=rulesets.jvp::pow_tangent<float>"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

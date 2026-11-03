@@ -40,7 +40,7 @@
 | `mean_axis` | ✓ | ✓ | ✓ |
 | `take` / `idx_take` | ✓ | ✓ `take_t` / `idx_arr_t` | ✓ |
 | 标量 `+ - * /`、一元负、`float()` | 核里另有 | ✓ | ✓ |
-| `pow` | ✓ `powVjp` | **✗** | ✓ `jvp_pow` |
+| `pow`（`^`） | ✓ | **✗**（实测 `skip=rule uri=math:pow_d reason=unbound`） | ✓ `jvp_pow` |
 | `reshape` | ✓ | **✗** | ✓ |
 | `softmax` | ✓ | **✗** | ✓ |
 | 其余 ~42 个张量算子 | ✓ | **✗** | **✗** |
@@ -57,7 +57,7 @@
 | # | 条件 | 今天怎么勾 |
 |---|---|---|
 | D1 | 引擎有真规则的每个张量算子，`stdlib/rulesets/transpose.cml` 里都有它的头 | 一个 diff 工具：`setVjp` 名字集合 − 规则头集合 = 空（今天差 ~42） |
-| D2 | `grad`/`with_grad`/`_aux` 有**库层声明**：`Gradient<F>`、`ValueAndGradient<F>`、`…AndAux<F>` 成为类型函数 | **未达成，且要作者裁决**：`stdlib/signatures/autodiff.cml` 自己写着 "`grad` has no declaration in standard library types: its result type is computed here"，今天由 C++ `GradResolver`（`gradientSignature`）算；要写成 `Tangent<With 的第一个>`，正撞上作者 2026-11-01 对"一长元组取元素"的否决 |
+| D2 | `grad`/`with_grad`/`_aux` 有**库层声明**：`Gradient<F>`、`ValueAndGradient<F>`、`…AndAux<F>` 成为类型函数。**已单独开页**：`docs/handover/questions/2026-11-03-can-gradient-of-a-function-be-a-library-type-function.cn.md`（默认 A：记为永久例外；要达成须先动那条否决） | **未达成，且要作者裁决**：`stdlib/signatures/autodiff.cml` 自己写着 "`grad` has no declaration in standard library types: its result type is computed here"，今天由 C++ `GradResolver`（`gradientSignature`）算；要写成 `Tangent<With 的第一个>`，正撞上作者 2026-11-01 对"一长元组取元素"的否决 |
 | D3 | 每个算子的数字对齐：库层 `grad`/`vjp` 与今天引擎读数 `max_abs_diff = 0` | 语料可数：`test/cases` 里 **239 个** case `import {…} from autodiff`、**125 个**提到 `with_grad`；对齐后这些数一个不动 |
 | D4 | 引擎今天**拒**的，库层按名拒、词不合并 | 非标量结果、无 `with`、首参 `var`（`differentiationRefusal`）、未知被调（`call-no-transpose`）、loop（`skip=state`）逐个有 case |
 | D5 | **嵌套 `grad`**（被微分的体里再调 `grad`）有库层答案 | 今天是引擎在 `ForwardRewrite::rewriteClosureCall` 里就地建图；作者的句子没提这条，但删了就没人答 |
@@ -67,15 +67,25 @@ D2 是硬前置：**类型算不出来，库层 `grad` 就写不出来**，于�
 `pullback.cpp` 再删也只删掉"建图"那半边，`grad` 仍是 C++ 算子——这不是作者第 7 条想要的结果。
 D1 才是主体工作量（~42 个算子，一个一个写 `*_t`）。
 
-## 4. 最小可验证的前置（今天就能勾）
+## 4. 最小可验证的前置（今天就能勾，已钉成用例）
 
-**`tensor:pow`**：引擎有 `powVjp`（`modules/tensor/ops/elementwise_ops.cpp`），库只有 `jvp_pow`
-没有 `pow_t`。于是同一条函数 `x ^ 2.0` 的梯度，`grad`（引擎）出数、`vjp`（库层）按名拒。
-`test/cases/compile/transforms/jvp_of_a_power.cml` 已经把 jvp 半边钉住（连"`skip=rule uri=:op/pow_d
-reason=the operator has no forward rule bound at all`"的旧读数都记在注释里），vjp 半边就是表里
-第一个能打勾的格子：不需要新代码，一个 case 两条读数。
+**`^`（两个 float 的乘方）**，两条相邻用例：
 
-`relu` 是更接近训练语料的同类锚点（引擎 `setVjp(defs, "relu", &reluVjp)`，库无 `relu_t`）。
+- 引擎回答：`test/cases/compile/transforms/pow_gradient_through_the_engine.cml` —— `grad` 给出
+  `d(w^2)/dw = 6.0`（`w = 3`），退出 0；
+- 库层按名拒：`test/cases/compile/transforms/pow_gradient_refused_by_the_library.cml` ——
+  `REINTERP jvp function=p … rules=jvp_pow`（前半边跑通）之后
+  `TRANSPOSE function=rulesets.jvp::pow_tangent<float> skip=rule uri=math:pow_d reason=unbound`，
+  再 `skip=call-no-transpose … callee=rulesets.jvp::pow_tangent<float>`，程序句是
+  "this call's callee has no transpose of its own"。
+
+实测要点：库层拒的 key 是 **`math:pow_d`**（`^` 落进图的标量拼写），不是 `tensor:pow`；`unbound`
+是规则表自己的词（这个族没有这个算子的规则）。两条读数不能同属一个程序——拒绝发生在建图处，
+程序不会跑到打印。
+
+**`relu` 是同一形状、更贴训练语料的锚**（静态清点，未跑）：引擎有
+`setVjp(defs, "relu", &reluVjp)`；库层无 `jvp_relu`、无 `relu_t`，所以 `vjp` 会在**前半边**（lift）
+就按名拒，而不像 `^` 那样走到转置才拒。要把它也钉成读数得再加一个用例，本轮只报不改。
 
 ## 5. 一句话
 

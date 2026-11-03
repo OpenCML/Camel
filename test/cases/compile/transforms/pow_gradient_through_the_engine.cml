@@ -1,0 +1,37 @@
+// The engine's answer for the gradient of a power, and half of deletion's first anchor.
+//
+// `docs/handover/reports/2026-11-03-what-deleting-the-engine-pullback-takes.cn.md` (D1) measures
+// what deleting the engine takes: for every operator the engine can differentiate, the library
+// needs its own cotangent rule. `^` on two floats is the first member of that difference set, and
+// this case is the engine's half -- `d(w^2)/dw = 2w = 6` at `w = 3`, through `grad` and the `with`
+// position it differentiates (design principles 9.9). The engine's power rules are the C++ side:
+// `tensor:pow`'s `powVjp` (`modules/tensor/ops/elementwise_ops.cpp`, registered by
+// `modules/tensor/ops/vjp.cpp#setVjp`), plus the engine's own table for the written scalar
+// operators. Which of the two answers this program is not measured here and is not what the anchor
+// is about; that the engine answers it is.
+//
+// The library's half is the neighbouring case, `pow_gradient_refused_by_the_library.cml`: the same
+// function's gradient through `vjp` refuses by name (`skip=rule uri=math:pow_d reason=unbound`),
+// because the forward rule `jvp_pow` exists and the reverse rule `pow_t` does not. The two readings
+// cannot share a program -- the refusal happens where the graph is built, so a program holding both
+// would never print this number.
+//
+// The forward half of `^` is already pinned by `jvp_of_a_power.cml` (the `jvp_pow` tangent, the
+// constant exponent's zero tangent, `log(-3.0)` staying out of the arithmetic); nothing here
+// repeats it.
+//
+//     camel test/cases/compile/transforms/pow_gradient_through_the_engine.cml
+import { grad } from autodiff
+
+/// The differentiated value is the `with` parameter: the body is a power of it and nothing else.
+with <w: float>
+func square(): float {
+    return w ^ 2.0
+}
+
+func main(): int sync {
+    let slope = grad(square)
+    let d = slope<3.0>()
+    `pow engine value=9.0 dL/dw={}`->format<d>->println
+    return 0
+}
