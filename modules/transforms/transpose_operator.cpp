@@ -92,11 +92,6 @@ class TransposeResolver final : public FuncTypeResolver {
         if (transposeSignature(const_cast<FunctionType *>(function)) != nullptr) {
             return std::nullopt;
         }
-        if (function->withTypesCount() != 0) {
-            return std::string(
-                "`transpose` takes a function without `with` parameters: the transform builds a "
-                "graph of its own and a captured value has no port to enter it by");
-        }
         if (function->exitType() != camel::core::type::Type::Float64()) {
             return std::string(
                 "`transpose` takes a function that returns a `float`: the cotangent of the "

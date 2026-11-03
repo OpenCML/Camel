@@ -748,13 +748,7 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
     }
     if (!sameArray(a->normPorts, b->normPorts, a->normPortCount) ||
         !sameArray(a->withPorts, b->withPorts, a->withPortCount) ||
-        !sameArray(a->closure, b->closure, a->closureCount) ||
-        // A closure member's identity is content too: it says which parameter the member is the
-        // value of, which `transpose` reads a parameter's value out of
-        // (`GCGraph::closureParameterOf`). Two graphs whose members differ in it are not one graph,
-        // and a comparison that said they were would let a rule skip writing the difference down.
-        (a->closureParameters != nullptr || b->closureParameters != nullptr) &&
-            !sameArray(a->closureParameters, b->closureParameters, a->closureCount)) {
+        !sameArray(a->closure, b->closure, a->closureCount)) {
         return false;
     }
     // Payloads, node by node: an OPER's cached implementation pointer is not content.
