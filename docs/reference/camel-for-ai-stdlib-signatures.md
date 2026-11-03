@@ -251,16 +251,22 @@ dim: <axis: i32> (t: T[..]) => int when is_numeric::<T>()
 pick_at: (t: T[..], at: int[]) => T when is_numeric::<T>()
 sum: (t: T[..]) => T
 sum: (t: T[..], axis: int, keepdims?: bool) => T[..]
+sum_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
 mean: (t: T[..]) => T
 mean: (t: T[..], axis: int, keepdims?: bool) => T[..]
+mean_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
 max: (t: T[..]) => T
 min: (t: T[..]) => T
 argmax: (t: T[..]) => int
 argmin: (t: T[..]) => int
 max: (t: T[..], axis: int, keepdims?: bool) => T[..]
+max_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
 min: (t: T[..], axis: int, keepdims?: bool) => T[..]
+min_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
 argmax: (t: float[..], axis: int, keepdims?: bool) => int64[..]
+argmax_axis: (t: T[..], axis: int, keepdims: bool) => int[..]
 argmin: (t: float[..], axis: int, keepdims?: bool) => int64[..]
+argmin_axis: (t: T[..], axis: int, keepdims: bool) => int[..]
 softmax: (t: f32[..], axis?: int) => f32[..]
 softmax: (t: float[..], axis?: int) => float[..]
 log_softmax: (t: f32[..], axis?: int) => f32[..]
@@ -289,13 +295,7 @@ gemm_backend: () => string
 gemm_threads: () => int
 gemm_library_threads: () => int
 gemm_library: () => string
-sum_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
 sum_to: (t: T[..], like: S) => S when is_float::<T>()
-mean_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
-min_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
-max_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
-argmax_axis: (xs: T[..], axis: int, keepdims: bool) => int[] when is_numeric::<T>()
-argmin_axis: (xs: T[..], axis: int, keepdims: bool) => int[] when is_numeric::<T>()
 ```
 
 **`types`** — import { ... } from types — 16 name(s)

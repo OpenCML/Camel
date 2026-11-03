@@ -164,3 +164,27 @@ expect_diagnostic_name = "SemanticDiag::DynamicCastForbidden"
 expect_output_contains = ["f32[3]", "f32[4]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+
+[[tests]]
+name = "reduction_states_extents"
+desc = "A reduction along an axis states the extents its result has: `mean_axis(x, 0, false)` on a `f32[2, 3]` answers a `f32[3]`, so a function declared `(v: f32[4])` cannot take it, and the call says the argument is `f32[3]`. Before the axis reductions were computed this read `f32[..]` and the message could not name a count at all."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_types/reduction_states_extents.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_output_contains = ["(f32[3])"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "reduction_extents_reach_the_product"
+desc = "An operator above a reduction reads the extents it states: `mean_axis(x, 0, false) * w` over a `f32[2, 3]` and a `f32[3]` is a `f32[3]`, so a function declared `(v: f32[5])` cannot take it and the call says `f32[3]`. This is the second half of the reading: the product had no extents to state while its left operand had none."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_types/reduction_extents_reach_the_product.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_output_contains = ["(f32[3])"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
