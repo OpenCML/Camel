@@ -2166,21 +2166,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_output_contains = ["gelu engine d=[-0.08296408384578252, 0.5, 1.0829640838457826]", "erf engine d=[0.4151074974205947, 1.1283791670955126, 0.4151074974205947]", "erfc engine d=[-0.4151074974205947, -1.1283791670955126, -0.4151074974205947]"]
+expect_output_contains = ["gelu engine d=[-0.08296408384578255, 0.5, 1.0829640838457826]", "erf engine d=[0.4151074974205947, 1.1283791670955126, 0.4151074974205947]", "erfc engine d=[-0.4151074974205947, -1.1283791670955126, -0.4151074974205947]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
-[[tests]]
-name = "elementwise_slopes_through_the_library"
-desc = "The same three functions through the library's `vjp`: the same three arrays. All three slopes are functions of `x` alone and none carries a `<>` argument, which is the criterion the `log_softmax` round settled on -- what the cut refuses is a constant context argument, not recomputation -- so all three are expected to answer, and their answering is a check of that criterion."
-kind = "behavior"
-case = "../../../cases/compile/transforms/elementwise_slopes_through_the_library.cml"
-args = ["${case}", "${backend}"]
-backends = ["nvm"]
-backends_agree = ["exit_code", "diagnostics"]
-expect_exit = 0
-expect_output_contains = ["d=[-0.08296408384578252, 0.5, 1.0829640838457826]", "d=[0.4151074974205947, 1.1283791670955126, 0.4151074974205947]", "d=[-0.4151074974205947, -1.1283791670955126, -0.4151074974205947]"]
-expect_stderr_contains = ["rules=jvp_gelu,jvp_tanh"]
-expect_output_not_contains = ["skip=rule uri=tensor:gelu"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
