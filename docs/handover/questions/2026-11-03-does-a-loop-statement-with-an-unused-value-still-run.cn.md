@@ -122,3 +122,31 @@ NAD [... span="28:4-28:66" ...]   NC5 [... span="29:4-29:80" ...]
 下一次改落在 `builder.cpp` 1820–1845 的判断上（或 `setArmResult` 收下之后）。量法：在 3648 打
 `nodeKind(bodyPart->output)` 与 `nodeKind(bodyPart->value)`，两者都是 `Oper`（不是 `Gate`）就
 说明确实没有门，那时再决定"体区交回链的最后一站"该写在哪一处。
+
+## 第三次读数：`synced_ == false`，`lastSyncedNode_ == nullptr`
+
+在 `builder.cpp` 1811 那句 `if (!operands)` 里打一行（`CAMEL_P02_SYNC=1`，`generators_loop.cml`
+走 `std::nvm`），这个用例的每一对打印都是同一个形状：
+
+```
+P02SYNC synced=0 operands=0 returned=<0|1> sameGraph=1 resKind=0 needs=0
+```
+
+三件事一起成立：
+
+- `synced = 0`：走到这句时**所在块不在链上**。`visitBodyNode` 建体区时先把 `synced_` 置 false
+  （`builder_control.cpp` 4246 行 `std::exchange(synced_, false)`），体内那个 `sync { … }` 块自己
+  的语句是有序的（所以体内确实有链），但块收尾时 `synced_` 已经回到外层的 false。
+- `needs = 0`：`valueNeedsSyncEdge(res, lastSyncedNode_)` 为假。它的定义是
+  `chainEnd != nullptr && !valueReadsThrough(value, chainEnd)`（`builder_helpers.h` 666 行），
+  而体区里 `lastSyncedNode_` 是空的 ⇒ **链尾是空的，所以永远不必造门**。
+- `resKind = 0`（`Oper` 一类的值节点），不是 `Gate`。
+
+所以"门没交回来"的确切原因是：**体区这一层没有链尾**，于是收尾处既不造门，也不把值挂到链上；
+值以裸值交回，`setArmResult` 收下裸值，循环拿到裸值，体的语句（发打印的那条）没有任何使用者。
+
+**判据（下一次动手用）**：`synced_` 这一个条件对"语句的值没人用"是对的（P0-2 的规矩：纯值不上
+链），但它对**要交给机器每轮消费的体区**不对——体区的值有使用者（循环的 `with` 输入），有使用者
+就该是链上的一站。所以这一处的判断要按"这个值有没有跨区域的使用者"分岔：没有跨区域使用者才让
+值自己当链尾，有就造门并交回门。改成这一条时**分支臂会同时被影响**（`buildArm` 两边共用），
+要单独跑臂的用例再动。
