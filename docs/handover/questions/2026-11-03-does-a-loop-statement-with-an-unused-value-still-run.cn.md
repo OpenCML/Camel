@@ -470,3 +470,15 @@ walks through it`），它把"链尾"从语句节点改成了**位门**，五处
 而且 `test/` 树里没有任何用例钉住这句话（`grep "sync block it is in is not used"` 零命中）。
 这条反向证据因此**还欠着**；能给出的保证是：这一段（五处之外）与 develop 逐字节相同，
 检查的口径没有被动过。
+### 合并 develop 之后的 transforms 读数（`d3d70c373`）
+
+| 时点 | total | pass | fail | known | 红的是哪几条 |
+| --- | --- | --- | --- | --- | --- |
+| 合并前（基 `d0246e7c9`，早于 `2c416539b`） | 78 | 74 | 3 | 1 | `transpose_loop_escape.two_values_of_two_kinds`、`.second_state_of_the_same_loop`、`.int_is_a_zero_tangent_space` |
+| 合并 `origin/develop`（`76f910062`）后 | 78 | **75** | **2** | 1 | `transpose_loop_escape.two_values_of_two_kinds`、`.second_state_of_the_same_loop` |
+
+**`int_is_a_zero_tangent_space` 是基带来的红，合进来就绿了**（可能 ①），不是回退带出来的新红。
+`jvp_effect.runs_as_written_and_zero_tangent.nvm` 两次都是绿的。
+
+反向证据那条改判为"这一轮仍造不出来"，单开一页：
+`2026-11-03-is-the-unused-sync-block-warning-reachable-at-all.cn.md`。
