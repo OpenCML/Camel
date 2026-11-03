@@ -1958,7 +1958,11 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // the one that writes `silenced_warnings = []`. `-Wno-...` is scanned out of the whole argv by
     // the command line (`takeWarningArguments`), so its position does not matter.
     const silencedWarnings = test.silenced_warnings ?? ['jit-without-code-generator']
+    // Only an entry that runs the compiler takes the flag: a `tool` entry hands its arguments to
+    // another program (a script of this repository, the language server, the debugger), which knows
+    // nothing of `-Wno-...` and would read it as its own.
     if (
+        toolName === 'camel' &&
         silencedWarnings.includes('jit-without-code-generator') &&
         buildHasNoCodeGenerator(logContext.options)
     ) {

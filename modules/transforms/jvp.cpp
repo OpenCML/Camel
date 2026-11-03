@@ -726,6 +726,15 @@ bool liftGraph(
         // which is the same type as the pair of the whole value, and only this set tells the exit
         // which of the two it is holding.
         std::unordered_set<gc_node_ref_t> pairIsTheCopy;
+        // What each tuple fill `jvp` writes is made of, member by slot: a loop's value tuple and the
+        // tangent tuple beside it, and the copy of any tuple a body builds. A reader that projects one
+        // member of such a tuple does not need the tuple: the member is a node already (the loop's
+        // half, the body's own value), so the projection answers that node instead of indexing a fill
+        // nobody else may read. Measured 2026-11-03: without this, `(loop t = (x, x) ...).1` reached
+        // both of the loop's components through the fill it built, which is exactly what `split`
+        // cannot cut. A slot the payload does not list (it takes the template's constant) is left out
+        // and its projection is copied as the projection it is.
+        std::unordered_map<gc_node_ref_t, std::vector<gc_node_ref_t>> membersOfFill;
         bool complete = true;
         // Step 3, second layer: a tangent for every node. A constant's tangent is zero, a port's is
         // the tangent parameter the caller passed, and a primitive's is the forward rule the ruleset
@@ -1234,6 +1243,24 @@ bool liftGraph(
                 copyOf[ref] = made;
                 copied[ref] = true;
                 ++copiedKinds;
+                // A projection of this tuple is its member's half, not an index into a tuple built
+                // for readers who want the whole thing (see `membersOfFill`).
+                if (typeIsTuple) {
+                    // By *slot*, not by position: a payload may list only some of the tuple's slots
+                    // and take the rest from the template, and a slot the payload does not list is
+                    // the template's constant, not the next listed member. A slot with no member
+                    // stays invalid, so a projection of it is copied as the projection it is.
+                    std::vector<gc_node_ref_t> bySlot(arity, rt::kInvalidNodeRef);
+                    if (fill != nullptr) {
+                        const std::span<const rt::gc_slot_idx_t> slots = fill->slots();
+                        for (size_t i = 0; i < slots.size() && i < values.size(); ++i) {
+                            if (slots[i] >= 0 && static_cast<size_t>(slots[i]) < arity) {
+                                bySlot[static_cast<size_t>(slots[i])] = values[i];
+                            }
+                        }
+                    }
+                    membersOfFill[made] = std::move(bySlot);
+                }
                 if (pairOf(node->dataType()) != nullptr) {
                     // The components in slot order, with a zero for every slot the payload leaves to
                     // the template. A tuple's components are its fields, at their own types; an
@@ -1277,6 +1304,9 @@ bool liftGraph(
                             slots);
                         tangentOf[ref] =
                             fillWithPayload(node->dataType(), tangentPayload, components);
+                        if (tuple != nullptr) {
+                            membersOfFill[tangentOf[ref]] = components;
+                        }
                     }
                 }
                 break;
@@ -1310,11 +1340,28 @@ bool liftGraph(
                 const gc_node_ref_t tuple = inputs.front();
                 const gc_node_ref_t source =
                     valueOf[tuple] != rt::kInvalidNodeRef ? valueOf[tuple] : copyOf[tuple];
-                copyOf[ref] = project(source);
+                // A member of a tuple this transform filled is that member's own node, not a projection of the
+                // tuple: the fill exists so a reader of the *whole* tuple sees what the program sees, and
+                // a reader of one member has no business reading every member (and, for a lifted loop's
+                // value tuple, reaching the loop's other component -- measured 2026-11-03,
+                // `(loop t = (x, x) ...).1`).
+                const auto memberHalf = [&](gc_node_ref_t from) -> gc_node_ref_t {
+                    const auto at = tupleIndexed ? membersOfFill.find(from) : membersOfFill.end();
+                    if (at == membersOfFill.end() || body->value >= at->second.size()) {
+                        return rt::kInvalidNodeRef;
+                    }
+                    return at->second[body->value];
+                };
+                const gc_node_ref_t valueMember = memberHalf(source);
+                copyOf[ref]                     = valueMember != rt::kInvalidNodeRef ? valueMember
+                                                                                    : project(source);
                 copied[ref] = true;
                 ++copiedKinds;
                 if (tangentOf[tuple] != rt::kInvalidNodeRef) {
-                    tangentOf[ref] = project(tangentOf[tuple]);
+                    const gc_node_ref_t tangentMember = memberHalf(tangentOf[tuple]);
+                    tangentOf[ref]                   = tangentMember != rt::kInvalidNodeRef
+                                                          ? tangentMember
+                                                          : project(tangentOf[tuple]);
                 }
                 break;
             }
@@ -1575,6 +1622,9 @@ bool liftGraph(
                             rt::makeFillPayload(rt::GCFillKind::Tuple, slots);
                         valueOf[ref]   = fillWithPayload(node->dataType(), payload, values);
                         tangentOf[ref] = fillWithPayload(node->dataType(), payload, tangents);
+                        // A reader of one member answers that member's half; see `membersOfFill`.
+                        membersOfFill[valueOf[ref]]   = values;
+                        membersOfFill[tangentOf[ref]] = tangents;
                     }
                 }
                 break;
