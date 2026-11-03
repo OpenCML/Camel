@@ -1,0 +1,30 @@
+/**
+ * A function whose result is a pair, handed to the library's `vjp` with no named argument: the
+ * library refuses, and the refusal is where the pair stops being a `float`.
+ *
+ * `vjp(f)` is `transpose(split(jvp(f)))` written out (stdlib/vjp.cml). For a `float` result the
+ * pair the cut hands out is `(value, lin)` and `transpose(lin)` is the pullback. For a result that
+ * is itself a pair, the cotangent that goes into the transposed half would be the cotangent of a
+ * pair, and `transpose` takes a function that returns a `float`. So the call is refused at that
+ * step, inside the library's own file, and not by returning `(value, pullback)` with the pair's
+ * first element silently differentiated: a library that guessed would answer a gradient for a
+ * function nobody asked it to differentiate.
+ *
+ * This is the pair form's refusal on the library side; the parameter form
+ * (`vjp(loss, has_aux: true)`) is test/cases/modules/autodiff/has_aux_vjp_named.cml, and the
+ * composition that does reach all three numbers is
+ * test/cases/modules/autodiff/has_aux_library.cml.
+ */
+import { vjp } from vjp
+
+func loss(x: float): (float, float) {
+    return (x * x, x + 10.0)
+}
+
+func main(): int sync {
+    let (y, pullback) = vjp(loss)(3.0)
+    let _ = y
+    let cotangents = pullback(1.0)
+    println(cotangents)
+    return 0
+}
