@@ -77,3 +77,31 @@
 那个形状，而它**与负载无关**，重跑一百次也一样。所以先看 stderr 第一行是不是
 `GLIBCXX_* not found`，再看宽度与负载（`docs/handover/pitfalls.cn.md` 同一天改的那一行）。
 否则每个手搓 ssh 的人都会得到 `0/N`，并把它误判成负载。
+
+## 补记（22:51，这份脚本被**另一条车道**改了，不是这一条）
+
+本页上面的读数取于 22:44–22:52，脚本当时还是我引的那三处。22:51 之后脚本变成
+**"整个远程执行都把 `$LibStdCxxDir` 放第一位"**——同一份文件、唯一副本，所以被改的是同一个对象，
+只是改的人不是我：
+
+```
+export CC=clang CXX=clang++
+export LD_LIBRARY_PATH='$LibStdCxxDir'":`$C/lib:`${LD_LIBRARY_PATH:-}"
+echo "[camel-remote] libstdc++: $LibStdCxxDir first on LD_LIBRARY_PATH (a command run by hand over ssh needs the same)"
+```
+
+对这份记录有三件事要说清：
+
+1. **这一笔没有改过脚本**（它不在版本控制里，也不在我这棵工作树里）；上面第 1 条引文是**改前**的原文。
+2. 改后的形状**包含**本页的结论，而且比它更强：构建、plan 与每一个 checker 现在都把
+   `$LibStdCxxDir` 放第一位，于是 `-Changed` / `-UpdateGolden` 那处不对称**自动消失**
+   （它们继承同一条导出），plan 分支的 `CAMEL_TEST_EXTRA_LIB_DIRS` 变成纯冗余。
+3. 改后跑过一次真目标：`-Plan feat/docs_links -Tier fast -Jobs 4` →
+   `[SUMMARY] total: 17, pass: 17, fail: 0`、退出 0，日志第一屏就是那行 `[camel-remote] libstdc++: …`；
+   改前同一棵树的 `-Plan feat/transforms/split -Tier fast -Jobs 4` 是
+   `[SUMMARY] total: 19, pass: 19, fail: 0`。两次都绿，所以这条改动**不是**在某次红上做的修补。
+
+留给下一个人的一句：那条新注释里 "Everything else in this script ran **without** it" 不成立——
+`LD_LIBRARY_PATH="$C/lib"` 一直都在，而且实测够用（本页第 2、3 条读数）。
+新写法更好（它把"手搓 ssh 该 paste 什么"直接打进输出），但它不是从"什么都没带"改过来的：
+把它当成对一次真红的修复来读，就会把 22:44 那份读数当成假的。
