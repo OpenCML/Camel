@@ -1,0 +1,38 @@
+// The forward rule and the transpose rule of the array product are adjoints of each other, and this
+// case reads both at the same function and the same point instead of trusting the words: for a
+// linear `f`, `<jvp(f)(x, dx), ct>` and `<dx, vjp(f)(x).1(ct)>` are the same number.
+//
+//   f(xs, w) = sum(xs * w)          xs = (1, 2, 3)      w = (2, 3, 4)
+//   dxs = (1, -1, 2)                dws = (0, 1, -1)     ct = 1
+//
+//   tangent = sum(dxs*w) + sum(xs*dws) = (2 - 3 + 8) + (0 + 2 - 3) = 7 - 1 = 6
+//   vjp at ct = 1 answers d/dxs = w = (2, 3, 4) and d/dw = xs = (1, 2, 3), and
+//   <dxs, w> + <dws, xs> = (2 - 3 + 8) + (0 + 2 - 3) = 6
+//
+// The two lines are printed one under the other, so the reading is the comparison and not a claim
+// about it. `jvp` reads `rulesets.jvp`'s `jvp_mul_tensor`; `vjp` reads this family's
+// `mul_tensor_t`, which is the rule this case was written for.
+import rulesets.jvp
+import rulesets.transpose
+import { sum } from tensor
+import { jvp } from transforms
+import { vjp } from vjp
+
+func energy(xs: float[..], w: float[..]): float {
+    return sum(xs * w)
+}
+
+func main(): int sync {
+    let xs = [1.0, 2.0, 3.0] as float[..]
+    let w = [2.0, 3.0, 4.0] as float[..]
+    let dxs = [1.0, -1.0, 2.0] as float[..]
+    let dws = [0.0, 1.0, -1.0] as float[..]
+    let (value, tangent) = jvp(energy)(xs, w, dxs, dws)
+    let (_, pullback) = vjp(energy)(xs, w)
+    let (dx, dw) = pullback(1.0)
+    let paired = sum(dxs * dx) + sum(dws * dw)
+    println(`value = ${value:.1f}`)
+    println(`forward  <jvp tangent, ct> = ${tangent:.1f}`)
+    println(`backward <dxs, d/dxs> + <dws, d/dw> = ${paired:.1f}`)
+    return 0
+}
