@@ -2268,10 +2268,17 @@ that says neither is not a use of this operator.
 #### `show`
 
 ```camel
-show: (t: A[..]) => void
+show: (t: A[..]) => void when is_numeric::<A>() || is_same::<A, bool>()
 ```
 
 Prints t to the console, in the module's layout.
+
+The elements are the ones a tensor stores -- the numbers and the booleans (`x * s`, a bool's
+gradient and the widths the kernels carry are all read at those, modules/tensor/dtype.cpp
+`isSupportedTensorScalar`) -- and the parameter says so, so an element type no kernel can read
+is refused at the call and not left to the runtime. The parameter takes `A[..]`, which includes
+rank 0 (design principles 5.4), so the condition is what keeps a `string` from being read as one
+element of a rank-zero array.
 
 - With effects: writes the console.
 - Example: `show([[1.0, 2.0]] as float[1, 2])`
@@ -2424,15 +2431,23 @@ rounded once into the element type. `keepdims` leaves the reduced axis as an ext
 sum_to: (t: T[..], like: T[..]) => T[..] when is_float::<T>()
 ```
 
-`t` reduced to the shape `like` states: the lanes `like` would have been spread over are summed
-back into one element each, in `f64`, rounded once into the element type. Two shapes that are
+`t` read at the shape `like` states, which is the shape of the answer. Two shapes that are
 equal give `t` unchanged, and `like` of rank 0 -- which `T[..]` includes, a rank-zero array being
 that element and nothing else (design principles 5.4) -- gives the total sum as that element.
 
-It is the adjoint of broadcasting read off the shape: what a broadcast handed out along a lane,
-this adds back up. The differentiation rules use it for exactly that (`rulesets.transpose`,
-where an operand of a broadcast product answers `sum_to(ct * other, operand)`), and its own VJP
-broadcasts back (`modules/tensor/ops/gradient_ops.cpp`).
+It is the adjoint of broadcasting read off the shape, and the adjoint runs both ways. Along the
+lanes `like` is lower in, what a broadcast handed out is added back up into one element each, in
+`f64`, rounded once into the element type. Along the lanes `like` is *higher* in, `t` has none of
+its own and there is nothing to add back: `t` is spread out over them, every element of the
+answer being the element of `t` its index came from -- the same law read the other way, and the
+direction is decided by the two ranks (`modules/tensor/kernels/gradient.cpp#sumTo`). A rank-zero
+`t` is the element itself (5.4), so it spreads as that value: `sum_to(6.0, xs)` with
+`xs: float[] = [1.0, 2.0, 3.0]` is `[6.0, 6.0, 6.0]`. A `like` the shape of `t` cannot reach at
+all (`[2, 3]` against `[4]`) is a fault, not a number.
+
+The differentiation rules use it for the reduction (`rulesets.transpose`, where an operand of a
+broadcast product answers `sum_to(ct * other, operand)`), and its own VJP broadcasts back
+(`modules/tensor/ops/gradient_ops.cpp`).
 
 - Pure.
 - Example: `sum_to([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 1.0)` gives `10.0`
