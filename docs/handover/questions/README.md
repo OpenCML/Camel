@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：39 页
+## 现在在等作者：41 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -28,9 +28,11 @@
 | [`2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value`](2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md) | 转置成员要不要给"一个参数自己的值"留一个端口？ |
 | [`2026-11-04-does-a-with-value-get-a-tangent`](2026-11-04-does-a-with-value-get-a-tangent.cn.md) | `with` 值该不该有自己的切向？ |
 | [`2026-11-04-does-pick-at-need-a-forward-rule`](2026-11-04-does-pick-at-need-a-forward-rule.cn.md) | 问题：`pick_at` 该补一条**前向**律吗？ |
+| [`2026-11-04-does-the-engine-need-a-pick-at-rule`](2026-11-04-does-the-engine-need-a-pick-at-rule.cn.md) | 问题：引擎的反向表要不要给 `pick_at` 补一条规则？ |
 | [`2026-11-04-does-the-seal-check-judge-the-marker-or-the-statement`](2026-11-04-does-the-seal-check-judge-the-marker-or-the-statement.cn.md) | 同步边的封口判据：问标记，还是问"这个节点是不是语句" |
 | [`2026-11-04-does-the-transpose-walk-still-refuse-by-arity`](2026-11-04-does-the-transpose-walk-still-refuse-by-arity.cn.md) | 问题：转置走图还按操作数个数拒一个算子吗？ |
 | [`2026-11-04-how-does-a-tie-mask-travel-with-an-extremums-shape`](2026-11-04-how-does-a-tie-mask-travel-with-an-extremums-shape.cn.md) | `max_axis` / `min_axis` 的孪生算子：并列极值的选择怎么随形状走？ |
+| [`2026-11-04-is-an-open-rank-zeros-answer-an-empty-array-or-a-refusal`](2026-11-04-is-an-open-rank-zeros-answer-an-empty-array-or-a-refusal.cn.md) | 开秩数组的零，是空数组还是明确拒绝 |
 | [`2026-11-04-should-a-multiplys-adjoint-need-its-operands-shape`](2026-11-04-should-a-multiplys-adjoint-need-its-operands-shape.cn.md) | 乘法的伴随要不要读操作数自己的形状？ |
 | [`2026-11-04-should-the-compiler-version-invalidate-an-install`](2026-11-04-should-the-compiler-version-invalidate-an-install.cn.md) | 编译器的**版本**要不要进构建指纹？ |
 | [`2026-11-04-should-the-library-grad-be-declared-per-arity`](2026-11-04-should-the-library-grad-be-declared-per-arity.cn.md) | 库层 `grad` 要不要按 arity 铺开一族声明，还是等一个"pack 的第一个成员"类型函数？ |

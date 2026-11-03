@@ -1503,13 +1503,13 @@ expect_output_contains = ["(2.0, 0.0)"]
 # instead of leaving a stale green behind.
 [[tests]]
 name = "transpose_unread_array_parameter_stops_earlier"
-desc = "`g(x: float[], n: float) = n * 2.0` never reads `x`, and the transpose of it does not reach `skip=unread-parameter` at all: the run stops one step earlier at `autodiff: a zero tangent array needs an array with a tangent`, with `TRANSPOSE function=g type=(float) => (float[], float) rhs=mul_t` above it and no `skip=` line, and exits 1. The zero of an array is made from an array (`tangent/zeros_arr`), and an unread parameter hands it nothing -- a stated length does not change that, because the same body with `x: float[3]` answers the same sentence. The neighbour `transpose_unread_parameter_answers_zero` is the other half: an unread float answers `(2.0, 0.0)`, so the rule is about an unread number and not about unread parameters in general."
-kind = "negative"
+desc = "`g(x: float[], n: float) = n * 2.0` never reads `x`, and the transpose of it does not reach `skip=unread-parameter` at all: the walk answers from the type, one gate earlier. This entry pinned the refusal that stood there (`autodiff: a zero tangent array needs an array with a tangent`, exit 1) and now pins the reading that replaced it -- `([], 2.0)`, exit 0 -- because `transpose` asks the parameter's tangent space for the zero and, when the member holds no value for that parameter, writes the zero the type states: the same rule, in the same words, as `jvp`'s `zeroConstantFor`. A type that leaves a dimension open states no size for it, and a zero of it has 0 elements there, so an unread `float[]` answers `[]` where an unread `float` answers `0.0`; the difference between the two entries is the type, not the reading. The refusal it used to pin was a different defect (`:tangent/zeros_arr` named in the walk's own source, handed a node of the source graph). Whether an empty array is the right zero for a length nobody stated is the open question this entry leaves to `docs/handover/questions/2026-11-04-is-an-open-rank-zeros-answer-an-empty-array-or-a-refusal.cn.md`."
+kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_unread_array_parameter_stops_earlier.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
-expect_exit = 1
-expect_output_contains = ["autodiff: a zero tangent array needs an array with a tangent", "TRANSPOSE function=g graph=", "type=(float) => (float[], float)"]
+expect_exit = 0
+expect_output_contains = ["([], 2.0)", "TRANSPOSE function=g graph=", "type=(float) => (float[], float)"]
 expect_output_not_contains = ["skip=unread-parameter"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
