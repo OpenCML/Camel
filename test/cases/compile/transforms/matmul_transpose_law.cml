@@ -1,0 +1,81 @@
+// The transpose law of the matrix product, read the way a training step reads it.
+//
+// `first_step_tensor.cml` takes the same step's gradient through the *forward* transform, four seeds
+// for four numbers. This case takes it through `vjp` -- `transpose(split(jvp(f)))` -- which is what
+// S2's step is written on and which answers every cotangent in one call.
+//
+// The two functions here take everything as an ordinary parameter, and that is deliberate: the
+// capture form of the same step is `first_step_tensor_vjp.cml`, which still stops at `split` (a
+// captured value is a port of the lifted graph that is not one of its parameters). Keeping the
+// capture out of this case is what makes the product's law the only thing under measurement.
+//
+//     sum_of_product:  L = sum(x @ w)                     nothing but the product and a sum
+//     step_plain:      L = 0.5 * sum((x @ w - t) * (x @ w - t))
+//
+// with `x = [[1, 2], [3, 4]]`, `t = [[0, 0], [1, 1]]`, `w = [[0.5, 0.25], [0.125, 1]]`.
+//
+// Hand calculation, the only numbers the laws may answer:
+//
+//     x @ w = [[0.75, 2.25], [2.0, 4.75]]        (2x2 · 2x2)
+//     L_a   = 9.75
+//     dL_a/dx = ones @ wᵀ = [[0.75, 1.125], [0.75, 1.125]]
+//     dL_a/dw = xᵀ @ ones = [[4, 4], [6, 6]]
+//
+//     e = x@w - t = [[0.75, 2.25], [1.0, 3.75]]
+//     L_b = 0.5 * (0.5625 + 5.0625 + 1 + 14.0625) = 10.34375
+//     dL_b/dw = xᵀ e = [[3.75, 13.5], [5.5, 19.5]]
+//     dL_b/dx = e wᵀ  = [[0.9375, 2.34375], [1.4375, 3.875]]
+//     dL_b/dt = -e   = [[-0.75, -2.25], [-1.0, -3.75]]
+//
+// Every one of these is exact in binary floating point, so "equal" below means equal.
+//
+//     camel test/cases/compile/transforms/matmul_transpose_law.cml
+import { matmul, sum } from tensor
+import { vjp } from vjp
+import { with_grad } from autodiff
+import { abs, max } from math
+
+/// A product under a sum: `a · b` is the only operator here that needs a transpose law.
+func sum_of_product(x: float[2, 2], w: float[2, 2]): float {
+    return sum(matmul(x, w))
+}
+
+/// The step itself, every value an ordinary parameter.
+func step_plain(x: float[2, 2], t: float[2, 2], w: float[2, 2]): float {
+    let e = matmul(x, w) - t
+    return 0.5 * sum(e * e)
+}
+
+/// The same step for the engine's pullback: `with_grad` differentiates `w`.
+with <w: float[2, 2]>
+func step_with(x: float[2, 2], t: float[2, 2]): float {
+    let e = matmul(x, w) - t
+    return 0.5 * sum(e * e)
+}
+
+func main(): int sync {
+    let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
+    let t = [[0.0, 0.0], [1.0, 1.0]] as float[2, 2]
+    let w = [[0.5, 0.25], [0.125, 1.0]] as float[2, 2]
+
+    // Leg A: the product alone, both of its operands read back.
+    let (value_a, pullback_a) = vjp(sum_of_product)(x, w)
+    let (dx_a, dw_a) = pullback_a(1.0)
+    `matmul_t sum_prod value={} dL/dx={} dL/dw={}`->format<value_a, dx_a, dw_a>->println
+
+    // Leg B: the step, with the engine's pullback beside it for the same four numbers.
+    let (value_b, pullback_b) = vjp(step_plain)(x, t, w)
+    let (dx_b, dt_b, dw_b) = pullback_b(1.0)
+    let (engine_value, engine_w) = with_grad(step_with)<[[0.5, 0.25], [0.125, 1.0]] as float[2, 2]>(x, t)
+    `matmul_t step value={} dL/dx={} dL/dt={} dL/dw={}`->format<value_b, dx_b, dt_b, dw_b>->println
+    `matmul_t engine value={} dL/dw={}`->format<engine_value, engine_w>->println
+
+    let dv = abs(value_b - engine_value)
+    let d00 = abs(dw_b[0][0] - engine_w[0][0])
+    let d01 = abs(dw_b[0][1] - engine_w[0][1])
+    let d10 = abs(dw_b[1][0] - engine_w[1][0])
+    let d11 = abs(dw_b[1][1] - engine_w[1][1])
+    let dw = max(max(d00, d01), max(d10, d11))
+    `matmul_t max_abs_diff_library_vs_engine w={:.12e} value={:.12e}`->format<dw, dv>->println
+    return 0
+}

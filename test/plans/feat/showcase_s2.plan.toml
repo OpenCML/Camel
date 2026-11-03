@@ -61,3 +61,114 @@ assert(Number.isFinite(values.library) && Number.isFinite(values.engine),
 }
 '''
 timeout_ms = 120000
+
+# The TENSOR model's first step, and the wall that used to stand in front of it. The step captures
+# its batch and its target -- `x = [[1, 2], [3, 4]]`, `t = [[0, 0], [1, 1]]` -- and moves one weight
+# `w = [[0.5, 0.25], [0.125, 1]]` through `pred = x @ w`, `loss = 0.5 * sum((pred - t)^2)`.
+#
+# Until 2026-11-03 a body that captured *anything* was refused whole
+# (`transforms: jvp has no forward transform for this function`, `REINTERP jvp ... skip=body`), for a
+# captured `float` as much as for a captured `float[2, 2]`: the ports a capture arrives at were the
+# one kind `jvp` did not make, and the report of the tensor path blamed `pairTypeOf`, which hands an
+# array the pair its own type names and was never asked. The four directions of `dL/dw` are now read
+# out of the forward transform, four seeds, and they are the reverse transform's answer without the
+# reverse transform: `dL/dw = x^T (pred - t) = [[3.75, 13.5], [5.5, 19.5]]` at `loss = 10.34375`.
+#
+# Every element is exact in binary floating point, so this entry compares exactly and not to a
+# tolerance: the hand calculation, the library's forward transform and the engine's `with_grad`
+# answer the same four numbers and the same loss (PyTorch 2.5.1+cu121, float64, cpu, 2026-11-03,
+# `D:\Temp\s2-tensor-first-step-torch.py`).
+[[tests]]
+name = "first_step.tensor_forward_jvp.nvm"
+desc = "The first step's gradient on a TENSOR model read through the library's forward transform, four seeds, against the engine's `with_grad`: loss 10.34375 and dL/dw [[3.75, 13.5], [5.5, 19.5]], element by element, against the hand calculation and PyTorch's reading of the same literals"
+kind = "behavior"
+case = "../../cases/compile/transforms/first_step_tensor.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["first_step tensor loss=10.34375 dL/dw=[[3.75, 13.5], [5.5, 19.5]]", "first_step tensor engine loss=10.34375 dL/dw=[[3.75, 13.5], [5.5, 19.5]]", "first_step tensor max_abs_diff_library_vs_engine w=0.000000000000e+00 loss=0.000000000000e+00"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+# The same step through `vjp` -- `transpose(split(jvp(f)))` -- which is the path S2's training step
+# is written on. The capture no longer stops it: the lift now builds the whole body (its reading
+# names `jvp_matmul,jvp_subtract,jvp_mul_tensor,jvp_sum`), and what stops the pair of halves is
+# `split`, which reads every port of the lifted graph as one of its parameters and says of a capture
+# that it is not: `construct=a port uri=- why=the port is not a parameter of the graph, so neither
+# half takes it`. That is the next wall, and it belongs to `split` rather than to the lift.
+#
+# The assertions are on the *reading*, not on the exit code. A negative entry that only demanded a
+# non-zero exit would go quietly green the day that wall falls -- the program would start printing
+# its numbers and still "expect 1" would be the only thing anyone had written down. So the message
+# `split` answers is pinned word for word, on the stream it is written to (`expect_stderr_contains`
+# for the `REINTERP` line, `expect_stdout_contains` for the fault), and the day either stops being
+# printed this entry fails and says which one.
+[[tests]]
+name = "first_step.tensor_vjp_stops_at_split.nvm"
+desc = "The tensor step through the library's `vjp`: the capture no longer refuses the lift, and the reverse half is refused by `split` -- a port of the lifted graph that is not one of its parameters, which is what a captured value is. Pinned as the two readings `split` prints (`skip=forward construct=a port uri=-`, and the fault naming the port), so the entry fails the day the wall falls rather than passing silently"
+kind = "negative"
+case = "../../cases/compile/transforms/first_step_tensor_vjp.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["transforms: split does not build this function", "the port is not a parameter of the graph, so neither half takes it"]
+expect_stderr_contains = ["REINTERP split function=jvp_of_", "skip=forward construct=a port uri=- why=the port is not a parameter of the graph, so neither half takes it"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+# The matrix product's transpose law (`stdlib/rulesets/transpose.cml#matmul_t`), read the way the step
+# reads it: `vjp`, both operands ordinary parameters, the same literals as the forward case above.
+#
+# This is the law that stood behind the second wall, one operator earlier than the report named it: a
+# step's `vjp` meets the product before it meets `mul_t`, because `d(a·b)` has to go backwards through
+# `matmul` first. Writing it needed three things that are not obvious from the law itself, and all
+# three are measured in the case's own comments: the forward rule had to stop calling a helper
+# (`skip=call-no-transpose` on `rulesets.jvp::matmul_tangent`), the cotangent of the subtracted target
+# needed the array subtract's adjoint (`skip=rule uri=tensor:subtract reason=unbound`), and the two
+# products the law writes were already there.
+#
+# Two legs, so that the law is the only thing under measurement in the first: a product under a sum,
+# and the whole step. Both answer the hand calculation and the engine's `with_grad` element by
+# element, `max_abs_diff = 0.0`:
+#
+#     sum(x@w) = 9.75        dL/dx = [[0.75, 1.125], [0.75, 1.125]]        dL/dw = [[4, 4], [6, 6]]
+#     step     = 10.34375    dL/dx = [[0.9375, 2.34375], [1.4375, 3.875]]
+#                            dL/dt = [[-0.75, -2.25], [-1.0, -3.75]]        dL/dw = [[3.75, 13.5], [5.5, 19.5]]
+#
+# Every element is exact in binary floating point, so these assertions are exact and not a tolerance.
+[[tests]]
+name = "matmul_t.law_read_through_vjp.nvm"
+desc = "The product's transpose law, read through `vjp`: a product under a sum and the whole step answer dL/dw [[3.75, 13.5], [5.5, 19.5]] at loss 10.34375, element by element against the hand calculation and the engine's `with_grad`, max_abs_diff 0.0. The step's values are ordinary parameters here so that the law is the only thing under measurement; the captured form is the entry above, which still stops at `split`"
+kind = "behavior"
+case = "../../cases/compile/transforms/matmul_transpose_law.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["matmul_t sum_prod value=9.75 dL/dx=[[0.75, 1.125], [0.75, 1.125]] dL/dw=[[4.0, 4.0], [6.0, 6.0]]", "matmul_t step value=10.34375 dL/dx=[[0.9375, 2.34375], [1.4375, 3.875]] dL/dt=[[-0.75, -2.25], [-1.0, -3.75]] dL/dw=[[3.75, 13.5], [5.5, 19.5]]", "matmul_t engine value=10.34375 dL/dw=[[3.75, 13.5], [5.5, 19.5]]", "matmul_t max_abs_diff_library_vs_engine w=0.000000000000e+00 value=0.000000000000e+00"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+# The shape the law leaves out, pinned as a reading. `matmul_t` takes two matrices and says so in its
+# pattern (`a: T[?, k], b: T[k, ?]`), so a vector operand finds no rule and the walk refuses the
+# *operator* by name instead of applying a law written for another shape:
+#
+#     skip=rule-shape uri=tensor:matmul node=6 operands=2 reason=the rule takes
+#       (float[?, k], float[k, ?]), and the operator has (float[], float[2, 2])
+#
+# The rank in the pattern is the point. With open ranks (`T[..]`) the law claims the vector too and the
+# program dies *inside* it -- `transpose: transpose requires a tensor of rank >= 2`, a fault naming
+# `transpose` rather than the law that asked for one -- which is what this case measured before the
+# pattern was narrowed. So the entry is deliberately not "expect exit 1" and nothing else: it pins the
+# sentence, on both streams, and the day the vector forms are written it fails and names the sentence.
+[[tests]]
+name = "matmul_t.vector_operand_is_refused_by_shape.nvm"
+desc = "The product's transpose law takes two matrices and refuses a vector operand by naming the shape: `skip=rule-shape uri=tensor:matmul ... reason=the rule takes (float[?, k], float[k, ?]), and the operator has (float[], float[2, 2])`. Pinned as the reading on both streams, not as an exit code, so the day the vector forms are served this entry fails rather than passing silently"
+kind = "negative"
+case = "../../cases/compile/transforms/matmul_transpose_vector_operand.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["transforms: transpose has no transpose for this function", "the rule the index filed for `tensor:matmul` was written for another shape", "the rule takes (float[?, k], float[k, ?]), and the operator has (float[], float[2, 2])"]
+expect_stderr_contains = ["skip=rule-shape uri=tensor:matmul node=6 operands=2", "reason=the rule takes (float[?, k], float[k, ?]), and the operator has (float[], float[2, 2])"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000

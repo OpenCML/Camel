@@ -156,9 +156,6 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
                "so there is nothing to capture for it";
     case TransposeRefusalCause::State:
         return "a loop carries its state out of itself, and that shape has no transpose";
-    case TransposeRefusalCause::StateUnread:
-        return "the loop is the whole answer and the value its state starts from answers no parameter, "
-               "so the cotangent of that value has no parameter to land on";
     case TransposeRefusalCause::CallNoTranspose:
         // One of the two causes a call site can meet, and the one this file said for both of them
         // until 2026-11-03. It is true only here: the callee has no transpose to call. A callee
