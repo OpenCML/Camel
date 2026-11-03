@@ -1,0 +1,22 @@
+// `extent_of::<A>()` answers the extents the type `A` writes down, at any rank, on every back end.
+//
+// The answer is a fact of the type argument, so it is settled where the call is written: `std::gir`
+// shows one DATA node labelled `[3]` of type `int[]` where the call was, not a call of the kernel.
+// That is what makes a program which names a type with every extent written down get the answer
+// instead of being told the compiler cannot run it.
+//
+// The third and fourth lines are the type argument a generic function hands on: `widths::<A>` names
+// `A` in the call, and the extents of the `A` the instance is made at are the ones answered.
+import { is_array } from types
+
+func widths::<A>(): int[] when is_array::<A>() {
+    return extent_of::<A>()
+}
+
+func main(): int sync {
+    println(extent_of::<float[3]>())
+    println(extent_of::<float[2, 3]>())
+    println(widths::<float[3]>())
+    println(widths::<int[2, 3]>())
+    return 0
+}

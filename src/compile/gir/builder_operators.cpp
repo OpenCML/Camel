@@ -11,6 +11,7 @@
 #include "builder_support.h"
 
 #include "camel/compile/gir/static_function.h"
+#include "camel/core/data/composite/array.h"
 #include "camel/core/data/primary.h"
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
@@ -254,6 +255,19 @@ const char *negatedWholeOf(const std::string &group) {
         return "__eq__";
     }
     return nullptr;
+}
+
+/// The value `extent_of::<A>()` answers for the extents `A` writes down: an `int[]` of them, in
+/// declaration order (`float[2, 3]` -> `[2, 3]`). One reading of the extents, so the constant the
+/// call is folded into and the constant a value of the function returns cannot differ; the answer
+/// is the open `int[]` the declaration states (`stdlib/prelude.cml#extent_of`), not an `int[N]`.
+data_ptr_t extentOfValue(const std::vector<int64_t> &extents) {
+    ArrayDataFactory factory;
+    factory.setElemType(Type::Int64());
+    for (const int64_t extent : extents) {
+        factory.add(tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(extent)));
+    }
+    return tt::as_shared<Data>(factory.build());
 }
 
 } // namespace
@@ -791,6 +805,36 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
     return graph;
 }
 
+compile_graph_ptr_t Builder::constantValueGraphOf(
+    const data_ptr_t &value, Type *exitType, const GCT::node_ptr_t &origin) {
+    GUARD(
+        value != nullptr && exitType != nullptr,
+        "A constant value graph needs a value and a type.");
+    // Its own type object, as the graph of an operator value has: a graph completes its function
+    // type in place, so two values of the same constant never share the one they were built from.
+    FunctionTypeFactory factory;
+    factory.setExitType(exitType);
+    FunctionType *type = factory.build();
+    compile_graph_ptr_t graph = enterScope(type);
+    registerGraphOrigin(context_, graph, origin, "gir.data.fold.extent_of");
+    try {
+        bodyStates_[graph.get()] = BodyState::Open;
+        // The constant is the whole body: a call of this function answers it, which is what
+        // `extent_of::<A>` used as a value means.
+        const node_handle_t node = graph->addStaticDataNode(value);
+        registerNodeOrigin(context_, node, origin, "gir.data.fold.extent_of");
+        setGraphReturnFromResult(graph, nodeIdOf(node), nodeIdOf(node), exitType);
+        bodyStates_[graph.get()] = BodyState::Built;
+        registerBuiltBody(graph);
+    } catch (...) {
+        bodyStates_[graph.get()] = BodyState::Built;
+        leaveScope();
+        throw;
+    }
+    leaveScope();
+    return graph;
+}
+
 node_handle_t
 Builder::attemptFunctionValue(const Argument &f, const GCT::node_ptr_t &origin) {
     // The argument is what the call would pass: a variable is read here, once, and the value
@@ -938,7 +982,21 @@ node_handle_t Builder::overloadValueFor(
             chosen = std::make_shared<OperatorIndex>(ops->name(), *type, uri);
         }
         if (chosen) {
-            explicitOperatorTypes_.erase(node);
+            // A value of `extent_of::<A>()`: its answer is a fact of the type argument, which a
+            // function value does not record (`operatorValueGraphOf` would build a body that
+            // calls the kernel, and the kernel has no type argument to read -- the state that
+            // made `let f: () => int[] = extent_of::<float[3]>` an internal error). The graph
+            // this value is made of is the folded constant instead, so a call of the value
+            // answers what the call it was made from would have answered.
+            if (chosen->uri() == ":op/extent_of" && explicitTypes.size() == 1) {
+                if (const auto extents = statedExtentsOf(explicitTypes.front());
+                    extents.has_value()) {
+                    if (compile_graph_ptr_t graph = constantValueGraphOf(
+                            extentOfValue(*extents), chosen->funcType()->exitType(), origin)) {
+                        return createFuncDataNode(graph, true, false);
+                    }
+                }
+            }
             if (compile_graph_ptr_t graph = operatorValueGraphOf(chosen, origin)) {
                 return createFuncDataNode(graph, true, false);
             }
@@ -3314,8 +3372,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             type_vec_t explicitTypes;
             if (auto typed = explicitOperatorTypes_.find(targetNode);
                 typed != explicitOperatorTypes_.end()) {
-                explicitTypes = std::move(typed->second);
-                explicitOperatorTypes_.erase(typed);
+                // The type arguments stay on the node: they are what that node denotes, and a
+                // node may be called more than once (`let f = extent_of::<float[2]>` then two
+                // calls of `f`). Reading them out of the map on the first call made the second
+                // one a call of an operator that takes no argument of these types -- a refusal
+                // of a program that says the same thing twice.
+                explicitTypes = typed->second;
             }
             // Candidates that took the arguments but whose own `when` condition is false: if no
             // other candidate applies, the call is reported as one whose conditions are unmet
@@ -3614,6 +3676,36 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                 throw BuildAbortException();
             }
             targetOperator = *res;
+            // `extent_of::<A>()` answers the extents `A` writes down, and the answer is a fact of
+            // the **type argument** and of nothing else -- so the one place it can be settled is
+            // here, where the call is built and the type argument is in hand. An OPER node
+            // records the instantiated type of the call (`() => int[]`) and not the type it was
+            // written with, so a call that reached the run would have nothing left to read: the
+            // kernel has no answer to give, and a program that names a type with every extent
+            // written down (`extent_of::<float[3]>()`) would be told the compiler is broken.
+            // The value is therefore folded into a constant of this graph, the way a `constas`
+            // value and a folded pure call are, and the run never sees the call.
+            //
+            // Doing it here and not in the kernel is also what keeps one answer for one question:
+            // the rule that instantiated the call
+            // (`src/builtin/operators/struct.cpp#extentOfResolver`) admits exactly the types
+            // `statedExtentsOf` answers for, which is the reading the transposition walk takes
+            // (`modules/transforms/transpose.cpp#shapeFromTypeOf`), so this cannot accept or
+            // refuse a type the rule decided the other way. A call the rule refused never
+            // reaches this line: `resolveGroupedCall` above reported it, as
+            // `SemanticDiag::ExtentOfNeedsStatedShape` for a type that writes its extents open.
+            if (targetOperator->uri() == ":op/extent_of" && normInputs.empty() &&
+                withInputs.empty() && explicitTypes.size() == 1) {
+                if (const auto extents = statedExtentsOf(explicitTypes.front());
+                    extents.has_value()) {
+                    const data_ptr_t value = extentOfValue(*extents);
+                    const node_handle_t folded = currGraph_->addStaticDataNode(value);
+                    rememberConstant(folded, value);
+                    registerNodeOrigin(context_, folded, gct, "gir.data.fold.extent_of");
+                    LEAVE("LINK");
+                    return folded;
+                }
+            }
             // `range(a, b, step)` is the integers `a`, `a + step`, ... below `b` (design
             // principles 4.2), so
             // a step of 0 names no sequence at all: a fault when the step is known only at the
