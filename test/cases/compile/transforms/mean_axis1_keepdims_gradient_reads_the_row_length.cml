@@ -13,7 +13,7 @@
  *
  * Why this reading is worth a case of its own: the `arity` wall -- a three-operand `mean_axis`
  * node in a transposed *value* graph -- is what hides the broadcast inside `mean_axis_t`
- * (`stdlib/rulesets/transpose.cml#mean_axis_t`) today; a naked `transpose` of this loss stops at
+ * (`stdlib/rulesets/transpose.cml#mean_axis_stated_t`) today; a naked `transpose` of this loss stops at
  * `skip=arity uri=tensor:mean_axis operands=3` (measured the same day). When that wall falls,
  * this entry is the guard that says these numbers must not move.
  *
