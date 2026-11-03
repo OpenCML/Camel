@@ -9,10 +9,10 @@
 #
 # Each case names the line it holds, and each number below was derived by hand from the derivative
 # before the program was run -- a reading read off the implementation would pin whatever the
-# implementation does. The four directions are the ones
-# `docs/handover/questions/2026-11-04-widening-the-float-guard-turns-ten-hardcoded-types-into-defects.cn.md`
-# asked for: an `f32` scalar's transposition, an `f32` closure member's port type, a loop state's
-# cotangent port in a non-`float` width, and an array the answer carries as a zero (the `pick` shape).
+# implementation does. The four directions are the ones the construction checklist `lane-typedrift`
+# wrote asked for: an `f32` scalar's transposition, an `f32` closure member's port type, a loop
+# state's cotangent port in a non-`float` width, and an array the answer carries as a zero (the `pick`
+# shape). That page is on `lane-typedrift` and not in this tree, so it is named here and not cited.
 #
 # `type=` on stderr is the member's own signature (`transposeSignature`'s answer, printed by the
 # walk), so those entries pin a *type* and not only a number: a cotangent port typed `float` for an
