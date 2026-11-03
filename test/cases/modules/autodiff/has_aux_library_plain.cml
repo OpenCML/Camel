@@ -1,0 +1,30 @@
+/**
+ * `has_aux` form four of four: the library's leg with no auxiliary value -- the control group.
+ *
+ * The library's own two names (`stdlib/vjp.cml`): `vjp(f)(2.0)` is the pair `(value, pullback)`
+ * and `grad(f)(2.0)` is `vjp` read at the seed 1, its cotangent taken and the one member a
+ * one-parameter pullback answers read out by position. `f(x) = x * x * x` at 2 gives 8.0, and
+ * its derivative `3x^2` gives 12.0, so the value and the gradient are different numbers and a
+ * `grad` that answered the value it differentiates is caught here.
+ *
+ * The point is 2 and not 3 for that reason: at 3 all three numbers are 27
+ * (test/plans/feat/compile/transforms.plan.toml makes the same choice in `vjp_gradient`, where
+ * the reading of a gradient computed as the value it differentiates is recorded as P2-22 of the
+ * 2026-11-01 review).
+ */
+import { vjp, grad } from vjp
+
+func cube(x: float): float {
+    return x * x * x
+}
+
+func main(): int sync {
+    let (y, pullback) = vjp(cube)(2.0)
+    let cotangents = pullback(1.0)
+    let g = grad(cube)(2.0)
+    println('has_aux_off_library')
+    println('value={}'->format<y>)
+    println(cotangents)
+    println('grad={}'->format<g>)
+    return 0
+}

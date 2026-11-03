@@ -1,0 +1,54 @@
+/**
+ * `has_aux` form three of four: the library's leg with an auxiliary value.
+ *
+ * The library's transforms are `vjp` and the seed (`stdlib/vjp.cml`), and `vjp` takes a function
+ * whose result is a `float`: it has no `has_aux` parameter, so a pair is not split by the
+ * library. What the library does have is composition, and the pair is split where the pair is
+ * written -- `value_of` and `aux_of` below are the two elements, each its own function of the
+ * same argument. `vjp(value_of)(3.0)` is `(9.0, pullback)` and `pullback(1.0)` is `(6.0)`,
+ * `aux_of(3.0)` is 13.0: the value, the gradient and the auxiliary value, all three.
+ *
+ * They have to be the engine's three numbers, and that is what this case measures: the same
+ * arithmetic through `with_grad(loss, has_aux: true)` and through the library's composition,
+ * compared in the program as floats -- value 9.0, auxiliary 13.0, gradient 6.0 -- so a library
+ * leg that put the auxiliary value where the gradient belongs (6.0 against 13.0), or that
+ * differentiated the auxiliary value too (a gradient of 7.0 from `x + 10.0`'s slope of 1.0),
+ * fails on a `false` line rather than on a reader's memory of the expected numbers.
+ *
+ * `has_aux` named at a `vjp` call is refused, by name: test/cases/modules/autodiff/has_aux_vjp_named.cml.
+ */
+import { vjp } from vjp
+import { with_grad } from autodiff
+
+with <w: float>
+func loss(): (float, float) {
+    return (w * w, w + 10.0)
+}
+
+func value_of(x: float): float {
+    return x * x
+}
+
+func aux_of(x: float): float {
+    return x + 10.0
+}
+
+func main(): int sync {
+    let stepped = with_grad(loss, has_aux: true)<3.0>()
+    let inner = stepped.0
+    let engine_value = inner.0
+    let engine_aux = inner.1
+    let engine_grad = stepped.1
+    let (y, pullback) = vjp(value_of)(3.0)
+    let cotangents = pullback(1.0)
+    let library_grad = cotangents.0
+    let library_aux = aux_of(3.0)
+    println('has_aux_library')
+    println('engine value={} aux={} grad={}'->format<engine_value, engine_aux, engine_grad>)
+    println('library value={} aux={} grad={}'->format<y, library_aux, library_grad>)
+    let same_value = engine_value == y
+    let same_aux = engine_aux == library_aux
+    let same_grad = engine_grad == library_grad
+    println('same_value={} same_aux={} same_grad={}'->format<same_value, same_aux, same_grad>)
+    return 0
+}

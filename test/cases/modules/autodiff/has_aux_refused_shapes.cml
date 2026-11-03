@@ -1,0 +1,48 @@
+/**
+ * `has_aux` where the pair contract is not met: the three shapes it refuses, each with its own
+ * sentence.
+ *
+ * `has_aux` says the result is the pair `(value, aux)` and the first element is what is
+ * differentiated. Three results break that, and each break has its own reason
+ * (`differentiationRefusal(function, hasAux)` in modules/autodiff/pullback.cpp):
+ *
+ *   - a pair whose first element is not a float (`counted` returns `(int, float)`): the pair is
+ *     right and the element a gradient could be taken of is not;
+ *   - a result that is a tuple but not a pair of two (`triple` returns three floats): there is no
+ *     second element for the auxiliary value to be;
+ *   - a result that is not a pair at all (`plain` returns a float): the writer means the plain
+ *     transform, and the call says `has_aux`.
+ *
+ * All three are refusals and not silent answers, which is the property worth pinning: a transform
+ * that accepted `triple` and differentiated its first element would answer a number a reader
+ * could not tell from the right one, since the first element of a three-tuple is still the loss.
+ * The other two refusals of the same transform are test/cases/modules/autodiff/jax_names/
+ * (`has_aux_plain.cml`, a pair without the argument; `has_aux_false.cml`, the argument given
+ * `false`).
+ */
+import { grad } from autodiff
+
+with <w: float>
+func counted(): (int, float) {
+    return (7, w * w)
+}
+
+with <w: float>
+func triple(): (float, float, float) {
+    return (w, w * w, w * w * w)
+}
+
+with <w: float>
+func plain(): float {
+    return w * w
+}
+
+func main(): int sync {
+    let a = grad(counted, has_aux: true)<3.0>()
+    let b = grad(triple, has_aux: true)<3.0>()
+    let c = grad(plain, has_aux: true)<3.0>()
+    println(a)
+    println(b)
+    println(c)
+    return 0
+}
