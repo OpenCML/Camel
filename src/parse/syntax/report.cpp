@@ -669,6 +669,19 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
             continue;
         }
 
+        // 6c. An annotation that is a list of types and then a `=>`: a function type names its
+        //     parameters, and `(float, float)` in a type position is a tuple type. The `=>`
+        //     is where the writer expected `=`, so the diagnosis is about the type and not
+        //     about a token that happens to fit nothing.
+        if (error.kind == SyntaxError::Kind::Unexpected && offToken.kind == TokenKind::FatArrow &&
+            std::find(error.expected.begin(), error.expected.end(),
+                      static_cast<uint8_t>(TokenKind::Assign)) != error.expected.end()) {
+            if (once(SyntaxDiag::FuncTypeNeedsNames, offending)) {
+                diagnostics.of(SyntaxDiag::FuncTypeNeedsNames).at(at(offending)).commit();
+            }
+            continue;
+        }
+
         // 7. A '(' or '[' still open where a statement starts, a block ends or the file ends;
         //    or the end of the file with a block open.
         if (!open.empty()) {

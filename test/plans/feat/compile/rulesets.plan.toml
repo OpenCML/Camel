@@ -91,16 +91,16 @@ expect_output_not_contains = ["FAIL"]
 timeout_ms = 60000
 
 [[tests]]
-name = "rulesets_forward_rules_come_from_the_index"
-desc = "The five scalar arithmetic operators are bound to keys in `rulesets.jvp`, and the pass reads the name those keys resolve to right now: `std::rulesets forward=true` prints one `FORWARD <uri> <family> <head>/<arity> -> <rule>` line per bound operator, and none of them says `no rule`. The three readings this pins -- that a binding is a key and not a remembered name, that the ten float operators (`_d` and `_f`) share the five keys, and that `-` with one operand is `jvp_neg` while `-` with two is `jvp_sub` -- are what a forward transform will read."
+name = "rulesets_keys_are_derived_and_the_exceptions_are_printed"
+desc = "No operator is bound to a key by hand: `std::rulesets forward=true` prints the two operators whose key cannot be derived from the operator itself, each with the reason, and the sentence saying how every other key is derived. `xs[i]` is a bracket form, which is none of `a <op> b`, `<op> a` or `f(a, b)`, so `:op/idx_arr`'s rule is filed under the call `index_into(x, i)`; `*/2` is already `:op/mul_d`'s key, so `tensor:multiply`'s rule is filed under `mul_tensor(x, w)`. The two lines print on every run of the pass, not only when asked for, because an exception only visible on request is an exception nobody reads."
 kind = "behavior"
 case = "../../../cases/compile/rulesets/rulesets_lookup.cml"
 args = ["${case}", "std::rulesets", "forward=true", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["FORWARD :op/add_d rulesets.jvp +/2 -> jvp_add", "FORWARD :op/sub_f rulesets.jvp -/2 -> jvp_sub", "FORWARD :op/mul_d rulesets.jvp */2 -> jvp_mul", "FORWARD :op/div_f rulesets.jvp //2 -> jvp_div", "FORWARD :op/neg_d rulesets.jvp -/1 -> jvp_neg"]
-expect_output_not_contains = ["-> no rule", "no such family"]
+expect_stdout_contains = ["RULEKEY-EXCEPTION :op/idx_arr -> index_into/2 because", "RULEKEY-EXCEPTION tensor:multiply -> mul_tensor/2 because", "RULEKEY derivable: an operator's key is its own spelling"]
+expect_stdout_not_contains = ["FORWARD ", "VMAP ", "-> no rule", "no such family"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -159,7 +159,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["REINTERP vmap function=f graph=", "kinds=8/8 asked=4 found=4 missing=0 rules=vmap_rule_mul,vmap_rule_div,vmap_rule_add,vmap_rule_sub", "REINTERP vmap function=g graph=", "kinds=9/9 asked=5 found=5 missing=0 rules=vmap_rule_mul,vmap_rule_div,vmap_rule_add,vmap_rule_sub,vmap_rule_neg", "REINTERP vmap op signature=(f: (f32) => f32) => (f32[]) => f32[]", "same=yes"]
+expect_output_contains = ["REINTERP vmap function=f graph=", "kinds=8/8 asked=4 found=4 missing=0 rules=vmap_rule_mul,vmap_rule_div,vmap_rule_add,vmap_rule_sub", "REINTERP vmap function=g graph=", "kinds=9/9 asked=5 found=5 missing=0 rules=vmap_rule_mul,vmap_rule_div,vmap_rule_add,vmap_rule_sub,vmap_rule_neg", "REINTERP vmap op signature=(f: (f32) => f32) => (f32[]) => f32[]", "same=yes"]
 verify_script = """
 ({ input, assert }) => {
 const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
@@ -180,7 +180,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["REINTERP vmap op signature=(f: (f32) => f32) => (f32[]) => f32[]", "type=(f32[?, 3]) => f32[?, 3]", "asked=1 found=1 missing=0 rules=vmap_rule_mul_tensor", "same=yes"]
+expect_output_contains = ["REINTERP vmap op signature=(f: (f32) => f32) => (f32[]) => f32[]", "type=(f32[?, 3]) => f32[?, 3]", "asked=1 found=1 missing=0 rules=vmap_rule_mul_tensor", "same=yes"]
 verify_script = """
 ({ input, assert }) => {
 const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
@@ -201,7 +201,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["type=(f32[?, 3]) => f32[]", "asked=3 found=3 missing=0 rules=vmap_rule_idx,vmap_rule_idx,vmap_rule_add", "same=yes"]
+expect_output_contains = ["type=(f32[?, 3]) => f32[]", "asked=3 found=3 missing=0 rules=vmap_rule_idx,vmap_rule_idx,vmap_rule_add", "same=yes"]
 verify_script = """
 ({ input, assert }) => {
 const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
@@ -222,7 +222,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["REINTERP vmap function=f graph=", "asked=1 found=1 missing=0 rules=vmap_rule_matmul", "[[[7.0, 10.0], [15.0, 22.0]], [[23.0, 34.0], [31.0, 46.0]]]"]
+expect_output_contains = ["REINTERP vmap function=f graph=", "asked=1 found=1 missing=0 rules=vmap_rule_matmul", "[[[7.0, 10.0], [15.0, 22.0]], [[23.0, 34.0], [31.0, 46.0]]]"]
 verify_script = """
 ({ input, assert }) => {
 const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
@@ -243,7 +243,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_argmax_axis elements=float", "asked=1 found=1 missing=0 rules=vmap_rule_argmin_axis elements=float", "[[1, 0, 1], [0, 1, 0], [1, 0, 1]]", "[[[0, 1, 0]], [[1, 0, 1]], [[0, 1, 0]]]", "[[1, 2], [0, 1], [0, 0]]"]
+expect_output_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_argmax_axis elements=float", "asked=1 found=1 missing=0 rules=vmap_rule_argmin_axis elements=float", "[[1, 0, 1], [0, 1, 0], [1, 0, 1]]", "[[[0, 1, 0]], [[1, 0, 1]], [[0, 1, 0]]]", "[[1, 2], [0, 1], [0, 0]]"]
 verify_script = """
 ({ input, assert }) => {
 const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
@@ -266,7 +266,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_sum_axis", "asked=1 found=1 missing=0 rules=vmap_rule_max_axis", "asked=1 found=1 missing=0 rules=vmap_rule_min_axis", "asked=1 found=1 missing=0 rules=vmap_rule_mean_axis", "[[5.0, 7.0, 9.0], [50.0, 70.0, 90.0], [1.0, 4.0, 9.0]]", "[[[6.0], [15.0]], [[60.0], [150.0]], [[0.0], [14.0]]]", "[[4.0, 5.0, 6.0], [40.0, 50.0, 60.0], [2.0, 4.0, 8.0]]", "[[1.0, 4.0], [10.0, 40.0], [-1.0, 2.0]]", "[[2.5, 3.5, 4.5], [25.0, 35.0, 45.0], [0.5, 2.0, 4.5]]"]
+expect_output_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_sum_axis", "asked=1 found=1 missing=0 rules=vmap_rule_max_axis", "asked=1 found=1 missing=0 rules=vmap_rule_min_axis", "asked=1 found=1 missing=0 rules=vmap_rule_mean_axis", "[[5.0, 7.0, 9.0], [50.0, 70.0, 90.0], [1.0, 4.0, 9.0]]", "[[[6.0], [15.0]], [[60.0], [150.0]], [[0.0], [14.0]]]", "[[4.0, 5.0, 6.0], [40.0, 50.0, 60.0], [2.0, 4.0, 8.0]]", "[[1.0, 4.0], [10.0, 40.0], [-1.0, 2.0]]", "[[2.5, 3.5, 4.5], [25.0, 35.0, 45.0], [0.5, 2.0, 4.5]]"]
 verify_script = """
 ({ input, assert }) => {
 const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
@@ -288,7 +288,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_sum elements=float", "asked=1 found=1 missing=0 rules=vmap_rule_mean elements=float", "asked=2 found=2 missing=0 rules=vmap_rule_sum,vmap_rule_mul elements=float", "[6.0, 15.0, 0.0]", "[12.0, 30.0, 0.0]", "[2.0, 5.0, 0.0]"]
+expect_output_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_sum elements=float", "asked=1 found=1 missing=0 rules=vmap_rule_mean elements=float", "asked=2 found=2 missing=0 rules=vmap_rule_sum,vmap_rule_mul elements=float", "[6.0, 15.0, 0.0]", "[12.0, 30.0, 0.0]", "[2.0, 5.0, 0.0]"]
 verify_script = """
 ({ input, assert }) => {
 const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
@@ -310,7 +310,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_max elements=float", "asked=1 found=1 missing=0 rules=vmap_rule_min elements=float", "[3.0, 6.0, 1.0]", "[1.0, 4.0, -1.0]", "[0.0, 0.0]", "[-0.0, -0.0]", "[nan, nan]", "[6.0, 7.0]"]
+expect_output_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_max elements=float", "asked=1 found=1 missing=0 rules=vmap_rule_min elements=float", "[3.0, 6.0, 1.0]", "[1.0, 4.0, -1.0]", "[0.0, 0.0]", "[-0.0, -0.0]", "[nan, nan]", "[6.0, 7.0]"]
 verify_script = """
 ({ input, assert }) => {
 const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
@@ -334,7 +334,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 1
-expect_stdout_contains = ["REINTERP vmap function=g skip=body construct=a call uri=f", "asked=1 found=0 missing=1", "[3.0, 5.0, 7.0]"]
+expect_output_contains = ["REINTERP vmap function=g skip=body construct=a call uri=f", "asked=1 found=0 missing=1", "[3.0, 5.0, 7.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -362,7 +362,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_argmax elements=float", "asked=1 found=1 missing=0 rules=vmap_rule_argmin elements=float", "[2, 1, 1]", "[0, 0, 2]", "[1, 0]"]
+expect_output_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_argmax elements=float", "asked=1 found=1 missing=0 rules=vmap_rule_argmin elements=float", "[2, 1, 1]", "[0, 0, 2]", "[1, 0]"]
 verify_script = """
 ({ input, assert }) => {
 const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
@@ -393,7 +393,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["[2.0, 5.0, nan]", "[-0.0, 3.0, nan]", "[3.0, 12.0, nan]", "[6.0, nan]", "[1.0, nan]", "[5, 4]", "[1, 0]", "rules=vmap_rule_max elements=float", "rules=vmap_rule_min elements=float", "rules=vmap_rule_max elements=int", "rules=vmap_rule_min elements=int", "rules=vmap_rule_sum elements=float"]
+expect_output_contains = ["[2.0, 5.0, nan]", "[-0.0, 3.0, nan]", "[3.0, 12.0, nan]", "[6.0, nan]", "[1.0, nan]", "[5, 4]", "[1, 0]", "rules=vmap_rule_max elements=float", "rules=vmap_rule_min elements=float", "rules=vmap_rule_max elements=int", "rules=vmap_rule_min elements=int", "rules=vmap_rule_sum elements=float"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -417,7 +417,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["[[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]], [[9.0, 1.0], [2.0, 3.0]]]", "[[[[1.0], [2.0]], [[3.0], [4.0]]], [[[5.0], [6.0]], [[7.0], [8.0]]], [[[9.0], [1.0]], [[2.0], [3.0]]]]", "[[[1.0, 2.0, 3.0]], [[4.0, 5.0, 6.0]]]", "[[[1.0], [2.0], [3.0]], [[4.0], [5.0], [6.0]]]", "[[[1.0, 3.0], [2.0, 4.0]], [[5.0, 7.0], [6.0, 8.0]]]", "[[[1.0, 2.0, 1.0, 2.0], [3.0, 4.0, 3.0, 4.0]], [[5.0, 6.0, 5.0, 6.0], [7.0, 8.0, 7.0, 8.0]]]", "[2, 2]", "rules=vmap_rule_reshape elements=float", "rules=vmap_rule_unsqueeze elements=float", "rules=vmap_rule_transpose elements=float", "rules=vmap_rule_permute elements=float", "rules=vmap_rule_concat elements=float", "rules=vmap_rule_dim elements=float"]
+expect_output_contains = ["[[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]], [[9.0, 1.0], [2.0, 3.0]]]", "[[[[1.0], [2.0]], [[3.0], [4.0]]], [[[5.0], [6.0]], [[7.0], [8.0]]], [[[9.0], [1.0]], [[2.0], [3.0]]]]", "[[[1.0, 2.0, 3.0]], [[4.0, 5.0, 6.0]]]", "[[[1.0], [2.0], [3.0]], [[4.0], [5.0], [6.0]]]", "[[[1.0, 3.0], [2.0, 4.0]], [[5.0, 7.0], [6.0, 8.0]]]", "[[[1.0, 2.0, 1.0, 2.0], [3.0, 4.0, 3.0, 4.0]], [[5.0, 6.0, 5.0, 6.0], [7.0, 8.0, 7.0, 8.0]]]", "[2, 2]", "rules=vmap_rule_reshape elements=float", "rules=vmap_rule_unsqueeze elements=float", "rules=vmap_rule_transpose elements=float", "rules=vmap_rule_permute elements=float", "rules=vmap_rule_concat elements=float", "rules=vmap_rule_dim elements=float"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 # `where`'s first operand is a condition, not a value arm: its element is `bool` and the answer's
@@ -435,7 +435,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["[[1.0, 0.0, 3.0], [4.0, 0.0, 6.0]]", "[[1.0, 20.0, 3.0], [4.0, 20.0, 6.0]]", "[1.0, 20.0, 3.0]", "rules=vmap_rule_where elements=float"]
+expect_output_contains = ["[[1.0, 0.0, 3.0], [4.0, 0.0, 6.0]]", "[[1.0, 20.0, 3.0], [4.0, 20.0, 6.0]]", "[1.0, 20.0, 3.0]", "rules=vmap_rule_where elements=float"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 # The batching index has two doors, and this entry is the second door of the table below: a program
@@ -483,5 +483,41 @@ case = "../../../cases/compile/rulesets/deleted_row_reduction_helpers.mjs"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["deleted_helpers: ok"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+# A capture is part of the *function value*, and the transform has to copy it. `make(3.0)` answers
+# `(x) => x + c` with `c` in the value's closure; the walk of the body used to answer every port with
+# the batch parameter, so the capture read `x` and `x + c` computed `2x` -- `[2.0, 4.0, 6.0]` where
+# the answer is `[4.0, 5.0, 6.0]`, printed in silence (author's review of 2026-11-02, high-2). The
+# capture now enters the batched graph as a constant, lifted the way a constant written in the body is
+# lifted, in the source graph's capture order.
+[[tests]]
+name = "vmap_reads_a_captured_value"
+desc = "A function that captures a value, batched: `vmap(make(3.0))` over `[1.0, 2.0, 3.0]` answers `[4.0, 5.0, 6.0]` -- `1+3, 2+3, 3+3`, hand-computed -- because the capture is a constant of the batched graph and not the batch element it was answered with before (`[2.0, 4.0, 6.0]`, the defect the author's review reports). The second line is the same defect with two captures: `make2(2.0, 1.0)` answers `(x) => x * a + b`, so the batch is `[3.0, 5.0, 7.0]` and both captures are read in their own order rather than both folding into the batch (`[2.0, 6.0, 12.0]` before). The reading beside them is the count: one primitive asked and answered for `+` and two for `*` then `+`, the rule names in the order the walk asked."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_capture_is_a_constant.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_add elements=float", "[4.0, 5.0, 6.0]", "asked=2 found=2 missing=0 rules=vmap_rule_mul,vmap_rule_add elements=float", "two captures=[3.0, 5.0, 7.0]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# `remat` copies the graph and sets one bit on the copy, so the copy is the same function -- and a
+# copy that declared none of the graph's captures was not: the value still carried the closure, the
+# graph said it took none, and every read of a capture answered the zero of its slot. `make(3.0)(1.0)`
+# printed `1.0` where `4.0` is the answer, and batched it printed `[2.0, 4.0, 6.0]` where the answer is
+# `[4.0, 5.0, 6.0]` (the same capture-loss class as `vmap`'s).
+[[tests]]
+name = "remat_keeps_a_captured_value"
+desc = "A function that captures a value, marked for recomputation: `remat(make(3.0))(1.0)` answers `4.0` -- `1 + 3` -- where it printed `1.0` (the capture's slot read as its zero), and the same function batched through `vmap` answers `[4.0, 5.0, 6.0]` where it printed `[2.0, 4.0, 6.0]`. The mark still sets the property on the copy, which the `in_recompute=0 out_recompute=1` lines say, and the numbers are the same on the two back ends. Before 2026-11-02 the copy declared no capture port at all, so a call through the marked value bound nothing (author's review, high-2)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/remat_capture_is_a_constant.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["in_recompute=0 out_recompute=1", "remat capture value=4.0", "[4.0, 5.0, 6.0]", "asked=1 found=1 missing=0 rules=vmap_rule_add elements=float"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

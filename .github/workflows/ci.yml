@@ -155,12 +155,27 @@ jobs:
           LDFLAGS: -fsanitize=address,undefined
         run: npm run debug
 
-      - name: Test (smoke)
+      # The author's 2026-11-02 06:10 ruling: both memory defects of that day sat in
+      # `stream` and `transforms`, and a leg that only runs `smoke` reports them on one
+      # platform instead of on every platform. Widening the plans is the cheapest way to
+      # make "crashes only on Windows" become "crashes everywhere, nightly".
+      #
+      # `CAMEL_TEST_BUILD: debug` is not optional here. The runner addresses a Release install
+      # (`out/latest`) unless it is told otherwise, and this leg builds only the sanitizer
+      # Debug tree -- on 2026-11-02 18:05 the widened step failed in its first second with
+      # "no Release binary at out/latest/bin/camel", which is the harness pointing at a build
+      # this job never made. The same variable keeps a future Release build from being tested
+      # by accident here: what must be exercised is the binary carrying the sanitizer flags.
+      - name: Test (smoke, stream, transforms)
         env:
           ASAN_OPTIONS: detect_leaks=0:symbolize=1
           ASAN_SYMBOLIZER_PATH: /usr/bin/llvm-symbolizer-19
           UBSAN_OPTIONS: print_stacktrace=1
-        run: node scripts/test.js smoke
+          CAMEL_TEST_BUILD: debug
+        run: |
+          node scripts/test.js smoke
+          node scripts/test.js test/plans/feat/compile/stream.plan.toml
+          node scripts/test.js test/plans/feat/compile/transforms.plan.toml
 
       - name: Upload test logs
         if: always()

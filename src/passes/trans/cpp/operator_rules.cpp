@@ -348,7 +348,6 @@ Rules buildRules() {
         r[std::format(":op/gt_{}", t)]  = infix(">");
         r[std::format(":op/ge_{}", t)]  = infix(">=");
         r[std::format(":op/eq_{}", t)]  = infix("==");
-        r[std::format(":op/ne_{}", t)]  = infix("!=");
     }
 
     // ---- Complex numbers (ops.cpp complexBinary, complexPower; include/camel/standalone/
@@ -365,7 +364,6 @@ Rules buildRules() {
         r[std::format(":op/div_{}", t)] =
             faultingFunction("complexDiv", RuntimeDiag::DivisionByZero, 0);
         r[std::format(":op/eq_{}", t)] = infix("==");
-        r[std::format(":op/ne_{}", t)] = infix("!=");
         r[std::format(":op/pow_{}", t)] = runtimeFunction("pow");
         for (const char *e : {"i", "l"}) {
             r[std::format(":op/pow_{}_{}", t, e)] = runtimeFunction("pow");
@@ -382,7 +380,6 @@ Rules buildRules() {
     }
     for (const char *t : {"i", "l", "f", "d", "b", "s"}) {
         r[std::format(":op/eq_{}", t)] = infix("==");
-        r[std::format(":op/ne_{}", t)] = infix("!=");
     }
     r[":op/eq"] = infix("==");
     r[":op/ne"] = infix("!=");
@@ -398,7 +395,7 @@ Rules buildRules() {
     r[":op/ltol"] = identity();
     r[":op/ftof"] = identity();
     r[":op/dtod"] = identity();
-    r[":op/stos"] = identity();
+    r[":op/atos"] = runtimeFunction("toText");
     r[":op/itol"] = cast("int64_t");
     r[":op/itof"] = cast("float");
     r[":op/ltof"] = cast("float");
@@ -468,8 +465,6 @@ Rules buildRules() {
     }
     r[":op/ztoc"] = complexFromComplex("float");
     r[":op/ctoz"] = complexFromComplex("double");
-    r[":op/ctos"] = runtimeFunction("toText");
-    r[":op/ztos"] = runtimeFunction("toText");
 
     // ---- Strings (ops.cpp __builtin__add_ss__, __builtin__idx__; struct.cpp) ----
     r[":op/add_s"]            = infix("+");
@@ -979,7 +974,6 @@ Rules buildRules() {
     // `a == b` of two `Bytes`: byte for byte, which is the array's `==` (a different length is a
     // different value, the same length compares the elements in order).
     r[":op/eq_bytes"]      = infix("==");
-    r[":op/ne_bytes"]      = infix("!=");
     r[":op/add_bytes"]     = {
         [](OperatorCall &c) -> std::optional<std::string> {
             if (c.normCount() != 2) {

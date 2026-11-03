@@ -20,6 +20,7 @@
 #include "camel/utils/log.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
@@ -30,6 +31,14 @@
 namespace camel::runtime {
 
 namespace mm = camel::core::mm;
+
+uint64_t nextDraftEpoch() {
+    // A number, not an address: the allocator hands a destroyed draft's memory to the next one, so
+    // the address says where a draft lives and not which one it is. 0 stays free for the handle
+    // that names no draft.
+    static std::atomic<uint64_t> counter{0};
+    return counter.fetch_add(1, std::memory_order_relaxed) + 1;
+}
 
 namespace {
 
@@ -1409,7 +1418,7 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     const auto nameControlPair = [&](gc_node_ref_t user, gc_node_ref_t pred) {
         const auto ctrl = ctrlInputsOf(user);
         if (std::ranges::find(ctrl, pred) == ctrl.end()) {
-            appendInput(DraftEdgeKind::Ctrl, user, pred);
+            appendControlEdge(user, pred);
         }
     };
     for (gc_node_ref_t user : syncUsers) {
@@ -1509,7 +1518,7 @@ void GraphDraft::handChainPlaceTo(gc_node_ref_t id, gc_node_ref_t tail) {
         setSyncInputs(user, only);
         const auto ctrl = ctrlInputsOf(user);
         if (std::ranges::find(ctrl, pred) == ctrl.end()) {
-            appendInput(DraftEdgeKind::Ctrl, user, pred);
+            appendControlEdge(user, pred);
         }
     };
     markStatement(tail);
@@ -1655,7 +1664,7 @@ void GraphDraft::takeStatementPlace(gc_node_ref_t oldId, gc_node_ref_t newId) {
     for (gc_node_ref_t pred : kept) {
         const auto ctrl = ctrlInputsOf(newId);
         if (std::ranges::find(ctrl, pred) == ctrl.end()) {
-            appendInput(DraftEdgeKind::Ctrl, newId, pred);
+            appendControlEdge(newId, pred);
         }
     }
     for (gc_node_ref_t user : users) {
@@ -1666,7 +1675,7 @@ void GraphDraft::takeStatementPlace(gc_node_ref_t oldId, gc_node_ref_t newId) {
         setSyncInputs(user, only);
         const auto ctrl = ctrlInputsOf(user);
         if (std::ranges::find(ctrl, newId) == ctrl.end()) {
-            appendInput(DraftEdgeKind::Ctrl, user, newId);
+            appendControlEdge(user, newId);
         }
     }
 }
@@ -2074,6 +2083,63 @@ size_t GraphDraft::dissolveUnorderedGates() {
                 continue;
             }
             const gc_node_ref_t value = normInputsOf(id).back();
+            // Plain forwarding is a gate **with a data user**: dissolving it hands that user the
+            // value the gate carried, so nothing stops running (src/compile/gir/graph_encode.cpp
+            // quotes the answer that settled it). A gate with no data user and no wait forwards
+            // nothing -- the value is read by this node alone -- so dissolving it takes the last
+            // **read** of whatever computed that value, and an effect that stands on a read (a call,
+            // an operator with effects, a computation that may fault, design principles 3.1) is then
+            // in the graph and in no chain. `std::opt::inline` splices an inlined body's tail as a
+            // GATE and the fold prunes the branch whose chain entered it, which leaves exactly this
+            // gate standing where the branch's arm stood.
+            //
+            // What such a gate holds is not a value but a **place**: it is where the code after it
+            // waits. That place is what the erase would take with it, so it is handed to what the
+            // gate read rather than kept on the gate -- a gate without a wait is a violation of its
+            // own (src/runtime/graph.cpp, the GATE check), and keeping one to hold a place would
+            // trade a dropped effect for an unbuildable graph. The successors follow the effect
+            // through the control kind, which is the kind this wait is carried in while the
+            // migration runs (docs/design/effects/edges.cn.md 5.3), and the gate still goes.
+            //
+            // Which node the place goes to, and why it is the effect and not the arm's tail:
+            //
+            // 1. Place. The effect ran inside the arm, before the JOIN. Handing it the block's
+            //    result or `return` instead would move it after the JOIN, past code already ordered
+            //    against the JOIN -- that is not keeping the place, it is taking another one.
+            // 2. One rule, not two. `pruneBranch` already treats the JOIN's successors this way
+            //    (`handChainPlaceTo`): the code that stood after the branch follows the arm's tail.
+            //    The same rule for the nodes that must survive inside the arm is what this does; a
+            //    second rule is exactly the shape of the defect this fixes -- two paths, only one of
+            //    which keeps the observed run.
+            // 3. The arm's tail cannot be the anchor here. When the tail is this gate -- the shape
+            //    `std::opt::inline` leaves, the arm's value being what the gate forwards -- ordering
+            //    the effect after `armTail` is ordering it after the gate that reads it, which is a
+            //    cycle of inputs. The place it stood in is therefore handed to the effect itself,
+            //    and the successors wait on the effect: the equivalent form of "put it where the
+            //    branch's arm left its place", and the one that has no cycle in it.
+            //
+            // The case that locks this is test/cases/opt/effects/inline_reduce_in_folded_arm.cml,
+            // with its entries in test/plans/feat/opt/effects_kept.plan.toml -- that plan's subject
+            // is "a pass never changes which effects run", which is this defect; the `trans` plans
+            // are dumps and traces and do not run programs.
+            // The guard asks the pass layer's own question -- `carriesOrdering` with the shape rule,
+            // the predicate `pruneBranch` and `replaceNode` read: a node another reader keeps is not
+            // the one this erase endangers, and a node whose running the program does not observe has
+            // no place to lose.
+            const bool holdsEffectPlace =
+                normUsersOf(id).empty() && withUsersOf(id).empty() &&
+                normUsersOf(value).size() + withUsersOf(value).size() == 1 &&
+                carriesOrdering(*this, value, true);
+            std::vector<gc_node_ref_t> successors;
+            if (holdsEffectPlace) {
+                for (auto group : {ctrlUsersOf(id), syncUsersOf(id)}) {
+                    for (gc_node_ref_t user : group) {
+                        if (user != id && std::ranges::find(successors, user) == successors.end()) {
+                            successors.push_back(user);
+                        }
+                    }
+                }
+            }
             if (exit_ == id) {
                 exit_ = value;
             }
@@ -2085,6 +2151,14 @@ size_t GraphDraft::dissolveUnorderedGates() {
             }
             replaceAllValueUses(id, value);
             eraseNode(id); // its control users lose nothing: it waited on nothing
+            for (gc_node_ref_t user : successors) {
+                // The place is handed on only to a successor the erase left waiting on nothing:
+                // one that already waits somewhere keeps waiting there.
+                if (user != value && alive(user) && ctrlInputsOf(user).empty() &&
+                    syncInputsOf(user).empty()) {
+                    appendControlEdge(user, value);
+                }
+            }
             ++removed;
             changed = true;
         }

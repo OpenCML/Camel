@@ -43,6 +43,7 @@ prints one entry.
 | `0x02000010` | [SyntaxDiag::WhenAfterBody](#whenafterbody) | Error | yes |
 | `0x02000011` | [SyntaxDiag::AsRightSideIsType](#asrightsideistype) | Error | no |
 | `0x02000012` | [SyntaxDiag::LambdaParametersNeedParentheses](#lambdaparametersneedparentheses) | Error | yes |
+| `0x02000014` | [SyntaxDiag::FuncTypeNeedsNames](#functypeneedsnames) | Error | no |
 | `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn | no |
 | `0x03000000` | [SemanticDiag::StaticHeadNameCount](#staticheadnamecount) | Error | no |
 | `0x03000001` | [SemanticDiag::Redeclaration](#redeclaration) | Error | no |
@@ -266,7 +267,7 @@ prints one entry.
 | `0x03000205` | [SemanticDiag::DuplicateRuleForOperator](#duplicateruleforoperator) | Error | no |
 | `0x03000206` | [SemanticDiag::YieldRequiresStreamHead](#yieldrequiresstreamhead) | Error | no |
 | `0x03000207` | [SemanticDiag::RuleRightUsesOuterVariable](#rulerightusesoutervariable) | Error | no |
-| `0x03000208` | [SemanticDiag::ResidualsAreNotVisible](#residualsarenotvisible) | Error | no |
+| `0x03000209` | [SemanticDiag::CalledFallibleValue](#calledfalliblevalue) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -303,7 +304,6 @@ prints one entry.
 | `0x04000032` | [RuntimeDiag::OperandTypeUnsupported](#operandtypeunsupported) | Error | no |
 | `0x04000033` | [RuntimeDiag::FieldNotFound](#fieldnotfound) | Error | no |
 | `0x04000034` | [RuntimeDiag::InvalidArgument](#invalidargument) | Error | no |
-| `0x04000036` | [RuntimeDiag::FileSystemError](#filesystemerror) | Error | no |
 | `0x04000039` | [RuntimeDiag::RegexInvalid](#regexinvalid) | Error | no |
 | `0x0400003A` | [RuntimeDiag::TimeFormatFailed](#timeformatfailed) | Error | no |
 | `0x0400003C` | [RuntimeDiag::GradientElementTypeMismatch](#gradientelementtypemismatch) | Error | no |
@@ -585,7 +585,18 @@ Unexpected '{0}': no '{1}' is open here.
 Remove the '{0}', or add the '{1}' it was meant to close.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/syntax/unmatched_closing_delimiter.cml`, run as `camel test/cases/parse/syntax/unmatched_closing_delimiter.cml`)
+
+```camel
+// A closing delimiter with nothing open: refused at the delimiter, and the message names both
+// repairs -- remove it, or add the opener it was meant to close -- because only the writer knows
+// which of the two happened.
+
+func main(): int sync {
+    let x: int = 1)
+    return x
+}
+```
 
 ### MissingThen
 
@@ -640,7 +651,19 @@ Unexpected ';': there is no statement between it and the ';' before it.
 Statements are separated by a line break or by one ';'. Remove the extra ';'.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/syntax/extra_semicolon.cml`, run as `camel test/cases/parse/syntax/extra_semicolon.cml`)
+
+```camel
+// Statements are separated by a line break or by one `;`. A second `;` with nothing between it and
+// the one before it is refused where it is written: the parser does not read it as an empty
+// statement, because a reader who wrote it meant one statement, not two.
+
+func main(): int sync {
+    let x: int = 1;;
+    println(x)
+    return 0
+}
+```
 
 ### AssignmentInCondition
 
@@ -662,7 +685,21 @@ None: choice: the condition was meant as a comparison or as an assignment, and t
 To compare, write '==': if x == 1 then ...
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/syntax/assignment_in_condition.cml`, run as `camel test/cases/parse/syntax/assignment_in_condition.cml`)
+
+```camel
+// `=` assigns; it is not the comparison a condition asks for, and a condition that assigns is
+// almost always a comparison written one `=` short. The parser refuses it at the `=` rather than
+// reading it as an assignment or as `==`, and names the operator to write instead.
+
+func main(): int sync {
+    let x: int = 1
+    if x = 1 then
+        println('one')
+    end
+    return 0
+}
+```
 
 ### KeywordAsIdentifier
 
@@ -744,7 +781,18 @@ The declaration of '{0}' has no value.
 A declaration binds a name to a value: let {0} = <value>, or with a type: let {0}: <type> = <value>.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/syntax/missing_initializer.cml`, run as `camel test/cases/parse/syntax/missing_initializer.cml`)
+
+```camel
+// A declaration binds a name to a value: `let x` names a binding and gives it nothing, so there is
+// nothing to bind. Refused at the name, with both forms that would fix it -- `= <value>` or
+// `: <type> = <value>` -- in the message.
+
+func main(): int sync {
+    let x
+    return 0
+}
+```
 
 ### MissingToken
 
@@ -1061,6 +1109,40 @@ func main(): int sync {
     let written: (x: int) => int = x => ident(ident(x))
     println(composed(3))
     return written(3)
+}
+```
+
+### FuncTypeNeedsNames
+
+`0x02000014` · Error · `SyntaxDiag::FuncTypeNeedsNames`
+
+**Fix**
+
+None: choice: the names the parameters take are the writer's, and a function value written with them keeps its meaning
+
+**Message**
+
+```text
+A function type names its parameters: write '(x: float, y: float) => float', not a list of types.
+```
+
+**Help**
+
+```text
+In parentheses a list of types is a tuple type, and '(float, float)' is read as one; the parameters of a function type are written 'name: type'. The names are the writer's to choose, and the types of the function's own parameters already say which is which.
+```
+
+**Example** (`test/cases/parse/rulings/function_type_needs_names.cml`, run as `camel test/cases/parse/rulings/function_type_needs_names.cml`)
+
+```camel
+// A function type names its parameters. Written without names, the types are a tuple type and the
+// `=>` that follows fits nothing: the refusal names the form instead.
+
+func g(x: float, y: float): float sync { return x + y }
+
+func main(): int sync {
+    let f: (float, float) => float = g
+    return 0
 }
 ```
 
@@ -5632,7 +5714,7 @@ std::cml cannot print {0}: {1}.
 **Help**
 
 ```text
-This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, and `sync` blocks. Tags, named types, generic instances and the other region kinds are refused.
+This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, `sync` blocks, and one `type` statement for each named struct type the program names. Tags, generic instances and the other region kinds are refused.
 ```
 
 *No example: no test small enough to show raises it.*
@@ -8706,51 +8788,45 @@ func main(): int sync {
 }
 ```
 
-### ResidualsAreNotVisible
+### CalledFallibleValue
 
-`0x03000208` · Error · `SemanticDiag::ResidualsAreNotVisible`
+`0x03000209` · Error · `SemanticDiag::CalledFallibleValue`
 
 **Fix**
 
-None: choice: the residuals are handed on whole, and which members the second half reads is the transform's to decide
+None: choice: the error value has to be handled, returned or dropped explicitly, and which one is the intent
 
 **Message**
 
 ```text
-The residuals `split` collects are not visible to the program: they are handed on whole to the second half, and neither a destructuring nor an element read takes them apart.
+This value has type '{0}' and it is fallible: calling it as a function leaves the error it may hold nowhere to be read.
 ```
 
 **Help**
 
 ```text
-A `split`'s forward half answers `(result, residuals)` -- the forward values the backward half's rules multiply by. Their number is the body's: `f(x) = x` crosses with none and `f(x, y) = x*x*y*y` with four, and two bodies with one lifted type can differ (design principles 4.4, the cut between now and later). The tuple travels for one reason, as one value: `let (value, residuals) = forward(xs)` and then `backward(residuals, dx)`, or the same tuple passed to the transposed function beside the cotangent. A program that destructured it, or read `residuals.0`, would depend on a count the graph chose, so both are refused here, at the `let` or the read. Pass the tuple as it stands: which members the second half reads is the transform's decision, made while the graph is built.
+A 'T!' is a value that reports a failure instead of giving a result, so a call of it has nothing to run: take it apart first ('!!', '->' or 'match'), return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...', and then call the function it gives.
 ```
 
-**Example** (`test/cases/compile/transforms/split_residuals_destructured.cml`, run as `camel test/cases/compile/transforms/split_residuals_destructured.cml`)
+**Example** (`test/cases/compile/unused_values/called_fallible.cml`, run as `camel -E short test/cases/compile/unused_values/called_fallible.cml`)
 
 ```camel
-// The residuals of a `split`, destructured: refused.
-//
-// `f(x, y) = x*x*y*y` crosses the cut with four values (`residuals=4`), and the tuple a program gets
-// is the transform's own (`TupleType::residuals`): its members are the graph's answer, so a program
-// does not read them. `let (r0, r1) = residuals` is `SemanticDiag::ResidualsAreNotVisible` at the
-// `let`; the tuple goes to the second half whole, as the last line below does.
-import rulesets.jvp
-import rulesets.transpose
-import { jvp, split, transpose } from transforms
+// Calling a `T!` as a function: the value reports a failure instead of giving a result, so the
+// call has nothing to run and the error it may hold has nowhere to be read. This used to be an
+// invariant violation in the builder (an abort, `visitLinkNode`): the target of a LINK is not a
+// function, and the builder stopped the process instead of the program. It is now a diagnostic,
+// and it is an error, not a warning: a warning would let the statement be dropped and the run go
+// on as if the call had been made.
+import { cse } from opt
 
-func f(x: float, y: float): float {
-    return x * x * y * y
+with <w: float>
+func loss(x: float): float {
+    return w * x + w * x
 }
 
 func main(): int sync {
-    let (forward, linear) = split(jvp(f))
-    let (value, residuals) = forward(3.0, 2.0)
-    let (r0, r1) = residuals
-    println("value=", value)
-    println("r0=", r0)
-    println("r1=", r1)
-    println("tangent=", transpose(linear)(residuals, 1.0))
+    let step = loss->cse
+    println(step<2.0>(3.0))
     return 0
 }
 ```
@@ -10135,28 +10211,6 @@ func main(): int sync {
     return 0
 }
 ```
-
-### FileSystemError
-
-`0x04000036` · Error · `RuntimeDiag::FileSystemError`
-
-**Fix**
-
-None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-
-**Message**
-
-```text
-'{0}' failed for '{1}': {2}.
-```
-
-**Help**
-
-```text
-Check the path and the permissions of the directories on it.
-```
-
-*No example: no test small enough to show raises it.*
 
 ### RegexInvalid
 

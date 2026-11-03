@@ -73,16 +73,16 @@ ProofObject *ProofObject::createChain(
     return allocateProof(record, stats, std::move(chain), allocator);
 }
 
-bool ProofObject::equals(const rtdata::Object *other, const Type *, bool) const {
+bool ProofObject::equalsImpl(const rtdata::Object *other, const Type *, bool) const {
     return this == other;
 }
 
-rtdata::Object *ProofObject::clone(mm::IAllocator &allocator, const Type *, bool) const {
+rtdata::Object *ProofObject::cloneImpl(mm::IAllocator &allocator, const Type *, bool) const {
     return chain_ ? createChain(*record_, stats_, *chain_, allocator)
                   : create(*record_, stats_, allocator);
 }
 
-void ProofObject::print(std::ostream &os, const Type *) const {
+void ProofObject::printImpl(std::ostream &os, const Type *) const {
     if (chain_) {
         const Chain &chain = *chain_;
         if (chain.same) {
@@ -138,13 +138,13 @@ void ProofObject::print(std::ostream &os, const Type *) const {
     }
 }
 
-void ProofObject::finalize() noexcept {
+void ProofObject::finalizeImpl() noexcept {
     chain_.reset();
     delete record_;
     record_ = nullptr;
 }
 
-void ProofObject::updateRefs(const rtdata::Object::RefRelocator &relocate, const Type *type) {
+void ProofObject::updateRefsImpl(const rtdata::Object::RefRelocator &relocate, const Type *type) {
     // A proof's steps are text and node ids, not GC values; the one reference it holds is the
     // program the run started from, which a chain may still name nodes of.
     if (input_ == nullptr ||

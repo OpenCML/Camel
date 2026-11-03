@@ -198,6 +198,13 @@ export func foreign_resource::<F>(f: F): F! when is_function::<F>()
 
 /// Runs the allocator's poison check.
 export func poison::<F>(f: F): F! when is_function::<F>()
+
+/// Traces a tuple value whose type declares more members than the value has, and stops: the
+/// collector trusts the type's count, so a value that disagrees is a memory-safety bug. Two halves,
+/// because the reading is the pair: `tuple_members_agree` traces a value that agrees (silent, the
+/// walk runs) and `tuple_members` traces one that does not (the guard speaks and the process stops).
+export func tuple_members::<F>(f: F): F! when is_function::<F>()
+export func tuple_members_agree::<F>(f: F): F! when is_function::<F>()
 }
 
 // -----------------------------------------------------------------------------
@@ -292,7 +299,12 @@ with <
     constant_budget: int = 8388608,
     /// Test of the generic passes' screens: give the graphs they skip to the pass anyway and
     /// fail if it rewrites one.
-    check_screens: bool = false
+    check_screens: bool = false,
+    /// How many runs of the rewrite in a row may each change the same graph before the pass
+    /// reports that it does not settle. This is the engine's internal bound, exposed so that a
+    /// test can prove the report happens; it is not a tuning knob, and 0 is refused rather than
+    /// read as "never report".
+    settle_runs: int = 32
 >
 export func opt::<F>(f: F): F! when is_function::<F>()
 

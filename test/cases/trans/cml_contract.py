@@ -14,8 +14,11 @@ printed source must compile to a graph isomorphic to the original. This case pin
     the interval again), for
     closures (a lambda as a value, a block body, captured source names, a returned lambda, a
     closure over a cell), for `with` parameters (including one that also reads a module value),
-    for a `var` parameter, and for a body whose value is a write's value (`write_value.cml`: the
-    tail `return v` and the implicit `v` are one graph, so each round trips);
+    for a `var` parameter, for a body whose value is a write's value (`write_value.cml`: the
+    tail `return v` and the implicit `v` are one graph, so each round trips), and for a named
+    struct type (`named_type.cml`: a parameter, a return type and a `with` parameter, with the
+    `type P = { ... }` declaration the printed program needs -- and only the printed program with
+    that line removed fails, `UnresolvedTypeReference`);
   * execution: the printed program prints the same stdout and exits with the same status as the
     original, on all four back ends for `arm_write.cml` (a write in an arm's value position is what
     makes the write run) and on `std::nvm` for the rest;
@@ -24,8 +27,12 @@ printed source must compile to a graph isomorphic to the original. This case pin
     and in the printed text, captured names included; the only new names are the printer's
     temporaries. Anonymous lambda graphs (`__g_<id>__`) are compared globally, because their
     graph name is an allocation, not a source name;
+  * a named type the printed program uses is declared in it (`check_declarations`): the name
+    without the declaration does not compile, so the declaration is part of the print;
   * the constructs outside S2 are refused with `SemanticDiag::CmlUnsupportedConstruct` and
-    nothing of the program is written before the refusal;
+    nothing of the program is written before the refusal, and a named type whose declaration
+    cannot be written (a generic instance) keeps the refusal and the message says which half is
+    missing;
   * a constant over `max_literal_bytes` is refused with `SemanticDiag::CmlBigConstant` and the
     message names the size and the limit.
 
@@ -55,12 +62,17 @@ CORPUS = [
     CML / "linear.cml",
     CML / "branch.cml",
     CML / "arm_write.cml",
+    CML / "arm_read.cml",
+    CML / "unused_loop.cml",
     CML / "loop.cml",
     CML / "interval.cml",
     CML / "closure.cml",
     CML / "with_param.cml",
     CML / "var_param.cml",
     CML / "write_value.cml",
+    CML / "string_conversion.cml",
+    CML / "named_type.cml",
+    CML / "map_with_closure.cml",
     CASES / "trans/jgir_duplicate.cml",
     CASES / "linear/nvm/hello.cml",
 ]
@@ -83,12 +95,17 @@ SOURCE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 MARKERS = {
     "branch": ["if ", "else ", "match ", "case "],
     "arm_write": ["if ", "else "],
+    "arm_read": ["if ", "else ", "let ", "var "],
+    "unused_loop": ["loop ", "while "],
     "loop": ["loop ", "for ", "while ", "sync {"],
     "interval": ["..", "for ", "while ", "let "],
     "closure": ["=>", "sync", "offset", "base"],
     "with_param": ["with <", "scale", "clamp"],
     "var_param": ["var "],
     "write_value": ["var "],
+    # The declaration is the half the printed program was missing: the name alone does not compile.
+    "named_type": ["type P = { x: int, y: int }", "with <m: P>", "p: P", "): P"],
+    "map_with_closure": ["map<", "=>", "let ys"],
 }
 # What the printed text must not spell, per corpus program: the defect each case pins. An arm whose
 # value is the value its write wrote ends with the write; a `return <temp>` there hands the value on
@@ -174,6 +191,31 @@ def check_names(source, printed, printed_path):
     assert not unexpected, (source.name, sorted(unexpected))
 
 
+DECLARED_TYPE = re.compile(r"^\s*(?:export\s+)?type\s+([A-Za-z_][A-Za-z0-9_]*)", re.M)
+
+
+def check_declarations(source, printed):
+    """A type the source declares and the printed program uses in a type position is declared.
+
+    The name alone is not enough: `func get(p: Point): int` without `type Point = { ... }` is
+    `UnresolvedTypeReference: 'Point'`, so the printer has to write the declaration too. Only a
+    type the printed text actually uses is required, because a program may declare one that no
+    printed position names.
+    """
+    wanted = set(DECLARED_TYPE.findall(source.read_text(encoding="utf-8")))
+    for name in sorted(wanted):
+        # A type position: after `:` (a parameter, a return type, a `let`/`var`, a field), after
+        # `as`, or as a `with` parameter's type.
+        if not re.search(rf"(:\s*{re.escape(name)}\b|\bas\s+{re.escape(name)}\b)", printed):
+            continue
+        assert re.search(rf"^\s*type\s+{re.escape(name)}\s*=", printed, re.M), (
+            source.name,
+            "the printed program uses a type it does not declare",
+            name,
+            printed,
+        )
+
+
 def check_round_trip(source):
     before_text, before = canonical(source)
     printed = print_source(source)
@@ -193,6 +235,13 @@ def check_round_trip(source):
     assert before["entry"] == after["entry"], (before["entry"], after["entry"])
 
     check_names(source, printed, printed_path)
+    check_declarations(source, printed)
+    if source.stem == "string_conversion":
+        # The eight per-type kernels are one operator now, and the printer names it: `string(x)`.
+        # A kernel's own name in the text would be a spelling no source can read back.
+        assert "string(" in printed, (source.name, "the conversion is not printed as string(x)", printed)
+        for kernel in ("dtos", "itos", "ltos", "ftos", "stos", "ctos", "ztos", "atos"):
+            assert kernel + "(" not in printed, (source.name, kernel, printed)
 
     original_run = run_source(source)
     printed_run = run_source(printed_path)
@@ -260,16 +309,47 @@ def main():
     assert "max_literal_bytes (64)" in message, message
 
     # The constructs S2 deliberately leaves to a later step stay refusals with a diagnostic.
-    check_refusal(CML / "refuse/named_type.cml", "CmlUnsupportedConstruct", contains=("named type",))
     check_refusal(
         CML / "refuse/tagged_node.cml", "CmlUnsupportedConstruct", contains=("attributes",)
     )
-    check_refusal(CML / "refuse/operator.cml", "CmlUnsupportedConstruct", contains=("operator",))
+    # An operator whose declaration is body-less *and not exported* is still a refusal, and the
+# message says which: `array:sort_l` is the kernel behind `array::sort`, which the module keeps
+# to itself. "Body-less" alone is not the test -- `map` states its shape in a declaration with no
+# body too, and that one the module exports, so the printer writes the call (see
+# `map_with_closure.cml`, which used to be this fixture).
+    check_refusal(
+        CASES / "modules/stdlib/array_kernels_read_back.cml",
+        "CmlUnsupportedConstruct",
+        contains=("body-less kernel declaration", "array:sort_l"),
+    )
     check_refusal(CML / "refuse/partial_value.cml", "CmlUnsupportedConstruct")
     check_refusal(
         CML / "refuse/inline_region.cml",
         "CmlUnsupportedConstruct",
         ("std::opt::inline", "std::cml"),
+    )
+    # A named struct type whose declaration cannot be written is still a refusal, and the message
+    # says which half is missing: this one is a `#resource` declaration, whose tag is not readable
+    # from the type, so the printer can write neither the declaration nor an import.
+    check_refusal(
+        CASES / "effects/declared.cml",
+        "CmlUnsupportedConstruct",
+        contains=("named type", "declaration cannot be printed", "#resource"),
+    )
+
+    # The declaration is load-bearing, not decoration: the same printed program with its `type`
+    # line removed does not compile. This is the reading that says the emitter is what closes the
+    # family, and it fails if the emitter stops writing the line.
+    printed = print_source(CML / "named_type.cml")
+    stripped = "\n".join(line for line in printed.splitlines() if not line.startswith("type "))
+    assert stripped != printed, (printed, "the case declares no type to remove")
+    without = TMP / "named_type.without_declaration.cml"
+    without.write_text(stripped, encoding="utf-8")
+    done = invoke(EXE, without, "std::jgir", "canonical=true")
+    message = done.stdout + done.stderr
+    assert done.returncode != 0 and "UnresolvedTypeReference" in message, (
+        "the type declaration is not what makes the printed program compile",
+        message,
     )
 
     print("cml round trip: PASS")

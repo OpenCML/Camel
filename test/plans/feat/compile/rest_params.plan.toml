@@ -112,6 +112,52 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "lambda_rest_parameter"
+desc = "A lambda's parameter list takes a rest parameter and the shape parses: `(..xs) => body`. What it stands for comes from the function type the lambda is in, and this position has none -- the value is bound by `let` with no declared type -- so the report is the one a lambda's unwritten parameter gets: the type is not written and nothing here expects a function type. That is 'this place cannot', not 'not done yet'."
+kind = "negative"
+case = "../../../cases/compile/rest_params/lambda_rest_untyped.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LambdaParameterWithoutType"
+expect_output_contains = ["is not written and cannot be inferred: nothing here expects a function type"]
+expect_output_not_contains = ["throw", "is not lowered yet"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "lambda_rest_parameter_typed"
+desc = "The same shape with a type after `..` (`(..xs: float[..])`) is answered the same way: a pack written there says which types the parameters have, not how many there are, and this position declares no function type to count them from."
+kind = "negative"
+case = "../../../cases/compile/rest_params/lambda_rest_typed.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LambdaParameterWithoutType"
+expect_output_contains = ["is not written and cannot be inferred: nothing here expects a function type"]
+expect_output_not_contains = ["throw", "is not lowered yet"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "lambda_rest_parameter_expanded"
+desc = "A position that does declare a function type is where a lambda's rest parameter is expanded: `let f: (float, float) => float = (..xs) => 0.0` takes the two parameters the type has, in its types, and the program runs. Before this, the same program was a compiler error."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/lambda_rest_annotated.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+[[tests]]
+name = "lambda_rest_as_a_value"
+desc = "A lambda's rest parameter is a value in its body, not only a name for the parameters it stands for: the body's `xs` is the tuple of the parameters the position's function type gave the lambda, so a read of it resolves (it was `UnresolvedReference` before the binding). What comes next is the spread's own rule: `..xs` at a call spreads a compile-time tuple, and the tuple a lambda's rest parameter stands for is a runtime value, so the spread is refused and names what it wants. Pinned as it stands so the wall is not lost; the ruling that spreads it is the author's."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/lambda_rest_forward.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_output_contains = ["prints 1 x 3.0"]
+expect_output_not_contains = ["Unresolved reference", "is not a compile-time tuple"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+[[tests]]
 name = "rest_argument_not_last"
 desc = "`..e` is the last argument: what follows it cannot be told from its elements."
 kind = "negative"

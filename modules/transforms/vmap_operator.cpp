@@ -12,6 +12,7 @@
 
 #include "vmap_operator.h"
 
+#include "readings.h"
 #include "vmap.h"
 
 #include "camel/core/context/context.h"
@@ -21,6 +22,7 @@
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
 #include "camel/utils/type.h"
 
@@ -94,7 +96,9 @@ class VmapResolver final : public FuncTypeResolver {
         if (function->withTypesCount() != 0) {
             return std::string(
                 "`vmap` takes a function without `with` parameters: the transform copies the body "
-                "into a new graph, and a captured value has no port to enter it by");
+                "into a new graph, and the graph it builds is entered by the batch alone, so a "
+                "value the call site would have to pass in has no port to enter it by (a value the "
+                "function *captured* is part of the function value and is copied in as a constant)");
         }
         if (function->normTypesCount() != 1) {
             return std::string("`vmap` takes a function of exactly one parameter");
@@ -122,8 +126,11 @@ slot_t vmapKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (function == nullptr || function->graph() == nullptr) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "transforms: vmap needs a function value");
     }
+    // The captures are the function *value*'s, not its graph's: they are handed to the build as the
+    // constants the batched body reads.
     const VmapGraph built = buildVmapGraph(
-        ctx.shared_from_this(), function->program(), function->graph(), std::cout);
+        ctx.shared_from_this(), function->program(), function->graph(), function->tuple(),
+        readings());
     if (built.graph == nullptr) {
         if (built.refusedOrigin == camel::source::kInvalidOriginId) {
             throwRuntimeFault(
@@ -151,17 +158,16 @@ slot_t vmapKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
                                                  : std::string("-");
     const std::string handedBack =
         built.graph->funcType() != nullptr ? built.graph->funcType()->toString() : "-";
-    std::cout << "REINTERP vmap op signature=" << spelled << " resolved=" << produced
+    readings() << "REINTERP vmap op signature=" << spelled << " resolved=" << produced
               << " lifted=" << lifted << " graph=" << handedBack
               << " same=" << (lifted == handedBack ? "yes" : "no") << " asked=" << built.asked
               << " found=" << built.found << '\n';
+    // The batched graph captures nothing: every capture of the source is a constant of it, so the
+    // value made of it carries an empty closure -- a tuple of a layout the graph does not read would
+    // be a capture the value claims and nothing binds.
     auto *result = ::Function::create(
-        built.program, built.graph->id(), function->tupleType(), mm::autoSpace());
-    if (::Tuple *closure = function->tuple()) {
-        for (size_t i = 0; i < closure->size(); ++i) {
-            result->tuple()->set<slot_t>(i, closure->get<slot_t>(i), function->tupleType());
-        }
-    }
+        built.program, built.graph->id(),
+        camel::core::type::TupleType::create(std::vector<Type *>{}), mm::autoSpace());
     return toSlot<::Function *>(result);
 }
 
@@ -184,6 +190,10 @@ void registerVmapOperatorMetadata() {
     camel::core::OperatorTable::instance().declare("transforms", {{"vmap", false}});
     camel::core::OperatorTable::instance().set(
         "transforms:vmap", {.pure = false, .readsGraphs = true});
+    // It builds the batched graph out of the graph of the function value it is handed, and out of the
+    // value's closure: what the function captured is handed to the build as the constants the
+    // batched body reads. Before 2026-11-02 the batch element took the capture's place and the
+    // capture was dropped, so `x + c` answered `2x` in silence (author's review, high-2).
 }
 
 } // namespace camel::transforms

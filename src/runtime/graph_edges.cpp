@@ -28,6 +28,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/cycle.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/graph_ref_check.h"
 #include "camel/runtime/program.h"
 #include "camel/utils/assert.h"
 
@@ -98,6 +99,7 @@ class EdgeChecker {
         checkOrderEdges();
         checkSyncEdges();
         checkSyncChainForks();
+        checkBranchBackReferences();
         findCycle();
         for (auto it = graph_.nodes().begin(); it != graph_.nodes().end(); ++it) {
             checkNode(it.ref(), **it);
@@ -106,6 +108,19 @@ class EdgeChecker {
     }
 
   private:
+    /**
+     * The four references a graph's numbering can break -- see camel::runtime::checkGraphCrossReferences,
+     * which this calls. It lives outside this class because the encoder runs the same four checks on
+     * the graph it is about to publish: a draft can hold a number that its own graph cannot resolve,
+     * and a frozen graph that is refused here and encoded there would be two answers.
+     */
+    void checkBranchBackReferences() {
+        for (const std::string &violation : camel::runtime::checkGraphCrossReferences(graph_)) {
+            violations_.push_back(violation);
+        }
+    }
+
+
     /**
      * Every type id a frozen node names came from the type table's interning path, and the debug
      * assertion is this check: `TypeTable::adopt` -- the door an id could be handed to an object
@@ -166,6 +181,75 @@ class EdgeChecker {
                 declared->toString()));
     }
 
+    /// A node the builder chained inside a `sync` block: it carries the wait that block wrote.
+    /// Every check about a sync edge asks this question, so it is asked in one place -- two
+    /// copies of one condition drift, and these copies had already grown a `GATE` exception on
+    /// only one of them.
+    /// Is this node a statement of a chain: one that runs for its effect or may fault, or a
+    /// structure that contains such statements (a branch, a loop, a call)? Answered from the node
+    /// itself and the operator table, as edges.cn.md 1 and 4.6 define it, not from a marker the
+    /// builder wrote (author ruling 2026-11-02 04:50: a marker that can be derived should not be
+    /// stored).
+    bool isChainStatement(gc_node_ref_t ref) const {
+        const GCNode *node = graph_.node(ref);
+        if (node == nullptr) {
+            return false;
+        }
+        switch (node->kind) {
+        case GCNodeKind::Brch:
+        case GCNodeKind::Loop:
+        case GCNodeKind::Call:
+            return true;
+        case GCNodeKind::Oper: {
+            const auto *body = graph_.nodeBodyAs<GCOperBody>(ref);
+            if (body == nullptr || body->oper == camel::core::kNoOper) {
+                return false;
+            }
+            const auto traits = camel::core::OperatorTable::instance().find(body->oper);
+            if (!traits.has_value()) {
+                return false;
+            }
+            return !camel::core::OperatorTable::instance().isPure(body->oper) ||
+                   camel::core::OperatorTable::instance().hasExternalEffect(body->oper) ||
+                   traits->mayFault;
+        }
+        default:
+            return false;
+        }
+    }
+    /// Is this node a statement of a chain, read from the node and the operator table (edges.cn.md
+    /// 1 and 4.6) rather than from the marker: a branch, a loop or a call is a statement; an
+    /// operator is one when it has an effect or may fault. Used by the census below only.
+    bool isChainStatementNode(const GCNode *node, gc_node_ref_t ref) const {
+        switch (node->kind) {
+        case GCNodeKind::Brch:
+        case GCNodeKind::Loop:
+        case GCNodeKind::Call:
+            return true;
+        case GCNodeKind::Oper: {
+            const auto *body = graph_.nodeBodyAs<GCOperBody>(ref);
+            if (body == nullptr || body->oper == camel::core::kNoOper) {
+                return true;
+            }
+            auto &table = camel::core::OperatorTable::instance();
+            const auto traits = table.find(body->oper);
+            return !table.isPure(body->oper) || table.hasExternalEffect(body->oper) ||
+                   (traits.has_value() && traits->mayFault);
+        }
+        default:
+            return false;
+        }
+    }
+    static bool isWaitingCarrier(const GCNode *node) {
+        return (node->flags & kGCNodeFlagSyncStatement) != 0;
+    }
+    /// The same question at a sync edge's end: a `GATE` may stand there instead of a statement,
+    /// because a block's value node may be one the block does not own (edges.cn.md 5.3).
+    static bool isWaitingCarrierOrGate(const GCNode *node) {
+        return isWaitingCarrier(node) || node->kind == GCNodeKind::Gate;
+    }
+
+
     /// The other half of the structural rule of 4.6: a sync edge joins two statements one `sync`
     /// block writes directly -- or the block's chain tail to the block's value -- and nothing else.
     /// The builder records that fact on each node it chains (kGCNodeFlagSyncStatement), so the
@@ -209,7 +293,7 @@ class EdgeChecker {
                 bad("chains a node to itself");
                 continue;
             }
-            if ((user->flags & kGCNodeFlagSyncStatement) == 0 && user->kind != GCNodeKind::Gate) {
+            if (!isWaitingCarrierOrGate(user)) {
                 bad(std::format(
                     "ends on a node no `sync` block wrote (kind {}, flags {}, data type '{}')",
                     static_cast<int>(user->kind),
@@ -217,13 +301,40 @@ class EdgeChecker {
                     user->dataType() != nullptr ? user->dataType()->toString() : "-"));
                 continue;
             }
-            if ((pred->flags & kGCNodeFlagSyncStatement) == 0) {
+            if (!isWaitingCarrier(pred)) {
                 bad(std::format(
                     "starts at a node no `sync` block wrote (kind {}, flags {}, data type '{}')",
                     static_cast<int>(pred->kind),
                     pred->flags,
                     pred->dataType() != nullptr ? pred->dataType()->toString() : "-"));
                 continue;
+            }
+            // Census, not a refusal (author ruling 2026-11-02): an edge the marker calls a chain
+            // tail, whose end the graph cannot derive as one, is counted here and nowhere else --
+            // it is not refused and it is not removed. The count is read at log level info and
+            // above, so a default run is unchanged; it never writes to the program's stdout, which
+            // is what a case asserts.
+            {
+                const bool endIsStatement = isChainStatementNode(user, edge.user);
+                // Region 0 is the graph itself -- the block a statement sits in when nothing
+                // wraps it (control_regions.h: `0 when it is in none`) -- so an end and its tail
+                // in the same region are in one block, and the value of that block is an end the
+                // graph can derive.
+                const bool sameBlockValue =
+                    graph_.nodeRegion(edge.user) == graph_.nodeRegion(edge.pred);
+                if (!endIsStatement && !sameBlockValue && user->kind != GCNodeKind::Gate) {
+                    static std::set<std::pair<gc_node_ref_t, gc_node_ref_t>> seen;
+                    if (seen.insert(std::make_pair(edge.user, edge.pred)).second) {
+                        CAMEL_LOG_INFO_S(
+                            "SyncCensus",
+                            "sync census: n={} end={} tail={} kind={} region={}",
+                            seen.size(),
+                            static_cast<unsigned>(edge.user),
+                            static_cast<unsigned>(edge.pred),
+                            static_cast<int>(user->kind),
+                            static_cast<unsigned>(graph_.nodeRegion(edge.user)));
+                    }
+                }
             }
             if (graph_.syncPredsOf(edge.user).size() > 1) {
                 bad("is the second predecessor of one statement");
@@ -286,8 +397,7 @@ class EdgeChecker {
             if (user->kind == GCNodeKind::Dead || pred->kind == GCNodeKind::Dead) {
                 continue; // reported by checkSyncEdges
             }
-            if ((user->flags & kGCNodeFlagSyncStatement) == 0 ||
-                (pred->flags & kGCNodeFlagSyncStatement) == 0) {
+            if (!isWaitingCarrier(user) || !isWaitingCarrier(pred)) {
                 continue; // reported by checkSyncEdges
             }
             if (controlBlockOf(edge.user) != controlBlockOf(edge.pred)) {
@@ -730,4 +840,112 @@ bool nodeTakesNoOrder(const GCGraph &graph, gc_node_ref_t ref) {
     }
     return nodeIsFreelySchedulable(graph, ref) && !nodeStandsForItsRegion(graph, ref);
 }
+} // namespace camel::runtime
+
+namespace camel::runtime {
+
+/**
+ * A branch and its join name each other, and the owner and result a region carries are nodes of
+ * this graph. Both are the numbers a lift renumbers: a graph copied into a draft and back keeps its
+ * own numbering, and a copy that takes one of these numbers with it reads a node that is not the one
+ * it meant -- another branch's join, or a result past the end. Optional references
+ * (`kInvalidNodeRef`) are allowed and left alone.
+ *
+ * One function, two callers: the frozen-graph check (`EdgeChecker`) and the encoder
+ * (`encodeDraftGraph`). A draft can hold a number its own graph cannot resolve, and a frozen graph
+ * that is refused in one place and encoded in the other would be two answers to one question.
+ */
+std::vector<std::string> checkGraphCrossReferences(const GCGraph &graph) {
+    std::vector<std::string> violations;
+    const auto nodeCount = graph.nodeCount();
+    const auto inRange   = [&](gc_node_ref_t ref) {
+        return ref == kInvalidNodeRef || (ref >= 0 && static_cast<uint32_t>(ref) < nodeCount);
+    };
+    const auto kindOf = [&](gc_node_ref_t ref) {
+        const GCNode *node = graph.node(ref);
+        return node != nullptr ? node->kind : GCNodeKind::Data;
+    };
+    for (auto it = graph.nodes().begin(); it != graph.nodes().end(); ++it) {
+        const gc_node_ref_t ref = it.ref();
+        const GCNode &node      = **it;
+        if (node.kind == GCNodeKind::Brch) {
+            const auto *body = graph.nodeBodyAs<GCBrchBody>(ref);
+            if (body == nullptr) {
+                continue;
+            }
+            if (!inRange(body->join)) {
+                violations.push_back(
+                    std::format(
+                        "graph '{}' branch {}: its join is {} and the graph has {} nodes",
+                        graph.name(),
+                        ref,
+                        body->join,
+                        nodeCount));
+                continue;
+            }
+            if (body->join == kInvalidNodeRef) {
+                continue;
+            }
+            if (kindOf(body->join) != GCNodeKind::Join) {
+                violations.push_back(
+                    std::format(
+                        "graph '{}' branch {}: its join is node {}, which is not a join",
+                        graph.name(),
+                        ref,
+                        body->join));
+                continue;
+            }
+            const auto *joinBody = graph.nodeBodyAs<GCJoinBody>(body->join);
+            if (joinBody != nullptr && joinBody->brch != ref) {
+                violations.push_back(
+                    std::format(
+                        "graph '{}' branch {}: its join {} says its branch is {}",
+                        graph.name(),
+                        ref,
+                        body->join,
+                        joinBody->brch));
+            }
+        } else if (node.kind == GCNodeKind::Join) {
+            const auto *body = graph.nodeBodyAs<GCJoinBody>(ref);
+            if (body == nullptr || body->brch == kInvalidNodeRef) {
+                continue;
+            }
+            if (!inRange(body->brch) || kindOf(body->brch) != GCNodeKind::Brch) {
+                violations.push_back(
+                    std::format(
+                        "graph '{}' join {}: its branch is node {} of {}",
+                        graph.name(),
+                        ref,
+                        body->brch,
+                        nodeCount));
+            }
+        }
+    }
+    for (uint32_t id = 1; id < graph.regionCount(); ++id) {
+        const GCRegion *region = graph.region(id);
+        if (region == nullptr) {
+            continue;
+        }
+        if (!inRange(region->owner)) {
+            violations.push_back(
+                std::format(
+                    "graph '{}' region {}: its owner is {} and the graph has {} nodes",
+                    graph.name(),
+                    id,
+                    region->owner,
+                    nodeCount));
+        }
+        if (!inRange(region->result)) {
+            violations.push_back(
+                std::format(
+                    "graph '{}' region {}: its result is {} and the graph has {} nodes",
+                    graph.name(),
+                    id,
+                    region->result,
+                    nodeCount));
+        }
+    }
+    return violations;
+}
+
 } // namespace camel::runtime

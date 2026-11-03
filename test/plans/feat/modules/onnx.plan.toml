@@ -28,6 +28,31 @@ assert(model.inputs.join() === 'input' && model.outputs.join() === 'output', `un
 timeout_ms = 10000
 
 [[tests]]
+name = "export_not_equal"
+desc = "`!==` on two arrays is `!(===)`, so its model holds the equality and the negation: one ONNX `Equal` and one ONNX `Not`, no `NotEqual` node. The negation is the tensor module's elementwise `not` on a bool array, which is a row of the lowering registry in its own right -- a comparison whose negation has no export is a comparison the model cannot express."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_not_equal.cml"
+backends = false
+args = ["${case}", "std::macro", "std::opt", 'onnx::export out="${test_tmp}/export_not_equal.onnx"']
+expect_exit = 0
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/export_not_equal.onnx"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'export_not_equal.onnx'))
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('Equal') === 1, `the elementwise === is one Equal, got ${model.ops}`)
+assert(count('Not') === 1, `the negation is one Not, got ${model.ops}`)
+assert(count('NotEqual') === 0, `the language has no not-equal operator to export, got ${model.ops}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
 name = "export_fold"
 desc = "Export folds weights, shape arithmetic, and constant-driven recursion; only input-dependent tensor ops are emitted."
 kind = "behavior"
@@ -3206,3 +3231,18 @@ expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/pass_quiet.onnx"]
 expect_output_not_contains = ["[onnx]", "ONNX_PREP_STATS", "digraph GraphIR {"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+
+[[tests]]
+name = "export_entry_impure_recursion"
+desc = "The export of the entry function refuses an impure program at the impure operator, before its own simplification runs: a recursion whose depth is a constant used to be unrolled until the rewrite budget ran out, and the program was reported as a defect of the compiler (`Pass 'std::opt' failed with an internal error: the rewrite ... did not settle`) instead of being refused (defect A5)"
+kind = "negative"
+case = "../../../cases/modules/onnx/export_entry_impure_recursion.cml"
+args = ["${case}", "std::macro", "std::opt", 'onnx::export out="${test_tmp}/impure_recursion.onnx"']
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_line = 16
+expect_diagnostic_column = 5
+expect_output_contains = ["impure operator ':io/println' cannot be exported"]
+expect_output_not_contains = ["PassInternalError", "did not settle", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000

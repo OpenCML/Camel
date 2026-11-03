@@ -75,14 +75,17 @@ B **新增**一条表示，且与裁定正面冲突；C 让 `split` 多背一个
 - 调用者数：每个算子 **1 个注册点 + 1 个 kernel**（`split_operator.cpp:179/:186`、`jvp_operator.cpp:218/:225`、`transpose_operator.cpp:170/:177`），**外部 C++ 调用点 0**。
 - 判据：**能删 342 行**（`split_operator.cpp` 179、`jvp_operator.cpp:81-226` 146、`transforms.cml:54-62,66` 10、`vjp.cml:47-53` 7），
   **但要搬 1720 行**（`split.cpp` 694 + `jvp.cpp` 1026）进一个新 pass。**按“删不掉就是净负”，甲是净负。**
-  （复核 2026-11-01：上面的行数是当天的文件量，今天读作 `split_operator.cpp` **204**、`jvp_operator.cpp` **268**、`transforms.cml` **116**、`vjp.cml` **104**，`split.cpp` **1470**、`jvp.cpp` **1376** —— 三个 `transforms/*.cpp` 随 `lane-gs6`、`lane-reinterp2` 两笔合并长出来，之后 `split.cpp` 又随 `914e09263`、`e0c206239`（残差元组自成一个类型）多了 96 行、随 `fdb60ba49`（选臂成为残差）多了 437 行，`jvp.cpp` 随 `728b9f27c`、`4fbdc4e3a` 与 `ba0a37be9`、`c98dd492f` 多了 37 行，`split_operator.cpp` 又随 `67509bd1a`（kernel 不再自己定类型）少了 2 行，`jvp_operator.cpp` 与 `jvp.cpp` 又随 `c8bc3d87f`（`jvp(f)` 在调用方的图建起来时实例化）多了 5 行与 32 行，`jvp.cpp` 再随 `lane-remat` 的核声明表多了 19 行（1315→1334），`split_operator.cpp` 再随本车道让切口在构建期回答（`printSplitCallReading` 一条读数）多了 8 行（196→204）、`jvp.cpp` 同时多 6 行（1366→1372，构建期的 `liftedFrom=` 读作 `unassigned`，那里没有运行期的图 id）；此后 `lane-remat` 又把 `jvp.cpp` 的核声明表删掉、改成调用节点上的 `tangentArgs`（1372→1376），`split.cpp` 拷贝调用时把那个计数一起带过去（1466→1470）；`vjp.cml` 随 `07451069e`（拉回一律返回元组、一元写成 `(float,)`）多了 10 行，此前随 `lane-m4-assembly` 的泛型化变短。命令：`node test/tools/check-doc-readings.mjs`。）
+
+
+- 路径：`modules/transforms/split_operator.cpp` **202**、`modules/transforms/jvp_operator.cpp` **268**、`stdlib/signatures/transforms.cml` **116**（这一页原来只写 `transforms.cml`；`stdlib/transforms.cml` 是另一份、只有 25 行，照那个名字去数会"文件不存在"）、`stdlib/vjp.cml` **98**、`modules/transforms/split.cpp` **1531**、`modules/transforms/jvp.cpp` **1126**。
+
+  （**2026-11-02 `lane-m5` 再测**：`split_operator.cpp` 202 → **208**、`jvp_operator.cpp` 268 → **278**，`case TypeCode::` 1024 → **1028**、文件数仍 74——前两个是同一件事：`jvp(f)`、`transpose(f)`、`split(f)` 的调用形状（名字、元数、`with` 参数个数）现在登记在算子声明的地方，两个 `*_operator.cpp` 各多几行注释与三条 `declareCallForm`；后一个是 `std::cml` 的 `hasFunction` 加的四条（`Function`/`Array`/`Tuple`/`Struct`），因为一个含函数类型的标注在源码里没有写法，打印机要能看出类型里有没有函数。**这两个数是照读数抄的，页是这一页的原文——`lane-m5` 自己那份带一处未解的冲突标记，没有整份取用。**）
 
 **乙 —— 每次实例化新铸一个刚性类型，并在原则 5.10 上开一条例外**
 - 一个 `TypeCode` 落地要动 **7 点**：枚举（`type/base.h:56` + `TypeFlag` `:39`）、`typeCodeToString`（`base.cpp:65`，35 分支且 `:111` 有 `default:` **漏了不报错**）、
   `Type::equals` 与 6 处覆盖、`TypeStorageKind`（`17` 处）、`intern.h:16-22` 的哈希 key、四处序列化、三处运行时值。
 - **其中哈希那一点是死结不是成本**：表的 key 是「构造子 + 组件 `TypeId`」，而残差的组件正是此刻还不存在的那个数。
 - 调用者数：**1019 个 `case TypeCode::` 分支、73 个文件**；原则 5.10 在代码里被引用 **4** 处、文档 32 行，**执行点只有一个**（`src/runtime/graph_types.cpp:55`）。
-  （复核 2026-11-01：现在是 **1024 处 `case TypeCode::`、74 个文件** —— `eeb02d2d4`（`lane-m4-assembly`）带进 `src/core/tangent_space.cpp` 时多出 3 处、1 个文件；原则 5.10 在代码里仍是 **4** 处，文档里 **38** 处（这个数每有一页写到 5.10 就变，不设检查：`check-doc-readings.mjs` 只锁代码里那 4 处）。命令：`node test/tools/check-doc-readings.mjs`。）
 - 判据：**例外只许落在 `graph_types.cpp:55` 的一处白名单**，并配一个 ledger（照 `test/tools/check-env-switches.mjs`）锁死构造点恰好 1 处——
   没有它，5.10 的唯一执行点迟早被加第二项，长成第二个 `any`。
 
@@ -92,7 +95,6 @@ B **新增**一条表示，且与裁定正面冲突；C 让 `split` 多背一个
 `transpose` 不再试着装闭包；**同时把 `transpose` 的拒绝信息钉成上面那一行**（指到生产者节点与 kind），
 这样去函数化那天，“被调值有没有名字”一读就知道能不能过。
 
-**复核 2026-11-01（`lane-gs6`）——"没有捕获"也过不了，缺的是名字，不是捕获**：把边界再切细一刀，同一天、同一棵树量了两条：
 
 - 带捕获（`g2(x) = let h = (y: float) => y*x; h(2.0)`）：`TRANSPOSE function=g2 skip=call node=4 callee=none value=3:0 with=2:4`；
 - 不带捕获（`double(x) = 2x`，`g(x) = let h = double; h(x)`）：`TRANSPOSE function=g skip=call node=2 callee=none value=0:1 with=1:0`。
@@ -117,3 +119,6 @@ B **新增**一条表示，且与裁定正面冲突；C 让 `split` 多背一个
 
 顺带一条同源的事实：转置后的调用必须把被调值放回原来的位置——原调用把被调方当 `with` 输入传，转置后的调用就得传一个**转置图的静态函数值**
 （空闭包）；放错位置得到的是"CALL node 3 without callee input"。
+ **2026-11-02（读数来源：lane-m4b 的树，不是 develop）**：这六个数是在 lane-m4b 上量的，与 develop 不同的部分由本车道自己的提交与合并造成——split.cpp 因 6b6d82aa8（值端口跨切）变大、jvp.cpp 因 21aa36805/9a54b9d5 的重构变小，其余跟着同一批改动。**今后引用这六个数，必须说清在哪棵树上量**。
+**2026-11-02 合并时重读一次**：`split.cpp` 那段注释变长了一行多，因为本车道把残差收录条件恢复成「后一半读到的参数一律记」（裁定 00:30）。**设计稿和交接页写规则与理由，不写会随代码变的数字**（作者 05:30 的裁定）；要用数字，写进提交信息，那是它所属的时刻。
+**2026-11-02 勘误**：上面那句"合并时按仪器重读为 1569"作废——1569 是在合并树的中间状态上量的，提交 `ca1941405` 里 `split.cpp` 的注释比那次短 6 行，**本文树上的数是 1563**。**教训：读数必须在 `git rev-parse HEAD` 与 `git status --porcelain` 都对上之后再取；树在动时读出来的数会跟着动。**

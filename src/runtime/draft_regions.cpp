@@ -47,6 +47,13 @@ uint32_t GraphDraft::addInlineRegion(uint32_t parent, GraphId callee, gc_node_re
     return id;
 }
 
+void GraphDraft::setBrchJoin(gc_node_ref_t brch, gc_node_ref_t join) {
+    ++mutations_;
+    DraftNode *node = this->node(brch);
+    ASSERT(node != nullptr && node->header.kind == GCNodeKind::Brch, "Not a branch node.");
+    DraftNodeView::payloadAs<DraftBrchPayload>(node)->join = join;
+}
+
 void GraphDraft::setRegionResult(uint32_t id, gc_node_ref_t result) {
     ++mutations_;
     ASSERT(id > 0 && id < regions_.size(), "No such region.");

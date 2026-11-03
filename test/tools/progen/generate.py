@@ -62,7 +62,7 @@ DEFAULT_FEATURES = frozenset(FEATURES) - {"modules"}
 
 # Part of the random stream: a change of the generator that changes the programs of existing
 # seeds gets a new number, so that "seed N" of an old report is not silently another program.
-VERSION = 6
+VERSION = 7
 
 
 def parse_features(text: Optional[str]) -> frozenset:

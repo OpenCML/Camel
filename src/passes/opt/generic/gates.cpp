@@ -22,23 +22,26 @@ if (!gate || gate->kind != GCNodeKind::Gate || !edgeBudget || !isReplaceable(tra
         return false;
     }
     // What a gate carries is a wait (docs/design/effects/plan.cn.md 5.5, the enabling condition of
-    // this rewrite): a gate with no wait is a plain forwarding node and has nothing to move. This
-    // is asked through the one place that answers what a wait is worth (no gate is an effect of its
-    // own, so `effectStandingOf` is not the question here -- `hasWaitEdge` is).
-    EffectLivenessFacts facts;
+    // this rewrite): a gate with no wait is a plain forwarding node and has nothing to move. This is
+    // a structural question, not the liveness answer: no gate is an effect of its own, so a gate
+    // with a wait stands as `HasNoCredential` in `effectStandingOf` (camel/runtime/effect_liveness.h)
+    // and that function cannot answer this. The wait is read here, in its two kinds, and the reading
+    // says what it is -- `effectLivenessFacts` used to carry it under a name four call sites spelled
+    // three ways, which is why it no longer does.
+    //
     // A wait is read in either kind (docs/design/effects/edges.cn.md 5.3): the control edge the
     // kind still exists under, and the sync edge that replaces it -- a GATE's wait is the chain's
     // tail, and the sync edge is what names it once the control edge is gone.
-    facts.hasWaitEdge      = !draft.ctrlInputsOf(id).empty() || !draft.syncInputsOf(id).empty();
-    facts.isSyncStatement  = !draft.syncInputsOf(id).empty();
-    if (!facts.hasWaitEdge) {
+    const bool waitOnAChain = !draft.syncInputsOf(id).empty();
+    const bool carriesWait  = !draft.ctrlInputsOf(id).empty() || waitOnAChain;
+    if (!carriesWait) {
         return false;
     }
     // A gate that waits through the sync edge of a block's chain carries that chain: the statements
     // before it run because the graph's result is reached through them (docs/design/effects/
     // edges.cn.md 2 and 5.3), so moving its wait to its consumers steps over them. It stays, the
     // way the gate a function returns through stays (isFoldable, generic.cpp).
-    if (facts.isSyncStatement) {
+    if (waitOnAChain) {
         return false;
     }
     const size_t valueUses = draft.normUsersOf(id).size() + draft.withUsersOf(id).size();
@@ -46,9 +49,16 @@ if (!gate || gate->kind != GCNodeKind::Gate || !edgeBudget || !isReplaceable(tra
     // Unread gates have their own DCE rule. Bound both local inspection and potential fanout
     // before allocating scratch storage; retaining a shared barrier can be cheaper than
     // materializing the Cartesian product of waits and consumers.
+    //
+    // `valueUses == 0` is also the last-reader question this rewrite has to answer before it erases
+    // anything, and the answer it gives is "not mine": a gate nobody reads is the only reader of
+    // what it forwards, so this rewrite -- which moves the gate's waits to consumers that need not
+    // exist -- would take that read away with the gate. It is left to the rule that dissolves
+    // unordered gates (src/runtime/draft.cpp, `dissolveUnorderedGates`), which hands the place the
+    // gate held to the node it read instead of dropping it.
     // The control inputs are counted for the fan-out bound: they multiply the waits this
-    // rewrite moves to the consumers. They stop existing with the kind (see hasWaitEdge,
-    // camel/runtime/effect_liveness.h), and this bound goes with the rewrite above it.
+    // rewrite moves to the consumers. They stop existing with the kind (see `carriesWait` above,
+    // and docs/design/effects/plan.cn.md 5.5), and this bound goes with the rewrite above it.
     if (!valueUses || allUses > 64 || draft.ctrlInputsOf(id).size() > 64)
         return false;
 

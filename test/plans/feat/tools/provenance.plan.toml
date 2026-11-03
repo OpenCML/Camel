@@ -1,0 +1,15 @@
+id = "feat.tools.provenance"
+tier = "fast"
+desc = "A run states the commit, the binary and the tree its numbers belong to, on one line before `[SUMMARY]`: a clean tree prints this checkout's HEAD character for character, a dirty tree prints `(dirty: N files)` and no sha at all, and the binary's time is the executable's mtime rather than the build log's"
+
+[[tests]]
+name = "runner.provenance_line_names_the_artifact"
+desc = "Night rewrites came from correct numbers attributed to the wrong artifact (a stale ref, `build.ninja` for `build-Release.ninja`, a lane's readings as develop's). The provenance line is pinned on three rules: the clean tip equals `git rev-parse HEAD`; a dirty tree prints `(dirty: N files)` with no sha in it (the dirty reading is taken by adding one untracked file to the checkout); and `binary built` is an ISO time read from the binary itself."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/provenance.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 180000

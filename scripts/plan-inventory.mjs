@@ -3,16 +3,13 @@
 // SPDX-License-Identifier: MIT
 
 // The plan inventory: the tables that say what layer a plan file belongs to, and the check that
-// every plan file of the tree belongs to one.
-//
-// Every plan file belongs to one of three layers, or to the debug layer: a fast target runs its
-// fast tests, a SLOW_PLANS entry runs it in full, FORBIDDEN names it as the milestone layer's --
-// a plan whose own file says `tier = "milestone"` -- or the debug layer is out of the release gate
-// and says so. A plan outside those would have tests that no layer runs and no line calls UNKNOWN;
-// the list would keep printing one number while the tree grew. This used to be unchecked: a
-// renamed FORBIDDEN file was printed as skipped, and a new slow plan under feat/ vanished from both
-// layers.
-//
+// Every plan file belongs to a layer, and the layers are read off the tree rather than written
+// down in a list. The fast layer is the whole tree at `--tier fast`; the slow layer is SLOW_PLANS,
+// by name, because a slow test is fast to name and long to run; the milestone layer is every test
+// whose own tier says `milestone`, which `--tier milestone` selects; the debug layer is out of the
+// release gate and says so. A plan file that names a tier nobody knows, a slow test that no slow
+// plan names, and a table entry that no longer exists are the problems left, and this check reports
+// them at the commit that lands them.
 // The tables and the check live here, in one place, because two readers need the same facts:
 // `scripts/release-gate.mjs` imports them, and the merge gate's fast layer runs this file as an
 // ordinary plan entry (`test/plans/feat/gate/plan_inventory.plan.toml`). A plan that landed without
@@ -31,15 +28,16 @@ import { expandSweeps, loadPlanTests, testTier } from '../test/tools/run-tests.m
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
-// The fast layer. `smoke` + `feat` are what `npm run test` walks; `gpu/profile` and `gpu/reading`
-// are fast-tier but under `gpu/`, which neither the fast target nor the slow list reaches -- they
-// would otherwise be as invisible as the rest of `gpu/**` was before the slow layer existed.
-export const FAST_TARGETS = [
-    'smoke',
-    'test/plans/feat',
-    'test/plans/gpu/profile.plan.toml',
-    'test/plans/gpu/reading.plan.toml',
-]
+// The fast layer: the whole plan tree at `--tier fast`, which is the command `npm run test` runs
+// on a subtree. The author's 01:30 ruling (2026-11-02) put it here: "what we call green" and "what
+// runs before a release" get one definition, the tree and each plan's own tier lines. It used to
+// be a list (`smoke` + `feat` + two gpu files), and a list is a second definition -- a fast test
+// in a file the list did not name was neither run by the gate nor reported as missing, and the
+// list had to be edited by hand the day a plan landed somewhere else. Measured before the change:
+// the list's own directory target walked all 338 files anyway (a directory is walked, not named),
+// so it ran 8440 of the 8441 cases the whole tree has; the difference the change makes is that the
+// report now says so instead of holding 25 files back "by policy" while running their fast tests.
+export const FAST_TARGETS = ['test/plans']
 
 // The slow layer, by explicit plan file. Fourteen files: six fast plans whose slow tests
 // are runnable, five whole slow plans, and three perf plans the tree keeps gate-able -- the
@@ -53,6 +51,9 @@ export const SLOW_PLANS = [
     'test/plans/feat/modules/random.plan.toml',
     'test/plans/feat/tools/lsp.plan.toml',
     'test/plans/feat/linear/var_reference.plan.toml',
+    // The whole corpus through the printer, one process per case (`node test/tools/cml-sweep.mjs`),
+    // about a minute.
+    'test/plans/feat/trans/cml_sweep.plan.toml',
     'test/plans/feat/tools/debugger.plan.toml',
     'test/plans/feat/mm/gc_pacing.plan.toml',
     'test/plans/feat/mm/gc_soak.plan.toml',
@@ -61,65 +62,30 @@ export const SLOW_PLANS = [
     'test/plans/gpu/tiles_transfer.plan.toml',
     'test/plans/perf/para_speedup.plan.toml',
     'test/plans/perf/step_counts.plan.toml',
+    // Its five PyTorch gradient comparisons say `tier = "slow"` and skip without torch; they
+    // were reached by no layer at all while the file sat in the old FORBIDDEN table.
+    'test/plans/feat/modules/autodiff.plan.toml',
     'test/plans/perf/reduce_layout_counts.plan.toml',
 ]
 
-// The milestone layer. `agents/test.md`, General Policy: the full suite, the GC poison sweep, the
-// GC stress plans (`gc.collection_trees_*`, `gc_elder_*`), the progen random-program checks, the
-// PyTorch comparisons and the perf/timeit plans are milestone-only -- by the coordinator, on a
-// quiet machine -- and the shared host is not one. Each plan file named here says
-// `tier = "milestone"` in its own file (the tests it holds back do too, in the three files that
-// hold back only some), so one word names the layer: `--tier milestone` selects exactly this batch
-// plus the unsampled copies of a sweep, and `--tier slow` never touches it.
+// The milestone layer is not a list here either: it is every test whose own tier line (or its
+// plan's) says `milestone`, which `--tier milestone` selects -- `agents/test.md`, General Policy:
+// the full suite, the GC poison sweep, the GC stress plans, the progen random-program checks, the
+// PyTorch comparisons and the perf/timeit plans are milestone-only, by the coordinator, on a quiet
+// machine. Depending on a list meant a plan that gained a milestone case after the list was
+// written was never counted; `milestoneLayer()` asks the runner's own reading of the tree instead,
+// and the gate prints its numbers on every run.
+
+// The plans the gate's own commands cannot start at all. Not "we chose not to run these": the
+// author's 01:30 ruling (2026-11-02) leaves this list for a plan the runner refuses to read, or
+// whose case needs something the command cannot have, and asks for a reason per entry.
 //
-// A file in this list is named as a whole plan when the whole plan is excluded, and as a plan
-// whose milestone entries are excluded when only some of its tests are: the runner cannot select
-// a test by name, so naming such a file would start the excluded tests too (the ONNX row). The
-// gate skips the file entirely either way, which is why the list holds 25 entries (22 whole plans
-// and 3 plans with milestone entries). How many cases that is, the gate counts through the runner's
-// own reading of these files (`loadPlanTests`, `expandSweeps` and `testTier`, in its
-// `forbiddenMilestoneTests`) and prints on every run; a count read off the table rows would be a
-// different number, because a row with `backends` is one case there and one test per back end to
-// the runner, and only the runner's number is the number of cases `--tier milestone` would run.
-export const FORBIDDEN = [
-    // The benchmark/timeit plans: the machine's load is part of what they measure.
-    { file: 'test/plans/perf/fib.plan.toml', reason: 'benchmark (`kind = "benchmark"`): measures the machine load' },
-    { file: 'test/plans/perf/para.plan.toml', reason: 'benchmark (`kind = "benchmark"`): measures the machine load' },
-    { file: 'test/plans/perf/startup.plan.toml', reason: 'benchmark: measures the machine load' },
-    { file: 'test/plans/perf/training_steps.plan.toml', reason: 'GPU training benchmark: measures the machine load' },
-    // The other perf plans: minutes-long soaks and fuzzing, or a PyTorch comparison.
-    { file: 'test/plans/perf/gc.plan.toml', reason: 'GC soak: minutes long, GB-scale live set (agents/test.md)' },
-    { file: 'test/plans/perf/collections_fuzz.plan.toml', reason: 'random-program fuzzing and differential, minutes long (agents/test.md)' },
-    { file: 'test/plans/perf/showcase_c1.plan.toml', reason: 'PyTorch comparison (`skip_unless` torch; agents/test.md)' },
-    { file: 'test/plans/perf/showcase_c2.plan.toml', reason: 'PyTorch comparison (`skip_unless` torch; agents/test.md)' },
-    { file: 'test/plans/perf/showcase_c6.plan.toml', reason: 'PyTorch comparison (`skip_unless` torch; agents/test.md)' },
-    { file: 'test/plans/perf/showcase_d5.plan.toml', reason: 'PyTorch comparison (`skip_unless` torch; agents/test.md)' },
-    // The remaining perf plans: a measurement whose numbers only mean anything beside the whole
-    // sweep, recorded rather than gated (the 2026-10-25 rule disposed of the eight that had no
-    // layer: one to the slow layer, two split into a gate-able count guard and a measurement, five
-    // here).
-    { file: 'test/plans/perf/gemm_canonical_shapes.plan.toml', reason: 'a rate curve (GFLOP/s per shape and round): measured before a release, not in a gate' },
-    { file: 'test/plans/perf/gemm_threads.plan.toml', reason: 'a thread-rate curve (GFLOP/s per thread count): measured before a release, not in a gate' },
-    { file: 'test/plans/perf/instruction_counts.plan.toml', reason: 'needs a privileged container and `perf stat` (`kernel.perf_event_paranoid` refuses an unprivileged perf)' },
-    { file: 'test/plans/perf/instruction_counts_load.plan.toml', reason: 'the same privileged `perf` measurement, and it induces the load it reads (96 spinners, 600 s)' },
-    { file: 'test/plans/perf/showcase_d4.plan.toml', reason: 'a line-by-line comparison with the Python counterpart: a measurement, like the showcase plans above' },
-    { file: 'test/plans/perf/step_budget.plan.toml', reason: 'the measured half: the step budget and its profile (the count guards are perf.step_counts, in SLOW_PLANS)' },
-    { file: 'test/plans/perf/reduce_layout.plan.toml', reason: 'the measured half: the per-operator profile (the count guard is perf.reduce_layout_counts, in SLOW_PLANS)' },
-    // GC stress and poison: every case passes --gc-stress, --gc-check poison or --gc-check verify.
-    { file: 'test/plans/feat/mm/gc.plan.toml', reason: 'GC stress + poison (`--gc-stress`, `--gc-check poison`)' },
-    { file: 'test/plans/feat/mm/gc_collections.plan.toml', reason: 'collection stress (`--gc-stress alloc` + `--gc-check verify=both`)' },
-    { file: 'test/plans/feat/mm/gc_elder_exhaustion.plan.toml', reason: 'elder-generation exhaustion (`gc_elder_*`; agents/test.md)' },
-    { file: 'test/plans/feat/opt/progen.plan.toml', reason: 'progen random-program check (agents/test.md)' },
-    { file: 'test/plans/gpu/tiles_regions.plan.toml', reason: 'region run under GC stress (`--gc-stress safepoint=1` + `--gc-check verify`)' },
-    // Files whose milestone entries are held back; the whole file is skipped (the runner cannot
-    // select a test by name, so naming the file would start the held-back tests).
-    { file: 'test/plans/feat/modules/autodiff.plan.toml', reason: 'its 5 milestone tests compare against PyTorch (`*_vs_torch64`)' },
-    {
-        file: 'test/plans/feat/modules/onnx.plan.toml',
-        reason: 'its 4 milestone tests: 2 PyTorch comparisons + 2 that cannot be selected apart from them',
-    },
-    { file: 'test/plans/feat/linear/jit_framed.plan.toml', reason: 'its 2 milestone tests are GC stress (`--gc-stress safepoint` + `--gc-check verify`)' },
-]
+// It is empty today, and that is the honest reading: every plan under `test/plans` starts and then
+// runs or skips on its own precondition, so nothing belongs here. The 25 rows this list used to
+// hold were layer statements -- benchmark, GC soak, PyTorch comparison, "its N milestone tests are
+// GC stress" -- and a plan file's own `tier` lines already say all of that. Keeping both is how a
+// file with 55 fast tests came to be reported as "UNKNOWN, not green" on a run that executed them.
+export const CANNOT_START = []
 
 export function rel(abs) {
     return path.relative(ROOT, abs).split(path.sep).join('/')
@@ -140,14 +106,43 @@ export function walkPlans(entry) {
     walk(abs)
     return out
 }
+// The milestone layer, counted through the runner's own reading of the tree: every test whose tier
+// is `milestone`. A plan whose file says `tier = "milestone"` contributes all of its cases, and the
+// three files that hold back only some contribute those tests alone -- which is exactly what
+// `--tier milestone` would start, so the number the gate prints is a reading, not a table row.
+export function milestoneLayer() {
+    const files = new Set()
+    let cases = 0
+    for (const abs of walkPlans('test/plans') ?? []) {
+        const plan = readPlan(abs)
+        if (plan.error) continue
+        let here = 0
+        for (const test of plan.tests) {
+            try {
+                // Counted as the file declares it, one per entry. A run starts a few more (back ends
+                // expand, `compare_to` companions join): measured on 2026-11-02, the files declare
+                // 3330 and `--tier milestone` reports `tests: 3404`. Two different subjects, and
+                // this line says "test entries" so that it cannot be read as the batch a run starts.
+                if (testTier(plan.doc, test) === 'milestone') here += 1
+            } catch {
+                // an unknown tier is the inventory check's problem, reported there by name
+            }
+        }
+        if (here > 0) {
+            files.add(rel(abs))
+            cases += here
+        }
+    }
+    return { files: [...files].sort(), cases }
+}
 
 // Every problem, not the first: the caller prints the whole list, so a reader sees all the plan
 // files that have no layer in one run instead of fixing one per run.
 export function planInventoryProblems() {
     const problems = []
-    for (const entry of FORBIDDEN) {
+    for (const entry of CANNOT_START) {
         if (!fs.existsSync(path.join(ROOT, entry.file))) {
-            problems.push(`the milestone plan '${entry.file}' does not exist; the list is stale`)
+            problems.push(`the plan the gate cannot start, '${entry.file}', does not exist; the list is stale`)
         }
     }
     for (const file of SLOW_PLANS) {
@@ -161,7 +156,7 @@ export function planInventoryProblems() {
         return problems
     }
     const slowSet = new Set(SLOW_PLANS)
-    const forbiddenSet = new Set(FORBIDDEN.map((entry) => entry.file))
+    const cannotStartSet = new Set(CANNOT_START.map((entry) => entry.file))
     const fastReaches = (key) =>
         FAST_TARGETS.some((target) => {
             if (target === 'smoke') return key.startsWith('test/plans/smoke/')
@@ -170,7 +165,7 @@ export function planInventoryProblems() {
         })
     for (const abs of planFiles) {
         const key = rel(abs)
-        if (slowSet.has(key) || forbiddenSet.has(key)) continue
+        if (slowSet.has(key) || cannotStartSet.has(key)) continue
         const plan = readPlan(abs)
         if (plan.error) {
             problems.push(`${key}: the runner cannot read it (${plan.error}); a plan file with no reading has no layer`)
@@ -197,8 +192,9 @@ export function planInventoryProblems() {
         }
         if (!fastReaches(key)) {
             problems.push(
-                `${key}: no layer reaches it (not a fast target, a SLOW_PLANS file, FORBIDDEN, or a debug or ` +
-                    `milestone plan); its ${plan.tests.length} test(s), ${slowTests} slow, are UNKNOWN, not green`,
+                `${key}: no layer reaches it (not a fast target, a SLOW_PLANS file, a plan the gate ` +
+                    `cannot start, or a debug or milestone plan); its ${plan.tests.length} test(s), ` +
+                    `${slowTests} slow, are UNKNOWN, not green`,
             )
         } else if (slowTests > 0) {
             problems.push(
@@ -747,7 +743,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (problems.length > 0) {
         console.error(
             `plan-inventory: ${problems.length} problem(s): every plan file must be reached by a fast target, ` +
-                'named in SLOW_PLANS, named in FORBIDDEN, or be a debug or milestone plan; and every file ' +
+                'named in SLOW_PLANS, cannot be started by the gate, or be a debug or milestone plan; and every file ' +
                 'under test/cases must be read by code -- a plan, an import, a harness that opens it -- ' +
                 'or be recorded in CASE_EXCEPTIONS with the reason it is kept',
         )

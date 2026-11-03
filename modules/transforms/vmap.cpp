@@ -3,6 +3,8 @@
 
 #include "vmap.h"
 
+#include "rule_types.h"
+
 #include "camel/compile/gir/draft_graph_builder.h"
 #include "camel/compile/gir/rule_templates.h"
 #include "camel/core/forward.h"
@@ -10,6 +12,7 @@
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
@@ -19,6 +22,7 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph_txn.h"
 
+#include <algorithm>
 #include <cstring>
 #include <format>
 #include <span>
@@ -40,6 +44,8 @@ using camel::core::type::Type;
 using camel::core::type::TypeCode;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GraphId;
+using camel::transforms::rules::firstOperandTypeOf;
+using camel::transforms::rules::ruleElementTypeOf;
 
 namespace {
 
@@ -68,63 +74,22 @@ Type *rowsOfType(Type *type) {
     return ArrayType::create(array->elemType(), forms, array->packName());
 }
 
-/// The type a rule is generic in: the type the primitive works on. A primitive over scalars is its
-/// own type (`+` on two `f32`), and one over arrays works on the element of the array -- `matmul`
-/// multiplies elements, `sum_axis` adds them -- so the rule is filed once per element type and says
-/// which axis the batch is on, never what shape a row has. Asking for the array type instead would
-/// file one instance per shape and would name the rows in type of the rule's `T`.
-Type *ruleElementTypeOf(Type *type) {
-    while (type != nullptr && type->code() == TypeCode::Array) {
-        type = tt::as_ptr<ArrayType>(type)->elemType();
-    }
-    return type;
-}
 
-/// The type of the first *value* operand of the node at `ref`, or nullptr when it has none.
-///
-/// A rule is generic in the element its values are made of, and that is not always the first port: a
-/// condition is not a value arm. `where(cond, lhs, rhs)` takes a `bool` first and answers the element
-/// of the two arms, so a rule instantiated on the first port would be a `bool` rule applied to a
-/// float batch -- and the arms carry the element the answer has. The node's own `dataType()` is no
-/// better: `argmax_axis` takes a tensor of numbers and answers `int64` positions, so asking the node
-/// would instantiate its rule at `int64` and apply it to floats. The first port whose element is not
-/// a condition is the one that names the rule's `T`; an operator that is all conditions (none today)
-/// falls back to its first port.
-Type *firstOperandTypeOf(camel::runtime::GCGraph &function, gc_node_ref_t ref) {
-    Type *first = nullptr;
-    for (const gc_node_ref_t input : function.normInputsOf(ref)) {
-        if (input >= function.nodeCount()) {
-            continue;
-        }
-        const rt::GCNode *operand = function.node(input);
-        if (operand == nullptr) {
-            continue;
-        }
-        Type *element = ruleElementTypeOf(operand->dataType());
-        const bool isCondition = element != nullptr && element->code() == TypeCode::Bool;
-        if (first == nullptr) {
-            first = operand->dataType();
-        }
-        if (!isCondition) {
-            return operand->dataType();
-        }
-    }
-    return first;
-}
-
-/// The rule `rulesets.vmap` files for `uri`, or nullptr and why not. The family is read through the
-/// operator's key: `vmapBindingOf` answers the key the operator's batching rule is filed under, and
-/// the head and the operand count in it are the operator's, not this family's. The key comes from
-/// the operator's own module (`camel/core/forward.h#bindVmapRule`), because the spelling a rule is
-/// written with (`matmul(x, w)`, `sum_axis(xs, axis, keepdims)`) is not the URI the node holds
-/// (`tensor:matmul`, `tensor:sum_axis`).
+/// The rule `rulesets.vmap` files for `uri`, or nullptr and why not. The key -- the spelling the
+/// rule's left side is written with, and its operand count -- is read off the operator itself
+/// (`camel/core/forward.h#ruleKeyOf`): `tensor:matmul` is written `matmul(x, w)` because that is the
+/// operator's name, and the two operators that cannot be spelled that way are named, with their
+/// reasons, in `ruleKeyExceptions()`. Nothing is registered per operator.
 std::optional<camel::parse::ast::RuleMatch> ruleOfUri(const std::string &uri, std::string &why) {
-    const auto binding = camel::core::vmapBindingOf(uri);
-    if (!binding.has_value()) {
-        why = "the operator has no batching rule key bound at all";
+    const auto answer = camel::core::vmapRuleOf(uri);
+    if (!answer.has_value()) {
+        why = "the operator's own name says no key (no rule is written for a call of it)";
         return std::nullopt;
     }
-    return camel::parse::ast::lookupRule(kFamily, binding->head, binding->arity);
+    if (answer->status == camel::parse::ast::RuleLookup::NoRuleForPrimitive) {
+        why = "the family holds no rule under that key";
+    }
+    return answer;
 }
 
 /// The rule's templates, by the name the index answered: what `genericRuleInstance` is asked for.
@@ -231,7 +196,7 @@ std::string askedFoundMissing(const VmapGraph &graph) {
 
 VmapGraph buildVmapGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    camel::runtime::GCGraph *function, std::ostream &os) {
+    camel::runtime::GCGraph *function, const ::Tuple *captured, std::ostream &os) {
     if (program == nullptr || function == nullptr) {
         return VmapGraph{};
     }
@@ -241,6 +206,21 @@ VmapGraph buildVmapGraph(
         return VmapGraph{};
     }
     const Type *liftedParameter = signature->normTypeAt(0);
+    // The values the function under the transform captured where it was written. They are part of
+    // the function *value* -- its closure tuple -- and they are a *constant* of the batched graph:
+    // the transform copies the value in, lifted the way a constant written in the body is lifted,
+    // so the batched body reads the capture and not the batch element. Before this, every port of
+    // the source graph was answered with the batch parameter, the capture port among them, so
+    // `x + c` computed `2x` and answered `[2.0, 4.0, 6.0]` where `[4.0, 5.0, 6.0]` is the answer
+    // (author's review of 2026-11-02, high-2).
+    const auto captures         = function->closureNodes();
+    const auto sourceParameters = function->normPorts();
+    // Where a capture port's value is in the closure tuple: the tuple is in capture order, so the
+    // port that is the i-th entry of `closureNodes` is the i-th slot.
+    std::vector<size_t> captureSlot(function->nodeCount(), static_cast<size_t>(-1));
+    for (size_t at = 0; at < captures.size(); ++at) {
+        captureSlot[captures[at]] = at;
+    }
 
     VmapGraph refused;
     size_t copiedKinds = 0;
@@ -259,6 +239,9 @@ VmapGraph buildVmapGraph(
         const gc_node_ref_t port = draft.addPortNode(
             const_cast<Type *>(liftedParameter), draft.allocateRuntimeSlot(const_cast<Type *>(liftedParameter)));
         draft.appendNormPort(port);
+
+        // The batched graph captures nothing: every capture is a constant of it (see the walk
+        // below), so the value made of it carries an empty closure.
 
         // A constant lifted: the batch of one row. `[3.0]` is what a constant becomes, and every
         // rule broadcasts it over the batch it meets (`at` in `rulesets/vmap.cml` reads one row as
@@ -438,9 +421,48 @@ VmapGraph buildVmapGraph(
             ++seenKinds;
             switch (node->kind) {
             case rt::GCNodeKind::Port: {
-                // The one parameter of the body is the batch the caller passes; a second port that
-                // is not a parameter has no reading in this tier.
+                // A port of the body is one of two things, and where the source graph lists it
+                // decides which. The ordinary parameter is the batch the caller passes. A capture
+                // is a value the function value carries, so it enters the batched graph as a
+                // *constant* -- the value read out of the closure tuple, lifted the way a constant
+                // written in the body is lifted -- and the body reads it, in the source graph's own
+                // capture order. Anything else is a port this tier has no reading for, and it is
+                // refused instead of being answered with the batch: a silent `2x` is worse than a
+                // refusal (design principles 9.9).
                 if (copyOf[ref] != rt::kInvalidNodeRef) {
+                    break;
+                }
+                if (captureSlot[ref] != static_cast<size_t>(-1)) {
+                    const size_t at = captureSlot[ref];
+                    if (captured == nullptr || at >= captured->size()) {
+                        refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                        refused.refusedUri    = "a capture";
+                        refused.refusedWhy    = "the function value does not carry the value it captures";
+                        complete              = false;
+                        break;
+                    }
+                    copyOf[ref] =
+                        liftConstant(node->dataType(), rowsOfType(node->dataType()),
+                                     captured->get<slot_t>(at), why);
+                    if (copyOf[ref] == rt::kInvalidNodeRef) {
+                        refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                        refused.refusedUri    = "a capture";
+                        refused.refusedWhy    = why;
+                        complete              = false;
+                        break;
+                    }
+                    ++copiedKinds;
+                    break;
+                }
+                if (std::find(sourceParameters.begin(), sourceParameters.end(), ref) ==
+                    sourceParameters.end()) {
+                    refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                    refused.refusedConstruct = "a port";
+                    refused.refusedUri       = "a port";
+                    refused.refusedWhy =
+                        "a port that is neither the parameter nor a capture of the function has no "
+                        "reading in the elementwise tier";
+                    complete = false;
                     break;
                 }
                 copyOf[ref] = port;

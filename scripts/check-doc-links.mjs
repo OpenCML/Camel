@@ -143,6 +143,8 @@ function check(file) {
 // check above. This mode derives the page list from the tree, so the index cannot quietly fall
 // behind it. The pages of a subdirectory (jit/) are pages too; the top-level README is the index.
 const TECHNICAL = path.join(root, 'docs', 'technical')
+const QUESTIONS_DIR = path.join(root, 'docs', 'handover', 'questions')
+const QUESTIONS_INDEX = path.join(QUESTIONS_DIR, 'README.md')
 const TECHNICAL_INDEX = path.join(TECHNICAL, 'README.md')
 
 function technicalPages(directory = TECHNICAL) {
@@ -158,6 +160,102 @@ function technicalPages(directory = TECHNICAL) {
         }
     }
     return pages.sort()
+}
+
+// The pending table of docs/handover/questions lists the pages in that directory, and its header
+// says how many rows it has. Hand-kept counts went wrong three times in one night: a merge resolved
+// to their side dropped a row and the header still carried the old number. So both are derived here:
+// the rows of the pending table must be exactly the *.md files beside it (README.md aside), one row
+// each, and the header's number must equal the number of pages.
+//
+// `--write` generates that table instead of checking it, and the author's 11:10 ruling is why the
+// generator exists at all: an index kept by hand and then compared against the directory is two
+// sources of truth for one fact, and the second one costs a merge conflict every night. One page,
+// one row, the page's own title as the sentence -- nothing here counts anything, so nothing here
+// can drift. With `--write` the file is written, and a caller that wants a gate runs the generator
+// and then `git diff --exit-code`: a diff means somebody edited the page by hand.
+function pendingPageSentence(pageFile) {
+    const text = fs.readFileSync(path.join(QUESTIONS_DIR, pageFile), 'utf8')
+    const heading = text.match(/^#\s+(.+)$/m)
+    let sentence = heading === null ? '' : heading[1].trim()
+    sentence = sentence.replace(/^问[:：]\s*/, '')
+    if (sentence === '') {
+        const line = text
+            .split('\n')
+            .map((l) => l.trim())
+            .find((l) => l !== '' && !l.startsWith('#') && !l.startsWith('```'))
+        sentence = line === undefined ? '' : line
+    }
+    sentence = sentence.replace(/\|/g, '\\|').replace(/\s+/g, ' ')
+    return sentence.length > 120 ? `${sentence.slice(0, 117)}...` : sentence
+}
+
+function renderQuestionsIndex() {
+    const pages = fs
+        .readdirSync(QUESTIONS_DIR)
+        .filter((name) => name.endsWith('.md') && name !== 'README.md')
+        .sort()
+    const lines = [
+        '# 待裁索引',
+        '',
+        '> 一页一问。作者把读过的页整体挪进 `reviews/`；这里只放**还在等回答**的页。',
+        '>',
+        '> 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：',
+        '> 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。',
+        '',
+        `## 现在在等作者：${pages.length} 页`,
+        '',
+    ]
+    if (pages.length === 0) {
+        lines.push('（目录为空：没有页在等回答。）')
+    } else {
+        lines.push('| 页 | 问什么 |', '| --- | --- |')
+        for (const page of pages) {
+            const stem = page.replace(/\.cn\.md$|\.md$/, '')
+            lines.push(`| [\`${stem}\`](${page}) | ${pendingPageSentence(page)} |`)
+        }
+    }
+    lines.push('')
+    return { text: lines.join('\n'), count: pages.length }
+}
+
+function writeQuestionsIndex() {
+    const { text, count } = renderQuestionsIndex()
+    fs.writeFileSync(QUESTIONS_INDEX, text, 'utf8')
+    console.log(`wrote the pending table: ${count} page(s), one row each`)
+    return 0
+}
+
+// The check is the generator run against the file: the same function builds what the page should
+// say and the page is compared with it. There is no second opinion to hold -- a count kept by hand
+// beside a directory is the ledger the author retired at 08:10, and a comparator that only knows
+// how to count rows is a weaker version of the generator that already knows the whole answer.
+function checkQuestionsIndex() {
+    if (!fs.existsSync(QUESTIONS_INDEX)) {
+        console.log('docs/handover/questions/README.md: no such file')
+        return 2
+    }
+    const { text: expected, count } = renderQuestionsIndex()
+    const actual = fs.readFileSync(QUESTIONS_INDEX, 'utf8').replace(/\r\n/g, '\n')
+    if (actual === expected) {
+        console.log(`the pending table lists ${count} page(s), one row each, as the header says`)
+        return 0
+    }
+    const actualLines = actual.split('\n')
+    const expectedLines = expected.split('\n')
+    const limit = Math.max(actualLines.length, expectedLines.length)
+    for (let i = 0; i < limit; i += 1) {
+        if (actualLines[i] !== expectedLines[i]) {
+            console.log(`docs/handover/questions/README.md:${i + 1}: the page is not what the directory generates`)
+            console.log(`  generated: ${expectedLines[i] === undefined ? '(no line)' : expectedLines[i]}`)
+            console.log(`  on disk:   ${actualLines[i] === undefined ? '(no line)' : actualLines[i]}`)
+            break
+        }
+    }
+    console.log(
+        `the pending table is hand-edited: run "node scripts/check-doc-links.mjs --questions-index --write" (${count} page(s) in the directory)`,
+    )
+    return 1
 }
 
 function checkTechnicalIndex() {
@@ -463,6 +561,9 @@ function checkCitations() {
 }
 if (args.includes('--citations')) {
     process.exit(checkCitations())
+}
+if (args.includes('--questions-index')) {
+    process.exit(args.includes('--write') ? writeQuestionsIndex() : checkQuestionsIndex())
 }
 if (args.includes('--technical-index')) {
     process.exit(checkTechnicalIndex())

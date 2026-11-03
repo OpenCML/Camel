@@ -3932,18 +3932,24 @@ std::vector<CheckRow> rowsOfReport(const Struct *report) {
 /// the text output is the fixed rendering of that table, which is what a reader -- and the
 /// acceptance -- reads).
 slot_t checkRules(ArgsView &with, ArgsView &norm, Context &ctx, bool over) {
-    const int64_t samples = std::max<int64_t>(1, with.get<Int64>(with.size() - 2));
-    const uint64_t seed   = static_cast<uint64_t>(with.get<Int64>(with.size() - 1));
-    // The program the call was given, or none: the parameter is a `Program?` whose default is
-    // `null` (design principles 4.4), so a
-    // call that leaves it out reads the null constant of the type and has no types of its own to
-    // add. Its types join the candidate set of every generic rule below.
+    // `samples` and `seed` are the whole `with` list of both overloads of `check`, in that order:
+    // the two declarations name each `with` position the same way, which is what lets a named
+    // argument (`check<samples: 1000>`) mean one position in the overload set at all. Read by that
+    // layout, not by counting back from the end.
+    const int64_t samples = std::max<int64_t>(1, with.get<Int64>(0));
+    const uint64_t seed   = static_cast<uint64_t>(with.get<Int64>(1));
+    // The program the check is about, or none: `check` alone takes no function and has no types of
+    // its own to add. It is the second ordinary argument of `check_over` (the declaration keeps it
+    // out of the `with` list so that both overloads name each `with` position the same way), so the
+    // kernel reads it there and not from `with`.
     std::vector<Type *> programTypes;
     if (over) {
         // `over: f`: the values of the function `f` have types of their own to add.
-        if (const ::Function *over = with.get<::Function *>(0);
-            over != nullptr && over->program() != nullptr) {
-            programTypes = programValueTypes(*over->program());
+        if (norm.size() > 1) {
+            if (const ::Function *given = norm.get<::Function *>(1);
+                given != nullptr && given->program() != nullptr) {
+                programTypes = programValueTypes(*given->program());
+            }
         }
     }
     std::vector<CheckRow> rows;

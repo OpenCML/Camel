@@ -9,9 +9,15 @@
 // itself -- `g`'s callee, the graph the lift was lifted from -- and the seeds are not arguments of
 // that call at all.
 //
-// The reading is the pair of numbers and the count, and the count is the part a recomputation could
-// fake: `residuals=3` is what the hand-inlined `x*x + 1.0` gives (`x`, `x*x`, and the constant), so
-// answering with the primal moves nothing that the inline spelling would have carried differently.
+// The reading is the pair of numbers, and the count the transform reports is the part a
+// recomputation could fake: `residuals=3` is what the hand-inlined `x*x + 1.0` gives (`x`, `x*x`,
+// and the constant), so answering with the primal moves nothing that the inline spelling would have
+// carried differently.
+//
+// The closure ABI is what the last three lines read: `split` is the forward function, `forward(3.0)`
+// answers the value and the linear map, and `backward(1.0)` takes the tangent direction alone. Under
+// the binary-tuple ABI the same three lines destructured `split` into `(forward, backward)` and
+// passed the residuals to `backward(residuals, 1.0)`.
 import rulesets.jvp
 import { jvp, split } from transforms
 
@@ -24,9 +30,9 @@ func g(x: float): float {
 }
 
 func main(): int sync {
-    let (forward, backward) = split(jvp(g))
-    let (value, residuals)  = forward(3.0)
+    let forward = split(jvp(g))
+    let (value, backward)  = forward(3.0)
     'g value={}'->format<value>->println
-    'g dgdx={}'->format<backward(residuals, 1.0)>->println
+    'g dgdx={}'->format<backward(1.0)>->println
     return 0
 }

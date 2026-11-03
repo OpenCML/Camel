@@ -1,0 +1,18 @@
+func f1(a2: (a0: int, a1: string) => string, a3: float, a4: bool): string {
+    return 'k9';
+}
+
+func r10(a11: int, a12: string, a13: int): string {
+    return f1((p16: int, p17: string): string => '', 2.5, true);
+}
+
+func k21(a22: int): (a0: int) => int sync {
+    return (p24: int): int => sync {
+        return 0;
+    };
+}
+
+func main(): int sync {
+    k21(3);
+    return 0;
+}

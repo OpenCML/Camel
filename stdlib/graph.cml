@@ -26,8 +26,8 @@
 //
 // `operator ==` is declared as the reserved group `__eq__`. `operator !=` cannot be declared
 // (design principles 4.3: an overload of `==` gives it, and `operator !=` is
-// OperatorNotOverloadable), and the compiler negates a Camel overload of `==`, not a native one,
-// so `modules/graph` keeps the `__neq__` group the compiler asks for.
+// OperatorNotOverloadable), and a declared `==` is negated by the compiler -- the graph holds
+// this declaration and the negation -- so no entry in `__neq__` is needed for the handle types.
 
 import { is_function, is_ordered } from types
 
@@ -118,6 +118,26 @@ export func op_name(o: Op): string
 /// @example is_pure(n)
 export func is_pure(n: Node): bool
 
+/// Whether a pass may compute the node's value itself and treat it as a value: its operator is
+/// pure *and* foldable, so folding it, merging it with an identical call or dropping it when
+/// nothing reads it cannot change the program. A pure operator that must run where the program
+/// writes it (a rule's value, a `fact`) is not one, and neither is any node that is no operation.
+/// This is the question the C++ fold, cse and dce ask (`OperatorTable::mayBeRecomputed`); whether
+/// the call may also be *moved* or dropped asks `may_fault` as well.
+/// @example-fragment n is a node of the surrounding pass
+/// @example may_be_recomputed(n)
+export func may_be_recomputed(n: Node): bool
+
+/// Whether running the node can raise a fault where the program writes it (a division by zero, an
+/// index out of range, a conversion whose value does not fit). It is the operator table's own fact
+/// (`OperatorTraits::mayFault`, the one the C++ sweep reads) and the conversion's (`castMayFault`);
+/// a call, a loop or a gate nobody declared answers true, and an elementwise operator whose
+/// operands' shapes the types state in full answers false. A node that may fault is not a value a
+/// pass may drop, move or merge away, whatever the purity of its operator.
+/// @example-fragment n is a node of the surrounding pass
+/// @example may_fault(n)
+export func may_fault(n: Node): bool
+
 /// Whether the node anchors its graph (its exit, output or return, or the end of a branch arm); a
 /// transaction does not replace or erase it.
 /// @example-fragment n is a node of the surrounding pass
@@ -136,6 +156,13 @@ export func is_written_slot(n: Node): bool
 /// @example is_constant(n)
 export func is_constant(n: Node): bool
 
+/// The bytes the node's constant value occupies: the measure `std::opt` and `std::opt::fold` clamp with
+/// `constant_budget`, so that a pass written in Camel can ask the same question the native pass asks. The
+/// cost is the value's elements plus the shape that describes them, the walk follows members 8 deep, and a
+/// node that is no constant costs 0.
+/// @example-fragment n is a node of the surrounding pass
+/// @example constant_bytes(n)
+export func constant_bytes(n: Node): int
 /// The type of the node's value, null when it has none.
 /// @example-fragment n is a node of the surrounding pass
 /// @example type_of(n)

@@ -12,12 +12,11 @@
  *   could not land on 4.0 and 3.0 together.
  *
  * The read path here is the cut itself, `split(jvp(f))`, and not `vjp`. `vjp` is the same cut with a
- * `transpose` after it, and `transpose` does not take this graph yet: the condition crosses the cut as
- * a `bool` residual, and `transpose`'s signature wants every residual to be a `float`
- * (`modules/transforms/transpose.cpp`, `transposeSignature`: `bundle->typeAt(i) != Type::Float64()` ->
- * `skip=signature`). `split_branch_author_vjp.cml` pins that refusal, so the gap is a reading and not a
- * silence -- and it is a question for the author, not something this lane settles: either `transpose`
- * admits a known value that is not a float, or the cut carries the condition in some other form.
+ * `transpose` after it, and `transpose` takes this graph too now: a `bool` residual has no cotangent
+ * space, which is stated once in the cotangent space (`addCotangent` drops a target that is not a
+ * `float`), an arm of a residual-bundle half stops at its tangent port, and a rule kernel's
+ * transposition takes the values and the cotangent only. `split_branch_author_vjp.cml` reads the
+ * author's 4.0 and 3.0 through `vjp`, which is this case's two numbers through one more transform.
  */
 import rulesets.jvp
 import { jvp, split } from transforms
@@ -27,14 +26,14 @@ func f(x: float): float {
 }
 
 func main(): int sync {
-    let (forward, backward) = split(jvp(f))
-    let (up, upResiduals)   = forward(2.0)
+    let forward = split(jvp(f))
+    let (up, upBackward)   = forward(2.0)
     // f(2) = 4, and d/dx (x*x) = 2x = 4 there.
     'author x=2.0 value={}'->format<up>->println
-    'author x=2.0 dfdx={}'->format<backward(upResiduals, 1.0)>->println
-    let (down, downResiduals) = forward(-2.0)
+    'author x=2.0 dfdx={}'->format<upBackward(1.0)>->println
+    let (down, downBackward) = forward(-2.0)
     // f(-2) = -6, and d/dx (3*x) = 3 there -- the arm the condition did not take at 2.0.
     'author x=-2.0 value={}'->format<down>->println
-    'author x=-2.0 dfdx={}'->format<backward(downResiduals, 1.0)>->println
+    'author x=-2.0 dfdx={}'->format<downBackward(1.0)>->println
     return 0
 }

@@ -8,6 +8,8 @@
 
 #include "read.h"
 
+#include "camel/passes/opt/constant_bytes.h"
+
 #include "handle.h"
 #include "nodekind.h"
 #include "regionkind.h"
@@ -341,6 +343,35 @@ slot_t isConstantKernel(ArgsView &, ArgsView &norm, Context &) {
     return toSlot<Bool>(node.kind() == GCNodeKind::Data && node.dataIndex() < 0);
 }
 
+/// The bytes a constant node's value occupies: the same measure `std::opt` and `std::opt::fold` clamp with
+/// `constant_budget`, answered here so a Camel pass can ask the same question. A node that is no constant --
+/// or whose value is not in the graph's static values -- occupies nothing: 0.
+slot_t constantBytesKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle  = norm.get<Handle *>(0);
+    const NodeView node = viewOf(handle, "graph.constant_bytes");
+    const camel::core::type::Type *type = node.dataType();
+    if (node.kind() != GCNodeKind::Data || type == nullptr || node.dataIndex() >= 0) {
+        return toSlot<Int64>(static_cast<Int64>(0));
+    }
+    const auto index = static_cast<size_t>(-static_cast<int64_t>(node.dataIndex()));
+    slot_t value     = NullSlot;
+    if (node.isDraft()) {
+        const auto slots = node.draft().staticSlots();
+        if (index >= slots.size()) {
+            return toSlot<Int64>(static_cast<Int64>(0));
+        }
+        value = slots[index];
+    } else {
+        const GCGraph &graph = graphOf(handle, "graph.constant_bytes");
+        if (index >= graph.staticSlots().size()) {
+            return toSlot<Int64>(static_cast<Int64>(0));
+        }
+        value = graph.staticSlots()[index];
+    }
+    const size_t bytes =
+        camel::passes::opt::constantBytesOf(value, type, std::numeric_limits<size_t>::max());
+    return toSlot<Int64>(static_cast<Int64>(bytes));
+}
 slot_t usersKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle  = norm.get<Handle *>(0);
     const NodeView view = viewOf(handle, "graph.users");
@@ -409,23 +440,59 @@ slot_t opNameKernel(ArgsView &, ArgsView &norm, Context &) {
     return stringSlot(OperatorTable::instance().uri(norm.get<Handle *>(0)->index()));
 }
 
+/// The operator an OPER node of a graph or of the draft being rewritten runs, `kNoOper` for
+/// every other node.
+camel::core::OperId operOf(const NodeView &node, const Handle *handle, const char *site) {
+    if (node.kind() != GCNodeKind::Oper || !node.hasPayload()) {
+        return camel::core::kNoOper;
+    }
+    if (node.isDraft()) {
+        const auto bytes = node.draft().payloadOf(node.ref);
+        if (bytes.size() < sizeof(GCOperBody)) {
+            return camel::core::kNoOper;
+        }
+        return reinterpret_cast<const GCOperBody *>(bytes.data())->oper;
+    }
+    return graphOf(handle, site).nodeBodyAs<GCOperBody>(handle->index())->oper;
+}
+
 slot_t isPureKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle  = norm.get<Handle *>(0);
     const NodeView node = viewOf(handle, "graph.is_pure");
     bool pure           = false;
     if (node.kind() == GCNodeKind::Oper && node.hasPayload()) {
-        camel::core::OperId oper = camel::core::kNoOper;
-        if (node.isDraft()) {
-            const auto bytes = node.draft().payloadOf(node.ref);
-            if (bytes.size() >= sizeof(GCOperBody)) {
-                oper = reinterpret_cast<const GCOperBody *>(bytes.data())->oper;
-            }
-        } else {
-            oper = graphOf(handle, "graph.is_pure").nodeBodyAs<GCOperBody>(handle->index())->oper;
-        }
-        pure = OperatorTable::instance().isPure(oper);
+        pure = OperatorTable::instance().isPure(operOf(node, handle, "graph.is_pure"));
     }
     return toSlot<Bool>(pure);
+}
+
+/// Whether the node's operator may be computed by a pass itself and its result treated as a
+/// value: pure and foldable (`OperatorTable::mayBeRecomputed`). The C++ fold, cse and dce ask
+/// this of every node before they evaluate, merge or drop it; a pure operator that must run
+/// where the program writes it (a rule's value, a `fact`) answers false.
+slot_t mayRecomputeKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle  = norm.get<Handle *>(0);
+    const NodeView node = viewOf(handle, "graph.may_be_recomputed");
+    if (node.kind() != GCNodeKind::Oper || !node.hasPayload()) {
+        return toSlot<Bool>(false);
+    }
+    const camel::core::OperId oper = operOf(node, handle, "graph.may_be_recomputed");
+    return toSlot<Bool>(
+        oper != camel::core::kNoOper && OperatorTable::instance().mayBeRecomputed(oper));
+}
+
+/// Whether running the node can raise a fault where it is written (`nodeMayFault`,
+/// camel/runtime/graph.h): the fact that decides whether a statement nobody reads may still be
+/// dropped. It is asked with the shapes the types state, the way the C++ sweep asks it, so an
+/// elementwise operator over fully fixed shapes is one that cannot fail.
+slot_t mayFaultKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle  = norm.get<Handle *>(0);
+    const NodeView node = viewOf(handle, "graph.may_fault");
+    if (node.isDraft()) {
+        return toSlot<Bool>(camel::runtime::nodeMayFault(node.draft(), node.ref, true));
+    }
+    return toSlot<Bool>(
+        camel::runtime::nodeMayFault(graphOf(handle, "graph.may_fault"), handle->index()));
 }
 
 slot_t typeOfKernel(ArgsView &, ArgsView &norm, Context &) {
@@ -850,10 +917,13 @@ const std::vector<ReadOp> &readOps() {
         {"users", usersKernel},
         {"value_users", valueUsersKernel},
         {"is_constant", isConstantKernel},
+        {"constant_bytes", constantBytesKernel},
         {"kind", kindKernel},
         {"op", opKernel},
         {"op_name", opNameKernel},
         {"is_pure", isPureKernel},
+        {"may_be_recomputed", mayRecomputeKernel},
+        {"may_fault", mayFaultKernel},
         {"type_of", typeOfKernel},
         {"type_name", typeNameKernel},
         {"callee", calleeKernel},
@@ -882,6 +952,7 @@ const std::unordered_map<std::string, operator_t> &readKernels() {
             out.emplace(op.name, op.kernel);
         }
         out.emplace("constant", constantKernel);
+        out.emplace("constant_bytes", constantBytesKernel);
         return out;
     }();
     return kernels;

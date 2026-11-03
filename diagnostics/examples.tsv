@@ -54,6 +54,7 @@ SemanticDiag::ArgumentsRejected	test/cases/compile/fstring/bad_spec.cml
 SemanticDiag::AssignmentTargetNotVariable	test/cases/compile/semantic/assign_to_temporary.cml
 SemanticDiag::BranchElementTypeMismatch	test/cases/compile/semantic/branch_element_type_mismatch.cml
 SemanticDiag::BranchReturnTypeMismatch	test/cases/compile/semantic/branch_return_mismatch.cml
+SemanticDiag::CalledFallibleValue	test/cases/compile/unused_values/called_fallible.cml
 SemanticDiag::CallingIncompleteFunction	test/cases/compile/module_load/order_values.cml
 SemanticDiag::CaptureAfterRecursiveCall	test/cases/compile/module_load/recursive_late_var.cml
 SemanticDiag::CollectionKeyNotAllowed	test/cases/compile/collections/err_key_float.cml
@@ -184,7 +185,6 @@ SemanticDiag::PureAndUses	test/cases/effects/err_pure_and_uses.cml
 SemanticDiag::RangeStepZero	test/cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml
 SemanticDiag::Redeclaration	test/cases/compile/generics/err_redecl.cml
 SemanticDiag::ReservedIdentifier	test/cases/compile/surface/reserved_function_name.cml
-SemanticDiag::ResidualsAreNotVisible	test/cases/compile/transforms/split_residuals_destructured.cml
 SemanticDiag::ResourceGroupCycle	test/cases/effects/err_group_cycle.cml
 SemanticDiag::RestArgumentNotLast	test/cases/compile/rest_params/rest_arg_not_last.cml
 SemanticDiag::RestArgumentNotTuple	test/cases/compile/rest_params/rest_arg_not_tuple.cml
@@ -283,16 +283,21 @@ SemanticDiag::WithParameterAfterDefault	test/cases/compile/with_defaults/after_d
 SemanticDiag::YieldRequiresStreamHead	test/cases/compile/stream/yield_head_no_stream.cml
 SyntaxDiag::AngleCloseAfterSpace	test/cases/parse/syntax/angle_close_after_space.cml
 SyntaxDiag::AsRightSideIsType	test/cases/parse/rulings/stream_type_as_interval.cml
+SyntaxDiag::AssignmentInCondition	test/cases/parse/syntax/assignment_in_condition.cml
 SyntaxDiag::ComparisonAcrossLines	test/cases/compile/surface/angle_then_name_line.cml
 SyntaxDiag::ComparisonNeedsSpace	test/cases/parse/syntax/comparison_needs_space.cml
 SyntaxDiag::EmptyInterpolation	test/cases/compile/fstring/empty_interpolation.cml
+SyntaxDiag::ExtraSemicolon	test/cases/parse/syntax/extra_semicolon.cml
+SyntaxDiag::FuncTypeNeedsNames	test/cases/parse/rulings/function_type_needs_names.cml
 SyntaxDiag::KeywordAsIdentifier	test/cases/compile/stream/yield_keyword.cml
 SyntaxDiag::LambdaParametersNeedParentheses	test/cases/parse/rulings/lambda_without_parentheses.cml
 SyntaxDiag::LineStartsWithOperator	test/cases/parse/syntax/line_starts_with_operator.cml
 SyntaxDiag::MissingClosingDelimiter	test/cases/parse/syntax/ident_list_open.cml
 SyntaxDiag::MissingComma	test/cases/compile/lambda_inference/func_type.cml
+SyntaxDiag::MissingInitializer	test/cases/parse/syntax/missing_initializer.cml
 SyntaxDiag::MissingThen	test/cases/parse/syntax/missing_then.cml
 SyntaxDiag::MissingToken	test/cases/compile/fstring/lambda_spec.cml
 SyntaxDiag::UnexpectedEndOfFile	test/cases/compile/fstring/bad_expr.cml
 SyntaxDiag::UnexpectedToken	test/cases/compile/array_shape/err_const_shape.cml
+SyntaxDiag::UnmatchedClosingDelimiter	test/cases/parse/syntax/unmatched_closing_delimiter.cml
 SyntaxDiag::WhenAfterBody	test/cases/parse/rules/when_after_body.cml

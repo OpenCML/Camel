@@ -1,14 +1,18 @@
 // The author's example of 2026-10-31 15:25, as a case: g(x) = x*x, f = reinterp<jvp>(g), x = 3,
-// dx = 1. The FORWARD half of split(f) computes what the present inputs allow and hands the residuals on
-// whole -- y = 9, and the tuple the backward half turns a cotangent into a tangent with (6 for dx = 1).
-// The tuple is the transform's own kind (`TupleType::residuals`): its members are the graph's answer, so
-// a signature cannot name them, and a program may neither destructure it nor read an element of it
-// (`SemanticDiag::ResidualsAreNotVisible`; split_residuals_destructured is the refused program). What is
-// left is this case's spelling: bind it to one name and hand it on whole -- printing it prints an empty
-// tuple, the members not being a signature's to name.
+// dx = 1. The FORWARD half of split(f) computes what the present inputs allow and hands the residuals
+// on whole -- y = 9, and the linear map the backward half turns a tangent direction into a tangent
+// with (6 for dx = 1).
 //
-// This case runs when `split` exists (design doc 4.2); test/tools/have-split.mjs lets a tree without
-// `modules/transforms/split.cpp` skip.
+// What crosses the cut is the transform's own business: the values the backward half reads are
+// closed over **inside** the linear map `split` builds, so no program names them and no type carries
+// them. That is the closure ABI (author, 2026-11-02), and this case asserts its two halves: `split(f)`
+// is the forward function, `fwd(3.0)` answers the result and that linear map, and `lin(1.0)` answers
+// 6 = 2x·dx.
+//
+// Before the closure ABI the same case asserted the binary-tuple split: `split(f)` destructured into
+// `(fwd, lin)`, `fwd(3.0)` answered `(y, residuals)`, and `lin` took the residuals **and** the
+// tangent as two arguments -- `lin(res, 1.0)`. Nothing about the numbers changed; only who holds the
+// carried values did.
 import rulesets.jvp
 import { jvp, split } from transforms
 
@@ -17,12 +21,10 @@ func g(x: float): float {
 }
 
 func main(): int sync {
-    let f = jvp(g)
-    let (fwd, lin) = split(f)
-    let (y, res) = fwd(3.0)
-    let dy = lin(res, 1.0)
+    let fwd = split(jvp(g))
+    let (y, lin) = fwd(3.0)
+    let dy = lin(1.0)
     println("forward y=", y)
-    println("residuals whole=", res)
     println("tangent dx1=", dy)
     return 0
 }

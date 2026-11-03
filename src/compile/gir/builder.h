@@ -1832,9 +1832,14 @@ class Builder {
     /// graph, and the attribute value only keeps the id.
     std::unordered_map<uint32_t, compile_graph_ptr_t> tagFunctionGraphs_;
 
+    /// `written` is the signature as the source wrote it, before a lambda's unwritten parameters were
+    /// filled and its rest parameter expanded; it is where a rest parameter's own name and position
+    /// are read from, since `funcType` holds the expanded parameters (`xs_0`, `xs_1`, ...) and no
+    /// longer the one name the body writes. Null where the caller has none (a generic instance's own
+    /// body), which only means no rest parameter can be expanded there.
     void buildFuncBody(
         const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
-        const std::string &name, const TagFacts &bodyTags);
+        const std::string &name, const TagFacts &bodyTags, const FunctionType *written = nullptr);
 
     /// Evaluates a declaration's `when` condition at one instantiation. `signature` is the
     /// declaration's signature with the instance's types bound, so the `with` parameter names
@@ -2022,7 +2027,7 @@ class Builder {
                         os << "<invalid>";
                         return;
                     }
-                    auto *graph = DraftGraphBuilder::fromDraft(value.draft);
+                    auto *graph = DraftGraphBuilder::fromRef(value);
                     os << (graph ? graph->name() : std::string{"<detached>"}) << "#" << value.id;
                 });
             CAMEL_LOG_DEBUG_S("GIR Builder", "Accessing node '{}' from scope {}", name, ss.str());
@@ -3003,11 +3008,13 @@ class Builder {
     /// Adds what the declaring modules of the operands export as overloads of `group` to the
     /// set of `dref`, once each: an overload the module also imports (or one found by both
     /// routes) stays one candidate. `!=` takes the `==` overloads, as it does for the ones the
-    /// program declares (design principles 4.3). Returns whether anything was added.
+    /// program declares (design principles 4.3); `writtenGroup` is the group the program wrote,
+    /// because the built-in rule's own group is already `==`'s and so does not say it by its
+    /// name. Returns whether anything was added.
     bool addDeclaringModuleOverloads(
         node_handle_t dref, const std::string &group,
         const camel::core::type::type_vec_t &withTypes,
-        const camel::core::type::type_vec_t &normTypes);
+        const camel::core::type::type_vec_t &normTypes, const std::string &writtenGroup);
     /// Whether a module that declares one of the operand types exports an overload of `group`
     /// (design principles 5.7). Asked before an operator DREF exists, for `+=`, which follows the
     /// plain operator (`compoundAssignmentByRebinding`) — together with the group's own rules
@@ -3155,13 +3162,6 @@ class Builder {
     /// (`out = out->append<i>; total += len(out)` in a loop stays linear). See the definition
     /// for the conditions; a read that does not meet every one of them stays `:var/get`.
     void markNonRetainingReads();
-    /// Answers the value-level transform calls the modules instantiate at compile time
-    /// (`camel/compile/gir/compile_time.h`): a call whose value is a function, written where its
-    /// graph is known, holds the value the transform built instead of a call that builds one.
-    /// Runs once, with the other steps that settle a program: every body is in hand and nothing
-    /// has been encoded, so a graph a transform builds is numbered after the program's own.
-    /// A shape no module answers is left exactly as it was, so it keeps the reading it had.
-    void instantiateCompileTimeTransforms();
     /// Function graphs whose return type is not declared but taken from their body, by `GraphId`:
     /// the graph is built and dropped long before this question is asked, so its address says
     /// nothing.

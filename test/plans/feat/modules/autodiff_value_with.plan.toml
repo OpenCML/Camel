@@ -52,7 +52,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::ValueWithNoDerivativeRule"
 expect_diagnostic_line = 13
-expect_output_contains = [":coll/map_get_or", "with parameter 2 (counting from 1)", "of type 'float'", "no derivative rule is registered for it"]
+expect_output_contains = ["' takes a differentiable value through its with parameter ", ":coll/map_get_or", "with parameter 2 (counting from 1)", "of type 'float'", "no derivative rule is registered for it"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -162,3 +162,20 @@ assert(unexpected.length === 0, 'unknown classification: ' + JSON.stringify(unex
 }
 """
 timeout_ms = 12000
+
+[[tests]]
+name = "value_with.same_as_grad"
+desc = "`with_grad(f)` gives the value of `f` and the gradient `grad(f)` gives, and the case prints both for `loss(x) = w*x + w*x` at `w = 2, x = 3`: the first component of `with_grad`'s pair must be the value of `f` (12) and the second must be the number `grad` returns (6). The assertion is the cross-check between the two transforms, not a copy of the two numbers: if either side changes its meaning, this goes red."
+case = "../../../cases/modules/autodiff/with_grad_matches_grad.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+const lines = input.stdout.split(String.fromCharCode(10)).filter((line) => line.length > 0)
+assert(lines.length === 2, JSON.stringify(lines))
+const gradValue = Number(lines[0])
+assert(gradValue === 6, `grad gave ${lines[0]}, and the derivative of w*x + w*x in w at w = 2, x = 3 is 6`)
+const pair = lines[1].replace(/[()]/g, '').split(',').map((part) => Number(part.trim()))
+assert(pair.length === 2, `with_grad gave ${lines[1]}, which is not a pair`)
+assert(pair[0] === 12, `with_grad's value is ${pair[0]}, and w*x + w*x at w = 2, x = 3 is 12`)
+assert(pair[1] === gradValue, `with_grad's gradient is ${pair[1]} while grad gave ${gradValue}: the two transforms disagree`)
+"""

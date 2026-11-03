@@ -29,6 +29,7 @@
 
 #include <algorithm>
 #include <format>
+#include "camel/core/error/diagnostics.h"
 #include <functional>
 #include <optional>
 #include <stdexcept>
@@ -780,7 +781,7 @@ class CallBook {
 const camel::runtime::Program *applyRuntimeOptimizeRewrite(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     const OptimizeRewriteConfig &config, size_t growthBudget, size_t &growthSpent,
-    std::vector<InlineDeclined> &declinedOut) {
+    std::vector<InlineDeclined> &declinedOut, const GCGraph **lastChangedOut = nullptr) {
     camel::runtime::RuntimeGraphDraftSession session(context, program);
     // Where a node is written, so that the size of a function counts one source operation once
     // however many nodes the front end built it from (see inlinedComputeNodeCount).
@@ -927,6 +928,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                     if (camel::runtime::specializeDirectFuncInDraft(
                             session, transaction, funcNodeId, config.specializeOnFunctionValues)) {
                         changed        = true;
+                        if (lastChangedOut) { *lastChangedOut = nextGraph; }
                         roundChanged   = true;
                         graphRewritten = true;
                         // The callee after the rewrite is the copy (counted in full even when
@@ -951,6 +953,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                             transaction,
                             callNodeId)) {
                         changed        = true;
+                        if (lastChangedOut) { *lastChangedOut = nextGraph; }
                         roundChanged   = true;
                         graphRewritten = true;
                     }
@@ -1085,6 +1088,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                 }
                 growthSpent += copied;
                 changed      = true;
+                if (lastChangedOut) { *lastChangedOut = nextGraph; }
                 roundChanged = true;
                 appliedInlineCount++;
                 restartRound = true;
@@ -1296,8 +1300,10 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
 
 const camel::runtime::Program *applyOptimizeRewritePass(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    std::ostream &os, const OptimizeRewriteConfig &config, bool *changedOut) {
+    std::ostream &os, const OptimizeRewriteConfig &config, bool *changedOut,
+    const GCGraph **lastChangedGraphOut) {
     (void)os;
+    (void)lastChangedGraphOut;
 
     if (!program) {
         return nullptr;
@@ -1315,6 +1321,7 @@ const camel::runtime::Program *applyOptimizeRewritePass(
     constexpr size_t kMaxSessions = 32;
     bool changed                  = false;
     std::vector<InlineDeclined> declined;
+    const GCGraph *lastChangedGraph = nullptr;
     for (size_t i = 0; i < kMaxSessions; ++i) {
         const camel::runtime::Program *rewritten = applyRuntimeOptimizeRewrite(
             context,
@@ -1322,12 +1329,46 @@ const camel::runtime::Program *applyOptimizeRewritePass(
             config,
             growthBudget,
             growthSpent,
-            declined);
+            declined,
+            &lastChangedGraph);
         if (!rewritten) {
             break;
         }
         changed = true;
         program = rewritten;
+    }
+    // A run of this pass does a couple of sessions: the first changes something, the second finds
+    // nothing left to do and ends the run. A rewrite that never settles therefore does not show up
+    // inside one run -- the round that changes nothing is the one that ends it -- but across runs:
+    // the pipeline asks again, and the answer is different again. This counts those runs, per
+    // graph, and reports through a diagnostic, which stops the pass chain (execute/pass.cpp reads
+    // the diagnostics after the pass) and ends the run with a non-zero code. The growth budget is
+    // not the bound that stops it: a pipeline that leaves the budget open has none to reach.
+    if (changed && lastChangedGraph != nullptr) {
+        // The count lives in the state of the run (OptimizeRewriteConfig::settleStreak), never in a
+        // static: two programs in one process each start from zero, and so does a second run of the
+        // pass. A run that is given no state has one of its own, which is the same thing for a
+        // caller that runs the engine once.
+        SettleStreak ownStreak;
+        SettleStreak &streak = config.settleStreak ? *config.settleStreak : ownStreak;
+        if (streak.graph == lastChangedGraph->name()) {
+            ++streak.runs;
+        } else {
+            streak.graph = lastChangedGraph->name();
+            streak.runs  = 1;
+        }
+        if (streak.runs >= config.settleRuns) {
+            context->rtmDiags()
+                ->of(camel::core::error::RuntimeDiag::PassInternalError)
+                .commit(
+                    "std::opt",
+                    std::format(
+                        "the rewrite of graph '{}' did not settle: {} consecutive runs each changed "
+                        "the program",
+                        lastChangedGraph->name(),
+                        config.settleRuns));
+            return nullptr;
+        }
     }
     if (config.enableInlining && context) {
         // For a later pass that has to explain a call this one left (see InlineReport).

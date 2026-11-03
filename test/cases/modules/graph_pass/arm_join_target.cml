@@ -1,0 +1,12 @@
+// Section 1 and 3.2: the program the stage cross_arm::move edits; it is the shape design principles 1.2 invariants 1 and 3 talk about.
+func pick(b: bool, x: int): int {
+    let y = x + 1
+    let r = if b then x * 7 else x - 1
+    return r + y
+}
+
+func main(): int sync {
+    println(pick(true, 5))
+    println(pick(false, 5))
+    return 0
+}

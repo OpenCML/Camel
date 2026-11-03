@@ -23,7 +23,7 @@
  */
 
 import { flatten, all, any } from array
-import { Node, Graph, Txn, NodeKind, graphs_of, nodes, inputs, with_inputs, value_users, id, kind, op, op_name, is_pure, is_anchor, is_written_slot, is_constant, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
+import { Node, Graph, Txn, NodeKind, graphs_of, nodes, inputs, with_inputs, value_users, id, kind, op, op_name, is_pure, may_be_recomputed, may_fault, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
 import { saturate as saturate_rules } from rewrite
 import { algebra, distribution } from rules
 import { is_function } from types
@@ -80,12 +80,15 @@ func same_nodes(xs: Node[], ys: Node[]): bool {
     return len(xs) == len(ys) && zip(xs, ys)->all<(p: (Node, Node)): bool => p.0 == p.1>
 }
 
-// A pure operation the sweep may merge: reading no value that may be written in place, and not
-// one itself. An operation over such a value is not one value: the two times it is written are
-// two results.
+// A pure operation the sweep may merge: one a pass may compute itself (`may_be_recomputed`, the
+// C++ pass's `isPureOper`: pure *and* foldable), reading no value that may be written in place, and
+// not one itself. An operation over such a value is not one value: the two times it is written are
+// two results. A pure operator that must run where the program writes it (a rule's value, a
+// `fact`) is not merged: running it is the declaration itself.
 func mergeable_operation(n: Node): bool {
-    return kind(n) == NodeKind::Oper && is_pure(n) && op_text(n) != '' && !is_written_slot(n)
-        && !inputs(n)->any<is_written_slot> && !with_inputs(n)->any<is_written_slot>
+    return kind(n) == NodeKind::Oper && is_pure(n) && may_be_recomputed(n) && op_text(n) != ''
+        && !is_written_slot(n) && !inputs(n)->any<is_written_slot>
+        && !with_inputs(n)->any<is_written_slot>
 }
 
 // Whether the two operations are the same computation: the same operator on values of the same
@@ -98,9 +101,12 @@ func same_operation(a: Node, b: Node): bool {
 }
 
 // Whether one node may stand for the other in a graph: as a constant of the same value, or as
-// the same operation.
+// the same operation. Two constants are one value only in one region: the C++ sweep keys them by
+// the region as well, because a value written in the body and one written in an arm are two
+// writings of the same number, not one node of the graph.
 func same_node(a: Node, b: Node): bool {
-    return (mergeable_constant(a) && mergeable_constant(b) && same_constant(a, b))
+    return (mergeable_constant(a) && mergeable_constant(b) && region_of(a) == region_of(b)
+               && same_constant(a, b))
         || (mergeable_operation(a) && mergeable_operation(b) && same_operation(a, b))
 }
 
@@ -108,12 +114,14 @@ func same_node(a: Node, b: Node): bool {
 // itself when it is the first. That first node is never a node the same round merges away, which
 // is what makes one transaction enough for a round.
 func keep_of(ns: Node[], n: Node): Node {
-    let earlier = ns->filter<(m: Node): bool => id(m) < id(n) && same_node(n, m)>
+    let earlier = ns->filter<(m: Node): bool => id(m) < id(n) && !is_anchor(m) && same_node(n, m)>
     return if len(earlier) == 0 then n else earlier[0]
 }
 
 func is_hit(ns: Node[], n: Node): bool {
-    return keep_of(ns, n) != n
+    // A node that anchors its graph is not merged away: the transaction does not replace or erase
+    // it, and a round that tried would stop on the refusal instead of merging the rest.
+    return !is_anchor(n) && keep_of(ns, n) != n
 }
 
 func graph_has_hit(g: Graph): bool {
@@ -141,16 +149,35 @@ export func cse::<F>(f: F): F! when is_function::<F>() {
 // ---- dead values ----
 
 // Whether the node computes a value: a constant, a conversion, a copy, an access, a fill or a pure
-// operation. This is `isValueOnly` of the C++ pass, which the `graph` module reads as the kinds of
-// a node and the declarations of its operator.
+// operation, none of which can raise a fault where it is written. This is `isValueOnly` of the C++
+// pass, which the `graph` module reads as the kinds of a node and the declarations of its operator.
+//
+// Two facts the `is_pure` of the operator alone does not give decide it. A pure operation is
+// dropped only when a pass may compute it itself (`may_be_recomputed`: pure and foldable; the C++
+// pass's `isPureOper`), so a rule's value or a `fact` is never dropped. And nothing is dropped that
+// may fault (`may_fault`, the operator table's own fact and `castMayFault`, the one the C++
+// sweep reads): an unread statement that can fail is a statement whose running is observable, so
+// it stays where it is written -- `5 / z` nobody reads still faults on `z = 0`, and so does an
+// unread checked conversion or an out-of-range `one_hot`. The query is asked of every kind the
+// same way, a CAST and an ACCS included, rather than letting a kind through by name.
 func value_only(n: Node): bool {
     let k = kind(n)
-    return (k == NodeKind::Data && is_constant(n)) || k == NodeKind::Cast || k == NodeKind::Copy
-        || k == NodeKind::Accs || k == NodeKind::Fill || (k == NodeKind::Oper && is_pure(n))
+    return ((k == NodeKind::Data && is_constant(n)) || k == NodeKind::Cast || k == NodeKind::Copy
+               || k == NodeKind::Accs || k == NodeKind::Fill
+               || (k == NodeKind::Oper && is_pure(n) && may_be_recomputed(n)))
+        && !may_fault(n)
 }
 
 // Whether the node computes a value no node reads. A node that anchors its graph is not one: a
 // transaction refuses to erase it, and the graph would lose its exit.
+//
+// The C++ sweep answers one case here that this sweep cannot ask: when the node it drops is the
+// last reader of an effect, it writes `:op/keep` in the statement's place (`keepThroughValue`,
+// operator_table.h), so the effect keeps running. A transaction can write no operator node, and
+// nothing in `graph` reads "would this read be the last one of an effect", so this sweep does not
+// guess: the graph the commit gets is checked, and an effect left with neither a read of its value
+// nor a place in its chain is refused there as `GraphInvalid`
+// (docs/technical/45_graph_module.md, the gap table). Loud, not silent.
 func dead_value(n: Node): bool {
     return value_only(n) && len(value_users(n)) == 0 && !is_anchor(n)
 }
@@ -183,17 +210,24 @@ func foldable(n: Node): bool {
     return !is_anchor(n) && !is_written_slot(n)
 }
 
-// Whether the node is a pure operation: the one kind of node this pass evaluates. The
-// conversions, copies, accesses and fills are not evaluated here.
+// Whether the node is an operation this pass evaluates: one whose operator a pass may compute
+// itself (`may_be_recomputed`: pure and foldable, the C++ pass's `isPureOper`), so folding it
+// cannot move a computation that must run where it is written. The conversions, copies, accesses
+// and fills are not evaluated here, and neither is an operation that may fault without its value
+// being read: `eval` refuses the node it cannot compute, and a faulting expression is left as
+// written (below).
 func is_operation(n: Node): bool {
-    return kind(n) == NodeKind::Oper && is_pure(n)
+    return kind(n) == NodeKind::Oper && is_pure(n) && may_be_recomputed(n)
 }
 
 // Whether every value the node reads is a constant of the graph: what its operator is computed
-// over. An operation that reads nothing is not one: `eval` has nothing to compute it from.
+// over. An operation that reads nothing is not one: `eval` has nothing to compute it from. A
+// constant that may be written in place is not one either, the way `foldable` refuses the node
+// itself: the C++ pass leaves a folding that reads such a value alone (`readsNoWrittenSlot`),
+// because a constant replacing it would share one object between every run of the graph.
 func constant_operands(n: Node): bool {
     let ins = inputs(n)
-    return len(ins) > 0 && ins->all<is_constant>
+    return len(ins) > 0 && ins->all<(m: Node): bool => is_constant(m) && !is_written_slot(m)>
 }
 
 // Whether the round evaluates this node: a pure operation whose operands are all constants. A
@@ -207,8 +241,8 @@ func evaluated(n: Node): bool {
 // Replaces one operation by the value its operator computes; the answer is whether it did. The
 // arm of a `match` is a graph of its own, so the edit is a call of its own: a statement inside an
 // arm has nothing that depends on it and does not run.
-func put_value::<F>(t: Txn<F>, n: Node, value: Node): bool sync {
-    return if foldable(n) then replaced(t, n, value) else false
+func put_value::<F>(t: Txn<F>, n: Node, value: Node, budget: int): bool sync {
+    return if foldable(n) && constant_bytes(value) < budget then replaced(t, n, value) else false
 }
 
 func replaced::<F>(t: Txn<F>, n: Node, value: Node): bool sync {
@@ -218,16 +252,16 @@ func replaced::<F>(t: Txn<F>, n: Node, value: Node): bool sync {
 
 // The value the round computes for this node, or null when there is nothing to compute or when
 // the expression can only fault, which is left as written and warned about.
-func fold_one::<F>(t: Txn<F>, n: Node): bool sync {
+func fold_one::<F>(t: Txn<F>, n: Node, budget: int): bool sync {
     return match eval(t, n) {
         case null => false
-        case v => put_value(t, n, v)
+        case v => put_value(t, n, v, budget)
     }
 }
 
 // One round over the nodes it evaluates: whether it replaced anything.
-func fold_round::<F>(t: Txn<F>, hits: Node[]): bool {
-    return hits->map<(n: Node): bool => fold_one(t, n)>->any<(did: bool): bool => did>
+func fold_round::<F>(t: Txn<F>, hits: Node[], budget: int): bool {
+    return hits->map<(n: Node): bool => fold_one(t, n, budget)>->any<(did: bool): bool => did>
 }
 
 // Commits a round that replaced something, and abandons one that replaced nothing: the program the
@@ -247,18 +281,24 @@ func abandoned::<F>(t: Txn<F>, f: F): F! sync {
 // `eval` all refused (a constant expression that can only fault is left as written and warned
 // about) is such a round, and recursing on the function it started from would not stop, so it is
 // abandoned.
-func fold_rounds::<F>(f: F): F! when is_function::<F>() sync {
+func fold_rounds::<F>(f: F, budget: int): F! when is_function::<F>() sync {
     let t = open(f)
-    let changed = fold_round(t, all_nodes(graphs_of(f))->filter<evaluated>)
-    return if changed then committed(t) -> fold_rounds else abandoned(t, f)
+    let changed = fold_round(t, all_nodes(graphs_of(f))->filter<evaluated>, budget)
+    return if changed then committed(t) -> fold_rounds(budget) else abandoned(t, f)
 }
 
 /// A pure operation whose operands are all constants is the value they compute, until none is
 /// left. A function that holds no node to evaluate at all is answered without opening a
 /// transaction.
 /// @example ((x: int): int => 1 + 2 + x)->fold
+with <
+    /// Bytes of constants this pass may materialize in a graph: the same measure and the same
+    /// default as `std::opt::fold` (`constantBytesOf`), read through `constant_bytes`; a value
+    /// above it is left as the computation that builds it, and 0 materializes none.
+    constant_budget: int = 8388608
+>
 export func fold::<F>(f: F): F! when is_function::<F>() {
-    return if all_nodes(graphs_of(f))->any<evaluated> then fold_rounds(f) else f
+    return if all_nodes(graphs_of(f))->any<evaluated> then fold_rounds(f, constant_budget) else f
 }
 
 // ---- saturation ----

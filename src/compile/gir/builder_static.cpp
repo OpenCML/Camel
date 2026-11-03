@@ -479,6 +479,22 @@ bool Builder::typeCaseMatches(Type *subject, const GCT::node_ptr_t &caseNode) co
             }
             continue;
         }
+        // `T[?]` states one dimension and says nothing about its length: the pattern asks for a
+        // rank-one array of the same element type, whatever that length turns out to be. The
+        // extent is compared as a form, and only `Unknown` means "any length": a constant
+        // (`T[3]`) stays exact through the `typeEquals` below, and a dimension name (`T[n]`) is
+        // a `Linear` form over names, not `Unknown`, so it stays exact too.
+        if (pattern->code() == TypeCode::Array) {
+            auto *want = static_cast<ArrayType *>(pattern);
+            if (!want->anyRank() && want->rank() == 1 && want->extents()[0].isUnknown() &&
+                subject->code() == TypeCode::Array) {
+                auto *have = static_cast<ArrayType *>(subject);
+                if (!have->anyRank() && have->rank() == 1 &&
+                    typeEquals(have->elemType(), want->elemType())) {
+                    return true;
+                }
+            }
+        }
         if (typeEquals(subject, pattern)) {
             return true;
         }

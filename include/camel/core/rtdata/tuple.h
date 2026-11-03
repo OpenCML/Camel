@@ -11,7 +11,10 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdio>
+#include <mutex>
 #include <new>
+#include <unordered_set>
 
 namespace rtdata = camel::core::rtdata;
 namespace type   = camel::core::type;
@@ -20,6 +23,53 @@ namespace camel::core::rtdata {
 /// Defined in rtdata/tagged.cpp.
 void printTaggedSlots(
     std::ostream &os, const slot_t *slots, const camel::core::type::TupleType *type);
+
+namespace detail {
+/// What a tuple value and its type disagreeing about the member count means, in one sentence.
+///
+/// The two counts are the same number stated twice -- the value's `size_` and the type's `size_` --
+/// and nothing compared them, so a value and a type that disagree were traced by a loop that read
+/// `codes[i]` past the end of the type's array: a garbage code that happens to be a traced kind
+/// crashed at `typeAt(i)`, and one that is not a traced kind was skipped in silence and its
+/// reference was never relocated (the stale pointer `docs/technical/36_gc_handle_rules.md` is
+/// about). The trace stops here rather than reading on (author, 2026-11-02 06:30): a disagreeing
+/// value is a memory-safety bug, and a guard that reports one and then reads anyway is worse than
+/// no guard, because it turns "I know this is wrong" into a read that may be taken as data.
+inline std::string membersBeyondTypeReading(
+    const void *value, const type::TupleType *tupleType, size_t members) {
+    return std::format(
+        "Tuple trace: a tuple value ({}) has {} member(s) but its type declares {}; the collector "
+        "trusts a value's static type, so this is a memory-safety bug and not a diagnostic question "
+        "(docs/technical/36_gc_handle_rules.md)",
+        value,
+        members,
+        tupleType->size());
+}
+
+/// Says, once per type, that a tuple value is described by a type that is not a tuple at all.
+///
+/// The same disagreement as above, produced the other way: a closure tuple described by the function
+/// signature it belongs to has no member count to compare against, so `updateRefs` returns before
+/// the walk and *every* member is left untraced. The poison check then reports a raw pointer kept
+/// across a safepoint somewhere else, in a frame that never saw this tuple. Reported here because a
+/// branch that cannot happen for a correct program is exactly where a wrong one goes quiet.
+inline void
+reportTupleHasNoTupleType(const void *value, const type::Type *type, size_t members) {
+    static std::mutex mutex;
+    static std::unordered_set<const type::Type *> said;
+    std::lock_guard<std::mutex> lock(mutex);
+    if (!said.insert(type).second) {
+        return;
+    }
+    std::fprintf(
+        stderr,
+        "[camel] tuple trace: a tuple value (%p) has %zu member(s) but its type is not a tuple "
+        "(type code %d); no member is traced or relocated\n",
+        value,
+        members,
+        static_cast<int>(type->code()));
+}
+} // namespace detail
 } // namespace camel::core::rtdata
 
 class Tuple : public rtdata::Object {
@@ -311,13 +361,32 @@ class Tuple : public rtdata::Object {
         if (isView()) {
             return; // pure data has no references
         }
-        if (!type || type->code() != type::TypeCode::Tuple)
+        if (!type || type->code() != type::TypeCode::Tuple) {
+            if (type != nullptr && size() > 0) {
+                camel::core::rtdata::detail::reportTupleHasNoTupleType(this, type, size());
+            }
             return;
+        }
         const type::TupleType *tupleType = static_cast<const type::TupleType *>(type);
         auto codes                       = tupleType->codes();
         rtdata::Object **refArr          = reinterpret_cast<rtdata::Object **>(data_);
 
-        for (size_t i = 0; i < size(); ++i) {
+        // The lesson this check exists for (author, 2026-11-02 05:30): the collector trusts a value's
+        // static type -- `codes` is the type's array and `refArr` is the value's slots -- so a type and
+        // a value that disagree about how many members there are is a memory-safety bug, not a
+        // diagnostic question. The check below is in the shipped build, not only in a debug one: a
+        // release that trusts the same static type has the same bug.
+        //
+        // The bound on the walk is gone (05:30: "B 的兜底代码在同一笔删掉"). It was there to stop
+        // `codes[i]` leaving the array the type owns while a residuals tuple still reached the caller
+        // as a tuple; the ruling that residuals are no longer a tuple removes the disagreement, so the
+        // walk goes back to the value's own count.
+        const size_t members = size();
+        GUARD(
+            members <= tupleType->size(),
+            camel::core::rtdata::detail::membersBeyondTypeReading(this, tupleType, members));
+
+        for (size_t i = 0; i < members; ++i) {
             if (type::isGCTraced(codes[i])) {
                 if (rtdata::Object *&ref = refArr[i]) {
                     const type::Type *slotType = tupleType->typeAt(i);

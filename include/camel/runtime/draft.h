@@ -307,11 +307,32 @@ struct DraftUserLists {
     }
 };
 
+/// The epoch of a draft: a number no other draft in this process has had. A draft takes one when it
+/// is made and never changes it, so (address, epoch) names one draft for as long as the process
+/// runs. A DraftNodeRef carries it because the address alone stops being an identity the moment the
+/// draft is destroyed and the allocator hands the memory to the next one. Defined in the core: a
+/// draft is made through GraphTransaction, whose constructors live there, so no module instantiates
+/// the constructor out of line.
+uint64_t nextDraftEpoch();
+
 class GraphDraft {
   public:
     /// A draft of `graph`, a graph of `program`: the draft reads the graphs it refers to (the
     /// callees of its FUNC nodes) in `program`. Graphs are named in a draft by GraphId.
     static std::unique_ptr<GraphDraft> decode(const Program &program, const GCGraph *graph);
+
+    /// Which draft this is, as opposed to where it happens to live: the number it was given when it
+    /// was made, which no other draft in the process has. A DraftNodeRef names its draft by the
+    /// pair of this and the address, so that a handle left over a destroyed draft names no draft
+    /// instead of naming the one the allocator put in its place.
+    uint64_t epoch() const { return epoch_; }
+    /// True when `node` was made in this draft: its address and its epoch, which is what a
+    /// DraftNodeRef names. It says nothing about a builder, so it is the question to ask of a
+    /// handle whose graph may already have been released, where the ownership table has nothing
+    /// left to answer; and a handle whose address was handed to a later draft answers no.
+    bool isNamedBy(const DraftNodeRef &node) const {
+        return node.draft == this && node.epoch == epoch_;
+    }
 
     /// The program the draft resolves the graphs it refers to in; null for a draft the front
     /// end builds, whose graphs do not exist yet.
@@ -415,7 +436,8 @@ class GraphDraft {
     gc_node_ref_t nodeId(const DraftNode *node) const;
     /// The handle of live node `id`; the null handle when `id` is not a live node.
     DraftNodeRef ref(gc_node_ref_t id) const {
-        return alive(id) ? DraftNodeRef(const_cast<GraphDraft *>(this), id) : DraftNodeRef();
+        return alive(id) ? DraftNodeRef(const_cast<GraphDraft *>(this), id, epoch_)
+                         : DraftNodeRef();
     }
     const DraftNodeHeader *header(gc_node_ref_t id) const;
     const DraftNodeHeader *header(const DraftNode *node) const;
@@ -685,6 +707,14 @@ class GraphDraft {
     void appendInput(
         DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId,
         PortRole role = PortRole::Normal);
+    /// The one place a control edge is written: every rewrite that keeps the kind alive beside a
+    /// sync edge calls this, so what a control edge means is decided in one function instead of at
+    /// a dozen call sites. The kind is on its way out (docs/design/effects/edges.cn.md 1: a graph's
+    /// edges are data, sync and order); when the read side stops asking for it, this function is
+    /// what goes, not its callers.
+    void appendControlEdge(gc_node_ref_t userId, gc_node_ref_t inputId) {
+        appendInput(DraftEdgeKind::Ctrl, userId, inputId);
+    }
     bool unlinkInput(
         DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId,
         PortRole role = PortRole::Normal);
@@ -764,6 +794,14 @@ class GraphDraft {
     /// Ends the region `id` (unless `keepRegion`) and the regions inside it; nodes that are still
     /// in them go to the region around.
     void retireRegion(uint32_t id, bool keepRegion = false);
+    /// The join a BRCH node names. **No validation**: a draft is allowed to be inconsistent while it
+    /// is being written -- a rewrite may move the branch before it moves the join, or build the two
+    /// in either order -- so the refusal happens where the graph is published, in
+    /// `encodeDraftGraph`, which runs `camel::runtime::checkGraphCrossReferences` on the graph the
+    /// draft produced (and `EdgeChecker` runs the same four checks on a frozen graph). A setter that
+    /// refused here would become a fifth answer to "is this join sound", and the draft needs to be
+    /// able to hold the state in between.
+    void setBrchJoin(gc_node_ref_t brch, gc_node_ref_t join);
     /// The region a node is put in when it is added without one (0: the body). The front end
     /// sets it to the arm it is writing; passes leave it alone.
     uint32_t insertRegion() const { return insertRegion_; }
@@ -926,6 +964,10 @@ class GraphDraft {
     const GCGraph *base_    = nullptr;
     uint64_t mutations_     = 0;
     uint64_t *refsEpoch_    = nullptr;
+    /// This draft's identity (epoch()). Minted when the draft is made, before any node of it
+    /// exists, and never changed: it is what a DraftNodeRef keeps so that the draft cannot be
+    /// mistaken for the next one the allocator puts at the same address.
+    const uint64_t epoch_ = nextDraftEpoch();
     void touchRefs() {
         ++revision_;
         if (refsEpoch_) {
@@ -982,6 +1024,11 @@ std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphTransaction &transact
 /// fixed); only a question about one decision of one pass may ask it, never the question of
 /// whether a node takes an order edge, which must not change as types are refined.
 bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byShape = false);
+
+/// `nodeMayFault` (camel/runtime/graph.h) asked of a node of a draft, with the same `byShape`
+/// reading of an elementwise operator. It is the fault half of `nodeIsFreelySchedulable` above,
+/// so a caller that has already asked whether the operator may be recomputed asks this alone.
+bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape = false);
 
 /// Whether a node carries the program's order instead of being a value a pass may compute for
 /// itself: a call runs a graph, a branch, join, sync or loop runs (or orders) what it holds, a gate

@@ -2724,6 +2724,7 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     }
 
     // Determine the binary operator and create the corresponding node
+    const bool negatedStrictNeq = binaryExpr->op() == AST::BinaryDataOp::StrictNeq;
     switch (binaryExpr->op()) {
     case AST::BinaryDataOp::LogicalOr:
     case AST::BinaryDataOp::LogicalAnd: {
@@ -2739,7 +2740,13 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         opNode = tree_->makeDRef("__strict_eq__");
     } break;
     case AST::BinaryDataOp::StrictNeq: {
-        opNode = tree_->makeDRef("__strict_neq__");
+        // `a !== b` is the negation of `a === b` (design principles 4.2): the comparison built
+        // here is `===`'s and the negation is wrapped around its call below, so the operands are
+        // evaluated once and the result is negated element by element. It is built here rather
+        // than in the builder -- where `!=` becomes `!(==)` -- because `!==` is not an
+        // overloadable form (operator_names.cpp): no name is looked up for it, so it never
+        // reaches the code that would give it a written group to negate.
+        opNode = tree_->makeDRef("__strict_eq__");
     } break;
     case AST::BinaryDataOp::Index:
         // A subscript is built above, one node per dimension it writes (design principles 5.4).
@@ -2787,6 +2794,24 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     }
     setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.binary.link");
     registerGctSemantic(context_, res, ast, std::move(parts), std::move(mergedInputs));
+
+    if (negatedStrictNeq) {
+        // `!(a === b)`: one call of `!` over the comparison linked above, so the operands are
+        // evaluated once. The negation carries the operator's origin, so a diagnostic about it
+        // points at `!==` and not at a name the program did not write.
+        node_ptr_t notOperator = tree_->makeDRef("__not__");
+        setOriginFromOrigin(
+            context_,
+            notOperator,
+            nodeOrigin(opNode),
+            camel::source::OriginKind::GctNode,
+            "gct.binary.negation");
+        node_ptr_t negation = tree_->makeLink(1);
+        *negation << notOperator << res;
+        setOriginFromAst(
+            context_, negation, ast, camel::source::OriginKind::GctNode, "gct.binary.negation");
+        res = negation;
+    }
 
     LEAVE("BinaryExpr");
     return res;
@@ -7098,10 +7123,16 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             // A rest parameter is untyped and last (design principles 5.5); it stands in the
             // signature as a `void` parameter that no call passes a value for.
             if (open && !signature) {
-                // The parser admits `..` in a declaration's parameter list and in a function
-                // type (`(..A) => R`), never in a lambda's.
-                throw std::runtime_error("A rest parameter in a lambda.");
-                throw BuildAbortException();
+                // A lambda's rest parameter (`(..xs) => body`) stands for the parameters of the
+                // function type the lambda is in. That type is not known at this stage -- it builds
+                // a signature, and the expected type is GIR's -- so the slot is recorded the way an
+                // omitted parameter type is, with one difference: it absorbs every parameter from
+                // here on rather than taking one type (`rest`). GIR expands it where the expected
+                // type is in hand. The flag comes from the written parameter (`isRest()`), never
+                // from the arity.
+                factory.addNormArg(name, Type::Void(), false);
+                unwrittenParams.push_back({paramIndex++, paramLoad->origin(), true});
+                continue;
             }
             if (pi + 1 != normParams.size()) {
                 diags_->of(SemanticDiag::RestParameterNotLast)

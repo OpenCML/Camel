@@ -111,7 +111,11 @@ const expected = new Map([
     ['row_where', 'where/3'],
 ])
 
-const transformText = run([bodies, 'std::nvm']).stdout
+// The transform's hits are spoken by the library, so they arrive on the diagnostic side, not in
+// the program's stdout (`modules/transforms/readings.h`); the two are read together here because
+// this checker cares which keys were hit, not which channel carried them.
+const transformRun = run([bodies, 'std::nvm'])
+const transformText = `${transformRun.stdout}\n${transformRun.stderr}`
 const hits = new Map()
 for (const line of transformText.split('\n')) {
     const hit = /REINTERP vmap function=(\S+) .*asked=(\d+) found=(\d+) missing=(\d+) rules=(\S+)/.exec(line)

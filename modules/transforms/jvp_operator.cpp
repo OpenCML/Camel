@@ -14,6 +14,7 @@
 #include "jvp_operator.h"
 
 #include "jvp.h"
+#include "readings.h"
 #include "transpose_operator.h"
 
 #include "camel/core/context/context.h"
@@ -168,9 +169,10 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "transforms: jvp needs a function value");
     }
     // The reading is part of the interface (jvp.h): a graph the caller cannot name yet is a graph
-    // nobody can check. It goes to the program's own output, as the pass's reading does.
+    // nobody can check. It goes to the diagnostic side (`readings.h`), not to the program's output:
+    // the same walk that explains a refusal used to land among the numbers the program printed.
     const JvpGraph built = buildJvpGraph(
-        ctx.shared_from_this(), function->program(), function->graph(), std::cout);
+        ctx.shared_from_this(), function->program(), function->graph(), readings());
     if (built.graph == nullptr) {
         if (built.refusedOrigin == camel::source::kInvalidOriginId) {
             throwRuntimeFault(
@@ -200,7 +202,7 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     // `pure` clause, which a declaration cannot write and `--verify-ops` does not compare. What has
     // to be one string, and is what the call site relies on, is the lifted half: the type the
     // operator says it returns and the type of the graph it hands back.
-    printJvpCallReading(std::cout, function->graph()->funcType(), built.graph->funcType(), "run");
+    printJvpCallReading(readings(), function->graph()->funcType(), built.graph->funcType());
     auto *result = ::Function::create(
         built.program, built.graph->id(), function->tupleType(), mm::autoSpace());
     if (::Tuple *closure = function->tuple()) {
@@ -214,7 +216,7 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
 } // namespace
 
 void printJvpCallReading(
-    std::ostream &os, FunctionType *function, const FunctionType *answered, std::string_view at) {
+    std::ostream &os, FunctionType *function, const FunctionType *answered) {
     const std::string spelled = JvpResolver{}.signature();
     const auto resolved =
         function != nullptr ? JvpResolver{}.resolve({}, type_vec_t{function}) : std::nullopt;
@@ -223,7 +225,7 @@ void printJvpCallReading(
         (resolved && (*resolved)->hasExitType()) ? (*resolved)->exitType()->toString()
                                                  : std::string("-");
     const std::string handedBack = answered != nullptr ? answered->toString() : "-";
-    os << "REINTERP jvp op lifted-at=" << at << " signature=" << spelled
+    os << "REINTERP jvp op signature=" << spelled
        << " resolved=" << produced << " lifted=" << lifted << " graph=" << handedBack
        << " same=" << (lifted == handedBack ? "yes" : "no") << '\n';
 }
@@ -263,6 +265,16 @@ void registerOperatorMetadata() {
     // the first one did not.
     camel::core::OperatorTable::instance().set(
         "transforms:transpose", {.pure = false, .readsGraphs = true});
+    // How a call of each is written: `jvp(f)` and `transpose(f)`, one function and no `with`
+    // parameters. Neither has a Camel declaration that could say so -- the result of `jvp` is the
+    // forward transform of `f`, the result of `transpose` its reverse transform, and no signature
+    // writes either type -- so the call shape is recorded here, where the operator is declared,
+    // rather than in a signature invented to make the printer pass (P1-13: an operator with no
+    // compilable declaration).
+    camel::core::OperatorTable::instance().declareCallForm(
+        "transforms:jvp", {.name = "jvp", .minArgs = 1, .withCount = 0, .declaredByModule = true});
+    camel::core::OperatorTable::instance().declareCallForm(
+        "transforms:transpose", {.name = "transpose", .minArgs = 1, .withCount = 0, .declaredByModule = true});
 }
 
 } // namespace camel::transforms

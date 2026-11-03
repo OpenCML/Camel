@@ -223,6 +223,24 @@ compare(write("stats.json", json.loads(through_stats)), write("base4.json", base
 calls = canonical(CALLS)[1]
 compare(write("calls.json", calls), write("calls2.json", json.loads(canonical(CALLS)[0])), True)
 
+# A program with a named declaration: the type's `decl` edge names the declaration's own vertex,
+# `D:<id>` (the one built from the document's `decls`). Built to `T:<id>` it named no vertex at
+# all, and the checker reported any document that holds a declaration as different from itself
+# (`T:2 --decl--> unknown vertex T:d0`, defect B1 of the 2026-11-01 eval report).
+NAMED = write(
+    "named_decl.cml",
+    "type P = { a: int, b: int }\n"
+    "\n"
+    "func main(p: P): int sync {\n"
+    "    return p.a + p.b\n"
+    "}\n",
+)
+named = canonical(NAMED)[1]
+assert any(entry.get("decl") is not None for entry in named["types"]), (
+    "the named program has no declaration edge to check"
+)
+compare(write("named.json", named), write("named2.json", json.loads(canonical(NAMED)[0])), True)
+
 # -- 3. the ordering edges ----------------------------------------------------------------
 
 # A program whose body holds both kinds of ordering edge: a read of a `var` and the write after

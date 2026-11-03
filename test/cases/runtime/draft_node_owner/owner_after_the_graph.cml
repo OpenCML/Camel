@@ -1,0 +1,6 @@
+// The case of `test::draft_node_owner`: nothing in the program is what the case is about; the pass
+// is. It is a program and not a comment because the pass is handed one.
+
+func main(): int sync {
+    return 0
+}

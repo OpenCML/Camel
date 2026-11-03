@@ -1357,7 +1357,7 @@ void Builder::readArmCellValue(const arm_ptr_t &arm) {
         // orderAfterLastWriter; design principles 3.5, F3).
         if (auto modifier = modifierOf(cell); modifier.has_value()) {
             if (sameGraph(*modifier, currGraph_) && linkCheek(*modifier, read)) {
-                linkNodes(LinkType::Ctrl, *modifier, read);
+                writeControlLink(*modifier, read);
             }
         }
     }
@@ -2803,7 +2803,7 @@ node_handle_t Builder::buildBranch(
 
     if (synced_) {
         if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, brchNode)) {
-            linkNodes(LinkType::Ctrl, lastSyncedNode_, brchNode);
+            writeControlLink(lastSyncedNode_, brchNode);
         }
         // A branch is one statement of the block and the join is where that statement's chain goes
         // on: the statements written after the branch are written directly after it, and the arm
@@ -2861,7 +2861,7 @@ void Builder::linkArmEntries(const std::vector<arm_ptr_t> &arms, node_handle_t b
             }
             node_handle_t node = draft.ref(id);
             if (!computed && linkCheek(brchNode, node)) {
-                linkNodes(LinkType::Ctrl, brchNode, node);
+                writeControlLink(brchNode, node);
             }
             // The entry of the arm's chain: the first statement of the arm's own region -- the
             // draft numbers its nodes in the order they are written -- that follows nothing and
@@ -2910,7 +2910,7 @@ void Builder::mergeArmVariables(
             if (touched.writerAfter.has_value()) {
                 known->second = true;
                 if (linkCheek(*touched.writerAfter, joinNode)) {
-                    linkNodes(LinkType::Ctrl, *touched.writerAfter, joinNode);
+                    writeControlLink(*touched.writerAfter, joinNode);
                 }
             }
         }
@@ -3536,7 +3536,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         if (bodyPart->output != bodyPart->value) {
             // A `sync` body's effects are ordered by the gate around the old value; the new
             // state comes after them.
-            linkNodes(LinkType::Ctrl, bodyPart->output, result);
+            writeControlLink(bodyPart->output, result);
         }
         bodyPart->output = result;
         bodyPart->value  = result;
@@ -4011,7 +4011,7 @@ node_handle_t Builder::buildStreamLoop(
                         throw BuildAbortException();
                     }
                     // The body runs after the pull it reads its element from.
-                    linkNodes(LinkType::Ctrl, pull, state);
+                    writeControlLink(pull, state);
                     std::vector<node_handle_t> next{rest, booleanConstant(false)};
                     if (k == 1) {
                         next.push_back(state);

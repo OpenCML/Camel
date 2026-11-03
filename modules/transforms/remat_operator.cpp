@@ -16,12 +16,15 @@
 
 #include "remat_operator.h"
 
+#include "readings.h"
+
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
 #include "camel/runtime/draft_clone.h"
 #include "camel/runtime/draft_session.h"
@@ -137,6 +140,18 @@ slot_t rematKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         for (rt::gc_node_ref_t port : cloned.withPorts) {
             draft.appendWithPort(port);
         }
+        // The captures of the graph being copied are ports too, and the copy has to declare them or a
+        // call through the marked value binds nothing: the closure tuple is there, the graph says it
+        // takes none, and every read of a capture answered the zero of its slot -- `x + c` computed
+        // `x`, i.e. 1.0 where 4.0 is the answer (author's review of 2026-11-02, high-2). The clone
+        // carries them in the source graph's order, which is the closure tuple's order, and the
+        // layout comes from the value, the same one the copy's tuple is made of below.
+        for (rt::gc_node_ref_t port : cloned.closureNodes) {
+            draft.appendClosureNode(port);
+        }
+        if (!cloned.closureNodes.empty()) {
+            draft.setClosureType(const_cast<camel::core::type::TupleType *>(function->tupleType()));
+        }
         if (cloned.entryNode != rt::kInvalidNodeRef) {
             draft.setEntryNode(cloned.entryNode);
         }
@@ -165,7 +180,7 @@ slot_t rematKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         }
     }
     // The reading: the property before and after the copy, so one run prints both numbers.
-    std::cout << "REINTERP remat function=" << source->name()
+    readings() << "REINTERP remat function=" << source->name()
               << " in_recompute=" << (source->recomputesOnBackward() ? 1 : 0)
               << " out_recompute=" << (marked->recomputesOnBackward() ? 1 : 0)
               << " graph=" << rt::toValue(made) << std::endl;
@@ -194,6 +209,10 @@ void registerRematOperatorMetadata() {
     camel::core::OperatorTable::instance().set(
         "transforms:remat",
         {.pure = false, .readsGraphs = true});
+    // The mark is a property of the graph it is handed, and the copy carries the graph's captures as
+    // well: before 2026-11-02 the copy declared none, so a call through the marked value bound
+    // nothing and answered the zero of every capture's slot -- measured 1.0 where `x + c` says 4.0
+    // (author's review, high-2, the same capture-loss class as `vmap`'s).
 }
 
 } // namespace camel::transforms

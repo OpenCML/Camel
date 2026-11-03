@@ -1662,7 +1662,7 @@ void resolvePlaceForks(GraphDraft &draft) {
         draft.setSyncInputs(n, only);
         const auto ctrl = draft.ctrlInputsOf(n);
         if (std::ranges::find(ctrl, tail) == ctrl.end()) {
-            draft.appendInput(DraftEdgeKind::Ctrl, n, tail);
+            draft.appendControlEdge(n, tail);
         }
     }
 }
@@ -1750,17 +1750,19 @@ DraftInlineResult inlineCallableInDraft(
         }
     }
     ctrlPreds                  = controlFrontier(transaction, ctrlPreds);
-    // What this splice asks about the call's place, asked the way every pass asks it
-    // (camel/runtime/effect_liveness.h): the predecessors are the wait the call carries today, and
-    // whether the call sat on a block's chain is a fact of its own. Read here, once, so that a
-    // later change moves the decision below without moving the reading.
-    EffectLivenessFacts callFacts;
-    callFacts.hasWaitEdge     = !ctrlPreds.empty();
-    callFacts.isSyncStatement = !draft.syncInputsOf(funcNodeId).empty();
+    // What this splice asks about the call's place: the predecessors are the wait the call carries
+    // today, and whether the call sat on a block's chain is a fact of its own. A structural reading,
+    // written where it is read -- `EffectLivenessFacts` no longer carries a wait field
+    // (camel/runtime/effect_liveness.h says why). Read once, so that a later change moves the
+    // decision below without moving the reading. Note that the wait here is the *frontier* of the
+    // predecessors, not the raw control inputs: a splice waits on what is left after the frontier,
+    // which is a different reading from the one the gate's bypass test takes.
+    const bool callCarriesWait = !ctrlPreds.empty();
+    const bool callOnAChain    = !draft.syncInputsOf(funcNodeId).empty();
     // The body waits where the call waited: a wait of its own, or a place on a block's chain. The
     // chain is the one that outlives the control edge (docs/design/effects/edges.cn.md 5.3), so it
     // is asked as a fact of its own and not only as part of the predecessors read above.
-    const bool hasExternalCtrl = callFacts.hasWaitEdge || callFacts.isSyncStatement;
+    const bool hasExternalCtrl = callCarriesWait || callOnAChain;
     // The statement(s) written after the call in its block: the call is replaced by the body's
     // result and the chain goes on from there, so 5.7's order edges have to reach exactly the nodes
     // that followed the call. Read now, because replacing the call's uses below is what makes them
@@ -1882,7 +1884,7 @@ DraftInlineResult inlineCallableInDraft(
             waitPreds.push_back(effect);
         }
     }
-    const bool bodyWaits = callFacts.hasWaitEdge || !unreadArgumentEffects.empty();
+    const bool bodyWaits = callCarriesWait || !unreadArgumentEffects.empty();
 
     // With control predecessors, the body reads each argument through a GATE that waits on
     // them. The gates order nothing the entry roots below do not order already (every
@@ -2197,7 +2199,7 @@ DraftInlineResult inlineCallableInDraft(
             draft.setSyncInputs(head, only);
             const auto ctrl = draft.ctrlInputsOf(head);
             if (std::ranges::find(ctrl, pred) == ctrl.end()) {
-                draft.appendInput(DraftEdgeKind::Ctrl, head, pred);
+                draft.appendControlEdge(head, pred);
             }
         }
         bodyChain = scanBodyChain();
@@ -2340,7 +2342,7 @@ DraftInlineResult inlineCallableInDraft(
         const auto nameControlPair = [&](gc_node_ref_t user, gc_node_ref_t pred) {
             const auto ctrl = draft.ctrlInputsOf(user);
             if (std::ranges::find(ctrl, pred) == ctrl.end()) {
-                draft.appendInput(DraftEdgeKind::Ctrl, user, pred);
+                draft.appendControlEdge(user, pred);
             }
         };
         // The statements written after the call follow the body's tail. `closeChainOver` closed the

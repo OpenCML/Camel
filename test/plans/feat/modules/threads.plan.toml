@@ -305,3 +305,37 @@ case = "../../../cases/modules/tensor/thread_pools.cml"
 args = ["-t", "16", "${case}", "tensor::fuse", "std::fvm"]
 expect_exit = 0
 expect_stdout_exact = "thread_pools threads=16 budget=16\n"
+
+# A width that is neither 1 nor a power of two, and a budget below this host's CPU count: a set of
+# threads that nothing sizes is as wide as the machine and shows up here as a count above the
+# budget, whichever of the two numbers is larger.
+[[tests]]
+name = "pools.cli_three"
+desc = "`-t 3` has three threads: the caller and two pool workers, so the count follows the budget and not the machine's width."
+kind = "behavior"
+case = "../../../cases/modules/tensor/thread_pools.cml"
+args = ["-t", "3", "${case}", "tensor::fuse", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "thread_pools threads=3 budget=3\n"
+
+# `-T` is `inspect`'s token stream and `-t` is the run's thread budget: two options of two
+# commands, so asking for tokens must print tokens and never a thread count, with or without a
+# budget on the command line.
+[[tests]]
+name = "inspect.tokens"
+desc = "`inspect -T` prints the entry's token stream, not the run's thread pool: the token of the leading comment and of the first `import`, and no thread line."
+kind = "behavior"
+case = "../../../cases/modules/tensor/thread_pools.cml"
+args = ["inspect", "-T", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n').filter((l) => l.trim() !== '')
+const tokenLine = /^\s*\d+\s+\[\s*\d+:\s*\d+\]/
+assert(lines.length > 100, 'only ' + lines.length + ' line(s) of tokens')
+const other = lines.find((l) => !tokenLine.test(l))
+assert(other === undefined, 'a line is not a token line: ' + other)
+assert(/BlockComment/.test(lines[0]), 'the first token is not the leading comment: ' + lines[0])
+assert(lines.some((l) => /KwFunc\s*:\s*func/.test(l)), 'no token line for the keyword func')
+}
+"""

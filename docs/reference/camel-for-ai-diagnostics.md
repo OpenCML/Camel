@@ -34,7 +34,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `InvalidEscapeSequence` | Invalid escape sequence in string: {0}. |
 
-**Syntax — errors** (`SyntaxDiag`) — 18
+**Syntax — errors** (`SyntaxDiag`) — 19
 
 | `MissingClosingDelimiter` | Expected '{0}' before {2}, to close the '{1}'. |
 | `UnmatchedClosingDelimiter` | Unexpected '{0}': no '{1}' is open here. |
@@ -52,6 +52,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `LineStartsWithOperator` | A statement cannot start with '{0}': the line break before it ended the statement of the line above. |
 | `EmptyInterpolation` | An interpolation has no expression to format. |
 | `AsRightSideIsType` | The right side of '{0}' is a type; write the interval as '(a..b)'. |
+| `FuncTypeNeedsNames` | A function type names its parameters: write '(x: float, y: float) => float', not a list of types. |
 | `WhenAfterBody` | A 'when' condition comes before what it guards, so {0} cannot follow it. |
 | `LambdaParametersNeedParentheses` | A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'. |
 
@@ -253,6 +254,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `CompOperandGenericWithoutType` | '..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type. |
 | `RangeStepZero` | The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers. |
 | `SliceStepZero` | The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are. |
+| `CalledFallibleValue` | This value has type '{0}' and it is fallible: calling it as a function leaves the error it may hold nowhere to be read. |
 | `WithPackNeedsNativeDeclaration` | The pack '..{0}' among the 'with' parameters needs a declaration without a body. |
 | `ImplOnBodylessDeclaration` | The body-less declaration '{0}' cannot carry '#impl({1})': it has no Camel body. |
 | `ImplKernelUnknown` | The '#impl' tag of '{0}' names '{1}', which is no body-less declaration. |
@@ -283,7 +285,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `RuleLeftIsNotAnOperator` | The rule '{0}' has a left side that is not one operator; it is written as '{1}', and a ruleset indexes its rules by the head of the left side. |
 | `DuplicateRuleForOperator` | The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side, and one ruleset has one rule per operator. |
 | `RuleRightUsesOuterVariable` | The rule '{0}' reads '{1}' on its right side, and '{1}' is a name its left side binds: in this ruleset the right side names the function the transform calls, and the pattern's names are never bound. |
-| `ResidualsAreNotVisible` | The residuals `split` collects are not visible to the program: they are handed on whole to the second half, and neither a destructuring nor an element read takes them apart. |
 
 **Semantic — warnings** (`SemanticDiag`) — 15
 
@@ -303,7 +304,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `FailNotExecuted` | This 'fail' is not executed: {0}. |
 | `StatementAfterFail` | This statement cannot run: the 'fail' written before it never returns. |
 
-**Run time and passes — errors** (`RuntimeDiag`) — 39
+**Run time and passes — errors** (`RuntimeDiag`) — 38
 
 | `RuntimeError` | An error has occurred: {0}. |
 | `DivisionByZero` | Attempted division by zero. |
@@ -327,7 +328,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `OperandTypeUnsupported` | '{0}' does not support a value of type '{1}'; it takes {2}. |
 | `FieldNotFound` | The struct has no field '{0}'. |
 | `InvalidArgument` | Invalid argument of '{0}': {1}. |
-| `FileSystemError` | '{0}' failed for '{1}': {2}. |
 | `RegexInvalid` | '{0}': '{1}' is not a valid regular expression: {2}. |
 | `TimeFormatFailed` | '{0}' failed: {1}. |
 | `GradientElementTypeMismatch` | The gradient of a value of type '{0}' has element type '{1}': {2}. A gradient must have the element type of the value it is the gradient of (design principles 9.9); accumulated as it is, the value would be read at the wrong width and answer with a number that is not the derivative. |

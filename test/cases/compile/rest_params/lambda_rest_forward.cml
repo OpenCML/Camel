@@ -1,0 +1,25 @@
+// The rest parameter of a lambda is a value in its body: `xs` is the tuple of the parameters the
+// position's function type gave the lambda, and `..xs` spreads it into a call by the rule that
+// already spreads a tuple.
+
+func add(a: float, b: float): float {
+    return a + b
+}
+
+func apply(f: (a: float, b: float) => float): float {
+    return f(1.0, 2.0)
+}
+
+func spread(): float {
+    return apply((..xs) => add(..xs))
+}
+
+func main(): int sync {
+    let sum = spread()
+    if sum != 3.0 then {
+        println("spread = {sum}, wanted 3.0")
+        return 1
+    }
+    println("prints 1 x 3.0")
+    return 0
+}

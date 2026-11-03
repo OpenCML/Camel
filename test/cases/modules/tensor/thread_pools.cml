@@ -3,10 +3,13 @@
  *
  * A run names its budget with `-t`. Every kernel thread in the process belongs to the tensor
  * pool, so the process's thread count (the caller included) is at most the budget. A second pool
- * — the library GEMM's own, or a second worker set — puts the count above the budget; before
- * the library's pool alone was as wide as the machine, so `-t 1` had 32 threads on this
- * host. The count is read from the operating system (`thread_count`), not timed, so the case
- * cannot pass by being slow or fail by being fast.
+ * — the library GEMM's own, or a second worker set — puts the count above the budget, because a
+ * pool that nothing sizes is as wide as the machine. The count is read from the operating system
+ * (`thread_count`), not timed, so the case cannot pass by being slow or fail by being fast.
+ *
+ * The count is of the threads the run owns. The operating system's own thread pool is not part of
+ * it: those workers run work the system queues, and no setting of the run says how many of them
+ * there are.
  *
  * The whole-work product is the library path (one call, `tensor::fuse`), and the batched product
  * makes the tensor pool create its workers, so both pools are live when the count is taken: if

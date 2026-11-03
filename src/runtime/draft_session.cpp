@@ -12,6 +12,7 @@
  */
 
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/graph_ref_check.h"
 #include "camel/runtime/reachable.h"
 #include "runtime/graph_build.h"
 
@@ -508,8 +509,9 @@ GCGraph *encodeDraftGraph(
 
     const auto payloadShape = describeDraftNativePayload(draft);
     // The node chunks are blocks of their own: the graph space can run out while they are made.
+    GCGraph *encoded = nullptr;
     try {
-    return GCGraphBuildAccess::constructInPlace(
+    encoded = GCGraphBuildAccess::constructInPlace(
         target,
         bytes,
         draft.id(),
@@ -539,6 +541,19 @@ GCGraph *encodeDraftGraph(
             identity.name,
             draftGraphOrigin(context, identity, transaction));
     }
+    // The same four checks the frozen graph gets (camel/runtime/graph_ref_check.h), run on the graph
+    // this draft produced: a draft can hold a number its own graph cannot resolve, and a graph that
+    // is refused by EdgeChecker and published here would be two answers to one question. A refusal
+    // names the graph, the node or region, and the reference, and the pipeline reports it against
+    // the pass that built the draft.
+    if (const auto violations = camel::runtime::checkGraphCrossReferences(*encoded); !violations.empty()) {
+        std::string message = std::format("the draft of graph '{}' cannot be encoded: {}", identity.name, violations.front());
+        for (size_t i = 1; i < violations.size(); ++i) {
+            message += std::format("; {}", violations[i]);
+        }
+        throw std::runtime_error(message);
+    }
+    return encoded;
 }
 
 size_t draftGraphBytes(
@@ -1456,6 +1471,35 @@ std::vector<gc_node_ref_t> RuntimeGraphDraftSession::committedNodeRefs(GCGraph *
     return draftRuntimeNodeRefs(*found->second->transaction);
 }
 
+void RuntimeGraphDraftSession::validateDraftPorts() const {
+    for (const auto &[graph, entry] : drafts_) {
+        if (entry == nullptr || entry->transaction == nullptr) {
+            continue;
+        }
+        const auto &draft  = entry->transaction->graph();
+        const size_t slots = draft.nodeSlotCount();
+        for (gc_node_ref_t id = 0; id < slots; ++id) {
+            const DraftNodeHeader *header = draft.header(id);
+            if (header == nullptr || header->kind != GCNodeKind::Oper) {
+                continue;
+            }
+            const std::span<const gc_node_ref_t> ports = draft.normInputsOf(id);
+            for (size_t port = 0; port < ports.size(); ++port) {
+                const gc_node_ref_t input = ports[port];
+                if (input == kInvalidNodeRef || draft.header(input) == nullptr) {
+                    throw std::runtime_error(std::format(
+                        "an ordinary port of operator node {} of graph '{}' reads port {} of a node "
+                        "the graph does not have ({})",
+                        static_cast<unsigned>(id),
+                        graph->name(),
+                        static_cast<unsigned>(port),
+                        static_cast<unsigned>(input)));
+                }
+            }
+        }
+    }
+}
+
 const Program *RuntimeGraphDraftSession::commitChecked() {
     std::vector<GraphId> differing = conflicts();
     if (!differing.empty()) {
@@ -1478,6 +1522,12 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     if (!runtimeRoot_) {
         return nullptr;
     }
+
+    // A port written at a node the draft does not have cannot be encoded: the writer of the graph
+    // version reads the node at that reference and there is none, which is a crash and not a
+    // diagnostic. The check every pass ends with promises to refuse exactly this shape, and this is
+    // what makes that promise keepable -- the graph has to exist in order to be judged.
+    validateDraftPorts();
 
     GCGraph *oldRuntimeRoot = runtimeRoot_;
 

@@ -27,9 +27,33 @@
 // 2. The case is run with the pass its plan runs it with, and **passes when the exit code is the one
 //    its own plan expects** -- not when it exits 0. `with_grad_old_name` guards that `value_and_grad`
 //    does not exist: its expectation is exit 1, so exit 0 would be the failure.
-// 3. A case that does not pass is sorted by **the shape of its first diagnostic**, not by what its
-//    source looks like: a function whose type carries a `with` parameter is one class, an
-//    array/tensor parameter is another, and everything else is the third.
+// 3. The three non-`pass` columns are counted **from the case sources and the rule files**, never
+//    from the wording of a diagnostic. `array` is a case whose source spells an array or tensor
+//    type (`[]`, `[..]`, `f32`, `f16`, `bf16`, `Model`, `Plain`); `with` is one whose source spells
+//    a function type carrying a `with` parameter (`<x: float> () => float`); `other` is the rest.
+//    The rule files are counted the same way and printed with `file:line` anchors beside the table.
+//
+//    **What this contract is, and what it is not.** The columns classify all 118 library cases, so
+//    they sum to 118 whatever the run does; `pass` is a separate runtime column and the three do not
+//    add up with it. That is deliberate: a structure count and a run count answer different
+//    questions, and mixing them is how the previous version read 0/0/0.
+//
+//    Until 2026-11-02 the split was made from **the text of the first diagnostic** -- `[]`/`f32` or
+//    `<x: float>` appearing in the message. When the front-end transform table and its call-site
+//    refusal were withdrawn, the refusal point moved, the wording stopped matching, and all four
+//    columns collapsed into `other` (`pass=0 with=0 array=0 other=118`). A ruler that reads wording
+//    can only measure wording; that classifier is deleted, not tuned.
+//
+//    **`pass` depends on the binary it runs.** It is measured by running `out/latest/bin/camel`, so
+//    the same tree reads differently under a different build of that file (the same tree read
+//    `pass=6` against the 2026-11-01 13:44 binary and `pass=0` where no binary was present). That
+//    column is not comparable across machines; the three source columns are, because they never run
+//    anything.
+//
+//    **`array` is no longer this column's business.** What the array step needs is a program that
+//    differentiates: `grad(f)([3.0, 2.0])` printing `[2.0, 3.0]`, and `skip=body` gone. Read those
+//    two, not the `array` column; the column only counts how many cases are *written* with an array
+//    type in them, which does not move when the work lands.
 //
 // The plan files are read with a small bracket scanner, not a TOML library: the repository has no
 // dependency for that, and the five keys this needs (`case`, `args`, `expect_exit`, and the test's
@@ -50,31 +74,41 @@ const args = process.argv.slice(2)
 const quiet = args.includes('--quiet')
 const ledgerCheck = args.includes('--ledger-check')
 const onlyCase = args.includes('--case') ? args[args.indexOf('--case') + 1] : undefined
+let loaderFailure = ''
 
 // The ledger's own record, kept the way `diagnostics-catalog.mjs` keeps its name coverage: a constant
-// in the file, refused to move the wrong way. Two numbers here mean opposite things, so the check
-// reads them in opposite directions --
+// in the file, refused to move the wrong way. Two kinds of number live here, so the check reads them
+// in two directions --
 //
 //   `pass` may only go **up**: a case that starts doing what its plan expects is progress, and one
-//   that stops is a regression however the other lines move.
-//   `with`, `array` and `other` may only go **down**: they count what stops the rest, so a case
-//   joining one of them is a case leaving `pass`.
-//   `total` and `library` are the denominator and may not move at all: a case appearing or leaving
-//   changes what the ledger means, which is a decision for a person, not a side effect.
+//   that stops is a regression however the other lines move. It is a run of `out/latest/bin/camel`
+//   and therefore moves with that binary (see the header): it is not comparable across machines.
+//   `array`, `with` and `other` may only go **down**: they count, from the sources, how many cases
+//   are still written in a shape the library does not take. `total` and `library` are the
+//   denominator and may not move at all: a case appearing or leaving changes what the ledger means,
+//   which is a decision for a person, not a side effect.
 //
 // **What `pass` counts, and what it does not.** It counts cases that do what their own plan asks --
-// and 8 of the 12 guard a refusal the library is supposed to make (`err_vjp_annotation`, six
-// `grad_function_value_*`, `with_grad_old_name`). So this records "how many cases are green on the
-// library", **not** "how many cases can be differentiated": the four that really produce numbers are
-// `transform_rules`, `jax_batching`, `jax_vmap` and `jax_vmap_tensor`. A reader who takes 12 for
-// "12 cases differentiate" would be reading it wrong.
+// and some of them guard a refusal the library is supposed to make (`err_vjp_annotation`, the
+// `grad_function_value_*` family, `with_grad_old_name`). So this records "how many cases are green on
+// the library", **not** "how many cases can be differentiated".
+//
+// The record was re-read on 2026-11-02, after the withdrawal of the front-end transform table and its
+// call-site refusal. The three source columns were recounted from the sources rather than from
+// diagnostic wording (54/46/6 became 44/67/7 -- a different question asked of the same 118). `pass`
+// did **not** move: it is 12 before and after the withdrawal, and the first reading of it here said 6
+// for a reason that belongs in this file: the shell that ran the ledger had no `LD_LIBRARY_PATH`, so
+// the compiler could not load `libstdc++`, every run exited 1 with no diagnostic, and six cases read as
+// failing that pass when the binary can start. That is why the run now refuses to report a number when
+// the binary does not start (see `loaderFailure` below): a ruler that cannot see must say so, not print
+// a smaller number.
 const LEDGER_RECORDED = {
-    total: 127,
-    library: 118,
+    total: 128,
+    library: 119,
     pass: 12,
-    with: 54,
-    array: 46,
-    other: 6,
+    with: 45,
+    array: 67,
+    other: 7,
 }
 
 function camelBinary() {
@@ -167,6 +201,9 @@ function runCase(file, test) {
     const { source: rewritten } = rewriteImports(source)
     const probe = file.replace(/\.cml$/, '.ledger-probe.cml')
     fs.writeFileSync(probe, rewritten, 'utf8')
+    if (!fs.existsSync(camelBinary())) {
+        loaderFailure = `no binary at ${camelBinary()}`;
+    }
     try {
         const result = spawnSync(camelBinary(), [probe, passOf(test)], {
             cwd: ROOT,
@@ -175,7 +212,14 @@ function runCase(file, test) {
             env: { ...process.env, CAMEL_HOME: process.env.CAMEL_HOME || path.join(ROOT, 'out', 'latest') },
         })
         const text = `${result.stdout || ''}${result.stderr || ''}`
-        const first = text.split('\n').find((l) => l.startsWith('error[')) || ''
+        const first = text.split('\n').find((l) => l.includes(': [Error]: ')) || ''
+        // A binary that cannot start is not a case that failed. On this host the compiler needs the
+        // newer `libstdc++` on `LD_LIBRARY_PATH`; without it every run exits 1 with a loader message
+        // and no diagnostic, and the ledger would report a pass count that measures the shell, not
+        // the tree. One such run marks the whole measure unusable.
+        if (/error while loading shared libraries|GLIBCXX_|version `GLIBC/.test(text)) {
+            loaderFailure = text.split('\n').find((l) => /error while loading shared libraries|GLIBCXX_/.test(l)) || text.split('\n')[0]
+        }
         return { exit: result.status === null ? -1 : result.status, first: first.trim(), text }
     } finally {
         fs.rmSync(probe, { force: true })
@@ -184,17 +228,37 @@ function runCase(file, test) {
 
 // --- the classes ------------------------------------------------------------------------------
 //
-// The shape, not the source: a diagnostic that prints a function type carrying a `with` parameter
-// (`<x: float> (y: float) => float`, `<w: float> () => float`) is the `with` class; one that names an
-// array or tensor parameter (`float[]`, `f32[..]`, `Model`, `Plain`) is the array class. Everything
-// else -- a missing name, the `@vjp` annotation -- is `other`.
-const ARRAY_SHAPE = /\[\]|\[\.\.\]|\bf32\b|\bf16\b|\bbf16\b|\bModel\b|\bPlain\b|\[\]/
-const WITH_SHAPE = /<[A-Za-z_]*\w*\s*:\s*[^>]+>/
+// Counted from the source, not from a diagnostic: see the header. `array` is an array or tensor type
+// spelled anywhere in the case; `with` is a function type carrying a `with` parameter; `other` is
+// what is left. The same two spellings are counted in the rule files, where the hits are printed with
+// `file:line` anchors so a reader can go and look.
+const ARRAY_SPELLING = /\[\]|\[\.\.\]|\bf32\b|\bf16\b|\bbf16\b|\bModel\b|\bPlain\b/
+const WITH_SPELLING = /<[A-Za-z_]\w*\s*:\s*[^>]+>/
 
-function classify(first) {
-    if (ARRAY_SHAPE.test(first)) return 'array'
-    if (WITH_SHAPE.test(first)) return 'with'
+function classifySource(source) {
+    if (ARRAY_SPELLING.test(source)) return 'array'
+    if (WITH_SPELLING.test(source)) return 'with'
     return 'other'
+}
+
+const RULE_DIR = path.join(ROOT, 'stdlib', 'rulesets')
+function ruleSpellings() {
+    const hits = { array: [], with: [] }
+    let files = []
+    try {
+        files = fs.readdirSync(RULE_DIR).filter((f) => f.endsWith('.cml')).sort()
+    } catch {
+        return hits
+    }
+    for (const name of files) {
+        const lines = fs.readFileSync(path.join(RULE_DIR, name), 'utf8').split('\n')
+        lines.forEach((line, index) => {
+            const anchor = `stdlib/rulesets/${name}:${index + 1}`
+            if (ARRAY_SPELLING.test(line)) hits.array.push(anchor)
+            if (WITH_SPELLING.test(line)) hits.with.push(anchor)
+        })
+    }
+    return hits
 }
 
 // --- the run ----------------------------------------------------------------------------------
@@ -238,7 +302,7 @@ for (const file of files) {
         expected,
         exit,
         pass: matched,
-        kind: matched ? 'pass' : classify(first),
+        kind: classifySource(source),
         missing,
         migrated,
         first,
@@ -247,10 +311,40 @@ for (const file of files) {
 }
 
 const library = rows.filter((r) => !r.offPath)
-const count = (kind) => library.filter((r) => r.kind === kind).length
+// Two different questions, deliberately kept apart: `pass` is what the run did, the three classes are
+// what the sources are written as. The classes cover all 118 library cases, so they sum to 118
+// whether or not a binary is present.
+// Two different questions, deliberately kept apart: `pass` is what the run did, the three classes are
+// what the sources are written as. The classes cover all 118 library cases, so they sum to 118
+// whether or not a binary is present.
+const countKind = (kind) => library.filter((r) => r.kind === kind).length
+const passed = library.filter((r) => r.pass).length
+
+// A run of nothing is not a run where nothing passes, and a dead binary looks exactly like a clean
+// refusal -- six cases that expect exit 1 and pin no output "pass" against a compiler that never
+// started (measured 2026-11-02, a shell without LD_LIBRARY_PATH). So the detector is not the count:
+// if no case produced an exit code, and if any run failed to start the binary, the instrument is not
+// moving, and an instrument that is not moving does not report a number. `pass` is printed as `n/a`,
+// the reason is said out loud, and the process exits non-zero so a gate cannot carry the number on.
+const ran = rows.filter((r) => r.exit !== null && r.exit !== -1).length
+const blind = ran === 0 || Boolean(loaderFailure)
+const passCell = blind ? 'n/a' : String(passed)
+if (blind) {
+    console.error(
+        'ledger: the instrument is not running, so `pass` is printed as `n/a` rather than a number. ' +
+            (loaderFailure
+                ? `The binary did not start: ${loaderFailure}. `
+                : `Nothing ran at all: there is no built tree at ` +
+                  `${path.relative(ROOT, path.dirname(camelBinary())).replace(/\\/g, '/') || 'out/latest'}. `) +
+            'A run of nothing is not a run where nothing passes, and a binary that cannot start reads ' +
+            'like a clean refusal. The three classes above are unaffected: they are counted from the sources.',
+    )
+    process.exitCode = 1
+}
+
 const summary =
-    `[LEDGER] total=${rows.length} library=${library.length} pass=${count('pass')} ` +
-    `with=${count('with')} array=${count('array')} other=${count('other')}`
+    `[LEDGER] total=${rows.length} library=${library.length} pass=${passCell} ` +
+    `with=${countKind('with')} array=${countKind('array')} other=${countKind('other')}`
 
 if (!quiet) {
     const width = Math.max(...rows.map((r) => r.relative.length), 10)
@@ -288,19 +382,53 @@ if (!quiet) {
             `the plan names; ${noNames.length} of the ${library.length} name none of the library's ` +
             'transforms, so they pass without it.',
     )
+    const binary = camelBinary()
+    let stamp = 'absent'
+    try {
+        stamp = fs.statSync(binary).mtime.toISOString()
+    } catch {
+        stamp = 'absent'
+    }
+    console.log(
+        `pass is a run of ${path.relative(ROOT, binary).replace(/\\/g, '/')} (${stamp}): it moves with ` +
+            'that binary and is not comparable across machines. The three classes above are counted ' +
+            'from the sources and never run anything.',
+    )
+    const spells = ruleSpellings()
+    if (spells.array.length > 0 || spells.with.length > 0) {
+        console.log(
+            `Rule files, same two spellings: array ${spells.array.length} site(s)` +
+                (spells.array.length > 0 ? ` (${spells.array.slice(0, 6).join(', ')})` : '') +
+                `, with ${spells.with.length} site(s)` +
+                (spells.with.length > 0 ? ` (${spells.with.slice(0, 6).join(', ')})` : '') +
+                '.',
+        )
+    }
+    console.log(
+        'array is not the array step\'s acceptance: read `grad(f)([3.0, 2.0])` printing `[2.0, 3.0]` ' +
+            'and `skip=body` gone. This column only counts cases written with an array type.',
+    )
 }
 console.log(summary)
 
+if (ledgerCheck && blind) {
+    console.log('')
+    console.log('[LEDGER-CHECK] not run: the instrument is not running (see above), so `pass` is not ' +
+        'compared against its recorded 12 -- a number from a run of nothing would send a reader hunting ' +
+        'for a fall that happened because nothing started.')
+    process.exit(1)
+}
+
 if (ledgerCheck) {
+    const problems = []
     const measured = {
         total: rows.length,
         library: library.length,
-        pass: count('pass'),
-        with: count('with'),
-        array: count('array'),
-        other: count('other'),
+        pass: passed,
+        with: countKind('with'),
+        array: countKind('array'),
+        other: countKind('other'),
     }
-    const problems = []
     const move = (key, direction, wording) => {
         const recorded = LEDGER_RECORDED[key]
         const got = measured[key]

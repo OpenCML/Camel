@@ -1,0 +1,30 @@
+id = "tools.diagnostic_form_readers"
+order = 919
+tier = "fast"
+tags = ["feat", "tools", "diagnostics"]
+desc = "Every tool that reads a diagnostic back out of `camel`'s output asks its own run for the form it parses. The default form is the rich one (`error[SemanticDiag::Name]: …` with a source excerpt); the one-line form (`path:line:col: [Error]: … (name=…, code=0x…)`) only appears when the run asks for it, and the plan runner sets `CAMEL_ERROR_FORMAT=short` for its children, so a *test case* sees the one-line form while a tool that spawns `camel` itself does not. A reader that matches nothing reads as \"the thing is not there\" -- a wrong answer, not an error -- which is how the autodiff ledger went blind twice."
+
+# Where this comes from: `git grep -n ": \[Error\]: "` finds two files in this tree. One is
+# `scripts/autodiff-migration-ledger.mjs`, which parses the one-line frame out of a run it starts
+# itself with the caller's environment, so under the default form its extraction is empty; the other
+# is `test/tools/selftest/backend_echo.mjs`, a fixture that *prints* such a line and parses nothing.
+# The two are the whole survey, and neither was noticed until the ledger's classification was made
+# independent of the text. The checker this plan runs names every reader and what it asks for, so the
+# next one is caught when it is written rather than when its numbers move.
+#
+# The ledger is a recorded exception, not a pass: the row says what it costs (a blank `first` column,
+# not a wrong count) and what closes it (read both shapes, the way `scripts/stdlib-reference.mjs` does,
+# or ask for `short`). The file belongs to the merge lane, so this plan records it instead of editing
+# it -- and fails if the exception stops applying, so the list cannot grow stale.
+
+[[tests]]
+name = "tools.diagnostic_form_readers.asked_for"
+desc = "The two readers in this tree are named with the form each parses, the one that does not ask for its form is recorded with its cost and its repair, and nothing else is in the list: `[DIAG-FORMAT] ok: 2 reader(s)`."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/check-diagnostic-form-readers.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["[DIAG-FORMAT] scripts/autodiff-migration-ledger.mjs: reads the one-line form and does NOT ask for it", "[DIAG-FORMAT] scripts/stdlib-reference.mjs: reads the rich form, which is the default", "[DIAG-FORMAT] exception scripts/autodiff-migration-ledger.mjs:", "[DIAG-FORMAT] repair scripts/autodiff-migration-ledger.mjs:", "[DIAG-FORMAT] ok: 2 reader(s), 0 ask for the one-line form, 0 read both, 1 recorded exception(s)"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000

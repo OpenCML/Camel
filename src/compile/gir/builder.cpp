@@ -1062,6 +1062,10 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         // with the type variables replaced.
         funcType = instantiateFunctionType(funcType, typeBindings_);
     }
+    // The signature as the source wrote it, kept for the body: once a lambda's unwritten parameters
+    // are filled and its rest parameter expanded, `funcType` no longer carries the one name the body
+    // writes (`xs` for `xs_0`, `xs_1`, ...), and the tuple that name stands for is built there.
+    const FunctionType *const written = funcType;
     if (name.empty()) {
         // A lambda's parameters that write no type take it from the function type of the
         // position the lambda stands in (design principles 5.9).
@@ -1092,7 +1096,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         graph->edit().setFlags(static_cast<uint8_t>(
             graph->view().flags() | camel::runtime::kGraphFlagMacro));
     }
-    buildFuncBody(gct, graph, funcType, name, tags);
+    buildFuncBody(gct, graph, funcType, name, tags, written);
     // A declaration tag whose argument names a function (`#vjp(cube_rule)`) keeps that graph
     // in the reference table of the function's graph: the fact is a graph reference, and the
     // reader finds it in the frozen graph (GCGraph::ruleGraphs).
@@ -1173,15 +1177,38 @@ FunctionType *Builder::completeLambdaSignature(
             .commit(name, reason);
         throw BuildAbortException();
     };
-    if (expectedFunc->withTypesCount() != withCount ||
-        expectedFunc->normTypesCount() != funcType->normTypesCount()) {
+    // A rest parameter (`(..xs) => body`) stands for the parameters the lambda's list leaves over:
+    // it absorbs the expected type's members from its index on, so it is the one shape where the
+    // lambda's parameter count may be smaller than the expected type's. The flag is the written
+    // parameter's (GCT recorded it), not a difference in arithmetic -- an omitted parameter type
+    // keeps the strict comparison, because a hole that takes one type cannot stand for several.
+    const GCT::Tree::UnwrittenParam *restHole = nullptr;
+    for (const GCT::Tree::UnwrittenParam &param : *unwritten) {
+        if (param.rest) {
+            restHole = &param;
+            break;
+        }
+    }
+    const size_t expectedTotal =
+        expectedFunc->withTypesCount() + expectedFunc->normTypesCount();
+    if (restHole == nullptr) {
+        if (expectedTotal != total) {
+            report(
+                (*unwritten)[0],
+                std::format(
+                    "the expected type '{}' takes {} parameters and the lambda {}",
+                    expectedFunc->toString(),
+                    expectedTotal,
+                    total));
+        }
+    } else if (expectedTotal < restHole->index) {
         report(
-            (*unwritten)[0],
+            *restHole,
             std::format(
-                "the expected type '{}' takes {} parameters and the lambda {}",
+                "the expected type '{}' ends before the rest parameter, which stands for the "
+                "parameters from position {} on",
                 expectedFunc->toString(),
-                expectedFunc->withTypesCount() + expectedFunc->normTypesCount(),
-                total));
+                restHole->index + 1));
     }
     const auto typeAt = [&](size_t index) -> Type * {
         return index < withCount ? funcType->withTypeAt(index)
@@ -1206,6 +1233,24 @@ FunctionType *Builder::completeLambdaSignature(
         bool isHole  = hole < unwritten->size() && (*unwritten)[hole].index == i;
         if (isHole) {
             const GCT::Tree::UnwrittenParam &param = (*unwritten)[hole++];
+            if (param.rest) {
+                // The rest parameter stands for the expected type's members from this position on:
+                // one parameter each, named after the rest parameter (`xs_0`, `xs_1`, ...), typed
+                // by that member. The single `void` slot the GCT signature kept stands for none of
+                // them, so nothing is added for it. A rest parameter stands for any number of
+                // parameters including none, which is why the arity check above only requires the
+                // expected type to reach this position.
+                const std::string base = nameAt(i);
+                for (size_t k = i; k < expectedTotal; ++k) {
+                    Type *const expanded = k < withCount ? expectedFunc->withTypeAt(k)
+                                                         : expectedFunc->normTypeAt(k - withCount);
+                    if (expanded == nullptr) {
+                        report(param, "the expected function type does not say what this parameter is");
+                    }
+                    factory.addNormArg(base + "_" + std::to_string(k - i), expanded, false);
+                }
+                continue;
+            }
             Type *const wanted                     = i < withCount
                                                          ? expectedFunc->withTypeAt(i)
                                                          : expectedFunc->normTypeAt(i - withCount);
@@ -1241,9 +1286,39 @@ void Builder::stampPermissions(node_handle_t operNode) const {
     }
 }
 
+namespace {
+
+/// Whether the GCT `node`, or something it contains, reads the value `name`. The body of a lambda is a
+/// GCT node by the time its graph is built, and a name the body does not declare stands in it as the
+/// reference it makes (NREF for a value, DREF for something reached as a declaration), so the question
+/// is asked of the graph the body already is rather than of the source it came from. GIR asks it
+/// before building the tuple a rest parameter stands for: a lambda that never reads its rest
+/// parameter gets no node, and its graph is what it was.
+bool graphNamesValue(const GCT::node_ptr_t &node, const std::string &name) {
+    if (node == nullptr) {
+        return false;
+    }
+    const GCT::NodeKind kind = node->type();
+    if ((kind == GCT::NodeKind::NREF || kind == GCT::NodeKind::DREF) && node->name() == name) {
+        return true;
+    }
+    if (kind == GCT::NodeKind::FUNC) {
+        // A function or lambda written inside the body has a body of its own, and its names are not
+        // this body's.
+        return false;
+    }
+    for (size_t i = 0; i < node->size(); ++i) {
+        if (graphNamesValue(node->at(i), name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
 void Builder::buildFuncBody(
     const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
-    const std::string &name, const TagFacts &bodyTags) {
+    const std::string &name, const TagFacts &bodyTags, const FunctionType *written) {
     // The function's graph has the permissions of its own body (which include those of the
     // code it is written in), not those of the place that asked for it to be built (a call
     // that instantiates a generic function, a block that declares it). The permission tags
@@ -1308,6 +1383,66 @@ void Builder::buildFuncBody(
             }
             if (recorder_) {
                 recordDeclaration(graph->nodePortName(port), port, gct);
+            }
+        }
+        // A lambda's rest parameter is a value in its body, not only a name for the parameters it
+        // stands for: `(..xs) => forward(..xs)` reads a tuple whose members are `xs_0`, `xs_1`, ...
+        // -- the parameters the expansion above made. `written` says which name and which position,
+        // because the completed `funcType` holds the expanded parameters and no longer the one name
+        // the body writes.
+        //
+        // The tuple is built only when the body names it (`graphNamesValue` above): a rest lambda that
+        // never reads `xs` gets no node, and its graph is what it was before rest parameters existed.
+        // The question is asked of the GCT the body already is, so what it looks for is the NREF or
+        // DREF the reference became -- not the source name, which is also in the parameter list -- and
+        // it does not enter a nested FUNC, whose names are not this body's.
+        //
+        // The condition under which this is wrong, and the one that would go red: the guard answers
+        // "no" for every kind of node it does not look at, so a body that reaches `xs` through a new
+        // kind -- a name reference that is neither NREF nor DREF -- loses the tuple silently. What
+        // moves then is not the node count: the body's read of `xs` stops resolving, and the red is
+        // `UnresolvedReference` in `rest_params.lambda_rest_as_a_value` (and in every other case whose
+        // rest lambda reads its parameter), the same red the binding was added to remove.
+        if (written != nullptr) {
+            if (const auto *unwritten = GCT::Tree::of(gct)->unwrittenParamsOf(gct)) {
+                for (const auto &param : *unwritten) {
+                    if (!param.rest) {
+                        continue;
+                    }
+                    const std::string restName(written->argNameAt(param.index));
+                    if (!graphNamesValue(gct->at(1), restName)) {
+                        break;
+                    }
+                    const size_t withCount   = funcType->withTypesCount();
+                    const auto normPorts     = graph->view().normPorts();
+                    std::vector<Type *> parts;
+                    std::vector<size_t> slots;
+                    std::vector<node_handle_t> members;
+                    for (size_t k = param.index; k < withCount + funcType->normTypesCount(); ++k) {
+                        const size_t norm = k - withCount;
+                        if (norm >= normPorts.size()) {
+                            break;
+                        }
+                        members.push_back(graph->view().ref(normPorts[norm]));
+                        parts.push_back(funcType->normTypeAt(norm));
+                        slots.push_back(k - param.index);
+                    }
+                    if (!members.empty()) {
+                        node_handle_t tuple = currGraph_->addFillNode(
+                            TupleType::create(parts),
+                            camel::runtime::makeFillPayload(
+                                camel::runtime::GCFillKind::Tuple, slots));
+                        // The members are With inputs, which is how a FILL that a rest argument can
+                        // spread carries them (expandRestArgument reads a tuple FILL's With inputs
+                        // as the arguments, builder_rest.cpp): a Norm tuple is a value, and a value
+                        // is not what `..xs` spreads.
+                        for (node_handle_t member : members) {
+                            linkNodes(LinkType::With, member, tuple);
+                        }
+                        insertNode(restName, tuple);
+                    }
+                    break;
+                }
             }
         }
         bodyStates_[graph.get()] = BodyState::Open;

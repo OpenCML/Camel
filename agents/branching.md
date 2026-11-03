@@ -20,6 +20,78 @@ This repository uses a strict `main` / `develop` / feature-branch workflow. Foll
 - After the merge completes, rebase the merged feature branch so it stays synchronized with the updated `develop`.
 - After the merge, verify branch ancestry before proceeding.
 
+### A lane may not accumulate: the ten-commit rule
+
+A lane's age is measured in `develop`'s API changes, not in days. A lane holding forty unmerged
+commits is a fuse: every change `develop` makes in the code the lane also edits is a merge that has
+not happened yet, and every commit taken out of the lane by diff is a chance to miss one.
+
+The rule, and who counts what when:
+
+- **The lane owner**, before starting a new piece of work, runs
+  `git rev-list --count origin/develop..HEAD`. If it is **more than 10**, the lane merges into
+  `develop` **first** and only then continues.
+- **The lane owner**, after every merge of `develop` into the lane, runs the same count and records
+  it in the merge commit. A lane that merges `develop` in and then adds ten more commits without
+  going back has already crossed the line again.
+- **The coordinator (or the merge lane)**, when a lane is handed over, runs the same count before
+  deciding how to take it. **A lane over 10 is taken whole (`git merge --no-ff`), not by diff** —
+  taking a commit out of a long lane is how a dependency gets missed (the include that `01ff08254`
+  needed is the example on record).
+- **After any merge, the person who merged runs `git rev-list --count origin/develop..HEAD`, which
+  must be 0 — or 1 when the merge commit itself has not been pushed yet.** Anything else means a
+  commit is still outside the door, which has happened twice and was caught only by this count.
+
+A lane may be red; `develop` may not. When a lane's tip is red, take its **last commit that was
+green** and say so in the merge message, so the red's cause lands with the next commit instead of
+sitting on `develop`.
+
+### "Green" is only green on today's `develop`
+
+A lane that reports a green suite reports it about **the `develop` it last merged in**. Five times in
+one night a lane was green and still not mergeable, because the tree it measured predated a change
+its own work would have to live with. Two checks before merging a green lane, both required:
+
+- `git merge-base --is-ancestor origin/develop <the commit to merge>` — **must succeed**. If it
+  fails, the green belongs to an older world: the lane merges `origin/develop` in, re-runs, and
+  reports again.
+- `git rev-list --count origin/develop..<the commit to merge>` — the lane's own commits, a different
+  number from how far behind it is, and both are worth knowing.
+
+One exception: a commit behind by **documentation only**, with each intervening commit named and its
+file list shown in the merge message. Documents cannot make code green or red, so the reading holds.
+Being behind by a commit that touches code is not an exception — it is the thing the check exists
+to catch.
+
+### When a ruling and a reading disagree
+
+A ruling is a decision about what the language should be; a reading is what the tree does today. They
+can disagree, and when they do, **do neither of the two easy things**: do not execute the ruling as
+if the reading were noise, and do not stop and wait.
+
+- **Take the default the page itself wrote down.** If the page that asked the question names a
+  default and a criterion for abandoning it ("if the suite drops, something calls it directly and it
+  is not a candidate"), the measurement is what applies that criterion. A reading of 508 failing
+  cases is the criterion answering.
+- **Write the conflict as a question page** and put it in `questions/`, with the reading, what was
+  tried, and the paths: the ruling stands as written in the record, and the person who ruled gets to
+  rule again knowing the number.
+- **Say in the merge or fix commit that the ruling was not executed, and why.** Otherwise the next
+  reader finds a ruling on `develop` and assumes it was carried out.
+
+The example on record: the ruling said the eleven `:op/ne_*` rows are a second implementation of
+`==` and should go. Deleting them took the suite from `8390/8374/0` to `8390/7866/508`, because
+`modules/graph/module.cpp#neKernel` builds a `__neq__` group for the types that have no `==` to fall back
+on. The rows stayed, a question page carried the reading, and the ruling's own text stayed in the
+record untouched.
+
+**The conflict ends when the ruling comes back with a path.** If the person who ruled responds with
+how to do it — change the call sites to an equivalent form first, then delete — the state is no
+longer "ruling vs reading": it is a migration with an order, and the lane does it. Move the page to
+`reviews/` at that point, because a ruled page left in `questions/` turns the index into a list of
+questions that have been answered. The example above ended exactly this way: the author answered with
+"grep for the URI, read `==` and negate, then delete", and the page went to `reviews/`.
+
 ## Coordinator Workflow: Handover Branches And `wzj-dev`
 
 The coordinator's own work follows a two-step integration so the remote stays quiet and the task book's readers still see progress.
@@ -123,3 +195,20 @@ Agents should prefer explicit verification over visual guesswork from partial hi
 - Do not merge `develop` into `main` until both version confirmation and `changes.log` confirmation have been completed with the user.
 - Never write a merge commit subject that only describes the mechanical act of merging.
 - Never run `checkout`, `merge`, `rebase`, `commit`, `tag`, `reset`, or `stash` in parallel with another git write operation.
+
+## Collapsing a Lane
+A lane that must land as one commit is collapsed against the base it will land on, and the measurement
+that says "only my content is in it" is the **two-dot** diff, `git diff <base>..HEAD`.
+
+- **`...` (three dots) hides what you reverted.** `git diff <base>...HEAD` is the difference from the
+  *merge-base*, so a file the base changed after your merge-base appears as **your** change -- and if
+  your branch still holds the older copy, what it shows as "your edit" is in fact you putting someone
+  else's work back. Wrong: collapse a lane on a three-dot stat and push it. Right: `git diff <base>..HEAD`
+  after `git reset --hard <base>` and re-applying only the paths you own. This has bitten this branch:
+  a three-dot stat read "10 files, mine" while `reset --soft` revealed `agents/test.md`,
+  `src/execute/pass.cpp` and `src/passes/test/fault.cpp` staged as reverts of the base's newer work.
+- **Collapse by resetting to the base and re-taking your paths**, not by rewording history one commit at
+  a time: `git reset --hard <base>; git checkout <old-tip> -- <paths>`, then one commit. The tree is what
+  lands; the base's newer files are untouched because they were never in your paths.
+- **Force-push a shared lane with `--force-with-lease` only.** Another lane may have written to it, and
+  the lease is what turns "I am replacing what I saw" into a refusal when that is no longer true.

@@ -65,7 +65,11 @@ class DraftGraphBuilder {
     auto edit() -> decltype(draft()) { return draft(); }
     /// The transaction the graph belongs to: the only handle to the graph being built.
     runtime::GraphTransaction &transaction() const { return *transaction_; }
-    static DraftGraphBuilder *fromDraft(const runtime::GraphDraft *draft);
+    /// The builder that owns the draft `node` names, or null: a handle whose draft was destroyed
+    /// and whose address another draft now holds names no builder, because the epoch it carries is
+    /// not the one that draft was made with. The address alone would name the wrong builder there,
+    /// and the caller would write into a live graph that is not its own.
+    static DraftGraphBuilder *fromRef(const runtime::DraftNodeRef &node);
     graph_arena_ptr_t arena() const { return arena_; }
     const std::string &name() const { return name_; }
     /// The graph's identity (camel/runtime/graph_id.h), the id of the runtime graph it encodes to.
@@ -170,48 +174,48 @@ class DraftGraphBuilder {
 
     const std::string &nodePortName(runtime::DraftNodeRef node) const;
     const std::string &nodePortName(runtime::gc_node_ref_t nodeId) const {
-        return nodePortName(runtime::DraftNodeRef(&draft(), nodeId));
+        return nodePortName(ref(nodeId));
     }
     const FuncTarget &funcTarget(runtime::DraftNodeRef node) const;
     const FuncTarget &funcTarget(runtime::gc_node_ref_t nodeId) const {
-        return funcTarget(runtime::DraftNodeRef(&draft(), nodeId));
+        return funcTarget(ref(nodeId));
     }
     const DrefTarget &drefTarget(runtime::DraftNodeRef node) const;
     const DrefTarget &drefTarget(runtime::gc_node_ref_t nodeId) const {
-        return drefTarget(runtime::DraftNodeRef(&draft(), nodeId));
+        return drefTarget(ref(nodeId));
     }
     const oper_idx_ptr_t &operTarget(runtime::DraftNodeRef node) const;
     const oper_idx_ptr_t &operTarget(runtime::gc_node_ref_t nodeId) const {
-        return operTarget(runtime::DraftNodeRef(&draft(), nodeId));
+        return operTarget(ref(nodeId));
     }
     void registerNodePortName(runtime::DraftNodeRef node, std::string name);
     void registerNodePortName(runtime::gc_node_ref_t nodeId, std::string name) {
-        registerNodePortName(runtime::DraftNodeRef(&draft(), nodeId), std::move(name));
+        registerNodePortName(ref(nodeId), std::move(name));
     }
     void registerFuncTarget(runtime::DraftNodeRef node, FuncTarget target);
     void registerFuncTarget(runtime::gc_node_ref_t nodeId, FuncTarget target) {
-        registerFuncTarget(runtime::DraftNodeRef(&draft(), nodeId), std::move(target));
+        registerFuncTarget(ref(nodeId), std::move(target));
     }
     void registerDrefTarget(runtime::DraftNodeRef node, DrefTarget target);
     void registerDrefTarget(runtime::gc_node_ref_t nodeId, DrefTarget target) {
-        registerDrefTarget(runtime::DraftNodeRef(&draft(), nodeId), std::move(target));
+        registerDrefTarget(ref(nodeId), std::move(target));
     }
     void registerOperTarget(runtime::DraftNodeRef node, oper_idx_ptr_t target);
     void registerOperTarget(runtime::gc_node_ref_t nodeId, oper_idx_ptr_t target) {
-        registerOperTarget(runtime::DraftNodeRef(&draft(), nodeId), std::move(target));
+        registerOperTarget(ref(nodeId), std::move(target));
     }
     void eraseNodeColdData(runtime::DraftNodeRef node);
     void eraseNodeColdData(runtime::gc_node_ref_t nodeId) {
-        eraseNodeColdData(runtime::DraftNodeRef(&draft(), nodeId));
+        eraseNodeColdData(ref(nodeId));
     }
 
     ::OperatorIndex *registerOperIndex(std::shared_ptr<::OperatorIndex> idx);
     std::shared_ptr<::OperatorIndex> lookupOperIndex(const ::OperatorIndex *raw) const;
 
   private:
-    runtime::DraftNodeRef ref(runtime::gc_node_ref_t id) const {
-        return draft().alive(id) ? runtime::DraftNodeRef(&draft(), id) : runtime::DraftNodeRef();
-    }
+    /// The handle of live node `id`, naming this draft by its address and its epoch: a handle outlives
+    /// the node only while the draft is the one it was made in.
+    runtime::DraftNodeRef ref(runtime::gc_node_ref_t id) const { return draft().ref(id); }
     static slot_t makeStaticSlot(
         const camel::core::data::data_ptr_t &data, camel::core::mm::IAllocator &allocator);
 

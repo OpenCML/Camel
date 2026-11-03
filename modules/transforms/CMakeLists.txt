@@ -6,11 +6,10 @@ add_camel_module(
   SOURCES
     module.cpp
     jvp.cpp
-    jvp_instantiate.cpp
     jvp_operator.cpp
     remat_operator.cpp
+    rule_expand.cpp
     split.cpp
-    split_instantiate.cpp
     split_operator.cpp
     transpose.cpp
     transpose_operator.cpp

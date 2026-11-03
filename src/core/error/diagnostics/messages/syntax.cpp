@@ -141,6 +141,14 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
             },
         },
         {
+            SyntaxDiag::FuncTypeNeedsNames,
+            {
+                "FuncTypeNeedsNames",
+                "A function type names its parameters: write '(x: float, y: float) => float', not a list of types.",
+                "In parentheses a list of types is a tuple type, and '(float, float)' is read as one; the parameters of a function type are written 'name: type'. The names are the writer's to choose, and the types of the function's own parameters already say which is which.",
+            },
+        },
+        {
             SyntaxDiag::WhenAfterBody,
             {
                 "WhenAfterBody",

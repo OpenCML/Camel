@@ -500,11 +500,13 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
             visit(edge.pred);
         }
         // An order edge orders two nodes that both run; it does not make either of them run
-        // (docs/design/effects/edges.cn.md 1.5 and 2). A predecessor that the layout does not
-        // hold anyway is a node nothing reaches, so its order says nothing and is not visited:
-        // no other edge is followed from it.
+        // (docs/design/effects/edges.cn.md 1.5 and 2; design principles 3.1: a node runs iff a node
+        // of its region that runs uses it). A predecessor that the layout does not hold anyway is a
+        // node nothing reaches, so its order says nothing and is not visited: no other edge is
+        // followed from it. Region membership decides *when* a node runs, never *whether* -- it is
+        // read below, to lay the plan out arm by arm, and it does not seed this walk.
         for (const camel::runtime::GCGraphOrderEdge &edge : graph->orderPredsOf(index)) {
-            if (live[edge.pred] || isMember(edge.pred)) {
+            if (live[edge.pred]) {
                 visit(edge.pred);
             }
         }
@@ -523,13 +525,15 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
     if (startRef != camel::runtime::kInvalidNodeRef) {
         visit(startRef);
     }
-    // A node a region says runs is laid out even when nothing outside the region reaches it: an
-    // arm's statements have no value user, and the region is the unit the plan is laid out from
-    // (docs/design/effects/edges.cn.md 5.2). What says a node runs is its membership, so the loop
-    // reads membership: an arm's range is the members of its region, and that range is the only
-    // thing an arm's statements need in order to be laid out.
+    // What runs is what the exit reaches along the edges that carry "used" -- data ports and sync
+    // edges -- and nothing else (design principles 3.1: a node executes iff a node that executes
+    // uses it; 3.4: a sync block does not inherit inward, so a region's membership says *when* a
+    // node of the region runs, never *whether* it runs). The region's result is part of the walk
+    // above because a region that runs makes its value; its members are not, and seeding them here
+    // is what used to make a control edge from the branch the only reason an arm's statements were
+    // laid out.
     for (gc_node_ref_t n = 0; n < live.size(); ++n) {
-        if ((live[n] || isMember(n)) && state[n] != 2) {
+        if (live[n] && state[n] != 2) {
             visit(n);
         }
     }

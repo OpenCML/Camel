@@ -72,6 +72,37 @@ bool shapesAreFixed(const camel::core::type::Type *type) {
     return true;
 }
 
+bool nodeMayFault(
+    GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
+    const camel::core::type::Type *castSource, bool fixedShapes) {
+    switch (kind) {
+    case GCNodeKind::Data:
+    case GCNodeKind::Port:
+    case GCNodeKind::Copy:
+    case GCNodeKind::Fill:
+    case GCNodeKind::Accs: // reads a field of a value whose type has it: nothing to fail
+    case GCNodeKind::Brch:
+    case GCNodeKind::Join:
+        return false;
+    case GCNodeKind::Cast:
+        return castMayFault(castTarget, castSource);
+    case GCNodeKind::Oper: {
+        const std::optional<camel::core::OperatorTraits> traits =
+            camel::core::OperatorTable::instance().find(oper);
+        if (!traits.has_value()) {
+            return true; // nobody declared it: not known never to fault
+        }
+        // An elementwise operator fails only when its operands' shapes do not broadcast: asked
+        // with every shape the type states in full, it cannot (nodeIsFreelySchedulable).
+        return traits->mayFault && !(traits->elementwise && fixedShapes);
+    }
+    default:
+        // A call, a function, a gate, a loop: what it runs is not in this table, and nothing
+        // says it cannot fault.
+        return true;
+    }
+}
+
 bool nodeIsFreelySchedulable(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
     const camel::core::type::Type *castSource, bool fixedShapes) {
@@ -85,14 +116,14 @@ bool nodeIsFreelySchedulable(
     case GCNodeKind::Join:
         return true;
     case GCNodeKind::Cast:
-        return !castMayFault(castTarget, castSource);
+        return !nodeMayFault(kind, camel::core::kNoOper, castTarget, castSource, fixedShapes);
     case GCNodeKind::Oper: {
         const auto &table = camel::core::OperatorTable::instance();
         const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
         if (!table.mayBeRecomputed(oper) || !traits.has_value()) {
             return false;
         }
-        return !traits->mayFault || (traits->elementwise && fixedShapes);
+        return !nodeMayFault(kind, oper, nullptr, nullptr, fixedShapes);
     }
     default:
         // A call, a function, a gate, a loop: an anchor that may be an effect, and nothing
@@ -121,6 +152,30 @@ bool nodeIsFreelySchedulable(const GCGraph &graph, gc_node_ref_t ref) {
     }
     default:
         return nodeIsFreelySchedulable(node->kind, camel::core::kNoOper);
+    }
+}
+
+bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref) {
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr) {
+        return true;
+    }
+    switch (node->kind) {
+    case GCNodeKind::Oper: {
+        const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
+        return body == nullptr || nodeMayFault(node->kind, body->oper);
+    }
+    case GCNodeKind::Cast: {
+        const auto inputs = graph.normInputsOf(ref);
+        const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
+        return nodeMayFault(
+            node->kind,
+            camel::core::kNoOper,
+            node->dataType(),
+            source != nullptr ? source->dataType() : nullptr);
+    }
+    default:
+        return nodeMayFault(node->kind, camel::core::kNoOper);
     }
 }
 
@@ -557,11 +612,13 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             // predecessor). The control input is what that wait used to be written as; the paths
             // this lane has not moved onto the sync edge yet still carry one, and the ones that
             // have carry the sync edge instead.
-            // Asked through the facts every pass asks (camel/runtime/effect_liveness.h): the wait a
-            // GATE carries is either a block's chain or an edge of its own, and the two are named
-            // there instead of here. A GATE with neither waits on nothing, which is what this
-            // refuses.
-            //
+            // The wait a GATE carries is either a block's chain or an edge of its own, and this
+            // refuses a gate with neither. It is a structural reading, and it is written where it is
+            // read: `EffectLivenessFacts` no longer carries it (camel/runtime/effect_liveness.h
+            // says why -- four call sites filled that field in three spellings, and none of them
+            // was the liveness answer).
+            const bool hasWaitEdge     = !graph->ctrlInputsOf(ref).empty();
+            const bool isSyncStatement = !graph->syncPredsOf(ref).empty();
             // This is an assertion, not a rule programs reach. Measured: payload validation does run
             // on the execution path (three graphs validated for a small program, five with a
             // fault-injection pass in the pipeline), but a gate whose waits are all taken away never
@@ -571,10 +628,7 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             // and ran with no error, and that gate was gone afterwards (2 gates before it, 1 after).
             // If this ever fires, either `dceDraft` stopped removing such a gate or the builder
             // started writing one that nothing waits on.
-            EffectLivenessFacts facts;
-            facts.hasWaitEdge     = !graph->ctrlInputsOf(ref).empty();
-            facts.isSyncStatement = !graph->syncPredsOf(ref).empty();
-            if (!facts.hasWaitEdge && !facts.isSyncStatement) {
+            if (!hasWaitEdge && !isSyncStatement) {
                 throw std::runtime_error(
                     std::format(
                         "Runtime graph '{}' has GATE node {} without a wait: no sync predecessor "
@@ -708,6 +762,19 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
     }
     return (bodyBytes + kPayloadWordBytes - 1) / kPayloadWordBytes;
 }
+
+/// Every sync edge the draft has is built into the payload, whatever it ends on (author ruling
+/// 2026-11-02 07:30: the edges stay, the check side changes). The build used to leave an edge out
+/// when its end was neither a statement, a `GATE` nor a node in the tail's region -- the "do not
+/// build a wait the seal would refuse" half of the question -- and that is what lost the waits
+/// whose end was a block's `Join` or `Func`: edges.cn.md 1 and 4.6 say the chain's tail reaches
+/// the block's value, and the value may be one of those.
+///
+/// So the wait is not dropped, and what the seal makes of it stays the seal's business: the check
+/// side judges the ends of an edge the graph has, which is the half of the ruling that the code
+/// below is about. Measured on this corpus, dropping the edge was also the only reason the tree did
+/// not build: with it gone, `feat.exemplars` reaches `05_effect_order` -- the chain of a block whose
+/// value the old predicate refused -- and the full fast layer has no red.
 
 DraftPayloadPlan planDraftPayload(
     const GraphDraft &draft, std::optional<std::span<const gc_node_ref_t>> live = std::nullopt) {
@@ -1268,6 +1335,41 @@ bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byS
     }
     default:
         return nodeIsFreelySchedulable(header->kind, camel::core::kNoOper);
+    }
+}
+
+bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr || !draft.alive(id)) {
+        return true;
+    }
+    switch (header->kind) {
+    case GCNodeKind::Oper: {
+        const std::span<const std::byte> payload = draft.payloadOf(id);
+        bool fixed = byShape && shapesAreFixed(header->dataType);
+        for (gc_node_ref_t input : draft.normInputsOf(id)) {
+            const DraftNodeHeader *in = draft.header(input);
+            fixed = fixed && in != nullptr && shapesAreFixed(in->dataType);
+        }
+        return payload.size() < sizeof(GCOperBody) ||
+               nodeMayFault(
+                   header->kind,
+                   reinterpret_cast<const GCOperBody *>(payload.data())->oper,
+                   nullptr,
+                   nullptr,
+                   fixed);
+    }
+    case GCNodeKind::Cast: {
+        const auto inputs = draft.normInputsOf(id);
+        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
+        return nodeMayFault(
+            header->kind,
+            camel::core::kNoOper,
+            header->dataType,
+            source != nullptr ? source->dataType : nullptr);
+    }
+    default:
+        return nodeMayFault(header->kind, camel::core::kNoOper);
     }
 }
 

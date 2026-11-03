@@ -1,0 +1,9 @@
+// A function type names its parameters. Written without names, the types are a tuple type and the
+// `=>` that follows fits nothing: the refusal names the form instead.
+
+func g(x: float, y: float): float sync { return x + y }
+
+func main(): int sync {
+    let f: (float, float) => float = g
+    return 0
+}

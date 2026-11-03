@@ -1,0 +1,29 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
+# The `std::cml` corpus sweep, as a reading rather than a pin: how many of `test/cases/**` print,
+# how many are refused and for which reason, and how many of the printed programs come back as the
+# same graph (`docs/design/graph-store/plan-roundtrip.cn.md` §0 has the numbers and the argument).
+# Slow tier: it runs the printer over the whole corpus and recompiles everything it printed.
+#
+# The three numbers are reported apart on purpose -- printed is not round trips, and a printed
+# source that compiles is not a graph that survived.
+#
+# The plan-level `tier` says which layer this file belongs to, and it is `slow` because its one
+# entry is slow: without the line the file claims `fast` (the default) while offering the fast layer
+# nothing, and the runner fails a plan of the layer it is running that starts no test in it
+# (2026-11-02: this was the one file in the tree that tripped that check).
+tier = "slow"
+
+[[tests]]
+name = "cml.corpus_sweep"
+desc = "`std::cml` over every `*.cml` under `test/cases`: the sweep line (files / printed / refused / frontend / timeout), one line per refusal family (the diagnostic's reason with names and numbers masked), and the round-trip line (checked / equivalent / not_equivalent / unfaithful). The buckets are exclusive and cover the corpus, so the reading is a to-do list: what the printer refuses, and what it prints but does not keep."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/cml-sweep.mjs"
+args = ["${case}"]
+tier = "slow"
+expect_exit = 0
+expect_stdout_contains = ["SWEEP files=", "REFUSALS families=", "ROUNDTRIP checked="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 1800000

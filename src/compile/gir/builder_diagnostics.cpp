@@ -1194,7 +1194,16 @@ void Builder::markNonRetainingReads() {
     const std::vector<StaticArg> statics(1);
 
     for (node_handle_t read : syncedReads_) {
-        runtime::GraphTransaction *transaction = nodeTransactionOf(read);
+        // A synced read names the graph it was made in, and that graph is handed over when its body
+        // is complete and released with its builder: `nodeTransactionOf` would then assert that the
+        // read has an owner (builder_support.h, `nodeGraphOf`). Nothing is left to mark in a graph
+        // that is gone, so such a read is skipped instead -- and it is skipped for the graph the
+        // read was made in, not for whichever graph the allocator put at its address since.
+        auto *owner = DraftGraphBuilder::fromRef(read);
+        if (owner == nullptr) {
+            continue;
+        }
+        runtime::GraphTransaction *transaction = &owner->transaction();
         const auto &draft                      = transaction->graph();
         const draft_node_ref_t id              = nodeIdOf(read);
         if (!draft.alive(id) || id == draft.exitNode() || id == draft.outputNode() ||

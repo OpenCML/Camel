@@ -203,17 +203,16 @@ tree_unzip: (r: R, s: S) => ?
 
 ```text
 jvp: (f: F) => Jvp<F> when is_function::<F>()
-split: (f: (v: float, d: float) => (float, float)) => (v: float, d: float) => (float, float)
+split: (f: (v: float, d: float) => (float, float)) => (v: float, d: float) => (float, (float, float) => float)
 transpose: (f: F) => Transpose<F> when is_function::<F>()
 vmap: (f: F) => Vmap<F> when is_function::<F>()
 remat: (f: F) => F when is_function::<F>()
 ```
 
-**`vjp`** — import { ... } from vjp — 4 name(s)
+**`vjp`** — import { ... } from vjp — 3 name(s)
 
 ```text
-vjp: (f: (x: T) => float) => (x: T) => (float, (ct: float) => (T,))
-vjp: (f: (x: T, y: U) => float) => (x: T, y: U) => (float, (ct: float) => (T, U))
+vjp: (f: F) => Vjp<F> when is_function::<F>()
 grad: (f: (x: float) => float) => (x: float) => float
 with_grad: (f: F) => F when is_function::<F>()
 ```
@@ -616,7 +615,7 @@ arity_probe: <tag: int, extra: int[] = []> (f: F, example: E) => int when is_fun
 zen: () => string
 ```
 
-**`graph`** — import { ... } from graph — 42 name(s)
+**`graph`** — import { ... } from graph — 45 name(s)
 
 ```text
 graph_of: (f: F) => Graph when is_function::<F>()
@@ -633,9 +632,12 @@ kind: (n: Node) => NodeKind
 op: (n: Node) => Op?
 op_name: (o: Op) => string
 is_pure: (n: Node) => bool
+may_be_recomputed: (n: Node) => bool
+may_fault: (n: Node) => bool
 is_anchor: (n: Node) => bool
 is_written_slot: (n: Node) => bool
 is_constant: (n: Node) => bool
+constant_bytes: (n: Node) => int
 type_of: (n: Node) => TypeRef?
 type_name: (t: TypeRef) => string
 callee: (n: Node) => Graph?
@@ -673,7 +675,7 @@ saturate: <rules: Rule[], rounds: int = 6, strict: bool = false> (f: F) => F! wh
 extract: <cost: (o: Op, inputs: float[]) => float> (f: F) => F! when is_function::<F>()
 run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false> (f: F) => Run<F>! when is_function::<F>()
 check: <samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport
-check: <over: F, samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport when is_function::<F>()
+check: <samples: int = 100, seed: int = 0> (rules: Rule[], over: F) => CheckReport when is_function::<F>()
 check_text: (r: CheckReport) => string
 coverage_table: string
 explain: <a: Node, b: Node> (r: Run<F>) => Proof!
@@ -767,7 +769,7 @@ update: (opt: Sgd, params: P, grads: G, state: SgdState) => (P, SgdState)
 update: (opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)
 ```
 
-**`autodiff`** — import { ... } from autodiff — 15 name(s)
+**`autodiff`** — import { ... } from autodiff — 19 name(s)
 
 ```text
 grad: (f: F) => Gradient<F> when is_function::<F>()
@@ -780,11 +782,15 @@ sub_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 mul_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 div_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 neg_tangent: (x: T, dx: T) => T when is_float::<T>()
-add_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
-sub_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
-mul_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
-div_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
-neg_cotangent: (x: T, ct: T) => T when is_float::<T>()
+add_cotangent: (ct: T) => T when is_float::<T>()
+sub_cotangent: (ct: T) => T when is_float::<T>()
+mul_cotangent: (c: T, ct: T) => T when is_float::<T>()
+div_cotangent: (c: T, ct: T) => T when is_float::<T>()
+neg_cotangent: (ct: T) => T when is_float::<T>()
+add_cotangent_c: (ct: T) => T when is_float::<T>()
+sub_cotangent_c: (ct: T) => T when is_float::<T>()
+mul_cotangent_c: (x: T, ct: T) => T when is_float::<T>()
+div_cotangent_c: (x: T, c: T, ct: T) => T when is_float::<T>()
 ```
 
 **`rulesets.jvp`** — import { ... } from rulesets.jvp — 7 name(s)

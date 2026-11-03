@@ -1411,7 +1411,7 @@ together with the derivative of `f` at 2 in the direction 1.
 #### `split`
 
 ```camel
-split: (f: (v: float, d: float) => (float, float)) => (v: float, d: float) => (float, float)
+split: (f: (v: float, d: float) => (float, float)) => (v: float, d: float) => (float, (float, float) => float)
 ```
 
 The step of `vjp` that separates a lifted function into the part computable now and the linear
@@ -1419,20 +1419,21 @@ residue (design 4.2, 4.4). Implemented for the straight-line tier (`modules/tran
 the halves are built from the graph, and what crosses the cut -- the residuals -- is read off the
 graph too, so a body that needs a value it computed carries it instead of computing it again.
 
-The cut, as the author writes it (15:25; revised 2026-11-01): the first half takes the ordinary
-parameters and answers with the result and the *residuals* -- the values the second half reads --
-and the second takes the residuals and the `with` parameters and answers with the result.
+The cut, as the author rules it (15:25; revised 2026-11-01 and 2026-11-02 08:30): the front half
+takes the ordinary parameters and answers `(result, lin)`; `lin` is the back half, closed over the
+residuals -- the values it reads -- and takes the tangents and nothing else.
 
-    type Split<F> = ((..ParamsOf<F>) => (ResultOf<F>,  _),
-                     (_, ..WithOf<F>) => ResultOf<F>)
+    split(f) = (fwd)  where  fwd(..values) = (result, lin)
+    lin      = the back half, its residuals captured rather than passed
 
-The residual position is written `_` and is not a type a program can name: the residuals are a
-property of `f`'s graph, so their number and their types are read where the graph is in hand, and
-the compiler fills the position at instantiation (`ResidualsOf<F>` was the earlier spelling of a
-type function doing that, and it is gone). The second half is linear in the cotangent it is given
--- that is the condition the transpose step (M3) reads -- and both halves speak in `Tangent<T>`
+The residuals are therefore **not a position in any type**: they are `lin`'s closure tuple, whose
+layout the run-time kernel reads off the back half's graph (the capture ports the graph declares),
+one member per residual, in the order the graph names them. At a call site `lin` is an ordinary
+function type, so no signature states a count it cannot know and no guard has to admit one
+(`ResidualsOf<F>`, and the `_` position before it, are both gone). `lin` is linear in the tangent
+it is given -- the condition the transpose step (M3) reads -- and both halves speak in `Tangent<T>`
 at the top of this file.
-fragment of the composition: `let (fwd, lin) = split(jvp(f))`.
+fragment of the composition: `let fwd = split(jvp(f))`, then `let (y, lin) = fwd(x)`.
 
 - Example (a fragment, not compiled): `let step = split`
 - Why it is not compiled: `split` takes the lifted function a `jvp` call writes, so the example is a
@@ -1511,7 +1512,7 @@ declarations show, because the result of a call is the exit type its resolver gi
 #### `vjp`
 
 ```camel
-vjp: (f: (x: T) => float) => (x: T) => (float, (ct: float) => (T,))
+vjp: (f: F) => Vjp<F> when is_function::<F>()
 ```
 
 The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
@@ -1524,23 +1525,24 @@ parameter has a one-long one -- `(27.0)` for `vjp(cube)(3.0)`'s pullback at `ct 
 number a gradient is comes out of it by position: `grad(f)(x)` is `vjp(f)(x).1(1.0).0` (author's
 ruling of 2026-11-01 14:30: one rule for every arity, no exception for one parameter, no type
 function that takes an element out of a one-long tuple).
+The derivative of `f` with respect to its parameters: `vjp(f)(x, y, ...)` is the pair
+`(value, pullback)`, and `pullback(ct)` answers the cotangents of the parameters -- one member per
+parameter, so a function of one parameter has a one-long tuple (author's ruling of 2026-11-01: one
+rule for every arity, no exception for one parameter, no type function that takes an element out of
+a one-long tuple).
+
+One declaration for every arity: `F` is the function, `Vjp<F>` says the parameters are `F`'s and the
+pullback's cotangents are too (stdlib/types.cml), and `(..xs)` takes the parameters the instantiated
+`Vjp<F>` has -- the ordinary rule that a lambda takes its parameters' types from the position it
+stands in, applied to a pack (author's ruling of 2026-11-01 19:10). The lambda's rest parameter is a
+value in its body: `xs` is the tuple of those parameters, and `split(jvp(f))(..xs)` spreads it into
+the call of the forward half, which is the rule the language already had for spreading a tuple.
+The whole reading in one line: the function is written where the call is, so the example is a
+program of its own -- `y` is `x * x` at 3, and the pullback read at `ct = 1.0` answers the
+derivative there, one member per parameter.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example (a fragment, not compiled): `let reading = vjp(f)`
-- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
-
-#### `vjp`
-
-```camel
-vjp: (f: (x: T, y: U) => float) => (x: T, y: U) => (float, (ct: float) => (T, U))
-```
-
-The same transform for a function of two parameters: `vjp(f)(x, y)` is `(value, pullback)` and
-`pullback(ct)` gives both cotangents, in the order `f` takes the parameters.
-
-- Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example (a fragment, not compiled): `let reading_of_two = vjp(f)`
-- Why it is not compiled: `f` is a function value of two parameters, so the example is a fragment of a program that declares one
+- Example: `let (y, pullback) = vjp((x: float) => x * x)(3.0)` gives `y = 9.0, and pullback(1.0) is (6.0)`
 
 #### `grad`
 
@@ -5314,6 +5316,38 @@ Whether the node is an operation whose operator is declared pure.
 - Example (a fragment, not compiled): `is_pure(n)`
 - Why it is not compiled: n is a node of the surrounding pass
 
+#### `may_be_recomputed`
+
+```camel
+may_be_recomputed: (n: Node) => bool
+```
+
+Whether a pass may compute the node's value itself and treat it as a value: its operator is
+pure *and* foldable, so folding it, merging it with an identical call or dropping it when
+nothing reads it cannot change the program. A pure operator that must run where the program
+writes it (a rule's value, a `fact`) is not one, and neither is any node that is no operation.
+This is the question the C++ fold, cse and dce ask (`OperatorTable::mayBeRecomputed`); whether
+the call may also be *moved* or dropped asks `may_fault` as well.
+
+- Example (a fragment, not compiled): `may_be_recomputed(n)`
+- Why it is not compiled: n is a node of the surrounding pass
+
+#### `may_fault`
+
+```camel
+may_fault: (n: Node) => bool
+```
+
+Whether running the node can raise a fault where the program writes it (a division by zero, an
+index out of range, a conversion whose value does not fit). It is the operator table's own fact
+(`OperatorTraits::mayFault`, the one the C++ sweep reads) and the conversion's (`castMayFault`);
+a call, a loop or a gate nobody declared answers true, and an elementwise operator whose
+operands' shapes the types state in full answers false. A node that may fault is not a value a
+pass may drop, move or merge away, whatever the purity of its operator.
+
+- Example (a fragment, not compiled): `may_fault(n)`
+- Why it is not compiled: n is a node of the surrounding pass
+
 #### `is_anchor`
 
 ```camel
@@ -5348,6 +5382,20 @@ is_constant: (n: Node) => bool
 Whether the node is a constant of the graph.
 
 - Example (a fragment, not compiled): `is_constant(n)`
+- Why it is not compiled: n is a node of the surrounding pass
+
+#### `constant_bytes`
+
+```camel
+constant_bytes: (n: Node) => int
+```
+
+The bytes the node's constant value occupies: the measure `std::opt` and `std::opt::fold` clamp with
+`constant_budget`, so that a pass written in Camel can ask the same question the native pass asks. The
+cost is the value's elements plus the shape that describes them, the walk follows members 8 deep, and a
+node that is no constant costs 0.
+
+- Example (a fragment, not compiled): `constant_bytes(n)`
 - Why it is not compiled: n is a node of the surrounding pass
 
 #### `type_of`
@@ -5751,19 +5799,27 @@ A build without a solver answers `Sampled` and `Refuted` and never `Proved`. A g
 checked at the types every operator group registered.
 
 - Example (a fragment, not compiled): `rules->check<samples: 1000, seed: 7>`
-- Why it is not compiled: a rule set comes from the caller
+- Why it is not compiled: `rules` comes from the caller
 
 #### `check`
 
 ```camel
-check: <over: F, samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport when is_function::<F>()
+check: <samples: int = 100, seed: int = 0> (rules: Rule[], over: F) => CheckReport when is_function::<F>()
 ```
 
 The same, with the law also checked at the types of the values `over` has, each once, in the
-order its graphs write them.
+order its graphs write them. `over` is an ordinary argument, not a `with` one, so that both
+overloads of `check` name each `with` position the same way: a named argument
+(`check<samples: 1000>`) means one position in every declaration of the set, and a position one
+declaration names `samples` and the other names `over` is one the name does not reach
+(`OverloadParameterNames`). It cannot stand in the `with` list in front of `samples` and `seed`
+either, because a `with` parameter without a default may not follow one that has a default
+(`WithParameterAfterDefault`), and a function-typed one takes no default (`null` has type
+`void`, and `F?` leaves `F` unbound). Written first, it is the argument the arrow carries:
+`rules->check<8, 1>(f)`.
 
-- Example (a fragment, not compiled): `rules->check<over: f>`
-- Why it is not compiled: a rule set and a function come from the caller
+- Example (a fragment, not compiled): `rules->check(f)`
+- Why it is not compiled: `rules` and `f` come from the caller
 
 #### `check_text`
 
@@ -6788,52 +6844,112 @@ The tangent of `-x` along `dx`: `-dx`.
 #### `add_cotangent`
 
 ```camel
-add_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+add_cotangent: (ct: T) => T when is_float::<T>()
 ```
 
 The cotangent of `x` in `x + c`: the cotangent of the sum, unchanged.
 
-- Example: `add_cotangent(3.0, 5.0, 2.0)` gives `2.0`
+The first five take only the values their answer is a function of -- `ct`, and the other name
+where the answer reads it. A transpose rule's right side names what it calls with exactly these,
+so a position whose answer does not read an operand asks for no value of it; that is what lets
+the transposed loop body answer a rule whose other operand is the round's own state (design
+principles: a value the walk does not carry costs nothing unless the rule reads it).
+
+- Example: `add_cotangent(2.0)` gives `2.0`
 
 #### `sub_cotangent`
 
 ```camel
-sub_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+sub_cotangent: (ct: T) => T when is_float::<T>()
 ```
 
 The cotangent of `x` in `x - c`: the cotangent of the difference, unchanged.
 
-- Example: `sub_cotangent(3.0, 5.0, 2.0)` gives `2.0`
+- Example: `sub_cotangent(2.0)` gives `2.0`
 
 #### `mul_cotangent`
 
 ```camel
-mul_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+mul_cotangent: (c: T, ct: T) => T when is_float::<T>()
 ```
 
 The cotangent of `x` in `x * c`: `ct * c`.
 
-- Example: `mul_cotangent(3.0, 5.0, 2.0)` gives `10.0`
+- Example: `mul_cotangent(5.0, 2.0)` gives `10.0`
 
 #### `div_cotangent`
 
 ```camel
-div_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+div_cotangent: (c: T, ct: T) => T when is_float::<T>()
 ```
 
 The cotangent of `x` in `x / c`: `ct / c`.
 
-- Example: `div_cotangent(6.0, 4.0, 2.0)` gives `0.5`
+- Example: `div_cotangent(4.0, 2.0)` gives `0.5`
 
 #### `neg_cotangent`
 
 ```camel
-neg_cotangent: (x: T, ct: T) => T when is_float::<T>()
+neg_cotangent: (ct: T) => T when is_float::<T>()
 ```
 
 The cotangent of `x` in `-x`: `-ct`.
 
-- Example: `neg_cotangent(3.0, 2.0)` gives `-2.0`
+- Example: `neg_cotangent(2.0)` gives `-2.0`
+
+### The other half: the cotangent of each name of a rule's left side
+
+The five above answer the cotangent of `x`, the first name their rule's left side binds. A rule
+like `x - c` has a second name, and its cotangent is not the one above with the arguments swapped:
+`sub_cotangent(ct)` is `ct`, while the cotangent of `c` in `x - c` is `-ct`. So each name gets its
+own function, named by position, and a rule's right side answers both -- a tuple, in the order the
+left side names them -- so the transposed graph calls the one for the name it is writing, and no
+transform re-derives the arithmetic in C++.
+
+`x` keeps its own names above (`mul_cotangent` and so on) and nothing here replaces them: `vjp` and
+`jvp` call those, and their meaning -- the cotangent of the first name -- is the meaning they keep.
+What changed is only their parameters: each takes the values its answer reads, so a rule that can
+be answered without an operand does not name it and does not need it.
+
+#### `add_cotangent_c`
+
+```camel
+add_cotangent_c: (ct: T) => T when is_float::<T>()
+```
+
+The cotangent of `c` in `x + c`: the cotangent of the sum, unchanged.
+
+- Example: `add_cotangent_c(2.0)` gives `2.0`
+
+#### `sub_cotangent_c`
+
+```camel
+sub_cotangent_c: (ct: T) => T when is_float::<T>()
+```
+
+The cotangent of `c` in `x - c`: `-ct`, the opposite sign of `sub_cotangent(ct)`.
+
+- Example: `sub_cotangent_c(2.0)` gives `-2.0`
+
+#### `mul_cotangent_c`
+
+```camel
+mul_cotangent_c: (x: T, ct: T) => T when is_float::<T>()
+```
+
+The cotangent of `c` in `x * c`: `ct * x`.
+
+- Example: `mul_cotangent_c(3.0, 2.0)` gives `6.0`
+
+#### `div_cotangent_c`
+
+```camel
+div_cotangent_c: (x: T, c: T, ct: T) => T when is_float::<T>()
+```
+
+The cotangent of `c` in `x / c`: `-(ct * x / (c * c))`.
+
+- Example: `div_cotangent_c(6.0, 4.0, 2.0)` gives `-0.75`
 
 <a id="rulesets.jvp"></a>
 

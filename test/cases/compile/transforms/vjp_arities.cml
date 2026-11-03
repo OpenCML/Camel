@@ -1,0 +1,42 @@
+// One rule for every arity: `vjp` takes the parameters of the function it is given, whatever their
+// number, and the pullback answers one cotangent per parameter. The body is one lambda with a rest
+// parameter, and the three calls below are the three arities through that one declaration.
+import { vjp } from vjp
+
+func one(x: float): float {
+    return x * x
+}
+
+func two(x: float, y: float): float {
+    return x * y
+}
+
+func three(x: float, y: float, z: float): float {
+    return x * y * z
+}
+
+func main(): int sync {
+    let (v1, p1) = vjp(one)(3.0)
+    let (g1,) = p1(1.0)
+    println("arity 1")
+    println(v1)
+    println(g1)
+
+    let (v2, p2) = vjp(two)(3.0, 2.0)
+    let (gx2, gy2) = p2(1.0)
+    println("arity 2")
+    println(v2)
+    println(gx2)
+    println(gy2)
+
+    let (v3, p3) = vjp(three)(2.0, 3.0, 4.0)
+    let (gx3, gy3, gz3) = p3(1.0)
+    println("arity 3")
+    println(v3)
+    println(gx3)
+    println(gy3)
+    println(gz3)
+
+
+    return 0
+}

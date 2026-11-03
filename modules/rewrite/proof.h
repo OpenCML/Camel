@@ -98,14 +98,38 @@ class ProofObject final : public rtdata::Object {
     /// handed out: a proof never changes after that.
     void setChain(Chain chain) { chain_ = std::move(chain); }
 
-    bool equals(const rtdata::Object *other, const Type *type, bool deep = false) const override;
+    /// The virtuals are inline wrappers over out-of-line bodies on purpose: a class a *reader* may
+    /// hold without linking the module cannot have a key function. The key function is the first
+    /// declared non-inline virtual, and the compiler emits the vtable and the type info in the one
+    /// object file that defines it -- the module's. The debugger is such a reader: its
+    /// `explain` TU calls the inline accessors above on a `ProofObject`, and `-fsanitize=vptr`
+    /// (part of the UBSan leg) turns every such call into a lookup of `typeinfo for ProofObject`,
+    /// which the debugger does not link (2026-11-02: Debug + ASan/UBSan failed to link
+    /// `camel-db` on exactly that symbol, while the Release leg, with no sanitizer, never asked
+    /// for it). With no key function the type info is emitted with vague linkage in every object
+    /// file that needs it, so the reader gets its own copy and the module keeps its one.
+    bool equals(const rtdata::Object *other, const Type *type, bool deep = false) const override {
+        return equalsImpl(other, type, deep);
+    }
     rtdata::Object *
-    clone(mm::IAllocator &allocator, const Type *type, bool deep = false) const override;
-    void print(std::ostream &os, const Type *type) const override;
+    clone(mm::IAllocator &allocator, const Type *type, bool deep = false) const override {
+        return cloneImpl(allocator, type, deep);
+    }
+    void print(std::ostream &os, const Type *type) const override { printImpl(os, type); }
     void onMoved() override {}
-    void updateRefs(const rtdata::Object::RefRelocator &relocate, const Type *type) override;
-    void finalize() noexcept override;
+    void updateRefs(const rtdata::Object::RefRelocator &relocate, const Type *type) override {
+        updateRefsImpl(relocate, type);
+    }
+    void finalize() noexcept override { finalizeImpl(); }
 
+  private:
+    bool equalsImpl(const rtdata::Object *other, const Type *type, bool deep) const;
+    rtdata::Object *cloneImpl(mm::IAllocator &allocator, const Type *type, bool deep) const;
+    void printImpl(std::ostream &os, const Type *type) const;
+    void updateRefsImpl(const rtdata::Object::RefRelocator &relocate, const Type *type);
+    void finalizeImpl() noexcept;
+
+  public:
     ProofObject(RewriteRecord *record, const camel::runtime::RewriteStats &stats)
         : record_(record), stats_(stats), input_(record != nullptr ? record->input : nullptr) {}
 

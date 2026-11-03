@@ -587,7 +587,7 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
             if (regionExit) {
                 if (!hasDirectDataDependency(use.node, exit) &&
                     !dataPathReaches(use.node, exit)) {
-                    linkNodes(LinkType::Ctrl, use.node, exit);
+                    writeControlLink(use.node, exit);
                     continue;
                 }
                 pending.push_back(use);
@@ -719,6 +719,18 @@ node_handle_t Builder::callValuePartOf(node_handle_t call, uint32_t part) {
         partType = static_cast<const TupleType *>(type)->typeAt(part);
     }
     node_handle_t node = currGraph_->addAccsNode(partType, part);
+    // The node reads the call's value, and that value exists from the call on, so the node belongs
+    // to the call's region and not to the region the first reader happens to stand in. It was made
+    // in the region being built, which for the first reader inside a branch arm is that arm: a
+    // second reader in the other arm was then handed the same node by the cache above and read a
+    // node that runs only when the first arm is taken (defect A3, `if c then v else v` over a `var`
+    // a call wrote). Nothing leaves a region here -- the input is already outside it, and a call
+    // inside the arm keeps its node in the arm -- so a graph whose reads all stood in the region of
+    // their call is unchanged.
+    const uint32_t callRegion = nodeDraftOf(call)->nodeRegion(nodeIdOf(call));
+    if (nodeDraftOf(node)->nodeRegion(nodeIdOf(node)) != callRegion) {
+        nodeDraftOf(node)->setNodeRegion(nodeIdOf(node), callRegion);
+    }
     if (value.parts.size() <= part) {
         value.parts.resize(part + 1, nullptr);
     }
@@ -791,7 +803,7 @@ void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
     }
     if (auto modifier = modifierOf(variable); modifier.has_value()) {
         if (sameGraph(*modifier, currGraph_) && shouldAddSyncCtrlLink(*modifier, node)) {
-            linkNodes(LinkType::Ctrl, *modifier, node);
+            writeControlLink(*modifier, node);
         }
     }
 }
@@ -1549,7 +1561,7 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     // is written, in the chain, with or without a reader of its value (design principles 3.4).
     if (synced_ && camel::runtime::castMayFault(targetType, sourceType)) {
         if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, castNode)) {
-            linkNodes(LinkType::Ctrl, lastSyncedNode_, castNode);
+            writeControlLink(lastSyncedNode_, castNode);
         }
         lastSyncedNode_ = castNode;
         chainedNodes_.insert(castNode);
@@ -1702,7 +1714,7 @@ node_handle_t Builder::readVariableThrough(
     if (version == variable) {
         if (auto modifier = modifierOf(variable); modifier.has_value()) {
             if (sameGraph(*modifier, currGraph_) && linkCheek(*modifier, value)) {
-                linkNodes(LinkType::Ctrl, *modifier, value);
+                writeControlLink(*modifier, value);
             }
         }
     }
@@ -1731,7 +1743,7 @@ node_handle_t Builder::readVariableThrough(
         syncedReads_.push_back(value);
         if (nodeKindOf(variable) == camel::runtime::GCNodeKind::Port) {
             if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, value)) {
-                linkNodes(LinkType::Ctrl, lastSyncedNode_, value);
+                writeControlLink(lastSyncedNode_, value);
             }
             lastSyncedNode_ = value;
             chainedNodes_.insert(value);
@@ -1761,8 +1773,18 @@ void Builder::collapseNonEscapingVariableReads() {
         std::vector<node_handle_t> unused;
         for (const auto &entry : variableReadSource_) {
             const node_handle_t read = entry.first;
-            if (!sameGraph(read, currGraph_) || graphDraft.header(nodeIdOf(read)) == nullptr ||
-                !graphDraft.alive(nodeIdOf(read))) {
+            // A read is recorded while this builder is in the graph that made it, and the table
+            // outlives that graph: the graph is handed over and released, and the builder with it.
+            // Asking `sameGraph` about such a read asserts that it has an owner (builder_support.h,
+            // `nodeGraphOf`), which is exactly what is gone here, so the read asks the draft
+            // whether it names it at all -- by address and by epoch, which is what a handle names
+            // a draft by. A read of another graph is not this graph's read; it is skipped here and
+            // dropped at the border by `forgetNodesOfOtherGraphs`, because an outer graph's reads
+            // are still needed by the outer graph's own turn.
+            if (!graphDraft.isNamedBy(read)) {
+                continue;
+            }
+            if (graphDraft.header(nodeIdOf(read)) == nullptr || !graphDraft.alive(nodeIdOf(read))) {
                 continue;
             }
             const draft_node_ref_t readId = nodeIdOf(read);
@@ -1788,13 +1810,15 @@ void Builder::collapseNonEscapingVariableReads() {
     // The reads recorded for this graph, grouped by the cell they read. A cell of an outer graph
     // belongs to that graph's own turn, so it is skipped here.
     std::unordered_map<node_handle_t, std::vector<std::pair<node_handle_t, node_handle_t>>> byCell;
+    auto &draft = currGraph_->transaction().edit();
     for (const auto &[read, info] : variableReadSource_) {
-        if (info.cell == nullptr || !sameGraph(info.cell, currGraph_)) {
+        // Same reason as above: the draft is asked whether it is the one the cell names, because a
+        // cell of a graph that has been released has no builder left to answer `sameGraph`.
+        if (!draft.isNamedBy(info.cell)) {
             continue;
         }
         byCell[info.cell].push_back({read, info.source});
     }
-    auto &draft = currGraph_->transaction().edit();
     for (auto &[cell, reads] : byCell) {
         // A `var` parameter of this graph is a resource shared with the caller, and a captured cell
         // is shared with a closure: both keep their cell.
@@ -2162,17 +2186,6 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         const auto &tupleType = tt::as_ptr<TupleType>(tgtType);
         const auto *gctTree     = GCT::Tree::of(gct);
         const size_t names      = gctTree != nullptr ? gctTree->unpackCount(gct) : 0;
-        // The tuple a `split` hands on beside its result is the transform's own: its members are the
-        // graph's answer -- how many forward values the backward half reads is a property of the body,
-        // not of the type -- so a program neither destructures it nor reads an element of it, and
-        // hands it on whole instead (design principles 4.4, the cut between now and later). Refused
-        // where the program would have read it: at the `let` for a destructuring, at the read for
-        // `residuals.0`. One answer per declaration, the rule the count below follows: every name of
-        // the destructuring carries it, and the first reports.
-        if (tupleType->isResiduals() && (names == 0 || gct->accessIndex() == 0)) {
-            diags_->of(SemanticDiag::ResidualsAreNotVisible).atOrigin(gct->origin()).commit();
-            throw BuildAbortException();
-        }
         // A destructuring declaration binds one name per element: `let (x, y) = t` needs a tuple of
         // two, whichever way the count is wrong (design principles 3.9). Reported here, at the
         // declaration, and not as an element read past the end -- a name too few used to drop the
@@ -2206,7 +2219,17 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         throw BuildAbortException();
     }
     case TypeCode::Struct: {
-        const auto *strTy    = tt::as_ptr<camel::core::type::StructType>(tgtType);
+        const auto *strTy = tt::as_ptr<camel::core::type::StructType>(tgtType);
+        if (gct->accessByIndex()) {
+            // `.N` is a tuple's element; a struct's members are read by name. Asking for the name of a
+            // positional access dereferences the name it does not have -- a null pointer the assert
+            // above guards in a debug build and release builds dropped, which is how `p.1` on a struct
+            // segfaulted the compiler instead of being refused.
+            diags_->of(SemanticDiag::InvalidAccessIndex)
+                .atOrigin(gct->origin())
+                .commit(std::to_string(gct->accessIndex()));
+            throw BuildAbortException();
+        }
         const auto &optIndex = strTy->findField(gct->accessKey());
         if (!optIndex.has_value()) {
             diags_->of(SemanticDiag::InvalidAccessIndex)
@@ -2218,7 +2241,17 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         break;
     }
     default:
-        throw std::runtime_error("Unexpected target type in ACCS node.");
+        // A composite that is none of the three above has no element to read: a function value is the
+        // case that reaches here, and it is not a corner -- `split` answers the forward half, so
+        // `let (y, lin) = split(f)` destructures a *function*, and the read lands on a type whose
+        // members are parameters, not elements (`(float, float) => float`). This used to be a
+        // `runtime_error`, which the driver reports as a defect of the compiler; a program that asks
+        // a function for its element is a program with a mistake in it, and it is told which type it
+        // asked (2026-11-02, the split ABI: sixteen cases in test/cases/transforms reached it).
+        diags_->of(SemanticDiag::TypeNotIndexable)
+            .atOrigin(gct->origin())
+            .commit(tgtType->toString());
+        throw BuildAbortException();
     }
 
     // A member read of a compile-time struct value is that field's value, known here as well: the

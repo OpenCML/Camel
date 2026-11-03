@@ -20,10 +20,10 @@
  * which half of a rule a transform can ask for.
  *
  * A family other than the one an operator's key was first recorded for is read through that *key*:
- * `bindVmapRule` keeps the family this transform reads, one entry per operator
- * (`src/builtin/operators/derivative.cpp#registerFloatVmapRules` for the scalar arithmetic, the
- * tensor module for `matmul` and the axis reductions), and binding again replaces. The key -- which
- * token, how many operands -- is a property of the operator, so `camel::core::vmapBindingOf(uri)`
+ * The key a batching rule is filed under -- the spelling the rule's left side writes, and how many
+ * operands that spelling takes -- is read off the operator itself (`camel/core/forward.h#ruleKeyOf`):
+ * this transform keeps no table of its own, and the two operators whose key cannot be derived are
+ * named, with their reasons, in `ruleKeyExceptions()`.
  * reads it and `lookupRule("rulesets.vmap", head, arity)` asks this family.
  *
  * What is built today is the elementwise tier, `matmul`, the reductions along an axis, and calls: a
@@ -42,6 +42,7 @@
 #pragma once
 
 #include "camel/core/context/context.h"
+#include "camel/core/rtdata/tuple.h"
 #include "camel/core/source/ids.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/runtime/graph.h"
@@ -77,8 +78,14 @@ struct VmapGraph {
 camel::core::type::FunctionType *vmapSignature(camel::core::type::FunctionType *function);
 
 /// Builds the batched graph of `function` and prints what it built.
+///
+/// `captured` is the closure tuple of the function *value* being transformed: the values the
+/// function captured where it was written. They are not the graph's to know -- a graph the front end
+/// builds records its captures by port and not by value -- so the caller that holds the value hands
+/// them in. Each one enters the batched graph as a constant, in the source graph's capture order, so
+/// a body that reads a capture reads that value and not the batch element.
 VmapGraph buildVmapGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    camel::runtime::GCGraph *function, std::ostream &os);
+    camel::runtime::GCGraph *function, const ::Tuple *captured, std::ostream &os);
 
 } // namespace camel::transforms

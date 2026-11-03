@@ -774,40 +774,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "string",
             {
                 {
-                    ":op/itos",
-                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::String()),
-                },
-                {
-                    ":op/ltos",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::String()),
-                },
-                {
-                    ":op/ftos",
-                    StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::String()),
-                },
-                {
-                    ":op/dtos",
-                    StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::String()),
-                },
-                {
-                    ":op/stos",
-                    StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::String()),
-                },
-                {
-                    ":op/ctos",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Complex64(), false}},
-                        Type::String()),
-                },
-                {
-                    ":op/ztos",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Complex128(), false}},
-                        Type::String()),
-                },
-                {
                     // Every other type: the text println writes for the value. A type rule,
                     // not a parameter of type `any` (design principles 5.10): the operator
                     // reads the argument with the static type it has at the call.
@@ -1462,69 +1428,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
         OperatorGroup::create(
             "__neq__",
             {
-                {
-                    ":op/ne_i",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Int32(), false}, {Type::Int32(), false}},
-                        Type::Bool()),
-                },
-                {
-                    ":op/ne_l",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Int64(), false}, {Type::Int64(), false}},
-                        Type::Bool()),
-                },
-                {
-                    ":op/ne_f",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Float32(), false}, {Type::Float32(), false}},
-                        Type::Bool()),
-                },
-                {
-                    ":op/ne_d",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Float64(), false}, {Type::Float64(), false}},
-                        Type::Bool()),
-                },
-                {
-                    ":op/ne_b",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Bool(), false}, {Type::Bool(), false}},
-                        Type::Bool()),
-                },
-                {
-                    ":op/ne_s",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::String(), false}, {Type::String(), false}},
-                        Type::Bool()),
-                },
-                {
-                    ":op/ne_bytes",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{BytesType::get(), false}, {BytesType::get(), false}},
-                        Type::Bool()),
-                },
-                {
-                    ":op/ne_c",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Complex64(), false}, {Type::Complex64(), false}},
-                        Type::Bool()),
-                },
-                {
-                    ":op/ne_z",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Complex128(), false}, {Type::Complex128(), false}},
-                        Type::Bool()),
-                },
+                // `!=` is built as the negation of `==` (design principles 4.2), and the operand
+                // type decides which `==` that is: the built-in comparison of a primitive, the
+                // composite entry above for an array, a tuple or a struct compared by content, or
+                // a declared `==` when the program writes one for its own type. A type whose `==`
+                // is declared still needs an entry here: without one, `!=` on that type has no
+                // overload to resolve through and is a located compile-time error (a `==` written
+                // with a tolerance is the case that needs it -- struct_equality.cml).
                 {
                     ":op/ne",
                     DynamicFuncTypeResolver::create(
@@ -1552,13 +1462,16 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             return Type::Bool();
                         }),
                 },
-                CAMEL_HALF_COMPARE("ne"),
             }),
         // `===` and `!==` are the elementwise comparison (design principles 4.2), so they are
-        // not here: their groups are `__strict_eq__` and `__strict_neq__`, built from the scalar
-        // entries of these two where this module exports its groups, and the tensor module adds
-        // the array entry to them. `==` and `!=` do not name them: the whole comparison is the
-        // reduction of the elementwise one, and a program gets it from this group alone.
+        // not here: their groups are `__strict_eq__` and `__strict_neq__`, and the tensor module
+        // adds the array entry to them. `==` and `!=` do not name them: the whole comparison is
+        // the reduction of the elementwise one, and a program gets it from this group alone.
+        // `__strict_eq__` still takes its scalar entries from `==`'s group below, because on a
+        // scalar `===` is `==`; `__neq__` keeps none now, so `__strict_neq__` comes out empty of
+        // them and `!==` no longer names it at all -- it is built as `!(===)` (gct/builder.cpp),
+        // which is why the negation of an elementwise comparison had to exist on `bool[]` too
+        // (`__not__`'s tensor entry).
         // <、<=、>、>=
         OperatorGroup::create(
             "__lt__",
@@ -2420,11 +2333,16 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
     for (const auto &group : collectionGroups) {
         exportEntity(group->name(), group);
     }
-    // `===` and `!==` (design principles 4.2): on a scalar they are `==` and `!=`, and on an
-    // array the tensor module exports an elementwise entry of its own into these groups. The
-    // scalar entries are taken from the groups that compare as a whole rather than written a
-    // second time, so a scalar type in one is in both; what is left out is the one entry that
-    // compares a composite as a whole, which is `==`'s alone.
+    // `===` and `!==` (design principles 4.2): on a scalar `===` is `==`, and on an array the
+    // tensor module exports an elementwise entry of its own into these groups. `===`'s scalar
+    // entries are taken from the group that compares as a whole rather than written a second
+    // time, so a scalar type in one is in both; what is left out is the one entry that compares
+    // a composite as a whole, which is `==`'s alone. `__neq__` keeps no scalar entries now, so
+    // `__strict_neq__` comes out empty of them -- and `!==` does not resolve in it: what is left
+    // there is only the tensor module's array entry, and the negation of the comparison is built
+    // by the construction tree (`!(===)`, gct/builder.cpp). The pair stays because the array
+    // entry needs a group of that name to be exported into, and because emptying the copy is
+    // what makes the cut visible rather than implied.
     for (const auto &[strict, whole] :
          {std::pair<const char *, const char *>{"__strict_eq__", "__eq__"},
           std::pair<const char *, const char *>{"__strict_neq__", "__neq__"}}) {

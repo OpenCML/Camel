@@ -7,6 +7,7 @@
 
 #include "camel/core/operator_table.h"
 #include "camel/core/node_attrs.h"
+#include "camel/core/operator_names.h"
 #include "camel/core/type/typevar.h"
 
 #include "camel/utils/assert.h"
@@ -289,6 +290,66 @@ std::vector<std::string> OperatorTable::groups() const {
     return names;
 }
 
+void OperatorTable::declareCallForm(std::string_view uri, const CallForm &form) {
+    std::unique_lock lock(mutex_);
+    for (auto &[declared, existing] : callForms_) {
+        if (declared != uri) {
+            continue;
+        }
+        // The name of the first declaration stands. One operator may be declared under two
+        // spellings (`:op/itol` is both `int` and `i64`); a reader of the graph has one text to
+        // write and either is the operator, and the first declaration is the one the language
+        // documents it under.
+        existing.minArgs   = std::min(existing.minArgs, form.minArgs);
+        existing.withCount = std::min(existing.withCount, form.withCount);
+        // A module that states the shape itself keeps saying so, whichever declaration came first.
+        existing.declaredByModule = existing.declaredByModule || form.declaredByModule;
+        existing.exported         = existing.exported || form.exported;
+        return;
+    }
+    callForms_.emplace_back(std::string(uri), form);
+}
+
+void OperatorTable::markExported(std::string_view uri) {
+    std::unique_lock lock(mutex_);
+    for (auto &[declared, form] : callForms_) {
+        // A declaration may cover a family of operators with one `*` (`:op/*tos`), and the export
+        // names one operator of that family: the family's shape is the one a program writes.
+        const size_t star  = declared.find('*');
+        const bool family = star != std::string::npos && uri.size() + 1 >= declared.size() &&
+                            uri.starts_with(std::string_view(declared.data(), star)) &&
+                            uri.ends_with(std::string_view(
+                                declared.data() + star + 1, declared.size() - star - 1));
+        if (declared == uri || family) {
+            form.exported = true;
+            return;
+        }
+    }
+}
+
+std::optional<OperatorTable::CallForm> OperatorTable::callFormOf(std::string_view uri) const {
+    std::shared_lock lock(mutex_);
+    for (const auto &[declared, form] : callForms_) {
+        if (declared == uri) {
+            return form;
+        }
+    }
+    // A declaration may cover a family of operators with one `*` (`:op/*tos`: one conversion per
+    // source type). Its call shape is the family's, so a URI of the family takes it.
+    for (const auto &[declared, form] : callForms_) {
+        const size_t star = declared.find('*');
+        if (star == std::string::npos || uri.size() + 1 < declared.size()) {
+            continue;
+        }
+        const std::string_view prefix(declared.data(), star);
+        const std::string_view suffix(declared.data() + star + 1, declared.size() - star - 1);
+        if (uri.starts_with(prefix) && uri.ends_with(suffix)) {
+            return form;
+        }
+    }
+    return std::nullopt;
+}
+
 std::vector<std::string> OperatorTable::groupOperators(std::string_view group) const {
     std::shared_lock lock(mutex_);
     std::vector<std::string> uris;
@@ -298,6 +359,35 @@ std::vector<std::string> OperatorTable::groupOperators(std::string_view group) c
         }
     }
     return uris;
+}
+
+std::string OperatorTable::groupOf(std::string_view uri) const {
+    std::shared_lock lock(mutex_);
+    // One operator may belong to more than one group: `tensor:matmul` is registered in `__mat__`
+    // (the language's `@`) and in `matmul` (the name the module exports), because the same
+    // `OpDef` names it both ways. Both answers are true, and the question "which group is this
+    // operator's" has two answers that matter differently: a program writes the sign of the
+    // language group, and the module's own name is what an import gives it.
+    //
+    // The first group that holds the URI is not the right answer to "how does a program write
+    // this": it depends on registration order, and a module that registers the exported name
+    // first hid the language's symbol from the printer, which then refused every `@` node. A
+    // group with a symbol is the source spelling, so it is preferred; the first group otherwise.
+    std::string first;
+    for (const auto &[name, declared] : groups_) {
+        for (const std::string &member : declared) {
+            if (member == uri) {
+                if (operatorSymbolOf(name) != nullptr) {
+                    return name;
+                }
+                if (first.empty()) {
+                    first = name;
+                }
+                break;
+            }
+        }
+    }
+    return first;
 }
 
 std::vector<type::Type *> OperatorTable::registeredTypes(std::string_view group) const {

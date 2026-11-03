@@ -215,6 +215,8 @@ enum class SemanticDiag : uint32_t {
     RestFunctionNeedsExpansion = 0x00018F,
     /// A call passes fewer arguments than the fixed parameters of a rest function.
     RestArgumentsMismatch = 0x000190,
+    // A rest parameter of a lambda: the shape parses and is refused by name, because the parameters it
+    // stands for come from the function type the lambda stands in and the front end does not build them.
     /// A rest parameter's build-time tuple was used where a runtime value is needed.
     StaticTupleEscapes = 0x00019C,
 
@@ -389,7 +391,12 @@ enum class SemanticDiag : uint32_t {
     RangeStepZero = 0x0001E6,
     /// A subscript slice with a constant step of 0 takes no element: `t[a:b:0]` (design principles 5.4;
     /// the step of a slice follows the same rule the step of a range does).
-    SliceStepZero                  = 0x0001E9,
+    SliceStepZero       = 0x0001E9,
+    CalledFallibleValue = 0x000209,
+    /// A transform (`transpose`, `jvp`) was handed something that is not a function known at compile time:
+    /// a parameter, or a closure that captures a value. The transform builds the transformed graph at the
+    /// call, out of the graph of the function it is given, and neither of those names one until the program
+    /// runs -- so it is refused at the call, by name, rather than left to the run.
     WithPackNeedsNativeDeclaration = 0x000191,
     // #impl(f) (design principles 10.4): the Camel body of the function is its semantics and the
     // body-less declaration f of the same module is the operator that runs it. The graph builder
@@ -468,7 +475,6 @@ enum class SemanticDiag : uint32_t {
     RuleLeftIsNotAnOperator    = 0x000204,
     DuplicateRuleForOperator   = 0x000205,
     RuleRightUsesOuterVariable = 0x000207,
-    ResidualsAreNotVisible     = 0x000208,
 
     // Warnings
     IgnoredSideEffect = 0x100002,
