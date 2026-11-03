@@ -12,6 +12,12 @@
  *
  *   LOOKUP <family> <head>/<arity> -> <rule> | no rule | no such family
  *
+ * A question with no field (`:op/itod`) asks the other half of the same reading: the key a rule of
+ * that operator is looked up under, which is read off the operator itself
+ * (`camel/core/forward.h#ruleKeyOf`), and `none` when it has no key at all:
+ *
+ *   KEY <uri> -> <head>/<arity> | none
+ *
  * This is the reading a ruleset is asked for, so a test can pin it: the index is a table the
  * transforms read, and a table nobody can ask is only a printout that looks like an answer.
  */

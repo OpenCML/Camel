@@ -1,11 +1,21 @@
 # Copyright (c) the OpenCML Organization
 # SPDX-License-Identifier: MIT
 
-# The two cases below pin a GraphId (`closure graph=286`, `built graph=236`). The id is positional:
-# the pass numbers the graphs it builds from a counter that the ruleset's own rule graphs consume
-# first, so adding a rule to `stdlib/rulesets/jvp.cml` shifts every id after it. Both were re-pinned
-# on 2026-11-03 when `jvp_pow` joined the family (107 -> 286, 56 -> 236); what the pins are *for* --
-# the layout, the slots, the node and region counts -- did not change.
+# The two cases below read a GraphId (`closure graph=…`, `built graph=…`) and do not pin it. The id
+# is positional: it comes from a counter that the ruleset's own rule graphs consume first, so adding
+# a rule to `stdlib/rulesets/jvp.cml` shifts every id after it while the program stays exactly as
+# correct. It was re-pinned twice in one day that way (107 -> 286 and 56 -> 236 when `jvp_pow` joined
+# the family, then again by the two rules this lane added). Both readings now pass through
+# `normalize_graph_ids` (`test/tools/normalizers.mjs`), the normalizer this repository already keeps
+# for exactly this: it replaces `graph=<n>` with `graph=<GRAPH>` on a `REINTERP ` line, so the whole
+# line is still asserted -- that a graph was reserved and named here, what it is laid out as, the
+# slots it closes over, the node and region counts -- and the run's counter is not. A number a
+# counter hands out is not a fact about this transform.
+#
+# The two assertions were each shown to fail before they were kept, by breaking the thing they name:
+# one more node in the case's body read `nodes=15 exit=14`, and a renamed graph (the `feat/trans/macro`
+# case's `iterate`, renamed `accumulate`) read `graph=3 name=accumulate` -- the same number under
+# another name, which is precisely what a number cannot tell apart.
 [[tests]]
 name = "reinterp_builds_its_own_graph"
 desc = "The first form of `reinterp` does two things and says them. It prints the other key the index holds, one line per operator: the left side of a rule is written `a + b` and a node names its operator by URI, so the instance records the URI its left side is written with, and the reading is `URI -> rule -> the GraphId of its right side` (`:op/div_d -> rule jvp_div -> rhs N`). Then it walks every function of the program that is made of operators -- for `f(x) = x*x + 3/x` that is `f`, with three primitives and two constants -- and builds a graph of the transform's own for each, printing its GraphId and node count. It is not a transform yet: the graph it builds is a single port handed to the output, and the reading says exactly that, so the next step has a number to grow from instead of a claim to believe."
@@ -15,22 +25,22 @@ args = ["${case}", "transforms::reinterp", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_output_contains = ["REINTERP uri :op/add_d -> rule jvp_add -> rhs ", "REINTERP uri :op/mul_d -> rule jvp_mul -> rhs ", "REINTERP uri :op/div_d -> rule jvp_div -> rhs ", "vars=x,w count=2", "fill=FunctionClosure slots=2", "type=(dx: float, dw: float) => float", "REINTERP closure graph=286 layout=(float, float) built=yes slots=x,w", "REINTERP target=f primitives=1 other=2 graph=", "nodes=1", "1.5"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+expect_output_contains = ["REINTERP uri :op/add_d -> rule jvp_add -> rhs ", "REINTERP uri :op/mul_d -> rule jvp_mul -> rhs ", "REINTERP uri :op/div_d -> rule jvp_div -> rhs ", "vars=x,w count=2", "fill=FunctionClosure slots=2", "type=(dx: float, dw: float) => float", "REINTERP closure graph=<GRAPH> layout=(float, float) built=yes slots=x,w", "REINTERP target=f primitives=1 other=2 graph=", "nodes=1", "1.5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_graph_ids"]
 timeout_ms = 20000
 
 [[tests]]
 name = "jvp_is_a_function_value"
-desc = "`reinterp<jvp>(f)` is the operator `jvp(f)`, and it produces a new function (the author's ruling a824031aa), not a rewritten graph: the call builds a graph of the transform's own and answers with a function value naming it. The lifted signature is `(float, float) => (float, float)` -- the ordinary parameter becomes a value and its tangent, and the result is the pair -- so `jvp(f)(2.0, 1.0)` passes two numbers and reads back `(value, tangent)`. Both halves are computed by the new graph: for `f(x) = x*x + 3/x` at 2 the chain gives `f(2) = 5.5`, and the forward rules along it give `f'(2) = 3.25` (2x - 3/x^2, seeded with the 1.0 the caller passed). The rules are the ruleset's: the reading says `source=ruleset` and names what it applied (`jvp_mul`, `jvp_div`, `jvp_add`), because the transform reads `stdlib/rulesets/jvp.cml`'s index at the moment it builds -- there is no second table of laws in C++. A primitive with no rule there is refused by name (`skip=rule uri=...`), never answered with 0 or 1. The operator's own line, `REINTERP jvp op ...`, prints the spelling a declaration writes, the type the call resolved to, the lifted half, and the type of the graph the call answered with: the two have to be one string, and they are. The build also says what it made -- `REINTERP jvp built graph=236 nodes=12 exit=11 regions=0 function=f` -- the member the lift reserved, the nodes and regions the draft holds before it is encoded, and the node the graph exits at. The lift is the run-time kernel's, on every shape: there is one implementation of the transform and the call reaches it as a call."
+desc = "`reinterp<jvp>(f)` is the operator `jvp(f)`, and it produces a new function (the author's ruling a824031aa), not a rewritten graph: the call builds a graph of the transform's own and answers with a function value naming it. The lifted signature is `(float, float) => (float, float)` -- the ordinary parameter becomes a value and its tangent, and the result is the pair -- so `jvp(f)(2.0, 1.0)` passes two numbers and reads back `(value, tangent)`. Both halves are computed by the new graph: for `f(x) = x*x + 3/x` at 2 the chain gives `f(2) = 5.5`, and the forward rules along it give `f'(2) = 3.25` (2x - 3/x^2, seeded with the 1.0 the caller passed). The rules are the ruleset's: the reading says `source=ruleset` and names what it applied (`jvp_mul`, `jvp_div`, `jvp_add`), because the transform reads `stdlib/rulesets/jvp.cml`'s index at the moment it builds -- there is no second table of laws in C++. A primitive with no rule there is refused by name (`skip=rule uri=...`), never answered with 0 or 1. The operator's own line, `REINTERP jvp op ...`, prints the spelling a declaration writes, the type the call resolved to, the lifted half, and the type of the graph the call answered with: the two have to be one string, and they are. The build also says what it made -- `REINTERP jvp built graph=… nodes=12 exit=11 regions=1 function=f` -- the member the lift reserved, the nodes and regions the draft holds before it is encoded, and the node the graph exits at. The one region is the draft's body: a draft is made with its body region (`GraphDraft`), so a graph with no control region still holds that one region and `region(0)` never has to answer with a record the draft does not have. The lift is the run-time kernel's, on every shape: there is one implementation of the transform and the call reaches it as a call."
 kind = "behavior"
 case = "../../../cases/compile/transforms/jvp_lifted.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_output_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_div,jvp_add", "REINTERP jvp op signature=(f: (float) => float) => (float, float) => (float, float)", "lifted=(float, float) => (float, float) pure graph=(float, float) => (float, float) pure same=yes", "REINTERP jvp built graph=236 nodes=12 exit=11 regions=0 function=f", "5.5", "3.25"]
+expect_output_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_div,jvp_add", "REINTERP jvp op signature=(f: (..) => any) => (the parameters and their tangents) => (value, tangent)", "lifted=(float, float) => (float, float) pure graph=(float, float) => (float, float) pure same=yes", "REINTERP jvp built graph=<GRAPH> nodes=12 exit=11 regions=1 function=f", "5.5", "3.25"]
 expect_stdout_not_contains = ["TRANSPOSE function=", "REINTERP "]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_graph_ids"]
 timeout_ms = 20000
 
 # A branch is a property of the graph, not of a node: its arms are regions, its value is the Join's,

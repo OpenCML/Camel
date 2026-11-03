@@ -12,7 +12,17 @@ namespace camel::runtime {
 
 uint32_t GraphDraft::nodeRegion(gc_node_ref_t id) const {
     const DraftNodeHeader *h = header(id);
-    return h ? h->region : 0;
+    // A node that is not in the draft has no region. Answering 0 would name the body, and 0 is a
+    // region the draft really has -- `region(0)` answers the body even when the table holds nothing
+    // else, and the record is written as soon as anything needs it -- so "region 0" is an actual
+    // membership, not "I do not know": the asker would be told that a node it can no longer find
+    // belongs to the graph's body, and would then order it, report it or read its ports as if it
+    // were there. There is no region to give, so fail instead of naming one.
+    GUARD(
+        h != nullptr,
+        "Region of a node that is not in the draft: the id was erased or never existed, and "
+        "region 0 is the body, a real region, not the answer for a node that is not there.");
+    return h->region;
 }
 
 void GraphDraft::setNodeRegion(gc_node_ref_t id, uint32_t region) {
@@ -27,9 +37,7 @@ void GraphDraft::setNodeRegion(gc_node_ref_t id, uint32_t region) {
 uint32_t GraphDraft::addRegion(
     GCRegionKind kind, uint32_t parent, gc_node_ref_t owner, uint32_t index) {
     ++mutations_;
-    if (regions_.empty()) {
-        regions_.push_back(GCRegion{});
-    }
+    ASSERT(!regions_.empty(), "A draft is made with its body region, so the table is not empty.");
     ASSERT(parent < regions_.size(), "A region is made in a region that is not there.");
     GCRegion region;
     region.kind   = kind;
@@ -224,6 +232,7 @@ void GraphDraft::clearRegions() {
         }
     }
     regions_.clear();
+    regions_.push_back(GCRegion{}); // the body, which every draft has
     regionPorts_.clear();
 }
 
@@ -240,11 +249,6 @@ void GraphDraft::setRegionParams(uint32_t id, const camel::core::type::FunctionT
 }
 
 void GraphDraft::setRegionAttrs(uint32_t id, uint32_t attrs) {
-    // The body region (0) is not in the table until something needs it. A tag written on a
-    // function writes it here, so a graph whose body carries a fact has a one-region table.
-    if (id == 0 && regions_.empty()) {
-        regions_.push_back(GCRegion{}); // the body, and nothing else
-    }
     ++mutations_;
     ASSERT(id < regions_.size(), "No such region.");
     regions_[id].attrs = attrs;
@@ -261,7 +265,12 @@ bool GraphDraft::regionWithin(uint32_t inner, uint32_t outer) const {
 }
 
 bool GraphDraft::inlinedCopyOf(gc_node_ref_t id, const GCGraph *callee) const {
-    if (callee == nullptr || regions_.empty()) {
+    // `1` is the body and nothing else: every draft is made with its body region (GraphDraft), and
+    // an inlined body is a region of its own -- `addInlineRegion` makes one through `addRegion`,
+    // which hands out an id from 1 up even when the parent is the body. So a table of one holds no
+    // Inline region, and no node of this draft can be inside a body inlined here. A draft whose own
+    // graph was inlined somewhere holds that Inline region beside its body, and the table is two.
+    if (callee == nullptr || regions_.size() <= 1) {
         return false;
     }
     // What the call is inside of, by the function it is a copy of: a type specialization is that

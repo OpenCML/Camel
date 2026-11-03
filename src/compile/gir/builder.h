@@ -2137,6 +2137,12 @@ class Builder {
     // functionValueOf, and FunctionNameAsValue when `name` has no single function value.
     node_handle_t
     namedValueOf(node_handle_t node, const std::string &name, const GCT::node_ptr_t &origin);
+    // The node that stands where a value was dropped -- the tail of a block in a position whose
+    // value nothing takes: a `: void` body's or arm's tail (`acceptsAsResult`), a statement whose
+    // value the block drops (`{ len };` in a `sync` block, or in any block). A name there is not
+    // used as a value and produces no node, so the null constant -- what a void graph exits at --
+    // stands in its place. One rule, one function: every such position calls this.
+    node_handle_t droppedValueAt(const GCT::node_ptr_t &last);
     // Reports FunctionNameAsValue at `origin` when `node` is still such a name (`name`) in
     // a place that needs a value.
     void rejectNameWithoutValue(
