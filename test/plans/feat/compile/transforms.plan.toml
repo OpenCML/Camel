@@ -126,7 +126,7 @@ timeout_ms = 20000
 #    `docs/handover/questions/2026-11-02-does-reversing-a-backward-need-a-new-operator.cn.md`), so no
 #    operator is added.
 #  - the residual taken *after* the loop. The tangent side of the exit states the length it reads
-#    (`element_at(dxs, extent_pair(0, len(xs)))`), and that length is computed from the loop's
+#    (`pick_at(dxs, extent_pair(0, len(xs)))`), and that length is computed from the loop's
 #    **value**, so no invariant can be it: `split`'s `Residual::afterLoop` copies it once, after the
 #    loop and after the cell's projections are seeded (author, 2026-11-03 11:10: 凡是由前一半循环的
 #    输出算出来的残差，在循环建好之后再取). Before it, `split` refused the whole cut
