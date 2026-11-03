@@ -506,6 +506,13 @@ export rule take_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
 
 /// The cotangent of `mean_axis_stated(t, at)`: each lane's `ct` spread back over the lane it was
 /// averaged from, where `at = [axis, keepdims, d0, ..., d(rank-1)]`.
+///
+/// A rank-zero answer -- one axis with `keepdims = false` on a rank-one operand -- has a cotangent
+/// with no shape, and it arrives here as the rank-zero array that *is* that value (design principles
+/// 5.4): the transpose walk hands it through the same `T` -> `T[..]` conversion the language inserts
+/// where a value enters an array position (`modules/transforms/transpose.cpp`, `ruleCotangent`). So
+/// `numel(ct)` answers 1 instead of a number read as a pointer, and the arithmetic below serves both
+/// shapes of answer with the one law this key holds.
 func mean_axis_cotangent::<T>(ct: T[..], at: int[]): T[..] when is_float::<T>() {
     let extents = at[2:len(at)]
     let lanes = float(extent_product(extents)) / float(numel(ct))
