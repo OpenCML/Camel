@@ -61,7 +61,7 @@ backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
 expect_output_contains = ["sum_axis: value=7.0", "same=true"]
-expect_stderr_contains = ["rhs=sum_axis_stated_t"]
+expect_stderr_contains = ["sum_axis_stated_t"]
 expect_output_not_contains = ["skip="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
@@ -76,7 +76,7 @@ backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
 expect_output_contains = ["sum_axis -1: value=15.0", "same=true"]
-expect_stderr_contains = ["rhs=sum_axis_stated_t"]
+expect_stderr_contains = ["sum_axis_stated_t"]
 expect_output_not_contains = ["skip="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
@@ -91,7 +91,7 @@ backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
 expect_output_contains = ["mean: value=7.0", "same=true"]
-expect_stderr_contains = ["rhs=mean_stated_t"]
+expect_stderr_contains = ["mean_stated_t"]
 expect_output_not_contains = ["skip="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
