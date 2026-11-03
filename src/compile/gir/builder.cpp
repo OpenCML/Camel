@@ -1800,11 +1800,31 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
     if (failed) {
         throw BuildAbortException();
     }
-    if (gct->size() > 0 && res != nullptr && nodeIsKind(res, runtime::GCNodeKind::Dref) &&
-        gct->at(gct->size() - 1)->type() == GCT::NodeKind::DREF && sameGraph(res, currGraph_)) {
-        // A block that ends in the name of a function has that function's value: the value
-        // of a branch arm (`if c then inc else dec`), of a block, of a function body. Left a
-        // name, it gave the block the type void.
+    const bool nameAtTail =
+        gct->size() > 0 && res != nullptr && nodeIsKind(res, runtime::GCNodeKind::Dref) &&
+        sameGraph(res, currGraph_);
+    // The value of a block is that of its last statement, and a name standing there is a value
+    // only where a value is wanted -- a DREF is a compile-time marker and no node of the graph
+    // (graph_encode, prepareGraph).
+    if (nameAtTail && tailExpected != nullptr && isVoidGraphExitType(tailExpected)) {
+        // The tail sits in a `void` position: a body declared `: void` discards whatever its body
+        // ends with (`acceptsAsResult`), and so does an arm of a branch such a body drops. The
+        // value is dropped, and dropping a name is not using it, so nothing is asked of it: the
+        // null constant -- what a void graph exits at anyway -- stands where it stood, and the
+        // sync chain reaches it as it reaches any other value. `func g(): void { let step = len }`
+        // left the stack as a live DREF here, and was an internal error about a legal program.
+        const auto &last = gct->at(gct->size() - 1);
+        res              = currGraph_->addStaticDataNode(Data::null());
+        registerNodeOrigin(context_, res, last, "gir.data.dropped");
+    } else if (nameAtTail &&
+               (!valueDropped || gct->at(gct->size() - 1)->type() == GCT::NodeKind::DREF)) {
+        // The value is wanted: a block that ends in the name of a function has that function's
+        // value -- of a branch arm (`if c then inc else dec`), of a block, of a function body --
+        // and a name that is no single function value is reported where it is used. Left a name,
+        // it gave the block the type void. The name arrives here from the `let` written last as
+        // well (`let step = len` binds the name, and the binding's value is the statement's), so
+        // the last statement is not asked what kind it is; a block whose value nothing takes
+        // keeps the rule it had, and asks only for a name written last.
         const auto &last = gct->at(gct->size() - 1);
         res              = namedValueOf(res, last->name(), last);
     }

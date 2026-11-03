@@ -1,8 +1,9 @@
 # One platform leg of CI: toolchain, dependencies, Release build, the fast test layer.
 #
-# It is a reusable workflow so that the three legs every run needs and the macOS leg (opt-in, see
-# ci.yml) share one definition instead of one copy of twenty steps each. A job-level `if` cannot
-# see the matrix, so the choice of legs has to live in the caller.
+# It is a reusable workflow so that the three platform legs of every run (linux-x64, win-x64,
+# macos-arm64) and the two manual ones (the JIT switched off, the sanitizer build) share one
+# definition instead of one copy of twenty steps each. A job-level `if` cannot see the matrix, so
+# the choice of legs has to live in the caller.
 name: CI leg
 
 on:
@@ -28,7 +29,7 @@ on:
         type: string
         default: ""
       nojit:
-        description: "Build with the JIT switched off and run the whole set under mark-sweep"
+        description: "Build with the JIT switched off and run the whole set on the default collector"
         type: boolean
         default: false
       experimental:

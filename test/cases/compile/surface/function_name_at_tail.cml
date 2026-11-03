@@ -1,0 +1,8 @@
+// The same binding at the tail of a function whose value is used: the name has no value the graph
+// can hand on, and the diagnostic says so at the statement that binds it. It used to be the same
+// internal error as the `void` tail of dropped_function_name.cml.
+func int_tail(): int {
+    let step = len
+}
+
+func main(): int sync { return 0 }

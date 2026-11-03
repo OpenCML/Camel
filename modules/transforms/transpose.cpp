@@ -7,9 +7,11 @@
 #include "rule_expand.h"
 
 #include "camel/core/forward.h"
+#include "camel/core/loop_kind.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/tangent_space.h"
+#include "camel/core/type/composite/array.h"
 #include "camel/core/type/tree.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
@@ -27,6 +29,7 @@ namespace camel::transforms {
 
 namespace mm = camel::core::mm;
 namespace rt = camel::runtime;
+using camel::core::type::ArrayType;
 using camel::core::type::FunctionType;
 using camel::core::type::Type;
 using camel::runtime::gc_node_ref_t;
@@ -426,6 +429,16 @@ bool buildTransposeMember(
         if (carriesClosure && function->closureType() != nullptr) {
             draft.setClosureType(const_cast<camel::core::type::TupleType *>(function->closureType()));
         }
+        // Where the parameters' own values start in the closure this member inherited. `split`'s
+        // backward half appends one member per parameter after the residuals, in parameter order
+        // (author, 2026-11-03 00:50 ①: the closure type keeps `residualIndexOf`'s order and gains
+        // one member per value the call hands over), and the graph's mark is what says the tail is
+        // that and not a closure a caller closed the member over. A graph without the mark has no
+        // tail, and a parameter the body asks for is still refused by name below -- the answer is
+        // never a number this build invented.
+        const bool hasParameterTail =
+            function->closureCarriesParameters() && closureOf.size() >= paramCount;
+        const size_t parameterTailAt = hasParameterTail ? closureOf.size() - paramCount : 0;
         const gc_node_ref_t cotangentIn =
             draft.addPortNode(resultCotangentType(function),
                               draft.allocateRuntimeSlot(resultCotangentType(function)));
@@ -757,6 +770,16 @@ bool buildTransposeMember(
                         // caller's to capture, not this graph's to invent.
                         forwardOf[ref] =
                             at < portOfParam.size() ? portOfParam[at] : rt::kInvalidNodeRef;
+                        // A parameter the answer is about has no port of its own, and the call
+                        // gives it no number -- but the closure the call handed over carries the
+                        // parameter's value at the tail `split` wrote, so the member reads it there
+                        // (author, 2026-11-03 00:50 ①). Only a graph that says its closure carries
+                        // the parameters has that tail; every other one goes on refusing below.
+                        if (forwardOf[ref] == rt::kInvalidNodeRef && hasParameterTail &&
+                            at < paramCount && parameterTailAt + at < closurePorts.size()) {
+                            forwardOf[ref] = closurePorts[parameterTailAt + at];
+                            return forwardOf[ref];
+                        }
                         if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount &&
                             std::find(wantedValues.begin(), wantedValues.end(), at) ==
                                 wantedValues.end()) {
@@ -884,6 +907,22 @@ bool buildTransposeMember(
             const gc_node_ref_t made = draft.addOperNode(node->dataType(), nullptr, body->uri());
             if (!inputs.empty()) {
                 draft.setNormInputs(made, std::span<const gc_node_ref_t>(inputs));
+            }
+            // The operator's `<>` arguments are ports of the same node, after the normal ones
+            // (`OpDef::params` written `withAfterNorm`), and a recomputed value has to be the same
+            // operator: a `softmax<1>(x)` rebuilt without its axis is `softmax(x)`, which reads the
+            // last axis instead of axis 1. They are recomputed forward like the rest, because the
+            // value the pullback reads must carry what the forward call carried.
+            std::vector<gc_node_ref_t> with;
+            for (gc_node_ref_t input : function->withInputsOf(ref)) {
+                const gc_node_ref_t copied = forward(input);
+                if (copied == rt::kInvalidNodeRef) {
+                    return rt::kInvalidNodeRef;
+                }
+                with.push_back(copied);
+            }
+            if (!with.empty()) {
+                draft.setWithInputs(made, std::span<const gc_node_ref_t>(with));
             }
             forwardOf[ref] = made;
             return made;
@@ -1733,11 +1772,21 @@ bool buildTransposeMember(
                        << " reason=" << reason << '\n';
                     return false;
                 }
-                const auto inputs = function->normInputsOf(ref);
-                if (inputs.size() != 2 && inputs.size() != 1) {
+                const auto normOperands = function->normInputsOf(ref);
+                if (normOperands.size() != 2 && normOperands.size() != 1) {
                     os << "TRANSPOSE function=" << function->name() << " skip=arity uri=" << uri
-                       << " operands=" << inputs.size() << '\n';
+                       << " operands=" << normOperands.size() << '\n';
                     return false;
+                }
+                // The list the rule's parameters line up with is the node's *port* list: the normal
+                // operands, then the `<>` ones (`OpDef::params` written `withAfterNorm`). A rule for
+                // an operator that takes its axis or its target shape in `<>` position declares that
+                // argument beside the value it differentiates, so the cotangent is asked for over the
+                // same list -- and the context positions answer no cotangent (they are constants with
+                // no tangent space), which the loop below already says of them.
+                std::vector<gc_node_ref_t> inputs(normOperands.begin(), normOperands.end());
+                for (gc_node_ref_t input : function->withInputsOf(ref)) {
+                    inputs.push_back(input);
                 }
                 const gc_node_ref_t ct = cotangent[ref];
                 noteRule(rule->rule);
@@ -1810,26 +1859,112 @@ bool buildTransposeMember(
                 // The state's initial values are the loop's norm inputs after the range; the
                 // escapes are compared with them below, so they are read once here.
                 const auto oldNorm = function->normInputsOf(ref);
+                // **The rounds are undone from the last to the first** (design 4.2, 4.3). Copying
+                // the sequence into the reverse loop and iterating it -- what this case did -- walks
+                // the rounds in the order they were written, so a per-round map that does not commute
+                // comes back as the product in the wrong order: `vjp_loop.rounds_are_undone_in_reverse`
+                // reads (1.0, 10.0) that way and (1.0, 1.0) this way. The reverse loop therefore
+                // iterates `range(n - 1, -1, -1)` -- the round *numbers*, the last one first -- and a
+                // round reads its own element out of the sequence with `:op/idx_arr`, the operator
+                // `xs[i]` is built from (`index_into` in `src/core/forward.cpp`); the reverse pass in
+                // `modules/autodiff/pullback.cpp` reads its tape the same way. The element is no
+                // longer a value the two loops share: it is a function of the round number, which is
+                // what makes the pairing right rather than merely reversed.
+                const bool iterates    = camel::core::loopHasIterable(function->loopKindOf(ref));
+                // Where the round takes its element from: the sequence itself (an array) or the two
+                // bounds of an interval, from which the round takes `a + round`
+                // (`LoopIterableForm`, include/camel/core/loop_kind.h). Both are read outside the
+                // loop, so the reverse loop's own body only carries the round number.
+                gc_node_ref_t sequence = rt::kInvalidNodeRef;
+                gc_node_ref_t intervalLower = rt::kInvalidNodeRef;
+                gc_node_ref_t backwardsRange = rt::kInvalidNodeRef;
+                bool intervalForm = false;
+                if (iterates) {
+                    sequence = oldNorm.empty() ? rt::kInvalidNodeRef : forward(oldNorm.front());
+                    if (sequence == rt::kInvalidNodeRef) {
+                        os << "TRANSPOSE function=" << function->name() << " skip=range node="
+                           << ref << '\n';
+                        return false;
+                    }
+                    intervalForm =
+                        function->loopIterableFormOf(ref) == camel::core::LoopIterableForm::Interval;
+                    const auto intConstant = [&](int64_t value) {
+                        return draft.materializeStaticValue(
+                            camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(value),
+                            Type::Int64(),
+                            rt::kGCNodeFlagConstant);
+                    };
+                    // How many rounds the loop runs: the sequence's length, or `b - a` for an
+                    // interval. An empty sequence makes an empty range, and the loop then runs no
+                    // round -- which is the same number of rounds the forward loop ran.
+                    gc_node_ref_t roundCount = rt::kInvalidNodeRef;
+                    if (intervalForm) {
+                        const std::array<gc_node_ref_t, 1> pair{sequence};
+                        intervalLower = draft.addAccsNode(Type::Int64(), 0);
+                        draft.setNormInputs(
+                            intervalLower, std::span<const gc_node_ref_t>(pair.data(), pair.size()));
+                        const gc_node_ref_t upper = draft.addAccsNode(Type::Int64(), 1);
+                        draft.setNormInputs(
+                            upper, std::span<const gc_node_ref_t>(pair.data(), pair.size()));
+                        const std::array<gc_node_ref_t, 2> span{upper, intervalLower};
+                        roundCount = draft.addOperNode(Type::Int64(), nullptr, ":op/sub_l");
+                        draft.setNormInputs(
+                            roundCount, std::span<const gc_node_ref_t>(span.data(), span.size()));
+                    } else {
+                        const std::array<gc_node_ref_t, 1> only{sequence};
+                        roundCount = draft.addOperNode(Type::Int64(), nullptr, ":struct/len_arr");
+                        draft.setNormInputs(
+                            roundCount, std::span<const gc_node_ref_t>(only.data(), only.size()));
+                    }
+                    const std::array<gc_node_ref_t, 2> lastRound{roundCount, intConstant(1)};
+                    const gc_node_ref_t lastIndex =
+                        draft.addOperNode(Type::Int64(), nullptr, ":op/sub_l");
+                    draft.setNormInputs(
+                        lastIndex, std::span<const gc_node_ref_t>(lastRound.data(), lastRound.size()));
+                    const std::array<gc_node_ref_t, 3> steps{lastIndex, intConstant(-1), intConstant(-1)};
+                    Type *const rangeType = ArrayType::create(Type::Int64());
+                    backwardsRange = draft.addOperNode(rangeType, nullptr, ":struct/range");
+                    draft.setNormInputs(
+                        backwardsRange, std::span<const gc_node_ref_t>(steps.data(), steps.size()));
+                }
                 const uint32_t newRegion =
                     draft.addRegion(rt::GCRegionKind::LoopBody, 0);
                 draft.setInsertRegion(newRegion);
-                // The body takes the iterated element first and the states after it. The element is
-                // not differentiated (it comes from the range), so it keeps its type and goes
-                // unused; each state becomes one cotangent, so the region grows one port per state
-                // and, later, one per escaped value.
+                // The body takes the round number first and the states after it; each state becomes
+                // one cotangent, so the region grows one port per state and, later, one per escaped
+                // value. The number is not differentiated (it comes from the range), so it keeps its
+                // type and goes unused by the rules.
                 std::vector<gc_node_ref_t> newPorts;
-                const gc_node_ref_t elementPort = draft.addPortNode(
-                    function->node(regionPorts.front())->dataType(),
-                    draft.allocateRuntimeSlot(function->node(regionPorts.front())->dataType()));
+                Type *const elementType =
+                    iterates ? Type::Int64() : function->node(regionPorts.front())->dataType();
+                const gc_node_ref_t elementPort =
+                    draft.addPortNode(elementType, draft.allocateRuntimeSlot(elementType));
                 newPorts.push_back(elementPort);
-                // The round's element is the one thing both loops have: the forward loop iterated
-                // it and the reverse loop iterates the same array, so round k reads element k in
-                // either direction. It is therefore a value a round can *forward* rather than one
-                // it has to refuse -- and it is where the backward half `split` hands out reads its
-                // per-round residuals from, because the tape the cut gives that half to iterate is
-                // that half's element. A rule that needs the round's own state still refuses
+                // The round's element, read at the round's own number: `xs[round]` for an array and
+                // `a + round` for an interval. Both stand inside the body region, so the number they
+                // read is this round's. A rule that needs the round's own state still refuses
                 // (`skip=state`): the state has no per-round value in the reverse walk.
-                forwardOf[regionPorts.front()] = elementPort;
+                if (iterates) {
+                    const gc_node_ref_t elementOfRound = [&]() -> gc_node_ref_t {
+                        if (intervalForm) {
+                            const std::array<gc_node_ref_t, 2> at{intervalLower, elementPort};
+                            const gc_node_ref_t sum =
+                                draft.addOperNode(Type::Int64(), nullptr, ":op/add_l");
+                            draft.setNormInputs(
+                                sum, std::span<const gc_node_ref_t>(at.data(), at.size()));
+                            return sum;
+                        }
+                        const std::array<gc_node_ref_t, 2> at{sequence, elementPort};
+                        const gc_node_ref_t read = draft.addOperNode(
+                            function->node(regionPorts.front())->dataType(), nullptr, ":op/idx_arr");
+                        draft.setNormInputs(
+                            read, std::span<const gc_node_ref_t>(at.data(), at.size()));
+                        return read;
+                    }();
+                    forwardOf[regionPorts.front()] = elementOfRound;
+                } else {
+                    forwardOf[regionPorts.front()] = elementPort;
+                }
                 // A state's cotangent port lives in the state's own tangent space: a loop that
                 // carries a `float[]` state pulls back an array, and a port typed `float` would hand
                 // that array to a number -- the same read that took the process down when two
@@ -1999,21 +2134,26 @@ bool buildTransposeMember(
                 draft.setRegionResult(newRegion, regionResult);
                 draft.setInsertRegion(0);
                 const gc_node_ref_t loopNode = draft.addLoopNode(
-                    rt::loopBodyOf(*function, ref), loopType);
+                    [&] {
+                        rt::GCLoopBody payload = rt::loopBodyOf(*function, ref);
+                        if (iterates) {
+                            // The reverse loop iterates the round numbers, which is an array
+                            // whatever the old loop's sequence was: an interval loop's pair is read
+                            // by the body through `a + round`, and the numbers come from an array.
+                            payload.iterableForm = camel::core::LoopIterableForm::Array;
+                        }
+                        return payload;
+                    }(),
+                    loopType);
                 draft.setRegionOwner(newRegion, loopNode, function->region(bodyRegionOld)->index);
                 draft.setNodeOrigin(loopNode, static_cast<uint32_t>(function->region(bodyRegionOld)->origin));
                 std::vector<gc_node_ref_t> loopNorm;
-                // The range, and everything before the states in the old norm list: those are
-                // copied as they stand, because the reverse loop iterates over the same values.
-                // What follows them is the states, and those become cotangents.
-                for (size_t i = 0; i + stateCount < oldNorm.size(); ++i) {
-                    const gc_node_ref_t copied = forward(oldNorm[i]);
-                    if (!complete || copied == rt::kInvalidNodeRef) {
-                        os << "TRANSPOSE function=" << function->name() << " skip=range node="
-                           << ref << '\n';
-                        return false;
-                    }
-                    loopNorm.push_back(copied);
+                // What the loop iterates is `range(n - 1, -1, -1)`: the reverse walk of the rounds,
+                // not the sequence in the order it was written. Everything before the states in the
+                // old norm list is that sequence, and it is now a value the *body* reads at the round
+                // number instead, so it is not a norm input of this loop at all.
+                if (iterates) {
+                    loopNorm.push_back(backwardsRange);
                 }
                 // One seed per state: the cotangent the loop's value carried for that state. With
                 // one state that is the whole cotangent of the loop's value; with several it is the
@@ -2098,16 +2238,17 @@ bool buildTransposeMember(
                     if (start != nullptr && start->kind == rt::GCNodeKind::Port) {
                         result =
                             tupleOf({loopNode}, {cotangentTypeOf(loopNode, Type::Float64())}).first;
-                    } else if (closurePortOf.empty()) {
+                    } else if (closureOf.empty()) {
                         // Nothing reaches that value, so nothing it did can reach a parameter, so the
                         // cotangent of the loop's value is the zero of its cotangent space: the same
                         // reading the straight-line case took on 48bfa6778 ("a parameter the body
                         // never reads answers a zero cotangent, not a refusal"), read for a loop. It is
-                        // answered only when the member carries no closure: a half that carries one
-                        // is called with the value it carries, and an answer that is a constant
-                        // would be a member called for a value nothing in it reads -- which is the
-                        // shape that took the process down when it was answered this way, so it stays
-                        // refused by name one branch below.
+                        // answered only when the member carries no closure *of its own* -- the test is
+                        // the closure it inherited (`closureOf`), not whether the answer reads one of
+                        // its ports: a half a call handed a closure has a value to be called with, and
+                        // an answer that is a constant would be a member called for a value nothing in
+                        // it reads -- which is the shape that took the process down when it was
+                        // answered this way, so it stays refused by name one branch below.
                         const gc_node_ref_t none = zeroOf(loopNode);
                         result = tupleOf({none}, {cotangentTypeOf(loopNode, Type::Float64())}).first;
                     } else {
@@ -2179,7 +2320,8 @@ bool buildTransposeMember(
                                                   ? static_cast<int>(carrier->kind)
                                                   : -1);
                     };
-                    os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                    os << "TRANSPOSE function=" << function->name()
+                       << " skip=call-no-transpose node=" << ref
                        << " callee=none value=" << describe(inputs.front());
                     const auto captured = function->withInputsOf(ref);
                     if (!captured.empty()) {
@@ -2205,7 +2347,8 @@ bool buildTransposeMember(
                 // the index.
                 const size_t calleeParams = callee->funcType()->normTypesCount();
                 if (calleeParams == 0 || inputs.size() != argumentAt + calleeParams) {
-                    os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                    os << "TRANSPOSE function=" << function->name()
+                       << " skip=call-no-transpose node=" << ref
                        << " callee=" << callee->name() << " params=" << calleeParams << '\n';
                     return false;
                 }
@@ -2220,7 +2363,8 @@ bool buildTransposeMember(
                 std::vector<bool> participates;
                 if (tangentArgs > 0) {
                     if (tangentArgs > calleeParams) {
-                        os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                        os << "TRANSPOSE function=" << function->name()
+                           << " skip=call-no-transpose node=" << ref
                            << " callee=" << callee->name() << " tangent-args=" << tangentArgs
                            << " params=" << calleeParams << '\n';
                         return false;
@@ -2245,7 +2389,8 @@ bool buildTransposeMember(
                         state.callees.emplace(rt::toValue(calleeId), transposed);
                         if (!buildTransposeMember(state, callee, transposed, os, participates)) {
                             os << "TRANSPOSE function=" << function->name()
-                               << " skip=call node=" << ref << " callee=" << callee->name() << '\n';
+                               << " skip=call-no-transpose node=" << ref
+                               << " callee=" << callee->name() << '\n';
                             return false;
                         }
                     } else {
@@ -2255,7 +2400,8 @@ bool buildTransposeMember(
                 FunctionType *calleeType = transposeSignature(
                     callee->funcType(), participates, &answersOf, &state.calleeNeeds[callee]);
                 if (calleeType == nullptr || calleeType->normTypesCount() == 0) {
-                    os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                    os << "TRANSPOSE function=" << function->name()
+                       << " skip=call-no-transpose node=" << ref
                        << " callee=" << callee->name() << " signature\n";
                     return false;
                 }
@@ -2280,13 +2426,15 @@ bool buildTransposeMember(
                         continue;
                     }
                     if (argumentAt + i >= inputs.size()) {
-                        os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                        os << "TRANSPOSE function=" << function->name()
+                           << " skip=call-value-missing param=" << i << " node=" << ref
                            << " arg=" << i << " callee=" << callee->name() << '\n';
                         return false;
                     }
                     const gc_node_ref_t argument = forward(inputs[argumentAt + i]);
                     if (argument == rt::kInvalidNodeRef) {
-                        os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                        os << "TRANSPOSE function=" << function->name()
+                           << " skip=call-value-missing param=" << i << " node=" << ref
                            << " arg=" << inputs[argumentAt + i] << '\n';
                         return false;
                     }
@@ -2299,20 +2447,23 @@ bool buildTransposeMember(
                 // a member called with a hole in its list, which is worse than a refusal.
                 for (const size_t idx : state.calleeNeeds[callee]) {
                     if (argumentAt + idx >= inputs.size()) {
-                        os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                        os << "TRANSPOSE function=" << function->name()
+                           << " skip=call-value-missing param=" << idx << " node=" << ref
                            << " arg=" << idx << " callee=" << callee->name() << '\n';
                         return false;
                     }
                     const gc_node_ref_t captured = forward(inputs[argumentAt + idx]);
                     if (captured == rt::kInvalidNodeRef) {
-                        os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                        os << "TRANSPOSE function=" << function->name()
+                           << " skip=call-value-missing param=" << idx << " node=" << ref
                            << " arg=" << inputs[argumentAt + idx] << '\n';
                         return false;
                     }
                     arguments.push_back(captured);
                 }
                 if (arguments.size() != memberValues) {
-                    os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                    os << "TRANSPOSE function=" << function->name()
+                       << " skip=call-no-transpose node=" << ref
                        << " values=" << arguments.size() << " member=" << memberValues << '\n';
                     return false;
                 }

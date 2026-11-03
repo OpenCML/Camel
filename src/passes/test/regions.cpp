@@ -31,10 +31,34 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
     RuntimeGraphDraftSession session(context_, program);
     auto &draft = session.edit(largest).edit();
     std::vector<gc_node_ref_t> live;
-    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount() && live.size() < 6; ++id) {
-        if (draft.alive(id)) {
-            live.push_back(id);
+    // What the blocks may take: a node of the body that no node in a region reads. A region reads
+    // the ports of the regions on its own chain (checked at commit), so a node another branch reads
+    // cannot be worded inside a block; a port words a value the region is handed and the blocks
+    // word none; and a node that waits on a BRCH runs between a branch and its join and would
+    // belong to no arm. Everything else is the blocks'.
+    const GCUseIndex uses(*largest);
+    const auto readFromARegion = [&](gc_node_ref_t id) {
+        for (const std::span<const gc_node_ref_t> group :
+             {uses.norm(id), uses.with(id), uses.ctrl(id)}) {
+            for (gc_node_ref_t user : group) {
+                if (largest->nodeRegion(user) != 0) {
+                    return true;
+                }
+            }
         }
+        return false;
+    };
+    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount() && live.size() < 6; ++id) {
+        const GCNode *existing = largest->node(id);
+        if (!draft.alive(id) || existing == nullptr || existing->kind == GCNodeKind::Port ||
+            largest->nodeRegion(id) != 0 || !largest->ctrlInputsOf(id).empty() ||
+            readFromARegion(id)) {
+            continue;
+        }
+        live.push_back(id);
+    }
+    if (live.size() < 5) {
+        return program;
     }
     const uint32_t outer = draft.addRegion(GCRegionKind::Block, 0);
     const uint32_t inner = draft.addRegion(GCRegionKind::Block, outer);

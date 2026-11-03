@@ -217,7 +217,7 @@ REINTERP jvp function=rulesets.jvp::jvp_ltod__lhs skip=rule uri=:op/ltod
 | (b'-2) | **一个键放多条律**：`indexRule` 每个键存一个 vector，`lookupRule` 返回候选表，三个 transform 依次试到"这个类型有实例"为止。引擎**已经**按操作数的元素类型实例化律（`genericRuleInstance(context, ruleId, {elementType}, {})`），类型不符时它给的是**具名拒绝**（`no instance of the rule at float`），不是错律 | `indexRule`/`lookupRule` 改成 vector + `jvp/vmap/transpose` 三处改成循环 | 无：键**完全不需要推导**，`float` 就是一个键，32 条缺口**一条例外都不用加**，例外表自动回到 2 |
 
 **(b'-2) 是 (b') 的真身，而且比 (b') 更小**：键不需要带类型（`float@1` 就够），因为类型分派是引擎已有的能力，不是键要解决的问题。**我按"不许留下一个红的树"回退了这一版**（`git checkout` 七个文件，`rulesets` 回 **67/67**、`transforms` 回 **48/61**、例外表回 **3**），把量到的东西写在这里，等点名再动。
-### 5.3 落 (b'-2)：一个键放多条律，类型分派留在引擎里（已落地）
+### 5.3 落 (b'-2)：一个键放多条律，类型分派留在引擎里（已落地；**"引擎已有分派"这一句在 §5.4 被实测推翻**）
 
 作者裁 (b'-2)。落地的形状比 (b') **更小**，因为键不再编码类型：
 
@@ -274,6 +274,236 @@ REINTERP jvp function=f6tod  ... tangent=computed source=ruleset rules=jvp_dtod
 **按 ⚠️ 停手条件 (i) 回退**：`stdlib/rulesets/jvp.cml` 与 `modules/transforms/jvp.cpp` 已 `git checkout` 回 `a9061b77a`，读数回到 `rulesets` **67/67**、`transforms` **48/61**。
 
 **要作者裁的一句**：**"一个键里的哪条律答这个类型"该由谁判**——是 `genericRuleInstance` 真的执行条件（那么 5.3 的候选表就够了，27 条律可以立刻写回），还是索引侧要有一个按类型的显式查表（那就回到 (b') 的键带类型，再看 5.2 里"律不能声明具体类型"那条约束怎么绕）？
+### 5.5 让 `when` 在实例判定里生效（作者裁 (a)，已落地）
+
+**改的是"说了不算"这件事**：一条律写了 `when is_same::<T, int>()`，却在 `float` 上被当成实例——**那条 `when` 是假话**。假话比缺失危险：缺失会拒绝，假话会算错。
+
+**一处代码，十二行**（`src/compile/gir/rule_templates.cpp#genericRuleInstance`）：
+
+```cpp
+std::string conditionWhy;
+if (owner != nullptr && ruleConditionAt(context, ruleId, types, conditionWhy) ==
+                            RuleConditionAt::Fails) {
+    instance.why = std::format("its condition does not hold at {}", tupleText(types));
+    entry.instances.push_back(std::move(instance));
+    return entry.instances.size() - 1;
+}
+```
+
+`ruleConditionAt` 早就存在（`rule_templates.h:148`，`check` 用的就是它），`genericRuleInstance` 从没问过它。**只有 `Fails` 会拿走这个元组**：`ValueDependent`（类型部分成立、其余读值）与 `Unknown`（问不出）照旧保留——问不出的条件不许吃掉实例。
+
+**一处刻意的顺序**：条件判 `Fails` 之后，**仍然让模板去实例化一次**，好让"体说了什么"留在 `why` 里（`operator '+' is not defined for these operand types` 这种报告是 `rules` 计划里两条用例钉住的）；体编译得过、只有条件不成立时，`why` 才是`its condition does not hold at …`。**实例一律不发布**——条件是在发布之前问的，这才是"律关于 `int` 就不会答给 `float`"的保证。
+
+**没有动 `rule_expand.cpp:227` 的判定顺序**（作者写的 ⚠️(i) 小实验因此没必要做）：门在实例之前，端口数检查留在原地当第二道筛。
+
+**②③ 各算子的日志（`rules=` 就是"哪条律答的"）**：
+
+```
+function=ltod   rules=jvp_ltod     3.5 / 1.0   （:op/ltod，int 源）
+function=f6tod  rules=jvp_f6tod    3.5 / 1.0   （:op/f6tod，f16 源）
+function=dtof   rules=jvp_dtof     3.5 / 1.0   （:op/dtof，float 源）
+function=ftod   rules=jvp_ftod     见下面的安全阀
+```
+
+`itod`/`dtod` 走的是常量折叠（`jvp(dtod)(3.5, 1.0)` 全是常量，不建图）——数对（`3.5`/`1.0`），但没有 `rules=` 行，所以安全阀用了一个不可折叠的输入（`math::sin(1.0)`）。
+
+**④ 安全阀：修前给错的数，修后给对的数。** 构造办法：把 `jvp_ftod` 的正文**临时**改成 `float(dx) * 2.0`（`jvp_dtod` 是 `f64(dx)`，两条律端口数都是 1，**端口数相同、类型不同**），再用不可折叠的 `f32(x)` 调用 `:op/ftod`：
+
+| | 日志 | 切量 |
+|---|---|---|
+| 门关（= §5.4 的状态，并让候选继续往下试） | `rules=jvp_dtod` | **`1.0`** ← 错的（`jvp_dtod` 的 `f64(dx)`） |
+| 门开（本笔） | `rules=jvp_ftod` | **`2.0`** ← 对的（`jvp_ftod` 的 `float(dx) * 2.0`） |
+
+两个数都是实测：`[stdout] 1.0` / `[stdout] 2.0`，同一份探针、只差那十行。**这一条同时证明了 §5.4 的担心不是假想**：端口数相同就会套错律，而套错的律会给出错数。
+
+**⑤ 读数**：`rulesets` **67/67**（27 条律全部归档、无重复键报警）；`transforms` **48/61**（同一份 13 条红，新增红 0）；全量见下。
+
+**⑥ 页里被纠正的一句**：§5.3 说"类型分派是引擎已有的能力"——**实测证明这条路径上没有**，纠正它的是 `:op/ftod` 那行 `rules=jvp_dtod`，不是文档推断。§5.3 的标题已标注。
+### 5.6 四条数组转换律：`export` 不是障碍，**`ruleElementTypeOf` 是**（实测，已回退）
+
+作者裁"给 `is_compact_array` 加 `export` 再写 4 条数组律"。**`export` 做了，律也写了，仍然选不中**——两处读数：
+
+**① 谓词该在 `types`，不在 `prelude`。** `prelude` 里的 `is_compact_array` 是私有的 `func`；只加 `export` 还不够，因为 `rulesets.jvp` 里 `is_float`/`is_same` 都来自 `types`，而 `prelude` 的导出面不被规则库当作名字来源。所以试的是：**把 `is_compact_array` 移到 `stdlib/types.cml` 并 `export`**（`types` 是类型谓词的家，`is_array`/`is_numeric` 都在那儿），`prelude` 改成 `import { …, is_compact_array, … } from types`，`jvp.cml` 也 import 它。这一版**编译通过**，说明"写得出"这一步是成立的。
+
+**② 但选不中：`ruleElementTypeOf` 把数组压成元素类型。** 4 条律的探针（`jvp(atod)(xs, [1.0, 1.0])`）给出的日志是：
+
+```
+REINTERP jvp function=atod graph=242 ... tangent=computed source=ruleset rules=jvp_dtod
+[SUMMARY] total: 1, pass: 0, fail: 1, killed by a signal: 1
+```
+
+`:op/at od` 是**数组**算子，答它的却是 `jvp_dtod`（标量 float→float 的律）——因为 `modules/transforms/rule_types.h#ruleElementTypeOf` **刻意把数组剥到元素类型**（注释写明：正是这一条让 `index_into<T>` 在 `float[]` 上被按 `float` 归档，review P1-9）。实例因此在 `float` 上成立，我的数组律（条件 `is_compact_array::<A>()`，A 必须是数组类型）永远不成立。**这不是"谓词私有"能解的**。
+
+**③ 而且它崩了。** 同一份探针在**有律**和**无律**两种情况下读数完全一样（`rules=jvp_dtod`、`killed by a signal: 1`），所以崩溃是**数组 lift 既有路径**的问题，不是这 4 条律引起的——与 `grad_array_*` 一直是红的一致。但它同时说明另一件事：**标量律被套到数组算子上，而且这一套就崩**。`when` 门在这里救不了，因为实例是按 `float` 问的、`jvp_dtod` 的条件在 `float` 上真成立。
+
+**按 ⚠️(二) 回退**：`stdlib/types.cml`、`stdlib/prelude.cml`、`stdlib/rulesets/jvp.cml` 全部 `git checkout` 回 `04720eb7c`；读数不动（`rulesets` 67/67、`transforms` 48/61、全量 8527/8493/14）。页里只留这一节。
+
+**这两条要作者裁（记成缺陷，不自己决定）**：
+1. **数组算子的律该按什么类型归档**——`ruleElementTypeOf` 的"剥到元素"是 P1-9 的决定，改它要重开那一页；不改，则数组转换永远没有律。
+2. **标量律被数组算子选中并崩**（`rules=jvp_dtod` + `killed by a signal`）：这是"选错律"的数组版本，和 §5.5 修掉的 `:op/ftod` 是同一类，只是入口不同——该在 `ruleElementTypeOf` 里挡，还是在"实例的端口类型与算子端口类型不符"时挡？
+### 5.7 数组 lift 的崩改成具名拒绝（作者把"不许崩"排在写律之前）
+
+§5.6 里那张读数表还有一行没被读懂：
+
+```
+REINTERP jvp function=atod ... tangent=computed source=ruleset rules=jvp_dtod
+[SUMMARY] total: 1, pass: 0, fail: 1, killed by a signal: 1
+```
+
+前一行说"算完了"，后一行说"进程被打死"。按"对 > 明确拒绝 > 错数 > 崩"的排序，**这是最坏的一格，而它一直挂在 `grad_array_*` 名下当一个红**。
+
+**崩因**：规则是**按操作数的元素类型**问的（`rule_types.h#ruleElementTypeOf` 刻意剥掉数组，注释写明那是让 `index_into<T>` 能在 `float[]` 上按 `float` 归档的同一件事，review P1-9）。于是 `:op/at od`（`float[]` → `float[]`）问到的实例是 `jvp_dtod`——一条端口类型为 `float` 的标量律。`expandRuleRightSide` 把 `float[]` 的操作数接到 `float` 的端口上，建出来的图不是任何编码器/VM 能跑的，运行时就那么死了。
+
+**改法（一处，`modules/transforms/jvp.cpp`）**：候选律在展开之前，先比**形状**——
+
+```cpp
+if (!portsTakeOperands(instance, operandTypes, why)) { shapeWhy = why; continue; }
+```
+
+`portsTakeOperands` 拿实例左侧的 `normTypeAt(i)` 和算子各操作数的**自身类型**逐个 `equals`；对不上就换下一条候选，全不成时用**形状那条**原因（比"条件不成立"更具体）。`operandTypes` 由调用点在 `originals` 上读出，穿进 `buildRuleTangent`。
+
+**改前 / 改后（同一份探针，`jvp(atod)(xs, [1.0, 1.0])`）**：
+
+```
+改前: REINTERP jvp function=atod ... rules=jvp_dtod
+      [SUMMARY] total: 1, pass: 0, fail: 1, killed by a signal: 1
+
+改后: REINTERP jvp function=atod skip=rule uri=:op/atod
+          reason=the rule takes (float), and the operator has (float[])
+      [Error]: transforms: jvp has no forward rule for `:op/atod`
+               (the rule takes (float), and the operator has (float[])).
+```
+
+**这一笔只挡实测到的这一处**（⚠️(i)）：`buildRuleTangent` 的候选循环；数组路径上**其他**崩点没有被走过，也就不在这里假装挡住。
+
+**读数**：`rulesets` **67/67**；`transforms` 见下（新增红 0 才算过）；全量见下（**`killed` 必须是 0**，这是本笔的关键读数）。
+## 5.8 附：P0-2 第二半的清单（只调查，不改代码）
+
+```
+git grep -n -E 'ctrlInputsOf|ctrlEdgesOf|orderPredsOf' -- src modules include
+```
+
+**命中 206 行 / 60 个文件**（`ctrlInputsOf` 188，`orderPredsOf` 19，`ctrlEdgesOf` 0——这个名字不存在）。按区域：
+
+| 区域 | 行数 | 它在回答什么 |
+|---|---|---|
+| `src/runtime/` | 76 | 运行时的等待边本身（`draft`/`graph`/`control`/`writings`/`draft_inline`/`draft_clone`） |
+| `src/passes/`（opt 等） | 29 | **编译期 pass 的决定**——唯一可能有"该读没读"的一组 |
+| `src/passes/test/` | 23 | 测试 pass 的断言与构造 |
+| `src/compile/gir/` | 18 | 建图（`builder_control`）与 `GraphRead` 读法 |
+| `src/execute/` | 18 | 执行计划与调度（ctrl 就是等待边，语义正确） |
+| `include/` | 11 | 访问器本身的声明/实现（不是读者） |
+| `src/passes/trans/` | 10 | printer（dot/json/stats） |
+| `modules/tiles` | 7 | 区域切分 |
+| `modules/autodiff` | 6 | pullback 的边搬运 |
+| 其它 `modules/` | 8 | `rewrite`/`graph`/`onnx` |
+
+**编译期那一组（`src/passes/opt` + `modules/transforms` + `modules/tiles`）共 32 行 / 12 文件**，逐行看过：**19 行同处也读了 sync**（`generic.cpp:203`、`rewrite.cpp:377`、`screen.cpp:231`、`split.cpp:373`、`gates.cpp:36` 是范本——`split.cpp` 那处干脆三个都读），**13 行只读 ctrl**：
+
+| 文件#符号 | 它在回答什么 | 该换成 | 备注 |
+|---|---|---|---|
+| **`src/passes/opt/generic/algebra.cpp#constant`** | "这个值能不能折成常量"（`!ctrl.empty() \|\| written(id)`） | ③ + ①：加 `!syncInputsOf(id).empty()` | **最小可换**（见下） |
+| `algebra.cpp` 同函数 | 同上（`written(id)` 是效应那半） | ③ 已答 | — |
+| `gates.cpp:62/90/94` | gate 的 frontier / 代价 | ① 该并读 sync | 需先定"代价"口径 |
+| `rewrite.cpp:512`、`rewrite.h:115` | "这个 user 能不能改写" | ① 该并读 sync | 与 512 同一判断的两处写法 |
+| `screen.cpp:274` | 等待 frontier 的规模 | ① 该并读 sync | 与 `screen.cpp:231` 成对，231 已读 |
+| `tiles/compiler.cpp:536`、`region_extract.cpp:108`、`graph_regions.cpp:513` | 区域切分的依赖闭包 | ① 该并读 sync | 三处同一件事 |
+| `defun/defunctionalize.cpp:878`、`tiles/region_outline.cpp:518/531` | 把已有边列**搬**到新节点 | **写侧**（另组） | 读是为了写，不是判断 |
+
+**挑出的一处：`src/passes/opt/generic/algebra.cpp#constant`。** 为什么最小：它是**一个纯谓词里的一个合取项**（`!draft.ctrlInputsOf(id).empty()` → 再加一个 `!draft.syncInputsOf(id).empty()`），不新增 API、不动图、不改任何 pass 的遍历；唯一的效果是**少折几个常量**（把"带着 sync 等待的节点"排除在常量之外），也就是只会更保守。它和 `842f4c1e9` 之前那笔 `fault` 的改法同一类：同一个谓词，同一处加减一个条件。
+
+**⚠️ 写边被单独分组**：`setCtrlInputs(..., ctrlInputsOf(...))` 这类（`draft_inline` 12 处、`draft_clone` 4 处、`pullback.cpp:1662/2646/2719`、`defunctionalize.cpp:304`、`rewrite.cpp:323`、`region_outline.cpp:518`）是**把已有的等待边原样搬走**，读是为了写，和"读边判断"不是一件事，不混进上表。
+
+**本轮不改代码。**
+### 5.9 P0-2 第二半 · 第 1 处：`algebra.cpp#constant` 加读 sync —— **实测不生效，已撤**
+
+§5.8 清单里挑出的最小一处。改动是一行合取项：
+
+```cpp
+    if (!h || h->kind != GCNodeKind::Data || h->dataType == nullptr || h->dataIndex >= 0 ||
+        h->dataType->code() != ops.element || !draft.normInputsOf(id).empty() ||
+        !draft.withInputsOf(id).empty() || !draft.ctrlInputsOf(id).empty() ||
+        !draft.syncInputsOf(id).empty() || written(id)) {
+```
+
+理由写在函数里：**常量是"没有任何链握着它的值"**；只看控制边，一个挂在 sync 链上的节点看起来是自由的（`edges.cn.md` 5.3：控制边消失之后，命名链尾的正是 sync 边），把它折走就是跨过它前面的语句。`gates.cpp#carriesWait` 与 `generic.cpp#waits` 早就是这么问的。
+
+**读数（改前 = `942f35372`，改后 = 本笔）**：
+
+```
+全量     8527 / 8493 pass / 14 fail / skip 10 / known failures 10   （改前改后完全一致）
+红名单   14 条逐名 diff：新增 0，减少 0
+killed   log 里出现 0 次
+feat/opt     1171 / 1171 全绿
+```
+
+**停手探针（作者裁：造不出来就撤）**：手工探针
+
+```cml
+func main(): int sync {
+    var total = 0
+    let k = 2 + 3        // 常量折叠的候选
+    total = total + k
+    println(total)
+    return 0
+}
+```
+
+`std::opt std::stats` 读数 **有这一行 21 节点 / 去掉这一行 21 节点**——**两次相同**。为什么：
+
+**builder 把 sync 边和 ctrl 边成对写**。`builder_helpers.h#writeSyncStatement` 就是
+`writeSyncLink(from, to); writeControlLink(from, to);`——所以**任何挂在 sync 链上的语句，`ctrlInputsOf` 本来就非空**，再加一个 `syncInputsOf` 合取项**永远改不了答案**。这不是"用例没覆盖"，是**这行今天不可达**。
+
+**这一行已撤**（`git checkout` 回 `ede6d0e54` 之前的 `algebra.cpp`）。结论记在这里的是**负结果**：今天没有任何程序能把"常量候选且只有 sync 等待"的节点放到图上——`constant()` 的候选是无输入的数据槽节点，而 `sync` 链上的节点从出生起就带着 ctrl 边。**只有某个 pass 把 ctrl 边单独丢掉之后，这行才会咬人**；那一天的到来，本身就是一个该立用例的事件。
+
+因此 §5.8 里"9 处该补 sync"要修正为 **8 处**：这一处经实测证明**不必补**（补了也不生效）。
+### 5.10 `syncInputsOf` 与 `ctrlInputsOf` **不是**同一个集合（抽样实测）
+
+§5.9 的推论"builder 成对写边 ⇒ 两个集合可能恒等"要当场验。方法：在 `src/passes/trans/stats/stats.cpp` 的节点循环里临时加一句 `std::fprintf(stderr, "EDGES node=%d ctrl=… sync=…")`（**测量后已 `git checkout` 掉，不进任何提交**），在 7 个程序上跑 `std::stats`：纯标量、分支（`if … then … else`）、循环（`loop … while`）、函数调用、`sync` 块（`loop … do sync { }`）、数组/结构体态、以及一个只做 `var` 赋值的 `sync` 函数。
+
+**读数：78 个节点实例，20 个带边；17 个两集合逐节点相同，3 个不同。**
+
+```
+tmp_e2_branch  node=3  ctrl=      sync=2,     ← 只有 sync
+tmp_e2_branch  node=6  ctrl=4,    sync=       ← 只有 ctrl
+tmp_e2_branch  node=8  ctrl=4,    sync=       ← 只有 ctrl
+```
+
+**结论：不是恒等。**三选一里的 **③（有节点只有 sync）** 出现了，同时还出现"只有 ctrl"的节点——都在分支那个程序里（两个图，节点号各自从 0 起，所以同一次运行里两图混在一起）。
+
+**这不只是"8 处白改"的反面，它把两件事都改了账**：
+
+1. **§5.8 那 8 处不是行为等价的**——对"只有 sync 等待"的节点，只读 ctrl 的读者会漏掉等待；对"只有 ctrl"的节点，补读 sync 是多一次无害的空判断。所以那 8 处要**逐处**看它遇到的图里是哪种节点，不能批量改。
+2. **§5.9 撤掉的那一行，理论上可能生效**——因为"只有 sync"的节点确实存在；只是我上一轮的探针里，常量候选不在这种节点上。要证明它在起作用，需要一个"常量候选恰好只有 sync 边"的程序——那是下一步（需要先知道那 3 个节点各是什么算子，临时打印里没有 kind/op）。
+
+**抽样声明**：以上是**在这 7 个程序上**的读数，不是全称结论。`sync` 边在更多 pass 之后的图上可能更常见（inline 的 splice、`setSyncInputs` 的搬运都可能只写一种）。
+### 5.11 那 3 个节点是什么：Join 只有 sync，两个算术只有 ctrl
+
+§5.10 的临时打印加上 `kind` 与算子名再跑同一批 7 个程序（**测完已 `git checkout`，仪器不进提交**）：
+
+```
+tmp_e2_branch | node=3 kind=7  op=          ctrl=      sync=2,      ← Join
+tmp_e2_branch | node=6 kind=11 op=:op/mul_l ctrl=4,    sync=       ← 分支臂
+tmp_e2_branch | node=8 kind=11 op=:op/add_l ctrl=4,    sync=       ← 分支臂
+```
+
+`kind=7` 是 **Join**（`GCNodeKind`：Data 0 … Brch 6, Join 7, Call 8 … Oper 11）——`if … then … else` 那个值的汇合点，它带着 sync 前驱（`2` 是条件 `:op/gt_l`）却**没有** ctrl 边；两个算术在 `Brch`（`4`）的控制边上，是**分支臂**，本来就不在块的语句链上。
+
+**② §5.9 那一行有没有靶子：没有。** `constant()` 的候选要求 `h->kind == GCNodeKind::Data`（`algebra.cpp` 第一个条件），而实测到的唯一"只有 sync"的节点是 **Join**——它永远进不了 `constant()`。要让那一行咬人，得有一个 **Data 节点**只有 sync 边；这批程序里没有。所以 §5.9 的合取项**没有靶子**（在这 7 个程序上），撤掉是对的。
+
+**③ 8 处的复核：我上一轮用"±1 行内有 sync 字样"做的分类**有假阳性**，逐处读之后**：
+
+| 位置 | 它处理什么形状 | 会不会遇到只有 sync 的节点 | 依据 |
+|---|---|---|---|
+| `rewrite.cpp:512` | 删除节点后把等待继承给后继（遍历 `syncUsers`） | **不是候选**——它同一表达式里读了两侧：`!syncInputsOf(user).empty() \|\| !ctrlInputsOf(user).empty()` | 逐行读 |
+| `rewrite.h:115` | `inheritWait`：**写** sync 边 + 补 ctrl 边 | **写侧**，不是读者 | 内有 `setSyncInputs` + `appendInput(Ctrl…)` |
+| `screen.cpp:274` | 数"多余的 ctrl 输入"（`ctrl >= 2`） | 不会：问的是**退役那种边**自己的冗余 | 逐行读 |
+| `gates.cpp:62/90/94` | gate 的 frontier 与代价 | 会（Join 可能是 gate 的后继） | 按形状推断，**未逐处读** |
+| `tiles/compiler.cpp:536`、`region_extract.cpp:108`、`graph_regions.cpp:513` | 区域切分的依赖闭包 | 会（任何节点都可能出现） | 按形状推断，**未逐处读** |
+
+**净结果：8 处里已确认 3 处不必改**（1 处本就两侧都读、1 处是写侧、1 处问的是 ctrl 的冗余）。剩下 **5 处**（`gates.cpp` 三处 + `tiles` 三处＝两族）是"按形状推断会"，**要逐处读才能定**——这正是"9 处"这个数字第三次缩小：9 → 8（§5.9 撤）→ 8 里 3 处不必改。
+
+**④ 抽样声明**：仍是那 7 个程序、78 个节点；`kind`/算子名只在 `tmp_e2_branch` 里产生了差异，其余 6 个程序没有。
 ## 6. 一句话结论
 
 **这条缝是方案性的，不是少数特例**：按"结果有切空间却拼不出键"计，**32 条**（把复数算进去 50 条），而例外表只能一条一条地救——今天救了两条、补了一条（`^`）。缺口的形状有两个：

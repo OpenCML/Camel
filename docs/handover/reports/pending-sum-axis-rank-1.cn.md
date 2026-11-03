@@ -62,7 +62,7 @@ python3 test/tools/cppexec/run.py test/cases/modules/tensor/int64_sum.cml   # �
 
 | 树 | 读数 | 原因 |
 |---|---|---|
-| `lane-guard`（本树） | `does not build 0` / `refused 1` | `tensor:sum_axis` 规则对 `rank < 2` **直接拒绝** |
+| `6af543d27`（原 `lane-guard`，该分支已删，本树） | `does not build 0` / `refused 1` | `tensor:sum_axis` 规则对 `rank < 2` **直接拒绝** |
 | `fsh-dev` | `does not build 1`（`const int64_t v5_sum_axis = rt::sumAxis(...)`） | 那道秩 1 的拒绝被**删掉**，却仍写返回数组的 `rt::sumAxis` |
 
 **判据**：「同一条用例在两棵树上一个是编不过、一个是被拒，说明两棵树对同一件事的判断不同——

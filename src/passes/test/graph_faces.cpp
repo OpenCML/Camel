@@ -134,9 +134,9 @@ GraphFacesTestPass::apply(const camel::runtime::Program *program, std::ostream &
         // The erasure is never committed: this pass reports and leaves the program it was given.
     }
 
-    os << "[GF] regions " << draft.regions << "/" << frozen.regions << " exit " << draft.exitRef
-       << "/" << frozen.exitRef << " slots " << draft.slots << "/" << frozen.slots << " node "
-       << anyNode << " " << draft.nodeRegion << "/" << frozen.nodeRegion << "\n";
+    // The absolute readings this pass has always printed, kept beside the relations below so a run
+    // prints both: a plan that pins these pins this graph, a plan that reads those pins the shape,
+    // and one run shows the two agree wherever both speak.
     os << "[NF] dead " << past << " draft=" << (deadDraft ? "null" : "record")
        << " frozen=" << (deadFrozen ? "null" : "record") << "\n";
     os << "[NF] erased " << victimRef << " draft=" << (erasedDraft ? "null" : "record")
@@ -144,5 +144,42 @@ GraphFacesTestPass::apply(const camel::runtime::Program *program, std::ostream &
     if (brchRef != kInvalidNodeRef) {
         os << "[BF] brch " << brchRef << " arms " << draft.arms << "/" << frozen.arms << "\n";
     }
+    os << "[GF] regions " << draft.regions << "/" << frozen.regions << " exit " << draft.exitRef
+       << "/" << frozen.exitRef << " slots " << draft.slots << "/" << frozen.slots << " node "
+       << anyNode << " " << draft.nodeRegion << "/" << frozen.nodeRegion << "\n";
+    // The four lines below say the same things the lines above say with one graph's node numbers
+    // in place of the relations those numbers stand for: `dead 16` reads like "node 16 is dead"
+    // and means "the graph has 11 nodes", and `erased 10`/`brch 6`/`exit 5` are that graph's
+    // indices. A plan that pins them pins one graph; a plan that reads these pins the shape. Both
+    // are printed by the same run, so the two writings can be read against each other.
+    os << "[GF] nodes " << target->nodeCount() << "\n";
+    size_t brchCount = 0;
+    gc_node_ref_t lastFree = kInvalidNodeRef;
+    for (gc_node_ref_t ref = 0; ref < target->nodeCount(); ++ref) {
+        const FrozenGraphRead face(*target);
+        if (!face.alive(ref)) {
+            continue;
+        }
+        if (face.kindOf(ref) == GCNodeKind::Brch) {
+            ++brchCount;
+        }
+        if (face.kindOf(ref) != GCNodeKind::Port && ref != face.exitRefOf()) {
+            lastFree = ref;
+        }
+    }
+    const auto beyondTheEnd = [&] {
+        return past > target->nodeCount();
+    };
+    os << "[NF] dead past=" << past << " gap=" << (past - target->nodeCount())
+       << " beyond=" << (beyondTheEnd() ? 1 : 0)
+       << " both=" << ((deadDraft && deadFrozen) ? 1 : 0) << "\n";
+    os << "[NF] erased at=" << victimRef << " last=" << (victimRef == lastFree ? 1 : 0)
+       << " draft-null=" << (erasedDraft ? 1 : 0)
+       << " frozen-record=" << ((!erasedFrozen && victimRef != kInvalidNodeRef) ? 1 : 0) << "\n";
+    os << "[BF] brch at=" << brchRef << " only=" << (brchCount == 1 ? 1 : 0)
+       << " arms-same=" << (draft.arms == frozen.arms ? 1 : 0) << " arms=" << draft.arms << "\n";
+    os << "[GF] exit at=" << draft.exitRef << " same=" << (draft.exitRef == frozen.exitRef ? 1 : 0)
+       << " answer=" << (draft.exitRef == frozen.exitRef && brchRef != kInvalidNodeRef ? 1 : 0)
+       << "\n";
     return program;
 }

@@ -23,6 +23,8 @@
 #include "camel/utils/assert.h"
 #include "camel/utils/str.h"
 
+#include <format>
+
 namespace camel::compile::gir {
 
 using camel::core::type::Type;
@@ -195,12 +197,32 @@ size_t genericRuleInstance(
     instance.withText = withText;
     auto *owner       = static_cast<Builder *>(entry.owner);
     compile_graph_ptr_t lhs, rhs, when;
+    // The condition is asked *before* the instance is made, and its answer is what decides whether
+    // the tuple is an instance at all. A law that says `is_same::<T, int>()` is a law about `int`;
+    // building it for `float` and calling the result an instance would make the condition a lie,
+    // and a lie is worse than a refusal -- it answers with a rule nobody wrote for that type.
+    //
+    // Only `Fails` takes the tuple away: `ValueDependent` (its type-level part holds and the rest
+    // reads values) and `Unknown` (the condition cannot be asked) keep it, because a condition the
+    // compiler cannot answer must not cost an instance (the rule on
+    // `generic-rule-instantiation-set-and-predicate`).
+    std::string conditionWhy;
+    const bool conditionFails =
+        owner != nullptr &&
+        ruleConditionAt(context, ruleId, types, conditionWhy) == RuleConditionAt::Fails;
     if (owner == nullptr) {
         instance.why = "the builder that declared it is gone";
     } else if (!owner->instantiateRuleTemplates(entry, types, with, lhs, rhs, when, instance.why)) {
         // The attempt is remembered as one that did not come about, and nothing of what the
         // compiler said about it is reported (the rule on
         // generic-rule-instantiation-set-and-predicate).
+    } else if (conditionFails) {
+        // The body compiles here, and the condition does not hold: the tuple is not an instance.
+        // Nothing is published -- the condition was asked before the instance was made, which is
+        // what keeps a law about `int` from answering for `float` -- and `why` says which. The
+        // verdict is written here rather than before the body builds: a body that does not build
+        // for these types has its own reason, and that reason is the one the attempt is kept by.
+        instance.why = std::format("its condition does not hold at {}", tupleText(types));
     } else {
         publish(context, lhs, rhs, when, instance);
         instance.made = instance.lhs != nullptr && instance.rhs != nullptr;

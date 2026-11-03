@@ -83,7 +83,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "residuals_in_the_closure"
-desc = "The transposed linear half, reading the cut's residuals out of the closure (2026-11-02). `lin` is the backward graph closed over the five values the cut carried, so `transpose(lin)` declares one **capture port** per residual, in the closure's order, and gets them because `transpose(f)` keeps `f`'s closure. The two leading arguments are the tangent values the type law still asks for (`Transpose<F>` is unchanged by this step) and they are passed as **zeros on purpose**: a coefficient read from a parameter would be 0 and the answer would be (0, 0). It is (12, 9) -- 2xy and x^2 for f(x, y) = x*x*y at x = 3, y = 2 -- which says the values came out of the closure and out of nowhere else. The counts are read too: the transposed graph is `(float, float, float) => (float, float)` (two tangents, the cotangent, two cotangents out), and the `mul_tangent` call inside it is transposed as the linear map it is (`(float, float, float) => (float, float)`), which is the participating set the arm path always built and the straight-line body now builds as well."
+desc = "The transposed linear half, reading the cut's residuals out of the closure (2026-11-02). `lin` is the backward graph closed over the five values the cut carried, so `transpose(lin)` declares one **capture port** per residual, in the closure's order, and gets them because `transpose(f)` keeps `f`'s closure. The answer is (12, 9) -- 2xy and x^2 for f(x, y) = x*x*y at x = 3, y = 2 -- which says the values came out of the closure and out of nowhere else: the call passes the cotangent and nothing else. The counts are read too. Since the ruling of 2026-11-03 00:50 ① the closure carries two more members after the residuals, `x` and `y` themselves, and a transposed graph answers a parameter's value from that tail instead of being handed it as an argument; so the transposed graph is `(float) => (float, float)` -- the cotangent in, two cotangents out, and no tangent value ahead of it -- which is the reading the two zeros used to stand for and the count this entry pins. The `mul_tangent` call inside it is still transposed as the linear map it is (`(float, float, float) => (float, float)`), which is the participating set the arm path always built and the straight-line body now builds as well."
 kind = "behavior"
 case = "../../../cases/transforms/transpose/residuals_in_the_closure.cml"
 args = ["${case}", "std::nvm"]
@@ -177,5 +177,26 @@ args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
 expect_output_contains = ["loop y= 30.0", "loop d= 30.0", "type=(float) => (float, (float) => float pure) pure residuals=1 loop=1 tape=2 invariants=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The same loop, read *into*: `g(s) = (loop x = s ...)[1]`. The exit is then not the LOOP cell but a
+# tuple fill whose two members are one component of the loop read through a projection, so the cut has
+# to reach the cell through the chain the exit reads. It does that by seeding the two projections --
+# each half gets its own value for the component it reads -- and copying the chain above the loop into
+# that half; no body region is copied, which is what the old refusal (`the half would have to copy a
+# body region`) said it would have to do. The numbers are row 1 of `M = M_10 * M_1 = [[1,1],[10,11]]`:
+# the value at (1, 2) is 32, and the linearization answers 10 for the seed (1, 0) and 11 for (0, 1).
+# A half that answered the whole state instead of the projection would print a pair, so the three
+# numbers check that the chain is on both sides of the cut and not only on one.
+[[tests]]
+name = "split_loop_value_projected"
+desc = "`split` through a loop whose value the exit reads *into* (`g(s) = (loop ...)[1]`): the loop cell is one node inside the chain the exit reads, not the exit, so the cut seeds the cell's two `TupleIndex` projections and copies the chain above it into each half -- the forward half's answers the projection's value, `lin`'s answers its tangent. Nothing of the body region is copied. The numbers are row 1 of `M = M_10 * M_1 = [[1,1],[10,11]]` on `s = (1, 2)`: 32 for the value, 10 for the tangent along (1, 0) and 11 along (0, 1) -- three numbers that separate a half answering the projection from one answering the state whole (`(3, 32)`), and a chain copied on one side of the cut from a chain copied on both. What this case does not reach is the pullback: `transpose` refuses one step later, at the call above the loop, so `vjp_loop.rounds_are_undone_in_reverse` stays marked." 
+kind = "behavior"
+case = "../../../cases/transforms/split/split_loop_value_projected.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["proj y= 32.0", "proj d1= 10.0", "proj d2= 11.0", "loop=1 tape=5 invariants=0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

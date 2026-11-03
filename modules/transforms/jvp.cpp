@@ -89,12 +89,63 @@ camel::core::type::TupleType *pairTypeOf(camel::core::type::Type *type) {
 /// calling the right side and calling what it answers -- is what a rule rewritten as a *runtime*
 /// call produces: a closure-valued node and a call that answers with a closure, neither of which
 /// belongs in a graph the transform builds at compile time.
+/// The types as a reader wants them in a refusal: `(float, int)`.
+std::string typeTextOf(const std::vector<camel::core::type::Type *> &types) {
+    std::string text;
+    for (const camel::core::type::Type *type : types) {
+        text += (text.empty() ? "(" : ", ");
+        text += type != nullptr ? type->toString() : std::string("?");
+    }
+    return text.empty() ? std::string("()") : text + ")";
+}
+
+/// Whether an instance's own ports take exactly the types this operator's operands have, and `why`
+/// when they do not.
+///
+/// The rule is asked for at the **element** type of the operand (`rule_types.h#ruleElementTypeOf`),
+/// which is what lets `index_into<T>` be filed at `float` while its operand is a `float[]`. That
+/// answer is about the element, not about the shape: `:op/at od` takes a `float[]`, the scalar law
+/// `jvp_dtod` is an instance at `float`, and building the graph anyway carried a `float[]` into a
+/// `float` port -- the run was killed by a signal, which is the worst reading a compiler can give
+/// (worse than a refusal, and worse than a wrong number, because it says nothing). A shape the
+/// instance does not take is refused here, by name, before anything is built.
+bool portsTakeOperands(
+    const camel::compile::gir::GenericRuleInstance &instance,
+    const std::vector<camel::core::type::Type *> &operandTypes, std::string &why) {
+    const FunctionType *ports = instance.lhs != nullptr ? instance.lhs->funcType() : nullptr;
+    if (ports == nullptr) {
+        why = "the rule's left side has no signature";
+        return false;
+    }
+    const size_t count = ports->normTypesCount();
+    std::vector<camel::core::type::Type *> wanted;
+    wanted.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        wanted.push_back(ports->normTypeAt(i));
+    }
+    if (count != operandTypes.size()) {
+        why = "the rule takes " + typeTextOf(wanted) + ", and the operator has " +
+              typeTextOf(operandTypes);
+        return false;
+    }
+    for (size_t i = 0; i < count; ++i) {
+        if (wanted[i] == nullptr || operandTypes[i] == nullptr ||
+            !wanted[i]->equals(operandTypes[i])) {
+            why = "the rule takes " + typeTextOf(wanted) + ", and the operator has " +
+                  typeTextOf(operandTypes);
+            return false;
+        }
+    }
+    return true;
+}
+
 gc_node_ref_t buildRuleTangent(
     camel::core::context::Context &context, camel::runtime::GraphDraftGroup &group,
     camel::runtime::GraphTransaction &transaction,
     std::string_view uri, const std::vector<gc_node_ref_t> &values,
     const std::vector<gc_node_ref_t> &tangents, camel::core::type::Type *elementType,
-    std::string &ruleName, std::string &why) {
+    const std::vector<camel::core::type::Type *> &operandTypes, std::string &ruleName,
+    std::string &why) {
     // The candidates, in the order the family filed them. A key can hold several rules -- one
     // spelling names several operators (`float(x: float)` and `float(x: int)` are both `float` at
     // one operand) -- and the type decides: the instance is asked for at the type the *operand* is
@@ -115,6 +166,9 @@ gc_node_ref_t buildRuleTangent(
         return rt::kInvalidNodeRef;
     }
     const auto &table = camel::compile::gir::genericRuleTable(context);
+    // The most specific refusal wins: a candidate that fits the type but not the shape says more
+    // than a later candidate whose condition simply does not hold here.
+    std::string shapeWhy;
     for (const camel::parse::ast::RuleMatch &match : candidates) {
         if (match.status != camel::parse::ast::RuleLookup::Found) {
             continue;
@@ -147,6 +201,16 @@ gc_node_ref_t buildRuleTangent(
                       : instance.why;
             continue;
         }
+        // The shape first: a candidate whose ports are not the operands' own types cannot be
+        // built, however well its condition holds at the element (`portsTakeOperands`). Refusing
+        // here is what keeps a `float[]` out of a `float` port -- the run that did it was killed
+        // by a signal, and a named refusal is worth more than a silent death.
+        if (!portsTakeOperands(instance, operandTypes, why)) {
+            if (shapeWhy.empty()) {
+                shapeWhy = why;
+            }
+            continue;
+        }
         ruleName = match.rule;
         return expandRuleRightSide(
             group, transaction, instance,
@@ -155,7 +219,10 @@ gc_node_ref_t buildRuleTangent(
             },
             tangents, why);
     }
-    // Every candidate refused: `why` holds the closest reason (the last one reached).
+    // Every candidate refused: the shape that nearly fitted says the most.
+    if (!shapeWhy.empty()) {
+        why = shapeWhy;
+    }
     return rt::kInvalidNodeRef;
 }
 
@@ -1352,6 +1419,35 @@ bool liftGraph(
                 if (!inputs.empty()) {
                     draft.setNormInputs(made, inputs);
                 }
+                // The operator's `<>` arguments are ports of the same node, in the same order and
+                // after the normal ones (`OpDef::params` written `withAfterNorm`; `dataPortsOf` and
+                // `portRoleOf` in camel/runtime/draft.h are that one list). A rule's parameters
+                // follow the port order too -- `modules/transforms/vmap.cpp` states the protocol
+                // where it builds a call, "a `with` argument is a rule's argument too" -- so a copy
+                // that dropped them would be a *different operator*: `softmax<1>(x)` copied without
+                // its axis is `softmax(x)`, which reads the last axis, and `mean<0, true>(x)` copied
+                // without its two is a mean with the default axis and no kept dimension. That is a
+                // wrong number, not a missing one, so they are copied and attached as the normal
+                // ones are. They are appended to `originals`/`inputs` so that everything below --
+                // the cotangents the rule is handed, the types it is asked about, and the values it
+                // reads -- sees one port list in port order.
+                std::vector<gc_node_ref_t> contextInputs;
+                for (gc_node_ref_t input : function.withInputsOf(ref)) {
+                    if (input >= function.nodeCount() || !copied[input]) {
+                        complete = false;
+                        break;
+                    }
+                    originals.push_back(input);
+                    contextInputs.push_back(
+                        valueOf[input] != rt::kInvalidNodeRef ? valueOf[input] : copyOf[input]);
+                    inputs.push_back(contextInputs.back());
+                }
+                if (!complete) {
+                    break;
+                }
+                if (!contextInputs.empty()) {
+                    draft.setWithInputs(made, contextInputs);
+                }
                 // The `sync` block's chain, copied edge for edge: a statement is executed because it
                 // sits on that chain, and an effect whose result nobody reads is dropped at run time
                 // without it. The flag says the node is one of the block's statements; the waits are
@@ -1419,6 +1515,17 @@ bool liftGraph(
                 }
                 std::string ruleName;
                 std::string ruleWhy;
+                // The types the operator's own operands have, in the order the rule is handed them:
+                // what a candidate's ports have to match before anything is built. The rule is
+                // asked for at the *element* type of the operand (`rule_types.h`), and that answer
+                // is about the element, not about the shape: `:op/at od` takes a `float[]` and the
+                // scalar law `jvp_dtod` is an instance at `float`, so a candidate whose ports say
+                // `float` may be offered operands that are `float[]`.
+                std::vector<camel::core::type::Type *> operandTypes;
+                for (gc_node_ref_t original : originals) {
+                    const NodeFace *input = function.node(original);
+                    operandTypes.push_back(input != nullptr ? input->dataType() : nullptr);
+                }
                 // The rule is generic in the element of the operand it was matched on: `+` over
                 // `f32` is a rule at `f32`, and `sum_axis` over a `float[]` is one at `float`
                 // (the array's rows are the batch, not the type of the rule). `rule_types.h` is
@@ -1428,7 +1535,7 @@ bool liftGraph(
                 tangentOf[ref] =
                     buildRuleTangent(
                         *context, state.group, transaction, uri, inputs, tangents, ruleElementType,
-                        ruleName, ruleWhy);
+                        operandTypes, ruleName, ruleWhy);
                 if (tangentOf[ref] == rt::kInvalidNodeRef) {
                     // Named, not guessed: the transform has no derivative for this operator, and
                     // the refusal carries the place the primitive was written -- the node's origin,

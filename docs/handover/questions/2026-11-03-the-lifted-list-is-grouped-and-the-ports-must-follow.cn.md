@@ -28,10 +28,68 @@
 
 只改签名不改图，`split` 切错位置、`grad_of_a_division` 变红 —— 这就是上表第一行那一条新增红。一次改到图端口，两个读数会同时动；分两次提交会让中间那次落在"声明对了、实现还按旧序读"的状态上，正是作者点名的那类不一致。
 
+## 端口也按 grouped 排过一次了，读数如下（已回退）
+
+`jvp.cpp` 的端口改成值 `0..n-1`、切向 `n..2n-1`，空切向那一位建一个 `void` 端口并 `appendNormPort`；`split.cpp` 的两个读法按中点两分。构建通过（`jvp.cpp`、`split.cpp` 各 2.6 s），读数：
+
+| 量的是 | 读数 |
+| --- | --- |
+| 全量 `[SUMMARY]` | 8542 / **8493 / 29** / 10 / 10 —— 比 15 条多 **14 条**（停手上限是 5） |
+| 新增红 | `vjp_arities.*`（4 档）、`vjp_api.analytic_gradient.*`（4 档）、`split_two_params.nvm`、`residuals_in_the_closure.nvm`、`remat.split.*`（2 档）、`grad_of_a_division.nvm`、`docs.links.questions_index`、`registry.docs_complete` |
+| `vjp(f)([1.0,2.0],[3],[4])` | 仍报，被调者为 `(float[..], int[..], void) => (float, (int[..], float[..], void) => float pure) pure` |
+
+两件事从这组数里读得出来：
+
+1. **`vjp_arities` 全红说明 `split` 与 `jvp` 的排布不能分两次对齐**：值端口一挪，`lin` 的形参就跟着挪，而 `lin` 的类型是 `split` 从一个还按旧序建的反半程里读出来的 —— 半程两边必须同一笔改。
+2. **`void` 端口能建、能 `appendNormPort`，但值进不去**：被调者里那个 `void` 就是证据 —— 参数表里有一格没有任何值可传，于是 `vjp` 的 `(..xs)` 拿到的那一格是空的。所以 `()` 占位在**类型层**成立，在**端口层**还需要"这一格传什么"的答案（一个 `void` 常量？一个被跳过的形参？），这正是 `transposeSignature` 那一笔要一起定的事。
+
+因此这一笔按停手规则回退，代码停在 `799bd565f`；上表是下一步的起点，不是成品。
+
+## 四步都落了，打印一字不变 —— 这一条否掉了"次序"这个假设
+
+四步（`jvpSignature` grouped + 端口 grouped + `Transpose<F>` 新形 + `split` 声明）一次性落地、构建通过，`vjp(f)([1.0,2.0],[3],[4])` 的报错**一字未变**，仍是
+
+```
+Function of type '(float[..], int[..], ()) => (float, (int[..], float[..], ()) => float pure) pure'
+cannot be called with argument types: <> (float[..], int[..], int[..])
+```
+
+同时把 `split.cpp#valuePortsOf` / `#parameterOfPort` 按中点两分读，**打印同样不变**。全量 8542 / 8493 / **29** / 10 / 10 —— 与只改签名那次同一条数，一条没绿。所以"端口次序是最后一层"是错的，已回退。
+
+## `ParamsOf` 是对的：五参、不是六参
+
+按作者的判据逐成员量（三参 `(float[], int, float)`）：
+
+| 量的是 | 读数 |
+| --- | --- |
+| `is_same::<(..ParamsOf<F>) => float, (m: float[..], n: int, y: float) => float>()` | **true** |
+| 同一条对"第三位是 `()`"/"第二位是 `()`"/"第一位是 `()`" | false / false / false |
+| `is_same::<(..Tangent<ParamsOf<F>>) => float, (m: float[..], n: (), y: float) => float>()` | **true** |
+| `is_same::<Jvp<F>, (m: float[..], n: int, y: float, dm: float[..], dn: (), dy: float) => (float, float)>()` | **true** |
+
+`ParamsOf` 一个不多一个不少，`Tangent<ParamsOf<F>>` 也对，`Jvp<F>` 的**声明**正是那六个。要修的不是它。
+
+真正量到的是 `jvp(f)` 的**实际类型**，被 `split` 拒绝时逐字印出来：
+
+```
+Invalid call to 'split' with argument types <> ((float[..], float[..], int, float, float) => (float, float) pure):
+`split` takes a lifted function...
+```
+
+五参：`(m, dm, n, y, dy)` —— 值 `float[]` 与它的切向挨着，`int` 那一格被跳过，值 `float` 与它的切向挨着。这就是 `jvpSignature` 今天建出来的东西（有切空间的参数值后跟切向，没有的只占一位），而 `split` 的旧读法正是按这个次序走的 —— 两边自洽，所以 `jvp_of_f` 一直绿。
+
+**所以缺的不是排布也不是 `ParamsOf`，是"声明六参、实现五参"这件事本身**：把 `jvpSignature` 改成六参（grouped）之后，`split` 那一半要按新次序重建，而它重建的路径**不经过 `valuePortsOf`**（改了也不动打印），说明半程的形状是在建图时从**成员端口**取的类型，不是从类型列表算的。
+
+下一步的入口因此更窄：`split` 建半程时给成形的那个 FunctionType 从哪儿来（`splitHalvesWith` 里给 forward/backward 各自 `setFuncType` 的那一处），而不是 `valuePortsOf`，也不是 `ParamsOf`。
+
+
 ## 我方默认
 
-**默认按页里那四步的顺序做完：先在图端口上按 grouped 排列，再按声明建 `transposeSignature`，最后才改 `stdlib` 的声明。**
+**默认：`split` 与 `jvp` 的端口排布必须一次对齐，不许分两步；在作者裁定"空切向占不占端口"之前，先按现在这组读数做事，不再单独挪排布。**
 
-理由就是页里那句"只在签名上改，`split` 会切错位置"：三条读数是同一次改动里的三个片面，**分两次提交的中间态就是作者点名的那类不一致**（声明对了、实现还按旧序读）。所以默认不是"先让签名过"，而是"让图和签名同时到位，中间不留一个自洽不了的落点"。
+页里那组数已经回答了这道题：只挪 `jvp` 的排布，全量从 15 条红涨到 29 条（`vjp_arities` 四档、`vjp_api.analytic_gradient` 四档、`split_two_params` 全红），而停手上限是 5。原因也读得出来 —— **值端口一挪，`lin` 的形参跟着挪，而 `lin` 的类型是 `split` 按它的排布写出来的**，所以两处不在同一笔里改，中间态就是红的。
 
-若作者裁定只保留一种排布（grouped 或 interleaved），则这一页退为记录那两种排布各自的读数，工作量减半。
+第二件：**`void` 端口能建、能 `appendNormPort`，但值进不去**（被调者里那个 `void` 就是证据），所以"空切向占一位"这条要先由作者裁"它拿什么占"，再动手 —— 否则做出来的仍是"参数表里有一格没有任何值可传"。
+
+若作者裁定空切向不占端口，这一页退为记录这次回退的读数，工作量减半。
+因此这一笔按停手规则回退，代码停在 `799bd565f`；上表是下一步的起点，不是成品。

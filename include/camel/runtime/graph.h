@@ -261,6 +261,16 @@ enum GCGraphFlag : uint8_t {
     /// parameters the call is given. It says nothing about the values: a call of a marked graph is
     /// the same call, so no number moves.
     kGraphFlagRecomputeBackward = 1 << 4,
+    /// The tail of this graph's closure is the parameters' own values: one member per parameter, in
+    /// parameter order, written after the residuals `residualsOf` numbered (`split`'s backward half,
+    /// modules/transforms/split.cpp#addResidualCaptures). The author's ruling of 2026-11-03 00:50 ①
+    /// is what it is for: a transposed member answers a parameter's value out of the closure the
+    /// call handed it, so the slot for parameter k is `residuals + k` on both sides of one merge --
+    /// the tuple the forward half builds and the type the transposed graph declares. The mark is
+    /// needed because a closure says nothing about where its members came from: a member closed by
+    /// a caller (`transpose(lin)` on a hand-closed lambda) has a tail of its own that is not this,
+    /// and such a member goes on refusing by name instead of reading a number it was not given.
+    kGraphFlagClosureCarriesParameters = 1 << 5,
 };
 
 /// kWritingDerived: congruence closure found the equivalence, it need not be stored.
@@ -666,6 +676,35 @@ class GCGraph : public camel::core::rtdata::Object {
         const GCNodeChunk &c = chunkOf(ref);
         return c.regions ? c.regions[ref & (kNodeChunkNodes - 1)] : 0;
     }
+    /// True when `ancestor` is `region` itself or a region `region` sits in, up to the body (0,
+    /// which is every region's ancestor).
+    bool isAncestorOf(uint32_t ancestor, uint32_t region) const {
+        for (uint32_t at = region;;) {
+            if (at == ancestor) {
+                return true;
+            }
+            const GCRegion *one = this->region(at);
+            if (one == nullptr || at == 0 || one->parent == at) {
+                return false;
+            }
+            at = one->parent;
+        }
+    }
+    /// True when the node `reader` may read a port of the region `portRegion`. Three readers may:
+    /// a node of that region, a node of a region `portRegion` sits in, and the node that owns it
+    /// (`region(portRegion)->owner`). A branch arm reading the function's own parameter is the
+    /// second; a LOOP node reading the port its own body region ends in is the third. Anyone else
+    /// is outside the frame the port lives in: a port of a region inside the reader is a value that
+    /// region produces, and it is not there before that region runs -- a loop body's port is a
+    /// different value every round, and the reader of the rounds is the loop node, not its
+    /// neighbours.
+    bool regionIsVisibleFrom(uint32_t portRegion, gc_node_ref_t reader) const {
+        if (isAncestorOf(portRegion, nodeRegion(reader))) {
+            return true;
+        }
+        const GCRegion *one = region(portRegion);
+        return one != nullptr && one->owner == reader;
+    }
     /// The LoopCond or LoopBody region (`part`) of the LOOP node `ref`; 0 when it has none: a For
     /// loop has no condition, and a loop in graph form has no regions.
     uint32_t loopRegionOf(gc_node_ref_t ref, GCRegionKind part) const {
@@ -707,6 +746,14 @@ class GCGraph : public camel::core::rtdata::Object {
     /// (kGraphFlagRecomputeBackward): `remat` set it on this graph, and `split` reads it to decide
     /// what crosses a cut. The body is the same code either way; only what a cut stores changes.
     bool recomputesOnBackward() const { return (flags_ & kGraphFlagRecomputeBackward) != 0; }
+    /// The tail of this graph's closure is one member per parameter, in parameter order, after the
+    /// residuals (kGraphFlagClosureCarriesParameters): `split`'s backward half wrote them, and
+    /// `transpose` reads a parameter's value out of that slot instead of asking its caller for one.
+    /// A graph without the mark has a closure of some other origin, and its parameters are refused
+    /// by name when the body reads one.
+    bool closureCarriesParameters() const {
+        return (flags_ & kGraphFlagClosureCarriesParameters) != 0;
+    }
     /// The kernel the semantic body of an `#impl` function implements (design principles 10.4):
     /// the operator URI a direct call of the function is compiled to, empty for every other
     /// graph. A consumer that must see inside the function (autodiff, fusion, export, a rule)

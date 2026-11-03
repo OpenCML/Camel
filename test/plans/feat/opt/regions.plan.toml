@@ -8,31 +8,13 @@ regions of a graph, kept by decode, encode, commit and the chunks. `test::region
 a program's largest graph in two nested regions and commits; the new version has them, a decode
 and a second commit with no change in between give the same version, and the program runs as
 before (no back end reads regions yet).
+
+The two entries that ran that pass on `../../../cases/opt/generic/arm_tail_gate.cml` moved to
+`arm_tail_gate_regions.cml`, word for word. That program's arms read its body's ports and its
+condition, so every body value is one an arm reads, and a block around them would be read from an
+arm across two branches -- a shape a region may not have (the commit refuses it). The old case file
+stays in the tree; the graph it builds cannot host the blocks the pass puts down.
 """
-
-[[tests]]
-name = "regions.survive_commit"
-desc = "Two nested Block regions with a result and a port survive a commit and a recommit, along with the two Arm regions the branch of the program has; the program still runs."
-kind = "behavior"
-case = "../../../cases/opt/generic/arm_tail_gate.cml"
-args = ["${case}", "test::regions", "std::nvm"]
-
-expect_exit = 0
-expect_output_contains = ["REGIONS count=5 in_inner=2 in_outer=1 result=ok ports=1 within=1", "REGIONS recommit same=1", "[8.0, 8.0]"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-[[tests]]
-name = "regions.survive_optimization"
-desc = "The regions are kept by the rewrites that follow: std::opt after test::regions leaves the program's result unchanged."
-kind = "behavior"
-case = "../../../cases/opt/generic/arm_tail_gate.cml"
-args = ["${case}", "test::regions", "std::opt", "std::nvm"]
-
-expect_exit = 0
-expect_output_contains = ["REGIONS count=5", "[8.0, 8.0]"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
 
 [[tests]]
 name = "regions.inline_origin"
@@ -87,4 +69,28 @@ args = ["${case}", "test::exec_plan"]
 
 expect_exit = 0
 expect_output_contains = ["PLAN run ", " arm0=", " arm1="]
+timeout_ms = 20000
+
+[[tests]]
+name = "regions.survive_commit_body"
+desc = "The same two nested Block regions, the same port and the same answer, on a graph whose body does work of its own: `arm_tail_gate_regions.cml` exists because on `arm_tail_gate.cml` the arms read the body's ports and its condition, so every body value is one an arm reads, and a block around them would be read from an arm across two branches -- a shape a region may not have. The expect strings are the ones the old case carries, word for word."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate_regions.cml"
+args = ["${case}", "test::regions", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["REGIONS count=5 in_inner=2 in_outer=1 result=ok ports=1 within=1", "REGIONS recommit same=1", "[8.0, 8.0]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "regions.survive_optimization_body"
+desc = "std::opt after test::regions on the body-work graph leaves the answer unchanged, with the regions still there."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate_regions.cml"
+args = ["${case}", "test::regions", "std::opt", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["REGIONS count=5", "[8.0, 8.0]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
