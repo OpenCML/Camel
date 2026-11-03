@@ -4387,14 +4387,9 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     if (synced_) {
         // The call is a statement of the block: the statement written before it follows into it by
         // a sync edge (the control edge the kind names the same pair with goes beside it).
-        // The chain's next link ends where the chain may stand, and the tail is that same place:
-        // asked once, before the edge is written, so the node a call builds is not on the chain and
-        // no second `GATE` is made for it when the statement after this one links from the tail.
-        const node_handle_t place = chainPlaceForNode(targetNode);
-        linkSyncStatement(lastSyncedNode_, place);
-        lastSyncedNode_ = place;
+        linkSyncStatement(lastSyncedNode_, targetNode);
+        lastSyncedNode_ = targetNode;
         chainedNodes_.insert(targetNode);
-        chainedNodes_.insert(place);
     }
     if (targetOperator == nullptr && (!dimValues.empty() || !dimPacks.empty()) &&
         targetFuncType != nullptr && targetFuncType->hasExitType()) {
