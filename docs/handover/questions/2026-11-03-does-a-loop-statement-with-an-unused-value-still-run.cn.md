@@ -203,3 +203,44 @@ used"变成"nothing depends on it and it is not in a sync block"，而 `inUnused
 `sync { … }` 块语句生成的那一句上打一次（第二个数），两处若从 1 变 0，就找到了那处
 `std::exchange(synced_, false)` —— 报出 `file#Symbol` 之后才动手改。作者已经裁定过方向：
 体区交回链的最后一站，不是裸值；分支臂与循环体共用 `buildArm`，动之前要用例说话。
+
+## 合并前必须解决：`feat/compile/transforms` 比 develop 多 8 条红
+
+本分支（`ca08022e4`）`feat/compile/transforms` 78 条 = **66 通过 / 11 失败 / 1 known**，
+11 条逐名：
+
+```
+jvp_effect.runs_as_written_and_zero_tangent.nvm
+transpose_loop_escape.two_values_of_two_kinds.nvm
+transpose_loop_escape.second_state_of_the_same_loop.nvm
+transpose_loop_escape.int_is_a_zero_tangent_space.nvm
+grad_array_no_int.fvm
+grad_of_an_array_parameter.nvm
+grad_array_one_element.nvm
+grad_array_two_elements_first.nvm
+grad_array_sum.nvm
+grad_array_product.nvm
+grad_of_a_division.nvm
+```
+
+develop（`5491d4bf6`）同一份计划是 74 过 / 3 红 / 1 known，三条都是 `transpose_loop_escape.*`。
+差集 **8 条** = `jvp_effect` 一条 + `grad_*` 七条。
+
+**我没有在 develop 上跑出来**：把主机的检出切到 `5491d4bf6` 并清空 `build/` 后，
+`cmake` 直接报 `CMake Error at CMakeLists.txt:1 (cmake_minimum_required)`（用
+`~/camel-eval/venv-build/bin/cmake` 4.4.3 也一样），所以这一格是**没量到**，不是量过为绿。
+
+**从仓库拓扑得到的结论**：`a49cac54d` **不是** `origin/develop` 的祖先，develop 比本分支多
+**89 个提交**，其中正好覆盖这 8 条所在的区域：
+
+- `04720eb7c` fix(rules): a rule's `when` decides the instance -- a condition that fails takes the tuple away
+- `4f524c534` / `a6ab688a2` 一个规则的条件只问一次
+- `08622b019` fix(compile): a `void` body's tail drops the name it ends with
+
+而这 8 条红报的是 `REINTERP ... skip=call node=9 arg=5`（`index_into` 的转置建不出来），
+落在 rules/instance 那一块 —— 就是 develop 已经修过的地方。所以**这 8 条是本分支缺 develop 的
+提交，不是本分支的改动造成的**；合并 develop 之后必须重测并归零，归零前不合。
+
+`feat/linear/jit_framed`：今天 57 条全过；两边条目数按 `name =` 数相同（24），本分支在这份计划
+文件上的改动只有 E 的 8 行期望（1 插入 / 7 删除），没有删用例。此前报的 62 那次运行与今天的
+条目不同，但**不是本分支删了 5 条**。
