@@ -104,3 +104,31 @@
 本轮同类、未检查的 `as_ptr<FunctionType>`——`callDecorated`（`nodeTypeOf(decoratorInvoke)`）与重载挑选的
 `signatureOf`（`it->second->funcType()->exitType()`）：两处的类型按构造都是函数，今天成立，但若哪天不
 成立，代价仍是崩溃而不是诊断。
+## 7. 同一姿态的两处入口，与一处仍是胡话的句子
+
+`Builder::visitLinkNode` 里另外两处未检查的 `as_ptr<FunctionType>` 换成了"检查 + 点名它靠哪一句保证"：
+
+- `callDecorated`：保证来自 `builder_decorators.cpp#Builder::lowerDecoratedGraphValue` —— 它先拒掉 exit
+  类型不是函数的 decorated graph，再用**同一个类型**建这个 CALL 节点，所以取到的必然是函数。检查与
+  `GUARD` 写在取用处，注释点名这两句。
+- 重载挑选的 `signatureOf`：保证来自两处——`decoratedOf_` 全树只有一个写入点（`builder.cpp#Builder::visitFuncNode`，
+  写的是 `buildDecoratedGraph` 的返回图），而 `builder_decorators.cpp#Builder::buildDecoratedGraph`
+  在设置图的 exit 类型**之前**就拒掉"装饰器答的不是函数"。
+
+两处都不再有程序能到达的崩溃路径；而"装饰器答的不是函数"这条**程序可达**的路，原先虽然是拒绝，句子却是胡话：
+
+- 基线 `34b659107`，`test/cases/compile/semantic/decorator_nonfunc_return.cml`：`1:1`，
+  `SemanticDiag::ArgumentsMismatch` `0x03000010`，
+  `Function of type 'decorator must return function' cannot be called with argument types: int.`
+  —— 消息自己的话站在类型的位置上，读的人被告知有个函数类型叫"decorator must return function"。
+- 改后：`18:1`（装饰器那一行），`SemanticDiag::ArgumentsRejected` `0x0300001C`，
+  `Invalid call to '@bad_decorator' with argument types <(x: int) => int pure> (): the value the
+  decorator answered has type 'int', and that is not a function: a decorated function is the
+  function its decorators answer, so this one has no function to be.`
+
+那条用例原本就存在（只是 pin 的是那句胡话），本轮把 pin 换成新读数（`core.plan.toml` 的
+`semantic.decorator_nonfunc_return`），没有另起一条重复用例。
+
+**还剩一处同样的胡话**（只报不改）：`builder_decorators.cpp#Builder::lowerDecoratedGraphValue` 的
+`"decorated graph should return function"`。它手上没有实参类型，`ArgumentsRejected` 的 `{1}` 位填不出真话，
+所以它需要自己的码——与第 3 节 B 是同一件后续。

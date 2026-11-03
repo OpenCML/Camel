@@ -2742,7 +2742,18 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // all: a float passed where the decorated function takes an int was read as an int).
     const auto callDecorated = [&](const compile_graph_ptr_t &decoratedGraph) {
         node_handle_t decoratorInvoke = lowerDecoratedGraphValue(decoratedGraph, gct);
-        FunctionType *factoryType     = tt::as_ptr<FunctionType>(nodeTypeOf(decoratorInvoke));
+        // The node `lowerDecoratedGraphValue` returns is a call of the decorated graph, stamped
+        // with that graph's exit type, and that function refuses the graph whose exit type is not
+        // a function before it creates the node
+        // (`builder_decorators.cpp#Builder::lowerDecoratedGraphValue`). So the type here is a
+        // function by that refusal, and the check states it where the cast spends it: a decorator
+        // that answers something else is a program the builder has already reported, never a
+        // value that reaches this line.
+        Type *decoratorValueType       = nodeTypeOf(decoratorInvoke);
+        GUARD(
+            decoratorValueType != nullptr && decoratorValueType->code() == TypeCode::Function,
+            "The value a decorator's invocation answers must be a function.");
+        FunctionType *factoryType = tt::as_ptr<FunctionType>(decoratorValueType);
         if (!accepts(factoryType, false) && !accepts(factoryType, true)) {
             yieldToPipe(gct);
             reportConversionGaps(
@@ -2988,7 +2999,19 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             std::vector<std::pair<std::string, std::string>> unmetConditions;
             const auto signatureOf = [&](const compile_graph_ptr_t &g) -> FunctionType * {
                 if (auto it = decoratedOf_.find(g.get()); it != decoratedOf_.end()) {
-                    return tt::as_ptr<FunctionType>(it->second->funcType()->exitType());
+                    // `decoratedOf_` is written in one place, with the graph
+                    // `buildDecoratedGraph` returned (`builder.cpp#Builder::visitFuncNode`), and
+                    // that function sets the graph's exit type from the value its decorators
+                    // answered only after refusing one that is not a function
+                    // (`builder_decorators.cpp#Builder::buildDecoratedGraph`). The exit type is
+                    // therefore a function by that refusal; the check states it where the cast
+                    // spends it.
+                    Type *decoratedType = it->second->funcType()->exitType();
+                    GUARD(
+                        decoratedType != nullptr && decoratedType->code() == TypeCode::Function,
+                        "A decorated graph's exit type must be the function its decorator "
+                        "answered.");
+                    return tt::as_ptr<FunctionType>(decoratedType);
                 }
                 return g->funcType();
             };
