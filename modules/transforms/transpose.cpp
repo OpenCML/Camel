@@ -391,14 +391,10 @@ bool buildTransposeMember(
         const GraphId probeMember = scratch.reserve("transpose_probe", "transpose_probe");
         std::vector<size_t> found;
         (void)buildTransposeMember(probe, function, probeMember, probeLog, participates, &found);
+        // `found` is what this half needs and is recorded on the state; nothing prints it. A
+        // probe line here was left by the `8194d89fd` experiment and made every reading carry a
+        // line no cause asked for.
         state.calleeNeeds[function] = found;
-        if (!found.empty()) {
-            os << "TRANSPOSE-PROBE function=" << function->name() << " needs=";
-            for (size_t i = 0; i < found.size(); ++i) {
-                os << (i == 0 ? "" : ",") << found[i];
-            }
-            os << '\n';
-        }
     }
     // The graph being built takes the ports the walk fills, so it asks for the shape its ports can
     // honour: the plain one. A closed half answers `(ct) => (cotangents)` at the call site (the
