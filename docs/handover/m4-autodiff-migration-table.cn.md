@@ -1,21 +1,22 @@
 # M4 迁移：autodiff 用例的库层分类表
 
-> **这一页的数由 `scripts/autodiff-migration-ledger.mjs` 产出**，不是人手抄的：下面这一行是工具打印的
-> 原样，日期在行下，提交就是**最后一次改动本页的那个提交**
-> （`git log -1 --format=%h -- docs/handover/m4-autodiff-migration-table.cn.md`）。人写的是结论，数是工具给的。
->
-> 追平读数（2026-11-04，分支 `lane-ledger2`，宿主 `88zjwei`，`out/latest/bin/camel` 2026-11-03 构建）：
->
-> ```
-> [LEDGER] total=132 library=123 pass=19 with=45 array=71 other=7
-> ```
->
-> `pass` 是**跑**出来的那一列，依赖上面那个二进制（`n/a` 表示二进制起不来，工具拒绝报数）；`total`
-> `library` `with` `array` `other` 只读源码，换机器不变。
->
-> **本页下文凡是 2026-11-01 / 2026-11-02 的读数（`127`、`118`、`pass=12`、`with=54 array=46 other=6`、
-> `with=44 array=67` 等）都保留为那两天的读数，不再当今天的数看**——它们记录的是那时候量到了什么，
-> 以及量错在哪。
+**这一页的数由 `scripts/autodiff-migration-ledger.mjs` 产出**，不是人手抄的：下面这一行是工具打印的原样，
+日期在行下，提交就是**最后一次改动本页的那个提交**
+（`git log -1 --format=%h -- docs/handover/m4-autodiff-migration-table.cn.md`）。人写的是结论，数是工具给的。
+
+追平读数（2026-11-04，分支 `lane-ledger2`，宿主 `88zjwei`，`out/latest/bin/camel` 2026-11-03 构建）：
+
+```
+[LEDGER] total=132 library=123 pass=19 with=45 array=71 other=7
+```
+
+`pass` 是**跑**出来的那一列，依赖上面那个二进制（`n/a` 表示二进制起不来，工具拒绝报数）；`total`
+`library` `with` `array` `other` 只读源码，换机器不变。这一行是脚本的原样输出，逐字一致：要复核就跑
+`node scripts/autodiff-migration-ledger.mjs`。
+
+**本页下文凡是 2026-11-01 / 2026-11-02 的读数（`127`、`118`、`pass=12`、`with=54 array=46 other=6`、
+`with=44 array=67` 等）都保留为那两天的读数，不再当今天的数看**——它们记录的是那时候量到了什么，
+以及量错在哪。
 
 对象：`test/cases/modules/autodiff/` 下全部 **132** 个 `.cml`。
 问题：**只 `import vjp`/`grad` 能不能过？** 答案逐条量出来，不是估的。
