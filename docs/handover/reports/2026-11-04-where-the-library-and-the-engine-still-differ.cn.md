@@ -10,6 +10,24 @@
 `camel <probe> std::nvm` 的原样输出，探针在 `D:\Temp\vjparity-probes\`（不入 git）。读数一律取自主机
 `88zjwei` 上本树刚构建的 `out/latest`，带 load，未在本机跑。
 
+## 合并之后：这张表上哪几行动了（2026-11-04 05:25，`integ2/rules-batch2`）
+
+上表是它自己那棵树上的原样读数（`lane-vjparity`，基线 `c4391db57`），**不改写**。第二批合进来之后，
+其中四行已经不是那个答案，动的是哪一支、新的读数钉在哪条用例上，见下：
+
+| # | 现在 | 由谁动、钉在哪 |
+|---|---|---|
+| 1 | `with` 实参的切向**已修**：库层腿从 `pullback=(0.0)` 变成 **`3.0`**，与引擎腿 `grad=3.0 lambda=3.0 with_grad=(9.0, 3.0)` 逐位同 | `lane-withtan#2e14a30dc`（合并在 `713e1ff26`）；钉在 `test/cases/compile/transforms/library_grad_of_a_with_weight.cml`（`weighted engine=3.0 value=9.0 grad=3.0`、`both value=18.0 pullback=(6.0, 3.0)`） |
+| 2 | 结构体 `with` **仍是拒绝**，句子与位置变了：``jvp does not reinterpret a `with` value of type `Point` yet (…)``，带源位置 | 同上；`lane-withtan` 量到的逐字句 |
+| 3 | 张量 `with` **仍是拒绝**，句子变了：``jvp does not reinterpret a `with` value of type `float[..]` yet (…)`` | 同上 |
+| 6 | `f32` 出口**已修**：`transpose` 不再因出口类型拒（`Tangent<f32>` 是 `f32`，余切按该宽度的加法相加） | `lane-f32trans#9f68dfdb2`（合并在 `78fa5c12a`）；读数与用例见 `test/plans/feat/transforms/compositions.plan.toml` 的 `known_fail_note` |
+
+第 2、3 项为什么宁可拒绝：抬升结构体权重会让 `split` 在 `nodevm.cpp` 的 `idx < t->size()` 上崩
+（实测 exit 134），而不崩的那条路是照旧写零、把错数留着。按“对 > 明确拒绝 > 错数 > 崩”，只能在抬升里
+按名字拒。**同名判定（拒绝）不变，句子与位置变了。**
+
+第 1 项那个错数为什么算今晚最值钱的一条：它不是“缺了切向”，是 `liftGraph` 用
+`zeroConstantFor(...)` 把权重方向**主动填成了 `0.0`**——不报错、答案悄悄错。
 ## 11 项逐条
 
 | # | 差什么 | 今天的引擎腿（逐字） | 今天的库层腿（逐字） | 归类 | 证据 | 下一笔动哪个文件 |
