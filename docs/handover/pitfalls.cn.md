@@ -60,10 +60,16 @@
 **怎么绕**：看到"bool 返回 + 出参"的判据，**在每条 `return true` 前问一句"出参这时是全的吗"**；
 出参是可选指针（`= nullptr`）或"只在一条分支上写"的，就是这一类的候选。修的时候从**位置的声明**取值，别去下游补（下游没有那个信息）。
 
-**同类第二处（今天没坏，但同一形状）**：`Builder::compositeWithHolesInType`（同文件）只有 **struct** 分支写 `holeSlots`（末尾 `holeSlots = std::move(slots)`），
-**array 分支直接 `return factory.build()`**。今天不坏，只因为调用方 `builder_expr.cpp` 先把 `holeSlots` 预置成 `holes`（数组是位置性的，索引相同）；
-一旦有调用方不预置，读到的就是字面量自己的索引。
+**同类第二处（形状相同，2026-11-03 已按裁定补齐）**：`Builder::compositeWithHolesInType`（同文件）原先只有 **struct** 分支写 `holeSlots`
+（末尾 `holeSlots = std::move(slots)`），**array 分支直接 `return factory.build()`**。它当时不坏，只因为调用方 `builder_expr.cpp` 先把
+`holeSlots` 预置成 `holes`（数组是位置性的，索引相同）——**是预置的默认值把断线挡住了，不是没断线**。现在 array 分支也写
+`holeSlots = refHoles`，**调用方的预置保留**（两道都在、互为印证），于是以后多一个不预置的调用方也拿不到字面量自己的索引。
+这一笔的判据是"**行为不变**"：`feat/compile` 2197 = 2192/2/3、`casts` 16/16、`parse` 115/115、`compile/transforms` 80 = 77/2/1、
+`split` 19/19、`opt` 1174/1174，**六个读数与改之前逐字相同**——若有一个变了，说明它今天其实在用，就该回滚而不是庆祝。
 
 **已核过、不属于这一类**：`flattenLiteral`（每层先 push 自己的长度，货真价实地交出去）、
-`literalShapeOf`（每层都填 `lengths`/`at`，ragged 走 `shaped=false`，调用方先看 `shaped`）、
 `ArrayType::extentForms`（`true` 时 `out` 总是整份）、`holdsStatedLength`（纯判据，没有可交的东西）。
+
+**近似但不算的一处**：`src/compile/gct/builder.cpp#literalShapeOf`。每层都填 `lengths`/`at`，但**ragged 时留下的是半份 `lengths`**、
+同时把 `shaped` 置 false——靠调用方先看 `shaped` 才不出事。不是"不交"，是"交了半份、靠标志位兜"。它旁边现在写了这句话
+（`lengths` 半份、调用方必须先看 `shaped`；谁先读 `lengths` 后看 `shaped` 就是同一个事故）。把半份改成整份会动行为，**没做**。
