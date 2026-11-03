@@ -576,10 +576,22 @@ export rule take_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
 
 /// The cotangent of `mean_axis_stated(t, at)`: each lane's `ct` spread back over the lane it was
 /// averaged from, where `at = [axis, keepdims, d0, ..., d(rank-1)]`.
+///
+/// The spread is `lane_spread`'s and not a bare `full(extents, 1.0) * ct`: a cotangent of the reduced
+/// shape against the extents broadcasts by **trailing** alignment, which is the right answer only
+/// when the reduced axis is the leading one. On `[2, 2]` along axis 1 the broadcast succeeds and
+/// answers the column array -- `[0.0, 0.5]` down the columns where the row's `[0.5, 0.5]` belongs,
+/// measured before this fix -- and on `[2, 3]` it stops with a dimension mismatch. `lane_spread` puts
+/// the reduced axis back as an extent of one and *then* broadcasts, which is the array the engine's
+/// `tensor:expand_axis` builds for any axis.
+///
+/// The lane length is `numel(t) / numel(ct)` -- the count the mean divided by -- read off the stated
+/// extents and the cotangent; the division is one operation per lane, applied before the spread, so
+/// the answer divides the same values by the same count as the engine's.
 func mean_axis_cotangent::<T>(ct: T[..], at: int[]): T[..] when is_float::<T>() {
     let extents = at[2:len(at)]
     let lanes = float(extent_product(extents)) / float(numel(ct))
-    return full(extents, 1.0) * (ct / lanes)
+    return lane_spread(ct / lanes, extents, at[0], at[1] != 0)
 }
 
 /// The number of positions a shape holds: what a lane mean divided by.
