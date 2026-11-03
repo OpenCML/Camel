@@ -12,14 +12,17 @@ desc = "The seal's judgement of the value a graph hands on: it is a value of the
 # The two refusals below build the bad graph *themselves*, in the program, which is why they are
 # evidence and not a fixture: a rule library (`import { rewrite } from rewrite`) replaces the node
 # the function returns with a value of another type. That is a program's error -- a rewrite whose
-# right side is not of the type of its left side -- and not a defect of the compiler, so the run
-# must fail with a sentence naming the graph, the value's type and the declared type.
+# right side is not of the type of its left side -- so the run fails with a code of its own,
+# `RuntimeDiag::ExitTypeMismatch`, whose sentence names the graph, the value's type, the declared
+# type and the value (see docs/diagnostics.md).
 #
-# The channel is the seal's own (`RuntimeDiag::PassInternalError`, which is where every frozen-graph
-# invariant is reported: the check runs inside the commit a pass makes, and the code that raises
-# program-facing pass-boundary diagnostics lives beside it in the core). The entries therefore assert
-# the *sentence*, which is what a reader acts on: the line under it names the graph, the node and
-# both types.
+# It is not `RuntimeDiag::PassInternalError`, which is still the code for the rest of the seal's
+# invariants -- a graph that breaks one of those is a defect of whatever wrote it, and the difference
+# between "the program wrote a value of another type" and "a pass broke the graph" is the difference
+# between the program's repair and the compiler's. `EdgeChecker` keeps the two apart: the exit-type
+# violation is raised as its own exception (`camel::runtime::GraphExitTypeMismatch`), the pass
+# boundary turns it into the code below, and a structural violation still throws the text the old
+# channel reports.
 
 [defaults]
 kind = "behavior"
@@ -33,7 +36,8 @@ desc = "A function declared `: float` hands on a `float[]`: the rule replaces th
 kind = "negative"
 case = "../../../cases/runtime/exit_type/float_declared_array_returned.cml"
 expect_exit = 1
-expect_stdout_matches = ["it hands on node \\d+, whose value has type 'float\\[\\]', and the graph declares 'float'"]
+expect_diagnostic_name = "RuntimeDiag::ExitTypeMismatch"
+expect_output_contains = ["The value the graph 'target' hands on has type 'float[]', and the graph declares 'float'"]
 
 [[tests]]
 name = "runtime.exit_type.int_declared_float_returned"
@@ -41,7 +45,8 @@ desc = "A function declared `: int` hands on a `float`: the rule replaces the re
 kind = "negative"
 case = "../../../cases/runtime/exit_type/int_declared_float_returned.cml"
 expect_exit = 1
-expect_stdout_matches = ["it hands on node \\d+, whose value has type 'float', and the graph declares 'int'"]
+expect_diagnostic_name = "RuntimeDiag::ExitTypeMismatch"
+expect_output_contains = ["The value the graph 'target' hands on has type 'float', and the graph declares 'int'"]
 
 [[tests]]
 name = "runtime.exit_type.legal_exits_are_not_refused"

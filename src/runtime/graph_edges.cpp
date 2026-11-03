@@ -28,6 +28,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/cycle.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/graph_exit_type.h"
 #include "camel/runtime/graph_ref_check.h"
 #include "camel/runtime/program.h"
 #include "camel/utils/assert.h"
@@ -106,6 +107,17 @@ class EdgeChecker {
             checkNode(it.ref(), **it);
         }
         return std::move(violations_);
+    }
+
+    /// The one violation that is the program's error rather than a graph written by mistake: the
+    /// value the graph hands on is not of the type its own signature declares (see
+    /// `checkReturnValueType`). It is kept out of `violations_` because the two are reported as
+    /// different diagnostics -- a graph that breaks a structural invariant is a defect of whatever
+    /// wrote it, and `validateRuntimeGraphEdges` says so, while this one is the program's own
+    /// rewrite having written a value of the wrong type, and the run says that instead. A graph can
+    /// have at most one exit, so at most one of these.
+    std::optional<camel::runtime::GraphExitTypeMismatch> takeExitTypeMismatch() {
+        return std::move(exitTypeMismatch_);
     }
 
   private:
@@ -213,16 +225,18 @@ class EdgeChecker {
             return;
         }
         const std::string_view name = graph_.nodeName(returned);
-        violations_.push_back(
-            std::format(
-                "graph '{}': it hands on node {}{}, whose value has type '{}', and the graph "
-                "declares '{}'; a return is a value of the declared type, and nothing is converted "
-                "on the way (design principles 5.1)",
-                graph_.name(),
-                returned,
-                name.empty() ? std::string() : std::format(" ('{}')", name),
-                actual->toString(),
-                declared->toString()));
+        std::string where           = std::format("node {}", returned);
+        if (!name.empty()) {
+            where += std::format(", the value '{}'", name);
+        }
+        // The program's own error, with the facts its report needs (see GraphExitTypeMismatch):
+        // the graph, the value, both types and the value's origin when the node records one.
+        exitTypeMismatch_.emplace(
+            std::string(graph_.name()),
+            std::move(where),
+            actual->toString(),
+            declared->toString(),
+            graph_.nodeOrigin(returned));
     }
 
     /// A type that is still being decided: a name whose target is not filled in, or a type
@@ -782,6 +796,8 @@ class EdgeChecker {
     const GCGraph &graph_;
     const GraphState state_;
     std::vector<std::string> violations_;
+    /// See `takeExitTypeMismatch`.
+    std::optional<camel::runtime::GraphExitTypeMismatch> exitTypeMismatch_;
 };
 
 } // namespace
@@ -790,8 +806,18 @@ void validateRuntimeGraphEdges(const Program &program, const GCGraph *graph, Gra
     if (graph == nullptr || !graph->hasNodePayload()) {
         return;
     }
-    const std::vector<std::string> violations = EdgeChecker(program, *graph, state).run();
+    EdgeChecker checker(program, *graph, state);
+    const std::vector<std::string> violations = checker.run();
     if (violations.empty()) {
+        // Nothing structural is broken. What can be left is the one violation that is the
+        // program's error rather than the graph's: the value the exit hands on is not of the type
+        // the signature declares. It travels as its own exception, so the pass boundary reports it
+        // as `RuntimeDiag::ExitTypeMismatch` and says what the program has to change, instead of
+        // `PassInternalError`, which is what a broken graph answers. A graph with a structural
+        // violation as well is reported as that: a defect first.
+        if (auto mismatch = checker.takeExitTypeMismatch()) {
+            throw std::move(*mismatch);
+        }
         return;
     }
     std::string text = std::format(

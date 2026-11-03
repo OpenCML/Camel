@@ -10,7 +10,9 @@
  * Measured 2026-11-04, before the seal judged every declared exit type: the run printed
  * `6.3956244425295e-310` and exited 0 -- the array's address read as a float -- because the check
  * refused only a `T?` / `T!` exit that had lost its boxed form. After: the seal refuses it, and the
- * run exits 1 with the diagnostic this plan asserts.
+ * run exits 1 with `RuntimeDiag::ExitTypeMismatch`, whose sentence names the graph, the value's
+ * type and the declared type. That code is the program's own: the pass list is not what is wrong
+ * here, and the report says so instead of sending the reader to the compiler.
  *
  * Run as `camel float_declared_array_returned.cml std::nvm`.
  */
