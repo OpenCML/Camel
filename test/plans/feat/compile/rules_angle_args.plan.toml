@@ -16,44 +16,45 @@
 #     each position is (`modules/transforms/transpose.cpp`, `skip=arity uri=tensor:mean_axis
 #     operands=3`), so `mean_axis`'s second and third names are positions no cotangent is asked of.
 #
-# Every number below is derived by hand in the case's own header, not read off any run. They are the
+# Three readings, three case files, one `main` each (`rules_angle_args_reshape.cml`,
+# `rules_angle_args_softmax.cml`, `rules_angle_args_mean_transpose.cml`). They shared one program
+# until this split, and a program stops at its first failure: `reshape` and `softmax` answered
+# correctly (`value=30.0 tangent=5.0`, `value=1.5 tangent=-0.25`) while the third line's transposed
+# walk ended the run, so the two correct answers could only be reported as part of a red one. A case
+# that asserts three things fails once, and that one failure hides which part was right.
+#
+# Every number below is derived by hand in its case's own header, not read off any run. They are the
 # target, and they stay: the day the walls fall the marker is removed and they turn green.
 
 [[tests]]
 name = "rules_angle_args.reshape"
 desc = "`jvp` of `f(x) = sum(reshape<[2, 2]>(x) * [[1, 2], [3, 4]])` at x = [1, 2, 3, 4] along dx = [0.5, 0.5, 0.5, 0.5]: f = 30.0 and f' = 5.0, both by hand. `jvp_reshape`'s right side names `reshape<[2, 2]>(dx)`, which is the context-argument refusal the expansion no longer makes."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/rules_angle_args.cml"
+case = "../../../cases/modules/autodiff/rules_angle_args_reshape.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_contains = ["rules_angle_args reshape value=30.0 tangent=5.0"]
-known_fail = ["nvm", "fvm"]
-known_fail_msg = "TRANSPOSE function=loss_mean skip=rule uri=tensor:multiply reason=no-rule"
-known_fail_note = "Its own line prints now: `rules_angle_args reshape value=30.0 tangent=5.0`, and the lift behind it is green -- `REINTERP jvp function=loss_reshape graph=242 liftedFrom=234 type=(float[..], float[..]) => (float, float) pure nodes=7 exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_reshape,jvp_mul_tensor,jvp_sum,...`. Two walls fell to get there: `portsTakeOperands` (`modules/transforms/jvp.cpp`) asks now whether a port *takes* the operand instead of whether the two are equal, and the count it keeps is `count < dataOperandCount || count > portTypes.size()`, so a `<>` argument still cannot become a port; and a `float[2, 2]` constant gets a zero tangent of its own shape, read off the value where the type leaves the dimension open. What fails is the exit code, and the reason has a name: the case is one program, its third line stops the run with `TRANSPOSE function=loss_mean skip=rule uri=tensor:multiply reason=no-rule` (the line this entry pins, which is the making of the third reading and not of this one), and that is the page `docs/handover/questions/2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md`."
 timeout_ms = 30000
 
 [[tests]]
 name = "rules_angle_args.softmax"
 desc = "`jvp` of `f(x) = sum(softmax<1>(x) * [1, 2])` at x = [[1, 1]] along dx = [[1, 0]]: y = [0.5, 0.5], so f = 1.5 and the tangent `y * (dx - y.dx)` dotted with [1, 2] is -0.25, both by hand."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/rules_angle_args.cml"
+case = "../../../cases/modules/autodiff/rules_angle_args_softmax.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_contains = ["rules_angle_args softmax value=1.5 tangent=-0.25"]
-known_fail = ["nvm", "fvm"]
-known_fail_msg = "TRANSPOSE function=loss_mean skip=rule uri=tensor:multiply reason=no-rule"
-known_fail_note = "Its own line prints now: `rules_angle_args softmax value=1.5 tangent=-0.25`, with `rules=jvp_softmax,jvp_mul_tensor,jvp_sum,...` in the lift's own reading -- `softmax<1>`'s axis is a `<>` port and the port/operand comparison stopped counting it as an operand. It fails on the exit code for the reshape entry's reason: one program, and the third line's transposed walk stops the run (`TRANSPOSE function=loss_mean skip=rule uri=tensor:multiply reason=no-rule`, the line pinned here), which is the page `docs/handover/questions/2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md`. Both numbers stay as they are."
 timeout_ms = 30000
 
 [[tests]]
 name = "rules_angle_args.mean_axis_transpose"
 desc = "`transpose` of `f(x) = sum(mean_axis(x, 0, false) * [1, 2, 3])` at ct = 1.0: every position of `xs` that fed lane k gets w[k] / 2, so the answer sums to 2 * (0.5 + 1 + 1.5) = 6.0, by hand. The node has three operands, and the transposed walk refuses three outright once it gets past the product above it, so the second and third names of `mean_axis_t`'s left side are positions no cotangent is ever asked of."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/rules_angle_args.cml"
+case = "../../../cases/modules/autodiff/rules_angle_args_mean_transpose.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
@@ -61,5 +62,5 @@ expect_exit = 0
 expect_stdout_contains = ["rules_angle_args mean transpose=6.0"]
 known_fail = ["nvm", "fvm"]
 known_fail_msg = "TRANSPOSE function=loss_mean skip=rule uri=tensor:multiply reason=no-rule"
-known_fail_note = "Reached, and it stops two walls into the transposed walk: `TRANSPOSE-PROBE function=loss_mean needs=0`, then `TRANSPOSE function=loss_mean skip=rule uri=tensor:multiply reason=no-rule` -- the array product's transpose law is `mul_t`'s array half, `jvp_mul_tensor`'s adjoint, and it is another lane's page. Behind it stands the count gate in `modules/transforms/transpose.cpp`: with that law in the tree the walk went on and reached `TRANSPOSE function=loss_mean skip=arity uri=tensor:mean_axis operands=3`, and lifting the count builds a graph taking `(x, ct)` where the function value's signature promises `(ct,)` -- `nargs.size() == normPorts.size()`, a signal. So `transpose=6.0` still stands as the target, and the wall is the residual convention: `docs/handover/questions/2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md`. The number does not move."
+known_fail_note = "One program, one reading: this file calls `transpose(loss_mean)` and nothing else, so what stops it is its own wall and not another line's. `TRANSPOSE-PROBE function=loss_mean needs=0`, then `TRANSPOSE function=loss_mean skip=rule uri=tensor:multiply reason=no-rule` -- the array product's transpose law is `mul_t`'s array half, `jvp_mul_tensor`'s adjoint, and it is another lane's work. Behind it stands the count gate in `modules/transforms/transpose.cpp`: with that law in the tree the walk went on and reached `TRANSPOSE function=loss_mean skip=arity uri=tensor:mean_axis operands=3`, and lifting the count builds a graph taking `(x, ct)` where the function value's signature promises `(ct,)` -- `nargs.size() == normPorts.size()`, a signal. So `transpose=6.0` still stands as the target, and the wall is the residual convention: `docs/handover/questions/2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md`. The number does not move."
 timeout_ms = 30000
