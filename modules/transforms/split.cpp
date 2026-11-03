@@ -3132,8 +3132,11 @@ SplitGraph buildSplitGraph(
             // nested builds stand on, one level down and however much further, because the field is
             // collected the same way one level out. Nothing else travels: every program in it is one
             // a cut this build calls was built in, so the graphs are the calls' own halves and not
-            // some other function's. A depth of N cuts asks for N levels of programs, and each level adds the
-            // pair of graphs its own callee's cut made and no more: two levels read
+            // some other function's. What it costs is the depth: every nested build has its own
+            // callee table, so a chain of n pair-answering calls builds 2^(n-1) pairs of graphs where
+            // n would do (measured: 8 pairs, graph ids 340..355, for `f -> g -> h -> k`, where `k` is
+            // cut four times). Every one of them is adopted here, which is a pointer in a table and
+            // not a copy, and no value is recomputed. Two levels read
             // `test/cases/transforms/split/split_two_nested_cuts.cml`, three and four were probed at
             // depth (the readings are in
             // `docs/handover/questions/2026-11-04-who-adopts-the-graphs-of-a-nested-cut.cn.md`).
