@@ -219,12 +219,14 @@ function printChangedFiles(stampFingerprint, currentFingerprint) {
 }
 
 function printMismatch(label, stamp, current, allowStale, differs) {
+    const changed = []
+    if (differs.sources) changed.push('sources')
+    if (differs.options) changed.push('build options')
+    if (differs.config) changed.push('configuration')
     const headline =
-        differs.sources && differs.options
-            ? `was built from different sources with different build options than this tree`
-            : differs.sources
-                ? `was built from different sources than this tree`
-                : `was built with different build options than this tree would build now`
+        changed.length === 1 && changed[0] === 'sources'
+            ? 'was built from different sources than this tree'
+            : `was built from different ${changed.join(' and ')} than this tree would build now`
     const stampGit = stamp.git === false
         ? { available: false }
         : { available: true, revision: stamp.revision, dirty: stamp.dirty, dirtyCount: stamp.dirtyCount }
@@ -270,6 +272,11 @@ function printMismatch(label, stamp, current, allowStale, differs) {
             '  Same source bytes, other options: the binary and the ' +
                 `${label}/stdlib it runs were compiled with the option set above, so the reading would ` +
                 'answer the old configuration and not this tree\'s.'
+        )
+    } else if (differs.config && !differs.sources && !differs.options) {
+        console.log(
+            `  Same source bytes, another configuration: the plan would run a ` +
+                `${stamp.config || 'unknown'} install where this run is about the ${differs.config} one.`
         )
     } else {
         console.log(`  The plan would run the old binary and the old ${label}/stdlib, not this tree.`)

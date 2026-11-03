@@ -77,9 +77,12 @@ it; the PyPI rollup copies `out/<tag>/` whole and ships the file.
 `node scripts/build-info.js check --tag latest` prints nothing when the stamp matches the current
 tree, and exits 4 when it does not, naming both revisions (HEAD plus dirty state), both
 fingerprints, the source files that changed and every build option that moved. `show` prints the
-stamp. `camel-remote.ps1` runs `check` before a `-NoBuild` plan, passing `--config` so that the
-configuration it builds is compared too: an install is reused only while its fingerprint *and* its
-option set still match, and `-AllowStale` is the explicit override. Changes under `docs/`, `test/`,
+stamp. `camel-remote.ps1` runs `check` before a `-NoBuild` plan, passing `--config Debug` for the
+debug tag (out/debug holds the Debug build by construction, so an install collected as another
+configuration is refused there too; out/latest holds Release *and* RelWithDebInfo and gets no
+`--config`, which keeps `-Tier debug -NoBuild` — verifying out/debug without building — working):
+an install is reused only while its fingerprint *and* its option set still match, and `-AllowStale`
+is the explicit override. Changes under `docs/`, `test/`,
 `scripts/`, `agents/`, `editors/`, `pypi/`, `assets/`, `examples/` and `benchmarks/` do not move the
 fingerprint (a test case is read at plan time); changes under the paths above do — including
 `stdlib/`, which `collect-out` copies verbatim into `out/<tag>/stdlib`.

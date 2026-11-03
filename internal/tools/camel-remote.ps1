@@ -65,6 +65,10 @@
 #                          the same bytes, but a no-JIT install and a JIT install are two different
 #                          binaries and reusing one for the other answers a question the tree never
 #                          asked;
+#   * another configuration -> exit 4 for the debug tag only, which is the one tag the configuration
+#                          follows from (out/debug is the Debug build); out/latest holds Release and
+#                          RelWithDebInfo, so no `--config` is passed there and `-Tier debug
+#                          -NoBuild` keeps verifying out/debug without building;
 #   * no stamp, or a stamp from before the option record -> exit 4: it cannot be proven to match,
 #                          so it is refused rather than trusted; build once without -NoBuild;
 #   * -AllowStale       -> the mismatch is still printed, followed by "continuing anyway"; the run
@@ -325,10 +329,13 @@ if ($null -ne $loadStart) {
 # The install the plan will actually use: `--tier debug` makes the plan runner read out/debug;
 # every other run reads out/latest. The -NoBuild guard checks that directory (H149).
 $verifyTag = if ($Tier -eq 'debug') { 'debug' } else { 'latest' }
-# `--config` is the configuration this run builds (`-Config`), so the guard can also refuse an
-# install collected as another one: out/latest holds both Release and RelWithDebInfo, and a bare
-# `check --tag latest` cannot tell them apart.
-$guardArgs = if ($AllowStale) { "--allow-stale --config $Config" } else { "--config $Config" }
+# `--config` is passed only where the tag decides the configuration. out/debug holds the Debug build
+# by construction (scripts/collect-out.js writes that tag from `npm run debug`), so naming it lets
+# the guard refuse a Release install sitting in out/debug too. out/latest holds Release *and*
+# RelWithDebInfo, and `-Tier debug -NoBuild` (which verifies out/debug without building) passes
+# `-Config Release` by default, so naming a configuration there would refuse a correct install.
+$guardConfig = if ($verifyTag -eq 'debug') { '--config Debug' } else { '' }
+$guardArgs = if ($AllowStale) { "--allow-stale $guardConfig" } else { $guardConfig }
 
 $Path = (Resolve-Path $Path).Path
 if (-not (Test-Path (Join-Path $Path 'package.json'))) {
@@ -1118,9 +1125,9 @@ exit `$code
                 return
             }
             if ($line -match '__CAMEL_REMOTE_STALE_BINARY__') {
-                Set-BuildPhase 'fail' "[camel-remote] -NoBuild refused: out/$verifyTag was built from different sources or build options"
+                Set-BuildPhase 'fail' "[camel-remote] -NoBuild refused: out/$verifyTag was built from different sources, options or configuration"
                 $run.phase = 'fail'
-                $run.lastLine = "[camel-remote] -NoBuild refused: out/$verifyTag was built from different sources or build options"
+                $run.lastLine = "[camel-remote] -NoBuild refused: out/$verifyTag was built from different sources, options or configuration"
                 Publish-Run
                 return
             }

@@ -22,7 +22,10 @@
  *   5. a stamp with `buildOptions` deleted: exit 4, "records no build options";
  *   6. a stamp with `schema` 2: exit 4, "different form of this guard", said to be untrustworthy
  *      rather than matched — the old stamp cannot prove which options produced the install;
- *   7. a fresh stamp with the other option value: exit 0, which is the reuse `-NoBuild` must keep.
+ *   7. a fresh stamp with the other option value: exit 0, which is the reuse `-NoBuild` must keep;
+ *   8. a Debug install: `--tag debug` with no `--config` passes (that is `-Tier debug -NoBuild`,
+ *      which verifies out/debug without building), `--config Debug` passes, and `--config Release`
+ *      is refused — same sources, same options, another configuration.
  *
  * No compiler runs: the case pins the guard's reading, not the artifact.
  *
@@ -73,7 +76,11 @@ function stampInfo(args) {
 }
 
 function checkTree(extra = []) {
-    const run = spawnSync(process.execPath, [BUILD_INFO, 'check', '--tag', 'latest', '--root', ROOT, ...extra], {
+    return checkTag('latest', extra)
+}
+
+function checkTag(tag, extra = []) {
+    const run = spawnSync(process.execPath, [BUILD_INFO, 'check', '--tag', tag, '--root', ROOT, ...extra], {
         encoding: 'utf8',
         windowsHide: true,
         env: ENV
@@ -236,6 +243,41 @@ check(
 )
 const reuse = checkTree()
 check('check with the rebuilt options exits 0 (the reuse -NoBuild must keep)', reuse.status === 0, reuse.output)
+
+// --- 8. the configuration is compared only where the caller names one -------
+// `camel-remote.ps1 -Tier debug -NoBuild` verifies out/debug without building and passes no
+// `--config`; that run must keep working. When a configuration is named, an install collected as
+// the other one is refused.
+const debugStampRun = stampInfo(['stamp', '--tag', 'debug', '--config', 'Debug'])
+check('stamping a debug install exits 0', debugStampRun.status === 0, debugStampRun.output)
+const debugStamp = JSON.parse(fs.readFileSync(path.join(ROOT, 'out', 'debug', 'build-info.json'), 'utf-8'))
+check('the debug stamp records its configuration', debugStamp.config === 'Debug', debugStamp.config)
+check(
+    'both stamps carry the same source and option hashes: only the configuration differs',
+    debugStamp.fingerprint.hash === stamp.fingerprint.hash && debugStamp.buildOptions.hash === stamp.buildOptions.hash,
+    `${debugStamp.fingerprint.hash} / ${debugStamp.buildOptions.hash}`
+)
+const bareDebug = checkTag('debug')
+check(
+    'check --tag debug with no --config passes, as -Tier debug -NoBuild does',
+    bareDebug.status === 0 && bareDebug.output.trim() === '',
+    `${bareDebug.status}: ${bareDebug.output}`
+)
+const asDebug = checkTag('debug', ['--config', 'Debug'])
+check('check --config Debug on a Debug install exits 0', asDebug.status === 0, `${asDebug.status}: ${asDebug.output}`)
+const asRelease = checkTag('debug', ['--config', 'Release'])
+check('check --config Release on a Debug install is refused (exit 4)', asRelease.status === 4, `${asRelease.status}: ${asRelease.output}`)
+check(
+    'the refusal names both configurations',
+    asRelease.output.includes('collected as a Debug build') && asRelease.output.includes('about the Release build'),
+    asRelease.output
+)
+check(
+    'the refusal says the sources and the options are unchanged',
+    asRelease.output.includes('Same source bytes, another configuration') &&
+        !asRelease.output.includes('built from different sources'),
+    asRelease.output
+)
 
 console.log(failed ? 'FAIL' : 'PASS')
 process.exit(failed ? 1 : 0)

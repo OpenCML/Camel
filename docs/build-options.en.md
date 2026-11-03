@@ -81,9 +81,13 @@ options moved it prints the option that moved and refuses:
 Only what changes the artifact is recorded: the effective values of the `cmake/options.json` entries,
 the two environment overrides `Options.cmake` honours (`CAMEL_TARGET_ARCH`, `CAMEL_SKIP_PYTHON`), the
 platform (an `add_platform_option` value becomes a different macro per processor) and the compiler
-selection. Timestamps, absolute paths and the user name are out; ccache is out (a cache returns the
-bytes it was given); the clang **version** is out, because probing it would make `-NoBuild` depend on
-`PATH` and invalidate every install after a toolchain update (whether it should be, see
+selection. The build configuration (`config`) is in the stamp but not in the options hash:
+`check --tag debug --config Debug` compares it, because out/debug belongs to `npm run debug` alone,
+while out/latest holds Release *and* RelWithDebInfo and `-Tier debug -NoBuild` verifies without
+building (passing `-Config Release` by default) — judging the configuration there would refuse a
+correct install. Timestamps, absolute paths and the user name are out; ccache is out (a cache returns
+the bytes it was given); the clang **version** is out, because probing it would make `-NoBuild` depend
+on `PATH` and invalidate every install after a toolchain update (whether it should be, see
 `docs/handover/questions/2026-11-04-should-the-compiler-version-invalidate-an-install.cn.md`).
 
 ## See also

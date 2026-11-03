@@ -78,7 +78,10 @@ CMake 会缓存布尔选项。若曾经关闭过 `CAMEL_ENABLE_PYTHON`，再次�
 
 记进去的只有**真会改变产物**的东西：`cmake/options.json` 各选项的生效值、`Options.cmake` 认的两个环境
 覆盖（`CAMEL_TARGET_ARCH`、`CAMEL_SKIP_PYTHON`）、平台（`add_platform_option` 按处理器改宏）与编译器
-选择。时间戳、绝对路径、用户名不进；ccache 不进（缓存交回的字节与它收到的一样）；clang 的**版本**也
+选择。构建类型（`config`）也在戳里，但它不在选项指纹里：`check --tag debug --config Debug` 会比，
+`out/debug` 由 `npm run debug` 独占，而 `out/latest` 同时放 Release 与 RelWithDebInfo，`-Tier debug
+-NoBuild` 又是"只验不建"（默认 `-Config Release`）——在那里按配置判会拒绝一个正确的安装。时间戳、绝对
+路径、用户名不进；ccache 不进（缓存交回的字节与它收到的一样）；clang 的**版本**也
 不进——探版本会让 `-NoBuild` 依赖 `PATH`，换一次工具链就废掉每个安装（这条是否该改，见
 `docs/handover/questions/2026-11-04-should-the-compiler-version-invalidate-an-install.cn.md`）。
 
