@@ -31,38 +31,69 @@ PROBE-FWD function=split_of_jvp_of_g_backward ref=2 kind=15 type=float[]
   不在它的类型里，只在它的值里。这正是 `split.cpp` 那句注释说的形状。
 - `argumentAt=0`、`inputs=[2:Loop(float[]) 22:Data(int)]`：`inputs[0]` 就是参数 0。**序号是对的**，
   身份是 `node 23` 的 `inputs[0]` → `ref 2`。站 1/2 的"按身份补"这条路没有走错格。
-- `ref=2` 的 `kind=15` 是 `GCNodeKind::Loop`（`include/camel/runtime/graph.h:126`），类型 `float[]`
-  ——它是那个循环**收上来的逐轮数组**（同一条 split 诊断里 `residuals=1 loop=1 tape=5 invariants=0`）。
+- `ref=2` 的 `kind=15` 是 `GCNodeKind::Loop`（`include/camel/runtime/graph.h:126`），类型 `float[]`。
 - 所以 `forward(2)` 拒绝的原因在 `modules/transforms/transpose.cpp:1017`：
   `if (node->kind != rt::GCNodeKind::Oper) { complete = false; return kInvalidNodeRef; }`。
   `forward` 认识的只有 `Port`、`Fill`、`Accs`、`Call`、`Func`、`Oper`，**没有 `Loop`**。
 
+## 那个 tape 是不是本来就在闭包里？（D 路，已排除）
+
+`residuals=1` 确实说明后一半只带了一个残差，所以先问"那个值是不是已经在手边"。第二个探针把 `ref 2` 的
+形状打全了：
+
+```
+PROBE-CLOSURE function=split_of_jvp_of_g_backward ref=2 kind=15 type=float[] members=1 \
+  [0:1:(float, float[], float, float, float)[]] ports=1 isMember=0 hasPort=0 closureType=none \
+  norm=[0:1:(float, float[], float, float, float)[] 1:1:float[] ] with=[20:4:float[] 21:1:int ] regions=2
+```
+
+读出来两件事，一件成立、一件不成立：
+
+- **tape 在闭包里——成立。** 唯一的残差就是 `ref 0`（`kind=1` `Port`），类型
+  `(float, float[], float, float, float)[]`，正是那条 `tape=5`；而且它就是 `ref 2` 的 `norm[0]`
+  ——这个循环是**遍历 tape** 的那个循环。
+- **"所以 `forward` 答闭包端口就行"——不成立。** `isMember=0`、`hasPort=0`：`ref 2` 不是闭包成员，
+  它是这个循环的**输出**（`with=[20:Fill(float[]) …]` 是它自己的区域结果 + 轮端口，`regions=2`）。
+  闭包里躺着的是循环的**输入**，要的是循环的**结果**：从 tape 到那个 `float[]` 之间隔着"把循环跑一遍"，
+  也就是抄一个循环。省不掉。
+
+还有一条更硬的理由：即使把规则放宽成"凡是闭包给得出的都答闭包端口"，这里给的也会是**类型不对**的东西
+——`ref 0` 是 `(float, float[], float, float, float)[]`，参数 0 要的是 `float[]`。D 若照这个写法落地，
+不是少抄一个循环，而是把一个 tuple 数组当数组交给 `zeros_like`。
+
 ## 结论
 
 这个值在调用点**存在**，身份也**已知**（`split_of_jvp_of_g_backward` 的 `node 23`、`inputs[0]`、`ref 2`），
-缺的不是"把实参搬过去"——搬的那条路是对的——而是 `forward` 能把一个 `Loop` 节点连同它的
-`LoopCond` / `LoopBody` 两个区域抄进转置图。**那是"抄一个循环"，不是"补一格值"。**
+缺的不是"把实参搬过去"——搬的那条路是对的——也不是"读闭包端口"（D 已排除）——而是 `forward` 能把一个
+`Loop` 节点连同它的 `LoopCond` / `LoopBody` 两个区域抄进转置图。**那是"抄一个循环"，不是"补一格值"。**
 
-因此我停在这里，没有自己造。要给的三条路：
+三条路：
 
 - **A：给 `forward` 加 `Loop` 分支**：抄 payload（`collectionCount`、区域引用、端口）、抄两个区域。
   代价是 `forward` 从此要能抄区域，而它今天连 `Brch`/`Join` 都不抄。
 - **B：让 `idx_arr_t` 的转置不读 tape 的值**：现在它靠 `zeros_like(x)` 拿长度，改成由余切/形状之外的
   东西决定长度，是算子契约的改法，要作者裁。
-- **C：把"loop 那一半的 tape"划出这一站**：这一站做到"数组那种形状按身份走通"，loop 那种形状连同
-  `docs/handover/questions/2026-11-03-does-a-one-member-closure-prove-the-slot-identity.cn.md` 的校验收紧
-  **同一个动作**做。
+- **C：把"loop 那一半的 tape"划出这一站**（默认建议）：这一站做到"数组那种形状按身份走通"，loop 那种
+  形状连同 `docs/handover/questions/2026-11-03-does-a-one-member-closure-prove-the-slot-identity.cn.md`
+  的校验收紧**同一个动作**做。理由：A 要 `forward` 学会抄两个区域，B 要改算子的转置怎么拿形状，两者都是
+  架构改动，该由作者裁；而这条用例现在是 `known_fail` 而不是新红，留着比赌一个架构改动安全。
 
-我不替作者选。要提醒的一点：`docs/handover/questions/2026-11-03-does-a-one-member-closure-prove-the-slot-identity` 里
-说的"后面还有一道墙挡着"，那道墙就是这一页的 `forward` 缺 `Loop` 分支；也就是说，选 A 或 B 的人等于
+默认是 C，但我不替作者选。要提醒的一点：`docs/handover/questions/2026-11-03-does-a-one-member-closure-prove-the-slot-identity`
+里说的"后面还有一道墙挡着"，那道墙就是这一页的 `forward` 缺 `Loop` 分支；也就是说，选 A 或 B 的人等于
 同时拆掉那道墙，那时单成员闭包的误过校验就会走到出口——两件事必须一起做。
 
-## 与既有判断的出入
+## 同一句诊断，两种成因（这一页要留下的东西）
 
-`56aa32a42` 之后我说过"`call-value-missing` 不再出现"。那句只对**数组那一种形状**成立：数组案例要的值
-是参数自己的值，站 1/2 之后确实不再缺。loop 这一种形状要的是**循环收上来的 tape**，它缺的从来不是
-"参数自己的值"，而是"让转置图能持有一个循环的值"。两种形状碰巧共用同一句诊断，所以那句话读起来像
-"修好了"，其实只覆盖了一半。
+`skip=call-value-missing` 是**一句诊断盖住两件事**，读的人必须知道它今天有哪两种：
+
+| 成因 | 要的值 | 一句话 | 今天 |
+| --- | --- | --- | --- |
+| 数组那种形状 | 参数**自己**的值（`zeros_like(xs)` 要长度） | 站 1/2 之后按身份搬过去 | 已修，8 条数组用例逐名绿 |
+| loop 那种形状 | 循环**算出来**的值（`zeros_like(tape 的收集结果)`） | 要抄一个循环 | 未修，停在本页 |
+
+`56aa32a42` 之后我说过"`call-value-missing` 不再出现"。那句只对第一行成立：两种形状碰巧共用同一句
+诊断，所以那句话读起来像"修好了"，其实只覆盖一半。**下次读到这句诊断，先问"它要的是参数自己的值，
+还是体自己算出来的值"，再看是哪一条。**
 
 ## 文件与读数
 
