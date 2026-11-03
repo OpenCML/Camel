@@ -257,7 +257,11 @@ args = ["${case}", "--verify-docs", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["every declared name has a description and an @example"]
 normalizers = ["normalize_newlines"]
-timeout_ms = 180000
+# The bound moved with the work: on 2026-11-04 this case used 47.0 s of CPU against the 45 s a
+# 180000 ms bound leaves for the 4x margin, and what grew was the library's own arithmetic -- the
+# examples went to 577 written, 574 a program of their own. A bound the work cannot meet is a red
+# about the bound, so it is 240000 ms (60 s of margin) and the case still asks for every slot.
+timeout_ms = 240000
 # This case compiles every `@example` of the library -- several hundred programs, each its own
 # process -- and reports how many of them compile. Under a full gate that number is a reading
 # about the machine as much as about the library: on 2026-11-02 the same tree passed alone and
