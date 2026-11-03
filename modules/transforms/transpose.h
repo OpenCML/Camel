@@ -59,7 +59,12 @@ enum class TransposeRefusalCause {
     StateUnread,
     Range,
     CallNoTranspose,
+    /// No program can reach this one today: the shape that reached it is the one `34788b554`
+    /// fixed (a parameter's own value is carried into the closure), so it is kept to name a state
+    /// the walk can still enter, not because a live check guards it.
     CallValueMissing,
+    /// Reachable today (`vjp_loop.rounds_are_undone_in_reverse` records it): the value is one the
+    /// function's own body computes, so carrying it means transposing that body.
     CallValueComputedByTheBody,
     UnreadParameter,
     NeedsAValueOutsideTheClosure,

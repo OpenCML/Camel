@@ -95,6 +95,47 @@ PROBE-CLOSURE function=split_of_jvp_of_g_backward ref=2 kind=15 type=float[] mem
 诊断，所以那句话读起来像"修好了"，其实只覆盖一半。**下次读到这句诊断，先问"它要的是参数自己的值，
 还是体自己算出来的值"，再看是哪一条。**
 
+## 两个词之后（`86b21fe7e`，这张表的两种成因现在各有一个词）
+
+上面那张表是历史读法。`86b21fe7e` 之后，同一句诊断拆成两个词，读的人不必再猜：
+
+- `skip=call-value-missing` —— 调用点没带**参数自己的值**；
+- `skip=call-value-computed-by-the-body` —— 要的值是**体自己从循环或分支里算出来的**，拿到它要转置整块体。
+
+判据换了地方：`forward` 在它"遇到不认的 kind"的兜底处记 `stoppedAtARegion`，两个搬不过值的地方读这个
+标记，而不是从手上那个节点的 kind 去猜——因为手上拿到的可能是一个区域结果的**投影**（`Accs` 投影循环
+的 cell），不是区域本身。诊断因此记的是量出来的事实。
+
+`vjp_loop.rounds_are_undone_in_reverse` 现在报第二个词，逐字：
+
+```
+TRANSPOSE function=split_of_jvp_of_g_backward skip=call-value-computed-by-the-body param=0 node=23 arg=2
+```
+
+外加一句：
+
+```
+transforms: transpose has no transpose for this function: the callee's transpose was built, but the
+parameter at position 1 reads a value the function's own body computes out of a loop or a branch, so
+carrying it means transposing that body
+```
+
+### 可达性（这是这一节真正要留下的）
+
+`feat/compile` 全层的 2186 个 stderr 逐文件 grep：两个词一共命中 **1 次**（就是上面那条 `vjp_loop`），
+`call-value-missing` **一次都没出现**。原因是清楚的——曾经到达第一个词的那种形状正是 `34788b554`
+修好的（参数原值作为残差进闭包）。
+
+所以：**第一个词今天没有程序能到。** 保留它的理由写在 `modules/transforms/transpose.h` 的枚举成员上——
+它命名的是 walking 仍可能进入的一个状态，不是因为有一道活的检查守在那里。要给第一个词一条读数，得造
+一个图级用例；那属于新用例而不是修，这一站没有做，也不该为了让表看起来齐而造。
+
+### 这一页与那两行注释的来历
+
+本节的读数是 `lane-looptape`（`86b21fe7e`）量的；页上这一节与枚举上的两行可达性注释是**合并车道代写**
+的，车道本身没有再提交一次文档——它把原文交了出来，落笔由合并这一步完成。以后若发现这两处措辞与车道
+的话不一致，以车道当时的原文与这里逐字引用的读数为准。
+
 ## 文件与读数
 
 - 拒绝点：`modules/transforms/transpose.cpp:1017`（`forward` 的兜底返回）。
