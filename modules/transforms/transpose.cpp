@@ -430,31 +430,35 @@ bool buildTransposeMember(
         if (carriesClosure && function->closureType() != nullptr) {
             draft.setClosureType(const_cast<camel::core::type::TupleType *>(function->closureType()));
         }
-        // A value the transposed body needs and this graph has no port for: the graph it was handed
-        // already carries one. `index_into(xs, i)`'s transpose writes its cotangent into
-        // `zeros_like(xs)` (`stdlib/rulesets/transpose.cml#idx_arr_t`), and a `T[]`'s length is not
-        // a thing its type carries, so the answer is sized by an array of that shape. The operand
-        // that read it is a linear input of a linear function, so it stands for no value here -- but
-        // the closure does hold an array of the operand's own type, and that is the value taken.
-        //
-        // What is read is **the value the graph carries of the type the ask is for**, and nothing
-        // about where a member came from: a member the cut wrote and a member a caller closed over
-        // by hand are the same thing to this table. When the closure holds more than one member of
-        // that type the earliest one stands, and "earliest" is the closure's own order, which is the
-        // order the cut wrote its residuals in: a parameter's own value stands before the values the
-        // body computed (`residualsOf`, modules/transforms/split.cpp). A caller's own closure is
-        // read in the order the caller wrote it. `div_tangent`'s transposed read is the place this
-        // tie-break shows: it wants a `float` and the half carries several, and the denominator of
-        // `4.0 / x` is the parameter, which is the earliest of them.
-        std::unordered_map<std::string, gc_node_ref_t> carriedPortOf;
-        for (size_t i = 0; i < closureOf.size() && i < closurePorts.size(); ++i) {
-            const camel::runtime::GCNode *member = function->node(closureOf[i]);
-            const Type *memberType = member != nullptr ? member->dataType() : nullptr;
-            if (memberType == nullptr) {
-                continue;
+        // Where a parameter's own value sits among the residuals, and why it is a **place** rather
+        // than a type. `residualsOf` numbers the residuals as the parameters by their index and then
+        // the values the body computed (`modules/transforms/split.cpp`, "program order"), one
+        // residual per parameter whether or not the parameter has a tangent space -- a parameter
+        // without one is still a value the backward half may read. The backward half declares a
+        // normal port only for a parameter that *has* a tangent space (`buildSplitGraph`, "a () slot
+        // is an answer this half gives, never an argument it takes"), so its port `i` is the `i`-th
+        // parameter that has one, and that is not the parameter's index whenever a parameter without
+        // a tangent space stands before it: `f(n: int, xs: float[])` has one port, `dxs`, which is
+        // parameter **1**. So the walk below counts the leading residuals whose type has a tangent
+        // space, which is the same predicate the cut counted ports with. One algorithm, here, and
+        // the number it answers is a residual slot -- the index the closure port list is in.
+        const auto residualSlotOfPort = [&](size_t port) -> size_t {
+            size_t seen = 0;
+            for (size_t slot = 0; slot < closureOf.size(); ++slot) {
+                const camel::runtime::GCNode *member = function->node(closureOf[slot]);
+                if (member == nullptr || member->dataType() == nullptr) {
+                    continue;
+                }
+                if (!camel::core::tangentSpaceOf(member->dataType()).hasSpace()) {
+                    continue;
+                }
+                if (seen == port) {
+                    return slot;
+                }
+                ++seen;
             }
-            carriedPortOf.emplace(memberType->toString(), closurePorts[i]);
-        }
+            return closureOf.size();
+        };
         // A closure member is forwarded to the member the transposed graph carries, and nothing
         // about where it came from is asked (author, 2026-11-03 08:50). A member the cut wrote and
         // a member a caller closed by hand are the same shape -- a port the function is handed --
@@ -792,27 +796,24 @@ bool buildTransposeMember(
                         forwardOf[ref] =
                             at < portOfParam.size() ? portOfParam[at] : rt::kInvalidNodeRef;
                         if (forwardOf[ref] == rt::kInvalidNodeRef && at < paramCount) {
-                            // The parameter's own value, by **identity**. `residualsOf` numbers the
-                            // residuals as the parameters by their index and then the values the body
-                            // computed (`modules/transforms/split.cpp`, "program order"), and this
-                            // graph declares one closure port per residual in that order, so slot
-                            // `at` is parameter `at`'s value. Which parameter this is decides the
-                            // slot: two arrays of one element type are two parameters, and the shape
-                            // an answer must be written in is *this* parameter's, not the first
-                            // member's of that type -- `xs[0] + ys[0]` over `[3.0, 4.0, 5.0]` and
-                            // `[2.0, 7.0]` answered `gy` sized by `xs` while the member was chosen by
-                            // type. The slot's type is **checked**, never searched: a slot that does
-                            // not hold a value of this parameter's type is a shape this build does not
-                            // understand, and a refusal is what it says rather than a neighbouring
-                            // member.
+                            // The parameter's own value, by **identity**: the slot is the one this
+                            // parameter's residual sits in (`residualSlotOfPort`), and the closure
+                            // port there is the value. Which parameter this is decides the slot --
+                            // two arrays of one element type are two parameters, and the shape an
+                            // answer must be written in is *this* parameter's, not the first
+                            // member's of that type. `xs[0] + ys[0]` over arrays of two lengths
+                            // answered `gy` sized by `xs` while the member was chosen by type. The
+                            // slot's type is **checked**, never searched: a slot that does not hold
+                            // a value of the parameter's type refuses instead of handing over a
+                            // neighbouring member.
+                            const size_t slot  = residualSlotOfPort(at);
                             Type *const askType = function->funcType()->normTypeAt(at);
                             const camel::runtime::GCNode *slotMember =
-                                at < closureOf.size() ? function->node(closureOf[at]) : nullptr;
+                                slot < closureOf.size() ? function->node(closureOf[slot]) : nullptr;
                             if (askType != nullptr && slotMember != nullptr &&
-                                slotMember->dataType() != nullptr &&
-                                at < closurePorts.size() &&
+                                slotMember->dataType() != nullptr && slot < closurePorts.size() &&
                                 camel::core::type::typeEquals(slotMember->dataType(), askType)) {
-                                forwardOf[ref] = closurePorts[at];
+                                forwardOf[ref] = closurePorts[slot];
                                 return forwardOf[ref];
                             }
                         }
