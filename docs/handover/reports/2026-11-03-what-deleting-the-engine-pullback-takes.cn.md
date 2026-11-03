@@ -59,16 +59,30 @@
 `[0.7864477329659274, 0.41997434161402614]`，两侧逐元素相同。
 `^`（`math:pow_d`）仍在"只有引擎"。
 
-**这条墙的判据（今晚第一次写成可判的句子）：重算的调用是否带着"出口不可达"的参数。**
-带上就拒，没带就过——四例通过（`relu` 的掩码、`exp`、`sigmoid`、`tanh`，重算只依赖输入 `x`；
-`exp` 实测 `residuals=2`、`rhs=sum_t,mul_tensor_t,exp_t`），两例被拒（`softmax<1>`/`sum<1,true>`
-带 `<>` 的轴与 `keepdims`；`vjp_loop` 里 `index_into` 的数组参数不是残差）。这同一句话也就是
-`mean_axis` 那条 `skip=arity` 的另一面。判据与代价写在
+**这条墙的判据（2026-11-04 修订，替换旧句——旧句把"重算"当成了条件，`log_softmax` 把它推翻了）：**
+**被拒的不是"重算"，是"`<>` 参数（context 边上的常量）在出口不可达"：`exp`/`relu`/`sigmoid`/`tanh`
+的重算都不带 `<>`，所以过；`softmax<1>`/`sum<0,true>`/`log_softmax` 的重算带着 `<>`，所以拒。
+`sum<0,true>` 甚至连重算都没有——它的值是后半边的数，`<>` 里才是常量。**
+
+四例通过（`relu` 的掩码、`exp`、`sigmoid`、`tanh`；`exp` 实测 `residuals=2`、
+`rhs=sum_t,mul_tensor_t,exp_t`），三例被拒（`softmax<1>`、`sum<0,true>`、`vjp_loop` 里
+`index_into` 的数组参数）。新句比旧句强的地方：它解释了为什么 `log_softmax` 拒而 `mean_axis`
+改完就过——`mean_axis` 的 `axis` 现在是**操作数**，不是 `<>`。判据与代价写在
 `docs/handover/questions/2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it.cn.md`。
 
-**下一个候选**：`log_softmax`（`jvp_log_softmax` 若无、且切线与 `softmax` 同形，会撞同一道墙，先量
-再动手）、`gelu` / `erf` / `erfc`（一元、切线只依赖 `x`，与 `exp` 同形，不会再碰这道墙）。
-`softmax` 与 `log_softmax` 今天仍是"缺一次 cut 的裁定"，不是缺律。
+**第三边界单记一行（不计入"过"）**：`log_softmax`（`lane-logsoftmax` `a65be8a25`）**律对、库层仍拒**。
+`jvp_log_softmax` + `log_softmax_t` 已写，引擎数 `[0.7299082804888587, 0.2658145868356071,
+-0.9957228673244654]`（`value=-4.222817893333142`），两条错律 `ct`→`[1.0, 1.0, 1.0]`、把 cotangent
+写成未转置方向 `ct - sum(p*ct)`→每个分量 ~3.3e-16；**这三种数组都和为 0**（`sum(1-3p)=3-3=0`，
+错的那条处处为 0），所以它只能逐元素判、和不是判据——"判据分辨不了对错就不算判据"的实例，已写进用例说明。
+被拒原文与 `softmax` 一字不差：`REINTERP split function=jvp_of_total skip=backward construct=a node
+whose input was not copied uri=- why=an operand of the node is not reachable from the half's exit`，之后没有
+`TRANSPOSE`。用例 `log_softmax_gradient_stops_at_split.cml`（`kind="negative"`）钉住这段原文。
+
+**下一个候选**：`gelu` / `erf` / `erfc`（一元、切线只依赖 `x`、不带 `<>`，按新句应当过；引擎侧三个
+都有 vjp，但用的是融合算子 `tensor:gelu_grad` / `tensor:erf_grad`，库里要用原语写出同一斜率）。
+`softmax` 与 `log_softmax` 今天仍是"缺一次 cut 的裁定"，不是缺律；能不能推进只看
+`writeConstant` 能不能重写那条常量。
 
 **两个被实测改口的结论**（2026-11-03 深夜）：
 
