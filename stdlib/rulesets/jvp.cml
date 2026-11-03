@@ -165,6 +165,15 @@ export rule jvp_neg::<T>(x: T) when is_float::<T>() {
 /// helpers because those are one value's arithmetic and the walk transposes them. So the rule here is
 /// two products and one add, on the tangents and on the values, and every node it writes is one the
 /// transpose family files a law for.
+///
+/// **This is a workaround, and the road it works around is named here so that nobody reads the inline
+/// form as a matter of taste.** What should be transposable is a `Call`: a rule's right side is an
+/// ordinary expression, so whether a law may be written with a helper should not be something the
+/// rule's author has to know. It is not transposable today -- `modules/transforms/transpose.cpp`
+/// refuses a callee whose signature it cannot turn around (`skip=signature`) and then refuses the call
+/// itself (`skip=call-no-transpose`), while it does transpose the one-value `autodiff` helpers.
+/// Making a call transposable in general is the change that would let this rule -- and any other --
+/// be written with a helper again; until then, inline is the only shape whose every node has a law.
 export rule jvp_matmul::<T>(a: T[..], b: T[..]) when is_float::<T>() {
     matmul(a, b) => (da: T[..], db: T[..]) => matmul(da, b) + matmul(a, db)
 }

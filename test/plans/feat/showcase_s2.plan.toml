@@ -147,3 +147,28 @@ expect_exit = 0
 expect_output_contains = ["matmul_t sum_prod value=9.75 dL/dx=[[0.75, 1.125], [0.75, 1.125]] dL/dw=[[4.0, 4.0], [6.0, 6.0]]", "matmul_t step value=10.34375 dL/dx=[[0.9375, 2.34375], [1.4375, 3.875]] dL/dt=[[-0.75, -2.25], [-1.0, -3.75]] dL/dw=[[3.75, 13.5], [5.5, 19.5]]", "matmul_t engine value=10.34375 dL/dw=[[3.75, 13.5], [5.5, 19.5]]", "matmul_t max_abs_diff_library_vs_engine w=0.000000000000e+00 value=0.000000000000e+00"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+
+# The shape the law leaves out, pinned as a reading. `matmul_t` takes two matrices and says so in its
+# pattern (`a: T[?, k], b: T[k, ?]`), so a vector operand finds no rule and the walk refuses the
+# *operator* by name instead of applying a law written for another shape:
+#
+#     skip=rule-shape uri=tensor:matmul node=6 operands=2 reason=the rule takes
+#       (float[?, k], float[k, ?]), and the operator has (float[], float[2, 2])
+#
+# The rank in the pattern is the point. With open ranks (`T[..]`) the law claims the vector too and the
+# program dies *inside* it -- `transpose: transpose requires a tensor of rank >= 2`, a fault naming
+# `transpose` rather than the law that asked for one -- which is what this case measured before the
+# pattern was narrowed. So the entry is deliberately not "expect exit 1" and nothing else: it pins the
+# sentence, on both streams, and the day the vector forms are written it fails and names the sentence.
+[[tests]]
+name = "matmul_t.vector_operand_is_refused_by_shape.nvm"
+desc = "The product's transpose law takes two matrices and refuses a vector operand by naming the shape: `skip=rule-shape uri=tensor:matmul ... reason=the rule takes (float[?, k], float[k, ?]), and the operator has (float[], float[2, 2])`. Pinned as the reading on both streams, not as an exit code, so the day the vector forms are served this entry fails rather than passing silently"
+kind = "negative"
+case = "../../cases/compile/transforms/matmul_transpose_vector_operand.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["transforms: transpose has no transpose for this function", "the rule the index filed for `tensor:matmul` was written for another shape", "the rule takes (float[?, k], float[k, ?]), and the operator has (float[], float[2, 2])"]
+expect_stderr_contains = ["skip=rule-shape uri=tensor:matmul node=6 operands=2", "reason=the rule takes (float[?, k], float[k, ?]), and the operator has (float[], float[2, 2])"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
