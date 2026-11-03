@@ -349,6 +349,13 @@ class GraphDraft {
 
     /// A draft always has its body: region 0 is made here, with the draft, so the table is never
     /// empty and `region(0)` answers a region the draft really holds (see `region`).
+    ///
+    /// A region is a record *and* a membership, and this model keeps the two apart: the record is
+    /// `regions_[0]`, while which nodes are in it is written on the nodes themselves
+    /// (`DraftNodeHeader::region`, read by `nodeRegion`) -- a region has no member table that could
+    /// be empty or full. The body is not a value either: `setRegionResult` takes only ids above 0,
+    /// and the exit of a graph is its own field (`exitNode`). So a body record of all defaults is
+    /// complete, not missing, and a graph of one region has every node in it.
     GraphDraft() { regions_.push_back(GCRegion{}); }
     ~GraphDraft() = default;
 

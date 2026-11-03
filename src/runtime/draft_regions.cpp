@@ -255,7 +255,11 @@ bool GraphDraft::regionWithin(uint32_t inner, uint32_t outer) const {
 }
 
 bool GraphDraft::inlinedCopyOf(gc_node_ref_t id, const GCGraph *callee) const {
-    // Only the body: a draft that has no other region has no inlined body to be inside of.
+    // `1` is the body and nothing else: every draft is made with its body region (GraphDraft), and
+    // an inlined body is a region of its own -- `addInlineRegion` makes one through `addRegion`,
+    // which hands out an id from 1 up even when the parent is the body. So a table of one holds no
+    // Inline region, and no node of this draft can be inside a body inlined here. A draft whose own
+    // graph was inlined somewhere holds that Inline region beside its body, and the table is two.
     if (callee == nullptr || regions_.size() <= 1) {
         return false;
     }
