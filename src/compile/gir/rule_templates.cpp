@@ -20,8 +20,10 @@
 #include "camel/core/operator_table.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
-#include "camel/utils/assert.h"`r`n`r`n#include <format>
+#include "camel/utils/assert.h"
 #include "camel/utils/str.h"
+
+#include <format>
 
 namespace camel::compile::gir {
 
@@ -208,9 +210,6 @@ size_t genericRuleInstance(
     const bool conditionFails =
         owner != nullptr &&
         ruleConditionAt(context, ruleId, types, conditionWhy) == RuleConditionAt::Fails;
-    if (conditionFails) {
-        instance.why = std::format("its condition does not hold at {}", tupleText(types));
-    }
     if (owner == nullptr) {
         instance.why = "the builder that declared it is gone";
     } else if (!owner->instantiateRuleTemplates(entry, types, with, lhs, rhs, when, instance.why)) {
@@ -220,7 +219,10 @@ size_t genericRuleInstance(
     } else if (conditionFails) {
         // The body compiles here, and the condition does not hold: the tuple is not an instance.
         // Nothing is published -- the condition was asked before the instance was made, which is
-        // what keeps a law about `int` from answering for `float` -- and `why` says which.
+        // what keeps a law about `int` from answering for `float` -- and `why` says which. The
+        // verdict is written here rather than before the body builds: a body that does not build
+        // for these types has its own reason, and that reason is the one the attempt is kept by.
+        instance.why = std::format("its condition does not hold at {}", tupleText(types));
     } else {
         publish(context, lhs, rhs, when, instance);
         instance.made = instance.lhs != nullptr && instance.rhs != nullptr;
