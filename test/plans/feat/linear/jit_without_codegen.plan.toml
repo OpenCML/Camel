@@ -12,6 +12,13 @@ tags = ["feat", "linear", "jit", "diagnostics"]
 # Both cases are skipped wherever the build has a code generator, which is the arm they are for:
 # the same two-line precondition asks the opposite question of the tests that assert a compiled
 # line (`test/tools/have-native-jit.mjs`, `--absent`).
+#
+# The first case is also the one place where this code is asserted by name: the warning is a
+# command-line warning with no source position, and the short rendering of a diagnostic ends with
+# `(name=..., code=...)`, so `expect_diagnostic_name` reads it out of the same line the message
+# needle reads. There is no other reachable shape: `src/execute/pass.cpp#jitWithoutCodeGeneratorWarning`
+# returns nullopt at compile time when ENABLE_FASTVM_JIT is on, so a build with a code generator has
+# no program, flag or environment that reaches this code.
 
 [[tests]]
 name = "without_codegen.warning"
@@ -22,6 +29,7 @@ args = ["${case}", "${run_jit}"]
 silenced_warnings = []
 skip_unless = ["node", "test/tools/have-native-jit.mjs", "--absent"]
 expect_exit = 0
+expect_diagnostic_name = "RuntimeDiag::JitWithoutCodeGenerator"
 expect_stderr_contains = ["[Warn]:", "no native code generator in this build"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
