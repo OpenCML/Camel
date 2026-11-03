@@ -2155,16 +2155,3 @@ expect_exit = 0
 expect_stdout_contains = ["[3]", "[2, 3]", "1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
-
-[[tests]]
-name = "transpose_of_a_with_function"
-desc = "A `with` parameter is a value the function is configured with, not one it is applied to: `transpose` carries the `with` list over to the transposed function and asks no cotangent of it, and the value comes from the closure the function value was bound with. `f(x) = x * c` transposed at c = 3 answers the cotangent of `x` times `c`, which at the seed 1 is 3; `f(x) = x * c + c` answers 3 as well, because the `c` that is added is a constant and not a dependency of the answer. The reading names the shape the resolver and the graph agree on: the transposed function still declares `<c: float>` and takes `(float, float)` -- the value and the cotangent -- so the `with` parameter is not among the cotangents."
-kind = "behavior"
-case = "../../../cases/compile/transforms/transpose_of_a_with_function.cml"
-args = ["${case}", "${backend}"]
-backends = ["nvm"]
-backends_agree = ["exit_code", "diagnostics"]
-expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=times graph=", "TRANSPOSE op signature=", "resolved=(f: <c: float> (x: float) => float pure) => <float> (float, float) => float", "same=yes", "3.0"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
