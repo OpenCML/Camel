@@ -1299,6 +1299,13 @@ bool buildTransposeMember(
         // expansion asks only for those -- so a position that needs nothing it does not have is
         // answered even where the walk carries no value for the other operand (a transposed loop
         // body's own state, or a divisor that is the differentiated value itself).
+        //
+        // The `int[]` of extents one step is handed beside its operands, when the law that answers it
+        // asks for one (`sum_from_type_t` and its neighbours read the extents instead of the operand,
+        // so that no array stands in for a value the transposition does not have). Set by the `Oper`
+        // case for the duration of its answer and cleared after it, so a law of any other step --
+        // an arm's, a call's -- is handed nothing it did not ask for.
+        gc_node_ref_t extentsValue = rt::kInvalidNodeRef;
         const auto ruleCotangent = [&](const std::string &ruleName,
                                        std::span<const gc_node_ref_t> inputs, size_t position,
                                        gc_node_ref_t ct, Type *ctType, std::string &why,
@@ -1356,12 +1363,6 @@ bool buildTransposeMember(
         // predicate the forward graph did, at the same values -- which is why the parameters of `f`
         // are parameters of the transposed function too.
         bool complete = true;
-        // The `int[]` of extents one step is handed beside its operands, when the law that answers it
-        // asks for one (`sum_from_type_t` and its neighbours read the extents instead of the operand,
-        // so that no array stands in for a value the transposition does not have). Set by the `Oper`
-        // case for the duration of its answer and cleared after it, so a law of any other step --
-        // an arm's, a call's -- is handed nothing it did not ask for.
-        gc_node_ref_t extentsValue = rt::kInvalidNodeRef;
         // Whether the last `forward` attempt stopped at a node kind it cannot copy -- the owner of a
         // region, a loop or a branch. That is the whole difference between the two shapes a call
         // site can fail on, so it is recorded where the walk stops rather than guessed at the call.
