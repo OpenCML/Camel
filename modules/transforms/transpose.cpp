@@ -2361,8 +2361,18 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                     os << " arms=" << arms.size() << '\n';
                     return false;
                 }
+                // What the join hands on is the cotangent of the value the branch produced, so its
+                // type is that value's own cotangent space -- read from the **source** node, the
+                // join of the graph being transposed. It used to be written as `Type::Float64()`
+                // and the one-slot tuple below then asked `cotangentTypeOf(join, ..)` about a node
+                // of *this draft*: `function->node` answers nullptr for a ref that is not one of its
+                // own and the fallback says `float`, so a branch over an array cotangent was a
+                // `(float,)` tuple around an array. `Self` is the type itself for a number and for
+                // an array (`camel/core/tangent_space.h`), so a branch of numbers reads exactly the
+                // type it read before.
+                Type *const joinSpace = cotangentTypeOf(ref, Type::Float64());
                 const gc_node_ref_t join = draft.addJoinNode(
-                    Type::Float64(), rt::kInvalidNodeRef, static_cast<rt::gc_cnt_t>(arms.size()));
+                    joinSpace, rt::kInvalidNodeRef, static_cast<rt::gc_cnt_t>(arms.size()));
                 const gc_node_ref_t brch = draft.addBrchNode(
                     Type::Int64(), join, static_cast<rt::gc_cnt_t>(arms.size()));
                 // The join's norm input is the branch; the branch's own norm input is the
@@ -2471,7 +2481,7 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                 // function's answer is one cotangent per parameter the transposition answers for, so
                 // the join's single value is wrapped in the one-slot tuple the signature promises --
                 // the shape every arity has (author, 2026-11-02 11:30).
-                result = tupleOf({join}, {cotangentTypeOf(join, Type::Float64())}).first;
+                result = tupleOf({join}, {joinSpace}).first;
                 break;
             }
             case rt::GCNodeKind::Oper: {
@@ -3143,8 +3153,18 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                     const camel::runtime::GCNode *const start =
                         stateInitials[0] < nodeCount ? function->node(stateInitials[0]) : nullptr;
                     if (start != nullptr && start->kind == rt::GCNodeKind::Port) {
-                        result =
-                            tupleOf({loopNode}, {cotangentTypeOf(loopNode, Type::Float64())}).first;
+                        // The tuple's member type is the loop's own: `loopType` is the type the
+                        // loop node was built with, which the component types above made. Asking
+                        // `cotangentTypeOf(loopNode, ..)` asked the *source* graph about a node of
+                        // *this draft* -- `function->node` answers nullptr for a ref that is not
+                        // one of its own, the fallback says `float`, and the answer was a tuple
+                        // whose member type is not the thing it holds: `(float,)` around an array
+                        // cotangent, which is what `RuntimeDiag::ExitTypeMismatch` reports as
+                        // `vjp_loop.rounds_are_undone_in_reverse`'s `(float,)` against the
+                        // declared `(float[],)`. A loop whose state is an array pulls back an
+                        // array, and the value and its type travel together here (design
+                        // principles 9.9).
+                        result = tupleOf({loopNode}, {loopType}).first;
                     } else {
                         // Nothing reaches that value, so nothing the loop did can reach a parameter,
                         // so the loop answers the zero of its cotangent space: the same reading the
