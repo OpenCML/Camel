@@ -1139,6 +1139,29 @@ expect_exit = 0
 expect_stdout_contains = ["6.0", "[2.0, 3.0]"]
 timeout_ms = 15000
 
+# The same read with the extent written in the parameter's type -- `float[3]`, which is the half of
+# the author's 2026-11-03 16:15 ruling a reader can act on today ("转置需要参数的形状：在类型里写出来").
+# The numbers are hand arithmetic and every position is its own assertion, because the third one is
+# what tells a cotangent built from the read positions from one built from the array: `d/dxs[2]` is
+# zero and nothing reads it.
+#
+# What this case does **not** pin is a mechanism: the transposed member still takes the array's value
+# (`TRANSPOSE function=rulesets.jvp::index_into<float> graph=388 type=(int, float[], float) =>
+# (float[],)`), so the extent in the type is not what answers it -- the split's residual is. The
+# measurement of both sources, and why neither reaches a law, is
+# `docs/handover/questions/2026-11-04-does-a-shape-in-the-type-reach-the-law.cn.md`.
+[[tests]]
+name = "grad_array_fixed_shape"
+desc = "A `float[3]` parameter read at two positions: `xs[1] * xs[0]` over `[3.0, 2.0, 5.0]` answers `6.0`, and the cotangent is `2.0`, `3.0`, `0.0` position by position -- the third one the zero the body never reads. This is `grad_array_no_int` with the extent stated in the type, which is the shape the ruling asks a caller to write."
+kind = "behavior"
+case = "../../../cases/compile/transforms/grad_array_fixed_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["fvm"]
+expect_exit = 0
+expect_stdout_contains = ["value = 6.0", "d/dxs[0] = 2.0", "d/dxs[1] = 3.0", "d/dxs[2] = 0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 15000
+
 [[tests]]
 name = "grad_array_with_int.fvm"
 kind = "behavior"

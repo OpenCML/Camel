@@ -1,0 +1,35 @@
+// The extent is written in the parameter's type: `both` takes a `float[3]`, not a `float[]`, and the
+// cotangent of the element read has the extent the type states.
+//
+// The ruling (author, 2026-11-03 16:15) makes a transposed function's parameter shape come from its
+// type: `float[3]` says the extent, `float[]` does not, and a shape neither the type nor the
+// cotangent states is refused where `transpose(g)` is built. This case is the type's side of that
+// sentence -- the same `xs[1] * xs[0]` as `grad_array_no_int`, at an extent a reader can write.
+//
+// Hand arithmetic at xs = (3, 2, 5):
+//
+//   value  = xs[1] * xs[0] = 2 * 3 = 6
+//   d/dxs[0] = xs[1] = 2
+//   d/dxs[1] = xs[0] = 3
+//   d/dxs[2] = 0     -- the body never reads it, so the third position is the zero and nothing else
+//
+// Every position is printed and checked on its own: the third one is the reading that would still
+// look right if the cotangent were built from the two elements the body happened to read.
+import rulesets.jvp
+import rulesets.transpose
+import { vjp } from vjp
+
+func both(xs: float[3]): float {
+    return xs[1] * xs[0]
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(both)([3.0, 2.0, 5.0])
+    let cotangents = pullback(1.0)
+    let dxs = cotangents.0
+    println(`value = ${value:.1f}`)
+    println(`d/dxs[0] = ${dxs[0]:.1f}`)
+    println(`d/dxs[1] = ${dxs[1]:.1f}`)
+    println(`d/dxs[2] = ${dxs[2]:.1f}`)
+    return 0
+}
