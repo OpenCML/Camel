@@ -101,6 +101,7 @@ SemanticDiag::EnumVariantFieldCount	test/cases/compile/enum/err_field_count.cml
 SemanticDiag::EnumWrittenWhereATypeIsExpected	test/cases/compile/semantic/enum_where_type_expected.cml
 SemanticDiag::ExitInUnusedBranch	test/cases/compile/diag_json/warning_with_error.cml
 SemanticDiag::ExtentNotADimension	test/cases/compile/extents/computed_negative.cml
+SemanticDiag::ExtentOfNeedsStatedShape	test/cases/compile/transforms/extent_of_needs_a_type_that_states_its_shape.cml
 SemanticDiag::FactArgumentNotConstant	test/cases/modules/rules/fact_arg_not_constant.cml
 SemanticDiag::FactCaseBindsNoVariable	test/cases/modules/rules/fact_case_binds_nothing.cml
 SemanticDiag::FactCaseDefaultMissing	test/cases/modules/rules/fact_no_default.cml

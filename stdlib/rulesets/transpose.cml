@@ -39,7 +39,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, max, maximum, mean_axis_stated, min, minimum, numel, pick_at, relu, rsqrt, sigmoid, sqrt, subtract, sum, sum_stated, sum_to, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
+import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, max, maximum, mean_axis, mean_axis_stated, min, minimum, numel, pick_at, relu, rsqrt, sigmoid, sqrt, subtract, sum, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 // `log as math_log`, for the reason `rulesets.jvp` records: the plain `log` here is the **array**
 // one (`log_t` files its law below), and a second import of one name hides the first instead of
 // overloading it, so `pow_d_t`'s scalar `log(x)` is spelled `math_log`.
@@ -547,16 +547,19 @@ export rule pick_at_t::<T>(xs: T[], at: int[]) when is_float::<T>() {
     pick_at(xs, at) => (ct: T) => scatter_into(zeros_of(ct, at[1]), at[0], ct)
 }
 
-/// The transpose of `xs[i]` where the array is a **known** operand: `ct` at `i`, zero everywhere
-/// else, in `xs`'s own shape.
+/// The transpose of `xs[i]`: `ct` at `i`, zero everywhere else, in the extents the operand's **type**
+/// states.
 ///
-/// This is the two-operand spelling of the same law, and it stays for the graphs that write the read
-/// over a forward value's array -- `transpose` itself builds `:op/idx_arr` nodes over a known value
-/// when it reverses a loop. It reads `xs` because in that shape `xs` is a value the transposition
-/// has; the linear half of `jvp_idx_arr` does not come here (it calls `pick_at`), which is what
-/// keeps the shape-only read out of the linear path.
-export rule idx_arr_t::<T>(xs: T[], i: int) {
-    index_into(xs, i) => (ct: T) => scatter_into(zeros_like(xs), i, ct)
+/// The length is not read off `xs`: a transposition is handed the cotangent and no forward value
+/// (design principles 4.3), so the number of positions comes from `extent_of::<X>()` -- the walk
+/// states the type's extents as an `int[]` and hands it over as the law's last port -- and `xs` is
+/// named here only because the operator has it. `zeros_of` is the rank-one base the scatter writes
+/// into, exactly as in `pick_at_t` above.
+///
+/// A type that states no extents (`float[..]`) reaches no law at all: the walk refuses the step by
+/// name (`parameter-shape`) instead of inventing a length.
+export rule idx_arr_t::<T, X, I, A>(xs: X, i: I, at: A) when is_float::<T>() {
+    index_into(xs, i) => (ct: T) => scatter_into(zeros_of(ct, extent_product(at)), i, ct)
 }
 
 // ---- the transpose rule of `tensor:take` ----
@@ -665,6 +668,63 @@ export rule mean_axis_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
 // forward rule gives the same operator. It is not written as a zero -- an undefined derivative says
 // so -- and it is not guarded either: a guard would be a branch on a value of the cotangent, which
 // the transposed walk cannot turn around.
+
+// ---- the laws for a reduction whose extents are in its **type** ----
+//
+// The three laws above are for the *stated* call the linear half writes (`sum_stated(t, at)`): a cut
+// carries the extents to the half that reads them, so `at` is a value of the primal, handed along
+// with the cotangent. A **value graph** has no such cut. `transpose` walks `sum(mean_axis(x, 0,
+// false) * w)` as it is written, the extents of `x` were never a value in it, and until these laws
+// existed the walk answered `skip=rule uri=tensor:sum reason=unbound`: the key has a law, and the
+// law was written for a call the program did not make.
+//
+// What the walk has is the **type**, so these laws name one port more than their operator has and
+// that port is `extent_of::<X>()` -- the extents the operand's type states, materialized as an
+// `int[]` where the step is met (`modules/transforms/transpose.cpp#statedExtentsNodeOf`). The
+// argument is offered *after* the operands' own types, so a law that does not name it answers
+// exactly as before, and only a step the family above left unanswered can reach these.
+//
+// The operand's own port stays in the head -- it is what fixes the instance -- and the right side
+// does not read it: an array that stands in for the value would make the length a fact of the
+// program's run rather than of its type, and an element of it could be read by mistake (author,
+// 2026-11-03 17:55: no zero carrier).
+
+/// The cotangent of `sum(t)`: the one number spread over the extents `at` states.
+export rule sum_from_type_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
+    sum(t) => (ct: T) => spread_over(ct, at)
+}
+
+/// The cotangent of `take(t, indices)` where the row count is the type's: the indices say where each
+/// row's cotangent goes, `at` says how many rows there are, and no value of `t` is read.
+func take_cotangent_from_type::<T>(ct: T[..], indices: int[], at: int[]): T[..]
+    when is_float::<T>() {
+    let base = zeros_of_shape(ct, at)
+    return scatter_rows(base, indices, ct, 0)
+}
+
+/// The transpose of `take(t, indices)`: the indices are an `int[]` and take no cotangent, so the
+/// right side answers one value, and the extents it scatters into are the operand's own.
+export rule take_from_type_t::<T, X, I, A>(t: X, indices: I, at: A) when is_float::<T>() {
+    take(t, indices) => (ct: T[..]) => take_cotangent_from_type(ct, indices, at)
+}
+
+/// The cotangent of `mean_axis(t, axis, keepdims)`: each lane's `ct` spread back over the lane it was
+/// averaged from, where `at` is the extents of `t`.
+///
+/// The lane length is the same count `mean_axis_cotangent` takes: `numel(t) / numel(ct)`. It is read
+/// off the extents and the cotangent rather than written down, and `keepdims` needs no reading at
+/// all -- `numel(ct)` already says whether the reduced axis is still there.
+func mean_axis_cotangent_from_type::<T>(ct: T[..], at: int[]): T[..] when is_float::<T>() {
+    let lanes = float(extent_product(at)) / float(numel(ct))
+    return full(at, 1.0) * (ct / lanes)
+}
+
+/// The transpose of `mean_axis(t, axis, keepdims)`, with the extents taken from the operand's type.
+export rule mean_axis_from_type_t::<T, X, A, B, C>(t: X, axis: A, keepdims: B, at: C)
+    when is_float::<T>() {
+    mean_axis(t, axis, keepdims) => (ct: float[..]) => mean_axis_cotangent_from_type(ct, at)
+}
+
 
 /// `pow(x, w)`: what `math:pow_d` means, and the left side this rule is filed under.
 /// @example pow_d(2.0, 3.0)    // 8.0

@@ -1,0 +1,22 @@
+// The transpose of a reduction whose extents are in the **type**: `sum(xs)` where `xs: float[3]`.
+//
+// `sum` forgets how many elements it added, and the adjoint has to put that back: the cotangent of
+// the one number is that number at every position of the operand's shape. A value graph has no cut
+// to carry the extents along, so the law is handed them -- `sum_from_type_t` names one port more
+// than the operator has, and the walk reads `extent_of`'s rule off the operand's type and hands the
+// `int[]` over. Measured 2026-11-04 on the base tree (`c4391db57`) this program stopped with
+// `TRANSPOSE function=total skip=rule uri=tensor:sum reason=unbound`, and it answers
+// `([1.0, 1.0, 1.0])` now.
+import { transpose } from transforms
+import rulesets.transpose
+import { sum } from tensor
+
+func total(xs: float[3]): float {
+    return sum(xs)
+}
+
+func main(): int sync {
+    let back = transpose(total)
+    println(back(1.0))
+    return 0
+}

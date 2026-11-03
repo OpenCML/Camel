@@ -143,11 +143,19 @@ RuleChoice chooseTransposedRule(
     camel::core::context::Context &context, std::string_view uri,
     std::span<const gc_node_ref_t> inputs, size_t dataOperandCount,
     const std::function<const Type *(gc_node_ref_t)> &typeOf, const Type *cotangentType,
-    const std::vector<bool> *answered) {
+    const std::vector<bool> *answered, const std::vector<Type *> *offeredOperands = nullptr,
+    bool *lawFits = nullptr) {
     std::vector<Type *> actual;
-    actual.reserve(inputs.size());
-    for (const gc_node_ref_t input : inputs) {
-        actual.push_back(const_cast<Type *>(typeOf(input)));
+    actual.reserve(inputs.size() + 1);
+    if (offeredOperands != nullptr) {
+        // What the walk offers *this* ask: a law of the reduction family names one port more than
+        // its operator has, and that port is the extents (`sum_from_type_t`). The list is the
+        // operands' own types with that one appended, so a law that does not name it is unaffected.
+        actual = *offeredOperands;
+    } else {
+        for (const gc_node_ref_t input : inputs) {
+            actual.push_back(const_cast<Type *>(typeOf(input)));
+        }
     }
     // The instance the ports are read from is made at the types the right side will be built at,
     // in the order the law names them: the cotangent first, then the node's operands. A law written
@@ -203,12 +211,18 @@ RuleChoice chooseTransposedRule(
         // not "no law for this step" -- the index has one -- so the walk is handed the law's name and
         // the expansion says what it could not build (`rule-ranks`). An empty key is the case this
         // class exists for, and it stays empty here.
+        //
+        // The name is synthesized, and it is told apart from a fit the index really made: a caller
+        // that wants to ask a second question (the extents a law of the reduction family names) must
+        // not read a name handed back for its *message* as an answer.
         const std::vector<camel::parse::ast::RuleMatch> filed =
             camel::core::transposeRulesOf(std::string(uri));
         if (!filed.empty()) {
             choice.rule = filed.front().rule;
             choice.why.clear();
         }
+    } else if (lawFits != nullptr) {
+        *lawFits = choice.found();
     }
     return choice;
 }
@@ -608,68 +622,62 @@ FunctionType *transposeSignature(
 /// graph and transposes; a closure names its graph too, and then fails later, on the capture. (The
 /// switch that guarded this is gone; the entry it guarded is the one the cases read.)
 
-/// The extents a type's shape states, or nothing when the type leaves one of them open.
-///
-/// A shape is a fact about an array type: `float[2, 3]` states two extents, `float[]` states one
-/// dimension and leaves its length open, and `float[..]` states neither the rank nor a length. The
-/// reading of a stated extent is the one `jvp.cpp#zeroConstantFor` makes of the same fact --
-/// `ExtentForm::evaluate({})` answers the number a written extent holds and nothing for a `?` or for
-/// an extent over a name nothing binds -- so the two transforms agree about which types have a shape
-/// that can be written while the graph is built.
-std::optional<std::vector<int64_t>> statedShapeOf(const Type *type) {
-    if (type == nullptr || type->code() != camel::core::type::TypeCode::Array) {
-        return std::nullopt;
-    }
-    const auto *array = tt::as_ptr<camel::core::type::ArrayType>(const_cast<Type *>(type));
-    if (array == nullptr || array->elemType() == nullptr ||
-        !camel::core::type::isFloatingScalar(array->elemType()->code())) {
-        return std::nullopt;
-    }
-    const std::span<const camel::core::type::ExtentForm> stated = array->extents();
-    if (stated.empty()) {
-        // `T[..]`: the rank is the value's, so the type states no shape at all.
-        return std::nullopt;
-    }
-    std::vector<int64_t> extents;
-    extents.reserve(stated.size());
-    for (const camel::core::type::ExtentForm &extent : stated) {
-        const std::optional<int64_t> size = extent.evaluate({});
-        if (!size.has_value() || *size < 0) {
-            return std::nullopt;
-        }
-        extents.push_back(*size);
-    }
-    return extents;
+/// The one `int[]` type an extents value has: `extent_of::<A>()` answers `int[]` and nothing else.
+camel::core::type::ArrayType *intArrayTypeOf() {
+    static camel::core::type::ArrayType *intArrayType =
+        camel::core::type::ArrayType::create(camel::core::type::Type::Int64());
+    return intArrayType;
 }
 
-/// The value a law's right side is handed for a parameter a cotangent is answered for: the zero of
-/// the parameter's type, which is that type's **shape** and nothing else.
+/// The extents a type states, as the `int[]` value `extent_of::<A>()` answers a program -- written
+/// into this graph where a law needs it and no program wrote the call.
 ///
 /// `transposeSignature` gives the transposed function the cotangent and no parameter, so a law that
-/// reads the parameter -- `mean_axis_cotangent` reads `xs` for `numel` and `ones_like` -- has the type
-/// and not the argument. What the type says is the shape, and the shape is what a transposition needs:
-/// the adjoint of a linear map is a function of the cotangent and of the domain's shape (author,
-/// 2026-11-03 16:15). The value below carries that shape; every element of it is zero, which is the
-/// one thing here that is not the argument. A law that reads an *element* would therefore be answered
-/// with zeros -- and such a law is not a law of a transposition, because a transposition has no
-/// element of the argument to read. This is the same zero `jvp` gives a value that does not move
-/// (`jvp.cpp#zeroConstantFor`).
+/// spreads a cotangent over a parameter's positions has the type and not the argument. What the type
+/// says is the shape, and the shape is what a transposition needs: the adjoint of a linear map is a
+/// function of the cotangent and of the domain's shape (author, 2026-11-03 16:15).
 ///
-/// Nothing when the type leaves an extent open: then the shape is written down nowhere, and the
-/// caller refuses by name instead of inventing one.
-gc_node_ref_t shapeCarrierOf(camel::runtime::GraphDraft &draft, Type *type) {
-    const std::optional<std::vector<int64_t>> extents = statedShapeOf(type);
+/// The shape is not read off any value: it is asked of the language, `extent_of::<A>()`, whose one
+/// spelling is `camel::core::type::statedExtentsOf` -- the same rule the builtin's resolver answers
+/// with (`src/builtin/operators/struct.cpp#extentOfResolver`), so the walk and a program that writes
+/// `extent_of::<float[2, 3]>()` read one fact the same way. What this writes into the graph is that
+/// answer, the `int[]` itself: a law of the reduction family (`sum_from_type_t` and its neighbours)
+/// is handed the extents and builds what it needs from them, so no array stands in for the operand
+/// and no element of one can be read by mistake (author, 2026-11-03 17:55: no zero carrier).
+///
+/// Nothing when the type states no shape: then the caller refuses by name instead of inventing one.
+gc_node_ref_t statedExtentsNodeOf(camel::runtime::GraphDraft &draft, Type *type) {
+    const std::optional<std::vector<int64_t>> extents = camel::core::type::statedExtentsOf(type);
     if (!extents.has_value()) {
         return rt::kInvalidNodeRef;
     }
-    auto *array = static_cast<camel::core::type::ArrayType *>(type);
-    ::Array *zero = ::Array::create(
-        mm::autoSpace(), array, std::span<const int64_t>(*extents), /*zeroInit=*/true);
-    if (zero == nullptr) {
+    camel::core::type::ArrayType *const intArrayType = intArrayTypeOf();
+    ::Array *stated = ::Array::create(mm::autoSpace(), intArrayType, extents->size());
+    if (stated == nullptr) {
         return rt::kInvalidNodeRef;
     }
+    for (size_t at = 0; at < extents->size(); ++at) {
+        stated->set<camel::core::rtdata::Int64>(
+            at, static_cast<camel::core::rtdata::Int64>((*extents)[at]));
+    }
     return draft.materializeStaticValue(
-        camel::core::rtdata::toSlot<::Array *>(zero), type, rt::kGCNodeFlagConstant);
+        camel::core::rtdata::toSlot<::Array *>(stated), intArrayType, rt::kGCNodeFlagConstant);
+}
+
+/// The shape-only value of a type: `tensor:zeros` of the extents it states.
+///
+/// This is the value a law that reads an operand for its **shape** and has no stated twin is handed
+/// -- `mul_tensor_t`'s `sum_to(ct * w, x)` asks `x` for its extents and for nothing else. The
+/// extents are `extent_of`'s answer, and the value is the library's own `tensor:zeros`, so the walk
+/// states a shape and the library makes the value.
+gc_node_ref_t shapeFromTypeOf(camel::runtime::GraphDraft &draft, Type *type) {
+    const gc_node_ref_t shape = statedExtentsNodeOf(draft, type);
+    if (shape == rt::kInvalidNodeRef) {
+        return rt::kInvalidNodeRef;
+    }
+    const gc_node_ref_t zeros = draft.addOperNode(type, nullptr, "tensor:zeros");
+    draft.setNormInputs(zeros, std::span<const gc_node_ref_t>(&shape, 1));
+    return zeros;
 }
 
 /// What the graphs of one transpose share: one group (a callee's transpose is another member of
@@ -1327,11 +1335,24 @@ bool buildTransposeMember(
         // expansion asks only for those -- so a position that needs nothing it does not have is
         // answered even where the walk carries no value for the other operand (a transposed loop
         // body's own state, or a divisor that is the differentiated value itself).
+        //
+        // The `int[]` of extents one step is handed beside its operands, when the law that answers it
+        // asks for one (`sum_from_type_t` and its neighbours read the extents instead of the operand,
+        // so that no array stands in for a value the transposition does not have). Set by the `Oper`
+        // case for the duration of its answer and cleared after it, so a law of any other step --
+        // an arm's, a call's -- is handed nothing it did not ask for.
+        gc_node_ref_t extentsValue = rt::kInvalidNodeRef;
         const auto ruleCotangent = [&](const std::string &ruleName,
                                        std::span<const gc_node_ref_t> inputs, size_t position,
                                        gc_node_ref_t ct, Type *ctType, std::string &why,
                                        bool &noInstance) -> gc_node_ref_t {
             const auto valueOf = [&](size_t slot) -> gc_node_ref_t {
+                if (slot == inputs.size()) {
+                    // The slot past the operands is the extents: the law asked for them
+                    // (`sum_from_type_t` names one port more than its operator has) and the walk is
+                    // the one that can read them, because it has the types.
+                    return extentsValue;
+                }
                 return slot < inputs.size() ? knownValue(inputs[slot]) : rt::kInvalidNodeRef;
             };
             // The operands' own types: the cotangent of a parameter is the parameter's tangent
@@ -1352,13 +1373,18 @@ bool buildTransposeMember(
                     }
                 }
             }
-            operandTypes.reserve(inputs.size() + 1);
+            operandTypes.reserve(inputs.size() + 2);
             operandTypes.push_back(ctElement);
             for (const gc_node_ref_t input : inputs) {
                 const camel::runtime::GCNode *inputNode = function->node(input);
                 operandTypes.push_back(inputNode != nullptr
                                            ? const_cast<Type *>(inputNode->dataType())
                                            : nullptr);
+            }
+            if (extentsValue != rt::kInvalidNodeRef) {
+                // The law names one port more than its operator has: the extents, which the walk
+                // read off the types (`extent_of`'s rule) and no operand of this node carries.
+                operandTypes.push_back(intArrayTypeOf());
             }
             return camel::transforms::expandRuleByName(
                 *state.context, group, group.transaction(member), ruleName, valueOf, {ct}, position,
@@ -1447,15 +1473,16 @@ bool buildTransposeMember(
                             at < portOfParam.size() ? portOfParam[at] : rt::kInvalidNodeRef;
                         if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                             // Neither a port nor a closure slot hands this parameter in, and the
-                            // law's right side reads its value. That value is the **shape** the
-                            // parameter's type states, and nothing else: the transposed function is
-                            // given the cotangent alone, so a law that reads `xs` for `numel` or
-                            // `ones_like` is answered from the type. A parameter whose shape the type
-                            // states (`float[2, 3]`) is answered with a zero array of that shape --
-                            // a *shape carrier*, which is the only thing a law that reads `xs` for
-                            // `numel` or `ones_like` can ask of a value this graph does not have.
+                            // law's right side reads its value. What the law reads it for is the
+                            // **shape** the parameter's type states (author, 2026-11-03 17:55:
+                            // "`transpose(pick)` on `x: float[3]` answers `([0.0, 1.0, 0.0])`, and it
+                            // rests on `extent_of`, not on a zero carrier"): the transposed function
+                            // is given the cotangent alone, so a law that reads `xs` for `numel` or
+                            // `ones_like` is answered from the type, through the language's own
+                            // `extent_of` rule (`camel::core::type::statedExtentsOf`) and the
+                            // library's own `tensor:zeros`.
                             Type *const askType = function->funcType()->normTypeAt(at);
-                            if (const gc_node_ref_t carrier = shapeCarrierOf(draft, askType);
+                            if (const gc_node_ref_t carrier = shapeFromTypeOf(draft, askType);
                                 carrier != rt::kInvalidNodeRef) {
                                 forwardOf[ref] = carrier;
                                 return carrier;
@@ -2616,14 +2643,153 @@ bool buildTransposeMember(
                     answered.push_back(
                         !isConstant(input) && wantsCotangent(input) && hasTangentSpace(input));
                 }
-                const RuleChoice choice = chooseTransposedRule(
+                bool fits = false;
+                RuleChoice choice = chooseTransposedRule(
                     *state.context, uri, inputs, normOperands.size(),
                     [&](gc_node_ref_t node) -> const Type * {
                         const camel::runtime::GCNode *at = function->node(node);
                         return at != nullptr ? at->dataType() : nullptr;
                     },
-                    cotangentTypeOf(ref, Type::Float64()), &answered);
-                if (choice.rule.empty()) {
+                    cotangentTypeOf(ref, Type::Float64()), &answered, nullptr, &fits);
+                // A law that has no extents in hand names one port more than its operator has and is
+                // handed them: the extents of the first operand whose type writes them down, read by
+                // `extent_of`'s rule and no value of the program. It is *offered* second, so every
+                // law that answers a node without them answers exactly as it did -- the widening can
+                // only reach a step the laws left unanswered before it.
+                Type *extentsOf   = nullptr;
+                bool offeredExtents = false;
+                gc_node_ref_t extentsNode = rt::kInvalidNodeRef;
+                if (!fits) {
+                    for (const gc_node_ref_t input : inputs) {
+                        const camel::runtime::GCNode *inputNode = function->node(input);
+                        Type *const type =
+                            inputNode != nullptr ? const_cast<Type *>(inputNode->dataType())
+                                                 : nullptr;
+                        if (camel::core::type::statedExtentsOf(type).has_value()) {
+                            extentsOf = type;
+                            break;
+                        }
+                    }
+                    if (extentsOf != nullptr) {
+                        std::vector<Type *> widened = operandTypes;
+                        widened.push_back(intArrayTypeOf());
+                        bool widenedFits = false;
+                        RuleChoice withExtents = chooseTransposedRule(
+                            *state.context, uri, inputs, normOperands.size(),
+                            [&](gc_node_ref_t node) -> const Type * {
+                                const camel::runtime::GCNode *at = function->node(node);
+                                return at != nullptr ? at->dataType() : nullptr;
+                            },
+                            cotangentTypeOf(ref, Type::Float64()), &answered, &widened,
+                            &widenedFits);
+                        if (widenedFits) {
+                            choice         = withExtents;
+                            operandTypes   = widened;
+                            offeredExtents = true;
+                            fits           = true;
+                            extentsNode    = statedExtentsNodeOf(draft, extentsOf);
+                        }
+                    }
+                }
+                if (!fits) {
+                    // A law of the reduction family wants an operand's extents, and no operand of
+                    // this step states one: the operand is a value that came from a parameter whose
+                    // type does not write its shape down (`float[..]`), and the extents the law needs
+                    // are exactly the part of that type that is missing. The repair is a declaration,
+                    // so the refusal names it (`parameter-shape`) instead of the step that noticed.
+                    //
+                    // Only a step with no law that fits is recorded this way, and only when an
+                    // operand's own type is an array that states no shape: a step whose law answered
+                    // is not asked for anything here.
+                    if (extentsOf == nullptr) {
+                        const auto unstatedArrayBehind = [&]() -> std::optional<size_t> {
+                            const auto ports = function->normPorts();
+                            for (const gc_node_ref_t input : inputs) {
+                                const camel::runtime::GCNode *const inputNode = function->node(input);
+                                const Type *const inputType =
+                                    inputNode != nullptr ? inputNode->dataType() : nullptr;
+                                if (inputType == nullptr ||
+                                    inputType->code() != camel::core::type::TypeCode::Array ||
+                                    camel::core::type::statedExtentsOf(inputType).has_value()) {
+                                    continue;
+                                }
+                                std::vector<gc_node_ref_t> pending{input};
+                                std::vector<bool> seen(nodeCount, false);
+                                while (!pending.empty()) {
+                                    const gc_node_ref_t at = pending.back();
+                                    pending.pop_back();
+                                    if (at >= nodeCount || seen[at]) {
+                                        continue;
+                                    }
+                                    seen[at] = true;
+                                    const camel::runtime::GCNode *const node = function->node(at);
+                                    if (node == nullptr) {
+                                        continue;
+                                    }
+                                    if (node->kind == rt::GCNodeKind::Port) {
+                                        for (size_t p = 0; p < ports.size(); ++p) {
+                                            if (ports[p] != at) {
+                                                continue;
+                                            }
+                                            const size_t param =
+                                                p < portParameter.size() ? portParameter[p]
+                                                                         : paramCount;
+                                            if (param < paramCount) {
+                                                // Only a declaration that leaves the shape open is
+                                                // the repair: a parameter that states its extents has
+                                                // done its part, and the type that failed to state
+                                                // one belongs to a value the walk computed (an
+                                                // operator whose result type is open), which no
+                                                // declaration of this function can fix.
+                                                const Type *const declared =
+                                                    function->funcType()->normTypeAt(param);
+                                                if (declared != nullptr &&
+                                                    declared->code() ==
+                                                        camel::core::type::TypeCode::Array &&
+                                                    !camel::core::type::statedExtentsOf(declared)
+                                                         .has_value()) {
+                                                    return param;
+                                                }
+                                            }
+                                        }
+                                        continue;
+                                    }
+                                    for (const gc_node_ref_t in : function->normInputsOf(at)) {
+                                        pending.push_back(in);
+                                    }
+                                }
+                            }
+                            return std::nullopt;
+                        };
+                        if (const auto unstated = unstatedArrayBehind(); unstated.has_value()) {
+                            Type *const paramType = function->funcType()->normTypeAt(*unstated);
+                            if (!state.shapeWanted) {
+                                state.shapeWanted = true;
+                                state.shapeParam  = *unstated;
+                                state.shapeType =
+                                    paramType != nullptr ? paramType->toString() : std::string();
+                                const FunctionType *const signatureType = function->funcType();
+                                if (signatureType->hasArgNames()) {
+                                    const size_t named = signatureType->withTypesCount() + *unstated;
+                                    if (named < signatureType->argNamesCount()) {
+                                        state.shapeName =
+                                            std::string(signatureType->argNameAt(named));
+                                    }
+                                }
+                            }
+                            refuse(TransposeRefusalCause::ParameterShape, *unstated);
+                            // The sentence a reader is handed names the declaration to edit, so the
+                            // name and the type travel with the refusal rather than only the number.
+                            state.refusal.paramName =
+                                state.shapeName;
+                            state.refusal.paramType = state.shapeType;
+                            os << " uri=" << uri << " node=" << ref << " param=" << *unstated
+                               << " param-type="
+                               << (paramType != nullptr ? paramType->toString() : std::string("?"))
+                               << '\n';
+                            return false;
+                        }
+                    }
                     // The key has a law and the law was written for another shape: not `Rule`. That
                     // sentence ("the rule table has no rule for a step of this body") describes a
                     // lookup that found nothing, and this lookup found a law that says this step is
@@ -2635,7 +2801,11 @@ bool buildTransposeMember(
                     // reader needs -- which node, which operator, and what the two type lists are --
                     // go into the record the sentence is rendered from, and the log says them here
                     // so the reading above can be grepped to the same node.
-                    if (choice.refusal == RuleRefusal::Shape) {
+                    if (!choice.rule.empty()) {
+                        // The name is the one `chooseTransposedRule` synthesized for a law no
+                        // instance of which could be made: the expansion reports `rule-ranks` from
+                        // the real instance count, so the walk leaves this step to it.
+                    } else if (choice.refusal == RuleRefusal::Shape) {
                         // The sentence this family has always written for the class: "the rule"
                         // (the index entry a reader can go and look up), the law's own parameter
                         // list, and the operands it was offered. Built here and not inherited from
@@ -2652,10 +2822,11 @@ bool buildTransposeMember(
                         os << " uri=" << uri << " node=" << ref
                            << " operands=" << normOperands.size() << " reason=" << shape << '\n';
                         return false;
+                    } else {
+                        refuse(TransposeRefusalCause::Rule);
+                        os << " uri=" << uri << " reason=" << choice.why << '\n';
+                        return false;
                     }
-                    refuse(TransposeRefusalCause::Rule);
-                    os << " uri=" << uri << " reason=" << choice.why << '\n';
-                    return false;
                 }
                 noteRule(choice.rule);
                 const std::string &chosenRule = choice.rule;
@@ -2666,7 +2837,12 @@ bool buildTransposeMember(
                 // second instantiation: one criterion, not two classifications.
                 {
                     std::string whyNot;
-                    if (state.context != nullptr &&
+                    // The second ask is skipped when the extents were offered: the choice already
+                    // asked this same predicate at the widened tuple (`chooseRuleAmong`, one
+                    // criterion), and this one is made at the operands' own tuple, which the law that
+                    // names the extents does not fit by construction -- asking it again would refuse
+                    // the law for naming the port it was written for.
+                    if (!offeredExtents && state.context != nullptr &&
                         !ruleTakesOperands(*state.context, chosenRule, operandTypes, answered,
                                            whyNot)) {
                         refuse(TransposeRefusalCause::RuleShape);
@@ -2678,6 +2854,8 @@ bool buildTransposeMember(
                         return false;
                     }
                 }
+                // The extents this step's law is handed, for the answer below and for nothing else.
+                extentsValue = extentsNode;
                 for (size_t i = 0; i < inputs.size(); ++i) {
                     if (isConstant(inputs[i]) || !wantsCotangent(inputs[i])) {
                         // A value parameter of a partial transposition takes no cotangent, and
@@ -2730,6 +2908,8 @@ bool buildTransposeMember(
                     }
                     addCotangent(inputs[i], answer);
                 }
+                // The extents belong to this step: the next one asks its own law.
+                extentsValue = rt::kInvalidNodeRef;
                 break;
             }
             case rt::GCNodeKind::Loop: {

@@ -13,6 +13,7 @@
 #include "builtin/operators/ops.h"
 #include "builtin/operators/array_convert.h"
 #include "builtin/operators/set_value.h"
+#include "builtin/operators/struct.h"
 #include "builtin/operators/tagged.h"
 #include "camel/core/context/context.h"
 #include "camel/core/type/composite/array.h"
@@ -2084,6 +2085,23 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
         // ======= struct =======
         // The rules of `len` are the declarations of stdlib/prelude.cml.
         OperatorGroup::create("len", {}),
+        // `extent_of::<A>()`: the extents an array type writes down, as an `int[]`
+        // (`float[2, 3]` -> `[2, 3]`). A fact of the type argument and of nothing else, which is why
+        // a type that leaves an extent open is refused where the call is instantiated rather than
+        // answered from a value: `float[]` states one dimension and no length, and `float[..]`
+        // states neither the rank nor a length. The rule is
+        // `src/builtin/operators/struct.cpp#extentOfResolver`, and it asks the same
+        // `camel::core::type::statedExtentsOf` the transposition walk asks, so the language and the
+        // walk cannot disagree about which types have a shape. Its declaration is in
+        // stdlib/prelude.cml.
+        OperatorGroup::create(
+            "extent_of",
+            {
+                {
+                    ":op/extent_of",
+                    extentOfResolver(),
+                },
+            }),
         // The elements a `for` takes from a string (design principles 11.1): its code points,
         // each a one-character string. The loop builder converts a string to that array once,
         // before the first round; a program does not write `__iter__` itself. A map adds its

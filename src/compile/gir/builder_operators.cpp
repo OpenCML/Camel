@@ -3851,6 +3851,37 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                 LEAVE("LINK");
                 return transformed;
             }
+            if (targetOperator->uri() == ":op/extent_of" && explicitTypes.size() == 1) {
+                // `extent_of::<A>()` answers the extents `A` states, and they are a fact of the
+                // **call** and not of the run: the node keeps the instantiated type of the call but
+                // not the type argument it was written with (`src/builtin/operators/struct.cpp`
+                // #__op_extent_of__), so the value is settled here -- where the argument is still
+                // readable -- and the graph holds the list itself, as a constant.
+                //
+                // Nothing is invented: a type argument that states no extents was refused by the
+                // resolver before this point (`SemanticDiag::ExtentOfNeedsStatedShape`), so the
+                // answer exists exactly where the type says it does.
+                if (const auto extents = camel::core::type::statedExtentsOf(explicitTypes[0]);
+                    extents.has_value()) {
+                    auto *const intArrayType =
+                        camel::core::type::ArrayType::create(camel::core::type::Type::Int64());
+                    ::Array *stated = ::Array::create(
+                        camel::core::mm::autoSpace(), intArrayType, extents->size());
+                    if (stated != nullptr) {
+                        for (size_t at = 0; at < extents->size(); ++at) {
+                            stated->set<camel::core::rtdata::Int64>(
+                                at, static_cast<camel::core::rtdata::Int64>((*extents)[at]));
+                        }
+                        auto &draft          = currGraph_->transaction().edit();
+                        node_handle_t settled = draft.ref(draft.materializeStaticValue(
+                            camel::core::rtdata::toSlot<::Array *>(stated), intArrayType,
+                            runtime::kGCNodeFlagConstant));
+                        registerNodeOrigin(context_, settled, gct->at(0), "gir.link.oper");
+                        LEAVE("LINK");
+                        return settled;
+                    }
+                }
+            }
             targetNode = currGraph_->addOperNode(targetOperator, 0);
             stampPermissions(targetNode);
             // An operator declared macro runs in std::macro once its inputs are static, like a call

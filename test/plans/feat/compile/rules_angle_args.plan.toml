@@ -69,8 +69,8 @@ expect_exit = 0
 expect_stdout_contains = ["rules_angle_args mean transpose=[[0.5, 1.0, 1.5], [0.5, 1.0, 1.5]]"]
 timeout_ms = 30000
 known_fail = ["nvm", "fvm"]
-known_fail_msg = "skip=rule uri=tensor:sum reason=unbound"
-known_fail_note = "The direct-value path, not the ruleset's: a program that writes `sum(xs)` and then calls `transpose` needs a law for the one-operand `sum`, and sumshape's rewrite replaced `sum_t`/`take_t`/`mean_axis_t` with the `*_stated` twins that only serve the call `jvp` writes (they read the extents the forward half states, never the operand's shape -- the criterion of docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md's neighbour, `git grep 'shape(xs)|ones_like' -- stdlib/rulesets/transpose.cml` empty). Measured 2026-11-04: `TRANSPOSE function=loss_mean skip=rule uri=tensor:sum reason=unbound`, one step before the shape question this case asks. Restoring the value path needs a law that is handed extents it does not have, which is a decision, not a merge; the mark goes away with it."
+known_fail_msg = "skip=rule-ranks uri=tensor:sum rule=sum_from_type_t"
+known_fail_note = "The law the value path needs exists now -- `rulesets/transpose.cml#sum_from_type_t` names one port more than `tensor:sum` has, and the walk hands it the extents `extent_of`'s rule reads off the operand's type -- so this program no longer stops at `skip=rule uri=tensor:sum reason=unbound`. What stops it is the type of the *intermediate*: measured 2026-11-04 with `std::gir` on this case, `tensor:mean_axis` answers `float[..]` and `tensor:multiply` answers `float[..]` even though `x` is `float[2, 3]`, so the operand `sum` reduces has no extents in its type either, and no law can be handed them. The law is not the gap and neither is the walk: the operator that drops the extents is (`modules/tensor`), and stating a result's shape there is a different lane's decision. The other half is green and pinned by `transpose_needs_parameter_shape` (the same function with `x: float[..]` is refused by name) and by `test/plans/feat/compile/transforms.plan.toml`'s `transpose_of_a_sum_over_a_parameter` (a reduction over a parameter whose type states its extents answers)."
 
 [[tests]]
 name = "transpose_needs_parameter_shape"
@@ -83,9 +83,6 @@ backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TransposeNeedsParameterShape"
 expect_stdout_contains = ["[Error]: The transpose of 'loss_mean' needs the shape of the parameter 'x', and the type 'float[..]' does not state it.", "Write the extents the parameter's value has in its declaration"]
-expect_stderr_contains = ["TRANSPOSE function=loss_mean ports=2 promised=1 cause=parameter-shape param=0 param-type=float[..]"]
+expect_stderr_contains = ["TRANSPOSE function=loss_mean skip=parameter-shape uri=tensor:sum node=6 param=0 param-type=float[..]"]
 expect_stdout_not_contains = ["transpose should have been refused, and it answered"]
 timeout_ms = 30000
-known_fail = ["nvm", "fvm"]
-known_fail_msg = "skip=rule uri=tensor:sum reason=unbound"
-known_fail_note = "The direct-value path, not the ruleset's: a program that writes `sum(xs)` and then calls `transpose` needs a law for the one-operand `sum`, and sumshape's rewrite replaced `sum_t`/`take_t`/`mean_axis_t` with the `*_stated` twins that only serve the call `jvp` writes (they read the extents the forward half states, never the operand's shape -- the criterion of docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md's neighbour, `git grep 'shape(xs)|ones_like' -- stdlib/rulesets/transpose.cml` empty). Measured 2026-11-04: `TRANSPOSE function=loss_mean skip=rule uri=tensor:sum reason=unbound`, one step before the shape question this case asks. Restoring the value path needs a law that is handed extents it does not have, which is a decision, not a merge; the mark goes away with it."
