@@ -86,9 +86,17 @@ slot_t __op_extent_of__(ArgsView &with, ArgsView &norm, Context &ctx) {
     // a reader can land in: `extentOfResolver` admits a call only for a type whose extents
     // `statedExtentsOf` answers, and the builder settles every such call as the constant it folded
     // where the type argument was still in hand -- so no graph built from a program holds this
-    // node. What can hold one is a graph that no program wrote (an imported document, a hand-made
-    // test graph), and for those the honest answer is that the node cannot be run: the extents are
-    // not in it.
+    // node.
+    //
+    // A graph a program did not write can still hold it, which is why the throw stays: a test
+    // harness or a tool that assembles GIR itself builds whichever node it wants, and the node's
+    // own shape is the reason the extents cannot survive that trip -- an OPER node records the
+    // call's type and never its type argument, so neither the graph nor the document `std::jgir`
+    // writes for the community's reader (`docs/cli.md`, `egraph`) has a field to carry them in.
+    // Running such a graph reports this text at the call's own origin, followed by the pass's
+    // generic help, which asks for the program and the pass list: that reader is the one this
+    // sentence is for, and it is not a state a program can reach -- the fold above is what keeps
+    // a compiled program out of it.
     throwRuntimeFault(
         RuntimeDiag::PassInternalError,
         "calling `extent_of`",
