@@ -219,8 +219,11 @@ struct OperatorTraits {
     bool stateOnly = false;
     /// The operator can raise a fault (design principles 3.9: division by zero, an index out
     /// of range, a conversion whose value does not fit). True unless the module declares
-    /// otherwise. Recorded for consumers of the graph model; no pass in this repository
-    /// changes its behaviour on it yet (docs/design/graph-model, question Q1).
+    /// otherwise. Passes read it: `src/runtime/graph.cpp#nodeMayFault` answers with it (beside
+    /// `elementwise`, for shapes the type states in full), and `nodeIsFreelySchedulable` hands
+    /// that answer to whoever may drop, move or recompute a node -- a node the program observes
+    /// is kept alive with `:op/keep` when a removal takes its last read
+    /// (`src/passes/opt/generic/rewrite.cpp#isObservedRun`).
     bool mayFault = true;
     /// While it runs, the operator calls function values it received as arguments (the
     /// higher-order operators and `attempt`), so what it does depends on those functions.
@@ -456,7 +459,7 @@ class OperatorTable {
     // ---- Conversions (the fact a rule's key is read from) -----------------------------------
     //
     // A conversion of the language is written `op/<source>to<destination>` and its rule is filed
-    // under the destination's spelling (`camel/core/forward.h#conversionKeyOf`). The two types are
+    // under the destination's spelling (`src/core/forward.cpp#conversionKeyOf`). The two types are
     // what the operator *is*, so they are declared with it when it is registered, and the key is
     // read from this declaration rather than decoded from the letters of the URI.
 

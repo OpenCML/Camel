@@ -26,7 +26,7 @@
  * `node scripts/stdlib-reference.mjs --write`.
  */
 
-import { is_float } from types
+import { is_float, is_same } from types
 import {
     add_cotangent,
     add_cotangent_c,
@@ -64,6 +64,20 @@ export rule div_t::<T>(x: T, c: T) when is_float::<T>() {
 export rule neg_t::<T>(x: T) when is_float::<T>() {
     -x => (ct: T) => neg_cotangent(ct)
 }
+
+/// The transpose of `float(x)` where `x` is a double already: the conversion changes nothing, so the
+/// cotangent goes back unchanged.
+///
+/// This is the transpose half of `jvp_dtod` (`stdlib/rulesets/jvp.cml`), and it was missing while the
+/// forward half was there: a program that writes `float(...)` around a value that is a double already
+/// keeps the conversion as a node, so the pullback met `:op/dtod` where the forward walk met it and
+/// found a law, and stopped there with `skip=rule uri=:op/dtod reason=no-rule` -- on the first step of
+/// the walk, since the conversion is what the function returns. The family filed laws for the
+/// operators in the body and for none of the conversions in front of them.
+export rule dtod_t::<T>(x: T) when is_same::<T, float>() {
+    float(x) => (ct: T) => ct
+}
+
 // ---- the transpose rules of the reductions and the layout ----
 //
 // A forward rule that answers with the operator itself (`d(sum(xs)) = sum(dxs)`, `rulesets.jvp`)

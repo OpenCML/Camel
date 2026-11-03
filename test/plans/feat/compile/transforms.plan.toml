@@ -127,10 +127,17 @@ timeout_ms = 20000
 # residuals=1 loop=1 tape=5 invariants=0`), because the exit reads the loop's cell through one
 # `TupleIndex` per side and those two projections are what the cut hands each half -- no body region
 # is copied. The wall is one step later and is not a loop wall at all:
-# `TRANSPOSE function=split_of_jvp_of_g_backward skip=call-value-missing param=0 node=23 arg=2` -- the
-# exit the backward half copies is `index_into(dxs, 0)`, whose array argument the backward half
+# `TRANSPOSE function=split_of_jvp_of_g_backward skip=call-value-computed-by-the-body param=0
+# node=23 arg=2` -- the exit the backward half copies is `index_into(dxs, 0)`, whose array argument
+# the backward half
 # *recomputes* (the loop is copied into that half and its cell is a node there, not a residual), so
-# the member built for the callee cannot be handed the array's **value**. Measured 2026-11-03: the
+# the member built for the callee cannot be handed the array's **value**. (The word was
+# `call-value-missing` until 2026-11-03, when one word was split into two: that one now means "the
+# call does not carry the parameter's own value", and this refusal is the other shape -- the value is
+# one this half computes out of a loop, so carrying it means transposing the body, not passing an
+# argument. The split is in `modules/transforms/transpose.cpp`'s `unforwardedCause`, its sentence in
+# `transpose_operator.cpp`, and `test/tools/transpose_refusal/check.py` holds the two words apart.)
+# Measured 2026-11-03: the
 # same refusal stands with and without the reverse walk in `modules/transforms/transpose.cpp` -- the
 # walk is behind this wall, not in front of it, so the number this case asks for is not readable until
 # the array argument at that call is carried instead of recomputed.
@@ -140,7 +147,8 @@ timeout_ms = 20000
 # moved by one field:
 #   REINTERP split function=jvp_of_g forward=276 backward=277 type=(float[]) => (float, (float[]) =>
 #     float pure) pure residuals=1 loop=1 tape=5 invariants=0
-#   TRANSPOSE function=split_of_jvp_of_g_backward skip=call-value-missing param=0 node=23 arg=2
+#   TRANSPOSE function=split_of_jvp_of_g_backward skip=call-value-computed-by-the-body param=0
+#     node=23 arg=2
 # `invariants=0` is the whole reason the closure item cannot be the owner: this backward half reads no
 # parameter's value, so there is no member for the identity table to name and nothing for it to
 # carry. The callee's member *was* built (`TRANSPOSE function=rulesets.jvp::index_into<float>
@@ -167,7 +175,7 @@ case = "../../../cases/compile/transforms/vjp_loop_rounds_walk_backwards.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 known_fail = ["nvm"]
-known_fail_msg = "split_of_jvp_of_g_backward skip=call-value-missing param=0 node=23"
+known_fail_msg = "split_of_jvp_of_g_backward skip=call-value-computed-by-the-body param=0 node=23"
 known_fail_note = "倒序本身已经做了（`transpose` 侧不再照抄 iterable）；这条用例仍红是因为 backwards 里 `index_into` 的数组参数是重算的、不是残差。**这一项不是作者第 1 项**：那一项（参数原值作为残差进闭包）已于 `34788b554` 落地，而这半的 `invariants=0` —— 它不读任何参数的值，身份表里没有成员可写，所以它不可能被那一项修好；缺的是"这半自己算出来又读回去的值"的残差。摘标记的前提是先有 `grad= [1.0, 1.0]` 这个读数，今天没有。`split` builds both halves; the refusal is one step before the walk, at the call the backward half recomputes (`index_into(dxs, 0)`), whose array argument is not a residual the cut carries."
 expect_exit = 0
 expect_output_contains = ["value= 3.0", "grad= [1.0, 1.0]"]
@@ -1283,14 +1291,14 @@ timeout_ms = 20000
 # `jvp matmul dx=(0,1) value=5.0000 tangent=2.0000` (A = [[1, 2], [3, 4]], x = (1, 2)).
 [[tests]]
 name = "transforms.jvp_matmul"
-desc = "The rule for `tensor:matmul` is indexed, and it still cannot answer: `jvp` of `matmul(A, x)[0]` stops with `transforms: jvp has no forward transform for this function` and no `file:line` of the operator, because the constant `A`'s zero tangent has no node -- `pairTypeOf` carries a pair for a floating scalar only, so a value of array type has no tangent to hand the rule. The hand calculation the day it flips: `A · x = (5, 11)`, so the value is 5, and the tangents along `(1, 0)` and `(0, 1)` are 1 and 2."
+desc = "The rule for `tensor:matmul` is indexed, and it still cannot answer -- but not for the reason this entry used to give. It said the constant `A`'s zero tangent had no node (`pairTypeOf` carrying a pair for a floating scalar only), and that is no longer true: `jvp` writes the zero of an array type too, so the lift now carries the `float[2, 2]` constant's tangent and the walk goes on past `matmul` to the index that reads one element of its result -- `matmul(A, x)[0]`, where the value is a `float[..]` and the law `jvp_idx_arr` is written for a rank-one `T[]`, so the refusal is `jvp has no forward rule for `:op/idx_arr`` with the two port lists and the data-operand count. The hand calculation the day the last wall falls: `A · x = (5, 11)`, so the value is 5, and the tangents along `(1, 0)` and `(0, 1)` are 1 and 2."
 kind = "negative"
 case = "../../../cases/compile/transforms/jvp_matmul.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 1
-expect_stdout_contains = ["transforms: jvp has no forward transform for this function"]
+expect_stdout_contains = ["jvp has no forward rule for", ":op/idx_arr"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
