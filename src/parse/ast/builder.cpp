@@ -878,6 +878,47 @@ makes the three sides functions of `tile` as well, and
 so that `tile_matmul<64>` -- the same spelling a function's partial application has -- calls it
 and gives the `Rule`, and `tile_matmul` alone does too when every parameter has a default.
 */
+namespace {
+
+/// A rule's parameters as one string: the type written for each, in order, with the whitespace
+/// between the tokens squeezed out and the positions joined by `|` (`T[..]|T`). Empty for a rule
+/// that takes none.
+///
+/// This is the part of a rule's signature the head cannot answer -- the head is the operator, and
+/// two laws of one operator with different parameter types are two laws (the author's ruling of
+/// 2026-11-03 11:10; design principles 5.4, 9.11) -- and it is read here, where the declaration is
+/// still syntax, for the same reason the head is: at the stage a module's declarations are read a
+/// rule's `__lhs` has no body, so nothing later has these types as they were written.
+std::string parameterTypesOf(cst::ParentParams params) {
+    std::string joined;
+    const auto paired = params ? params->get<cst::PairedParams>() : cst::PairedParams();
+    if (!paired) {
+        return joined;
+    }
+    bool first = true;
+    for (const syn::Node child : paired->nodes()) {
+        if (!child.is(NK::KeyParamPair)) {
+            continue; // a tuple parameter: one position, many types, not the one this string holds
+        }
+        const cst::KeyParamPair pair(child);
+        const auto type = pair->type();
+        if (!first) {
+            joined += '|';
+        }
+        first = false;
+        if (type) {
+            for (const char c : type->text()) {
+                if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
+                    joined += c;
+                }
+            }
+        }
+    }
+    return joined;
+}
+
+} // namespace
+
 Value Builder::visitRuleDecl(cst::RuleDecl context) {
     ENTER("RuleDecl");
     const std::string name = std::string(context->get<cst::IdentDef>()->text());
@@ -911,6 +952,12 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         // a family it dispatches over.
         const auto conditionClause = context->get<cst::WhenClause>();
         std::string condition = conditionClause ? conditionClause->text() : std::string();
+        // The type of each parameter, in order: the other half of what a duplicate is. A key holds
+        // one rule per parameter-type list (the author's ruling of 2026-11-03 11:10), so the two
+        // laws of `T[..]` and `T` are filed under one key and the engine picks the one the
+        // operand's own type enters -- the declaration is not refused for writing the same
+        // `is_float::<T>()` twice.
+        std::string parameterTypes = parameterTypesOf(context->get<cst::ParentParams>());
         collectRuleHead(
             diags_->moduleName(),
             std::move(head),
@@ -920,6 +967,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
             std::move(variables),
             std::move(outerUses),
             std::move(condition),
+            std::move(parameterTypes),
             arity,
             range.start,
             range.end);

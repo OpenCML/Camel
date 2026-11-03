@@ -36,19 +36,33 @@ export rule jvp_idx_arr::<T>(xs: T[..], i: int) {
 切空间是 `float`。5.4 的读数正是这个差别：`t: f32[]` 的 `t[0]` 是 `f32`，`t: f32[..]` 的 `t[0]` 是
 `f32[..]`。**两种形状要的不是同一条律的参数，是不同结果的类型。**
 
-**开秩也没通**，只是换了个拒绝的理由（`patch=值` 拦在建图之后）：
+**开秩也没通，只是换了个拒绝的理由（`patch=值` 拦在建图之后）**：
 
 ```
 REINTERP jvp function=pick skip=value
 error[RuntimeDiag::RuntimeError]: transforms: jvp has no forward transform for this function.
 ```
 
-`transpose` 一侧同样两条都坏，读数在下面"读数"。另外开秩经由 `vjp`/`transpose` 时根本走不到规则：
+这句话说的是 **jvp** 那一侧。同一天的另一次实测把 `transpose` 那一侧的停点量清楚了，两者不是一个停点：开秩的 `transpose` 在**入口**就被拒，早于任何律被问到 ——
 
 ```
 error[SemanticDiag::ArgumentsRejected]: Invalid call to 'transpose' with argument types <> ((float[..]) => float[..] pure):
 `transpose` takes a function that returns a `float`: the cotangent of the result is what goes in.
 ```
+
+所以"开秩停在 `skip=value`"这个说法只对 jvp 成立；转置一侧要更正为"停在 `ArgumentsRejected`，函数准入"。`T[..]` 的 `t[0]` 是 `T[..]`（5.4），而 `transpose` 只收返回 `float` 的函数，于是开秩下标**今天没有转置入口**，与律怎么写无关。
+
+## 2026-11-03 11:10 的裁定改变了本页的前提：一个键可以挂两条律
+
+本页第 13 行那个前提——"一个键一条规则"——已经被作者的裁定推翻：判重按**参数类型列表**（外加 `when`），不按 `when` 文本，所以 `T[]` 与 `T[..]` 是**两条律、同一个键**，不是"一条律要覆盖两种形状"。转置一族已经按实参类型在候选里挑（`modules/transforms/transpose.cpp#chooseTransposedRule`，提交 `9e7e5b1ea`）：`index_into@2` 上同时挂 `idx_arr_t`（`T[]`）与开秩律（`T[..]`）时，`float[4]` 实参的读数是
+
+```
+TRANSPOSE function=first graph=49 type=(float[4], float) => (float[4],) nodes=3 arms=0 rhs=idx_arr_t
+```
+
+窄的那条被选中并点名；改前同一个键挂两条律会答 `skip=rule reason=no-rule`。上表 b 行"秩一被弄坏"因此只属于"把唯一的律改写成 `T[..]`"那种做法，不再是把两种形状写进一个键的代价：两条律并存时秩一仍由 `T[]` 那条答。
+
+**仍然没解决的**是开秩那条律本身：它在转置一侧进不了入口（上一节），在 jvp 一侧停在 `skip=value`。所以本页的缺口没有变，变的是"两形状共键"这条障碍已经不存在了。
 
 ## 不知道的
 
@@ -62,7 +76,7 @@ error[SemanticDiag::ArgumentsRejected]: Invalid call to 'transpose' with argumen
 
 ## 默认（按此往下做）
 
-1. **两条秩一律保持原样**（`T[]`），不为了过一条探针把秩一弄成错数 —— "拒绝比错数好"。
+1. **两条秩一/开秩律可以并存在同一个键下**（2026-11-03 11:10 的裁定 + `9e7e5b1ea`），秩一那条保持 `T[]` 原样，不为了过一条探针把秩一弄成错数 —— "拒绝比错数好"。
 2. 缺口留在本页；下一次要动的是**路 1**：给规则加秩多态（返回类型按操作数秩特化），那要动
    5.4/5.5/9.11 与匹配层，是一条语言变更，不是一处拼写。**路 2**（切线形参按节点切空间类型比）
    更小，但它改的是 `portsTakeOperands` 与规则绑定的契约，要作者先裁定"律的形参类型是声明还是槽"。

@@ -152,18 +152,19 @@ std::optional<RuleKey> ruleKeyOf(const std::string &family, const std::string &u
     return RuleKey{name, *arity};
 }
 
-std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri) {
-    return ruleIn("rulesets.jvp", ruleKeyOf("rulesets.jvp", uri));
-}
+namespace {
 
-std::vector<camel::parse::ast::RuleMatch> forwardRulesOf(const std::string &uri) {
+/// Every rule `family` files under `uri`'s key, in filing order: the single answer a one-law key
+/// holds, and every candidate a key that holds several laws holds. A family whose key says nothing
+/// about the operator answers nothing, which is not the same as a family that holds no rule there.
+std::vector<camel::parse::ast::RuleMatch> rulesIn(const std::string &family, const std::string &uri) {
     std::vector<camel::parse::ast::RuleMatch> answers;
-    const auto key = ruleKeyOf("rulesets.jvp", uri);
+    const auto key = ruleKeyOf(family, uri);
     if (!key.has_value()) {
         return answers;
     }
     const std::vector<std::string> names =
-        camel::parse::ast::lookupRules("rulesets.jvp", key->head, key->arity);
+        camel::parse::ast::lookupRules(family, key->head, key->arity);
     answers.reserve(names.size());
     for (const std::string &name : names) {
         answers.push_back(camel::parse::ast::RuleMatch{camel::parse::ast::RuleLookup::Found, name});
@@ -171,12 +172,30 @@ std::vector<camel::parse::ast::RuleMatch> forwardRulesOf(const std::string &uri)
     return answers;
 }
 
+} // namespace
+
+std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri) {
+    return ruleIn("rulesets.jvp", ruleKeyOf("rulesets.jvp", uri));
+}
+
+std::vector<camel::parse::ast::RuleMatch> forwardRulesOf(const std::string &uri) {
+    return rulesIn("rulesets.jvp", uri);
+}
+
 std::optional<camel::parse::ast::RuleMatch> transposeRuleOf(const std::string &uri) {
     return ruleIn("rulesets.transpose", ruleKeyOf("rulesets.transpose", uri));
 }
 
+std::vector<camel::parse::ast::RuleMatch> transposeRulesOf(const std::string &uri) {
+    return rulesIn("rulesets.transpose", uri);
+}
+
 std::optional<camel::parse::ast::RuleMatch> vmapRuleOf(const std::string &uri) {
     return ruleIn("rulesets.vmap", ruleKeyOf("rulesets.vmap", uri));
+}
+
+std::vector<camel::parse::ast::RuleMatch> vmapRulesOf(const std::string &uri) {
+    return rulesIn("rulesets.vmap", uri);
 }
 
 } // namespace camel::core

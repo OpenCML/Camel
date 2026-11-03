@@ -5,6 +5,7 @@
 
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/base.h"
+#include "camel/parse/ast/rule_head.h"
 
 #include <algorithm>
 #include <functional>
@@ -19,6 +20,214 @@ namespace camel::transforms {
 namespace rt = camel::runtime;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GraphId;
+
+std::vector<camel::core::type::Type *>
+rulePortsOf(const camel::compile::gir::GenericRuleInstance &instance) {
+    using camel::core::type::FunctionType;
+    std::vector<camel::core::type::Type *> ports;
+    const FunctionType *func = instance.lhs != nullptr ? instance.lhs->funcType() : nullptr;
+    if (func == nullptr) {
+        return ports;
+    }
+    ports.reserve(func->normTypesCount());
+    for (size_t i = 0; i < func->normTypesCount(); ++i) {
+        ports.push_back(func->normTypeAt(i));
+    }
+    return ports;
+}
+
+bool narrowerPortsThan(
+    const std::vector<camel::core::type::Type *> &narrow,
+    const std::vector<camel::core::type::Type *> &wide) {
+    if (narrow.size() != wide.size() || narrow.empty()) {
+        return false;
+    }
+    bool strict = false;
+    for (size_t i = 0; i < narrow.size(); ++i) {
+        if (narrow[i] == nullptr || wide[i] == nullptr) {
+            return false;
+        }
+        if (!wide[i]->assignableFrom(narrow[i])) {
+            return false;
+        }
+        if (!narrow[i]->assignableFrom(wide[i])) {
+            strict = true;
+        }
+    }
+    return strict;
+}
+
+namespace {
+
+/// A type list as the reports write it: `(float[..], float)`, `()` when empty.
+std::string typeTextOf(const std::vector<camel::core::type::Type *> &types) {
+    std::string text;
+    for (const camel::core::type::Type *type : types) {
+        text += (text.empty() ? "(" : ", ");
+        text += type != nullptr ? camel::core::type::typeToString(type) : std::string("?");
+    }
+    return text.empty() ? std::string("()") : text + ")";
+}
+
+} // namespace
+
+RuleChoice chooseRuleAmong(
+    camel::core::context::Context &context,
+    const std::vector<camel::parse::ast::RuleMatch> &candidates,
+    const std::vector<camel::core::type::Type *> &instanceTypes,
+    const std::vector<camel::core::type::Type *> &operandTypes, size_t dataOperandCount,
+    const RuleChoiceWords &words, const std::vector<bool> *answered) {
+    using camel::core::type::Type;
+    RuleChoice choice;
+    const auto &table = camel::compile::gir::genericRuleTable(context);
+    // The most specific refusal wins: a candidate that fits the type but not the shape says more
+    // than a later candidate whose condition simply does not hold here.
+    std::string shapeWhy;
+    // The same candidate's two type lists, kept beside the sentence so a family that writes its own
+    // wording for a shape refusal (`transpose`'s `rule-shape`) does not have to re-instantiate the
+    // law to read them again.
+    std::vector<Type *> shapePorts;
+    std::string lastWhy;
+    // Every candidate that instantiates and whose ports take the operands. A key can hold more than
+    // one such law (`T[..]` and `T[]` both take a rank-one array), so the fit is collected first and
+    // the choice made after it.
+    struct Fit {
+        const camel::compile::gir::GenericRuleInstance *instance = nullptr;
+        std::string rule;
+        std::vector<Type *> ports;
+    };
+    std::vector<Fit> fitting;
+    for (const camel::parse::ast::RuleMatch &candidate : candidates) {
+        if (candidate.status != camel::parse::ast::RuleLookup::Found) {
+            continue;
+        }
+        uint64_t ruleId = 0;
+        for (size_t i = 0; i < table.size(); ++i) {
+            if (table[i] != nullptr && table[i]->name == candidate.rule) {
+                ruleId = static_cast<uint64_t>(i) + 1;
+                break;
+            }
+        }
+        if (ruleId == 0) {
+            lastWhy = "the rule is named in the index but its templates are not registered";
+            continue;
+        }
+        const size_t at =
+            camel::compile::gir::genericRuleInstance(context, ruleId, instanceTypes, {});
+        const auto *entry = camel::compile::gir::genericRuleEntry(context, ruleId);
+        if (entry == nullptr || at >= entry->instances.size()) {
+            lastWhy = "no instance of the rule at " + typeTextOf(instanceTypes);
+            continue;
+        }
+        const auto &instance = entry->instances[at];
+        if (!instance.made || instance.program == nullptr || instance.rhs == nullptr) {
+            lastWhy = instance.why.empty()
+                          ? "no instance of the rule at " + typeTextOf(instanceTypes)
+                          : instance.why;
+            continue;
+        }
+        // The shape first: a candidate whose ports are not the operands' own types cannot be built,
+        // however well its condition holds at the element. Refusing here is what keeps a `float[]`
+        // out of a `float` port -- the run that did it was killed by a signal, and a named refusal is
+        // worth more than a silent death.
+        //
+        // A rule's parameters are the operator's **ports, in port order** -- the normal ones, then
+        // the `<>` ones (`stdlib/rulesets/jvp.cml`, the paragraph above `jvp_sum`;
+        // `stdlib/rulesets/vmap.cml` states the same protocol where it builds a call). So the rule's
+        // `count` parameters line up with the node's first `count` ports, and a *rule* that names
+        // fewer of them than the node has ports is not refusing anything: `jvp_reshape` is
+        // `rule jvp_reshape::<T>(x: T[..])` over the node `reshape<[2, 2]>(x)`, whose second port is
+        // the shape its own left side writes as a constant. That port is a static slot of the
+        // operator, not a value the node passes as data -- `normInputsOf` does not answer it,
+        // `withInputsOf` does -- and it is not a parameter of the rule, so counting it refused a law
+        // for the shape of its own left side. What the count still has to say is that no *data* input
+        // is left without a parameter to bind it: a rule that names fewer parameters than the node has
+        // data inputs cannot describe the node, and one that names more parameters than the node has
+        // ports cannot be filled.
+        //
+        // "Takes" is the relation a call site uses, not equality: an instance's ports are written in
+        // the spelling the rule's left side uses, and that spelling does not shrink to the shape of
+        // the operand it meets. `jvp_mul_tensor` is `mul_tensor(x: T[..], w: T[..])`, and a
+        // `float[2, 2]` operand is a value that port takes -- an open rank is every rank, and the
+        // operator walks whatever rank it is given (`stdlib/rulesets/vmap.cml` says the same about the
+        // batch it hands a rule). Asking for equality refused it: `float[..]` and `float[2, 2]` are
+        // not the same type, and the law was refused for the shape of the value it was written for.
+        // The direction is the one a call checks -- the port takes the operand -- and it is the
+        // direction that keeps the case this exists for refused: a `float` port still takes no
+        // `float[]`, because a primitive takes its own type and nothing else (`Type::assignableFrom`),
+        // so `:op/at od` is still stopped before a `float[]` reaches the scalar law's port.
+        std::vector<Type *> ports = rulePortsOf(instance);
+        const bool namesTheNode =
+            ports.size() <= operandTypes.size() && ports.size() >= dataOperandCount;
+        bool takes = namesTheNode;
+        for (size_t i = 0; takes && i < ports.size(); ++i) {
+            // A port the walk answers no cotangent for is not a port the law is asked about, so its
+            // shape cannot make the law wrong (`RuleChoice::answered`, and the doc in the header).
+            // A family that passes no list asks about every port.
+            if (answered != nullptr && i < answered->size() && !(*answered)[i]) {
+                continue;
+            }
+            takes = ports[i] != nullptr && operandTypes[i] != nullptr &&
+                    ports[i]->assignableFrom(operandTypes[i]);
+        }
+        if (!takes) {
+            shapeWhy = std::string("the ") + words.subject + " takes " + typeTextOf(ports) +
+                       ", and the operator has " + typeTextOf(operandTypes);
+            if (dataOperandCount > 0) {
+                shapeWhy += " (of which " + std::to_string(dataOperandCount) + " is a data operand)";
+            }
+            shapePorts = ports;
+            continue;
+        }
+        fitting.push_back(Fit{&instance, candidate.rule, std::move(ports)});
+    }
+    if (fitting.empty()) {
+        // Every candidate refused: the shape that nearly fitted says the most.
+        choice.why = !shapeWhy.empty() ? shapeWhy : lastWhy;
+        if (!shapeWhy.empty()) {
+            // A law was found and instantiated and its shape refused: that is `Shape`, not `NoLaw`,
+            // and the two type lists travel with it.
+            choice.refusal     = RuleRefusal::Shape;
+            choice.lawPorts    = std::move(shapePorts);
+            choice.operandTypes = operandTypes;
+        }
+        return choice;
+    }
+    // The narrowest fit, and only when it is one law. Two laws neither of which is narrower than the
+    // other are two laws the declaration does not choose between -- the author's `two laws both
+    // accept these arguments` -- and it is reported rather than answered by filing order.
+    std::vector<const Fit *> kept;
+    for (const Fit &candidate : fitting) {
+        bool outranked = false;
+        for (const Fit &other : fitting) {
+            if (&other == &candidate) {
+                continue;
+            }
+            if (narrowerPortsThan(other.ports, candidate.ports)) {
+                outranked = true;
+                break;
+            }
+        }
+        if (!outranked) {
+            kept.push_back(&candidate);
+        }
+    }
+    if (kept.size() > 1) {
+        std::string names;
+        for (size_t i = 0; i < kept.size(); ++i) {
+            names += (i == 0 ? "'" : " and '");
+            names += kept[i]->rule;
+            names += "'";
+        }
+        choice.why = std::string("two laws both accept these ") + words.operands + ": " + names +
+                     " (the operator has " + typeTextOf(operandTypes) + ")";
+        return choice;
+    }
+    choice.instance = kept.front()->instance;
+    choice.rule     = kept.front()->rule;
+    choice.refusal  = RuleRefusal::None;
+    return choice;
+}
 
 namespace {
 

@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：44 页
+## 现在在等作者：46 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -17,6 +17,7 @@
 | [`2026-11-03-a-second-rule-under-one-key-is-judged-by-its-when-text`](2026-11-03-a-second-rule-under-one-key-is-judged-by-its-when-text.cn.md) | 同一个键下挂两条规则，今天按 `when` 文本判重，与裁定「按操作数类型」不一致 |
 | [`2026-11-03-a-sized-rank-one-cast-refuses-a-literal-the-declaration-accepts`](2026-11-03-a-sized-rank-one-cast-refuses-a-literal-the-declaration-accepts.cn.md) | 一个定长的秩一 `as`，拒了声明和传参都接受的同一个字面量 |
 | [`2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant`](2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant.cn.md) | 一个超时应该由读数推出来，而不是由人写死 |
+| [`2026-11-03-can-gradient-of-a-function-be-a-library-type-function`](2026-11-03-can-gradient-of-a-function-be-a-library-type-function.cn.md) | `grad(f)` 的类型能不能写成库层类型函数？（删引擎 D2） |
 | [`2026-11-03-does-a-comment-in-a-source-file-count-as-a-direct-connection`](2026-11-03-does-a-comment-in-a-source-file-count-as-a-direct-connection.cn.md) | 源文件里的一句注释，算不算一次"直连"？ |
 | [`2026-11-03-does-a-generic-call-accept-a-rank-zero-argument`](2026-11-03-does-a-generic-call-accept-a-rank-zero-argument.cn.md) | 泛型函数调用的实参匹配，要不要照 5.4 收秩 0？ |
 | [`2026-11-03-does-a-loop-statement-with-an-unused-value-still-run`](2026-11-03-does-a-loop-statement-with-an-unused-value-still-run.cn.md) | 一个值没人用的 `loop` 语句，还算不算一条要执行的语句？ |
@@ -30,6 +31,7 @@
 | [`2026-11-03-is-the-unused-sync-block-warning-reachable-at-all`](2026-11-03-is-the-unused-sync-block-warning-reachable-at-all.cn.md) | 「这个 sync 块没人用」这句警告，今天还响得了吗？ |
 | [`2026-11-03-may-a-region-owner-read-its-own-exit`](2026-11-03-may-a-region-owner-read-its-own-exit.cn.md) | 一个区域的拥有者能不能读自己区域的端口？ |
 | [`2026-11-03-must-a-pullback-of-a-with-function-take-the-with-list`](2026-11-03-must-a-pullback-of-a-with-function-take-the-with-list.cn.md) | 带 `with` 参数的函数的 pullback，要不要把 `with` 列表写在类型上？ |
+| [`2026-11-03-must-the-same-shape-refusal-carry-the-same-name-in-jvp-and-transpose`](2026-11-03-must-the-same-shape-refusal-carry-the-same-name-in-jvp-and-transpose.cn.md) | 同一个形状拒绝，在 `jvp` 和 `transpose` 里该不该有同一个名字？ |
 | [`2026-11-03-one-rule-key-cannot-hold-an-array-and-a-number`](2026-11-03-one-rule-key-cannot-hold-an-array-and-a-number.cn.md) | 一个规则键只能挂一条规则，于是同一个算子的两种形状无法共存 |
 | [`2026-11-03-reversing-a-backward-can-only-be-pinned-when-a-loop-state-is-not-a-float`](2026-11-03-reversing-a-backward-can-only-be-pinned-when-a-loop-state-is-not-a-float.cn.md) | 反传倒着走要能钉住，先要循环状态不是浮点标量 |
 | [`2026-11-03-should-a-value-read-twice-be-one-residual`](2026-11-03-should-a-value-read-twice-be-one-residual.cn.md) | 同一个值被读两次，是一个残余还是两个？ |

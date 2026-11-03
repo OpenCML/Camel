@@ -35,6 +35,7 @@ std::map<std::string, std::vector<RuleHead>> registry;
 struct RuleSlot {
     std::string rule;
     std::string condition;
+    std::string parameterTypes;
 };
 
 std::map<std::string, std::map<std::string, std::vector<RuleSlot>>> indexed;
@@ -295,6 +296,7 @@ void collectRuleHead(
     std::string variables,
     std::string outerUses,
     std::string condition,
+    std::string parameterTypes,
     uint32_t arity,
     uint32_t tokenStart,
     uint32_t tokenEnd) {
@@ -307,6 +309,7 @@ void collectRuleHead(
         std::move(variables),
         std::move(outerUses),
         std::move(condition),
+        std::move(parameterTypes),
         arity,
         tokenStart,
         tokenEnd});
@@ -333,14 +336,27 @@ std::string indexRule(const std::string &family, const RuleHead &rule) {
             return {}; // one module built twice files its rules twice
         }
         // Two rules of one operator that cannot be told apart -- one spelling, one operand count,
-        // one condition -- are a duplicate: neither can be preferred, and a family that holds both
-        // would answer by filing order. Two that differ in their condition are not: the engine
-        // instantiates each at the operand's type and at most one of them answers.
-        if (slot.condition == rule.condition) {
+        // one parameter-type list -- are a duplicate: neither can be preferred, and a family that
+        // holds both would answer by filing order. The condition is *not* part of that test (author,
+        // 2026-11-03 12:10): a `when` clause is a question about the same operands, not a different
+        // shape, so two laws of one parameter-type list are one law written twice whatever their
+        // guards say. A rule that wants to answer two questions of one operand writes two laws of two
+        // parameter types (`jvp_float_from_float::<S>` beside `jvp_float_from_int(x: int)`,
+        // `stdlib/rulesets/jvp.cml`) or one law that branches on the type.
+        //
+        // Anything else is two laws of one key, which is what a family is for. Two rules whose
+        // parameter types differ (`(T[..], T[..])` and `(T[..], T)`, `(x: S)` and `(x: int)`) answer
+        // for different operands -- `T[..]`'s `t[0]` is the open-rank array and `T[]`'s is the
+        // element (design principles 5.4), and an `int` source is not a float one -- and this text
+        // used to call them a duplicate because both wrote `is_float::<T>()`.
+        //
+        // The choice between rules that share a key is not made here: the operand types are not
+        // known at this point, and the engine makes it where they are (`lookupRules`).
+        if (slot.parameterTypes == rule.parameterTypes) {
             return slot.rule;
         }
     }
-    slots.push_back(RuleSlot{rule.rule, rule.condition});
+    slots.push_back(RuleSlot{rule.rule, rule.condition, rule.parameterTypes});
     callees[family][rule.rule]   = rule.rhsCallee;
     variables[family][rule.rule] = rule.variables;
     return {};
