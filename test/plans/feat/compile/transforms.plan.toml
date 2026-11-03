@@ -1727,6 +1727,6 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 1
-expect_output_contains = ["extent_of"]
+expect_output_contains = ["answers the extents the type `A` writes down, and this call's type writes none: the type it is instantiated at is 'float[]', and an extent it writes is not a number"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
