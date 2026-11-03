@@ -1084,10 +1084,27 @@ name = "grad_array_with_int.fvm"
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_with_int.cml"
 args = ["${case}", "std::fvm"]
-expect_exit = 1
-expect_output_contains = ["Invalid call to 'split'"]
+expect_exit = 0
+expect_output_contains = ["6.0", "([2.0, 3.0], ())"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 15000
+
+# The same two answers with the `int` on the other side of the array, which is the only place a half's
+# port index and a parameter's index come apart: `((), float[])` has one port, `dxs`, and it is
+# parameter 1. A build that reads a port's position as a parameter's position names `n`, answers the
+# wrong shape or refuses, and never reaches the numbers.
+[[tests]]
+name = "grad_array_int_parameter_first"
+desc = "`f(n, xs) = xs[n]` at (1, [3.0, 2.0]) through `vjp`: 2.0, `()` for the `int` -- an empty member of the answer, since `Tangent<int>` is `()` and the pullback answers one slot per parameter -- and `[0.0, 1.0]` for `xs`. The backward half's type is `((), float[])` and its one port is `dxs`, which is parameter 1: a port index read as a parameter index names `n`, so this is where the two readings differ. The `()` answers a member and takes no port -- nobody can pass a value where there is none."
+kind = "behavior"
+case = "../../../cases/compile/transforms/grad_array_int_parameter_first.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["2.0", "()", "[0.0, 1.0]"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
 
 # A struct's member read by position used to segfault the compiler in release builds; it is a refusal now.
 [[tests]]
@@ -1311,5 +1328,18 @@ backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
 expect_output_contains = ["tangent_of_float_array true", "tangent_of_int_array true", "params_of_f3 true", "params_and_tangents true", "vjp_of_f3 true", "tangents_of_two_floats true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_hand_closed_lambda.same_answer_as_the_cut"
+desc = "The criterion of the 2026-11-03 rework as two readings of one number: a lambda a caller closes by hand and the second half `split` builds answer the same. `g(x) = x*x` at 3 lifts to `(x, dx) => (x*x, x*dx + x*dx)`, so the cut's second half is `lin(dx) = 6*dx`; a lambda written by hand over the same value, `(dx) => 2.0 * x * dx` with `x = 3`, is the same linear map spelled without a cut. Every transpose is asked at cotangent 1 and 3, so the four readings are 6, 18, 6, 18: the pair 6/6 is the criterion, and 18 is on no forward line, so an answer only proportional to the cotangent can produce it. Before the rework the cut's half answered and the hand-closed one refused -- `34788b554` gave every closure member the number of the parameter whose value it held, and a closure a caller wrote records nothing -- which made the result depend on where the graph came from."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_hand_closed_lambda.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+expect_output_contains = ["cut ct1= (6.0)", "cut ct3= (18.0)", "hand ct1= (6.0)", "hand ct3= (18.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

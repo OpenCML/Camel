@@ -286,9 +286,7 @@ enum GCGraphFlag : uint8_t {
     kGraphFlagRecomputeBackward = 1 << 4,
 };
 
-/// The closure-member identity a graph records, for a member that is no parameter's value: a value
-/// the cut computed, or a member a caller closed by hand (GCGraph::closureParameterOf).
-inline constexpr int32_t kNoClosureParameter = -1;
+
 
 /// kWritingDerived: congruence closure found the equivalence, it need not be stored.
 inline constexpr uint8_t kWritingDerived = 1 << 0;
@@ -585,10 +583,6 @@ struct GCGraphNativePayload {
     gc_node_ref_t *normPorts   = nullptr;
     gc_node_ref_t *withPorts   = nullptr;
     gc_node_ref_t *closure     = nullptr;
-    // One entry per closure member: the parameter whose *value* the member holds, or
-    // kNoClosureParameter (GCGraph::closureParameterOf). Null when the graph records no identity,
-    // which is every closure but the ones a cut wrote.
-    int32_t *closureParameters = nullptr;
     // The order edges of the graph, sorted by (user, pred); null when the graph has none. Not in
     // the nodes' input runs: an order edge is not a port (GCGraph::orderPredsOf).
     GCGraphOrderEdge *orderEdges = nullptr;
@@ -1092,12 +1086,6 @@ class GCGraph : public camel::core::rtdata::Object {
     std::span<const gc_node_ref_t> normPorts() const;
     std::span<const gc_node_ref_t> withPorts() const;
     std::span<const gc_node_ref_t> closureNodes() const;
-    /// For each of `closureNodes()`, the parameter whose *value* the member holds -- the numbering a
-    /// cut gives its residuals (`Residual::parameter`, modules/transforms/split.cpp#residualsOf) --
-    /// or kNoClosureParameter. Empty when the graph records no identity: a closure a caller closed
-    /// over its own values has no parameters behind it, and a reader then refuses to name one
-    /// instead of reading a member by its place in the list.
-    std::span<const int32_t> closureParameterOf() const;
     /// The number of arms of the BRCH `brchRef` (0 for another node).
     gc_cnt_t armCountOf(gc_node_ref_t brchRef) const;
 
