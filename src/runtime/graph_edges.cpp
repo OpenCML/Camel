@@ -257,13 +257,10 @@ class EdgeChecker {
     }
 
 
-
     /// The other half of the structural rule of 4.6: a sync edge joins two statements one `sync`
     /// block writes directly -- or the block's chain tail to the block's value -- and nothing else.
-    /// What makes a node such a statement is the node itself -- the shape of it, read back by
-    /// `nodeIsChainStatement` (author ruling 2026-11-02 04:50: a mark that can be derived should not
-    /// be stored) -- so the check is: both ends are such a node, they are not the same node and not a
-    /// node a rewrite
+    /// The builder records that fact on each node it chains (kGCNodeFlagSyncStatement), so the
+    /// check is: both ends are such a node, they are not the same node and not a node a rewrite
     /// removed, and one statement is written directly after one other (the tail that reaches the
     /// block's value is the one node that two sync edges leave). The other direction -- one
     /// statement two statements follow -- is `checkSyncChainForks` below.
@@ -303,27 +300,17 @@ class EdgeChecker {
                 bad("chains a node to itself");
                 continue;
             }
-            // Both ends are read from the graph, not from the marker the builder wrote: a marker
-            // that can be derived should not be stored (author ruling 2026-11-02 04:50), and the
-            // predicate is what says whether a place was handed to the right node. `isChainStatement`
-            // is edges.cn.md 1 and 4.6; the end may also be the block's own value (same region as
-            // its tail, the block a statement sits in when nothing wraps it being region 0) or a
-            // `GATE` (edges.cn.md 5.3).
-            const bool endSameBlockValue = isTheBlocksOwnValue(graph_, edge.user, edge.pred);
-            if (!isChainStatement(graph_, edge.user) && !endSameBlockValue &&
-                user->kind != GCNodeKind::Gate) {
+            if (!isWaitingCarrierOrGate(user)) {
                 bad(std::format(
-                    "ends on a node that is not a statement of the block, not the block's value and "
-                    "not a GATE (kind {}, flags {}, data type '{}')",
+                    "ends on a node no `sync` block wrote (kind {}, flags {}, data type '{}')",
                     static_cast<int>(user->kind),
                     user->flags,
                     user->dataType() != nullptr ? user->dataType()->toString() : "-"));
                 continue;
             }
-            if (!isChainStatement(graph_, edge.pred)) {
+            if (!isWaitingCarrier(pred)) {
                 bad(std::format(
-                    "starts at a node that is not a statement of a chain (kind {}, flags {}, data "
-                    "type '{}')",
+                    "starts at a node no `sync` block wrote (kind {}, flags {}, data type '{}')",
                     static_cast<int>(pred->kind),
                     pred->flags,
                     pred->dataType() != nullptr ? pred->dataType()->toString() : "-"));
@@ -340,7 +327,8 @@ class EdgeChecker {
                 // wraps it (control_regions.h: `0 when it is in none`) -- so an end and its tail
                 // in the same region are in one block, and the value of that block is an end the
                 // graph can derive.
-                const bool sameBlockValue = isTheBlocksOwnValue(graph_, edge.user, edge.pred);
+                const bool sameBlockValue =
+                    graph_.nodeRegion(edge.user) == graph_.nodeRegion(edge.pred);
                 if (!endIsStatement && !sameBlockValue && user->kind != GCNodeKind::Gate) {
                     static std::set<std::pair<gc_node_ref_t, gc_node_ref_t>> seen;
                     if (seen.insert(std::make_pair(edge.user, edge.pred)).second) {
@@ -416,7 +404,7 @@ class EdgeChecker {
             if (user->kind == GCNodeKind::Dead || pred->kind == GCNodeKind::Dead) {
                 continue; // reported by checkSyncEdges
             }
-            if (!isChainStatement(graph_, edge.user) || !isChainStatement(graph_, edge.pred)) {
+            if (!isWaitingCarrier(user) || !isWaitingCarrier(pred)) {
                 continue; // reported by checkSyncEdges
             }
             if (controlBlockOf(edge.user) != controlBlockOf(edge.pred)) {
