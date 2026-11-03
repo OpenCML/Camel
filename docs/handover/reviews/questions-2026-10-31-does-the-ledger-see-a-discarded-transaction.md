@@ -19,10 +19,10 @@ after   allocations=2 live=0
 
 ## 为什么会这样（代码级理由）
 
-`extractRegion`（`modules/tiles/src/region_extract.cpp:146-152`）只做两件事：
+`extractRegion`（`modules/tiles/src/region_extract.cpp#extractRegion`）只做两件事：
 
 * `GraphTransaction::open(id)` —— `make_unique<GraphDraft>`，**普通堆**；
-* 往草稿自己的向量里 `addNode` / `appendStaticSlot`（`src/runtime/draft.cpp:2131-2145`——`materializeStaticValue` 就是 `appendStaticSlot` + `addNode`，**静态值存在草稿的 `staticSlots_` 里**）。
+* 往草稿自己的向量里 `addNode` / `appendStaticSlot`（`src/runtime/draft.cpp#GraphDraft::appendStaticSlot`——`materializeStaticValue` 就是 `appendStaticSlot` + `addNode`，**静态值存在草稿的 `staticSlots_` 里**）。
 
 **整条抽出路径一次 `autoSpace()` 分配都没有。** 草稿造的一切是它自己的几个 vector，"退回"就是 `~GraphDraft` 释放它们——**`autoSpace().stats()` 永远看不到。**
 

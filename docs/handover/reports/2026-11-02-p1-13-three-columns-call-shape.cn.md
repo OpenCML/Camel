@@ -20,10 +20,10 @@
 
 | 名字 | 声明在哪 | 接受张量实参？ |
 |---|---|---|
-| `sum`、`mean`、`min`、`max`、`argmax`、`argmin` | `stdlib/array.cml:155,167,177,187,196,205` | **接受**（6.0 / 1.0 / 1.0 / 1.0 / 0 / 0） |
+| `sum`、`mean`、`min`、`max`、`argmax`、`argmin` | `stdlib/array.cml#sum`（以及同文件的 mean、min、max、argmax、argmin） | **接受**（6.0 / 1.0 / 1.0 / 1.0 / 0 / 0） |
 | `abs`、`exp`、`log`、`erf`、`erfc` | `stdlib/math.cml` | **拒绝**：`WhenConditionUnmet`，`when is_float::<T>()` 对 `f32[2, 3]` 为假 |
-| `pow` | `stdlib/math.cml:335` | **拒绝**：`(x: T, y: T)` 把 `T` 绑成 `f32[2,3]`，第二个实参 `float` 对不上 |
-| `dim` | `stdlib/array.cml:290` | **假匹配**：轴是 `<1>` 里的静态参数，不在括号里 |
+| `pow` | `stdlib/math.cml#pow` | **拒绝**：`(x: T, y: T)` 把 `T` 绑成 `f32[2,3]`，第二个实参 `float` 对不上 |
+| `dim` | `stdlib/array.cml#dim` | **假匹配**：轴是 `<1>` 里的静态参数，不在括号里 |
 
 所以"已覆盖 413"里，**这 13 个只有 6 个是被证明接受的**；其余 400 行是**结构匹配**（名字 + 元数一致），没有逐个真跑。这不是漏做，是要说清读数能证明什么：结构性覆盖 ≠ 调用得通；把 400 行全跑一遍是另一件事，其代价与判据要先定。
 
@@ -31,7 +31,7 @@
 
 清单（`inspect --ops`，URI / 元数）：`tensor:zeros(1)`、`tensor:ones(1)`、`tensor:eye(1)`、`tensor:full(2)`、`tensor:from_bytes_aggregate(2)`、`tensor:from_bytes_bf16(2)`、`tensor:from_bytes_bool(2)`、`tensor:from_bytes_f16(2)`、`tensor:from_bytes_f32(2)`、`tensor:from_bytes_f64(2)`、`tensor:from_bytes_i32(2)`、`tensor:from_bytes_i64(2)`、`tensor:load_npy_bool(1)`、`tensor:load_npy_f32(1)`、`tensor:load_npy_f64(1)`、`tensor:load_npy_i32(1)`、`tensor:load_npy_i64(1)`。
 
-试过、也真跑过：把 `stdlib/signatures/tensor.cml:20,26,36` 那三条**作者已经写好的**声明文本（`zeros`、`ones`、`eye`，写法不是我发明的）搬进编译文件 `stdlib/tensor.cml` 的 "creation" 一节。
+试过、也真跑过：把 `stdlib/signatures/tensor.cml#zeros`（以及同文件的 ones、eye） 那三条**作者已经写好的**声明文本（`zeros`、`ones`、`eye`，写法不是我发明的）搬进编译文件 `stdlib/tensor.cml` 的 "creation" 一节。
 
 **它们加载得进去，`inspect --ops` 也照样给行，但全量测试塌了 137 个**：
 
@@ -39,7 +39,7 @@
 [SUMMARY] total: 8359, pass: 8210, fail: 137, skip: 10, known failures: 2
 ```
 
-一个例子说清原因（`test/cases/compile/constas/constas_param.cml:12`）：
+一个例子说清原因（`test/cases/compile/constas/constas_param.cml#main`）：
 
 ```
 error[SemanticDiag::GenericArgumentsMismatch]: The generic function 'total' cannot be called
@@ -108,7 +108,7 @@ with that overload, so the two cannot disagree.
 
 也就是说 `!=` **没有自己的符号可写**，它由 `==` 派生；`:op/ne_*` 那 11 条规则任何声明都命名不到。按流程整族搬进"签名表达不了"（22 行），并且它们是**规则删除的候选**——和 19:50 那条"同键多规则按类型选"要删的 `mul_tensor` 同类：既然 `!=` 是 `==` 的否定，`ne_*` 的规则就多了一份实现同一个事实的东西。
 
-**这一族的账**：`eq_*` 11 个名字 / 22 行 → **已覆盖**（tag + 声明，写法照 `stdlib/prelude.cml` 的算术块，`operator ==` 的组名 `__eq__` 由 `src/core/operator_names.cpp:34` 给出）；`ne_*` 11 个名字 / 22 行 → **签名表达不了**。
+**这一族的账**：`eq_*` 11 个名字 / 22 行 → **已覆盖**（tag + 声明，写法照 `stdlib/prelude.cml` 的算术块，`operator ==` 的组名 `__eq__` 由 `src/core/operator_names.cpp#kForms` 给出）；`ne_*` 11 个名字 / 22 行 → **签名表达不了**。
 
 **判据**：`inspect --ops` 仍 **655 行**，`:op/eq_*` 与 `:op/ne_*` 那 **44 行与改动前逐字节相同**（比对了 `OPERATOR` 行全文）；`--verify-ops` 仍 **559**、报 agree；全量 `8359/8347/0`。
 
@@ -143,7 +143,7 @@ with that overload, so the two cannot disagree.
 OPERATOR {"module":"<builtin>","name":"string","uri":":op/dtos","with":0,"norm":1,"purity":"pure","signature":"(float) => string"}
 ```
 
-**它服务于哪个调用**：`string(x)`。`include/camel/standalone/format.h:180` 自己写着——
+**它服务于哪个调用**：`string(x)`。`include/camel/standalone/format.h#toText` 自己写着——
 
 ```
 /// `string(x)` (:op/itos, :op/ltos, :op/ftos, :op/dtos, :op/atos): the text of `x`.
@@ -151,7 +151,7 @@ OPERATOR {"module":"<builtin>","name":"string","uri":":op/dtos","with":0,"norm":
 
 注册处是内置组的静态类型解析器表（`src/builtin/modules/globals.cpp`：`OperatorGroup::create("string", {...})` 里每条 `":op/dtos"` 配 `StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::String())`）。
 
-**覆盖它的声明**在 `stdlib/prelude.cml:705`：
+**覆盖它的声明**在 `stdlib/prelude.cml#bf16`：
 
 ```
 #op(':op/*tos')
@@ -327,7 +327,7 @@ OPERATOR {"module":"<builtin>","name":"__pow__","uri":":op/pow_d","with":0,"norm
 
 `inspect --ops` 的 **655** 是**注册表行数**：每个注册重载一行（同一个 URI 可以有计算签名行和声明行两条，这正是 `sum_axis` 的两条）。
 
-`--verify-ops` 的 **559** 是它**逐条比较过的声明条目数**：`scripts/stdlib-reference.mjs` 里的 `checked++` 只在"一条声明配上一条注册算子"时加一，而 `export func operator …` 这类算子声明**按设计整类跳过**（`scripts/stdlib-reference.mjs:735`，也是 `docs/stdlib-reference.md` 里没有算子条目的原因）。
+`--verify-ops` 的 **559** 是它**逐条比较过的声明条目数**：`scripts/stdlib-reference.mjs` 里的 `checked++` 只在"一条声明配上一条注册算子"时加一，而 `export func operator …` 这类算子声明**按设计整类跳过**（`scripts/stdlib-reference.mjs#sectionNotes`，也是 `docs/stdlib-reference.md` 里没有算子条目的原因）。
 
 两个数数的不是同一个东西：一个是"注册了多少重载"，一个是"声明和算子对上了多少对"，所以不相等，也没有哪个是错的。今晚"305 诊断码 vs 打印码"那条纪律同理——**先问"它在数什么"，再问"对不对"**。
 
@@ -335,7 +335,7 @@ OPERATOR {"module":"<builtin>","name":"__pow__","uri":":op/pow_d","with":0,"norm
 
 `inspect --ops` 的 **655** 是**注册表行数**：每个注册重载一行（同一个 URI 可以有计算签名行和声明行两条，这正是 `sum_axis` 的两条）。
 
-`--verify-ops` 的 **559** 是它**逐条比较过的声明条目数**：`scripts/stdlib-reference.mjs` 里那个 `checked++` 只在"一条声明配上一条注册算子"时加一，而 `export func operator …` 这类算子声明**按设计整类跳过**（同 `scripts/stdlib-reference.mjs:735`，也是 `docs/stdlib-reference.md` 里没有算子条目的原因）。
+`--verify-ops` 的 **559** 是它**逐条比较过的声明条目数**：`scripts/stdlib-reference.mjs` 里那个 `checked++` 只在"一条声明配上一条注册算子"时加一，而 `export func operator …` 这类算子声明**按设计整类跳过**（同 `scripts/stdlib-reference.mjs#sectionNotes`，也是 `docs/stdlib-reference.md` 里没有算子条目的原因）。
 
 两个数数的不是同一个东西：一个是"注册了多少重载"，一个是"声明与算子对上了多少对"，所以它们不相等，也没有哪个是错的。今晚"305 诊断码 vs 打印码"那条纪律同理——**两个数各自有定义，先问"它在数什么"，再问"对不对"**。
 

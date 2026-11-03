@@ -23,12 +23,12 @@ The same grep over the whole tree:
 
 So a pass that ends with an error value **is** reported: the CLI, `--timeit` and the debugger each
 read the status and call `reportPassErrorValue`, which sets the exit code and prints the value as an
-error nobody handled. The comment at `include/camel/execute/pass/base.h:102` -- "which the driver has
+error nobody handled. The comment at `include/camel/execute/pass/base.h#PassApplyResult` -- "which the driver has
 already reported" -- is true. The claim that no test could see it was this page's own blind spot.
 
 ## What the whole-tree grep did find
 
-`applyPasses` (`src/execute/pass.cpp:3189`, declared at `base.h:187`) is
+`applyPasses` (`src/execute/pass.cpp#applyPassesDetailed`, declared at `base.h:187`) is
 `applyPassesDetailed(...).program`: for an `Errored` result that is `nullptr`, and the value goes with
 it. **It has no callers anywhere in the tree** -- the entry points that run a pass list are the CLI's
 (`main.cpp:680`, `:701`) and both read the detailed result. So it was a helper that silently drops a

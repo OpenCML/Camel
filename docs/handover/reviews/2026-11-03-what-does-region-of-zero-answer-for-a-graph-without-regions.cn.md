@@ -14,11 +14,11 @@
   `modules/graph/read.cpp#regionKindKernel`（`graph.region_kind`）读 `region.kind`；
   `modules/graph/read.cpp#regionParentKernel`（`graph.region_parent`）在 0 号区**先**返回 `NullSlot`，
   根本走不到这里。语言侧可见的区接口只有 `region_of` / `region_kind` / `region_parent`
-  （`stdlib/graph.cml:232-244`，`modules/graph/module.cpp:165-167`），没有 `region_result` / `region_ports`。
+  （`stdlib/graph.cml#constant`，`modules/graph/module.cpp#GraphModule`），没有 `region_result` / `region_ports`。
   所以今天**没有任何调用方依赖"全零"，也没有任何调用方读得到 `result`**。
 - 真的根体记录里有什么（A6 的探针，一次运行里 8 张图，含 jvp 与 export 的图）：
   `bodyKind=0(Root) bodyOwner=none bodyResult=none bodyParams=none bodyPorts=0`，8/8 一致。
-- 为什么 `result` 恒空：`GraphDraft::setRegionResult` 只接受 `id > 0`（`src/runtime/draft_regions.cpp:57`），
+- 为什么 `result` 恒空：`GraphDraft::setRegionResult` 只接受 `id > 0`（`src/runtime/draft_regions.cpp#GraphDraft::setRegionResult`），
   写 `result` 的全是 arm / loop 的两半 / 内联体（`git grep -n "setRegionResult("` 的 20 处无一传 0）——
   **根体不产值**，图自己的出口是另一个字段（`payload.exitNode`）。
 - 于是"没有区表"这个状态本身说明什么：草稿**只有**在根体带了 tag 时才写下那条记录

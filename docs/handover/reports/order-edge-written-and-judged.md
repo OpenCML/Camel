@@ -3,7 +3,7 @@
 **这条不变式的拥有者是「完工的图」，不是写边的那些地方。**
 
 判定必须在与检查**同一时刻**、对**同一个**节点问同一个问题。写边的时候节点还不完整——`nodeIsFreelySchedulable`
-对 `OPER` 要求 payload 里已经有算子（`src/runtime/graph.cpp:1196-1209`），而节点还在构建时 payload 是空的，
+对 `OPER` 要求 payload 里已经有算子（`src/runtime/graph.cpp#emitDraftPayload`），而节点还在构建时 payload 是空的，
 于是「写时」它答「有人排它」，一切守卫都放行；等到图冻结、payload 落定，同一个节点答「自由」，封印检查便
 拒掉那条当初看起来合法的边。**今晚四个写者守卫与一个 choke point 全部无效，原因都在这里**：
 `Builder::rehomeOrderEdges`、`importGraph`、`replaceOrderEdgesAt`、`spliceOrderEdgesOver` 都问得太早，
@@ -40,6 +40,6 @@
 
 * 落点：`src/runtime/draft_session.cpp` 的 `describeDraftNativePayload` 之前（`draft_session.cpp:512-535`）；
 * 判据：冻结后同义的 `nodeTakesNoOrder`——注意它必须拿到每个节点的算子，而草稿自己没有算子表，
-  算子由 `DraftPayloadPlan`（`src/runtime/graph.cpp:698` `planDraftPayload`）决定，所以过滤要接在这份计划上，
+  算子由 `DraftPayloadPlan`（`src/runtime/graph.cpp#validateRuntimeGraphPayloadImpl` `planDraftPayload`）决定，所以过滤要接在这份计划上，
   而不是在草稿里就地分类；
 * `graph_edges.cpp:344` 的判定不动，它是安全网。

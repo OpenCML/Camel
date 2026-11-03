@@ -24,12 +24,12 @@ error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no 
 
 1. **键是 `subtract/2`，不是形状决定的**。`ruleKeyOf(family, "tensor:subtract")` 只读算子名与
    `arityOfHead`，与调用点的操作数类型无关 —— 形状是在规则**绑定**那一步比的
-   （`portsTakeOperands`，`modules/transforms/jvp.cpp:112-140`，逐参数 `Type::equals`）。
+   （`portsTakeOperands`，`modules/transforms/jvp.cpp#buildRuleTangent`，逐参数 `Type::equals`）。
 2. **一个键一条规则是索引自己的约束**，不是这一族的：同族里第二个 `subtract` 规则会被
    `rulesets.err_duplicate_head.cml` 那条用例按名拒绝（"one key holds one rule" 是它的原文判据；
    `tensor:multiply` → `mul_tensor` 那次例外也是同一个理由促成的，见
    `ruleKeyExceptions` 的第二条）。
-3. **声明里已经写过并集**：`stdlib/tensor.cml:146` 的 `take(t: float[..], indices: int64[..] | number[])`、
+3. **声明里已经写过并集**：`stdlib/tensor.cml#gemm_library` 的 `take(t: float[..], indices: int64[..] | number[])`、
    `reshape(t: float[..] | number[])` 都是并集形参，并且编译得通、调用得分得清。**规则形参能不能写，还没测。**
 
 ## 已经量到的：并集写法在规则形参上**写不出来**（2026-11-03，实测）

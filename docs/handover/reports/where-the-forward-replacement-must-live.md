@@ -67,8 +67,8 @@ rule jvp_add
 
 取不到的那一处（结构上的缺失，不是某个函数返回空）：
 
-- `include/camel/runtime/program.h:79` —— `graph(GraphId)` 是唯一的取图入口；
-- `include/camel/runtime/program.h:175` —— `tableSize()` 是唯一的规模读数，**没有按名字取的入口**；
+- `include/camel/runtime/program.h#graph` —— `graph(GraphId)` 是唯一的取图入口；
+- `include/camel/runtime/program.h#makeProgram` —— `tableSize()` 是唯一的规模读数，**没有按名字取的入口**；
 - 探针处：`src/passes/trans/rulesets/rulesets.cpp` 的 `apply`（已删除，不留）。
 
 **这个结论是错的，作者裁定在先（`fsh-dev = 480523c40`）：“规则本身就是引用，不是名字：规则值带着
@@ -85,15 +85,15 @@ rule jvp_add
 
 读 `src/compile/gir/` 的规则声明一侧，答案是三个字：**被存起来**。存的地方与索引：
 
-- `src/compile/gir/builder_generics.cpp:603` —— `registerGenericRule(...)`，把规则的两侧模板
+- `src/compile/gir/builder_generics.cpp#Builder::settleGenericRuleMaker` —— `registerGenericRule(...)`，把规则的两侧模板
   登记进表，返回 `ruleId`；**规则值只带这个 id**（`builder_tags.cpp:354` 的注释：
   “no graph stands for it, and the value namespace is the only place it appears”）；
-- `src/compile/gir/rule_templates.cpp:35` —— 表挂在 **context** 上（`context.genericRuleTemplates()`），
+- `src/compile/gir/rule_templates.cpp#rulesOf` —— 表挂在 **context** 上（`context.genericRuleTemplates()`），
   “so a rule value can keep an id instead of a pointer and an instance outlives the pass that made it”；
-- `include/camel/compile/gir/rule_templates.h:96-112` —— `GenericRuleEntry` 存 `lhs`/`rhs`/`when`
+- `include/camel/compile/gir/rule_templates.h#GenericRuleEntry` —— `GenericRuleEntry` 存 `lhs`/`rhs`/`when`
   模板与 `instances`；每个 `GenericRuleInstance`（`:60-77`）带着 **`program`、`lhs`、`rhs`、`when`
   四张真实的图**，“in one program of the context that is never released”；
-- `include/camel/compile/gir/rule_templates.h:152` —— `genericRuleEntry(context, ruleId)`；
+- `include/camel/compile/gir/rule_templates.h#genericRuleEntry` —— `genericRuleEntry(context, ruleId)`；
   `:168` —— `genericRuleInstance(context, ruleId, types, with)`：按类型元组实例化一次、留下，
   **问两次答同一个位置**。
 
@@ -108,9 +108,9 @@ rule jvp_add
 
 字段与位置：
 
-- `modules/rewrite/rule.h:84-85` —— `RuleObject::lhs()` / `RuleObject::rhs()`；
-- `modules/rewrite/rule.h:108-109` —— 字段 `::Function *lhs_; ::Function *rhs_;`；
-- `modules/rewrite/rule.h:72-73` —— “A rule value that keeps an id has no `lhs`, `rhs` or `when` of
+- `modules/rewrite/rule.h#RuleObject` —— `RuleObject::lhs()` / `RuleObject::rhs()`；
+- `modules/rewrite/rule.h#updateRefs` —— 字段 `::Function *lhs_; ::Function *rhs_;`；
+- `modules/rewrite/rule.h#RuleObject` —— “A rule value that keeps an id has no `lhs`, `rhs` or `when` of
   its own”：**实例化的规则值只带 `ruleId()`**，两侧要从实例拿。
 
 两行打印（探针在 `std::rulesets` 的 `apply` 里，按名字在 context 的通用规则表里找到 `jvp_add`
@@ -130,9 +130,9 @@ PROBE   node 0 kind=1 / node 1 kind=1 / node 2 kind=0 / node 3 kind=4
 
 **实例的 `rhs` 是有的（4 个节点的图），但里面没有调用节点**：两个 Port、一个 Data、一个 Fill。
 也就是说，**存下来的这一份不是能跑的那一份**——真正被引擎应用的那份规则由
-`modules/rewrite/module.cpp:669` 的 `compileRule(ctx, source)` 编出来，存在
-`GenericRuleEntry::compiled`（`include/camel/compile/gir/rule_templates.h:112`，“owned by the
-engine”）里；`instanceRules`（`modules/rewrite/module.cpp:636`）是那个模块里的 `static` 函数。
+`modules/rewrite/module.cpp#instanceRules` 的 `compileRule(ctx, source)` 编出来，存在
+`GenericRuleEntry::compiled`（`include/camel/compile/gir/rule_templates.h#GenericRuleEntry`，“owned by the
+engine”）里；`instanceRules`（`modules/rewrite/module.cpp#instanceRules`）是那个模块里的 `static` 函数。
 
 所以桥的下一段是：**`ruleId` → 实例 → 编译后的规则（引擎应用的那一个）→ 它的 rhs 图 → 调用节点
 → `GraphId`**。这一段要么给 `modules/transforms` 一个取“编译后规则”的入口（`compileRule` 是
@@ -153,7 +153,7 @@ PROBE jvp_div rhs GraphId=75 name=rulesets.jvp_div__rhs<float> nodes=4
 张图，调用它**——不是到图里去找一个“指向 `div_tangent` 的调用节点”。
 
 **为什么图里没有调用节点**：`compileRule` 的产物 `camel::runtime::Rule` 的 `rhs` 是
-`Pattern`（`include/camel/runtime/writings.h:64-75`），而 `Pattern::Kind` 只有
+`Pattern`（`include/camel/runtime/writings.h#WritingStore`），而 `Pattern::Kind` 只有
 `Var / Constant / Op / Compute`——**没有 Call 这一种**。`div_tangent` 的调用在**编码后的模板体**
 里，实例图上只有它的入口形状（2 Port + 1 Data + 1 Fill）；调用这张图，`div_tangent` 就在里面跑。
 
@@ -189,7 +189,7 @@ REINTERP target=main primitives=1 other=4 graph=50 nodes=1
 - 写了 `stdlib/transforms.cml` 之后，`registry.migrations_stay_migrated` 要求
   `scripts/stdlib-reference.mjs` 的 `MODULES` 里有一条 `transforms`。
 - 那条一加，`--verify-ops` 就红：`MODULES lists 'transforms', but no module of modules/ registers
-  operators under that name`（`scripts/stdlib-declarations.mjs:470`）——**登记簿的单位是算子，
+  operators under that name`（`scripts/stdlib-declarations.mjs#coverageProblems`）——**登记簿的单位是算子，
   一个只注册 pass 的模块没有算子**。
 - 退到 `UNCHECKED_MODULES` 也不行：它要 `covered_by`，而 `--verify-ops` 看不见一个没有算子的模块。
 
@@ -292,11 +292,11 @@ REINTERP uri :op/div_d -> rule jvp_div -> rhs 107 ports=1 nodes=4 lhsPorts=1 lhs
 **变量表拿不到，卡在这里（不是猜的）**：三份表示里都没有变量的名字——
 
 - 两侧的实例图只有节点种类，没有名字（上面那行就是全部内容）；
-- `runtime::Pattern` 的 `Var` 只带下标（`include/camel/runtime/writings.h:64-75`）；
+- `runtime::Pattern` 的 `Var` 只带下标（`include/camel/runtime/writings.h#WritingStore`）；
 - 声明的源码只剩一个 origin id（`GenericRuleEntry::where`，
   `include/camel/compile/gir/rule_templates.h`）。
 
-**名字只在 `src/compile/gir/builder.cpp:897` 那一处还在手上**（`leftHeadOf(sides[0], …)` 与紧随的
+**名字只在 `src/compile/gir/builder.cpp#parameterPortOrigins` 那一处还在手上**（`leftHeadOf(sides[0], …)` 与紧随的
 `collectRuleHead(…)`，`sides` 还是语法节点），而 `RuleHead`（`include/camel/parse/ast/rule_head.h`）
 没有承载它的字段。所以下一笔是：**让 `collectRuleHead` 多带一列变量名，与 `rhsCallee` 走同一条路**——
 它已经从同一份语法里读出了被调函数，变量名是同一处的第二个事实。
@@ -307,7 +307,7 @@ REINTERP uri :op/div_d -> rule jvp_div -> rhs 107 ports=1 nodes=4 lhsPorts=1 lhs
 > 是那一处的第二个事实。**
 
 补上了那一列（`RuleHead::variables`，`include/camel/parse/ast/rule_head.h`），在
-`src/parse/ast/builder.cpp:902` 读（与 `rhsCallee` 同一处语法、同一行代码的邻座）：
+`src/parse/ast/builder.cpp#parameterTypesOf` 读（与 `rhsCallee` 同一处语法、同一行代码的邻座）：
 
 ```
 REINTERP uri :op/add_d -> rule jvp_add -> rhs 74 ports=1 nodes=4 lhsPorts=1 lhsKinds=1,11 rhsKinds=1,0,4 vars=x,w count=2
@@ -462,7 +462,7 @@ REINTERP closure graph=107 layout=(float, float) built=yes slots=x,w
 std::shared_ptr<camel::compile::gir::DraftGraphBuilder> rhsBuilder;
 ```
 
-**赋值点一处**：`src/compile/gir/rule_templates.cpp:104`，`publish()` 里 `encodeToRuntimeProgram(rhs, …)`
+**赋值点一处**：`src/compile/gir/rule_templates.cpp#publish`，`publish()` 里 `encodeToRuntimeProgram(rhs, …)`
 之后紧跟 `instance.rhsBuilder = rhs;`——那一刻 builder 就在参数表里，是它**最后一次**以局部身份活着的地方。
 
 **它不延长任何东西的寿命**：图在那之前已经编进 `context` 的 pinned program（`publish` 的上一行

@@ -25,13 +25,13 @@ func g(x: int!): string.. sync {
 
 ## 2 事实：`typeof` 为什么给不出它
 
-- `PayloadOf<T!>` 是 `payloadType()`，即"值"那一格（`include/camel/core/type/composite/tuple.h:124`）；`T!` 的错误不是 payload，所以 `typeof` 主体写不出错误绑定的 cell 类型。这就是这一条当初变成内部错误的原因。
+- `PayloadOf<T!>` 是 `payloadType()`，即"值"那一格（`include/camel/core/type/composite/tuple.h#payloadType`）；`T!` 的错误不是 payload，所以 `typeof` 主体写不出错误绑定的 cell 类型。这就是这一条当初变成内部错误的原因。
 - 错误那一格**本来就有类型，而且只有一个对象**：`type::errorType()`（`tuple.h:192-194`，`{ kind: string, message: string, location: string }`，注释原文 "One object; every fallible type carries it"；design principles 3.9）。
-- `TagErrorInfo` 的返回类型就是它（`src/builtin/operators/tagged.cpp:172-174`），GIR 自己也拿它比对（`src/compile/gir/builder_control.cpp:723`、`1420`）——所以这不是 GCT 单方面发明的一个类型。
+- `TagErrorInfo` 的返回类型就是它（`src/builtin/operators/tagged.cpp#getTaggedOperatorGroups`），GIR 自己也拿它比对（`src/compile/gir/builder_control.cpp#Builder::coerceTo`、`1420`）——所以这不是 GCT 单方面发明的一个类型。
 
 ## 3 事实：它还有个名字，但程序写不出来
 
-- 名字是有的：prelude 里 `export type Error`（`stdlib/prelude.cml:39`），由 `registerNativeType("prelude", "Error", errorType())` 注册（`src/builtin/modules/globals.cpp:2396`）。
+- 名字是有的：prelude 里 `export type Error`（`stdlib/prelude.cml#Error`），由 `registerNativeType("prelude", "Error", errorType())` 注册（`src/builtin/modules/globals.cpp#GlobalsBuiltinModule::load`）。
 - **但用户模块里查不到这个名字**。实测原文（落地过程中试过按名字取类型，`lookupType(Reference("Error"))`）：
 
 ```

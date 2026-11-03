@@ -5,12 +5,12 @@
 ## 一条分界（原文）
 
 ```
-include/camel/utils/assert.h:93-101
+include/camel/utils/assert.h#GUARD
 /// Its report is headed `Camel Invariant Violation` rather than `Debug Assertion`: this check is
 /// alive in the build that ships, so its heading must not read like a build-time reminder.
 #define GUARD(condition, reading) ... ::cml::fail_invariant(#condition, (reading)); ...
 
-include/camel/utils/assert.h:102-104
+include/camel/utils/assert.h#ASSERT
 #ifdef NDEBUG
 #define ASSERT(condition, message) ((void)0)
 ```

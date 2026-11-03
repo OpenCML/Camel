@@ -44,7 +44,7 @@ symptom against the history rather than against the host.
 `feat/modules/onnx` `pass_export_equals_export_model` was filed with the perf-margin family by the 10-24 record
 ("the margin rule reads CPU time and fails it"). This run reads otherwise: the measurement is under budget (3.34 s
 cpu of 75.00 s) and the failure is a Python traceback, `onnxruntime` building a session for the model the *pass*
-produced (`ort.InferenceSession(str(by_op))`, `test/cases/modules/onnx/pass_export.py:111`), on a model for which
+produced (`ort.InferenceSession(str(by_op))`, `test/cases/modules/onnx/pass_export.py#equiv`), on a model for which
 `onnx.checker full_check` had just reported ok. It stands here as "the symptom does not match the 10-24
 classification" and needs a second-look attribution, rather than the load caveat.
 

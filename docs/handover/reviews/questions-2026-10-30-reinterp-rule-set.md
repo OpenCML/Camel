@@ -4,7 +4,7 @@
 
 ## 现象到符号
 
-- **规则是泛型 `rule` 声明**，住在库里：`stdlib/autodiff.cml#add_jvp`、`#mul_jvp`、`#neg_jvp`（`rule mul_jvp::<T>(x: T, w: T) when is_float::<T>()`）。
+- **规则是泛型 `rule` 声明**，住在库里：`stdlib/rulesets/jvp.cml#add_jvp`、`#mul_jvp`、`#neg_jvp`（`rule mul_jvp::<T>(x: T, w: T) when is_float::<T>()`）。
 - **按声明读规则只对"有声明"的函数成立**：`stdlib/graph.cml#rule_of` 与 `modules/autodiff/rules.h#ruleOf` 读的是函数图上的 `#jvp(rule)`。标量算术是内置算子（`:op/mul_l`），**没有声明可挂**。
 - **把规则名当标签实参今天被拒**：`diagnostics/registry.tsv#TagArgumentNotValue`，`#jvp(mul_jvp)` 那句写法进不了程序。
 - **变换的签名不写在库里**：`stdlib/signatures/autodiff.cml` 自己写明 "these declarations are not compiled"；类型由 `modules/autodiff/operators.cpp#GradResolver` 一类 C++ 解析器算。所以 `reinterp`／`jvp` 的类型也只能在 C++ 里算，`H` 只能从这里进。

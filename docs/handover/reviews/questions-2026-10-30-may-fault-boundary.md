@@ -12,7 +12,7 @@
 (hasEffect && !nodeStandsForItsRegion(node)) || nodeMayFault(node)
 ```
 
-后半 `nodeMayFault` 读算子 trait，而 trait 只有一个来源（`src/core/operator_table.cpp:46`）：
+后半 `nodeMayFault` 读算子 trait，而 trait 只有一个来源（`src/core/operator_table.cpp#OperatorTable::traitsOf`）：
 
 ```cpp
 // No fault list: undeclared, may fault. An empty list: it never faults.

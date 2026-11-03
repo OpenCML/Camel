@@ -139,7 +139,7 @@ reworked into this line.
 ### `feat/trans/cpp :: agree_with_fvm` -- a real defect in the C++ backend, fixed here
 
 Not the tensor alias flip's: the affected programs hold no tensor at all, they are the `int[]`
-rebinding cases. `test/plans/feat/trans/cpp.plan.toml:31` translates every program in
+rebinding cases. `test/plans/feat/trans/cpp.plan.toml#agree_with_fvm` translates every program in
 `test/tools/cppexec/expect.txt` with `std::cpp`, builds it and compares its output with `std::fvm`'s.
 Two consecutive runs before the fix, `82.82 s` and `73.72 s`:
 
@@ -199,7 +199,7 @@ line's account, not the flip's.
 ### `feat/mm/gc_pacing :: gc_pacing.training_400` / `.training_800` -- the bare-`Tensor` family, fixed by the lane
 
 A compile-time refusal, not a moving number: `gc_training_peak.cml:29` calls `sgd(wf, g, 0.5)` with
-`(f32[?, 4], Tensor, float)`, and `nn:sgd` (its signature is printed from `modules/nn/optim.cpp:567`)
+`(f32[?, 4], Tensor, float)`, and `nn:sgd` (its signature is printed from `modules/nn/optim.cpp#OptimizerResolver`)
 binds both `P` and `grad of P` to the first argument's type, so the bare `Tensor` of the gradient
 does not unify with `f32[?, 4]`. Two runs each (`188.00 ms`, `129.56 ms` and `180.22 ms`,
 `209.13 ms`); the same program with `steps=2 batch=64 width=64` prints its result line on develop

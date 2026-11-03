@@ -49,8 +49,8 @@
 
 1. **写算子（四处，一笔只做算子本身 + 一处插入）**：
    `include/camel/core/operator_table.h`（`OperId` 与 `mayBeRecomputed`——**新算子不参与重算**，
-   否则 DCE 会把它当"可重算的纯计算"再删一次）→ `src/builtin/executors/builtin.cpp:39-43`
-   （`keep(x, v)` 的执行就是返回 `v`）→ `include/camel/core/operator_semantics.h:68` 起的 URI 格式 →
+   否则 DCE 会把它当"可重算的纯计算"再删一次）→ `src/builtin/executors/builtin.cpp#ConversionRegistration`
+   （`keep(x, v)` 的执行就是返回 `v`）→ `include/camel/core/operator_semantics.h#OperatorKey` 起的 URI 格式 →
    插入点 `src/passes/opt/generic/rewrite.cpp` 的 `replaceNode`（273/277/313 附近）与
    `generic.cpp:1464` 的 `dceDraft`。
    **提交信息里要写一行"为什么插入点选在 `replaceNode` 而不是别处"**——下一个人读代码时的第一个问题。
@@ -62,12 +62,12 @@
 
 ## 5. 算子本身的落点（读到这一步为止）
 
-- **编号是编译期固定的**：`include/camel/core/operator_table.h:98-134` 是 `namespace oper`，最后一个
+- **编号是编译期固定的**：`include/camel/core/operator_table.h#oper` 是 `namespace oper`，最后一个
   `VarAfter = 21`、`kWellKnownCount = 22`（含 `kNoOper`）。**新算子加在末尾**（`Keep = 22`，
   `kWellKnownCount = 23`），**否则后面每一个 id 都要挪**，而 id 被序列化进模块缓存之外的很多东西里。
 - **URI 列表同序**：`kWellKnownOperatorUris`（第 137 行起）按 id 排，新的一项加在最后，写 `":op/keep"`。
-  表在启动时按这张列表 intern（`src/core/operator_table.cpp:32`）。
-- **执行器**：`src/builtin/executors/builtin.cpp:35-36` 的 `getOpsImplMap()`，键是不带冒号的
+  表在启动时按这张列表 intern（`src/core/operator_table.cpp#OperatorTable::OperatorTable`）。
+- **执行器**：`src/builtin/executors/builtin.cpp#ConversionRegistration` 的 `getOpsImplMap()`，键是不带冒号的
   `"op/xxx"`（`{"op/atoi", __atoi__}`），新加一行 `{"op/keep", __keep__}`；`__keep__` 的签名要与
   `operator_t` 一致（看 `src/builtin/operators/ops.h` 里已有的定义照抄），**行为是返回第二个参数**。
 - **保守默认已在**：表头第 22-23 行——"An operator nobody declared is treated conservatively: it has side

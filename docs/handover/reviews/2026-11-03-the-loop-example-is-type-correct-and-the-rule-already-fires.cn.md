@@ -27,7 +27,7 @@ loop s = 100 for i in [0,1,2] do { s }          ⇒ 100（不动点）
 
 ## 那个例子为什么合法
 
-`stdlib/prelude.cml:858`：`export func println::<T>(x: T, ..rest): T` —— **`println` 返回它的参数**。
+`stdlib/prelude.cml#println`：`export func println::<T>(x: T, ..rest): T` —— **`println` 返回它的参数**。
 
 所以 `s: int` 时 `println(s): int`，与状态类型相同 ⇒ **`0 0 0` 不是"没写出下一个状态"，而是"写出的下一个状态就是它自己"**：一个不动点。这条规则落不落地，它都不会报错。
 

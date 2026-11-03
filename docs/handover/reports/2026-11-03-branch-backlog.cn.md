@@ -82,7 +82,7 @@
 
 ## 五、指针改写：文档里被改写的每一处（原名 → 新 sha）
 
-规则：`` `lane-X @ <sha>` `` 保留原 sha、把分支名换成它；只有名字没有 sha 的，换成该支的 tip sha，并注明"原 `lane-X`，该分支已删"。**未删的支（`lane-tloop`、`lane-knownfail-audit`、`lane-m4b2-v2`、`m-train-merge`）与 7 条判 c 的未合支，名字一律不动**；`agents/test.md:159` 的 `origin/lane-a3` 说的是远端 ref、不是本地分支，也不动。
+规则：`` `lane-X @ <sha>` `` 保留原 sha、把分支名换成它；只有名字没有 sha 的，换成该支的 tip sha，并注明"原 `lane-X`，该分支已删"。**未删的支（`lane-tloop`、`lane-knownfail-audit`、`lane-m4b2-v2`、`m-train-merge`）与 7 条判 c 的未合支，名字一律不动**；`agents/test.md#the-instruments-range-is-narrower-than-the-fact` 的 `origin/lane-a3` 说的是远端 ref、不是本地分支，也不动。
 
 | 文件:行 | 原名 | 新 sha |
 |---|---|---|

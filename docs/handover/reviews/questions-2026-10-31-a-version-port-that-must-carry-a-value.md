@@ -132,11 +132,11 @@ return version;
 
 | 处 | 原文 | 判 |
 |---|---|---|
-| `src/passes/trans/cpp/cpp_types.h:72`（实现在 `cpp_types.cpp:355-`） | `The C++ type of a value of `type`, or nothing when std::cpp does not translate it yet.` | **尚未实现**：映射表是我们自己的，大部分类型已映射到 `rt::Array`/`rt::Cell`/`rt::Opt` 这类运行时类型；没映射的是这张表缺条目，不是 C++ 没有这个类型 |
-| `src/passes/trans/cpp/function_emitter.cpp:690` | `… contains {a function bound to its 'with' arguments \| a read through a reference}, which std::cpp does not translate yet` | **尚未实现**：C++ 有引用，也有捕获的 lambda；缺的是这两种节点在发射器里的写法 |
+| `src/passes/trans/cpp/cpp_types.h#hoist`（实现在 `cpp_types.cpp:355-`） | `The C++ type of a value of `type`, or nothing when std::cpp does not translate it yet.` | **尚未实现**：映射表是我们自己的，大部分类型已映射到 `rt::Array`/`rt::Cell`/`rt::Opt` 这类运行时类型；没映射的是这张表缺条目，不是 C++ 没有这个类型 |
+| `src/passes/trans/cpp/function_emitter.cpp#FunctionEmitter::lowerNode` | `… contains {a function bound to its 'with' arguments \| a read through a reference}, which std::cpp does not translate yet` | **尚未实现**：C++ 有引用，也有捕获的 lambda；缺的是这两种节点在发射器里的写法 |
 | `:973` | `… uses the operator '{}' on values std::cpp does not translate it for yet` | **尚未实现**：规则在 `operator_rules.cpp` 这张表里，没写就是没写（表里已有的算子不受影响） |
 | `:1348` | `… makes a function value of type '{}' std::cpp does not translate yet` | **尚未实现**：函数值就是 lambda，C++ 有 |
-| `src/passes/trans/cpp/operator_rules.cpp:453` | `… neither is bf16 or f16 (this back end has no such element type): those are refused` | **目标不具备**：这一后端的元素类型集合里没有 bf16/f16——注释自己写着 `this back end has no such element type`；要它具备是另一件事（换元素类型层），不是把规则补上 |
+| `src/passes/trans/cpp/operator_rules.cpp#buildRules` | `… neither is bf16 or f16 (this back end has no such element type): those are refused` | **目标不具备**：这一后端的元素类型集合里没有 bf16/f16——注释自己写着 `this back end has no such element type`；要它具备是另一件事（换元素类型层），不是把规则补上 |
 
 **一条判据（作者 06:10 的裁定，照抄）**：**"判断一条拒绝该不该写成'目标不具备'，只问一句：语言规定这个目标必须有吗？核心类型和核心运算，每个后端都必须有；只有对运行时本身的内省，可以随目标不同而缺席。"**
 

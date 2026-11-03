@@ -5,7 +5,7 @@
 
 ## 问什么
 
-`modules/transforms/transpose.cpp#transposeNodesInDraft` 的 `case rt::GCNodeKind::Loop:`（`:1704`）把原 range 照抄给反向循环，所以它正着走、不保序（设计 4.2/4.3 要求倒着走）。`split` 那一半已经倒过来（`e8c78f495`），`transpose` 这一半没动。问的是**它被钉住之前先要什么**：改 `:1704`，还是抬升先能配非标量态？这一页把钉住顺序的那条程序记下来，等先决条件落地。
+`modules/transforms/transpose.cpp#buildTransposeMember` 的 `case rt::GCNodeKind::Loop:`（`:1704`）把原 range 照抄给反向循环，所以它正着走、不保序（设计 4.2/4.3 要求倒着走）。`split` 那一半已经倒过来（`e8c78f495`），`transpose` 这一半没动。问的是**它被钉住之前先要什么**：改 `:1704`，还是抬升先能配非标量态？这一页把钉住顺序的那条程序记下来，等先决条件落地。
 
 ## 1 钉住顺序的程序（纸面：今天跑不起来）
 

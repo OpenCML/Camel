@@ -17,7 +17,7 @@ Camel Debug Assertion Failed:
 ```
 （`cml_contract.py` 重新 canonical 打印体时，子进程编译器中止）
 
-而那句断言**是故意的**，它自己的注释写着（`src/core/type/base.cpp:324-335` 原文）：
+而那句断言**是故意的**，它自己的注释写着（`src/core/type/base.cpp#Type::assignableFrom` 原文）：
 
 > 324: `// Still an ASSERT, now with the measurements that settle why. Turning it on aborts 17 plan`
 > 325: `// cases, not the four the ruling named: … `rank_zero_slot_*`, `print_and_recompile` and`
@@ -28,7 +28,7 @@ Camel Debug Assertion Failed:
 
 ## 二、为什么不能直接标 `known_fail`
 
-`test/tools/run-tests.mjs:3235-3248` 原文：
+`test/tools/run-tests.mjs#printResult` 原文：
 
 > 3236: `// A known failure that fails is reported and counted apart, and does not fail`
 > 3237: `// the run. One that passes fails the run: the mark is out of date.`
@@ -46,7 +46,7 @@ Camel Debug Assertion Failed:
 
 ### (b) 让那条断言只在"这是合法程序"的路径上闭嘴
 
-- **改哪**：`Type::assignableFrom`（`src/core/type/base.cpp:321-335`）——要么在比较前把 `Ref` 解析掉，要么让调用方先 resolve 再比。
+- **改哪**：`Type::assignableFrom`（`src/core/type/base.cpp#Type::assignableFrom`）——要么在比较前把 `Ref` 解析掉，要么让调用方先 resolve 再比。
 - **代价**：注释自己说这是"which type is a name allowed to stand for, and who reads it"的问题，即**类型系统**的问题；而且那段注释记着"打开它会中止 17 条计划用例"（`rank_zero_slot_*`、`comprehension_context.annotated`、`context.var_sibling`、`ort_struct_casts`、本条）。**改它等于改语言的一处判定**，不是改一个测试。
 - **好处**：根上解决，Debug 与 Release 给出**同一个结论**。
 

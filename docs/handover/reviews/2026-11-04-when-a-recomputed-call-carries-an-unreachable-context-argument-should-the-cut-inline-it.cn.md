@@ -101,7 +101,7 @@ uri=- why=an operand of the node is not reachable from the half's exit`——**�
 的不是 `tensor:softmax` 本身，而是它上游某个非算子节点（`DATA` 没有输入，所以更像 `CAST`/`PORT` 或
 别的读法）。而 `split.cpp` 的 `halfInputsOf` 走 `dataInputsOf`，**普通与 context 输入都收**，并且有
 一段专门重写常量的分支（"A constant has no producer, so either half can write it again"，
-`writeConstant`）。**量过了：`writeConstant` 能重写它。** `modules/transforms/split.cpp:370` 的
+`writeConstant`）。**量过了：`writeConstant` 能重写它。** `modules/transforms/split.cpp#Half` 的
 `writeConstant` 只做一件事：`node->kind != rt::GCNodeKind::Data` 返回 `kInvalidNodeRef`；
 `dataIndex >= 0` 或槽号越界也返回它；只有**静态槽里**的 `Data` 节点才走
 `draft.materializeStaticValue(slots[index], node->dataType())` 写出来。而上一节量到的轴正是

@@ -11,7 +11,7 @@
 
 ## 1 通道甲被运行期契约挡回（原文）
 
-按运行期契约，循环体的端口个数就是 `element + k`（state 的分量数），捕获没有位置：`src/runtime/loop.cpp:131` 的 `initialState(j) = normInputs[j + iterates]` 把 iterable 之后**每一个** norm 输入都读成一个 state。所以把捕获追加成 norm 输入，等于给循环多造了几个 state：
+按运行期契约，循环体的端口个数就是 `element + k`（state 的分量数），捕获没有位置：`src/runtime/loop.cpp#LoopDraftView::initialState` 的 `initialState(j) = normInputs[j + iterates]` 把 iterable 之后**每一个** norm 输入都读成一个 state。所以把捕获追加成 norm 输入，等于给循环多造了几个 state：
 
 ```
 error[RuntimeDiag::PassInternalError]: Pass 'std::nvm' failed with an internal error:
@@ -19,7 +19,7 @@ Runtime graph 'jvp_of_f' has LOOP node 14: its body graph returns a '(float, flo
 the state is '((float, float), float, float, float, (float, float))'.
 ```
 
-对比 `include/camel/runtime/exec_plan.h:95-99`：`slots` 的排布是"state 各分量、cond 端口、**体的端口：先 element 再 k 个**"。
+对比 `include/camel/runtime/exec_plan.h#ExecLoop`：`slots` 的排布是"state 各分量、cond 端口、**体的端口：先 element 再 k 个**"。
 
 ## 2 通道乙通过运行期，读数没动
 

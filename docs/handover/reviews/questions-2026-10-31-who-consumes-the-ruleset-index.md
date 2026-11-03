@@ -32,9 +32,9 @@ RULESET rulesets.transpose -/1 -> neg_t
 （主机 `88zjwei`，`LD_LIBRARY_PATH=$HOME/camel-eval/conda/envs/clang/lib`，一个 `import
 {rulesets.jvp, rulesets.transpose}` 的程序加 `CAMEL_RULESET_INDEX=1`；不设该变量时导入完全静默。）
 
-索引是建在模块编译时的：`src/compile/gir/program.cpp:658` 起，只对名字以 `rulesets.` 开头的模块建，
-键在 `src/compile/gir/program.cpp:674`（`rule.head + "@" + arity`），`RuleHead` 带 `arity` 在
-`include/camel/parse/ast/rule_head.h:24-33`。
+索引是建在模块编译时的：`src/compile/gir/program.cpp#Builder::scanProgramWriters` 起，只对名字以 `rulesets.` 开头的模块建，
+键在 `src/compile/gir/program.cpp#Builder::scanProgramWriters`（`rule.head + "@" + arity`），`RuleHead` 带 `arity` 在
+`include/camel/parse/ast/rule_head.h#leftHeadOf`。
 
 **但 `takeRuleHeads` 在整棵树里只有两处调用，都在同一个函数里，就是"建索引并打印"这一处：**
 
@@ -68,7 +68,7 @@ LOOKUP rulesets.nope -/1 -> no such family
 `src/passes/trans/rulesets/`），不是环境变量。**但除了这个遍，今天没有第二个消费者：索引建出来了、
 打得出来、也查得动了，却仍然没有一个变换去查它。** `jvp` / `transpose` 这两个变换算子
 （设计 `docs/design/program-transforms/README.cn.md` 第 4 节"三个图算子"）还没有实现：`git grep
-"func jvp" -- stdlib` 无结果，库里只有 `grad`、`with_grad` 两个宏（`stdlib/signatures/autodiff.cml:45-68`），
+"func jvp" -- stdlib` 无结果，库里只有 `grad`、`with_grad` 两个宏（`stdlib/signatures/autodiff.cml#with_grad`），
 它们展开宏、不查规则集。
 
 **一条判据（写在这里，因为它是这一页的由来）**：**一个索引建好了却不能查，与没建的区别只在于

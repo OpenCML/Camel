@@ -1,6 +1,6 @@
 # 运行时内存的代码评审
 
-范围：`src/core/mm/`（`block.cpp`、`deferred.cpp`、`foreign_handle.cpp`）、`src/core/rtdata/`（`array.cpp`、`view.cpp`）、`include/camel/core/mm/block.h`、`include/camel/core/rtdata/view.h`；原地更新的决定（`src/execute/exec_plan.cpp:440–610 planStorageReuse`、`src/compile/gir/builder_diagnostics.cpp:1063 markNonRetainingReads`、`src/builtin/operators/ops.cpp:49–250` 的 `var` 算子、`set_value.cpp`、`struct.cpp`、`array.cpp` 里的原地形式）；`src/core/array/dlpack.cpp`；`modules/python/operators.cpp` 的 Bytes 采纳。读的是代码，没有编译、没有运行；"失败场景"是从代码推出的，写明"需先写用例确认"的除外。行号是当前树上的。没有逐行审 `gen.cpp`（1575 行的分代收集器）与四个后端各自的槽位复用，下面"没有覆盖到的"一节列出。
+范围：`src/core/mm/`（`block.cpp`、`deferred.cpp`、`foreign_handle.cpp`）、`src/core/rtdata/`（`array.cpp`、`view.cpp`）、`include/camel/core/mm/block.h`、`include/camel/core/rtdata/view.h`；原地更新的决定（`src/execute/exec_plan.cpp#cellEscapes planStorageReuse`、`src/compile/gir/builder_diagnostics.cpp#Builder::markNonRetainingReads markNonRetainingReads`、`src/builtin/operators/ops.cpp#shareForSecondName` 的 `var` 算子、`set_value.cpp`、`struct.cpp`、`array.cpp` 里的原地形式）；`src/core/array/dlpack.cpp`；`modules/python/operators.cpp` 的 Bytes 采纳。读的是代码，没有编译、没有运行；"失败场景"是从代码推出的，写明"需先写用例确认"的除外。行号是当前树上的。没有逐行审 `gen.cpp`（1575 行的分代收集器）与四个后端各自的槽位复用，下面"没有覆盖到的"一节列出。
 
 ## 总评
 

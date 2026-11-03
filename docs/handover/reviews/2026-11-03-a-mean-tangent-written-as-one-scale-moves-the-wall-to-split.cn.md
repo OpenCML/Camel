@@ -82,7 +82,7 @@ mean_axis(xs, axis, keepdims) =>
 
 ## 8. 复核（lane-bcast，2026-11-04）：拒绝与轴无关，广播本身也不静默
 
-问题：`stdlib/rulesets/transpose.cml#mean_axis_cotangent` 的 `ones_like(xs) * (ct / lanes)` 是不是"只对某些轴成立"？量它是**拒绝**、**错数**还是**崩**。
+问题：`stdlib/rulesets/transpose.cml#mean_axis_t` 的 `ones_like(xs) * (ct / lanes)` 是不是"只对某些轴成立"？量它是**拒绝**、**错数**还是**崩**。
 
 读数环境：`c69a110fa` 的干净构建（`Camel v0.2.43 (Build 261103_155934_c69a110fa)`），主机 `88zjwei` load 19–20/32。探针 `x = [[1,2,3],[4,5,6]]`（`float[2,3]`），`loss(x) = sum(mean_axis(x, axis, false) * w)`。
 

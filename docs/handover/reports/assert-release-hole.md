@@ -68,16 +68,16 @@ Camel Invariant Violation:
 
 | # | 位置 | 守什么 | 假设不成立时退化成 |
 |---|---|---|---|
-| 1 | `include/camel/core/rtdata/variant.h:47` | 字段下标 `< fieldCount_`，随后读内联字段数组 | 越界读：按错误的枚举类型描述读取一个值 |
-| 2 | `include/camel/core/rtdata/variant.h:51` | 同上（写/构造路径） | 越界读/写，写出别的值的字段 |
-| 3 | `src/core/rtdata/array.cpp:551`（`getSlotSlow`） | `flatIndex < numel_`，随后 `dataPtr_ + flatIndex * elementSize_` | **堆越界读**；`isSlots()` 分支是越界读指针 |
-| 4 | `src/core/rtdata/array.cpp:663`（同族 685/707/729/758/787） | 同一判据，写入/原地更新路径 | **堆越界写**：写坏相邻对象，通常几帧之后才崩 |
-| 5 | `include/camel/core/rtdata/array.h:411`（`:415` 同） | `isCompact()`，随后 `dataAs<T>()` 把存储当裸数值 | 类型混淆：把视图/聚合数组当 `f32` 读，**静默错值**或按错误步长越界 |
-| 6 | `src/core/rtdata/array.cpp:426`（`:479` 同） | `layout->aggregate`，随后按 layout 写字段 | 按非聚合布局写进一个非聚合缓冲区：**写坏内存** |
-| 7 | `src/core/rtdata/array.cpp:1273` | 类型是 `ArrayType`，随后 `static_cast` 并用它的 `elemTypeCode`/`rank` | 类型混淆：读别的类型对象的前缀，拷出错误形状 |
-| 8 | `src/core/rtdata/variant.cpp:21`（`:19` 同） | 值必须有枚举类型，随后按 `EnumType` 打印/比较/追踪 | 空指针或类型混淆；**这正是昨晚 `updateRefs` 那一类** |
-| 9 | `src/core/rtdata/conv.cpp:52`（`:117` 同） | `data != nullptr`，随后解引用 | 空指针崩（`exit 139`，无读数） |
-| 10 | `src/runtime/draft.cpp:2208`（`:2228` 同） | 节点 `kind == Func`（/`Loop`），随后 `payloadAs<GCFuncRef>`（/`GCLoopRef>`） | GC 句柄按错误的结构体重解释：非法的图索引 → 跳到错误代码或崩 |
+| 1 | `include/camel/core/rtdata/variant.h#get` | 字段下标 `< fieldCount_`，随后读内联字段数组 | 越界读：按错误的枚举类型描述读取一个值 |
+| 2 | `include/camel/core/rtdata/variant.h#get` | 同上（写/构造路径） | 越界读/写，写出别的值的字段 |
+| 3 | `src/core/rtdata/array.cpp#Array::getSlotSlow`（`getSlotSlow`） | `flatIndex < numel_`，随后 `dataPtr_ + flatIndex * elementSize_` | **堆越界读**；`isSlots()` 分支是越界读指针 |
+| 4 | `src/core/rtdata/array.cpp#Array::setSlotSlow`（同族 685/707/729/758/787） | 同一判据，写入/原地更新路径 | **堆越界写**：写坏相邻对象，通常几帧之后才崩 |
+| 5 | `include/camel/core/rtdata/array.h#dataAs`（`:415` 同） | `isCompact()`，随后 `dataAs<T>()` 把存储当裸数值 | 类型混淆：把视图/聚合数组当 `f32` 读，**静默错值**或按错误步长越界 |
+| 6 | `src/core/rtdata/array.cpp#writeLeaf`（`:479` 同） | `layout->aggregate`，随后按 layout 写字段 | 按非聚合布局写进一个非聚合缓冲区：**写坏内存** |
+| 7 | `src/core/rtdata/array.cpp#Array::equalsContent` | 类型是 `ArrayType`，随后 `static_cast` 并用它的 `elemTypeCode`/`rank` | 类型混淆：读别的类型对象的前缀，拷出错误形状 |
+| 8 | `src/core/rtdata/variant.cpp#enumTypeOf`（`:19` 同） | 值必须有枚举类型，随后按 `EnumType` 打印/比较/追踪 | 空指针或类型混淆；**这正是昨晚 `updateRefs` 那一类** |
+| 9 | `src/core/rtdata/conv.cpp#makeSlotFromPrimitiveData`（`:117` 同） | `data != nullptr`，随后解引用 | 空指针崩（`exit 139`，无读数） |
+| 10 | `src/runtime/draft.cpp#GraphDraft::setStaticSlot`（`:2228` 同） | 节点 `kind == Func`（/`Loop`），随后 `payloadAs<GCFuncRef>`（/`GCLoopRef>`） | GC 句柄按错误的结构体重解释：非法的图索引 → 跳到错误代码或崩 |
 
 ## 边角
 

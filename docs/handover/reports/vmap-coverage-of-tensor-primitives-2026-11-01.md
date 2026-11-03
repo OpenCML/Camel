@@ -94,7 +94,7 @@ transforms: vmap has no rule for `tensor:<名字>` (the operator has no batching
 | 字节 | `tensor:to_bytes` | `to_bytes(x)` | — |
 
 **不在这张表里的四个名字**：`show::<A>(t: A[..]): void`、`num_threads(): int`、`set_num_threads(n: int): void`、
-`gemm_backend(): string`（`stdlib/tensor.cml:102/109/114/120`）。它们不是「把一个张量变成另一个张量」的原语
+`gemm_backend(): string`（`stdlib/tensor.cml#show`（以及同文件的 num_threads、set_num_threads））。它们不是「把一个张量变成另一个张量」的原语
 （一个打印、两个是模块设置、一个回后端名），`vmap` 对它们的翻法不是「批」，所以没量；谁要批 `show`，那是另一句话
 （打印一次还是每行一次），不是规则缺。
 
@@ -109,7 +109,7 @@ transforms: vmap has no rule for `tensor:<名字>` (the operator has no batching
 **上表里 `tensor:one_hot` 那一行曾经写不出来**：第一版探测时它在批里**编译不过**，原文是
 `Return type 'f32[2, 3]' does not match the function's declared return type 'int[..]'`——那不是批的问题，
 是**声明与算子自己不一致**：`stdlib/signatures/tensor.cml` 说回 `int64[..]`，而算子那侧
-（`modules/tensor/ops/layout_ops.cpp:443` 的注释、`oneHotKernel`、`oneHotInfer`、OpDef 的 `resultDoc = "float[..]"`、
+（`modules/tensor/ops/layout_ops.cpp#oneHotKernel` 的注释、`oneHotKernel`、`oneHotInfer`、OpDef 的 `resultDoc = "float[..]"`、
 `setVjp(defs, "one_hot", &noGradient)` 上那句 "the float one-hot rows"）全都说 **f32**。
 照现有用例判，f32 那一侧是多数也是语义：`test/plans/feat/modules/tensor.plan.toml` 的 `take_one_hot` 钉着
 `one_hot=[[0.0, 1.0, 0.0], [1.0, 0.0, 0.0]]`，`discrete_zero` 钉着 `one_hot=(-2.0,0.0,2.0)`，
@@ -183,7 +183,7 @@ error InvalidArgument: Invalid argument of 'argmin': a tensor with no element ha
 
 判据有两条，都是读出来的：算子的参数怎么声明（`modules/tensor/ops/*.cpp` 的
 `OpDef{.params, .withAfterNorm, .ordinaryParams}`），以及变换把什么交给规则
-（`modules/transforms/vmap.cpp:379-388`：`for (input : function->normInputsOf(ref))`——**只转发普通操作数**）。
+（`modules/transforms/vmap.cpp#buildVmapGraph`：`for (input : function->normInputsOf(ref))`——**只转发普通操作数**）。
 `ordinaryParams = 1` 的算子里第二个参数（轴 / 形状 / 排列）是 **with 参数**，规则拿不到；这一条把清单切成两半。
 
 ### 一档：改一句规则就能有（要用的参数都是普通操作数）——21 条
@@ -230,7 +230,7 @@ A/B（同一份规则、同一份程序，只差这一行变换）：关掉 →
 
 剩下三条**实测过的原因**：
 
-- `softmax/1`、`log_softmax/1`：轴是**可省的**——`modules/tensor/ops/catalog.cpp:50-57` 把两者声明成
+- `softmax/1`、`log_softmax/1`：轴是**可省的**——`modules/tensor/ops/catalog.cpp#declareResourcesAndDefinitions` 把两者声明成
   `params = {operand(0), operand(1, int64_t{-1})}`，省掉时节点**没有** with 端口。于是同一个键 `softmax/1` 有两种端口数：
   `softmax<0>(x)` 走 2 端口（实测 `rules=vmap_rule_softmax elements=float`，数值对），`softmax(x)` 走 1 端口，规则
   照样命中却在运行时炸：`Runtime indirect call norm-arity mismatch: caller graph 'vmap_of_soft_no_axis' node 2 has 1 args, target graph 'rulesets.vmap::vmap_softmax<float>' has 2 norm ports.`。今天 `softmax(x)` 是**干净的诊断**

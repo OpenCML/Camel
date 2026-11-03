@@ -45,7 +45,7 @@ export rule mul_tensor_scalar_t::<T>(x: T[..], c: T) when is_float::<T>() {
 `docs/handover/questions/2026-11-03-one-rule-key-cannot-hold-an-array-and-a-number.cn.md` 已测），
 所以「一条律」这条路今天不存在。
 
-**④ 判重口径是 `when` 文本，不是操作数类型**（`src/parse/ast/rule_head.cpp:335-341`）：
+**④ 判重口径是 `when` 文本，不是操作数类型**（`src/parse/ast/rule_head.cpp#indexRule`）：
 
 ```cpp
         // Two rules of one operator that cannot be told apart -- one spelling, one operand count,
@@ -59,11 +59,11 @@ export rule mul_tensor_scalar_t::<T>(x: T[..], c: T) when is_float::<T>() {
 
 两条的 `when` 都是 `is_float::<T>()`，逐字节相同，于是被判成"分不开的两条"。而两种形状的差别在
 **操作数列表**、不在条件：任何诚实的条件文字对两条都相同，所以**无论条件怎么写都过不了这一关**。
-`include/camel/parse/ast/rule_head.h:64-68` 把条件当成"真正的重复"与"两份不同的律"之间的判据，
+`include/camel/parse/ast/rule_head.h#RuleHead` 把条件当成"真正的重复"与"两份不同的律"之间的判据，
 这条读法在形状不同的两条上不成立。
 
 **⑤ 再往后还有第二道同向的闸**：`transpose.cpp:1952` 用 `transposeRuleOf` 要规则，而它是单数
-（`src/core/forward.cpp:174` → `ruleIn` → `lookupRule`），`lookupRule` 在一个键挂多条时答
+（`src/core/forward.cpp#ruleIn` → `ruleIn` → `lookupRule`），`lookupRule` 在一个键挂多条时答
 `NoRuleForPrimitive`（`rule_head.cpp:378-384`：*"One answer when the key holds one rule…"*），
 转置的走法把非 `Found` 一律按 `skip=rule … reason=no-rule` 拒绝。
 

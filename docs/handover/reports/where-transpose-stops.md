@@ -12,7 +12,7 @@
 ```
 TRANSPOSE function=rulesets.jvp::index_into<float> skip=rule uri=:op/idx_arr reason=unbound
 ```
-`unbound` 出自 `modules/transforms/transpose.cpp:1296–1301` 的那个三元式：`!rule.has_value()` → `unbound`，也就是"`transposeBindings()` 里没有这个 uri"。
+`unbound` 出自 `modules/transforms/transpose.cpp#Escape` 的那个三元式：`!rule.has_value()` → `unbound`，也就是"`transposeBindings()` 里没有这个 uri"。
 
 **当时为什么以为它是终点**：因为它看起来是一个"绑定没登记"的确定结论，于是下一步自然是查注册有没有跑、键有没有写错，甚至怀疑规则名要不要 `export`。**这三条都查了，都不是。**
 
@@ -42,7 +42,7 @@ TRANSPOSE function=rulesets.jvp::index_into<float> skip=law rule=idx_arr_t uri=:
 
 **症状**：`primitive(uri, args)` 只发**算子节点**（`":op/add_d"` 这种），转置整个文件里没有一处发过**调用节点**。要发，就撞上
 ```
-include/camel/runtime/draft.h:573   gc_node_ref_t addCallNode(
+include/camel/runtime/draft.h#setRuntimeSlotTypes   gc_node_ref_t addCallNode(
                                         camel::core::type::Type *type, const GCCallBody &body = {},
                                         gc_slot_idx_t dataIndex = 0);
 ```
@@ -57,7 +57,7 @@ include/camel/runtime/draft.h:573   gc_node_ref_t addCallNode(
 
 **症状**：唯一"把规则右侧变成图"的函数是
 ```
-modules/transforms/jvp.cpp:131   gc_node_ref_t expandRuleRightSide(
+modules/transforms/jvp.cpp#buildRuleTangent   gc_node_ref_t expandRuleRightSide(
                                      camel::runtime::GraphDraftGroup &group,
                                      camel::runtime::GraphTransaction &transaction,
                                      const camel::compile::gir::GenericRuleInstance &instance,
@@ -68,7 +68,7 @@ modules/transforms/jvp.cpp:131   gc_node_ref_t expandRuleRightSide(
 
 **当时为什么以为它是终点**：`jvp` 手里有它、调得通，那"转置调到同一个函数"看起来只是传参；而且转置确实有 `group`（`transpose.cpp:202`）与 `draft`（`233`）。
 
-**挪开它之后露出的是什么**：**第三个参数转置没有**。`GenericRuleInstance`（`include/camel/compile/gir/rule_templates.h:52`）是"某条规则在某个算子上的一次实例化"，而转置今天**拿到规则名就按名字分派，从不实例化任何规则**——它手里根本没有那个对象。所以卡住的不是一堵墙，是**一个对象**：要先有实例，"按规则展开"才有一半可用；而实例化的入口在今天只在 `reinterp` 那一遍里。
+**挪开它之后露出的是什么**：**第三个参数转置没有**。`GenericRuleInstance`（`include/camel/compile/gir/rule_templates.h#GenericRuleInstance`）是"某条规则在某个算子上的一次实例化"，而转置今天**拿到规则名就按名字分派，从不实例化任何规则**——它手里根本没有那个对象。所以卡住的不是一堵墙，是**一个对象**：要先有实例，"按规则展开"才有一半可用；而实例化的入口在今天只在 `reinterp` 那一遍里。
 
 ---
 

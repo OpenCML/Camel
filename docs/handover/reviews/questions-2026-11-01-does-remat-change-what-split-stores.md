@@ -13,23 +13,23 @@
 > ——是 `split` 交出的残差元组（今天可读：`residuals=`），还是 `modules/autodiff/pullback.cpp` 里
 > 建回传图时的捕获表（今天不可读）？两处都自称知道"哪些值是残差"，而今天没有任何一处读 `remat`。
 > **堵着谁**：M6 的 `remat` 验收第二半（残差数下降）。第一半（数不变）已经落地并钉住
-> （`stdlib/autodiff.cml:82-84`、`test/plans/feat/modules/remat.plan.toml`）；第二半没有落点，
+> （`stdlib/autodiff.cml#add_tangent`、`test/plans/feat/modules/remat.plan.toml`）；第二半没有落点，
 > 所以"`remat` 已经能用"这句话今天只对一半。
 > **为什么我不自己定**：它不是写法选择，而是**一个名字该由哪个模块读**——决定 `remat` 是图变换
 > （`split` 认标记）还是引擎开关（`pullback` 认标记），两条路的读数不同，验收断言也不同。
 
 ## 今天的事实（读数逐条）
 
-- **值那一半已经是恒等且被钉住**：`stdlib/autodiff.cml:82-84` 的 `remat(f) = f`；
+- **值那一半已经是恒等且被钉住**：`stdlib/autodiff.cml#add_tangent` 的 `remat(f) = f`；
   `test/cases/modules/autodiff/remat_identity.cml` 在 `f(x, y) = x * x * y`（x=3, y=2）上两条路都打印
   `18.0 / 12.0 / 9.0`。这条是 M6 表里的"数值与不加 `remat` 逐位相同"。
 - **`remat` 在 `src/`、`modules/` 里零命中**：`modules/transforms`（`jvp`/`split`/`transpose`/`vmap` 四个算子）
   与 `modules/autodiff` 都不认识这个词。所以今天"反向时重算"一句没有实现它的地方。
-- **残差数今天已经读得出来**，读在 `split` 上：`test/plans/feat/transforms/split.plan.toml:74-80` 钉着
+- **残差数今天已经读得出来**，读在 `split` 上：`test/plans/feat/transforms/split.plan.toml#split_two_params` 钉着
   同一个 `x*x*y` 的 `residuals=3`，并写明"the arity is the graph's, not the signature's"。
   `docs/design/program-transforms/m6-combination-numbers.cn.md:112` 因此说：`split` 落地之后，
   "残差数等于 `split` 结果的元数"，`remat` 的"数变少了"可以断言成"`split` 的输出少了几个"。
-- **另一处也知道残差**：`modules/autodiff/pullback.cpp:1241` 的 `captures_`（`:1117` 的 `residuals()` 直接返回它）。
+- **另一处也知道残差**：`modules/autodiff/pullback.cpp#Backward` 的 `captures_`（`:1117` 的 `residuals()` 直接返回它）。
   它是全树唯一同时知道"这是残差、不是普通捕获"的地方，但只在建回传图那一刻存在，图走一遍读不出来
   （同一页 4.1 量过 `std::stats` 的 12 个字段，没有一个与残差有关）。
 
@@ -66,7 +66,7 @@ C 什么都删不掉。
 ## 默认与正在做的事
 
 **按 A 走**：标记归 `split`，`remat` 的输出照今天的恒等不动；在 A 落地之前，`remat` 就是值上的恒等，
-`split` 与 `pullback` 都不读它——这一点写在库里（`stdlib/autodiff.cml:73-79`），不写成"待办"。
+`split` 与 `pullback` 都不读它——这一点写在库里（`stdlib/autodiff.cml#add_tangent`），不写成"待办"。
 B 的入口留好：`pullback.cpp` 的 `captures_` 与 `residualTypes` 已经集中在建图那一处，`split` 也已经有
 `residualsOf(GCGraph)`，两条路将来都只需要在各自那一处加一个判断。
 

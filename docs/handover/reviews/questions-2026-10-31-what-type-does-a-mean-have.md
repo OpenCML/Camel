@@ -22,14 +22,14 @@
 
 三处说法，互相不一致：
 
-1. **签名说返回元素类型，而且接受一切数值**：`stdlib/tensor.cml:169`
+1. **签名说返回元素类型，而且接受一切数值**：`stdlib/tensor.cml#sum_axis`
    ```cml
    export func mean_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..] when is_numeric::<T>()
    ```
-2. **kernel 对整数答 `f32`**：`modules/tensor/kernels/reduce.cpp:160-174`——`Mean` 的输出类型在
+2. **kernel 对整数答 `f32`**：`modules/tensor/kernels/reduce.cpp#reduceAxis`——`Mean` 的输出类型在
    `f64`/`bf16`/`f16` 时取元素类型，其余（含 `int`/`bool`）取 `Float32`；随后 `mean = total / extent`
    一次舍入，存进那个类型（`T(mean)` / `float(mean)`）。
-3. **另一条路直接拒**：`src/builtin/operators/array_axis.cpp:182-186`——`array` 那套 `reduceAxis` 对非浮点
+3. **另一条路直接拒**：`src/builtin/operators/array_axis.cpp#reduceAxis`——`array` 那套 `reduceAxis` 对非浮点
    元素的 `mean` 报 `the mean is taken of floating-point elements`。
 
 于是同一句 `mean_axis` 在解释器里有两种答案，取决于走哪条路；`tensor:mean_axis` 走的是第 2 条。
@@ -62,7 +62,7 @@ error[RuntimeDiag::TranslationRefused]: … uses the operator 'tensor:mean_axis'
 （`[1, 2, 4]` → `2`，丢掉的正好是"平均"），要么就是今天这样把 `f32` 的位模式当整数印出来——两种都不是均值。
 
 **(B) 返回 `f32`（与 kernel 的答案一致）。** 签名与解释器的实际答案对齐（`2.3333333`），代价是
-`int[..]`（以及 `bool[..]`）上的 `mean` 结果类型与输入不同：`stdlib/array.cml:239` 的转发、`T[..] => T[..]`
+`int[..]`（以及 `bool[..]`）上的 `mean` 结果类型与输入不同：`stdlib/array.cml#mean` 的转发、`T[..] => T[..]`
 这条泛型形状，以及调用点上的类型标注都要跟着写成"整数进、`f32` 出"。
 
 ## 我方默认建议

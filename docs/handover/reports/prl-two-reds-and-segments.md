@@ -40,7 +40,7 @@ PASS，没有可修的红。** 这一段记下来，是为了将来有人重建�
 
 - 分段已经读同步边（`src/passes/sched/taskflow/taskflow.cpp#buildStructuredPlan`，块可达性把
   `uses().sync(ref)` 与 `ctrlOutputsOf` 并列，`taskflow.cpp:897`），顺序边在
-  `taskflow.cpp:2443`；拓扑序三种边都读（`src/execute/exec_plan.cpp:643`）。
+  `taskflow.cpp:2443`；拓扑序三种边都读（`src/execute/exec_plan.cpp#planStorageReuse`）。
 - `buildStructuredPlan` 抛 `it has a loop`（`taskflow.cpp:747`）只覆盖循环，是 prl 唯一的“整图退成
   逐节点”路径，与这两条不是一回事：一个带循环的函数本来就不进并行计划，而这两条的程序没有循环。
 - “分不出段”与“退成逐节点”是两件事，分界线是 `GraphPlan#refusal`：计划现在把拒绝的原因记在图上，

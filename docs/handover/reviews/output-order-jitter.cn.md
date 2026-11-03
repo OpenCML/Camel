@@ -37,7 +37,7 @@
 边、类型、id 全同），变的是**同一个节点的多条 order 前置被存储/打印的顺序**。
 
 这个不一致的源头不在打印器：`graphviz.cpp:817` 是顺序遍历 `graph->orderPredsOf(nodeIndex)`，
-而 `orderPredsOf` 的定义（`include/camel/runtime/graph.h:895`）是「**the order they are stored
+而 `orderPredsOf` 的定义（`include/camel/runtime/graph.h#entryNodeRef`）是「**the order they are stored
 (the source order they were written in)**」——也就是说**存储顺序本身**在两次运行里不同。
 要查的是：一个节点有多条 order 前置时，这些前置是按什么容器收集进 draft 的
 （`draft.orderInputsOf` 的填充处，以及 `appendOrderDependency` 的调用者）。

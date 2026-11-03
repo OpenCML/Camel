@@ -86,7 +86,7 @@
 
 - 新文件：`modules/transforms/vmap.h`（77 行）、`vmap.cpp`（479 行）、`vmap_operator.h`（30 行）、`vmap_operator.cpp`（189 行）；改 `module.cpp`（+28/-4）、`CMakeLists.txt`（+2）、`stdlib/rulesets/vmap.cml`（+75/-20）、`stdlib/signatures/transforms.cml`（+18/-1）。
 - 读数（`vmap_elementwise.cml`，四个后端一致）：`REINTERP vmap function=f graph=232 type=(float[]) => float[] nodes=8 kinds=8/8 asked=4 found=4 rules=vmap_rule_mul,vmap_rule_div,vmap_rule_add,vmap_rule_sub`，然后 `[1.5, 4.0, 6.5, 0.25]` 两遍（`vmap(f)(xs)` 与 `xs->map(f)` 逐位相同）；`g` 一侧 `asked=5 found=5`、`[0.375, 6.0, -9.0]` 两遍；`REINTERP vmap op … same=yes`（算子签名与建出来的图一致）。
-- 全量快闸 **8139 / 8145 过，2 红**：`registry.docs_complete`、`docs.links.citations`。后者已定位并修好（`vmap.h` 里一处 `src/builtin/operators/derivative.cpp:512-516` 是"引行号"，改成 `#bindForwardRule`，本地 `node scripts/check-doc-links.mjs --citations` 现在是 `524 of 524`）；前者要 `--camel` 二进制，断网只能在主机上验，怀疑是新算子 `vmap` / 类型 `Vmap<F>` 的登记或示例。
+- 全量快闸 **8139 / 8145 过，2 红**：`registry.docs_complete`、`docs.links.citations`。后者已定位并修好（`vmap.h` 里一处 `src/builtin/operators/derivative.cpp#registerBuiltinDerivatives` 是"引行号"，改成 `#bindForwardRule`，本地 `node scripts/check-doc-links.mjs --citations` 现在是 `524 of 524`）；前者要 `--camel` 二进制，断网只能在主机上验，怀疑是新算子 `vmap` / 类型 `Vmap<F>` 的登记或示例。
 - 上一笔已提交的绿 sha：`05a8b3496`（`forwardBindingOf`）。
 
 **判据（自这一拿起）**：**四后端一致说"这不是某一个后端碰巧对了"，两遍一致说"这不是偶然"——两个都要有，缺一个就只是"跑通了"。**

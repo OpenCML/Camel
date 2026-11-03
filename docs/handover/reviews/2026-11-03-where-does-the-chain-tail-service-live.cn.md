@@ -10,7 +10,7 @@ autodiff 重建一张图之后，要把"新结果"顶替旧出口，而旧出口
 
 `GATE` 的等待按 `docs/design/effects/edges.cn.md` 5.3 是**同步前驱**，不是控制输入。建图器在链首
 造位门时，旁边那条控制边让它蒙混过关；本分支按 P0-2 不再造链首位门，它就只剩一条不算等待的
-控制边，封印检查（`src/runtime/graph.cpp:619–630`）于是打中：`Runtime graph 'jvp_of_g' has GATE
+控制边，封印检查（`src/runtime/graph.cpp#validateRuntimeGraphPayloadImpl`）于是打中：`Runtime graph 'jvp_of_g' has GATE
 node 8 without a wait`。
 
 实测过"照建图器的方式等"这条路（把旧节点的同步前驱与 ctrl 输入接成门的同步前驱）：

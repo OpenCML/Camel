@@ -4,7 +4,7 @@
 
 按类型找家在 `07466c5e2` 里删掉了（`git grep carriedPortOf` 零命中），现在一个参数的值在反传那半里
 **按身份**取：参数序号 `at` 就是闭包成员的序号，取到的端口就是那个值
-（`modules/transforms/transpose.cpp:886-903`）。取之前有一道校验：
+（`modules/transforms/transpose.cpp#NeedsOut`）。取之前有一道校验：
 
 ```cpp
 const size_t slot   = at;
@@ -58,7 +58,7 @@ transforms: the callee's transpose was built, but the parameter at position 1 re
 
 ## 4. 测量与文件
 
-- 校验点：`modules/transforms/transpose.cpp:886-903`（`typeEquals` 那一句）。
+- 校验点：`modules/transforms/transpose.cpp#NeedsOut`（`typeEquals` 那一句）。
 - 案例：`test/plans/feat/compile/transforms.plan.toml#vjp_loop.rounds_are_undone_in_reverse`（`[XFAIL]`，原文见第 1 节）。
 - `git grep carriedPortOf` → 零命中；`split.plan.toml` 与 `remat.plan.toml` 相对 `origin/develop`
   的 `git diff --stat` 为空（四处 `residuals=` 断言一字节未动）。

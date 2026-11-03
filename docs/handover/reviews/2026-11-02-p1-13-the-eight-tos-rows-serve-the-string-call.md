@@ -12,7 +12,7 @@
 
    `dtos` 只是 URI 的后缀。同族的 `itos`、`ltos`、`ftos`、`stos`、`ctos`、`ztos`、`atos` 一样，名字都是 `string`。
 
-2. **它登的是转换调用 `string(x)` 的语义，不是运算符**。`include/camel/standalone/format.h:180` 自己写着：
+2. **它登的是转换调用 `string(x)` 的语义，不是运算符**。`include/camel/standalone/format.h#toText` 自己写着：
 
    ```
    /// `string(x)` (:op/itos, :op/ltos, :op/ftos, :op/dtos, :op/atos): the text of `x`.
@@ -20,7 +20,7 @@
 
    注册处是内置组的规则表（`src/builtin/modules/globals.cpp`，`OperatorGroup::create("string", {...})` 里每条 `":op/dtos"` 配一个 `StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::String())`）——是**静态类型解析器**，即"这个调用对 float 实参返回 string"。
 
-3. **它已经被声明了，而且是一条通配声明**。`stdlib/prelude.cml:705`：
+3. **它已经被声明了，而且是一条通配声明**。`stdlib/prelude.cml#bf16`：
 
    ```
    #op(':op/*tos')

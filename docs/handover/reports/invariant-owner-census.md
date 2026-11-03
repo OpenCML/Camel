@@ -27,49 +27,49 @@ planDraftPayload 里——**拥有者是完工的图，不是写边的地方**�
 
 | file:line | first sentence | owner named | should belong to |
 |---|---|---|---|
-| src/runtime/graph_edges.cpp:5 | * The edge invariants of an encoded graph, checked at every commit (docs/design/graph-store 5.4). | finished graph | finished graph (the seal check) |
-| src/runtime/graph_edges.cpp:254 | /// The other half of 5.3, and the one a splice can break: a block's statements are one chain, /// so one stat | finished graph | finished graph (the seal check) |
-| src/runtime/graph_edges.cpp:364 | /// The control region an order edge would cross, 0 when it crosses none. | finished graph | finished graph (the seal check) |
-| src/runtime/graph_edges.cpp:439 | /// The rule of 4.6's third clause, read off the shared classification so that the seal check /// and the pass | seal check (backstop only) | finished graph (the seal check) |
-| src/runtime/graph_edges.cpp:444 | // Whether a conversion can fail depends on the types it converts between, and a pass that // refines the type | finished graph | finished graph (the seal check) |
-| src/runtime/draft.cpp:1352 | // A predecessor of the node this chain closes over that belongs to another block cannot become // the success | **none** | draft |
-| src/runtime/draft.cpp:1375 | A sync edge joins two statements of one block, so a predecessor of the node this chain // closes over that bel | **none** | draft |
-| src/runtime/draft.cpp:1499 | // What ordered the replaced node orders its replacer (docs/design/effects/edges.cn.md 4). | **none** | draft |
-| src/runtime/draft.cpp:1511 | // What the replaced node ordered is ordered by its replacer. | seal check (backstop only) | draft |
-| src/runtime/draft.cpp:1822 | // Both are the statement's own place in the chain: a node already in one chain cannot be // put into another, | **none** | draft |
-| src/runtime/draft.cpp:2065 | // A value of `never` never exists (design principles 3.9): the expression that has this type // gives no valu | **none** | draft |
-| src/runtime/graph.cpp:874 | // A GATE forwards its (last) norm input: FastVM reads the producer, NodeVM reads the gate's // slot, so the s | finished graph | encoder (the payload plan) |
-| src/runtime/draft_session.cpp:441 | The type of the draft's static area. | draft | draft |
-| src/runtime/draft_session.cpp:481 | Encodes `draft` into `target` (`bytes` reserved), rewriting every graph reference through // `rewritten`, whic | draft | draft |
-| src/runtime/draft_session.cpp:654 | * The commit encoded `after` from the draft of `before`, and they have the same content: the * same records, e | draft | draft |
-| src/runtime/draft_session.cpp:792 | ifndef NDEBUG // --------------------------------------------------------------------------------------------- | draft | draft |
-| src/runtime/draft_session.cpp:935 | // An assertion, not an exception: the rewrite kernels catch std::exception and turn it // into an error value | **none** | draft |
-| src/runtime/draft_session.cpp:1013 | // The session may replace the context's program only while the program it rewrites is one of // that program' | **none** | draft |
-| src/runtime/draft_session.cpp:1142 | // The objects the collector moved, old slot to new: a specialization is cached under the // value it binds, a | **none** | draft |
-| src/runtime/draft_session.cpp:1207 | // A type-only binding names a type (permanent, never moved); | **none** | draft |
-| src/runtime/draft_session.cpp:1411 | // A conflict is a lost race for the context's program, and only a session whose commit could // replace that  | **none** | draft |
-| src/runtime/draft_session.cpp:1427 | // The graphs the session read or wrote: it reads a graph when it decodes it (a draft) and // writes the ones  | draft | draft |
-| src/runtime/draft_session.cpp:1500 | // The graphs of the session are the versions this session read; | **none** | draft |
-| src/runtime/draft_session.cpp:1554 | ifndef NDEBUG // Before the draft is destroyed: the Debug record must never name a freed draft. | draft | draft |
-| src/runtime/draft_session.cpp:1567 | // The program after the commit holds every graph of the closure: the version it has now, or // the one this c | **none** | draft |
-| src/runtime/draft_inline.cpp:87 | The parameter type an instance of a declaration gets from one argument, as design principles /// 5.5 states it | **none** | draft |
-| src/runtime/draft_inline.cpp:791 | // The order is part of the key, so both sides must place two bindings of one type the same // way: a type is  | **none** | draft |
-| src/runtime/draft_inline.cpp:929 | // Ports are parameter placeholders. | draft | draft |
-| src/runtime/draft_inline.cpp:931 | // So must the control uses. | **none** | draft |
-| src/runtime/draft_inline.cpp:1177 | // A bound argument may have been a constant seen through a GATE that waits (the result of an // inlined sync  | **none** | draft |
-| src/runtime/draft_inline.cpp:1309 | // Every capture must be filled here; | **none** | draft |
-| src/runtime/draft_inline.cpp:1360 | A node whose work is inside the regions it owns (the arms of a branch, the parts of a loop): /// it carries no | **none** | draft |
-| src/runtime/draft_inline.cpp:1368 | The nodes a spliced body's order edges have to cover (docs/design/effects/edges.cn.md 5.7): the /// effect and | seal check (backstop only) | draft |
-| src/runtime/draft_inline.cpp:1410 | 5.7's extra constraint, written beside the splice: the chain the call stood in runs /// `before -> body -> aft | **none** | draft |
-| src/runtime/draft_inline.cpp:1625 | // The chain end that grows from `pred`, walked among the statements of its block and never // through `n` its | **none** | draft |
-| src/runtime/draft_inline.cpp:1822 | // An argument the body never reads still runs. | **none** | draft |
-| src/runtime/draft_inline.cpp:1856 | // What the body waits for: the call's predecessors, and the effects of arguments it never // read. | **none** | draft |
-| src/runtime/draft_inline.cpp:1902 | // Callee ports are now pure placeholders. | **none** | draft |
-| src/runtime/draft_inline.cpp:1927 | // A gate waits on the predecessors themselves; | **none** | draft |
-| src/runtime/draft_inline.cpp:2120 | // The chain the call stood in has to run through the body once the body is spliced in: its // statements are  | **none** | draft |
-| src/runtime/draft_inline.cpp:2254 | // The statements written directly after the call keep their place in the chain of the block // they are writt | **none** | draft |
-| src/runtime/control.cpp:99 | // A direct value input already orders ordinary users after its producer. | finished graph | finished graph (the scheduler reads it) |
-| src/runtime/control.cpp:172 | // Epochs avoid clearing graph-sized scratch arrays for every target. | finished graph | finished graph (the scheduler reads it) |
+| src/runtime/graph_edges.cpp#FrozenCycleEdges | * The edge invariants of an encoded graph, checked at every commit (docs/design/graph-store 5.4). | finished graph | finished graph (the seal check) |
+| src/runtime/graph_edges.cpp#EdgeChecker | /// The other half of 5.3, and the one a splice can break: a block's statements are one chain, /// so one stat | finished graph | finished graph (the seal check) |
+| src/runtime/graph_edges.cpp#EdgeChecker | /// The control region an order edge would cross, 0 when it crosses none. | finished graph | finished graph (the seal check) |
+| src/runtime/graph_edges.cpp#EdgeChecker | /// The rule of 4.6's third clause, read off the shared classification so that the seal check /// and the pass | seal check (backstop only) | finished graph (the seal check) |
+| src/runtime/graph_edges.cpp#EdgeChecker | // Whether a conversion can fail depends on the types it converts between, and a pass that // refines the type | finished graph | finished graph (the seal check) |
+| src/runtime/draft.cpp#GraphDraft::appendInputEntry | // A predecessor of the node this chain closes over that belongs to another block cannot become // the success | **none** | draft |
+| src/runtime/draft.cpp#controlRegionOf | A sync edge joins two statements of one block, so a predecessor of the node this chain // closes over that bel | **none** | draft |
+| src/runtime/draft.cpp#GraphDraft::handChainPlaceTo | // What ordered the replaced node orders its replacer (docs/design/effects/edges.cn.md 4). | **none** | draft |
+| src/runtime/draft.cpp#GraphDraft::handChainPlaceTo | // What the replaced node ordered is ordered by its replacer. | seal check (backstop only) | draft |
+| src/runtime/draft.cpp#GraphDraft::setOrderInputs | // Both are the statement's own place in the chain: a node already in one chain cannot be // put into another, | **none** | draft |
+| src/runtime/draft.cpp#GraphDraft::dissolveUnorderedGates | // A value of `never` never exists (design principles 3.9): the expression that has this type // gives no valu | **none** | draft |
+| src/runtime/graph.cpp#planDraftPayload | // A GATE forwards its (last) norm input: FastVM reads the producer, NodeVM reads the gate's // slot, so the s | finished graph | encoder (the payload plan) |
+| src/runtime/draft_session.cpp#draftStaticDataType | The type of the draft's static area. | draft | draft |
+| src/runtime/draft_session.cpp#encodeDraftGraph | Encodes `draft` into `target` (`bytes` reserved), rewriting every graph reference through // `rewritten`, whic | draft | draft |
+| src/runtime/draft_session.cpp#sameStaticValue | * The commit encoded `after` from the draft of `before`, and they have the same content: the * same records, e | draft | draft |
+| src/runtime/draft_session.cpp#sameContent | ifndef NDEBUG // --------------------------------------------------------------------------------------------- | draft | draft |
+| src/runtime/draft_session.cpp#describeUncoveredDraft | // An assertion, not an exception: the rewrite kernels catch std::exception and turn it // into an error value | **none** | draft |
+| src/runtime/draft_session.cpp#RuntimeSpecializationKeyHasher::operator | // The session may replace the context's program only while the program it rewrites is one of // that program' | **none** | draft |
+| src/runtime/draft_session.cpp#RootScope::RootScope | // The objects the collector moved, old slot to new: a specialization is cached under the // value it binds, a | **none** | draft |
+| src/runtime/draft_session.cpp#RuntimeGraphDraftSession::traceStaticSlots | // A type-only binding names a type (permanent, never moved); | **none** | draft |
+| src/runtime/draft_session.cpp#RuntimeGraphDraftSession::draftRefs | // A conflict is a lost race for the context's program, and only a session whose commit could // replace that  | **none** | draft |
+| src/runtime/draft_session.cpp#RuntimeGraphDraftSession::conflicts | // The graphs the session read or wrote: it reads a graph when it decodes it (a draft) and // writes the ones  | draft | draft |
+| src/runtime/draft_session.cpp#RuntimeGraphDraftSession::validateDraftPorts | // The graphs of the session are the versions this session read; | **none** | draft |
+| src/runtime/draft_session.cpp#RuntimeGraphDraftSession::commit | ifndef NDEBUG // Before the draft is destroyed: the Debug record must never name a freed draft. | draft | draft |
+| src/runtime/draft_session.cpp#RuntimeGraphDraftSession::commit | // The program after the commit holds every graph of the closure: the version it has now, or // the one this c | **none** | draft |
+| src/runtime/draft_inline.cpp#instanceParameterType | The parameter type an instance of a declaration gets from one argument, as design principles /// 5.5 states it | **none** | draft |
+| src/runtime/draft_inline.cpp#makeRuntimeSpecializationKey | // The order is part of the key, so both sides must place two bindings of one type the same // way: a type is  | **none** | draft |
+| src/runtime/draft_inline.cpp#bindPortValueUses | // Ports are parameter placeholders. | draft | draft |
+| src/runtime/draft_inline.cpp#bindPortValueUses | // So must the control uses. | **none** | draft |
+| src/runtime/draft_inline.cpp#specializeDirectFuncInDraft | // A bound argument may have been a constant seen through a GATE that waits (the result of an // inlined sync  | **none** | draft |
+| src/runtime/draft_inline.cpp#devirtualizeClosureCallInDraft | // Every capture must be filled here; | **none** | draft |
+| src/runtime/draft_inline.cpp#devirtualizeClosureCallInDraft | A node whose work is inside the regions it owns (the arms of a branch, the parts of a loop): /// it carries no | **none** | draft |
+| src/runtime/draft_inline.cpp#nodeOwnsRegions | The nodes a spliced body's order edges have to cover (docs/design/effects/edges.cn.md 5.7): the /// effect and | seal check (backstop only) | draft |
+| src/runtime/draft_inline.cpp#addSpliceOrderEdges | 5.7's extra constraint, written beside the splice: the chain the call stood in runs /// `before -> body -> aft | **none** | draft |
+| src/runtime/draft_inline.cpp#resolvePlaceForks | // The chain end that grows from `pred`, walked among the statements of its block and never // through `n` its | **none** | draft |
+| src/runtime/draft_inline.cpp#inlineCallableInDraft | // An argument the body never reads still runs. | **none** | draft |
+| src/runtime/draft_inline.cpp#inlineCallableInDraft | // What the body waits for: the call's predecessors, and the effects of arguments it never // read. | **none** | draft |
+| src/runtime/draft_inline.cpp#inlineCallableInDraft | // Callee ports are now pure placeholders. | **none** | draft |
+| src/runtime/draft_inline.cpp#inlineCallableInDraft | // A gate waits on the predecessors themselves; | **none** | draft |
+| src/runtime/draft_inline.cpp#inlineCallableInDraft | // The chain the call stood in has to run through the body once the body is spliced in: its // statements are  | **none** | draft |
+| src/runtime/draft_inline.cpp#inlineCallableInDraft | // The statements written directly after the call keep their place in the chain of the block // they are writt | **none** | draft |
+| src/runtime/control.cpp#appendControlDependency | // A direct value input already orders ordinary users after its producer. | finished graph | finished graph (the scheduler reads it) |
+| src/runtime/control.cpp#reduceControlDependencies | // Epochs avoid clearing graph-sized scratch arrays for every target. | finished graph | finished graph (the scheduler reads it) |
 
 
 

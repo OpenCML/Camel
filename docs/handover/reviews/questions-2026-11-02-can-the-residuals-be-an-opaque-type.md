@@ -5,7 +5,7 @@
 
 ## 实测（一条 `.cml`，跑一次）
 
-样板取 `stdlib/rewrite.cml:29` 的 `export type Rule`——"一个类型名，内部结构不外露"，由 C++ 模块
+样板取 `stdlib/rewrite.cml#rewrite` 的 `export type Rule`——"一个类型名，内部结构不外露"，由 C++ 模块
 提供。照它写成带参数的形式：
 
 ```camel

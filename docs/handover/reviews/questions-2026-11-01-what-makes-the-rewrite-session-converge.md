@@ -22,10 +22,10 @@
 
 | 位置 | 做什么 |
 |---|---|
-| `src/passes/opt/inline/engine.cpp:1301`-`:1335` `applyOptimizeRewritePass` | 最多跑 `kMaxSessions = 32` 个会话，每个会话返回非空就继续；注释自己写着"the bound only guards against a rewrite that never settles"——**今天就是那个 never settles** |
-| `src/passes/opt/inline/engine.cpp:780` `applyRuntimeOptimizeRewrite`、`:802` 的 `while (true)` | 每轮 `collectReachableRuntimeGraphs()`（`:804`）后把整张闭包重新解码、重扫 |
-| `src/passes/opt/inline/engine.cpp:1124` `if (!roundChanged) break;` | 会话内退出的唯一条件 |
-| `src/passes/opt/inline/engine.cpp:919`-`:957` | 置 `changed` 的三处：特化（`:927`）、去虚拟化（`:949`）、内联（`:1083`） |
+| `src/passes/opt/inline/engine.cpp#applyOptimizeRewritePass`-`:1335` `applyOptimizeRewritePass` | 最多跑 `kMaxSessions = 32` 个会话，每个会话返回非空就继续；注释自己写着"the bound only guards against a rewrite that never settles"——**今天就是那个 never settles** |
+| `src/passes/opt/inline/engine.cpp#applyRuntimeOptimizeRewrite` `applyRuntimeOptimizeRewrite`、`:802` 的 `while (true)` | 每轮 `collectReachableRuntimeGraphs()`（`:804`）后把整张闭包重新解码、重扫 |
+| `src/passes/opt/inline/engine.cpp#applyRuntimeOptimizeRewrite` `if (!roundChanged) break;` | 会话内退出的唯一条件 |
+| `src/passes/opt/inline/engine.cpp#applyRuntimeOptimizeRewrite`-`:957` | 置 `changed` 的三处：特化（`:927`）、去虚拟化（`:949`）、内联（`:1083`） |
 
 **作者点名的假设（"宏求值器把分支的递归臂当成无条件求值"）：没有成立。** 读数里没有任何一处求值一条臂——
 整段是**解码 + 重写**，图从未被执行；每轮的内联候选、特化绑定、去虚拟化全是 0，而图仍在长。所以那条边
@@ -84,14 +84,14 @@ Inline probe 'model' -> 'iterate$spec221': ...
 
 **每轮内联的是一个新造出来的特化副本 `iterate$specN`**（20 秒里出现 113 个不同的 `iterate$specN`），
 造它的地方是 `specializeGraphWithBindings(…, "spec", session.nextSpecializationNonce())`
-（`src/runtime/draft_inline.cpp:1135`-`:1140`，由 `specializeDirectFuncInDraft` 在 `bindings` 非空时调用）。
+（`src/runtime/draft_inline.cpp#specializeDirectFuncInDraft`-`:1140`，由 `specializeDirectFuncInDraft` 在 `bindings` 非空时调用）。
 副本的名字每轮带一个新 nonce，所以"这张图我见过"的判断永远不成立；而本该拦住它的那个定点守卫
 （`kTypeSpecializationFixedPointGuard`，`:1120`-`:1131` 的报错）只对**类型**特化生效，`"spec"` 这一路不在其中。
 **这才是"每一轮算不算有变化"里的那个'变化'。**
 
 ## 一之三补：去重**已经在了**，但键里有一样每轮都变的东西
 
-`specializeGraphWithBindings` 开头就是按绑定组合查表（`src/runtime/draft_inline.cpp:824`-`:827`）：
+`specializeGraphWithBindings` 开头就是按绑定组合查表（`src/runtime/draft_inline.cpp#specializeGraphWithBindings`-`:827`）：
 
 ```cpp
 RuntimeSpecializationKey cacheKey = makeRuntimeSpecializationKey(baseGraph, bindings);
