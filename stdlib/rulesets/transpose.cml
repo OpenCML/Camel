@@ -38,7 +38,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { exp, full, matmul, mean_axis, numel, ones_like, relu, shape, sigmoid, subtract, sum, sum_to, take, transpose, where, zeros_like } from tensor
+import { exp, full, matmul, mean_axis, numel, ones_like, relu, shape, sigmoid, subtract, sum, sum_to, take, tanh, transpose, where, zeros_like } from tensor
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
@@ -154,6 +154,12 @@ export rule mul_tensor_t::<T, X, W>(x: X, w: W) {
 /// and the reverse reading of the boundary cannot drift apart.
 export rule relu_t::<T, A>(x: A) when is_float::<T>() {
     relu(x) => (ct: T[..]) => (where(x > 0.0, ct, 0.0))
+}
+/// The transpose of `tanh`: `ct * (1 - y * y)` with `y = tanh(x)`, the adjoint of `jvp_tanh` and the
+/// same slope the engine's `tanhVjp` builds from its own output. The right side recomputes `tanh(x)`,
+/// an x-only value -- the shape the cut carries (`exp`, `sigmoid`).
+export rule tanh_t::<T>(x: T[..]) when is_float::<T>() {
+    tanh(x) => (ct: T[..]) => (ct * (1.0 - tanh(x) * tanh(x)))
 }
 
 /// The transpose of `exp`: `ct * y` with `y = exp(x)` -- the cotangent scaled by the output, which is
