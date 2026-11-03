@@ -12,16 +12,21 @@ or keep a sentence for a word that was renamed or deleted, and no program can se
 words cannot be reached from any program this tree can run, so a case that runs `camel` cannot pin
 them, and a case that pins the six reachable ones says nothing about the rest.
 
-This check reads both files and holds the three facts together:
+This check reads both files and holds three **relations** together -- no count of words is pinned,
+because a count is what an assertion says when it means "these sets still line up": add a word with
+its sentence and the sets still line up, while a count asks for an edit to a number that measures
+nothing a reader cares about (measured 2026-11-03: splitting one word into two made the plan red on
+`17` before `18`, with both trees satisfying every relation below).
 
-* every emitted word lands on a non-empty sentence. A word with no sentence of its own lands on the
-  one sentence that names the word -- `the shape this program used has no transpose (the transform
-  named it `<word>`)` -- which is a landing a reader can act on. It is not a sentence of its own, so
-  the set of such words is written out below (`LANDS_ON_THE_NAMED_SHAPE`): a word cannot quietly join
-  it, and a sentence deleted from the dispatch moves its word into the set, which is a red here.
-* every sentence of its own is reached by a word some file writes. A sentence nobody reaches is a
-  claim about a cause the transform cannot name.
-* the catch-all exists and interpolates the word, because everything above leans on it.
+* every written word lands on a non-empty sentence (inclusion, one way). A word with no sentence of
+  its own lands on the one sentence that names the word -- `the shape this program used has no
+  transpose (the transform named it `<word>`)`. It is not a sentence of its own, so the set of such
+  words is written out below (`LANDS_ON_THE_NAMED_SHAPE`): a word cannot quietly join it, and a
+  sentence deleted from the dispatch moves its word into the set, which is a red here.
+* every sentence of its own is written by a word some file writes (inclusion, the other way). A
+  sentence nobody reaches is a claim about a cause the transform cannot name.
+* the catch-all exists and interpolates the word, so every word it is handed lands on it and says
+  which word it was.
 
 `refusalCause` is file-local to the module's `.cpp`, so no program calls it and no plan tool links
 it; the properties checked are the ones its dispatch has, read from the two sources that hold them.
@@ -154,11 +159,16 @@ def main() -> int:
     if broken:
         return 1
 
+    # What is said here is what was decided above, as relations: each line is one of the three
+    # properties, and none of them counts anything. A count would make every added word an edit here
+    # and in the plan, which is exactly the assertion that reads like a property and measures a
+    # number -- and the two trees either side of the 2026-11-03 split satisfied both relations and
+    # printed two different totals.
     print(
-        f"transpose refusals: {len(emitted)} words written into the log, {len(answered & emitted)} of "
-        f"them answered in their own words, {len(named_shape)} answered by the sentence that names "
-        f"the word, {len(WAITS_FOR_A_WORD)} sentence waiting for a word no file writes "
-        f"({', '.join(sorted(WAITS_FOR_A_WORD))}), and every landing is non-empty"
+        "transpose refusals: every word the log writes lands on a sentence -- its own, or the "
+        "catch-all that names it; every sentence of its own is written by a file that writes the "
+        "word; and a word with no sentence of its own lands nowhere but the catch-all, which names "
+        f"it (`{', '.join(sorted(WAITS_FOR_A_WORD))}` waits for a shape, not for a sentence)"
     )
     return 0
 
