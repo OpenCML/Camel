@@ -38,7 +38,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { exp, full, matmul, mean_axis, numel, ones_like, shape, subtract, sum, sum_to, take, transpose, zeros_like } from tensor
+import { erf, erfc, exp, full, gelu, matmul, mean_axis, numel, ones_like, shape, subtract, sum, sum_to, take, tanh, transpose, zeros_like } from tensor
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
@@ -147,6 +147,22 @@ export rule mul_tensor_t::<T, X, W>(x: X, w: W) {
 /// rule and `jvp_exp` (`stdlib/rulesets/jvp.cml`) are a measurement as well as a law.
 export rule exp_t::<T>(x: T[..]) when is_float::<T>() {
     exp(x) => (ct: T[..]) => ct * exp(x)
+}
+/// The transpose of `gelu`: the same slope as `jvp_gelu`, applied to the cotangent. A slope that depends
+/// on `x` alone multiplies the cotangent; the tanh approximation is the engine's definition, so this is
+/// the same number the engine's `gelu_grad` will have to answer.
+export rule gelu_t::<T>(x: T[..]) when is_float::<T>() {
+    gelu(x) => (ct: T[..]) => (ct * (0.5 * (1.0 + tanh(0.7978845608028654 * (x + 0.044715 * x * x * x))) + 0.5 * x * (0.7978845608028654 * (1.0 + 0.134145 * x * x)) * (1.0 - tanh(0.7978845608028654 * (x + 0.044715 * x * x * x)) * tanh(0.7978845608028654 * (x + 0.044715 * x * x * x)))))
+}
+
+/// The transpose of `erf`.
+export rule erf_t::<T>(x: T[..]) when is_float::<T>() {
+    erf(x) => (ct: T[..]) => (ct * (exp(-1.0 * x * x) * 1.12837916709551257390))
+}
+
+/// The transpose of `erfc`: the same slope with the sign the engine negates the cotangent by.
+export rule erfc_t::<T>(x: T[..]) when is_float::<T>() {
+    erfc(x) => (ct: T[..]) => (ct * (exp(-1.0 * x * x) * -1.12837916709551257390))
 }
 
 /// `x - w` on two arrays: what `tensor:subtract` means, and the left side this rule is filed under.
