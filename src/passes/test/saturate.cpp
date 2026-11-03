@@ -162,6 +162,29 @@ const std::set<std::string> kCorpusTargets{
 /// Prints the operators each saturated function was left with: the observable result the rules
 /// work for. A rule that never fires leaves an `add` or a `mul` behind, so this also says that
 /// the saturation did not stop early.
+///
+/// `waits` is "the chain stands at this operator", told as a relation rather than as one edge on
+/// one node: the operator waits itself when it carries a sync or control input, and otherwise the
+/// chain stands above it on the `GATE` its value is read by -- a place, which the graph tells from
+/// a block's value by having the chain go on from it (docs/design/effects/edges.cn.md 1: a value
+/// that a pass may arrange freely never stands on the chain, so a pure statement's place is a
+/// `GATE`, and a place with no successor is the chain's last stop, not a place). Counting only the
+/// input would say "no wait" of an operator whose wait is one node further up and unchanged.
+bool chainStandsAt(const GCGraph &graph, gc_node_ref_t ref) {
+    if (!graph.waitInputsOf(ref).empty()) {
+        return true;
+    }
+    for (gc_node_ref_t user : graph.normUsersOf(ref)) {
+        if (graph.node(user) == nullptr || graph.node(user)->kind != GCNodeKind::Gate) {
+            continue;
+        }
+        if (!graph.waitUsersOf(user).empty()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void printOperatorCounts(
     const Program *next, const std::vector<std::pair<std::string, GraphId>> &done,
     std::ostream &os) {
@@ -173,7 +196,7 @@ void printOperatorCounts(
                 continue;
             }
             const auto uri = graph->nodeBodyAs<GCOperBody>(ref)->uri();
-            waits += graph->ctrlInputsOf(ref).empty() ? 0 : 1;
+            waits += chainStandsAt(*graph, ref) ? 1 : 0;
             adds += uri.starts_with(":op/add_");
             muls += uri.starts_with(":op/mul_");
         }
