@@ -2056,16 +2056,22 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                               gct->at(0)->name() == "__assn__";
     Type *assignedType      = nullptr;
     // The declaration of a rest function, when this call names one: its arguments are expanded
-    // into a body in place of the call, and no instance is made (inlineRestCall).
+    // into a body in place of the call, and no instance is made (inlineRestCall). A pack among the
+    // `with` parameters is a pack like any other -- it stands for the `with` arguments given past
+    // the fixed ones -- so a function that writes one is expanded the same way, and the body reads
+    // the pack's own arguments as a compile-time tuple (language author, 2026-11-03; design
+    // principles 4.4, 5.6).
     generic_template_ptr_t restTemplate;
     if (auto generic = genericDrefs_.find(targetNode);
         generic != genericDrefs_.end() && generic->second.one() != nullptr &&
-        generic->second.one()->funcType->hasRest()) {
+        (generic->second.one()->funcType->hasRest() ||
+         generic->second.one()->funcType->hasWithRest())) {
         restTemplate = generic->second.one();
     }
     const size_t restFixedCount =
         restTemplate != nullptr
-            ? restTemplate->funcType->normTypesCount() - 1 -
+            ? restTemplate->funcType->normTypesCount() -
+                  (restTemplate->funcType->hasRest() ? 1 : 0) -
                   restTemplate->funcType->normConstasCount()
             : 0;
     const size_t restDeclaredCount =

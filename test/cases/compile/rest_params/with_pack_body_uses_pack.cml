@@ -1,0 +1,17 @@
+// ① the body reads the pack: `ws` is a compile-time tuple of the `with` arguments given past the
+// fixed ones, and `ws.[0]` takes the first of them.
+with <..ws>
+func scale(x: float): float {
+    return x * ws.[0]
+}
+
+with <..ws: float>
+func scale_typed(x: float): float {
+    return x * ws.[0]
+}
+
+func main(): int sync {
+    println(scale<2.5>(4.0))
+    println(scale_typed<3.0>(4.0))
+    return 0
+}

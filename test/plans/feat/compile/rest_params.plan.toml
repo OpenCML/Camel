@@ -235,13 +235,45 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "with_pack_argument_not_carried"
-desc = "The boundary: a with argument of the pack's own element type is not carried into the body yet (that is the step that binds the pack in the body), so the call is reported as one with no matching function, and the overload table shows the signature with the pack's type. This case changes with that step."
-kind = "negative"
-case = "../../../cases/compile/rest_params/with_pack_argument_not_carried.cml"
+name = "with_pack_body_uses_pack"
+desc = "The body reads the pack (①): `ws` is a compile-time tuple of the `with` arguments given past the fixed ones, so `scale<2.5>(4.0)` is 4.0 * 2.5 = 10.0 and `scale_typed<3.0>(4.0)` is 12.0. This is also the answer step 1 owed: the pack really receives the value, not merely compiles."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/with_pack_body_uses_pack.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
-expect_output_contains = ["<..ws: int> (x: float) => float pure"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_exit = 0
+expect_stdout_exact = "10.0\n12.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_pack_forwarded"
+desc = "A pack is forwarded to another function's pack (②): `forward<1.0, 2.0, 3.0>(10.0)` expands `add3<..ws>(x, 1.0, 2.0)`, whose three fixed parameters take the three arguments, so the answer is 13.0. Without the expansion of `..ws` among the `with` arguments the name is not a value and the shape is refused."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/with_pack_forwarded.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "0.0\n13.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_pack_destructured"
+desc = "A fixed `with` parameter before the pack destructures the list (③): `combine<2.0, 3.0>(4.0)` binds `w = 2.0` and `rest = (3.0)`, so the answer is 4.0 * 2.0 + 3.0 = 11.0. The pack is what is left after the fixed ones, the same rule an ordinary rest parameter follows."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/with_pack_destructured.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "11.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_pack_argument_carried"
+desc = "The pack's own argument is carried (the case that used to pin the boundary): `g<1>(2.5)` gives `with <..ws: int>` one argument of its element type and the call runs, printing 2.5. It was a call with no matching function until the arguments reached the body."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/with_pack_argument_carried.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
