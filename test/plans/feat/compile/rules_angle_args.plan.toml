@@ -58,6 +58,18 @@ expect_stdout_contains = ["rules_angle_args softmax value=1.5 tangent=-0.25"]
 timeout_ms = 30000
 
 [[tests]]
+name = "rules_angle_args.sum_axis_jvp"
+desc = "`jvp` of `lane_sums(x) = sum_axis(x, 0, false)` at x = [[1, 2, 3], [4, 5, 6]] along dx = [[1, 0, 0], [0, 2, 0]]: the value is the column sums [5.0, 7.0, 9.0] and the tangent is the column sums of the tangent [1.0, 2.0, 0.0], both by hand. The tangent is deliberately not uniform, so the array separates the right law from the wrong ones the case's header lists: handing the tangent back unreduced is rank 2, summing everything is a number, and broadcasting the first row answers [1.0, 0.0, 0.0]."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/rules_angle_args_sum_axis_jvp.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["rules_angle_args sum_axis jvp=[5.0, 7.0, 9.0] tangent=[1.0, 2.0, 0.0]"]
+timeout_ms = 30000
+
+[[tests]]
 name = "rules_angle_args.mean_axis_transpose"
 desc = "`transpose` of `f(x) = sum(mean_axis(x, 0, false) * [1, 2, 3])` at ct = 1.0, with `x: float[2, 3]`: every position of `xs` that fed lane k gets w[k] / 2, so the answer is read element by element as `[[0.5, 1.0, 1.5], [0.5, 1.0, 1.5]]` -- not as its sum, which is 6.0 and which the wrong law `(ct) => ct` also reaches with `[1.0, 2.0, 3.0]` (author, 2026-11-03 15:15). The parameter's shape is in the type because the transposed function is handed the cotangent and nothing else, and the lane length the law reads comes from there: 6 positions over 3 lanes is 2 (author, 2026-11-03 16:15)."
 kind = "behavior"
