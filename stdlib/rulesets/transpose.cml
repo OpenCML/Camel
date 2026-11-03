@@ -38,7 +38,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { full, matmul, mean_axis, numel, ones_like, relu, shape, subtract, sum, sum_to, take, transpose, where, zeros_like } from tensor
+import { exp, full, log_softmax, matmul, mean_axis, numel, ones_like, relu, shape, subtract, sum, sum_to, take, transpose, where, zeros_like } from tensor
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
@@ -154,6 +154,14 @@ export rule mul_tensor_t::<T, X, W>(x: X, w: W) {
 /// and the reverse reading of the boundary cannot drift apart.
 export rule relu_t::<T, A>(x: A) when is_float::<T>() {
     relu(x) => (ct: T[..]) => (where(x > 0.0, ct, 0.0))
+}
+/// The transpose of `log_softmax`: `ct - exp(y) * sum(ct)` with `y = log_softmax(x)` and the axis summed
+/// with `keepdims` -- the expression the engine's own rule writes (`logSoftmaxVjp`,
+/// `modules/tensor/ops/reduction_ops.cpp`: `dy - exp(output) * sum_axis(dy, axis, true)`), not the
+/// transposed direction of `jvp_log_softmax`, which is `ct - sum(exp(y) * ct)`. The two differ by a
+/// broadcast: for `ct = 1` the wrong one answers zero everywhere, because `sum(p) = 1`.
+export rule log_softmax_t::<T>(x: T[..]) when is_float::<T>() {
+    log_softmax<0>(x) => (ct: T[..]) => (ct - exp(log_softmax<0>(x)) * sum<0, true>(ct))
 }
 
 /// `x - w` on two arrays: what `tensor:subtract` means, and the left side this rule is filed under.
