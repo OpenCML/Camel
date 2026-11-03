@@ -11,11 +11,21 @@
  * single file with `reshape` and `softmax` so that their correct numbers are not reported as part
  * of this one's red: one program per reading.
  *
- * The number is derived by hand, not read off a run:
+ * The number is derived by hand, not read off a run, and it is read ELEMENT BY ELEMENT:
  *
  *   mean     f(x) = sum(mean_axis(x, 0, false) * [1, 2, 3]) on x = [[1, 2, 3], [4, 5, 6]]
  *            the lane means are [2.5, 3.5, 4.5], so f = 2.5 + 7.0 + 13.5 = 23.0; the cotangent of x
- *            at ct = 1.0 is w[k] / 2 in both rows, which sums to 2 * (0.5 + 1 + 1.5) = 6.0.
+ *            at ct = 1.0 is w[k] / 2 in both rows:
+ *
+ *              [[0.5, 1.0, 1.5],
+ *               [0.5, 1.0, 1.5]]
+ *
+ * Why the whole array and not its sum (author's ruling, 2026-11-03 15:15): the right answer's total
+ * is 2 * (0.5 + 1 + 1.5) = 6.0, and the wrong law -- the one that spreads nothing and hands the
+ * incoming cotangent back unchanged, `(ct) => ct` -- answers `[1.0, 2.0, 3.0]`, whose total is also
+ * 6.0. A criterion that reads the sum therefore passes whichever of the two the walk did, so a red
+ * one could turn green on a wrong law. Reading the array separates them at the first element: 0.5
+ * against 1.0.
  */
 import rulesets.transpose
 import { transpose } from transforms
@@ -27,6 +37,6 @@ func loss_mean(x: float[..]): float {
 
 func main(): int sync {
     let back = transpose(loss_mean)(1.0)
-    'rules_angle_args mean transpose={}'->format<float(sum(back.0))>->println
+    'rules_angle_args mean transpose={}'->format<back.0>->println
     return 0
 }
