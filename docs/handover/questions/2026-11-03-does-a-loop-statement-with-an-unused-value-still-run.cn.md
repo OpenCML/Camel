@@ -286,3 +286,38 @@ autodiff"）停在这里，改动已回退。
 "臂里的语句"，体结果门该等"体里的语句"，梯度门该等"函数自己返回前的那条链"（注释原文
 "the gradient waits for it, so that the function's effects all happen, in their order"）。
 四处要的都是**同一种东西**：那条链的最后一站，而这件事今天的 pass 侧拿不到。
+## 32 条 stream 红是本分支造成的：bisect 指向 `a49cac54d`
+
+两棵树的同一份计划（`test/plans/feat/compile/stream.plan.toml`，`-Tier fast -Jobs 4`，完整重建）：
+
+| 树 | `[SUMMARY]` |
+| --- | --- |
+| `dev-baseline` = `origin/develop` = `5491d4bf6` | **146 条全 PASS，0 fail**，`RUN_EXIT=0` |
+| `lane-p02` = `989780a2d` | **146 条，114 过 / 32 红**，`RUN_EXIT=1` |
+
+32 条逐名（各 4–5 个后端变体）：`stream.interval_loop_cml`；`stream.generator_sync_order.{nvm,fvm,jit,prl,_default}`；
+`stream.generator_early_stop.{…}`；`stream.generator_error_element.{…}`；`stream.generator_local_across_yield`；
+`stream.generator_destructured_local`；`stream.generator_loop.{…}`；`stream.generator_cell_across_pulls.{…}`；
+`stream.generator_body_fault_ends_stream.{…}`；`stream.generators_loop_computed_initialiser`。
+停在同一句上：`The call of 'println' has side effects but is never executed: the sync block it is in is not used`。
+
+所以他们说的"既有缺陷"是我把分支读数当成了缺陷现状。**这 32 条是我这条分支造成的。**
+
+### bisect（每次都在同一棵 `lane-p02` 上完整重建 + 跑同一份计划）
+
+1. `9e48ccfc0`（test/jit 关系读数）贴到 develop 上 → **146/146**，无罪。
+2. `bd7a12fbe`（链首不造位门）在我的树上回退 → **仍是 114/32**，无罪。
+3. 把与 develop 不同的 23 个代码文件**全部退回 develop 的版本**（只留本分支的计划与文档）→ **146/146**，说明 32 条出在这 23 个文件里。
+4. 只把 `src/compile/gir/builder*.{cpp,h}`（我的版本）放回去，其余仍是 develop 的 → **114/32**。
+
+⇒ 第一次让 pass 从 146 掉下来的是 **`a49cac54d`**（`gir: the chain's place is a position, and the diagnostic
+walks through it`），它把"链尾"从语句节点改成了**位门**，五处：
+
+- `builder_control.cpp#Builder::buildBranch`（2822 附近，`lastSyncedNode_ = chainPlaceForNode(joinNode)`）
+- `builder_control.cpp#Builder::visitLoopNode`（3688 附近，同上，`loopNode`）
+- `builder_control.cpp#Builder::buildStreamLoop`（4091 附近，同上，`loopNode`）
+- `builder_expr.cpp#Builder::readVariableThrough`（1742 附近，读也取一个位）
+- `builder_operators.cpp`（4387 附近，调用点同样先取位再连）
+
+这正是 A 那 32 条的症状来源：链尾成了一个位门，`inUnusedSyncBlock` 之外的读者（生成器体内语句的消费者）
+不再把它当"这个块写过东西"，于是 `println` 被判成"所在 sync 块没人用"，效果被丢掉。
