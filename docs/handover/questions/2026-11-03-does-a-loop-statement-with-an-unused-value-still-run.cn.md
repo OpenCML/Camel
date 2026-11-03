@@ -421,3 +421,25 @@ walks through it`），它把"链尾"从语句节点改成了**位门**，五处
 `res = gate` 之后，`bodyPart->output` / 区域结果那一线拿到的仍是 29，所以循环读 29、门 31 悬空。
 下一支探针要打的是**时序**：`visitBodyNode` 返回的是门还是 29、`setArmResult` 收的是哪一个、
 `linkNodes(LinkType::With, bodyPart->output, loopNode)` 那一刻 `bodyPart->output` 是谁。
+### 读代码的结论：三种形状都不成立，门不是体区交回的那个值
+
+按作者给的三种形状逐个对：
+
+1. **"函数 `return res`，调用者用了旧变量"** —— 不成立：`builder.cpp:1866` `res = gate` 之后
+   `1873` 就是 `return res`；调用者 `visitBodyNode`（`builder_control.cpp:4256`）`result = visitExecNode(...)`
+   再 `4267 return result`；`setArmResult`（`1566–1586`）`arm.output = result`（1583）。
+   整条链都取返回值，没有旧变量。
+2. **"造了门却丢掉"** —— 不成立：`1866` 之后没有把 `res` 写回原值。
+3. **"`output` 在造门之前就赋成裸值"** —— 不成立：`output` 只在 `setArmResult` 里赋值（1583），
+   而它收的是 `visitBodyNode` 的返回值。
+
+而 `buildStreamLoop` 的 `linkNodes(LinkType::With, bodyPart->output, loopNode)`（4045）与
+`visitLoopNode` 的同一句（3640）都在体区建完之后，用的就是 `output`。
+
+**所以探针与代码矛盾**：若门是体区交回的那个值，循环就会是门的 `With` 使用者；可探针说门的
+`withUsers` 为空、而**裸值 29 的 `With` 使用者是 33（循环节点）**。结论只能是：**那个门不是体区交回的
+值，它造在更里一层**（某个内层 `exec` 走 `if (!operands)` 那条路造了门、返回了门，而内层的值 29
+同时被内层语句 30 和循环 33 直接读）。门与值分家，门悬空。
+
+下一支探针因此只问一件事：**门 31 是哪一个 `visitExecNode` 调用造的**（打印每次 `if (!operands)`
+进入时的 gct 源位置与 graph id）。它不是"返回谁"的问题，是"哪一层的值"的问题。
