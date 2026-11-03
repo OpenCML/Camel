@@ -822,9 +822,9 @@ slot_t regionOfKernel(ArgsView &, ArgsView &norm, Context &) {
 /// What it holds is not a guess. A body region never carries a result -- `setRegionResult` takes
 /// only ids above 0, because it is an arm, a part of a loop or an inlined body that yields a value
 /// -- and it has no owner, no ports and no parameters. A graph whose table is empty is also one
-/// whose body carried no tag: a tag on the body writes the record (`GraphDraft::setRegionAttrs`),
-/// and the draft is made with its body (`GraphDraft`), so an empty table means "the body says
-/// nothing". The body of such a graph is therefore exactly a default `GCRegion`.
+/// whose body carried no tag: a tag on the body writes the record, and a draft is made with its
+/// body, so an empty table means the body says nothing. The body of such a graph is therefore
+/// exactly a default `GCRegion`.
 ///
 /// It is returned by value rather than as a shared static: the answer belongs to the graph that
 /// was asked about, and a caller that compares two answers must not get one object.
