@@ -181,6 +181,11 @@ export rule jvp_matmul::<T>(a: T[..], b: T[..]) when is_float::<T>() {
 // Their right sides name the operator with that same constant: `modules/transforms/rule_expand.cpp`
 // carries a `with` input of the right side over like an operand, so the copied node's angle argument
 // is the rule's own constant and no context argument of the matched node is invented.
+// The paragraph that used to stand here said `softmax` and `reshape` were not in this file because a
+// rule's right side may not pass a context argument of its own -- `4fb738332` removed exactly that
+// refusal (the `with` input of a right side is carried over like an operand, and one the body does
+// not carry is still refused by name), so the statement is no longer true and the two laws are
+// written below. What is left is the pattern half, which is the next paragraph.
 // `test/plans/feat/compile/rules_angle_args.plan.toml` pins the numbers these two laws have to
 // answer once a rule can name what the node carries.
 //
