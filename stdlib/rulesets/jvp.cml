@@ -383,7 +383,7 @@ export rule jvp_pow::<T>(x: T, w: T) when is_float::<T>() {
 // 12:10: a duplicate is two laws of one parameter-type list, and `when` does not decide it). The two
 // shapes cannot be merged -- they answer closures of different arity, `(dx: S)` against `()`, and a
 // rule's right side cannot branch on a type -- so the sources with no tangent space are named:
-// `is_integer::<T>()` is `int | i32` (`stdlib/types.cml:153`) and the third is `string`. The float
+// `is_integer::<T>()` is `int | i32` (`stdlib/types.cml#is_integer`) and the third is `string`. The float
 // sources stay one generic law per destination, `(x: S) when is_float::<S>()`, because the conversion
 // of the tangent is legal for every one of them and is checked where the source is known.
 //
