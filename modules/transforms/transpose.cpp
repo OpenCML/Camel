@@ -190,6 +190,14 @@ RuleChoice chooseTransposedRule(
         if (soleType != nullptr) {
             soleTypes.push_back(soleType);
         }
+        // GUARD for the empty tuple, so that it is not read as a question nobody asked: this line is
+        // reached only after the one-per-port reading above answered something other than `Shape`,
+        // and `soleType` is `instanceTypes.front()` -- the types `lawInstanceTypes` built from the
+        // step's own operands. Its empty case is an operator with no operand, and a null front is a
+        // null operand type, which that function lets through on purpose so the expansion says what
+        // it could not build in its own words. An empty tuple handed to `chooseRuleAmong` is answered
+        // as `Shape` (no instance found), which is the sentence the walk then refuses with; it is
+        // never handed to the expansion as a tuple of one invented type.
         choice = chooseRuleAmong(context, camel::core::transposeRulesOf(std::string(uri)),
                                  soleTypes, actual, dataOperandCount, words, answered);
         // `operandTypes` stay the node's own in both readings: the shape test is about the operands
@@ -297,6 +305,13 @@ std::vector<Type *> lawInstanceTypes(
     // A law instantiated at no operand type at all: there is nothing to ask and nothing to reduce,
     // so the tuple stays empty and the caller reads that as "no instance to try". A `float` pushed in
     // here would be an instance asked about a type no step has.
+    //
+    // GUARD for the empty case, so that it is not read as a reading nobody took: `portTypes` is the
+    // node's own operand-type list (`operandTypes` at every call site), so empty means an operator
+    // node with **no operand at all** -- not a type that could not be read. Every rule in
+    // `stdlib/rulesets/transpose.cml` is written for at least one operand and names at least one type
+    // parameter (`export rule mul_t::<T>(x: T, c: T)` and its siblings), so such a node has no
+    // instance to be given; pushing `Float64()` here would be the one instance it can never have.
     if (types.empty()) {
         return types;
     }
@@ -426,6 +441,13 @@ std::string addUriFor(const camel::runtime::GCGraph *function, gc_node_ref_t ref
 /// float operators come in (`:op/add_d`, `:op/add_f`). A result with no tangent space has no
 /// cotangent to take in at all; a reduced-precision float has one, and this file has no addition for
 /// it yet, so it is refused here instead of being answered with a `float` cotangent.
+///
+/// The two widths in the `return` are **not** an oversight and must not be deleted as one: opening
+/// this to `bf16`/`f16` needs a case that transposes a `bf16` function, and today there is none -- the
+/// readings below the gate are already the space's own (`addUri`, `zero`, `zerosLikeUri` all come from
+/// the registry), so the code would very likely work, and "very likely works with nothing measuring
+/// it" is how the seventeen readings in this file were written in the first place. A lane that opens
+/// this brings the case that reads a `bf16` cotangent, in the same commit.
 bool hasResultCotangent(const Type *result) {
     if (result == nullptr) {
         return false;
@@ -448,6 +470,15 @@ bool hasResultCotangent(const Type *result) {
 /// `nullptr` for a result with no tangent space. The gate above (`hasResultCotangent`) refuses such
 /// a function before a signature is built from it, so a caller that meets a nullptr here is inside a
 /// build the gate already admitted: it refuses rather than answer with a `float`.
+///
+/// GUARD, so that the `nullptr` is not read as a reading nobody took: the gate asks
+/// `tangentSpaceOf` of **the same type** (`function->exitType()`) and refuses the whole function when
+/// there is no space, and every caller here is inside a member built after that answer. A `nullptr`
+/// therefore says "a member is being built for a function the gate never admitted", which is this
+/// walk's own defect and not a state a program can be in -- so it refuses by name instead of
+/// answering a `float`. Anything that builds a signature without going through the gate (a caller
+/// that writes `cotangentTypeOfResultType` into a new path) meets the gate's question only if it asks
+/// it: check that it does before assuming this cannot answer `nullptr`.
 Type *cotangentTypeOfResultType(const Type *result) {
     if (result == nullptr) {
         return nullptr;
@@ -2251,6 +2282,15 @@ bool buildTransposeMember(
                     // answers for means the signature and the marks do not belong together. A tuple
                     // of `answerCount` `float`s written in that place is a type nobody computed: it
                     // would hand the caller an `f32` cotangent to read as a `float`.
+                    //
+                    // GUARD for the arity above, so that the mismatch is not read as a case nobody
+                    // tried: the answer tuple is built by `transposeSignature` out of the same
+                    // `participates` vector this site counts -- one member per parameter it answers
+                    // for -- and `answerCount` is `answerAt.size()`, the set entries of that one
+                    // vector. The two numbers are one list read twice, in this function, and the
+                    // callee is the graph `participates` was written for (`calleeToTranspose`, chosen
+                    // above from the call's own callee). A mismatch therefore means the callee's
+                    // signature was built by something other than this walk's count.
                     FunctionType *const calleeSignature = transposeSignature(
                         calleeToTranspose->funcType(), participates, nullptr,
                         &state.calleeNeeds[calleeToTranspose]);
@@ -3762,6 +3802,16 @@ bool buildTransposeMember(
                         // the member's own type `calleeType`, the same one the static function
                         // value below is written at. A `float` written here is a call whose callee
                         // value is typed `float` while the call's answer is not.
+                        //
+                        // GUARD for "written in place", so that this branch is not taken for dead
+                        // code: `argumentAt == 1` is exactly "`calleeIdOf` answered for the call's
+                        // **first ordinary input**" (the two lines that set it above), i.e. the
+                        // callee stands at the call site as an ordinary operand rather than as a
+                        // named graph (`calleeIdOf(ref)`, a FUNC node -- a call written by name) or
+                        // as a `with` input (a value kept in a `let`). A program reaches it by
+                        // writing a function value where the call's first argument goes; none of the
+                        // five `floatgate_f32_*` cases does, which is why it is unchanged in reading
+                        // and not because no such program can be written.
                         calleeValue = draft.addFuncNode(transposed, calleeType);
                         callArgs.push_back(calleeValue);
                     } else {
