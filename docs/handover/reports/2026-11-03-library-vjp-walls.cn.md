@@ -37,6 +37,20 @@
 
 写不出来是因为它需要**带体的 `with` 参数包**：`src/compile/gct/builder.cpp:5378` 的守卫拿掉之后，`with <..ws>` 加体里 `inner<..ws>(x)` 直接 `camel: internal error: Unknown GCT NodeType`，而 `with <..ws: int>` 更早被拒（`The rest parameter '..ws' cannot write a type`）。所以这条排在增补 1（语法那件）之后；**在那之前不要删引擎的 `pullback.cpp`**。
 
+## 3.5 第一堵墙的措辞与读数不符（2026-11-03 20:30，车道 `lane-s2wall`，呈上）
+
+第 2 节第 1 行把第一堵墙写成"`pairTypeOf` 只给浮点标量造 `(值, 切向)` 对"，并把责任落在 `modules/transforms/jvp.cpp#pairTypeOf`。**照这一句排期的下一面墙会派错。** 在 `af3a1c774` 上量到的三组读数：
+
+- `pairTypeOf` 今天只问一个问题 —— `tangentSpaceOf(type).kind == Self && space == type`（`modules/transforms/jvp.cpp#pairTypeOf`，函数上方注释记着 2026-11-02 作者撤掉了第二道门）。**数组拿到的是自己类型的对**，不是"没有对"。同一句判据也在 `test/plans/feat/compile/transforms.plan.toml#transforms.jvp_matmul` 的描述里被否掉了（"that is no longer true: `jvp` writes the zero of an array type too"）。
+- 无捕获、只吃一个数组参数的函数，`jvp` 正常出数（`jvp(h)([3, 5], (1, 0))` → `value=3 tangent=5`）。所以数组本身不是墙。
+- 真正被拒的是**任何被捕获的值**，与类型无关：`(t: float[]) => k * t[0]` 捕获一个 `float` 也照样 `REINTERP jvp function=__g_235__ skip=body`，捕获 `float[2, 2]` 与捕获 `float[]` 报同一句。GIR 里那个节点的类型是 `CLOSURE_PORT, param_kind="capture"`：捕获是图的端口，但**不在 `withPorts` 里**，提升器只给参数、`with` 参数和循环状态建端口，捕获落在"其他端口"那一支、被原样拷贝而**没有切向**，于是体里第一个读它的算子就 `complete=false`，整个体被拒。
+
+**更正后的措辞（建议）**：第一堵墙不是"被捕获的数组操作数没有切向量对"，而是**"被捕获的值没有端口，提升器少一类端口；任何被捕获的值都会让整个体 `skip=body`，数组只是它最常被看见的样子"**。缺的东西在端口那一层，不在 `pairTypeOf`，也不在规则表。
+
+修法与读数见车道 `lane-s2wall`（`Lift a captured value: the lifted copy declares the closure's ports`，测量用例 `test/plans/feat/showcase_s2.plan.toml#first_step.tensor_forward_jvp`）：捕获端口按源顺序建、`appendClosureNode`、`setClosureType`，切向取自身类型的零。改后张量模型的前向出数（loss `10.34375`、`dL/dw = [[3.75, 13.5], [5.5, 19.5]]`，库层 = 引擎 = 手算 = PyTorch，逐元素 0.0），而 `vjp` 路径卡在**下一面墙 `split`**：`REINTERP split function=jvp_of_… skip=forward construct=a port uri=- why=the port is not a parameter of the graph, so neither half takes it`。
+
+**给排期的一条**：`stdlib/rulesets/transpose.cml` 里连 `matmul_t` 都没有（只有 `add_t`/`sub_t`/`mul_t`/`div_t`/`neg_t`/`dtod_t`/`sum_t`/`mean_axis_t`/`idx_arr_t`/`take_t`），所以 MLP 的 `vjp` 会先卡在**乘积的转置**，比第 2 节第 2 行的 `mul_t` 早一个算子。
+
 ## 4. 复现
 
 ```

@@ -626,18 +626,32 @@ bool liftGraph(
             }
             return made;
         };
-        // The zero tangent of a value that is not a constant: a captured or `with` value does not
-        // move, so its tangent is the zero of its own type -- and when the type leaves an extent
-        // open (`float[]`, `f32[..]`, which is how S2's own parameter tree is written) there is no
-        // static zero to write, because the length is the value's and the value is a port.
+        // The zero tangent of a value that is not a constant -- a captured value or a `with` parameter --
+        // and where that zero is made.
         //
-        // The language already answers that question, and not here: a tangent space published by
-        // the registry names the operator that makes a zero of a value of that type
+        // *Why it is zero.* This road differentiates the function's ordinary parameters: the caller
+        // hands a seed for each of them, and a value the body merely reads is not one of those
+        // inputs, so it does not move. Design principles 9.9 says the same thing as a rule
+        // (`reinterpret<jvp>` lifts a captured value to a zero tangent), and the forward transform
+        // therefore adds no second port to hand it a direction: the value has one port and the
+        // tangent is the zero of its own type.
+        //
+        // *How it is made, and the boundary between the two ways.* A type whose extents are all
+        // stated has a zero that can be written down while the graph is built -- `0.0` for a
+        // `float`, an array of zeros for `float[2, 2]` -- and `zeroConstantFor` above writes it, as
+        // it already does for a constant. A type that leaves an extent open (`float[]`, `f32[..]`,
+        // which is how S2's own parameter tree is written) has no such zero: the length is the
+        // *value's*, and the value is a port that has not been run yet. Only then is the zero made
+        // where the value is, and by the operator the type's tangent space already names
         // (`TangentSpace::zerosLikeUri`, include/camel/core/derivative.h; the arrays' is
-        // `:tangent/zeros_arr`, src/builtin/operators/derivative.cpp). Building the call is the same
-        // thing this lift does for a rule -- a node at a named operator -- so nothing is invented:
-        // the zero is the one every other reader of a tangent already asks for (`zeroTangent`,
-        // src/builtin/operators/struct.cpp).
+        // `:tangent/zeros_arr`, src/builtin/operators/derivative.cpp) -- the same zero every other
+        // reader of a tangent already asks for (`zeroTangent`, src/builtin/operators/struct.cpp).
+        //
+        // The order matters and is not an optimisation to be traded away: the static zero is one
+        // node per type shared by every rule of that type, while a zero built from a value is that
+        // value's and cannot be shared with the next value of the same open type. Reaching for the
+        // registry first would also make every `float` tangent a call, which is neither what the
+        // rules were handed before nor what a reader of the graph sees today.
         const auto zeroOfValueAtRunTime = [&draft](gc_node_ref_t primal,
                                                    Type *type) -> gc_node_ref_t {
             if (type == nullptr || type->code() != camel::core::type::TypeCode::Array) {
@@ -747,10 +761,19 @@ bool liftGraph(
         //
         // The copy declares them in the source's order, which is the closure tuple's order, and
         // takes the source's closure type; the function value this transform answers already
-        // carries `f`'s tuple (`jvp_operator.cpp`), so the two together make a read through the
-        // derivative read the caller's value. `rematKernel`
-        // (modules/transforms/remat_operator.cpp) copies a graph the same way and records the same
-        // defect: a capture the copy does not declare answers the zero of its slot.
+        // carries `f`'s tuple (`jvp_operator.cpp`, `Function::create` with `f`'s tuple and the tuple
+        // copied over), so the two together make a read through the derivative read the caller's
+        // value. `rematKernel` (modules/transforms/remat_operator.cpp) copies a graph the same way
+        // and records the same defect: a capture the copy does not declare answers the zero of its
+        // slot.
+        //
+        // `closureNodesOf` and `closureTypeOf` are two *readings* added to `GraphRead`, not new
+        // storage: a runtime graph has answered both since captures existed (`GCGraph::closureNodes`
+        // and `GCGraph::closureType`), and the compile-time draft answers both as well
+        // (`GraphDraft::closureNodes`, `GraphDraft::closureType`). The face that turns a graph into
+        // what a transform reads simply did not pass them on, so a transform holding a `GraphRead`
+        // could see a graph's parameters and its `with` ports and not what it captures. Nothing is
+        // recorded twice and nothing new is encoded.
         std::unordered_map<gc_node_ref_t, gc_node_ref_t> capturePortOf;
         {
             const std::vector<gc_node_ref_t> captures = function.closureNodesOf();

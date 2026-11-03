@@ -168,6 +168,10 @@ class GraphRead {
     /// call binds them from the closure tuple and nothing at the call site names them. A transform
     /// that copies a body has to declare them, or a read of a captured value answers the zero of
     /// its slot (`modules/transforms/remat_operator.cpp` recorded that defect).
+    ///
+    /// This and `closureTypeOf` are readings the face was missing, not facts it now stores: both
+    /// graphs already answer them (`GCGraph::closureNodes`/`closureType`, and the draft's own
+    /// `closureNodes`/`closureType`). Nothing is recorded twice.
     virtual std::vector<gc_node_ref_t> closureNodesOf() const = 0;
     /// The tuple those captures are read out of at a call, `nullptr` when the graph captures
     /// nothing.
