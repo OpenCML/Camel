@@ -688,20 +688,24 @@ class GCGraph : public camel::core::rtdata::Object {
             at = one->parent;
         }
     }
-    /// True when the node `reader` may read a port of the region `portRegion`. Three readers may:
-    /// a node of that region, a node of a region `portRegion` sits in, and the node that owns it
-    /// (`region(portRegion)->owner`). A branch arm reading the function's own parameter is the
-    /// second; a LOOP node reading the port its own body region ends in is the third. Anyone else
-    /// is outside the frame the port lives in: a port of a region inside the reader is a value that
-    /// region produces, and it is not there before that region runs -- a loop body's port is a
-    /// different value every round, and the reader of the rounds is the loop node, not its
-    /// neighbours.
-    bool regionIsVisibleFrom(uint32_t portRegion, gc_node_ref_t reader) const {
+    /// True when the node `reader` may read the port `port` of the region `portRegion`. Two readers
+    /// may: a node of a region `portRegion` contains -- the region itself and every region inside
+    /// it -- and the node that owns the region (`region(portRegion)->owner`), but that one only the
+    /// region's **exit** (`region.result`; a loop's condition region has one too).
+    ///
+    /// The owner's read is the rule's one exception and it is written on the port, not on the
+    /// reader's identity or on the exit's node kind (author ruling 2026-11-03 08:10): a `LOOP`
+    /// consumes its body's exit round by round, and a body written `do s` ends in the state port
+    /// while one written `do s + 1` ends in an Oper -- the same thing to the loop, so a rule that
+    /// told the two apart would be a special case. Any *other* port of the region is refused to the
+    /// owner as well: it is a value that region produces, and it is not there when the owner looks
+    /// at it.
+    bool regionIsVisibleFrom(uint32_t portRegion, gc_node_ref_t port, gc_node_ref_t reader) const {
         if (isAncestorOf(portRegion, nodeRegion(reader))) {
             return true;
         }
         const GCRegion *one = region(portRegion);
-        return one != nullptr && one->owner == reader;
+        return one != nullptr && one->owner == reader && one->result == port;
     }
     /// The LoopCond or LoopBody region (`part`) of the LOOP node `ref`; 0 when it has none: a For
     /// loop has no condition, and a loop in graph form has no regions.
