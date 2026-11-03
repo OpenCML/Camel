@@ -181,7 +181,7 @@ export func sum::<T>(t: T[..], axis: int, keepdims?: bool): T[..]
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
 /// @example sum_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [4.0, 6.0]
-export func sum_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]
+export func sum_axis::<T>(t: T[..], axis: int, keepdims: bool): T[..]
 
 /// The mean of every element, in the operand's element type, with one rounding: the canonical
 /// form of the element type `T` is `mean::<T>(x: T[..]): T = T(sum(float(x)) / float(numel(x)))`.
@@ -207,7 +207,7 @@ export func mean::<T>(t: T[..], axis: int, keepdims?: bool): T[..]
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element
 /// @example mean_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [2.0, 3.0]
-export func mean_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]
+export func mean_axis::<T>(t: T[..], axis: int, keepdims: bool): T[..]
 
 /// IEEE 754-2019 maximum of every element (design principles 7.7): a NaN anywhere gives `nan`, and
 /// -0 is below +0. An extremum has no identity, so a tensor with no element is a fault rather than
@@ -253,7 +253,7 @@ export func max::<T>(t: T[..], axis: int, keepdims?: bool): T[..]
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element
 /// @example max_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [3.0, 4.0]
-export func max_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]
+export func max_axis::<T>(t: T[..], axis: int, keepdims: bool): T[..]
 
 /// IEEE 754-2019 minimum over the axis (exactly associative and commutative); keepdims keeps the
 /// axis with extent 1.
@@ -269,7 +269,7 @@ export func min::<T>(t: T[..], axis: int, keepdims?: bool): T[..]
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element
 /// @example min_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [1.0, 2.0]
-export func min_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]
+export func min_axis::<T>(t: T[..], axis: int, keepdims: bool): T[..]
 
 /// The position (`int64`) of the first maximum over the axis by IEEE 754-2019 maximum: the first
 /// NaN if there is one, +0 above -0, the earlier position on a tie.
@@ -285,7 +285,7 @@ export func argmax(t: float[..], axis: int, keepdims?: bool): int64[..]
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element
 /// @example argmax_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [1, 1]
-export func argmax_axis::<T>(xs: T[..], axis: int, keepdims: bool): int[]
+export func argmax_axis::<T>(t: T[..], axis: int, keepdims: bool): int[..]
 
 /// The position (`int64`) of the first minimum over the axis by IEEE 754-2019 minimum: the first
 /// NaN if there is one, -0 below +0, the earlier position on a tie.
@@ -301,7 +301,7 @@ export func argmin(t: float[..], axis: int, keepdims?: bool): int64[..]
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element
 /// @example argmin_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [0, 0]
-export func argmin_axis::<T>(xs: T[..], axis: int, keepdims: bool): int[]
+export func argmin_axis::<T>(t: T[..], axis: int, keepdims: bool): int[..]
 
 /// The softmax over the axis (-1, the last axis, by default), computed as its normative
 /// definition in Camel, in `f32`.

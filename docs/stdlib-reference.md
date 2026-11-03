@@ -1982,7 +1982,7 @@ The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis wit
 #### `sum_axis`
 
 ```camel
-sum_axis: (xs: T[..], axis: int, keepdims: bool) => T[..]
+sum_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
 ```
 
 The sum of each lane along one axis, accumulated in `f64` from `+0` in ascending order and
@@ -2026,7 +2026,7 @@ The same mean over one axis; keepdims keeps the axis with extent 1.
 #### `mean_axis`
 
 ```camel
-mean_axis: (xs: T[..], axis: int, keepdims: bool) => T[..]
+mean_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
 ```
 
 The mean of each lane along one axis: the sum and the count both in `f64`, one rounding into
@@ -2108,7 +2108,7 @@ the same bits); keepdims keeps the axis with extent 1.
 #### `max_axis`
 
 ```camel
-max_axis: (xs: T[..], axis: int, keepdims: bool) => T[..]
+max_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
 ```
 
 The largest element of each lane along one axis. An empty axis is a fault, as for the whole
@@ -2134,7 +2134,7 @@ axis with extent 1.
 #### `min_axis`
 
 ```camel
-min_axis: (xs: T[..], axis: int, keepdims: bool) => T[..]
+min_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
 ```
 
 The smallest element of each lane along one axis. An empty axis is a fault: a minimum over no
@@ -2161,7 +2161,7 @@ NaN if there is one, +0 above -0, the earlier position on a tie.
 #### `argmax_axis`
 
 ```camel
-argmax_axis: (xs: T[..], axis: int, keepdims: bool) => int[]
+argmax_axis: (t: T[..], axis: int, keepdims: bool) => int[..]
 ```
 
 The position of the largest element of each lane along one axis, an `int` index along that
@@ -2188,7 +2188,7 @@ NaN if there is one, -0 below +0, the earlier position on a tie.
 #### `argmin_axis`
 
 ```camel
-argmin_axis: (xs: T[..], axis: int, keepdims: bool) => int[]
+argmin_axis: (t: T[..], axis: int, keepdims: bool) => int[..]
 ```
 
 The position of the smallest element of each lane along one axis; a tie keeps the earlier
