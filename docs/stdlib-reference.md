@@ -1405,8 +1405,7 @@ Forward mode: `jvp(f)` gives a function that takes the parameters of `f` followe
 tangents and returns the pair `(value, tangent)`. `jvp(f)(2.0, 1.0)` is the value `f(2.0)`
 together with the derivative of `f` at 2 in the direction 1.
 
-- Example (a fragment, not compiled): `let forward = jvp(f)`
-- Why it is not compiled: `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
+- Example: `let forward = jvp((x: float) => x * x)`
 
 #### `split`
 
@@ -1465,8 +1464,7 @@ parameters the call site still passes" -- a missing capability of the splice, to
 wording to be kept. `modules/transforms/transpose.cpp#transposeSignature` is the build that has to
 come to agree with it.
 
-- Example (a fragment, not compiled): `let back = transpose(f)`
-- Why it is not compiled: `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
+- Example: `let back = transpose((x: float) => 2.0 * x + 3.0 * x)`
 
 #### `vmap`
 
@@ -1487,8 +1485,7 @@ operator with no rule is refused by name at the primitive, never batched by a gu
 branch or a loop in the body is refused the same way, because the elementwise tier batches
 straight-line bodies.
 
-- Example (a fragment, not compiled): `let batched = vmap(f)`
-- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+- Example: `let batched = vmap((x: f32) => x * 2.0)`
 
 #### `remat`
 
@@ -1512,8 +1509,7 @@ the name says. `modules/transforms/remat_operator.cpp` answers `(f: F) => F` and
 the value stands on; the shapes a call site can write today are the ones `jvp`'s and `split`'s
 declarations show, because the result of a call is the exit type its resolver gives.
 
-- Example (a fragment, not compiled): `let remembered = remat(f)`
-- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+- Example: `let remembered = remat((x: int) => x + 1)`
 
 <a id="vjp"></a>
 
@@ -5457,8 +5453,7 @@ function, in the order of their names; empty for a graph that is no declaration 
 for a declaration that writes none. The declaration's facts travel with the graph, so a pass
 reads them without the module that declares the function.
 
-- Example (a fragment, not compiled): `declaration_tags(graph_of(f))`
-- Why it is not compiled: pass is the surrounding pass and f the function it received
+- Example: `declaration_tags(graph_of((x: int): int => x + 1))`
 
 #### `tag_name`
 
@@ -5494,8 +5489,7 @@ The rule the declaration of `g` writes for the transformation `name`: `jvp` is f
 Null when the declaration writes none, when it writes that tag twice, and when what the tag
 names is not a function. The name is the one the program writes, or its qualified spelling.
 
-- Example (a fragment, not compiled): `rule_of(graph_of(f), 'vjp')`
-- Why it is not compiled: pass is the surrounding pass and f the function it received
+- Example: `rule_of(graph_of((x: int): int => x + 1), 'vjp')`
 
 #### `origin`
 
@@ -5681,8 +5675,7 @@ holds it. The value is a number, a bool or a string; a string is copied into the
 space because a value a transaction creates may be live at a safepoint where its draft is not
 traced.
 
-- Example (a fragment, not compiled): `add_constant(t, g, 7)`
-- Why it is not compiled: t is an open transaction and g a graph of it
+- Example: `add_constant(open((x: int): int => x + 1), graph_of((x: int): int => x + 1), 7)`
 
 #### `commit`
 
@@ -5694,8 +5687,7 @@ Checks the edits and makes the changed function: the same type as the one that w
 the values it captured, sharing every graph nothing changed. The transaction is over.
 
 - Failure: error value `GraphConflict` when a graph the transaction touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant (the message names the graph, the node and the edge); error value `TxnUsed` when the transaction was over already.
-- Example (a fragment, not compiled): `commit(t)`
-- Why it is not compiled: t is an open transaction
+- Example: `commit(open((x: int): int => x + 1))`
 
 #### `abort`
 
@@ -5705,8 +5697,7 @@ abort: (t: Txn<F>) => void uses t
 
 Drops the transaction.
 
-- Example (a fragment, not compiled): `abort(t)`
-- Why it is not compiled: t is an open transaction
+- Example: `abort(open((x: int): int => x + 1))`
 
 <a id="rewrite"></a>
 
@@ -5816,8 +5807,8 @@ either, because a `with` parameter without a default may not follow one that has
 `void`, and `F?` leaves `F` unbound). Written first, it is the argument the arrow carries:
 `rules->check<8, 1>(f)`.
 
-- Example (a fragment, not compiled): `rules->check(f)`
-- Why it is not compiled: `rules` and `f` come from the caller
+- Example (a fragment, not compiled): `rules->check((x: int) => x + 1)`
+- Why it is not compiled: `rules` comes from the caller
 
 #### `check_text`
 
@@ -7681,7 +7672,6 @@ one that runtime has (`'none'` switches the check off).
 
 - With effects: writes a file and reads the function's graph.
 - Failure: error value `ExportUnsupported` when `fn` is not a function, when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node; error value `IOError` when the model cannot be written.
-- Example (a fragment, not compiled): `export_model<out: "/tmp/model.onnx">(fn, example)`
-- Example (a fragment, not compiled): `export_model<out: "/tmp/model.onnx", dynamic_axes: [0]>(fn, example)`
-- Example (a fragment, not compiled): `export_model<out: "/tmp/model.onnx", target: "onnxruntime-cpu">(fn, example)`
-- Why it is not compiled: the call needs a function value and an example of the arguments that function takes, which the description introduces (the exporter reads the function's graph, so no value a fragment can write stands for it)
+- Example: `export_model<out: "/tmp/model.onnx">((x: float) => x * 2.0, 2.0)`
+- Example: `export_model<out: "/tmp/model.onnx", dynamic_axes: [0]>((xs: f32[2, 3]) => xs[0][0], [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])`
+- Example: `export_model<out: "/tmp/model.onnx", target: "onnxruntime-cpu">((x: float) => x * 2.0, 2.0)`

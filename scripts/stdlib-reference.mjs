@@ -2090,7 +2090,27 @@ const EXAMPLE_STOPS = {
     // class -- `f` is a name only the description introduces -- so the example went with the
     // declaration and the class is one smaller. No example was fixed and none was excused; one was
     // deleted with the name it named.
-    'a semantic error': 39,
+    //
+    // 39 -> 24 (2026-11-03, branch lane-docexamples): thirteen examples left this class, and the
+    // route out was the example, not the number. Twelve had a fragment marker that said the page
+    // could not write the name the call takes; the name is writable where the call is, so the
+    // example now writes it and the marker went with the excuse it no longer needed --
+    // `jvp`, `transpose`, `vmap` and `remat` write the function instead of a bare `f`;
+    // `declaration_tags` and `rule_of` write `graph_of((x: int): int => x + 1)` for the same
+    // `f`; `stdlib/graph.cml`'s `commit`, `abort` and `add_constant` write
+    // `open((x: int): int => x + 1)` instead of a transaction the page cannot make; and
+    // `export_model`'s three examples write the function and its argument instead of `(fn,
+    // example)`. The thirteenth, `rules->check(f)`, kept its marker and left the class the other
+    // way: it writes the function, so it is compiled with `rules` bound and belongs in the list of
+    // examples a marker calls not compiled that compile only with a name bound. No example was
+    // deleted. What stays in this class needs a value no example program can write, and the marker
+    // on each says which: a `Bytes` built with `bytes`'s `encode` (`len`, `slice`, `read_bytes`,
+    // `read_chunk`, `write_bytes`, `append_bytes`, `sha256`), a node, a transaction or a rule set of
+    // a pass (`constant`, `replace`, `erase`, `eval`, `rewrite`, `saturate`, `extract`, `run`,
+    // `explain`, `explain_all`, `why_not`), the stream a tee reads (`tee_note`), a Python callable
+    // (`call`), and a function the gradient needs a `with` parameter on (`grad` twice, `with_grad`
+    // twice).
+    'a semantic error': 24,
     // `split`'s example reaches the compiler with a function-typed parameter bound by name and the
     // compile graph keeps a live dereference node (`internal error: Compile graph '__doc_example'
     // still contains a live DREF node`). That is the compiler's own class, not the example's.
