@@ -28,6 +28,13 @@
 //                                               (the trees in SKIP_DIRS, on a tree it writes itself)
 //   node scripts/check-doc-links.mjs FILE DIR  the given files and directories
 //
+// Over a developer's checkout a `--citations` run reads the checkout and not the trees a build, a
+// Python environment or a dependency download leaves beside it (they are the names in SKIP_DIRS).
+// Before those names were skipped, one run of this check over such a checkout had not finished
+// after 46 minutes and was taken for a hang by two lanes in one night. So: if a run over a
+// developer checkout does not end in seconds, it is walking a tree that belongs in that set -- the
+// answer is to add the name, never to wait an hour or to read the wait as a red check.
+//
 // Exit status 1 when a link is broken or a citation does not resolve, 2 when the scope is empty or
 // names a missing entry: a check of nothing is refused, never reported as a pass. External links
 // (http, mailto) are not fetched.
@@ -76,15 +83,17 @@ const SCOPE = [
 // longer than ten minutes and was read as a hang or as a red check rather than as a walk of the
 // repository (measured 2026-11-04).
 //
-// `vendor` is here for the three reasons `sdks` is: git ignores it, so it is not content of a
-// checkout; its files cite *their own* paths, so it reports citations of this repository that were
-// never made (a page named `README` under the other project's `docs`, a `src/shape/...` of another
-// project in Eigen's); and two of its headers send the citation patterns into catastrophic
-// backtracking -- `nlohmann/detail/meta/type_traits.hpp` costs 208.5 s in the symbol pattern and
-// 205.7 s in the line pattern, `taskflow/dsl/task_dsl.hpp` 82.7 s and 82.8 s, both for zero
-// matches. Every one of those four measurements is on one 28.8 KB or 4.0 KB file, so it is the
-// pattern and not the walk. (No literal path of that kind is written here: this file is scanned
-// too, and the first draft of this very paragraph was reported as a citation it never made.)
+// `vendor` is here for two reasons of content and one of cost. Content: git ignores it, so it is
+// not content of a checkout, exactly like `sdks`; and its files cite *their own* paths, so the
+// check reported citations of this repository that nobody made and the run went red for files of
+// other projects (a page named `README` under the other project's `docs`, a `src/shape/...` of
+// another project in Eigen's) -- two such rows on this developer checkout. Cost: two of its
+// headers send the citation patterns into catastrophic backtracking --
+// `nlohmann/detail/meta/type_traits.hpp` costs 208.5 s in the symbol pattern and 205.7 s in the
+// line pattern, `taskflow/dsl/task_dsl.hpp` 82.7 s and 82.8 s, both for zero matches. Every one of
+// those four measurements is on one 28.8 KB or 4.0 KB file, so it is the pattern and not the walk.
+// (No literal path of that kind is written here: this file is scanned too, and the first draft of
+// this very paragraph was reported as a citation it never made.)
 //
 // Git ignores every name below, so none of them is content of a checkout: with them skipped the
 // run verifies the same citations and the walk is the repository's own. `venv` is named beside
