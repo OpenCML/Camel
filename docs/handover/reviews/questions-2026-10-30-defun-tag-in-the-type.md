@@ -4,7 +4,7 @@
 
 两处说法互斥，且后者晚于前者：
 
-- **代码**（`src/passes/opt/defun/defun.cpp:8-10`，2026-10-29 14:42 合入 develop）：
+- **代码**（`src/passes/opt/defun/defun.cpp:8-10`，2026-10-29 14:42 合入 develop；该文件现在在 `src/passes/opt/defun/defunctionalize.cpp`，`src/passes/opt/defun/defunctionalize.cpp#DefunctionalizeRewritePass::apply`）：
   「A function value in this graph model is already a tag with an environment: a FUNC node
   names the function (the tag) and a FILL of kind FunctionClosure adds the values it captures
   (the environment)」——所以这个 pass 只剩「把分派变静态」，手段是**按 (callee, function) 复制一份

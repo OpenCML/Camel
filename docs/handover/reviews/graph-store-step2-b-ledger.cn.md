@@ -934,7 +934,7 @@ HANDLE_PROBE refused: InvalidArgument
 * `resources.cpp`：`makeDraft` 从 `make_unique<rt::GraphDraft>()` 改成 `rt::GraphTransaction::open(id, type)`；三个 helper（`addPort`／`finish`／`encode`）改收事务，草稿在函数体内借。
 * `anchor.h`：`anchorNode`／`blankNode` 改收事务；**33 个调用点散在 7 个文件，一片做完**（`edges` 17、`chunks` 1、`keepfn` 2、`graph_release` 1、`fault` 1、`facts` 1）。每个调用点手上本来就有事务——`session.edit(...)` 或一个绑定好的 owner。
 
-**三个数**：**消失的参数 6 个**（`resources` 4、`anchor` 2）；**删掉的行数 156**；**保留 1 个**（`test/writings.cpp:216` 的 `GraphDraft::WritingScope`——**类型自己的作用域守卫，不是参数**）。
+**三个数**：**消失的参数 6 个**（`resources` 4、`anchor` 2）；**删掉的行数 156**；**保留 1 个**（`test/writings.cpp:216` 的 `GraphDraft::WritingScope`；该文件现在在 `src/passes/test/writings.cpp`（`src/passes/test/writings.cpp#roundtrip`），`WritingScope` 本身在 `include/camel/runtime/draft.h#GraphDraft::WritingScope`——**类型自己的作用域守卫，不是参数**）。
 
 **四个数：45 / 389 / 2 / 4。**（**`constructions` 3 → 2**：测试里那一处构造没了，只剩事务内部的两处。）
 
@@ -981,7 +981,7 @@ HANDLE_PROBE refused: InvalidArgument
 | 11 | `writings.h:411` + `writings.cpp:434` **只收草稿的构造函数** | **留**：**这是另一条车道 4 小时前才立的门**（"a draft alone has no owner"），删它等于替他们改决定；要删得先问 |
 | 12 | `writings.h:557` 成员 `GraphDraft &draft_` | **留**：**草稿就是这份 writings 的研究对象**，不是伸手要 |
 | 13–17 | `writings.cpp:824/1003/1435/1982/2449` 五处 `GraphDraft::WritingScope` | **留**：**类型自己的作用域守卫**，同 §41 判过的那条 |
-| 18–19 | `test/writings.cpp:216` | **留**：同上（上一片已判） |
+| 18–19 | `test/writings.cpp:216`（该文件现在在 `src/passes/test/writings.cpp`，`src/passes/test/writings.cpp#roundtrip`） | **留**：同上（上一片已判） |
 
 **三个数**：**消失的参数 6 个**（第 1、4、5、6、7、8 项）+ **一个访问器**（第 2 项）；**删掉的行数 55**；**保留 9 个**。
 
@@ -1047,7 +1047,7 @@ HANDLE_PROBE refused: InvalidArgument
 |---|---|---|
 | 1 | `modules/graph/txn.cpp#mm` `using camel::runtime::GraphDraft;` | **删**：这个 using **一次都没被用到**——点名一个自己不碰的类型，等于宣告一个不存在的主人 |
 | 2 | `modules/onnx/exporter.cpp#bindCaptures` `bindCaptures(GraphDraft &, …)` | **改**：`session.rootDraft()` 本来就返回 `GraphTransaction&`，收下它、问 `.edit()` |
-| 3 | `src/runtime/operator_instance.h:40` + `.cpp:92` `kernelArgumentsOf(const GraphDraft &, node)` | **等**：5 个调用点（`generic.cpp:1112`、`definitions.cpp:508`、`module.cpp:2140`、`writings.cpp:1530/2364`）**手上都只有一张草稿**——**与 `tiles` 那 7 个通行参数同型，同一个 id 问题堵着** |
+| 3 | `src/runtime/operator_instance.h:40`（该文件现在在 `include/camel/runtime/operator_instance.h`，`include/camel/runtime/operator_instance.h#kernelArgumentsOf`）+ `.cpp:92` `kernelArgumentsOf(const GraphDraft &, node)` | **等**：5 个调用点（`generic.cpp:1112`、`definitions.cpp:508`、`module.cpp:2140`、`writings.cpp:1530/2364`）**手上都只有一张草稿**——**与 `tiles` 那 7 个通行参数同型，同一个 id 问题堵着** |
 | 4 | `modules/rewrite/proof.h#linkAfter` | **留**：它点的是 `GraphDraft::decode` 这个 API。**改它会把 `decode` 那格也用散文降下来**（试过：`decode` 4 → 3），**那是拿散文改代码格，不做** |
 | 5 | `include/camel/core/data/composite/func.h` | **已经没有了**（今天 0 处），清单可能旧了 |
 
