@@ -196,7 +196,7 @@ export func mean_stated::<T>(t: T[..], at: int[]): T when is_numeric::<T>()
 /// broadcasts it against the extents `at` states.
 /// @pure
 /// @fails fault `RuntimeError` when `at` is shorter than three entries, its extents disagree with the tensor's shape, or the axis is outside the rank
-/// @example max_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[false, true], [false, true]], [1, 0, 2, 2])    // [2.0, 4.0]
+/// @example max_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[false, true], [false, true]] as bool[2, 2], [1, 0, 2, 2])    // [2.0, 4.0]
 export func max_axis_stated::<T>(t: T[..], mask: bool[..], at: int[]): T[..] when is_numeric::<T>()
 
 /// The smallest element of each lane along one axis, with the tie selection, the axis, `keepdims` and
@@ -204,7 +204,7 @@ export func max_axis_stated::<T>(t: T[..], mask: bool[..], at: int[]): T[..] whe
 /// `max_axis_stated` is.
 /// @pure
 /// @fails fault `RuntimeError` when `at` is shorter than three entries, its extents disagree with the tensor's shape, or the axis is outside the rank
-/// @example min_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[true, false], [true, false]], [1, 0, 2, 2])    // [1.0, 3.0]
+/// @example min_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[true, false], [true, false]] as bool[2, 2], [1, 0, 2, 2])    // [1.0, 3.0]
 export func min_axis_stated::<T>(t: T[..], mask: bool[..], at: int[]): T[..] when is_numeric::<T>()
 
 // ---- binary form ----
