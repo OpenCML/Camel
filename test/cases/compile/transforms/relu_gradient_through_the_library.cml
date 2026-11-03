@@ -32,30 +32,27 @@
 // `y > 0`, which are the same set, so the input zero has slope zero on both sides -- measured, not
 // argued.
 //
-// ---- what the product law reads (measured 2026-11-04) ----
+// ---- where the walk stops now (measured 2026-11-04, with the closure-member rules) ----
 //
 // The `sum` step turns around: its forward rule states the extents (`jvp_sum` calls `sum_stated(dxs,
 // shape(xs))`) and the walk applies `sum_stated_t`, which reads that list and nothing of `dxs`. That
 // is one more residual than before -- `residuals=3`, because `shape(relu(x))` is a value the
 // backward half reads. The mask is what the backward half computes from the closure member `x`, and
 // the closure-member rules settled that step (author, 2026-11-03 19:55): a closed-over member takes
-// no cotangent, and a value computed only from members is not asked for one -- so the walk asks the
-// product's law for one cotangent only, the tangent's.
+// no cotangent, and a value computed only from members is not asked for one -- so the walk no longer
+// asks the product's law for the mask's **own** cotangent, and stops at the position the answer does
+// need, the tangent's:
 //
-// What the law then reads is the operand it is **not** answering for. `mul_tensor_t`'s answer used
-// to name the operand's own shape (`sum_to(ct * w, x)` for `x`), which reads the tangent; it now
-// names the other one (`sum_to(ct * w, w)` for `x`, `sum_to(ct * x, x)` for `w`), so the answer for
-// the tangent's cotangent reads the mask, a value the backward half has. The walk reports the
-// finished half, where it used to report
-// `skip=cotangent-needs-a-value uri=tensor:multiply`:
+//     TRANSPOSE function=split_of_jvp_of_total_backward skip=cotangent-needs-a-value uri=tensor:multiply position=1
 //
-//     TRANSPOSE function=split_of_jvp_of_total_backward graph=354 type=(float) => (float[],) nodes=12 arms=0 rhs=sum_stated_t,mul_tensor_t
-//
-//     relu library value=3.0 dL/dx=[0.0, 0.0, 1.0, 0.0]
-//
-// The same law answers `exp`, `sigmoid`, `tanh` through the library and both array products
-// (`test/plans/feat/compile/transpose_array_product.plan.toml`), which is where the six `known_fail`
-// marks came off.
+// `mul_tensor_t` names each operand's shape in its answer -- `sum_to(ct * w, x)` reads `x`, and
+// `sum_to(ct * x, w)` reads `w` -- so the answer for the tangent's cotangent reads the tangent
+// itself. A transposition is handed the cotangent and known values, `float[..]` does not state the
+// shape a carrier would need (`shapeCarrierOf` answers only for a stated shape), and `sum_to` reads
+// that operand for nothing else. The one thing missing is therefore the rule layer's:
+// `mul_tensor_t` has to state the extents the way `sum_stated_t` and `take_stated_t` do. What a rule
+// can settle today is settled and pinned on the numbers instead: `stated_sum_gradient.cml`, beside
+// this file.
 //
 //     camel test/cases/compile/transforms/relu_gradient_through_the_library.cml
 import { vjp } from vjp
