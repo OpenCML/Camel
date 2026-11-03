@@ -1707,3 +1707,25 @@ expect_stderr_contains = ["skip=backward construct=a node whose input was not co
 expect_output_not_contains = ["TRANSPOSE function="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# The same defect read from the top: `grad` is `transpose(split(jvp(f)))`, so a linear half that is
+# a constant function of its direction gives a pullback with no cotangent to send and an answer the
+# program never had to compute -- `grad(g)` printed 0.0 in silence. The four numbers are the two
+# levels (`g = 2x²`, `g2 = 2x³`: 12 at 3, 20 at 5, 54 at 3) and the flat spelling of the same
+# function `g` as the guard (`h(x) = 2.0 * x * x`, 12), which never went through the cut's residual
+# list and must not move. The two-level reading also pins the second half of the fix: a cut adopts
+# its callee's program and not the cuts that program adopted, so `g2` used to stop the run at `a
+# direct call names a function whose graph is not in the program's graph table`
+# (modules/transforms/split.h#SplitGraph::standing).
+[[tests]]
+name = "grad_across_a_call"
+desc = "`grad` through a call, at one level and at two: `f(x) = 2.0 * x`, `g(x) = f(x) * x` (2x², so 12 at 3 and 20 at 5), `g2(x) = g(x) * x` (2x³, so 54 at 3), and `h(x) = 2.0 * x * x` -- the flat spelling of g -- as the guard that the path which was already right still reads 12. Before the fix the first two answered 0.0 without a word and the third stopped the run at a callee graph that the outermost program did not hold."
+kind = "behavior"
+case = "../../../cases/compile/transforms/grad_across_a_call.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["grad_g_3= 12.0", "grad_g_5= 20.0", "grad_g2_3= 54.0", "grad_h_3= 12.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

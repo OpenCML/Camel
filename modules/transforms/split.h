@@ -188,6 +188,15 @@ struct SplitGraph {
     /// one for `x*x`, and three for `f(x, y) = x*x*y` -- `x`, `y`, and `x*x`, because the backward
     /// half's rule for the second `mul` reads that product.
     size_t residuals = 0;
+    /// The cuts this one stands on, one program per cut below it: the program of the first callee
+    /// that had to be cut, then the cuts *that* one stood on, and so on. A build adopts every program
+    /// in the list into its own, because adoption is not transitive -- `Program::adoptMissing` binds
+    /// the graphs a program **owns** and not the ones it adopted itself, so a cut two levels down is
+    /// lost by the time it reaches the outermost program (measured 2026-11-04: `g2(x) = g(x) * x`
+    /// built, and running it stopped at `a direct call names a function whose graph is not in the
+    /// program's graph table`). Carrying the list is what a caller needs to make every graph its
+    /// members call reachable by id.
+    std::vector<const camel::runtime::Program *> standing;
 };
 
 /// Builds the two graphs of `split(f)` and prints what it built. `f`'s graph is read, never changed.

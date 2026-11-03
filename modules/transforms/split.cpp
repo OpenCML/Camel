@@ -1094,7 +1094,8 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 }
                 continue;
             }
-            if (!behindCut && beforeCut[ref] != 0 && ref != tangentHalf) {
+            if (!behindCut && beforeCut[ref] != 0 && ref != tangentHalf &&
+                portIndex[ref] == Residual::kNotAParameter) {
                 // A call of a callee that answers the pair (value, tangent) reads both sides of the
                 // cut and is not itself carried (see the note where the list is filtered below): what
                 // the tangent half recomputes the pair from is the values its caller passes, so the
@@ -1102,6 +1103,19 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 // is decided by the callee's content** (`answersAPair`, the same criterion the cut
                 // itself is built on) -- not by a record of what the callee was lifted from, which
                 // would answer differently for a hand-written graph of the same content.
+                //
+                // A **port** is not one of these, even when the result side reaches it: no half can
+                // carry a port as a computed value, and the tangent port in particular is reached by
+                // the result side for a reason that has nothing to do with the tangent half -- a call
+                // of a pair-answering callee is handed the tangents as ordinary arguments, so the
+                // value half walks into the seed of every parameter its callee is called with. Kept
+                // here, the seed would go into the closure as "parameter k's value" and the backward
+                // half would read the seed's slot where it should read its own port: for
+                // `f(x) = 2.0 * x`, `g(x) = f(x) * x`, `g`'s lin came out `mul_tangent(y, x, lin_f(x),
+                // x)` -- the value in the tangent's place, a constant function of its argument, 36.0
+                // for every `dx`, and `grad(g)` answered 0.0 without a word (measured 2026-11-04).
+                // The port branch below is the one that states what a port contributes: the value port
+                // of its own parameter, which is the only thing the forward half can hand over.
                 const GraphId calleeId = lifted.calleeIdOf(ref);
                 const rt::GCGraph *calleeGraph =
                     program != nullptr && rt::isValid(calleeId) ? program->graph(calleeId) : nullptr;
@@ -3205,7 +3219,20 @@ SplitGraph buildSplitGraph(
                 return SplitGraph{};
             }
             calleeCuts.emplace(callee, member);
-            nestedPrograms.push_back(nested.program);
+            // The callee's cut and the cuts *it* stands on: both have to be adopted below, because
+            // `Program::adoptMissing` binds the graphs a program owns and not the ones it adopted, so
+            // the grandchild of a cut is not carried by its child's program (see `SplitGraph::standing`).
+            if (std::find(nestedPrograms.begin(), nestedPrograms.end(), nested.program) ==
+                nestedPrograms.end()) {
+                nestedPrograms.push_back(nested.program);
+            }
+            for (const rt::Program *onward : nested.standing) {
+                if (onward != nullptr &&
+                    std::find(nestedPrograms.begin(), nestedPrograms.end(), onward) ==
+                        nestedPrograms.end()) {
+                    nestedPrograms.push_back(onward);
+                }
+            }
             pending.push_back(callee);
         }
     }
@@ -3361,13 +3388,15 @@ SplitGraph buildSplitGraph(
     }
     // The programs of the cuts this one stands on: the graphs of those two halves join this build's
     // program, so the calls this half wrote resolve at run time. Adopted, not rebuilt -- the ids the
-    // calls name are the graphs those builds made, and no value is recomputed.
+    // calls name are the graphs those builds made, and no value is recomputed. The list is this
+    // build's own `standing`, so a cut above this one adopts the whole chain in one step.
     for (const rt::Program *nested : nestedPrograms) {
         group.adopt(*nested);
     }
     group.encode();
     const rt::GCGraph *forwardMade  = group.encoded(forwardId);
     const rt::GCGraph *backwardMade = group.encoded(backwardId);
+    built.standing                  = nestedPrograms;
     built.residuals                 = graphResiduals.size();
     os << "REINTERP split function=" << function->name() << " forward=" << rt::toValue(forwardId)
        << " backward=" << rt::toValue(backwardId)

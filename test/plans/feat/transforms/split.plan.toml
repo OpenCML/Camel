@@ -200,3 +200,24 @@ expect_exit = 0
 expect_output_contains = ["proj y= 32.0", "proj d1= 10.0", "proj d2= 11.0", "loop=1 tape=5 invariants=0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# The same question as `split_linear_in_dx`, asked where a *call* is on the path: `g(x) = f(x) * x`
+# with `f(x) = 2.0 * x`, so the tangent the cut carries is `mul_tangent(y, x, lin_f(dx), dx)` and
+# every one of those reads has to be a read of what `jvp` computed. Three directions at x = 3 are
+# 12, 6 and 24 -- and 36, 36, 36 is what a cut that carried the *seed* instead of the value port
+# answered before this case existed: the value half receives the tangent port as an ordinary
+# argument of the call to the lifted callee, and a residual list that took every node the result
+# side reaches as a computed value took the seed with it (modules/transforms/split.cpp#residualsOf).
+# `residuals=3` is the count the cut now names for this shape, and it is pinned because it is the
+# shape of the answer: x's value, the callee's `lin`, and f(x)'s value the rule reads.
+[[tests]]
+name = "split_linear_across_a_call"
+desc = "`lin` through a call: `g(x) = f(x) * x`, `f(x) = 2.0 * x`, so g = 2x² and the linear half is dx -> 4x·dx. At x = 3 the three directions read 12, 6 and 24 -- where the cut used to answer 36.0 for all three, because it carried g's tangent port as 'parameter 0's value' and the backward half read the closure slot holding x in place of its own port. The tangent `jvp` computes itself (12) agrees with the first direction, `twice_dx1` is the linearity statement, and `residuals=3` is the count this shape has."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_linear_across_a_call.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["value= 18.0  tangent= 12.0", "dx1= 12.0", "dx05= 6.0", "dx2= 24.0", "twice_dx1= true", "residuals=3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
