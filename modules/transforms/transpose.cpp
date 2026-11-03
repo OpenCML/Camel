@@ -426,16 +426,30 @@ bool buildTransposeMember(
         if (carriesClosure && function->closureType() != nullptr) {
             draft.setClosureType(const_cast<camel::core::type::TupleType *>(function->closureType()));
         }
-        // Where the parameters' own values start in the closure this member inherited. `split`'s
-        // backward half appends one member per parameter after the residuals, in parameter order
-        // (author, 2026-11-03 00:50 ①: the closure type keeps `residualIndexOf`'s order and gains
-        // one member per value the call hands over), and the graph's mark is what says the tail is
-        // that and not a closure a caller closed the member over. A graph without the mark has no
-        // tail, and a parameter the body asks for is still refused by name below -- the answer is
-        // never a number this build invented.
-        const bool hasParameterTail =
-            function->closureCarriesParameters() && closureOf.size() >= paramCount;
-        const size_t parameterTailAt = hasParameterTail ? closureOf.size() - paramCount : 0;
+        // Which closure member holds the value of which parameter. The answer is the member's own:
+        // the cut that wrote it recorded the parameter number with it
+        // (`GraphDraft::setClosureParameterOf`, `Residual::parameter`), and this reads it here --
+        // never a place in the list. Places were the shape that broke: `residualsOf` numbers
+        // residuals in program order, which is not parameter order, so `f(x, y) = y * y` puts
+        // parameter 1 in slot 0 and a member's index named the wrong parameter. A closure a caller
+        // closed over its own values records nothing, so the map is empty and a parameter the body
+        // asks for is still refused by name below -- the answer is never a number this build
+        // invented.
+        std::unordered_map<size_t, gc_node_ref_t> parameterValueOf;
+        {
+            const std::span<const int32_t> identity = function->closureParameterOf();
+            for (size_t i = 0; i < closurePorts.size() && i < identity.size(); ++i) {
+                if (identity[i] < 0) {
+                    continue;
+                }
+                const auto parameter = static_cast<size_t>(identity[i]);
+                parameterValueOf.emplace(parameter, closurePorts[i]);
+                // The member a transposed graph carries is the member it inherited, identity
+                // included: a transposition of a transposition reads it the same way (transpose is
+                // handed the closure and hands it on).
+                draft.setClosureParameterOf(closurePorts[i], parameter);
+            }
+        }
         const gc_node_ref_t cotangentIn =
             draft.addPortNode(resultCotangentType(function),
                               draft.allocateRuntimeSlot(resultCotangentType(function)));
@@ -769,13 +783,15 @@ bool buildTransposeMember(
                             at < portOfParam.size() ? portOfParam[at] : rt::kInvalidNodeRef;
                         // A parameter the answer is about has no port of its own, and the call
                         // gives it no number -- but the closure the call handed over carries the
-                        // parameter's value at the tail `split` wrote, so the member reads it there
-                        // (author, 2026-11-03 00:50 ①). Only a graph that says its closure carries
-                        // the parameters has that tail; every other one goes on refusing below.
-                        if (forwardOf[ref] == rt::kInvalidNodeRef && hasParameterTail &&
-                            at < paramCount && parameterTailAt + at < closurePorts.size()) {
-                            forwardOf[ref] = closurePorts[parameterTailAt + at];
-                            return forwardOf[ref];
+                        // parameter's own value when the cut recorded it as a residual, and this
+                        // reads it by identity (author, 2026-11-03 03:10). A graph that recorded
+                        // nothing for it goes on refusing below.
+                        if (forwardOf[ref] == rt::kInvalidNodeRef && at < paramCount) {
+                            if (const auto carried = parameterValueOf.find(at);
+                                carried != parameterValueOf.end()) {
+                                forwardOf[ref] = carried->second;
+                                return forwardOf[ref];
+                            }
                         }
                         if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount &&
                             std::find(wantedValues.begin(), wantedValues.end(), at) ==

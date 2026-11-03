@@ -279,6 +279,7 @@ struct GraphArenaLayout {
     size_t normPortBytes    = 0;
     size_t withPortBytes    = 0;
     size_t closureBytes     = 0;
+    size_t closureParameterBytes = 0;
     size_t frameLayoutBytes = 0;
     size_t totalBytes       = 0;
 };
@@ -327,10 +328,15 @@ GraphArenaLayout planGraphArenaLayout(
         .closureBytes = camel::core::mm::alignUp(
             bytesForArray<gc_node_ref_t>(payload.closureCount),
             alignof(gc_node_ref_t)),
+        .closureParameterBytes = payload.closureParameters
+                                     ? camel::core::mm::alignUp(
+                                           bytesForArray<int32_t>(payload.closureCount),
+                                           alignof(int32_t))
+                                     : 0,
     };
     const size_t beforeFrameLayout =
         layout.graphBytes + layout.refBytes + layout.refRoleBytes + layout.tupleBytes +
-        layout.chunkDirBytes + layout.regionBytes + layout.regionPortBytes + layout.writingBytes + layout.orderEdgeBytes + layout.syncEdgeBytes + layout.normPortBytes + layout.withPortBytes + layout.closureBytes;
+        layout.chunkDirBytes + layout.regionBytes + layout.regionPortBytes + layout.writingBytes + layout.orderEdgeBytes + layout.syncEdgeBytes + layout.normPortBytes + layout.withPortBytes + layout.closureBytes + layout.closureParameterBytes;
     // The frame layout comes last. The arrays before it may end at any 4-byte boundary, so the
     // padding up to the layout's alignment is part of its share.
     if (frameSlots) {
@@ -935,6 +941,13 @@ GCGraphPayloadShape describeDraftPayload(const GraphDraft &draft, const DraftPay
         .normPortCount    = static_cast<gc_cnt_t>(draft.normPorts().size()),
         .withPortCount    = static_cast<gc_cnt_t>(draft.withPorts().size()),
         .closureCount   = static_cast<gc_cnt_t>(draft.closureNodes().size()),
+        // The identity a cut recorded for its closure members: present only when some member holds
+        // a parameter's own value (`GraphDraft::closureParameterOf`).
+        .closureParameters = std::any_of(
+            draft.closureNodes().begin(), draft.closureNodes().end(),
+            [&draft](gc_node_ref_t ref) {
+                return draft.closureParameterOf(ref) != kNoClosureParameter;
+            }),
         .permissions    = std::any_of(
             plan.nodes.begin(),
             plan.nodes.end(),
@@ -1211,6 +1224,9 @@ void emitDraftPayload(
     }
     for (size_t i = 0; i < draft.closureNodes().size(); ++i) {
         payload.closure[i] = plan.runtimeRefsByDraftId[draft.closureNodes()[i]];
+        if (payload.closureParameters != nullptr) {
+            payload.closureParameters[i] = draft.closureParameterOf(draft.closureNodes()[i]);
+        }
     }
 
     // The regions: the node references in them follow the numbering of the nodes; one to a node
@@ -1503,6 +1519,12 @@ allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shap
     payload.normPorts        = arenaAllocArray<gc_node_ref_t>(arena, shape.normPortCount);
     payload.withPorts        = arenaAllocArray<gc_node_ref_t>(arena, shape.withPortCount);
     payload.closure          = arenaAllocArray<gc_node_ref_t>(arena, shape.closureCount);
+    payload.closureParameters = shape.closureParameters
+                                    ? arenaAllocArray<int32_t>(arena, shape.closureCount)
+                                    : nullptr;
+    if (payload.closureParameters != nullptr) {
+        std::fill_n(payload.closureParameters, shape.closureCount, kNoClosureParameter);
+    }
     payload.nodeCount        = shape.nodeCount;
     payload.edgeCount        = shape.edgeCount;
     payload.payloadWordCount = shape.payloadWordCount;
@@ -1546,6 +1568,7 @@ GCGraphPayloadArena makePayloadArenaView(GCGraphNativePayload &payload, PayloadS
         .normPorts        = payload.normPorts,
         .withPorts        = payload.withPorts,
         .closure          = payload.closure,
+        .closureParameters = payload.closureParameters,
         .nodeCount        = payload.nodeCount,
         .edgeCount        = payload.edgeCount,
         .payloadWordCount = payload.payloadWordCount,
@@ -2656,6 +2679,14 @@ std::span<const gc_node_ref_t> GCGraph::closureNodes() const {
         return {};
     }
     return {payload.closure, payload.closureCount};
+}
+
+std::span<const int32_t> GCGraph::closureParameterOf() const {
+    const auto &payload = nativePayload_;
+    if (!payload.closureParameters) {
+        return {};
+    }
+    return {payload.closureParameters, payload.closureCount};
 }
 
 gc_cnt_t GCGraph::armCountOf(gc_node_ref_t brchRef) const {
