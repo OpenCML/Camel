@@ -244,3 +244,25 @@ develop（`5491d4bf6`）同一份计划是 74 过 / 3 红 / 1 known，三条都�
 `feat/linear/jit_framed`：今天 57 条全过；两边条目数按 `name =` 数相同（24），本分支在这份计划
 文件上的改动只有 E 的 8 行期望（1 插入 / 7 删除），没有删用例。此前报的 62 那次运行与今天的
 条目不同，但**不是本分支删了 5 条**。
+## `jvp_effect`：本分支红、develop 绿（第二条 GATE 造法）
+
+第二条树的基线（`D:\Projects\Camel-wt\dev`，`5491d4bf6`，独立检出）：
+
+```
+[PASS] jvp_effect.runs_as_written_and_zero_tangent.nvm      108.35 ms
+[SUMMARY] total: 78, pass: 74, fail: 3, known failures: 1
+```
+
+本分支是红，原文：`Runtime graph 'jvp_of_g' has GATE node 8 without a wait: no sync
+predecessor and no control input.` 图由 autodiff 建（`REINTERP jvp built graph=236 nodes=9
+exit=8 function=g`），节点 8 就是出口门，手造在
+`modules/autodiff/pullback.cpp#setResult`（378–391 行）：`addGateNode` + `setNormInputs(exit,
+{result})` + `setCtrlInputs(exit, {oldExit})`。
+
+它写的等待是**控制输入**——正是 `edges.cn.md` 5.3 说 `GATE` 不再带的那种（"一个数据端口、一个
+同步前驱"）。`src/runtime/graph.cpp:619–630` 两者都收，所以建图器还在链首造位门时它旁边那条控制边
+让检查通过了；位门没了之后它就只剩那条控制边，而它已经不是这个门的等待。
+
+**修法是让它按建图器的等待方式等（同步前驱），不是在这里手补一条等待**——补会把"绕过建图器"
+固化。`setResult` 不是唯一手造门的地方：`pullback.cpp` 还有 3022（臂的结果）、4756（体的结果）、
+4844，所以这是一小族而不是一行；**按规矩停在这里**，等作者把它排进 P0-2 的顺序。
