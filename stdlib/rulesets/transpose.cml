@@ -38,7 +38,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { full, mean_axis, numel, ones_like, shape, sum, take, zeros_like } from tensor
+import { full, mean_axis, numel, ones_like, shape, sum, sum_to, take, zeros_like } from tensor
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
@@ -86,27 +86,29 @@ export rule dtod_t::<T>(x: T) when is_same::<T, float>() {
 // `ruleKeyExceptions()` and the family files the key as the call `mul_tensor(x, w)`, declared here
 // the way `rulesets.jvp` declares its own: a module cannot read another module's private function.
 //
-// It is the adjoint of `jvp_mul_tensor`, and the law is the product rule read backwards: the
-// cotangent of `x` is `ct * w`, the cotangent of `w` is `ct * x`, each through the kernel's own `*`
-// so the element-by-element product and its order stay the operator's.
+// It is the adjoint of `jvp_mul_tensor`: a product is linear in each operand while the other is a
+// known value, so an operand's cotangent is `ct * other`, and the second half of the law is "then
+// summed back to the shape the operand states". That second half is not a detail. The operator is
+// called with an array and a *number* as well as with two arrays, and the number's cotangent is a
+// reduction: the number fed every lane the broadcast spread it over, so its cotangent is the sum
+// of what it fed. One law covers both shapes because it names the shape instead of assuming it --
+// `sum_to(ct * other, operand)` is the identity when the shapes are equal, and `T[..]` includes
+// rank 0, a rank-zero array being that element and nothing else (design principles 5.4), so the
+// number's shape is a shape like any other and its reduction is the total sum.
 //
-// The other shape this operator is called with -- an array times a number -- is a second law under
-// the same key, and it is not the same right side: the number's cotangent is `sum(ct * x)`, a
-// reduction rather than a product, because a broadcast operand's cotangent is the sum of what it
-// fed. It is not written here, and the refusal was measured rather than predicted: a second rule
-// under `mul_tensor` whose parameters are `(T[..], T)` -- no position of which overlaps the ones
-// above -- is refused where it is written, because the index tells two rules of one key apart by
-// their `when` condition and both of these are `is_float::<T>()`:
+// This is one rule and cannot be two: the index tells two rules of one key apart by their `when`
+// condition, so a second rule `(T[..], T)` -- no position of which overlaps the shapes above --
+// was refused where it was written:
 //
 //     The rule 'mul_tensor_t' and the rule 'mul_tensor_scalar_t' both have 'mul_tensor' with 2
 //     operand(s) as the head of their left side, and one ruleset has one rule per operator.
 //
-// The two shapes differ in the operand list, not in the condition, so no wording of the condition
-// lets them share this key. Past that, the walk asks for one rule per key by name
-// (`camel/core/forward.cpp#transposeRuleOf`; `lookupRule` answers `no-rule` when a key holds
-// several), so a second rule would take this one down with it. Dispatching over a key's candidates
-// by operand type is what `jvp.cpp#buildRuleTangent` already does; `transpose.cpp` would have to do
-// the same, and that is core work, not a law still missing.
+// The shapes differ in the operand list, not in the condition, so no wording of the condition
+// lets them share this key; past that the walk asks for one rule per key by name
+// (`camel/core/forward.cpp#transposeRuleOf`). Writing the reduction into the law is what makes the
+// one rule correct for both shapes, and the sum is the engine's own reduction for the same operand
+// (`modules/tensor/ops/vjp.cpp#accumulateOperand`: a tensor operand gets `tensor:sum_to`, a float
+// one gets `tensor:sum`) -- read here as one expression rather than as a branch on the type.
 
 /// `x + w` on two arrays: what `tensor:add` means, and the left side this rule is filed under.
 func add::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
@@ -131,9 +133,11 @@ func mul_tensor::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
     return x * w
 }
 
-/// The transpose of `x * w`: `ct * w` for `x`, `ct * x` for `w`.
+/// The transpose of `x * w`: `ct * w` reduced to `x`'s shape for `x`, `ct * x` reduced to `w`'s
+/// shape for `w`. The reduction is the one `sum_to` names, so the law is written once for both
+/// shapes the operator is called with -- two arrays, and an array and a number.
 export rule mul_tensor_t::<T>(x: T[..], w: T[..]) when is_float::<T>() {
-    mul_tensor(x, w) => (ct: T[..]) => (ct * w, ct * x)
+    mul_tensor(x, w) => (ct: T[..]) => (sum_to(ct * w, x), sum_to(ct * x, w))
 }
 // ---- the transpose rules of the reductions and the layout ----
 //
