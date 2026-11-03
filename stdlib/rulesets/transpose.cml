@@ -508,11 +508,17 @@ export rule take_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
 /// averaged from, where `at = [axis, keepdims, d0, ..., d(rank-1)]`.
 ///
 /// A rank-zero answer -- one axis with `keepdims = false` on a rank-one operand -- has a cotangent
-/// with no shape, and it arrives here as the rank-zero array that *is* that value (design principles
-/// 5.4): the transpose walk hands it through the same `T` -> `T[..]` conversion the language inserts
-/// where a value enters an array position (`modules/transforms/transpose.cpp`, `ruleCotangent`). So
-/// `numel(ct)` answers 1 instead of a number read as a pointer, and the arithmetic below serves both
-/// shapes of answer with the one law this key holds.
+/// with no shape. The rule below states its cotangent as the *element* (`ct: T`), so it arrives here
+/// through the `T` -> `T[..]` conversion the language inserts where a value enters an array position
+/// (`ArrayType::castSlotFrom`, `Builder::coerceTo`) -- a call argument is such a position, and this
+/// function's `ct` is one. So `numel(ct)` answers 1 instead of a number read as a pointer, and the
+/// arithmetic below serves both shapes of answer with the one law this key holds.
+///
+/// The rule must state the element for that conversion to happen: a port of `float[..]` looks like a
+/// slot that already has a rank, so nothing converts and the number is read as an array -- the
+/// SIGSEGV `docs/handover/questions/2026-11-04-a-rank-zero-cotangent-is-read-as-a-pointer.cn.md`
+/// records. Its type cannot help either: the node's answer is `T[..]` while the value is the element,
+/// so `tangentSpaceOf` says `float[..]` of a value that has no rank.
 func mean_axis_cotangent::<T>(ct: T[..], at: int[]): T[..] when is_float::<T>() {
     let extents = at[2:len(at)]
     let lanes = float(extent_product(extents)) / float(numel(ct))
@@ -526,8 +532,11 @@ func extent_product(extents: int[]): int {
 
 /// The transpose of `mean_axis_stated(t, at)`: the cotangent spread back over the averaged lane, in
 /// the same per-position type parameters `sum_stated_t` states.
+///
+/// The cotangent is stated as the element and not as `float[..]`, which is what lets the rank-zero
+/// answer convert instead of being read as an array: see `mean_axis_cotangent` above.
 export rule mean_axis_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
-    mean_axis_stated(t, at) => (ct: float[..]) => mean_axis_cotangent(ct, at)
+    mean_axis_stated(t, at) => (ct: T) => mean_axis_cotangent(ct, at)
 }
 
 

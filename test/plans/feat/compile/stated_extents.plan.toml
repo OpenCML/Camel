@@ -50,6 +50,27 @@ expect_output_not_contains = ["skip="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# The law with the mean's answer an element instead of an array: `keepdims = false` on a rank-one
+# operand, which the entry above cannot be. It was eight SIGSEGVs in `numelKernel` while
+# `mean_axis_stated_t` stated its cotangent as `float[..]`
+# (docs/handover/questions/2026-11-04-a-rank-zero-cotangent-is-read-as-a-pointer.cn.md): a port that
+# looks like it already has a rank is a slot nothing converts, so `numel(ct)` read the number's bits
+# as a pointer. The law states the element now, and the language's own `T` -> `T[..]` conversion --
+# the one a call argument gets -- does the rest.
+[[tests]]
+name = "stated_mean_axis_element_gradient"
+desc = "The gradient of a lane mean whose answer is the element itself: `mean_axis(x, 0, false)` over `[1.0, 2.0, 3.0, 4.0]` is 2.5, and the adjoint gives every position a quarter, `dL/dx=[0.25, 0.25, 0.25, 0.25]`. The lane length `numel(t) / numel(ct)` divides by three extents' product over `numel(ct)`, so a cotangent read as a pointer is a SIGSEGV and one spread over the lane answers 1.0 -- the number, not just the exit, is what says the conversion happened."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_mean_axis_element_gradient.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["stated mean element value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 # The signature, where it can be stated: `at` written in the call is a compile-time constant, so
 # `mean_axis_stated` answers the extents the list names instead of `T[..]`. The number is the same
 # either way; the *type* is what this pins, because that is what the reverse law reads.

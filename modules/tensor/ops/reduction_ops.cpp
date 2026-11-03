@@ -336,11 +336,15 @@ slot_t meanAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
 /// the two call sites that exist -- `stdlib/rulesets/jvp.cml#jvp_mean_axis` and its tangent call --
 /// build the list with `stated_axis_shape(axis, keepdims, shape(xs))`, whose extents are the
 /// primal's and therefore a value; refusing would turn a legal program away for a shape its own
-/// operand has. Measured on that tree: both sites report `at=runtime`, and the reverse walk still
-/// stops on a SIGSEGV in `numelKernel`, because the cotangent a transposition is handed is typed
-/// from this node's type (`modules/transforms/transpose.cpp`, `cotangentTypeOf`) and a rank-0
-/// answer under an array type has no conversion to make. That is the walk's to fix, and the page
-/// above asks whose it is.
+/// operand has. Measured on that tree: both sites report `at=runtime`, and the reverse walk used to
+/// stop on a SIGSEGV in `numelKernel`, because the cotangent a transposition is handed is typed from
+/// this node's type (`modules/transforms/transpose.cpp`, `cotangentTypeOf`) and a rank-0 answer under
+/// an array type has no conversion to make. The repair is not here and not in the walk -- a slot whose
+/// type already claims a rank has nothing to convert -- but in the law that reads the cotangent: it
+/// states the cotangent as the element (`stdlib/rulesets/transpose.cml#mean_axis_stated_t`), so the
+/// language's own `T` -> `T[..]` conversion at its next call argument boxes the value and `numel(ct)`
+/// answers 1. The rank-0 program answers `[0.25, 0.25, 0.25, 0.25]` instead of dying
+/// (docs/handover/questions/2026-11-04-who-states-the-extents-of-a-stated-reduction.cn.md).
 std::optional<Type *> meanAxisStatedInfer(const InferContext &ctx) {
     const TensorFacts in = ctx.facts(0);
     const TypeCode dtype = reductionDtype(k::ReduceOp::Mean, in.dtype);
