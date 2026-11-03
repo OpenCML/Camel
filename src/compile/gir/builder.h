@@ -2187,6 +2187,13 @@ class Builder {
     // such function (it changes an argument in place).
     compile_graph_ptr_t
     operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &origin);
+    // A function of no parameters whose body is the constant `value` and nothing else: what a
+    // value of `extent_of::<A>()` stands for. The answer is a fact of the type argument, which a
+    // function value does not carry, so the graph the value is made of answers it here, once,
+    // with the type argument in hand -- the way the call itself is folded
+    // (`:op/extent_of` beside buildOperatorCall's `range` check).
+    compile_graph_ptr_t constantValueGraphOf(
+        const data_ptr_t &value, Type *exitType, const GCT::node_ptr_t &origin);
     /// `attempt(f)` (design principles 3.9): the function value whose parameters are `f`'s and
     /// whose result is `f`'s result plus `!`. It is a closure -- a graph of its own that captures
     /// `f` and whose body is one marked call of it -- so no node of the calling graph stands for

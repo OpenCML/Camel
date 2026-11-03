@@ -70,21 +70,32 @@ slot_t __len_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // same rule `statedExtentsOf` (camel/core/type/composite/array.h) spells for every other reader.
 //
 // The value is settled where the call is built, not where it runs: an OPER node carries the
-// instantiated type of the call, never the type argument it was written with, so nothing at run
-// time still says which type the extents belong to. A reader that has the type -- the transposition
-// walk -- asks `statedExtentsOf` directly (`modules/transforms/transpose.cpp#shapeFromTypeOf`), and
-// the kernel below is the case of a call that reached the run without being settled.
+// instantiated type of the call (`() => int[]`), never the type argument it was written with, so
+// nothing at run time still says which type the extents belong to. The builder therefore folds the
+// call into a constant of the graph (`src/compile/gir/builder_operators.cpp`, the `:op/extent_of`
+// fold beside `buildOperatorCall`'s `range` check), and the run never sees it. A reader that has
+// the type -- the transposition walk -- asks `statedExtentsOf` directly
+// (`modules/transforms/transpose.cpp#shapeFromTypeOf`), so there is exactly one reading of "the
+// extents a type writes down" in the compiler and this kernel is not a second one.
 
 slot_t __op_extent_of__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
     (void)norm;
     (void)ctx;
+    // Unreachable from a program, and that is the invariant this kernel guards rather than a state
+    // a reader can land in: `extentOfResolver` admits a call only for a type whose extents
+    // `statedExtentsOf` answers, and the builder settles every such call as the constant it folded
+    // where the type argument was still in hand -- so no graph built from a program holds this
+    // node. What can hold one is a graph that no program wrote (an imported document, a hand-made
+    // test graph), and for those the honest answer is that the node cannot be run: the extents are
+    // not in it.
     throwRuntimeFault(
         RuntimeDiag::PassInternalError,
         "calling `extent_of`",
         "the extents of `A` are a fact of the type the call names, and an OPER node records the "
         "instantiated type of the call but not the type argument it was written with, so the value "
-        "is settled where the call is built and there is nothing left for the run to read");
+        "is settled where the call is built and there is nothing left for the run to read; a graph "
+        "built from a program never holds this node");
     return 0;
 }
 
