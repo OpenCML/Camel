@@ -546,29 +546,6 @@ inline bool nodeTakesAnOrder(node_handle_t node) {
     return !camel::runtime::nodeIsFreelySchedulable(*nodeDraftOf(node), nodeIdOf(node));
 }
 
-/// Where a `sync` block's chain may stand on this node: on a statement that has an effect or may
-/// fault, on a control structure that contains such statements, or on a `GATE` -- a value the model
-/// lets a pass arrange freely never stands on the chain (docs/design/effects/edges.cn.md 1, 4.6).
-/// A node that is only a value is reached by its data edge, and the chain passes through a `GATE`
-/// that reads it, so nothing has to be recorded on the edge to say where the chain is: the `GATE`
-/// is the place. This is the rule a block's value is already handed on under
-/// (`Builder::visitBodyNode`), asked of the node the chain would otherwise end on.
-inline node_handle_t chainPlaceFor(node_handle_t node) {
-    if (node == nullptr || nodeTakesAnOrder(node)) {
-        return node;
-    }
-    const runtime::GCNodeKind kind = nodeKindOf(node);
-    if (kind != runtime::GCNodeKind::Oper && kind != runtime::GCNodeKind::Data &&
-        kind != runtime::GCNodeKind::Cast) {
-        // A `Brch`, a `Join`, a `Loop` and a call through a function value stand on the chain as
-        // they are: they are the statements the chain orders, not values it passes by.
-        return node;
-    }
-    node_handle_t gate = nodeGraphOf(node)->addGateNode(nodeTypeOf(node));
-    linkNodes(LinkType::Norm, node, gate);
-    return gate;
-}
-
 /// Whether an edge that says "after" and not "value" says anything at all: two different nodes of
 /// one graph, and one is not already the other's data input. Only the exact, local skip: the
 /// predecessor is already a direct data input of the target, so the edge would say nothing new.
