@@ -59,7 +59,9 @@ DBGPROBE answer at=1 portNode=4 part=15 type=float
 另外两条副产物，各自是一个名字而不是一个猜测：
 
 - 律里写**字面量** `sum_to(ct * x, 0.0)` 被拒，理由 `the rule's right side uses a node written after it`——字面量被当作"写在它后面"的节点。这条拒绝是对的（拒绝优于错数），但理由是错的：常量不可能是写在后面的节点。
-- 操作数顺序翻过来（`sum(s * x)`）时转置出来的图有 **2 个 norm 端口**，而调用点只传 1 个，直接 `PassInternalError`。同一处映射（`portOfParameter` 与闭包 port）的另一个症状，与 `lane-resid` 正在做的 `cutLoopGraph` 的 `invariants` 相邻，但这一条发生在 `split` 之后，不在 `split` 里。
+- 操作数顺序翻过来（`sum(s * x)`）时转置出来的图有 **2 个 norm 端口**，而调用点只传 1 个，直接 `PassInternalError`。这一条**不是新症状**：同一棵树上 `feat/compile/transforms` 的红用例 `transpose_loop_escape.two_values_of_two_kinds` 崩的就是同一句读数，逐字相同而只有图名不同——
+  `Runtime indirect call norm-arity mismatch: caller graph 'main' node 3 has 1 args, target graph 'transpose_of_read_outer' has 2 norm ports`。
+  同一处映射（`portOfParameter` 与闭包 port）的两个症状，与 `lane-resid` 正在做的 `cutLoopGraph` 的 `invariants` 相邻，但这一条发生在 `split` 之后，不在 `split` 里。
 
 ## 四、要作者裁的一句
 
