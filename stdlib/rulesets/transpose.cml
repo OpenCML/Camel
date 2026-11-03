@@ -207,17 +207,23 @@ export rule subtract_t::<T>(x: T[..], w: T[..]) when is_float::<T>() {
 // `sum_to` is also where the reduction half of this law lives: for two matrices the call is the
 // identity, and it becomes the sum over a batch axis the day an operand has one.
 //
-// **What is outside the law stops in the helpers, and the reading says so.** Rank three and above, and
-// the vector-vector product whose answer is a number, have no overload; the walk finds no candidate for
-// the cotangent it needs and refuses at the operator:
+// **What is outside the law stops in the helpers, and the walk has a word for it.** Rank three and
+// above, and the vector-vector product whose answer is a number, have no overload; the law is chosen,
+// its own body has nothing for these operands, and the walk refuses that by name -- the law, the
+// operator and the ranks:
 //
-//     skip=cotangent-needs-a-value uri=tensor:matmul position=0
-//     reason=No matching function found for argument types: <> (float[..], float[3, 2, 2], float[2, 2])
+//     skip=rule-ranks uri=tensor:matmul rule=matmul_t node=6 position=0 ranks=(3, 2) operands=2
+//     reason=No matching function found for argument types: <> (float[..], float[3, 2, 2], float[2, 2]).
 //
-// That is not `skip=rule-shape`, which is where this reading stood while the law named its ranks in the
-// pattern (commit `5a2fed990`): the pattern could only ever serve one shape, so the three shapes could
-// not all be served from one key. `test/cases/compile/transforms/matmul_transpose_rank_three.cml`
-// pins the sentence, and the day a batch axis is served it fails and names what replaced it.
+// `rule-ranks` is not `rule-shape`, and the two must not be merged: `rule-shape` means the law's
+// *pattern* rejected the operand types and nothing was built, which is where this reading stood while
+// the law named its ranks in the pattern (commit `5a2fed990`, when one pattern could serve only one
+// shape). A reader fixes those two differently -- widen the pattern, or write the missing shape's law
+// -- so they are two words. Until 2026-11-03 the second arrived as `skip=cotangent-needs-a-value`
+// carrying this expansion's own sentence, which named a helper instead of the law and said nothing
+// about a rank; both sentences below are pinned by
+// `test/cases/compile/transforms/matmul_transpose_rank_three.cml`, and the day a batch axis is served
+// that case fails and names what replaced them.
 //
 // The two matrices are also what makes the law checkable: the model it was written for multiplies a
 // batch by a weight, both two-dimensional (`test/cases/compile/transforms/matmul_transpose_law.cml`),

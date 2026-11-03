@@ -63,6 +63,8 @@ const char *transposeRefusalWord(TransposeRefusalCause cause) {
         return "rule";
     case TransposeRefusalCause::RuleShape:
         return "rule-shape";
+    case TransposeRefusalCause::RuleRanks:
+        return "rule-ranks";
     case TransposeRefusalCause::Kind:
         return "kind";
     case TransposeRefusalCause::Arity:
@@ -95,6 +97,30 @@ std::string typeTextOf(const std::vector<Type *> &types) {
     for (const Type *type : types) {
         text += (text.empty() ? "(" : ", ");
         text += type != nullptr ? type->toString() : std::string("?");
+    }
+    return text.empty() ? std::string("()") : text + ")";
+}
+
+/// The ranks of the operands a cotangent was asked for, in the law's own order: `(3, 2)`.
+///
+/// The walk prints the ranks and not the types because the types are the expansion's to report and
+/// the rank is what a law that dispatches on rank is declining. An operand that is not an array has
+/// rank 0 -- it carries no extents to reduce and no lane to spread over -- and an open-rank array
+/// (`float[..]`) reports the prefix it states, which is the number of axes the law can count on.
+std::string
+operandRanksText(const camel::runtime::GCGraph *function, std::span<const gc_node_ref_t> operands) {
+    std::string text;
+    for (const gc_node_ref_t operand : operands) {
+        const camel::runtime::GCNode *node = function != nullptr ? function->node(operand) : nullptr;
+        Type *type = node != nullptr ? const_cast<Type *>(node->dataType()) : nullptr;
+        size_t rank                         = 0;
+        if (type != nullptr && type->code() == camel::core::type::TypeCode::Array) {
+            if (const auto *array = tt::as_ptr<camel::core::type::ArrayType>(type)) {
+                rank = array->rank();
+            }
+        }
+        text += text.empty() ? "(" : ", ";
+        text += std::to_string(rank);
     }
     return text.empty() ? std::string("()") : text + ")";
 }
@@ -957,7 +983,7 @@ bool buildTransposeMember(
         const auto ruleCotangent = [&](const std::string &ruleName,
                                        std::span<const gc_node_ref_t> inputs, size_t position,
                                        gc_node_ref_t ct, Type *ctType,
-                                       std::string &why) -> gc_node_ref_t {
+                                       std::string &why, bool &noInstance) -> gc_node_ref_t {
             const auto valueOf = [&](size_t slot) -> gc_node_ref_t {
                 return slot < inputs.size() ? knownValue(inputs[slot]) : rt::kInvalidNodeRef;
             };
@@ -989,7 +1015,7 @@ bool buildTransposeMember(
             }
             return camel::transforms::expandRuleByName(
                 *state.context, group, group.transaction(member), ruleName, valueOf, {ct}, position,
-                operandTypes, why);
+                operandTypes, why, &noInstance);
         };
         const auto noteRule = [&usedRules](const std::string &name) {
             if (std::find(usedRules.begin(), usedRules.end(), name) == usedRules.end()) {
@@ -1783,14 +1809,34 @@ bool buildTransposeMember(
                         continue;
                     }
                     std::string why;
+                    bool noInstance                    = false;
                     const gc_node_ref_t answer =
                         ruleCotangent(rule->rule, inputs, i, local[ref],
-                                  cotangentTypeOf(ref, Type::Float64()), why);
+                                  cotangentTypeOf(ref, Type::Float64()), why, noInstance);
                     if (answer == rt::kInvalidNodeRef) {
                         armsOk = false;
-                        refuse(TransposeRefusalCause::CotangentNeedsAValue);
-                        os << " uri=" << body->uri() << " position=" << i
-                           << " reason=" << why << '\n';
+                        // Two facts, and the expansion names which one it met: `noInstance` means the
+                        // law was named and would not instantiate at these operand types -- for a
+                        // body written once per rank, the ranks outside the set it serves -- and a
+                        // reader acts on that by writing the missing shape's law. Every other
+                        // failure is the walk failing to reach a value, which is a different edit.
+                        // Naming the first as the second is how the builder's "no matching function"
+                        // sentence reached a reader as though the transform had nothing to say
+                        // (measured 2026-11-03 on `matmul_t`).
+                        if (!noInstance) {
+                            refuse(TransposeRefusalCause::CotangentNeedsAValue);
+                            os << " uri=" << body->uri() << " position=" << i
+                               << " reason=" << why << '\n';
+                            return {};
+                        }
+                        refuse(TransposeRefusalCause::RuleRanks);
+                        state.refusal.node  = ref;
+                        state.refusal.uri   = std::string(body->uri());
+                        state.refusal.rule  = rule->rule;
+                        state.refusal.ranks = operandRanksText(function, inputs);
+                        os << " uri=" << body->uri() << " rule=" << rule->rule
+                           << " position=" << i << " ranks=" << state.refusal.ranks
+                           << " operands=" << inputs.size() << " reason=" << why << '\n';
                         return {};
                     }
                     deliver(inputs[i], answer, ref);
@@ -2195,12 +2241,29 @@ bool buildTransposeMember(
                         continue;
                     }
                     std::string why;
+                    bool noInstance = false;
                     const gc_node_ref_t answer = ruleCotangent(
-                        rule->rule, inputs, i, ct, cotangentTypeOf(ref, Type::Float64()), why);
+                        rule->rule, inputs, i, ct, cotangentTypeOf(ref, Type::Float64()), why,
+                        noInstance);
                     if (answer == rt::kInvalidNodeRef) {
-                        refuse(TransposeRefusalCause::CotangentNeedsAValue);
-                        os << " uri=" << uri << " position=" << i << " reason=" << why
-                           << '\n';
+                        // The same two facts as the arm walk above, told apart the same way: the law
+                        // would not instantiate at these operand types, or the walk could not reach a
+                        // value the answer reads. The rank is printed for the first because it is the
+                        // fact a reader edits, and the law's name because it is the function to edit.
+                        if (!noInstance) {
+                            refuse(TransposeRefusalCause::CotangentNeedsAValue);
+                            os << " uri=" << uri << " position=" << i << " reason=" << why
+                               << '\n';
+                            return false;
+                        }
+                        refuse(TransposeRefusalCause::RuleRanks);
+                        state.refusal.node  = ref;
+                        state.refusal.uri   = uri;
+                        state.refusal.rule  = rule->rule;
+                        state.refusal.ranks = operandRanksText(function, inputs);
+                        os << " uri=" << uri << " rule=" << rule->rule << " node=" << ref
+                           << " position=" << i << " ranks=" << state.refusal.ranks
+                           << " operands=" << inputs.size() << " reason=" << why << '\n';
                         return false;
                     }
                     addCotangent(inputs[i], answer);

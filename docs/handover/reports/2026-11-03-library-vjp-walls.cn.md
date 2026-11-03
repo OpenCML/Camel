@@ -78,7 +78,18 @@
 
 **写这条律前量到的两件事**（注释里都留了）：① 走查给规则的类型元组是**每个值一个类型**（切向的元素类型 + 各操作数类型，`ruleCotangent`），所以规则头必须是 `<T, A, B>` 这种类型变量——写 `T[?, k], T[k, ?]` 会被拒 `it takes 1 type parameter(s), and it was asked for 3`；`mul_tensor_t` 早就是 `<T, X, W>`，原因相同。② 一个 ruleset 每个算子+元数只有一条规则（`SemanticDiag::DuplicateRuleForOperator`），三种形状不能写成三条规则，所以秩的区分放在两个按秩重载的 helper 里（每个形状一对）。
 
-**边界跟着挪了，也钉了**：三维及以上、以及向量·向量（答案是数）没有重载，走查在拿不到切向处按名拒算子，但**不再是 `skip=rule-shape`**，而是 `skip=cotangent-needs-a-value uri=tensor:matmul position=0 reason=No matching function found for argument types: <> (float[..], float[3, 2, 2], float[2, 2])`。上一版（`5a2fed990`）把秩写进模式，只能服务一种形状；要一条 key 服务三种形状，秩就必然落到 helper 里，报文随之落在那儿。读数钉在 `#matmul_t.rank_three_is_refused_by_name`（两条流都钉），`#matmul_t.vector_operand_is_refused_by_shape` 已随之删除。要变成"三维也答"只需再加一对重载，`sum_to` 那一半已经就是批轴上的归约。
+**边界跟着挪了，也钉了**：三维及以上、以及向量·向量（答案是数）没有重载，律被选中而它的体对这两个操作数无话可说——走查**按名拒**，而且给了它自己的一类词（2026-11-03 22:25，父代理裁定：不许退回 `rule-shape`，分类名不许合并）：
+
+```
+skip=rule-ranks uri=tensor:matmul rule=matmul_t node=6 position=0 ranks=(3, 2) operands=2
+reason=No matching function found for argument types: <> (float[..], float[3, 2, 2], float[2, 2]).
+
+transforms: transpose has no transpose for this function: the law `matmul_t` has no cotangent for
+`tensor:matmul` at these operands: their ranks are (3, 2), and it serves the ranks its cotangents
+are written for (node 6).
+```
+
+`rule-ranks` 与 `rule-shape` 必须分得开：后者是"律的**模式**不收这些操作数、什么都还没建"，前者是"模式收了、律被选中、律的**体**对这些秩无话可说"——读者的改法不同（放宽模式 vs 补上缺的那条律）。上一版（`5a2fed990`）把秩写进模式，只能服务一种形状；要一条 key 服务三种形状，秩必然落到 helper 里，**判据的可达性随模式变宽而消失**，报文随之换成 `rule-ranks`。读数钉在 `#matmul_t.rank_three_is_refused_by_name`（两条流都钉），`#matmul_t.vector_operand_is_refused_by_shape` 已随之删除。要变成"三维也答"只需再加一对重载（`sum_to` 那一半已经就是批轴上的归约），但父代理裁定今晚不开这个面。
 
 捕获版（S2 真正的写法）不变，仍停在 `split`（3.5 末尾那面墙）；也就是张量模型的 `vjp` 现在只差 `split` 这一处。
 
