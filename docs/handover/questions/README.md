@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：44 页
+## 现在在等作者：47 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -17,6 +17,7 @@
 | [`2026-11-03-a-second-rule-under-one-key-is-judged-by-its-when-text`](2026-11-03-a-second-rule-under-one-key-is-judged-by-its-when-text.cn.md) | 同一个键下挂两条规则，今天按 `when` 文本判重，与裁定「按操作数类型」不一致 |
 | [`2026-11-03-a-sized-rank-one-cast-refuses-a-literal-the-declaration-accepts`](2026-11-03-a-sized-rank-one-cast-refuses-a-literal-the-declaration-accepts.cn.md) | 一个定长的秩一 `as`，拒了声明和传参都接受的同一个字面量 |
 | [`2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant`](2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant.cn.md) | 一个超时应该由读数推出来，而不是由人写死 |
+| [`2026-11-03-can-gradient-of-a-function-be-a-library-type-function`](2026-11-03-can-gradient-of-a-function-be-a-library-type-function.cn.md) | `grad(f)` 的类型能不能写成库层类型函数？（删引擎 D2） |
 | [`2026-11-03-does-a-comment-in-a-source-file-count-as-a-direct-connection`](2026-11-03-does-a-comment-in-a-source-file-count-as-a-direct-connection.cn.md) | 源文件里的一句注释，算不算一次"直连"？ |
 | [`2026-11-03-does-a-generic-call-accept-a-rank-zero-argument`](2026-11-03-does-a-generic-call-accept-a-rank-zero-argument.cn.md) | 泛型函数调用的实参匹配，要不要照 5.4 收秩 0？ |
 | [`2026-11-03-does-a-loop-statement-with-an-unused-value-still-run`](2026-11-03-does-a-loop-statement-with-an-unused-value-still-run.cn.md) | 一个值没人用的 `loop` 语句，还算不算一条要执行的语句？ |
@@ -46,10 +47,12 @@
 | [`2026-11-03-what-does-taking-pure-nodes-off-the-chain-cost`](2026-11-03-what-does-taking-pure-nodes-off-the-chain-cost.cn.md) | 纯节点离开链位要付 59 条红和一条封存拒绝：P0-2 第二步还做吗？ |
 | [`2026-11-03-what-type-does-an-error-binding-have-across-a-yield`](2026-11-03-what-type-does-an-error-binding-have-across-a-yield.cn.md) | `case error e` 绑定的名字跨 `yield` 进状态时，那个 cell 的类型从哪来 |
 | [`2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-split-cut`](2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-split-cut.cn.md) | 被微分的 lambda 以「调用带 `with` 的函数」收尾时，`split` 该剪什么？ |
+| [`2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry`](2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md) | 切线重算的那个"带上下文输入的节点"，`split` 该拷什么？ |
 | [`2026-11-03-where-does-the-chain-tail-service-live`](2026-11-03-where-does-the-chain-tail-service-live.cn.md) | 出口门要等的"链上最后一站"，这个服务归谁？ |
 | [`2026-11-03-where-does-the-loop-results-residual-land`](2026-11-03-where-does-the-loop-results-residual-land.cn.md) | "循环结果作为残差跨过切口"这条裁定，落在哪一格？ |
 | [`2026-11-03-which-layer-carries-the-libstdcxx-path`](2026-11-03-which-layer-carries-the-libstdcxx-path.cn.md) | 闸门的 libstdc++ 路径带在哪一层——"只在 `-Check` 加"不成立，那么要不要收敛成一条？ |
 | [`2026-11-03-which-p0-2-does-the-order-mean`](2026-11-03-which-p0-2-does-the-order-mean.cn.md) | 排序里那条 `P0-2` 指 A 还是 B？A 的两处是不是同一个条件（逐分支量：不是） |
 | [`2026-11-03-who-carries-the-forward-halfs-intermediate-values`](2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md) | 转置图需要前向那一半的中间值，谁携带它？ |
 | [`2026-11-03-why-the-self-test-grew-expensive-without-any-test-count-growth`](2026-11-03-why-the-self-test-grew-expensive-without-any-test-count-growth.cn.md) | 自检什么时候变贵了：成本已逐项归因，没有余额，也没有可比的前后读数 |
+| [`2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it`](2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it.cn.md) | 重算的调用带着出口不可达的参数时，`cut` 应当把它们算作可达，还是拒绝？ |
 | [`array-scalar-product-transpose`](array-scalar-product-transpose.cn.md) | 数组×标量那条路：律已就位、形状已按类型拒绝，剩下的是"律的答案类型"这一问 |
