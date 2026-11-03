@@ -157,6 +157,73 @@ bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref) {
     }
 }
 
+bool is_chain_statement(
+    GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
+    const camel::core::type::Type *castSource, bool standsForRegion) {
+    switch (kind) {
+    case GCNodeKind::Call:
+        // A call runs a graph: what it does is not in the operator table, and nothing says it
+        // cannot fail.
+        return true;
+    case GCNodeKind::Brch:
+    case GCNodeKind::Loop:
+        // A branch or a loop is a statement when it carries something: it stands on the outside
+        // for what runs inside it (edges.cn.md 4.6). One that carries nothing is a value the model
+        // lets a pass arrange freely.
+        return standsForRegion;
+    case GCNodeKind::Gate:
+        // A `GATE` is where a `sync` block hands its value on and where the chain's wait reaches
+        // that value (edges.cn.md 5.3, author ruling 2026-11-03 01:10): the chain orders it even
+        // though the gate computes nothing.
+        return true;
+    case GCNodeKind::Cast:
+        // A conversion is a statement exactly when running it can fail: a value check the model
+        // cannot move is one the chain has to reach (design principles 3.4, 3.9).
+        return nodeMayFault(kind, camel::core::kNoOper, castTarget, castSource);
+    case GCNodeKind::Oper: {
+        const auto &table = camel::core::OperatorTable::instance();
+        const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
+        if (oper == camel::core::kNoOper) {
+            // An operator nobody named is not known never to fault.
+            return true;
+        }
+        if (!table.isPure(oper) || table.hasExternalEffect(oper)) {
+            return true;
+        }
+        return traits.has_value() && traits->mayFault;
+    }
+    default:
+        // A `Func`, a `Data`, a `Port`, a `Copy`, a `Fill`, an `Accs`, a `Join`: computed from
+        // what it reads, with nothing to fail and nothing to order.
+        return false;
+    }
+}
+
+bool is_chain_statement(const GCGraph &graph, gc_node_ref_t ref) {
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr) {
+        return false;
+    }
+    const bool standsForRegion = nodeStandsForItsRegion(graph, ref);
+    switch (node->kind) {
+    case GCNodeKind::Oper: {
+        const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
+        return is_chain_statement(
+            node->kind, body != nullptr ? body->oper : camel::core::kNoOper, nullptr, nullptr,
+            standsForRegion);
+    }
+    case GCNodeKind::Cast: {
+        const auto inputs = graph.normInputsOf(ref);
+        const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
+        return is_chain_statement(
+            node->kind, camel::core::kNoOper, node->dataType(),
+            source != nullptr ? source->dataType() : nullptr, standsForRegion);
+    }
+    default:
+        return is_chain_statement(node->kind, camel::core::kNoOper, nullptr, nullptr, standsForRegion);
+    }
+}
+
 } // namespace graph
 
 bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref) {
@@ -1339,6 +1406,47 @@ bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byS
     }
     default:
         return nodeIsFreelySchedulable(header->kind, camel::core::kNoOper);
+    }
+}
+
+bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr || !draft.alive(id)) {
+        return false;
+    }
+    // Region 0 is the body itself, so an owner is looked for above it -- the same reading
+    // `nodeStandsForItsRegion` takes of a graph.
+    bool standsForRegion = false;
+    for (uint32_t region = 1; region < draft.regionCount(); ++region) {
+        if (draft.region(region).owner == id) {
+            standsForRegion = true;
+            break;
+        }
+    }
+    switch (header->kind) {
+    case GCNodeKind::Oper: {
+        const std::span<const std::byte> payload = draft.payloadOf(id);
+        return isChainStatement(
+            header->kind,
+            payload.size() >= sizeof(GCOperBody)
+                ? reinterpret_cast<const GCOperBody *>(payload.data())->oper
+                : camel::core::kNoOper,
+            nullptr,
+            nullptr,
+            standsForRegion);
+    }
+    case GCNodeKind::Cast: {
+        const auto inputs = draft.normInputsOf(id);
+        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
+        return isChainStatement(
+            header->kind,
+            camel::core::kNoOper,
+            header->dataType,
+            source != nullptr ? source->dataType : nullptr,
+            standsForRegion);
+    }
+    default:
+        return isChainStatement(header->kind, camel::core::kNoOper, nullptr, nullptr, standsForRegion);
     }
 }
 
