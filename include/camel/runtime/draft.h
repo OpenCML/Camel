@@ -822,7 +822,10 @@ class GraphDraft {
       private:
         GraphDraft &draft_;
     };
-    /// The region node `id` is in, 0 when it is in none but the body.
+    /// The region node `id` is in: 0 is the body, which every node the draft holds is in unless a
+    /// control region holds it. An `id` the draft does not hold (erased, or never a node of it) has
+    /// no region at all: it is not answered as 0, because 0 names the body, a region that exists.
+    /// Asking for it fails (`GUARD`), so "which region" has an answer or none, never a wrong one.
     uint32_t nodeRegion(gc_node_ref_t id) const;
     void setNodeRegion(gc_node_ref_t id, uint32_t region);
     /// A new region in `parent`; for a control region the node that owns it and its index.

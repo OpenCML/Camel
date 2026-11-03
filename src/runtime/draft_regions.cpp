@@ -12,7 +12,17 @@ namespace camel::runtime {
 
 uint32_t GraphDraft::nodeRegion(gc_node_ref_t id) const {
     const DraftNodeHeader *h = header(id);
-    return h ? h->region : 0;
+    // A node that is not in the draft has no region. Answering 0 would name the body, and 0 is a
+    // region the draft really has -- `region(0)` answers the body even when the table holds nothing
+    // else, and the record is written as soon as anything needs it -- so "region 0" is an actual
+    // membership, not "I do not know": the asker would be told that a node it can no longer find
+    // belongs to the graph's body, and would then order it, report it or read its ports as if it
+    // were there. There is no region to give, so fail instead of naming one.
+    GUARD(
+        h != nullptr,
+        "Region of a node that is not in the draft: the id was erased or never existed, and "
+        "region 0 is the body, a real region, not the answer for a node that is not there.");
+    return h->region;
 }
 
 void GraphDraft::setNodeRegion(gc_node_ref_t id, uint32_t region) {

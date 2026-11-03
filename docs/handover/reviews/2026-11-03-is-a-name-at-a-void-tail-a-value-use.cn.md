@@ -76,3 +76,22 @@
 - 用例：`test/cases/compile/surface/dropped_function_name.cml`、`test/cases/compile/surface/function_name_at_tail.cml`；
   计划 `test/plans/feat/compile/surface.plan.toml` 的同名两条。
 - 探针：`D:\Temp\dref-probe*\`（修前 / 修后同一批 17 个变体）。
+
+## 7 裁定之后（作者裁定 `290f338d3`，2026-11-03；本页 §1 的最后两行由此收掉）
+
+裁定是：**规则只有一条 —— "丢掉值的位置不算值使用"，不按形状写成两条（丙不取）**。于是 §1 里标"未动"的那一行也照这条
+规则收掉，它不再是"未动"：
+
+| 程序 | 修前 | 现在 |
+|---|---|---|
+| `func g(): void { 1 + 2 }` | 编译通过 | 编译通过 |
+| `func g(): void { len }` | 编译通过 | 编译通过 |
+| `func g(): int { let step = len }` | `FunctionNameAsValue`，位置在 `let` | 同左（值真被用的位置，未变） |
+| `func main(): int sync { { len }; return 0 }` | `FunctionNameAsValue`（2:27，`len`） | **编译通过，exit 0，无输出** |
+| `func main(): int sync { { let s = len }; return 0 }` | 编译通过 | 编译通过（未变） |
+
+实现：`src/compile/gir/builder.cpp#visitExecNode` 现在先问一个"这个位置丢不丢值"（`valueDropped`、`: void` 尾位置、
+`visitInPosition` 传下来的 `void` 位置 —— 与 `branchTakesNoValue` 问分支的是同一个问题），丢的时候一律走
+`src/compile/gir/builder.cpp#droppedValueAt`，也就是 `08622b019` 的 `void` 尾走的那一处，**没有第二份**；值真被用的位置仍走
+`namedValueOf`。用例：`dropped_value_statement.cml`（§1 能编译的四行，加两层嵌套的同一位置）、
+`function_name_bound_at_a_used_tail.cml`（第三行，4:17 逐字钉住）。`feat/compile/surface` 24/24。
