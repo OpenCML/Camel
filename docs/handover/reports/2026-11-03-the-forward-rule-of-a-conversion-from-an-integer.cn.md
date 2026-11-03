@@ -90,7 +90,7 @@ REINTERP jvp function=int_escape skip=rule uri=:op/ltod reason=the rule is named
 REINTERP jvp function=int_escape skip=loop
 ```
 
-`:op/ltod` 那道墙没了；现在挡着它的是 `int_escape` 里的**循环**的前向变换，也就是 `skip=loop`——和另外 5 条 `transpose_loop_escape.*` 同一道墙，`lane-loopreverse` 的活。
+`:op/ltod` 那道墙没了；现在挡着它的是 `int_escape` 里的**循环**的前向变换，也就是 `skip=loop`——和另外 5 条 `transpose_loop_escape.*` 同一道墙，`737a7e896`（原 `lane-loopreverse`，该分支已删）的活。
 
 它自己的对照组**通了**，而且是纸上的数（同一个 `g`，`float(int(5.0x)) + x`，无循环）：
 

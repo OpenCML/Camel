@@ -9,7 +9,7 @@ Both are inside the five `law == ...` branches of `modules/transforms/transpose.
 re-writes the law instead of expanding the rule's right side. Both are dead weight *and* wrong, which
 is the argument for deleting the branches rather than keeping them.
 
-**Update (2026-11-02, `lane-m4-assembly`):** the five branches are gone and both positions now expand
+**Update (2026-11-02, `c2181c95f`, 原 `lane-m4-assembly`, 该分支已删):** the five branches are gone and both positions now expand
 the rule's right side. **T1 is repaired** -- `-x` answers `-1.0` / `-2.0`, measured on `std::nvm`.
 **T2 is repaired too, and it was reachable all along.** The branch's `-ct/x` is gone, and the reason it
 looked unreachable was the wrong test: a divisor is a *constant* only in the forward graph. `grad` is
