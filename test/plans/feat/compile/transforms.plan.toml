@@ -412,12 +412,15 @@ timeout_ms = 20000
 # The transform's refusals are two files: the words it writes into its reading log
 # (`modules/transforms/transpose.cpp`) and the sentences it answers them with
 # (`modules/transforms/transpose_operator.cpp`). One can gain a word the other has never heard of, and
-# a sentence can outlive the word it names, and no program can see either: eight of the seventeen words
-# are not reachable from anything this tree can run, so a case that runs `camel` cannot pin them -- the
-# ones it can reach say nothing about the rest. So the check reads the two sources and holds the sets
+# a sentence can outlive the word it names, and no program can see either: most of the words are not
+# reachable from anything this tree can run, so a case that runs `camel` cannot pin them -- the ones it
+# can reach say nothing about the rest. So the check reads the two sources and holds the sets
 # together, and the property is not "every word has a sentence of its own" (a cause whose sentence
 # would only repeat the word adds nothing, and the one catch-all sentence prints the word anyway) but
-# "every word has a readable landing, and no landing is left standing without a word".
+# "every word has a readable landing, and no landing is left standing without a word". Both are
+# inclusions between the two sets, so the entry pins them as relations and never as counts: a count is
+# a number a reader has to edit for a reason no reader can see (2026-11-03: splitting one word into two
+# made `17` red before `18`, on two trees that satisfied both inclusions).
 #
 # The reds it can be are both directions: delete one sentence and its word moves into the set that
 # reads the catch-all, which is not where an unanswered word should fall; rename one word and its
@@ -425,13 +428,13 @@ timeout_ms = 20000
 # written (the sentence of `state-unread` deleted, then its word renamed), and both read as reds.
 [[tests]]
 name = "transpose_refusal_words_are_answerable"
-desc = "The words `transpose` writes into its reading log and the sentences `refusalCause` answers them with, held together across the two files that hold them: all 18 words land on a non-empty sentence -- 10 in words of their own, 8 on the sentence that names the word -- no sentence waits for a word no file writes except the one cause that has a sentence and no shape yet, and the sentence that names the word exists, because every landing above leans on it. Delete one sentence and its word joins the catch-all set, which is a red; rename one word and its sentence becomes a promise nothing keeps, which is a red. The count moved from 17 to 18 on 2026-11-03, when `call` was split into `call-no-transpose` and `call-value-missing`: the second cause is a callee whose transpose *was* built, and it used to be answered with the sentence about a callee that has none -- the reading above the refusal contradicted it."
+desc = "The words `transpose` writes into its reading log and the sentences `refusalCause` answers them with, held together across the two files that hold them: every word the log writes lands on a sentence -- its own, or the catch-all that names the word it is handed -- every sentence of its own is written by a file that writes the word, and a word with no sentence of its own lands nowhere but the catch-all, which names it. The three are inclusions between two sets, so this entry pins relations and nothing that counts: adding a word with its sentence is green here, and the ways it can be red are the two directions -- delete one sentence and its word joins the catch-all set, which is not where an unanswered word should fall; rename one word and its sentence becomes a promise nothing keeps. The numbers this entry used to pin (17 words, 9 of their own, 8 on the catch-all) were that same property written as a measurement, and on 2026-11-03 splitting `call` into `call-no-transpose` and `call-value-missing` turned the entry red on `17` while both trees satisfied every inclusion; the numbers are gone for that reason."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/transpose_refusal/check.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["18 words written into the log", "10 of them answered in their own words", "8 answered by the sentence that names the word", "1 sentence waiting for a word no file writes", "every landing is non-empty"]
+expect_stdout_contains = ["every word the log writes lands on a sentence", "every sentence of its own is written by a file that writes the word", "lands nowhere but the catch-all, which names it", "waits for a shape, not for a sentence"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
 

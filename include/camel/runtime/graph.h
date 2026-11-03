@@ -676,6 +676,29 @@ class GCGraph : public camel::core::rtdata::Object {
         const GCNodeChunk &c = chunkOf(ref);
         return c.regions ? c.regions[ref & (kNodeChunkNodes - 1)] : 0;
     }
+    /// True when `ancestor` is `region` itself or a region `region` sits in, up to the body (0,
+    /// which is every region's ancestor).
+    bool isAncestorOf(uint32_t ancestor, uint32_t region) const {
+        for (uint32_t at = region;;) {
+            if (at == ancestor) {
+                return true;
+            }
+            const GCRegion *one = this->region(at);
+            if (one == nullptr || at == 0 || one->parent == at) {
+                return false;
+            }
+            at = one->parent;
+        }
+    }
+    /// True when `a` and `b` are on one chain of regions: one of them is the other, or one contains
+    /// the other. This is the question a read of a port asks. A region reads a port of a region it
+    /// sits in -- the builder writes that everywhere (a branch arm reading the function's own
+    /// parameter) -- and reads a port of a region inside it too (the arm that holds a loop reads
+    /// the loop's body port). It reads nothing of a region on another branch: that frame is not
+    /// there when the read happens.
+    bool regionsShareChain(uint32_t a, uint32_t b) const {
+        return isAncestorOf(a, b) || isAncestorOf(b, a);
+    }
     /// The LoopCond or LoopBody region (`part`) of the LOOP node `ref`; 0 when it has none: a For
     /// loop has no condition, and a loop in graph form has no regions.
     uint32_t loopRegionOf(gc_node_ref_t ref, GCRegionKind part) const {
