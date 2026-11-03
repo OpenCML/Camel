@@ -12,6 +12,7 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/tangent_space.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/core/type/text.h"
 #include "camel/core/type/tree.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
@@ -791,11 +792,27 @@ bool buildTransposeMember(
                         forwardOf[ref] =
                             at < portOfParam.size() ? portOfParam[at] : rt::kInvalidNodeRef;
                         if (forwardOf[ref] == rt::kInvalidNodeRef && at < paramCount) {
-                            // The operand's own value, taken from the closure: see `carriedPortOf`.
-                            if (const auto carried =
-                                    carriedPortOf.find(function->funcType()->normTypeAt(at)->toString());
-                                carried != carriedPortOf.end()) {
-                                forwardOf[ref] = carried->second;
+                            // The parameter's own value, by **identity**. `residualsOf` numbers the
+                            // residuals as the parameters by their index and then the values the body
+                            // computed (`modules/transforms/split.cpp`, "program order"), and this
+                            // graph declares one closure port per residual in that order, so slot
+                            // `at` is parameter `at`'s value. Which parameter this is decides the
+                            // slot: two arrays of one element type are two parameters, and the shape
+                            // an answer must be written in is *this* parameter's, not the first
+                            // member's of that type -- `xs[0] + ys[0]` over `[3.0, 4.0, 5.0]` and
+                            // `[2.0, 7.0]` answered `gy` sized by `xs` while the member was chosen by
+                            // type. The slot's type is **checked**, never searched: a slot that does
+                            // not hold a value of this parameter's type is a shape this build does not
+                            // understand, and a refusal is what it says rather than a neighbouring
+                            // member.
+                            Type *const askType = function->funcType()->normTypeAt(at);
+                            const camel::runtime::GCNode *slotMember =
+                                at < closureOf.size() ? function->node(closureOf[at]) : nullptr;
+                            if (askType != nullptr && slotMember != nullptr &&
+                                slotMember->dataType() != nullptr &&
+                                at < closurePorts.size() &&
+                                camel::core::type::typeEquals(slotMember->dataType(), askType)) {
+                                forwardOf[ref] = closurePorts[at];
                                 return forwardOf[ref];
                             }
                         }
