@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：25 页
+## 现在在等作者：26 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -16,6 +16,7 @@
 | [`2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant`](2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant.cn.md) | 一个超时应该由读数推出来，而不是由人写死 |
 | [`2026-11-03-does-a-loop-statement-with-an-unused-value-still-run`](2026-11-03-does-a-loop-statement-with-an-unused-value-still-run.cn.md) | 一个值没人用的 `loop` 语句，还算不算一条要执行的语句？ |
 | [`2026-11-03-does-a-one-member-closure-prove-the-slot-identity`](2026-11-03-does-a-one-member-closure-prove-the-slot-identity.cn.md) | 闭包只有一个成员时，「槽的类型等于参数类型」能证明它是这个参数的值吗？ |
+| [`2026-11-03-does-an-open-rank-index-law-cover-rank-one`](2026-11-03-does-an-open-rank-index-law-cover-rank-one.cn.md) | 下标的律：秩一与开秩要的答案类型不同，一条写在 `T[..]` 上的律覆盖不了两者 |
 | [`2026-11-03-does-note-zero-cover-a-closure-capture-port`](2026-11-03-does-note-zero-cover-a-closure-capture-port.cn.md) | `noteZero` 要不要覆盖闭包捕获端口？ |
 | [`2026-11-03-is-a-name-at-a-void-tail-a-value-use`](2026-11-03-is-a-name-at-a-void-tail-a-value-use.cn.md) | 一个 `void` 函数体尾部的名字，是"被丢掉的值"还是"被当成值使用"？ |
 | [`2026-11-03-is-a-var-read-outside-the-pure-value-rule`](2026-11-03-is-a-var-read-outside-the-pure-value-rule.cn.md) | 链位到底是谁在承担语义：`var` 读，还是纯算术调用？ |
