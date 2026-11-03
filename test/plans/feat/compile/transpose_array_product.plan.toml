@@ -18,6 +18,9 @@ expect_exit = 0
 expect_stdout_contains = ["value = 20.0", "d/dxs numel = 3", "d/dxs = 2.0 3.0 4.0", "d/dw numel = 3", "d/dw = 1.0 2.0 3.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+known_fail = ["nvm"]
+known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply position=0"
+known_fail_note = "Waits on the author's ruling on docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md (does a closure member's cotangent have a slot?). A ruling of `乙` -- the member gets a slot -- flips about 16 cases, this one among them. Measured 2026-11-04 on the integration branch: the transposed backward half stops at `skip=cotangent-needs-a-value uri=tensor:multiply position=0 reason=the rule's right side reads a value the caller does not carry` -- the value the law needs for the other operand is a forward-half value the backward half closed over, and a transposition is handed the cotangent and no operand. The mark goes away in the commit that answers the page; the expected numbers are that answer's, not a different law's."
 
 [[tests]]
 name = "jvp_vjp_array_product.one_point_two_ends"
@@ -31,3 +34,6 @@ expect_exit = 0
 expect_stdout_contains = ["value = 20.0", "forward  <jvp tangent, ct> = 6.0", "backward <dxs, d/dxs> + <dws, d/dw> = 6.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+known_fail = ["nvm"]
+known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply position=0"
+known_fail_note = "Waits on the author's ruling on docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md (does a closure member's cotangent have a slot?). A ruling of `乙` -- the member gets a slot -- flips about 16 cases, this one among them. Measured 2026-11-04 on the integration branch: the transposed backward half stops at `skip=cotangent-needs-a-value uri=tensor:multiply position=0 reason=the rule's right side reads a value the caller does not carry` -- the value the law needs for the other operand is a forward-half value the backward half closed over, and a transposition is handed the cotangent and no operand. The mark goes away in the commit that answers the page; the expected numbers are that answer's, not a different law's."

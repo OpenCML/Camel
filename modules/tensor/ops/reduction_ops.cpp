@@ -227,6 +227,73 @@ InferFn wholeReductionInfer(k::ReduceOp op) {
     };
 }
 
+// ---- the reductions with their extents stated ----
+//
+// A reduction forgets the extents it reduced, and the reverse of a reduction puts them back: the
+// adjoint of `sum(t)` spreads one number over `shape(t)`, and the adjoint of `mean(t, axis, ...)`
+// spreads each lane's mean over the lane. Neither can be built from the operand on the reverse
+// side -- a transpose law reads only **known** operands, and the operand a cotangent comes back
+// through is not one: it has no value there (author, 2026-11-03 11:10, 17:35) -- and `T[..]`
+// carries no extents in its type (design principles 5.4). So the forward half of a reduction states
+// them, and the two operators below are what it states them to.
+//
+// Both are second spellings of the operator above them for the reason `tensor:element_at` is a
+// second spelling of `:op/idx_arr` (`modules/tensor/ops/layout_ops.cpp#elementAtKernel`): a law's
+// parameters are bound one per operand, and the transpose walk answers an operator with one or two
+// normal operands, so the extents travel in one integer list beside the value rather than as
+// operands of their own. `rulesets.jvp`'s `jvp_sum` and `jvp_mean_axis` state them, and
+// `rulesets.transpose`'s `sum_stated_t` and `mean_axis_stated_t` read them and nothing of the
+// operand.
+
+/// `sum_stated(t, at)`: the whole-tensor sum, with `at` the operand's extents.
+///
+/// The value is `sum(t)` -- `sumAllKernel` below is the same kernel, so the accumulation, the
+/// element type and the one rounding are the definition's own -- and `at` is checked against the
+/// operand's shape: an extent nobody verified would be a gradient of the wrong shape
+/// (`support.h#checkStatedExtents`).
+slot_t sumStatedKernel(ArgsView &with, ArgsView &norm, context::Context &ctx) {
+    const std::vector<int64_t> at = intListArg(norm, 1, "sum_stated");
+    checkStatedExtents(tensorArg(norm, 0), at, 0, "sum_stated");
+    return sumAllKernel(with, norm, ctx);
+}
+
+std::optional<Type *> sumStatedInfer(const InferContext &ctx) {
+    return Type::create(wholeReductionDtype(k::ReduceOp::Sum, ctx.facts(0).dtype));
+}
+
+/// `mean_axis_stated(t, at)`: the lane mean, with `at` = `[axis, keepdims, d0, ..., d(rank-1)]`.
+///
+/// The value is `mean_axis(t, axis, keepdims)` -- `k::reduceAxis` is the kernel the axis form runs,
+/// so the lane's mean and its one rounding are the definition's own -- and the extents after the
+/// two scalars are checked against the operand's shape. The axis and the flag travel in the list
+/// because the reverse law needs the *shape* alone (`numel(t) / numel(ct)` is the lane length, and
+/// the answer is `full(shape, 1) * (ct / lanes)`), while the value is the one thing that needs the
+/// axis: one list, two readers.
+slot_t meanAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    const Array *t               = tensorArg(norm, 0);
+    const std::vector<int64_t> at = intListArg(norm, 1, "mean_axis_stated");
+    if (at.size() < 3) {
+        reportShapeError(
+            "mean_axis_stated",
+            "expects an integer list: the axis, the keepdims flag and the tensor's extents");
+    }
+    const int64_t axis  = at[0];
+    const bool keepDims = at[1] != 0;
+    checkStatedExtents(t, at, 2, "mean_axis_stated");
+    return runKernel("mean_axis_stated", [&] {
+        return wrap(
+            norm.resultType(),
+            k::reduceAxis(k::ReduceOp::Mean, t, axis, keepDims, resultAllocator()));
+    });
+}
+
+/// The stated lane mean's result: the axis form's element type at the rank the axis and the flag
+/// decide, both of which are values of the run in this spelling and not of the type -- so the rank
+/// stays open and the answer is the operand's element type, converted by the mean's own rule.
+std::optional<Type *> meanAxisStatedInfer(const InferContext &ctx) {
+    return tensorOf(reductionDtype(k::ReduceOp::Mean, ctx.facts(0).dtype), std::nullopt);
+}
+
 /// The name a whole-tensor extremum reports its fault under: design principles 7.7 gives the
 /// operator whose identity does not exist the fault, so the reading says which of the four was
 /// asked about a tensor with no element.
@@ -563,6 +630,25 @@ std::vector<OpDef> reductionOps() {
         .kernel    = &meanAllKernel,
         .traits    = {}});
     defs.push_back(reduceAxisDef<k::ReduceOp::Mean>("mean_axis", "mean", "T[..]"));
+    // The two stated twins of the reductions above (`sumStatedKernel`, `meanAxisStatedKernel`):
+    // the same value, with the extents the reverse law needs as a second operand. Both are one
+    // ordinary operand and one integer list, which is the count the transpose walk answers.
+    defs.push_back(OpDef{
+        .name      = "sum_stated",
+        .exports   = {"sum_stated"},
+        .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
+        .resultDoc = "T",
+        .infer     = sumStatedInfer,
+        .kernel    = &sumStatedKernel,
+        .traits    = {}});
+    defs.push_back(OpDef{
+        .name      = "mean_axis_stated",
+        .exports   = {"mean_axis_stated"},
+        .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
+        .resultDoc = "T[..]",
+        .infer     = meanAxisStatedInfer,
+        .kernel    = &meanAxisStatedKernel,
+        .traits    = {}});
     defs.push_back(reduceAxisDef<k::ReduceOp::Max>("max_axis", "max", "T[..]"));
     defs.push_back(reduceAxisDef<k::ReduceOp::Min>("min_axis", "min", "T[..]"));
     defs.push_back(reduceAxisDef<k::ReduceOp::ArgMax>("argmax_axis", "argmax", "int[..]"));

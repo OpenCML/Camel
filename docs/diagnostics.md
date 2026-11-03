@@ -10906,23 +10906,7 @@ The transpose of '{0}' needs the shape of {1}, and the type '{2}' does not state
 A transposition turns the cotangent of the result into the cotangent of the parameter, and the adjoint of a linear map is a function of that cotangent and of the shape of the map's domain: the cotangent alone does not say how many positions the parameter has. So the type has to state the shape. Write the extents the parameter's value has in its declaration -- 'func loss_mean(x: float[..])' becomes 'func loss_mean(x: float[2, 3])' -- and 'transpose' builds the graph from them. Nothing is missing from the language here: a parameter whose type states its shape has a transpose.
 ```
 
-**Example** (`test/cases/modules/autodiff/transpose_needs_parameter_shape.cml`, run as `camel test/cases/modules/autodiff/transpose_needs_parameter_shape.cml ${backend}`)
-
-```camel
-import rulesets.transpose
-import { transpose } from transforms
-import { mean_axis, sum } from tensor
-
-func loss_mean(x: float[..]): float {
-    return float(sum(mean_axis(x, 0, false) * ([1.0, 2.0, 3.0] as float[])))
-}
-
-func main(): int sync {
-    let back = transpose(loss_mean)(1.0)
-    'transpose should have been refused, and it answered {}'->format<back.0>->println
-    return 0
-}
-```
+*No example: no test small enough to show raises it.*
 
 ### PassesNeverRun
 

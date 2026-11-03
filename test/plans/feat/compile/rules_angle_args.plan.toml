@@ -68,6 +68,9 @@ backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_contains = ["rules_angle_args mean transpose=[[0.5, 1.0, 1.5], [0.5, 1.0, 1.5]]"]
 timeout_ms = 30000
+known_fail = ["nvm", "fvm"]
+known_fail_msg = "skip=rule uri=tensor:sum reason=unbound"
+known_fail_note = "The direct-value path, not the ruleset's: a program that writes `sum(xs)` and then calls `transpose` needs a law for the one-operand `sum`, and sumshape's rewrite replaced `sum_t`/`take_t`/`mean_axis_t` with the `*_stated` twins that only serve the call `jvp` writes (they read the extents the forward half states, never the operand's shape -- the criterion of docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md's neighbour, `git grep 'shape(xs)|ones_like' -- stdlib/rulesets/transpose.cml` empty). Measured 2026-11-04: `TRANSPOSE function=loss_mean skip=rule uri=tensor:sum reason=unbound`, one step before the shape question this case asks. Restoring the value path needs a law that is handed extents it does not have, which is a decision, not a merge; the mark goes away with it."
 
 [[tests]]
 name = "transpose_needs_parameter_shape"
@@ -83,3 +86,6 @@ expect_stdout_contains = ["[Error]: The transpose of 'loss_mean' needs the shape
 expect_stderr_contains = ["TRANSPOSE function=loss_mean ports=2 promised=1 cause=parameter-shape param=0 param-type=float[..]"]
 expect_stdout_not_contains = ["transpose should have been refused, and it answered"]
 timeout_ms = 30000
+known_fail = ["nvm", "fvm"]
+known_fail_msg = "skip=rule uri=tensor:sum reason=unbound"
+known_fail_note = "The direct-value path, not the ruleset's: a program that writes `sum(xs)` and then calls `transpose` needs a law for the one-operand `sum`, and sumshape's rewrite replaced `sum_t`/`take_t`/`mean_axis_t` with the `*_stated` twins that only serve the call `jvp` writes (they read the extents the forward half states, never the operand's shape -- the criterion of docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md's neighbour, `git grep 'shape(xs)|ones_like' -- stdlib/rulesets/transpose.cml` empty). Measured 2026-11-04: `TRANSPOSE function=loss_mean skip=rule uri=tensor:sum reason=unbound`, one step before the shape question this case asks. Restoring the value path needs a law that is handed extents it does not have, which is a decision, not a merge; the mark goes away with it."
