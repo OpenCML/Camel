@@ -1857,47 +1857,6 @@ expect_stdout_contains = ["mean_axis_negative library value=7.00000000000000000 
 expect_stderr_contains = ["rules=jvp_mean_axis,jvp_sum", "residuals=4", "rhs=sum_stated_t,mean_axis_stated_t"]
 
 [[tests]]
-name = "library_grad_of_a_with_weight"
-desc = "A weight the program holds as an ordinary parameter of a lambda, handed to a function that reads it through a `with` parameter: the shape `grad_first_with_parameter` measures on the engine's side, taken through the library's composition here. `vjp` differentiates the ordinary parameters only, so the weight is moved onto one by `f = (ww) => weighted<ww>(2.0)`; the lift of `f` reaches a *call* of `weighted` whose `with` argument is the lambda's parameter, and that parameter is a value the lifted body has a direction for. Before 2026-11-04 the lifted call handed the callee its `with` value and the zero the old signature wrote for its direction, so `weighted`'s lifted chain was constant in the weight and the composition answered value 9.0 with grad 0.0 while the engine answered 3.0 -- a wrong number, and the reason this is pinned rather than described. The second line is the same list's other half: a lifted call's arguments are `(..values, ..their tangents)`, the lift used to interleave them (`v1, d1, v2, d2`) into a callee that reads `(v1, v2, d1, d2)`, and two parameters is where that misaligns -- `mulxy(3.0, 2.0) = 6.0` with `d/dx = 2.0`, which used to refuse with 'the value half reads the tangent of parameter 0, which the forward half does not take'. A struct or tensor weight is not pinned here, and not because it is untested: a `with` value is promoted only when its tangent is its own type one word wide (`withValueIsCarriable`), so `jvp` refuses a `Point` weight and an `f64[..]` one by name instead of letting the cut die on that port -- the crash those shapes used to reach, and the two gates that replaced it, are measured in `docs/handover/questions/2026-11-04-when-the-lift-promotes-a-with-value-and-the-cut-cannot-take-the-port.cn.md`."
-kind = "behavior"
-case = "../../../cases/compile/transforms/library_grad_of_a_with_weight.cml"
-args = ["${case}", "std::nvm"]
-expect_exit = 0
-expect_stdout_contains = ["weighted engine=3.0 value=9.0 grad=3.0", "twoparam value=6.0 grad=2.0"]
-expect_output_not_contains = ["Warning", "[Error]"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-# ---- the tranche of eight laws: `neg`, `abs`, `sqrt`, `log`, `rsqrt`, `maximum`, `minimum`,
-# `divide` ----
-# One entry an operator, and one program an entry: the engine's `grad` leg first, then the library's
-# `vjp` leg on the same input, then whether the two arrays agree lane for lane. The pair of legs is
-# the criterion the deletion audit asks for (`docs/handover/reports/2026-11-03-what-deleting-the-engine-pullback-takes.cn.md`,
-# D1), and every entry pins the whole array rather than an aggregate, because a sum can be made to
-# match by a law that is wrong in every lane (`log_softmax`'s note is the worked example).
-#
-# Measured on 2026-11-04 (worktree `tranche` = `origin/develop` 545b24d92 + this lane's changes,
-# load 19-25, `[SUMMARY] total: 8, pass: 8`), one line an operator, `rhs=` being the transpose walk's
-# own list of the laws it read for that program:
-#
-#     neg      engine [-1.0, -1.0, -1.0]                     library same=true  rhs=sum_t,neg_tensor_t
-#     abs      engine [-1.0, 1.0, 1.0, -1.0]                 library same=true  rhs=sum_t,mul_tensor_t
-#     sqrt     engine [0.25, 0.3333333333333333, 1.0]        library same=true  rhs=sum_t,divide_t,mul_tensor_t,sqrt_t
-#     log      engine [1.0, 0.5, 0.25]                       library same=true  rhs=sum_t,divide_t
-#     rsqrt    engine [-0.0625, -0.5, -4.0]                  library same=true  rhs=sum_t,mul_tensor_t,rsqrt_t
-#     maximum  engine dx [0.0, 1.0, 1.0, 0.0] dw [1.0, 0.0, 0.0, 1.0]         library same=true  rhs=sum_t,add_tensor_t,mul_tensor_t,subtract_t
-#     minimum  engine dx [1.0, 1.0, 0.0, 1.0] dw [0.0, 0.0, 1.0, 0.0]         library same=true  rhs=sum_t,add_tensor_t,mul_tensor_t,subtract_t
-#     divide   engine dx [0.5, 0.25, 0.125] dw [-1.5, 0.1875, -0.015625]      library same=true  rhs=sum_t,subtract_t,divide_t,mul_tensor_t
-#
-# **Four laws are walked and four are not**, and the four that are not are not a defect: the walk asks
-# for a law at the nodes the *linear half* holds, and a nonlinear operator's forward rule puts its
-# slope there as a mask or a product instead of the operator (`abs`'s two masks, `maximum`/`minimum`'s
-# `where` and `1 - where`, `log`'s `dx / x`). `sqrt_t` and `rsqrt_t` are walked because those forward
-# rules *recompute* the operator from the operand and the cut carries the recomputation; `neg_tensor_t`
-# is walked because `-dx` is the operator on a linear value. So the number in each reading is the
-# engine's number whether or not the law was reached, and the `rhs=` list is the measurement that says
-# which happened -- the reason it is written down here instead of being assumed.
-[[tests]]
 name = "neg_gradient_both_legs"
 desc = "`sum(-x)` on `[-2.0, 0.5, 3.0]` through both legs: the engine's `negVjp` answers `[-1.0, -1.0, -1.0]` and the library's `neg_tensor_t` must answer the same three lanes, so `same=true`. `neg`'s slope is `-1` and reads nothing off the operand, which is why its law is the pure cotangent form `-ct` and why this is the first member of the tranche: a law written `ct` (the sign dropped) answers `[1.0, 1.0, 1.0]` and the three lanes tell the two apart without a tolerance. Walk `rhs=sum_t,neg_tensor_t`: the law is walked, because `jvp_neg_tensor`'s right side is `-dx`, the operator on a linear value."
 kind = "behavior"
@@ -2156,5 +2115,19 @@ expect_exit = 0
 expect_stdout_contains = ["([1.0, 1.0, 1.0])"]
 expect_output_contains = ["rhs=sum_from_type_t"]
 expect_output_not_contains = ["skip=rule uri=tensor:sum reason=unbound", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "library_grad_of_a_with_weight"
+desc = "A weight the program holds as an ordinary parameter of a lambda, handed to a function that reads it through a `with` parameter -- the shape the engine measures in `grad_first_with_parameter`, taken through the library's composition here. `vjp` differentiates the ordinary parameters only, so the weight is moved onto one by `f = (ww) => weighted<ww>(2.0)`; the lift of `f` then meets a *call* of `weighted` whose `with` argument is the lambda's parameter, and that parameter is a value the lifted body carries a direction for. Before 2026-11-04 the lifted call handed the callee its `with` value and the zero the lifted signature leaves a `with` parameter's tangent to be, so `weighted`'s lifted chain was constant in the weight, its `lin` was the zero map, and the composition answered value 9.0 with grad 0.0 where the engine answers 3.0 -- a wrong number, which is why this is pinned rather than described. Every line is hand-computed: `weighted<3.0>(2.0) = 3*2 + 3 = 9.0` with `d/dy = x = 3.0`; the same call with the number on an ordinary parameter too is `weighted<3.0>(5.0) = 18.0`, whose cotangents are `6.0` for the weight (`t + 1`) and `3.0` for `t` (the weight), so a dropped weight direction shows as one wrong member and not as a wrong line. The third line is the same argument list read for order: a lifted call's arguments are `(..values, ..their tangents)`, the lift used to interleave them (`v1, d1, v2, d2`) into a callee that reads `(v1, v2, d1, d2)`, and `mulxy(3.0, 2.0) = 6.0` with `d/dx = y = 2.0` and `d/dy = x = 3.0` is where two parameters tell the two orders apart."
+kind = "behavior"
+case = "../../../cases/compile/transforms/library_grad_of_a_with_weight.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["weighted engine=3.0 value=9.0 grad=3.0", "both value=18.0 pullback=(6.0, 3.0)", "twoparam value=6.0 pullback=(2.0, 3.0)"]
+expect_output_not_contains = ["Warning", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

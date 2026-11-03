@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <array>
+#include <format>
 #include <optional>
 #include <span>
 #include <string>
@@ -325,18 +326,24 @@ FunctionType *liftSignature(FunctionType *function, bool promoteWiths) {
     return FunctionType::create(withs, params, lifted)->withResources(function->resources());
 }
 
-} // namespace
-
-FunctionType *jvpSignature(FunctionType *function) {
-    return liftSignature(function, /*promoteWiths=*/false);
-}
-
 /// The signature of a **callee's** lift (see `liftSignature`): the same law, with every `with`
 /// value that is not a `var` lifted into the ordinary list so that its direction can be handed in
 /// at the call. Never the type of `jvp(f)` -- the operator's answer is `jvpSignature`'s
 /// (`jvp_operator.cpp#jvpOperatorSignature`), and the two must not be confused: only a callee is
-/// called from a graph that has a tangent for its `with` values.
-FunctionType *jvpCalleeSignature(FunctionType *function);
+/// called from a graph that has a tangent for its `with` values. This file's own name: no caller
+/// outside it lifts a callee, and a declaration in a header would invite one.
+FunctionType *jvpCalleeSignature(FunctionType *function) {
+    return liftSignature(function, /*promoteWiths=*/true);
+}
+
+} // namespace
+
+/// The signature `reinterp<jvp>(f)` has: `f`'s `with` list stays `f`'s own, so this answer and the
+/// declared `Jvp<F>` (`stdlib/types.cml`) are one type -- which is what `vjp(f)` forwards to
+/// `split(jvp(f))<..ws>(..xs)`. `liftSignature` says why only a callee promotes its `with` values.
+FunctionType *jvpSignature(FunctionType *function) {
+    return liftSignature(function, /*promoteWiths=*/false);
+}
 
 namespace {
 
@@ -359,10 +366,6 @@ struct LiftState {
     /// cannot disagree about the order or the length of the list (`liftSignature`).
     std::unordered_map<uint32_t, FunctionType *> calleeTypes;
 };
-
-FunctionType *jvpCalleeSignature(FunctionType *function) {
-    return liftSignature(function, /*promoteWiths=*/true);
-}
 
 bool fail(JvpGraph &refusal) {
     refusal = JvpGraph{};
