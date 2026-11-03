@@ -1,0 +1,44 @@
+// The same three functions through the library's `vjp`: the same three arrays, element for element.
+//
+// All three slopes are functions of `x` alone and none carries a `<>` argument, which is the criterion
+// the `log_softmax` round settled on: what the cut refuses is a constant context argument on the path
+// the backward half reproduces, not recomputation itself. So these three are expected to pass.
+//
+// **`gelu` follows the engine's definition, which is the tanh approximation** -- not the erf form:
+// 引擎的 `gelu` 是 tanh 近似，库层跟引擎；要改成 erf 精确式，那是引擎要改，不是库层迁就。
+// Writing the erf form here would make the library differ from the engine by 1.5e-4 on the forward
+// value (`0.8413447460685429` against the engine's `0.8411919906082768` at `x = 1`), which is two
+// definitions rather than a better one.
+//
+// The numbers this has to reproduce are the engine's, and they are **the engine's after its `gelu_grad`
+// / `erf_grad` kernels were fixed**: before that fix the engine answered uninitialised doubles on
+// exactly this input (`gelu engine d=[0.0, 1.5769529523e-314, 0.0]`, `erf ... 5.098027537e-315`,
+// `erfc ... 1.570800649e-314`), so no array could be pinned. The criterion is therefore "the same
+// numbers as the fixed engine, element for element", never the broken ones.
+//
+//     camel test/cases/compile/transforms/elementwise_slopes_through_the_library.cml
+import { vjp } from vjp
+import { erf, erfc, gelu, sum } from tensor
+
+func gelu_total(x: float[..]): float {
+    return sum(gelu(x))
+}
+
+func erf_total(x: float[..]): float {
+    return sum(erf(x))
+}
+
+func erfc_total(x: float[..]): float {
+    return sum(erfc(x))
+}
+
+func main(): int sync {
+    let input = [-1.0, 0.0, 1.0] as float[]
+    let (vg, pg) = vjp(gelu_total)(input)
+    let (ve, pe) = vjp(erf_total)(input)
+    let (vc, pc) = vjp(erfc_total)(input)
+    `gelu library value={} d={}`->format<vg, pg(1.0).0>->println
+    `erf library value={} d={}`->format<ve, pe(1.0).0>->println
+    `erfc library value={} d={}`->format<vc, pc(1.0).0>->println
+    return 0
+}
