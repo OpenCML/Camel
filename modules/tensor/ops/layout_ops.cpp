@@ -574,7 +574,7 @@ void takeVjp(VjpBuilder &b, const VjpCall &call) {
             {call.inputs[0], call.inputs[1], *dy}));
 }
 
-// element_at(t, at): the element at `at[0]` of a rank-1 tensor whose length `at[1]` states.
+// pick_at(t, at): the element at `at[0]` of a rank-1 tensor whose length `at[1]` states.
 //
 // The length is not a convenience and not a hint: it is the operand that makes the read's pullback
 // writable at all. `xs[i]`'s transpose is a scatter into an array of zeros with `xs`'s length
@@ -582,7 +582,7 @@ void takeVjp(VjpBuilder &b, const VjpCall &call) {
 // only known operands -- the array itself is the operand the cotangent comes back through, so on
 // that side it has no value (author, 2026-11-03 11:10 and 17:35). So the linear half of the read
 // states the length: `rulesets.jvp`'s `jvp_idx_arr` passes `[i, len(xs)]`, a value the forward side
-// computes, and `rulesets.transpose`'s `element_at_t` builds its zeros from `at[1]` and reads
+// computes, and `rulesets.transpose`'s `pick_at_t` builds its zeros from `at[1]` and reads
 // nothing of the array.
 //
 // It is a second spelling of `:op/idx_arr` rather than a third operand of it, because that
@@ -600,19 +600,19 @@ void takeVjp(VjpBuilder &b, const VjpCall &call) {
 slot_t elementAtKernel(ArgsView &, ArgsView &norm, context::Context &) {
     const Array *t = tensorArg(norm, 0);
     if (t->rank() != 1) {
-        reportShapeError("element_at", "expects a tensor with exactly one dimension");
+        reportShapeError("pick_at", "expects a tensor with exactly one dimension");
     }
-    const std::vector<int64_t> at = intListArg(norm, 1, "element_at");
+    const std::vector<int64_t> at = intListArg(norm, 1, "pick_at");
     if (at.size() != 2) {
         reportShapeError(
-            "element_at",
+            "pick_at",
             "expects a two-entry integer list: the position and the length of the tensor");
     }
     const int64_t length = at[1];
     if (length < 0 || static_cast<uint64_t>(length) != t->numel()) {
         throwRuntimeFault(
             RuntimeDiag::InvalidArgument,
-            std::string("element_at"),
+            std::string("pick_at"),
             std::format(
                 "the stated length {} does not agree with the tensor's {}", length, t->numel()));
     }
@@ -630,7 +630,7 @@ slot_t elementAtKernel(ArgsView &, ArgsView &norm, context::Context &) {
 std::optional<Type *> elementAtInfer(const InferContext &ctx) {
     const TensorFacts t = ctx.facts(0);
     if (t.shape && t.shape->size() != 1) {
-        throw ShapeError("element_at expects a tensor with exactly one dimension");
+        throw ShapeError("pick_at expects a tensor with exactly one dimension");
     }
     // An element type nobody stated answers `f64`, the way the whole-tensor reductions answer it.
     return Type::create(t.dtype.value_or(TypeCode::Float64));
@@ -646,7 +646,7 @@ std::optional<Type *> elementAtInfer(const InferContext &ctx) {
 // supplies only the columns, so the extents have to be stated by the forward half
 // (`rulesets.jvp`'s `jvp_take` passes `[len(indices), the indices, shape(t)]`).
 //
-// The indices and the extents are one list for the reason `element_at`'s position and length are:
+// The indices and the extents are one list for the reason `pick_at`'s position and length are:
 // the transpose walk answers an operator with one or two normal operands, so a third one would be
 // refused before any law was looked up. The first entry is the number of indices, which is what
 // tells the two halves of the list apart -- the indices are as long as the list says, and the
@@ -768,8 +768,8 @@ std::vector<OpDef> layoutOps() {
     // The read with a stated length: `t[at[0]]` of a rank-1 tensor whose length `at[1]` states.
     // Both are the element type's own answer (see `elementAtKernel` and `stdlib/tensor.cml`).
     defs.push_back(OpDef{
-        .name      = "element_at",
-        .exports   = {"element_at"},
+        .name      = "pick_at",
+        .exports   = {"pick_at"},
         .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
         .resultDoc = "T",
         .infer     = elementAtInfer,

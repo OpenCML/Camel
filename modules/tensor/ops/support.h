@@ -51,7 +51,7 @@ std::vector<int64_t> intListArg(ArgsView &args, size_t index, std::string_view o
  * `sum_stated` sum is a sum -- and the extents are there for the reverse law, which builds its zeros
  * from them and reads nothing of the operand the cotangent comes back through. An extent nobody
  * compared would be a gradient of the wrong shape, so it is a fault and not a silently reshaped
- * answer (`tensor:element_at`, the first of these twins, checks its length the same way).
+ * answer (`tensor:pick_at`, the first of these twins, checks its length the same way).
  */
 void checkStatedExtents(
     const Array *value, const std::vector<int64_t> &at, size_t offset, std::string_view op);

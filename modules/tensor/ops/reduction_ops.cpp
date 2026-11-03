@@ -237,7 +237,7 @@ InferFn wholeReductionInfer(k::ReduceOp op) {
 // carries no extents in its type (design principles 5.4). So the forward half of a reduction states
 // them, and the two operators below are what it states them to.
 //
-// Both are second spellings of the operator above them for the reason `tensor:element_at` is a
+// Both are second spellings of the operator above them for the reason `tensor:pick_at` is a
 // second spelling of `:op/idx_arr` (`modules/tensor/ops/layout_ops.cpp#elementAtKernel`): a law's
 // parameters are bound one per operand, and the transpose walk answers an operator with one or two
 // normal operands, so the extents travel in one integer list beside the value rather than as

@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_integer, is_same, is_string, Tangent } from types
-import { abs, element_at, exp, log, log_softmax, matmul, maximum, mean_axis, mean_axis_stated, minimum, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, sum, sum_stated, take, take_stated, tanh, where, zeros_like } from tensor
+import { abs, exp, log, log_softmax, matmul, maximum, mean_axis, mean_axis_stated, minimum, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, sum, sum_stated, take, take_stated, tanh, where, zeros_like } from tensor
 // `log as math_log`: this module files the **array** `log`'s forward rule below (`jvp_log`), and a
 // rule's left side has to spell its operator with the operator's own name, so the plain `log` here
 // is `tensor:log`. The scalar `log` is what `pow_tangent` needs, and one module holds one `log`: the
@@ -265,7 +265,7 @@ export rule jvp_matmul::<T>(a: T[..], b: T[..]) when is_float::<T>() {
 // that argument and nothing of the operand the cotangent comes back through. A transpose law may
 // read only known operands (author, 2026-11-03 11:10 and 17:35), and `T[..]` carries no extents in
 // its type (design principles 5.4). `jvp_idx_arr` below is the same arrangement for a read, and
-// `tensor.element_at` is the operator it states a length to.
+// `tensor.pick_at` is the operator it states a length to.
 //
 // The extents ride inside one integer list because the transpose walk answers an operator with one
 // or two normal operands: a third position is refused before any law is looked up
@@ -591,7 +591,7 @@ func extent_pair(position: int, length: int): int[] {
 /// carries no tangent of its own -- `Tangent<int>` is `()` -- so it does not enter the right side.
 ///
 /// The linear body also states how long the array is: `len(xs)` is a value of the primal, and it
-/// travels to the read as `at[1]` (`tensor.element_at` is `xs[i]` with the length stated). The law
+/// travels to the read as `at[1]` (`tensor.pick_at` is `xs[i]` with the length stated). The law
 /// that answers the read's transposition builds its zeros from that length and reads nothing of the
 /// array, which is what a transpose rule is allowed to do (author, 2026-11-03 11:10 and 17:35): `xs`
 /// is the operand the cotangent comes back through, so on the reverse side it has no value, and
@@ -603,7 +603,7 @@ func extent_pair(position: int, length: int): int[] {
 /// tangent *and* carries the fact the reverse reading needs.
 /// @example index_into([0.5, 0.25], 1)    // the tangent of `xs[1]` when `dxs` is `[0.5, 0.25]`
 export rule jvp_idx_arr::<T>(xs: T[], i: int) {
-    index_into(xs, i) => (dxs: T[]) => element_at(dxs, extent_pair(i, len(xs)))
+    index_into(xs, i) => (dxs: T[]) => pick_at(dxs, extent_pair(i, len(xs)))
 }
 
 // ---- the forward rule of `^` (a power) ----
