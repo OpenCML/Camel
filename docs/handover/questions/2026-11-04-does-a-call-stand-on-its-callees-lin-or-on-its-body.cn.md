@@ -13,6 +13,38 @@
 
 要裁的是第三条支：**换不换成 `transpose(lin_g)`**。
 
+## 那个站点的原文
+
+`modules/transforms/transpose.cpp#buildTransposeMember`，`GCNodeKind::Call` / `GCNodeKind::Func` 那一臂。
+它**拿**被调函数的线性半——当那个半是以**值**（本图收到的 `Port`，即切片交出来的 `lin`）到场时：
+
+> A call reaches its callee one of two ways in this graph model: a CALL node whose first input is the
+> callee's value, or a FUNC node that is the call itself, with the arguments as its norm inputs. Both
+> are one fact -- a graph is called here -- and both are transposed the same way: the callee's
+> transpose is a graph of its own, built beside this one, once per callee (the rule `jvp` reads for a
+> lifted function, so two calls of one function call one graph).
+
+> A **Port** is a value this graph *receives* -- a `with` parameter, or a closure port, which is how a
+> cut hands its linear half to the half that calls it. That value's transpose is `transpose(v)` at run
+> time, so the call can be turned around without seeing the graph behind it.
+
+**拿不到时它拒绝，不就地展开**——同一个文件的 `callee == nullptr` 支：
+
+> **Unless it is a linear function known at run time**, which is exactly what a cut hands out: `split`'s
+> second half is a closure value, so a body that calls it (every backward half that has a call in it
+> does) calls a value and not a graph. Transposing it is the same rule as transposing a graph, one
+> level down: the transposition of `v` is `transpose(v)` -- the operator, written once in the
+> transposed graph -- and the call is that result applied to the cotangent. No node reads a closure
+> cell, and nothing is recomputed (author, 2026-11-03 17:55).
+
+两个拒绝因而存在：`TransposeRefusalCause::CallValueComputedByTheBody`（那个值不是本图收到的
+`Port`，而是 body 自己造的闭包——`let h = (y) => y*x`）与 `CallNoTranspose`（参数个数与被调函数
+的形参不符）。**没有「退回去展开 body」这条路**：支是按值的来历选的，不是按成败选的。
+
+**具名被调函数**（`calleeIdOf` 答得出来）走的是另一条：`buildTransposeMember(state, callee…)`
+造一张被调函数的转置成员图，在 body 上逐条反向走律——它本来就**不拿**线性半，因为那个半只有
+`split` 会交出来。
+
 ## 读数
 
 1. **第二条支确实在**（不是「一行都没有」）。同一棵树上的 trace（`residual` @ `34b659107`，
