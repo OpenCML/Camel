@@ -139,6 +139,39 @@ export rule jvp_neg::<T>(x: T) when is_float::<T>() {
     -x => (dx: T) => neg_tangent(x, dx)
 }
 
+// ---- the forward rule of `tensor:multiply` ----
+//
+// The array product is the one binary arithmetic operator whose key is not a token: `*/2` is already
+// `:op/mul_d`'s key, and one key holds one rule, so `ruleKeyOf` files `tensor:multiply` under the
+// call `mul_tensor(x, w)` (`src/core/forward.cpp`, the same exception that makes `:op/idx_arr`'s rule
+// `index_into(x, i)`). `stdlib/rulesets/vmap.cml` has that function, that rule, for the batching
+// transform; this family had neither, so a `jvp` over two arrays reached no law at all and said so by
+// name at the operator (`the ruleset holds no rule for this operator and operand count`). The
+// asymmetry was the batching family's alone, and it is closed here rather than in a second table: one
+// key, one rule per family, and each family's rule written where that family's laws live.
+//
+// The law is the scalar product's, element by element -- the two factors each contribute the other
+// factor -- because `tensor:multiply` multiplies corresponding elements and nothing else moves. The
+// right side names `mul_tensor` for both products and `+`, which is `tensor:add` on two arrays: no
+// new tangent function is invented, since an elementwise product needs no arithmetic the library
+// does not already write.
+//
+// It is instantiated at the operator's *element* type like every other rule here (`rule_types.h`),
+// and the operator walks whatever rank it is given, so the parameters are the open rank `T[..]`.
+
+/// The product of two arrays at any rank: what `tensor:multiply` means, and the left side this rule is
+/// filed under. The array product has no infix spelling a rule's left side could be written with.
+/// @example mul_tensor(2.0, 3.0)    // 6.0
+/// @example mul_tensor([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[1.0, 10.0], [100.0, 1000.0]] as float[2, 2])    // [[1.0, 20.0], [300.0, 4000.0]]
+func mul_tensor::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
+    return x * w
+}
+
+/// `d(x * w) = dx * w + x * dw`, element by element.
+export rule jvp_mul_tensor::<T>(x: T[..], w: T[..]) when is_float::<T>() {
+    mul_tensor(x, w) => (dx: T[..], dw: T[..]) => mul_tensor(x, dw) + mul_tensor(dx, w)
+}
+
 // ---- the forward rule of `matmul` ----
 //
 // The matrix product is the one operator a model meets at every step, and its key needs no

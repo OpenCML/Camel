@@ -26,7 +26,7 @@
  * `node scripts/stdlib-reference.mjs --write`.
  */
 
-import { is_float } from types
+import { is_float, is_same } from types
 import {
     add_cotangent,
     add_cotangent_c,
@@ -64,6 +64,48 @@ export rule div_t::<T>(x: T, c: T) when is_float::<T>() {
 export rule neg_t::<T>(x: T) when is_float::<T>() {
     -x => (ct: T) => neg_cotangent(ct)
 }
+
+/// The transpose of `float(x)` where `x` is a double already: the conversion changes nothing, so the
+/// cotangent goes back unchanged.
+///
+/// This is the transpose half of `jvp_dtod` (`stdlib/rulesets/jvp.cml`), and it was missing while the
+/// forward half was there: a program that writes `float(...)` around a value that is a double already
+/// keeps the conversion as a node, so the pullback met `:op/dtod` where the forward walk met it and
+/// found a law, and stopped there with `skip=rule uri=:op/dtod reason=no-rule` -- on the first step of
+/// the walk, since the conversion is what the function returns. The family filed laws for the
+/// operators in the body and for none of the conversions in front of them.
+export rule dtod_t::<T>(x: T) when is_same::<T, float>() {
+    float(x) => (ct: T) => ct
+}
+
+// ---- the transpose rule of `tensor:multiply` ----
+//
+// The array product's key is the call `mul_tensor(x, w)`, not `*/2` (`src/core/forward.cpp`: `*/2` is
+// already `:op/mul_d`'s key), so a rule for the array product is filed under that call in every family
+// that has one. `stdlib/rulesets/vmap.cml` has it, `stdlib/rulesets/jvp.cml` has it, and this family
+// had neither the function nor the rule -- the same asymmetry, one family at a time.
+//
+// The law: an elementwise product is linear in each factor, so the cotangent of `x` is `w * ct` and the
+// cotangent of `w` is `x * ct`. Same shape in, same shape out: the two operands are arrays of one
+// shape, which is the case `vmap_rule_mul_tensor` writes the same product for. The operator's other
+// case is a scalar multiplied into an array, and there the scalar's own pullback reduces (the sum of
+// the array's cotangent, `src/builtin/operators/derivative.cpp`); a rule's left side cannot say "the
+// two operands have one shape", so that case is named here rather than answered with an array where a
+// scalar's cotangent belongs.
+
+/// The product of two arrays at any rank: what `tensor:multiply` means, and the left side this rule is
+/// filed under.
+/// @example mul_tensor(2.0, 3.0)    // 6.0
+/// @example mul_tensor([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[1.0, 10.0], [100.0, 1000.0]] as float[2, 2])    // [[1.0, 20.0], [300.0, 4000.0]]
+func mul_tensor::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
+    return x * w
+}
+
+/// The transpose of `x * w`: `w * ct` for `x`, `x * ct` for `w`.
+export rule mul_tensor_t::<T>(x: T[..], w: T[..]) when is_float::<T>() {
+    mul_tensor(x, w) => (ct: T[..]) => (mul_tensor(w, ct), mul_tensor(x, ct))
+}
+
 // ---- the transpose rules of the reductions and the layout ----
 //
 // A forward rule that answers with the operator itself (`d(sum(xs)) = sum(dxs)`, `rulesets.jvp`)

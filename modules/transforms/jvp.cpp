@@ -10,6 +10,7 @@
 #include "camel/core/forward.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/tangent_space.h"
@@ -150,7 +151,20 @@ bool portsTakeOperands(
         return false;
     }
     for (size_t i = 0; i < count; ++i) {
-        if (wanted[i] == nullptr || portTypes[i] == nullptr || !wanted[i]->equals(portTypes[i])) {
+        // "Takes" is the relation a call site uses, not equality: an instance's ports are written in
+        // the spelling the rule's left side uses, and that spelling does not shrink to the shape of
+        // the operand it meets. `jvp_mul_tensor` is `mul_tensor(x: T[..], w: T[..])`, and a
+        // `float[2, 2]` operand is a value that port takes -- an open rank is every rank, and the
+        // operator walks whatever rank it is given (`stdlib/rulesets/vmap.cml` says the same about
+        // the batch it hands a rule). Asking for equality refused it: `float[..]` and `float[2, 2]`
+        // are not the same type, and the law was refused for the shape of the value it was written
+        // for. The direction is the one a call checks -- the port takes the operand -- and it is the
+        // direction that keeps the case this function exists for refused: a `float` port still takes
+        // no `float[]`, because a primitive takes its own type and nothing else
+        // (`Type::assignableFrom`), so `:op/at od` is still stopped before a `float[]` reaches the
+        // scalar law's port.
+        if (wanted[i] == nullptr || portTypes[i] == nullptr ||
+            !wanted[i]->assignableFrom(portTypes[i])) {
             why = "the rule takes " + typeTextOf(wanted) + ", and the operator has " +
                   typeTextOf(portTypes) + " (of which " + std::to_string(dataOperandCount) +
                   " is a data operand)";
@@ -523,11 +537,24 @@ bool liftGraph(
         // every operand whose type has one. Answering no zero for it stopped the lift at the first
         // constant it met (`skip=body`), which says nothing about the constant and everything about
         // this gap.
+        //
+        // The shape comes from the type where the type states it, and from the value where it does
+        // not: `[1.0, 2.0] as float[]` is a two-element array whose type says "one dimension, length
+        // unknown", and the value in the static slot is what says two. Reading it there is not a
+        // second opinion about the type -- the dimension the type leaves open is the one the value
+        // fills in, and a dimension neither of them fixes answers no zero.
         std::unordered_map<const Type *, gc_node_ref_t> zeroConstants;
-        const auto zeroConstantFor = [&draft, &zeroConstants](Type *type) -> gc_node_ref_t {
-            const auto at = zeroConstants.find(type);
-            if (at != zeroConstants.end()) {
-                return at->second;
+        const auto zeroConstantFor = [&draft, &zeroConstants](
+                                         Type *type,
+                                         const ::Array *shapeOf = nullptr) -> gc_node_ref_t {
+            // A zero whose shape was read off one value is that value's zero and is not shared with
+            // the next value of the same open type.
+            const bool shareable = shapeOf == nullptr;
+            if (shareable) {
+                const auto at = zeroConstants.find(type);
+                if (at != zeroConstants.end()) {
+                    return at->second;
+                }
             }
             gc_node_ref_t made = rt::kInvalidNodeRef;
             switch (type->code()) {
@@ -540,22 +567,27 @@ bool liftGraph(
                     camel::core::rtdata::toSlot<float>(0.0f), type, rt::kGCNodeFlagConstant);
                 break;
             case camel::core::type::TypeCode::Array: {
-                // The zero of an array is an array of the same shape with every element zero, and
-                // the shape is the type's own: a constant's type states it (`float[2, 2]`), and a
-                // shape the type does not fix is not one this transform can write a value for --
-                // it answers none, and the refusal downstream names the operator rather than
-                // inventing a zero of another shape.
                 const auto *arrayType = static_cast<const camel::core::type::ArrayType *>(type);
+                const std::span<const camel::core::type::ExtentForm> stated = arrayType->extents();
                 std::vector<int64_t> extents;
                 bool exact = arrayType->elemType() != nullptr &&
                              camel::core::type::isFloatingScalar(arrayType->elemType()->code());
-                for (size_t i = 0; exact && i < arrayType->extents().size(); ++i) {
-                    const std::optional<int64_t> extent = arrayType->extents()[i].evaluate({});
-                    if (!extent.has_value()) {
+                if (exact && stated.empty()) {
+                    // No dimension is stated (`T[..]`): the rank is the value's, or there is none.
+                    if (shapeOf == nullptr) {
                         exact = false;
-                        break;
+                    } else {
+                        extents.assign(shapeOf->shape(), shapeOf->shape() + shapeOf->rank());
                     }
-                    extents.push_back(*extent);
+                }
+                for (size_t i = 0; exact && i < stated.size(); ++i) {
+                    if (const std::optional<int64_t> size = stated[i].evaluate({})) {
+                        extents.push_back(*size);
+                    } else if (shapeOf != nullptr && i < shapeOf->rank()) {
+                        extents.push_back(shapeOf->shape()[i]);
+                    } else {
+                        exact = false;
+                    }
                 }
                 if (exact) {
                     ::Array *zero = ::Array::create(
@@ -572,7 +604,9 @@ bool liftGraph(
             default:
                 break;
             }
-            zeroConstants.emplace(type, made);
+            if (shareable) {
+                zeroConstants.emplace(type, made);
+            }
             return made;
         };
         // The graph this one is a lift of: a fact about the graph, not a comment about the call.
@@ -1088,7 +1122,14 @@ bool liftGraph(
                     // constant of a discrete type (a `bool` condition) has no tangent at all, and
                     // neither has one whose zero this transform does not write.
                     if (pairOf(node->dataType()) != nullptr) {
-                        tangentOf[ref] = zeroConstantFor(node->dataType());
+                        // An array constant's shape can be one its type leaves open (`float[]`), and
+                        // then the value in the slot is what says how long the zero is.
+                        const ::Array *shapeOf = nullptr;
+                        if (node->dataType()->code() == camel::core::type::TypeCode::Array) {
+                            shapeOf = camel::core::rtdata::fromSlot<const ::Array *>(
+                                slots[static_cast<size_t>(index)]);
+                        }
+                        tangentOf[ref] = zeroConstantFor(node->dataType(), shapeOf);
                     }
                     copied[ref]    = true;
                     ++copiedKinds;
