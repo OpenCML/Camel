@@ -95,9 +95,12 @@ export type Tangent<T>
 export type Pullback<F> = (ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
 
 /// The turn of a forward transform into a reverse one, as a function's own type: `vjp(f)` is a
-/// function of `f`'s parameters that answers the value and the pullback.
-/// @example is_same::<Vjp<(x: float) => float>, (x: float) => (float, Pullback<(x: float) => float>)>()    // true
-export type Vjp<F> = (..ParamsOf<F>) => (ResultOf<F>, Pullback<F>)
+/// function of `f`'s parameters that answers the value and the pullback, and it takes `f`'s `with`
+/// parameters as `f` does (author's ruling of 2026-11-03 09:50): a transform differentiates the
+/// ordinary parameters only, and a `with` value is handed on unchanged, as a constant, its tangent
+/// the zero of its type. So this is `Jvp<F>`'s shape -- the same `with` list, then the parameters.
+/// @example is_same::<Vjp<(x: float) => float>, <..WithOf<(x: float) => float>> (x: float) => (float, Pullback<(x: float) => float>)>()    // true
+export type Vjp<F> = <..WithOf<F>> (..ParamsOf<F>) => (ResultOf<F>, Pullback<F>)
 
 /// The forward transform's type: the parameters of `f` and their tangents, then the value and its
 /// tangent (`jvp(f)(2.0, 1.0)` is `f(2.0)` and `df` in the direction 1).
