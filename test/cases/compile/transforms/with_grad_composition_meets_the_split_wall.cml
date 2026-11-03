@@ -3,64 +3,32 @@
 // a lambda -- `(ww) => loss_with<ww, b>(x, t)` -- and the seed 1 read off the pullback is its
 // gradient.
 //
-// The composition builds up to the `vjp` call and stops inside it. **The wall it names has moved
-// one step.** It used to be the exit's shape: the differentiated lambda ends in a call to a
-// `with`-parameterised function, the lifted graph answered with that call's pair instead of a
-// two-member tuple `Fill` of its own, and `split` cut only a fill. That wall is gone -- the lift now
-// hydrates an application's pair into a fill of the two halves it already holds
-// (`modules/transforms/jvp.cpp`, route B of the ruling of 2026-11-03 15:15), and the lifted graph
-// grew from `nodes=9 exit=6` to `nodes=11 exit=10`, the new node being the `Fill`.
+// This case was written about the walls between that composition and its number. It now answers the
+// number: `(0.125, -0.75)` for x = 1.5, t = 2.0, w = 0.5, b = 0.75 -- err = 0.5*1.5 + 0.75 - 2 =
+// -0.5, loss = 0.5 * err * err = 0.125, and d(loss)/dw = err * x = -0.75.
 //
-// Both readings are kept here on purpose, because the difference between them is what this case
-// records: a reader who finds only the second cannot tell that the first ever stood, and the next
-// person to widen the cut needs to know which refusal was answered and which was not. The wall as
-// it stood until the lift stopped hydrating (exit 1, `stdlib/vjp.cml#vjp`):
+// Three walls stood in its way, and each is kept here because which refusal stood says what was
+// missing where -- a reader who finds only the last cannot tell what was answered:
 //
-//     transforms: split does not build this function (a lifted function answers with the pair
-//     (result, tangent); here the pair is a call's result -- the differentiated lambda ends in a
-//     call to a `with`-parameterised function -- and not the two-member tuple fill this cut takes
-//     its two halves from, so there is no pair to cut)
-//     REINTERP split function=jvp_of___g_248__ skip=exit
+//   1. The exit's shape: the lifted graph answered with the call's pair instead of a two-member tuple
+//      `Fill` of its own, and `split` cut only a fill (`skip=exit`, `split does not build this
+//      function (a lifted function answers with the pair (result, tangent); ...)`). Answered by the
+//      lift hydrating an application's pair (route B of the ruling of 2026-11-03 15:15).
+//   2. The cut's **forward** walk on a captured value: the lifted lambda has no `with` list while its
+//      graph still reads the captures through ports, and the half listed its ports from the
+//      declaration, so a captured port was in neither map (`skip=forward`, `the port is not a
+//      parameter of the graph, so neither half takes it`). Answered by `split` declaring one closure
+//      port per captured value (`modules/transforms/split.cpp#addCapturePorts`) and carrying the
+//      tangent side's capture as a residual.
+//   3. The cut's **backward** walk on the same kind of port, and behind it a `with` value with no
+//      tangent slot: `jvp` wrote a call's arguments interleaved -- `(value, tangent)` per parameter --
+//      while the lifted signature is the values and then their tangents, and the weight's tangent was
+//      the zero constant the lift wrote. Answered by `lane-withtan`
+//      (`modules/transforms/jvp.cpp`): the lifted call's arguments are filled from the callee's own
+//      lifted signature, and a `with` argument keeps its direction.
 //
-// What refuses now is the step after it, in the cut's **forward** walk: the lifted lambda's type has
-// no `with` list, while its graph still reads the captured `x`/`t`/`b` through ports -- the lift
-// declares those captures as closure ports (`jvp.cpp`), and the half lists its ports from the
-// declaration, so a captured port is in neither map. The reading as it stands now (exit 1):
-//
-//     transforms: split does not build this function (the port is not a parameter of the graph, so
-//     neither half takes it)
-//     REINTERP split function=jvp_of___g_248__ skip=forward construct=a port uri=-
-//     why=the port is not a parameter of the graph, so neither half takes it
-//
-// `split` now does that -- the forward half declares one closure port per captured value
-// (`addCapturePorts`) and the tangent side's capture is a residual like a `with` port
-// (`residualsOf`) -- and the cut of this lambda is built (`forward=369 backward=370 residuals=11`).
-// **The wall has moved one step and is still not the numbers.** What refuses now is the cut's
-// **backward** walk, on a capture it reads as an *ordinary input* of the lifted call (`t`, the
-// lambda's second capture):
-//
-//     REINTERP split function=jvp_of___g_328__ skip=backward construct=a port uri=-
-//     why=the port is not a parameter of the graph, so neither half takes it
-//
-// The reason is upstream of `split`: the lifted callee's signature is the values and then their
-// tangents (`jvpSignature`, the author's ruling of 2026-11-03), while `jvp` writes the call's
-// arguments **interleaved** -- `(value, tangent)` per parameter (`jvp.cpp`, the `Func` and `Call`
-// arms of the lift). One parameter makes the two orders the same, which is why every single-parameter
-// shape cuts and this one does not; with two, `halfInputsOf` reads the second parameter's *value*
-// where the signature has its tangent. A call in that order is refused by the runtime itself when it
-// gets that far (`passes a Point as ordinary argument 1 of 'jvp_of_point_loss_plain', which takes a
-// float`, measured on the same shape with a struct parameter), so the order is a defect and not a
-// reading.
-//
-// And behind it stands the wall this case was written about in the first place: a `with` value has no
-// tangent of its own (`jvpSignature` gives it one value port and no tangent slot; its tangent is the
-// zero of its type), so the lifted lambda's tangent does not read `ww` at all and the cut's `lin` is
-// constant in it. Answering `-0.75` needs the `with` parameter to carry a tangent -- item 1 of
-// `2026-11-04-where-the-library-and-the-engine-still-differ.cn.md`, which is being changed in
-// `jvp.cpp` by the lane that owns it -- and until it does, this case stays negative and pins the
-// message rather than a wrong number. The numbers it is held to are `(0.125, -0.75)` for x = 1.5,
-// t = 2.0, w = 0.5, b = 0.75: err = 0.5*1.5 + 0.75 - 2 = -0.5, loss = 0.5 * err * err = 0.125, and
-// d(loss)/dw = err * x = -0.75.
+// The three sentences above are quoted as they were measured, not as they were remembered. The tree
+// that answers the number prints `value=0.12500000000000000 w=-0.75000000000000000` and exits 0.
 import { vjp } from vjp
 
 with <w: float, b: float>
