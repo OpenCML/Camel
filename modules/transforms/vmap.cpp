@@ -142,82 +142,19 @@ std::optional<camel::parse::ast::RuleMatch> chooseRuleOfUri(
         const camel::runtime::GCNode *node = function.node(input);
         actual.push_back(node != nullptr ? node->dataType() : nullptr);
     }
-    const auto typesText = [](const std::vector<Type *> &types) {
-        std::string text;
-        for (const Type *type : types) {
-            text += (text.empty() ? "(" : ", ");
-            text += type != nullptr ? type->toString() : std::string("?");
-        }
-        return text.empty() ? std::string("()") : text + ")";
-    };
-    std::vector<std::string> taking;
-    std::vector<std::vector<Type *>> takingPorts;
-    std::string lastWhy;
-    for (const camel::parse::ast::RuleMatch &candidate : candidates) {
-        if (candidate.status != camel::parse::ast::RuleLookup::Found) {
-            continue;
-        }
-        const uint64_t ruleId = ruleIdOf(context, candidate.rule);
-        if (ruleId == 0) {
-            lastWhy = "the rule '" + candidate.rule + "' is named in the index but not registered";
-            continue;
-        }
-        const size_t at = camel::compile::gir::genericRuleInstance(
-            context, ruleId, std::vector<Type *>{elementType}, {});
-        const auto *entry = camel::compile::gir::genericRuleEntry(context, ruleId);
-        if (entry == nullptr || at >= entry->instances.size() || !entry->instances[at].made) {
-            lastWhy = entry != nullptr && at < entry->instances.size() &&
-                              !entry->instances[at].why.empty()
-                          ? entry->instances[at].why
-                          : "no instance of '" + candidate.rule + "' at this type";
-            continue;
-        }
-        std::vector<Type *> ports = rulePortsOf(entry->instances[at]);
-        if (ports.size() > actual.size()) {
-            lastWhy = "the law takes " + typesText(ports) + ", and the operator has " +
-                      typesText(actual);
-            continue;
-        }
-        bool takes = true;
-        for (size_t i = 0; i < ports.size() && takes; ++i) {
-            takes = ports[i] != nullptr && actual[i] != nullptr &&
-                    ports[i]->assignableFrom(actual[i]);
-        }
-        if (!takes) {
-            lastWhy = "the law takes " + typesText(ports) + ", and the operator has " +
-                      typesText(actual);
-            continue;
-        }
-        taking.push_back(candidate.rule);
-        takingPorts.push_back(std::move(ports));
-    }
-    if (taking.empty()) {
-        why = lastWhy.empty() ? "no law of the family takes these operands" : lastWhy;
+    // Which of the key's laws answers this batch is one question, asked in one place
+    // (`rule_expand.cpp#chooseRuleAmong`); the batching family's own part is the type an instance is
+    // made at -- the *element* of the operand, which is what makes `vmap_mul<float>` a law for a
+    // `float[]` batch -- and the operand list, which carries the `<>` configuration beside the value
+    // (so no lower bound is asked for here: `dataOperandCount` 0).
+    const RuleChoice choice = chooseRuleAmong(
+        context, candidates, std::vector<Type *>{elementType}, actual, 0,
+        RuleChoiceWords{"law", "operands"});
+    if (!choice.found()) {
+        why = choice.why;
         return std::nullopt;
     }
-    std::vector<size_t> kept;
-    for (size_t i = 0; i < taking.size(); ++i) {
-        bool outranked = false;
-        for (size_t j = 0; j < taking.size() && !outranked; ++j) {
-            outranked = i != j && narrowerPortsThan(takingPorts[j], takingPorts[i]);
-        }
-        if (!outranked) {
-            kept.push_back(i);
-        }
-    }
-    if (kept.size() > 1) {
-        std::string names;
-        for (const size_t at : kept) {
-            names += names.empty() ? "'" : " and '";
-            names += taking[at];
-            names += "'";
-        }
-        why = "two laws both accept these operands: " + names + " (the operator has " +
-              typesText(actual) + ")";
-        return std::nullopt;
-    }
-    return camel::parse::ast::RuleMatch{camel::parse::ast::RuleLookup::Found,
-                                       taking[kept.front()]};
+    return camel::parse::ast::RuleMatch{camel::parse::ast::RuleLookup::Found, choice.rule};
 }
 
 // The lifting of a constant is a lambda beside the draft it writes through, not a free function:

@@ -3,7 +3,8 @@
 作者 2026-11-03 12:10（`956255585`）定：同一个键下两条规则**按参数类型判重**，`when` 文本不参与；
 并给出两条出路——"按参数类型区分"或"合成一条带分支的规则"。本页记的是**这两条出路在今天的语言里都
 不可写**的四组读数，以及按默认补上的那一处引擎能力（单态规则的模板注册）。分支 `lane-dedupe`，
-改动 `b5f418a2d`。
+改动 `b5f418a2d`（能力与律）、`21b5dab0c`（本页）、`b3086f1f2`（合入 `origin/develop`），
+以及第六节的收口（`chooseRuleAmong`）。
 
 ## 一、判重那处
 
@@ -86,11 +87,68 @@ export rule jvp_float_from_string(x: string) { float(x) => () => 0.0 }
 `transforms` 那两红仍是 `transpose_loop_escape.two_values_of_two_kinds`、`.second_state_of_the_same_loop`
 （别人在做的前向值残差，不是这一笔）。
 
-## 六、留着的两件事
+## 六、三处候选循环收成一处
 
-1. **候选循环仍有三份**（`jvp.cpp`、`transpose.cpp`、`vmap.cpp` 各一处，共享的是
-   `rulePortsOf`/`narrowerPortsThan`）。作者要求"写成一个函数、两处都调"；收成
-   `chooseRuleAmong(context, candidates, instanceTypes, operandTypes, dataOperandCount)` 是下一笔，
-   等转换律落地、层回绿之后再动。
-2. **`match type` 那条路只差"参数个数随类型变"**。若作者认为这值得做，那是一条独立的能力，本页只记
-   读数。
+作者 12:10 那句"挑选规则是 `jvp` 和 `transpose` 共用的事：从候选集合里挑能绑上操作数的那一条，
+写成一个函数，两处都调它"，落成了 `rule_expand.cpp#chooseRuleAmong`。
+
+三份实现（`jvp.cpp#buildRuleTangent` 的循环、`transpose.cpp#chooseTransposedRule`、
+`vmap.cpp#chooseRuleOfUri`）逐字比对后，**判据完全相同**，不同的只有两处：
+
+1. **拒绝句的词**：`jvp` 写 "the rule takes …" / "two laws both accept these **arguments**"，
+   `transpose`/`vmap` 写 "the **law** takes …" / "… these **operands**"。收成一个
+   `RuleChoiceWords{subject, operands}` 参数，句子一个字不变。
+2. **读端口用的实例元组**：`jvp`/`vmap` 用操作数的**元素**类型（`ruleElementTypeOf`），`transpose`
+   用 `{Float64()}`（`expandRuleByName` 的缺陷，见 `docs/handover/reviews/questions-2026-10-29.md`，
+   不是这一笔的）。收成 `instanceTypes` 参数。
+3. 另有一处**下界**差别：`jvp`/`transpose` 要求 `ports.size() >= dataOperandCount`，`vmap` 不要求
+   （它的操作数列表带 `<>` 配置）。`dataOperandCount == 0` 表示不设下界，所以它也是参数而不是分支。
+
+签名：
+
+```cpp
+RuleChoice chooseRuleAmong(
+    camel::core::context::Context &context,
+    const std::vector<camel::parse::ast::RuleMatch> &candidates,
+    const std::vector<camel::core::type::Type *> &instanceTypes,
+    const std::vector<camel::core::type::Type *> &operandTypes, size_t dataOperandCount,
+    const RuleChoiceWords &words = {});
+```
+
+判据（`git grep -n chooseRuleAmong modules`）：
+
+- **一个定义**：`modules/transforms/rule_expand.cpp:74`
+- **一个声明**：`modules/transforms/rule_expand.h:84`
+- **三处调用**：`jvp.cpp:136`、`transpose.cpp:121`、`vmap.cpp:150`
+
+收掉 355 行、新增 251 行（`git diff --stat`：`jvp.cpp` −198、`transpose.cpp` −115、`vmap.cpp` −85，
+`rule_expand.cpp` +154、`rule_expand.h` +54）。`portsTakeOperands`（`jvp.cpp`）、`portsTextOf`
+（`transpose.cpp`）、`vmap.cpp` 里那份 `typesText` 都跟着消失，它们的说明并进了
+`chooseRuleAmong` 的文档：`<>` 端口不参与 data 端口的下界、`assignableFrom` 的方向、以及
+"开放秩不缩成操作数的形状"。
+
+合入 `origin/develop`（`9e72bc95b`）时 `modules/transforms/transpose.cpp` 是真冲突，两边都在同一个
+匿名命名空间里加了函数、都改了同一个走查点：`develop` 的 `ruleTakesOperands`（lane-mulsc，
+数组×标量的形状拒绝）本来问的是 `transposeRuleOf` 答的那**一条**律；本分支已无"那一条"，
+所以合并后它问的是 `chooseTransposedRule` **选出来的那一条**——`develop` 的问题不变，只是换了主语。
+顺序也据此定为"先选律，再问形状"（`transpose.cpp` 走查点）。
+
+闸门（同一棵合并后的树，jobs 4，2026-11-03 20:50–21:05）：
+
+| 计划 | 合并后、收口前（`b3086f1f2`） | 收口后 |
+| --- | --- | --- |
+| `feat/compile` | 2190 = 2185 / 2 / 3 | **2190 = 2185 / 2 / 3** |
+| `feat/compile/rulesets` | 67/67 | **67/67** |
+| `feat/compile/transforms` | 80 = 77 / 2 / 1 | **80 = 77 / 2 / 1** |
+| `feat/transforms/split` | 19/19 | **19/19** |
+| `feat/parse` | 115/115 | **115/115** |
+
+`feat/modules` 1929 = 1917 / 5 / 7，五红全是 `registry.*`（`signatures_match`、`result_types_match`、
+`parameter_types_match`、`docs_complete`、`migrations_stay_migrated`）；**收口前后同数**——
+用 `git stash` 拿掉这一笔重跑 `stdlib_registry` 计划确认过（13 = 8/5 两遍）。那是陈旧签名页那条
+lane 的账（`docs/reference/camel-for-ai-stdlib-signatures.md` 在合并里就有改动），不是这一笔。
+
+## 七、仍然留着的一件事
+
+**`match type` 那条路只差"参数个数随类型变"**。若作者认为这值得做，那是一条独立的能力，本页只记
+读数（第四节第三条）。

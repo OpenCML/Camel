@@ -91,39 +91,24 @@ const char *transposeRefusalWord(TransposeRefusalCause cause) {
 
 namespace {
 
-/// The types of a node's ports, written the way the library writes them, for a refusal to name them:
-/// `(float[4], int)`.
-std::string portsTextOf(const std::vector<Type *> &types) {
-    std::string text;
-    for (const Type *type : types) {
-        text += (text.empty() ? "(" : ", ");
-        text += type != nullptr ? camel::core::type::typeToString(type) : std::string("?");
-    }
-    return text.empty() ? std::string("()") : text + ")";
-}
-
 /// The transpose law that answers an operator here, chosen by the operands' own types, and `why`
 /// when the declaration does not choose.
 ///
-/// A key holds one law in most families, and then this answers what `transposeRuleOf` answers. It
-/// holds several when one spelling names several shapes: `t[0]` on a `T[]` is the element and on a
-/// `T[..]` it is the open-rank array (design principles 5.4), so the index laws are two laws of one
-/// key with two parameter-type lists. Which one answers is decided by the operands' own types, the
-/// way a call decides -- an instance's ports have to take them (`Type::assignableFrom`, the
-/// direction `jvp.cpp#portsTakeOperands` and the call rule both check) -- and among the laws that
-/// take them the narrowest wins: `T[]` beside `T[..]`, where an open rank takes a rank-one array and
-/// a rank-one array does not take an open rank (`narrowerPortsThan`).
+/// A key holds one law in most families, and then this answers it. It holds several when one
+/// spelling names several shapes: `t[0]` on a `T[]` is the element and on a `T[..]` it is the
+/// open-rank array (design principles 5.4), so the index laws are two laws of one key with two
+/// parameter-type lists. Which one answers is decided by the operands' own types, the way a call
+/// decides -- an instance's ports have to take them (`Type::assignableFrom`) -- and among the laws
+/// that take them the narrowest wins (`T[]` beside `T[..]`, `rulePortsOf`/`narrowerPortsThan`).
 ///
-/// Two laws that both take the operands and neither of which is narrower than the other are a
-/// declaration this transform will not choose between. Picking by filing order would make a program
-/// mean one thing where a rule sits and another where it is moved to, so the refusal names both laws
-/// and the types they were offered.
-///
-/// The instance the ports are read from is the one the expansion itself will ask for: the rule at
-/// `float`, which is what `expandRuleByName` instantiates (`rule_expand.cpp`, whose `{Float64()}` is
-/// a standing defect recorded in `docs/handover/reviews/questions-2026-10-29.md`, not this
-/// function's). A choice made on ports is only a choice between *shapes*: two laws of one key that
-/// differ in their element type alone are told apart by the instance the expansion makes, not here.
+/// The question itself is not this file's: it is `rule_expand.cpp#chooseRuleAmong`, which `jvp`,
+/// `vmap` and this transform all ask. What is this family's own is the instance tuple the ports are
+/// read from -- the rule at `float`, which is what `expandRuleByName` instantiates
+/// (`rule_expand.cpp`, whose `{Float64()}` is a standing defect recorded in
+/// `docs/handover/reviews/questions-2026-10-29.md`, not this function's) -- and the words a refusal
+/// is written with. A choice made on ports is only a choice between *shapes*: two laws of one key
+/// that differ in their element type alone are told apart by the instance the expansion makes, not
+/// here.
 bool chooseTransposedRule(
     camel::core::context::Context &context, std::string_view uri,
     std::span<const gc_node_ref_t> inputs, size_t dataOperandCount,
@@ -131,73 +116,17 @@ bool chooseTransposedRule(
     std::vector<Type *> actual;
     actual.reserve(inputs.size());
     for (const gc_node_ref_t input : inputs) {
-        const Type *type = typeOf(input);
-        actual.push_back(const_cast<Type *>(type));
+        actual.push_back(const_cast<Type *>(typeOf(input)));
     }
-    const std::vector<camel::parse::ast::RuleMatch> candidates =
-        camel::core::transposeRulesOf(std::string(uri));
-    std::vector<std::string> taking;
-    std::vector<std::vector<Type *>> takingPorts;
-    std::string lastWhy;
-    for (const camel::parse::ast::RuleMatch &candidate : candidates) {
-        if (candidate.status != camel::parse::ast::RuleLookup::Found) {
-            continue;
-        }
-        std::string instanceWhy;
-        const camel::compile::gir::GenericRuleInstance *instance =
-            camel::compile::gir::genericRuleInstanceByName(
-                context, candidate.rule, {Type::Float64()}, {}, instanceWhy);
-        if (instance == nullptr || !instance->made) {
-            lastWhy = instance != nullptr && !instance->why.empty() ? instance->why : instanceWhy;
-            continue;
-        }
-        std::vector<Type *> ports = rulePortsOf(*instance);
-        if (ports.size() < dataOperandCount || ports.size() > actual.size()) {
-            lastWhy = "the law takes " + portsTextOf(ports) + ", and the operator has " +
-                      portsTextOf(actual) + " (of which " + std::to_string(dataOperandCount) +
-                      " is a data operand)";
-            continue;
-        }
-        bool takes = true;
-        for (size_t i = 0; i < ports.size() && takes; ++i) {
-            takes = ports[i] != nullptr && actual[i] != nullptr &&
-                    ports[i]->assignableFrom(actual[i]);
-        }
-        if (!takes) {
-            lastWhy = "the law takes " + portsTextOf(ports) + ", and the operator has " +
-                      portsTextOf(actual) + " (of which " + std::to_string(dataOperandCount) +
-                      " is a data operand)";
-            continue;
-        }
-        taking.push_back(candidate.rule);
-        takingPorts.push_back(std::move(ports));
-    }
-    if (taking.empty()) {
-        why = lastWhy.empty() ? "no law of the family takes these operands" : lastWhy;
+    const RuleChoice choice = chooseRuleAmong(
+        context, camel::core::transposeRulesOf(std::string(uri)),
+        std::vector<Type *>{Type::Float64()}, actual, dataOperandCount,
+        RuleChoiceWords{"law", "operands"});
+    if (!choice.found()) {
+        why = choice.why;
         return false;
     }
-    std::vector<size_t> kept;
-    for (size_t i = 0; i < taking.size(); ++i) {
-        bool outranked = false;
-        for (size_t j = 0; j < taking.size() && !outranked; ++j) {
-            outranked = i != j && narrowerPortsThan(takingPorts[j], takingPorts[i]);
-        }
-        if (!outranked) {
-            kept.push_back(i);
-        }
-    }
-    if (kept.size() > 1) {
-        std::string names;
-        for (const size_t at : kept) {
-            names += names.empty() ? "'" : " and '";
-            names += taking[at];
-            names += "'";
-        }
-        why = "two laws both accept these operands: " + names + " (the operator has " +
-              portsTextOf(actual) + ")";
-        return false;
-    }
-    rule = taking[kept.front()];
+    rule = choice.rule;
     return true;
 }
 

@@ -103,87 +103,6 @@ camel::core::type::Type *emptyTupleType() {
 /// calling the right side and calling what it answers -- is what a rule rewritten as a *runtime*
 /// call produces: a closure-valued node and a call that answers with a closure, neither of which
 /// belongs in a graph the transform builds at compile time.
-/// The types as a reader wants them in a refusal: `(float, int)`.
-std::string typeTextOf(const std::vector<camel::core::type::Type *> &types) {
-    std::string text;
-    for (const camel::core::type::Type *type : types) {
-        text += (text.empty() ? "(" : ", ");
-        text += type != nullptr ? type->toString() : std::string("?");
-    }
-    return text.empty() ? std::string("()") : text + ")";
-}
-
-/// Whether an instance's own ports take the types this operator's operands have, and `why` when they
-/// do not.
-///
-/// `portTypes` is the node's port list in port order -- the data inputs, then the `<>` ones -- and
-/// `dataOperandCount` says where that role changes. A rule's parameters cover the leading ports and
-/// only those (the block below is the contract); the ports past its last parameter are the operator's
-/// own configuration, which the rule's left side writes as a constant rather than binding.
-///
-/// The rule is asked for at the **element** type of the operand (`rule_types.h#ruleElementTypeOf`),
-/// which is what lets `index_into<T>` be filed at `float` while its operand is a `float[]`. That
-/// answer is about the element, not about the shape: `:op/at od` takes a `float[]`, the scalar law
-/// `jvp_dtod` is an instance at `float`, and building the graph anyway carried a `float[]` into a
-/// `float` port -- the run was killed by a signal, which is the worst reading a compiler can give
-/// (worse than a refusal, and worse than a wrong number, because it says nothing). A shape the
-/// instance does not take is refused here, by name, before anything is built.
-bool portsTakeOperands(
-    const camel::compile::gir::GenericRuleInstance &instance,
-    const std::vector<camel::core::type::Type *> &portTypes, size_t dataOperandCount,
-    std::string &why) {
-    const FunctionType *ports = instance.lhs != nullptr ? instance.lhs->funcType() : nullptr;
-    if (ports == nullptr) {
-        why = "the rule's left side has no signature";
-        return false;
-    }
-    // A rule's parameters are the operator's **ports, in port order** -- the normal ones, then the
-    // `<>` ones (`stdlib/rulesets/jvp.cml`, the paragraph above `jvp_sum`; `stdlib/rulesets/vmap.cml`
-    // states the same protocol where it builds a call). So the rule's `count` parameters line up
-    // with the node's first `count` ports, and a *rule* that names fewer of them than the node has
-    // ports is not refusing anything: `jvp_reshape` is `rule jvp_reshape::<T>(x: T[..])` over the
-    // node `reshape<[2, 2]>(x)`, whose second port is the shape its own left side writes as a
-    // constant. That port is a static slot of the operator, not a value the node passes as data --
-    // `normInputsOf` does not answer it, `withInputsOf` does -- and it is not a parameter of the
-    // rule, so counting it here refused a law for the shape of its own left side. What the count
-    // still has to say is that no *data* input is left without a parameter to bind it: a rule that
-    // names fewer parameters than the node has data inputs cannot describe the node, and one that
-    // names more parameters than the node has ports cannot be filled.
-    const size_t count = ports->normTypesCount();
-    std::vector<camel::core::type::Type *> wanted;
-    wanted.reserve(count);
-    for (size_t i = 0; i < count; ++i) {
-        wanted.push_back(ports->normTypeAt(i));
-    }
-    if (count < dataOperandCount || count > portTypes.size()) {
-        why = "the rule takes " + typeTextOf(wanted) + ", and the operator has " +
-              typeTextOf(portTypes) + " (of which " + std::to_string(dataOperandCount) +
-              " is a data operand)";
-        return false;
-    }
-    for (size_t i = 0; i < count; ++i) {
-        // "Takes" is the relation a call site uses, not equality: an instance's ports are written in
-        // the spelling the rule's left side uses, and that spelling does not shrink to the shape of
-        // the operand it meets. `jvp_mul_tensor` is `mul_tensor(x: T[..], w: T[..])`, and a
-        // `float[2, 2]` operand is a value that port takes -- an open rank is every rank, and the
-        // operator walks whatever rank it is given (`stdlib/rulesets/vmap.cml` says the same about
-        // the batch it hands a rule). Asking for equality refused it: `float[..]` and `float[2, 2]`
-        // are not the same type, and the law was refused for the shape of the value it was written
-        // for. The direction is the one a call checks -- the port takes the operand -- and it is the
-        // direction that keeps the case this function exists for refused: a `float` port still takes
-        // no `float[]`, because a primitive takes its own type and nothing else
-        // (`Type::assignableFrom`), so `:op/at od` is still stopped before a `float[]` reaches the
-        // scalar law's port.
-        if (wanted[i] == nullptr || portTypes[i] == nullptr ||
-            !wanted[i]->assignableFrom(portTypes[i])) {
-            why = "the rule takes " + typeTextOf(wanted) + ", and the operator has " +
-                  typeTextOf(portTypes) + " (of which " + std::to_string(dataOperandCount) +
-                  " is a data operand)";
-            return false;
-        }
-    }
-    return true;
-}
 
 gc_node_ref_t buildRuleTangent(
     camel::core::context::Context &context, camel::runtime::GraphDraftGroup &group,
@@ -211,116 +130,19 @@ gc_node_ref_t buildRuleTangent(
         }
         return rt::kInvalidNodeRef;
     }
-    const auto &table = camel::compile::gir::genericRuleTable(context);
-    // The most specific refusal wins: a candidate that fits the type but not the shape says more
-    // than a later candidate whose condition simply does not hold here.
-    std::string shapeWhy;
-    // Every candidate that both instantiates and whose ports take the operands. A key can hold more
-    // than one such law (`T[..]` and `T[]` both take a rank-one array), so the fit is collected
-    // first and the choice made after it: one fit is the answer, the narrowest of several is the
-    // answer, and two that neither of which is narrower than the other is a refusal that names both
-    // -- never a pick by filing order.
-    struct FittingRule {
-        std::string rule;
-        size_t ruleId   = 0;
-        size_t instance = 0;
-        std::vector<camel::core::type::Type *> ports;
-    };
-    std::vector<FittingRule> fitting;
-    for (const camel::parse::ast::RuleMatch &match : candidates) {
-        if (match.status != camel::parse::ast::RuleLookup::Found) {
-            continue;
-        }
-        uint64_t ruleId = 0;
-        for (size_t i = 0; i < table.size(); ++i) {
-            if (table[i] != nullptr && table[i]->name == match.rule) {
-                ruleId = static_cast<uint64_t>(i) + 1;
-                break;
-            }
-        }
-        if (ruleId == 0) {
-            why = "the rule is named in the index but its templates are not registered";
-            continue;
-        }
-        const size_t at = camel::compile::gir::genericRuleInstance(
-            context, ruleId, std::vector<camel::core::type::Type *>{elementType}, {});
-        const auto *entry = camel::compile::gir::genericRuleEntry(context, ruleId);
-        if (entry == nullptr || at >= entry->instances.size()) {
-            why = "no instance of the rule at " +
-                  (elementType != nullptr ? elementType->toString() : std::string("no type"));
-            continue;
-        }
-        const auto &instance = entry->instances[at];
-        if (!instance.made || instance.program == nullptr || instance.rhs == nullptr) {
-            why = instance.why.empty()
-                      ? "no instance of the rule at " +
-                            (elementType != nullptr ? elementType->toString()
-                                                    : std::string("no type"))
-                      : instance.why;
-            continue;
-        }
-        // The shape first: a candidate whose ports are not the operands' own types cannot be
-        // built, however well its condition holds at the element (`portsTakeOperands`). Refusing
-        // here is what keeps a `float[]` out of a `float` port -- the run that did it was killed
-        // by a signal, and a named refusal is worth more than a silent death.
-        if (!portsTakeOperands(instance, portTypes, dataOperandCount, why)) {
-            if (shapeWhy.empty()) {
-                shapeWhy = why;
-            }
-            continue;
-        }
-        fitting.push_back(
-            FittingRule{match.rule, static_cast<size_t>(ruleId), at, rulePortsOf(instance)});
-    }
-    if (fitting.empty()) {
-        // Every candidate refused: the shape that nearly fitted says the most.
-        if (!shapeWhy.empty()) {
-            why = shapeWhy;
-        }
+    // Which of the key's laws answers these operands is one question, asked in one place
+    // (`rule_expand.cpp#chooseRuleAmong`); `jvp` is one of the three families that ask it, and the
+    // words a refusal is written with are the only part that is this family's own.
+    const RuleChoice choice = chooseRuleAmong(
+        context, candidates, std::vector<camel::core::type::Type *>{elementType}, portTypes,
+        dataOperandCount, RuleChoiceWords{"rule", "arguments"});
+    if (!choice.found()) {
+        why = choice.why;
         return rt::kInvalidNodeRef;
     }
-    // The narrowest fit, and only when it is one law. `T[..]` takes every rank and `T[]` takes a
-    // rank-one array, so a `f32[4]` operand enters both laws; the rank-one law is the one written
-    // for that operand, and the open-rank law is the one written for a value whose rank is not
-    // known. Two laws neither of which is narrower than the other are two laws the declaration does
-    // not choose between -- that is the author's `two laws both accept these arguments`, and it is
-    // reported rather than answered by the order the family filed them in.
-    std::vector<const FittingRule *> narrowed;
-    for (const FittingRule &candidate : fitting) {
-        bool outranked = false;
-        for (const FittingRule &other : fitting) {
-            if (&other == &candidate) {
-                continue;
-            }
-            if (narrowerPortsThan(other.ports, candidate.ports)) {
-                outranked = true;
-                break;
-            }
-        }
-        if (!outranked) {
-            narrowed.push_back(&candidate);
-        }
-    }
-    if (narrowed.size() > 1) {
-        why = "two laws both accept these arguments: ";
-        for (size_t i = 0; i < narrowed.size(); ++i) {
-            if (i != 0) {
-                why += (i + 1 == narrowed.size() ? " and " : ", ");
-            }
-            why += "'" + narrowed[i]->rule + "'";
-        }
-        why += " (the operator has " + typeTextOf(portTypes) + ")";
-        return rt::kInvalidNodeRef;
-    }
-    const FittingRule &chosen = *narrowed.front();
-    const auto *chosenEntry   = camel::compile::gir::genericRuleEntry(context, chosen.ruleId);
-    if (chosenEntry == nullptr || chosen.instance >= chosenEntry->instances.size()) {
-        why = "the rule is named in the index but its templates are not registered";
-        return rt::kInvalidNodeRef;
-    }
-    ruleName = chosen.rule;
+    ruleName = choice.rule;
     return expandRuleRightSide(
-        group, transaction, chosenEntry->instances[chosen.instance],
+        group, transaction, *choice.instance,
         [&values](size_t slot) {
             return slot < values.size() ? values[slot] : rt::kInvalidNodeRef;
         },
