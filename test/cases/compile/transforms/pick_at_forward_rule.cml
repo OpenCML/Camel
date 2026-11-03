@@ -32,10 +32,11 @@
 // which is the third line of the reading. Two laws that disagree about the position, or a scatter
 // that put the cotangent somewhere else, would print three numbers that do not close.
 //
-// The engine's own `grad` is a different reading and it is not this file's: it refuses a `pick_at`
-// node, because the engine's reverse registry has no rule under that name (the read it does know is
-// `:op/idx_arr`). That refusal is pinned beside this file, in
-// `pick_at_gradient_refused_by_the_engine.cml`, so the two are read together.
+// The engine's own `grad` is a different reading and this file is not it: its reverse pass reads a
+// table of C++ rules, not this law, and for this read that table is
+// `modules/tensor/ops/layout_ops.cpp#pickAtVjp` (filed 2026-11-04, `lane-pickatvjp`). It answers the
+// same array this file's reverse leg prints -- `[0.0, 1.0, 0.0]` -- which
+// `pick_at_gradient_answered_by_the_engine.cml` is the reading of, so the two are read together.
 //
 //     camel test/cases/compile/transforms/pick_at_forward_rule.cml
 import rulesets.jvp
