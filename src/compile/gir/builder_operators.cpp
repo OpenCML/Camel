@@ -2997,6 +2997,35 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             const std::string argumentTypes =
                 strutil::join(argumentTypeTexts, ", ", [](const std::string &s) { return s; });
+            // A call that hands a pack among the `with` parameters an argument: every argument the
+            // pack takes is of the type the declaration wrote for it (`with <..ws: int>`), the
+            // rule an ordinary parameter follows one type further out (design principles 4.4,
+            // 5.6). It is decided here, at the call, because the pack's element type is the
+            // declaration's and the arguments are the call's; what the body may do with the pack
+            // is step 3 of the same work, and until then such a call is reported as one with no
+            // matching function, the type notwithstanding.
+            if (graphs->size() == 1) {
+                FunctionType *packed = signatureOf(graphs->front());
+                const size_t fixedWith =
+                    packed->withTypesCount() - (packed->hasWithRest() ? 1 : 0);
+                Type *element = packed->withRestType();
+                if (element != nullptr && withInputTypes.size() > fixedWith) {
+                    for (size_t i = fixedWith; i < withInputTypes.size(); ++i) {
+                        if (element->assignableFrom(valueTypeOf(withInputTypes[i]))) {
+                            continue;
+                        }
+                        diags_->of(SemanticDiag::WithPackArgumentType)
+                            .atOrigin(gct->origin())
+                            .commit(
+                                std::string(packed->argNameAt(fixedWith)),
+                                graphs->front()->name(),
+                                element->toString(),
+                                std::to_string(i - fixedWith + 1),
+                                valueTypeOf(withInputTypes[i])->toString());
+                        throw BuildAbortException();
+                    }
+                }
+            }
             // A declaration takes every count of `with` arguments from its required ones to its
             // full arity (design principles 4.4): the call is completed for each declaration with
             // the defaults that declaration registers, and the arguments of the one chosen are

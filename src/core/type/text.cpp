@@ -385,6 +385,12 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
                 if (fn->hasArgNames()) {
                     parts.push_back(literal(std::string(fn->argNameAt(i))));
                 }
+                // A pack that writes an element type (`with <..args: T>`) says what its own
+                // arguments are: the signature prints it as the parameter it stands for.
+                if (Type *element = fn->withRestType()) {
+                    parts.push_back(literal(": "));
+                    pushChild(parts, element, "<null>");
+                }
                 continue;
             }
             if (fn->withIsConstasAt(i)) {

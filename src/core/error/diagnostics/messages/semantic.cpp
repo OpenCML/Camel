@@ -1229,6 +1229,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::WithPackArgumentType,
+            {
+                "WithPackArgumentType",
+                "The pack '..{0}' of '{1}' takes 'with' arguments of type '{2}': argument {3} has type '{4}'.",
+                "Every 'with' argument the pack takes is of the type it writes, the rule an ordinary parameter follows one type further out. Give an argument of that type, or write the pack without one ('..{0}') to take any type.",
+            },
+        },
+        {
             SemanticDiag::WithArgumentCallee,
             {
                 "WithArgumentCallee",

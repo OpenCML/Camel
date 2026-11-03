@@ -57,7 +57,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 223
+**Semantic — errors** (`SemanticDiag`) — 224
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -211,6 +211,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `WithDefaultNotConstant` | The default of the 'with' parameter '{0}' is not a compile-time constant: {1}. |
 | `WithDefaultWrongType` | The default of the 'with' parameter '{0}' has type '{1}', not '{2}'. |
 | `WithParameterAfterDefault` | The 'with' parameter '{0}' has no default and follows '{1}', which has one. |
+| `WithPackArgumentType` | The pack '..{0}' of '{1}' takes 'with' arguments of type '{2}': argument {3} has type '{4}'. |
 | `WithArgumentCallee` | The 'with' argument '{0}' is given by name, and the signature of '{1}' is not known where the binding is written. |
 | `WithArgumentInValue` | The 'with' argument '{0}' is given by name, and this binding is used as a function value. |
 | `WhenPredicateNotImported` | '{1}' is declared in module '{2}', but that name is not imported where the 'when' condition of '{0}' is written. |

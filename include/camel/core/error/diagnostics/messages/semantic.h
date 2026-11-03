@@ -286,7 +286,8 @@ enum class SemanticDiag : uint32_t {
     /// A `with` parameter without a default follows one that has a default.
     WithParameterAfterDefault = 0x0001BC,
     /// A `with` argument is given by name where the callee's signature is not known.
-    WithArgumentCallee = 0x0001BD,
+    WithPackArgumentType = 0x00020A,
+    WithArgumentCallee   = 0x0001BD,
     /// A `with` argument is given by name in a binding used as a function value.
     WithArgumentInValue = 0x0001BE,
 

@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-307 diagnostics: 286 errors, 21 warnings. 15 carry a machine-applicable edit, 292 say why they carry none.
+308 diagnostics: 287 errors, 21 warnings. 15 carry a machine-applicable edit, 293 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -268,6 +268,7 @@ prints one entry.
 | `0x03000207` | [SemanticDiag::RuleRightUsesOuterVariable](#rulerightusesoutervariable) | Error | no |
 | `0x03000208` | [SemanticDiag::LoopBodyNeedsNextState](#loopbodyneedsnextstate) | Error | no |
 | `0x03000209` | [SemanticDiag::CalledFallibleValue](#calledfalliblevalue) | Error | no |
+| `0x0300020A` | [SemanticDiag::WithPackArgumentType](#withpackargumenttype) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8819,6 +8820,42 @@ func loss(x: float): float {
 func main(): int sync {
     let step = loss->cse
     println(step<2.0>(3.0))
+    return 0
+}
+```
+
+### WithPackArgumentType
+
+`0x0300020A` · Error · `SemanticDiag::WithPackArgumentType`
+
+**Fix**
+
+None: choice: which value of the wanted type to give, or whether to write the pack without one, is the writer's
+
+**Message**
+
+```text
+The pack '..{0}' of '{1}' takes 'with' arguments of type '{2}': argument {3} has type '{4}'.
+```
+
+**Help**
+
+```text
+Every 'with' argument the pack takes is of the type it writes, the rule an ordinary parameter follows one type further out. Give an argument of that type, or write the pack without one ('..{0}') to take any type.
+```
+
+**Example** (`test/cases/compile/rest_params/with_pack_wrong_element.cml`, run as `camel test/cases/compile/rest_params/with_pack_wrong_element.cml`)
+
+```camel
+// The pack's element type is a guard: `with <..ws: int>` refuses a `float` argument written in the
+// angle brackets, and says which pack, which type it takes, and which type it was given.
+with <..ws: int>
+func g(x: float): float {
+    return x
+}
+
+func main(): int sync {
+    println(g<1.0>(2.5))
     return 0
 }
 ```

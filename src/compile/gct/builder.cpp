@@ -7148,17 +7148,13 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
                 factory.addWithArg(name + "_" + std::to_string(wi), pack, false);
                 continue;
             }
-            // A pack among the `with` parameters (`with <..args>`): untyped and last, like
-            // the rest parameter of the ordinary ones. A lambda does not write one (the parser
-            // refuses it); a declaration with a body is refused where its body is known.
+            // A pack among the `with` parameters (`with <..args>`): last, like the rest parameter of
+            // the ordinary ones, and typed or not. A pack that writes a type (`with <..args: T>`)
+            // takes `with` arguments of that type, on the rule an ordinary parameter follows one
+            // type further out (design principles 4.4, 5.6); `with <..args>` takes any type. What
+            // the body may do with the pack is built where the body is.
             if (wi + 1 != withParams.size()) {
                 diags_->of(SemanticDiag::RestParameterNotLast)
-                    .at(paramLoad->tokenRange())
-                    .commit(name);
-                throw BuildAbortException();
-            }
-            if (paramPair->size() > 0) {
-                diags_->of(SemanticDiag::RestParameterTypeNotSupported)
                     .at(paramLoad->tokenRange())
                     .commit(name);
                 throw BuildAbortException();
@@ -7170,7 +7166,8 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
                 throw BuildAbortException();
             }
             defaults.with.push_back({nullptr, camel::source::kInvalidOriginId});
-            factory.addWithRest(name);
+            factory.addWithRest(
+                name, paramPair->size() > 0 ? visitType(paramPair->at(0)) : nullptr);
             continue;
         }
         Type *type                = nullptr;
