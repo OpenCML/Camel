@@ -1363,6 +1363,24 @@ args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_output_contains = ["(2.0, 0.0)"]
 
+# The neighbour above answers a zero for an unread *number*; an unread *array* is stopped one gate
+# before that answer is the walk's to give, and the case pins which gate stops it rather than the
+# refusal it was written to expect. It is a refusal entry, not a known failure: the sentence is the
+# reading, and a tree that starts answering a number here has to say so by turning this entry red
+# instead of leaving a stale green behind.
+[[tests]]
+name = "transpose_unread_array_parameter_stops_earlier"
+desc = "`g(x: float[], n: float) = n * 2.0` never reads `x`, and the transpose of it does not reach `skip=unread-parameter` at all: the run stops one step earlier at `autodiff: a zero tangent array needs an array with a tangent`, with `TRANSPOSE function=g type=(float) => (float[], float) rhs=mul_t` above it and no `skip=` line, and exits 1. The zero of an array is made from an array (`tangent/zeros_arr`), and an unread parameter hands it nothing -- a stated length does not change that, because the same body with `x: float[3]` answers the same sentence. The neighbour `transpose_unread_parameter_answers_zero` is the other half: an unread float answers `(2.0, 0.0)`, so the rule is about an unread number and not about unread parameters in general."
+kind = "negative"
+case = "../../../cases/compile/transforms/transpose_unread_array_parameter_stops_earlier.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 1
+expect_output_contains = ["autodiff: a zero tangent array needs an array with a tangent", "TRANSPOSE function=g graph=", "type=(float) => (float[], float)"]
+expect_output_not_contains = ["skip=unread-parameter"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 # The same wall from the other side, and the one the zero carrier answers. `transpose` answers one
 # cotangent per parameter and passes nothing else (design principles 9.9: every parameter is a linear
 # input), while this body reads its array parameter to build a zero array of that array's shape. What
