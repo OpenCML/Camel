@@ -543,7 +543,8 @@ FunctionType *transposeSignature(
 /// The type answers this (`camel/core/tangent_space.h`), not the node kind: the same rule covers the
 /// booleans, the strings and a function value. Before this, an integer in a loop body stops the body's walk
 /// where it stands -- which is what the transform did before this rule, and what the A/B of the case
-/// below flips back to: `skip=state`, with no answer at all. (The switch is gone; the rule and the`r`n/// reading are what remain.)
+/// below flips back to: `skip=state`, with no answer at all. (The switch is gone; the rule and the
+/// reading are what remain.)
 
 /// A call's recorded tangent-argument count is read (`GCNode::tangentArgs`: how many of the
 /// call's trailing arguments a rule's expansion said are tangents). A kernel call inside an arm is
