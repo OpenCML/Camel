@@ -54,6 +54,14 @@ enum class TransposeRefusalCause {
     ArmTangents,
     Arm,
     Rule,
+    /// The key holds a law, and the law was written for another shape. The index files a rule under
+    /// the head of its left side and that head's operand count, and reads no operand types, so a
+    /// key can hold one law for every shape its operator is called with -- `tensor:multiply` is
+    /// called with two arrays and with an array and a number, and the law it files was written for
+    /// two arrays. It is not `Rule`: there *is* a rule, and what it says is that this step is not
+    /// the shape it was written for. Saying "no rule" here would be a sentence about a state the
+    /// transform is not in.
+    RuleShape,
     Arity,
     CotangentNeedsAValue,
     State,
@@ -89,17 +97,22 @@ const char *transposeRefusalWord(TransposeRefusalCause cause);
 struct TransposeRefusal {
     TransposeRefusalCause cause = TransposeRefusalCause::None;
     std::optional<size_t> param;
-    /// The graph whose walk stopped, spelled as the reading log writes it (`function=<graph>`).
+/// The graph whose walk stopped, spelled as the reading log writes it (`function=<graph>`).
     std::string graph;
-    /// The node that stopped the walk. Nothing for a refusal about the graph or a parameter rather
-    /// than about a step.
+    /// The node that stopped the walk, in the graph's own numbering: the reading above the sentence
+    /// numbers its nodes the same way, so a reader can find the step the sentence is about. Nothing
+    /// for a refusal about the graph or a parameter rather than about a step.
     std::optional<size_t> node;
-    /// That node's operator, when it has one.
+    /// That node's operator, when it has one: the key the law is filed under, so `Rule`'s lookup and
+    /// `RuleShape`'s mismatch both name a thing a reader can look up instead of "this body".
     std::string uri;
     /// Why a `Rule` refusal found no rule: the log's own word for the lookup (`unbound`,
     /// `no-such-family`, `no-rule`), or empty for any other cause. Kept as the log's word rather
     /// than as a second enum, so that one fact is spelled once.
     std::string lookup;
+    /// What the law takes and what the step has (`RuleShape`), in the index's own spelling: the one
+    /// fact that turns "another shape" into something a reader can act on.
+    std::string shape;
 };
 
 /// The graph of `transpose(f)` and the program of the graphs built with it. `refusal` is what the

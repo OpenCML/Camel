@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：28 页
+## 现在在等作者：30 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -13,6 +13,7 @@
 | [`2026-11-02-which-missing-operator-carries-a-reversed-backward`](2026-11-02-which-missing-operator-carries-a-reversed-backward.cn.md) | 倒序的 backward 该由哪一条来承载：新增 `:struct/reverse_arr`，还是让 draft 能造动态下标读？ |
 | [`2026-11-03-a-captured-scalar-inside-a-loop-body-is-silently-wrong`](2026-11-03-a-captured-scalar-inside-a-loop-body-is-silently-wrong.cn.md) | 一个被循环体捕获的标量，抬升后静默算错 |
 | [`2026-11-03-a-norm-port-count-over-the-call-arguments-is-not-a-wall-today`](2026-11-03-a-norm-port-count-over-the-call-arguments-is-not-a-wall-today.cn.md) | 转置成员的 norm 端口数多于调用点实参数：今天不是墙，是被更早一道拒绝挡住的潜在墙 |
+| [`2026-11-03-a-second-rule-under-one-key-is-judged-by-its-when-text`](2026-11-03-a-second-rule-under-one-key-is-judged-by-its-when-text.cn.md) | 同一个键下挂两条规则，今天按 `when` 文本判重，与裁定「按操作数类型」不一致 |
 | [`2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant`](2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant.cn.md) | 一个超时应该由读数推出来，而不是由人写死 |
 | [`2026-11-03-does-a-loop-statement-with-an-unused-value-still-run`](2026-11-03-does-a-loop-statement-with-an-unused-value-still-run.cn.md) | 一个值没人用的 `loop` 语句，还算不算一条要执行的语句？ |
 | [`2026-11-03-does-a-one-member-closure-prove-the-slot-identity`](2026-11-03-does-a-one-member-closure-prove-the-slot-identity.cn.md) | 闭包只有一个成员时，「槽的类型等于参数类型」能证明它是这个参数的值吗？ |
@@ -37,3 +38,4 @@
 | [`2026-11-03-which-p0-2-does-the-order-mean`](2026-11-03-which-p0-2-does-the-order-mean.cn.md) | 排序里那条 `P0-2` 指 A 还是 B？A 的两处是不是同一个条件（逐分支量：不是） |
 | [`2026-11-03-who-carries-the-forward-halfs-intermediate-values`](2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md) | 转置图需要前向那一半的中间值，谁携带它？ |
 | [`2026-11-03-why-the-self-test-grew-expensive-without-any-test-count-growth`](2026-11-03-why-the-self-test-grew-expensive-without-any-test-count-growth.cn.md) | 自检什么时候变贵了：成本已逐项归因，没有余额，也没有可比的前后读数 |
+| [`array-scalar-product-transpose`](array-scalar-product-transpose.cn.md) | 数组×标量那条路：律已就位、形状已按类型拒绝，剩下的是"律的答案类型"这一问 |

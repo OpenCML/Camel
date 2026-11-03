@@ -1,0 +1,39 @@
+// The transpose of the array product, which is `mul_t`'s other half: `x * w` on two arrays is
+// `tensor:multiply`, not `:op/mul_d`, so the scalar rule does not reach it and the family had no
+// array law at all.
+//
+// `transpose` takes a function whose result is a number (its signature says so: a function of
+// arrays that answers an array has no cotangent seat in the public surface), so the reading is the
+// one every gradient in the library takes: sum the product, and let the pullback answer the array.
+// `f(xs, w) = sum(xs * w)` meets `tensor:multiply` with both operands live, so the rule has to
+// answer both members -- `ct * w` for `xs`, `ct * xs` for `w`.
+//
+// Hand arithmetic at xs = (1, 2, 3), w = (2, 3, 4):
+//
+//   value  = 1*2 + 2*3 + 3*4        = 20
+//   d/dxs  = w  (the seed is 1)     = (2, 3, 4)     -- an array, the shape of xs
+//   d/dw   = xs                     = (1, 2, 3)     -- an array, the shape of w
+//
+// `numel` is read before each answer, because a cotangent that came back with the right digits in
+// the wrong shape would be the wrong answer.
+import rulesets.jvp
+import rulesets.transpose
+import { numel, sum } from tensor
+import { vjp } from vjp
+
+func energy(xs: float[..], w: float[..]): float {
+    return sum(xs * w)
+}
+
+func main(): int sync {
+    let xs = [1.0, 2.0, 3.0] as float[..]
+    let w = [2.0, 3.0, 4.0] as float[..]
+    let (value, pullback) = vjp(energy)(xs, w)
+    let (dx, dw) = pullback(1.0)
+    println(`value = ${value:.1f}`)
+    println(`d/dxs numel = ${numel(dx)}`)
+    println(`d/dxs = ${dx[0]:.1f} ${dx[1]:.1f} ${dx[2]:.1f}`)
+    println(`d/dw numel = ${numel(dw)}`)
+    println(`d/dw = ${dw[0]:.1f} ${dw[1]:.1f} ${dw[2]:.1f}`)
+    return 0
+}

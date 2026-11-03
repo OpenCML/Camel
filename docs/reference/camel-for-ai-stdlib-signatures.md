@@ -216,7 +216,7 @@ vjp: (f: F) => Vjp<F> when is_function::<F>()
 grad: (f: (x: float) => float) => (x: float) => float
 ```
 
-**`tensor`** — import { ... } from tensor — 70 name(s)
+**`tensor`** — import { ... } from tensor — 71 name(s)
 
 ```text
 zeros: (shape: int[]) => T[..] when is_numeric::<T>()
@@ -286,6 +286,7 @@ gemm_threads: () => int
 gemm_library_threads: () => int
 gemm_library: () => string
 sum_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
+sum_to: (t: T[..], like: T[..]) => T[..] when is_float::<T>()
 mean_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
 min_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
 max_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
@@ -614,7 +615,7 @@ arity_probe: <tag: int, extra: int[] = []> (f: F, example: E) => int when is_fun
 zen: () => string
 ```
 
-**`graph`** — import { ... } from graph — 45 name(s)
+**`graph`** — import { ... } from graph — 46 name(s)
 
 ```text
 graph_of: (f: F) => Graph when is_function::<F>()
@@ -633,6 +634,7 @@ op_name: (o: Op) => string
 is_pure: (n: Node) => bool
 may_be_recomputed: (n: Node) => bool
 may_fault: (n: Node) => bool
+may_be_rearranged: (n: Node) => bool
 is_anchor: (n: Node) => bool
 is_written_slot: (n: Node) => bool
 is_constant: (n: Node) => bool
