@@ -27,9 +27,7 @@ void GraphDraft::setNodeRegion(gc_node_ref_t id, uint32_t region) {
 uint32_t GraphDraft::addRegion(
     GCRegionKind kind, uint32_t parent, gc_node_ref_t owner, uint32_t index) {
     ++mutations_;
-    if (regions_.empty()) {
-        regions_.push_back(GCRegion{});
-    }
+    ASSERT(!regions_.empty(), "A draft is made with its body region, so the table is not empty.");
     ASSERT(parent < regions_.size(), "A region is made in a region that is not there.");
     GCRegion region;
     region.kind   = kind;
@@ -224,6 +222,7 @@ void GraphDraft::clearRegions() {
         }
     }
     regions_.clear();
+    regions_.push_back(GCRegion{}); // the body, which every draft has
     regionPorts_.clear();
 }
 
@@ -240,11 +239,6 @@ void GraphDraft::setRegionParams(uint32_t id, const camel::core::type::FunctionT
 }
 
 void GraphDraft::setRegionAttrs(uint32_t id, uint32_t attrs) {
-    // The body region (0) is not in the table until something needs it. A tag written on a
-    // function writes it here, so a graph whose body carries a fact has a one-region table.
-    if (id == 0 && regions_.empty()) {
-        regions_.push_back(GCRegion{}); // the body, and nothing else
-    }
     ++mutations_;
     ASSERT(id < regions_.size(), "No such region.");
     regions_[id].attrs = attrs;
@@ -261,7 +255,8 @@ bool GraphDraft::regionWithin(uint32_t inner, uint32_t outer) const {
 }
 
 bool GraphDraft::inlinedCopyOf(gc_node_ref_t id, const GCGraph *callee) const {
-    if (callee == nullptr || regions_.empty()) {
+    // Only the body: a draft that has no other region has no inlined body to be inside of.
+    if (callee == nullptr || regions_.size() <= 1) {
         return false;
     }
     // What the call is inside of, by the function it is a copy of: a type specialization is that
