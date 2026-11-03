@@ -172,7 +172,7 @@ export func sum_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..] when is_n
 /// broadcasts back (`modules/tensor/ops/gradient_ops.cpp`).
 /// @pure
 /// @example sum_to([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 1.0)    // 10.0
-/// @example sum_to([1.0, 2.0, 3.0] as float[3], [0.0, 0.0, 0.0] as float[3])    // [1.0, 2.0, 3.0]
+/// @example sum_to([1.0, 2.0, 3.0] as float[], [0.0, 0.0, 0.0] as float[])    // [1.0, 2.0, 3.0]
 export func sum_to::<T>(t: T[..], like: T[..]): T[..] when is_float::<T>()
 
 /// The mean of each lane along one axis: the sum and the count both in `f64`, one rounding into

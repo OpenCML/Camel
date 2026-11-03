@@ -2436,7 +2436,7 @@ broadcasts back (`modules/tensor/ops/gradient_ops.cpp`).
 
 - Pure.
 - Example: `sum_to([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 1.0)` gives `10.0`
-- Example: `sum_to([1.0, 2.0, 3.0] as float[3], [0.0, 0.0, 0.0] as float[3])` gives `[1.0, 2.0, 3.0]`
+- Example: `sum_to([1.0, 2.0, 3.0] as float[], [0.0, 0.0, 0.0] as float[])` gives `[1.0, 2.0, 3.0]`
 
 #### `mean_axis`
 
