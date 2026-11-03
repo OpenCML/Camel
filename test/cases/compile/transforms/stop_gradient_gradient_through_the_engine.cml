@@ -1,0 +1,26 @@
+// `stop_gradient` through the engine's own rules: the value passes through and the gradient is zero.
+//
+// The engine's kernel is the identity slot (`modules/autodiff/operators.cpp#stopGradientKernel`) and
+// the rule registered for the operator is `camel::core::noGradient` -- one that contributes nothing --
+// so the pullback materializes the missing contribution as the zero of the value's own type
+// (`modules/autodiff/pullback.cpp#Backward::checkGradientType`). That is the reading this case
+// pins: `4.0` and `0.0`, not a refusal and not a skipped step.
+//
+// The library's answer for the same function is the neighbouring
+// `stop_gradient_gradient_through_the_library.cml`, and the two must be the same number: the operator
+// cuts a gradient, and which transform walks the graph is not supposed to change what a cut is.
+//
+//     camel test/cases/compile/transforms/stop_gradient_gradient_through_the_engine.cml
+import { stop_gradient, with_grad } from autodiff
+
+/// The differentiated value is the `with` parameter, and the body hands it to `stop_gradient`.
+with <x: float>
+func cut(): float {
+    return stop_gradient(x)
+}
+
+func main(): int sync {
+    let (value, gradient) = with_grad(cut)<4.0>()
+    `stop_gradient engine value={} dL/dx={}`->format<value, gradient>->println
+    return 0
+}
