@@ -52,7 +52,6 @@ SENTENCE_FILE = ROOT / "modules" / "transforms" / "transpose_operator.cpp"
 # that would repeat the word adds nothing, and the catch-all still prints the word. It is pinned so
 # that the list is a decision someone made, not the place an unanswered cause happens to fall.
 NAMES_THE_SHAPE = {
-    "Arity",
     "Arm",
     "ArmTangents",
     "Component",
@@ -62,11 +61,13 @@ NAMES_THE_SHAPE = {
     "Range",
 }
 
-# The cause that has its word and its sentence and waits for a shape to record it. One entry, and it
-# is older than this check: the sentence exists in the dispatch and waits for the shape that produces
-# it. Pinned rather than deleted, so that the day the site is written the check asks for the entry to
-# go, and so that a *second* such cause is a red instead of a habit.
-WAITS_FOR_A_SITE = {"NeedsAValueOutsideTheClosure"}
+# The cause that has its word and its sentence and waits for a shape to record it. Pinned rather than
+# deleted, so that the day the site is written the check asks for the entry to go, and so that a
+# *second* such cause is a red instead of a habit. Empty now: `NeedsAValueOutsideTheClosure` is
+# recorded by `buildTransposeGraph`'s port-count guard, which is the one place that has both counts
+# and is therefore where the shape that has no closure is refused. The set stays because the check it
+# asks is worth keeping: a cause that gains a sentence and no site is still a red.
+WAITS_FOR_A_SITE: set[str] = set()
 
 ENUM_START = "enum class TransposeRefusalCause {"
 WORD_FN = "const char *transposeRefusalWord(TransposeRefusalCause cause) {"
@@ -259,8 +260,19 @@ def word_table(path: Path) -> tuple[dict[str, str], bool]:
 
 
 def recorded_causes(path: Path) -> set[str]:
-    """The causes a refusal site decides, read from the sites themselves."""
-    return set(re.findall(r"refuse\(TransposeRefusalCause::(\w+)", read(path)))
+    """The causes a refusal site decides, read from the sites themselves.
+
+    Two shapes are a site. The walk records one through the one lambda that prints it
+    (`refuse(TransposeRefusalCause::X)`, and the lambda is where a log line is rendered). A cause
+    decided *after* the walk -- `buildTransposeGraph` compares the ports the member was built with
+    against the ports the operator's type promised, which is a fact no step of the walk has -- writes
+    the record directly (`refusal.cause = TransposeRefusalCause::X`), and it is a site all the same:
+    it is where the fact is decided.
+    """
+    text = read(path)
+    return set(re.findall(r"refuse\(TransposeRefusalCause::(\w+)", text)) | set(
+        re.findall(r"\.cause\s*=\s*TransposeRefusalCause::(\w+)", text)
+    )
 
 
 def sentence_dispatch(path: Path) -> tuple[set[str], set[str], bool]:
@@ -397,7 +409,12 @@ def main() -> int:
 
     print(
         "transpose refusals: every cause has one word, one sentence, and a site that records it -- "
-        f"except `{', '.join(sorted(WAITS_FOR_A_SITE))}`, which has the first two and waits for a shape"
+        + (
+            f"except `{', '.join(sorted(WAITS_FOR_A_SITE))}`, which has the first two and waits for a "
+            "shape"
+            if WAITS_FOR_A_SITE
+            else "the list of causes that wait for a site is empty"
+        )
     )
     print(
         "transpose refusals: a cause with no sentence of its own lands on the one that names the "

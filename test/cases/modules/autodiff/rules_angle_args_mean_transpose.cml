@@ -4,12 +4,17 @@
  * `mean_axis(xs, axis, keepdims)` has three ports: one data operand and two context arguments.
  * `mean_axis_t` names all three, because a rule's parameters are the operator's ports in port
  * order -- and only the first answers a cotangent, since `int` and `bool` have no tangent space.
- * The cotangent the law has to spread needs the *value* of `xs`, the array being reduced; that
- * value is what this file is about, and it is why the reading stops where it does.
+ * The cotangent the law has to spread needs the *length of the lane* it spreads over, which it reads
+ * from `xs` (`numel(xs) / numel(ct)`) and from `ones_like(xs)`.
  *
- * This is the third of the three readings, and the only one still marked. It was split out of a
- * single file with `reshape` and `softmax` so that their correct numbers are not reported as part
- * of this one's red: one program per reading.
+ * The parameter's shape is written in the type, and that is what makes the reading possible
+ * (author, 2026-11-03 16:15): the transposed function is handed the cotangent (`float[3]`) and
+ * nothing else, so the shape a law reads `xs` for is the shape the type states. `x: float[2, 3]`
+ * states it, and `transpose` builds the graph from it -- 6 positions over 3 lanes, so each lane is 2
+ * long. A parameter declared `x: float[..]` states no shape and no other value in the program
+ * carries one, and that program is refused by name, with the repair ("write the shape in the type")
+ * as the sentence: `transpose_needs_parameter_shape.cml` in this directory is that reading, and it
+ * is the negative of this one.
  *
  * The number is derived by hand, not read off a run, and it is read ELEMENT BY ELEMENT:
  *
@@ -31,7 +36,7 @@ import rulesets.transpose
 import { transpose } from transforms
 import { mean_axis, sum } from tensor
 
-func loss_mean(x: float[..]): float {
+func loss_mean(x: float[2, 3]): float {
     return float(sum(mean_axis(x, 0, false) * ([1.0, 2.0, 3.0] as float[])))
 }
 

@@ -154,6 +154,17 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
     case TransposeRefusalCause::NeedsAValueOutsideTheClosure:
         return "the member reads a value that the transposed function does not carry in its closure, "
                "so there is nothing to capture for it";
+    case TransposeRefusalCause::ParameterShape:
+        // The words are the registry's and not this file's: the kernel below raises this same cause
+        // as `RuntimeDiag::TransposeNeedsParameterShape`, so a reader is handed the diagnostic the
+        // language declares for the rule, and this case reads that message instead of writing a
+        // second one that could drift from it. The parameter is named where the signature has names
+        // and placed where it does not.
+        return camel::core::error::runtimeDiagMessage(
+            RuntimeDiag::TransposeNeedsParameterShape,
+            {refusal.graph,
+             refusal.paramName.empty() ? position : "the parameter '" + refusal.paramName + "'",
+             refusal.paramType});
     case TransposeRefusalCause::State:
         return "a loop carries its state out of itself, and that shape has no transpose";
     case TransposeRefusalCause::CallNoTranspose:
@@ -287,7 +298,6 @@ case TransposeRefusalCause::RuleShape: {
     // No program in this tree reaches the shapes below yet, so each keeps the sentence that names
     // the shape instead of a sentence written for a cause nobody has read; when one becomes
     // reachable, give it the sentence it stands for.
-    case TransposeRefusalCause::Arity:
     case TransposeRefusalCause::Arm:
     case TransposeRefusalCause::ArmTangents:
     case TransposeRefusalCause::Component:
@@ -313,9 +323,27 @@ slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     // `built.refusal` is what the walk recorded, and the sentence below is its reading.
     std::ostringstream why;
     const TransposeGraph built = buildTransposeGraph(
-        ctx.shared_from_this(), function->program(), function->graph(), why);
+        ctx.shared_from_this(), function->program(), function->graph(), why,
+        /*promisedToTheOperator=*/true);
     readings() << why.str();
     if (built.graph == nullptr) {
+        // A cause the language has a rule for is raised as the diagnostic the registry declares for
+        // it, not as the catch-all: `ParameterShape` is the shape rule -- the adjoint of a linear map
+        // needs the shape of its domain, and the program's type does not state it -- so a reader is
+        // told to write the shape in the type (author, 2026-11-03 16:15). Everything else keeps the
+        // sentence `refusalSentence` renders from the cause.
+        if (built.refusal.cause == TransposeRefusalCause::ParameterShape) {
+            const std::string named =
+                built.refusal.paramName.empty()
+                    ? (built.refusal.param.has_value()
+                           ? "the parameter at position " +
+                                 std::to_string(*built.refusal.param + 1)
+                           : std::string("a parameter"))
+                    : "the parameter '" + built.refusal.paramName + "'";
+            throwRuntimeFault(
+                RuntimeDiag::TransposeNeedsParameterShape, built.refusal.graph, named,
+                built.refusal.paramType);
+        }
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
             "transforms: transpose has no transpose for this function: " +

@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-308 diagnostics: 287 errors, 21 warnings. 15 carry a machine-applicable edit, 293 say why they carry none.
+309 diagnostics: 288 errors, 21 warnings. 15 carry a machine-applicable edit, 294 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -322,6 +322,7 @@ prints one entry.
 | `0x040001AA` | [RuntimeDiag::GraphNoDeviceProgram](#graphnodeviceprogram) | Error | no |
 | `0x040001AB` | [RuntimeDiag::DeviceNotSelected](#devicenotselected) | Error | no |
 | `0x040001AC` | [RuntimeDiag::ProgramFault](#programfault) | Error | no |
+| `0x040001AD` | [RuntimeDiag::TransposeNeedsParameterShape](#transposeneedsparametershape) | Error | no |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn | no |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn | no |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn | no |
@@ -10881,6 +10882,44 @@ func main(): int sync {
     println('before')
     println(limit(-1.0))
     println('not reached')
+    return 0
+}
+```
+
+### TransposeNeedsParameterShape
+
+`0x040001AD` · Error · `RuntimeDiag::TransposeNeedsParameterShape`
+
+**Fix**
+
+None: choice: the extents are the shape of the argument, and only the writer of the declaration knows it
+
+**Message**
+
+```text
+The transpose of '{0}' needs the shape of {1}, and the type '{2}' does not state it.
+```
+
+**Help**
+
+```text
+A transposition turns the cotangent of the result into the cotangent of the parameter, and the adjoint of a linear map is a function of that cotangent and of the shape of the map's domain: the cotangent alone does not say how many positions the parameter has. So the type has to state the shape. Write the extents the parameter's value has in its declaration -- 'func loss_mean(x: float[..])' becomes 'func loss_mean(x: float[2, 3])' -- and 'transpose' builds the graph from them. Nothing is missing from the language here: a parameter whose type states its shape has a transpose.
+```
+
+**Example** (`test/cases/modules/autodiff/transpose_needs_parameter_shape.cml`, run as `camel test/cases/modules/autodiff/transpose_needs_parameter_shape.cml ${backend}`)
+
+```camel
+import rulesets.transpose
+import { transpose } from transforms
+import { mean_axis, sum } from tensor
+
+func loss_mean(x: float[..]): float {
+    return float(sum(mean_axis(x, 0, false) * ([1.0, 2.0, 3.0] as float[])))
+}
+
+func main(): int sync {
+    let back = transpose(loss_mean)(1.0)
+    'transpose should have been refused, and it answered {}'->format<back.0>->println
     return 0
 }
 ```

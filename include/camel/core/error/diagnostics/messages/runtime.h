@@ -46,10 +46,11 @@ enum class RuntimeDiag : uint32_t {
     FieldNotFound          = 0x000033,
     InvalidArgument        = 0x000034,
     // 0x000037: empty. The number is not reused.
-    RegexInvalid                = 0x000039,
-    TimeFormatFailed            = 0x00003A,
-    GradientElementTypeMismatch = 0x00003C,
-    ValueWithNoDerivativeRule   = 0x0001A8,
+    RegexInvalid                 = 0x000039,
+    TimeFormatFailed             = 0x00003A,
+    GradientElementTypeMismatch  = 0x00003C,
+    ValueWithNoDerivativeRule    = 0x0001A8,
+    TransposeNeedsParameterShape = 0x0001AD,
     // Faults and reports of design principles log 2.10.
     ConversionOutOfRange = 0x000050,
     UnhandledError       = 0x000051,
