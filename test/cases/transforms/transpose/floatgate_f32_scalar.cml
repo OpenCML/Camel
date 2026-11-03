@@ -1,0 +1,41 @@
+/**
+ * An `f32` scalar's transposition, read at two cotangents and at two points.
+ *
+ * `f(x) = x*x + x*5`, so `f'(x) = 2x + 5` and the pullback of the cotangent `ct` is `ct * (2x + 5)`:
+ *
+ *     x = 3,  ct = 1 -> 11
+ *     x = 3,  ct = 2 -> 22
+ *     x = -2, ct = 1 -> 1
+ *
+ * The body reads `x` **twice** (`x*x` and `x*5`), so the walk has two cotangents landing on one value
+ * and adds them: at `f32` that addition is `:op/add_f` and both operands are four-byte `f32` slots.
+ * A walk that sums them with the `float` addition (`:op/add_d`, which is what a `Float64()` written
+ * down as the answer to "what width is this cotangent" produces) does not convert the value: the
+ * operator's ports take a `float`, so the step is refused by shape and this reading never prints.
+ * That refusal is what the entry in `test/plans/feat/transforms/floatgate.plan.toml` measured
+ * before this case turned green.
+ *
+ * The `float` twin is printed beside it so the two widths are one program and one reading: `f32` is
+ * not a `float` and nothing here is read as one.
+ */
+import { vjp } from vjp
+
+func sf(x: f32): f32 {
+    return x * x + x * 5.0
+}
+
+func sd(x: float): float {
+    return x * x + x * 5.0
+}
+
+func main(): int sync {
+    let (vf, pf) = vjp(sf)(3.0)
+    'scalar f32   value={} dfdx={}'->format<vf, pf(1.0).0>->println
+    'scalar f32   x=3 ct=2 -> {}'->format<pf(2.0).0>->println
+    let (vfneg, pfneg) = vjp(sf)(-2.0)
+    'scalar f32   x=-2 ct=1 -> {}'->format<pfneg(1.0).0>->println
+    let (vd, pd) = vjp(sd)(3.0)
+    'scalar float value={} dfdx={}'->format<vd, pd(1.0).0>->println
+    'scalar float x=-2 ct=1 -> {}'->format<vjp(sd)(-2.0).1(1.0).0>->println
+    return 0
+}

@@ -169,6 +169,12 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
     case TransposeRefusalCause::NeedsAValueOutsideTheClosure:
         return "the member reads a value that the transposed function does not carry in its closure, "
                "so there is nothing to capture for it";
+    case TransposeRefusalCause::NoCotangentArithmetic:
+        // Named as what it is: the value is read more than once and its *type* has no sum, so there
+        // is no cotangent to answer -- not a width the transform failed to support, and not a program
+        // shape a reader can write differently without changing what it differentiates.
+        return "a value the body reads twice has a cotangent type with no addition of its own, so its "
+               "cotangents cannot be summed";
     case TransposeRefusalCause::ParameterShape:
         // The words are the registry's and not this file's: the kernel below raises this same cause
         // as `RuntimeDiag::TransposeNeedsParameterShape`, so a reader is handed the diagnostic the

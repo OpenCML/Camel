@@ -7,6 +7,7 @@
 #include "rule_expand.h"
 #include "split.h"
 
+#include "camel/core/derivative.h"
 #include "camel/core/forward.h"
 #include "camel/core/loop_kind.h"
 #include "camel/core/mm.h"
@@ -87,6 +88,8 @@ const char *transposeRefusalWord(TransposeRefusalCause cause) {
         return "unread-parameter";
     case TransposeRefusalCause::NeedsAValueOutsideTheClosure:
         return "needs-a-value-outside-the-closure";
+    case TransposeRefusalCause::NoCotangentArithmetic:
+        return "no-cotangent-arithmetic";
     }
     return nullptr;
 }
@@ -178,11 +181,17 @@ RuleChoice chooseTransposedRule(
         // has (f32, f32)`. The cotangent's element type is the step's own: an `f32` cotangent's
         // element is `f32`, a `float` cotangent's is `float`, and the operands of a step are the
         // types that cotangent is a cotangent of.
-        Type *soleType = instanceTypes.empty() || instanceTypes.front() == nullptr
-                             ? Type::Float64()
-                             : instanceTypes.front();
+        Type *soleType = instanceTypes.empty() ? nullptr : instanceTypes.front();
+        // No element type means there is no instance to ask about: the tuple stays empty -- the same
+        // "nothing to try" the choice answers around, which the walk turns into `rule-shape` with the
+        // operands it really has. A `float` here is an instance asked for a step whose cotangent is
+        // not a `float`, which is the shape this whole change removes.
+        std::vector<Type *> soleTypes;
+        if (soleType != nullptr) {
+            soleTypes.push_back(soleType);
+        }
         choice = chooseRuleAmong(context, camel::core::transposeRulesOf(std::string(uri)),
-                                 {soleType}, actual, dataOperandCount, words, answered);
+                                 soleTypes, actual, dataOperandCount, words, answered);
         // `operandTypes` stay the node's own in both readings: the shape test is about the operands
         // the walk will hand the right side, whatever instance the ports were read from.
         if (!choice.found()) {
@@ -285,14 +294,20 @@ std::vector<Type *> lawInstanceTypes(
     const std::vector<Type *> &portTypes) {
     std::string unused;
     std::vector<Type *> types = portTypes;
+    // A law instantiated at no operand type at all: there is nothing to ask and nothing to reduce,
+    // so the tuple stays empty and the caller reads that as "no instance to try". A `float` pushed in
+    // here would be an instance asked about a type no step has.
     if (types.empty()) {
-        types.push_back(Type::Float64());
+        return types;
     }
     if (camel::compile::gir::genericRuleInstanceByName(context, ruleName, types, {}, unused) !=
         nullptr) {
         return types;
     }
-    Type *sole = types.front() == nullptr ? Type::Float64() : types.front();
+    if (types.front() == nullptr) {
+        return types;
+    }
+    Type *sole = types.front();
     if (sole->code() == camel::core::type::TypeCode::Array) {
         if (auto *array = tt::as_ptr<camel::core::type::ArrayType>(sole)) {
             if (Type *zero = array->rankZeroType()) {
@@ -363,53 +378,45 @@ bool ruleTakesOperands(
     return takes;
 }
 
-/// A floating scalar's addition, in that scalar's own width: `:op/add_d` at `float`, `:op/add_f` at
-/// `f32`. A narrow float is a float but it is **not** a `float` and not the same slot: `f32` is four
-/// bytes and `float` is eight, so a cotangent written as one and read as the other is a
-/// reinterpretation of bits, not a conversion. `Tangent<f32>` is `f32` (`camel/core/tangent_space.h`
-/// answers `Self` for every floating scalar, and `stdlib/types.cml#Tangent` says so in the language),
-/// so an `f32` cotangent adds with the `f32` addition and its zero is an `f32` zero.
+/// The addition a cotangent space sums with, asked of the derivative registry -- the one place a
+/// space is declared (`TangentSpace::addUri`, `camel/core/derivative.h`, design principles 9.9).
 ///
-/// nullptr for a type this file has no addition for; the caller keeps the answer it gave before an
-/// `f32` cotangent existed, and an exit whose cotangent is such a type is refused where the signature
-/// is built rather than answered here.
-const char *floatAddUri(const Type *type, Type *&addType) {
-    if (type == nullptr) {
-        return nullptr;
+/// `:op/add_d` at `float` and `:op/add_f` at `f32` are that registry's answers, and so are
+/// `:tangent/add_arr` for an array whose elements the core holds one slot each and `tensor:add` for
+/// a tensor: the two kinds share the array *code* and sum differently, so the answer is read from
+/// the space and never spelled here from a type code. A narrow float is a float but it is **not** a
+/// `float` and not the same slot -- `f32` is four bytes and `float` is eight, so a cotangent written
+/// as one and read as the other is a reinterpretation of bits, not a conversion.
+///
+/// An empty answer is "this space registers no addition": a cotangent that cannot be summed is not a
+/// cotangent, and the caller refuses by name. It is **not** a `float`.
+std::string addUriOfSpace(Type *space) {
+    if (space == nullptr) {
+        return {};
     }
-    if (type->code() == camel::core::type::TypeCode::Float64) {
-        addType = Type::Float64();
-        return ":op/add_d";
-    }
-    if (type->code() == camel::core::type::TypeCode::Float32) {
-        addType = Type::Float32();
-        return ":op/add_f";
-    }
-    return nullptr;
+    const camel::core::TangentSpace *registered =
+        camel::core::DerivativeRegistry::instance().findTangentSpace(space);
+    return registered != nullptr ? registered->addUri : std::string{};
 }
 
-/// The sum a cotangent accumulates with is the sum of the type it lands in: two array cotangents
-/// add element by element (`:tangent/add_arr`, design principles 9.9) and a number's add is the add
-/// of its own width (`:op/add_d`, `:op/add_f`). Handing an array to `add_d` is the same lie as
-/// calling it a float -- it reads the array as a number and takes the process down, which is what
-/// two element reads of one array did (a sum of two reads was enough; one read was not). Every
-/// accumulation in this file asks this question; a site that spells `:op/add_d` itself decided the
-/// answer without asking.
-const char *addUriFor(const camel::runtime::GCGraph *function, gc_node_ref_t ref, Type *&addType) {
+/// The sum a cotangent accumulates with, and the type it is written at: the tangent space of the
+/// value the cotangent lands in (`tangentSpaceOf`) and that space's own addition. Handing an array
+/// to `add_d` is the same lie as calling it a float -- it reads the array as a number and takes the
+/// process down, which is what two element reads of one array did (a sum of two reads was enough;
+/// one read was not). Every accumulation in this file asks this question; a site that spells
+/// `:op/add_d` itself decided the answer without asking.
+///
+/// `addType` is that space and never a placeholder: a `float` written here first is a `float` read
+/// if the answer is ever consulted before it is filled. An empty `addUri` is a value whose type has
+/// no cotangent space -- and every caller has already asked `hasTangentSpace` of the value before a
+/// cotangent of it exists -- so an empty answer is a defect of this walk and refused as one.
+std::string addUriFor(const camel::runtime::GCGraph *function, gc_node_ref_t ref, Type *&addType) {
     const camel::runtime::GCNode *node = function->node(ref);
     const Type *type                   = node != nullptr ? node->dataType() : nullptr;
     const camel::core::TangentSpaceAnswer space =
         type == nullptr ? camel::core::TangentSpaceAnswer{} : camel::core::tangentSpaceOf(type);
-    if (space.hasSpace() && space.space != nullptr &&
-        space.space->code() == camel::core::type::TypeCode::Array) {
-        addType = space.space;
-        return ":tangent/add_arr";
-    }
-    if (const char *uri = floatAddUri(space.hasSpace() ? space.space : nullptr, addType)) {
-        return uri;
-    }
-    addType = Type::Float64();
-    return ":op/add_d";
+    addType = space.hasSpace() ? space.space : nullptr;
+    return addUriOfSpace(addType);
 }
 
 /// Whether this transform has a cotangent for a result of type `result`: the cotangent is the
@@ -427,8 +434,9 @@ bool hasResultCotangent(const Type *result) {
     if (!space.hasSpace() || space.space == nullptr) {
         return false;
     }
-    Type *unused = nullptr;
-    return floatAddUri(space.space, unused) != nullptr;
+    const camel::core::type::TypeCode width = space.space->code();
+    return width == camel::core::type::TypeCode::Float64 ||
+           width == camel::core::type::TypeCode::Float32;
 }
 
 /// The type a transposed function's cotangent input lives in: the cotangent of the result, which is
@@ -436,12 +444,16 @@ bool hasResultCotangent(const Type *result) {
 /// (`Tangent<f32>` is `f32`), which is the query and not a width written down here -- so widening
 /// what `transpose` accepts cannot leave a `float` where an `f32` is promised (design principles
 /// 9.9, and the drift `jvp`'s four sites were fixed for).
+///
+/// `nullptr` for a result with no tangent space. The gate above (`hasResultCotangent`) refuses such
+/// a function before a signature is built from it, so a caller that meets a nullptr here is inside a
+/// build the gate already admitted: it refuses rather than answer with a `float`.
 Type *cotangentTypeOfResultType(const Type *result) {
     if (result == nullptr) {
-        return Type::Float64();
+        return nullptr;
     }
     const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(result);
-    return space.hasSpace() && space.space != nullptr ? space.space : Type::Float64();
+    return space.hasSpace() ? space.space : nullptr;
 }
 
 Type *resultCotangentType(const FunctionType *function) {
@@ -756,6 +768,50 @@ gc_node_ref_t shapeCarrierOf(camel::runtime::GraphDraft &draft, Type *type) {
         camel::core::rtdata::toSlot<::Array *>(zero), type, rt::kGCNodeFlagConstant);
 }
 
+/// The zero a cotangent space starts from, asked of that space: the constant the registry holds
+/// (`TangentSpace::zero`, written in the space's own width -- an `f32` zero is four bytes and a
+/// `float` zero is eight, and one read as the other is a reinterpretation of bits), or the space's
+/// own `zerosLikeUri` for a space whose zero is built from a value's shape (`:tangent/zeros_arr` for
+/// an array of values, `tensor:zeros_like` for a tensor). Both are the registry's answers, so no
+/// width and no operator name is written down here (design principles 9.9).
+///
+/// `shapeFrom` is the value the shape is read from, and it has to be a node of **this** graph: a ref
+/// of the source graph written into a node of the new one reads whatever node sits at that index,
+/// which is how a zero array came to be built from a number (`autodiff: a zero tangent array needs
+/// an array with a tangent`). `kInvalidNodeRef` builds the shape from the type's stated extents
+/// (`shapeCarrierOf`), which is what a zero needs in order to be an array of the right shape.
+///
+/// An invalid ref for a space the registry does not know, or one with neither a zero constant nor a
+/// `zerosLikeUri`: a cotangent that has no zero cannot be accumulated, and the caller refuses by name
+/// instead of handing the slot a `float` zero.
+gc_node_ref_t zeroOfSpaceOf(
+    camel::runtime::GraphDraft &draft, Type *space, gc_node_ref_t shapeFrom) {
+    if (space == nullptr) {
+        return rt::kInvalidNodeRef;
+    }
+    const camel::core::TangentSpace *registered =
+        camel::core::DerivativeRegistry::instance().findTangentSpace(space);
+    if (registered == nullptr) {
+        return rt::kInvalidNodeRef;
+    }
+    if (registered->zero.has_value()) {
+        return draft.materializeStaticValue(*registered->zero, space, rt::kGCNodeFlagConstant);
+    }
+    if (registered->zerosLikeUri.empty()) {
+        return rt::kInvalidNodeRef;
+    }
+    if (shapeFrom == rt::kInvalidNodeRef) {
+        shapeFrom = shapeCarrierOf(draft, space);
+    }
+    if (shapeFrom == rt::kInvalidNodeRef) {
+        return rt::kInvalidNodeRef;
+    }
+    const gc_node_ref_t zeros =
+        draft.addOperNode(space, nullptr, registered->zerosLikeUri.c_str());
+    draft.setNormInputs(zeros, std::span<const gc_node_ref_t>(&shapeFrom, 1));
+    return zeros;
+}
+
 /// What the graphs of one transpose share: one group (a callee's transpose is another member of
 /// it, exactly as `jvp` lifts one graph per callee) and the callees already transposed, so that
 /// two calls of one function call one graph.
@@ -1048,7 +1104,17 @@ bool buildTransposeMember(
         for (const gc_node_ref_t ref : closureOf) {
             const camel::runtime::GCNode *node = function->node(ref);
             const Type *declared                = node != nullptr ? node->dataType() : nullptr;
-            Type *const type = declared != nullptr ? const_cast<Type *>(declared) : Type::Float64();
+            if (declared == nullptr) {
+                // The capture port takes the residual's own declared type: a port typed `float` for
+                // a residual that is not one hands the value to a slot of another width, and a
+                // residual with no type at all is a graph whose closure cannot be declared. The
+                // node's declaration is the only source of that type, so the walk refuses instead of
+                // inventing a `float`.
+                refuse(TransposeRefusalCause::Signature);
+                os << " closure=" << ref << '\n';
+                return false;
+            }
+            Type *const type = const_cast<Type *>(declared);
             const gc_node_ref_t port =
                 draft.addPortNode(type, draft.allocateRuntimeSlot(type));
             draft.appendClosureNode(port);
@@ -1097,9 +1163,22 @@ bool buildTransposeMember(
         // a member a caller closed by hand are the same shape -- a port the function is handed --
         // so both answer the same way, and a transposition does not need to know which parameter a
         // member was the value of.
+        // The cotangent input's type is the result's own cotangent space, and a function whose
+        // result has one is the only function a member is built for (`transposeSignature`'s gate
+        // admits exactly those). A null here is a caller that asked for a member of a function the
+        // gate refuses: refused by name, never typed `float`.
+        Type *const cotangentType = resultCotangentType(function);
+        if (cotangentType == nullptr) {
+            refuse(TransposeRefusalCause::Exit);
+            os << " exit="
+               << (function->funcType() != nullptr && function->funcType()->exitType() != nullptr
+                       ? function->funcType()->exitType()->toString()
+                       : std::string("?"))
+               << '\n';
+            return false;
+        }
         const gc_node_ref_t cotangentIn =
-            draft.addPortNode(resultCotangentType(function),
-                              draft.allocateRuntimeSlot(resultCotangentType(function)));
+            draft.addPortNode(cotangentType, draft.allocateRuntimeSlot(cotangentType));
         draft.appendNormPort(cotangentIn);
 
         const auto primitiveOf = [&draft](Type *type, const char *uri, std::vector<gc_node_ref_t> inputs) {
@@ -1107,86 +1186,82 @@ bool buildTransposeMember(
             draft.setNormInputs(made, std::span<const gc_node_ref_t>(inputs));
             return made;
         };
-        const auto primitive = [&primitiveOf](const char *uri, std::vector<gc_node_ref_t> inputs) {
-            return primitiveOf(Type::Float64(), uri, std::move(inputs));
-        };
-        // The sum a cotangent accumulates with is the sum of the type it lands in: two array
-        // cotangents add element by element (`:tangent/add_arr`, design principles 9.9) and a
-        // number's add is `:op/add_d`. Handing an array to `add_d` is the same lie as calling it a
-        // float -- it reads the array as a number and takes the process down, which is what two
-        // element reads of one array did (a sum of two reads was enough; one read was not).
-        const auto addUriAndType = [&](gc_node_ref_t ref, Type *&addType) {
-            return addUriFor(function, ref, addType);
-        };
-        // Every cotangent accumulation in this file goes through this one function: given what a
-        // place holds already (invalid means nothing yet) and what arrives, it answers the value
-        // that place holds afterwards. The sum is chosen by the tangent space of what is already
-        // there, so an array accumulates with `:tangent/add_arr` and a number with `:op/add_d`;
-        // nothing here spells an addition of its own.
-        // TODO(the program this needs): no case in the tree reaches the array side of this yet. What
-        // would reach it is a program where two cotangents land on the same array-valued node -- the
-        // `cotangent[ref]` accumulation above, run a second time for one array -- so `into` holds an
-        // array and the sum has to be `:tangent/add_arr`. The gap is a program shape, not an
-        // assertion: there is nothing to assert until such a program exists.
-        const auto accumulate = [&](gc_node_ref_t into, gc_node_ref_t node) -> gc_node_ref_t {
+        // A value the cotangent path does not carry but the transposed graph must reproduce: a
+        // branch's condition is computed from the parameters, and the arm that ran is decided by
+        // it. These nodes are copied forward, not transposed. Declared here because the zero of a
+        // cotangent space reads a value's shape from it (`zeroOf`).
+        std::vector<gc_node_ref_t> forwardOf(nodeCount, rt::kInvalidNodeRef);
+        // Every cotangent accumulation in this file goes through this one function: given the cotangent
+        // space of the value a cotangent lands on, what the place holds already (invalid means nothing
+        // yet) and what arrives, it answers the value that place holds afterwards. The sum is that
+        // space's own (`addUriOfSpace`: the registry's `addUri`), so an `f32` accumulates with
+        // `:op/add_f`, an array with `:tangent/add_arr` and a tensor with `tensor:add`; nothing here
+        // spells an addition of its own, and no width is written down as a placeholder.
+        //
+        // The space is the *value's*, handed in by the caller that knows the value -- not `into`'s
+        // space: `into` is a node of the **new** graph, and asking the source graph about it reads
+        // whatever source node sits at that index, a type that has nothing to do with the cotangent
+        // being summed. That read answered `:op/add_d` for as long as every cotangent was a `float`;
+        // asked of the registry it answers nothing at all, which is how it was found.
+        //
+        // A space with no addition at all is a cotangent that cannot be summed:
+        // `cotangentArithmeticMissing` records it so the member is refused by name at the end of the
+        // walk (`NoCotangentArithmetic`) instead of handing the slot a `float` sum.
+        bool cotangentArithmeticMissing = false;
+        const auto accumulate = [&](Type *space, gc_node_ref_t into,
+                                    gc_node_ref_t node) -> gc_node_ref_t {
             if (into == rt::kInvalidNodeRef) {
                 return node;
             }
-            Type *addType            = Type::Float64();
-            const char *const addUri = addUriFor(function, into, addType);
-            return into == node ? primitiveOf(addType, addUri, {node, node})
-                                : primitiveOf(addType, addUri, {into, node});
-        };
-        const auto zero = [&]() {
-            return draft.materializeStaticValue(
-                camel::core::rtdata::toSlot<double>(0.0), Type::Float64(),
-                rt::kGCNodeFlagConstant);
-        };
-        // The zero of a cotangent whose space is a floating scalar, written in that scalar's own
-        // width: an `f32` cotangent's zero is an `f32` zero (a four-byte slot holding `0.0f`), not a
-        // `float` zero that the reader would have to reinterpret. `Tangent<f32>` is `f32`, and the
-        // sum the zero is the identity of is `:op/add_f` (`floatAddUri`), so the constant and the
-        // arithmetic are the same width. A space that is not a floating scalar, and `float` itself,
-        // keep the `float` zero they had.
-        const auto zeroIn = [&](Type *type) -> gc_node_ref_t {
-            if (type != nullptr && type->code() == camel::core::type::TypeCode::Float32) {
-                return draft.materializeStaticValue(
-                    camel::core::rtdata::toSlot<float>(0.0f), Type::Float32(),
-                    rt::kGCNodeFlagConstant);
+            const std::string addUri = addUriOfSpace(space);
+            if (addUri.empty() || space == nullptr) {
+                cotangentArithmeticMissing = true;
+                os << "TRANSPOSE function=" << function->name() << " cotangent-no-arithmetic"
+                   << '\n';
+                return rt::kInvalidNodeRef;
             }
-            return zero();
+            return into == node ? primitiveOf(space, addUri.c_str(), {node, node})
+                                : primitiveOf(space, addUri.c_str(), {into, node});
         };
-        // The type a value's cotangent lives in, read from the value's type: the same question
-        // `jvp` asks of a parameter (`camel/core/tangent_space.h`), asked here of a loop's state and
-        // of a value that escaped it. A `float[]` state pulls back an array; a number pulls back a
-        // number. Nothing in this file decides that by hand any more -- the port, the tuple member
-        // and the component read all ask here.
-        const auto cotangentTypeOf = [function](gc_node_ref_t ref, Type *fallback) {
-            const camel::runtime::GCNode *node = function->node(ref);
-            const Type *type                   = node != nullptr ? node->dataType() : nullptr;
-            if (type == nullptr) {
-                return fallback;
-            }
-            const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(type);
-            return space.hasSpace() && space.space != nullptr ? space.space : fallback;
-        };
-        // The zero of the space a value's cotangent lives in: a number's is `0.0`, and an array's is
-        // the array of zeros built from the value's own shape (`:tangent/zeros_arr`, the operator
-        // the pullback already builds for the same purpose).
+        // The zero of the space a value's cotangent lives in, asked of the space (see
+        // `zeroOfSpaceOf`): a floating scalar's is the constant the registry holds in that scalar's
+        // own width -- an `f32` zero is four bytes, not a `float` zero read as four -- and a space
+        // whose zero is built from a value's shape uses the space's own `zerosLikeUri`. Nothing here
+        // writes a `float` zero on behalf of a type that is not a `float`.
+        //
+        // The shape a zero array is built at is a node of **this** graph: the value the walk
+        // forwarded for it when there is one, and the type's own stated extents otherwise. A source
+        // ref written into a node of the new graph reads whatever node sits at that index.
         const auto zeroOf = [&](gc_node_ref_t valueRef) -> gc_node_ref_t {
             const camel::runtime::GCNode *node = function->node(valueRef);
             const Type *type                   = node != nullptr ? node->dataType() : nullptr;
             const camel::core::TangentSpaceAnswer space =
                 type == nullptr ? camel::core::TangentSpaceAnswer{}
                                 : camel::core::tangentSpaceOf(type);
-            if (space.hasSpace() && space.space != nullptr &&
-                space.space->code() == camel::core::type::TypeCode::Array) {
-                const gc_node_ref_t zeros =
-                    draft.addOperNode(space.space, nullptr, ":tangent/zeros_arr");
-                draft.setNormInputs(zeros, std::span<const gc_node_ref_t>(&valueRef, 1));
-                return zeros;
+            const gc_node_ref_t forwarded =
+                valueRef < forwardOf.size() ? forwardOf[valueRef] : rt::kInvalidNodeRef;
+            return zeroOfSpaceOf(draft, space.hasSpace() ? space.space : nullptr, forwarded);
+        };
+        // The type a value's cotangent lives in, read from the value's type: the same question
+        // `jvp` asks of a parameter (`camel/core/tangent_space.h`), asked here of a loop's state and
+        // of a value that escaped it. A `float[]` state pulls back an array; a number pulls back a
+        // number. Nothing in this file decides that by hand any more -- the port, the tuple member
+        // and the component read all ask here.
+        //
+        // There is **no fallback**: a ref that is not in the source graph, or a value whose type has
+        // no tangent space, has no cotangent type, and every caller refuses by name. A `float`
+        // written here is the whole family's defect -- it answers "this cotangent is a `float`" for
+        // values whose cotangent is anything else, and the answer is read.
+        const auto cotangentTypeOfType = [](const Type *type) -> Type * {
+            if (type == nullptr) {
+                return nullptr;
             }
-            return zero();
+            const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(type);
+            return space.hasSpace() ? space.space : nullptr;
+        };
+        const auto cotangentTypeOf = [function, &cotangentTypeOfType](gc_node_ref_t ref) -> Type * {
+            const camel::runtime::GCNode *node = function->node(ref);
+            return cotangentTypeOfType(node != nullptr ? node->dataType() : nullptr);
         };
         // A tuple of these values, as a node of the new graph, and the type that names it: the Fill
         // the builder writes for a state tuple (`builder_control.cpp`, `gir.loop.split`), so a loop
@@ -1217,10 +1292,6 @@ bool buildTransposeMember(
         std::vector<bool> hasCotangent(nodeCount, false);
         // A constant operand carries no cotangent, but its *value* is what a rule needs (`ct * c`).
         std::vector<gc_node_ref_t> constantOf(nodeCount, rt::kInvalidNodeRef);
-        // A value the cotangent path does not carry but the transposed graph must reproduce: a
-        // branch's condition is computed from the parameters, and the arm that ran is decided by
-        // it. These nodes are copied forward, not transposed.
-        std::vector<gc_node_ref_t> forwardOf(nodeCount, rt::kInvalidNodeRef);
 
         const auto isConstant = [function](gc_node_ref_t ref) {
             const camel::runtime::GCNode *node = function->node(ref);
@@ -1347,13 +1418,23 @@ bool buildTransposeMember(
                 hasCotangent[ref] = true;
                 return;
             }
-            Type *addType = Type::Float64();
-            const char *const addUri = addUriAndType(ref, addType);
-            if (cotangent[ref] == node) {
-                cotangent[ref] = primitiveOf(addType, addUri, {node, node});
+            Type *addType            = nullptr;
+            const std::string addUri = addUriFor(function, ref, addType);
+            if (addUri.empty() || addType == nullptr) {
+                // Two cotangents land on one value and the value's space registers no addition:
+                // there is no sum to write, so this member answers no cotangent. Recorded here and
+                // refused by name at the end of the walk (`NoCotangentArithmetic`); a `float` sum
+                // here would be an addition the space never declared.
+                cotangentArithmeticMissing = true;
+                os << "TRANSPOSE function=" << function->name()
+                   << " cotangent-no-arithmetic node=" << ref << '\n';
                 return;
             }
-            cotangent[ref] = primitiveOf(addType, addUri, {cotangent[ref], node});
+            if (cotangent[ref] == node) {
+                cotangent[ref] = primitiveOf(addType, addUri.c_str(), {node, node});
+                return;
+            }
+            cotangent[ref] = primitiveOf(addType, addUri.c_str(), {cotangent[ref], node});
         };
         // One position's cotangent: the rule the index filed for this operator, its right side
         // expanded where the operator stood. What stands in the graph is the rule's own function of
@@ -1761,7 +1842,7 @@ bool buildTransposeMember(
                     hasLocal[ref] = true;
                     return;
                 }
-                local[ref] = accumulate(local[ref], node);
+                local[ref] = accumulate(cotangentTypeOf(ref), local[ref], node);
             };
             // The arm's chain ends at the parameter, which lives outside the arm's region: the
             // cotangent of that parameter for this arm is what the chain hands it. Anything else
@@ -1783,7 +1864,8 @@ bool buildTransposeMember(
                     if (stops[i] != target) {
                         continue;
                     }
-                    portCotangents[i] = accumulate(portCotangents[i], node);
+                    portCotangents[i] =
+                        accumulate(cotangentTypeOf(stops[i]), portCotangents[i], node);
                     return;
                 }
                 // A residual the arm read: the cotangent goes back into the slot it came from, named
@@ -1800,7 +1882,7 @@ bool buildTransposeMember(
                         });
                     if (body != nullptr && onAResidualPort) {
                         auto &slot = residualBack[body->value];
-                        slot       = accumulate(slot, node);
+                        slot       = accumulate(cotangentTypeOf(target), slot, node);
                         os << "TRANSPOSE function=" << function->name() << " residual-return slot="
                            << body->value << " region=" << oldRegion << '\n';
                         return;
@@ -1813,7 +1895,7 @@ bool buildTransposeMember(
                     if (slot.cotangent == rt::kInvalidNodeRef) {
                         slot = Escape{node, from};
                     } else {
-                        slot.cotangent = accumulate(slot.cotangent, node);
+                        slot.cotangent = accumulate(cotangentTypeOf(target), slot.cotangent, node);
                     }
                     return;
                 }
@@ -2162,12 +2244,26 @@ bool buildTransposeMember(
                     // its transposed signature answers with -- the tuple `transposeSignature` built.
                     // Read from the function rather than restated as `float`: a callee that answers
                     // an array cotangent must not be read back as a number.
+                    //
+                    // Both facts the two former fallbacks stood for are refusals, not a missing
+                    // source: `transposeSignature` answering nothing means **this callee has no
+                    // transpose**, and an answer tuple whose arity is not the count this call site
+                    // answers for means the signature and the marks do not belong together. A tuple
+                    // of `answerCount` `float`s written in that place is a type nobody computed: it
+                    // would hand the caller an `f32` cotangent to read as a `float`.
                     FunctionType *const calleeSignature = transposeSignature(
                         calleeToTranspose->funcType(), participates, nullptr,
                         &state.calleeNeeds[calleeToTranspose]);
                     Type *const calleeExit = calleeSignature != nullptr
                                                  ? calleeSignature->exitType()
                                                  : nullptr;
+                    if (calleeExit == nullptr) {
+                        os << "TRANSPOSE function=" << function->name()
+                           << " arm-stop region=" << oldRegion << " node=" << ref
+                           << " callee=" << calleeToTranspose->name() << " signature\n";
+                        armsOk = false;
+                        return {};
+                    }
                     const auto *calleeAnswerMembers =
                         dynamic_cast<const camel::core::type::TupleType *>(calleeExit);
                     std::vector<Type *> answerComponentTypesStorage;
@@ -2176,13 +2272,19 @@ bool buildTransposeMember(
                         answerComponentTypesStorage.assign(calleeAnswerMembers->types().begin(),
                                                            calleeAnswerMembers->types().end());
                     }
-                    Type *const answerType =
-                        answerCount == 1
-                            ? (calleeExit != nullptr ? calleeExit : Type::Float64())
-                            : (answerComponentTypesStorage.size() == answerCount
-                                   ? calleeExit
-                                   : camel::core::type::TupleType::create(
-                                         std::vector<Type *>(answerCount, Type::Float64())));
+                    if (answerCount > 1 && answerComponentTypesStorage.size() != answerCount) {
+                        // The member answers one cotangent per parameter it answers for, and this
+                        // call site delivers one per marked argument: a mismatch is a record that
+                        // does not describe this call, and no tuple invented here would describe it
+                        // either.
+                        os << "TRANSPOSE function=" << function->name()
+                           << " arm-stop region=" << oldRegion << " node=" << ref
+                           << " callee=" << calleeToTranspose->name() << " answers=" << answerCount
+                           << " signature-members=" << answerComponentTypesStorage.size() << '\n';
+                        armsOk = false;
+                        return {};
+                    }
+                    Type *const answerType = calleeExit;
                     const gc_node_ref_t made = draft.addFuncNode(transposed, answerType);
                     std::vector<gc_node_ref_t> callArgs   = arguments;
                     callArgs.push_back(local[ref]);
@@ -2202,11 +2304,11 @@ bool buildTransposeMember(
                             deliver(targetAt, made, ref);
                             break;
                         }
+                        // The component's type is the one the signature answered for it: the
+                        // two counts were compared above, so this read is the member's own type and
+                        // not a `float` standing in for a member nobody looked at.
                         const gc_node_ref_t part = draft.addAccsNode(
-                            i < answerComponentTypesStorage.size()
-                                ? answerComponentTypesStorage[i]
-                                : Type::Float64(),
-                            static_cast<uint32_t>(i));
+                            answerComponentTypesStorage[i], static_cast<uint32_t>(i));
                         draft.setNormInputs(part, std::span<const gc_node_ref_t>(&made, 1));
                         deliver(targetAt, part, ref);
                     }
@@ -2265,6 +2367,17 @@ bool buildTransposeMember(
                 }
                 const auto inputs = function->normInputsOf(ref);
                 const auto *body = function->nodeBodyAs<camel::runtime::GCOperBody>(ref);
+                // The step's cotangent space, asked once: the law is chosen at it and the rule's
+                // right side is expanded at it. `hasTangentSpace` above is what makes this non-null
+                // -- a value with no cotangent space never reaches the law -- so a null here is the
+                // walk's own defect and not the program's.
+                Type *const armCotangentType = cotangentTypeOf(ref);
+                if (armCotangentType == nullptr) {
+                    os << "TRANSPOSE function=" << function->name() << " arm-stop region="
+                       << oldRegion << " node=" << ref << " no-cotangent-space\n";
+                    armsOk = false;
+                    return {};
+                }
                 std::string chosenRule;
                 std::string ruleWhy;
                 const RuleChoice armChoice = chooseTransposedRule(
@@ -2273,7 +2386,7 @@ bool buildTransposeMember(
                         const camel::runtime::GCNode *at = function->node(node);
                         return at != nullptr ? at->dataType() : nullptr;
                     },
-                    cotangentTypeOf(ref, Type::Float64()), nullptr);
+                    armCotangentType, nullptr);
                 if (armChoice.rule.empty()) {
                     armsOk = false;
                     refuse(TransposeRefusalCause::Rule);
@@ -2290,7 +2403,7 @@ bool buildTransposeMember(
                     bool noInstance = false;
                     const gc_node_ref_t answer =
                         ruleCotangent(chosenRule, inputs, i, local[ref],
-                                      cotangentTypeOf(ref, Type::Float64()), why, noInstance);
+                                      armCotangentType, why, noInstance);
                     if (answer == rt::kInvalidNodeRef) {
                         armsOk = false;
                         // Two facts, and the expansion names which one it met: `noInstance` means the
@@ -2393,7 +2506,7 @@ bool buildTransposeMember(
                         if (into.size() <= j) {
                             into.resize(j + 1, rt::kInvalidNodeRef);
                         }
-                        into[j] = accumulate(into[j], part);
+                        into[j] = accumulate(cotangentTypeOf(parts2[body->value]), into[j], part);
                     }
                     hasCotangent[parts2[body->value]] = true;
                     break;
@@ -2406,8 +2519,33 @@ bool buildTransposeMember(
                 if (body->value >= slots.size()) {
                     break;
                 }
+                // The slot holds a **component's** cotangent, so the sum is the component's space and
+                // not the tuple's: a tuple space has no addition, and asking the holder would refuse
+                // a sum that is a `float`'s or an `f32`'s own. The component is the value the holder
+                // was filled with at this slot when the holder is a Fill, and the tuple type's member
+                // when it is a value of tuple type the body received rather than built.
+                const camel::runtime::GCNode *holderNode = function->node(holder);
+                const auto holderParts                  = function->withInputsOf(holder);
+                Type *slotSpace                         = nullptr;
+                if (holderNode != nullptr && holderNode->kind == rt::GCNodeKind::Fill &&
+                    body->value < holderParts.size()) {
+                    slotSpace = cotangentTypeOf(holderParts[body->value]);
+                } else if (const auto *holderTuple =
+                               holderNode != nullptr
+                                   ? dynamic_cast<const camel::core::type::TupleType *>(
+                                         holderNode->dataType())
+                                   : nullptr;
+                           holderTuple != nullptr && body->value < holderTuple->size()) {
+                    slotSpace = cotangentTypeOfType(holderTuple->types()[body->value]);
+                }
+                if (slotSpace == nullptr) {
+                    refuse(TransposeRefusalCause::Component);
+                    os << " node=" << ref << " holder=" << holder << " slot=" << body->value
+                       << '\n';
+                    return false;
+                }
                 gc_node_ref_t &slot = slots[body->value];
-                slot = accumulate(slot, cotangent[ref]);
+                slot = accumulate(slotSpace, slot, cotangent[ref]);
                 hasCotangent[holder] = true;
                 break;
             }
@@ -2427,13 +2565,25 @@ bool buildTransposeMember(
                     }
                     const gc_node_ref_t part =
                         i < found->second.size() ? found->second[i] : rt::kInvalidNodeRef;
+                    if (part != rt::kInvalidNodeRef) {
+                        addCotangent(parts[i], part);
+                        continue;
+                    }
                     // The zero of a slot nobody read is the zero of that component's own cotangent
-                    // space, read from the component's type (`Tangent<f32>` is `f32`).
-                    addCotangent(
-                        parts[i],
-                        part == rt::kInvalidNodeRef
-                            ? zeroIn(cotangentTypeOf(parts[i], Type::Float64()))
-                            : part);
+                    // space, read from the component's type (`Tangent<f32>` is `f32`) and built by
+                    // that space's own zero (`zeroOfSpaceOf`): a component with no cotangent space
+                    // has no zero to write, so the slot is refused rather than handed a `float`.
+                    Type *const componentType = cotangentTypeOf(parts[i]);
+                    const gc_node_ref_t zero   = zeroOfSpaceOf(
+                        draft, componentType,
+                        parts[i] < forwardOf.size() ? forwardOf[parts[i]] : rt::kInvalidNodeRef);
+                    if (componentType == nullptr || zero == rt::kInvalidNodeRef) {
+                        os << "TRANSPOSE function=" << function->name() << " component-zero node="
+                           << parts[i] << " slot=" << i << " no-cotangent-zero\n";
+                        complete = false;
+                        break;
+                    }
+                    addCotangent(parts[i], zero);
                 }
                 break;
             }
@@ -2465,8 +2615,19 @@ bool buildTransposeMember(
                     os << " arms=" << arms.size() << '\n';
                     return false;
                 }
+                // The join carries whichever arm's cotangent came back, so its value type is the
+                // cotangent of the value it joins -- read from the source node, which is the value
+                // both arms are cotangents of. A join created as `float` and then fed one `f32` arm
+                // and one `f32` arm breaks the graph's own edge invariant ("arm 0 yields a f32, the
+                // JOIN is a float"), which is a graph the run cannot carry.
+                Type *const joinType = cotangentTypeOf(ref);
+                if (joinType == nullptr) {
+                    refuse(TransposeRefusalCause::Join);
+                    os << " node=" << ref << " no-cotangent-space\n";
+                    return false;
+                }
                 const gc_node_ref_t join = draft.addJoinNode(
-                    Type::Float64(), rt::kInvalidNodeRef, static_cast<rt::gc_cnt_t>(arms.size()));
+                    joinType, rt::kInvalidNodeRef, static_cast<rt::gc_cnt_t>(arms.size()));
                 const gc_node_ref_t brch = draft.addBrchNode(
                     Type::Int64(), join, static_cast<rt::gc_cnt_t>(arms.size()));
                 // The join's norm input is the branch; the branch's own norm input is the
@@ -2574,8 +2735,10 @@ bool buildTransposeMember(
                 // The arms answer one cotangent each, and the join is theirs to merge. The transposed
                 // function's answer is one cotangent per parameter the transposition answers for, so
                 // the join's single value is wrapped in the one-slot tuple the signature promises --
-                // the shape every arity has (author, 2026-11-02 11:30).
-                result = tupleOf({join}, {cotangentTypeOf(join, Type::Float64())}).first;
+                // the shape every arity has (author, 2026-11-02 11:30). The member type is the one
+                // the join was typed with above: asking the source graph for it by a *draft* ref
+                // would read whatever source node sits at that index, which is a different value.
+                result = tupleOf({join}, {joinType}).first;
                 break;
             }
             case rt::GCNodeKind::Oper: {
@@ -2662,6 +2825,18 @@ bool buildTransposeMember(
                 // question (`chooseRuleAmong`'s `answered`), because a position the law is never
                 // handed cannot make the law wrong.
                 const gc_node_ref_t ct = cotangent[ref];
+                // The step's cotangent space, asked once and asked of the node's own type: the law
+                // is chosen at it and the right side is expanded at it. A node that holds a
+                // cotangent has a tangent space (`addCotangent` asked), so a null here is the
+                // walk's own defect and not the program's -- refused rather than answered with a
+                // `float` the law would then be instantiated at.
+                Type *const stepCotangentType = cotangentTypeOf(ref);
+                if (stepCotangentType == nullptr) {
+                    os << "TRANSPOSE function=" << function->name() << " node=" << ref
+                       << " no-cotangent-space\n";
+                    refuse(TransposeRefusalCause::Signature);
+                    return false;
+                }
                 std::vector<Type *> operandTypes;
                 std::vector<bool> answered;
                 operandTypes.reserve(inputs.size());
@@ -2679,7 +2854,7 @@ bool buildTransposeMember(
                         const camel::runtime::GCNode *at = function->node(node);
                         return at != nullptr ? at->dataType() : nullptr;
                     },
-                    cotangentTypeOf(ref, Type::Float64()), &answered);
+                    stepCotangentType, &answered);
                 if (choice.rule.empty()) {
                     // The key has a law and the law was written for another shape: not `Rule`. That
                     // sentence ("the rule table has no rule for a step of this body") describes a
@@ -2756,7 +2931,7 @@ bool buildTransposeMember(
                     std::string why;
                     bool noInstance = false;
                     const gc_node_ref_t answer = ruleCotangent(
-                        chosenRule, inputs, i, ct, cotangentTypeOf(ref, Type::Float64()), why,
+                        chosenRule, inputs, i, ct, stepCotangentType, why,
                         noInstance);
                     if (answer == rt::kInvalidNodeRef) {
                         // The same two facts as the arm walk above, told apart the same way: the law
@@ -2933,14 +3108,24 @@ bool buildTransposeMember(
                 // that array to a number -- the same read that took the process down when two
                 // elements of one array were summed (design principles 9.9).
                 std::vector<gc_node_ref_t> ctPorts;
-                std::vector<Type *> stateCotangentTypes(stateCount, Type::Float64());
+                std::vector<Type *> stateCotangentTypes;
+                stateCotangentTypes.reserve(stateCount);
                 for (size_t i = 0; i < stateCount; ++i) {
                     const size_t portIndex = 1 + i;
-                    Type *const type       = portIndex < regionPorts.size()
-                                                 ? cotangentTypeOf(regionPorts[portIndex],
-                                                                   Type::Float64())
-                                                 : Type::Float64();
-                    stateCotangentTypes[i] = type;
+                    // The state's cotangent space, read from the state's own port. A state port
+                    // this loop does not have is a count that disagrees with the region's ports --
+                    // the walk's own defect, not the program's -- so it refuses rather than typing
+                    // the port `float`.
+                    Type *const type =
+                        portIndex < regionPorts.size() ? cotangentTypeOf(regionPorts[portIndex])
+                                                       : nullptr;
+                    if (type == nullptr) {
+                        os << "TRANSPOSE function=" << function->name() << " node=" << ref
+                           << " state=" << i << " no-cotangent-space\n";
+                        refuse(TransposeRefusalCause::State);
+                        return false;
+                    }
+                    stateCotangentTypes.push_back(type);
                     ctPorts.push_back(draft.addPortNode(type, draft.allocateRuntimeSlot(type)));
                     newPorts.push_back(ctPorts.back());
                 }
@@ -3068,7 +3253,9 @@ bool buildTransposeMember(
                     const gc_node_ref_t part =
                         i < back.size() ? back[i] : rt::kInvalidNodeRef;
                     regionParts.push_back(
-                        part == rt::kInvalidNodeRef ? zeroOf(regionPorts[1 + i]) : part);
+                        part == rt::kInvalidNodeRef && 1 + i < regionPorts.size()
+                            ? zeroOf(regionPorts[1 + i])
+                            : part);
                     componentTypes.push_back(stateCotangentTypes[i]);
                 }
                 for (const auto &entry : caught) {
@@ -3076,15 +3263,22 @@ bool buildTransposeMember(
                     // that value's tangent space -- the same answer the state ports above ask. A
                     // `float` port holding an array was this site's lie: `:op/add_d` on an array
                     // reads it as a number.
-                    Type *const accType = cotangentTypeOf(entry.first, Type::Float64());
+                    Type *const accType = cotangentTypeOf(entry.first);
+                    if (accType == nullptr) {
+                        os << "TRANSPOSE function=" << function->name() << " node=" << ref
+                           << " escape=" << entry.first << " no-cotangent-space\n";
+                        refuse(TransposeRefusalCause::State);
+                        return false;
+                    }
                     const gc_node_ref_t accPort =
                         draft.addPortNode(accType, draft.allocateRuntimeSlot(accType));
                     newPorts.push_back(accPort);
                     // The round adds what escaped to the sum the round before handed on. One
                     // accumulator per value, not per product: the products that call one value
                     // add into the same sum when they are delivered (the collection above). The sum
-                    // is the type's own: `:tangent/add_arr` for an array, `:op/add_d` for a number.
-                    regionParts.push_back(accumulate(accPort, entry.second.cotangent));
+                    // is the type's own: `:tangent/add_arr` for an array, the scalar's own addition
+                    // for a number.
+                    regionParts.push_back(accumulate(accType, accPort, entry.second.cotangent));
                     componentTypes.push_back(accType);
                 }
                 gc_node_ref_t regionResult = regionParts.front();
@@ -3132,10 +3326,13 @@ bool buildTransposeMember(
                                                    ? slots->second[i]
                                                    : rt::kInvalidNodeRef;
                     // A slot nobody read is zero: that state's value pulls nothing back into it. The
-                    // zero is written in the state's own cotangent space, which is the type the port
-                    // above was made at -- an `f32` state's seed is an `f32` zero.
+                    // zero is the zero of the state's own cotangent space, which is the type the port
+                    // above was made at -- an `f32` state's seed is an `f32` zero, built by that
+                    // space's own zero and not by a `float` constant.
                     loopNorm.push_back(
-                        slot == rt::kInvalidNodeRef ? zeroIn(stateCotangentTypes[i]) : slot);
+                        slot == rt::kInvalidNodeRef
+                            ? zeroOfSpaceOf(draft, stateCotangentTypes[i], rt::kInvalidNodeRef)
+                            : slot);
                 }
                 for (size_t i = 0; i < caught.size(); ++i) {
                     // Every sum starts at zero: a value a round never reaches adds nothing. The sum
@@ -3143,9 +3340,10 @@ bool buildTransposeMember(
                     // that component's own cotangent space (`componentTypes`, which the answer's
                     // components were typed from).
                     const size_t componentAt = stateCount + i;
-                    loopNorm.push_back(zeroIn(componentAt < componentTypes.size()
-                                                  ? componentTypes[componentAt]
-                                                  : nullptr));
+                    loopNorm.push_back(zeroOfSpaceOf(
+                        draft, componentAt < componentTypes.size() ? componentTypes[componentAt]
+                                                                   : nullptr,
+                        rt::kInvalidNodeRef));
                 }
                 draft.setNormInputs(loopNode, std::span<const gc_node_ref_t>(loopNorm));
                 // The With inputs of a loop are the results of its parts and its round: the round is
@@ -3164,10 +3362,15 @@ bool buildTransposeMember(
                     // slots -- `answer=per-target` -- and nothing is added across values.
                     const auto component = [&](uint32_t index) {
                         // The component read is typed like the member it reads: a sum over an array
-                        // is an array, and reading it as a float is the same read `add_d` made.
-                        Type *const componentType = index < componentTypes.size()
-                                                        ? componentTypes[index]
-                                                        : Type::Float64();
+                        // is an array, and reading it as a float is the same read `add_d` made. A
+                        // component index this region has no type for is a count that disagrees
+                        // with the parts the region returns -- the walk's own defect -- so it
+                        // answers no node rather than a `float` read.
+                        Type *const componentType =
+                            index < componentTypes.size() ? componentTypes[index] : nullptr;
+                        if (componentType == nullptr) {
+                            return rt::kInvalidNodeRef;
+                        }
                         const gc_node_ref_t part = draft.addAccsNode(componentType, index);
                         draft.setNormInputs(part, std::span<const gc_node_ref_t>(&loopNode, 1));
                         return part;
@@ -3209,8 +3412,11 @@ bool buildTransposeMember(
                     const camel::runtime::GCNode *const start =
                         stateInitials[0] < nodeCount ? function->node(stateInitials[0]) : nullptr;
                     if (start != nullptr && start->kind == rt::GCNodeKind::Port) {
-                        result =
-                            tupleOf({loopNode}, {cotangentTypeOf(loopNode, Type::Float64())}).first;
+                        // The member type is the loop's own (`loopType`: the state's cotangent
+                        // space, or the tuple of the states' and the sums' spaces). Asking the
+                        // *source* graph for it by the draft's ref would read whatever source node
+                        // sits at that index -- a different value with a type of its own.
+                        result = tupleOf({loopNode}, {loopType}).first;
                     } else {
                         // Nothing reaches that value, so nothing the loop did can reach a parameter,
                         // so the loop answers the zero of its cotangent space: the same reading the
@@ -3552,8 +3758,11 @@ bool buildTransposeMember(
                 gc_node_ref_t calleeValue = rt::kInvalidNodeRef;
                 if (isCall) {
                     if (argumentAt == 1) {
-                        // Written in place: a FUNC node, whose type is the call's value.
-                        calleeValue = draft.addFuncNode(transposed, Type::Float64());
+                        // Written in place: a FUNC node, whose type is the call's value -- which is
+                        // the member's own type `calleeType`, the same one the static function
+                        // value below is written at. A `float` written here is a call whose callee
+                        // value is typed `float` while the call's answer is not.
+                        calleeValue = draft.addFuncNode(transposed, calleeType);
                         callArgs.push_back(calleeValue);
                     } else {
                         // Taken as a value: it has to be a function value, a static function of the
@@ -3610,6 +3819,15 @@ bool buildTransposeMember(
                 os << " node=" << ref << '\n';
                 return false;
             }
+        }
+        if (cotangentArithmeticMissing) {
+            // A value read twice whose cotangent space registers no addition: the sums it needs are
+            // not a thing its type has, so this member answers no cotangent. Refused here rather
+            // than at the first failed sum, because one reading of the cause is what a reader
+            // greps and the walk may have gone on to place other cotangents meanwhile.
+            refuse(TransposeRefusalCause::NoCotangentArithmetic);
+            os << '\n';
+            return false;
         }
         if (result == rt::kInvalidNodeRef) {
             // The answer is one cotangent per parameter the transposition answers for, in the order
@@ -3675,48 +3893,32 @@ bool buildTransposeMember(
                     partTypes.push_back(space.space);
                     continue;
                 }
-                // The question is which space, not which object: a `float` cotangent is the one whose
-                // tangent space *is* the float type, and asking by pointer would silently answer "not
-                // float" for any float type that is not the interned one. A narrow float is its own
-                // space too (`Tangent<f32>` is `f32`), so the zero is written in the width the space
-                // names and the slot is typed with that same space: an `f32` slot holding a `float`
-                // zero would be the reinterpretation this whole file refuses.
-                if (portType == nullptr ||
-                    space.space->code() == camel::core::type::TypeCode::Float64 ||
-                    space.space->code() == camel::core::type::TypeCode::Float32) {
-                    parts.push_back(zeroIn(portType == nullptr ? nullptr : space.space));
-                    partTypes.push_back(portType == nullptr ? Type::Float64() : space.space);
-                    continue;
+                // The zero is the parameter's own cotangent space's (`zeroOfSpaceOf`), built from the
+                // value the walk forwarded for that parameter when there is one and from the type's
+                // stated extents otherwise -- never from a source ref written into a node of this
+                // graph. An `f32` slot is an `f32` zero; an array slot is the space's own
+                // `:tangent/zeros_arr` of that array's shape.
+                //
+                // A parameter with no tangent space answers the empty member `()` above, so a null
+                // space here is a signature that admitted a parameter nothing can answer for: a
+                // refusal by name, not a `float` member the signature never promised.
+                if (space.space == nullptr) {
+                    refuse(TransposeRefusalCause::UnreadParameter);
+                    os << " port=" << ports[port] << " at=" << at << " no-cotangent-space\n";
+                    return false;
                 }
-                if (space.space->code() == camel::core::type::TypeCode::Array) {
-                    // An array parameter the backward half never read. Its cotangent is the
-                    // zero of its own space, and the zero of an array's tangent space is the
-                    // array of zeros built from the value's shape -- `:tangent/zeros_arr`,
-                    // the operator the pullback already builds for the same purpose
-                    // (`idxArrayVjp`, builtin/operators/derivative.cpp). The parameter's port
-                    // carries the value the shape comes from, so the zero is built where the
-                    // value already stands. A zero cotangent is the identity of the sum the
-                    // pullback takes, so answering it is the same as answering nothing, in the
-                    // type the slot promises; refusing the call instead stops a function that
-                    // is written correctly -- providing the parameter is read by the forward
-                    // half, which is why a parameter with no tangent space was already let
-                    // through above.
-                    const gc_node_ref_t zeros =
-                        draft.addOperNode(space.space, nullptr, ":tangent/zeros_arr");
-                    draft.setNormInputs(zeros, std::span<const gc_node_ref_t>(&ports[port], 1));
-                    parts.push_back(zeros);
-                    partTypes.push_back(space.space);
-                    continue;
+                const gc_node_ref_t zero = zeroOfSpaceOf(
+                    draft, space.space,
+                    ports[port] < forwardOf.size() ? forwardOf[ports[port]] : rt::kInvalidNodeRef);
+                if (zero == rt::kInvalidNodeRef) {
+                    refuse(TransposeRefusalCause::UnreadParameter);
+                    os << " port=" << ports[port]
+                       << " type=" << (portType != nullptr ? portType->toString() : "?")
+                       << " no-cotangent-zero\n";
+                    return false;
                 }
-                // A value with a cotangent space and no cotangent: the graph never read it. A zero of
-                // its own space would have to be built from the value's shape, which this walk does
-                // not carry for anything but a number; refuse by name rather than answer a `float`
-                // where an array is promised.
-                refuse(TransposeRefusalCause::UnreadParameter);
-                os << " port=" << ports[port]
-                   << " type=" << (portType != nullptr ? portType->toString() : "?")
-                   << '\n';
-                return false;
+                parts.push_back(zero);
+                partTypes.push_back(space.space);
             }
             if (!parts.empty()) {
                 std::vector<size_t> slots;
