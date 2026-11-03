@@ -11,6 +11,7 @@
 #include "builder_support.h"
 
 #include "camel/compile/gir/static_function.h"
+#include "camel/core/data/composite/array.h"
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/rtdata/string.h"
@@ -1685,6 +1686,34 @@ void Builder::rejectLiteralValue(
     throw BuildAbortException();
 }
 
+namespace {
+
+/// Why an array literal cannot be an array type that states one dimension: the length it writes.
+/// This decides nothing -- `arrayLiteralFitsShape` already decided, and the elements are each
+/// reported by whoever builds the value -- it says which side is what, because a rank-one length
+/// that does not match used to arrive here as the fallback sentence "the value cannot become that
+/// type", which names neither the length nor the side that wrote it, for a literal whose elements
+/// all fit.
+std::string arrayLengthReason(const data_ptr_t &data, Type *type) {
+    const auto *stated  = type != nullptr ? tt::as_ptr<ArrayType>(type) : nullptr;
+    const auto written  = data != nullptr ? std::dynamic_pointer_cast<ArrayData>(data) : nullptr;
+    if (stated == nullptr || written == nullptr) {
+        return {};
+    }
+    const std::span<const ExtentForm> extents = stated->extents();
+    if (extents.size() != 1 || !extents.front().isConstant()) {
+        return {};
+    }
+    const int64_t count = static_cast<int64_t>(written->raw().size());
+    if (count == extents.front().constant()) {
+        return {};
+    }
+    return "the literal writes " + std::to_string(count) + " element(s) and the type states " +
+           std::to_string(extents.front().constant());
+}
+
+} // namespace
+
 void Builder::rejectLiteralData(
     const data_ptr_t &data, Type *type, camel::source::origin_id_t where,
     const GCT::node_ptr_t &written, camel::source::origin_id_t writtenAt,
@@ -1696,6 +1725,9 @@ void Builder::rejectLiteralData(
         reason = reasonGiven;
     } else if (const std::string notFit = literalNotFitReason(data, type); !notFit.empty()) {
         reason = notFit;
+    } else if (const std::string lengthMismatch = arrayLengthReason(data, type);
+               !lengthMismatch.empty()) {
+        reason = lengthMismatch;
     } else if (data->type()->isPrimitive() && isIntegerType(type)) {
         // A decimal literal in an integer type: `int(1.9)` loses the fraction, `int(1.0e30)`
         // is out of the range.

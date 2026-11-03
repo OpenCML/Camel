@@ -4545,13 +4545,22 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
 
 namespace {
 
-/// Whether an array position states a rank of its own: a shape of two or more dimensions, all
-/// written as constants (`f32[2, 2]`). Those are the positions a nested literal is one array of
-/// (design principles 5.1, 5.4); a shape with a dimension left open, or a rank of one, keeps the
-/// ordinary build.
+/// Whether an array position states a rank of its own: a shape whose dimensions are all written
+/// as constants (`f32[2, 2]`, `f32[3]`). Those are the positions a literal is one array of
+/// (design principles 5.1, 5.4); a shape with a dimension left open keeps the ordinary build.
+///
+/// A rank of one is a shape too. It used to be left out here, and that was the whole difference
+/// between `let v: float[3] = [1.0, 2.0, 3.0]` (which built the literal into the stated shape)
+/// and `[1.0, 2.0, 3.0] as float[3]` (which did not: the ordinary build made a `float[]`, and the
+/// `as` path then refused it on `castSafety` with "the value cannot become that type" -- a value
+/// that fits, refused by the one position that could not build it). Nothing about the literal's
+/// own rank decides this: the position's shape does, and `[a, b, c]` in a `f32[3]` position is
+/// that shape however it is spelled. The length it writes is checked here, in the same place a
+/// rank-two literal's is, so a mismatch names the extent instead of falling to a conversion that
+/// could not say why.
 bool statesARank(const ArrayType *type) {
     const std::span<const ExtentForm> extents = type->extents();
-    if (extents.size() < 2) {
+    if (extents.empty()) {
         return false;
     }
     for (const ExtentForm &extent : extents) {
@@ -7371,10 +7380,19 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
     if (signature) {
         std::vector<std::string> used;
         collectTypeVars(built, used);
+        // A `rule`'s head is written once and its sides are three declarations of the compiler's
+        // making, so "the signature" of a rule side is not where the rule's parameters are written:
+        // `mul_tensor_t::<T, X, W>` names `T` only on its right side (`(ct: T[..])`), which is the
+        // author's line and cannot be written any other way. What the rule writes is carried here
+        // from the rule's own text (`src/parse/ast/builder.cpp`, `visitRuleDecl`), so the check
+        // reads the whole declaration and not the one side it happens to be building.
+        const auto &acrossTheRule =
+            ast->loadAs<AST::FuncTypeLoad>()->typeParamsWrittenElsewhere();
         pendingUnusedHeadVars_.clear();
         for (const std::string &name : declaredTypeVars_) {
             if (std::find(used.begin(), used.end(), name) == used.end() &&
-                !writtenHeadVars_.contains(name)) {
+                !writtenHeadVars_.contains(name) &&
+                std::find(acrossTheRule.begin(), acrossTheRule.end(), name) == acrossTheRule.end()) {
                 pendingUnusedHeadVars_.push_back(name);
             }
         }

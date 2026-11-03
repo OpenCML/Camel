@@ -2428,7 +2428,7 @@ rounded once into the element type. `keepdims` leaves the reduced axis as an ext
 #### `sum_to`
 
 ```camel
-sum_to: (t: T[..], like: T[..]) => T[..] when is_float::<T>()
+sum_to: (t: T[..], like: S) => S when is_float::<T>()
 ```
 
 `t` read at the shape `like` states, which is the shape of the answer. Two shapes that are
@@ -2451,7 +2451,7 @@ broadcast product answers `sum_to(ct * other, operand)`), and its own VJP broadc
 
 - Pure.
 - Example: `sum_to([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 1.0)` gives `10.0`
-- Example: `sum_to([1.0, 2.0, 3.0] as float[3], [0.0, 0.0, 0.0] as float[3])` gives `[1.0, 2.0, 3.0]`
+- Example: `sum_to([1.0, 2.0, 3.0] as float[], [0.0, 0.0, 0.0] as float[])` gives `[1.0, 2.0, 3.0]`
 
 #### `mean_axis`
 

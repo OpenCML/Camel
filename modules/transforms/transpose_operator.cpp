@@ -257,6 +257,28 @@ case TransposeRefusalCause::RuleShape: {
         }
         return answer;
     }
+    case TransposeRefusalCause::RuleRanks: {
+        // The neighbour of the sentence above, and the one that used to be answered with the
+        // builder's own words ("No matching function found for argument types"), which name a helper
+        // rather than the law and never say the rank. Here the law's pattern *took* the operands: the
+        // law was chosen, and its body -- the cotangent helpers a law that serves several shapes
+        // writes, one overload per shape -- has nothing for the ranks this step has. So the sentence
+        // names the law, the operator it is filed under, and the ranks, because those three are
+        // what a reader edits or writes a case for.
+        std::string answer = "the law ";
+        answer += refusal.rule.empty() ? std::string("the index filed") : "`" + refusal.rule + "`";
+        answer += " has no cotangent for ";
+        answer += refusal.uri.empty() ? std::string("this step") : "`" + refusal.uri + "`";
+        answer += " at these operands";
+        if (!refusal.ranks.empty()) {
+            answer += ": their ranks are " + refusal.ranks;
+        }
+        answer += ", and it serves the ranks its cotangents are written for";
+        if (refusal.node.has_value()) {
+            answer += " (node " + std::to_string(*refusal.node) + ")";
+        }
+        return answer;
+    }
     case TransposeRefusalCause::Condition:
         return "a bool condition has no cotangent space, so it carries no derivative";
     case TransposeRefusalCause::Signature:

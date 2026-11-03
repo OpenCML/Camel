@@ -1,0 +1,43 @@
+// The shapes the product's transpose law does not serve, pinned as the reading.
+//
+// `matmul_t` (stdlib/rulesets/transpose.cml) serves the two-matrix product and the two shapes a
+// vector makes with a matrix. What is left out is a product with a batch axis -- rank three and
+// above -- and the vector-vector product whose answer is a number. The ranks are told apart by the
+// cotangent helpers (`ct_of_a` / `ct_of_b`, one overload per shape), so the law is *chosen* and its
+// own body is what has nothing for these operands. The walk refuses that by name, and the two
+// readings say which law, which operator and which ranks:
+//
+//     TRANSPOSE function=split_of_jvp_of_batched_sum_of_product_backward skip=rule-ranks
+//     uri=tensor:matmul rule=matmul_t node=6 position=0 ranks=(3, 2) operands=2
+//     reason=No matching function found for argument types: <> (float[..], float[3, 2, 2], float[2, 2]).
+//
+//     transforms: transpose has no transpose for this function: the law `matmul_t` has no cotangent
+//     for `tensor:matmul` at these operands: their ranks are (3, 2), and it serves the ranks its
+//     cotangents are written for (node 6).
+//
+// `rule-ranks` and not `rule-shape`: that word means the law's *pattern* rejected the operand types
+// and nothing was built, which is what this reading was while the law named its ranks in the pattern
+// (commit `5a2fed990`). Here the pattern took them -- a rule is instantiated with three type
+// parameters, the cotangent's element type and the two operand types, so its head is type variables
+// and the shapes live in the helpers -- and the law's body is what declines. The two want different
+// edits: a wider pattern, or the missing shape's law. Until 2026-11-03 the second arrived as
+// `skip=cotangent-needs-a-value` carrying the builder's own "No matching function" sentence, which
+// names a helper instead of the law and says nothing about a rank.
+//
+//     camel test/cases/compile/transforms/matmul_transpose_rank_three.cml
+import { matmul, sum } from tensor
+import { vjp } from vjp
+
+/// A batched product: a (3, 2, 2) operand times a matrix, which the law does not take.
+func batched_sum_of_product(a: float[3, 2, 2], b: float[2, 2]): float {
+    return sum(matmul(a, b))
+}
+
+func main(): int sync {
+    let a = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]], [[9.0, 10.0], [11.0, 12.0]]] as float[3, 2, 2]
+    let b = [[0.5, 0.25], [0.125, 1.0]] as float[2, 2]
+    let (value, pullback) = vjp(batched_sum_of_product)(a, b)
+    let (da, db) = pullback(1.0)
+    `matmul_t rank_three value={} dL/da={} dL/db={}`->format<value, da, db>->println
+    return 0
+}
