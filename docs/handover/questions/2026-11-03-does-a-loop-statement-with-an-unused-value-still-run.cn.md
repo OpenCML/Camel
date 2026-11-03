@@ -374,3 +374,26 @@ walks through it`），它把"链尾"从语句节点改成了**位门**，五处
 与角色，确认它是不是块值门，再动那一处连边。
 
 **这一轮没有改代码**（探针已存 `D:\Temp\p02-probe-gate.patch`，源文件已还原）。
+### 三个新读数：这个门**谁都不读**
+
+```
+[P02GATE] from=30  gate=31  kind=13 place=0 origin=0 dataIn=[29 ] dataUsers=[] withUsers=[] ctrlUsers=[] syncUsers=[] directData=0
+[P02GATE] from=73  gate=74  kind=13 place=0 origin=0 dataIn=[72 ] dataUsers=[] withUsers=[] ctrlUsers=[] syncUsers=[] directData=0
+[P02GATE] from=115 gate=116 kind=13 place=0 origin=0 dataIn=[114] dataUsers=[] withUsers=[] ctrlUsers=[] syncUsers=[] directData=0
+```
+
+- **origin = 0**（`kInvalidOriginId`：造它的时候没有源位置，是建图器自己的中间节点）；
+- 四种使用者**全空**：数据 0、上下文（`With`）0、控制 0、同步 0 —— 这不是"块值门没人读"，是**一个谁都不读、
+  谁也不等的死端**；它唯一的一条边是**进来的**（`from`=30/73/115 的 ctrl 或 sync 使用者就是它）；
+- `dataIn` = 29/72/114（门读的那个值），与撞上它的语句不是同一个节点。
+
+### 判断：走不了 1，也走不了 2 —— `With` 那条边根本没写
+
+- 第 1 条（没人读就不造门）不成立：这个门不是"多造的一个位"，它是链尾；删了它，值 29/72/114 仍然没人读，
+  语句照样被判"没人用"，32 条不会变绿。
+- 第 2 条（把消费者连到门上）也不成立：**消费者不存在**——`withUsers` 为空，说明
+  `visitLoopNode` 里那句 `linkNodes(LinkType::With, bodyPart->output, loopNode)` 没有落到这个门身上。
+  也就是说 `bodyPart->output` 很可能**不是** 31/74/116，而是别的东西，于是循环没有读它。
+
+**停手报作者**（按"两者都不是就停手"）。下一支探针要打的是：`bodyPart->output` 的 id 与 kind、循环节点的
+`with` 输入列表、以及 29/72/114 各自的使用者——这三格决定 `With` 是在哪一步丢的。
