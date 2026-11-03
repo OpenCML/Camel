@@ -1,0 +1,35 @@
+// Two levels of nesting: `split(jvp(f))` where `f` calls `g` and `g` calls `h`. The cut of `jvp_of_f`
+// answers f's call with `split_of_jvp_of_g_forward`; that half was built by a nested cut, which had
+// to answer g's call with `split_of_jvp_of_h_forward` -- a cut of a cut.
+//
+// What travel are the graphs a nested build **made**. The two halves of `jvp_of_h` are graphs that
+// build *adopted*, and `Program::adoptMissing` copies only the graphs the program it reads owns, so
+// the outer program holds one level and not two: its call to the deeper forward half named a graph
+// the program does not have, and the VM stopped at `runtimeTarget != nullptr` ("a direct call names
+// a function whose graph is not in the program's graph table").
+//
+// The reading is the refusal, word for word: the call, the graph whose own cut stands on another
+// (`jvp_of_h`), why only one level travels, and the position of the body the calls stand in.
+// `split_call_one` is the same shape one level shallower, and it is cut.
+import rulesets.jvp
+import { jvp, split } from transforms
+
+func h(x: float): float {
+    return x * 2.0
+}
+
+func g(x: float): float {
+    return h(x) + 1.0
+}
+
+func f(x: float): float {
+    return g(x) * 3.0
+}
+
+func main(): int sync {
+    let fwd = split(jvp(f))
+    let (y, lin) = fwd(2.0)
+    println("f y=", y)
+    println("f d=", lin(1.0))
+    return 0
+}

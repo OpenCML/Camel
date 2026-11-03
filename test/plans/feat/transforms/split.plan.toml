@@ -200,3 +200,77 @@ expect_exit = 0
 expect_output_contains = ["proj y= 32.0", "proj d1= 10.0", "proj d2= 11.0", "loop=1 tape=5 invariants=0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# What a **struct** is to the cut, in the two shapes that differ by one thing: whether the body names
+# a member. A struct *port* is a port like any other -- `Tangent<Point>` is the struct of the members'
+# tangents, so the two halves take one `Point` each and the halving of the lifted signature is right
+# -- and a struct *field read* is a read by **name**, which is not a place either half numbers.
+#
+# That second shape used to be lost rather than refused: the copy of an `Accs` node wrote a
+# `TupleIndex` from the payload's `value` and dropped the key, so at run time a `Struct` was indexed
+# as a `Tuple` and the VM stopped at `idx < t->size()` ("Tuple index out of bounds", nodevm.cpp).
+# `jvp` alone answers 11.0 and 4.0 on that program, so the lift was never the defect.
+[[tests]]
+name = "split_struct_port"
+desc = "A struct parameter the body only **passes** (`g(qq: Point) = qq`): the forward half answers the struct it was handed and `lin` answers the struct of the direction's members, so the reading is `{ a: 2.0, b: 3.0 }` and `{ a: 1.0, b: 0.0 }`. `residuals=1` is the parameter's value crossing, which the tangent side needs because it reads the tangent beside it. This entry is the guard for the shape the field-read refusal is *not* about: a struct port is cut, and a cut that stopped taking one would fail here first."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_struct_port.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["forward y= { a: 2.0, b: 3.0 }", "lin dp= { a: 1.0, b: 0.0 }", "type=(Point) => (Point, (Point) => Point pure) pure residuals=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "split_struct_field_read"
+desc = "A struct parameter whose member the body **names** (`g(qq: Point) = qq.a * 4.0 + qq.b`): refused by name at the read, with the member's key and the reason a half cannot copy it -- a struct's member is read by name and the halves number a tuple's places. Pinned word for word because the day the key can be copied this entry has to fail and say so: the numbers it would then print are `forward y= 11.0` and `lin dp= 4.0`, the two `jvp` alone already answers. The refusal carries the position the body is written at and names the `split` call beside it; the lift's own line above it (`lift value= 11.0 tangent= 4.0`) is what separates 'the lift is right' from 'the cut lost the graph'."
+kind = "negative"
+case = "../../../cases/transforms/split/split_struct_field_read.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["lift value= 11.0  tangent= 4.0", "transforms: split does not copy a field of a struct, read by name", "a struct's member is read by its **name**", "split_struct_field_read.cml:17:8"]
+expect_stderr_contains = ["REINTERP split function=jvp_of_g skip=forward construct=a field of a struct, read by name"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# A callee whose parameter has no tangent space, which is where the second half's **argument
+# arithmetic** was wrong rather than merely unsupported: `Tangent<int> = ()`, the lifted callee
+# declares `(int, float, (), float)`, its backward half declares one port (the float's tangent), and
+# the cut handed it the slot's `()` as well -- `Runtime indirect call norm-arity mismatch: caller
+# graph 'split_of_jvp_of_g_backward' ... has 2 args, target graph 'split_of_jvp_of_widen_backward'
+# has 1 norm ports`. The slot is now dropped by the callee's own signature (`tangentArgumentsOf`),
+# the same list `buildSplitGraph` numbers the backward ports from.
+[[tests]]
+name = "split_int_parameter_slot"
+desc = "`split` of a lift whose body calls a function with an `int` parameter (`widen(n: int, x: float)`), so the callee's lifted list has the `()` slot `Tangent<int> = ()` writes. The reading is the cut's own numbers -- 7.0 for `widen(2, 2) + 1.0` and 3.0 for its tangent -- and the backward half's type `((), float) => float`: the slot stays in the *type* (the halves keep their places position by position) and is not an argument anyone takes."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_int_parameter_slot.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["lift value= 7.0  tangent= 3.0", "g y= 7.0", "g d= 3.0", "type=(int, float) => (float, ((), float) => float pure) pure residuals=3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# A cut of a cut. `split(jvp(f))` with `f` calling `g` and `g` calling `h`: the cut of `jvp_of_f`
+# answers f's call with the forward half of `jvp_of_g`, and the cut of that half answered g's call
+# with the forward half of `jvp_of_h` -- a pair of graphs the nested build *adopted* and therefore
+# does not own, so the outer program held one level of them and not two. Refused at the call now, by
+# name, instead of built into a program that names a graph it does not have
+# (`runtimeTarget != nullptr`, "a direct call names a function whose graph is not in the program's
+# graph table"). `split_call_one` is the same shape one level shallower and is cut.
+[[tests]]
+name = "split_two_nested_cuts"
+desc = "Two levels of nesting (`f` calls `g`, `g` calls `h`, `split(jvp(f))`): refused at the call to `jvp_of_g`, with the graph whose own cut stands on another (`jvp_of_h`) and the reason -- a nested build adopts the graphs a program *made*, not the ones it adopted, so the deeper pair of halves belongs to neither program the outer build can reach. The position is the body the calls stand in; the two shallower cuts (`jvp_of_h`, `jvp_of_g`) print their lines above it, which is what says the refusal is about the third level and not about a callee whose own cut failed."
+kind = "negative"
+case = "../../../cases/transforms/split/split_two_nested_cuts.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["transforms: split does not copy a call to `jvp_of_g`, whose own cut stands on `jvp_of_h`", "a body whose calls nest twice is a shape this cut does not carry", "split_two_nested_cuts.cml:25:8"]
+expect_stderr_contains = ["REINTERP split function=jvp_of_f skip=callee construct=a call to `jvp_of_g`, whose own cut stands on `jvp_of_h`", "REINTERP split function=jvp_of_g forward="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
