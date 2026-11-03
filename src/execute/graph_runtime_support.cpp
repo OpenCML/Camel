@@ -200,6 +200,15 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         // null tuple (the member `h(x) = loop s = 0.0 for i in [1,2,3,4] do s + 2.0` transposes to,
         // 2026-11-03). The walk repeats because an owner may itself be a member of a region: what a
         // seed brings in can be the owner of another region.
+        //
+        // Measured on 2026-11-03 (`test/plans/feat/compile/transforms.plan.toml`, 84 entries): no
+        // entry needs more than one round -- a seeded result is one the exit walk already had, so no
+        // seed brings in an owner the walk had not reached (the GUARD below is what keeps that true:
+        // an owner in `used` with a result outside it is an error, not a seed). The load-bearing half
+        // of this change is the owner-live condition, and this loop is defensive: it is kept, and not
+        // deleted, so that a graph whose seed does bring in another region's owner walks to the
+        // fixpoint instead of stopping one round short -- but it solves nothing this tree can show
+        // today, and the count above is the reading, not a claim that it will always be one.
         for (bool grew = true; grew;) {
             grew = false;
             std::vector<gc_node_ref_t> seeds;
