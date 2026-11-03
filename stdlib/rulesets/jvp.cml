@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_integer, is_same, is_string, Tangent } from types
-import { exp, matmul, mean_axis, relu, reshape, shape, sigmoid, softmax, sum, take, tanh, where, zeros_like } from tensor
+import { exp, log_softmax, matmul, mean_axis, relu, reshape, shape, sigmoid, softmax, sum, take, tanh, where, zeros_like } from tensor
 import { log, pow } from math
 import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
 
@@ -315,6 +315,13 @@ export rule jvp_mul_tensor::<T>(x: T[..], w: T[..]) when is_float::<T>() {
 /// `d(softmax(x)) = y * (dx - sum(y * dx))` with `y = softmax(x)` over the same axis.
 export rule jvp_softmax::<T>(x: T[..]) when is_float::<T>() {
     softmax<1>(x) => (dx: T[..]) => softmax<1>(x) * (dx - sum<1, true>(softmax<1>(x) * dx))
+}
+/// `d(log_softmax(x)) = dx - sum(exp(y) * dx)` with `y = log_softmax(x)`, the axis (0, the only axis of the
+/// rank-1 input this rule is written for) summed with `keepdims`: the jacobian is `I - 1 pᵀ` with `p = softmax(x)`, so the tangent loses its own axis sum
+/// broadcast back over the axis. `exp(y)` is `p` and is an x-only value, the shape `exp` proved the cut
+/// carries; the axis lives in a `<>` argument, which is the part `softmax` is refused for.
+export rule jvp_log_softmax::<T>(x: T[..]) when is_float::<T>() {
+    log_softmax<0>(x) => (dx: T[..]) => (dx - sum<0, true>(exp(log_softmax<0>(x)) * dx))
 }
 
 /// `d(relu(x)) = dx` where `x > 0`, and zero where it is not: the tangent is the mask multiplied by

@@ -1638,3 +1638,31 @@ expect_stderr_contains = ["rules=jvp_tanh"]
 expect_output_not_contains = ["skip=rule uri=tensor:tanh"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+# `log_softmax` on the D1 difference set: the jacobian is `I - 1 pᵀ`, and the two readings differ by a
+# broadcast, so the whole array is the criterion.
+[[tests]]
+name = "log_softmax_gradient_through_the_engine"
+desc = "The gradient of `sum(log_softmax<1>(x))` through the engine's own rule (`logSoftmaxVjp`, `modules/tensor/ops/reduction_ops.cpp`), whole array on `[1.0, 2.0, 3.0]`: `[0.7299082804888587, 0.2658145868356072, -0.9957228673244649]`. Two wrong laws separate from it without a tolerance: `ct` answers `[1.0, 1.0, 1.0]`, and the cotangent written in the un-transposed direction (`ct - sum(p * ct)`) answers `[3.3306690738754696e-16, 3.3306690738754696e-16, 3.3306690738754696e-16]` -- zero everywhere, because `sum(p) = 1`. Both of those, and the right answer, sum to zero, so a sum is not a criterion here."
+kind = "behavior"
+case = "../../../cases/compile/transforms/log_softmax_gradient_through_the_engine.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["log_softmax engine d=[0.7299082804888587, 0.2658145868356071, -0.9957228673244654]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "log_softmax_gradient_stops_at_split"
+desc = "The same function through the library's `vjp`: the forward half is built with the new rule named (`rules=jvp_log_softmax,jvp_sum`) and the cut then refuses -- `skip=backward construct=a node whose input was not copied uri=- why=an operand of the node is not reachable from the half's exit`, with no `TRANSPOSE` line at all. This is the wall's third boundary: `softmax` refuses a context argument on a forward recomputation, while here the refused call (`sum<0, true>`) recomputes nothing -- its value is a backward-half number and only its `<>` arguments are constants. Pinned as readings, so the day the cut inlines the argument this entry goes red and names what replaced it; the default and its cost are in `docs/handover/questions/2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it.cn.md`."
+kind = "negative"
+case = "../../../cases/compile/transforms/log_softmax_gradient_stops_at_split.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["split does not build this function"]
+expect_stderr_contains = ["skip=backward construct=a node whose input was not copied", "rules=jvp_log_softmax,jvp_sum"]
+expect_output_not_contains = ["TRANSPOSE function="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

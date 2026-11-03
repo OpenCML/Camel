@@ -1,0 +1,43 @@
+// The library's `log_softmax` gradient stops **before** the transposition, at the same sentence that
+// stops `softmax` -- and with one difference that matters: here the call the backward half reproduces
+// does not read a recomputed forward value at all in the part that is refused.
+//
+// The forward half is built, with the new rule named:
+//
+//     REINTERP jvp function=total graph=325 ... rules=jvp_log_softmax,jvp_sum
+//
+// and then the cut refuses, before any `TRANSPOSE` line exists:
+//
+//     REINTERP split function=jvp_of_total skip=backward construct=a node whose input was not copied uri=- why=an operand of the node is not reachable from the half's exit
+//
+// The tangent `jvp_log_softmax` writes is `dx - sum<0, true>(exp(y) * dx)` with `y = log_softmax<0>(x)`.
+// `exp(y)` is an x-only recomputation -- the shape `exp` and `sigmoid` pass the cut with -- so what is
+// left in the refused node is the `sum<0, true>`: a call whose two `<>` arguments (axis `0`, `keepdims`
+// `true`) are constants and whose value is a *backward-half* number. That makes this the wall's third
+// boundary: `softmax` shows a context argument on a forward recomputation, this shows one on a call
+// that recomputes nothing, and both stop with the identical sentence.
+//
+// The question this measures is
+// `docs/handover/questions/2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it.cn.md`,
+// whose default is "inline the constant argument in the backward half" -- the measurement there says the
+// axis is a `context` edge onto a `DATA` node, so the argument is a node the cut can copy.
+//
+// The number the library will have to reproduce is written out element for element in the neighbouring
+// `log_softmax_gradient_through_the_engine.cml`:
+// `[0.7299082804888587, 0.2658145868356071, -0.9957228673244654]` on `[1.0, 2.0, 3.0]`.
+//
+//     camel test/cases/compile/transforms/log_softmax_gradient_stops_at_split.cml
+import { vjp } from vjp
+import { log_softmax, sum } from tensor
+
+/// The same function as the engine case, with the differentiated value as an ordinary parameter.
+func total(x: float[..]): float {
+    return sum(log_softmax<0>(x))
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(total)([1.0, 2.0, 3.0] as float[])
+    let d = pullback(1.0).0
+    `log_softmax library value={} d={}`->format<value, d>->println
+    return 0
+}
