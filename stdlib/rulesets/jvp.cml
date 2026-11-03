@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_integer, is_same, is_string, Tangent } from types
-import { matmul, mean_axis, relu, reshape, softmax, sum, take, where, zeros_like } from tensor
+import { matmul, mean_axis, relu, reshape, shape, softmax, sum, take, where, zeros_like } from tensor
 import { log, pow } from math
 import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
 
@@ -222,12 +222,27 @@ export rule jvp_sum::<T>(xs: T[..]) when is_float::<T>() {
     sum(xs) => (dxs: T[..]) => sum(dxs)
 }
 
-/// `d(mean_axis(xs, axis, keepdims)) = mean_axis(dxs, axis, keepdims)`: a mean is a sum divided by a
-/// count, and neither the count nor the division reads the value, so the tangent of a mean is the
-/// mean of the tangents. It is written as the operator so that the accumulator, the order and the one
-/// rounding are the definition's own (`stdlib/tensor_definitions.cml`).
+/// `d(mean_axis(xs, axis, keepdims)) = dxs * (1 / shape(xs)[axis])`: a mean is a sum divided by the
+/// length of the lane it reduced, and neither the count nor the division reads the value, so the
+/// tangent of a mean is the tangent scaled by that one number.
+///
+/// The scale is written out rather than the operator: `mean_axis(dxs, axis, keepdims)` puts a
+/// three-operand node in the *linear* half, and the transposed walk refuses any node with more than
+/// two normal operands before it looks a rule up (`skip=arity uri=tensor:mean_axis operands=3`), so
+/// `vjp` of a loss that reduces with a mean stopped there. The scale is the same number and one
+/// `mul_tensor`; the trade is the last-place rounding (`dxs * (1/n)` against `sum / n`, which
+/// `stdlib/tensor_definitions.cml` gives the operator), taken for a linear half the walk can turn
+/// around.
+///
+/// The count is read off `xs`, the operand, and not off `dxs` (author's ruling, 2026-11-03 16:15):
+/// a law may read the operands it was handed, and a tangent's shape is a linear value's shape. In
+/// this half the two are the same number -- `dxs` has `xs`'s shape by definition, so no forward
+/// input tells them apart; the transposed half is where they part, because the position `dxs` holds
+/// there is the incoming cotangent, which carries the *reduced* shape. `xs` depends on nothing the
+/// tangent does, so `split` computes the scale in the forward half and carries it as a residual
+/// (`jvp_relu` above writes its mask the same way), and the linear half is only the product.
 export rule jvp_mean_axis::<T>(xs: T[..], axis: int, keepdims: bool) when is_float::<T>() {
-    mean_axis(xs, axis, keepdims) => (dxs: T[..]) => mean_axis(dxs, axis, keepdims)
+    mean_axis(xs, axis, keepdims) => (dxs: T[..]) => dxs * T(1.0 / float(shape(xs)[axis]))
 }
 
 /// `d(reshape(x)) = reshape(dx)`: a reshape moves no element, so the tangent moves with the value.

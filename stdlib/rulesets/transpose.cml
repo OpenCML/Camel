@@ -38,7 +38,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { full, matmul, mean_axis, numel, ones_like, relu, shape, subtract, sum, sum_to, take, transpose, where, zeros_like } from tensor
+import { full, matmul, mean_axis, ones_like, relu, shape, subtract, sum, sum_to, take, transpose, where, zeros_like } from tensor
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
@@ -382,22 +382,24 @@ export rule take_t::<T>(t: T[..], indices: int[]) {
 // (`stdlib/rulesets/jvp.cml`, the `reshape`/`softmax` pair, says the same thing at the left side).
 //
 // The law: the lane's mean spreads its cotangent back over exactly the elements it averaged, so
-// every position of `xs` that fed lane `k` gets `ct[k] / lane length`. `ones_like(xs)` is the shape
-// the broadcast needs, and `numel(xs) / numel(ct)` is the lane length -- the count the average
-// divided by, read off the two shapes rather than written down.
+// every position of `xs` that fed lane `k` gets `ct[k] * (1 / shape(xs)[axis])`. `ones_like(xs)` is
+// the shape the broadcast needs, and `shape(xs)[axis]` is the lane length -- the count the average
+// divided by, read off the **operand**. It used to be `numel(xs) / numel(ct)`, and the second half
+// of that reads the cotangent's shape: `ct` is a linear value, a law may read only the operands the
+// node was handed (author's ruling, 2026-11-03 16:15), and `dxs`'s shape is not one of them.
+//
+// The right side is written inline and names no helper: a helper is a call in the graph the
+// backward walk has to transpose, and a call with no transpose of its own stops the walk
+// (`skip=call-no-transpose`, measured on `rulesets.jvp::pow_tangent`). What it writes is one
+// `mul_tensor`, whose scalar shape `mul_tensor_t` above already serves.
 //
 // The left side names three values, and the transposed walk asks a cotangent of each position that
 // wants one: `axis` is an `int` and `keepdims` a `bool`, and neither has a tangent space, so the
 // right side answers one value -- for `xs` -- and nothing for the other two
 // (`camel/core/tangent_space.h`).
 
-/// The cotangent of a lane-mean: `ct` spread back over the lane it was averaged from.
-func mean_axis_cotangent::<T>(xs: T[..], ct: T[..]): T[..] when is_float::<T>() {
-    let lanes = float(numel(xs)) / float(numel(ct))
-    return ones_like(xs) * (ct / lanes)
-}
-
 /// The transpose of `mean(xs, axis, keepdims)`: the cotangent spread back over the averaged lane.
 export rule mean_axis_t::<T>(xs: T[..], axis: int, keepdims: bool) when is_float::<T>() {
-    mean_axis(xs, axis, keepdims) => (ct: float[..]) => mean_axis_cotangent(xs, ct)
+    mean_axis(xs, axis, keepdims) =>
+        (ct: float[..]) => ones_like(xs) * (ct * T(1.0 / float(shape(xs)[axis])))
 }
