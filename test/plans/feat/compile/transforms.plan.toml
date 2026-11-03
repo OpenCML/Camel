@@ -1747,3 +1747,53 @@ expect_output_contains = ["rhs=sum_from_type_t"]
 expect_output_not_contains = ["skip=rule uri=tensor:sum reason=unbound", "defect of the compiler"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+# `exp` with its shape in the type: the fixed-shape half of the open-rank gap the four library cases
+# below still record. The walk answers a tangent's shape through `shapeCarrierOf`, which answers a
+# stated type and nothing else (author, 2026-11-03 16:15), so `float[2]` answers where `float[]` refuses.
+[[tests]]
+name = "exp_gradient_of_a_stated_shape"
+desc = "`sum(exp(x))` with `x: float[2]` instead of `float[]`, through **both** legs in one program: the engine's own pullback (`grad`) and the library's rules (`vjp` -> `split(jvp)` -> `transpose`). Hand: `exp([1.0, 2.0]) = [2.718281828459045, 7.38905609893065]`, `value = 10.107337927389695`, and `sum`'s adjoint is one per lane. Both lines are pinned, so a change to either leg shows up as a difference between two lines of one program. This is the fixed-shape half of the pair: the open-rank `exp_gradient_through_the_library` still refuses, because `mul_tensor_t` reads the tangent's own shape for `sum_to` and `float[..]` states no extents -- keeping both is what keeps the refusal visible while the answering path is covered."
+kind = "behavior"
+case = "../../../cases/compile/transforms/exp_gradient_of_a_stated_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["exp stated engine d=[2.718281828459045, 7.38905609893065]", "exp stated library value=10.107337927389695 d=[2.718281828459045, 7.38905609893065]"]
+expect_output_not_contains = ["skip=cotangent-needs-a-value", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The clock for the one spelling of the product law that answers a wrong shape: a broadcasting
+# product's adjoint reduces to each operand's own shape, so reading the *other* operand for `sum_to`
+# is right only while the two shapes are equal.
+[[tests]]
+name = "broadcast_product_gradient_of_a_stated_shape"
+desc = "`sum(x * w)` with `x: float[3]`, `w: float[1]` -- a broadcasting product, both shapes in the types -- through both legs. Hand: product `[2.0, 4.0, 6.0]`, `value = 12.0`; the cotangent arriving is `[1.0, 1.0, 1.0]`, so `d/dx = broadcast(w) = [2.0, 2.0, 2.0]` (numel 3, `x`'s shape) and `d/dw = sum(ct * x) = [6.0]` (numel 1, `w`'s shape). The numbers are the two legs' common answer, element for element. **This case is a clock**: writing `mul_tensor_t` to read the operand each side is not answering for (`sum_to(ct * w, w)`) removes a refusal and answers `d/dx numel=1 d/dx=[6.0]`, `d/dw numel=3 d/dw=[1.0, 2.0, 3.0]` here -- measured 2026-11-04 -- and nothing under `test/plans/` covered a broadcasting product before this case."
+kind = "behavior"
+case = "../../../cases/compile/transforms/broadcast_product_gradient_of_a_stated_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["engine d/dx numel=3 d/dx=[2.0, 2.0, 2.0]", "engine d/dw numel=1 d/dw=[6.0]", "library value=12.0 d/dx numel=3 d/dx=[2.0, 2.0, 2.0] d/dw numel=1 d/dw=[6.0]"]
+expect_output_not_contains = ["skip=cotangent-needs-a-value", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The same program with open types: the refusal, and the case that catches bending the law instead.
+[[tests]]
+name = "broadcast_product_gradient_of_an_open_rank"
+desc = "The same broadcasting product with `float[..]` for both operands. The desired reading is the stated twin's answer exactly -- `value=12.0`, `d/dx numel=3 d/dx=[2.0, 2.0, 2.0]`, `d/dw numel=1 d/dw=[6.0]` -- and it is not reachable today: `mul_tensor_t`'s `sum_to` reads the operand whose cotangent is being built for its shape, that operand is a tangent, and `float[..]` states no extents (`shapeCarrierOf` answers a stated type only, author 2026-11-03 16:15), so the walk stops at `skip=cotangent-needs-a-value uri=tensor:multiply position=0`. The mark pins that refusal and the desired numbers at once. **Why it must stay marked rather than removed**: the tempting fix -- make each side read the operand it is not answering for -- clears the refusal and answers `d/dx numel=1 d/dx=[6.0]`, `d/dw numel=3 d/dw=[1.0, 2.0, 3.0]`, because `sum_to`'s second argument is the *target shape* and 'the two shapes are equal' is invisible on an open rank. A named refusal is better than a wrong number, and this case turns green only when the library can answer a broadcast adjoint."
+kind = "behavior"
+case = "../../../cases/compile/transforms/broadcast_product_gradient_of_an_open_rank.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["open value=12.0 d/dx numel=3 d/dx=[2.0, 2.0, 2.0] d/dw numel=1 d/dw=[6.0]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+known_fail = ["nvm"]
+known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply"
+known_fail_note = "The open-rank half of the product law's gap, kept as the clock for the one wrong spelling. Desired: value=12.0, d/dx numel=3 d/dx=[2.0, 2.0, 2.0], d/dw numel=1 d/dw=[6.0] (hand: product [2,4,6], ct [1,1,1], d/dx = broadcast(w), d/dw = sum(ct*x)). Today: the walk asks stdlib/rulesets/transpose.cml#mul_tensor_t for the tangent's cotangent, the law's sum_to reads that operand for its shape, that operand is a tangent, and float[..] states no extents -- shapeCarrierOf answers a stated type only (author 2026-11-03 16:15) -- so it stops at skip=cotangent-needs-a-value uri=tensor:multiply position=0. Two dead ends for closing it, both measured: extent_of answers nothing for float[..] (extent_of_needs_a_type_that_states_its_shape guards that side), and sum_to's second argument wants a value, so read-only-the-length needs a sum_to_stated(t, at: int[]) twin that git grep finds in no branch and that would live in modules/tensor. And the shortcut must not be taken: naming the operand each side is NOT answering for (sum_to(ct * w, w)) clears the refusal and answers d/dx numel=1 d/dx=[6.0] and d/dw numel=3 d/dw=[1.0, 2.0, 3.0], measured 2026-11-04, because sum_to's second argument is the target shape and the two shapes being equal is invisible on an open rank. A named refusal is better than a wrong number."

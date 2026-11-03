@@ -52,12 +52,43 @@ engine d/dw numel=1 d/dw=[6.0]
 - 律回到 `sum_to(ct * w, x), sum_to(ct * x, w)`，注释保持原样（它已经把"第二半是归约到操作数形状"写清）。
 - 6 条 `known_fail` 回到原位，pin 仍是 `skip=cotangent-needs-a-value uri=tensor:multiply`；`known_fail_note`
   里补上了这次量测和结论（错数比拒绝严重，所以这一律不动）。
-- 读数：`feat/compile/transforms` 回到 `111 = 105 / 2 / 4`；`feat/compile` 回到 `2249 = 2239 / 2 / 8`
-  （`719fc2baf` 的基线是 `2238/2/9`，差的 1 条 known 是并入的 `bbfc003ec` 回掉的
-  `transpose_hand_closed_lambda`）。
+- 读数（宿主 88zjwei，2026-11-04，`-Tier fast -Jobs 4`，1 m load 15.5–23.3）：
+  - 回退后、加新用例前：`feat/compile/transforms` `111 = 105 / 2 / 4`；`feat/compile`
+    `2249 = 2239 / 2 / 8`（`719fc2baf` 的基线是 `2238/2/9`，差的 1 条 known 是并入的 `bbfc003ec`
+    回掉的 `transpose_hand_closed_lambda`）。
+  - 加三条新用例之后：`feat/compile/transforms` **`116 = 109 / 2 / 5`**；`feat/compile`
+    **`2254 = 2243 / 2 / 9`**。总数 2249→2254 正是新增的 5 个条目（exp 2 + 广播写死形状 2 + 广播开秩 1）；
+    `fail` 仍是 **2**（一直是基线那两条 `transpose_loop_escape.*`），`known failures` 8→9 是**预期**的
+    ——按裁决保留的那条开秩广播钟。
+  - `test/plans/feat/transforms`：`29 = 21 / 0 / 8`，退出码 0，与加用例前逐字相同（红数没增）。
 - `transpose(pick)`（`transforms.plan.toml#transpose_refuses_a_parameter_value_it_cannot_be_handed`）
   仍答 `([0.0, 1.0, 0.0])`；`mean_axis1_keepdims_gradient_reads_the_row_length` 仍答
   `mean_axis1 keepdims value=120.0 cotangent=[[3.3333333333333335, 3.3333333333333335, 3.3333333333333335], [6.666666666666667, 6.666666666666667, 6.666666666666667]]`。
+
+## 2.1 补上的三条用例（乙只做一半：加固定形状的，删不动开秩的）
+
+派工的裁决是"固定形状是今天能对，开秩是今天拒，两者都要有；把开秩那条删掉就是把未来的钟拆了"。
+所以开秩那 6 条 `known_fail` 一个字没动，另加三条：
+
+| 用例 | 类型 | 今天 | 读数 |
+| --- | --- | --- | --- |
+| `exp_gradient_of_a_stated_shape` | `float[2]` | PASS（nvm+fvm） | 两腿都印：`exp stated engine d=[2.718281828459045, 7.38905609893065]`、`exp stated library value=10.107337927389695 d=[2.718281828459045, 7.38905609893065]` |
+| `broadcast_product_gradient_of_a_stated_shape` | `float[3]`×`float[1]` | PASS（nvm+fvm） | `engine d/dx numel=3 d/dx=[2.0, 2.0, 2.0]`、`engine d/dw numel=1 d/dw=[6.0]`、`library value=12.0 d/dx numel=3 d/dx=[2.0, 2.0, 2.0] d/dw numel=1 d/dw=[6.0]` |
+| `broadcast_product_gradient_of_an_open_rank` | `float[..]`×`float[..]` | XFAIL（pin 拒绝） | 期望即上表的 `value=12.0 / [2,2,2] / [6.0]`；今天停在 `skip=cotangent-needs-a-value uri=tensor:multiply position=0` |
+
+每条用例的注释里都先写手算，再写读数。固定形状两条**同时印引擎腿（`grad`）与库层腿（`vjp`）**，两腿逐位
+相同——这样任一侧的规则改动都会在**同一个程序的两行之间**显出来，而不是在两条用例之间。
+
+**广播那条为什么是钟**：`sum_to` 的第二实参是归约目标形状，所以"每一侧读另一个操作数"这个写法在等形状上
+对、在广播上错。今天库层对广播的答案依赖 `shapeCarrierOf` 认的是**写死的类型**；一旦有人按那个写法改律，
+`broadcast_product_gradient_of_a_stated_shape`（绿）会立刻答成 `d/dx numel=1 d/dx=[6.0]`、
+`d/dw numel=3 d/dw=[1.0, 2.0, 3.0]` 而变红，`broadcast_product_gradient_of_an_open_rank`（known_fail）会
+从"拒绝"变成"错数"而漂移。这两条就是本次错数在用例库里的钟——**在此之前 `test/plans/` 下没有任何一条
+把 `float[1]`／秩 0 的 `w` 与 `float[3]` 的 `x` 一起送进乘积的转置**，所以那个错数一条现成的用例都抓不到。
+
+**`ast_hashes.txt` 确认**：`test/plans/feat/parse/golden/ast_hashes.txt` 共 304 条，`compile/` 与
+`transforms/` 的条目各 0 条（只覆盖 `test/cases/parse/**` 与 probes），所以新增
+`test/cases/compile/transforms/*.cml` 不需要动它，本次也没动。
 
 ## 3. 这条律要通，缺的是什么
 
@@ -79,3 +110,24 @@ engine d/dw numel=1 d/dw=[6.0]
 （`lane-fwdclosure`）之后才轮到律自己那一处。本分支先并入它（合并提交 `77a7384ab`，冲突两处：
 `transpose.cml` import 列表里 `element_at`→`pick_at`；`idx_arr_t` 保留本车道的四端口 stated 写法）。
 `modules/transforms/**`、`modules/tensor/**`、`modules/autodiff/**`、`src/runtime/**`、`scripts/**` 一行未改。
+## 5. 两条要记住的结论（一条给下一个碰乘积律的人，一条给嵌套形状）
+
+**（一）开秩类型上"两侧形状相等"是看不见的。** `float[..]` 与 `float[..]` 是同一个类型，所以律里没有任何
+写法能分辨"这两个形状一样"和"这两个形状会被广播成一样"。于是：
+
+- 想读被给余切那个操作数的形状 → 转置图里它是切向，`float[..]` 不写形状，拒绝（今天的行为）；
+- 想读另一个操作数的形状 → 等形状时对，广播时答错（本次实测的错数）。
+
+**两条不能同时满足**，这不是措辞问题而是形状来源问题。引擎之所以两种都对，是因为
+`modules/tensor/ops/vjp.cpp#accumulateOperand` 手上有前值、拿操作数自己当 `sum_to` 的目标；**转置图里没有
+前值**。要同时满足，只有两条路：让形状进类型（乙），或者让算子接受"形状当实参"（`sum_to_stated`）。
+
+**（二）`rule-ranks` 卡在律左半边的头，不在右侧。** `lane-statetypes` 量到的
+`skip=rule-ranks uri=tensor:multiply rule=mul_tensor_t ranks=(1,1) argument types (float[3][..], float[])`，
+原因是律左半边 `func mul_tensor::<T>(x: T[..], w: T[..])` 要求两个操作数**同一个元素类型**：`float[3][..]`
+的元素是 `float[3]`、`float[]` 的元素是 `float`，同一个 `T` 绑不上，律在绑定阶段就没成——**右侧 `sum_to`
+写成什么都不影响这一步**。要吃嵌套形状，得先让头按操作数分开（`mul_tensor::<T, S>(x: T[..], w: S[..])` 或
+按位置分开的端口），那是律的形状问题，不是归约目标的问题。所以 `lane-statetypes` 那两条
+`mean_axis_transpose` **不能靠改这条律的右侧解决**。
+
+本车道在这条律上能做的已经到底：右侧的写法只有一种是对的（读被给余切那个操作数），它今天对着开秩拒绝。
