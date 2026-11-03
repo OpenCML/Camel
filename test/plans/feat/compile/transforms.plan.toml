@@ -885,7 +885,13 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=both graph=", "3.0", "6.0"]
+expect_output_contains = ["TRANSPOSE function=both graph=", "3.0", "(3.0)", "(6.0)"]
+# The answer is a tuple, and the tuple is what the plan pins: `3.0` alone is printed by the forward
+# line as well, so it cannot tell the answer from the value the program computed on the way there --
+# a transposition whose answer collapsed to a zero still prints `3.0` (measured 2026-11-04, the
+# reading the page on a closure member's cotangent reported). A zero answer is named as forbidden
+# rather than left to the reader of a substring.
+expect_output_not_contains = ["(0.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -968,8 +974,12 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 0
-expect_output_contains = ["type=int space=none", "1.0", "3.0"]
-expect_output_not_contains = ["skip="]
+expect_output_contains = ["type=int space=none", "5.0", "(1.0)", "(3.0)"]
+# Both answers, in the tuple shape the transposition answers with: `1.0` and `3.0` are the two
+# cotangents asked for, and the case reads them as answers rather than as any occurrence of the
+# number. A transpose that stopped delivering the parameter's cotangent answers `(0.0)` twice and
+# nothing in the program prints `1.0` or `3.0`; the tuple form is what makes that impossible.
+expect_output_not_contains = ["skip=", "(0.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 [[tests]]
