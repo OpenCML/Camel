@@ -42,7 +42,7 @@ using camel::core::type::TypeCode;
 /// what the operator *is*. The registration hands them to the operator table
 /// (`OperatorTable::declareConversion`), so a reader asks there whether an operator converts
 /// and between which types, instead of decoding the letters of its URI: a conversion's rule
-/// is filed under its destination's spelling (`camel/core/forward.h#conversionKeyOf`), and a
+/// is filed under its destination's spelling (`src/core/forward.cpp#conversionKeyOf`), and a
 /// variable read whose result is a float is not a conversion.
 struct ConversionRegistration {
     const char *name; // the URI in the builtin namespace: `op/itod`
@@ -661,7 +661,7 @@ void registerBuiltinOperatorTraits() {
             {.pure = pure, .elementwise = arrayConversions.contains(key), .mayFault = !kNeverFaults.contains(key)});
     }
     // Which types each conversion reads and writes: the fact a reader asks for instead of
-    // decoding the letters of the URI (`camel/core/forward.h#conversionKeyOf`). Written here,
+    // decoding the letters of the URI (`src/core/forward.cpp#conversionKeyOf`). Written here,
     // where the operator is registered, and at no second place.
     for (const ConversionRegistration &conversion : kConversions) {
         registry.declareConversion(
