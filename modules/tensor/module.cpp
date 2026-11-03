@@ -62,7 +62,7 @@ constexpr std::string_view kDeclaredOperators[] = {
     "argmax_axis",
     "argmin_axis",
     "dim",
-    "element_at",
+    "pick_at",
     "gemm_backend",
     "gemm_library",
     "gemm_library_threads",

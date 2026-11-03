@@ -1917,10 +1917,10 @@ The extent of one axis; a negative axis counts from the last one (`-1` is the la
 - Failure: fault `RuntimeError` when the axis is outside the rank.
 - Example: `dim<1>(zeros::<f32>([2, 2]))` gives `2`
 
-#### `element_at`
+#### `pick_at`
 
 ```camel
-element_at: (t: T[..], at: int[]) => T when is_numeric::<T>()
+pick_at: (t: T[..], at: int[]) => T when is_numeric::<T>()
 ```
 
 The element at `at[0]` of a rank-1 tensor whose length is `at[1]`: `t[at[0]]`, with the length
@@ -1944,7 +1944,7 @@ or `at[0]` is outside it
 
 - Pure.
 - Failure: fault `RuntimeError` when the list is not two entries, `at[1]` disagrees with the tensor,.
-- Example: `element_at([1.0, 2.0, 3.0] as float[], [2, 3])` gives `3.0`
+- Example: `pick_at([1.0, 2.0, 3.0] as float[], [2, 3])` gives `3.0`
 
 ### Reduction
 
@@ -2379,7 +2379,7 @@ carries no extents in its type (design principles 5.4).
 
 So the forward half states them, and these three declarations are what it states them to. Each is
 the operation above it with one more operand, an `int[]` the value does not need and the reverse
-law reads instead of the array. `element_at` is the same arrangement for the read: `at[1]` is the
+law reads instead of the array. `pick_at` is the same arrangement for the read: `at[1]` is the
 length `xs[i]` cannot state for itself. The extents travel in one list because a transpose walk
 answers an operator with one or two normal operands: a third position would be refused before any
 law was looked up.
