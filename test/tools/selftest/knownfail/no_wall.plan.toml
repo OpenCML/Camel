@@ -1,0 +1,19 @@
+# Fixture of test/tools/selftest/run.mjs: a sentence that says the case does not pass but not what
+# stands in the way. The reason has to name a wall in one of three shapes -- a refusal in backticks,
+# the file#Symbol that refuses, or the page that decides it -- because "where is it stuck" is the
+# only part a reader can act on.
+id = "selftest.knownfail.no_wall"
+order = 4
+tier = "fast"
+
+[[tests]]
+name = "no_wall"
+desc = "A marked case whose reason names no wall: refused at load."
+tool = "node"
+kind = "behavior"
+case = "fails.mjs"
+args = ["${case}"]
+expect_exit = 0
+known_fail = true
+known_fail_owner = "the runner self-test"
+known_fail_reason = "this case does not pass yet and we know it"

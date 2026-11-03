@@ -1,0 +1,18 @@
+# Fixture of test/tools/selftest/run.mjs: the author's ruling of 2026-11-03 00:30 asks a case that
+# cannot pass to stay in the plan with three things -- the mark, who owns it, and why it cannot
+# pass. This entry has the mark and the reason and no owner, so the plan must be refused where it
+# is loaded, naming this file, this case and `known_fail_owner`.
+id = "selftest.knownfail.no_owner"
+order = 1
+tier = "fast"
+
+[[tests]]
+name = "no_owner"
+desc = "A marked case with a reason and no owner: refused at load."
+tool = "node"
+kind = "behavior"
+case = "fails.mjs"
+args = ["${case}"]
+expect_exit = 0
+known_fail = true
+known_fail_reason = "the fixture stops at `WALL fixture=knownfail`, so the run is red on purpose"
