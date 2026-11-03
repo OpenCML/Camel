@@ -227,3 +227,31 @@ expect_exit = 0
 expect_stdout_contains = ["4.5"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+# The rank-one shape as the surface the rule actually bears on. The three entries below stand on
+# the positions that are not a cast and not a declaration: the empty literal (a length of zero
+# against three), computed elements (the shape comes from the position, not from the values), and
+# a return type. They are what keeps `statesARank` from being narrowed back to the `as` branch
+# alone -- that narrowing would keep every cast test green and move these three.
+[[tests]]
+name = "array_literal_empty_into_stated_shape.nvm"
+desc = "`[]` in a `float[3]` position is a length of zero against a stated three, and is reported at the position: 'The array literal written here has extent 0, but the position states the shape 'f32[3]''. It is not the empty array of the element type reshaped to fit (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/casts/array_literal_empty_into_stated_shape.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_stdout_contains = ["has extent 0, but the position states the shape"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_literal_computed_into_stated_shape.nvm"
+desc = "`[a, b, c]` with computed elements in a `float[3]` position is still that shape: the position gives the type and the elements fill it, rather than the literal taking its type from what the elements happened to be (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/casts/array_literal_computed_into_stated_shape.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["2.5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+

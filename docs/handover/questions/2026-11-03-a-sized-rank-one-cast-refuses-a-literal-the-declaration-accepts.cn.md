@@ -96,7 +96,12 @@ if (extents.size() < 2) {
 
 守卫不是靠 `rejectLiteralData` 的兜底话，而是靠 `visitRankedArrayInto` 里本来就有、秩二一直在用的那条逐层 extent 检查——**长度检查没有拆，反而从"发散到兜底"变成"点名哪个维度差多少"**。
 
-四层判据：`feat/compile` 2193 / **2188 pass / 2 fail**（两条红是 `transpose_loop_escape.two_values_of_two_kinds` 与 `.second_state_of_the_same_loop`，非本改动带出）、`feat/parse` **115/115**、`feat/compile/transforms` **80 = 77/2/1**、`feat/transforms/split` **19/19**。永久用例三条在 `test/cases/compile/casts/array_literal_*.cml`，`casts.plan.toml` 各一条。
+四层判据：`feat/compile` 2195 / **2190 pass / 2 fail**（两条红是 `transpose_loop_escape.two_values_of_two_kinds` 与 `.second_state_of_the_same_loop`，非本改动带出）、`feat/parse` **115/115**、`feat/compile/transforms` **80 = 77/2/1**、`feat/transforms/split` **19/19**。永久用例五条在 `test/cases/compile/casts/array_literal_*.cml`，`casts.plan.toml` 各一条。
+
+**第二笔追加**：
+
+3. 第 1 条要的"先判它是否真的不可达"做了：在 `arrayLiteralFitsShape` 的秩一支加探针跑 `feat/compile`，**命中 15 次**，所以**没删**；它返回 false 时原先落到兜底话，现在由 `arrayLengthReason` 说出哪边写了多少、类型要求多少。
+4. 守则三格补了**两格**：`[]` 进 `float[3]`（`array_literal_empty_into_stated_shape`，报文 `has extent 0`）、`[a, b, c]` 计算元素进 `float[3]`（`array_literal_computed_into_stated_shape`）。**第三格（秩一返回位置）跑出来是拒的，不是绿的**：`return [1.5, 2.5, 3.5]` 在 `func three(): float[3]` 里报 `ReturnNeedsConversion`（返回值的类型是 `float[]`），而秩二 `return [[1.5, 2.5], [3.5, 4.5]]` 过——返回位置有它自己的第三套规则，见 `2026-11-03-a-returned-literal-is-not-built-into-the-declared-shape.cn.md`。按"先报不统一"没动，所以没进计划。
 
 **留给作者两件事**：
 
