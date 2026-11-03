@@ -1,0 +1,24 @@
+// A `with` parameter is a value the function is configured with, so transpose carries it over and
+// never asks for a cotangent of it: `f(x) = x * c` is transposed to `ct => ct * c`, which at c = 3
+// and ct = 1 answers 3. `f(x) = x * c + c` answers the same, because the c that is added is a
+// constant and not a dependency.
+import { transpose } from transforms
+import rulesets.transpose
+
+with <c: float>
+func times(x: float): float {
+    return x * c
+}
+
+with <c: float>
+func times_and_add(x: float): float {
+    return x * c + c
+}
+
+func main(): int sync {
+    let backward = transpose(times)<3.0>(2.0, 1.0)
+    println(backward)
+    let backward2 = transpose(times_and_add)<3.0>(2.0, 1.0)
+    println(backward2)
+    return 0
+}
