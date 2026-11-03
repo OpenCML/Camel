@@ -10,7 +10,7 @@
 // reports' parity reading is about: it either answers six cotangents or it stops at the first
 // construct the library cannot differentiate, and which of those happens is the reading.
 import { sqrt } from math
-import { softmax, sum } from tensor
+import { softmax, sum, transpose } from tensor
 import rulesets.jvp
 import rulesets.transpose
 import { vjp } from vjp

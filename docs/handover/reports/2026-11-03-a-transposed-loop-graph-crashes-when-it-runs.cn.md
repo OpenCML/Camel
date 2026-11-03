@@ -1,6 +1,6 @@
 # 转置出来的循环图一旦执行就 SIGSEGV
 
-**读数树**：`lane-portgate @ a1f648fb4`（`origin/develop 00c59b0c6` + 从 `lane-b2` 取来的四个代码文件
+**读数树**：`a1f648fb4`（原 `lane-portgate`，该分支已删；`origin/develop 00c59b0c6` + 从 `lane-b2` 取来的四个代码文件
 `modules/transforms/{transpose.cpp,transpose.h,transpose_operator.cpp}`、`stdlib/vjp.cml`）。
 **Release 构建**，`out/latest/bin/camel <文件> std::nvm`。三份程序都在本节里可直接复制。
 
@@ -150,7 +150,7 @@ C 两个循环函数、三次转置调用                    8.0 (8.0) (16.0) 16
 cotangent-only 写法后转绿）；`feat/transforms/split` 14 / 18；全量 fast `8526` 里 `8483` 过、`23` 红、
 `killed by a signal` **0**。
 
-## 六、同一处崩溃的第二个触发形状：给带闭包的那半答零（2026-11-03 07:10，`lane-splitprimal @ cd46c06de`）
+## 六、同一处崩溃的第二个触发形状：给带闭包的那半答零（2026-11-03 07:10，`cd46c06de`，原 `lane-splitprimal`，该分支已删）
 
 上面那条（裸 `float` 当元组）修完后，这一页记的那个 SIGSEGV 不再出现。**同一个 `GUARD` 还有第二个触发
 形状**，记在这里是因为它比上面那条更难看见：图建得出来、`same=yes`、`skip=` 一条不写，**只在被调用的
@@ -210,4 +210,4 @@ rc=139
 `collect-out`）。符号是唯一拿到 `file:line` 的办法，而 `.so` 是 strip 的 —— 所以下一次有人要查这一格，
 预算里要有这两次构建。
 
-**读数树**：`lane-splitprimal @ cd46c06de`，`out/debug` 与 `out/latest` 都是同一棵树。
+**读数树**：`cd46c06de`（原 `lane-splitprimal`，该分支已删），`out/debug` 与 `out/latest` 都是同一棵树。

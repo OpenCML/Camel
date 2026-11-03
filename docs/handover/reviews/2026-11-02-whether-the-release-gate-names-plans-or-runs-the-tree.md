@@ -27,7 +27,7 @@
 
 `jit_framed` 那两条 `gc_stress` 长期被记作"既有红"，实测是计划里写错了参数（`--gc-check verify=1`，CLI 收 `before|after|both`），**从写下的那天起一次都没跑起来过**。改成 `verify=both` 后 **57/57/0**。
 ⇒ **一条测试如果从来没跑起来过，它的"红"和"绿"都不是读数。**
-## 结果：按 A 落地（2026-11-02 11:00 前后，`lane-a3`，`381e55b45`）
+## 结果：按 A 落地（2026-11-02 11:00 前后，`ea5d5de70`，原 `lane-a3`，该分支已删；`381e55b45`）
 
 **新的快层定义**：`FAST_TARGETS = ['test/plans']`——整个计划树配 `--tier fast`，与 `npm run test` 在同一条命令上。`FORBIDDEN` 改名为 `CANNOT_START`（空表），只留给"这条命令本身起不动"的计划；里程碑层不再靠表，改成**按树读**：每一条 `tier = "milestone"` 的用例，用 runner 自己的 loader 数。
 

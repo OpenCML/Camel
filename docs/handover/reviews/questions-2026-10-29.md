@@ -576,7 +576,7 @@ graph-store 的账（b5 收尾、b4 入口）收下："删行数为 0 的片不�
 | 第 13 条 示例 | MCTS |
 | 语义表 `faults = []` | 07:20：逐个算子核对实现后补上 |
 | `prl` 两条红 | 08:30：定位分段或调度 |
-| 窄浮点算术 | 10:30 新排的一条：窄浮点逐元素算术，以及与 `f32` 之间的转换（`lane-narrow` 在补用例，算子本身也要补齐） |
+| 窄浮点算术 | 10:30 新排的一条：窄浮点逐元素算术，以及与 `f32` 之间的转换（`2ce226040`，原 `lane-narrow`，该分支已删，在补用例；算子本身也要补齐） |
 
 合并提交和账页不算产出。每一路一到两小时至少一笔代码。
 
@@ -1606,7 +1606,7 @@ func f(c: bool): int sync {
 - 用读数说明"通过"时，读数要能分辨出被审的那个机制。这一条以后照此执行。
 
 
-**已修（2026-11-02，develop `9ae8b202`）**：第 1 条那条 `if ((live[n] || isMember(n)) && state[n] != 2)` 已经不在了——排布只按存活，`isMember` 剩下的两处只决定“在哪条臂里、什么时候”排。合并的是 `lane-guard` 的 `4ea783758`（按 sha 并），改动在 `src/execute/graph_runtime_support.cpp` 的 order-pred 遍历：一个顺序边的前驱不再因为“属于正在排的那条臂”就被排进去。
+**已修（2026-11-02，develop `9ae8b202`）**：第 1 条那条 `if ((live[n] || isMember(n)) && state[n] != 2)` 已经不在了——排布只按存活，`isMember` 剩下的两处只决定“在哪条臂里、什么时候”排。合并的是 `6af543d27`（原 `lane-guard`，该分支已删）的 `4ea783758`（按 sha 并），改动在 `src/execute/graph_runtime_support.cpp` 的 order-pred 遍历：一个顺序边的前驱不再因为“属于正在排的那条臂”就被排进去。
 
 读数：`git grep '|| isMember' src/execute` 命中 **0**；全量 fast 层 `[SUMMARY] total: 8363, pass: 8351, fail: 0, skip: 10, known failures: 2`（`RUN_EXIT=0`）。**这一笔的读数照那条元规则诚实写着：它分不出这处改动**——24 格后端读数带不带这个种子打印相同的值；`let z = 1 / 0` 那条在前端就被删掉，计划见不到；计划级“存活没到却排进计划”的计数在三个程序上带不带种子都是 0（`var_read_before_region` 上是 1，同样带不带都一样）。所以这是**按规则保留，不是按读数保留**。
 
@@ -1816,7 +1816,7 @@ P0-1、P0-3 的主体都落了，下一步是 P0-2（控制边，批次项 9）�
 | `lane-lit2` | 49 笔整支（`12509f812`，先按 diff 取过的四笔在合并信息里逐个点名） | 0；新推的 10 笔**未合**（它报不出"最后一次全绿"，按规矩不合） | `total: 8388, pass: 8375, fail: 0, skip: 10, known failures: 3` |
 | `lane-m5` | 32 笔整支（`7037652a9`） | 0 | `total: 8388, pass: 8375, fail: 0, skip: 10, known failures: 3` |
 
-**RangeRightIsLink 的落处（2026-11-02 11:00 补，读数落在这里而不是只在合并信息里）**：撤除随 lane-a3 整支合并落地。git grep -c 'RangeRightIsLink' -- diagnostics/registry.tsv = **0 命中**，diagnostics/registry **307 → 306 码**，
+**RangeRightIsLink 的落处（2026-11-02 11:00 补，读数落在这里而不是只在合并信息里）**：撤除随 `ea5d5de70`（原 lane-a3，该分支已删）整支合并落地。git grep -c 'RangeRightIsLink' -- diagnostics/registry.tsv = **0 命中**，diagnostics/registry **307 → 306 码**，
 ode scripts/camel-for-ai.mjs --write 输出 `already what the sources produce (nothing written)`、git status --porcelain **为空** ⇒ 四处一致。作者 00:50 的判断是"它把 ..(b->f) 这种合法程序拒了，而同样的优先级在  + b->f 上不报错"。
 **代价记一笔**：整支合之后，`8582dc7a0`（`RangeRightIsLink`）只能在 `develop` 上撤，不能"从车道里摘掉"——这是整支合并的第一次代价，不是对那个决定的抱怨。
 

@@ -972,28 +972,34 @@ std::vector<std::string> checkGraphCrossReferences(const GCGraph &graph) {
                     nodeCount));
         }
     }
-    // A node reads a port of a region on its own chain: its own region's ports, those of the
-    // regions it sits in, and those of the regions inside it. The builder writes all three
-    // (measured over the whole fast tier on 2026-11-03: 647 reads `Arm` -> `Root`, 155 `Arm` ->
-    // `LoopBody`, 122 `LoopBody` -> `Root`, and none across two branches -- see
-    // docs/handover/reports/2026-11-03-does-a-partial-transposition-need-the-operand-values.cn.md
-    // 9). `regionsShareChain` answers for the three at once, and the rule is the author's
-    // (2026-11-03: "a region reads its ancestors' ports and commit checks that"), widened by that
-    // measurement to the other direction: an arm that holds a loop reads the loop's body port.
+    // A port of a region may be read from that region, from a region nested in it, and by the node
+    // that owns it -- a LOOP node reading the port its own body region ends in. Those three are one
+    // rule with one question behind it: is the frame the port lives in there when the read happens?
+    // Inside it, in a region it contains, and in the node it is the inside of, yes; anywhere else,
+    // no.
     //
-    // What is refused is a read *across two branches*: no value of that region is in the frame the
-    // reader runs in -- the branch's frame is entered and left on its own, and its port is a slot
-    // of a frame that is not there when the read happens.
+    // Measured over the whole fast tier on 2026-11-03: 961 cross-region port reads in 58 graphs of
+    // 63 cases, of which 647 are `Arm` -> `Root`, 155 `Arm` -> `LoopBody` where the arm sits in the
+    // body, 122 `LoopBody` -> `Root`, 10 `Inline` -> `Root`, 2 `LoopCond` -> `Root`, 1
+    // `Arm` -> `LoopCond`, and 0 across two branches -- see
+    // docs/handover/reports/2026-11-03-does-a-partial-transposition-need-the-operand-values.cn.md 9.
+    // Every one of those has the reader inside and the port outside.
     //
-    // Nothing in the tree reads across two branches today except the graph `src/passes/test/
-    // regions.cpp#run` fabricates, which now keeps its ports where they are so that its readers and
-    // their ports stay on one chain. So this check reports nothing today: it is here because the
-    // rule is the tree's rule, and because the first rewrite that moves a port into another branch
-    // would read a slot that is not there in silence.
+    // The author's rule (2026-11-03) is "a region reads its ancestors' ports and commit checks
+    // that", and the one shape it leaves out -- a LOOP node reading the port its own body region
+    // ends in -- is the owner's read, added on the same day with the two programs that ask for it
+    // (see docs/handover/questions/2026-11-03-may-a-region-owner-read-its-own-exit.cn.md). An
+    // earlier version allowed the whole reverse direction instead, on the reading of those 155
+    // `Arm` -> `LoopBody` reads as an arm holding a loop; they are the opposite shape (the arm sits
+    // in the body), so the widening was measuring its own misreading.
+    //
+    // The owner's read is the only one the third case admits, and it is not a licence for the
+    // reverse direction: `region(portRegion)->owner` is one node per region, so a port of a loop
+    // body is readable from the loop and from nowhere else.
     //
     // A region's own ports are recorded in the region itself (a port belongs to the graph and is
-    // written into the region it serves), so `regionsShareChain` answers for them on the same walk.
-    // Constants are Data nodes and are never ports.
+    // written into the region it serves), so `regionIsVisibleFrom` answers for them by the same
+    // walk that answers for the ancestors. Constants are Data nodes and are never ports.
     for (auto it = graph.nodes().begin(); it != graph.nodes().end(); ++it) {
         const gc_node_ref_t ref = it.ref();
         const uint32_t region   = graph.nodeRegion(ref);
@@ -1008,14 +1014,14 @@ std::vector<std::string> checkGraphCrossReferences(const GCGraph &graph) {
                     continue;
                 }
                 const uint32_t portRegion = graph.nodeRegion(input);
-                if (graph.regionsShareChain(region, portRegion)) {
+                if (graph.regionIsVisibleFrom(portRegion, ref)) {
                     continue;
                 }
                 violations.push_back(
                     std::format(
                         "graph '{}' node {} in region {} ({} parent {}): it reads port {} of region"
-                        " {} ({} parent {}), which is not on the same chain of regions as the region"
-                        " the node runs in",
+                        " {} ({} parent {}), which is not the region the node runs in, nor one it"
+                        " sits in, nor a region it owns",
                         graph.name(),
                         ref,
                         region,
