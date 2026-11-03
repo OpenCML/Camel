@@ -272,6 +272,20 @@ sumTo(const Array *g, std::span<const int64_t> shape, mm::IAllocator &allocator)
         return const_cast<Array *>(g);
     }
     const Array *src = asFloat(g, allocator);
+    // The adjoint of broadcasting runs both ways (design principles 5.4: `T[..]` includes rank 0,
+    // and a rank-zero array *is* that element). A `like` of higher rank than `t` states lanes `t`
+    // never had, so there is nothing to sum back along them: what a broadcast would have handed
+    // out along those lanes, this spreads out again -- every element of the answer is the element
+    // of `t` its index came from. A rank-zero `t` is the total, spread over every lane:
+    // `sum_to(6.0, [1.0, 2.0, 3.0])` is `[6.0, 6.0, 6.0]`. `broadcastTo` is the same walk read the
+    // other way and refuses a `like` the shape cannot reach (`[2, 3]` against `[4]`), so a shape
+    // that is not a spreading of `t` is still a fault and not a number.
+    //
+    // This is the one place the direction is decided: a `like` of the same rank or lower keeps the
+    // reduction below, extent 1 or not.
+    if (src->shapeSpan().size() < shape.size()) {
+        return broadcastTo(src, shape, allocator);
+    }
     if (src->dtype() == TypeCode::Float64) {
         return sumToArm<TypeCode::Float64>(src, shape, allocator);
     }
