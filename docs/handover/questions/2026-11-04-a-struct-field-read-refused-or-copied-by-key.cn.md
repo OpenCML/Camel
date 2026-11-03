@@ -50,3 +50,21 @@ note: raised here
 **甲留下，乙单开一条车道**，先红后绿：现成的 `split_struct_port`（绿）是「端口本身要能切」的守卫，
 `split_struct_field_read`（现在是拒绝）就是乙的靶子 —— 把它改成期望
 `forward y= 11.0` / `lin dp= 4.0` 即可。乙做成之前，甲那句拒绝是这一形状的正确答案。
+
+## 答（lane-splitnext，树 `splitnext`，base `9c6e41182`，2026-11-04 04:2x +08:00，主机 load 18.35 / 21.89 / 21.6）
+
+**乙落地**，按上面那条默认建议：`modules/transforms/split.cpp#Half::makeCopy` 的 `Accs` 一格现在按源节点说的写
+—— `GCAccsKind::StructKey` 走 `addAccsNode(type, body->key())`，其余走 `addAccsNode(type, body->value)`。
+端口那一层一个字没动（乙的猜测是对的：丢的是**读**）。
+
+先红后绿都在 `afb9d40dc` 起的树上：用例先改成期望答案而源码不改 —— `feat/transforms/split` 跑成
+`total: 24, pass: 22, fail: 2`，红的就是这一条与 `split_two_nested_cuts`；改完源码 `24 / 24`。
+
+- `split_struct_field_read`：`lift value= 11.0  tangent= 4.0`、`forward y= 11.0`、`lin dp= 4.0`；
+- `split_struct_port` 不变：`forward y= { a: 2.0, b: 3.0 }`、`lin dp= { a: 1.0, b: 0.0 }`。
+
+**切线端同一格**是同一条路径（两半共用 `makeCopy`，一个 `Accs` 一格），所以一起变了，实测后半也读得动：
+`type=(Point) => (float, (Point) => float pure) pure residuals=5`，两条规则 `mul_tangent` / `add_tangent` 都转得动。
+**`transpose` 那一侧不是这条车道的，而且它今天不是崩**：struct 成员读第一次走得到 `transpose`，它按
+`unread-parameter` 拒绝（`port=5 type=Point`）。同一形状写成元组、按下标读则是**崩**，且 `afb9d40dc` 原样上就崩。
+两页读数、三条路与默认建议见 `2026-11-04-a-member-read-is-not-a-parameter-read.cn.md`。

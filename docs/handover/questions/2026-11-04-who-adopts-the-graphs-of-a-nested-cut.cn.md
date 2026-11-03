@@ -47,3 +47,26 @@ note: raised here
 
 **甲留下，乙单开一条车道**：`nestedPrograms` 字段本轮已经落进 `split.h` 并带上去了（`buildSplitGraph` 末尾
 赋给 `SplitGraph`），乙只需要把收集改成传递、把拒绝那一格换掉，用例是现成的红/绿靶子。
+
+## 答（lane-splitnext，树 `splitnext`，base `9c6e41182`，2026-11-04 04:2x +08:00，主机 load 18.35 / 21.89 / 21.6）
+
+**乙落地**：`modules/transforms/split.cpp#buildSplitGraph` 的 `nestedPrograms` 改成传递收集 —— 本层采纳的
+每个程序，连同它自己的 `nestedPrograms`，按取的顺序进同一张单子、按指针去重；末尾把整张单子 `adopt` 一遍。
+`adopt` 走 `Program::adoptMissing`，只**绑指针**，不复制图，也不重算任何值。
+
+先红后绿：用例先改成期望答案而源码不改，`feat/transforms/split` 跑成 `total: 24, pass: 22, fail: 2`；
+改完源码 `24 / 24`。两条读数：
+
+- 两层（本条的靶子）：`f y= 15.0`、`f d= 6.0`，前面三行 `REINTERP split function=jvp_of_h/jvp_of_g/jvp_of_f` 都在
+  —— 三个切按由内到外的顺序建，最外层把四张半边图都带上；
+- 三层、四层（探针，不入 git）：`chain y= 21.0  d= 6.0`（`f -> g -> h -> k`，`f(x) = 3·(2·(x+1)+1)` 在 2 处是 21）。
+
+**代价（量过）**：每个嵌套 build 有自己的一张 `calleeCuts`（`buildSplitGraph` 的局部变量），所以同一条链的
+深层会被**重复切**：`split(jvp(f))` 在 `f -> g -> h -> k` 上实测建了 **8 对图（graph id 340–355，16 张）**，
+其中 `k` 切了四次、`h` 两次、`g` 一次、`f` 一对；线性只要 4 对。三函数链是 4 对、四函数链 8 对 —— 按
+`2^(n-1)` 长。名字不冲突（id 由 context 分配，重复的是同一张图），内存也不翻倍（图本来就建过，`adopt` 只绑指针）；
+真正该收的是把 `calleeCuts` 穿进递归、一次 transform 一张表，那会让它变成线性，但那是另一条车道的事，
+本轮没做 —— 今天到得了的深度（两、三层，即 4 和 8 对）代价可以接受。
+
+**附带一句**：上面那张表里「两层」以下的第三层（`split_three_nested_cuts` 之类的用例）本轮**没有**加进 `test/`，
+因为新增一个 `.cml` 会牵动 `test/plans/feat/parse/golden/ast_hashes.txt`；三层、四层是探针读的，读数在上。
