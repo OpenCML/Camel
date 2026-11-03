@@ -13,6 +13,7 @@
 | [`2026-11-02-which-missing-operator-carries-a-reversed-backward`](2026-11-02-which-missing-operator-carries-a-reversed-backward.cn.md) | 倒序的 backward 该由哪一条来承载：新增 `:struct/reverse_arr`，还是让 draft 能造动态下标读？ |
 | [`2026-11-03-a-captured-scalar-inside-a-loop-body-is-silently-wrong`](2026-11-03-a-captured-scalar-inside-a-loop-body-is-silently-wrong.cn.md) | 一个被循环体捕获的标量，抬升后静默算错 |
 | [`2026-11-03-a-norm-port-count-over-the-call-arguments-is-not-a-wall-today`](2026-11-03-a-norm-port-count-over-the-call-arguments-is-not-a-wall-today.cn.md) | 转置成员的 norm 端口数多于调用点实参数：今天不是墙，是被更早一道拒绝挡住的潜在墙 |
+| [`2026-11-03-a-second-rule-under-one-key-is-judged-by-its-when-text`](2026-11-03-a-second-rule-under-one-key-is-judged-by-its-when-text.cn.md) | 同一个键下挂两条规则，今天按 `when` 文本判重，与裁定「按操作数类型」不一致 |
 | [`2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant`](2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant.cn.md) | 一个超时应该由读数推出来，而不是由人写死 |
 | [`2026-11-03-does-a-loop-statement-with-an-unused-value-still-run`](2026-11-03-does-a-loop-statement-with-an-unused-value-still-run.cn.md) | 一个值没人用的 `loop` 语句，还算不算一条要执行的语句？ |
 | [`2026-11-03-does-a-one-member-closure-prove-the-slot-identity`](2026-11-03-does-a-one-member-closure-prove-the-slot-identity.cn.md) | 闭包只有一个成员时，「槽的类型等于参数类型」能证明它是这个参数的值吗？ |

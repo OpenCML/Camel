@@ -78,6 +78,63 @@ export rule dtod_t::<T>(x: T) when is_same::<T, float>() {
     float(x) => (ct: T) => ct
 }
 
+
+// ---- the transpose rule of the array product ----
+//
+// `x * w` on two arrays is `tensor:multiply`, the operator whose key cannot be derived from its
+// name -- `*/2` is `:op/mul_d`'s key, and one key holds one rule -- so the core names it in
+// `ruleKeyExceptions()` and the family files the key as the call `mul_tensor(x, w)`, declared here
+// the way `rulesets.jvp` declares its own: a module cannot read another module's private function.
+//
+// It is the adjoint of `jvp_mul_tensor`, and the law is the product rule read backwards: the
+// cotangent of `x` is `ct * w`, the cotangent of `w` is `ct * x`, each through the kernel's own `*`
+// so the element-by-element product and its order stay the operator's.
+//
+// The other shape this operator is called with -- an array times a number -- is a second law under
+// the same key, and it is not the same right side: the number's cotangent is `sum(ct * x)`, a
+// reduction rather than a product, because a broadcast operand's cotangent is the sum of what it
+// fed. It is not written here, and the refusal was measured rather than predicted: a second rule
+// under `mul_tensor` whose parameters are `(T[..], T)` -- no position of which overlaps the ones
+// above -- is refused where it is written, because the index tells two rules of one key apart by
+// their `when` condition and both of these are `is_float::<T>()`:
+//
+//     The rule 'mul_tensor_t' and the rule 'mul_tensor_scalar_t' both have 'mul_tensor' with 2
+//     operand(s) as the head of their left side, and one ruleset has one rule per operator.
+//
+// The two shapes differ in the operand list, not in the condition, so no wording of the condition
+// lets them share this key. Past that, the walk asks for one rule per key by name
+// (`camel/core/forward.cpp#transposeRuleOf`; `lookupRule` answers `no-rule` when a key holds
+// several), so a second rule would take this one down with it. Dispatching over a key's candidates
+// by operand type is what `jvp.cpp#buildRuleTangent` already does; `transpose.cpp` would have to do
+// the same, and that is core work, not a law still missing.
+
+/// `x + w` on two arrays: what `tensor:add` means, and the left side this rule is filed under.
+func add::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
+    return x + w
+}
+
+/// The transpose of `x + w` on two arrays: each operand's cotangent is `ct`. A sum is its own
+/// adjoint, which is what the engine's own `addVjp` says too (`modules/tensor/ops/elementwise_ops.cpp`:
+/// both operands accumulate `dy`).
+///
+/// It is here because the array product's law is unreachable without it: the product rule's right
+/// side is `dx * w + x * dw`, so the linear graph a product's pullback walks holds an array add, and
+/// the walk refused there -- `TRANSPOSE ... skip=rule uri=tensor:add reason=unbound` -- before this
+/// rule existed. Filed under the call `add(x, w)` for the same reason `mul_tensor` is: the key is
+/// the operator's own name, and `+` at two operands is `:op/add_d`'s.
+export rule add_tensor_t::<T>(x: T[..], w: T[..]) when is_float::<T>() {
+    add(x, w) => (ct: T[..]) => (ct, ct)
+}
+
+/// `x * w` on two arrays: what `tensor:multiply` means, and the left side this rule is filed under.
+func mul_tensor::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
+    return x * w
+}
+
+/// The transpose of `x * w`: `ct * w` for `x`, `ct * x` for `w`.
+export rule mul_tensor_t::<T>(x: T[..], w: T[..]) when is_float::<T>() {
+    mul_tensor(x, w) => (ct: T[..]) => (ct * w, ct * x)
+}
 // ---- the transpose rules of the reductions and the layout ----
 //
 // A forward rule that answers with the operator itself (`d(sum(xs)) = sum(dxs)`, `rulesets.jvp`)
