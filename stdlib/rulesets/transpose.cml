@@ -124,22 +124,19 @@ export rule sum_t::<T>(xs: T[..]) when is_float::<T>() {
 // The operator takes three or four operands: `axis` is optional (src/builtin/operators/derivative.cpp#scatterAddArrayVjp)
 // and omitting it means the operand's last axis, which is the axis an index of this shape reads.
 
-/// `x[i]`: what `:op/idx_arr` means, and the left side this rule is filed under. The operand is
-/// `T[..]`, the open-rank array, which accepts `float[]`, `float[3]` and `float[..]` alike
-/// (design principles 5.4); the result is the same open-rank type, an element being its rank-zero
-/// case.
+/// `x[i]`: what `:op/idx_arr` means, and the left side this rule is filed under.
 /// @example index_into([1.0, 2.0, 3.0], 2)    // 3.0
-func index_into::<T>(x: T[..], i: int): T[..] {
+func index_into::<T>(x: T[], i: int): T {
     return x[i]
 }
 
 /// `xs` with `delta` added at position `i`: the write a transposed read needs. Private to this module.
 #op(':tangent/scatter_add_arr')
-func scatter_into::<T>(xs: T[..], i: int, delta: T[..]): T[..]
+func scatter_into::<T>(xs: T[], i: int, delta: T): T[]
 
 /// The transpose of `xs[i]`: `ct` at `i`, zero everywhere else.
-export rule idx_arr_t::<T>(xs: T[..], i: int) {
-    index_into(xs, i) => (ct: T[..]) => scatter_into(zeros_like(xs), i, ct)
+export rule idx_arr_t::<T>(xs: T[], i: int) {
+    index_into(xs, i) => (ct: T) => scatter_into(zeros_like(xs), i, ct)
 }
 
 // ---- the transpose rule of `tensor:take` ----

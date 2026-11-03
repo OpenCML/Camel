@@ -138,10 +138,15 @@ std::string debugRunArrayTypeSelfTest() {
     ArrayType *openF32 = ArrayType::openRank(f32);
     require(openF32->assignableFrom(fromInts), "f32[..] does not accept f32[3, 4]");
     require(openF32->assignableFrom(fixed4), "f32[..] does not accept f32[4]");
-    // The other half of the line below at `open3`: `f32[..]` states no extent of its own, so a
-    // rank-one array of unknown extent -- `f32[]`, the same rank with its one dimension unnamed --
-    // enters it. This is the relation the widened `:op/idx_arr` rules rest on (design principles
-    // 5.4): one law written on `T[..]` answers `T[]` and `T[..]` both.
+    // `assignableFrom` reads in one direction only: the receiver is the type a position *expects*
+    // and the argument is what the caller hands it. So "an open rank accepts every rank of its
+    // element" holds while "every rank accepts an open rank" does not -- the relation is not
+    // symmetric, and the two lines here and below at `open3` are its two halves, not a repetition.
+    // The receiver `f32[..]` states no extent of its own, so `f32[]` -- rank one, one dimension of
+    // unknown extent, the argument a `f32[]` parameter also takes -- enters it; `f32[3, ..]` does
+    // state one, so that same argument does not. This is the relation the two widened
+    // `:op/idx_arr` laws rest on (design principles 5.4): one law written on `T[..]` answers both
+    // `T[]` and `T[..]`, which is why the laws did not need a second key.
     require(openF32->assignableFrom(anyF32), "f32[..] does not accept f32[] (one unknown extent)");
     ArrayType *open3 = ArrayType::openRank(f32, constants({3}));
     require(open3->assignableFrom(fromInts), "f32[3, ..] does not accept f32[3, 4]");

@@ -298,25 +298,16 @@ export rule jvp_softmax::<T>(x: T[..]) when is_float::<T>() {
 // transform asks for.
 
 /// `x[i]`: what `:op/idx_arr` means, and the left side this rule is filed under.
-///
-/// The operand is `T[..]`, an array of unknown rank, because that is the shape the operator meets:
-/// `T[..]` accepts `float[]`, `float[3]` and `float[..]` (design principles 5.4), so one rule covers
-/// the rank-one array, the fixed shape and the open-rank one. Its result is the same open-rank type:
-/// on `t: f32[..]`, `t[0]` is `f32[..]` (5.4) -- an element is the rank-zero case of it, not a
-/// different type. The rank-one spelling this rule used to have answered every rank-one index and
-/// told the open-rank one "the rule takes (float[], int), and the operator has (float[..], int)"
-/// (`modules/transforms/jvp.cpp#portsTakeOperands`), which is the relation working and the law
-/// missing.
 /// @example index_into([1.0, 2.0, 3.0], 2)    // 3.0
-func index_into::<T>(x: T[..], i: int): T[..] {
+func index_into::<T>(x: T[], i: int): T {
     return x[i]
 }
 
 /// `d(xs[i]) = dxs[i]`: the tangent of an element is that element of the array's tangent. The index
 /// carries no tangent of its own -- `Tangent<int>` is `()` -- so it does not enter the right side.
 /// @example index_into([0.5, 0.25], 1)    // the tangent of `xs[1]` when `dxs` is `[0.5, 0.25]`
-export rule jvp_idx_arr::<T>(xs: T[..], i: int) {
-    index_into(xs, i) => (dxs: T[..]) => index_into(dxs, i)
+export rule jvp_idx_arr::<T>(xs: T[], i: int) {
+    index_into(xs, i) => (dxs: T[]) => index_into(dxs, i)
 }
 
 // ---- the forward rule of `^` (a power) ----
