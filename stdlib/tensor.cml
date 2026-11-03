@@ -101,6 +101,58 @@ export func dim::<T>(t: T[..]): int when is_numeric::<T>()
 /// @example element_at([1.0, 2.0, 3.0] as float[], [2, 3])    // 3.0
 export func element_at::<T>(t: T[..], at: int[]): T when is_numeric::<T>()
 
+// ---- the same operations, with the extents the reverse law needs ----
+//
+// A reduction and a gather both forget something a pullback has to put back: `sum` forgets how many
+// elements it added, `take` forgets how many rows it read from, and `mean` over an axis forgets the
+// lane. The reverse of each spreads one cotangent over *that* shape, and it cannot read the shape
+// off the operand: a transpose rule may read only **known** operands (author, 2026-11-03 11:10 and
+// 17:35), and the operand a cotangent comes back through has no value on that side -- while `T[..]`
+// carries no extents in its type (design principles 5.4).
+//
+// So the forward half states them, and these three declarations are what it states them to. Each is
+// the operation above it with one more operand, an `int[]` the value does not need and the reverse
+// law reads instead of the array. `element_at` is the same arrangement for the read: `at[1]` is the
+// length `xs[i]` cannot state for itself. The extents travel in one list because a transpose walk
+// answers an operator with one or two normal operands: a third position would be refused before any
+// law was looked up.
+
+/// The sum of every element, with the operand's extents stated: `sum(t)`, and `at` is `shape(t)`.
+///
+/// The extents are read by `rulesets.transpose`'s `sum_stated_t` and by nothing else -- the value is
+/// the sum, and the accumulation, the element type and the one rounding are `sum`'s own. A list that
+/// disagrees with the tensor's shape is a fault, because a spread over extents nobody verified is a
+/// gradient of the wrong shape.
+/// @pure
+/// @fails fault `RuntimeError` when `at` disagrees with the tensor's shape
+/// @example sum_stated([1.0, 2.0, 3.0] as float[], [3])    // 6.0
+export func sum_stated::<T>(t: T[..], at: int[]): T when is_numeric::<T>()
+
+/// The rows `take` reads, with the indices and the operand's extents stated in one list:
+/// `[n, i0, ..., i(n-1), d0, ..., d(rank-1)]` is `take(t, [i0, ..., i(n-1)])`.
+///
+/// The value is that take; the leading count splits the list, so the indices are the `n` entries
+/// after it and the extents are everything after them. `rulesets.transpose`'s `take_stated_t` reads
+/// the extents to build the array the scatter-add writes into, which is the operand's shape and
+/// therefore has to come from a known operand.
+/// @pure
+/// @fails fault `RuntimeError` when the list's first entry is not its index count, the extents
+/// disagree with the tensor's shape, or an index is outside the first dimension
+/// @example take_stated([[1.0, 2.0], [3.0, 4.0]] as float[..], [1, 1, 2, 2])    // [[3.0, 4.0]]
+export func take_stated::<T>(t: T[..], at: int[]): T[..] when is_numeric::<T>()
+
+/// The mean of each lane along one axis, with the axis, `keepdims` and the operand's extents stated
+/// in one list: `[axis, keepdims, d0, ..., d(rank-1)]` is `mean_axis(t, axis, keepdims)`.
+///
+/// The value needs the axis and the flag; the reverse law needs the extents, because the lane length
+/// is `numel(t) / numel(ct)` and the answer is spread over `shape(t)`. The flag is written as an
+/// integer (`1` for true, `0` for false), a list holding one element type.
+/// @pure
+/// @fails fault `RuntimeError` when the list is shorter than three entries, the extents disagree
+/// with the tensor's shape, or the axis is outside the rank
+/// @example mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[..], [0, 1, 2, 2])    // [[2.0, 3.0]]
+export func mean_axis_stated::<T>(t: T[..], at: int[]): T[..] when is_numeric::<T>()
+
 // ---- binary form ----
 
 /// The elements of a tensor as little-endian bytes, in row-major order: the payload `from_bytes`

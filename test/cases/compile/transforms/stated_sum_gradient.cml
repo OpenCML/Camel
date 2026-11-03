@@ -1,0 +1,25 @@
+// The gradient of a whole-tensor `sum`, through the library's own rules.
+//
+// `jvp_sum` (`stdlib/rulesets/jvp.cml`) is linear, so its tangent call is the sum of the tangents --
+// and it states the extents the adjoint needs, `shape(xs)`, in the operator's second operand
+// (`sum_stated`). `sum_stated_t` (`stdlib/rulesets/transpose.cml`) reads that list and nothing of the
+// operand the cotangent comes back through, which is the shape a transpose law may read.
+//
+// Every element contributes once, so the gradient of the sum is one at every position:
+//
+//     x = [1.0, 2.0, 3.0]   ->   dL/dx = [1.0, 1.0, 1.0]
+//
+//     camel test/cases/compile/transforms/stated_sum_gradient.cml
+import { vjp } from vjp
+import { sum } from tensor
+
+func total(x: float[]): float {
+    return sum(x)
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(total)([1.0, 2.0, 3.0] as float[])
+    let d = pullback(1.0).0
+    `stated sum value={} dL/dx={}`->format<value, d>->println
+    return 0
+}

@@ -38,7 +38,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { element_at, exp, full, log_softmax, matmul, mean_axis, numel, ones_like, relu, shape, sigmoid, subtract, sum, sum_to, take, tanh, transpose, where, zeros, zeros_like } from tensor
+import { element_at, exp, full, log_softmax, matmul, mean_axis_stated, numel, relu, sigmoid, subtract, sum, sum_stated, sum_to, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
@@ -326,34 +326,53 @@ export rule matmul_t::<T, A, B>(a: A, b: B) when is_float::<T>() {
 // leaves the pullback one question: the adjoint of that operator. A sum is linear in the value, so
 // its adjoint is the move it makes read backwards -- a reduction's adjoint spreads.
 //
-// `sum` is the one of these whose pattern can be written, because it is the one whose declaration
-// takes a single ordinary argument. What the other three need is described below.
+// The three operations whose adjoint needs the extents they consumed are below, written against the
+// **stated** spelling their forward halves call (`sum_stated`, `take_stated`, `mean_axis_stated`):
+// that spelling's second operand is the shape, so the law reads a known value instead of the tensor
+// the cotangent comes back through. `reshape` and `softmax` still have no rule here, and their
+// reason is the **pattern** half and not the law: each states its deciding value in angle brackets
+// only (`stdlib/signatures/tensor.cml`: `reshape<dims>(t)`, `softmax<axis>(t)`), and a rule cannot
+// name that position yet.
 
-/// `xs` with one number at every element: the shape a reduction's cotangent is spread over. Written
-/// as `full` of the operand's own shape so that the spread carries the operand's extents rather than
-/// a shape this ruleset would have to reconstruct from the axis.
-func spread_like::<T>(xs: T[..], value: T): T[..] when is_float::<T>() {
-    return full(shape(xs), value)
+// ---- the transpose rules of the three operations that state their extents ----
+//
+// A reduction and a gather are linear in their data, so their adjoints are the moves they make read
+// backwards -- a reduction's adjoint spreads one cotangent over the elements it added, a gather's
+// adjoint scatters a row's cotangent back to where that row came from. Neither can be built from the
+// operand the cotangent comes back through: a transpose law reads only **known** operands (author,
+// 2026-11-03 11:10 and 17:35), and that operand has no value on this side.
+//
+// So the forward half states the extents, in the operator's second operand, and these three rules
+// read that operand and nothing of the tensor: `sum_stated_t` spreads over the list's extents,
+// `take_stated_t` scatters into an array of them, and `mean_axis_stated_t` spreads each lane's
+// cotangent over `numel(t) / numel(ct)` positions. Each list's layout is stated where the forward
+// half builds it (`stdlib/rulesets/jvp.cml#stated_axis_shape`, `#stated_rows`).
+//
+// The value of a stated operator is the operation itself -- the extents are there for this side --
+// so what a call site hands over is one integer list, and the arrays these laws build carry the
+// extents of a value the transpose never reads.
+
+/// `xs` with one number at every element: the shape a reduction's cotangent is spread over, taken
+/// from the extents the forward half stated.
+///
+/// `full` is what makes a spread out of a scalar, and the declared `T[..]` is what lets a rule's
+/// right side hold it: `full` answers an array of open rank from a runtime shape list, which is the
+/// rank its callers already read it at.
+func spread_over::<T>(ct: T, at: int[]): T[..] when is_float::<T>() {
+    return full(at, ct)
 }
 
-/// The cotangent of `sum(xs)`: the one number it answers is the sum of every element, so its adjoint
-/// gives that number to every element of the operand.
-export rule sum_t::<T>(xs: T[..]) when is_float::<T>() {
-    sum(xs) => (ct: T) => spread_like(xs, ct)
+/// The cotangent of `sum_stated(t, at)`: the one number it answers is the sum of every element, so
+/// its adjoint gives that number to every element of the extents `at` states.
+///
+/// The head declares one type parameter per position a law is instantiated at -- the cotangent's
+/// element type and one per operand, the spelling `mul_tensor_t` uses -- so `t` and `at` are `X` and
+/// `A` and not `T[..]` and `int[]`. A law built at the node's own types is the law the operands have
+/// (`modules/transforms/transpose.cpp`, `ruleTakesOperands`), and its parameters are read for their
+/// types, not for a shape this side would have to restate.
+export rule sum_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
+    sum_stated(t, at) => (ct: T) => spread_over(ct, at)
 }
-
-// `mean_axis`, `reshape` and `softmax` have no rule here. Their laws are the adjoints of the moves
-// their forward rules make -- a reduction's adjoint spreads a lane's cotangent over the lane, a
-// re-reading's adjoint re-reads, and the softmax's Jacobian `diag(y) - y·y^T` is symmetric so it is
-// the same matrix in both directions -- but the **pattern** cannot be written: a rule's left side is
-// compiled as an ordinary call, and each of the three takes an argument in angle brackets only
-// (`stdlib/signatures/tensor.cml`: `mean<axis, keepdims>(t)`, `reshape<dims>(t)`, `softmax<axis>(t)`).
-// `mean_axis_t` was written and measured: the transpose walk hands a rule one cotangent per *normal*
-// operand, so the rule's second and third parameters were never bound and `transpose` refused the
-// operator by name (`skip=arity uri=tensor:mean_axis operands=3`). Making the pullback reach these
-// three is the same port-order change `modules/transforms/jvp.cpp` just took, in
-// `modules/transforms/transpose.cpp`, plus a spelling for the angle-bracket argument in a rule's two
-// sides. It is not a law anybody still has to find.
 
 // ---- the transpose rule of `:op/idx_arr` ----
 //
@@ -435,40 +454,73 @@ export rule idx_arr_t::<T>(xs: T[], i: int) {
 #op(':tangent/scatter_take_arr')
 func scatter_rows::<T>(xs: T[..], indices: int[], delta: T[..], axis: int): T[..]
 
-/// The transpose of `take(t, indices)`: the indices are an `int[..]` and take no cotangent, so the
-/// rule's right side reads one -- and it needs `t` only for the shape the cotangent goes back into,
-/// which is why the value is read and not just the cotangent. The axis is `0` because that is the
-/// axis `take` reads (`tensor:take` names its first dimension).
-export rule take_t::<T>(t: T[..], indices: int[]) {
-    take(t, indices) => (ct: T[..]) => scatter_rows(zeros_like(t), indices, ct, 0)
+/// `n` zeros of the cotangent's own element type, in the shape the forward half stated: the base a
+/// transposed take scatters into.
+///
+/// The declared result is open rank on purpose and not a shortfall: the base is the operand's **whole**
+/// shape, which is a runtime list, so `T[..]` is the only honest spelling -- and it is the rank
+/// `scatter_rows` takes. The cotangent is written `T[..]` because this cotangent is an array (a
+/// take answers rows), so the parameter is what binds `T` to an element; a spelled type argument in a
+/// rule's right side is a function value to the copy, measured 2026-11-04.
+func zeros_of_shape::<T>(ct: T[..], s: int[]): T[..] when is_float::<T>() {
+    return zeros::<T>(s)
+}
+
+/// The cotangent of `take_stated(t, at)`: `ct`'s rows added back where `at`'s indices say they came
+/// from, in an array of `at`'s extents.
+///
+/// `at` is `[n, i0, ..., i(n-1), d0, ..., d(rank-1)]` (`stdlib/rulesets/jvp.cml#stated_rows`), so the
+/// leading count splits it: the indices are the `n` entries after it and the extents are everything
+/// after those. The law reads the list and nothing of `t`, which is what it may do: a transpose rule
+/// reads only known operands, and the row count a take forgets -- the indices say where its rows go,
+/// not how many there were -- is a value of the primal.
+///
+/// The axis is `0` because that is the axis `take` reads (`tensor:take` names its first dimension).
+func take_cotangent::<T>(ct: T[..], at: int[]): T[..] when is_float::<T>() {
+    let count = at[0]
+    let base = zeros_of_shape(ct, at[1 + count:len(at)])
+    return scatter_rows(base, at[1:1 + count], ct, 0)
+}
+
+/// The transpose of `take_stated(t, at)`: the indices are an `int[]` and take no cotangent, so the
+/// rule's right side answers one value, and the extents it spreads into are `at`'s. The head states
+/// the same per-position type parameters as `sum_stated_t`.
+export rule take_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
+    take_stated(t, at) => (ct: T[..]) => take_cotangent(ct, at)
 }
 
 // ---- the transpose of `mean` over an axis ----
 //
-// `mean(xs, axis, keepdims)` is the spelling of `tensor:mean_axis` that names every parameter in
-// parentheses, and it is the one a rule has to use: the operator's other spelling states the axis in
-// angle brackets (`mean<axis>(xs)`), and a rule cannot name that position today
-// (`stdlib/rulesets/jvp.cml`, the `reshape`/`softmax` pair, says the same thing at the left side).
+// `mean_axis(xs, axis, keepdims)` is the spelling of `tensor:mean_axis` that names every parameter in
+// parentheses, and the forward half's linear call is `mean_axis_stated`, whose second operand states
+// the axis, the flag and the extents in one list (`stdlib/rulesets/jvp.cml#stated_axis_shape`).
 //
 // The law: the lane's mean spreads its cotangent back over exactly the elements it averaged, so
-// every position of `xs` that fed lane `k` gets `ct[k] * (1 / shape(xs)[axis])`. `ones_like(xs)` is
-// the shape the broadcast needs, and `shape(xs)[axis]` is the lane length -- the count the average
-// divided by, read off the **operand**. It used to be `numel(xs) / numel(ct)`, and the second half
-// of that reads the cotangent's shape: `ct` is a linear value, a law may read only the operands the
-// node was handed (author's ruling, 2026-11-03 16:15), and `dxs`'s shape is not one of them.
+// every position of `t` that fed lane `k` gets `ct[k] / lane length`. `numel(t) / numel(ct)` is the
+// lane length -- the count the average divided by, read off the extents and the cotangent rather
+// than written down -- and the extents are also the shape the broadcast needs, which is why they are
+// stated at all: `ct` knows only the reduced shape.
 //
-// The right side is written inline and names no helper: a helper is a call in the graph the
-// backward walk has to transpose, and a call with no transpose of its own stops the walk
-// (`skip=call-no-transpose`, measured on `rulesets.jvp::pow_tangent`). What it writes is one
-// `mul_tensor`, whose scalar shape `mul_tensor_t` above already serves.
-//
-// The left side names three values, and the transposed walk asks a cotangent of each position that
-// wants one: `axis` is an `int` and `keepdims` a `bool`, and neither has a tangent space, so the
-// right side answers one value -- for `xs` -- and nothing for the other two
-// (`camel/core/tangent_space.h`).
+// The rule's left side names two values and answers one: `at` is an `int[]` and has no tangent space
+// (`camel/core/tangent_space.h`), so nothing is asked of it.
 
-/// The transpose of `mean(xs, axis, keepdims)`: the cotangent spread back over the averaged lane.
-export rule mean_axis_t::<T>(xs: T[..], axis: int, keepdims: bool) when is_float::<T>() {
-    mean_axis(xs, axis, keepdims) =>
-        (ct: float[..]) => ones_like(xs) * (ct * T(1.0 / float(shape(xs)[axis])))
+/// The cotangent of `mean_axis_stated(t, at)`: each lane's `ct` spread back over the lane it was
+/// averaged from, where `at = [axis, keepdims, d0, ..., d(rank-1)]`.
+func mean_axis_cotangent::<T>(ct: T[..], at: int[]): T[..] when is_float::<T>() {
+    let extents = at[2:len(at)]
+    let lanes = float(extent_product(extents)) / float(numel(ct))
+    return full(extents, 1.0) * (ct / lanes)
 }
+
+/// The number of positions a shape holds: what a lane mean divided by.
+func extent_product(extents: int[]): int {
+    return extents->reduce<(acc: int, d: int) => acc * d, 1>
+}
+
+/// The transpose of `mean_axis_stated(t, at)`: the cotangent spread back over the averaged lane, in
+/// the same per-position type parameters `sum_stated_t` states.
+export rule mean_axis_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
+    mean_axis_stated(t, at) => (ct: float[..]) => mean_axis_cotangent(ct, at)
+}
+
+

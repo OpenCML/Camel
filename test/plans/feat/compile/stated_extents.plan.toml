@@ -1,0 +1,80 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
+# The three reverse laws that need the extents their forward half consumed: a sum, a take and a lane
+# mean. Each forward rule (`stdlib/rulesets/jvp.cml`) passes the extents to the **stated** spelling of
+# the operator -- `sum_stated`, `take_stated`, `mean_axis_stated` -- as one known actual argument, and
+# each reverse law (`stdlib/rulesets/transpose.cml`, `sum_stated_t` and its two neighbours) reads that
+# argument and nothing of the operand the cotangent comes back through. These three cases are what
+# says the laws answer the number on paper, and not merely that the walk stopped refusing.
+[[tests]]
+name = "stated_sum_gradient"
+desc = "The gradient of `sum(x)` over `[1.0, 2.0, 3.0]`: `jvp_sum` states `shape(xs)` in the linear call and `sum_stated_t` spreads the cotangent of 1.0 over those extents, so every element gets one -- value 6.0, `dL/dx=[1.0, 1.0, 1.0]`. The reading also names the reverse law the walk applied (`rhs=sum_stated_t`), which is what says the stated operator was reached and not the operand-reading one it replaced."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_sum_gradient.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["stated sum value=6.0 dL/dx=[1.0, 1.0, 1.0]"]
+expect_stderr_contains = ["rhs=sum_stated_t"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "stated_take_gradient"
+desc = "The gradient of `sum(take(x, [0, 2]))` over `[1.0, 2.0, 3.0, 4.0]`: value 4.0, and `dL/dx=[1.0, 0.0, 1.0, 0.0]`, because the rows read are positions 0 and 2 and the row nobody read gets nothing. The zeros are the point: an adjoint that spread a row's cotangent everywhere, or put it at the wrong position, answers a different array, and the extents it scatters into are `at`'s rather than the cotangent's (which knows only the rows)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_take_gradient.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["stated take value=4.0 dL/dx=[1.0, 0.0, 1.0, 0.0]"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "stated_mean_axis_gradient"
+desc = "The gradient of `sum(mean_axis(x, 0, false))` over `[1.0, 2.0, 3.0, 4.0]`: the value is the mean, 2.5, and every position gets a quarter, `dL/dx=[0.25, 0.25, 0.25, 0.25]` -- the lane length `numel(t) / numel(ct)` the reverse law reads off the stated extents. A law that spread the whole cotangent over the lane (the sum's answer) would read 1.0 here, and one that divided by the cotangent's count would read 0.5."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_mean_axis_gradient.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["stated mean value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+
+[[tests]]
+name = "stated_sum_extents_refused"
+desc = "A stated extent the tensor does not have is a fault: `sum_stated(x, [2])` over four elements stops on the operator's own line with `states extent 2 at dimension 0 and the tensor has 4`, and the program never prints its reading. This is the check the forward half's `shape(xs)` makes unnecessary and no less necessary: the value does not read the list, so nothing but this comparison can say it is wrong, and an extent nobody compared is a gradient of the wrong shape."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_sum_extents_refused.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_output_contains = ["states extent 2 at dimension 0 and the tensor has 4"]
+expect_output_not_contains = ["stated sum="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "stated_take_extents_refused"
+desc = "The same check at the second list's own offset: `take_stated(x, [1, 0, 9])` states one index, then one extent of nine against four rows, and stops with `states extent 9 at dimension 0 and the tensor has 4`. The offset is the point -- the extents start after the count and the indices -- so a check that always read from position 0 would compare the index with the extent and pass."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_take_extents_refused.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_output_contains = ["states extent 9 at dimension 0 and the tensor has 4"]
+expect_output_not_contains = ["stated take="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
