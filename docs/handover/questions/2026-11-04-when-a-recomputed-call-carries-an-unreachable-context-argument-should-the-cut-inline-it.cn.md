@@ -101,9 +101,17 @@ uri=- why=an operand of the node is not reachable from the half's exit`——**�
 的不是 `tensor:softmax` 本身，而是它上游某个非算子节点（`DATA` 没有输入，所以更像 `CAST`/`PORT` 或
 别的读法）。而 `split.cpp` 的 `halfInputsOf` 走 `dataInputsOf`，**普通与 context 输入都收**，并且有
 一段专门重写常量的分支（"A constant has no producer, so either half can write it again"，
-`writeConstant`）。所以真正要查的是：**那条常量能不能被 `writeConstant` 重写**——不能，就是这堵墙的
-实际卡点；能，则卡点在别处，得再读一层。这一条是一行 `grep` 加一次带 id 的 `REINTERP` 就能定的，
-不动代码。
+`writeConstant`）。**量过了：`writeConstant` 能重写它。** `modules/transforms/split.cpp:370` 的
+`writeConstant` 只做一件事：`node->kind != rt::GCNodeKind::Data` 返回 `kInvalidNodeRef`；
+`dataIndex >= 0` 或槽号越界也返回它；只有**静态槽里**的 `Data` 节点才走
+`draft.materializeStaticValue(slots[index], node->dataType())` 写出来。而上一节量到的轴正是
+`DATA 1 out=int`——一个 `Data` 节点、一个字面量，落在它的能力范围之内。**所以这堵墙不是"常量写不出来"。**
+
+卡点在别处：`uri=-` 说的是**被拒的那个节点没有算子名**，而它"有一个输入没被复制"
+（`split.cpp:465`，`refuseAt(… "a node whose input was not copied" …)`）。它前面几种情形都另有名的
+拒绝句（`"a node"`、`"a node on an effect edge"`、分支/循环），所以 `uri=-` 是第四种：**某个非算子节点
+（`Cast`/`Port` 一类）自己没被复制**，而不是它的常量输入。`refuseAt`（`split.cpp:369` 起）把这个节点的
+**源位置**记进 `refusedOrigin`，所以下一量是那行里的 `origin`——拿到它就知道是哪个节点、哪条输入。
 
 ## 不做的事
 
