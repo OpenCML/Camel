@@ -150,3 +150,24 @@ P02SYNC synced=0 operands=0 returned=<0|1> sameGraph=1 resKind=0 needs=0
 就该是链上的一站。所以这一处的判断要按"这个值有没有跨区域的使用者"分岔：没有跨区域使用者才让
 值自己当链尾，有就造门并交回门。改成这一条时**分支臂会同时被影响**（`buildArm` 两边共用），
 要单独跑臂的用例再动。
+
+## 试过的第二次（已回退）：`visitBodyNode` 里 `synced_ = true`
+
+只改一行（`builder_control.cpp` 4246：`std::exchange(synced_, false)` → `true`），让体区的语句
+自己成一条链、链尾不空。
+
+读数是**诊断的措辞变了、结果没变**：
+
+- `feat/compile/stream` 146 条仍是 **114 通过 / 32 失败**，逐名与改前一致，体内
+  `:io/println` 仍不回来；
+- 但告警从 `the sync block it is in is not used` 变成了
+  **`nothing depends on it and it is not in a sync block`** —— 说明打印经过的那一层块终于是
+  "不在链上"的另一种判定了，可它仍然不在链上。
+
+所以 `synced_ = true` 没有把链带进体区：体区的语句仍然被判为"不在 sync 块里"。这一条要往下追
+的是 `visitExecNode` 里对 `sync { … }` 块本身 `operands` / `synced_` 的判定（1811 那句
+`if (!operands)` 的两侧），不是 `visitBodyNode` 的这一个 flag。改动已回退，分支上没有半成品。
+
+**下一步的三个数**：在这一个改法下重打 `P02SYNC`，若 `synced` 仍是 0，说明 `visitBodyNode` 的
+`synced_` 在进入 `sync { … }` 块之前又被关掉了；那就要在 `visitExecNode` 入口打
+`synced_`/`operands`，找到"谁把它关掉"。
