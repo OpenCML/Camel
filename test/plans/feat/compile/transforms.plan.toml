@@ -112,12 +112,19 @@ timeout_ms = 20000
 # answer the transform owes, not today's refusal, and the runner reports a marked case that passes
 # as a failure, so the mark's removal is what this case asks for.
 #
-# Where the wall is today, read off the run rather than off the transpose site itself: `vjp` never
-# reaches `transpose`. `split(jvp(g))` refuses first -- `REINTERP split function=jvp_of_g
-# skip=forward construct=a loop ... why=the cut enters a loop through the loop cell, and that cell
-# is the exit` -- so the reverse walk in `modules/transforms/transpose.cpp#buildTransposeMember`
-# is not yet the first thing between this program and its answer.
-# Owner: whoever lands that reverse walk (the review page names the `Loop` case of that function).
+# Where the wall is today, read off the run rather than off the transpose site itself: `split` now
+# builds both halves of this loop (`REINTERP split function=jvp_of_g forward=276 backward=277 ...
+# residuals=1 loop=1 tape=5 invariants=0`), because the exit reads the loop's cell through one
+# `TupleIndex` per side and those two projections are what the cut hands each half -- no body region
+# is copied. The wall is one step later and is not a loop wall at all:
+# `TRANSPOSE function=split_of_jvp_of_g_backward skip=call node=23 arg=2` -- the exit the backward
+# half copies is `index_into(dxs, 0)`, a FUNC node whose array argument is *linear*, and the member
+# built for the callee answers the array alone, so the call site asks for the array's **value**.
+# That is the same wall the six `grad_array_*` cases stand on (`xs[0]` on its own, no loop in sight:
+# `same wall: the element read's member is built, and the call site needs the array's value`), so it
+# belongs to whoever lands that one, with all seven cases to check at once.
+# Owner: whoever lands the array argument at a transposed call site (`grad_array_one_element` names
+# it); the loop's own reverse walk in `modules/transforms/transpose.cpp` is behind it, not before it.
 [[tests]]
 name = "vjp_loop.rounds_are_undone_in_reverse"
 desc = "The pullback of a two-round loop reads `(1.0, 1.0)` and not `(1.0, 10.0)`: for `loop x = s for k in [1.0, 10.0] do [x[1], x[0] + x[1] * k]` the per-round map is `M_k = [[0,1],[1,k]]`, so `M = M_10 * M_1 = [[1,1],[10,11]]`, and a pullback must apply `M_1^T` after `M_10^T` -- the rounds are undone in the other direction (design 4.2/4.3). Reading the loop's first component, the correct walk gives the gradient `(1.0, 1.0)` and a copied range gives `(1.0, 10.0)`; the two numbers separate the walks and nothing else in the program has to change. `vjp` takes a function whose result is a `float` (the cotangent of the result is the seed), so the pullback's subject is `g(s) = (loop ...)[0]` -- the same loop, the same two numbers."
@@ -126,8 +133,8 @@ case = "../../../cases/compile/transforms/vjp_loop_rounds_walk_backwards.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 known_fail = ["nvm"]
-known_fail_msg = "skip=forward"
-known_fail_note = "split(jvp(g)) does not build the forward half of a loop whose cell is the exit; the reverse walk is behind that."
+known_fail_msg = "split_of_jvp_of_g_backward skip=call"
+known_fail_note = "`split` builds both halves; `transpose` then refuses at the call above the loop, whose array argument is linear and is asked for as a value -- the `grad_array_*` wall, not a loop one."
 expect_exit = 0
 expect_output_contains = ["value= 3.0", "grad= [1.0, 1.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
