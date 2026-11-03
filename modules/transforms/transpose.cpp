@@ -1458,7 +1458,9 @@ bool buildTransposeMember(
                 }
                 const auto inputs = function->normInputsOf(ref);
                 const auto *body = function->nodeBodyAs<camel::runtime::GCOperBody>(ref);
-                const auto rule  = camel::core::transposeRuleOf(std::string(body->uri()));
+                const camel::runtime::GCNode *self = function->node(ref);
+                const auto rule  = camel::core::transposeRuleOf(
+                    std::string(body->uri()), self != nullptr ? self->dataType() : nullptr);
                 if (!rule.has_value() || rule->status != camel::parse::ast::RuleLookup::Found) {
                     armsOk = false;
                     return {};
@@ -1761,7 +1763,9 @@ bool buildTransposeMember(
                 }
                 const auto *body           = function->nodeBodyAs<camel::runtime::GCOperBody>(ref);
                 const std::string_view uri = body->uri();
-                const auto rule            = camel::core::transposeRuleOf(std::string(uri));
+                const camel::runtime::GCNode *self = function->node(ref);
+                const auto rule            = camel::core::transposeRuleOf(
+                    std::string(uri), self != nullptr ? self->dataType() : nullptr);
                 if (!rule.has_value() || rule->status != camel::parse::ast::RuleLookup::Found) {
                     const char *reason =
                         !rule.has_value() ? "unbound"

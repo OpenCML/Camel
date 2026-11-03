@@ -94,10 +94,16 @@ std::optional<std::string> spellingOfDestination(const std::string &letters) {
 /// does: it instantiates a rule at the operand's own type and refuses by name when no instance is
 /// made. The family files one rule per operand type under the spelling and `lookupRules` answers
 /// them all; which of them answers is not the index's question.
-std::optional<RuleKey> conversionKeyOf(const std::string &name) {
+std::optional<RuleKey> conversionKeyOf(const std::string &name, const camel::core::type::Type *result) {
     const size_t to = name.find("to");
     if (to == std::string::npos || to == 0 || to + 2 >= name.size()) {
         return std::nullopt;
+    }
+    // The key is the destination's spelling, and the destination of a conversion is the type of its
+    // result: it is asked of the type the caller is holding, which is an instance fact, rather than
+    // decoded out of the operator's name.
+    if (result != nullptr) {
+        return RuleKey{result->toString(), 1};
     }
     const auto head = spellingOfDestination(name.substr(to + 2));
     if (!head.has_value()) {
@@ -129,7 +135,8 @@ std::vector<std::string> ruleKeyExceptionLines() {
     return lines;
 }
 
-std::optional<RuleKey> ruleKeyOf(const std::string &family, const std::string &uri) {
+std::optional<RuleKey> ruleKeyOf(
+    const std::string &family, const std::string &uri, const camel::core::type::Type *result) {
     for (const RuleKeyException &exception : kRuleKeyExceptions) {
         if (exception.uri == uri) {
             return RuleKey{exception.head, exception.arity};
@@ -148,7 +155,7 @@ std::optional<RuleKey> ruleKeyOf(const std::string &family, const std::string &u
         // A conversion: `itod` is `float(x: i32)` and `dtod` is `float(x: float)` -- one spelling at
         // one operand, seven sources. The key is the destination's spelling; the source is the
         // engine's business, not the index's.
-        if (const auto conversion = conversionKeyOf(uri.substr(kLanguageOperator.size()))) {
+        if (const auto conversion = conversionKeyOf(uri.substr(kLanguageOperator.size()), result)) {
             return conversion;
         }
         // Another `:op/` name -- a call of a function (`:op/fail`), a variable read
@@ -166,13 +173,13 @@ std::optional<RuleKey> ruleKeyOf(const std::string &family, const std::string &u
     return RuleKey{name, *arity};
 }
 
-std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri) {
-    return ruleIn("rulesets.jvp", ruleKeyOf("rulesets.jvp", uri));
+std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri, const camel::core::type::Type *result) {
+    return ruleIn("rulesets.jvp", ruleKeyOf("rulesets.jvp", uri, result));
 }
 
-std::vector<camel::parse::ast::RuleMatch> forwardRulesOf(const std::string &uri) {
+std::vector<camel::parse::ast::RuleMatch> forwardRulesOf(const std::string &uri, const camel::core::type::Type *result) {
     std::vector<camel::parse::ast::RuleMatch> answers;
-    const auto key = ruleKeyOf("rulesets.jvp", uri);
+    const auto key = ruleKeyOf("rulesets.jvp", uri, result);
     if (!key.has_value()) {
         return answers;
     }
@@ -185,12 +192,13 @@ std::vector<camel::parse::ast::RuleMatch> forwardRulesOf(const std::string &uri)
     return answers;
 }
 
-std::optional<camel::parse::ast::RuleMatch> transposeRuleOf(const std::string &uri) {
-    return ruleIn("rulesets.transpose", ruleKeyOf("rulesets.transpose", uri));
+std::optional<camel::parse::ast::RuleMatch> transposeRuleOf(
+    const std::string &uri, const camel::core::type::Type *result) {
+    return ruleIn("rulesets.transpose", ruleKeyOf("rulesets.transpose", uri, result));
 }
 
-std::optional<camel::parse::ast::RuleMatch> vmapRuleOf(const std::string &uri) {
-    return ruleIn("rulesets.vmap", ruleKeyOf("rulesets.vmap", uri));
+std::optional<camel::parse::ast::RuleMatch> vmapRuleOf(const std::string &uri, const camel::core::type::Type *result) {
+    return ruleIn("rulesets.vmap", ruleKeyOf("rulesets.vmap", uri, result));
 }
 
 } // namespace camel::core

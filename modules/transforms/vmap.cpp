@@ -80,8 +80,9 @@ Type *rowsOfType(Type *type) {
 /// (`camel/core/forward.h#ruleKeyOf`): `tensor:matmul` is written `matmul(x, w)` because that is the
 /// operator's name, and the two operators that cannot be spelled that way are named, with their
 /// reasons, in `ruleKeyExceptions()`. Nothing is registered per operator.
-std::optional<camel::parse::ast::RuleMatch> ruleOfUri(const std::string &uri, std::string &why) {
-    const auto answer = camel::core::vmapRuleOf(uri);
+std::optional<camel::parse::ast::RuleMatch> ruleOfUri(
+    const std::string &uri, const camel::core::type::Type *result, std::string &why) {
+    const auto answer = camel::core::vmapRuleOf(uri, result);
     if (!answer.has_value()) {
         why = "the operator's own name says no key (no rule is written for a call of it)";
         return std::nullopt;
@@ -502,7 +503,11 @@ VmapGraph buildVmapGraph(
                 const auto *body   = function->nodeBodyAs<rt::GCOperBody>(ref);
                 const std::string uri(body->uri());
                 ++refused.asked;
-                const auto match = ruleOfUri(uri, why);
+                // The node's own type, for the same reason `jvp.cpp` passes it: a conversion's key
+                // is the spelling of the type it produces, and that is a fact about this node.
+                const rt::GCNode *self = function->node(ref);
+                const auto match =
+                    ruleOfUri(uri, self != nullptr ? self->dataType() : nullptr, why);
                 if (!match.has_value() || match->status != camel::parse::ast::RuleLookup::Found) {
                     refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
                     refused.refusedUri    = uri;

@@ -144,8 +144,8 @@ gc_node_ref_t buildRuleTangent(
     camel::runtime::GraphTransaction &transaction,
     std::string_view uri, const std::vector<gc_node_ref_t> &values,
     const std::vector<gc_node_ref_t> &tangents, camel::core::type::Type *elementType,
-    const std::vector<camel::core::type::Type *> &operandTypes, std::string &ruleName,
-    std::string &why) {
+    const std::vector<camel::core::type::Type *> &operandTypes,
+    camel::core::type::Type *resultType, std::string &ruleName, std::string &why) {
     // The candidates, in the order the family filed them. A key can hold several rules -- one
     // spelling names several operators (`float(x: float)` and `float(x: int)` are both `float` at
     // one operand) -- and the type decides: the instance is asked for at the type the *operand* is
@@ -153,9 +153,9 @@ gc_node_ref_t buildRuleTangent(
     // `Type::Float64()` here was the review's P1-9), and a rule whose condition does not hold there
     // is skipped rather than applied. The last refusal is reported, so a caller that tried
     // everything says the closest thing to why.
-    const auto candidates = camel::core::forwardRulesOf(std::string(uri));
+    const auto candidates = camel::core::forwardRulesOf(std::string(uri), resultType);
     if (candidates.empty()) {
-        const auto match = camel::core::forwardRuleOf(std::string(uri));
+        const auto match = camel::core::forwardRuleOf(std::string(uri), resultType);
         if (!match.has_value()) {
             why = "the operator has no forward rule bound at all";
         } else if (match->status == camel::parse::ast::RuleLookup::NoSuchFamily) {
@@ -1532,10 +1532,15 @@ bool liftGraph(
                 // that answer, and it is the same one `vmap` asks for.
                 Type *ruleElementType = camel::transforms::rules::ruleElementTypeOf(
                     camel::transforms::rules::firstOperandTypeOf(function, ref));
+                // The node's own type: a conversion's key is the spelling of the type it produces
+                // (`:op/itod` at a `float` node is `float` at one operand), which is a fact about
+                // this node and not something the operator's name spells.
+                const NodeFace *self = function.node(ref);
+                Type *resultType     = self != nullptr ? self->dataType() : nullptr;
                 tangentOf[ref] =
                     buildRuleTangent(
                         *context, state.group, transaction, uri, inputs, tangents, ruleElementType,
-                        operandTypes, ruleName, ruleWhy);
+                        operandTypes, resultType, ruleName, ruleWhy);
                 if (tangentOf[ref] == rt::kInvalidNodeRef) {
                     // Named, not guessed: the transform has no derivative for this operator, and
                     // the refusal carries the place the primitive was written -- the node's origin,
