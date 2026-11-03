@@ -12,6 +12,12 @@
 // compiled. Such a build says so once in its log (-v), and that line is what is asked for here,
 // so the answer is the build's own and does not depend on whether the JIT works.
 // Exit 0 where the JIT generates code, 1 with the reason elsewhere.
+//
+// `--absent` asks the opposite question, for the tests of what such a build says: it exits 0
+// where the build has no code generator and 1 where it has one, so one precondition serves both
+// `skip_unless = ["node", "test/tools/have-native-jit.mjs"]` (results under std::jit, asserting a
+// compiled line) and `skip_unless = ["node", "test/tools/have-native-jit.mjs", "--absent"]` (the
+// warning a build without a code generator prints).
 
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -27,8 +33,9 @@ const proc = spawnSync(camel, ['-v', path.join(ROOT, 'hello.cml'), 'std::jit'], 
     timeout: 60000,
 })
 const log = `${proc.stdout || ''}${proc.stderr || ''}`
-if (log.includes('no native code generator')) {
+const absent = process.argv.slice(2).includes('--absent')
+const noCodeGenerator = log.includes('no native code generator')
+if (noCodeGenerator) {
     console.log('this build of camel has no JIT (x86-64 only, ENABLE_FASTVM_JIT): std::jit runs the bytecode interpreter')
-    process.exit(1)
 }
-process.exit(0)
+process.exit(noCodeGenerator === absent ? 0 : 1)

@@ -36,8 +36,9 @@ class GraphIRPass {
     // standard error, with a non-zero exit code. A failure that is already decided while compiling
     // is still a diagnostic (the comment a pass writes about itself): only what the pass finds out
     // when it runs belongs here.
-    /// Ends the pass with an error value instead of a program (design principles 9.1, `(f: F) => F!`).
-    /// It cannot be `[[nodiscard]]` -- it returns nothing -- so the obligation is stated instead:
+    /// Ends the pass with an error value instead of a program (design principles 9.1, `(f: F) =>
+    /// F!`). It cannot be `[[nodiscard]]` -- it returns nothing -- so the obligation is stated
+    /// instead:
     /// **the caller must then check `hasErrorValue()` and either hand the value to the driver that
     /// ran it or turn it into a diagnostic.** Setting it and continuing is how a pass's answer
     /// disappears; `applyRegisteredPass` and `applyPassesDetailed` are the two readers that make
@@ -154,6 +155,14 @@ bool passListTranslatesProgram(
  */
 std::optional<camel::core::error::Diagnostic> passesNeverRunWarning(
     const std::vector<std::string> &passes, const camel::core::context::context_ptr_t &ctx);
+/**
+ * The warning RuntimeDiag::JitWithoutCodeGenerator when the pipeline names `std::jit` (or an alias
+ * of it) in a build whose JIT has no code generator for this processor, or nullopt when it does
+ * not. The pass itself is accepted there; this only says what it does in this build, before
+ * anything runs.
+ */
+std::optional<camel::core::error::Diagnostic> jitWithoutCodeGeneratorWarning(
+    const std::vector<std::string> &passes, const camel::core::context::context_ptr_t &ctx);
 
 /**
  * True when the pipeline names `std::profile` (or an alias of it) anywhere: the driver turns on
@@ -188,7 +197,6 @@ std::vector<camel::core::error::Diagnostic> tagsNeverReadWarnings(
 PassApplyResult applyPassesDetailed(
     const camel::runtime::Program *program, const std::vector<std::string> &passes,
     const camel::core::context::context_ptr_t &ctx, std::ostream &os);
-
 
 /// The outcome of one registered pass run, for a pass that runs another pass on the program it
 /// is given (std::opt runs the rules library's algebra, `rules::simplify`, as its algebraic
