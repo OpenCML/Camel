@@ -166,18 +166,70 @@ def address_of(value):
     return bytes_of(value)[0] if is_capsule(value) else value.ctypes.data
 
 
+_process_memory_counters = None
+
+
+def windows_resident_bytes():
+    """The pages the process holds now, out of `GetProcessMemoryInfo` through `ctypes`.
+
+    `WorkingSetSize` is the same quantity `/proc/self/statm`'s resident field is: what the process
+    has mapped and touched. Asking for it costs no third-party library, exactly as the DLPack
+    capsules above do not. The structure is the one `PROCESS_MEMORY_COUNTERS` declares, and `cb`
+    says how much of it this caller knows about.
+    """
+    global _process_memory_counters
+    if _process_memory_counters is None:
+
+        class ProcessMemoryCounters(ctypes.Structure):
+            _fields_ = [
+                ("cb", ctypes.c_uint32),
+                ("PageFaultCount", ctypes.c_uint32),
+                ("PeakWorkingSetSize", ctypes.c_size_t),
+                ("WorkingSetSize", ctypes.c_size_t),
+                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                ("PagefileUsage", ctypes.c_size_t),
+                ("PeakPagefileUsage", ctypes.c_size_t),
+            ]
+
+        _process_memory_counters = ProcessMemoryCounters
+
+    counters = _process_memory_counters()
+    counters.cb = ctypes.sizeof(_process_memory_counters)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.GetCurrentProcess.restype = ctypes.c_void_p
+    psapi = ctypes.WinDLL("psapi", use_last_error=True)
+    # The pseudo-handle is `(HANDLE)-1`: it does not fit the default `c_int` argument, so the
+    # three parameters are declared rather than left to ctypes' defaults.
+    psapi.GetProcessMemoryInfo.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32]
+    psapi.GetProcessMemoryInfo.restype = ctypes.c_int
+    if not psapi.GetProcessMemoryInfo(
+        ctypes.c_void_p(kernel32.GetCurrentProcess()), ctypes.byref(counters), counters.cb
+    ):
+        raise OSError(ctypes.get_last_error(), "GetProcessMemoryInfo")
+    return counters.WorkingSetSize
+
+
 def resident_bytes():
     """How much memory the process holds, or None where the system does not say.
 
-    Linux answers with the resident size; elsewhere the peak resident size is the portable measure
-    (`ru_maxrss`, KiB on Linux and bytes on macOS). The peak never falls, so it is read before the
-    measurement that raises it, which is what the caller does.
+    Linux answers with the resident size, Windows with the same quantity out of
+    `GetProcessMemoryInfo`; elsewhere the peak resident size is the portable measure (`ru_maxrss`,
+    KiB on Linux and bytes on macOS). The peak never falls, so it is read before the measurement
+    that raises it, which is what the caller does.
     """
     try:
         with open("/proc/self/statm", "r", encoding="ascii") as handle:
             return int(handle.read().split()[1]) * os.sysconf("SC_PAGE_SIZE")
-    except (OSError, IndexError, ValueError):
+    except (OSError, IndexError, ValueError, AttributeError):
         pass
+    if sys.platform == "win32":
+        try:
+            return windows_resident_bytes()
+        except (OSError, AttributeError):
+            return None
     try:
         import resource
     except ImportError:
