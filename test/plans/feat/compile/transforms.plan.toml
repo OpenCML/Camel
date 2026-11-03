@@ -2446,3 +2446,36 @@ expect_output_contains = ["gelu engine d=[-0.08296408384578255, 0.5, 1.082964083
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+
+
+# The tangent of a loop's *iterated element*, and what the forward half does when it has nowhere to
+# put it. `jvp_loop_array_state` pins the shape this transform supports -- a `for` loop over a
+# sequence nobody differentiates, whose element therefore has no tangent worth carrying. A loop over
+# a value that *does* carry a tangent is the other case, and it answered the zero of the tangent
+# space for a derivative that is not zero:
+#
+#   f(xs) = loop s = 0.0 for e in xs do s + e
+#   jvp(f)([1.0, 2.0], [1.0, 1.0])   ->   value= 3.0   tangent= 0.0     (used to print both)
+#
+# `f` is the sum, so the tangent is `1 + 1 = 2.0`; the value was right and the tangent was the
+# zero's. Nothing in this shape can carry it -- the loop iterates the values it was given, and
+# pairing the iterable would hand it a pair where it asks for an array -- so the lift refuses at the
+# loop and names the construct, the same way it refuses a primitive the ruleset has no rule for. A
+# refusal, not a saved wrong number: the backward half of the same program already refuses this
+# shape ("the shape this program used has no transpose (the transform named it `range`)").
+#
+# `expect_stdout_not_contains` is the red half of the entry: before this change the program printed
+# `tangent= 0.0` and exited 0.
+[[tests]]
+name = "jvp_loop_iterable_tangent"
+desc = "A `for` loop whose iterable is a value with a tangent: `jvp(f)` of `f(xs) = loop s = 0.0 for e in xs do s + e` at `xs = [1.0, 2.0]`, `dxs = [1.0, 1.0]`. The element `e` has the tangent of the array's element, and the lift copies the iterable as it stands, so it has nowhere to put it. The fault names the construct -- this program exits non-zero with `jvp does not reinterpret a loop over a value that has a tangent` -- and prints neither the value nor the zero tangent it used to answer (measured 2026-11-04: `value= 3.0`, `tangent= 0.0`, where the sum of the tangents is 2.0)."
+kind = "negative"
+case = "../../../cases/compile/transforms/jvp_loop_iterable_tangent.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_output_contains = ["jvp does not reinterpret a loop over a value that has a tangent", "the element the loop hands its body has the tangent of the array's element"]
+expect_stdout_not_contains = ["tangent= 0.0", "value= 3.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

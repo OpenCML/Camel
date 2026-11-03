@@ -583,7 +583,11 @@ bool liftGraph(
         // second opinion about the type -- the dimension the type leaves open is the one the value
         // fills in, and a dimension neither of them fixes answers no zero.
         std::unordered_map<const Type *, gc_node_ref_t> zeroConstants;
-        const auto zeroConstantFor = [&draft, &zeroConstants](
+        // The zeros this transform wrote, so a later question can tell "nothing flows here" (a
+        // zero) from "a value flows here" (a tangent the lift does not carry). A loop's iterable
+        // asks that question; see the `for` loop's input loop below.
+        std::unordered_set<gc_node_ref_t> zeroMade;
+        const auto zeroConstantFor = [&draft, &zeroConstants, &zeroMade](
                                          Type *type,
                                          const ::Array *shapeOf = nullptr) -> gc_node_ref_t {
             // A zero whose shape was read off one value is that value's zero and is not shared with
@@ -646,6 +650,9 @@ bool liftGraph(
             if (shareable) {
                 zeroConstants.emplace(type, made);
             }
+            if (made != rt::kInvalidNodeRef) {
+                zeroMade.insert(made);
+            }
             return made;
         };
         // The zero tangent of a value that is not a constant -- a captured value or a `with` parameter --
@@ -674,8 +681,8 @@ bool liftGraph(
         // value's and cannot be shared with the next value of the same open type. Reaching for the
         // registry first would also make every `float` tangent a call, which is neither what the
         // rules were handed before nor what a reader of the graph sees today.
-        const auto zeroOfValueAtRunTime = [&draft](gc_node_ref_t primal,
-                                                   Type *type) -> gc_node_ref_t {
+        const auto zeroOfValueAtRunTime = [&draft, &zeroMade](gc_node_ref_t primal,
+                                                              Type *type) -> gc_node_ref_t {
             if (type == nullptr || type->code() != camel::core::type::TypeCode::Array) {
                 return rt::kInvalidNodeRef;
             }
@@ -685,6 +692,10 @@ bool liftGraph(
             }
             const gc_node_ref_t zero = draft.addOperNode(type, nullptr, space->zerosLikeUri);
             draft.setNormInputs(zero, std::span<const gc_node_ref_t>(&primal, 1));
+            // A zero this transform wrote, like the static ones above: the value whose shape it was
+            // read from does not move in forward mode, so a loop over it has no element tangent
+            // either, and the loop must stay liftable.
+            zeroMade.insert(zero);
             return zero;
         };
         // The graph this one is a lift of: a fact about the graph, not a comment about the call.
@@ -2344,7 +2355,9 @@ bool liftGraph(
             // state: the loop still iterates the values it was given, and no derivative flows
             // through the array itself. Pairing it would hand the loop a pair where it asks for an
             // array -- and `pairOf` pairs it once an array of floats answers `Self`, which is why
-            // this one input is named instead of being left to the type.
+            // this one input is named instead of being left to the type. An array that *does*
+            // carry a tangent is refused where it is read (below), because the element's tangent
+            // has no place in this shape and answering its zero is a wrong number.
             size_t inputIndex = 0;
             const size_t stateStart = camel::core::loopHasIterable(body.kind) ? 1 : 0;
             for (gc_node_ref_t input : function.normInputsOf(ref)) {
@@ -2355,6 +2368,28 @@ bool liftGraph(
                 const NodeFace *in = function.node(input);
                 const gc_node_ref_t copy         = copyOf[input];
                 if (inputIndex++ < stateStart) {
+                    // The array a `for` loop walks (`LoopView::iterable`). It is copied as it
+                    // stands, so the element the body is handed has no tangent -- right for a
+                    // sequence nobody differentiates (`[1.0, 10.0]`, whose tangent this transform
+                    // writes as the zero of its space) and wrong for one that carries a tangent,
+                    // where the element's tangent is the array's element: `jvp(f)` of
+                    // `f(xs) = loop s = 0.0 for e in xs do s + e` at `xs = [1.0, 2.0]` with
+                    // `dxs = [1.0, 1.0]` answered the value 3.0 and the tangent 0.0, where the sum
+                    // of the tangents is 2.0 (measured 2026-11-04, `std::nvm`). The transform has
+                    // no place to put that tangent, so it says so instead of answering the zero of
+                    // the space: a loop over a value with a tangent is refused, and a loop over a
+                    // sequence stays exactly as it was.
+                    const gc_node_ref_t iterableTangent = tangentOf[input];
+                    if (iterableTangent != rt::kInvalidNodeRef &&
+                        !zeroMade.contains(iterableTangent)) {
+                        refusal.refusedOrigin = static_cast<camel::source::origin_id_t>(
+                            function.nodeOrigin(ref));
+                        refusal.refusedConstruct = "a loop over a value that has a tangent";
+                        refusal.refusedWhy =
+                            "the element the loop hands its body has the tangent of the array's "
+                            "element, and no tangent of an element is carried";
+                        return false;
+                    }
                     loopInputs.push_back(copy);
                     continue;
                 }
