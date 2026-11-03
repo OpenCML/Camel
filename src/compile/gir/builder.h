@@ -1440,6 +1440,19 @@ class Builder {
             camel::compile::gct::Tree::of(node)->headTypeParamsOf(node) != nullptr) {
             return true;
         }
+        // A pack among the `with` parameters (`with <..ws>`) decides the `with` arity at each call
+        // exactly as a rest parameter decides the ordinary one, so a declaration with a body is a
+        // template for the same reason: no graph is built for the declaration itself, and each
+        // call expands the body where it is (design principles 5.5, applied to the pack rule of
+        // 4.4 and 5.6). Both the declaration's own node and its function node answer here, or the
+        // one that did not would be read as an ordinary function of the same name and refused as
+        // a redeclaration. A declaration without a body is an operator implemented in C++, whose
+        // resolver takes the arguments itself, and is not one.
+        if (node != nullptr && !node->nativeDeclaration() && type != nullptr &&
+            type->code() == camel::core::type::TypeCode::Function &&
+            static_cast<FunctionType *>(type)->hasWithRest()) {
+            return true;
+        }
         return isGenericHere(type);
     }
     // The type parameters of a template in declaration order: the head names first, then the

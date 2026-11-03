@@ -48,14 +48,14 @@ assert(input.normalized.stdout.trim() === ["1", "1"].join(String.fromCharCode(10
 timeout_ms = 8000
 
 [[tests]]
-name = "with_pack_needs_native_declaration"
-desc = "A function with a body cannot write a pack among its `with` parameters."
-kind = "negative"
+name = "with_pack_with_body"
+desc = "A function with a body may write a pack among its `with` parameters, on the rule the ordinary parameters follow: `with <..ws> func ident(x: float): float` is called with no `with` argument and returns its argument."
+kind = "behavior"
 case = "../../../cases/compile/prelude_signatures/with_pack_with_body.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::WithPackNeedsNativeDeclaration"
-expect_output_contains = ["WithPackNeedsNativeDeclaration", "The pack '..args' among the 'with' parameters needs a declaration without a body."]
+expect_exit = 0
+expect_output_contains = ["2.5"]
+expect_output_not_contains = ["[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

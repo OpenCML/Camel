@@ -501,7 +501,12 @@ std::optional<FunctionType *> DeclaredFuncTypeResolver::resolveForCall(
 std::optional<FunctionType *> StaticFuncTypeResolver::resolve(
     const type_vec_t &with, const type_vec_t &norm) const {
     GUARD(funcType_, "FunctionType is null");
-    const size_t withCount = funcType_->withTypesCount();
+    // A pack among the `with` parameters (`with <..ws>`) writes a `void` slot at the end that no
+    // call passes a value for: the arguments it takes are the ones a call writes beyond the fixed
+    // parameters (design principles 4.4, 5.6). The fixed parameters are therefore all of them but
+    // that slot. A call that gives the pack itself arguments is not this shape: its instance has
+    // one parameter per argument the pack took, which is built where the call is expanded.
+    const size_t withCount = funcType_->withTypesCount() - (funcType_->hasWithRest() ? 1 : 0);
     const size_t normCount = funcType_->normTypesCount();
     if (withCount != with.size() || normCount != norm.size()) {
         return std::nullopt; // reject

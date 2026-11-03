@@ -158,11 +158,24 @@ class GraphRead {
     virtual std::vector<gc_node_ref_t> normPortsOf() const = 0;
 
     std::vector<gc_node_ref_t> withPorts() const { return withPortsOf(); }
-    /// The graph's `with` ports, the list GCGraph::withPorts answers: the first
-    /// `funcType()->withTypesCount()` of them are the declared `with` parameters, the rest are the
-    /// values the body captured. A lift reads the declared ones -- those are what the caller fills at
-    /// the call site -- and leaves the captures to the closure, which the lifted value keeps.
+    /// The graph's `with` ports, the list GCGraph::withPorts answers: the declared `with` parameters
+    /// (the first `funcType()->withTypesCount()` of them) and the values the body captured past
+    /// them. A lift reads the declared ones -- those are what the caller fills at the call site --
+    /// and leaves the captures to the closure, which the lifted value keeps.
     virtual std::vector<gc_node_ref_t> withPortsOf() const = 0;
+    /// The values the body captured, in the order it captured them: the graph's closure nodes
+    /// (`GCGraph::closureNodes`), which are ports of the graph but are *not* in `withPorts` -- a
+    /// call binds them from the closure tuple and nothing at the call site names them. A transform
+    /// that copies a body has to declare them, or a read of a captured value answers the zero of
+    /// its slot (`modules/transforms/remat_operator.cpp` recorded that defect).
+    ///
+    /// This and `closureTypeOf` are readings the face was missing, not facts it now stores: both
+    /// graphs already answer them (`GCGraph::closureNodes`/`closureType`, and the draft's own
+    /// `closureNodes`/`closureType`). Nothing is recorded twice.
+    virtual std::vector<gc_node_ref_t> closureNodesOf() const = 0;
+    /// The tuple those captures are read out of at a call, `nullptr` when the graph captures
+    /// nothing.
+    virtual const camel::core::type::TupleType *closureTypeOf() const = 0;
 
     /// The statements this one follows in the same `sync` block. A frozen graph keeps them as
     /// `GCGraphSyncEdge` and a draft as a list of ids; the face answers the predecessor, which is
@@ -229,6 +242,8 @@ class DraftGraphRead final : public GraphRead {
     std::vector<gc_node_ref_t> regionPortsOf(uint32_t id) const override;
     std::vector<gc_node_ref_t> normPortsOf() const override;
     std::vector<gc_node_ref_t> withPortsOf() const override;
+    std::vector<gc_node_ref_t> closureNodesOf() const override;
+    const camel::core::type::TupleType *closureTypeOf() const override;
     std::vector<gc_node_ref_t> syncInputsOf(gc_node_ref_t ref) const override;
     gc_node_ref_t exitRefOf() const override;
     std::span<const ::slot_t> staticSlotsOf() const override {
@@ -288,6 +303,8 @@ class FrozenGraphRead final : public GraphRead {
     std::vector<gc_node_ref_t> regionPortsOf(uint32_t id) const override;
     std::vector<gc_node_ref_t> normPortsOf() const override;
     std::vector<gc_node_ref_t> withPortsOf() const override;
+    std::vector<gc_node_ref_t> closureNodesOf() const override;
+    const camel::core::type::TupleType *closureTypeOf() const override;
     std::vector<gc_node_ref_t> syncInputsOf(gc_node_ref_t ref) const override;
     gc_node_ref_t exitRefOf() const override { return graph_.exitNodeRef(); }
     std::span<const ::slot_t> staticSlotsOf() const override {

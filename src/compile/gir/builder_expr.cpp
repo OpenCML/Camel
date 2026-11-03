@@ -2076,6 +2076,29 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         const std::optional<std::string> name =
             withNames != nullptr && i - 1 < withNames->size() ? (*withNames)[i - 1]
                                                               : std::nullopt;
+        if (gct->at(i)->type() == GCT::NodeKind::SPRD) {
+            // `..ws` among the `with` arguments: the pack's elements are `with` arguments of their
+            // own, exactly as `..e` gives the ordinary arguments of a call. `f<..ws>(..xs)` is how a
+            // pack is forwarded to another function's pack, so the elements stand where they stand.
+            if (i + 1 != gct->size()) {
+                const GCT::node_ptr_t operand = gct->at(i)->at(0);
+                diags_->of(SemanticDiag::RestArgumentNotLast)
+                    .atOrigin(operand->origin() != 0 ? operand->origin() : gct->origin())
+                    .commit(
+                        operand->type() == GCT::NodeKind::DREF ? operand->name()
+                                                               : std::string("expression"));
+                throw BuildAbortException();
+            }
+            const GCT::node_ptr_t operand = gct->at(i)->at(0);
+            for (const node_handle_t &element : expandRestArgument(
+                     operand,
+                     operand->type() == GCT::NodeKind::DREF ? operand->name()
+                                                            : std::string("expression"),
+                     gct)) {
+                inputs.push_back({element, operand, std::nullopt});
+            }
+            continue;
+        }
         if (!restCall) {
             const GCT::NodeKind kind = gct->at(i)->type();
             // A literal whose type the signature still leaves open takes its type from the

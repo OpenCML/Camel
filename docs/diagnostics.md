@@ -165,7 +165,6 @@ prints one entry.
 | `0x0300018E` | [SemanticDiag::RestArgumentNotTuple](#restargumentnottuple) | Error | no |
 | `0x0300018F` | [SemanticDiag::RestFunctionNeedsExpansion](#restfunctionneedsexpansion) | Error | no |
 | `0x03000190` | [SemanticDiag::RestArgumentsMismatch](#restargumentsmismatch) | Error | no |
-| `0x03000191` | [SemanticDiag::WithPackNeedsNativeDeclaration](#withpackneedsnativedeclaration) | Error | no |
 | `0x03000193` | [SemanticDiag::ConstasTypeRequired](#constastyperequired) | Error | no |
 | `0x03000195` | [SemanticDiag::ConstasValueNotConstant](#constasvaluenotconstant) | Error | no |
 | `0x03000199` | [SemanticDiag::ConstasFunctionNeedsCall](#constasfunctionneedscall) | Error | no |
@@ -269,6 +268,7 @@ prints one entry.
 | `0x03000207` | [SemanticDiag::RuleRightUsesOuterVariable](#rulerightusesoutervariable) | Error | no |
 | `0x03000208` | [SemanticDiag::LoopBodyNeedsNextState](#loopbodyneedsnextstate) | Error | no |
 | `0x03000209` | [SemanticDiag::CalledFallibleValue](#calledfalliblevalue) | Error | no |
+| `0x0300020A` | [SemanticDiag::WithPackArgumentType](#withpackargumenttype) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -5204,40 +5204,6 @@ func main(): int sync {
 }
 ```
 
-### WithPackNeedsNativeDeclaration
-
-`0x03000191` · Error · `SemanticDiag::WithPackNeedsNativeDeclaration`
-
-**Fix**
-
-None: choice: whether to name the parameters or move the pack into a function type is the writer's decision
-
-**Message**
-
-```text
-The pack '..{0}' among the 'with' parameters needs a declaration without a body.
-```
-
-**Help**
-
-```text
-A pack among the 'with' parameters stands for the arguments a call gives beyond the fixed ones, and only a declaration of a native operator, which takes them as they come, can use them. A function with a body names each 'with' parameter; write them out, or write the pack in a function type.
-```
-
-**Example** (`test/cases/compile/prelude_signatures/with_pack_with_body.cml`, run as `camel test/cases/compile/prelude_signatures/with_pack_with_body.cml`)
-
-```camel
-// A pack among the `with` parameters needs a declaration without a body.
-with <..args>
-func bad(x: int): int {
-    return x
-}
-
-func main(): int sync {
-    return 0
-}
-```
-
 ### ConstasTypeRequired
 
 `0x03000193` · Error · `SemanticDiag::ConstasTypeRequired`
@@ -8854,6 +8820,42 @@ func loss(x: float): float {
 func main(): int sync {
     let step = loss->cse
     println(step<2.0>(3.0))
+    return 0
+}
+```
+
+### WithPackArgumentType
+
+`0x0300020A` · Error · `SemanticDiag::WithPackArgumentType`
+
+**Fix**
+
+None: choice: which value of the wanted type to give, or whether to write the pack without one, is the writer's
+
+**Message**
+
+```text
+The pack '..{0}' of '{1}' takes 'with' arguments of type '{2}': argument {3} has type '{4}'.
+```
+
+**Help**
+
+```text
+Every 'with' argument the pack takes is of the type it writes, the rule an ordinary parameter follows one type further out. Give an argument of that type, or write the pack without one ('..{0}') to take any type.
+```
+
+**Example** (`test/cases/compile/rest_params/with_pack_wrong_element.cml`, run as `camel test/cases/compile/rest_params/with_pack_wrong_element.cml`)
+
+```camel
+// The pack's element type is a guard: `with <..ws: int>` refuses a `float` argument written in the
+// angle brackets, and says which pack, which type it takes, and which type it was given.
+with <..ws: int>
+func g(x: float): float {
+    return x
+}
+
+func main(): int sync {
+    println(g<1.0>(2.5))
     return 0
 }
 ```

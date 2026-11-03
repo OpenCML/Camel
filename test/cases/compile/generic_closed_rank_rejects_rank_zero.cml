@@ -1,0 +1,15 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// The open-rank edge is only the open rank. `T[]` states one dimension and holds no rank-zero
+// value, so a number does not bind its element type and the call is refused as a mismatch of types
+// (design principles 5.4: "秩 0 就是元素本身" is written for `T[..]`, and the reverse -- a `T[]`
+// parameter taking a `T[..]` argument -- does not hold either).
+func take_first::<T>(xs: T[]): int {
+    return 0
+}
+
+func main(): int sync {
+    println(take_first(6.0))
+    return 0
+}
