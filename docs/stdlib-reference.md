@@ -1432,10 +1432,8 @@ function type, so no signature states a count it cannot know and no guard has to
 (`ResidualsOf<F>`, and the `_` position before it, are both gone). `lin` is linear in the tangent
 it is given -- the condition the transpose step (M3) reads -- and both halves speak in `Tangent<T>`
 at the top of this file.
-fragment of the composition: `let fwd = split(jvp(f))`, then `let (y, lin) = fwd(x)`.
 
-- Example (a fragment, not compiled): `let step = split`
-- Why it is not compiled: `split` takes the lifted function a `jvp` call writes, so the example is a
+- Example: `let step = split`
 
 #### `transpose`
 
