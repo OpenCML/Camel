@@ -229,20 +229,23 @@ timeout_ms = 20000
 
 # The negative side of the same rule table, and the point of it: a primitive the ruleset has no rule
 # for is not answered with 0 or 1 and is not only printed at -- it is a diagnostic that names the
-# primitive and stands *where the primitive is written*. `pow` is `math:pow_d`, which no forward rule
-# is bound for, so `jvp(f)` cannot build; the error is at `f`'s `pow` (`file:line:col`) and the
+# primitive and stands *where the primitive is written*. `sin` is `math:sin_d`, which no forward rule
+# is bound for, so `jvp(f)` cannot build; the error is at `f`'s `sin` (`file:line:col`) and the
 # process stops without running `main`, while the call site is kept beside it as a related position.
+#
+# `pow` (`math:pow_d`) carried this shape until the ruleset gained a forward rule for it
+# (`jvp_pow_d`, pinned by `jvp_of_a_pow_call`); the shape is the same one, one operator along.
 [[tests]]
 name = "rulesets_probe_missing.at_the_primitive"
-desc = "With a primitive carrying no forward rule, `jvp(f)` is a diagnostic and not a value: it names the operator (`math:pow_d`) and the reason no rule was found, and its position is the primitive's own -- `rulesets_probe_missing.cml:10:12`, the `pow` in `f` -- which is the position a reader has to be sent to, not the `jvp(f)` call. The reading line still names what was refused (`skip=rule uri=math:pow_d`), and the run's exit is non-zero: the program does not go on to print a value it could not differentiate. Read as a whole the assertions say *when* the fault is raised: the diagnostic carries the primitive's own position, the reason the table gave (`no forward rule bound at all`), and the raise-site hint (`[raised here`) that keeps the `jvp(f)` call beside it -- a graph-time fault, not a value computed and then checked."
+desc = "With a primitive carrying no forward rule, `jvp(f)` is a diagnostic and not a value: it names the operator (`math:sin_d`) and the reason no rule was found, and its position is the primitive's own -- `rulesets_probe_missing.cml:14:12`, the `sin` in `f` -- which is the position a reader has to be sent to, not the `jvp(f)` call. The reading line still names what was refused (`skip=rule uri=math:sin_d`), and the run's exit is non-zero: the program does not go on to print a value it could not differentiate. Read as a whole the assertions say *when* the fault is raised: the diagnostic carries the primitive's own position, the reason the table gave (`no forward rule bound at all`), and the raise-site hint that keeps the `jvp(f)` call beside it -- a graph-time fault, not a value computed and then checked. `pow` was the operator this entry named until `math:pow_d` gained a forward rule; `sin` is one no family binds, so nothing in the reading changed but the name."
 kind = "behavior"
 case = "../../../cases/compile/transforms/rulesets_probe_missing.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 1
-expect_output_contains = ["skip=rule uri=math:pow_d", "rulesets_probe_missing.cml:10:12: [Error]:", "jvp has no forward rule for `math:pow_d`", "no forward rule bound at all", "[raised here"]
-expect_stdout_not_contains = ["5.0"]
+expect_output_contains = ["skip=rule uri=math:sin_d", "rulesets_probe_missing.cml:14:12: [Error]:", "jvp has no forward rule for `math:sin_d`", "no forward rule bound at all", "raised here"]
+expect_stdout_not_contains = ["0.9092974268256817"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 # The library carries the rulesets it composes.
@@ -1487,13 +1490,13 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 # The anchor of the D1 difference set in
-# `docs/handover/reports/2026-11-03-what-deleting-the-engine-pullback-takes.cn.md`: `^` on two floats is
-# answered by the engine and refused by the library, whose `stdlib/rulesets/transpose.cml` has no `pow_t`.
-# Two entries because the library's refusal happens where the graph is built -- a program holding both
-# would never print the engine's number.
+# `docs/handover/reports/2026-11-03-what-deleting-the-engine-pullback-takes.cn.md`: `^` on two floats.
+# Three entries: the engine's number, the library's number for the same arithmetic under the spelling
+# whose forward rule carries no guard, and the refusal `^`'s own pullback still gives -- the third is
+# the guard on `pow_tangent`, not a missing law.
 [[tests]]
 name = "pow_gradient_through_the_engine"
-desc = "`d(w^2)/dw` of a function whose differentiated `with` parameter is squared: the engine's `grad` answers it (6.0 at `w = 3`), which is one half of the anchor the deletion audit counts. The other half is the neighbouring entry: through `vjp` the same function is refused by name, because the library's reverse rule `pow_t` does not exist. The forward tangent of `^` is not repeated here; `jvp_of_a_power.cml` pins it."
+desc = "`d(w^2)/dw` of a function whose differentiated `with` parameter is squared: the engine's `grad` answers it (6.0 at `w = 3`), which is one half of the anchor the deletion audit counts. The other half is `pow_gradient_through_the_library`: through `vjp` the same arithmetic -- `pow(x, 3.0)`, `math:pow_d` -- answers 12.0, which is this case's number for the exponent moved to `3.0` (`pow_cube_gradient_through_the_engine`). The forward tangent of `^` is not repeated here; `jvp_of_a_power.cml` pins it."
 kind = "behavior"
 case = "../../../cases/compile/transforms/pow_gradient_through_the_engine.cml"
 args = ["${case}", "${backend}"]
@@ -1501,6 +1504,45 @@ backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
 expect_output_contains = ["pow engine value=9.0 dL/dw=6.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "pow_cube_gradient_through_the_engine"
+desc = "The engine's `d(w^3)/dw` at `w = 2`: `12.0`, and it exists so that the library's answer for the same arithmetic can be read beside it. `pow_gradient_through_the_library` differentiates `pow(x, 3.0)` through `vjp` and answers 12.0; the engine has no rule for `math:pow_d` at all (measured: `autodiff: no derivative rule for operator 'math:pow_d' of type 'float'`), so the two spellings of one kernel can only be compared as numbers, and these are the numbers. The exponent is `3.0` and not `2.0` so the value and the slope are told apart (8.0 and 12.0, neither one the other's square)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/pow_cube_gradient_through_the_engine.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["pow engine value=8.0 dL/dw=12.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "pow_gradient_through_the_library"
+desc = "`pow(x, w)` differentiated through `vjp`, three readings: `8.0` and `12.0` for `pow(2.0, 3.0)` in the base (the engine's number for `w ^ 3.0` at `w = 2`), `5.656854249492381` and `7.0710678118654755` for `pow(2.0, 2.5)` (a non-integer exponent: `2.5 * 2^1.5`, which no 'multiply by an integer' law can answer), and `5.545177444479562` for `d/dn 2^n` at `n = 3` (`8 * ln 2`), the exponent's branch of the same law. Before `jvp_pow_d` and `pow_d_t` were written this entry's case stopped in the forward half: `skip=rule uri=math:pow_d reason=the operator has no forward rule bound at all`. The second law needs the `log` law beside it (`log_d_t`), which is why the family gained that one too."
+kind = "behavior"
+case = "../../../cases/compile/transforms/pow_gradient_through_the_library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["pow library value=8.0 d/dx=12.0", "pow fractional value=5.656854249492381 d/dx=7.0710678118654755", "pow exponent value=8.0 d/dn=5.545177444479562"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "jvp_of_a_pow_call"
+desc = "The forward rule of `math:pow_d`: `pow` (`stdlib/math.cml#pow`) is the same arithmetic as `^` under a declared function's spelling, so it is a different operator with a key of its own, and it had no forward rule -- a lifted program that called it stopped with `skip=rule uri=math:pow_d reason=no forward rule bound at all`, which is what `rulesets_probe_missing` pinned before this law existed. Three readings: `8.0`/`12.0` for `pow(2.0, 3.0)`, `5.656854249492381`/`7.0710678118654755` for `pow(2.0, 2.5)`, and `8.0`/`5.545177444479562` for the exponent lifted on its own (`d/dn 2^n` at `n = 3`). The last one is the branch `^`'s helper guards on a tangent's value and therefore cannot be transposed; here it is written out, so it reads as a number."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_of_a_pow_call.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["jvp pow value=8.0 d=12.0", "jvp pow fractional value=5.656854249492381 d=7.0710678118654755", "jvp pow exponent value=8.0 d=5.545177444479562", "rules=jvp_pow_d"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1514,6 +1556,36 @@ backends = ["nvm"]
 expect_exit = 1
 expect_stdout_contains = ["transpose has no transpose for this function: this call's callee has no transpose of its own, so the call cannot be turned around"]
 expect_stderr_contains = ["skip=condition", "skip=call-no-transpose node=6 callee=rulesets.jvp::pow_tangent<float>"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# `stop_gradient` through both halves: the engine answers it with a rule that contributes nothing and
+# the library had no rule at all, which is the second gap of this lane. Two entries, engine and
+# library, because the number is the same number and the point is that the transform does not change
+# what a cut is.
+[[tests]]
+name = "stop_gradient_gradient_through_the_engine"
+desc = "`d(stop_gradient(x))/dx` at `x = 4` through the engine's own rules: the value passes through (`4.0`) and the gradient is the zero of its type (`0.0`). The engine's kernel is the identity slot (`modules/autodiff/operators.cpp#stopGradientKernel`) and the rule registered for the operator is `camel::core::noGradient`, which contributes nothing; the pullback then materializes the missing contribution as the zero of the value's own type (`modules/autodiff/pullback.cpp#Backward::checkGradientType`). Pinned as one reading, `value` and `gradient` together, because a cut that also changed the value would be a different operator."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stop_gradient_gradient_through_the_engine.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["stop_gradient engine value=4.0 dL/dx=0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "stop_gradient_gradient_through_the_library"
+desc = "The same cut through `vjp`, which is `transpose(split(jvp(f)))`: both halves need a law, and neither existed -- `vjp` stopped in the *forward* half with `skip=rule uri=autodiff:stop_gradient reason=the operator has no forward rule bound at all`, which is the reading this entry was red with before `jvp_stop_gradient` and `stop_gradient_t` were written. The answer is the engine's to the number, `4.0` and `0.0`: the tangent of the result is the zero of its own type and the cotangent of the argument is the same zero, and the zero is the law's answer rather than a value standing in for one -- no operand is read, and the type is the operator's own signature's. `residuals=0` in the split's reading says the same thing from the other side: there is nothing to carry, because the tangent depends on no input."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stop_gradient_gradient_through_the_library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["stop_gradient library value=4.0 dL/dx=0.0", "residuals=0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

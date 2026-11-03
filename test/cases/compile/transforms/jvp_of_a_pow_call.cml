@@ -1,0 +1,43 @@
+// `pow(x, w)` lifted: the forward half of the same law, for the spelling `math:pow_d`.
+//
+// `jvp_of_a_power.cml` pins the forward rule of `^` (`:op/pow_d`); this case pins the forward rule of
+// `pow` (`math:pow_d`), which is a different operator reached through a declared function
+// (`stdlib/math.cml#pow`) and had no rule at all: until `jvp_pow_d` was written, a lifted program
+// that called `pow` stopped with `skip=rule uri=math:pow_d reason=no forward rule bound at all`, and
+// `rulesets_probe_missing.cml` pinned exactly that refusal as its negative.
+//
+// What is pinned, in order:
+//   - `pow(2.0, 3.0) = 8.0` and `3 * 2^2 * 1 = 12.0`, the same 12.0 the engine answers for the same
+//     arithmetic spelled `^` (`pow_cube_gradient_through_the_engine.cml`).
+//   - The non-integer exponent: `pow(2.0, 2.5) = 5.656854249492381` and `2.5 * 2^1.5 = 7.0710678118654755`.
+//   - The exponent's branch, with the exponent itself lifted: `d/dn 2^n = 2^3 * ln(2) = 5.545177444479562`
+//     at `n = 3`. This is where the `^` spelling's guard (`pow_tangent`, `stdlib/rulesets/jvp.cml`)
+//     cannot be reused: a rule with one branch on the tangent's value is a branch, and this case reads
+//     the branch written out instead, `NaN` at `x <= 0` included.
+//
+//     camel test/cases/compile/transforms/jvp_of_a_pow_call.cml
+import rulesets.jvp
+import { jvp } from transforms
+import { pow } from math
+
+func cube(x: float): float {
+    return pow(x, 3.0)
+}
+
+func fractional(x: float): float {
+    return pow(x, 2.5)
+}
+
+func throughExponent(n: float): float {
+    return pow(2.0, n)
+}
+
+func main(): int sync {
+    let (value, tangent) = jvp(cube)(2.0, 1.0)
+    `jvp pow value={} d={}`->format<value, tangent>->println
+    let (fracValue, fracTangent) = jvp(fractional)(2.0, 1.0)
+    `jvp pow fractional value={} d={}`->format<fracValue, fracTangent>->println
+    let (expValue, expTangent) = jvp(throughExponent)(3.0, 1.0)
+    `jvp pow exponent value={} d={}`->format<expValue, expTangent>->println
+    return 0
+}
