@@ -86,7 +86,18 @@ std::vector<camel::parse::ast::RuleMatch> forwardRulesOf(const std::string &uri)
 /// `forwardRuleOf`, for the family a linear function's pullback is written in.
 std::optional<camel::parse::ast::RuleMatch> transposeRuleOf(const std::string &uri);
 
+/// Every rule `uri` could answer by in the transpose family, in filing order: what a caller that can
+/// see the operands' types asks, so that two laws of one key are told apart by the values they meet
+/// rather than by the order they were filed in. Empty when the operator has no key or the family
+/// holds none there -- `transposeRuleOf` still tells those two apart (`NoSuchFamily`,
+/// `NoRuleForPrimitive`).
+std::vector<camel::parse::ast::RuleMatch> transposeRulesOf(const std::string &uri);
+
 /// `forwardRuleOf`, for the family a batching transform asks (`rulesets.vmap`).
 std::optional<camel::parse::ast::RuleMatch> vmapRuleOf(const std::string &uri);
+
+/// Every rule `uri` could answer by in the batching family, in filing order: `transposeRulesOf`'s
+/// question asked of `rulesets.vmap`.
+std::vector<camel::parse::ast::RuleMatch> vmapRulesOf(const std::string &uri);
 
 } // namespace camel::core

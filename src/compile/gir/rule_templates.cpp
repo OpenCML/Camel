@@ -152,6 +152,44 @@ uint64_t registerGenericRule(
     return table.size();
 }
 
+uint64_t registerMonomorphicRule(
+    camel::core::context::Context &context, void *owner, std::string name,
+    const std::shared_ptr<void> &lhs, const std::shared_ptr<void> &rhs,
+    const std::shared_ptr<void> &when) {
+    Table &table           = rulesOf(context);
+    auto entry             = std::make_shared<GenericRuleEntry>();
+    entry->name            = std::move(name);
+    entry->owner           = owner;
+    entry->lhs             = lhs;
+    entry->rhs             = rhs;
+    entry->when            = when;
+    // The one instance, made here and not on the first ask: the graphs are the declaration's own
+    // functions, so there is no tuple to wait for, and an entry with `typeParams` empty and exactly
+    // one instance is what `genericRuleInstance` answers without instantiating anything.
+    GenericRuleInstance instance;
+    instance.typeText = tupleText({});
+    publish(
+        context, std::static_pointer_cast<DraftGraphBuilder>(lhs),
+        std::static_pointer_cast<DraftGraphBuilder>(rhs),
+        std::static_pointer_cast<DraftGraphBuilder>(when), instance);
+    instance.made = instance.lhs != nullptr && instance.rhs != nullptr;
+    if (!instance.made) {
+        instance.why = "its graphs could not be published in the program it runs in";
+    } else {
+        for (camel::runtime::gc_node_ref_t ref = 1; ref <= instance.lhs->nodeCount(); ++ref) {
+            const camel::runtime::GCNode *node = instance.lhs->node(ref);
+            if (node != nullptr && node->kind == camel::runtime::GCNodeKind::Oper) {
+                instance.lhsOperatorUri = std::string(
+                    instance.lhs->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri());
+                break;
+            }
+        }
+    }
+    entry->instances.push_back(std::move(instance));
+    table.push_back(std::move(entry));
+    return table.size();
+}
+
 RuleConditionAt ruleConditionAt(
     camel::core::context::Context &context, uint64_t ruleId,
     const std::vector<camel::core::type::Type *> &types, std::string &why) {
@@ -180,6 +218,13 @@ size_t genericRuleInstance(
         ruleId >= 1 && ruleId <= table.size(),
         "The id of a generic rule names a rule the context has registered.");
     GenericRuleEntry &entry = *table[static_cast<size_t>(ruleId) - 1];
+    if (entry.typeParams.empty() && entry.instances.size() == 1) {
+        // A rule whose head declares no type parameters is one law, and the instance made when it was
+        // registered is that law: there is no tuple to instantiate and no `with` value to bind, so
+        // every ask answers the same instance. (`registerMonomorphicRule`; the entry has exactly one
+        // instance from the moment it exists.)
+        return 0;
+    }
     const std::string withKey = withArgumentsKey(with);
     const std::string withText = withArgumentsText(with, entry.withParams);
     for (size_t i = 0; i < entry.instances.size(); ++i) {

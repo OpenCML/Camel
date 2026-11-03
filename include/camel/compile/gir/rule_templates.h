@@ -174,6 +174,20 @@ uint64_t registerGenericRule(
     const std::shared_ptr<void> &lhs, const std::shared_ptr<void> &rhs,
     const std::shared_ptr<void> &when);
 
+/// Register a rule whose head declares **no** type parameters: one law, one instance, made from the
+/// two graphs the declaration already built. `lhs`/`rhs`/`when` are the sides' builders
+/// (`compile_graph_ptr_t`, `DraftGraphBuilder`), not templates -- there is nothing to instantiate, so
+/// `genericRuleInstance` answers this rule's only instance for every tuple it is asked about.
+///
+/// Kept beside `registerGenericRule` rather than inside it because the two differ in what a side is:
+/// a template is instantiated per type tuple, a graph is already the instance. The rule value the
+/// declaration makes is untouched -- it keeps id 0 and the function values it held -- so an ordinary
+/// rule stays an ordinary rule for the rewrite engines; only the table of templates grows.
+uint64_t registerMonomorphicRule(
+    camel::core::context::Context &context, void *owner, std::string name,
+    const std::shared_ptr<void> &lhs, const std::shared_ptr<void> &rhs,
+    const std::shared_ptr<void> &when);
+
 /// The place, in its rule's `instances`, of the instance of `ruleId` at `types` with the `with`
 /// values `with`: the pair is instantiated once and kept, and asking twice answers the same place.
 /// The attempt never reports a diagnostic — read the entry's instance for whether it was made and

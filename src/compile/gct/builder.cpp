@@ -4571,6 +4571,25 @@ bool statesARank(const ArrayType *type) {
     return true;
 }
 
+/// Whether `type` states exactly the one dimension of no elements that `[]` writes: `f32[0]`.
+///
+/// The empty literal writes extent 0 in one dimension, and a position that states `f32[0]` states
+/// the same extent. Extent 0 equals extent 0, so the position takes that literal, and refusing it
+/// reads "no elements" as "no shape" -- the two are not the same statement, and a zero-length
+/// array is a shape a program may declare, pass and compute with (an empty tensor's reduction is
+/// `InvalidArgument`, not a compile error).
+///
+/// The same question is asked in three places and they answer alike: this literal-vs-position check,
+/// the ranked comparison of the literal's lengths to the stated extents
+/// (`visitRankedArrayInto` below, where `[]` into `f32[0]` compares 0 to 0), and a `f32[0]`
+/// parameter taking a `[]` argument. A position that states *another* rank or another extent still
+/// does not take `[]`: `f32[2]` asks for two elements, `f32[0, 0]` for a second axis the literal
+/// does not write.
+bool isADimensionOfNoElements(const ArrayType *type) {
+    const std::span<const ExtentForm> extents = type->extents();
+    return extents.size() == 1 && extents.front().isConstant() && extents.front().constant() == 0;
+}
+
 
 } // namespace
 
@@ -4596,15 +4615,26 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
             if (type->code() == TypeCode::Array) {
                 if (items.empty()) {
                     const auto *emptyInto = tt::as_ptr<ArrayType>(type);
-                    if (emptyInto != nullptr && statesARank(emptyInto)) {
+                    if (emptyInto != nullptr && statesARank(emptyInto) &&
+                        !isADimensionOfNoElements(emptyInto)) {
                         // `[]` writes one dimension of no elements: it is not the shape the
-                        // position states, and it is not reshaped into it either.
+                        // position states, and it is not reshaped into it either. A position that
+                        // states that same dimension (`f32[0]`) is the one stated shape `[]` writes,
+                        // and it is taken below like any other empty array of the position's type.
                         diags_->of(SemanticDiag::DimensionMismatch)
                             .at(ast->load()->tokenRange())
                             .commit(
                                 "The array literal written here", "0",
                                 "the position states the shape '" + type->toString() + "'");
                         throw BuildAbortException();
+                    }
+                    if (emptyInto != nullptr && statesARank(emptyInto)) {
+                        // `f32[0]`: the literal writes the one dimension of no elements the
+                        // position states, so it is built *as* that shape -- the stated extent is
+                        // the literal's own extent, zero, and the value carries it. Built as the
+                        // open `f32[]` below, the declaration's type was checked but not applied,
+                        // and the name bound a value no `f32[0]` parameter would take.
+                        return visitRankedArrayInto(ast, type, entered);
                     }
                     // `[]` in a position of type `T[]` is the empty array of `T` (design
                     // principles 5.1, 5.2): the elements it does not have are the only thing

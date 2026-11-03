@@ -379,14 +379,21 @@ export rule jvp_pow::<T>(x: T, w: T) when is_float::<T>() {
 //     `Tangent<string>` are `()`, so there is no cotangent to carry and the answer is the zero of the
 //     **result's** space: `d(float(n)) = 0.0`.
 //
-// That is two rules per destination and no more: the `<source>to<destination>` names used to be
-// spelled out one by one, each differing only in the `is_same::<T, ...>()` its guard named, and they
-// said the same two things twenty-eight times.
+// **The two are told apart by their parameter types, not by their guards** (author, 2026-11-03
+// 12:10: a duplicate is two laws of one parameter-type list, and `when` does not decide it). The two
+// shapes cannot be merged -- they answer closures of different arity, `(dx: S)` against `()`, and a
+// rule's right side cannot branch on a type -- so the sources with no tangent space are named:
+// `is_integer::<T>()` is `int | i32` (`stdlib/types.cml:153`) and the third is `string`. The float
+// sources stay one generic law per destination, `(x: S) when is_float::<S>()`, because the conversion
+// of the tangent is legal for every one of them and is checked where the source is known.
 //
-// The key is the destination's spelling at one operand -- `float`, `f32`, `f16`, `bf16` -- and one
-// key holds several rules, which is what this family leans on here: `float@1` holds the two below,
-// and the engine dispatches between them by instantiating each at the operand's own type and
-// refusing the one whose guard does not hold. The source therefore never appears in a key.
+// Four laws per destination, then: the generic float one and the three step ones. The
+// `<source>to<destination>` names this family used to spell out one by one said the same two things
+// twenty-eight times; two laws per destination said them twice and could not be told apart; this is
+// the shape the ruling leaves.
+//
+// The key is the destination's spelling at one operand -- `float`, `f32`, `f16`, `bf16`. The source
+// never appears in a key, which is why it appears in the parameter type instead.
 //
 // `f64` names the same `:op/*tod` uris that `float` does, and one uri has one key, so the
 // destination is written `float` here; a rule filed under `f64@1` would be a key no uri asks for.
@@ -401,9 +408,19 @@ export rule jvp_float_from_float::<S>(x: S) when is_float::<S>() {
     float(x) => (dx: S) => float(dx)
 }
 
-/// `d(float(n)) = 0` where `n` is a step: an integer jumps and a string is not a number, so neither
-/// has a tangent for the conversion to carry and the answer is the zero of the result's space.
-export rule jvp_float_from_a_step::<S>(x: S) when is_integer::<S>() || is_string::<S>() {
+/// `d(float(n)) = 0` where `n` is an `int`: an integer jumps, so there is no tangent for the
+/// conversion to carry and the answer is the zero of the result's space.
+export rule jvp_float_from_int(x: int) {
+    float(x) => () => 0.0
+}
+
+/// `d(float(n)) = 0` where `n` is an `i32`.
+export rule jvp_float_from_i32(x: i32) {
+    float(x) => () => 0.0
+}
+
+/// `d(float(s)) = 0` where `s` is a `string`: a string is not a number.
+export rule jvp_float_from_string(x: string) {
     float(x) => () => 0.0
 }
 
@@ -412,8 +429,18 @@ export rule jvp_f32_from_float::<S>(x: S) when is_float::<S>() {
     f32(x) => (dx: S) => f32(dx)
 }
 
-/// `d(f32(n)) = f32(0)` where `n` is a step.
-export rule jvp_f32_from_a_step::<S>(x: S) when is_integer::<S>() || is_string::<S>() {
+/// `d(f32(n)) = f32(0)` where `n` is an `int`.
+export rule jvp_f32_from_int(x: int) {
+    f32(x) => () => f32(0)
+}
+
+/// `d(f32(n)) = f32(0)` where `n` is an `i32`.
+export rule jvp_f32_from_i32(x: i32) {
+    f32(x) => () => f32(0)
+}
+
+/// `d(f32(s)) = f32(0)` where `s` is a `string`.
+export rule jvp_f32_from_string(x: string) {
     f32(x) => () => f32(0)
 }
 
@@ -422,8 +449,18 @@ export rule jvp_f16_from_float::<S>(x: S) when is_float::<S>() {
     f16(x) => (dx: S) => f16(dx)
 }
 
-/// `d(f16(n)) = f16(0)` where `n` is a step.
-export rule jvp_f16_from_a_step::<S>(x: S) when is_integer::<S>() || is_string::<S>() {
+/// `d(f16(n)) = f16(0)` where `n` is an `int`.
+export rule jvp_f16_from_int(x: int) {
+    f16(x) => () => f16(0)
+}
+
+/// `d(f16(n)) = f16(0)` where `n` is an `i32`.
+export rule jvp_f16_from_i32(x: i32) {
+    f16(x) => () => f16(0)
+}
+
+/// `d(f16(s)) = f16(0)` where `s` is a `string`.
+export rule jvp_f16_from_string(x: string) {
     f16(x) => () => f16(0)
 }
 
@@ -432,7 +469,17 @@ export rule jvp_bf16_from_float::<S>(x: S) when is_float::<S>() {
     bf16(x) => (dx: S) => bf16(dx)
 }
 
-/// `d(bf16(n)) = bf16(0)` where `n` is a step.
-export rule jvp_bf16_from_a_step::<S>(x: S) when is_integer::<S>() || is_string::<S>() {
+/// `d(bf16(n)) = bf16(0)` where `n` is an `int`.
+export rule jvp_bf16_from_int(x: int) {
+    bf16(x) => () => bf16(0)
+}
+
+/// `d(bf16(n)) = bf16(0)` where `n` is an `i32`.
+export rule jvp_bf16_from_i32(x: i32) {
+    bf16(x) => () => bf16(0)
+}
+
+/// `d(bf16(s)) = bf16(0)` where `s` is a `string`.
+export rule jvp_bf16_from_string(x: string) {
     bf16(x) => () => bf16(0)
 }
