@@ -4,7 +4,7 @@
 日期在行下，提交就是**最后一次改动本页的那个提交**
 （`git log -1 --format=%h -- docs/handover/m4-autodiff-migration-table.cn.md`）。人写的是结论，数是工具给的。
 
-追平读数（2026-11-04，分支 `lane-ledger2`，宿主 `88zjwei`，`out/latest/bin/camel` 2026-11-03 构建）：
+追平读数（2026-11-04，分支 `lane-ledger2b`（`lane-ledger` 的 tip 之上；任务书里的分支名 `lane-ledger2` 已被另一条车道占用），宿主 `88zjwei`，`out/latest/bin/camel` 2026-11-03 构建）：
 
 ```
 [LEDGER] total=132 library=123 pass=19 with=45 array=71 other=7
