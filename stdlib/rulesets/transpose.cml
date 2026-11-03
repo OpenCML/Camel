@@ -38,7 +38,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { exp, full, matmul, mean_axis, numel, ones_like, relu, shape, subtract, sum, sum_to, take, transpose, where, zeros_like } from tensor
+import { exp, full, matmul, mean_axis, numel, ones_like, relu, shape, sigmoid, subtract, sum, sum_to, take, transpose, where, zeros_like } from tensor
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
@@ -163,6 +163,17 @@ export rule relu_t::<T, A>(x: A) when is_float::<T>() {
 /// rule and `jvp_exp` (`stdlib/rulesets/jvp.cml`) are a measurement as well as a law.
 export rule exp_t::<T>(x: T[..]) when is_float::<T>() {
     exp(x) => (ct: T[..]) => ct * exp(x)
+}
+
+/// The transpose of `sigmoid`: `ct * y * (1 - y)` with `y = sigmoid(x)`, the cotangent scaled by the
+/// slope the engine's own rule builds (`sigmoidVjp`, `modules/tensor/ops/elementwise_ops.cpp`: `y`,
+/// then `1 - y`, then the two multiplied into the cotangent). The law has one operand, so the slope
+/// can only be named by recomputing it, and `sigmoid(x)` depends on `x` alone -- the recomputation
+/// `exp` measured the cut carrying as a residue (`jvp_exp`, `exp_t`). What stays in the linear half
+/// is `ct * <residual> * <residual>`, two `mul_tensor` nodes, each of which already has a transpose
+/// (`mul_tensor_t`), so the walk needs nothing new by name.
+export rule sigmoid_t::<T>(x: T[..]) when is_float::<T>() {
+    sigmoid(x) => (ct: T[..]) => (ct * sigmoid(x) * (1.0 - sigmoid(x)))
 }
 
 /// `x - w` on two arrays: what `tensor:subtract` means, and the left side this rule is filed under.
