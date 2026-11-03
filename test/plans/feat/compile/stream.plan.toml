@@ -1361,3 +1361,14 @@ expect_exit = 0
 expect_stdout_exact = "7\n17\n"
 expect_output_not_contains = ["[Error]", "UnknownInternalError", "Please report it"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "stream.generators_error_binding_across_yield"
+desc = "`case error e` binds the error of a `T!` and the arm `yield`s it. The error is the one `Error` structure the prelude declares (design principles 3.9), not the payload of the tagged value, so the cell the name lives in is typed by reading that declaration -- the same registration a `case v` gets, and the same cell. The second `yield` stands after the first, so it runs on the next pull and reads `e` out of the cell: the arm hands out `!` and then `broke`."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_error_binding_across_yield.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "!\nbroke\n"
+expect_output_not_contains = ["[Error]", "UnknownInternalError", "Please report it"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

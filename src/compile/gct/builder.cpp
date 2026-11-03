@@ -6322,20 +6322,6 @@ node_ptr_t Builder::visitGeneratorBody(
                                 writtenPattern && patternKind == AST::DataType::EnumPattern;
                             const bool isRefPattern =
                                 writtenPattern && patternKind == AST::DataType::Ref;
-                            // `case error e` binds the error of a `T!`, which is not the payload
-                            // the tagged value holds, so the cell this name would live in has no
-                            // type written where the body is built. The value a `case v` binds is
-                            // the payload, and that one is built below. Not reachable from source
-                            // today: no test writes `case error e` in a body that `yield`s.
-                            if (isRefPattern && pattern->size() > 0) {
-                                diags_->of(InternalDiag::UnknownInternalError)
-                                    .at(caseNode->load()->tokenRange())
-                                    .commit(
-                                        "a `match` arm binds the error of a `T!` and the arm then "
-                                        "`yield`s it: the error is not the payload the value "
-                                        "holds, so the name has no type written for its cell");
-                                throw BuildAbortException();
-                            }
                             // The names a case binds are locals of the body like any other, and a
                             // local that lives across a `yield` is part of the state (design
                             // principles 5.4). So each is a cell of the body, registered with the
@@ -6403,22 +6389,41 @@ node_ptr_t Builder::visitGeneratorBody(
                                     }
                                 }
                             } else if (isRefPattern) {
-                                const std::string name =
-                                    pattern->loadAs<AST::RefDataLoad>()->ref().toString();
+                                // `case v` binds the payload of a `T?` / `T!`; `case error e` binds
+                                // the error of a `T!`, and that one is not the payload. Every
+                                // fallible value carries the one `Error` structure (design
+                                // principles 3.9), and the prelude declares that type under the name
+                                // `Error`, so the cell a `case error e` binds is typed by reading the
+                                // declaration, the way a written annotation would.
+                                const bool isError = pattern->size() > 0;
+                                const std::string name = (isError ? pattern->front() : pattern)
+                                                             ->loadAs<AST::RefDataLoad>()
+                                                             ->ref()
+                                                             .toString();
                                 const std::string holder =
                                     "__gen_match_bind_" + std::to_string(idIndex_++);
                                 patternBindings.push_back(holder);
-                                // `case v` binds the payload of the tagged value: `PayloadOf<T?>`
-                                // is the `U` of `U?`, and of `U!` as well.
-                                std::vector<Type *> payloadArgument = {
-                                    TypeOfType::create(readCell(subjectCell))};
                                 cellWrites.emplace_back(name, holder);
                                 if (std::find(cellNames.begin(), cellNames.end(), name) ==
                                     cellNames.end()) {
-                                    addCellOfType(
-                                        name,
-                                        TypeCallType::create("PayloadOf", payloadArgument),
-                                        caseNode);
+                                    Type *cellType = nullptr;
+                                    if (isError) {
+                                        // The error of a `T!` is not the payload the tagged value
+                                        // holds, so `typeof` the value does not give it. What does
+                                        // give it is the one `Error` structure every fallible
+                                        // value carries (design principles 3.9) -- the same object
+                                        // the graph builder compares a failing value against, so
+                                        // the cell is typed by the language's own fact and not by
+                                        // one the builder picks.
+                                        cellType = errorType();
+                                    } else {
+                                        // `PayloadOf<T?>` is the `U` of `U?`, and of `U!` too.
+                                        std::vector<Type *> payloadArgument = {
+                                            TypeOfType::create(readCell(subjectCell))};
+                                        cellType =
+                                            TypeCallType::create("PayloadOf", payloadArgument);
+                                    }
+                                    addCellOfType(name, cellType, caseNode);
                                     cellNames.push_back(name);
                                 }
                             }
@@ -6456,7 +6461,11 @@ node_ptr_t Builder::visitGeneratorBody(
                                 continue;
                             }
                             if (isRefPattern) {
-                                node_ptr_t gCase = tree_->makeCase(CaseType::Bind, patternBindings[0]);
+                                // `case v` takes the value side of a `T?` / `T!`; `case error e`
+                                // takes the side that failed (design principles 3.8).
+                                node_ptr_t gCase = tree_->makeCase(
+                                    pattern->size() > 0 ? CaseType::Error : CaseType::Bind,
+                                    patternBindings[0]);
                                 *gCase << entry;
                                 *brch << gCase;
                                 continue;
