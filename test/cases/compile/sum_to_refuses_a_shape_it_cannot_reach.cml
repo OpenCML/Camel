@@ -1,0 +1,13 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// A shape `t` cannot reach is still a fault with a name, not a silent wrong number: `[2, 2]` has no
+// way to become the four lanes `[4]` states, so `sum_to` refuses rather than answering something.
+import { sum_to } from tensor
+
+func main(): int sync {
+    let wide = [[1.0, 2.0], [3.0, 4.0]]
+    let flat = [1.0, 2.0, 3.0, 4.0]
+    println(`sum_to(wide, flat) = ${sum_to(wide, flat):.1f}`)
+    return 0
+}

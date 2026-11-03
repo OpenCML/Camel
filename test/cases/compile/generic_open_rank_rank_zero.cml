@@ -2,19 +2,21 @@
 // SPDX-License-Identifier: MIT
 
 // `T[..]` includes rank 0, and a rank-zero array is that element (design principles 5.4): a value
-// of the element type is a value of the open rank, the same value and the same printing. So a
-// generic function's open-rank parameter takes a number, binds its element type from it, and the
-// call answers the number.
+// of the element type is a value of the open rank -- the same value and the same printing. So a
+// generic function's open-rank parameter takes a number at the position where the number is the
+// *first* thing the element type is read from, binds `T` from it, and the call answers that value.
 //
-// The array itself still enters the same parameter at every rank the value has: `float[3]` and
-// `float[]` are what the other two calls give, and they were accepted before this edge existed.
-import { sum_to } from tensor
+// The same parameter still takes the arrays it always took: `float[..]` and `float[3]` are the
+// other two calls, and the rank they have is what they print with.
+func ident::<T>(xs: T[..]): T[..] {
+    return xs
+}
 
 func main(): int sync {
     let xs = [1.0, 2.0, 3.0] as float[..]
     let fixed = [1.0, 2.0, 3.0]
-    println(`sum_to(6.0, xs) = ${sum_to(6.0, xs):.1f}`)
-    println(`sum_to(xs, 6.0) = ${sum_to(xs, 6.0):.1f}`)
-    println(`sum_to(fixed, 6.0) = ${sum_to(fixed, 6.0):.1f}`)
+    println(`ident(6.0) = ${ident(6.0):.1f}`)
+    println(`ident(xs) = ${ident(xs):.1f}`)
+    println(`ident(fixed) = ${ident(fixed):.1f}`)
     return 0
 }

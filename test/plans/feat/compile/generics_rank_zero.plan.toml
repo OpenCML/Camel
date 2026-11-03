@@ -2,39 +2,62 @@ id = "compile.generics_rank_zero"
 order = 324
 tier = "fast"
 tags = ["feat", "compile", "generics", "types"]
-desc = "An open-rank parameter `T[..]` takes a rank-zero argument -- `T[..]` includes rank 0 and a rank-zero array is that element -- while `T[]` and `float[]` keep refusing one (design principles 5.4)."
+desc = "An open-rank parameter `T[..]` binds its element type from a rank-zero argument -- `T[..]` includes rank 0 and a rank-zero array is that element -- while `T[]` and `float[]` keep refusing one (design principles 5.4)."
 
 [[tests]]
 name = "open_rank_takes_rank_zero"
-desc = "A generic function's `T[..]` parameter binds its element type from a number and answers the number; the same parameter still takes `float[3]` and `float[]`."
+desc = "A rank-zero argument at the position that binds `T` of `T[..]` is accepted, prints as the element, and the same parameter still takes `float[..]` and `float[3]`."
 kind = "behavior"
 case = "../../../cases/compile/generic_open_rank_rank_zero.cml"
 args = ["${case}", "std::fvm"]
 expect_exit = 0
-expect_stdout_exact = "sum_to(6.0, xs) = 6.0\nsum_to(xs, 6.0) = 6.0\nsum_to(fixed, 6.0) = 6.0\n"
+expect_stdout_exact = "ident(6.0) = 6.0\nident(xs) = [1.0, 2.0, 3.0]\nident(fixed) = [1.0, 2.0, 3.0]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
 name = "closed_rank_still_rejects_rank_zero"
-desc = "`T[]` states one dimension, so a number does not bind its element type: the call is a type mismatch, not a silent acceptance."
+desc = "`T[]` states one dimension, so a number does not bind its element type: the call is refused as a mismatch of types, in the words a single generic candidate already used."
 kind = "negative"
 case = "../../../cases/compile/generic_closed_rank_rejects_rank_zero.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
-expect_output_contains = ["(float)", "take_first: (xs: T[]) => int"]
+expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
+expect_output_contains = ["cannot be called with argument types (float)", "its parameter 'xs: T[]' needs a type of that form"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
 name = "written_rank_still_rejects_rank_zero"
-desc = "A non-generic parameter `float[]` keeps refusing a number, in the same words as before this edge existed."
+desc = "A non-generic parameter `float[]` keeps refusing a number, with the same diagnostic and the same overload list as before this edge existed."
 kind = "negative"
 case = "../../../cases/compile/closed_rank_rejects_rank_zero.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
-expect_output_contains = ["(float)", "first: (t: float[]) => float"]
+expect_output_contains = ["No matching function found for argument types: <> (float)", "first: (t: float[]) => float"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "sum_to_spreads_a_rank_zero_operand"
+desc = "`sum_to` is the adjoint of broadcasting both ways: a rank-zero `t` spreads over the lanes `like` states, while the reduction direction answers the total (design principles 5.4)."
+kind = "behavior"
+case = "../../../cases/compile/sum_to_spreads_rank_zero.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "sum_to(6.0, xs) = [6.0, 6.0, 6.0]\nsum_to(xs, 6.0) = 6.0\nsum_to(xs, xs) = [1.0, 2.0, 3.0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "sum_to_still_refuses_a_shape_it_cannot_reach"
+desc = "A `like` the shape of `t` cannot reach is a fault with a name, not a silent number: `[2, 2]` cannot become `[4]`."
+kind = "negative"
+case = "../../../cases/compile/sum_to_refuses_a_shape_it_cannot_reach.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TensorDimensionMismatch"
+expect_output_contains = ["cannot broadcast [4] to [2, 2]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
