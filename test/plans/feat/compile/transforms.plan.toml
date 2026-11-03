@@ -433,32 +433,30 @@ expect_output_contains = ["k value= 6.0", "k pullback(1.0)= (0.0)", "k pullback(
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
-# The transform's refusals are two files: the words it writes into its reading log
-# (`modules/transforms/transpose.cpp`) and the sentences it answers them with
-# (`modules/transforms/transpose_operator.cpp`). One can gain a word the other has never heard of, and
-# a sentence can outlive the word it names, and no program can see either: most of the words are not
-# reachable from anything this tree can run, so a case that runs `camel` cannot pin them -- the ones it
-# can reach say nothing about the rest. So the check reads the two sources and holds the sets
-# together, and the property is not "every word has a sentence of its own" (a cause whose sentence
-# would only repeat the word adds nothing, and the one catch-all sentence prints the word anyway) but
-# "every word has a readable landing, and no landing is left standing without a word". Both are
-# inclusions between the two sets, so the entry pins them as relations and never as counts: a count is
-# a number a reader has to edit for a reason no reader can see (2026-11-03: splitting one word into two
-# made `17` red before `18`, on two trees that satisfied both inclusions).
+# A refusal is one cause, and the cause is a value: the header declares it
+# (`enum class TransposeRefusalCause`), `transposeRefusalWord` spells it into the reading log,
+# `refusalSentence` renders the sentence a reader is handed from it, and a refusal site records it
+# (`refuse(TransposeRefusalCause::X)`). The four can drift apart and no program can see it: most of the
+# causes are not reachable from anything this tree can run, so a case that runs `camel` cannot pin
+# them -- the ones it can reach say nothing about the rest. So the check reads the four sources and
+# holds the sets together, and it holds them as relations, never as counts: a count is a number a
+# reader has to edit for a reason no reader can see (2026-11-03: splitting one word into two made `17`
+# red before `18`, on two trees that satisfied every relation).
 #
-# The reds it can be are both directions: delete one sentence and its word moves into the set that
-# reads the catch-all, which is not where an unanswered word should fall; rename one word and its
-# sentence becomes a claim about a cause nothing names. Both were walked by hand before this entry was
-# written (the sentence of `state-unread` deleted, then its word renamed), and both read as reds.
+# The reds it can be are the four directions, and each is one of the four places: a cause with no word
+# cannot be spelled into the log; a cause with no sentence is answered with nothing; a cause that names
+# the shape without being written out as one is an authored decision made quietly; a cause with a word
+# and a sentence and no site is a promise nothing keeps. The check also refuses a sentence file that
+# spells any of the words itself, which is the second spelling of the fact this change removed.
 [[tests]]
-name = "transpose_refusal_words_are_answerable"
-desc = "The words `transpose` writes into its reading log and the sentences `refusalCause` answers them with, held together across the two files that hold them: every word the log writes lands on a sentence -- its own, or the catch-all that names the word it is handed -- every sentence of its own is written by a file that writes the word, and a word with no sentence of its own lands nowhere but the catch-all, which names it. The three are inclusions between two sets, so this entry pins relations and nothing that counts: adding a word with its sentence is green here, and the ways it can be red are the two directions -- delete one sentence and its word joins the catch-all set, which is not where an unanswered word should fall; rename one word and its sentence becomes a promise nothing keeps. The numbers this entry used to pin (17 words, 9 of their own, 8 on the catch-all) were that same property written as a measurement, and on 2026-11-03 splitting `call` into `call-no-transpose` and `call-value-missing` turned the entry red on `17` while both trees satisfied every inclusion; the numbers are gone for that reason."
+name = "transpose_refusal_is_one_cause_in_four_places"
+desc = "One refusal is one cause, and the cause is read in four places that have to agree: the header declares it, the word table spells it into the log, `refusalSentence` renders the sentence a reader is handed from it, and the refusal sites record it. Held as relations, not counts: every cause has one word, one sentence and a site -- except `NeedsAValueOutsideTheClosure`, which has the first two and waits for a shape -- a cause with no sentence of its own lands on the one that names the shape and that list is written out in the check, and the word a cause is spelled as appears in one file only, the table, so the caller renders the sentence from the cause and never from the log. That last relation is the point of the entry: the caller used to recover the cause by searching the log text for the word's prefix, so the spelling itself was the fact, and a word renamed on one side of the pair was a sentence about a cause nothing named. The four ways it can be red are the four places -- a cause with no word, a cause with no sentence, a cause that names the shape without being written out as one, and a cause with a word and a sentence that no site records."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/transpose_refusal/check.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["every word the log writes lands on a sentence", "every sentence of its own is written by a file that writes the word", "lands nowhere but the catch-all, which names it", "waits for a shape, not for a sentence"]
+expect_stdout_contains = ["every cause has one word, one sentence, and a site that records it", "without a sentence of its own lands on the one that names the shape", "renders the sentence from the cause and never from the log", "waits for a shape"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
 
