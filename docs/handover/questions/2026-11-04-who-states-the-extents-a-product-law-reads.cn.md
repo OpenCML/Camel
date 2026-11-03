@@ -72,3 +72,23 @@
 本轮我已按甲把**本车道能做的**都落地了：`wantsCotangent` 对闭包端口答 `false`、`reachesAParticipant` 对每个转置都算且看两条输入表（否则元组用例静默变零）。手的闭包那条已回基线四个数并去掉 `known_fail`；另 6 条保留 `known_fail`，pin 改成 `skip=cotangent-needs-a-value uri=tensor:multiply`（不带位置——位置从 0 挪到 1 是同一成因往前走了一步，不该被当成换了个毛病）。
 
 **阈值**：甲落地时若发现除这 6 条之外还要改别处的期望，退到乙，并在那一页里写清"库这条路的参数形状必须写在类型里"。
+## 5. 已解（2026-11-04，`lane-multensor`，`52d4ff75b`）
+
+**甲，但读的不是类型，是另一个操作数。** 6 条回到基线数，`known_fail` 全消。
+
+先说清一件事：甲原文写的是"把两侧长度作为已知实参交给那个线性调用"。**这条路在本仓现有的算子集合里走不通**，两条都试过，都不是猜的：
+
+1. `sum_to` 的第二个实参要的是一个**值**，形状只是它被读的那一面。要让律"只读长度"，得有一个 `sum_to_stated(t, at: int[])` 这样的孪生算子。`git grep sum_to_stated` 在整棵树和所有分支里都是 0——它不存在，而新加它要动 `modules/tensor`（本车道按派工不碰）。
+2. `extent_of::<X>()` 这条路对开秩类型没有答案：`float[..]` 不写死形状，`extent_of` 在实例化处就被拒（`extent_of_needs_a_type_that_states_its_shape` 守着的正是这一侧）。6 条用例的参数恰恰全是 `float[..]`／`float[]`。所以"长度从类型来"对这 6 条**没有可读的长度**。把它当作宽化端口（`*_from_type` 那一族的写法）同样拿不到东西，因为宽化端口交出来的就是 `extent_of` 的答案。
+
+真正能读的已知值是**另一个操作数**。`sum_to` 的第二实参在等形状时是恒等，而 `tensor:multiply` 就是逐元素的——引擎自己的孪生 `modules/tensor/ops/elementwise_ops.cpp#multiplyVjp` 只写 `multiply(dy, rhs)` 累加进 `lhs`，自己不做任何归约，归约是 `accumulateOperand` 按操作数形状补的。所以"乘积的形状"和"另一个操作数的形状"是同一个形状，谁都能写出来。于是：
+
+```
+mul_tensor(x, w) => (ct: T[..]) => (sum_to(ct * w, w), sum_to(ct * x, x))
+```
+
+每一侧命名的是它**没有在给余切**的那个操作数：`x` 那一侧读 `w`，`w` 那一侧读 `x`。没有一侧读切向，没有零载体，`sum_to` 仍然读形状。这就是 17:35 那条（原值信息由有值的那一半交出来）在乘积族上的形状，也是下标族 `element_at(dxs, extent_pair(i, len(xs)))` 的同一招。
+
+**取舍**：`T[..]` 包含秩 0，把"数组 × 数"交给这一个律的写法（原先注里那句）现在改为归 `:op/mul_d`／`mul_t`，律本身只对逐元素乘积成立。这不是缩水：开秩操作数在秩 0 一侧的归约，旧写法同样读不到形状（拒绝点完全相同），而新写法给出的答案在算子接受的每一种形状上都对。
+
+读数与判据见 `docs/handover/reports/2026-11-04-the-product-law-reads-the-other-operand.cn.md`。
