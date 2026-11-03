@@ -404,9 +404,10 @@ timeout_ms = 20000
 # the constant `1.0` this shape answered before the loop branch existed would answer `2.0` -- and `m`,
 # whose state starts at the parameter, keeps answering `1.0` for `m(x) = x + 6`, so the branch answers a
 # zero only where nothing reaches the parameter and not on the way past the loop that does reach it.
-# The half that carries a closure still refuses the shape by name (`skip=state-unread`): a member that
-# carries a value and reads none is the graph that took the process down when this was answered with a
-# constant, so the ruling lands on the half that can take it.
+# The half that carries a closure answers the same zero: a member carries its closure whatever its
+# answer reads -- a zero answer is a constant and the closure is still filled -- so the shape that
+# used to be refused with `skip=state-unread` is answered by that half too (author, 2026-11-03,
+# `origin/fsh-dev = 3ab482ab2`), and the cause is gone from `TransposeRefusalCause`.
 [[tests]]
 name = "transpose_unread_state_answers_zero.nvm"
 desc = "A parameter the loop never reads answers a zero cotangent: `transpose(k)` for `k(x) = loop s = 0.0 for i in [1, 2, 3] do s + 2.0` answers `(0.0)` for a cotangent of 1 and 0 (linear), where the same shape used to be refused with `skip=state-unread`; `m(x) = loop s = x ...` is the control and answers `(1.0)`. On paper `k(x) = 6` for all `x` so `k' = 0`, and `m(x) = x + 6` so `m' = 1`."

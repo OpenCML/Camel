@@ -69,8 +69,6 @@ const char *transposeRefusalWord(TransposeRefusalCause cause) {
         return "cotangent-needs-a-value";
     case TransposeRefusalCause::State:
         return "state";
-    case TransposeRefusalCause::StateUnread:
-        return "state-unread";
     case TransposeRefusalCause::Range:
         return "range";
     case TransposeRefusalCause::CallNoTranspose:
@@ -1348,8 +1346,8 @@ bool buildTransposeMember(
                             // has no other way to reach, and the arm stops by name (author's ruling
                             // of 2026-11-03, `origin/fsh-dev = ad7e716b0`: the legacy path that
                             // answered it from `paramPorts` is dropped -- it named a parameter as
-                            // the holder of a value nobody had established it held, which is the
-                            // same claim `state-unread` refuses to make one branch below).
+                            // the holder of a value nobody had established it held, the same claim
+                            // the loop's unread-state case stopped making on 2026-11-03).
                             return forward(value);
                         }
                         if (sourced->kind == rt::GCNodeKind::Oper) {
@@ -2460,23 +2458,28 @@ bool buildTransposeMember(
                     if (start != nullptr && start->kind == rt::GCNodeKind::Port) {
                         result =
                             tupleOf({loopNode}, {cotangentTypeOf(loopNode, Type::Float64())}).first;
-                    } else if (closureOf.empty()) {
-                        // Nothing reaches that value, so nothing it did can reach a parameter, so the
-                        // cotangent of the loop's value is the zero of its cotangent space: the same
-                        // reading the straight-line case took on 48bfa6778 ("a parameter the body
-                        // never reads answers a zero cotangent, not a refusal"), read for a loop. It is
-                        // answered only when the member carries no closure *of its own* -- the test is
-                        // the closure it inherited (`closureOf`), not whether the answer reads one of
-                        // its ports: a half a call handed a closure has a value to be called with, and
-                        // an answer that is a constant would be a member called for a value nothing in
-                        // it reads -- which is the shape that took the process down when it was
-                        // answered this way, so it stays refused by name one branch below.
-                        const gc_node_ref_t none = zeroOf(loopNode);
-                        result = tupleOf({none}, {cotangentTypeOf(loopNode, Type::Float64())}).first;
                     } else {
-                        refuse(TransposeRefusalCause::StateUnread);
-                        os << " node=" << ref << " origin=" << regionOrigin << '\n';
-                        return false;
+                        // Nothing reaches that value, so nothing the loop did can reach a parameter,
+                        // so the loop answers the zero of its cotangent space: the same reading the
+                        // straight-line case took on 48bfa6778 ("a parameter the body never reads
+                        // answers a zero cotangent, not a refusal"), read for a loop. A member
+                        // carries its closure whatever its answer reads -- a zero answer is a
+                        // constant and the closure is still filled -- so there is no refusal here
+                        // (author, 2026-11-03, `origin/fsh-dev = 3ab482ab2`). The test is no longer
+                        // whether the member carries a closure (`closureOf`), which would refuse the
+                        // half `vjp` hands out: that half carries the loop's tape and is exactly the
+                        // shape the zero is for.
+                        //
+                        // The constant is not written here. `result` stays invalid, and the answer is
+                        // built by the walk below exactly as every other transposition builds it: one
+                        // value per parameter the walk reached, each read from that parameter's own
+                        // cotangent slot, wrapped in the tuple the signature promises (`(float,)` for
+                        // one parameter; author, 2026-11-02 11:30). A constant written here instead
+                        // took the *loop's* cotangent type for the answer's: the slot holds the
+                        // answer's type, so the value has to be the answer's too -- a bare scalar in a
+                        // slot or a tuple on its way into a tuple is what took the process down on
+                        // 843d38025, and the loop's cotangent type is not even a question this graph
+                        // can answer (the ref is a node of the draft, the types belong to the source).
                     }
                 }
                 break;
