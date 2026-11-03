@@ -34,6 +34,7 @@ import {
     outArtifactStdlib,
     writeBuildInfo
 } from './common.js'
+import { CXX_RUNTIME_LIBRARY, installCxxRuntimeGuard } from './cxx-runtime-guard.mjs'
 
 // The Debug build has its own artifact directory: the Release tree stays at out/latest, so the
 // test runner can address a Debug binary by path (--build debug) instead of guessing which
@@ -197,6 +198,91 @@ function collectPythonRuntimeDlls(BASEDIR) {
     return [...files]
 }
 
+// The C++ standard library the link used travels with the install.
+//
+// libcamel.so and every tool ask for GLIBCXX_3.4.31..36, which is newer than the libstdc++ an
+// older distribution ships: there the binary refuses to start ("version `GLIBCXX_3.4.36' not
+// found") and every caller had to export LD_LIBRARY_PATH first. A command typed by hand over ssh,
+// or any caller that did not inherit that export, got a binary that could not start at all -- and
+// the failure looks like a broken test rather than a missing library (docs/handover/pitfalls.cn.md,
+// the GLIBCXX row).
+//
+// Writing the toolchain's directory into the executables' rpath would answer that with an absolute
+// path inside one account's toolchain: a wheel carrying it names a directory the machine it is
+// installed on has never had, and the path stops resolving the day that toolchain moves. libs/ is
+// where the rpath the build already writes points -- `$ORIGIN/../libs` on every tool
+// (tools/libcamel_tool.cmake), `$ORIGIN` on libcamel itself (CMakeLists.txt) -- so the library is
+// copied there
+// instead: the binary loads the copy beside it wherever the install is unpacked, and `ldd` names a
+// file inside the install rather than the system's. What that costs is size (~24 MB in libs/,
+// already 20 MB of libcamel) and the rule that libs/ travels with bin/, which it already did.
+//
+// The copy cannot answer the install that finds a *too old* one -- `libs/` missing from an older
+// install, or its `libstdc++.so.6` replaced -- because the loader refuses the binary before `main`.
+// `bin/camel` therefore becomes a launcher (scripts/cxx-runtime-guard.mjs) whose one check runs
+// before that process exists; the copy above and the launcher are the two halves of the ruling
+// "an install carries its own C++ runtime, and when the one it finds is too old it says so".
+// Directories that belong to the distribution. A link that resolved the library there produced a
+// binary the machine it runs on can load, so there is nothing to carry; only a toolchain kept
+// elsewhere (a conda environment, a custom GCC) needs its own copy bundled.
+const SYSTEM_LIBRARY_DIRS = ['/lib', '/lib32', '/lib64', '/usr/lib', '/usr/lib32', '/usr/lib64']
+
+function isSystemLibraryDir(dir) {
+    return SYSTEM_LIBRARY_DIRS.some((base) => dir === base || dir.startsWith(base + '/'))
+}
+
+/**
+ * The runtime library the C++ compiler driver links, as that same driver reports it: the driver
+ * that chose the library at link time is the one whose answer decides which version the binary
+ * needs, so asking it is not a guess. `null` when no driver on PATH answers.
+ */
+function findCxxRuntimeLibrary(name) {
+    const compilers = [process.env.CXX, process.env.CC, 'c++', 'clang++'].filter(Boolean)
+    for (const compiler of compilers) {
+        try {
+            const reported = execFileSync(compiler, [`--print-file-name=${name}`], {
+                encoding: 'utf8',
+                stdio: ['ignore', 'pipe', 'ignore']
+            }).trim()
+            // A driver that cannot find the library prints the bare name; an absolute path that
+            // exists is the answer, and its real file is what is copied (`libstdc++.so.6` is a
+            // symlink to `libstdc++.so.6.0.36`, and the linker records the symlink's name).
+            if (path.isAbsolute(reported) && fs.existsSync(reported)) return fs.realpathSync(reported)
+        } catch {
+            // Not every CXX/CC on PATH is a compiler driver, and not every driver knows this
+            // option: the next candidate answers instead.
+        }
+    }
+    return null
+}
+
+function collectCxxRuntimeLibrary(libsDir) {
+    if (isWindows || process.platform === 'darwin') return
+    const source = findCxxRuntimeLibrary(CXX_RUNTIME_LIBRARY)
+    if (source === null) {
+        logWarn(
+            `No compiler reported ${CXX_RUNTIME_LIBRARY}; out/<tag>/libs will not carry it and the ` +
+                `binaries load the host's copy (bin/camel then refuses with what that copy is missing)`
+        )
+        return
+    }
+    // A link that resolved the library inside the distribution is not carried: the machine that
+    // runs this install is the one whose copy answered the link, so there is nothing a copy would
+    // add. Said out loud, because "libs/ has no libstdc++ and that is correct" has to be readable
+    // from the build log rather than inferred from a missing file.
+    if (isSystemLibraryDir(path.dirname(source))) {
+        logStep(
+            `Not bundling ${CXX_RUNTIME_LIBRARY}: the link resolved it in ${path.dirname(source)}, ` +
+                `a directory of the distribution (SYSTEM_LIBRARY_DIRS)`
+        )
+        return
+    }
+    const destination = path.join(libsDir, CXX_RUNTIME_LIBRARY)
+    fs.copyFileSync(source, destination)
+    fs.chmodSync(destination, 0o755)
+    logStep(`Bundled ${CXX_RUNTIME_LIBRARY} from ${source}: the binaries load it from libs/`)
+}
+
 const COLLECT_PRIMARY_TAG = 'latest'
 
 function collect(config, tag) {
@@ -261,6 +347,19 @@ function collect(config, tag) {
         }
     } else {
         logWarn(`Library not found for ${libName} under build/ (expected a built shared library for ${config})`)
+    }
+
+    collectCxxRuntimeLibrary(libsDir)
+
+    // `bin/camel` becomes a launcher and `bin/camel.real` the binary it starts (Linux only; see
+    // scripts/cxx-runtime-guard.mjs). The install is complete either way: a launcher that cannot be
+    // written leaves the binary where it is, and every caller keeps starting it directly.
+    const guard = installCxxRuntimeGuard(binDir)
+    if (guard !== null) {
+        logStep(
+            `bin/${path.basename(guard.launcher)} is a launcher for bin/${path.basename(guard.binary)}: ` +
+                `it answers with what the loader is missing (${guard.interpreter}) before the loader refuses`
+        )
     }
 
     // Python runtime DLLs: modules/python/sdks/python3xx/ (sync-python-sdks); else venv / conda / python on PATH.
