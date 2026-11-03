@@ -24,4 +24,9 @@ class InlineRewritePass : public RuntimeGraphRewritePass {
     /// given none is refused (engine.cpp). It belongs to this pass, so two programs in one process
     /// do not share a count, and a run on another graph starts its own.
     SettleStreak settleStreak_{};
+    /// The nodes this pass has copied against `growth_budget`: required by
+    /// `applyOptimizeRewritePass` the same way, and cleared where a run starts, so each run spends
+    /// the budget `stdlib/std.cml` declares on this pass and no run starts on what one before it
+    /// left. The engine used to make its own count here, which dropped the budget at every call.
+    size_t growthSpent_{};
 };

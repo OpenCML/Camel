@@ -42,7 +42,7 @@ using camel::core::type::TypeCode;
 /// what the operator *is*. The registration hands them to the operator table
 /// (`OperatorTable::declareConversion`), so a reader asks there whether an operator converts
 /// and between which types, instead of decoding the letters of its URI: a conversion's rule
-/// is filed under its destination's spelling (`camel/core/forward.h#conversionKeyOf`), and a
+/// is filed under its destination's spelling (`src/core/forward.cpp#conversionKeyOf`), and a
 /// variable read whose result is a float is not a conversion.
 struct ConversionRegistration {
     const char *name; // the URI in the builtin namespace: `op/itod`
@@ -515,9 +515,14 @@ void registerBuiltinOperatorTraits() {
     // Declared never to fault, where the implementation has no fault path at all: integer
     // addition and subtraction wrap, floating-point arithmetic and ordering cannot fail, and
     // the strict boolean operators only read their operands. Everything else keeps the
-    // default (may fault). No pass acts on this declaration yet (operator_table.h). Each entry
-    // here is one operator of docs/handover/reports/faults-table-audit.md, which reads its
-    // implementation against this list.
+    // default (may fault). The passes do act on this list: `src/runtime/graph.cpp#nodeMayFault`
+    // reads `mayFault` beside `elementwise` to answer design principles 3.4's predicate, and
+    // `nodeIsFreelySchedulable` hands that answer to whoever may drop, move or recompute a node
+    // -- an operator left out of this list is a running the program observes, so `std::opt`
+    // keeps it alive with `:op/keep` when a removal takes its last read
+    // (`src/passes/opt/generic/rewrite.cpp#isObservedRun`). Each entry here is one operator of
+    // docs/handover/reports/faults-table-audit.md, which reads its implementation against this
+    // list.
     static const std::unordered_set<std::string_view> kNeverFaults = {
         "op/add_i",
         "op/add_l",
@@ -656,7 +661,7 @@ void registerBuiltinOperatorTraits() {
             {.pure = pure, .elementwise = arrayConversions.contains(key), .mayFault = !kNeverFaults.contains(key)});
     }
     // Which types each conversion reads and writes: the fact a reader asks for instead of
-    // decoding the letters of the URI (`camel/core/forward.h#conversionKeyOf`). Written here,
+    // decoding the letters of the URI (`src/core/forward.cpp#conversionKeyOf`). Written here,
     // where the operator is registered, and at no second place.
     for (const ConversionRegistration &conversion : kConversions) {
         registry.declareConversion(

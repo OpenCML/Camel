@@ -1974,6 +1974,31 @@ bool buildTransposeMember(
                 }
                 const auto normOperands = function->normInputsOf(ref);
                 if (normOperands.size() != 2 && normOperands.size() != 1) {
+                    // Measured, and left standing: the refusal is reachable (`transpose(loss_mean)`
+                    // over `mean_axis(xs, axis, keepdims)` reaches it as
+                    // `skip=arity uri=tensor:mean_axis operands=3`), and the count is wrong about
+                    // *why* -- the law `mean_axis_t` names all three ports and the last two answer no
+                    // cotangent because `int` and `bool` have no tangent space. What it is right about
+                    // is what removing it does: with the count gone the walk finishes, and the graph
+                    // it builds takes `(x, ct)` (`TRANSPOSE function=loss_mean graph=296
+                    // type=(float[..], float) => (float[..],)`) while the function value's signature
+                    // promises `(float) => (float[..],)`. The pullback's convention carries no residual:
+                    // a law whose right side reads the forward value of an *intermediate* node
+                    // (`mean_axis_cotangent` reads `xs`) makes the walk declare a port the caller was
+                    // never told to fill, and the call dies on `nargs.size() == normPorts.size()` --
+                    // a signal, which is worse than this refusal. A law that reads a *parameter* or a
+                    // constant (`sum_t`, `mul_t`, `mul_tensor_t`, `dtod_t`) needs no residual, which is
+                    // why every reachable transpose rule is of that shape.
+                    //
+                    // The count came in with `a64136b6a` ("transpose of a straight-line linear graph,
+                    // built from the index's rules"), when the walk knew unary and binary primitives
+                    // and nothing else. `439d800be` gave the walk the node's port list (normal ones,
+                    // then `<>`) and wrote `mean_axis_t` in the same change, recording here that the
+                    // count refuses a law whose three ports it names -- `stdlib/rulesets/transpose.cml`
+                    // keeps that measurement beside the law. What the stop is really about is the
+                    // residual, so the page
+                    // `docs/handover/questions/2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md`
+                    // asks the question this line is one symptom of.
                     refuse(TransposeRefusalCause::Arity);
                     os << " uri=" << uri << " operands=" << normOperands.size() << '\n';
                     return false;

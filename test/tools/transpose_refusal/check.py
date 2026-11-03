@@ -93,9 +93,139 @@ def string_literals(text: str) -> list[str]:
     """Every double-quoted literal of a C++ source, escapes kept as written.
 
     Words are read out of literals and not out of the file: a comment that says a cause teaches a
-    reader something and produces no reading.
+    reader something and produces no reading. The literals are scanned, not matched: a regular
+    expression cannot tell a literal from a quotation in a comment, and this file is about exactly
+    that difference.
     """
-    return [m.group(1) for m in re.finditer(r'"((?:[^"\\\n]|\\.)*)"', text)]
+    return [literal for _, literal in scanned_literals(text)]
+
+
+def scanned_literals(text: str) -> list[tuple[int, str]]:
+    """Every string literal of a C++ source with the offset it starts at, tokens walked in order.
+
+    Line comments, block comments, character literals and raw strings are states, so text that only
+    looks like a literal -- a quotation in a comment, a `'` in a digit separator -- is not one.
+    """
+    found: list[tuple[int, str]] = []
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch == "/" and i + 1 < n and text[i + 1] == "/":
+            newline = text.find("\n", i)
+            i = n if newline < 0 else newline
+        elif ch == "/" and i + 1 < n and text[i + 1] == "*":
+            close = text.find("*/", i + 2)
+            i = n if close < 0 else close + 2
+        elif ch == '"':
+            j, body = i + 1, []
+            while j < n and text[j] != '"':
+                if text[j] == "\\" and j + 1 < n:
+                    body.append(text[j])
+                    body.append(text[j + 1])
+                    j += 2
+                elif text[j] == "\n":
+                    break
+                else:
+                    body.append(text[j])
+                    j += 1
+            found.append((i, "".join(body)))
+            i = j + 1
+        elif ch == "'":
+            close = text.find("'", i + 1, min(n, i + 8))
+            i += 1 if close < 0 or "\n" in text[i:close] else close + 1 - i
+        elif ch == "R" and i + 1 < n and text[i + 1] == '"':
+            opening = text.find("(", i + 2)
+            if opening < 0:
+                i += 1
+                continue
+            delimiter = text[i + 2 : opening]
+            end = text.find(")" + delimiter + '"', opening + 1)
+            if end < 0:
+                i = n
+            else:
+                found.append((i, text[opening + 1 : end]))
+                i = end + len(delimiter) + 2
+        else:
+            i += 1
+    return found
+
+
+def code_only(text: str) -> str:
+    """The source with comments and literal bodies blanked, line breaks and offsets kept.
+
+    Brace matching has to see code and not strings, and keeping the length makes an offset here an
+    offset in the original -- which is how a literal is placed inside a function.
+    """
+    blank = list(text)
+    i, n = 0, len(text)
+
+    def blank_range(start: int, stop: int) -> None:
+        for k in range(start, min(stop, n)):
+            if blank[k] != "\n":
+                blank[k] = " "
+
+    while i < n:
+        ch = text[i]
+        if ch == "/" and i + 1 < n and text[i + 1] == "/":
+            end = text.find("\n", i)
+            end = n if end < 0 else end
+            blank_range(i, end)
+            i = end
+        elif ch == "/" and i + 1 < n and text[i + 1] == "*":
+            end = text.find("*/", i + 2)
+            end = n if end < 0 else end + 2
+            blank_range(i, end)
+            i = end
+        elif ch == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == "\\" and j + 1 < n else 1
+            blank_range(i, j + 1)
+            i = j + 1
+        elif ch == "'":
+            close = text.find("'", i + 1, min(n, i + 8))
+            if close < 0 or "\n" in text[i:close]:
+                i += 1
+            else:
+                blank_range(i, close + 1)
+                i = close + 1
+        elif ch == "R" and i + 1 < n and text[i + 1] == '"':
+            opening = text.find("(", i + 2)
+            if opening < 0:
+                i += 1
+                continue
+            delimiter = text[i + 2 : opening]
+            end = text.find(")" + delimiter + '"', opening + 1)
+            end = n if end < 0 else end
+            blank_range(i, end)
+            i = end
+        else:
+            i += 1
+    return "".join(blank)
+
+
+def render_span(text: str) -> tuple[int, int]:
+    """Where the one place that prints a refusal's word starts and ends, in `text`'s offsets."""
+    marker = "const auto refuse = [&](TransposeRefusalCause cause,"
+    start = text.find(marker)
+    if start < 0:
+        raise SystemExit(
+            "transpose refusals: transpose.cpp has no `const auto refuse = [&](` lambda, so nothing "
+            "is the single place that prints a refusal's word"
+        )
+    code = code_only(text)
+    opening = code.find("{", start)
+    if opening < 0:
+        raise SystemExit("transpose refusals: the `refuse` lambda has no body")
+    depth = 0
+    for i in range(opening, len(code)):
+        if code[i] == "{":
+            depth += 1
+        elif code[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return start, i
+    raise SystemExit("transpose refusals: the `refuse` lambda is never closed")
 
 
 def enum_members(path: Path) -> list[str]:
@@ -215,6 +345,23 @@ def main() -> int:
         red("`refusalSentence` has no catch-all that names the shape, so a cause with no sentence of "
             "its own would be answered with nothing")
 
+    # A word is printed in one place, and it is printed by asking the table. A literal that spells
+    # `skip=` anywhere else is a second spelling of the same fact, whether or not it agrees with the
+    # table today -- and a site that writes its own log line is exactly how the one on
+    # `UnreadParameter` survived the change that removed the rest.
+    span = render_span(read(WORDS_FILE))
+    for path in (WORDS_FILE, SENTENCE_FILE, HEADER_FILE):
+        text = read(path)
+        for offset, literal in scanned_literals(text):
+            if "skip=" not in literal:
+                continue
+            if path == WORDS_FILE and span[0] <= offset <= span[1]:
+                continue
+            line = text.count("\n", 0, offset) + 1
+            red(f"{path.name}:{line}: a string literal spells `{literal.strip()}` outside the one "
+                f"place that renders a refusal's word: the word belongs in the table and is printed "
+                f"by `refuse`, so a hand-written line is a second spelling of it")
+
     if own & named:
         red(f"`{', '.join(sorted(own & named))}` has its own sentence and names the shape at once")
     if own | named != declared:
@@ -259,6 +406,10 @@ def main() -> int:
     print(
         "transpose refusals: the word a cause is spelled as appears in one file only -- the table -- "
         "so the caller renders the sentence from the cause and never from the log"
+    )
+    print(
+        "transpose refusals: no literal spells `skip=` outside the one place that renders it, so a "
+        "refusal point cannot hand-write the line the table is there to spell"
     )
     return 0
 
