@@ -883,6 +883,25 @@ bool matchParameterList(
     return ok;
 }
 
+/// The type an open-rank pattern binds from a value that is not an array: `T[..]` includes rank 0,
+/// and a rank-zero array is that element (design principles 5.4), so the element type is what the
+/// value constrains. nullptr when the pattern is not an open rank with no prefix -- `T[]` and
+/// `T[3, ..]` state dimensions a non-array value does not have, so nothing binds and the value does
+/// not enter either -- and when the actual is already an array, whose own element the array arm
+/// below pairs with.
+///
+/// One judgement for both walkers: `bindTypeVars` and `unifyTypeVars` used to answer "the codes
+/// differ, so nothing binds" separately, and that is exactly the answer design principles 5.4
+/// overrules for `T[..]`. `rankZeroType()` is where the shape is decided, so the binding and
+/// `ArrayType::assignableFrom` (array.cpp, the membership check that follows) ask one place.
+Type *rankZeroBindTarget(Type *pattern, Type *actual) {
+    if (pattern == nullptr || actual == nullptr || pattern->code() != TypeCode::Array ||
+        actual->code() == TypeCode::Array) {
+        return nullptr;
+    }
+    return static_cast<ArrayType *>(pattern)->rankZeroType();
+}
+
 } // namespace
 
 bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
@@ -908,6 +927,16 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         return true;
     }
     if (pattern->code() != actual->code()) {
+        // `T[..]` includes rank 0, and a rank-zero array is that element (design principles 5.4),
+        // so a value of some other type at an open-rank position binds the element type there and
+        // the position then holds that type at rank zero -- the same edge `ArrayType::assignableFrom`
+        // answers for the argument check, which asks `rankZeroType()` for it (array.cpp). `T[]` and
+        // `T[3, ..]` state dimensions and hold no rank-zero value, so `rankZeroType()` is the one
+        // place that decides which shapes are an open rank with no prefix, and the two answering
+        // it here and there cannot drift apart.
+        if (Type *zero = rankZeroBindTarget(pattern, actual); zero != nullptr) {
+            return bindTypeVars(zero, actual, bindings);
+        }
         return false;
     }
     switch (pattern->code()) {
@@ -1135,6 +1164,11 @@ bool unifyTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         }
     }
     if (pattern->code() != actual->code()) {
+        // The same edge `bindTypeVars` takes above: `T[..]` includes rank 0 and a rank-zero array
+        // is that element (design principles 5.4).
+        if (Type *zero = rankZeroBindTarget(pattern, actual); zero != nullptr) {
+            return unifyTypeVars(zero, actual, bindings);
+        }
         return false;
     }
     switch (pattern->code()) {
