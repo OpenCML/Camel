@@ -342,7 +342,12 @@
             "plans": ["feat/gate/conformance.plan.toml"]
         },
         {
-            "comment": "The other build/dev scripts (build.js, format.js, collect-out.js, ...): every plan runs the binary they build, but no plan reads them. Smoke is the smallest check that the toolchain still produces a working camel. scripts/perf-gate.mjs is covered here too: smoke does not run a perf plan.",
+            "comment": "The build stamp and the -NoBuild guard: build_stamp drives scripts/build-info.js on a fake checkout, and the option record it compares comes from scripts/common.js (with scripts/cmake-opts.js reading the same values for the -D flags) and is written by scripts/collect-out.js at the end of every build. The general rule below sends scripts/ to smoke, which never reads the stamp.",
+            "paths": ["scripts/build-info.js", "scripts/common.js", "scripts/cmake-opts.js", "scripts/collect-out.js"],
+            "plans": ["feat/tools/build_stamp.plan.toml"]
+        },
+        {
+            "comment": "The other build/dev scripts (build.js, format.js, debug.js, ...): every plan runs the binary they build, but no plan reads them. Smoke is the smallest check that the toolchain still produces a working camel. scripts/perf-gate.mjs is covered here too: smoke does not run a perf plan.",
             "paths": ["scripts/"],
             "plans": ["smoke"]
         },

@@ -7,7 +7,7 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { BASEDIR } from './common.js'
+import { BASEDIR, effectiveCmakeOptions } from './common.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const OPTIONS_FILE = path.join(BASEDIR, 'cmake', 'options.json')
@@ -49,10 +49,12 @@ export function getEffectiveValue(opt, userOpts) {
 
 /**
  * Build -D flags for cmake. Reads from .camel-opts.json (or options.json default)
+ *
+ * The values come from `common.js: effectiveCmakeOptions`, the same reader the build stamp uses:
+ * the `-D` flags that reach the compiler and the option set recorded in `out/<tag>/build-info.json`
+ * are then one reading, and `-NoBuild` compares the install against what a build would pass now.
  */
 export function getCmakeOptionFlags() {
-    const opts = loadOptions()
-    const userOpts = loadUserOpts()
-    const flags = opts.map((opt) => `-D${opt.name}=${getEffectiveValue(opt, userOpts)}`)
+    const flags = effectiveCmakeOptions().map((opt) => `-D${opt.name}=${opt.value}`)
     return flags.join(' ')
 }

@@ -9,8 +9,8 @@
  * of `collect-out`). This script never writes during a build; it reads the stamp and compares it
  * with the tree the caller is about to verify.
  *
- *   node scripts/build-info.js check --tag latest [--allow-stale] [--root DIR]
- *   node scripts/build-info.js check --install DIR [--root DIR]
+ *   node scripts/build-info.js check --tag latest [--allow-stale] [--config Release|Debug] [--root DIR]
+ *   node scripts/build-info.js check --install DIR [--config Release|Debug] [--root DIR]
  *   node scripts/build-info.js show  --tag latest [--root DIR]
  *   node scripts/build-info.js show  --install DIR [--root DIR]
  *   node scripts/build-info.js stamp --tag TAG [--config Release] [--root DIR]
@@ -23,10 +23,19 @@
  *
  * `check` is what `camel-remote.ps1 -NoBuild` runs on the host before the plan:
  *
- *   * exit 0 -- the install was built from the same source content as this tree; say nothing;
- *   * exit 4 -- refuse: the stamp is missing, unusable, or names different sources. The message
- *     names both revisions (HEAD and dirty state), both fingerprints, and the files that moved;
+ *   * exit 0 -- the install was built from the same source content and the same build options as
+ *     this tree; say nothing;
+ *   * exit 4 -- refuse: the stamp is missing, unusable, or names different sources or different
+ *     build options. The message names both revisions (HEAD and dirty state), both fingerprints,
+ *     the source files that moved, and every option that moved;
  *   * exit 2 -- usage error.
+ *
+ * Two installs of the same sources can be different builds. The option values live outside every
+ * fingerprinted path (`.camel-opts.json` is git-ignored, and `-D` flags are the build's, not the
+ * tree's), so the stamp records the option set a rebuild would pass -- see
+ * `common.js: buildOptions` for what is in it and what is deliberately out -- and `check` compares
+ * it beside the source hash. A stamp from before that record (schema 2 and older) is refused as
+ * untrustworthy rather than matched: it cannot prove which options produced the install.
  *
  * `--allow-stale` is the explicit override behind `camel-remote.ps1 -AllowStale`: it prints the
  * same refusal text, adds that it is continuing anyway, and exits 0. It is never implied.
@@ -44,7 +53,10 @@ import {
     BUILD_INFO_FILE,
     BUILD_INFO_SCHEMA,
     FINGERPRINT_VERSION,
+    BUILD_OPTIONS_VERSION,
     buildInfoPath,
+    buildOptions,
+    describeOptionSet,
     gitState,
     sourceFingerprint,
     writeBuildInfo
@@ -60,12 +72,12 @@ function usage(message) {
     if (message) {
         console.error(`[build-info] ${message}`)
     }
-    console.error('usage: node scripts/build-info.js check|show|stamp [--tag latest|debug|<tag>] [--install DIR] [--allow-stale] [--config Release] [--root DIR]')
+    console.error('usage: node scripts/build-info.js check|show|stamp [--tag latest|debug|<tag>] [--install DIR] [--allow-stale] [--config Release|Debug] [--root DIR]')
     process.exit(EXIT_USAGE)
 }
 
 function parseArgs(argv) {
-    const options = { command: null, tag: 'latest', allowStale: false, config: 'Release', root: BASEDIR, install: null }
+    const options = { command: null, tag: 'latest', allowStale: false, config: null, root: BASEDIR, install: null }
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i]
         const next = () => {
@@ -118,6 +130,51 @@ function fingerprintLabel(fingerprint) {
     return `${fingerprint.hash.slice(0, 12)} (${fingerprint.files} source files)`
 }
 
+function optionsLabel(options) {
+    if (!options || typeof options.hash !== 'string') return 'none (the build recorded no options)'
+    return options.hash.slice(0, 12)
+}
+
+// What moved between the option set the install was built with and the one a build of this tree
+// would use now. Name the option, not just the two digests: "ENABLE_FASTVM_JIT: built OFF, a
+// rebuild would use ON" is the sentence a reader can act on.
+function buildOptionDifferences(before, after) {
+    const lines = []
+    const beforeCmake = before.cmake || {}
+    const afterCmake = after.cmake || {}
+    for (const [name, value] of Object.entries(afterCmake)) {
+        if (!Object.hasOwn(beforeCmake, name)) {
+            lines.push(`${name}: not recorded by the build, a rebuild would use ${value}`)
+        } else if (beforeCmake[name] !== value) {
+            lines.push(`${name}: built ${beforeCmake[name]}, a rebuild would use ${value}`)
+        }
+    }
+    for (const [name, value] of Object.entries(beforeCmake)) {
+        if (!Object.hasOwn(afterCmake, name)) {
+            lines.push(`${name}: built ${value}, the tree no longer sets it`)
+        }
+    }
+    const beforeEnv = before.env || {}
+    for (const [name, value] of Object.entries(after.env || {})) {
+        if (beforeEnv[name] !== value) {
+            lines.push(
+                `${name}: built ${beforeEnv[name] === undefined ? 'not recorded' : beforeEnv[name]}, ` +
+                    `a rebuild would use ${value}`
+            )
+        }
+    }
+    if (before.platform !== after.platform) {
+        lines.push(`platform: built for ${before.platform || 'an unrecorded platform'}, this tree builds on ${after.platform}`)
+    }
+    if (before.compilerFlags !== after.compilerFlags) {
+        lines.push(
+            `compiler: built with "${before.compilerFlags || 'not recorded'}", ` +
+                `a rebuild would use "${after.compilerFlags}"`
+        )
+    }
+    return lines
+}
+
 function changedFiles(stampFingerprint, currentFingerprint) {
     const before = stampFingerprint.fileHashes || {}
     const after = currentFingerprint.fileHashes || {}
@@ -161,21 +218,69 @@ function printChangedFiles(stampFingerprint, currentFingerprint) {
     }
 }
 
-function printMismatch(label, stamp, current, allowStale) {
+function printMismatch(label, stamp, current, allowStale, differs) {
+    const headline =
+        differs.sources && differs.options
+            ? `was built from different sources with different build options than this tree`
+            : differs.sources
+                ? `was built from different sources than this tree`
+                : `was built with different build options than this tree would build now`
     const stampGit = stamp.git === false
         ? { available: false }
         : { available: true, revision: stamp.revision, dirty: stamp.dirty, dirtyCount: stamp.dirtyCount }
-    console.log(`[camel-remote] -NoBuild refused: ${label} was built from different sources than this tree.`)
+    console.log(`[camel-remote] -NoBuild refused: ${label} ${headline}.`)
     console.log(`  built from: ${revisionLabel(stampGit)}, at ${stamp.builtAt || 'unknown time'}`)
-    console.log(`              fingerprint ${fingerprintLabel(stamp.fingerprint)}`)
+    console.log(
+        `              fingerprint ${fingerprintLabel(stamp.fingerprint)}, ` +
+            `build options ${optionsLabel(stamp.buildOptions)} (${stamp.config || 'unknown config'})`
+    )
     console.log(`  this tree:  ${revisionLabel(current.git)}`)
-    console.log(`              fingerprint ${fingerprintLabel(current.fingerprint)}`)
-    printChangedFiles(stamp.fingerprint, current.fingerprint)
-    console.log(`  The plan would run the old binary and the old ${label}/stdlib, not this tree.`)
+    console.log(
+        `              fingerprint ${fingerprintLabel(current.fingerprint)}, ` +
+            `build options ${optionsLabel(current.buildOptions)} (${differs.config || current.config || 'unknown config'})`
+    )
+    if (differs.sources) {
+        printChangedFiles(stamp.fingerprint, current.fingerprint)
+    }
+    if (differs.options) {
+        if (differs.optionLines.length > 0) {
+            console.log(`  build options that moved: ${differs.optionLines.length}`)
+            for (const line of differs.optionLines.slice(0, MAX_LISTED_FILES)) {
+                console.log(`    ~ ${line}`)
+            }
+            if (differs.optionLines.length > MAX_LISTED_FILES) {
+                console.log(`    ... and ${differs.optionLines.length - MAX_LISTED_FILES} more`)
+            }
+        } else {
+            console.log(
+                '  (the recorded option sets differ, but no listed option does -- the stamp and this ' +
+                    'build disagree about which options exist)'
+            )
+        }
+        console.log(`  built with: ${describeOptionSet(stamp.buildOptions || {})}`)
+        console.log(`  now a build would pass: ${describeOptionSet(current.buildOptions)}`)
+    }
+    if (differs.config) {
+        console.log(
+            `  the install was collected as a ${stamp.config} build; this run is about the ${differs.config} build`
+        )
+    }
+    if (differs.options && !differs.sources) {
+        console.log(
+            '  Same source bytes, other options: the binary and the ' +
+                `${label}/stdlib it runs were compiled with the option set above, so the reading would ` +
+                'answer the old configuration and not this tree\'s.'
+        )
+    } else {
+        console.log(`  The plan would run the old binary and the old ${label}/stdlib, not this tree.`)
+    }
     if (allowStale) {
         console.log('  -AllowStale was given: continuing anyway; this result does not describe this tree.')
     } else {
-        console.log('  Re-run without -NoBuild (it builds this tree and stamps the install), or pass -AllowStale to run anyway.')
+        console.log(
+            '  Re-run without -NoBuild (it builds this tree with these options and restamps the install), ' +
+                'or pass -AllowStale to run anyway.'
+        )
     }
 }
 
@@ -234,18 +339,47 @@ function commandCheck(options) {
             `${label}/${BUILD_INFO_FILE} was written by a different form of this guard ` +
                 `(schema ${stamp && stamp.schema}, fingerprint ${stamp && stamp.fingerprint && stamp.fingerprint.version}; ` +
                 `this build writes schema ${BUILD_INFO_SCHEMA}, fingerprint ${FINGERPRINT_VERSION}).\n` +
+                `  A stamp that predates the build-option record cannot prove which options produced the ` +
+                `install, so it is treated as untrustworthy rather than matched.\n` +
+                `  Run once without -NoBuild to rebuild and restamp ${label}.`,
+            options.allowStale
+        )
+        return
+    }
+    if (!stamp.buildOptions || stamp.buildOptions.version !== BUILD_OPTIONS_VERSION) {
+        refuse(
+            `${label}/${BUILD_INFO_FILE} records no build options (schema ${stamp.schema}, ` +
+                `options ${stamp.buildOptions ? stamp.buildOptions.version : 'missing'}; this build records ` +
+                `version ${BUILD_OPTIONS_VERSION}).\n` +
+                `  Two builds of these sources with different CMake options are two different installs, and ` +
+                `without the option record there is no way to tell this one from the other.\n` +
                 `  Run once without -NoBuild to rebuild and restamp ${label}.`,
             options.allowStale
         )
         return
     }
 
-    const current = { git: gitState(options.root), fingerprint: sourceFingerprint(options.root) }
-    if (stamp.fingerprint.hash === current.fingerprint.hash) {
-        return // The install matches these sources: no new noise on a correct run.
+    const current = {
+        git: gitState(options.root),
+        fingerprint: sourceFingerprint(options.root),
+        buildOptions: buildOptions(options.root),
+        config: options.config
+    }
+    const optionLines = buildOptionDifferences(stamp.buildOptions, current.buildOptions)
+    const differs = {
+        sources: stamp.fingerprint.hash !== current.fingerprint.hash,
+        options: stamp.buildOptions.hash !== current.buildOptions.hash,
+        optionLines,
+        // Only when the caller said which configuration it is about (`camel-remote.ps1` passes the
+        // configuration it builds): a bare `check --tag latest` cannot tell Release from
+        // RelWithDebInfo, and both live in `out/latest`.
+        config: options.config && stamp.config !== options.config ? options.config : null
+    }
+    if (!differs.sources && !differs.options && !differs.config) {
+        return // The install matches these sources and this option set: no new noise on a correct run.
     }
 
-    printMismatch(label, stamp, current, options.allowStale)
+    printMismatch(label, stamp, current, options.allowStale, differs)
     if (!options.allowStale) {
         process.exit(EXIT_STALE)
     }
@@ -260,8 +394,16 @@ function commandShow(options) {
     process.stdout.write(fs.readFileSync(stampPath, 'utf-8'))
     const stamp = JSON.parse(fs.readFileSync(stampPath, 'utf-8'))
     const current = sourceFingerprint(options.root)
-    console.log(`current tree fingerprint: ${fingerprintLabel(current)}`)
-    console.log(stamp.fingerprint.hash === current.hash ? label + ' matches this tree' : label + ' does NOT match this tree')
+    const options1 = buildOptions(options.root)
+    console.log(`current tree fingerprint: ${fingerprintLabel(current)}, build options ${optionsLabel(options1)}`)
+    console.log(stamp.fingerprint.hash === current.hash ? label + ' matches this tree\'s sources' : label + ' does NOT match this tree')
+    if (stamp.buildOptions && typeof stamp.buildOptions.hash === 'string') {
+        console.log(
+            stamp.buildOptions.hash === options1.hash
+                ? label + ' matches this tree\'s build options'
+                : label + ' does NOT match this tree\'s build options'
+        )
+    }
 }
 
 function main() {
@@ -273,7 +415,7 @@ function main() {
     } else {
         // `stamp` writes the same file collect-out writes. It exists for the report's local
         // preflight and for inspecting what a build would record; it is not part of a build.
-        writeBuildInfo(options.config, options.tag, options.root)
+        writeBuildInfo(options.config || 'Release', options.tag, options.root)
     }
 }
 
