@@ -219,6 +219,34 @@ export rule jvp_take::<T>(t: T[..], indices: int[]) {
     take(t, indices) => (dt: T[..]) => take(dt, indices)
 }
 
+// ---- the forward rule of the array subtraction ----
+//
+// `x - w` on two arrays is `tensor:subtract`, not `:op/sub`: the scalar operator's rule (`jvp_sub`)
+// is filed under the infix spelling at `T`, and an array is the same subtraction done by the tensor
+// kernel. The two are different operators, so the family needs the array one filed here.
+//
+// The key is the operator's own name, `subtract`, derived from `tensor:subtract` by `ruleKeyOf` --
+// and the name a rule's left side is written with does not have to be an operator's public spelling:
+// a *function* declared in this module whose body is the operator is a key like any other, which is
+// how `index_into` below stands for `:op/idx_arr` and how `rulesets.vmap` stands for
+// `tensor:multiply` with `mul_tensor`. This one needs no exception in the core's table, because
+// `tensor:subtract`'s name is already a word a left side can be written with.
+//
+// The right side must not name `subtract` again -- a name the left side binds is a pattern variable
+// to the right side -- so it writes the operator itself.
+
+/// `x - w` on two arrays: what `tensor:subtract` means, and the left side this rule is filed under.
+func subtract::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
+    return x - w
+}
+
+/// `d(x - w) = dx - dw`: a difference is linear in both of its operands, so the tangent of the
+/// difference is the difference of the tangents -- and the two shapes may differ, which is the same
+/// broadcast the operator itself does to the value.
+export rule jvp_subtract::<T>(x: T[..], w: T[..]) when is_float::<T>() {
+    subtract(x, w) => (dx: T[..], dw: T[..]) => dx - dw
+}
+
 // ---- the forward rule of `:op/idx_arr` ----
 //
 // `xs[i]` is the one operator a function of an array meets before any other: `f(xs) = xs[0] * xs[1]`
