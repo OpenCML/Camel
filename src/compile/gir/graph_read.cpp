@@ -132,6 +132,14 @@ std::vector<gc_node_ref_t> DraftGraphRead::withPortsOf() const {
     return mappedListOf(txn_.graph().withPorts());
 }
 
+std::vector<gc_node_ref_t> DraftGraphRead::closureNodesOf() const {
+    return mappedListOf(txn_.graph().closureNodes());
+}
+
+const camel::core::type::TupleType *DraftGraphRead::closureTypeOf() const {
+    return txn_.graph().closureType();
+}
+
 uint32_t DraftGraphRead::regionOfNode(gc_node_ref_t ref) const {
     const camel::runtime::DraftNodeHeader *header = txn_.graph().header(sourceIdOf(ref));
     return header == nullptr ? 0 : header->region;
@@ -250,6 +258,15 @@ std::vector<gc_node_ref_t> FrozenGraphRead::normPortsOf() const {
 std::vector<gc_node_ref_t> FrozenGraphRead::withPortsOf() const {
     const std::span<const gc_node_ref_t> ports = graph_.withPorts();
     return std::vector<gc_node_ref_t>(ports.begin(), ports.end());
+}
+
+std::vector<gc_node_ref_t> FrozenGraphRead::closureNodesOf() const {
+    const std::span<const gc_node_ref_t> ports = graph_.closureNodes();
+    return std::vector<gc_node_ref_t>(ports.begin(), ports.end());
+}
+
+const camel::core::type::TupleType *FrozenGraphRead::closureTypeOf() const {
+    return graph_.closureType();
 }
 
 std::vector<gc_node_ref_t> FrozenGraphRead::regionPortsOf(uint32_t id) const {

@@ -687,11 +687,13 @@ bool liftGraph(
         // replaces described the problem. The value only: the tangent of a captured value is the
         // zero below, so there is no second port to hand a direction in.
         std::unordered_map<gc_node_ref_t, gc_node_ref_t> withPortOf;
+        // The declared ones and the captured ones, one list: the first `withTypesCount()` are the
+        // caller's `with` arguments and the rest are the values the body captured, in the closure
+        // tuple's order (`GraphRead::withPortsOf`, cited below).
+        const size_t withCount =
+            function.funcType() != nullptr ? function.funcType()->withTypesCount() : 0;
+        const std::vector<gc_node_ref_t> originalWith = function.withPorts();
         {
-            const size_t withCount = function.funcType() != nullptr
-                                         ? function.funcType()->withTypesCount()
-                                         : 0;
-            const std::vector<gc_node_ref_t> originalWith = function.withPorts();
             for (size_t i = 0; i < withCount && i < originalWith.size(); ++i) {
                 camel::core::type::Type *withType = function.funcType()->withTypeAt(i);
                 if (withType == nullptr) {
@@ -706,6 +708,43 @@ bool liftGraph(
                     draft.addPortNode(withType, draft.allocateRuntimeSlot(withType));
                 draft.appendWithPort(port);
                 withPortOf[originalWith[i]] = port;
+            }
+        }
+        // The values the body *captures* from where it was written, which are not `with` parameters
+        // and were the one kind of port this lift left out. A capture is a port of the graph
+        // (`GraphRead::closureNodesOf`, which is `GCGraph::closureNodes`) but not one of its `with`
+        // ports, so a cell the walk never made is a hole: the lifted copy read nothing where the
+        // value stood, and the refusal it produced named the whole body (`skip=body`) rather than
+        // the capture -- measured 2026-11-03 on `(t: float[]) => k * t[0]`, which refused for a
+        // captured `float` exactly as it did for a captured `float[]`, so the type of the captured
+        // value was never the question and `pairTypeOf` was never the gate.
+        //
+        // The copy declares them in the source's order, which is the closure tuple's order, and
+        // takes the source's closure type; the function value this transform answers already
+        // carries `f`'s tuple (`jvp_operator.cpp`), so the two together make a read through the
+        // derivative read the caller's value. `rematKernel`
+        // (modules/transforms/remat_operator.cpp) copies a graph the same way and records the same
+        // defect: a capture the copy does not declare answers the zero of its slot.
+        std::unordered_map<gc_node_ref_t, gc_node_ref_t> capturePortOf;
+        {
+            const std::vector<gc_node_ref_t> captures = function.closureNodesOf();
+            for (gc_node_ref_t original : captures) {
+                const NodeFace *captureNode = function.node(original);
+                camel::core::type::Type *captureType =
+                    captureNode != nullptr ? captureNode->dataType() : nullptr;
+                if (captureType == nullptr) {
+                    continue;
+                }
+                const gc_node_ref_t port =
+                    draft.addPortNode(captureType, draft.allocateRuntimeSlot(captureType));
+                draft.appendClosureNode(port);
+                capturePortOf[original] = port;
+            }
+            if (!capturePortOf.empty()) {
+                if (const camel::core::type::TupleType *closureType = function.closureTypeOf()) {
+                    draft.setClosureType(
+                        const_cast<camel::core::type::TupleType *>(closureType));
+                }
             }
         }
         // Step 3, first layer: the body is copied node by node. A port reads the caller's value, a
@@ -1076,6 +1115,21 @@ bool liftGraph(
                 const auto withPort = withPortOf.find(ref);
                 if (withPort != withPortOf.end()) {
                     copyOf[ref] = withPort->second;
+                    if (camel::core::tangentSpaceOf(node->dataType()).hasSpace()) {
+                        tangentOf[ref] = zeroConstantFor(node->dataType());
+                    }
+                    copied[ref] = true;
+                    ++copiedKinds;
+                    break;
+                }
+                // A value the body captured from where it was written: it enters by the port made
+                // for it above, and it does not move -- the same rule the `with` parameter one arm
+                // up follows (design principles 9.9's ruleset: `reinterpret<jvp>` lifts a captured
+                // value to a zero tangent), so its tangent is the zero of its own type and there is
+                // no second port to hand a direction in.
+                const auto captured = capturePortOf.find(ref);
+                if (captured != capturePortOf.end()) {
+                    copyOf[ref] = captured->second;
                     if (camel::core::tangentSpaceOf(node->dataType()).hasSpace()) {
                         tangentOf[ref] = zeroConstantFor(node->dataType());
                     }
