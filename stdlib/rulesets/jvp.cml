@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_same, Tangent } from types
-import { matmul, zeros_like } from tensor
+import { matmul, reshape, softmax, sum, zeros_like } from tensor
 import { log, pow } from math
 import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
 
@@ -158,6 +158,33 @@ func matmul_tangent::<T>(a: T[..], b: T[..], da: T[..], db: T[..]): T[..] when i
 /// `d(a · b) = da · b + a · db`, both operands' tangents in one right side.
 export rule jvp_matmul::<T>(a: T[..], b: T[..]) when is_float::<T>() {
     matmul(a, b) => (da: T[..], db: T[..]) => matmul_tangent(a, b, da, db)
+}
+
+// ---- the forward rules of `reshape` and `softmax` ----
+//
+// Both operators state a parameter in angle brackets -- `reshape<shape>(x)`, `softmax<axis>(x)` --
+// because the shape and the axis are what decides which function this is (design principles 4.4:
+// `<...>` is configuration, `(...)` is the data that flows). A rule's two sides are written with the
+// same spelling, so the angle argument is where these two laws have to put the one value that is
+// neither: the shape a reshape applies, the axis a softmax normalizes over.
+//
+// The rules below are written with the argument as the **constant** the call site states it as,
+// because that is the only thing a rule can write there today: the pattern names its data in
+// parentheses, and a name in angle brackets has no binding -- the builder asks for a compile-time
+// value (`builder_generics.cpp#Builder::ruleWithArgumentValue`, `RuleWithArgumentNotConstant`), so
+// the rule serves the one shape and the one axis it is written for, and the matched node's own
+// angle argument is not a name the rule can read. That is the wall this pair records; the numbers
+// pinned in `test/plans/feat/compile/rules_angle_args.plan.toml` are what the same two laws have to
+// answer once a rule can name what the node carries.
+
+/// `d(reshape(x)) = reshape(dx)`: a reshape moves no element, so the tangent moves with the value.
+export rule jvp_reshape(x: float[..]) {
+    reshape<[2, 2]>(x) => (dx: float[..]) => reshape<[2, 2]>(dx)
+}
+
+/// `d(softmax(x)) = y * (dx - sum(y * dx))` with `y = softmax(x)` over the same axis.
+export rule jvp_softmax(x: float[..]) {
+    softmax<1>(x) => (dx: float[..]) => softmax<1>(x) * (dx - sum<1, true>(softmax<1>(x) * dx))
 }
 
 // ---- the forward rule of `:op/idx_arr` ----

@@ -1,0 +1,53 @@
+# The angle-bracket arguments of a rule's two sides (lane-rulesargs)
+#
+# `reshape<shape>(x)` and `softmax<axis>(x)` state the parameter that decides which function they
+# are in `<>` (design principles 4.4), and `mean(xs, axis, keepdims)` -- the operator's other
+# spelling -- states the same kind of value in parentheses. A rule names its data in parentheses
+# only, so today:
+#
+#   * a rule whose right side names `reshape<...>(dx)` or `softmax<...>(...)` is refused by the
+#     expander with `the rule's right side passes a context argument of its own`
+#     (`modules/transforms/rule_expand.cpp`), and
+#   * the transposed walk refuses an operator with more than two operands outright --
+#     `TRANSPOSE ... skip=arity uri=tensor:mean_axis operands=3`
+#     (`modules/transforms/transpose.cpp`) -- so the second and third names of `mean_axis_t` are
+#     positions no cotangent can ever be asked of.
+#
+# The numbers below are derived by hand in the case's own header, not read off any run:
+# 30.0 / 5.0 / 4.0 for `reshape`, 1.5 / -0.25 for `softmax`, 23.0 / 6.0 for `mean_axis`.
+
+[[tests]]
+name = "rules_angle_args.reshape"
+desc = "`jvp` of `f(x) = sum(reshape<[2, 2]>(x) * [[1, 2], [3, 4]])` at x = [1, 2, 3, 4] along dx = [0.5, 0.5, 0.5, 0.5]: `jvp_reshape`'s right side names `reshape<[2, 2]>(dx)`, which is the context-argument refusal."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/rules_angle_args.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["rules_angle_args reshape value=30.0 tangent=5.0"]
+timeout_ms = 30000
+
+[[tests]]
+name = "rules_angle_args.softmax"
+desc = "`jvp` of `f(x) = sum(softmax<1>(x) * [1, 2])` at x = [[1, 1]] along dx = [[1, 0]]: y = [0.5, 0.5], so f = 1.5 and the tangent is y * (dx - y.dx) = [0.25, -0.25] dotted with [1, 2] = -0.25."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/rules_angle_args.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["rules_angle_args softmax value=1.5 tangent=-0.25"]
+timeout_ms = 30000
+
+[[tests]]
+name = "rules_angle_args.mean_axis_transpose"
+desc = "`transpose` of `f(x) = sum(mean_axis(x, 0, false) * [1, 2, 3])` at ct = 1.0: every position of `xs` that fed lane k gets w[k] / 2, so the answer sums to 2 * (0.5 + 1 + 1.5) = 6.0. The node has three operands, and the transposed walk refuses three outright (`skip=arity ... operands=3`), so the second and third names of the left side are never reachable positions."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/rules_angle_args.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["rules_angle_args mean transpose=6.0"]
+timeout_ms = 30000

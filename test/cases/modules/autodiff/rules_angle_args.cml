@@ -1,0 +1,61 @@
+/**
+ * The operators whose parameter is written in angle brackets, differentiated through a rule.
+ *
+ * `reshape<shape>(x)` and `softmax<axis>(x)` state their shape and their axis in `<>`, because that
+ * is what decides which function this is (design principles 4.4). A rule's left side is the operator
+ * written the way a call writes it, so the shape and the axis are exactly the two values a rule has
+ * to carry from its left side to its right -- and today it cannot: a rule names its data in
+ * parentheses, and the builder asks a name in angle brackets to be a compile-time value
+ * (`RuleWithArgumentNotConstant`), so the pattern has no place to bind what the node carries.
+ *
+ * The same pair of numbers is asked of all three operators here, and the reading is the numbers and
+ * nothing else:
+ *
+ *   reshape  f(x) = sum(reshape<[2, 2]>(x) * [[1, 2], [3, 4]]) on x = [1, 2, 3, 4]
+ *            f = 1*1 + 2*2 + 3*3 + 4*4 = 30, and along dx = [0.5, 0.5, 0.5, 0.5] f' = 5.0;
+ *            the transpose spreads ct = 1.0 over the four positions, so its answer sums to 4.0.
+ *
+ *   softmax  f(x) = sum(softmax<1>(x) * [1, 2]) on x = [[1, 1]]
+ *            y = [0.5, 0.5], f = 1.5; along dx = [1, 0] the tangent is y * (dx - y.dx)
+ *            = [0.25, -0.25], so f' = 0.25 - 0.5 = -0.25.
+ *
+ *   mean     f(x) = sum(mean_axis(x, 0, false) * [1, 2, 3]) on x = [[1, 2, 3], [4, 5, 6]]
+ *            the lane means are [2.5, 3.5, 4.5], f = 2.5 + 7 + 13.5 = 23.0, and the transpose of
+ *            ct = 1.0 is w[k] / 2 in every row, which sums to 2 * (0.5 + 1 + 1.5) = 6.0.
+ *
+ * A refusal here is the point of the case, not an accident: the two sentences it prints are the two
+ * walls the lane has to take down, and the plan beside it pins the numbers that replace them.
+ */
+import { jvp, transpose } from transforms
+import { mean_axis, reshape, softmax, sum } from tensor
+
+func w42(): float[..] { return [[1.0, 2.0], [3.0, 4.0]] as float[2, 2] }
+func w2(): float[..] { return [1.0, 2.0] as float[] }
+func w3(): float[..] { return [1.0, 2.0, 3.0] as float[] }
+
+func loss_reshape(x: float[..]): float {
+    return float(sum(reshape<[2, 2]>(x) * w42()))
+}
+
+func loss_softmax(x: float[..]): float {
+    return float(sum(softmax<1>(x) * w2()))
+}
+
+func loss_mean(x: float[..]): float {
+    return float(sum(mean_axis(x, 0, false) * w3()))
+}
+
+func main(): int sync {
+    let xr = [1.0, 2.0, 3.0, 4.0] as float[]
+    let (reshapeValue, reshapeTangent) = jvp(loss_reshape)(xr, [0.5, 0.5, 0.5, 0.5] as float[])
+    'rules_angle_args reshape value={} tangent={}'->format<reshapeValue, reshapeTangent>->println
+
+    let xs = [[1.0, 1.0]] as float[1, 2]
+    let (softmaxValue, softmaxTangent) = jvp(loss_softmax)(xs, [[1.0, 0.0]] as float[1, 2])
+    'rules_angle_args softmax value={} tangent={}'->format<softmaxValue, softmaxTangent>->println
+
+    let xm = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
+    let back = transpose(loss_mean)(1.0)
+    'rules_angle_args mean transpose={}'->format<float(sum(back.0))>->println
+    return 0
+}
