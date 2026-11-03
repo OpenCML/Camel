@@ -418,13 +418,13 @@ timeout_ms = 20000
 # written (the sentence of `state-unread` deleted, then its word renamed), and both read as reds.
 [[tests]]
 name = "transpose_refusal_words_are_answerable"
-desc = "The words `transpose` writes into its reading log and the sentences `refusalCause` answers them with, held together across the two files that hold them: all 17 words land on a non-empty sentence -- 9 in words of their own, 8 on the sentence that names the word -- no sentence waits for a word no file writes except the one cause that has a sentence and no shape yet, and the sentence that names the word exists, because every landing above leans on it. Delete one sentence and its word joins the catch-all set, which is a red; rename one word and its sentence becomes a promise nothing keeps, which is a red."
+desc = "The words `transpose` writes into its reading log and the sentences `refusalCause` answers them with, held together across the two files that hold them: all 18 words land on a non-empty sentence -- 10 in words of their own, 8 on the sentence that names the word -- no sentence waits for a word no file writes except the one cause that has a sentence and no shape yet, and the sentence that names the word exists, because every landing above leans on it. Delete one sentence and its word joins the catch-all set, which is a red; rename one word and its sentence becomes a promise nothing keeps, which is a red. The count moved from 17 to 18 on 2026-11-03, when `call` was split into `call-no-transpose` and `call-value-missing`: the second cause is a callee whose transpose *was* built, and it used to be answered with the sentence about a callee that has none -- the reading above the refusal contradicted it."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/transpose_refusal/check.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["17 words written into the log", "9 of them answered in their own words", "8 answered by the sentence that names the word", "1 sentence waiting for a word no file writes", "every landing is non-empty"]
+expect_stdout_contains = ["18 words written into the log", "10 of them answered in their own words", "8 answered by the sentence that names the word", "1 sentence waiting for a word no file writes", "every landing is non-empty"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
 
@@ -850,20 +850,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 [[tests]]
 name = "transpose_no_tangent.function_value_is_refused"
-desc = "A function value in the middle of a differentiable graph, `g2(x) = let h = (y: float) => y*x; h(2)`, is REFUSED, and this entry says by what name rather than leaving the shape untested: the case prints the forward value (2.0, which is `2x` at x = 1, so the graph is really computing) and then `TRANSPOSE function=g skip=call node=4 callee=none value=3:0 with=2:4`. The call site cannot name the callee's graph: `h` is a closure, its graph id sits inside the bound value together with the capture `x`, and `calleeIdOf` sees a value the call takes as a `with` input, not a graph. Naming it is only half of what would be needed -- the transposed callee would have to take the capture as a parameter of its own, which is the piece this transform does not have (it refuses `with` parameters outright, as `jvp` does). So the reading is a refusal and not a number, and the entry pins the refusal's name so that the cut which changes it is visible. The paper answer it owes is 2 (and 6 at cotangent 3)."
+desc = "A function value in the middle of a differentiable graph, `g2(x) = let h = (y: float) => y*x; h(2)`, is REFUSED, and this entry says by what name rather than leaving the shape untested: the case prints the forward value (2.0, which is `2x` at x = 1, so the graph is really computing) and then `TRANSPOSE function=g skip=call-no-transpose node=4 callee=none value=3:0 with=2:4`. The call site cannot name the callee's graph: `h` is a closure, its graph id sits inside the bound value together with the capture `x`, and `calleeIdOf` sees a value the call takes as a `with` input, not a graph. Naming it is only half of what would be needed -- the transposed callee would have to take the capture as a parameter of its own, which is the piece this transform does not have (it refuses `with` parameters outright, as `jvp` does). So the reading is a refusal and not a number, and the entry pins the refusal's name so that the cut which changes it is visible. The paper answer it owes is 2 (and 6 at cotangent 3)."
 kind = "negative"
 case = "../../../cases/compile/transforms/transpose_no_tangent_closure.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 1
-expect_output_contains = ["2.0", "TRANSPOSE function=g2 skip=call node=4 callee=none", "reason=function-closure"]
+expect_output_contains = ["2.0", "TRANSPOSE function=g2 skip=call-no-transpose node=4 callee=none", "reason=function-closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
 name = "transpose_no_tangent.a_refusal_is_a_diagnostic_not_the_programs_output"
-desc = "The channel a refusal is spoken on, pinned so it cannot drift back: the same shape as `function_value_is_refused` (`g2(x) = let h = (y: float) => y*x; h(2)`, refused at the call because `h` is a closure with no graph at that point), asserted as `expect_stdout_exact = \"2.0\\n\"` -- the program prints one line and the transform says nothing into it -- with the reason itself on the diagnostic side (`TRANSPOSE function=g2 skip=call node=4 callee=none` and `reason=function-closure`), and `expect_stdout_not_contains` naming both prefixes so a reading that came back to stdout fails here. This is the author's review item, high-3 second half: the refusal reason used to exist only in the program's own output, where a caller collecting diagnostics never saw it and a caller collecting output was handed the transform's debugging. The refusal also carries the reason to the reader as an error (`transpose has no transpose for this function`, on the library's own line)."
+desc = "The channel a refusal is spoken on, pinned so it cannot drift back: the same shape as `function_value_is_refused` (`g2(x) = let h = (y: float) => y*x; h(2)`, refused at the call because `h` is a closure with no graph at that point), asserted as `expect_stdout_exact = \"2.0\\n\"` -- the program prints one line and the transform says nothing into it -- with the reason itself on the diagnostic side (`TRANSPOSE function=g2 skip=call-no-transpose node=4 callee=none` and `reason=function-closure`), and `expect_stdout_not_contains` naming both prefixes so a reading that came back to stdout fails here. This is the author's review item, high-3 second half: the refusal reason used to exist only in the program's own output, where a caller collecting diagnostics never saw it and a caller collecting output was handed the transform's debugging. The refusal also carries the reason to the reader as an error (`transpose has no transpose for this function`, on the library's own line)."
 kind = "negative"
 case = "../../../cases/compile/transforms/a_refusal_keeps_stdout_to_the_program.cml"
 args = ["${case}", "${backend}"]
@@ -872,7 +872,7 @@ backends_agree = ["exit_code"]
 expect_exit = 1
 expect_stdout_starts_with = "2.0\n"
 expect_stdout_not_contains = ["TRANSPOSE function=", "REINTERP "]
-expect_stderr_contains = ["TRANSPOSE function=g2 skip=call node=4 callee=none", "reason=function-closure"]
+expect_stderr_contains = ["TRANSPOSE function=g2 skip=call-no-transpose node=4 callee=none", "reason=function-closure"]
 expect_output_contains = ["transpose has no transpose for this function"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
@@ -909,14 +909,14 @@ timeout_ms = 20000
 # what `rules=add_t,mul_t` on the callee's line says: nothing in C++ knows what `mul_tangent` is.
 [[tests]]
 name = "transpose_many_parameters"
-desc = "**A refusal, and the refusal is the answer**, because the pullback of `mul_tangent` with respect to its tangents is a shape no route supports. `mul_tangent(x, w, dx, dw) = dx*w + x*dw`, and `mul_t`'s right side reads the operands: the cotangent of `dx` is `mul_cotangent(w, ct)` and the cotangent of `w` is `mul_cotangent_c(dx, ct)`, so the member is computed from the value of `w` and the value of `dx`. Two of those values are operands, which a split half carries in its residual tuple; the other two are the **tangents**, and a transposition has no value for a tangent -- the tangent's cotangent is what it answers. Under the ruling (author, 2026-11-02 11:30) a transposed member takes the values it needs out of **the closure it was built with**, the closure of the function it is the transposition of, and is refused otherwise; the closure is how a value reaches a transposed function without the type naming it. For the shape here the closure is empty -- `3.0` and `2.0` are literals in the body, and `dx`/`dw` are `lin`'s own parameters, not captures -- so `dx`'s value has nowhere to come from. The reading is the refusal's own words, one level below the user-facing sentence (which says only that there is no transposition for the function): `skip=cotangent-needs-a-value uri=:op/mul_d position=1`, `reason=the rule's right side reads a value the caller does not carry`, and the two calls that inherit it (`TRANSPOSE function=mt skip=call`, then the closure above it). Both other shapes are read elsewhere and are green: a function of four parameters whose body reads no parameter value is transposed and answers four cotangents (`transpose_unread_parameters`), and the kernel's four-parameter member is built when the values come from the cut that carries them (`split_branch_author_vjp`, where the member takes the operands' two and answers the tangents' two)."
+desc = "**A refusal, and the refusal is the answer**, because the pullback of `mul_tangent` with respect to its tangents is a shape no route supports. `mul_tangent(x, w, dx, dw) = dx*w + x*dw`, and `mul_t`'s right side reads the operands: the cotangent of `dx` is `mul_cotangent(w, ct)` and the cotangent of `w` is `mul_cotangent_c(dx, ct)`, so the member is computed from the value of `w` and the value of `dx`. Two of those values are operands, which a split half carries in its residual tuple; the other two are the **tangents**, and a transposition has no value for a tangent -- the tangent's cotangent is what it answers. Under the ruling (author, 2026-11-02 11:30) a transposed member takes the values it needs out of **the closure it was built with**, the closure of the function it is the transposition of, and is refused otherwise; the closure is how a value reaches a transposed function without the type naming it. For the shape here the closure is empty -- `3.0` and `2.0` are literals in the body, and `dx`/`dw` are `lin`'s own parameters, not captures -- so `dx`'s value has nowhere to come from. The reading is the refusal's own words, one level below the user-facing sentence (which says only that there is no transposition for the function): `skip=cotangent-needs-a-value uri=:op/mul_d position=1`, `reason=the rule's right side reads a value the caller does not carry`, and the two calls that inherit it (`TRANSPOSE function=mt skip=call-no-transpose`, then the closure above it). Both other shapes are read elsewhere and are green: a function of four parameters whose body reads no parameter value is transposed and answers four cotangents (`transpose_unread_parameters`), and the kernel's four-parameter member is built when the values come from the cut that carries them (`split_branch_author_vjp`, where the member takes the operands' two and answers the tangents' two)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_many_parameters.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 1
-expect_output_contains = ["skip=cotangent-needs-a-value uri=:op/mul_d position=1", "reason=the rule's right side reads a value the caller does not carry", "TRANSPOSE function=mt skip=call node=", "callee=mt", "transpose has no transpose for this function"]
+expect_output_contains = ["skip=cotangent-needs-a-value uri=:op/mul_d position=1", "reason=the rule's right side reads a value the caller does not carry", "TRANSPOSE function=mt skip=call-no-transpose node=", "callee=mt", "transpose has no transpose for this function"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 # One seed cannot tell a pullback from a table of derivatives -- at ct = 1 the two agree by
@@ -1026,7 +1026,7 @@ timeout_ms = 20000
 # that falls must turn its assertion into a number, and known_fail would hide that.
 [[tests]]
 name = "grad_array_no_int"
-desc = "The gradient of an array through `vjp`, on the backend whose program contains no integer: `xs[0] * xs[1]` over `[3.0, 2.0]` answers `6.0` and the array cotangent `[2.0, 3.0]`, on fvm. The transposed `index_into` member is built; what the walk still needs is the **array's value at the call site** (`TRANSPOSE-NEEDS ... param=0`, then `skip=call ... arg=5`), which the member carries only once its closure does."
+desc = "The gradient of an array through `vjp`, on the backend whose program contains no integer: `xs[0] * xs[1]` over `[3.0, 2.0]` answers `6.0` and the array cotangent `[2.0, 3.0]`, on fvm. The transposed `index_into` member is built; what the walk still needs is the **array's value at the call site** (`TRANSPOSE-NEEDS ... param=0`, then `skip=call-value-missing ... arg=5`), which the member carries only once its closure does."
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_no_int.cml"
 args = ["${case}", "${backend}"]
@@ -1075,13 +1075,14 @@ timeout_ms = 15000
 # function=rulesets.jvp::index_into<float> graph=128 type=(int, float[], float) => (float[],) nodes=3
 # arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
 # it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
-# `TRANSPOSE function=... skip=call ... arg=N`. That value is what the member must carry in its
-# closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these flip when it lands.
+# `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
+# must carry in its closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these
+# flip when it lands.
 # (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
 # replaced it is the one above.)
 [[tests]]
 name = "grad_of_an_array_parameter"
-desc = "The handed-over program: `xs[1] * xs[0]` over `[3.0, 2.0]`, read through `vjp` -- `6.0` and the array cotangent `[2.0, 3.0]`, each operator's value landing in the other's place. Same wall as the rest of the block: the element read's member is built, and the call site still needs the array's **value** (`param=0`, then `skip=call ... arg=5`)."
+desc = "The handed-over program: `xs[1] * xs[0]` over `[3.0, 2.0]`, read through `vjp` -- `6.0` and the array cotangent `[2.0, 3.0]`, each operator's value landing in the other's place. Same wall as the rest of the block: the element read's member is built, and the call site still needs the array's **value** (`param=0`, then `skip=call-value-missing ... arg=5`)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_of_an_array_parameter.cml"
 args = ["${case}", "${backend}"]
@@ -1103,13 +1104,14 @@ timeout_ms = 30000
 # function=rulesets.jvp::index_into<float> graph=128 type=(int, float[], float) => (float[],) nodes=3
 # arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
 # it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
-# `TRANSPOSE function=... skip=call ... arg=N`. That value is what the member must carry in its
-# closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these flip when it lands.
+# `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
+# must carry in its closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these
+# flip when it lands.
 # (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
 # replaced it is the one above.)
 [[tests]]
 name = "grad_array_one_element"
-desc = "One element read: `xs[0]` over `[3.0]` -- `3.0` and the cotangent `[1.0]`, the smallest array a function of an array can have. Same wall: the element read's member is built, and the call site needs the array's **value** (`param=0`, then `skip=call ... arg=2`)."
+desc = "One element read: `xs[0]` over `[3.0]` -- `3.0` and the cotangent `[1.0]`, the smallest array a function of an array can have. Same wall: the element read's member is built, and the call site needs the array's **value** (`param=0`, then `skip=call-value-missing ... arg=2`)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_one_element.cml"
 args = ["${case}", "${backend}"]
@@ -1125,13 +1127,14 @@ timeout_ms = 30000
 # function=rulesets.jvp::index_into<float> graph=128 type=(int, float[], float) => (float[],) nodes=3
 # arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
 # it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
-# `TRANSPOSE function=... skip=call ... arg=N`. That value is what the member must carry in its
-# closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these flip when it lands.
+# `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
+# must carry in its closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these
+# flip when it lands.
 # (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
 # replaced it is the one above.)
 [[tests]]
 name = "grad_array_two_elements_first"
-desc = "Two elements, only the first read: `xs[0]` over `[3.0, 2.0]` -- `3.0` and `[1.0, 0.0]`, where the second element's cotangent is a zero the law puts there rather than a number the read produces. Same wall (`param=0`, `skip=call ... arg=2`)."
+desc = "Two elements, only the first read: `xs[0]` over `[3.0, 2.0]` -- `3.0` and `[1.0, 0.0]`, where the second element's cotangent is a zero the law puts there rather than a number the read produces. Same wall (`param=0`, `skip=call-value-missing ... arg=2`)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_two_elements_first.cml"
 args = ["${case}", "${backend}"]
@@ -1147,13 +1150,14 @@ timeout_ms = 30000
 # function=rulesets.jvp::index_into<float> graph=128 type=(int, float[], float) => (float[],) nodes=3
 # arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
 # it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
-# `TRANSPOSE function=... skip=call ... arg=N`. That value is what the member must carry in its
-# closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these flip when it lands.
+# `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
+# must carry in its closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these
+# flip when it lands.
 # (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
 # replaced it is the one above.)
 [[tests]]
 name = "grad_array_sum"
-desc = "The sum: `xs[0] + xs[1]` over `[3.0, 2.0]` -- `5.0` and `[1.0, 1.0]`, each element contributing once. Same wall (`param=0`, `skip=call ... arg=5`)."
+desc = "The sum: `xs[0] + xs[1]` over `[3.0, 2.0]` -- `5.0` and `[1.0, 1.0]`, each element contributing once. Same wall (`param=0`, `skip=call-value-missing ... arg=5`)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_sum.cml"
 args = ["${case}", "${backend}"]
@@ -1169,13 +1173,14 @@ timeout_ms = 30000
 # function=rulesets.jvp::index_into<float> graph=128 type=(int, float[], float) => (float[],) nodes=3
 # arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
 # it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
-# `TRANSPOSE function=... skip=call ... arg=N`. That value is what the member must carry in its
-# closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these flip when it lands.
+# `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
+# must carry in its closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these
+# flip when it lands.
 # (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
 # replaced it is the one above.)
 [[tests]]
 name = "grad_array_product"
-desc = "The product: `xs[0] * xs[1]` over `[3.0, 2.0]` -- `6.0` and `[2.0, 3.0]`, the other element's value in each place. Same wall (`param=0`, `skip=call ... arg=5`)."
+desc = "The product: `xs[0] * xs[1]` over `[3.0, 2.0]` -- `6.0` and `[2.0, 3.0]`, the other element's value in each place. Same wall (`param=0`, `skip=call-value-missing ... arg=5`)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_product.cml"
 args = ["${case}", "${backend}"]
@@ -1199,7 +1204,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "grad_of_a_division"
-desc = "`grad((x) => x / 4.0)` at 8 is `0.25`, not a crash and not a division by zero: the transposed `div_tangent` divides by `w * w`, a value rather than a constant, so `div_t`'s second position is reached and answered by the rule's second component -- which reads both operands, the way its law does -- instead of by the first component with the operands swapped (`ct / 0`, since the dividend there is `x * dw` and `dw` is the zero tangent of a constant). `grad((x) => 4.0 / x)` at 2 is `-1.0`: the differentiated value is the divisor, its cotangent is `-(ct * x / (c * c))`, and both values it needs are carried. `grad((x) => -x)` is `-1.0` -- the negation's cotangent is `-ct` -- and the multiplication and subtraction beside it keep their numbers. Today the first four numbers print and the run stops one step later, on the same wall as the array block: the backward half's body reads a value the transposed function does not carry -- `TRANSPOSE-NEEDS ... param=0`, then `skip=call node=5 arg=3` -- so the two remaining answers wait for the closure (`b2f`)."
+desc = "`grad((x) => x / 4.0)` at 8 is `0.25`, not a crash and not a division by zero: the transposed `div_tangent` divides by `w * w`, a value rather than a constant, so `div_t`'s second position is reached and answered by the rule's second component -- which reads both operands, the way its law does -- instead of by the first component with the operands swapped (`ct / 0`, since the dividend there is `x * dw` and `dw` is the zero tangent of a constant). `grad((x) => 4.0 / x)` at 2 is `-1.0`: the differentiated value is the divisor, its cotangent is `-(ct * x / (c * c))`, and both values it needs are carried. `grad((x) => -x)` is `-1.0` -- the negation's cotangent is `-ct` -- and the multiplication and subtraction beside it keep their numbers. Today the first four numbers print and the run stops one step later, on the same wall as the array block: the backward half's body reads a value the transposed function does not carry -- `TRANSPOSE-NEEDS ... param=0`, then `skip=call-value-missing param=3 node=6 arg=3` -- so the two remaining answers wait for the closure (`b2f`)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_of_a_division.cml"
 args = ["${case}", "${backend}"]
