@@ -1187,7 +1187,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "grad_constant_beside_a_value"
-desc = "A constant on a value operand is not an operand that did not arrive: `grad((x) => 5.0 + x * 7.0)` at 2 is `7.0`, and `grad((x) => x * 5.0 + x * 7.0)` at 2 is `12.0`. The two have the same shape to a reader and the second always cut; the first was refused by `split` with 'an operand of the node is not reachable from the half's exit', because the backward half asks for every data input of the node it copies and a bare `5.0` feeding `:op/add_d` is a constant -- never copied, never crossing the cut -- so it read as unreachable (measured 2026-11-03 against `fa00`/`fa11`)."
+desc = "A constant on a value operand is not an operand that did not arrive: `grad((x) => 5.0 + x * 7.0)` at 2 is `7.0`, and `grad((x) => x * 5.0 + x * 7.0)` at 2 is `12.0`. The two have the same shape to a reader and the second always cut; the first was refused by `split` with 'an operand of the node is not reachable from the half's exit', because the backward half asks for every data input of the node it copies and a bare `5.0` feeding `:op/add_d` is a constant -- never copied, never crossing the cut -- so it read as unreachable. The rule `split` follows instead is a constant on a value operand is a value like any other, so either half may write it again, and what a half writes is the value the source holds."
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_constant_beside_a_value.cml"
 args = ["${case}", "${backend}"]

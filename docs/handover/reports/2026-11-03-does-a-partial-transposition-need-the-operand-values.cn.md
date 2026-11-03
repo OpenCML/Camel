@@ -233,3 +233,62 @@ body**、**5 条读在 arm**（`pick`、两个 `if` 程序的 `f`、`rulesets.jv
 - ③ 上面 16 条 loop body 里**任何一条**仍红 ⇒ 停、点名（那才是循环根修没覆盖的形状）。
 
 那 5 条是**另一种构造**：分支臂也要把捕获复制成 arm 输入，不在循环那条修的范围里。
+
+## 九、只打印版的全量测量：建图器自己就跨区域读外层端口（2026-11-03，`lane-norm-arity`）
+
+作者把 22:50 那半句（"跨区域读会让帧槽读错"）撤回为待查，并要一次测量：把第八节那条校验挂在
+全量 fast 上**只打印不拒绝**，看**建图器自己**造出来的图有没有跨区域读外层端口。这一节是那次测量。
+
+**仪器**：把 `src/runtime/graph_edges.cpp#checkGraphCrossReferences` 里的 `violations.push_back(...)`
+换成 `reportRegionPortRead(...)` —— 新增 94 行、零删除（4809 B 的 patch），只往 stderr 打一行、同一
+进程内按整行去重（`std::set` + `std::mutex`）、**不 return、不动 `violations`**。行格式：
+
+```
+REGION-PORT graph=<名> node=<n> region=<r> regionKind=<Arm|LoopBody|LoopCond|Inline|Root> port=<p> portRegion=<k> portRegionKind=<...>
+```
+
+**它不能常开**：`-Plan all -Tier fast -Jobs 8` 读数 **8541 = 8448 通过 / 73 失败 / skip 10 /
+known 10 / killed 0**，新增红 **62**，而原因**不是**打印落在热路径 —— 那 62 条**逐字比对
+stdout/stderr**（`defun.*`、`match.complete.*`、`search.*`、`entry.error_json.*`、`poison:*`），
+有一条命中行直接落进断言文本（`verification output: Error: nothing to report: REGION-PORT graph=pick …`）。
+要它挂全量，只能走环境变量开关，或让比对器忽略这个前缀。
+
+**分类（961 行命中 / 58 个图 / 63 条用例）。按来源**：
+
+| 来源 | 行数 |
+| --- | --- |
+| 建图器造的用户函数图（`main`、`pick`、`apply`、`best_move`、`winner`、`completing_move`、`text_of`、`moves_of` …） | 830 |
+| 建图器造的 stdlib 规则与内建（`rules::combine_same_sign<float>`、`opt::foldable`、`array::count<int>`、`array::find_index<bool>`、`python_rules::checked_scale`、`random::fold`） | 92 |
+| 变换造的（`jvp_of_read_outer`、`jvp_of_carried`、`jvp_of_carried_p`、`jvp_of_int_escape`） | 15 |
+
+**按区域对**：
+
+| 区域 → 端口所在区域 | 行数 |
+| --- | --- |
+| `Arm` → `Root`（分支臂读所在函数的端口） | 647 |
+| `Arm` → `LoopBody`（循环体里的 `if` 读循环自己的端口） | 155 |
+| `LoopBody` → `Root`（循环体读函数端口） | 122 |
+| `Inline` → `Root` | 10 |
+| `LoopCond` → `Root` | 2 |
+| `Arm` → `LoopCond` | 1 |
+| **兄弟读（`Arm` → `Arm`、`LoopBody` → `Arm`）** | **0** |
+
+最小例子（原文）：
+
+```
+REGION-PORT graph=pick node=5 region=1 regionKind=Arm port=1 portRegion=0 portRegionKind=Root
+```
+
+它对应的程序就是 `pick(x) = if x > 0.0 then 2.0*x else 3.0*x`：两个臂各读一次函数**自己的**端口
+`x`。stdlib 的规则图（`rules::combine_same_sign<float>` 等十个）和 `array::count<int>` 一样如此，
+变换造的 15 行形状与建图器**完全相同**（`LoopBody` → `Root`）。
+
+**结论两句**：
+
+1. **22:50 的规则要改**。实际被遵守的是"**一个区域可读祖先区域的端口，不可读兄弟区域的端口**"
+   —— 兄弟读在本树是 0，而 `Arm`→`Root` 647 行说明建图器（以及 stdlib 的规则）一直在向祖先读。
+2. **改后的检查今天测不到东西**：兄弟读为 0，只拦兄弟读的版本在全量上将是 0 命中。按今晚那条
+   纪律（不生效的守卫比不留更糟，见 `questions/2026-11-03-a-norm-port-count-over-the-call-arguments-is-not-a-wall-today.cn.md`）
+   **不合入**，直到有一条真实程序能让它拦住；在那之前它只是一台仪器，而不是一条不变式。
+
+patch 位置：`D:\Temp\region-port-printonly.patch`（只打印版，4809 B）。
