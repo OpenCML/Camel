@@ -148,6 +148,7 @@ export rule mul_tensor_t::<T, X, W>(x: X, w: W) {
 export rule exp_t::<T>(x: T[..]) when is_float::<T>() {
     exp(x) => (ct: T[..]) => ct * exp(x)
 }
+
 /// The transpose of `gelu`: the same slope as `jvp_gelu`, applied to the cotangent. A slope that depends
 /// on `x` alone multiplies the cotangent; the tanh approximation is the engine's definition, so this is
 /// the same number the engine's `gelu_grad` will have to answer.

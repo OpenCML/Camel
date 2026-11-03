@@ -314,6 +314,7 @@ export rule jvp_softmax::<T>(x: T[..]) when is_float::<T>() {
 export rule jvp_exp::<T>(x: T[..]) when is_float::<T>() {
     exp(x) => (dx: T[..]) => exp(x) * dx
 }
+
 /// `d(gelu(x))` for **the engine's definition**, which is the tanh approximation and not the erf form:
 ///
 ///     gelu(x) = 0.5 x (1 + tanh(s)),  s = sqrt(2/pi) (x + 0.044715 x^3)
