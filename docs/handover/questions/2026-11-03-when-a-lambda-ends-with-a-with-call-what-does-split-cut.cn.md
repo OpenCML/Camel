@@ -29,7 +29,9 @@ REINTERP split function=jvp_of___g_243__ skip=exit (a lifted function answers wi
 
 **读数**：出口的**类型**是对的（`exit=Tuple{chain,tangent}`），错的是**形状**——出口结点 7 不是一个两元的 tuple `Fill`。`__g_243__` 就是被微分的那个 lambda `(ww: float) => loss_with<ww, b>(x, t)`：它的体以一次「带 `with` 实参的调用」收尾，抬升后这个对是**那次调用的作答**，不是本图里一个把两半拼起来的 `Fill`。
 
-这落到 `modules/transforms/split.cpp#exitShapeOf` 的第三个格：它只认 `GCNodeKind::Fill` + `GCFillKind::Tuple` + `withInputsOf(exit).size() == 2`，其余都归 `ExitShape::NotAPair`；而 `NotAPair` 那一格的注释写的是**"Defensive, and unreachable from `.cml`"**。这条例子**从 `.cml` 走到了它**——那句注释现在是假的，这也是这条墙第一次被一个真实程序钉住（此前只有 `showcase_s2` 的 `tensor_vjp_stops_at_split` 钉着 `split` 的别的形状）。
+这落到 `modules/transforms/split.cpp#exitShapeOf` 的第三个格：它只认 `GCNodeKind::Fill` + `GCFillKind::Tuple` + `withInputsOf(exit).size() == 2`，其余都归 `ExitShape::NotAPair`；而 `NotAPair` 那一格的注释写的是**"Defensive, and unreachable from `.cml`"**。这条例子**从 `.cml` 走到了它**——那句注释是假的，这也是这条墙第一次被一个真实程序钉住（此前只有 `showcase_s2` 的 `tensor_vjp_stops_at_split` 钉着 `split` 的别的形状）。
+
+> **已修（2026-11-03 晚，`modules/transforms/split.cpp#exitShapeOf`）**：注释已按事实改——写明它可以从 `.cml` 到达，路径是"被微分的 lambda 体以调用带 `with` 的函数收尾"，并指向本页；报文也改成指名墙的那句（"…here the pair is a call's result … not the two-member tuple fill this cut takes its two halves from … This shape is not accepted"），不再有 `Defensive` 或"内部状态"的暗示。**行为未动**：不做 B、不做 A，等本页的裁定。
 
 ## 二、最小程序（就是库层 `with_grad` 的组合，不精简）
 

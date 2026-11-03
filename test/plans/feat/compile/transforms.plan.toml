@@ -1434,7 +1434,7 @@ kind = "behavior"
 case = "../../../cases/compile/transforms/with_grad_composition_meets_the_split_wall.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["skip=exit", "split does not build this function", "this graph's exit is not a two-member tuple fill", "a lifted function answers with the pair (result, tangent)"]
+expect_output_contains = ["skip=exit", "split does not build this function", "a lifted function answers with the pair (result, tangent)", "here the pair is a call's result", "not the two-member tuple fill this cut takes its two halves from", "This shape is not accepted", "2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-split-cut.cn.md"]
 expect_stdout_not_contains = ["value=0.12500000000000000"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
