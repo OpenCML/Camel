@@ -519,10 +519,12 @@ inline bool nodeStandsForItsRegion(node_handle_t node) {
 /// Whether the model lets an order edge sit on this node (docs/design/effects/edges.cn.md 4.6):
 /// an order edge only orders, and its two ends are effects or nodes that may fault, so a node the
 /// model lets a pass arrange freely -- pure and unable to fault (design principles 3.4) -- carries
-/// none. The seal check asks the same question through the same classification
-/// (src/runtime/graph_edges.cpp), so an edge written through this one cannot be refused, and a node
-/// whose operator is not known is left out rather than ordered: a missing order only leaves the
-/// two writes in the order they were written.
+/// none. This is not the seal's question, and its answer is not the seal's set: a chain's set is
+/// narrower -- a `Call` stands on a chain, and a `Func`, a `Gate` and a `Cast` that may fault do not
+/// -- so an edge written through this one can be refused there. Merging the two decides first
+/// whether an order edge may stand only where a chain statement stands, and that is a rule about
+/// order edges, not about this function. A node whose operator is not known is left out rather than
+/// ordered: a missing order only leaves the two writes in the order they were written.
 inline bool nodeTakesAnOrder(node_handle_t node) {
     if (node == nullptr) {
         return false;

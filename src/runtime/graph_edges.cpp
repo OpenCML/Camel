@@ -181,42 +181,6 @@ class EdgeChecker {
                 declared->toString()));
     }
 
-    /// A node the builder chained inside a `sync` block: it carries the wait that block wrote.
-    /// Every check about a sync edge asks this question, so it is asked in one place -- two
-    /// copies of one condition drift, and these copies had already grown a `GATE` exception on
-    /// only one of them.
-    /// Is this node a statement of a chain: one that runs for its effect or may fault, or a
-    /// structure that contains such statements (a branch, a loop, a call)? Answered from the node
-    /// itself and the operator table, as edges.cn.md 1 and 4.6 define it, not from a marker the
-    /// builder wrote (author ruling 2026-11-02 04:50: a marker that can be derived should not be
-    /// stored).
-    bool isChainStatement(gc_node_ref_t ref) const {
-        const GCNode *node = graph_.node(ref);
-        if (node == nullptr) {
-            return false;
-        }
-        switch (node->kind) {
-        case GCNodeKind::Brch:
-        case GCNodeKind::Loop:
-        case GCNodeKind::Call:
-            return true;
-        case GCNodeKind::Oper: {
-            const auto *body = graph_.nodeBodyAs<GCOperBody>(ref);
-            if (body == nullptr || body->oper == camel::core::kNoOper) {
-                return false;
-            }
-            const auto traits = camel::core::OperatorTable::instance().find(body->oper);
-            if (!traits.has_value()) {
-                return false;
-            }
-            return !camel::core::OperatorTable::instance().isPure(body->oper) ||
-                   camel::core::OperatorTable::instance().hasExternalEffect(body->oper) ||
-                   traits->mayFault;
-        }
-        default:
-            return false;
-        }
-    }
     /// Is this node a statement of a chain, read from the node and the operator table (edges.cn.md
     /// 1 and 4.6) rather than from the marker: a branch, a loop or a call is a statement; an
     /// operator is one when it has an effect or may fault. Used by the census below only.
