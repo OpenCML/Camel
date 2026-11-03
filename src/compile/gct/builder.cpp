@@ -7380,10 +7380,19 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
     if (signature) {
         std::vector<std::string> used;
         collectTypeVars(built, used);
+        // A `rule`'s head is written once and its sides are three declarations of the compiler's
+        // making, so "the signature" of a rule side is not where the rule's parameters are written:
+        // `mul_tensor_t::<T, X, W>` names `T` only on its right side (`(ct: T[..])`), which is the
+        // author's line and cannot be written any other way. What the rule writes is carried here
+        // from the rule's own text (`src/parse/ast/builder.cpp`, `visitRuleDecl`), so the check
+        // reads the whole declaration and not the one side it happens to be building.
+        const auto &acrossTheRule =
+            ast->loadAs<AST::FuncTypeLoad>()->typeParamsWrittenElsewhere();
         pendingUnusedHeadVars_.clear();
         for (const std::string &name : declaredTypeVars_) {
             if (std::find(used.begin(), used.end(), name) == used.end() &&
-                !writtenHeadVars_.contains(name)) {
+                !writtenHeadVars_.contains(name) &&
+                std::find(acrossTheRule.begin(), acrossTheRule.end(), name) == acrossTheRule.end()) {
                 pendingUnusedHeadVars_.push_back(name);
             }
         }

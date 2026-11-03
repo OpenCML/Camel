@@ -1125,6 +1125,37 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         return list;
     };
 
+    // The type parameters the rule writes *anywhere* -- its left side, its right side, its
+    // condition. A rule's head is written once, but the sides are three declarations of the
+    // compiler's making, so a name the user writes on the right is absent from the left: the
+    // unused-parameter check reads one declaration's own signature, and `rule
+    // mul_tensor_t::<T, X, W>(x: X, w: W) { mul_tensor(x, w) => (ct: T[..]) => … }` names `T`
+    // only in the right side's cotangent. What the rule uses is the union, read here from the
+    // rule's own tokens, and carried to every side.
+    std::vector<std::string> writtenAcrossTheRule;
+    {
+        const syn::TokenBuffer &tokens = context.tree()->tokens();
+        const auto writesName = [&](syn::Node node, const std::string &name) {
+            if (!node) {
+                return false;
+            }
+            // Token *indices*, not byte offsets: `begin()`/`end()` are offsets into the source.
+            const uint32_t first = node->firstToken().index();
+            const uint32_t last  = node->lastToken().index();
+            for (uint32_t i = first; i <= last && i < tokens.size(); ++i) {
+                if (!syn::isTrivia(tokens[i].kind) && tokens.text(i) == name) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        for (const std::string &name : typeParams) {
+            if (writesName(sides[0], name) || writesName(sides[1], name) ||
+                writesName(when, name)) {
+                writtenAcrossTheRule.push_back(name);
+            }
+        }
+    }
     // One side as a function of the rule's parameters: `func name__<side>(params) => expr`. A side
     // is read as a pattern the engine matches and rebuilds with, so its ports are the rule's own
     // parameters; a `with` parameter is a `constas` parameter of it, which the instance reads from
@@ -1134,6 +1165,8 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(funcTypeNode, context);
         unwrapNodeAs<FuncTypeLoad>(funcTypeNode)->setTypeParamNames(typeParams);
+        unwrapNodeAs<FuncTypeLoad>(funcTypeNode)
+            ->setTypeParamsWrittenElsewhere(writtenAcrossTheRule);
         *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
         *funcTypeNode << constasParams(
             params ? any2node(visitParentParams(params)) : createNodeAs<RepeatedLoad>("NamedPair"));

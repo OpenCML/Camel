@@ -49,6 +49,17 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '..', '..', '..')
 const runner = path.join(path.dirname(here), 'run-tests.mjs')
 const stripAnsi = (text) => text.replace(/\x1b\[[0-9;]*m/g, '')
+// The width every child run of this self-test is taken at. A runner that is not told takes
+// `availableParallelism` -- 32 on the gate host -- and then its readings move with its neighbours:
+// on 2026-11-03 the sweep fixture's 13 cases came back all FAIL with `pass: 0` while the same
+// fixture, run at 32 on a quieter host the same day, was 13/13 (`docs/handover/reviews/
+// 2026-11-03-the-self-test-is-red-on-develop-and-has-no-name.cn.md`). All thirteen failing, none
+// passing, is the shape of "squeezed out", not the shape of "one assertion chose wrongly"; and a
+// judgement that moves with the load is neither a red nor a green (author ruling 2026-11-02 16:50).
+// The checks below compare against fixed strings, so the width they are taken at has to be fixed
+// too. Four is a width this fixture's work is small enough to fill and small enough not to swamp;
+// one would make the wall time unacceptable, and it is not what the plan layer runs at either.
+const SELFTEST_JOBS = '4'
 // Printed at the end and read by nothing: how many child runs this file started, and what the
 // whole thing cost in CPU and in wall time. The three numbers belong together because the bound
 // this self-test runs under rose twice on readings that were never the same kind, and a host that
@@ -64,7 +75,12 @@ fs.mkdirSync(probeLogDir, { recursive: true })
 
 function runRunner(args, extraEnv = {}) {
     cost.children += 1
-    const proc = spawnSync(process.execPath, [runner, ...args], {
+    // A child run that names its own width (`--jobs 1` for the serial check, `--jobs 4` for the
+    // parallel one) keeps it: the width is the subject of those checks. Every other child run is
+    // taken at `SELFTEST_JOBS`, which is what makes its reading independent of the load it is
+    // started under. The flag goes before the target, where the runner reads it.
+    const width = args.includes('--jobs') ? [] : ['--jobs', SELFTEST_JOBS]
+    const proc = spawnSync(process.execPath, [runner, ...width, ...args], {
         encoding: 'utf8',
         cwd: repoRoot,
         env: { ...process.env, ...extraEnv },
@@ -1126,4 +1142,4 @@ console.log('runner self-test ok')
 // file's own runs are judged by. A measurement that moves the thing it measures is worse than the
 // number it replaces, so the reading stays where the runner makes it.
 const spentWall = Number(process.hrtime.bigint() - cost.wallStart) / 1e9
-console.log(`[calibration] child-runs=${cost.children}; wall=${spentWall.toFixed(1)} s`)
+console.log(`[calibration] child-runs=${cost.children}; jobs=${SELFTEST_JOBS}; wall=${spentWall.toFixed(1)} s`)

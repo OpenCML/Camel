@@ -2428,7 +2428,7 @@ rounded once into the element type. `keepdims` leaves the reduced axis as an ext
 #### `sum_to`
 
 ```camel
-sum_to: (t: T[..], like: T[..]) => T[..] when is_float::<T>()
+sum_to: (t: T[..], like: S) => S when is_float::<T>()
 ```
 
 `t` read at the shape `like` states, which is the shape of the answer. Two shapes that are
