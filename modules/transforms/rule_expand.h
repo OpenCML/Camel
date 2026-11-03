@@ -58,6 +58,7 @@ camel::runtime::gc_node_ref_t expandRuleByName(
     camel::core::context::Context &context, camel::runtime::GraphDraftGroup &group,
     camel::runtime::GraphTransaction &transaction, std::string_view ruleName,
     const std::function<camel::runtime::gc_node_ref_t(size_t)> &valueOf,
-    const std::vector<camel::runtime::gc_node_ref_t> &tangents, size_t position, std::string &why);
+    const std::vector<camel::runtime::gc_node_ref_t> &tangents, size_t position,
+    const std::vector<camel::core::type::Type *> &operandTypes, std::string &why);
 
 } // namespace camel::transforms
