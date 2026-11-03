@@ -1,9 +1,18 @@
 # 踩过的坑（症状 / 为什么 / 怎么避免）
 
 每个生成器、每条守卫都有一条"看起来修好了、其实把红推给了下一层"的路。这张表只记实测过的，
-每条都附当时的读数。
+每条都附当时的读数。一条三行：症状 / 为什么 / 怎么避免。没有读数的不要写进来，"感觉容易错"不是坑。
 
 | 症状 | 为什么 | 怎么避免 |
 | --- | --- | --- |
 | `registry.reference_is_generated` 修绿之后，`docs.ai_reference.current` 立刻变红，报文是 `the 'stdlib-signatures' region is not what its source produces (534 entries)`（2026-11-03 实测：4 次运行里第 2 次） | AI 参考的 stdlib 签名目录**不是从 `stdlib/*.cml` 直接生成的**，而是从 `docs/stdlib-reference.md` 生成的。改了 `stdlib/*.cml` 的文档行、只重录了中间那层，就等于把红推给下一层：`stdlib/tensor.cml` → `docs/stdlib-reference.md` → `docs/reference/camel-for-ai-stdlib-signatures.md`，三个文件、两个生成器 | 改 `stdlib/*.cml` 的文档行之后**按链条顺序跑两次**：`node scripts/stdlib-reference.mjs --write`，再 `node scripts/camel-for-ai.mjs --write`。两个自检分别要 `up to date` 与 `what its sources produce`——**这两条不是一回事**，只过一条不算修好 |
 | 两笔各自合法、各自测过，合到一起整层的 `total` 会跳（例如 `feat/compile` 从 2182 变 2187） | 整层的 `total` 由该层各 plan 声明的测试条目决定，任何一笔新增或删除用例都会改分母；单笔跑的是自己的 plan，看不到别人的分母 | 合前用**实时 `origin/develop`** 复跑那一层，不要用任何写死的 sha；**pass 与 total 分别报**，别用一个数代替另一个；比值下降时先问"是分子掉了还是分母变了" |
+| 改了 `stdlib/tensor.cml` 一行 `/// @example`，同一个注册表计划里 `registry.reference_is_generated` 变成 `docs/stdlib-reference.md is out of date: run node scripts/stdlib-reference.mjs --write` | `docs/stdlib-reference.md` 是**生成物**，它把声明的文档行（含 `@example` 原文）印进表里。改了源、没重录，两边就对不上；改任何文档行、签名行、例子都会这样，不只是例子 | 同一次改动里跑 `node scripts/stdlib-reference.mjs --write`（只重写这一个文件，实测只动 1 行），再 `node scripts/stdlib-reference.mjs --verify-doc` 应得 `docs/stdlib-reference.md is up to date`。两条都是纯 node，不需要二进制 |
+| 想给 `test/plans/feat/compile/rules_angle_args.plan.toml` 补一条目录规则，写成 `{ "path": "test/cases/modules/autodiff/", "plans": [...] }` 之后，原来能选中 autodiff 计划的路径变成 `Cannot read properties of null (reading 'names')`，`plansForChanges` 也返回不全 | `directoryRules` 是按前缀匹配再从 `rest` 切段下钻的。一个**正好在 prefixes 根下的文件**，`rest == ""` → `segments == []` → 下钻循环一次都不跑 → 走到末尾 `return null`，而 `null` 的意思是"这条路到此为止，不往下落"；于是既没匹配到新写的规则，也把原有的镜像挡住了 | 这种"某个计划读的用例散落在别人的目录里"的情形，用 **file rule**（`rules` 数组）配 `ownCases: true`：`rules.find` 取第一条命中的 file rule，`ownCases` 让计划只在改动文件确实是它自己的 case 时才被选中 |
+| 同一棵树，手工数出 `GraphDraft` 316/317 处引用，而账本 check 读 307；两边差了 9~10 | 两件独立的事叠在一起。① PowerShell 的 `-match` **大小写不敏感**，`graphDraft`（局部变量名）被算进了 `GraphDraft`。② 账本用 `git grep -w`（整词），`RuntimeGraphDraftSession`、`GraphDraftGroup` 不该算。另外账本**按 basename 丢掉两个事务文件**（`graph_txn.h` / `graph_txn.cpp`）：裸数 37 个文件，账本读 35 | 复现账本读数就用账本自己的口径：`git grep -c -w GraphDraft`，再手工减掉事务文件里的出现次数；不要用 `Get-Content \| Select-String -match` 去"验算"，那不是同一个问题 |
+| `[camel-remote] triage: pushed lane-triage, 0 changed file(s), 11 untracked`——**未跟踪文件也算"改动"**，会被 patch 到主机上参与构建和跑计划 | 脚本把"HEAD + 工作树 diff（含未跟踪）"整体送到主机。这对临时探针很方便（不用提交就能在主机上跑），但也意味着**忘删的探针会一直留在主机的工作树里**，而下一轮别人的 `-NoBuild` 复用可能踩到 | 探针放 `test/cases/...` 与 `test/plans/...` 之外的临时目录优先（探针文本落 `D:\Temp\`，别落仓库）；一定要走计划跑，就记下用了哪些文件，测完 `git status --short` 必须干净，删完再提交 |
+| `func three(): float[3] { return [1.5, 2.5, 3.5] }` 被拒，而同一份字面量在声明、传参、`as` 三处都过；探针读数是 `declared=float[3] written=float[] array=1/1 eq=0`、`arr=1 raw=3 fits=1 elem=float`——**形状判据说"相符"，值却还是开放数组** | `arrayLiteralFitsShape`（`src/compile/gir/builder_control.cpp`）的秩一分支 `if (extents.size() < 2) return holdsStatedLength(type, array.get());` **直接返回，出参 `lengths` 一次也没写过**——只有秩二那条路会填它。下游 `ArrayDataFactory` 于是按"没有 extent"建出 `f32[]`：判据判过了，但**判过的那个长度没交出去**，下游不是判错，是拿不到 | 看到"bool 返回 + 出参"的判据，**在每条 `return true` 前问一句"出参这时是全的吗"**；出参是可选指针（`= nullptr`）或"只在一条分支上写"的，就是这一类的候选。修的时候从**位置的声明**取值，别去下游补（下游没有那个信息）。同类第二处：`Builder::compositeWithHolesInType` 只有 struct 分支写 `holeSlots`，array 分支直接 `return factory.build()`——今天不坏只是因为调用方先把 `holeSlots` 预置成 `holes` |
+
+已核过、不属于"判据算出了答案却不交出去"这一类：`flattenLiteral`（每层先 push 自己的长度，货真价实地交出去）、
+`literalShapeOf`（每层都填 `lengths`/`at`，ragged 走 `shaped=false`，调用方先看 `shaped`）、
+`ArrayType::extentForms`（`true` 时 `out` 总是整份）、`holdsStatedLength`（纯判据，没有可交的东西）。

@@ -204,7 +204,7 @@
             "plans": ["feat/modules/autodiff.plan.toml", "feat/modules/autodiff_inspection.plan.toml", { "plan": "feat/compile/rules_angle_args.plan.toml", "ownCases": true }]
         },
         {
-            "comment": "The showcase's first-step gradient: `feat/showcase_s2.plan.toml` reads one case under test/cases/compile/transforms/, which the directory rules mirror to feat/compile/transforms.plan.toml, and it sits beside the feat/ plans rather than in that mirrored directory, so no case path selected it and `--changed` could never reach it. `ownCases` keeps the rule from riding every edit in that directory into a plan that reads one program.",
+            "comment": "The showcase's first-step gradient: `feat/showcase_s2.plan.toml` reads one case under test/cases/compile/transforms/, which the directory rules mirror to feat/compile/transforms.plan.toml, and it sits beside the feat/ plans rather than in that mirrored directory, so no case path selected it and `--changed` could never reach it. `ownCases` keeps the rule from riding every edit in that directory into a plan that reads one program. This and the `feat/compile/rules_angle_args.plan.toml` entry above are the author's 2026-11-03 ruling on the red self-test carried out: the two names the self-test reports are a rule missing from this file, and the runner has nothing to do with it.",
             "paths": ["test/cases/compile/transforms/"],
             "plans": [
                 { "plan": "feat/showcase_s2.plan.toml", "ownCases": true }
