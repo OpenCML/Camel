@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：48 页
+## 现在在等作者：49 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -55,5 +55,6 @@
 | [`2026-11-03-which-p0-2-does-the-order-mean`](2026-11-03-which-p0-2-does-the-order-mean.cn.md) | 排序里那条 `P0-2` 指 A 还是 B？A 的两处是不是同一个条件（逐分支量：不是） |
 | [`2026-11-03-who-carries-the-forward-halfs-intermediate-values`](2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md) | 转置图需要前向那一半的中间值，谁携带它？ |
 | [`2026-11-03-why-the-self-test-grew-expensive-without-any-test-count-growth`](2026-11-03-why-the-self-test-grew-expensive-without-any-test-count-growth.cn.md) | 自检什么时候变贵了：成本已逐项归因，没有余额，也没有可比的前后读数 |
+| [`2026-11-04-item-7-deleting-the-build-side-would-delete-grad-itself`](2026-11-04-item-7-deleting-the-build-side-would-delete-grad-itself.cn.md) | 第 7 项「先删 `pullback.cpp` 的建图」今天能删吗：`buildGradientGraph` 仍是 `grad` 的唯一实现 |
 | [`2026-11-04-should-the-straight-line-transpose-transpose-a-lifted-call`](2026-11-04-should-the-straight-line-transpose-transpose-a-lifted-call.cn.md) | 直线路径的转置要不要像分支臂那样，把一个抬升调用穿过它的原函数转置？ |
 | [`array-scalar-product-transpose`](array-scalar-product-transpose.cn.md) | 数组×标量那条路：律已就位、形状已按类型拒绝，剩下的是"律的答案类型"这一问 |
