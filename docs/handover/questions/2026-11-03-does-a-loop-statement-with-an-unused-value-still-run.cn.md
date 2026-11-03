@@ -171,3 +171,35 @@ P02SYNC synced=0 operands=0 returned=<0|1> sameGraph=1 resKind=0 needs=0
 **下一步的三个数**：在这一个改法下重打 `P02SYNC`，若 `synced` 仍是 0，说明 `visitBodyNode` 的
 `synced_` 在进入 `sync { … }` 块之前又被关掉了；那就要在 `visitExecNode` 入口打
 `synced_`/`operands`，找到"谁把它关掉"。
+
+## 交接：四轮读数与已排除的四种可能（2026-11-03）
+
+A（`feat/compile/stream` 里 `stream.generator_*` 那 32 条，加另一个计划里的
+`stream_fib.default.{nvm,prl}` 共 34 条）**原样留给下一手**：`feat/compile/stream` 146 条，
+**114 通过 / 32 失败**，逐名稳定。四轮下来排除了四种可能，每一种都有读数，不用重走：
+
+1. **不是诊断集合失效**。`chainPlaceGates_` 认得链位：走法 `visited=3`（`println` 26 → 链位
+   30 → 31），链位被穿过去了，诊断与建图器是同一个 `Builder` 实例。
+2. **不是"值节点独有"**。`P02SYNC` 三数：`synced=0 operands=0 needs=0 resKind=0`。
+   `needs=0` 的原因是 `lastSyncedNode_ == nullptr`（`valueNeedsSyncEdge` 要求链尾非空），
+   不是"这个值没人要"。
+3. **不是 `builder_control.cpp` 3536–3541 那条拆分路径**。打印一次也没触发：这段在"状态可拆成
+   分量"的分支里，这三个循环的状态不是可拆分聚合。
+4. **不是标记退役的副作用**。`kGCNodeFlagSyncStatement` **还在**，还有 28 个读点
+   （`src/runtime/graph_edges.cpp:208`、`src/runtime/draft_regions.cpp:103`、
+   `src/passes/opt/generic/generic.cpp:342` 等），`git log -S` 的历史里它是"退成边"而不是被删；
+   而**诊断这条路根本不读它**：`inUnusedSyncBlock`
+   （`src/copy/…` 实际是 `src/compile/gir/builder_diagnostics.cpp:478`）只沿 ctrl/sync 使用者走，
+   碰到不在 `chainPlaceGates_` 里的 `GATE` 就判"块没被用"。所以这条线干净。
+
+**第五轮的读数（推出来的，源头在这条代码路径里）**：把 `visitBodyNode` 的
+`std::exchange(synced_, false)` 改成 `true` 之后，告警措辞从"the sync block it is in is not
+used"变成"nothing depends on it and it is not in a sync block"，而 `inUnusedSyncBlock` 返回
+**false**、效应仍不执行。walk 返回 false 只有一个意思：**打印上面没有任何 ctrl/sync 使用者**
+（连链位 `GATE` 都没有）。既然 `synced_` 已经在体区入口被置真而语句仍然不上链，就只有一种解释：
+**在 `visitBodyNode` 与 `sync { … }` 块的语句之间，`synced_` 又被关掉了**。
+
+**下一手的第一件事**：在 `visitExecNode` 的入口打 `synced_`/`operands`（第一个数），再在
+`sync { … }` 块语句生成的那一句上打一次（第二个数），两处若从 1 变 0，就找到了那处
+`std::exchange(synced_, false)` —— 报出 `file#Symbol` 之后才动手改。作者已经裁定过方向：
+体区交回链的最后一站，不是裸值；分支臂与循环体共用 `buildArm`，动之前要用例说话。
