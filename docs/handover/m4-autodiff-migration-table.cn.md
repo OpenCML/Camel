@@ -31,7 +31,7 @@
 
 | 类 | 分母 | 分子（只 import 库、退出码 0 且打出数） | 今天挡在哪 |
 | --- | --- | --- | --- |
-| ① `with` 函数 + `grad(f)<x>()` | 51 | **0** | `grad` 声明的参数是 `(x: float) => float`，`f` 是函数值或数组函数时匹配不上：`No matching function found for argument types: <> (<f: (x: float) => float> (x: float) => float)`；带进 `with_grad` 的走 `stdlib/vjp.cml:93`（`with_grad` 体里 `vjp(f)`） |
+| ① `with` 函数 + `grad(f)<x>()` | 51 | **0** | `grad` 声明的参数是 `(x: float) => float`，`f` 是函数值或数组函数时匹配不上：`No matching function found for argument types: <> (<f: (x: float) => float> (x: float) => float)`；带进 `with_grad` 的走 `stdlib/vjp.cml#vjp`（`with_grad` 体里 `vjp(f)`） |
 | ② 数组/张量参数 | 54 | **0** | 同一处声明面：`No matching function found for argument types: <> (<xs: float[]> () => float pure)`（`array_slice_grad.cml:63:18` 起四行同一句） |
 | ③ 库里没有的名字 | 10 | **0** | `Unresolved reference: 'stop_gradient'`（`scalar_grad.cml:22:24`）；补上名字后仍卡 `with_grad<<x: float> (y: float) => float pure>` 在 `stdlib/vjp.cml:93:15` |
 | ④ 不在这条路上（`prelude` 的 `jvp`/`vmap`/`remat`，或只测名字解析） | 11 | **4** | 不再挡：`jax_batching`、`jax_vmap`、`jax_vmap_tensor`、`jax_names/remat` 今天退出码 0 且打出数（它们的名字在 `transforms` 里，本就不经过 `vjp`）。余 7 条仍在名字解析上 |
