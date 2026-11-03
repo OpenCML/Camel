@@ -122,13 +122,23 @@ let loaderFailure = ''
 // the file says it is not comparable across machines. Recording 14 here would fail the ledger on a
 // host where the same three cases do not pass, which is a red about the host and not about the
 // migration.
+//
+// The record moved a second time on `integ2/rules-batch2`, the batch of rules lanes merged onto
+// `c4391db57`: `total` 131 -> 140, `library` 122 -> 131, `with` 45 -> 50, `array` 70 -> 72,
+// `other` 7 -> 9. Eight of those nine are cases the batch added under `test/cases/modules/autodiff/`
+// -- seven `has_aux_*` (five `with`, two `other`) and `reshape_adjoint_shape` (`array`) -- and the
+// ninth was behind the record before the batch reached it: the same run on `545b24d92` reads
+// `total=132 library=123 with=45 array=71 other=7`, one `array` case more than this file recorded,
+// and no lane in the batch edited that case. So one of the nine is a debt being paid and not a case
+// arriving, and `with`/`array`/`other` moving up here is the corpus growing, which the file has to
+// follow or every later reading of it means nothing.
 const LEDGER_RECORDED = {
-    total: 131,
-    library: 122,
+    total: 140,
+    library: 131,
     pass: 12,
-    with: 45,
-    array: 70,
-    other: 7,
+    with: 50,
+    array: 72,
+    other: 9,
 }
 
 function camelBinary() {
@@ -483,7 +493,7 @@ if (ledgerCheck) {
         console.log(
             `[LEDGER-CHECK] ok: total=${measured.total} library=${measured.library} ` +
                 `pass=${measured.pass} with=${measured.with} array=${measured.array} ` +
-                `other=${measured.other} -- pass 没有降，三类没有升`,
+                `other=${measured.other} -- pass 没有降，三类与记录的读数一致`,
         )
     }
 }

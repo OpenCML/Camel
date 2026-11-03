@@ -18,13 +18,13 @@ desc = "The autodiff migration ledger is a ratchet: `pass` may only rise, `with`
 
 [[tests]]
 name = "tools.autodiff_migration_ledger.ratchet"
-desc = "`--ledger-check` reads `total=131 library=122 pass=14 with=45 array=70 other=7`, which is what `LEDGER_RECORDED` holds, and says so instead of reding a number nothing moved."
+desc = "`--ledger-check` reads `total=140 library=131 with=50 array=72 other=9`, which is what `LEDGER_RECORDED` holds, and `pass` at or above the 12 that file records (this host's binary read 17), and says so instead of reding a number nothing moved."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/autodiff-migration-ledger.mjs"
 args = ["${case}", "--ledger-check"]
 expect_exit = 0
-expect_stdout_contains = ["[LEDGER-CHECK] ok: total=131 library=122", "with=45 array=70 other=7 -- pass 没有降，三类没有升"]
+expect_stdout_contains = ["[LEDGER-CHECK] ok: total=140 library=131", "with=50 array=72 other=9 -- pass 没有降，三类与记录的读数一致"]
 # It runs alone: for the length of the run, `test/cases/modules/autodiff/` holds files that are not
 # there before or after it (`<case>.ledger-probe.cml`, written and deleted per case), and two other
 # checks walk that tree -- `plan-inventory.mjs`'s case ledger and `check-doc-links.mjs`'s citations --
