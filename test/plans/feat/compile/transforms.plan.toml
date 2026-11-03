@@ -1707,3 +1707,17 @@ expect_stderr_contains = ["skip=backward construct=a node whose input was not co
 expect_output_not_contains = ["TRANSPOSE function="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "library_grad_of_a_with_weight"
+desc = "A weight the program holds as an ordinary parameter of a lambda, handed to a function that reads it through a `with` parameter -- the shape the engine measures in `grad_first_with_parameter`, taken through the library's composition here. `vjp` differentiates the ordinary parameters only, so the weight is moved onto one by `f = (ww) => weighted<ww>(2.0)`; the lift of `f` then meets a *call* of `weighted` whose `with` argument is the lambda's parameter, and that parameter is a value the lifted body carries a direction for. Before 2026-11-04 the lifted call handed the callee its `with` value and the zero the lifted signature leaves a `with` parameter's tangent to be, so `weighted`'s lifted chain was constant in the weight, its `lin` was the zero map, and the composition answered value 9.0 with grad 0.0 where the engine answers 3.0 -- a wrong number, which is why this is pinned rather than described. Every line is hand-computed: `weighted<3.0>(2.0) = 3*2 + 3 = 9.0` with `d/dy = x = 3.0`; the same call with the number on an ordinary parameter too is `weighted<3.0>(5.0) = 18.0`, whose cotangents are `6.0` for the weight (`t + 1`) and `3.0` for `t` (the weight), so a dropped weight direction shows as one wrong member and not as a wrong line. The third line is the same argument list read for order: a lifted call's arguments are `(..values, ..their tangents)`, the lift used to interleave them (`v1, d1, v2, d2`) into a callee that reads `(v1, v2, d1, d2)`, and `mulxy(3.0, 2.0) = 6.0` with `d/dx = y = 2.0` and `d/dy = x = 3.0` is where two parameters tell the two orders apart."
+kind = "behavior"
+case = "../../../cases/compile/transforms/library_grad_of_a_with_weight.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["weighted engine=3.0 value=9.0 grad=3.0", "both value=18.0 pullback=(6.0, 3.0)", "twoparam value=6.0 pullback=(2.0, 3.0)"]
+expect_output_not_contains = ["Warning", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

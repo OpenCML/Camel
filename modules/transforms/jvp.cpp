@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <array>
+#include <format>
 #include <optional>
 #include <span>
 #include <string>
@@ -150,9 +151,92 @@ gc_node_ref_t buildRuleTangent(
         tangents, why);
 }
 
-} // namespace
+/// Whether a `with` value of `type` is one a **callee's** lift can carry a direction for (see
+/// `withIsPromoted`). A promoted value becomes a parameter of the lifted graph, so it has to be a
+/// shape the whole road takes: a direction of its own type, one word wide.
+///
+/// `Tangent<float> = float` is the whole of the positive half of this predicate, and it is not a
+/// guess about arithmetic: `split` hands the halves' ports to `transpose`, whose rules for a scalar
+/// are the ones a `with` weight already goes through (`jvp_mul` and its family), while a port of an
+/// aggregate or an array shape is a port the cut does not take at all -- it refuses an array by name
+/// ("the port is not a parameter of the graph, so neither half takes it",
+/// `split.cpp#valuePortsOf`) and loses a graph for a struct, which is the `nodevm.cpp` guarantee
+/// `idx < t->size()` ("Tuple index out of bounds"). Measured on `grad_first_with_parameter`'s `pg`
+/// (a `Point` weight, `Tuple index out of bounds`) and `wg` (an `f64[..]` weight, the refusal above)
+/// on 2026-11-04.
+///
+/// A shape that is *not* promoted is not silently given a zero either: at a call, answering the zero
+/// of its type for a value the caller does have a direction for is exactly the wrong number this
+/// transform removed for a scalar (`grad=0.0` where the engine answers 3.0), so a callee's lift
+/// refuses such a `with` value by name instead of writing it (`liftGraph`'s `with`-port step).
+bool withValueIsCarriable(camel::core::type::Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    // A `float` is its own tangent, and the one shape whose direction the cut passes through: a
+    // tangent port of a wider or more structured type is either refused or lost by `split` (the
+    // readings cited above), and one with no tangent space at all has no direction to carry in the
+    // first place (`Tangent<int> = ()`).
+    const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(type);
+    return space.hasSpace() && (type->code() == camel::core::type::TypeCode::Float64 ||
+                                type->code() == camel::core::type::TypeCode::Float32);
+}
 
-FunctionType *jvpSignature(FunctionType *function) {
+/// Whether a `with` parameter of a lifted callee is written into the *ordinary* list of the lift
+/// instead of staying a `with` parameter (see `liftSignature` below). One rule, asked by the two
+/// writers that have to agree about it -- the signature a callee's lift declares and the argument
+/// list its caller fills in: a promoted `with` value is one of a shape the lift can carry a
+/// direction for (`withValueIsCarriable`), and a `var` one is never promoted.
+///
+/// A `var` `with` parameter is a cell the body writes. There is no direction to hand in for it (the
+/// lift reads it and does not write it, `jvpSignature`'s own sentence), so it keeps the place it had
+/// -- a `with` port of its declared value type, with the zero of that type as its tangent.
+bool withIsPromoted(const FunctionType *function, size_t index) {
+    if (function == nullptr || function->withIsVarAt(index)) {
+        return false;
+    }
+    return withValueIsCarriable(function->withTypeAt(index));
+}
+
+/// The lifted signature of `function`, in the one shape both lifts of this transform need.
+///
+/// `promoteWiths` is the difference between them, and it is a difference of *where the value comes
+/// from*, not of law:
+///
+///  * the **top-level** lift -- what `jvp(f)` hands a caller -- declares `f`'s `with` list as its
+///    own (`<..WithOf<F>>`), the way the declared `Jvp<F>` writes it (`stdlib/types.cml`) and the
+///    way `Vjp<F>` forwards it (`vjp(f)` takes `f`'s `with` list, so `split(jvp(f))<..ws>(..xs)`
+///    hands the forward half exactly the list it declares). A value captured there is not one of
+///    the caller's seeds -- the caller of `jvp(f)` has no argument in which to hand a direction for
+///    it -- so its tangent is the zero of its type (`zeroConstantFor` in `liftGraph`), which is
+///    design principles 9.9's law for a captured value.
+///  * a **callee's** lift -- the `jvp_of_g` this transform makes for a call it meets while lifting
+///    somebody else's body -- is called from a graph that is itself lifted, so every value it is
+///    handed has a tangent beside it, the call's `with` arguments included. Those values are not
+///    captured *by the lifted callee* at all: they arrive at the call. A lifted callee that kept
+///    them a `with` list would have nowhere to take the direction in from, and the direction its
+///    caller has would be dropped -- a wrong number and not a refusal (measured 2026-11-04 on
+///    `vjp((ww) => weighted<ww>(2.0))(3.0)`: the lift answered 9.0 with gradient 0.0 where the
+///    engine answers 3.0, because the lifted call handed `jvp_of_weighted` the value of `ww` and
+///    the *zero* the old signature left it to write for the tangent).
+///
+/// So a callee's lift writes every `with` value it can carry a direction for into the ordinary list
+/// (`withIsPromoted`), and the two halves keep the one shape every reader of a lifted signature
+/// already relies on:
+/// `(..ParamsOf<F>, ..WithOf<F>, ..Tangent<ParamsOf<F>>, ..Tangent<WithOf<F>>)`. Two facts about
+/// that shape are not this transform's own, and they are why the promoted values go *between* the
+/// parameters and their tangents rather than after everything:
+///
+///  1. the halves have to be **equal in length**, because `split` reads the seam at `count / 2` and
+///     takes the first half as the values and the second as the tangents
+///     (`split.cpp#valuePortsOf`, `#parameterOfPort`, `#tangentArgumentsOf`). A `with` tangent
+///     appended after the parameters' own tangents would move that seam the moment a function has
+///     two `with` parameters (`scaled`, `grad_first_with_parameter`'s `sk`/`sx` group: three
+///     tangents against one value would put the seam inside the tangents).
+///  2. a value with no tangent space still keeps a *slot* in the tangent half -- `()` -- for the
+///     reason a parameter does: the halves line up position by position, so a reader that walks
+///     them together never has to know which values were left out.
+FunctionType *liftSignature(FunctionType *function, bool promoteWiths) {
     if (function == nullptr) {
         return nullptr;
     }
@@ -167,8 +251,27 @@ FunctionType *jvpSignature(FunctionType *function) {
         return nullptr;
     }
     auto *lifted = TupleType::create(std::vector<Type *>{function->exitType(), resultSpace.space});
-    // Every parameter becomes two parameters, the value and its tangent, and the two halves are
-    // written **values first, then tangents** (author, 2026-11-03): `(..ParamsOf<F>, ..
+    // The value half, in the order the call passes it: the ordinary parameters first, then the
+    // promoted `with` parameters in their declaration order (a `var` one is skipped -- it stays a
+    // `with` parameter and has no slot here).
+    std::vector<Type *> values;
+    values.reserve(function->normTypesCount() + function->withTypesCount());
+    for (size_t i = 0; i < function->normTypesCount(); ++i) {
+        values.push_back(function->normTypeAt(i));
+    }
+    if (promoteWiths) {
+        for (size_t i = 0; i < function->withTypesCount(); ++i) {
+            camel::core::type::Type *withType = function->withTypeAt(i);
+            if (withType == nullptr) {
+                return nullptr;
+            }
+            if (withIsPromoted(function, i)) {
+                values.push_back(withType);
+            }
+        }
+    }
+    // Every value becomes two parameters, the value and its tangent, and the two halves are written
+    // **values first, then tangents** (author, 2026-11-03): `(..ParamsOf<F>, ..
     // Tangent<ParamsOf<F>>)`, which is the order the declared `Jvp<F>` type writes
     // (`stdlib/types.cml`), so the graph and the type cannot drift apart, and the k-th tangent is
     // the tangent of the k-th value by position rather than by arithmetic on the pairs.
@@ -177,36 +280,38 @@ FunctionType *jvpSignature(FunctionType *function) {
     // tuple would need a node that takes it apart, and the only such node -- `Dref` -- belongs to
     // graph construction and is refused outright in a runtime graph (src/runtime/graph.cpp).
     //
-    // A parameter with no tangent space -- the `n` of `xs[n]` -- keeps its place in the tangent half
-    // as `()`, an empty slot: the two halves line up position by position, so a reader that walks
-    // them together never has to know which parameters were left out. The empty slot is a place a
-    // cotangent could be written with nothing to write in it, which is why an earlier reading of this
-    // function gave such a parameter no slot at all; that made the halves two lists of different
-    // lengths and left the pairing to arithmetic. The author's ruling is the slot.
+    // A value with no tangent space -- the `n` of `xs[n]` -- keeps its place in the tangent half as
+    // `()`, an empty slot: the two halves line up position by position, so a reader that walks them
+    // together never has to know which values were left out. The empty slot is a place a cotangent
+    // could be written with nothing to write in it, which is why an earlier reading of this function
+    // gave such a parameter no slot at all; that made the halves two lists of different lengths and
+    // left the pairing to arithmetic. The author's ruling is the slot.
     camel::core::type::param_vec_t params;
-    for (size_t i = 0; i < function->normTypesCount(); ++i) {
-        params.emplace_back(function->normTypeAt(i), false);
+    for (camel::core::type::Type *type : values) {
+        params.emplace_back(type, false);
     }
-    for (size_t i = 0; i < function->normTypesCount(); ++i) {
-        const camel::core::TangentSpaceAnswer answer =
-            camel::core::tangentSpaceOf(function->normTypeAt(i));
+    for (camel::core::type::Type *type : values) {
+        const camel::core::TangentSpaceAnswer answer = camel::core::tangentSpaceOf(type);
         params.emplace_back(answer.hasSpace() ? answer.space : emptyTupleType(), false);
     }
     if (params.empty()) {
         return nullptr;
     }
-    // The lift keeps the function's `with` parameters, in their order and of their own types: the
-    // body reads a weight through a port, and a lifted graph that listed no `with` port would have
-    // nowhere for the captured value to enter by (that was the gate this replaces, written as if it
-    // were a property of the transform). One port per `with` parameter, the value only: a captured
-    // value's tangent in forward mode is the zero of its type, not a second slot a caller fills, so
-    // the pair is not written for a `with` parameter at all. A `var` `with` parameter is listed as
-    // the variable it was declared as; the lift reads it and does not write it.
+    // What stays a `with` list, in the declaration's order and of its own type: the body reads a
+    // weight through a port, and a lifted graph that listed no `with` port would have nowhere for
+    // the captured value to enter by (that was the gate this replaces, written as if it were a
+    // property of the transform). Under `promoteWiths` only the `var` parameters are left here --
+    // the same ones `values` skipped -- so the two halves of this answer are one decision. A `var`
+    // `with` parameter is listed as the variable it was declared as; the lift reads it and does not
+    // write it.
     camel::core::type::param_vec_t withs;
     for (size_t i = 0; i < function->withTypesCount(); ++i) {
         camel::core::type::Type *withType = function->withTypeAt(i);
         if (withType == nullptr) {
             return nullptr;
+        }
+        if (promoteWiths && withIsPromoted(function, i)) {
+            continue;
         }
         if (function->withIsVarAt(i)) {
             if (camel::core::type::Type *value = camel::core::type::valueTypeOf(withType)) {
@@ -221,6 +326,25 @@ FunctionType *jvpSignature(FunctionType *function) {
     return FunctionType::create(withs, params, lifted)->withResources(function->resources());
 }
 
+/// The signature of a **callee's** lift (see `liftSignature`): the same law, with every `with`
+/// value that is not a `var` lifted into the ordinary list so that its direction can be handed in
+/// at the call. Never the type of `jvp(f)` -- the operator's answer is `jvpSignature`'s
+/// (`jvp_operator.cpp#jvpOperatorSignature`), and the two must not be confused: only a callee is
+/// called from a graph that has a tangent for its `with` values. This file's own name: no caller
+/// outside it lifts a callee, and a declaration in a header would invite one.
+FunctionType *jvpCalleeSignature(FunctionType *function) {
+    return liftSignature(function, /*promoteWiths=*/true);
+}
+
+} // namespace
+
+/// The signature `reinterp<jvp>(f)` has: `f`'s `with` list stays `f`'s own, so this answer and the
+/// declared `Jvp<F>` (`stdlib/types.cml`) are one type -- which is what `vjp(f)` forwards to
+/// `split(jvp(f))<..ws>(..xs)`. `liftSignature` says why only a callee promotes its `with` values.
+FunctionType *jvpSignature(FunctionType *function) {
+    return liftSignature(function, /*promoteWiths=*/false);
+}
+
 namespace {
 
 /// What a lift hands on to the lifts it starts: the group the members live in, and the callee graphs
@@ -230,6 +354,17 @@ struct LiftState {
     const camel::runtime::Program *program;
     camel::runtime::GraphDraftGroup &group;
     std::unordered_map<uint32_t, camel::runtime::GraphId> callees;
+    /// Whether this lift is a **callee's** (`jvpCalleeSignature`) rather than the top-level one
+    /// `jvp(f)` answers (`jvpSignature`). The one place the two differ is where a `with` value's
+    /// tangent comes from: the top-level lift writes it as the zero of its type, a callee's lift
+    /// reads it from the port its caller fills (see `liftSignature`). Every lift started from a
+    /// lifted body is a callee's, and a callee of a callee's is one too, so the flag travels with
+    /// the state rather than being decided per graph.
+    bool promoteWiths = false;
+    /// The lifted signature of each callee this build made, keyed by the **original** graph's id --
+    /// the type the call site has to fill in, kept rather than derived again there so the two
+    /// cannot disagree about the order or the length of the list (`liftSignature`).
+    std::unordered_map<uint32_t, FunctionType *> calleeTypes;
 };
 
 bool fail(JvpGraph &refusal) {
@@ -313,9 +448,19 @@ bool liftGraph(
     const camel::core::context::context_ptr_t &context = state.context;
     const camel::runtime::Program *program             = state.program;
     camel::runtime::GraphDraftGroup &group             = state.group;
-    FunctionType *signature                            = jvpSignature(function.funcType());
+    // Which lift this is decides what happens to a `with` value's tangent (see `liftSignature`):
+    // the top-level one `jvp(f)` answers writes the zero of the value's type for it, a callee's one
+    // reads it from a port. The type has to be the same answer, or the graph and its call sites
+    // would be two different lists.
+    FunctionType *signature = state.promoteWiths ? jvpCalleeSignature(function.funcType())
+                                                : jvpSignature(function.funcType());
     if (signature == nullptr) {
         return fail(refusal);
+    }
+    if (state.promoteWiths && rt::isValid(source)) {
+        // The call site fills its arguments in from this: the order and the length of the value half
+        // are what `liftSignature` decided, and nothing else has to know them.
+        state.calleeTypes[rt::toValue(source)] = signature;
     }
 
     // Steps 1 and 2: a new member with the lifted signature, and one port per parameter, the port
@@ -548,42 +693,66 @@ bool liftGraph(
         // Every member the lift makes gets it, the top-level `jvp_of_f` and each `jvp_of_callee`.
         // The id is the caller's, like the name: a draft is numbered when it is encoded.
         draft.addLiftedFromRef(source);
-        // One pair of ports per parameter of `f`, in its order: the value the caller passes and the
-        // seed of that direction. A port node is a node; the graph's *parameters* are the port nodes
-        // it lists as its norm ports, and a call is checked against that list ("has 0 norm ports" is
-        // how a graph with the nodes but no entries in the list refused the call) -- so the lifted
-        // signature's 2n parameters are these 2n ports, in the same order.
+        // One pair of ports per value of the lifted signature, in its order: the value the caller
+        // passes and the seed of that direction. A port node is a node; the graph's *parameters* are
+        // the port nodes it lists as its norm ports, and a call is checked against that list ("has 0
+        // norm ports" is how a graph with the nodes but no entries in the list refused the call) --
+        // so the lifted signature's parameters are exactly these ports, in the same order.
         const size_t parameterCount = function.funcType()->normTypesCount();
+        const size_t withCount =
+            function.funcType() != nullptr ? function.funcType()->withTypesCount() : 0;
+        const std::vector<gc_node_ref_t> originalWith = function.withPorts();
+        // The value half of the lifted list: the ordinary parameters in their order, and then -- for
+        // a **callee's** lift only -- every `with` value that is not a `var`, in the declaration's
+        // order (`liftSignature`). Which slot each one takes is decided here once and read below
+        // twice: the signature writes the same list, and the call site fills it in by these indices.
+        // `promotedSlotOf[i]` is the place `with` parameter `i` takes among the values, or
+        // `kNotPromoted` when it keeps a `with` port of its own.
+        constexpr size_t kNotPromoted = static_cast<size_t>(-1);
+        std::vector<size_t> promotedSlotOf(withCount, kNotPromoted);
+        std::vector<camel::core::type::Type *> valueTypes;
+        valueTypes.reserve(parameterCount + withCount);
+        for (size_t i = 0; i < parameterCount; ++i) {
+            valueTypes.push_back(function.funcType()->normTypeAt(i));
+        }
+        if (state.promoteWiths) {
+            for (size_t i = 0; i < withCount; ++i) {
+                camel::core::type::Type *withType = function.funcType()->withTypeAt(i);
+                if (withType == nullptr || !withIsPromoted(function.funcType(), i)) {
+                    continue;
+                }
+                promotedSlotOf[i] = valueTypes.size();
+                valueTypes.push_back(withType);
+            }
+        }
         std::vector<gc_node_ref_t> valuePorts;
         std::vector<gc_node_ref_t> tangentPorts;
-        valuePorts.reserve(parameterCount);
-        tangentPorts.reserve(parameterCount);
-        // The value half first, in the parameters' order, and then the tangent half in the same
-        // order: the lifted signature is `(..ParamsOf<F>, ..Tangent<ParamsOf<F>>)` (author,
-        // 2026-11-03), so the ports of the graph line up with the declared `Jvp<F>` by position --
-        // port k is the k-th value, port n + k is its tangent. A caller copies its arguments into
-        // these in order, so the order here *is* the interface.
-        for (size_t i = 0; i < parameterCount; ++i) {
-            // The port's type is the parameter's own. The tangent port's is that parameter's tangent
-            // space -- `tangentSpaceOf`'s answer, not `float`: a `float[]` parameter's tangent is an
-            // array of the same shape, and a rule that consumes it (`index_into`) takes it whole. The
+        valuePorts.reserve(valueTypes.size());
+        tangentPorts.reserve(valueTypes.size());
+        // The value half first, in the list's order, and then the tangent half in the same order: the
+        // lifted signature is `(..values, ..their tangents)` (author, 2026-11-03), so the ports of the
+        // graph line up with the declared type by position -- port k is the k-th value, port n + k is
+        // its tangent. A caller copies its arguments into these in order, so the order here *is* the
+        // interface.
+        for (camel::core::type::Type *valueType : valueTypes) {
+            // The port's type is the value's own. The tangent port's is that value's tangent space --
+            // `tangentSpaceOf`'s answer, not `float`: a `float[]` parameter's tangent is an array of
+            // the same shape, and a rule that consumes it (`index_into`) takes it whole. The
             // element's tangent only appears one layer down, at `xs[i]`.
-            camel::core::type::Type *parameterType = function.funcType()->normTypeAt(i);
-            const gc_node_ref_t value = draft.addPortNode(
-                parameterType, draft.allocateRuntimeSlot(parameterType));
+            const gc_node_ref_t value =
+                draft.addPortNode(valueType, draft.allocateRuntimeSlot(valueType));
             draft.appendNormPort(value);
             valuePorts.push_back(value);
         }
-        for (size_t i = 0; i < parameterCount; ++i) {
-            camel::core::type::Type *parameterType = function.funcType()->normTypeAt(i);
+        for (camel::core::type::Type *valueType : valueTypes) {
             const camel::core::TangentSpaceAnswer tangentSpace =
-                camel::core::tangentSpaceOf(parameterType);
-            // A parameter with no tangent space takes a `()` slot here too, and the slot is a port:
-            // the two halves keep their places position by position, so a reader that walks them
-            // together never has to know which parameters were left out. What such a parameter does
-            // *not* get is a tangent to walk with -- `tangentPorts` holds the invalid ref, so the
-            // chain below reads "nothing to differentiate" and answers a zero contribution rather
-            // than a `()`-typed node where a direction belongs.
+                camel::core::tangentSpaceOf(valueType);
+            // A value with no tangent space takes a `()` slot here too, and the slot is a port: the
+            // two halves keep their places position by position, so a reader that walks them
+            // together never has to know which values were left out. What such a value does *not*
+            // get is a tangent to walk with -- `tangentPorts` holds the invalid ref, so the chain
+            // below reads "nothing to differentiate" and answers a zero contribution rather than a
+            // `()`-typed node where a direction belongs.
             camel::core::type::Type *tangentType =
                 tangentSpace.hasSpace() ? tangentSpace.space : emptyTupleType();
             const gc_node_ref_t slot =
@@ -591,30 +760,69 @@ bool liftGraph(
             draft.appendNormPort(slot);
             tangentPorts.push_back(tangentSpace.hasSpace() ? slot : rt::kInvalidNodeRef);
         }
-        // Which parameter a port of the original body is, by its place in that list.
+        // Which value of the lifted list a port of the original body is, by its place in that list.
         std::unordered_map<gc_node_ref_t, size_t> parameterOf;
         const std::vector<gc_node_ref_t> originalPorts = function.normPorts();
         for (size_t i = 0; i < originalPorts.size(); ++i) {
             parameterOf[originalPorts[i]] = i;
         }
-        // The `with` parameters, the same way: a port each, listed among the lifted graph's `with`
+        // A promoted `with` parameter is a parameter of the lifted graph like any other: its port
+        // takes the value slot decided above, and the tangent beside it is the direction its caller
+        // hands in. That is the whole of what lets a lifted body that reads a weight through a port
+        // pass the direction it has for that weight on to the callee it calls (`GCNodeKind::Func`
+        // below) -- without it the callee's chain is constant in the weight and its `lin` is zero.
+        for (size_t i = 0; i < withCount && i < originalWith.size(); ++i) {
+            if (promotedSlotOf[i] != kNotPromoted) {
+                parameterOf[originalWith[i]] = promotedSlotOf[i];
+            }
+        }
+        // The `with` parameters that stay `with` parameters -- a `var` cell, and every `with`
+        // parameter of the top-level lift -- get a port each, listed among the lifted graph's `with`
         // ports, so the captured value enters the copy by a port rather than by a node nothing can
-        // fill. One per declared `with` parameter, in the declaration's order -- a port node that the
-        // graph does not list as a `with` port is a hole, which is exactly how the refusal this
-        // replaces described the problem. The value only: the tangent of a captured value is the
-        // zero below, so there is no second port to hand a direction in.
+        // fill. One per such parameter, in the declaration's order -- a port node that the graph does
+        // not list as a `with` port is a hole, which is exactly how the refusal this replaces
+        // described the problem. The value only: the tangent of a captured value is the zero below,
+        // so there is no second port to hand a direction in.
         std::unordered_map<gc_node_ref_t, gc_node_ref_t> withPortOf;
         // The declared ones and the captured ones, one list: the first `withTypesCount()` are the
         // caller's `with` arguments and the rest are the values the body captured, in the closure
         // tuple's order (`GraphRead::withPortsOf`, cited below).
-        const size_t withCount =
-            function.funcType() != nullptr ? function.funcType()->withTypesCount() : 0;
-        const std::vector<gc_node_ref_t> originalWith = function.withPorts();
         {
             for (size_t i = 0; i < withCount && i < originalWith.size(); ++i) {
+                if (promotedSlotOf[i] != kNotPromoted) {
+                    continue;
+                }
                 camel::core::type::Type *withType = function.funcType()->withTypeAt(i);
                 if (withType == nullptr) {
                     continue;
+                }
+                // A `var` cell is read and not written, so it has no direction to lose and keeps the
+                // zero. Every **other** `with` value of a callee's lift arrives at a call whose
+                // caller does hold a direction for it, and one this lift cannot carry
+                // (`withIsPromoted` answered no because the shape is not a scalar) is refused here
+                // by name rather than answered with the zero of its type: the zero *is* the wrong
+                // number this transform removed for a `float` (2026-11-04, `grad=0.0` against the
+                // engine's 3.0), and a caller's direction that is silently dropped does not become
+                // right because the shape is wider. Measured on `grad_first_with_parameter`'s `pg`
+                // (`Point`, which this lift used to build and `split` then lost in `nodevm.cpp`) and
+                // `wg` (`f64[..]`, which `split` refuses by name two steps later -- the refusal now
+                // stands at the value rather than at the cut that inherits it).
+                if (state.promoteWiths && !function.funcType()->withIsVarAt(i)) {
+                    JvpGraph refused;
+                    refused.refusedOrigin = static_cast<camel::source::origin_id_t>(
+                        function.nodeOrigin(originalWith[i]));
+                    refused.refusedConstruct =
+                        std::format("a `with` value of type `{}`", withType->toString());
+                    refused.refusedWhy =
+                        "a callee's lift hands a direction on through its ordinary list, and only a "
+                        "scalar can go there (`Tangent<T> = T`, one word -- `withValueIsCarriable`). "
+                        "A wider value keeps a `with` place of its own, where its direction is the "
+                        "zero of its type, and its caller has a direction to lose. The cut takes "
+                        "such a port nowhere: it refuses an array by name and loses a graph for a "
+                        "struct.";
+                    os << "REINTERP jvp function=" << name << " skip=with type="
+                       << withType->toString() << '\n';
+                    return fail(refusal, refused);
                 }
                 if (function.funcType()->withIsVarAt(i)) {
                     if (camel::core::type::Type *value = camel::core::type::valueTypeOf(withType)) {
@@ -886,15 +1094,29 @@ bool liftGraph(
                     "jvp_of_" + std::string(callee->name()),
                     "jvp_of_" + std::string(callee->name()));
                 state.callees.emplace(rt::toValue(calleeId), liftedCallee);
+                // The lift this starts is a **callee's**: it is called from a body that is itself
+                // lifted, so the values the call passes it -- its `with` arguments among them --
+                // arrive with the tangents the caller's chain already carries. That is what
+                // `promoteWiths` decides, and it is a property of the *call* the lift is for, not
+                // of the callee: the same function lifted for `jvp(f)` at the top level keeps its
+                // `with` list (`liftSignature`).
+                const bool outerPromote = state.promoteWiths;
+                state.promoteWiths    = true;
                 JvpGraph sub;
-                if (!liftGraph(state, calleeFace, calleeName, calleeId, liftedCallee, os, sub)) {
+                const bool lifted =
+                    liftGraph(state, calleeFace, calleeName, calleeId, liftedCallee, os, sub);
+                state.promoteWiths = outerPromote;
+                if (!lifted) {
                     refusal = sub;
                     return false;
                 }
             } else {
                 liftedCallee = at->second;
             }
-            FunctionType *calleeSignature = jvpSignature(callee->funcType());
+            // The signature the call site fills in has to be the one the callee's lift declared, and
+            // it is already there (the lift recorded it): asking for it again is how the two could
+            // drift apart.
+            FunctionType *calleeSignature = jvpCalleeSignature(callee->funcType());
             if (calleeSignature == nullptr) {
                 return false;
             }
@@ -910,7 +1132,11 @@ bool liftGraph(
                 continue;
             }
             if (!liftFuncValue(ref)) {
-                return fail(refusal);
+                // Kept, not replaced: when the callee's own lift refused it left its refusal here
+                // (`refusal = sub` above, a named construct and the node it stands at), and building
+                // an empty one from nothing would report "this function has no forward transform"
+                // about a shape the transform can name.
+                return false;
             }
         }
         for (std::uint8_t kind = 0; kind <= static_cast<std::uint8_t>(rt::GCNodeKind::Dref); ++kind) {
@@ -1398,34 +1624,156 @@ bool liftGraph(
                 if (callee == nullptr) {
                     return fail(refusal);
                 }
-                FunctionType *calleeSignature = jvpSignature(callee->funcType());
-                if (calleeSignature == nullptr) {
-                    return fail(refusal);
-                }
                 const bool isValue = node->dataType() != nullptr &&
                                      node->dataType()->code() == camel::core::type::TypeCode::Function;
-                std::vector<gc_node_ref_t> arguments;
-                for (gc_node_ref_t input : function.normInputsOf(ref)) {
-                    if (input >= function.nodeCount() || !copied[input]) {
+                // A **call** is filled in against the callee's own lifted signature -- the one its
+                // lift declared, whose `with` values are promoted into the ordinary list
+                // (`liftSignature`) -- so that signature is what says how long the value half is.
+                // A function **value** keeps the declared `Jvp<F>`: a value is carried, not called,
+                // and the type a body sees for it is the type the declaration writes.
+                FunctionType *calleeLifted = nullptr;
+                FunctionType *calleeSignature = nullptr;
+                if (isValue) {
+                    calleeSignature = jvpSignature(callee->funcType());
+                    if (calleeSignature == nullptr) {
                         return fail(refusal);
                     }
-                    if (isValue) {
-                        break;
+                } else {
+                    const auto declared =
+                        state.calleeTypes.find(rt::toValue(function.calleeIdOf(ref)));
+                    calleeLifted = declared != state.calleeTypes.end()
+                                       ? declared->second
+                                       : jvpCalleeSignature(callee->funcType());
+                    if (calleeLifted == nullptr) {
+                        return fail(refusal);
                     }
-                    const NodeFace *in = function.node(input);
+                }
+                // A callee that takes no value of its own -- every value it reads arrives through a
+                // `with` parameter -- has no value half that is not a promoted `with` value. Met
+                // inside a **callee's** lift, the cut cuts that callee a second time and the halves it
+                // makes name a graph the nested program does not carry: `nodevm.cpp`'s
+                // `runtimeTarget != nullptr` ("a direct call names a function whose graph is not in
+                // the program's graph table", measured 2026-11-04 on `grad_first_with_parameter`'s
+                // `sx`, whose `scaled_x` calls `scaled`: two `with` parameters and no parameter of
+                // its own). One level is fine -- `sk` calls the same `scaled` from the top-level lift
+                // and answers 6.0 -- so the gate is the *second* level of pair-answering calls under a
+                // promoted `with` value, and it refuses by name until `split` adopts that graph rather
+                // than letting the run time die on a call with no target.
+                if (state.promoteWiths && callee->funcType() != nullptr &&
+                    callee->funcType()->normTypesCount() == 0 &&
+                    callee->funcType()->withTypesCount() > 0) {
+                    JvpGraph refused;
+                    refused.refusedOrigin = static_cast<camel::source::origin_id_t>(
+                        function.nodeOrigin(ref));
+                    refused.refusedConstruct = std::format(
+                        "a call to `{}`, which takes nothing but its `with` values",
+                        callee->name());
+                    refused.refusedWhy =
+                        "this lift is itself a callee's, so the cut cuts the callee it calls a "
+                        "second time, and the halves of a function whose whole value half is "
+                        "promoted `with` values are a graph the nested program does not hold. One "
+                        "level of that call is built and answers its numbers; the second is refused "
+                        "here until the cut adopts the graph it names.";
+                    os << "REINTERP jvp function=" << name << " skip=callee callee="
+                       << callee->name() << '\n';
+                    return fail(refusal, refused);
+                }
+                // The arguments, in the order the lifted callee declares them: **every value first**
+                // -- the ordinary parameters and then the `with` values this lift promoted into the
+                // ordinary list (`liftSignature`) -- and **their tangents after them**, in the same
+                // order. A call that pushed each value with its tangent as it walked the inputs
+                // passed `(v1, d1, v2, d2)` to a callee whose list is `(v1, v2, d1, d2)`: right for
+                // one parameter by accident, and refused for two (`split` reads the seam at
+                // `count / 2` and found a tangent where it wanted a value -- measured 2026-11-04 on
+                // `vjp((rr) => mulxy(rr, 2.0))(3.0)`, "the value half reads the tangent of parameter
+                // 0, which the forward half does not take").
+                //
+                // The value half's length is the callee's own answer, not this graph's guess: it is
+                // `calleeLifted`'s first half, and a call whose inputs do not fill exactly one value
+                // per slot and one tangent per slot is refused rather than misaligned -- a call the
+                // run time checks by count would otherwise land every argument one place off.
+                const size_t valueSlots =
+                    calleeLifted != nullptr ? calleeLifted->normTypesCount() / 2 : 0;
+                std::vector<gc_node_ref_t> values;
+                std::vector<gc_node_ref_t> tangents;
+                // The tangent of a value with no tangent space is the `()` slot the lifted signature
+                // writes for it: the slot is a port there, so the call has to fill it, and a `()`
+                // value is the only thing that fits. One node, shared: it is a constant.
+                gc_node_ref_t emptyTangent = rt::kInvalidNodeRef;
+                const auto tangentSlotOf = [&](gc_node_ref_t input, const NodeFace *in) {
                     if (in != nullptr && pairOf(in->dataType()) != nullptr) {
                         if (tangentOf[input] == rt::kInvalidNodeRef) {
+                            return rt::kInvalidNodeRef;
+                        }
+                        return tangentOf[input];
+                    }
+                    if (emptyTangent == rt::kInvalidNodeRef) {
+                        emptyTangent = draft.materializeStaticValue(
+                            camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(
+                                ::Tuple::create(0, mm::autoSpace())),
+                            emptyTupleType());
+                    }
+                    return emptyTangent;
+                };
+                std::vector<gc_node_ref_t> carries;
+                std::vector<gc_node_ref_t> arguments;
+                if (!isValue) {
+                    for (gc_node_ref_t input : function.normInputsOf(ref)) {
+                        if (input >= function.nodeCount() || !copied[input]) {
                             return fail(refusal);
                         }
+                        const NodeFace *in = function.node(input);
                         const gc_node_ref_t half =
                             valueOf[input] != rt::kInvalidNodeRef ? valueOf[input] : copyOf[input];
                         // The lifted callee takes the value and its tangent as two ordinary
-                        // arguments (the signature is `(T, T) => ...`), not as one tuple.
-                        arguments.push_back(half);
-                        arguments.push_back(tangentOf[input]);
-                    } else {
-                        arguments.push_back(copyOf[input]);
+                        // arguments (the signature is `(T, T) => ...`), not as one tuple -- and the
+                        // tangent goes into the second half of the list, so the two are collected
+                        // apart and joined below.
+                        values.push_back(half);
+                        const gc_node_ref_t tangent = tangentSlotOf(input, in);
+                        if (tangent == rt::kInvalidNodeRef) {
+                            return fail(refusal);
+                        }
+                        tangents.push_back(tangent);
                     }
+                    const std::vector<gc_node_ref_t> withArgs = function.withInputsOf(ref);
+                    for (size_t i = 0; i < withArgs.size(); ++i) {
+                        const gc_node_ref_t input = withArgs[i];
+                        if (input >= function.nodeCount() || !copied[input]) {
+                            return fail(refusal);
+                        }
+                        const NodeFace *in = function.node(input);
+                        const gc_node_ref_t half =
+                            valueOf[input] != rt::kInvalidNodeRef ? valueOf[input] : copyOf[input];
+                        // A `with` argument the callee's lift promoted is a value of its ordinary
+                        // list, and the direction it goes with is the tangent this graph already
+                        // carries for it -- which is the whole of the fix: `weighted`'s lifted call
+                        // is handed the value of `ww` *and* the direction `dww`, so its `lin` is not
+                        // constant in the weight. One that stayed a `with` parameter (a `var` cell)
+                        // is passed as it stands, value only -- the same two sides of one question
+                        // `liftSignature` answers, asked here about the callee's own declaration.
+                        if (i < callee->funcType()->withTypesCount() &&
+                            withIsPromoted(callee->funcType(), i)) {
+                            values.push_back(half);
+                            const gc_node_ref_t tangent = tangentSlotOf(input, in);
+                            if (tangent == rt::kInvalidNodeRef) {
+                                return fail(refusal);
+                            }
+                            tangents.push_back(tangent);
+                        } else {
+                            carries.push_back(half);
+                        }
+                    }
+                    if (values.size() != valueSlots) {
+                        // The call's inputs do not fill the callee's value half one slot each. A call
+                        // the run time checks by count would take every argument one place off, so
+                        // this is refused rather than written: the two lists have to be the same
+                        // list, and the callee's own signature is what says how long it is.
+                        return fail(refusal);
+                    }
+                    arguments.reserve(values.size() + tangents.size());
+                    arguments.insert(arguments.end(), values.begin(), values.end());
+                    arguments.insert(arguments.end(), tangents.begin(), tangents.end());
                 }
                 TupleType *resultPair = pairOf(node->dataType());
                 if (!isValue && resultPair == nullptr) {
@@ -1441,13 +1789,6 @@ bool liftGraph(
                 if (!isValue) {
                     if (!arguments.empty()) {
                         draft.setNormInputs(made, arguments);
-                    }
-                    std::vector<gc_node_ref_t> carries;
-                    for (gc_node_ref_t input : function.withInputsOf(ref)) {
-                        if (input >= function.nodeCount() || !copied[input]) {
-                            return fail(refusal);
-                        }
-                        carries.push_back(copyOf[input]);
                     }
                     if (!carries.empty()) {
                         draft.setWithInputs(made, carries);
