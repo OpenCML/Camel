@@ -98,3 +98,29 @@ camel test/cases/compile/transforms/grad_array_sum.cml std::nvm 2>&1 | grep -E "
 ## 8. 复现最后一步（为什么"后一半的图"看不见）
 
 `split` 不是可调用的 pass（`modules/transforms/split.cpp` 里没有 `registerPass`，`stdlib/std.cml` 里也没有 `split` 这个词），它是库里 `transforms:split` 这个算子运行时内部生成的。所以**今天没有现成工具把后一半单独 dump 出来**（`std::jgir` 只给到 `transforms:split` 这一层，见 `g4n3 OPER transforms:split`）。要贴「体里那个读节点的来源变成了闭包成员」的图证据，**得先有一个能 dump 后一半的入口**——这本身是一笔工，和上面的核对一样，先报不动手。
+
+## 9. `at` 是谁给的：一次插桩量到的现场（`grad_array_sum`）
+
+派工要求第一笔先把「`at` 这个下标是谁给的」量清楚。做法：在 `transpose.cpp` 的 `Port` 分支、按位置取值那段之前插一句 stderr 打印（`CAMEL_POSPROBE=1` 时才打），跑 `grad_array_sum.cml std::nvm`。插桩已还原，树回到 `33c853f01`，探针开启时 `feat/compile/transforms` 仍是 **87 = 84/2/1**（插桩不改变行为）。
+
+实测输出（原样，只截了这一行）：
+
+```
+POSPROBE fn=split_of_jvp_of_g_backward ref=5 at=0 paramCount=1 i=0 portParameter=1
+  closureOf[0]=0 closurePorts[0]=0 inNorm=0
+  closureOf[1]=1 closurePorts[1]=1 inNorm=0
+  closureOf[2]=2 closurePorts[2]=2 inNorm=0
+  closureOf[3]=3 closurePorts[3]=3 inNorm=0
+  closureOf[4]=4 closurePorts[4]=4 inNorm=0
+  normPorts[0]=5
+```
+
+读法：
+
+1. **`at` 是"参数下标"**：`at = portParameter[i] = 0`，来自 `normPorts[0] = 5`——`ref=5` 是这张图的**唯一 norm 端口**，它是参数 0。`paramCount = 1`，`portOfParam.size() = 1`，而 `portOfParam[0]` 是无效（参数 0 参与求导，按 `transpose.cpp:625` 的那段注释不为它开端口）。
+2. **按位置取值返回的是"闭包第 0 格"**：`closurePorts[0] = 0`，即后一半闭包的第 0 个成员的端口。`closureOf` 与 `closurePorts` 在这张图上是**同号的 5 个成员**（`0..4` 对 `0..4`），没有一个成员出现在 `normPorts` 里（`inNorm=0` 五行）——所以"参数"和"闭包成员"是**两张互不相交的表**。
+3. **约定成立的条件是"参数 0 的值 == 闭包第 0 格"**。在这条用例里两者都是 `xs`（`g(xs) = sum(xs)`，后一半要靠 `xs` 的**形状**写 `gy`），所以按位置取到的是对的数。**一旦参数顺序与残差顺序不一致，取到的就是另一个值**——`grad_array_int_parameter_first` 那条 `TRANSPOSE-NEEDS param=1` vs `skip param=0` 的错位，就是这个条件被打破的现场。
+
+**所以"按身份取"要回答的问题变成**：`split_of_jvp_of_g_backward` 的**参数 0**（node 5）与它的**闭包成员 0**（node 0）之间，有没有一条今天就能读到的身份链？插桩量到的现有材料里**没有**：`closureNodes()` 只给出成员节点号，`Accs` 只给出元组里的格号，两者都不写"这个成员是哪个前向参数的値"。要凭空造出这条链，就得在 `split` 造后一半时把映射记下来——**那就是乙（把私下约定从位置换成字段），作者明确否了**。
+
+**结论：第一笔不能按"在 `transpose` 里换一种查法"来做。** 真正的身份链只能在**切点造图时**成立：后一半需要的前向值必须以残差身份出现，且它的"是哪一位"由残差表本身（不是端口顺序）说出。这一处与 `withres` 的捕获、与 `jvp` 侧的 `wantedValues` 是同一块，**不在 `transpose.cpp` 内部**。按纪律停在这里，报给派工的人定。
