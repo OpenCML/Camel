@@ -2682,10 +2682,18 @@ function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false)
     // unless `--changed` marked it `layer: true`: then the tier filter applies to it as well.
     const namedPlans = new Set()
     const discovered = []
+    // A target that reaches no plan file named nothing: it is neither a layer question nor a plan
+    // with a schema error. Kept apart so the callers can refuse with that sentence -- the layer
+    // one below (`none of their entries is in this layer`) would be a wrong answer for a path that
+    // holds no plan at all, and it is the answer a fixture directory gets: `test/plans/feat/docs_links`
+    // is the directory beside `docs_links.plan.toml`, not a plan directory.
+    const reachedNothing = []
     for (const target of targets) {
         const resolved = path.resolve(target)
+        const found = walkPlans(target)
+        if (found.length === 0) reachedNothing.push(target)
         if (fs.statSync(resolved).isFile() && !layeredPlans.has(resolved)) namedPlans.add(resolved)
-        discovered.push(...walkPlans(target))
+        discovered.push(...found)
     }
     if (targets.length === 0) discovered.push(...walkPlans(PLANS_ROOT))
     // `--all` names the plans root and a plan may also be named explicitly; the same plan must
@@ -2710,7 +2718,16 @@ function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false)
             if (lhsOrder !== rhsOrder) return lhsOrder - rhsOrder
             return lhs.__planPath.localeCompare(rhs.__planPath)
         })
-    return selectTier(plans, tier, namedPlans, compileOnly === true)
+    // `reachedButFiltered` is how many plan files this selection read, before the layer kept
+    // anything from them. A run that starts nothing has to say which of the two zeros it is -- no
+    // plan file at all (refused above, target by target) or plan files whose entries belong to
+    // another layer -- and the count that separates them is the one before the filter, not after
+    // it: `plans` is the post-filter list and reads 0 in that message's own case.
+    return {
+        ...selectTier(plans, tier, namedPlans, compileOnly === true),
+        reachedNothing,
+        reachedButFiltered: plans.length,
+    }
 }
 
 /** The result of a test the runner itself could not run: its failure is reported like any other. */
@@ -3453,6 +3470,32 @@ async function main() {
     })
     const selected = loadPlans(options.targets, options.tier, options.layeredPlans, options.compileOnly === true)
     const plans = selected.plans
+    // A target that reached no plan file refuses the run before anything starts: nothing would run,
+    // so no [SUMMARY] could say anything true about it. It gets a sentence of its own -- the layer
+    // sentence further down answers "these plans belong to another tier", a different question and
+    // the wrong answer for a path that holds no plan -- and it names the plan file beside the
+    // directory when there is one, because that is the mistake this refusal exists for:
+    // `test/plans/feat/docs_links` is the fixture directory beside `docs_links.plan.toml`.
+    // Written to stdout on purpose: the helper that runs this on the host loses the run's stderr,
+    // so a refusal written there would be a red with no reason (measured 2026-11-03 -- the old
+    // `[FAIL] this run selected no test at all` line never reached the operator from a host run).
+    if (selected.reachedNothing.length > 0) {
+        for (const target of selected.reachedNothing) {
+            const beside = `${path.resolve(target)}.plan.toml`
+            const hint = fs.existsSync(beside) ? `; the plan file beside it is ${relPath(beside)}` : ''
+            console.log(
+                `${COLORS.red}[PLAN ERROR]${COLORS.reset} ${relPath(path.resolve(target))} holds no *.plan.toml, ` +
+                    `so this run would start nothing${hint}. A target is a *.plan.toml or a directory that ` +
+                    'contains one.',
+            )
+        }
+        console.log(
+            `${COLORS.red}[PLAN ERROR]${COLORS.reset} ${selected.reachedNothing.length} target(s) named no plan, ` +
+                'so nothing was started: a selection error, not a run of zero tests.',
+        )
+        process.exitCode = 2
+        return 2
+    }
     // A plan that names an option value the CLI does not take is a plan error, and the run refuses
     // instead of starting it: the CLI would exit 1 while parsing, and that exit code is not a
     // reading about the program under test. `plan:line` and the legal values are in the message so
@@ -3541,10 +3584,15 @@ async function main() {
     if (testCount === 0 && options.targets.length > 0) {
         // A run that starts nothing is not a pass: every claim it could make is about tests it did
         // not run. (No target at all is `scripts/test.js --changed` finding nothing to run, which is
-        // a legitimate no-op and says so, not a green run.)
+        // a legitimate no-op and says so, not a green run.) A target that reached no plan file at
+        // all was already refused above: this is the other zero -- the plan files were read and
+        // none of their entries belongs to this layer -- so the number is the count before the
+        // filter (`plans` is the post-filter list and reads 0 here) and the flag that lifts it is
+        // named. Both are counted, never inferred from each other.
         console.error(
             `${COLORS.red}[FAIL]${COLORS.reset} this run selected no test at all: ` +
-                `${plans.length} plan file(s) were reached and none of their entries is in this layer`,
+                `${selected.reachedButFiltered} plan file(s) were read and none of their entries is in the ` +
+                `'${options.tier}' layer (--tier all runs every layer)`,
         )
         process.exitCode = 1
         return 1
