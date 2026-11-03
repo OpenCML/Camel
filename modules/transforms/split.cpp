@@ -533,6 +533,26 @@ struct Half {
                         std::to_string(parameterOfPort(source->funcType(), index).first) +
                     ", and it is not one of the values the cut carries");
         }
+        // What the refusal above states is the invariant this cut keeps: the tangent half reads only
+        // values that cross the cut -- the ones `residualsOf` listed -- plus what the tangent half
+        // itself computes from them. A parameter's value is one of the former whenever the tangent
+        // half reads it: `residualsOf` asks the tangent side's own walk what it reads, not which
+        // parameter index a port belongs to, and it keeps a parameter's value port on the same terms
+        // it keeps a computed value (2026-11-02 00:30: the rule does not split by type; 2026-11-03
+        // 15:15: 后一半要读的东西都是残差). That is also why the refusal is not reachable today: a
+        // parameter value the backward half reads is in the residual list before this walk runs, so
+        // `makeCopy` answers it from the tuple (`crossesCut`, above) and never arrives here.
+        //
+        // It is kept, deliberately, and not replaced by an assertion: 对 > 明确拒绝 > 错数 > 崩 is
+        // the order, and an assertion here would turn a refusal into the worst of the four. Its being
+        // unreachable in the shapes this lane measured is a reading and not a proof -- measured
+        // 2026-11-04: no case in the tree pins this message, and this lane could not construct a
+        // shape that still reaches it; another lane instrumented the same site on other shapes and
+        // saw zero entries. Zero entries and unreachable are two different conclusions, and this
+        // project has already paid once tonight for treating them as one. If it is ever *proved*
+        // unreachable for every input, delete this refusal and demote the invariant above to a
+        // comment -- do not delete it on the strength of a count. Never delete it while it is the
+        // only refusal standing between this walk and a half that reads a value nothing carries.
         case rt::GCNodeKind::Data: {
             // A constant stands for the same value in the copy; `writeConstant` is that writer, so the
             // DATA case and the reachability walk write it the same way. A constant whose slot is not
