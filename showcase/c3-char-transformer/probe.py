@@ -59,11 +59,20 @@ EXPECTED = {
     # probe the new `jvp_sum` rule answers, which is why it moved.
     "03_matmul": "ok",
     "04_softmax": "refused",
-    "05_reduction": "refused",
+    # `sum((x - mean<1, true>(x)) ** 2)` at `x = [1, 2, 3, 4]`: the mean is 2.5, the centred row is
+    # `[-1.5, -0.5, 0.5, 1.5]`, and its squares sum to `2.25 + 0.25 + 0.25 + 2.25 = 5.0`.  Along the
+    # all-ones direction the centred tangent is `1 - mean(1) = 0` at every element -- centring cancels
+    # a uniform direction exactly -- so the tangent is `2 * 0 = 0.0`.  The wall here was
+    # `tensor:subtract` (and then `tensor:multiply`), both of which have forward rules now.
+    "05_reduction": "ok",
     "06_layout": "refused",
     # `dot` again: 26.0, with one cotangent per parameter, `a -> [2.0, 5.0]` and `b -> [3.0, 4.0]`.
     "07_two_parameters": "ok",
-    "08_embedding": "refused",
+    # `sum(take(table, [1]) * take(table, [1]))` over `[[1, 2], [3, 4]]`: the row read is `[3, 4]`, so
+    # the value is `9 + 16 = 25.0` and the gradient is `[0, 0, 6, 8]` -- the row's own values twice,
+    # at the row the index names and zero at the row it does not.  The all-ones direction sums it to
+    # `6 + 8 = 14.0`.  `tensor:take` and `tensor:multiply` both have forward rules now.
+    "08_embedding": "ok",
     "09_causal_mask": "refused",
     "10_with_parameter": "refused",
     "11_grad_of_a_model": "refused",
