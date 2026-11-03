@@ -324,7 +324,7 @@ export rule jvp_mean_axis::<T>(xs: T[..], axis: int, keepdims: bool) when is_flo
 /// already resolved.
 ///
 /// The transposing walk still stops on this operator and not on a wrong law
-/// (ulesets.transpose#sum_axis_t records the refusal word for word): a sum's tangent *is* a
+/// (`rulesets.transpose#sum_axis_t` records the refusal word for word): a sum's tangent *is* a
 /// reduction, and no transposable spelling removes it from the linear half.
 export rule jvp_sum_axis::<T>(xs: T[..], axis: int, keepdims: bool) when is_float::<T>() {
     sum_axis(xs, axis, keepdims) => (dxs: T[..]) => sum_axis_stated(dxs, stated_axis_shape(axis, keepdims, shape(xs)))
