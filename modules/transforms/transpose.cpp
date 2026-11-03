@@ -89,6 +89,116 @@ const char *transposeRefusalWord(TransposeRefusalCause cause) {
 
 namespace {
 
+/// The types of a node's ports, written the way the library writes them, for a refusal to name them:
+/// `(float[4], int)`.
+std::string portsTextOf(const std::vector<Type *> &types) {
+    std::string text;
+    for (const Type *type : types) {
+        text += (text.empty() ? "(" : ", ");
+        text += type != nullptr ? camel::core::type::typeToString(type) : std::string("?");
+    }
+    return text.empty() ? std::string("()") : text + ")";
+}
+
+/// The transpose law that answers an operator here, chosen by the operands' own types, and `why`
+/// when the declaration does not choose.
+///
+/// A key holds one law in most families, and then this answers what `transposeRuleOf` answers. It
+/// holds several when one spelling names several shapes: `t[0]` on a `T[]` is the element and on a
+/// `T[..]` it is the open-rank array (design principles 5.4), so the index laws are two laws of one
+/// key with two parameter-type lists. Which one answers is decided by the operands' own types, the
+/// way a call decides -- an instance's ports have to take them (`Type::assignableFrom`, the
+/// direction `jvp.cpp#portsTakeOperands` and the call rule both check) -- and among the laws that
+/// take them the narrowest wins: `T[]` beside `T[..]`, where an open rank takes a rank-one array and
+/// a rank-one array does not take an open rank (`narrowerPortsThan`).
+///
+/// Two laws that both take the operands and neither of which is narrower than the other are a
+/// declaration this transform will not choose between. Picking by filing order would make a program
+/// mean one thing where a rule sits and another where it is moved to, so the refusal names both laws
+/// and the types they were offered.
+///
+/// The instance the ports are read from is the one the expansion itself will ask for: the rule at
+/// `float`, which is what `expandRuleByName` instantiates (`rule_expand.cpp`, whose `{Float64()}` is
+/// a standing defect recorded in `docs/handover/reviews/questions-2026-10-29.md`, not this
+/// function's). A choice made on ports is only a choice between *shapes*: two laws of one key that
+/// differ in their element type alone are told apart by the instance the expansion makes, not here.
+bool chooseTransposedRule(
+    camel::core::context::Context &context, std::string_view uri,
+    std::span<const gc_node_ref_t> inputs, size_t dataOperandCount,
+    const std::function<const Type *(gc_node_ref_t)> &typeOf, std::string &rule, std::string &why) {
+    std::vector<Type *> actual;
+    actual.reserve(inputs.size());
+    for (const gc_node_ref_t input : inputs) {
+        const Type *type = typeOf(input);
+        actual.push_back(const_cast<Type *>(type));
+    }
+    const std::vector<camel::parse::ast::RuleMatch> candidates =
+        camel::core::transposeRulesOf(std::string(uri));
+    std::vector<std::string> taking;
+    std::vector<std::vector<Type *>> takingPorts;
+    std::string lastWhy;
+    for (const camel::parse::ast::RuleMatch &candidate : candidates) {
+        if (candidate.status != camel::parse::ast::RuleLookup::Found) {
+            continue;
+        }
+        std::string instanceWhy;
+        const camel::compile::gir::GenericRuleInstance *instance =
+            camel::compile::gir::genericRuleInstanceByName(
+                context, candidate.rule, {Type::Float64()}, {}, instanceWhy);
+        if (instance == nullptr || !instance->made) {
+            lastWhy = instance != nullptr && !instance->why.empty() ? instance->why : instanceWhy;
+            continue;
+        }
+        std::vector<Type *> ports = rulePortsOf(*instance);
+        if (ports.size() < dataOperandCount || ports.size() > actual.size()) {
+            lastWhy = "the law takes " + portsTextOf(ports) + ", and the operator has " +
+                      portsTextOf(actual) + " (of which " + std::to_string(dataOperandCount) +
+                      " is a data operand)";
+            continue;
+        }
+        bool takes = true;
+        for (size_t i = 0; i < ports.size() && takes; ++i) {
+            takes = ports[i] != nullptr && actual[i] != nullptr &&
+                    ports[i]->assignableFrom(actual[i]);
+        }
+        if (!takes) {
+            lastWhy = "the law takes " + portsTextOf(ports) + ", and the operator has " +
+                      portsTextOf(actual) + " (of which " + std::to_string(dataOperandCount) +
+                      " is a data operand)";
+            continue;
+        }
+        taking.push_back(candidate.rule);
+        takingPorts.push_back(std::move(ports));
+    }
+    if (taking.empty()) {
+        why = lastWhy.empty() ? "no law of the family takes these operands" : lastWhy;
+        return false;
+    }
+    std::vector<size_t> kept;
+    for (size_t i = 0; i < taking.size(); ++i) {
+        bool outranked = false;
+        for (size_t j = 0; j < taking.size() && !outranked; ++j) {
+            outranked = i != j && narrowerPortsThan(takingPorts[j], takingPorts[i]);
+        }
+        if (!outranked) {
+            kept.push_back(i);
+        }
+    }
+    if (kept.size() > 1) {
+        std::string names;
+        for (const size_t at : kept) {
+            names += names.empty() ? "'" : " and '";
+            names += taking[at];
+            names += "'";
+        }
+        why = "two laws both accept these operands: " + names + " (the operator has " +
+              portsTextOf(actual) + ")";
+        return false;
+    }
+    rule = taking[kept.front()];
+    return true;
+}
+
 /// The sum a cotangent accumulates with is the sum of the type it lands in: two array cotangents
 /// add element by element (`:tangent/add_arr`, design principles 9.9) and a number's add is
 /// `:op/add_d`. Handing an array to `add_d` is the same lie as calling it a float -- it reads the
@@ -1652,19 +1762,28 @@ bool buildTransposeMember(
                 }
                 const auto inputs = function->normInputsOf(ref);
                 const auto *body = function->nodeBodyAs<camel::runtime::GCOperBody>(ref);
-                const auto rule  = camel::core::transposeRuleOf(std::string(body->uri()));
-                if (!rule.has_value() || rule->status != camel::parse::ast::RuleLookup::Found) {
+                std::string chosenRule;
+                std::string ruleWhy;
+                if (!chooseTransposedRule(
+                        *state.context, body->uri(), inputs, inputs.size(),
+                        [&](gc_node_ref_t node) -> const Type * {
+                            const camel::runtime::GCNode *at = function->node(node);
+                            return at != nullptr ? at->dataType() : nullptr;
+                        },
+                        chosenRule, ruleWhy)) {
                     armsOk = false;
+                    refuse(TransposeRefusalCause::Rule);
+                    os << " uri=" << body->uri() << " reason=" << ruleWhy << '\n';
                     return {};
                 }
-                noteRule(rule->rule);
+                noteRule(chosenRule);
                 for (size_t i = 0; i < inputs.size(); ++i) {
                     if (isConstant(inputs[i])) {
                         continue;
                     }
                     std::string why;
                     const gc_node_ref_t answer =
-                        ruleCotangent(rule->rule, inputs, i, local[ref], why);
+                        ruleCotangent(chosenRule, inputs, i, local[ref], why);
                     if (answer == rt::kInvalidNodeRef) {
                         armsOk = false;
                         refuse(TransposeRefusalCause::CotangentNeedsAValue);
@@ -1957,8 +2076,9 @@ bool buildTransposeMember(
                 }
                 const auto *body           = function->nodeBodyAs<camel::runtime::GCOperBody>(ref);
                 const std::string_view uri = body->uri();
-                const auto rule            = camel::core::transposeRuleOf(std::string(uri));
-                if (!rule.has_value() || rule->status != camel::parse::ast::RuleLookup::Found) {
+                const auto candidates        = camel::core::transposeRulesOf(std::string(uri));
+                if (candidates.empty()) {
+                    const auto rule = camel::core::transposeRuleOf(std::string(uri));
                     const char *reason =
                         !rule.has_value() ? "unbound"
                         : rule->status == camel::parse::ast::RuleLookup::NoSuchFamily
@@ -2010,7 +2130,20 @@ bool buildTransposeMember(
                     inputs.push_back(input);
                 }
                 const gc_node_ref_t ct = cotangent[ref];
-                noteRule(rule->rule);
+                std::string chosenRule;
+                std::string ruleWhy;
+                if (!chooseTransposedRule(
+                        *state.context, uri, inputs, normOperands.size(),
+                        [&](gc_node_ref_t node) -> const Type * {
+                            const camel::runtime::GCNode *at = function->node(node);
+                            return at != nullptr ? at->dataType() : nullptr;
+                        },
+                        chosenRule, ruleWhy)) {
+                    refuse(TransposeRefusalCause::Rule);
+                    os << " uri=" << uri << " reason=" << ruleWhy << '\n';
+                    return false;
+                }
+                noteRule(chosenRule);
                 for (size_t i = 0; i < inputs.size(); ++i) {
                     if (isConstant(inputs[i]) || !wantsCotangent(inputs[i])) {
                         // A value parameter of a partial transposition takes no cotangent, and
@@ -2030,7 +2163,7 @@ bool buildTransposeMember(
                         continue;
                     }
                     std::string why;
-                    const gc_node_ref_t answer = ruleCotangent(rule->rule, inputs, i, ct, why);
+                    const gc_node_ref_t answer = ruleCotangent(chosenRule, inputs, i, ct, why);
                     if (answer == rt::kInvalidNodeRef) {
                         refuse(TransposeRefusalCause::CotangentNeedsAValue);
                         os << " uri=" << uri << " position=" << i << " reason=" << why

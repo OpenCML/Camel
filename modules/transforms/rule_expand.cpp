@@ -20,6 +20,42 @@ namespace rt = camel::runtime;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GraphId;
 
+std::vector<camel::core::type::Type *>
+rulePortsOf(const camel::compile::gir::GenericRuleInstance &instance) {
+    using camel::core::type::FunctionType;
+    std::vector<camel::core::type::Type *> ports;
+    const FunctionType *func = instance.lhs != nullptr ? instance.lhs->funcType() : nullptr;
+    if (func == nullptr) {
+        return ports;
+    }
+    ports.reserve(func->normTypesCount());
+    for (size_t i = 0; i < func->normTypesCount(); ++i) {
+        ports.push_back(func->normTypeAt(i));
+    }
+    return ports;
+}
+
+bool narrowerPortsThan(
+    const std::vector<camel::core::type::Type *> &narrow,
+    const std::vector<camel::core::type::Type *> &wide) {
+    if (narrow.size() != wide.size() || narrow.empty()) {
+        return false;
+    }
+    bool strict = false;
+    for (size_t i = 0; i < narrow.size(); ++i) {
+        if (narrow[i] == nullptr || wide[i] == nullptr) {
+            return false;
+        }
+        if (!wide[i]->assignableFrom(narrow[i])) {
+            return false;
+        }
+        if (!narrow[i]->assignableFrom(wide[i])) {
+            strict = true;
+        }
+    }
+    return strict;
+}
+
 namespace {
 
 /// The graph a rule's right side answers with, read from the right side itself.

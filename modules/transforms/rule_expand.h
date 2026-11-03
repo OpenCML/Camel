@@ -19,6 +19,21 @@ namespace camel::transforms {
 /// stands. Every other position asks for one name's cotangent.
 inline constexpr size_t kWholeAnswer = static_cast<size_t>(-1);
 
+/// The ports a rule instance asks for, in port order -- `T[..]|T`'s two, and so on. This is what a
+/// choice between two laws of one key is made on.
+std::vector<camel::core::type::Type *>
+rulePortsOf(const camel::compile::gir::GenericRuleInstance &instance);
+
+/// Whether `narrow` asks for a type every position `wide` also takes, and asks for a narrower one
+/// somewhere: `T[]` beside `T[..]`, where an open rank takes a rank-one array and a rank-one array
+/// does not take an open rank. This is the relation a choice between two laws of one key is made by,
+/// and it is `assignableFrom` in the direction a call checks -- the port takes the operand -- not
+/// equality: `T[..]` and `f32[4]` are not the same type, and the law written `T[..]` is the law for a
+/// `f32[4]` operand.
+bool narrowerPortsThan(
+    const std::vector<camel::core::type::Type *> &narrow,
+    const std::vector<camel::core::type::Type *> &wide);
+
 /// The rule's right side expanded at the match site: the body of the closure it answers with is
 /// copied into this graph, its captures bound to the operands and its parameters to the tangents,
 /// and the copy's exit is the operator's derivative.

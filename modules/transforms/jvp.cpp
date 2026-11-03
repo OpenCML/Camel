@@ -113,49 +113,6 @@ std::string typeTextOf(const std::vector<camel::core::type::Type *> &types) {
     return text.empty() ? std::string("()") : text + ")";
 }
 
-/// The ports a rule instance asks for, in port order -- `T[..]|T`'s two, and so on. This is what a
-/// choice between two laws of one key is made on.
-std::vector<camel::core::type::Type *>
-normPortsOf(const camel::compile::gir::GenericRuleInstance &instance) {
-    std::vector<camel::core::type::Type *> ports;
-    const FunctionType *func = instance.lhs != nullptr ? instance.lhs->funcType() : nullptr;
-    if (func == nullptr) {
-        return ports;
-    }
-    ports.reserve(func->normTypesCount());
-    for (size_t i = 0; i < func->normTypesCount(); ++i) {
-        ports.push_back(func->normTypeAt(i));
-    }
-    return ports;
-}
-
-/// Whether `narrow` asks for a type every position `wide` also takes, and asks for a narrower one
-/// somewhere: `T[]` beside `T[..]`, where an open rank takes a rank-one array and a rank-one array
-/// does not take an open rank. This is the relation a choice between two laws of one key is made by,
-/// and it is `assignableFrom` in the direction a call checks -- the port takes the operand -- not
-/// equality: `T[..]` and `f32[4]` are not the same type, and the law written `T[..]` is the law for a
-/// `f32[4]` operand.
-bool narrowerThan(
-    const std::vector<camel::core::type::Type *> &narrow,
-    const std::vector<camel::core::type::Type *> &wide) {
-    if (narrow.size() != wide.size() || narrow.empty()) {
-        return false;
-    }
-    bool strict = false;
-    for (size_t i = 0; i < narrow.size(); ++i) {
-        if (narrow[i] == nullptr || wide[i] == nullptr) {
-            return false;
-        }
-        if (!wide[i]->assignableFrom(narrow[i])) {
-            return false;
-        }
-        if (!narrow[i]->assignableFrom(wide[i])) {
-            strict = true;
-        }
-    }
-    return strict;
-}
-
 /// Whether an instance's own ports take the types this operator's operands have, and `why` when they
 /// do not.
 ///
@@ -313,7 +270,7 @@ gc_node_ref_t buildRuleTangent(
             continue;
         }
         fitting.push_back(
-            FittingRule{match.rule, static_cast<size_t>(ruleId), at, normPortsOf(instance)});
+            FittingRule{match.rule, static_cast<size_t>(ruleId), at, rulePortsOf(instance)});
     }
     if (fitting.empty()) {
         // Every candidate refused: the shape that nearly fitted says the most.
@@ -335,7 +292,7 @@ gc_node_ref_t buildRuleTangent(
             if (&other == &candidate) {
                 continue;
             }
-            if (narrowerThan(other.ports, candidate.ports)) {
+            if (narrowerPortsThan(other.ports, candidate.ports)) {
                 outranked = true;
                 break;
             }
