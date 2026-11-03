@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "camel/core/forward.h"
+#include "camel/core/operator_table.h"
+#include "camel/core/type/base.h"
 
 #include <array>
 
@@ -65,14 +67,15 @@ std::string operationOf(const std::string &name) {
     return underscore == std::string::npos ? name : name.substr(0, underscore);
 }
 
-/// The key of a conversion, whose name is `<source>to<destination>`: the **destination's spelling**
-/// at one operand, read from the type of the node the operator was reached at.
+/// The key of a conversion: the destination's spelling at one operand, and nothing else.
 ///
-/// The destination of a conversion is the type of its result, so that type's own name is the
-/// spelling a law's left side is filed under -- `:op/itod` at a `float` node is `float` at one
-/// operand, `:op/dtof6` at an `f16` node is `f16`. Nothing is decoded out of the operator's name: a
-/// table of letter/gotcha pairs (`bf` is `bf16`, `d` is `float`, ...) used to live here and it was a
-/// second copy of what the declarations in `stdlib/prelude.cml` already say.
+/// Which operators are conversions, and which types each one converts between, is written where
+/// the operator is registered (`builtin/executors/builtin.cpp#kConversions`, handed to
+/// `OperatorTable::declareConversion`): the registration that gives the operator its
+/// implementation also gives its two types, because they are what the operator *is*. This used to
+/// be read off the letters of the name instead (`d` is float, `f` is f32, ...), which called
+/// every name containing `to` a conversion, and `:op/var/get` -- an operator whose result is a
+/// float and which converts nothing -- then got a conversion's key.
 ///
 /// The *source* is deliberately not in the key. One spelling names several operators -- `float` at
 /// one operand is `float(x: float)`, `float(x: int)`, `float(x: string)` and the rest -- so a key
@@ -80,22 +83,12 @@ std::string operationOf(const std::string &name) {
 /// does: it instantiates a rule at the operand's own type and refuses by name when no instance is
 /// made. The family files one rule per operand type under the spelling and `lookupRules` answers
 /// them all; which of them answers is not the index's question.
-///
-/// A caller with no type gets no key, and that is the whole of the answer: there is no default and
-/// in particular no fallback to a float. The conversion whose result is an array (`:op/atod` and the
-/// other three "a type name applied to a numeric array") asks for a key spelled `float[..]`, which no
-/// family files a rule under, so it is refused by "no rule bound" -- which is what it was refused by
-/// before too, in different words.
-std::optional<RuleKey> conversionKeyOf(
-    const std::string &name, const camel::core::type::Type *result) {
-    if (result == nullptr) {
+std::optional<RuleKey> conversionKeyOf(const std::string &uri) {
+    const auto conversion = camel::core::OperatorTable::instance().conversionTypesOf(uri);
+    if (!conversion.has_value()) {
         return std::nullopt;
     }
-    const size_t to = name.find("to");
-    if (to == std::string::npos || to == 0 || to + 2 >= name.size()) {
-        return std::nullopt;
-    }
-    return RuleKey{result->toString(), 1};
+    return RuleKey{camel::core::type::typeCodeToString(conversion->target), 1};
 }
 
 std::optional<camel::parse::ast::RuleMatch>
@@ -121,8 +114,7 @@ std::vector<std::string> ruleKeyExceptionLines() {
     return lines;
 }
 
-std::optional<RuleKey> ruleKeyOf(
-    const std::string &family, const std::string &uri, const camel::core::type::Type *result) {
+std::optional<RuleKey> ruleKeyOf(const std::string &family, const std::string &uri) {
     for (const RuleKeyException &exception : kRuleKeyExceptions) {
         if (exception.uri == uri) {
             return RuleKey{exception.head, exception.arity};
@@ -138,10 +130,11 @@ std::optional<RuleKey> ruleKeyOf(
                 return RuleKey{written.head, written.arity};
             }
         }
-        // A conversion: `itod` is `float(x: i32)` and `dtod` is `float(x: float)` -- one spelling at
-        // one operand, seven sources. The key is the destination's spelling; the source is the
-        // engine's business, not the index's.
-        if (const auto conversion = conversionKeyOf(uri.substr(kLanguageOperator.size()), result)) {
+        // A conversion: `itod` is `float(x: i32)` and `dtod` is `float(x: float)` -- one spelling
+        // at one operand, seven sources. The key is the destination's spelling; the source is the
+        // engine's business, not the index's. The registration says which operators are conversions
+        // and between which types; the URI is passed whole because that is how it is registered.
+        if (const auto conversion = conversionKeyOf(uri)) {
             return conversion;
         }
         // Another `:op/` name -- a call of a function (`:op/fail`), a variable read
@@ -159,13 +152,13 @@ std::optional<RuleKey> ruleKeyOf(
     return RuleKey{name, *arity};
 }
 
-std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri, const camel::core::type::Type *result) {
-    return ruleIn("rulesets.jvp", ruleKeyOf("rulesets.jvp", uri, result));
+std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri) {
+    return ruleIn("rulesets.jvp", ruleKeyOf("rulesets.jvp", uri));
 }
 
-std::vector<camel::parse::ast::RuleMatch> forwardRulesOf(const std::string &uri, const camel::core::type::Type *result) {
+std::vector<camel::parse::ast::RuleMatch> forwardRulesOf(const std::string &uri) {
     std::vector<camel::parse::ast::RuleMatch> answers;
-    const auto key = ruleKeyOf("rulesets.jvp", uri, result);
+    const auto key = ruleKeyOf("rulesets.jvp", uri);
     if (!key.has_value()) {
         return answers;
     }
@@ -178,13 +171,12 @@ std::vector<camel::parse::ast::RuleMatch> forwardRulesOf(const std::string &uri,
     return answers;
 }
 
-std::optional<camel::parse::ast::RuleMatch> transposeRuleOf(
-    const std::string &uri, const camel::core::type::Type *result) {
-    return ruleIn("rulesets.transpose", ruleKeyOf("rulesets.transpose", uri, result));
+std::optional<camel::parse::ast::RuleMatch> transposeRuleOf(const std::string &uri) {
+    return ruleIn("rulesets.transpose", ruleKeyOf("rulesets.transpose", uri));
 }
 
-std::optional<camel::parse::ast::RuleMatch> vmapRuleOf(const std::string &uri, const camel::core::type::Type *result) {
-    return ruleIn("rulesets.vmap", ruleKeyOf("rulesets.vmap", uri, result));
+std::optional<camel::parse::ast::RuleMatch> vmapRuleOf(const std::string &uri) {
+    return ruleIn("rulesets.vmap", ruleKeyOf("rulesets.vmap", uri));
 }
 
 } // namespace camel::core

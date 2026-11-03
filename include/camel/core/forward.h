@@ -25,7 +25,6 @@
 
 #pragma once
 
-#include "camel/core/type/base.h"
 #include "camel/parse/ast/rule_head.h"
 
 #include <cstdint>
@@ -67,23 +66,12 @@ std::vector<std::string> ruleKeyExceptionLines();
 ///
 /// `family` is needed for the arity of a module operator: `tensor:sum_axis` is `sum_axis` at three
 /// operands, and three is a fact the family's index holds (`arityOfHead`), not one the name spells.
-///
-/// `result` is the type of the node the operator was reached at, when the caller has one. A
-/// conversion has no name of its own to be filed under -- `float(x: i32)` and `float(x: float)` are
-/// one spelling at one operand -- so its key is the **destination's spelling**, and the destination
-/// of a conversion is the type of its result: `:op/itod` at a node of type `float` is `float` at one
-/// operand. The type is an instance fact the caller already holds, which is why it is a parameter and
-/// not something decoded out of the operator's name. A caller with no type passes `nullptr` and gets
-/// no conversion key: there is no default, and in particular no fallback to a float.
-std::optional<RuleKey> ruleKeyOf(
-    const std::string &family, const std::string &uri,
-    const camel::core::type::Type *result = nullptr);
+std::optional<RuleKey> ruleKeyOf(const std::string &family, const std::string &uri);
 
 /// What `uri`'s forward rule is called right now, read from `rulesets.jvp`'s index at this moment.
 /// `nullopt` when the operator has no key at all (which is not the same as a family that lacks the
 /// rule: the two are `NoRuleForPrimitive` and `NoSuchFamily` in the answer).
-std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(
-    const std::string &uri, const camel::core::type::Type *result = nullptr);
+std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri);
 
 /// Every forward rule `uri` could answer by, in the order the family filed them: empty when the
 /// operator has no key or the family holds none.
@@ -93,15 +81,12 @@ std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(
 /// apart. The index does not encode the type; this answers the candidates and the caller lets the
 /// engine decide -- it instantiates a rule at the operand's own type, and a rule whose condition
 /// does not hold there gives a named refusal instead of an answer.
-std::vector<camel::parse::ast::RuleMatch> forwardRulesOf(
-    const std::string &uri, const camel::core::type::Type *result = nullptr);
+std::vector<camel::parse::ast::RuleMatch> forwardRulesOf(const std::string &uri);
 
 /// `forwardRuleOf`, for the family a linear function's pullback is written in.
-std::optional<camel::parse::ast::RuleMatch> transposeRuleOf(
-    const std::string &uri, const camel::core::type::Type *result = nullptr);
+std::optional<camel::parse::ast::RuleMatch> transposeRuleOf(const std::string &uri);
 
 /// `forwardRuleOf`, for the family a batching transform asks (`rulesets.vmap`).
-std::optional<camel::parse::ast::RuleMatch> vmapRuleOf(
-    const std::string &uri, const camel::core::type::Type *result = nullptr);
+std::optional<camel::parse::ast::RuleMatch> vmapRuleOf(const std::string &uri);
 
 } // namespace camel::core

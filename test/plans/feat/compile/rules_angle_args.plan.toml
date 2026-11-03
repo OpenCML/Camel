@@ -1,0 +1,65 @@
+# The angle-bracket arguments of a rule's two sides (lane-rulesargs)
+#
+# `reshape<shape>(x)` and `softmax<axis>(x)` state the parameter that decides which function they
+# are in `<>` (design principles 4.4), and `mean_axis(xs, axis, keepdims)` -- the operator's other
+# spelling -- states the same kind of value in parentheses. A rule names its data in parentheses
+# only, so the two operators that state it in `<>` cannot be written as rules that carry it:
+#
+#   * the builder asks a `with` argument to be a compile-time value
+#     (`src/compile/gir/builder_generics.cpp#Builder::ruleWithArgumentValue`), and a value position's
+#     `<...>` is a context argument and nothing else (design principles 5.6) -- so the shape and the
+#     axis can only be *stated* by a rule, never bound from the node it matches;
+#   * a rule's right side that names `reshape<[2, 2]>(dx)` used to be refused outright
+#     (`modules/transforms/rule_expand.cpp#findRuleRightSide`, "passes a context argument of its
+#     own"); it is copied now, with its angle argument carried like an operand (4fb738332);
+#   * the transposed walk refuses an operator with more than two operands before it looks at what
+#     each position is (`modules/transforms/transpose.cpp`, `skip=arity uri=tensor:mean_axis
+#     operands=3`), so `mean_axis`'s second and third names are positions no cotangent is asked of.
+#
+# Every number below is derived by hand in the case's own header, not read off any run. They are the
+# target, and they stay: the day the walls fall the marker is removed and they turn green.
+
+[[tests]]
+name = "rules_angle_args.reshape"
+desc = "`jvp` of `f(x) = sum(reshape<[2, 2]>(x) * [[1, 2], [3, 4]])` at x = [1, 2, 3, 4] along dx = [0.5, 0.5, 0.5, 0.5]: f = 30.0 and f' = 5.0, both by hand. `jvp_reshape`'s right side names `reshape<[2, 2]>(dx)`, which is the context-argument refusal the expansion no longer makes."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/rules_angle_args.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["rules_angle_args reshape value=30.0 tangent=5.0"]
+known_fail = ["nvm", "fvm"]
+known_fail_msg = "transforms: jvp has no forward rule for `tensor:reshape` (the rule takes (float[..]), and the operator has (float[..], int[]))"
+known_fail_note = "Stops today at `REINTERP jvp function=loss_reshape skip=rule uri=tensor:reshape reason=the rule takes (float[..]), and the operator has (float[..], int[])`. The condition this note used to wait for -- `jvp` lifting a `float[..]` parameter at all -- was met by `lane-jvpwith` (`bb6c9d9a5`), so what is left is the wall itself, and it is one comparison: a `reshape<[2, 2]>` node states its target shape in `<>`, the walk hands that `with` input over as a second operand, and `portsTakeOperands` (`modules/transforms/jvp.cpp`) compares the rule left side's `normTypesCount()` against that vector -- so the rule is refused for having one port where the node answers two, not for what it says. The fix belongs in that comparison (a port the node does not pass as data is not an operand); the index's arity contract, the number of names written in parentheses, does not move. `value=30.0 tangent=5.0` is the target, not the state."
+timeout_ms = 30000
+
+[[tests]]
+name = "rules_angle_args.softmax"
+desc = "`jvp` of `f(x) = sum(softmax<1>(x) * [1, 2])` at x = [[1, 1]] along dx = [[1, 0]]: y = [0.5, 0.5], so f = 1.5 and the tangent `y * (dx - y.dx)` dotted with [1, 2] is -0.25, both by hand."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/rules_angle_args.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["rules_angle_args softmax value=1.5 tangent=-0.25"]
+known_fail = ["nvm", "fvm"]
+known_fail_msg = "transforms: jvp has no forward rule for `tensor:reshape` (the rule takes (float[..]), and the operator has (float[..], int[]))"
+known_fail_note = "Same wall as the reshape entry and reached after it, since the case runs one program: `softmax<1>`'s axis is the same `with` port, so the same `portsTakeOperands` comparison refuses it for a count that includes the axis, and the message is `tensor:reshape`'s because that body comes first. The place to change is that one comparison (`normTypesCount()` against the operands the walk passes), not the index's arity contract. `value=1.5 tangent=-0.25` is the target, not the state."
+timeout_ms = 30000
+
+[[tests]]
+name = "rules_angle_args.mean_axis_transpose"
+desc = "`transpose` of `f(x) = sum(mean_axis(x, 0, false) * [1, 2, 3])` at ct = 1.0: every position of `xs` that fed lane k gets w[k] / 2, so the answer sums to 2 * (0.5 + 1 + 1.5) = 6.0, by hand. The node has three operands, and the transposed walk refuses three outright, so the second and third names of `mean_axis_t`'s left side are positions no cotangent is ever asked of."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/rules_angle_args.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["rules_angle_args mean transpose=6.0"]
+known_fail = ["nvm", "fvm"]
+known_fail_msg = "transforms: jvp has no forward rule for `tensor:reshape` (the rule takes (float[..]), and the operator has (float[..], int[]))"
+known_fail_note = "The program stops at its first `jvp` line, so the transposed walk this entry is about is not reached yet: the message here is the lift's `tensor:reshape` refusal, not `transpose`'s. When it is reached, the wall behind it is `modules/transforms/transpose.cpp`'s operand refusal, which decides a node's operand count before it decides what each position is; what is wanted is a walk that binds position by position (the constant, the value, the value whose cotangent is asked) and still refuses what it cannot bind. `transpose=6.0` is the target, not the state."
+timeout_ms = 30000

@@ -150,6 +150,7 @@ class GraphModule final : public BuiltinModule {
                 {"is_pure", true},
                 {"may_be_recomputed", true},
                 {"may_fault", true},
+                {"may_be_rearranged", true},
                 {"type_of", true},
                 {"type_name", true},
                 {"callee", true},

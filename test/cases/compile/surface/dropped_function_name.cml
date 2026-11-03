@@ -1,0 +1,33 @@
+// A library operator's name bound with `let`, where the binding is the last statement of a function
+// declared `: void`: `step` is a function value nobody calls, and the body drops it. A name is not
+// a value, so a `void` tail asks nothing of it; it used to reach the encoder as a live DREF -- an
+// internal error about a legal program.
+func void_tail(): void sync {
+    println('void_tail')
+    let step = len
+}
+
+func void_tail_plain(): void {
+    let step = len
+}
+
+// An arm of a branch a `void` body drops is dropped too.
+func arm_tail(): void {
+    let c = true
+    if c then { let step = len } else { let other = len }
+}
+
+// The binding is not lost by being dropped: it is the name, and a call through it still runs.
+func calls_it(): int {
+    let step = len
+    return step([10, 20, 30])
+}
+
+func main(): int sync {
+    void_tail()
+    void_tail_plain()
+    arm_tail()
+    println(calls_it())
+    println('done')
+    return 0
+}

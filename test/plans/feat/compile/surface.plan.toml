@@ -66,6 +66,50 @@ expect_diagnostic_line = 6
 expect_output_contains = ["2 functions of that name [(x: int) => int pure; (x: float) => float pure]"]
 
 [[tests]]
+name = "surface.dropped_function_name"
+desc = "`let step = len` as the last statement of a function declared `: void`, and in an arm of a branch such a body drops: `len` has four signatures, so `let` binds the name rather than one function value, and a body declared `void` drops whatever it ends with -- the name is not used as a value, so nothing is asked of it. It used to be an internal error ('still contains a live DREF node'): a name is no node of the graph, and the dropped value is a constant. Every function here is one the program never calls, and the one binding a call goes through is still the name it was."
+kind = "behavior"
+case = "../../../cases/compile/surface/dropped_function_name.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["void_tail\n3\ndone\n"]
+expect_output_not_contains = ["Error", "Warning"]
+
+[[tests]]
+name = "surface.function_name_at_tail"
+desc = "The same binding where the body's value is used (`func int_tail(): int { let step = len }`): the name has no value to hand on, so the position asks for its function value and the diagnostic says at the `let` that `len` names an operator with several signatures. It used to be the same internal error as the `void` tail beside it, never a diagnostic."
+kind = "negative"
+case = "../../../cases/compile/surface/function_name_at_tail.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
+expect_diagnostic_line = 5
+expect_diagnostic_column = 5
+expect_output_contains = ["'step' is used as a value here, but it names an operator with 4 signatures"]
+
+[[tests]]
+name = "surface.dropped_value_statement"
+desc = "The rows of the ruling of 2026-11-03 that compile, in one file: `func g(): void { 1 + 2 }`, `func g(): void { len }`, `{ len };` and `{ let s = len };` in a `sync` block, the same statement in a block that is not one, and the same name at the tail of a block that is a `void` body's own tail. A position that discards a value does not use a name, so none of them reports anything and the program runs; the name a dropped statement binds is still the name it was (the call through it prints 3). Before this the two `{ len }` shapes answered FunctionNameAsValue at the name, which was a report about a legal program."
+kind = "behavior"
+case = "../../../cases/compile/surface/dropped_value_statement.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "stmt_name\nstmt_bound_name\n3\ndone\n"
+expect_output_not_contains = ["Error", "Warning"]
+
+[[tests]]
+name = "surface.function_name_bound_at_a_used_tail"
+desc = "The third row, written as the page writes it (`func g(): int { let step = len }`): the body's value is used, so the position asks the binding for a function value and the diagnostic is at the `let` -- line 4, column 17, the `let` and not the body or the name -- with the whole sentence. The rows where nothing takes the value are the case above; the two differ only in the position."
+kind = "negative"
+case = "../../../cases/compile/surface/function_name_bound_at_a_used_tail.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 17
+expect_output_contains = ["function_name_bound_at_a_used_tail.cml:4:17: [Error]: 'step' is used as a value here, but it names an operator with 4 signatures [(x: string) => int; (x: A) => int; (x: Bytes) => int; (x: C) => int], not one function. Only a name that stands for exactly one function has a function value. Wrap the call in a function whose parameter types are written out, e.g. '(x: int) => step(x)'"]
+
+[[tests]]
 name = "surface.if_without_else"
 desc = "`if c then println(...)` compiles and runs: an if without else has no value and its arm may be of any type (design principles 3.7). It used to be an error."
 kind = "behavior"

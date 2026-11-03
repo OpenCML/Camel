@@ -33,17 +33,32 @@ expect_stdout_contains = ["[LEDGER] files ", "[LEDGER] ok"]
 expect_output_not_contains = ["[LEDGER] RED"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
-# The check in Handle::create that a handle naming a program names a node that program has. This
-# case is what makes it a check and not a comment: the pass makes a handle that is wrong on
-# purpose, and the reading is the refusal. Both lines are asserted -- the control first, because a
-# refusal that also refuses the right handle would be a worse bug than the one it guards.
+# The check in Handle::create that a handle naming a program names a node that program has, and the
+# check in `GCGraph::nodeRegion` that a region belongs to a node that is there. This case is what
+# makes them checks and not comments: the pass makes a handle and a region query that are wrong on
+# purpose, and the readings are the refusal and then the abort. The control lines come first -- a
+# node that is there is allowed, and its region is 0, the body -- because a guard that also
+# refused the right node would be a worse bug than the one it guards.
 [[tests]]
-name = "runtime.graph_draft_ledger.handle_invariant"
-desc = "A handle that claims a node the program does not have is refused where the handle is made, and a node that is there is allowed."
+name = "runtime.graph_draft_ledger.handle_and_region_invariants"
+desc = "A handle that claims a node the program does not have is refused where the handle is made, and `nodeRegion` of a ref the graph does not have aborts with the region guard's reading -- after the controls that a node that is there is allowed and answers region 0. Answering 0 for the node that is not there prints a line and exits 0, which this test rejects."
 kind = "behavior"
 case = "../../../cases/runtime/graph_draft_ledger/probe_handle.cml"
 args = ["${case}", "graph::probe_handle"]
-expect_exit = 0
-expect_stdout_contains = ["HANDLE_PROBE allowed a node that is there: yes", "HANDLE_PROBE refused:"]
+expect_stdout_contains = ["HANDLE_PROBE allowed a node that is there: yes", "HANDLE_PROBE refused:", "REGION_PROBE body region of node 0: 0"]
+expect_output_not_contains = ["REGION_PROBE answered the body for a node that is not there"]
+expect_stderr_contains = ["Camel Invariant Violation:", "Region of a node that is not in the graph", "region 0 is the body, not the answer for a node that is not there"]
+# No `expect_exit`: the guard aborts, and no plan field says "ended by a signal" -- POSIX records
+# `signal = SIGABRT` with a null exit code, MSVC turns `abort()` into exit status 3. The abort is
+# asserted from the runner's verify payload, which carries both (docs/test-plans.md,
+# "verify_script"), the way test/plans/debug/view_escape.plan.toml does.
+verify_script = """
+if (input.signal !== null) {
+    assert(input.signal === 'SIGABRT', `ended by signal ${input.signal}, not the abort`)
+    assert(input.exit_code === null, `a signal and an exit code together: ${input.exit_code}`)
+} else {
+    assert(input.exit_code === 3, `ended with exit ${input.exit_code}, not the abort`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000

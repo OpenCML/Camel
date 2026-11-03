@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-307 diagnostics: 287 errors, 20 warnings. 15 carry a machine-applicable edit, 292 say why they carry none.
+308 diagnostics: 287 errors, 21 warnings. 15 carry a machine-applicable edit, 293 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -326,6 +326,7 @@ prints one entry.
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn | no |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn | no |
 | `0x04100017` | [RuntimeDiag::DefunctionalizationIncomplete](#defunctionalizationincomplete) | Warn | no |
+| `0x04100018` | [RuntimeDiag::JitWithoutCodeGenerator](#jitwithoutcodegenerator) | Warn | no |
 
 ## Internal (`InternalDiag`)
 
@@ -11028,6 +11029,60 @@ func main(): int sync {
     let zs = apply_n((x: int) => x * 2, [1, 2, 3])
     let pairs = zip([1, 2], [10, 20])
     'MAP ys={} zs={} pairs={}'->format<ys, zs, pairs>->println
+    return 0
+}
+```
+
+### JitWithoutCodeGenerator
+
+`0x04100018` · Warn · `RuntimeDiag::JitWithoutCodeGenerator`
+
+**Fix**
+
+None: choice: which processor a build targets is the build's, and a pipeline is written to run wherever it is compiled
+
+**Message**
+
+```text
+`std::jit` has no native code generator in this build; the program runs on the bytecode interpreter, as under `std::fvm`, and the result is the same.
+```
+
+**Help**
+
+```text
+The JIT generates code for x86-64 only: every other processor turns ENABLE_FASTVM_JIT off in cmake/Options.cmake (arm64 Linux and Apple Silicon), and a build may switch it off by hand. The pass is accepted rather than refused, because a command line has to run on every platform, so this says what the pass does here instead: the program is interpreted. Silence it with `-Wno-jit-without-code-generator`, or make it an error with `-Werror`.
+```
+
+**Example** (`test/cases/linear/jit/native_registers.cml`, run as `camel test/cases/linear/jit/native_registers.cml std::jit`)
+
+```camel
+func mix(a: int, b: int, c: int, d: int, e: int, n: int): int {
+    return if n <= 0 then a * b + c * d - e * a + (b - c) * (d - e) + a / 3 + (e * d) / 7
+           else mix(b, c, d, e, a + n, n - 1)
+}
+
+func cmp(a: int, b: int, c: int, d: int, n: int): int {
+    return if n <= 0 then (if a < b then 1 else 0) + (if b <= c then 10 else 0) + (if c > d then 100 else 0) +
+                          (if d >= a then 1000 else 0) + (if a == c then 10000 else 0) + (if b != d then 100000 else 0)
+           else cmp(d, a, b, c, n - 1)
+}
+
+func fmix(a: float, b: float, c: float, d: float, e: float, n: int): float {
+    return if n <= 0 then a * b + c * d - e * a + (b - c) * (d - e) + a / 4.0
+           else fmix(b, c, d, e, a + 0.5, n - 1)
+}
+
+func fcmp(a: float, b: float, c: float, d: float, n: int): int {
+    return if n <= 0 then (if a < b then 1 else 0) + (if b <= c then 10 else 0) + (if c > d then 100 else 0) +
+                          (if d >= a then 1000 else 0) + (if a == c then 10000 else 0) + (if b != d then 100000 else 0)
+           else fcmp(d, a, b, c, n - 1)
+}
+
+func main(): int sync {
+    println('mix {} {} {} {}'->format<mix(3, 5, 7, 11, 13, 0), mix(3, 5, 7, 11, 13, 4), mix(3, 5, 7, 11, 13, 9), mix(0 - 3, 5, 0 - 7, 11, 0 - 13, 6)>)
+    println('cmp {} {} {} {}'->format<cmp(1, 2, 3, 4, 0), cmp(1, 2, 3, 4, 3), cmp(4, 4, 4, 2, 5), cmp(9, 1, 9, 1, 6)>)
+    println('fmix {} {} {}'->format<fmix(1.5, 2.5, 3.5, 4.5, 5.5, 0), fmix(1.5, 2.5, 3.5, 4.5, 5.5, 4), fmix(1.5, 2.5, 3.5, 4.5, 5.5, 7)>)
+    println('fcmp {} {} {} {}'->format<fcmp(1.0, 2.0, 3.0, 4.0, 0), fcmp(1.0, 2.0, 3.0, 4.0, 3), fcmp(4.0, 4.0, 4.0, 2.0, 5), fcmp(9.0, 1.0, 9.0, 1.0, 6)>)
     return 0
 }
 ```
