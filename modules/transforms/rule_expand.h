@@ -95,14 +95,6 @@ struct RuleChoice {
 struct RuleChoiceWords {
     const char *subject  = "law";     // "rule" (jvp) or "law" (transpose, vmap)
     const char *operands = "operands"; // "arguments" (jvp) or "operands" (transpose, vmap)
-    /// Whether a port written as an array asks for an array. `T[..]` takes a `float` -- design
-    /// principles 5.4 makes a rank-zero array the element itself -- and that is the relation a
-    /// *call* checks; a law that names an array operand reduces along the lanes a broadcast handed
-    /// out (`sum_to` rewrites `t` to the shape of `like`), and a number has none. `transpose` refuses
-    /// the scalar shape by name (`docs/handover/questions/array-scalar-product-transpose.cn.md`) and
-    /// says so here; `jvp` and `vmap` ask the call's relation and leave this false. The clause is a
-    /// parameter of the question, not a divergence between three copies of it.
-    bool arrayPortNeedsAnArray = false;
 };
 
 /// Which of `candidates` answers a node whose ports are `operandTypes`, with an instance made at
@@ -162,10 +154,20 @@ camel::runtime::gc_node_ref_t expandRuleRightSide(
 /// Answers the expanded node, or `kInvalidNodeRef` with `why`: no rule of that name in this context,
 /// an instance that did not come about, a position the right side does not answer, or a value the
 /// answer reads and the walk lacks.
+///
+/// `noInstanceAtOperands`, when given, is set to true for the second of those four and false
+/// otherwise: the law was named, and it would not instantiate at `operandTypes`. That is the one of
+/// the four a caller acts on differently -- a law that dispatches on the operands' shape (its
+/// cotangents written once per rank) refuses exactly the shapes it has no overload for, and a
+/// transform that must name the refusal needs to say which class of refusal it met rather than read
+/// `why`, whose sentences belong to the instantiation. `why` still says what the instantiation
+/// complained about.
 camel::runtime::gc_node_ref_t expandRuleByName(
     camel::core::context::Context &context, camel::runtime::GraphDraftGroup &group,
     camel::runtime::GraphTransaction &transaction, std::string_view ruleName,
     const std::function<camel::runtime::gc_node_ref_t(size_t)> &valueOf,
-    const std::vector<camel::runtime::gc_node_ref_t> &tangents, size_t position, std::string &why);
+    const std::vector<camel::runtime::gc_node_ref_t> &tangents, size_t position,
+    const std::vector<camel::core::type::Type *> &operandTypes, std::string &why,
+    bool *noInstanceAtOperands = nullptr);
 
 } // namespace camel::transforms

@@ -1,0 +1,25 @@
+// The `return` slot is a position like a declaration: the value takes the declared return type
+// there (design principles 5.4). A rank-one literal written in it is built into the shape the
+// return type states -- `take3` takes nothing but a `f32[3]`, so this compiling is the reading --
+// and the rank-two spelling keeps its own shape, which it already stated by itself.
+func take3(x: float[3]): void {
+    println(x)
+}
+
+func take22(m: float[2, 2]): void {
+    println(m)
+}
+
+func three(): float[3] sync {
+    return [1.5, 2.5, 3.5]
+}
+
+func four(): float[2, 2] sync {
+    return [[1.5, 2.5], [3.5, 4.5]]
+}
+
+func main(): int sync {
+    take3(three())
+    take22(four())
+    return 0
+}

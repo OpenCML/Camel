@@ -67,7 +67,29 @@
 - `jvp_matmul` 的右边原来调 helper `matmul_tangent(a, b, da, db)`，回程撞 `TRANSPOSE function=rulesets.jvp::matmul_tangent<float> skip=signature`、`skip=call-no-transpose node=6`。现在内联（与 `jvp_mul_tensor` 同形）。**真正该通的是"转置一个调用"**，`modules/transforms/transpose.cpp` 那条路没通之前，内联是唯一每个结点都有律的写法——`stdlib/rulesets/jvp.cml#jvp_matmul` 的注释里点了这条。
 - `pred - target` 把数组减法放进了反向图，它没有伴随：`skip=rule uri=tensor:subtract reason=unbound`。补了 `subtract_t`（`add_tensor_t` 的镜像，`(ct, -ct)`）。
 
-**边界，也钉了**：本律只认二维×二维，写进模式里（`a: T[?, k], b: T[k, ?]`）。用开放秩（`T[..]`）时它**也会对向量生效**，然后程序死在律内部——`transpose: transpose requires a tensor of rank >= 2`，报文指 `transpose` 而不是指那条律。收窄之后向量操作数**找不到规则**，`transpose` 按名拒算子：`skip=rule-shape uri=tensor:matmul node=6 operands=2 reason=the rule takes (float[?, k], float[k, ?]), and the operator has (float[], float[2, 2])`。读数钉在 `#matmul_t.vector_operand_is_refused_by_shape`（报文，不是退出码）。向量×矩阵那一格要 `sum_to` 的铺开方向（`lane-rank0`），没做。
+**向量的两条腿，也落地了**（2026-11-03 22:15，提交 `9856e2df4`）：`v @ w` 和 `x @ u` 各给手算 = 库层 = 引擎三方，`max_abs_diff` 三项全 `0.000000000000e+00`（两项的 `*_engine_v`/`*_engine_u` 那条腿把**向量本身**放进 `with` 子句，所以秩一的切向也是引擎的答案，不只是库层的）：
+
+| 形 | 值 | 库层 = 引擎 = 手算 |
+|---|---|---|
+| `v @ w`（`v` 是行） | 3.0 | `dL/dv = [0.75, 1.125]`，`dL/dw = [[1, 1], [2, 2]]` |
+| `x @ u`（`u` 是列） | 3.5 | `dL/dx = [[0.5, 0.25], [0.5, 0.25]]`，`dL/du = [4, 6]` |
+
+秩一操作数对面那个切向是**外积**，而两个秩一的乘积是个数，所以用 `sum_to` 在**已知操作数**已有的那几条道上铺：行用 `sum_to(ct, bᵀ) * sum_to(a, bᵀ)` 再转置，列用 `sum_to(ct, a) * sum_to(b, a)`。没有一处读线性操作数的形状，也没有一处把形状从计数重建——每个 helper 都以 `sum_to(…, 操作数)` 收尾，答案的形状就是操作数自己的形状。
+
+**写这条律前量到的两件事**（注释里都留了）：① 走查给规则的类型元组是**每个值一个类型**（切向的元素类型 + 各操作数类型，`ruleCotangent`），所以规则头必须是 `<T, A, B>` 这种类型变量——写 `T[?, k], T[k, ?]` 会被拒 `it takes 1 type parameter(s), and it was asked for 3`；`mul_tensor_t` 早就是 `<T, X, W>`，原因相同。② 一个 ruleset 每个算子+元数只有一条规则（`SemanticDiag::DuplicateRuleForOperator`），三种形状不能写成三条规则，所以秩的区分放在两个按秩重载的 helper 里（每个形状一对）。
+
+**边界跟着挪了，也钉了**：三维及以上、以及向量·向量（答案是数）没有重载，律被选中而它的体对这两个操作数无话可说——走查**按名拒**，而且给了它自己的一类词（2026-11-03 22:25，父代理裁定：不许退回 `rule-shape`，分类名不许合并）：
+
+```
+skip=rule-ranks uri=tensor:matmul rule=matmul_t node=6 position=0 ranks=(3, 2) operands=2
+reason=No matching function found for argument types: <> (float[..], float[3, 2, 2], float[2, 2]).
+
+transforms: transpose has no transpose for this function: the law `matmul_t` has no cotangent for
+`tensor:matmul` at these operands: their ranks are (3, 2), and it serves the ranks its cotangents
+are written for (node 6).
+```
+
+`rule-ranks` 与 `rule-shape` 必须分得开：后者是"律的**模式**不收这些操作数、什么都还没建"，前者是"模式收了、律被选中、律的**体**对这些秩无话可说"——读者的改法不同（放宽模式 vs 补上缺的那条律）。上一版（`5a2fed990`）把秩写进模式，只能服务一种形状；要一条 key 服务三种形状，秩必然落到 helper 里，**判据的可达性随模式变宽而消失**，报文随之换成 `rule-ranks`。读数钉在 `#matmul_t.rank_three_is_refused_by_name`（两条流都钉），`#matmul_t.vector_operand_is_refused_by_shape` 已随之删除。要变成"三维也答"只需再加一对重载（`sum_to` 那一半已经就是批轴上的归约），但父代理裁定今晚不开这个面。
 
 捕获版（S2 真正的写法）不变，仍停在 `split`（3.5 末尾那面墙）；也就是张量模型的 `vjp` 现在只差 `split` 这一处。
 

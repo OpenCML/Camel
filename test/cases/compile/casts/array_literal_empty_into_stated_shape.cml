@@ -1,0 +1,7 @@
+// `[]` writes one dimension of no elements, and a position that states three does not take it:
+// the empty literal is reported at the position, not reshaped into it (design principles 5.1).
+func main(): int sync {
+    let xs: float[3] = []
+    println(xs)
+    return 0
+}

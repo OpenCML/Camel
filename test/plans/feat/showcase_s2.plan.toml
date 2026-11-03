@@ -19,7 +19,7 @@ tags = ["feat", "showcase", "s2", "vjp", "autodiff", "gradient"]
 # bias to the front with a lambda. The PyTorch reading is the third leg, recorded beside the case.
 
 [[tests]]
-name = "first_step.scalar_library_vjp.nvm"
+name = "first_step.scalar_library_vjp"
 desc = "The first step's gradient on a SCALAR model (one weight, one bias, `x = 1.5`, `t = 2.0`), by the library's `vjp(loss_plain)(0.5, 0.75)` -> `pullback(1.0)` against the engine's `with_grad(loss_with)<0.5, 0.75>(1.5, 2.0)` plus `grad` for the bias, and against the PyTorch reading recorded beside the case (torch 2.5.1+cu121, float64, cpu): loss 0.125, dL/dw -0.75, dL/db -0.5"
 kind = "behavior"
 case = "../../cases/compile/transforms/first_step_library.cml"
@@ -79,7 +79,7 @@ timeout_ms = 120000
 # answer the same four numbers and the same loss (PyTorch 2.5.1+cu121, float64, cpu, 2026-11-03,
 # `D:\Temp\s2-tensor-first-step-torch.py`).
 [[tests]]
-name = "first_step.tensor_forward_jvp.nvm"
+name = "first_step.tensor_forward_jvp"
 desc = "The first step's gradient on a TENSOR model read through the library's forward transform, four seeds, against the engine's `with_grad`: loss 10.34375 and dL/dw [[3.75, 13.5], [5.5, 19.5]], element by element, against the hand calculation and PyTorch's reading of the same literals"
 kind = "behavior"
 case = "../../cases/compile/transforms/first_step_tensor.cml"
@@ -104,7 +104,7 @@ timeout_ms = 60000
 # for the `REINTERP` line, `expect_stdout_contains` for the fault), and the day either stops being
 # printed this entry fails and says which one.
 [[tests]]
-name = "first_step.tensor_vjp_stops_at_split.nvm"
+name = "first_step.tensor_vjp_stops_at_split"
 desc = "The tensor step through the library's `vjp`: the capture no longer refuses the lift, and the reverse half is refused by `split` -- a port of the lifted graph that is not one of its parameters, which is what a captured value is. Pinned as the two readings `split` prints (`skip=forward construct=a port uri=-`, and the fault naming the port), so the entry fails the day the wall falls rather than passing silently"
 kind = "negative"
 case = "../../cases/compile/transforms/first_step_tensor_vjp.cml"
@@ -137,7 +137,7 @@ timeout_ms = 60000
 #
 # Every element is exact in binary floating point, so these assertions are exact and not a tolerance.
 [[tests]]
-name = "matmul_t.law_read_through_vjp.nvm"
+name = "matmul_t.law_read_through_vjp"
 desc = "The product's transpose law, read through `vjp`: a product under a sum and the whole step answer dL/dw [[3.75, 13.5], [5.5, 19.5]] at loss 10.34375, element by element against the hand calculation and the engine's `with_grad`, max_abs_diff 0.0. The step's values are ordinary parameters here so that the law is the only thing under measurement; the captured form is the entry above, which still stops at `split`"
 kind = "behavior"
 case = "../../cases/compile/transforms/matmul_transpose_law.cml"
@@ -148,27 +148,71 @@ expect_output_contains = ["matmul_t sum_prod value=9.75 dL/dx=[[0.75, 1.125], [0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
-# The shape the law leaves out, pinned as a reading. `matmul_t` takes two matrices and says so in its
-# pattern (`a: T[?, k], b: T[k, ?]`), so a vector operand finds no rule and the walk refuses the
-# *operator* by name instead of applying a law written for another shape:
+# The two shapes a vector makes with a matrix, served by the same law. `matmul` reads a rank-one operand
+# as a row or as a column and drops that axis from the answer, so the cotangent of the *other* operand is
+# an outer product -- and a product of two rank-one values is a number, so the outer product is built
+# with `sum_to` in the lanes a known operand already has, not with a shape this ruleset would reconstruct
+# (`stdlib/rulesets/transpose.cml#ct_of_b`). The rank dispatch itself lives in the two cotangent helpers
+# (`ct_of_a` / `ct_of_b`), because a ruleset files one rule per operator and arity.
 #
-#     skip=rule-shape uri=tensor:matmul node=6 operands=2 reason=the rule takes
-#       (float[?, k], float[k, ?]), and the operator has (float[], float[2, 2])
+#     v @ w, v a row:      sum = 3.0   dL/dv = [0.75, 1.125]   dL/dw = [[1, 1], [2, 2]]
+#     x @ u, u a column:   sum = 3.5   dL/dx = [[0.5, 0.25], [0.5, 0.25]]   dL/du = [4, 6]
 #
-# The rank in the pattern is the point. With open ranks (`T[..]`) the law claims the vector too and the
-# program dies *inside* it -- `transpose: transpose requires a tensor of rank >= 2`, a fault naming
-# `transpose` rather than the law that asked for one -- which is what this case measured before the
-# pattern was narrowed. So the entry is deliberately not "expect exit 1" and nothing else: it pins the
-# sentence, on both streams, and the day the vector forms are written it fails and names the sentence.
+# Each leg is read three ways -- the hand calculation, `vjp`, and the engine's `with_grad` with the
+# *vector* moved into the `with` clause, so the rank-one cotangent is the engine's answer as well and not
+# only the library's. Every difference is exactly 0.0, because every literal here is exact in binary.
 [[tests]]
-name = "matmul_t.vector_operand_is_refused_by_shape.nvm"
-desc = "The product's transpose law takes two matrices and refuses a vector operand by naming the shape: `skip=rule-shape uri=tensor:matmul ... reason=the rule takes (float[?, k], float[k, ?]), and the operator has (float[], float[2, 2])`. Pinned as the reading on both streams, not as an exit code, so the day the vector forms are served this entry fails rather than passing silently"
+name = "matmul_t.vector_lhs_law"
+desc = "A row times a matrix: `vjp(sum_of_product)([1, 2], w)` answers dL/dv [0.75, 1.125] and dL/dw [[1, 1], [2, 2]] at loss 3.0, and the engine's `with_grad` answers the same numbers with either operand differentiated, max_abs_diff 0.0 on all three. The vector's own cotangent is the one the law used to refuse"
+kind = "behavior"
+case = "../../cases/compile/transforms/matmul_transpose_vector_lhs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["matmul_t vector_lhs value=3.0 dL/dv=[0.75, 1.125] dL/dw=[[1.0, 1.0], [2.0, 2.0]]", "matmul_t vector_lhs engine value=3.0 dL/dw=[[1.0, 1.0], [2.0, 2.0]] dL/dv=[0.75, 1.125]", "matmul_t vector_lhs engine_v value=3.0", "matmul_t vector_lhs max_abs_diff_library_vs_engine v=0.000000000000e+00 w=0.000000000000e+00 value=0.000000000000e+00"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "matmul_t.vector_rhs_law"
+desc = "A matrix times a column: `vjp(sum_of_product)(x, [0.5, 0.25])` answers dL/dx [[0.5, 0.25], [0.5, 0.25]] and dL/du [4, 6] at loss 3.5, matched element by element by the engine's `with_grad` with either operand differentiated, max_abs_diff 0.0 on all three. The matrix's cotangent here is the outer product `ct ⊗ u`, the half `sum_to` had to build"
+kind = "behavior"
+case = "../../cases/compile/transforms/matmul_transpose_vector_rhs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["matmul_t vector_rhs value=3.5 dL/dx=[[0.5, 0.25], [0.5, 0.25]] dL/du=[4.0, 6.0]", "matmul_t vector_rhs engine value=3.5 dL/dx=[[0.5, 0.25], [0.5, 0.25]] dL/du=[4.0, 6.0]", "matmul_t vector_rhs engine_u value=3.5", "matmul_t vector_rhs max_abs_diff_library_vs_engine u=0.000000000000e+00 x=0.000000000000e+00 value=0.000000000000e+00"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+# The shapes the law leaves out, pinned as a reading. Rank three and above, and the vector-vector product
+# whose answer is a number, have no cotangent overload, so the law is *chosen* and its own body has nothing
+# for these operands. The walk refuses that by name, with the law, the operator and the ranks:
+#
+#     skip=rule-ranks uri=tensor:matmul rule=matmul_t node=6 position=0 ranks=(3, 2) operands=2
+#     reason=No matching function found for argument types: <> (float[..], float[3, 2, 2], float[2, 2]).
+#
+#     the law `matmul_t` has no cotangent for `tensor:matmul` at these operands: their ranks are (3, 2),
+#     and it serves the ranks its cotangents are written for (node 6)
+#
+# `rule-ranks` is its own word, not `rule-shape`: that one means the law's *pattern* rejected the operand
+# types and nothing was built, which is where this reading stood while the law named its ranks in the
+# pattern (commit `5a2fed990`). A rule is instantiated with three type parameters -- the cotangent's element
+# type and the two operand types -- so a head that names one shape's ranks serves that shape alone, and a
+# ruleset files one rule per operator and arity (`SemanticDiag::DuplicateRuleForOperator`). Serving all three
+# shapes from one key is what moved the ranks into the helpers, and the classification moved with them: one
+# tells a reader to widen a pattern, the other to write the missing shape's law.
+# The entry pins both sentences, not the exit code, so the day a batch axis is served it fails and names
+# what replaced this.
+[[tests]]
+name = "matmul_t.rank_three_is_refused_by_name"
+desc = "The product's transpose law serves ranks one and two and refuses a batched operand by naming the law, the operator and the ranks: `skip=rule-ranks uri=tensor:matmul rule=matmul_t node=6 position=0 ranks=(3, 2)`, with the sentence `the law `matmul_t` has no cotangent for `tensor:matmul` at these operands: their ranks are (3, 2)`. Its own word and not `rule-shape`, because the pattern took the operands and the law's body is what declined. Pinned on both streams, not as an exit code, so the day the batch axis is served this entry fails rather than passing silently"
 kind = "negative"
-case = "../../cases/compile/transforms/matmul_transpose_vector_operand.cml"
+case = "../../cases/compile/transforms/matmul_transpose_rank_three.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
-expect_stdout_contains = ["transforms: transpose has no transpose for this function", "the rule the index filed for `tensor:matmul` was written for another shape", "the rule takes (float[?, k], float[k, ?]), and the operator has (float[], float[2, 2])"]
-expect_stderr_contains = ["skip=rule-shape uri=tensor:matmul node=6 operands=2", "reason=the rule takes (float[?, k], float[k, ?]), and the operator has (float[], float[2, 2])"]
+expect_stdout_contains = ["transpose has no transpose for this function: the law `matmul_t` has no cotangent for `tensor:matmul` at these operands: their ranks are (3, 2)"]
+expect_stderr_contains = ["skip=rule-ranks uri=tensor:matmul rule=matmul_t node=6 position=0 ranks=(3, 2) operands=2", "reason=No matching function found for argument types: <> (float[..], float[3, 2, 2], float[2, 2])"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000

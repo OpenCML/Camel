@@ -75,6 +75,7 @@ constexpr std::string_view kDeclaredOperators[] = {
     "set_num_threads",
     "shape",
     "sum_axis",
+    "sum_to",
     "show",
     "to_bytes",
 };

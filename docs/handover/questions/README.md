@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：35 页
+## 现在在等作者：40 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -13,9 +13,12 @@
 | [`2026-11-02-which-missing-operator-carries-a-reversed-backward`](2026-11-02-which-missing-operator-carries-a-reversed-backward.cn.md) | 倒序的 backward 该由哪一条来承载：新增 `:struct/reverse_arr`，还是让 draft 能造动态下标读？ |
 | [`2026-11-03-a-captured-scalar-inside-a-loop-body-is-silently-wrong`](2026-11-03-a-captured-scalar-inside-a-loop-body-is-silently-wrong.cn.md) | 一个被循环体捕获的标量，抬升后静默算错 |
 | [`2026-11-03-a-norm-port-count-over-the-call-arguments-is-not-a-wall-today`](2026-11-03-a-norm-port-count-over-the-call-arguments-is-not-a-wall-today.cn.md) | 转置成员的 norm 端口数多于调用点实参数：今天不是墙，是被更早一道拒绝挡住的潜在墙 |
+| [`2026-11-03-a-returned-literal-is-not-built-into-the-declared-shape`](2026-11-03-a-returned-literal-is-not-built-into-the-declared-shape.cn.md) | 返回位置不肯把字面量建成声明说出的形状 |
 | [`2026-11-03-a-second-rule-under-one-key-is-judged-by-its-when-text`](2026-11-03-a-second-rule-under-one-key-is-judged-by-its-when-text.cn.md) | 同一个键下挂两条规则，今天按 `when` 文本判重，与裁定「按操作数类型」不一致 |
+| [`2026-11-03-a-sized-rank-one-cast-refuses-a-literal-the-declaration-accepts`](2026-11-03-a-sized-rank-one-cast-refuses-a-literal-the-declaration-accepts.cn.md) | 一个定长的秩一 `as`，拒了声明和传参都接受的同一个字面量 |
 | [`2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant`](2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant.cn.md) | 一个超时应该由读数推出来，而不是由人写死 |
 | [`2026-11-03-does-a-comment-in-a-source-file-count-as-a-direct-connection`](2026-11-03-does-a-comment-in-a-source-file-count-as-a-direct-connection.cn.md) | 源文件里的一句注释，算不算一次"直连"？ |
+| [`2026-11-03-does-a-generic-call-accept-a-rank-zero-argument`](2026-11-03-does-a-generic-call-accept-a-rank-zero-argument.cn.md) | 泛型函数调用的实参匹配，要不要照 5.4 收秩 0？ |
 | [`2026-11-03-does-a-loop-statement-with-an-unused-value-still-run`](2026-11-03-does-a-loop-statement-with-an-unused-value-still-run.cn.md) | 一个值没人用的 `loop` 语句，还算不算一条要执行的语句？ |
 | [`2026-11-03-does-a-one-member-closure-prove-the-slot-identity`](2026-11-03-does-a-one-member-closure-prove-the-slot-identity.cn.md) | 闭包只有一个成员时，「槽的类型等于参数类型」能证明它是这个参数的值吗？ |
 | [`2026-11-03-does-an-open-rank-index-law-cover-rank-one`](2026-11-03-does-an-open-rank-index-law-cover-rank-one.cn.md) | 下标的律：秩一与开秩要的答案类型不同，一条写在 `T[..]` 上的律覆盖不了两者 |
@@ -28,6 +31,8 @@
 | [`2026-11-03-may-a-region-owner-read-its-own-exit`](2026-11-03-may-a-region-owner-read-its-own-exit.cn.md) | 一个区域的拥有者能不能读自己区域的端口？ |
 | [`2026-11-03-one-rule-key-cannot-hold-an-array-and-a-number`](2026-11-03-one-rule-key-cannot-hold-an-array-and-a-number.cn.md) | 一个规则键只能挂一条规则，于是同一个算子的两种形状无法共存 |
 | [`2026-11-03-reversing-a-backward-can-only-be-pinned-when-a-loop-state-is-not-a-float`](2026-11-03-reversing-a-backward-can-only-be-pinned-when-a-loop-state-is-not-a-float.cn.md) | 反传倒着走要能钉住，先要循环状态不是浮点标量 |
+| [`2026-11-03-should-a-value-read-twice-be-one-residual`](2026-11-03-should-a-value-read-twice-be-one-residual.cn.md) | 同一个值被读两次，是一个残余还是两个？ |
+| [`2026-11-03-should-one-unused-parameter-warn-once-per-rule`](2026-11-03-should-one-unused-parameter-warn-once-per-rule.cn.md) | 一个未使用的类型参数，该在律上报一次还是每侧面一次？ |
 | [`2026-11-03-should-vjp-carry-the-with-list-as-jvp-does`](2026-11-03-should-vjp-carry-the-with-list-as-jvp-does.cn.md) | `Vjp<F>` 该不该和 `Jvp<F>` 同形地带 `WithOf<F>`？ |
 | [`2026-11-03-the-capture-does-not-reach-the-body-is-not-the-whole-cause`](2026-11-03-the-capture-does-not-reach-the-body-is-not-the-whole-cause.cn.md) | 捕获"没进循环输入"不是全部原因：两条通道都实现了，错数一个也没动 |
 | [`2026-11-03-the-lifted-list-is-grouped-and-the-ports-must-follow`](2026-11-03-the-lifted-list-is-grouped-and-the-ports-must-follow.cn.md) | 抬升列表已定为 grouped、空切向占位；剩下的是建图里的端口次序 |

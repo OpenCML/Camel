@@ -63,6 +63,8 @@ const char *transposeRefusalWord(TransposeRefusalCause cause) {
         return "rule";
     case TransposeRefusalCause::RuleShape:
         return "rule-shape";
+    case TransposeRefusalCause::RuleRanks:
+        return "rule-ranks";
     case TransposeRefusalCause::Kind:
         return "kind";
     case TransposeRefusalCause::Arity:
@@ -117,23 +119,75 @@ namespace {
 RuleChoice chooseTransposedRule(
     camel::core::context::Context &context, std::string_view uri,
     std::span<const gc_node_ref_t> inputs, size_t dataOperandCount,
-    const std::function<const Type *(gc_node_ref_t)> &typeOf,
+    const std::function<const Type *(gc_node_ref_t)> &typeOf, const Type *cotangentType,
     const std::vector<bool> *answered) {
     std::vector<Type *> actual;
     actual.reserve(inputs.size());
     for (const gc_node_ref_t input : inputs) {
         actual.push_back(const_cast<Type *>(typeOf(input)));
     }
+    // The instance the ports are read from is made at the types the right side will be built at,
+    // in the order the law names them: the cotangent first, then the node's operands. A law written
+    // per shape takes one type parameter per port (`matmul_t` serves the matrix and both vector
+    // lanes), and asking it for one `float` answers `it takes 3 type parameter(s), and it was asked
+    // for 1` -- the reading that made all three lanes unreachable behind a standing `{Float64()}`.
+    std::vector<Type *> instanceTypes;
+    if (cotangentType != nullptr) {
+        Type *element = const_cast<Type *>(cotangentType);
+        if (element->code() == camel::core::type::TypeCode::Array) {
+            if (auto *array = tt::as_ptr<camel::core::type::ArrayType>(element)) {
+                if (Type *zero = array->rankZeroType()) {
+                    element = zero;
+                }
+            }
+        }
+        instanceTypes.push_back(element);
+    }
+    instanceTypes.insert(instanceTypes.end(), actual.begin(), actual.end());
     RuleChoiceWords words{"law", "operands"};
-    // The clause this family has always had and `jvp` never did: a law that names an array operand
-    // wants an array, and a rank-zero value is not one -- `sum_to` reduces along lanes a broadcast
-    // handed out, and a number has none (`array-scalar-product-transpose.cn.md`, and the reason
-    // `sum(x * s)` used to answer `0.0` with no `skip=` line). It is one clause of the one
-    // question now, not a second copy of it.
-    words.arrayPortNeedsAnArray = true;
-    return chooseRuleAmong(
-        context, camel::core::transposeRulesOf(std::string(uri)),
-        std::vector<Type *>{Type::Float64()}, actual, dataOperandCount, words, answered);
+    // What is *not* a mismatch here is a rank: 5.4 says `T[..]` includes rank 0, a rank-zero array
+    // being the element itself, so a port written `T[..]` takes a `float` and one law covers both
+    // shapes `tensor:multiply` is called with. The clause this family used to keep -- an array port
+    // refusing a non-array operand -- was deleted with the author's 2026-11-03 12:10 ruling, and the
+    // array-and-scalar product has a law of its own now (`mul_tensor_t`, `lane-mulsc`).
+    //
+    // The instance the ports are read from is made at the operands' own types and not at one
+    // `float`: a law is judged at the types the expansion will build it at, and a law that takes one
+    // type parameter per shape (`matmul_t` serving the matrix and both vector lanes) has no instance
+    // at all when it is asked for one `float` (`it takes 3 type parameter(s), and it was asked for
+    // 1`). That sentence was this choice's reading on the merged tree -- the three lanes unreachable
+    // behind it -- and it is what a standing `{Float64()}` costs once laws are written per shape.
+    RuleChoice choice = chooseRuleAmong(
+        context, camel::core::transposeRulesOf(std::string(uri)), instanceTypes, actual,
+        dataOperandCount, words, answered);
+    if (!choice.found() && choice.refusal != RuleRefusal::Shape) {
+        // The law could not be built at the operands' own types. That is not this question's to
+        // refuse: a law whose right side the expansion can still write is not a law that says this
+        // step is not its shape, and refusing here reports the next step's gap as this one's. Ask
+        // again at the one `float` the expansion falls back to -- the answer the choice gave before
+        // laws were written per shape -- and let the expansion say what it cannot build.
+        choice = chooseRuleAmong(context, camel::core::transposeRulesOf(std::string(uri)),
+                                 {Type::Float64()}, actual, dataOperandCount, words, answered);
+        // `operandTypes` stay the node's own in both readings: the shape test is about the operands
+        // the walk will hand the right side, whatever instance the ports were read from.
+        if (!choice.found()) {
+            choice.operandTypes = actual;
+        }
+    }
+    if (!choice.found() && choice.refusal != RuleRefusal::Shape) {
+        // The key files a law and no instance of it can be made at any tuple tried: a law written per
+        // rank, meeting a rank outside the set it serves (`matmul_t` at `float[3, 2, 2]`). That is
+        // not "no law for this step" -- the index has one -- so the walk is handed the law's name and
+        // the expansion says what it could not build (`rule-ranks`). An empty key is the case this
+        // class exists for, and it stays empty here.
+        const std::vector<camel::parse::ast::RuleMatch> filed =
+            camel::core::transposeRulesOf(std::string(uri));
+        if (!filed.empty()) {
+            choice.rule = filed.front().rule;
+            choice.why.clear();
+        }
+    }
+    return choice;
 }
 
 /// The type list as the index's reports write it: `(float[..], float)`, `()` when empty.
@@ -144,6 +198,117 @@ std::string typeTextOf(const std::vector<Type *> &types) {
         text += type != nullptr ? type->toString() : std::string("?");
     }
     return text.empty() ? std::string("()") : text + ")";
+}
+
+/// The ranks of the operands a cotangent was asked for, in the law's own order: `(3, 2)`.
+///
+/// The walk prints the ranks and not the types because the types are the expansion's to report and
+/// the rank is what a law that dispatches on rank is declining. An operand that is not an array has
+/// rank 0 -- it carries no extents to reduce and no lane to spread over -- and an open-rank array
+/// (`float[..]`) reports the prefix it states, which is the number of axes the law can count on.
+std::string
+operandRanksText(const camel::runtime::GCGraph *function, std::span<const gc_node_ref_t> operands) {
+    std::string text;
+    for (const gc_node_ref_t operand : operands) {
+        const camel::runtime::GCNode *node = function != nullptr ? function->node(operand) : nullptr;
+        Type *type = node != nullptr ? const_cast<Type *>(node->dataType()) : nullptr;
+        size_t rank                         = 0;
+        if (type != nullptr && type->code() == camel::core::type::TypeCode::Array) {
+            if (const auto *array = tt::as_ptr<camel::core::type::ArrayType>(type)) {
+                rank = array->rank();
+            }
+        }
+        text += text.empty() ? "(" : ", ";
+        text += std::to_string(rank);
+    }
+    return text.empty() ? std::string("()") : text + ")";
+}
+
+/// Whether the rule named `ruleName` describes a node whose ports are `operandTypes`.
+///
+/// It does not, and this is why the question is asked here rather than left to the index: a rule is
+/// filed under the head of its left side and that head's operand count, and the index does not read
+/// the operand *types* (`rule_head.cpp`). So a law can be found for a node it was not written for --
+/// a law whose parameters are two fixed-length arrays meeting an open-rank value is the shape that
+/// has to be refused by name rather than expanded into something nobody wrote.
+///
+/// The choice of *which* law answers is `chooseRuleAmong`'s (`rule_expand.cpp`), and it asks this
+/// same question one step earlier, at the instance `expandRuleByName` will build the right side
+/// from. This is that question asked again at the types the expansion will really use -- the
+/// cotangent's own type and the operands' -- because a law that covers two shapes of one operator
+/// is judged at the types the node has, not at one `float` for every port. One criterion, two
+/// instantiations: not two classifications.
+///
+/// What is *not* a mismatch is a rank. Design principles 5.4 says `T[..]` includes rank 0, that a
+/// rank-zero array is the element itself, the same value and the same type. So a port written `T[..]`
+/// takes a `float`, one law covers both shapes `tensor:multiply` is called with (two arrays, and an
+/// array and a number), and the author ruled exactly that on 2026-11-03 12:10 -- the clause this file
+/// used to keep (`sameOperandShape`, which refused a non-array operand for an array-written port) was
+/// deleted with that ruling. A rank a law does not serve is a body that will not instantiate, which
+/// is a different fact and has its own word (`RuleRanks`, `rule-ranks`).
+///
+/// The cotangent each position answers is then `Tangent<P>` of that position's own type, which is what
+/// makes a number's cotangent a number: `sum_to(ct * x, w)` answers `w`'s own type (`S`, the type of
+/// `like`), so the law has to be instantiated at the operand types the node really has
+/// (`rule_expand.cpp#expandRuleByName`), not at one `float` for every port.
+bool ruleTakesOperands(
+    camel::core::context::Context &context, const std::string &ruleName,
+    const std::vector<Type *> &operandTypes, const std::vector<bool> &answered,
+    std::string &why) {
+    std::string unused;
+    // The same types the expansion asks for: a rule is judged at the types it will be built at.
+    std::vector<Type *> types = operandTypes;
+    if (types.empty()) {
+        types.push_back(Type::Float64());
+    }
+    const auto *instance =
+        camel::compile::gir::genericRuleInstanceByName(context, ruleName, types, {}, unused);
+    if (instance == nullptr) {
+        types    = {Type::Float64()};
+        instance = camel::compile::gir::genericRuleInstanceByName(context, ruleName, types, {}, unused);
+    }
+    const FunctionType *ports =
+        instance != nullptr && instance->lhs != nullptr ? instance->lhs->funcType() : nullptr;
+    if (ports == nullptr) {
+        // Nothing to check against: the expansion below says what it could not find, in its own
+        // words, and this is not the place to invent a second spelling for "no instance".
+        return true;
+    }
+    const size_t count = ports->normTypesCount();
+    std::vector<Type *> wanted;
+    wanted.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        wanted.push_back(ports->normTypeAt(i));
+    }
+    // A rule names the node's ports, in port order: the values, then the `<>` ones (`reshape<shape>`
+    // names one of the two). Naming more ports than the node has cannot be filled; naming all of
+    // the node's values is what a law for this operator does.
+    const bool namesTheNode = count > 0 && count <= operandTypes.size();
+    bool takes = namesTheNode;
+    for (size_t i = 0; takes && i < count; ++i) {
+        // A position the walk answers no cotangent for -- a constant, a value with no tangent space
+        // -- is not a position the law is asked about (`isConstant`, `hasTangentSpace` in the walk),
+        // so its shape cannot make the law wrong: `x * 2.0` is one array operand and one constant,
+        // and the law for two arrays answers it correctly. What is checked is the operands the walk
+        // will hand the right side.
+        if (i < answered.size() && !answered[i]) {
+            continue;
+        }
+        Type *const written = wanted[i];
+        Type *const operand = operandTypes[i];
+        if (written == nullptr || operand == nullptr) {
+            takes = false;
+            break;
+        }
+        // `assignableFrom` and nothing else: 5.4's rank 0 is the element, so an array port takes a
+        // number, and the law that names an array operand is the law for that shape too.
+        takes = written->assignableFrom(operand);
+    }
+    if (!takes) {
+        why = "the rule takes " + typeTextOf(wanted) + ", and the operator has " +
+              typeTextOf(operandTypes);
+    }
+    return takes;
 }
 
 /// The sum a cotangent accumulates with is the sum of the type it lands in: two array cotangents
@@ -925,13 +1090,40 @@ bool buildTransposeMember(
         // body's own state, or a divisor that is the differentiated value itself).
         const auto ruleCotangent = [&](const std::string &ruleName,
                                        std::span<const gc_node_ref_t> inputs, size_t position,
-                                       gc_node_ref_t ct, std::string &why) -> gc_node_ref_t {
+                                       gc_node_ref_t ct, Type *ctType, std::string &why,
+                                       bool &noInstance) -> gc_node_ref_t {
             const auto valueOf = [&](size_t slot) -> gc_node_ref_t {
                 return slot < inputs.size() ? knownValue(inputs[slot]) : rt::kInvalidNodeRef;
             };
+            // The operands' own types: the cotangent of a parameter is the parameter's tangent
+            // space, so the law is built at the types the operator really has. A node that is not in
+            // the graph answers no type, and the expansion falls back to the single-type instance.
+            std::vector<Type *> operandTypes;
+            // The cotangent's own type first: a law that covers two shapes of one operator writes
+            // `(ct: T[..])`, and `T` has to be the type the cotangent really has -- a number here,
+            // an array there -- or the right side's operator is resolved for the wrong one.
+            // `T` is the law's *element* type: a cotangent whose type is a rank-zero array type is the
+            // element itself (5.4), and the law writes `T[..]` around it. Handing the rank-zero type
+            // in as `T` would ask for `float[..][..]`.
+            Type *ctElement = ctType;
+            if (ctType != nullptr && ctType->code() == camel::core::type::TypeCode::Array) {
+                if (auto *array = tt::as_ptr<camel::core::type::ArrayType>(ctType)) {
+                    if (Type *zero = array->rankZeroType()) {
+                        ctElement = zero;
+                    }
+                }
+            }
+            operandTypes.reserve(inputs.size() + 1);
+            operandTypes.push_back(ctElement);
+            for (const gc_node_ref_t input : inputs) {
+                const camel::runtime::GCNode *inputNode = function->node(input);
+                operandTypes.push_back(inputNode != nullptr
+                                           ? const_cast<Type *>(inputNode->dataType())
+                                           : nullptr);
+            }
             return camel::transforms::expandRuleByName(
                 *state.context, group, group.transaction(member), ruleName, valueOf, {ct}, position,
-                why);
+                operandTypes, why, &noInstance);
         };
         const auto noteRule = [&usedRules](const std::string &name) {
             if (std::find(usedRules.begin(), usedRules.end(), name) == usedRules.end()) {
@@ -1722,8 +1914,8 @@ bool buildTransposeMember(
                         const camel::runtime::GCNode *at = function->node(node);
                         return at != nullptr ? at->dataType() : nullptr;
                     },
-                    nullptr);
-                if (!armChoice.found()) {
+                    cotangentTypeOf(ref, Type::Float64()), nullptr);
+                if (armChoice.rule.empty()) {
                     armsOk = false;
                     refuse(TransposeRefusalCause::Rule);
                     os << " uri=" << body->uri() << " reason=" << armChoice.why << '\n';
@@ -1736,13 +1928,34 @@ bool buildTransposeMember(
                         continue;
                     }
                     std::string why;
+                    bool noInstance = false;
                     const gc_node_ref_t answer =
-                        ruleCotangent(chosenRule, inputs, i, local[ref], why);
+                        ruleCotangent(chosenRule, inputs, i, local[ref],
+                                      cotangentTypeOf(ref, Type::Float64()), why, noInstance);
                     if (answer == rt::kInvalidNodeRef) {
                         armsOk = false;
-                        refuse(TransposeRefusalCause::CotangentNeedsAValue);
-                        os << " uri=" << body->uri() << " position=" << i
-                           << " reason=" << why << '\n';
+                        // Two facts, and the expansion names which one it met: `noInstance` means the
+                        // law was named and would not instantiate at these operand types -- for a
+                        // body written once per rank, the ranks outside the set it serves -- and a
+                        // reader acts on that by writing the missing shape's law. Every other
+                        // failure is the walk failing to reach a value, which is a different edit.
+                        // Naming the first as the second is how the builder's "no matching function"
+                        // sentence reached a reader as though the transform had nothing to say
+                        // (measured 2026-11-03 on `matmul_t`).
+                        if (!noInstance) {
+                            refuse(TransposeRefusalCause::CotangentNeedsAValue);
+                            os << " uri=" << body->uri() << " position=" << i
+                               << " reason=" << why << '\n';
+                            return {};
+                        }
+                        refuse(TransposeRefusalCause::RuleRanks);
+                        state.refusal.node  = ref;
+                        state.refusal.uri   = std::string(body->uri());
+                        state.refusal.rule  = chosenRule;
+                        state.refusal.ranks = operandRanksText(function, inputs);
+                        os << " uri=" << body->uri() << " rule=" << chosenRule
+                           << " position=" << i << " ranks=" << state.refusal.ranks
+                           << " operands=" << inputs.size() << " reason=" << why << '\n';
                         return {};
                     }
                     deliver(inputs[i], answer, ref);
@@ -2117,8 +2330,8 @@ bool buildTransposeMember(
                         const camel::runtime::GCNode *at = function->node(node);
                         return at != nullptr ? at->dataType() : nullptr;
                     },
-                    &answered);
-                if (!choice.found()) {
+                    cotangentTypeOf(ref, Type::Float64()), &answered);
+                if (choice.rule.empty()) {
                     // The key has a law and the law was written for another shape: not `Rule`. That
                     // sentence ("the rule table has no rule for a step of this body") describes a
                     // lookup that found nothing, and this lookup found a law that says this step is
@@ -2154,6 +2367,25 @@ bool buildTransposeMember(
                 }
                 noteRule(choice.rule);
                 const std::string &chosenRule = choice.rule;
+                // The choice refused nothing; this asks the same question at the types the
+                // expansion will really build the right side from -- the choice decides *which*
+                // law answers, at the instance it is chosen at, and this says whether the law it
+                // picked is the shape the node is at the types the node has. Same predicate,
+                // second instantiation: one criterion, not two classifications.
+                {
+                    std::string whyNot;
+                    if (state.context != nullptr &&
+                        !ruleTakesOperands(*state.context, chosenRule, operandTypes, answered,
+                                           whyNot)) {
+                        refuse(TransposeRefusalCause::RuleShape);
+                        state.refusal.node  = ref;
+                        state.refusal.uri   = uri;
+                        state.refusal.shape = whyNot;
+                        os << " uri=" << uri << " node=" << ref
+                           << " operands=" << normOperands.size() << " reason=" << whyNot << '\n';
+                        return false;
+                    }
+                }
                 for (size_t i = 0; i < inputs.size(); ++i) {
                     if (isConstant(inputs[i]) || !wantsCotangent(inputs[i])) {
                         // A value parameter of a partial transposition takes no cotangent, and
@@ -2173,11 +2405,29 @@ bool buildTransposeMember(
                         continue;
                     }
                     std::string why;
-                    const gc_node_ref_t answer = ruleCotangent(chosenRule, inputs, i, ct, why);
+                    bool noInstance = false;
+                    const gc_node_ref_t answer = ruleCotangent(
+                        chosenRule, inputs, i, ct, cotangentTypeOf(ref, Type::Float64()), why,
+                        noInstance);
                     if (answer == rt::kInvalidNodeRef) {
-                        refuse(TransposeRefusalCause::CotangentNeedsAValue);
-                        os << " uri=" << uri << " position=" << i << " reason=" << why
-                           << '\n';
+                        // The same two facts as the arm walk above, told apart the same way: the law
+                        // would not instantiate at these operand types, or the walk could not reach a
+                        // value the answer reads. The rank is printed for the first because it is the
+                        // fact a reader edits, and the law's name because it is the function to edit.
+                        if (!noInstance) {
+                            refuse(TransposeRefusalCause::CotangentNeedsAValue);
+                            os << " uri=" << uri << " position=" << i << " reason=" << why
+                               << '\n';
+                            return false;
+                        }
+                        refuse(TransposeRefusalCause::RuleRanks);
+                        state.refusal.node  = ref;
+                        state.refusal.uri   = uri;
+                        state.refusal.rule  = chosenRule;
+                        state.refusal.ranks = operandRanksText(function, inputs);
+                        os << " uri=" << uri << " rule=" << chosenRule << " node=" << ref
+                           << " position=" << i << " ranks=" << state.refusal.ranks
+                           << " operands=" << inputs.size() << " reason=" << why << '\n';
                         return false;
                     }
                     addCotangent(inputs[i], answer);

@@ -1,0 +1,14 @@
+// The elements are computed, not written: `[a, b, c]` in a `f32[3]` position is that shape too,
+// and the rank build fills it with the values the program computes instead of leaving the literal
+// to decide its own type from them (design principles 5.1).
+func take3(x: float[3]): void {
+    println(x)
+}
+
+func main(): int sync {
+    let a = 1.5
+    let b = 2.5
+    let c = 3.5
+    take3([a, b, c])
+    return 0
+}
