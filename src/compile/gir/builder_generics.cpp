@@ -632,6 +632,51 @@ void Builder::settleGenericRuleMaker(
     }
 }
 
+// ---- A rule whose head declares no type parameters, where a rule is expected ----
+
+void Builder::settleRuleMaker(
+    std::vector<Argument> &normInputs, type_vec_t &normTypes, const GCT::node_ptr_t &call) {
+    // `__rule('name', two_way, needs, consts, <the sides>)`: the sides are ordinary functions, so
+    // they have values and the maker keeps them -- the rule value is an ordinary rule, id 0, and the
+    // rewrite engines go on reading it as they did. What is added here is a fact for the
+    // *transforms*: the rule's two graphs are registered in the table of rule templates, with no
+    // type parameters and the one instance the declaration already is, so a transform that picks
+    // between the laws of a key can find a law whose parameter types name a type
+    // (`jvp_float_from_int(x: int)`) instead of only the generic ones.
+    constexpr size_t kFixed = 4; // name, two_way, needs, consts
+    if (normInputs.size() < kFixed + 2 || normInputs.size() > kFixed + 3) {
+        return;
+    }
+    std::vector<compile_graph_ptr_t> sides;
+    for (size_t i = kFixed; i < normInputs.size(); ++i) {
+        compile_graph_ptr_t graph = functionValueGraphOf(normInputs[i].node);
+        if (graph == nullptr) {
+            // A side that is not a function value of this program: a generic rule's side is a
+            // template and has none, and its own maker registered it.
+            return;
+        }
+        sides.push_back(std::move(graph));
+    }
+    if (sides.size() < 2) {
+        return;
+    }
+    // The rule's name as a reader writes it, read off the sides the front end named
+    // (`<scope>::<rule>__lhs`).
+    std::string name = sides.front()->name();
+    if (const size_t scope = name.rfind("::"); scope != std::string::npos) {
+        name = name.substr(scope + 2);
+    }
+    if (const size_t side = name.rfind("__"); side != std::string::npos) {
+        name.resize(side);
+    }
+    const uint64_t ruleId = registerMonomorphicRule(
+        *context_, static_cast<void *>(this), std::move(name), sides[0], sides[1],
+        sides.size() == 3 ? sides[2] : nullptr);
+    if (GenericRuleEntry *entry = genericRuleEntry(*context_, ruleId); entry != nullptr) {
+        entry->where = call->origin();
+    }
+}
+
 // ---- A generic fact, asked for by its own query (rewrite design 7.5) ----
 
 void Builder::settleGenericFactMaker(

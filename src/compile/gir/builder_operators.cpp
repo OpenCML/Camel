@@ -3222,6 +3222,15 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 // 2026-10-23 on generic-rule-instantiation).
                 settleGenericRuleMaker(normInputs, normInputTypes, gct);
             }
+            if (ops->name() == "__rule") {
+                // The maker of a rule whose head declares no type parameters: the call keeps its two
+                // function values and the rule value is an ordinary rule, but the two graphs are
+                // registered in the table of rule templates too, so a transform that picks between
+                // the laws of one key can find a law whose parameter types name a type
+                // (author, 2026-11-03 12:10: two laws of one key are told apart by their parameter
+                // types). The call itself is not changed: an ordinary rule stays ordinary.
+                settleRuleMaker(normInputs, normInputTypes, gct);
+            }
             if (ops->name() == "__fact") {
                 // The maker of a fact whose head declares type parameters: the functions it is made
                 // of are generic, and this call is the instance of its query, so the type arguments

@@ -1500,6 +1500,25 @@ class Builder {
     void settleGenericRuleMaker(
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &normTypes,
         const GCT::node_ptr_t &call);
+    /// `__rule('name', two_way, needs, consts, <the sides>)`, the maker of a rule whose head declares
+    /// **no** type parameters: its sides are ordinary functions and have values, so the maker keeps
+    /// taking them and the rule value is unchanged (id 0, an ordinary rule).
+    ///
+    /// It is registered in the table of rule templates all the same, with no type parameters and one
+    /// instance already made from the two graphs. Before this, only a generic rule reached that
+    /// table, so a transform that asks "which of this key's laws answers these operands" could not see
+    /// a law written `jvp_float_from_int(x: int)` at all: the index named it and the table did not
+    /// hold it (`the rule is named in the index but its templates are not registered`,
+    /// `modules/transforms/jvp.cpp`). That is what the author's ruling of 2026-11-03 12:10 asks for --
+    /// two laws of one key told apart by their parameter types instead of by `when` -- so a law that
+    /// names a type has to be reachable.
+    ///
+    /// Does nothing when the call is not that shape (a side that is not a function value, a rule that
+    /// declares `with` values -- those are the generic maker's), and nothing is reported: the maker's
+    /// own resolution reports what it cannot do.
+    void settleRuleMaker(
+        std::vector<Argument> &normInputs, camel::core::type::type_vec_t &normTypes,
+        const GCT::node_ptr_t &call);
     /// The maker of a fact whose head declares type parameters (`fact range::<T>(v: T)`): the
     /// functions the fact is made of are the generic ones the front end named, the type arguments
     /// are the ones the query's own instance was resolved with, and they name the fact
