@@ -8,54 +8,53 @@
  * parentheses, and the builder asks a name in angle brackets to be a compile-time value
  * (`RuleWithArgumentNotConstant`), so the pattern has no place to bind what the node carries.
  *
- * The same pair of numbers is asked of all three operators here, and the reading is the numbers and
- * nothing else:
+ * Every number below is derived by hand, not read off a run:
  *
  *   reshape  f(x) = sum(reshape<[2, 2]>(x) * [[1, 2], [3, 4]]) on x = [1, 2, 3, 4]
- *            f = 1*1 + 2*2 + 3*3 + 4*4 = 30, and along dx = [0.5, 0.5, 0.5, 0.5] f' = 5.0;
- *            the transpose spreads ct = 1.0 over the four positions, so its answer sums to 4.0.
+ *            f = 1*1 + 2*2 + 3*3 + 4*4 = 30.0, and a reshape moves no element, so along
+ *            dx = [0.5, 0.5, 0.5, 0.5] the tangent is 0.5 * (1 + 2 + 3 + 4) = 5.0.
  *
  *   softmax  f(x) = sum(softmax<1>(x) * [1, 2]) on x = [[1, 1]]
- *            y = [0.5, 0.5], f = 1.5; along dx = [1, 0] the tangent is y * (dx - y.dx)
- *            = [0.25, -0.25], so f' = 0.25 - 0.5 = -0.25.
+ *            y = [0.5, 0.5], so f = 0.5 + 1.0 = 1.5, and along dx = [[1, 0]] the tangent is
+ *            y * (dx - y.dx) = [0.25, -0.25], so f' = 0.25 * 1 - 0.25 * 2 = -0.25.
  *
  *   mean     f(x) = sum(mean_axis(x, 0, false) * [1, 2, 3]) on x = [[1, 2, 3], [4, 5, 6]]
- *            the lane means are [2.5, 3.5, 4.5], f = 2.5 + 7 + 13.5 = 23.0, and the transpose of
- *            ct = 1.0 is w[k] / 2 in every row, which sums to 2 * (0.5 + 1 + 1.5) = 6.0.
+ *            the lane means are [2.5, 3.5, 4.5], so f = 2.5 + 7.0 + 13.5 = 23.0; the cotangent of x
+ *            at ct = 1.0 is w[k] / 2 in both rows, which sums to 2 * (0.5 + 1 + 1.5) = 6.0.
  *
- * A refusal here is the point of the case, not an accident: the two sentences it prints are the two
- * walls the lane has to take down, and the plan beside it pins the numbers that replace them.
+ * A refusal here is the point of the case, not an accident: the sentence it prints is the wall the
+ * lane has to take down, and the plan beside it records that sentence so that the day the wall falls
+ * the plan says so instead of staying quiet.
  */
+import rulesets.jvp
+import rulesets.transpose
 import { jvp, transpose } from transforms
 import { mean_axis, reshape, softmax, sum } from tensor
 
-func w42(): float[..] { return [[1.0, 2.0], [3.0, 4.0]] as float[2, 2] }
-func w2(): float[..] { return [1.0, 2.0] as float[] }
-func w3(): float[..] { return [1.0, 2.0, 3.0] as float[] }
-
 func loss_reshape(x: float[..]): float {
-    return float(sum(reshape<[2, 2]>(x) * w42()))
+    return float(sum(reshape<[2, 2]>(x) * ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])))
 }
 
 func loss_softmax(x: float[..]): float {
-    return float(sum(softmax<1>(x) * w2()))
+    return float(sum(softmax<1>(x) * ([1.0, 2.0] as float[])))
 }
 
 func loss_mean(x: float[..]): float {
-    return float(sum(mean_axis(x, 0, false) * w3()))
+    return float(sum(mean_axis(x, 0, false) * ([1.0, 2.0, 3.0] as float[])))
 }
 
 func main(): int sync {
-    let xr = [1.0, 2.0, 3.0, 4.0] as float[]
-    let (reshapeValue, reshapeTangent) = jvp(loss_reshape)(xr, [0.5, 0.5, 0.5, 0.5] as float[])
+    let (reshapeValue, reshapeTangent) =
+        jvp(loss_reshape)([1.0, 2.0, 3.0, 4.0] as float[], [0.5, 0.5, 0.5, 0.5] as float[])
     'rules_angle_args reshape value={} tangent={}'->format<reshapeValue, reshapeTangent>->println
 
-    let xs = [[1.0, 1.0]] as float[1, 2]
-    let (softmaxValue, softmaxTangent) = jvp(loss_softmax)(xs, [[1.0, 0.0]] as float[1, 2])
+    let (softmaxValue, softmaxTangent) =
+        jvp(loss_softmax)([[1.0, 1.0]] as float[1, 2], [[1.0, 0.0]] as float[1, 2])
     'rules_angle_args softmax value={} tangent={}'->format<softmaxValue, softmaxTangent>->println
 
-    let xm = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
     let back = transpose(loss_mean)(1.0)
     'rules_angle_args mean transpose={}'->format<float(sum(back.0))>->println
     return 0
 }
+
+

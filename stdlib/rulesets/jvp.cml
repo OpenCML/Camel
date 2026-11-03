@@ -178,13 +178,13 @@ export rule jvp_matmul::<T>(a: T[..], b: T[..]) when is_float::<T>() {
 // answer once a rule can name what the node carries.
 
 /// `d(reshape(x)) = reshape(dx)`: a reshape moves no element, so the tangent moves with the value.
-export rule jvp_reshape(x: float[..]) {
-    reshape<[2, 2]>(x) => (dx: float[..]) => reshape<[2, 2]>(dx)
+export rule jvp_reshape::<T>(x: T[..]) when is_float::<T>() {
+    reshape<[2, 2]>(x) => (dx: T[..]) => reshape<[2, 2]>(dx)
 }
 
 /// `d(softmax(x)) = y * (dx - sum(y * dx))` with `y = softmax(x)` over the same axis.
-export rule jvp_softmax(x: float[..]) {
-    softmax<1>(x) => (dx: float[..]) => softmax<1>(x) * (dx - sum<1, true>(softmax<1>(x) * dx))
+export rule jvp_softmax::<T>(x: T[..]) when is_float::<T>() {
+    softmax<1>(x) => (dx: T[..]) => softmax<1>(x) * (dx - sum<1, true>(softmax<1>(x) * dx))
 }
 
 // ---- the forward rule of `:op/idx_arr` ----
@@ -465,4 +465,7 @@ export rule jvp_ltobf::<T>(x: T) when is_same::<T, int>() {
 export rule jvp_stobf::<T>(x: T) when is_same::<T, string>() {
     bf16(x) => () => bf16(0)
 }
+
+
+
 

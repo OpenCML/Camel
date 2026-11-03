@@ -109,12 +109,12 @@ export rule idx_arr_t::<T>(xs: T[], i: int) {
 // (`camel/core/tangent_space.h`).
 
 /// The cotangent of a lane-mean: `ct` spread back over the lane it was averaged from.
-func mean_axis_cotangent(xs: float[..], ct: float[..]): float[..] {
+func mean_axis_cotangent::<T>(xs: T[..], ct: T[..]): T[..] when is_float::<T>() {
     let lanes = float(numel(xs)) / float(numel(ct))
     return ones_like(xs) * (ct / lanes)
 }
 
 /// The transpose of `mean(xs, axis, keepdims)`: the cotangent spread back over the averaged lane.
-export rule mean_axis_t(xs: float[..], axis: int, keepdims: bool) {
+export rule mean_axis_t::<T>(xs: T[..], axis: int, keepdims: bool) when is_float::<T>() {
     mean_axis(xs, axis, keepdims) => (ct: float[..]) => mean_axis_cotangent(xs, ct)
 }

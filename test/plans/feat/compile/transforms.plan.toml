@@ -9,6 +9,14 @@
 # reader wants: what the readings are *for* is the layout, the slots, the node and region counts and
 # the function the graph belongs to, and those are asserted by name below. A number a counter hands
 # out is not a fact about this transform, so it is written but not held.
+#
+# Of the three assertions that replaced them, two were shown to fail before they were kept (one more
+# node in the case read `nodes=15 exit=14`; one renamed graph read `graph=3 name=accumulate`). The
+# third -- `layout=(float, float) built=yes slots=x,w` -- holds the layout and the slot names, not an
+# id, and no program-side counterexample can prove it fails alone: the slots it reads are the rule's
+# own parameters, so mutating a rule's body cannot reorder them (measured: `jvp_div`'s right side
+# rewritten to drop `x` left the reading unchanged). What is checked about it is that the whole
+# string is matched, which is why `slots=w,x` in this file turns the same test red.
 [[tests]]
 name = "reinterp_builds_its_own_graph"
 desc = "The first form of `reinterp` does two things and says them. It prints the other key the index holds, one line per operator: the left side of a rule is written `a + b` and a node names its operator by URI, so the instance records the URI its left side is written with, and the reading is `URI -> rule -> the GraphId of its right side` (`:op/div_d -> rule jvp_div -> rhs N`). Then it walks every function of the program that is made of operators -- for `f(x) = x*x + 3/x` that is `f`, with three primitives and two constants -- and builds a graph of the transform's own for each, printing its GraphId and node count. It is not a transform yet: the graph it builds is a single port handed to the output, and the reading says exactly that, so the next step has a number to grow from instead of a claim to believe."
