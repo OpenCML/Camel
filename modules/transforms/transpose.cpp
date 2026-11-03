@@ -2179,7 +2179,8 @@ bool buildTransposeMember(
                                                   ? static_cast<int>(carrier->kind)
                                                   : -1);
                     };
-                    os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                    os << "TRANSPOSE function=" << function->name()
+                       << " skip=call-no-transpose node=" << ref
                        << " callee=none value=" << describe(inputs.front());
                     const auto captured = function->withInputsOf(ref);
                     if (!captured.empty()) {
@@ -2205,7 +2206,8 @@ bool buildTransposeMember(
                 // the index.
                 const size_t calleeParams = callee->funcType()->normTypesCount();
                 if (calleeParams == 0 || inputs.size() != argumentAt + calleeParams) {
-                    os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                    os << "TRANSPOSE function=" << function->name()
+                       << " skip=call-no-transpose node=" << ref
                        << " callee=" << callee->name() << " params=" << calleeParams << '\n';
                     return false;
                 }
@@ -2220,7 +2222,8 @@ bool buildTransposeMember(
                 std::vector<bool> participates;
                 if (tangentArgs > 0) {
                     if (tangentArgs > calleeParams) {
-                        os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                        os << "TRANSPOSE function=" << function->name()
+                           << " skip=call-no-transpose node=" << ref
                            << " callee=" << callee->name() << " tangent-args=" << tangentArgs
                            << " params=" << calleeParams << '\n';
                         return false;
@@ -2245,7 +2248,8 @@ bool buildTransposeMember(
                         state.callees.emplace(rt::toValue(calleeId), transposed);
                         if (!buildTransposeMember(state, callee, transposed, os, participates)) {
                             os << "TRANSPOSE function=" << function->name()
-                               << " skip=call node=" << ref << " callee=" << callee->name() << '\n';
+                               << " skip=call-no-transpose node=" << ref
+                               << " callee=" << callee->name() << '\n';
                             return false;
                         }
                     } else {
@@ -2255,7 +2259,8 @@ bool buildTransposeMember(
                 FunctionType *calleeType = transposeSignature(
                     callee->funcType(), participates, &answersOf, &state.calleeNeeds[callee]);
                 if (calleeType == nullptr || calleeType->normTypesCount() == 0) {
-                    os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                    os << "TRANSPOSE function=" << function->name()
+                       << " skip=call-no-transpose node=" << ref
                        << " callee=" << callee->name() << " signature\n";
                     return false;
                 }
@@ -2280,13 +2285,15 @@ bool buildTransposeMember(
                         continue;
                     }
                     if (argumentAt + i >= inputs.size()) {
-                        os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                        os << "TRANSPOSE function=" << function->name()
+                           << " skip=call-value-missing param=" << i << " node=" << ref
                            << " arg=" << i << " callee=" << callee->name() << '\n';
                         return false;
                     }
                     const gc_node_ref_t argument = forward(inputs[argumentAt + i]);
                     if (argument == rt::kInvalidNodeRef) {
-                        os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                        os << "TRANSPOSE function=" << function->name()
+                           << " skip=call-value-missing param=" << i << " node=" << ref
                            << " arg=" << inputs[argumentAt + i] << '\n';
                         return false;
                     }
@@ -2299,20 +2306,23 @@ bool buildTransposeMember(
                 // a member called with a hole in its list, which is worse than a refusal.
                 for (const size_t idx : state.calleeNeeds[callee]) {
                     if (argumentAt + idx >= inputs.size()) {
-                        os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                        os << "TRANSPOSE function=" << function->name()
+                           << " skip=call-value-missing param=" << idx << " node=" << ref
                            << " arg=" << idx << " callee=" << callee->name() << '\n';
                         return false;
                     }
                     const gc_node_ref_t captured = forward(inputs[argumentAt + idx]);
                     if (captured == rt::kInvalidNodeRef) {
-                        os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                        os << "TRANSPOSE function=" << function->name()
+                           << " skip=call-value-missing param=" << idx << " node=" << ref
                            << " arg=" << inputs[argumentAt + idx] << '\n';
                         return false;
                     }
                     arguments.push_back(captured);
                 }
                 if (arguments.size() != memberValues) {
-                    os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                    os << "TRANSPOSE function=" << function->name()
+                       << " skip=call-no-transpose node=" << ref
                        << " values=" << arguments.size() << " member=" << memberValues << '\n';
                     return false;
                 }

@@ -175,8 +175,25 @@ std::string refusalCause(const std::string &log) {
         return "the loop is the whole answer and the value its state starts from answers no parameter, "
                "so the cotangent of that value has no parameter to land on";
     }
-    if (word == "call") {
+    if (word == "call-no-transpose") {
+        // One of the two causes a call site can meet, and the one this file said for both of them
+        // until 2026-11-03. It is true only here: the callee has no transpose to call. A callee
+        // whose transpose *was* built, and whose member reads a value the call site cannot hand
+        // over, was refused with this same sentence, and the reading above the refusal contradicted
+        // it -- `TRANSPOSE function=rulesets.jvp::index_into<float> graph=307 type=(int, float[],
+        // float) => (float[],) ... rhs=idx_arr_t` says the member exists. That shape is the word
+        // below, whose position is the callee's own parameter index.
         return "this call's callee has no transpose of its own, so the call cannot be turned around";
+    }
+    if (word == "call-value-missing") {
+        if (position.empty()) {
+            // Naming only what the reading says: the member exists, and what it wanted has no
+            // source at the call. Nothing here answers the value with one it does not have.
+            return "the callee's transpose was built, but it reads a value this call does not "
+                   "carry";
+        }
+        return "the callee's transpose was built, but " + position +
+               " reads a value this call does not carry";
     }
     if (word == "rule") {
         return "the rule table has no rule for a step of this body";
