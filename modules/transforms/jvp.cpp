@@ -74,11 +74,13 @@ camel::core::type::TupleType *pairTypeOf(camel::core::type::Type *type) {
 }
 
 /// The empty tuple `()`, which is the tangent space of a parameter that has none
-/// (`Tangent<int> = ()`, `stdlib/types.cml`). A fresh instance each call and no cache: types belong
-/// to a context and are compared structurally (`Type::equals`), so one instance shared across two
-/// contexts would be a type from another one.
+/// (`Tangent<int> = ()`, `stdlib/types.cml`). It is **the** empty tuple type and not a second one:
+/// `TupleType::create()` (src/core/type/composite/tuple.cpp:98) is the zero-argument form of the
+/// interning constructor, so every place that writes `()` -- this one, `split`'s empty closure,
+/// `vmap`, `typecall` -- gets the same object back. A helper rather than a bare call so that the
+/// reason a signature has an empty slot at all is written where the slot is made.
 camel::core::type::Type *emptyTupleType() {
-    return camel::core::type::TupleType::create(std::vector<camel::core::type::Type *>{});
+    return camel::core::type::TupleType::create();
 }
 
 /// The tangent of one primitive: the rule `stdlib/rulesets/jvp.cml` files for its operator, applied
