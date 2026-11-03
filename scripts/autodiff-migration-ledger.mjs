@@ -102,12 +102,32 @@ let loaderFailure = ''
 // failing that pass when the binary can start. That is why the run now refuses to report a number when
 // the binary does not start (see `loaderFailure` below): a ruler that cannot see must say so, not print
 // a smaller number.
+// Re-read on 2026-11-03, after the transpose lanes added three library cases. `total`, `library` and
+// `array` moved by the same 3, which is the shape that says the corpus grew and nothing was
+// reclassified: the three new programs are all `vjp`/`grad` cases written with array types.
+//
+//   * `test/cases/compile/transforms/transpose_array_product.cml` and
+//     `.../jvp_vjp_array_product_cross.cml` (`fd964b750`, the array product's transpose needing the
+//     array sum's law), and
+//   * `test/cases/compile/transforms/transpose_product_fixed_shape.cml` (`910f49400`, the shape
+//     clause held from both sides).
+//
+// `array` is a ratchet and it went **up**, which the ratchet exists to notice: it is recorded here
+// rather than left to glare because the denominators are decisions, not side effects, and a
+// denominator that cannot follow its corpus makes every later reading meaningless. What it must not
+// do is hide a case that *stopped* being written with an array -- none did: `with` and `other` are
+// unchanged at 45 and 7, so the 3 are additions and not a shift between classes.
+//
+// `pass` stays at 12 although the run read 14: it is the one column that follows the host binary and
+// the file says it is not comparable across machines. Recording 14 here would fail the ledger on a
+// host where the same three cases do not pass, which is a red about the host and not about the
+// migration.
 const LEDGER_RECORDED = {
-    total: 128,
-    library: 119,
+    total: 131,
+    library: 122,
     pass: 12,
     with: 45,
-    array: 67,
+    array: 70,
     other: 7,
 }
 

@@ -71,8 +71,6 @@ const char *transposeRefusalWord(TransposeRefusalCause cause) {
         return "cotangent-needs-a-value";
     case TransposeRefusalCause::State:
         return "state";
-    case TransposeRefusalCause::StateUnread:
-        return "state-unread";
     case TransposeRefusalCause::Range:
         return "range";
     case TransposeRefusalCause::CallNoTranspose:
@@ -101,67 +99,41 @@ std::string typeTextOf(const std::vector<Type *> &types) {
     return text.empty() ? std::string("()") : text + ")";
 }
 
-/// Whether a port written `written` takes an operand of type `operand` **as the shape the law was
-/// written for**.
-///
-/// "Takes" is the relation a call site uses -- `assignableFrom`, the port accepts the value -- and
-/// it is not the whole question here. `T[..]` is an open rank, and design principles 5.4 says a
-/// rank-zero array *is* the element, so `float[..]` accepts a `float`: the same value, and not the
-/// same shape. A law that names an array operand reduces along the lanes a broadcast handed out
-/// (`sum_to` rewrites `t` to the shape of `like`), and a number has no lanes to reduce; so a port
-/// written as an array does not take a value that is not an array, however willingly the type system
-/// hands it over. The other direction needs no clause here: a port written `float` takes no
-/// `float[]` at all (`ArrayType::assignableFrom` is the array on the left of that sentence, not the
-/// right).
-///
-/// This is the clause that keeps a law for two arrays from being taken for an array and a number,
-/// which is the shape `tensor:multiply` is called with and answers no cotangent for
-/// (`ruleTakesOperands`, and the page
-/// `docs/handover/questions/array-scalar-product-transpose.cn.md`).
-bool sameOperandShape(const Type *written, const Type *operand) {
-    if (written == nullptr || operand == nullptr) {
-        return false;
-    }
-    if (!written->assignableFrom(const_cast<Type *>(operand))) {
-        return false;
-    }
-    const bool portIsArray = written->code() == camel::core::type::TypeCode::Array;
-    const bool operandIsArray = operand->code() == camel::core::type::TypeCode::Array;
-    return !portIsArray || operandIsArray;
-}
-
 /// Whether the rule named `ruleName` describes a node whose ports are `operandTypes`.
 ///
 /// It does not, and this is why the question is asked here rather than left to the index: a rule is
 /// filed under the head of its left side and that head's operand count, and the index does not read
-/// the operand *types* (`rule_head.cpp`). One key therefore holds one law for every shape the
-/// operator is called with -- `tensor:multiply` is called with two arrays and with an array and a
-/// number -- and the law it finds was written for two arrays. Its right side is then expanded at
-/// `T = float`, where `T[..]` reads `float[..]`, a type that *takes* a number (`ArrayType::
-/// assignableFrom`, design principles 5.4: rank 0 is the element itself). So the expansion succeeds,
-/// and answers a cotangent of a shape the law was never written for: measured, `sum(x * s)`'s
-/// cotangent at `s` read `0.0` with no `skip=` and no `contribution=0` line, which is the one
-/// reading a transform may not give (design principles 9.9: a wrong number is worse than a refusal,
-/// and refusing the wrong shape is what the walk is for).
+/// the operand *types* (`rule_head.cpp`). So a law can be found for a node it was not written for --
+/// a law whose parameters are two fixed-length arrays meeting an open-rank value is the shape that
+/// has to be refused by name rather than expanded into something nobody wrote.
 ///
-/// `jvp` asks the same question one step earlier and refuses this shape by name
-/// (`jvp.cpp#portsTakeOperands`: "the rule takes (float[..], float[..]), and the operator has
-/// (float[..], float)"). This is that reading, in that wording, asked of the transpose's rule.
+/// What is *not* a mismatch is a rank. Design principles 5.4 says `T[..]` includes rank 0, that a
+/// rank-zero array is the element itself, the same value and the same type. So a port written `T[..]`
+/// takes a `float`, one law covers both shapes `tensor:multiply` is called with (two arrays, and an
+/// array and a number), and the author ruled exactly that on 2026-11-03 12:10 -- the clause this file
+/// used to keep (`sameOperandShape`, which refused a non-array operand for an array-written port) was
+/// deleted with that ruling.
 ///
-/// The extra clause is 5.4's other direction: a port written `T[..]` asks for an array, and an
-/// operand that is not an array is not the shape it asked for even though the *value* is the same
-/// (`assignableFrom` says so in both directions). A law that names an array operand reduces along
-/// the lanes a broadcast handed out (`sum_to`), and a number has none to reduce -- the law was
-/// written for the array shape and does not take the scalar one until someone writes a law that
-/// does.
+/// The cotangent each position answers is then `Tangent<P>` of that position's own type, which is what
+/// makes a number's cotangent a number: `sum_to(ct * x, w)` answers `w`'s own type (`S`, the type of
+/// `like`), so the law has to be instantiated at the operand types the node really has
+/// (`rule_expand.cpp#expandRuleByName`), not at one `float` for every port.
 bool ruleTakesOperands(
     camel::core::context::Context &context, const std::string &ruleName,
     const std::vector<Type *> &operandTypes, const std::vector<bool> &answered,
     std::string &why) {
     std::string unused;
-    const std::vector<Type *> types{Type::Float64()};
+    // The same types the expansion asks for: a rule is judged at the types it will be built at.
+    std::vector<Type *> types = operandTypes;
+    if (types.empty()) {
+        types.push_back(Type::Float64());
+    }
     const auto *instance =
         camel::compile::gir::genericRuleInstanceByName(context, ruleName, types, {}, unused);
+    if (instance == nullptr) {
+        types    = {Type::Float64()};
+        instance = camel::compile::gir::genericRuleInstanceByName(context, ruleName, types, {}, unused);
+    }
     const FunctionType *ports =
         instance != nullptr && instance->lhs != nullptr ? instance->lhs->funcType() : nullptr;
     if (ports == nullptr) {
@@ -195,10 +167,9 @@ bool ruleTakesOperands(
             takes = false;
             break;
         }
-        if (!sameOperandShape(written, operand)) {
-            takes = false;
-            break;
-        }
+        // `assignableFrom` and nothing else: 5.4's rank 0 is the element, so an array port takes a
+        // number, and the law that names an array operand is the law for that shape too.
+        takes = written->assignableFrom(operand);
     }
     if (!takes) {
         why = "the rule takes " + typeTextOf(wanted) + ", and the operator has " +
@@ -206,7 +177,6 @@ bool ruleTakesOperands(
     }
     return takes;
 }
-
 /// The sum a cotangent accumulates with is the sum of the type it lands in: two array cotangents
 /// add element by element (`:tangent/add_arr`, design principles 9.9) and a number's add is
 /// `:op/add_d`. Handing an array to `add_d` is the same lie as calling it a float -- it reads the
@@ -986,13 +956,40 @@ bool buildTransposeMember(
         // body's own state, or a divisor that is the differentiated value itself).
         const auto ruleCotangent = [&](const std::string &ruleName,
                                        std::span<const gc_node_ref_t> inputs, size_t position,
-                                       gc_node_ref_t ct, std::string &why) -> gc_node_ref_t {
+                                       gc_node_ref_t ct, Type *ctType,
+                                       std::string &why) -> gc_node_ref_t {
             const auto valueOf = [&](size_t slot) -> gc_node_ref_t {
                 return slot < inputs.size() ? knownValue(inputs[slot]) : rt::kInvalidNodeRef;
             };
+            // The operands' own types: the cotangent of a parameter is the parameter's tangent
+            // space, so the law is built at the types the operator really has. A node that is not in
+            // the graph answers no type, and the expansion falls back to the single-type instance.
+            std::vector<Type *> operandTypes;
+            // The cotangent's own type first: a law that covers two shapes of one operator writes
+            // `(ct: T[..])`, and `T` has to be the type the cotangent really has -- a number here,
+            // an array there -- or the right side's operator is resolved for the wrong one.
+            // `T` is the law's *element* type: a cotangent whose type is a rank-zero array type is the
+            // element itself (5.4), and the law writes `T[..]` around it. Handing the rank-zero type
+            // in as `T` would ask for `float[..][..]`.
+            Type *ctElement = ctType;
+            if (ctType != nullptr && ctType->code() == camel::core::type::TypeCode::Array) {
+                if (auto *array = tt::as_ptr<camel::core::type::ArrayType>(ctType)) {
+                    if (Type *zero = array->rankZeroType()) {
+                        ctElement = zero;
+                    }
+                }
+            }
+            operandTypes.reserve(inputs.size() + 1);
+            operandTypes.push_back(ctElement);
+            for (const gc_node_ref_t input : inputs) {
+                const camel::runtime::GCNode *inputNode = function->node(input);
+                operandTypes.push_back(inputNode != nullptr
+                                           ? const_cast<Type *>(inputNode->dataType())
+                                           : nullptr);
+            }
             return camel::transforms::expandRuleByName(
                 *state.context, group, group.transaction(member), ruleName, valueOf, {ct}, position,
-                why);
+                operandTypes, why);
         };
         const auto noteRule = [&usedRules](const std::string &name) {
             if (std::find(usedRules.begin(), usedRules.end(), name) == usedRules.end()) {
@@ -1471,8 +1468,8 @@ bool buildTransposeMember(
                             // has no other way to reach, and the arm stops by name (author's ruling
                             // of 2026-11-03, `origin/fsh-dev = ad7e716b0`: the legacy path that
                             // answered it from `paramPorts` is dropped -- it named a parameter as
-                            // the holder of a value nobody had established it held, which is the
-                            // same claim `state-unread` refuses to make one branch below).
+                            // the holder of a value nobody had established it held, the same claim
+                            // the loop's unread-state case stopped making on 2026-11-03).
                             return forward(value);
                         }
                         if (sourced->kind == rt::GCNodeKind::Oper) {
@@ -1787,7 +1784,8 @@ bool buildTransposeMember(
                     }
                     std::string why;
                     const gc_node_ref_t answer =
-                        ruleCotangent(rule->rule, inputs, i, local[ref], why);
+                        ruleCotangent(rule->rule, inputs, i, local[ref],
+                                  cotangentTypeOf(ref, Type::Float64()), why);
                     if (answer == rt::kInvalidNodeRef) {
                         armsOk = false;
                         refuse(TransposeRefusalCause::CotangentNeedsAValue);
@@ -2197,7 +2195,8 @@ bool buildTransposeMember(
                         continue;
                     }
                     std::string why;
-                    const gc_node_ref_t answer = ruleCotangent(rule->rule, inputs, i, ct, why);
+                    const gc_node_ref_t answer = ruleCotangent(
+                        rule->rule, inputs, i, ct, cotangentTypeOf(ref, Type::Float64()), why);
                     if (answer == rt::kInvalidNodeRef) {
                         refuse(TransposeRefusalCause::CotangentNeedsAValue);
                         os << " uri=" << uri << " position=" << i << " reason=" << why
@@ -2627,23 +2626,28 @@ bool buildTransposeMember(
                     if (start != nullptr && start->kind == rt::GCNodeKind::Port) {
                         result =
                             tupleOf({loopNode}, {cotangentTypeOf(loopNode, Type::Float64())}).first;
-                    } else if (closureOf.empty()) {
-                        // Nothing reaches that value, so nothing it did can reach a parameter, so the
-                        // cotangent of the loop's value is the zero of its cotangent space: the same
-                        // reading the straight-line case took on 48bfa6778 ("a parameter the body
-                        // never reads answers a zero cotangent, not a refusal"), read for a loop. It is
-                        // answered only when the member carries no closure *of its own* -- the test is
-                        // the closure it inherited (`closureOf`), not whether the answer reads one of
-                        // its ports: a half a call handed a closure has a value to be called with, and
-                        // an answer that is a constant would be a member called for a value nothing in
-                        // it reads -- which is the shape that took the process down when it was
-                        // answered this way, so it stays refused by name one branch below.
-                        const gc_node_ref_t none = zeroOf(loopNode);
-                        result = tupleOf({none}, {cotangentTypeOf(loopNode, Type::Float64())}).first;
                     } else {
-                        refuse(TransposeRefusalCause::StateUnread);
-                        os << " node=" << ref << " origin=" << regionOrigin << '\n';
-                        return false;
+                        // Nothing reaches that value, so nothing the loop did can reach a parameter,
+                        // so the loop answers the zero of its cotangent space: the same reading the
+                        // straight-line case took on 48bfa6778 ("a parameter the body never reads
+                        // answers a zero cotangent, not a refusal"), read for a loop. A member
+                        // carries its closure whatever its answer reads -- a zero answer is a
+                        // constant and the closure is still filled -- so there is no refusal here
+                        // (author, 2026-11-03, `origin/fsh-dev = 3ab482ab2`). The test is no longer
+                        // whether the member carries a closure (`closureOf`), which would refuse the
+                        // half `vjp` hands out: that half carries the loop's tape and is exactly the
+                        // shape the zero is for.
+                        //
+                        // The constant is not written here. `result` stays invalid, and the answer is
+                        // built by the walk below exactly as every other transposition builds it: one
+                        // value per parameter the walk reached, each read from that parameter's own
+                        // cotangent slot, wrapped in the tuple the signature promises (`(float,)` for
+                        // one parameter; author, 2026-11-02 11:30). A constant written here instead
+                        // took the *loop's* cotangent type for the answer's: the slot holds the
+                        // answer's type, so the value has to be the answer's too -- a bare scalar in a
+                        // slot or a tuple on its way into a tuple is what took the process down on
+                        // 843d38025, and the loop's cotangent type is not even a question this graph
+                        // can answer (the ref is a node of the draft, the types belong to the source).
                     }
                 }
                 break;

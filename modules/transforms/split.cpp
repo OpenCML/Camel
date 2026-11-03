@@ -901,17 +901,60 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
             return isLiftedCall(lifted, ref, program);
         });
     }
-    std::sort(found.begin(), found.end(), [&portIndex](gc_node_ref_t a, gc_node_ref_t b) {
-        const bool aIsPort = portIndex[a] != Residual::kNotAParameter;
-        const bool bIsPort = portIndex[b] != Residual::kNotAParameter;
-        if (aIsPort != bIsPort) {
-            return aIsPort;
+    // The parameters' values come first, each in its own parameter's slot, because that is the order
+    // a reader of the closure goes by: "slot `at` is parameter `at`'s value"
+    // (`modules/transforms/transpose.cpp`). The walk can reach one value by two routes -- a
+    // parameter's value port seen as a value that crosses the cut, and the same port seen as what a
+    // parameter the tangent side reads stands for (`ports[valuePort]` below) -- and while a second
+    // copy of a value is not lost information, it must not take a slot that belongs to another
+    // parameter. Two programs of one type show why:
+    //
+    //     sum(x * s)  residuals [x, s, s]     slots 0 and 1 are `x` and `s`
+    //     sum(s * x)  residuals [x, x, s]     slot 1 is `x` again, and `s` stands at 2
+    //
+    // The transposition read slot 1 for `s`, found an array, and its type check refused it -- rightly,
+    // an array is not the number `s` holds -- then asked for the value it could not find, which added
+    // a norm port no call site fills. So a value that appears more than once is placed after
+    // everything that appears once: the copies are kept (the count is the graph's answer, and the
+    // reading below prints it), and the slots of the parameters stay their own.
+    {
+        std::vector<gc_node_ref_t> once;
+        std::vector<gc_node_ref_t> again;
+        for (const gc_node_ref_t ref : found) {
+            if (std::find(once.begin(), once.end(), ref) == once.end()) {
+                once.push_back(ref);
+            } else {
+                again.push_back(ref);
+            }
         }
-        if (aIsPort) {
-            return portIndex[a] < portIndex[b];
-        }
-        return a < b;
-    });
+        std::sort(once.begin(), once.end(), [&portIndex](gc_node_ref_t a, gc_node_ref_t b) {
+            const bool aIsPort = portIndex[a] != Residual::kNotAParameter;
+            const bool bIsPort = portIndex[b] != Residual::kNotAParameter;
+            if (aIsPort != bIsPort) {
+                return aIsPort;
+            }
+            if (aIsPort) {
+                return portIndex[a] < portIndex[b];
+            }
+            return a < b;
+        });
+        std::sort(again.begin(), again.end(), [&portIndex](gc_node_ref_t a, gc_node_ref_t b) {
+            const bool aIsPort = portIndex[a] != Residual::kNotAParameter;
+            const bool bIsPort = portIndex[b] != Residual::kNotAParameter;
+            if (aIsPort != bIsPort) {
+                return aIsPort;
+            }
+            if (aIsPort) {
+                return portIndex[a] < portIndex[b];
+            }
+            return a < b;
+        });
+        std::vector<gc_node_ref_t> ordered;
+        ordered.reserve(found.size());
+        ordered.insert(ordered.end(), once.begin(), once.end());
+        ordered.insert(ordered.end(), again.begin(), again.end());
+        found = std::move(ordered);
+    }
     residuals.reserve(found.size());
     for (gc_node_ref_t ref : found) {
         Residual residual;
@@ -929,6 +972,7 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
         }
         residuals.push_back(residual);
     }
+
     return residuals;
 }
 
