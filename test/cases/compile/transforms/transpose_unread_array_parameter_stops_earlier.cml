@@ -1,0 +1,23 @@
+// An array parameter the body never reads does NOT reach `skip=unread-parameter`: it is stopped one
+// step earlier, by "a zero tangent array needs an array with a tangent". This case pins that order --
+// which gate stops it first -- and not the refusal it was written to expect.
+//
+// A number's zero needs nothing: the neighbouring case `transpose_unread_parameter_answers_zero` reads
+// `(2.0, 0.0)` for an unread float, and that is right, because `f` does not depend on it. An array's
+// zero is not a constant the walk can write down -- `tangent/zeros_arr` makes it from an array it is
+// handed (`src/builtin/operators/struct.cpp#__tangent_zeros_arr__`), and a parameter the body never
+// reads hands it nothing. Measured rather than reasoned, twice: the same body with a stated length,
+// `g(x: float[3], n: float)`, answers this same sentence, so what stops the program is the parameter
+// being unread and not the `[]` being open.
+import { transpose } from transforms
+import rulesets.transpose
+
+func g(x: float[], n: float): float {
+    return n * 2.0
+}
+
+func main(): int sync {
+    let back = transpose(g)
+    println(back(1.0))
+    return 0
+}
