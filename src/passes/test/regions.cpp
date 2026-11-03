@@ -13,9 +13,101 @@
 
 #include "camel/runtime/draft_session.h"
 
+#include <exception>
+#include <format>
+#include <string>
+
 const camel::runtime::Program *
 RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     using namespace camel::runtime;
+    // The shape the commit refuses: a node of one arm reading a port the graph gives to the other
+    // arm of the same branch. Nothing in the tree builds it, so the only program that asks the
+    // commit to refuse it is this one; without it the check (graph.h, regionsShareChain) would
+    // pass every graph it is asked about for reasons no test could tell from a check that never
+    // runs. It goes first, over the program the pass was handed: a refused commit publishes
+    // nothing, so the program is still the one the blocks are built on below.
+    // The reader is a node of one arm, and the port is the arm's own parameter: a port of the body
+    // (`nodeRegion` 0), which the builder writes for every function and an arm reads everywhere.
+    // Giving it to a sibling arm of the same branch is the move a rewrite would make and the read
+    // the commit has to refuse.
+    const GCGraph *branchy = nullptr;
+    uint32_t readerArm     = 0;
+    uint32_t portArm       = 0;
+    gc_node_ref_t reader   = kInvalidNodeRef;
+    gc_node_ref_t port     = kInvalidNodeRef;
+    for (GCGraph *graph : program->graphs()) {
+        for (uint32_t r = 1; branchy == nullptr && r < graph->regionCount(); ++r) {
+            const GCRegion *arm = graph->region(r);
+            if (arm == nullptr || arm->kind != GCRegionKind::Arm) {
+                continue;
+            }
+            uint32_t sibling = 0;
+            for (uint32_t s = 1; s < graph->regionCount() && sibling == 0; ++s) {
+                const GCRegion *other = graph->region(s);
+                if (s != r && other != nullptr && other->kind == GCRegionKind::Arm &&
+                    other->owner == arm->owner) {
+                    sibling = s;
+                }
+            }
+            if (sibling == 0) {
+                continue;
+            }
+            for (gc_node_ref_t ref = 0; ref < graph->nodeCount() && port == kInvalidNodeRef; ++ref) {
+                if (graph->nodeRegion(ref) != r) {
+                    continue;
+                }
+                for (const std::span<const gc_node_ref_t> group :
+                     {graph->normInputsOf(ref),
+                      graph->withInputsOf(ref),
+                      graph->ctrlInputsOf(ref)}) {
+                    for (gc_node_ref_t input : group) {
+                        const GCNode *node = graph->node(input);
+                        if (node == nullptr || node->kind != GCNodeKind::Port ||
+                            graph->nodeRegion(input) != 0) {
+                            continue;
+                        }
+                        branchy   = graph;
+                        readerArm = r;
+                        portArm   = sibling;
+                        reader    = ref;
+                        port      = input;
+                        break;
+                    }
+                    if (port != kInvalidNodeRef) {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    if (reader == kInvalidNodeRef) {
+        // No branch of two arms, or no arm node reading a port of the body: the program cannot ask
+        // the question, and the reading says so instead of passing for a refusal.
+        os << "REGIONS sibling_refused=none\n";
+    } else {
+        RuntimeGraphDraftSession refused(context_, program);
+        auto &draft = refused.edit(const_cast<GCGraph *>(branchy)).edit();
+        draft.setNodeRegion(port, portArm);
+        const gc_node_ref_t moved[1] = {port};
+        draft.setRegionPorts(portArm, std::span<const gc_node_ref_t>(moved, 1));
+        std::string refusal;
+        bool wasRefused = false;
+        try {
+            (void)refused.commit();
+        } catch (const std::exception &e) {
+            wasRefused = true;
+            refusal    = e.what();
+        }
+        // Named, not just refused: the commit has to say which port and which reader, or a reader
+        // of the diagnostic cannot tell this refusal from the next one.
+        const bool namedPort   = refusal.find(std::format("reads port {}", port)) != std::string::npos;
+        const bool namedReader =
+            refusal.find(std::format("node {} in region {}", reader, readerArm)) != std::string::npos;
+        os << "REGIONS sibling_refused=" << (wasRefused ? 1 : 0) << " port=" << port
+           << " reader=" << reader << " arm=" << readerArm << " sibling=" << portArm
+           << " named_port=" << (namedPort ? 1 : 0) << " named_reader=" << (namedReader ? 1 : 0)
+           << "\n";
+    }
     // The largest graph that has arms, if any has, so that they are among the regions it keeps.
     GCGraph *largest = nullptr;
     const auto hasArms = [](const GCGraph *graph) { return graph->regionCount() > 1; };
