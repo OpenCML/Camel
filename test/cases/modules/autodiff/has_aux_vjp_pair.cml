@@ -5,7 +5,8 @@
  * `vjp(f)` is `transpose(split(jvp(f)))` written out (stdlib/vjp.cml). For a `float` result the
  * pair the cut hands out is `(value, lin)` and `transpose(lin)` is the pullback. For a result that
  * is itself a pair, the cotangent that goes into the transposed half would be the cotangent of a
- * pair, and `transpose` takes a function that returns a `float`. So the call is refused at that
+ * pair, and `transpose` takes a function whose result has a cotangent -- a pair has none. So the
+ * call is refused at that
  * step, inside the library's own file, and not by returning `(value, pullback)` with the pair's
  * first element silently differentiated: a library that guessed would answer a gradient for a
  * function nobody asked it to differentiate.

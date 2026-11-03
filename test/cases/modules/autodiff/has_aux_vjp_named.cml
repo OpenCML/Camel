@@ -17,8 +17,8 @@
  *
  * A pair-returning function handed to `vjp` with no named argument -- the other spelling of the
  * same mistake -- is refused one step later, at `stdlib/vjp.cml`'s `transpose(lin)` call:
- * `transpose` takes a function that returns a `float`, and the cotangent of a pair is what would
- * have to go in.
+ * `transpose` takes a function whose result has a cotangent, and the cotangent of a pair is what
+ * would have to go in.
  *
  * That the three numbers are still reached, by composition, is
  * test/cases/modules/autodiff/has_aux_library.cml.
