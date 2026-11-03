@@ -11,20 +11,38 @@
 // `p` were unused -- it is not: `p` feeds `s` and the escape. What comes back is 0 for `s` (nothing
 // reads it), 1 for `p`, and 3 rounds of `p`'s cotangent through the escape `q = 2x`, i.e. 6, and
 // 0 + 1 + 6 = 7. The `.0` case was 1 + 3 + 6 = 10, and the difference is exactly the first slot.
-import { jvp, split, transpose } from transforms
+//
+// The route is the one the `.0` case takes -- `transpose` on the program itself -- and the reading it
+// prints is the one the two cases were written against: `TRANSPOSE function=carried_p carried=1
+// captures=1 answer=per-target`, one `ESCAPE` (the `q = 2x` the round reads from outside), and
+// `type=(float) => (float,)`. The cotangent goes in at slot 1 of the loop's pair and slot 0 is left
+// zero; `back(2.0)` answering 14 is the same claim from the other side, since no forward line of this
+// program prints 14.
+//
+// `split(jvp(carried_p))` is **not** the route here, and it says so by name rather than by a wrong
+// number: `REINTERP split function=jvp_of_carried_p skip=forward construct=a loop uri=-
+// why=this loop is on the chain the exit reads and neither half has a value for it: the cut copies a
+// loop where the exit reads its two components through one projection each, and here the half would
+// have to copy a body region`. The reason is the shape of a lifted loop with more than one state: its
+// value is a tuple of one `(state, tangent)` pair per state, so a projection of it names a **state**
+// and not a half of the pair, and `split`'s loop cut takes one state
+// (`modules/transforms/split.cpp#readLoopCut`, `ports.size() != 2`). Nothing in this case needs that
+// cut, and the mark would not make it exist.
+import { transpose } from transforms
 import rulesets.transpose
 
 func carried_p(x: float): float {
     let q = 2.0 * x
     return (loop s = x, p = x for i in 0..3 do (s + p, p + q)).1
 }
-import rulesets.jvp
+
 func main(): int sync {
+    // The algebra first, forward and un-transposed: 7 is the value this case reads out.
     println(carried_p(1.0))
-    let (_, lin) = split(jvp(carried_p))(1.0)
-    println(transpose(lin)(1.0))
+    let back = transpose(carried_p)
+    println(back(1.0))
     // Twice the cotangent, 14: the last reading is the transpose's alone, since the forward line
     // prints 7.
-    println(transpose(lin)(2.0))
+    println(back(2.0))
     return 0
 }
