@@ -1,0 +1,42 @@
+// The same branch as `transpose_call_first_argument_is_a_call.cml`, with the argument that names it
+// carrying a **function value**: `f(x) = h(mk(x), 2.0)` with `mk(x) = (y) => x * y` and
+// `h = (a, b) => a(b) * x`.
+//
+// On paper `f(x) = mk(x)(2.0) * x = 2x * x = 2x^2`, so `f(3) = 18` and the derivative at 3 is `12`.
+//
+// The GIR is the one the sibling case prints, one node kind further on: the callee is the FILL closure
+// `h`, and the first ordinary input is the FUNC node `mk`. `GCGraph::calleeIdOf` answers for a FUNC
+// node, so the walk reads `mk` as this call's callee and sets `argumentAt = 1` -- and `mk` is the
+// callee of the *first argument*, not of this call.
+//
+// Measured today: `TRANSPOSE function=mk skip=signature` (a function whose answer is a function has no
+// transposed signature) and then `TRANSPOSE function=f skip=call-no-transpose node=5 callee=mk`. The
+// program stops with exit 1, so this shape is refused rather than answered -- but the refusal names a
+// graph that is not this call's callee, and it names the wrong reason: what stands in the way is the
+// callee being a value the body assembled, which is the cause the transform spells
+// `reason=function-closure` everywhere else (`transpose_no_tangent_closure.cml`). The plan entry marks
+// this case until the reading is that refusal; it is the same defect the sibling case pins from the
+// side where the misreading reaches a graph the runtime will not run.
+//
+// Making the first argument a *bare function name* instead of a call is what
+// `transpose_call_of_a_body_closure_with_a_bare_name.cml` writes: there the node names no graph and
+// the refusal is already the right one, which is how this case and that one are the two halves of the
+// one question.
+import rulesets.transpose
+import { transpose } from transforms
+
+func mk(x: float): (y: float) => float {
+    return (y: float) => x * y
+}
+
+func f(x: float): float {
+    let h = (a: (y: float) => float, b: float) => a(b) * x
+    return h(mk(x), 2.0)
+}
+
+func main(): int sync {
+    println(f(3.0))
+    // The paper answer: (12.0,). No forward line prints 12, so the claim is about the transpose.
+    println(transpose(f)(1.0))
+    return 0
+}

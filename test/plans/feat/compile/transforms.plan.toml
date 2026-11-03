@@ -981,6 +981,107 @@ expect_exit = 0
 expect_output_contains = ["TRANSPOSE function=g graph=", "TRANSPOSE function=f graph=", "rhs=add_t", "4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+# ---------------------------------------------------------------------------------------------------
+# Where a callee can stand: five cases, one per position, written so that each of the walks a CALL can
+# send a transposition down has a program.
+#
+# `modules/transforms/transpose.cpp#buildTransposeMember` asks three questions of a CALL node and sets
+# `argumentAt` from the answers: does the node itself name a graph (`GCGraph::calleeIdOf`, which answers
+# only for FUNC nodes -- a call written by name); does a `with` input name one (a static function, or a
+# Port this graph receives); and, only when neither did, does the **first ordinary input** name one. The
+# last question is the one no program was written for: every producer in this compiler puts a call's
+# callee in a `with` input (the builder at `src/compile/gir/builder_calls.cpp`, the transforms at
+# `split`/`vmap`/`jvp`/`pullback`, and `transpose` itself everywhere but that branch), and
+# `src/runtime/graph.cpp` refuses to run a CALL node that has no callee input at all. So the branch is
+# reached only by accident -- when the first *argument* is itself a call written by name, and the walk
+# reads that argument's callee as this call's callee. Two of the five cases below reach it, and both are
+# marked; the three beside them say what the same shape reads as when the argument is a name instead of
+# a call, and what a function value in an argument position reads as when the callee is a parameter.
+[[tests]]
+name = "transpose.function_parameter_is_handed_through"
+desc = "A function value in an ordinary argument position -- `f(x) = apply(twice, x)` with `apply(fn, x) = fn(x) + fn(x)` -- is differentiated correctly: 4 at x = 3 (`4x`) and 4 at cotangent 1. This is the shape people mean by `a function as an argument`, and it is answered because the callee inside `apply` is a **Port**, a value the graph receives: the walk turns it around without seeing the graph behind it (`transpose(v)` at run time), so nothing has to know which function was passed. The transposed signature keeps the function parameter -- `type=((y: float) => float, float) => (float,)` -- and the answer has no slot for it, because a function value has no cotangent space. It is the control for the two marked cases below: the same function value reaches the walk as an *argument* here and is never read as a callee, because the callee stands in a `with` input as a Port and the walk finds it there first."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_takes_a_function_parameter.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["TRANSPOSE function=apply", "type=((y: float) => float, float) => (float,)", "rhs=mul_t", "12.0", "(4.0)"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The control the two marked cases are read against: the same program with the first argument written as
+# a **bare function name** instead of a call. A name in an argument position is a DATA node holding a
+# static function, and `calleeIdOf` does not answer for a DATA node -- so there is nothing to misread and
+# the refusal is the one the transform has for a callee the body assembled (`function-closure`). The pair
+# is what makes the marked cases read as a defect rather than as an opinion: one word of the program
+# changes, and the reading changes from the right refusal to a wrong callee.
+[[tests]]
+name = "transpose.call_of_a_body_closure.bare_name_is_refused_by_name"
+desc = "`f(x) = let h = (a: (y: float) => float, b: float) => a(b) * x; h(twice, 2.0)`: the callee is a closure the body assembled, and the call is refused with the cause that names it -- `TRANSPOSE function=f skip=call-no-transpose node=5 callee=none value=3:0 with=2:4 reason=function-closure`. The paper answer is 4 (the program computes `4x`), and it is not owed to this transform: a transposed callee would have to take the captured `x` as a parameter of its own, which is the piece `transpose_no_tangent_closure.cml` measures. What this case holds is that a function value written in the first argument position **as a name** stops the walk at the callee's own value, and the node numbers are not pinned because they are positional: the shape is the claim."
+kind = "negative"
+case = "../../../cases/compile/transforms/transpose_call_of_a_body_closure_with_a_bare_name.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_output_contains = ["skip=call-no-transpose node=", "callee=none", "reason=function-closure", "transpose has no transpose for this function"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The shape no case had until now: the call's first ordinary input is itself a call written by name, and
+# the callee is a value the body assembled. It reaches `argumentAt == 1`, which is the branch this pair
+# of cases exists to pin, and it is marked because that branch's own output cannot run: it writes the
+# transposed call with its callee in the first ordinary input and no `with` input, and
+# `src/runtime/graph.cpp` refuses that graph (`without callee input`) as a `PassInternalError` -- a
+# compiler defect with an exit code, never a wrong number. The refusal this program owes is the one the
+# case above gets on the same shape written with a name.
+[[tests]]
+name = "transpose.call_of_a_body_closure.call_argument_is_read_as_the_callee"
+desc = "`f(x) = let h = (y: float, z: float) => y * z * x; h(g(x), 1.0)` with `g(x) = 2x`: the paper answer is 12 at cotangent 1 (`2x^2`, differentiated), and today the program stops with `Pass 'std::default' failed with an internal error: Runtime graph 'transpose_of_f' has CALL node 2 without callee input`. The GIR of `f` is the smallest program that shows why: the CALL node takes its callee as a `with` input (`N0A`, a FILL closure) and its first ordinary input is the FUNC node `N0B` (`g`), so the walk's third question -- does the first ordinary input name a graph -- answers yes and reads `g` as this call's callee (`argumentAt = 1`). `g` is the callee of the *first argument*, not of this call. Under the mark: (1) the reading must be the refusal the same program gets when the argument is a name, `reason=function-closure`, and (2) the branch it lands in must stop writing a CALL node whose callee stands in an ordinary input. Owner: the CALL case of `modules/transforms/transpose.cpp#buildTransposeMember`, which another lane is rewriting; this entry is the red case that lane can run."
+kind = "negative"
+case = "../../../cases/compile/transforms/transpose_call_first_argument_is_a_call.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_output_contains = ["skip=call-no-transpose node=", "callee=none", "reason=function-closure"]
+expect_output_not_contains = ["without callee input"]
+known_fail = ["nvm"]
+known_fail_msg = "without callee input"
+known_fail_note = "Marked 2026-11-04 (lane-fnarg): the program is right and the compiler is not. `argumentAt == 1` reads the first ordinary input as the callee; that input is `g(x)`, whose callee `g` is not this call's callee. Measured on 34b659107 with `nvm`: exit 1, `RuntimeDiag::PassInternalError ... has CALL node 2 without callee input`, after `TRANSPOSE function=f` built `transpose_of_f`. The mark goes away in the commit that either stops the walk reading an ordinary operand as a callee (then the reading is `reason=function-closure`, as the name-written sibling case gets) or teaches the call transposition to put the callee where the runtime looks for it -- both are edits inside the CALL case of `transpose.cpp#buildTransposeMember`/`src/runtime/graph.cpp`, and the first is the one this case pins."
+
+[[tests]]
+name = "transpose.call_of_a_body_closure.function_value_argument_is_read_as_the_callee"
+desc = "The same branch, with the argument that names it carrying a **function value**: `f(x) = let h = (a: (y: float) => float, b: float) => a(b) * x; h(mk(x), 2.0)` with `mk(x) = (y) => x*y`. The paper answer is 12 at cotangent 1 (`2x^2`), and today the walk reads `mk` as the call's callee and stops at `TRANSPOSE function=mk skip=signature`, then `TRANSPOSE function=f skip=call-no-transpose node=5 callee=mk`. So the program is refused rather than answered -- but a graph that is not this call's callee is named, and the reason given is that callee's missing signature instead of the real one, that the callee is a value the body assembled (`function-closure`, which the name-written sibling gets). This is the reading that matches the sentence `a function value written in the call's first argument position` most literally, and it reaches the branch: `argumentAt=1 callee=mk`, the `with` input being a FILL."
+kind = "negative"
+case = "../../../cases/compile/transforms/transpose_call_first_argument_is_a_function_value.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_output_contains = ["skip=call-no-transpose node=", "callee=none", "reason=function-closure"]
+expect_output_not_contains = ["callee=mk"]
+known_fail = ["nvm"]
+known_fail_msg = "callee=mk"
+known_fail_note = "Marked 2026-11-04 (lane-fnarg): measured on 34b659107 with `nvm`, exit 1, `TRANSPOSE function=mk skip=signature` then `TRANSPOSE function=f skip=call-no-transpose node=5 callee=mk`. `mk` is the callee of `mk(x)`, the call standing in this call's first argument position; this call's callee is the closure `h`, which the walk has already found in the `with` input and cannot name (`function-closure`). The mark goes away when the third question (`calleeIdOf(inputs.front())`) stops answering for an ordinary operand; the entry is the same defect as the sibling above, read from the side where the misread callee has no transposed signature and so refuses instead of building an unrunnable call."
+
+[[tests]]
+name = "transpose.callee_is_a_returned_function.is_not_the_callees_own_graph"
+desc = "`f(x) = mk(x)(2.0)` with `mk(x) = (y) => x*y`: the value the call is made through is `mk(x)`'s **result**, and the walk names `mk` -- the graph of the call that produced the value -- as the callee. So it transposes `mk` (`TRANSPOSE function=mk skip=signature`, a function whose answer is a function has no transposed signature) and refuses the caller with `TRANSPOSE function=f skip=call-no-transpose node=3 callee=mk`, exit 1. The paper answer is 2 at cotangent 1 and the program is not wrong; what is wrong is the name: a FUNC node is a call written by name, so `calleeIdOf` answers for it -- with its own callee, not with the graph its *value* holds. The GIR makes the gap visible: the CALL's `with` input is `N07` (`label=\"mk\"`, `type=\"FUNC\"`), i.e. the call `mk(x)`, and its one ordinary input is the `2.0`. The reading this case owes is `callee=none` (the callee's graph is not named here) with whatever cause the walk then gives; the mark exists so that the wrong name cannot go quiet."
+kind = "negative"
+case = "../../../cases/compile/transforms/transpose_callee_is_a_returned_function.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_output_contains = ["skip=call-no-transpose node=", "callee=none"]
+expect_output_not_contains = ["callee=mk", "TRANSPOSE function=mk "]
+known_fail = ["nvm"]
+known_fail_msg = "callee=mk"
+known_fail_note = "Marked 2026-11-04 (lane-fnarg): measured on 34b659107 with `nvm`, exit 1, `TRANSPOSE function=mk skip=signature` and `TRANSPOSE function=f skip=call-no-transpose node=3 callee=mk`. The walk's second question asks `calleeIdOf` of every node in the `with` list, and `calleeIdOf` answers for any FUNC node -- including one whose value is this call's callee rather than a function constant. The mark goes away when that question is asked with an entry that answers `what graph does this *value* name` (`staticFunctionGraphOf`, which refuses `not-a-data-node` here) instead of `calleeIdOf`. Same root as the two cases above, read from the position the callee stands in: a `with` input holding a call's value rather than an ordinary input holding a call."
+
 # A rule's tangent function is a plain function of several floats: `mul_tangent(x, w, dx, dw)` is
 # `dx*w + x*dw`, so the transposed half of a lifted graph calls it with the operands in front of
 # the tangents. `Transpose<F>` has a shape for that -- every parameter is a value the graph reads and

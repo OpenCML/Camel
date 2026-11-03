@@ -1,0 +1,42 @@
+// The control for `transpose_call_first_argument_is_a_function_value.cml`: **one word different** in the
+// program, and the refusal is already the right one.
+//
+//     f(x) = h(twice, 2.0)     here: a bare function name in the first argument position
+//     f(x) = h(mk(x), 2.0)     the sibling case: a call, whose value is a function
+//
+// with `h = (a, b) => a(b) * x` and `twice(y) = 2y`. On paper both are `2 * 2 * x = 4x`: `f(3) = 12`
+// and the derivative at 3 is `4`.
+//
+// A bare function name in an argument position is a DATA node holding a static function
+// (`transpose_function_value_no_capture.cml`), and `GCGraph::calleeIdOf` does not answer for a DATA
+// node -- so the walk has nothing to misread: the callee is the closure the body assembled, that value
+// names no graph at the call site, and the refusal is the one the transform has for exactly that value:
+//
+//     TRANSPOSE function=f skip=call-no-transpose node=5 callee=none value=3:0 with=2:4 reason=function-closure
+//
+// That is the reading the sibling case owes and does not get today, and the pair is what makes the
+// defect visible as a defect: the same shape, refused correctly when the argument is a name and
+// misread when it is a call, because a call is the one argument that *does* name a graph
+// (`argumentAt = 1`), and the walk reads that graph as this call's callee.
+//
+// The node numbers are not pinned in the plan: they are positional, and the shape is what this case is
+// about. Measured today on `nvm`: exit 1, the line above, and the diagnostic
+// `transpose has no transpose for this function`.
+import rulesets.transpose
+import { transpose } from transforms
+
+func twice(y: float): float {
+    return y * 2.0
+}
+
+func f(x: float): float {
+    let h = (a: (y: float) => float, b: float) => a(b) * x
+    return h(twice, 2.0)
+}
+
+func main(): int sync {
+    println(f(3.0))
+    // The paper answer is (4.0,); today the program is refused, and this case pins the refusal.
+    println(transpose(f)(1.0))
+    return 0
+}
