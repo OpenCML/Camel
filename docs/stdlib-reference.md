@@ -1917,6 +1917,35 @@ The extent of one axis; a negative axis counts from the last one (`-1` is the la
 - Failure: fault `RuntimeError` when the axis is outside the rank.
 - Example: `dim<1>(zeros::<f32>([2, 2]))` gives `2`
 
+#### `element_at`
+
+```camel
+element_at: (t: T[..], at: int[]) => T when is_numeric::<T>()
+```
+
+The element at `at[0]` of a rank-1 tensor whose length is `at[1]`: `t[at[0]]`, with the length
+stated by whoever holds the value.
+
+The length is a **known operand**, and it is the reason this spelling exists beside the
+language's own `t[i]`. A transpose rule may read only known operands (author, 2026-11-03 11:10),
+and `T[]` carries no length in its type (design principles 5.4), so the law that scatters a
+cotangent back into the array's shape (9.9: the reverse of a gather is a scatter-add) has nothing
+to build the zeros from unless the value's length is handed to it. A forward half can state it --
+`rulesets.jvp`'s `jvp_idx_arr` passes `[i, len(xs)]`, a value of the primal -- and this operator
+is what it passes it to.
+
+The position and the length travel in one integer list because the transpose walk's operator path
+takes one or two normal operands, and that count is not this operator's to lift: it is the guard
+`tensor:mean_axis`'s three ports are held by.
+
+The stated length is checked against the tensor and the position against both, so a wrong length
+is a fault rather than an array of the wrong shape.
+or `at[0]` is outside it
+
+- Pure.
+- Failure: fault `RuntimeError` when the list is not two entries, `at[1]` disagrees with the tensor,.
+- Example: `element_at([1.0, 2.0, 3.0] as float[], [2, 3])` gives `3.0`
+
 ### Reduction
 
 #### `sum`

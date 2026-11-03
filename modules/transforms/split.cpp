@@ -901,17 +901,17 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                     continue;
                 }
                 const std::vector<gc_node_ref_t> arguments = dataInputsOf(&lifted, ref);
-                // The lifted callee takes its values and then its tangents (`jvpSignature`), so the
-                // value arguments are the first half of what the call passes -- of the *ordinary*
-                // arguments. `dataInputsOf` is the ordinary inputs followed by the context ones
-                // (`dataInputsOf` above), so the count to halve is the list without the call's `with`
-                // arguments: halving the whole list puts the boundary in the wrong place as soon as a
-                // lifted callee keeps a `with` list, and the value that lands on the boundary is the
-                // caller-side weight. 后一半要读的东西都是残差 (author, 2026-11-03 15:15), and this
-                // half hands the callee that weight, so the walk keeps it; dropping it is what made
-                // the composition `vjp((ww) => f<ww>(..))(w)` refuse one step past the exit, in the
-                // backward walk's own words, `the backward half reads the value of parameter 0, and it
-                // is not one of the values the cut carries` (measured 2026-11-04).
+                // The lifted signature writes a callee's value arguments first (`jvpSignature`) and
+                // its tangents after them, so what the walk keeps here are the ordinary arguments'
+                // first half. `dataInputsOf` is the ordinary inputs followed by the context ones, so
+                // the count to halve is the list without the call's `with` arguments: halving the
+                // whole list puts the boundary in the wrong place as soon as a lifted callee keeps a
+                // `with` list. Keep the weight on the boundary and the composition
+                // `vjp((ww) => f<ww>(..))(w)` stops one step past the exit, in the backward walk's
+                // words, `the backward half reads the value of parameter 0, and it is not one of the
+                // values the cut carries` (measured 2026-11-04). Anything the tangent half reads
+                // *beyond* these values is a residual the cut carries, decided by what the callee
+                // reads (`residualsOf` above), never by where a parameter stands.
                 const size_t withArguments = lifted.withInputsOf(ref).size();
                 const size_t valueArguments =
                     arguments.size() > withArguments ? arguments.size() - withArguments : 0;

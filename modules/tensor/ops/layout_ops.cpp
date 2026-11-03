@@ -619,6 +619,68 @@ void takeVjp(VjpBuilder &b, const VjpCall &call) {
             {call.inputs[0], call.inputs[1], *dy}));
 }
 
+// element_at(t, at): the element at `at[0]` of a rank-1 tensor whose length `at[1]` states.
+//
+// The length is not a convenience and not a hint: it is the operand that makes the read's pullback
+// writable at all. `xs[i]`'s transpose is a scatter into an array of zeros with `xs`'s length
+// (design principles 9.9), `T[]` carries no length in its type (5.4), and a transpose law may read
+// only known operands -- the array itself is the operand the cotangent comes back through, so on
+// that side it has no value (author, 2026-11-03 11:10 and 17:35). So the linear half of the read
+// states the length: `rulesets.jvp`'s `jvp_idx_arr` passes `[i, len(xs)]`, a value the forward side
+// computes, and `rulesets.transpose`'s `element_at_t` builds its zeros from `at[1]` and reads
+// nothing of the array.
+//
+// It is a second spelling of `:op/idx_arr` rather than a third operand of it, because that
+// operator's key is filed at two operands in the core (`src/core/forward.cpp`,
+// `kRuleKeyExceptions`) and a law's parameters are bound one per operand: a law filed under it
+// cannot receive a third value (measured -- `skip=rule uri=:op/idx_arr reason=no-rule`).
+//
+// The position and the length are one integer list because the transpose walk answers an operator
+// with one or two normal operands (the guard `tensor:mean_axis`'s three ports are held by); two
+// integer operands beside the tensor would be three.
+//
+// The stated length is checked against the tensor and the position against both: a length that
+// disagrees is a fault, not a silently reshaped answer. An answer sized by a number nobody verified
+// is the one failure this operator exists to make impossible.
+slot_t elementAtKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    const Array *t = tensorArg(norm, 0);
+    if (t->rank() != 1) {
+        reportShapeError("element_at", "expects a tensor with exactly one dimension");
+    }
+    const std::vector<int64_t> at = intListArg(norm, 1, "element_at");
+    if (at.size() != 2) {
+        reportShapeError(
+            "element_at",
+            "expects a two-entry integer list: the position and the length of the tensor");
+    }
+    const int64_t length = at[1];
+    if (length < 0 || static_cast<uint64_t>(length) != t->numel()) {
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            std::string("element_at"),
+            std::format(
+                "the stated length {} does not agree with the tensor's {}", length, t->numel()));
+    }
+    const int64_t index = at[0];
+    if (index < 0 || index >= length) {
+        throwRuntimeFault(
+            RuntimeDiag::IndexOutOfRange, index, std::string("the tensor"), length);
+    }
+    // The element is the array's own slot: the type the read declares is the element type the
+    // tensor states (`elementAtInfer`), so nothing is converted and no kernel is needed.
+    return t->getSlot(static_cast<size_t>(index));
+}
+
+/// The read's result type: one element of the tensor's own element type.
+std::optional<Type *> elementAtInfer(const InferContext &ctx) {
+    const TensorFacts t = ctx.facts(0);
+    if (t.shape && t.shape->size() != 1) {
+        throw ShapeError("element_at expects a tensor with exactly one dimension");
+    }
+    // An element type nobody stated answers `f64`, the way the whole-tensor reductions answer it.
+    return Type::create(t.dtype.value_or(TypeCode::Float64));
+}
+
 } // namespace
 
 std::vector<OpDef> layoutOps() {
@@ -688,6 +750,16 @@ std::vector<OpDef> layoutOps() {
         .resultDoc = "float[..]",
         .infer     = takeInfer,
         .kernel    = &takeKernel,
+        .traits    = {}});
+    // The read with a stated length: `t[at[0]]` of a rank-1 tensor whose length `at[1]` states.
+    // Both are the element type's own answer (see `elementAtKernel` and `stdlib/tensor.cml`).
+    defs.push_back(OpDef{
+        .name      = "element_at",
+        .exports   = {"element_at"},
+        .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
+        .resultDoc = "T",
+        .infer     = elementAtInfer,
+        .kernel    = &elementAtKernel,
         .traits    = {}});
     // The subscript forms of design principles 5.4: `t[a:b]` and `t[idx]` on a tensor. Both are
     // the core's own operators (`t[a:b]` is `:op/slice_sub`), so only the index form needs a
