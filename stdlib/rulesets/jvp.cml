@@ -22,7 +22,7 @@
 import { is_float, is_integer, is_same, is_string, Tangent } from types
 import { exp, log_softmax, matmul, mean_axis, relu, reshape, shape, sigmoid, softmax, sum, take, tanh, where, zeros_like } from tensor
 import { log, pow } from math
-import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
+import { add_tangent, div_tangent, mul_tangent, neg_tangent, stop_gradient, sub_tangent } from autodiff
 
 /// A value of type `T` with its tangent: what a forward transform carries for one value.
 /// @example is_same::<Lift<float>, (float, float)>()    // true
@@ -137,6 +137,32 @@ export rule jvp_div::<T>(x: T, w: T) when is_float::<T>() {
 /// `d(-x) = -dx`.
 export rule jvp_neg::<T>(x: T) when is_float::<T>() {
     -x => (dx: T) => neg_tangent(x, dx)
+}
+
+// ---- the forward rule of `stop_gradient` ----
+//
+// `stop_gradient` passes its argument through unchanged and cuts the gradient there (the engine's
+// kernel is the identity slot and its registered rule is `camel::core::noGradient`, whose missing
+// contribution the pullback materializes as the zero of the value's type,
+// `modules/autodiff/pullback.cpp#Backward::checkGradientType`). So the tangent of the result is not
+// "the tangent of the argument dropped somewhere": it is the zero of the result's own type, and that
+// zero **is** this law's answer. It is not a zero standing in for a value -- nothing here reads a
+// value at all.
+//
+// The zero is written as the zero of the rule's type parameter, `T(0.0)`, and not read off `x`: the
+// tangent and cotangent types are the operator's signature's (`stop_gradient::<T>(x: T): T` declares
+// one value and one result of the same type, so a tangent is that same `T`), and a scalar `T` needs
+// no shape to be zeroed. An array `T` would: its zero needs the array's extents, and the two roads to
+// them are `zeros_like(x)` (the operand's value) or `:op/extent_of` from the type, which this tree
+// does not have (`docs/handover/reviews/2026-11-04-does-a-shape-in-the-type-reach-the-law.cn.md`,
+// road 1). Reading the operand for its shape is what the author's ruling forbids here, so an array
+// argument is left unserved by this law rather than answered with the wrong shape -- measured: the
+// walk refuses it by name instead of answering.
+
+/// `d(stop_gradient(x)) = 0`: the value passes through and the gradient stops, so the tangent of the
+/// result is the zero of its own type.
+export rule jvp_stop_gradient::<T>(x: T) when is_float::<T>() {
+    stop_gradient(x) => (dx: T) => T(0.0)
 }
 
 // ---- the forward rule of `matmul` ----
@@ -440,6 +466,38 @@ export func pow_tangent::<T>(x: T, w: T, dx: T, dw: T): T when is_float::<T>() {
 /// @example 3.0 ^ 2.0    // 9.0
 export rule jvp_pow::<T>(x: T, w: T) when is_float::<T>() {
     x ^ w => (dx: T, dw: T) => pow_tangent(x, w, dx, dw)
+}
+
+// ---- the forward rule of `pow` (`math:pow_d`) ----
+//
+// `pow(x, w)` (`stdlib/math.cml#pow`) is the same arithmetic as `^` under another spelling, and it is
+// a different operator: `^` on two floats is `:op/pow_d`, a written token whose key the core derives
+// (`src/core/forward.cpp#kWrittenOperations`), while `pow` reaches the same kernel through a declared
+// function and is `math:pow_d`, whose key is the name `pow_d` at two operands -- so the two families
+// need two rules, and until this one was written a lifted program that called `pow` was refused by
+// name (`skip=rule uri=math:pow_d reason=no forward rule bound at all`).
+//
+// The law is the one above, both branches, and **inline**: the exponent's branch is `x^w * log(x)`,
+// which is `pow` and `log` again, and a helper named here would be a `Call` in the linear half that
+// the backward walk cannot turn around (`skip=call-no-transpose`, the wall `jvp_matmul` documents
+// above). At `x <= 0` the exponent's term is `NaN` for a non-zero `dw` -- `log(x)` has no real value
+// there, and the derivative in the exponent does not either -- and it is written that way rather than
+// as a zero. The base's term is defined wherever `pow` is.
+//
+// The base is `float` and the exponent is `float`: `math:pow_d` is the double kernel, so both
+// parameters are `float` here and the rule is not generic.
+
+/// `pow(x, w)`: what `math:pow_d` means, and the left side this rule is filed under.
+/// @example pow_d(2.0, 3.0)    // 8.0
+func pow_d(x: float, y: float): float {
+    return pow(x, y)
+}
+
+/// `d(pow(x, w)) = w * x^(w-1) * dx + x^w * ln(x) * dw`, both branches. The exponent's branch is
+/// undefined for `x <= 0` and answers `NaN` there, the same reading `pow_tangent` gives the same
+/// operator spelled `^`.
+export rule jvp_pow_d(x: float, y: float) {
+    pow_d(x, y) => (dx: float, dy: float) => y * pow(x, y - 1.0) * dx + pow(x, y) * log(x) * dy
 }
 
 // ---- the forward rules of the conversions ----
