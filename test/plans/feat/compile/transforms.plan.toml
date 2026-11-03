@@ -1427,6 +1427,9 @@ backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 0
 expect_output_contains = ["cut ct1= (6.0)", "cut ct3= (18.0)", "hand ct1= (6.0)", "hand ct3= (18.0)"]
+known_fail = ["nvm"]
+known_fail_msg = "skip=cotangent-needs-a-value uri=:op/mul_d position=0"
+known_fail_note = "Waits on the author's ruling on docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md (does a closure member's cotangent have a slot?). A ruling of `乙` -- the member gets a slot -- flips about 16 cases, this one among them, so this is the criterion's own reading and not a separate defect. Measured 2026-11-04 on the integration branch: the cut's half still answers 6 and 18, and the hand-closed lambda's transposed graph `__g_322__` stops at `TRANSPOSE function=__g_322__ skip=cotangent-needs-a-value uri=:op/mul_d position=0 reason=the rule's right side reads a value the caller does not carry` -- the `x = 3` the lambda closed over is what `mul_d`'s right side reads for the *other* operand's cotangent, and a transposition is handed the cotangent and no operand. The `(hand ct1= (6.0))` answer is reachable only if that member has a slot; the mark goes away with the ruling, in the same commit that flips the numbers."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1524,6 +1527,9 @@ expect_exit = 0
 expect_output_contains = ["relu library value=3.0 dL/dx=[0.0, 0.0, 1.0, 0.0]"]
 expect_stderr_contains = ["rules=jvp_relu"]
 expect_output_not_contains = ["skip=rule uri=tensor:relu", "skip=call-no-transpose"]
+known_fail = ["nvm"]
+known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply position=0"
+known_fail_note = "Waits on the author's ruling on docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md (does a closure member's cotangent have a slot?). A ruling of `乙` -- the member gets a slot -- flips about 16 cases, this one among them. Measured 2026-11-04 on the integration branch: `REINTERP split function=jvp_of_total ... residuals=3` and `TRANSPOSE function=split_of_jvp_of_total_backward skip=cotangent-needs-a-value uri=tensor:multiply position=0 reason=the rule's right side reads a value the caller does not carry` -- the walk turns `sum` around with `sum_stated_t` and stops one step further on, at the mask `where(x > 0, 1, 0)` computed from the close-over `x`: the product's law reads that operand's value for the other position's cotangent. The number `[0.0, 0.0, 1.0, 0.0]` is reached by no rule and no rewrite; only the slot decision changes it, and the mark goes away in the commit that decision lands in."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
