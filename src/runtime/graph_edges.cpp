@@ -247,13 +247,42 @@ class EdgeChecker {
         return type->code() == TypeCode::Ref || type->code() == TypeCode::TypeVar;
     }
 
-    static bool isWaitingCarrier(const GCNode *node) {
-        return (node->flags & kGCNodeFlagSyncStatement) != 0;
+    /// Whether a node may stand at a sync edge's end. Two answers are in the tree and they have to
+    /// agree here, because a graph is handed on to the next pass through this check:
+    ///
+    ///  * the mark (`kGCNodeFlagSyncStatement`), which the builder sets on each node it chains and
+    ///    which the seal has read since the chain was an edge; and
+    ///  * the node itself (`nodeIsChainStatement`): a branch, a loop, a call, or an operator that is
+    ///    observable, which is what the author's ruling of 2026-11-02 wants (`docs/design/
+    ///    effects/edges.cn.md` 1: a pure value is not on the chain) and what the writing side of
+    ///    this tree already asks (`src/runtime/draft.cpp#takeStatementPlace`,
+    ///    `handChainPlaceTo`, `src/runtime/draft_inline.cpp` -- "no mark is written beside the edge,
+    ///    the `kGCNodeFlagSyncStatement` retirement").
+    ///
+    /// The union, not the derived answer alone: a writer that stopped marking is what the retirement
+    /// asks for, and a node the graph derives as a statement is one the chain may hold. Replacing the
+    /// mark outright is the author's decision and it moves 30 readings
+    /// (`docs/handover/questions/2026-11-04-does-the-seal-check-judge-the-marker-or-the-statement.cn.md`,
+    /// 乙); accepting both moves none, because every graph that sealed yesterday holds a mark at both
+    /// ends and every graph the derived question accepts is one a writer of this tree wrote knowing
+    /// it to be a statement. The disagreement shows up as a refusal only when the two branches of it
+    /// meet, which is this merge (`std::opt` hands a branch's place to the arm's statement, that
+    /// statement carries no mark, and the seal refused the graph it built).
+    bool isWaitingCarrier(gc_node_ref_t ref) const {
+        const GCNode *node = graph_.node(ref);
+        if (node == nullptr) {
+            return false;
+        }
+        if ((node->flags & kGCNodeFlagSyncStatement) != 0) {
+            return true;
+        }
+        return camel::runtime::nodeIsChainStatement(graph_, ref);
     }
     /// The same question at a sync edge's end: a `GATE` may stand there instead of a statement,
     /// because a block's value node may be one the block does not own (edges.cn.md 5.3).
-    static bool isWaitingCarrierOrGate(const GCNode *node) {
-        return isWaitingCarrier(node) || node->kind == GCNodeKind::Gate;
+    bool isWaitingCarrierOrGate(gc_node_ref_t ref) const {
+        const GCNode *node = graph_.node(ref);
+        return node != nullptr && (isWaitingCarrier(ref) || node->kind == GCNodeKind::Gate);
     }
 
 
@@ -300,7 +329,7 @@ class EdgeChecker {
                 bad("chains a node to itself");
                 continue;
             }
-            if (!isWaitingCarrierOrGate(user)) {
+            if (!isWaitingCarrierOrGate(edge.user)) {
                 bad(std::format(
                     "ends on a node no `sync` block wrote (kind {}, flags {}, data type '{}')",
                     static_cast<int>(user->kind),
@@ -308,7 +337,7 @@ class EdgeChecker {
                     user->dataType() != nullptr ? user->dataType()->toString() : "-"));
                 continue;
             }
-            if (!isWaitingCarrier(pred)) {
+            if (!isWaitingCarrier(edge.pred)) {
                 bad(std::format(
                     "starts at a node no `sync` block wrote (kind {}, flags {}, data type '{}')",
                     static_cast<int>(pred->kind),
@@ -404,7 +433,7 @@ class EdgeChecker {
             if (user->kind == GCNodeKind::Dead || pred->kind == GCNodeKind::Dead) {
                 continue; // reported by checkSyncEdges
             }
-            if (!isWaitingCarrier(user) || !isWaitingCarrier(pred)) {
+            if (!isWaitingCarrier(edge.user) || !isWaitingCarrier(edge.pred)) {
                 continue; // reported by checkSyncEdges
             }
             if (controlBlockOf(edge.user) != controlBlockOf(edge.pred)) {
