@@ -1,0 +1,12 @@
+// The declared return type states its extent, so a literal of another length is a length: two
+// elements where the return type states three. The report names both sides, as a declaration's
+// does, instead of asking for an `as` conversion of a value that does not fit.
+func bad(): float[3] sync {
+    return [1.5, 2.5]
+}
+
+func main(): int sync {
+    let xs = bad()
+    println(xs)
+    return 0
+}

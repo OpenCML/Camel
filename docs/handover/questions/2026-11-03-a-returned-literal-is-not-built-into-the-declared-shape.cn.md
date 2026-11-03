@@ -1,5 +1,7 @@
 # 返回位置不肯把字面量建成声明说出的形状
 
+> **状态：已修（作者裁"甲：修"，2026-11-03 22:12）。** 根因与四格读数见 §9；下表是修之前的读数，留着作为这个缺陷的第一手记录。
+
 ## 1. 一句话
 
 `func three(): float[3] sync { return [1.5, 2.5, 3.5] }` 被拒，说返回值是 `float[]`、比 `float[3]` 不精确、要写 `as`。**同一份字面量在声明、传参、`as` 三处都过**。而秩二 `return [[1.5, 2.5], [3.5, 4.5]]` 在返回位置**过**——但它靠的是字面量自己成形，不是位置给的。
@@ -53,7 +55,7 @@ less exact than 'float[3]'. ... Where the value is known to fit, write the conve
 - **甲（默认）**：一致。理由是 §4.1：树里的注释已经这么写了；再加 §3 的读数，同一份字面量写在同一份声明下，四个位置不该有四个答案，而秩二"碰巧过"本身就说明返回值是被期待那个形状的。
 - 乙：不改。那要先把 §4.1 那句注释改掉，并解释为什么秩二可以、秩一不行——这与"显式转换"无关，秩二并没有写 `as`。
 
-## 6. 本车道没改
+## 6. 报上时本车道没改（现已按裁定修，见 §7-§9）
 
 补这一道要改返回表达式的构建（要不要给 `ExpectedValueScope` 声明类型），面比 `statesARank` 一句大得多，按"**发现第二份先报不统一**"的规矩**报上，未改**。本车道想加的第三条永久守卫（秩一返回位置的形状）也因此没进计划——它得等这条裁定；现在加进去只会是一条红。
 
@@ -99,3 +101,43 @@ EXITPROBE2 arr=1 raw=3 fits=1 elem=float
 **第①条仍不过说明还缺一层**：逐元素重建已经走到并返回了值，但出口那道 `declaredExit->equals(built->type())` 没成立，所以没装上——下一步要打印 `built->type()` 才能定（是 extent 没进 type，还是 `ArrayDataFactory::build()` 仍按元素给类型）。**不是形状判据挡的，也不是期望类型挡的**（§7 那两组探针仍然成立）。
 
 时间账：20 分钟里约 6.5 分钟是在等主机构建槽（`build 401.0 s` 里绝大部分是排队），只跑了两次 `casts`。回滚后树与 `5a1d52eca` 逐字节相同。
+
+## 9. 已修：卡点是 `lengths` 在秩一位置从来是空的
+
+上一轮"打印 `built->type()`"那一步**没跑**，改用读代码定下来的，因为 `ArrayDataFactory` 只有两句话：
+
+```cpp
+if (impl_->extents.empty()) { type = ArrayTypeFactory().setElemType(...).build(); }   // f32[]
+else { type = ArrayType::create(elemType, impl_->extents); }                          // f32[N]
+```
+
+也就是说 `build()` 有 extent 就给形状、没有就给开放数组。于是问题只剩"`setExtents` 拿到的表是不是空的"。查下去是**空的**：`arrayLiteralFitsShape` 在秩一位置第 421 行
+
+```cpp
+if (extents.size() < 2) {
+    return holdsStatedLength(type, array.get());   // 直接返回，lengths 一次也没写过
+}
+```
+
+只比较长度、**从不填 `lengths`**（填 `lengths` 的只有秩二那条路）。所以上一轮的 `setExtents(lengths)` 等于 `setExtents({})`，`build()` 又回到开放数组。**根因是"判据没报告它判过的那个长度"，不是 `build()` 的问题。**
+
+改法（仍在授权范围内，两处同属一条机制）：`compositeDataInType` 的秩一分支改成从**位置自己声明的** extent 取值——
+
+```cpp
+if (arrayType->extents().size() == 1 && arrayType->extents().front().isConstant()) {
+    const int64_t statedLength[1] = {arrayType->extents().front().constant()};
+    factory.setExtents(statedLength);   // 位置写了长度，值就带着这个长度
+}
+```
+
+位置不写 extents 时照旧（元素决定），`assignableFrom` 一句没动，`less exact than` 一句没动。四格读数（`2026-11-03 22:12`，HEAD 见提交）：
+
+| 格 | 读数 |
+| --- | --- |
+| `feat/compile` | **2197** = 2192 pass / 2 fail / **3 known**（红仍是 `transpose_loop_escape.two_values_of_two_kinds`、`.second_state_of_the_same_loop`）—— 2195 + 两条新用例 |
+| `feat/compile/casts` | 16/16，含 `array_literal_in_return_shape`、`array_literal_in_return_length_mismatch` |
+| `feat/parse` | 115/115 |
+| `feat/compile/transforms` | 80 = 77 / 2 / 1 |
+| `feat/transforms/split` | 19/19 |
+
+`rank_zero_slot_return` 四个变体、秩二 `four()` 都绿，长度不符仍是 `the literal writes 2 element(s) and the type states 3`。**总数为 2197 而不是 2196**：① 和 ③ 是同一个程序（两条读法在同一份源码里），② 是编译错误、必须是自己的程序，所以这一笔加的是**两条**用例。

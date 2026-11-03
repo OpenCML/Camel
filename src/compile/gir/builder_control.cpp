@@ -851,7 +851,33 @@ Builder::compositeDataInType(const data_ptr_t &data, Type *type, const GCT::node
     if (data == nullptr || type == nullptr || asTagged(type) != nullptr) {
         return nullptr;
     }
-    if (type->assignableFrom(data->type())) {
+    // A position that states an extent takes the value it states, and a source that leaves the
+    // same dimension open does not settle it: `f32[3]` from a `f32[]` is assignable (an extent a
+    // source does not state is accepted as any length), and returning the value unchanged left it
+    // the `f32[]` it was written as -- which is why a rank-one `return` refused a literal that
+    // fits while the rank-two spelling, whose nested literal states the shape itself, passed. The
+    // walk below is the one that builds the value element by element from the values that were
+    // written (design principles 5.1), and this is the one combination it is asked for here: a
+    // stated extent against a dimension the source leaves open. Every other pair keeps the answer
+    // it had, which is why `assignableFrom` itself is not touched (a source that states its
+    // extent, or a target that states none, is still taken as it was).
+    const bool positionStatesWhatTheValueLeavesOpen = [&] {
+        const auto *target = tt::as_ptr<ArrayType>(type);
+        const auto *source = data->type()->code() == TypeCode::Array
+                                 ? tt::as_ptr<ArrayType>(data->type())
+                                 : nullptr;
+        if (target == nullptr || source == nullptr ||
+            target->extents().size() != source->extents().size()) {
+            return false;
+        }
+        for (size_t i = 0; i < target->extents().size(); ++i) {
+            if (target->extents()[i].isConstant() && !source->extents()[i].isConstant()) {
+                return true;
+            }
+        }
+        return false;
+    }();
+    if (type->assignableFrom(data->type()) && !positionStatesWhatTheValueLeavesOpen) {
         return data;
     }
     if (type->code() == TypeCode::Array && data->type()->code() == TypeCode::Array) {
@@ -900,6 +926,15 @@ Builder::compositeDataInType(const data_ptr_t &data, Type *type, const GCT::node
         const auto *written =
             origin != nullptr ? GCT::Tree::of(origin)->literalElementsOf(data) : nullptr;
         ArrayDataFactory factory;
+        // A rank-one position that states its extent keeps it in the value it builds. `lengths`
+        // cannot say so here: the fit check above settles a rank-one position with
+        // `holdsStatedLength` and never fills it, which is why the value built from its elements
+        // alone came out the open `f32[]` it was written as. A position that states no extent
+        // still lets the elements decide, so only a constant extent is asked for.
+        if (arrayType->extents().size() == 1 && arrayType->extents().front().isConstant()) {
+            const int64_t statedLength[1] = {arrayType->extents().front().constant()};
+            factory.setExtents(statedLength);
+        }
         size_t index = 0;
         for (const auto &element : array->raw()) {
             data_ptr_t converted =
@@ -4139,6 +4174,37 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     // `return f`: the function value of a function named here. The name itself is not a
     // value, and left in place it reached the end of compilation as a DREF node.
     node_handle_t resNode = functionValueOf(valueNodeOf(visit(gct->at(0))), gct);
+    // The value a `return` hands back takes the declared return type: the return slot is a
+    // position like a declaration, as `test/cases/compile/array_shape/rank_zero_slot_return.cml`
+    // says in its own words, and a rank-zero return does take it. The position's type is already
+    // in scope above (`expectedExitTypeHere`), but a literal whose elements are all written is a
+    // finished constant by the time it is read here, so it is asked for the shape only where the
+    // position states one and the value leaves it open (`compositeDataInType`); a value that
+    // states more than the position does is left as it is, for the check below to speak about.
+    if (const data_ptr_t written = constantOfNode(resNode); written != nullptr) {
+        Type *declaredExit = expectedExitTypeHere();
+        if (declaredExit != nullptr && declaredExit->code() == TypeCode::Array &&
+            written->type()->code() == TypeCode::Array &&
+            !declaredExit->equals(written->type())) {
+            if (const data_ptr_t built = compositeDataInType(written, declaredExit, gct->at(0));
+                built != nullptr && declaredExit->equals(built->type())) {
+                resNode = currGraph_->addStaticDataNode(built);
+                rememberConstant(resNode, built);
+                registerNodeOrigin(context_, resNode, gct, "gir.data");
+            } else if (const auto *stated = tt::as_ptr<ArrayType>(declaredExit);
+                       stated != nullptr && stated->extents().size() == 1 &&
+                       stated->extents().front().isConstant()) {
+                // A literal of another length is a length, reported with the extent it wrote and
+                // the one the position states, rather than as a value that is merely less exact
+                // than the return type.
+                if (const auto array = std::dynamic_pointer_cast<ArrayData>(written);
+                    array != nullptr && static_cast<int64_t>(array->raw().size()) !=
+                                            stated->extents().front().constant()) {
+                    rejectLiteralData(written, declaredExit, gct->origin(), gct->at(0));
+                }
+            }
+        }
+    }
     if (genericDrefs_.contains(resNode)) {
         // `return id` under a declared function type: that type is the function wanted.
         resNode = genericValueFor(resNode, expectedExitTypeHere(), gct->at(0));

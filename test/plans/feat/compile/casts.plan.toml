@@ -255,3 +255,27 @@ expect_stdout_contains = ["2.5"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
+
+# The `return` slot, a position like a declaration (design principles 5.4): a literal written in
+# it takes the shape the return type states, and one of another length is reported as a length.
+[[tests]]
+name = "array_literal_in_return_shape.nvm"
+desc = "`func three(): float[3] { return [1.5, 2.5, 3.5] }` gives a `f32[3]`, and `take3(x: f32[3])` takes it, so this compiling is the reading; the rank-two return in the same program keeps its own shape. Before, the rank-one return refused a literal that fits with ReturnNeedsConversion ('the value has type float[] ... write the conversion') while the rank-two one passed by its own shape (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/casts/array_literal_in_return_shape.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["2.5", "4.5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_literal_in_return_length_mismatch.nvm"
+desc = "Two elements in a `float[3]` return position is a length, reported with both sides -- 'the literal writes 2 element(s) and the type states 3' -- and not as a value that is merely 'less exact than' the return type (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/casts/array_literal_in_return_length_mismatch.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_stdout_contains = ["the literal writes 2 element(s) and the type states 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
