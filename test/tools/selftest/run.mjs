@@ -922,6 +922,18 @@ if (!/holds no \*\.plan\.toml/.test(barren.output) || !/docs_links\.plan\.toml/.
     problems.push(`target that names no plan: the refusal did not name the plan file beside it: ${barren.output.trim()}`)
 }
 if (/\[SUMMARY\]/.test(barren.output)) problems.push('target that names no plan: a [SUMMARY] was printed for a run that started nothing')
+// `--list` is the other entry point onto the same target and used to answer it differently: it
+// printed the directory and exited 0, so "what would this run?" was answered with a path no plan
+// is behind. Same exit code, same sentence -- the sentence is asserted equal, so a rewording in
+// one of the two places cannot leave them describing the same mistake in two ways.
+const barrenList = runTestCli(['test/plans/feat/docs_links', '--list'])
+if (barrenList.status !== 2) problems.push(`--list on a target that names no plan: exit ${barrenList.status}, expected 2`)
+const sentenceOf = (output) => (output.match(/^\[PLAN ERROR\].*$/m) || [''])[0].trim()
+if (!sentenceOf(barrenList.output)) {
+    problems.push(`--list on a target that names no plan: no [PLAN ERROR] line: ${barrenList.output.trim()}`)
+} else if (sentenceOf(barrenList.output) !== sentenceOf(barren.output)) {
+    problems.push(`--list and the run disagree about the same target: ${sentenceOf(barrenList.output)} vs ${sentenceOf(barren.output)}`)
+}
 
 // The base branch: origin/develop by default, overridden by CAMEL_TEST_BASE.
 const savedBase = process.env.CAMEL_TEST_BASE
