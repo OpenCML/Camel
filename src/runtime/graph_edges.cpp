@@ -148,14 +148,46 @@ class EdgeChecker {
             "path (see typeIdOf in src/runtime/graph.cpp).");
     }
 
-    /// The value a graph whose exit is a `T?` or a `T!` hands on is that tagged value. It is the
-    /// shape the value is boxed into, and it is what a second writing of the exit leaves out: the
-    /// second `return` writes its own value where the first wrote the boxed one, so the graph's
-    /// signature and its exit no longer agree, and a back end that reads the exit as the declared
-    /// type writes a slot of another shape -- the node VM crashed on exactly that. Refused here,
-    /// where the graph is frozen, so no back end is ever handed one. Any other exit type is left
-    /// to the builder: a function declared `void` hands on the value it computes, and the purity of
-    /// a function type is not a difference the value's shape shows.
+    /// The value a graph hands on is a value of the type the graph declares: that is the promise a
+    /// caller reads off the signature, and the shape a back end trusts when it writes the result
+    /// into the declared slot. "Of the type" is the relation a position holds a value to everywhere
+    /// else -- `Type::assignableFrom`, the same judgement the builder makes at a `return` and at
+    /// every argument (design principles 5.1): equality for the numbers and the texts (nothing is
+    /// converted, so an `int` value under a `float` declaration is a mismatch and not a widening),
+    /// `float[3]` where `float[]` is declared, `float[]` where `float[..]` is, and `T?` / `T!` only
+    /// from themselves -- the boxed form, which is the shape a second writing of the exit leaves
+    /// out: that is how the node VM came to write a slot of another shape.
+    ///
+    /// Three declared types are not judged, and each says why:
+    ///
+    ///   * `void`: a function that declares `void` hands on the value it computes and the caller
+    ///     reads nothing back, so the value is kept in the graph and no return is recorded
+    ///     (`setGraphReturnFromResult`). `func f(): void { 42 }` is a legal program whose exit
+    ///     names an `int` under a `void` signature -- the purity of a function type is likewise no
+    ///     difference the value's type shows -- and judging the pair would refuse it
+    ///     (`test/cases/runtime/exit_type/legal_exits.cml`, `void_hands_on_its_value`).
+    ///   * an undecided type (`Ref`, a type variable): an undecided type is not another type, and
+    ///     a committed graph holds none (design principles 5.1). `validateRuntimeGraphTypes` owns
+    ///     that question; asking it a second time here would give it two answers.
+    ///   * no declared exit type: the builder takes the exit type from the value the graph returns,
+    ///     so there is no promise to break. Camel has no `any` to stand in for one (5.10) -- an
+    ///     empty declaration is not "no type", it is "whatever the body returns".
+    ///
+    /// Everything else is judged, tagged or not. Measured 2026-11-04 on the half this check used to
+    /// leave alone, with a rule library that replaces the node a function returns by a value of
+    /// another type (`import { rewrite } from rewrite`): `func target(n: float): float` handed on a
+    /// `float[]` and the run printed `6.3956244425295e-310` -- the array's address read as a float
+    /// -- and `func target(n: int): int` handed on a `float` and printed `4612811918334230528`,
+    /// both with exit code 0 and nothing refused anywhere. Neither graph is a defect of the
+    /// compiler: the rewrite's right side is not of the type of its left side
+    /// (`test/cases/runtime/exit_type/float_declared_array_returned.cml` and
+    /// `test/cases/runtime/exit_type/int_declared_float_returned.cml`).
+    ///
+    /// The graph's name is the function the writer declared: a frozen node carries no origin
+    /// column the seal could turn into a file and a line (`GCGraph::nodeOrigin` answers an id, and
+    /// there is no source context here to resolve it), so the value it hands on is named by the
+    /// node's ref and by the source name of its value when it has one -- enough to find it under
+    /// `std::gir`.
     void checkReturnValueType() {
         const gc_node_ref_t returned = graph_.returnNodeRef();
         if (returned == kInvalidNodeRef || graph_.returnKind() == GCReturnKind::None) {
@@ -171,15 +203,34 @@ class EdgeChecker {
         if (declared == nullptr || actual == nullptr || declared->equals(actual)) {
             return;
         }
-        if (camel::core::type::asTagged(declared) == nullptr) {
+        // A `void` declaration promises nothing about the value, and an undecided type is not a
+        // different type (see the comment above).
+        if (declared->code() == TypeCode::Void || isUndecidedType(declared) ||
+            isUndecidedType(actual)) {
             return;
         }
+        if (declared->assignableFrom(actual)) {
+            return;
+        }
+        const std::string_view name = graph_.nodeName(returned);
         violations_.push_back(
             std::format(
-                "graph '{}': the value it hands on has type '{}', and the graph declares '{}'",
+                "graph '{}': it hands on node {}{}, whose value has type '{}', and the graph "
+                "declares '{}'; a return is a value of the declared type, and nothing is converted "
+                "on the way (design principles 5.1)",
                 graph_.name(),
+                returned,
+                name.empty() ? std::string() : std::format(" ('{}')", name),
                 actual->toString(),
                 declared->toString()));
+    }
+
+    /// A type that is still being decided: a name whose target is not filled in, or a type
+    /// variable. Neither is a type a value of another type could fail to be (design principles
+    /// 5.1: every type on a committed graph is determined), so a judge of assignability leaves
+    /// them alone rather than reading "not assignable" out of "not known yet".
+    static bool isUndecidedType(const Type *type) {
+        return type->code() == TypeCode::Ref || type->code() == TypeCode::TypeVar;
     }
 
     static bool isWaitingCarrier(const GCNode *node) {

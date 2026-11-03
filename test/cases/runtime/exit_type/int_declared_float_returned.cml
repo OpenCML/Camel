@@ -1,0 +1,28 @@
+/**
+ * The same refusal the other way round, and with two numbers of the same width: an `int` graph
+ * hands on a `float`, which is assignable to it by nothing at all (design principles 5.1: the
+ * numbers are not converted, so this is never a widening).
+ *
+ * A rule library replaces the returned operator, which is an `int`, with the float literal `2.5`.
+ * The graph that reaches the seal declares `int` and hands on a `float`: two 64-bit values, so no
+ * reading of "the same width" could call them the same type. This is the shape the check must not
+ * be relaxed into accepting.
+ *
+ * Measured 2026-11-04, before the seal judged every declared exit type: `4612811918334230528` and
+ * exit 0 -- the double's bits read as an integer. After: refused, exit 1.
+ *
+ * Run as `camel int_declared_float_returned.cml std::nvm`.
+ */
+
+import { rewrite } from rewrite
+
+rule retype(x: int) { x * 1 => 2.5 }
+
+func target(n: int): int { n * 1 }
+
+func main(): int sync {
+    let rules = [retype]
+    let g     = target->rewrite<rules> !! target
+    print(g(7))
+    return 0
+}

@@ -5,8 +5,9 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：1 页
+## 现在在等作者：2 页
 
 | 页 | 问什么 |
 | --- | --- |
+| [`2026-11-04-where-the-seal-says-the-exit-type-is-wrong`](2026-11-04-where-the-seal-says-the-exit-type-is-wrong.cn.md) | 出口类型对不上，判决该在封存层说，还是该退回一个能报行号、面向程序的诊断码？ |
 | [`2026-11-04-who-carries-the-cxx-runtime-into-the-install`](2026-11-04-who-carries-the-cxx-runtime-into-the-install.cn.md) | 安装自己带 C++ 运行时，还是继续要调用方补一条导出？ |
