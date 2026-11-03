@@ -4,7 +4,12 @@
 // its shape with one slot filled. `transpose` answers one cotangent per parameter and passes nothing
 // else -- every parameter is a linear input (design principles 9.9) -- so the graph the build makes
 // takes the array's own *value* as a parameter, and the type the call site fills has no place for
-// it. What the body needs is the value; the shape it already states in its type.
+// it. What the walk asks for is the value, and what the backward law actually does with it is read
+// its *shape* (`rulesets/transpose.cml#idx_arr_t` builds `zeros_like(xs)` and writes the cotangent
+// into slot `i`) -- a shape this type already states. So this program has one right answer, and the
+// refusal below is a conservative stop rather than a saved wrong number; the page
+// `docs/handover/questions/2026-11-04-what-may-a-zero-carrier-stand-in-for.cn.md` records that
+// distinction.
 //
 // Before this case's change the difference reached the run as a count, and a count is not a report:
 //
@@ -26,6 +31,16 @@
 // answers 2.0 and ([0.0, 1.0, 0.0]), because a cut's backward half carries the array in its closure.
 // That is the repair the sentence names, and it is why this program's answer is a sentence and not a
 // number.
+//
+// **When the zero carrier lands, this assertion flips to a number.** Measured on the sibling branch
+// that builds the cotangent from the parameter's stated shape (`lane-trefuse`, `fbf31b3ed`):
+// `transpose(pick)` there answers `([0.0, 1.0, 0.0])` with `exit 0` and `same=yes`, which is the
+// right answer -- the adjoint of `x[1]` at ct = 1 fills slot 1 and every other slot is zero. So the
+// entry in `test/plans/feat/compile/transforms.plan.toml` is expected to lose `expect_exit = 1` and
+// its not-contains needles, and to gain `expect_stdout_contains = ["([0.0, 1.0, 0.0])"]`. The
+// refusal sentence stays for the positions whose law reads *elements* instead of shapes
+// (`#mul_tensor_t`'s `ct * w`, `#relu_t`'s `where(x > 0.0, ct, 0.0)`), which no shape can stand in
+// for.
 import { transpose } from transforms
 import rulesets.transpose
 
