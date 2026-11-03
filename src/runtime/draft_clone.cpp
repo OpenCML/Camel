@@ -452,6 +452,19 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(
     remapGraphRefs(sourceGraph->normPorts(), result.normPorts);
     remapGraphRefs(sourceGraph->withPorts(), result.withPorts);
     remapGraphRefs(sourceGraph->closureNodes(), result.closureNodes);
+    // The closure members' identity travels with them (see cloneDraftGraphIntoDraft below): a graph
+    // whose closure a cut wrote keeps the parameters behind its members.
+    {
+        const std::span<const int32_t> identity = sourceGraph->closureParameterOf();
+        for (size_t i = 0; i < result.closureNodes.size() && i < identity.size(); ++i) {
+            const gc_node_ref_t clonedMember = result.closureNodes[i];
+            if (identity[i] < 0 || clonedMember == kInvalidNodeRef) {
+                continue;
+            }
+            owner.setClosureParameterOf(clonedMember, static_cast<size_t>(identity[i]));
+            result.closureParameterOf[clonedMember] = static_cast<size_t>(identity[i]);
+        }
+    }
     result.entryNode  = remapNodeRef(sourceGraph->entryNodeRef(), result.sourceToCloned);
     result.exitNode   = remapNodeRef(sourceGraph->exitNodeRef(), result.sourceToCloned);
     result.outputNode = remapNodeRef(sourceGraph->outputNodeRef(), result.sourceToCloned);
@@ -601,6 +614,20 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(
     remapDraftRefs(sourceDraft.normPorts(), result.normPorts);
     remapDraftRefs(sourceDraft.withPorts(), result.withPorts);
     remapDraftRefs(sourceDraft.closureNodes(), result.closureNodes);
+    // The closure members' identity is part of what a member is, so it is cloned with them: a graph
+    // whose closure a cut wrote keeps the parameters behind its members, and `transpose` reads
+    // nothing else (GCGraph::closureParameterOf). Recorded on the owner draft keyed by the cloned
+    // member, so a clone that keeps the closure keeps the numbering by construction.
+    for (gc_node_ref_t sourceMember : sourceDraft.closureNodes()) {
+        const int32_t parameter = sourceDraft.closureParameterOf(sourceMember);
+        const gc_node_ref_t clonedMember =
+            remapNodeRef(sourceMember, result.sourceToCloned);
+        if (parameter == kNoClosureParameter || clonedMember == kInvalidNodeRef) {
+            continue;
+        }
+        owner.setClosureParameterOf(clonedMember, static_cast<size_t>(parameter));
+        result.closureParameterOf[clonedMember] = static_cast<size_t>(parameter);
+    }
     result.entryNode  = remapNodeRef(sourceDraft.entryNode(), result.sourceToCloned);
     result.exitNode   = remapNodeRef(sourceDraft.exitNode(), result.sourceToCloned);
     result.outputNode = remapNodeRef(sourceDraft.outputNode(), result.sourceToCloned);
