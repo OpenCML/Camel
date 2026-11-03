@@ -452,6 +452,59 @@ expect_output_contains = ["k value= 6.0", "k pullback(1.0)= (0.0)", "k pullback(
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
+# The same zero through `vjp`, where the half that is transposed carries a closure (the loop's tape).
+# That half used to refuse the shape by name (`skip=state-unread`); it answers now, and the answer is
+# the zero the walk below builds rather than a constant written at the refusal site: the closure is
+# filled whatever the answer reads, and the value handed back has the answer's own type -- `(0.0)`.
+# `h(x) = loop s = 0.0 for i in [1, 2, 3, 4] do s + 2.0` is `8.0` for every `x`, so `h' = 0`; the
+# pullback of `2.0` answering `(0.0)` as well is what makes the zero *linear* and not a constant `1.0`
+# read as `(2.0)`. Neighbouring `transpose_unread_state_answers_zero` is the same reading without the
+# closure, and `m(x) = loop s = x ...` there is the control that the zero only lands where nothing
+# reaches the parameter.
+[[tests]]
+name = "vjp_loop_state_unread_answers_zero.nvm"
+desc = "A loop that is the whole answer, transposed through `vjp`: `h(x) = loop s = 0.0 for i in [1, 2, 3, 4] do s + 2.0` is 8.0 for every `x`, so its pullback answers `(0.0)` -- for a cotangent of 1 and of 2 alike, which a constant 1.0 would read as `(2.0)`. The half `split` hands out carries the loop's tape, so this is the shape where an answer that is a constant meets a member that carries a value; it used to be refused with `skip=state-unread`, and it answers the zero in the answer's own type now."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_loop_state_unread_answers_zero.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_output_contains = ["h value= 8.0", "h vjp value= 8.0", "h pullback(1.0)= (0.0)", "h pullback(2.0)= (0.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vjp_loop_state_unread_answers_zero.fvm"
+desc = "The same case on the bytecode VM: the zero is a value the transposed graph carries, so the schedule that runs it answers the same three numbers."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_loop_state_unread_answers_zero.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_output_contains = ["h value= 8.0", "h vjp value= 8.0", "h pullback(1.0)= (0.0)", "h pullback(2.0)= (0.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vjp_loop_state_unread_answers_zero.jit"
+desc = "The same case with the JIT: the graph is built once and called twice, and the second call still answers the zero rather than the first call's cotangent."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_loop_state_unread_answers_zero.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+expect_output_contains = ["h value= 8.0", "h vjp value= 8.0", "h pullback(1.0)= (0.0)", "h pullback(2.0)= (0.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vjp_loop_state_unread_answers_zero.prl"
+desc = "The same case on the parallel scheduler: the region of the loop the answer is the whole of is seeded because its owner is in the execution, and the member the walk builds answers the zero its slot holds."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_loop_state_unread_answers_zero.cml"
+args = ["${case}", "std::prl"]
+expect_exit = 0
+expect_output_contains = ["h value= 8.0", "h vjp value= 8.0", "h pullback(1.0)= (0.0)", "h pullback(2.0)= (0.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
 # A refusal is one cause, and the cause is a value: the header declares it
 # (`enum class TransposeRefusalCause`), `transposeRefusalWord` spells it into the reading log,
 # `refusalSentence` renders the sentence a reader is handed from it, and a refusal site records it
