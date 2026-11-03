@@ -122,6 +122,19 @@ set_target_properties(libcamel PROPERTIES
     LINKER_LANGUAGE CXX
     PREFIX "")
 
+# The library carries the same two entries the tools carry (tools/libcamel_tool.cmake): the
+# directory it sits in, and `libs/` below it. A tool finds the collected install through its own
+# rpath, but a consumer that is not one of our tools -- the Python binding, anything that loads the
+# library directly -- has no entry to inherit and would then resolve libcamel's own dependencies,
+# the C++ runtime among them, against the host's libraries. With `$ORIGIN` written here, everything
+# the install puts beside libcamel (scripts/collect-out.js places the toolchain's libstdc++ there)
+# resolves from inside the install for any loader.
+if(UNIX)
+    set_target_properties(libcamel PROPERTIES
+        BUILD_RPATH "$ORIGIN;$ORIGIN/../libs"
+        INSTALL_RPATH "$ORIGIN;$ORIGIN/../libs")
+endif()
+
 # Windows: explicit exports for camel-cli, the tools and the .cmo modules.
 #
 # WINDOWS_EXPORT_ALL_SYMBOLS is off: a Debug build emits every inline and template function as a
