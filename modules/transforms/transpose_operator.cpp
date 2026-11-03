@@ -216,8 +216,16 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
                 found = "the family is built, and its index holds no rule under that operator's "
                         "name at the operand count it has";
             } else if (refusal.lookup == "unbound") {
-                found = "that operator's name is not one the family's index can spell as a rule "
-                        "head, so there is no rule to look up for it";
+                // The key itself was missing, and the site's word does not say which way: a family
+                // that was never built spells no head at all, and an operator whose name the index
+                // does not spell has none either. So the sentence names the key's origin and both
+                // ways it can be absent, instead of claiming the family is here (measured: the
+                // missing-module shape reaches this branch when the step is a module operator,
+                // whose key comes from the family's index -- the shape `no-such-family` covers only
+                // an operator the family could spell without the module, like `:op/mul_d`).
+                found = "the walk found no rule key for that operator, so there was no rule to look "
+                        "up: the key is the operator's name at its operand count, the family's "
+                        "index spells no such name, and an unbuilt family spells none at all";
             } else {
                 found = "the walk recorded no reason for the lookup";
             }
