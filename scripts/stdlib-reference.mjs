@@ -2982,7 +2982,16 @@ if (mode === '--write' || mode === '--verify-doc') {
         process.exit(1)
     }
     if (mismatched.length > 0) {
-        console.log(`${mismatched.length} example class(es) the run found and the script does not record`)
+        // `mismatched` is one line per problem, and a problem is not always a class: `exampleProblems`
+        // adds one for a class EXAMPLE_STOPS does not have, one for a class whose recorded number
+        // moved, one for a class the run no longer finds, one per example that stops with no class at
+        // all, and one for the totals against STALE_FRAGMENTS. The number here is how many of those
+        // lines stand above it, so it says "problem(s)": "example class(es)" would name a count this
+        // is not, and "does not record" would be false for a class whose number merely moved.
+        console.log(
+            `${mismatched.length} example problem(s) between the run and the script's records: a class ` +
+                'it does not record, a number that moved, or a marker that is stale',
+        )
         process.exit(1)
     }
     console.log(

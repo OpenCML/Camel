@@ -19,8 +19,8 @@
  *
  */
 
-import { is_float, is_same, Tangent } from types
-import { matmul, mean_axis, reshape, softmax, sum, zeros_like } from tensor
+import { is_float, is_integer, is_same, is_string, Tangent } from types
+import { matmul, mean_axis, reshape, softmax, sum, take, zeros_like } from tensor
 import { log, pow } from math
 import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
 
@@ -139,50 +139,6 @@ export rule jvp_neg::<T>(x: T) when is_float::<T>() {
     -x => (dx: T) => neg_tangent(x, dx)
 }
 
-// ---- the forward rule of `tensor:multiply` ----
-//
-// The array product is the one binary arithmetic operator whose key is not a token: `*/2` is already
-// `:op/mul_d`'s key, and one key holds one rule, so `ruleKeyOf` files `tensor:multiply` under the
-// call `mul_tensor(x, w)` (`src/core/forward.cpp`, the same exception that makes `:op/idx_arr`'s rule
-// `index_into(x, i)`). `stdlib/rulesets/vmap.cml` has that function, that rule, for the batching
-// transform; this family had neither, so a `jvp` over two arrays reached no law at all and said so by
-// name at the operator (`the ruleset holds no rule for this operator and operand count`). The
-// asymmetry was the batching family's alone, and it is closed here rather than in a second table: one
-// key, one rule per family, and each family's rule written where that family's laws live.
-//
-// The law is the scalar product's, element by element -- the two factors each contribute the other
-// factor -- because `tensor:multiply` multiplies corresponding elements and nothing else moves. The
-// right side names `mul_tensor` for both products and `+`, which is `tensor:add` on two arrays: no
-// new tangent function is invented, since an elementwise product needs no arithmetic the library
-// does not already write.
-//
-// It is instantiated at the operator's *element* type like every other rule here (`rule_types.h`),
-// and the operator walks whatever rank it is given, so the parameters are the open rank `T[..]`.
-
-/// The product of two arrays at any rank: what `tensor:multiply` means, and the left side this rule is
-/// filed under. The array product has no infix spelling a rule's left side could be written with.
-/// @example mul_tensor(2.0, 3.0)    // 6.0
-/// @example mul_tensor([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[1.0, 10.0], [100.0, 1000.0]] as float[2, 2])    // [[1.0, 20.0], [300.0, 4000.0]]
-func mul_tensor::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
-    return x * w
-}
-
-/// `d(x * w) = dx * w + x * dw`, element by element.
-///
-/// One rule answers both of the operator's shapes. Its parameters are `(T[..], T[..])`, and a scalar
-/// operand is taken by that second port the way a call takes it -- a rank-zero array is the element it
-/// is made of (`docs/design/arrays-memory` section 5.4), which is why `T` fits `T[..]` and not the
-/// other way round. The law does not need a second writing for `mul_tensor(x, w)` with one number as
-/// `w`: a tangent is a value of the value's own space, so the node's tangent is `dx * w + x * dw`, an
-/// array either way, and the scalar operand's tangent stays the caller's seed. A second rule under this
-/// key -- the shape `(T[..], T)` -- is the way the author ruled on 2026-11-03 (`a9061b77a`: a key holds
-/// several rules and the engine picks by the operand types), and it is not available here: this tree's
-/// index still refuses two rules on one key, `The rule 'jvp_mul_tensor' and the rule
-/// 'jvp_mul_tensor_scalar' both have 'mul_tensor' with 2 operand(s) as the head of their left side`.
-export rule jvp_mul_tensor::<T>(x: T[..], w: T[..]) when is_float::<T>() {
-    mul_tensor(x, w) => (dx: T[..], dw: T[..]) => mul_tensor(x, dw) + mul_tensor(dx, w)
-}
-
 // ---- the forward rule of `matmul` ----
 //
 // The matrix product is the one operator a model meets at every step, and its key needs no
@@ -261,6 +217,68 @@ export rule jvp_reshape::<T>(x: T[..]) when is_float::<T>() {
     reshape<[2, 2]>(x) => (dx: T[..]) => reshape<[2, 2]>(dx)
 }
 
+/// `d(take(t, indices)) = take(dt, indices)`: which rows a take reads is the call's, not the value's,
+/// so a take is linear and the tangent of the selection is the same selection of the tangents. The
+/// indices are an `int[]` and carry no tangent (`Tangent<int[]>` is `()`), which is why the rule
+/// takes one cotangent and not two -- a row read twice contributes its tangent twice, which is the
+/// same thing the operator does to the value.
+export rule jvp_take::<T>(t: T[..], indices: int[]) {
+    take(t, indices) => (dt: T[..]) => take(dt, indices)
+}
+
+// ---- the forward rule of the array subtraction ----
+//
+// `x - w` on two arrays is `tensor:subtract`, not `:op/sub`: the scalar operator's rule (`jvp_sub`)
+// is filed under the infix spelling at `T`, and an array is the same subtraction done by the tensor
+// kernel. The two are different operators, so the family needs the array one filed here.
+//
+// The key is the operator's own name, `subtract`, derived from `tensor:subtract` by `ruleKeyOf` --
+// and the name a rule's left side is written with does not have to be an operator's public spelling:
+// a *function* declared in this module whose body is the operator is a key like any other, which is
+// how `index_into` below stands for `:op/idx_arr` and how `rulesets.vmap` stands for
+// `tensor:multiply` with `mul_tensor`. This one needs no exception in the core's table, because
+// `tensor:subtract`'s name is already a word a left side can be written with.
+//
+// The right side must not name `subtract` again -- a name the left side binds is a pattern variable
+// to the right side -- so it writes the operator itself.
+
+/// `x - w` on two arrays: what `tensor:subtract` means, and the left side this rule is filed under.
+func subtract::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
+    return x - w
+}
+
+/// `d(x - w) = dx - dw`: a difference is linear in both of its operands, so the tangent of the
+/// difference is the difference of the tangents -- and the two shapes may differ, which is the same
+/// broadcast the operator itself does to the value.
+///
+/// The operands are both `T[..]`. The other shape `tensor:subtract` is called with -- an array minus
+/// a number, `(T[..], T)` -- cannot be spelled here: a union in a parameter list is a syntax error
+/// (`Expected ',' or ')' before '|'`), so one key cannot hold both shapes with one rule, and this
+/// rule is the array-to-array one, which is the shape a layer norm writes. The gap and its
+/// measurements are `docs/handover/questions/2026-11-03-one-rule-key-cannot-hold-an-array-and-a-number.cn.md`.
+export rule jvp_subtract::<T>(x: T[..], w: T[..]) when is_float::<T>() {
+    subtract(x, w) => (dx: T[..], dw: T[..]) => dx - dw
+}
+
+// ---- the forward rule of the array product ----
+//
+// `x * w` on two arrays is `tensor:multiply`, whose key is `mul_tensor` -- this is the one key the
+// core states as an exception (`ruleKeyExceptions`), because `*/2` is already `:op/mul_d`'s spelling
+// and one key holds one rule. `rulesets.vmap` declares its own `mul_tensor` for its own family; a
+// module cannot read another's private function, so the name is declared here too, with the same
+// body -- the product the operator means.
+
+/// `x * w` on two arrays: what `tensor:multiply` means, and the left side this rule is filed under.
+func mul_tensor::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
+    return x * w
+}
+
+/// `d(x * w) = dx * w + x * dw`: the product rule, written with the operator on the tangents and on
+/// the values, so the element-by-element multiplication and its order are the kernel's own.
+export rule jvp_mul_tensor::<T>(x: T[..], w: T[..]) when is_float::<T>() {
+    mul_tensor(x, w) => (dx: T[..], dw: T[..]) => dx * w + x * dw
+}
+
 /// `d(softmax(x)) = y * (dx - sum(y * dx))` with `y = softmax(x)` over the same axis.
 export rule jvp_softmax::<T>(x: T[..]) when is_float::<T>() {
     softmax<1>(x) => (dx: T[..]) => softmax<1>(x) * (dx - sum<1, true>(softmax<1>(x) * dx))
@@ -290,41 +308,6 @@ func index_into::<T>(x: T[], i: int): T {
 /// @example index_into([0.5, 0.25], 1)    // the tangent of `xs[1]` when `dxs` is `[0.5, 0.25]`
 export rule jvp_idx_arr::<T>(xs: T[], i: int) {
     index_into(xs, i) => (dxs: T[]) => index_into(dxs, i)
-}
-
-// ---- the forward rule of `:op/ltod` ----
-//
-// `float(n)` where `n` is an `int`. An integer is a **zero tangent space**
-// (`camel/core/tangent_space.h`: `float` and the float arrays are their own space, an integer and a
-// string have none), so there is no tangent for the conversion to carry and its derivative is zero.
-// The rule is written the way `jvp_idx_arr` above treats an `int` operand -- it *does not enter the
-// right side*, because `Tangent<int>` is `()` -- and the answer here is the zero of the **result's**
-// space, which is a `float`: `float(n)` reads an integer and contributes nothing of its own.
-//
-// The key is the operator's own spelling: `ltod` is `float(x: int)`, `ruleKeyOf` reads the
-// destination's letter (`d` -> `float`) and the arity (one), and the family files this rule under
-// `float` at one operand. The *source* is not in the key, and does not have to be: several
-// conversions share that spelling (`float(x: i32)`, `float(x: float)`, ...), so a key holds several
-// rules and the engine decides -- it instantiates a rule at the operand's own type, and a law whose
-// condition (`is_same::<T, int>()`) does not hold there is refused by name instead of applied.
-// `ltod` used to be an exception for the opposite reason (one key held one rule); it is not one now.
-
-/// `float(n)` where `n` is an `int`. Not `export`ed: nothing calls it -- the rule below answers
-/// with the zero of the result's space directly -- but it is the body `:op/ltod` is, written down
-/// once where the conversion's own documentation can point at it.
-/// `is_same` is how a rule here names one type (`sum_kernel` in `array.cml` does the same), and it
-/// is also what lets the body convert: `float` is a different operator for `i32` than for `int`.
-/// @example float_of_int(3)    // 3.0
-func float_of_int::<T>(n: T): float when is_same::<T, int>() {
-    return float(n)
-}
-
-/// `d(float(n)) = 0`: an integer is a step, not a slope. `int(3x)` is constant between its jumps, so
-/// its derivative is zero wherever it exists, and `float(n)` reads that integer without adding
-/// anything -- the value is real (`int_escape(1.0)` is 10.0) and its derivative is 0.
-/// @example float_of_int(3)    // 3.0; lifted, its tangent is 0.0
-export rule jvp_ltod::<T>(n: T) when is_same::<T, int>() {
-    float(n) => () => 0.0
 }
 
 // ---- the forward rule of `^` (a power) ----
@@ -367,183 +350,71 @@ export rule jvp_pow::<T>(x: T, w: T) when is_float::<T>() {
     x ^ w => (dx: T, dw: T) => pow_tangent(x, w, dx, dw)
 }
 
-//
-
 // ---- the forward rules of the conversions ----
 //
-// A conversion is linear in its value, so its derivative is the same conversion applied to the
-// tangent: `d(float(x)) = float(dx)`, and `d(float(n)) = 0` when the source has no tangent space
-// (an integer is a step, a string is not a number). One rule per `<source>to<destination>` name,
-// because the key of each is the destination's spelling at one operand and `float@1` therefore
-// holds eight rules -- one per source type -- which is what `lookupRules` answers and the engine
-// dispatches between by the operand's own type.
+// A conversion is one of two laws, and which one it is follows from the **tangent space of the
+// source**, not from the operator's name:
 //
-// The spellings are `float`, `f32`, `f16` and `bf16` (the ones the prelude declares). `f64` names
-// the same `:op/*tod` uris as `float` does, and one uri has one key, so the laws are written with
-// `float`; a rule written with `f64` would be filed under `f64@1`, which no uri asks for.
+//   * a source with a tangent space (the four float types) -- the conversion is linear, so its
+//     derivative is the same conversion applied to the tangent: `d(float(x)) = float(dx)`;
+//   * a source with none (an integer is a step, a string is not a number) -- `Tangent<int>` and
+//     `Tangent<string>` are `()`, so there is no cotangent to carry and the answer is the zero of the
+//     **result's** space: `d(float(n)) = 0.0`.
+//
+// That is two rules per destination and no more: the `<source>to<destination>` names used to be
+// spelled out one by one, each differing only in the `is_same::<T, ...>()` its guard named, and they
+// said the same two things twenty-eight times.
+//
+// The key is the destination's spelling at one operand -- `float`, `f32`, `f16`, `bf16` -- and one
+// key holds several rules, which is what this family leans on here: `float@1` holds the two below,
+// and the engine dispatches between them by instantiating each at the operand's own type and
+// refusing the one whose guard does not hold. The source therefore never appears in a key.
+//
+// `f64` names the same `:op/*tod` uris that `float` does, and one uri has one key, so the
+// destination is written `float` here; a rule filed under `f64@1` would be a key no uri asks for.
+//
+// The rules are written with `float`/`f32`/`f16`/`bf16` applied to the tangent rather than to a
+// helper, because the conversion *is* the law: there is nothing between the source and the result
+// for a helper to name.
 
-/// `d(float(x)) = float(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
-/// @example dtod
-export rule jvp_dtod::<T>(x: T) when is_same::<T, float>() {
-    float(x) => (dx: T) => float(dx)
+/// `d(float(x)) = float(dx)` where `x` is a float: a conversion between float types is linear, so its
+/// derivative is the same conversion applied to the tangent of its source.
+export rule jvp_float_from_float::<S>(x: S) when is_float::<S>() {
+    float(x) => (dx: S) => float(dx)
 }
 
-/// `d(float(x)) = float(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
-/// @example ftod
-export rule jvp_ftod::<T>(x: T) when is_same::<T, f32>() {
-    float(x) => (dx: T) => float(dx)
-}
-
-/// `d(float(x)) = float(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
-/// @example f6tod
-export rule jvp_f6tod::<T>(x: T) when is_same::<T, f16>() {
-    float(x) => (dx: T) => float(dx)
-}
-
-/// `d(float(x)) = float(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
-/// @example bftod
-export rule jvp_bftod::<T>(x: T) when is_same::<T, bf16>() {
-    float(x) => (dx: T) => float(dx)
-}
-
-/// `d(float(x)) = 0`: a i32 is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
-/// @example itod
-export rule jvp_itod::<T>(x: T) when is_same::<T, i32>() {
+/// `d(float(n)) = 0` where `n` is a step: an integer jumps and a string is not a number, so neither
+/// has a tangent for the conversion to carry and the answer is the zero of the result's space.
+export rule jvp_float_from_a_step::<S>(x: S) when is_integer::<S>() || is_string::<S>() {
     float(x) => () => 0.0
 }
 
-/// `d(float(x)) = 0`: a string is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
-/// @example stod
-export rule jvp_stod::<T>(x: T) when is_same::<T, string>() {
-    float(x) => () => 0.0
+/// `d(f32(x)) = f32(dx)` where `x` is a float.
+export rule jvp_f32_from_float::<S>(x: S) when is_float::<S>() {
+    f32(x) => (dx: S) => f32(dx)
 }
 
-/// `d(f32(x)) = f32(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
-/// @example dtof
-export rule jvp_dtof::<T>(x: T) when is_same::<T, float>() {
-    f32(x) => (dx: T) => f32(dx)
-}
-
-/// `d(f32(x)) = f32(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
-/// @example ftof
-export rule jvp_ftof::<T>(x: T) when is_same::<T, f32>() {
-    f32(x) => (dx: T) => f32(dx)
-}
-
-/// `d(f32(x)) = f32(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
-/// @example f6tof
-export rule jvp_f6tof::<T>(x: T) when is_same::<T, f16>() {
-    f32(x) => (dx: T) => f32(dx)
-}
-
-/// `d(f32(x)) = f32(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
-/// @example bftof
-export rule jvp_bftof::<T>(x: T) when is_same::<T, bf16>() {
-    f32(x) => (dx: T) => f32(dx)
-}
-
-/// `d(f32(x)) = 0`: a i32 is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
-/// @example itof
-export rule jvp_itof::<T>(x: T) when is_same::<T, i32>() {
+/// `d(f32(n)) = f32(0)` where `n` is a step.
+export rule jvp_f32_from_a_step::<S>(x: S) when is_integer::<S>() || is_string::<S>() {
     f32(x) => () => f32(0)
 }
 
-/// `d(f32(x)) = 0`: a int is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
-/// @example ltof
-export rule jvp_ltof::<T>(x: T) when is_same::<T, int>() {
-    f32(x) => () => f32(0)
+/// `d(f16(x)) = f16(dx)` where `x` is a float.
+export rule jvp_f16_from_float::<S>(x: S) when is_float::<S>() {
+    f16(x) => (dx: S) => f16(dx)
 }
 
-/// `d(f32(x)) = 0`: a string is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
-/// @example stof
-export rule jvp_stof::<T>(x: T) when is_same::<T, string>() {
-    f32(x) => () => f32(0)
-}
-
-/// `d(f16(x)) = f16(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
-/// @example dtof6
-export rule jvp_dtof6::<T>(x: T) when is_same::<T, float>() {
-    f16(x) => (dx: T) => f16(dx)
-}
-
-/// `d(f16(x)) = f16(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
-/// @example ftof6
-export rule jvp_ftof6::<T>(x: T) when is_same::<T, f32>() {
-    f16(x) => (dx: T) => f16(dx)
-}
-
-/// `d(f16(x)) = f16(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
-/// @example f6tof6
-export rule jvp_f6tof6::<T>(x: T) when is_same::<T, f16>() {
-    f16(x) => (dx: T) => f16(dx)
-}
-
-/// `d(f16(x)) = f16(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
-/// @example bftof6
-export rule jvp_bftof6::<T>(x: T) when is_same::<T, bf16>() {
-    f16(x) => (dx: T) => f16(dx)
-}
-
-/// `d(f16(x)) = 0`: a i32 is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
-/// @example itof6
-export rule jvp_itof6::<T>(x: T) when is_same::<T, i32>() {
+/// `d(f16(n)) = f16(0)` where `n` is a step.
+export rule jvp_f16_from_a_step::<S>(x: S) when is_integer::<S>() || is_string::<S>() {
     f16(x) => () => f16(0)
 }
 
-/// `d(f16(x)) = 0`: a int is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
-/// @example ltof6
-export rule jvp_ltof6::<T>(x: T) when is_same::<T, int>() {
-    f16(x) => () => f16(0)
+/// `d(bf16(x)) = bf16(dx)` where `x` is a float.
+export rule jvp_bf16_from_float::<S>(x: S) when is_float::<S>() {
+    bf16(x) => (dx: S) => bf16(dx)
 }
 
-/// `d(f16(x)) = 0`: a string is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
-/// @example stof6
-export rule jvp_stof6::<T>(x: T) when is_same::<T, string>() {
-    f16(x) => () => f16(0)
-}
-
-/// `d(bf16(x)) = bf16(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
-/// @example dtobf
-export rule jvp_dtobf::<T>(x: T) when is_same::<T, float>() {
-    bf16(x) => (dx: T) => bf16(dx)
-}
-
-/// `d(bf16(x)) = bf16(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
-/// @example ftobf
-export rule jvp_ftobf::<T>(x: T) when is_same::<T, f32>() {
-    bf16(x) => (dx: T) => bf16(dx)
-}
-
-/// `d(bf16(x)) = bf16(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
-/// @example f6tobf
-export rule jvp_f6tobf::<T>(x: T) when is_same::<T, f16>() {
-    bf16(x) => (dx: T) => bf16(dx)
-}
-
-/// `d(bf16(x)) = bf16(dx)`: a conversion is linear, so its derivative is the same conversion applied to the tangent of its source.
-/// @example bftobf
-export rule jvp_bftobf::<T>(x: T) when is_same::<T, bf16>() {
-    bf16(x) => (dx: T) => bf16(dx)
-}
-
-/// `d(bf16(x)) = 0`: a i32 is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
-/// @example itobf
-export rule jvp_itobf::<T>(x: T) when is_same::<T, i32>() {
+/// `d(bf16(n)) = bf16(0)` where `n` is a step.
+export rule jvp_bf16_from_a_step::<S>(x: S) when is_integer::<S>() || is_string::<S>() {
     bf16(x) => () => bf16(0)
 }
-
-/// `d(bf16(x)) = 0`: a int is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
-/// @example ltobf
-export rule jvp_ltobf::<T>(x: T) when is_same::<T, int>() {
-    bf16(x) => () => bf16(0)
-}
-
-/// `d(bf16(x)) = 0`: a string is a step, not a slope (no tangent space), so the conversion adds nothing and the answer is the zero of the result's space.
-/// @example stobf
-export rule jvp_stobf::<T>(x: T) when is_same::<T, string>() {
-    bf16(x) => () => bf16(0)
-}
-
-
-
-

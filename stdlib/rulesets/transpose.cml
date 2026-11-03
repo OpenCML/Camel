@@ -38,7 +38,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { full, mean_axis, numel, ones_like, shape, sum, zeros_like } from tensor
+import { full, mean_axis, numel, ones_like, shape, sum, take, zeros_like } from tensor
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
@@ -76,34 +76,6 @@ export rule neg_t::<T>(x: T) when is_float::<T>() {
 /// operators in the body and for none of the conversions in front of them.
 export rule dtod_t::<T>(x: T) when is_same::<T, float>() {
     float(x) => (ct: T) => ct
-}
-
-// ---- the transpose rule of `tensor:multiply` ----
-//
-// The array product's key is the call `mul_tensor(x, w)`, not `*/2` (`src/core/forward.cpp`: `*/2` is
-// already `:op/mul_d`'s key), so a rule for the array product is filed under that call in every family
-// that has one. `stdlib/rulesets/vmap.cml` has it, `stdlib/rulesets/jvp.cml` has it, and this family
-// had neither the function nor the rule -- the same asymmetry, one family at a time.
-//
-// The law: an elementwise product is linear in each factor, so the cotangent of `x` is `w * ct` and the
-// cotangent of `w` is `x * ct`. Same shape in, same shape out: the two operands are arrays of one
-// shape, which is the case `vmap_rule_mul_tensor` writes the same product for. The operator's other
-// case is a scalar multiplied into an array, and there the scalar's own pullback reduces (the sum of
-// the array's cotangent, `src/builtin/operators/derivative.cpp`); a rule's left side cannot say "the
-// two operands have one shape", so that case is named here rather than answered with an array where a
-// scalar's cotangent belongs.
-
-/// The product of two arrays at any rank: what `tensor:multiply` means, and the left side this rule is
-/// filed under.
-/// @example mul_tensor(2.0, 3.0)    // 6.0
-/// @example mul_tensor([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[1.0, 10.0], [100.0, 1000.0]] as float[2, 2])    // [[1.0, 20.0], [300.0, 4000.0]]
-func mul_tensor::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
-    return x * w
-}
-
-/// The transpose of `x * w`: `w * ct` for `x`, `x * ct` for `w`.
-export rule mul_tensor_t::<T>(x: T[..], w: T[..]) when is_float::<T>() {
-    mul_tensor(x, w) => (ct: T[..]) => (mul_tensor(w, ct), mul_tensor(x, ct))
 }
 
 // ---- the transpose rules of the reductions and the layout ----
@@ -165,6 +137,33 @@ func scatter_into::<T>(xs: T[], i: int, delta: T): T[]
 /// The transpose of `xs[i]`: `ct` at `i`, zero everywhere else.
 export rule idx_arr_t::<T>(xs: T[], i: int) {
     index_into(xs, i) => (ct: T) => scatter_into(zeros_like(xs), i, ct)
+}
+
+// ---- the transpose rule of `tensor:take` ----
+//
+// A take picks rows, so its adjoint puts each row's cotangent back where that row came from and
+// sums where an index repeats -- `take(t, [1, 1])` reads one row twice, and its cotangent is the sum
+// of the two. The write is `:tangent/scatter_take_arr(base, indices, delta[, axis])`
+// (src/builtin/operators/derivative.cpp): the core's scatter for a read along a named axis, whose
+// own gradient is the take back along the same axis -- which is why it is the adjoint and not a
+// second implementation of one.
+//
+// The engine's own route names `tensor:take_grad` for this (modules/tensor/ops/layout_ops.cpp
+// #takeVjp), and a ruleset cannot: that operator is declared by the tensor module, and a second
+// declaration of it is refused by name ("The declaration 'take_into' names the operator
+// 'tensor:take_grad', which another module declares"). `:tangent/scatter_take_arr` is the core's,
+// so it can be declared here, privately, like `scatter_into` above.
+
+/// `take(t, indices)`'s adjoint: `dy` added back at the rows the indices name, along the first axis.
+#op(':tangent/scatter_take_arr')
+func scatter_rows::<T>(xs: T[..], indices: int[], delta: T[..], axis: int): T[..]
+
+/// The transpose of `take(t, indices)`: the indices are an `int[..]` and take no cotangent, so the
+/// rule's right side reads one -- and it needs `t` only for the shape the cotangent goes back into,
+/// which is why the value is read and not just the cotangent. The axis is `0` because that is the
+/// axis `take` reads (`tensor:take` names its first dimension).
+export rule take_t::<T>(t: T[..], indices: int[]) {
+    take(t, indices) => (ct: T[..]) => scatter_rows(zeros_like(t), indices, ct, 0)
 }
 
 // ---- the transpose of `mean` over an axis ----
