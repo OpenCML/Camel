@@ -314,11 +314,61 @@ slot_t meanAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
     });
 }
 
-/// The stated lane mean's result: the axis form's element type at the rank the axis and the flag
-/// decide, both of which are values of the run in this spelling and not of the type -- so the rank
-/// stays open and the answer is the operand's element type, converted by the mean's own rule.
+/// The stated lane mean's result: the axis form's own element type at the extents `at` states.
+///
+/// `at` is `[axis, keepdims, d0, ..., d(rank-1)]`, so it carries the two values `reduceAxisInfer`
+/// reads as arguments -- the axis at `at[0]`, the flag at `at[1]` -- and the operand's extents after
+/// them. That is why this name is **computed** rather than declared
+/// (`modules/tensor/module.cpp#kDeclaredOperators`): a declaration's result is a type, and these
+/// extents are a function of three values, so the only type a declaration could write is `T[..]`.
+///
+/// When a call writes `at`, the extents are stated and the answer is stated with them: `axis 0`,
+/// no `keepdims`, over a rank-1 operand of four elements answers the element itself (design
+/// principles 5.4), and the graph reads `float` -- not `float[..]` and a conversion. That is the
+/// difference between a result somebody stated and a result nobody did: with the declaration this
+/// name had, every call read `float[..]`, and the cotangent the reverse law was handed had no rank
+/// while its type said array (`numel(ct)` in `stdlib/rulesets/transpose.cml#mean_axis_cotangent`
+/// read a number's bits as a pointer,
+/// docs/handover/questions/2026-11-04-who-gives-a-shapeless-cotangent-its-rank.cn.md).
+///
+/// A call whose `at` is a **value of the run** has stated nothing, and this inference says exactly
+/// that: the operand's element type at a rank nobody fixed (`T[..]`). It does not refuse, because
+/// the two call sites that exist -- `stdlib/rulesets/jvp.cml#jvp_mean_axis` and its tangent call --
+/// build the list with `stated_axis_shape(axis, keepdims, shape(xs))`, whose extents are the
+/// primal's and therefore a value; refusing would turn a legal program away for a shape its own
+/// operand has. Measured on that tree: both sites report `at=runtime`, and the reverse walk still
+/// stops on a SIGSEGV in `numelKernel`, because the cotangent a transposition is handed is typed
+/// from this node's type (`modules/transforms/transpose.cpp`, `cotangentTypeOf`) and a rank-0
+/// answer under an array type has no conversion to make. That is the walk's to fix, and the page
+/// above asks whose it is.
 std::optional<Type *> meanAxisStatedInfer(const InferContext &ctx) {
-    return tensorOf(reductionDtype(k::ReduceOp::Mean, ctx.facts(0).dtype), std::nullopt);
+    const TensorFacts in = ctx.facts(0);
+    const TypeCode dtype = reductionDtype(k::ReduceOp::Mean, in.dtype);
+    const auto at        = ctx.constInts(1);
+    if (!at.has_value()) {
+        return tensorOf(dtype, std::nullopt);
+    }
+    if (at->size() < 3) {
+        throw ShapeError(std::format(
+            "mean_axis_stated expects `at` = `[axis, keepdims, d0, ..., d(rank-1)]`: the axis, the "
+            "flag and the operand's {} extent(s), and the list has {} entr{}",
+            in.shape ? in.shape->size() : 0,
+            at->size(),
+            at->size() == 1 ? "y" : "ies"));
+    }
+    const StaticShape stated(at->begin() + 2, at->end());
+    // The extents a stated reduction names are the operand's own, and a list that names another
+    // number of them is refused here rather than at the run: `support.h#checkStatedExtents` makes
+    // the same comparison when the value is known, and a program that writes its extents is the
+    // one case where the comparison can be made before it runs.
+    if (in.shape && in.shape->size() != stated.size()) {
+        throw ShapeError(std::format(
+            "mean_axis_stated states {} extent(s) and the operand has rank {}: `at` is "
+            "`[axis, keepdims, d0, ..., d(rank-1)]`",
+            stated.size(),
+            in.shape->size()));
+    }
+    return tensorOf(dtype, reduceShape(stated, (*at)[0], (*at)[1] != 0));
 }
 
 /// The name a whole-tensor extremum reports its fault under: design principles 7.7 gives the

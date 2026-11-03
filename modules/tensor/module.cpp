@@ -58,6 +58,19 @@ class TensorExecutor : public Executor {
 /// (`load_npy::<f32>(p)`), and a declaration's parameters cannot mention a type variable that is
 /// the result's element type, so its signature is computed (`loadNpyOperatorGroup`, recorded in
 /// `stdlib/signatures/tensor.cml`).
+///
+/// `mean_axis_stated` is not among them for the same kind of reason and one step further: its
+/// result's extents are the operand's with the axis `at[0]` removes -- or the flag `at[1]` keeps --
+/// so they follow from a *value*, and the only type a declaration could write is `T[..]`. That
+/// type is a claim the value can contradict: the answer is the element itself when the reduction
+/// leaves rank 0 (design principles 5.4), and a cotangent typed array over a value that has no
+/// rank is read as a pointer (`modules/tensor/ops/reduction_ops.cpp#meanAxisStatedInfer`, and
+/// docs/handover/questions/2026-11-04-who-gives-a-shapeless-cotangent-its-rank.cn.md). Its
+/// signature is computed, and it is recorded in `stdlib/signatures/tensor.cml`.
+///
+/// `sum_stated` and `take_stated` stay declared: neither can answer an element. A stated sum is
+/// one number whatever the extents are (`T`), and a stated take always answers at least the rows
+/// it read (`T[..]`, rank one or more), so their declared results are the results.
 constexpr std::string_view kDeclaredOperators[] = {
     "dim",
     "pick_at",
@@ -66,7 +79,6 @@ constexpr std::string_view kDeclaredOperators[] = {
     "gemm_library_threads",
     "gemm_threads",
     "num_threads",
-    "mean_axis_stated",
     "numel",
     "save_npy",
     "set_num_threads",

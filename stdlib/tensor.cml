@@ -141,17 +141,19 @@ export func sum_stated::<T>(t: T[..], at: int[]): T when is_numeric::<T>()
 /// @example take_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1, 1, 2, 2])    // [[3.0, 4.0]]
 export func take_stated::<T>(t: T[..], at: int[]): T[..] when is_numeric::<T>()
 
-/// The mean of each lane along one axis, with the axis, `keepdims` and the operand's extents stated
-/// in one list: `[axis, keepdims, d0, ..., d(rank-1)]` is `mean_axis(t, axis, keepdims)`.
-///
-/// The value needs the axis and the flag; the reverse law needs the extents, because the lane length
-/// is `numel(t) / numel(ct)` and the answer is spread over `shape(t)`. The flag is written as an
-/// integer (`1` for true, `0` for false), a list holding one element type.
-/// @pure
-/// @fails fault `RuntimeError` when the list is shorter than three entries, the extents disagree
-/// with the tensor's shape, or the axis is outside the rank
-/// @example mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0, 1, 2, 2])    // [[2.0, 3.0]]
-export func mean_axis_stated::<T>(t: T[..], at: int[]): T[..] when is_numeric::<T>()
+// The lane mean with its extents stated -- `mean_axis_stated(t, at)`, `at` being `[axis, keepdims,
+// d0, ..., d(rank-1)]` -- is not declared here. Its result's extents are the operand's with the axis
+// removed, or kept as an extent of one, so they follow from the *values* in `at`, and the only type
+// a declaration could write is `T[..]`. That type is what put a `float[..]` on a node whose value is
+// the element itself (design principles 5.4): `numel(ct)` in
+// `stdlib/rulesets/transpose.cml#mean_axis_cotangent` read a number as a pointer
+// (docs/handover/questions/2026-11-04-who-gives-a-shapeless-cotangent-its-rank.cn.md). Its signature
+// is computed (`modules/tensor/ops/reduction_ops.cpp#meanAxisStatedInfer`) and recorded in
+// `stdlib/signatures/tensor.cml`.
+//
+// The other two stated spellings above stay declared beside it: a stated sum answers one number
+// whatever the extents are, and a stated take always answers at least the rows it read, so `T` and
+// `T[..]` are the results they have.
 
 // ---- binary form ----
 

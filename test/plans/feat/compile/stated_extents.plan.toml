@@ -50,6 +50,43 @@ expect_output_not_contains = ["skip="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# The signature, where it can be stated: `at` written in the call is a compile-time constant, so
+# `mean_axis_stated` answers the extents the list names instead of `T[..]`. The number is the same
+# either way; the *type* is what this pins, because that is what the reverse law reads.
+[[tests]]
+name = "stated_mean_axis_declares_the_extents"
+desc = "`mean_axis_stated(x, [0, 0, 4])` over `[1.0, 2.0, 3.0, 4.0]` states the result's extents: axis 0, no `keepdims`, four elements, so the answer is the element 2.5 and the graph's node is a `float` rather than a `float[..]` under a conversion. The value alone does not say which of the two types was read -- a rank-zero array is its element (design principles 5.4) -- so the case reads the graph: the node's `value_type` and the absence of the `CAST` a declared `T[..]` forced."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_mean_axis_declares_the_extents.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.split(String.fromCharCode(10))
+  const stated = lines.filter((l) => l.includes('tensor:mean_axis_stated') || l.includes('mean_axis_stated'))
+  assert(stated.length > 0, `no mean_axis_stated node: ${lines.join(' | ')}`)
+  const asElement = stated.filter((l) => l.includes('value_type="float"'))
+  assert(asElement.length === 1, `the stated lane mean is not a float: ${stated.join(' | ')}`)
+  const casts = lines.filter((l) => l.includes('type="CAST"') && l.includes('value_type="float"'))
+  assert(casts.length === 0, `a conversion stands between the node and the return: ${casts.join(' | ')}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "stated_mean_axis_declares_the_extents_value"
+desc = "The same program run: the stated lane mean of `[1.0, 2.0, 3.0, 4.0]` along its only axis, without `keepdims`, is the mean of the four, 2.5. It is the number the type promised, so the case that reads the graph and the case that reads the answer cannot drift apart without one of them going red."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_mean_axis_declares_the_extents.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["stated lane mean=2.5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 
 [[tests]]
 name = "stated_sum_extents_refused"

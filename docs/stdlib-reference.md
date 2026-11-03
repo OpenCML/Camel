@@ -2199,6 +2199,28 @@ removed or kept.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element.
 - Example: `argmin_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[0, 0]`
 
+### The reductions with their extents stated
+
+#### `mean_axis_stated`
+
+```camel
+mean_axis_stated: (t: T[..], at: int[]) => T[..]
+```
+
+The mean of each lane along one axis, with the axis, `keepdims` and the operand's extents stated
+in one list: `[axis, keepdims, d0, ..., d(rank-1)]` is `mean_axis(t, axis, keepdims)`.
+
+The result is `mean_axis`'s at the extents `at` states: the operand's, with the axis at `at[0]`
+removed, or kept as an extent of one when `at[1]` is not zero. It is computed rather than
+declared because those extents follow from values, so a call that writes `at` states its own
+result -- `[0, 0, 4]` over a rank-1 operand is the element, not `float[..]` and a conversion --
+and a call whose list is a value of the run states the operand's element type at a rank nobody
+fixed.
+
+- Pure.
+- Failure: fault `RuntimeError` when the list is shorter than three entries, the extents disagree with the tensor's shape, or the axis is outside the rank.
+- Example: `mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0, 1, 2, 2])` gives `[[2.0, 3.0]]`
+
 #### `softmax`
 
 ```camel
@@ -2503,24 +2525,6 @@ disagree with the tensor's shape, or an index is outside the first dimension
 - Pure.
 - Failure: fault `RuntimeError` when the list's first entry is not its index count, the extents.
 - Example: `take_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1, 1, 2, 2])` gives `[[3.0, 4.0]]`
-
-#### `mean_axis_stated`
-
-```camel
-mean_axis_stated: (t: T[..], at: int[]) => T[..] when is_numeric::<T>()
-```
-
-The mean of each lane along one axis, with the axis, `keepdims` and the operand's extents stated
-in one list: `[axis, keepdims, d0, ..., d(rank-1)]` is `mean_axis(t, axis, keepdims)`.
-
-The value needs the axis and the flag; the reverse law needs the extents, because the lane length
-is `numel(t) / numel(ct)` and the answer is spread over `shape(t)`. The flag is written as an
-integer (`1` for true, `0` for false), a list holding one element type.
-with the tensor's shape, or the axis is outside the rank
-
-- Pure.
-- Failure: fault `RuntimeError` when the list is shorter than three entries, the extents disagree.
-- Example: `mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0, 1, 2, 2])` gives `[[2.0, 3.0]]`
 
 ### Module state
 
