@@ -201,7 +201,14 @@
             "comment": "Automatic differentiation. `layer` is true because five slow cases compare gradients against PyTorch: --tier fast runs the fast autodiff cases and filters those.",
             "paths": ["modules/autodiff/", "test/cases/modules/autodiff/"],
             "layer": true,
-            "plans": ["feat/modules/autodiff.plan.toml", "feat/modules/autodiff_inspection.plan.toml"]
+            "plans": ["feat/modules/autodiff.plan.toml", "feat/modules/autodiff_inspection.plan.toml", { "plan": "feat/compile/rules_angle_args.plan.toml", "ownCases": true }]
+        },
+        {
+            "comment": "The showcase's first-step gradient: `feat/showcase_s2.plan.toml` reads one case under test/cases/compile/transforms/, which the directory rules mirror to feat/compile/transforms.plan.toml, and it sits beside the feat/ plans rather than in that mirrored directory, so no case path selected it and `--changed` could never reach it. `ownCases` keeps the rule from riding every edit in that directory into a plan that reads one program.",
+            "paths": ["test/cases/compile/transforms/"],
+            "plans": [
+                { "plan": "feat/showcase_s2.plan.toml", "ownCases": true }
+            ]
         },
         {
             "comment": "Tensor operators and shapes: the tensor plans, the index/operator semantics plans, the thread budget (the pool and the library GEMM share one number), the numeric licence that the library path is allowed under, and autodiff (layered, for the same PyTorch reason), because a shape or operator change shows up in gradients.",
