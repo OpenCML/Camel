@@ -8683,13 +8683,13 @@ None: choice: the repair is a decision only the writer can make
 **Message**
 
 ```text
-The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side, and one ruleset has one rule per operator.
+The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side and write the same parameter types, and one ruleset holds one rule per operator and parameter-type list.
 ```
 
 **Help**
 
 ```text
-A transform looks up the rules of a primitive by the operator its left side is written with and the number of operands it takes, so a second rule under the same operator with the same number of operands has no way to be chosen: which of the two applies would be decided by the order they are written in, and the program would mean different things depending on where a rule sits. Merge the two into one rule whose right side covers both cases, or give one of them a left side with a different operator -- and remember that `-x` and `x - w` are two primitives, not one.
+A transform finds a rule for a primitive by the operator its left side is written with, the number of operands it takes, and then by the types its parameters are written with: two laws of one operator that name different parameter types are two laws -- `T[]`'s `t[0]` is the element and `T[..]`'s `t[0]` is the open-rank array (design principles 5.4) -- and the engine answers with the one the operand's own type enters. Two laws that write the same parameter types have nothing left to be told apart by: which of them applies would be decided by the order they are written in, and the program would mean different things depending on where a rule sits. Merge the two into one rule whose right side covers both cases, write one of them with a parameter type the other does not write (`T[..]` in place of `T`), or give one of them a left side with a different operator -- and remember that `-x` and `x - w` are two primitives, not one.
 ```
 
 **Example** (`test/cases/compile/rulesets/rulesets.err_duplicate_head.cml`, run as `camel test/cases/compile/rulesets/rulesets.err_duplicate_head.cml`)

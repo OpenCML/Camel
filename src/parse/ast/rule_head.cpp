@@ -35,6 +35,7 @@ std::map<std::string, std::vector<RuleHead>> registry;
 struct RuleSlot {
     std::string rule;
     std::string condition;
+    std::string parameterTypes;
 };
 
 std::map<std::string, std::map<std::string, std::vector<RuleSlot>>> indexed;
@@ -295,6 +296,7 @@ void collectRuleHead(
     std::string variables,
     std::string outerUses,
     std::string condition,
+    std::string parameterTypes,
     uint32_t arity,
     uint32_t tokenStart,
     uint32_t tokenEnd) {
@@ -307,6 +309,7 @@ void collectRuleHead(
         std::move(variables),
         std::move(outerUses),
         std::move(condition),
+        std::move(parameterTypes),
         arity,
         tokenStart,
         tokenEnd});
@@ -333,14 +336,27 @@ std::string indexRule(const std::string &family, const RuleHead &rule) {
             return {}; // one module built twice files its rules twice
         }
         // Two rules of one operator that cannot be told apart -- one spelling, one operand count,
-        // one condition -- are a duplicate: neither can be preferred, and a family that holds both
-        // would answer by filing order. Two that differ in their condition are not: the engine
-        // instantiates each at the operand's type and at most one of them answers.
-        if (slot.condition == rule.condition) {
+        // one condition, one parameter-type list -- are a duplicate: neither can be preferred, and
+        // a family that holds both would answer by filing order.
+        //
+        // Anything else is two laws of one key, which is what a family is for. Two rules whose
+        // parameter types differ (`(T[..], T[..])` and `(T[..], T)`) answer for different operands
+        // whatever their `when` clauses say -- `T[..]`'s `t[0]` is the open-rank array and `T[]`'s
+        // is the element (design principles 5.4), so the two are two laws of two shapes, and this
+        // text used to call them a duplicate because both wrote `is_float::<T>()`. Two rules whose
+        // parameter types are the same list but whose conditions differ are two questions the
+        // engine asks of one operand (`float(x: S)` from a float is `float(dx)` and from a step is
+        // `0.0`, `stdlib/rulesets/jvp.cml`), and neither is the other's duplicate either. The
+        // parameter types come first because they are what the *declaration* fixes; the condition
+        // stays because it is the only thing that tells those two conversions apart.
+        //
+        // The choice between rules that share a key is not made here: the operand types are not
+        // known at this point, and the engine makes it where they are (`lookupRules`).
+        if (slot.condition == rule.condition && slot.parameterTypes == rule.parameterTypes) {
             return slot.rule;
         }
     }
-    slots.push_back(RuleSlot{rule.rule, rule.condition});
+    slots.push_back(RuleSlot{rule.rule, rule.condition, rule.parameterTypes});
     callees[family][rule.rule]   = rule.rhsCallee;
     variables[family][rule.rule] = rule.variables;
     return {};

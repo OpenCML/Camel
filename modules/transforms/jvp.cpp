@@ -113,6 +113,49 @@ std::string typeTextOf(const std::vector<camel::core::type::Type *> &types) {
     return text.empty() ? std::string("()") : text + ")";
 }
 
+/// The ports a rule instance asks for, in port order -- `T[..]|T`'s two, and so on. This is what a
+/// choice between two laws of one key is made on.
+std::vector<camel::core::type::Type *>
+normPortsOf(const camel::compile::gir::GenericRuleInstance &instance) {
+    std::vector<camel::core::type::Type *> ports;
+    const FunctionType *func = instance.lhs != nullptr ? instance.lhs->funcType() : nullptr;
+    if (func == nullptr) {
+        return ports;
+    }
+    ports.reserve(func->normTypesCount());
+    for (size_t i = 0; i < func->normTypesCount(); ++i) {
+        ports.push_back(func->normTypeAt(i));
+    }
+    return ports;
+}
+
+/// Whether `narrow` asks for a type every position `wide` also takes, and asks for a narrower one
+/// somewhere: `T[]` beside `T[..]`, where an open rank takes a rank-one array and a rank-one array
+/// does not take an open rank. This is the relation a choice between two laws of one key is made by,
+/// and it is `assignableFrom` in the direction a call checks -- the port takes the operand -- not
+/// equality: `T[..]` and `f32[4]` are not the same type, and the law written `T[..]` is the law for a
+/// `f32[4]` operand.
+bool narrowerThan(
+    const std::vector<camel::core::type::Type *> &narrow,
+    const std::vector<camel::core::type::Type *> &wide) {
+    if (narrow.size() != wide.size() || narrow.empty()) {
+        return false;
+    }
+    bool strict = false;
+    for (size_t i = 0; i < narrow.size(); ++i) {
+        if (narrow[i] == nullptr || wide[i] == nullptr) {
+            return false;
+        }
+        if (!wide[i]->assignableFrom(narrow[i])) {
+            return false;
+        }
+        if (!narrow[i]->assignableFrom(wide[i])) {
+            strict = true;
+        }
+    }
+    return strict;
+}
+
 /// Whether an instance's own ports take the types this operator's operands have, and `why` when they
 /// do not.
 ///
@@ -215,6 +258,18 @@ gc_node_ref_t buildRuleTangent(
     // The most specific refusal wins: a candidate that fits the type but not the shape says more
     // than a later candidate whose condition simply does not hold here.
     std::string shapeWhy;
+    // Every candidate that both instantiates and whose ports take the operands. A key can hold more
+    // than one such law (`T[..]` and `T[]` both take a rank-one array), so the fit is collected
+    // first and the choice made after it: one fit is the answer, the narrowest of several is the
+    // answer, and two that neither of which is narrower than the other is a refusal that names both
+    // -- never a pick by filing order.
+    struct FittingRule {
+        std::string rule;
+        size_t ruleId   = 0;
+        size_t instance = 0;
+        std::vector<camel::core::type::Type *> ports;
+    };
+    std::vector<FittingRule> fitting;
     for (const camel::parse::ast::RuleMatch &match : candidates) {
         if (match.status != camel::parse::ast::RuleLookup::Found) {
             continue;
@@ -257,19 +312,62 @@ gc_node_ref_t buildRuleTangent(
             }
             continue;
         }
-        ruleName = match.rule;
-        return expandRuleRightSide(
-            group, transaction, instance,
-            [&values](size_t slot) {
-                return slot < values.size() ? values[slot] : rt::kInvalidNodeRef;
-            },
-            tangents, why);
+        fitting.push_back(
+            FittingRule{match.rule, static_cast<size_t>(ruleId), at, normPortsOf(instance)});
     }
-    // Every candidate refused: the shape that nearly fitted says the most.
-    if (!shapeWhy.empty()) {
-        why = shapeWhy;
+    if (fitting.empty()) {
+        // Every candidate refused: the shape that nearly fitted says the most.
+        if (!shapeWhy.empty()) {
+            why = shapeWhy;
+        }
+        return rt::kInvalidNodeRef;
     }
-    return rt::kInvalidNodeRef;
+    // The narrowest fit, and only when it is one law. `T[..]` takes every rank and `T[]` takes a
+    // rank-one array, so a `f32[4]` operand enters both laws; the rank-one law is the one written
+    // for that operand, and the open-rank law is the one written for a value whose rank is not
+    // known. Two laws neither of which is narrower than the other are two laws the declaration does
+    // not choose between -- that is the author's `two laws both accept these arguments`, and it is
+    // reported rather than answered by the order the family filed them in.
+    std::vector<const FittingRule *> narrowed;
+    for (const FittingRule &candidate : fitting) {
+        bool outranked = false;
+        for (const FittingRule &other : fitting) {
+            if (&other == &candidate) {
+                continue;
+            }
+            if (narrowerThan(other.ports, candidate.ports)) {
+                outranked = true;
+                break;
+            }
+        }
+        if (!outranked) {
+            narrowed.push_back(&candidate);
+        }
+    }
+    if (narrowed.size() > 1) {
+        why = "two laws both accept these arguments: ";
+        for (size_t i = 0; i < narrowed.size(); ++i) {
+            if (i != 0) {
+                why += (i + 1 == narrowed.size() ? " and " : ", ");
+            }
+            why += "'" + narrowed[i]->rule + "'";
+        }
+        why += " (the operator has " + typeTextOf(portTypes) + ")";
+        return rt::kInvalidNodeRef;
+    }
+    const FittingRule &chosen = *narrowed.front();
+    const auto *chosenEntry   = camel::compile::gir::genericRuleEntry(context, chosen.ruleId);
+    if (chosenEntry == nullptr || chosen.instance >= chosenEntry->instances.size()) {
+        why = "the rule is named in the index but its templates are not registered";
+        return rt::kInvalidNodeRef;
+    }
+    ruleName = chosen.rule;
+    return expandRuleRightSide(
+        group, transaction, chosenEntry->instances[chosen.instance],
+        [&values](size_t slot) {
+            return slot < values.size() ? values[slot] : rt::kInvalidNodeRef;
+        },
+        tangents, why);
 }
 
 } // namespace
