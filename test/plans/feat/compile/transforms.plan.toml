@@ -1488,14 +1488,14 @@ timeout_ms = 20000
 
 [[tests]]
 name = "pow_gradient_refused_by_the_library"
-desc = "The same gradient through the library's `vjp`: the forward half runs (`rules=jvp_pow`) and the transposition stops where it needs the reverse rule, which is not written -- `skip=condition`, then `skip=call-no-transpose … callee=rulesets.jvp::pow_tangent<float>`, and the sentence `this call's callee has no transpose of its own`. (Measured 2026-11-04: the walk stops one step earlier than `skip=rule uri=math:pow_d reason=unbound` did -- the value the old reading missed out of the closure is no longer asked for, so the walk gets past the products and stops at the branch a `pow` is implemented with. The verdict is the same and the missing reverse rule is still missing; what the line names is the construct the walk reached.) Pinned as the reading on both streams, not as an exit code, so the day a `pow_t` is written this entry fails and names what replaced it. This is the first member of the difference set that has to be empty before the engine's `pullback.cpp` can be deleted; the engine's answer for the same function is the neighbouring entry."
+desc = "The same gradient through the library's `vjp`: the forward half runs (`rules=jvp_pow`) and the transposition stops where it needs the reverse rule, which is not written -- `skip=condition`, then `skip=call-no-transpose … callee=rulesets.jvp::pow_tangent<float>`, and the sentence `this call's callee has no transpose of its own`. (Measured 2026-11-04: the walk stops one step earlier than `skip=rule uri=math:pow_d reason=unbound` did -- the value the old reading missed out of the closure is no longer asked for, so the walk gets past the products and stops at the branch a `pow` is implemented with. The verdict is the same and the missing reverse rule is still missing; what the line names is the construct the walk reached.) The node index in that line is positional and moved with the cut's residual list: `node=6` while the list held a duplicate of a parameter's value, `node=5` once it held one member per value (`residuals=2`, modules/transforms/split.cpp#residualsOf), because the backward graph has one port node fewer and the call is one node earlier. The callee and the sentence are the reading; the index is kept beside them only because the whole line is echoed. Pinned as the reading on both streams, not as an exit code, so the day a `pow_t` is written this entry fails and names what replaced it. This is the first member of the difference set that has to be empty before the engine's `pullback.cpp` can be deleted; the engine's answer for the same function is the neighbouring entry."
 kind = "negative"
 case = "../../../cases/compile/transforms/pow_gradient_refused_by_the_library.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
 expect_stdout_contains = ["transpose has no transpose for this function: this call's callee has no transpose of its own, so the call cannot be turned around"]
-expect_stderr_contains = ["skip=condition", "skip=call-no-transpose node=6 callee=rulesets.jvp::pow_tangent<float>"]
+expect_stderr_contains = ["skip=condition", "skip=call-no-transpose node=5 callee=rulesets.jvp::pow_tangent<float>"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

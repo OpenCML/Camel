@@ -8,12 +8,17 @@
 // `transpose(split(jvp(f)))` -- stops where the transposition needs it:
 //
 //     REINTERP jvp function=p graph=250 … rules=jvp_pow
-//     REINTERP split function=jvp_of_p forward=266 backward=267 type=(float) => (float, (float) => float pure) pure residuals=3
-//     TRANSPOSE function=rulesets.jvp::pow_tangent<float> skip=rule uri=math:pow_d reason=unbound
-//     TRANSPOSE function=split_of_jvp_of_p_backward skip=call-no-transpose node=6 callee=rulesets.jvp::pow_tangent<float>
+//     REINTERP split function=jvp_of_p forward=266 backward=267 type=(float) => (float, (float) => float pure) pure residuals=2
+//     TRANSPOSE function=rulesets.jvp::pow_tangent<float> skip=condition
+//     TRANSPOSE function=split_of_jvp_of_p_backward skip=call-no-transpose node=5 callee=rulesets.jvp::pow_tangent<float>
 //
 //     transforms: transpose has no transpose for this function: this call's callee has no transpose
 //     of its own, so the call cannot be turned around
+//
+// The node index in the last line is positional: it counts the nodes of the cut's backward graph, so
+// it moved from 6 to 5 when that graph lost the duplicate residual it used to carry (2026-11-04,
+// `residuals=2` above, modules/transforms/split.cpp#residualsOf). What the line is read for is the
+// callee and the sentence.
 //
 // The refused key is `math:pow_d` -- the scalar spelling `^` puts in the graph -- and `unbound` is
 // the rule table's own word for "this family has no rule for that operator". The transposition
