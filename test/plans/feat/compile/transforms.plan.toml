@@ -1500,3 +1500,32 @@ expect_stderr_contains = ["rules=jvp_relu"]
 expect_output_not_contains = ["skip=rule uri=tensor:relu", "skip=call-no-transpose"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+# `tanh` on the D1 difference set: the slope is one minus the output squared, and the tangent recomputes
+# an x-only value (the shape `exp` proved the cut carries).
+[[tests]]
+name = "tanh_gradient_through_the_engine"
+desc = "The gradient of `sum(tanh(x))` through the engine's own rule (`tanhVjp`, `modules/tensor/ops/elementwise_ops.cpp`), whole array on `[0.5, -1.0]`: `[0.7864477329659274, 0.41997434161402614]`. Both components are the criterion and their sum is not: a `tanh_t` written as `ct` answers `[1.0, 1.0]`, and one that drops the `1 - y*y` factor (writing `ct * tanh(x)`) answers `[0.46211715726000974, -0.7615941559557649]` -- the sign of the second component flips -- so the pair separates the three laws while an aggregate could be made to match. The neighbouring library case pins the same two numbers."
+kind = "behavior"
+case = "../../../cases/compile/transforms/tanh_gradient_through_the_engine.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["tanh engine d=[0.7864477329659274, 0.41997434161402614]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "tanh_gradient_through_the_library"
+desc = "The same function through the library's `vjp`: `value=-0.2994769986957551` (the two tanh values added) and `d=[0.7864477329659274, 0.41997434161402614]`, element for element the engine's answer. Before `jvp_tanh` and `tanh_t` the program stopped at the lift (`skip=rule uri=tensor:tanh`); the stderr side pins the rule that now answers (`rules=jvp_tanh`) and that no `skip=` line remains."
+kind = "behavior"
+case = "../../../cases/compile/transforms/tanh_gradient_through_the_library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["tanh library value=-0.2994769986957551 d=[0.7864477329659274, 0.41997434161402614]"]
+expect_stderr_contains = ["rules=jvp_tanh"]
+expect_output_not_contains = ["skip=rule uri=tensor:tanh"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

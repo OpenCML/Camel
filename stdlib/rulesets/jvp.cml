@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_integer, is_same, is_string, Tangent } from types
-import { matmul, mean_axis, relu, reshape, softmax, sum, take, where, zeros_like } from tensor
+import { matmul, mean_axis, relu, reshape, softmax, sum, take, tanh, where, zeros_like } from tensor
 import { log, pow } from math
 import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
 
@@ -317,6 +317,13 @@ export rule jvp_softmax::<T>(x: T[..]) when is_float::<T>() {
 /// (`skip=call-no-transpose`).
 export rule jvp_relu::<T>(x: T[..]) when is_float::<T>() {
     relu(x) => (dx: T[..]) => (where(x > 0.0, 1.0, 0.0) * dx)
+}
+
+/// `d(tanh(x)) = (1 - y * y) * dx` with `y = tanh(x)`: the slope is one minus the output squared, the
+/// engine's own law (`tanhVjp`, `modules/tensor/ops/elementwise_ops.cpp`), written the same way here so
+/// the two algorithms differ only in who builds the graph.
+export rule jvp_tanh::<T>(x: T[..]) when is_float::<T>() {
+    tanh(x) => (dx: T[..]) => (1.0 - tanh(x) * tanh(x)) * dx
 }
 // ---- the forward rule of `:op/idx_arr` ----
 //
