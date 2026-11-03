@@ -159,7 +159,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "docs.links.citations_skip_local_caches"
-desc = "A virtual environment, a tool cache and a dependency tree beside the checkout are not scanned and the checkout still is: a tree with one page, one source file and one directory per name that must be skipped -- each cache file citing a file that does not exist -- is verified whole, so the case is red when a name leaves the skip set (a reported citation) and also when the walk stops reading real files (a count that is not the three the miniature checkout holds). It is the reading that failed before: 45,407 files and 1.87 GB of cache plus two backtracing vendored headers turned a four-second walk into a run that had not finished after three quarters of an hour."
+desc = "A virtual environment, a tool cache and a dependency tree beside the checkout are not scanned and the checkout still is: a tree with one page, one source file and one directory per name that must be skipped -- each cache file citing a file that does not exist -- is verified whole. The three readings it pins: green it prints `1 of 1 symbol citation(s) verified, 1 path citation(s) across 3 file(s)` and exits 0; with the set emptied it reports 30 unverified citations and exits 1; with `.venv` alone dropped it reports 2 and names `.venv/lib/ghost.ts`. So the case is red when a name leaves the skip set, and also when the walk stops reading real files (a count that is not the three the miniature checkout holds). It is the reading that failed before: 45,407 files and 1.87 GB of cache plus two backtracing vendored headers turned a four-second walk into a run that had not finished after three quarters of an hour."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/check-doc-links.mjs"
