@@ -463,7 +463,14 @@ void reshapeLikeVjp(VjpBuilder &b, const VjpCall &call) {
             ArrayType::create(Type::Int64()),
             "tensor:shape",
             std::span<const vjp_node_t>(call.inputs.data(), 1));
-        b.accumulateGradient(call.inputs[0], addTensorOper(b, "tensor:reshape", {*dy, shape}));
+        // The adjoint is shaped like the input, and `addTensorOperFor` is what says so: the node
+        // takes the tangent type of `call.inputs[0]`, the value the gradient belongs to (design
+        // principles 9.9: a gradient has the element type and the shape of its value). `dy` is
+        // shaped like the *output*, so a node declared from the inputs alone would be one shape
+        // too far -- the same numbers, recorded under the reshape's result shape.
+        b.accumulateGradient(
+            call.inputs[0],
+            addTensorOperFor(b, call.inputs[0], "tensor:reshape", {*dy, shape}));
     }
 }
 

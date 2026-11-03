@@ -101,6 +101,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::ExitTypeMismatch,
+            {
+                "ExitTypeMismatch",
+                "The value the graph '{0}' hands on has type '{1}', and the graph declares '{2}'; the value is {3}.",
+                "A return is a position with an expected type: what a function hands on is of the type the function declares, and nothing is converted on the way (design principles 5.1) -- an int is not read as a float, and a float[] is not read as a float. The graph is the function, so the declaration is the type to match: hand on a value of the declared type, or declare the type the value has. A return a rewrite rule replaced takes the type of the rule's right side, so a rule whose right side is of another type than its left is the place to look. The message names the value by its node and, when it has one, by its source name: a node a rewrite built carries no source position of its own, and that is why this report can stand without a line of its own.",
+            },
+        },
+        {
             RuntimeDiag::PassBoundaryPorts,
             {
                 "PassBoundaryPorts",

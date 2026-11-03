@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-309 diagnostics: 288 errors, 21 warnings. 15 carry a machine-applicable edit, 294 say why they carry none.
+310 diagnostics: 289 errors, 21 warnings. 15 carry a machine-applicable edit, 295 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -323,6 +323,7 @@ prints one entry.
 | `0x040001AB` | [RuntimeDiag::DeviceNotSelected](#devicenotselected) | Error | no |
 | `0x040001AC` | [RuntimeDiag::ProgramFault](#programfault) | Error | no |
 | `0x040001AD` | [RuntimeDiag::TransposeNeedsParameterShape](#transposeneedsparametershape) | Error | no |
+| `0x040001AE` | [RuntimeDiag::ExitTypeMismatch](#exittypemismatch) | Error | no |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn | no |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn | no |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn | no |
@@ -10907,6 +10908,43 @@ A transposition turns the cotangent of the result into the cotangent of the para
 ```
 
 *No example: no test small enough to show raises it.*
+
+### ExitTypeMismatch
+
+`0x040001AE` · Error · `RuntimeDiag::ExitTypeMismatch`
+
+**Fix**
+
+None: choice: hand on a value of the declared type, or declare the type the value has.
+
+**Message**
+
+```text
+The value the graph '{0}' hands on has type '{1}', and the graph declares '{2}'; the value is {3}.
+```
+
+**Help**
+
+```text
+A return is a position with an expected type: what a function hands on is of the type the function declares, and nothing is converted on the way (design principles 5.1) -- an int is not read as a float, and a float[] is not read as a float. The graph is the function, so the declaration is the type to match: hand on a value of the declared type, or declare the type the value has. A return a rewrite rule replaced takes the type of the rule's right side, so a rule whose right side is of another type than its left is the place to look. The message names the value by its node and, when it has one, by its source name: a node a rewrite built carries no source position of its own, and that is why this report can stand without a line of its own.
+```
+
+**Example** (`test/cases/runtime/exit_type/float_declared_array_returned.cml`, run as `camel test/cases/runtime/exit_type/float_declared_array_returned.cml std::nvm`)
+
+```camel
+import { rewrite } from rewrite
+
+rule retype(x: float) { x * 1.0 => [1.0, 2.0] }
+
+func target(n: float): float { n * 1.0 }
+
+func main(): int sync {
+    let rules = [retype]
+    let g     = target->rewrite<rules> !! target
+    print(g(7.0))
+    return 0
+}
+```
 
 ### PassesNeverRun
 

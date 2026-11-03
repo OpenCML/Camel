@@ -16,6 +16,7 @@ RuntimeDiag::DivisionByZero	test/cases/consistency/attempt/fault_outside.cml
 RuntimeDiag::EntryArgumentInvalid	test/cases/compile/entry_args/scalars.cml
 RuntimeDiag::EntryArgumentMissing	test/cases/compile/entry_args/scalars.cml
 RuntimeDiag::EntryResultNotWritten	test/cases/consistency/entry/undeclared_println.cml
+RuntimeDiag::ExitTypeMismatch	test/cases/runtime/exit_type/float_declared_array_returned.cml
 RuntimeDiag::FieldNotFound	test/cases/compile/native/idx_field_missing.cml
 RuntimeDiag::GpuScopeMacroNotExpanded	test/cases/gpu/nofallback/grad_expand.cml
 RuntimeDiag::GpuScopeNoDeviceProgram	test/cases/gpu/nofallback/runtime_refusal.cml
