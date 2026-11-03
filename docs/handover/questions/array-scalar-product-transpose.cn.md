@@ -1,76 +1,76 @@
-# 数组×标量那条路：律对了、端口对了，答案在一个 float 位上读成 0.0
+# 数组×标量那条路：律已就位、形状已按类型拒绝，剩下的是"律的答案类型"这一问
 
-`tensor:multiply` 的转置律已经按作者 2026-11-03 10:30 的裁定写成一条（`stdlib/rulesets/transpose.cml`，提交 `5b4f2e1a9`）：
+`tensor:multiply` 的转置律已经按作者 2026-11-03 10:30 的裁定写成**一条**（`stdlib/rulesets/transpose.cml`，提交 `5b4f2e1a9`）：
 
 ```camel
 mul_tensor(x, w) => (ct: T[..]) => (sum_to(ct * w, x), sum_to(ct * x, w))
 ```
 
-`sum_to` 是引擎里已有的"按广播求和回原形状"（`modules/tensor/ops/vjp.cpp#accumulateOperand`），这一笔给了它标准库里的名字（`stdlib/tensor.cml`）。数组×数组那一半是绿的（`transpose_array_product` 2/2，`d/dxs=(2,3,4)`、`d/dw=(1,2,3)`）。**数组×标量那一半仍然给出 `d/ds = 0.0`**，这一页是它的四条读数，和它卡在哪一处。
+`sum_to` 是引擎里已有的"按广播求和回原形状"（`modules/tensor/ops/vjp.cpp#accumulateOperand`），这一笔给了它标准库里的名字（`stdlib/tensor.cml`）。数组×数组那一半是绿的（`transpose_array_product` 2/2，`d/dxs=(2,3,4)`、`d/dw=(1,2,3)`）。
 
-## 一、四条读数（都是实测，同一棵树，`5b4f2e1a9` 上改律的右式重跑）
+数组×标量那一半今天**拒绝**（不是错数），理由和读数在下面。剩下的那一问要作者裁，不急在这一笔。
+
+## 一、为什么一笔就够，且为什么必须拒绝这个形状
+
+一条律覆盖两种形状是**实测的**，不是推理：`T[..]` 含秩 0，秩 0 就是那个元素（设计原则 5.4），所以 `sum_to` 的 `like` 可以是一个数，那时它答的就是总和——`sum_to([1.0, 2.0, 3.0], 2.0)` 读 `6.0`，`sum_to(g, g)` 读 `g` 原样。所以"按广播求和回原形状"这句话在律里写成 `sum_to` 就同时是两种形状，不需要"一个键下两条律"、也不需要按类型派发。
+
+但**律被挑中的那一刻没有问操作数类型**：索引只按左式那个算子与它的元数归档（`rule_head.cpp`），`tensor:multiply` 是被两个数组和"一个数组一个数"共用的，而索引里那条律是给两个数组写的。它的右式于是在 `T = float` 上展开，`T[..]` 读作 `float[..]`——一个**接受**数字的类型（5.4，`ArrayType::assignableFrom`）——于是展开成功，并给出一个律从没为之写过的形状的余切：实测 `sum(x * s)` 在 `s` 上的余切读 **`0.0`**，且没有 `skip=`、没有 `contribution=0`。这正是设计原则 9.9 说不能给的那一种读数。
+
+所以这一笔加的是**挑律时的那一问**：`modules/transforms/transpose.cpp#ruleTakesOperands`，照 `jvp.cpp#portsTakeOperands` 的写法与措辞——律的形参表是不是这个节点的形参表？不是就不选它，走既有拒绝路径，并把两边的类型都写出来：
+
+```
+TRANSPOSE function=split_of_jvp_of_a_prod_backward skip=rule uri=tensor:multiply operands=2 \
+  reason=the rule takes (float[..], float[..]), and the operator has (float[..], float)
+error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: transpose has no transpose
+  for this function: the rule table has no rule for a step of this body.
+```
+
+只有**走查会真去要余切的位置**参与这一问：常量与无切空间的值本来就不问律（`isConstant`、`hasTangentSpace`），所以 `sum(x * 2.0)` 照旧对——`value = 12.0`、`d/dx = 2.0 2.0 2.0`、`rhs=sum_t,add_tensor_t,mul_tensor_t`。校验只加在 transpose 这一处，索引的判重规则一个字没动。
+
+## 二、四条读数（实测，同一棵树）
 
 探针：`f(x: float[..], s: float) = sum(x * s)`，`x = (1,2,3)`、`s = 4.0`；`pullback(1.0)`。
 
-| 律的右式第二项 | `d/ds` | 诊断 |
-|---|---|---|
-| `sum_to(ct * x, w)` | **0.0** | 无 `skip=`、无 `contribution=0`，静默 |
-| `sum(ct * x)` | **6.0**（对） | 无 |
-| `sum_to(ct * x, 0.0)`（字面量） | 拒绝 | `skip=cotangent-needs-a-value uri=tensor:multiply position=1 reason=the rule's right side uses a node written after it` |
-| `f = sum(s * x)`（操作数顺序翻过来） | 崩 | `PassInternalError: norm-arity mismatch: caller graph 'main' node 23 has 1 args, target graph 'transpose_of_split_of_jvp_of_b_prod_backward' has 2 norm ports` |
+| 律的右式，或调用形状 | 读数 |
+|---|---|
+| `sum_to(ct * x, w)`，**不做类型校验** | `d/dx = 4 4 4`（对）、**`d/ds = 0.0`**，无任何诊断 |
+| 同上，换成 `sum(ct * x)`（`float` 型的答案） | `d/ds = 6.0`（对） |
+| 同上，`sum_to(ct * x, 0.0)`（字面量 `like`） | 拒绝：`reason=the rule's right side uses a node written after it` |
+| **本笔之后**：`sum(x * s)` | 拒绝，原文见上，`(float[..], float)` |
+| **本笔之后**：`sum(s * x)`（操作数顺序翻过来） | 同样拒绝，`(float, float[..])`——**不再崩** |
+| **本笔之后**：`sum(x * 2.0)`（常量标量） | 照旧对：`12.0`、`d/dx = 2 2 2` |
 
-`d/dx` 在四种情形里都是 `4.0 4.0 4.0`（对）。
+倒数第二行原来是一个 `PassInternalError`（`norm-arity mismatch: caller graph 'main' node 23 has 1 args, target graph ... has 2 norm ports`），拒绝把它关掉了。崩比红需要名字，而"拒绝"已经够了，所以那条崩溃形状**没有**进用例库。
 
-## 二、`0.0` 不在端口上（这一条排除了我先前的猜测）
+## 三、`0.0` 不在端口上（临时读数，已撤，未提交）
 
-给 `transpose.cpp` 加临时读数（已撤，未提交）后，`split_of_jvp_of_a_prod_backward` 的 dump：
+给 `transpose.cpp` 加 dump 之后，`split_of_jvp_of_a_prod_backward` 的读数是：
 
 ```
 params=2 ports=2 partial=0 firstPort=0
 param=0 type=float[..] participates=1 portOfParameter=0
 param=1 type=float     participates=1 portOfParameter=1
 closure=3 carries=1 [0:float[..]] [1:float] [2:float]
-node=0 kind=1 type=float[..] hasCt=1
-node=1 kind=1 type=float     hasCt=0     <- 闭包里没人读的那个 float
-node=2 kind=1 type=float     hasCt=1     <- 体里读的 s
-node=3 kind=1 type=float[..] hasCt=1     <- 体里读的 x
-node=4 kind=1 type=float     hasCt=1     <- ds 端口
-node=5 kind=11 type=float[..] normInputs=0 4     <- x * ds
-node=6 kind=11 type=float[..] normInputs=3 2     <- dx * s
-node=7 kind=11 type=float[..] normInputs=6 5
-node=8 kind=11 type=float     normInputs=7
+node=0 kind=1 float[..] hasCt=1        node=1 kind=1 float     hasCt=0   <- 闭包里没人读的那个
+node=2 kind=1 float     hasCt=1        node=3 kind=1 float[..] hasCt=1
+node=4 kind=1 float     hasCt=1        <- ds 端口，有余切
+node=5 kind=11 float[..] normInputs=0 4   <- x * ds
+node=6 kind=11 float[..] normInputs=3 2   <- dx * s
+node=7 kind=11 float[..] normInputs=6 5    node=8 kind=11 float normInputs=7
 DBGPROBE answer at=0 portNode=3 part=9  type=float[..]
 DBGPROBE answer at=1 portNode=4 part=15 type=float
 ```
 
-`ds` 的端口（node 4）**有余切**，答案也**没有走** `transpose.cpp:2898` 那条"没到手就答零"的分支：`at=1` 走的是 `2890` 的 `hasCotangent` 分支，`part=15` 就是律右式的那个值，类型记成 `float`。所以 `0.0` 是**那个值本身在 float 位上读出来是 0.0**，不是端口丢的、也不是律没被调用（`rhs=sum_t,add_tensor_t,mul_tensor_t` 三处都在）。
+`ds` 的端口**有余切**，答案也**没走** `transpose.cpp` 那条"没到手就答零"的分支。所以 `0.0` 是律的答案本身在 `float` 位上读出来的，不是端口丢的、也不是律没被调用（`rhs=sum_t,add_tensor_t,mul_tensor_t` 三处都在）。
 
-## 三、卡在哪一处：律的答案类型 `T[..]` 与成员位的 `float`
+## 四、根因：一条律的答案类型对所有位置都是 `T[..]`
 
-一条转置律的答案类型对所有位置都是 `T[..]`（`transposeSignature`：`(ct: T[..]) => (T[..], T[..])`）。`T = float` 时那个类型的字面是 `float[..]`——按设计原则 5.4（"秩 0 就是元素本身"）它**接受**一个 float，但反过来，一个 `float[..]` 型的值放进 `float` 的成员位，是数组进了 float 槽。实测这个转换的读数是 `0.0`，而 `sum(ct * x)`（类型 `float`，槽也是 `float`）给 `6.0`。
+`transposeSignature` 让一条律的答案类型对所有位置都是 `T[..]`。`T = float` 时那是 `float[..]`——5.4 让它**接受**一个 float，可值真就是数组，进 `float` 成员位读成 `0.0`；而 `sum(ct * x)`（类型 `float`，槽也 `float`）给 `6.0`。我试过把声明改成 `sum_to::<T, S>(t: T[..], like: S): S` 让类型跟着 `like` 走，**仍是 `0.0`**：成员位的期望类型是 `T[..]`，推断把 `S` 钉回 `float[..]`。所以修法不在 `sum_to` 的声明。
 
-我试过让类型跟着 `like` 走——`sum_to::<T, S>(t: T[..], like: S): S`——读数仍是 `0.0`：成员位的期望类型是 `T[..]`，推断把 `S` 钉成了 `float[..]`，所以声明改了、期望类型没改，什么都没动。
+## 五、要作者裁的一句
 
-两条可能的修法都不在我这一笔的范围里：
+**一条转置律的答案类型，该不该按每个参数的切空间分别给**（`(Tangent<P0>, Tangent<P1>, ...)`），而不是今天所有位置一个 `T[..]`？
 
-1. **律的答案类型按参数的切空间走**（每个成员一个 `Tangent<Param_i>`，而不是一个 `T[..]` 通吃）。这样 `(sum_to(ct*w, x), sum_to(ct*x, w))` 的第二个成员就是 `float`，`sum_to` 的返回值也就是 `float`，`0.0` 不会发生；同一处改动也顺带让"一个键下两条形参不同的律"不再需要派发——**这正是作者裁过、今天卡在实现上的那件事**。
-2. **数组进 float 槽要拒绝**（设计原则 9.9：跑通却给出错值不允许）。今天它是静默的 `0.0`，和 lane-mult 上量到的 `6.5897671638891e-310`（未初始化 double）是同一类：错数不是拒绝。
+裁"该"：`sum_to` 的返回值在标量位上就是 `float`，数组×标量那一半当场算对（`d/dx=(4,4,4)`、`d/ds=6.0`），并且"同一个键下多条形参不同的律"这件事也一起解锁——那条已经由作者 11:10 裁过（判重按参数类型是否相同，不按 `when` 的文本），实现点就在这同一处。
 
-**同一形状的加法不会错，因为它根本走不到**：`g(x: float[..], s: float) = sum(x + s)`（同一 `s = 4.0`）的读数是**拒绝**，不是错数——
-
-```
-error[RuntimeDiag::RuntimeError]: ... transforms: jvp has no forward rule for `tensor:add` (the operator has no forward rule bound at all).
-```
-
-所以"数组 + 数字"今天停在 jvp 那一层，`add_tensor_t` 的右式再怎么写都到不了它；这一笔的错数只属于 `tensor:multiply`——**因为它有 jvp 律，却没有一条对方是数字的转置律**。
-
-另外两条副产物，各自是一个名字而不是一个猜测：
-
-- 律里写**字面量** `sum_to(ct * x, 0.0)` 被拒，理由 `the rule's right side uses a node written after it`——字面量被当作"写在它后面"的节点。这条拒绝是对的（拒绝优于错数），但理由是错的：常量不可能是写在后面的节点。
-- 操作数顺序翻过来（`sum(s * x)`）时转置出来的图有 **2 个 norm 端口**，而调用点只传 1 个，直接 `PassInternalError`。这一条**不是新症状**：同一棵树上 `feat/compile/transforms` 的红用例 `transpose_loop_escape.two_values_of_two_kinds` 崩的就是同一句读数，逐字相同而只有图名不同——
-  `Runtime indirect call norm-arity mismatch: caller graph 'main' node 3 has 1 args, target graph 'transpose_of_read_outer' has 2 norm ports`。
-  同一处映射（`portOfParameter` 与闭包 port）的两个症状，与 `lane-resid` 正在做的 `cutLoopGraph` 的 `invariants` 相邻，但这一条发生在 `split` 之后，不在 `split` 里。
-
-## 四、要作者裁的一句
-
-**一条转置律的答案类型，该不该按每个参数的切空间分别给**（`(Tangent<P0>, Tangent<P1>, ...)`），而不是今天这样所有位置一个 `T[..]`？裁"该"，方案 1 就能一次做完两件事：数组×标量算对，同键下多条形参不同的律不再需要派发。裁"不该"，那么 `sum_to` 这种"回到某个形状"的归约在律里就只能用在数组位上，数组×标量那一半得靠别的写法（今天没有）。
+裁"不该"：`sum_to` 这种"回到某个形状"的归约就只能用在数组位上，数组×标量那一半要换别的写法——今天没有。在那之前，这一笔的状态是"该拒的仍然拒、该对的仍然对"。
