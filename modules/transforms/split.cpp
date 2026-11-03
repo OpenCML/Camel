@@ -1150,6 +1150,21 @@ struct LoopCut {
     Type *stateValueType   = nullptr;
     Type *stateTangentType = nullptr;
     Type *elementType      = nullptr;
+    /// The exit as the program wrote it, when the pair the exit answers with is not the loop cell's own
+    /// value but a chain above it: the loop is then *inside* the chain the exit reads (measured
+    /// 2026-11-03: `g(s) = (loop x = s ...)[0]` -- the exit is a tuple fill whose two members are
+    /// `idx_arr` of the loop's component 0 and component 1). These are the tops of those two chains,
+    /// and each half computes its own above the loop it made. `kInvalidNodeRef` on both when the exit
+    /// is the cell itself, which is the shape `jvp` gives a loop a function returns whole.
+    gc_node_ref_t exitValueRoot   = rt::kInvalidNodeRef;
+    gc_node_ref_t exitTangentRoot = rt::kInvalidNodeRef;
+    /// The nodes that read one component of the loop's pair through `GCAccsKind::TupleIndex` and stand
+    /// outside the body: a half seeds each of them with its own value for that component (the forward
+    /// half's `(state, tape)` component 0, the backward half's tangent state), so the chain above the
+    /// loop is copied without the walk ever entering the loop cell. Component 0's list is the value
+    /// side's, component 1's is the tangent side's.
+    std::vector<gc_node_ref_t> valueProjections;
+    std::vector<gc_node_ref_t> tangentProjections;
 };
 
 /// The nodes of `region` that `root` reads, `root` among them, and the nodes outside the region it
@@ -1369,10 +1384,9 @@ bool readLoopCut(
 /// construction -- the tape has one element per round the forward half ran.
 SplitGraph cutLoopGraph(
     const camel::core::context::context_ptr_t &context, const rt::Program *program,
-    rt::GCGraph *function, std::ostream &os, gc_node_ref_t exit) {
+    rt::GCGraph *function, std::ostream &os, LoopCut &cut) {
     SplitGraph built;
-    LoopCut cut;
-    if (!readLoopCut(function, exit, os, cut)) {
+    if (!readLoopCut(function, cut.loop, os, cut)) {
         return built;
     }
     const std::span<const gc_node_ref_t> sourcePorts = function->normPorts();
@@ -1438,6 +1452,30 @@ SplitGraph cutLoopGraph(
            << " skip=loop (the loop's first state is not the pair `jvp` writes, so the loop is not "
               "lifted)\n";
         return built;
+    }
+    // The chain above the cell answers the half's own result: the forward half's value on the value
+    // side, the backward half's tangent on the tangent side. Read off the source graph before either
+    // half exists -- a chain that answers something else is not the pair this cut splits, and saying
+    // so here keeps the refusal about the shape rather than about a type a copy happened to reach.
+    if (cut.exitValueRoot != rt::kInvalidNodeRef || cut.exitTangentRoot != rt::kInvalidNodeRef) {
+        const rt::GCNode *valueTop =
+            cut.exitValueRoot < function->nodeCount() ? function->node(cut.exitValueRoot) : nullptr;
+        const rt::GCNode *tangentTop = cut.exitTangentRoot < function->nodeCount()
+                                           ? function->node(cut.exitTangentRoot)
+                                           : nullptr;
+        const auto *forwardPair =
+            halves.forward->exitType() != nullptr &&
+                    halves.forward->exitType()->code() == TypeCode::Tuple
+                ? tt::as_ptr<TupleType>(halves.forward->exitType())
+                : nullptr;
+        if (valueTop == nullptr || tangentTop == nullptr || forwardPair == nullptr ||
+            forwardPair->size() != 2 || valueTop->dataType() != forwardPair->typeAt(0) ||
+            tangentTop->dataType() != halves.backward->exitType()) {
+            os << "REINTERP split function=" << function->name()
+               << " skip=loop (the chain the exit reads above the loop does not answer the halves' "
+                  "results)\n";
+            return built;
+        }
     }
     const std::string base = "split_of_" + std::string(function->name());
     rt::GraphDraftGroup group(context, program);
@@ -1545,6 +1583,26 @@ SplitGraph cutLoopGraph(
         draft.setNormInputs(value, std::span<const gc_node_ref_t>(&forwardLoop, 1));
         const gc_node_ref_t tapeValue = draft.addAccsNode(tapeType, 1);
         draft.setNormInputs(tapeValue, std::span<const gc_node_ref_t>(&forwardLoop, 1));
+        // The exit the program wrote may read the loop's value through a chain above the cell
+        // (`g(s) = (loop ...)[0]`): then the half copies that chain, with the cell's value seeded at
+        // its foot, and answers with the top of it rather than with the state whole. The projections
+        // are seeded for the *whole* cell's pair, so the walk never reaches the loop node and no body
+        // region is copied -- what crosses from the cell into the chain is the one value the half has
+        // for that component, and nothing else.
+        gc_node_ref_t answered = value;
+        if (cut.exitValueRoot != rt::kInvalidNodeRef) {
+            for (gc_node_ref_t projection : cut.valueProjections) {
+                forward.seed(projection, value);
+            }
+            if (!forward.copyHalf(cut.exitValueRoot, built)) {
+                os << "REINTERP split function=" << function->name()
+                   << " skip=forward construct=" << built.refusedConstruct
+                   << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
+                   << " why=" << built.refusedWhy << '\n';
+                return built;
+            }
+            answered = forward.copyOf[cut.exitValueRoot];
+        }
         std::vector<gc_node_ref_t> residualMembers;
         residualMembers.reserve(cuts.size());
         for (const Residual &one : cut.outside) {
@@ -1554,7 +1612,7 @@ SplitGraph cutLoopGraph(
         const gc_node_ref_t linValue = buildLinearClosure(
             draft, program, backwardId, halves.closure, halves.backward,
             std::span<const gc_node_ref_t>(residualMembers.data(), residualMembers.size()));
-        const std::array<gc_node_ref_t, 2> exitHalves{value, linValue};
+        const std::array<gc_node_ref_t, 2> exitHalves{answered, linValue};
         const gc_node_ref_t out = fillTuple(
             draft, halves.forward->exitType(),
             std::span<const gc_node_ref_t>(exitHalves.data(), exitHalves.size()));
@@ -1649,9 +1707,26 @@ SplitGraph cutLoopGraph(
             backward.copyOf[cut.tangentRoot], backwardRound};
         draft.setWithInputs(
             backwardLoop, std::span<const gc_node_ref_t>(backwardWith.data(), backwardWith.size()));
-        draft.setExitNode(backwardLoop);
-        draft.setOutputNode(backwardLoop);
-        draft.setReturnNode(backwardLoop, rt::GCReturnKind::Self);
+        // The same chain above the cell as the forward half copies, read on the tangent side: the
+        // tangent state the loop ends on is seeded into the tangent projection, so what the chain
+        // computes is the tangent of what the forward half's chain computed.
+        gc_node_ref_t answered = backwardLoop;
+        if (cut.exitTangentRoot != rt::kInvalidNodeRef) {
+            for (gc_node_ref_t projection : cut.tangentProjections) {
+                backward.seed(projection, backwardLoop);
+            }
+            if (!backward.copyHalf(cut.exitTangentRoot, built)) {
+                os << "REINTERP split function=" << function->name()
+                   << " skip=backward construct=" << built.refusedConstruct
+                   << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
+                   << " why=" << built.refusedWhy << '\n';
+                return built;
+            }
+            answered = backward.copyOf[cut.exitTangentRoot];
+        }
+        draft.setExitNode(answered);
+        draft.setOutputNode(answered);
+        draft.setReturnNode(answered, rt::GCReturnKind::Self);
     }
     group.encode();
     const rt::GCGraph *forwardMade  = group.encoded(forwardId);
@@ -1867,7 +1942,80 @@ SplitGraph cutBranchGraph(
 /// is a cell too, so that its refusal stays named instead of becoming a fall-through.
 enum class ExitShape { Straight, Branch, Loop, NotAPair };
 
-ExitShape exitShapeOf(const rt::GCGraph *function, gc_node_ref_t exit) {
+/// One half of a lifted exit, read back to the LOOP cell it comes from: the loop, which of its two
+/// components this half reads (0 the value, 1 the tangent), and the nodes that read that component
+/// (the projections a half seeds with its own value for the component, so the chain above the loop is
+/// copied without the walk entering the cell). `ok` is false when the half reads no loop, or reads
+/// two, or reaches one other than through a `TupleIndex` of it.
+struct LoopReach {
+    bool ok           = false;
+    gc_node_ref_t loop = rt::kInvalidNodeRef;
+    uint32_t component = 0;
+    std::vector<gc_node_ref_t> projections;
+};
+
+/// The loop a half of the exit comes from. The walk follows the ordinary data edges and stops at a
+/// LOOP node; every node on the way is a node the half copies above the loop, so a value the chain
+/// reads from somewhere else (a parameter, another loop) is left to the copy to answer or refuse.
+LoopReach loopBehindExit(const rt::GCGraph *function, gc_node_ref_t root) {
+    LoopReach reach;
+    if (function == nullptr || root >= function->nodeCount() || function->node(root) == nullptr) {
+        return reach;
+    }
+    std::vector<char> visited(static_cast<size_t>(function->nodeCount()), 0);
+    std::vector<gc_node_ref_t> stack{root};
+    while (!stack.empty()) {
+        const gc_node_ref_t ref = stack.back();
+        stack.pop_back();
+        if (ref >= function->nodeCount() || function->node(ref) == nullptr) {
+            continue;
+        }
+        if (visited[ref] != 0) {
+            continue;
+        }
+        visited[ref] = 1;
+        const rt::GCNode *node = function->node(ref);
+        if (node->kind == rt::GCNodeKind::Loop) {
+            if (reach.loop != rt::kInvalidNodeRef && reach.loop != ref) {
+                return LoopReach{}; // two loops: the chain is not a projection of one cell
+            }
+            reach.loop = ref;
+            continue;
+        }
+        // A projection of the loop's pair is the edge into the cell, and its component is what the
+        // half reads. Any other node reading the loop itself would hold the cell's pair as one value,
+        // which no half can be handed (`split` hands the components, not the pair).
+        const std::vector<gc_node_ref_t> inputs = dataInputsOf(function, ref);
+        bool readsTheCell                       = false;
+        for (gc_node_ref_t input : inputs) {
+            const rt::GCNode *source = input < function->nodeCount() ? function->node(input) : nullptr;
+            readsTheCell             = readsTheCell || (source != nullptr &&
+                                            source->kind == rt::GCNodeKind::Loop);
+        }
+        if (readsTheCell) {
+            const auto *body = function->nodeBodyAs<rt::GCAccsBody>(ref);
+            if (node->kind != rt::GCNodeKind::Accs || body == nullptr ||
+                body->accsKind != rt::GCAccsKind::TupleIndex || body->value > 1) {
+                return LoopReach{};
+            }
+            const uint32_t component = static_cast<uint32_t>(body->value);
+            if (!reach.projections.empty() && reach.component != component) {
+                return LoopReach{}; // one half reads both components: not a projection of one
+            }
+            reach.component = component;
+            reach.projections.push_back(ref);
+        }
+        for (gc_node_ref_t input : inputs) {
+            if (input < function->nodeCount() && visited[input] == 0) {
+                stack.push_back(input);
+            }
+        }
+    }
+    reach.ok = reach.loop != rt::kInvalidNodeRef && !reach.projections.empty();
+    return reach;
+}
+
+ExitShape exitShapeOf(const rt::GCGraph *function, gc_node_ref_t exit, LoopCut &cut) {
     const rt::GCNode *node = function->node(exit);
     if (node == nullptr) {
         return ExitShape::NotAPair;
@@ -1876,6 +2024,25 @@ ExitShape exitShapeOf(const rt::GCGraph *function, gc_node_ref_t exit) {
         const auto *fill = function->nodeBodyAs<rt::GCFillBody>(exit);
         if (fill != nullptr && fill->fillKind == rt::GCFillKind::Tuple &&
             function->withInputsOf(exit).size() == 2) {
+            // The pair may be the loop cell itself pair of components, read through a chain above the
+            // cell: `jvp` gives a loop the pair type, and a program that reads *into* the loop's value
+            // (`g(s) = (loop x = s ...)[0]`) answers the pair by projecting one component on each
+            // side. The cut then enters the loop through its cell all the same -- the cell is one node
+            // inside the chain the exit reads, not the exit -- and the two chains are what each half
+            // computes after the loop. Measured 2026-11-03 (`vjp_loop.rounds_are_undone_in_reverse`):
+            // exit 37 = fill[36, 30, 31], 30 = idx_arr(26, 29), 26 = tuple-index 0 of loop 25.
+            const std::span<const gc_node_ref_t> halves = function->withInputsOf(exit);
+            const LoopReach value   = loopBehindExit(function, halves[0]);
+            const LoopReach tangent = loopBehindExit(function, halves[1]);
+            if (value.ok && tangent.ok && value.loop == tangent.loop && value.component == 0 &&
+                tangent.component == 1) {
+                cut.loop             = value.loop;
+                cut.exitValueRoot    = halves[0];
+                cut.exitTangentRoot  = halves[1];
+                cut.valueProjections = value.projections;
+                cut.tangentProjections = tangent.projections;
+                return ExitShape::Loop;
+            }
             return ExitShape::Straight;
         }
     }
@@ -1883,17 +2050,21 @@ ExitShape exitShapeOf(const rt::GCGraph *function, gc_node_ref_t exit) {
         // A loop answers with its own value: `jvp` gives the LOOP node the pair type, so the exit of
         // `jvp(loop body)` is the loop itself and its two components *are* the pair. There is a pair
         // to cut in that graph all the same -- it is the node's value, not a tuple fill beside it.
-        return function->funcType() != nullptr &&
-                       node->dataType() == function->funcType()->exitType()
-                   ? ExitShape::Loop
-                   : ExitShape::NotAPair;
+        if (function->funcType() != nullptr && node->dataType() == function->funcType()->exitType()) {
+            cut.loop = exit;
+            return ExitShape::Loop;
+        }
+        return ExitShape::NotAPair;
     }
     if (node->kind != rt::GCNodeKind::Join || function->funcType() == nullptr ||
         node->dataType() != function->funcType()->exitType()) {
         return ExitShape::NotAPair;
     }
-    return branchConditionOf(function, exit) != rt::kInvalidNodeRef ? ExitShape::Branch
-                                                                  : ExitShape::Loop;
+    if (branchConditionOf(function, exit) != rt::kInvalidNodeRef) {
+        return ExitShape::Branch;
+    }
+    cut.loop = exit;
+    return ExitShape::Loop;
 }
 
 SplitGraph buildSplitGraph(
@@ -1944,12 +2115,16 @@ SplitGraph buildSplitGraph(
     }
     const rt::GCNode *exitNode = function->node(exit);
     (void)exitNode;
+    // What the exit's shape says about where the loop cell is: filled by the shape question, read by
+    // the loop cell of the switch below (the pair's two chains above one loop) and, before that, by
+    // the dispatch the loop takes with its own two halves.
+    LoopCut loopCut;
     // The loop is the one cell that does not read a residual tuple out of the graph before the cut:
     // its residuals are the tape the forward half makes plus the invariants its rounds read, and
     // neither exists until the loop is read. So it dispatches here, before `residualsOf`, and takes
     // its own two halves with it -- the entry is the same question about the same exit's shape.
-    if (exitShapeOf(function, exit) == ExitShape::Loop) {
-        return cutLoopGraph(context, program, function, os, exit);
+    if (exitShapeOf(function, exit, loopCut) == ExitShape::Loop) {
+        return cutLoopGraph(context, program, function, os, loopCut);
     }
     // One entry, three cells (P1-14, code review 2026-11-01). What used to be a chain of `if`s --
     // "is it a tuple fill? then straight line; else is it a Join? then branch; else loop; else not a
@@ -1971,7 +2146,7 @@ SplitGraph buildSplitGraph(
     // - Every cell *starts* at the same place (the exit's shape) and will end at the same place (a
     //   cut that recurses by region); they are written as cells so that the recursion of P1-14's
     //   next step is a change of one cell's body, not the invention of a second entry.
-    switch (exitShapeOf(function, exit)) {
+    switch (exitShapeOf(function, exit, loopCut)) {
         case ExitShape::Straight:
             // The exit is the pair itself: the cut is the straight-line body, and the two `copyHalf`
             // walks after this switch are that cell's one entry.
