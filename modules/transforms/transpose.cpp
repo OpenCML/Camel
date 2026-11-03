@@ -2782,8 +2782,8 @@ bool buildTransposeMember(
                 const size_t port =
                     at < portOfParameter.size() ? portOfParameter[at] : paramCount;
                 if (port >= ports.size()) {
-                    os << "TRANSPOSE function=" << function->name() << " skip=unread-parameter at="
-                       << at << '\n';
+                    refuse(TransposeRefusalCause::UnreadParameter);
+                    os << " at=" << at << '\n';
                     return false;
                 }
                 const camel::runtime::GCNode *portNode = function->node(ports[port]);
