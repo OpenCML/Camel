@@ -80,3 +80,21 @@
 # 摘掉的那一段：transpose.cpp#forward 里 `if (forwardOf[ref] == rt::kInvalidNodeRef && at < paramCount)` 的分支（`const size_t slot = at;` 起，到类型校验通过后 return 为止）
 camel test/cases/compile/transforms/grad_array_sum.cml std::nvm 2>&1 | grep -E "TRANSPOSE-NEEDS|call-value-missing"
 ```
+
+## 7. 动手前的第一处核对：「改写体里的读」**已经在了**
+
+派工说的一笔是「`split` 造后一半时，把体里读参数原值的地方改写成读闭包成员」。动手前先核对这一处是否已经存在，结果是**它已经存在**，位置在 `modules/transforms/split.cpp`：
+
+- `SplitGraph::crossesCut`（`split.cpp:347`）判「这个值跨切点、要从元组里取」；
+- `makeCopy`（`split.cpp:388`）**第一件事**就是 `if (crossesCut(ref))` → `projectResidual(...)`，把源图里那个读**换成一个 `accs`，从残差元组里取出那一格**（`split.cpp:390`）。所以后一半的体里，跨切点的值**已经是"读闭包成员"的节点**（`Accs`），不是读参数端口；
+- 只有当值不跨切点时，才会走到 `split.cpp:479` 的 `portIndex` 那一支，而那一支在"后一半要读参数原值"时是**拒绝**（`split.cpp:501`：`the backward half reads the value of parameter N, and it is not one of the values the cut carries`），不会退化成"按位置读"。
+
+也就是说：**"改写体里的读"不是缺失的那一步**，它已经由 `projectResidual` 完成。缺的那一步在**转置端怎么认出这个 `accs` 背后是谁的**：
+
+`transpose.cpp:1147`（`Accs` 分支）先把元组本身 `forward(norm.front())`，元组又落到 `Port` 分支，于是走到 `closurePorts[at]` 的位置约定——**位置约定最后是被"元组端口"这一层用掉的**，不是被"体里的读"用掉的。
+
+这一条的后果很重要：派工里那三笔的**第一笔（`split` 侧改写）没有可改的东西**，硬改会去动一个已经正确的机制；真正的着力点在 `Transpose` 的 `Accs`/`Port` 两级的**身份识别**，与第 1 项的核心是同一块。**所以这一轮没有改代码**：按纪律，先报告这处核对结果，不盲改。
+
+## 8. 复现最后一步（为什么"后一半的图"看不见）
+
+`split` 不是可调用的 pass（`modules/transforms/split.cpp` 里没有 `registerPass`，`stdlib/std.cml` 里也没有 `split` 这个词），它是库里 `transforms:split` 这个算子运行时内部生成的。所以**今天没有现成工具把后一半单独 dump 出来**（`std::jgir` 只给到 `transforms:split` 这一层，见 `g4n3 OPER transforms:split`）。要贴「体里那个读节点的来源变成了闭包成员」的图证据，**得先有一个能 dump 后一半的入口**——这本身是一笔工，和上面的核对一样，先报不动手。
