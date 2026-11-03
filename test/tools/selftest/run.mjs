@@ -296,7 +296,10 @@ const knownfailVerdict = knownfailReadings.map(([what, needle]) => {
 if (!/^\[XFAIL\] complete\b/m.test(knownfail.output)) {
     problems.push(`known_fail gate: the complete entry did not report [XFAIL]:\n${knownfail.output}`)
 }
-if (!knownfail.output.includes('known_fail_owner: the runner self-test')) {
+// The owner is printed through `printDetailLines`, which splits `key: value` into two padded
+// columns -- the line reads `[INFO] known_fail_owner   the runner self-test`, with no colon left.
+// The assertion is on that printed form, because that is the form the reader of a gate sees.
+if (!/\[INFO\] known_fail_owner\s+the runner self-test\b/.test(knownfail.output)) {
     problems.push('known_fail gate: the owner was not printed on the [XFAIL] line')
 }
 knownfailVerdict.push(`all-three=${/^\[XFAIL\] complete\b/m.test(knownfail.output) ? 'accepted' : 'MISSING'}`)
