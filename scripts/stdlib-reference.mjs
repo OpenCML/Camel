@@ -2111,20 +2111,13 @@ const EXAMPLE_STOPS = {
     // (`call`), and a function the gradient needs a `with` parameter on (`grad` twice, `with_grad`
     // twice).
     'a semantic error': 24,
-    // `split`'s example reaches the compiler with a function-typed parameter bound by name and the
-    // compile graph keeps a live dereference node (`internal error: Compile graph '__doc_example'
-    // still contains a live DREF node`). That is the compiler's own class, not the example's.
-    //
-    // 1 -> 4 while the split ABI moves (2026-11-02): `split(f)` now answers the front half alone, so
-    // the bodies and examples that still write the old pair -- `let (fwd, lin) = split(...)`, an
-    // element read of a *function* -- reach the compiler as `internal error: Unexpected target type
-    // in ACCS node`. The three are `stdlib/vjp.cml`'s own @example and the two fragments beside it
-    // (`grad`, `with_grad`): each compiles a body that calls `vjp`, and `vjp`'s body still
-    // destructures the pair. Recorded rather than fixed because the fix is the next step of the same
-    // lane (`stdlib/vjp.cml` and the cases that destructure the pair), and the number comes back to 1
-    // when that step lands. The rule above stands: this records a move in progress, not a permission
-    // to leave the examples broken.
-    'an internal error': 1,
+    // `an internal error` is gone (2026-11-03). The class held the examples that reached the
+    // compiler with a function-typed parameter bound by name: `split`'s own example, which kept a
+    // live dereference node, and then, while the split ABI moved, `stdlib/vjp.cml`'s example and the
+    // two fragments beside it, which still destructured the pair `split(f)` no longer answers. The
+    // step that lane recorded as pending has landed: every one of those examples compiles, so a run
+    // that finds nothing in this class is the run this table asks for, and the class is removed
+    // rather than left holding a number nothing points at.
 }
 
 // A fragment is a claim -- "this example is not a program of its own" -- and the marker is only
