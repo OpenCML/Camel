@@ -65,7 +65,6 @@ enum class TransposeRefusalCause {
     Arity,
     CotangentNeedsAValue,
     State,
-    StateUnread,
     Range,
     CallNoTranspose,
     /// No program can reach this one today: the shape that reached it is the one `34788b554`
