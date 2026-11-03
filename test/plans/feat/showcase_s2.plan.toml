@@ -61,3 +61,49 @@ assert(Number.isFinite(values.library) && Number.isFinite(values.engine),
 }
 '''
 timeout_ms = 120000
+
+# The TENSOR model's first step, and the wall that used to stand in front of it. The step captures
+# its batch and its target -- `x = [[1, 2], [3, 4]]`, `t = [[0, 0], [1, 1]]` -- and moves one weight
+# `w = [[0.5, 0.25], [0.125, 1]]` through `pred = x @ w`, `loss = 0.5 * sum((pred - t)^2)`.
+#
+# Until 2026-11-03 a body that captured *anything* was refused whole
+# (`transforms: jvp has no forward transform for this function`, `REINTERP jvp ... skip=body`), for a
+# captured `float` as much as for a captured `float[2, 2]`: the ports a capture arrives at were the
+# one kind `jvp` did not make, and the report of the tensor path blamed `pairTypeOf`, which hands an
+# array the pair its own type names and was never asked. The four directions of `dL/dw` are now read
+# out of the forward transform, four seeds, and they are the reverse transform's answer without the
+# reverse transform: `dL/dw = x^T (pred - t) = [[3.75, 13.5], [5.5, 19.5]]` at `loss = 10.34375`.
+#
+# Every element is exact in binary floating point, so this entry compares exactly and not to a
+# tolerance: the hand calculation, the library's forward transform and the engine's `with_grad`
+# answer the same four numbers and the same loss (PyTorch 2.5.1+cu121, float64, cpu, 2026-11-03,
+# `D:\Temp\s2-tensor-first-step-torch.py`).
+[[tests]]
+name = "first_step.tensor_forward_jvp.nvm"
+desc = "The first step's gradient on a TENSOR model read through the library's forward transform, four seeds, against the engine's `with_grad`: loss 10.34375 and dL/dw [[3.75, 13.5], [5.5, 19.5]], element by element, against the hand calculation and PyTorch's reading of the same literals"
+kind = "behavior"
+case = "../../cases/compile/transforms/first_step_tensor.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["first_step tensor loss=10.34375 dL/dw=[[3.75, 13.5], [5.5, 19.5]]", "first_step tensor engine loss=10.34375 dL/dw=[[3.75, 13.5], [5.5, 19.5]]", "first_step tensor max_abs_diff_library_vs_engine w=0.000000000000e+00 loss=0.000000000000e+00"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+# The same step through `vjp` -- `transpose(split(jvp(f)))` -- which is the path S2's training step
+# is written on. The capture no longer stops it: the lift now builds the whole body (its reading
+# names `jvp_matmul,jvp_subtract,jvp_mul_tensor,jvp_sum`), and what stops the pair of halves is
+# `split`, which reads every port of the lifted graph as one of its parameters and says of a capture
+# that it is not: `a port uri=- why=the port is not a parameter of the graph, so neither half takes
+# it`. That is the next wall, and it belongs to `split` rather than to the lift.
+[[tests]]
+name = "first_step.tensor_vjp_stops_at_split.nvm"
+desc = "The tensor step through the library's `vjp`: the capture no longer refuses the lift, and the reverse half is refused by `split` -- a port of the lifted graph that is not one of its parameters, which is what a captured value is"
+kind = "negative"
+case = "../../cases/compile/transforms/first_step_tensor_vjp.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["transforms: split does not build this function", "the port is not a parameter of the graph, so neither half takes it"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000

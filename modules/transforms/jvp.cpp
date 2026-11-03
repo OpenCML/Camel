@@ -8,6 +8,7 @@
 
 #include "camel/compile/gir/rule_templates.h"
 #include "camel/core/forward.h"
+#include "camel/core/derivative.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/base.h"
@@ -625,6 +626,31 @@ bool liftGraph(
             }
             return made;
         };
+        // The zero tangent of a value that is not a constant: a captured or `with` value does not
+        // move, so its tangent is the zero of its own type -- and when the type leaves an extent
+        // open (`float[]`, `f32[..]`, which is how S2's own parameter tree is written) there is no
+        // static zero to write, because the length is the value's and the value is a port.
+        //
+        // The language already answers that question, and not here: a tangent space published by
+        // the registry names the operator that makes a zero of a value of that type
+        // (`TangentSpace::zerosLikeUri`, include/camel/core/derivative.h; the arrays' is
+        // `:tangent/zeros_arr`, src/builtin/operators/derivative.cpp). Building the call is the same
+        // thing this lift does for a rule -- a node at a named operator -- so nothing is invented:
+        // the zero is the one every other reader of a tangent already asks for (`zeroTangent`,
+        // src/builtin/operators/struct.cpp).
+        const auto zeroOfValueAtRunTime = [&draft](gc_node_ref_t primal,
+                                                   Type *type) -> gc_node_ref_t {
+            if (type == nullptr || type->code() != camel::core::type::TypeCode::Array) {
+                return rt::kInvalidNodeRef;
+            }
+            const auto *space = camel::core::DerivativeRegistry::instance().findTangentSpace(type);
+            if (space == nullptr || space->zerosLikeUri.empty()) {
+                return rt::kInvalidNodeRef;
+            }
+            const gc_node_ref_t zero = draft.addOperNode(type, nullptr, space->zerosLikeUri);
+            draft.setNormInputs(zero, std::span<const gc_node_ref_t>(&primal, 1));
+            return zero;
+        };
         // The graph this one is a lift of: a fact about the graph, not a comment about the call.
         // `split` reads it when it has to carry a call of a lifted graph into a half, so that the
         // value half can call the primal instead of the lift (whose first parameter is the pair).
@@ -1117,6 +1143,9 @@ bool liftGraph(
                     copyOf[ref] = withPort->second;
                     if (camel::core::tangentSpaceOf(node->dataType()).hasSpace()) {
                         tangentOf[ref] = zeroConstantFor(node->dataType());
+                        if (tangentOf[ref] == rt::kInvalidNodeRef) {
+                            tangentOf[ref] = zeroOfValueAtRunTime(copyOf[ref], node->dataType());
+                        }
                     }
                     copied[ref] = true;
                     ++copiedKinds;
@@ -1132,6 +1161,11 @@ bool liftGraph(
                     copyOf[ref] = captured->second;
                     if (camel::core::tangentSpaceOf(node->dataType()).hasSpace()) {
                         tangentOf[ref] = zeroConstantFor(node->dataType());
+                        if (tangentOf[ref] == rt::kInvalidNodeRef) {
+                            // An extent the type leaves open: the zero is the value's shape, made
+                            // where the value is (see `zeroOfValueAtRunTime`).
+                            tangentOf[ref] = zeroOfValueAtRunTime(copyOf[ref], node->dataType());
+                        }
                     }
                     copied[ref] = true;
                     ++copiedKinds;
