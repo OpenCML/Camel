@@ -19,11 +19,13 @@ mul_tensor(x, w) => (ct: T[..]) => (sum_to(ct * w, x), sum_to(ct * x, w))
 所以这一笔加的是**挑律时的那一问**：`modules/transforms/transpose.cpp#ruleTakesOperands`，照 `jvp.cpp#portsTakeOperands` 的写法与措辞——律的形参表是不是这个节点的形参表？不是就不选它，走既有拒绝路径，并把两边的类型都写出来：
 
 ```
-TRANSPOSE function=split_of_jvp_of_a_prod_backward skip=rule uri=tensor:multiply operands=2 \
-  reason=the rule takes (float[..], float[..]), and the operator has (float[..], float)
-error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: transpose has no transpose
-  for this function: the rule table has no rule for a step of this body.
+TRANSPOSE function=split_of_jvp_of_a_prod_backward skip=rule-shape uri=tensor:multiply node=6 \
+  operands=2 reason=the rule takes (float[..], float[..]), and the operator has (float[..], float)
+error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: transpose has no transpose for
+  this function: the rule the index filed for `tensor:multiply` was written for another shape: the
+  rule takes (float[..], float[..]), and the operator has (float[..], float) (node 6).
 ```
+那一句里三件东西都在：**哪个节点**（`node 6`，与上面日志同一编号）、**哪个算子**（`` `tensor:multiply` ``）、**什么不合**（律的形参表对实参表）。它没有退化成"没有律"——那是 `Rule` 的句子（`the rule table has no rule for a step of this body`），描述的是查了一次什么都没查到；这里查到了一条律，而律自己说这一步不是它要的形状，所以是新的 `TransposeRefusalCause::RuleShape`（日志里的词是 `rule-shape`）。三件事实记在 `TransposeRefusal` 上与句子读的是同一份记录，不靠人再解析日志。
 
 只有**走查会真去要余切的位置**参与这一问：常量与无切空间的值本来就不问律（`isConstant`、`hasTangentSpace`），所以 `sum(x * 2.0)` 照旧对——`value = 12.0`、`d/dx = 2.0 2.0 2.0`、`rhs=sum_t,add_tensor_t,mul_tensor_t`。校验只加在 transpose 这一处，索引的判重规则一个字没动。
 
@@ -38,7 +40,7 @@ error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: transpose h
 | `sum_to(ct * x, w)`，**不做类型校验** | `d/dx = 4 4 4`（对）、**`d/ds = 0.0`**，无任何诊断 |
 | 同上，换成 `sum(ct * x)`（`float` 型的答案） | `d/ds = 6.0`（对） |
 | 同上，`sum_to(ct * x, 0.0)`（字面量 `like`） | 拒绝：`reason=the rule's right side uses a node written after it` |
-| **本笔之后**：`sum(x * s)` | 拒绝，原文见上，`(float[..], float)` |
+| **本笔之后**：`sum(x * s)` | 拒绝，句子见上（带 `node 6`、`` `tensor:multiply` ``、"another shape"），`(float[..], float)` |
 | **本笔之后**：`sum(s * x)`（操作数顺序翻过来） | 同样拒绝，`(float, float[..])`——**不再崩** |
 | **本笔之后**：`sum(x * 2.0)`（常量标量） | 照旧对：`12.0`、`d/dx = 2 2 2` |
 | **本笔之后**：`float[3]` × `float[3]`（具体形状，`transpose_product_fixed_shape`） | 照旧对：`20.0`、`d/dxs = 2 3 4`、`d/dw = 1 2 3` |

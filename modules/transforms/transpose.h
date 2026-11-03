@@ -27,6 +27,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace camel::transforms {
@@ -53,6 +54,14 @@ enum class TransposeRefusalCause {
     ArmTangents,
     Arm,
     Rule,
+    /// The key holds a law, and the law was written for another shape. The index files a rule under
+    /// the head of its left side and that head's operand count, and reads no operand types, so a
+    /// key can hold one law for every shape its operator is called with -- `tensor:multiply` is
+    /// called with two arrays and with an array and a number, and the law it files was written for
+    /// two arrays. It is not `Rule`: there *is* a rule, and what it says is that this step is not
+    /// the shape it was written for. Saying "no rule" here would be a sentence about a state the
+    /// transform is not in.
+    RuleShape,
     Arity,
     CotangentNeedsAValue,
     State,
@@ -80,6 +89,16 @@ const char *transposeRefusalWord(TransposeRefusalCause cause);
 struct TransposeRefusal {
     TransposeRefusalCause cause = TransposeRefusalCause::None;
     std::optional<size_t> param;
+    /// The node the walk stopped at, in the graph's own numbering, when the site knows it: the
+    /// reading above the sentence numbers its nodes the same way, so a reader can find the step the
+    /// sentence is about. Empty when the cause is about the function rather than one node.
+    std::optional<size_t> node;
+    /// The operator whose law the shape did not fit (`RuleShape`): `tensor:multiply`. The sentence
+    /// names it because "this body" is not something a reader can look up.
+    std::string operatorUri;
+    /// What the law takes and what the step has, in the index's own spelling: the one fact that
+    /// turns "another shape" into something a reader can act on.
+    std::string shape;
 };
 
 /// The graph of `transpose(f)` and the program of the graphs built with it. `refusal` is what the

@@ -61,6 +61,8 @@ const char *transposeRefusalWord(TransposeRefusalCause cause) {
         return "arm";
     case TransposeRefusalCause::Rule:
         return "rule";
+    case TransposeRefusalCause::RuleShape:
+        return "rule-shape";
     case TransposeRefusalCause::Kind:
         return "kind";
     case TransposeRefusalCause::Arity:
@@ -2145,9 +2147,19 @@ bool buildTransposeMember(
                     if (state.context != nullptr &&
                         !ruleTakesOperands(
                             *state.context, rule->rule, operandTypes, answered, whyNot)) {
-                        refuse(TransposeRefusalCause::Rule);
-                        os << " uri=" << uri << " operands=" << normOperands.size()
-                           << " reason=" << whyNot << '\n';
+                        // The key has a law; the law was written for another shape. Not `Rule`:
+                        // that sentence ("the rule table has no rule for a step of this body")
+                        // describes a lookup that found nothing, and this lookup found a law that
+                        // says this step is not what it takes. The three facts a reader needs --
+                        // which node, which operator, and what the two type lists are -- go into
+                        // the record the sentence is rendered from, and the log says them here so
+                        // the reading above can be grepped to the same node.
+                        refuse(TransposeRefusalCause::RuleShape);
+                        state.refusal.node = ref;
+                        state.refusal.operatorUri = uri;
+                        state.refusal.shape = whyNot;
+                        os << " uri=" << uri << " node=" << ref
+                           << " operands=" << normOperands.size() << " reason=" << whyNot << '\n';
                         return false;
                     }
                 }

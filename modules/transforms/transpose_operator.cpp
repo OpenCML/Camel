@@ -188,6 +188,25 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
                          "branch, so carrying it means transposing that body";
     case TransposeRefusalCause::Rule:
         return "the rule table has no rule for a step of this body";
+    case TransposeRefusalCause::RuleShape: {
+        // The other half of the same lookup, and the sentence `Rule` above used to stand in for.
+        // The index files a rule under the head of its left side and that head's operand count and
+        // reads no operand types, so a key can hold a law written for another shape: this step has
+        // a law, and the law's own parameter list says this step is not it. "No rule" would be a
+        // sentence about a state this transform is not in. Everything a reader can act on is the
+        // operator, the two type lists and the node, so all three are in the sentence.
+        std::string answer = "the rule the index filed for ";
+        answer += refusal.operatorUri.empty() ? std::string("this step")
+                                              : "`" + refusal.operatorUri + "`";
+        answer += " was written for another shape";
+        if (!refusal.shape.empty()) {
+            answer += ": " + refusal.shape;
+        }
+        if (refusal.node.has_value()) {
+            answer += " (node " + std::to_string(*refusal.node) + ")";
+        }
+        return answer;
+    }
     case TransposeRefusalCause::Condition:
         return "a bool condition has no cotangent space, so it carries no derivative";
     case TransposeRefusalCause::Signature:
