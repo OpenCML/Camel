@@ -39,6 +39,9 @@ function: the membe…`）、`.second_state_of_the_same_loop`（`split does not 
 on the chain the exit reads…)`）——**既不属 ① 也不属 ②**。8 个 known fail 全在 `compositions`：
 `grad_vmap_f`、`vmap_grad_f`、`jvp_vjp_f`、`grad_vjp_g_zero`（各 2 后端）。
 
+**① 到今天还没落**：它自己的判据之一 `vjp_loop.rounds_are_undone_in_reverse.nvm` 在 `cabe67e0e` 上仍是
+`[XFAIL]`（17:35 那条要求它答 `(1.0, 1.0)` 并摘掉已知失败标记）。`split` 那 20 条其余全绿。
+
 **已经同答的**（同机同树，说明差集不是"整个库层"）：`x³` 27.0 = 27.0；`x/y` 的 `d/dx` 0.25 逐位同，库层还答
 `d/dy = -0.375`；`x - y` 引擎 1.0 = 库层 1.0 且 `d/dy = -1.0`；`tanh` `[0.7864477329659274,
 0.41997434161402614]` 二进制同；`take(x,[0,0,2])` 两侧 `[2.0, 0.0, 1.0]`。
