@@ -1,0 +1,37 @@
+// The same function through the library's `vjp`, element for element against the engine's answer.
+//
+// Before `jvp_sigmoid` and `sigmoid_t`, this program stopped at the lift -- the library had no
+// forward rule for the operator at all:
+//
+//     REINTERP jvp function=total skip=rule uri=tensor:sigmoid reason=the operator has no forward rule bound at all
+//     error: transforms: jvp has no forward rule for `tensor:sigmoid` (the operator has no forward rule bound at all).
+//
+// With them the same program runs, and the backward half needs `sigmoid(x)`, a value no line of this
+// file computes: the two rules recompute it from `x` alone, and the cut carries it as a residue --
+// the shape `exp` measured (`jvp_exp`, `exp_t`). So this case pins three things at once: the
+// numbers, the rules by name, and that no `skip=` line remains.
+//
+// The wrong laws and the readings they would print are written out in the neighbouring engine case,
+// `sigmoid_gradient_through_the_engine.cml`; here the criterion is that the library prints the
+// engine's numbers component for component --
+//
+//     value = s(0.5) + s(-1.0) = 0.8914007525718497
+//     d     = [0.2350037122015945, 0.19661193324148185]
+//
+// -- not an aggregate, and not the value of the function it differentiates.
+//
+//     camel test/cases/compile/transforms/sigmoid_gradient_through_the_library.cml
+import { vjp } from vjp
+import { sigmoid, sum } from tensor
+
+/// The same function as the engine case, with the differentiated value as an ordinary parameter.
+func total(x: float[..]): float {
+    return sum(sigmoid(x))
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(total)([0.5, -1.0] as float[])
+    let d = pullback(1.0).0
+    `sigmoid library value={} d={}`->format<value, d>->println
+    return 0
+}

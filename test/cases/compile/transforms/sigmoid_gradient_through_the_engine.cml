@@ -1,0 +1,36 @@
+// `sigmoid`'s gradient through the engine: the number the library's own rules must reproduce.
+//
+// `sigmoid` is a member of the deletion difference set whose slope needs a **forward value**:
+// `d(sigmoid(x)) = y * (1 - y) * dx` with `y = sigmoid(x)`, and a law with one operand can only
+// write that by calling the operator a second time. The engine does not have to recompute anything
+// -- `sigmoidVjp` (`modules/tensor/ops/elementwise_ops.cpp`) keeps the output it already has -- so
+// the two sides reach the same number by different routes, and this case pins the number.
+//
+// The criterion is both components of the gradient on one input that holds both signs, and the two
+// wrong laws a reader is most likely to write are separable element by element, without a tolerance
+// and without an aggregate:
+//
+//   * `sigmoid_t` written as `ct` (the identity)        -> [1.0, 1.0];
+//   * `sigmoid_t` written as `ct * s(x)` (the `1 - s(x)`
+//     factor dropped, half of the slope)                -> [0.6224593312018546, 0.2689414213699951];
+//   * the correct `ct * s(x) * (1 - s(x))`              -> [0.2350037122015945, 0.19661193324148185].
+//
+// `s(x)` is injective and the two points are `0.5` and `-1.0`, so every component separates all
+// three laws: a single component or a sum could not (the two wrong readings also sum to something
+// that is not the right sum, but the pair is what is asserted, not the sum).
+//
+//     camel test/cases/compile/transforms/sigmoid_gradient_through_the_engine.cml
+import { grad } from autodiff
+import { sigmoid, sum } from tensor
+
+/// The differentiated value is the `with` parameter (design principles 9.9).
+with <x: float[..]>
+func total(): float {
+    return sum(sigmoid(x))
+}
+
+func main(): int sync {
+    let d = grad(total)<[0.5, -1.0] as float[]>()
+    `sigmoid engine d={}`->format<d>->println
+    return 0
+}

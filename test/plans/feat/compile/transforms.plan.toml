@@ -1500,3 +1500,32 @@ expect_stderr_contains = ["rules=jvp_relu"]
 expect_output_not_contains = ["skip=rule uri=tensor:relu", "skip=call-no-transpose"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# `sigmoid` on the D1 difference set: its slope needs a forward value the program text never computes.
+[[tests]]
+name = "sigmoid_gradient_through_the_engine"
+desc = "The gradient of `sum(sigmoid(x))` through the engine's own rule (`sigmoidVjp`, `modules/tensor/ops/elementwise_ops.cpp`, registered by `setVjp` in `modules/tensor/ops/vjp.cpp`), both components written out: `[0.2350037122015945, 0.19661193324148185]` on `[0.5, -1.0]`, which holds both signs. The pair is the criterion: a `sigmoid_t` written as `ct` answers `[1.0, 1.0]` and one written as `ct * s(x)` (the `1 - s(x)` factor dropped) answers `[0.6224593312018546, 0.2689414213699951]`, so both components separate all three laws without a tolerance, while one component or an aggregate would not."
+kind = "behavior"
+case = "../../../cases/compile/transforms/sigmoid_gradient_through_the_engine.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["sigmoid engine d=[0.2350037122015945, 0.19661193324148185]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "sigmoid_gradient_through_the_library"
+desc = "The same function through the library's `vjp`: `value=0.8914007525718497` and `d=[0.2350037122015945, 0.19661193324148185]`, element for element the engine's answer. Before `jvp_sigmoid` and `sigmoid_t` the program stopped at the lift with `skip=rule uri=tensor:sigmoid reason=the operator has no forward rule bound at all`; the stderr side pins the rule that now answers (`rules=jvp_sigmoid,jvp_sum`) and that no `skip=` line remains. The backward half needs `sigmoid(x)`, which no line of the program computes, so the cut must carry a recomputed x-only value as a residue."
+kind = "behavior"
+case = "../../../cases/compile/transforms/sigmoid_gradient_through_the_library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["sigmoid library value=0.8914007525718497 d=[0.2350037122015945, 0.19661193324148185]"]
+expect_stderr_contains = ["rules=jvp_sigmoid"]
+expect_output_not_contains = ["skip=rule uri=tensor:sigmoid"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
