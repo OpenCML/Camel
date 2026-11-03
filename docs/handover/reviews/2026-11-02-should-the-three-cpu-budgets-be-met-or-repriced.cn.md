@@ -112,7 +112,7 @@ operators (share of operator time)
 | `f6b37bf01` | 2026-10-31 | 收集器的尺寸与开关改为从命令行取 |
 | `5301360dd`、`2c1a7b6c4` | 2026-11-02 | GC 自检：晋升阈值、pin 自检 |
 
-**`GUARD` 在发布版里是活的**（`include/camel/utils/assert.h:95`：`ASSERT` 在 `NDEBUG` 下是 `((void)0)`，
+**`GUARD` 在发布版里是活的**（`include/camel/utils/assert.h#GUARD`：`ASSERT` 在 `NDEBUG` 下是 `((void)0)`，
 `GUARD` 是 `CAMEL_UNLIKELY(!(cond))` + 一次 `fail_invariant`），所以 `ccbc54293` 确实给**每一次分配**加了比较与分支。
 
 **而那一笔自己的证据是 18 次**：它的提交信息写着"the 3,000,000 element loop allocates **18 times** and the

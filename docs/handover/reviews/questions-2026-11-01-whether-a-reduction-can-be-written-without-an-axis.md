@@ -19,7 +19,7 @@
 
 - 声明（`stdlib/signatures/tensor.cml`）：`168` 行 `sum::<T>(t: T[..]): T`、`186` 行 `mean::<T>(t: T[..]): T` 是一实参的整轴；
   `#op('tensor:max_axis')` 那一条（`201` 行）起，`max`/`min`/`argmax`/`argmin` **只有**带 `axis` 的声明。
-- 注册（`modules/tensor/ops/reduction_ops.cpp:456`）：`reductionOps()` 里只有 `sum` 与 `mean` 各推一个整轴 `OpDef`；
+- 注册（`modules/tensor/ops/reduction_ops.cpp#meanAxisVjp`）：`reductionOps()` 里只有 `sum` 与 `mean` 各推一个整轴 `OpDef`；
   `max`/`min`/`argmax`/`argmin` 走 `reduceAxisDef<…>("max_axis", "max")` 这样的**沿轴注册**，没有 `tensor:max` 整轴 OpDef。
 - 实测原文（一个 `float[2, 3]` 的行上写一实参调用）：
 

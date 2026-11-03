@@ -6,9 +6,9 @@
 
 | # | 位置 | 能造什么 | 聚合类型怎么办 | `split` 能用吗 |
 |---|---|---|---|---|
-| 1 | `modules/transforms/jvp.cpp:794`（`draft.materializeStaticValue(toSlot<double>(0.0), Type::Float64(), kGCNodeFlagConstant)`） | **只有 `float`**。同一文件 1052 行是同一写法 | **不处理**（外层已按 `node->dataType() == Type::Float64()` 挡掉） | 不行：`split` 要的是"该切线类型的零"，切线可能是元组/数组 |
-| 2 | `modules/autodiff/pullback.cpp:1992` `addZeroTangent(transaction, primal, primalValue)` | **任意有切线空间的类型**：标量走 `materializeStaticValue`，**聚合递归**（`isAggregate` → 逐字段造零再 `addAggregate`），离散标量走 `discreteZeroSlot`，都没有就 `fail("no zero gradient for type '%s'")` | **处理得最完整**：逐字段递归 + 每个元素带自己的切线元素索引 | **最接近，但接口不合**：它收 `rt::GraphTransaction &`，而 `split` 全程只握 `draft`（模板参数，为的是不新增 `GraphDraft` 直接引用）；跨模块复用 `split → autodiff` 还是新依赖 |
-| 3 | `src/builtin/operators/struct.cpp:830` `moduleZeroTangent(ctx, primalType, tangentType, primal)` | 运行时算子（`struct` 模块里），值层 | 值层递归 | **不行**：那是**运行时取值**，不是建图期的节点 |
+| 1 | `modules/transforms/jvp.cpp#liftGraph`（`draft.materializeStaticValue(toSlot<double>(0.0), Type::Float64(), kGCNodeFlagConstant)`） | **只有 `float`**。同一文件 1052 行是同一写法 | **不处理**（外层已按 `node->dataType() == Type::Float64()` 挡掉） | 不行：`split` 要的是"该切线类型的零"，切线可能是元组/数组 |
+| 2 | `modules/autodiff/pullback.cpp#addZeroTangent` `addZeroTangent(transaction, primal, primalValue)` | **任意有切线空间的类型**：标量走 `materializeStaticValue`，**聚合递归**（`isAggregate` → 逐字段造零再 `addAggregate`），离散标量走 `discreteZeroSlot`，都没有就 `fail("no zero gradient for type '%s'")` | **处理得最完整**：逐字段递归 + 每个元素带自己的切线元素索引 | **最接近，但接口不合**：它收 `rt::GraphTransaction &`，而 `split` 全程只握 `draft`（模板参数，为的是不新增 `GraphDraft` 直接引用）；跨模块复用 `split → autodiff` 还是新依赖 |
+| 3 | `src/builtin/operators/struct.cpp#zeroTangent` `moduleZeroTangent(ctx, primalType, tangentType, primal)` | 运行时算子（`struct` 模块里），值层 | 值层递归 | **不行**：那是**运行时取值**，不是建图期的节点 |
 | 4 | `split.cpp` 自己：`fillTuple` 里的常量、`zeroTangent` 相关分支 | 只在残差/元组的既定位置造常量 | —— | 不是通用入口 |
 
 ## 结论

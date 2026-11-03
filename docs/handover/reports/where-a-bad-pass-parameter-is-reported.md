@@ -40,9 +40,9 @@ silently is not.
 
 | what is wrong | who catches it | when | what the user sees |
 |---|---|---|---|
-| parameter undeclared, duplicated, wrong type, missing, out of the declared range | `valueProblem` / `bindArgs` (`src/execute/pass.cpp:1370-1400`) | while the pipeline is **read** | `ParamArgumentUnknown` / `Duplicate` / `WrongType` / `Missing`, or `InvalidPassParameter` for a range, with `<pipeline>:line:col` |
+| parameter undeclared, duplicated, wrong type, missing, out of the declared range | `valueProblem` / `bindArgs` (`src/execute/pass.cpp#valueProblem`) | while the pipeline is **read** | `ParamArgumentUnknown` / `Duplicate` / `WrongType` / `Missing`, or `InvalidPassParameter` for a range, with `<pipeline>:line:col` |
 | the specification is not a call at all | `parameterDiagnostic`, `Kind::Syntax` | while the pipeline is read | `InvalidPassParameter` |
-| the pass **refuses to be built** for a reason its declaration does not describe | `constructPass` -> `reportPassFailure` (`src/execute/pass.cpp:2551`, `:2520`) | while the pass is **constructed** | `PassInternalError` naming the pass and what it said |
+| the pass **refuses to be built** for a reason its declaration does not describe | `constructPass` -> `reportPassFailure` (`src/execute/pass.cpp#effectOrderViolation`, `:2520`) | while the pass is **constructed** | `PassInternalError` naming the pass and what it said |
 | the pass breaks while running | the same `reportPassFailure`, from the `apply` handler (`:3050`) | while the pass **runs** | `PassInternalError` |
 
 **The rule**: anything the declaration can describe is refused where the declaration is read, and

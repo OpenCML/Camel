@@ -6,9 +6,9 @@
 
 ## P0：执行语义（直接违反原则 3.1/3.3，影响 ECOOP 的主张）
 
-1. **执行计划把区域的所有成员都排进去**（`232542e69`，`src/execute/graph_runtime_support.cpp:526-535`，`live[n] || isMember(n)`）。原则 3.1 写的是"一个节点执行，当且仅当它所在区域里一个要执行的节点用到它"。区域成员关系只决定"何时"，不决定"是否"。起因是我 12:30 那条裁定写成了"臂的范围取区域的成员"，没写清这一点。**修法**：计划只按存活排；臂里语句的"被用到"经同步链传到臂结果。**读数**：`func f(c: bool): int sync { if c then { println(1); println(2) }; return 0 }` 在 `c=true` 时按原则 3.1 的例子输出；臂里没人读的除零不触发故障。
+1. **执行计划把区域的所有成员都排进去**（`232542e69`，`src/execute/graph_runtime_support.cpp#computeExecutionOrder`，`live[n] || isMember(n)`）。原则 3.1 写的是"一个节点执行，当且仅当它所在区域里一个要执行的节点用到它"。区域成员关系只决定"何时"，不决定"是否"。起因是我 12:30 那条裁定写成了"臂的范围取区域的成员"，没写清这一点。**修法**：计划只按存活排；臂里语句的"被用到"经同步链传到臂结果。**读数**：`func f(c: bool): int sync { if c then { println(1); println(2) }; return 0 }` 在 `c=true` 时按原则 3.1 的例子输出；臂里没人读的除零不触发故障。
 2. **控制边仍在传递"被用到"**（`graph_runtime_support.cpp:181` 沿 ctrl 往回走；`graph_read.cpp:525`；8 处成对写"sync 边 + ctrl 边"：`draft.cpp:1658,1669`、`draft_inline.cpp:1665,2200,2343`、`rewrite.h:117`、`writings.cpp:2199`、`builder_helpers.h:695`；建图侧 15 处 `linkNodes(LinkType::Ctrl, …)`）。`effects_model_edges.plan.toml:55,165` 标成 `known_fail`，备注写着"负责人不在，等人接手批次项 9"。**修法**：批次项 9 现在指定负责人，把成对写收成一个写入口，读侧的 ctrl 半边全部删掉，直到原则 3.1 说的三种边成立；两条 `known_fail` 在同一笔里撤掉。
-3. **"严格"的效应凭据检查把顺序边和一个标记都算作凭据**（`5dbd26a37`、`7aa67cbd3`，`src/execute/pass.cpp:1845-1861`）。原则 3.1/3.3 说顺序边只排序。**修法**：凭据只认三样：数据用户、同步链上的位置（读边，不读标记）、图的结果。**读数**：删掉一个效应的最后一个读者、只留一条顺序边的测试遍，检查报 `PassInternalError`。
+3. **"严格"的效应凭据检查把顺序边和一个标记都算作凭据**（`5dbd26a37`、`7aa67cbd3`，`src/execute/pass.cpp#ProgramEffects`）。原则 3.1/3.3 说顺序边只排序。**修法**：凭据只认三样：数据用户、同步链上的位置（读边，不读标记）、图的结果。**读数**：删掉一个效应的最后一个读者、只留一条顺序边的测试遍，检查报 `PassInternalError`。
 4. **`EffectLivenessFacts` 是伪单点**（`821185288`、`30fa22344`；`effectStandingOf` 生产代码调用数为 0）。五处各自填字段，`hasWaitEdge` 有三种口径。**修法**：五处都经它判定，口径只留一种；做不到的字段删掉。
 5. **悄悄放行的界**：
    - 环守卫触发时，返回入参 `program`，丢掉本遍的全部重写（`rewrite.cpp:652-655`）。
@@ -26,7 +26,7 @@
 
 ## P1：程序变换与签名（违反"求导是库""签名只有一个来源"）
 
-7. **C++ 里的三张规则绑定表**（`src/core/forward.cpp`；`derivative.cpp:512-560`、`modules/tensor/ops/catalog.cpp:94-113`、`modules/tensor/module.cpp:111` 共 41 处 `bind*Rule`），把规则左边的头和元数又写了一遍；还为它造了 `mul_tensor` 这个名字。**修法**：加载规则集时，从规则左边（运算符加元数，或在前奏声明的名字）建索引，删掉三张表和 `*Descriptions`。
+7. **C++ 里的三张规则绑定表**（`src/core/forward.cpp`；`derivative.cpp:512-560`、`modules/tensor/ops/catalog.cpp#declareVmapRuleKeys`、`modules/tensor/module.cpp#TensorModule::TensorModule` 共 41 处 `bind*Rule`），把规则左边的头和元数又写了一遍；还为它造了 `mul_tensor` 这个名字。**修法**：加载规则集时，从规则左边（运算符加元数，或在前奏声明的名字）建索引，删掉三张表和 `*Descriptions`。
 8. **变换往用户程序的 stdout 写调试行**（`jvp/split/transpose/vmap/remat_operator.cpp` 里的 `std::cout`），失败时只抛一句笼统的话。**修法**：变换不写 stdout；拒绝走带位置、带原因的诊断；测试需要读数时，通过显式的调试接口取。
 9. **写死 `float64`**（`transpose.cpp` 34 处、`jvp.cpp` 25 处），带 `with` 参数的函数被整体拒绝。**修法**：提升与转置都问 `tangentSpaceOf(节点类型)`，规则按节点类型实例化；`with` 参数照原则 9.9 处理。这条覆盖 15:50 裁的数组参数三步。
 10. **`split`/`transpose` 按参数奇偶位置切**（`split.cpp:264,742,783`；`transpose.cpp` 用"第一参数是不是元组"来猜残差包）。**修法**：按 `Lift<T>` 的类型读，残差靠类型标记识别，不数参数个数。

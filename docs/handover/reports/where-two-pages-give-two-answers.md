@@ -19,8 +19,8 @@
 
 1. **停造 ctrl：报告说"不动"，裁定说"要做 ②a"。** `reports/control-edge-readers.md:15` 的"造边……**不动**（② 才停造）"与 `reviews/questions-2026-10-29.md:699` 的"**然后做 ②a**：停造 ctrl，重新测量"是同一条计划的今天与下一步，不是两个答案。
 2. **资源顺序保证"读的先后"，而最小程序读到的是前一次的值。** `reviews/questions-2026-10-29.md:736` 说未登记的写"只由同步块和资源顺序保证（3.3）"；`docs/handover/questions/questions-2026-10-31-two-references-write-one-object-outside-a-sync-block.md:32` 说"两次写都发生、同步块也保证了先后，读却稳定地拿到前一次的值"。不是矛盾：这一段落下规则的同一段末句就是"如果你们找到一个程序，在这条规则下给出违背直觉的结果，写成一页带最小程序的问题"（`:736`）——那页是它请来的反例，问题还没裁；而那句话保的是**执行先后**，不是**读拿到哪个版本**。
-3. **`writings` 的等价类 vs 资源顺序。** `reports/H232-ac-canonical-form.md:31` 说两种写法"在 congruence closure 里就是同一个等价类"（值的等价，`writings` 的活）；`reviews/questions-2026-10-29.md:736` 与 `include/camel/runtime/effect_liveness.h:67` 说的是"同一资源上的写与读的先后"（效应的顺序，3.3 的活）。前者决定两个表达式是不是同一个值，后者决定两个效应谁先谁后；一次写没有"值"可以等价。
-4. **规则集模块导出 `Lift`/`lift` vs "一个模块不兼任库和规则集"。** `reviews/questions-2026-10-29.md:397` 说规则集是一个模块，导出 `Lift<T>` 与 `lift`；`:746` 说不兼任。两个"库"不是一回事：`:746` 的"库"是 `autodiff` 那种被 `import` 进来、提供 `grad`/`tangent` 的模块；规则集模块导出的是它自己的规则要用的类型与提升函数（`stdlib/rulesets/jvp.cml:28`、`:33`），不是第二重身份。
+3. **`writings` 的等价类 vs 资源顺序。** `reports/H232-ac-canonical-form.md:31` 说两种写法"在 congruence closure 里就是同一个等价类"（值的等价，`writings` 的活）；`reviews/questions-2026-10-29.md:736` 与 `include/camel/runtime/effect_liveness.h#effectStandingOf` 说的是"同一资源上的写与读的先后"（效应的顺序，3.3 的活）。前者决定两个表达式是不是同一个值，后者决定两个效应谁先谁后；一次写没有"值"可以等价。
+4. **规则集模块导出 `Lift`/`lift` vs "一个模块不兼任库和规则集"。** `reviews/questions-2026-10-29.md:397` 说规则集是一个模块，导出 `Lift<T>` 与 `lift`；`:746` 说不兼任。两个"库"不是一回事：`:746` 的"库"是 `autodiff` 那种被 `import` 进来、提供 `grad`/`tangent` 的模块；规则集模块导出的是它自己的规则要用的类型与提升函数（`stdlib/rulesets/jvp.cml#lift`、`:33`），不是第二重身份。
 5. **20:50 与 22:10 对"`jvp.cml` 里有没有规则"的两个答案。** 22:10 在同一份文件里当场更正自己（"我 20:50 说……这是看错了"），读者在同一页往下两段就能读到更正，不构成两页各说各话。
 
 ## 怎么核的

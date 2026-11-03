@@ -28,7 +28,7 @@
 - 状态机在 `493d3953e`（2026-10-30 06:57，"Lower a generator into a state machine of pulled steps"）落进同一文件：`visitGeneratorBody` 就是它下面的那台机器，`:2160` 的"which is not built yet"与同文件第 5648 行起的实现直接矛盾。
 - **行号也漂了**：裁定写 `:5704`，今天是 `:5659`（`refuse` lambda）/ `:5667`（第一个调用）；`:2164` 没动。
 
-**② 今天只有一条用例真的撞在这组 `refuse` 上**：`test/plans/feat/compile/stream.plan.toml:528` 的 `stream.yield_lowering_refused`（`yield_lowering.cml`，`loop` 带 `i`、`s` 两个状态）。其余的 `generators_*` 全是绿的正例。
+**② 今天只有一条用例真的撞在这组 `refuse` 上**：`test/plans/feat/compile/stream.plan.toml#stream.non_null_assertion_not_implemented` 的 `stream.yield_lowering_refused`（`yield_lowering.cml`，`loop` 带 `i`、`s` 两个状态）。其余的 `generators_*` 全是绿的正例。
 
 ## 形状表（四栏）
 
@@ -61,4 +61,4 @@
 ## 这张表不承诺什么
 
 - "有别的路径"是按**语义等价的最小改写** + 已有绿例推断的；状态名重名这条先被实测推翻（`UnresolvedReference`），后按作者裁定改正并转正。
-- `:2164` 的"疑似死"同样只是静态读法：删它之前要么找到一条能命中的程序，要么接受"删掉并留一条它曾在哪里被命中的记录"。
+- `src/compile/gct/builder.cpp:2164` 的"疑似死"同样只是静态读法：删它之前要么找到一条能命中的程序，要么接受"删掉并留一条它曾在哪里被命中的记录"。

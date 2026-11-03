@@ -6,7 +6,7 @@
 ## 作者的原话（14:10）
 
 > 那 29 条红是 `TransposeResolver` 还没换新签名：`ef60bd42a` 查明它们都停在 `stdlib/vjp.cml:73:47`，
-> 原因是「旧的转置类型遇上新的单余切调用」，不是 `with_grad`。……`modules/transforms/transpose_operator.cpp:110`
+> 原因是「旧的转置类型遇上新的单余切调用」，不是 `with_grad`。……`modules/transforms/transpose_operator.cpp#TransposeResolver`
 > 仍写着 `(knowns.., cotangent) => (cotangents..)`，照 11:30、13:10 的约定改成 `(ȳ) => (每个参数一项的余切)`，
 > 类型只由参数函数的类型决定。**读数：29 条转绿。**
 

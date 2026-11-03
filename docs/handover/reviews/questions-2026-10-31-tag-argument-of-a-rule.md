@@ -9,7 +9,7 @@
 
 ## 一、今天的拒绝（原文）
 
-`SemanticDiag::TagArgumentNotValue`（`0x03000202`），钉在 `test/plans/feat/compile/tags.plan.toml#err_rule_argument`：
+`SemanticDiag::TagArgumentNotValue`（`0x03000202`），钉在 `test/plans/feat/compile/tags.plan.toml#argument_tag`：
 
 ```
 The tag 'jvp' cannot take 'mul_rule' as an argument: it names a declaration of this program that is not one function.

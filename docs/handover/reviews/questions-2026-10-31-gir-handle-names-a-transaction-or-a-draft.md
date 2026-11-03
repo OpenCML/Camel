@@ -1,7 +1,7 @@
 # 一问：GIR 的 handle 应该名字一个事务，还是名字一张草稿？
 
 > 状态：**等作者裁决。**
-> 相关：`src/compile/gir/builder_support.h:117`（`nodeDraftOf`）；`include/camel/compile/gir/draft_graph_builder.h:52`（`draft()`）；对照 `modules/graph/read.cpp:119`（`NodeView` 已经是"名字一个事务"）；`docs/handover/reviews/graph-store-step2-b-ledger.cn.md` §46。
+> 相关：`src/compile/gir/builder_support.h#nodeDraftOf`（`nodeDraftOf`）；`include/camel/compile/gir/draft_graph_builder.h#DraftGraphBuilder`（`draft()`）；对照 `modules/graph/read.cpp#NodeView`（`NodeView` 已经是"名字一个事务"）；`docs/handover/reviews/graph-store-step2-b-ledger.cn.md` §46。
 
 ## 现象
 

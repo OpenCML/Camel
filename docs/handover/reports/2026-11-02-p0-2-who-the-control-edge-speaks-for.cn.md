@@ -43,7 +43,7 @@
 
 ## 2. 凭据里的 ctrl 一项：改法与两侧原文
 
-改的是 `src/execute/pass.cpp:1925`，`effectStandsOnSomething` 的最后一支：
+改的是 `src/execute/pass.cpp#effectStandsOnSomething`，`effectStandsOnSomething` 的最后一支：
 
 ```
 -    return !graph.syncPredsOf(ref).empty() || !graph.syncUsersOf(ref).empty() ||
@@ -96,5 +96,5 @@
 
 负责人提的 `control.cpp` 里那条 `h->kind != Gate || !existing.empty() || !syncInputsOf(user).empty()`
 这一轮没动：它守的是"这条 Gate 的等待已经写在 sync 上了，别再补一条 ctrl"
-（`src/passes/opt/generic/rewrite.cpp:511` 附近的形状），**不是**凭据检查。等 (b)(c) 迁完、
+（`src/passes/opt/generic/rewrite.cpp#replaceNode` 附近的形状），**不是**凭据检查。等 (b)(c) 迁完、
 ctrl 不再被写之后，它才是删的对象——那时它守的东西已经不存在了。这一条记在这里，不在这一笔里动。

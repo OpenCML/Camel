@@ -13,7 +13,7 @@
 - 决策者（`docs/handover/reviews/questions-2026-10-29.md:33`）：第 8 路的三个算子落地后，`vmap`、`jvp`、`checkpoint` 按同一套算子写，先交计划。
 - 交接说明 5.26（`docs/handover/README.cn.md:505-513`）：`grad`/`vjp`（已有）、`jvp`（前向）、`custom_vjp`/`custom_jvp`、`vmap`（按维度名对齐）、`jit`（已有整图编译）、`scan`/`while_loop`/`cond`（已有 `LOOP`/`BRCH`）、`checkpoint`（重算换内存）、`pmap`/分片（接 GPU 计划）、组合 `grad(vmap(f))`/`vmap(grad(f))` 以 JAX 同名例子对照。
 
-依赖现状，现读：`reinterp`、`split`、`transpose` 三个算子在 `src/`、`modules/`、`stdlib/` 里 **0 行**；库里只有它们的**规则面**——三个标签加标量一族 10 条规则（`stdlib/autodiff.cml:44-187`），标签按结构读回（`stdlib/graph.cml:170-189`、`modules/graph/read.cpp:560-628`，用例 `test/cases/modules/autodiff/transform_rules.cml`）。第 6 条那一路（`lane-transforms`）正在做第 1 步。所以本批**不写三个算子**，只写名字面与验收。
+依赖现状，现读：`reinterp`、`split`、`transpose` 三个算子在 `src/`、`modules/`、`stdlib/` 里 **0 行**；库里只有它们的**规则面**——三个标签加标量一族 10 条规则（`stdlib/autodiff.cml#stop_gradient`），标签按结构读回（`stdlib/graph.cml#constant_bytes`、`modules/graph/read.cpp#tagsKernel`，用例 `test/cases/modules/autodiff/transform_rules.cml`）。第 6 条那一路（`lane-transforms`）正在做第 1 步。所以本批**不写三个算子**，只写名字面与验收。
 
 ## 1. 差距清单
 
@@ -44,7 +44,7 @@
 
 - **名称**：`jax.grad` ⇄ `grad`，同名。
 - **语义**：反向模式，把函数变成它的梯度函数。
-- **我们现在**：`grad(f)` 对 `f` 的**第一个 `with` 参数**求导；普通参数与其余 `with` 参数是常量；结果是标量浮点，否则 `NotDifferentiable`；整数/布尔叶子给同型的零（与 JAX 相同）。声明在 `stdlib/signatures/autodiff.cml:29-33`，类型解析与拒绝在 `modules/autodiff/operators.cpp:37-81`，运行期建梯度图在 `operators.cpp:85-107`。
+- **我们现在**：`grad(f)` 对 `f` 的**第一个 `with` 参数**求导；普通参数与其余 `with` 参数是常量；结果是标量浮点，否则 `NotDifferentiable`；整数/布尔叶子给同型的零（与 JAX 相同）。声明在 `stdlib/signatures/autodiff.cml#grad`，类型解析与拒绝在 `modules/autodiff/operators.cpp#GradResolver`，运行期建梯度图在 `operators.cpp:85-107`。
 - **JAX 的行为**：默认对第 0 个**位置参数**求导；`argnums` 可给元组（多参数、多返回）；`has_aux=True` 时把 `(y, aux)` 拆开，只对 `y` 求导；`holomorphic`/`allow_int`/`reduce_axes` 各有别的用途。
 - **差在哪**：求导对象怎么选（第一个 `with` 参数 vs 第 0 个位置参数）；`argnums` 的多参数形式；`has_aux` 没有。
 
@@ -52,21 +52,21 @@
 
 - **名称**：`jax.value_and_grad` ⇄ `with_grad`，名字不同。
 - **语义**：一次求值同时给出 `(值, 梯度)`。
-- **我们现在**：`with_grad(f)` 返回 `(f 的值, 梯度)`，顺序与 JAX 一致（`stdlib/signatures/autodiff.cml:35-39`、`modules/autodiff/operators.cpp:114-117`；用例读 `vg=(17.5, 12.5)`，`test/plans/feat/modules/autodiff.plan.toml:14-19`）。
+- **我们现在**：`with_grad(f)` 返回 `(f 的值, 梯度)`，顺序与 JAX 一致（`stdlib/signatures/autodiff.cml#with_grad`、`modules/autodiff/operators.cpp#GradResolver`；用例读 `vg=(17.5, 12.5)`，`test/plans/feat/modules/autodiff.plan.toml#scalar_grad.runtime.nvm`）。
 - **JAX 的行为**：`value_and_grad(fun, argnums=0, has_aux=False)` 返回 `(value, grad)`。
 - **差在哪**：只剩名字，以及 J1 的 `argnums`/`has_aux`。
 
 ### J3 `jvp`
 
-- **名称**：`jax.jvp` ⇄ **没有这个变换**；Camel 的 `jvp` 是标签名 `#jvp(rule)`（`stdlib/autodiff.cml:41-44`）。
+- **名称**：`jax.jvp` ⇄ **没有这个变换**；Camel 的 `jvp` 是标签名 `#jvp(rule)`（`stdlib/autodiff.cml#div_cotangent_c`）。
 - **语义**：前向模式：给定 `(x, dx)` 给 `(f(x), J·dx)`，一次一个方向。
-- **我们现在**：标签只表示"某个函数自己的前向规则"；标量算术 5 条规则（`add_jvp`…`neg_jvp`，`stdlib/autodiff.cml:85-132`）；按结构读回（`graph::rule_of(g, 'jvp')`，`stdlib/graph.cml:178-189`，内核 `modules/graph/read.cpp:602-628`）。**变换本体不存在**：`jvp(f)` 没有任何东西接。
+- **我们现在**：标签只表示"某个函数自己的前向规则"；标量算术 5 条规则（`add_jvp`…`neg_jvp`，`stdlib/autodiff.cml#add_tangent`）；按结构读回（`graph::rule_of(g, 'jvp')`，`stdlib/graph.cml#rule_of`，内核 `modules/graph/read.cpp#tagOf`）。**变换本体不存在**：`jvp(f)` 没有任何东西接。
 - **JAX 的行为**：`jax.jvp(fun, primals, tangents)` 返回 `(primals_out, tangents_out)`；与 `vmap` 组合得到整条雅可比，成本是每次一个方向。
 - **差在哪**：没有变换（需要 `reinterp<jvp>` 或设计稿里等价的组合，`docs/design/program-transforms/README.cn.md:71-87`）。另一件：**`jvp` 这个名字已经是标签名**，而标签与函数、类型同一命名空间（`diagnostics/registry.tsv` 的 `TagUndeclared` 帮助："Tags share the namespace of functions and types"），所以 `jvp` 作函数名之前先要定命名空间怎么分。
 
 ### J4 `vjp`
 
-- **名称**：`jax.vjp` ⇄ **没有这个变换**；Camel 的 `vjp` 是标签名 `#vjp(rule)`（`stdlib/autodiff.cml:52-55`），今天扮演的是 JAX 的 **`custom_vjp`**：调用那个函数时用规则代替对函数体求导（`modules/autodiff/module.cpp:22-28` 的 `kVjpTag` 与 `kGraphRefRule`；用例 `custom_rule`）。
+- **名称**：`jax.vjp` ⇄ **没有这个变换**；Camel 的 `vjp` 是标签名 `#vjp(rule)`（`stdlib/autodiff.cml#div_cotangent_c`），今天扮演的是 JAX 的 **`custom_vjp`**：调用那个函数时用规则代替对函数体求导（`modules/autodiff/module.cpp#kVjpTag` 的 `kVjpTag` 与 `kGraphRefRule`；用例 `custom_rule`）。
 - **语义**：反向模式，给任意形状的结果（不要求标量）：返回 `(结果, 回拉函数)`。
 - **我们现在**：标签可读（`rule_of`）、被 `pullback.cpp` 在调用点使用；变换本体 0 行。
 - **JAX 的行为**：`jax.vjp(fun, *primals)` 返回 `(primals_out, vjp_fun)`；`vjp_fun(ct)` 给出每个 primal 的余切；`grad` 是 `vjp` 加一个 `ct = 1`。
@@ -82,23 +82,23 @@
 
 ### J6 线性转置
 
-- **名称**：`jax.linear_transpose` ⇄ `transpose`（设计稿的第三个算子，`docs/design/program-transforms/README.cn.md:101-115`）加标签 `#transpose(rule)`（`stdlib/autodiff.cml:46-50`）。
+- **名称**：`jax.linear_transpose` ⇄ `transpose`（设计稿的第三个算子，`docs/design/program-transforms/README.cn.md:101-115`）加标签 `#transpose(rule)`（`stdlib/autodiff.cml#div_cotangent_c`）。
 - **语义**：对线性函数，把数据流反过来：余切进、余切出。残差是已知值。
 - **我们现在**：标签加 5 条标量规则（`add_t`…`neg_t`）、`rule_of(g, 'transpose')` 可读；**算子 0 行**。
 - **JAX 的行为**：`jax.linear_transpose(fun, *primals)` 返回 `ct -> cts`；不是线性的函数交进去是错误。
-- **差在哪**：算子不存在。名字另有一层：Camel 已有数据转置 `tensor::transpose(t: float[..]): float[..]`（`stdlib/signatures/tensor.cml:126-129`），与函数同一命名空间；JAX 用 `linear_` 前缀正是为了分开这两件事。
+- **差在哪**：算子不存在。名字另有一层：Camel 已有数据转置 `tensor::transpose(t: float[..]): float[..]`（`stdlib/signatures/tensor.cml#transpose`），与函数同一命名空间；JAX 用 `linear_` 前缀正是为了分开这两件事。
 
 ### J7 `vmap`
 
-- **名称**：`jax.vmap` ⇄ **没有**。最近的是 `map`：`map::<T, U>(xs: T[]): U[]`，`with <f: (item: T) => U>`（`stdlib/prelude.cml:483-487`）。
+- **名称**：`jax.vmap` ⇄ **没有**。最近的是 `map`：`map::<T, U>(xs: T[]): U[]`，`with <f: (item: T) => U>`（`stdlib/prelude.cml#operator`）。
 - **语义**：把作用于一个值的函数变长成作用于一批的函数。
-- **我们现在**：`xs->map<f>` 一次批**一个**数组，批的是它**唯一那一维**（`T[]` 是秩 1；`stdlib/prelude.cml:479` 的注释写明秩 n 的含义是 P5 的活）；没有 `in_axes`/`out_axes`、没有按维度名对齐；它不是变换（不能写 `vmap(grad(f))`，因为没有 `vmap` 这个值）。
+- **我们现在**：`xs->map<f>` 一次批**一个**数组，批的是它**唯一那一维**（`T[]` 是秩 1；`stdlib/prelude.cml#operator` 的注释写明秩 n 的含义是 P5 的活）；没有 `in_axes`/`out_axes`、没有按维度名对齐；它不是变换（不能写 `vmap(grad(f))`，因为没有 `vmap` 这个值）。
 - **JAX 的行为**：`vmap(fun, in_axes=0, out_axes=0)`；可同时批多个参数（每个参数一个 `in_axes`）、可批 pytree 的每个叶子、结果是函数、任意嵌套、与 `jit`/`grad` 可交换。
 - **差在哪**：四层——批几个参数（一个 vs 多个）、轴（写死第一维 vs 指定/命名）、批什么（数组的元素 vs 树的叶子）、是不是变换（值 vs 函数）。
 
 ### J8 `checkpoint`
 
-- **名称**：`jax.checkpoint`（JAX 自己的别名是 `jax.remat`）⇄ **没有**。Camel 里"checkpoint"是**持久化**：`ckpt` 模块的 `save_tree`/`load_tree`（`stdlib/ckpt.cml:48`、`:60`），用例 `test/plans/feat/modules/checkpoints.plan.toml`、`ckpt.plan.toml`，实现 `modules/ckpt`。
+- **名称**：`jax.checkpoint`（JAX 自己的别名是 `jax.remat`）⇄ **没有**。Camel 里"checkpoint"是**持久化**：`ckpt` 模块的 `save_tree`/`load_tree`（`stdlib/ckpt.cml#load_tree`、`:60`），用例 `test/plans/feat/modules/checkpoints.plan.toml`、`ckpt.plan.toml`，实现 `modules/ckpt`。
 - **语义**：值上是恒等；反向时**重算**被标注的那段而不是存中间量，用计算换内存。
 - **我们现在**：0 行（`remat`/重算在 `src`、`modules`、`stdlib` 里无命中）。
 - **JAX 的行为**：`checkpoint(fun)` 返回 `fun` 本身（值不变），反向时重算；可带 policy；与 `grad`、`vmap` 组合。
@@ -123,12 +123,12 @@
 
 ### J12 `checkify`
 
-- **名称**：`jax.checkify` ⇄ `attempt`（`include/camel/execute/fault_isolation.h:7-36`，`kFaultIsolationName`）：`attempt(f)` 的参数与 `f` 一样，结果类型是 `f` 的结果加 `!`。
+- **名称**：`jax.checkify` ⇄ `attempt`（`include/camel/execute/fault_isolation.h#kFaultIsolationName`，`kFaultIsolationName`）：`attempt(f)` 的参数与 `f` 一样，结果类型是 `f` 的结果加 `!`。
 - **差在哪**：名字不同，想法相同（设计原则 2 节已定名 `attempt`）。有意保留，不改。
 
 ### J13 `stop_gradient`
 
-- **名称**：`jax.lax.stop_gradient` ⇄ `stop_gradient`（`stdlib/autodiff.cml:57-61`；内核与 `noGradient` 在 `modules/autodiff/operators.cpp:119-123`、`:171-173`）。
+- **名称**：`jax.lax.stop_gradient` ⇄ `stop_gradient`（`stdlib/autodiff.cml#stop_gradient`；内核与 `noGradient` 在 `modules/autodiff/operators.cpp#GradResolver`、`:171-173`）。
 - **差在哪**：无。同名同义。
 
 ### J14 组合

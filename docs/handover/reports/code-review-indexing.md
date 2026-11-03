@@ -1,6 +1,6 @@
 # 核心切片、按位置取行与元素类型规则的代码评审
 
-范围：核心的 `:op/slice_sub`、`:op/idx_arr`、`:op/idx_take` 与它们的伴随（`src/builtin/operators/struct.cpp`、`derivative.cpp`）；下标的逐维降低（`src/compile/gct/builder.cpp:2430–2600`、`src/compile/gir/builder_operators.cpp`）；类型规则与静态检查（`src/builtin/modules/globals.cpp:205–560`）；张量模块的下标实例与元素类型规则（`modules/tensor/ops/indexing.cpp`、`elementwise_ops.cpp`、`gradient_ops.cpp`、`linalg_ops.cpp`、`support.cpp`、`layout_ops.cpp`）；ONNX 降低（`modules/onnx/lowering.cpp`）；Tiles（`modules/tiles/src/compiler.cpp`）。读的是代码，没有编译，没有运行；"失败场景"都是从代码推出的，需要先写用例确认的已标明。行号是当前树上的。
+范围：核心的 `:op/slice_sub`、`:op/idx_arr`、`:op/idx_take` 与它们的伴随（`src/builtin/operators/struct.cpp`、`derivative.cpp`）；下标的逐维降低（`src/compile/gct/builder.cpp#Builder::visitData`、`src/compile/gir/builder_operators.cpp`）；类型规则与静态检查（`src/builtin/modules/globals.cpp#CAMEL_HALF_UNARY`）；张量模块的下标实例与元素类型规则（`modules/tensor/ops/indexing.cpp`、`elementwise_ops.cpp`、`gradient_ops.cpp`、`linalg_ops.cpp`、`support.cpp`、`layout_ops.cpp`）；ONNX 降低（`modules/onnx/lowering.cpp`）；Tiles（`modules/tiles/src/compiler.cpp`）。读的是代码，没有编译，没有运行；"失败场景"都是从代码推出的，需要先写用例确认的已标明。行号是当前树上的。
 
 ## 总评
 
@@ -13,7 +13,7 @@
 - 运行时核 `struct.cpp:219 sliceRange`（掩码 `written & 1/2`）；
 - 静态拒绝 `globals.cpp:265 staticSliceRejection`（`:286/288` 解码掩码）；
 - 静态长度 `globals.cpp:380 staticSliceLength`（`:393/396` 再解码一次，个数公式第三份）；
-- 下标实例 `modules/tensor/ops/indexing.cpp:385`（解码，个数公式第四份）；
+- 下标实例 `modules/tensor/ops/indexing.cpp#sliceIndexing`（解码，个数公式第四份）；
 - ONNX 前向 `lowering.cpp:476`（解码，个数公式第五份）与伴随 `:614`（只解码一位）；
 - 反向规则 `derivative.cpp:~325 sliceSubArrayVjp`（元数缺省）。
 缺省值"步长 1、掩码 3"按元数回填，在 `struct.cpp __slice_sub__`（`words >= 5 ? … : 1`、`words >= 6 ? … : 3`）、`globals.cpp:279/383/384`、`sliceSubArrayVjp`、`indexing.cpp:372–378`、`lowering.cpp:473/475` 各写了一遍；ONNX 前向接受 4–6 个字，ONNX 伴随却要求恰好 7 个字（`:586`）。
@@ -24,7 +24,7 @@
 ### 2. 删除模块切片之后，还有第二套切片与第二套"按位置取行"
 - `xs->slice<start, end>`（`:struct/slice_arr`，`struct.cpp:162 __slice_arr__`，类型规则 `globals.cpp:2527`，伴随 `derivative.cpp:292 sliceArrayVjp`，注册 `builtin.cpp:378`）是与 `:op/slice_sub` 并存的**第二个切片内核**：不看轴、不支持步长，且**总是复制**（逐元素 `set<slot_t>`），而 `xs[a:b]` 在紧凑数组上是共享数据块的视图（`struct.cpp:__slice_sub__`）——同一个切片，两种拷贝行为，设计原则 5.4 说切片是视图。它的规则表（负数是故障、`end < start` 为空）与 `sliceRange` 相同，只是又写了一遍。函数形式 `slice(t, axis, …)` 早已是核心节点，这个 `with` 形式只需要在建图时降成同一个节点（轴 0、步长 1、掩码 3）。
 - 张量模块里 `tensor:idx_take`（`layout_ops.cpp:716`，导出为 `__idx__`）是 `take` 的别名（`subscriptTakeKernel` 直接调 `takeKernel`），与核心的 `:op/idx_take`（`struct.cpp:410 __idx_take_arr__`）是**同一个运算的两份实现**，各有一份伴随：核心的 `:tangent/scatter_take_arr`（`struct.cpp:948`，`derivative.cpp:386`）和模块的 `tensor:take_grad`。
-- 更糟的是**导数规则被两处注册到同一个 URI**：`derivative.cpp:467 registry.setRule(":op/idx_take", idxTakeArrayVjp)` 与 `layout_ops.cpp:641 registerSubscriptTakeRule()`（`catalog.cpp:94` 调用）都对 `":op/idx_take"` 调 `setRule`，而 `DerivativeRegistry::setRule` 是 `insert_or_assign`（`src/core/derivative.cpp:42`）——**后注册的赢**，结果取决于程序是否加载了 tensor 模块，以及加载次序。同一个 `t[idx]` 在两种程序里走不同的伴随（一个是 `scatter_take_arr` 的逐元素 `addTangent`，一个是 `take_grad`）。
+- 更糟的是**导数规则被两处注册到同一个 URI**：`derivative.cpp:467 registry.setRule(":op/idx_take", idxTakeArrayVjp)` 与 `layout_ops.cpp:641 registerSubscriptTakeRule()`（`catalog.cpp:94` 调用）都对 `":op/idx_take"` 调 `setRule`，而 `DerivativeRegistry::setRule` 是 `insert_or_assign`（`src/core/derivative.cpp#DerivativeRegistry::setRule`）——**后注册的赢**，结果取决于程序是否加载了 tensor 模块，以及加载次序。同一个 `t[idx]` 在两种程序里走不同的伴随（一个是 `scatter_take_arr` 的逐元素 `addTangent`，一个是 `take_grad`）。
 修法：删除 `:struct/slice_arr` 整条链（内核、规则、伴随、注册），`slice<a, b>` 在建图时降成 `:op/slice_sub`；删除 `tensor:idx_take` 与 `registerSubscriptTakeRule`，`take` 与 `t[idx]` 共用一个内核与一个伴随；一个 URI 只能有一处 `setRule`（给 `setRule` 加"已存在则报错"的断言，立刻能抓到这类重复）。
 
 ### 3. ONNX：`t[idx]` 与它的伴随没有降低，`t[-1]` 却被接受
@@ -41,7 +41,7 @@
 ## 高
 
 ### 5. 规范写了、实现拒绝：`t[:, 0]`、`t[a:b, c]`
-设计原则 5.4 的"下标与切片"一条写明：每一维写一个位置、一个范围或一个整数数组，"写位置的那一维从结果里去掉"，"`t[:, 0]` 是第二维的第 0 个，`t[a:b, c]` 在第一维切片、在第二维取位置"，"哪一维、什么秩都是同一套规则"。实现里 `gct/builder.cpp:~2530` 对这两种形式直接报 `ConstructNotSupported`（"a subscript that names a range or a position on more than one dimension"），并且有计划用例把这个拒绝钉死（`test/plans/feat/modules/tensor/subscript.plan.toml:81`）。这是**规范与实现的偏差用一条"不支持"诊断盖住**。
+设计原则 5.4 的"下标与切片"一条写明：每一维写一个位置、一个范围或一个整数数组，"写位置的那一维从结果里去掉"，"`t[:, 0]` 是第二维的第 0 个，`t[a:b, c]` 在第一维切片、在第二维取位置"，"哪一维、什么秩都是同一套规则"。实现里 `gct/builder.cpp:~2530` 对这两种形式直接报 `ConstructNotSupported`（"a subscript that names a range or a position on more than one dimension"），并且有计划用例把这个拒绝钉死（`test/plans/feat/modules/tensor/subscript.plan.toml#slice_two_axes_constant_and_computed`）。这是**规范与实现的偏差用一条"不支持"诊断盖住**。
 修法：要么实现——降成"先取位置（`idx_arr`/`select` 去掉那一维）再切片"的两个节点；要么把原则改成现实，并在同一个提交里改计划用例。不要让规范领先实现而不留下待办。
 
 ### 6. 元素类型规则被"常量"后门掏空
@@ -80,7 +80,7 @@
 ### 11. 死代码与过时的叶子
 - `globals.cpp:228–234`：一段文档注释（"Whether `t` is a tensor the module that owns tensors slices …"）后面没有任何声明，是被删的模块切片留下的孤儿。
 - `tensor/ops/semantics.cpp:231`：`t.emplace("slice", …)`，对应的 `OpDef` 早已不存在。
-- `modules/tiles/src/compiler.cpp:1179`：`n.op == "slice"`，没有任何算子会产生这个名字（核心切片走 `coreSlice` 分支，`:950`），这个分支永远不会进。
+- `modules/tiles/src/compiler.cpp#Compiler`：`n.op == "slice"`，没有任何算子会产生这个名字（核心切片走 `coreSlice` 分支，`:950`），这个分支永远不会进。
 - `lowering.cpp` 里 `add("tensor:take", …)` 的伙伴 `tensor:take_grad`、`tensor:idx_take` 没有降低（见第 3 条），而它们本身在 `layout_ops.cpp` 里仍保留——若按第 2 条删除，应一并清理。
 - `struct.cpp:160 __slice_arr__` 的注释写"It used to be cut to the array, and a negative bound counted from the end"：历史叙述。
 

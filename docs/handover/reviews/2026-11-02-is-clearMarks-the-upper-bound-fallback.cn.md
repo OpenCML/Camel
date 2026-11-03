@@ -5,7 +5,7 @@
 ## 1. 找到的那一处（原文）
 
 `src/core/mm/gen.cpp`，`GenerationalAllocatorWithGC::clearMarks()` —— `markPhase()` 的**第一句**就是它
-（`src/core/mm/gen.cpp:1437`）。原文与它的理由注释：
+（`src/core/mm/gen.cpp#GenerationalAllocatorWithGC::markPhase`）。原文与它的理由注释：
 
 ```cpp
 void GenerationalAllocatorWithGC::clearMarks() {
@@ -34,7 +34,7 @@ void GenerationalAllocatorWithGC::clearMarks() {
 }
 ```
 
-**"按上界扫"就是 `iterateAllocated` 的写法本身**（`include/camel/core/mm/alloc/bump_ptr.h:223`）：
+**"按上界扫"就是 `iterateAllocated` 的写法本身**（`include/camel/core/mm/alloc/bump_ptr.h#BumpPointerAllocator`）：
 
 ```cpp
 std::byte *current     = begin_;
@@ -103,7 +103,7 @@ while (current < topSnapshot) { ...; visitor(header); current += obj_size; }
 按要求，下一步是把根种子带上"注册时该有的类型"，再跑 `json.gc.forced_major.*` 一族。读注册表后这一步**判死**：
 
 ```cpp
-// include/camel/core/mm/gen.h:581
+// include/camel/core/mm/gen.h#ObjectRootSetEntry
 struct ObjectRootSetEntry {
     const void *owner = nullptr;
     std::string name;
@@ -113,7 +113,7 @@ struct ObjectRootSetEntry {
 
 **没有 type 字段。** 所以 `markPhase()` / `clearMarks()` 给根种子传 `nullptr` **不是疏忽，是注册时就丢掉了**
 —— `registerObjectRootSet`（声明 `gen.h:335`、定义 `gen.cpp:157`）收的就是 owner/name/set 三样，
-主调用点是 `src/core/context/context.cpp:432`（注销在 `:320`）。
+主调用点是 `src/core/context/context.cpp#Context::create`（注销在 `:320`）。
 
 结论三句：
 
@@ -132,8 +132,8 @@ struct ObjectRootSetEntry {
 
 | 调用点 | 注册的 `set` 是什么 | 那一层手上有没有类型 |
 | --- | --- | --- |
-| `src/core/context/context.cpp:432` `registerObjectRootSet(ctx.get(), "runtimeGraphRoots", &ctx->runtimeGraphMgr_->gcRoots())` | `runtimeGraphMgr_->gcRoots()`，元素是 **`Program *`**（`src/runtime/program.cpp:186` 与 `:348` 塞入，`:345`/`:462` 清空） | **C 栏**：集合是**同质**的图载体，不需要数据类型 |
-| `src/passes/test/contexts.cpp:81` `registerObjectRootSet(&ownRoots, kOwnRootSetName, &ownRoots)` | 测试自己的 `ownRoots`，只用来数条目数（`countRootSets`） | **C 栏**：测试探针，与类型无关 |
+| `src/core/context/context.cpp#Context::create` `registerObjectRootSet(ctx.get(), "runtimeGraphRoots", &ctx->runtimeGraphMgr_->gcRoots())` | `runtimeGraphMgr_->gcRoots()`，元素是 **`Program *`**（`src/runtime/program.cpp#GCGraphManager::reserve` 与 `:348` 塞入，`:345`/`:462` 清空） | **C 栏**：集合是**同质**的图载体，不需要数据类型 |
+| `src/passes/test/contexts.cpp#kOwnRootSetName` `registerObjectRootSet(&ownRoots, kOwnRootSetName, &ownRoots)` | 测试自己的 `ownRoots`，只用来数条目数（`countRootSets`） | **C 栏**：测试探针，与类型无关 |
 
 - **A 栏（有类型可交）：0 个** —— 没有任何调用点手上握着一个可以交出去的 `type::Type *`。
 - **B 栏（类型在更上层被丢掉）：0 个** —— 不存在"上层有类型、注册时丢了"的情形；注册进去的本来就是**图载体**，
@@ -164,7 +164,7 @@ struct ObjectRootSetEntry {
 - **C 栏（差集）**：**"markObject 追到的边"不可能超出"markPhase 能到的边"** —— 两者就是同一次遍历。
   所以更强那句（"markObject 内部才追的边，根遍历走不到"）**不成立**；我上一轮那句"已知不 ⊆"**判错，撤回**。
 
-**真正的差集在别处，而且有名字**：`minorTracedGraphs_`（`include/camel/core/mm/gen.h:631`，
+**真正的差集在别处，而且有名字**：`minorTracedGraphs_`（`include/camel/core/mm/gen.h#GenerationalAllocatorWithGC`，
 `std::unordered_set<rtdata::Object *>`）。**图空间里的对象会在小回收（minor）里被打上 mark** ——
 它们由**年轻代的引用追踪**标记，不经 `markPhase`：
 
@@ -237,7 +237,7 @@ struct ObjectRootSetEntry {
 
 ## 13. 与"悬垂节点"那页的关系（作者 13:50 指明出处）
 
-作者 13:50 指明他说的那一件是 **`stream.*` 11 条在 Windows 上崩在 `src/compile/gir/builder_support.h:125` 的
+作者 13:50 指明他说的那一件是 **`stream.*` 11 条在 Windows 上崩在 `src/compile/gir/builder_support.h#nodeKindOf` 的
 `nodeGraphOf()`（"Draft node is not owned by a compile graph builder"）**，Linux 上碰巧读得到已释放内存所以不报；
 **与 GCT 的 `extractData` 的 `dangling` 无关，与 progen 也无关**。本页第 5 节的 GIR 层扫描（24 条用例、
 0 个非 EXIT 无读者节点）是**另一件事，结论照旧**。

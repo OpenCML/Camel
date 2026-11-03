@@ -5,7 +5,7 @@
 ## 问什么
 
 `SemanticDiag::EffectNotExecuted` 的两种措辞里，一种是
-`the sync block it is in is not used`（`src/compile/gir/builder_diagnostics.cpp:540`），由
+`the sync block it is in is not used`（`src/compile/gir/builder_diagnostics.cpp#Builder::reportDroppedEffects`），由
 `inUnusedSyncBlock(start)`（同文件 `478–507`）返回 `true` 时选中。问题是：**在当前模型里，
 有没有一个程序能让它返回 `true`**？
 
@@ -36,7 +36,7 @@ expected an expression`）、`do { … }`（`Unexpected 'do'; expected '}'`）�
    - `540–542`：`inUnusedSyncBlock(id) ? "the sync block it is in is not used" : "nothing depends on it
      and it is not in a sync block"` 那一处**只保留后半句**；
    - `550`、`570` 两处注释提到它，随句子一起改。
-2. `src/compile/gir/builder.h:2338`、`:415` 的注释里写着这条诊断的口径。
+2. `src/compile/gir/builder.h#Builder`、`:415` 的注释里写着这条诊断的口径。
 3. `docs/design/effects/plan.cn.md:75` 说的是 `EffectNotExecuted` 的判据（**不要整条删**：这同一个诊断码还承载
    "nothing depends on it and it is not in a sync block" 那一支）。
 4. `docs/reference/camel-for-ai-diagnostics.md` 与 `docs/design/effects/04_execution_model.md:50/65/128`

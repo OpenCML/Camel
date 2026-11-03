@@ -1,6 +1,6 @@
 # 张量能装复数吗：签名说能，张量的存储层说不能
 
-**问题**：`zeros`/`ones` 的签名写 `when is_numeric::<T>()`（`stdlib/signatures/tensor.cml:20`、`:26`），而 `is_numeric` 的定义是 `is_real || is_complex`（`stdlib/types.cml`），量得 `is_numeric::<c64>()` 为 `true`；但 `zeros::<c64>([2])` 在**两个后端上都匹配不到**这个签名。要问作者的是：**复数元素要不要成为张量的一部分**——两条路，我不该替作者选。
+**问题**：`zeros`/`ones` 的签名写 `when is_numeric::<T>()`（`stdlib/signatures/tensor.cml#ones`、`:26`），而 `is_numeric` 的定义是 `is_real || is_complex`（`stdlib/types.cml`），量得 `is_numeric::<c64>()` 为 `true`；但 `zeros::<c64>([2])` 在**两个后端上都匹配不到**这个签名。要问作者的是：**复数元素要不要成为张量的一部分**——两条路，我不该替作者选。
 
 **今天拒绝的原文**（`std::fvm` 与 `std::cpp` 逐字相同，2026-10-31，`379e70c85` 之上）：
 
@@ -14,7 +14,7 @@ help: Check the number and types of arguments to ensure they match one of the av
           <tensor:zeros>: (shape: int[]) => T[..]
 ```
 
-拒绝发生在**语义分析的重载匹配**里，不在 `std::cpp` 的规则里：张量的存储层只认 `i32`、`i64`、`f32`、`f64`、`bool`、`bf16`、`f16`（`modules/tensor/dtype.cpp:23` 的 `isSupportedTensorScalar`），结果类型推不出来，`tensorOf` 就抛 `Unsupported array element type`（`modules/tensor/ops/support.cpp:189`），于是这次调用没有匹配。所以 `operator_rules.cpp` 里 `tensorBuilder` 的 `default` 分支对 `c64`/`c128` **永远走不到**——今天挡住复数张量的是签名与存储层的不一致，不是那条规则。
+拒绝发生在**语义分析的重载匹配**里，不在 `std::cpp` 的规则里：张量的存储层只认 `i32`、`i64`、`f32`、`f64`、`bool`、`bf16`、`f16`（`modules/tensor/dtype.cpp#isSupportedTensorScalar` 的 `isSupportedTensorScalar`），结果类型推不出来，`tensorOf` 就抛 `Unsupported array element type`（`modules/tensor/ops/support.cpp#tensorOf`），于是这次调用没有匹配。所以 `operator_rules.cpp` 里 `tensorBuilder` 的 `default` 分支对 `c64`/`c128` **永远走不到**——今天挡住复数张量的是签名与存储层的不一致，不是那条规则。
 
 **两条候选路**（各自一句代价）：
 

@@ -1,6 +1,6 @@
 # 一个 GCT 节点能不能有两个父亲：`Tree::append` 的“未挂载”不变式被 `match` 守卫用例打破
 
-**问题**：`src/compile/gct/tree.cpp:284` 的 `Tree::append` 要求 `(child->flags_ & Node::kAttached) == 0`（“Node already has a parent”），而 `test/cases/compile/.../match_guard` 那条守卫用例（`poison:compile.match_guard:match_guard.first_match_wins.nvm`）在**合法程序**上让一个已挂载的节点被再次 append。
+**问题**：`src/compile/gct/tree.cpp#Tree::append` 的 `Tree::append` 要求 `(child->flags_ & Node::kAttached) == 0`（“Node already has a parent”），而 `test/cases/compile/.../match_guard` 那条守卫用例（`poison:compile.match_guard:match_guard.first_match_wins.nvm`）在**合法程序**上让一个已挂载的节点被再次 append。
 
 **为什么要问**：这棵树在代码里叫 `Tree`，`append` 还会把 `kAttached` 置上、拒绝第二次挂载——形状是“一棵树”。但守卫用例走到这里说明要么构建器**有意共享子树**（那它其实是 DAG，标志位和名字都该改），要么这是**构建器的缺陷**（同一个节点被两个父亲拥有，之后遍历、改写、销毁都会看到它两次）。release 档里这条 `ASSERT` 是死的，程序一直跑；把它变活之后立刻中止，所以这是“检查第一次真正被执行”暴露出来的问题，不是这次改动引入的。代码没动。
 

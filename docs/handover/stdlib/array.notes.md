@@ -44,7 +44,7 @@
 3. 新增 `argsort_bf`、`argsort_f6` 两个执行器（`kArgsortTypes` 加两行；比较用 `halfToFloat`，与 `min_bf` 同路）。
 4. 比较器 `numberLess`（argsort 与 sort 共用）加零的符号规则：两者都是零时 `-0 < +0`；NaN 仍全部在数之后、彼此等价。这样“排序结果与算法无关、`sort` 与 `xs[argsort(xs)]` 逐位相同”才成立（见 Q5）。
 5. `array_reduce.cpp` 删 `sum_bf`、`sum_f6`、`min_{bf,f6,b,s}`、`max_{bf,f6,b,s}`（两处注册 + 纯度声明）。
-6. `src/passes/sched/taskflow/taskflow.h:508` 注释里的 `array:sort` 无需改。
+6. `src/passes/sched/taskflow/taskflow.h#TaskflowExecSchedPass` 注释里的 `array:sort` 无需改。
 
 `stdlib/types.cml`：加 `is_same::<T, U>(): bool`（`match type T { case U => true; case _ => false }`，设计原则 5.5 允许 `case T` 写类型变量）。本文不改它，建议给 `types` 的负责人。
 
@@ -79,7 +79,7 @@
 - `reduced_*`：`reduced_sort_refused.cml`（见 §4）、`reduced_sum_refused.cml`、`array_reduction_arms.cml`（分臂不再存在）。
 - golden：`test/plans/feat/consistency/golden/attempt_library.txt:14` 写着 `InvalidArgument at array.cml:300:12`，是 `zip_with` 里 `zip` 的位置；新文件里行号变了，重录。旧文件“内核声明必须放在文件末尾，否则故障行号会动”的那条限制不再需要说明，但新文件把内核仍放在末尾。
 - 文档：`docs/language/03_data_model.md:122`（及英文）的函数清单加 `find_index`；`docs/stdlib-reference.md`、`docs/reference/camel-for-ai-stdlib-signatures.md` 由 `scripts/stdlib-reference.mjs` 重新生成；`docs/design/arrays-memory/plan.cn.md`、`docs/technical/06_runtime_and_execution.md`、`09_operator_registration.md` 里提到旧排序名的段落。
-- 唯一的库内调用方 `stdlib/opt.cml:23`（`flatten, all, any`）签名不变，无需改。
+- 唯一的库内调用方 `stdlib/opt.cml#op_text`（`flatten, all, any`）签名不变，无需改。
 
 ## 6. 与其他模块的重叠
 

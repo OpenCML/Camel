@@ -1,0 +1,25 @@
+// The gradient of a lane mean through the library's own rules.
+//
+// `jvp_mean_axis` states the axis, the flag and the extents in one list, and `mean_axis_stated_t`
+// spreads each lane's cotangent back over the lane it was averaged from: the lane length is
+// `numel(t) / numel(ct)`, read off the stated extents and the cotangent, and the shape it spreads
+// into is the stated one.
+//
+// A mean of four elements divides by four, so every position gets a quarter:
+//
+//     x = [1.0, 2.0, 3.0, 4.0]   ->   value 2.5, dL/dx = [0.25, 0.25, 0.25, 0.25]
+//
+//     camel test/cases/compile/transforms/stated_mean_axis_gradient.cml
+import { vjp } from vjp
+import { mean_axis, sum } from tensor
+
+func total(x: float[]): float {
+    return sum(mean_axis(x, 0, false))
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(total)([1.0, 2.0, 3.0, 4.0] as float[])
+    let d = pullback(1.0).0
+    `stated mean value={} dL/dx={}`->format<value, d>->println
+    return 0
+}

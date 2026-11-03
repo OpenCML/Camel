@@ -8,7 +8,7 @@
 
 ## 1. 两个程序
 
-`test/cases/compile/expected_type_loop/loop_parts.cml:23-28`：
+`test/cases/compile/expected_type_loop/loop_parts.cml#through_match`：
 
 ```camel
 func through_match(a: int, c: float): int[] {
@@ -19,7 +19,7 @@ func through_match(a: int, c: float): int[] {
 }
 ```
 
-`test/cases/loops/zero_leaf_state.cml:11-13`：
+`test/cases/loops/zero_leaf_state.cml#carried`：
 
 ```camel
 func carried(n: int): Nothing {

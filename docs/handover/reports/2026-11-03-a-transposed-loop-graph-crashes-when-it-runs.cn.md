@@ -180,11 +180,11 @@ rc=139
 **带行号的栈**（`-Config Debug` 构建，`out/debug`）：
 
 ```
-#0  Tuple::size (this=0x0) at include/camel/core/rtdata/tuple.h:112
-#1  NodeVMSchedPass::call (rootRuntimeGraph=0x7fffe79b3b90, rootFrame=0x7fffe75c6158) at src/passes/sched/nodevm/nodevm.cpp:548
-#2  NodeVMSchedPass::call (…) at src/passes/sched/nodevm/nodevm.cpp:629   ← 间接调用：call(funcRuntimeGraph, funcFrame)
-#3  NodeVMSchedPass::call (…) at src/passes/sched/nodevm/nodevm.cpp:629   ← 同一个调用点第二次
-#4  NodeVMSchedPass::apply (…) at src/passes/sched/nodevm/nodevm.cpp:857
+#0  Tuple::size (this=0x0) at include/camel/core/rtdata/tuple.h#Tuple
+#1  NodeVMSchedPass::call (rootRuntimeGraph=0x7fffe79b3b90, rootFrame=0x7fffe75c6158) at src/passes/sched/nodevm/nodevm.cpp#NodeVMSchedPass::call
+#2  NodeVMSchedPass::call (…) at src/passes/sched/nodevm/nodevm.cpp#NodeVMSchedPass::call   ← 间接调用：call(funcRuntimeGraph, funcFrame)
+#3  NodeVMSchedPass::call (…) at src/passes/sched/nodevm/nodevm.cpp#NodeVMSchedPass::call   ← 同一个调用点第二次
+#4  NodeVMSchedPass::apply (…) at src/passes/sched/nodevm/nodevm.cpp#NodeVMSchedPass::apply
 ```
 
 `Tuple::size_` 就是 Release 里 `mov 0x8(%rax),%ecx` 那一下（`call+3468`，`rax=0x0`）：**空指针，不是野指针。**

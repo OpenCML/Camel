@@ -140,16 +140,16 @@
 
 **在拿到裁定前，本条不产出代码**：按 2026-10-24 那次裁定（`questions-2026-10-24-evening.md` 的生成器两节），完整形态一次做完、半成品不进 develop，所以这里只交清点与一条提问。状态表第 11 条原来是**未开始**；五个状态值里没有"等裁定"，所以记**受阻**，备注写"等作者裁定：生成器捕获的 `var` 是单元还是按值"——不是"进行中"，也不是"已完成"。
 
-**落地顺序（重排过一次，2026-10-30）**：① 直线体 + `if` 臂 → ② `match` 臂 → ③ `sync` 里的打印顺序 → ④ 提前停 → ⑤ 可错元素 `yield error(...)` → ⑥ `pairs(n)` 与 `loop` 一起、同笔翻掉 `stream.yield_lowering_refused` 与语言参考里"状态机还没有"那句。**`pairs(n)` 从第二格挪到最后不是拖延**：语言里没有无状态的 `while`（`loop while c do …` 报 `'while' is a keyword and cannot be used as a name`），所以 `pairs(n)` 只能写成 `loop` 带状态 + `yield`，而那个形状正是 `stream.yield_lowering_refused` 锁着的程序；`loop` 一支持，锁就必红，所以锁只能与"支持 `loop`"同笔翻，两者不能分开落进 develop。第 ① 格已落地：生成器写成一台状态机——`pc` 与 `halt` 是两句 `var` 单元，跨 `yield` 的局部变量也是单元（裁定：单元放进状态，闭包按引用捕获），`step` 是一个函数，用 `loop … while halt == 0` 按 `pc` 分支，每段的出口是表达式的值。**为什么不是「结构体装状态」**：GCT 里单元是**节点身份**而不是类型（`declaresVariable_` 按节点判断，`src/compile/gir/builder_expr.cpp:349`），从结构体或元组里取出来的值不再是单元——所以状态只能是这些单元本身，`step` 与每个 `() => step()` 闭包按引用捕获同一批句柄，这就是裁定要的「同一份」。真正的结构体态机等 GCT 知道局部变量的类型之后再谈，是后续的细化，不是这条裁定的条件。
+**落地顺序（重排过一次，2026-10-30）**：① 直线体 + `if` 臂 → ② `match` 臂 → ③ `sync` 里的打印顺序 → ④ 提前停 → ⑤ 可错元素 `yield error(...)` → ⑥ `pairs(n)` 与 `loop` 一起、同笔翻掉 `stream.yield_lowering_refused` 与语言参考里"状态机还没有"那句。**`pairs(n)` 从第二格挪到最后不是拖延**：语言里没有无状态的 `while`（`loop while c do …` 报 `'while' is a keyword and cannot be used as a name`），所以 `pairs(n)` 只能写成 `loop` 带状态 + `yield`，而那个形状正是 `stream.yield_lowering_refused` 锁着的程序；`loop` 一支持，锁就必红，所以锁只能与"支持 `loop`"同笔翻，两者不能分开落进 develop。第 ① 格已落地：生成器写成一台状态机——`pc` 与 `halt` 是两句 `var` 单元，跨 `yield` 的局部变量也是单元（裁定：单元放进状态，闭包按引用捕获），`step` 是一个函数，用 `loop … while halt == 0` 按 `pc` 分支，每段的出口是表达式的值。**为什么不是「结构体装状态」**：GCT 里单元是**节点身份**而不是类型（`declaresVariable_` 按节点判断，`src/compile/gir/builder_expr.cpp#Builder::visitDataNode`），从结构体或元组里取出来的值不再是单元——所以状态只能是这些单元本身，`step` 与每个 `() => step()` 闭包按引用捕获同一批句柄，这就是裁定要的「同一份」。真正的结构体态机等 GCT 知道局部变量的类型之后再谈，是后续的细化，不是这条裁定的条件。
 
 **现状三行**（在 `8d556cdb6` 上逐条读码，不引旧清点稿）：
-- **语言层有 `yield`**：关键字在 `include/camel/parse/syntax/token_kinds.def:50`，产生式 `retStmt : ('return' | 'yield') dataList` 在 `src/parse/syntax/parser.cpp:1250`，AST 的 `ExitType::Yield`、"`yield` 不能当名字"的负例、格式化器都在，语言参考 7.3.1 已写语法与恢复点。**缺的是"写 `yield` 的函数头必须是 `T..`"这条规则没有任何检查**，诊断注册表里也还没有 generator 条目；`yield` 写在 lambda 体里没有说法。
+- **语言层有 `yield`**：关键字在 `include/camel/parse/syntax/token_kinds.def#KwYield`，产生式 `retStmt : ('return' | 'yield') dataList` 在 `src/parse/syntax/parser.cpp#ParserImpl::atResourceDecl`，AST 的 `ExitType::Yield`、"`yield` 不能当名字"的负例、格式化器都在，语言参考 7.3.1 已写语法与恢复点。**缺的是"写 `yield` 的函数头必须是 `T..`"这条规则没有任何检查**，诊断注册表里也还没有 generator 条目；`yield` 写在 lambda 体里没有说法。
 - **编译层：整台状态机 0 行**。`yield` 走到 GCT 就按名字拒绝，没有活性分析、没有分段、没有状态结构体、没有步进函数。
 - **运行时一行不改**：流值就是 `() => (T, T..)?` 的普通函数值，状态活在捕获里；`for x in s` 已展开成既有的 `LOOP`，`unfold`、`tee`、线性检查都在。
 
 **两处过期信息，引用时按这里**：
-- 拒绝**不在** `src/compile/gir/builder.cpp:2164`：`git show` 读该文件为 **1661 行**（换行数加一，空行也算；`Measure-Object -Line` 读作 1610，因为它跳过 51 行空行——判断路径在不在用前者），没有这个位置。真正的拒绝在 `src/compile/gct/builder.cpp:2164`，是 `SemanticDiag::FeatureNotSupported`（`0x03000040`）里的 `'generators'`。
-- 锁着这个拒绝的用例是 `test/plans/feat/compile/stream.plan.toml:528` 的 `stream.yield_lowering_refused`。它转成正例（`count(3)` 产出 `0`、`1`、`2`）的那一刻，就是这台机器的验收。
+- 拒绝**不在** `src/compile/gir/builder.cpp:2164`：`git show` 读该文件为 **1661 行**（换行数加一，空行也算；`Measure-Object -Line` 读作 1610，因为它跳过 51 行空行——判断路径在不在用前者），没有这个位置。真正的拒绝在 `src/compile/gct/builder.cpp#Builder::visitExitStmt`，是 `SemanticDiag::FeatureNotSupported`（`0x03000040`）里的 `'generators'`。
+- 锁着这个拒绝的用例是 `test/plans/feat/compile/stream.plan.toml#stream.non_null_assertion_not_implemented` 的 `stream.yield_lowering_refused`。它转成正例（`count(3)` 产出 `0`、`1`、`2`）的那一刻，就是这台机器的验收。
 
 **要裁定的一句**：生成器状态里被闭包捕获的 `var`，是**单元**（3.5"闭包对变量的捕获也是引用"、3.3"每个 `var` 自动是一个资源"，跨拉取保持同一个），还是 5.4 字面的"结构体装局部变量"（按值）？两者不能同时按字面成立。判别例：
 
@@ -171,7 +171,7 @@ func g(): int.. {
 
 - `std::nvm` 与 `std::opt::dce|cse|order|saturate` 各遍都出齐全 7 行；**`std::opt::inline` 单独就只剩 5 行**——缺 `through_assignment` 的第二个 `int 2 1` 与 `after_the_write` 的 `after 2 2`。
 - 图上的样子（`std::opt::inline std::gir`）：`through_assignment` 区域里语句链是 **`N1E(:var/get) -> N23(:io/println) -> N25(GATE) -> EXIT`**，而先于 `println` 写的赋值 `N20(:op/assn_l)` 只剩 `N1E -> N20 [ORDER]`、`N20 -> N22` 这样的**顺序边与数据边，没有同步后继**。也就是说链的**入口锚在一次读上，而不是前一条语句**，赋值语句整条掉出链；两种边都在时那批控制边还替它把执行撑着，同步边独存时这个效应就不可达了。
-- **位置**：内联器把调用者的链位交给函数体时的写侧交接（`closeChainOver`/`handChainPlaceTo`、`src/runtime/draft_inline.cpp:1652` 那处 `setSyncInputs`），与 `edges.cn.md` 5.7（从链上前一条语句向函数体里每个效应节点连边，再从它们连向后一条）一致的方向。
+- **位置**：内联器把调用者的链位交给函数体时的写侧交接（`closeChainOver`/`handChainPlaceTo`、`src/runtime/draft_inline.cpp#resolvePlaceForks` 那处 `setSyncInputs`），与 `edges.cn.md` 5.7（从链上前一条语句向函数体里每个效应节点连边，再从它们连向后一条）一致的方向。
 - **一个最小的两函数例子在主机上复现不出来**（`var a = 1; let b = a; a = 2; return rep("t", a, b)` 内联后照常打印）——**这个用例的形状本身是证据的一部分：两个读同一版本、赋值夹在中间、读又作为实参传进一个 `sync` 函数**。不要为了"最小化"把它削到不复现。
 
 ### 补记（同日）：丢的是「函数体没接回调用者的链」，不是「调用的链位写错」
@@ -180,11 +180,11 @@ func g(): int.. {
 
 **丢的是函数体与调用者链的连接**：`through_assignment` 子图的 `O05（EXIT）` 在全图**只出现一次**（`N25 -> O05`），**没有任何子图外的使用者，也没有任何等待者**。子图内部链是完整的（`N1E -> N23 -> N25 -> O05`），但它既不被 `main` 的链等到、也不被谁用到，于是沿"从结果出发可达"这条规则整个子图不执行。两种边都在时，接上它的正是 `draft_inline.cpp:2213-2248` 那块里 `nameControlPair` 与 `setSyncInputs` **并写的那条控制边**；同步边那一半在探针态没有写出来。
 
-**位置**：`src/runtime/draft_inline.cpp:2213-2248`，整块的前提是 `bodyHasChain && !placePreds.empty()`，`placePreds` 取 `callSyncInputs`、空了再退到 `ctrlPreds`。`O05` 连一个同步等待者都没有，说明这次拼接里 `callSyncUsers` 也是空的——**也就是说那条调用语句在探针态根本没有链位**（既无同步前驱也无同步后继）。所以问题不在内联器怎么交接，而在**建图时那条调用语句的链位是怎么写的**：`writeSyncStatement` 之外必有一处只写控制边的链位写入点，落在 18 处建图点的 P3 写侧。
+**位置**：`src/runtime/draft_inline.cpp#inlineCallableInDraft`，整块的前提是 `bodyHasChain && !placePreds.empty()`，`placePreds` 取 `callSyncInputs`、空了再退到 `ctrlPreds`。`O05` 连一个同步等待者都没有，说明这次拼接里 `callSyncUsers` 也是空的——**也就是说那条调用语句在探针态根本没有链位**（既无同步前驱也无同步后继）。所以问题不在内联器怎么交接，而在**建图时那条调用语句的链位是怎么写的**：`writeSyncStatement` 之外必有一处只写控制边的链位写入点，落在 18 处建图点的 P3 写侧。
 
 ### 补记再一条：这两例今天靠「内联拼接自己写的控制边」撑着
 
-`through_assignment`、`after_the_write` 里那条 `report(...)` 调用，在建图时**既没有同步边也没有控制边**：前一条链上节点是它自己的一个实参读，`chainEdgeSaysSomething`（`builder_helpers.h:552`，`linkCheek && !hasDirectDataDependency`）判成「说了也白说」，两种边一起跳过。它今天能跑，是因为**它的值就是所在函数的返回值**，沿数据边从结果可达；而**函数体的效应**靠的是内联拼接处 `nameControlPair`（`src/runtime/draft_inline.cpp:2221-2226`）**自己写的那条控制边**，同步那一半被 `placePreds.empty()` 的守卫跳过。
+`through_assignment`、`after_the_write` 里那条 `report(...)` 调用，在建图时**既没有同步边也没有控制边**：前一条链上节点是它自己的一个实参读，`chainEdgeSaysSomething`（`builder_helpers.h:552`，`linkCheek && !hasDirectDataDependency`）判成「说了也白说」，两种边一起跳过。它今天能跑，是因为**它的值就是所在函数的返回值**，沿数据边从结果可达；而**函数体的效应**靠的是内联拼接处 `nameControlPair`（`src/runtime/draft_inline.cpp#inlineCallableInDraft`）**自己写的那条控制边**，同步那一半被 `placePreds.empty()` 的守卫跳过。
 
 所以这个缺陷藏到现在的原因清楚了：**两种边都在时，拼接处的控制边替它撑着**。第 2 块（删 `writeSyncStatement` 的 ctrl 行）的风险也**不在建图**——那一条这条调用本来就没有——**而在拼接处**。
 
@@ -415,7 +415,7 @@ tiles 那边，`graph_regions.cpp:106` 的 `ordered → host` 是错的读法：
 
 ## 裁定（2026-10-30 09:35）：`#jvp` 族的挂点——①；"内置算子的声明"这种写法已经有了
 
-选 ①，这正是 09:15 那条里写的"给十来个标量算子补声明"。而且①的 a) 不用新造：`stdlib/prelude.cml:49`（`#op(':op/mem_blocks')`）、`:64` 起的 `#op(':op/itol')` 那一组，以及 `stdlib/array.cml:307` 的 `argsort`，都已经是编译的声明，"这条声明就是那个内置算子"今天就写得出来。
+选 ①，这正是 09:15 那条里写的"给十来个标量算子补声明"。而且①的 a) 不用新造：`stdlib/prelude.cml#std`（`#op(':op/mem_blocks')`）、`:64` 起的 `#op(':op/itol')` 那一组，以及 `stdlib/array.cml#argsort` 的 `argsort`，都已经是编译的声明，"这条声明就是那个内置算子"今天就写得出来。
 - **补声明**：把要用到的标量算子（`:op/add_*`、`:op/sub_*`、`:op/mul_*`、`:op/neg_*`、`:op/div_*` 等）按同样的形式写进 `prelude.cml`，带上 `#jvp(...)`。中缀运算符的解析不用改：变换在原语处按算子 id 找到 `#op` 指向它的那条声明，再读这条声明的 `#jvp`。
 - **签名文件**：被补成真声明的算子，从 `stdlib/signatures/` 里删掉对应条目，同一个算子只有一处声明，不让两份并存。
 - **b) 和 c) 照 09:15 那条做**：`TagArgumentNotValue` 放开 `rule` 名；在 `transforms` 里读声明上的标签。
@@ -1578,7 +1578,7 @@ T+48（明天 15:00）的目标仍是过半。照这个次序，第 2 步做完�
 
 ## 裁定（2026-11-01 19:50，P1-7）：规则键从 `#op` 声明读，不另设表、不加写法字段、不改规则表面
 
-三条都不选。键本来就有唯一的来源：Camel 里把算子绑到声明上的那一行。`stdlib/prelude.cml:89` 写着 `#op(':op/add_d') export func operator +(x: float, y: float): float`，从这一行就能读出 `:op/add_d` 的头是 `+`、元数是 2；`#op('tensor:matmul') … func matmul(…)` 同理。所以：
+三条都不选。键本来就有唯一的来源：Camel 里把算子绑到声明上的那一行。`stdlib/prelude.cml#operator` 写着 `#op(':op/add_d') export func operator +(x: float, y: float): float`，从这一行就能读出 `:op/add_d` 的头是 `+`、元数是 2；`#op('tensor:matmul') … func matmul(…)` 同理。所以：
 - 加载规则集建索引时，同时扫一遍带 `#op` 的声明，得到"算子 URI → (头, 元数)"。三张 `bind*Rule` 表、`forward.cpp` 里的三份 map 和 `*Descriptions` 全部删掉。
 - **同一个键可以有多条规则，按类型选**，和函数重载同一条规则。这样标量的 `*` 和张量的 `*` 都叫 `*`/2，`mul_tensor`/`vmap_mul_tensor` 这个为表而造的名字删掉。`indexRule` 撞键报重名，改成同键同类型条件才报。
 - **`xs[i]`**：在前奏里给 `:op/idx_arr` 一条运算符声明（`#op(':op/idx_arr') export func operator [](xs: T[], i: int): T`，与 `operator +` 同一种写法）。规则左边写 `xs[i]`，`index_into` 这个名字删掉。解析器还不认 `operator []` 的话，补上：这是已有运算符声明写法的延伸，不是新机制。
@@ -1592,7 +1592,7 @@ T+48（明天 15:00）的目标仍是过半。照这个次序，第 2 步做完�
 
 ## 返工（2026-11-01 20:30，P0-1）：读数过了，机制没改；`isMember` 那一行还在
 
-`da27eca0a` 说 P0-1 在 develop 上已经通过：三条读数四个后端都对，之前看到的 `std::opt` 前后差异是旧二进制造成的，已撤回。读数对是好事，但审查指的是机制。`src/execute/graph_runtime_support.cpp:532` 仍是 `if ((live[n] || isMember(n)) && state[n] != 2)`，区域成员不看有没有被用到就排进计划，这直接违反原则 3.1 的"当且仅当"。这三条读数分不出这个差别：`println(1)` 被前端判为不执行，没走到计划这一层。要换一条能分辨的读数：
+`da27eca0a` 说 P0-1 在 develop 上已经通过：三条读数四个后端都对，之前看到的 `std::opt` 前后差异是旧二进制造成的，已撤回。读数对是好事，但审查指的是机制。`src/execute/graph_runtime_support.cpp#computeExecutionOrder` 仍是 `if ((live[n] || isMember(n)) && state[n] != 2)`，区域成员不看有没有被用到就排进计划，这直接违反原则 3.1 的"当且仅当"。这三条读数分不出这个差别：`println(1)` 被前端判为不执行，没走到计划这一层。要换一条能分辨的读数：
 
 ```camel
 func f(c: bool): int sync {
@@ -1693,7 +1693,7 @@ P0-1、P0-3 从 18:20 下达，到现在快三小时，还没有一行代码。�
 ## 已修（2026-11-02，A3 车道）：`std::opt::devirtualize` 曾把递归深度上限抬高一层
 
 - **读数（修前）。** `test/cases/trans/cpp/exec/recursion_limit.cml`，四种跑法：`std::fvm` → `999` 之后在 `6:38` 的 `1 + depth(n - 1)` 报 `MaxRecursionDepthExceeded`，rc=1；`std::opt::devirtualize std::fvm` → `999 / 1000 / not reached` 三行全打完，rc=0；`std::nvm` 同上，`std::opt::devirtualize std::nvm` 也打出三行；`std::jit` 两种写法都是 rc=1。也就是**一个优化遍改变了哪个程序会失败**，连带改变了"`println('not reached')` 这条效应执不执行"（9.7 说改写不改变哪些效应执行）。C++ 产物始终是"会失败"那一侧（3.9 要的形状）。
-- **它按什么计。** 不是 `CALL` 节点数，是"同时打开的、不是尾调用的调用"。`include/camel/execute/limits.h:33` 的 `kEntryCalls = 1` 明写：入口图自己对 `main` 的那一次调用不算；其余每个函数调用（直接写的、经函数值调的、高阶算子为元素调的）都算。计数器有两处：`std::nvm` 的 `currRecursionDepth_`（自增在 `src/passes/sched/nodevm/nodevm.cpp:298`，自减在 776/791/809/828），判定在 `requireRecursionRoom`（`nodevm.cpp:283`：`openCalls = currRecursionDepth_ - 1`，`openCalls >= maxRecursionDepth_ + kEntryCalls` 就报）；`std::fvm` 的是 `stackDepth_ + nestedCalls_`（`src/passes/sched/fastvm/fastvm.cpp:450`，`push()` 在 426 行用同一个判定）。
+- **它按什么计。** 不是 `CALL` 节点数，是"同时打开的、不是尾调用的调用"。`include/camel/execute/limits.h#kEntryCalls` 的 `kEntryCalls = 1` 明写：入口图自己对 `main` 的那一次调用不算；其余每个函数调用（直接写的、经函数值调的、高阶算子为元素调的）都算。计数器有两处：`std::nvm` 的 `currRecursionDepth_`（自增在 `src/passes/sched/nodevm/nodevm.cpp#NodeVMSchedPass::requireRecursionRoom`，自减在 776/791/809/828），判定在 `requireRecursionRoom`（`nodevm.cpp:283`：`openCalls = currRecursionDepth_ - 1`，`openCalls >= maxRecursionDepth_ + kEntryCalls` 就报）；`std::fvm` 的是 `stackDepth_ + nestedCalls_`（`src/passes/sched/fastvm/fastvm.cpp#FastVMSchedPass::push`，`push()` 在 426 行用同一个判定）。
 - **根因：尾调用把入口那次调用合并掉了。** 两个解释器都做尾调用优化：nvm 在 `nodevm.cpp:640-676` 里 `isTailCall` 就直接换图换帧、`goto loop_start`，不开新激活；fvm 的 `label_TAIL`（`gotovm.cpp`）释放 `currFrame` 再取一个新帧，`stackDepth_` 不变。而 `-1` 与 `+ kEntryCalls` 这两笔减掉的正好是**两个**不是程序自己发的激活：入口图自己的激活，和它对 `main` 的调用。`devirtualize` 把入口那次调用从 `N16 [CALL]`（函数值调用）改成 `N16 [FUNC main]`（直接调用，落在尾位置），它就被当成尾调用合并了，只剩一笔可减——上限高出一层，`depth(1000)` 于是跑得动。
 - **修法（不调上限）。** 入口图对它的被调者的那次调用，无论哪种写法都单独开一个激活：nvm 把条件改成 `isTailCall && currRecursionDepth_ > 1`；fvm 的 `label_TAIL` 在 `stackDepth_ + nestedCalls_ == 0` 时走"直接调用那条路"（`push` + 新帧）。另外编译路径的预算按"还剩多少"算：`fastvm.cpp:880` 原来只减 `stackDepth_`，现在减 `stackDepth_ + nestedCalls_`——否则 fvm 改对以后 `std::jit` 反而在 `depth(99)` 就报（这一条是修完 fvm 后读数抓出来的，见下）。
 - **读数（修后）。** 小程序 `depth(k)`（`--max-recursion-depth 10`）的边界三种后端一致：`k=9` rc=0、`k=10` rc=1，加不加 `devirtualize` 都一样（修前只有"加 `devirtualize`"那一列是 `k=10` rc=0、`k=11` rc=1）。`recursion_limit.cml` 七种跑法（默认 / `std::fvm` / `devirtualize std::fvm` / `std::nvm` / `devirtualize std::nvm` / `std::jit` / `devirtualize std::jit`）逐字相同：`999` + `6:38` 的 `MaxRecursionDepthExceeded`，rc=1。
@@ -1775,7 +1775,7 @@ P0-1、P0-3 的主体都落了，下一步是 P0-2（控制边，批次项 9）�
 
 **被转置成员靠什么认身份**——只靠图 id。名字只给人读，可以重名；打印时要不要去重，归 `std::cml` 起名的规则管（M7）。另外问一句：同一个被调图在一次转置里要转置几次，就建几张成员图？如果是重复建，按被调图 id 做一次记忆，这是性能问题，不是身份问题。
 
-**两个 `float` 端口的成员是谁建的**——十有八九是规则在 `float` 上实例化。`modules/transforms/jvp.cpp:365` 和 `module.cpp:74` 调 `genericRuleInstance` 时，类型参数写死成 `{Type::Float64()}`，`index_into<float>` 的 `xs: T[]`、`i: int` 就被实例化成了别的形状，审查 P1-9 点过这个写死。规则要按被匹配节点自己的类型实例化（原则 5.5、9.11），把这两处改掉再看那 4 条不变量。排查过程写得很好，五条假设逐条排除，两条自己撤回。
+**两个 `float` 端口的成员是谁建的**——十有八九是规则在 `float` 上实例化。`modules/transforms/jvp.cpp#liftGraph` 和 `module.cpp:74` 调 `genericRuleInstance` 时，类型参数写死成 `{Type::Float64()}`，`index_into<float>` 的 `xs: T[]`、`i: int` 就被实例化成了别的形状，审查 P1-9 点过这个写死。规则要按被匹配节点自己的类型实例化（原则 5.5、9.11），把这两处改掉再看那 4 条不变量。排查过程写得很好，五条假设逐条排除，两条自己撤回。
 
 **8 个 `*tos` 行**——收下这个观察，处理照 00:10 那条：通配一律不用，`string::<T>` 对应一个算子，按类型分派。
 
@@ -1825,7 +1825,7 @@ ode scripts/camel-for-ai.mjs --write 输出 `already what the sources produce (n
 
 A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*` 是同一个事实的第二份实现，照"同一事实一份实现"删掉 22 行注册。B 的顾虑删之前查一次：`git grep` 一遍按 URI 点名 `:op/ne_*` 的地方（规则、遍、导出器、`std::cpp`、tiles），有的就改成读 `==` 再取反，不留按 URI 的引用。读数照页里那张表：`inspect --ops` 655→633，三栏表不动，`--verify-ops` 仍一致，全量不掉。前端今天把 `!=` 建成什么节点，也一并看：如果建的是 `ne_*`，改成 `eq` 加 `!`，或者在 `==` 的结果上取反，走同一条已有的规则。页面挪到 `reviews/` 留档。
 
-**裁定未执行，据实报（2026-11-02 10:30）**：`gs6` 按上面这条裁定删掉那 9 条规则（实为 63 行）后实测 **`8390 / 7866 pass / 508 fail`**——`array_whole.nvm/.fvm/.jit/.prl` 整片倒。按页里自己写死的判据"掉了就说明有地方直接调，那就不是候选"，**这 22 行保留**。原因在 `modules/graph/module.cpp:110` 的原文：`!=` 的排除法只覆盖"有 `==` 可取"的场合，handle 类型那类要靠编译器自己构造的 `__neq__` 组 ⇒ **`:op/ne_*` 不是"同一事实的第二份实现"，是 `!=` 的兜底**。所以**裁定在这里没有被执行**，作者 02:30 随后给出了执行路径（先在别处改成等价形态、再删），**冲突状态结束**：迁移由 `lane-gs6` 按新路径做，问题页留在 `questions/` 的时间到此为止——`432359f2c` 把它挪进 `reviews/`，已裁的页不留在一个指向已答问题的索引里。
+**裁定未执行，据实报（2026-11-02 10:30）**：`gs6` 按上面这条裁定删掉那 9 条规则（实为 63 行）后实测 **`8390 / 7866 pass / 508 fail`**——`array_whole.nvm/.fvm/.jit/.prl` 整片倒。按页里自己写死的判据"掉了就说明有地方直接调，那就不是候选"，**这 22 行保留**。原因在 `modules/graph/module.cpp#GraphModule` 的原文：`!=` 的排除法只覆盖"有 `==` 可取"的场合，handle 类型那类要靠编译器自己构造的 `__neq__` 组 ⇒ **`:op/ne_*` 不是"同一事实的第二份实现"，是 `!=` 的兜底**。所以**裁定在这里没有被执行**，作者 02:30 随后给出了执行路径（先在别处改成等价形态、再删），**冲突状态结束**：迁移由 `lane-gs6` 按新路径做，问题页留在 `questions/` 的时间到此为止——`432359f2c` 把它挪进 `reviews/`，已裁的页不留在一个指向已答问题的索引里。
 
 **P1-13 这一批看过**：`000afde13` 把 8 个 `string` kernel 合成一个算子，`74fb52d4d` 补上 `[]`、`~`、`!`、`%`、`&`、`|` 的声明，`^` 按类型各一条声明，复合赋值被认定为语法结构而不是运算符，`0f8546699` 收尾时三栏是已覆盖 487、结构性 22、写不出 146。方向都对。剩下"写不出的 146"，分清两类：一类是语言今天表达不了（联合参数之类），记下来交给负责人；另一类只是还没写，接着补。
 
@@ -1844,7 +1844,7 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 
 `6f135cfef` 记下：删掉 11 个 `:op/ne_*` 之后，全量从 8374 过掉到 7866 过，于是没有执行裁定。这 508 条正是 02:10 那条最后一句说要"一并看"的：前端把 `a != b` 建成了 `ne_*` 节点。所以删除要分两步，在同一笔里做：
 1. 前端把 `!=` 建成对 `==` 结果的取反（`!(a == b)`，走 `operator ==` 的同一套重载解析），不再产出 `ne_*`；
-2. 删掉 22 行注册，以及 ONNX 导出、内建执行器里按 URI 点名 `ne_*` 的地方（`modules/onnx/lowering.cpp:1376`、`src/builtin/executors/builtin.cpp` 那几行）。
+2. 删掉 22 行注册，以及 ONNX 导出、内建执行器里按 URI 点名 `ne_*` 的地方（`modules/onnx/lowering.cpp#LoweringRegistry::LoweringRegistry`、`src/builtin/executors/builtin.cpp` 那几行）。
 读数：全量回到 8374 过、0 失败，`inspect --ops` 少 22 行。你们在 `branching.md` 里写的规矩是对的：裁定和读数冲突时先写问题页、提交里说明没执行。这一次的冲突是裁定没写全，我补上了，照做。
 
 ## 收下（2026-11-02 02:50）：里程碑层那一页
@@ -1859,7 +1859,7 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 
 **30 个"沉默的零"**：收下，照默认不改层。零分三种，这张表是对的：本层计划零启动是红，别层计划零启动记一行账，整次零启动是红。我昨晚那句"31 个计划一条都没启动"没有分清层，是我说得不准。真缺陷只有一个（`cml_sweep` 缺 `tier`），已修。"均匀的零先怀疑仪器"这条教训写得好。
 
-**私有 kernel 要不要可写名字**：前提不成立，A、B、C 都不选。最小例子里 `shl` 不是私有的：`stdlib/math.cml:627-632` 写着 `#op('math:shl_i') export func shl::<T>(x: T): T when is_same::<T, i32>()`，`shl_l` 同理。它是**导出的**无体声明，程序也确实写了 `1->shl<64>`。打印器那条判据"无体 kernel 声明，没有程序写这个名字"错在把"无体"当成了"私有"：无体只说明实现在 C++ 里，名字照样可写。
+**私有 kernel 要不要可写名字**：前提不成立，A、B、C 都不选。最小例子里 `shl` 不是私有的：`stdlib/math.cml#shl` 写着 `#op('math:shl_i') export func shl::<T>(x: T): T when is_same::<T, i32>()`，`shl_l` 同理。它是**导出的**无体声明，程序也确实写了 `1->shl<64>`。打印器那条判据"无体 kernel 声明，没有程序写这个名字"错在把"无体"当成了"私有"：无体只说明实现在 C++ 里，名字照样可写。
 - 修打印器：算子由一条导出的声明绑定，就打印那条声明的名字，按原样写出 `x->shl<64>`；重编译时，重载按类型重新选回 `shl_l`。只有确实没有任何导出声明能到达的算子，才算"没有可写名字"。
 - 修完重扫，报告这一族还剩多少。剩下的如果真是私有 kernel 出现在了图里，那是某个遍把私有实现暴露进了程序图（比如内联了库函数的私有体），再单独拿来看。
 
@@ -1964,7 +1964,7 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 
 ## 裁定（2026-11-02 14:10）：两件
 
-**那 29 条红是 `TransposeResolver` 还没换新签名**：`ef60bd42a` 查明它们都停在 `stdlib/vjp.cml:73:47`，原因是"旧的转置类型遇上新的单余切调用"，不是 `with_grad`。我 13:30 把它归给 `with_grad`，归错了，更正。`modules/transforms/transpose_operator.cpp:110` 仍写着 `(knowns.., cotangent) => (cotangents..)`，照 11:30、13:10 的约定改成 `(ȳ) => (每个参数一项的余切)`，类型只由参数函数的类型决定。读数：29 条转绿。
+**那 29 条红是 `TransposeResolver` 还没换新签名**：`ef60bd42a` 查明它们都停在 `stdlib/vjp.cml:73:47`，原因是"旧的转置类型遇上新的单余切调用"，不是 `with_grad`。我 13:30 把它归给 `with_grad`，归错了，更正。`modules/transforms/transpose_operator.cpp#TransposeResolver` 仍写着 `(knowns.., cotangent) => (cotangents..)`，照 11:30、13:10 的约定改成 `(ȳ) => (每个参数一项的余切)`，类型只由参数函数的类型决定。读数：29 条转绿。
 
 **一个用例能不能只在某一层算已知失败**——不加按层的标记，修那条断言。Debug 下 `Type::assignableFrom` 遇到 `Ref` 就中止，断言注释自己写着"合法程序到处都会走到这里，17 条用例"。这不是测试工具缺能力，而是编译器把一个合法程序的情况写成了断言。10 月我裁过一次：`Ref` 在**每个类型判断的入口**先解析掉，不要求调用者各自记得解析。照这一条做：`assignableFrom`、`equals` 等判断的入口先把 `Ref` 解析成它指向的类型，断言随之删掉（它挡的是一个本该处理的输入），17 条用例在 Debug 下转绿。在那之前，Debug 腿上这些用例照常红，不许为了让它绿去加按层标记或改测试。
 
@@ -2083,7 +2083,7 @@ A。`a != b` 就是 `!(a == b)`，语言本来就不许单独重载 `!=`。`ne_*
 
 ## 裁定（2026-11-02 18:50，M2/M3）：反向半程按轮倒序——不新增算子，用已有的 `range` 和 `:op/idx_arr`
 
-两页的前提里有一条不对：运行期下标读数组的算子是有的，就是 `:op/idx_arr`（`src/builtin/executors/builtin.cpp:324` 的执行器，`globals.cpp:1940` 的注册；`xs[i]` 降级后就是它，`rulesets.jvp` 的 `index_into`、`rulesets.transpose` 的 `idx_arr_t` 也都挂在它上面）。它不是编译器内部机制，`draft` 可以像造别的 `Oper` 一样造它。
+两页的前提里有一条不对：运行期下标读数组的算子是有的，就是 `:op/idx_arr`（`src/builtin/executors/builtin.cpp#makeOpsImplMap` 的执行器，`globals.cpp:1940` 的注册；`xs[i]` 降级后就是它，`rulesets.jvp` 的 `index_into`、`rulesets.transpose` 的 `idx_arr_t` 也都挂在它上面）。它不是编译器内部机制，`draft` 可以像造别的 `Oper` 一样造它。
 - **做法（B，全部用已有算子）**：反向循环迭代 `range(n - 1, -1, -1)`（`range` 已经收负步长），每轮用 `:op/idx_arr(tape, i)` 从残差带里取第 `i` 轮的残差。`n` 是残差带的长度（`:struct/len_arr`）。残差带作为反向循环的不变输入进来。
 - **不新增 `:struct/reverse_arr`（A）**：今天的需要用已有算子就能表达，为一个变换加一个用户可见的算子不值得。用户要反转数组，用库里已有的 `reverse`。
 - **现在就做**，不等可观测（15:30 已裁）。判别用例照 15:30：聚合状态提升已经在 `b19a84dfe`、`1e553aaad` 里落了，那个 2×2 矩阵连乘的例子现在应该能走到 `split`，用它来证明 `vjp` 给出的是倒序的结果。
@@ -2345,21 +2345,21 @@ P0-2 两处改写、`transpose` 递归捕获、循环倒序、M4 迁移、Transf
 
 ### 高
 
-- **A1 返工：`src/compile/gir/rule_templates.cpp:23` 混进了 PowerShell 的转义**。整行是 `#include "camel/utils/assert.h"`r`n`r`n#include <format>`，`<format>` 被吞在同一行里，能编过只是因为它碰巧被别的头文件带进来了（`04720eb7c`）。拆成两行 include。顺带：同一文件 `:211` 和 `:220` 两次判断 `conditionFails`，合成一次。
-- **A2 返工：`jvp` 的解析器里还留着"暂不提升"的门**（`modules/transforms/jvp_operator.cpp:113-140`）。参数不是 `float` 就拒（"this transform does not lift yet"）；结果不是 `float` 就拒；带 `with` 参数的函数也拒，理由是"捕获值没有端口可进"，可闭包早就有捕获端口了。`signature()` 还写死了 `(f: (float) => float) => …`。这就是"暂不支持"的诊断，而且是在 `jvpSignature` 和 `stdlib` 声明之外，又写了一份类型规则。修法：解析器的类型照声明的 `Jvp<F>` 走（22:30 起实现以声明为准）；任何参数，只要 `Tangent<T>` 有定义就能接受；`with` 参数照闭包规则处理；只有 `Tangent` 无定义时才拒，用语言规则的说法拒，不写"暂不"。读数：`jvp` 能直接接收 `f32`、数组和结构体参数的函数，并在三种类型上各给一个例子。
+- **A1 返工：`src/compile/gir/rule_templates.cpp#Table` 混进了 PowerShell 的转义**。整行是 `#include "camel/utils/assert.h"`r`n`r`n#include <format>`，`<format>` 被吞在同一行里，能编过只是因为它碰巧被别的头文件带进来了（`04720eb7c`）。拆成两行 include。顺带：同一文件 `:211` 和 `:220` 两次判断 `conditionFails`，合成一次。
+- **A2 返工：`jvp` 的解析器里还留着"暂不提升"的门**（`modules/transforms/jvp_operator.cpp#JvpResolver`）。参数不是 `float` 就拒（"this transform does not lift yet"）；结果不是 `float` 就拒；带 `with` 参数的函数也拒，理由是"捕获值没有端口可进"，可闭包早就有捕获端口了。`signature()` 还写死了 `(f: (float) => float) => …`。这就是"暂不支持"的诊断，而且是在 `jvpSignature` 和 `stdlib` 声明之外，又写了一份类型规则。修法：解析器的类型照声明的 `Jvp<F>` 走（22:30 起实现以声明为准）；任何参数，只要 `Tangent<T>` 有定义就能接受；`with` 参数照闭包规则处理；只有 `Tangent` 无定义时才拒，用语言规则的说法拒，不写"暂不"。读数：`jvp` 能直接接收 `f32`、数组和结构体参数的函数，并在三种类型上各给一个例子。
 - **A3 返工：拒绝原因靠日志字符串传递，再被解析回来**。`transpose_operator.cpp:135` 用 `log.rfind("skip=")` 加 `stoul` 从日志里还原"原因和第几个参数"；约 18 个词靠手写的 if 链对应到句子，链的末尾 `:207` 是个 TODO，没认出来的词一律套通用句。测试端 `test/tools/transpose_refusal/check.py` 又用正则去解析这两个 C++ 文件，外加两张手工维护的例外表（`LANDS_ON_THE_NAMED_SHAPE`、`WAITS_FOR_A_WORD`）。修法：建图的结果带一个结构化的原因 `{cause 枚举, param}`，诊断文字只从一张 `cause → 句子` 表里查，每个枚举值必须有句子（编译期就能保证）；日志只是输出，不再被解析；删掉 `check.py` 和它在计划里的那一项。
 
 ### 中
 
 - **A4 返工：类型转换的规则键靠解码算子名的字母**（`src/core/forward.cpp` 里的 `spellingOfDestination`/`conversionKeyOf`，`{"bf","bf16"},{"f6","f16"},{"d","float"}…` 再加 `name.find("to")`）。这是在 C++ 里重述了 prelude 声明。同时 `stdlib/rulesets/jvp.cml` 手抄了 28 条转换规则，每条只是守卫里的源类型不同。修法：目标类型从算子声明的函数类型里读，不解码名字；规则合成两条泛型规则，按源类型的切空间分：源类型有切空间时，切向量做同样的转换；没有时答零。删掉没人调用的 `float_of_int`。
-- **A5 返工：同一个谓词有两份**。`stdlib/opt.cml:89` 写的是 `is_pure(n) && may_be_recomputed(n) && !may_fault(n)`，C++ 那边是 `nodeIsFreelySchedulable`，A10 当初就是这两种写法分叉造成的。原则 3.4 要求"一个谓词，处处同用"。导出一个 `graph::may_be_rearranged` 直接用 C++ 的那个谓词，`opt.cml` 只调它，那三段"按 C++ 遍的写法"的注释一起删掉。
-- **A6 返工：`GraphDraft::region(0)` 在没有区域时返回一个静态的假区域**（`include/camel/runtime/draft.h:770`）。根子是 `nodeRegion` 对每个节点都答 0，区域 0 却要等加了别的区域才存在。修法：草稿创建时就建好区域 0（根区域）。
-- **A7 返工：内联引擎的"没收敛"计数会悄悄归零**（`src/passes/opt/inline/engine.cpp:1352`）：没传状态时用一个局部的 `ownStreak`，每次调用都从 0 开始，上限永远触发不了。修法：状态改成必传，不设后备。
-- **A8 返工：生成器 `match` 臂里的绑定仍然报 `UnknownInternalError`**（`src/compile/gct/builder.cpp:6323`）。18:10 已经裁定：绑定是局部量，跨 `yield` 就进状态。照那条去建，不留内部错误。
+- **A5 返工：同一个谓词有两份**。`stdlib/opt.cml#mergeable_operation` 写的是 `is_pure(n) && may_be_recomputed(n) && !may_fault(n)`，C++ 那边是 `nodeIsFreelySchedulable`，A10 当初就是这两种写法分叉造成的。原则 3.4 要求"一个谓词，处处同用"。导出一个 `graph::may_be_rearranged` 直接用 C++ 的那个谓词，`opt.cml` 只调它，那三段"按 C++ 遍的写法"的注释一起删掉。
+- **A6 返工：`GraphDraft::region(0)` 在没有区域时返回一个静态的假区域**（`include/camel/runtime/draft.h#region`）。根子是 `nodeRegion` 对每个节点都答 0，区域 0 却要等加了别的区域才存在。修法：草稿创建时就建好区域 0（根区域）。
+- **A7 返工：内联引擎的"没收敛"计数会悄悄归零**（`src/passes/opt/inline/engine.cpp#applyOptimizeRewritePass`）：没传状态时用一个局部的 `ownStreak`，每次调用都从 0 开始，上限永远触发不了。修法：状态改成必传，不设后备。
+- **A8 返工：生成器 `match` 臂里的绑定仍然报 `UnknownInternalError`**（`src/compile/gct/builder.cpp#Builder::visitGeneratorBody`）。18:10 已经裁定：绑定是局部量，跨 `yield` 就进状态。照那条去建，不留内部错误。
 - **A9 返工：测试被改得迎合实现**。
-  - `src/passes/test/regions.cpp:60` 的 `if (live.size() < 5) return program;` 让小图悄悄跳过测试。去掉这个早退；小图不该测，就让用例不选它。
+  - `src/passes/test/regions.cpp#RegionsTestPass::apply` 的 `if (live.size() < 5) return program;` 让小图悄悄跳过测试。去掉这个早退；小图不该测，就让用例不选它。
   - 新的区域校验（只读祖先）没有负例。用测试遍造一张"兄弟区域读端口"的图，断言 `commit` 拒绝并点名。
-  - `test/tools/selftest/run.mjs:57,1088` 用 `process.cpuUsage()` 只算到 node 进程自己，子进程的 CPU 没算进去，打出来的读数接近 0，也没人用。要么用树里已有的 `child-cpu.mjs` 读子进程的 CPU，要么删掉这行。
+  - `test/tools/selftest/run.mjs#cost`（以及同文件的 devicePlan） 用 `process.cpuUsage()` 只算到 node 进程自己，子进程的 CPU 没算进去，打出来的读数接近 0，也没人用。要么用树里已有的 `child-cpu.mjs` 读子进程的 CPU，要么删掉这行。
 
 ### 低（冲刺后一次扫完）
 
@@ -2639,3 +2639,20 @@ P0-2 两处改写、`transpose` 递归捕获、循环倒序、M4 迁移、Transf
 **第 7 项先删建图，等于删掉 `grad` 本身**：对，我 15:55 那句说错了，撤回。`buildGradientGraph` 现在仍是 `grad`/`with_grad` 四个算子的唯一实现，库层 `grad` 能用之前不能删。第 7 项保持原定：库层与引擎在全部 autodiff 用例上对齐后，再一次删掉建图和 `GradResolver`；`GradResolver` 的类型那一半等负责人对"类型层拆包"的裁定。
 
 九页挪到 `reviews/` 留档。`048dd4771`（`mean` 的切向从操作数取长度，`vjp` 越过了 `mean_axis`）照 16:15 落了，对。
+
+## 裁定（2026-11-03 17:55）：五页，调用怎么切、怎么转；形状从哪来；零载体
+
+**进展**：`f5eaeb0fa`、`65c9e87f2` 照 16:55 落了：两条路径按被调函数的内容判断是否答二元组，`transpose` 里 `liftedFrom` 归零。`fbf31b3ed` 照 16:15 落了：参数类型没写死形状时，裸 `transpose` 按语言规则拒绝。`fab8187fc`、`96e7d78dc`（融合梯度按算子声明的宽度写）是真缺陷，修得对。
+
+**调用点看不见被调函数自己算的残差 + 前一半怎么取调用的值分量**（两页，加一页施工规格）：这两件是一回事，答案是**被调函数的 `lin` 本身就是外层的残差**，甲、丙、丁都不用。
+- **前一半**：外层前一半遇到一个答二元组的调用 `g(…)`，就调用 `split(g)` 的前一半，拿到 `(y_g, lin_g)`。前一半只收原值，`split(g)` 的前一半也只收原值，不需要切向实参（甲不需要）。`y_g` 照常往下算；`lin_g` 是前一半算出来的**一个函数值**，它是后一半要读的东西，所以照 15:15 成为外层的残差，进外层 `lin` 的闭包。`g` 自己的残差（如 `x*y`）就在 `lin_g` 的闭包里，跟着它走，调用点不需要看见它们。
+- **后一半**：外层后一半在那个位置调用闭包里的 `lin_g`（一次间接调用）。
+- **转置**：转置"调用一个已知的线性函数值 `v`"，就是调用 `transpose(v)`。变换本来就是运行时函数，转置后的图里写一次对 `transpose` 的调用，再用 `ct` 去调它的结果。不需要"读闭包格"的新节点（丙），也不重算（丁），更不改 `Vjp<F>` 的可见形状（甲）。
+- **递归函数**：`split(g)` 在 `g` 的体里又遇到 `g` 时，引用正在建的那张图。在**一次变换调用之内**用一张"正在建/已建"的表，按源图记住结果，与 `jvp` 处理递归是同一个做法。这张表只活在变换过程中，不进图、不进核心。
+- 判据：库层 `with_grad` 在 `grad_first_with_parameter` 上与引擎同答；`split_call_one` 照旧；`split` 里两处 `liftedFrom()` 也随之删掉。
+
+**类型里写的形状律读不到**：选路 1 的方向，但不靠零载体，下面一并说。为裸 `transpose` 加一个通用的"由类型取形状"的内建：`extent_of::<A>()`，对写死形状的数组类型答 `int[]`；对开秩、不定长的类型，在实例化时按语言规则报错。它是一个普通内建函数，不动图数据模型。`vjp` 那条路不用它，形状从原值（残差）读，照 17:35。
+
+**零载体能顶替到什么程度**：不要零载体。用一个零数组去顶替参数的值，只在律"恰好只读形状"时才对，这是一条看不见的约定，读元素时就会静默出错数。按 11:10/17:35 改完规则以后，转置规则不再读线性操作数：`vjp` 路径的形状由原值作为已知实参交进去，裸 `transpose` 的形状由 `extent_of` 从类型取。零载体也就不需要了。`transpose(pick)` 在 `x: float[3]` 上答 `([0.0, 1.0, 0.0])`，靠的是 `extent_of`，不是零载体。`e07ce4481` 里的零载体，在规则改完后删掉。
+
+五页挪到 `reviews/` 留档。

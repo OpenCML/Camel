@@ -31,8 +31,8 @@ PROBE-FWD function=split_of_jvp_of_g_backward ref=2 kind=15 type=float[]
   不在它的类型里，只在它的值里。这正是 `split.cpp` 那句注释说的形状。
 - `argumentAt=0`、`inputs=[2:Loop(float[]) 22:Data(int)]`：`inputs[0]` 就是参数 0。**序号是对的**，
   身份是 `node 23` 的 `inputs[0]` → `ref 2`。站 1/2 的"按身份补"这条路没有走错格。
-- `ref=2` 的 `kind=15` 是 `GCNodeKind::Loop`（`include/camel/runtime/graph.h:126`），类型 `float[]`。
-- 所以 `forward(2)` 拒绝的原因在 `modules/transforms/transpose.cpp:1017`：
+- `ref=2` 的 `kind=15` 是 `GCNodeKind::Loop`（`include/camel/runtime/graph.h#GCNodeKind`），类型 `float[]`。
+- 所以 `forward(2)` 拒绝的原因在 `modules/transforms/transpose.cpp#NeedsOut`：
   `if (node->kind != rt::GCNodeKind::Oper) { complete = false; return kInvalidNodeRef; }`。
   `forward` 认识的只有 `Port`、`Fill`、`Accs`、`Call`、`Func`、`Oper`，**没有 `Loop`**。
 
@@ -138,7 +138,7 @@ carrying it means transposing that body
 
 ## 文件与读数
 
-- 拒绝点：`modules/transforms/transpose.cpp:1017`（`forward` 的兜底返回）。
+- 拒绝点：`modules/transforms/transpose.cpp#NeedsOut`（`forward` 的兜底返回）。
 - 需要值的那一侧：`modules/transforms/transpose.cpp` 的 `calleeNeeds` 循环（`state.calleeNeeds[callee]`）。
 - 案例：`test/plans/feat/compile/transforms.plan.toml#vjp_loop.rounds_are_undone_in_reverse`（`known_fail`，
   原文见上）。

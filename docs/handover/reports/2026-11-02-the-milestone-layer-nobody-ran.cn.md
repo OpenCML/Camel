@@ -18,4 +18,4 @@
 
 ## 这一层的账怎么记
 
-`develop` 的每轮闸门是 `-Plan all -Tier fast`，它按 `tier` 跳过 milestone 条目；`scripts/plan-inventory.mjs:121` 又把 `jit_framed` 登记进 `FORBIDDEN`，那句理由写的是"its 2 milestone tests are GC stress"。⇒ **为 2 条跑不动的条目，把同一文件另外 55 条也划走了**，而这一层没有人跑。**报 `[SUMMARY]` 必须带 `-Tier`：一个绿只有在说清盖住哪一层之后才是绿。**
+`develop` 的每轮闸门是 `-Plan all -Tier fast`，它按 `tier` 跳过 milestone 条目；`scripts/plan-inventory.mjs#plan` 又把 `jit_framed` 登记进 `FORBIDDEN`，那句理由写的是"its 2 milestone tests are GC stress"。⇒ **为 2 条跑不动的条目，把同一文件另外 55 条也划走了**，而这一层没有人跑。**报 `[SUMMARY]` 必须带 `-Tier`：一个绿只有在说清盖住哪一层之后才是绿。**

@@ -8,7 +8,7 @@
 | 断言 | 拿掉了什么 | 红的条数 | 是否「恰好」 | 结论 |
 |---|---|---|---|---|
 | `order_edge_on_a_pure_node_is_refused`（`feat/opt/edges`） | `graph_edges.cpp:347` 的 `nodeTakesNoOrder` → `bad("is on a pure node…")` | 1 / 14 | 是 | **有效** |
-| `rank_zero_slot_array_element` ×4（`_fvm/_jit/_tf`） | `ArrayDataFactory::add` 的元素转换（`src/core/data/composite/array.cpp:26`） | 4 / 84 | 恰好那 4 条 | **部分有效：守元素转换一族** |
+| `rank_zero_slot_array_element` ×4（`_fvm/_jit/_tf`） | `ArrayDataFactory::add` 的元素转换（`src/core/data/composite/array.cpp#ArrayDataFactory::add`） | 4 / 84 | 恰好那 4 条 | **部分有效：守元素转换一族** |
 | `rank_zero_slot_nested_field` ×4 | `convertStructValue` 里 rank-0 的 `coerceTo`（`builder_control.cpp:632`） | 4 / 84 | 恰好那 4 条 | **部分有效：守嵌套字段一族** |
 | `argument_rule`（接受那条） | `declarationOf` 的 maker 分支（`builder_tags.cpp:399`，`__rule_generic` / `ruleMakerCalled`） | 1 / 48 | 是 | **有效** |
 | （同族） | `declarationOf` 把 `Rule` 折回 `Value`（`builder_tags.cpp:395`，FUNC 的 `ruleBinding` 分支） | **0 / 48** | 什么都没红 | **空转** |

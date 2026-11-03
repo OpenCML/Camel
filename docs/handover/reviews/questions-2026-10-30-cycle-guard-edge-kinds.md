@@ -6,11 +6,11 @@
 
 ## 现象
 
-- `std::opt` 每次改写之后，`src/passes/opt/generic/rewrite.cpp:470` 的 `draftHasCycle` 判刚写出来的
+- `std::opt` 每次改写之后，`src/passes/opt/generic/rewrite.cpp#replaceNode` 的 `draftHasCycle` 判刚写出来的
   整图有没有环；调用点在同一个文件 `:552`，成环就丢弃会话、保留原图（这一次优化被静默跳过）。
 - 它的遍历走 **5** 类边：`norm` / `with` / `ctrl` / `sync` / `order`（`rewrite.cpp:489`，
   `while (top.group < 5)`）。
-- 图交给后端之前的冻结是 `src/runtime/graph_edges.cpp:489` 的 `findCycle`，只走 **4** 类：
+- 图交给后端之前的冻结是 `src/runtime/graph_edges.cpp#EdgeChecker` 的 `findCycle`，只走 **4** 类：
   `norm` / `with` / `ctrl` / `order`（`graph_edges.cpp:508`，`while (top.group < 4)`），**不含
   `sync`**。
 - 后果：只在 `sync` 边上成的环，守卫会静默丢弃会话（程序照常跑，没有任何诊断），而冻结不会报错；

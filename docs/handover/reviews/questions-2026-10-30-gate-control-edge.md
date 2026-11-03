@@ -9,7 +9,7 @@
 - `docs/technical/05_graph_ir.md` 4.1（4.8 同口径）：`GATE` 是"数据-控制聚合门控"，**至少一条 `Norm` 入边、至少一条 `Ctrl` 入边**，缺一即构图错误。
 - `docs/design/effects/edges.cn.md` 5.3（决策者 2026-10-24）：`GATE` 是纯传值节点，"**不再有控制输入**（控制边已不存在）"，它的等待是同步链的链尾（同步前驱）。
 
-代码两种都接受：运行图的封存检查读 `GATE` 的等待，同步前驱与控制入边**任一**即可（`src/runtime/graph.cpp:561` 的注释、`:568` 的判定）。也就是说，今天写 `Norm + Ctrl` 的图和写 `Norm + Sync` 的图都能编码入库。
+代码两种都接受：运行图的封存检查读 `GATE` 的等待，同步前驱与控制入边**任一**即可（`src/runtime/graph.cpp#validateRuntimeGraphPayloadImpl` 的注释、`:568` 的判定）。也就是说，今天写 `Norm + Ctrl` 的图和写 `Norm + Sync` 的图都能编码入库。
 
 ## 这是真矛盾，不是笔误
 
@@ -28,5 +28,5 @@
 
 - `docs/technical/05_graph_ir.md` 4.1、4.8（已在 4.1 加口径注指向本页）
 - `docs/design/effects/edges.cn.md` 5.3 第 3 条
-- `src/runtime/graph.cpp:561`–`:581`（封存检查：等待两种都接受、无等待即内部错误）
-- `src/compile/gir/builder_helpers.h:680`（`writeSyncStatement`）
+- `src/runtime/graph.cpp#validateRuntimeGraphPayloadImpl`–`:581`（封存检查：等待两种都接受、无等待即内部错误）
+- `src/compile/gir/builder_helpers.h#writeSyncStatement`（`writeSyncStatement`）

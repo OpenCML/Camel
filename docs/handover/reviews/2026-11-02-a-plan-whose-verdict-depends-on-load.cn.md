@@ -1,11 +1,11 @@
 # 一条计划的判定取决于当时的负载
 
-**日期**：2026-11-02。**计划**：`runner.backend_matrix`（`test/plans/feat/consistency/runner.plan.toml:8`，
+**日期**：2026-11-02。**计划**：`runner.backend_matrix`（`test/plans/feat/consistency/runner.plan.toml#runner.backend_matrix`，
 执行 `test/tools/selftest/run.mjs`）。**状态**：同一个 sha 上读数不一致，**这是 flaky，不是回归**。
 
 ## 1. 它自己的判据依赖负载
 
-这条计划的时间敏感写在它自己的注释里（`:16-19`）：
+这条计划的时间敏感写在它自己的注释里（`runner.plan.toml:16-19`）：
 
 > The deciding reading is this self-test's own CPU time, not the wall clock: the runner's margin
 > rule reads the CPU of every test's process tree. Six runs of this case inside the fast layer at

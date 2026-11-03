@@ -44,7 +44,7 @@
 - `modules/tiles/src/graph_regions.cpp#shape`：结果的静态形状只从 f32 张量读得出（f64 读成标量，
   其余 `nullopt`），所以 i64 结果今天在 `eligibility` 里是 **`unresolved_type`**，连 lowering 都到不了。
 - `modules/tiles/src/schedule.cpp#validate`：`require(n.dtype == DType::F32)` 与操作数的同一条要求。
-- `modules/tiles/src/compiler.cpp:1094`：`operator '…' needs a statically known f32 tensor result`——
+- `modules/tiles/src/compiler.cpp#Compiler`：`operator '…' needs a statically known f32 tensor result`——
   这是把 i64 结果落在运行图里的那道门的原话。
 
 ## 一之二、第 1 步做完了什么（上传 / 内核 / 回读里的第三段，加两处宽度）
@@ -344,16 +344,16 @@ TILES_OPERATOR_ID tensor:reshape id=406 tensor_spelling=422
 
 **结论：有内核，只是名字没进 `operations()`。** 三处原文：
 
-- `modules/tiles/src/serial_kernel.cpp:145` —— `else if (op == "argmax_axis" || op == "argmin_axis")`，两个槽：极值决定、位置就是循环下标，下标原样写进 i64 槽（不做算术，所以并列时保留更早的位置）。
-- `modules/tiles/src/reduction_kernel.cpp:153` —— 同一算子参与归约规则。
-- `modules/tiles/src/schedule.cpp:135` —— `positional("argmax_axis")` 为真。
+- `modules/tiles/src/serial_kernel.cpp#serialBody` —— `else if (op == "argmax_axis" || op == "argmin_axis")`，两个槽：极值决定、位置就是循环下标，下标原样写进 i64 槽（不做算术，所以并列时保留更早的位置）。
+- `modules/tiles/src/reduction_kernel.cpp#canonicalAxisReduction` —— 同一算子参与归约规则。
+- `modules/tiles/src/schedule.cpp#positional` —— `positional("argmax_axis")` 为真。
 
 **所以 `unsupported_operator` 不是"真的不支持"，而是"表里没登记"**：设备程序能生成，只是 eligibility 这一层没放它过去。
 **补的是一个名字，不是一条降级路径**——与 ONNX 的 `ArgMax`（那是导出侧的 lowering，另一件事）不同。
 
 ### 九、`operations()` 的真值：24，不是 21
 
-数函数体（`modules/tiles/src/graph_regions.cpp:46-82`），两个来源：
+数函数体（`modules/tiles/src/graph_regions.cpp#narrowElement`），两个来源：
 
 - **字面量条目 22 条**：`neg`、`abs`、`exp`、`log`、`sqrt`、`rsqrt`、`relu`、`add`、`subtract`、`multiply`、`divide`、`maximum`、`minimum`、`matmul`、`sum_axis`、`mean_axis`、`max_axis`、`sum_to`、`transpose`、`permute`、`reshape`、`broadcast_like`；
 - **`emplace` 条目 2 条**：`tensor:sum` → `sum_all`、`tensor:mean` → `mean_all`。
@@ -370,7 +370,7 @@ TILES_OPERATOR_ID tensor:reshape id=406 tensor_spelling=422
 
 **一条被推翻的诊断**：我曾说 `graph_regions.cpp#elementType` 把 `f16`/`bf16` 静默当 `F32`（2 字节存储、4 字节读取）。
 **读门那一行发现不成立**：`graph_regions.cpp:41-43` 在它之前就把非 `Float32`/`Int64` 的类型拒了（返回 `nullopt`），
-兜底那一行对窄浮点不可达。**真缺口只有一个 `enum`**：`modules/tiles/include/tiles/dtype.h:11` ——
+兜底那一行对窄浮点不可达。**真缺口只有一个 `enum`**：`modules/tiles/include/tiles/dtype.h#DType` ——
 `enum class DType { F32, F64, I64 };`，**设备侧没有窄浮点的表示**。
 
 **唯一一个带 `#gpu` 的窄浮点用例**（`test/cases/gpu/nofallback/scalar_literal.cml`）单独跑出来的读数：

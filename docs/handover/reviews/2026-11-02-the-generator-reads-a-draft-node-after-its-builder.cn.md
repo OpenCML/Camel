@@ -4,7 +4,7 @@
 
 ## 问句
 
-`stream.*` 的 11 条用例在 Windows 上崩在同一处不变量——`src/compile/gir/builder_support.h:125`
+`stream.*` 的 11 条用例在 Windows 上崩在同一处不变量——`src/compile/gir/builder_support.h#nodeKindOf`
 的 `nodeGraphOf()` 说"这个草稿节点不属于任何 compile graph builder"——而**同一棵树在 Linux 的两条腿全绿**。
 该由谁去把那个节点的 owner 找出来，以及在它修好之前，Windows 腿要不要继续红？
 

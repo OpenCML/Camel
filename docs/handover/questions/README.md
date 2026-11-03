@@ -5,12 +5,9 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：5 页
+## 现在在等作者：2 页
 
 | 页 | 问什么 |
 | --- | --- |
-| [`2026-11-04-does-a-shape-in-the-type-reach-the-law`](2026-11-04-does-a-shape-in-the-type-reach-the-law.cn.md) | 作者裁定要的「形状在类型里」，律读不到：`T[n]` 的 `n` 不是值 |
-| [`2026-11-04-how-is-the-by-content-rule-built-at-a-call-site`](2026-11-04-how-is-the-by-content-rule-built-at-a-call-site.cn.md) | 「答 `(value, tangent)` 二元组就切它、转置后一半、把调用转过来」——施工规格 |
-| [`2026-11-04-the-residuals-a-call-site-cannot-see`](2026-11-04-the-residuals-a-call-site-cannot-see.cn.md) | 调用点看不见的那部分残差，由谁来算 |
-| [`2026-11-04-the-value-half-cannot-keep-a-pair-answering-call`](2026-11-04-the-value-half-cannot-keep-a-pair-answering-call.cn.md) | 前一半怎么取「这个调用的值分量」 |
-| [`2026-11-04-what-may-a-zero-carrier-stand-in-for`](2026-11-04-what-may-a-zero-carrier-stand-in-for.cn.md) | 零载体能顶替一个参数到什么程度：只经形状、还是也顶替元素？ |
+| [`2026-11-04-does-a-closure-members-cotangent-have-a-slot`](2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md) | 闭包成员的余切应不应该有一个槽？ |
+| [`2026-11-04-who-carries-the-cxx-runtime-into-the-install`](2026-11-04-who-carries-the-cxx-runtime-into-the-install.cn.md) | 安装自己带 C++ 运行时，还是继续要调用方补一条导出？ |

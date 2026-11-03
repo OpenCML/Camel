@@ -46,7 +46,7 @@
 **把 22 条期望改成 10 现在做不到；改成 12 属于重录，未获授权。** 我没有动任何期望。
 
 一条工具限制要说清：`region_test_pass.cpp:263` 只打印 `TILES_OUTLINED <n>`，全仓没有一个遍打印
-区域成员（`inspectRegions` 只经 `tiles:regions` 算子由程序调用，见 `modules/tiles/src/module.cpp:207`）。
+区域成员（`inspectRegions` 只经 `tiles:regions` 算子由程序调用，见 `modules/tiles/src/module.cpp#regionsKernel`）。
 所以上面是按"带 ctrl/sync 边的节点 + 两支排除"指认的**成员集合**，不是区域编号；要按区域逐个点名，
 需要给测试遍加一行成员清单（一处代码改动），没有授权我不加。
 

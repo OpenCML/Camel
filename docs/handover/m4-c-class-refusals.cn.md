@@ -9,15 +9,15 @@
 
 | # | 用例 | 现在这句（来源） | 新路线里由谁说、落在哪 | 出这句话的条件 | 判定 |
 |---|---|---|---|---|---|
-| 1 | `grad_refuse_no_with` | `it has no \`with\` parameter, and grad differentiates the first \`with\` parameter`（`modules/autodiff/pullback.cpp:4971`） | `grad` 的签名：`Tangent<ParamsOf<F>>` 为空（`stdlib/signatures/autodiff.cml:45`），落在 `grad(...)` 调用处 | `F` 没有 `with` 参数 | **改写**（位置从 pullback 移到签名） |
+| 1 | `grad_refuse_no_with` | `it has no \`with\` parameter, and grad differentiates the first \`with\` parameter`（`modules/autodiff/pullback.cpp#differentiationRefusal`） | `grad` 的签名：`Tangent<ParamsOf<F>>` 为空（`stdlib/signatures/autodiff.cml#grad`），落在 `grad(...)` 调用处 | `F` 没有 `with` 参数 | **改写**（位置从 pullback 移到签名） |
 | 2 | `grad_refuse_var` | `its first \`with\` parameter is a \`var\` of type {…}; gradients do not flow through …`（`pullback.cpp:4979`） | 同上，`Tangent<T>` 对 `var` 类型无定义 | 首个 `with` 参数是 `var`（3.5） | **改写** |
 | 3 | `grad_refuse_string` | `its first \`with\` parameter has type {}, which has no gradient`（`pullback.cpp:4996`） | `Tangent<T>` 无 `string` 的规则，落在调用处的类型位置 | 首个 `with` 参数是 `string` | **改写** |
 | 4 | `grad_refuse_function` | 同上（`has no gradient`） | `Tangent<T>` 无函数类型的规则 | 首个 `with` 参数是函数 | **改写** |
 | 5 | `grad_refuse_struct` | `has type Plain, whose field \`s\` has type string, which has no gradient`（`pullback.cpp:4996` 家族，逐字段展开） | `Tangent<Struct>` 逐字段取，字段的 `Tangent` 无定义时点名该字段 | 结构某字段无切空间 | **改写**（点名仍保留） |
 | 6 | `grad_refuse_tuple` | `whose element 1 has type string, which has no gradient`（同上，逐位置） | `Tangent<Tuple>` 逐位置取，点名位置 | 元组某成员无切空间 | **改写** |
-| 7 | `grad_refuse_return` | `it returns {}, not a float`（`pullback.cpp:4967`） | `grad` 的签名：`ResultOf<F>` 必须是 `float` 类（`stdlib/signatures/autodiff.cml:45` 的 `when`） | 返回值不是 float | **改写** |
+| 7 | `grad_refuse_return` | `it returns {}, not a float`（`pullback.cpp:4967`） | `grad` 的签名：`ResultOf<F>` 必须是 `float` 类（`stdlib/signatures/autodiff.cml#grad` 的 `when`） | 返回值不是 float | **改写** |
 | 8 | `discrete_zero_refuse` | `'. Gradients do not flow through it: there is no derivative rule for …`（`pullback.cpp:3328`） | `reinterp<jvp>`：`Map`/`Set` 在 `stdlib/rulesets/jvp.cml` 里没有规则 → 缺规则诊断（4.1，9.9） | 值被放进 `Map<int, float>` 且参与了求导 | **照旧**（同一句“没有规则”） |
-| 9 | `refuse_container_reshape` | `cannot differentiate operator 'tensor:reshape' … no operator carries a tensor's gradient back into one, … type 'float[][]'`（`modules/tensor/ops/vjp.cpp:315`、`:126`） | `reinterp<jvp>` 找 `tensor:reshape` 的 jvp 规则；容器类型上 `#transpose` 规则的 `when` 拒绝（`stdlib/rulesets/transpose.cml`） | `reshape` 的实参是容器（非数值数组） | **改写** |
+| 9 | `refuse_container_reshape` | `cannot differentiate operator 'tensor:reshape' … no operator carries a tensor's gradient back into one, … type 'float[][]'`（`modules/tensor/ops/vjp.cpp#refuseVjp`、`:126`） | `reinterp<jvp>` 找 `tensor:reshape` 的 jvp 规则；容器类型上 `#transpose` 规则的 `when` 拒绝（`stdlib/rulesets/transpose.cml`） | `reshape` 的实参是容器（非数值数组） | **改写** |
 | 10 | `refuse_container_concat` | 同上（`tensor:concat`） | 同上，`concat` 的容器部分 | concat 的数组部分是容器 | **改写** |
 | 11 | `refuse_gradient_element_type_rule` | `of type 'float[]' … element type 'f32' … the derivative rule produced it`（规则产出校验） | 规则自身的签名检查：`#transpose` 规则的返回类型必须与参数元素类型一致（`stdlib/rulesets/transpose.cml`） | 规则产出的梯度元素类型与参数不符 | **照旧**（同一条检查，同一句话） |
 | 12 | `with_grad_old_name` | `SemanticDiag::UnresolvedReference`（名字解析） | 名字解析，不变（`src/compile/gir`，与求导无关） | 用了已删除的 `value_and_grad` | **照旧** |

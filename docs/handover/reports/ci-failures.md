@@ -10,7 +10,7 @@ CI 只在打标签时跑（`develop` 上的合并一次都不跑），而 10-23/
 ## CI 跑的是哪一层：**快层**
 
 `ci-leg.yml:231` 的测试步骤是 `node scripts/test.js`（无参数），目标是 `test/plans/smoke` +
-`test/plans/feat`（`test/runner.mjs:41-44`），tier 默认 `fast`（`test/tools/run-tests.mjs:533`）。
+`test/plans/feat`（`test/runner.mjs#plans`），tier 默认 `fast`（`test/tools/run-tests.mjs#runProcess`）。
 run `40077350582` 的 linux-x64 腿自报，逐字：
 
     [INFO] discovered plans: 209

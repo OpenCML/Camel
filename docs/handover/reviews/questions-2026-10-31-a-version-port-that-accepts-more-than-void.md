@@ -22,13 +22,13 @@
 
 ## 实现时发现（`edges` 的读数）
 
-`var_param` 那一族里，写变量的调用**自己有返回值**（`int`），不是 `void`——只允许 `void` 会让该族直接编译失败。第一版实测的诊断原文（`src/compile/gir/builder_expr.cpp:1528` 的格式串产出）：
+`var_param` 那一族里，写变量的调用**自己有返回值**（`int`），不是 `void`——只允许 `void` 会让该族直接编译失败。第一版实测的诊断原文（`src/compile/gir/builder_expr.cpp#Builder::visitCastNode` 的格式串产出）：
 
 ```
 a variable after a call rejected its operands: the variable is var int and the call is int
 ```
 
-今天的做法是第二个实参**接受任意值**：`src/compile/gir/builder_expr.cpp:673-676` 的注释写明"调用的值可以是 `void`——**这个算子不读它**"；`src/compile/gir/builder_expr.cpp:1518-1521` 同样写"第二个实参是那次调用，它的值可以是 `void` 且不被读取——是这条边让调用在读到这个版本时执行（3.1、3.5）"；`src/builtin/executors/builtin.cpp:671` 只把 `:var/after` 标成 `stateOnly`。
+今天的做法是第二个实参**接受任意值**：`src/compile/gir/builder_expr.cpp#Builder::captureWriteMaskOf` 的注释写明"调用的值可以是 `void`——**这个算子不读它**"；`src/compile/gir/builder_expr.cpp#Builder::visitCastNode` 同样写"第二个实参是那次调用，它的值可以是 `void` 且不被读取——是这条边让调用在读到这个版本时执行（3.1、3.5）"；`src/builtin/executors/builtin.cpp#BasicBuiltinExecutor::create` 只把 `:var/after` 标成 `stateOnly`。
 
 ## 两条路
 

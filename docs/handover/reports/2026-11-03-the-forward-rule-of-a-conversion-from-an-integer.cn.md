@@ -10,7 +10,7 @@
 REINTERP jvp function=int_escape skip=rule uri=:op/ltod reason=the operator has no forward rule bound at all
 ```
 
-`:op/ltod` 是 `float(x: int)`（`stdlib/prelude.cml:649`），也就是"把一个整数读成 double"。这个用例问的正是它：`int_escape(x) = let n = int(3x); loop s = x for i in 0..3 do s + float(n)`，其中 `float(n)` 读到一个整数，而整数是**零切空间** ⇒ 它对导数没有贡献 ⇒ `int_escape` 的导数是 1（`x` 自己被读了一次），不是 0，不是 3，也不是 13。
+`:op/ltod` 是 `float(x: int)`（`stdlib/prelude.cml#float`），也就是"把一个整数读成 double"。这个用例问的正是它：`int_escape(x) = let n = int(3x); loop s = x for i in 0..3 do s + float(n)`，其中 `float(n)` 读到一个整数，而整数是**零切空间** ⇒ 它对导数没有贡献 ⇒ `int_escape` 的导数是 1（`x` 自己被读了一次），不是 0，不是 3，也不是 13。
 
 ## 2. 答案：零值，不是"没有"
 

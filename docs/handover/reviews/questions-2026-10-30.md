@@ -32,7 +32,7 @@
 | B | 无 | 运行期 null | 同一套 |
 | C | 无 | 编译期错（载荷重取） | 两套 |
 
-**⑥ 循环里的 `yield` 落在同一处，不是另一个问题。** 查过了：把循环开起来，要先把循环拆成臂（入口、条件、体、步进），因为臂是各自独立的图，跨得过去的只有单元（`src/compile/gct/builder.cpp:5733` 建臂、`5917` 起按 `pc` 选臂）；而单元建在生成器**被创建**时跑的那段体里（`5685` 的 `addCell`、`5951`、`5955`），所以单元的初值在创建那一刻就定了。可循环的初值与序列是"在循环所在处求值一次"（`3365`–`3408`，注释在 `3383`）——拆成臂之后，那就是某一臂，而不是创建时。
+**⑥ 循环里的 `yield` 落在同一处，不是另一个问题。** 查过了：把循环开起来，要先把循环拆成臂（入口、条件、体、步进），因为臂是各自独立的图，跨得过去的只有单元（`src/compile/gct/builder.cpp#Builder::visitGeneratorBody` 建臂、`5917` 起按 `pc` 选臂）；而单元建在生成器**被创建**时跑的那段体里（`5685` 的 `addCell`、`5951`、`5955`），所以单元的初值在创建那一刻就定了。可循环的初值与序列是"在循环所在处求值一次"（`3365`–`3408`，注释在 `3383`）——拆成臂之后，那就是某一臂，而不是创建时。
 
 - 单层 `while`、累加器初值是常量（`loop i = 0 while i < n do { … yield … }`）：把它变成单元时 `addCell(i, visitData(0))` 在创建时求值，与在循环处求值同值（常量无副作用、不看任何单元），**不需要本条**。
 - 作者点名的 `pairs(n)` 是双层：内层的起点从外层当前值算（5.4 的例子 `docs/design-principles.cn.md:393` 写 `func pairs(n: int): (int, int).. { … yield (i, j) … }`），创建时外层还是 0，拿它当初值只能得到错的值；`for v in xs` 的迭代器同理（序列在循环处求值，不是创建时）。
@@ -45,7 +45,7 @@
 
 - `func g(): int.. sync { yield 1; return }` → `Unexpected '}'`，`expected an expression`；
 - `return null` 可以（读数：`1`，流结束）；
-- 语法是 `retStmt : ('return' | 'yield') dataList`（`src/parse/syntax/parser.cpp:1250`），`dataList` 至少一个表达式。
+- 语法是 `retStmt : ('return' | 'yield') dataList`（`src/parse/syntax/parser.cpp#ParserImpl::atResourceDecl`），`dataList` 至少一个表达式。
 
 所以要么解析器接受 bare `return`（文档现写法），要么文档改成"不交值写 `return null`"（解析器现行为）。本格没有动它。
 

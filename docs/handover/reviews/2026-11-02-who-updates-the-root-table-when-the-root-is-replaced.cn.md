@@ -25,7 +25,7 @@
 
 ## 三处原文：根表在哪儿建、换根时改了哪儿
 
-1. **根表是"由五个清单重建"，不是一个可以直接加条目的表**（`src/runtime/program.cpp:344-357`）：
+1. **根表是"由五个清单重建"，不是一个可以直接加条目的表**（`src/runtime/program.cpp#GCGraphManager::rebuildGcRoots`）：
    `rebuildGcRoots()` 先 `gcRoots_.clear()`，再依次 `add(current_)`，然后 `detached_`、`pinned_`、
    `provisional_`、`runRoots_` 四个清单。
 2. **换根时确实重建了**（`program.cpp:237-252`）：`replaceRootIfCurrent` 在 `NoCollectionScope` 里

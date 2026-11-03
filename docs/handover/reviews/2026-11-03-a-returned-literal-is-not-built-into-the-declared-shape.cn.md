@@ -32,7 +32,7 @@ less exact than 'float[3]'. ... Where the value is known to fit, write the conve
 
 ## 4. 机制上它不是 `statesARank` 的副本
 
-`checkDeclaredReturn`（`src/compile/gir/builder_diagnostics.cpp:1875`）只比较返回值的类型与声明的出口类型，**不给返回表达式一个期望类型**；声明、传参、`as` 走的是 GCT 的 `visitDataInto`，那里按位置建。所以不是同一句判据的第二个副本，是**返回位置根本没有"期望类型"那一道**。
+`checkDeclaredReturn`（`src/compile/gir/builder_diagnostics.cpp#Builder::checkDeclaredReturn`）只比较返回值的类型与声明的出口类型，**不给返回表达式一个期望类型**；声明、传参、`as` 走的是 GCT 的 `visitDataInto`，那里按位置建。所以不是同一句判据的第二个副本，是**返回位置根本没有"期望类型"那一道**。
 
 （顺带一条读数：把这一支加探针跑 `feat/compile`，`arrayLiteralFitsShape` 的秩一分支被走到 **15 次**——说明除了 `as`，还有别的路径由 GIR 去比秩一的长度。那些 15 次全是"长度相符"的放行，没有一次是拒绝。）
 
@@ -61,7 +61,7 @@ less exact than 'float[3]'. ... Where the value is known to fit, write the conve
 
 ## 7. 作者已裁"甲：修"；这是修之前量到的机制（2026-11-03 21:35，`05f9f7439` 的树）
 
-处方是"让 `checkDeclaredReturn` 先给返回表达式期望类型再比"。**这一句已经在了**：`visitExitNode`（`src/compile/gir/builder_control.cpp:4138`）第一句就是
+处方是"让 `checkDeclaredReturn` 先给返回表达式期望类型再比"。**这一句已经在了**：`visitExitNode`（`src/compile/gir/builder_control.cpp#Builder::visitExitNode`）第一句就是
 
 ```cpp
 ExpectedValueScope expectedScope(expectedValueType_, expectedExitTypeHere());
@@ -80,7 +80,7 @@ EXITPROBE2 arr=1 raw=3 fits=1 elem=float
 
 | 走法 | 结果 |
 | --- | --- |
-| `compositeDataInType(written, declaredExit, gct->at(0))` | 返回原值不变。它第一步 `type->assignableFrom(data->type())`（`builder_control.cpp:854`）就为真——`ArrayType::assignableFrom`（`src/core/type/composite/array.cpp:662-665`）对**源 extent 不是常量**的情形按"接受任意长度"处理，于是"形状相符"根本到不了下面的逐元素构建（905-913 的 `literalElementInType`） |
+| `compositeDataInType(written, declaredExit, gct->at(0))` | 返回原值不变。它第一步 `type->assignableFrom(data->type())`（`builder_control.cpp:854`）就为真——`ArrayType::assignableFrom`（`src/core/type/composite/array.cpp#ArrayType::assignableFrom`）对**源 extent 不是常量**的情形按"接受任意长度"处理，于是"形状相符"根本到不了下面的逐元素构建（905-913 的 `literalElementInType`） |
 | `written->convertTo(declaredExit)` | 换掉 extent、**没换元素**：`ElementTypeMismatch: Cannot insert data of type 'float' into a(n) Array with element type 'f32'`。`feat/compile` 从 2 红变 **10 红**（`expected.same_value_in_every_position` 四变体等），**已回滚** |
 
 ⇒ 真正的缺口不是"给不给期望类型"，而是**一个已经成型的常量怎么按位置重建**：逐元素那条路（按写下的值转一次、不按落下来的 double 转）从没被叫到，因为 `assignableFrom` 先把话说了。动它 = 动 `compositeDataInType` / `assignableFrom` 这条**声明、传参、`as` 共用**的转换，影响面是"每个位置上的每个字面量"，不是一个出口。

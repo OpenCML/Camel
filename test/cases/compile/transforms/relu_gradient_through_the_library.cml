@@ -32,6 +32,27 @@
 // `y > 0`, which are the same set, so the input zero has slope zero on both sides -- measured, not
 // argued.
 //
+// ---- where the walk stops now (measured 2026-11-04, tree `sumshape`) ----
+//
+// The `sum` step turns around: its forward rule states the extents (`jvp_sum` calls `sum_stated(dxs,
+// shape(xs))`) and the walk applies `sum_stated_t`, which reads that list and nothing of `dxs`. That
+// is one more residual than before -- `residuals=3`, because `shape(relu(x))` is a value the
+// backward half reads -- and the walk then stops one node later, on the mask:
+//
+//     TRANSPOSE function=split_of_jvp_of_total_backward contribution=0 node=4 type=int[] space=none from=11
+//     TRANSPOSE function=split_of_jvp_of_total_backward skip=cotangent-needs-a-value uri=tensor:multiply position=0
+//
+// The mask is what the backward half computes from the closure member `x`, and the walk asks the
+// product's law for the mask's **own** cotangent; answering that position reads the other operand's
+// value, which is the tangent -- the one value a transposition never has. It is the same refusal
+// `transpose_hand_closed_lambda.same_answer_as_the_cut` reads at `:op/mul_d position=0`, and it is
+// the question of
+// `docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md`: whether a
+// closure member receives a cotangent at all. `modules/transforms/transpose.cpp#buildTransposeMember`
+// answers it today by falling through to `return true`, which is what makes the mask a participant.
+// So this case stays red until that ruling lands, and what a rule can settle is settled and pinned
+// on the numbers instead: `stated_sum_gradient.cml`, beside this file.
+//
 //     camel test/cases/compile/transforms/relu_gradient_through_the_library.cml
 import { vjp } from vjp
 import { relu, sum } from tensor

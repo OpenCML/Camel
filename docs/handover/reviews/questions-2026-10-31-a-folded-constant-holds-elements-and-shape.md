@@ -7,14 +7,14 @@
 
 ## 丢掉形状的那一行
 
-`src/passes/trans/cpp/function_emitter.cpp:1491`（`lowerFill` 的数组分支）：
+`src/passes/trans/cpp/function_emitter.cpp#FunctionEmitter::callDepth`（`lowerFill` 的数组分支）：
 
 ```cpp
 for (size_t i = 0; array != nullptr && i < array->size(); ++i) {
 ```
 
 `size()` 在一个多维模板上答的是**第一维的长度**，元素个数在 `numel()`
-（`include/camel/core/rtdata/array.h:345-347`）。同文件 1550 行又把结果按
+（`include/camel/core/rtdata/array.h#writableInPlace`）。同文件 1550 行又把结果按
 `rt::Array<T>{元素…}` 印出来，**没有形状那一块**。
 
 所以 `let w: float[2, 2] = [[1.0, x], [x, 2.0]]`（`x: float = 2.0`）折成了一个两元素的常量：
@@ -34,7 +34,7 @@ std::cpp : [[1.0, 2.0], [2.0, 2.0]]
 ## 谁负责重算 numel
 
 **没有人**。`rt::Array(元素表, 形状表)` 自己从形状之积算出元素数
-（`include/camel/standalone/array.h:56-80`），并且当"形状之积 ≠ 元素个数"时**退成一维**——
+（`include/camel/standalone/array.h#Array`），并且当"形状之积 ≠ 元素个数"时**退成一维**——
 它宁可丢形状也不崩。所以折叠这边只有一个义务：**元素写全**。写全了，形状和元素数就是同一个
 事实的两种说法；写不全，形状会被构造器静默丢掉，值带着旧形状装着一截元素，那比丢形状更难查。
 

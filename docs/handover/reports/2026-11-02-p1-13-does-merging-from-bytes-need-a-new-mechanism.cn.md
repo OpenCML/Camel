@@ -6,14 +6,14 @@
 
 ```
 using ResolverFunc = std::function<std::optional<Type *>(
-    const type_vec_t &, const type_vec_t &)>;                 // include/camel/core/type/resolver.h:20
+    const type_vec_t &, const type_vec_t &)>;                 // include/camel/core/type/resolver.h#ResolverFunc
 std::optional<FunctionType *> resolve(
     const type_vec_t &with, const type_vec_t &norm) const override;   // 同上 :259
 ```
 
 `with` 是 `with` 参数的类型、`norm` 是普通参数的类型，**没有"这条调用的类型实参"这个入口**。`::<T>` 那一层在签名与调用节点上，但**解析器的回调签名里没有它**。
 
-**二、`withStaticResult` 的判据是参数的常量值，不是类型实参。** 原文（`src/builtin/modules/globals.cpp:120`）：
+**二、`withStaticResult` 的判据是参数的常量值，不是类型实参。** 原文（`src/builtin/modules/globals.cpp#withStaticResult`）：
 
 ```
 /// The rule with a result callback that also reads the call's constants (`withStatics`: the path

@@ -8,7 +8,7 @@
 2. **剩下 40 条是同一个根因**（同诊断首行）：`stdout does not start with ...` + `expected diagnostic RuntimeDiag::DivisionByZero`，而 stdout 里是 `Runtime graph 'pick' breaks its edge invariants` / `sync edge 5 -> 6 ends on a node no 'sync' block wrote` —— **程序在开跑前被边不变量否掉**。
 3. **只换边、不改不变量的整树读数 = 4192 条红**（`total 8447 / pass 4245 / fail 4192`）—— **这个数是 P0-2 的上界，不是终局读数**：终局还包括"把这条不变量该说的东西说对"。
 
-## 那条不变量（原文，`src/runtime/graph_edges.cpp:226-241`）
+## 那条不变量（原文，`src/runtime/graph_edges.cpp#EdgeChecker`）
 
 ```cpp
 if ((user->flags & kGCNodeFlagSyncStatement) == 0 && user->kind != GCNodeKind::Gate) {
@@ -19,7 +19,7 @@ if ((pred->flags & kGCNodeFlagSyncStatement) == 0) {
 }
 ```
 
-**它曾经是对的**：sync 边原本只由 `sync` 块产生，而 `sync` 块写过的节点由 `src/compile/gir/builder_helpers.h:668` 打上这个 flag。**P0-2 之后它要回答的是"这条链的终点是不是某个等待的承担者"，而不是"它是不是 sync 块写的"。**
+**它曾经是对的**：sync 边原本只由 `sync` 块产生，而 `sync` 块写过的节点由 `src/compile/gir/builder_helpers.h#isFailCall` 打上这个 flag。**P0-2 之后它要回答的是"这条链的终点是不是某个等待的承担者"，而不是"它是不是 sync 块写的"。**
 
 ## 两条路与代价
 

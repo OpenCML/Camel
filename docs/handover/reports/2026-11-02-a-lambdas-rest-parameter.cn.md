@@ -140,7 +140,7 @@
 | 6529 | `visitTypeExpr` 派发 `TypeType::Func`：写在**类型位置**的函数类型（注解、泛型实参） | 不知道——注解本身就是类型，没有"期望"可言 |
 
 **结论一句话**：要改的调用点是 **0 个**；能传的也是 0 个——因为真正的展开点在
-`src/compile/gir/builder.cpp:1143-1165`，那里 `expected` 已经**在手上**：
+`src/compile/gir/builder.cpp#Builder::visitFuncNode`，那里 `expected` 已经**在手上**：
 
     // A lambda takes the types it does not write from the function type of the position it
     // stands in (design principles 5.9). That expected type reaches this point through the one
@@ -195,7 +195,7 @@ FUNC 节点上，由 GIR 按 `expected` 填；`..xs` 可以走**同一条通道*
 `git grep -c RestValue -- src/compile` **改前 0、改后 0**——我们造的**不是** `RestValue` 节点，
 而是 **`GCFillKind::Tuple` 的 Fill**，成员是它的 **`With` 输入**。
 摊开要的是"这是要被摊成实参的元组"，**`With` 是那条边，`Norm` 是"这是一个值"**——
-`expandRestArgument`（`src/compile/gir/builder_rest.cpp:80-118`）只认两种：
+`expandRestArgument`（`src/compile/gir/builder_rest.cpp#Builder::expandRestArgument`）只认两种：
 build-time tuple，或 **With 输入个数等于元组长度的 tuple FILL**。
 
 **② `xs[0]` 实测**：**是具名拒绝，不是"到不了"**。
@@ -239,11 +239,11 @@ GIR 里留下的只是被摊开的实参。**旧的三种说法（`RestValue`／
 
 **⑦ `65d8dbb85`（`Norm → With`）改的到底是什么——查清了：不是空改，但也不是"图里多一个 FILL"。**
 
-- **建**：`src/compile/gir/builder.cpp:1426`（`buildFuncBody` 里那一处，`GCFillKind::Tuple` + `slots`），
+- **建**：`src/compile/gir/builder.cpp#Builder::buildFuncBody`（`buildFuncBody` 里那一处，`GCFillKind::Tuple` + `slots`），
   成员是 `xs_0`, `xs_1`, … 的 **`With` 输入**。`git grep -n GCFillKind::Tuple` 其余各处都是别的路径
   （循环状态机 `builder_control.cpp` 多处、元组字面量 `gir/tree.cpp:71`、`builder_static.cpp:1526`、
   `graph_encode.cpp`、`passes/trans/json` 等），服务于各自的路径。
-- **消费**：`src/compile/gir/builder_rest.cpp:103`——`expandRestArgument` 认的正是"`With` 输入个数等于元组长度"，
+- **消费**：`src/compile/gir/builder_rest.cpp#Builder::expandRestArgument`——`expandRestArgument` 认的正是"`With` 输入个数等于元组长度"，
   把 With 输入当实参返回；**此后这个 Fill 没有消费者**，所以**摊开的那张图里它不出现**（见 ⑤）。
 - **体内把 `xs` 留住（而不是摊开）时，它就在图上**：`pair((..xs) => xs)` 的 `std::gir` 里有
 
@@ -418,7 +418,7 @@ written and cannot be inferred: nothing here expects a function type.
 
 ## 12. `core::tangentSpaceOf` 今天覆盖哪些类型（只量不修）
 
-定义在 `src/core/tangent_space.cpp:76-124`（`answerOf`），入口 `:140`。三档答案：`Self`（切向就是它自己）/ `Other`（另一种类型）/ `None`（没有切空间）。
+定义在 `src/core/tangent_space.cpp#answerOf`（`answerOf`），入口 `:140`。三档答案：`Self`（切向就是它自己）/ `Other`（另一种类型）/ `None`（没有切空间）。
 
 | 类型 | 有/没有 | 依据 |
 |---|---|---|
@@ -489,7 +489,7 @@ error[SemanticDiag::ArgumentsRejected]: Invalid call to 'split' with argument ty
 ```
 
 **根因（就是你要的那一条：位次与字段共用一条路径）**：`src/compile/gir/builder_expr.cpp` 的 `visitAccsNode` 里，
-`TypeCode::Struct` 这一支**无条件**读 `gct->accessKey()`；而 `accessKey()`（`include/camel/compile/gct/node.h:269-272`）是
+`TypeCode::Struct` 这一支**无条件**读 `gct->accessKey()`；而 `accessKey()`（`include/camel/compile/gct/node.h#accessKey`）是
 
 ```cpp
 const std::string &accessKey() const { ASSERT(!accessByIndex(), "The access is by position"); return *payload_.name; }
@@ -658,7 +658,7 @@ error[RuntimeDiag::PassInternalError]: Pass 'std::opt::fold' failed with an inte
 ⇒ **崩在 `CmlPrinter::emitAssignment` 里的 `std::format`**：格式化一个字符串时读到坏指针（`memmove`）。
 不是遍调度、不是 VM，是**打印器在写赋值那一行时**。
 
-**③ 相关代码**：`src/passes/trans/cml/cml.cpp:1470-1489`，`emit()` 那一句是
+**③ 相关代码**：`src/passes/trans/cml/cml.cpp#CmlPrinter`，`emit()` 那一句是
 
 ```cpp
 emit(indent_ + std::format("{} {} {}", cell->second, assignmentOperator(uri),
@@ -773,7 +773,7 @@ func main(): int sync {
 
 ## 23. 全量那 3 条红：都在"生成物过期"，且根子是同一笔
 
-**① `registry.reference_is_generated` 在比什么**：`scripts/stdlib-reference.mjs:2770-2776` ——
+**① `registry.reference_is_generated` 在比什么**：`scripts/stdlib-reference.mjs#verifyOps` ——
 
 ```js
 const current = fs.readFileSync(DOC_PATH,'utf8').replace(/\r\n/g,'\n');
@@ -800,7 +800,7 @@ if (current !== text) { console.log('… is out of date: run --write'); process.
 EXAMPLE_STOPS['a semantic error'] records 39, and the run found 40: update the number in the same commit and say why the class moved
 ```
 
-**第 40 条是 `vjp` 自己的例子**：`stdlib/vjp.cml:68` 的 `@example` 仍把 `f` 当值写，而声明已把它当类型参数 ⇒
+**第 40 条是 `vjp` 自己的例子**：`stdlib/vjp.cml#vjp` 的 `@example` 仍把 `f` 当值写，而声明已把它当类型参数 ⇒
 `UnresolvedReference: 'f'`。**这是例子自己的欠账，不是"豁免"**——所以数字改成 40，并在旁边写明为什么。
 
 **④ `docs.doc_readings.current`**（该计划条目已随工具在 05:30 删除）：它量的是下面这六个文件。
@@ -865,7 +865,7 @@ stdlib/vjp.cml:68:    export func vjp::<F>(f: F): Vjp<F> when is_function::<F>()
 （`src/builtin/operators/derivative.cpp` 里的 `VjpBuilder`/`addVjp<F>` 是 C++ 名字，不是这个类型；类型本身在 `stdlib/types.cml`。）
 
 **四、结论**：**有意的一笔，保留、不 revert**；`docs` 那两处改动照旧，提交信息已点名 `9048c30ea`。
-**没把文档改成记录一个不存在的签名**——`--write` 的产物与 `stdlib/vjp.cml:68` 逐字一致。
+**没把文档改成记录一个不存在的签名**——`--write` 的产物与 `stdlib/vjp.cml#vjp` 逐字一致。
 
 **五、两对数（改前 / 改后）**：
 
@@ -921,8 +921,8 @@ Stack Trace: (not available on this platform)
 #10 applyPassesDetailed(…)
 ```
 
-**⑤ 位置**：`Variant::get` 的守卫在 `include/camel/core/rtdata/variant.h:47-54`（`GUARD` → `fail_invariant` → `abort`），
-**越界由 `std::opt::generic` 的折叠规则读出来**：`src/passes/opt/generic/generic.cpp:1172` `foldDraft`。
+**⑤ 位置**：`Variant::get` 的守卫在 `include/camel/core/rtdata/variant.h#get`（`GUARD` → `fail_invariant` → `abort`），
+**越界由 `std::opt::generic` 的折叠规则读出来**：`src/passes/opt/generic/generic.cpp#foldDraft` `foldDraft`。
 **也就是"折叠规则按一个 tag 的形状去读，而手里那个值的 tag 不是它假设的那一个"。**
 
 **⑥ 还没修**：这一笔到"复现 + 栈 + 位置"。修的方向是让 `foldDraft` 在读之前核对 tag/字段数（**按 A2 的模板：把断言里的前提变成分支**），
@@ -930,7 +930,7 @@ Stack Trace: (not available on this platform)
 
 ## 27. A6 修之前必须先分清是哪一次读：两个候选分支，只有一个有守卫
 
-`foldDraft`（`src/passes/opt/generic/generic.cpp:1172`）自己不解引用变体；它是**帧**，真正读的是被内联进来的折叠函数。
+`foldDraft`（`src/passes/opt/generic/generic.cpp#foldDraft`）自己不解引用变体；它是**帧**，真正读的是被内联进来的折叠函数。
 按 `Variant::get(index)` 的形状，候选是 `foldStaticAccess`（`:965`）里的两个分支：
 
 | 分支 | 读法 | 有没有先核对 |
@@ -1003,7 +1003,7 @@ Stack Trace: (not available on this platform)
 
 ## 30. A6 第三次：`materializeStaticValue` 一行都不读字段 ⇒ 按你的规则停手，交人换角度
 
-**① 原文（`src/runtime/draft.cpp:2116-2142`，两段都贴）**：
+**① 原文（`src/runtime/draft.cpp#GraphDraft::dissolveUnorderedGates`，两段都贴）**：
 
 ```cpp
 size_t GraphDraft::appendStaticSlot(slot_t value, camel::core::type::Type *type) {
@@ -1077,7 +1077,7 @@ gc_node_ref_t GraphDraft::materializeStaticValue(
 | `tree.h:63` | 同一个 `node` 被两次 `add`（树的所有者写错） |
 | `execute/loop_driver.h:207` | 形状的 `valueType->size()` 与 `k + collectionCount` 不符（类型与形状分头构造） |
 | `runtime/graph.h:866` | `n->hasPayload()` 为假时 `reinterpret_cast` |
-| `include/camel/runtime/draft.h:445` | `index` 来自调用方，未在 release 校验 |
+| `include/camel/runtime/draft.h#containsNode` | `index` 来自调用方，未在 release 校验 |
 | `utils/append_only_table.h:77,82` | `index >= size()`，`index` 由调用方给 |
 | `enum.cpp:131` | **枚举值为 null**（`fromSlot` 得到空指针）⇒ `value->tag()` 解引用空指针 |
 | `enum.cpp:140` | 值的 tag 与图决定的 tag 不一致（重排/内联后 tag 常量失效） |
@@ -1125,7 +1125,7 @@ gc_node_ref_t GraphDraft::materializeStaticValue(
 
 ⇒ **用 `InvalidArgument`**，页里一句：**这条码的意思正是"值违反了它作为参数的契约"**。
 
-**② 改动（两处，`src/builtin/operators/enum.cpp:131`）**：
+**② 改动（两处，`src/builtin/operators/enum.cpp#__enum_tag__`）**：
 
 ```cpp
     if (value == nullptr) {
@@ -1299,7 +1299,7 @@ help: The interval is an expression, and the call is written after it in parenth
 
 ⇒ **真因就是"函数类型的标注要写参数名"**：`(float, float)` 在类型位置被读成**元组类型**，后面的 `=>` 无处可去。**而加上名字就编过**。
 
-**② 答案（贴原文）**：`src/parse/syntax/parser_type.cpp:301-311`——`(` 之后**只有"像函数类型头"的形态**才走 `parseFuncType()`：
+**② 答案（贴原文）**：`src/parse/syntax/parser_type.cpp#ParserImpl::parsePrimaryType`——`(` 之后**只有"像函数类型头"的形态**才走 `parseFuncType()`：
 
 ```cpp
     case TK::LParen: {
@@ -1319,7 +1319,7 @@ help: The interval is an expression, and the call is written after it in parenth
 `expectListEnd(TK::RParen)` 之后 `=>` 就"无处可去"——**这不是"标注的解析退回了更早的规则"，是"类型语法里函数类型的头就要求参数名或 `..` 包"**。
 
 **③ 改法（选"给一条点名病因的诊断"，不做语法扩展）**，理由：**Camel 的函数类型本来就是"给每个参数起名"的形状**
-（`stdlib/types.cml:100` 的 `Vjp<F> = (..ParamsOf<F>) => …` 走的是 `..` 那一支，不是"一串裸类型"）；
+（`stdlib/types.cml#Vjp` 的 `Vjp<F> = (..ParamsOf<F>) => …` 走的是 `..` 那一支，不是"一串裸类型"）；
 **支持 `(T, U) => R` 等于引入"无名参数的函数类型"，那是语言扩展，要作者过目**——所以这轮只让它有名有姓地说清楚。
 
 ```
@@ -1373,7 +1373,7 @@ func main(): int sync {
 | `camel … std::opt::cse std::gir` | `rc=0`（画出 GIR） | `rc=0`（**同一个数**） |
 
 **② 那是设计上的禁止，还是拒绝过宽？** —— **是设计上的禁止**，两处原文：
-`stdlib/graph.cml:121-125`：
+`stdlib/graph.cml#may_be_recomputed`：
 
 ```
 /// Whether the node anchors its graph (its exit, output or return, or the end of a branch arm); a
@@ -1462,7 +1462,7 @@ func main(): int sync {
 ⇒ **之前那个 `too_large` 就是这件事**：Camel 阶段把 500 万个元素物化进图里，dump 出来 43 MB。
 
 **② 原生遍那条钳的落点（原文）**：
-`include/camel/passes/opt/config.h:55-59`：
+`include/camel/passes/opt/config.h#kDefaultConstantBudgetBytes`：
 
 ```cpp
 /// Bytes of constants folding may put into a graph. Folding replaces a computation by the value it
@@ -1472,7 +1472,7 @@ func main(): int sync {
 inline constexpr size_t kDefaultConstantBudgetBytes = 8u * 1024u * 1024u;
 ```
 
-`src/execute/pass.cpp:375-382`：
+`src/execute/pass.cpp#GcViewsPass`：
 
 ```cpp
 /// The `constant_budget` parameter of the passes that fold (design principles 9.6): the bytes of
@@ -1509,7 +1509,7 @@ size_t constantBytesOf(slot_t value, const type::Type *type, size_t stopAt, size
 
 **④ 所以按判据 6 的兜底停手**：**这个钳不是一个能从 Camel 阶段照抄的量**——
 `stdlib` 里没有任何"值的字节数"函数（`git grep bytes -- stdlib/*.cml` 只有 `to_bytes`/字节串），
-而 `eval(t, n)`（`stdlib/graph.cml:281`）**没有预算参数**：它把值物化出来再交回来，**"先物化再丢掉"这一步原生遍也做**（`fitsConstantBudget` 的注释写着"asked after the operator ran"），
+而 `eval(t, n)`（`stdlib/graph.cml#probe_handle`）**没有预算参数**：它把值物化出来再交回来，**"先物化再丢掉"这一步原生遍也做**（`fitsConstantBudget` 的注释写着"asked after the operator ran"），
 **但 Camel 阶段连"丢掉"的判断都做不出来，因为它量不出那个值的大小。**
 
 **⑤ 给作者的选项（我的建议是甲）**：
@@ -1598,7 +1598,7 @@ with <
 
 **五条（连移交件）全部停在同一条 `skip=law rule=idx_arr_t uri=:op/idx_arr`**。**⇒ 不是"某个形状"，是"数组元素读这一条 law 没有 arm"。**
 
-**③ 中止点定到了：`modules/transforms/transpose.cpp:1354-1358` 的兜底 `else`**
+**③ 中止点定到了：`modules/transforms/transpose.cpp#Escape` 的兜底 `else`**
 
 ```cpp
                 } else if (law == "mul_t" || law == "div_t") {
@@ -1610,7 +1610,7 @@ with <
                 }
 ```
 
-**转置器只认算术那几条 law**（`add_t`、`mul_t`、`div_t`……），**而 `idx_arr_t` 在规则库里是有的**（`stdlib/rulesets/transpose.cml:73`）：
+**转置器只认算术那几条 law**（`add_t`、`mul_t`、`div_t`……），**而 `idx_arr_t` 在规则库里是有的**（`stdlib/rulesets/transpose.cml#div_t`）：
 
 ```camel
 export rule idx_arr_t::<T>(xs: T[], i: int) {
@@ -1625,7 +1625,7 @@ export rule idx_arr_t::<T>(xs: T[], i: int) {
 移交单上写的是 `got null` + `[stderr] (empty)`（没有退出码），**那是 `h-m4b` 树上的读数**；**我这棵树两次运行都是 `got 1`**（有退出码 1），**stderr 空、stdout 末尾是 `vjp.cml:72` 的 `[Error]`**。
 **我在 plan 日志里搜过 `signal`/`Segmentation`/`Aborted`/`core dumped`：一处都没有——没有观测到信号中止。** **所以"静默中止"这个形状我在自己的树上没有复现出来**，写在这里而不是当成结论。
 
-**⑤ 同一条路的另一侧已经有实现**：`modules/autodiff/pullback.cpp:2146-2161` 处理数组元素读时**就散一个 slot**——`":tangent/scatter_add_arr"`，而 `tensor:zeros_like` 是现成的（`modules/tensor/ops/gradient_ops.cpp`）。
+**⑤ 同一条路的另一侧已经有实现**：`modules/autodiff/pullback.cpp#buildReverseBody` 处理数组元素读时**就散一个 slot**——`":tangent/scatter_add_arr"`，而 `tensor:zeros_like` 是现成的（`modules/tensor/ops/gradient_ops.cpp`）。
 **⇒ 缺的 arm 有现成材料可借**：转置器要发的正是 `scatter_add_arr(zeros_like(xs), i, ct)`。
 
 **⑥ 默认建议（给作者的问题，一页一问）**：
@@ -1732,7 +1732,7 @@ TRANSPOSE arm=idx_arr_t function=rulesets.jvp::index_into<float> xs=0 xsType=flo
 ```
 **`xs` 就是那个参数端口（`0`），它的类型是 `float[]`（开放秩），`at` 是常量 `1`，余切类型 `float[]`。**⇒ **arm 拿到的 `xs` 是对的，没有"另发明零数组"。**
 
-**② `zeros_arr` 今天就是从 `xs` 的值建零数组**（`src/builtin/operators/struct.cpp:1063-1086`）：
+**② `zeros_arr` 今天就是从 `xs` 的值建零数组**（`src/builtin/operators/struct.cpp#__tangent_zeros_arr__`）：
 ```cpp
 auto *value = norm.get<Array *>(0);
 Array *zero = Array::create(mm::autoSpace(), tangentArray, value->shapeSpan());
@@ -1769,7 +1769,7 @@ PROBE getSlot flat=0 numel=0 rank=0 size=0 storage=0 elemSize=0
 ⇒ **`rank=0`、`elemSize=0`、`storage=0`（compact）**：**这不是"一个 0 元素的 `float[]`"，而是一个"默认构造/零初始化过的 `Array` 头"**——
 **有人把 `null` 或一块没写过的对象当成数组读它的第 0 个元素。**（一个真的 0 元素 `float[]` 会是 `rank=1, elemSize=8`。）
 
-**⇒ 凶手位置（今晚第五个"不在被怀疑那一处"）**：`modules/transforms/transpose.cpp:1833-1846`，**被转置成员的答案装配**：
+**⇒ 凶手位置（今晚第五个"不在被怀疑那一处"）**：`modules/transforms/transpose.cpp#ArmSeed`，**被转置成员的答案装配**：
 
 ```cpp
 for (size_t i = firstPort; i < ports.size(); ++i) {
@@ -1892,14 +1892,14 @@ terminate called after throwing an instance of 'camel::core::mm::MemoryExhausted
 
 ## 55. `{Float64()}` 的用例写不出来，所以代码不动——而挡住它的是两条正当的拒绝
 
-**① 撤标的顺序确认（你问的那条）**：`test/tools/run-tests.mjs:2856` 把"标了却通过"直接改成 `fail` 并附
+**① 撤标的顺序确认（你问的那条）**：`test/tools/run-tests.mjs#verifyInSlotMs` 把"标了却通过"直接改成 `fail` 并附
 `marked known_fail on '<backend>' but passes: remove the mark`。**上一笔我是"先撤标、再同一次构建里跑"，一次就 58/58**，没有出现那条检查的红。
 
 **② 要写 `f32[]` 用例，三道探针全部被拒**（原文，逐层）：
 
 | 探针 | 结果 |
 |---|---|
-| `func g(xs: f32[]): f32` | `Invalid call to 'transpose' … : 'transpose' takes a function that returns a 'float'`（`stdlib/vjp.cml:73`） |
+| `func g(xs: f32[]): f32` | `Invalid call to 'transpose' … : 'transpose' takes a function that returns a 'float'`（`stdlib/vjp.cml#vjp`） |
 | `func g(xs: f32[]): float { return xs[0] as float }` | `DynamicCastForbidden: Dynamic cast from 'f32' to 'float' is not allowed` |
 | `func g(xs: f32[]): float { return float(xs[0]) }` | `RuntimeDiag: transforms: jvp has no forward rule for ':op/ftod' (the operator has no forward rule bound at all)` |
 
@@ -1943,7 +1943,7 @@ Camel Invariant Violation:
 所以它不是一条普通的红，是**"搬动之后读到一个错的类型/下标"**——与 `guard` 那族的**形状相同**（跨 safepoint 之后读到搬动前的东西），
 **只是落在类型上，于是被类型的不变量接住，而不是被"指针被搬动"的报告接住。**
 
-**⑤ 下一步的探针（没做，等点头）**：在 `include/camel/core/type/composite/tuple.h:143` 的守卫里**加上 `this` 的 `size_` 与实际下标**，
+**⑤ 下一步的探针（没做，等点头）**：在 `include/camel/core/type/composite/tuple.h#TupleType` 的守卫里**加上 `this` 的 `size_` 与实际下标**，
 以及 `modules/autodiff/pullback.cpp` 里 13 处 `typeAt(...)` 各是哪一处（判据：加了下标与 size 之后，一次构建就能指出是哪个调用点、下标记成了几）。
 **这是 `type/composite/tuple.h` 与本报告之外的 `pullback.cpp`，按规矩先报不动。**
 
@@ -1972,7 +1972,7 @@ PROBE typeAt after this=0x7bf8c8646188 size=0 sameness=same
 **今夜早些时候 `Array::getSlot` 那次 `element 0 of an array that holds 0`，是一个 default 构造的 `Array` 头被当作真数组用；
 这里是 default 构造的 `TupleType`（`size_ = 0`）被当作真的有布局用。同一族。**
 
-**③ `why=?` ⇒ 这个调用点不在我注解的 18 处里。** 剩下的候选集中在 `include/camel/core/context/frame.h:719/720`
+**③ `why=?` ⇒ 这个调用点不在我注解的 18 处里。** 剩下的候选集中在 `include/camel/core/context/frame.h#SlotArgsView`
 （`runtimeDataType_->typeAt(...)` / `staticDataType_->typeAt(...)`：**帧按数据槽位问布局的类型**），
 以及 `type/tree.h:46-47`、`execute/loop_driver.h` 与 `json`/`onnx` 模块。**`frame.h` 是最像的一处：一个零成员的"运行时数据类型"被问第 4 个槽。**
 

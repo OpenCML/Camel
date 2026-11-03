@@ -1,0 +1,18 @@
+// A stated extent that is not the tensor's is a fault, not a gradient of the wrong shape.
+//
+// `sum_stated(t, at)` is `sum(t)` with the extents the reverse law spreads over. The value does not
+// read `at`, so the only thing that can say the list is wrong is the check the operator owes: the
+// extents are compared with the tensor's shape and a list that disagrees raises
+// (`support.h#checkStatedExtents`). Here the tensor holds four elements and the list says two, and
+// the program stops on the operator's own line instead of spreading the cotangent over a shape
+// nobody verified.
+//
+//     camel test/cases/compile/transforms/stated_sum_extents_refused.cml
+import { sum_stated } from tensor
+
+func main(): int sync {
+    let x = [1.0, 2.0, 3.0, 4.0] as float[]
+    let s = sum_stated(x, [2])
+    `stated sum={}`->format<s>->println
+    return 0
+}
