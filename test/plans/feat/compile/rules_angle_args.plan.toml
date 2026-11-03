@@ -30,8 +30,8 @@ backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_contains = ["rules_angle_args reshape value=30.0 tangent=5.0"]
 known_fail = ["nvm", "fvm"]
-known_fail_msg = "transforms: transpose has no transpose for this function"
-known_fail_note = "Its own line prints now: `rules_angle_args reshape value=30.0 tangent=5.0`, and the lift behind it is green -- `REINTERP jvp function=loss_reshape graph=242 liftedFrom=234 type=(float[..], float[..]) => (float, float) pure nodes=7 exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_reshape,jvp_mul_tensor,jvp_sum,...`. Two walls fell to get there: `portsTakeOperands` (`modules/transforms/jvp.cpp`) asks now whether a port *takes* the operand instead of whether the two are equal, and the count it keeps is `count < dataOperandCount || count > portTypes.size()`, so a `<>` argument still cannot become a port; and a `float[2, 2]` constant gets a zero tangent of its own shape, read off the value where the type leaves the dimension open. What fails is the exit code: the case is one program and its third line stops the run at `transforms: transpose has no transpose for this function`, which is the page `docs/handover/questions/2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md`."
+known_fail_msg = "TRANSPOSE function=loss_mean skip=rule uri=tensor:multiply reason=no-rule"
+known_fail_note = "Its own line prints now: `rules_angle_args reshape value=30.0 tangent=5.0`, and the lift behind it is green -- `REINTERP jvp function=loss_reshape graph=242 liftedFrom=234 type=(float[..], float[..]) => (float, float) pure nodes=7 exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_reshape,jvp_mul_tensor,jvp_sum,...`. Two walls fell to get there: `portsTakeOperands` (`modules/transforms/jvp.cpp`) asks now whether a port *takes* the operand instead of whether the two are equal, and the count it keeps is `count < dataOperandCount || count > portTypes.size()`, so a `<>` argument still cannot become a port; and a `float[2, 2]` constant gets a zero tangent of its own shape, read off the value where the type leaves the dimension open. What fails is the exit code, and the reason has a name: the case is one program, its third line stops the run with `TRANSPOSE function=loss_mean skip=rule uri=tensor:multiply reason=no-rule` (the line this entry pins, which is the making of the third reading and not of this one), and that is the page `docs/handover/questions/2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md`."
 timeout_ms = 30000
 
 [[tests]]
@@ -45,8 +45,8 @@ backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_contains = ["rules_angle_args softmax value=1.5 tangent=-0.25"]
 known_fail = ["nvm", "fvm"]
-known_fail_msg = "transforms: transpose has no transpose for this function"
-known_fail_note = "Its own line prints now: `rules_angle_args softmax value=1.5 tangent=-0.25`, with `rules=jvp_softmax,jvp_mul_tensor,jvp_sum,...` in the lift's own reading -- `softmax<1>`'s axis is a `<>` port and the port/operand comparison stopped counting it as an operand. It fails on the exit code for the reshape entry's reason: one program, and the third line's transposed walk stops the run (`transforms: transpose has no transpose for this function`), which is the page `docs/handover/questions/2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md`. Both numbers stay as they are."
+known_fail_msg = "TRANSPOSE function=loss_mean skip=rule uri=tensor:multiply reason=no-rule"
+known_fail_note = "Its own line prints now: `rules_angle_args softmax value=1.5 tangent=-0.25`, with `rules=jvp_softmax,jvp_mul_tensor,jvp_sum,...` in the lift's own reading -- `softmax<1>`'s axis is a `<>` port and the port/operand comparison stopped counting it as an operand. It fails on the exit code for the reshape entry's reason: one program, and the third line's transposed walk stops the run (`TRANSPOSE function=loss_mean skip=rule uri=tensor:multiply reason=no-rule`, the line pinned here), which is the page `docs/handover/questions/2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md`. Both numbers stay as they are."
 timeout_ms = 30000
 
 [[tests]]
@@ -60,6 +60,6 @@ backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_contains = ["rules_angle_args mean transpose=6.0"]
 known_fail = ["nvm", "fvm"]
-known_fail_msg = "transforms: transpose has no transpose for this function"
+known_fail_msg = "TRANSPOSE function=loss_mean skip=rule uri=tensor:multiply reason=no-rule"
 known_fail_note = "Reached, and it stops two walls into the transposed walk: `TRANSPOSE-PROBE function=loss_mean needs=0`, then `TRANSPOSE function=loss_mean skip=rule uri=tensor:multiply reason=no-rule` -- the array product's transpose law is `mul_t`'s array half, `jvp_mul_tensor`'s adjoint, and it is another lane's page. Behind it stands the count gate in `modules/transforms/transpose.cpp`: with that law in the tree the walk went on and reached `TRANSPOSE function=loss_mean skip=arity uri=tensor:mean_axis operands=3`, and lifting the count builds a graph taking `(x, ct)` where the function value's signature promises `(ct,)` -- `nargs.size() == normPorts.size()`, a signal. So `transpose=6.0` still stands as the target, and the wall is the residual convention: `docs/handover/questions/2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md`. The number does not move."
 timeout_ms = 30000
