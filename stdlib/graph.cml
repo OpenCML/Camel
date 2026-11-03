@@ -192,8 +192,7 @@ export func tags(n: Node): string
 /// function, in the order of their names; empty for a graph that is no declaration (a lambda) and
 /// for a declaration that writes none. The declaration's facts travel with the graph, so a pass
 /// reads them without the module that declares the function.
-/// @example-fragment pass is the surrounding pass and f the function it received
-/// @example declaration_tags(graph_of(f))
+/// @example declaration_tags(graph_of((x: int): int => x + 1))
 export func declaration_tags(g: Graph): Tag[]
 
 /// The name of the tag as the program writes it (`jvp`, `vjp`); the qualified name when the tag is
@@ -211,8 +210,7 @@ export func tag_graphs(t: Tag): Graph[]
 /// `transpose` the rule of a linear function, and `vjp` the rule that gives the pullback directly.
 /// Null when the declaration writes none, when it writes that tag twice, and when what the tag
 /// names is not a function. The name is the one the program writes, or its qualified spelling.
-/// @example-fragment pass is the surrounding pass and f the function it received
-/// @example rule_of(graph_of(f), 'vjp')
+/// @example rule_of(graph_of((x: int): int => x + 1), 'vjp')
 export func rule_of(g: Graph, name: string): Graph?
 
 /// The source origin id of the node, 0 when unknown.
@@ -311,20 +309,17 @@ export func eval::<F>(t: Txn<F>, n: Node): Node? uses t
 /// holds it. The value is a number, a bool or a string; a string is copied into the permanent
 /// space because a value a transaction creates may be live at a safepoint where its draft is not
 /// traced.
-/// @example-fragment t is an open transaction and g a graph of it
-/// @example add_constant(t, g, 7)
+/// @example add_constant(open((x: int): int => x + 1), graph_of((x: int): int => x + 1), 7)
 export func add_constant::<F, T>(t: Txn<F>, g: Graph, value: T): Node uses t when is_ordered::<T>()
 
 /// Checks the edits and makes the changed function: the same type as the one that was opened, with
 /// the values it captured, sharing every graph nothing changed. The transaction is over.
 /// @fails error value `GraphConflict` when a graph the transaction touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant (the message names the graph, the node and the edge); error value `TxnUsed` when the transaction was over already
-/// @example-fragment t is an open transaction
-/// @example commit(t)
+/// @example commit(open((x: int): int => x + 1))
 export func commit::<F>(t: Txn<F>): F! uses t
 
 /// Drops the transaction.
-/// @example-fragment t is an open transaction
-/// @example abort(t)
+/// @example abort(open((x: int): int => x + 1))
 export func abort::<F>(t: Txn<F>): void uses t
 
 // ---- comparison ----
