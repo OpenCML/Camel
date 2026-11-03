@@ -272,3 +272,28 @@ expect_exit = 0
 expect_output_contains = ["REINTERP split function=jvp_of_h forward=", "REINTERP split function=jvp_of_g forward=", "REINTERP split function=jvp_of_f forward=", "f y= 15.0", "f d= 6.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# A tuple parameter whose members the body reads **by place** -- `g(q: (float, float)) = q.0 * 4.0 + q.1`
+# -- read through `vjp`. The cut was never the defect here: `split(jvp(g))` answers `forward y= 11.0` and
+# `lin dp= 4.0`, and it is pinned below beside the pullback so that a change that "fixes" `vjp` by
+# changing the halves shows up as a cut that stopped agreeing with its own lift.
+#
+# The defect was one step later. `transpose` files a member's cotangent in the slot table of the value
+# it read (`tupleCotangents`, `modules/transforms/transpose.cpp#buildTransposeMember`) and marks the
+# **port** answered, and nothing joined the slots back into the tuple the answer needs -- so the answer
+# tuple of the transposed member held an empty reference, the encoder was handed a node whose input was
+# no node, and the run stopped inside the encoder's input table: SIGSEGV, empty stdout, stderr ending
+# after `REINTERP split function=jvp_of_g` with no `TRANSPOSE` line at all. The same program written
+# with a struct parameter refused by name one step earlier (`skip=unread-parameter port=5 type=Point`),
+# which is the same missing join seen from the side where the slot table is never built.
+[[tests]]
+name = "split_tuple_member_read"
+desc = "A tuple parameter read by place (`g(q) = q.0 * 4.0 + q.1`) through `vjp`: the pullback answers `((4.0, 1.0))` -- one member per parameter, and the member is the tuple parameter's own cotangent, dg/dq = (4, 1) hand-computed -- while the same program's cut answers `forward y= 11.0` and `lin dp= 4.0`. The two shapes beside it separate a zero from an empty slot: `g_0(q) = 4q.0` answers `((4.0, 0.0))` for the member nobody read, and `g_1(q) = 3q.1` answers `((0.0, 3.0))`, which is the member order of the parameter and not the order the body happened to read them in. Before the join the first of these stopped the run on a signal inside the encoder, with `stdout` ending at the cut's own three lines and no `TRANSPOSE` line at all; a shape that answered one member's zero for the other's cotangent would pass a one-member reading and fail these."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_tuple_member_read.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["REINTERP split function=jvp_of_g_all", "forward y= 11.0", "lin dp= 4.0", "lift value= 11.0  tangent= 4.0", "vjp y= 11.0  dq= ((4.0, 1.0))", "vjp0 y= 8.0  dq= ((4.0, 0.0))", "vjp1 y= 9.0  dq= ((0.0, 3.0))"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

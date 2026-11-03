@@ -2235,12 +2235,86 @@ bool buildTransposeMember(
                 continue;
             }
             switch (node->kind) {
-            case rt::GCNodeKind::Port:
+            case rt::GCNodeKind::Port: {
                 // The answer is assembled below, one member per parameter the transposition answers
                 // for. A parameter's cotangent is a member of that tuple and never the exit itself --
                 // so even a function of one parameter answers a one-long tuple, which is the shape
                 // the law states for every arity (author, 2026-11-02 11:30).
+                //
+                // A parameter that is a **tuple the body reads one member at a time** (`q.0`, `q.1`)
+                // never gets a cotangent of its own: the `Accs` case below files each member's
+                // cotangent in the slot table (`tupleCotangents`) and marks the port answered, and
+                // nothing joined the slots back into the tuple the answer needs. The answer then read
+                // an empty reference out of `cotangent` and handed the encoder a node whose input was
+                // no node: the run stopped on a signal inside the encoder's input table and printed
+                // nothing at all (measured 2026-11-04 on `vjp((q: (float, float)) => q.0 * 4.0 +
+                // q.1)((2.0, 3.0))`, and again on a shape whose callee is the one reading the
+                // members -- the cut itself was never the defect: `split(jvp(g))` answers 11.0 and
+                // 4.0 on the same program). This case is the join the slot table was missing: a slot
+                // the body read keeps its cotangent, and a slot nobody read gets the zero that says
+                // so -- the same statement the `Fill` case below makes when it hands a zero to a
+                // component no cotangent reached. The type of each member is the tangent space of the
+                // member's own type, so a tuple of numbers is assembled here and a member whose
+                // space is not a number is refused rather than written as a float.
+                const auto slots = tupleCotangents.find(ref);
+                if (slots == tupleCotangents.end()) {
+                    break;
+                }
+                if (cotangent[ref] != rt::kInvalidNodeRef) {
+                    // The parameter was read **whole and by member**, and the adjoint of the two uses
+                    // is their sum: there is no tuple addition in the rules (`addUriFor` answers one
+                    // operator per type), so answering one of the two halves would be a wrong
+                    // number. Refused by name instead.
+                    refuse(TransposeRefusalCause::Component);
+                    os << " node=" << ref << " whole=1 slots=" << slots->second.size() << '\n';
+                    return false;
+                }
+                const camel::runtime::GCNode *portNode = function->node(ref);
+                const Type *const portType = portNode != nullptr ? portNode->dataType() : nullptr;
+                const size_t arity =
+                    portType != nullptr && portType->code() == camel::core::type::TypeCode::Tuple
+                        ? camel::core::type::tree::arity(portType)
+                        : 0;
+                if (arity == 0 || slots->second.size() > arity) {
+                    refuse(TransposeRefusalCause::Component);
+                    os << " node=" << ref << " slots=" << slots->second.size() << " arity=" << arity
+                       << '\n';
+                    return false;
+                }
+                std::vector<gc_node_ref_t> parts;
+                std::vector<Type *> partTypes;
+                for (size_t i = 0; i < arity; ++i) {
+                    Type *const memberType = camel::core::type::tree::childType(portType, i);
+                    const camel::core::TangentSpaceAnswer space =
+                        memberType != nullptr ? camel::core::tangentSpaceOf(memberType)
+                                              : camel::core::TangentSpaceAnswer{};
+                    if (!space.hasSpace() || space.space == nullptr) {
+                        refuse(TransposeRefusalCause::Component);
+                        os << " node=" << ref << " member=" << i << " type="
+                           << (memberType != nullptr ? memberType->toString() : "?")
+                           << " why=no-tangent-space\n";
+                        return false;
+                    }
+                    gc_node_ref_t part =
+                        i < slots->second.size() ? slots->second[i] : rt::kInvalidNodeRef;
+                    if (part == rt::kInvalidNodeRef) {
+                        // The zero this walk writes is the number's (`0.0`); a member whose space is
+                        // some other shape has no zero this file can build, and saying so is the
+                        // refusal rather than writing a `float` where that shape belongs.
+                        if (space.space->code() != camel::core::type::TypeCode::Float64) {
+                            refuse(TransposeRefusalCause::Component);
+                            os << " node=" << ref << " member=" << i << " type="
+                               << space.space->toString() << " why=no-zero-for-an-unread-member\n";
+                            return false;
+                        }
+                        part = zero();
+                    }
+                    parts.push_back(part);
+                    partTypes.push_back(space.space);
+                }
+                cotangent[ref] = tupleOf(parts, partTypes).first;
                 break;
+            }
             case rt::GCNodeKind::Data:
                 break;
             case rt::GCNodeKind::Accs: {
@@ -3668,6 +3742,17 @@ bool buildTransposeMember(
                     portType == nullptr ? camel::core::TangentSpaceAnswer{}
                                         : camel::core::tangentSpaceOf(portType);
                 if (hasCotangent[ports[port]]) {
+                    // Answered, and answered with a *node*: a port the walk marked and then left
+                    // empty is the one shape that used to reach the encoder as a node with no input,
+                    // and a signal there says nothing about which parameter it was. The `Port` case
+                    // above is what joins a tuple's slots back into a cotangent; this line is the
+                    // check that no other reader of the slot table leaves a hole for the encoder.
+                    if (cotangent[ports[port]] == rt::kInvalidNodeRef) {
+                        refuse(TransposeRefusalCause::Component);
+                        os << " port=" << ports[port] << " at=" << at
+                           << " why=answered-with-no-cotangent\n";
+                        return false;
+                    }
                     parts.push_back(cotangent[ports[port]]);
                     partTypes.push_back(space.space);
                     continue;

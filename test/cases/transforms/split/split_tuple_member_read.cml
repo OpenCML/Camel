@@ -1,0 +1,62 @@
+// A tuple parameter whose members the body reads **by place**: `g(q: (float, float)) = q.0 * 4.0 + q.1`.
+// This is the shape the cut was never the defect in -- `split(jvp(g))` answered `forward y= 11.0` and
+// `lin dp= 4.0` while `vjp(g)` on the same program died on a signal -- so it is the shape that says
+// which of the two transforms owns which half of a member read.
+//
+// What `vjp` needs is the cotangent of the **parameter**, and the two halves of the law put it nowhere
+// until now: the cut hands the backward half its residuals in one tuple port, the body reads that
+// tuple's members (`q.0`, `q.1`), and `transpose`'s walk files each member's cotangent in the slot
+// table of the value it read (`tupleCotangents`) -- so the port itself was marked answered with no
+// cotangent of its own. The answer tuple of the transposed member then held an empty reference, the
+// encoder was handed a node whose input was no node, and the run stopped inside the encoder's input
+// table (SIGSEGV, empty stdout, nothing but `REINTERP split function=...` on stderr). The join the slot
+// table was missing is `modules/transforms/transpose.cpp#buildTransposeMember`: a slot the body read
+// keeps its cotangent and a slot nobody read gets the zero that says so, which is exactly the shape
+// `Tangent<(float, float)>` = `(float, float)` states (design principles 9.9).
+//
+// The three readings below are the three things a member read can say, and each one is hand-checkable:
+//   * `g_all(q) = 4q.0 + q.1`: dg/dq = (4, 1);
+//   * `g_0(q)   = 4q.0`:       dg/dq = (4, 0) -- the member never read pulls back zero, and a zero
+//     and an empty slot are different answers: an empty slot is what used to crash;
+//   * `g_1(q)  = 3q.1`:        dg/dq = (0, 3).
+// The pullback answers **one member per parameter** (the law's shape for every arity), and this
+// program has one parameter, so the printed answer is one long and its member is `dg/dq`:
+// `((4.0, 1.0))`, `((4.0, 0.0))`, `((0.0, 3.0))`.
+import rulesets.jvp
+import { jvp, split } from transforms
+import { vjp } from vjp
+
+type P = (float, float)
+
+func g_all(q: P): float {
+    return q.0 * 4.0 + q.1
+}
+
+func g_0(q: P): float {
+    return q.0 * 4.0
+}
+
+func g_1(q: P): float {
+    return q.1 * 3.0
+}
+
+func main(): int sync {
+    let p = (2.0, 3.0)
+    // The cut of the lift, read on its own: it was never the defect, and it has to stay right.
+    let lifted = jvp(g_all)
+    let fwd = split(lifted)
+    let (value, lin) = fwd(p)
+    println("forward y=", value)
+    println("lin dp=", lin((1.0, 0.0)))
+    // The lift's own answer, which the cut's numbers are supposed to repeat.
+    let (lv, lt) = lifted(p, (1.0, 0.0))
+    println("lift value=", lv, " tangent=", lt)
+    // The pullback: one cotangent per parameter, so one tuple.
+    let (yAll, pullAll) = vjp(g_all)(p)
+    println("vjp y=", yAll, " dq=", pullAll(1.0))
+    let (y0, pull0) = vjp(g_0)(p)
+    println("vjp0 y=", y0, " dq=", pull0(1.0))
+    let (y1, pull1) = vjp(g_1)(p)
+    println("vjp1 y=", y1, " dq=", pull1(1.0))
+    return 0
+}
