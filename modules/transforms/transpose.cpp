@@ -373,9 +373,14 @@ bool buildTransposeMember(
     // log's line is rendered from the same cause. A site adds the *where* -- the node, the uri, the
     // callee -- because that is not the cause and no caller decides anything from it; a site that
     // wanted a sentence of its own would add an enumerator instead of writing one here.
+    //
+    // The graph is part of the where and is recorded here rather than at the sites, because every
+    // refusal is met inside a graph and the lambda is the one place that has it: the sentence keeps
+    // saying "this function" only because the name never left the log before.
     const auto refuse = [&](TransposeRefusalCause cause,
                             std::optional<size_t> param = std::nullopt) -> void {
         state.refusal = TransposeRefusal{cause, param};
+        state.refusal.graph = function->name();
         os << "TRANSPOSE function=" << function->name() << " skip=" << transposeRefusalWord(cause);
     };
     // What this member needs is discovered by asking: the body decides which parameters it reads by
@@ -1965,6 +1970,14 @@ bool buildTransposeMember(
                             ? "no-such-family"
                             : "no-rule";
                     refuse(TransposeRefusalCause::Rule);
+                    // The where of this refusal, recorded for the sentence as well as the log: the
+                    // step is this node, its operator is this uri, and the lookup answered this
+                    // word. The site has all three -- the log has printed them since the walk
+                    // existed -- and until now the sentence a reader was handed dropped them and
+                    // said only that *a* step had no rule.
+                    state.refusal.node   = ref;
+                    state.refusal.uri    = std::string(uri);
+                    state.refusal.lookup = reason;
                     os << " uri=" << uri << " reason=" << reason << '\n';
                     return false;
                 }

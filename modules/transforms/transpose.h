@@ -27,6 +27,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace camel::transforms {
@@ -74,12 +75,31 @@ enum class TransposeRefusalCause {
 /// caller's decision are two readings of one value, so this is the only place that spells it.
 const char *transposeRefusalWord(TransposeRefusalCause cause);
 
-/// What a refusal is: the cause, and the parameter it is about when the cause is about one. The
-/// index is the callee's parameter position as the graph counts it; the sentence adds one because a
-/// reader counts from one.
+/// What a refusal is: the cause, the parameter it is about when the cause is about one, and the step
+/// it was met at when it was met at a step. The index is the callee's parameter position as the graph
+/// counts it; the sentence adds one because a reader counts from one.
+///
+/// `graph`, `node`, `uri` and `lookup` are the *where*, not the cause: the walk records them at the
+/// site that stopped it, and the sentence reads them. They are here because a sentence about a step
+/// with no node number and no operator name names no step -- "some step of some body has no
+/// transpose rule" is true of every body and tells a reader nothing they can act on, while the log
+/// line for the same refusal has carried `function=`, `node=`, `uri=` and `reason=` all along.
+/// Empty/null means the walk had nothing to record there, and the sentence says that instead of
+/// leaving the gap: a gap reads as "there is no such thing".
 struct TransposeRefusal {
     TransposeRefusalCause cause = TransposeRefusalCause::None;
     std::optional<size_t> param;
+    /// The graph whose walk stopped, spelled as the reading log writes it (`function=<graph>`).
+    std::string graph;
+    /// The node that stopped the walk. Nothing for a refusal about the graph or a parameter rather
+    /// than about a step.
+    std::optional<size_t> node;
+    /// That node's operator, when it has one.
+    std::string uri;
+    /// Why a `Rule` refusal found no rule: the log's own word for the lookup (`unbound`,
+    /// `no-such-family`, `no-rule`), or empty for any other cause. Kept as the log's word rather
+    /// than as a second enum, so that one fact is spelled once.
+    std::string lookup;
 };
 
 /// The graph of `transpose(f)` and the program of the graphs built with it. `refusal` is what the
