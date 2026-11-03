@@ -924,6 +924,22 @@ bool buildTransposeMember(
             if (!inputs.empty()) {
                 draft.setNormInputs(made, std::span<const gc_node_ref_t>(inputs));
             }
+            // The operator's `<>` arguments are ports of the same node, after the normal ones
+            // (`OpDef::params` written `withAfterNorm`), and a recomputed value has to be the same
+            // operator: a `softmax<1>(x)` rebuilt without its axis is `softmax(x)`, which reads the
+            // last axis instead of axis 1. They are recomputed forward like the rest, because the
+            // value the pullback reads must carry what the forward call carried.
+            std::vector<gc_node_ref_t> with;
+            for (gc_node_ref_t input : function->withInputsOf(ref)) {
+                const gc_node_ref_t copied = forward(input);
+                if (copied == rt::kInvalidNodeRef) {
+                    return rt::kInvalidNodeRef;
+                }
+                with.push_back(copied);
+            }
+            if (!with.empty()) {
+                draft.setWithInputs(made, std::span<const gc_node_ref_t>(with));
+            }
             forwardOf[ref] = made;
             return made;
         };
@@ -1772,11 +1788,21 @@ bool buildTransposeMember(
                        << " reason=" << reason << '\n';
                     return false;
                 }
-                const auto inputs = function->normInputsOf(ref);
-                if (inputs.size() != 2 && inputs.size() != 1) {
+                const auto normOperands = function->normInputsOf(ref);
+                if (normOperands.size() != 2 && normOperands.size() != 1) {
                     os << "TRANSPOSE function=" << function->name() << " skip=arity uri=" << uri
-                       << " operands=" << inputs.size() << '\n';
+                       << " operands=" << normOperands.size() << '\n';
                     return false;
+                }
+                // The list the rule's parameters line up with is the node's *port* list: the normal
+                // operands, then the `<>` ones (`OpDef::params` written `withAfterNorm`). A rule for
+                // an operator that takes its axis or its target shape in `<>` position declares that
+                // argument beside the value it differentiates, so the cotangent is asked for over the
+                // same list -- and the context positions answer no cotangent (they are constants with
+                // no tangent space), which the loop below already says of them.
+                std::vector<gc_node_ref_t> inputs(normOperands.begin(), normOperands.end());
+                for (gc_node_ref_t input : function->withInputsOf(ref)) {
+                    inputs.push_back(input);
                 }
                 const gc_node_ref_t ct = cotangent[ref];
                 noteRule(rule->rule);

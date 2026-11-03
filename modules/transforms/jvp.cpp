@@ -1419,6 +1419,35 @@ bool liftGraph(
                 if (!inputs.empty()) {
                     draft.setNormInputs(made, inputs);
                 }
+                // The operator's `<>` arguments are ports of the same node, in the same order and
+                // after the normal ones (`OpDef::params` written `withAfterNorm`; `dataPortsOf` and
+                // `portRoleOf` in camel/runtime/draft.h are that one list). A rule's parameters
+                // follow the port order too -- `modules/transforms/vmap.cpp` states the protocol
+                // where it builds a call, "a `with` argument is a rule's argument too" -- so a copy
+                // that dropped them would be a *different operator*: `softmax<1>(x)` copied without
+                // its axis is `softmax(x)`, which reads the last axis, and `mean<0, true>(x)` copied
+                // without its two is a mean with the default axis and no kept dimension. That is a
+                // wrong number, not a missing one, so they are copied and attached as the normal
+                // ones are. They are appended to `originals`/`inputs` so that everything below --
+                // the cotangents the rule is handed, the types it is asked about, and the values it
+                // reads -- sees one port list in port order.
+                std::vector<gc_node_ref_t> contextInputs;
+                for (gc_node_ref_t input : function.withInputsOf(ref)) {
+                    if (input >= function.nodeCount() || !copied[input]) {
+                        complete = false;
+                        break;
+                    }
+                    originals.push_back(input);
+                    contextInputs.push_back(
+                        valueOf[input] != rt::kInvalidNodeRef ? valueOf[input] : copyOf[input]);
+                    inputs.push_back(contextInputs.back());
+                }
+                if (!complete) {
+                    break;
+                }
+                if (!contextInputs.empty()) {
+                    draft.setWithInputs(made, contextInputs);
+                }
                 // The `sync` block's chain, copied edge for edge: a statement is executed because it
                 // sits on that chain, and an effect whose result nobody reads is dropped at run time
                 // without it. The flag says the node is one of the block's statements; the waits are

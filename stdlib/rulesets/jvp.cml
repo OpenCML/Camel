@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_same, Tangent } from types
-import { matmul, zeros_like } from tensor
+import { matmul, mean_axis, reshape, sum, zeros_like } from tensor
 import { log, pow } from math
 import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
 
@@ -159,6 +159,56 @@ func matmul_tangent::<T>(a: T[..], b: T[..], da: T[..], db: T[..]): T[..] when i
 export rule jvp_matmul::<T>(a: T[..], b: T[..]) when is_float::<T>() {
     matmul(a, b) => (da: T[..], db: T[..]) => matmul_tangent(a, b, da, db)
 }
+
+// ---- the forward rules of the reductions and the layout ----
+//
+// These are what a model writes at every step: a loss is a `sum` over every element, a layer norm is
+// a `mean` along an axis, and the head split is a `reshape`. All three are **linear** -- a sum, a
+// mean and a re-reading of the elements add nothing a tangent does not already carry through -- so
+// their forward rule is the operator itself applied to the tangents, and the right side names that
+// operator rather than an arithmetic this ruleset would have to keep in step with it.
+//
+// `tensor:softmax` and `tensor:reshape` are the two of those that are not here, and not because
+// their laws are hard. `softmax`'s law is `softmax_grad(y, dx, axis)` with `y` the softmax itself,
+// whose Jacobian `diag(y) - y·y^T` is symmetric, so the forward direction and the pullback are one
+// matrix; `reshape`'s is "the same elements at the same target shape". Both are refused for one
+// reason: a rule's left side is compiled as an ordinary call, and neither operator has a
+// parenthesised spelling -- `softmax` takes its axis in angle brackets only, and `reshape` its target
+// shape (`stdlib/signatures/tensor.cml`) -- so a pattern parameter, which is always an ordinary
+// argument, has nowhere to go. `reshape`'s right side would be refused a second time, by name: "the
+// rule's right side passes a context argument of its own". `mean_axis` is here because its
+// declaration *does* have a parenthesised form, `mean_axis(t, axis, keepdims?)`
+// (`stdlib/tensor.cml:169`), even though the node it builds carries the axis as a context port.
+//
+// Each key is the operator's own name (`tensor:sum` -> `sum`). A rule's parameters are the
+// operator's **ports, in port order**: the normal ones, then the `<>` ones (`OpDef::params` written
+// `withAfterNorm`, and `modules/transforms/vmap.cpp` states the same protocol where it builds a
+// call). That is why `jvp_mean_axis` declares all three of `mean_axis`'s parameters even though only
+// the first is an operand: `axis` and `keepdims` arrive as the node's context ports, and the walk
+// hands them over after the tensor. They carry no tangent of their own (`Tangent<int>` and
+// `Tangent<int[]>` are `()`), so none of them enters a right side as a lifted value: the right side
+// takes the cotangents of the parameters that have a tangent space, in that same order.
+
+/// `d(sum(xs)) = sum(dxs)`: a sum adds its elements up, so it is linear and the sum of the tangents is
+/// the tangent of the sum.
+export rule jvp_sum::<T>(xs: T[..]) when is_float::<T>() {
+    sum(xs) => (dxs: T[..]) => sum(dxs)
+}
+
+/// `d(mean_axis(xs, axis, keepdims)) = mean_axis(dxs, axis, keepdims)`: a mean is a sum divided by a
+/// count, and neither the count nor the division reads the value, so the tangent of a mean is the
+/// mean of the tangents. It is written as the operator so that the accumulator, the order and the one
+/// rounding are the definition's own (`stdlib/tensor_definitions.cml`).
+export rule jvp_mean_axis::<T>(xs: T[..], axis: int, keepdims: bool) when is_float::<T>() {
+    mean_axis(xs, axis, keepdims) => (dxs: T[..]) => mean_axis(dxs, axis, keepdims)
+}
+
+/// `d(reshape<dims>(x)) = reshape<dims>(dx)`: a reshape moves no element, so its tangent is the same
+/// elements read at the same target shape -- but the rule cannot be written, for the reason in the
+/// section comment above: the right side would have to write `reshape<dims>(dx)`, and a rule's right
+/// side may not pass a context argument of its own (`the rule's right side passes a context argument
+/// of its own` is how the expansion refuses it). `tensor:reshape` has no parenthesised spelling, so
+/// neither side of the law has a form here.
 
 // ---- the forward rule of `:op/idx_arr` ----
 //

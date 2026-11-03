@@ -688,14 +688,20 @@ class GCGraph : public camel::core::rtdata::Object {
             at = one->parent;
         }
     }
-    /// True when `a` and `b` are on one chain of regions: one of them is the other, or one contains
-    /// the other. This is the question a read of a port asks. A region reads a port of a region it
-    /// sits in -- the builder writes that everywhere (a branch arm reading the function's own
-    /// parameter) -- and reads a port of a region inside it too (the arm that holds a loop reads
-    /// the loop's body port). It reads nothing of a region on another branch: that frame is not
-    /// there when the read happens.
-    bool regionsShareChain(uint32_t a, uint32_t b) const {
-        return isAncestorOf(a, b) || isAncestorOf(b, a);
+    /// True when the node `reader` may read a port of the region `portRegion`. Three readers may:
+    /// a node of that region, a node of a region `portRegion` sits in, and the node that owns it
+    /// (`region(portRegion)->owner`). A branch arm reading the function's own parameter is the
+    /// second; a LOOP node reading the port its own body region ends in is the third. Anyone else
+    /// is outside the frame the port lives in: a port of a region inside the reader is a value that
+    /// region produces, and it is not there before that region runs -- a loop body's port is a
+    /// different value every round, and the reader of the rounds is the loop node, not its
+    /// neighbours.
+    bool regionIsVisibleFrom(uint32_t portRegion, gc_node_ref_t reader) const {
+        if (isAncestorOf(portRegion, nodeRegion(reader))) {
+            return true;
+        }
+        const GCRegion *one = region(portRegion);
+        return one != nullptr && one->owner == reader;
     }
     /// The LoopCond or LoopBody region (`part`) of the LOOP node `ref`; 0 when it has none: a For
     /// loop has no condition, and a loop in graph form has no regions.
