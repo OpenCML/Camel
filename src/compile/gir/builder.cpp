@@ -1195,19 +1195,31 @@ FunctionType *Builder::completeLambdaSignature(
             break;
         }
     }
-    const size_t expectedTotal =
-        expectedFunc->withTypesCount() + expectedFunc->normTypesCount();
+    // A lambda takes the `with` list it does not write from the position it stands in as well
+    // (design principles 5.9: the types it does not write come from the function type of the
+    // position). A transform's result declares the differentiated function's own `with` list --
+    // `Vjp<F>` is `<..WithOf<F>> (..ParamsOf<F>) => ...` -- and the library's `vjp` answers a lambda
+    // written `(..xs) => ...`, so this is the one place the two lists differ: without adopting the
+    // position's list the value would answer `(..ParamsOf<F>)` while the declaration promises the
+    // `with` prefix too, and `vjp(f)<2.0>(3.0)` would pass a `with` argument to a function with no
+    // `with` port. A lambda that *writes* a `with` list of its own keeps it, and one that writes a
+    // different number of them than the position has is told so below.
+    const size_t expectedWith = expectedFunc->withTypesCount();
+    const size_t adoptedWith =
+        withCount == 0 && expectedWith > 0 ? expectedWith : size_t{0};
+    const size_t effectiveWith = withCount + adoptedWith;
+    const size_t expectedTotal  = expectedWith + expectedFunc->normTypesCount();
     if (restHole == nullptr) {
-        if (expectedTotal != total) {
+        if (expectedTotal != effectiveWith + funcType->normTypesCount()) {
             report(
                 (*unwritten)[0],
                 std::format(
                     "the expected type '{}' takes {} parameters and the lambda {}",
                     expectedFunc->toString(),
                     expectedTotal,
-                    total));
+                    effectiveWith + funcType->normTypesCount()));
         }
-    } else if (expectedTotal < restHole->index) {
+    } else if (expectedTotal < effectiveWith + restHole->index) {
         report(
             *restHole,
             std::format(
@@ -1233,6 +1245,15 @@ FunctionType *Builder::completeLambdaSignature(
         exitType = expectedFunc->exitType();
     }
     factory.setExitType(exitType);
+    // The `with` list a lambda does not write is the position's (design principles 5.9), and a call
+    // numbers `with` parameters before the ordinary ones, so the adopted list goes in first.
+    for (size_t k = 0; k < adoptedWith; ++k) {
+        factory.addWithArg(
+            expectedFunc->hasArgNames() ? std::string(expectedFunc->argNameAt(k)) : std::string(),
+            expectedFunc->withTypeAt(k),
+            expectedFunc->withIsVarAt(k),
+            expectedFunc->withNeedsValueAt(k));
+    }
     size_t hole = 0;
     for (size_t i = 0; i < total; ++i) {
         Type *type   = typeAt(i);
@@ -1247,7 +1268,11 @@ FunctionType *Builder::completeLambdaSignature(
                 // parameters including none, which is why the arity check above only requires the
                 // expected type to reach this position.
                 const std::string base = nameAt(i);
-                for (size_t k = i; k < expectedTotal; ++k) {
+                // The ordinary parameters the rest hole stands for, and only them: the expected
+                // type's `with` list is not one of the lambda's parameters (a `with` value reaches
+                // the body as a value of the function, not as an argument), so the range is the
+                // expected type's ordinary count, not its total.
+                for (size_t k = i; k - withCount < expectedFunc->normTypesCount(); ++k) {
                     Type *const expanded = k < withCount ? expectedFunc->withTypeAt(k)
                                                          : expectedFunc->normTypeAt(k - withCount);
                     if (expanded == nullptr) {
@@ -1419,19 +1444,24 @@ void Builder::buildFuncBody(
                     if (!graphNamesValue(gct->at(1), restName)) {
                         break;
                     }
-                    const size_t withCount   = funcType->withTypesCount();
+                    // `param.index` numbers the parameters as the lambda *wrote* them, and the
+                    // completed signature is what the ports are read from: a `with` list the lambda
+                    // took from the position (`completeLambdaSignature`) is in the second and not in
+                    // the first, so the two are subtracted in their own terms.
+                    const size_t writtenWith = written->withTypesCount();
+                    const size_t firstNorm =
+                        param.index >= writtenWith ? param.index - writtenWith : 0;
                     const auto normPorts     = graph->view().normPorts();
                     std::vector<Type *> parts;
                     std::vector<size_t> slots;
                     std::vector<node_handle_t> members;
-                    for (size_t k = param.index; k < withCount + funcType->normTypesCount(); ++k) {
-                        const size_t norm = k - withCount;
+                    for (size_t norm = firstNorm; norm < funcType->normTypesCount(); ++norm) {
                         if (norm >= normPorts.size()) {
                             break;
                         }
                         members.push_back(graph->view().ref(normPorts[norm]));
                         parts.push_back(funcType->normTypeAt(norm));
-                        slots.push_back(k - param.index);
+                        slots.push_back(norm - firstNorm);
                     }
                     if (!members.empty()) {
                         node_handle_t tuple = currGraph_->addFillNode(
