@@ -493,8 +493,12 @@ gc_node_ref_t expandRuleByName(
     camel::runtime::GraphTransaction &transaction, std::string_view ruleName,
     const std::function<gc_node_ref_t(size_t)> &valueOf,
     const std::vector<gc_node_ref_t> &tangents, size_t position,
-    const std::vector<camel::core::type::Type *> &operandTypes, std::string &why) {
+    const std::vector<camel::core::type::Type *> &operandTypes, std::string &why,
+    bool *noInstanceAtOperands) {
     using camel::core::type::Type;
+    if (noInstanceAtOperands != nullptr) {
+        *noInstanceAtOperands = false;
+    }
     // What the rule is instantiated at, and why it is the operands' own types: a law that covers two
     // shapes of one operator -- `tensor:multiply` on two arrays, and on an array and a number --
     // names its parameters' types (`mul_tensor_t::<X, W>`), so the instance has to be built at the
@@ -522,6 +526,13 @@ gc_node_ref_t expandRuleByName(
         why      = firstWhy;
     }
     if (instance == nullptr) {
+        // The law was named and would not be built at these types -- the second of the four ways in
+        // the header. Recorded as a class and not as a reading of `why`, because `why` here is the
+        // instantiation's own sentence about a call inside the law's body, and a caller that must
+        // answer "which kind of refusal is this" would otherwise be parsing it back.
+        if (noInstanceAtOperands != nullptr) {
+            *noInstanceAtOperands = true;
+        }
         return rt::kInvalidNodeRef;
     }
     RuleRightSide right;

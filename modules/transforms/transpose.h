@@ -62,6 +62,21 @@ enum class TransposeRefusalCause {
     /// the shape it was written for. Saying "no rule" here would be a sentence about a state the
     /// transform is not in.
     RuleShape,
+    /// The law was found and its body has no instance at these operands: the key holds a law written
+    /// for one operator, and a transform expands that law's right side at the operand types it really
+    /// has (`ruleCotangent`). When the body is a dispatch on rank -- two cotangent helpers overloaded
+    /// per shape, which is how one law serves a matrix product and its two vector lanes -- the ranks
+    /// outside the set it serves are exactly what the expansion refuses.
+    ///
+    /// It is **not** `RuleShape`: there the law's *pattern* rejected the operand types, and the walk
+    /// never built anything. Here the pattern took them, the law was chosen, and the law's own body is
+    /// what has nothing to say for these ranks. The two want different edits: `RuleShape` is answered
+    /// by widening the pattern, and this one by writing the missing shape's law. Measured 2026-11-03
+    /// on `matmul_t` at a rank-three operand: with the law serving ranks one and two only, the
+    /// refusal used to arrive as `CotangentNeedsAValue` carrying the builder's own sentence ("No
+    /// matching function found for argument types"), which names a helper instead of the law and says
+    /// nothing about the rank a reader has to change.
+    RuleRanks,
     Arity,
     CotangentNeedsAValue,
     State,
@@ -112,6 +127,11 @@ struct TransposeRefusal {
     /// What the law takes and what the step has (`RuleShape`), in the index's own spelling: the one
     /// fact that turns "another shape" into something a reader can act on.
     std::string shape;
+    /// The law whose body has no instance (`RuleRanks`): the name a reader greps in the ruleset.
+    std::string rule;
+    /// The operands' ranks (`RuleRanks`), in the law's own order, spelled `(3, 2)`: the fact the
+    /// refusal is about, because a law that dispatches on rank serves a set of them.
+    std::string ranks;
 };
 
 /// The graph of `transpose(f)` and the program of the graphs built with it. `refusal` is what the

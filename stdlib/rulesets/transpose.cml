@@ -169,33 +169,106 @@ export rule subtract_t::<T>(x: T[..], w: T[..]) when is_float::<T>() {
 // the way that forward rule is -- the key `tensor:matmul` needs no exception in `ruleKeyExceptions()`
 // because the name derives it.
 //
-// **Only the two-matrix shape is taken, and the pattern says so.** A vector operand is not that shape
-// with a smaller extent: `matmul` broadcasts it, so the cotangent of a broadcast operand is the *sum*
-// of what it fed -- the reduction `sum_to` names, which is what `mul_tensor_t` above had to write for
-// the array-times-number shape. Here that reduction would have to be written for `ct · bᵀ` and
-// `aᵀ · ct` in the two vector positions, and it is not written.
+// **Every shape `matmul` takes is served, and the shapes are told apart by the cotangent helpers.** A
+// vector operand is not the matrix shape with a smaller extent: the product reads a rank-one operand
+// as a row or a column and drops that axis from the answer (`modules/tensor/kernels/gemm.cpp#planMatmul`),
+// so the cotangent that comes back is a rank-one value where the operand is rank one, and the cotangent
+// that goes to the *other* operand is an outer product the matmul cannot write -- the product of a
+// rank-one value with a rank-one value is a number. That outer product is what `sum_to` is for, and it
+// is written in the two lane orderings the shapes allow:
 //
-// Naming the ranks in the pattern is what keeps the law from *claiming* a shape it cannot serve. With
-// open ranks (`a: T[..], b: T[..]`) the pattern matches a vector too, so the walk applies this law and
-// the program dies inside it at run time -- measured 2026-11-03 on `v · w` with `v: float[]`:
-// `rhs=sum_t,add_tensor_t,matmul_t` resolved and then
-// `transpose: transpose requires a tensor of rank >= 2`, a fault naming `transpose` and not the law
-// that asked it for one. With `T[?, k]` and `T[k, ?]` the vector form finds no rule at all, so the
-// walk refuses the *operator* by name, with the reason:
+//   * `a` a vector, `b` a matrix: `bᵀ` is (n, k) and both the cotangent of the answer (n) and `a` (k)
+//     spread into that shape from the right -- `sum_to(ct, bᵀ) * sum_to(a, bᵀ)` is (n, k) with
+//     `ct[i] * a[j]` in it, and the transpose of it is the (k, n) outer product `a ⊗ ct` that goes
+//     back to `b`. The shape is `bᵀ`'s own, read from a known operand; no extent is reconstructed.
+//   * `a` a matrix, `b` a vector: `a` is (m, k) and the cotangent of the answer (m) spreads along its
+//     leading axis while `b` (k) spreads along its last -- `sum_to(ct, a) * sum_to(b, a)` is `ct ⊗ b`.
 //
-//     skip=rule-shape uri=tensor:matmul node=6 operands=2 reason=the rule takes
-//     (float[?, k], float[k, ?]), and the operator has (float[], float[2, 2])
+// Both are the same law `matmul` states, read at the rank the operands have; nothing here reads a
+// linear operand's value or asks for a count. What the matrix form needs is the reduction
+// `sum_to(matmul(ct, bᵀ), a)`: the identity when the shapes agree, and the sum over a batch axis the
+// day an operand carries one -- the reduction half of this law, written where it belongs rather than
+// left to the day a batch appears.
 //
-// Two extents are `?` and one is a name: only the shared one (`k`) relates the operands, and naming
-// the other two would be a name no second position writes -- which the language warns about
-// (`docs/design-principles.cn.md` 5.4) because a name that relates nothing reads as though it does.
-// The boundary therefore stands where the rule is written, and
-// `test/cases/compile/transforms/matmul_transpose_vector_operand.cml` pins the reading.
+// **The rank dispatch lives in the helpers, because a ruleset files one rule per operator and arity.**
+// A second `matmul(a, b)` rule is refused by name (`SemanticDiag::DuplicateRuleForOperator`, 0x03000205:
+// the transform would otherwise choose between them by the order they are written in), and a pattern
+// cannot name a set of ranks. The head of the instance is type variables for a second reason: the walk
+// hands a rule one type per value it can see -- the cotangent's element type, then each operand's own
+// type (`ruleCotangent`, `modules/transforms/transpose.cpp`) -- so a head that wrote `T[?, k], T[k, ?]`
+// would state *one* shape and be instantiated for all three numbers anyway. `mul_tensor_t` above is
+// `<T, X, W>` for the same reason. The shapes are therefore stated by the two cotangent helpers,
+// overloaded on the operands' ranks.
+//
+// What a helper must not do is build a shape: every one of them ends by reading its answer at the
+// *known* operand -- `sum_to(..., a)` or `sum_to(..., b)` -- so the extents come from a value the cut
+// already carries and a shape is never reconstructed from a count (design principles 5.4, and the
+// author's 11:10 note: a shape may be taken from an operand, never read off the linear operand).
+// `sum_to` is also where the reduction half of this law lives: for two matrices the call is the
+// identity, and it becomes the sum over a batch axis the day an operand has one.
+//
+// **What is outside the law stops in the helpers, and the walk has a word for it.** Rank three and
+// above, and the vector-vector product whose answer is a number, have no overload; the law is chosen,
+// its own body has nothing for these operands, and the walk refuses that by name -- the law, the
+// operator and the ranks:
+//
+//     skip=rule-ranks uri=tensor:matmul rule=matmul_t node=6 position=0 ranks=(3, 2) operands=2
+//     reason=No matching function found for argument types: <> (float[..], float[3, 2, 2], float[2, 2]).
+//
+// `rule-ranks` is not `rule-shape`, and the two must not be merged: `rule-shape` means the law's
+// *pattern* rejected the operand types and nothing was built, which is where this reading stood while
+// the law named its ranks in the pattern (commit `5a2fed990`, when one pattern could serve only one
+// shape). A reader fixes those two differently -- widen the pattern, or write the missing shape's law
+// -- so they are two words. Until 2026-11-03 the second arrived as `skip=cotangent-needs-a-value`
+// carrying this expansion's own sentence, which named a helper instead of the law and said nothing
+// about a rank; both sentences below are pinned by
+// `test/cases/compile/transforms/matmul_transpose_rank_three.cml`, and the day a batch axis is served
+// that case fails and names what replaced them.
 //
 // The two matrices are also what makes the law checkable: the model it was written for multiplies a
-// batch by a weight, both two-dimensional (`test/cases/compile/transforms/matmul_transpose_law.cml`).
-export rule matmul_t::<T>(a: T[?, k], b: T[k, ?]) when is_float::<T>() {
-    matmul(a, b) => (ct: T[?, ?]) => (matmul(ct, transpose(b)), matmul(transpose(a), ct))
+// batch by a weight, both two-dimensional (`test/cases/compile/transforms/matmul_transpose_law.cml`),
+// and the vector lanes are read in `matmul_transpose_vector_lhs.cml` and
+// `matmul_transpose_vector_rhs.cml`.
+
+/// The cotangent of the left operand, both operands matrices: `ct · bᵀ`, read at `a`'s shape.
+func ct_of_a(ct: float[..], a: float[?, ?], b: float[?, ?]): float[?, ?] {
+    return sum_to(matmul(ct, transpose(b)), a)
+}
+
+/// The cotangent of the left operand when it is a row: `ct · bᵀ` is already its own shape.
+func ct_of_a(ct: float[..], a: float[?], b: float[?, ?]): float[?] {
+    return sum_to(matmul(ct, transpose(b)), a)
+}
+
+/// The cotangent of the left operand when the right one is a column: the outer product `ct ⊗ b`,
+/// which is `a`'s shape, read off `a` itself.
+func ct_of_a(ct: float[..], a: float[?, ?], b: float[?]): float[?, ?] {
+    return sum_to(ct, a) * sum_to(b, a)
+}
+
+/// The cotangent of the right operand, both matrices: `aᵀ · ct`, read at `b`'s shape.
+func ct_of_b(ct: float[..], a: float[?, ?], b: float[?, ?]): float[?, ?] {
+    return sum_to(matmul(transpose(a), ct), b)
+}
+
+/// The cotangent of the right operand when the left one is a row: the outer product `a ⊗ ct`, built
+/// in `bᵀ`'s lanes and turned round, because a row's cotangent is where the missing axis is.
+func ct_of_b(ct: float[..], a: float[?], b: float[?, ?]): float[?, ?] {
+    return sum_to(transpose(sum_to(ct, transpose(b)) * sum_to(a, transpose(b))), b)
+}
+
+/// The cotangent of the right operand when it is a column: `aᵀ · ct` is already its own shape.
+func ct_of_b(ct: float[..], a: float[?, ?], b: float[?]): float[?] {
+    return sum_to(matmul(transpose(a), ct), b)
+}
+
+// The head takes three type parameters because the walk hands a rule one type per value it can see:
+// the cotangent's element type first, then the operands' own types (`modules/transforms/transpose.cpp`
+// `ruleCotangent`). `mul_tensor_t` above is written `<T, X, W>` for the same reason. `A` and `B` are
+// the operand types whole -- their ranks live in them, which is what the helpers above dispatch on --
+// and `T` is only the element type every cotangent here has.
+export rule matmul_t::<T, A, B>(a: A, b: B) when is_float::<T>() {
+    matmul(a, b) => (ct: T[..]) => (ct_of_a(ct, a, b), ct_of_b(ct, a, b))
 }
 // ---- the transpose rules of the reductions and the layout ----
 //
