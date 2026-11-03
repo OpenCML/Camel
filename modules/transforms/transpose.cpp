@@ -560,7 +560,8 @@ FunctionType *transposeSignature(
 /// no graph, not a static reference of this graph). Before this, that shape refuses with
 /// `skip=call callee=none`, which is what the transform did before this entry existed -- the A/B of
 /// `transpose_function_value_no_capture.cml` flips exactly this. a value with no capture names its
-/// graph and transposes; a closure names its graph too, and then fails later, on the capture. (The`r`n/// switch that guarded this is gone; the entry it guarded is the one the cases read.)
+/// graph and transposes; a closure names its graph too, and then fails later, on the capture. (The
+/// switch that guarded this is gone; the entry it guarded is the one the cases read.)
 
 /// What the graphs of one transpose share: one group (a callee's transpose is another member of
 /// it, exactly as `jvp` lifts one graph per callee) and the callees already transposed, so that
