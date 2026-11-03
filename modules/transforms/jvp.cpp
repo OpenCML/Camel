@@ -19,9 +19,11 @@
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph_txn.h"
+#include "camel/utils/type.h"
 
 #include <algorithm>
 #include <array>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -510,9 +512,17 @@ bool liftGraph(
         auto &draft       = transaction.edit();
         draft.setFuncType(signature);
         // The tangent a constant or an effect's result gets: the zero of the value's own type. One
-        // node per type, because every rule of that type shares it. Written for the two types whose
-        // slot is a machine double or float; a narrower float has no zero here yet, and gets none --
-        // a refusal downstream instead of a zero of the wrong type.
+        // node per type, because every rule of that type shares it.
+        //
+        // *Which* types have a zero is `tangentSpaceOf`'s answer, not a list written here: a
+        // floating scalar is `Self` and its zero is one machine number, and an array of them is
+        // `Self` too -- its zero is an array of the same shape with every element zero. Both are
+        // the same question asked once (design principles 9.9), and a constant of array type is
+        // not an edge case: `f(x) = sum(reshape<[2, 2]>(x) * [[1, 2], [3, 4]])` puts a `float[2, 2]`
+        // constant where a rule over an array operand reads it, and a rule is handed the tangent of
+        // every operand whose type has one. Answering no zero for it stopped the lift at the first
+        // constant it met (`skip=body`), which says nothing about the constant and everything about
+        // this gap.
         std::unordered_map<const Type *, gc_node_ref_t> zeroConstants;
         const auto zeroConstantFor = [&draft, &zeroConstants](Type *type) -> gc_node_ref_t {
             const auto at = zeroConstants.find(type);
@@ -529,6 +539,36 @@ bool liftGraph(
                 made = draft.materializeStaticValue(
                     camel::core::rtdata::toSlot<float>(0.0f), type, rt::kGCNodeFlagConstant);
                 break;
+            case camel::core::type::TypeCode::Array: {
+                // The zero of an array is an array of the same shape with every element zero, and
+                // the shape is the type's own: a constant's type states it (`float[2, 2]`), and a
+                // shape the type does not fix is not one this transform can write a value for --
+                // it answers none, and the refusal downstream names the operator rather than
+                // inventing a zero of another shape.
+                const auto *arrayType = static_cast<const camel::core::type::ArrayType *>(type);
+                std::vector<int64_t> extents;
+                bool exact = arrayType->elemType() != nullptr &&
+                             camel::core::type::isFloatingScalar(arrayType->elemType()->code());
+                for (size_t i = 0; exact && i < arrayType->extents().size(); ++i) {
+                    const std::optional<int64_t> extent = arrayType->extents()[i].evaluate({});
+                    if (!extent.has_value()) {
+                        exact = false;
+                        break;
+                    }
+                    extents.push_back(*extent);
+                }
+                if (exact) {
+                    ::Array *zero = ::Array::create(
+                        mm::autoSpace(), arrayType, std::span<const int64_t>(extents),
+                        /*zeroInit=*/true);
+                    if (zero != nullptr) {
+                        made = draft.materializeStaticValue(
+                            camel::core::rtdata::toSlot<::Array *>(zero), type,
+                            rt::kGCNodeFlagConstant);
+                    }
+                }
+                break;
+            }
             default:
                 break;
             }
