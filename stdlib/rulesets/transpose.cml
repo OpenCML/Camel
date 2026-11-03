@@ -136,7 +136,7 @@ func mul_tensor::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
 /// The transpose of `x * w`: `ct * w` reduced to `x`'s shape for `x`, `ct * x` reduced to `w`'s
 /// shape for `w`. The reduction is the one `sum_to` names, so the law is written once for both
 /// shapes the operator is called with -- two arrays, and an array and a number.
-export rule mul_tensor_t::<T>(x: T[..], w: T[..]) when is_float::<T>() {
+export rule mul_tensor_t::<T, X, W>(x: X, w: W) {
     mul_tensor(x, w) => (ct: T[..]) => (sum_to(ct * w, x), sum_to(ct * x, w))
 }
 // ---- the transpose rules of the reductions and the layout ----
