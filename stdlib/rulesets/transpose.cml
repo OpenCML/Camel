@@ -38,7 +38,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { pick_at, exp, full, log_softmax, matmul, mean_axis_stated, numel, relu, sigmoid, subtract, sum, sum_stated, sum_to, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
+import { pick_at, erf, erfc, exp, full, gelu, linear, log_softmax, matmul, max, mean_axis_stated, min, numel, relu, sigmoid, subtract, sum, sum_stated, sum_to, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
@@ -524,3 +524,101 @@ export rule mean_axis_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
 }
 
 
+
+// ---- the transpose rules of the second tranche ----
+//
+// The backward half of the eight laws whose forward halves are at the end of `stdlib/rulesets/jvp.cml`.
+// Each is written against the engine's own rule, node for node where the engine's rule is a graph
+// and token for token where it is a kernel, because the two legs of one `grad` are compared bit for
+// bit. A law's right side may name a helper of this module (it is the answer, not a step the walk
+// transposes); the *forward* half may not, and its comments say why.
+
+/// The transpose of `erf`: `(ct * 2/sqrt(pi)) * exp(-x*x)`, which is `erfGrad`'s own grouping
+/// (`modules/tensor/kernels/gradient.cpp#erfGradArm`: `pg * kScale * exp(-px*px)`).
+///
+/// The forward rule chains its two products in the order this is the reverse of
+/// (`stdlib/rulesets/jvp.cml#jvp_erf`), so the cotangent reaches the exponential on the same side of
+/// the constant as the engine's does. Written `ct * (kScale * exp(...))` instead -- the same number
+/// on paper -- this law answers a different last place, which is what the case beside it measures.
+export rule erf_t::<T>(x: T[..]) when is_float::<T>() {
+    erf(x) => (ct: T[..]) => (ct * 1.1283791670955126) * exp((x * x) * -1.0)
+}
+
+/// The transpose of `erfc`: `erf`'s with the sign folded into the constant, which is where the
+/// engine puts it (`erfcVjp` is `erf_grad(x, neg(dy))`). `(ct * -k) * e` and `((-ct) * k) * e` are
+/// one value bit for bit, and the case beside this law reads the sign of every lane.
+export rule erfc_t::<T>(x: T[..]) when is_float::<T>() {
+    erfc(x) => (ct: T[..]) => (ct * -1.1283791670955126) * exp((x * x) * -1.0)
+}
+
+/// The transpose of `gelu`: `ct * gelu'(x)`, the slope recomputed from `x` alone -- the shape the
+/// cut carries (`exp_t`, `tanh_t`) -- and written in the kernel's token order
+/// (`modules/tensor/kernels/gradient.cpp#geluGradArm`, the f64 arm), with the tangent multiplied in
+/// once at the end. It is the tanh form's slope and not the `Phi` form's, so a reader who knows
+/// `gelu` from its `erf` definition still reads the number this tree computes.
+export rule gelu_t::<T>(x: T[..]) when is_float::<T>() {
+    gelu(x) => (ct: T[..]) => ct * (0.5 * (1.0 + tanh(0.7978845608028654 * (x + 0.044715 * x * x * x))) + 0.5 * x * (1.0 - tanh(0.7978845608028654 * (x + 0.044715 * x * x * x)) * tanh(0.7978845608028654 * (x + 0.044715 * x * x * x))) * 0.7978845608028654 * (1.0 + 3.0 * 0.044715 * x * x))
+}
+
+/// The transpose of `transpose`: the same swap again, because swapping the last two axes twice is
+/// the identity. The engine's rule is the same node (`transposeVjp`,
+/// `modules/tensor/ops/layout_ops.cpp`: `tensor:transpose` of the cotangent), and this law needs no
+/// shape, no extent and no operand: it is the one member of the tranche whose backward half reads
+/// nothing but its cotangent.
+export rule transpose_t::<T>(x: T[..]) when is_float::<T>() {
+    transpose(x) => (ct: T[..]) => transpose(ct)
+}
+
+/// The transpose of `where`: each branch takes the cotangent where it was selected and zero
+/// elsewhere, and the condition takes nothing -- a boolean is a choice, not a magnitude. The two
+/// nodes are the engine's own pair (`whereVjp`, `modules/tensor/ops/elementwise_ops.cpp`: the same
+/// `tensor:where` over the same condition and a static `0.0`), so this is not an equality of two
+/// arithmetics but the same graph.
+///
+/// **The right side answers one component per port, in the order the left side writes them, and the
+/// component asked for is the operand's position** -- `expandRuleRightSide` picks the tuple's
+/// `position`-th component (`modules/transforms/rule_expand.cpp`, "Position `i` is that tuple's
+/// i-th component"), where the position is a *port* of the node and not a count of the ports that
+/// happen to answer. So this law writes three components and the condition's is the first: it is
+/// never selected -- a `bool` has no tangent space, and the walk records it as the zero it is
+/// (`noteZero`) before any law is asked -- but leaving it out shifts the two answers that matter one
+/// place to the left. Measured, both ways: with **two** components the branch that was *not* taken
+/// took the cotangent (`where` answered `[1.0, 0.0, 0.0, 1.0]` for a mask of `[F, T, T, F]`) and the
+/// last port was refused with `position=2 reason=the rule's right side answers 2 name(s)`; with three
+/// where the first is a constant (`false`) the count was still 2 -- a constant component is not a
+/// `with` input of the tuple -- so the first component is written as the condition itself. Its slot
+/// is a shape, not an answer: the walk never asks for it.
+export rule where_t::<T>(c: bool[..], a: T[..], b: T[..]) when is_float::<T>() {
+    where(c, a, b) => (ct: T[..]) => (c, where(c, ct, 0.0), where(c, 0.0, ct))
+}
+
+/// The transpose of `max`: the cotangent of the extremum goes to every position that holds it, and
+/// the mask is the one the forward half builds (`xs >= max(xs)`, `stdlib/rulesets/jvp.cml#jvp_max`).
+///
+/// The engine spreads the same way (`extremumAllVjp`: `cast_like(strict_eq(x, broadcast(out)), dy)`
+/// times `broadcast_like(dy)`, `modules/tensor/ops/reduction_ops.cpp`), which for a scalar cotangent
+/// is `dy` at every selected position -- so a tie gives each tied position the whole cotangent on
+/// both sides, and `where(..., ct, 0.0)` with a scalar `ct` is that spread. Nothing here reads
+/// `xs`'s shape off the cotangent's operand: the mask's shape is `xs`'s own.
+export rule max_t::<T>(xs: T[..]) when is_float::<T>() {
+    max(xs) => (ct: T) => where(xs >= max(xs), ct, 0.0)
+}
+
+/// The transpose of `min`: `max`'s mirror, one comparison turned round, over the mask the forward
+/// half builds (`stdlib/rulesets/jvp.cml#jvp_min`).
+export rule min_t::<T>(xs: T[..]) when is_float::<T>() {
+    min(xs) => (ct: T) => where(xs <= min(xs), ct, 0.0)
+}
+
+/// The transpose of `linear`: `ct @ wᵀ` for `x` and `xᵀ @ ct` for `w`, each reduced to its own
+/// operand's shape with `sum_to` -- the two answers `matmul_t` already gives for `matmul`
+/// (`#ct_of_a`, `#ct_of_b`), one operator further out, and the pair the engine reaches through
+/// `tensor:matmul_grad_lhs` / `_rhs` (`modules/tensor/ops/linalg_ops.cpp#linearVjp`).
+///
+/// Both operands are read here and both are read from the *known* side: `x` and `w` are a call's
+/// parameters, which the cut carries, the same way `matmul_t` reads them. The head takes three type
+/// parameters for the reason that law's does -- the walk hands a rule the cotangent's element type
+/// and then each operand's own type.
+export rule linear_t::<T, A, B>(x: A, w: B) when is_float::<T>() {
+    linear(x, w) => (ct: T[..]) => (sum_to(matmul(ct, transpose(w)), x), sum_to(matmul(transpose(x), ct), w))
+}

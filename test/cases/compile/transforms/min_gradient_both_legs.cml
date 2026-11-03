@@ -1,0 +1,38 @@
+// `min`'s gradient through the engine and through the library, in one program.
+//
+// `min` is `max`'s mirror with one comparison turned round: `where(xs <= min(xs), ct, 0.0)` over
+// `xs`'s shape. The engine's rule is the same one for both extrema (`extremumAllVjp`,
+// `modules/tensor/ops/reduction_ops.cpp`, which selects with `strict_eq` either way), so the two
+// readings of this case are the same two readings the `max` case takes, on an input whose minimum is
+// **not** the value `max` would select: a law that had been copied from the sibling without its
+// comparison would answer zeros everywhere here and ones everywhere there, which is a louder failure
+// than a wrong magnitude.
+//
+// The tie is again the reading: `x = [2.0, -1.0, 4.0, -1.0]` has two minima, and both positions
+// take the whole cotangent -- not half of it, and not the first one alone.
+//
+//     camel test/cases/compile/transforms/min_gradient_both_legs.cml
+import { grad } from autodiff
+import { vjp } from vjp
+import { abs, min, sum } from tensor
+
+/// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
+with <x: float[..]>
+func total(): float {
+    return min(x)
+}
+
+/// The library's spelling: the same function with the value as an ordinary parameter.
+func total_plain(x: float[]): float {
+    return min(x)
+}
+
+func main(): int sync {
+    let engine = grad(total)<[2.0, -1.0, 4.0, -1.0] as float[]>()
+    `min engine={}`->format<engine>->println
+    let (value, pullback) = vjp(total_plain)([2.0, -1.0, 4.0, -1.0] as float[])
+    let library = pullback(1.0).0
+    let same = sum(abs(engine - library)) == 0.0
+    `min: value={} engine={} library={} same={}`->format<value, engine, library, same>->println
+    return 0
+}

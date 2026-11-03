@@ -1,0 +1,57 @@
+// `gelu`'s gradient through the engine and through the library, in one program.
+//
+// `gelu`'s value is the tanh form, `0.5 * x * (1 + tanh(u))` with `u = kScale * (x + kCubic * x^3)`,
+// and its slope is what falls out of that expression rather than the `Phi` form a reader may know:
+//
+//     t     = tanh(u)
+//     slope = 0.5 * (1 + t) + 0.5 * x * (1 - t*t) * kScale * (1 + 3 * kCubic * x * x)
+//
+// The engine's f64 arm (`modules/tensor/kernels/gradient.cpp#geluGradArm`) computes exactly those
+// tokens in exactly that order and multiplies the cotangent in once, at the end:
+// `po[i] = pg[i] * slope`. So the law states `slope` (a value of `x` alone, carried across the cut)
+// and multiplies the tangent by it, and the two legs agree in every bit -- the alternative form
+// `0.5 * (1 + erf(x / sqrt(2))) + x * exp(-x*x/2) / sqrt(2*pi)` is the same number on paper and a
+// different one in the last place, and it is not what this case measures.
+//
+// The three factors of the second term are grouped left to right (`((0.5*x * (1-t*t)) * kScale) *
+// (1 + 3*kCubic*x*x)`), which is C++'s and Camel's association alike, and `t` is recomputed where
+// it appears because a law's right side is one straight line and binds no local.
+//
+// **The shape is stated, and that is not decoration.** The library half of this program takes
+// `float[4]`: `mul_tensor_t`'s answer reduces the cotangent to its operand's shape with `sum_to`,
+// and a shape is a value the transposed function only has when the parameter's *type* states it.
+// Measured on this tree with `float[..]` instead: the engine leg prints its array and the library
+// leg stops at
+//
+//     skip=cotangent-needs-a-value uri=tensor:multiply position=0 reason=the rule's right side reads a value the caller does not carry
+//
+// -- the same wall `exp`, `sigmoid`, `tanh` and `relu` meet on this tree today
+// (`exp_gradient_through_the_library` and its three neighbours pin it, and the reason is the same in
+// all four: a slope the tangent multiplies by is a value the backward half has to be handed). A
+// parameter whose shape the type states is answered from the type, so the law is the whole law.
+//
+//     camel test/cases/compile/transforms/gelu_gradient_both_legs.cml
+import { grad } from autodiff
+import { vjp } from vjp
+import { abs, gelu, sum } from tensor
+
+/// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
+with <x: float[..]>
+func total(): float {
+    return sum(gelu(x))
+}
+
+/// The library's spelling: the same function with the value as an ordinary parameter.
+func total_plain(x: float[4]): float {
+    return sum(gelu(x))
+}
+
+func main(): int sync {
+    let engine = grad(total)<[0.75, -1.5, 2.0, -0.25] as float[]>()
+    `gelu engine={}`->format<engine>->println
+    let (_, pullback) = vjp(total_plain)([0.75, -1.5, 2.0, -0.25] as float[4])
+    let library = pullback(1.0).0
+    let same = sum(abs(engine - library)) == 0.0
+    `gelu: engine={} library={} same={}`->format<engine, library, same>->println
+    return 0
+}
