@@ -1,0 +1,54 @@
+/**
+ * A weight that is an *ordinary parameter of a lambda* keeps its direction when the lifted body
+ * calls a function that reads it through a `with` parameter (design principles 9.9).
+ *
+ * `vjp` differentiates the ordinary parameters only, so the weight of a `with`-parameterised
+ * function is moved onto one with a lambda -- `f = (ww) => weighted<ww>(2.0)` -- and the library's
+ * `vjp` is `transpose(split(jvp(f)))`. The lift of `f` reaches a *call* of `weighted`, whose `with`
+ * argument is the lambda's own parameter `ww`, and that parameter is a value the lifted body carries
+ * a direction for. Before 2026-11-04 the lifted call handed `jvp_of_weighted` the *value* of `ww`
+ * and the zero the old signature left it to write for the direction: `weighted`'s lifted chain was
+ * constant in the weight, its `lin` was zero, and the composition answered `value=9.0 grad=0.0`
+ * where the engine answers 3.0 -- a wrong number, not a refusal, which is why it is pinned here
+ * rather than left to a comment.
+ *
+ * The second line is the other half of the same list. A lifted call's arguments are `(..values,
+ * ..their tangents)` (`jvpSignature`, author 2026-11-03), and the lift used to write each value
+ * beside its own tangent as it walked the call's inputs: `(v1, d1, v2, d2)` into a callee that
+ * reads `(v1, v2, d1, d2)`. One parameter hid it -- the two orders agree -- and two parameters did
+ * not: `split` reads the seam at `count / 2` and refused with "the value half reads the tangent of
+ * parameter 0, which the forward half does not take". `mulxy` has two parameters, and the numbers
+ * below are the ones the products give by hand: `mulxy(3.0, 2.0) = 6.0`, `d/dx = y = 2.0`.
+ *
+ * Every number is read from the library's own composition, next to the engine's for the first one,
+ * so a regression answers a different line and not merely a different digit.
+ */
+
+import { grad } from autodiff
+import { vjp } from vjp
+
+// d/dx (x*y + x) = y + 1 = 3.0 at x = 3.0, y = 2.0.
+with <x: float>
+func weighted(y: float): float {
+    return x * y + x
+}
+
+func mulxy(x: float, y: float): float {
+    return x * y
+}
+
+func main(): int sync {
+    // The engine's leg, for the same number.
+    let engine = grad(weighted)<3.0>(2.0)
+
+    // The library's leg: the weight on an ordinary parameter of a lambda.
+    let (value, pullback) = vjp((ww: float): float => weighted<ww>(2.0))(3.0)
+    let library = pullback(1.0).0
+    'weighted engine={} value={} grad={}'->format<engine, value, library>->println
+
+    // A call of a two-parameter function inside a lifted body.
+    let (twoValue, twoPullback) = vjp((rr: float): float => mulxy(rr, 2.0))(3.0)
+    let twoGradient = twoPullback(1.0).0
+    'twoparam value={} grad={}'->format<twoValue, twoGradient>->println
+    return 0
+}
