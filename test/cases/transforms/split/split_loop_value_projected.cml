@@ -1,0 +1,47 @@
+// `split` through a loop the exit reads *into* (design 4.2, design principles 3.10 and 9.9).
+//
+//     f(s) = loop x = s for k in [1.0, 10.0] do [x[1], x[0] + x[1] * k]
+//     g(s) = f(s)[1]
+//
+// `jvp` gives the LOOP node the pair type, so the exit of `jvp(f)` *is* the loop and its two
+// components are the pair (`split_loop_taped_rounds` cuts that shape). Reading one component of the
+// result is a different exit: the pair on this graph's exit is a tuple fill whose two members are
+// `x[1]` of the loop's component 0 and `x[1]` of its component 1. The loop cell is then not the exit
+// but one node inside the chain the exit reads, and the cut has to copy that chain into each half --
+// with the cell's projection seeded at its foot, so no body region is copied at all.
+//
+// The two halves are the linearization as always: the forward half answers the value, `lin` answers
+// the tangent the program's own seed picks out. At s = (1, 2):
+//
+//     primal:  (1, 2) -> (2, 3) -> (3, 32)                  -> y[1] = 32
+//
+// and the per-round map is `M_k = [[0, 1], [1, k]]`, so `M = M_10 * M_1 = [[1, 1], [10, 11]]` and
+// row 1 answers `dx0 + 11*dx1`:
+//
+//     lin([1, 0]) = 10     lin([0, 1]) = 11
+//
+// Both numbers are the transpose row the pullback needs (`vjp_loop.rounds_are_undone_in_reverse`
+// works backwards from here and prints the other two, (1.0, 1.0)). What this case pins on its own is
+// that the cut *builds* -- and that the chain above the loop is on both sides of it: a half that
+// answered the whole state (3.0, 32.0) instead of the projection would print a pair here, and a
+// chain copied into the forward half only would make `lin` refuse or answer the state's tangent.
+//
+// `split` on its own, without `transpose`: the pullback over this exit is refused one step later,
+// at the call above the loop (`grad_array_*` names that wall), so this case holds the cut to what the
+// cut owes and nothing more.
+import rulesets.jvp
+import { jvp, split } from transforms
+
+func g(s: float[]): float {
+    let y = loop x = s for k in [1.0, 10.0] do [x[1], x[0] + x[1] * k]
+    return y[1]
+}
+
+func main(): int sync {
+    let fwd = split(jvp(g))
+    let (value, lin) = fwd([1.0, 2.0])
+    println("proj y=", value)
+    println("proj d1=", lin([1.0, 0.0]))
+    println("proj d2=", lin([0.0, 1.0]))
+    return 0
+}
