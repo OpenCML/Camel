@@ -82,5 +82,5 @@ if (entry.test.__knownFail) {
 ## ⑦ 读数
 
 - runner 自检：`node test/tools/selftest/run.mjs` → `runner self-test ok`（它按名字钉着 `marked known_fail on 'prl' but passes: remove the mark`，所以有后端的措辞一个字没动，只有"没有后端"那条换了不带冒号的句子——带冒号会被 `printDetailLines` 当成"标签: 值"拆成两列打印）。
-- 全量 `-Plan all -Tier fast`：`[SUMMARY] total: 8442, pass: 8426, fail: 0, skip: 10, known failures: 6`、`RUN_EXIT=0`（`lane-a3`，含 `develop` 20860eb01 那 30 笔）。**`known failures: 6` 正好是 ④ 那 6 条**；这次从 3 涨到 6 不是这一笔造成的，而是同一遍里新编进来的 `transforms` 模块让 33 条原先 skip 的用例真的跑起来（`skip 43 → 10`），它们原来没跑到，标记也就没有机会生效。
+- 全量 `-Plan all -Tier fast`：`[SUMMARY] total: 8442, pass: 8426, fail: 0, skip: 10, known failures: 6`、`RUN_EXIT=0`（`ea5d5de70`，原 `lane-a3`，该分支已删；含 `develop` 20860eb01 那 30 笔）。**`known failures: 6` 正好是 ④ 那 6 条**；这次从 3 涨到 6 不是这一笔造成的，而是同一遍里新编进来的 `transforms` 模块让 33 条原先 skip 的用例真的跑起来（`skip 43 → 10`），它们原来没跑到，标记也就没有机会生效。
 - 探针文件跑完即删，工作树里没有留下 `_kf_*.plan.toml`。
