@@ -1,0 +1,32 @@
+/**
+ * `softmax`'s axis is written in angle brackets, and the JVP of it is a rule.
+ *
+ * `softmax<axis>(x)` states its axis in `<>` for the same reason `reshape<shape>(x)` states its
+ * shape: the axis decides which function this is (design principles 4.4). One node, two ports --
+ * the value and the axis -- and one data operand, so `jvp_softmax` names both ports and only the
+ * first is a value a tangent is paired with.
+ *
+ * This is its own file for the reason given in `rules_angle_args_reshape.cml`: while the three
+ * readings shared one `main`, the transposed walk of `mean_axis` stopped the program and this
+ * correct number was recorded as part of a red one.
+ *
+ * The number is derived by hand, not read off a run:
+ *
+ *   softmax  f(x) = sum(softmax<1>(x) * [1, 2]) on x = [[1, 1]]
+ *            y = [0.5, 0.5], so f = 0.5 + 1.0 = 1.5, and along dx = [[1, 0]] the tangent is
+ *            y * (dx - y.dx) = [0.25, -0.25], so f' = 0.25 * 1 - 0.25 * 2 = -0.25.
+ */
+import rulesets.jvp
+import { jvp } from transforms
+import { softmax, sum } from tensor
+
+func loss_softmax(x: float[..]): float {
+    return float(sum(softmax<1>(x) * ([1.0, 2.0] as float[])))
+}
+
+func main(): int sync {
+    let (softmaxValue, softmaxTangent) =
+        jvp(loss_softmax)([[1.0, 1.0]] as float[1, 2], [[1.0, 0.0]] as float[1, 2])
+    'rules_angle_args softmax value={} tangent={}'->format<softmaxValue, softmaxTangent>->println
+    return 0
+}
