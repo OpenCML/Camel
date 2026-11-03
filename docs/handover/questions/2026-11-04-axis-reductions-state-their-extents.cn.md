@@ -45,39 +45,20 @@ return tensorOf(dtype, reduceShape(in.shape, ctx.constInt(1), keepDims));
 
 **声明为什么只能写 `T[..]`**：结果的外延取决于 `axis` 和 `keepdims` 的**值**，而声明的结果是一个**类型**，不是两个值的函数。`stdlib/tensor.cml` 自己的头注释早写过这句话："What a declaration still cannot state is a signature that depends on a *value* argument."
 
-3. **两条 `mean_axis_transpose` 不可能在我这棵树上转正，缺的那一半在 `lane-extentof` 手里。** 今天它的拒绝是 `skip=rule uri=tensor:sum reason=unbound`：`stdlib/rulesets/transpose.cml` 里没有一条 `sum` 的反向律（`sumshape` 那轮把 `sum_t` 换成了 `*_stated` 双胞胎）。`lane-extentof` 的 `sum_from_type_t::<T, X, A>(t: X, at: A)` 就是补这一条的律，而 `A` 这个类型参数要绑定的是 `extent_of::<X>()` 物化出来的 `int[]`——**`X` 必须带 extents，否则那条律拿到的是 `float[..]`，`extent_of` 无从下手**。所以两件事是一对：**律在人家车里，extents 在我车里**。我在 `D:\Projects\Camel-wt\statetypes-extentof` 那棵一次性验证树上同时叠了 `lane-extentof` 与我这棵树，实跑结果见第 1.1 节；**这两条不在我这棵树上，我不撤它们的 `known_fail` 标记**。
+3. **两条 `mean_axis_transpose` 不可能在我这棵树上转正，缺的那一半在 `lane-extentof` 手里。** 今天它的拒绝是 `skip=rule uri=tensor:sum reason=unbound`：`stdlib/rulesets/transpose.cml` 里没有一条 `sum` 的反向律（`sumshape` 那轮把 `sum_t` 换成了 `*_stated` 双胞胎）。`lane-extentof` 的 `sum_from_type_t::<T, X, A>(t: X, at: A)` 就是补这一条的律，而 `A` 这个类型参数要绑定的是 `extent_of::<X>()` 物化出来的 `int[]`——**`X` 必须带 extents，否则那条律拿到的是 `float[..]`，`extent_of` 无从下手**。所以两件事是一对：**律在人家车里，extents 在我车里**。我在 `D:\Projects\Camel-wt\statetypes-joint` 那棵一次性验证树上（分支 `probe-joint`，从 `719fc2baf` 起，把我的改动 `git apply --3way` 上去，**未提交**）叠了两边，实跑读数：两条 `mean_axis_transpose` 从 `skip=rule uri=tensor:sum reason=unbound` **前进到** `skip=rule-ranks uri=tensor:multiply rule=mul_tensor_t ranks=(1, 1)`，理由是 `argument types: <> (float[3][..], float[]); operator '*' is not defined for these operand types`——`extent_of` 那条路已经把 `mean_axis` 的 `float[3]` 读到了，卡点从"没有律"变成了"`mul_tensor_t` 的余切端口吃嵌套的 `float[3][..]`，而右侧是 `float[]`"（这条读数已交回给改 `mul_tensor_t` 的那条车）。**这两条不在我这棵树上，我不撤它们的 `known_fail` 标记**。
 
-### 1.1 这一刀切下去露出来的一个洞：秩 0 的余切被当成数组读（SIGSEGV）
+### 1.1 这一刀切下去露出来的一个洞：秩 0 的余切被当成指针读
 
-带上诚实类型之后，`vjp` 一条"秩 1 张量上归约唯一那根轴"的函数会**稳定段错误**（8/8 次，rc=139），gdb 的帧是：
+带上诚实类型之后，`vjp` 一条"秩 1 张量上归约唯一那根轴"的函数会**稳定段错误（8/8，rc=139，gdb 帧在 `modules/tensor/ops/gradient_ops.cpp#numelKernel`）**：`mean_axis(x, 0, false)` 在秩 1 上答的是**那个元素**（`float`），而 `stdlib/rulesets/transpose.cml#mean_axis_stated_t` 的余切端口写的是 `(ct: float[..])`，`mean_axis_cotangent` 头一句就是 `numel(ct)`——槽里是 double，类型说是数组，于是 double 的位被当 `Array *` 读。
 
-```
-Program received signal SIGSEGV
-#0  camel::tensor::ops::(anonymous namespace)::numelKernel(ArgsView&, ArgsView&, ...)   tensor.cmo
-#1  NodeVMSchedPass::evalNativeOperator(...)
-...
-TRANSPOSE function=split_of_jvp_of_total_backward graph=346 type=(float) => (float[],) rhs=mean_axis_stated_t
-```
+**这条单独一页，因为它是今晚最坏的一类不一致（崩），而且那张表比这两条 known_fail 值钱**：[`2026-11-04-a-rank-zero-cotangent-is-read-as-a-pointer`](2026-11-04-a-rank-zero-cotangent-is-read-as-a-pointer.cn.md)。那一页有最小程序、8/8 怎么数的、gdb 帧原文、**为什么 `sum_stated_t` 同情形不炸（端口写的是 `(ct: T)`，差的就是"先当元素用还是先当数组用"）**，以及六个"现在会写形状"的算子逐算子的端口秩 vs 结果秩自查表。
 
-原因是一条反向律的端口类型和诚实类型对不上：`stdlib/rulesets/transpose.cml#mean_axis_stated_t` 写的是
-
-```
-mean_axis_stated(t, at) => (ct: float[..]) => mean_axis_cotangent(ct, at)
-```
-
-`ct: float[..]` 是**数组**。而 `mean_axis(x, 0, false)` 在秩 1 上的答案是**那个元素**（`float`，5.4：秩零数组就是它的元素）。值是 double，类型说是指针：`mean_axis_cotangent` 里的 `numel(ct)` 于是把 double 的位当成 `Array*` 读，段在 `numelKernel`。改前不炸，只因为改前 `mean_axis` 的类型是 `T[..]`——**数组**，`wrap` 就把它保持成秩零数组，谁都没读错。**所以这不是我改坏的地方，是我把一处"类型和值靠 `T[..]` 勉强对齐"的地方挪开了，露出来的洞。**
-
-真正的修法在律那一侧（`stdlib/rulesets/transpose.cml`，这条车道的 Forbid 清单里）：`ct` 的端口应当写成元素类型（`ct: T` 或 `X`），`mean_axis_cotangent` 的第一句改成能接元素的形式（或在律里显式 `full`/`reshape` 成 `[1]`）。对照 `sum_stated_t` 那条同样的律它是不炸的——因为 `sum(x)` 从 `stdlib/signatures` 一路就是 `T`（元素），它的 `spread_over::<T>(ct: T, at)` 收的就是元素，包装/解包在那一层是对的。**也就是说：同一个"余切是标量"的情形，一条律支持、一条律不支持，差别只在端口怎么写的。**
-
-**我这一轮怎么处理的**：`test/cases/compile/transforms/stated_mean_axis_gradient.cml` 改成 `sum(mean_axis(x, 0, true))`（保留那根轴，于是余切是 `float[1]` 而不是标量），读数一位不变（`value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]`），用例和 plan 的 `desc` 都写明了为什么保留、以及这条洞在哪。**我没有把 `mean_axis` 的类型退回 `T[..]` 去迁就那条律**——`T[..]` 是"不知道"，而这里知道。
-
-**这条要请作者裁的一句**（可以和上面那句一起答，也可以分开）：`mean_axis_stated_t` 的余切端口该不该改成元素类型？我默认**该改**（和 `sum_stated_t` 对齐），并且这一改应当落在 `lab/transpose` 或谁手里能动 `stdlib/rulesets/transpose.cml` 的那条车上；在那之前，秩 0 的轴归约做 `vjp` 会段错误，这是一个**今天就能复现的洞**，不是"暂不支持"。
-
+**我这一轮怎么处置的**：`test/cases/compile/transforms/stated_mean_axis_gradient.cml` 用 `sum(mean_axis(x, 0, true))`——**保留那根轴**，于是余切是 `float[1]` 而不是标量，读数一位不变（`value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]`）。**这是绕开，不是修好**：谁把那个 `keepdims` 去掉，谁就会崩。用例注释、plan 的 `desc`、以及上面那一页都写明了这一点。**我没有把 `mean_axis` 的类型退回 `T[..]` 去迁就那条律**——`T[..]` 是"不知道"，而这里知道。
 ## 2. 两条路
 
 | 路 | 做法 | 代价 |
 | --- | --- | --- |
-| **甲：退掉声明，交给推导** | 六个 `*_axis` 从 `kDeclaredOperators` 与 `stdlib/tensor.cml` 里去掉，改由 `OpRegistry::operatorGroups("tensor")` 导出；`reduceAxisDef` 的三个参数改成普通参数（`withAfterNorm = false`），这样括号写法直接落到推导；`stdlib/signatures/tensor.cml` 收下六条计算签名，`docs/stdlib-reference.md` 与 `docs/reference/camel-for-ai-stdlib-signatures.md` 用生成器重录 | **动到 `stdlib/tensor.cml`**（任务书 Allow 清单外、Forbid 清单内也没有）；六个名字的签名从"声明"变成"计算"，`docs/` 两个生成文件跟着变；`withAfterNorm` 从 true 变 false，`declareCallForm` 因此开始为这六个op 登记调用形状（`std::cml` 打印器因此从"拒绝"变成能写 `tensor::mean_axis(x, 0, false)`） |
+| **甲：退掉声明，交给推导** | 六个 `*_axis` 从 `kDeclaredOperators` 与 `stdlib/tensor.cml` 里去掉，改由 `OpRegistry::operatorGroups("tensor")` 导出；`reduceAxisDef` 的 `ordinaryParams` 写成**整张参数表**（`params.size()`），括号写法因此直接落到推导（`withAfterNorm` **保留 true**：pass 还按 `argmin<0, true>(rows)` 的角括号写法建同一个算子，两种写法都到达同一个 `infer`），并且 `registry.cpp#declareCallForm` 的判据从"有没有 `withAfterNorm`"改成"是不是每个参数都在括号里"，否则打印器拒绝按名字写这个算子；`stdlib/signatures/tensor.cml` 收下六条计算签名，`docs/stdlib-reference.md` 与 `docs/reference/camel-for-ai-stdlib-signatures.md` 用生成器重录 | **动到 `stdlib/tensor.cml`**（任务书 Allow 清单外、Forbid 清单内也没有）；六个名字的签名从"声明"变成"计算"，`docs/` 两个生成文件跟着变；`withAfterNorm` 从 true 变 false，`declareCallForm` 因此开始为这六个op 登记调用形状（`std::cml` 打印器因此从"拒绝"变成能写 `tensor::mean_axis(x, 0, false)`） |
 | **乙：留着声明，另开一条不声明同名算子的路** | 比如给 `mean_axis` 加一个带角括号的第二拼写 `mean_axis<axis, keepdims>(x)`，声明留 `T[..]`，新拼写走推导 | 两条拼写对同一个算子给两个结果类型（`mean_axis(x,0,false)` 是 `float[..]`、`mean_axis<0,false>(x)` 是 `float[3]`），正是 `--verify-ops` 那条"one operator, two signatures"要防的形状；而且程序要改写法，`rules_angle_args` 的用例文件也得改 |
 | **丙：什么都不动，把 `float[..]` 当终局** | 认下 `T[..]`，让 `extent_of` 那一路去猜 | 不行：`float[..]` 是"不知道"；靠猜长度就是任务书禁止的"看起来知道" |
 
