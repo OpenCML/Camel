@@ -1937,22 +1937,29 @@ GraphOrder orderOfGraph(const GCGraph &graph) {
     return result;
 }
 
-/// Whether the effect `ref` stands on something in `graph` (design principles 3.1): a read of its
-/// value -- a normal or `with` input of another node, or the graph's own result, which whoever runs
-/// the graph reads -- or a place in its block's chain. The chain is carried as two edge kinds while
-/// the migration runs (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the control one),
-/// so a place in it is a sync or control edge either way. The chain is read as edges, not as the
-/// `kGCNodeFlagSyncStatement` mark: a mark is anybody's to set (`markSyncStatement` in
-/// `passes/opt/generic/rewrite.h`), so it says someone believed the node is in a chain, not that
-/// anything holds it there (the mark was a credential until 2026-11-01; the author struck it).
+/// Whether the effect `ref` stands on something in `graph` (design principles 3.1). Three
+/// credentials, and only three:
 ///
-/// An order edge is not one of them: it orders two nodes that both run and makes neither of them run
-/// (edges.cn.md 1.5), so an effect whose only company is an order edge stands on nothing. Read this
-/// way, this predicate is what refuses such a graph -- `test::order_only_effect` builds one on
-/// purpose by stripping every other edge of an effect, and the refusal names what is missing.
+/// 1. **a read of its value** -- a normal or `with` input of another node;
+/// 2. **the graph's own result** -- whoever runs the graph reads it (`exit`, `output`, `return`);
+/// 3. **a place in its block's chain, measured as an edge** -- a sync or control edge to a node that
+///    runs after it. The migration carries the chain as both kinds at once
+///    (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the control one) and either one
+///    is the same fact while both exist.
 ///
-/// An effect with none of these is in the graph and in no chain: nothing makes it run, which is what
-/// a rewrite that removes its last reader and forgets to hand its place on leaves behind.
+/// Two things are **not** credentials, and used to be counted here:
+///
+/// - **the `kGCNodeFlagSyncStatement` tag.** A tag is a declaration, not a use: the builder and the
+///   splices set it on a node, and a rewrite that drops the node's place in the chain leaves the tag
+///   set. Counting it made "this statement is in a block" a fact a pass could keep while losing the
+///   edge that makes it true -- the credential outlived the thing it stands for;
+/// - **an order edge.** `order` joins statements of one block while the migration runs, but it is an
+///   order the *writer* put there, not a read: an effect whose only remaining edge is an order edge
+///   is one no chain makes run. That is exactly the case design principles 3.1 refuses, and the
+///   boundary check now refuses it too (P0-3).
+///
+/// An effect with none of the three is in the graph and in no chain: nothing makes it run, which is
+/// what a rewrite that removes its last reader and forgets to hand its place on leaves behind.
 bool effectStandsOnSomething(const GCGraph &graph, camel::runtime::gc_node_ref_t ref) {
     if (!graph.normUsersOf(ref).empty() || !graph.withUsersOf(ref).empty()) {
         return true;
@@ -2492,11 +2499,16 @@ EffectCredentialViolation effectCredentialViolation(
             std::string writtenAt = std::format("origin {}", violation.origin);
             if (violation.origin != 0 && context != nullptr && context->sourceContext() != nullptr) {
                 const auto range = context->sourceContext()->resolveOrigin(violation.origin);
-                writtenAt        = std::format(
+                // `Range::start` is 0-based (the same convention the compiler's own ranges use); a
+                // position written into a sentence for a reader is 1-based, the way the diagnostic's
+                // caret renders it. Writing the raw values here made one message say ":12:99" while
+                // its own caret pointed at "13:100" -- a reader following the sentence looks one line
+                // above the defect.
+                writtenAt = std::format(
                     "{}:{}:{}",
                     context->sourceContext()->pathForOrigin(violation.origin),
-                    range.start.line,
-                    range.start.character);
+                    range.start.line + 1,
+                    range.start.character + 1);
             }
             violation.text = std::format(
                 "graph '{}' has effect node {} ('{}') with neither a read of its value nor a place "
