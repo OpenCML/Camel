@@ -96,6 +96,52 @@ function resolveTarget(input) {
     return absolute
 }
 
+/**
+ * The targets that name no plan: a directory holding no plan file, which is what
+ * `test/plans/feat/docs_links` is (the plan's fixture directory; the plan file beside it is
+ * `docs_links.plan.toml` and the suffix-less shorthand above does not fire, because the
+ * directory exists). `--list` used to print such a directory and exit 0, which reads as "this
+ * is what the run would do" when the run would do nothing; the run path refuses the same target
+ * (test/tools/run-tests.mjs, `reachedNothing`) and the two entry points must not disagree about
+ * what a target means. A path that does not exist is left to the run path's ENOENT.
+ */
+function targetsHoldingNoPlan(targets) {
+    return targets.filter((target) => {
+        const absolute = path.resolve(target)
+        if (!fs.existsSync(absolute) || !fs.statSync(absolute).isDirectory()) return false
+        let plans = 0
+        const walk = (directory) => {
+            for (const name of fs.readdirSync(directory)) {
+                const entry = path.join(directory, name)
+                if (fs.statSync(entry).isDirectory()) walk(entry)
+                else if (name.endsWith('.plan.toml')) plans += 1
+            }
+        }
+        walk(absolute)
+        return plans === 0
+    })
+}
+
+/** The repository-relative spelling of a path, the way every other line the runner prints names one. */
+function relativeToRepo(target) {
+    return path.relative(REPO_ROOT, path.resolve(target)).replace(/\\/g, '/')
+}
+
+/**
+ * The one sentence a target that reaches no plan gets, shared in wording with the run path
+ * (test/tools/run-tests.mjs prints the same one to stdout). The self-test asserts both, so a
+ * rewording in one place cannot quietly leave the two entry points describing the same mistake
+ * differently.
+ */
+function noPlanSentence(target) {
+    const beside = `${path.resolve(target)}.plan.toml`
+    const hint = fs.existsSync(beside) ? `; the plan file beside it is ${relativeToRepo(beside)}` : ''
+    return (
+        `[PLAN ERROR] ${relativeToRepo(target)} holds no *.plan.toml, so this run would start ` +
+        `nothing${hint}. A target is a *.plan.toml or a directory that contains one.`
+    )
+}
+
 function parseArgs(argv) {
     const runnerArgs = []
     const targets = []
@@ -467,6 +513,15 @@ export function main(argv = process.argv.slice(2)) {
     if (options.list) {
         // `--changed --list`: the selection without the run. It is how a change's plan list is
         // checked (and recorded in a report) without paying for the plans.
+        // A target that holds no plan is refused here too, and with the same exit code the run
+        // path gives it: printing the directory and exit 0 would answer "what would this run?"
+        // with a path no plan is behind, and the two entry points would disagree about a target
+        // that means nothing.
+        const barren = targetsHoldingNoPlan(selection.targets)
+        if (barren.length > 0) {
+            for (const target of barren) console.log(noPlanSentence(target))
+            process.exit(2)
+        }
         for (const target of selection.targets) console.log(target)
         if (selection.targets.length === 0 && selection.layered.length === 0) {
             console.log('(the whole fast layer: smoke + feat)')

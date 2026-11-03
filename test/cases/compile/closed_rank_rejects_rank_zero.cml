@@ -1,0 +1,13 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// A parameter written `float[]` reads exactly the array it states: it does not take a number,
+// because `T[]` is one dimension and a number has rank zero (design principles 5.4).
+func first(t: float[]): float {
+    return t[0]
+}
+
+func main(): int sync {
+    println(`${first(6.0):.1f}`)
+    return 0
+}

@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：30 页
+## 现在在等作者：32 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -29,6 +29,8 @@
 | [`2026-11-03-should-vjp-carry-the-with-list-as-jvp-does`](2026-11-03-should-vjp-carry-the-with-list-as-jvp-does.cn.md) | `Vjp<F>` 该不该和 `Jvp<F>` 同形地带 `WithOf<F>`？ |
 | [`2026-11-03-the-capture-does-not-reach-the-body-is-not-the-whole-cause`](2026-11-03-the-capture-does-not-reach-the-body-is-not-the-whole-cause.cn.md) | 捕获"没进循环输入"不是全部原因：两条通道都实现了，错数一个也没动 |
 | [`2026-11-03-the-lifted-list-is-grouped-and-the-ports-must-follow`](2026-11-03-the-lifted-list-is-grouped-and-the-ports-must-follow.cn.md) | 抬升列表已定为 grouped、空切向占位；剩下的是建图里的端口次序 |
+| [`2026-11-03-the-remote-helper-loses-a-plans-stderr`](2026-11-03-the-remote-helper-loses-a-plans-stderr.cn.md) | 远程 helper 把 plan 的 stderr 整段丢掉了：这条修只活在本机，够不够？ |
+| [`2026-11-03-the-self-test-is-red-on-develop-and-has-no-name`](2026-11-03-the-self-test-is-red-on-develop-and-has-no-name.cn.md) | 自检在 develop 上是红的：`runner.backend_matrix` 里 7 个用例失败，这一红该由谁摘？ |
 | [`2026-11-03-the-silent-wrong-number-does-not-reproduce`](2026-11-03-the-silent-wrong-number-does-not-reproduce.cn.md) | 循环体里读外部标量的「静默错数」今天不可复现：它还算主线第一件吗？ |
 | [`2026-11-03-what-does-region-of-zero-answer-for-a-graph-without-regions`](2026-11-03-what-does-region-of-zero-answer-for-a-graph-without-regions.cn.md) | 一张没有区表的图，`region_of(0)` 该答真记录还是报错？ |
 | [`2026-11-03-what-does-taking-pure-nodes-off-the-chain-cost`](2026-11-03-what-does-taking-pure-nodes-off-the-chain-cost.cn.md) | 纯节点离开链位要付 59 条红和一条封存拒绝：P0-2 第二步还做吗？ |
