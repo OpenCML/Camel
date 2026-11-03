@@ -147,17 +147,26 @@ export rule jvp_neg::<T>(x: T) when is_float::<T>() {
 // (`include/camel/core/forward.h`). A rule with no binding and a binding with no rule are the two
 // halves that must land together, and here the rule is the binding.
 
-/// The tangent of `a · b` along `(da, db)`: `da · b + a · db`. The rule below is the only caller: the
-/// tangent of the product is the product of the tangents' terms, and it is written here rather than
-/// in `autodiff` because that module's generic helpers are one value's arithmetic, while this one
-/// takes two of them.
-func matmul_tangent::<T>(a: T[..], b: T[..], da: T[..], db: T[..]): T[..] when is_float::<T>() {
-    return matmul(da, b) + matmul(a, db)
-}
-
 /// `d(a · b) = da · b + a · db`, both operands' tangents in one right side.
+///
+/// The right side is written **inline** and not as a call to a helper, and that is a condition of the
+/// law being transposable at all: the pullback walks the driven graph and turns each node around, and
+/// a `Call` is a node it can only turn around when the callee is a function it can transpose
+/// (`skip=call-no-transpose`, `modules/transforms/transpose.cpp`). A helper taking both operands and
+/// both tangents -- `matmul_tangent(a, b, da, db)` was exactly that, and it is what this rule used to
+/// call -- has no transpose of its own: measured 2026-11-03, the walk answered
+/// `TRANSPOSE function=rulesets.jvp::matmul_tangent<float> skip=signature` and then
+/// `skip=call-no-transpose node=6 callee=rulesets.jvp::matmul_tangent<float>`, so a step whose loss
+/// multiplied two matrices could not be differentiated backwards even once the product's own adjoint
+/// was written (`rulesets.transpose#matmul_t`).
+///
+/// The element-wise product's rule is written the same way and for the same reason
+/// (`jvp_mul_tensor` below: `dx * w + x * dw`), while the scalar rules can call the `autodiff`
+/// helpers because those are one value's arithmetic and the walk transposes them. So the rule here is
+/// two products and one add, on the tangents and on the values, and every node it writes is one the
+/// transpose family files a law for.
 export rule jvp_matmul::<T>(a: T[..], b: T[..]) when is_float::<T>() {
-    matmul(a, b) => (da: T[..], db: T[..]) => matmul_tangent(a, b, da, db)
+    matmul(a, b) => (da: T[..], db: T[..]) => matmul(da, b) + matmul(a, db)
 }
 
 // ---- the forward rules of the reductions and the layout ----

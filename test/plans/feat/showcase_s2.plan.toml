@@ -115,3 +115,35 @@ expect_stdout_contains = ["transforms: split does not build this function", "the
 expect_stderr_contains = ["REINTERP split function=jvp_of_", "skip=forward construct=a port uri=- why=the port is not a parameter of the graph, so neither half takes it"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+
+# The matrix product's transpose law (`stdlib/rulesets/transpose.cml#matmul_t`), read the way the step
+# reads it: `vjp`, both operands ordinary parameters, the same literals as the forward case above.
+#
+# This is the law that stood behind the second wall, one operator earlier than the report named it: a
+# step's `vjp` meets the product before it meets `mul_t`, because `d(a·b)` has to go backwards through
+# `matmul` first. Writing it needed three things that are not obvious from the law itself, and all
+# three are measured in the case's own comments: the forward rule had to stop calling a helper
+# (`skip=call-no-transpose` on `rulesets.jvp::matmul_tangent`), the cotangent of the subtracted target
+# needed the array subtract's adjoint (`skip=rule uri=tensor:subtract reason=unbound`), and the two
+# products the law writes were already there.
+#
+# Two legs, so that the law is the only thing under measurement in the first: a product under a sum,
+# and the whole step. Both answer the hand calculation and the engine's `with_grad` element by
+# element, `max_abs_diff = 0.0`:
+#
+#     sum(x@w) = 9.75        dL/dx = [[0.75, 1.125], [0.75, 1.125]]        dL/dw = [[4, 4], [6, 6]]
+#     step     = 10.34375    dL/dx = [[0.9375, 2.34375], [1.4375, 3.875]]
+#                            dL/dt = [[-0.75, -2.25], [-1.0, -3.75]]        dL/dw = [[3.75, 13.5], [5.5, 19.5]]
+#
+# Every element is exact in binary floating point, so these assertions are exact and not a tolerance.
+[[tests]]
+name = "matmul_t.law_read_through_vjp.nvm"
+desc = "The product's transpose law, read through `vjp`: a product under a sum and the whole step answer dL/dw [[3.75, 13.5], [5.5, 19.5]] at loss 10.34375, element by element against the hand calculation and the engine's `with_grad`, max_abs_diff 0.0. The step's values are ordinary parameters here so that the law is the only thing under measurement; the captured form is the entry above, which still stops at `split`"
+kind = "behavior"
+case = "../../cases/compile/transforms/matmul_transpose_law.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["matmul_t sum_prod value=9.75 dL/dx=[[0.75, 1.125], [0.75, 1.125]] dL/dw=[[4.0, 4.0], [6.0, 6.0]]", "matmul_t step value=10.34375 dL/dx=[[0.9375, 2.34375], [1.4375, 3.875]] dL/dt=[[-0.75, -2.25], [-1.0, -3.75]] dL/dw=[[3.75, 13.5], [5.5, 19.5]]", "matmul_t engine value=10.34375 dL/dw=[[3.75, 13.5], [5.5, 19.5]]", "matmul_t max_abs_diff_library_vs_engine w=0.000000000000e+00 value=0.000000000000e+00"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
