@@ -43,7 +43,7 @@
 | `pow`（`^`） | ✓ | **✗**（实测 `skip=rule uri=math:pow_d reason=unbound`） | ✓ `jvp_pow` |
 | `relu` | ✓ | **✓** `relu_t`（2026-11-03 补齐，见下） | **✓** `jvp_relu` |
 | `reshape` | ✓ | **✗** | ✓ |
-| `softmax` | ✓ | **✗**（只差 `softmax_t`：`jvp_softmax` 已在） | ✓ |
+| `softmax` | ✓ | **✗**（不是差 `softmax_t`：库层在 `split` 就停，走查未开始；见下） | ✓ |
 | 其余 ~41 个张量算子 | ✓ | **✗** | **✗** |
 
 **差集进度**：`relu` 已从"只能走引擎"移到"两侧都有"（引擎 `reluVjp` 与库层
@@ -54,8 +54,19 @@
 **下一个候选**：**`exp`（最省）**——一元、无掩码，`jvp_exp` 就是 `where`-free 的
 `exp(x) * dx`，`exp_t` 是 `ct * exp(x)`，两条律都是单操作数，今晚的 `skip=arity` 墙碰不到；
 **`sigmoid` / `tanh`（最贴训练语料）**——同样一元，切线 `y*(1-y)`，律里只有 `mul`/`sub`/`sub_c`，
-两条律即可；**`softmax` 其实只差一条**：`jvp_softmax` 已存在，补 `softmax_t`
-（`y * (ct - sum(y * ct))`）即可把这一行也移过来——它今天的两条读数因此不是"缺两条律"而是"缺一条"。
+两条律即可。
+
+**上一段里"`softmax` 其实只差一条"这句已经被实测推翻**（2026-11-03 深夜，`lane-softmax`
+`f5dbca977`）：补 `softmax_t` 没有用，因为库层在**走查之前**就停——
+`REINTERP split function=jvp_of_total skip=backward construct=a node whose input was not copied
+uri=- why=an operand of the node is not reachable from the half's exit`，整份输出里没有一行
+`TRANSPOSE`。引擎侧同一条损失答得出（`[[-0.17007706463866937, -0.37517307550291684,
+-0.5460605174868518, 1.0913106576284373], [0.10848803305563078, -0.046500634627606695,
+-0.22389029087827908, 0.16190289245025496]]`，与手算到 1e-16 一致）。所以 `softmax` 这一行不是
+"缺一条律"，而是"缺一次 cut 的裁定"；问题与判别实验写在
+`docs/handover/questions/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`，
+而那个实验正好就是补 `exp` 的两条律——**`exp` 因此同时是"最省的下一个"和"softmax 那道墙的判别器"**，
+两件事一次做完。
 
 **缺口（= "对齐"的度量）**：引擎 61 个张量名字里，库 `transpose` 覆盖 8–9 个，
 **约 41 个只能走引擎**（`gelu`、`sigmoid`、`tanh`、`exp`、`log`、`sqrt`、`rsqrt`、`abs`、
