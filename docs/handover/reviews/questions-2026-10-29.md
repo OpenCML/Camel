@@ -2336,3 +2336,37 @@ P0-2 两处改写、`transpose` 递归捕获、循环倒序、M4 迁移、Transf
 ## 抽查（2026-11-03 07:50）：倒序落了
 
 `10e097354` 对：照 18:50，反向循环走 `range(n-1, -1, -1)`，数组用 `:op/idx_arr`、区间用 `add_l(lower, round)` 取当轮元素，没有新增算子。倒序只放在 `transpose` 一侧，`lin` 照旧正着走，理由写清楚了（线性化随数据正向流动），没合 `e8c78f495` 也对。`split` 19/19，`transforms` 无新红。判据用例仍停在 `skip=call-value-missing`，也就是闭包那一项（复工顺序 ①）。① 落地后，这条应当直接答 `(1.0, 1.0)`，届时摘掉已知失败标记。
+
+## 每日审查（2026-11-03）
+
+范围：过去 24 小时 `origin/develop` 上 381 笔非合并提交，代码部分约 145 笔，按三组审：变换与求导、图模型与执行、核心与测试工具。下面各条都已对照 HEAD 核实。已在返工里的两条不重复列：图标志 `kGCNodeFlagSyncStatement` 的退役归 P0-2，`kGraphFlagClosureCarriesParameters` 和"声明是契约"见 03:10、22:30。
+
+**排期**：A1 现在就修，几分钟的事。其余排在 15:00 冲刺结束之后，不挤占复工顺序那几项。
+
+### 高
+
+- **A1 返工：`src/compile/gir/rule_templates.cpp:23` 混进了 PowerShell 的转义**。整行是 `#include "camel/utils/assert.h"`r`n`r`n#include <format>`，`<format>` 被吞在同一行里，能编过只是因为它碰巧被别的头文件带进来了（`04720eb7c`）。拆成两行 include。顺带：同一文件 `:211` 和 `:220` 两次判断 `conditionFails`，合成一次。
+- **A2 返工：`jvp` 的解析器里还留着"暂不提升"的门**（`modules/transforms/jvp_operator.cpp:113-140`）。参数不是 `float` 就拒（"this transform does not lift yet"）；结果不是 `float` 就拒；带 `with` 参数的函数也拒，理由是"捕获值没有端口可进"，可闭包早就有捕获端口了。`signature()` 还写死了 `(f: (float) => float) => …`。这就是"暂不支持"的诊断，而且是在 `jvpSignature` 和 `stdlib` 声明之外，又写了一份类型规则。修法：解析器的类型照声明的 `Jvp<F>` 走（22:30 起实现以声明为准）；任何参数，只要 `Tangent<T>` 有定义就能接受；`with` 参数照闭包规则处理；只有 `Tangent` 无定义时才拒，用语言规则的说法拒，不写"暂不"。读数：`jvp` 能直接接收 `f32`、数组和结构体参数的函数，并在三种类型上各给一个例子。
+- **A3 返工：拒绝原因靠日志字符串传递，再被解析回来**。`transpose_operator.cpp:135` 用 `log.rfind("skip=")` 加 `stoul` 从日志里还原"原因和第几个参数"；约 18 个词靠手写的 if 链对应到句子，链的末尾 `:207` 是个 TODO，没认出来的词一律套通用句。测试端 `test/tools/transpose_refusal/check.py` 又用正则去解析这两个 C++ 文件，外加两张手工维护的例外表（`LANDS_ON_THE_NAMED_SHAPE`、`WAITS_FOR_A_WORD`）。修法：建图的结果带一个结构化的原因 `{cause 枚举, param}`，诊断文字只从一张 `cause → 句子` 表里查，每个枚举值必须有句子（编译期就能保证）；日志只是输出，不再被解析；删掉 `check.py` 和它在计划里的那一项。
+
+### 中
+
+- **A4 返工：类型转换的规则键靠解码算子名的字母**（`src/core/forward.cpp` 里的 `spellingOfDestination`/`conversionKeyOf`，`{"bf","bf16"},{"f6","f16"},{"d","float"}…` 再加 `name.find("to")`）。这是在 C++ 里重述了 prelude 声明。同时 `stdlib/rulesets/jvp.cml` 手抄了 28 条转换规则，每条只是守卫里的源类型不同。修法：目标类型从算子声明的函数类型里读，不解码名字；规则合成两条泛型规则，按源类型的切空间分：源类型有切空间时，切向量做同样的转换；没有时答零。删掉没人调用的 `float_of_int`。
+- **A5 返工：同一个谓词有两份**。`stdlib/opt.cml:89` 写的是 `is_pure(n) && may_be_recomputed(n) && !may_fault(n)`，C++ 那边是 `nodeIsFreelySchedulable`，A10 当初就是这两种写法分叉造成的。原则 3.4 要求"一个谓词，处处同用"。导出一个 `graph::may_be_rearranged` 直接用 C++ 的那个谓词，`opt.cml` 只调它，那三段"按 C++ 遍的写法"的注释一起删掉。
+- **A6 返工：`GraphDraft::region(0)` 在没有区域时返回一个静态的假区域**（`include/camel/runtime/draft.h:770`）。根子是 `nodeRegion` 对每个节点都答 0，区域 0 却要等加了别的区域才存在。修法：草稿创建时就建好区域 0（根区域）。
+- **A7 返工：内联引擎的"没收敛"计数会悄悄归零**（`src/passes/opt/inline/engine.cpp:1352`）：没传状态时用一个局部的 `ownStreak`，每次调用都从 0 开始，上限永远触发不了。修法：状态改成必传，不设后备。
+- **A8 返工：生成器 `match` 臂里的绑定仍然报 `UnknownInternalError`**（`src/compile/gct/builder.cpp:6323`）。18:10 已经裁定：绑定是局部量，跨 `yield` 就进状态。照那条去建，不留内部错误。
+- **A9 返工：测试被改得迎合实现**。
+  - `src/passes/test/regions.cpp:60` 的 `if (live.size() < 5) return program;` 让小图悄悄跳过测试。去掉这个早退；小图不该测，就让用例不选它。
+  - 新的区域校验（只读祖先）没有负例。用测试遍造一张"兄弟区域读端口"的图，断言 `commit` 拒绝并点名。
+  - `test/tools/selftest/run.mjs:57,1088` 用 `process.cpuUsage()` 只算到 node 进程自己，子进程的 CPU 没算进去，打出来的读数接近 0，也没人用。要么用树里已有的 `child-cpu.mjs` 读子进程的 CPU，要么删掉这行。
+
+### 低（冲刺后一次扫完）
+
+- **A10 注释里写读数、日期、提交号、"作者某日裁定"**，约 54 行，`known_fail_note` 和 `EXAMPLE_STOPS` 里还夹着变更史。注释只写规则，读数进提交信息（11-02 已定）。同时把 `known_fail_msg` 钉成稳定的诊断码，不用 `"CTRL edge(s)"`、`"std::vjp"` 这种松散片段。
+- **A11** `regionKindText` 有三份（`graph_edges.cpp:862`、`cml.cpp:108`、`gir_canonical.cpp:93`），合成一个函数。
+- **A12** `--questions-defaults` 只检查标题里有没有"默认"二字，是在给台账设闸门，删掉。按"冲刺中不新增闸门检查"，这一条本来就不该进。
+- **A13** 走不到的分支：`transpose.cpp:468` 的 TODO 分支，`split.cpp` 里"这里不会发生"的拒绝。要么写用例把它走到，要么改成断言。
+- **A14** `fastvm.cpp:1147` 按指针地址排序来释放帧，默认地址顺序就是申请顺序；几个解释器的异常路径释放顺序也不一致。把释放顺序收成一个函数，几个驱动共用。
+
+**要负责人定的**：无。上面都是照既有原则返工，没有改语义、改阶段或新增限制。
