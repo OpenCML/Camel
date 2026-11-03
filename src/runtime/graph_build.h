@@ -53,6 +53,9 @@ struct GCGraphPayloadShape {
     gc_cnt_t normPortCount    = 0;
     gc_cnt_t withPortCount    = 0;
     gc_cnt_t closureCount     = 0;
+    // Whether the closure members' identity is recorded: one entry per member, the parameter whose
+    // value it holds (GCGraph::closureParameterOf). Only a graph whose closure a cut wrote has it.
+    bool closureParameters    = false;
     // Whether some node has numeric permissions: only then the graph has a permission column.
     bool permissions = false;
     // Whether some node has attributes: only then the graph has an attribute column.
@@ -95,6 +98,9 @@ struct GCGraphPayloadArena {
     gc_node_ref_t *normPorts   = nullptr;
     gc_node_ref_t *withPorts   = nullptr;
     gc_node_ref_t *closure     = nullptr;
+    // closureCount entries: the parameter whose value the member holds, or kNoClosureParameter
+    // (null when the shape says the graph records none).
+    int32_t *closureParameters = nullptr;
     // The order edges, sorted by (user, pred), already offset-free (NodeIds of this graph).
     GCGraphOrderEdge *orderEdges = nullptr;
     gc_cnt_t orderEdgeCount      = 0;

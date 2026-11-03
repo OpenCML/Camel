@@ -18,4 +18,8 @@ class SpecializeRewritePass : public RuntimeGraphRewritePass {
 
   private:
     GrowthBudget growthBudget_{};
+    /// The runs in a row that changed one graph: `applyOptimizeRewritePass` requires it, and a run
+    /// given none is refused (engine.cpp). It belongs to this pass, so two programs in one process
+    /// do not share a count, and a run on another graph starts its own.
+    SettleStreak settleStreak_{};
 };
