@@ -7,7 +7,7 @@
 声明（`#gradientLikeTyped` → `tensorOf(like.dtype, like.shape)`）说结果是 f64，读要 24 字节。
 f32 的 4 字节落在 double 的低半、高半为 0，读出来就是 1e-314 量级的 denormal。**它对给定输入是
 确定的**：同一程序跑两次逐位相同，换成另一次分配、另一个进程也是同一个数；变的只有输入——
-`x=[-1,0,1]` 读 `1.5769529523e-314`，`x=[1,0,-1]` 读 `5.30626085e-315`。所以"跑两次是否相同"
+`x=[-1,0,1]` 读 `1.5769529523e-314`，`x=[1,0,0]` 读 `5.30626085e-315`。所以"跑两次是否相同"
 这条判据会把它整类漏掉。
 
 ## 判据（三条；第一条最硬）
@@ -24,33 +24,35 @@ f32 的 4 字节落在 double 的低半、高半为 0，读出来就是 1e-314 �
 
 | 算子 | 注册处 | 建出来的宽度 = 声明宽度？ | 实测判据（读数） | 处置 |
 |---|---|---|---|---|
-| `gelu_grad` | `modules/tensor/ops/gradient_ops.cpp#gradientOps` | **否**（f64 `[3]`：写 12 B / 声明 24 B） | `bytes=12 d=[0.0, 1.5769529523e-314, 0.0]`；`[1,0,-1]` 换成 `5.30626085e-315` | **已修**：加 f64 臂 |
+| `gelu_grad` | `modules/tensor/ops/gradient_ops.cpp#gradientOps` | **否**（f64 `[3]`：写 12 B / 声明 24 B） | `bytes=12 d=[0.0, 1.5769529523e-314, 0.0]`；`[1,0,0]` 换成 `5.30626085e-315` | **已修**：加 f64 臂 |
 | `erf_grad` | 同上 | **否** | `bytes=12 d=[0.0, 5.098027537e-315, 0.0]` | **已修**：加 f64 臂 |
 | `erfc`（经 `erf_grad` 取负） | `modules/tensor/ops/elementwise_ops.cpp#erfcVjp` | **否**（与 `erf_grad` 同一内核） | `bytes=12 d=[0.0, 1.570800649e-314, 0.0]` | 随 `erf_grad` 修好 |
-| `layer_norm_grad` | `modules/tensor/ops/gradient_ops.cpp#gradientOps` | 是（`#layerNormGradArm<Code>` 已按输入分臂） | f64 `[2,3]`：`dx bytes=48`、`dgamma/dbeta bytes=24`，值 = 解析导数 | 只对齐 `#layerNormGradInfer` 的陈述（原写死 f32），值不动 |
-| `sum_to` | 同上 | 是（`#sumToArm` 分 f32/f64 + `zeroInit`） | f64：`dx bytes=48`、`dp bytes=24`，`dp=[5,7,9]` 是列和 | 不动 |
+| `layer_norm_grad` | `modules/tensor/ops/gradient_ops.cpp#gradientOps` | 是（`#layerNormGradArm` 已按 `SumElement<Code>` 分臂） | f64 `[2,3]`：`dx bytes=48`、`dgamma/dbeta bytes=24`，值 = 解析导数 | 只对齐 `#layerNormGradInfer` 的陈述（原写死 f32），值不动 |
+| `sum_to` | 同上 | 是（`#sumToArm` 按 `SumElement<Code>` 分臂 + `zeroInit`） | f64：`dx bytes=48`、`dp bytes=24`，`dp=[5,7,9]` 是列和 | 不动 |
 | `broadcast_like` | 同上 | 是（`k::fill` 按 `like` 的 dtype 逐元素写） | f64：`bytes=48`，全 2.0 | 不动 |
 | `expand_axis` | 同上 | 是（`k::broadcastTo` 逐元素写） | f64：`bytes=48`，全 1.0 | 不动 |
-| `matmul_grad_lhs` / `_rhs` | 同上 | 是（f64 不走 GEMM 快路，走通用 matmul） | f64：`bytes=48/48`，`dA=[[1,1,4],…]`、`dC=[[5,5],[7,7],[9,9]]` | 不动 |
+| `matmul_grad_lhs` / `_rhs` | 同上 | 是（f64 不走 GEMM 快路，走通用 matmul） | f64：`bytes=48/48`，`dA=[[1,1,4],[1,1,4]]`、`dC=[[5,5],[7,7],[9,9]]` | 不动 |
 | `permute_inverse` | 同上 | 是（`k::permute` 逐元素写） | f64：`bytes=48/48`，`dx=wᵀ` | 不动 |
 | `cast_like` | 同上 | 是（写的是 `like` 的 dtype，与 `#castLikeInfer` 说的一致；等宽时直接返回 `g`） | 读码；未造探针 | 不动（可疑未复现，理由见下） |
 | `zeros_like` / `ones_like` | 同上 | 是（`k::full` 逐元素写，dtype 取参数） | 间接：它们是 tangent 的零元/单位元，f64 梯度里未出现宽度错 | 不动 |
 | `take_grad` | `modules/tensor/ops/layout_ops.cpp#takeGradKernel` | 是（`zeroInit=true` 后用 `input->dtype()` 累加） | f64 `[4]`：`bytes=32`，`[0,2,0,1]`（索引 `[1,1,3]`） | 不动 |
 | `row_add_at` | `modules/tensor/ops/layout_ops.cpp#rowAddAtKernel` | 是（`memcpy` 整块 `acc` 后再加一行） | 读码；未造探针 | 不动（可疑未复现，理由见下） |
 | `softmax_grad` | `modules/tensor/ops/reduction_ops.cpp#softmaxGradKernel` | 是（`dtypeOf<T>()`） | f64：`bytes=24`；`~1e-17` 是 `y(1-Σy)` 的算术残差，不是垃圾 | 不动 |
-| `nn:conv2d_input_grad` / `_kernel_grad` | `modules/nn/tensor_ops.cpp#nnTensorOps` | 是（`zeroInit=true` 的 f32 累积） | f64 调用被显式拒绝（下条读数） | 不动 |
+| `nn:conv2d_input_grad` / `_kernel_grad` | `modules/nn/tensor_ops.cpp#nnTensorOps` | 是（`zeroInit=true` 的 f32 累积） | 读码：`#requireF32` + 签名只有 `f32[..]` 重载；实测同类见 pool 那条 | 不动 |
 | `nn:conv2d_bias_grad` | 同上 | 是（每个 `db[o]` 都写） | 同上 | 不动 |
-| `nn:max_pool2d_grad` / `avg_pool2d_grad` | 同上 | 是（`zeroInit=true`，散射前先清零） | `RuntimeDiag::OperandTypeUnsupported: 'pool2d_grad' does not support a value of type 'f64[..]'; it takes f32 tensors.` | 不动 |
-| `nn:batch_norm_train_grad` | 同上 | 是（dx 逐元素、dgamma/dbeta 每通道都写） | 同上（`#requireF32` + 签名只有 f32 重载） | 不动 |
-| `nn:embedding_table_grad` | `modules/nn/tensor_ops.cpp#nnTensorOps`（内核 `modules/nn/layers.cpp#embeddingTableGrad`） | 是（`zeroInit=true`，`table->dtype()`） | 签名 `f32[..]`；无 f64 重载 | 不动 |
-| `nn:softmax_cross_entropy_grad` / `_labels_grad` | `modules/nn/tensor_ops.cpp#nnTensorOps`（内核 `modules/nn/losses.cpp#softmaxCrossEntropyGradLogits` / `#softmaxCrossEntropyLabelsGradLogits`） | 是（每个 `(row, col)` 都 `setFromDouble`） | 签名 `f32[..]`；无 f64 重载 | 不动 |
+| `nn:max_pool2d_grad` / `avg_pool2d_grad` | 同上 | 是（`zeroInit=true`，散射前先清零） | **实测**：f64 输入被拒，原文 `RuntimeDiag::OperandTypeUnsupported: 'pool2d_grad' does not support a value of type 'f64[..]'; it takes f32 tensors.` | 不动 |
+| `nn:batch_norm_train_grad` | 同上 | 是（dx 逐元素、dgamma/dbeta 每通道都写） | 读码：`#requireF32` + 签名只有 f32 重载 | 不动 |
+| `nn:embedding_table_grad` | `modules/nn/tensor_ops.cpp#nnTensorOps`（内核 `modules/nn/layers.cpp#embeddingTableGrad`） | 是（`zeroInit=true`，`table->dtype()`） | 读码：签名 `f32[..]`，无 f64 重载 | 不动 |
+| `nn:softmax_cross_entropy_grad` / `_labels_grad` | `modules/nn/tensor_ops.cpp#nnTensorOps`（内核 `modules/nn/losses.cpp#softmaxCrossEntropyGradLogits` / `#softmaxCrossEntropyLabelsGradLogits`） | 是（每个 `(row, col)` 都 `setFromDouble`） | 读码：签名 `f32[..]`，无 f64 重载 | 不动 |
 
-nn 那 9 个的结论用一条读数说话：f64 输入在**语义期/运行期就被拒绝**（上面那条诊断原文），
-所以它们不可能静默给错数；f64 臂要新开，不在本笔。
+nn 那 9 个的结论：**签名里只有 `f32[..]` 重载**（`stdlib/signatures/nn.cml` 逐行读过），内核另加
+`#requireF32`；实测拿 `max_pool2d_grad` 打了一次 f64，得到上面那条诊断原文——它在**运行期就被拒**，
+所以这 9 个不会静默给错数。要给 f64 开臂是另一件事，不在本笔。
 
 ## 修了什么，证据是什么
 
-- `#geluGrad` / `#erfGrad`：改为按输入元素类型分臂（`#geluGradArm<Code>` / `#erfGradArm<Code>`）。
+- `#geluGrad` / `#erfGrad`：改为按输入元素类型分臂（`#geluGradArm` / `#erfGradArm`，`SumElement<Code>`
+  取宽度，与 `#sumToArm`、`#layerNormGradArm` 同一套写法）。
   **f32 臂原样保留**（同一 `#geluGradUnit`、同一 `kScale` 字面量、同一乘积次序），f64 臂是新写的。
   另加一条：`dy` 与 `x` 的元素类型不同就 `refuseTensorElementType` 拒绝，而不是拿 `x` 的宽度去读 `dy`
   （`#asFloat` 不转换，混宽读就是同一类错）。
@@ -66,8 +68,8 @@ nn 那 9 个的结论用一条读数说话：f64 输入在**语义期/运行期�
 | `layer_norm` dx（两行相同） | 0.4082360432562664, -0.8164904572722602, 0.40825441401599355 | h=1e-3 同上三值 ±1.4e-7；（h=1e-6 时 ≤4.2e-10） | ≤1.4e-7（≤4.2e-10） |
 | `layer_norm` dgamma / dbeta | -2.4494713718167804, 0, 2.4494713718167804 / 2, 2, 2 | h=1e-6: 同 | ≤1.7e-10 |
 
-  1e-7 是 **h=1e-3 的中心差分截断误差**（O(h²)），不是内核的误差：h=1e-6 时同样三个数落到 1e-11
-  量级；`gelu` f64 的读数与解析式的 17 位十进制**完全一致**。
+  1e-7 是 **h=1e-3 的中心差分截断误差**（O(h²)），不是内核的误差：h=1e-6 时同样几个数落到 1e-11
+  量级；`gelu` f64 的读数与按解析式独立算出的 double 是**同一个数**（`-0.08296408384578255`）。
 
 - **f32 逐字不变**：`gelu_grad.bits` 与 `gelu_grad.bits.generic_unit` 两个 digest 用例（它们钉的是
   f32 梯度存储位的 sha256）在计划里原样通过，一位没动。**前向**：本笔不碰任何前向内核；
@@ -95,9 +97,9 @@ nn 那 9 个的结论用一条读数说话：f64 输入在**语义期/运行期�
 
 ## 闸门（主机 88zjwei，`-Tier fast -Jobs 4`，一次一个目标；load 为 1m/5m/15m）
 
-| 目标 | 基线（本树回退 3 处源码、用例仍在） | 本笔 | load |
+| 目标 | 基线（本树回退 2 个源文件、用例仍在） | 本笔 | load |
 |---|---|---|---|
-| `test/plans/feat/modules/tensor.plan.toml` | 114 = **112 / 2**（两条红正是 `grad.f64.width.nvm/.fvm`，读数 `bytes=12 …1.5769529523e-314`） | 114 = **114 / 0** | 21.0 / 25.6 / 24.1（基线那次 36.7） |
+| `test/plans/feat/modules/tensor.plan.toml` | 114 = **112 / 2**（两条红正是 `grad.f64.width.nvm/.fvm`，读数 `bytes=12 …1.5769529523e-314`） | 114 = **114 / 0** | 21.0 / 25.6 / 24.1（基线那次 36.7）；提交后复跑 exit 0，15.6 / 20.9 / 22.5 |
 | `test/plans/feat/modules/autodiff.plan.toml` | 未单独跑（本笔只动梯度内核与一条 infer） | 263 = **263 / 0** | 峰值 44.9 |
 | `test/plans/feat/modules/nn.plan.toml` | 同上 | 68 = **68 / 0** | 25.8 / 27.0 / 24.5 |
 

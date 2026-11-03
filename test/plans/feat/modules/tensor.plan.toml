@@ -1169,7 +1169,7 @@ timeout_ms = 10000
 # input's element type: an f64 `x` came back as an f64-typed value over an f32 buffer. An f64 [3] is
 # 24 bytes and the kernel wrote 12, so the low half of every element was an f32 it wrote and the
 # high half was not part of what it wrote -- the number read is a denormal of order 1e-314, and it
-# is deterministic for a given input (x = [-1, 0, 1] reads 1.5769529523e-314, x = [1, 0, -1] reads
+# is deterministic for a given input (x = [-1, 0, 1] reads 1.5769529523e-314, x = [1, 0, 0] reads
 # 5.30626085e-315), so comparing two runs would have missed this class entirely. The storage's width
 # and the derivative's values are both asserted, and the two scheduling backends have to agree.
 [[tests]]

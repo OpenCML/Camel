@@ -9,7 +9,7 @@
  * low half of every element was an f32 the kernel wrote and the high half was not part of what it
  * wrote. What was read is a denormal of order 1e-314, and it is **deterministic** for a given input
  * -- it moves with the input, not with the allocator: x = [-1, 0, 1] reads 1.5769529523e-314 and
- * x = [1, 0, -1] reads 5.30626085e-315. A run-twice comparison cannot see this class at all; the
+ * x = [1, 0, 0] reads 5.30626085e-315. A run-twice comparison cannot see this class at all; the
  * width comparison below can. The forward is not in question: it answers at 8 bytes per element,
  * and so must its gradient (design principles 9.9).
  *
