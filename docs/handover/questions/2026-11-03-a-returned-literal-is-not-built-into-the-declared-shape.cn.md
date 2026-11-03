@@ -84,3 +84,18 @@ EXITPROBE2 arr=1 raw=3 fits=1 elem=float
 ⇒ 真正的缺口不是"给不给期望类型"，而是**一个已经成型的常量怎么按位置重建**：逐元素那条路（按写下的值转一次、不按落下来的 double 转）从没被叫到，因为 `assignableFrom` 先把话说了。动它 = 动 `compositeDataInType` / `assignableFrom` 这条**声明、传参、`as` 共用**的转换，影响面是"每个位置上的每个字面量"，不是一个出口。
 
 按"面大先报"的规矩停在这里：**回滚后本页仍是未修状态，`feat/compile` 2195 / 2190 pass / 2 fail / 3 known 不变**，两条待补的用例也没进计划。
+
+## 8. 第二次尝试（限 20 分钟，未到点内达标，已回滚）
+
+按裁定把触发条件收窄到一条后改了两处，读数分半：
+
+| 一半 | 结果 |
+| --- | --- |
+| 长度不符那条（`return [1.5, 2.5]` 进 `float[3]`） | **成立**：报 `the literal writes 2 element(s) and the type states 3`，用例过。`compositeDataInType` 返回 nullptr 后由 `rejectLiteralData` + `arrayLengthReason` 说出长度 |
+| 秩一放过那条（`return [1.5, 2.5, 3.5]`） | **仍卡**：`three()` 第 14 行还是 `ReturnNeedsConversion` |
+
+改的两处：① `compositeDataInType` 的早退条件加了"目标有常量 extent 且源在同一维没写 extent"这一条（`assignableFrom` 本身没动），于是它会走到 905-913 的逐元素重建；② 该重建的秩一分支补了 `factory.setExtents(lengths)`（只在位置有常量 extent 时），否则重建出来的还是 `float[]`。
+
+**第①条仍不过说明还缺一层**：逐元素重建已经走到并返回了值，但出口那道 `declaredExit->equals(built->type())` 没成立，所以没装上——下一步要打印 `built->type()` 才能定（是 extent 没进 type，还是 `ArrayDataFactory::build()` 仍按元素给类型）。**不是形状判据挡的，也不是期望类型挡的**（§7 那两组探针仍然成立）。
+
+时间账：20 分钟里约 6.5 分钟是在等主机构建槽（`build 401.0 s` 里绝大部分是排队），只跑了两次 `casts`。回滚后树与 `5a1d52eca` 逐字节相同。
