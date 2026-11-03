@@ -129,6 +129,35 @@ timeout_ms = 20000
 
 
 [[tests]]
+name = "stated_mean_axis_gradient_square_axis"
+desc = "The gradient of `sum(take(mean_axis(x, 1, false), [1]))` over a `[2, 2]` tensor: the lanes are `[1.5, 3.5]`, the value is `3.5`, and the gradient is `[[0.0, 0.0], [0.5, 0.5]]`. The reading exists to pin the number a trailing broadcast answers instead: `[[0.0, 0.5], [0.0, 0.5]]`, the same two halves spread down the columns rather than along the row, with a square tensor's shapes agreeing so that nothing objects. Both legs `same=true` -- before the reverse law put the reduced axis back, this one printed `same=false` and the library leg answered the column array."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_mean_axis_gradient_square_axis.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["mean_axis square: value=3.5", "same=true"]
+expect_output_not_contains = ["skip=", "same=false"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "stated_mean_axis_gradient_nonsquare_axis"
+desc = "The same reading on `[2, 3]`: the lanes are `[2.0, 5.0]`, the value is `5.0`, and the gradient is `[[0.0, 0.0, 0.0], [0.3333333333333333, 0.3333333333333333, 0.3333333333333333]]`. On this shape the old broadcast could not stay quiet -- a `[2]` cotangent against `[2, 3]` extents matches nothing, so the library leg stopped with a dimension mismatch while the engine answered -- and the pair with the square case is the point: this one says the law refused, that one says it answered the wrong array."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_mean_axis_gradient_nonsquare_axis.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["mean_axis nonsquare: value=5.0", "same=true"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+
+[[tests]]
 name = "stated_sum_extents_refused"
 desc = "A stated extent the tensor does not have is a fault: `sum_stated(x, [2])` over four elements stops on the operator's own line with `states extent 2 at dimension 0 and the tensor has 4`, and the program never prints its reading. This is the check the forward half's `shape(xs)` makes unnecessary and no less necessary: the value does not read the list, so nothing but this comparison can say it is wrong, and an extent nobody compared is a gradient of the wrong shape."
 kind = "behavior"
