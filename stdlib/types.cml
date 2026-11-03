@@ -91,8 +91,15 @@ export type Tangent<T>
 /// of `f`'s parameters, one tuple member per parameter. A function of one parameter's pullback
 /// answers a one-long tuple -- `(27.0)` -- because the rule is one rule for every arity (author's
 /// ruling of 2026-11-01 14:30).
+///
+/// It takes `f`'s `with` list as `Vjp<F>` does, for the reason the build makes it that way: the
+/// linear half a lift is split into is a function of the `with` values too -- a `with` value is a
+/// constant of the transform, not a value the cut turns into a residual, so the half that runs
+/// backwards still takes it, and `transpose` of that half takes it as well. For a function with no
+/// `with` parameters the pack is empty and this is the shape the ruling wrote.
 /// @example is_same::<Pullback<(x: float) => float>, (ct: float) => (float,)>()    // true
-export type Pullback<F> = (ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
+/// @example is_same::<Pullback<<w: float> (x: float) => float>, <float> (ct: float) => (float,)>()    // true
+export type Pullback<F> = <..WithOf<F>> (ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
 
 /// The turn of a forward transform into a reverse one, as a function's own type: `vjp(f)` is a
 /// function of `f`'s parameters that answers the value and the pullback, and it takes `f`'s `with`

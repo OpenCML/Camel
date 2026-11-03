@@ -1147,7 +1147,22 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
 FunctionType *Builder::completeLambdaSignature(
     const GCT::node_ptr_t &gct, FunctionType *funcType, Type *expected) {
     const auto *unwritten = GCT::Tree::of(gct)->unwrittenParamsOf(gct);
-    if (unwritten == nullptr || unwritten->empty()) {
+    // A pack among the `with` parameters (`<..ws> (..xs) => ...`) is open in the same sense a
+    // parameter without a type is: the function type of the position says what it stands for
+    // (author's ruling of 2026-11-03 13:50, on the pack rule of design principles 5.6). It is not
+    // in the GCT's unwritten list -- that list is about parameter types -- so it joins the holes
+    // here, at its own index (the `with` parameters are numbered first).
+    const bool withPack = funcType->hasWithRest();
+    std::vector<GCT::Tree::UnwrittenParam> holes;
+    if (unwritten != nullptr) {
+        holes = *unwritten;
+    }
+    if (withPack) {
+        holes.push_back({funcType->withTypesCount() - 1, gct->origin(), true});
+        std::stable_sort(
+            holes.begin(), holes.end(), [](const auto &a, const auto &b) { return a.index < b.index; });
+    }
+    if (holes.empty()) {
         return funcType;
     }
     // A lambda takes the types it does not write from the function type of the position it
@@ -1156,16 +1171,16 @@ FunctionType *Builder::completeLambdaSignature(
     // the value of a declared type, or the result of a function whose result type is a function
     // type.
     if (expected == nullptr) {
-        const std::string name(funcType->argNameAt((*unwritten)[0].index));
+        const std::string name(funcType->argNameAt(holes[0].index));
         diags_->of(SemanticDiag::LambdaParameterWithoutType)
-            .atOrigin((*unwritten)[0].origin)
+            .atOrigin(holes[0].origin)
             .commit(name, "nothing here expects a function type");
         throw BuildAbortException();
     }
     if (expected->code() != TypeCode::Function) {
-        const std::string name(funcType->argNameAt((*unwritten)[0].index));
+        const std::string name(funcType->argNameAt(holes[0].index));
         diags_->of(SemanticDiag::LambdaParameterWithoutType)
-            .atOrigin((*unwritten)[0].origin)
+            .atOrigin(holes[0].origin)
             .commit(
                 name,
                 std::format(
@@ -1189,7 +1204,7 @@ FunctionType *Builder::completeLambdaSignature(
     // parameter's (GCT recorded it), not a difference in arithmetic -- an omitted parameter type
     // keeps the strict comparison, because a hole that takes one type cannot stand for several.
     const GCT::Tree::UnwrittenParam *restHole = nullptr;
-    for (const GCT::Tree::UnwrittenParam &param : *unwritten) {
+    for (const GCT::Tree::UnwrittenParam &param : holes) {
         if (param.rest) {
             restHole = &param;
             break;
@@ -1207,12 +1222,29 @@ FunctionType *Builder::completeLambdaSignature(
     const size_t expectedWith = expectedFunc->withTypesCount();
     const size_t adoptedWith =
         withCount == 0 && expectedWith > 0 ? expectedWith : size_t{0};
-    const size_t effectiveWith = withCount + adoptedWith;
+    // A pack among the `with` parameters stands for the position's `with` list from its own index
+    // on, one `with` parameter each, exactly as an ordinary rest parameter stands for the ordinary
+    // ones: the arity it leaves open is the position's, so the count compared below is the
+    // position's too. A pack is last in the list (the parser refuses one that is not), so the
+    // parameters before it are the written ones.
+    const size_t withPackAt    = withPack ? withCount - 1 : withCount;
+    const size_t effectiveWith =
+        withPack ? expectedWith : withCount + adoptedWith;
     const size_t expectedTotal  = expectedWith + expectedFunc->normTypesCount();
+    if (withPack && expectedWith < withPackAt) {
+        report(
+            holes[0],
+            std::format(
+                "the expected type '{}' has {} `with` parameters and the lambda writes {} before "
+                "its pack",
+                expectedFunc->toString(),
+                expectedWith,
+                withPackAt));
+    }
     if (restHole == nullptr) {
         if (expectedTotal != effectiveWith + funcType->normTypesCount()) {
             report(
-                (*unwritten)[0],
+                holes[0],
                 std::format(
                     "the expected type '{}' takes {} parameters and the lambda {}",
                     expectedFunc->toString(),
@@ -1257,9 +1289,29 @@ FunctionType *Builder::completeLambdaSignature(
     size_t hole = 0;
     for (size_t i = 0; i < total; ++i) {
         Type *type   = typeAt(i);
-        bool isHole  = hole < unwritten->size() && (*unwritten)[hole].index == i;
+        bool isHole  = hole < holes.size() && holes[hole].index == i;
         if (isHole) {
-            const GCT::Tree::UnwrittenParam &param = (*unwritten)[hole++];
+            const GCT::Tree::UnwrittenParam &param = holes[hole++];
+            if (param.rest && i < withCount) {
+                // A pack among the `with` parameters stands for the position's `with` list from its
+                // own index on, one `with` parameter each, named after the pack (`ws_0`, `ws_1`,
+                // ...) as an ordinary rest parameter names the parameters it stands for. The body
+                // reads the pack itself as the tuple of them, built where the body is
+                // (buildFuncBody), so what it can forward is `ws` and not one name per element.
+                const std::string base = nameAt(i);
+                for (size_t k = i; k < expectedWith; ++k) {
+                    Type *const expanded = expectedFunc->withTypeAt(k);
+                    if (expanded == nullptr) {
+                        report(param, "the expected function type does not say what this parameter is");
+                    }
+                    factory.addWithArg(
+                        base + "_" + std::to_string(k - i),
+                        expanded,
+                        expectedFunc->withIsVarAt(k),
+                        expectedFunc->withNeedsValueAt(k));
+                }
+                continue;
+            }
             if (param.rest) {
                 // The rest parameter stands for the expected type's members from this position on:
                 // one parameter each, named after the rest parameter (`xs_0`, `xs_1`, ...), typed
@@ -1479,6 +1531,36 @@ void Builder::buildFuncBody(
                     }
                     break;
                 }
+            }
+        }
+        // A pack among the `with` parameters that the lambda itself wrote (`<..ws> (..xs) => ...`)
+        // is a value in its body for the same reason its rest parameter is: `ws` is the tuple of
+        // the `with` parameters the position gave the value, and `f<..ws>(..xs)` spreads it into a
+        // call of `f`. The pack is not in the unwritten list (that list is about parameter types),
+        // so the name and the index come from the signature as it was written, and the members are
+        // the `with` ports the completion expanded the pack into (`ws_0`, `ws_1`, ...).
+        if (written != nullptr && name.empty() && written->hasWithRest()) {
+            const size_t packIndex = written->withTypesCount() - 1;
+            const std::string packName(written->argNameAt(packIndex));
+            if (graphNamesValue(gct->at(1), packName)) {
+                const auto withPorts = graph->view().withPorts();
+                std::vector<Type *> parts;
+                std::vector<size_t> slots;
+                std::vector<node_handle_t> members;
+                for (size_t w = packIndex; w < funcType->withTypesCount() && w < withPorts.size();
+                     ++w) {
+                    members.push_back(graph->view().ref(withPorts[w]));
+                    parts.push_back(funcType->withTypeAt(w));
+                    slots.push_back(w - packIndex);
+                }
+                node_handle_t tuple = currGraph_->addFillNode(
+                    TupleType::create(parts),
+                    camel::runtime::makeFillPayload(
+                        camel::runtime::GCFillKind::Tuple, slots));
+                for (node_handle_t member : members) {
+                    linkNodes(LinkType::With, member, tuple);
+                }
+                insertNode(packName, tuple);
             }
         }
         bodyStates_[graph.get()] = BodyState::Open;
