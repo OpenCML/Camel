@@ -70,7 +70,7 @@ B **新增**一条表示，且与裁定正面冲突；C 让 `split` 多背一个
 摆了两条路。这里把两条路的**价款**量出来：
 
 **甲 —— 把 `jvp`/`split`/`transpose` 挪进编译阶段**（图在建图期就在手里）
-- 拼写数：`stdlib` 值级 **4 行**（`stdlib/vjp.cml#vjp`）+ **3 行文档示例**（`stdlib/signatures/transforms.cml#jvp（以及同文件的 `split`、`transpose`）`）；
+- 拼写数：`stdlib` 值级 **4 行**（`stdlib/vjp.cml#vjp`）+ **3 行文档示例**（`stdlib/signatures/transforms.cml#jvp`（以及同文件的 split、transpose））；
   `vjp.cml` 要换 **11 行**，两条同形声明并成一条泛型；要改写的程序 **5 个文件**。
 - 调用者数：每个算子 **1 个注册点 + 1 个 kernel**（`split_operator.cpp:179/:186`、`jvp_operator.cpp:218/:225`、`transpose_operator.cpp:170/:177`），**外部 C++ 调用点 0**。
 - 判据：**能删 342 行**（`split_operator.cpp` 179、`jvp_operator.cpp:81-226` 146、`stdlib/signatures/transforms.cml#split` 10、`vjp.cml:47-53` 7），

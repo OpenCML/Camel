@@ -50,7 +50,7 @@ N09 [:io/println, OPER] --SYNC--> N0B [label="update", type=FUNC, value_type=int
 
 **缺的事实：一个节点是不是占据一个链位。** 图上没有任何字段说它，除了标记：
 
-1. **块的值**：`GCRegion::result` 只对有自己区域的块成立（`src/compile/gir/builder_control.cpp#Builder::buildBranch（以及同文件的 `Builder::visitLoopNode`）` 打）；图的 body 没有区域，只能退回 `returnNodeRef()`，而那只对 `main` 的退出值成立。`sync { … }` 的块值是 `:op/add_l` 这类节点时，**图上一个字段都没有**。
+1. **块的值**：`GCRegion::result` 只对有自己区域的块成立（`src/compile/gir/builder_control.cpp#Builder::buildBranch`（以及同文件的 Builder::visitLoopNode） 打）；图的 body 没有区域，只能退回 `returnNodeRef()`，而那只对 `main` 的退出值成立。`sync { … }` 的块值是 `:op/add_l` 这类节点时，**图上一个字段都没有**。
 2. **链穿过值**：甲/乙都测出大量 `starts at :op/…`（乙 2113 条）。按 `edges.cn.md` 5.3/5.7，链尾到不归本块独有的值要经 `GATE`，**而建图今天插的是标记，不是 `GATE`**。
 3. **纯节点在链上**：算子表判「纯、无效应、不出故障」（`:op/add_l` 601 start / 537 end、`:op/mul_l`、`:op/eq_l`、`:struct/len_arr` …），建图仍然连它们。
 

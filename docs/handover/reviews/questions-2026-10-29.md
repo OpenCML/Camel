@@ -2359,7 +2359,7 @@ P0-2 两处改写、`transpose` 递归捕获、循环倒序、M4 迁移、Transf
 - **A9 返工：测试被改得迎合实现**。
   - `src/passes/test/regions.cpp#RegionsTestPass::apply` 的 `if (live.size() < 5) return program;` 让小图悄悄跳过测试。去掉这个早退；小图不该测，就让用例不选它。
   - 新的区域校验（只读祖先）没有负例。用测试遍造一张"兄弟区域读端口"的图，断言 `commit` 拒绝并点名。
-  - `test/tools/selftest/run.mjs#cost（以及同文件的 `devicePlan`）` 用 `process.cpuUsage()` 只算到 node 进程自己，子进程的 CPU 没算进去，打出来的读数接近 0，也没人用。要么用树里已有的 `child-cpu.mjs` 读子进程的 CPU，要么删掉这行。
+  - `test/tools/selftest/run.mjs#cost`（以及同文件的 devicePlan） 用 `process.cpuUsage()` 只算到 node 进程自己，子进程的 CPU 没算进去，打出来的读数接近 0，也没人用。要么用树里已有的 `child-cpu.mjs` 读子进程的 CPU，要么删掉这行。
 
 ### 低（冲刺后一次扫完）
 

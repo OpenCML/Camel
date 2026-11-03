@@ -15,7 +15,7 @@
 | `src/passes/opt/generic/generic.cpp#pruneBranch` / `:667` | 分支/汇合处的 `unlinkInput(Ctrl, …)` | 摘下 |
 | `src/passes/opt/generic/rewrite.cpp#replaceNode` | 重写时 `unlinkInput(Ctrl, …)` | 摘下 |
 | `src/passes/opt/generic/rewrite.h#handOverSyncWait` | `appendInput(Ctrl, user, pred)` | **写入（重写器自己造一条）** |
-| `src/passes/test/fault.cpp#LeakBranchArmTestPass::apply（以及同文件的 `ShareBranchArmTestPass::apply`、`OrderOnlyEffectTestPass::apply`）` | 故障注入测试 | 测试 |
+| `src/passes/test/fault.cpp#LeakBranchArmTestPass::apply`（以及同文件的 ShareBranchArmTestPass::apply、OrderOnlyEffectTestPass::apply） | 故障注入测试 | 测试 |
 
 **判据的落点：真正"写入"控制边的只有三处 —— `builder_support.h:87`（构造）、`rewrite.h:117`（重写器）、`draft.h:694`（底层入口）。其余是摘下或读取。** 「谁在算链位」要落在前三处的调用者身上，而这需要一次调用图，本页没有做，**所以本页不声明"链位只剩几处"。**
 

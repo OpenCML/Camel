@@ -34,8 +34,8 @@
 
 | 装置 | 今天读什么 | 改成读什么 |
 |---|---|---|
-| `src/passes/test/keepnode.cpp#constant（以及同文件的 `countKeeps`、`KeepNodeTestPass::apply`）` | `using camel::core::oper::Keep;`，数 `OperId == Keep` 的节点，读 `keep=1 reads_the_divisor=1` | 数**`GCNodeKind::Gate` 且 `syncInputsOf(gate)` 非空**的节点：`gate=1`；"被保活的那个节点"= `syncInputsOf(gate).front()`；`reads_the_divisor` 的判据不变（那个节点是否读除数）。输出改 `KEEPNODE gate=1 reads_the_divisor=1` |
-| `src/passes/test/keepshape.cpp#KeepShapeTestPass::apply（以及同文件的 `KeepInspectTestPass::apply`）` | `operUriOf(user) == ":op/keep"`，输出 `uri=:op/keep` | 读 `draft.header(user)->kind == Gate` 且 `syncInputsOf(user)` 非空：输出 `gate=1 sync_pred=1`（取代 `uri=:op/keep`）；`data_user`/`standing` 两列照旧（它们本来读的就是数据边与链位，与算子无关） |
+| `src/passes/test/keepnode.cpp#constant`（以及同文件的 countKeeps、KeepNodeTestPass::apply） | `using camel::core::oper::Keep;`，数 `OperId == Keep` 的节点，读 `keep=1 reads_the_divisor=1` | 数**`GCNodeKind::Gate` 且 `syncInputsOf(gate)` 非空**的节点：`gate=1`；"被保活的那个节点"= `syncInputsOf(gate).front()`；`reads_the_divisor` 的判据不变（那个节点是否读除数）。输出改 `KEEPNODE gate=1 reads_the_divisor=1` |
+| `src/passes/test/keepshape.cpp#KeepShapeTestPass::apply`（以及同文件的 KeepInspectTestPass::apply） | `operUriOf(user) == ":op/keep"`，输出 `uri=:op/keep` | 读 `draft.header(user)->kind == Gate` 且 `syncInputsOf(user)` 非空：输出 `gate=1 sync_pred=1`（取代 `uri=:op/keep`）；`data_user`/`standing` 两列照旧（它们本来读的就是数据边与链位，与算子无关） |
 | `src/passes/test/semantics.cpp#OperatorSemanticsTestPass::apply` | `printTraits(":op/keep")`：读"那个不许被改的算子的 traits" | **删掉整段**。它守的性质是"保活机制不许被某个遍当成纯计算"——`GATE` 不是算子、没有 traits 可读；同一条性质现在由 `graph.cpp:561` 的提交断言（**一个既无控制入边又无同步前驱的 `GATE` 被拒**）与 `test::keepshape` 的 `standing=alive` 承担，判据不丢 |
 
 ## 4. 期望值与人口映射（逐行原文）

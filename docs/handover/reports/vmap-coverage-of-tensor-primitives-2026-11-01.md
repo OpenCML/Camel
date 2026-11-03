@@ -94,7 +94,7 @@ transforms: vmap has no rule for `tensor:<名字>` (the operator has no batching
 | 字节 | `tensor:to_bytes` | `to_bytes(x)` | — |
 
 **不在这张表里的四个名字**：`show::<A>(t: A[..]): void`、`num_threads(): int`、`set_num_threads(n: int): void`、
-`gemm_backend(): string`（`stdlib/tensor.cml#show（以及同文件的 `num_threads`、`set_num_threads`）`）。它们不是「把一个张量变成另一个张量」的原语
+`gemm_backend(): string`（`stdlib/tensor.cml#show`（以及同文件的 num_threads、set_num_threads））。它们不是「把一个张量变成另一个张量」的原语
 （一个打印、两个是模块设置、一个回后端名），`vmap` 对它们的翻法不是「批」，所以没量；谁要批 `show`，那是另一句话
 （打印一次还是每行一次），不是规则缺。
 

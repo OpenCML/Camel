@@ -36,7 +36,7 @@
 ## 裁定 C 落在哪三个机关上（都在本树里量过）
 
 1. **建值：`GCFillKind::FunctionClosure`**（`include/camel/runtime/graph.h#GCFillKind`）。一个 `Fill`，`norm` 输入是**静态函数值**（`Data` 节点，`dataIndex < 0`，命名要跑的图），`with` 输入是**捕获的值**，按闭包槽序排。写方是建图器（`src/compile/gir/builder_calls.cpp#Builder::createFuncDataNode`），读方是 `modules/transforms/rule_expand.cpp#chooseRuleAmong`——它原话写着：`normPorts` 是参数，`closureNodes` 是捕获。也就是说"图里造一个带运行期闭包的函数值"不是新节点，是**已有一类 Fill**。
-2. **进图：`closureNodes`**。callee 的图用 `draft.appendClosureNode(port)` 声明捕获口（`include/camel/runtime/draft.h#appendClosureNode`），用 `appendNormPort(port)` 声明参数口；两者的类型都是 `Port` 节点自己的 `dataType`。运行期调用时，函数值的闭包元组按槽序灌进 callee 的捕获口（`populateFunctionClosureFrame`，`src/passes/sched/fastvm/fastvm.cpp#FastVMSchedPass::populateFunctionClosureFrame（以及同文件的 `FastVMSchedPass::populateIndirectCallFrame`、`FastVMSchedPass::populateMarkedCallFrame`）`）。
+2. **进图：`closureNodes`**。callee 的图用 `draft.appendClosureNode(port)` 声明捕获口（`include/camel/runtime/draft.h#appendClosureNode`），用 `appendNormPort(port)` 声明参数口；两者的类型都是 `Port` 节点自己的 `dataType`。运行期调用时，函数值的闭包元组按槽序灌进 callee 的捕获口（`populateFunctionClosureFrame`，`src/passes/sched/fastvm/fastvm.cpp#FastVMSchedPass::populateFunctionClosureFrame`（以及同文件的 FastVMSchedPass::populateIndirectCallFrame、FastVMSchedPass::populateMarkedCallFrame））。
 3. **扫描：闭包元组自己的类型**。函数值的布局是它被创建时给的那个元组类型（`include/camel/core/rtdata/func.h#updateRefs`），GC 就按它扫（`src/core/rtdata/func.cpp#Function::print`：`closureType()`，注释明确写着"不是程序里的图会给的那个"）。所以"类型由 kernel 从后半段图里读出来"= kernel 用 `TupleType::create(残差各自的类型)` 造 `lin` 的布局，而不是任何 `TupleType::residuals`。
 
 合起来，`split` 的形状是：

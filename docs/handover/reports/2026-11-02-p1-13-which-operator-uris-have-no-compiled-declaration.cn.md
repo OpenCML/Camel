@@ -98,7 +98,7 @@
 
 **剩下 5 个为什么停手（三条都撞上已有的东西，不是不肯做）**
 
-1. **名字撞车**：`tensor:sum` 要写成 `export func sum::<T>(xs: T[..]): T when is_numeric::<T>()`，而 `stdlib/array.cml#sum` **已经有一条形状一模一样的** `sum`（`array` 模块的数组归约，带函数体）。再写一条，树里就有两个"一维数组求和"的声明，正是设计原则 §8 说的"两个机制做同一件事"。`mean`、`min`、`max` 同理（`array.cml:167,177,187`；`max`/`min` 还与 `stdlib/math.cml#min（以及同文件的 `max`）` 的二元版本同名）。
+1. **名字撞车**：`tensor:sum` 要写成 `export func sum::<T>(xs: T[..]): T when is_numeric::<T>()`，而 `stdlib/array.cml#sum` **已经有一条形状一模一样的** `sum`（`array` 模块的数组归约，带函数体）。再写一条，树里就有两个"一维数组求和"的声明，正是设计原则 §8 说的"两个机制做同一件事"。`mean`、`min`、`max` 同理（`array.cml:167,177,187`；`max`/`min` 还与 `stdlib/math.cml#min`（以及同文件的 max） 的二元版本同名）。
 2. **`reshape` 的注册签名是联合类型**（`float[..] | number[]`），声明只能写其中一支，写哪一支都是自己做主。
 3. **这 5 个也没有 `#op` 可言**：它们的 URI 遵循约定，加上去是多余的（`sum_axis` 的实验已经证明）。
 

@@ -6,7 +6,7 @@
 
 ## 现象
 
-返工 `vmap` 时新加了一个**公开的语言原语**：编译器提供的类型函数 `RowsOf<T>`（声明 `stdlib/types.cml#RowsOf`，实现 `src/core/type/typecall.cpp#kTypeFunctions（以及同文件的 `TypeCallType::evaluate`）`）。它是"第一维元素为 `T` 的数组类型"：`RowsOf<f32[3]>` 是 `f32[?, 3]`，`RowsOf<f32>` 是 `f32[?]`。
+返工 `vmap` 时新加了一个**公开的语言原语**：编译器提供的类型函数 `RowsOf<T>`（声明 `stdlib/types.cml#RowsOf`，实现 `src/core/type/typecall.cpp#kTypeFunctions`（以及同文件的 TypeCallType::evaluate））。它是"第一维元素为 `T` 的数组类型"：`RowsOf<f32[3]>` 是 `f32[?, 3]`，`RowsOf<f32>` 是 `f32[?]`。
 
 加它的原因是量出来的、不是猜的：`vmap(f)` 要保持"一个参数、轴 0、同一个名字"的柯里形态，而这条签名在 Camel 里写不出来——
 

@@ -13,7 +13,7 @@
 | `a-version-port-that-must-carry-a-value` 的**算子本身** | `OperId VarAfter = 21`、`builtin.cpp:175` kernel、`builtin.cpp:681` `stateOnly`、`builtin_semantics.cpp:343-347` 资源、`builder_expr.cpp:629-631` 链式构造、`builder_diagnostics.cpp:209`；`callback_write_ignored` 四后端打印 `3` | **已裁已落（算子）**，**但 `orderAfterLastWriter` 的 ctrl 替身未拆**——这一条要留"已裁未落"或改成"已裁已落，替身待拆" |
 | `generator-cell-type-by-inference` | `FeatureNotSupported("generators")` 在 `src` **0 命中**（`git grep -n 'FeatureNotSupported("generators")' -- src`） | **已裁已落**（若还有别的生成器墙，请以命令复核为准） |
 | `who-consumes-the-ruleset-index` 的**索引与规则搬运** | `stdlib/rulesets/jvp.cml`、`transpose.cml` 已在树上（`67b4c17bc`）；`autodiff` 只留包装 | **已裁已落（索引与规则）**；**消费者 `reinterp<jvp>` 未做**——这一条同样是"一半落地" |
-| `one-operator-two-names` | `argmax_axis`/`argmin_axis` 只有 `stdlib/tensor.cml#sum_to（以及同文件的 `mean_axis`）` 一处定义，`array.cml:264` 委托 `tensor` 的 | **已裁已落**（若 ONNX 导出侧还有 `array:`，请以 `git grep -n 'array:argmax' -- src` 复核） |
+| `one-operator-two-names` | `argmax_axis`/`argmin_axis` 只有 `stdlib/tensor.cml#sum_to`（以及同文件的 mean_axis） 一处定义，`array.cml:264` 委托 `tensor` 的 | **已裁已落**（若 ONNX 导出侧还有 `array:`，请以 `git grep -n 'array:argmax' -- src` 复核） |
 
 ## 二、确实还没做（保持"已裁未落"）
 

@@ -47,7 +47,7 @@ of the ruling (the value carries its template) is what this step has to build.
 
 - `stdlib/types.cml#ElementOf` — the family predicate is identity over the spelled types:
   `is_integer::<T>()` is `match type T { case int | i32 => true; case _ => false }`.
-- `src/compile/gir/builder_when.cpp#GctConstantEvaluator（以及同文件的 `Builder::whenPredicateNamed`）` and the scope switch at `:805-817` — a
+- `src/compile/gir/builder_when.cpp#GctConstantEvaluator`（以及同文件的 Builder::whenPredicateNamed） and the scope switch at `:805-817` — a
   `when` predicate is resolved **where the declaration is written**, not where it is selected:
   `ConditionContext` installs the *declaring template's* scope, so `add_zero`'s
   `when is_integer::<T>()` calls the library's `is_integer`, never the importing program's.
@@ -119,7 +119,7 @@ recorded as *not made* in the cache, so `why_not` can say the type was tried and
 
 The engine is `modules/rewrite` (runtime layer); the instantiation is compile-layer. The bridge
 exists: `Builder::of(const context_ptr_t &)` (`src/compile/gir/program.cpp#Builder::of`) keeps the
-program's Builder on the Context (`include/camel/core/context/context.h#Context（以及同文件的 `setEntryResultHandler`）`), and modules link
+program's Builder on the Context (`include/camel/core/context/context.h#Context`（以及同文件的 setEntryResultHandler）), and modules link
 `libcamel` with an undefined-symbol export scan, so a public entry under `include/camel/compile/`
 resolves from the module. A generic declaration already builds the three functions it needs
 (`src/parse/ast/builder.cpp#Builder::visitFuncAnno` emits `name__lhs::<T>`, `name__rhs::<T>`, `name__when::<T>`);
@@ -152,7 +152,7 @@ PROOF session=1 reserved=1 fresh_id=51 side=1 bound=1 table=52 version=1
 So the first way is the one to build, and the encoder is not an obstacle: publication is the three
 lines the runtime already uses at pass time for an operator's definition graph —
 `context.reserveProgram()`, `encodeToRuntimeProgram(graph, *program, &context.graphIds())`,
-`context.pinRuntimeProgram(program)` (`src/runtime/definitions.cpp#DefinitionStore::libraryFunction（以及同文件的 `DefinitionStore::build`）`) — and
+`context.pinRuntimeProgram(program)` (`src/runtime/definitions.cpp#DefinitionStore::libraryFunction`（以及同文件的 DefinitionStore::build）) — and
 `encodeToRuntimeProgram` is a public entry (`include/camel/compile/gir/encode.h#encodeToRuntimeProgram`).
 
 What is missing is smaller than it looked: `Builder`, `GenericTemplate` and `instantiateGenericAs`
@@ -162,7 +162,7 @@ one new public entry beside `encodeToRuntimeProgram` (the context, a template ha
 expected `FunctionType` in, the instance's compile graph out, `why` when it does not fit), with the
 handle carried by the `RuleObject` (the ruling's "the Rule value carries its template"). The engine
 needs no lookup of its own for it: the public module API exposes an `Entity` only as an opaque
-carrier (`include/camel/core/module/module.h#EntityAccess（以及同文件的 `Entity`）`), and the front end is the side that knows what
+carrier (`include/camel/core/module/module.h#EntityAccess`（以及同文件的 Entity）), and the front end is the side that knows what
 a rule's template is.
 
 The second way stays an alternative for the *sides* only, and only if materialized patterns turn out

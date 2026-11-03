@@ -20,7 +20,7 @@
 
 | 名字 | 声明在哪 | 接受张量实参？ |
 |---|---|---|
-| `sum`、`mean`、`min`、`max`、`argmax`、`argmin` | `stdlib/array.cml#sum（以及同文件的 `mean`、`min`、`max`、`argmax`、`argmin`）` | **接受**（6.0 / 1.0 / 1.0 / 1.0 / 0 / 0） |
+| `sum`、`mean`、`min`、`max`、`argmax`、`argmin` | `stdlib/array.cml#sum`（以及同文件的 mean、min、max、argmax、argmin） | **接受**（6.0 / 1.0 / 1.0 / 1.0 / 0 / 0） |
 | `abs`、`exp`、`log`、`erf`、`erfc` | `stdlib/math.cml` | **拒绝**：`WhenConditionUnmet`，`when is_float::<T>()` 对 `f32[2, 3]` 为假 |
 | `pow` | `stdlib/math.cml#pow` | **拒绝**：`(x: T, y: T)` 把 `T` 绑成 `f32[2,3]`，第二个实参 `float` 对不上 |
 | `dim` | `stdlib/array.cml#dim` | **假匹配**：轴是 `<1>` 里的静态参数，不在括号里 |
@@ -31,7 +31,7 @@
 
 清单（`inspect --ops`，URI / 元数）：`tensor:zeros(1)`、`tensor:ones(1)`、`tensor:eye(1)`、`tensor:full(2)`、`tensor:from_bytes_aggregate(2)`、`tensor:from_bytes_bf16(2)`、`tensor:from_bytes_bool(2)`、`tensor:from_bytes_f16(2)`、`tensor:from_bytes_f32(2)`、`tensor:from_bytes_f64(2)`、`tensor:from_bytes_i32(2)`、`tensor:from_bytes_i64(2)`、`tensor:load_npy_bool(1)`、`tensor:load_npy_f32(1)`、`tensor:load_npy_f64(1)`、`tensor:load_npy_i32(1)`、`tensor:load_npy_i64(1)`。
 
-试过、也真跑过：把 `stdlib/signatures/tensor.cml#zeros（以及同文件的 `ones`、`eye`）` 那三条**作者已经写好的**声明文本（`zeros`、`ones`、`eye`，写法不是我发明的）搬进编译文件 `stdlib/tensor.cml` 的 "creation" 一节。
+试过、也真跑过：把 `stdlib/signatures/tensor.cml#zeros`（以及同文件的 ones、eye） 那三条**作者已经写好的**声明文本（`zeros`、`ones`、`eye`，写法不是我发明的）搬进编译文件 `stdlib/tensor.cml` 的 "creation" 一节。
 
 **它们加载得进去，`inspect --ops` 也照样给行，但全量测试塌了 137 个**：
 

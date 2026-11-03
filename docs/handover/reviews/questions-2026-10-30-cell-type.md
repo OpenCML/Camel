@@ -16,7 +16,7 @@
 
 卡住的是 `T`。单元建在"流被创建"时跑的那段体里（`src/compile/gct/builder.cpp#nameUseIn`），
 那一刻要给出 `T`，而 **GCT 只认写出来的类型**：`typeScope_`/`visitType`
-（`src/compile/gct/builder.h#context_（以及同文件的 `Builder`、`visitRefData`）`）里没有表达式的类型。`loop i = 0` 的初值是个字面量，
+（`src/compile/gct/builder.h#context_`（以及同文件的 Builder、visitRefData））里没有表达式的类型。`loop i = 0` 的初值是个字面量，
 GCT 顺手就有 `int64`；但 5.4 点名的 `pairs(n)`，内层是 `loop j = i + 1`，`i + 1` 在 GCT 处没有类型。
 
 GCT 唯一能表达"某表达式的类型"的机制是 `typeof <expr>`（`src/compile/gct/builder.cpp#addTypedCell`，`TypeOfType::create`），
