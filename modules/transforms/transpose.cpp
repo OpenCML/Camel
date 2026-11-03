@@ -163,13 +163,26 @@ RuleChoice chooseTransposedRule(
         context, camel::core::transposeRulesOf(std::string(uri)), instanceTypes, actual,
         dataOperandCount, words, answered);
     if (!choice.found() && choice.refusal != RuleRefusal::Shape) {
-        // The law could not be built at the operands' own types. That is not this question's to
-        // refuse: a law whose right side the expansion can still write is not a law that says this
-        // step is not its shape, and refusing here reports the next step's gap as this one's. Ask
-        // again at the one `float` the expansion falls back to -- the answer the choice gave before
-        // laws were written per shape -- and let the expansion say what it cannot build.
+        // The law could not be built at one type per port. That is not this question's to refuse: a
+        // law whose right side the expansion can still write is not a law that says this step is not
+        // its shape, and refusing here reports the next step's gap as this one's. Ask again at the
+        // **one** type the law is written for -- a law that names a single type parameter for
+        // several positions (`add_t::<T>(x: T, c: T)`) is instantiated at one type, and the ports it
+        // then has are that type's ports (`it takes 1 type parameter(s), and it was asked for 3`
+        // is what one-per-port answers it).
+        //
+        // That one type is the step's own, and it was `Float64()` here until 2026-11-04: a narrow
+        // float step then fell back to a `float` instance, whose ports take no `f32` operand, so the
+        // choice refused by shape and the walk stopped -- measured, `vjp` of `(x: f32) => x + 1.5`
+        // read `skip=rule-shape uri=:op/add_f reason=the rule takes (float, float), and the operator
+        // has (f32, f32)`. The cotangent's element type is the step's own: an `f32` cotangent's
+        // element is `f32`, a `float` cotangent's is `float`, and the operands of a step are the
+        // types that cotangent is a cotangent of.
+        Type *soleType = instanceTypes.empty() || instanceTypes.front() == nullptr
+                             ? Type::Float64()
+                             : instanceTypes.front();
         choice = chooseRuleAmong(context, camel::core::transposeRulesOf(std::string(uri)),
-                                 {Type::Float64()}, actual, dataOperandCount, words, answered);
+                                 {soleType}, actual, dataOperandCount, words, answered);
         // `operandTypes` stay the node's own in both readings: the shape test is about the operands
         // the walk will hand the right side, whatever instance the ports were read from.
         if (!choice.found()) {
@@ -266,7 +279,12 @@ bool ruleTakesOperands(
     const auto *instance =
         camel::compile::gir::genericRuleInstanceByName(context, ruleName, types, {}, unused);
     if (instance == nullptr) {
-        types    = {Type::Float64()};
+        // The same fallback the choice makes, and for the same reason: several ports of one law can
+        // name one type parameter, and such a law is instantiated at **one** type -- the step's own,
+        // which is this list's first entry (the cotangent's element type), not a `Float64()` that
+        // no `f32` operand fits.
+        const Type *sole = types.empty() || types.front() == nullptr ? Type::Float64() : types.front();
+        types    = {const_cast<Type *>(sole)};
         instance = camel::compile::gir::genericRuleInstanceByName(context, ruleName, types, {}, unused);
     }
     const FunctionType *ports =
@@ -313,12 +331,38 @@ bool ruleTakesOperands(
     return takes;
 }
 
+/// A floating scalar's addition, in that scalar's own width: `:op/add_d` at `float`, `:op/add_f` at
+/// `f32`. A narrow float is a float but it is **not** a `float` and not the same slot: `f32` is four
+/// bytes and `float` is eight, so a cotangent written as one and read as the other is a
+/// reinterpretation of bits, not a conversion. `Tangent<f32>` is `f32` (`camel/core/tangent_space.h`
+/// answers `Self` for every floating scalar, and `stdlib/types.cml#Tangent` says so in the language),
+/// so an `f32` cotangent adds with the `f32` addition and its zero is an `f32` zero.
+///
+/// nullptr for a type this file has no addition for; the caller keeps the answer it gave before an
+/// `f32` cotangent existed, and an exit whose cotangent is such a type is refused where the signature
+/// is built rather than answered here.
+const char *floatAddUri(const Type *type, Type *&addType) {
+    if (type == nullptr) {
+        return nullptr;
+    }
+    if (type->code() == camel::core::type::TypeCode::Float64) {
+        addType = Type::Float64();
+        return ":op/add_d";
+    }
+    if (type->code() == camel::core::type::TypeCode::Float32) {
+        addType = Type::Float32();
+        return ":op/add_f";
+    }
+    return nullptr;
+}
+
 /// The sum a cotangent accumulates with is the sum of the type it lands in: two array cotangents
-/// add element by element (`:tangent/add_arr`, design principles 9.9) and a number's add is
-/// `:op/add_d`. Handing an array to `add_d` is the same lie as calling it a float -- it reads the
-/// array as a number and takes the process down, which is what two element reads of one array did
-/// (a sum of two reads was enough; one read was not). Every accumulation in this file asks this
-/// question; a site that spells `:op/add_d` itself decided the answer without asking.
+/// add element by element (`:tangent/add_arr`, design principles 9.9) and a number's add is the add
+/// of its own width (`:op/add_d`, `:op/add_f`). Handing an array to `add_d` is the same lie as
+/// calling it a float -- it reads the array as a number and takes the process down, which is what
+/// two element reads of one array did (a sum of two reads was enough; one read was not). Every
+/// accumulation in this file asks this question; a site that spells `:op/add_d` itself decided the
+/// answer without asking.
 const char *addUriFor(const camel::runtime::GCGraph *function, gc_node_ref_t ref, Type *&addType) {
     const camel::runtime::GCNode *node = function->node(ref);
     const Type *type                   = node != nullptr ? node->dataType() : nullptr;
@@ -329,14 +373,36 @@ const char *addUriFor(const camel::runtime::GCGraph *function, gc_node_ref_t ref
         addType = space.space;
         return ":tangent/add_arr";
     }
+    if (const char *uri = floatAddUri(space.hasSpace() ? space.space : nullptr, addType)) {
+        return uri;
+    }
     addType = Type::Float64();
     return ":op/add_d";
 }
 
+/// Whether this transform has a cotangent for a result of type `result`: the cotangent is the
+/// result's tangent space (`tangentSpaceOf`), and every width this file can add is a width it can
+/// transpose at. Today that is the two scalars `float` and `f32` -- the arithmetic of the walk is the
+/// addition above and the rules the family files, and those are written for the widths the language's
+/// float operators come in (`:op/add_d`, `:op/add_f`). A result with no tangent space has no
+/// cotangent to take in at all; a reduced-precision float has one, and this file has no addition for
+/// it yet, so it is refused here instead of being answered with a `float` cotangent.
+bool hasResultCotangent(const Type *result) {
+    if (result == nullptr) {
+        return false;
+    }
+    const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(result);
+    if (!space.hasSpace() || space.space == nullptr) {
+        return false;
+    }
+    Type *unused = nullptr;
+    return floatAddUri(space.space, unused) != nullptr;
+}
+
 /// The type a transposed function's cotangent input lives in: the cotangent of the result, which is
-/// the result's tangent space. Every shape that reaches these lines has passed the `float` guard
-/// above, so this answers `float` today -- but it *asks* the type system instead of restating the
-/// guard, so widening the guard cannot leave a `float` where an array is promised (design principles
+/// the result's tangent space. A `float` result answers `float` and an `f32` result answers `f32`
+/// (`Tangent<f32>` is `f32`), which is the query and not a width written down here -- so widening
+/// what `transpose` accepts cannot leave a `float` where an `f32` is promised (design principles
 /// 9.9, and the drift `jvp`'s four sites were fixed for).
 Type *cotangentTypeOfResultType(const Type *result) {
     if (result == nullptr) {
@@ -385,7 +451,15 @@ FunctionType *transposeSignature(
     if (function->normTypesCount() == 0) {
         return nullptr;
     }
-    if (function->exitType() != Type::Float64()) {
+    // What the cotangent of the result is: the result's *tangent space*, asked of the type. A
+    // `float` answers `float` and an `f32` answers `f32`, so this is one law for both widths rather
+    // than a `float` law that a narrow float has to be read into: `Tangent<f32>` is `f32`
+    // (design principles 9.9, `stdlib/types.cml#Tangent`), and the cotangent the caller passes, the
+    // cotangent the answer's slots hold and the cotangent every rule is instantiated at are that one
+    // type. A result whose cotangent this file has no arithmetic for is refused by `hasResultCotangent`
+    // -- it is the same question `cotangentTypeOfResultType` answers below, asked once, before a
+    // signature is built from it.
+    if (!hasResultCotangent(function->exitType())) {
         return nullptr;
     }
     // The law, as the author rules it (2026-11-02 11:30): `transpose(g)` treats **every parameter
@@ -1036,6 +1110,20 @@ bool buildTransposeMember(
                 camel::core::rtdata::toSlot<double>(0.0), Type::Float64(),
                 rt::kGCNodeFlagConstant);
         };
+        // The zero of a cotangent whose space is a floating scalar, written in that scalar's own
+        // width: an `f32` cotangent's zero is an `f32` zero (a four-byte slot holding `0.0f`), not a
+        // `float` zero that the reader would have to reinterpret. `Tangent<f32>` is `f32`, and the
+        // sum the zero is the identity of is `:op/add_f` (`floatAddUri`), so the constant and the
+        // arithmetic are the same width. A space that is not a floating scalar, and `float` itself,
+        // keep the `float` zero they had.
+        const auto zeroIn = [&](Type *type) -> gc_node_ref_t {
+            if (type != nullptr && type->code() == camel::core::type::TypeCode::Float32) {
+                return draft.materializeStaticValue(
+                    camel::core::rtdata::toSlot<float>(0.0f), Type::Float32(),
+                    rt::kGCNodeFlagConstant);
+            }
+            return zero();
+        };
         // The type a value's cotangent lives in, read from the value's type: the same question
         // `jvp` asks of a parameter (`camel/core/tangent_space.h`), asked here of a loop's state and
         // of a value that escaped it. A `float[]` state pulls back an array; a number pulls back a
@@ -1251,7 +1339,8 @@ bool buildTransposeMember(
         const auto ruleCotangent = [&](const std::string &ruleName,
                                        std::span<const gc_node_ref_t> inputs, size_t position,
                                        gc_node_ref_t ct, Type *ctType, std::string &why,
-                                       bool &noInstance) -> gc_node_ref_t {
+                                       bool &noInstance,
+                                       const std::vector<Type *> *lawTypes) -> gc_node_ref_t {
             const auto valueOf = [&](size_t slot) -> gc_node_ref_t {
                 return slot < inputs.size() ? knownValue(inputs[slot]) : rt::kInvalidNodeRef;
             };
@@ -1281,9 +1370,25 @@ bool buildTransposeMember(
                                            ? const_cast<Type *>(inputNode->dataType())
                                            : nullptr);
             }
+            // The types the right side is expanded at, and they are the ones the **choice** made its
+            // instance at when it says which instance that is (`lawTypes`): the same law, the same
+            // tuple, one decision instead of two.
+            //
+            // This is not a detail. A law that names one type parameter for several positions
+            // (`add_t::<T>(x: T, c: T)`) is instantiated at *one* type, and asking the expansion at
+            // one type per port is a question it answers with `it takes 1 type parameter(s), and it
+            // was asked for 3` -- it then falls back to a single `float` instance, and the right
+            // side was built at `float` around an `f32` cotangent: measured on 2026-11-04 as
+            // `transpose_of_autodiff::mul_tangent<f32>` passing `a f32 as ordinary argument 0 of
+            // autodiff::add_cotangent<float>, which takes a float`, which the scheduler stops on.
+            // The per-port list stays the answer for a law the choice has no instance of (a wildcard
+            // or a rank outside the set the law serves), which is the case this function is also
+            // asked about.
+            const std::vector<Type *> &at =
+                lawTypes != nullptr && !lawTypes->empty() ? *lawTypes : operandTypes;
             return camel::transforms::expandRuleByName(
                 *state.context, group, group.transaction(member), ruleName, valueOf, {ct}, position,
-                operandTypes, why, &noInstance);
+                at, why, &noInstance);
         };
         const auto noteRule = [&usedRules](const std::string &name) {
             if (std::find(usedRules.begin(), usedRules.end(), name) == usedRules.end()) {
@@ -2158,7 +2263,9 @@ bool buildTransposeMember(
                     bool noInstance = false;
                     const gc_node_ref_t answer =
                         ruleCotangent(chosenRule, inputs, i, local[ref],
-                                      cotangentTypeOf(ref, Type::Float64()), why, noInstance);
+                                      cotangentTypeOf(ref, Type::Float64()), why, noInstance,
+                                      armChoice.instance != nullptr ? &armChoice.instance->types
+                                                                    : nullptr);
                     if (answer == rt::kInvalidNodeRef) {
                         armsOk = false;
                         // Two facts, and the expansion names which one it met: `noInstance` means the
@@ -2295,7 +2402,13 @@ bool buildTransposeMember(
                     }
                     const gc_node_ref_t part =
                         i < found->second.size() ? found->second[i] : rt::kInvalidNodeRef;
-                    addCotangent(parts[i], part == rt::kInvalidNodeRef ? zero() : part);
+                    // The zero of a slot nobody read is the zero of that component's own cotangent
+                    // space, read from the component's type (`Tangent<f32>` is `f32`).
+                    addCotangent(
+                        parts[i],
+                        part == rt::kInvalidNodeRef
+                            ? zeroIn(cotangentTypeOf(parts[i], Type::Float64()))
+                            : part);
                 }
                 break;
             }
@@ -2619,7 +2732,8 @@ bool buildTransposeMember(
                     bool noInstance = false;
                     const gc_node_ref_t answer = ruleCotangent(
                         chosenRule, inputs, i, ct, cotangentTypeOf(ref, Type::Float64()), why,
-                        noInstance);
+                        noInstance,
+                        choice.instance != nullptr ? &choice.instance->types : nullptr);
                     if (answer == rt::kInvalidNodeRef) {
                         // The same two facts as the arm walk above, told apart the same way: the law
                         // would not instantiate at these operand types, or the walk could not reach a
@@ -2993,12 +3107,21 @@ bool buildTransposeMember(
                     const gc_node_ref_t slot = slots != tupleCotangents.end() && i < slots->second.size()
                                                    ? slots->second[i]
                                                    : rt::kInvalidNodeRef;
-                    // A slot nobody read is zero: that state's value pulls nothing back into it.
-                    loopNorm.push_back(slot == rt::kInvalidNodeRef ? zero() : slot);
+                    // A slot nobody read is zero: that state's value pulls nothing back into it. The
+                    // zero is written in the state's own cotangent space, which is the type the port
+                    // above was made at -- an `f32` state's seed is an `f32` zero.
+                    loopNorm.push_back(
+                        slot == rt::kInvalidNodeRef ? zeroIn(stateCotangentTypes[i]) : slot);
                 }
                 for (size_t i = 0; i < caught.size(); ++i) {
-                    // Every sum starts at zero: a value a round never reaches adds nothing.
-                    loopNorm.push_back(zero());
+                    // Every sum starts at zero: a value a round never reaches adds nothing. The sum
+                    // is a component of the loop's value like any other, so its zero is the zero of
+                    // that component's own cotangent space (`componentTypes`, which the answer's
+                    // components were typed from).
+                    const size_t componentAt = stateCount + i;
+                    loopNorm.push_back(zeroIn(componentAt < componentTypes.size()
+                                                  ? componentTypes[componentAt]
+                                                  : nullptr));
                 }
                 draft.setNormInputs(loopNode, std::span<const gc_node_ref_t>(loopNorm));
                 // The With inputs of a loop are the results of its parts and its round: the round is
@@ -3530,10 +3653,15 @@ bool buildTransposeMember(
                 }
                 // The question is which space, not which object: a `float` cotangent is the one whose
                 // tangent space *is* the float type, and asking by pointer would silently answer "not
-                // float" for any float type that is not the interned one.
-                if (portType == nullptr || space.space->code() == camel::core::type::TypeCode::Float64) {
-                    parts.push_back(zero());
-                    partTypes.push_back(Type::Float64());
+                // float" for any float type that is not the interned one. A narrow float is its own
+                // space too (`Tangent<f32>` is `f32`), so the zero is written in the width the space
+                // names and the slot is typed with that same space: an `f32` slot holding a `float`
+                // zero would be the reinterpretation this whole file refuses.
+                if (portType == nullptr ||
+                    space.space->code() == camel::core::type::TypeCode::Float64 ||
+                    space.space->code() == camel::core::type::TypeCode::Float32) {
+                    parts.push_back(zeroIn(portType == nullptr ? nullptr : space.space));
+                    partTypes.push_back(portType == nullptr ? Type::Float64() : space.space);
                     continue;
                 }
                 if (space.space->code() == camel::core::type::TypeCode::Array) {
