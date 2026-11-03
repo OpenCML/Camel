@@ -321,3 +321,32 @@ walks through it`），它把"链尾"从语句节点改成了**位门**，五处
 
 这正是 A 那 32 条的症状来源：链尾成了一个位门，`inUnusedSyncBlock` 之外的读者（生成器体内语句的消费者）
 不再把它当"这个块写过东西"，于是 `println` 被判成"所在 sync 块没人用"，效果被丢掉。
+### 假设一（"位门没登记"）不成立：五处都经 `chainPlaceForNode`，那里就是唯一的登记点
+
+| 造位门的位置 | 是否登记 |
+| --- | --- |
+| `builder_control.cpp#Builder::buildBranch`（`lastSyncedNode_ = chainPlaceForNode(joinNode)`） | 是 |
+| `builder_control.cpp#Builder::visitLoopNode`（同上，`loopNode`） | 是 |
+| `builder_control.cpp#Builder::buildStreamLoop`（同上，`loopNode`） | 是 |
+| `builder_expr.cpp#Builder::readVariableThrough`（`const node_handle_t place = chainPlaceForNode(value)`） | 是 |
+| `builder_operators.cpp`（`const node_handle_t place = chainPlaceForNode(targetNode)`） | 是 |
+
+`chainPlaceForNode`（`builder.cpp:43`）是唯一把门放进 `chainPlaceGates_` 的地方
+（`chainPlaceGates_.insert(place)`，当 `place != node`），所以经它造的门一律登记。
+
+### 下一层：步行在门口停下时问的是"它是不是位门"，从没问"这个门有没有人读"
+
+`inUnusedSyncBlock`（`src/compile/gir/builder_diagnostics.cpp:478–507`）：
+
+- 只沿 `draft.ctrlUsersOf(id)` 与 `draft.syncUsersOf(id)` 走（484 行），**从不沿数据输入/数据使用者走**；
+- 遇到 `GATE`：在 `chainPlaceGates_` 里就继续走（496–498），不在就**立刻 `return true`**（500）；
+- `return true` 的那一支就是诊断的原句 "the sync block it is in is not used"（540–542）。
+
+所以"块的值门"这一站被当成"这个效果就是块的值"，而**块的值有没有人读，它一次都没问**。生成器体里
+`println` 的链尾正是这个值门（`a49cac54d` 之后链尾成了位门，值门在它之后），于是效果被判"没人用"。
+
+第二条同层读数（从代码就能看出来）：`chainLinkSaysSomething`（`builder_helpers.h:626`）要求
+`!hasDirectDataDependency(from, to)`，而新链尾的门**数据输入正是它前面那个语句**——那条边因此可能
+根本不写。这一条要先量出来（链尾门有没有入边），才能决定是修步行还是修连边。
+
+**这一轮没有改代码**：假设一被否掉了，改哪里要等这两条读数里哪一条成立。
