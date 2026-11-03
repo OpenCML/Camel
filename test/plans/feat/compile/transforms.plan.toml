@@ -1074,10 +1074,27 @@ name = "grad_array_with_int.fvm"
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_with_int.cml"
 args = ["${case}", "std::fvm"]
-expect_exit = 1
-expect_output_contains = ["Invalid call to 'split'"]
+expect_exit = 0
+expect_output_contains = ["6.0", "([2.0, 3.0], ())"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 15000
+
+# The same two answers with the `int` on the other side of the array, which is the only place a half's
+# port index and a parameter's index come apart: `((), float[])` has one port, `dxs`, and it is
+# parameter 1. A build that reads a port's position as a parameter's position names `n`, answers the
+# wrong shape or refuses, and never reaches the numbers.
+[[tests]]
+name = "grad_array_int_parameter_first.nvm"
+desc = "`f(n, xs) = xs[n]` at (1, [3.0, 2.0]) through `vjp`: 2.0, `()` for the `int` -- an empty member of the answer, since `Tangent<int>` is `()` and the pullback answers one slot per parameter -- and `[0.0, 1.0]` for `xs`. The backward half's type is `((), float[])` and its one port is `dxs`, which is parameter 1: a port index read as a parameter index names `n`, so this is where the two readings differ. The `()` answers a member and takes no port -- nobody can pass a value where there is none."
+kind = "behavior"
+case = "../../../cases/compile/transforms/grad_array_int_parameter_first.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["2.0", "()", "[0.0, 1.0]"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
 
 # A struct's member read by position used to segfault the compiler in release builds; it is a refusal now.
 [[tests]]

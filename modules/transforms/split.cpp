@@ -991,6 +991,16 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
         if (tangentOfParameter != nullptr &&
             camel::core::tangentSpaceOf(tangentOfParameter).hasSpace()) {
             tangentParams.emplace_back(tangentOfParameter, false);
+        } else {
+            // The parameter's tangent is `()`: an **answer** the half gives, not an argument it
+            // takes. It keeps its place in the half's type so that the transposed half answers one
+            // slot per parameter -- `Vjp<F>`'s pullback is `(ct) => (..Tangent<ParamsOf<F>>)`, and
+            // `Tangent<int>` is `()` -- while the half's *graph* declares no port for it, because
+            // nobody can pass a value where there is nothing to pass (the port loop below skips it by
+            // the same predicate). Losing the place here makes the pullback answer one member fewer
+            // than it declares: `grad_array_with_int.fvm` read `(float[],)` where the declaration
+            // said `(float[], ())`.
+            tangentParams.emplace_back(TupleType::create(std::vector<Type *>{}), false);
         }
     }
 

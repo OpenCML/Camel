@@ -83,6 +83,21 @@ Type *resultCotangentType(const camel::runtime::GCGraph *function) {
 
 } // namespace
 
+/// Whether `type` is `()`, the empty tuple. The distinction this draws is the one the whole answer
+/// shape turns on, and it is a difference of *types*, not of tangent spaces: an `int` parameter and a
+/// `()` parameter both have no tangent space, but an `int` is a value the caller still passes and
+/// answers nothing, while `()` is a place with nothing to pass and an empty member of the answer
+/// (`Tangent<int>` is `()` -- author, 2026-11-03: `()` is what the half **answers**, not what it
+/// takes). Reading them as one thing either puts a port where nobody can fill it or drops a member
+/// the declaration promised.
+bool isUnitType(const Type *type) {
+    if (type == nullptr || type->code() != camel::core::type::TypeCode::Tuple) {
+        return false;
+    }
+    const auto *tuple = tt::as_ptr<camel::core::type::TupleType>(const_cast<Type *>(type));
+    return tuple != nullptr && tuple->size() == 0;
+}
+
 FunctionType *transposeSignature(
     FunctionType *function, const std::vector<bool> &participates,
     std::vector<size_t> *answersOf, const std::vector<size_t> *captures) {
@@ -152,6 +167,21 @@ FunctionType *transposeSignature(
         const bool participatesHere =
             participates.empty() ? (space.hasSpace() && space.space != nullptr) : participates[i];
         if (!participatesHere) {
+            if (participates.empty() && isUnitType(parameter)) {
+                // `()` is an **answer** with an empty slot, not a parameter: `(..Tangent<ParamsOf<F>>)`
+                // has one member per parameter, so `Tangent<int>` is `()` and the pullback's answer
+                // keeps the place even though nothing can land in it. It takes no port -- nobody can
+                // pass a value where there is none. `grad_array_with_int.fvm` read `(float[],)` where
+                // the declaration said `(float[], ())` for exactly this missing place. An `int`
+                // parameter is *not* this: it is a value the caller still passes, so it falls through
+                // to the value parameters below and answers nothing.
+                cotangentsOfParticipants.push_back(
+                    camel::core::type::TupleType::create(std::vector<Type *>{}));
+                if (answersOf != nullptr) {
+                    answersOf->push_back(i);
+                }
+                continue;
+            }
             // A value the transposed graph reads and answers nothing for. It keeps its place among
             // the parameters the caller passes, in the order they stand.
             params.emplace_back(parameter, false);
@@ -320,6 +350,26 @@ bool buildTransposeMember(
     };
     std::vector<std::string> usedRules;
     std::vector<uint32_t> armRegionsBuilt;
+    // Which parameter a normal port of this function stands for, and which port a parameter asks for.
+    // **One walk, and every reader below asks it**: `normPorts()` position `i` is
+    // `portParameter[i]`, and a parameter asks `portOfParameter[at]`. A `()` place is an answer and
+    // not a parameter, so it is the one thing skipped: a graph that declares a port for every other
+    // parameter -- a plain function, an `int` included -- degenerates to the identity, while a half's
+    // graph declares a port only for a parameter that has a tangent space (`buildSplitGraph`: "a ()
+    // slot is an answer this half gives, never an argument it takes") and its type keeps the place as
+    // `()`, so its port `i` is the parameter index among the non-`()` places and **not** the `i`-th
+    // parameter: `f(n: int, xs: float[])`'s backward half is `((), float[])` with one port, `dxs`,
+    // which is parameter 1. Reading a port index as a parameter index is the arithmetic this
+    // replaces, and it is wrong exactly when a `()` place stands before a parameter with a port.
+    std::vector<size_t> portParameter;
+    std::vector<size_t> portOfParameter(paramCount, paramCount);
+    for (size_t at = 0; at < paramCount; ++at) {
+        if (isUnitType(function->funcType()->normTypeAt(at))) {
+            continue;
+        }
+        portOfParameter[at] = portParameter.size();
+        portParameter.push_back(at);
+    }
     // The parameters whose *value* the body asked for and this member cannot hand over: a parameter a
     // cotangent is answered for has no port, so a rule's right side that reads it is refused. The
     // refusal stands -- nothing here answers with a number it does not have -- and what is new is
@@ -379,6 +429,12 @@ bool buildTransposeMember(
                     continue;
                 }
                 Type *const portType = function->funcType()->normTypeAt(i);
+                if (isUnitType(portType)) {
+                    // `()` is a member of the answer and not a parameter: nobody can pass a value
+                    // where there is none, so it takes no port. An `int` parameter is a value the
+                    // caller still fills and is not this (`isUnitType`).
+                    continue;
+                }
                 const gc_node_ref_t port =
                     draft.addPortNode(portType, draft.allocateRuntimeSlot(portType));
                 draft.appendNormPort(port);
@@ -430,35 +486,14 @@ bool buildTransposeMember(
         if (carriesClosure && function->closureType() != nullptr) {
             draft.setClosureType(const_cast<camel::core::type::TupleType *>(function->closureType()));
         }
-        // Where a parameter's own value sits among the residuals, and why it is a **place** rather
-        // than a type. `residualsOf` numbers the residuals as the parameters by their index and then
-        // the values the body computed (`modules/transforms/split.cpp`, "program order"), one
-        // residual per parameter whether or not the parameter has a tangent space -- a parameter
-        // without one is still a value the backward half may read. The backward half declares a
-        // normal port only for a parameter that *has* a tangent space (`buildSplitGraph`, "a () slot
-        // is an answer this half gives, never an argument it takes"), so its port `i` is the `i`-th
-        // parameter that has one, and that is not the parameter's index whenever a parameter without
-        // a tangent space stands before it: `f(n: int, xs: float[])` has one port, `dxs`, which is
-        // parameter **1**. So the walk below counts the leading residuals whose type has a tangent
-        // space, which is the same predicate the cut counted ports with. One algorithm, here, and
-        // the number it answers is a residual slot -- the index the closure port list is in.
-        const auto residualSlotOfPort = [&](size_t port) -> size_t {
-            size_t seen = 0;
-            for (size_t slot = 0; slot < closureOf.size(); ++slot) {
-                const camel::runtime::GCNode *member = function->node(closureOf[slot]);
-                if (member == nullptr || member->dataType() == nullptr) {
-                    continue;
-                }
-                if (!camel::core::tangentSpaceOf(member->dataType()).hasSpace()) {
-                    continue;
-                }
-                if (seen == port) {
-                    return slot;
-                }
-                ++seen;
-            }
-            return closureOf.size();
-        };
+        // Where a parameter's own value sits among the residuals, and why a *parameter's number* is the
+        // place rather than a type. `residualsOf` numbers the residuals as the parameters by their
+        // index and then the values the body computed (`modules/transforms/split.cpp`, "program
+        // order"), one residual per parameter the tangent side reads -- so slot `at` is parameter
+        // `at`'s value, and this graph declares one closure port per residual in that order. Which
+        // parameter this is therefore decides the slot: two arrays of one element type are two
+        // parameters, and the shape an answer must be written in is *this* parameter's, not the
+        // first member's of that type.
         // A closure member is forwarded to the member the transposed graph carries, and nothing
         // about where it came from is asked (author, 2026-11-03 08:50). A member the cut wrote and
         // a member a caller closed by hand are the same shape -- a port the function is handed --
@@ -763,22 +798,16 @@ bool buildTransposeMember(
                     if (ports[i] != ref) {
                         continue;
                     }
-                    // The port at position `i` of the original graph **is** parameter `i`: a graph has one port
-                    // per parameter, in the order the parameters stand. It is `paramPorts` -- the ports of
-                    // the *new* graph -- that holds one entry per value parameter only, so reading this
-                    // place through that list named the wrong parameter whenever a value parameter
-                    // stood before an answered one (`index_into(xs, i)`: port 0 is the array, and the
-                    // list's own position 0 is the `int`).
-                    const size_t at = i < paramCount ? i : paramCount;
-                    // Every place below indexes the *parameter*, not the port. `portOfParam`,
-                    // `capturePortOf` and `transposeSignature`'s capture list are all keyed that way --
-                    // the last one through `funcType()->normTypeAt(at)` -- so the ask this walk records
-                    // has to be a parameter index too, or the set the probe reports names places the
-                    // consumer reads as different parameters. The two numbers agree for every graph a
-                    // parameter of which is one norm port, which is the shape this walk assumes; writing
-                    // `at` says which of the two lists the number belongs to, and keeps a port past the
-                    // last parameter (`i >= paramCount`, which has no parameter to name) out of the set
-                    // instead of recording it as one.
+                    // The port at position `i` of the original graph is the parameter
+                    // `portParameter[i]`, asked of the one walk above -- `i` for a plain graph, and
+                    // the `i`-th parameter with a tangent space for a half's graph, whose `()`
+                    // places take no port. Everything below indexes the *parameter*: `portOfParam`,
+                    // `capturePortOf` and `transposeSignature`'s capture list are all keyed that
+                    // way, the last one through `funcType()->normTypeAt(at)`, so a port index read
+                    // as a parameter index names a different place whenever a parameter without a
+                    // tangent space stands before one with a tangent space.
+                    const size_t at =
+                        i < portParameter.size() ? portParameter[i] : paramCount;
                     // A value the body asked for and the caller hands in as a capture port: the
                     // port stands where the parameter stands, so the member reads the value from
                     // it and nothing is asked of the caller's closure.
@@ -796,17 +825,16 @@ bool buildTransposeMember(
                         forwardOf[ref] =
                             at < portOfParam.size() ? portOfParam[at] : rt::kInvalidNodeRef;
                         if (forwardOf[ref] == rt::kInvalidNodeRef && at < paramCount) {
-                            // The parameter's own value, by **identity**: the slot is the one this
-                            // parameter's residual sits in (`residualSlotOfPort`), and the closure
-                            // port there is the value. Which parameter this is decides the slot --
-                            // two arrays of one element type are two parameters, and the shape an
-                            // answer must be written in is *this* parameter's, not the first
-                            // member's of that type. `xs[0] + ys[0]` over arrays of two lengths
-                            // answered `gy` sized by `xs` while the member was chosen by type. The
-                            // slot's type is **checked**, never searched: a slot that does not hold
-                            // a value of the parameter's type refuses instead of handing over a
-                            // neighbouring member.
-                            const size_t slot  = residualSlotOfPort(at);
+                            // The parameter's own value, by **identity**: the closure slot that is this
+                            // parameter's value, and the port there is the value. Which parameter
+                            // this is decides the slot -- two arrays of one element type are two
+                            // parameters, and the shape an answer must be written in is *this*
+                            // parameter's, not the first member's of that type. `xs[0] + ys[0]` over
+                            // arrays of two lengths answered `gy` sized by `xs` while the member was
+                            // chosen by type. The slot's type is **checked**, never searched: a slot
+                            // that does not hold a value of the parameter's type refuses instead of
+                            // handing over a neighbouring member.
+                            const size_t slot   = at;
                             Type *const askType = function->funcType()->normTypeAt(at);
                             const camel::runtime::GCNode *slotMember =
                                 slot < closureOf.size() ? function->node(closureOf[slot]) : nullptr;
@@ -2598,28 +2626,48 @@ bool buildTransposeMember(
             // Each answered parameter's cotangent, and the type it has: an array parameter's
             // cotangent is an array. The type comes from the parameter's own answer
             // (`tangentSpaceOf`, the query the signature reads), so nothing here says `float` on
-            // behalf of a type that is not one. A parameter with no tangent space answers nothing
-            // and has no slot, which is what keeps the tuple the signature promised and the tuple
-            // this builds the same length.
+            // behalf of a type that is not one. A parameter with no tangent space answers the empty
+            // member `()` -- the signature has one place per parameter, and this is that place with
+            // nothing in it -- which is what keeps the tuple the signature promised and the tuple this
+            // builds the same length and the same order.
+            Type *const unitType = camel::core::type::TupleType::create(std::vector<Type *>{});
+            const auto unit      = [&]() {
+                ::Tuple *emptyTuple = ::Tuple::create(0, mm::autoSpace());
+                return draft.materializeStaticValue(
+                    camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(emptyTuple), unitType);
+            };
             std::vector<Type *> partTypes;
-            for (size_t i = firstPort; i < ports.size(); ++i) {
-                if (!participatesOf(i)) {
-                    // A parameter the transposition does not answer for -- a value the graph reads,
-                    // or one no cotangent can land on: no member of the answer is its.
+            // The **parameters**, not the ports: the walk above says which port a parameter asks for,
+            // and a `()` place has no port at all. Iterating `ports` was the same reading of a port
+            // index as a parameter index that named the wrong parameter everywhere else.
+            for (size_t at = firstPort; at < paramCount; ++at) {
+                if (!participatesOf(at)) {
+                    // A parameter the transposition answers nothing for. A `()` place owns a member
+                    // of the answer and that member is empty -- `Tangent<int>` is `()` -- while an
+                    // `int` parameter, which the caller still passes as a value, owns no member at
+                    // all. The two are told apart by the type (`isUnitType`), the same query the
+                    // signature answered with.
+                    Type *const parameterType = function->funcType()->normTypeAt(at);
+                    if (isUnitType(parameterType)) {
+                        parts.push_back(unit());
+                        partTypes.push_back(unitType);
+                    }
                     continue;
                 }
-                const camel::runtime::GCNode *portNode = function->node(ports[i]);
+                const size_t port =
+                    at < portOfParameter.size() ? portOfParameter[at] : paramCount;
+                if (port >= ports.size()) {
+                    os << "TRANSPOSE function=" << function->name() << " skip=unread-parameter at="
+                       << at << '\n';
+                    return false;
+                }
+                const camel::runtime::GCNode *portNode = function->node(ports[port]);
                 const Type *portType = portNode != nullptr ? portNode->dataType() : nullptr;
                 const camel::core::TangentSpaceAnswer space =
                     portType == nullptr ? camel::core::TangentSpaceAnswer{}
                                         : camel::core::tangentSpaceOf(portType);
-                if (portType != nullptr && !space.hasSpace()) {
-                    // Nothing can be where a cotangent goes, so this parameter answers none: the
-                    // `i` of `xs[i]` is an `int`.
-                    continue;
-                }
-                if (hasCotangent[ports[i]]) {
-                    parts.push_back(cotangent[ports[i]]);
+                if (hasCotangent[ports[port]]) {
+                    parts.push_back(cotangent[ports[port]]);
                     partTypes.push_back(space.space);
                     continue;
                 }
@@ -2646,7 +2694,7 @@ bool buildTransposeMember(
                     // through above.
                     const gc_node_ref_t zeros =
                         draft.addOperNode(space.space, nullptr, ":tangent/zeros_arr");
-                    draft.setNormInputs(zeros, std::span<const gc_node_ref_t>(&ports[i], 1));
+                    draft.setNormInputs(zeros, std::span<const gc_node_ref_t>(&ports[port], 1));
                     parts.push_back(zeros);
                     partTypes.push_back(space.space);
                     continue;
@@ -2656,7 +2704,7 @@ bool buildTransposeMember(
                 // not carry for anything but a number; refuse by name rather than answer a `float`
                 // where an array is promised.
                 os << "TRANSPOSE function=" << function->name() << " skip=unread-parameter port="
-                   << ports[i] << " type=" << (portType != nullptr ? portType->toString() : "?")
+                   << ports[port] << " type=" << (portType != nullptr ? portType->toString() : "?")
                    << '\n';
                 return false;
             }

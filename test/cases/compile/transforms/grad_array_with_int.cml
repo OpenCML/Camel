@@ -1,12 +1,9 @@
-// The author's reading of 2026-11-02 18:50, as a case: f(xs, n) = xs[n] * xs[0] at ([3.0, 2.0], 1) should
-// give the gradient of `xs`, [2.0, 3.0]. It does not run today, and this pins why:
-//   * the discrete `int` parameter has no tangent space (tangent_space.cpp answers none for it, which is
-//     what the ruling says), but `split` demands that every parameter be lifted -- so the refusal comes
-//     from `split`, not from the array;
-//   * behind it stands the second wall: the transpose has no rule for an array element times a scalar
-//     (grad_array_no_int.cml pins that one).
-// When wall A falls (a parameter without a tangent space takes no slot, as the ruling says), this
-// assertion becomes wall B's refusal, and after that the numbers: [2.0, 3.0] for `xs` and 0.0 for `n`.
+// The author's reading of 2026-11-02 18:50, as a case: f(xs, n) = xs[n] * xs[0] at ([3.0, 2.0], 1)
+// answers 6.0 and the gradient of `xs`, [2.0, 3.0], with `()` beside it for the `int` -- an empty
+// member of the answer, because the pullback answers one slot per parameter and `Tangent<int>` is
+// `()`; the `int` itself is a value the caller still passes and takes no answer slot of its own.
+// It read a `split` refusal until 2026-11-03, then stopped on the answer's shape: the pullback
+// answered `(float[],)` where `Vjp<F>` declares `(float[], ())`.
 import { vjp } from vjp
 
 func mixed(xs: float[], n: int): float {
