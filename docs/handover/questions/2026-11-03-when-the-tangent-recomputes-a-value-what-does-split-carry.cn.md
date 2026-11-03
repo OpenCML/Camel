@@ -65,10 +65,40 @@ bound at all`），所以这一格既是差集的下一个成员，也是这条�
    这条墙就不该出现——所以**C 必须先测**：读数只要看一次 `skip=backward` 运行后的图里
    `softmax<1>` 节点有几个（一个 = 复用了，墙在别处；两个 = 重算，C 成立）。
 
-## 默认建议：先做 `exp` 那个实验，再按结果走 A
+## 实验做完了（2026-11-03 深夜，`lane-exp`）：**墙不拦"重算"，只拦"重算还带不可达的参数"**
 
-那一次实验（`jvp_exp` + `exp_t`，再加一条 `vjp(sum(exp(x)))` 的读数）**今天就能取**，不涉及任何裁定，
-而且它本身就填掉差集的一格；它同时把 A 的代价定下来（拦"带上下文输入的重算"还是"一切重算"）。
-若墙只拦前者，默认走 **A**——它是 `split` 的问题，本该由 `split` 回答，而 `mean_axis` 那条 `skip=arity`
-是同一个问题的另一面，两处应当一起回答。B 不建议：代价落在语言的核心前提上，收益只是省一次 lift
-改动。C 保留为 A 的替代（若 `exp` 也拦，说明 lift 确实在重算，C 就成了最小改动）。
+给 `exp` 补了 `jvp_exp`（`exp(x) * dx`）与 `exp_t`（`ct * exp(x)`），两者都在后半边重算 `exp(x)`。
+结果**过了**，三处原文：
+
+```
+REINTERP jvp function=total graph=325 liftedFrom=265 type=(float[..], float[..]) => (float, float) pure nodes=3 kinds=3/2 exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_exp,jvp_sum
+REINTERP split function=jvp_of_total forward=344 backward=345 type=(float[..]) => (float, (float[..]) => float pure) pure residuals=2
+TRANSPOSE function=split_of_jvp_of_total_backward graph=346 type=(float) => (float[..],) nodes=6 arms=0 rhs=sum_t,mul_tensor_t,exp_t
+```
+
+`residuals=2` 说明 cut **把重算出来的 `exp(x)` 当残差带过去了**；走查也用上了新律（`rhs` 里有 `exp_t`）；
+库层答案与引擎逐元素相同：`value=10.107337927389695 d=[2.718281828459045, 7.38905609893065]`。
+
+于是本页的问题收窄成一句可判定的问法：**重算的调用，它的每个参数都必须从出口可达吗？**
+
+三处读数放进同一张表就能看出边界：
+
+| 后半边重算的调用 | 它的参数 | 结果 |
+|---|---|---|
+| `exp(x)`（本轮） | 只有输入 `x` | **过**，`residuals=2` |
+| `where(x > 0, 1, 0)`（`jvp_relu`） | 只有输入 `x` 和一个比较常量 | **过** |
+| `softmax<1>(x)` / `sum<1, true>(…)`（`jvp_softmax`） | 输入 `x` **加上 `<>` 里的轴与 `keepdims`** | 拒（`skip=backward … why=an operand of the node is not reachable from the half's exit`） |
+| `index_into(dxs, 0)`（`vjp_loop.rounds_are_undone_in_reverse`，已在树上） | 数组参数不是残差 | 拒（同一句原文） |
+
+所以"**重算本身是被允许的**"这一点已经确定（`exp` 与 `relu` 两例），剩下的是"`<>` 上下文参数算不算
+可达"这一格——它也正是 `mean_axis` 那条 `skip=arity` 的另一面（律的右手边读中间值时，走查要不要多声明
+一个端口）。**两条路**：A′ 让 cut 连调用的 `<>` 参数一起带过去（机制已在，`exp` 证明残差带着走这条路能
+通，所以代价比原来估的小得多）；C′ 让 lift 复用值半边已有的 `softmax<1>(x)` 节点（若那两处本就是同一
+个节点，问题就只剩 `<>` 参数，C′ 便不成立）。
+
+## 默认建议：A′
+
+`exp` 与 `relu` 已经证明"重算 + 残差"这条路是通的，所以这条墙不再需要"要不要允许多带东西"的裁定，
+只需要回答"上下文参数算不算可达"——那是一个 `split` 内部的可达性判断，也正是 `mean_axis` 那条
+`skip=arity` 要一起回答的问题。B（改律语言）不建议：代价落在语言核心前提上，而本轮的读数把收益削到
+只剩一个上下文参数。C′ 保留为 A′ 的替代，先看一次 `softmax<1>` 节点数即可判定。
