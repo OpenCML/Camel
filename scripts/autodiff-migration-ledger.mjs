@@ -197,11 +197,11 @@ let loaderFailure = ''
 // host's. 17 = 12 + the 5 this fix turns over, and those 5 are the ruler's, so they are required
 // everywhere; the 2 that ride on the binary are not.
 const LEDGER_RECORDED = {
-    total: 140,
-    library: 131,
-    pass: 17,
+    total: 141,
+    library: 132,
+    pass: 23,
     with: 50,
-    array: 72,
+    array: 73,
     other: 9,
 }
 
