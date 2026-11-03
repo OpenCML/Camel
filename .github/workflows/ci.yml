@@ -1,7 +1,10 @@
 # Everything that has to stay green, on the release branch, on every tag and on demand.
 #
-# The work of one platform lives in ci-leg.yml: compiling is ~13 of the ~15 minutes of a leg, and
-# a leg that only Release needs (macOS) is opt-in rather than a fourth runner on every tag.
+# The work of one platform lives in ci-leg.yml. Compiling is the larger half of a leg, so the
+# three platform legs every run needs -- linux-x64, win-x64 and macos-arm64 -- are what the run is
+# made of. A leg that measures a *build* rather than a platform (the JIT switched off) is a manual
+# dispatch: it finishes before the longest platform leg does, so it costs a runner without making
+# the run any shorter.
 #
 # `release` is the branch a version is assembled on, and it is pushed *before* the tag is made
 # (agents/branching.md): a red run there costs a push, where a red run on the tag costs a
@@ -22,8 +25,8 @@ on:
         description: "Also run the ASan/UBSan Debug build (Linux, smoke plan)"
         type: boolean
         default: false
-      macos:
-        description: "Also run the macOS arm64 leg (Apple toolchain signal; the wheel workflow does not build macOS wheels yet)"
+      nojit:
+        description: "Also run the no-JIT leg (linux-x64; the JIT switched off, the whole set on the default collector)"
         type: boolean
         default: false
 
@@ -44,10 +47,6 @@ jobs:
           - runner: ubuntu-24.04
             slug: linux-x64
             arch: x86-64-v3
-          - runner: ubuntu-24.04
-            slug: linux-x64-nojit
-            arch: x86-64-v3
-            nojit: true
           # Pinned: the leg needs Visual Studio 17, and the newer images carry only VS 2026 (VS 18).
           # windows-2022 has VS 17 with the 14.4x toolset, so its Conan runtime version is v144;
           # ci-leg.yml pins whatever value the cell declares.
@@ -55,6 +54,14 @@ jobs:
             slug: win-x64
             arch: x86-64-v3
             msvc_runtime_version: v144
+          # Apple Silicon, and the only leg that builds for arm64. The JIT has a code generator for
+          # x86-64 only (cmake/Options.cmake turns ENABLE_FASTVM_JIT off on every other processor),
+          # so this leg is JIT-less by platform rather than by an option: std::jit runs the
+          # bytecode interpreter there and says so. build-pypi.yml builds no macOS wheel yet (5.37
+          # item 6), so this leg is the only macOS signal there is.
+          - runner: macos-latest
+            slug: macos-arm64
+            arch: baseline # the x86-64 levels do not apply to arm64
     uses: ./.github/workflows/ci-leg.yml
     with:
       runner: ${{ matrix.cfg.runner }}
@@ -63,19 +70,18 @@ jobs:
       nojit: ${{ matrix.cfg.nojit || false }}
       msvc_runtime_version: ${{ matrix.cfg.msvc_runtime_version || '' }}
 
-  # Opt-in: `experimental` means it never decides the run, and it is the most expensive runner.
-  # build-pypi.yml does **not** build macOS wheels yet (5.37 item 6: the bundling step, where
-  # `delocate` has to copy the libraries in and re-sign what it rewrote, is still to be written;
-  # see the note in that workflow's matrix), so this leg is the only macOS signal there is.
-  build-test-macos:
-    name: Build and test (macos-arm64)
-    if: github.event_name == 'workflow_dispatch' && inputs.macos
+  # Manual: Run workflow -> nojit. The same leg with ENABLE_FASTVM_JIT=OFF, which no published
+  # artifact is built with: what it protects is the build option, not a platform. It runs the
+  # whole set, and ci-leg.yml refuses to let it measure the ordinary build by mistake.
+  build-test-nojit:
+    name: Build and test (linux-x64-nojit)
+    if: github.event_name == 'workflow_dispatch' && inputs.nojit
     uses: ./.github/workflows/ci-leg.yml
     with:
-      runner: macos-latest
-      slug: macos-arm64
-      arch: baseline # the x86-64 levels do not apply to arm64
-      experimental: true
+      runner: ubuntu-24.04
+      slug: linux-x64-nojit
+      arch: x86-64-v3
+      nojit: true
 
   # Manual: Run workflow -> sanitizers. Debug build of everything with ASan + UBSan, then the smoke plan.
   # The flags reach CMake through CFLAGS/CXXFLAGS/LDFLAGS on the first configure of a fresh build tree.

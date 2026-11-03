@@ -2899,6 +2899,24 @@ passesNeverRunWarning(const std::vector<std::string> &passes, const context_ptr_
     warning.stage = "pass:" + specName(passes[*consumer]);
     return warning;
 }
+std::optional<Diagnostic> jitWithoutCodeGeneratorWarning(
+    const std::vector<std::string> &passes, const context_ptr_t &ctx) {
+    (void)ctx;
+#if ENABLE_FASTVM_JIT
+    (void)passes;
+    return std::nullopt;
+#else
+    for (const std::string &spec : passes) {
+        if (resolveAlias(specName(spec)) != "std::fastvm::jit") {
+            continue;
+        }
+        auto warning = DiagnosticBuilder::of(RuntimeDiag::JitWithoutCodeGenerator).commit();
+        warning.stage = "pass:" + specName(spec);
+        return warning;
+    }
+    return std::nullopt;
+#endif
+}
 
 namespace {
 

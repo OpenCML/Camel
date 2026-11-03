@@ -38,8 +38,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { zeros_like } from tensor
-import { mean_axis, numel, ones_like } from tensor
+import { full, mean_axis, numel, ones_like, shape, sum, zeros_like } from tensor
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
@@ -65,6 +64,41 @@ export rule div_t::<T>(x: T, c: T) when is_float::<T>() {
 export rule neg_t::<T>(x: T) when is_float::<T>() {
     -x => (ct: T) => neg_cotangent(ct)
 }
+// ---- the transpose rules of the reductions and the layout ----
+//
+// A forward rule that answers with the operator itself (`d(sum(xs)) = sum(dxs)`, `rulesets.jvp`)
+// leaves the pullback one question: the adjoint of that operator. A sum is linear in the value, so
+// its adjoint is the move it makes read backwards -- a reduction's adjoint spreads.
+//
+// `sum` is the one of these whose pattern can be written, because it is the one whose declaration
+// takes a single ordinary argument. What the other three need is described below.
+
+/// `xs` with one number at every element: the shape a reduction's cotangent is spread over. Written
+/// as `full` of the operand's own shape so that the spread carries the operand's extents rather than
+/// a shape this ruleset would have to reconstruct from the axis.
+func spread_like::<T>(xs: T[..], value: T): T[..] when is_float::<T>() {
+    return full(shape(xs), value)
+}
+
+/// The cotangent of `sum(xs)`: the one number it answers is the sum of every element, so its adjoint
+/// gives that number to every element of the operand.
+export rule sum_t::<T>(xs: T[..]) when is_float::<T>() {
+    sum(xs) => (ct: T) => spread_like(xs, ct)
+}
+
+// `mean_axis`, `reshape` and `softmax` have no rule here. Their laws are the adjoints of the moves
+// their forward rules make -- a reduction's adjoint spreads a lane's cotangent over the lane, a
+// re-reading's adjoint re-reads, and the softmax's Jacobian `diag(y) - y·y^T` is symmetric so it is
+// the same matrix in both directions -- but the **pattern** cannot be written: a rule's left side is
+// compiled as an ordinary call, and each of the three takes an argument in angle brackets only
+// (`stdlib/signatures/tensor.cml`: `mean<axis, keepdims>(t)`, `reshape<dims>(t)`, `softmax<axis>(t)`).
+// `mean_axis_t` was written and measured: the transpose walk hands a rule one cotangent per *normal*
+// operand, so the rule's second and third parameters were never bound and `transpose` refused the
+// operator by name (`skip=arity uri=tensor:mean_axis operands=3`). Making the pullback reach these
+// three is the same port-order change `modules/transforms/jvp.cpp` just took, in
+// `modules/transforms/transpose.cpp`, plus a spelling for the angle-bracket argument in a rule's two
+// sides. It is not a law anybody still has to find.
+
 // ---- the transpose rule of `:op/idx_arr` ----
 //
 // `ct` goes back to position `i` and every other position is zero: the cotangent of `xs[i]` is that

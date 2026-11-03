@@ -10,12 +10,33 @@
 
 namespace {
 
-// One question of `query`: `family|head|arity`. The words are the program's, so a malformed one is
-// reported rather than guessed at: guessing would answer a question nobody asked.
+// One question of `query`: `family|head|arity`, or an operator on its own (`:op/itod`), which asks
+// for the key its rule is looked up under rather than for a rule under a key. The words are the
+// program's, so a half-written one is reported rather than guessed at: guessing would answer a
+// question nobody asked.
+void answerKey(const std::string &uri, std::ostream &os) {
+    // The key a transform asks the family for, read off the operator itself (`ruleKeyOf`): a
+    // conversion's is its destination's spelling, an operator written with a token has the token, a
+    // module operator has its own name. `none` means the operator has no key at all, and a
+    // transform refuses it by name -- `:var/get` is a read of a variable and converts nothing.
+    const auto key = camel::core::ruleKeyOf("rulesets.jvp", uri);
+    os << "KEY " << uri << " -> ";
+    if (!key.has_value()) {
+        os << "none";
+    } else {
+        os << key->head << '/' << key->arity;
+    }
+    os << '\n';
+}
+
 void answerOne(const std::string &question, std::ostream &os) {
     const size_t bar1 = question.find('|');
     const size_t bar2 = bar1 == std::string::npos ? std::string::npos : question.find('|', bar1 + 1);
-    if (bar1 == std::string::npos || bar2 == std::string::npos) {
+    if (bar1 == std::string::npos) {
+        answerKey(question, os);
+        return;
+    }
+    if (bar2 == std::string::npos) {
         os << "LOOKUP " << question << " -> malformed" << '\n';
         return;
     }

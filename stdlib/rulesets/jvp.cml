@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_same, Tangent } from types
-import { matmul, reshape, softmax, sum, zeros_like } from tensor
+import { matmul, mean_axis, reshape, softmax, sum, zeros_like } from tensor
 import { log, pow } from math
 import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
 
@@ -160,22 +160,52 @@ export rule jvp_matmul::<T>(a: T[..], b: T[..]) when is_float::<T>() {
     matmul(a, b) => (da: T[..], db: T[..]) => matmul_tangent(a, b, da, db)
 }
 
-// ---- the forward rules of `reshape` and `softmax` ----
+// ---- the forward rules of the reductions and the layout ----
 //
-// Both operators state a parameter in angle brackets -- `reshape<shape>(x)`, `softmax<axis>(x)` --
-// because the shape and the axis are what decides which function this is (design principles 4.4:
-// `<...>` is configuration, `(...)` is the data that flows). A rule's two sides are written with the
-// same spelling, so the angle argument is where these two laws have to put the one value that is
-// neither: the shape a reshape applies, the axis a softmax normalizes over.
+// These are what a model writes at every step: a loss is a `sum` over every element, a layer norm is
+// a `mean` along an axis, the head split is a `reshape` and the head's normalisation a `softmax`.
+// `sum` and `mean_axis` are **linear** -- a sum, a mean add nothing a tangent does not already carry
+// through -- so their forward rule is the operator itself applied to the tangents, and the right side
+// names that operator rather than an arithmetic this ruleset would have to keep in step with it.
+// `mean_axis` is the one of the two whose declaration has a parenthesised form,
+// `mean_axis(t, axis, keepdims?)` (`stdlib/tensor.cml#mean_axis`), even though the node it builds
+// carries the axis as a context port.
 //
-// The rules below are written with the argument as the **constant** the call site states it as,
-// because that is the only thing a rule can write there today: the pattern names its data in
-// parentheses, and a name in angle brackets has no binding -- the builder asks for a compile-time
-// value (`builder_generics.cpp#Builder::ruleWithArgumentValue`, `RuleWithArgumentNotConstant`), so
-// the rule serves the one shape and the one axis it is written for, and the matched node's own
-// angle argument is not a name the rule can read. That is the wall this pair records; the numbers
-// pinned in `test/plans/feat/compile/rules_angle_args.plan.toml` are what the same two laws have to
+// `reshape` and `softmax` are the two operators that state a deciding value in angle brackets --
+// `reshape<shape>(x)`, `softmax<axis>(x)` -- because the shape and the axis are what decides which
+// function this is (design principles 4.4: `<...>` is configuration, `(...)` is the data). A rule's
+// own parameter cannot be that value yet: the builder asks a name in angle brackets to be a
+// compile-time value (`builder_generics.cpp#Builder::ruleWithArgumentValue`,
+// `RuleWithArgumentNotConstant`), so the pattern half is open and the two laws below are written for
+// the one shape and the one axis a rule can state, as the constants a call site states them.
+// Their right sides name the operator with that same constant: `modules/transforms/rule_expand.cpp`
+// carries a `with` input of the right side over like an operand, so the copied node's angle argument
+// is the rule's own constant and no context argument of the matched node is invented.
+// `test/plans/feat/compile/rules_angle_args.plan.toml` pins the numbers these two laws have to
 // answer once a rule can name what the node carries.
+//
+// Each key is the operator's own name (`tensor:sum` -> `sum`). A rule's parameters are the
+// operator's **ports, in port order**: the normal ones, then the `<>` ones (`OpDef::params` written
+// `withAfterNorm`, and `modules/transforms/vmap.cpp` states the same protocol where it builds a
+// call). That is why `jvp_mean_axis` declares all three of `mean_axis`'s parameters even though only
+// the first is an operand: `axis` and `keepdims` arrive as the node's context ports, and the walk
+// hands them over after the tensor. They carry no tangent of their own (`Tangent<int>` and
+// `Tangent<int[]>` are `()`), so none of them enters a right side as a lifted value: the right side
+// takes the cotangents of the parameters that have a tangent space, in that same order.
+
+/// `d(sum(xs)) = sum(dxs)`: a sum adds its elements up, so it is linear and the sum of the tangents is
+/// the tangent of the sum.
+export rule jvp_sum::<T>(xs: T[..]) when is_float::<T>() {
+    sum(xs) => (dxs: T[..]) => sum(dxs)
+}
+
+/// `d(mean_axis(xs, axis, keepdims)) = mean_axis(dxs, axis, keepdims)`: a mean is a sum divided by a
+/// count, and neither the count nor the division reads the value, so the tangent of a mean is the
+/// mean of the tangents. It is written as the operator so that the accumulator, the order and the one
+/// rounding are the definition's own (`stdlib/tensor_definitions.cml`).
+export rule jvp_mean_axis::<T>(xs: T[..], axis: int, keepdims: bool) when is_float::<T>() {
+    mean_axis(xs, axis, keepdims) => (dxs: T[..]) => mean_axis(dxs, axis, keepdims)
+}
 
 /// `d(reshape(x)) = reshape(dx)`: a reshape moves no element, so the tangent moves with the value.
 export rule jvp_reshape::<T>(x: T[..]) when is_float::<T>() {
@@ -186,7 +216,6 @@ export rule jvp_reshape::<T>(x: T[..]) when is_float::<T>() {
 export rule jvp_softmax::<T>(x: T[..]) when is_float::<T>() {
     softmax<1>(x) => (dx: T[..]) => softmax<1>(x) * (dx - sum<1, true>(softmax<1>(x) * dx))
 }
-
 // ---- the forward rule of `:op/idx_arr` ----
 //
 // `xs[i]` is the one operator a function of an array meets before any other: `f(xs) = xs[0] * xs[1]`

@@ -266,11 +266,30 @@ FunctionType *jvpSignature(FunctionType *function) {
     if (params.empty()) {
         return nullptr;
     }
+    // The lift keeps the function's `with` parameters, in their order and of their own types: the
+    // body reads a weight through a port, and a lifted graph that listed no `with` port would have
+    // nowhere for the captured value to enter by (that was the gate this replaces, written as if it
+    // were a property of the transform). One port per `with` parameter, the value only: a captured
+    // value's tangent in forward mode is the zero of its type, not a second slot a caller fills, so
+    // the pair is not written for a `with` parameter at all. A `var` `with` parameter is listed as
+    // the variable it was declared as; the lift reads it and does not write it.
+    camel::core::type::param_vec_t withs;
+    for (size_t i = 0; i < function->withTypesCount(); ++i) {
+        camel::core::type::Type *withType = function->withTypeAt(i);
+        if (withType == nullptr) {
+            return nullptr;
+        }
+        if (function->withIsVarAt(i)) {
+            if (camel::core::type::Type *value = camel::core::type::valueTypeOf(withType)) {
+                withType = value;
+            }
+        }
+        withs.emplace_back(withType, false);
+    }
     // The lifted graph does what the original does to the outside world, so it publishes the same
     // effects: an effectful function's lift is an effectful function (otherwise the run time treats
     // its print as an effect nothing depends on and does not execute it).
-    return FunctionType::create(camel::core::type::param_vec_t{}, params, lifted)
-        ->withResources(function->resources());
+    return FunctionType::create(withs, params, lifted)->withResources(function->resources());
 }
 
 namespace {
@@ -543,6 +562,34 @@ bool liftGraph(
         const std::vector<gc_node_ref_t> originalPorts = function.normPorts();
         for (size_t i = 0; i < originalPorts.size(); ++i) {
             parameterOf[originalPorts[i]] = i;
+        }
+        // The `with` parameters, the same way: a port each, listed among the lifted graph's `with`
+        // ports, so the captured value enters the copy by a port rather than by a node nothing can
+        // fill. One per declared `with` parameter, in the declaration's order -- a port node that the
+        // graph does not list as a `with` port is a hole, which is exactly how the refusal this
+        // replaces described the problem. The value only: the tangent of a captured value is the
+        // zero below, so there is no second port to hand a direction in.
+        std::unordered_map<gc_node_ref_t, gc_node_ref_t> withPortOf;
+        {
+            const size_t withCount = function.funcType() != nullptr
+                                         ? function.funcType()->withTypesCount()
+                                         : 0;
+            const std::vector<gc_node_ref_t> originalWith = function.withPorts();
+            for (size_t i = 0; i < withCount && i < originalWith.size(); ++i) {
+                camel::core::type::Type *withType = function.funcType()->withTypeAt(i);
+                if (withType == nullptr) {
+                    continue;
+                }
+                if (function.funcType()->withIsVarAt(i)) {
+                    if (camel::core::type::Type *value = camel::core::type::valueTypeOf(withType)) {
+                        withType = value;
+                    }
+                }
+                const gc_node_ref_t port =
+                    draft.addPortNode(withType, draft.allocateRuntimeSlot(withType));
+                draft.appendWithPort(port);
+                withPortOf[originalWith[i]] = port;
+            }
         }
         // Step 3, first layer: the body is copied node by node. A port reads the caller's value, a
         // constant is written again with the same value, and a primitive keeps its operator and gets
@@ -903,6 +950,22 @@ bool liftGraph(
                     ++copiedKinds;
                     break;
                 }
+                // A `with` parameter of the body is the port made for it above: the caller's
+                // captured value, read as the body read it. Its tangent is the zero of its own type
+                // -- a captured value does not move in forward mode (design principles 9.9's
+                // ruleset: `reinterpret<jvp>` lifts a captured value to a zero tangent) -- so a
+                // primitive that reads it is handed that zero instead of being refused for an
+                // operand that never arrived.
+                const auto withPort = withPortOf.find(ref);
+                if (withPort != withPortOf.end()) {
+                    copyOf[ref] = withPort->second;
+                    if (camel::core::tangentSpaceOf(node->dataType()).hasSpace()) {
+                        tangentOf[ref] = zeroConstantFor(node->dataType());
+                    }
+                    copied[ref] = true;
+                    ++copiedKinds;
+                    break;
+                }
                 // A port of a loop's body region is a loop variable, and one the transform carries a
                 // pair for is the carried state: the loop carries the pair, so this port is a pair
                 // port and the body reads its halves through projections.
@@ -942,8 +1005,8 @@ bool liftGraph(
                     copied[ref] = true;
                     ++copiedKinds;
                 } else {
-                    // Any other port -- the round number a loop writes, a with-parameter -- is a
-                    // place a value arrives in: copied as it is, with no tangent.
+                    // Any other port -- the round number a loop writes -- is a place a value arrives
+                    // in: copied as it is, with no tangent.
                     copyOf[ref] = draft.addPortNode(
                         node->dataType(), draft.allocateRuntimeSlot(node->dataType()));
                     copied[ref] = true;
@@ -1418,6 +1481,35 @@ bool liftGraph(
                 }
                 if (!inputs.empty()) {
                     draft.setNormInputs(made, inputs);
+                }
+                // The operator's `<>` arguments are ports of the same node, in the same order and
+                // after the normal ones (`OpDef::params` written `withAfterNorm`; `dataPortsOf` and
+                // `portRoleOf` in camel/runtime/draft.h are that one list). A rule's parameters
+                // follow the port order too -- `modules/transforms/vmap.cpp` states the protocol
+                // where it builds a call, "a `with` argument is a rule's argument too" -- so a copy
+                // that dropped them would be a *different operator*: `softmax<1>(x)` copied without
+                // its axis is `softmax(x)`, which reads the last axis, and `mean<0, true>(x)` copied
+                // without its two is a mean with the default axis and no kept dimension. That is a
+                // wrong number, not a missing one, so they are copied and attached as the normal
+                // ones are. They are appended to `originals`/`inputs` so that everything below --
+                // the cotangents the rule is handed, the types it is asked about, and the values it
+                // reads -- sees one port list in port order.
+                std::vector<gc_node_ref_t> contextInputs;
+                for (gc_node_ref_t input : function.withInputsOf(ref)) {
+                    if (input >= function.nodeCount() || !copied[input]) {
+                        complete = false;
+                        break;
+                    }
+                    originals.push_back(input);
+                    contextInputs.push_back(
+                        valueOf[input] != rt::kInvalidNodeRef ? valueOf[input] : copyOf[input]);
+                    inputs.push_back(contextInputs.back());
+                }
+                if (!complete) {
+                    break;
+                }
+                if (!contextInputs.empty()) {
+                    draft.setWithInputs(made, contextInputs);
                 }
                 // The `sync` block's chain, copied edge for edge: a statement is executed because it
                 // sits on that chain, and an effect whose result nobody reads is dropped at run time

@@ -509,6 +509,20 @@ bool OperatorTable::reusesOperand(std::string_view uri) const {
     return entries_[*id].reusesOperand;
 }
 
+void OperatorTable::declareConversion(std::string_view uri, ConversionTypes types) {
+    std::unique_lock lock(mutex_);
+    entries_[internLocked(uri)].conversion = types;
+}
+
+std::optional<ConversionTypes> OperatorTable::conversionTypesOf(std::string_view uri) const {
+    const auto id = lookup(uri);
+    if (!id) {
+        return std::nullopt;
+    }
+    std::shared_lock lock(mutex_);
+    return entries_[*id].conversion;
+}
+
 void OperatorTable::declareGrant(std::string_view uri, AttrGrant grant) {
     (void)attr::key(grant.key); // validates the name
     auto shared = std::make_shared<const AttrGrant>(std::move(grant));
