@@ -30,3 +30,8 @@
 ## 顺带一条读数（不是问句）
 
 权重本身**不会是**这条链给出的梯度：前向把 `with` 值当常量、切向量为零（作者 A2「`with` 参数照闭包规则处理」），所以 `transpose(lin)` 只答数据（`x`）的余切，答案元里没有权重的位置。`vjp(block)<m>(x)` 即便打通，给出的也是 `d/dx`，不是 `d/dm`。
+## 待办（2026-11-03 18:20 记）
+
+**用户面今天有两个 `grad` 并存**：`stdlib/vjp.cml:84#grad`（只收 `(x: float) => float`，实现是 `vjp(f)` 读种子 1 取 `.0`）与 `stdlib/signatures/autodiff.cml:51#grad`、`:66#with_grad`（实现在 `modules/autodiff/operators.cpp:155#gradFunction`，C++ 直接 pullback，对第一个 `with` 参数求导）。
+
+作者 2026-11-03 10:00 的第 3 条要的是：库层那个写成**一次组合**——`<w, ..rest> (..xs) => …`，体里对 `(w) => f<w, ..rest>(..xs)` 做 `vjp`；`stdlib/vjp.cml` 里只收单个 `float` 的那个删掉，用户面只剩一个。这条排在增补 1（带体的 `with` 参数包，`src/compile/gct/builder.cpp:5378` 的守卫与体里的绑定）之后——今天拿掉守卫会得到 `camel: internal error: Unknown GCT NodeType`。**在那之前不要删引擎的 `pullback.cpp`。**

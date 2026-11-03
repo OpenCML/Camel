@@ -182,29 +182,6 @@ class EdgeChecker {
                 declared->toString()));
     }
 
-    /// Is this node a statement of a chain, read from the node and the operator table (edges.cn.md
-    /// 1 and 4.6) rather than from the marker: a branch, a loop or a call is a statement; an
-    /// operator is one when it has an effect or may fault. Used by the census below only.
-    bool isChainStatementNode(const GCNode *node, gc_node_ref_t ref) const {
-        switch (node->kind) {
-        case GCNodeKind::Brch:
-        case GCNodeKind::Loop:
-        case GCNodeKind::Call:
-            return true;
-        case GCNodeKind::Oper: {
-            const auto *body = graph_.nodeBodyAs<GCOperBody>(ref);
-            if (body == nullptr || body->oper == camel::core::kNoOper) {
-                return true;
-            }
-            auto &table = camel::core::OperatorTable::instance();
-            const auto traits = table.find(body->oper);
-            return !table.isPure(body->oper) || table.hasExternalEffect(body->oper) ||
-                   (traits.has_value() && traits->mayFault);
-        }
-        default:
-            return false;
-        }
-    }
     static bool isWaitingCarrier(const GCNode *node) {
         return (node->flags & kGCNodeFlagSyncStatement) != 0;
     }
@@ -280,7 +257,7 @@ class EdgeChecker {
             // above, so a default run is unchanged; it never writes to the program's stdout, which
             // is what a case asserts.
             {
-                const bool endIsStatement = isChainStatementNode(user, edge.user);
+                const bool endIsStatement = isChainStatement(graph_, edge.user);
                 // Region 0 is the graph itself -- the block a statement sits in when nothing
                 // wraps it (control_regions.h: `0 when it is in none`) -- so an end and its tail
                 // in the same region are in one block, and the value of that block is an end the
