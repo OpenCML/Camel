@@ -1409,6 +1409,11 @@ async function compileExamples(module, entries) {
     const jobs = []
     const fragments = []
     const seen = new Set()
+    // How many examples a declaration name has in one file, so each one can be named without a line
+    // number: `<file>#<name>#<k>`. The count is of the examples this run compiles, in declaration
+    // order, so it moves only when that name's examples are added, removed or reordered -- not when a
+    // comment above them grows a line.
+    const ordinals = new Map()
     let declared = 0
     for (const entry of entries) {
         if (entry.fragments.length > 0) fragments.push(entry)
@@ -1421,6 +1426,9 @@ async function compileExamples(module, entries) {
             const key = `${entry.name}\u0000${code}`
             if (seen.has(key)) continue
             seen.add(key)
+            const basis = `${entry.file}#${entry.name}`
+            const ordinal = (ordinals.get(basis) || 0) + 1
+            ordinals.set(basis, ordinal)
             jobs.push({
                 module,
                 entries,
@@ -1429,6 +1437,7 @@ async function compileExamples(module, entries) {
                 file: entry.file,
                 line: entry.line,
                 name: entry.name,
+                member: `${basis}#${ordinal}`,
                 fragment: entry.fragments.length > 0,
             })
         }
@@ -1534,14 +1543,14 @@ async function verifyDocs() {
     const problems = []
     let checked = 0
     let fragments = 0
-    // What happened to every example of every module, counted so that none of them is dropped: how many
-    // were written, how many are a program of their own, the ones that compile, and the ones that do
-    // not, by class and one by one.
+    // What happened to every example of every module, so that none of them is dropped: how many were
+    // written, how many are a program of their own, the ones that compile, and the ones that do not,
+    // by class and one by one -- each of those named as `<file>#<name>#<k>`, never counted.
     const coverage = {
         written: 0,
         programs: 0,
         compiled: 0,
-        stops: {},
+        members: new Map(),
         unlabelled: [],
         stale: [],
         bound: [],
@@ -1571,7 +1580,12 @@ async function verifyDocs() {
         const label = exampleStopClass(result)
         coverage.stopped.push({ ...result, label })
         if (label === null) coverage.unlabelled.push(result)
-        else coverage.stops[label] = (coverage.stops[label] || 0) + 1
+        else {
+            if (!coverage.members.has(label)) coverage.members.set(label, new Map())
+            if (!coverage.members.get(label).has(result.member)) {
+                coverage.members.get(label).set(result.member, { ...result, label })
+            }
+        }
     }
     for (const module of MODULES) {
         const pending = pendingReason(module)
@@ -2002,115 +2016,288 @@ function kindCovers(kind, need) {
 // A type variable: `A` in `bf16(x: A)` binds whatever the caller passes, so it takes everything.
 const TYPE_VARIABLE = /^[A-Z]$/
 
-// The exceptions this check carries, class by class, as data rather than prose: every stop is
-// classified, these are the classes and their counts, and the run compares itself with them. A stop
-// that matches no class fails ("an exception with no label"), a class that is not in this table
-// fails, and a count that moved fails with the number the run found -- so the only way past is to
-// name the class and update the number here, in a commit that says why the list grew or shrank.
+// The exceptions this check carries, class by class, as data rather than prose -- and **one member at
+// a time**. A member is a place this checker cannot read: `<operator> (<uri>)#result` on the result
+// half, `<operator> (<uri>)#parameter` on the parameter half. Its value is the sentence that says why
+// it is an exception, in this checker's own words ("the rule writes a function type, and no type
+// variable holds one"), never "because it has always been here".
+//
+// ## Why members and not counts
+//
+// Author's ruling of 2026-11-03 13:30 (`docs/handover/reviews/questions-2026-10-29.md`): a count that
+// can move while the behaviour stays the same protects nothing. The per-class counts this table used
+// to hold were exactly that: an overload that started writing a different spelling moved the class
+// while nothing about the library changed, and the failure said "records 6, and the run found 7" -- a
+// number, not a name, so the reader had to bisect to find out who moved.
+//
+// Each class is now a table of its members, and the run compares it in both directions, naming the
+// member every time:
+//
+//   * in the run and not in the table -> `entered`: the operator, what the two sides say, and the
+//     request to add it with its reason;
+//   * in the table and not in the run -> `left`: the operator, and the request to take it off --
+//     that removal is the record of it having become readable.
+//
+// No line numbers anywhere: a line moves with every edit above it. One name can be several members:
+// `from_bytes` registers one URI per element type, so it is five, while a name registered once is one
+// member however many declarations answer to it.
 const EXCEPTIONS = {
     // The operator's own result text is a shape no type variable holds: a function type, a tuple, a
     // record, a `gradient of W0`, a generic application (`Device<T>`), a named aggregate (`Tensor`),
-    // a bare type variable, or no result text at all; and the two cases where the rule reads and the
-    // declaration is the side that does not (`T[..]` from `from_bytes` and `load_npy`, `Jvp<F>` from
-    // the transforms).
+    // a bare type variable, or no result text at all; and the cases where the rule reads and the
+    // declaration is the side that does not (`T[..]` from `from_bytes`, `Jvp<F>` from the
+    // transforms).
     result: {
-        'rule states no result': 1,
-        'rule states a function type': 2,
-        'rule states a tuple': 6,
-        'rule states a record': 1,
-        'rule states a gradient-of result': 1,
-        'rule states a generic application': 1,
-        'rule states a named type': 14,
-        'rule states a type variable': 1,
-// `remat` is the thirteenth: its result is the argument's own type (`(f: F) => F`), because a
-        // call through the mark is a call of the same function, and no spelling names every function
-        // type a program can pass. The operator answers that type (`rematOperatorSignature`), so the
-        // declaration is the side that cannot state it concretely -- the same reading `jvp`'s
-        // `Jvp<F>` carries one class over.
-        'declaration states a type variable': 13,
-        'declaration states a generic application': 2,
+        'rule states no result': {
+            'tree_leaves (ckpt:tree_leaves)#result':
+                'the rule registers no result text at all (`tree_leaves (type-directed)`); the declaration writes `L`',
+        },
+        'rule states a function type': {
+            'attempt (:mark/attempt)#result':
+                'the rule answers the function it was given, `((...args: A) => T!)`; the declaration states only the error `F!`',
+            'split (transforms:split)#result':
+                'the rule answers a pair whose second half is a function type, `(float, (float) => float)`; the declaration spells the same pair as text, and a function type is not compared',
+        },
+        'rule states a tuple': {
+            'batch_norm_train (nn:batch_norm_train)#result':
+                'the rule answers `(Tensor, Tensor, Tensor)`; the declaration writes the same three as `f32[..]`',
+            'batch_norm_train_grad (nn:batch_norm_train_grad)#result':
+                'the rule answers `(Tensor, Tensor, Tensor)`; the declaration writes the same three as `f32[..]`',
+            'grad (autodiff:grad_aux)#result':
+                'the rule answers `(gradient of W0, aux)`, a pair one half of which is a phrase; the declaration writes `GradientAndAux<F>`',
+            'jvp (transforms:jvp)#result':
+                'the rule answers `(value, tangent)`, two prose words; the declaration writes `Jvp<F>`',
+            'transpose (transforms:transpose)#result':
+                'the rule answers `(cotangents..)`, a rest pack; the declaration writes `Transpose<F>`',
+            'with_grad (autodiff:with_grad)#result':
+                'the rule answers `(float, gradient of W0)`; the declaration writes `ValueAndGradient<F>`',
+            'with_grad (autodiff:with_grad_aux)#result':
+                'the rule answers `((float, aux), gradient of W0)`, a nested pair; the declaration writes `ValueAndGradientAndAux<F>`',
+        },
+        'rule states a record': {
+            'effects (graph:effects)#result':
+                'the rule answers a record literal, `{ external: bool, ... }`; the declaration names it `Effects`',
+        },
+        'rule states a gradient-of result': {
+            'grad (autodiff:grad)#result':
+                'the rule answers `gradient of W0`, a phrase about a derivative; the declaration writes `Gradient<F>`',
+        },
+        'rule states a generic application': {
+            'upload (tiles:upload)#result':
+                'the rule answers `Device<T>`, a generic application; the declaration narrows it to `Device<f32[..]>`',
+        },
+        'rule states a named type': {
+            'avg_pool2d (nn:avg_pool2d)#result':
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+            'avg_pool2d_grad (nn:avg_pool2d_grad)#result':
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+            'batch_norm (nn:batch_norm)#result':
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+            'conv2d (nn:conv2d)#result':
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+            'conv2d_bias_grad (nn:conv2d_bias_grad)#result':
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+            'conv2d_input_grad (nn:conv2d_input_grad)#result':
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+            'conv2d_kernel_grad (nn:conv2d_kernel_grad)#result':
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+            'embedding (nn:embedding)#result':
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+            'embedding_table_grad (nn:embedding_table_grad)#result':
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+            'max_pool2d (nn:max_pool2d)#result':
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+            'max_pool2d_grad (nn:max_pool2d_grad)#result':
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+            'run_preferred_resident (tiles:run_preferred_resident)#result':
+                'the rule answers `DeviceAggregate`, a named aggregate; the declaration writes `Device<f32>`',
+            'softmax_cross_entropy_grad (nn:softmax_cross_entropy_grad)#result':
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+            'softmax_cross_entropy_grad (nn:softmax_cross_entropy_labels_grad)#result':
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+        },
+        'rule states a type variable': {
+            'download (tiles:download)#result':
+                'the rule answers `T`, the element type of the device it read; the declaration writes `f32[..]`',
+        },
+        'declaration states a type variable': {
+            'from_bytes (tensor:from_bytes_bf16)#result':
+                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `bfloat16[..]`',
+            'from_bytes (tensor:from_bytes_bool)#result':
+                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `bool[..]`',
+            'from_bytes (tensor:from_bytes_f16)#result':
+                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `float16[..]`',
+            'from_bytes (tensor:from_bytes_f32)#result':
+                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `float32[..]`',
+            'from_bytes (tensor:from_bytes_f64)#result':
+                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `float64[..]`',
+            'from_bytes (tensor:from_bytes_i32)#result':
+                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `int32[..]`',
+            'from_bytes (tensor:from_bytes_i64)#result':
+                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `int64[..]`',
+            'load_npy (tensor:load_npy_bool)#result':
+                'the element type comes from the file, so the declaration writes `T[..]` and this rule answers `bool[..]`',
+            'load_npy (tensor:load_npy_f32)#result':
+                'the element type comes from the file, so the declaration writes `T[..]` and this rule answers `float32[..]`',
+            'load_npy (tensor:load_npy_f64)#result':
+                'the element type comes from the file, so the declaration writes `T[..]` and this rule answers `float64[..]`',
+            'load_npy (tensor:load_npy_i32)#result':
+                'the element type comes from the file, so the declaration writes `T[..]` and this rule answers `int32[..]`',
+            'load_npy (tensor:load_npy_i64)#result':
+                'the element type comes from the file, so the declaration writes `T[..]` and this rule answers `int64[..]`',
+            'remat (transforms:remat)#result':
+                'the rule answers the argument\'s own type (`(f: F) => F`), which the declaration writes `F`; this rule states `float` for the two-parameter function it was asked about',
+        },
+        'declaration states a generic application': {
+            'vmap (transforms:vmap)#result':
+                'the declaration writes `Vmap<F>`, a type no spelling names, and the rule answers `f32[]`',
+        },
     },
-    // The same question one position to the left: a parameter the operator writes as a function
-    // type, a `grad of P`, a named aggregate (`NumericAggregate`, `Device<T>`), an untyped pack; a
+    // The same question one position to the left: a parameter the operator writes as a function type,
+    // a `grad of P`, a named aggregate (`NumericAggregate`, `Device<T>`), an untyped pack; a
     // declaration that writes a bare `T`; and two parameter lists that are not a list at all or not
-    // the same length. `remat`'s `f` is the tenth function-typed one: the operator registers the
-    // shape its kernel answers for a two-parameter function (`(f: (float, float) => float)`), while
-    // the declaration writes the bare `F` no spelling can name.
+    // the same length.
     parameter: {
-        'rule states no parameter list': 1,
-        'declared arity differs from rule arity': 4,
-        'untyped pack ..rest': 6,
-        'function-typed parameter': 10,
-        'grad of P': 2,
-        'named-type parameter': 5,
-    },
+        'rule states no parameter list': {
+            'tree_leaves (ckpt:tree_leaves)#parameter':
+                'the registered signature is `tree_leaves (type-directed)`, not a list of `name: type` positions',
+        },
+        'declared arity differs from rule arity': {
+            'slice (:op/slice_bytes)#parameter':
+                'the declaration writes one parameter and the rule registers six positions, so there is no position-by-position pair',
+            'slice (:op/slice_str)#parameter':
+                'the declaration writes one parameter and the rule registers six positions, so there is no position-by-position pair',
+            'slice (:op/slice_sub)#parameter':
+                'the declaration writes one parameter and the rule registers six positions, so there is no position-by-position pair',
+            'upload (tiles:upload)#parameter':
+                'the declaration writes one parameter and the rule registers three, so there is no position-by-position pair',
+        },
+        'untyped pack ..rest': {
+            'eprintln (:io/eprintln)#parameter':
+                'the rule writes `(x: T, ..rest)`, a pack with no type, so no position maps to the declaration',
+            'print (:io/print)#parameter':
+                'the rule writes `(x: T, ..rest)`, a pack with no type, so no position maps to the declaration',
+            'println (:io/println)#parameter':
+                'the rule writes `(x: T, ..rest)`, a pack with no type, so no position maps to the declaration',
+        },
+        'function-typed parameter': {
+            'attempt (:mark/attempt)#parameter':
+                'parameter 1 is `(...args: A) => T`, a function type whose arguments are a pack',
+            'grad (autodiff:grad)#parameter':
+                'parameter 1 is `<W...>(N...) => float`, a function type with a `with` pack',
+            'grad (autodiff:grad_aux)#parameter':
+                'parameter 1 is `<W...>(N...) => (float, aux)`, a function type with a `with` pack',
+            'jvp (transforms:jvp)#parameter':
+                'parameter 1 is `(..) => any`, a function type whose positions are not spelled',
+            'remat (transforms:remat)#parameter':
+                'parameter 1 is `(float, float) => float`, a function type the declaration writes as a bare `F`',
+            'split (transforms:split)#parameter':
+                'parameter 1 is `(float, float) => (float, float)`, a function type the declaration writes as a bare `F`',
+            'transpose (transforms:transpose)#parameter':
+                'parameter 1 is a union of function types, `(float) => float | (float, ...) => float`',
+            'vmap (transforms:vmap)#parameter':
+                'parameter 1 is `(f32) => f32`, a function type the declaration writes as a bare `F`',
+            'with_grad (autodiff:with_grad)#parameter':
+                'parameter 1 is `<W...>(N...) => float`, a function type with a `with` pack',
+            'with_grad (autodiff:with_grad_aux)#parameter':
+                'parameter 1 is `<W...>(N...) => (float, aux)`, a function type with a `with` pack',
+        },
+        'grad of P': {
+            'adam (nn:adam)#parameter':
+                'parameter 2 is `grad of P`, a phrase about a parameter\'s derivative rather than a type',
+            'sgd (nn:sgd)#parameter':
+                'parameter 2 is `grad of P`, a phrase about a parameter\'s derivative rather than a type',
+        },
+        'named-type parameter': {
+            'benchmark (tiles:benchmark)#parameter':
+                'parameter 1 is `NumericAggregate`, a named aggregate of the tiles module',
+            'download (tiles:download)#parameter':
+                'parameter 1 is `Device<T>`, a generic application, not a type a declaration can write',
+            'inspect (tiles:inspect)#parameter':
+                'parameter 1 is `NumericAggregate`, a named aggregate of the tiles module',
+            'run_preferred_resident (tiles:run_preferred_resident)#parameter':
+                'parameter 1 is `NumericAggregate`, a named aggregate of the tiles module',
+            'source (tiles:source)#parameter':
+                'parameter 1 is `NumericAggregate`, a named aggregate of the tiles module',
+        },
+    }
 }
 
-// The numbers count every overload of the tree, the operators a merge brought in included: the tree
-// has `transforms:remat`, whose declaration writes the type variable (`f: F` in, `F` out) while the
-// operator states the function type the call gets
-// (`((float, float) => float) => (float, float) => float`), so neither side can be read from the
-// other. It is one of `declaration states a type variable` on the result and one of
-// `function-typed parameter` on the parameter, the state `jvp`, `split`, `transpose` and `vmap` are
-// in. A tree that has not merged the operator finds one fewer in each class, and the failure there
-// says so rather than being excused: the number describes the tree the run measured.
+// The numbers used to count every overload of the tree, the operators a merge brought in included:
+// `transforms:remat`'s declaration writes the type variable (`f: F` in, `F` out) while the operator
+// states the function type the call gets (`((float, float) => float) => (float, float) => float`), so
+// neither side can be read from the other, and the tree either has that operator or it does not. That
+// is now said by the member `remat (transforms:remat)#result` being on the list or not: a tree that
+// has not merged the operator finds no such member, and the failure names it instead of counting one
+// fewer in a class.
+//
 // The examples that do not compile, by the kind of diagnostic that stopped them, and the examples a
-// `@example-fragment` marker calls "not compiled" that the checker compiles anyway. Both are
-// numbers the run compares its own tally with: a class that appears, moves or disappears fails, so
-// the only way past is to change the number here, in a commit that says why the list moved.
+// `@example-fragment` marker calls "not compiled" that the checker compiles anyway. Both are member
+// tables the run compares its own members with: a member that appears, or one that goes away, is
+// named -- so the way past is to say which example it is and why it stops there, never to move a
+// number.
+//
+// A member of this table is the example, not the name: `<file>#<name>#<k>`, where `k` counts the
+// examples that declaration name has in that file, in declaration order. A file and a name are what
+// a reader needs; `k` keeps two examples of one name apart without a line number, which would move
+// with every edit above it.
 const EXAMPLE_STOPS = {
-    // The example calls a name the description introduces and the declaration does not take
-    // (`inputs(n)` with `n` a node of the surrounding pass), or names a value the wrapper cannot
-    // bind at all: 37 of them, most of them marked a fragment, measured on the tree that merged both This was 39 until `check''s two
-    // overloads came to name the same `with` positions: the example
-    // `rules->check<samples: 1000, seed: 7>` used to stop here as `OverloadParameterNames`, because
-    // `samples` stood at position 0 in one declaration and position 1 in the other, and it compiles
-    // now that both say `samples, seed`. No example was deleted -- one moved from this class to the
-    // side that compiles once its names are bound -- so the number follows the tree. This was 40
-    // for one commit: the author''s one declaration for every arity made `stdlib/vjp.cml#vjp` generic
-    // over `F`, and its example `let reading = vjp(f)` stopped as UnresolvedReference 'f'. The
-    // number was raised to record it; the example is fixed instead -- it writes the function where
-    // the call is, `vjp((x: float) => x * x)(3.0)`, and compiles and runs with nothing bound -- so
-    // the count is back down, and the rule it leaves is: fix the example, not the count.
-    //
-    // The split ABI (2026-11-02) moved one more out of this class and into the internal-error one:
-    // `split`''s own example used to read the pair the call answered and stopped here; with the
-    // forward half alone it reaches the compiler''s `Unexpected target type in ACCS node` instead,
-    // so the two numbers of this lane sum to the same corpus. Both return when `stdlib/vjp.cml` is
-    // migrated.
-    //
-    // This is a shape count, not a count of assertions that passed: it says how many examples
-    // stop at this class of diagnostic in the tree the run measured, so moving it neither relaxes
-    // nor tightens anything -- the rule is still that every `@example` compiles, or carries a
-    // `@example-fragment` marker whose reason names what it is missing. A number here that moved
-    // says a shape changed; a number here that was lowered without a reason would be the same
-    // silence as a relaxed gate.
-    // This was 40 until the library's `with_grad` export was deleted (the author's ruling of
-    // 2026-11-02 11:50): its example `let slope_over_the_capture = with_grad(f)` stopped in this
-    // class -- `f` is a name only the description introduces -- so the example went with the
-    // declaration and the class is one smaller. No example was fixed and none was excused; one was
-    // deleted with the name it named.
-    //
-    // 39 -> 24 (2026-11-03, branch lane-docexamples): thirteen examples left this class, and the
-    // route out was the example, not the number. Twelve had a fragment marker that said the page
-    // could not write the name the call takes; the name is writable where the call is, so the
-    // example now writes it and the marker went with the excuse it no longer needed --
-    // `jvp`, `transpose`, `vmap` and `remat` write the function instead of a bare `f`;
-    // `declaration_tags` and `rule_of` write `graph_of((x: int): int => x + 1)` for the same
-    // `f`; `stdlib/graph.cml`'s `commit`, `abort` and `add_constant` write
-    // `open((x: int): int => x + 1)` instead of a transaction the page cannot make; and
-    // `export_model`'s three examples write the function and its argument instead of `(fn,
-    // example)`. The thirteenth, `rules->check(f)`, kept its marker and left the class the other
-    // way: it writes the function, so it is compiled with `rules` bound and belongs in the list of
-    // examples a marker calls not compiled that compile only with a name bound. No example was
-    // deleted. What stays in this class needs a value no example program can write, and the marker
-    // on each says which: a `Bytes` built with `bytes`'s `encode` (`len`, `slice`, `read_bytes`,
-    // `read_chunk`, `write_bytes`, `append_bytes`, `sha256`), a node, a transaction or a rule set of
-    // a pass (`constant`, `replace`, `erase`, `eval`, `rewrite`, `saturate`, `extract`, `run`,
-    // `explain`, `explain_all`, `why_not`), the stream a tee reads (`tee_note`), a Python callable
-    // (`call`), and a function the gradient needs a `with` parameter on (`grad` twice, `with_grad`
-    // twice).
-    'a semantic error': 24,
+    // What stops here needs a value no example program can write, and the marker on each says which:
+    // a `Bytes` built with `bytes`'s `encode`, a node or a transaction or a rule set of a pass, the
+    // stream a tee reads, a Python callable, a function the gradient needs a `with` parameter on. The
+    // member is the example -- `<file>#<name>#<k>` -- and the sentence beside it names what the example
+    // is missing, so a member that enters this list says which example stopped and why, and one that
+    // leaves says which example the marker no longer excuses.
+    'a semantic error': {
+        'stdlib/fs.cml#append_bytes#1':
+            'the example hands `encode(\'abc\')` to an operator that takes `Bytes`, and `encode` is `bytes`\'s name, which this page does not import',
+        'stdlib/fs.cml#read_bytes#1':
+            'the example compares the read against `encode(\'\')`, which is `bytes`\'s name and not this module\'s',
+        'stdlib/fs.cml#read_chunk#1':
+            'the example compares the read against `encode(\'\')`, which is `bytes`\'s name and not this module\'s',
+        'stdlib/fs.cml#write_bytes#1':
+            'the example builds its `Bytes` with `encode(\'abc\')`, which is `bytes`\'s name',
+        'stdlib/graph.cml#constant#1':
+            '`n` is a node of the surrounding pass, and no example program has one',
+        'stdlib/graph.cml#erase#1':
+            '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
+        'stdlib/graph.cml#eval#1':
+            '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
+        'stdlib/graph.cml#replace#1':
+            '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
+        'stdlib/hash.cml#sha256#1':
+            'the example builds its `Bytes` value with `encode(\'abc\')`, which is `bytes`\'s name',
+        'stdlib/prelude.cml#len#3':
+            'the `Bytes` overload\'s example builds its value with `encode(\'h€\')`, which is `bytes`\'s name',
+        'stdlib/prelude.cml#slice#3':
+            'the `Bytes` overload\'s example names `encode`, which is `bytes`\'s, and a doc example is compiled with this module\'s names only',
+        'stdlib/prelude.cml#tee_note#1':
+            'the last operand is the stream a tee reads, and no example program has one',
+        'stdlib/python.cml#call#1':
+            'the callable is a Python object from `attr`, and `sqrt` is a name the surrounding program binds',
+        'stdlib/rewrite.cml#explain#1':
+            'a run and two of its values come from the caller, and `a` is one of those values',
+        'stdlib/rewrite.cml#explain_all#1':
+            'a run comes from the caller, and `r` is it',
+        'stdlib/rewrite.cml#extract#1':
+            'the cost function comes from `rules`, and `rules::nodes` is not a name the page binds',
+        'stdlib/rewrite.cml#rewrite#1':
+            'a rule set comes from the caller, and `rules` is it',
+        'stdlib/rewrite.cml#run#1':
+            'a rule set comes from the caller, and `rules` is it',
+        'stdlib/rewrite.cml#saturate#1':
+            'a rule set comes from the caller, and `rules` is it',
+        'stdlib/rewrite.cml#why_not#1':
+            'a run, a rule and a value come from the caller, and `target` is one of them',
+        'stdlib/signatures/autodiff.cml#grad#1':
+            '`loss` must have a `with` parameter for its gradient to exist, and only a declaration in the surrounding program gives it one',
+        'stdlib/signatures/autodiff.cml#grad#2':
+            'the function must return a pair whose first element is the loss, which only a declaration in the surrounding program writes',
+        'stdlib/signatures/autodiff.cml#with_grad#1':
+            '`loss` must have a `with` parameter for its gradient to exist, and only a declaration in the surrounding program gives it one',
+        'stdlib/signatures/autodiff.cml#with_grad#2':
+            'the function must return a pair whose first element is the loss, which only a declaration in the surrounding program writes'
+    },
     // `an internal error` is gone (2026-11-03). The class held the examples that reached the
     // compiler with a function-typed parameter bound by name: `split`'s own example, which kept a
     // live dereference node, and then, while the split ABI moved, `stdlib/vjp.cml`'s example and the
@@ -2131,12 +2318,20 @@ const EXAMPLE_STOPS = {
 // here the moment the example is compiled.
 const STALE_FRAGMENTS = 0
 
-// Compare what the run found with what the two numbers above record. Returns the problems, so the
-// caller can exit non-zero: a bounded list is only kept bounded if something counts it.
+// Compare what the run found with what the two member tables above record. Returns the problems, so
+// the caller can exit non-zero: a list is only kept honest if something reads it back.
+//
+// Every comparison here is a comparison of members, in both directions, and every message names the
+// member: "entered" says who joined a class and what the two sides say, "left" says who is no longer
+// in it. Nowhere does a message say "records 6, the run found 7" -- that was the failure the author's
+// ruling of 2026-11-03 13:30 retired, because the number left the reader to bisect for a name.
 function exampleProblems(coverage) {
     const problems = []
     const stopped = coverage.programs - coverage.compiled
-    const counted = coverage.unlabelled.length + Object.values(coverage.stops).reduce((sum, one) => sum + one, 0)
+    const counted = coverage.unlabelled.length + [...coverage.members.values()].reduce(
+        (sum, one) => sum + one.size,
+        0,
+    )
     if (stopped !== counted) {
         problems.push(
             `${stopped} example(s) do not compile, and ${counted} of them were counted: an example that is neither ` +
@@ -2145,27 +2340,32 @@ function exampleProblems(coverage) {
     }
     for (const one of coverage.unlabelled) {
         problems.push(
-            `an example that does not compile with no class: ${one.file}:${one.line}: '${one.name}': ${one.message}`,
+            `an example that does not compile with no class: ${one.member} '${one.name}': ${one.message}`,
         )
     }
-    for (const label of Object.keys(coverage.stops).sort()) {
-        if (EXAMPLE_STOPS[label] === undefined) {
+    const labels = new Set([...coverage.members.keys(), ...Object.keys(EXAMPLE_STOPS)])
+    for (const label of [...labels].sort()) {
+        const ran = coverage.members.get(label) || new Map()
+        const kept = EXAMPLE_STOPS[label]
+        if (kept === undefined) {
             problems.push(
-                `the example class '${label}' is not in EXAMPLE_STOPS: ${coverage.stops[label]} example(s) stop there, ` +
-                    'and a new class is a new promise to keep -- add it with its count and say why',
-            )
-        } else if (EXAMPLE_STOPS[label] !== coverage.stops[label]) {
-            problems.push(
-                `EXAMPLE_STOPS['${label}'] records ${EXAMPLE_STOPS[label]}, and the run found ${coverage.stops[label]}: ` +
-                    'update the number in the same commit and say why the class moved',
+                `the example class '${label}' is not in EXAMPLE_STOPS: ${ran.size} example(s) stop there, and a ` +
+                    'new class is a new promise to keep -- add it with the members named below, each with the ' +
+                    'reason it stops',
             )
         }
-    }
-    for (const label of Object.keys(EXAMPLE_STOPS)) {
-        if (coverage.stops[label] === undefined) {
+        for (const member of [...ran.keys()].sort()) {
+            if (kept !== undefined && Object.hasOwn(kept, member)) continue
+            const one = ran.get(member)
             problems.push(
-                `EXAMPLE_STOPS['${label}'] records ${EXAMPLE_STOPS[label]}, and the run found none: ` +
-                    'the class is gone, so remove it and say why',
+                `entered: '${label}' + ${member} -- ${one.message.trim().slice(0, 200)}`,
+            )
+        }
+        for (const member of Object.keys(kept || {}).sort()) {
+            if (ran.has(member)) continue
+            problems.push(
+                `left: '${label}' - ${member} -- it does not stop here any more, so take it off the table and ` +
+                    'say in the commit what made it compile (or where it moved)',
             )
         }
     }
@@ -2180,7 +2380,7 @@ function exampleProblems(coverage) {
     // example is compiled against is the same silence in the other direction.
     for (const one of coverage.thin) {
         problems.push(
-            `the marker of ${one.file}:${one.line} '${one.name}' does not say what the example is missing: it ` +
+            `the marker of ${one.member} '${one.name}' does not say what the example is missing: it ` +
                 `compiles once ${one.unnamed.map((name) => `\`${name}\``).join(', ')} is bound, and the reason ` +
                 `gives ${one.entry.fragments.map((reason) => `\`${reason}\``).join(' ')}`,
         )
@@ -2188,34 +2388,38 @@ function exampleProblems(coverage) {
     return problems
 }
 
-// Compare what the run found with what EXCEPTIONS records. Returns the problems, so the caller can
-// exit non-zero: a bounded list is only kept bounded if something counts it.
+// Compare what the run found with what EXCEPTIONS records, member by member and both ways round.
+// Returns the problems, so the caller can exit non-zero: a list is only kept honest if something
+// reads it back, and a member is only a record if the run says which one moved.
 function exceptionProblems(found) {
     const problems = []
     for (const half of ['result', 'parameter']) {
         const { byLabel, unlabelled } = found[half]
         const recorded = EXCEPTIONS[half]
         for (const one of unlabelled) {
-            problems.push(`an exception with no label: ${one.name} (${one.uri}): ${one.detail}`)
+            problems.push(`an exception with no label: ${one.member} -- ${one.detail}`)
         }
-        for (const label of Object.keys(byLabel).sort()) {
-            if (recorded[label] === undefined) {
+        const labels = new Set([...Object.keys(byLabel), ...Object.keys(recorded)])
+        for (const label of [...labels].sort()) {
+            const ran = byLabel[label] || new Map()
+            const kept = recorded[label]
+            if (kept === undefined) {
                 problems.push(
-                    `the exception class '${label}' is not in EXCEPTIONS.${half}: ${byLabel[label]} overload(s) carry it, ` +
-                        'and a new class is a new promise to keep -- add it with its count and say why',
-                )
-            } else if (recorded[label] !== byLabel[label]) {
-                problems.push(
-                    `EXCEPTIONS.${half}['${label}'] records ${recorded[label]}, and the run found ` +
-                        `${byLabel[label]}: update the number in the same commit and say why the class moved`,
+                    `the exception class '${label}' is not in EXCEPTIONS.${half}: ${ran.size} member(s) carry it, ` +
+                        'and a new class is a new promise to keep -- add it with the members named below, each ' +
+                        'with the sentence that says why it cannot be read',
                 )
             }
-        }
-        for (const label of Object.keys(recorded)) {
-            if (byLabel[label] === undefined) {
+            for (const member of [...ran.keys()].sort()) {
+                if (kept !== undefined && Object.hasOwn(kept, member)) continue
+                const one = ran.get(member)
+                problems.push(`entered: '${label}' + ${member} -- ${one.detail}`)
+            }
+            for (const member of Object.keys(kept || {}).sort()) {
+                if (ran.has(member)) continue
                 problems.push(
-                    `EXCEPTIONS.${half}['${label}'] records ${recorded[label]}, and the run found none: ` +
-                        'the class is gone, so remove it and say why',
+                    `left: '${label}' - ${member} -- it is not in the run any more, so take it off the table ` +
+                        'and say in the commit what made it readable (or which class it moved to)',
                 )
             }
         }
@@ -2603,6 +2807,7 @@ function verifyOps() {
                 paramsUnchecked.push({
                     name: op.name,
                     uri: op.uri,
+                    member: `${op.name} (${op.uri})#parameter`,
                     stop,
                     label: parameterStopClass(stop, at >= 0 ? first.params[at].type : '', at >= 0 ? ruleParams[at] : ''),
                     detail,
@@ -2683,6 +2888,7 @@ function verifyOps() {
                     unchecked.push({
                         name: one.entry.name,
                         uri: op.uri,
+                        member: `${one.entry.name} (${op.uri})#result`,
                         declared: one.declaredText,
                         claimed: claimedText.trim(),
                         label,
@@ -2750,7 +2956,8 @@ function verifyOps() {
             previous = entry.name
         }
     }
-    // The exceptions, counted the way EXCEPTIONS records them: by class, with the ones that carry no
+    // The exceptions, classed the way EXCEPTIONS records them: one member per place this checker
+    // cannot read, keyed `<operator> (<uri>)#result` or `...#parameter`, with the ones that carry no
     // class kept apart so the run can refuse them by name.
     const tally = (list) => {
         const byLabel = {}
@@ -2760,7 +2967,8 @@ function verifyOps() {
                 unlabelled.push(one)
                 continue
             }
-            byLabel[one.label] = (byLabel[one.label] || 0) + 1
+            if (byLabel[one.label] === undefined) byLabel[one.label] = new Map()
+            if (!byLabel[one.label].has(one.member)) byLabel[one.label].set(one.member, one)
         }
         return { byLabel, unlabelled, total: list.length }
     }
@@ -2955,7 +3163,9 @@ if (mode === '--write' || mode === '--verify-doc') {
             `${coverage.compiled} compile, ${stopped} do not, and ${coverage.stale.length} marked a fragment compile ` +
             `with nothing bound`,
     )
-    for (const label of Object.keys(coverage.stops).sort()) console.log(`    ${label}: ${coverage.stops[label]}`)
+    for (const label of [...coverage.members.keys()].sort()) {
+        console.log(`    ${label}: ${coverage.members.get(label).size}`)
+    }
     // Every example that does not compile, by name: the class it stops on and the compiler's own
     // words, cut to the part that says what is wrong.
     announceExamples(
@@ -2982,17 +3192,14 @@ if (mode === '--write' || mode === '--verify-doc') {
         process.exit(1)
     }
     if (mismatched.length > 0) {
-        // `mismatched` is one line per problem, and a problem is not always a class: `exampleProblems`
-        // adds one for a class EXAMPLE_STOPS does not have, one for a class whose recorded number
-        // moved, one for a class the run no longer finds, one per example that stops with no class at
-        // all, and one for the totals against STALE_FRAGMENTS. The number here is how many of those
-        // lines stand above it, so it says "problem(s)". The line used to read "example class(es) the
-        // run found and the script does not record", which is history and nothing else: it counted
-        // classes it was not counting, and "does not record" was false for a class whose number
-        // merely moved. What this prints now is "example problem(s)".
+        // `mismatched` is one line per problem, and a problem is what a member did: it entered a
+        // class EXAMPLE_STOPS has no room for, it entered a class that exists, it left one, it
+        // stopped somewhere with no class at all, or a marker went stale. Each of those lines names
+        // the example, so this number is only how many of them stand above it -- the diagnosis is the
+        // names, not the total.
         console.log(
-            `${mismatched.length} example problem(s) between the run and the script's records: a class ` +
-                'it does not record, a number that moved, or a marker that is stale',
+            `${mismatched.length} example problem(s) between the run and the script's records: an example ` +
+                'that entered, one that left, or a marker that is stale -- each is named above',
         )
         process.exit(1)
     }
@@ -3020,10 +3227,10 @@ if (mode === '--write' || mode === '--verify-doc') {
         const shown = names.slice(0, EXCEPTIONS_SHOWN)
         const more = names.length > shown.length ? `, and ${names.length - shown.length} more` : ''
         console.log(`the declared ${what} was not compared for ${names.length} operator(s) -- ${why}: ${shown.join(', ')}${more}`)
-        // The classes, counted the way EXCEPTIONS records them, then the same bounded detail as the
+        // The classes, as the members EXCEPTIONS records them, then the same bounded detail as the
         // names, so a reader of a green run still knows which piece is not read and why.
         for (const label of Object.keys(classes.byLabel).sort()) {
-            console.log(`    ${label}: ${classes.byLabel[label]}`)
+            console.log(`    ${label}: ${classes.byLabel[label].size}`)
         }
         for (const one of list.slice(0, EXCEPTIONS_SHOWN)) console.log(`    ${detail(one)}`)
     }
@@ -3041,9 +3248,10 @@ if (mode === '--write' || mode === '--verify-doc') {
         found.parameter,
         (one) => `${one.name} (${one.uri}): ${one.detail}`,
     )
-    // The list is data: the run counts its own exceptions by class and compares them with the
-    // numbers in EXCEPTIONS. A stop with no class, a class the table does not hold, or a class that
-    // moved fails here, so the list cannot grow or shrink without someone writing the class down.
+    // The list is data: the run gathers its own exceptions by class and compares the members with the
+    // members EXCEPTIONS holds, both ways round. A stop with no class fails, a member the table does
+    // not hold fails with its name, and a member the run no longer finds fails with its name too, so
+    // the list cannot grow or shrink without someone writing down which place moved.
     const mismatched = exceptionProblems(found)
     for (const problem of mismatched) console.log(problem)
     if (problems.length > 0) {
@@ -3051,23 +3259,21 @@ if (mode === '--write' || mode === '--verify-doc') {
         process.exit(1)
     }
     if (mismatched.length > 0) {
-        // One line per problem, and a problem is not always a class: `exceptionProblems` adds one
-        // for a class EXCEPTIONS does not hold, one for a class whose recorded number moved, one for
-        // a class the run no longer finds, and one per overload that carries a label the table has
-        // no class for. This number is how many of those lines stand above it, so it says
-        // "problem(s)": "exception class(es)" would name a count this is not, and "does not record"
-        // would be false for a class whose number merely moved -- which is the usual one.
+        // One line per problem, and a problem is what a member did: it entered a class the table has
+        // no room for, it entered a class that exists, it left one, or its example stopped carrying a
+        // class at all. Each of those lines names the member, so this number is only how many of them
+        // stand above it -- the diagnosis is the names, not the total.
         console.log(
-            `${mismatched.length} exception problem(s) between the run and EXCEPTIONS: a class it does ` +
-                'not record, a number that moved, or an overload that carries no class',
+            `${mismatched.length} exception problem(s) between the run and EXCEPTIONS: a member that entered, ` +
+                'one that left, or one that carries no class -- each is named above',
         )
         process.exit(1)
     }
-    // What the run compared its own lists with, so a reader of a green run sees the totals the table
-    // pins as well as the counts it printed above.
+    // What the run compared its own lists with, so a reader of a green run sees the size of the table
+    // it agreed with as well as the classes it printed above.
     const recorded = (half) => {
-        const counts = Object.values(EXCEPTIONS[half])
-        return `${counts.reduce((sum, one) => sum + one, 0)} in ${counts.length} class(es)`
+        const members = Object.values(EXCEPTIONS[half]).map((kept) => Object.keys(kept).length)
+        return `${members.reduce((sum, one) => sum + one, 0)} in ${members.length} class(es)`
     }
     console.log(
         `the exception lists are the ones EXCEPTIONS records: result ${recorded('result')}, parameter ${recorded('parameter')}`,
