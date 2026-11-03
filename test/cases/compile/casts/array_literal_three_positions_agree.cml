@@ -1,0 +1,22 @@
+// The same literal, into the same type, through the three positions that state it: a cast, a
+// declaration and an argument. They must give one answer -- the author's ruling of 2026-11-03 says
+// a sized rank-one `as` is not narrower than the two, and the way to say that in a test is to put
+// one literal through all three and require all three to be a `f32[3]`.
+//
+// `take3` accepts nothing but a `f32[3]`, so handing it the cast's value and the declaration's value
+// is the reading: if either position had left the literal an open `f32[]`, these lines would not
+// compile. The refusals are the other half of the same rule and each keeps its own case --
+// `array_literal_length_mismatch` (a cast that states the wrong extent) and
+// `array_literal_in_return_length_mismatch` (a return that states the wrong extent).
+func take3(x: float[3]): void {
+    println(x)
+}
+
+func main(): int sync {
+    let byCast = [1.5, 2.5, 2.5] as float[3]
+    let byDeclaration: float[3] = [1.5, 2.5, 2.5]
+    take3([1.5, 2.5, 2.5])
+    take3(byCast)
+    take3(byDeclaration)
+    return 0
+}

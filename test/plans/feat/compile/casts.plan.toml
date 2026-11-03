@@ -279,3 +279,12 @@ expect_exit = 1
 expect_stdout_contains = ["the literal writes 2 element(s) and the type states 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+[[tests]]
+name = "array_literal_three_positions_agree.nvm"
+desc = "One literal, one type, three positions that state it -- a cast, a declaration and an argument all build it into a `f32[3]`, which `take3` is the reading for; the author's ruling is that a sized rank-one `as` is not narrower than the declaration and the argument (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/casts/array_literal_three_positions_agree.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["[1.5, 2.5, 2.5]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
