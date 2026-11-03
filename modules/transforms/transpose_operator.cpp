@@ -125,8 +125,11 @@ class TransposeResolver final : public FuncTypeResolver {
 /// that names the shape -- the catch-all prints the log's own word for it, so a cause added without a
 /// sentence says which cause it was instead of saying nothing.
 ///
-/// Only the cause is answered here -- the prefix `transpose has no transpose for this function` stays
-/// where the raise site writes it, because it is what a reader greps for and what the plans pin.
+/// Only the cause is decided here -- the prefix `transpose has no transpose for this function` stays
+/// where the raise site writes it, because it is what a reader greps for and what the plans pin. The
+/// *where* the walk recorded (`TransposeRefusal`'s graph, node, uri and lookup) is rendered with the
+/// cause it belongs to, and not here as a second decision: a site records it once, and the log and
+/// the sentence read that one record.
 std::string refusalSentence(const TransposeRefusal &refusal) {
     const std::string position =
         refusal.param.has_value()
@@ -187,7 +190,40 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
                          " reads a value the function's own body computes out of a loop or a "
                          "branch, so carrying it means transposing that body";
     case TransposeRefusalCause::Rule:
-        return "the rule table has no rule for a step of this body";
+        // The one cause whose sentence is built from the *where* as well as from the cause: which
+        // function, which node, which operator, and which of the three ways the index had no rule.
+        // The walk recorded all four at the site, and the log has printed all four since it existed
+        // -- the sentence said "a step of this body" and left a reader with no step to look at.
+        // A part the walk recorded as nothing is said to be missing rather than dropped: a gap
+        // reads as "there is no such thing", which is the reading this sentence exists to prevent.
+        {
+            std::string about = "a step";
+            about += refusal.graph.empty() ? " of a graph the walk did not name"
+                                           : " of `" + refusal.graph + "`";
+            std::string at;
+            at += refusal.node.has_value() ? "node " + std::to_string(*refusal.node)
+                                           : "a node the walk did not number";
+            at += refusal.uri.empty() ? ", an operator the walk did not name"
+                                      : ", operator `" + refusal.uri + "`";
+            // The three ways the lookup answers nothing are three different facts about the tree,
+            // and a reader fixes a different thing for each: a module that was not built, a family
+            // that cannot spell the operator's name, or a family that is here and holds no rule.
+            std::string found;
+            if (refusal.lookup == "no-such-family") {
+                found = "no module named `rulesets.transpose` was built into this program, so the "
+                        "family holds no rule for any operator";
+            } else if (refusal.lookup == "no-rule") {
+                found = "the family is built, and its index holds no rule under that operator's "
+                        "name at the operand count it has";
+            } else if (refusal.lookup == "unbound") {
+                found = "that operator's name is not one the family's index can spell as a rule "
+                        "head, so there is no rule to look up for it";
+            } else {
+                found = "the walk recorded no reason for the lookup";
+            }
+            return about + " (" + at + ") is one the transpose family `rulesets.transpose` cannot "
+                   "turn around: " + found;
+        }
     case TransposeRefusalCause::Condition:
         return "a bool condition has no cotangent space, so it carries no derivative";
     case TransposeRefusalCause::Signature:
