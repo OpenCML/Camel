@@ -1,0 +1,18 @@
+# Fixture of test/tools/selftest/run.mjs: "待修" is not a reason. A field filled with a stock phrase
+# records that the case is red, which the mark already said, and leaves the next reader with
+# nothing to act on -- so it is refused rather than accepted as a filled field.
+id = "selftest.knownfail.vague_reason"
+order = 3
+tier = "fast"
+
+[[tests]]
+name = "vague_reason"
+desc = "A marked case whose reason is a placeholder: refused at load."
+tool = "node"
+kind = "behavior"
+case = "fails.mjs"
+args = ["${case}"]
+expect_exit = 0
+known_fail = true
+known_fail_owner = "the runner self-test"
+known_fail_reason = "待修"

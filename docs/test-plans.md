@@ -726,6 +726,31 @@ everywhere is written once:
   for the first time (2026-11-02: compiling `modules/transforms` moved `skip 43 -> 10` and
   `known failures 3 -> 6` in the same run). Read the two numbers together before calling it a
   regression.
+- `known_fail_owner`
+  Who is responsible for making a marked case green: a lane (`lane-transforms`) or a person.
+  **Required on every mark**, and the plan is refused when it is loaded if it is missing, naming the
+  plan, the case and the field (`test/tools/run-tests.mjs`, `checkKnownFailMark`). The author's
+  ruling of 2026-11-03 00:30 asks a case that cannot pass today to stay in the plan with three
+  things -- the mark, the owner and the reason -- and the other two used to be prose inside
+  `known_fail_note`, which nothing checked and a review had to remember to read. There is
+  deliberately no default: a default owner would let a case nobody owns pass the check, which is the
+  state the ruling is about. A placeholder (`unassigned`, `tbd`, `nobody`, `待定`) is refused for the
+  same reason. The owner is inherited from `[defaults]` like the mark, and it is printed as
+  `known_fail_owner: …` under every `[XFAIL]`, so it is a field the run reads and not a promise kept
+  in a file.
+- `known_fail_reason`
+  **Required on every mark**, one sentence saying where the case is stuck -- which refusal, which
+  law, which missing slot -- written in one of the three shapes this tree already records walls in:
+  - the refusal or the law in backticks: `` `skip=rule uri=tensor:sum reason=unbound` ``;
+  - the file and the symbol that refuses: `modules/transforms/vmap.cpp#liftConstant`;
+  - the page that decides the question: `docs/handover/questions/…cn.md`.
+
+  It is refused at load with the same refusal the owner gets, and three more shapes are refused with
+  it: an empty value, a stock phrase (`待修`, `todo`, `known issue`, …) and a sentence that names no
+  wall ("this case does not pass yet"). Each of those records that the case is red, which the mark
+  already said, and leaves the next reader nothing to act on. It is not a replacement for
+  `known_fail_note`: the reason says where the wall is, the note keeps the readings, the counts and
+  the history.
 - `known_fail_note`
   Printed with an `[XFAIL]`: why, and what will fix it.
 - `known_fail_msg`
@@ -747,6 +772,11 @@ the expected tests) and the `--changed` mapping (`src/passes/sched/` selects the
 plans, `docs/` the documentation checks, `modules/tiles/` the GPU plans, `modules/onnx/` a
 layered plan, a plan file itself, the forbidden perf/GC-stress/progen plans nothing, an unknown
 path nothing); it runs with the default test set (`test/plans/feat/consistency/runner.plan.toml`).
+The `known_fail` gate has five plan files of its own under `test/tools/selftest/knownfail/`: four
+ways to be incomplete -- no owner, no reason, a placeholder reason and a reason that names no wall --
+each refused with its file, its case and its missing field named, and one complete entry that loads,
+runs and reports `[XFAIL]` with its owner printed. A default owner or a default reason would make
+the four pass and that check red, which is the direction that matters.
 
 ## Supported Normalizers
 

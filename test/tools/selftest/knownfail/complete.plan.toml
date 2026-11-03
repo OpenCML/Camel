@@ -1,0 +1,18 @@
+# Fixture of test/tools/selftest/run.mjs: all three things, so this plan loads and its case reports
+# `[XFAIL]` -- and the run prints the owner beside the mark, which is what makes the field read by
+# something other than the load-time check.
+id = "selftest.knownfail.complete"
+order = 5
+tier = "fast"
+
+[[tests]]
+name = "complete"
+desc = "A marked case with an owner and a wall: loads, runs, and reports [XFAIL]."
+tool = "node"
+kind = "behavior"
+case = "fails.mjs"
+args = ["${case}"]
+expect_exit = 0
+known_fail = true
+known_fail_owner = "the runner self-test"
+known_fail_reason = "the fixture stops at `WALL fixture=knownfail`, so the run is red on purpose"

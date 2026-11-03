@@ -8,6 +8,9 @@
 //   * the plan schema: a misspelled key or a known key of the wrong type fails its own plan with
 //     the file, the test and the key named, while a valid plan in the same directory still runs;
 //     `expect_stdout_exact` (and its legacy name `expect_stdout`) compares the whole output;
+//   * the `known_fail` gate: a marked case that names no owner, no reason, a placeholder reason or
+//     a reason that names no wall is refused where its plan is loaded, by name, and an entry that
+//     carries all three loads, runs and reports `[XFAIL]` with its owner printed;
 //   * the payload a `verify_script_path` receives: the resolved case path under `case_path` and
 //      the other fields docs/test-plans.md documents;
 //   * the per-test scratch directory: scratch.plan.toml is run twice, and a test must not see
@@ -242,6 +245,63 @@ if (!strict.output.includes(`[INFO] test scratch kept: ${strictRoot}`)) {
     problems.push('strict: the failed run did not print the kept test root')
 }
 fs.rmSync(strictRoot, { recursive: true, force: true })
+
+// --- the `known_fail` gate: a marked case carries an owner and a wall ---------------------------
+// The author's ruling of 2026-11-03 00:30: a case that cannot pass today stays in the plan with the
+// mark, who is responsible for making it green, and why it cannot pass. Two of the three used to be
+// prose inside `known_fail_note`, which nothing checked and a review had to remember to read; they
+// are fields now, and a plan that omits either is refused where it is loaded. Five plan files share
+// one directory -- four ways to be incomplete and one complete entry. The four must fail with the
+// file, the case and the missing (or unusable) field named; the complete one must load, run, and
+// report `[XFAIL]` with its owner printed beside the mark. A default owner or a default reason
+// would make the four pass and this block red, which is the direction that matters.
+const knownfailDir = path.join(here, 'knownfail')
+const knownfail = runRunner([knownfailDir])
+if (knownfail.status !== 1) problems.push(`known_fail gate: runner exit ${knownfail.status}, expected 1`)
+if (!knownfail.output.includes('[SUMMARY] total: 5, pass: 0, fail: 4, known failures: 1')) {
+    problems.push(`known_fail gate: unexpected summary (${summaryLine(knownfail.output)})`)
+}
+// The four readings, each a refusal that names its own missing thing. Kept as pairs so the verdict
+// printed below is read off the output and not off this file's intentions.
+const knownfailReadings = [
+    [
+        'missing-owner',
+        "test/tools/selftest/knownfail/no_owner.plan.toml: test 'no_owner': known_fail needs "
+            + 'known_fail_owner',
+    ],
+    [
+        'missing-reason',
+        "test/tools/selftest/knownfail/no_reason.plan.toml: test 'no_reason': known_fail needs "
+            + 'known_fail_reason',
+    ],
+    [
+        'placeholder-reason',
+        "test/tools/selftest/knownfail/vague_reason.plan.toml: test 'vague_reason': "
+            + 'known_fail_reason is "待修", which says nothing about the wall',
+    ],
+    [
+        'reason-names-no-wall',
+        "test/tools/selftest/knownfail/no_wall.plan.toml: test 'no_wall': known_fail_reason names "
+            + 'no wall',
+    ],
+]
+const knownfailVerdict = knownfailReadings.map(([what, needle]) => {
+    const seen = knownfail.output.includes(needle)
+    if (!seen) problems.push(`known_fail gate: ${what} was not refused by name; output lacks: ${needle}`)
+    return `${what}=${seen ? 'refused' : 'MISSING'}`
+})
+// The complete entry is the control: the same mark, refused only for want of a field, must load and
+// run. Its status and its owner are two different readings -- one says the gate let it through, the
+// other says the field reaches the person reading the gate.
+if (!/^\[XFAIL\] complete\b/m.test(knownfail.output)) {
+    problems.push(`known_fail gate: the complete entry did not report [XFAIL]:\n${knownfail.output}`)
+}
+if (!knownfail.output.includes('known_fail_owner: the runner self-test')) {
+    problems.push('known_fail gate: the owner was not printed on the [XFAIL] line')
+}
+knownfailVerdict.push(`all-three=${/^\[XFAIL\] complete\b/m.test(knownfail.output) ? 'accepted' : 'MISSING'}`)
+console.log(`[known_fail gate] ${knownfailVerdict.join('; ')}`)
+fs.rmSync(path.join(scratchRoot, `run-${knownfail.pid}`), { recursive: true, force: true })
 
 // --- expect_signal: a run that is meant to die of a named signal -------------------------------
 // "This process dies of SIGABRT" had no way to be written: `expect_exit` compares an exit code a
