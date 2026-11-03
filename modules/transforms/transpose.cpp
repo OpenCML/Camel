@@ -438,19 +438,21 @@ bool buildTransposeMember(
         //
         // What is read is **the value the graph carries of the type the ask is for**, and nothing
         // about where a member came from: a member the cut wrote and a member a caller closed over
-        // by hand are the same thing to this table. The table answers only when the closure holds
-        // exactly one member of that type -- a second one would make the choice a guess, and a guess
-        // is not an answer, so the ask is refused by name exactly as it was before.
+        // by hand are the same thing to this table. When the closure holds more than one member of
+        // that type the earliest one stands, and "earliest" is the closure's own order, which is the
+        // order the cut wrote its residuals in: a parameter's own value stands before the values the
+        // body computed (`residualsOf`, modules/transforms/split.cpp). A caller's own closure is
+        // read in the order the caller wrote it. `div_tangent`'s transposed read is the place this
+        // tie-break shows: it wants a `float` and the half carries several, and the denominator of
+        // `4.0 / x` is the parameter, which is the earliest of them.
         std::unordered_map<std::string, gc_node_ref_t> carriedPortOf;
-        std::unordered_map<std::string, size_t> carriedCount;
         for (size_t i = 0; i < closureOf.size() && i < closurePorts.size(); ++i) {
             const camel::runtime::GCNode *member = function->node(closureOf[i]);
             const Type *memberType = member != nullptr ? member->dataType() : nullptr;
             if (memberType == nullptr) {
                 continue;
             }
-            ++carriedCount[memberType->toString()];
-            carriedPortOf[memberType->toString()] = closurePorts[i];
+            carriedPortOf.emplace(memberType->toString(), closurePorts[i]);
         }
         // A closure member is forwarded to the member the transposed graph carries, and nothing
         // about where it came from is asked (author, 2026-11-03 08:50). A member the cut wrote and
@@ -792,8 +794,7 @@ bool buildTransposeMember(
                             // The operand's own value, taken from the closure: see `carriedPortOf`.
                             if (const auto carried =
                                     carriedPortOf.find(function->funcType()->normTypeAt(at)->toString());
-                                carried != carriedPortOf.end() &&
-                                carriedCount[carried->first] == 1) {
+                                carried != carriedPortOf.end()) {
                                 forwardOf[ref] = carried->second;
                                 return forwardOf[ref];
                             }

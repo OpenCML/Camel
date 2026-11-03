@@ -1303,3 +1303,16 @@ expect_exit = 0
 expect_output_contains = ["tangent_of_float_array true", "tangent_of_int_array true", "params_of_f3 true", "params_and_tangents true", "vjp_of_f3 true", "tangents_of_two_floats true"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "transpose_hand_closed_lambda.same_answer_as_the_cut"
+desc = "The criterion of the 2026-11-03 rework as two readings of one number: a lambda a caller closes by hand and the second half `split` builds answer the same. `g(x) = x*x` at 3 lifts to `(x, dx) => (x*x, x*dx + x*dx)`, so the cut's second half is `lin(dx) = 6*dx`; a lambda written by hand over the same value, `(dx) => 2.0 * x * dx` with `x = 3`, is the same linear map spelled without a cut. Every transpose is asked at cotangent 1 and 3, so the four readings are 6, 18, 6, 18: the pair 6/6 is the criterion, and 18 is on no forward line, so an answer only proportional to the cotangent can produce it. Before the rework the cut's half answered and the hand-closed one refused -- `34788b554` gave every closure member the number of the parameter whose value it held, and a closure a caller wrote records nothing -- which made the result depend on where the graph came from."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_hand_closed_lambda.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+expect_output_contains = ["cut ct1= (6.0)", "cut ct3= (18.0)", "hand ct1= (6.0)", "hand ct3= (18.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
