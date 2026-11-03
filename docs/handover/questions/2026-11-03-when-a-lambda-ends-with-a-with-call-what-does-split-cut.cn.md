@@ -84,3 +84,71 @@ function (the port is not a parameter of the graph, so neither half takes it). �
 - 已**回滚**（树与 `7432f65cc` 相同，`git status` 空）。读数：`transforms` 87 = 84/2/1 复原；那一版里除了本页对应的负向用例因报文变化而红，**84 条通行用例一条没红**（`grep '[FAIL]'` 只有两条已知红 + 本用例）。
 
 所以本页的排期变成两件：**B（水合出口，本页默认）→ 闭包 port 归类**。两件都不做，库层 `with_grad` 出不了数。
+## 七、库层 `with_grad` 今天不存在，第 3 项是从零写起（2026-11-03 23:5x，`lane-withgrad`）
+
+**前提事实，先记下来**：库层 `with_grad` 现在**没有**。`3a2e8fc90` 删掉了那一行导出——它声明 `F`、实际返回 `Vjp<F>`、也从不对方程里的 `with` 参数求值——`stdlib/vjp.cml` 只剩 `vjp` 与 `grad`。所以 `grad_first_with_parameter` 的两组用例（`.macro.nvm`、`.runtime.nvm`）都 `import { grad, with_grad } from autodiff`，走的是**引擎**那一份（`stdlib/signatures/autodiff.cml` 声明、`modules/autodiff` 实现），两组读数相同、无 skip 报文：
+
+```
+grad_first_with_parameter gx=3.0 vg=(9.0, 3.0) gy=3.0 gl=3.0
+grad_first_with_parameter pg={ a: 4.0, b: 1.0 } pvg=(11.0, { a: 4.0, b: 1.0 })
+grad_first_with_parameter wg=[4.0, 5.0, 6.0] wvg=(32.0, [4.0, 5.0, 6.0])
+grad_first_with_parameter sk=6.0 sx=4.0
+```
+
+**第三行原本两组用例都没断言**（只断到 `gx/vg`、`pg/pvg`、`sk/sx`），这正是 15:15 说的"判据分辨不了对错"：一个错的律也能印出前三行那些数。现已按裁定补齐，四行全断言、`wg` 逐元素。
+
+**三步走到哪**：
+
+1. **B（出口水合）已落**：`modules/transforms/jvp.cpp` 里"出口的副本就是那个对、且那个对是应用结点作答"时，把 `valueOf`/`tangentOf` 这两个已经算好的投影写成一个两元 tuple `Fill`。读数：那堵 `skip=exit` 不再出现，抬升图 `nodes=9 exit=6` → `nodes=11 exit=10`（多出的正是 `Fill`），与本页第六节试出来的数一致。
+2. **捕获声明成闭包端口：本页第六节说的"第二件"的一半其实已经在树里**。`jvp.cpp` 早有一段把 `function.closureNodesOf()` 的每个捕获做成 port 并 `appendClosureNode`、再 `setClosureType`（`skip=body` 那一版就是它修的）。缺口不在"声明"，在 **`split` 认不认这些 port**。
+3. **第 ③ 步（`split` 把后一半读到的闭包端口当残差）未做**，`split.cpp` 归另一支。四个形状在这一步之后停下的原文：
+
+```
+# 无捕获的 float 形状（vjp((ww) => weighted<ww>(2.0))(3.0)）
+REINTERP split function=jvp_of___g_247__ skip=backward construct=a parameter uri=- why=the backward half reads the value of parameter 0, and it is not one of the values the cut carries
+# 捕获了数组的 tensor 形状（vjp((ww) => dot<ww>(x))(w)）
+REINTERP split function=jvp_of___g_248__ skip=forward construct=a port uri=- why=the port is not a parameter of the graph, so neither half takes it
+```
+
+两个形状各停在一处，**都不是出口形状**了，也都不在库层能改的范围：一处是后一半读参数原值没进残差清单，一处是闭包 port 没被当成半边的端口。
+
+**路线 C 有了读数**（本页第三节说"没试过"）：把体的结果包一层（`vjp((ww) => weighted<ww>(2.0) + 0.0)`）绕出口形状，报文变成 `skip=residual (the forward half does not compute a value the cut carries)`——**绕不过去**，与第三节的判断一致。
+
+另：结构体形状（`point_loss`）与两个 `with` 参数形状（`scaled`）更早就停，报文是 `REINTERP jvp function=point_loss skip=body` 与 `transforms: jvp has no forward transform for this function`，连 `split` 都没到。这两条是 `jvp` 侧的另两件，不在本页的三步里。
+
+## 八、第 ③ 步落地：`split` 认了"后一半读的调用实参"，`501` 那堵通了，下一堵在 `transpose`（2026-11-04，`lane-withgrad`）
+
+按 15:15 的原话"后一半要读的东西都是残差，进 `lin` 的闭包"改的，改动只在 `split.cpp`，一处逻辑、三个落点，`portOf` 一字未动：
+
+1. `residualsOf` 的 `isLiftedCall` 分支：一个抬升调用传给被调方的实参里，值实参是**普通实参的前一半**——原来按 `dataInputsOf(...).size()/2` 取，而 `dataInputsOf` 是"普通输入 + 上下文输入"，被调方一旦保留 `with` 列表，这个减半就切错位置，切在边界上的那个值正是调用方的权重。现在减半只减普通实参，上下文实参整段留在残差里。
+2. `Half::halfInputsOf`：重定向的调用（`retargets`）原来只取值实参，把 `with` 实参丢了；补上。
+3. `Half::makeCopy` 的 `Func` 分支：`halfInputsOf` 是"普通 + 上下文"一个表，交给 `setNormInputs` 会把 `with` 实参当普通实参传；新增 `placeCallArguments`，普通进 `setNormInputs`、上下文进 `setWithInputs`。
+
+**`501` 前后对比**（同一个表达式 `vjp((ww: float) => weighted<ww>(2.0))(3.0)`，`weighted` 是 `with <x: float> func weighted(y) = x*y + x`）：
+
+改前（`split` 的后一半按名拒绝，exit 1）：
+
+```
+transforms: split does not build this function (the backward half reads the value of parameter 0, and it is not one of the values the cut carries)
+REINTERP split function=jvp_of___g_247__ skip=backward construct=a parameter uri=- why=the backward half reads the value of parameter 0, and it is not one of the values the cut carries
+```
+
+改后：这条**不再出现**，`split` 两个半边都建出来了（`residualsOf` 收 `p0` 进残差、前一半 `placed=2` 普通 1 上下文 1），停到下一站：
+
+```
+transforms: transpose has no transpose for this function: this call's callee has no transpose of its own, so the call cannot be turned around
+TRANSPOSE function=jvp_of_weighted skip=signature
+TRANSPOSE function=split_of_jvp_of___g_247___backward skip=call-no-transpose node=5 callee=jvp_of_weighted
+```
+
+**下一堵是 `transpose`，不是 `split`**：`transpose.cpp` 里已经有一条"抬升调用穿过它被抬起的原函数转置"的规则（"A lifted call is transposed **through the graph it was lifted from**"，`callee->liftedFrom()`），但它在**分支臂**的路径上；直线路径仍然要求被调方自己有转置，而 `jvp_of_weighted` 的签名（返回对）没有转置，于是按名拒绝。所以要么直线路径补同一条规则，要么库层组合不该让后一半留一个抬升调用的直呼——这是设计问题，本页记下来，`transpose.cpp` 本车道没碰。
+
+**所以库层仍然没有数**，`stdlib/vjp.cml` 仍然没有 `with_grad`。四个形状今天各自停在哪：float 形状停在 `transpose`（上面那条）；tensor 形状停在第七节的 `skip=forward` 闭包端口（未动）；结构体与两个 `with` 参数形状更早，停在 `jvp` 的 `skip=body` / 无前向规则。
+
+**一处要审的：`split.cpp` 里那条按名拒绝（"the backward half reads the value of parameter N, and it is not one of the values the cut carries"）现在没有形状能走到，但留着的三个读数分开写，别合成一句"不可达"：**
+
+1. **本车道在改后构造不出触发形状。** 改完以后，"后一半读到的参数"必然先进残差清单（`residualsOf` 走的是后一半自己的读取，不是参数下标），`makeCopy` 从元组里答它（`crossesCut`），走不到那句拒绝。试过的形状：无捕获的 float、捕获数组的 tensor、两个 `with` 参数、结构体——都不过这句。
+2. **树上没有任何用例钉着它。** `git grep "not one of the values the cut carries"` 只在页里出现，`test/plans` 一条都没有，所以没有任何一条红/绿能作它的哨兵。
+3. **在别的形状上插桩显示零进入。** 另一条车道在同一个点上插桩过，别的形状上**一次都没进**。
+
+**"零命中"和"不可达"是两个结论。** 上面三条合起来是"今天没有读数支持它可达"，不是"它对任何输入都不可达"；今晚已经为把这两个当成一个付过一次代价。按严重性次序 **对 > 明确拒绝 > 错数 > 崩**，这条保留、**不换成断言**（断言会把"明确拒绝"降成"崩"，是最坏的一步），代码处已加注释写明它陈述的不变量（后一半只读跨越切点的值）、今天由"后一半读到的参数必然进残差清单"保证，以及**若将来证实它对任何输入都不可达，就删掉它、把不变量降级为注释**——不是凭一次计数删。
