@@ -228,16 +228,20 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
         }
         live.push_back(id);
     }
-    if (live.size() < 5) {
-        return program;
-    }
+    // No early return here on a short list: a graph this pass cannot host the blocks on is a
+    // program the case must not hand it (author's review of A9, 2026-11-03: "a small graph should
+    // not be tested, so let the case not choose it"). A silent return made the case read as a pass
+    // on a program it had not tested at all. The five nodes are taken with `at`, so a program that
+    // cannot host the blocks fails here and says so instead of wordings blocks around whatever the
+    // vector's memory held.
     const uint32_t outer = draft.addRegion(GCRegionKind::Block, 0);
     const uint32_t inner = draft.addRegion(GCRegionKind::Block, outer);
-    draft.setNodeRegion(live[2], outer);
-    draft.setNodeRegion(live[3], inner);
-    draft.setNodeRegion(live[4], inner);
-    draft.setRegionResult(inner, live[4]);
-    draft.setRegionPorts(outer, std::span<const gc_node_ref_t>(&live[1], 1));
+    draft.setNodeRegion(live.at(2), outer);
+    draft.setNodeRegion(live.at(3), inner);
+    draft.setNodeRegion(live.at(4), inner);
+    draft.setRegionResult(inner, live.at(4));
+    const gc_node_ref_t outerPort = live.at(1);
+    draft.setRegionPorts(outer, std::span<const gc_node_ref_t>(&outerPort, 1));
     const Program *next = session.commit();
 
     const GCGraph *after = next->graph(largest->id());
@@ -246,9 +250,9 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
         inInner += after->nodeRegion(id) == inner;
         inOuter += after->nodeRegion(id) == outer;
     }
-    const bool resultOk = after && after->region(inner) && after->region(inner)->result == live[4];
+    const bool resultOk = after && after->region(inner) && after->region(inner)->result == live.at(4);
     const bool portsOk  = after && after->regionPorts(outer).size() == 1 &&
-                         after->regionPorts(outer)[0] == live[1];
+                         after->regionPorts(outer)[0] == outerPort;
     os << "REGIONS count=" << (after ? after->regionCount() : 0) << " in_inner=" << inInner
        << " in_outer=" << inOuter << " result=" << (resultOk ? "ok" : "bad")
        << " ports=" << (portsOk ? 1 : 0) << " within=" << (inInner == 2 ? 1 : 0) << "\n";
