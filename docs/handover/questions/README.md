@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：44 页
+## 现在在等作者：45 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -17,6 +17,7 @@
 | [`2026-11-03-a-second-rule-under-one-key-is-judged-by-its-when-text`](2026-11-03-a-second-rule-under-one-key-is-judged-by-its-when-text.cn.md) | 同一个键下挂两条规则，今天按 `when` 文本判重，与裁定「按操作数类型」不一致 |
 | [`2026-11-03-a-sized-rank-one-cast-refuses-a-literal-the-declaration-accepts`](2026-11-03-a-sized-rank-one-cast-refuses-a-literal-the-declaration-accepts.cn.md) | 一个定长的秩一 `as`，拒了声明和传参都接受的同一个字面量 |
 | [`2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant`](2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant.cn.md) | 一个超时应该由读数推出来，而不是由人写死 |
+| [`2026-11-03-can-gradient-of-a-function-be-a-library-type-function`](2026-11-03-can-gradient-of-a-function-be-a-library-type-function.cn.md) | `grad(f)` 的类型能不能写成库层类型函数？（删引擎 D2） |
 | [`2026-11-03-does-a-comment-in-a-source-file-count-as-a-direct-connection`](2026-11-03-does-a-comment-in-a-source-file-count-as-a-direct-connection.cn.md) | 源文件里的一句注释，算不算一次"直连"？ |
 | [`2026-11-03-does-a-generic-call-accept-a-rank-zero-argument`](2026-11-03-does-a-generic-call-accept-a-rank-zero-argument.cn.md) | 泛型函数调用的实参匹配，要不要照 5.4 收秩 0？ |
 | [`2026-11-03-does-a-loop-statement-with-an-unused-value-still-run`](2026-11-03-does-a-loop-statement-with-an-unused-value-still-run.cn.md) | 一个值没人用的 `loop` 语句，还算不算一条要执行的语句？ |
