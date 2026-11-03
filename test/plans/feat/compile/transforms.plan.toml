@@ -1469,3 +1469,32 @@ expect_stdout_contains = ["transpose has no transpose for this function: this ca
 expect_stderr_contains = ["skip=rule uri=math:pow_d reason=unbound", "skip=call-no-transpose node=6 callee=rulesets.jvp::pow_tangent<float>"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# `softmax` on the D1 difference set. The engine answers it; the library stops in `split`, one step
+# before any transpose rule is looked up (see the neighbouring entry and the question page).
+[[tests]]
+name = "softmax_gradient_through_the_engine"
+desc = "The gradient of `sum(softmax<1>(x) * w)` through the engine's own rule (`softmaxVjp`, `modules/tensor/ops/reduction_ops.cpp`, registered by `setVjp(defs, `"softmax`", ...)`), written out element for element on both rows: `[[-0.17007706463866937, -0.37517307550291684, -0.5460605174868518, 1.0913106576284373], [0.10848803305563078, -0.046500634627606695, -0.22389029087827908, 0.16190289245025496]]`. The four components are the criterion and their sum is not: the correct gradient sums to zero on every row by construction, so an aggregate would pass for a rule that returns `ct` on a zero-mean `ct` and would say nothing about three of the four numbers. The two wrong laws a reader is likely to write -- `softmax_t` as `ct` (answers `w` = `[1.0, 2.0, 4.0, 8.0]` on row 0) and as `ct * y` (answers `[0.032058603, 0.174288638, 0.947531272, 5.151314079]`) -- differ from the correct row in all four components, so no tolerance is needed to tell them apart. This is the number the library's rules will have to reproduce; the library's side is blocked one step earlier."
+kind = "behavior"
+case = "../../../cases/compile/transforms/softmax_gradient_through_the_engine.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["softmax engine d=[[-0.17007706463866937, -0.37517307550291684, -0.5460605174868518, 1.0913106576284373], [0.10848803305563078, -0.046500634627606695, -0.22389029087827908, 0.16190289245025496]]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "softmax_gradient_stops_at_split"
+desc = "The same function through the library's `vjp`: the forward half is built with its rule named (`rules=jvp_softmax,jvp_mul_tensor,jvp_sum`) and the cut then refuses -- `skip=backward construct=a node whose input was not copied uri=- why=an operand of the node is not reachable from the half's exit`, and no `TRANSPOSE` line exists at all. So `softmax` is not one rule away: the tangent `jvp_softmax` writes needs `y = softmax<1>(x)` in the backward half, that call carries its axis as a context input (`softmax<1>`, `sum<1, true>`), and the forward half's exit does not reach it. A `softmax_t` rule cannot help a walk that never starts; the question is `docs/handover/questions/docs/handover/questions/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`. Pinned as the readings, not as an exit code, so the day the cut is answered this entry goes red and names what replaced it."
+kind = "negative"
+case = "../../../cases/compile/transforms/softmax_gradient_stops_at_split.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["split does not build this function"]
+expect_stderr_contains = ["skip=backward construct=a node whose input was not copied", "rules=jvp_softmax,jvp_mul_tensor,jvp_sum"]
+expect_output_not_contains = ["TRANSPOSE function="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
