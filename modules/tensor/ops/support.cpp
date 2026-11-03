@@ -16,6 +16,12 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/utils/assert.h"
 
+#include <format>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
+
 namespace camel::tensor::ops {
 
 using namespace camel::core::type;
@@ -88,6 +94,84 @@ std::string stringArg(ArgsView &args, size_t index) {
 
 Shape shapeArg(ArgsView &args, size_t index) {
     return parseShapeArray(args.get<::Array *>(index), args.type(index));
+}
+
+bool isIntegerCode(const std::optional<TypeCode> &code) {
+    return !code || *code == TypeCode::Int32 || *code == TypeCode::Int64;
+}
+
+bool isIntegerType(const Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    if (type->code() == TypeCode::Array) {
+        const Type *elem = static_cast<const ArrayType *>(type)->elemType();
+        return elem != nullptr &&
+               (elem->code() == TypeCode::Int32 || elem->code() == TypeCode::Int64);
+    }
+    return type->code() == TypeCode::Int32 || type->code() == TypeCode::Int64;
+}
+
+std::vector<int64_t> intListArg(ArgsView &args, size_t index, std::string_view op) {
+    Type *type = args.type(index);
+    if (type->code() == TypeCode::Array) {
+        ::Array *array = args.get<::Array *>(index);
+        // An empty literal `[]` has no element type to infer from (literal context typing is
+        // not here yet); there are no elements to convert, so it is the empty integer list.
+        if (array->size() == 0) {
+            return {};
+        }
+        // The type may state no element type at all (its element is `Void`, the "a numeric scalar,
+        // which one is not fixed yet" marker of design
+        // principles 5.4) — the reading `isIntegerCode` already takes, which answers "yes" for
+        // an unstated dtype and leaves the refusal to the kernel. A type that does fix an
+        // element type is the exact one it says, so a concrete `f32[3]` is still refused here;
+        // an unstated one is read from the value, which is the only thing that has it.
+        if (!isIntegerType(type) && array->dtype() != TypeCode::Int32 &&
+            array->dtype() != TypeCode::Int64) {
+            reportShapeError(op, "expects an integer array");
+        }
+        return parseIntArray(array, type);
+    }
+    const Array *tensor = tensorArg(args, index);
+    if (tensor->dtype() != TypeCode::Int64 && tensor->dtype() != TypeCode::Int32) {
+        reportShapeError(op, "expects integer indices");
+    }
+    if (tensor->rank() != 1) {
+        reportShapeError(op, "expects a rank-1 index tensor");
+    }
+    std::vector<int64_t> values(tensor->numel());
+    for (uint64_t i = 0; i < tensor->numel(); ++i) {
+        values[static_cast<size_t>(i)] = tensor->getAsInt64(i);
+    }
+    return values;
+}
+
+void checkStatedExtents(
+    const Array *value, const std::vector<int64_t> &at, size_t offset, std::string_view op) {
+    if (value == nullptr) {
+        return;
+    }
+    const size_t stated = at.size() - offset;
+    std::string why;
+    if (stated != value->rank()) {
+        why = std::format(
+            "states {} extents and the tensor has {}", stated, value->rank());
+    } else {
+        for (size_t d = 0; d < stated; ++d) {
+            if (at[offset + d] != value->dim(d)) {
+                why = std::format(
+                    "states extent {} at dimension {} and the tensor has {}",
+                    at[offset + d],
+                    d,
+                    value->dim(d));
+                break;
+            }
+        }
+    }
+    if (!why.empty()) {
+        reportShapeError(op, why.c_str());
+    }
 }
 
 slot_t wrap(type::Type *declared, Array *tensor) {
