@@ -836,12 +836,11 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 // it: the transpose of the read writes its cotangent into `zeros_like(xs)`, a `T[]`'s
                 // length is not a thing its type carries, and this parameter holds the array.
                 const size_t index = portIndex[ref];
-                // Which parameter this port belongs to, by the layout `jvpSignature` writes: the
-                // values are the first half and the tangents the second, so a port below the half is
-                // its own parameter's value and one above it is the tangent whose value stands
+                // Which parameter this port belongs to, asked of the one mapping that knows the layout
+                // `jvpSignature` writes (`parameterOfPort`) instead of restating it: a port below the
+                // half is its own parameter's value and one above it is the tangent whose value stands
                 // exactly `half` places earlier.
-                const size_t half      = ports.size() / 2;
-                const size_t valuePort = index < half ? index : index - half;
+                const size_t valuePort = parameterOfPort(lifted.funcType(), index).first;
                 // A parameter the tangent side reads crosses too: the residual set is what the
                 // backward half actually reads, whether the forward half computed it or it is a
                 // parameter itself. The ruling of 2026-11-02 00:30: the rule does not split by type.
