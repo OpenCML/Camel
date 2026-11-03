@@ -8,11 +8,13 @@
 //
 // Both readings move the second operand, whose rule term is `a · db`; the first operand here is the
 // constant `A`, so its term is zero. The reading that would separate `da · b` cannot be taken
-// through `jvp` yet: `matmul(param, constant)`, `matmul(w, w)` and `matmul(computed, constant)` are
-// each refused with `transforms: jvp has no forward transform for this function` at the `jvp` call
-// and no `file:line` of the operator -- a refusal the lift cannot place. The rule is written with
-// both terms anyway, so that the day the lift carries an array operand's tangent the rule is right;
-// this case locks the half that can be read today.
+// through `jvp` yet, and the wall is no longer the constant's tangent: the lift writes the zero of
+// an array type now, so `A`'s `float[2, 2]` zero is a node and the walk goes on past `matmul`. What
+// stops it is the index that reads one element of the product -- `matmul(A, x)[0]`, where the value
+// is a `float[..]` and `jvp_idx_arr` is written for a rank-one `T[]`, so `jvp` refuses
+// `:op/idx_arr` by naming the two port lists. The rule is written with both terms anyway, so that
+// the day the lift carries an array operand's tangent the rule is right; this case locks the half
+// that can be read today.
 import { matmul } from tensor
 import rulesets.jvp
 import { jvp } from transforms

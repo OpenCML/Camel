@@ -1283,14 +1283,14 @@ timeout_ms = 20000
 # `jvp matmul dx=(0,1) value=5.0000 tangent=2.0000` (A = [[1, 2], [3, 4]], x = (1, 2)).
 [[tests]]
 name = "transforms.jvp_matmul"
-desc = "The rule for `tensor:matmul` is indexed, and it still cannot answer: `jvp` of `matmul(A, x)[0]` stops with `transforms: jvp has no forward transform for this function` and no `file:line` of the operator, because the constant `A`'s zero tangent has no node -- `pairTypeOf` carries a pair for a floating scalar only, so a value of array type has no tangent to hand the rule. The hand calculation the day it flips: `A · x = (5, 11)`, so the value is 5, and the tangents along `(1, 0)` and `(0, 1)` are 1 and 2."
+desc = "The rule for `tensor:matmul` is indexed, and it still cannot answer -- but not for the reason this entry used to give. It said the constant `A`'s zero tangent had no node (`pairTypeOf` carrying a pair for a floating scalar only), and that is no longer true: `jvp` writes the zero of an array type too, so the lift now carries the `float[2, 2]` constant's tangent and the walk goes on past `matmul` to the index that reads one element of its result -- `matmul(A, x)[0]`, where the value is a `float[..]` and the law `jvp_idx_arr` is written for a rank-one `T[]`, so the refusal is `jvp has no forward rule for `:op/idx_arr`` with the two port lists and the data-operand count. The hand calculation the day the last wall falls: `A · x = (5, 11)`, so the value is 5, and the tangents along `(1, 0)` and `(0, 1)` are 1 and 2."
 kind = "negative"
 case = "../../../cases/compile/transforms/jvp_matmul.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 1
-expect_stdout_contains = ["transforms: jvp has no forward transform for this function"]
+expect_stdout_contains = ["jvp has no forward rule for", ":op/idx_arr"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 

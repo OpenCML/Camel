@@ -10,6 +10,7 @@
 #include "camel/core/forward.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/tangent_space.h"
@@ -19,9 +20,11 @@
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph_txn.h"
+#include "camel/utils/type.h"
 
 #include <algorithm>
 #include <array>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -109,8 +112,13 @@ std::string typeTextOf(const std::vector<camel::core::type::Type *> &types) {
     return text.empty() ? std::string("()") : text + ")";
 }
 
-/// Whether an instance's own ports take exactly the types this operator's operands have, and `why`
-/// when they do not.
+/// Whether an instance's own ports take the types this operator's operands have, and `why` when they
+/// do not.
+///
+/// `portTypes` is the node's port list in port order -- the data inputs, then the `<>` ones -- and
+/// `dataOperandCount` says where that role changes. A rule's parameters cover the leading ports and
+/// only those (the block below is the contract); the ports past its last parameter are the operator's
+/// own configuration, which the rule's left side writes as a constant rather than binding.
 ///
 /// The rule is asked for at the **element** type of the operand (`rule_types.h#ruleElementTypeOf`),
 /// which is what lets `index_into<T>` be filed at `float` while its operand is a `float[]`. That
@@ -121,28 +129,55 @@ std::string typeTextOf(const std::vector<camel::core::type::Type *> &types) {
 /// instance does not take is refused here, by name, before anything is built.
 bool portsTakeOperands(
     const camel::compile::gir::GenericRuleInstance &instance,
-    const std::vector<camel::core::type::Type *> &operandTypes, std::string &why) {
+    const std::vector<camel::core::type::Type *> &portTypes, size_t dataOperandCount,
+    std::string &why) {
     const FunctionType *ports = instance.lhs != nullptr ? instance.lhs->funcType() : nullptr;
     if (ports == nullptr) {
         why = "the rule's left side has no signature";
         return false;
     }
+    // A rule's parameters are the operator's **ports, in port order** -- the normal ones, then the
+    // `<>` ones (`stdlib/rulesets/jvp.cml`, the paragraph above `jvp_sum`; `stdlib/rulesets/vmap.cml`
+    // states the same protocol where it builds a call). So the rule's `count` parameters line up
+    // with the node's first `count` ports, and a *rule* that names fewer of them than the node has
+    // ports is not refusing anything: `jvp_reshape` is `rule jvp_reshape::<T>(x: T[..])` over the
+    // node `reshape<[2, 2]>(x)`, whose second port is the shape its own left side writes as a
+    // constant. That port is a static slot of the operator, not a value the node passes as data --
+    // `normInputsOf` does not answer it, `withInputsOf` does -- and it is not a parameter of the
+    // rule, so counting it here refused a law for the shape of its own left side. What the count
+    // still has to say is that no *data* input is left without a parameter to bind it: a rule that
+    // names fewer parameters than the node has data inputs cannot describe the node, and one that
+    // names more parameters than the node has ports cannot be filled.
     const size_t count = ports->normTypesCount();
     std::vector<camel::core::type::Type *> wanted;
     wanted.reserve(count);
     for (size_t i = 0; i < count; ++i) {
         wanted.push_back(ports->normTypeAt(i));
     }
-    if (count != operandTypes.size()) {
+    if (count < dataOperandCount || count > portTypes.size()) {
         why = "the rule takes " + typeTextOf(wanted) + ", and the operator has " +
-              typeTextOf(operandTypes);
+              typeTextOf(portTypes) + " (of which " + std::to_string(dataOperandCount) +
+              " is a data operand)";
         return false;
     }
     for (size_t i = 0; i < count; ++i) {
-        if (wanted[i] == nullptr || operandTypes[i] == nullptr ||
-            !wanted[i]->equals(operandTypes[i])) {
+        // "Takes" is the relation a call site uses, not equality: an instance's ports are written in
+        // the spelling the rule's left side uses, and that spelling does not shrink to the shape of
+        // the operand it meets. `jvp_mul_tensor` is `mul_tensor(x: T[..], w: T[..])`, and a
+        // `float[2, 2]` operand is a value that port takes -- an open rank is every rank, and the
+        // operator walks whatever rank it is given (`stdlib/rulesets/vmap.cml` says the same about
+        // the batch it hands a rule). Asking for equality refused it: `float[..]` and `float[2, 2]`
+        // are not the same type, and the law was refused for the shape of the value it was written
+        // for. The direction is the one a call checks -- the port takes the operand -- and it is the
+        // direction that keeps the case this function exists for refused: a `float` port still takes
+        // no `float[]`, because a primitive takes its own type and nothing else
+        // (`Type::assignableFrom`), so `:op/at od` is still stopped before a `float[]` reaches the
+        // scalar law's port.
+        if (wanted[i] == nullptr || portTypes[i] == nullptr ||
+            !wanted[i]->assignableFrom(portTypes[i])) {
             why = "the rule takes " + typeTextOf(wanted) + ", and the operator has " +
-                  typeTextOf(operandTypes);
+                  typeTextOf(portTypes) + " (of which " + std::to_string(dataOperandCount) +
+                  " is a data operand)";
             return false;
         }
     }
@@ -154,8 +189,8 @@ gc_node_ref_t buildRuleTangent(
     camel::runtime::GraphTransaction &transaction,
     std::string_view uri, const std::vector<gc_node_ref_t> &values,
     const std::vector<gc_node_ref_t> &tangents, camel::core::type::Type *elementType,
-    const std::vector<camel::core::type::Type *> &operandTypes, std::string &ruleName,
-    std::string &why) {
+    const std::vector<camel::core::type::Type *> &portTypes, size_t dataOperandCount,
+    std::string &ruleName, std::string &why) {
     // The candidates, in the order the family filed them. A key can hold several rules -- one
     // spelling names several operators (`float(x: float)` and `float(x: int)` are both `float` at
     // one operand) -- and the type decides: the instance is asked for at the type the *operand* is
@@ -215,7 +250,7 @@ gc_node_ref_t buildRuleTangent(
         // built, however well its condition holds at the element (`portsTakeOperands`). Refusing
         // here is what keeps a `float[]` out of a `float` port -- the run that did it was killed
         // by a signal, and a named refusal is worth more than a silent death.
-        if (!portsTakeOperands(instance, operandTypes, why)) {
+        if (!portsTakeOperands(instance, portTypes, dataOperandCount, why)) {
             if (shapeWhy.empty()) {
                 shapeWhy = why;
             }
@@ -506,14 +541,35 @@ bool liftGraph(
         auto &draft       = transaction.edit();
         draft.setFuncType(signature);
         // The tangent a constant or an effect's result gets: the zero of the value's own type. One
-        // node per type, because every rule of that type shares it. Written for the two types whose
-        // slot is a machine double or float; a narrower float has no zero here yet, and gets none --
-        // a refusal downstream instead of a zero of the wrong type.
+        // node per type, because every rule of that type shares it.
+        //
+        // *Which* types have a zero is `tangentSpaceOf`'s answer, not a list written here: a
+        // floating scalar is `Self` and its zero is one machine number, and an array of them is
+        // `Self` too -- its zero is an array of the same shape with every element zero. Both are
+        // the same question asked once (design principles 9.9), and a constant of array type is
+        // not an edge case: `f(x) = sum(reshape<[2, 2]>(x) * [[1, 2], [3, 4]])` puts a `float[2, 2]`
+        // constant where a rule over an array operand reads it, and a rule is handed the tangent of
+        // every operand whose type has one. Answering no zero for it stopped the lift at the first
+        // constant it met (`skip=body`), which says nothing about the constant and everything about
+        // this gap.
+        //
+        // The shape comes from the type where the type states it, and from the value where it does
+        // not: `[1.0, 2.0] as float[]` is a two-element array whose type says "one dimension, length
+        // unknown", and the value in the static slot is what says two. Reading it there is not a
+        // second opinion about the type -- the dimension the type leaves open is the one the value
+        // fills in, and a dimension neither of them fixes answers no zero.
         std::unordered_map<const Type *, gc_node_ref_t> zeroConstants;
-        const auto zeroConstantFor = [&draft, &zeroConstants](Type *type) -> gc_node_ref_t {
-            const auto at = zeroConstants.find(type);
-            if (at != zeroConstants.end()) {
-                return at->second;
+        const auto zeroConstantFor = [&draft, &zeroConstants](
+                                         Type *type,
+                                         const ::Array *shapeOf = nullptr) -> gc_node_ref_t {
+            // A zero whose shape was read off one value is that value's zero and is not shared with
+            // the next value of the same open type.
+            const bool shareable = shapeOf == nullptr;
+            if (shareable) {
+                const auto at = zeroConstants.find(type);
+                if (at != zeroConstants.end()) {
+                    return at->second;
+                }
             }
             gc_node_ref_t made = rt::kInvalidNodeRef;
             switch (type->code()) {
@@ -525,10 +581,47 @@ bool liftGraph(
                 made = draft.materializeStaticValue(
                     camel::core::rtdata::toSlot<float>(0.0f), type, rt::kGCNodeFlagConstant);
                 break;
+            case camel::core::type::TypeCode::Array: {
+                const auto *arrayType = static_cast<const camel::core::type::ArrayType *>(type);
+                const std::span<const camel::core::type::ExtentForm> stated = arrayType->extents();
+                std::vector<int64_t> extents;
+                bool exact = arrayType->elemType() != nullptr &&
+                             camel::core::type::isFloatingScalar(arrayType->elemType()->code());
+                if (exact && stated.empty()) {
+                    // No dimension is stated (`T[..]`): the rank is the value's, or there is none.
+                    if (shapeOf == nullptr) {
+                        exact = false;
+                    } else {
+                        extents.assign(shapeOf->shape(), shapeOf->shape() + shapeOf->rank());
+                    }
+                }
+                for (size_t i = 0; exact && i < stated.size(); ++i) {
+                    if (const std::optional<int64_t> size = stated[i].evaluate({})) {
+                        extents.push_back(*size);
+                    } else if (shapeOf != nullptr && i < shapeOf->rank()) {
+                        extents.push_back(shapeOf->shape()[i]);
+                    } else {
+                        exact = false;
+                    }
+                }
+                if (exact) {
+                    ::Array *zero = ::Array::create(
+                        mm::autoSpace(), arrayType, std::span<const int64_t>(extents),
+                        /*zeroInit=*/true);
+                    if (zero != nullptr) {
+                        made = draft.materializeStaticValue(
+                            camel::core::rtdata::toSlot<::Array *>(zero), type,
+                            rt::kGCNodeFlagConstant);
+                    }
+                }
+                break;
+            }
             default:
                 break;
             }
-            zeroConstants.emplace(type, made);
+            if (shareable) {
+                zeroConstants.emplace(type, made);
+            }
             return made;
         };
         // The graph this one is a lift of: a fact about the graph, not a comment about the call.
@@ -1052,7 +1145,14 @@ bool liftGraph(
                     // constant of a discrete type (a `bool` condition) has no tangent at all, and
                     // neither has one whose zero this transform does not write.
                     if (pairOf(node->dataType()) != nullptr) {
-                        tangentOf[ref] = zeroConstantFor(node->dataType());
+                        // An array constant's shape can be one its type leaves open (`float[]`), and
+                        // then the value in the slot is what says how long the zero is.
+                        const ::Array *shapeOf = nullptr;
+                        if (node->dataType()->code() == camel::core::type::TypeCode::Array) {
+                            shapeOf = camel::core::rtdata::fromSlot<const ::Array *>(
+                                slots[static_cast<size_t>(index)]);
+                        }
+                        tangentOf[ref] = zeroConstantFor(node->dataType(), shapeOf);
                     }
                     copied[ref]    = true;
                     ++copiedKinds;
@@ -1496,6 +1596,11 @@ bool liftGraph(
                     originals.push_back(input);
                     inputs.push_back(valueOf[input] != rt::kInvalidNodeRef ? valueOf[input] : copyOf[input]);
                 }
+                // Where the data inputs end: everything appended past this is a `<>` argument, a
+                // static slot of the operator rather than a value the node passes as data. The list
+                // stays one list in port order; this number is what tells the two roles apart when a
+                // rule's parameters are lined up with it (`portsTakeOperands`).
+                const size_t dataOperandCount = originals.size();
                 copyOf[ref] = made;
                 copied[ref] = true;
                 ++copiedKinds;
@@ -1601,12 +1706,15 @@ bool liftGraph(
                 }
                 std::string ruleName;
                 std::string ruleWhy;
-                // The types the operator's own operands have, in the order the rule is handed them:
-                // what a candidate's ports have to match before anything is built. The rule is
-                // asked for at the *element* type of the operand (`rule_types.h`), and that answer
-                // is about the element, not about the shape: `:op/at od` takes a `float[]` and the
-                // scalar law `jvp_dtod` is an instance at `float`, so a candidate whose ports say
-                // `float` may be offered operands that are `float[]`.
+                // The types the operator's ports have, in the order the rule is handed them: what a
+                // candidate's ports have to match before anything is built. The list is the node's
+                // ports -- the data inputs, then the `<>` ones -- and `dataOperandCount` is kept so
+                // that the comparison can tell a value the node passes from a slot its own left side
+                // writes. The rule is asked for at the *element* type of the operand
+                // (`rule_types.h`), and that answer is about the element, not about the shape:
+                // `:op/at od` takes a `float[]` and the scalar law `jvp_dtod` is an instance at
+                // `float`, so a candidate whose ports say `float` may be offered operands that are
+                // `float[]`.
                 std::vector<camel::core::type::Type *> operandTypes;
                 for (gc_node_ref_t original : originals) {
                     const NodeFace *input = function.node(original);
@@ -1621,7 +1729,7 @@ bool liftGraph(
                 tangentOf[ref] =
                     buildRuleTangent(
                         *context, state.group, transaction, uri, inputs, tangents, ruleElementType,
-                        operandTypes, ruleName, ruleWhy);
+                        operandTypes, dataOperandCount, ruleName, ruleWhy);
                 if (tangentOf[ref] == rt::kInvalidNodeRef) {
                     // Named, not guessed: the transform has no derivative for this operator, and
                     // the refusal carries the place the primitive was written -- the node's origin,
