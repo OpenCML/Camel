@@ -281,10 +281,10 @@ gc_node_ref_t GraphDraft::addFuncNode(
             .runtimeFlags = runtimeFlags,
             .payload      = payload,
         });
-    // How many of the call's trailing arguments are tangents, when the caller knows (a rule's
-    // expansion does: the values are the captures it bound, the tangents are the lambda's own
-    // parameters). A fact about the call, frozen with it and read by `transpose` at a call inside a
-    // branch arm.
+    // Which of the call's arguments are tangents, one bit per argument position, when the caller
+    // knows (a rule's expansion does: the values are the captures it bound, the tangents are the
+    // lambda's own parameters). A fact about the call, frozen with it and read by `transpose` at a
+    // call inside a branch arm.
     if (tangentArgs > 0) {
         DraftNode *draftNode = node(made);
         GUARD(draftNode != nullptr, "the call just added has no node record");

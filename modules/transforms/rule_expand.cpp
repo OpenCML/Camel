@@ -619,25 +619,38 @@ gc_node_ref_t expandRuleRightSide(
                 why = "the rule's right side calls a function it does not name";
                 return rt::kInvalidNodeRef;
             }
-            // How many of the call's arguments are tangents -- the rule's own split, recorded on the
-            // call the rule produced. The right side binds the values as its captures and takes the
-            // tangents as its own parameters (`x * w => (dx, dw) => mul_tangent(x, w, dx, dw)`), so an
-            // argument that is one of this expansion's tangent ports is a tangent, and the count is
-            // read off the rule. This is the one place the fact exists in the tree: `transpose` reads
-            // the node rather than re-deriving the split from a name, and there is no second table to
-            // keep in step when a rule is added.
-            uint16_t tangentArgs = 0;
+            // Which of the call's arguments are tangents -- the rule's own split, recorded on the call
+            // the rule produced as one bit per argument position. The right side binds the values as
+            // its captures and takes the tangents as its own parameters
+            // (`x * w => (dx, dw) => mul_tangent(x, w, dx, dw)`), so an argument that is one of this
+            // expansion's tangent ports is a tangent wherever the right side writes it: `mul_tangent`
+            // ends with its two, `index_into(dxs, i)` begins with one and puts a value last. The record
+            // is therefore the set of positions, not a run of trailing ones. This is the one place the
+            // fact exists in the tree: `transpose` reads the node rather than re-deriving the split
+            // from a name, and there is no second table to keep in step when a rule is added.
+            //
+            // The record is `GCNode::tangentArgs`, one bit per position. A tangent past its last bit
+            // cannot be written, and a call recorded as one of values only is a wrong split rather
+            // than a missing one, so such a right side is refused by name instead.
+            uint16_t tangentMask = 0;
             if (!inputs.empty() && !tangents.empty()) {
-                for (size_t i = inputs.size(); i-- > 0;) {
+                for (size_t i = 0; i < inputs.size(); ++i) {
                     if (std::find(tangents.begin(), tangents.end(), inputs[i]) == tangents.end()) {
-                        break;
+                        continue;
                     }
-                    ++tangentArgs;
+                    if (i >= rt::kTangentArgumentBits) {
+                        why = "the rule's right side passes a tangent as argument " +
+                              std::to_string(i + 1) + " of a call, and a call's tangent positions are "
+                              "recorded for its first " +
+                              std::to_string(rt::kTangentArgumentBits) + " arguments";
+                        return rt::kInvalidNodeRef;
+                    }
+                    tangentMask |= static_cast<uint16_t>(uint16_t{1} << i);
                 }
             }
             const gc_node_ref_t made = draft.addFuncNode(
                 callee, node->dataType(), 0, draft.allocateRuntimeSlot(node->dataType()), 0,
-                tangentArgs);
+                tangentMask);
             if (!inputs.empty()) {
                 draft.setNormInputs(made, inputs);
             }
