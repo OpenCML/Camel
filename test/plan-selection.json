@@ -92,6 +92,11 @@
             "plans": ["smoke", "feat/consistency/runner.plan.toml"]
         },
         {
+            "comment": "The gate entry and the helpers beside it (internal/tools): the tools that move a tree to the build host, build and run plans there, the local build and test helpers, the watcher, the settings loader, the example settings file and their README. No plan exercises them -- they are the harness that runs the plans, they run on the workstation under PowerShell, and the build host has no pwsh -- so there is no behavioural plan to name, and naming smoke here would be the shape of a guard that guards nothing. They are still read, though, which is why this is a rule and not a rule-less class: scripts/conflict-markers.mjs walks every tracked file whose extension it knows (.md, .ps1 and .json are all in that set) and scripts/check-doc-links.mjs --citations reads .ps1 and .md from the repository root, and both are tests of feat/docs_links. Measured on 2026-11-04: one hunk head appended to internal/tools/watch-fsh-dev.ps1 is reported as internal/tools/watch-fsh-dev.ps1:71, and one stale `*.md` citation in a .ps1 or a .md under internal/tools is reported by name. So `--changed` on a gate-script edit runs feat/docs_links, and a merge left unfinished or a citation that stops resolving in one of these files goes red there. That is the whole of what the plan sees: it does not verify what the gate does. A file added here that neither walker reads is a new hole, and must not be read as covered because this rule exists.",
+            "paths": ["internal/tools/"],
+            "plans": ["feat/docs_links.plan.toml"]
+        },
+        {
             "comment": "FastVM and the other schedulers.",
             "paths": ["src/passes/sched/"],
             "plans": ["smoke", "feat/linear", "feat/para", "feat/trans"]

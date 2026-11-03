@@ -520,11 +520,14 @@ the rule, or add the class and its reason to the self-test.
 That check is why the file rules now cover the classes the first rule set could not have known about: the
 `stdlib/<module>.cml` declaration bodies (`feat/modules` plus `feat/compile`) and their computed
 halves in `stdlib/signatures/` (the registry plan, which runs `--verify-ops` and `--verify-doc`),
-the documentation and release-gate scripts (`feat/docs_links`), the debugger race harness
-(`feat/tools/debugger`), exemplars, root Markdown and assets, the public headers under
-`include/` (mirroring `src/`), the rest of `src/` and the test harnesses. The plan-reachability
-check added the case directories whose plans live elsewhere: the loop, macro, JSON, unicode-path,
-print-format and compiler-benchmark cases. `test/perf-baseline.json`
+the documentation and release-gate scripts (`feat/docs_links`), the gate entry and its helpers
+under `internal/tools/` (`feat/docs_links` too, and for the reason the rule states: no plan can run
+a PowerShell gate, but the conflict-marker and citation walkers both read those `.ps1`, `.md` and
+`.json` files, so that is the plan a change there runs and the whole of the guard it gets), the
+debugger race harness (`feat/tools/debugger`), exemplars, root Markdown and assets, the public
+headers under `include/` (mirroring `src/`), the rest of `src/` and the test harnesses. The
+plan-reachability check added the case directories whose plans live elsewhere: the loop, macro,
+JSON, unicode-path, print-format and compiler-benchmark cases. `test/perf-baseline.json`
 and `scripts/perf-gate.mjs` are the one class left without a perf plan on purpose: perf is manual
 (the rule that perf is manual), so a change there must not select a perf plan.
 
