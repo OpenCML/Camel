@@ -58,12 +58,17 @@ FunctionType *jvpOperatorSignature(FunctionType *function) {
     if (function == nullptr) {
         return nullptr;
     }
-    // What `buildJvpGraph` can build, and nothing else: it copies one body and gives every `float`
-    // parameter of that body a pair of ports, so it takes any number of them (at least one), and it
-    // has no node that reads a captured value into a port, so the function has no `with` parameters.
-    // A function outside that shape is refused where it is written, not left to fail when the call
-    // runs.
-    if (function->withTypesCount() != 0 || function->normTypesCount() == 0) {
+    // What `buildJvpGraph` can build, and nothing else: it copies one body and gives every parameter
+    // of that body a pair of ports, so it takes any number of ordinary parameters (at least one).
+    // A `with` parameter is not a reason to refuse: the lift writes that parameter a port of its own
+    // and lists it among the lifted graph's `with` ports, so the captured value enters by a port and
+    // the body reads it as it did (design principles 9.9: what `grad` differentiates is the first
+    // `with` parameter -- the weights -- and `vjp` is `transpose(split(jvp(f)))`, so a `jvp` that
+    // refuses every function carrying a weight makes a gradient of the weights impossible to build
+    // rather than merely unwritten). Its tangent is the zero of its type, which is what a captured
+    // value's tangent is in forward mode, so the lift adds no tangent port for it. A function
+    // outside that shape is refused where it is written, not left to fail when the call runs.
+    if (function->normTypesCount() == 0) {
         return nullptr;
     }
     FunctionType *lifted = jvpSignature(function);
@@ -103,11 +108,6 @@ class JvpResolver final : public FuncTypeResolver {
             return std::nullopt;
         }
         const auto *function = tt::as_ptr<FunctionType>(norm[0]);
-        if (function->withTypesCount() != 0) {
-            return std::string(
-                "`jvp` takes a function without `with` parameters: the transform copies the body "
-                "into a new graph, and a captured value has no port to enter it by");
-        }
         if (function->normTypesCount() == 0) {
             return std::string("`jvp` takes a function of at least one `float` parameter");
         }
