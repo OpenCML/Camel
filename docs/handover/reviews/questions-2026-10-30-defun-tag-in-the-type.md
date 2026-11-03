@@ -8,7 +8,7 @@
   「A function value in this graph model is already a tag with an environment: a FUNC node
   names the function (the tag) and a FILL of kind FunctionClosure adds the values it captures
   (the environment)」——所以这个 pass 只剩「把分派变静态」，手段是**按 (callee, function) 复制一份
-  被调者**（`defun.cpp:17-24`），并且它登记为一个**可选遍**（`src/execute/pass.cpp:549`），
+  被调者**（`defun.cpp:17-24`），并且它登记为一个**可选遍**（`src/execute/pass.cpp#RulesAlgebraPass`），
   `std::opt` 不跑它。
 - **文档**（作者的设计笔记，commit `df3796086`，2026-10-29 22:22；**该文件尚未合入 develop**，本车道读的是提交对象）：
   §1 说标签必须在**值的类型里**——每个函数类型一个 `enum`、每个被取作值的函数一个变体、捕获是

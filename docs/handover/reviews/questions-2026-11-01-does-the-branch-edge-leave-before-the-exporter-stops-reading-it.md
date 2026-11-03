@@ -2,7 +2,7 @@
 
 > **裁定（2026-11-01 13:10，已裁）**：选 **甲**——先把 124 定位到具体函数，**不能带着一个解释不了的超时删边**。作者给的方向：超时在 `std::macro` 下、尾递归从 `Loop` 变成了 `If`，像是某处判断"这条臂要不要算"读的还是 ctrl 边。原文见 [`questions-2026-10-29.md`](questions-2026-10-29.md) 末节。
 
-> **问什么**：S1 的收尾是删掉 `src/compile/gir/builder_control.cpp:2864`（`linkArmEntries` 里的
+> **问什么**：S1 的收尾是删掉 `src/compile/gir/builder_control.cpp#Builder::linkArmEntries`（`linkArmEntries` 里的
 > `linkNodes(LinkType::Ctrl, brchNode, node)`，从 BRCH 连到臂入口的那条 ctrl 边）。接链修法已经落了
 > （`e6bfe5d09`），`positions.cml` 在删边后回到 10 行、次序不变——但**删边之后导出器坏了**，而且坏法
 > 不是形状。
@@ -27,11 +27,11 @@
 
 | 位置 | 读什么 |
 |---|---|
-| `modules/onnx/exporter.cpp:2728`、`:3768` | 一个分支的臂是 `withInputsOf(brch)`（**数据** kind 的边），不是被删的这条 ctrl 边 |
-| `modules/onnx/exporter.cpp:2446` `evalLoopNode`、`:2027` `translateLoop` | 尾递归认不认成 `Loop`，看的是被调用者那张图 |
-| `src/passes/sched/fastvm/compile.cpp:409` | `plan.branchArmEntriesOf(i)[armIndex]` → `brchTargetMap`（字节码 VM 从**计划**取臂的入口） |
-| `src/execute/graph_runtime_support.cpp:826` | `BranchArmEntries`：臂在计划里没有成员时回落到 `body->join` |
-| `src/runtime/draft_inline.cpp:2325` | 内联时"调用等哪条语句"取自 `ctrlPreds`（`controlFrontier` 走 ctrl/sync 输入） |
+| `modules/onnx/exporter.cpp#Evaluator::translateLinear`、`:3768` | 一个分支的臂是 `withInputsOf(brch)`（**数据** kind 的边），不是被删的这条 ctrl 边 |
+| `modules/onnx/exporter.cpp#Evaluator::evalLoopNode` `evalLoopNode`、`:2027` `translateLoop` | 尾递归认不认成 `Loop`，看的是被调用者那张图 |
+| `src/passes/sched/fastvm/compile.cpp#compileRuntimeGraph` | `plan.branchArmEntriesOf(i)[armIndex]` → `brchTargetMap`（字节码 VM 从**计划**取臂的入口） |
+| `src/execute/graph_runtime_support.cpp#BranchArmEntries::BranchArmEntries` | `BranchArmEntries`：臂在计划里没有成员时回落到 `body->join` |
+| `src/runtime/draft_inline.cpp#inlineCallableInDraft` | 内联时"调用等哪条语句"取自 `ctrlPreds`（`controlFrontier` 走 ctrl/sync 输入） |
 
 **要点**：导出器**不读** `branchArmEntriesOf`，也不读被删的那条 ctrl 边。删边是通过**改掉 `std::opt`
 交给导出器的那张图**（内联的 place 变了）让导出失败的。所以"让导出器从区域取臂入口"这句在今天
@@ -57,7 +57,7 @@
 - **把边删掉再看**：`export_loop.cml std::macro` **仍然 124**。所以"place 从区域取"**没有**替代这条边，
   这条边今天挡着的不是内联的 place。
 
-这条负读数把范围缩小到：导出器的臂归属已经是区域取（`modules/onnx/passes/export.cpp:255`
+这条负读数把范围缩小到：导出器的臂归属已经是区域取（`modules/onnx/passes/export.cpp#runtimeBranchOver`
 `runtimeBranchOver` → `collectRuntimeBranchArmRegion` → `ControlRegions`），字节码 VM 已经只从计划取
 （`compile.cpp:409`），内联的 place 也不是（刚试过）。**剩下没排除的是 order/`controlFrontier` 那条链，
 和 `std::opt` 交给导出器的那张图本身。** 所以甲的第一刀应当先把 124 定位到具体函数（今天 `gdb -p` 被

@@ -4,7 +4,7 @@
 
 `docs/design-principles.cn.md` 5.2：函数类型的名字只是别名，`(x: int) => int` 与另一处写同一签名
 是**同一个类型**，可互换。作者的设计笔记（commit `df3796086`）§1 要求「每个函数类型一个
-`enum`」——`enum` 是名义类型：`EnumDecl` 有进程内唯一的 `id`（`include/camel/core/type/enum.h:88`），
+`enum`」——`enum` 是名义类型：`EnumDecl` 有进程内唯一的 `id`（`include/camel/core/type/enum.h#EnumDecl`），
 两处 `equals` 比的是声明，不是拼写。
 
 于是同一个值在运行期是一个东西，在类型层面却可能是**两个不可互换的类型**。运行期替换按 `TypeId`

@@ -25,8 +25,8 @@ RULESET rulesets.probe_rule_heads - -> neg_rule
 
 ```
 $ grep -c "^export rule\|^rule " stdlib/autodiff.cml stdlib/rulesets/jvp.cml
-stdlib/autodiff.cml:10
-stdlib/rulesets/jvp.cml:0
+stdlib/autodiff.cml#stop_gradient
+stdlib/rulesets/jvp.cml#Lift
 ```
 
 `stdlib/rulesets/jvp.cml` 里是 `Lift<T>`、`lift`、零切向量这些东西（共 4449 字节），**没有一条 `rule`

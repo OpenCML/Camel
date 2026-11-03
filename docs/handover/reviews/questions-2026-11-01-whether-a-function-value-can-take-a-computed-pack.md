@@ -30,7 +30,7 @@ help: A rest parameter is untyped: the tuple of the arguments left over is made 
                                                       （改用嵌套具名函数绕也不行）
 ```
 
-**一句话**：一个"参数表是计算出的 pack"的函数值**没有拼写**——`func` 的声明与定义可以写 `..xs: ..A`（`stdlib/prelude.cml:515` 的 `zip`，用例 `firsts`/`both`），但那里的 pack 由**调用点**定（`help` 说得很清楚）；要让它由**外层泛型**定（`..ParamsOf<F>`），今天没有写法。
+**一句话**：一个"参数表是计算出的 pack"的函数值**没有拼写**——`func` 的声明与定义可以写 `..xs: ..A`（`stdlib/prelude.cml#operator` 的 `zip`，用例 `firsts`/`both`），但那里的 pack 由**调用点**定（`help` 说得很清楚）；要让它由**外层泛型**定（`..ParamsOf<F>`），今天没有写法。
 
 ## 三条路
 

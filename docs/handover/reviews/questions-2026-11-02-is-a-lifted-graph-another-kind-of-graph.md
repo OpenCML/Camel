@@ -4,7 +4,7 @@
 
 ## 为什么问
 
-`include/camel/runtime/graph.h:345` 有一个引用角色：
+`include/camel/runtime/graph.h#graph` 有一个引用角色：
 
 ```cpp
 kGraphRefLiftedFrom = 1 << 4, // the graph a lift of this one took its body from (`jvp`)

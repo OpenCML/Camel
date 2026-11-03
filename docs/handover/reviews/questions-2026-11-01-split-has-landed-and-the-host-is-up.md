@@ -27,7 +27,7 @@
 
 ## 现在唯一的那道墙，和正派的两条车道
 
-**`transpose` 还不收残差。** 今天它只收 `(f: (float) => float) => (float, float) => float`，而 `split` 交出的是 `((float, float), float, float) => float`（残差两项 + 两个切向量）——所以 `stdlib/vjp.cml:33` 的 `transpose(split(jvp(f)))` 还编不过，M4 的 `12 / 9` 只能在 `split` 那一侧读到，**库层 `vjp` 还没有读数**。
+**`transpose` 还不收残差。** 今天它只收 `(f: (float) => float) => (float, float) => float`，而 `split` 交出的是 `((float, float), float, float) => float`（残差两项 + 两个切向量）——所以 `stdlib/vjp.cml#vjp` 的 `transpose(split(jvp(f)))` 还编不过，M4 的 `12 / 9` 只能在 `split` 那一侧读到，**库层 `vjp` 还没有读数**。
 
 按你 06:50 的裁定（「`split` 落地后，已知值换成残差，形状没变」）正在做：
 - 一条车道让 **`transpose` 收残差**（残差就是已知值，按位置展开；`x*x` 那种需要前向值的图从残差里取，取不到才按名拒绝）；

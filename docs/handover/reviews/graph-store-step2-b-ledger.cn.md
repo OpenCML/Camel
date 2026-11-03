@@ -67,7 +67,7 @@ b1 的 −2 是从哪掉的：`src/compile/gir/draft_graph_builder.cpp` 的 `mak
 
 | b2.3a | `bindFunctionCall` 收 `GraphTransaction&`（体首一行 `auto &draft = transaction.edit();`，函数体一字未改）；调用点 `session.rootDraft().edit()` → `session.rootDraft()`。**内联引擎那四个留到 b2.3b**：它们要先在 `engine.cpp:901` 把事务与图分开绑一次，`devirtualizeStaticCallInDraft` 的唯一调用点在 `pullback.cpp`，归 b3 | 80 / 659 | 8 | 15 |
 
-| b2.3b | `specializeDirectFuncInDraft` 收 `GraphTransaction&`；`engine.cpp:901` 拆成 `auto &transaction = session.edit(g); auto &draft = transaction.edit();` 一次（内联引擎从此手里有事务）；**`inlineCallableInDraft`／`inlineCallInOrder`／`expandDefinition` 没能进来**：它们的另一个调用点在 `modules/autodiff/pullback.cpp:1421/1426`，那里只有 `draft_`、拿不到事务，所以整条链随 **b3** 一起换——硬塞就得在 b3 之前给自动微分造事务，那正是 b3 的题目 | 80 / 657 | 8 | 15 |
+| b2.3b | `specializeDirectFuncInDraft` 收 `GraphTransaction&`；`engine.cpp:901` 拆成 `auto &transaction = session.edit(g); auto &draft = transaction.edit();` 一次（内联引擎从此手里有事务）；**`inlineCallableInDraft`／`inlineCallInOrder`／`expandDefinition` 没能进来**：它们的另一个调用点在 `modules/autodiff/pullback.cpp#ForwardRewrite::followFunctionValues`，那里只有 `draft_`、拿不到事务，所以整条链随 **b3** 一起换——硬塞就得在 b3 之前给自动微分造事务，那正是 b3 的题目 | 80 / 657 | 8 | 15 |
 
 | b2.4a（测试体） | `passes/test/control.cpp` 的 15 处 `GraphDraft draft;` 换成真事务：`auto owner = GraphTransaction::open(static_cast<GraphId>(1)); auto &draft = owner->edit();`（既有 public 入口，无新构造路径，事务活过整个测试函数）。**它能单独编译通过，所以不挂在 b2.3e 上**；剩下的 `node(GraphDraft &draft, …)` 这个局部助手随 b5 | 80 / 642 | 8 | 15 |
 
@@ -152,7 +152,7 @@ b2.2 那一跑的闸门是 `total 7802, pass 7793, fail 0, skip 7`，基线是 `
 差的 5 条全是 `skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]` 的用例
 （`device_startup.available`、`device_startup.one_device_named_missing`、`gpu_preference.named_device`、
 `gpu_scope.placement_with_a_device`、`gpu_scope.host_effect_synchronises`）。原因不在代码：
-`tiles::available()` 的实现就是"`backend()` 能否构造"（`modules/tiles/src/cuda.cpp:609`），
+`tiles::available()` 的实现就是"`backend()` 能否构造"（`modules/tiles/src/cuda.cpp#downloadValues`），
 而那一跑时 GPU 0 已用 **23,956 / 24,576 MiB**——四个 `VLLM::EngineCore` 进程各占 20 GiB——探针连跑三次都答 false，
 20 秒内显存数字不动。**所以这一行的 `pass 7793` 与基线的 `pass 7798` 不可比**。
 
@@ -272,7 +272,7 @@ b4 只有一个人口：`modules/graph/handle.h` 里那个 `const GraphDraft *dr
 
 ### 第二片：从 program 造 handle 的那 13 处
 
-- **动哪些文件**：`modules/graph/read.cpp`（8 处构造 + 它们的 `program` 来源）、`modules/graph/txn.cpp`（3）、`modules/rewrite/fact.cpp:424`、`modules/rewrite/module.cpp:1544`。
+- **动哪些文件**：`modules/graph/read.cpp`（8 处构造 + 它们的 `program` 来源）、`modules/graph/txn.cpp`（3）、`modules/rewrite/fact.cpp#evaluate`、`modules/rewrite/module.cpp#CamelCostModel`。
 - **哪些调用点**：这 13 处构造；以及它们上游"先拿到图才能拿到 handle"的那批（Camel 侧 `graph::` 函数、rewrite 模块的 `whenArg`）。
 - **验收怎么量**：① `modules/graph` 的 `GraphDraft` 15 → **0**；② 每个 `Handle` 都指得到一个所有者（**事务**，或**已发布程序**），没有第三种；③ 闸门 `fail 0`、`never_rises` 绿。
 - **做完之后还有谁去拿 handle**：**没有第三种持有者**。这一片可能得出"program-backed handle 保留 program 就够、不必造事务"的结论——**那也是它的结论**，写进账本，别硬造事务。
@@ -299,7 +299,7 @@ b4 只有一个人口：`modules/graph/handle.h` 里那个 `const GraphDraft *dr
 
 **为什么这样切**：这是一次纯新增的中间态——**没有任何调用者用 `createInTransaction`**，所以行为与上一笔逐字节相同，树随时能构建、能整闸。类型一换就成了"必须原子完成"的笔，那正是今晚不该做的。
 
-**下一步第一件**：`modules/graph/read.cpp:165` 的 `nodeHandle(from, node)` —— 它现在从 `from->draft()` 取草稿，改成从 `from->transaction()` 取事务、用 `createInTransaction`；同一段里 `from->draft()` 的判空顺带改成 `from->transaction()` 判空。**这一步做完，`read.cpp` 的 `->draft()` 从 3 处降到 2 处。**
+**下一步第一件**：`modules/graph/read.cpp#nodeHandle` 的 `nodeHandle(from, node)` —— 它现在从 `from->draft()` 取草稿，改成从 `from->transaction()` 取事务、用 `createInTransaction`；同一段里 `from->draft()` 的判空顺带改成 `from->transaction()` 判空。**这一步做完，`read.cpp` 的 `->draft()` 从 3 处降到 2 处。**
 
 **树能不能构建**：**能**（`-Plan compile` 全绿：1845/1845、`fail 0`，build 16.2 s）。三个数仍是 66 / 535 / 3 / 6——这一笔只加能力、不删拼写，账要等调用点搬过去才动。
 
@@ -673,7 +673,7 @@ HANDLE_PROBE refused: InvalidArgument
 | 调用者 | 它手里原本有什么 | 改了什么 |
 |---|---|---|
 | `generic` 的两处 lambda | 事务（B 之后） | 传 `transaction` |
-| `src/passes/trans/json/gir_canonical.cpp:237` | **两行之上刚 `GraphTransaction::decode(program_, graph)`** | 传 `*transaction` |
+| `src/passes/trans/json/gir_canonical.cpp#CanonicalDocument` | **两行之上刚 `GraphTransaction::decode(program_, graph)`** | 传 `*transaction` |
 | `src/passes/test/control.cpp`（18 处） | 每个用例函数第二行就是 `auto owner = GraphTransaction::open(...)` | 传 `*owner` |
 
 **没有一处需要新造事务**。**"调用点上能不能拿到事务"这条判据，到现在为止的答案是：能——只要那个模块已经按自己的方式回答过一次。**
@@ -1045,10 +1045,10 @@ HANDLE_PROBE refused: InvalidArgument
 
 | 处 | 位置 | 判定 |
 |---|---|---|
-| 1 | `modules/graph/txn.cpp:52` `using camel::runtime::GraphDraft;` | **删**：这个 using **一次都没被用到**——点名一个自己不碰的类型，等于宣告一个不存在的主人 |
-| 2 | `modules/onnx/exporter.cpp:4815` `bindCaptures(GraphDraft &, …)` | **改**：`session.rootDraft()` 本来就返回 `GraphTransaction&`，收下它、问 `.edit()` |
+| 1 | `modules/graph/txn.cpp#mm` `using camel::runtime::GraphDraft;` | **删**：这个 using **一次都没被用到**——点名一个自己不碰的类型，等于宣告一个不存在的主人 |
+| 2 | `modules/onnx/exporter.cpp#bindCaptures` `bindCaptures(GraphDraft &, …)` | **改**：`session.rootDraft()` 本来就返回 `GraphTransaction&`，收下它、问 `.edit()` |
 | 3 | `src/runtime/operator_instance.h:40` + `.cpp:92` `kernelArgumentsOf(const GraphDraft &, node)` | **等**：5 个调用点（`generic.cpp:1112`、`definitions.cpp:508`、`module.cpp:2140`、`writings.cpp:1530/2364`）**手上都只有一张草稿**——**与 `tiles` 那 7 个通行参数同型，同一个 id 问题堵着** |
-| 4 | `modules/rewrite/proof.h:51` | **留**：它点的是 `GraphDraft::decode` 这个 API。**改它会把 `decode` 那格也用散文降下来**（试过：`decode` 4 → 3），**那是拿散文改代码格，不做** |
+| 4 | `modules/rewrite/proof.h#linkAfter` | **留**：它点的是 `GraphDraft::decode` 这个 API。**改它会把 `decode` 那格也用散文降下来**（试过：`decode` 4 → 3），**那是拿散文改代码格，不做** |
 | 5 | `include/camel/core/data/composite/func.h` | **已经没有了**（今天 0 处），清单可能旧了 |
 
 **四个数：39 / 369 / 2 / 4。**（`files` 41 → 39、`references` 371 → 369，**都是代码**；`decode` 4 不动，正是第 4 项的克制。）
@@ -1063,11 +1063,11 @@ HANDLE_PROBE refused: InvalidArgument
 
 ### 一条记录：**试改过，回退在案**
 
-`modules/rewrite/proof.h:51` 的 `GraphDraft::decode` 我一度改成 `` `decode` ``，整闸没红，但账本的 `decode` 那一格从 **4 掉到 3**——**散文降了代码格**。已原样回退（`94018cbff` 里这一处没有动）。**记下来，是因为"数要对得上意思"比"数变小"重要；一次试改加一次回退，比一个漂亮的小数字更能说明账本在被怎么用。**
+`modules/rewrite/proof.h#linkAfter` 的 `GraphDraft::decode` 我一度改成 `` `decode` ``，整闸没红，但账本的 `decode` 那一格从 **4 掉到 3**——**散文降了代码格**。已原样回退（`94018cbff` 里这一处没有动）。**记下来，是因为"数要对得上意思"比"数变小"重要；一次试改加一次回退，比一个漂亮的小数字更能说明账本在被怎么用。**
 
 ## 48. 资源账那条用例：撤掉，不是改写
 
-**结论（作者 2026-10-31 `f24411f32` 裁定 (c)）**：**草稿不在 GC 空间分配**——`extractRegion` 只做 `GraphTransaction::open`（普通堆上的 `make_unique<GraphDraft>`）与往草稿自己的向量里 `addNode`/`appendStaticSlot`（`src/runtime/draft.cpp:2131-2145`），**整条抽出路径一次 `autoSpace()` 分配都没有**。实测三行：`during / before / after = allocations 2 / 2 / 2，live 0 / 0 / 0`。
+**结论（作者 2026-10-31 `f24411f32` 裁定 (c)）**：**草稿不在 GC 空间分配**——`extractRegion` 只做 `GraphTransaction::open`（普通堆上的 `make_unique<GraphDraft>`）与往草稿自己的向量里 `addNode`/`appendStaticSlot`（`src/runtime/draft.cpp#GraphDraft::appendStaticSlot`），**整条抽出路径一次 `autoSpace()` 分配都没有**。实测三行：`during / before / after = allocations 2 / 2 / 2，live 0 / 0 / 0`。
 
 所以**"丢弃前后 GC 读数相同"在丢弃路径上恒真且无信息**。
 
@@ -1196,7 +1196,7 @@ HANDLE_PROBE refused: InvalidArgument
 
 **没有新造一处 `borrow`**：这一笔改掉的每一处，调用者手上本来就有事务。
 
-**一处漏了的调用者**：`GraphDraftGroup::draft` 改名之后，`modules/transforms/jvp.cpp:86` 还是 `group.draft(member)`——那一笔提交时这个文件在我这一支里还不存在（`origin/develop` 后来才带来），合成闸门的构建当场就停了。补一行 `auto &draft = group.transaction(member).edit();`。全树的调用者 1 处（`modules/transforms` 1、`src/execute` 0）。
+**一处漏了的调用者**：`GraphDraftGroup::draft` 改名之后，`modules/transforms/jvp.cpp#TupleType::create` 还是 `group.draft(member)`——那一笔提交时这个文件在我这一支里还不存在（`origin/develop` 后来才带来），合成闸门的构建当场就停了。补一行 `auto &draft = group.transaction(member).edit();`。全树的调用者 1 处（`modules/transforms` 1、`src/execute` 0）。
 
 **一条判据（协调者给的一句）**：**「删掉一个访问器的时候，先 `grep` 它的调用者——库里的 API 不是只有自己在用。」**
 
@@ -1239,7 +1239,7 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(GraphDraft &owner, const GraphDra
 
 | 若是要换 | 要动几个文件 | 是什么 |
 |---|---|---|
-| 换掉这 13 处 | **3** | `draft_clone.h:37/39` 两张签名 + `draft_clone.cpp` 13 处 + 唯一调用者 `src/runtime/draft_inline.cpp:1830`（那里手上正好有 `transaction` 与 `calleeTransaction`） |
+| 换掉这 13 处 | **3** | `draft_clone.h:37/39` 两张签名 + `draft_clone.cpp` 13 处 + 唯一调用者 `src/runtime/draft_inline.cpp#inlineCallableInDraft`（那里手上正好有 `transaction` 与 `calleeTransaction`） |
 
 **数**：`references` **314**（不动），`files` **35**（不动），`constructions` 1，`decode` 4。**一处 `borrow` 也没有造**——造了也只是把 13 处挪进另一个函数。
 

@@ -8,10 +8,10 @@
 
 两个子系统都在判「这个节点是不是一条语句」，判据不一样：
 
-- **建图**（`src/compile/gir/builder_operators.cpp:4317`、`src/compile/gir/builder_control.cpp:3624`
+- **建图**（`src/compile/gir/builder_operators.cpp#Builder::visitLinkNode`、`src/compile/gir/builder_control.cpp#Builder::visitLoopNode`
   与 `:4027`）：`sync` 块里**每个调用**都走 `linkSyncStatement`，也就是每个调用（**包括写在表达式
   里的嵌套调用**）都是「块里的语句」，据此给它一个链位。
-- **tiles 区域资格**（`modules/tiles/src/graph_regions.cpp:106`）：
+- **tiles 区域资格**（`modules/tiles/src/graph_regions.cpp#operations`）：
 
   ```cpp
   const bool ordered = !graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty() ||

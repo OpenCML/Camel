@@ -6,7 +6,7 @@
 
 ## 1. 事实（每条都有读数或原文）
 
-**声明**：`modules/tensor/ops/catalog.cpp:50-58`
+**声明**：`modules/tensor/ops/catalog.cpp#declareResourcesAndDefinitions`
 
 ```cpp
 // softmax(t, axis = -1), log_softmax(t, axis = -1): the axis may be left out.
@@ -36,8 +36,8 @@ for (const char *name : {"softmax", "log_softmax"}) {
 
 三条读出来的理由：
 
-1. **声明的默认值今天是只写的。** `DefinitionParam::fallback`（`include/camel/core/operator_semantics.h:353-366`）的注释写着"the value of an optional operand the call leaves out"，但 `include/`、`modules/` 里**没有任何地方读它**（grep `fallback` 只命中它的声明和别的模块里同名但无关的局部量）。真正生效的默认在各内核自己的 `optInt(norm, 1, -1)`（`modules/nn/tensor_ops.cpp:44-45`）。
-2. **端口角色由调用的写法决定，不由声明决定。** 写在括号里的是普通操作数，写在角度括号里的是 with 参数；括号里多写的还会被拒（`modules/tensor/ops/registry.cpp:125`：`withAfterNorm && norm.size() > ordinaryParams` → `nullopt`）。所以节点是**源码的镜像**，默认值是"展开定义图时"的事实（`Definition` 的文档就这么说：nothing expands a definition unless a pass asks）。变换看到的节点从来没有那个端口。
+1. **声明的默认值今天是只写的。** `DefinitionParam::fallback`（`include/camel/core/operator_semantics.h#DefinitionDefault`）的注释写着"the value of an optional operand the call leaves out"，但 `include/`、`modules/` 里**没有任何地方读它**（grep `fallback` 只命中它的声明和别的模块里同名但无关的局部量）。真正生效的默认在各内核自己的 `optInt(norm, 1, -1)`（`modules/nn/tensor_ops.cpp#optInt`）。
+2. **端口角色由调用的写法决定，不由声明决定。** 写在括号里的是普通操作数，写在角度括号里的是 with 参数；括号里多写的还会被拒（`modules/tensor/ops/registry.cpp#OpDefResolver`：`withAfterNorm && norm.size() > ordinaryParams` → `nullopt`）。所以节点是**源码的镜像**，默认值是"展开定义图时"的事实（`Definition` 的文档就这么说：nothing expands a definition unless a pass asks）。变换看到的节点从来没有那个端口。
 3. **变换手里没有默认值可填。** `vmap.cpp` 只通过 `camel::core::vmapBindingOf(uri)` 拿到键；它读不到 `Definition`，也没有按 URI 查声明默认的接口。要在提升时填，得先加一个读者，再在节点上凭空造一个常量端口——那是**语义变更**：`withInputsOf` 对所有消费者（`std::jgir` 的端口、`split`/`jvp` 两个变换、`inspect --ops`）都会多出一个源码没写的端口，内核里 `ctx.has(1)` 从此恒真。
 
 可选的两条路，都不该由我一个人定：

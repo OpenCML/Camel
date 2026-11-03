@@ -8,19 +8,19 @@
 
 第 11 条定了 A（`docs/handover/reviews/questions-2026-10-30.md` §1）：跨 `yield` 的值做成单元，
 单元"带类型、暂不赋值"。运行期那一半是现成的、且与 B 同形：`__builtin__var_new__`
-（`src/builtin/operators/ops.cpp:215`）建的就是一个 `Tuple`，而 `Tuple::create` 把槽填成 `NullSlot`
+（`src/builtin/operators/ops.cpp#__builtin__var_new__`）建的就是一个 `Tuple`，而 `Tuple::create` 把槽填成 `NullSlot`
 （`include/camel/core/rtdata/tuple.h`），所以"无值单元"在运行期就是"槽里是 null"；A 与 B 的差别只在
 编译期证不证。GIR 也不需要新节点种类：`OperatorIndex` 的构造子是公开的
-（`include/camel/core/operator.h:70`），可以直接合成一个 `() => var T` 的 `:var/new` 实例，
-用 `addOperNode(op, 0)` 建出这个单元（`src/execute/exec_plan.cpp:731` 已经处理 `norm.empty()`）。
+（`include/camel/core/operator.h#OperatorIndex`），可以直接合成一个 `() => var T` 的 `:var/new` 实例，
+用 `addOperNode(op, 0)` 建出这个单元（`src/execute/exec_plan.cpp#planStorageReuse` 已经处理 `norm.empty()`）。
 
-卡住的是 `T`。单元建在"流被创建"时跑的那段体里（`src/compile/gct/builder.cpp:5685`），
+卡住的是 `T`。单元建在"流被创建"时跑的那段体里（`src/compile/gct/builder.cpp#nameUseIn`），
 那一刻要给出 `T`，而 **GCT 只认写出来的类型**：`typeScope_`/`visitType`
-（`src/compile/gct/builder.h:36,61,394`）里没有表达式的类型。`loop i = 0` 的初值是个字面量，
+（`src/compile/gct/builder.h#context_（以及同文件的 `Builder`、`visitRefData`）`）里没有表达式的类型。`loop i = 0` 的初值是个字面量，
 GCT 顺手就有 `int64`；但 5.4 点名的 `pairs(n)`，内层是 `loop j = i + 1`，`i + 1` 在 GCT 处没有类型。
 
 GCT 唯一能表达"某表达式的类型"的机制是 `typeof <expr>`（`src/compile/gct/builder.cpp#addTypedCell`，`TypeOfType::create`），
-而 GIR 解析它是**在使用处把表达式建出来**（`src/compile/gir/builder_generics.cpp:2465-2489`），
+而 GIR 解析它是**在使用处把表达式建出来**（`src/compile/gir/builder_generics.cpp#Builder::instantiateGeneric`），
 也就是建在创建体里。于是：
 
 - `pairs` 两层能过：外层 `i = 0` 是常量初值，创建时单元 `i` 已有值，探针读 `i + 1` 拿得到 `int`；

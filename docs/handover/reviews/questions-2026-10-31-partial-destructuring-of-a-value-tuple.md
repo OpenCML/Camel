@@ -69,9 +69,9 @@ func main(): int sync {
 ## 注记：同一天撞到的两条，不成问题，只记
 
 1. **`${arr:.6f}` 在插值里被拒**（`Invalid call to 'format' … invalid format specifier`），要写成
-   `let text = '{:.6f}'->format<xs>` 再把字符串插进去——`stdlib/prelude.cml:400-415` 的示例正是
+   `let text = '{:.6f}'->format<xs>` 再把字符串插进去——`stdlib/prelude.cml#operator` 的示例正是
    这样用。插值与 `format` 若给同一个答案，`d4` 的这条线就不用多撞一次。
-2. **`verify_script` 里写 `'\\n'` 会被 TOML 的读法吃掉**：`test/tools/toml-lite.mjs:84-88` 先替换
+2. **`verify_script` 里写 `'\\n'` 会被 TOML 的读法吃掉**：`test/tools/toml-lite.mjs#parseString` 先替换
    `/\\n/` 再替换 `/\\\\/`，于是 `'\\n'` 到 JS 里成了行继续，`split` 一条线都切不开；写成
    `String.fromCharCode(10)` 就没有转义。这不是语言问题，是那个 TOML 子集的读法，在
    `agents/test.md` 或该文件头里留一行即可。
