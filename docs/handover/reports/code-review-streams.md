@@ -2,7 +2,7 @@
 
 范围：`git log -60 -- src include stdlib/stream.cml` 里与流有关的提交（主要是 `bf9a4208e`、`afa52e16e`、`d09604821`、`f1fa2bd23`、`124317bd3`/`eb391cd10`），以及现在树上的代码。读的是代码，不是提交信息。没有编译、没有运行用例；下面每条"失败场景"都是从代码推出的，写明了"需先写用例确认"的除外。行号是当前树（`2c0f893d8`）上的。
 
-涉及的文件：`src/compile/gir/builder_control.cpp`（`buildStreamLoop` 3485–3815、`consumeStream` 3819、`checkStreamConsumption` 3841–3908、`visitLoopNode` 2660 起）、`src/compile/gir/builder_operators.cpp`（3280–3290、3387–3425）、`src/compile/gir/builder.cpp:378`、`src/core/type/composite/stream.cpp`、`func.cpp:378`、`include/camel/core/type/composite/stream.h`、`src/core/type/typevar.cpp`、`src/compile/gct/builder.cpp`（2041、5424、5962、6015）、`src/builtin/operators/stream.cpp`、`stdlib/stream.cml`、`src/core/error/diagnostics/messages/semantic.cpp:1576–1610`。
+涉及的文件：`src/compile/gir/builder_control.cpp`（`buildStreamLoop` 3485–3815、`consumeStream` 3819、`checkStreamConsumption` 3841–3908、`visitLoopNode` 2660 起）、`src/compile/gir/builder_operators.cpp`（3280–3290、3387–3425）、`src/compile/gir/builder.cpp#genericShapeText`、`src/core/type/composite/stream.cpp`、`func.cpp:378`、`include/camel/core/type/composite/stream.h`、`src/core/type/typevar.cpp`、`src/compile/gct/builder.cpp`（2041、5424、5962、6015）、`src/builtin/operators/stream.cpp`、`stdlib/stream.cml`、`src/core/error/diagnostics/messages/semantic.cpp#getSemanticDiagInfoMap`。
 
 ## 总评
 
@@ -42,12 +42,12 @@
 ### 5. 编译器按名字认库函数：`tee` 的特判
 `builder_operators.cpp:3387–3425`：在一般调用路径里写了 `baseGraphName(targetGraph->name()) == "stream::tee"`，还靠 `name.find('<')` 剥掉实例化后缀，再用 `dynamic_pointer_cast<LongData>/<IntData>` 判常量，报 `TeeHintNotPositive`。
 - 这是绕开机制：库函数的前提应当写在库里（`n: int` 的约束，或函数体里 `fail<'InvalidArgument'>`），或者用语言的通用常量检查，不该让通用的调用构造器认识 `stream::tee`；同名的用户函数在另一个模块里叫 `stream::tee` 时也会被误伤（名字前缀相同的用户模块）。
-- 语义不自洽：`stdlib/stream.cml:57` 只钳上限（`if n > cap`），`n < 1` 的非常量实参静默通过，常量 0 反而编译错误；诊断文本自己写着"它是个提示，永不故障"（`semantic.cpp:1604`）。
+- 语义不自洽：`stdlib/stream.cml#advance` 只钳上限（`if n > cap`），`n < 1` 的非常量实参静默通过，常量 0 反而编译错误；诊断文本自己写着"它是个提示，永不故障"（`semantic.cpp:1604`）。
 - 更根本：`n` 对行为**没有任何影响**（只进性能报告 `tee_note`），却成了公开参数、专属诊断、`StreamConsumedTwice` 帮助文字里的推荐写法（`tee(s, n)`）。
 修法：删除特判和 `TeeHintNotPositive`，删除 `n`（缓冲本来就无界），或者让 `n` 真的成为背压（缓冲满了领先方等待）再谈参数。
 
 ### 6. `tee` 的缓冲只增不减，是内存泄漏
-`stdlib/stream.cml:72`：`buffer = buffer->append<p.0>`，没有任何地方丢弃两边都读过的前缀（`taken` 记了位置，只用来算 `peak`）。两边步调一致读一个 10 GB 的文件，缓冲会长到 10 GB。设计稿写的是"背压是拉取模型自带的"，这里恰好破坏了它。
+`stdlib/stream.cml#map`：`buffer = buffer->append<p.0>`，没有任何地方丢弃两边都读过的前缀（`taken` 记了位置，只用来算 `peak`）。两边步调一致读一个 10 GB 的文件，缓冲会长到 10 GB。设计稿写的是"背压是拉取模型自带的"，这里恰好破坏了它。
 修法：按 `min(taken)` 丢弃前缀（用偏移量表示 `at`），或用环形缓冲；加一个"长流 + 两边同步读，内存不增长"的用例。
 
 ### 7. `FunctionType::assignableFrom(Stream)` 的子类型方向看起来反了
@@ -81,14 +81,14 @@
 
 ### 13. `tee_note`：运行时读静态类型，用对象地址当键
 `src/builtin/operators/stream.cpp`：`norm.type(4)` 在运行时取实参的静态类型来算元素名与字节数——设计原则 5.5 写明"原生算子的内核不在运行时读取调用的静态类型；需要按类型变化的，在编译期展开"。又用 `reinterpret_cast<const void*>(norm.slot(4))`（流值，即闭包指针）当报告的键；分代 GC 会移动小对象（10.5），同一个 `tee` 在两次拉取之间可能换了地址，报告里变成两条。
-另外 `stdlib/stream.cml:95` 的 `tee_note(...)` 每拉一个元素都调用一次（参数 `len(buffer)` 等先求值），报告关着时也付调用成本；"一次加载就返回"是 C++ 一侧的，调用本身不免。
+另外 `stdlib/stream.cml#take` 的 `tee_note(...)` 每拉一个元素都调用一次（参数 `len(buffer)` 等先求值），报告关着时也付调用成本；"一次加载就返回"是 C++ 一侧的，调用本身不免。
 修法：元素名与大小在 `tee` 实例化时作为编译期常量传入（`T` 已知）；键用 `tee` 调用处的稳定标识（调用点的源位置）而不是对象地址；整个报告钩子放到 `profile` 打开时才生成（`when` 或编译期开关）。`bytesOfElement` 重复了数组元素大小的已有知识（数据块的元素宽度），应调用那一份。
 
 ### 14. 两个类型遍历漏了流
 `typevar.cpp:264` `writesResourceClause` 与 `:332` `findRepeatedMark` 对 `TypeCode::Array` 有分支、对 `Stream` 没有；其余 8 个遍历补了。后果：元素是带资源子句的函数类型的流（`(() => int uses fs)..`）不被识别为"写了资源子句"；`int??..` 这样的重复标记穿过 `findRepeatedMark`。更根本的是"每加一种复合类型，要在十几个 `switch` 里各补一条"（`TypeCode::Array` 出现在 44 个文件，`Stream` 在 13 个）——补漏就是这样漏的。给 `CompositeType` 一个"组件列表 / 映射组件"的虚函数，遍历就不再枚举类型。
 
 ### 15. `tee` 读到末尾后每次重新拉源
-`stdlib/stream.cml:68–74`：`pull()` 在源结束（`src()` 为 `null`）时返回 `false`，但**不记录"已结束"**，`src` 不变。之后每次读都再次 `src()`。纯来源无所谓；有效应的来源（`read_lines`）会被再次打开读。应在 `var` 里记一位 `done`。
+`stdlib/stream.cml#map`：`pull()` 在源结束（`src()` 为 `null`）时返回 `false`，但**不记录"已结束"**，`src` 不变。之后每次读都再次 `src()`。纯来源无所谓；有效应的来源（`read_lines`）会被再次打开读。应在 `var` 里记一位 `done`。
 
 ## 低
 
@@ -99,7 +99,7 @@
 - 在 `for` 体里又拉同一条流报的是 `StreamConsumedInLoop`（"每轮消费一次"），不是 `StreamConsumedTwice`，对这种情形更准的话是"这条流已由外层 `for` 读取"。
 
 ### 17. 注释
-- `stream.h:17` 与 `stdlib/stream.cml:6` 带日期（"the rule of 2026-10-24"、"the reading of 2026-10-26"），是在引用裁定记录；应写规则本身并引用设计原则小节。
+- `stream.h:17` 与 `stdlib/stream.cml#unfold` 带日期（"the rule of 2026-10-24"、"the reading of 2026-10-26"），是在引用裁定记录；应写规则本身并引用设计原则小节。
 - `gct/builder.cpp:2041–2050` 的 `yield` 拒绝注释讲"slice E … is not built yet"，是计划状态不是规则；留着的拒绝也应当只说"`yield` 的降低（状态机）见 `docs/design/io-concurrency-streams/`"。
 - `builder_control.cpp:3470–3482` 的函数头注释对机器状态的描述（"state (next, acc)"）与实际布局 `($stream, $done, state...)` 已不符（早期版本留下的）。
 - `buildStreamLoop` 内"A `for` over a stream is one consumer of it (design principles 5.4 …)"之类对原则的引用是对的，保留。

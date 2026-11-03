@@ -35,7 +35,7 @@
 - **修**：同 A1：一个解析引擎，字面量规则只写一处。
 
 ### A5. 优化失败变成崩溃
-`src/runtime/draft_inline.cpp:1038-1056`。类型特化走进调用环、实例数超过 `kTypeSpecializationFixedPointGuard` 时 `throw std::runtime_error(...)`。特化是优化，不特化程序仍然正确；这里把"优化没做完"变成一个未处理的 `std::runtime_error`（pass 的调用方不一定接得住），对应的值特化超出预算（`engine.cpp:850`）则是安静地停止。同一类情况两种处理，更糟的那种在更常见的类型特化上。
+`src/runtime/draft_inline.cpp#specializeDirectFuncInDraft`。类型特化走进调用环、实例数超过 `kTypeSpecializationFixedPointGuard` 时 `throw std::runtime_error(...)`。特化是优化，不特化程序仍然正确；这里把"优化没做完"变成一个未处理的 `std::runtime_error`（pass 的调用方不一定接得住），对应的值特化超出预算（`engine.cpp:850`）则是安静地停止。同一类情况两种处理，更糟的那种在更常见的类型特化上。
 - **修**：到上限就保持当前被调用者（不特化），并用 `CAMEL_LOG` 或遍的报告记一笔；计数用的是整个根的特化总数而不是这一条环，也需要重新考虑（一个在多处被用到的泛型函数会耗尽整个预算）。
 
 ### A6. 凭 `when` 的**文本**判定一个声明是遍

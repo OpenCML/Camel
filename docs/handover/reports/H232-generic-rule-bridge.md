@@ -37,7 +37,7 @@ given its types here: the operator '__rule' does not say which function it expec
 suggested by its other arguments is one it accepts; its type variable(s) T stay undetermined. ...]
 ```
 
-The refusal is raised while binding the maker's arguments (`src/compile/gir/builder_generics.cpp:1259-1270`,
+The refusal is raised while binding the maker's arguments (`src/compile/gir/builder_generics.cpp#Builder::chooseGenericOverload`,
 `rejectGenericValue` at `:275`). The declaration itself parses and locks its syntax
 (`test/plans/feat/parse/rules.plan.toml`, `rules.generic_head`). So the red-before for the
 acceptance is not a law that fails to fire: **the law cannot be written at all**, and the first half
@@ -45,9 +45,9 @@ of the ruling (the value carries its template) is what this step has to build.
 
 ## 1. The type the acceptance names cannot satisfy the standard library's `is_integer`
 
-- `stdlib/types.cml:29-34` — the family predicate is identity over the spelled types:
+- `stdlib/types.cml#ElementOf` — the family predicate is identity over the spelled types:
   `is_integer::<T>()` is `match type T { case int | i32 => true; case _ => false }`.
-- `src/compile/gir/builder_when.cpp:778-781, 1041-1043` and the scope switch at `:805-817` — a
+- `src/compile/gir/builder_when.cpp#GctConstantEvaluator（以及同文件的 `Builder::whenPredicateNamed`）` and the scope switch at `:805-817` — a
   `when` predicate is resolved **where the declaration is written**, not where it is selected:
   `ConditionContext` installs the *declaring template's* scope, so `add_zero`'s
   `when is_integer::<T>()` calls the library's `is_integer`, never the importing program's.
@@ -60,7 +60,7 @@ of the ruling (the value carries its template) is what this step has to build.
 | a *refined* type the pattern reads (`type Vec = Tensor<f32, [3]>` vs the law's `Tensor<f32>`) | yes, for a tensor law | yes — measured below |
 | its own identity (a named struct, an enum, a program's own type with its own `+`) | no | no |
 
-The middle row is not hypothetical: the corpus already runs one. `test/cases/modules/rules/tensor_target.cml:10`
+The middle row is not hypothetical: the corpus already runs one. `test/cases/modules/rules/tensor_target.cml#Vec`
 declares `type Vec = Tensor<f32, [3]>` and its docstring says the point — "`Vec` has a known extent, so
 the rules (written for `Tensor<f32>`) are exercised through the type check: a less informed pattern
 type reads a more informed node type" — and `rules.tensor_laws_counts` expects the library's
@@ -93,7 +93,7 @@ Readings:
 - the type table interns types but does not iterate them (`include/camel/core/type/intern.h`);
 - the operator table registers per-type *operator instances*, not a type list;
 - `check` today reads the parameter types off the rule's left function
-  (`modules/rewrite/module.cpp:2131-2138`), which a generic rule has none of.
+  (`modules/rewrite/module.cpp#RefEvaluator`), which a generic rule has none of.
 
 Options: **(i) the types of the nodes of the program being rewritten** — complete for the matching
 path (a pattern's nodes are nodes of that program, so the tuple *is* the matched node's type),
@@ -109,7 +109,7 @@ made).
 `when` first removes most failures: a tuple the condition rejects is never instantiated. What is
 left is a tuple the condition *admits* whose pattern has no operator, which the ruling calls
 "unsolvable... → no match". Today that is not quiet: `Builder::instantiateGeneric`
-(`src/compile/gir/builder_generics.cpp:1302`+) reports the body's diagnostics and throws
+(`src/compile/gir/builder_generics.cpp#Builder::chooseGenericOverload`+) reports the body's diagnostics and throws
 `BuildAbortException`, and `GenericInstance::failed` (`builder.h:77-78`) only makes *later* calls
 with the same types fail quietly. No scope captures and drops diagnostics. The step needs one: an
 RAII flag routing `diags_` to a scratch sink for the attempt, restoring on exit, and the tuple
@@ -118,17 +118,17 @@ recorded as *not made* in the cache, so `why_not` can say the type was tried and
 ## 4. Where the front end is reached from, and the one mechanism that is missing (not a question)
 
 The engine is `modules/rewrite` (runtime layer); the instantiation is compile-layer. The bridge
-exists: `Builder::of(const context_ptr_t &)` (`src/compile/gir/program.cpp:186-195`) keeps the
-program's Builder on the Context (`include/camel/core/context/context.h:145, 421`), and modules link
+exists: `Builder::of(const context_ptr_t &)` (`src/compile/gir/program.cpp#Builder::of`) keeps the
+program's Builder on the Context (`include/camel/core/context/context.h#Context（以及同文件的 `setEntryResultHandler`）`), and modules link
 `libcamel` with an undefined-symbol export scan, so a public entry under `include/camel/compile/`
 resolves from the module. A generic declaration already builds the three functions it needs
-(`src/parse/ast/builder.cpp:832-1166` emits `name__lhs::<T>`, `name__rhs::<T>`, `name__when::<T>`);
-`RuleObject` (`modules/rewrite/rule.h:47`) holds three `::Function*` today and would hold the three
+(`src/parse/ast/builder.cpp#Builder::visitFuncAnno` emits `name__lhs::<T>`, `name__rhs::<T>`, `name__when::<T>`);
+`RuleObject` (`modules/rewrite/rule.h#RuleObject`) holds three `::Function*` today and would hold the three
 templates plus the per-type instance cache.
 
 The missing mechanism is how an instance's **graphs and condition function come to exist in the
 program the pass is running on**. `compileRule` reads the sides out of the runtime program
-(`rule.lhs()->program()`, `sourceOf` at `modules/rewrite/module.cpp:268-295`), and the pass runs
+(`rule.lhs()->program()`, `sourceOf` at `modules/rewrite/module.cpp#callWhen`), and the pass runs
 after the program is encoded, so an instance built by `instantiateGeneric` afterwards has no graph
 the engine can read.
 
@@ -152,8 +152,8 @@ PROOF session=1 reserved=1 fresh_id=51 side=1 bound=1 table=52 version=1
 So the first way is the one to build, and the encoder is not an obstacle: publication is the three
 lines the runtime already uses at pass time for an operator's definition graph —
 `context.reserveProgram()`, `encodeToRuntimeProgram(graph, *program, &context.graphIds())`,
-`context.pinRuntimeProgram(program)` (`src/runtime/definitions.cpp:331-333, 410-412`) — and
-`encodeToRuntimeProgram` is a public entry (`include/camel/compile/gir/encode.h:29`).
+`context.pinRuntimeProgram(program)` (`src/runtime/definitions.cpp#DefinitionStore::libraryFunction（以及同文件的 `DefinitionStore::build`）`) — and
+`encodeToRuntimeProgram` is a public entry (`include/camel/compile/gir/encode.h#encodeToRuntimeProgram`).
 
 What is missing is smaller than it looked: `Builder`, `GenericTemplate` and `instantiateGenericAs`
 live in `src/compile/gir/builder.h`, which no module can include — the public compile-side headers
@@ -162,7 +162,7 @@ one new public entry beside `encodeToRuntimeProgram` (the context, a template ha
 expected `FunctionType` in, the instance's compile graph out, `why` when it does not fit), with the
 handle carried by the `RuleObject` (the ruling's "the Rule value carries its template"). The engine
 needs no lookup of its own for it: the public module API exposes an `Entity` only as an opaque
-carrier (`include/camel/core/module/module.h:32, 61`), and the front end is the side that knows what
+carrier (`include/camel/core/module/module.h#EntityAccess（以及同文件的 `Entity`）`), and the front end is the side that knows what
 a rule's template is.
 
 The second way stays an alternative for the *sides* only, and only if materialized patterns turn out
@@ -222,7 +222,7 @@ the two decisions above are its prerequisites.
 
 A rule declaration lowers to
 `let name = __rule('name', twoWay, needs, consts, name__lhs, name__rhs)` with a third reference for
-`__rule_when` (`src/parse/ast/builder.cpp:1101-1127`), and the two references are *functions*: under a
+`__rule_when` (`src/parse/ast/builder.cpp#Builder::visitRuleDecl`), and the two references are *functions*: under a
 generic head they are generic functions, and giving one to `__rule` as a value is the refusal §0
 measured.
 
@@ -230,7 +230,7 @@ A template is a compile-time object, so it cannot travel as a runtime value. The
 the front end registers the rule's three templates (`name__lhs`, `name__rhs`, `name__when`) in a table
 the context owns, emits `__rule_generic('name', twoWay, needs, consts, ruleId)`, and the `RuleObject`
 keeps `ruleId`. The engine then has the templates through the table and the context it already holds
-(`engineRules(Context &ctx, …)`, `modules/rewrite/module.cpp:301`), which is where the per-type-tuple
+(`engineRules(Context &ctx, …)`, `modules/rewrite/module.cpp#callWhen`), which is where the per-type-tuple
 cache goes too.
 
 The pieces, each with its own test:
@@ -244,14 +244,14 @@ The pieces, each with its own test:
 2. **the registration table and `__rule_generic`** (the context's table, the module's kernel,
    `stdlib/rewrite.cml`'s declarations) and the front-end lowering for a generic head. The only case
    with a generic head today is `test/cases/parse/rules/generic_head.cml`, and its test
-   (`rules.generic_head`, `test/plans/feat/parse/rules.plan.toml:19-27`) only reads the declaration's
+   (`rules.generic_head`, `test/plans/feat/parse/rules.plan.toml#rules.format_snapshot`) only reads the declaration's
    AST (`${inspect_ast}`) without compiling it: it does not lock today's refusal and needs no
    re-pointing. **No plan asserts the refusal** — it was measured with a temporary case (§0) — so the
    new behaviour wants its own test rather than a re-pointed one.
    A rule with no instance for a type tuple does not fire, so a rule value whose templates are
    registered and never instantiated is not an error; it is a rule that matches nowhere. Until step 3
    lands, `apply` of such a rule does nothing and says so.
-3. **the per-type cache** in `RuleObject` (`modules/rewrite/rule.h:47`), keyed by the type tuple the
+3. **the per-type cache** in `RuleObject` (`modules/rewrite/rule.h#RuleObject`), keyed by the type tuple the
    match solves; one `compileRule` per instance; `explain`/`why_not` (and `check`) report the
    instance's types, which is the observable for "one instantiation per type tuple".
 4. **one law end to end**: `int_add_zero`/`int32_add_zero` and `float_add_minus_zero`/`f32_add_minus_zero`

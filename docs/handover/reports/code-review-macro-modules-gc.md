@@ -1,6 +1,6 @@
 # `std::macro`、模块系统与垃圾回收器的代码审查
 
-范围：(1) `src/execute/macro/{macro,eval,scan,rewrite}.cpp`、`runtime.h`；(2) `src/core/context/context.cpp`（导入、候选名、搜索、`.cmo`/`.cml`）、`src/core/module/{dynamic,userdef}.cpp`、`include/camel/utils/install_layout.h`、`src/compile/gct/builder.cpp:711-824` 的 `visitImport`、五个工具入口；(3) `src/core/mm/{gen,mm}.cpp`、`include/camel/core/mm/gen.h`、`src/passes/sched/taskflow/{taskflow.cpp,taskflow.h,handoff.cpp}` 的 GC 栅栏、`rtdata` 的写屏障调用点。对照设计原则 §8、§10.2。只读代码，没有构建、没有运行；标"需确认"的是由代码推断、未实测。写屏障只核对了调用面（`array/tuple/struct/func/collection_tree`），没有逐个存储点审；`gen.cpp` 的 `markPhase` 与 `gc_debug.cpp` 的校验器没有逐行审。
+范围：(1) `src/execute/macro/{macro,eval,scan,rewrite}.cpp`、`runtime.h`；(2) `src/core/context/context.cpp`（导入、候选名、搜索、`.cmo`/`.cml`）、`src/core/module/{dynamic,userdef}.cpp`、`include/camel/utils/install_layout.h`、`src/compile/gct/builder.cpp#Builder::visitImport` 的 `visitImport`、五个工具入口；(3) `src/core/mm/{gen,mm}.cpp`、`include/camel/core/mm/gen.h`、`src/passes/sched/taskflow/{taskflow.cpp,taskflow.h,handoff.cpp}` 的 GC 栅栏、`rtdata` 的写屏障调用点。对照设计原则 §8、§10.2。只读代码，没有构建、没有运行；标"需确认"的是由代码推断、未实测。写屏障只核对了调用面（`array/tuple/struct/func/collection_tree`），没有逐个存储点审；`gen.cpp` 的 `markPhase` 与 `gc_debug.cpp` 的校验器没有逐行审。
 
 按严重度排序。
 
@@ -8,7 +8,7 @@
 
 ### R1 分配器是进程级单例，每个 `Context` 覆盖它的根集与图清扫器，销毁任何一个都会把它们清空
 
-- `src/core/context/context.cpp:228-231`：`Context::create` 调 `autoSpace().setObjectRootSet(&ctx->runtimeGraphMgr_->gcRoots())` 与 `setGraphSweeper(...)`；`:105-108` 析构时无条件 `setObjectRootSet(nullptr)`、`setGraphSweeper(nullptr)`。`gen.cpp:146-155` 的两个 setter 只是替换成员，没有"属于谁"的记录。
+- `src/core/context/context.cpp#ModuleResolver::findUnder`：`Context::create` 调 `autoSpace().setObjectRootSet(&ctx->runtimeGraphMgr_->gcRoots())` 与 `setGraphSweeper(...)`；`:105-108` 析构时无条件 `setObjectRootSet(nullptr)`、`setGraphSweeper(nullptr)`。`gen.cpp:146-155` 的两个 setter 只是替换成员，没有"属于谁"的记录。
 - 失败场景：同一进程里存在两个活着的 `Context`（语言服务器每个分析一个、`camel` 的某些工具在主上下文之外另建一个、测试进程依次创建与销毁）。创建 B 之后 A 的图根不再被标记，major GC 把 A 的图持有的静态数据当垃圾回收（悬空）；销毁 B 之后 A 的根集与清扫器都为空，A 的图空间永不清扫。Python 绑定因为只有一个静态 Context（`bindings/python/module.cpp:188`）而碰不到，但它也不能与别的 Context 并存。
 - 修法：根集与清扫器改成登记制（`registerRootSet(owner, ptr)`/`unregister(owner)`，同 `registerExternalRootTracer` 的做法），GC 遍历所有登记项；或者明确规定"一个进程一个 Context"并在第二次 `create` 时抛错。
 
@@ -27,7 +27,7 @@
 ### R4 入口模块在五个工具里都被命名为 `"main"`，与原则 10.2 相反
 
 - 原则 10.2："A file is a module, and the module's name is the file's name … there is no placeholder name `main`, for the entry file too (the pass-name prefix is `counts` for both `./counts.cml` and `counts.cml`)."
-- 代码：`tools/camel-cli/main.cpp:274`、`tools/camel-cli/timeit.cpp:259`、`tools/codegen/main.cpp:82`、`tools/debugger/src/compile.cpp:68`、`src/service/semantic/analyze.cpp:512` 都是 `make_shared<UserDefinedModule>("main", path, ctx, parser)`；`diagnostic.moduleName = "main"`（`main.cpp:589`）。`Module::name()` 又是导入解析的基准（`importModule` 里的 `importerName`，相对导入与"向上前缀回退"都用它，`context.cpp:420-430,578-606`）。
+- 代码：`tools/camel-cli/main.cpp:274`、`tools/camel-cli/timeit.cpp:259`、`tools/codegen/main.cpp:82`、`tools/debugger/src/compile.cpp:68`、`src/service/semantic/analyze.cpp#ModelBuilder` 都是 `make_shared<UserDefinedModule>("main", path, ctx, parser)`；`diagnostic.moduleName = "main"`（`main.cpp:589`）。`Module::name()` 又是导入解析的基准（`importModule` 里的 `importerName`，相对导入与"向上前缀回退"都用它，`context.cpp:420-430,578-606`）。
 - 失败场景：入口文件里写 `shapes::area`（用自己的名字限定）解析不到；`import .x` 这类相对导入以 `"main"` 为基准而不是文件名；通过路径判断"入口自己"只靠 `fs::equivalent`（`:871-880`）。测试用例大量仍写 `module foo` 头（如 `test/cases/feat/bindings/python_rules.cml`），说明原则里"没有 module 声明"与代码没有同时落地。
 - 修法：先裁定哪一边是目标状态；若原则是目标，五处入口统一用一个函数 `moduleNameOfFile(path)`（取文件主名），并在这里去掉对 `"main"` 的依赖。
 
