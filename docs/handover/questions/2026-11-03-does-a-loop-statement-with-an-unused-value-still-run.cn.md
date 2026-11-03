@@ -350,3 +350,27 @@ walks through it`），它把"链尾"从语句节点改成了**位门**，五处
 根本不写。这一条要先量出来（链尾门有没有入边），才能决定是修步行还是修连边。
 
 **这一轮没有改代码**：假设一被否掉了，改哪里要等这两条读数里哪一条成立。
+### 探针读数（`generators_loop.cml`，500 行 `return true` 之前，`P02_GATE_PROBE=1`）
+
+```
+[P02GATE] from=30  gate=31  kind=13 place=0 dataIn=1 [29 ] dataUsers=0 [] ctrlUsers=0 [] directData=0
+[P02GATE] from=73  gate=74  kind=13 place=0 dataIn=1 [72 ] dataUsers=0 [] ctrlUsers=0 [] directData=0
+[P02GATE] from=115 gate=116 kind=13 place=0 dataIn=1 [114] dataUsers=0 [] ctrlUsers=0 [] directData=0
+```
+
+五个数（三次同样的形状）：撞到的是 `GATE`（kind 13）、**不在 `chainPlaceGates_` 里**（place=0）、
+**一个数据输入**（29/72/114，和"撞上它的那个语句"30/73/115 不是同一个节点）、**数据使用者 0**、
+**控制使用者 0**、**两个相邻节点之间没有数据边**（directData=0）。
+
+### 判断：不是"登记"，也不是"步行"，是**块的值门成了孤儿**
+
+这个门有一个数据输入、一条从前一个语句来的 ctrl/sync 入边、**却没有任何使用者**——它就是"块交给外面
+的那个值"，而本该读它的那一端没有连上来（读的是别处）。所以 `inUnusedSyncBlock` 判"这个 sync 块没人用"
+**在它自己的口径里是对的**：那个块的值确实没人读。
+
+要修的是**谁该读这个门**：`a49cac54d` 把链尾改成位门之后，取块值的那一端（`visitLoopNode` /
+`buildStreamLoop` 里的 `linkNodes(LinkType::With, bodyPart->output, loopNode)` 与区域结果那条线）
+接的是位，而不是这个值门，于是值门悬空、块被判没用。下一轮先用同一支探针打出这个门的 `origin`
+与角色，确认它是不是块值门，再动那一处连边。
+
+**这一轮没有改代码**（探针已存 `D:\Temp\p02-probe-gate.patch`，源文件已还原）。
