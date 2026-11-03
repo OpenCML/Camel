@@ -100,9 +100,9 @@ class FunctionTypeFactory {
     ///
     /// The `with` parameters end in a pack (`with <..args>`): it stands for the `with` arguments
     /// a call gives beyond the fixed ones, of any types, and is added after every other `with`
-    /// parameter as a `void` parameter no call passes a value for. Only a declaration without a
-    /// body (the rule of a native operator, which takes its arguments as they come) and a
-    /// function type write one.
+    /// parameter as a `void` parameter no call passes a value for. A declaration with a body
+    /// writes one like a declaration without one (language author, 2026-11-03), and so does a
+    /// function type.
     void addWithRest(const std::string &ident) {
         hasWithRest_ = true;
         withTypes_.emplace_back(Type::Void(), false);

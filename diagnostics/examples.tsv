@@ -280,7 +280,6 @@ SemanticDiag::WithArgumentMissing	test/cases/compile/with_defaults/missing.cml
 SemanticDiag::WithArgumentUnknown	test/cases/compile/with_defaults/unknown_name.cml
 SemanticDiag::WithDefaultNotConstant	test/cases/compile/with_defaults/default_not_constant.cml
 SemanticDiag::WithDefaultWrongType	test/cases/compile/with_defaults/default_wrong_type.cml
-SemanticDiag::WithPackNeedsNativeDeclaration	test/cases/compile/prelude_signatures/with_pack_with_body.cml
 SemanticDiag::WithParameterAfterDefault	test/cases/compile/with_defaults/after_default.cml
 SemanticDiag::YieldRequiresStreamHead	test/cases/compile/stream/yield_head_no_stream.cml
 SyntaxDiag::AngleCloseAfterSpace	test/cases/parse/syntax/angle_close_after_space.cml

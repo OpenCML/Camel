@@ -114,7 +114,13 @@ void Builder::buildEntryCall() {
                            ? std::string(entryType->argNameAt(argIndex))
                            : std::format("{}{}", prefix, i);
             };
-            for (size_t i = 0; i < entryType->withTypesCount(); ++i) {
+            // The entry graph takes the same parameters, and a pack among the `with` ones is not
+            // one of them: a pack is the arguments a call writes beyond the fixed parameters, and
+            // the entry graph is called with the values given from outside, one per parameter
+            // (design principles 4.4, 5.6).
+            const size_t entryWithPorts =
+                entryType->withTypesCount() - (entryType->hasWithRest() ? 1 : 0);
+            for (size_t i = 0; i < entryWithPorts; ++i) {
                 const std::string name = nameAt(i, "__w", i);
                 const bool isVar       = entryType->withIsVarAt(i);
                 Type *type             = entryType->withTypeAt(i);
