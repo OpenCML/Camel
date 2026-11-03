@@ -107,21 +107,62 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
            << " reader=" << reader << " arm=" << readerArm << " sibling=" << portArm
            << " named_port=" << (namedPort ? 1 : 0) << " named_reader=" << (namedReader ? 1 : 0)
            << "\n";
-
-        // The same port, one reader over: the node that owns the arm it was moved into. That node
-        // may read the arm's exit (`region.result`) and nothing else in it (author ruling
-        // 2026-11-03 08:10), and this port is not the exit -- the arm ends in its own value. The
-        // arm node's read of the port goes first, so the refusal reported is the owner's and not
-        // the sibling's reported above.
-        const gc_node_ref_t owner = branchy->region(portArm)->owner;
+    }
+    // The shape the owner's exception is drawn around: the node that owns a region reading a port of
+    // it that is **not** its exit. The tree has one owner read -- a LOOP consuming its body's exit
+    // port, `loop_parts.cml` / `through_match`, `g6n10` reading `g6n9` of `g6r2` -- so the shape is
+    // built by taking that exit away: the body's result becomes invalid, and the loop's read of the
+    // port is then a read of a port the region no longer ends in. Under the wider exception (the
+    // owner reads any port of its region) this draft would commit; a rule that asks "is this port
+    // the region's exit" refuses it.
+    const GCGraph *looped = nullptr;
+    uint32_t bodyRegion   = 0;
+    gc_node_ref_t loopNode = kInvalidNodeRef;
+    gc_node_ref_t bodyExit = kInvalidNodeRef;
+    for (GCGraph *graph : program->graphs()) {
+        for (uint32_t r = 1; looped == nullptr && r < graph->regionCount(); ++r) {
+            const GCRegion *body = graph->region(r);
+            if (body == nullptr || body->kind != GCRegionKind::LoopBody) {
+                continue;
+            }
+            const GCNode *exit = graph->node(body->result);
+            if (exit == nullptr || exit->kind != GCNodeKind::Port || body->owner == kInvalidNodeRef) {
+                continue;
+            }
+            // The check walks the readers that are in a region; an owner in the body is not one of
+            // them, so the shape has to be a loop that is itself inside a region (a loop in an arm,
+            // which is where `loop_parts.cml` and `zero_leaf_state.cml` put theirs).
+            if (graph->nodeRegion(body->owner) == 0) {
+                continue;
+            }
+            // The owner has to read it, or there is nothing to take away.
+            bool ownerReads = false;
+            for (const std::span<const gc_node_ref_t> group :
+                 {graph->normInputsOf(body->owner),
+                  graph->withInputsOf(body->owner),
+                  graph->ctrlInputsOf(body->owner)}) {
+                for (gc_node_ref_t input : group) {
+                    ownerReads = ownerReads || input == body->result;
+                }
+            }
+            if (!ownerReads) {
+                continue;
+            }
+            looped    = graph;
+            bodyRegion = r;
+            loopNode  = body->owner;
+            bodyExit  = body->result;
+        }
+        if (looped != nullptr) {
+            break;
+        }
+    }
+    if (looped == nullptr) {
+        os << "REGIONS owner_refused=none\n";
+    } else {
         RuntimeGraphDraftSession ownerRead(context_, program);
-        auto &ownerDraft = ownerRead.edit(const_cast<GCGraph *>(branchy)).edit();
-        ownerDraft.setNodeRegion(port, portArm);
-        bool unlinked = ownerDraft.unlinkInput(DraftEdgeKind::Data, reader, port, PortRole::Normal);
-        unlinked      = ownerDraft.unlinkInput(DraftEdgeKind::Data, reader, port, PortRole::Context) ||
-                   unlinked;
-        unlinked = ownerDraft.unlinkInput(DraftEdgeKind::Ctrl, reader, port) || unlinked;
-        ownerDraft.appendInput(DraftEdgeKind::Data, owner, port);
+        auto &ownerDraft = ownerRead.edit(const_cast<GCGraph *>(looped)).edit();
+        ownerDraft.setRegionResult(bodyRegion, kInvalidNodeRef);
         std::string ownerRefusal;
         bool ownerRefused = false;
         try {
@@ -131,17 +172,17 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
             ownerRefusal = e.what();
         }
         const bool ownerNamesPort =
-            ownerRefusal.find(std::format("reads port {}", port)) != std::string::npos;
+            ownerRefusal.find(std::format("reads port {}", bodyExit)) != std::string::npos;
         const bool ownerNamesReader =
-            ownerRefusal.find(std::format("node {} in region {}", owner, branchy->nodeRegion(owner))) !=
+            ownerRefusal.find(std::format("node {} in region {}", loopNode, looped->nodeRegion(loopNode))) !=
             std::string::npos;
         size_t violations = ownerRefused ? 1 : 0;
         for (size_t at = ownerRefusal.find("; "); at != std::string::npos;
              at        = ownerRefusal.find("; ", at + 2)) {
             ++violations;
         }
-        os << "REGIONS owner_refused=" << (ownerRefused ? 1 : 0) << " port=" << port
-           << " owner=" << owner << " arm=" << portArm << " unlinked=" << (unlinked ? 1 : 0)
+        os << "REGIONS owner_refused=" << (ownerRefused ? 1 : 0) << " port=" << bodyExit
+           << " owner=" << loopNode << " region=" << bodyRegion
            << " named_port=" << (ownerNamesPort ? 1 : 0)
            << " named_reader=" << (ownerNamesReader ? 1 : 0) << " violations=" << violations
            << "\n";
