@@ -104,7 +104,7 @@ and the second half of the law is "then summed back to the shape the operand sta
 
 | 条数 | 谁在问 | 读这个值的节点 | 需求是什么 | 能不能丢 |
 | --- | --- | --- | --- | --- |
-| **18** | 五张 `split` 后一半 | **`Func`（kind 10）把它当函数值的闭包捕获** | 转置图要重建那个函数值，捕获的值必须是真的值；16 条里这个端口本身就是答案位置（`selfBinds=1`） | **不能丢**——它不是余切需求，"余切落不到参与参数"这句话对它没有适用面 |
+| **18** | 五张 `split` 后一半 | **`Func`（kind 10）把它当一条直接调用的第 0 个实参** | 见下方读数六：转置这条调用要给被调成员一个数组的值；16 条里这个端口本身就是答案位置（`selfBinds=1`） | **不能丢**——它不是余切需求，"余切落不到参与参数"这句话对它没有适用面 |
 | **2** | `__g_242__`（手写闭包 `(dx) => 2.0 * x * dx`） | `op/mul_d`，目标 `2.0*x`，`binds=0` | 规则要给 `2.0*x` 写余切，要 `dx` 的值；那笔余切落不到任何参与参数 | **空转，可丢** |
 | **2** | `autodiff::mul_tangent<float>` | `op/mul_d`，`selfBinds=1` | 真需求，但闭包为空（`closureCount=0`），今天本来就取不到 | 取不到；不影响结果 |
 
@@ -117,8 +117,35 @@ transpose_hand_closed_lambda: cut ct1= (6.0)  cut ct3= (18.0)  hand ct1= (6.0)  
 ```
 
 **结论，也是本页最该留的一句：空转的那 2 条恰好都不在 `split` 后面；`split` 后面那 18 条一条都不是空转。**
-所以判据 ①′（`split` 后面那 20 条降到 0）**同样到不了 0**——这条路的上限是 18，而那 18 条的取值来源是
-"转置图要重建一个函数值、它的闭包捕获了这一格"，不是余切。
+所以判据 ①′（`split` 后面那 20 条降到 0）**同样到不了 0**——这条路的上限是 18。
+（那 18 条的取值来源见下一条读数：**不是**"函数值的闭包捕获"——本页初稿这么写过，读数六把它改正了。）
+
+## 读数六：那 18 条的消费节点是**一次调用的实参**，不是闭包捕获（本页初稿说错了，这里是更正）
+
+三条，各一句：
+
+1. **谁建的**：`jvp` 在 `modules/transforms/jvp.cpp#buildJvpGraph` 的 `Func` 分支里把一条调用**提升成"每个实参送
+   `(值, 切线)` 两格"**（`arguments.push_back(half); arguments.push_back(tangentOf[input]);`，注释原文
+   "a call is lifted as a call: the lifted callee takes pairs"），这个 `Func` 节点是那时建的；`split` 造后一半时
+   由 `modules/transforms/split.cpp#makeCopy` 的 `Func` 分支整条复制过去（`draft.setNormInputs(made, inputs)`）。
+2. **那一格在切点之前是谁的值**：**切线本身**。它不是"从参数端口读出来的原值"，也不是跨切点搬过去的残差——
+   `jvp` 建它时递的是 `tangentOf[input]`，即提升签名里**切线那一格**；而切线那一格在后一半里本来就是它自己的
+   形参。读数原文：`REINTERP split function=jvp_of_g forward=271 backward=272 … residuals=5`、
+   `TRANSPOSE function=rulesets.jvp::index_into<float> graph=300 type=(int, float[], float) => (float[],)`。
+3. **为什么落在切点之后**：**是 `makeCopy` 复制过去的，不是 `split` 新造的**。而且它没有"跨切点"，所以捕获表
+   一个字都不用改：`makeCopy` 的端口分支把 `n+0` 映到 `portOf[n+0]`，就是后一半自己的切线端口。后一半也必须
+   留着这条调用——`lin` 的体本来就是拿切线算（`lin(dxs) = dxs[0] + dxs[1]`），它不是"切点之前的常量"。
+
+于是转置侧拿它做什么：`transpose.cpp#buildTransposeMember` 的 `Func` 分支要给被调成员的每个值形参递一个值
+（`forward(inputs[argumentAt + i])` 与 `calleeNeeds` 那一轮），而 `index_into` 的转置成员签名是
+`(int, float[], float) => (float[],)`——它要**数组那个值**（形状）；这条调用递过去的数组却是 `dxs`。按位置取值
+交出去的是残差 0，也就是原值 `xs`。同型、同形状、`sum_to` 只要形状，所以今天对得上。
+
+**归类**：不是"`split` 新造、可以挪到前一半"，也不是"复制了一个捕获了切点之前值的函数值、要改捕获表"——
+是"**必须被复制的调用，它的实参就是切线**"。所以它落回"身份 vs 位置"：转置成员要的那个数组值，今天从
+"闭包第 `at` 格"取到的是**原值**，而这条调用的实参是**切线**；两者同型同形状，只有"该是谁"不同。
+
+（读数六全程只读代码与既有日志：`modules/transforms/` 一个字没动，两个探针都只跑在别处已撤回的树上。）
 
 ## 三条路，各带代价
 
@@ -128,15 +155,15 @@ transpose_hand_closed_lambda: cut ct1= (6.0)  cut ct3= (18.0)  hand ct1= (6.0)  
 - **乙：律不再向前向要这个值。** `sum_to(ct * other, operand)` 的第二实参改由余切/类型给出形状，或让 `jvp` 的前一半
   把切线的形状也当值算出来。代价：`mul_tensor_t` 这一类定律要重写，`jvp` 前一半多算，是规则集/契约的改动。
 - **丙：保持现状（默认建议）。** 那段继续存在。可达性分析给的是硬上限：**22 → 18**，`split` 那 18 条一条都丢不掉
-  （它们不是余切需求，是函数值闭包的捕获值），另 2 条本来就取不到。代价已经量清：20 条用例名与每行 `ref/at` 在
-  车道报告里，将来谁想动它不必重测。
+  （它们不是余切需求，是"一条调用的实参就是切线"），另 2 条本来就取不到。代价已经量清：20 条用例名与每行
+  `ref/at` 在车道报告里，将来谁想动它不必重测。
 
 ## 默认建议：丙，暂不动，等裁定
 
 甲乙都要改设计边界（一个是裁定本身，一个是规则集契约），而丙的全部代价这一轮已经量清。所以本车道**不提交任何
 语义改动**：三条候选一条量成 27 红、一条量成空操作、一条（按可达性逐条丢）量成 22 → 18 且剩下的动不了。判据 ①
-（及其更正 ①′）与 ② 今天**不能同时成立**——这是本页要留下的那句话，而且现在知道卡在哪：**不是余切，是函数值的
-闭包捕获**。
+（及其更正 ①′）与 ② 今天**不能同时成立**——这是本页要留下的那句话，而且现在知道卡在哪：**不是余切，是一条
+把切线数组当实参传给提升后被调函数的调用**。
 
 ## 那 2 条不在 `split` 后面的命中，各自从哪取值
 
@@ -158,3 +185,6 @@ transpose_hand_closed_lambda: cut ct1= (6.0)  cut ct3= (18.0)  hand ct1= (6.0)  
 - 残差的编号与排序：`modules/transforms/split.cpp#residualsOf`
 - 定律：`stdlib/rulesets/transpose.cml#mul_tensor_t`
 - 读节点复制：`modules/transforms/split.cpp#makeCopy`
+- `Func` 节点谁建的（提升一条调用为 `(值, 切线)` 两格实参）：`modules/transforms/jvp.cpp#buildJvpGraph`
+- 转置侧为什么要实参的值：`modules/transforms/transpose.cpp#buildTransposeMember`（`Func` 分支的成员实参一轮与
+  `calleeNeeds` 一轮；两条拒绝 `call-value-missing` 与 `call-value-computed-by-the-body` 也在那里）
