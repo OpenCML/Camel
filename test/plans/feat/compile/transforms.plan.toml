@@ -456,7 +456,7 @@ tool = "python"
 case = "../../../tools/transpose_refusal/check.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["every cause has one word, one sentence, and a site that records it", "without a sentence of its own lands on the one that names the shape", "renders the sentence from the cause and never from the log", "waits for a shape"]
+expect_stdout_contains = ["every cause has one word, one sentence, and a site that records it", "no sentence of its own lands on the one that names the shape", "renders the sentence from the cause and never from the log", "waits for a shape"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
 
