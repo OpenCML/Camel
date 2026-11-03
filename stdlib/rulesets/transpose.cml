@@ -39,7 +39,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, max, max_axis_stated, maximum, mean_axis, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, numel, pick_at, relu, reshape, rsqrt, sigmoid, sqrt, subtract, sum, sum_axis_stated, sum_stated, sum_to, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
+import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, max, max_axis_stated, maximum, mean_axis, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, numel, pick_at, relu, reshape, rsqrt, sigmoid, sqrt, subtract, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 // `log as math_log`, for the reason `rulesets.jvp` records: the plain `log` here is the **array**
 // one (`log_t` files its law below), and a second import of one name hides the first instead of
 // overloading it, so `pow_d_t`'s scalar `log(x)` is spelled `math_log`.
