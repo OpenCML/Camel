@@ -1,0 +1,57 @@
+// The gradients of `gelu`, `erf` and `erfc` through the engine -- three slopes that are functions of the
+// input alone, so the neighbouring library case is expected to pass on all three.
+//
+// **`gelu` here means the engine's definition, which is the tanh approximation**:
+//
+//     gelu(x) = 0.5 x (1 + tanh(s)),  s = sqrt(2/pi) (x + 0.044715 x^3)
+//     gelu'(x) = 0.5 (1 + tanh(s)) + 0.5 x ds/dx (1 - tanh(s)^2),  ds/dx = sqrt(2/pi)(1 + 0.134145 x^2)
+//
+// measured on the forward value: the engine answers `0.8411919906082768` at `x = 1`, where the exact
+// (erf) GELU would answer `0.8413447460685429`. A library law written from the erf form would differ
+// from the engine by 1.5e-4 and would be a second definition rather than a better one -- the criterion
+// is that both sides answer the same number for the same loss. Whether the engine *should* switch to
+// the exact form is the author's call, not a reason to disagree with it here.
+//
+// `erf` and `erfc` carry no choice: `erf'(x) = 2/sqrt(pi) exp(-x^2)` and `erfc'` is its negation, and
+// the engine builds both out of the fused `erf_grad` (`erfVjp`/`erfcVjp`,
+// `modules/tensor/ops/elementwise_ops.cpp`).
+//
+// The wrong laws worth writing out:
+//
+//   * `ct` (identity): `[1.0, 1.0, 1.0]` against every one of the three;
+//   * `erfc` written with `erf`'s slope (the sign dropped): the right answer is negative everywhere,
+//     and the two ends of `[-1.0, 0.0, 1.0]` cancel in a sum, so only the array shows it;
+//   * `gelu` written from the erf form: each component differs in the fourth decimal
+//     (`-0.08296` here against `-0.08332` there), which a 1e-4 tolerance would hide and an exact array
+//     does not.
+//
+//     python -c "import math; k=math.sqrt(2/math.pi); x=[-1.,0.,1.]; print([0.5*(1+math.tanh(k*(v+0.044715*v**3)))+0.5*v*k*(1+0.134145*v*v)*(1-math.tanh(k*(v+0.044715*v**3))**2) for v in x])"
+//     camel test/cases/compile/transforms/elementwise_slopes_through_the_engine.cml
+import { grad } from autodiff
+import { erf, erfc, gelu, sum } from tensor
+
+with <x: float[..]>
+func gelu_total(): float {
+    return sum(gelu(x))
+}
+
+with <x: float[..]>
+func erf_total(): float {
+    return sum(erf(x))
+}
+
+with <x: float[..]>
+func erfc_total(): float {
+    return sum(erfc(x))
+}
+
+func main(): int sync {
+    let input = [-1.0, 0.0, 1.0] as float[]
+    let dg = grad(gelu_total)<input>()
+    let de = grad(erf_total)<input>()
+    let dc = grad(erfc_total)<input>()
+    `gelu engine d={}`->format<dg>->println
+    `erf engine d={}`->format<de>->println
+    `erfc engine d={}`->format<dc>->println
+    return 0
+}

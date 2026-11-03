@@ -39,7 +39,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, max, max_axis_stated, maximum, mean_axis, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, numel, pick_at, relu, reshape, rsqrt, sigmoid, sqrt, subtract, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
+import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, max, max_axis_stated, maximum, mean_axis, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, numel, pick_at, relu, reshape, rsqrt, sigmoid, sqrt, subtract, sum, sum_axis, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 // `log as math_log`, for the reason `rulesets.jvp` records: the plain `log` here is the **array**
 // one (`log_t` files its law below), and a second import of one name hides the first instead of
 // overloading it, so `pow_d_t`'s scalar `log(x)` is spelled `math_log`.
@@ -929,4 +929,31 @@ export rule min_t::<T>(xs: T[..]) when is_float::<T>() {
 /// and then each operand's own type.
 export rule linear_t::<T, A, B>(x: A, w: B) when is_float::<T>() {
     linear(x, w) => (ct: T[..]) => (sum_to(matmul(ct, transpose(w)), x), sum_to(matmul(transpose(x), ct), w))
+}
+
+// ---- the transpose rule of `sum_axis` ----
+//
+// A sum along an axis adds every element of each lane and reads no value, so its cotangent is the
+// incoming one handed to every element the lane added: `zeros_like(xs) + ct` is that, and it needs
+// `xs` for its shape only (the add broadcasts `ct` over the lane).
+//
+// Measured, and left standing as the second half of this rule's story: with `jvp_sum_axis` added the
+// forward half names this key, and `transpose(loss)` over `sum(sum_axis(x, 0, false))` then refuses
+// one step earlier than this law can be reached --
+//
+//   TRANSPOSE function=loss skip=arity uri=tensor:sum_axis operands=3
+//
+// -- because the walk refuses any node with more than two normal operands before it consults the key
+// (`modules/transforms/transpose.cpp`; the same stop `mean_axis_t` records above). Writing the law is
+// still right: it moves the refusal from `skip=rule reason=unbound`, which reads as "nobody wrote
+// this operator a law", to the one cause that is actually in the way. Unlike a mean, a sum has no
+// spelling that puts the reduction outside the linear half -- any faithful tangent of a sum reduces
+// -- so there is no scaled-multiplication rewrite to fall back on here.
+func sum_axis_cotangent::<T>(xs: T[..], ct: T[..]): T[..] when is_float::<T>() {
+    return zeros_like(xs) + ct
+}
+
+/// The transpose of `sum_axis(xs, axis, keepdims)`: the cotangent handed to every element of the lane.
+export rule sum_axis_t::<T>(xs: T[..], axis: int, keepdims: bool) when is_float::<T>() {
+    sum_axis(xs, axis, keepdims) => (ct: T[..]) => sum_axis_cotangent(xs, ct)
 }

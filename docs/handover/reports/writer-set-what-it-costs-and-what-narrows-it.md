@@ -93,3 +93,141 @@
 **修好的两个数都钉成了用例**：`test/cases/effects/two_calls_through_values_keep_both_writes.cml`（`12`）与 `test/cases/effects/value_made_after_a_call_captures_its_version.cml`（`5`），注释写明修前分别是 `10` 和 `1`，`callback.*` 那两条在 `test/plans/feat/compile/effects_syntax.plan.toml` 里跑四个后端。
 
 **判据**：**修好一个数之后，第一件事是把它钉成用例；不然它不是被修好了，只是这次对了。**
+
+## 6. 资源账上的那一格：`:var/after` 被数了两次
+
+**读数**：`test/cases/resources/effects.cml` 上，账里是
+`RESOURCES node main 32 :var/after: read variable (node 2); result same 0`，紧接着
+`RESOURCES node main 33 :var/get: read variable (node 32); result same 0`。node 32 就是 node 2，**同一格被数了两次**。
+
+**那句 `read` 来自声明，不是 footprint 里另加的**：`src/builtin/executors/builtin_semantics.cpp:346-350` 的 `.accesses = {cell(AccessMode::Read)}`；`src/runtime/resources.cpp:783 resourcesOf` 只是照声明算。
+
+**去掉那条 access 会被 check 5 挡（实测）**：只留 `.result = Same(0)` 后跑 `modules.resources`，五条红，报文 `resources: an operator that is not pure touches, allocates or affects something (declare it pure instead)`——`:var/after` 的 traits 是 `stateOnly = true`（`src/builtin/executors/builtin.cpp:671`），检查在 `src/core/operator_table.cpp:552`。已回退。
+
+**访问种类只有三种，没有"别名/同一份值"这一类**：
+
+- `include/camel/core/resource_semantics.h:118` —— `enum class AccessMode : uint8_t { Read, Write, ReadModifyWrite };`（`accessModeName` 在 `:120`，`writes()` 在 `:123`，`uniteAccess` 在 `:129`）
+- `include/camel/core/resource_semantics.h:131` —— `struct ResourceAccess { Resource resource; ResourceBinding binding; ResourceRegion region; AccessMode mode; }`（`mode` 在 `:135`）
+- 声明里的 `cell(mode)` 就是 `operandAccess(ResourceClass::Variable, 0, mode)`（`src/builtin/executors/builtin_semantics.cpp:322`）
+- "别名"这一层只存在于**结果**：`ResultAlias::Kind`（`:142-149`：`Fresh` / `Same` / `View` / `MayAlias` / `Unknown`），**不在访问上**
+
+**结论**：要让 `:var/after` 在账上算"同一个名字"而不是"再读一次"，**需要新增一种访问种类**（例如"它交出的就是第 k 个操作数，不另算一次访问"）。那是语言层的决定，本线不自行加。
+
+**判据**：**账上把同一格数两次，会让两条本来无关的红同时出现（`core` 与 `source.declared_resources`）；一个红数到两条，先怀疑账本重复计数，而不是两个缺陷。**
+
+## 7. 合上 `lane-edges` 之后的那四条红（读数）
+
+合 `lane-edges`（`6a6fccfaf`，只合、未推）之后整闸 **total 8045, pass 8032, fail 4, skip 7, known 2**，四条正是 `core`、`poison:modules.resources:core`、`source.declared_resources`、`poison:compile.effects_syntax:source.declared_resources`。两族各一条根子：
+
+**`core` 族：节点号整体 +1，因为 `main` 的 `CALL` 节点现在记了一条访问。** 计划期望 `RESOURCES node main 19 :var/take: rmw variable (node 18); result may_alias 0`，实际是 `RESOURCES node main 20 :var/take: rmw variable (node 19); result may_alias 0`；账里多出一行 `RESOURCES node main 15 CALL: rmw variable (node 2)`，而计划的注释（`test/plans/feat/modules/resources.plan.toml:80-81`）写的是"The `CALL` node of `main` records no access of its own"。访问从 `Resolver::call` 的签名/足迹分支出来（`src/runtime/resources.cpp:444`，签名在 `:485-489`，操作数绑定在 `:519-526`）。
+
+**`source.declared_resources` 族：两次 `bump(cell)` 现在指两个不同的版本节点。** 期望（`test/plans/feat/compile/effects_syntax.plan.toml:33-44`）：两次调用**指同一格**且**按 control 定序**；实际是
+`RESOURCES node main 8 FUNC bump: rmw variable (node 7)` 与 `RESOURCES node main 9 FUNC bump: rmw variable (node 10)`，其中 `node 10 :var/after: read variable (node 7); result same 0`，配对只剩 `order main 8 9 resource ordered by data`。也就是说：`:var/after` 作为"同一格的下一版"，在账上被当成了**另一个值**。
+
+**它比的是哪两样**：`RESOURCES node`/`RESOURCES order` 这些行（由声明 + 建好的图算出来，`src/runtime/resources.cpp:783 resourcesOf`）对**源码程序里写的 clause**（`test/cases/effects/declared.cml:20-32`），断言写在计划的内联 `verify_script` 里（`test/plans/feat/compile/effects_syntax.plan.toml:26-53`）；**没有快照文件**。
+
+**判据**：**结果说"就是那个单元"、访问却说"读了它"——两者同时成立时，账本迟早会数两次；先看哪一句是多余的，再决定改哪一边。**
+
+## 8. 重录：旧账与新账，两份都贴
+
+方法：同一份代码，合 `lane-edges` 前后各跑一次 `test::resources`，把 `RESOURCES node`/`RESOURCES order` 原样留下（`14d1052a8` 与合后 `692c053d1`）。**两段账都能解释，才叫"形状变了"。**
+
+**`test/cases/effects/declared.cml`（两次 `bump(cell)`）**
+
+旧账（`14d1052a8`）：
+```
+RESOURCES node main 8 FUNC bump: rmw variable (node 7)
+RESOURCES node main 9 FUNC bump: rmw variable (node 7)
+RESOURCES order main 8 9 resource ordered by control
+RESOURCES node main 13 :var/get: read variable (node 7); result may_alias 0
+```
+
+新账（`692c053d1`）：
+```
+RESOURCES node main 8 FUNC bump: rmw variable (node 7)
+RESOURCES node main 9 FUNC bump: rmw variable (node 10)
+RESOURCES node main 10 :var/after: read variable (node 7); result same 0
+RESOURCES order main 8 9 resource ordered by data
+RESOURCES node main 14 :var/after: read variable (node 7); result same 0
+RESOURCES node main 15 :var/get: read variable (node 14); result may_alias 0
+```
+
+读法：第二次调用的实参现在是第一次调用产出的那个版本（`:var/after`，`Same(0)`，**同一个格子**），于是两次调用之间有了 data 边——**定序种类从 control 变成 data，不是断言放宽**。计划里 `pair('bump', cells, 'data')` 加一句"第二次的节点要么是同一格，要么是第一格上的 `:var/after`"，把这条形状写死。
+
+**`test/cases/resources/effects.cml`（`core` 那几条）**：旧 `19 :var/take: rmw variable (node 18)` → 新 `20 :var/take: rmw variable (node 19)`；旧 `order main 12 35 ... by control` → 新 `order main 12 37 ... by data`；旧 `order main 19 21 ... by data` → 新 `20 22 ... by data`；账里多出 `16 :var/after: read variable (node 2)`。**这一段没有重录**，因为它重录后会撞上计划里一条全局断言，见下。
+
+**停下来的那一处（按"必须删就停"）**：按新账重录 `core` 之后，`assert(!out.includes(' unordered'), 'the program orders every conflicting pair')`（`test/plans/feat/modules/resources.plan.toml:149`）会红——新账里有一对 **`RESOURCES order main 15 16 resource unordered`**：`main` 的 `CALL` 节点 15 写 node 2，它上面那个 `:var/after` 16 也指 node 2，两者是冲突却**没有顺序**。这不是重录能解决的（删断言 = 删既有行），所以这一段退回旧账、报上去。
+
+**判据**：**重录可以是"形状变了"，不能是"数变松了"；判据是同一份代码在合入前后各跑一次，两段账都能解释。**
+
+## 9. 两边读数相反时
+
+同一对节点 `15`/`16`，`edges` 报图上已有 `N0F [:var/after] -> N0E [ORDER]`；我在合并后的同一棵树上量到的是：`main` 的 ORDER 边只有 `8 -> 15` 和 `10 -> 15`，而 `N0F` 在这棵树里是 `CALL 15`、不是 `:var/after`。两边都在实测，所以先对齐号：`std::gir` 打的是十六进制节点号，账本 `RESOURCES node` 打的是十进制序号，**不是同一套号**；对齐之后才谈谁对。
+
+读数（`effects.cml`，`main`，`15` = `CALL: rmw variable (node 2)`，`16` = `:var/after: read variable (node 2); result same 0`）：
+
+| 前置条件 | 读数 |
+| --- | --- |
+| 同图？ | 是 |
+| 两个方向有 data 路径？ | `15→16` 否，`16→15` 否 |
+| 两端都吃 order？ | `15` 有 2 条 order 前驱（`8`、`10`），`16` **0 条**；`16` 的 ctrl / sync 前驱也各为 0 |
+
+**判据**：**两个人报同一件事的相反读数时，先对齐是哪个用例、哪个节点编号，再谈谁对。**
+
+### 不是"过期读"，是账本把版本折回了格子
+
+同一对的第三个问题：读到的版本是不是比写旧。读数（`effects.cml`/`main`，行号即程序顺序）：
+
+| 节点 | 账 | 对应源码 |
+| --- | --- | --- |
+| `9` | `:op/assn_l: write variable (node 2)` | 24 行 `c = c + 2` |
+| `16` | `:var/after: read variable (node 9)` | 25 行 `bump(c)` 之后的那个版本 |
+| `15` | `CALL: rmw variable (node 2)` | 28 行 `inc()` |
+| `33` | `:var/after: read variable (node 16)`（第二操作数是 `15`） | 28 行之后的那个版本 |
+| `34` | `:var/get: read variable (node 33)` | 34 行 `println(c)` |
+
+两件事：**`16` 在程序顺序上早于 `15`**（它记的是 `bump` 之后那个版本，25 行；`15` 是 28 行的调用）；**真要看到 `15` 那次写的读是 `33`/`34`，而它确实接在 `15` 上**。所以没有"读到过期版本"的缺陷——`16` 读的版本 `9` 是不可变的，之后那次写覆盖不到它，它本来就不该和 `15` 有序。账本把 `9` 与 `2` 折成同一资源（`Resolver::originOf`、`Resolver::mayAlias`），才把它们配成一对并要求顺序。
+
+**判据**：**一对没被排序的访问，先问它们该不该有序；若读到的版本比写旧，那不是缺一条边，是读错了版本。**
+
+## 10. 这条口径要动多大：把快层的账全量量一遍
+
+口径指的是：`Resolver::originOf` 把一个版本节点折回它所属的格子，于是"读这个版本"和"写这个格子"被配成一对冲突。要动它，得先知道现在有多少对靠这个折叠才成立。
+
+方法：快层里所有会打资源账的用例（`cases/resources/effects.cml`、`cases/effects/declared.cml`、`cases/modules/io/ordering.cml`、`cases/resources/conflict_per_resource.cml`、`cases/resources/names.cml`，共 6 个图）跑 `test::resources`，把每条 `RESOURCES order` 的两端追到格子（`:var/after`、`:op/assn_l` 一路追到 `:var/new`），按"两端是不是同一个格子、值是不是同一个版本"分类。
+
+| 形状 | 对数 |
+| --- | --- |
+| 两端不同资源（`stdout`、对象、句柄、ambient） | 38 |
+| 同一格子、**同一版本**（真冲突） | 4 |
+| 同一格子、**不同版本**（读版本 + 写格子） | 9 |
+
+其中**没有顺序的只有 1 对**，正是 `main` 的 `15 16`（`CALL` 写格子 `2` 对 `:var/after` 读版本 `9`），形状是"不同版本"。**"同一版本上的两个真冲突"里没有一对是没排过序的**——4 对全部有序。
+
+所以这条口径的代价是 **9 对**（8 对已有序 + 1 对没序）：不折叠它们，这 9 对不再进账本，`15 16` 那条 `unordered` 随之消失。
+
+**期望这一侧**：全量计划里写死 `ordered by control` 的有 **8 行**（`resources.plan.toml` 7 行、`effects_syntax.plan.toml` 1 行），写死 `ordered by data` 的 **7 行**。这 8 条控制序对应的对，按上面的分类**全部落在"两端不同资源"或"同一版本"**，**没有一条是"不同版本"那 9 对**——所以改口径**不牵动任何一条 `ordered by control` 期望**；会变的只有那 9 对所在的期望行（其中一半还没重录、仍写着旧号）。
+
+**判据**：**改一条口径之前，先量它会牵动多少条期望——代价是裁决的一半。**
+
+## 11. 折回格子漏了一种算子
+
+`Resolver::originOf` 本来只跟 `Same(k)` / `View(k)` 往后折，`may_alias(k)` 不算——可 `:var/get` 和 `:var/take` 的实参就是它读/搬的那个东西（格子或它的某个版本），它们的 `result may_alias 0` 是给优化器的"不保证同一对象"，对账本却是同一对象。补上这两种算子的折返之后：
+
+- `:var/take` 的实参不再停在一个值节点上，`short` 的 `rmw object (node …)` 折到了那个格子。
+- `array:sort_l_in_place` 落到具体格子上，`main` 的 footprint 里的 **`rmw object (any)` 消失**（原来"可能有任意对象"现在说得出来是哪一个）。
+- **`unordered` 的条数没变**：改前 1 条（`main 15 16`），改后仍是 1 条。这条折叠不是那对 `unordered` 的解药，是另一处的漏写。
+- `core` 的报错从 `missing: RESOURCES node main 19 :var/take: rmw variable (node 18); result may_alias 0` 变成 `missing: RESOURCES footprint main … rmw object (any); external`——红法换了，原因是 footprint 少了一项、期望还写着它。
+
+**判据**：**折回格子漏了一种算子，看起来像"口径不对"；先把折返补全，再谈口径——否则会把一个漏写的分支说成一次设计冲突。**
+
+重录只动那一行（`main` 的 footprint）：
+
+```
+改前  RESOURCES footprint main rmw ambient rng; write ambient stdout; read ambient fs; rmw object (any); external
+改后  RESOURCES footprint main rmw ambient rng; write ambient stdout; read ambient fs; external
+```
+
+"精度变好"就是这一项：`rmw object (any)`（"可能碰到某个对象"）变成了具体格子，于是 footprint 不再需要"任意对象"那一条。重录之后 `core` 回到它原来的红法——`missing: RESOURCES node main 19 :var/take: rmw variable (node 18); result may_alias 0`，也就是那对 `unordered` 挡住的那半，等作者裁。`unordered` 仍是 **1**。
+
+**判据**：**折返补全之后红法变了，说明它改的是精度不是口径——精度变好要重录期望，口径之争才等裁定。**

@@ -237,6 +237,16 @@ struct Facts {
     std::vector<std::string> readers;
 };
 
+/// The tag `#remat`, as an id: the standard tag a programmer writes on a function to say **"I require
+/// this to appear"** -- to be recomputed where it is needed rather than carried there as a value. It
+/// is a standard tag like `#strict` (`src/core/tags.cpp`, declared once with the others). The pass that
+/// gives it meaning is `split`, whose reading is the next piece of this work; until then nothing reads
+/// it, and the definition is still worth having: the compiler checks the spelling and the position of a
+/// tag, and a tag with no reader yet is a promise that can be caught being broken.
+TagId rematTag();
+/// Whether the standard tag `#remat` is among `tags`.
+bool hasRematTag(attr::AttrSetId tags);
+
 /// The facts of the declaration `name` of `module`, over every overload of that name.
 Facts factsOf(const module::Module &module, const Reference &name);
 /// The facts of one overload of `name`: `signature` is the declaration's function type as

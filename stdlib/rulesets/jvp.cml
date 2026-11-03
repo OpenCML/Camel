@@ -940,3 +940,16 @@ export rule jvp_min::<T>(xs: T[..]) when is_float::<T>() {
 export rule jvp_linear::<T>(x: T[..], w: T[..]) when is_float::<T>() {
     linear(x, w) => (dx: T[..], dw: T[..]) => matmul(dx, w) + matmul(x, dw)
 }
+
+/// `d(sum_axis(xs, axis, keepdims)) = sum_axis(dxs, axis, keepdims)`: a sum adds a lane's elements in
+/// a fixed order and reads no value of them, so the tangent of a sum is the sum of the tangents, over
+/// the same axis and with the same `keepdims`.
+///
+/// It is the operator again, and not a rewrite like `mean_tangent`'s: a mean's tangent differs from
+/// the mean of the tangents by nothing at all, so it can be written as one scale, but a sum's tangent
+/// *is* a reduction and no transposable spelling removes it from the linear half. That is why the
+/// transposing walk stops on this operator rather than on a wrong law (`rulesets.transpose#sum_axis_t`
+/// records the refusal word for word).
+export rule jvp_sum_axis::<T>(xs: T[..], axis: int, keepdims: bool) when is_float::<T>() {
+    sum_axis(xs, axis, keepdims) => (dxs: T[..]) => sum_axis(dxs, axis, keepdims)
+}

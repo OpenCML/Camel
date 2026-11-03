@@ -1,0 +1,15 @@
+// Reduced from the e9 corpus (author list, item A4b): `std::opt::inline std::fvm` aborted with
+// "Region 2 yields node 8 and its owner 5 is in the execution, but that node is not". On 2026-11-02
+// it runs with no output and exit 0; this case is what keeps it that way.
+func u19(a20: string?, a21: string): string {
+    return '';
+}
+
+with <k36: string>
+func w35(a37: bool, a38: string): string {
+    return u19(u19(if false then 'x' else null, 'a'), '');
+}
+
+func main(): int sync {
+    return 0;
+}

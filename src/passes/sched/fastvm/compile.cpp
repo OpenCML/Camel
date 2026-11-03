@@ -20,6 +20,7 @@
 #include <stdexcept>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 
 using namespace std;
 using namespace camel::core::error;
@@ -115,6 +116,43 @@ const std::unordered_map<camel::core::OperId, OpCode> &getSupportedInlineOperato
     return supportedInlineOperators;
 }
 
+/// The instruction that is the negation of `eq_*`'s comparison, for the element types whose equality
+/// has an opcode of its own.
+///
+/// `a != b` is built as `!(a == b)` (design principles 4.2; src/compile/gct/builder.cpp), so a graph
+/// carries the equality and a `not` over it. Where the equality's value has no other reader those two
+/// instructions are one comparison, and the bytecode that comparison already has is `INE`/`LNE`/
+/// `FNE`/`DNE`. The graph is not touched: `!=` stays `!(==)` and the fusion is the back end's.
+static std::optional<OpCode> notEqualOpcodeOf(camel::core::OperId eqOper) {
+    static const std::unordered_map<std::string_view, OpCode> byUri = {
+        {":op/eq_i", OpCode::INE},
+        {":op/eq_l", OpCode::LNE},
+        {":op/eq_f", OpCode::FNE},
+        {":op/eq_d", OpCode::DNE},
+    };
+    static const std::unordered_map<camel::core::OperId, OpCode> byId = [] {
+        std::unordered_map<camel::core::OperId, OpCode> opCodeOf;
+        for (const auto &[uri, code] : byUri) {
+            opCodeOf.emplace(camel::core::OperatorTable::instance().intern(uri), code);
+        }
+        return opCodeOf;
+    }();
+    if (auto it = byId.find(eqOper); it != byId.end()) {
+        return it->second;
+    }
+    return std::nullopt;
+}
+
+/// What a fused `!("==")` runs as: the comparison-not-equal opcode, and the two slots the equality
+/// compared. The fused instruction writes the `not`'s slot (the equality's own slot has no other
+/// reader, which is what allows the fusion), and is emitted where the `not` was, so it reads the two
+/// slots in the same order the equality did.
+struct FusedNegation {
+    OpCode opcode;
+    data_idx_t lhs;
+    data_idx_t rhs;
+};
+
 static bytecode_vec_t compileRuntimeGraph(
     const context_ptr_t &ctx, const camel::runtime::Program &program,
     camel::runtime::GCGraph *graph, const CompileStrategy &opt,
@@ -184,6 +222,63 @@ static bytecode_vec_t compileRuntimeGraph(
                 node ? node->dataIndex : 0);
         }
     });
+
+    // The peephole, decided before anything is emitted: a `not` whose single input is an equality of
+    // a scalar type with an opcode, and which is that equality's only reader, becomes that type's
+    // comparison-not-equal instruction. `fusedEqualities` are the equalities that then emit nothing
+    // (nothing reads their slot), `fusedNegations` the `not`s that emit the comparison instead.
+    //
+    // Only when the type's comparison opcodes are in use: without them the equality is a call too, and
+    // the fusion would be emitting an instruction the compiler was told not to use.
+    std::unordered_set<camel::runtime::gc_node_ref_t> fusedEqualities;
+    std::unordered_map<camel::runtime::gc_node_ref_t, FusedNegation> fusedNegations;
+    if (opt.enableInlineOperators) {
+        const auto notOper = camel::core::OperatorTable::instance().intern(":op/not");
+        for (const auto notRef : topoSortedIndices) {
+            const auto *notRecord = graph->node(notRef);
+            if (!notRecord || notRecord->kind != camel::runtime::GCNodeKind::Oper ||
+                graph->nodeBodyAs<camel::runtime::GCOperBody>(notRef)->oper != notOper) {
+                continue;
+            }
+            const auto notInputs = graph->normInputsOf(notRef);
+            if (notInputs.size() != 1 || !graph->withInputsOf(notRef).empty()) {
+                continue;
+            }
+            const auto eqRef     = notInputs.front();
+            const auto *eqRecord = graph->node(eqRef);
+            if (!eqRecord || eqRecord->kind != camel::runtime::GCNodeKind::Oper) {
+                continue;
+            }
+            const auto eqOpcode =
+                notEqualOpcodeOf(graph->nodeBodyAs<camel::runtime::GCOperBody>(eqRef)->oper);
+            if (!eqOpcode) {
+                continue;
+            }
+            // Exactly one reader, and it is this `not`. With a second reader the equality's slot is
+            // still part of the program and both instructions are emitted as they are today.
+            const auto users = graph->normUsersOf(eqRef);
+            if (users.size() != 1 || users.front() != notRef || !graph->withUsersOf(eqRef).empty()) {
+                continue;
+            }
+            const auto eqInputs = graph->normInputsOf(eqRef);
+            if (eqInputs.size() != 2 || !graph->withInputsOf(eqRef).empty()) {
+                continue;
+            }
+            // The return slot is read by the RETN this chunk ends with, whatever the graph's edges
+            // say: an equality that writes it keeps its instruction.
+            if (hasValueReturn && eqRecord->dataIndex == returnNode->dataIndex) {
+                continue;
+            }
+            fusedEqualities.insert(eqRef);
+            fusedNegations.emplace(
+                notRef,
+                FusedNegation{
+                    *eqOpcode,
+                    runtimeDataIndexOf(graph, eqInputs[0]),
+                    runtimeDataIndexOf(graph, eqInputs[1]),
+                });
+        }
+    }
 
     auto bytecodes = bytecode_vec_t();
     bytecodes.reserve(topoSortedIndices.size() * 3);
@@ -493,6 +588,20 @@ static bytecode_vec_t compileRuntimeGraph(
         }
 
         case camel::runtime::GCNodeKind::Oper: {
+            // The fused `!(==)` of the peephole above: one comparison, under the `not`'s slot.
+            if (auto fused = fusedNegations.find(runtimeNodeIndex); fused != fusedNegations.end()) {
+                appendBytecode(
+                    bytecodes,
+                    fused->second.opcode,
+                    record->dataIndex,
+                    {fused->second.lhs, fused->second.rhs});
+                break;
+            }
+            // The equality that fusion took over: its only reader is the comparison emitted above,
+            // which reads the same two slots, so it has no instruction and no slot left to write.
+            if (fusedEqualities.contains(runtimeNodeIndex)) {
+                break;
+            }
             const auto *operBody = graph->nodeBodyAs<camel::runtime::GCOperBody>(runtimeNodeIndex);
             // The plan names the operator: an update node whose storage must not be reused runs
             // the plain form of the operator it names (docs/design/arrays-memory/README.cn.md

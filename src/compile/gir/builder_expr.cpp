@@ -8,6 +8,7 @@
  */
 
 #include "builder.h"
+#include <cstdio>
 #include "builder_helpers.h"
 #include "builder_support.h"
 
@@ -613,6 +614,27 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
         }
         uses = std::move(pending);
     }
+    // A read that took a version of this variable with `:var/after` is a read of this cell: the
+    // write written below it must run after it, or the read sees the value this write leaves
+    // (docs/design/effects/edges.cn.md 5.6). It is not in `pendingUses_`: what it used is the
+    // version, not the cell.
+    if (auto reads = versionReads_.find(variable); reads != versionReads_.end()) {
+        for (node_handle_t read : reads->second) {
+            if (read == exit || !sameGraph(read, currGraph_) || !linkCheek(read, exit) ||
+                !nodeTakesAnOrder(read) || !nodeTakesAnOrder(exit)) {
+                continue;
+            }
+            // The value may already carry the read to this write -- the read is an argument of the
+            // call, or feeds one -- and the ordering is written anyway: what the ledger reads is
+            // the two statements, and a read of the cell and a write of it have to be ordered as
+            // statements, not through the value they both mention. Only the opposite direction
+            // would be a cycle, and that is not added.
+            if (dataPathReaches(exit, read)) {
+                continue;
+            }
+            linkNodes(LinkType::Order, read, exit);
+        }
+    }
     // A store is one of the cell's known users (collapseNonEscapingVariableReads): a user the builder
     // did not record -- a:var/take, a call handed the `var` -- makes the cell escape.
     knownCellUsers_.insert(exit);
@@ -772,7 +794,7 @@ node_handle_t Builder::valueVersionOf(node_handle_t variable) {
         // variable's new version: the read takes `:var/after(cell, call)`, which is the cell as it
         // stands after that call, and the edge from the call is what makes it run (3.1). Whatever
         // the call returns -- nothing, or a value of its own -- is not read here.
-        if (nodeKindOf(*modifier) == camel::runtime::GCNodeKind::Call) {
+        if (isCallNode(*modifier)) {
             return variableAfterCall(variable, *modifier);
         }
         return nullptr;
@@ -791,32 +813,42 @@ node_handle_t Builder::valueVersionOf(node_handle_t variable) {
     // parts of the call's value say nothing about it: the parts come from the callee's
     // captured-value table, and a write recorded through a function value has no row there. The
     // call is then the variable's version as a whole: `:var/after(cell, call)`.
-    if (nodeKindOf(*modifier) == camel::runtime::GCNodeKind::Call) {
+    if (isCallNode(*modifier)) {
         return variableAfterCall(variable, *modifier);
     }
     return nullptr;
 }
 
-void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
-    // A control input, and it has to stay one until the read gets the data edge it is owed: for
-    // a call that reads a captured `var` this is the edge that makes the write the read uses
-    // execute (design principles 3.5, F3), and an order edge would leave the read with the value
-    // from before it. The two uses of this helper are one link today, and telling them apart
-    // needs that data edge. The read is a data edge from the nearest write and writes are
-    // ordered by order edges -- design principles 3.5 (a write through a captured variable is a
-    // write to that cell, tracked where it happens).
-    //
-    // A write that produced a version of its own has that data edge already: the read takes the
-    // version, and the control input this helper used to stand in for it is gone with it
-    // (Builder::valueVersionOf).
-    if (valueVersionOf(variable) != nullptr) {
-        return;
+/// A call, whichever node kind it is drawn with: `Call` names a call through a function value and
+/// `Func` a call of a function the graph names (the callee is the node's operator), and both are
+/// the write a captured variable takes (recordWrite, throughCallee).
+bool Builder::isCallNode(node_handle_t node) {
+    const auto kind = nodeKindOf(node);
+    return kind == camel::runtime::GCNodeKind::Call || kind == camel::runtime::GCNodeKind::Func;
+}
+
+bool Builder::hasValueVersion(node_handle_t variable) {
+    // The same question valueVersionOf answers, without making the node it would answer with: a
+    // caller that only wants to know whether the read has a version of its own must not leave a
+    // `:var/after` node behind for nothing to use (it would be an effect nothing depends on).
+    const auto modifier = modifierOf(variable);
+    if (!modifier.has_value() || !sameGraph(*modifier, currGraph_)) {
+        return false;
     }
-    if (auto modifier = modifierOf(variable); modifier.has_value()) {
-        if (sameGraph(*modifier, currGraph_) && shouldAddSyncCtrlLink(*modifier, node)) {
-            writeControlLink(*modifier, node);
+    Type *type = nodeTypeOf(*modifier);
+    if (type != nullptr && valueTypeOf(type) != type) {
+        return true;
+    }
+    const auto value = callValues_.find(*modifier);
+    if (value == callValues_.end()) {
+        return isCallNode(*modifier);
+    }
+    for (size_t k = 0; k < value->second.variables.size(); ++k) {
+        if (value->second.variables[k] == variable) {
+            return true;
         }
     }
+    return isCallNode(*modifier);
 }
 
 std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
@@ -1632,10 +1664,11 @@ node_handle_t Builder::variableOperator(camel::core::OperId oper, node_handle_t 
 }
 
 node_handle_t Builder::variableAfterCall(node_handle_t variable, node_handle_t call) {
-    // The variable as it stands after `call`: `:var/after(cell, call)`. Its second argument is the
-    // call, whose value may be `void` and is not read -- the edge is what makes the call run when the
-    // read takes this version (docs/design-principles.cn.md 3.1, 3.5) -- and its result is the cell
-    // itself, so the read above it is a read of the variable after that write.
+    // The variable as it stands after `call`: `:var/after(version, call)`. Its second argument is
+    // the call, and its value may be anything, `void` included, because this operator reads nothing
+    // of it: the edge is what makes the call run when the read takes this version
+    // (docs/design-principles.cn.md 3.1, 3.5). The result is that version's cell, so the read above
+    // it is a read of the variable after that write.
     //
     // Its first argument is the version the variable had before that call when there was one: the
     // write written before a call through a function value must keep running, because the call is
@@ -1662,6 +1695,11 @@ node_handle_t Builder::variableAfterCall(node_handle_t variable, node_handle_t c
     stampPermissions(node);
     linkNodes(LinkType::Norm, before, node);
     linkNodes(LinkType::Norm, call, node);
+    // This node reads the variable as the call left it. A write of the same cell written below it
+    // has to run after it, or the read would see that write -- the WAR half of 5.6, and the reason
+    // the read is recorded here: it is not a `VariableUse` of a read of the cell, it is a use of
+    // the version.
+    versionReads_[before].push_back(node);
     return node;
 }
 

@@ -1,0 +1,16 @@
+// `#remat` on a function in another module still marks the graph that is cut: the tag becomes the
+// graph's recompute bit when the graph is built, and a module's declarations are built the same way as
+// the file's own. The same-file case could not have shown a mark that stops at an import.
+//
+// The cut is asked with the closure ABI (`split(f)` is the forward function, `fwd(x)` answers
+// `(y, lin)`), so the module's tag has to survive both the import and the closure.
+import rulesets.jvp
+import { jvp, split } from transforms
+import remat_lib
+
+func main(): int sync {
+    let fwd = split(jvp(remat_lib::g))
+    let (_y, lin) = fwd(3.0)
+    println("tagged dx=", lin(1.0))
+    return 0
+}

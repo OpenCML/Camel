@@ -1561,10 +1561,11 @@ bool devirtualizeStaticCallInDraft(
 /// The place is resolved again here, after the code is in -- reading which statement ends the chain
 /// that grows from the one it was written after, rather than the snapshot the splice took.
 void resolvePlaceForks(GraphDraft &draft) {
+    // A statement of a chain is read from the node itself (draft.h, `isChainStatement`), not from
+    // the mark the builder left: the mark says the builder chained the node, which is a different
+    // question from whether running it is observable.
     const auto isStatement = [&](gc_node_ref_t n) {
-        const DraftNodeHeader *header = draft.header(n);
-        return draft.alive(n) && header != nullptr &&
-               (header->runtimeFlags & kGCNodeFlagSyncStatement) != 0;
+        return draft.alive(n) && draft.isChainStatement(n);
     };
     const auto inBlock = [&](gc_node_ref_t a, gc_node_ref_t b) {
         return sameSyncBlock(draft, a, b);
@@ -1998,6 +1999,14 @@ DraftInlineResult inlineCallableInDraft(
         // branch, the arm was taken to have no code, and what the call's arguments ran in the
         // arm belonged to no arm any more. The same gate carries an argument's effect when the
         // body reads none of it: the call ran it, so the value the call became waits for it.
+        //
+        // This is not the seal check's question (`isTheBlocksOwnValue`, camel/runtime/graph.h),
+        // and it is not a weaker form of it: what is asked here is whether the value already
+        // waits for the block's tail, which is about the control exits the splice found, not
+        // about which region the value ends in. Measured 2026-11-02 over 304 splices of the fast
+        // tier: 302 of them place the value in a region nested inside the call's block, where the
+        // region question answers "no" and this one answers "nothing to gate". A gate per region
+        // answer would be 304 gates where 2 are built, and the 302 would wait twice.
         const DraftNodeHeader *valueHeader        = draft.header(result.valueExit);
         std::vector<gc_node_ref_t> gateCtrlInputs = waitPreds;
         if (result.ctrlExit != result.valueExit) {
@@ -2324,44 +2333,36 @@ DraftInlineResult inlineCallableInDraft(
         placeUsers = callFollowers;
     }
     if (bodyHasChain && !placePreds.empty() && draft.alive(bodyHead) && draft.alive(bodyTail)) {
-        const auto markStatement = [&](gc_node_ref_t node) {
-            const DraftNodeHeader *header = draft.header(node);
-            if (header != nullptr) {
-                draft.setNodeRuntimeFlags(
-                    node, static_cast<uint8_t>(header->runtimeFlags | kGCNodeFlagSyncStatement));
-            }
-        };
-        const auto nameControlPair = [&](gc_node_ref_t user, gc_node_ref_t pred) {
-            const auto ctrl = draft.ctrlInputsOf(user);
-            if (std::ranges::find(ctrl, pred) == ctrl.end()) {
-                draft.appendControlEdge(user, pred);
-            }
-        };
         // The statements written after the call follow the body's tail. `closeChainOver` closed the
         // chain over the call above, so they follow what the call followed until this takes that
-        // place back from it.
+        // place back from it -- the whole of it in one operation, which is also where a GATE is
+        // built if the block does not own the value the body's tail ends on (edges.cn.md 5.3).
+        std::vector<gc_node_ref_t> successors;
+        successors.reserve(placeUsers.size());
         for (gc_node_ref_t user : placeUsers) {
             if (user == funcNodeId || !draft.alive(user) || user == bodyHead || user == bodyTail) {
                 continue;
             }
-            markStatement(user);
-            markStatement(bodyTail);
-            const gc_node_ref_t only[1] = {bodyTail};
-            draft.setSyncInputs(user, only);
-            nameControlPair(user, bodyTail);
+            successors.push_back(user);
         }
-        // The body's head is written after the statement the call was written after.
-        const gc_node_ref_t callPred = placePreds.front();
-        if (callPred != bodyHead && callPred != bodyTail && draft.alive(callPred)) {
-            markStatement(bodyHead);
-            markStatement(callPred);
-            const gc_node_ref_t only[1] = {callPred};
-            draft.setSyncInputs(bodyHead, only);
-            nameControlPair(bodyHead, callPred);
-        }
+        const std::vector<gc_node_ref_t> everyone{placePreds.front()};
+        const auto sameBlock = [&](gc_node_ref_t n) {
+            return sameSyncBlock(draft, n, bodyTail);
+        };
+        draft.spliceChain(
+            bodyHead, bodyTail, std::span<const gc_node_ref_t>(everyone.data(), everyone.size()),
+            std::span<const gc_node_ref_t>(successors.data(), successors.size()), sameBlock);
     }
 
     draft.eraseNode(funcNodeId);
+    // The place the call stood in is written by `spliceChain` above, in one operation: the body's
+    // head after the call's predecessor, its tail before the call's successors. Reading the place
+    // again here is still needed, and the measurement says why: without it
+    // `feat.exemplars/05_effect_order` stops printing `visit 3` and prints `total 60` -- a statement
+    // written after a call is written after a statement that gains a follower later, when the code
+    // that call stands for is spliced in turn. At splice time the body's tail is a snapshot; it is
+    // final only once the code is in. One operation keeps the two writes from disagreeing (which is
+    // what this pass used to repair); it does not make the snapshot final.
     resolvePlaceForks(draft);
     CAMEL_LOG_INFO_S("DraftInline", "Inline splice finished for draft node {}.", funcNodeId);
     return result;

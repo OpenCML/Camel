@@ -250,6 +250,51 @@ bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref) {
     }
 }
 
+bool nodeIsChainStatement(GCNodeKind kind, camel::core::OperId oper) {
+    switch (kind) {
+    case GCNodeKind::Brch:
+    case GCNodeKind::Loop:
+    case GCNodeKind::Call:
+        // A structure that holds statements: what runs inside it is on the chain even though the
+        // node itself computes no value.
+        return true;
+    case GCNodeKind::Oper: {
+        // An operator is a statement when running it is observable, and not when it only computes
+        // a value somebody may read (edges.cn.md 1). An operator nobody declared is not known to
+        // be free of either: it is refused as a start rather than assumed harmless.
+        if (oper == camel::core::kNoOper) {
+            return false;
+        }
+        auto &table          = camel::core::OperatorTable::instance();
+        const auto traits    = table.find(oper);
+        if (!traits.has_value()) {
+            return false;
+        }
+        return !table.isPure(oper) || table.hasExternalEffect(oper) || traits->mayFault;
+    }
+    default:
+        // A value: data, a port, a copy, a cast, a join, a function value, a gate. None of them
+        // runs for its effect, and a sync edge that starts at one orders nothing.
+        return false;
+    }
+}
+
+bool nodeIsChainStatement(const GCGraph &graph, gc_node_ref_t ref) {
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr) {
+        return false;
+    }
+    if (node->kind != GCNodeKind::Oper) {
+        return nodeIsChainStatement(node->kind, camel::core::kNoOper);
+    }
+    const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
+    return nodeIsChainStatement(node->kind, body != nullptr ? body->oper : camel::core::kNoOper);
+}
+
+bool isTheBlocksOwnValue(const GCGraph &graph, gc_node_ref_t candidate, gc_node_ref_t tail) {
+    return graph.nodeRegion(candidate) == graph.nodeRegion(tail);
+}
+
 using camel::core::rtdata::fromSlot;
 using camel::core::rtdata::Object;
 using camel::core::rtdata::toSlot;

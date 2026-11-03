@@ -147,3 +147,31 @@ args = ["${case}", "std::gir"]
 expect_exit = 0
 expect_stdout_contains = ["label=\":coll/eq\"", "label=\":op/not\""]
 expect_output_not_contains = ["coll/neq"]
+
+# The other half of the author's 2026-11-02 12:10 ruling: the graph stays as it is (`:op/not` over
+# the equality, which the entry above pins), and the fastvm back end is where `!=` gets its speed --
+# it decides before emission that the negation of a comparison with no other reader is one
+# `LNE`/`DNE` instruction. Red if the fusion stops happening: the dump then carries `:op/not` and no
+# `LNE`/`DNE`.
+[[tests]]
+name = "equality.back_end_fuses_the_negation"
+desc = "The fastvm bytecode of `!=` on an int and on an f64: the equality's only reader is a `:op/not`, so the two leave one `LNE` / `DNE` behind and nothing reads the equality's slot."
+kind = "behavior"
+case = "../../../cases/compile/equality/fastvm_fuses_the_negation.cml"
+args = ["${case}", "std::bc"]
+expect_exit = 0
+expect_stdout_contains = [" LNE (", " DNE ("]
+expect_output_not_contains = [":op/not"]
+
+# The same shape with the equality read twice. Red if the fusion stops checking its readers: it
+# would emit `LNE` for one negation and leave the other reading a slot that has stopped being
+# written.
+[[tests]]
+name = "equality.back_end_keeps_the_negation_with_two_readers"
+desc = "The equality read through both its negations (`(a == b) != !(a == b)`, with std::opt::cse making one node of the two equalities): its slot is still needed, so the dump keeps `LEQ` and both `:op/not`s and has no `LNE`."
+kind = "behavior"
+case = "../../../cases/compile/equality/fastvm_keeps_the_negation_when_the_equality_has_two_readers.cml"
+args = ["${case}", "std::opt::cse", "std::bc"]
+expect_exit = 0
+expect_stdout_contains = [" LEQ (", ":op/not"]
+expect_output_not_contains = [" LNE ("]

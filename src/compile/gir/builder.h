@@ -1070,6 +1070,10 @@ class Builder {
         bool isRead;
     };
     std::unordered_map<node_handle_t, std::vector<VariableUse>> pendingUses_;
+    /// The reads that took a version of a variable with `:var/after`, per version they read: a
+    /// write of that version written below them is ordered after them (docs/design/effects/
+    /// edges.cn.md 5.6, the WAR half: the read sees the cell as it was before that write).
+    std::unordered_map<node_handle_t, std::vector<node_handle_t>> versionReads_;
 
     /// A branch arm: a region of the graph that has the branch (docs/design/graph-store 3.3),
     /// built where it is written. What the arm changes of the order of the variables (the last
@@ -2187,6 +2191,13 @@ class Builder {
     // such function (it changes an argument in place).
     compile_graph_ptr_t
     operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &origin);
+    // A function of no parameters whose body is the constant `value` and nothing else: what a
+    // value of `extent_of::<A>()` stands for. The answer is a fact of the type argument, which a
+    // function value does not carry, so the graph the value is made of answers it here, once,
+    // with the type argument in hand -- the way the call itself is folded
+    // (`:op/extent_of` beside buildOperatorCall's `range` check).
+    compile_graph_ptr_t constantValueGraphOf(
+        const data_ptr_t &value, Type *exitType, const GCT::node_ptr_t &origin);
     /// `attempt(f)` (design principles 3.9): the function value whose parameters are `f`'s and
     /// whose result is `f`'s result plus `!`. It is a closure -- a graph of its own that captures
     /// `f` and whose body is one marked call of it -- so no node of the calling graph stands for
@@ -2301,8 +2312,6 @@ class Builder {
     void recordWrite(node_handle_t variable, node_handle_t writer) {
         recordWrite(variable, writer, false);
     }
-    // Orders `node` after the last writer of `variable` in the current graph.
-    void orderAfterLastWriter(node_handle_t variable, node_handle_t node);
     // ---- The conservative writer set (design principles 3.1, 3.5) ---------------------------
     // A call through a function value has no callee at the call; which variable it writes is not
     // in its type yet. So the variables some function of the program writes are counted as its
@@ -2570,6 +2579,13 @@ class Builder {
     /// The variable as it stands after `call`: `:var/after(cell, call)`, the version a read takes
     /// when the call that wrote the variable is a call through a function value (valueVersionOf).
     node_handle_t variableAfterCall(node_handle_t variable, node_handle_t call);
+    /// A call, whichever node kind draws it: `Call` for a call through a function value, `Func` for
+    /// a call of a function the graph names.
+    bool isCallNode(node_handle_t node);
+    /// Whether `variable`'s last write gives a version of it -- the question valueVersionOf answers,
+    /// asked without building the node the answer would be: a caller that only asks must not leave
+    /// a `:var/after` node behind with nothing to use it.
+    bool hasValueVersion(node_handle_t variable);
     /// The group of an operator the compiler emits itself (`oper::EnumMake` and the like): the
     /// built-in module registered it; an id is fixed at start-up, the group when that module is
     /// loaded, which is before any module of a program is compiled.

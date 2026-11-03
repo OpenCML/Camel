@@ -1,0 +1,14 @@
+/**
+ * The equality read twice: the outer `!=` negates one `(a == b)` and `!(a == b)` negates the other,
+ * and `std::opt::cse` makes one node of the two equalities. That node has two readers, so its slot
+ * must stay alive and the back end must keep both instructions (`LEQ` and the two `:op/not`s).
+ */
+
+func shared(a: int, b: int): int {
+    return if (a == b) != !(a == b) then 1 else 0
+}
+
+func main(): int sync {
+    println('shared={}'->format<shared(3, 4)>)
+    return 0
+}
