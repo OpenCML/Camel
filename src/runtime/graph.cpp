@@ -2142,6 +2142,15 @@ void validateRuntimeGraphCalls(const Program &program, const GCGraph *graph, Gra
                     graph->name(),
                     it.ref()));
         }
+        // The two `with`-segment layouts, stated once so the next reader does not take the
+        // difference for a defect. A FUNC node names its callee statically, so its `with` segment
+        // holds exactly the callee's closure arguments and its size is `withPorts()`; a CALL node
+        // carries the callee *value* itself at slot 0, so its `with` segment is `1 + withPorts()`
+        // -- which is the one FastVM subtracts (`populateIndirectCallFrame`:
+        // `wargs.size() - 1 == withPorts().size()`, and `fillFrameForIndirectCall` reads the
+        // explicit arguments from `withInputs[i + 1]`). The check below is about FUNC only: a CALL
+        // is another node kind, and payload validation asks of it that it has a callee input, not
+        // that its arity matches (`validateRuntimeGraphPayloadImpl`).
         const size_t normArgs = graph->normInputsOf(it.ref()).size();
         const size_t withArgs = graph->withInputsOf(it.ref()).size();
         if (normArgs != callee->normPorts().size() || withArgs != callee->withPorts().size()) {
