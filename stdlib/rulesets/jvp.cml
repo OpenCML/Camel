@@ -178,7 +178,7 @@ export rule jvp_matmul::<T>(a: T[..], b: T[..]) when is_float::<T>() {
 // argument, has nowhere to go. `reshape`'s right side would be refused a second time, by name: "the
 // rule's right side passes a context argument of its own". `mean_axis` is here because its
 // declaration *does* have a parenthesised form, `mean_axis(t, axis, keepdims?)`
-// (`stdlib/tensor.cml:169`), even though the node it builds carries the axis as a context port.
+// (`stdlib/tensor.cml#mean_axis`), even though the node it builds carries the axis as a context port.
 //
 // Each key is the operator's own name (`tensor:sum` -> `sum`). A rule's parameters are the
 // operator's **ports, in port order**: the normal ones, then the `<>` ones (`OpDef::params` written
