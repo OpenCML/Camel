@@ -1509,7 +1509,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_output_contains = ["gelu engine d=__GELU__"]
+expect_output_contains = ["gelu engine d=[-0.08296408384578252, 0.5, 1.0829640838457826]", "erf engine d=[0.4151074974205947, 1.1283791670955126, 0.4151074974205947]", "erfc engine d=[-0.4151074974205947, -1.1283791670955126, -0.4151074974205947]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1522,8 +1522,8 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_output_contains = ["gelu library value=__VG__"]
-expect_stderr_contains = ["rules=jvp_gelu"]
+expect_output_contains = ["d=[-0.08296408384578252, 0.5, 1.0829640838457826]", "d=[0.4151074974205947, 1.1283791670955126, 0.4151074974205947]", "d=[-0.4151074974205947, -1.1283791670955126, -0.4151074974205947]"]
+expect_stderr_contains = ["rules=jvp_gelu,jvp_tanh"]
 expect_output_not_contains = ["skip=rule uri=tensor:gelu"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
