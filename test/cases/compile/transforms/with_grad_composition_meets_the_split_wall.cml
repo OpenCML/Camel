@@ -11,11 +11,26 @@
 // (`modules/transforms/jvp.cpp`, route B of the ruling of 2026-11-03 15:15), and the lifted graph
 // grew from `nodes=9 exit=6` to `nodes=11 exit=10`, the new node being the `Fill`.
 //
+// Both readings are kept here on purpose, because the difference between them is what this case
+// records: a reader who finds only the second cannot tell that the first ever stood, and the next
+// person to widen the cut needs to know which refusal was answered and which was not. The wall as
+// it stood until the lift stopped hydrating (exit 1, `stdlib/vjp.cml:87`):
+//
+//     transforms: split does not build this function (a lifted function answers with the pair
+//     (result, tangent); here the pair is a call's result -- the differentiated lambda ends in a
+//     call to a `with`-parameterised function -- and not the two-member tuple fill this cut takes
+//     its two halves from, so there is no pair to cut)
+//     REINTERP split function=jvp_of___g_248__ skip=exit
+//
 // What refuses now is the step after it, in the cut's **forward** walk: the lifted lambda's type has
 // no `with` list, while its graph still reads the captured `x`/`t`/`b` through ports -- the lift
 // declares those captures as closure ports (`jvp.cpp`), and the half lists its ports from the
-// declaration, so a captured port is in neither map. The reading is `skip=forward` and the reason
-// names it: "the port is not a parameter of the graph, so neither half takes it".
+// declaration, so a captured port is in neither map. The reading as it stands now (exit 1):
+//
+//     transforms: split does not build this function (the port is not a parameter of the graph, so
+//     neither half takes it)
+//     REINTERP split function=jvp_of___g_248__ skip=forward construct=a port uri=-
+//     why=the port is not a parameter of the graph, so neither half takes it
 //
 // The next step is therefore not on this side: `split` has to treat a closure port the backward half
 // reads as a residual, the same way it already treats a `with` port (`ce2691f54`). Until it does,

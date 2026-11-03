@@ -327,6 +327,15 @@ struct Half {
                 values.push_back(all[port]);
             }
         }
+        // ...and the call's `with` arguments, which `valuePortsOf` does not name: they are not
+        // ordinary parameters of the lifted signature, they stand at the end of the data list
+        // (`dataInputsOf`), and a retargeted call still passes them to the primal. A half that takes
+        // the value ports and not these places the last value it did take in the `with` slot, which
+        // is a call the runtime refuses by name (measured 2026-11-04: `FUNC node 2 passing 0
+        // arguments and 1 'with' arguments to 'weighted', which takes 1 and 1`).
+        for (gc_node_ref_t input : source->withInputsOf(ref)) {
+            values.push_back(input);
+        }
         return values;
     }
 
@@ -381,6 +390,26 @@ struct Half {
             return rt::kInvalidNodeRef;
         }
         return draft.materializeStaticValue(slots[static_cast<size_t>(index)], node->dataType());
+    }
+
+    /// Places a call's arguments on its copy: the ordinary ones as the call's norm inputs and the
+    /// context ones as its `with` inputs. `halfInputsOf` is `dataInputsOf`, which is the ordinary
+    /// inputs followed by the context ones (`dataInputsOf` above), so a copy that hands that one list
+    /// to `setNormInputs` passes the call's `with` argument as an ordinary one -- and a call the graph
+    /// names is checked against what the callee declares at run time. Measured 2026-11-04 on the
+    /// composition `vjp((ww) => weighted<ww>(2.0))(3.0)`: `Runtime graph
+    /// 'split_of_jvp_of___g_247___forward' has FUNC node 2 passing 1 arguments and 0 'with' arguments
+    /// to 'weighted', which takes 1 and 1`.
+    void placeCallArguments(gc_node_ref_t made, gc_node_ref_t ref,
+                            const std::vector<gc_node_ref_t> &placed) {
+        size_t withCount = source->withInputsOf(ref).size();
+        if (withCount > placed.size()) {
+            withCount = placed.size();
+        }
+        const size_t normCount = placed.size() - withCount;
+        draft.setNormInputs(made, std::span<const gc_node_ref_t>(placed.data(), normCount));
+        draft.setWithInputs(made,
+                            std::span<const gc_node_ref_t>(placed.data() + normCount, withCount));
     }
 
     /// The copy of one source node, its inputs already copied. The kinds below are the tier the
@@ -596,7 +625,7 @@ struct Half {
                     pair != nullptr ? pair->typeAt(0) : node->dataType();
                 const gc_node_ref_t made = draft.addFuncNode(
                     primal, valueType, 0, draft.allocateRuntimeSlot(valueType), 0);
-                draft.setNormInputs(made, inputs);
+                placeCallArguments(made, ref, inputs);
                 draft.addDependency(primal);
                 copyOf[ref] = made;
                 retargetedCalls.insert(ref);
@@ -608,7 +637,7 @@ struct Half {
             const gc_node_ref_t made = draft.addFuncNode(
                 callee, node->dataType(), 0, draft.allocateRuntimeSlot(node->dataType()), 0,
                 source->callTangentArgsOf(ref));
-            draft.setNormInputs(made, inputs);
+            placeCallArguments(made, ref, inputs);
             draft.addDependency(callee);
             copyOf[ref] = made;
             return true;
@@ -855,8 +884,28 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 }
                 const std::vector<gc_node_ref_t> arguments = dataInputsOf(&lifted, ref);
                 // The lifted callee takes its values and then its tangents (`jvpSignature`), so the
-                // value arguments are the first half of what the call passes.
-                for (size_t i = 0; i < arguments.size() / 2; ++i) {
+                // value arguments are the first half of what the call passes -- of the *ordinary*
+                // arguments. `dataInputsOf` is the ordinary inputs followed by the context ones
+                // (`dataInputsOf` above), so the count to halve is the list without the call's `with`
+                // arguments: halving the whole list puts the boundary in the wrong place as soon as a
+                // lifted callee keeps a `with` list, and the value that lands on the boundary is the
+                // caller-side weight. 后一半要读的东西都是残差 (author, 2026-11-03 15:15), and this
+                // half hands the callee that weight, so the walk keeps it; dropping it is what made
+                // the composition `vjp((ww) => f<ww>(..))(w)` refuse one step past the exit, in the
+                // backward walk's own words, `the backward half reads the value of parameter 0, and it
+                // is not one of the values the cut carries` (measured 2026-11-04).
+                const size_t withArguments = lifted.withInputsOf(ref).size();
+                const size_t valueArguments =
+                    arguments.size() > withArguments ? arguments.size() - withArguments : 0;
+                for (size_t i = 0; i < valueArguments / 2; ++i) {
+                    const gc_node_ref_t input = arguments[i];
+                    if (input < nodeCount && visited[input] == 0) {
+                        stack.push_back(input);
+                    }
+                }
+                // ...and the context arguments themselves, which are values it reads just as it reads
+                // the ordinary ones.
+                for (size_t i = valueArguments; i < arguments.size(); ++i) {
                     const gc_node_ref_t input = arguments[i];
                     if (input < nodeCount && visited[input] == 0) {
                         stack.push_back(input);
