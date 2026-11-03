@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_integer, is_same, is_string, Tangent } from types
-import { pick_at, exp, log_softmax, matmul, mean, mean_axis, mean_axis_stated, mean_stated, relu, reshape, shape, sigmoid, softmax, sum, sum_axis, sum_axis_stated, sum_stated, take, take_stated, tanh, where, zeros_like } from tensor
+import { pick_at, exp, log_softmax, matmul, max_axis, max_axis_stated, mean, mean_axis, mean_axis_stated, mean_stated, min_axis, min_axis_stated, relu, reshape, shape, sigmoid, softmax, sum, sum_axis, sum_axis_stated, sum_stated, take, take_stated, tanh, where, zeros_like } from tensor
 import { log, pow } from math
 import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
 
@@ -291,6 +291,26 @@ export rule jvp_mean_axis::<T>(xs: T[..], axis: int, keepdims: bool) when is_flo
 /// already resolved.
 export rule jvp_sum_axis::<T>(xs: T[..], axis: int, keepdims: bool) when is_float::<T>() {
     sum_axis(xs, axis, keepdims) => (dxs: T[..]) => sum_axis_stated(dxs, stated_axis_shape(axis, keepdims, shape(xs)))
+}
+
+/// `d(max_axis(xs, axis, keepdims)) = max_axis(dxs, axis, keepdims)` where the lane's largest element
+/// is: a max is a selection, and the tangent of a selection is the tangent of the element it chose.
+///
+/// The selection is what the stated call carries. `xs >= max_axis(xs, axis, true)` is `true` exactly
+/// at the positions that hold the lane's largest element -- every tied one, since a value is greater
+/// than or equal to the max of its lane iff it is that max -- and the inner call states `keepdims` so
+/// that the comparison broadcasts against `xs` whatever axis was reduced. The mask depends on `xs`
+/// alone, so the cut carries it and the reverse law multiplies by it
+/// (`max_axis_stated_t`). NaN selects nothing on either side, which is the engine's `strict_eq`
+/// reading too (`extremumAxisVjp`).
+export rule jvp_max_axis::<T>(xs: T[..], axis: int, keepdims: bool) when is_float::<T>() {
+    max_axis(xs, axis, keepdims) => (dxs: T[..]) => max_axis_stated(dxs, xs >= max_axis(xs, axis, true), stated_axis_shape(axis, keepdims, shape(xs)))
+}
+
+/// `d(min_axis(xs, axis, keepdims)) = min_axis(dxs, axis, keepdims)` where the lane's smallest element
+/// is: the same selection as the max's, read with `<=`.
+export rule jvp_min_axis::<T>(xs: T[..], axis: int, keepdims: bool) when is_float::<T>() {
+    min_axis(xs, axis, keepdims) => (dxs: T[..]) => min_axis_stated(dxs, xs <= min_axis(xs, axis, true), stated_axis_shape(axis, keepdims, shape(xs)))
 }
 
 /// `d(mean(xs)) = mean(dxs)`: the mean of every element is a sum divided by a count, and the

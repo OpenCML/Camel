@@ -98,6 +98,37 @@ timeout_ms = 20000
 
 
 [[tests]]
+name = "stated_max_axis_gradient_tie"
+desc = "The gradient of `sum(max_axis(x, 1, false))` where one row holds its maximum twice: the lanes are `[3.0, 2.0]`, the value is `5.0`, and the gradient is `[[0.0, 1.0, 1.0], [0.0, 0.0, 1.0]]` -- both tied positions get the whole cotangent. The tie is what discriminates the law: taking the first tied position answers `[[0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]` and sharing the cotangent answers `[[0.0, 0.5, 0.5], [0.0, 0.0, 1.0]]`, and only the first reading is what the engine's `extremumAxisVjp` answers, which the `same=true` on the two legs says."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_max_axis_gradient_tie.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["max_axis tie: value=5.0", "same=true"]
+expect_stderr_contains = ["max_axis_stated_t"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "stated_min_axis_gradient_negative_axis"
+desc = "The gradient of `sum(min_axis(x, -1, false))` with a tie in one row: the lanes are `[1.0, 4.0]`, the value is `5.0`, and the gradient is `[[0.0, 1.0, 1.0], [0.0, 1.0, 0.0]]`. The axis written `-1` is the second reading in the case -- it reaches `min_axis_stated` unresolved and the stated extents decide where the lane's cotangent goes -- and the tie is the first: a law that kept only the first tied position would answer `[[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]]`, and one that spread the cotangent over the lane would answer `[[1.0, 1.0, 1.0], [0.0, 1.0, 0.0]]`. Both legs `same=true`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stated_min_axis_gradient_negative_axis.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["min_axis -1: value=5.0", "same=true"]
+expect_stderr_contains = ["min_axis_stated_t"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+
+[[tests]]
 name = "stated_sum_extents_refused"
 desc = "A stated extent the tensor does not have is a fault: `sum_stated(x, [2])` over four elements stops on the operator's own line with `states extent 2 at dimension 0 and the tensor has 4`, and the program never prints its reading. This is the check the forward half's `shape(xs)` makes unnecessary and no less necessary: the value does not read the list, so nothing but this comparison can say it is wrong, and an extent nobody compared is a gradient of the wrong shape."
 kind = "behavior"

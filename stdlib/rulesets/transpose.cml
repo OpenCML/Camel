@@ -38,7 +38,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { pick_at, exp, full, log_softmax, matmul, mean_axis_stated, mean_stated, numel, relu, reshape, sigmoid, subtract, sum, sum_axis_stated, sum_stated, sum_to, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
+import { pick_at, exp, full, log_softmax, matmul, max_axis_stated, mean_axis_stated, mean_stated, min_axis_stated, numel, relu, reshape, sigmoid, subtract, sum, sum_axis_stated, sum_stated, sum_to, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
@@ -423,6 +423,25 @@ export rule sum_axis_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
 /// the two orders divide the same values by the same count.
 export rule mean_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
     mean_stated(t, at) => (ct: T) => spread_over(ct, at) / float(extent_product(at))
+}
+
+/// The cotangent of `max_axis_stated(t, mask, at)`: the lane's cotangent, spread back along the axis
+/// the extremum took, and kept only where `mask` says the operand holds the lane's largest element.
+///
+/// The mask is the whole of an extremum's reverse rule. An extremum is not linear, so its adjoint is
+/// not a spread of `ct` but a *selection*: every position that holds the lane's largest element gets
+/// the whole `ct`, and one that does not gets nothing (`modules/tensor/ops/reduction_ops.cpp`'s
+/// `extremumAxisVjp` answers exactly that, with `strict_eq` against the broadcast output). Two laws a
+/// reader might write instead -- the first position only, or `ct` divided among the tied ones -- are
+/// different numbers on a tie, which is what the case's reading says.
+export rule max_axis_stated_t::<T, X, M, A>(t: X, mask: M, at: A) when is_float::<T>() {
+    max_axis_stated(t, mask, at) => (ct: T[..]) => where(mask, lane_spread(ct, at[2:len(at)], at[0], at[1] != 0), 0.0)
+}
+
+/// The cotangent of `min_axis_stated(t, mask, at)`: `max_axis_stated_t`'s rule, on the mask of the
+/// lane's smallest elements.
+export rule min_axis_stated_t::<T, X, M, A>(t: X, mask: M, at: A) when is_float::<T>() {
+    min_axis_stated(t, mask, at) => (ct: T[..]) => where(mask, lane_spread(ct, at[2:len(at)], at[0], at[1] != 0), 0.0)
 }
 
 // ---- the transpose rule of `:op/idx_arr` ----
