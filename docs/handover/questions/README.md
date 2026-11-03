@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：25 页
+## 现在在等作者：26 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -29,6 +29,7 @@
 | [`2026-11-03-the-lifted-list-is-grouped-and-the-ports-must-follow`](2026-11-03-the-lifted-list-is-grouped-and-the-ports-must-follow.cn.md) | 抬升列表已定为 grouped、空切向占位；剩下的是建图里的端口次序 |
 | [`2026-11-03-the-silent-wrong-number-does-not-reproduce`](2026-11-03-the-silent-wrong-number-does-not-reproduce.cn.md) | 循环体里读外部标量的「静默错数」今天不可复现：它还算主线第一件吗？ |
 | [`2026-11-03-what-does-region-of-zero-answer-for-a-graph-without-regions`](2026-11-03-what-does-region-of-zero-answer-for-a-graph-without-regions.cn.md) | 一张没有区表的图，`region_of(0)` 该答真记录还是报错？ |
+| [`2026-11-03-what-does-taking-pure-nodes-off-the-chain-cost`](2026-11-03-what-does-taking-pure-nodes-off-the-chain-cost.cn.md) | 纯节点离开链位要付 59 条红和一条封存拒绝：P0-2 第二步还做吗？ |
 | [`2026-11-03-what-type-does-an-error-binding-have-across-a-yield`](2026-11-03-what-type-does-an-error-binding-have-across-a-yield.cn.md) | `case error e` 绑定的名字跨 `yield` 进状态时，那个 cell 的类型从哪来 |
 | [`2026-11-03-where-does-the-chain-tail-service-live`](2026-11-03-where-does-the-chain-tail-service-live.cn.md) | 出口门要等的"链上最后一站"，这个服务归谁？ |
 | [`2026-11-03-which-p0-2-does-the-order-mean`](2026-11-03-which-p0-2-does-the-order-mean.cn.md) | 排序里那条 `P0-2` 指 A 还是 B？A 的两处是不是同一个条件（逐分支量：不是） |
