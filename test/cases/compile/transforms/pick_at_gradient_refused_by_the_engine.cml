@@ -12,10 +12,28 @@
 //
 // The law this commit adds (`stdlib/rulesets/jvp.cml#jvp_pick_at`) is a **forward** rule and answers
 // the library's legs -- `jvp` and `vjp`, which is `transpose(split(jvp(f)))`. It cannot answer this
-// one: the engine's reverse pass reads a table of C++ rules, not the ruleset, and the entry that
-// would be missing there is a registration in `modules/tensor`, not a law. The two readings are
-// therefore read together, this one as what it says, and `pick_at_forward_rule.cml` as the numbers
-// the library answers; the day the registration lands, this entry fails and names what replaced it.
+// one: the engine's reverse pass reads a table of C++ rules, not the ruleset, and the entry that is
+// missing there is a registration in `modules/tensor`, not a law.
+//
+// ---- what this entry is, and what it is not ----
+//
+// It is not a "not supported yet" wall: **the library already answers the read** -- `jvp` gives the
+// tangent and `vjp` gives the gradient, and they close on the direction
+// (`pick_at_forward_rule.cml`). What is missing is one row of the engine's C++ table:
+// `DerivativeRegistry::findRule` has no `tensor:pick_at`
+// (`modules/autodiff/pullback.cpp`), because `modules/tensor/ops/layout_ops.cpp` files `setVjp`
+// under `transpose`, `reshape`, `take`, `idx_take` and their neighbours, and never under
+// `pick_at`'s own name -- the entry the engine does have for a read of one element is
+// `:op/idx_arr`, which is `xs[i]`.
+//
+// So this entry is written to be **replaced, not kept**: the day someone gives `pick_at` a `setVjp`
+// in that table, this case must be turned into the positive reading of the same program --
+// `engine dL/dw=[0.0, 1.0, 0.0]`, the number the library's `vjp` answers today, because both would
+// then be the adjoint of the same read -- and the `expect_exit = 1` of the plan entry becomes
+// `expect_exit = 0` with that one line pinned. The two entries are the two halves of one account:
+// this one is the engine's side of the read, `pick_at_forward_rule_answers_both_directions` is the
+// library's, and an account with one half answered and one half refused is exactly what the pair
+// records.
 //
 //     camel test/cases/compile/transforms/pick_at_gradient_refused_by_the_engine.cml
 import { grad } from autodiff

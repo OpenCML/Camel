@@ -28,6 +28,8 @@
 
 **丙：就在本车道加那条注册。** 代价：`modules/tensor/**` 是本次任务的禁区（八条车道今晚在 `stdlib/rulesets/transpose.cml` 上撞过），且它要与 `pick_at_t` 两个地方说同一件事——两处会分叉。
 
+**默认取甲**：本车道不动，留给一条允许改 `modules/tensor` 的车道补那一行 `setVjp`。**这不是「本版本暂不支持」**——库层已经答得出（`jvp` 给切向 `0.25`，`vjp` 给梯度 `[0.0, 1.0, 0.0]`，两者在方向上闭合），只是引擎侧的 C++ 表还缺 `pick_at` 那一行；两腿不一致本身是一条账，不是一道墙。账的一头钉在 `test/plans/feat/compile/transforms.plan.toml#pick_at_gradient_refused_by_the_engine`（它写明：谁给 `pick_at` 加了 `setVjp`，这条就要翻成正面期望 `engine dL/dw=[0.0, 1.0, 0.0]`），另一头是 `#pick_at_forward_rule_answers_both_directions` 的 `0.25` 闭合。
+
 ## 4. 未测点
 
 - 补了引擎规则之后，`grad` 与 `vjp` 两腿对同一个读是否逐位相同（现在只有规则层两腿相同）。
