@@ -73,6 +73,7 @@ const TEST_FIELDS = new Set([
     'skip_unless', 'skip_unless_timeout_ms', 'parallel', 'tier', 'sweep', 'cuda_devices',
     'cuda_free_device',
     'known_fail', 'known_fail_note', 'known_fail_msg', 'failure_note',
+    'silenced_warnings',
     'backends', 'backends_agree', 'compare_to', 'compare_fields',
     'golden', 'snapshot_stream', 'snapshot_compare', 'normalizers',
     'expect_exit', 'expect_signal', 'expect_stdout_contains', 'expect_stdout_exact', 'expect_stdout',
@@ -150,9 +151,11 @@ function checkFieldType(planPath, entry, field, where, type) {
             ? typeof value === 'number' && Number.isFinite(value)
             : type === 'boolean'
                 ? typeof value === 'boolean'
-                : false
+                : type === 'strings'
+                    ? Array.isArray(value) && value.every((one) => typeof one === 'string')
+                    : false
     if (ok) return
-    const shown = type === 'string' ? JSON.stringify(value) : String(value)
+    const shown = type === 'number' || type === 'boolean' ? String(value) : JSON.stringify(value)
     throw new PlanSchemaError(`${planLabel(planPath)}: ${where}: ${field} must be a ${type}, got ${shown}`)
 }
 
@@ -220,6 +223,7 @@ function validatePlanSchema(doc, planPath) {
                 )
             }
         }
+        checkFieldType(planPath, entry, 'silenced_warnings', where, 'strings')
         checkFieldType(planPath, entry, 'perf_budget_platform', where, 'string')
         checkFieldType(planPath, entry, 'cuda_devices', where, 'boolean')
         checkFieldType(planPath, entry, 'cuda_free_device', where, 'boolean')
@@ -265,6 +269,41 @@ function camelBinary(options) {
 
 function camelInstall(options) {
     return path.dirname(path.dirname(camelBinary(options)))
+}
+
+// Whether this build's `std::jit` compiles a function to native code.
+//
+// The JIT has one code generator, for x86-64 (`cmake/Options.cmake`: ENABLE_FASTVM_JIT is on for
+// that processor alone), so every other build -- arm64 on any platform, and a build that switched
+// the JIT off by hand -- runs `std::jit` on the bytecode interpreter of `std::fvm` and says so on
+// every run of a pipeline that names the pass (`RuntimeDiag::JitWithoutCodeGenerator`, one warning
+// line on stderr and one diagnostic in the report). That is a fact about the build, not about the
+// program a test runs, and 240 entries compare a `.jit` entry against its `.nvm` twin on stderr and
+// diagnostics while others assert that a run says nothing. The notice is therefore silenced for
+// every entry by default (`silenced_warnings`, see runOneTest) and the entries that test the notice
+// keep it.
+//
+// The reading is the one `test/tools/have-native-jit.mjs` takes, so a test and a runner cannot
+// disagree about which build they are in. `CAMEL_TEST_NO_JIT=1|0` answers for the harness, which is
+// how the no-JIT behaviour is exercised on a build that does have a code generator.
+let noCodeGeneratorCache = null
+
+function buildHasNoCodeGenerator(options) {
+    if (noCodeGeneratorCache !== null) return noCodeGeneratorCache
+    const forced = process.env.CAMEL_TEST_NO_JIT
+    if (forced !== undefined && forced !== '') {
+        noCodeGeneratorCache = forced !== '0'
+        return noCodeGeneratorCache
+    }
+    const probe = spawnSync(camelBinary(options), ['-v', path.join(REPO_ROOT, 'hello.cml'), 'std::jit'], {
+        cwd: REPO_ROOT,
+        env: { ...process.env, CAMEL_HOME: camelInstall(options) },
+        encoding: 'utf8',
+        timeout: 60000,
+    })
+    const text = `${probe.stdout || ''}${probe.stderr || ''}`
+    noCodeGeneratorCache = text.includes('no native code generator')
+    return noCodeGeneratorCache
 }
 
 function toolExecutable(tool, build) {
@@ -1913,6 +1952,18 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         scope.backend = passes
     }
     const args = expandArgs(test.args || [], scope)
+    // The build's own notice about `std::jit` (see buildHasNoCodeGenerator) is silenced here unless
+    // the entry names it in `silenced_warnings`: an entry that compares back ends or asserts that a
+    // run says nothing is asking about the program, and the entry that tests the notice itself is
+    // the one that writes `silenced_warnings = []`. `-Wno-...` is scanned out of the whole argv by
+    // the command line (`takeWarningArguments`), so its position does not matter.
+    const silencedWarnings = test.silenced_warnings ?? ['jit-without-code-generator']
+    if (
+        silencedWarnings.includes('jit-without-code-generator') &&
+        buildHasNoCodeGenerator(logContext.options)
+    ) {
+        args.unshift('-Wno-jit-without-code-generator')
+    }
     // `--compile-only`: the same entry, the same case, the same environment and the same arguments
     // that are not passes -- but the pipeline stops once the program is built. Every word that
     // names a pass is dropped and one compile pass is appended (`std::gir` builds the program and
