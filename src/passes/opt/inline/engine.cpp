@@ -1312,24 +1312,22 @@ const camel::runtime::Program *applyOptimizeRewritePass(
         return program;
     }
     const size_t growthBudget = config.growthBudget.nodes;
-    // The count is the caller's when it has one: `std::opt` runs the engine over its rounds against
-    // one budget (`simplifyGraph` hands it the count it keeps), so `growth_budget` bounds the work
-    // of the pass. A run given none counts into a local, which is a bound on this run and on
-    // nothing else: the next run of the pass starts from zero and spends the whole budget again.
-    // Both modes are real, and which one a run is has to be readable: a count that quietly starts
-    // over is the silence the not-settling count below had when it lived in a local. Report the
-    // local one at the place it is chosen; the budget itself stays what the pass declared.
-    size_t ownGrowthSpent      = 0;
-    const bool countedByCaller = config.growthSpentNodes != nullptr;
-    size_t &growthSpent        = countedByCaller ? *config.growthSpentNodes : ownGrowthSpent;
-    if (!countedByCaller) {
-        CAMEL_LOG_WARN_S(
-            "OptimizePass",
-            "No growth count was given (OptimizeRewriteConfig::growthSpentNodes): this run starts "
-            "its budget of {} nodes from zero, so `growth_budget` bounds this run's work and not "
-            "the pass's, and the next run of the pass spends the whole budget again",
-            growthBudget);
-    }
+    // The count is the caller's, the way the not-settling count below is: `std::opt` hands over the
+    // count its rounds share, so `growth_budget` bounds the work of the pass, and each pass that
+    // runs the engine on its own (`std::opt::inline`, `::devirtualize`, `::specialize`) keeps one
+    // and clears it where its run starts, so a run spends the budget the pipeline gave it and the
+    // next one does not start on what the last one left. A run given none used to count into a
+    // local and start over with no trace: the bound it enforced was one only that call could see,
+    // which is a budget in name.
+    GUARD(
+        config.growthSpentNodes != nullptr,
+        std::format(
+            "the rewrite engine counts the nodes it copies against `growth_budget` ({}), and this "
+            "run was given nowhere to count them (OptimizeRewriteConfig::growthSpentNodes): the "
+            "budget it would enforce is one this call keeps and drops, and the next run of the "
+            "pass would spend it again",
+            growthBudget));
+    size_t &growthSpent  = *config.growthSpentNodes;
     const bool hadBudget = growthSpent < growthBudget;
     // A session only inlines calls that existed when it started; calls exposed by its own
     // inlining (nested helpers, devirtualized pullbacks) wait for the next session. Repeat until
