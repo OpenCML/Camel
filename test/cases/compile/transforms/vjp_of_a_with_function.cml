@@ -1,0 +1,45 @@
+// `vjp` of a function that writes `with` parameters (author's ruling of 2026-11-03 13:50). The
+// reverse transform differentiates the ordinary parameters only and hands the `with` values on
+// unchanged, so `vjp(f)<w>(x)` answers `f`'s value at that point and the pullback's one member is
+// the slope there. Hand-computed, for every line below:
+//
+//     scale(x)     = w * x                    w = 2.0,  x = 3.0
+//                  value = 2.0 * 3.0 = 6.0            slope = d/dx = w = 2.0
+//     quadratic(x) = w * x + v * x * x        w = 2.0, v = 3.0, x = 1.5
+//                  value = 2.0 * 1.5 + 3.0 * 1.5 * 1.5 = 3.0 + 6.75 = 9.75
+//                  slope = w + 2 * v * x = 2.0 + 2.0 * 3.0 * 1.5 = 2.0 + 9.0 = 11.0
+//     quadratic(x) = w * x + v * x * x        w = 3.0, v = 2.0, x = 1.0
+//                  value = 3.0 + 2.0 = 5.0            slope = 3.0 + 4.0 = 7.0
+//
+// The pullback takes the `with` list as well: a `with` value is a constant of the transform and not
+// a residual the cut captures, so the linear half stays a function of it and so does its transpose
+// (`Pullback<F>` in stdlib/types.cml). `pullback<2.0>(1.0)` is therefore how the cotangent is read.
+//
+// The last two rows are the same function with the two `with` values exchanged, and they answer
+// different numbers only if each value lands in its own slot: a body that took the wrong one would
+// answer 9.75 / 7.0 for the pair, which is on neither line.
+//
+// This is the path that used to stop at `ArgumentsMismatch` in `split(jvp(f))(..xs)`: `jvp(f)` is a
+// function of `f`'s `with` list, and the lambda `vjp` answers had no way to name the list it took
+// from its position.
+import { vjp } from vjp
+
+with <w: float>
+func scale(x: float): float {
+    return w * x
+}
+
+with <w: float, v: float>
+func quadratic(x: float): float {
+    return w * x + v * x * x
+}
+
+func main(): int sync {
+    let (a, pullback_a) = vjp(scale)<2.0>(3.0)
+    let (b, pullback_b) = vjp(quadratic)<2.0, 3.0>(1.5)
+    let (c, pullback_c) = vjp(quadratic)<3.0, 2.0>(1.0)
+    println(`scale     value={:.17f} slope={:.17f}`->format<a, pullback_a<2.0>(1.0).0>)
+    println(`quadratic value={:.17f} slope={:.17f}`->format<b, pullback_b<2.0, 3.0>(1.0).0>)
+    println(`exchanged value={:.17f} slope={:.17f}`->format<c, pullback_c<3.0, 2.0>(1.0).0>)
+    return 0
+}

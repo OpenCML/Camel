@@ -1415,3 +1415,26 @@ expect_stdout = "library value=0.12500000000000000 w=-0.75000000000000000 b=-0.5
 expect_output_not_contains = ["Warning", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+[[tests]]
+name = "transforms.vjp_of_a_with_function"
+desc = "`vjp` of a function that writes `with` parameters, which is what the ruling of 2026-11-03 13:50 unblocked: the lambda `vjp` answers names the `with` list it takes from its position (`<..ws> (..xs) => ...`) and hands it to `split(jvp(f))<..ws>(..xs)`, so a `with` value reaches the forward half and the transform differentiates the ordinary parameters only. Every line is hand-computed and pinned: `scale(x) = w * x` at w = 2.0, x = 3.0 answers value 6.0 and slope 2.0; `quadratic(x) = w * x + v * x * x` at w = 2.0, v = 3.0, x = 1.5 answers 9.75 and 11.0; the same function with the two `with` values exchanged at w = 3.0, v = 2.0, x = 1.0 answers 5.0 and 7.0. The last two rows answer different numbers only if each `with` value lands in its own slot. Before, the first line stopped with `ArgumentsMismatch` at `split(jvp(f))(..xs)`: `jvp(f)` takes `f`'s `with` list and the lambda had no name for it."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_of_a_with_function.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout = "scale     value=6.00000000000000000 slope=2.00000000000000000\nquadratic value=9.75000000000000000 slope=11.00000000000000000\nexchanged value=5.00000000000000000 slope=7.00000000000000000\n"
+expect_output_not_contains = ["Warning", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "transforms.with_grad_composition_meets_the_split_wall"
+desc = "A library-level `with_grad` written as the composition design principles 9.9 asks for (author's ruling of 2026-11-03 09:50) -- the weight moved to an ordinary parameter by a lambda, `vjp` differentiating it there -- and the wall it meets: the differentiated function is a lambda whose body ends in a call to a `with`-parameterised function, so the lifted graph answers with that call's pair instead of building a two-member tuple fill, and `split` cuts only a fill. The case pins the wall rather than the numbers the composition would produce; those are `(0.125, -0.75)`, the engine reading `library_grad_is_the_composition.cml` holds to. `skip=exit` and the reason line are `split`'s own report, and the case turns green the day the exit is cuttable."
+kind = "behavior"
+case = "../../../cases/compile/transforms/with_grad_composition_meets_the_split_wall.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["skip=exit", "split does not build this function", "a lifted function answers with the pair (result, tangent)", "here the pair is a call's result", "not the two-member tuple fill this cut takes its two halves from", "This shape is not accepted", "2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-split-cut.cn.md"]
+expect_stdout_not_contains = ["value=0.12500000000000000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

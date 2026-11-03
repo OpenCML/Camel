@@ -169,3 +169,14 @@ expect_stdout = "rest_hole 7.0\nnamed_hole 30.0\ntwo_with 6.0\n"
 expect_output_not_contains = ["Warning", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+[[tests]]
+name = "lambda_inference.with_pack_on_a_lambda"
+desc = "A lambda writes a pack among its `with` parameters and forwards it (author's ruling of 2026-11-03 13:50, the pack rule of design principles 5.6), and the completion binds that pack to the `with` list of the position the lambda stands in -- the same rule an ordinary rest parameter follows from the expected type. `through(scaled)` answers `<..ws> (x) => g<..ws>(x)`: the position's `w` = 2.0 and `x` = 3.0 give 6.0, the same number as the lambda that reads the position's name (`apply((x) => x * w)`), so the pack carries the value and not only the syntax. Before, `<..ws>` was `Unexpected '..'; expected a name` -- the `with` half of the 10:00 ruling while the ordinary pack already parsed. The third line is the empty pack: `vjp` of a function with no `with` parameters stands at a position whose list is empty, `ws` is `()`, and `split(jvp(f))<..ws>(x)` spreads nothing -- value 9.0, slope 6.0."
+kind = "behavior"
+case = "../../../cases/compile/lambda_inference/with_pack_on_a_lambda.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout = "named=6.00000000000000000 packed=6.00000000000000000\nsquare value=9.00000000000000000 slope=6.00000000000000000\n"
+expect_output_not_contains = ["Warning", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

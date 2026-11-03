@@ -1537,11 +1537,18 @@ rule for every arity, no exception for one parameter, no type function that take
 a one-long tuple).
 
 One declaration for every arity: `F` is the function, `Vjp<F>` says the parameters are `F`'s and the
-pullback's cotangents are too (stdlib/types.cml), and `(..xs)` takes the parameters the instantiated
-`Vjp<F>` has -- the ordinary rule that a lambda takes its parameters' types from the position it
-stands in, applied to a pack (author's ruling of 2026-11-01 19:10). The lambda's rest parameter is a
-value in its body: `xs` is the tuple of those parameters, and `split(jvp(f))(..xs)` spreads it into
-the call of the forward half, which is the rule the language already had for spreading a tuple.
+pullback's cotangents are too (stdlib/types.cml), and `<..ws> (..xs)` takes both lists the
+instantiated `Vjp<F>` has -- the `with` list and the parameters, each from the position the lambda
+stands in (author's rulings of 2026-11-01 19:10 and 2026-11-03 13:50). The packs are values in the
+body: `xs` is the tuple of the parameters and `ws` the tuple of `f`'s `with` values, so
+`split(jvp(f))<..ws>(..xs)` hands the forward half the list it declares and the parameters it
+takes. `transpose(lin)` takes no `with` argument written for it: its type already has one --
+`lin` is a function of `f`'s `with` list, because a `with` value is a constant of the transform
+rather than a residual the cut could capture, so the linear half is too, and its transpose is as
+well (`Pullback<F>` in stdlib/types.cml, author's ruling of 2026-11-03 13:50 deciding the list by
+the type). The lambda writes the pack rather than naming the `with` parameters: `Vjp<F>` splices
+`WithOf<F>` as types, and a body that read a name from there would depend on what the caller of
+`vjp` called its own parameters.
 The whole reading in one line: the function is written where the call is, so the example is a
 program of its own -- `y` is `x * x` at 3, and the pullback read at `ct = 1.0` answers the
 derivative there, one member per parameter.

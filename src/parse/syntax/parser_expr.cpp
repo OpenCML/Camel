@@ -1190,7 +1190,10 @@ void ParserImpl::parseFuncData() {
     const bool outerLambdaParams = lambdaParams_;
     lambdaParams_                = true;
     if (cur_ == TK::Lt || cur_ == TK::LAngle) {
-        parseAngledParams();
+        // A pack among the `with` parameters is the same rule on a lambda as on a declaration
+        // (design principles 5.6, and the author's ruling of 2026-11-03 13:50): `<..ws> (..xs) => ...`
+        // names the `with` list the position gives the value, so the lambda's body can forward it.
+        parseAngledParams(true);
     }
     if (cur_ != TK::LParen) {
         lambdaParams_ = outerLambdaParams;

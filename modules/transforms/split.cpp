@@ -2549,16 +2549,36 @@ SplitGraph buildSplitGraph(
             return refusal;
         }
         case ExitShape::NotAPair: {
-            // **Defensive, and unreachable from `.cml`.** `split`'s own type refuses a plain function
+            // **Reachable from `.cml`**, and the cell used to say the opposite ("defensive, and
+            // unreachable"), which was wrong twice over. `split`'s own type refuses a plain function
             // before this function runs -- `Invalid call to 'split' with argument types <> ((x: float)
-            // => float pure)` -- so the only way to stand here is a graph built by hand whose exit is
-            // neither the pair nor a Join. The same distinction as the cell above: "cannot happen
-            // here", not "not supported yet".
+            // => float pure)` -- so a graph built by hand is one way in; a lifted graph is the other,
+            // and it is the way a program takes. The shape: the exit node is the *application* whose
+            // lifted copy is the pair (measured with a temporary probe line, 2026-11-03: `kind=10`
+            // -- `GCNodeKind::Func` -- with two `with` inputs and two ordinary ones, and the copy's
+            // type `(float, float)`), so the pair is a callee's answer and not the two-member tuple
+            // `Fill` this graph writes itself. That is what a differentiated lambda ending in a call
+            // to a `with`-parameterised function lifts to
+            // (`test/cases/compile/transforms/with_grad_composition_meets_the_split_wall.cml`). The
+            // `exit=Tuple{chain,tangent}` field of the `REINTERP jvp` line is a fixed label, not a
+            // reading, and does not say this: the node's kind does.
+            //
+            // So this is a wall to name, not a state to defend: the three routes through it -- write
+            // the pair into a `Fill` in the lowering, teach this switch the call's-pair shape, or work
+            // around it in the library -- are weighed in
+            // `docs/handover/questions/2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-split-cut.cn.md`,
+            // which takes the first: an exit's shape is the lowering's product, while this switch is
+            // the semantic invariant, and a criterion naming more shapes is harder to state than a
+            // product that writes the one shape.
             SplitGraph refusal;
             refuseAt(
                 refusal, function, exit, "the exit",
-                "a lifted function answers with the pair (result, tangent); this graph's exit is not a "
-                "two-member tuple fill, so there is no pair to cut");
+                "a lifted function answers with the pair (result, tangent); here the pair is a call's "
+                "result -- the differentiated lambda ends in a call to a `with`-parameterised function "
+                "-- and not the two-member tuple fill this cut takes its two halves from, so there is "
+                "no pair to cut. This shape is not accepted: "
+                "`docs/handover/questions/2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-"
+                "split-cut.cn.md` weighs the three routes through it");
             os << "REINTERP split function=" << function->name() << " skip=exit ("
                << refusal.refusedWhy << ")\n";
             return refusal;

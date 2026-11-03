@@ -66,6 +66,14 @@ const SELFTEST_JOBS = '4'
 // reports its own cost is the only thing that stops the next raise from being a guess.
 // See docs/handover/questions/2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant.cn.md.
 const cost = { children: 0, cpuStart: process.cpuUsage(), wallStart: process.hrtime.bigint() }
+// The width the child runs actually got, as opposed to the width this file intends for them.
+// `SELFTEST_JOBS` alone is a constant, and a constant printed as a reading is a reading of
+// nothing: with the pin taken out (`width` left empty) it still said `jobs=4`. So each child
+// records which of the two it got -- `fixed` when this file appended `--jobs SELFTEST_JOBS`,
+// `inherited` when it appended nothing and the child took the host's width -- and the line at the
+// end reports what every child got. A child that names its own width (`--jobs 1` for the serial
+// check) is not part of this reading: its width is the subject of that check, not this file's.
+const childWidths = new Set()
 const problems = []
 const scratchRoot = path.join(repoRoot, 'tmp', 'test')
 // When the self-test runs under the runner, this is its own scratch directory; a direct run
@@ -80,6 +88,11 @@ function runRunner(args, extraEnv = {}) {
     // taken at `SELFTEST_JOBS`, which is what makes its reading independent of the load it is
     // started under. The flag goes before the target, where the runner reads it.
     const width = args.includes('--jobs') ? [] : ['--jobs', SELFTEST_JOBS]
+    // What this child is taken at, from the width this file appended rather than from the constant
+    // it would have appended: `fixed` is the pin, `inherited` is no pin at all.
+    if (!args.includes('--jobs')) {
+        childWidths.add(width.length > 0 ? 'fixed' : 'inherited')
+    }
     const proc = spawnSync(process.execPath, [runner, ...width, ...args], {
         encoding: 'utf8',
         cwd: repoRoot,
@@ -1142,4 +1155,15 @@ console.log('runner self-test ok')
 // file's own runs are judged by. A measurement that moves the thing it measures is worse than the
 // number it replaces, so the reading stays where the runner makes it.
 const spentWall = Number(process.hrtime.bigint() - cost.wallStart) / 1e9
-console.log(`[calibration] child-runs=${cost.children}; jobs=${SELFTEST_JOBS}; wall=${spentWall.toFixed(1)} s`)
+// `width` is what the children were taken at, and it is the one number here that can differ
+// between two runs of the same tree: `fixed(4)` is the pin doing its work, `inherited` is a run
+// where the children took the host's width. It read `jobs=4` before, which was `SELFTEST_JOBS`
+// printed whether or not anything was appended -- a constant in the shape of a measurement.
+const widthReading = childWidths.has('inherited')
+    ? 'inherited'
+    : childWidths.has('fixed')
+      ? `fixed(${SELFTEST_JOBS})`
+      : 'own' // every child named its own width, so this file pinned nothing
+console.log(
+    `[calibration] child-runs=${cost.children}; width=${widthReading}; wall=${spentWall.toFixed(1)} s`
+)

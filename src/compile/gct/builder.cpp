@@ -4727,6 +4727,11 @@ bool isArrayLiteralData(const AST::node_ptr_t &ast) {
 /// as the brackets write it. `at` holds the level's own literal, which is where a level is
 /// reported; `shaped` is false when a level is not one shape — a row beside an element, or two
 /// rows of different lengths — and then no rank-N array has that shape.
+///
+/// When `shaped` is false, `lengths` holds only the levels walked before the disagreement: a half
+/// shape, not a wrong one. So a caller reads `shaped` first and `lengths` second; whoever reads
+/// `lengths` first and `shaped` after is one `if` away from the same accident as the rank-one
+/// literal walk had (a judgement that worked out the lengths and did not hand them out).
 void literalShapeOf(
     const AST::node_ptr_t &ast, std::vector<int64_t> &lengths, std::vector<AST::node_ptr_t> &at,
     bool &shaped) {
@@ -7177,6 +7182,11 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             defaults.with.push_back({nullptr, camel::source::kInvalidOriginId});
             factory.addWithRest(
                 name, paramPair->size() > 0 ? visitType(paramPair->at(0)) : nullptr);
+            // The pack takes one slot in the numbering of the parameters the function wrote, which
+            // is the numbering the unwritten parameters of a lambda are recorded against (`with`
+            // parameters first): a parameter written after it (an ordinary rest parameter, say) is
+            // one place further on than its position in the source suggests.
+            ++paramIndex;
             continue;
         }
         Type *type                = nullptr;
