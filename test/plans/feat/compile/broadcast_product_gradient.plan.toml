@@ -1,0 +1,37 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
+# The transpose of the array product when its two operands are not the same shape.
+#
+# `tensor:multiply` broadcasts, so `mul_tensor_t`'s second operand is a *shape*: `w`'s cotangent is
+# `ct * h` reduced to `w`'s shape, and `w`'s shape is `float[2, 2, 3]` while `h` is `float[3]`. A law
+# that reads `w` for that shape cannot have it -- a transposition is handed the cotangent and never
+# the value it differentiates -- so the law reads the extents its own port states instead
+# (`stdlib/tensor.cml#sum_to_stated`, handed over by `modules/transforms/rule_expand.cpp`). The two
+# cases are one number read on both sides: the engine's own pullback and the library's law.
+[[tests]]
+name = "broadcast_product_gradient.engine_and_library_agree"
+desc = "`sum(w * h)` with `w: float[2, 2, 3]` and `h: float[3]` is a broadcast product: every element `w[i][j][k]` meets `h[k]`, so `dL/dw` is `h` spread over the leading axes -- twelve numbers, `[1, 2, 3]` three times over, and `value` is 24. The engine's pullback reads the operator's own rule (`modules/tensor/kernels/gradient.cpp#sumTo`) and the library's reads `mul_tensor_t`; both cases pin the same numbers, so a law that answered `w`'s shape from `h`'s -- or from a zero carrier standing in for `w` -- is a fail and not a different reading. `numel` comes first because a cotangent with the right digits in the wrong shape is the wrong answer, and that is exactly the shape a broadcast gets wrong."
+kind = "behavior"
+case = "../../../cases/compile/transforms/broadcast_product_gradient_through_the_engine.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["broadcast engine numel=12 d000=1.0 d001=2.0 d002=3.0 d11_2=3.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "broadcast_product_gradient.library_answers_the_engine_number"
+desc = "The same program with the library's own rules: `rulesets.jvp`'s forward rule for the product, then `transpose`'s `mul_tensor_t` for the pullback. The reading is the engine's, element for element -- `value=24.0`, `numel=12`, and the three elements of the first row `1.0 2.0 3.0` with the last element of the tensor `3.0` -- which is what makes the law the adjoint of the broadcasting operator and not a plausible reduction. The value is printed first: a refused transpose produces no output at all, and the plan records the exit code beside the lines."
+kind = "behavior"
+case = "../../../cases/compile/transforms/broadcast_product_gradient_through_the_library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["broadcast library value=24.0 numel=12 d000=1.0 d001=2.0 d002=3.0 d11_2=3.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
