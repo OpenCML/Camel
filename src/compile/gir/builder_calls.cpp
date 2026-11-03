@@ -1374,7 +1374,11 @@ void Builder::bindNamedArgumentsToDeclarations(
 bool Builder::completeWithFor(
     const void *owner, const std::string &uri, FunctionType *signature,
     std::vector<Argument> &inputs, camel::core::type::type_vec_t &types) {
-    const size_t arity = signature->withTypesCount();
+    // A pack among the `with` parameters (`with <..ws>`) is not a parameter a call names or a
+    // default fills: it stands for the `with` arguments a call writes beyond the fixed ones
+    // (design principles 4.4, 5.6), so the parameters to complete end before its `void` slot.
+    const size_t arity =
+        signature->withTypesCount() - (signature->hasWithRest() ? 1 : 0);
     if (inputs.size() > arity) {
         return false;
     }

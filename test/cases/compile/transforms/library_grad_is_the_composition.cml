@@ -1,0 +1,61 @@
+// The library's `grad` is the composition `vjp` + the seed 1, and `vjp` is `split` read backwards by
+// `transpose` -- `(y, transpose(lin))`, nothing wrapped around it (stdlib/vjp.cml). This holds it to
+// the engine's own `grad`/`with_grad` on one scalar model, element by element:
+//
+//     pred = x * w + b, loss = 0.5 * (pred - t)^2, x = 1.5, t = 2.0, w = 0.5, b = 0.75
+//     d/dw = (pred - t) * x = (0.75 + 0.75 - 2.0) * 1.5 = -0.75
+//     d/db = (pred - t)     = -0.5
+//
+// The two Camel legs differ only in where the weight sits: the library's leg writes everything as an
+// ordinary parameter, and the engine's `grad`/`with_grad` differentiate the first `with` parameter
+// (the bias reaches `grad` through a lambda that moves it to the front). Same arithmetic, same
+// literals; what differs is which of the two positions the value sits in.
+//
+// A tensor model cannot be written on this path yet, and that is a boundary rather than a missing
+// test: `vjp` of a function of `float[..]` stops before the walk (a captured array operand has no
+// tangent pair; `sum` over an array, `softmax<1>` and `mean` at an axis stop the transpose), and the
+// library's `grad` is declared for `(x: float) => float` only. `docs/handover/reports/
+// 2026-11-03-library-vjp-walls.cn.md` names the four places in the order the path meets them.
+import { grad, with_grad } from autodiff
+import { vjp } from vjp
+import { abs } from math
+
+// The library's spelling: everything the loss reads is an ordinary parameter.
+func loss_plain(w: float, b: float): float {
+    let err = 1.5 * w + b - 2.0
+    return 0.5 * err * err
+}
+
+// The engine's spelling: the same arithmetic, the weight first among the `with` parameters.
+with <w: float, b: float>
+func loss_with(x: float, t: float): float {
+    let err = x * w + b - t
+    return 0.5 * err * err
+}
+
+func main(): int sync {
+    // The library's leg: `vjp` answers (value, pullback), and the pullback at the seed 1 is the
+    // gradient of the parameters.
+    let (library_value, pullback) = vjp(loss_plain)(0.5, 0.75)
+    let (library_w, library_b) = pullback(1.0)
+
+    // The engine's leg: `with_grad` gives the value and the first `with` parameter's gradient, and
+    // the bias is moved to the front by a lambda to be differentiated in its turn.
+    let (engine_value, engine_w) = with_grad(loss_with)<0.5, 0.75>(1.5, 2.0)
+    let engine_b = grad(<bb: float> (ww: float): float => loss_with<ww, bb>(1.5, 2.0))<0.75>(0.5)
+
+    println(`library value={:.17f} w={:.17f} b={:.17f}`->format<library_value, library_w, library_b>)
+    println(`engine  value={:.17f} w={:.17f} b={:.17f}`->format<engine_value, engine_w, engine_b>)
+    // Element by element, not "close": the two paths agree exactly or this line is not zero.
+    println(
+        `diff    w={:.3e} b={:.3e} value={:.3e}`->format<
+            abs(library_w - engine_w),
+            abs(library_b - engine_b),
+            abs(library_value - engine_value)>)
+    println(
+        `same_w={} same_b={} same_value={}`->format<
+            library_w == engine_w,
+            library_b == engine_b,
+            library_value == engine_value>)
+    return 0
+}

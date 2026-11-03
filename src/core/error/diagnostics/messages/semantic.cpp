@@ -1245,6 +1245,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::WithPackArgumentType,
+            {
+                "WithPackArgumentType",
+                "The pack '..{0}' of '{1}' takes 'with' arguments of type '{2}': argument {3} has type '{4}'.",
+                "Every 'with' argument the pack takes is of the type it writes, the rule an ordinary parameter follows one type further out. Give an argument of that type, or write the pack without one ('..{0}') to take any type.",
+            },
+        },
+        {
             SemanticDiag::WhenPredicateNotImported,
             {
                 "WhenPredicateNotImported",
@@ -1554,14 +1562,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "CalledFallibleValue",
                 "This value has type '{0}' and it is fallible: calling it as a function leaves the error it may hold nowhere to be read.",
                 "A 'T!' is a value that reports a failure instead of giving a result, so a call of it has nothing to run: take it apart first ('!!', '->' or 'match'), return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...', and then call the function it gives.",
-            },
-        },
-        {
-            SemanticDiag::WithPackNeedsNativeDeclaration,
-            {
-                "WithPackNeedsNativeDeclaration",
-                "The pack '..{0}' among the 'with' parameters needs a declaration without a body.",
-                "A pack among the 'with' parameters stands for the arguments a call gives beyond the fixed ones, and only a declaration of a native operator, which takes them as they come, can use them. A function with a body names each 'with' parameter; write them out, or write the pack in a function type.",
             },
         },
         {

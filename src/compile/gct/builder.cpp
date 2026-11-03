@@ -5375,12 +5375,11 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     // (step 1) -- unless its condition is the pass applicability, in which case it
     // declares a pass and the pipeline reads it (design principles 9.3).
     const bool nativeDeclaration = ast->size() < 2;
-    if (!nativeDeclaration && funcType->hasWithRest()) {
-        diags_->of(SemanticDiag::WithPackNeedsNativeDeclaration)
-            .at(ast->atAs<AST::FuncTypeLoad>(0)->load()->tokenRange())
-            .commit(std::string(funcType->argNameAt(funcType->withTypesCount() - 1)));
-        throw BuildAbortException();
-    }
+    // A pack among the `with` parameters is allowed on a declaration with a body as on one without
+    // (language author, 2026-11-03): the pack rule is the one the ordinary parameters follow
+    // (design principles 4.4, 5.6). Its binding of the call's `with` arguments, and what the body
+    // may do with it, are built where the body is; here the signature keeps it as the `void` slot
+    // `addWithRest` writes, which a call never passes a value for.
     // A `.cml` found beside a `.cmo` of the same name is that C++ module's *declaration*
     // module, in which the C++ operators are declared; it may also hold Camel definitions
     // (rule impl-kernel-site, 2026-10-23: "声明模块可以有函数体，`DeclarationModuleHasBody`
@@ -7149,17 +7148,13 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
                 factory.addWithArg(name + "_" + std::to_string(wi), pack, false);
                 continue;
             }
-            // A pack among the `with` parameters (`with <..args>`): untyped and last, like
-            // the rest parameter of the ordinary ones. A lambda does not write one (the parser
-            // refuses it); a declaration with a body is refused where its body is known.
+            // A pack among the `with` parameters (`with <..args>`): last, like the rest parameter of
+            // the ordinary ones, and typed or not. A pack that writes a type (`with <..args: T>`)
+            // takes `with` arguments of that type, on the rule an ordinary parameter follows one
+            // type further out (design principles 4.4, 5.6); `with <..args>` takes any type. What
+            // the body may do with the pack is built where the body is.
             if (wi + 1 != withParams.size()) {
                 diags_->of(SemanticDiag::RestParameterNotLast)
-                    .at(paramLoad->tokenRange())
-                    .commit(name);
-                throw BuildAbortException();
-            }
-            if (paramPair->size() > 0) {
-                diags_->of(SemanticDiag::RestParameterTypeNotSupported)
                     .at(paramLoad->tokenRange())
                     .commit(name);
                 throw BuildAbortException();
@@ -7171,7 +7166,8 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
                 throw BuildAbortException();
             }
             defaults.with.push_back({nullptr, camel::source::kInvalidOriginId});
-            factory.addWithRest(name);
+            factory.addWithRest(
+                name, paramPair->size() > 0 ? visitType(paramPair->at(0)) : nullptr);
             continue;
         }
         Type *type                = nullptr;

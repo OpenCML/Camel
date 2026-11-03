@@ -415,7 +415,13 @@ inline compile_graph_ptr_t createCompileGraph(
         }
     };
     if (funcType) {
-        for (size_t i = 0; i < funcType->withTypesCount(); ++i) {
+        // A pack among the `with` parameters (`with <..ws>`) is not a port: a port is a value a
+        // call passes, and a pack is the arguments a call writes beyond the fixed parameters,
+        // decided at the call (design principles 4.4, 5.6). Its slot stays in the signature,
+        // which is what the name table below indexes with, and no port stands for it.
+        const size_t withPorts =
+            funcType->withTypesCount() - (funcType->hasWithRest() ? 1 : 0);
+        for (size_t i = 0; i < withPorts; ++i) {
             const std::string portName = i < funcType->argNamesCount()
                                              ? std::string(funcType->argNameAt(i))
                                              : std::format("__w{}", i);
