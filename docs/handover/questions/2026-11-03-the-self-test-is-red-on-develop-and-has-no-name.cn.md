@@ -38,15 +38,43 @@ benchmark failure: the payload failure reason is missing
 benchmark failure: the diagnostic of the failed iteration is missing
 ```
 
-分成三组，三组的病不一样：
+分成三组，三组的病不一样。每组各给一条最小读数（夹具、期望、实得原文）：
 
-1. **五个 sweep 夹具整体 `PASS=0`**（`fast`/`all`/`milestone`/`collision`/`reuse`）：不只是
-   `poison` 那几条期望失败的对不上，连应当通过的样本也全红——这更像"夹具根本没跑起来"或
-   "sweep 展开没产出样本"（`sweep fast sampled 0 copies … expected 3 + 1` 正指向后者），
-   而不是某一条断言选错。
-2. **`--changed` 的洞**：`feat/compile/rules_angle_args.plan.toml` 没有任何 case 路径能选到它，
-   改了它的用例永远不会跑它。这是 `test/plan-selection.json` 缺一条规则，与 runner 本身无关。
-3. **benchmark 失败载荷**：少 `reason`、少失败轮次的诊断两处。
+**组 1：`test/tools/selftest/sweep/`（两个源计划 + 一条 sweep 计划）——13 个用例全红**
+
+| 层 | 期望（自检里写死的字符串） | 实得 |
+| --- | --- | --- |
+| `--tier fast` | `[SUMMARY] total: 13, pass: 13, fail: 0` | `[SUMMARY] total: 13, pass: 0, fail: 13` |
+| `--tier all` | `[SUMMARY] total: 18, pass: 18, fail: 0` | `[SUMMARY] total: 18, pass: 0, fail: 18` |
+| `--tier milestone` | `[SUMMARY] total: 5, pass: 5, fail: 0` | `[SUMMARY] total: 5, pass: 0, fail: 5` |
+
+`collision` 与 `reuse` 两处是各 4 个用例，同样 `pass: 0, fail: 4`。所以那行
+`sweep fast sampled 0 copies (risky 0, plain 0), expected 3 + 1` **不是另一个病**：它数的是
+`PASS poison:` 开头的行，全部用例都 FAIL 时数出来自然是 0——同一件事的症状，不是第二件事。
+
+一条**未验证**的线索：内层那次运行的 `[provenance]` 写的是 `jobs 32`（自检 spawn 时不带
+`--jobs`，取 `availableParallelism`），而那段时间主机 1 分钟 load 在 20–47。13 个用例全红、
+一个都不亮，更像整体超时/被挤掉，而不是某条断言选错——但这是要单独跑一次才能确认的事。
+
+**组 2：`test/plans/feat/compile/rules_angle_args.plan.toml` 没有任何 case 路径能选到它**
+
+原文（一行）：
+`plan-selection: 1 plan file(s) no case path selects, so --changed can never run them: test/plans/feat/compile/rules_angle_args.plan.toml (its cases are under test/cases/modules/autodiff/). Add a rule that names the plan for the directory its cases live in.`
+
+也就是说：改 `test/cases/modules/autodiff/` 下的用例，`--changed` 解析到的是 autodiff 的
+计划，这条 plan 永远跑不到。这是 `test/plan-selection.json` 缺一条规则，与 runner 无关。
+
+**组 3：`test/tools/selftest/benchmark_failure.plan.toml` 的失败载荷少了两个字段**
+
+自检找的两段字面量都没出现：
+
+| 缺的字段 | 自检找的字面量 |
+| --- | --- |
+| 失败原因 | `the timed pass failed` |
+| 失败轮次的诊断 | `RuntimeDiag::DivisionByZero` |
+
+（该用例自己那条 `[FAIL] failing_pass` 与 `[SUMMARY] … fail: 1` 都对，所以只是载荷内容缺，
+不是整条失败没被报出来。）
 
 ## 三条路
 
