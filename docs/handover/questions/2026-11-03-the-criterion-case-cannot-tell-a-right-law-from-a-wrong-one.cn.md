@@ -71,14 +71,52 @@ mean_axis(x, 0, false) 的余切，ct = 1.0 时：正确解 [[0.5,1,1.5],[0.5,1,
 所以正确解的**形状 `[2, 3]` 在转置图里无处可知**。这不是"律写得不够好"，是这条用例的程序形状
 缺了长度这个值。
 
-## 同一族：`take_t` 与 `idx_arr_t` 也读线性操作数
+## 一条病、四处律（2026-11-03 22:35 量，探针 `D:\Temp\p2-shapes.txt`）
 
-`stdlib/rulesets/transpose.cml:258`（`idx_arr_t`）的 `scatter_into(zeros_like(xs), …)` 与
-`:283`（`take_t`）的 `scatter_rows(zeros_like(t), …)` 都读**线性操作数自己的值**，只为拿形状。
-11:10 裁的就是这一族（"`idx_arr_t` 写的是 `scatter_into(zeros_like(xs), i, ct)`，`zeros_like(xs)`
-读的是线性操作数自己的值，只为拿它的长度……所以这条规则写法本身不成立"）。
-**所以这条裁决不能只落在 `mean_axis_t` 上**：三条律是同一个写法，按一条裁，按一条改，
-否则下一个只修 `mean` 的人会把矛盾留在 `take`/`idx_arr` 上。
+**同一条病，四处律，不是三种。** 逐条量到的是下面这张表；"读什么"一栏是律的右手边**为了什么**
+去读线性操作数，"已知操作数能给吗"一栏问的是 11:10 那条路（长度/形状由已知操作数提供）能不能走。
+
+| 律 | 读线性操作数的什么 | 位置（原文一行） | 已知操作数能给吗 | 缺的是一句话 |
+| --- | --- | --- | --- | --- |
+| `sum_t` | `xs` 的**整张形状** | `stdlib/rulesets/transpose.cml#spread_like`：`return full(shape(xs), value)` | 否 | 输入的整体形状 |
+| `mean_axis_t` | `xs` 的**总长度 + 形状** | `#mean_axis_t`：`numel(xs) / numel(ct)`、`ones_like(xs)` | 否（`ct` 只给归约后的长度） | 总长度 |
+| `take_t` | `t` 的**整张形状**（行×列） | `#take_t`：`scatter_rows(zeros_like(t), indices, ct, 0)` | **半**：`ct` 给列数，`indices` 给行号不给行数 | 行数 |
+| `idx_arr_t` | `xs` 的**长度** | `#idx_arr_t`：`scatter_into(zeros_like(xs), i, ct)` | 否（`i` 是 `int`，给不了长度） | 长度 |
+| `mul_tensor_t` | `x`/`w` 的**形状** | `#mul_tensor_t`：`sum_to(ct * w, x)`、`sum_to(ct * x, w)` | 常量侧 ✓（常量本就已知），线性侧 ✗ | 形状 |
+
+**机制链条一句话**：律的右手边读线性操作数 → 走法的探针表
+（`modules/transforms/transpose.cpp#TransposeState::calleeNeeds`）把那个操作数的**值**记成该成员的
+一个捕获口 → `modules/transforms/transpose.cpp#transposeSignature` 从**正函数的签名**算、只数余切
+→ 两张表对不上，调用时死在 `nargs.size() == normPorts.size()`。这不是"律写得不够好"，是**两条表
+各算一份**。
+
+**三个最小程序，同一句报文**（今天全部编不过）：
+
+```
+f(x: float[])    = x[0] * 2.0          →  transpose_of_f  has 2 norm ports
+g(t: float[..])  = sum(take(t, [1]))   →  transpose_of_g  has 2 norm ports
+h(x: float[..])  = sum(x)              →  transpose_of_h  has 2 norm ports
+
+Runtime indirect call norm-arity mismatch: caller graph 'main' node 3 has 1 args,
+  target graph 'transpose_of_X' has 2 norm ports
+```
+
+**没有一条编过，所以没有"转置后的读数"可贴——这本身就是读数**：今天这三条律没有一个能对
+`transpose` 出数，能出数的只有走 `vjp`/`split` 的那条路（见下）。
+
+**`11:10` 在 `take_t` 上无解，这一句要分开写，因为它把责任从律挪到了调用点。**
+`take_t` 需要的行数**没有任何已知操作数能给**：`indices` 给的是被选中的行号，不是 `t` 有多少行；
+`ct` 只给列数。所以只能走"线性调用多收一个已知实参（`len(t)` / 形状）"那条——而这条路**今天
+没接**：`stdlib/rulesets/jvp.cml#jvp_idx_arr` 仍写 `index_into(dxs, i)`，`take` 的 jvp 侧同样没带
+长度。⇒ **不是"律没写"，是"实参没接"。** 责任在调用点，不在律的写法。
+
+**`sum_t` 也在病里，只是被遮住了。** 它今天"看起来正常"，是因为 `vjp`/`sum` 那条路走的是
+`split`：捕获进的是 `split` 后一半的**闭包**（闭包端口本来就按捕获数算），不经过
+`transposeSignature` 的端口数比对。所以**这条病不限于新写的律**，也不限于 `mean` 一族：
+任何人直接对一个含 `sum` 的函数取 `transpose`，今天都撞同一句报文。
+
+**所以这条裁决不能只落在 `mean_axis_t` 上**：五条律是同一个写法，按一条裁，按一条改，
+否则下一个只修 `mean` 的人会把矛盾留在 `sum`/`take`/`idx_arr` 上。
 
 ## 三条路
 
@@ -90,13 +128,25 @@ mean_axis(x, 0, false) 的余切，ct = 1.0 时：正确解 [[0.5,1,1.5],[0.5,1,
   `(int, float) => (float[..],)`，用例同样要先造 `x`（长度来自 `x`）。代价：规则层要新写"带长度的
   线性版本"（和 `idx_arr` 那条同一套，作者说"不新增核心机制"），且 `take`/`idx_arr`/`mean` 三处
   一起动；好处：带的值从"整个数组"降到"一个数"，签名改动面小。
-- **C（默认建议）：守站，并先把用例改造成"能分辨对错"的形状，再谈 A 还是 B。** 具体两步：
-  1. 用例侧：先造出 `x`，断言改成**逐元素**（打印数组本身，或断言 `sum` 加一个元素值），让"正确解
-     `[[0.5,1,1.5],[0.5,1,1.5]]`"与"错律 `[1,2,3]`"**印出不同的字**。这一条不需要任何实现路先定。
-  2. 实现侧：`known_fail` 保留、`known_fail_msg` 不动，`known_fail_note` 加两句——本页的
-     "6.0 分辨不了对错"与"绑定即捕获"，并指向本页。理由：**在分辨不了对错的判据上选实现路，
-     等于给未来的错数盖章**；而 A、B 都要动用例的调用形状、`take`/`idx_arr` 也一起动，先有能分辨
-     的判据，才知道改完是不是真的对了。
+- **C（默认建议，一条，按此往下做）：一条约定改四处，并先接上调用点那根线。** 约定就一句：
+
+  > **转置律不得读线性操作数的形状/长度；律需要的信息由调用点作为"已知实参"传入。**
+
+  顺序三步，一步一步各自可验：
+
+  1. **先接线（不动律）**：把形状/长度作为已知实参接到线性调用上（`jvp_idx_arr`、`take` 的
+     jvp 侧各一处，`mean_axis` 一处），照 11:10 写的"不新增核心机制"。这一步的判据是**端口的数
+     变对**：`transpose_of_*` 的 norm 口数等于调用点实参数，报文从 norm-arity 消失（哪怕律还
+     没改，这一步就能量出来）。
+  2. **再改律**：`sum_t`/`mean_axis_t`/`take_t`/`idx_arr_t`/`mul_tensor_t` 五处，把"读操作数拿
+     形状"换成"读那个已知实参"。判据是五条各自的最小程序**都能编过并出数**（`sum_t` 那条今天
+     也编不过，正好当同一个判据用）。
+  3. **最后拆 `mean` 的个数闸**：`modules/transforms/transpose.cpp` 的 `normOperands.size() != 2
+     && != 1` 换成"按位置问每个操作数要不要余切"——`int`/`bool` 无切空间，天然答零。只有前两步
+     落地之后这一步才安全，因为今天这道闸正是唯一挡住"错律也能绿"的东西（本页第一节量的那个
+     6.0）。
+  4. 用例侧（与实现并行、不依赖它）：先把 `mean_axis_transpose` 的断言改成**能分辨对错**的形状
+     （先造 `x`、断言逐元素），再做上面的实现顺序。
 
 ## 未测出
 
