@@ -1063,6 +1063,18 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const Program &program, const GCG
     translateVector(graph->normPorts(), draft->normPorts_);
     translateVector(graph->withPorts(), draft->withPorts_);
     translateVector(graph->closureNodes(), draft->closureNodes_);
+    // The closure members' identity travels with them: a decode that dropped it would lose the
+    // numbering a cut wrote the first time the graph is read back, and `transpose` has nothing else
+    // to read it by (`GCGraph::closureParameterOf`).
+    {
+        const std::span<const int32_t> identity = graph->closureParameterOf();
+        for (size_t i = 0; i < draft->closureNodes_.size() && i < identity.size(); ++i) {
+            if (identity[i] >= 0) {
+                draft->setClosureParameterOf(
+                    draft->closureNodes_[i], static_cast<size_t>(identity[i]));
+            }
+        }
+    }
 
     draft->entry_      = translateNodeRef(graph->entryNodeRef(), sourceToDraft);
     draft->exit_       = translateNodeRef(graph->exitNodeRef(), sourceToDraft);
@@ -1750,6 +1762,7 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
     std::erase(normPorts_, id);
     std::erase(withPorts_, id);
     std::erase(closureNodes_, id);
+    closureParameterOf_.erase(id);
     if (entry_ == id)
         entry_ = kInvalidNodeRef;
     if (exit_ == id)

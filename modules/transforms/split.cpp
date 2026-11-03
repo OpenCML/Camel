@@ -687,10 +687,8 @@ struct Half {
 /// what the transaction hands it, and a parameter written as the type is one more of the direct
 /// connections `runtime.graph_draft_ledger` counts, which may only fall.
 template <typename Draft>
-void addResidualCaptures(
-    Draft &draft, const std::vector<Residual> &residuals,
-    std::span<Type *const> parameterValues, Half &backward) {
-    backward.closurePorts.reserve(residuals.size() + parameterValues.size());
+void addResidualCaptures(Draft &draft, const std::vector<Residual> &residuals, Half &backward) {
+    backward.closurePorts.reserve(residuals.size());
     for (const Residual &residual : residuals) {
         if (residual.type == nullptr) {
             continue;
@@ -698,28 +696,15 @@ void addResidualCaptures(
         const gc_node_ref_t port =
             draft.addPortNode(residual.type, draft.allocateRuntimeSlot(residual.type));
         draft.appendClosureNode(port);
-        backward.closurePorts.push_back(port);
-    }
-    // The parameters' own values stand after the residuals, in parameter order: the tail the
-    // transpose reads a parameter's value out of (author, 2026-11-03 00:50 ①). `residualsOf` numbered
-    // the members before them, so the slot for parameter k is `residuals + k` -- the number the
-    // transposed member computes on its own side from the closure it inherited, which is this tuple.
-    // The mark is what says the tail is this and not a closure some caller closed a member over: a
-    // graph without it goes on refusing a parameter it cannot hand over, by name.
-    bool appended = false;
-    for (Type *parameter : parameterValues) {
-        if (parameter == nullptr) {
-            continue;
+        // The member's identity, not its place: a residual that is a parameter's own value is
+        // recorded as that parameter's (author, 2026-11-03 03:10). A transposed member reads the
+        // number from here and nowhere else -- the residuals are in `residualsOf`' program order,
+        // not in parameter order, so a member's index would name the wrong parameter as soon as the
+        // program reads two of them out of order (`f(x, y) = y * y` puts parameter 1 in slot 0).
+        if (residual.parameter != Residual::kNotAParameter) {
+            draft.setClosureParameterOf(port, residual.parameter);
         }
-        const gc_node_ref_t port =
-            draft.addPortNode(parameter, draft.allocateRuntimeSlot(parameter));
-        draft.appendClosureNode(port);
         backward.closurePorts.push_back(port);
-        appended = true;
-    }
-    if (appended) {
-        draft.setFlags(
-            static_cast<uint8_t>(draft.flags() | rt::kGraphFlagClosureCarriesParameters));
     }
 }
 
@@ -1370,6 +1355,19 @@ bool readLoopCut(
     }
     std::sort(tape.begin(), tape.end());
     cut.tape = std::move(tape);
+    // The parameter a graph port is the *value* of, or `kNotAParameter`. A port at a tangent position
+    // is the half's own parameter, not a value anything carries, and a port that is no parameter's
+    // (a seeded value, a round port) answers `kNotAParameter` too.
+    const std::span<const gc_node_ref_t> graphPorts = function->normPorts();
+    const auto parameterValueOf = [&](gc_node_ref_t ref) -> size_t {
+        const auto at = std::find(graphPorts.begin(), graphPorts.end(), ref);
+        if (at == graphPorts.end()) {
+            return Residual::kNotAParameter;
+        }
+        const std::pair<size_t, bool> which =
+            parameterOfPort(function->funcType(), static_cast<size_t>(at - graphPorts.begin()));
+        return which.second ? Residual::kNotAParameter : which.first;
+    };
     std::vector<gc_node_ref_t> invariants;
     for (gc_node_ref_t ref : tangentOutside) {
         const rt::GCNode *node = function->node(ref);
@@ -1381,7 +1379,6 @@ bool readLoopCut(
             continue;
         }
         if (node->kind == rt::GCNodeKind::Port) {
-            const std::span<const gc_node_ref_t> graphPorts = function->normPorts();
             const auto at = std::find(graphPorts.begin(), graphPorts.end(), ref);
             if (at != graphPorts.end() &&
                 parameterOfPort(function->funcType(), static_cast<size_t>(at - graphPorts.begin()))
@@ -1392,11 +1389,62 @@ bool readLoopCut(
         }
         invariants.push_back(ref);
     }
-    std::sort(invariants.begin(), invariants.end());
+    // **A parameter's own value is a residual when the second half reads it** (author, 2026-11-03
+    // 00:50 ①, reworked 03:10). The branch cut carries every value parameter -- its arms may read any
+    // of them -- and the loop carries the ones its second half actually reads, which is a fact of the
+    // walk rather than of the signature: `int_escape`'s half reads `x` through `3.0*x`, the truncation
+    // and `float(...)` even though the round computes none of those, and a signature cannot say so.
+    //
+    // The walk is the one the copy makes, with the round's own leaves removed: it descends through
+    // the values the cut carries as a whole (they are on this side of the cut anyway) and stops at a
+    // port whose value the round itself owns -- the state, the round's element -- because the tape
+    // carries those and their inputs are not the half's. A constant is skipped for the reason above.
+    {
+        std::unordered_set<gc_node_ref_t> visited;
+        std::vector<gc_node_ref_t> stack{cut.tangentRoot};
+        while (!stack.empty()) {
+            const gc_node_ref_t ref = stack.back();
+            stack.pop_back();
+            if (ref >= function->nodeCount() || !visited.insert(ref).second) {
+                continue;
+            }
+            const rt::GCNode *node = function->node(ref);
+            if (node == nullptr || node->kind == rt::GCNodeKind::Data) {
+                continue;
+            }
+            if (node->kind == rt::GCNodeKind::Port) {
+                const size_t parameter = parameterValueOf(ref);
+                if (parameter != Residual::kNotAParameter &&
+                    std::find(invariants.begin(), invariants.end(), ref) == invariants.end()) {
+                    invariants.push_back(ref);
+                }
+                continue;
+            }
+            for (gc_node_ref_t input : dataInputsOf(function, ref)) {
+                stack.push_back(input);
+            }
+        }
+    }
+    // Program order, the order `residualsOf` numbers for a straight-line cut: parameters by their
+    // index first, then the values the forward half computes, by node.
+    std::sort(
+        invariants.begin(), invariants.end(), [&parameterValueOf](gc_node_ref_t a, gc_node_ref_t b) {
+            const size_t pa     = parameterValueOf(a);
+            const size_t pb     = parameterValueOf(b);
+            const bool aIsValue = pa != Residual::kNotAParameter;
+            const bool bIsValue = pb != Residual::kNotAParameter;
+            if (aIsValue != bIsValue) {
+                return aIsValue;
+            }
+            if (aIsValue) {
+                return pa < pb;
+            }
+            return a < b;
+        });
     for (gc_node_ref_t ref : invariants) {
         Residual one;
         one.node      = ref;
-        one.parameter = Residual::kNotAParameter;
+        one.parameter = parameterValueOf(ref);
         one.type      = function->node(ref) != nullptr ? function->node(ref)->dataType() : nullptr;
         if (one.type == nullptr) {
             return refuse("a value the backward half reads from outside the loop has no type");
@@ -1652,7 +1700,7 @@ SplitGraph cutLoopGraph(
         auto &draft = group.transaction(backwardId).edit();
         draft.setFuncType(halves.backward);
         Half backward(draft, function, program, true, &cut.outside, &residualIndexOf);
-        addResidualCaptures(draft, cuts, std::span<Type *const>(), backward);
+        addResidualCaptures(draft, cuts, backward);
         for (size_t i = 1; i < sourcePorts.size(); i += 2) {
             Type *type               = function->funcType()->normTypeAt(i);
             const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
@@ -1911,7 +1959,7 @@ SplitGraph cutBranchGraph(
         auto &draft = group.transaction(backwardId).edit();
         draft.setFuncType(branchHalves.backward);
         Half backward(draft, function, program, true, &cuts, &residualIndexOf);
-        addResidualCaptures(draft, cuts, std::span<Type *const>(), backward);
+        addResidualCaptures(draft, cuts, backward);
         for (size_t i = 1; i < sourcePorts.size(); i += 2) {
             Type *type               = function->funcType()->normTypeAt(i);
             const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
@@ -2126,23 +2174,12 @@ SplitGraph buildSplitGraph(
         }
         residualTypes.push_back(residual.type);
     }
-    // The parameters' own values ride at the tail of the same tuple, after the residuals and in
-    // parameter order. A transposed member answers a parameter's value out of the closure the call
-    // handed it instead of being handed one as an argument (author, 2026-11-03 00:50 ①), and this
-    // tail is where that value comes from: `residualsOf` numbered the residuals, so the appended
-    // member for parameter k sits at `residuals + k`, and the transposed member reads it there.
-    // The value is the parameter's own -- what the forward half is given, and what it has a port for.
-    std::vector<Type *> parameterValues;
-    parameterValues.reserve(function->funcType()->normTypesCount() / 2);
-    for (size_t i = 0; i < function->funcType()->normTypesCount(); i += 2) {
-        Type *const type = function->funcType()->normTypeAt(i);
-        if (type == nullptr) {
-            parameterValues.clear();
-            break;
-        }
-        parameterValues.push_back(type);
-    }
-    residualTypes.insert(residualTypes.end(), parameterValues.begin(), parameterValues.end());
+    // **The closure is the residuals, and nothing else.** A parameter's own value the backward half
+    // reads is one of them -- `residualsOf` numbers it, and the member carries the parameter number
+    // it is the value of (author, 2026-11-03 03:10: 后一半读到的参数原是残差，由 residualsOf 编号进闭包).
+    // There is no tail of parameter types after the residuals any more: what a member is the value of
+    // is its identity, and a reader that had to count places after the residuals was counting a
+    // layout two sides had to agree on.
     Type *residualsType = TupleType::create(residualTypes);
     const SplitHalves halves = splitHalvesWith(function->funcType(), residualsType);
     if (halves.forward == nullptr || halves.backward == nullptr) {
@@ -2437,18 +2474,6 @@ SplitGraph buildSplitGraph(
             }
             residualMembers.push_back(value);
         }
-        // The parameters' own values, in the tail order the closure type names: the value port the
-        // forward half declares for each parameter is the value itself, and handing it on here is
-        // what makes the tail readable on the other side of the merge.
-        for (size_t i = 0; i < function->funcType()->normTypesCount(); i += 2) {
-            if (i >= forward.portOf.size() || forward.portOf[i] == rt::kInvalidNodeRef) {
-                os << "REINTERP split function=" << function->name()
-                   << " skip=residual (the forward half declares no port for a parameter the "
-                      "closure tail carries)\n";
-                return built;
-            }
-            residualMembers.push_back(forward.portOf[i]);
-        }
         // `lin`: the backward graph closed over those values, built here because here is where they
         // exist. Its closure layout is the one this build read from the backward graph, so the
         // collector scans it by exactly the type the graph states.
@@ -2473,9 +2498,7 @@ SplitGraph buildSplitGraph(
             residualIndexOf[graphResiduals[i].node] = i;
         }
         Half backward(draft, function, program, true, &graphResiduals, &residualIndexOf);
-        addResidualCaptures(
-            draft, graphResiduals,
-            std::span<Type *const>(parameterValues.data(), parameterValues.size()), backward);
+        addResidualCaptures(draft, graphResiduals, backward);
         for (size_t i = 1; i < sourcePorts.size(); i += 2) {
             Type *type       = function->funcType()->normTypeAt(i);
             const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));

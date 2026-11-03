@@ -261,17 +261,11 @@ enum GCGraphFlag : uint8_t {
     /// parameters the call is given. It says nothing about the values: a call of a marked graph is
     /// the same call, so no number moves.
     kGraphFlagRecomputeBackward = 1 << 4,
-    /// The tail of this graph's closure is the parameters' own values: one member per parameter, in
-    /// parameter order, written after the residuals `residualsOf` numbered (`split`'s backward half,
-    /// modules/transforms/split.cpp#addResidualCaptures). The author's ruling of 2026-11-03 00:50 ①
-    /// is what it is for: a transposed member answers a parameter's value out of the closure the
-    /// call handed it, so the slot for parameter k is `residuals + k` on both sides of one merge --
-    /// the tuple the forward half builds and the type the transposed graph declares. The mark is
-    /// needed because a closure says nothing about where its members came from: a member closed by
-    /// a caller (`transpose(lin)` on a hand-closed lambda) has a tail of its own that is not this,
-    /// and such a member goes on refusing by name instead of reading a number it was not given.
-    kGraphFlagClosureCarriesParameters = 1 << 5,
 };
+
+/// The closure-member identity a graph records, for a member that is no parameter's value: a value
+/// the cut computed, or a member a caller closed by hand (GCGraph::closureParameterOf).
+inline constexpr int32_t kNoClosureParameter = -1;
 
 /// kWritingDerived: congruence closure found the equivalence, it need not be stored.
 inline constexpr uint8_t kWritingDerived = 1 << 0;
@@ -568,6 +562,10 @@ struct GCGraphNativePayload {
     gc_node_ref_t *normPorts   = nullptr;
     gc_node_ref_t *withPorts   = nullptr;
     gc_node_ref_t *closure     = nullptr;
+    // One entry per closure member: the parameter whose *value* the member holds, or
+    // kNoClosureParameter (GCGraph::closureParameterOf). Null when the graph records no identity,
+    // which is every closure but the ones a cut wrote.
+    int32_t *closureParameters = nullptr;
     // The order edges of the graph, sorted by (user, pred); null when the graph has none. Not in
     // the nodes' input runs: an order edge is not a port (GCGraph::orderPredsOf).
     GCGraphOrderEdge *orderEdges = nullptr;
@@ -750,14 +748,6 @@ class GCGraph : public camel::core::rtdata::Object {
     /// (kGraphFlagRecomputeBackward): `remat` set it on this graph, and `split` reads it to decide
     /// what crosses a cut. The body is the same code either way; only what a cut stores changes.
     bool recomputesOnBackward() const { return (flags_ & kGraphFlagRecomputeBackward) != 0; }
-    /// The tail of this graph's closure is one member per parameter, in parameter order, after the
-    /// residuals (kGraphFlagClosureCarriesParameters): `split`'s backward half wrote them, and
-    /// `transpose` reads a parameter's value out of that slot instead of asking its caller for one.
-    /// A graph without the mark has a closure of some other origin, and its parameters are refused
-    /// by name when the body reads one.
-    bool closureCarriesParameters() const {
-        return (flags_ & kGraphFlagClosureCarriesParameters) != 0;
-    }
     /// The kernel the semantic body of an `#impl` function implements (design principles 10.4):
     /// the operator URI a direct call of the function is compiled to, empty for every other
     /// graph. A consumer that must see inside the function (autodiff, fusion, export, a rule)
@@ -1075,6 +1065,12 @@ class GCGraph : public camel::core::rtdata::Object {
     std::span<const gc_node_ref_t> normPorts() const;
     std::span<const gc_node_ref_t> withPorts() const;
     std::span<const gc_node_ref_t> closureNodes() const;
+    /// For each of `closureNodes()`, the parameter whose *value* the member holds -- the numbering a
+    /// cut gives its residuals (`Residual::parameter`, modules/transforms/split.cpp#residualsOf) --
+    /// or kNoClosureParameter. Empty when the graph records no identity: a closure a caller closed
+    /// over its own values has no parameters behind it, and a reader then refuses to name one
+    /// instead of reading a member by its place in the list.
+    std::span<const int32_t> closureParameterOf() const;
     /// The number of arms of the BRCH `brchRef` (0 for another node).
     gc_cnt_t armCountOf(gc_node_ref_t brchRef) const;
 
