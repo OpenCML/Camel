@@ -257,10 +257,23 @@ args = ["${case}", "--verify-docs", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["every declared name has a description and an @example"]
 normalizers = ["normalize_newlines"]
-# The bound moved with the work: on 2026-11-04 this case used 47.0 s of CPU against the 45 s a
-# 180000 ms bound leaves for the 4x margin, and what grew was the library's own arithmetic -- the
-# examples went to 577 written, 574 a program of their own. A bound the work cannot meet is a red
-# about the bound, so it is 240000 ms (60 s of margin) and the case still asks for every slot.
+# The bound moved with the work, and the two readings below are why (both on `88zjwei`, the same
+# tree, `--verify-docs --camel out/latest/bin/camel`):
+#
+#   * at 180000 ms, tip `ffa27bba1`, 2026-11-04 04:39 +08:00, 1m load 16.5: `used 47750 ms of CPU
+#     against a 180000 ms timeout, below the 4x margin` -- 47750 > 180000/4 = 45000, so the bound
+#     was the red, and the verdict itself passed (`every declared name has a description and an
+#     @example: 574 example(s) checked, 65 entry(ies) marked a fragment were compiled too`, exit 0).
+#   * at 240000 ms, tip `b8d944be9`, 2026-11-04 05:19 +08:00, 1m load 30.3: `User time 26.67 s +
+#     System time 20.35 s = 47.02 s of CPU` (wall 19.95 s, 235% of a core), against 240000/4 =
+#     60000 ms -- 12.98 s of margin, and the same two verdict lines: `575 example(s) checked, 65
+#     entry(ies) marked a fragment were compiled too` and `the example counts are the ones the
+#     script records: 24 that do not compile in 1 class(es), 0 marked a fragment that compile
+#     alone, 41 that compile only with the name they say they need`.
+#
+# So the count the work needs is 47 s of CPU -- the library's own arithmetic, 575 examples, each
+# its own process -- and a bound it cannot meet is a red about the bound. 240000 ms leaves 60 s of
+# margin, the case still asks for every slot, and the number is stated rather than waved at.
 timeout_ms = 240000
 # This case compiles every `@example` of the library -- several hundred programs, each its own
 # process -- and reports how many of them compile. Under a full gate that number is a reading
