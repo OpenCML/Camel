@@ -1,0 +1,43 @@
+// The engine's reading of a `take_stated` node, beside the library's reading of the same take.
+//
+// `take_stated(t, at)` is the stated spelling of `take`: `at` is
+// `[n, i0, ..., i(n-1), d0, ..., d(rank-1)]`, the rows read and the operand's extents, because a
+// transpose law cannot read the shape of the value a cotangent comes back through
+// (`modules/tensor/ops/layout_ops.cpp#takeStatedKernel`).
+//
+// The library answers a take's gradient through `stdlib/rulesets/jvp.cml#jvp_take`, whose tangent
+// call is `take_stated`, and `stdlib/rulesets/transpose.cml#take_stated_t` scatters each row's
+// cotangent into an array of the stated extents. The engine's reverse pass answers it through
+// `DerivativeRegistry` only if a rule is filed under the node's operator -- this program is the one
+// whose reading was once a refusal (`autodiff: no derivative rule for operator 'tensor:take_stated'`),
+// a missing row in the engine's C++ table and not a missing law.
+//
+// The rows read are positions 0 and 2, so both legs put one there and zero where nobody read:
+//
+//     engine dL/dw=[1.0, 0.0, 1.0, 0.0] library dL/dx=[1.0, 0.0, 1.0, 0.0]
+//
+// The library's leg is the program `stated_take_gradient.cml` pins on its own; this file runs both
+// legs and prints them side by side so the equality is a reading and not a citation.
+//
+//     camel test/cases/compile/transforms/stated_take_answered_by_the_engine.cml
+import { grad } from autodiff
+import { sum, take, take_stated } from tensor
+import { vjp } from vjp
+
+/// The differentiated value is the `with` parameter (design principles 9.9).
+with <w: float[]>
+func stated(): float {
+    return sum(take_stated(w, [2, 0, 2, 4]))
+}
+
+func through_library(x: float[]): float {
+    return sum(take(x, [0, 2]))
+}
+
+func main(): int sync {
+    let engine = grad(stated)<[1.0, 2.0, 3.0, 4.0] as float[]>()
+    let (value, pullback) = vjp(through_library)([1.0, 2.0, 3.0, 4.0] as float[])
+    let fromLibrary = pullback(1.0).0
+    `value={} engine dL/dw={} library dL/dx={}`->format<value, engine, fromLibrary>->println
+    return 0
+}

@@ -1,0 +1,44 @@
+// The engine's reading of a `sum_stated` node, beside the library's reading of the same sum.
+//
+// `sum_stated` is the stated spelling of the whole-tensor sum: the value is `sum`'s (`sumAllKernel`
+// runs it) and the list is the operand's extents, which the forward half states because a transpose
+// law cannot read the shape of the value a cotangent comes back through
+// (`modules/tensor/ops/reduction_ops.cpp#sumStatedKernel`).
+//
+// The library answers the sum's gradient through `stdlib/rulesets/jvp.cml#jvp_sum`, whose tangent
+// call *is* `sum_stated`, and `stdlib/rulesets/transpose.cml#sum_stated_t` reads the stated extents.
+// The engine's reverse pass answers it through `DerivativeRegistry` only if a rule is filed under
+// the node's operator -- this program is the one whose reading was once a refusal
+// (`autodiff: no derivative rule for operator 'tensor:sum_stated'`), a missing row in the engine's
+// C++ table and not a missing law.
+//
+// Both legs answer the same array, which is what the one line of this case prints:
+//
+//     engine dL/dw=[1.0, 1.0, 1.0] library dL/dx=[1.0, 1.0, 1.0]
+//
+// The library's leg is the program `stated_sum_gradient.cml` pins on its own (through `sum`, whose
+// linear half calls `sum_stated`); this file runs both legs and prints them side by side so the
+// equality is a reading and not a citation.
+//
+//     camel test/cases/compile/transforms/stated_sum_answered_by_the_engine.cml
+import { grad } from autodiff
+import { sum, sum_stated } from tensor
+import { vjp } from vjp
+
+/// The differentiated value is the `with` parameter (design principles 9.9).
+with <w: float[]>
+func stated(): float {
+    return sum_stated(w, [3])
+}
+
+func through_library(x: float[]): float {
+    return sum(x)
+}
+
+func main(): int sync {
+    let engine = grad(stated)<[1.0, 2.0, 3.0] as float[]>()
+    let (value, pullback) = vjp(through_library)([1.0, 2.0, 3.0] as float[])
+    let fromLibrary = pullback(1.0).0
+    `value={} engine dL/dw={} library dL/dx={}`->format<value, engine, fromLibrary>->println
+    return 0
+}
