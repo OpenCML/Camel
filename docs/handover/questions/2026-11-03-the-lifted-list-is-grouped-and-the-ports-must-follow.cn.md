@@ -45,6 +45,43 @@
 
 因此这一笔按停手规则回退，代码停在 `799bd565f`；上表是下一步的起点，不是成品。
 
+## 四步都落了，打印一字不变 —— 这一条否掉了"次序"这个假设
+
+四步（`jvpSignature` grouped + 端口 grouped + `Transpose<F>` 新形 + `split` 声明）一次性落地、构建通过，`vjp(f)([1.0,2.0],[3],[4])` 的报错**一字未变**，仍是
+
+```
+Function of type '(float[..], int[..], ()) => (float, (int[..], float[..], ()) => float pure) pure'
+cannot be called with argument types: <> (float[..], int[..], int[..])
+```
+
+同时把 `split.cpp#valuePortsOf` / `#parameterOfPort` 按中点两分读，**打印同样不变**。全量 8542 / 8493 / **29** / 10 / 10 —— 与只改签名那次同一条数，一条没绿。所以"端口次序是最后一层"是错的，已回退。
+
+## `ParamsOf` 是对的：五参、不是六参
+
+按作者的判据逐成员量（三参 `(float[], int, float)`）：
+
+| 量的是 | 读数 |
+| --- | --- |
+| `is_same::<(..ParamsOf<F>) => float, (m: float[..], n: int, y: float) => float>()` | **true** |
+| 同一条对"第三位是 `()`"/"第二位是 `()`"/"第一位是 `()`" | false / false / false |
+| `is_same::<(..Tangent<ParamsOf<F>>) => float, (m: float[..], n: (), y: float) => float>()` | **true** |
+| `is_same::<Jvp<F>, (m: float[..], n: int, y: float, dm: float[..], dn: (), dy: float) => (float, float)>()` | **true** |
+
+`ParamsOf` 一个不多一个不少，`Tangent<ParamsOf<F>>` 也对，`Jvp<F>` 的**声明**正是那六个。要修的不是它。
+
+真正量到的是 `jvp(f)` 的**实际类型**，被 `split` 拒绝时逐字印出来：
+
+```
+Invalid call to 'split' with argument types <> ((float[..], float[..], int, float, float) => (float, float) pure):
+`split` takes a lifted function...
+```
+
+五参：`(m, dm, n, y, dy)` —— 值 `float[]` 与它的切向挨着，`int` 那一格被跳过，值 `float` 与它的切向挨着。这就是 `jvpSignature` 今天建出来的东西（有切空间的参数值后跟切向，没有的只占一位），而 `split` 的旧读法正是按这个次序走的 —— 两边自洽，所以 `jvp_of_f` 一直绿。
+
+**所以缺的不是排布也不是 `ParamsOf`，是"声明六参、实现五参"这件事本身**：把 `jvpSignature` 改成六参（grouped）之后，`split` 那一半要按新次序重建，而它重建的路径**不经过 `valuePortsOf`**（改了也不动打印），说明半程的形状是在建图时从**成员端口**取的类型，不是从类型列表算的。
+
+下一步的入口因此更窄：`split` 建半程时给成形的那个 FunctionType 从哪儿来（`splitHalvesWith` 里给 forward/backward 各自 `setFuncType` 的那一处），而不是 `valuePortsOf`，也不是 `ParamsOf`。
+
 
 ## 我方默认
 
@@ -55,3 +92,4 @@
 第二件：**`void` 端口能建、能 `appendNormPort`，但值进不去**（被调者里那个 `void` 就是证据），所以"空切向占一位"这条要先由作者裁"它拿什么占"，再动手 —— 否则做出来的仍是"参数表里有一格没有任何值可传"。
 
 若作者裁定空切向不占端口，这一页退为记录这次回退的读数，工作量减半。
+因此这一笔按停手规则回退，代码停在 `799bd565f`；上表是下一步的起点，不是成品。
