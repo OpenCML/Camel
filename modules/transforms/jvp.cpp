@@ -8,6 +8,7 @@
 
 #include "camel/compile/gir/rule_templates.h"
 #include "camel/core/forward.h"
+#include "camel/core/derivative.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/base.h"
@@ -625,6 +626,45 @@ bool liftGraph(
             }
             return made;
         };
+        // The zero tangent of a value that is not a constant -- a captured value or a `with` parameter --
+        // and where that zero is made.
+        //
+        // *Why it is zero.* This road differentiates the function's ordinary parameters: the caller
+        // hands a seed for each of them, and a value the body merely reads is not one of those
+        // inputs, so it does not move. Design principles 9.9 says the same thing as a rule
+        // (`reinterpret<jvp>` lifts a captured value to a zero tangent), and the forward transform
+        // therefore adds no second port to hand it a direction: the value has one port and the
+        // tangent is the zero of its own type.
+        //
+        // *How it is made, and the boundary between the two ways.* A type whose extents are all
+        // stated has a zero that can be written down while the graph is built -- `0.0` for a
+        // `float`, an array of zeros for `float[2, 2]` -- and `zeroConstantFor` above writes it, as
+        // it already does for a constant. A type that leaves an extent open (`float[]`, `f32[..]`,
+        // which is how S2's own parameter tree is written) has no such zero: the length is the
+        // *value's*, and the value is a port that has not been run yet. Only then is the zero made
+        // where the value is, and by the operator the type's tangent space already names
+        // (`TangentSpace::zerosLikeUri`, include/camel/core/derivative.h; the arrays' is
+        // `:tangent/zeros_arr`, src/builtin/operators/derivative.cpp) -- the same zero every other
+        // reader of a tangent already asks for (`zeroTangent`, src/builtin/operators/struct.cpp).
+        //
+        // The order matters and is not an optimisation to be traded away: the static zero is one
+        // node per type shared by every rule of that type, while a zero built from a value is that
+        // value's and cannot be shared with the next value of the same open type. Reaching for the
+        // registry first would also make every `float` tangent a call, which is neither what the
+        // rules were handed before nor what a reader of the graph sees today.
+        const auto zeroOfValueAtRunTime = [&draft](gc_node_ref_t primal,
+                                                   Type *type) -> gc_node_ref_t {
+            if (type == nullptr || type->code() != camel::core::type::TypeCode::Array) {
+                return rt::kInvalidNodeRef;
+            }
+            const auto *space = camel::core::DerivativeRegistry::instance().findTangentSpace(type);
+            if (space == nullptr || space->zerosLikeUri.empty()) {
+                return rt::kInvalidNodeRef;
+            }
+            const gc_node_ref_t zero = draft.addOperNode(type, nullptr, space->zerosLikeUri);
+            draft.setNormInputs(zero, std::span<const gc_node_ref_t>(&primal, 1));
+            return zero;
+        };
         // The graph this one is a lift of: a fact about the graph, not a comment about the call.
         // `split` reads it when it has to carry a call of a lifted graph into a half, so that the
         // value half can call the primal instead of the lift (whose first parameter is the pair).
@@ -687,11 +727,13 @@ bool liftGraph(
         // replaces described the problem. The value only: the tangent of a captured value is the
         // zero below, so there is no second port to hand a direction in.
         std::unordered_map<gc_node_ref_t, gc_node_ref_t> withPortOf;
+        // The declared ones and the captured ones, one list: the first `withTypesCount()` are the
+        // caller's `with` arguments and the rest are the values the body captured, in the closure
+        // tuple's order (`GraphRead::withPortsOf`, cited below).
+        const size_t withCount =
+            function.funcType() != nullptr ? function.funcType()->withTypesCount() : 0;
+        const std::vector<gc_node_ref_t> originalWith = function.withPorts();
         {
-            const size_t withCount = function.funcType() != nullptr
-                                         ? function.funcType()->withTypesCount()
-                                         : 0;
-            const std::vector<gc_node_ref_t> originalWith = function.withPorts();
             for (size_t i = 0; i < withCount && i < originalWith.size(); ++i) {
                 camel::core::type::Type *withType = function.funcType()->withTypeAt(i);
                 if (withType == nullptr) {
@@ -706,6 +748,52 @@ bool liftGraph(
                     draft.addPortNode(withType, draft.allocateRuntimeSlot(withType));
                 draft.appendWithPort(port);
                 withPortOf[originalWith[i]] = port;
+            }
+        }
+        // The values the body *captures* from where it was written, which are not `with` parameters
+        // and were the one kind of port this lift left out. A capture is a port of the graph
+        // (`GraphRead::closureNodesOf`, which is `GCGraph::closureNodes`) but not one of its `with`
+        // ports, so a cell the walk never made is a hole: the lifted copy read nothing where the
+        // value stood, and the refusal it produced named the whole body (`skip=body`) rather than
+        // the capture -- measured 2026-11-03 on `(t: float[]) => k * t[0]`, which refused for a
+        // captured `float` exactly as it did for a captured `float[]`, so the type of the captured
+        // value was never the question and `pairTypeOf` was never the gate.
+        //
+        // The copy declares them in the source's order, which is the closure tuple's order, and
+        // takes the source's closure type; the function value this transform answers already
+        // carries `f`'s tuple (`jvp_operator.cpp`, `Function::create` with `f`'s tuple and the tuple
+        // copied over), so the two together make a read through the derivative read the caller's
+        // value. `rematKernel` (modules/transforms/remat_operator.cpp) copies a graph the same way
+        // and records the same defect: a capture the copy does not declare answers the zero of its
+        // slot.
+        //
+        // `closureNodesOf` and `closureTypeOf` are two *readings* added to `GraphRead`, not new
+        // storage: a runtime graph has answered both since captures existed (`GCGraph::closureNodes`
+        // and `GCGraph::closureType`), and the compile-time draft answers both as well
+        // (`GraphDraft::closureNodes`, `GraphDraft::closureType`). The face that turns a graph into
+        // what a transform reads simply did not pass them on, so a transform holding a `GraphRead`
+        // could see a graph's parameters and its `with` ports and not what it captures. Nothing is
+        // recorded twice and nothing new is encoded.
+        std::unordered_map<gc_node_ref_t, gc_node_ref_t> capturePortOf;
+        {
+            const std::vector<gc_node_ref_t> captures = function.closureNodesOf();
+            for (gc_node_ref_t original : captures) {
+                const NodeFace *captureNode = function.node(original);
+                camel::core::type::Type *captureType =
+                    captureNode != nullptr ? captureNode->dataType() : nullptr;
+                if (captureType == nullptr) {
+                    continue;
+                }
+                const gc_node_ref_t port =
+                    draft.addPortNode(captureType, draft.allocateRuntimeSlot(captureType));
+                draft.appendClosureNode(port);
+                capturePortOf[original] = port;
+            }
+            if (!capturePortOf.empty()) {
+                if (const camel::core::type::TupleType *closureType = function.closureTypeOf()) {
+                    draft.setClosureType(
+                        const_cast<camel::core::type::TupleType *>(closureType));
+                }
             }
         }
         // Step 3, first layer: the body is copied node by node. A port reads the caller's value, a
@@ -1087,6 +1175,29 @@ bool liftGraph(
                     copyOf[ref] = withPort->second;
                     if (camel::core::tangentSpaceOf(node->dataType()).hasSpace()) {
                         tangentOf[ref] = zeroConstantFor(node->dataType());
+                        if (tangentOf[ref] == rt::kInvalidNodeRef) {
+                            tangentOf[ref] = zeroOfValueAtRunTime(copyOf[ref], node->dataType());
+                        }
+                    }
+                    copied[ref] = true;
+                    ++copiedKinds;
+                    break;
+                }
+                // A value the body captured from where it was written: it enters by the port made
+                // for it above, and it does not move -- the same rule the `with` parameter one arm
+                // up follows (design principles 9.9's ruleset: `reinterpret<jvp>` lifts a captured
+                // value to a zero tangent), so its tangent is the zero of its own type and there is
+                // no second port to hand a direction in.
+                const auto captured = capturePortOf.find(ref);
+                if (captured != capturePortOf.end()) {
+                    copyOf[ref] = captured->second;
+                    if (camel::core::tangentSpaceOf(node->dataType()).hasSpace()) {
+                        tangentOf[ref] = zeroConstantFor(node->dataType());
+                        if (tangentOf[ref] == rt::kInvalidNodeRef) {
+                            // An extent the type leaves open: the zero is the value's shape, made
+                            // where the value is (see `zeroOfValueAtRunTime`).
+                            tangentOf[ref] = zeroOfValueAtRunTime(copyOf[ref], node->dataType());
+                        }
                     }
                     copied[ref] = true;
                     ++copiedKinds;

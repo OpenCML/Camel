@@ -38,7 +38,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { full, mean_axis, numel, ones_like, shape, sum, sum_to, take, zeros_like } from tensor
+import { full, matmul, mean_axis, numel, ones_like, shape, subtract, sum, sum_to, take, transpose, zeros_like } from tensor
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
@@ -138,6 +138,64 @@ func mul_tensor::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
 /// shapes the operator is called with -- two arrays, and an array and a number.
 export rule mul_tensor_t::<T>(x: T[..], w: T[..]) when is_float::<T>() {
     mul_tensor(x, w) => (ct: T[..]) => (sum_to(ct * w, x), sum_to(ct * x, w))
+}
+
+/// `x - w` on two arrays: what `tensor:subtract` means, and the left side this rule is filed under.
+func subtract::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
+    return x - w
+}
+
+/// The transpose of `x - w` on two arrays: `ct` for `x`, `-ct` for `w`. It is the mirror of
+/// `add_tensor_t` above and the adjoint of `jvp_subtract` (`stdlib/rulesets/jvp.cml`), and it is here
+/// because a loss written `pred - target` -- the one line every training step has -- puts this
+/// operator in the backward graph between the product's law and the sum's.
+export rule subtract_t::<T>(x: T[..], w: T[..]) when is_float::<T>() {
+    subtract(x, w) => (ct: T[..]) => (ct, -ct)
+}
+
+// ---- the transpose rule of the matrix product ----
+//
+// A product's cotangent is written with two more products: `a · b` passes `ct · bᵀ` back to `a` and
+// `aᵀ · ct` back to `b`. Both are the operator itself, so the law needs no arithmetic of its own and
+// no operator the library does not already publish -- the transposition of the *known* operand is
+// `tensor:transpose` (the last two axes swapped, `stdlib/signatures/tensor.cml#transpose`), which
+// reads a value the cut already carries, not the cotangent. Nothing here asks for a shape: the
+// extents are the operands' own, `transpose` carries them through, and `matmul` checks the pair where
+// the node is built -- the same place the forward rule's `matmul(da, b)` is checked
+// (`stdlib/rulesets/jvp.cml#jvp_matmul`). So the law reads no linear operand's value and needs no
+// count of anything: this is the shape the primitives' own declarations already state.
+//
+// It is the adjoint of `jvp_matmul` and it is filed under the operator's own name, `matmul(a, b)`,
+// the way that forward rule is -- the key `tensor:matmul` needs no exception in `ruleKeyExceptions()`
+// because the name derives it.
+//
+// **Only the two-matrix shape is taken, and the pattern says so.** A vector operand is not that shape
+// with a smaller extent: `matmul` broadcasts it, so the cotangent of a broadcast operand is the *sum*
+// of what it fed -- the reduction `sum_to` names, which is what `mul_tensor_t` above had to write for
+// the array-times-number shape. Here that reduction would have to be written for `ct · bᵀ` and
+// `aᵀ · ct` in the two vector positions, and it is not written.
+//
+// Naming the ranks in the pattern is what keeps the law from *claiming* a shape it cannot serve. With
+// open ranks (`a: T[..], b: T[..]`) the pattern matches a vector too, so the walk applies this law and
+// the program dies inside it at run time -- measured 2026-11-03 on `v · w` with `v: float[]`:
+// `rhs=sum_t,add_tensor_t,matmul_t` resolved and then
+// `transpose: transpose requires a tensor of rank >= 2`, a fault naming `transpose` and not the law
+// that asked it for one. With `T[?, k]` and `T[k, ?]` the vector form finds no rule at all, so the
+// walk refuses the *operator* by name, with the reason:
+//
+//     skip=rule-shape uri=tensor:matmul node=6 operands=2 reason=the rule takes
+//     (float[?, k], float[k, ?]), and the operator has (float[], float[2, 2])
+//
+// Two extents are `?` and one is a name: only the shared one (`k`) relates the operands, and naming
+// the other two would be a name no second position writes -- which the language warns about
+// (`docs/design-principles.cn.md` 5.4) because a name that relates nothing reads as though it does.
+// The boundary therefore stands where the rule is written, and
+// `test/cases/compile/transforms/matmul_transpose_vector_operand.cml` pins the reading.
+//
+// The two matrices are also what makes the law checkable: the model it was written for multiplies a
+// batch by a weight, both two-dimensional (`test/cases/compile/transforms/matmul_transpose_law.cml`).
+export rule matmul_t::<T>(a: T[?, k], b: T[k, ?]) when is_float::<T>() {
+    matmul(a, b) => (ct: T[?, ?]) => (matmul(ct, transpose(b)), matmul(transpose(a), ct))
 }
 // ---- the transpose rules of the reductions and the layout ----
 //
