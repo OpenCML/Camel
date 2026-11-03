@@ -99,6 +99,9 @@
 |---|---|---|---|
 | `test/plans/feat/compile/transforms.plan.toml` | 我这份（改动前同计划 105 项） | 2026-11-04 05:58 | `total: 106, pass: 99, fail: 2, known failures: 5` |
 | 同上，加 `zeroOfValueAtRunTime` 记录后复测 | 同上 | 2026-11-04 06:05 | `total: 106, pass: 99, fail: 2, known failures: 5` |
+| `test/plans/feat/compile` 全目录 | 同上（提交 `228da2ea8`） | 2026-11-04 06:02 | `total: 2244, pass: 2231, fail: 2, known failures: 11`（基线同一段读数为 2243 / 2230 / 2 / 11：只多我这一项） |
+| `test/plans/feat/transforms` 目录 | 同上 | 2026-11-04 06:04 | `total: 29, pass: 21, fail: 0, known failures: 8`（与基线逐项相同） |
+| `test/plans/feat/transforms/split.plan.toml` | 同上 | 2026-11-04 06:05 | `total: 19, pass: 19, fail: 0`（19 项，无退化） |
 
 两条 fail 都是基线就红的 `transpose_loop_escape.two_values_of_two_kinds` 与
 `transpose_loop_escape.second_state_of_the_same_loop`（我未增未减）；`total` 106 = 105 + 我这一项，
