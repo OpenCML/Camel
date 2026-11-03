@@ -79,11 +79,20 @@ export rule neg_t::<T>(x: T) when is_float::<T>() {
 // The other shape this operator is called with -- an array times a number -- is a second law under
 // the same key, and it is not the same right side: the number's cotangent is `sum(ct * x)`, a
 // reduction rather than a product, because a broadcast operand's cotangent is the sum of what it
-// fed. It is not written here for a measured reason: the transposed walk asks the index for **one**
-// rule per key (`camel/core/forward.cpp#transposeRuleOf`, `lookupRule`), which answers `no-rule`
-// when a key holds several, so a second rule under `mul_tensor` would take this one down with it.
-// Dispatching over a key's candidates by operand type is what `jvp.cpp#buildRuleTangent` already
-// does; `transpose.cpp` would have to do the same, and that is core work, not a law still missing.
+// fed. It is not written here, and the refusal was measured rather than predicted: a second rule
+// under `mul_tensor` whose parameters are `(T[..], T)` -- no position of which overlaps the ones
+// above -- is refused where it is written, because the index tells two rules of one key apart by
+// their `when` condition and both of these are `is_float::<T>()`:
+//
+//     The rule 'mul_tensor_t' and the rule 'mul_tensor_scalar_t' both have 'mul_tensor' with 2
+//     operand(s) as the head of their left side, and one ruleset has one rule per operator.
+//
+// The two shapes differ in the operand list, not in the condition, so no wording of the condition
+// lets them share this key. Past that, the walk asks for one rule per key by name
+// (`camel/core/forward.cpp#transposeRuleOf`; `lookupRule` answers `no-rule` when a key holds
+// several), so a second rule would take this one down with it. Dispatching over a key's candidates
+// by operand type is what `jvp.cpp#buildRuleTangent` already does; `transpose.cpp` would have to do
+// the same, and that is core work, not a law still missing.
 
 /// `x + w` on two arrays: what `tensor:add` means, and the left side this rule is filed under.
 func add::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
