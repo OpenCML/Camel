@@ -35,10 +35,12 @@ import {
     mul_cotangent,
     mul_cotangent_c,
     neg_cotangent,
+    stop_gradient,
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
 import { exp, full, log_softmax, matmul, mean_axis, numel, ones_like, relu, shape, sigmoid, subtract, sum, sum_to, take, tanh, transpose, where, zeros_like } from tensor
+import { log, pow } from math
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
@@ -76,6 +78,28 @@ export rule neg_t::<T>(x: T) when is_float::<T>() {
 /// operators in the body and for none of the conversions in front of them.
 export rule dtod_t::<T>(x: T) when is_same::<T, float>() {
     float(x) => (ct: T) => ct
+}
+
+// ---- the transpose rule of `stop_gradient` ----
+//
+// The engine answers `stop_gradient` with `camel::core::noGradient` (`modules/autodiff/operators.cpp`
+// registers it) -- a rule that contributes nothing -- and the pullback then materializes the missing
+// contribution as the zero of the value's own type
+// (`modules/autodiff/pullback.cpp#Backward::checkGradientType`). The library's half is the same
+// answer written as a value: the cotangent of the argument is the zero of its own type, so nothing
+// flows back and the result's cotangent is not read at all.
+//
+// Like the forward half (`jvp_stop_gradient`), the zero is the zero of the rule's own type parameter
+// and no operand is read: `stop_gradient::<T>(x: T): T` declares one value and one result of one type,
+// and a scalar needs no shape to be zeroed. An array argument would need its extents, which are the
+// operand's value or `:op/extent_of` from the type -- the second of which this tree does not have
+// (`docs/handover/reviews/2026-11-04-does-a-shape-in-the-type-reach-the-law.cn.md`, road 1) -- so an
+// array is refused by name rather than answered with a zero of the wrong shape.
+
+/// The transpose of `stop_gradient(x)`: nothing flows back, so the cotangent of `x` is the zero of its
+/// own type.
+export rule stop_gradient_t::<T>(x: T) when is_float::<T>() {
+    stop_gradient(x) => (ct: T) => T(0.0)
 }
 
 
@@ -436,4 +460,48 @@ export rule take_t::<T>(t: T[..], indices: int[]) {
 export rule mean_axis_t::<T>(xs: T[..], axis: int, keepdims: bool) when is_float::<T>() {
     mean_axis(xs, axis, keepdims) =>
         (ct: float[..]) => ones_like(xs) * (ct * T(1.0 / float(shape(xs)[axis])))
+}
+
+// ---- the transpose rules of the logarithm and of `pow` (`math:pow_d`) ----
+//
+// `pow(x, w)` is `math:pow_d`, and it is not `^`: `^` on two floats is `:op/pow_d`, a written token
+// whose key the core derives, while `pow` (`stdlib/math.cml#pow`) reaches the same kernel through a
+// declared function and its key is the name `pow_d` at two operands. `log(x)` is `math:log_d` the
+// same way. Both are filed here by declaring the call their operators are, the way `mul_tensor` and
+// `index_into` are (`rulesets.jvp` declares its own copies: a family cannot read another module's
+// private function).
+//
+// The two keys are the ones a **pullback** asks for, and they are what `^`'s backward walk stopped
+// on: `pow`'s forward rule is `jvp_pow_d` (`stdlib/rulesets/jvp.cml`), which writes
+// `w * x^(w-1) * dx + x^w * log(x) * dy` inline, so the linear half of a program that calls `pow`
+// holds a `math:pow_d` and a `math:log_d` node -- measured on `vjp(x => pow(x, 3.0))`, which answered
+// `skip=rule uri=math:log_d reason=unbound` once `pow_d_t` was in place and 12.0 once this law was.
+//
+// The exponent's branch is `ct * x^w * ln(x)`: for `x <= 0` that is `NaN`, the same reading the
+// forward rule gives the same operator. It is not written as a zero -- an undefined derivative says
+// so -- and it is not guarded either: a guard would be a branch on a value of the cotangent, which
+// the transposed walk cannot turn around.
+
+/// `pow(x, w)`: what `math:pow_d` means, and the left side this rule is filed under.
+/// @example pow_d(2.0, 3.0)    // 8.0
+func pow_d(x: float, y: float): float {
+    return pow(x, y)
+}
+
+/// The transpose of `pow(x, w)`: `ct * w * x^(w-1)` for the base, `ct * x^w * ln(x)` for the exponent.
+/// Its numbers are pinned by `pow_gradient_through_the_library.cml`.
+export rule pow_d_t(x: float, y: float) {
+    pow_d(x, y) => (ct: float) => (ct * y * pow(x, y - 1.0), ct * pow(x, y) * log(x))
+}
+
+/// `log(x)`: what `math:log_d` means, and the left side this rule is filed under.
+/// @example log_d(1.0)    // 0.0
+func log_d(x: float): float {
+    return log(x)
+}
+
+/// The transpose of `log(x)`: `ct / x`, which is the whole law -- the derivative of the logarithm is
+/// `1 / x` wherever the logarithm has a real value.
+export rule log_d_t(x: float) {
+    log_d(x) => (ct: float) => ct / x
 }
