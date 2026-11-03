@@ -272,3 +272,31 @@ expect_exit = 0
 expect_output_contains = ["REINTERP split function=jvp_of_h forward=", "REINTERP split function=jvp_of_g forward=", "REINTERP split function=jvp_of_f forward=", "f y= 15.0", "f d= 6.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+
+# A value the differentiated lambda captured, of a tensor-shaped type: the cut had no reading for a
+# **closure** port, and the two roads it did have (an ordinary parameter, a `with` argument) are not
+# where a capture arrives. `jvp` declares a capture as a closure port of the lifted graph, `split`
+# listed its halves' ports from `normPorts` and from the call's `with` inputs, and the read was in
+# neither map -- the refusal both halves gave was `the port is not a parameter of the graph, so
+# neither half takes it`, measured on `vjp((ww) => dot<ww>(x))(w)` with `x` the capture, which is the
+# shape of item 3 of `2026-11-04-where-the-library-and-the-engine-still-differ.cn.md`.
+#
+# The forward half now declares one port per closure node of the source, in the source's order, and
+# takes the source's closure type when it states one (`addCapturePorts`): the operator already hands
+# the forward half `f`'s tuple (`splitKernel` creates the value with `function->tupleType()` and
+# copies every slot), so the port reads the caller's value and the call site fills it as it always
+# filled a closure -- the author's shape for a closure port (2026-11-04 02:50: 转发成成员自己的端口、
+# 调用点照常填). A capture the tangent side reads crosses the cut as a residual like a `with` port
+# (`residualsOf`), so the backward half reads it out of `lin`'s closure and declares nothing.
+[[tests]]
+name = "split_capture_of_a_tensor"
+desc = "`vjp` of a lambda whose body reads a captured tensor, `dot(w) = sum(w * x)`: the cut of the lifted lambda reads the capture through a closure port, which neither `normPorts` nor the call's `with` inputs named, so both halves refused the read (`skip=forward construct=a port uri=- why=the port is not a parameter of the graph, so neither half takes it`). The answer is the engine's number for the same derivative, computed by hand before the reading was taken: `sum([1,2,3] * [4,5,6]) = 32` with pullback `[4, 5, 6]`, and the same `w` against the capture `[-1, 2, 0.5]` giving `4.5` with pullback `[-1, 2, 0.5]` -- the second point is what separates a pullback that reads the capture from one that hands back a remembered array. The extent is stated (`f64[3]`): with an open extent the same cut answers and `transpose` refuses one step later (`skip=cotangent-needs-a-value uri=tensor:multiply`), which is the case's boundary and not its subject."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_capture_of_a_tensor.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout = "captured value=32.0 pullback=([4.0, 5.0, 6.0])\ncaptured value=4.5 pullback=([-1.0, 2.0, 0.5])\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
