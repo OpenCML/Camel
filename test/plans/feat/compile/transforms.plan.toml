@@ -127,10 +127,17 @@ timeout_ms = 20000
 # residuals=1 loop=1 tape=5 invariants=0`), because the exit reads the loop's cell through one
 # `TupleIndex` per side and those two projections are what the cut hands each half -- no body region
 # is copied. The wall is one step later and is not a loop wall at all:
-# `TRANSPOSE function=split_of_jvp_of_g_backward skip=call-value-missing param=0 node=23 arg=2` -- the
-# exit the backward half copies is `index_into(dxs, 0)`, whose array argument the backward half
+# `TRANSPOSE function=split_of_jvp_of_g_backward skip=call-value-computed-by-the-body param=0
+# node=23 arg=2` -- the exit the backward half copies is `index_into(dxs, 0)`, whose array argument
+# the backward half
 # *recomputes* (the loop is copied into that half and its cell is a node there, not a residual), so
-# the member built for the callee cannot be handed the array's **value**. Measured 2026-11-03: the
+# the member built for the callee cannot be handed the array's **value**. (The word was
+# `call-value-missing` until 2026-11-03, when one word was split into two: that one now means "the
+# call does not carry the parameter's own value", and this refusal is the other shape -- the value is
+# one this half computes out of a loop, so carrying it means transposing the body, not passing an
+# argument. The split is in `modules/transforms/transpose.cpp`'s `unforwardedCause`, its sentence in
+# `transpose_operator.cpp`, and `test/tools/transpose_refusal/check.py` holds the two words apart.)
+# Measured 2026-11-03: the
 # same refusal stands with and without the reverse walk in `modules/transforms/transpose.cpp` -- the
 # walk is behind this wall, not in front of it, so the number this case asks for is not readable until
 # the array argument at that call is carried instead of recomputed.
@@ -140,7 +147,8 @@ timeout_ms = 20000
 # moved by one field:
 #   REINTERP split function=jvp_of_g forward=276 backward=277 type=(float[]) => (float, (float[]) =>
 #     float pure) pure residuals=1 loop=1 tape=5 invariants=0
-#   TRANSPOSE function=split_of_jvp_of_g_backward skip=call-value-missing param=0 node=23 arg=2
+#   TRANSPOSE function=split_of_jvp_of_g_backward skip=call-value-computed-by-the-body param=0
+#     node=23 arg=2
 # `invariants=0` is the whole reason the closure item cannot be the owner: this backward half reads no
 # parameter's value, so there is no member for the identity table to name and nothing for it to
 # carry. The callee's member *was* built (`TRANSPOSE function=rulesets.jvp::index_into<float>
@@ -167,7 +175,7 @@ case = "../../../cases/compile/transforms/vjp_loop_rounds_walk_backwards.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 known_fail = ["nvm"]
-known_fail_msg = "split_of_jvp_of_g_backward skip=call-value-missing param=0 node=23"
+known_fail_msg = "split_of_jvp_of_g_backward skip=call-value-computed-by-the-body param=0 node=23"
 known_fail_note = "倒序本身已经做了（`transpose` 侧不再照抄 iterable）；这条用例仍红是因为 backwards 里 `index_into` 的数组参数是重算的、不是残差。**这一项不是作者第 1 项**：那一项（参数原值作为残差进闭包）已于 `34788b554` 落地，而这半的 `invariants=0` —— 它不读任何参数的值，身份表里没有成员可写，所以它不可能被那一项修好；缺的是"这半自己算出来又读回去的值"的残差。摘标记的前提是先有 `grad= [1.0, 1.0]` 这个读数，今天没有。`split` builds both halves; the refusal is one step before the walk, at the call the backward half recomputes (`index_into(dxs, 0)`), whose array argument is not a residual the cut carries."
 expect_exit = 0
 expect_output_contains = ["value= 3.0", "grad= [1.0, 1.0]"]

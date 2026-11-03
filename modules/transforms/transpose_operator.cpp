@@ -174,6 +174,18 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
         }
         return "the callee's transpose was built, but " + position +
                " reads a value this call does not carry";
+    case TransposeRefusalCause::CallValueComputedByTheBody:
+        // The other shape, and the one the sentence above used to cover: the value is not missing
+        // from the call -- it is a value the function's own body computes, and it comes out of a
+        // loop or a branch. Handing it over is not passing one more argument; it is turning the
+        // region that computes it around, which is a transposition of a whole body.
+        return position.empty()
+                   ? std::string("the callee's transpose was built, but it reads a value the "
+                                 "function's own body computes out of a loop or a branch, so "
+                                 "carrying it means transposing that body")
+                   : "the callee's transpose was built, but " + position +
+                         " reads a value the function's own body computes out of a loop or a "
+                         "branch, so carrying it means transposing that body";
     case TransposeRefusalCause::Rule:
         return "the rule table has no rule for a step of this body";
     case TransposeRefusalCause::Condition:

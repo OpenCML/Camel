@@ -77,6 +77,8 @@ const char *transposeRefusalWord(TransposeRefusalCause cause) {
         return "call-no-transpose";
     case TransposeRefusalCause::CallValueMissing:
         return "call-value-missing";
+    case TransposeRefusalCause::CallValueComputedByTheBody:
+        return "call-value-computed-by-the-body";
     case TransposeRefusalCause::UnreadParameter:
         return "unread-parameter";
     case TransposeRefusalCause::NeedsAValueOutsideTheClosure:
@@ -882,6 +884,10 @@ bool buildTransposeMember(
         // predicate the forward graph did, at the same values -- which is why the parameters of `f`
         // are parameters of the transposed function too.
         bool complete = true;
+        // Whether the last `forward` attempt stopped at a node kind it cannot copy -- the owner of a
+        // region, a loop or a branch. That is the whole difference between the two shapes a call
+        // site can fail on, so it is recorded where the walk stops rather than guessed at the call.
+        bool stoppedAtARegion = false;
         std::function<gc_node_ref_t(gc_node_ref_t)> forward;
         forward = [&](gc_node_ref_t ref) -> gc_node_ref_t {
             if (ref >= nodeCount) {
@@ -1077,7 +1083,13 @@ bool buildTransposeMember(
                 return made;
             }
             if (node->kind != rt::GCNodeKind::Oper) {
-                complete = false;
+                // A kind `forward` cannot copy: a loop's rounds, a branch's arms -- a value that
+                // comes out of a **region**. Recorded here rather than guessed from the kind of the
+                // node a caller happens to have in hand, because the caller's node may be a
+                // projection *of* such a value (`Accs` over a loop's cell): the walk stops at the
+                // region, and the caller sees only that its projection would not forward.
+                stoppedAtARegion = true;
+                complete          = false;
                 return rt::kInvalidNodeRef;
             }
             const auto *body = function->nodeBodyAs<camel::runtime::GCOperBody>(ref);
@@ -2602,6 +2614,33 @@ bool buildTransposeMember(
                 // index belongs, and `(xs, i)` is the shape where an answered parameter stands before
                 // a value.
                 const size_t memberValues = calleeType->normTypesCount() - 1;
+                // Which of the two shapes a value this call cannot hand over is. The call site has
+                // one diagnostic for both, and until 2026-11-03 one word as well, so a refusal that
+                // meant the second read like the first and looked fixed:
+                //
+                // - the value is the **parameter's own**, and this call does not carry it (the shape
+                //   the membership test above answers, and the one the array cases left behind);
+                // - the value is one this **half's body computes** -- a loop's result, a branch's --
+                //   and it is not missing from the call at all: it stands in this graph, and handing
+                //   it over means copying a node whose value comes out of a region, which `forward`
+                //   cannot do (it copies Data, Port, Accs, Fill and Oper, and stops at `Loop`).
+                //   `vjp_loop.rounds_are_undone_in_reverse` is that shape: the call is
+                //   `index_into(dxs, 0)` and `dxs` is the backward half's own loop.
+                //
+                // The node's kind is the whole of the difference, so it is read and not guessed: a
+                // value that comes out of a region is one the walk would have to transpose the
+                // region for, and a value that does not is one the call or its closure owes.
+                const auto unforwardedCause = [&](gc_node_ref_t ref, size_t param) {
+                    // Ask again with the flag cleared, so the answer is this attempt's: a failure is
+                    // not memoised, so the walk repeats the same path and stops at the same node.
+                    stoppedAtARegion          = false;
+                    const gc_node_ref_t probe = forward(ref);
+                    if (probe == rt::kInvalidNodeRef && stoppedAtARegion) {
+                        refuse(TransposeRefusalCause::CallValueComputedByTheBody, param);
+                        return;
+                    }
+                    refuse(TransposeRefusalCause::CallValueMissing, param);
+                };
                 std::vector<gc_node_ref_t> arguments;
                 for (size_t i = 0; i < calleeParams; ++i) {
                     bool answered = false;
@@ -2623,7 +2662,7 @@ bool buildTransposeMember(
                     }
                     const gc_node_ref_t argument = forward(inputs[argumentAt + i]);
                     if (argument == rt::kInvalidNodeRef) {
-                        refuse(TransposeRefusalCause::CallValueMissing, i);
+                        unforwardedCause(inputs[argumentAt + i], i);
                         os << " param=" << i << " node=" << ref
                            << " arg=" << inputs[argumentAt + i] << '\n';
                         return false;
@@ -2644,7 +2683,7 @@ bool buildTransposeMember(
                     }
                     const gc_node_ref_t captured = forward(inputs[argumentAt + idx]);
                     if (captured == rt::kInvalidNodeRef) {
-                        refuse(TransposeRefusalCause::CallValueMissing, idx);
+                        unforwardedCause(inputs[argumentAt + idx], idx);
                         os << " param=" << idx << " node=" << ref
                            << " arg=" << inputs[argumentAt + idx] << '\n';
                         return false;

@@ -60,6 +60,7 @@ enum class TransposeRefusalCause {
     Range,
     CallNoTranspose,
     CallValueMissing,
+    CallValueComputedByTheBody,
     UnreadParameter,
     NeedsAValueOutsideTheClosure,
 };
