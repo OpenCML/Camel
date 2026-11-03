@@ -2181,7 +2181,6 @@ expect_output_not_contains = ["Warning", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
-timeout_ms = 20000
 # `exp` with its shape in the type: the fixed-shape half of the open-rank gap the four library cases
 # below still record. The walk answers a tangent's shape through `shapeCarrierOf`, which answers a
 # stated type and nothing else (author, 2026-11-03 16:15), so `float[2]` answers where `float[]` refuses.
