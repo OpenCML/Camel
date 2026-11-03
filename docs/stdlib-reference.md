@@ -1617,10 +1617,13 @@ function is `vjp`'s own composition and the declaration is the engine's; the fou
 measure it on are the four groups of
 `test/cases/modules/autodiff/grad_first_with_parameter.cml`, and the entry that holds this
 refusal is `test/cases/compile/transforms/with_grad_from_the_library.cml`.
+The example is a program of its own and stops at the name: it writes a call that is a value, and it
+reads nothing out of it, because the function `with_grad` answers returns `never` -- a program that
+asked `frozen(3.0)` for a number would not compile, and one that ran would stop with the sentence
+above. The gradient of a first `with` parameter is read with `grad`: `grad(weighted)<3.0>(2.0)`.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Why it is not compiled: the call refuses, so an example that answered a number would be a lie about the tree
-- Why it is not compiled: read the gradient of a first `with` parameter with `grad`: `grad(weighted)<3.0>(2.0)`
+- Example: `let frozen = with_grad((y: float) => y * 2.0)`
 
 <a id="tensor"></a>
 
