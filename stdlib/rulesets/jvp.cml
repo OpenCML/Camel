@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_same, Tangent } from types
-import { matmul, mean_axis, reshape, sum, zeros_like } from tensor
+import { matmul, mean_axis, reshape, sum, take, zeros_like } from tensor
 import { log, pow } from math
 import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
 
@@ -209,6 +209,15 @@ export rule jvp_mean_axis::<T>(xs: T[..], axis: int, keepdims: bool) when is_flo
 /// side may not pass a context argument of its own (`the rule's right side passes a context argument
 /// of its own` is how the expansion refuses it). `tensor:reshape` has no parenthesised spelling, so
 /// neither side of the law has a form here.
+
+/// `d(take(t, indices)) = take(dt, indices)`: which rows a take reads is the call's, not the value's,
+/// so a take is linear and the tangent of the selection is the same selection of the tangents. The
+/// indices are an `int[]` and carry no tangent (`Tangent<int[]>` is `()`), which is why the rule
+/// takes one cotangent and not two -- a row read twice contributes its tangent twice, which is the
+/// same thing the operator does to the value.
+export rule jvp_take::<T>(t: T[..], indices: int[]) {
+    take(t, indices) => (dt: T[..]) => take(dt, indices)
+}
 
 // ---- the forward rule of `:op/idx_arr` ----
 //
