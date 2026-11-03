@@ -53,6 +53,23 @@ bool narrowerPortsThan(
 /// The three families that ask this -- `jvp`, `transpose` and `vmap` -- ask it in this one place
 /// (`chooseRuleAmong`); what differs between them is the words a refusal is written with and the type
 /// tuple an instance is made at, and both are arguments.
+/// The three ways a key answers, and the difference between the last two is a reader's: which layer
+/// of the declaration refused. Both are "nothing to expand here", and they are not the same sentence.
+enum class RuleRefusal {
+    /// A law answered.
+    None,
+    /// No law of this key describes this node: the index filed none, or the instance a candidate
+    /// named was not made, or a condition the law writes does not hold here.
+    NoLaw,
+    /// A law of this key **was** found and instantiated, and its own parameter list does not take the
+    /// operands -- the step is not the shape the law was written for. The key has a law, so the
+    /// responsibility is the law's, not the next step's; `transpose` has a word for this
+    /// (`skip=rule-shape`) and a sentence that names the law's two type lists, and the case that
+    /// exists to keep the two apart (`showcase_s2`, `matmul_t.vector_operand_is_refused_by_shape`)
+    /// fails the day they are merged into one.
+    Shape,
+};
+
 struct RuleChoice {
     /// The law that answers, null when none does.
     const camel::compile::gir::GenericRuleInstance *instance = nullptr;
@@ -60,6 +77,14 @@ struct RuleChoice {
     std::string rule;
     /// Why nothing answered: the most specific refusal a candidate gave.
     std::string why;
+    /// Which of the three answers this is. A caller that has a word of its own for a shape refusal
+    /// reads this instead of parsing `why`.
+    RuleRefusal refusal = RuleRefusal::NoLaw;
+    /// What the two lists were, when `refusal == RuleRefusal::Shape`: the law's parameters as its
+    /// left side writes them, and the operands it was asked about. The finding is this function's;
+    /// the wording is the family's (`RuleChoiceWords`), so the sentence is built where the words are.
+    std::vector<camel::core::type::Type *> lawPorts;
+    std::vector<camel::core::type::Type *> operandTypes;
     bool found() const { return instance != nullptr; }
 };
 
@@ -70,6 +95,14 @@ struct RuleChoice {
 struct RuleChoiceWords {
     const char *subject  = "law";     // "rule" (jvp) or "law" (transpose, vmap)
     const char *operands = "operands"; // "arguments" (jvp) or "operands" (transpose, vmap)
+    /// Whether a port written as an array asks for an array. `T[..]` takes a `float` -- design
+    /// principles 5.4 makes a rank-zero array the element itself -- and that is the relation a
+    /// *call* checks; a law that names an array operand reduces along the lanes a broadcast handed
+    /// out (`sum_to` rewrites `t` to the shape of `like`), and a number has none. `transpose` refuses
+    /// the scalar shape by name (`docs/handover/questions/array-scalar-product-transpose.cn.md`) and
+    /// says so here; `jvp` and `vmap` ask the call's relation and leave this false. The clause is a
+    /// parameter of the question, not a divergence between three copies of it.
+    bool arrayPortNeedsAnArray = false;
 };
 
 /// Which of `candidates` answers a node whose ports are `operandTypes`, with an instance made at
@@ -81,12 +114,18 @@ struct RuleChoiceWords {
 /// than the node's *data* operands cannot describe the node, and one that names more ports than the
 /// node has cannot be filled. Passing 0 asks for no lower bound at all (`vmap`, whose operand list
 /// carries the configuration and whose laws are written against the value only).
+///
+/// `answered` says which of the ports the walk will actually hand the law's right side, when the
+/// family knows: a position the walk answers no cotangent for -- a constant, a value with no tangent
+/// space -- is not a position the law is asked about, so its shape cannot make the law wrong
+/// (`x * 2.0` is one array operand and one constant, and the law for two arrays answers it). Null
+/// asks about every port, which is what a family that has not asked itself the question does.
 RuleChoice chooseRuleAmong(
     camel::core::context::Context &context,
     const std::vector<camel::parse::ast::RuleMatch> &candidates,
     const std::vector<camel::core::type::Type *> &instanceTypes,
     const std::vector<camel::core::type::Type *> &operandTypes, size_t dataOperandCount,
-    const RuleChoiceWords &words = {});
+    const RuleChoiceWords &words = {}, const std::vector<bool> *answered = nullptr);
 
 /// The rule's right side expanded at the match site: the body of the closure it answers with is
 /// copied into this graph, its captures bound to the operands and its parameters to the tangents,

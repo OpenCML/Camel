@@ -69,6 +69,13 @@ std::string typeTextOf(const std::vector<camel::core::type::Type *> &types) {
     return text.empty() ? std::string("()") : text + ")";
 }
 
+/// Whether a port is written as an array: the clause `RuleChoiceWords::arrayPortNeedsAnArray` asks
+/// (`T[..]` is a `TypeCode::Array`; a rank-zero array is one too, which is the point -- a law that
+/// names an array operand wants the array, and 5.4 says the same *value* can be the element).
+bool isArrayPort(const camel::core::type::Type *type) {
+    return type != nullptr && type->code() == camel::core::type::TypeCode::Array;
+}
+
 } // namespace
 
 RuleChoice chooseRuleAmong(
@@ -76,13 +83,17 @@ RuleChoice chooseRuleAmong(
     const std::vector<camel::parse::ast::RuleMatch> &candidates,
     const std::vector<camel::core::type::Type *> &instanceTypes,
     const std::vector<camel::core::type::Type *> &operandTypes, size_t dataOperandCount,
-    const RuleChoiceWords &words) {
+    const RuleChoiceWords &words, const std::vector<bool> *answered) {
     using camel::core::type::Type;
     RuleChoice choice;
     const auto &table = camel::compile::gir::genericRuleTable(context);
     // The most specific refusal wins: a candidate that fits the type but not the shape says more
     // than a later candidate whose condition simply does not hold here.
     std::string shapeWhy;
+    // The same candidate's two type lists, kept beside the sentence so a family that writes its own
+    // wording for a shape refusal (`transpose`'s `rule-shape`) does not have to re-instantiate the
+    // law to read them again.
+    std::vector<Type *> shapePorts;
     std::string lastWhy;
     // Every candidate that instantiates and whose ports take the operands. A key can hold more than
     // one such law (`T[..]` and `T[]` both take a rank-one array), so the fit is collected first and
@@ -157,8 +168,16 @@ RuleChoice chooseRuleAmong(
             ports.size() <= operandTypes.size() && ports.size() >= dataOperandCount;
         bool takes = namesTheNode;
         for (size_t i = 0; takes && i < ports.size(); ++i) {
+            // A port the walk answers no cotangent for is not a port the law is asked about, so its
+            // shape cannot make the law wrong (`RuleChoice::answered`, and the doc in the header).
+            // A family that passes no list asks about every port.
+            if (answered != nullptr && i < answered->size() && !(*answered)[i]) {
+                continue;
+            }
             takes = ports[i] != nullptr && operandTypes[i] != nullptr &&
-                    ports[i]->assignableFrom(operandTypes[i]);
+                    ports[i]->assignableFrom(operandTypes[i]) &&
+                    (!words.arrayPortNeedsAnArray || !isArrayPort(ports[i]) ||
+                     isArrayPort(operandTypes[i]));
         }
         if (!takes) {
             shapeWhy = std::string("the ") + words.subject + " takes " + typeTextOf(ports) +
@@ -166,6 +185,7 @@ RuleChoice chooseRuleAmong(
             if (dataOperandCount > 0) {
                 shapeWhy += " (of which " + std::to_string(dataOperandCount) + " is a data operand)";
             }
+            shapePorts = ports;
             continue;
         }
         fitting.push_back(Fit{&instance, candidate.rule, std::move(ports)});
@@ -173,6 +193,13 @@ RuleChoice chooseRuleAmong(
     if (fitting.empty()) {
         // Every candidate refused: the shape that nearly fitted says the most.
         choice.why = !shapeWhy.empty() ? shapeWhy : lastWhy;
+        if (!shapeWhy.empty()) {
+            // A law was found and instantiated and its shape refused: that is `Shape`, not `NoLaw`,
+            // and the two type lists travel with it.
+            choice.refusal     = RuleRefusal::Shape;
+            choice.lawPorts    = std::move(shapePorts);
+            choice.operandTypes = operandTypes;
+        }
         return choice;
     }
     // The narrowest fit, and only when it is one law. Two laws neither of which is narrower than the
@@ -207,6 +234,7 @@ RuleChoice chooseRuleAmong(
     }
     choice.instance = kept.front()->instance;
     choice.rule     = kept.front()->rule;
+    choice.refusal  = RuleRefusal::None;
     return choice;
 }
 
