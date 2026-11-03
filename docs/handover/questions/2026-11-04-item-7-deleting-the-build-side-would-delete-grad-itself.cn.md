@@ -2,11 +2,11 @@
 
 日期：2026-11-04　状态：**默认按 A 落地（暂不删），等你裁**
 
-**一句话**：15:55 那条裁「第 7 项先删 `pullback.cpp` 的建图部分，`GradResolver` 留着」，但建图侧的**唯一入口 `buildGradientGraph` 今天仍是 `grad` / `with_grad` / `grad_aux` / `with_grad_aux` 四个算子的 kernel 实现**，库里没有第二条声明。**删掉它等于删掉这四个算子本身**：`test/cases` 下 **240 个 `.cml`** 在链接期一起消失。这不是不执行，是执行不了——**裁定的前提是建图侧已有替代实现，实测没有。**
+**一句话**：2026-11-03 15 时 55 分那条裁「第 7 项先删 `pullback.cpp` 的建图部分，`GradResolver` 留着」，但建图侧的**唯一入口 `buildGradientGraph` 今天仍是 `grad` / `with_grad` / `grad_aux` / `with_grad_aux` 四个算子的 kernel 实现**，库里没有第二条声明。**删掉它等于删掉这四个算子本身**：`test/cases` 下 **240 个 `.cml`** 在链接期一起消失。这不是不执行，是执行不了——**裁定的前提是建图侧已有替代实现，实测没有。**
 
 ## 1. 出处
 
-- **裁定**（2026-11-03 15:55，第 7 项）：方向是"类型层能像值层一样拆包"，具体写法交负责人定；**在他定之前，先删 `pullback.cpp` 的建图部分，`GradResolver` 留着并标明等这一条裁定**；终态是"求导都在库里"。
+- **裁定**（2026-11-03 15 时 55 分，第 7 项）：方向是"类型层能像值层一样拆包"，具体写法交负责人定；**在他定之前，先删 `pullback.cpp` 的建图部分，`GradResolver` 留着并标明等这一条裁定**；终态是"求导都在库里"。
 - `stdlib/signatures/autodiff.cml` 页头自认：**"`grad` has no declaration in standard library types: its result type is computed here, so there is no one place where its shape is written down to be pinned against"**。
 - D2 已单独开页：`docs/handover/questions/2026-11-03-can-gradient-of-a-function-be-a-library-type-function.cn.md`（`grad(f)` 的类型能不能写成库层类型函数）。**本页是第 7 项的执行侧，不是 D2 的重复**：D2 问类型能不能写进库，本页问在类型还没写进库的今天，那一刀砍下去砍掉的是什么。
 - 本页每个数字都是施工方在本轮的实测，基线 `origin/develop` = `c69a110fa`。
@@ -62,29 +62,47 @@
 
 这是第一次量清；此前 `docs/handover/reports/2026-11-03-what-deleting-the-engine-pullback-takes.cn.md` 只写到"两个调用点"与"删引擎要满足什么"，没有把它与第 7 项的"先删"对上。**对上之后，结论变了：这一刀今天不能砍。**
 
-## 5. 可裁问句与三条路
+## 5. 要裁的那一句
 
 **问：第 7 项的"先删 `pullback.cpp` 的建图部分"，是在库层 `grad` 存在之前就删（B），还是等类型层拆包裁定落地、`buildGradientGraph` 自然失去调用者再删（A）？**
 
+## 6. 默认建议与代价：三条路各带代价（A 是默认）
+
 - **A（默认建议）：暂不删，等类型层拆包裁定落地、库层 `grad` 存在之后再切。**
   理由：作者自己的终态是"求导都在库里"，那一天 `buildGradientGraph` 的调用者会自然归零，这一刀自己就成了删死代码；现在删等于**把 `grad` 从语言里拿掉**，与"求导都在库里"不是一个方向。
-  **代价要写清**：在第 7 项这条裁定落地之前，**第 7 项不会有机器可验的进展**——它今天的产出只有本页的分类表与备好的切法（§7），没有提交、没有读数变化。
+  **代价要写清**：在第 7 项这条裁定落地之前，**第 7 项不会有机器可验的进展**——它今天的产出只有本页的分类表与备好的切法（§9），没有提交、没有读数变化。
 - **B：现在就删建图，四个算子留空。**
   代价：`grad` / `with_grad` / `grad_aux` / `with_grad_aux` 没有 kernel，240 个用例文件与 `test/cases/compile/transforms` 那 16 个一起红，闸门不可能绿。**不建议**：这等于把一条语言特性下架，不是删实现。
 - **C：保留算子名与 `GradResolver` 签名，把 `#gradFunction` 的实现从"引擎建图"改成"在运行期拼一张调用库层 `vjp` 的图"，然后再删建图。**
   代价：不碰类型、不碰 `stdlib` 声明（`run-time` 拼图不需要库层 `grad` 的类型），但要求库层 `vjp` 能从 kernel 里被调用——`vjp` 今天还在 `modules/transforms` 那几条车道里收尾，**这条由其他车道决定能不能做**；要不要这么做是设计判断（一个算子 kernel 里再造一张库调用图，与"求导都在库里"是不是同一个意思），不是本车道能定的。
 
-## 6. 一条更正：旧报告的第二调用点写错了
+## 7. 判据 / 哨兵：A 路怎么算走通，B 路撞上的红长什么样
+
+三条都是机器可验的读数，不需要人读代码判：
+
+1. **A 路的等待条件（判据）**：`git grep -n 'buildGradientGraph' -- modules src` 的**代码**调用点今天正好两处——
+   `modules/autodiff/operators.cpp#gradFunction` 与 `modules/autodiff/pullback.cpp#ForwardRewrite::macroCallee`。
+   **这两处归零的那一天，A 的等待条件就成立**，这一刀自动变成删死代码；在它们还是两处之前动刀，动掉的是 `grad` 本身。
+   （数调用点、不数行：`git grep -c` 把注释一起数进来，第一版就是这么数错的。）
+2. **绿哨兵（删了会红）**：`test/cases/modules/autodiff/scalar_grad.cml` 的计划项 `scalar_grad.macro.nvm`
+   （`test/plans/feat/modules/autodiff.plan.toml`）今天答 `scalar_grad df=12.5 vg=(17.5, 12.5) dg=12.0`——
+   一条用例同时走 `grad`、`with_grad`、`stop_gradient`，是这四个算子最小的一条正面读数。
+   **判据：删建图之后它必须仍答这一行**；答不出来（链接期少 `buildGradientGraph`）或 `dg=` 变了，B 路当场被证伪。
+3. **红的爆炸半径（不该出现的红出现，就回滚）**：`test/cases` 下用 `grad(` / `with_grad(` 的 **240 个** `.cml`，
+   以及 `test/plans/feat/modules/autodiff.plan.toml` 的 **225 个计划项**（其中 699 行提到 grad）。删除后其中任何一个以
+   "unknown operator / 未声明" 出现，说明删掉的是语言特性而不是多余实现——**立刻回滚，不许改用例期望来掩盖**。
+
+## 8. 一条更正：旧报告的第二调用点写错了
 
 `docs/handover/reports/2026-11-03-what-deleting-the-engine-pullback-takes.cn.md` 写第二个调用点是 **`#ForwardRewrite::rewriteClosureCall`**；**实测是 `#ForwardRewrite::macroCallee`**（`rewriteClosureCall` 不调 `buildGradientGraph`，它自己不碰 `grad` 节点）。
 
 这一处留在页里，是因为它今晚的教训：**没有出处的断言会被下一个人当结论用**。旧报告那句被读到过、也被引用过；照它去删，删的是错的函数。
 
-## 7. 备件：切法与标注（本轮真正的产出）
+## 9. 备件：切法与标注（本轮真正的产出）
 
 切法（在本轮文本层切过一遍、`git grep` 残留已核、随后 `git checkout --` 还原；**没有提交**）：
 
-- `modules/autodiff/pullback.cpp`：删**匿名命名空间的整段建图**（从 `#TangentAudience` 之前到该命名空间闭合处）与 `#buildGradientGraph`；保留文件头、`#memberWithoutTangent` 所在的匿名命名空间、`#differentiationRefusal`、`#gradientSignature` 与最外层命名空间的闭合。**今天的行号是 49–4881 与 5044–5057**（行号会漂，判据用符号）；`#include` 随后按"编译期未用"清理。
+- `modules/autodiff/pullback.cpp`：删**匿名命名空间的整段建图**与 `modules/autodiff/pullback.cpp#buildGradientGraph`；保留文件头、`#memberWithoutTangent` 所在的匿名命名空间、`#differentiationRefusal`、`#gradientSignature` 与最外层命名空间的闭合。**两段边界都用符号定，不用行号**：第一段是装 `#TangentAudience` 的那个匿名命名空间整段——从它开头的 `namespace {` 起，到 `#Engine::gradient` 之后那条 `} // namespace` 为止；第二段就是 `#buildGradientGraph` 一个函数，从它的函数头到右花括号；`#include` 随后按"编译期未用"清理。
 - `modules/autodiff/pullback.h`：删 `#GradientGraph` 与 `#buildGradientGraph` 两个声明，留 `#GradientSignature`、`#differentiationRefusal`、`#gradientSignature`。
 - **两处前置（缺一不可）**：`modules/autodiff/operators.cpp#gradFunction` 与 `modules/autodiff/pullback.cpp#ForwardRewrite::macroCallee` 必须同时换成别的实现，否则链接期没有 `buildGradientGraph`。
 
@@ -92,7 +110,7 @@
 
 ```cpp
 // The engine's graph construction for `grad` used to be here. The author's ruling of
-// 2026-11-03 15:55 (item 7) keeps the signature side above (`gradientSignature`, consumed
+// 2026-11-03 15h55 (item 7) keeps the signature side above (`gradientSignature`, consumed
 // by `GradResolver` in modules/autodiff/operators.cpp) and holds the build side back until
 // the type-layer question is decided: a gradient's type is the type of the function's first
 // `with` parameter, which standard library types cannot name yet. The end state is that every
@@ -102,6 +120,6 @@
 
 `GradResolver` 那一侧的"等这一条裁定"标注，建议落在 `modules/autodiff/operators.cpp#GradResolver` 的头注释里，写清"签名留在这里是因为类型层还写不出 `Tangent<With 的第一个>`"，与 D2 页互指即可，不重复论证。
 
-## 8. 本轮没有做的事
+## 10. 本轮没有做的事
 
 没有删任何代码、没有改用例期望、没有动 `GradResolver`、没有动 `stdlib` 里 `grad` 的声明；上一轮的临时工作树已删，本轮只提交这一页。
