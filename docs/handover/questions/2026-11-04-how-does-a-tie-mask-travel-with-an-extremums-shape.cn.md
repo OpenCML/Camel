@@ -1,6 +1,6 @@
 # `max_axis` / `min_axis` 的孪生算子：并列极值的选择怎么随形状走？
 
-**状态**：待裁；我方默认见第 3 节（**甲：`bool[..]` 掩码进第二个普通操作数，轴与范围留在 `at`**）。本轮**未落地**，只在第 1 节把读数摆好；`sum_axis_stated` 与 `mean_stated` 已入库（第 1 节第 1、2 条）。
+**状态**：**甲已落地并量到**（第 1 节第 8 条，tip `3d95855c7`），此页留作读数与理由；这一页不再是待裁项，除非有人要改乙。
 
 写这页的直接原因：派工要求把 `sum_stated` 的模式推到 `sum_axis` / `max_axis` / `min_axis` / `mean` 四个算子上。前两个与后一个都做完了，`max_axis` / `min_axis` 卡在一个不是"要不要写律"的问题上：**极值的余切不是形状问题，是"哪几个位置"的问题**。
 
@@ -15,6 +15,8 @@
 5. **`pick_at` 只有转置律、没有前向律**：`no derivative rule for operator 'tensor:pick_at' of type 'float'`——想"只读一条 lane"得走 `take`（`jvp_take` + `take_stated_t` 都在），这也是本轮两条用例的读法。
 6. **"三个普通操作数会被拒"这条已经不成立**：`modules/transforms/transpose.h` 的 `TransposeRefusalCause` 里没有 `Arity`，`transpose.cpp` 里也没有任何 `skip=arity` 的发生点；`stdlib/tensor.cml` 第 116 行那句"第三个位置会在找律之前被拒"是旧事实。这条一旦成立，掩码就能作为**第三个端口**，不必挤进 `at`。
 7. **`shape(bool[])` 不存在**：`shape` 的头部是 `when is_numeric::<T>()`，`bool` 不是numeric，所以律里量不到 `bool[]` 的形状。这是甲的关键约束——**掩码不能自证形状，形状只能从 `at` 读**。
+8. **甲落地后的读数（并列用例两条，两腿）**：`max_axis tie: value=5.0 engine=[[0.0, 1.0, 1.0], [0.0, 0.0, 1.0]] library=[[0.0, 1.0, 1.0], [0.0, 0.0, 1.0]] same=true`；`min_axis -1: value=5.0 engine=[[0.0, 1.0, 1.0], [0.0, 1.0, 0.0]] library=[[0.0, 1.0, 1.0], [0.0, 1.0, 0.0]] same=true`。两个并列位置各拿整份 1.0，与第 3 节手算的期望值逐位相同；`stated_extents` 计划 10/10 绿。
+9. 甲的两个未测点都通了：`bool[..]` 能写进声明、`ParamKind::BoolArray` 能注册成端口，且走图时 `bool` 操作数的**值**作为残差到了反半段（否则 `where(mask, ...)` 会以 `cotangent-needs-a-value` 拒，实测没有）。
 
 ## 2. 三条路
 
@@ -32,6 +34,8 @@
 
 第 3 节那句期望值是**手算的**（并列两个位置各拿整份 1.0，第三个位置 0.0；第二行只有末位是最大值），落地前不要拿运行输出改它。
 
-## 4. 本轮为什么没做
+## 4. 落地了什么
 
-派工的其余九条（清单、两条孪生、负轴、并列用例、`feat/compile` 与 `feat/transforms` 红不增、参考重生成、四地同步、`git diff -w`）先落；`max_axis` / `min_axis` 需要的是第 2 节里那一到两次探针读数，等这一页的默认被确认后再动，避免在同一批里又改律又改声明又改核。
+甲在同一个 lane 里做完并量到（第 1 节第 8 条）：`max_axis_stated(t, mask: bool[..], at)` 与 `min_axis_stated` 的声明、`kDeclaredOperators` 登记、`modules/tensor/ops/reduction_ops.cpp` 的核（值走 `k::reduceAxis`，掩码不读）、`jvp_max_axis`/`jvp_min_axis`（掩码写成 `xs >= max_axis(xs, axis, true)`，内层 `keepdims` 让它对任何轴都能广播）、`max_axis_stated_t`/`min_axis_stated_t`（`where(mask, lane_spread(...), 0.0)`），以及两条两腿用例。
+
+顺带改了一句旧话：`stdlib/tensor.cml` 里"第三个普通操作数会在找律之前被拒"已不成立，改成"范围共用一个列表是因为反向律要整份读它"，并注明两个极值算子就带第三个端口。
