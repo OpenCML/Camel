@@ -302,7 +302,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `FailNotExecuted` | This 'fail' is not executed: {0}. |
 | `StatementAfterFail` | This statement cannot run: the 'fail' written before it never returns. |
 
-**Run time and passes — errors** (`RuntimeDiag`) — 38
+**Run time and passes — errors** (`RuntimeDiag`) — 39
 
 | `RuntimeError` | An error has occurred: {0}. |
 | `DivisionByZero` | Attempted division by zero. |
@@ -330,6 +330,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `TimeFormatFailed` | '{0}' failed: {1}. |
 | `GradientElementTypeMismatch` | The gradient of a value of type '{0}' has element type '{1}': {2}. A gradient must have the element type of the value it is the gradient of (design principles 9.9); accumulated as it is, the value would be read at the wrong width and answer with a number that is not the derivative. |
 | `ValueWithNoDerivativeRule` | The operator '{0}' takes a differentiable value through its with parameter {1} (counting from 1), of type '{2}', but {3}. |
+| `TransposeNeedsParameterShape` | The transpose of '{0}' needs the shape of {1}, and the type '{2}' does not state it. |
 | `ConversionOutOfRange` | Cannot convert {0} to {1}: {2}. |
 | `UnhandledError` | An error value reached the exit of 'main' without being handled: {0}: {1}. |
 | `SliceOutOfRange` | The range {0} to {1} is out of range for {2} of length {3}. |

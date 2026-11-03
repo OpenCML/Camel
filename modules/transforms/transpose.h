@@ -77,7 +77,17 @@ enum class TransposeRefusalCause {
     /// matching function found for argument types"), which names a helper instead of the law and says
     /// nothing about the rank a reader has to change.
     RuleRanks,
-    Arity,
+    /// A parameter a cotangent is answered for, whose **value** the law's right side reads, and whose
+    /// type does not state its shape (`float[..]`, `float[]`). The transposed function is handed the
+    /// cotangent and nothing else, so a law that needs the parameter's value can only be answered
+    /// when the shape the value carries is in the type: `float[2, 3]` says how many positions the
+    /// parameter has, and `float[..]` does not. This is the language's rule about what a transposition
+    /// is (author, 2026-11-03 16:15) -- the adjoint of a linear map needs the shape of its domain --
+    /// not a limit of this walk: the same thing is why JAX's `linear_transpose` asks the caller for the
+    /// shape of the value it transposes. The refusal is raised as its own diagnostic
+    /// (`RuntimeDiag::TransposeNeedsParameterShape`), so a reader is told to write the shape in the
+    /// type instead of being told the compiler cannot do it.
+    ParameterShape,
     CotangentNeedsAValue,
     State,
     Range,
@@ -132,6 +142,14 @@ struct TransposeRefusal {
     /// The operands' ranks (`RuleRanks`), in the law's own order, spelled `(3, 2)`: the fact the
     /// refusal is about, because a law that dispatches on rank serves a set of them.
     std::string ranks;
+    /// The parameter's name as the declaration writes it (`x`), for the cause that is about one
+    /// (`ParameterShape`): the sentence names the parameter a reader has to edit, and the position
+    /// alone would leave them counting parameters.
+    std::string paramName;
+    /// The parameter's declared type, spelled as the program wrote it (`float[..]`, `float[2, 3]`),
+    /// for the causes that are about a parameter's type rather than about a step (`ParameterShape`):
+    /// the repair is an edit to this spelling, so a reader is handed it verbatim.
+    std::string paramType;
 };
 
 /// The graph of `transpose(f)` and the program of the graphs built with it. `refusal` is what the
@@ -167,8 +185,18 @@ camel::core::type::FunctionType *transposeSignature(
 /// Builds the graph of `transpose(f)` for the graph `function` of `program`. The graph `function`
 /// is read, never changed. `os` receives what was built: which rule every primitive on the path was
 /// transposed by, in the order the walk found them, and why it stopped when it did.
+///
+/// `promisedToTheOperator` says who the answer is for, and it is the difference between a refusal and
+/// a working member. The `transpose` operator's call site is typed from `transposeSignature` before any
+/// body is read, so the graph it gets has to be the function that type names: a member with a port
+/// more is a function the call site cannot call, and the build refuses it rather than let it reach the
+/// run (`ParameterShape` when the extra port carries the shape of a parameter whose type leaves it
+/// open, `NeedsAValueOutsideTheClosure` otherwise). A walk that builds a member for a *call inside a
+/// body* is not promised anything: its caller writes the callee's type with the captures in hand, so
+/// the extra ports are filled, and comparing the counts there would refuse an `index_into` over an
+/// array whose extent only the caller knows. The kernel passes true; nothing else does.
 TransposeGraph buildTransposeGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    camel::runtime::GCGraph *function, std::ostream &os);
+    camel::runtime::GCGraph *function, std::ostream &os, bool promisedToTheOperator = false);
 
 } // namespace camel::transforms

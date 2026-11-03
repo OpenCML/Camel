@@ -44,6 +44,7 @@ RuntimeDiag::SliceOutOfRange	test/cases/consistency/faults/slice_out_of_range.cm
 RuntimeDiag::TensorDimensionMismatch	test/cases/loops/fault_tensor_rank0.cml
 RuntimeDiag::TranslationLinksRuntime	test/cases/trans/cpp/runtime_bridge.cml
 RuntimeDiag::TranslationRefused	test/cases/compile/collections/refuse_export.cml
+RuntimeDiag::TransposeNeedsParameterShape	test/cases/modules/autodiff/transpose_needs_parameter_shape.cml
 RuntimeDiag::UnhandledError	test/cases/consistency/entry/error_thrown.cml
 RuntimeDiag::UnrecognizedGraphPass	test/cases/compile/diag_json/div_zero.cml
 RuntimeDiag::ValueWithNoDerivativeRule	test/cases/modules/autodiff/value_with_refusal.cml

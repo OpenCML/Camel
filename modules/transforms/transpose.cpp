@@ -9,6 +9,7 @@
 #include "camel/core/forward.h"
 #include "camel/core/loop_kind.h"
 #include "camel/core/mm.h"
+#include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/tangent_space.h"
 #include "camel/core/type/composite/array.h"
@@ -67,8 +68,8 @@ const char *transposeRefusalWord(TransposeRefusalCause cause) {
         return "rule-ranks";
     case TransposeRefusalCause::Kind:
         return "kind";
-    case TransposeRefusalCause::Arity:
-        return "arity";
+    case TransposeRefusalCause::ParameterShape:
+        return "parameter-shape";
     case TransposeRefusalCause::CotangentNeedsAValue:
         return "cotangent-needs-a-value";
     case TransposeRefusalCause::State:
@@ -557,8 +558,73 @@ FunctionType *transposeSignature(
 /// says which check refused: not a data node, no static slot, not a function type, no function value,
 /// no graph, not a static reference of this graph). Before this, that shape refuses with
 /// `skip=call callee=none`, which is what the transform did before this entry existed -- the A/B of
-/// `transpose_function_value_no_capture.cml` flips exactly this. a value with no capture names its
-/// graph and transposes; a closure names its graph too, and then fails later, on the capture. (The`r`n/// switch that guarded this is gone; the entry it guarded is the one the cases read.)
+/// `transpose_function_value_no_capture.cml` flips exactly this. A value with no capture names its
+/// graph and transposes; a closure names its graph too, and then fails later, on the capture. (The
+/// switch that guarded this is gone; the entry it guarded is the one the cases read.)
+
+/// The extents a type's shape states, or nothing when the type leaves one of them open.
+///
+/// A shape is a fact about an array type: `float[2, 3]` states two extents, `float[]` states one
+/// dimension and leaves its length open, and `float[..]` states neither the rank nor a length. The
+/// reading of a stated extent is the one `jvp.cpp#zeroConstantFor` makes of the same fact --
+/// `ExtentForm::evaluate({})` answers the number a written extent holds and nothing for a `?` or for
+/// an extent over a name nothing binds -- so the two transforms agree about which types have a shape
+/// that can be written while the graph is built.
+std::optional<std::vector<int64_t>> statedShapeOf(const Type *type) {
+    if (type == nullptr || type->code() != camel::core::type::TypeCode::Array) {
+        return std::nullopt;
+    }
+    const auto *array = tt::as_ptr<camel::core::type::ArrayType>(const_cast<Type *>(type));
+    if (array == nullptr || array->elemType() == nullptr ||
+        !camel::core::type::isFloatingScalar(array->elemType()->code())) {
+        return std::nullopt;
+    }
+    const std::span<const camel::core::type::ExtentForm> stated = array->extents();
+    if (stated.empty()) {
+        // `T[..]`: the rank is the value's, so the type states no shape at all.
+        return std::nullopt;
+    }
+    std::vector<int64_t> extents;
+    extents.reserve(stated.size());
+    for (const camel::core::type::ExtentForm &extent : stated) {
+        const std::optional<int64_t> size = extent.evaluate({});
+        if (!size.has_value() || *size < 0) {
+            return std::nullopt;
+        }
+        extents.push_back(*size);
+    }
+    return extents;
+}
+
+/// The value a law's right side is handed for a parameter a cotangent is answered for: the zero of
+/// the parameter's type, which is that type's **shape** and nothing else.
+///
+/// `transposeSignature` gives the transposed function the cotangent and no parameter, so a law that
+/// reads the parameter -- `mean_axis_cotangent` reads `xs` for `numel` and `ones_like` -- has the type
+/// and not the argument. What the type says is the shape, and the shape is what a transposition needs:
+/// the adjoint of a linear map is a function of the cotangent and of the domain's shape (author,
+/// 2026-11-03 16:15). The value below carries that shape; every element of it is zero, which is the
+/// one thing here that is not the argument. A law that reads an *element* would therefore be answered
+/// with zeros -- and such a law is not a law of a transposition, because a transposition has no
+/// element of the argument to read. This is the same zero `jvp` gives a value that does not move
+/// (`jvp.cpp#zeroConstantFor`).
+///
+/// Nothing when the type leaves an extent open: then the shape is written down nowhere, and the
+/// caller refuses by name instead of inventing one.
+gc_node_ref_t shapeCarrierOf(camel::runtime::GraphDraft &draft, Type *type) {
+    const std::optional<std::vector<int64_t>> extents = statedShapeOf(type);
+    if (!extents.has_value()) {
+        return rt::kInvalidNodeRef;
+    }
+    auto *array = static_cast<camel::core::type::ArrayType *>(type);
+    ::Array *zero = ::Array::create(
+        mm::autoSpace(), array, std::span<const int64_t>(*extents), /*zeroInit=*/true);
+    if (zero == nullptr) {
+        return rt::kInvalidNodeRef;
+    }
+    return draft.materializeStaticValue(
+        camel::core::rtdata::toSlot<::Array *>(zero), type, rt::kGCNodeFlagConstant);
+}
 
 /// What the graphs of one transpose share: one group (a callee's transpose is another member of
 /// it, exactly as `jvp` lifts one graph per callee) and the callees already transposed, so that
@@ -581,6 +647,22 @@ struct TransposeState {
     /// Why the walk stopped, recorded at the site that stopped it. A probe carries a state of its
     /// own, so a probe's refusal never becomes the answer of the build that made it.
     TransposeRefusal refusal;
+    /// The parameter whose *shape* the walk had to ask for and whose type does not state it: the
+    /// cause the build refuses on when the member comes out with a port the operator's type has no
+    /// room for. It is a fact and not a refusal: a call site inside a body carries the value (the
+    /// capture is one of the member's ports, and the caller's type is written with it in hand), so
+    /// asking is legitimate there and the walk must keep asking -- refusing at the step would break
+    /// every `index_into` over an array whose extent only the caller knows. Whether the ask is fatal
+    /// is a fact about the whole member, and `buildTransposeGraph` decides it once the ports are
+    /// known (author, 2026-11-03 16:15: the shape has to be in the type or derivable from `ct` and
+    /// known values -- and a value the caller carries *is* one).
+    bool shapeWanted = false;
+    /// The parameter the ask was about, and the name and type its declaration writes, for the
+    /// sentence: the repair is that spelling. Recorded where the ask is made, because that is the
+    /// one place that has the parameter and its declared type together.
+    size_t shapeParam = 0;
+    std::string shapeName;
+    std::string shapeType;
 };
 
 bool buildTransposeMember(
@@ -622,6 +704,16 @@ bool buildTransposeMember(
         // probe line here was left by the `8194d89fd` experiment and made every reading carry a
         // line no cause asked for.
         state.calleeNeeds[function] = found;
+        // The ask is the probe's, so the fact it was a parameter's *shape* is the probe's too: the
+        // member being built here answers those parameters from the capture ports `found` names and
+        // never reaches the ask, so a fact recorded only there would be lost with the probe's state.
+        // Read here for the same reason `found` is: one discovery, not two.
+        if (probe.shapeWanted && !state.shapeWanted) {
+            state.shapeWanted = true;
+            state.shapeParam  = probe.shapeParam;
+            state.shapeName   = probe.shapeName;
+            state.shapeType   = probe.shapeType;
+        }
     }
     // The graph being built takes the ports the walk fills, so it asks for the shape its ports can
     // honour: the plain one. A closed half answers `(ct) => (cotangents)` at the call site (the
@@ -1219,6 +1311,47 @@ bool buildTransposeMember(
                                 camel::core::type::typeEquals(slotMember->dataType(), askType)) {
                                 forwardOf[ref] = closurePorts[slot];
                                 return forwardOf[ref];
+                            }
+                        }
+                        if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
+                            // Neither a port nor a closure slot hands this parameter in, and the
+                            // law's right side reads its value. That value is the **shape** the
+                            // parameter's type states, and nothing else: the transposed function is
+                            // given the cotangent alone, so a law that reads `xs` for `numel` or
+                            // `ones_like` is answered from the type. A parameter whose shape the type
+                            // states (`float[2, 3]`) is answered with a zero array of that shape --
+                            // a *shape carrier*, which is the only thing a law that reads `xs` for
+                            // `numel` or `ones_like` can ask of a value this graph does not have.
+                            Type *const askType = function->funcType()->normTypeAt(at);
+                            if (const gc_node_ref_t carrier = shapeCarrierOf(draft, askType);
+                                carrier != rt::kInvalidNodeRef) {
+                                forwardOf[ref] = carrier;
+                                return carrier;
+                            }
+                            if (askType != nullptr &&
+                                askType->code() == camel::core::type::TypeCode::Array) {
+                                // The type does not state the shape, so nothing can be answered from
+                                // it: the walk asks for the value below, as it does for every value a
+                                // law reads, and the *build* decides whether that ask fits the type
+                                // the operator promised (`buildTransposeGraph`). Refusing here would
+                                // be wrong for a call site inside a body, where the caller carries
+                                // the value and the member's type is written with it: the adjoint is
+                                // then a function of `ct` and of a known value, which the rule allows.
+                                // What is recorded is the fact the repair is about -- which parameter,
+                                // and the declaration that should state its shape.
+                                if (!state.shapeWanted) {
+                                    state.shapeWanted = true;
+                                    state.shapeParam  = at;
+                                    state.shapeType   = askType->toString();
+                                    const FunctionType *const signatureType = function->funcType();
+                                    if (signatureType->hasArgNames()) {
+                                        const size_t named = signatureType->withTypesCount() + at;
+                                        if (named < signatureType->argNamesCount()) {
+                                            state.shapeName =
+                                                std::string(signatureType->argNameAt(named));
+                                        }
+                                    }
+                                }
                             }
                         }
                         if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount &&
@@ -2264,38 +2397,22 @@ bool buildTransposeMember(
                     return false;
                 }
                 const auto normOperands = function->normInputsOf(ref);
-                if (normOperands.size() != 2 && normOperands.size() != 1) {
-                    // Measured, and left standing: the refusal is reachable (`transpose(loss_mean)`
-                    // over `mean_axis(xs, axis, keepdims)` reaches it as
-                    // `skip=arity uri=tensor:mean_axis operands=3`), and the count is wrong about
-                    // *why* -- the law `mean_axis_t` names all three ports and the last two answer no
-                    // cotangent because `int` and `bool` have no tangent space. What it is right about
-                    // is what removing it does: with the count gone the walk finishes, and the graph
-                    // it builds takes `(x, ct)` (`TRANSPOSE function=loss_mean graph=296
-                    // type=(float[..], float) => (float[..],)`) while the function value's signature
-                    // promises `(float) => (float[..],)`. The pullback's convention carries no residual:
-                    // a law whose right side reads the forward value of an *intermediate* node
-                    // (`mean_axis_cotangent` reads `xs`) makes the walk declare a port the caller was
-                    // never told to fill, and the call dies on `nargs.size() == normPorts.size()` --
-                    // a signal, which is worse than this refusal. A law that reads a *parameter* or a
-                    // constant (`sum_t`, `mul_t`, `dtod_t`) needs no residual, which is why every
-                    // reachable transpose rule is of that shape. (The array product's transposed law is
-                    // the one that would *not* be: `mul_tensor_t` is not in this tree yet -- it is the
-                    // half `lane-mulsc` is writing -- so the list here names only what exists.)
-                    //
-                    // The count came in with `a64136b6a` ("transpose of a straight-line linear graph,
-                    // built from the index's rules"), when the walk knew unary and binary primitives
-                    // and nothing else. `439d800be` gave the walk the node's port list (normal ones,
-                    // then `<>`) and wrote `mean_axis_t` in the same change, recording here that the
-                    // count refuses a law whose three ports it names -- `stdlib/rulesets/transpose.cml`
-                    // keeps that measurement beside the law. What the stop is really about is the
-                    // residual, so the page
-                    // `docs/handover/questions/2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md`
-                    // asks the question this line is one symptom of.
-                    refuse(TransposeRefusalCause::Arity);
-                    os << " uri=" << uri << " operands=" << normOperands.size() << '\n';
-                    return false;
-                }
+                // An operator is walked at whatever operands it has, and the *law* says which of them
+                // are positions a cotangent is answered for: `mean_axis(xs, axis, keepdims)` has three
+                // ports, the law names all three, and the last two answer nothing because `int` and
+                // `bool` have no tangent space (`tangentSpace.h`). The count that stood here --
+                // `normOperands.size() != 2 && != 1`, which refused every three-operand step before
+                // the law was looked up -- was written by `a64136b6a`, when the walk knew unary and
+                // binary primitives and nothing else, and `439d800be` gave the walk the node's port
+                // list in the same change that wrote `mean_axis_t`. It refused a shape the law already
+                // described.
+                //
+                // What it was protecting against is a law whose right side reads a **forward value the
+                // call site cannot hand it** -- an intermediate node's, or a parameter's whose type
+                // states no shape. That is now answered where it happens and refused by name there
+                // (`parameter-shape`, and the port-count guard in `buildTransposeGraph`), so the count
+                // is gone rather than merely loosened: a count is not the fact, and a reader told
+                // "arity" learns nothing about what to change.
                 // The list the rule's parameters line up with is the node's *port* list: the normal
                 // operands, then the `<>` ones (`OpDef::params` written `withAfterNorm`). A rule for
                 // an operator that takes its axis or its target shape in `<>` position declares that
@@ -3331,7 +3448,7 @@ bool buildTransposeMember(
 
 TransposeGraph buildTransposeGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    camel::runtime::GCGraph *function, std::ostream &os) {
+    camel::runtime::GCGraph *function, std::ostream &os, bool promisedToTheOperator) {
     if (program == nullptr || function == nullptr) {
         return TransposeGraph{};
     }
@@ -3347,6 +3464,55 @@ TransposeGraph buildTransposeGraph(
     }
     group.encode();
     const camel::runtime::GCGraph *made = group.encoded(member);
+    // The graph must take exactly what the operator's own type says it takes. `transpose(f)` is
+    // resolved by `transposeOperatorSignature`, which reads `f`'s type and no body, so the call site
+    // is told `(ct) => (cotangents)` -- one port, the cotangent. A member that needs a value the body
+    // reads and no type of the program can supply declares one port *more*, and the call site then
+    // hands the graph one argument where it has two ports: the run dies on
+    // `nargs.size() == normPorts.size()`, which is a signal and says nothing. Rather than let the
+    // shape reach the run, the build compares the two counts here -- the only place that has both --
+    // and refuses by name. The count is not the rule: it is the one reading that can tell "this
+    // member is the function the call site was promised" from "this member is a different function".
+    //
+    // Only the operator's own call site is compared: `promisedToTheOperator` is what the kernel says,
+    // and it is false for a member the walk builds for a *call inside a body*, whose caller writes its
+    // type with the captures in hand (`calleeNeeds`) and therefore fills them. Comparing there would
+    // refuse the honest `index_into` over an array whose extent only the caller knows -- the value is
+    // carried, the adjoint is built from `ct` and a known value, and the rule allows exactly that.
+    if (promisedToTheOperator) {
+        FunctionType *const promised =
+            function->funcType() != nullptr ? transposeSignature(function->funcType()) : nullptr;
+        const size_t promisedPorts = promised != nullptr ? promised->normTypesCount() : 0;
+        const size_t builtPorts    = made != nullptr ? made->normPorts().size() : 0;
+        if (promisedPorts != 0 && builtPorts != promisedPorts) {
+            // Which repair the reader is owed depends on *what* the extra port carries: a value a
+            // law reads that no type states (a capture the operator's type cannot name) or the shape
+            // of a parameter whose declaration leaves it open. The second has a declaration to edit
+            // and a rule behind it (author, 2026-11-03 16:15), so it is refused with the diagnostic
+            // that says so; the first keeps the sentence about the closure.
+            TransposeRefusal refusal;
+            refusal.graph = function->name();
+            if (state.shapeWanted) {
+                refusal.cause  = TransposeRefusalCause::ParameterShape;
+                refusal.param  = state.shapeParam;
+                refusal.paramName = state.shapeName;
+                refusal.paramType = state.shapeType;
+            } else {
+                refusal.cause = TransposeRefusalCause::NeedsAValueOutsideTheClosure;
+            }
+            // The line names the cause by the table's word rather than the log's `skip=` prefix: this
+            // record is written after the walk, and `skip=` belongs to the one place that renders a
+            // refusal as the walk meets it. What a reader greps for is here all the same.
+            const char *const word = transposeRefusalWord(refusal.cause);
+            os << "TRANSPOSE function=" << function->name() << " ports=" << builtPorts
+               << " promised=" << promisedPorts << " cause=" << (word != nullptr ? word : "-");
+            if (state.shapeWanted) {
+                os << " param=" << state.shapeParam << " param-type=" << state.shapeType;
+            }
+            os << '\n';
+            return TransposeGraph{nullptr, nullptr, refusal};
+        }
+    }
     return TransposeGraph{group.program(), const_cast<camel::runtime::GCGraph *>(made)};
 }
 
