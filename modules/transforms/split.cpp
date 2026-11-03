@@ -765,6 +765,8 @@ void addResidualCaptures(Draft &draft, const std::vector<Residual> &residuals, H
     }
 }
 
+} // namespace
+
 /// `lin`: the backward graph, closed over the residuals the forward half computed.
 ///
 /// A FILL of the `FunctionClosure` kind -- the kind a rule's right side already builds for its
@@ -773,14 +775,17 @@ void addResidualCaptures(Draft &draft, const std::vector<Residual> &residuals, H
 /// inputs are the residual values in slot order. This is what "the kernel builds `lin` once it has
 /// the graph" means (author, 2026-11-02 08:30): the values do not exist before the forward half runs,
 /// so `lin` is built where they do, and what it captures is stated by no signature.
-template <typename Draft>
+///
+/// Here because *two* builds write this shape, not one: the cut hands `lin` out of the forward half,
+/// and a call site that transposes a pair-answering callee closes the same graph over the same values
+/// (`transpose.cpp`, `transposePairCall`). One writer, so a closure a cut made and a closure a call
+/// site made are the same value.
 gc_node_ref_t buildLinearClosure(
-    Draft &draft, const rt::Program *program, GraphId backwardId,
+    rt::GraphDraft &draft, const rt::Program *program, GraphId backwardId,
     const camel::core::type::TupleType *closure, FunctionType *linType,
     std::span<const gc_node_ref_t> residuals) {
-    auto *lin      = ::Function::create(program, backwardId, closure, mm::autoSpace());
-    const gc_node_ref_t source =
-        draft.materializeStaticValue(toSlot<::Function *>(lin), linType);
+    auto *lin = ::Function::create(program, backwardId, closure, mm::autoSpace());
+    const gc_node_ref_t source = draft.materializeStaticValue(toSlot<::Function *>(lin), linType);
     std::vector<size_t> slots(residuals.size());
     std::iota(slots.begin(), slots.end(), size_t{0});
     const gc_node_ref_t value =
@@ -789,8 +794,6 @@ gc_node_ref_t buildLinearClosure(
     draft.setWithInputs(value, residuals);
     return value;
 }
-
-} // namespace
 
 /// Whether `ref` is a call of a graph that records what it was lifted from. Such a call answers the
 /// pair (result, tangent): its value half is the primal's result, which is a graph of its own, and its
@@ -2350,6 +2353,37 @@ ExitShape exitShapeOf(const rt::GCGraph *function, gc_node_ref_t exit, LoopCut &
     }
     cut.loop = exit;
     return ExitShape::Loop;
+}
+
+bool answersAPair(const rt::GCGraph *callee, std::string *why) {
+    const auto fail = [why](std::string reason) {
+        if (why != nullptr) {
+            *why = std::move(reason);
+        }
+        return false;
+    };
+    if (callee == nullptr) {
+        return fail("there is no callee graph to ask");
+    }
+    if (callee->funcType() == nullptr) {
+        return fail("the callee has no function type, so its parameters cannot be counted");
+    }
+    // The signature side, first: it costs no walk, and a graph that is not a pair by its parameters
+    // cannot be one by its exit either (the halves are what the pair answer is written in).
+    const SplitHalves halves = splitHalvesWith(callee->funcType(), nullptr);
+    if (halves.forward == nullptr || halves.backward == nullptr) {
+        return fail(halves.why);
+    }
+    // The graph side: the exit is the pair itself -- a two-member tuple fill, a loop whose value is
+    // the pair, or the Join a branch answers with. `exitShapeOf` is the one reader of that question,
+    // so this asks it rather than restating its conditions.
+    LoopCut cut;
+    const gc_node_ref_t exit = ungated(callee, callee->exitNodeRef());
+    if (exitShapeOf(callee, exit, cut) == ExitShape::NotAPair) {
+        return fail("its exit is not the pair (value, tangent): it is neither a two-member tuple fill, "
+                    "nor a loop whose value is the pair, nor the Join a branch answers with");
+    }
+    return true;
 }
 
 /// The `with` parameters of the source, as ports of one half. A `with` parameter is a value the
