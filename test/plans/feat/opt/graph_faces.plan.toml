@@ -10,16 +10,38 @@ The facts a face answers beside a node's record, printed with both sides togethe
 compares a draft's reading with the encoding's on every graph of every program and refuses a
 graph whose readings disagree, and a comparison that holds prints nothing: these lines are what
 makes a change in either answer visible.
+
+The pass prints the readings twice: once with the node numbers this graph happens to have
+(`[NF] dead 16` reads like "node 16 is dead" and means "the graph has 11 nodes"), and once with
+the relations those numbers stand for. `graph_faces.readings_absolute` pins the numbers on the
+program they belong to; `graph_faces.readings_body` reads only the relations, on the program whose
+body does work of its own. One run prints both, so the two writings can be read against each other.
+
+The entry that ran `test::regions` on `../../../cases/opt/generic/arm_tail_gate.cml` moved to
+`arm_tail_gate_regions.cml`: that program's arms read its body's ports and its condition, so no
+block can sit on its body without being read from an arm across two branches.
 """
 
 [[tests]]
-name = "graph_faces.readings"
-desc = "Five regions, the same answer node and two static slots on both faces; an id past the end answering nothing on both; a node erased in the draft answering nothing there while the encoding still answers a record; and the branch's two arms out of the payload on both."
+name = "graph_faces.readings_absolute"
+desc = "The readings of the graph that has 11 nodes, with both writings on it: five past the end is 16 (11 + 5) and answers nothing on both faces; the erased node is 10, the last one that is neither a port nor the answer, null in the draft and a record in the encoding; the branch is node 6, the graph's only BRCH, two arms on both; and both faces name node 5 as the answer."
 kind = "behavior"
 case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "test::graph_faces", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["[GF] regions 3/3 exit 5/5 slots 2/2 node 0 0/0", "[NF] dead 16 draft=null frozen=null", "[NF] erased 10 draft=null frozen=record", "[BF] brch 6 arms 2/2", "[GF] nodes 11", "[NF] dead past=16 gap=5 beyond=1 both=1", "[NF] erased at=10 last=1 draft-null=1 frozen-record=1", "[BF] brch at=6 only=1 arms-same=1 arms=2", "[GF] exit at=5 same=1 answer=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "graph_faces.readings_body"
+desc = "The same readings on a graph whose body does work of its own (`arm_tail_gate_regions.cml`), after `test::regions` put its two blocks down: the plan reads the relations instead of that one graph's node numbers -- a reference five past the end answers nothing on both faces, the erased node is the last that is neither a port nor the answer, the branch is the graph's only BRCH with two arms on both, and the two faces name the same answer -- with five regions and two static slots on both."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate_regions.cml"
 args = ["${case}", "test::regions", "test::graph_faces", "std::nvm"]
 
 expect_exit = 0
-expect_output_contains = ["[GF] regions 5/5 exit 5/5 slots 2/2 node 0 0/0", "[NF] dead 16 draft=null frozen=null", "[NF] erased 10 draft=null frozen=record", "[BF] brch 6 arms 2/2"]
+expect_output_contains = ["[GF] regions 5/5 exit ", "node 0 0/0", "[GF] nodes ", "slots ", "beyond=1 both=1", "last=1 draft-null=1 frozen-record=1", "only=1 arms-same=1 arms=2", "same=1 answer=1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
