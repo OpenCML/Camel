@@ -1923,6 +1923,44 @@ expect_output_contains = ["log_softmax engine d=[0.7299082804888587, 0.265814586
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# A read with a stated length, `tensor:pick_at`, is the operator the linear half of a read is written
+# with (`stdlib/rulesets/jvp.cml#jvp_idx_arr` answers with `pick_at(dxs, extent_pair(i, len(xs)))`).
+# It carried a reverse law (`stdlib/rulesets/transpose.cml#pick_at_t`) and no forward one, so a
+# program that wrote the read itself was refused where the lift looks the rule up:
+#
+#     REINTERP jvp function=read skip=rule uri=tensor:pick_at reason=the operator has no forward rule bound at all
+#
+# `jvp_pick_at` is one line -- a read moves no element, so its tangent is the read of the tangent --
+# and it needs no stated twin, because the list that carries the position (`at[0]`) already carries
+# the length (`at[1]`). The two entries below are that law's reading and the engine's, which is a
+# different question with a different answer.
+[[tests]]
+name = "pick_at_forward_rule_answers_both_directions"
+desc = "The library's two legs over `read(x) = pick_at(x, [1, 3])` on `x = [1.0, 2.0, 3.0]` and the direction `dx = [0.5, 0.25, -1.0]`, every number hand-computed before the run: the read is the second element, so the forward tangent is `dx[1] = 0.25` and the reverse leg's cotangent of 1.0 lands at position 1 alone, `dL/dx = [0.0, 1.0, 0.0]`. The third line is what ties the two laws together instead of comparing them by eye -- the forward tangent is the gradient applied to the direction, `sum(dL/dx * dx) = 0.0*0.5 + 1.0*0.25 + 0.0*(-1.0) = 0.25` -- so a `pick_at_t` that scattered the cotangent to another position, or a `jvp_pick_at` that read one, prints a line that does not close. Before the law the program stopped at the lift with `skip=rule uri=tensor:pick_at reason=the operator has no forward rule bound at all`; the stderr side pins the rule that answers now (`rules=jvp_pick_at`) and that no `skip=` line remains."
+kind = "behavior"
+case = "../../../cases/compile/transforms/pick_at_forward_rule.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["forward value=2.0 tangent=0.25", "reverse value=2.0 dL/dx=[0.0, 1.0, 0.0]", "agreement 0.25"]
+expect_stderr_contains = ["rules=jvp_pick_at"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "pick_at_gradient_refused_by_the_engine"
+desc = "The same read through the engine's `grad`: it refuses, and the sentence is `no derivative rule for operator 'tensor:pick_at' of type 'float'`, located at the call that wrote the read. The reason is a registration and not a law -- the engine's reverse pass reads `DerivativeRegistry`, the read it knows there is `:op/idx_arr` (`src/builtin/operators/derivative.cpp`), and the second spelling of the read (`modules/tensor/ops/layout_ops.cpp`, the OpDef named `pick_at`) has no `setVjp` in that file's list. A forward rule cannot answer it: `jvp_pick_at` is a law of the ruleset, and this pass reads a table of C++ rules. The two entries are the two halves of one account -- the library answers the read (`pick_at_forward_rule_answers_both_directions`, whose `0.25` closes), the engine does not -- and an account with one half refused is a debt, not a wall: the day someone files a `setVjp` for `pick_at`, this entry must be turned into the positive reading of the same program (`engine dL/dw=[0.0, 1.0, 0.0]`, the number the library's `vjp` answers today), which the case's own comment says in full. Pinned as the reading until then, so a registration that lands without this edit fails here and names itself."
+kind = "negative"
+case = "../../../cases/compile/transforms/pick_at_gradient_refused_by_the_engine.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["no derivative rule for operator 'tensor:pick_at' of type 'float'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 [[tests]]
 name = "log_softmax_gradient_stops_at_split"
 desc = "The same function through the library's `vjp`: the forward half is built with the new rule named (`rules=jvp_log_softmax,jvp_sum`) and the cut then refuses -- `skip=backward construct=a node whose input was not copied uri=- why=an operand of the node is not reachable from the half's exit`, with no `TRANSPOSE` line at all. This is the wall's third boundary: `softmax` refuses a context argument on a forward recomputation, while here the refused call (`sum<0, true>`) recomputes nothing -- its value is a backward-half number and only its `<>` arguments are constants. Pinned as readings, so the day the cut inlines the argument this entry goes red and names what replaced it; the default and its cost are in `docs/handover/questions/2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it.cn.md`."
