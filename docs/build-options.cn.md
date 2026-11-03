@@ -61,6 +61,30 @@ CMake 会缓存布尔选项。若曾经关闭过 `CAMEL_ENABLE_PYTHON`，再次�
 
 仅设置 `CAMEL_SKIP_PYTHON` 为空或取消该环境变量**不会**自动把已缓存的 `OFF` 改回 `ON`；需按上一条之一刷新。
 
+## 选项进了构建戳，`-NoBuild` 会因此拒绝复用
+
+一次构建在 `out/<tag>/build-info.json` 里记两样东西：源码内容指纹（哪些字节被读进产物）和
+**构建选项**（这些字节是以什么配置编译的，`scripts/common.js: buildOptions`）。选项值来自
+`.camel-opts.json`，而那个文件是 git-ignored——任何指纹都覆盖不到它，所以只能单独记。
+
+于是"同一棵树、只差 `ENABLE_FASTVM_JIT`"的两次构建是两个不同的安装：源码指纹相同，选项指纹不同。
+`camel-remote.ps1 -NoBuild`（主机上跑 `scripts/build-info.js check`）两边都要相符才复用；只有选项动了
+时它打印动的那一项并拒绝：
+
+```
+  build options that moved: 1
+    ~ ENABLE_FASTVM_JIT: built OFF, a rebuild would use ON
+```
+
+记进去的只有**真会改变产物**的东西：`cmake/options.json` 各选项的生效值、`Options.cmake` 认的两个环境
+覆盖（`CAMEL_TARGET_ARCH`、`CAMEL_SKIP_PYTHON`）、平台（`add_platform_option` 按处理器改宏）与编译器
+选择。构建类型（`config`）也在戳里，但它不在选项指纹里：`check --tag debug --config Debug` 会比，
+`out/debug` 由 `npm run debug` 独占，而 `out/latest` 同时放 Release 与 RelWithDebInfo，`-Tier debug
+-NoBuild` 又是"只验不建"（默认 `-Config Release`）——在那里按配置判会拒绝一个正确的安装。时间戳、绝对
+路径、用户名不进；ccache 不进（缓存交回的字节与它收到的一样）；clang 的**版本**也
+不进——探版本会让 `-NoBuild` 依赖 `PATH`，换一次工具链就废掉每个安装（这条是否该改，见
+`docs/handover/questions/2026-11-04-should-the-compiler-version-invalidate-an-install.cn.md`）。
+
 ## 相关文档
 
 - 根目录 **`AGENTS.md`**：构建命令约定、运行时环境与日志等（与 `CMake` 选项互补）。

@@ -1,0 +1,26 @@
+id = "tools.build_stamp"
+order = 917
+tier = "fast"
+tags = ["feat", "tools", "build", "stamp"]
+desc = "`out/<tag>/build-info.json` records the build options beside the source fingerprint, and `-NoBuild` refuses an install whose option set moved instead of reusing a differently configured binary"
+
+# The stamp used to be a source hash only. `.camel-opts.json` — where the CMake option values live —
+# is git-ignored, so no fingerprint covered it, and a build with ENABLE_FASTVM_JIT=OFF stamped the
+# same fingerprint as one with it ON: `camel-remote.ps1 -NoBuild`, which means "reuse the existing
+# install", could run the no-JIT binary for a JIT tree and report a reading that looked normal. The
+# stamp now records the option set (`scripts/common.js: buildOptions`) and `scripts/build-info.js
+# check` compares it beside the source hash; a stamp from before that record is refused as
+# untrustworthy rather than matched. The case drives the guard on a fake checkout, so it needs no
+# compiler and no install of its own.
+
+[[tests]]
+name = "build_stamp.options_change"
+desc = "A stamp taken with the default options passes its own check silently; flipping one option in `.camel-opts.json` makes the check exit 4 and name the option and both values while saying the sources are the same bytes; flipping it back passes again; `-AllowStale` prints the same refusal and continues; a stamp with `buildOptions` deleted, and a schema-2 stamp, are both refused as untrustworthy; and a rebuild with the other option set is reusable again."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/build_stamp/options_change.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 120000

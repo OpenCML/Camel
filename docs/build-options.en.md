@@ -61,6 +61,35 @@ Booleans are cached. If `CAMEL_ENABLE_PYTHON` was turned off, re-enable it by:
 
 Clearing or unsetting **`CAMEL_SKIP_PYTHON`** alone does **not** flip a cached `OFF` back to `ON`; use one of the steps above.
 
+## The options are part of the build stamp, and `-NoBuild` refuses on a change
+
+A build records two things in `out/<tag>/build-info.json`: the source-content fingerprint (which bytes
+went into the install) and the **build options** (what configuration compiled them,
+`scripts/common.js: buildOptions`). The option values come from `.camel-opts.json`, which is
+git-ignored — no fingerprint covers it, so it is recorded separately.
+
+Two builds of one tree that differ only in `ENABLE_FASTVM_JIT` are therefore two different installs:
+the same source fingerprint, a different options fingerprint. `camel-remote.ps1 -NoBuild` (it runs
+`scripts/build-info.js check` on the host) reuses an install only when both agree; when only the
+options moved it prints the option that moved and refuses:
+
+```
+  build options that moved: 1
+    ~ ENABLE_FASTVM_JIT: built OFF, a rebuild would use ON
+```
+
+Only what changes the artifact is recorded: the effective values of the `cmake/options.json` entries,
+the two environment overrides `Options.cmake` honours (`CAMEL_TARGET_ARCH`, `CAMEL_SKIP_PYTHON`), the
+platform (an `add_platform_option` value becomes a different macro per processor) and the compiler
+selection. The build configuration (`config`) is in the stamp but not in the options hash:
+`check --tag debug --config Debug` compares it, because out/debug belongs to `npm run debug` alone,
+while out/latest holds Release *and* RelWithDebInfo and `-Tier debug -NoBuild` verifies without
+building (passing `-Config Release` by default) — judging the configuration there would refuse a
+correct install. Timestamps, absolute paths and the user name are out; ccache is out (a cache returns
+the bytes it was given); the clang **version** is out, because probing it would make `-NoBuild` depend
+on `PATH` and invalidate every install after a toolchain update (whether it should be, see
+`docs/handover/questions/2026-11-04-should-the-compiler-version-invalidate-an-install.cn.md`).
+
 ## See also
 
 - **`AGENTS.md`** (repo root): build commands, runtime env (`CAMEL_HOME`, etc.), logging — complements CMake options.

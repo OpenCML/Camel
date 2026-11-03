@@ -21,7 +21,7 @@ import { CUDA_DEVICE_ORDER, PCI_BUS_ID, chooseFreeDevice } from './free-device.m
 import { RUN_DIRS_KEPT, SCRATCH_DIR, formatRetention, pruneRunnerOutput, runnerOutputPath } from './runner-output.mjs'
 import { argProblems } from './cli-arg-domains.mjs'
 import { tierAccountingLine, tierAccountingProblems } from './tier-accounting.mjs'
-import { formatIsoTime, provenanceLine } from './provenance.mjs'
+import { formatIsoTime, provenanceLine, staleAllowedMark } from './provenance.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const TOOLS_ROOT = path.dirname(__filename)
@@ -1065,7 +1065,7 @@ function printPlanHeader(plan) {
     const showPath = relativePath.split('.')[0].replace(/\//g, '.')
     const planLabel = plan.desc || plan.id || '.'
     console.log('')
-    console.log(`${COLORS.cyan}[PLAN]${COLORS.reset} ${showPath}: ${planLabel}`)
+    console.log(`${COLORS.cyan}[PLAN]${COLORS.reset} ${showPath}: ${planLabel}${staleAllowedMark()}`)
 }
 
 function printStatusLine(status, name, metric = '') {
@@ -1214,7 +1214,7 @@ function readProvenance(options) {
 }
 
 function printProvenance(options) {
-    console.log(`${COLORS.cyan}[provenance]${COLORS.reset} ${readProvenance(options)}`)
+    console.log(`${COLORS.cyan}[provenance]${COLORS.reset} ${readProvenance(options)}${staleAllowedMark()}`)
 }
 
 function printRunSummary(summary) {
@@ -1229,7 +1229,7 @@ function printRunSummary(summary) {
     console.log('')
     console.log(
         `${COLORS.cyan}[SUMMARY]${COLORS.reset} total: ${total}, pass: ${summary.pass}, fail: ${summary.fail}` +
-            `${skipped}${known}${timedOut}${crashed}`,
+            `${skipped}${known}${timedOut}${crashed}${staleAllowedMark()}`,
     )
 }
 

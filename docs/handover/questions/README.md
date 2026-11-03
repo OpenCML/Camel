@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：36 页
+## 现在在等作者：37 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -31,6 +31,7 @@
 | [`2026-11-04-does-the-transpose-walk-still-refuse-by-arity`](2026-11-04-does-the-transpose-walk-still-refuse-by-arity.cn.md) | 问题：转置走图还按操作数个数拒一个算子吗？ |
 | [`2026-11-04-how-does-a-tie-mask-travel-with-an-extremums-shape`](2026-11-04-how-does-a-tie-mask-travel-with-an-extremums-shape.cn.md) | `max_axis` / `min_axis` 的孪生算子：并列极值的选择怎么随形状走？ |
 | [`2026-11-04-should-a-multiplys-adjoint-need-its-operands-shape`](2026-11-04-should-a-multiplys-adjoint-need-its-operands-shape.cn.md) | 乘法的伴随要不要读操作数自己的形状？ |
+| [`2026-11-04-should-the-compiler-version-invalidate-an-install`](2026-11-04-should-the-compiler-version-invalidate-an-install.cn.md) | 编译器的**版本**要不要进构建指纹？ |
 | [`2026-11-04-should-the-library-grad-be-declared-per-arity`](2026-11-04-should-the-library-grad-be-declared-per-arity.cn.md) | 库层 `grad` 要不要按 arity 铺开一族声明，还是等一个"pack 的第一个成员"类型函数？ |
 | [`2026-11-04-should-the-library-grow-a-has-aux-form`](2026-11-04-should-the-library-grow-a-has-aux-form.cn.md) | 库层要不要也有 `has_aux`，还是"配对在哪写就在哪拆"就够了？ |
 | [`2026-11-04-should-the-library-with-grad-be-an-export-that-refuses`](2026-11-04-should-the-library-with-grad-be-an-export-that-refuses.cn.md) | 库层 `with_grad` 今天就该挂一个一律拒绝的可调用导出，还是等 `jvp` 的 `with` 切向落地再挂？ |
