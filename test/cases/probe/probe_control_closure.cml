@@ -1,0 +1,12 @@
+// PROBE (control C): a captured float and NO array at all -- does a closure that reads a free
+// variable lift? `let g = (t: float): float => k * t` with k from the enclosing function.
+import rulesets.jvp
+import { jvp } from transforms
+
+func main(): int sync {
+    let k = 2.0
+    let g = (t: float): float => k * t
+    let (v, d) = jvp(g)(3.0, 1.0)
+    `probe control closure value=${v} tangent=${d}`->println
+    return 0
+}

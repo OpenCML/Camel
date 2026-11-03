@@ -1,0 +1,18 @@
+id = "probe_wall1_gir"
+order = 9920
+tier = "fast"
+tags = ["probe", "wal1", "gir"]
+
+# SCRATCH PROBE (lane-s2wall): the GIR of the refused probe, to read which node kind the captured
+# value is, instead of guessing from the walk.
+
+[[tests]]
+name = "probe.gir.captured_float"
+desc = "The graph the lift refuses: which node carries the captured `k`?"
+kind = "behavior"
+case = "../../cases/probe/probe_control_float.cml"
+args = ["${case}", "${backend}"]
+backends = ["std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
