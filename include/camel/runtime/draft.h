@@ -347,7 +347,16 @@ class GraphDraft {
         outerGraphId_ = outer;
     }
 
-    GraphDraft()  = default;
+    /// A draft always has its body: region 0 is made here, with the draft, so the table is never
+    /// empty and `region(0)` answers a region the draft really holds (see `region`).
+    ///
+    /// A region is a record *and* a membership, and this model keeps the two apart: the record is
+    /// `regions_[0]`, while which nodes are in it is written on the nodes themselves
+    /// (`DraftNodeHeader::region`, read by `nodeRegion`) -- a region has no member table that could
+    /// be empty or full. The body is not a value either: `setRegionResult` takes only ids above 0,
+    /// and the exit of a graph is its own field (`exitNode`). So a body record of all defaults is
+    /// complete, not missing, and a graph of one region has every node in it.
+    GraphDraft() { regions_.push_back(GCRegion{}); }
     ~GraphDraft() = default;
 
     GraphDraft(const GraphDraft &)            = delete;
@@ -750,27 +759,21 @@ class GraphDraft {
     /// materialising an array); no graph producer of a library does. Asserts that `id` is a LOOP
     /// node.
     void setLoopIterableInterval(gc_node_ref_t id);
-    /// Regions (GCRegion). The body is region 0 and it is there once the draft has any other
-    /// region; before that the table is empty and every node is in the body. Ids are not reused.
+    /// Regions (GCRegion). Region 0 is the body and the draft makes it when it is made, so the
+    /// table always holds the body and then the other regions; ids are not reused.
     size_t regionCount() const { return regions_.size(); }
     /// The region `id`.
     ///
-    /// Region 0 is **the body**, and it answers even when the table is empty: `addRegion` writes
-    /// the body's record only when the first other region is added (`regions_`: "empty, or region 0
-    /// (the body) then the others"), while `nodeRegion` answers 0 for every node of a draft that has
-    /// no control regions at all. So "which region encloses this node" has an answer in that state
-    /// too -- the body, which owns no loop and carries no ports -- and the reader does not have to
-    /// know that the table is empty to get it. Any other id has to be one the draft has.
-    ///
-    /// The reading past the body is a `GUARD`, not an `ASSERT`: it stays in every build, because a
-    /// build that reads past the end without saying anything is one where only a Debug build's
-    /// standard library would object (`settleStreamLinearity` read `regions_[0]` of an empty table
-    /// in Release, bound the reference, never read through it and passed; 24 tests of
-    /// `feat/compile/stream` aborted in Debug on 2026-11-02).
+    /// Region 0 is **the body**, and it is a record of this draft like any other: the draft is
+    /// made with it, `clearRegions` keeps it, and `nodeRegion` answers 0 for every node that is in
+    /// no other. So "which region encloses this node" has an answer, and the answer is a region
+    /// the draft holds -- nothing here makes one up. Any id the draft does not have is a `GUARD`
+    /// failure, and the `GUARD` stays in every build: a build that reads past the end of the table
+    /// without saying anything is one where only a Debug build's standard library would object
+    /// (`settleStreamLinearity` read `regions_[0]` of an empty table in Release, bound the
+    /// reference, never read through it and passed; 24 tests of `feat/compile/stream` aborted in
+    /// Debug on 2026-11-02).
     const GCRegion &region(uint32_t id) const {
-        static const GCRegion body{};
-        if (id == 0 && regions_.empty())
-            return body;
         GUARD(
             id < regions_.size(),
             std::format(
@@ -802,7 +805,10 @@ class GraphDraft {
       private:
         GraphDraft &draft_;
     };
-    /// The region node `id` is in, 0 when it is in none but the body.
+    /// The region node `id` is in: 0 is the body, which every node the draft holds is in unless a
+    /// control region holds it. An `id` the draft does not hold (erased, or never a node of it) has
+    /// no region at all: it is not answered as 0, because 0 names the body, a region that exists.
+    /// Asking for it fails (`GUARD`), so "which region" has an answer or none, never a wrong one.
     uint32_t nodeRegion(gc_node_ref_t id) const;
     void setNodeRegion(gc_node_ref_t id, uint32_t region);
     /// A new region in `parent`; for a control region the node that owns it and its index.
@@ -973,7 +979,7 @@ class GraphDraft {
     std::unordered_map<GraphId, uint32_t> payloadGraphIndex_;
     std::vector<DraftNode *> nodesById_;
     std::vector<std::unique_ptr<DraftUserLists>> users_; // by node id; null: no users
-    std::vector<GCRegion> regions_; // empty, or region 0 (the body) then the others
+    std::vector<GCRegion> regions_; // region 0 (the body), made with the draft, then the others
     uint32_t insertRegion_    = 0;
     bool inheritsRegions_     = true;
     std::vector<gc_node_ref_t> regionPorts_;

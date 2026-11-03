@@ -157,6 +157,13 @@ class GraphRead {
     /// The graph's own ports (its parameters), the list GCGraph::normPorts answers.
     virtual std::vector<gc_node_ref_t> normPortsOf() const = 0;
 
+    std::vector<gc_node_ref_t> withPorts() const { return withPortsOf(); }
+    /// The graph's `with` ports, the list GCGraph::withPorts answers: the first
+    /// `funcType()->withTypesCount()` of them are the declared `with` parameters, the rest are the
+    /// values the body captured. A lift reads the declared ones -- those are what the caller fills at
+    /// the call site -- and leaves the captures to the closure, which the lifted value keeps.
+    virtual std::vector<gc_node_ref_t> withPortsOf() const = 0;
+
     /// The statements this one follows in the same `sync` block. A frozen graph keeps them as
     /// `GCGraphSyncEdge` and a draft as a list of ids; the face answers the predecessor, which is
     /// the only part of the edge the lift reads.
@@ -221,6 +228,7 @@ class DraftGraphRead final : public GraphRead {
     uint32_t regionOfNode(gc_node_ref_t ref) const override;
     std::vector<gc_node_ref_t> regionPortsOf(uint32_t id) const override;
     std::vector<gc_node_ref_t> normPortsOf() const override;
+    std::vector<gc_node_ref_t> withPortsOf() const override;
     std::vector<gc_node_ref_t> syncInputsOf(gc_node_ref_t ref) const override;
     gc_node_ref_t exitRefOf() const override;
     std::span<const ::slot_t> staticSlotsOf() const override {
@@ -279,6 +287,7 @@ class FrozenGraphRead final : public GraphRead {
     uint32_t regionOfNode(gc_node_ref_t ref) const override { return graph_.nodeRegion(ref); }
     std::vector<gc_node_ref_t> regionPortsOf(uint32_t id) const override;
     std::vector<gc_node_ref_t> normPortsOf() const override;
+    std::vector<gc_node_ref_t> withPortsOf() const override;
     std::vector<gc_node_ref_t> syncInputsOf(gc_node_ref_t ref) const override;
     gc_node_ref_t exitRefOf() const override { return graph_.exitNodeRef(); }
     std::span<const ::slot_t> staticSlotsOf() const override {

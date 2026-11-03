@@ -487,6 +487,16 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
                         continue;
                     }
                     if (nodeKindOf(draft.ref(user)) == runtime::GCNodeKind::Gate) {
+                        // A `GATE` the builder put here as the chain's place is a position, not
+                        // content: the chain reaches it and goes on from it, and what the walk is
+                        // looking for is the gate the block hands its value on through
+                        // (`chainPlaceForNode`). Walking through it is the whole of the rule;
+                        // stopping at it said "this effect is this block's value", which was true
+                        // of every chain place and of none of them was it meant.
+                        if (chainPlaceGates_.contains(draft.ref(user))) {
+                            stack.push_back(user);
+                            continue;
+                        }
                         return true;
                     }
                     stack.push_back(user);

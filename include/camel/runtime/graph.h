@@ -43,6 +43,7 @@
 #include "camel/core/symbol.h"
 #include "camel/core/type/intern.h"
 #include "camel/runtime/graph_id.h"
+#include "camel/utils/assert.h"
 
 #include <algorithm>
 #include <atomic>
@@ -180,21 +181,36 @@ enum GCNodeFlag : uint8_t {
 /// conversion the type does not call safe checks the value (an array's shape, a number's range).
 bool castMayFault(const camel::core::type::Type *target, const camel::core::type::Type *source);
 
-/// The one question a pass asks before it drops, moves, merges or reorders a node, or before it
-/// decides that a node needs an order edge: is the node pure *and* unable to fault? Such a node
-/// can be arranged anywhere -- off the sync chain, out of a loop body or an arm, away when a rewrite
-/// drops it (design principles 3.4), and without an order edge after an inline (docs/design/effects/
-/// edges.cn.md 5.7). An operator that may fault is not free: what it does when it fails is
-/// observable, so its place is kept. An operator nobody declared is not known never to fault, so it
-/// is not free either; neither is an operator that must run where the program writes it
-/// (`OperatorTable::mayBeRecomputed`). A CAST is free when its conversion cannot fail
+/// `graph::may_be_rearranged` -- the one question a pass asks before it drops, moves, merges or
+/// reorders a node, or before it decides that a node needs an order edge: is the node pure *and*
+/// unable to fault? Such a node can be arranged anywhere -- off the sync chain, out of a loop body
+/// or an arm, away when a rewrite drops it (design principles 3.4), and without an order edge after
+/// an inline (docs/design/effects/edges.cn.md 5.7). An operator that may fault is not free: what it
+/// does when it fails is observable, so its place is kept. An operator nobody declared is not known
+/// never to fault, so it is not free either; neither is an operator that must run where the program
+/// writes it (`OperatorTable::mayBeRecomputed`). A CAST is free when its conversion cannot fail
 /// (`castMayFault`), and is asked with the types it converts between: without them it is not free.
 /// `oper` is `kNoOper` for every kind but OPER. An elementwise operator (tensor arithmetic) fails
 /// only when its operands' shapes do not broadcast: asked with `fixedShapes` (every operand and
 /// the result have shapes the type states in full, `shapesAreFixed`) it cannot.
-bool nodeIsFreelySchedulable(
+///
+/// This is the answer to that question and nothing else. The C++ passes and the passes written in
+/// Camel both read it -- the module `graph` exports it as `may_be_rearranged`, the builtin that
+/// `stdlib/graph.cml` declares -- so a pass on either side of the boundary asks one implementation.
+/// `nodeIsFreelySchedulable` below is the older name of this same function and forwards to it.
+namespace graph {
+bool may_be_rearranged(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget = nullptr,
     const camel::core::type::Type *castSource = nullptr, bool fixedShapes = false);
+} // namespace graph
+
+/// The older name of `graph::may_be_rearranged`, kept for the C++ passes that still read it: it
+/// forwards, so there is one implementation and the two names cannot answer differently.
+inline bool nodeIsFreelySchedulable(
+    GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget = nullptr,
+    const camel::core::type::Type *castSource = nullptr, bool fixedShapes = false) {
+    return graph::may_be_rearranged(kind, oper, castTarget, castSource, fixedShapes);
+}
 
 /// The fault half of `nodeIsFreelySchedulable`, on its own: whether running a node of this kind
 /// can raise a fault (`castMayFault`, `OperatorTraits::mayFault`; design principles 3.9) where it
@@ -212,9 +228,16 @@ bool nodeMayFault(
 bool shapesAreFixed(const camel::core::type::Type *type);
 
 class GCGraph;
-/// The same question of a node of a graph; a CAST is asked with its result type and the type of
-/// its input.
-bool nodeIsFreelySchedulable(const GCGraph &graph, gc_node_ref_t ref);
+/// `graph::may_be_rearranged` of a node of a graph; a CAST is asked with its result type and the
+/// type of its input.
+namespace graph {
+bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref);
+} // namespace graph
+
+/// The older name of the overload above, forwarding to it.
+inline bool nodeIsFreelySchedulable(const GCGraph &graph, gc_node_ref_t ref) {
+    return graph::may_be_rearranged(graph, ref);
+}
 
 /// `nodeMayFault` of a node of a graph, read the way `nodeIsFreelySchedulable(const GCGraph &)`
 /// reads its operands and types.
@@ -660,11 +683,15 @@ class GCGraph : public camel::core::rtdata::Object {
     const GCRegion *region(uint32_t id) const {
         return id < nativePayload_.regionCount ? nativePayload_.regionTable + id : nullptr;
     }
-    /// The region node `ref` is in: the innermost; 0 for the body.
+    /// The region node `ref` is in: the innermost; 0 for the body. A ref that names no node of
+    /// this graph has no region, and 0 would say it is in the body -- a region the graph really
+    /// has (the body's record exists even when the table holds nothing else), so the answer would
+    /// be a membership the program does not have. Fail instead of naming the body.
     uint32_t nodeRegion(gc_node_ref_t ref) const {
-        if (!containsNodeRef(ref)) {
-            return 0;
-        }
+        GUARD(
+            containsNodeRef(ref),
+            "Region of a node that is not in the graph: the ref is kInvalidNodeRef or past "
+            "nodeCount(), and region 0 is the body, not the answer for a node that is not there.");
         const GCNodeChunk &c = chunkOf(ref);
         return c.regions ? c.regions[ref & (kNodeChunkNodes - 1)] : 0;
     }
@@ -682,20 +709,24 @@ class GCGraph : public camel::core::rtdata::Object {
             at = one->parent;
         }
     }
-    /// True when the node `reader` may read a port of the region `portRegion`. Three readers may:
-    /// a node of that region, a node of a region `portRegion` sits in, and the node that owns it
-    /// (`region(portRegion)->owner`). A branch arm reading the function's own parameter is the
-    /// second; a LOOP node reading the port its own body region ends in is the third. Anyone else
-    /// is outside the frame the port lives in: a port of a region inside the reader is a value that
-    /// region produces, and it is not there before that region runs -- a loop body's port is a
-    /// different value every round, and the reader of the rounds is the loop node, not its
-    /// neighbours.
-    bool regionIsVisibleFrom(uint32_t portRegion, gc_node_ref_t reader) const {
+    /// True when the node `reader` may read the port `port` of the region `portRegion`. Two readers
+    /// may: a node of a region `portRegion` contains -- the region itself and every region inside
+    /// it -- and the node that owns the region (`region(portRegion)->owner`), but that one only the
+    /// region's **exit** (`region.result`; a loop's condition region has one too).
+    ///
+    /// The owner's read is the rule's one exception and it is written on the port, not on the
+    /// reader's identity or on the exit's node kind (author ruling 2026-11-03 08:10): a `LOOP`
+    /// consumes its body's exit round by round, and a body written `do s` ends in the state port
+    /// while one written `do s + 1` ends in an Oper -- the same thing to the loop, so a rule that
+    /// told the two apart would be a special case. Any *other* port of the region is refused to the
+    /// owner as well: it is a value that region produces, and it is not there when the owner looks
+    /// at it.
+    bool regionIsVisibleFrom(uint32_t portRegion, gc_node_ref_t port, gc_node_ref_t reader) const {
         if (isAncestorOf(portRegion, nodeRegion(reader))) {
             return true;
         }
         const GCRegion *one = region(portRegion);
-        return one != nullptr && one->owner == reader;
+        return one != nullptr && one->owner == reader && one->result == port;
     }
     /// The LoopCond or LoopBody region (`part`) of the LOOP node `ref`; 0 when it has none: a For
     /// loop has no condition, and a loop in graph form has no regions.
