@@ -2672,3 +2672,18 @@ P0-2 两处改写、`transpose` 递归捕获、循环倒序、M4 迁移、Transf
 - 排期属于第 6 项（测试设施），不插到第 1–3 项前面。
 
 页挪到 `reviews/` 留档。第 1–3 项这一小时仍然没有代码。
+
+## 第 1 项拆成小步（2026-11-03 19:35，决策者）
+
+第 1 项三个多小时没人接，这里把它拆到第一步只改两条规则、一条用例，接手的人照做即可。
+
+**第一步：只改下标这一对规则**。
+- `stdlib/rulesets/jvp.cml`：加一个线性函数 `pick_at::<T>(dxs: T[], i: int, n: int): T { return dxs[i] }`。它对 `dxs` 线性，`i`、`n` 是已知实参，前向里 `n` 不参与计算，只为让转置拿得到长度。`jvp_idx_arr` 的右边改成 `(dxs: T[]) => pick_at(dxs, i, len(xs))`。`len(xs)` 由原值在前一半算出，照 15:15 成为残差。
+- `stdlib/rulesets/transpose.cml`：加 `pick_at_t::<T>(dxs: T[], i: int, n: int) { pick_at(dxs, i, n) => (ct: T) => scatter_into(zeros::<T>([n]), i, ct) }`。这条规则只读已知的 `i`、`n`。
+- 判据：`grad_array_no_int` 等 10 条照旧绿；`rounds_are_undone_in_reverse` 答 `(1.0, 1.0)`；同时数一下 `transpose.cpp` 里按位置取值那一段还被命中几次，应当只剩别的规则的命中。
+
+**第二步**：照第一步的样子，把剩下命中按位置取值的规则逐条改掉（`take_t`、`mean_axis_t`、`sum_t` 里读线性操作数形状的地方），每条一笔提交，判据都是"命中数减少、用例不变"。
+
+**第三步**：命中数归零后，删掉 `transpose.cpp` 里按位置取值的那段、`wantedValues`/`TRANSPOSE-NEEDS`，以及 `split.cpp` 里那段约定注释。
+
+裸 `transpose` 上的 `idx_arr_t`（`index_into(x, i)` 中 `x` 是参数本身）不走这条路，它的长度由第 3 项的 `extent_of` 从类型取，放到第 3 项一起做。
