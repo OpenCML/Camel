@@ -515,9 +515,14 @@ void registerBuiltinOperatorTraits() {
     // Declared never to fault, where the implementation has no fault path at all: integer
     // addition and subtraction wrap, floating-point arithmetic and ordering cannot fail, and
     // the strict boolean operators only read their operands. Everything else keeps the
-    // default (may fault). No pass acts on this declaration yet (operator_table.h). Each entry
-    // here is one operator of docs/handover/reports/faults-table-audit.md, which reads its
-    // implementation against this list.
+    // default (may fault). The passes do act on this list: `src/runtime/graph.cpp#nodeMayFault`
+    // reads `mayFault` beside `elementwise` to answer design principles 3.4's predicate, and
+    // `nodeIsFreelySchedulable` hands that answer to whoever may drop, move or recompute a node
+    // -- an operator left out of this list is a running the program observes, so `std::opt`
+    // keeps it alive with `:op/keep` when a removal takes its last read
+    // (`src/passes/opt/generic/rewrite.cpp#isObservedRun`). Each entry here is one operator of
+    // docs/handover/reports/faults-table-audit.md, which reads its implementation against this
+    // list.
     static const std::unordered_set<std::string_view> kNeverFaults = {
         "op/add_i",
         "op/add_l",
