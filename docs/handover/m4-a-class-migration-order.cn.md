@@ -6,7 +6,7 @@
 
 ## 结论：能迁 0 条，要等 34 条
 
-读数（可复现，在 `lane-guard` 上）：
+读数（可复现，在 `6af543d27` 上；原 `lane-guard`，该分支已删）：
 
 ```
 camel test/cases/modules/autodiff/scalar_grad.cml transforms::reinterp std::nvm

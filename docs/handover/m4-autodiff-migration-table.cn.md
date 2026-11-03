@@ -166,15 +166,16 @@ camel test/cases/modules/autodiff/jax_vmap.cml std::nvm   # 退出码 0，打出
   `TRANSPOSE function=autodiff::add_tangent<float> skip=output`（lambda 形）或
   `TRANSPOSE function=split_of_jvp_of_…_backward skip=call node=5 callee=autodiff::add_tangent<float>`（具名函数形）
   → `transpose has no transpose for this function`。
-  **注意**：`skip=output` 这一族的修法在 `lane-reinterp2` 的 `e9ab3bdd9`（"answer a zero for a parameter no
-  cotangent reached"），它**不在** `origin/develop` 的 `bcf970332` 里（`git branch -a --contains e9ab3bdd9` 只列
-  `lane-reinterp2`）；所以本表按本分支的读数记。那一笔进来之后这一行要重测。
+  **注意**：`skip=output` 这一族的修法在 `e9ab3bdd9`（"answer a zero for a parameter no
+  cotangent reached"），记这一行时它**不在** `origin/develop` 的 `bcf970332` 里（`git branch -a --contains e9ab3bdd9`
+  当时只列 `lane-reinterp2`，该分支已删、tip `67509bd1a`）；所以本表按当时本分支的读数记。
+  这一笔现在已在 `origin/develop` 的历史里（`f130ac445`），**这一行要重测**。
 - 函数体里有调用（`sq(x) * sq(x)`）→ `REINTERP split … skip=forward construct=a tangent port`；
   函数体里有分支 → `skip=exit`；函数体里建张量再取 `max` → `REINTERP jvp … skip=body`。
 - 数组参数 → 声明面：`No matching function … ((xs: float[]) => float pure)`。
 
 所以"过半"的真正账不是每条用例缺一条规则，而是三件事：库的**声明面**（`Vjp<F>` 泛型，设计 6.1）、
-**`add_tangent` 的转置**（在 `lane-reinterp2` 上已修，未进 develop）、**`split`/`jvp` 对调用、分支、张量体的支持**。
+**`add_tangent` 的转置**（`e9ab3bdd9` 已修，现在已在 `develop` 里）、**`split`/`jvp` 对调用、分支、张量体的支持**。
 这三件都不在用例那边：试点 5 条里 0 条是改写法就能过的。
 
 ## 逐条（127 行）
