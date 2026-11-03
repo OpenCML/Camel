@@ -106,6 +106,14 @@ struct Residual {
     /// The parameter it is the value of, when it is a parameter; `kNotAParameter` when it is a value
     /// the forward half computes.
     size_t parameter = 0;
+    /// When this residual is the **linear half** of a call whose callee answers a pair: `node` is the
+    /// call, and `type` is that half's type -- the callee's own backward half, `(tangents) => tangent`,
+    /// with the values it reads in its closure. Nothing the callee computes crosses as a value: the
+    /// call site never sees the residuals of `g`'s body (author, 2026-11-03 17:55), it sees `lin_g`.
+    /// The two halves reach it differently: the forward half gets it as the second component of the
+    /// call it placed (`ACCS 1`), and the backward half **calls** it on the tangents the source call
+    /// passed, which is one indirect call where the source had one direct one.
+    bool linearHalf = false;
     static constexpr size_t kNotAParameter = static_cast<size_t>(-1);
 };
 
