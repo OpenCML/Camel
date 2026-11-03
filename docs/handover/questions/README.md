@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：12 页
+## 现在在等作者：13 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -15,6 +15,7 @@
 | [`2026-11-03-a-norm-port-count-over-the-call-arguments-is-not-a-wall-today`](2026-11-03-a-norm-port-count-over-the-call-arguments-is-not-a-wall-today.cn.md) | 转置成员的 norm 端口数多于调用点实参数：今天不是墙，是被更早一道拒绝挡住的潜在墙 |
 | [`2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant`](2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant.cn.md) | 一个超时应该由读数推出来，而不是由人写死 |
 | [`2026-11-03-does-note-zero-cover-a-closure-capture-port`](2026-11-03-does-note-zero-cover-a-closure-capture-port.cn.md) | `noteZero` 要不要覆盖闭包捕获端口？ |
+| [`2026-11-03-is-a-name-at-a-void-tail-a-value-use`](2026-11-03-is-a-name-at-a-void-tail-a-value-use.cn.md) | 一个 `void` 函数体尾部的名字，是"被丢掉的值"还是"被当成值使用"？ |
 | [`2026-11-03-may-a-region-owner-read-its-own-exit`](2026-11-03-may-a-region-owner-read-its-own-exit.cn.md) | 一个区域的拥有者能不能读自己区域的端口？ |
 | [`2026-11-03-reversing-a-backward-can-only-be-pinned-when-a-loop-state-is-not-a-float`](2026-11-03-reversing-a-backward-can-only-be-pinned-when-a-loop-state-is-not-a-float.cn.md) | 反传倒着走要能钉住，先要循环状态不是浮点标量 |
 | [`2026-11-03-the-capture-does-not-reach-the-body-is-not-the-whole-cause`](2026-11-03-the-capture-does-not-reach-the-body-is-not-the-whole-cause.cn.md) | 捕获"没进循环输入"不是全部原因：两条通道都实现了，错数一个也没动 |

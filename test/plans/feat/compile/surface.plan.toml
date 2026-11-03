@@ -66,6 +66,28 @@ expect_diagnostic_line = 6
 expect_output_contains = ["2 functions of that name [(x: int) => int pure; (x: float) => float pure]"]
 
 [[tests]]
+name = "surface.dropped_function_name"
+desc = "`let step = len` as the last statement of a function declared `: void`, and in an arm of a branch such a body drops: `len` has four signatures, so `let` binds the name rather than one function value, and a body declared `void` drops whatever it ends with -- the name is not used as a value, so nothing is asked of it. It used to be an internal error ('still contains a live DREF node'): a name is no node of the graph, and the dropped value is a constant. Every function here is one the program never calls, and the one binding a call goes through is still the name it was."
+kind = "behavior"
+case = "../../../cases/compile/surface/dropped_function_name.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["void_tail\n3\ndone\n"]
+expect_output_not_contains = ["Error", "Warning"]
+
+[[tests]]
+name = "surface.function_name_at_tail"
+desc = "The same binding where the body's value is used (`func int_tail(): int { let step = len }`): the name has no value to hand on, so the position asks for its function value and the diagnostic says at the `let` that `len` names an operator with several signatures. It used to be the same internal error as the `void` tail beside it, never a diagnostic."
+kind = "negative"
+case = "../../../cases/compile/surface/function_name_at_tail.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
+expect_diagnostic_line = 5
+expect_diagnostic_column = 5
+expect_output_contains = ["'step' is used as a value here, but it names an operator with 4 signatures"]
+
+[[tests]]
 name = "surface.if_without_else"
 desc = "`if c then println(...)` compiles and runs: an if without else has no value and its arm may be of any type (design principles 3.7). It used to be an error."
 kind = "behavior"

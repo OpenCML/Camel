@@ -268,7 +268,7 @@ jobs:
           # rewriting for the files whose bytes changed -- pip checks those hashes when it
           # installs. Until that is written and run once, a macOS wheel would ship a tag it
           # cannot honour, and build-pypi.yml does not build one. ci.yml's macOS leg says the
-          # truth about this (see the comment on build-test-macos there).
+          # truth about this (the macos-arm64 cell of the build-test matrix there).
           #
           # Windows arm64 is not published: few users. Intel Macs are not published either:
           # Apple has stopped making them.
