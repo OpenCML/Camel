@@ -43,6 +43,8 @@
 | `pow`（`^`） | ✓ | **✗**（实测 `skip=rule uri=math:pow_d reason=unbound`） | ✓ `jvp_pow` |
 | `relu` | ✓ | **✓** `relu_t`（2026-11-03 补齐，见下） | **✓** `jvp_relu` |
 | `exp` | ✓ | **✓** `exp_t`（2026-11-03 补齐，见下） | **✓** `jvp_exp` |
+| `sigmoid` | ✓ | **✓** `sigmoid_t`（2026-11-04 补齐） | **✓** `jvp_sigmoid` |
+| `tanh` | ✓ | **✓** `tanh_t`（2026-11-04 补齐） | **✓** `jvp_tanh` |
 | `reshape` | ✓ | **✗** | ✓ |
 | `softmax` | ✓ | **✗**（不是差 `softmax_t`：库层在 `split` 就停，走查未开始；见下） | ✓ |
 | 其余 ~41 个张量算子 | ✓ | **✗** | **✗** |
@@ -52,11 +54,21 @@
 用例 `test/cases/compile/transforms/relu_gradient_through_{the_engine,the_library}.cml`）。
 `exp` 也已移过去（`lane-exp` `ab1e7113c`）：`jvp_exp` = `exp(x) * dx`、`exp_t` = `ct * exp(x)`，
 在 `[1.0, 2.0]` 上两侧逐元素同答 `[2.718281828459045, 7.38905609893065]`。
+`sigmoid`（`lane-sigmoid` `b93074169`）与 `tanh`（`lane-tanh` `0f9b577f8`）也移过去了：在
+`[-1.0, 0.0, 1.0]` 上 `[0.19661193324148185, 0.25, 0.19661193324148185]`、在 `[0.5, -1.0]` 上
+`[0.7864477329659274, 0.41997434161402614]`，两侧逐元素相同。
 `^`（`math:pow_d`）仍在"只有引擎"。
 
-**下一个候选**：**`sigmoid` / `tanh`（最贴训练语料）**——一元，切线 `y*(1-y)`，两条律即可，
-且它们的切线**只重算 `x` 上的值**，与 `exp` 同形，不会再碰 cut 那道墙；`softmax` 与 `log_softmax`
-仍是"缺一次 cut 的裁定"（见下），不是缺律。
+**这条墙的判据（今晚第一次写成可判的句子）：重算的调用是否带着"出口不可达"的参数。**
+带上就拒，没带就过——四例通过（`relu` 的掩码、`exp`、`sigmoid`、`tanh`，重算只依赖输入 `x`；
+`exp` 实测 `residuals=2`、`rhs=sum_t,mul_tensor_t,exp_t`），两例被拒（`softmax<1>`/`sum<1,true>`
+带 `<>` 的轴与 `keepdims`；`vjp_loop` 里 `index_into` 的数组参数不是残差）。这同一句话也就是
+`mean_axis` 那条 `skip=arity` 的另一面。判据与代价写在
+`docs/handover/questions/2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it.cn.md`。
+
+**下一个候选**：`log_softmax`（`jvp_log_softmax` 若无、且切线与 `softmax` 同形，会撞同一道墙，先量
+再动手）、`gelu` / `erf` / `erfc`（一元、切线只依赖 `x`，与 `exp` 同形，不会再碰这道墙）。
+`softmax` 与 `log_softmax` 今天仍是"缺一次 cut 的裁定"，不是缺律。
 
 **两个被实测改口的结论**（2026-11-03 深夜）：
 
@@ -75,7 +87,7 @@
    `docs/handover/questions/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`。
 
 **缺口（= "对齐"的度量）**：引擎 61 个张量名字里，库 `transpose` 覆盖 8–9 个，
-**约 41 个只能走引擎**（`gelu`、`sigmoid`、`tanh`、`exp`、`log`、`sqrt`、`rsqrt`、`abs`、
+**约 38 个只能走引擎**（`gelu`、`log`、`sqrt`、`rsqrt`、`abs`、
 `erf`、`erfc`、`maximum`、`minimum`、`where`、`log_softmax`、`layer_norm`、`mean`、`max`、`min`、
 `sum_axis`、`max_axis`、`min_axis`、`sum_to`、`broadcast_like`、`expand_axis`、`cast_like`、
 `permute`、`permute_inverse`、`transpose`、`unsqueeze`、`concat`、`shape`、`linear`…），
