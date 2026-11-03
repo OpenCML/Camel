@@ -7,7 +7,7 @@ desc = "An install whose C++ runtime is too old says which version it needs, whi
 # The versions a binary requires from libstdc++.so.6 are ELF version requirements, and the loader
 # resolves them before `main`: nothing inside the program can report them, so `bin/camel` is a
 # launcher (scripts/cxx-runtime-guard.mjs) that asks the loader before exec'ing the binary
-# (docs/technical/35_install_cxx_runtime.md). This case holds both ends -- the ordinary start, and
+# (docs/technical/58_install_cxx_runtime.md). This case holds both ends -- the ordinary start, and
 # an install whose `libs/libstdc++.so.6` is the distribution's older copy -- and asserts that the
 # second one does not read like a broken toolchain. It builds that install in a temporary
 # directory, so it writes nothing to `out/`, and it skips the second half where no too-old runtime
