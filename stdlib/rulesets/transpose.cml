@@ -38,7 +38,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { pick_at, exp, full, log_softmax, matmul, mean_axis_stated, numel, relu, sigmoid, subtract, sum, sum_stated, sum_to, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
+import { pick_at, exp, full, log_softmax, matmul, mean_axis_stated, mean_stated, numel, relu, reshape, sigmoid, subtract, sum, sum_axis_stated, sum_stated, sum_to, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
