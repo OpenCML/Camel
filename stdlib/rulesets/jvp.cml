@@ -243,8 +243,33 @@ func subtract::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
 /// `d(x - w) = dx - dw`: a difference is linear in both of its operands, so the tangent of the
 /// difference is the difference of the tangents -- and the two shapes may differ, which is the same
 /// broadcast the operator itself does to the value.
+///
+/// The operands are both `T[..]`. The other shape `tensor:subtract` is called with -- an array minus
+/// a number, `(T[..], T)` -- cannot be spelled here: a union in a parameter list is a syntax error
+/// (`Expected ',' or ')' before '|'`), so one key cannot hold both shapes with one rule, and this
+/// rule is the array-to-array one, which is the shape a layer norm writes. The gap and its
+/// measurements are `docs/handover/questions/2026-11-03-one-rule-key-cannot-hold-an-array-and-a-number.cn.md`.
 export rule jvp_subtract::<T>(x: T[..], w: T[..]) when is_float::<T>() {
     subtract(x, w) => (dx: T[..], dw: T[..]) => dx - dw
+}
+
+// ---- the forward rule of the array product ----
+//
+// `x * w` on two arrays is `tensor:multiply`, whose key is `mul_tensor` -- this is the one key the
+// core states as an exception (`ruleKeyExceptions`), because `*/2` is already `:op/mul_d`'s spelling
+// and one key holds one rule. `rulesets.vmap` declares its own `mul_tensor` for its own family; a
+// module cannot read another's private function, so the name is declared here too, with the same
+// body -- the product the operator means.
+
+/// `x * w` on two arrays: what `tensor:multiply` means, and the left side this rule is filed under.
+func mul_tensor::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
+    return x * w
+}
+
+/// `d(x * w) = dx * w + x * dw`: the product rule, written with the operator on the tangents and on
+/// the values, so the element-by-element multiplication and its order are the kernel's own.
+export rule jvp_mul_tensor::<T>(x: T[..], w: T[..]) when is_float::<T>() {
+    mul_tensor(x, w) => (dx: T[..], dw: T[..]) => dx * w + x * dw
 }
 
 // ---- the forward rule of `:op/idx_arr` ----
