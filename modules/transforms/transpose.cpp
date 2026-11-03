@@ -99,6 +99,35 @@ std::string typeTextOf(const std::vector<Type *> &types) {
     return text.empty() ? std::string("()") : text + ")";
 }
 
+/// Whether a port written `written` takes an operand of type `operand` **as the shape the law was
+/// written for**.
+///
+/// "Takes" is the relation a call site uses -- `assignableFrom`, the port accepts the value -- and
+/// it is not the whole question here. `T[..]` is an open rank, and design principles 5.4 says a
+/// rank-zero array *is* the element, so `float[..]` accepts a `float`: the same value, and not the
+/// same shape. A law that names an array operand reduces along the lanes a broadcast handed out
+/// (`sum_to` rewrites `t` to the shape of `like`), and a number has no lanes to reduce; so a port
+/// written as an array does not take a value that is not an array, however willingly the type system
+/// hands it over. The other direction needs no clause here: a port written `float` takes no
+/// `float[]` at all (`ArrayType::assignableFrom` is the array on the left of that sentence, not the
+/// right).
+///
+/// This is the clause that keeps a law for two arrays from being taken for an array and a number,
+/// which is the shape `tensor:multiply` is called with and answers no cotangent for
+/// (`ruleTakesOperands`, and the page
+/// `docs/handover/questions/array-scalar-product-transpose.cn.md`).
+bool sameOperandShape(const Type *written, const Type *operand) {
+    if (written == nullptr || operand == nullptr) {
+        return false;
+    }
+    if (!written->assignableFrom(const_cast<Type *>(operand))) {
+        return false;
+    }
+    const bool portIsArray = written->code() == camel::core::type::TypeCode::Array;
+    const bool operandIsArray = operand->code() == camel::core::type::TypeCode::Array;
+    return !portIsArray || operandIsArray;
+}
+
 /// Whether the rule named `ruleName` describes a node whose ports are `operandTypes`.
 ///
 /// It does not, and this is why the question is asked here rather than left to the index: a rule is
@@ -164,15 +193,10 @@ bool ruleTakesOperands(
             takes = false;
             break;
         }
-        if (!written->assignableFrom(operand)) {
+        if (!sameOperandShape(written, operand)) {
             takes = false;
             break;
         }
-        // The clause 5.4 does not answer: an array-shaped port and a number are the same value, and
-        // not the same shape.
-        const bool portIsArray = written->code() == camel::core::type::TypeCode::Array;
-        const bool operandIsArray = operand->code() == camel::core::type::TypeCode::Array;
-        takes = !portIsArray || operandIsArray;
     }
     if (!takes) {
         why = "the rule takes " + typeTextOf(wanted) + ", and the operator has " +

@@ -27,6 +27,8 @@ error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: transpose h
 
 只有**走查会真去要余切的位置**参与这一问：常量与无切空间的值本来就不问律（`isConstant`、`hasTangentSpace`），所以 `sum(x * 2.0)` 照旧对——`value = 12.0`、`d/dx = 2.0 2.0 2.0`、`rhs=sum_t,add_tensor_t,mul_tensor_t`。校验只加在 transpose 这一处，索引的判重规则一个字没动。
 
+那一句"`T[..]` 的形参不收非数组实参"单独有名字：`sameOperandShape(written, operand)`（同文件，注释引设计原则 5.4 而**不写行号**）。分开写是因为它判的是另一件事——`assignableFrom` 判"这个口收不收这个值"，它判"这是不是那条律写的那种形状"；5.4 说秩 0 的数组**就是**那个元素，所以两个方向都真而形状不同。它是这一笔唯一一处会拒掉原本能过的程序的地方，所以它有自己的名字、自己的注释、和**两个方向各自的用例**：负的 `(float[..], float)` 上面两条，正的 `float[3]` × `float[3]` 是 `transpose_product_fixed_shape.matches_an_open_rank`（开秩仍收固定长度，`value = 20.0`、`d/dxs = 2 3 4`、`d/dw = 1 2 3`）。
+
 ## 二、四条读数（实测，同一棵树）
 
 探针：`f(x: float[..], s: float) = sum(x * s)`，`x = (1,2,3)`、`s = 4.0`；`pullback(1.0)`。
@@ -39,6 +41,7 @@ error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: transpose h
 | **本笔之后**：`sum(x * s)` | 拒绝，原文见上，`(float[..], float)` |
 | **本笔之后**：`sum(s * x)`（操作数顺序翻过来） | 同样拒绝，`(float, float[..])`——**不再崩** |
 | **本笔之后**：`sum(x * 2.0)`（常量标量） | 照旧对：`12.0`、`d/dx = 2 2 2` |
+| **本笔之后**：`float[3]` × `float[3]`（具体形状，`transpose_product_fixed_shape`） | 照旧对：`20.0`、`d/dxs = 2 3 4`、`d/dw = 1 2 3` |
 
 倒数第二行原来是一个 `PassInternalError`（`norm-arity mismatch: caller graph 'main' node 23 has 1 args, target graph ... has 2 norm ports`），拒绝把它关掉了。崩比红需要名字，而"拒绝"已经够了，所以那条崩溃形状**没有**进用例库。
 
