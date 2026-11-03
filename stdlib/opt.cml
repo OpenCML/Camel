@@ -23,7 +23,7 @@
  */
 
 import { flatten, all, any } from array
-import { Node, Graph, Txn, NodeKind, graphs_of, nodes, inputs, with_inputs, value_users, id, kind, op, op_name, is_pure, may_be_recomputed, may_fault, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
+import { Node, Graph, Txn, NodeKind, graphs_of, nodes, inputs, with_inputs, value_users, id, kind, op, op_name, is_pure, may_be_recomputed, may_fault, may_be_rearranged, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
 import { saturate as saturate_rules } from rewrite
 import { algebra, distribution } from rules
 import { is_function } from types
@@ -80,13 +80,16 @@ func same_nodes(xs: Node[], ys: Node[]): bool {
     return len(xs) == len(ys) && zip(xs, ys)->all<(p: (Node, Node)): bool => p.0 == p.1>
 }
 
-// A pure operation the sweep may merge: one a pass may compute itself (`may_be_recomputed`, the
-// C++ pass's `isPureOper`: pure *and* foldable), reading no value that may be written in place, and
-// not one itself. An operation over such a value is not one value: the two times it is written are
-// two results. A pure operator that must run where the program writes it (a rule's value, a
-// `fact`) is not merged: running it is the declaration itself.
+// A pure operation the sweep may merge: one a pass may arrange anywhere (`may_be_rearranged`:
+// pure *and* unable to fault). The merge pulls the computation back to its first writing, so a
+// node that may fault stays where the program wrote it -- what it does when it fails is
+// observable, and moving it ahead of an effect would show the failure sooner. Reading no value
+// that may be written in place, and not one itself: an operation over such a value is not one
+// value, the two times it is written are two results. A pure operator that must run where the
+// program writes it (a rule's value, a `fact`) is not merged either: running it is the
+// declaration itself.
 func mergeable_operation(n: Node): bool {
-    return kind(n) == NodeKind::Oper && is_pure(n) && may_be_recomputed(n) && op_text(n) != ''
+    return kind(n) == NodeKind::Oper && may_be_rearranged(n) && op_text(n) != ''
         && !is_written_slot(n) && !inputs(n)->any<is_written_slot>
         && !with_inputs(n)->any<is_written_slot>
 }
@@ -148,24 +151,16 @@ export func cse::<F>(f: F): F! when is_function::<F>() {
 
 // ---- dead values ----
 
-// Whether the node computes a value: a constant, a conversion, a copy, an access, a fill or a pure
-// operation, none of which can raise a fault where it is written. This is `isValueOnly` of the C++
-// pass, which the `graph` module reads as the kinds of a node and the declarations of its operator.
-//
-// Two facts the `is_pure` of the operator alone does not give decide it. A pure operation is
-// dropped only when a pass may compute it itself (`may_be_recomputed`: pure and foldable; the C++
-// pass's `isPureOper`), so a rule's value or a `fact` is never dropped. And nothing is dropped that
-// may fault (`may_fault`, the operator table's own fact and `castMayFault`, the one the C++
-// sweep reads): an unread statement that can fail is a statement whose running is observable, so
-// it stays where it is written -- `5 / z` nobody reads still faults on `z = 0`, and so does an
-// unread checked conversion or an out-of-range `one_hot`. The query is asked of every kind the
-// same way, a CAST and an ACCS included, rather than letting a kind through by name.
+// Whether the node computes a value: a constant, a conversion, a copy, an access, a fill or an
+// operation a pass may arrange anywhere (`may_be_rearranged`: pure *and* unable to fault). This is
+// `isValueOnly` of the C++, which asks the same entry. The kinds that compute no value (a port, a
+// call, a loop, a gate) answer no: a port is a frame's edge, not a value written in the graph.
 func value_only(n: Node): bool {
     let k = kind(n)
-    return ((k == NodeKind::Data && is_constant(n)) || k == NodeKind::Cast || k == NodeKind::Copy
-               || k == NodeKind::Accs || k == NodeKind::Fill
-               || (k == NodeKind::Oper && is_pure(n) && may_be_recomputed(n)))
-        && !may_fault(n)
+    return ((k == NodeKind::Cast || k == NodeKind::Copy || k == NodeKind::Accs
+                || k == NodeKind::Fill || k == NodeKind::Oper)
+               && may_be_rearranged(n))
+        || (k == NodeKind::Data && is_constant(n))
 }
 
 // Whether the node computes a value no node reads. A node that anchors its graph is not one: a

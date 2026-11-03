@@ -103,7 +103,9 @@ bool nodeMayFault(
     }
 }
 
-bool nodeIsFreelySchedulable(
+namespace graph {
+
+bool may_be_rearranged(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
     const camel::core::type::Type *castSource, bool fixedShapes) {
     switch (kind) {
@@ -132,28 +134,30 @@ bool nodeIsFreelySchedulable(
     }
 }
 
-bool nodeIsFreelySchedulable(const GCGraph &graph, gc_node_ref_t ref) {
+bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref) {
     const GCNode *node = graph.node(ref);
     if (node == nullptr) {
         return false;
     }
     switch (node->kind) {
     case GCNodeKind::Oper: {
-        return nodeIsFreelySchedulable(node->kind, graph.nodeBodyAs<GCOperBody>(ref)->oper);
+        return may_be_rearranged(node->kind, graph.nodeBodyAs<GCOperBody>(ref)->oper);
     }
     case GCNodeKind::Cast: {
         const auto inputs = graph.normInputsOf(ref);
         const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
-        return nodeIsFreelySchedulable(
+        return may_be_rearranged(
             node->kind,
             camel::core::kNoOper,
             node->dataType(),
             source != nullptr ? source->dataType() : nullptr);
     }
     default:
-        return nodeIsFreelySchedulable(node->kind, camel::core::kNoOper);
+        return may_be_rearranged(node->kind, camel::core::kNoOper);
     }
 }
+
+} // namespace graph
 
 bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref) {
     const GCNode *node = graph.node(ref);
