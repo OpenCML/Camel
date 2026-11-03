@@ -22,7 +22,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
     using namespace camel::runtime;
     // The shape the commit refuses: a node of one arm reading a port the graph gives to the other
     // arm of the same branch. Nothing in the tree builds it, so the only program that asks the
-    // commit to refuse it is this one; without it the check (graph.h, regionsShareChain) would
+    // commit to refuse it is this one; without it the check (graph.h, regionIsVisibleFrom) would
     // pass every graph it is asked about for reasons no test could tell from a check that never
     // runs. It goes first, over the program the pass was handed: a refused commit publishes
     // nothing, so the program is still the one the blocks are built on below.
@@ -106,6 +106,44 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
         os << "REGIONS sibling_refused=" << (wasRefused ? 1 : 0) << " port=" << port
            << " reader=" << reader << " arm=" << readerArm << " sibling=" << portArm
            << " named_port=" << (namedPort ? 1 : 0) << " named_reader=" << (namedReader ? 1 : 0)
+           << "\n";
+
+        // The same port, one reader over: the node that owns the arm it was moved into. That node
+        // may read the arm's exit (`region.result`) and nothing else in it (author ruling
+        // 2026-11-03 08:10), and this port is not the exit -- the arm ends in its own value. The
+        // arm node's read of the port goes first, so the refusal reported is the owner's and not
+        // the sibling's reported above.
+        const gc_node_ref_t owner = branchy->region(portArm)->owner;
+        RuntimeGraphDraftSession ownerRead(context_, program);
+        auto &ownerDraft = ownerRead.edit(const_cast<GCGraph *>(branchy)).edit();
+        ownerDraft.setNodeRegion(port, portArm);
+        bool unlinked = ownerDraft.unlinkInput(DraftEdgeKind::Data, reader, port, PortRole::Normal);
+        unlinked      = ownerDraft.unlinkInput(DraftEdgeKind::Data, reader, port, PortRole::Context) ||
+                   unlinked;
+        unlinked = ownerDraft.unlinkInput(DraftEdgeKind::Ctrl, reader, port) || unlinked;
+        ownerDraft.appendInput(DraftEdgeKind::Data, owner, port);
+        std::string ownerRefusal;
+        bool ownerRefused = false;
+        try {
+            (void)ownerRead.commit();
+        } catch (const std::exception &e) {
+            ownerRefused = true;
+            ownerRefusal = e.what();
+        }
+        const bool ownerNamesPort =
+            ownerRefusal.find(std::format("reads port {}", port)) != std::string::npos;
+        const bool ownerNamesReader =
+            ownerRefusal.find(std::format("node {} in region {}", owner, branchy->nodeRegion(owner))) !=
+            std::string::npos;
+        size_t violations = ownerRefused ? 1 : 0;
+        for (size_t at = ownerRefusal.find("; "); at != std::string::npos;
+             at        = ownerRefusal.find("; ", at + 2)) {
+            ++violations;
+        }
+        os << "REGIONS owner_refused=" << (ownerRefused ? 1 : 0) << " port=" << port
+           << " owner=" << owner << " arm=" << portArm << " unlinked=" << (unlinked ? 1 : 0)
+           << " named_port=" << (ownerNamesPort ? 1 : 0)
+           << " named_reader=" << (ownerNamesReader ? 1 : 0) << " violations=" << violations
            << "\n";
     }
     // The largest graph that has arms, if any has, so that they are among the regions it keeps.
