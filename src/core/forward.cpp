@@ -65,28 +65,14 @@ std::string operationOf(const std::string &name) {
     return underscore == std::string::npos ? name : name.substr(0, underscore);
 }
 
-/// The spelling a conversion's destination is written with, from the letters its name ends in: `d`
-/// is `float`, `f` is `f32`, `f6` is `f16`, `bf` is `bf16`, `c` and `z` are the two complex types.
-/// These are the spellings the *declarations* use (`float(x: i32)`, `f32(x: float)`), so the key
-/// this answers is the one a law's left side is filed under.
-std::optional<std::string> spellingOfDestination(const std::string &letters) {
-    struct Spelling {
-        const char *letters;
-        const char *head;
-    };
-    static const Spelling kSpellings[] = {
-        {"bf", "bf16"}, {"f6", "f16"}, {"d", "float"}, {"f", "f32"}, {"c", "c64"}, {"z", "c128"},
-    };
-    for (const Spelling &spelling : kSpellings) {
-        if (letters == spelling.letters) {
-            return std::string(spelling.head);
-        }
-    }
-    return std::nullopt;
-}
-
-/// The key of a conversion named `<source>to<destination>`: the destination's spelling at one
-/// operand, and nothing else.
+/// The key of a conversion, whose name is `<source>to<destination>`: the **destination's spelling**
+/// at one operand, read from the type of the node the operator was reached at.
+///
+/// The destination of a conversion is the type of its result, so that type's own name is the
+/// spelling a law's left side is filed under -- `:op/itod` at a `float` node is `float` at one
+/// operand, `:op/dtof6` at an `f16` node is `f16`. Nothing is decoded out of the operator's name: a
+/// table of letter/gotcha pairs (`bf` is `bf16`, `d` is `float`, ...) used to live here and it was a
+/// second copy of what the declarations in `stdlib/prelude.cml` already say.
 ///
 /// The *source* is deliberately not in the key. One spelling names several operators -- `float` at
 /// one operand is `float(x: float)`, `float(x: int)`, `float(x: string)` and the rest -- so a key
@@ -94,22 +80,22 @@ std::optional<std::string> spellingOfDestination(const std::string &letters) {
 /// does: it instantiates a rule at the operand's own type and refuses by name when no instance is
 /// made. The family files one rule per operand type under the spelling and `lookupRules` answers
 /// them all; which of them answers is not the index's question.
-std::optional<RuleKey> conversionKeyOf(const std::string &name, const camel::core::type::Type *result) {
+///
+/// A caller with no type gets no key, and that is the whole of the answer: there is no default and
+/// in particular no fallback to a float. The conversion whose result is an array (`:op/atod` and the
+/// other three "a type name applied to a numeric array") asks for a key spelled `float[..]`, which no
+/// family files a rule under, so it is refused by "no rule bound" -- which is what it was refused by
+/// before too, in different words.
+std::optional<RuleKey> conversionKeyOf(
+    const std::string &name, const camel::core::type::Type *result) {
+    if (result == nullptr) {
+        return std::nullopt;
+    }
     const size_t to = name.find("to");
     if (to == std::string::npos || to == 0 || to + 2 >= name.size()) {
         return std::nullopt;
     }
-    // The key is the destination's spelling, and the destination of a conversion is the type of its
-    // result: it is asked of the type the caller is holding, which is an instance fact, rather than
-    // decoded out of the operator's name.
-    if (result != nullptr) {
-        return RuleKey{result->toString(), 1};
-    }
-    const auto head = spellingOfDestination(name.substr(to + 2));
-    if (!head.has_value()) {
-        return std::nullopt;
-    }
-    return RuleKey{*head, 1};
+    return RuleKey{result->toString(), 1};
 }
 
 std::optional<camel::parse::ast::RuleMatch>
