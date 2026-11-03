@@ -1345,12 +1345,22 @@ const camel::runtime::Program *applyOptimizeRewritePass(
     // the diagnostics after the pass) and ends the run with a non-zero code. The growth budget is
     // not the bound that stops it: a pipeline that leaves the budget open has none to reach.
     if (changed && lastChangedGraph != nullptr) {
-        // The count lives in the state of the run (OptimizeRewriteConfig::settleStreak), never in a
-        // static: two programs in one process each start from zero, and so does a second run of the
-        // pass. A run that is given no state has one of its own, which is the same thing for a
-        // caller that runs the engine once.
-        SettleStreak ownStreak;
-        SettleStreak &streak = config.settleStreak ? *config.settleStreak : ownStreak;
+        // The count lives in the state of the run (OptimizeRewriteConfig::settleStreak) and nowhere
+        // else: a local would be made and destroyed with this call, so every run would start from
+        // zero, `runs` could never pass 1, and `settle_runs` (32 by default) would never be
+        // reached -- the run that never settles would look like one that always does. A caller
+        // that runs the engine therefore has to give it the count it keeps across its runs; the
+        // engine used to keep one of its own for such a caller, which is the same silence.
+        GUARD(
+            config.settleStreak != nullptr,
+            std::format(
+                "the rewrite engine counts the runs in a row that changed a graph, and this run was "
+                "given no state to count them in (OptimizeRewriteConfig::settleStreak): graph '{}' "
+                "changed, so the rewrite cannot settle, and the bound `settle_runs` ({}) that says "
+                "so has nowhere to reach",
+                lastChangedGraph->name(),
+                config.settleRuns));
+        SettleStreak &streak = *config.settleStreak;
         if (streak.graph == lastChangedGraph->name()) {
             ++streak.runs;
         } else {

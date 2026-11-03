@@ -973,10 +973,9 @@ std::vector<std::string> checkGraphCrossReferences(const GCGraph &graph) {
         }
     }
     // A port of a region may be read from that region, from a region nested in it, and by the node
-    // that owns it -- a LOOP node reading the port its own body region ends in. Those three are one
-    // rule with one question behind it: is the frame the port lives in there when the read happens?
-    // Inside it, in a region it contains, and in the node it is the inside of, yes; anywhere else,
-    // no.
+    // that owns it -- but the owner only for the region's exit. Those three are one rule with one
+    // question behind it: is the frame the port lives in there when the read happens? Inside it, in
+    // a region it contains, and in the node it is the inside of, yes; anywhere else, no.
     //
     // Measured over the whole fast tier on 2026-11-03: 961 cross-region port reads in 58 graphs of
     // 63 cases, of which 647 are `Arm` -> `Root`, 155 `Arm` -> `LoopBody` where the arm sits in the
@@ -986,16 +985,18 @@ std::vector<std::string> checkGraphCrossReferences(const GCGraph &graph) {
     // Every one of those has the reader inside and the port outside.
     //
     // The author's rule (2026-11-03) is "a region reads its ancestors' ports and commit checks
-    // that", and the one shape it leaves out -- a LOOP node reading the port its own body region
+    // that", and the one shape it leaves out -- a LOOP node reading the value its own body region
     // ends in -- is the owner's read, added on the same day with the two programs that ask for it
     // (see docs/handover/questions/2026-11-03-may-a-region-owner-read-its-own-exit.cn.md). An
     // earlier version allowed the whole reverse direction instead, on the reading of those 155
     // `Arm` -> `LoopBody` reads as an arm holding a loop; they are the opposite shape (the arm sits
     // in the body), so the widening was measuring its own misreading.
     //
-    // The owner's read is the only one the third case admits, and it is not a licence for the
-    // reverse direction: `region(portRegion)->owner` is one node per region, so a port of a loop
-    // body is readable from the loop and from nowhere else.
+    // The owner's read was then narrowed to the region's exit (author ruling 2026-11-03 08:10): the
+    // rule is written on the port -- is this the value the region ends in -- and not on the reader's
+    // identity or on the exit's node kind, because a body ending in `do s` and one ending in
+    // `do s + 1` are the same thing to the loop. So `regionIsVisibleFrom` is handed the port, and
+    // the owner reading any other port of its own region is refused with everything else.
     //
     // A region's own ports are recorded in the region itself (a port belongs to the graph and is
     // written into the region it serves), so `regionIsVisibleFrom` answers for them by the same
@@ -1014,14 +1015,14 @@ std::vector<std::string> checkGraphCrossReferences(const GCGraph &graph) {
                     continue;
                 }
                 const uint32_t portRegion = graph.nodeRegion(input);
-                if (graph.regionIsVisibleFrom(portRegion, ref)) {
+                if (graph.regionIsVisibleFrom(portRegion, input, ref)) {
                     continue;
                 }
                 violations.push_back(
                     std::format(
                         "graph '{}' node {} in region {} ({} parent {}): it reads port {} of region"
                         " {} ({} parent {}), which is not the region the node runs in, nor one it"
-                        " sits in, nor a region it owns",
+                        " sits in, nor the exit of a region it owns",
                         graph.name(),
                         ref,
                         region,
