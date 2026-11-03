@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：25 页
+## 现在在等作者：26 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -17,6 +17,7 @@
 | [`2026-11-03-does-a-loop-statement-with-an-unused-value-still-run`](2026-11-03-does-a-loop-statement-with-an-unused-value-still-run.cn.md) | 一个值没人用的 `loop` 语句，还算不算一条要执行的语句？ |
 | [`2026-11-03-does-a-one-member-closure-prove-the-slot-identity`](2026-11-03-does-a-one-member-closure-prove-the-slot-identity.cn.md) | 闭包只有一个成员时，「槽的类型等于参数类型」能证明它是这个参数的值吗？ |
 | [`2026-11-03-does-note-zero-cover-a-closure-capture-port`](2026-11-03-does-note-zero-cover-a-closure-capture-port.cn.md) | `noteZero` 要不要覆盖闭包捕获端口？ |
+| [`2026-11-03-how-does-a-transform-hand-a-with-value-through-a-generic-body`](2026-11-03-how-does-a-transform-hand-a-with-value-through-a-generic-body.cn.md) | 变换在泛型库体里怎么把 `with` 值传下去：lambda 采纳了位置的 `with` 列表，体里却没有这些值的名字 |
 | [`2026-11-03-is-a-name-at-a-void-tail-a-value-use`](2026-11-03-is-a-name-at-a-void-tail-a-value-use.cn.md) | 一个 `void` 函数体尾部的名字，是"被丢掉的值"还是"被当成值使用"？ |
 | [`2026-11-03-is-a-var-read-outside-the-pure-value-rule`](2026-11-03-is-a-var-read-outside-the-pure-value-rule.cn.md) | 链位到底是谁在承担语义：`var` 读，还是纯算术调用？ |
 | [`2026-11-03-is-the-loop-halfs-missing-value-at-the-call-site`](2026-11-03-is-the-loop-halfs-missing-value-at-the-call-site.cn.md) | loop 那一半的转置要的值，在调用点存在吗？在——但那是一个循环的值 |
