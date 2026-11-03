@@ -38,7 +38,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { full, matmul, mean_axis, ones_like, relu, shape, subtract, sum, sum_to, take, transpose, where, zeros_like } from tensor
+import { exp, full, matmul, mean_axis, numel, ones_like, relu, shape, subtract, sum, sum_to, take, transpose, where, zeros_like } from tensor
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
@@ -154,6 +154,15 @@ export rule mul_tensor_t::<T, X, W>(x: X, w: W) {
 /// and the reverse reading of the boundary cannot drift apart.
 export rule relu_t::<T, A>(x: A) when is_float::<T>() {
     relu(x) => (ct: T[..]) => (where(x > 0.0, ct, 0.0))
+}
+
+/// The transpose of `exp`: `ct * y` with `y = exp(x)` -- the cotangent scaled by the output, which is
+/// the same rule the engine's `expVjp` (`modules/tensor/ops/elementwise_ops.cpp`) applies to its own
+/// cotangent. The right side recomputes the forward value from `x`, which is the only way a law with
+/// one operand can name it; that recomputation is the point the question below asks about, so this
+/// rule and `jvp_exp` (`stdlib/rulesets/jvp.cml`) are a measurement as well as a law.
+export rule exp_t::<T>(x: T[..]) when is_float::<T>() {
+    exp(x) => (ct: T[..]) => ct * exp(x)
 }
 
 /// `x - w` on two arrays: what `tensor:subtract` means, and the left side this rule is filed under.

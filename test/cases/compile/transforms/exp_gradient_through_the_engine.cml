@@ -1,0 +1,35 @@
+// `exp`'s gradient through the engine: the number the library's own rules must reproduce, on the
+// input the two halves are compared on.
+//
+// `exp` is the first member of the deletion difference set whose tangent **recomputes a forward
+// value**: `d(exp(x)) = exp(x) * dx` needs `exp(x)` again, and a law with one operand can only write
+// it by calling the operator a second time. That is why this pair of cases is also the experiment
+// `docs/handover/questions/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`
+// asks for -- `softmax` stopped at the cut on such a recomputation, `relu`'s mask did not, and `exp`
+// is the smallest case that tells the two apart.
+//
+// The criterion is both components, and the two wrong laws a reader is likely to write are separable
+// without any tolerance, because `exp` is injective and the two inputs are a factor of two apart:
+//
+//   * `exp_t` written as `ct` (the identity)      -> [1.0, 1.0];
+//   * `exp_t` written as `ct * x`                 -> [1.0, 2.0];
+//   * the correct `ct * exp(x)`                   -> [2.718281828459045, 7.38905609893065].
+//
+// Every component of the correct answer differs from both wrong ones, and the second component
+// differs from the first, so neither an aggregate nor a single component could stand in for the pair.
+//
+//     camel test/cases/compile/transforms/exp_gradient_through_the_engine.cml
+import { grad } from autodiff
+import { exp, sum } from tensor
+
+/// The differentiated value is the `with` parameter (design principles 9.9).
+with <x: float[..]>
+func total(): float {
+    return sum(exp(x))
+}
+
+func main(): int sync {
+    let d = grad(total)<[1.0, 2.0] as float[]>()
+    `exp engine d={}`->format<d>->println
+    return 0
+}

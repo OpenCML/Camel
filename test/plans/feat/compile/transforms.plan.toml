@@ -1551,3 +1551,32 @@ expect_stdout_contains = ["mean_axis1 keepdims value=120.0 cotangent=[[3.3333333
 expect_output_not_contains = ["skip=arity uri=tensor:mean_axis", "skip=call-no-transpose"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+# `exp` on the D1 difference set: the cheapest member, and the discriminator for the cut question
+# (`docs/handover/questions/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`).
+[[tests]]
+name = "exp_gradient_through_the_engine"
+desc = "The gradient of `sum(exp(x))` through the engine's own rule (`expVjp`, `modules/tensor/ops/__elementwise_ops.cpp`, registered by `setVjp(defs, `"exp`", ...)`), both components written out: `[2.718281828459045, 7.38905609893065]` on `[1.0, 2.0]`. Both components are the criterion: a `exp_t` written as `ct` answers `[1.0, 1.0]` and one written as `ct * x` answers `[1.0, 2.0]`, so the pair separates the three laws without a tolerance, while a single component or an aggregate would not. This is the number the library's rules reproduce in the neighbouring case."
+kind = "behavior"
+case = "../../../cases/compile/transforms/exp_gradient_through_the_engine.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["exp engine d=[2.718281828459045, 7.38905609893065]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "exp_gradient_through_the_library"
+desc = "The same function through the library's `vjp`: `value=10.107337927389695` and `d=[2.718281828459045, 7.38905609893065]`, element for element the engine's answer. Before `jvp_exp` and `exp_t` the program stopped at the lift with `skip=rule uri=tensor:exp`; the stderr side pins the rule that now answers (`rules=jvp_exp,jvp_sum`) and that no `skip=` line remains. This is also the experiment the question page asks for: the backward half needs `exp(x)`, a value no line of the program computes, so the cut must carry a recomputed forward value."
+kind = "behavior"
+case = "../../../cases/compile/transforms/exp_gradient_through_the_library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["exp library value=10.107337927389695 d=[2.718281828459045, 7.38905609893065]"]
+expect_stderr_contains = ["rules=jvp_exp"]
+expect_output_not_contains = ["skip=rule uri=tensor:exp"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

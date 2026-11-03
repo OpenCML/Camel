@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_integer, is_same, is_string, Tangent } from types
-import { matmul, mean_axis, relu, reshape, shape, softmax, sum, take, where, zeros_like } from tensor
+import { exp, matmul, mean_axis, relu, reshape, shape, softmax, sum, take, where, zeros_like } from tensor
 import { log, pow } from math
 import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
 
@@ -332,6 +332,19 @@ export rule jvp_softmax::<T>(x: T[..]) when is_float::<T>() {
 /// (`skip=call-no-transpose`).
 export rule jvp_relu::<T>(x: T[..]) when is_float::<T>() {
     relu(x) => (dx: T[..]) => (where(x > 0.0, 1.0, 0.0) * dx)
+}
+
+/// `d(exp(x)) = exp(x) * dx`: the value the operator already produced multiplies the tangent. No
+/// helper, and nothing but registered operators on the right, so the linear half of a program that
+/// uses it is one `mul_tensor` the walk already has a law for.
+///
+/// This rule is the smallest tangent that **recomputes a forward value**: `exp(x)` is written again
+/// on the right, and the cut has to carry it to the backward half as a residue. Whether it may is
+/// exactly the question `docs/handover/questions/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`
+/// asks -- `softmax` stopped there, `relu`'s mask did not, and the two differ only in what the
+/// recomputed call carries. So this rule is a measurement as much as a law.
+export rule jvp_exp::<T>(x: T[..]) when is_float::<T>() {
+    exp(x) => (dx: T[..]) => exp(x) * dx
 }
 // ---- the forward rule of `:op/idx_arr` ----
 //
