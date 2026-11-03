@@ -2982,7 +2982,18 @@ if (mode === '--write' || mode === '--verify-doc') {
         process.exit(1)
     }
     if (mismatched.length > 0) {
-        console.log(`${mismatched.length} example class(es) the run found and the script does not record`)
+        // `mismatched` is one line per problem, and a problem is not always a class: `exampleProblems`
+        // adds one for a class EXAMPLE_STOPS does not have, one for a class whose recorded number
+        // moved, one for a class the run no longer finds, one per example that stops with no class at
+        // all, and one for the totals against STALE_FRAGMENTS. The number here is how many of those
+        // lines stand above it, so it says "problem(s)". The line used to read "example class(es) the
+        // run found and the script does not record", which is history and nothing else: it counted
+        // classes it was not counting, and "does not record" was false for a class whose number
+        // merely moved. What this prints now is "example problem(s)".
+        console.log(
+            `${mismatched.length} example problem(s) between the run and the script's records: a class ` +
+                'it does not record, a number that moved, or a marker that is stale',
+        )
         process.exit(1)
     }
     console.log(
@@ -3040,7 +3051,16 @@ if (mode === '--write' || mode === '--verify-doc') {
         process.exit(1)
     }
     if (mismatched.length > 0) {
-        console.log(`${mismatched.length} exception class(es) the run found and EXCEPTIONS does not record`)
+        // One line per problem, and a problem is not always a class: `exceptionProblems` adds one
+        // for a class EXCEPTIONS does not hold, one for a class whose recorded number moved, one for
+        // a class the run no longer finds, and one per overload that carries a label the table has
+        // no class for. This number is how many of those lines stand above it, so it says
+        // "problem(s)": "exception class(es)" would name a count this is not, and "does not record"
+        // would be false for a class whose number merely moved -- which is the usual one.
+        console.log(
+            `${mismatched.length} exception problem(s) between the run and EXCEPTIONS: a class it does ` +
+                'not record, a number that moved, or an overload that carries no class',
+        )
         process.exit(1)
     }
     // What the run compared its own lists with, so a reader of a green run sees the totals the table

@@ -127,10 +127,17 @@ timeout_ms = 20000
 # residuals=1 loop=1 tape=5 invariants=0`), because the exit reads the loop's cell through one
 # `TupleIndex` per side and those two projections are what the cut hands each half -- no body region
 # is copied. The wall is one step later and is not a loop wall at all:
-# `TRANSPOSE function=split_of_jvp_of_g_backward skip=call-value-missing param=0 node=23 arg=2` -- the
-# exit the backward half copies is `index_into(dxs, 0)`, whose array argument the backward half
+# `TRANSPOSE function=split_of_jvp_of_g_backward skip=call-value-computed-by-the-body param=0
+# node=23 arg=2` -- the exit the backward half copies is `index_into(dxs, 0)`, whose array argument
+# the backward half
 # *recomputes* (the loop is copied into that half and its cell is a node there, not a residual), so
-# the member built for the callee cannot be handed the array's **value**. Measured 2026-11-03: the
+# the member built for the callee cannot be handed the array's **value**. (The word was
+# `call-value-missing` until 2026-11-03, when one word was split into two: that one now means "the
+# call does not carry the parameter's own value", and this refusal is the other shape -- the value is
+# one this half computes out of a loop, so carrying it means transposing the body, not passing an
+# argument. The split is in `modules/transforms/transpose.cpp`'s `unforwardedCause`, its sentence in
+# `transpose_operator.cpp`, and `test/tools/transpose_refusal/check.py` holds the two words apart.)
+# Measured 2026-11-03: the
 # same refusal stands with and without the reverse walk in `modules/transforms/transpose.cpp` -- the
 # walk is behind this wall, not in front of it, so the number this case asks for is not readable until
 # the array argument at that call is carried instead of recomputed.
@@ -140,7 +147,8 @@ timeout_ms = 20000
 # moved by one field:
 #   REINTERP split function=jvp_of_g forward=276 backward=277 type=(float[]) => (float, (float[]) =>
 #     float pure) pure residuals=1 loop=1 tape=5 invariants=0
-#   TRANSPOSE function=split_of_jvp_of_g_backward skip=call-value-missing param=0 node=23 arg=2
+#   TRANSPOSE function=split_of_jvp_of_g_backward skip=call-value-computed-by-the-body param=0
+#     node=23 arg=2
 # `invariants=0` is the whole reason the closure item cannot be the owner: this backward half reads no
 # parameter's value, so there is no member for the identity table to name and nothing for it to
 # carry. The callee's member *was* built (`TRANSPOSE function=rulesets.jvp::index_into<float>
@@ -167,7 +175,7 @@ case = "../../../cases/compile/transforms/vjp_loop_rounds_walk_backwards.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 known_fail = ["nvm"]
-known_fail_msg = "split_of_jvp_of_g_backward skip=call-value-missing param=0 node=23"
+known_fail_msg = "split_of_jvp_of_g_backward skip=call-value-computed-by-the-body param=0 node=23"
 known_fail_note = "倒序本身已经做了（`transpose` 侧不再照抄 iterable）；这条用例仍红是因为 backwards 里 `index_into` 的数组参数是重算的、不是残差。**这一项不是作者第 1 项**：那一项（参数原值作为残差进闭包）已于 `34788b554` 落地，而这半的 `invariants=0` —— 它不读任何参数的值，身份表里没有成员可写，所以它不可能被那一项修好；缺的是"这半自己算出来又读回去的值"的残差。摘标记的前提是先有 `grad= [1.0, 1.0]` 这个读数，今天没有。`split` builds both halves; the refusal is one step before the walk, at the call the backward half recomputes (`index_into(dxs, 0)`), whose array argument is not a residual the cut carries."
 expect_exit = 0
 expect_output_contains = ["value= 3.0", "grad= [1.0, 1.0]"]
@@ -443,32 +451,30 @@ expect_output_contains = ["k value= 6.0", "k pullback(1.0)= (0.0)", "k pullback(
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
-# The transform's refusals are two files: the words it writes into its reading log
-# (`modules/transforms/transpose.cpp`) and the sentences it answers them with
-# (`modules/transforms/transpose_operator.cpp`). One can gain a word the other has never heard of, and
-# a sentence can outlive the word it names, and no program can see either: most of the words are not
-# reachable from anything this tree can run, so a case that runs `camel` cannot pin them -- the ones it
-# can reach say nothing about the rest. So the check reads the two sources and holds the sets
-# together, and the property is not "every word has a sentence of its own" (a cause whose sentence
-# would only repeat the word adds nothing, and the one catch-all sentence prints the word anyway) but
-# "every word has a readable landing, and no landing is left standing without a word". Both are
-# inclusions between the two sets, so the entry pins them as relations and never as counts: a count is
-# a number a reader has to edit for a reason no reader can see (2026-11-03: splitting one word into two
-# made `17` red before `18`, on two trees that satisfied both inclusions).
+# A refusal is one cause, and the cause is a value: the header declares it
+# (`enum class TransposeRefusalCause`), `transposeRefusalWord` spells it into the reading log,
+# `refusalSentence` renders the sentence a reader is handed from it, and a refusal site records it
+# (`refuse(TransposeRefusalCause::X)`). The four can drift apart and no program can see it: most of the
+# causes are not reachable from anything this tree can run, so a case that runs `camel` cannot pin
+# them -- the ones it can reach say nothing about the rest. So the check reads the four sources and
+# holds the sets together, and it holds them as relations, never as counts: a count is a number a
+# reader has to edit for a reason no reader can see (2026-11-03: splitting one word into two made `17`
+# red before `18`, on two trees that satisfied every relation).
 #
-# The reds it can be are both directions: delete one sentence and its word moves into the set that
-# reads the catch-all, which is not where an unanswered word should fall; rename one word and its
-# sentence becomes a claim about a cause nothing names. Both were walked by hand before this entry was
-# written (the sentence of `state-unread` deleted, then its word renamed), and both read as reds.
+# The reds it can be are the four directions, and each is one of the four places: a cause with no word
+# cannot be spelled into the log; a cause with no sentence is answered with nothing; a cause that names
+# the shape without being written out as one is an authored decision made quietly; a cause with a word
+# and a sentence and no site is a promise nothing keeps. The check also refuses a sentence file that
+# spells any of the words itself, which is the second spelling of the fact this change removed.
 [[tests]]
-name = "transpose_refusal_words_are_answerable"
-desc = "The words `transpose` writes into its reading log and the sentences `refusalCause` answers them with, held together across the two files that hold them: every word the log writes lands on a sentence -- its own, or the catch-all that names the word it is handed -- every sentence of its own is written by a file that writes the word, and a word with no sentence of its own lands nowhere but the catch-all, which names it. The three are inclusions between two sets, so this entry pins relations and nothing that counts: adding a word with its sentence is green here, and the ways it can be red are the two directions -- delete one sentence and its word joins the catch-all set, which is not where an unanswered word should fall; rename one word and its sentence becomes a promise nothing keeps. The numbers this entry used to pin (17 words, 9 of their own, 8 on the catch-all) were that same property written as a measurement, and on 2026-11-03 splitting `call` into `call-no-transpose` and `call-value-missing` turned the entry red on `17` while both trees satisfied every inclusion; the numbers are gone for that reason."
+name = "transpose_refusal_is_one_cause_in_four_places"
+desc = "One refusal is one cause, and the cause is read in four places that have to agree: the header declares it, the word table spells it into the log, `refusalSentence` renders the sentence a reader is handed from it, and the refusal sites record it. Held as relations, not counts: every cause has one word, one sentence and a site -- except `NeedsAValueOutsideTheClosure`, which has the first two and waits for a shape -- a cause with no sentence of its own lands on the one that names the shape and that list is written out in the check, and the word a cause is spelled as appears in one file only, the table, so the caller renders the sentence from the cause and never from the log. That last relation is the point of the entry: the caller used to recover the cause by searching the log text for the word's prefix, so the spelling itself was the fact, and a word renamed on one side of the pair was a sentence about a cause nothing named. The four ways it can be red are the four places -- a cause with no word, a cause with no sentence, a cause that names the shape without being written out as one, and a cause with a word and a sentence that no site records."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/transpose_refusal/check.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["every word the log writes lands on a sentence", "every sentence of its own is written by a file that writes the word", "lands nowhere but the catch-all, which names it", "waits for a shape, not for a sentence"]
+expect_stdout_contains = ["every cause has one word, one sentence, and a site that records it", "no sentence of its own lands on the one that names the shape", "renders the sentence from the cause and never from the log", "waits for a shape"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
 
@@ -1285,14 +1291,14 @@ timeout_ms = 20000
 # `jvp matmul dx=(0,1) value=5.0000 tangent=2.0000` (A = [[1, 2], [3, 4]], x = (1, 2)).
 [[tests]]
 name = "transforms.jvp_matmul"
-desc = "The rule for `tensor:matmul` is indexed, and it still cannot answer: `jvp` of `matmul(A, x)[0]` stops with `transforms: jvp has no forward transform for this function` and no `file:line` of the operator, because the constant `A`'s zero tangent has no node -- `pairTypeOf` carries a pair for a floating scalar only, so a value of array type has no tangent to hand the rule. The hand calculation the day it flips: `A · x = (5, 11)`, so the value is 5, and the tangents along `(1, 0)` and `(0, 1)` are 1 and 2."
+desc = "The rule for `tensor:matmul` is indexed, and it still cannot answer -- but not for the reason this entry used to give. It said the constant `A`'s zero tangent had no node (`pairTypeOf` carrying a pair for a floating scalar only), and that is no longer true: `jvp` writes the zero of an array type too, so the lift now carries the `float[2, 2]` constant's tangent and the walk goes on past `matmul` to the index that reads one element of its result -- `matmul(A, x)[0]`, where the value is a `float[..]` and the law `jvp_idx_arr` is written for a rank-one `T[]`, so the refusal is `jvp has no forward rule for `:op/idx_arr`` with the two port lists and the data-operand count. The hand calculation the day the last wall falls: `A · x = (5, 11)`, so the value is 5, and the tangents along `(1, 0)` and `(0, 1)` are 1 and 2."
 kind = "negative"
 case = "../../../cases/compile/transforms/jvp_matmul.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 1
-expect_stdout_contains = ["transforms: jvp has no forward transform for this function"]
+expect_stdout_contains = ["jvp has no forward rule for", ":op/idx_arr"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 

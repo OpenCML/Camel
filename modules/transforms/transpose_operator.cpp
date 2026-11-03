@@ -117,60 +117,46 @@ class TransposeResolver final : public FuncTypeResolver {
     }
 };
 
-/// The half of a refusal that says which cause it was.
+/// The sentence a reader is handed, rendered from the refusal the build recorded.
 ///
-/// `buildTransposeGraph` answers a null graph for every cause and writes the cause into its reading
-/// log as `skip=<word>`; one pointer therefore carried eighteen different causes, and the sentence
-/// raised here could only name two of them at once. The log is read, not judged again: a second
-/// judgement would be the same decision written twice and would drift from the first.
+/// The cause is a value here, not a word read back out of the log: `buildTransposeMember` recorded it
+/// where the walk stopped, the log spells that same value for a reader who greps, and this spells it
+/// for one who is told what went wrong. A cause with no sentence of its own falls to the sentence
+/// that names the shape -- the catch-all prints the log's own word for it, so a cause added without a
+/// sentence says which cause it was instead of saying nothing.
 ///
-/// Only the cause is answered -- the prefix `transpose has no transpose for this function` stays
-/// where it was, because it is what a reader greps for and what the plan's assertions pin.
-std::string refusalCause(const std::string &log) {
-    const size_t at = log.rfind("skip=");
-    if (at == std::string::npos) {
+/// Only the cause is answered here -- the prefix `transpose has no transpose for this function` stays
+/// where the raise site writes it, because it is what a reader greps for and what the plans pin.
+std::string refusalSentence(const TransposeRefusal &refusal) {
+    const std::string position =
+        refusal.param.has_value()
+            ? "the parameter at position " + std::to_string(*refusal.param + 1)
+            : std::string{};
+    const auto namedShape = [&refusal]() {
+        const char *word = transposeRefusalWord(refusal.cause);
+        return std::string("the shape this program used has no transpose (the transform named it `") +
+               (word != nullptr ? word : "-") + "`)";
+    };
+    switch (refusal.cause) {
+    case TransposeRefusalCause::None:
+        // A build that refused before any site ran records no cause. Saying so is better than a
+        // sentence about a shape nothing named.
         return "the transform gave no reason";
-    }
-    std::string word = log.substr(at + 5);
-    if (const size_t nl = word.find('\n'); nl != std::string::npos) {
-        word.resize(nl);
-    }
-    const size_t space = word.find(' ');
-    std::string position;
-    if (space != std::string::npos) {
-        const std::string rest = word.substr(space + 1);
-        word.resize(space);
-        if (const size_t p = rest.find("param="); p != std::string::npos) {
-            const size_t end = rest.find(' ', p);
-            const std::string digits =
-                rest.substr(p + 6, end == std::string::npos ? std::string::npos : end - p - 6);
-            try {
-                position = "the parameter at position " + std::to_string(std::stoul(digits) + 1);
-            } catch (...) {
-                position = "a parameter";
-            }
-        }
-    }
-    if (word == "cotangent-needs-a-value") {
+    case TransposeRefusalCause::CotangentNeedsAValue:
         return position.empty() ? "a parameter holds no cotangent: nothing uses its value"
                                 : position + " holds no cotangent: nothing uses its value";
-    }
-    if (word == "unread-parameter") {
+    case TransposeRefusalCause::UnreadParameter:
         return position.empty() ? "a parameter is never read by the body, so it answers no cotangent"
                                 : position + " is never read by the body, so it answers no cotangent";
-    }
-    if (word == "needs-a-value-outside-the-closure") {
+    case TransposeRefusalCause::NeedsAValueOutsideTheClosure:
         return "the member reads a value that the transposed function does not carry in its closure, "
                "so there is nothing to capture for it";
-    }
-    if (word == "state") {
+    case TransposeRefusalCause::State:
         return "a loop carries its state out of itself, and that shape has no transpose";
-    }
-    if (word == "state-unread") {
+    case TransposeRefusalCause::StateUnread:
         return "the loop is the whole answer and the value its state starts from answers no parameter, "
                "so the cotangent of that value has no parameter to land on";
-    }
-    if (word == "call-no-transpose") {
+    case TransposeRefusalCause::CallNoTranspose:
         // One of the two causes a call site can meet, and the one this file said for both of them
         // until 2026-11-03. It is true only here: the callee has no transpose to call. A callee
         // whose transpose *was* built, and whose member reads a value the call site cannot hand
@@ -179,8 +165,7 @@ std::string refusalCause(const std::string &log) {
         // float) => (float[],) ... rhs=idx_arr_t` says the member exists. That shape is the word
         // below, whose position is the callee's own parameter index.
         return "this call's callee has no transpose of its own, so the call cannot be turned around";
-    }
-    if (word == "call-value-missing") {
+    case TransposeRefusalCause::CallValueMissing:
         if (position.empty()) {
             // Naming only what the reading says: the member exists, and what it wanted has no
             // source at the call. Nothing here answers the value with one it does not have.
@@ -189,19 +174,39 @@ std::string refusalCause(const std::string &log) {
         }
         return "the callee's transpose was built, but " + position +
                " reads a value this call does not carry";
-    }
-    if (word == "rule") {
+    case TransposeRefusalCause::CallValueComputedByTheBody:
+        // The other shape, and the one the sentence above used to cover: the value is not missing
+        // from the call -- it is a value the function's own body computes, and it comes out of a
+        // loop or a branch. Handing it over is not passing one more argument; it is turning the
+        // region that computes it around, which is a transposition of a whole body.
+        return position.empty()
+                   ? std::string("the callee's transpose was built, but it reads a value the "
+                                 "function's own body computes out of a loop or a branch, so "
+                                 "carrying it means transposing that body")
+                   : "the callee's transpose was built, but " + position +
+                         " reads a value the function's own body computes out of a loop or a "
+                         "branch, so carrying it means transposing that body";
+    case TransposeRefusalCause::Rule:
         return "the rule table has no rule for a step of this body";
-    }
-    if (word == "condition") {
+    case TransposeRefusalCause::Condition:
         return "a bool condition has no cotangent space, so it carries no derivative";
-    }
-    if (word == "signature" || word == "exit") {
+    case TransposeRefusalCause::Signature:
+    case TransposeRefusalCause::Exit:
         return "the graph's shape disagrees with the signature the call was written against";
+    // No program in this tree reaches the shapes below yet, so each keeps the sentence that names
+    // the shape instead of a sentence written for a cause nobody has read; when one becomes
+    // reachable, give it the sentence it stands for.
+    case TransposeRefusalCause::Arity:
+    case TransposeRefusalCause::Arm:
+    case TransposeRefusalCause::ArmTangents:
+    case TransposeRefusalCause::Component:
+    case TransposeRefusalCause::Join:
+    case TransposeRefusalCause::Kind:
+    case TransposeRefusalCause::Output:
+    case TransposeRefusalCause::Range:
+        return namedShape();
     }
-    // TODO: no program in this tree reaches the words below yet, so each keeps a plain sentence
-    // naming the shape; when one becomes reachable, replace it with the cause it stands for.
-    return "the shape this program used has no transpose (the transform named it `" + word + "`)";
+    return namedShape();
 }
 
 /// transpose(f) at run time: the new graph, as a function value. Nothing of `f` is changed, and the
@@ -212,9 +217,9 @@ slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (function == nullptr || function->graph() == nullptr) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "transforms: transpose needs a function value");
     }
-    // The reading log is both the diagnostic text a reader sees and what the plan's cases assert, so
-    // it is captured and then forwarded: a tee, not a replacement. Capturing it is also the only way
-    // to know which of the causes the build named -- the graph pointer is null either way.
+    // The reading log is what a reader greps and what the plan's cases assert, so it is captured and
+    // then forwarded: a tee, not a replacement. *Why* the build refused is not read back out of it --
+    // `built.refusal` is what the walk recorded, and the sentence below is its reading.
     std::ostringstream why;
     const TransposeGraph built = buildTransposeGraph(
         ctx.shared_from_this(), function->program(), function->graph(), why);
@@ -222,7 +227,8 @@ slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (built.graph == nullptr) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
-            "transforms: transpose has no transpose for this function: " + refusalCause(why.str()));
+            "transforms: transpose has no transpose for this function: " +
+                refusalSentence(built.refusal));
     }
     const std::string spelled = TransposeResolver{}.signature();
     const auto resolved = TransposeResolver{}.resolve({}, type_vec_t{function->graph()->funcType()});

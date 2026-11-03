@@ -23,7 +23,7 @@
  */
 
 import { flatten, all, any } from array
-import { Node, Graph, Txn, NodeKind, graphs_of, nodes, inputs, with_inputs, value_users, id, kind, op, op_name, is_pure, may_be_recomputed, may_fault, may_be_rearranged, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
+import { Node, Graph, Txn, NodeKind, graphs_of, nodes, inputs, with_inputs, value_users, id, kind, op, op_name, may_be_recomputed, may_fault, may_be_rearranged, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
 import { saturate as saturate_rules } from rewrite
 import { algebra, distribution } from rules
 import { is_function } from types
@@ -212,7 +212,7 @@ func foldable(n: Node): bool {
 // being read: `eval` refuses the node it cannot compute, and a faulting expression is left as
 // written (below).
 func is_operation(n: Node): bool {
-    return kind(n) == NodeKind::Oper && is_pure(n) && may_be_recomputed(n)
+    return kind(n) == NodeKind::Oper && may_be_recomputed(n)
 }
 
 // Whether every value the node reads is a constant of the graph: what its operator is computed

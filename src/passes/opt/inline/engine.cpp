@@ -1312,9 +1312,23 @@ const camel::runtime::Program *applyOptimizeRewritePass(
         return program;
     }
     const size_t growthBudget = config.growthBudget.nodes;
-    size_t ownGrowthSpent     = 0;
-    size_t &growthSpent       = config.growthSpentNodes ? *config.growthSpentNodes : ownGrowthSpent;
-    const bool hadBudget      = growthSpent < growthBudget;
+    // The count is the caller's, the way the not-settling count below is: `std::opt` hands over the
+    // count its rounds share, so `growth_budget` bounds the work of the pass, and each pass that
+    // runs the engine on its own (`std::opt::inline`, `::devirtualize`, `::specialize`) keeps one
+    // and clears it where its run starts, so a run spends the budget the pipeline gave it and the
+    // next one does not start on what the last one left. A run given none used to count into a
+    // local and start over with no trace: the bound it enforced was one only that call could see,
+    // which is a budget in name.
+    GUARD(
+        config.growthSpentNodes != nullptr,
+        std::format(
+            "the rewrite engine counts the nodes it copies against `growth_budget` ({}), and this "
+            "run was given nowhere to count them (OptimizeRewriteConfig::growthSpentNodes): the "
+            "budget it would enforce is one this call keeps and drops, and the next run of the "
+            "pass would spend it again",
+            growthBudget));
+    size_t &growthSpent  = *config.growthSpentNodes;
+    const bool hadBudget = growthSpent < growthBudget;
     // A session only inlines calls that existed when it started; calls exposed by its own
     // inlining (nested helpers, devirtualized pullbacks) wait for the next session. Repeat until
     // nothing changes; the bound only guards against a rewrite that never settles.

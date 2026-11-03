@@ -36,6 +36,57 @@ using camel::core::type::Type;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GraphId;
 
+/// The log's spelling of a cause. Nothing else in this file writes the word: a refusal site records
+/// the cause and this spells it, so the log and the caller read one value twice instead of one
+/// string being built in eighteen places and parsed back in a nineteenth.
+const char *transposeRefusalWord(TransposeRefusalCause cause) {
+    switch (cause) {
+    case TransposeRefusalCause::None:
+        return nullptr;
+    case TransposeRefusalCause::Signature:
+        return "signature";
+    case TransposeRefusalCause::Exit:
+        return "exit";
+    case TransposeRefusalCause::Output:
+        return "output";
+    case TransposeRefusalCause::Component:
+        return "component";
+    case TransposeRefusalCause::Join:
+        return "join";
+    case TransposeRefusalCause::Condition:
+        return "condition";
+    case TransposeRefusalCause::ArmTangents:
+        return "arm-tangents";
+    case TransposeRefusalCause::Arm:
+        return "arm";
+    case TransposeRefusalCause::Rule:
+        return "rule";
+    case TransposeRefusalCause::Kind:
+        return "kind";
+    case TransposeRefusalCause::Arity:
+        return "arity";
+    case TransposeRefusalCause::CotangentNeedsAValue:
+        return "cotangent-needs-a-value";
+    case TransposeRefusalCause::State:
+        return "state";
+    case TransposeRefusalCause::StateUnread:
+        return "state-unread";
+    case TransposeRefusalCause::Range:
+        return "range";
+    case TransposeRefusalCause::CallNoTranspose:
+        return "call-no-transpose";
+    case TransposeRefusalCause::CallValueMissing:
+        return "call-value-missing";
+    case TransposeRefusalCause::CallValueComputedByTheBody:
+        return "call-value-computed-by-the-body";
+    case TransposeRefusalCause::UnreadParameter:
+        return "unread-parameter";
+    case TransposeRefusalCause::NeedsAValueOutsideTheClosure:
+        return "needs-a-value-outside-the-closure";
+    }
+    return nullptr;
+}
+
 namespace {
 
 /// The sum a cotangent accumulates with is the sum of the type it lands in: two array cotangents
@@ -305,6 +356,9 @@ struct TransposeState {
     /// it computes the type it calls with: the capture ports are part of that type, so the set has to
     /// be known before the signature is written, not after the build that uses it.
     std::unordered_map<const camel::runtime::GCGraph *, std::vector<size_t>> calleeNeeds;
+    /// Why the walk stopped, recorded at the site that stopped it. A probe carries a state of its
+    /// own, so a probe's refusal never becomes the answer of the build that made it.
+    TransposeRefusal refusal;
 };
 
 bool buildTransposeMember(
@@ -315,6 +369,15 @@ bool buildTransposeMember(
     if (state.program == nullptr || function == nullptr) {
         return false;
     }
+    // One place says why, and it says it as a value: the cause is recorded for the caller, and the
+    // log's line is rendered from the same cause. A site adds the *where* -- the node, the uri, the
+    // callee -- because that is not the cause and no caller decides anything from it; a site that
+    // wanted a sentence of its own would add an enumerator instead of writing one here.
+    const auto refuse = [&](TransposeRefusalCause cause,
+                            std::optional<size_t> param = std::nullopt) -> void {
+        state.refusal = TransposeRefusal{cause, param};
+        os << "TRANSPOSE function=" << function->name() << " skip=" << transposeRefusalWord(cause);
+    };
     // What this member needs is discovered by asking: the body decides which parameters it reads by
     // asking for their values, and nothing in the type says which. The ask is itself a build, so it
     // runs in a draft of its own -- a scratch group, destroyed with the members reserved in it --
@@ -328,14 +391,10 @@ bool buildTransposeMember(
         const GraphId probeMember = scratch.reserve("transpose_probe", "transpose_probe");
         std::vector<size_t> found;
         (void)buildTransposeMember(probe, function, probeMember, probeLog, participates, &found);
+        // `found` is what this half needs and is recorded on the state; nothing prints it. A
+        // probe line here was left by the `8194d89fd` experiment and made every reading carry a
+        // line no cause asked for.
         state.calleeNeeds[function] = found;
-        if (!found.empty()) {
-            os << "TRANSPOSE-PROBE function=" << function->name() << " needs=";
-            for (size_t i = 0; i < found.size(); ++i) {
-                os << (i == 0 ? "" : ",") << found[i];
-            }
-            os << '\n';
-        }
     }
     // The graph being built takes the ports the walk fills, so it asks for the shape its ports can
     // honour: the plain one. A closed half answers `(ct) => (cotangents)` at the call site (the
@@ -349,7 +408,8 @@ bool buildTransposeMember(
     FunctionType *signature =
         transposeSignature(function->funcType(), participates, nullptr, &capturesOf);
     if (signature == nullptr) {
-        os << "TRANSPOSE function=" << function->name() << " skip=signature\n";
+        refuse(TransposeRefusalCause::Signature);
+        os << '\n';
         return false;
     }
     const size_t nodeCount         = function->nodeCount();
@@ -820,6 +880,10 @@ bool buildTransposeMember(
         // predicate the forward graph did, at the same values -- which is why the parameters of `f`
         // are parameters of the transposed function too.
         bool complete = true;
+        // Whether the last `forward` attempt stopped at a node kind it cannot copy -- the owner of a
+        // region, a loop or a branch. That is the whole difference between the two shapes a call
+        // site can fail on, so it is recorded where the walk stops rather than guessed at the call.
+        bool stoppedAtARegion = false;
         std::function<gc_node_ref_t(gc_node_ref_t)> forward;
         forward = [&](gc_node_ref_t ref) -> gc_node_ref_t {
             if (ref >= nodeCount) {
@@ -1015,7 +1079,13 @@ bool buildTransposeMember(
                 return made;
             }
             if (node->kind != rt::GCNodeKind::Oper) {
-                complete = false;
+                // A kind `forward` cannot copy: a loop's rounds, a branch's arms -- a value that
+                // comes out of a **region**. Recorded here rather than guessed from the kind of the
+                // node a caller happens to have in hand, because the caller's node may be a
+                // projection *of* such a value (`Accs` over a loop's cell): the walk stops at the
+                // region, and the caller sees only that its projection would not forward.
+                stoppedAtARegion = true;
+                complete          = false;
                 return rt::kInvalidNodeRef;
             }
             const auto *body = function->nodeBodyAs<camel::runtime::GCOperBody>(ref);
@@ -1066,7 +1136,8 @@ bool buildTransposeMember(
         // to. It is seeded before the walk, because the walk starts there and goes backwards.
         const gc_node_ref_t oldExit = function->exitNodeRef();
         if (oldExit >= nodeCount) {
-            os << "TRANSPOSE function=" << function->name() << " skip=exit\n";
+            refuse(TransposeRefusalCause::Exit);
+            os << '\n';
             return false;
         }
         addCotangent(oldExit, cotangentIn);
@@ -1596,9 +1667,9 @@ bool buildTransposeMember(
                         ruleCotangent(rule->rule, inputs, i, local[ref], why);
                     if (answer == rt::kInvalidNodeRef) {
                         armsOk = false;
-                        os << "TRANSPOSE function=" << function->name()
-                           << " skip=cotangent-needs-a-value uri=" << body->uri()
-                           << " position=" << i << " reason=" << why << '\n';
+                        refuse(TransposeRefusalCause::CotangentNeedsAValue);
+                        os << " uri=" << body->uri() << " position=" << i
+                           << " reason=" << why << '\n';
                         return {};
                     }
                     deliver(inputs[i], answer, ref);
@@ -1664,8 +1735,8 @@ bool buildTransposeMember(
                     const auto parts2 = function->withInputsOf(holder);
                     if (held == nullptr || held->kind != rt::GCNodeKind::Fill ||
                         body->value >= parts2.size()) {
-                        os << "TRANSPOSE function=" << function->name()
-                           << " skip=component node=" << ref << " holder=" << holder << '\n';
+                        refuse(TransposeRefusalCause::Component);
+                        os << " node=" << ref << " holder=" << holder << '\n';
                         return false;
                     }
                     std::vector<gc_node_ref_t> &into = tupleCotangents[parts2[body->value]];
@@ -1739,8 +1810,8 @@ bool buildTransposeMember(
                 const auto arms                        = function->withInputsOf(ref);
                 const auto normBranch                  = function->normInputsOf(ref);
                 if (arms.size() < 2 || normBranch.empty()) {
-                    os << "TRANSPOSE function=" << function->name() << " skip=join arms="
-                       << arms.size() << '\n';
+                    refuse(TransposeRefusalCause::Join);
+                    os << " arms=" << arms.size() << '\n';
                     return false;
                 }
                 const gc_node_ref_t join = draft.addJoinNode(
@@ -1751,12 +1822,14 @@ bool buildTransposeMember(
                 // condition this arm was chosen by.
                 const auto conditionInputs = function->normInputsOf(normBranch.front());
                 if (conditionInputs.empty()) {
-                    os << "TRANSPOSE function=" << function->name() << " skip=condition\n";
+                    refuse(TransposeRefusalCause::Condition);
+                    os << '\n';
                     return false;
                 }
                 const gc_node_ref_t condition = forward(conditionInputs.front());
                 if (!complete || condition == rt::kInvalidNodeRef) {
-                    os << "TRANSPOSE function=" << function->name() << " skip=condition\n";
+                    refuse(TransposeRefusalCause::Condition);
+                    os << '\n';
                     return false;
                 }
                 // A condition is a choice, not a magnitude: the branch that ran is decided by it, and
@@ -1785,8 +1858,8 @@ bool buildTransposeMember(
                     // contributes nothing to the answer. One tangent is what an arm answers today, as
                     // for the residual bundle; more than one would have to answer a tuple per arm.
                     if (stopPorts.size() > 1) {
-                        os << "TRANSPOSE function=" << function->name() << " skip=arm-tangents ports="
-                           << stopPorts.size() << '\n';
+                        refuse(TransposeRefusalCause::ArmTangents);
+                        os << " ports=" << stopPorts.size() << '\n';
                         return false;
                     }
                     if (!stopPorts.empty()) {
@@ -1799,8 +1872,8 @@ bool buildTransposeMember(
                     if (stopPorts.size() > 2) {
                         // One tangent is what an arm of a cut half answers today; more than one would
                         // have to answer a tuple per arm, and nothing builds that yet.
-                        os << "TRANSPOSE function=" << function->name() << " skip=arm-tangents ports="
-                           << stopPorts.size() << '\n';
+                        refuse(TransposeRefusalCause::ArmTangents);
+                        os << " ports=" << stopPorts.size() << '\n';
                         return false;
                     }
                     stops.push_back(stopPorts[1]);
@@ -1815,8 +1888,8 @@ bool buildTransposeMember(
                     draft.setInsertRegion(newRegion);
                     const gc_node_ref_t armCotangent = runArm(oldRegion, arms[k], ctJoin, stops);
                     if (!armsOk || armCotangent == rt::kInvalidNodeRef) {
-                        os << "TRANSPOSE function=" << function->name() << " skip=arm arm=" << k
-                           << '\n';
+                        refuse(TransposeRefusalCause::Arm);
+                        os << " arm=" << k << '\n';
                         return false;
                     }
                     draft.setRegionResult(newRegion, armCotangent);
@@ -1891,14 +1964,39 @@ bool buildTransposeMember(
                         : rule->status == camel::parse::ast::RuleLookup::NoSuchFamily
                             ? "no-such-family"
                             : "no-rule";
-                    os << "TRANSPOSE function=" << function->name() << " skip=rule uri=" << uri
-                       << " reason=" << reason << '\n';
+                    refuse(TransposeRefusalCause::Rule);
+                    os << " uri=" << uri << " reason=" << reason << '\n';
                     return false;
                 }
                 const auto normOperands = function->normInputsOf(ref);
                 if (normOperands.size() != 2 && normOperands.size() != 1) {
-                    os << "TRANSPOSE function=" << function->name() << " skip=arity uri=" << uri
-                       << " operands=" << normOperands.size() << '\n';
+                    // Measured, and left standing: the refusal is reachable (`transpose(loss_mean)`
+                    // over `mean_axis(xs, axis, keepdims)` reaches it as
+                    // `skip=arity uri=tensor:mean_axis operands=3`), and the count is wrong about
+                    // *why* -- the law `mean_axis_t` names all three ports and the last two answer no
+                    // cotangent because `int` and `bool` have no tangent space. What it is right about
+                    // is what removing it does: with the count gone the walk finishes, and the graph
+                    // it builds takes `(x, ct)` (`TRANSPOSE function=loss_mean graph=296
+                    // type=(float[..], float) => (float[..],)`) while the function value's signature
+                    // promises `(float) => (float[..],)`. The pullback's convention carries no residual:
+                    // a law whose right side reads the forward value of an *intermediate* node
+                    // (`mean_axis_cotangent` reads `xs`) makes the walk declare a port the caller was
+                    // never told to fill, and the call dies on `nargs.size() == normPorts.size()` --
+                    // a signal, which is worse than this refusal. A law that reads a *parameter* or a
+                    // constant (`sum_t`, `mul_t`, `mul_tensor_t`, `dtod_t`) needs no residual, which is
+                    // why every reachable transpose rule is of that shape.
+                    //
+                    // The count came in with `a64136b6a` ("transpose of a straight-line linear graph,
+                    // built from the index's rules"), when the walk knew unary and binary primitives
+                    // and nothing else. `439d800be` gave the walk the node's port list (normal ones,
+                    // then `<>`) and wrote `mean_axis_t` in the same change, recording here that the
+                    // count refuses a law whose three ports it names -- `stdlib/rulesets/transpose.cml`
+                    // keeps that measurement beside the law. What the stop is really about is the
+                    // residual, so the page
+                    // `docs/handover/questions/2026-11-03-who-carries-the-forward-halfs-intermediate-values.cn.md`
+                    // asks the question this line is one symptom of.
+                    refuse(TransposeRefusalCause::Arity);
+                    os << " uri=" << uri << " operands=" << normOperands.size() << '\n';
                     return false;
                 }
                 // The list the rule's parameters line up with is the node's *port* list: the normal
@@ -1934,9 +2032,9 @@ bool buildTransposeMember(
                     std::string why;
                     const gc_node_ref_t answer = ruleCotangent(rule->rule, inputs, i, ct, why);
                     if (answer == rt::kInvalidNodeRef) {
-                        os << "TRANSPOSE function=" << function->name()
-                           << " skip=cotangent-needs-a-value uri=" << uri << " position=" << i
-                           << " reason=" << why << '\n';
+                        refuse(TransposeRefusalCause::CotangentNeedsAValue);
+                        os << " uri=" << uri << " position=" << i << " reason=" << why
+                           << '\n';
                         return false;
                     }
                     addCotangent(inputs[i], answer);
@@ -1969,8 +2067,8 @@ bool buildTransposeMember(
                     ? function->regionPorts(bodyRegionOld)
                     : std::span<const gc_node_ref_t>{};
                 if (bodyRegionOld == 0 || regionPorts.empty()) {
-                    os << "TRANSPOSE function=" << function->name() << " skip=state node=" << ref
-                       << " origin=" << regionOrigin << '\n';
+                    refuse(TransposeRefusalCause::State);
+                    os << " node=" << ref << " origin=" << regionOrigin << '\n';
                     return false;
                 }
                 const gc_node_ref_t oldBodyResult = function->region(bodyRegionOld)->result;
@@ -2005,8 +2103,8 @@ bool buildTransposeMember(
                 if (iterates) {
                     sequence = oldNorm.empty() ? rt::kInvalidNodeRef : forward(oldNorm.front());
                     if (sequence == rt::kInvalidNodeRef) {
-                        os << "TRANSPOSE function=" << function->name() << " skip=range node="
-                           << ref << '\n';
+                        refuse(TransposeRefusalCause::Range);
+                        os << " node=" << ref << '\n';
                         return false;
                     }
                     intervalForm =
@@ -2178,8 +2276,9 @@ bool buildTransposeMember(
                     } else {
                         // The refusal's own line, character for character: the A/B of this change
                         // reads it as it stood before the accumulators existed.
-                        os << "TRANSPOSE function=" << function->name() << " skip=state node=" << ref
-                           << " origin=" << regionOrigin << " captures=" << caught.size() << '\n';
+                        refuse(TransposeRefusalCause::State);
+                        os << " node=" << ref << " origin=" << regionOrigin
+                           << " captures=" << caught.size() << '\n';
                     }
                     for (const auto &entry : caught) {
                         const camel::runtime::GCNode *carrier = function->node(entry.first);
@@ -2208,8 +2307,8 @@ bool buildTransposeMember(
                     }
                 }
                 if (!armsOk || bodyCotangent == rt::kInvalidNodeRef) {
-                    os << "TRANSPOSE function=" << function->name() << " skip=state node=" << ref
-                       << " origin=" << regionOrigin << '\n';
+                    refuse(TransposeRefusalCause::State);
+                    os << " node=" << ref << " origin=" << regionOrigin << '\n';
                     return false;
                 }
                 // The region hands back one cotangent per state, then one sum per escaped value. With one
@@ -2375,8 +2474,8 @@ bool buildTransposeMember(
                         const gc_node_ref_t none = zeroOf(loopNode);
                         result = tupleOf({none}, {cotangentTypeOf(loopNode, Type::Float64())}).first;
                     } else {
-                        os << "TRANSPOSE function=" << function->name() << " skip=state-unread node="
-                           << ref << " origin=" << regionOrigin << '\n';
+                        refuse(TransposeRefusalCause::StateUnread);
+                        os << " node=" << ref << " origin=" << regionOrigin << '\n';
                         return false;
                     }
                 }
@@ -2425,8 +2524,9 @@ bool buildTransposeMember(
                     argumentAt = 0;
                 }
                 if (inputs.size() <= argumentAt && !rt::isValid(calleeId)) {
-                    os << "TRANSPOSE function=" << function->name() << " skip=kind node=" << ref
-                       << " kind=" << static_cast<int>(node->kind) << '\n';
+                    refuse(TransposeRefusalCause::Kind);
+                    os << " node=" << ref << " kind=" << static_cast<int>(node->kind)
+                       << '\n';
                     return false;
                 }
 
@@ -2443,9 +2543,9 @@ bool buildTransposeMember(
                                                   ? static_cast<int>(carrier->kind)
                                                   : -1);
                     };
-                    os << "TRANSPOSE function=" << function->name()
-                       << " skip=call-no-transpose node=" << ref
-                       << " callee=none value=" << describe(inputs.front());
+                    refuse(TransposeRefusalCause::CallNoTranspose);
+                    os << " node=" << ref << " callee=none value="
+                       << describe(inputs.front());
                     const auto captured = function->withInputsOf(ref);
                     if (!captured.empty()) {
                         os << " with=" << describe(captured.front());
@@ -2470,9 +2570,9 @@ bool buildTransposeMember(
                 // the index.
                 const size_t calleeParams = callee->funcType()->normTypesCount();
                 if (calleeParams == 0 || inputs.size() != argumentAt + calleeParams) {
-                    os << "TRANSPOSE function=" << function->name()
-                       << " skip=call-no-transpose node=" << ref
-                       << " callee=" << callee->name() << " params=" << calleeParams << '\n';
+                    refuse(TransposeRefusalCause::CallNoTranspose);
+                    os << " node=" << ref << " callee=" << callee->name()
+                       << " params=" << calleeParams << '\n';
                     return false;
                 }
                 std::vector<size_t> answersOf;
@@ -2486,10 +2586,10 @@ bool buildTransposeMember(
                 std::vector<bool> participates;
                 if (tangentArgs > 0) {
                     if (tangentArgs > calleeParams) {
-                        os << "TRANSPOSE function=" << function->name()
-                           << " skip=call-no-transpose node=" << ref
-                           << " callee=" << callee->name() << " tangent-args=" << tangentArgs
-                           << " params=" << calleeParams << '\n';
+                        refuse(TransposeRefusalCause::CallNoTranspose);
+                        os << " node=" << ref << " callee=" << callee->name()
+                           << " tangent-args=" << tangentArgs << " params=" << calleeParams
+                           << '\n';
                         return false;
                     }
                     participates.assign(calleeParams, false);
@@ -2511,9 +2611,9 @@ bool buildTransposeMember(
                             "transpose_of_" + std::string(callee->name()));
                         state.callees.emplace(rt::toValue(calleeId), transposed);
                         if (!buildTransposeMember(state, callee, transposed, os, participates)) {
-                            os << "TRANSPOSE function=" << function->name()
-                               << " skip=call-no-transpose node=" << ref
-                               << " callee=" << callee->name() << '\n';
+                            refuse(TransposeRefusalCause::CallNoTranspose);
+                            os << " node=" << ref << " callee=" << callee->name()
+                               << '\n';
                             return false;
                         }
                     } else {
@@ -2523,9 +2623,9 @@ bool buildTransposeMember(
                 FunctionType *calleeType = transposeSignature(
                     callee->funcType(), participates, &answersOf, &state.calleeNeeds[callee]);
                 if (calleeType == nullptr || calleeType->normTypesCount() == 0) {
-                    os << "TRANSPOSE function=" << function->name()
-                       << " skip=call-no-transpose node=" << ref
-                       << " callee=" << callee->name() << " signature\n";
+                    refuse(TransposeRefusalCause::CallNoTranspose);
+                    os << " node=" << ref << " callee=" << callee->name()
+                       << " signature\n";
                     return false;
                 }
                 // The member's value parameters are the callee's parameters it answers nothing for, in
@@ -2535,6 +2635,33 @@ bool buildTransposeMember(
                 // index belongs, and `(xs, i)` is the shape where an answered parameter stands before
                 // a value.
                 const size_t memberValues = calleeType->normTypesCount() - 1;
+                // Which of the two shapes a value this call cannot hand over is. The call site has
+                // one diagnostic for both, and until 2026-11-03 one word as well, so a refusal that
+                // meant the second read like the first and looked fixed:
+                //
+                // - the value is the **parameter's own**, and this call does not carry it (the shape
+                //   the membership test above answers, and the one the array cases left behind);
+                // - the value is one this **half's body computes** -- a loop's result, a branch's --
+                //   and it is not missing from the call at all: it stands in this graph, and handing
+                //   it over means copying a node whose value comes out of a region, which `forward`
+                //   cannot do (it copies Data, Port, Accs, Fill and Oper, and stops at `Loop`).
+                //   `vjp_loop.rounds_are_undone_in_reverse` is that shape: the call is
+                //   `index_into(dxs, 0)` and `dxs` is the backward half's own loop.
+                //
+                // The node's kind is the whole of the difference, so it is read and not guessed: a
+                // value that comes out of a region is one the walk would have to transpose the
+                // region for, and a value that does not is one the call or its closure owes.
+                const auto unforwardedCause = [&](gc_node_ref_t ref, size_t param) {
+                    // Ask again with the flag cleared, so the answer is this attempt's: a failure is
+                    // not memoised, so the walk repeats the same path and stops at the same node.
+                    stoppedAtARegion          = false;
+                    const gc_node_ref_t probe = forward(ref);
+                    if (probe == rt::kInvalidNodeRef && stoppedAtARegion) {
+                        refuse(TransposeRefusalCause::CallValueComputedByTheBody, param);
+                        return;
+                    }
+                    refuse(TransposeRefusalCause::CallValueMissing, param);
+                };
                 std::vector<gc_node_ref_t> arguments;
                 for (size_t i = 0; i < calleeParams; ++i) {
                     bool answered = false;
@@ -2549,15 +2676,15 @@ bool buildTransposeMember(
                         continue;
                     }
                     if (argumentAt + i >= inputs.size()) {
-                        os << "TRANSPOSE function=" << function->name()
-                           << " skip=call-value-missing param=" << i << " node=" << ref
-                           << " arg=" << i << " callee=" << callee->name() << '\n';
+                        refuse(TransposeRefusalCause::CallValueMissing, i);
+                        os << " param=" << i << " node=" << ref << " arg=" << i
+                           << " callee=" << callee->name() << '\n';
                         return false;
                     }
                     const gc_node_ref_t argument = forward(inputs[argumentAt + i]);
                     if (argument == rt::kInvalidNodeRef) {
-                        os << "TRANSPOSE function=" << function->name()
-                           << " skip=call-value-missing param=" << i << " node=" << ref
+                        unforwardedCause(inputs[argumentAt + i], i);
+                        os << " param=" << i << " node=" << ref
                            << " arg=" << inputs[argumentAt + i] << '\n';
                         return false;
                     }
@@ -2570,24 +2697,24 @@ bool buildTransposeMember(
                 // a member called with a hole in its list, which is worse than a refusal.
                 for (const size_t idx : state.calleeNeeds[callee]) {
                     if (argumentAt + idx >= inputs.size()) {
-                        os << "TRANSPOSE function=" << function->name()
-                           << " skip=call-value-missing param=" << idx << " node=" << ref
-                           << " arg=" << idx << " callee=" << callee->name() << '\n';
+                        refuse(TransposeRefusalCause::CallValueMissing, idx);
+                        os << " param=" << idx << " node=" << ref << " arg=" << idx
+                           << " callee=" << callee->name() << '\n';
                         return false;
                     }
                     const gc_node_ref_t captured = forward(inputs[argumentAt + idx]);
                     if (captured == rt::kInvalidNodeRef) {
-                        os << "TRANSPOSE function=" << function->name()
-                           << " skip=call-value-missing param=" << idx << " node=" << ref
+                        unforwardedCause(inputs[argumentAt + idx], idx);
+                        os << " param=" << idx << " node=" << ref
                            << " arg=" << inputs[argumentAt + idx] << '\n';
                         return false;
                     }
                     arguments.push_back(captured);
                 }
                 if (arguments.size() != memberValues) {
-                    os << "TRANSPOSE function=" << function->name()
-                       << " skip=call-no-transpose node=" << ref
-                       << " values=" << arguments.size() << " member=" << memberValues << '\n';
+                    refuse(TransposeRefusalCause::CallNoTranspose);
+                    os << " node=" << ref << " values=" << arguments.size()
+                       << " member=" << memberValues << '\n';
                     return false;
                 }
                 // The callee's transpose stands where the call stood: it takes the arguments as the
@@ -2660,8 +2787,8 @@ bool buildTransposeMember(
                 break;
             }
             default:
-                os << "TRANSPOSE function=" << function->name() << " skip=kind node=" << ref
-                   << '\n';
+                refuse(TransposeRefusalCause::Kind);
+                os << " node=" << ref << '\n';
                 return false;
             }
         }
@@ -2715,8 +2842,8 @@ bool buildTransposeMember(
                 const size_t port =
                     at < portOfParameter.size() ? portOfParameter[at] : paramCount;
                 if (port >= ports.size()) {
-                    os << "TRANSPOSE function=" << function->name() << " skip=unread-parameter at="
-                       << at << '\n';
+                    refuse(TransposeRefusalCause::UnreadParameter);
+                    os << " at=" << at << '\n';
                     return false;
                 }
                 const camel::runtime::GCNode *portNode = function->node(ports[port]);
@@ -2761,8 +2888,9 @@ bool buildTransposeMember(
                 // its own space would have to be built from the value's shape, which this walk does
                 // not carry for anything but a number; refuse by name rather than answer a `float`
                 // where an array is promised.
-                os << "TRANSPOSE function=" << function->name() << " skip=unread-parameter port="
-                   << ports[port] << " type=" << (portType != nullptr ? portType->toString() : "?")
+                refuse(TransposeRefusalCause::UnreadParameter);
+                os << " port=" << ports[port]
+                   << " type=" << (portType != nullptr ? portType->toString() : "?")
                    << '\n';
                 return false;
             }
@@ -2784,7 +2912,8 @@ bool buildTransposeMember(
             }
         }
         if (result == rt::kInvalidNodeRef) {
-            os << "TRANSPOSE function=" << function->name() << " skip=output\n";
+            refuse(TransposeRefusalCause::Output);
+            os << '\n';
             return false;
         }
         draft.setExitNode(result);
@@ -2814,7 +2943,9 @@ TransposeGraph buildTransposeGraph(
         "transpose_of_" + std::string(function->name()));
     TransposeState state{group, program, {}, context};
     if (!buildTransposeMember(state, function, member, os)) {
-        return TransposeGraph{};
+        // The cause the walk recorded, not a reading of the log: a null graph and the reason it is
+        // null are one answer, handed back together.
+        return TransposeGraph{nullptr, nullptr, state.refusal};
     }
     group.encode();
     const camel::runtime::GCGraph *made = group.encoded(member);
