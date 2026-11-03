@@ -2,15 +2,17 @@
 // answers f's call with `split_of_jvp_of_g_forward`; that half was built by a nested cut, which had
 // to answer g's call with `split_of_jvp_of_h_forward` -- a cut of a cut.
 //
-// What travel are the graphs a nested build **made**. The two halves of `jvp_of_h` are graphs that
-// build *adopted*, and `Program::adoptMissing` copies only the graphs the program it reads owns, so
-// the outer program holds one level and not two: its call to the deeper forward half named a graph
-// the program does not have, and the VM stopped at `runtimeTarget != nullptr` ("a direct call names
-// a function whose graph is not in the program's graph table").
+// What travelled used to be only the graphs a nested build **made**. The two halves of `jvp_of_h` are
+// graphs that build *adopted*, and `Program::adoptMissing` copies only the graphs the program it
+// reads owns, so the outer program held one level and not two: its call to the deeper forward half
+// named a graph the program did not have, and the VM stopped at `runtimeTarget != nullptr` ("a direct
+// call names a function whose graph is not in the program's graph table").
 //
-// The reading is the refusal, word for word: the call, the graph whose own cut stands on another
-// (`jvp_of_h`), why only one level travels, and the position of the body the calls stand in.
-// `split_call_one` is the same shape one level shallower, and it is cut.
+// `SplitGraph::nestedPrograms` is collected transitively now -- this build's programs, and the ones
+// the nested builds stood on, however deep -- and every one of them is adopted. The numbers are
+// `g(x) = h(x) + 1.0 = 2x + 1` at x = 2, `f(x) = 3·g(x) = 6x + 3 = 15`, and the tangent 6. They are
+// the ones the lift gives, which is what says the cut carried the graph and did not recompute it.
+// `split_call_one` is the same shape one level shallower.
 import rulesets.jvp
 import { jvp, split } from transforms
 
