@@ -1349,3 +1349,15 @@ expect_exit = 0
 expect_output_contains = ["cut ct1= (6.0)", "cut ct3= (18.0)", "hand ct1= (6.0)", "hand ct3= (18.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "transforms.library_grad_is_the_composition"
+desc = "The library's `grad` is `vjp` + the seed, and `vjp` is `(y, transpose(lin))` -- nothing wrapped around it (stdlib/vjp.cml). On one scalar model, the library's leg (everything an ordinary parameter) and the engine's leg (`grad`/`with_grad` on the first `with` parameter, the bias moved to the front by a lambda) answer the same numbers element by element: w = -0.75, b = -0.5, loss = 0.125, every difference 0.000e+00. A tensor model is the known boundary, not a missing case: `vjp` of a function of `float[..]` stops at the four places docs/handover/reports/2026-11-03-library-vjp-walls.cn.md names, and the library's `grad` is declared for `(x: float) => float` only."
+kind = "behavior"
+case = "../../../cases/compile/transforms/library_grad_is_the_composition.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout = "library value=0.12500000000000000 w=-0.75000000000000000 b=-0.50000000000000000\nengine  value=0.12500000000000000 w=-0.75000000000000000 b=-0.50000000000000000\ndiff    w=0.000e+00 b=0.000e+00 value=0.000e+00\nsame_w=true same_b=true same_value=true\n"
+expect_output_not_contains = ["Warning", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
