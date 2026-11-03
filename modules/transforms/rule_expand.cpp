@@ -353,6 +353,22 @@ std::vector<bool> portsReadByBody(const rt::GCGraph &body, const std::vector<boo
 
 } // namespace
 
+std::vector<camel::core::type::Type *>
+ruleCotangentPortsOf(const camel::compile::gir::GenericRuleInstance &instance) {
+    std::vector<camel::core::type::Type *> ports;
+    RuleRightSide side;
+    std::string why;
+    if (!findRuleRightSide(instance, side, why) || side.body == nullptr) {
+        return ports;
+    }
+    for (const gc_node_ref_t port : side.body->normPorts()) {
+        const rt::GCNode *node = side.body->node(port);
+        ports.push_back(node != nullptr ? const_cast<camel::core::type::Type *>(node->dataType())
+                                        : nullptr);
+    }
+    return ports;
+}
+
 /// The rule's right side expanded at the match site: the body of the closure it answers with is
 /// copied into this graph, its captures bound to the operands and its parameters to the tangents,
 /// and the copy's exit is the operator's derivative.

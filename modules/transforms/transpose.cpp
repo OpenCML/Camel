@@ -115,6 +115,31 @@ const char *transposeRefusalWord(TransposeRefusalCause cause) {
 
 namespace {
 
+/// The type a law's right side takes its cotangent at: the port of the closure it answers with
+/// (`rule_expand.h#ruleCotangentPortsOf`), or null when the law has no instance at `instanceTypes`
+/// or its right side is not a function of the tangents.
+///
+/// `rulePortsOf` is the **left** side's ports -- the operator's own operands -- and a cotangent is
+/// not one of them. A law is therefore chosen on the shape of the operands it describes, and ready to
+/// read whatever is handed to it: what a law says about the cotangent is written in the closure its
+/// right side answers with (`(ct: T[..]) => mean_axis_cotangent(ct, at)`), and that is the only place
+/// the port is stated. This is the question `ruleCotangent` asks before it hands the value over.
+Type *cotangentPortOf(
+    camel::core::context::Context &context, const std::string &rule,
+    const std::vector<Type *> &instanceTypes, size_t position) {
+    std::string why;
+    const camel::compile::gir::GenericRuleInstance *instance =
+        camel::compile::gir::genericRuleInstanceByName(context, rule, instanceTypes, {}, why);
+    if (instance == nullptr) {
+        return nullptr;
+    }
+    const std::vector<Type *> ports = camel::transforms::ruleCotangentPortsOf(*instance);
+    if (ports.empty()) {
+        return nullptr;
+    }
+    return position < ports.size() ? ports[position] : ports.front();
+}
+
 /// The transpose law that answers an operator here, chosen by the operands' own types, or the
 /// refusal when the declaration does not choose.
 ///
@@ -1580,9 +1605,39 @@ bool buildTransposeMember(
             // in the width the cotangent is in. A law with no instance at either tuple is expanded at
             // the ports' own types, and the expansion says what it could not build in its own words.
             const std::vector<Type *> at = lawInstanceTypes(*state.context, ruleName, operandTypes);
+            // A cotangent with no shape is a value an open-rank port takes (design principles 5.4:
+            // `T[..]` includes rank 0, a rank-zero array being the element itself), and that is not
+            // a statement about the type alone: the slot of a `T[..]` position holds the rank-zero
+            // array that *is* the element. Without it the body has no rank to read, and where the
+            // body asks `numel(ct)` a number is read as a pointer -- a SIGSEGV inside the numel
+            // kernel (`docs/handover/questions/
+            // 2026-11-04-a-rank-zero-cotangent-is-read-as-a-pointer.cn.md`). The conversion is made
+            // wherever a value's type goes from `T` to `T[..]` (`Builder::coerceTo`, whose reason is
+            // stated in `ArrayType::castSlotFrom`: the run gets a value with a rank to read), and a
+            // call argument is the one entrance that is not such a position (it asks the same
+            // question before it enters, `builder_operators.cpp`). A law's right side is entered by
+            // this walk and not by a call, so the conversion is made here -- the value is handed
+            // over through a cast to the port's own type, which is what the language would have
+            // inserted had the law been written as a call.
+            gc_node_ref_t handed = ct;
+            Type *port = ctType != nullptr
+                             ? cotangentPortOf(*state.context, ruleName, operandTypes, position)
+                             : nullptr;
+            if (ctType != nullptr && ctType->code() != camel::core::type::TypeCode::Array) {
+                const auto *arrayPort =
+                    port != nullptr && port->code() == camel::core::type::TypeCode::Array
+                        ? tt::as_ptr<camel::core::type::ArrayType>(port)
+                        : nullptr;
+                if (arrayPort != nullptr && arrayPort->rankZeroType() != nullptr &&
+                    port->assignableFrom(ctType)) {
+                    const std::vector<gc_node_ref_t> source{ct};
+                    handed = draft.addCastNode(port);
+                    draft.setNormInputs(handed, std::span<const gc_node_ref_t>(source));
+                }
+            }
             return camel::transforms::expandRuleByName(
-                *state.context, group, group.transaction(member), ruleName, valueOf, {ct}, position,
-                at, why, &noInstance);
+                *state.context, group, group.transaction(member), ruleName, valueOf, {handed},
+                position, at, why, &noInstance);
         };
         const auto noteRule = [&usedRules](const std::string &name) {
             if (std::find(usedRules.begin(), usedRules.end(), name) == usedRules.end()) {

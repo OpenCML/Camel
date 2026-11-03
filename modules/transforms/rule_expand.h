@@ -25,6 +25,18 @@ inline constexpr size_t kWholeAnswer = static_cast<size_t>(-1);
 std::vector<camel::core::type::Type *>
 rulePortsOf(const camel::compile::gir::GenericRuleInstance &instance);
 
+/// The ports of the closure a law's right side answers with: the **tangents** it takes, in the order
+/// its right side writes them, or empty when the right side is not a function of the tangents.
+///
+/// This is not the same question `rulePortsOf` answers. That one is the *left* side -- the operator's
+/// own operands -- and it is what a law is chosen on (one law per left side; `chooseRuleAmong`). What
+/// a law will *read* when the walk hands it a cotangent is written nowhere on the left side: it is
+/// the parameter of the closure the right side answers with (`(ct: T[..]) => mean_axis_cotangent(ct,
+/// at)`), which `findRuleRightSide` already reads in order to expand that closure. A family that must
+/// judge a cotangent against the port it is entering asks here.
+std::vector<camel::core::type::Type *>
+ruleCotangentPortsOf(const camel::compile::gir::GenericRuleInstance &instance);
+
 /// Whether `narrow` asks for a type every position `wide` also takes, and asks for a narrower one
 /// somewhere: `T[]` beside `T[..]`, where an open rank takes a rank-one array and a rank-one array
 /// does not take an open rank. This is the relation a choice between two laws of one key is made by,
