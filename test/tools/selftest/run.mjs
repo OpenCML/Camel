@@ -909,6 +909,20 @@ if (shorthand.status !== 0 || !shorthand.output.includes('[SUMMARY] total: 5, pa
     problems.push(`target shorthand: a plan target without its suffix did not run in full (${summaryLine(shorthand.output)})`)
 }
 
+//  --- a target that names a directory holding no plan refuses ------------------------------
+// `test/plans/feat/docs_links` is the plan's fixture directory; the plan file is the sibling
+// `docs_links.plan.toml`, so the suffix-less shorthand above does not apply (the directory
+// exists). Naming it used to reach no plan, start nothing and explain that with the layer
+// sentence -- "none of their entries is in this layer", which is an answer about plans that were
+// reached. It now refuses, names the plan beside it, and prints no [SUMMARY] at all: a run that
+// started nothing must not look finished.
+const barren = runTestCli(['test/plans/feat/docs_links'])
+if (barren.status !== 2) problems.push(`target that names no plan: exit ${barren.status}, expected 2`)
+if (!/holds no \*\.plan\.toml/.test(barren.output) || !/docs_links\.plan\.toml/.test(barren.output)) {
+    problems.push(`target that names no plan: the refusal did not name the plan file beside it: ${barren.output.trim()}`)
+}
+if (/\[SUMMARY\]/.test(barren.output)) problems.push('target that names no plan: a [SUMMARY] was printed for a run that started nothing')
+
 // The base branch: origin/develop by default, overridden by CAMEL_TEST_BASE.
 const savedBase = process.env.CAMEL_TEST_BASE
 delete process.env.CAMEL_TEST_BASE
