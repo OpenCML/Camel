@@ -54,9 +54,6 @@
 （`scripts/stdlib-reference.mjs#installEnvironment`、`test/tools/check-vjp-ruleset.mjs#installEnvironment`、
 `test/tools/check-tuple-trace.mjs`）都是在**继承来的 `LD_LIBRARY_PATH` 前面追加**，不是替换，
 所以它们对"手工跑"有用，对"经闸门跑"不改变结果。
-另记一句**文档与代码的漂移**（只报不改）：`camel-remote.ps1` 文件头写
-"`stdlib-reference --verify-ops` is the one entry that starts the tree's own camel binary"，
-而 `$checkers` 表里 `compiler = $true` 的已经有三条（`stdlib-reference`、`conformance`、`gate-static`）。
 
 ## 三条路（第四条是本轮被点名要走的）
 
@@ -77,6 +74,15 @@
 那个形状，而它**与负载无关**，重跑一百次也一样。所以先看 stderr 第一行是不是
 `GLIBCXX_* not found`，再看宽度与负载（`docs/handover/pitfalls.cn.md` 同一天改的那一行）。
 否则每个手搓 ssh 的人都会得到 `0/N`，并把它误判成负载。
+
+## 顺带发现（只报不改）
+
+**`camel-remote.ps1` 文件头那句"唯一"已经旧了。** 它写
+"`stdlib-reference --verify-ops` is the one entry that starts the tree's own camel binary"，
+而 `$checkers` 表里 `compiler = $true` 的已经有三条：`stdlib-reference`、`conformance`、`gate-static`。
+不影响行为：`$checkBlocks` 里的 `$libPrefix` 对 `$entry.compiler` 为真的**每一条**都生效，
+表里再加一条也自动覆盖——错的只是那句话，不是机制。所以这里只记事实、不去改那份脚本
+（它是另一条车道的作业面，也不在版本控制里）。
 
 ## 补记（22:51，这份脚本被**另一条车道**改了，不是这一条）
 
@@ -101,7 +107,9 @@ echo "[camel-remote] libstdc++: $LibStdCxxDir first on LD_LIBRARY_PATH (a comman
    改前同一棵树的 `-Plan feat/transforms/split -Tier fast -Jobs 4` 是
    `[SUMMARY] total: 19, pass: 19, fail: 0`。两次都绿，所以这条改动**不是**在某次红上做的修补。
 
-留给下一个人的一句：那条新注释里 "Everything else in this script ran **without** it" 不成立——
-`LD_LIBRARY_PATH="$C/lib"` 一直都在，而且实测够用（本页第 2、3 条读数）。
-新写法更好（它把"手搓 ssh 该 paste 什么"直接打进输出），但它不是从"什么都没带"改过来的：
-把它当成对一次真红的修复来读，就会把 22:44 那份读数当成假的。
+**那条新注释里 `Everything else in this script ran without it` 不成立。** `LD_LIBRARY_PATH="$C/lib"`
+**改前就是全局导出**（本页第 1 条引文），而且实测够用：二进制起得来（`Camel v0.2.43`），
+同一夹具 13/13（本页第 2、3 条读数）。新写法本身更好——它把"手搓 ssh 该 paste 什么"直接打进输出，
+正好补上本页第 4 条读数暴露的那一步——但它**不是从"什么都没带"改过来的**。
+把它当成对一次真红的修复来读，就会把本页 22:44 那份读数当成假的；
+那正是"用读数回答、而不是用印象回答"要防的事。
