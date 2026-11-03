@@ -1,0 +1,40 @@
+// The value `transpose` cannot be handed, named.
+//
+// `pick` reads one element of its parameter, so the cotangent of that parameter is a zero array of
+// its shape with one slot filled. `transpose` answers one cotangent per parameter and passes nothing
+// else -- every parameter is a linear input (design principles 9.9) -- so the graph the build makes
+// takes the array's own *value* as a parameter, and the type the call site fills has no place for
+// it. What the body needs is the value; the shape it already states in its type.
+//
+// Before this case's change the difference reached the run as a count, and a count is not a report:
+//
+//   error[...]: Pass 'std::nvm' failed with an internal error: Runtime indirect call norm-arity
+//   mismatch: caller graph 'main' node 3 has 1 args, target graph 'transpose_of_pick' has 2 norm
+//   ports.
+//   help: ... which is a defect of the compiler rather than of the program. ... report the program
+//   together with the pass list.
+//
+// on `std::nvm`, whose help asked a reader to report their own program as a defect of the compiler,
+// and an abort on the fast VM (`FastVM indirect call norm-arity mismatch for graph
+// 'transpose_of_pick': expected 2, got 1`, exit 134). Both are refusals now, said where the two
+// counts are in hand, and this case pins that the sentence names the missing thing -- the value of
+// the `float[3]` parameter -- and that neither the count nor the abort comes back. It asserts no
+// count: what has to stay true is that the program is refused in words, not how many ports anyone
+// counted.
+//
+// The same cotangent is reachable today through the library's cut: `vjp(pick)([1.0, 2.0, 3.0])`
+// answers 2.0 and ([0.0, 1.0, 0.0]), because a cut's backward half carries the array in its closure.
+// That is the repair the sentence names, and it is why this program's answer is a sentence and not a
+// number.
+import { transpose } from transforms
+import rulesets.transpose
+
+func pick(x: float[3]): float {
+    return x[1]
+}
+
+func main(): int sync {
+    let back = transpose(pick)
+    println(back(1.0))
+    return 0
+}

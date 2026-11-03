@@ -332,6 +332,57 @@ slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     readings() << "TRANSPOSE op signature=" << spelled << " resolved=" << produced
               << " transposed=" << given << " graph=" << handedBack
               << " same=" << (given == handedBack ? "yes" : "no") << '\n';
+    // The ports the member takes against the parameters the operator promised. A call site fills the
+    // parameters a type writes and nothing else, so a member that takes one more is refused here
+    // instead of being met by the run: both facts are in hand -- the resolver answered the promise
+    // just above, and the graph is the one just built -- and the reading one line up already spells
+    // the difference as `same=no`.
+    //
+    // What the extra parameter carries is a parameter's **value**, and `transpose`'s law says a
+    // parameter of the function is a linear input whose cotangent is answered for and whose value is
+    // never passed (author, 2026-11-02 11:30). The body asked for the value because a cotangent of
+    // that parameter is built from it: `idx_arr_t` answers a zero array of the operand's shape, and
+    // `mean_axis_cotangent` reads `xs` for `numel`/`ones_like`. That ask is a fact of the body and
+    // not of the type, so the two sides disagree on how many parameters the transposed function
+    // has, and the run could only say so as a count (`nargs` against `normPorts`), naming neither
+    // the parameter nor the reason: measured 2026-11-04 on `pick(x: float[3]) = x[1]`, the fast VM
+    // aborts (`expected 2, got 1`) and `std::nvm` reports a defect of the compiler instead of a fact
+    // about the program.
+    //
+    // This refusal is also what leaves `RuntimeDiag::PassInternalError`'s norm-arity text unreached
+    // from `transpose`: no call of a member is built any more whose argument count the member's own
+    // ports do not fit, because the operator stops where the two counts are known. The pass-level
+    // report is kept as the internal fallback it is for every other pass -- its help is written for
+    // the whole pipeline and is true there, so it is not rewritten for one operator's old wall.
+    {
+        FunctionType *const promised     = resolved ? *resolved : nullptr;
+        FunctionType *const member       = built.graph->funcType();
+        const size_t promisedCount = promised != nullptr ? promised->normTypesCount() : 0;
+        const size_t memberCount   = member != nullptr ? member->normTypesCount() : 0;
+        // A promise with no parameter at all is not a shape this operator writes -- the cotangent
+        // is always one -- so it is not a difference to read, and the count is not subtracted from.
+        if (promisedCount != 0 && memberCount > promisedCount) {
+            // The extra parameters stand where `transposeSignature` writes them: after the values
+            // the caller passes and before the cotangent, so the promise's last parameter is the
+            // first one the member adds. Their types are what the body asked for, and they are what
+            // the sentence names: a reader has the source's parameter types in front of them, and a
+            // count is a number they would have to look up.
+            std::string carried;
+            for (size_t at = promisedCount - 1; at + 1 < memberCount; ++at) {
+                const camel::core::type::Type *const extra = member->normTypeAt(at);
+                carried += (carried.empty() ? "" : ", ") +
+                           (extra != nullptr ? extra->toString() : std::string("?"));
+            }
+            throwRuntimeFault(
+                RuntimeDiag::RuntimeError,
+                "transforms: transpose has no transpose for this function: the body reads the "
+                "value of its `" +
+                    carried + "` parameter, and the transposed function `" + given +
+                    "` has no parameter for it: a parameter of the function is a linear input, so "
+                    "only its cotangent is passed. Take the cotangent through `vjp`, whose cut "
+                    "carries that value in its backward half's closure");
+        }
+    }
     auto *result = ::Function::create(
         built.program, built.graph->id(), function->tupleType(), mm::autoSpace());
     if (::Tuple *closure = function->tuple()) {
