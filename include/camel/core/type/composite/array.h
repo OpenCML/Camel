@@ -252,11 +252,15 @@ bool isElementTypeUnstated(const Type *type);
 /// evaluation is the one `ExtentForm::evaluate` makes everywhere else, so a written number answers
 /// and a `?` does not.
 ///
-/// This is the **one** spelling of "the shape a type writes down", and both readers of it go
-/// through here: the builtin `extent_of::<A>()`, which answers these extents as an `int[]`
-/// (`src/builtin/operators/struct.cpp#extentOfResolver`), and the transposition walk, which asks a
-/// bare `transpose` for the shape a law reads (`modules/transforms/transpose.cpp#shapeFromTypeOf`).
-/// A second evaluation of the same extents would be a second answer to one question.
+/// This is the **one** spelling of "the shape a type writes down" for a question that has no value
+/// behind it, and both such readers go through here: the builtin `extent_of::<A>()`, which answers
+/// these extents as an `int[]` (`src/builtin/operators/struct.cpp#extentOfResolver`), and the
+/// transposition walk, which asks a bare `transpose` for the shape a law reads
+/// (`modules/transforms/transpose.cpp#shapeFromTypeOf`). A second evaluation for that question would
+/// be a second answer to one question. The literal conversion keeps its own reading
+/// (`src/core/data/composite/array.cpp#statedShapeOf`) because it asks something else: which written
+/// shape a literal's elements can fill, where a form that is an expression states none however it
+/// would evaluate.
 inline std::optional<std::vector<int64_t>> statedExtentsOf(const Type *type) {
     const ArrayType *array = asArrayType(type);
     if (array == nullptr) {
