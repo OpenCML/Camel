@@ -4465,7 +4465,6 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     }
     std::vector<node_handle_t> capturedWrites;
     for (const CapturedUse &use : captured) {
-        orderAfterLastWriter(use.variable, targetNode);
         if (use.written) {
             capturedWrites.push_back(use.origin);
         }
@@ -4493,6 +4492,26 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     }
     for (const Passed &arg : passed) {
         if (arg.written != nullptr) {
+            // The version the variable had before this call. A read written after the call takes
+            // the version the call leaves, and what stands before that call in the version chain
+            // is this version: `:var/after(version, call)` orders the call and hands the version on
+            // (docs/design/effects/edges.cn.md 3.1, 5.6). Recorded here, before `recordWrite` moves
+            // the variable's modifier on to the call: after it, the version this asks for would be
+            // the call itself.
+            //
+            // The write is still a direct one -- a `var` argument of a known callee -- so
+            // `recordWrite` is called with `throughCallee = false`: that flag says the write is
+            // known only through a call through a function value, and it is what decides whether
+            // the arm and capture bookkeeping sees this write at all. Only the version is recorded
+            // here, which is what a call through a function value records too.
+            if (auto previous = modifierOf(arg.written);
+                !previous.has_value() ||
+                (sameGraph(*previous, currGraph_) &&
+                 nodeKindOf(*previous) != camel::runtime::GCNodeKind::Call)) {
+                if (node_handle_t before = valueVersionOf(arg.written); before != nullptr) {
+                    writeBeforeCall_[targetNode][arg.written] = before;
+                }
+            }
             recordWrite(arg.written, targetNode);
         }
     }

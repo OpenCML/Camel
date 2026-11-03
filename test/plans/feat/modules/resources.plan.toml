@@ -64,7 +64,10 @@ for (const l of [
   'RESOURCES overlap a-b 0 a-c 1 a-empty 0 a-unknown 1',
   'RESOURCES footprint bump rmw variable norm 0 whole',
   'RESOURCES footprint countdown rmw variable norm 0 whole',
-  'RESOURCES footprint main rmw ambient rng; write ambient stdout; read ambient fs; rmw object (any); external',
+  // The sorted array is the cell `var xs` allocates: `:var/take` and `:var/get` fold back to what
+  // they name (`Resolver::originOf`), so `array:sort_l_in_place` names that cell and the footprint
+  // no longer says `rmw object (any)` -- "it may touch some object" became "it touches this one".
+  'RESOURCES footprint main rmw ambient rng; write ambient stdout; read ambient fs; external',
   'RESOURCES node main 2 :var/new: allocates variable',
   'RESOURCES node main 9 :op/assn_l: write variable (node 2); result same 0',
   'RESOURCES node main 10 FUNC bump: rmw variable (node 9); result unknown',

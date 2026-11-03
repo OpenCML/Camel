@@ -578,6 +578,22 @@ ValueOrigin Resolver::originOf(const GCGraph &graph, gc_node_ref_t ref) const {
         case GCNodeKind::Func:
         case GCNodeKind::Call:
         case GCNodeKind::Loop: {
+            // `:var/get` and `:var/take` name the thing they read or move: whatever the variable is
+            // -- the cell, or a version of it -- the node's value is that object, and the folding
+            // that answers "is this the same cell" has to go on through it. Their result is
+            // `may_alias`, because a read of a variable is not a proof of identity for the
+            // optimiser, but for the account the operand is the object.
+            if (node->kind == GCNodeKind::Oper) {
+                if (const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
+                    body != nullptr &&
+                    (body->oper == core::oper::VarGet || body->oper == core::oper::VarTake)) {
+                    const auto norm = graph.normInputsOf(ref);
+                    if (!norm.empty()) {
+                        ref = norm[0];
+                        continue;
+                    }
+                }
+            }
             const ResultAlias result = this->node(graph, ref).result;
             if (result.kind == ResultAlias::Kind::Fresh) {
                 return ValueOrigin{ValueOrigin::Kind::Fresh, ref};
