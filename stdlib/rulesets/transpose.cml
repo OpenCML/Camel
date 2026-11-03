@@ -38,7 +38,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { full, matmul, mean_axis, numel, ones_like, shape, subtract, sum, sum_to, take, transpose, zeros_like } from tensor
+import { full, matmul, mean_axis, numel, ones_like, relu, shape, subtract, sum, sum_to, take, transpose, where, zeros_like } from tensor
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
@@ -138,6 +138,22 @@ func mul_tensor::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
 /// shapes the operator is called with -- two arrays, and an array and a number.
 export rule mul_tensor_t::<T, X, W>(x: X, w: W) {
     mul_tensor(x, w) => (ct: T[..]) => (sum_to(ct * w, x), sum_to(ct * x, w))
+}
+
+/// `relu(x) = maximum(x, 0)` per element: the cotangent is `ct` where the input was positive and
+/// zero where it was not, so the rule is the mask `x > 0` and nothing else. It writes that mask with
+/// `where`, a registered operator, and not with a function of this rule's making: a helper named on a
+/// rule's right side becomes a call in the graph the backward walk has to transpose, and a call with
+/// no transpose of its own stops the walk (`skip=call-no-transpose`, measured on
+/// `rulesets.jvp::pow_tangent` 2026-11-03). A rule's right side is the answer, so a three-operand
+/// `where` is allowed here; the forward rule cannot write it that way, and `jvp_relu` records the
+/// measurement (`skip=arity uri=tensor:where operands=3`).
+///
+/// `x > 0` and not `x >= 0`: the input zero has no slope, and both halves say so the same way --
+/// `jvp_relu` (`stdlib/rulesets/jvp.cml`) kills the tangent with the same comparison, so the forward
+/// and the reverse reading of the boundary cannot drift apart.
+export rule relu_t::<T, A>(x: A) when is_float::<T>() {
+    relu(x) => (ct: T[..]) => (where(x > 0.0, ct, 0.0))
 }
 
 /// `x - w` on two arrays: what `tensor:subtract` means, and the left side this rule is filed under.

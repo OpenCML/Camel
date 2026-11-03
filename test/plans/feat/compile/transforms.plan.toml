@@ -1469,3 +1469,34 @@ expect_stdout_contains = ["transpose has no transpose for this function: this ca
 expect_stderr_contains = ["skip=rule uri=math:pow_d reason=unbound", "skip=call-no-transpose node=6 callee=rulesets.jvp::pow_tangent<float>"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# D1's first filled member: `relu` carries library rules of its own (`jvp_relu` and `relu_t`). Two
+# entries, engine and library, because the audit's criterion is that the two answer the same number
+# element for element.
+[[tests]]
+name = "relu_gradient_through_the_engine"
+desc = "The gradient of `sum(relu(w))` through the engine's own rule (`reluVjp`, registered by `modules/tensor/ops/vjp.cpp#setVjp`): the mask `[0.0, 0.0, 1.0, 0.0]` for the input `[-2.0, 0.0, 3.0, -0.5]`, which holds both signs and the boundary. The engine asks `y > 0` of the output and the library asks `x > 0` of the input; both sets are the same, so the zero has slope zero on both sides. This is the number the library's half must match."
+kind = "behavior"
+case = "../../../cases/compile/transforms/relu_gradient_through_the_engine.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["relu engine dL/dw=[0.0, 0.0, 1.0, 0.0]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "relu_gradient_through_the_library"
+desc = "The same gradient through the library's `vjp`: `jvp_relu` (`stdlib/rulesets/jvp.cml`) and `relu_t` (`stdlib/rulesets/transpose.cml`) answer it, and the forward rule writes the mask as a forward-half value (`where(x > 0, 1, 0) * dx`) so the linear half is one `mul_tensor` and the backward walk turns it around with `sum_t,mul_tensor_t` instead of stopping. Pinned on three streams: the number (identical to the engine's, element for element), the rule names the walk reports (`rules=jvp_relu,jvp_sum`), and the absence of the refusal this case had before the rules existed -- `skip=rule uri=tensor:relu reason=the operator has no forward rule bound at all`, replaced by the rule names."
+kind = "behavior"
+case = "../../../cases/compile/transforms/relu_gradient_through_the_library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["relu library value=3.0 dL/dx=[0.0, 0.0, 1.0, 0.0]"]
+expect_stderr_contains = ["rules=jvp_relu"]
+expect_output_not_contains = ["skip=rule uri=tensor:relu", "skip=call-no-transpose"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
