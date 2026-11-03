@@ -1060,6 +1060,12 @@ std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphTransaction &transact
 /// whether a node takes an order edge, which must not change as types are refined.
 bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byShape = false);
 
+/// `isChainStatement` (camel/runtime/graph.h) asked of a node of a draft: the operator from the
+/// node's payload, a cast's types from its input, and whether it owns a region from the draft's
+/// own regions. The builder writes a `sync` block's chain by this, so it is the same rule the seal
+/// check's census reads.
+bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id);
+
 /// `nodeMayFault` (camel/runtime/graph.h) asked of a node of a draft, with the same `byShape`
 /// reading of an elementwise operator. It is the fault half of `nodeIsFreelySchedulable` above,
 /// so a caller that has already asked whether the operator may be recomputed asks this alone.

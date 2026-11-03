@@ -40,22 +40,6 @@ using namespace camel::core::type;
 
 namespace camel::compile::gir {
 
-node_handle_t Builder::chainPlaceForNode(node_handle_t node) {
-    // A place is a place only where there is a statement to be ordered against: a block whose chain
-    // has not begun has nothing before it, so the pure value written first stands as it is -- it is
-    // where the chain starts, and there is no earlier statement for a `GATE` to stand after. A
-    // `GATE` made there has no wait at all, and the seal check refuses every `GATE` without one
-    // ("GATE node N without a wait"); 196 of this corpus's 3089 places were exactly that.
-    if (lastSyncedNode_ == nullptr) {
-        return node;
-    }
-    const node_handle_t place = chainPlaceFor(node);
-    if (place != node) {
-        chainPlaceGates_.insert(place);
-    }
-    return place;
-}
-
 void Builder::ensureRootGraph() {
     if (rootGraph_) {
         return;
