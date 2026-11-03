@@ -8882,7 +8882,36 @@ None: choice: the extents the type should write, or the value whose shape stands
 Every extent of the type has to be a number written in it: `float[2, 3]` answers `[2, 3]`, and that is what `extent_of::<float[2, 3]>()` gives. `float[]` (= `float[?]`) states one dimension and no length, and `float[..]` states neither the rank nor a length, so neither tells the function what to answer. Write the extents in the type the call names (`float[2, 3]`), or take the shape from a value the program has (`shape(xs)`). A transposition reaches this rule for a parameter whose value nobody has, and the type is then the only place its shape can come from.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/transforms/extent_of_needs_a_type_that_states_its_shape.cml`, run as `camel test/cases/compile/transforms/extent_of_needs_a_type_that_states_its_shape.cml ${backend}`)
+
+```camel
+// `extent_of::<A>()` answers the extents a type writes down, and `float[]` writes none.
+//
+// The function is the language's one spelling of "the shape a type states": its answer is a fact of
+// its **type argument** and of nothing else, which is what a transposition needs -- the adjoint of a
+// linear map is a function of the cotangent and of the shape of the map's domain, and a parameter
+// whose cotangent is what the transposed function takes has no value to read
+// (`transpose(pick)` on `x: float[3]`).
+//
+// That the answer is a fact of the type is also why a type that writes no shape has no answer:
+// `float[]` (= `float[?]`) states one dimension and leaves its length open, and `float[..]` states
+// neither the rank nor a length, so neither tells the function what to answer. Nothing here is a
+// value that was not computed or a shape nobody wrote down: the call asks a question the type does
+// not answer, and it is refused where it is instantiated, which is where the type is in hand.
+//
+// The repair the sentence names is to write the extents in the type (`float[2, 3]` answers
+// `[2, 3]`) or to ask a value for its shape (`shape(xs)`), which is a question about a value the
+// program has. This case is the refusal; the answer is what `transpose(pick)` on `x: float[3]`
+// reads, and the transposition walk asks the same rule (`statedExtentsOf`) rather than a second
+// reading of the extents.
+import rulesets.transpose
+
+func main(): int sync {
+    let extents: int[] = extent_of::<float[]>()
+    println(extents)
+    return 0
+}
+```
 
 ### IgnoredSideEffect
 
@@ -10929,7 +10958,23 @@ The transpose of '{0}' needs the shape of {1}, and the type '{2}' does not state
 A transposition turns the cotangent of the result into the cotangent of the parameter, and the adjoint of a linear map is a function of that cotangent and of the shape of the map's domain: the cotangent alone does not say how many positions the parameter has. So the type has to state the shape. Write the extents the parameter's value has in its declaration -- 'func loss_mean(x: float[..])' becomes 'func loss_mean(x: float[2, 3])' -- and 'transpose' builds the graph from them. Nothing is missing from the language here: a parameter whose type states its shape has a transpose.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/modules/autodiff/transpose_needs_parameter_shape.cml`, run as `camel test/cases/modules/autodiff/transpose_needs_parameter_shape.cml ${backend}`)
+
+```camel
+import rulesets.transpose
+import { transpose } from transforms
+import { mean_axis, sum } from tensor
+
+func loss_mean(x: float[..]): float {
+    return float(sum(mean_axis(x, 0, false) * ([1.0, 2.0, 3.0] as float[])))
+}
+
+func main(): int sync {
+    let back = transpose(loss_mean)(1.0)
+    'transpose should have been refused, and it answered {}'->format<back.0>->println
+    return 0
+}
+```
 
 ### PassesNeverRun
 
