@@ -5,10 +5,22 @@
 
 #include "camel/core/operator.h"
 #include "camel/core/type.h"
+#include "camel/core/type/resolver.h"
+
+#include <memory>
 
 slot_t __len_str__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __iter_str__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __len_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+/// `extent_of::<A>()`: the extents the array type `A` writes down, as an `int[]`. The value is a
+/// fact of the type argument and is settled where the call is built (`extentOfResolver`), so this
+/// kernel is the case of a call that reached the run without being settled.
+slot_t __op_extent_of__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+/// The rule of `extent_of::<A>()`: it reads the call's type argument and answers `int[]` for an
+/// array type whose extents are all written down (`camel::core::type::statedExtentsOf`). A type
+/// that leaves an extent open is refused where the call is instantiated, with
+/// `SemanticDiag::ExtentOfNeedsStatedShape`.
+std::shared_ptr<camel::core::type::FuncTypeResolver> extentOfResolver();
 
 slot_t __zip__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __range__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

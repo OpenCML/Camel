@@ -1717,3 +1717,16 @@ expect_stderr_contains = ["skip=backward construct=a node whose input was not co
 expect_output_not_contains = ["TRANSPOSE function="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "extent_of_needs_a_type_that_states_its_shape"
+desc = "`extent_of::<A>()` answers the extents a type writes down; `float[]` writes none, so the call is refused where it is instantiated. The sentence names the type and the repair, and no count is pinned: what has to stay true is that a type which states no shape is refused in words. `transpose(pick)` on `x: float[3]` reads the same rule (`statedExtentsOf`) for the shape it spreads a cotangent over, so this entry and `transpose_refuses_a_parameter_value_it_cannot_be_handed` are the two sides of one rule."
+kind = "negative"
+case = "../../../cases/compile/transforms/extent_of_needs_a_type_that_states_its_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 1
+expect_output_contains = ["extent_of"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

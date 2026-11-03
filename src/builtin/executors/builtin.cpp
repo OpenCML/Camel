@@ -415,6 +415,11 @@ std::unordered_map<std::string, operator_t> makeOpsImplMap() {
         {"tangent/init_arr", __tangent_init_arr__},
         {"tangent/last_arr", __tangent_last_arr__},
 
+        // `extent_of::<A>()`: the shape a type writes down. The value is a fact of the type
+        // argument and is settled where the call is built, so a call that reaches the run has
+        // nothing to read (`src/builtin/operators/struct.cpp#__op_extent_of__`).
+        {"op/extent_of", __op_extent_of__},
+
         // profiler
         {"profiler/begin", __profiler_begin__},
         {"profiler/end", __profiler_end__},

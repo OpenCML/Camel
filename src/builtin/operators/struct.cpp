@@ -5,6 +5,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/derivative.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/error/diagnostics/messages/semantic.h"
 #include "camel/core/operator.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
@@ -51,6 +52,103 @@ slot_t __iter_str__(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t __len_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *arr = norm.get<Array *>(0);
     return rtdata::toSlot(static_cast<Int64>(arr->size()));
+}
+
+// ---- `extent_of::<A>()`: the shape a type writes down ----
+//
+// A transposition is the adjoint of a linear map, and the adjoint is a function of the cotangent
+// and of the **shape of the map's domain** -- the cotangent alone does not say how many positions
+// the parameter has (`:op/idx_arr`'s law spreads one cotangent over the array it was read from).
+// The shape is a fact the parameter's type may write down (`func pick(x: float[3])`), and until
+// this builtin there was no way to read that fact as a value: a law can name the operand's value
+// and nothing of its type, and the value of a parameter whose cotangent is what the transposed
+// function takes is a value nobody has (author, 2026-11-03 17:55).
+//
+// So the language gets one function whose answer is a fact of its **type argument** and of nothing
+// else: `extent_of::<float[2, 3]>()` is `[2, 3]`, an `int[]`. A type that leaves an extent open
+// answers nothing and is refused where the call is instantiated (`extentOfResolver`), which is the
+// same rule `statedExtentsOf` (camel/core/type/composite/array.h) spells for every other reader.
+//
+// The value is settled where the call is built, not where it runs: an OPER node carries the
+// instantiated type of the call, never the type argument it was written with, so nothing at run
+// time still says which type the extents belong to. A reader that has the type -- the transposition
+// walk -- asks `statedExtentsOf` directly (`modules/transforms/transpose.cpp#shapeFromTypeOf`), and
+// the kernel below is the case of a call that reached the run without being settled.
+
+slot_t __op_extent_of__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)norm;
+    (void)ctx;
+    throwRuntimeFault(
+        RuntimeDiag::PassInternalError,
+        "calling `extent_of`",
+        "the extents of `A` are a fact of the type the call names, and an OPER node records the "
+        "instantiated type of the call but not the type argument it was written with, so the value "
+        "is settled where the call is built and there is nothing left for the run to read");
+    return 0;
+}
+
+namespace {
+
+/// `extent_of::<A>()`: the call's type argument is the whole question, so the rule reads it and
+/// nothing else. It takes no ordinary arguments and no `with` arguments (a call that writes any is
+/// not this function), and it answers `int[]` whenever `A` is an array type whose extents are all
+/// written down -- `statedExtentsOf` is the answer, so the builtin and the transposition walk cannot
+/// disagree about which types have a shape.
+class ExtentOfResolver final : public camel::core::type::FuncTypeResolver {
+  public:
+    /// A call with no type argument says nothing about a type, and this function answers about the
+    /// type it is given: `nullopt` here is "this is not a call of `extent_of`", not a diagnostic.
+    std::optional<FunctionType *> resolve(const type_vec_t &with, const type_vec_t &norm)
+        const override {
+        (void)with;
+        (void)norm;
+        return std::nullopt;
+    }
+
+    std::optional<FunctionType *>
+    resolveForCall(const type_vec_t &types, Type *expectedResult, const type_vec_t &with,
+                   const type_vec_t &norm, static_args_t normStatics) const override {
+        (void)expectedResult;
+        (void)normStatics;
+        if (!with.empty() || !norm.empty() || types.size() != 1 || types.front() == nullptr) {
+            return std::nullopt;
+        }
+        if (!statedExtentsOf(types.front()).has_value()) {
+            return std::nullopt;
+        }
+        return FunctionType::create(
+            camel::core::type::param_init_list_t{}, camel::core::type::param_init_list_t{},
+            ArrayType::create(Type::Int64()));
+    }
+
+    std::optional<std::string> explainCallRejection(
+        const type_vec_t &types, Type *expectedResult, const type_vec_t &with,
+        const type_vec_t &norm, static_args_t normStatics) const override {
+        (void)expectedResult;
+        (void)normStatics;
+        if (!with.empty() || !norm.empty() || types.size() != 1 || types.front() == nullptr) {
+            return std::nullopt;
+        }
+        return std::string("the type it is instantiated at is '") + types.front()->toString() +
+               "', and an extent it writes is not a number";
+    }
+
+    /// The sentence a reader is handed. It is the shape rule of the language stated where the call
+    /// is written, the way `TransposeNeedsParameterShape` states it where the transposition is
+    /// built: what to write instead is in the declaration, so the message names the type and says
+    /// which declaration to edit.
+    std::optional<camel::core::error::SemanticDiag> rejectionDiag() const override {
+        return camel::core::error::SemanticDiag::ExtentOfNeedsStatedShape;
+    }
+
+    std::string signature() const override { return "<A> () => int[]"; }
+};
+
+} // namespace
+
+std::shared_ptr<camel::core::type::FuncTypeResolver> extentOfResolver() {
+    return std::make_shared<ExtentOfResolver>();
 }
 
 slot_t __zip__(ArgsView &with, ArgsView &norm, Context &ctx) {

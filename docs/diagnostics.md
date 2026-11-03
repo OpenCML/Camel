@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-309 diagnostics: 288 errors, 21 warnings. 15 carry a machine-applicable edit, 294 say why they carry none.
+310 diagnostics: 289 errors, 21 warnings. 15 carry a machine-applicable edit, 295 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -269,6 +269,7 @@ prints one entry.
 | `0x03000208` | [SemanticDiag::LoopBodyNeedsNextState](#loopbodyneedsnextstate) | Error | no |
 | `0x03000209` | [SemanticDiag::CalledFallibleValue](#calledfalliblevalue) | Error | no |
 | `0x0300020A` | [SemanticDiag::WithPackArgumentType](#withpackargumenttype) | Error | no |
+| `0x0300020B` | [SemanticDiag::ExtentOfNeedsStatedShape](#extentofneedsstatedshape) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8860,6 +8861,28 @@ func main(): int sync {
     return 0
 }
 ```
+
+### ExtentOfNeedsStatedShape
+
+`0x0300020B` · Error · `SemanticDiag::ExtentOfNeedsStatedShape`
+
+**Fix**
+
+None: choice: the extents the type should write, or the value whose shape stands in for them, are the writer's
+
+**Message**
+
+```text
+`extent_of::<A>()` answers the extents the type `A` writes down, and this call's type writes none: {0}.
+```
+
+**Help**
+
+```text
+Every extent of the type has to be a number written in it: `float[2, 3]` answers `[2, 3]`, and that is what `extent_of::<float[2, 3]>()` gives. `float[]` (= `float[?]`) states one dimension and no length, and `float[..]` states neither the rank nor a length, so neither tells the function what to answer. Write the extents in the type the call names (`float[2, 3]`), or take the shape from a value the program has (`shape(xs)`). A transposition reaches this rule for a parameter whose value nobody has, and the type is then the only place its shape can come from.
+```
+
+*No example: no test small enough to show raises it.*
 
 ### IgnoredSideEffect
 

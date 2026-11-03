@@ -473,6 +473,7 @@ enum class SemanticDiag : uint32_t {
     RuleLeftIsNotAnOperator    = 0x000204,
     DuplicateRuleForOperator   = 0x000205,
     RuleRightUsesOuterVariable = 0x000207,
+    ExtentOfNeedsStatedShape   = 0x00020B,
 
     // Warnings
     IgnoredSideEffect = 0x100002,

@@ -586,68 +586,47 @@ FunctionType *transposeSignature(
 /// graph and transposes; a closure names its graph too, and then fails later, on the capture. (The
 /// switch that guarded this is gone; the entry it guarded is the one the cases read.)
 
-/// The extents a type's shape states, or nothing when the type leaves one of them open.
-///
-/// A shape is a fact about an array type: `float[2, 3]` states two extents, `float[]` states one
-/// dimension and leaves its length open, and `float[..]` states neither the rank nor a length. The
-/// reading of a stated extent is the one `jvp.cpp#zeroConstantFor` makes of the same fact --
-/// `ExtentForm::evaluate({})` answers the number a written extent holds and nothing for a `?` or for
-/// an extent over a name nothing binds -- so the two transforms agree about which types have a shape
-/// that can be written while the graph is built.
-std::optional<std::vector<int64_t>> statedShapeOf(const Type *type) {
-    if (type == nullptr || type->code() != camel::core::type::TypeCode::Array) {
-        return std::nullopt;
-    }
-    const auto *array = tt::as_ptr<camel::core::type::ArrayType>(const_cast<Type *>(type));
-    if (array == nullptr || array->elemType() == nullptr ||
-        !camel::core::type::isFloatingScalar(array->elemType()->code())) {
-        return std::nullopt;
-    }
-    const std::span<const camel::core::type::ExtentForm> stated = array->extents();
-    if (stated.empty()) {
-        // `T[..]`: the rank is the value's, so the type states no shape at all.
-        return std::nullopt;
-    }
-    std::vector<int64_t> extents;
-    extents.reserve(stated.size());
-    for (const camel::core::type::ExtentForm &extent : stated) {
-        const std::optional<int64_t> size = extent.evaluate({});
-        if (!size.has_value() || *size < 0) {
-            return std::nullopt;
-        }
-        extents.push_back(*size);
-    }
-    return extents;
-}
-
-/// The value a law's right side is handed for a parameter a cotangent is answered for: the zero of
-/// the parameter's type, which is that type's **shape** and nothing else.
+/// The value a law's right side is handed for a parameter a cotangent is answered for: the zeros of
+/// the shape the parameter's **type** writes down.
 ///
 /// `transposeSignature` gives the transposed function the cotangent and no parameter, so a law that
 /// reads the parameter -- `mean_axis_cotangent` reads `xs` for `numel` and `ones_like` -- has the type
 /// and not the argument. What the type says is the shape, and the shape is what a transposition needs:
 /// the adjoint of a linear map is a function of the cotangent and of the domain's shape (author,
-/// 2026-11-03 16:15). The value below carries that shape; every element of it is zero, which is the
-/// one thing here that is not the argument. A law that reads an *element* would therefore be answered
-/// with zeros -- and such a law is not a law of a transposition, because a transposition has no
-/// element of the argument to read. This is the same zero `jvp` gives a value that does not move
-/// (`jvp.cpp#zeroConstantFor`).
+/// 2026-11-03 16:15).
 ///
-/// Nothing when the type leaves an extent open: then the shape is written down nowhere, and the
-/// caller refuses by name instead of inventing one.
-gc_node_ref_t shapeCarrierOf(camel::runtime::GraphDraft &draft, Type *type) {
-    const std::optional<std::vector<int64_t>> extents = statedShapeOf(type);
+/// The shape is not read here: it is asked of the language, `extent_of::<A>()`, whose one spelling is
+/// `camel::core::type::statedExtentsOf` -- the same rule the builtin's resolver answers with
+/// (`src/builtin/operators/struct.cpp#extentOfResolver`), so the walk and a program that writes
+/// `extent_of::<float[2, 3]>()` read one fact the same way. The zeros of that shape are then written
+/// by the library's own operator, `tensor:zeros`, which is the operator `zeros_like` is built on
+/// (`modules/tensor/ops/creation_ops.cpp#zerosKernel`): the walk states the shape as an `int[]` and
+/// the library makes the value, from the shape and from the type the node carries.
+///
+/// Nothing when the type writes no shape: then the caller refuses by name instead of inventing one.
+gc_node_ref_t shapeFromTypeOf(camel::runtime::GraphDraft &draft, Type *type) {
+    const std::optional<std::vector<int64_t>> extents = camel::core::type::statedExtentsOf(type);
     if (!extents.has_value()) {
         return rt::kInvalidNodeRef;
     }
-    auto *array = static_cast<camel::core::type::ArrayType *>(type);
-    ::Array *zero = ::Array::create(
-        mm::autoSpace(), array, std::span<const int64_t>(*extents), /*zeroInit=*/true);
-    if (zero == nullptr) {
+    static camel::core::type::ArrayType *intArrayType =
+        camel::core::type::ArrayType::create(camel::core::type::Type::Int64());
+    ::Array *stated = ::Array::create(mm::autoSpace(), intArrayType, extents->size());
+    if (stated == nullptr) {
         return rt::kInvalidNodeRef;
     }
-    return draft.materializeStaticValue(
-        camel::core::rtdata::toSlot<::Array *>(zero), type, rt::kGCNodeFlagConstant);
+    for (size_t at = 0; at < extents->size(); ++at) {
+        stated->set<camel::core::rtdata::Int64>(
+            at, static_cast<camel::core::rtdata::Int64>((*extents)[at]));
+    }
+    const gc_node_ref_t shape = draft.materializeStaticValue(
+        camel::core::rtdata::toSlot<::Array *>(stated), intArrayType, rt::kGCNodeFlagConstant);
+    if (shape == rt::kInvalidNodeRef) {
+        return rt::kInvalidNodeRef;
+    }
+    const gc_node_ref_t zeros = draft.addOperNode(type, nullptr, "tensor:zeros");
+    draft.setNormInputs(zeros, std::span<const gc_node_ref_t>(&shape, 1));
+    return zeros;
 }
 
 /// What the graphs of one transpose share: one group (a callee's transpose is another member of
@@ -1383,15 +1362,16 @@ bool buildTransposeMember(
                         }
                         if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                             // Neither a port nor a closure slot hands this parameter in, and the
-                            // law's right side reads its value. That value is the **shape** the
-                            // parameter's type states, and nothing else: the transposed function is
-                            // given the cotangent alone, so a law that reads `xs` for `numel` or
-                            // `ones_like` is answered from the type. A parameter whose shape the type
-                            // states (`float[2, 3]`) is answered with a zero array of that shape --
-                            // a *shape carrier*, which is the only thing a law that reads `xs` for
-                            // `numel` or `ones_like` can ask of a value this graph does not have.
+                            // law's right side reads its value. What the law reads it for is the
+                            // **shape** the parameter's type states (author, 2026-11-03 17:55:
+                            // "`transpose(pick)` on `x: float[3]` answers `([0.0, 1.0, 0.0])`, and it
+                            // rests on `extent_of`, not on a zero carrier"): the transposed function
+                            // is given the cotangent alone, so a law that reads `xs` for `numel` or
+                            // `ones_like` is answered from the type, through the language's own
+                            // `extent_of` rule (`camel::core::type::statedExtentsOf`) and the
+                            // library's own `tensor:zeros`.
                             Type *const askType = function->funcType()->normTypeAt(at);
-                            if (const gc_node_ref_t carrier = shapeCarrierOf(draft, askType);
+                            if (const gc_node_ref_t carrier = shapeFromTypeOf(draft, askType);
                                 carrier != rt::kInvalidNodeRef) {
                                 forwardOf[ref] = carrier;
                                 return carrier;
