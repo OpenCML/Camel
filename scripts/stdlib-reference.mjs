@@ -2986,8 +2986,10 @@ if (mode === '--write' || mode === '--verify-doc') {
         // adds one for a class EXAMPLE_STOPS does not have, one for a class whose recorded number
         // moved, one for a class the run no longer finds, one per example that stops with no class at
         // all, and one for the totals against STALE_FRAGMENTS. The number here is how many of those
-        // lines stand above it, so it says "problem(s)": "example class(es)" would name a count this
-        // is not, and "does not record" would be false for a class whose number merely moved.
+        // lines stand above it, so it says "problem(s)". The line used to read "example class(es) the
+        // run found and the script does not record", which is history and nothing else: it counted
+        // classes it was not counting, and "does not record" was false for a class whose number
+        // merely moved. What this prints now is "example problem(s)".
         console.log(
             `${mismatched.length} example problem(s) between the run and the script's records: a class ` +
                 'it does not record, a number that moved, or a marker that is stale',
