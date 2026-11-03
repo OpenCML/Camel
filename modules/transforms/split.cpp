@@ -59,6 +59,58 @@ bool refuseAt(
     return false;
 }
 
+/// Where to report a refusal made at a node of a **lifted** graph. `jvp` writes the nodes of its copy,
+/// and a written node carries no source origin (0, `DraftNodeHeader::origin`), so `refuseAt` alone
+/// would leave the refusal with no position: the sentence would name a shape and say nothing about
+/// where the program writes it. The position is then the first node of the graph that has one -- the
+/// fallback `GraphDraft::firstNodeOrigin` documents ("where to report"), which for a lifted body is
+/// the body's own first statement -- and, when the graph has none either, the first origin of the
+/// graph it was lifted from, which is a node the program wrote.
+camel::source::origin_id_t originOfRefusal(
+    const rt::GCGraph *graph, const rt::Program *program, gc_node_ref_t ref) {
+    const auto firstOrigin = [](const rt::GCGraph *of) -> camel::source::origin_id_t {
+        if (of == nullptr) {
+            return camel::source::kInvalidOriginId;
+        }
+        for (gc_node_ref_t at = 0; at < of->nodeCount(); ++at) {
+            const uint64_t origin = of->nodeOrigin(at);
+            if (origin != 0) {
+                return static_cast<camel::source::origin_id_t>(origin);
+            }
+        }
+        return camel::source::kInvalidOriginId;
+    };
+    if (graph != nullptr && ref < graph->nodeCount()) {
+        const uint64_t origin = graph->nodeOrigin(ref);
+        if (origin != 0) {
+            return static_cast<camel::source::origin_id_t>(origin);
+        }
+    }
+    const camel::source::origin_id_t inGraph = firstOrigin(graph);
+    if (inGraph != camel::source::kInvalidOriginId) {
+        return inGraph;
+    }
+    if (graph != nullptr && program != nullptr) {
+        const GraphId liftedFrom = graph->liftedFrom();
+        if (rt::isValid(liftedFrom)) {
+            return firstOrigin(program->graph(liftedFrom));
+        }
+    }
+    return camel::source::kInvalidOriginId;
+}
+
+/// `refuseAt`, for a shape the cut meets in a graph `jvp` wrote: the same sentence, with the position
+/// found for it by `originOfRefusal` when the node itself carries none.
+bool refuseAtLifted(
+    SplitGraph &refusal, const rt::GCGraph *source, const rt::Program *program, gc_node_ref_t ref,
+    std::string construct, std::string why) {
+    refuseAt(refusal, source, ref, std::move(construct), std::move(why));
+    if (refusal.refusedOrigin == camel::source::kInvalidOriginId) {
+        refusal.refusedOrigin = originOfRefusal(source, program, ref);
+    }
+    return false;
+}
+
 /// The condition of the branch whose Join is `join`, or `kInvalidNodeRef` when no branch names it: a
 /// `Brch` node holds the Join it fills and takes the condition as its input, so the condition of the
 /// branch is read off the graph and never guessed from the shape of the arms.
@@ -262,14 +314,35 @@ bool answersAPairAt(const rt::GCGraph &graph, const rt::Program *program, gc_nod
 /// being the values and then their tangents (`jvpSignature`). The `with` arguments stand after both
 /// halves (`dataInputsOf` hands back the ordinary ones first), so the list to halve is the ordinary
 /// one, not the whole data list.
-std::vector<gc_node_ref_t> tangentArgumentsOf(const rt::GCGraph &graph, gc_node_ref_t ref) {
+///
+/// One place of that second half is not a tangent anybody takes. A parameter with no tangent space
+/// takes a `()` slot in the lifted signature (`Tangent<int> = ()`), the slot holds the empty tuple,
+/// and the half that *reads* tangents declares **no port** for it: `buildSplitGraph` gives the
+/// backward half one port per tangent that has a space and skips the rest. So the slot's argument is
+/// dropped here, by the callee's own signature -- the same list, read from the same place
+/// (`parameterOfPort`), so a call site and the graph it calls number their ports alike.
+///
+/// Handing it on was one argument too many, and the run time says so by name (measured 2026-11-04):
+/// `Runtime indirect call norm-arity mismatch: caller graph 'split_of_jvp_of_g_backward' node 6 has
+/// 2 args, target graph 'split_of_jvp_of_widen_backward' has 1 norm ports`, on a callee
+/// `widen(n: int, x: float)` whose lifted list is `(int, float, (), float)`.
+std::vector<gc_node_ref_t> tangentArgumentsOf(
+    const rt::GCGraph &graph, const rt::Program *program, gc_node_ref_t ref) {
     const std::vector<gc_node_ref_t> all = dataInputsOf(&graph, ref);
     const size_t withCount               = graph.withInputsOf(ref).size();
     const size_t ordinary                = all.size() > withCount ? all.size() - withCount : 0;
     const size_t half                    = ordinary / 2;
+    const rt::GCGraph *callee            = calleeGraphOf(graph, program, ref);
+    const FunctionType *calleeType       = callee != nullptr ? callee->funcType() : nullptr;
     std::vector<gc_node_ref_t> tangents;
     tangents.reserve(half);
     for (size_t i = half; i < ordinary; ++i) {
+        if (calleeType != nullptr && i < calleeType->normTypesCount()) {
+            const Type *tangentType = calleeType->normTypeAt(i);
+            if (tangentType == nullptr || !camel::core::tangentSpaceOf(tangentType).hasSpace()) {
+                continue; // the `()` slot of a parameter with no tangent space
+            }
+        }
         tangents.push_back(all[i]);
     }
     return tangents;
@@ -378,7 +451,7 @@ struct Half {
         const std::vector<gc_node_ref_t> all = dataInputsOf(source, ref);
         if (tangent) {
             const gc_node_ref_t call = pairTangentReadOf(*source, program, ref);
-            return call != rt::kInvalidNodeRef ? tangentArgumentsOf(*source, call) : all;
+            return call != rt::kInvalidNodeRef ? tangentArgumentsOf(*source, program, call) : all;
         }
         if (!answersAPairAt(*source, program, ref)) {
             return all;
@@ -771,6 +844,33 @@ struct Half {
                     refusal, source, ref, "an access node",
                     "the node reads no input, so the half has nothing to project");
             }
+            // A member of a **struct** is read by name (`qq.a`, `GCAccsKind::StructKey`) and a member
+            // of a tuple by place (`qq.0`, `GCAccsKind::TupleIndex`). The draft writes both forms
+            // (`addAccsNode(type, key)` and `addAccsNode(type, index)`) and this half copies the
+            // place alone: the name is dropped, the read becomes a tuple index carrying the
+            // payload's `value` as its place, and at run time a `Struct` is indexed as if it were a
+            // `Tuple` -- `idx < t->size()`, "Tuple index out of bounds" in `nodevm.cpp` (measured
+            // 2026-11-04 on `split(jvp((qq: Point) => qq.a * 4.0 + qq.b))(p)`, a plain struct
+            // parameter and not a `with` one; `jvp` alone answers 11.0 and 4.0, so the lift is right
+            // and the cut is what loses the graph).
+            //
+            // Refused by name, at the read, rather than answered with a graph that indexes the wrong
+            // member: what the two halves number is a *place* in a tuple, and a struct's member is
+            // named, so there is no place here for either half to copy. A struct whose value is only
+            // *passed* -- no field read -- is cut as it stands, and its tangent is the struct of the
+            // members' tangents (`test/cases/transforms/split/split_struct_port.cml`); the shapes
+            // differ in exactly this: whether the body names a member.
+            if (body->accsKind == rt::GCAccsKind::StructKey) {
+                return refuseAtLifted(
+                    refusal, source, program, ref,
+                    "a field of a struct, read by name (`" + std::string(body->key()) + "`)",
+                    "the cut copies a member read by its **place** in a tuple, and a struct's member "
+                    "is read by its **name**: the name is not a place either half numbers, so a half "
+                    "that copied this read as a place would read a member the program did not name "
+                    "-- and would index a `Struct` as a `Tuple` when it ran. Both halves walk the "
+                    "ports of the lifted signature by position, and none of them carries a field's "
+                    "name, so a body that reads one is a shape this cut does not take");
+            }
             if (const gc_node_ref_t call = pairTangentReadOf(*source, program, ref);
                 call != rt::kInvalidNodeRef) {
                 if (!tangent) {
@@ -1044,7 +1144,7 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 // -- through the call's own value arguments, which the second half reads and which
                 // therefore are residuals -- but with the same rule the result side uses, which is why
                 // a call there is descended by its value arguments alone.
-                for (gc_node_ref_t argument : tangentArgumentsOf(lifted, call)) {
+                for (gc_node_ref_t argument : tangentArgumentsOf(lifted, program, call)) {
                     if (argument < nodeCount && visited[argument] == 0 &&
                         std::find(later.begin(), later.end(), argument) == later.end()) {
                         later.push_back(argument);
@@ -3204,6 +3304,59 @@ SplitGraph buildSplitGraph(
                    << "half of `" << callee->name() << "` declares no exit type)\n";
                 return SplitGraph{};
             }
+            // **A cut of a cut.** The forward half of `callee` that this build would call is not the
+            // whole answer when that half is itself answered by a call of *its* callee's forward half:
+            // the nested build made that second cut and adopted its two graphs into its own program,
+            // and this build adopts that program in turn -- but `Program::adoptMissing` copies only
+            // the graphs the program it reads **owns**, and an adopted graph is not one it owns. So
+            // this program would hold the halves of `callee` and not the halves of `callee`'s callee,
+            // and the call the value half writes to the deeper forward half would name a graph the
+            // program does not hold -- `runtimeTarget != nullptr`, "a direct call names a function
+            // whose graph is not in the program's graph table" in `nodevm.cpp` (measured 2026-11-04
+            // on `split(jvp(f))` where `f` calls `g` and `g` calls `h`: the cut of `jvp_of_f` answers
+            // a call of `split_of_jvp_of_g_forward`, which answers one of
+            // `split_of_jvp_of_h_forward`, and the last pair of graphs is in neither).
+            //
+            // Refused at the call, by name, with the graph it names: which graphs a build adopts is a
+            // property of the build, not of the program, so "the outer program does not hold the
+            // inner halves" is a statement about this cut and not about the function. What would lift
+            // it is carrying `SplitGraph::nestedPrograms` as well (the field says which programs a
+            // cut stood on, one level down); until then
+            // this shape is one the two halves cannot be handed on for, and a program that needs it
+            // is a shape the cut names rather than a graph it builds wrongly.
+            if (!nested.nestedPrograms.empty()) {
+                const rt::GCGraph *deeper = nullptr;
+                for (const rt::GCGraph *one : pairCalleesOnValueChain(*callee, program)) {
+                    if (one != nullptr) {
+                        deeper = one;
+                        break;
+                    }
+                }
+                gc_node_ref_t call = rt::kInvalidNodeRef;
+                for (gc_node_ref_t ref = 0; ref < pending[at]->nodeCount(); ++ref) {
+                    if (pending[at]->calleeIdOf(ref) == callee->id()) {
+                        call = ref;
+                        break;
+                    }
+                }
+                SplitGraph refused;
+                refuseAtLifted(
+                    refused, pending[at], program, call,
+                    "a call to `" + std::string(callee->name()) + "`, whose own cut stands on `" +
+                        std::string(deeper != nullptr ? deeper->name() : callee->name()) + "`",
+                    "that callee answers the pair, so the value half answers its call with that "
+                    "callee's forward half -- and that half was itself answered by the forward half "
+                    "of the graph it calls, made inside the nested cut. This build adopts the graphs "
+                    "of a nested cut's program, and a program carries the graphs it *made*, not the "
+                    "ones it adopted: the deeper pair of halves belongs to neither program this "
+                    "build can reach, so the call the value half writes would name a graph its "
+                    "program does not hold -- which the run time reports as a call to a function not "
+                    "in the graph table. Both halves are wanted here and only one level of them "
+                    "travels, so a body whose calls nest twice is a shape this cut does not carry");
+                os << "REINTERP split function=" << function->name() << " skip=callee construct="
+                   << refused.refusedConstruct << " uri=- why=" << refused.refusedWhy << '\n';
+                return refused;
+            }
             calleeCuts.emplace(callee, member);
             nestedPrograms.push_back(nested.program);
             pending.push_back(callee);
@@ -3384,6 +3537,9 @@ SplitGraph buildSplitGraph(
     built.program  = group.program();
     built.forward  = const_cast<rt::GCGraph *>(forwardMade);
     built.backward = const_cast<rt::GCGraph *>(backwardMade);
+    // What this cut stands on, past the graphs `program` already holds: a caller one level out
+    // cannot adopt them (`Program::adoptMissing` copies owned graphs only), so it reads this list.
+    built.nestedPrograms = nestedPrograms;
     return built;
 }
 
