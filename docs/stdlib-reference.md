@@ -1599,9 +1599,11 @@ move). Measured on this tree, `x_times_y` being `x * y`:
 The first line is the shape every `with_grad` composition has, and the derivative it owes is
 `d/dx (x*y)` at `y = 2`, which is 2.0. So the composition answers the zero of the gradient's
 type for every weight that reaches the body through that list -- and a weight always does, since
-the `with` list is what a weight is written as. Two more shapes stop before that point and are
-refused where they stop: a `with` parameter that is a struct, or a body that captures a value the
-cut has not classified yet.
+the `with` list is what a weight is written as. The other shapes a `with_grad` is asked for stop
+before that point and are refused where they stop, so each one names its own wall instead of
+answering a number: a `with` parameter that is a struct, and a function of two `with` parameters
+with no ordinary parameter, both stop in `jvp`; a tensor `with` parameter whose lambda captures
+an array stops in `split`.
 
 The result type says only what is true of this call: it never gives a value. The declaration the
 engine's transform has -- `ValueAndGradient<F>`, whose second member is the type of the *first*
