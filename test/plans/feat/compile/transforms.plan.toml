@@ -1401,7 +1401,7 @@ case = "../../../cases/compile/transforms/transpose_unread_array_parameter_stops
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 1
-expect_output_contains = ["autodiff: a zero tangent array needs an array with a tangent", "TRANSPOSE function=g type=(float) => (float[], float)"]
+expect_output_contains = ["autodiff: a zero tangent array needs an array with a tangent", "TRANSPOSE function=g graph=", "type=(float) => (float[], float)"]
 expect_output_not_contains = ["skip=unread-parameter"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
