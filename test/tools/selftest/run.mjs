@@ -66,6 +66,15 @@ const SELFTEST_JOBS = '4'
 // reports its own cost is the only thing that stops the next raise from being a guess.
 // See docs/handover/questions/2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant.cn.md.
 const cost = { children: 0, cpuStart: process.cpuUsage(), wallStart: process.hrtime.bigint() }
+// What each child run was actually started with, counted at the spawn and never read back from
+// `SELFTEST_JOBS`. The distinction is the whole point of the [calibration] line: the constant says
+// what this file meant to pass, and a line that prints the constant is not a reading -- blanking the
+// constant left the line saying `jobs=4` while every child took the runner's default width, so the
+// one thing the line exists for (the width these readings were taken at) was the one thing it never
+// measured. `inherited` is the state of a child started with no width of ours and therefore with the
+// runner's own (`availableParallelism`); it is a different word on the line for exactly that reason.
+const widthTally = { fixed: 0, named: 0, inherited: 0, cli: 0 }
+const widthsPassed = new Set()
 const problems = []
 const scratchRoot = path.join(repoRoot, 'tmp', 'test')
 // When the self-test runs under the runner, this is its own scratch directory; a direct run
@@ -79,7 +88,21 @@ function runRunner(args, extraEnv = {}) {
     // parallel one) keeps it: the width is the subject of those checks. Every other child run is
     // taken at `SELFTEST_JOBS`, which is what makes its reading independent of the load it is
     // started under. The flag goes before the target, where the runner reads it.
-    const width = args.includes('--jobs') ? [] : ['--jobs', SELFTEST_JOBS]
+    //
+    // What this call appends is recorded here, where the decision is made, because the line that
+    // reports it used to report the constant instead -- see `widthTally`. A blank `SELFTEST_JOBS`
+    // appends nothing rather than an empty `--jobs`: that is a child with no width of ours, and it
+    // is the state the control experiment puts this file in to show the line can tell the two apart.
+    const namesItsOwnWidth = args.includes('--jobs')
+    const width = namesItsOwnWidth || !SELFTEST_JOBS ? [] : ['--jobs', SELFTEST_JOBS]
+    if (namesItsOwnWidth) {
+        widthTally.named += 1
+    } else if (width.length > 0) {
+        widthTally.fixed += 1
+        widthsPassed.add(SELFTEST_JOBS)
+    } else {
+        widthTally.inherited += 1
+    }
     const proc = spawnSync(process.execPath, [runner, ...width, ...args], {
         encoding: 'utf8',
         cwd: repoRoot,
@@ -93,6 +116,10 @@ function runRunner(args, extraEnv = {}) {
 // through it, not through run-tests.mjs, or it would test a different parser.
 function runTestCli(args, extraEnv = {}) {
     cost.children += 1
+    // No width here, and none wanted: these calls only resolve a target (`--list`), so the width
+    // they would run at is not part of what they check. They are counted in their own bucket so the
+    // [calibration] line can account for every child it printed a total for.
+    widthTally.cli += 1
     const proc = spawnSync(process.execPath, [path.join(repoRoot, 'test', 'runner.mjs'), ...args], {
         encoding: 'utf8',
         cwd: repoRoot,
@@ -1117,16 +1144,14 @@ if (!/^\[PASS\] names_its_own_card\b/m.test(busy.output)) {
     problems.push('free device: a test that named its own card was skipped or failed')
 }
 
-if (problems.length > 0) {
-    console.error(problems.join('\n'))
-    console.error('--- runner output ---')
-    console.error(output)
-    process.exit(1)
-}
-console.log('runner self-test ok')
-// Two numbers, printed and used by nothing: how many child runs it took, and what this run cost in
-// wall time on this host. `timeout_ms` is untouched -- that is what makes this line safe to add, and
-// why it is a reading rather than a decision.
+// A reading, printed and used by nothing: how many child runs it took, what width this file put
+// them at, and what the run cost in wall time on this host. `timeout_ms` is untouched -- that is
+// what makes this line safe to add, and why it is a reading rather than a decision.
+//
+// Printed before the verdict, and on a failing run too. The run that most needs to know the width
+// its numbers were taken at is the one that went red, and a check that only speaks when it is green
+// is the shape this project keeps calling a fake reading: on the day the sweep fixture came back
+// `pass: 0` the line was never printed, because the file exits with `problems` first.
 //
 // The CPU figure this line used to print is gone, and it is not coming back as `process.cpuUsage()`:
 // that call charges this process only, and nearly all of the work here is in children, so it read
@@ -1142,4 +1167,20 @@ console.log('runner self-test ok')
 // file's own runs are judged by. A measurement that moves the thing it measures is worse than the
 // number it replaces, so the reading stays where the runner makes it.
 const spentWall = Number(process.hrtime.bigint() - cost.wallStart) / 1e9
-console.log(`[calibration] child-runs=${cost.children}; jobs=${SELFTEST_JOBS}; wall=${spentWall.toFixed(1)} s`)
+// `width` is what was appended, taken from the set of values actually passed at the spawn; with the
+// constant blanked the set is empty and the line says `inherited`. Four buckets that add up to the
+// child count printed beside them: `fixed` took our `--jobs`, `own` named one in the call, `cli` only
+// resolved a target, and `inherited` took the runner's default width.
+const widthTaken = widthsPassed.size > 0 ? `fixed(${[...widthsPassed].join('|')})` : 'inherited'
+console.log(
+    `[calibration] child-runs=${cost.children}; width=${widthTaken}; `
+        + `fixed=${widthTally.fixed}, own=${widthTally.named}, inherited=${widthTally.inherited}, `
+        + `cli=${widthTally.cli}; wall=${spentWall.toFixed(1)} s`
+)
+if (problems.length > 0) {
+    console.error(problems.join('\n'))
+    console.error('--- runner output ---')
+    console.error(output)
+    process.exit(1)
+}
+console.log('runner self-test ok')
