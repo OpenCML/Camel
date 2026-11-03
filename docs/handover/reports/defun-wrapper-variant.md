@@ -12,7 +12,7 @@
 FUNC node 1 calls a graph that is not among the graphs this graph calls (its reference table).
 ```
 
-`src/passes/opt/defun/defunctionalize.cpp#writeCallGraph` 因此把被调图也用 `addDependency` 加进引用表。下一笔里真被引用的图（包装图）走的是同一条路，而且是**两端都要**：
+`src/passes/opt/defun/defunctionalize.cpp#writeCallGraph`（该函数已删除，本页下文记着删它的那次改动）因此把被调图也用 `addDependency` 加进引用表。下一笔里真被引用的图（包装图）走的是同一条路，而且是**两端都要**：
 
 * 造它的遍，在它自己的草稿里 `addDependency`；
 * 被改写去调用它的那些图的草稿，也要 `addDependency(包装图的 id)`——否则同样是这一句红，而这次它是在**一次真的改写之后**才出现，很容易被当成改写本身写坏了。
