@@ -1,88 +1,90 @@
-# 抬起的 `with` 值进了值列表，切不动的那三种形状归谁拒
+# 抬起的 `with` 值进了值列表：已按甲收窄，切不动的形状按名字拒
 
-## 问什么
+## 现在什么状态
 
 `lane-jvpwith` 让被调函数的抬升把 `with` 实参**当值带切向**（`modules/transforms/jvp.cpp#liftSignature`：
-非 `var` 的 `with` 值按声明顺序进普通值列表，它的切向进同序的切线列表）。这一半是对的：`jvp` 单独跑一个
-struct 权重的 λ，切向就是对的（读数在下）。但库层是 `vjp = transpose(split(jvp(f)))`，它还要能**切**它，
-而三种形状在 `split` 里停住或崩：
+能带的 `with` 值按声明顺序进普通值列表，它的切向进同序的切线列表）。这一半是对的，而且是本轮要的：
+`vjp((ww) => weighted<ww>(2.0))(3.0)` 从 `value=9.0 grad=0.0`（**错数**）变成 `value=9.0 grad=(3.0)`，
+引擎一侧一个字没动。
 
-1. **struct 形状的端口** → 崩（`Tuple index out of bounds`）；
-2. **张量（`f64[..]`）形状的端口** → 拒绝（`the port is not a parameter of the graph, so neither half takes it`）；
-3. **两级嵌套、内层被调函数没有普通参数** → 崩（`a direct call names a function whose graph is not in the program's graph table`）。
+不能带的形状（聚合、数组、以及「被调函数自己没有值」的两级嵌套）**已经在 `jvp` 里按名字拒绝**，不再
+落到 `split` 里崩。这一页记的是：两条门判据、它们现在的拒绝句、以及为什么剩下的路只有 `split` 能走。
 
-**要作者裁的是**：这三种形状的拒绝（或修），归 `jvp`（本 lane 的文件里加一道它讲不真的门），还是归
-`split`（本 lane 明令不动的文件，而那两句拒绝的原话已经在那里）？
+## 两条门判据（都能从代码里读出来）
 
-## 实测依据（树 `jvpwith`，`db741501d` + 本 lane 改动，2026-11-04 03:0x +08:00，主机 load 1m 13–20）
+### 一、只有「切向是自己的标量」才提升（`jvp.cpp#withValueIsCarriable`）
 
-`grad_first_with_parameter` 的四组逐组读数（每组单独一个程序，程序与输出都原样粘）：
+被提升的 `with` 值会变成抬起图的一个**参数**，所以它必须是整条路都吃得下的形状：切向空间等于自身、
+一个字宽（`Tangent<float> = float`）。聚合与数组不提升。**删了会怎样**（2026-11-04 实测）：
+
+- `Point` 权重（`grad_first_with_parameter` 的 `pg`）：提升后抬升本身建得出来（`jvp` 单独跑
+  `value=11.0 tangent=4.0` 是对的），`split` 切它时死在 `nodevm.cpp` 的 `idx < t->size()`
+  （`Tuple index out of bounds`）——**崩**；
+- `f64[..]` 权重（`wg`）：抬升建得出来，`split` 两步后按名字拒
+  （`the port is not a parameter of the graph, so neither half takes it`）——拒绝离原因远了两步。
+
+同一形状在**没有 `with`** 的普通 struct 参数上也崩（`split(jvp((qq: Point) => qq.a * 4.0 + qq.b))(p)`
+在 `db741501d` 原样上就崩，同一条保证），所以这不是本 lane 造的，只是本 lane 让它多了一条到达的路。
+
+### 二、`with` 值不被提升时，在被调的抬升里**拒绝**而不是写零（`jvp.cpp` 的 `with`-端口一步）
+
+一个不是 `var` 的 `with` 值如果不被提升，它的切向就是该类型的零 —— 而调用方的链上**有**它的方向。
+把这个方向换成零，正是本 lane 消掉的那个错数（`grad=0.0`），只是形状更宽。所以拒绝，句子：
+「a `with` value of type `Point` … a callee's lift hands a direction on through its ordinary list, and
+only a scalar can go there …」。`var` 的 `with` 参数例外：它是 body 会写的单元，本来就没有方向可丢。
+
+### 三、两级嵌套里「被调函数自己没有值」拒绝（`jvp.cpp` 的 `Func` 分支）
+
+一个函数如果**没有自己的普通参数**（读到的每个值都从 `with` 来），它的值那一半全是提升出来的
+`with` 值。在**被调的抬升里**再遇到它，`split` 会把那个被调切第二遍，而切出来的半边指着一张嵌套程序
+没带的图。**删了会怎样**：`nodevm.cpp` 的 `runtimeTarget != nullptr`
+（`a direct call names a function whose graph is not in the program's graph table`）——**崩**。
+
+为什么不是「被调函数有普通参数才提升」这条字面规则：`sk` 调的 `scaled` 同样没有普通参数
+（两个值都在 `with` 里），而它在**顶层**抬升里被调，切一刀就够，答 `6.0` 是对的。字面规则会把这个
+数拿走。坏的是**第二刀**，所以门判的是第二刀。
+
+## 现在的读数（树 `jvpwith`，`db741501d` + 本 lane，2026-11-04 03:2x +08:00，主机 load 1m 17–29）
 
 ```
-# gx -- 基线 library=0.0（错数），现在对上
-group gx   engine=3.0 library=3.0 value=9.0
+# weighted —— 基线 grad=(0.0)，现在对上
+engine   grad=3.0 with_grad=(9.0, 3.0)
+library  vjp value=9.0 grad=(3.0)
+library  split value=9.0 grad=3.0
 
-# sk -- 基线拒绝 jvp has no forward transform，现在对上
+group gx   engine=3.0 library=3.0 value=9.0
 sk engine=6.0
 sk library=6.0 value=12.0
-
-# sk 的另一半：两参数被调，基线拒绝，现在对上
 twoparam vjp   value=6.0 grad=2.0
-twoparam split value=6.0 grad=2.0
+nested split value=7.0 grad=2.0          <- 没有 with 的两级嵌套仍然通过
+jvp int arg value=6.0 tangent=3.0
 
-# wg -- 与基线同一条拒绝，原文不变
-wg engine=[4.0, 5.0, 6.0]
-transforms: split does not build this function (the port is not a parameter of the graph, so neither half takes it).
-
-# pg -- 基线拒绝 jvp has no forward transform，现在崩
-pg engine={ a: 4.0, b: 1.0 }
-Camel Invariant Violation: ../src/passes/sched/nodevm/nodevm.cpp(548) Guarantee: idx < t->size()
-
-# sx -- 基线拒绝 jvp has no forward transform，现在崩
-sx engine=4.0
-Camel Invariant Violation: ../src/passes/sched/nodevm/nodevm.cpp(639) Guarantee: runtimeTarget != nullptr
+# 三处收窄后的拒绝（都有源位置，都不是崩）
+transforms: jvp does not reinterpret a `with` value of type `Point` yet (...)
+    --> jvpwith_pg.cml:9:7        with <p: Point>
+transforms: jvp does not reinterpret a `with` value of type `float[..]` yet (...)
+    --> jvpwith_wg.cml:8:7        with <w: f64[..]>
+transforms: jvp does not reinterpret a call to `scaled`, which takes nothing but its `with` values yet (...)
+    --> jvpwith_sx.cml:14:18      return scaled<k, x>()
 ```
 
-**两条「不是本 lane 建的」证据**，都是为了说明上面第 1、3 条不是新缺陷：
+## 为什么不选丙（一律不提升）
 
-1. **struct 的崩在没有 `with` 的普通 struct 参数上就能复现**。`split(jvp((qq: Point) => qq.a * 4.0 + qq.b))(p)`
-   在 `db741501d` 原样上崩（同一条 `Tuple index out of bounds`），而同一个 λ 的 `jvp` 单独跑给
-   `jvp only value=11.0 tangent=4.0`——抬升答对了，是**切**崩。按 `file#Symbol` 说：`split.cpp#valuePortsOf`
-   与后半的 `file#tangentArgumentsOf` 走的是端口，而 struct 的形状在切面里没人翻译。
-2. **两级嵌套在基线上是通过的**。`split(jvp((x: float) => outer(inner(x))))(3.0)` 在 `db741501d` 上
-   `nested split value=7.0 grad=2.0`、`nested vjp value=7.0 grad=2.0`（`inner`/`outer` 各 1 个普通参数）。
-   `sx` 的差别只有一处：内层 `scaled` 的**普通参数为空**（`(k, x)` 两个都是 `with`，全被提升进值列表），
-   于是切出来的两级里第二级的图没被采纳进程序表。
+丙就是**退回错数**：`weighted` 会重新答 `grad=0.0`，而引擎答 3.0。按 **对 > 明确拒绝 > 错数 > 崩**，
+丙比现在差两档，不可取。
 
-## 三条路
+## 剩下给 `split` 的（不在本 lane 的文件里）
 
-- **甲（默认）**：`jvp` 照建，`split` 按名字拒绝切不动的形状。**代价**：`split` 要加判据（struct 端口的
-  拒绝、两级嵌套的图采纳），那是 `lane-lincall` 的文件；在它落地之前，`pg`/`sx` 从「拒绝」变成「崩」。
-- **乙**：`jvp` 侧加门——聚合类型的 `with` 值不提升（退回写零）、以及「已在被调抬升里又遇到被调」时拒绝。
-  **代价**：这两句话**都不真**：`jvp` 确实建得出（`value=11.0 tangent=4.0` 就是它建对了），门只能在注释里
-  承认是替 `split` 挡；而且 `split` 修好后这道门必须删，删的人不会知道它为什么在那儿。
-- **丙**：聚合/张量 `with` 一律不提升（= 退回本 lane 之前的零切向）。**代价**：这正是 `gx` 那条错数的来源，
-  直接取消本 lane 的目标。
+1. **结构体形状的端口**：`modules/transforms/split.cpp#valuePortsOf` 拿前半、`#tangentArgumentsOf`
+   拿后半，两侧都按端口走；一个 struct 端口的投影在切里没人翻译，落成
+   `nodevm.cpp` 的 `idx < t->size()`（`Tuple index out of bounds`）。应有句子：这个端口不是任何一半
+   能取的值形状 —— 与它现有的「不是图的参数」同一族，说清形状而不是只说位置。
+2. **两级嵌套里没被采纳的图**：`split.cpp` 的 `calleeCuts`（每次 transform 调用一张表）与
+   `nestedPrograms`（`for (const rt::Program *nested : nestedPrograms)` 才 adopt），一个被调在**另一
+   次嵌套切**里被切时，外层指到的半边图没被带进来，落成 `nodevm.cpp` 的 `runtimeTarget != nullptr`。
+3. **`()` 槽的算术**（本轮顺带发现，与 `with` 无关）：抬升签名给没有切向空间的值一个 `()` 槽，被调
+   函数的后半被调用时实参比参数多一个 —— `Runtime indirect call norm-arity mismatch: caller
+   'split_of_jvp_of___g_318___backward' node 3 has 2 args, target 'split_of_jvp_of_widen_backward' has
+   1 norm ports`。`split.cpp#tangentArgumentsOf` 是算这组实参的地方。
 
-## 默认建议（施工方默认）
-
-**走甲**，理由三条：
-
-1. 严重序是「对 > 明确拒绝 > 错数 > 崩」。乙/丙都换不来「对」，而甲已经消掉了**错数**（`gx`、`sk`、两参数
-   的那条都对了）；剩下的崩是既有的、静默之外的失败。
-2. 判断「切不切得动」的唯一知情处是 `split`，拒绝的原话和位置也在那里；把判据写在 `jvp` 等于第二个
-   意见。
-3. `jvp` 侧的门会让「被调函数的抬升」这件事在下游修好之后仍然被挡住，而它挡不住任何真正的坏图。
-
-**代价说清楚**：`pg`、`sx` 现在**崩**，基线是**拒**。不静默、不出错数，但比基线差一档。若作者要求
-`lane-jvpwith` 先退回「拒」等 `split`（= 乙），最小门是：`liftSignature` 只提升「切向空间等于自身且
-不是聚合/数组」的 `with` 值；`liftFuncValue` 在 `promoteWiths` 已为真时拒绝（那正好就是 `sx` 的两级）。
-
-## 判据 / 哨兵（本次读数，主机 load 1m 13–20，不安静）
-
-- `feat/compile` **2238 = 2235 / 2 / 1**，与 `db741501d` 逐条相同（两条 `transpose_loop_escape`）。
-- `feat/compile/transforms` 基线 **105 = 102 / 2 / 1**；本 lane 加了一条新用例后 **106 = 103 / 2 / 1**，
-  红的两条不变。
-- `feat/transforms/split` **19/19**。
-- 新用例 `test/cases/compile/transforms/library_grad_of_a_with_weight.cml` 在基线上**红**（`grad=0.0` +
-  第二行拒绝），本 lane 两行都对——两条断言都是先测出红才留下的。
+这三处都不改，这是记录与交接，不是待裁的问题；本轮的选择（甲：`jvp` 按名字拒、`split` 待补）已经落地。
