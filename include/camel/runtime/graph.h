@@ -227,6 +227,33 @@ bool nodeMayFault(
 /// extents are all constants.
 bool shapesAreFixed(const camel::core::type::Type *type);
 
+/// Whether a node of this kind is a statement of a chain -- one a `sync` block's chain has to
+/// order (design principles 3.4; the author's ruling of 2026-11-03, 01:10): an operator that has an
+/// effect or may fault, a cast whose conversion may fail, a call, a branch or a loop that owns a
+/// control region, and a `GATE` -- the block's value is handed on behind one, so the wait reaches
+/// it (docs/design/effects/edges.cn.md 5.3). What is not: a `Func`, an operator or cast that is
+/// pure and cannot fault (an operator declared un-recomputable included -- "can this be moved" and
+/// "does the chain order this" are two questions, and `may_be_rearranged` answers the first), and a
+/// `Data`, `Port`, `Copy`, `Fill`, `Accs` or `Join`: the model lets a pass arrange those freely, so
+/// none of them is something the chain orders.
+///
+/// This is the answer to that question and nothing else, and there is one implementation of it: the
+/// seal check's census and the builder's sync-chain link both ask here, so "written" and "derived"
+/// cannot answer differently. `standsForRegion` is `nodeStandsForItsRegion` where the caller has a
+/// graph; without it a `Brch` or a `Loop` is not known to carry anything.
+namespace graph {
+bool is_chain_statement(
+    GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget = nullptr,
+    const camel::core::type::Type *castSource = nullptr, bool standsForRegion = false);
+} // namespace graph
+
+/// The same question, under the name the call sites write it under.
+inline bool isChainStatement(
+    GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget = nullptr,
+    const camel::core::type::Type *castSource = nullptr, bool standsForRegion = false) {
+    return graph::is_chain_statement(kind, oper, castTarget, castSource, standsForRegion);
+}
+
 class GCGraph;
 /// `graph::may_be_rearranged` of a node of a graph; a CAST is asked with its result type and the
 /// type of its input.
@@ -242,6 +269,16 @@ inline bool nodeIsFreelySchedulable(const GCGraph &graph, gc_node_ref_t ref) {
 /// `nodeMayFault` of a node of a graph, read the way `nodeIsFreelySchedulable(const GCGraph &)`
 /// reads its operands and types.
 bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref);
+
+/// `isChainStatement` of a node of a graph: the operator from the node's body, a cast's types from
+/// its input, and whether it owns a region from `nodeStandsForItsRegion`.
+namespace graph {
+bool is_chain_statement(const GCGraph &graph, gc_node_ref_t ref);
+} // namespace graph
+
+inline bool isChainStatement(const GCGraph &graph, gc_node_ref_t ref) {
+    return graph::is_chain_statement(graph, ref);
+}
 
 /// Whether a node owns a control region of this graph, and so stands on the outside for what runs
 /// inside it (`docs/design/effects/edges.cn.md` 4.6): a `BRCH` or a `LOOP` that carries an arm or a

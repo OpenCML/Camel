@@ -519,12 +519,13 @@ inline bool nodeStandsForItsRegion(node_handle_t node) {
 /// Whether the model lets an order edge sit on this node (docs/design/effects/edges.cn.md 4.6):
 /// an order edge only orders, and its two ends are effects or nodes that may fault, so a node the
 /// model lets a pass arrange freely -- pure and unable to fault (design principles 3.4) -- carries
-/// none. This is not the seal's question, and its answer is not the seal's set: a chain's set is
-/// narrower -- a `Call` stands on a chain, and a `Func`, a `Gate` and a `Cast` that may fault do not
-/// -- so an edge written through this one can be refused there. Merging the two decides first
-/// whether an order edge may stand only where a chain statement stands, and that is a rule about
-/// order edges, not about this function. A node whose operator is not known is left out rather than
-/// ordered: a missing order only leaves the two writes in the order they were written.
+/// none. This is a question about order edges and not the question "is this a statement of a
+/// chain": that one is `runtime::isChainStatement`, and the sync-chain link asks it
+/// (`chainLinkSaysSomething`). The two sets are close and not the same -- an operator declared
+/// un-recomputable takes an order and is not a chain statement -- so a caller that is writing a
+/// chain must ask the chain's question, and a caller that is writing an order edge this one.
+/// A node whose operator is not known is left out rather than ordered: a missing order only leaves
+/// the two writes in the order they were written.
 inline bool nodeTakesAnOrder(node_handle_t node) {
     if (node == nullptr) {
         return false;
@@ -595,15 +596,19 @@ inline bool fromIsArgumentReadOf(node_handle_t from, node_handle_t to) {
 
 /// Whether a `sync` block's chain has to name this pair: a statement of the block follows the one
 /// written before it by a sync edge, and that edge carries "used" as well as "after" (5.3). The
-/// data-dependency skip still stands wherever it did: a node the model lets a pass arrange freely --
-/// pure and unable to fault (3.4) -- is not on the chain, and neither is a statement whose link
-/// carries something beyond the order. The one pair the skip must not take is an effectful or
-/// faulting statement that reads a `var` through a place of its own (`fromIsArgumentReadOf`): the
-/// read's chain place is the read's, so without the edge the statement has no place on the chain.
+/// data-dependency skip still stands wherever it did: a node that is not a statement of a chain --
+/// pure and unable to fault (3.4), so a pass may arrange it -- is not on the chain, and neither is a
+/// statement whose link carries something beyond the order. "Is a statement of a chain" is
+/// `runtime::isChainStatement`, the same answer the seal check's census reads: two predicates for
+/// the one question is what let the writer and the checker disagree. The one pair the skip must not
+/// take is an effectful or faulting statement that reads a `var` through a place of its own
+/// (`fromIsArgumentReadOf`): the read's chain place is the read's, so without the edge the statement
+/// has no place on the chain.
 inline bool chainLinkSaysSomething(node_handle_t from, node_handle_t to) {
     return linkCheek(from, to) &&
            (!hasDirectDataDependency(from, to) ||
-            (nodeTakesAnOrder(to) && fromIsArgumentReadOf(from, to)));
+            (camel::runtime::isChainStatement(*nodeDraftOf(to), nodeIdOf(to)) &&
+             fromIsArgumentReadOf(from, to)));
 }
 
 /// Whether a control edge that stands in for the data edge a pair is still owed says anything: the
