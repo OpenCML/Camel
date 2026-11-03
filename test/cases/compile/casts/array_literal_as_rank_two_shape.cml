@@ -1,0 +1,10 @@
+// The rank-two reading of the same rule, kept as a guard: a nested literal `as float[2, 2]` is
+// built into the stated shape and stays a `f32[2, 2]`. The rank-one fix above must not move it.
+func take22(m: float[2, 2]): void {
+    println(m)
+}
+
+func main(): int sync {
+    take22([[1.5, 2.5], [3.5, 4.5]] as float[2, 2])
+    return 0
+}

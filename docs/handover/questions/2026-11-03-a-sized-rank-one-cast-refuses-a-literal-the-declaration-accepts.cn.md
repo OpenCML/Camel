@@ -80,4 +80,25 @@ if (extents.size() < 2) {
 
 **默认甲**。理由是 §2：**一个已经过、一个被拒，被拒的那个还与自己的诊断措辞矛盾**；设计原则里没有一条说 `as` 要比声明窄，而 `as` 在秩二上又比声明宽。这不是取舍，是同一把尺子量出了两个数。
 
-**未做**：本页只给读数与判断，没有改语义（任务要求"先别改，等看读数"）。修的时候注意 t5（`float[2]` 装 3 个元素）必须仍然拒，否则就是把长度检查一起拆了。
+## 6. 默认已落地（本页仍在等作者裁定）
+
+§5 的**甲**已经做了，一处改动，没有第二份判据：
+
+`src/compile/gct/builder.cpp#statesARank` 原来第一句是 `if (extents.size() < 2) return false;` —— **秩一永远不是"一个形状"**。于是 `[1.0,2.0,3.0] as float[3]` 走普通构建得到 `float[]`，再由 `as` 按 `castSafety` 拒掉；而声明和传参走的是 `visitDataInto`，那里 `float[3]` 被同一句判成"不是形状"、同样落到普通构建，**只是它们后面还有一道注解 CAST 把它救回来**，`as` 没有那一道。§2 的三行表就是这两条路的差。
+
+改成"所有 extent 都是常量就是一个形状"（秩一也算）之后，三种位置都走 `visitRankedArrayInto`：
+
+| 读数 | 结果 |
+| --- | --- |
+| `take3([1.5, 2.5, 3.5] as float[3])`，`take3(x: float[3])` | 过（值真的是 `f32[3]`，`take3` 只收这个） |
+| `[1.5, 2.5, 3.5] as float[2]` | **仍拒**，理由具体：`The array literal written here has extent 3, but the position states 2 for this dimension.` |
+| `[[1.5, 2.5], [3.5, 4.5]] as float[2, 2]` | 过（秩二没被弄坏） |
+
+守卫不是靠 `rejectLiteralData` 的兜底话，而是靠 `visitRankedArrayInto` 里本来就有、秩二一直在用的那条逐层 extent 检查——**长度检查没有拆，反而从"发散到兜底"变成"点名哪个维度差多少"**。
+
+四层判据：`feat/compile` 2193 / **2188 pass / 2 fail**（两条红是 `transpose_loop_escape.two_values_of_two_kinds` 与 `.second_state_of_the_same_loop`，非本改动带出）、`feat/parse` **115/115**、`feat/compile/transforms` **80 = 77/2/1**、`feat/transforms/split` **19/19**。永久用例三条在 `test/cases/compile/casts/array_literal_*.cml`，`casts.plan.toml` 各一条。
+
+**留给作者两件事**：
+
+1. **`arrayLiteralFitsShape` 那一支没动**（`builder_control.cpp:420`：`extents.size() < 2` 只比长度、不符时返回 false 落兜底）。改完之后 `as` 不再走到那里——字面量在 GCT 就已经是 `float[3]` 值。所以"具体理由"是 `visitRankedArrayInto` 给的，不是这一支给的。这一支只剩在我没找到的路径上才会露兜底话；要不要另外硬化，按"发现第二份先报再统一"的规矩**报上，未改**。
+2. `statesARank` 现在对**所有**秩一定长位置生效（声明、传参、返回、循环状态一样）。这是"同一条规则"的含义，也意味着 `[]` 进 `float[3]`、`[a, b, c]`（元素是计算值）进 `float[3]` 这几条以前走普通构建的路径现在都走 rank 构建——四条判据无红。若作者要缩小影响面，可把放宽只用在 `As` 分支，但那会是第二处判据，本车道没做。
