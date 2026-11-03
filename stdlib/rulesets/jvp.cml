@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_integer, is_same, is_string, Tangent } from types
-import { matmul, mean_axis, relu, reshape, softmax, sum, take, where, zeros_like } from tensor
+import { element_at, matmul, mean_axis, relu, reshape, softmax, sum, take, where, zeros_like } from tensor
 import { log, pow } from math
 import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
 
@@ -338,11 +338,34 @@ func index_into::<T>(x: T[], i: int): T {
     return x[i]
 }
 
+/// `[position, length]`: how a read states where it reads and how long the array is.
+///
+/// The pair is a call rather than a list literal written in `jvp_idx_arr`'s right side because a
+/// rule's right side is copied node by node and has to be a straight line of nodes in the order it
+/// writes them: a list literal holding a computed element is written before the node that computes
+/// it, and the copy refuses that (`skip=rule uri=:op/idx_arr reason=the rule's right side uses a node
+/// written after it`, measured 2026-11-04).
+func extent_pair(position: int, length: int): int[] {
+    return [position, length]
+}
+
 /// `d(xs[i]) = dxs[i]`: the tangent of an element is that element of the array's tangent. The index
 /// carries no tangent of its own -- `Tangent<int>` is `()` -- so it does not enter the right side.
+///
+/// The linear body also states how long the array is: `len(xs)` is a value of the primal, and it
+/// travels to the read as `at[1]` (`tensor.element_at` is `xs[i]` with the length stated). The law
+/// that answers the read's transposition builds its zeros from that length and reads nothing of the
+/// array, which is what a transpose rule is allowed to do (author, 2026-11-03 11:10 and 17:35): `xs`
+/// is the operand the cotangent comes back through, so on the reverse side it has no value, and
+/// `T[]` carries no length in its type (design principles 5.4).
+///
+/// The left side stays `index_into` -- `:op/idx_arr` at two operands, the operator's own spelling --
+/// and only the linear half is written with the length. The two sides of one rule no longer say the
+/// same thing, which is the point: the primal reads an element, the tangent reads an element of the
+/// tangent *and* carries the fact the reverse reading needs.
 /// @example index_into([0.5, 0.25], 1)    // the tangent of `xs[1]` when `dxs` is `[0.5, 0.25]`
 export rule jvp_idx_arr::<T>(xs: T[], i: int) {
-    index_into(xs, i) => (dxs: T[]) => index_into(dxs, i)
+    index_into(xs, i) => (dxs: T[]) => element_at(dxs, extent_pair(i, len(xs)))
 }
 
 // ---- the forward rule of `^` (a power) ----

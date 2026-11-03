@@ -38,7 +38,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { full, matmul, mean_axis, numel, ones_like, relu, shape, subtract, sum, sum_to, take, transpose, where, zeros_like } from tensor
+import { element_at, full, matmul, mean_axis, numel, ones_like, relu, shape, subtract, sum, sum_to, take, transpose, where, zeros, zeros_like } from tensor
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
@@ -342,7 +342,42 @@ func index_into::<T>(x: T[], i: int): T {
 #op(':tangent/scatter_add_arr')
 func scatter_into::<T>(xs: T[], i: int, delta: T): T[]
 
-/// The transpose of `xs[i]`: `ct` at `i`, zero everywhere else.
+/// `n` zeros of the cotangent's own element type, in a rank-one array: the base a transposed read
+/// scatters into.
+///
+/// The declared result is the point. `zeros` answers an array of **open rank** (the rank comes from
+/// a runtime shape list) and the scatter below takes a rank-one array, so the two do not unify. A
+/// body that declares `T[]` settles it once, where `[n]` is also legal -- a runtime list is not
+/// something a rule's right side may hold.
+///
+/// The cotangent is the call's element-type witness: the rule's right side cannot write `zeros_of::<T>`
+/// (a spelled type argument there is a function value to the copy, measured 2026-11-04), and passing
+/// the cotangent binds `T` without reading any value of the array the cotangent comes back through.
+func zeros_of::<T>(ct: T, n: int): T[] when is_float::<T>() {
+    return zeros::<T>([n])
+}
+
+/// The transpose of `tensor:element_at(xs, at)`: `ct` at `at[0]`, zero everywhere else, where the
+/// zeros are `at[1]` of them and that is the length the **forward** half stated.
+///
+/// This is the law the linear half of a read meets (`rulesets.jvp`'s `jvp_idx_arr` passes
+/// `[i, len(xs)]`). It reads the list and nothing of `xs`: a transpose rule reads only known
+/// operands, and `T[]` carries no length in its type (design principles 5.4), so the length arrives
+/// as an operand instead of being taken from the array the cotangent comes back through. `len(xs)`
+/// is a value of the primal, which the cut carries to the half that reads it, so what a call site
+/// hands over is one integer list.
+export rule element_at_t::<T>(xs: T[], at: int[]) when is_float::<T>() {
+    element_at(xs, at) => (ct: T) => scatter_into(zeros_of(ct, at[1]), at[0], ct)
+}
+
+/// The transpose of `xs[i]` where the array is a **known** operand: `ct` at `i`, zero everywhere
+/// else, in `xs`'s own shape.
+///
+/// This is the two-operand spelling of the same law, and it stays for the graphs that write the read
+/// over a forward value's array -- `transpose` itself builds `:op/idx_arr` nodes over a known value
+/// when it reverses a loop. It reads `xs` because in that shape `xs` is a value the transposition
+/// has; the linear half of `jvp_idx_arr` does not come here (it calls `element_at`), which is what
+/// keeps the shape-only read out of the linear path.
 export rule idx_arr_t::<T>(xs: T[], i: int) {
     index_into(xs, i) => (ct: T) => scatter_into(zeros_like(xs), i, ct)
 }
