@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：42 页
+## 现在在等作者：43 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -36,6 +36,7 @@
 | [`2026-11-03-should-one-unused-parameter-warn-once-per-rule`](2026-11-03-should-one-unused-parameter-warn-once-per-rule.cn.md) | 一个未使用的类型参数，该在律上报一次还是每侧面一次？ |
 | [`2026-11-03-should-vjp-carry-the-with-list-as-jvp-does`](2026-11-03-should-vjp-carry-the-with-list-as-jvp-does.cn.md) | `Vjp<F>` 该不该和 `Jvp<F>` 同形地带 `WithOf<F>`？ |
 | [`2026-11-03-the-capture-does-not-reach-the-body-is-not-the-whole-cause`](2026-11-03-the-capture-does-not-reach-the-body-is-not-the-whole-cause.cn.md) | 捕获"没进循环输入"不是全部原因：两条通道都实现了，错数一个也没动 |
+| [`2026-11-03-the-criterion-case-cannot-tell-a-right-law-from-a-wrong-one`](2026-11-03-the-criterion-case-cannot-tell-a-right-law-from-a-wrong-one.cn.md) | 一条分辨不了对错的判据，能不能算判据？——`mean_axis_transpose` 的 6.0 既对也错 |
 | [`2026-11-03-the-lifted-list-is-grouped-and-the-ports-must-follow`](2026-11-03-the-lifted-list-is-grouped-and-the-ports-must-follow.cn.md) | 抬升列表已定为 grouped、空切向占位；剩下的是建图里的端口次序 |
 | [`2026-11-03-the-remote-helper-loses-a-plans-stderr`](2026-11-03-the-remote-helper-loses-a-plans-stderr.cn.md) | 远程 helper 把 plan 的 stderr 整段丢掉了：这条修只活在本机，够不够？ |
 | [`2026-11-03-the-self-test-is-red-on-develop-and-has-no-name`](2026-11-03-the-self-test-is-red-on-develop-and-has-no-name.cn.md) | 自检在 develop 上是红的：`runner.backend_matrix` 里 7 个用例失败，这一红该由谁摘？ |
