@@ -574,6 +574,42 @@ void takeVjp(VjpBuilder &b, const VjpCall &call) {
             {call.inputs[0], call.inputs[1], *dy}));
 }
 
+// pick_at(t, at): the element at `at[0]` of a rank-1 tensor whose length `at[1]` states
+// (`elementAtKernel` below). A read moves no element, so its adjoint is the read's own: the
+// cotangent of the element goes back to the position that was read, and every other position keeps
+// a zero (design principles 9.9: the reverse of a gather is a scatter-add). That is the adjoint the
+// core files for the same read under its own spelling
+// (`src/builtin/operators/derivative.cpp#idxArrayVjp`), written here with the position taken out of
+// the list.
+//
+// The zeros are `:tangent/zeros_arr` of `t` and not an array built from `at[1]`: a pullback rule is
+// handed the operand, and the length that operand holds is the one `elementAtKernel` checked the
+// stated length against -- a length that disagrees is a fault there, never a silently reshaped
+// read -- so the zeros are as long as `at[1]` says. `at[1]` is therefore read nowhere; the list is
+// read only at `at[0]` (`:op/idx_arr(at, 0)`), the position the cotangent lands on. That is the one
+// difference from the library's law for this read
+// (`stdlib/rulesets/transpose.cml#pick_at_t`): a transpose law reads only known operands and has no
+// array to take a length from, so it builds the same zeros from `at[1]`. Both scatter into `at[0]`,
+// so both answer the same array
+// (`test/cases/compile/transforms/pick_at_gradient_answered_by_the_engine.cml`).
+void pickAtVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 2);
+    const auto dy = b.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    type::Type *const tangent = camel::core::machineryTangentTypeOf(b.nodeType(call.inputs[0]));
+    if (tangent == nullptr) {
+        return; // an array whose elements have no tangent: the read has none either
+    }
+    const std::array<vjp_node_t, 1> zeroInputs{call.inputs[0]};
+    const vjp_node_t zero = b.addOper(tangent, ":tangent/zeros_arr", zeroInputs);
+    const std::array<vjp_node_t, 2> positionInputs{call.inputs[1], staticInt(b, 0)};
+    const vjp_node_t position = b.addOper(Type::Int64(), ":op/idx_arr", positionInputs);
+    const std::array<vjp_node_t, 3> scatter{zero, position, *dy};
+    b.accumulateGradient(call.inputs[0], b.addOper(tangent, ":tangent/scatter_add_arr", scatter));
+}
+
 // pick_at(t, at): the element at `at[0]` of a rank-1 tensor whose length `at[1]` states.
 //
 // The length is not a convenience and not a hint: it is the operand that makes the read's pullback
@@ -837,6 +873,10 @@ std::vector<OpDef> layoutOps() {
     // The subscript forms are differentiated by the same rule as the calls they name: the
     // indices of `t[idx]` take no gradient, and t's receives the scatter-add (takeVjp).
     setVjp(defs, "idx_take", &takeVjp);
+    // The read with a stated length is differentiated by the read's own adjoint (`pickAtVjp` above):
+    // `pick_at` is `xs[i]` with the length stated, so its pullback is `:op/idx_arr`'s, with the
+    // position read out of the list.
+    setVjp(defs, "pick_at", &pickAtVjp);
     // one_hot's input is discrete (an integer array or a rank-1 integer tensor): its derivative
     // is zero by definition (design principles 9.9), and the float one-hot rows are locally
     // constant in it. The rule is therefore empty: no gradient, no error, and no caller has to
