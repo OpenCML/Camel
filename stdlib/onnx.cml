@@ -43,10 +43,9 @@ export func supported_operators(): string[]
 /// one that runtime has (`'none'` switches the check off).
 /// @effect writes a file and reads the function's graph
 /// @fails error value `ExportUnsupported` when `fn` is not a function, when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node; error value `IOError` when the model cannot be written
-/// @example export_model<out: "/tmp/model.onnx">(fn, example)
-/// @example export_model<out: "/tmp/model.onnx", dynamic_axes: [0]>(fn, example)
-/// @example export_model<out: "/tmp/model.onnx", target: "onnxruntime-cpu">(fn, example)
-/// @example-fragment the call needs a function value and an example of the arguments that function takes, which the description introduces (the exporter reads the function's graph, so no value a fragment can write stands for it)
+/// @example export_model<out: "/tmp/model.onnx">((x: float) => x * 2.0, 2.0)
+/// @example export_model<out: "/tmp/model.onnx", dynamic_axes: [0]>((xs: f32[2, 3]) => xs[0][0], [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])
+/// @example export_model<out: "/tmp/model.onnx", target: "onnxruntime-cpu">((x: float) => x * 2.0, 2.0)
 #op('onnx:export_model')
 with <out: string, dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'>
 export func export_model::<F, E>(fn: F, example: E): void! when is_function::<F>()

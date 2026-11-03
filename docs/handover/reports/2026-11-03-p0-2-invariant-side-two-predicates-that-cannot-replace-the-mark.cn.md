@@ -56,4 +56,4 @@ N09 [:io/println, OPER] --SYNC--> N0B [label="update", type=FUNC, value_type=int
 
 **要改的是建图层**：`src/compile/gir/builder_helpers.h#writeSyncLink` / `src/runtime/draft.cpp#setSyncInputs` / `src/runtime/draft_inline.cpp` 的内联拼接——要么不再把非语句节点串进链（链尾直接接后一条语句），要么让**每个链尾都落到 `GATE`**，让「链在这里结束」由节点而不是标记表达。**检查侧在此之前无论怎么写谓词都会红 3224 以上。**
 
-**撤净**：两份补丁在 `D:\Temp\p02-invariant-5222.patch`（甲）与 `D:\Temp\p02-invariant-v2.patch`（乙），树上不留代码改动，本页是这条车道唯一的提交内容。`git status --porcelain` 空，分支 `lane-p02-invariant`。
+**撤净**：两份补丁在 `D:\Temp\p02-invariant-5222.patch`（甲）与 `D:\Temp\p02-invariant-v2.patch`（乙），树上不留代码改动，本页是这条车道唯一的提交内容。`git status --porcelain` 空，分支 `37bbd03d4`（原 `lane-p02-invariant`，该分支已删）。

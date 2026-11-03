@@ -7,9 +7,11 @@
 #include "rule_expand.h"
 
 #include "camel/core/forward.h"
+#include "camel/core/loop_kind.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/tangent_space.h"
+#include "camel/core/type/composite/array.h"
 #include "camel/core/type/tree.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
@@ -27,6 +29,7 @@ namespace camel::transforms {
 
 namespace mm = camel::core::mm;
 namespace rt = camel::runtime;
+using camel::core::type::ArrayType;
 using camel::core::type::FunctionType;
 using camel::core::type::Type;
 using camel::runtime::gc_node_ref_t;
@@ -1846,26 +1849,112 @@ bool buildTransposeMember(
                 // The state's initial values are the loop's norm inputs after the range; the
                 // escapes are compared with them below, so they are read once here.
                 const auto oldNorm = function->normInputsOf(ref);
+                // **The rounds are undone from the last to the first** (design 4.2, 4.3). Copying
+                // the sequence into the reverse loop and iterating it -- what this case did -- walks
+                // the rounds in the order they were written, so a per-round map that does not commute
+                // comes back as the product in the wrong order: `vjp_loop.rounds_are_undone_in_reverse`
+                // reads (1.0, 10.0) that way and (1.0, 1.0) this way. The reverse loop therefore
+                // iterates `range(n - 1, -1, -1)` -- the round *numbers*, the last one first -- and a
+                // round reads its own element out of the sequence with `:op/idx_arr`, the operator
+                // `xs[i]` is built from (`index_into` in `src/core/forward.cpp`); the reverse pass in
+                // `modules/autodiff/pullback.cpp` reads its tape the same way. The element is no
+                // longer a value the two loops share: it is a function of the round number, which is
+                // what makes the pairing right rather than merely reversed.
+                const bool iterates    = camel::core::loopHasIterable(function->loopKindOf(ref));
+                // Where the round takes its element from: the sequence itself (an array) or the two
+                // bounds of an interval, from which the round takes `a + round`
+                // (`LoopIterableForm`, include/camel/core/loop_kind.h). Both are read outside the
+                // loop, so the reverse loop's own body only carries the round number.
+                gc_node_ref_t sequence = rt::kInvalidNodeRef;
+                gc_node_ref_t intervalLower = rt::kInvalidNodeRef;
+                gc_node_ref_t backwardsRange = rt::kInvalidNodeRef;
+                bool intervalForm = false;
+                if (iterates) {
+                    sequence = oldNorm.empty() ? rt::kInvalidNodeRef : forward(oldNorm.front());
+                    if (sequence == rt::kInvalidNodeRef) {
+                        os << "TRANSPOSE function=" << function->name() << " skip=range node="
+                           << ref << '\n';
+                        return false;
+                    }
+                    intervalForm =
+                        function->loopIterableFormOf(ref) == camel::core::LoopIterableForm::Interval;
+                    const auto intConstant = [&](int64_t value) {
+                        return draft.materializeStaticValue(
+                            camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(value),
+                            Type::Int64(),
+                            rt::kGCNodeFlagConstant);
+                    };
+                    // How many rounds the loop runs: the sequence's length, or `b - a` for an
+                    // interval. An empty sequence makes an empty range, and the loop then runs no
+                    // round -- which is the same number of rounds the forward loop ran.
+                    gc_node_ref_t roundCount = rt::kInvalidNodeRef;
+                    if (intervalForm) {
+                        const std::array<gc_node_ref_t, 1> pair{sequence};
+                        intervalLower = draft.addAccsNode(Type::Int64(), 0);
+                        draft.setNormInputs(
+                            intervalLower, std::span<const gc_node_ref_t>(pair.data(), pair.size()));
+                        const gc_node_ref_t upper = draft.addAccsNode(Type::Int64(), 1);
+                        draft.setNormInputs(
+                            upper, std::span<const gc_node_ref_t>(pair.data(), pair.size()));
+                        const std::array<gc_node_ref_t, 2> span{upper, intervalLower};
+                        roundCount = draft.addOperNode(Type::Int64(), nullptr, ":op/sub_l");
+                        draft.setNormInputs(
+                            roundCount, std::span<const gc_node_ref_t>(span.data(), span.size()));
+                    } else {
+                        const std::array<gc_node_ref_t, 1> only{sequence};
+                        roundCount = draft.addOperNode(Type::Int64(), nullptr, ":struct/len_arr");
+                        draft.setNormInputs(
+                            roundCount, std::span<const gc_node_ref_t>(only.data(), only.size()));
+                    }
+                    const std::array<gc_node_ref_t, 2> lastRound{roundCount, intConstant(1)};
+                    const gc_node_ref_t lastIndex =
+                        draft.addOperNode(Type::Int64(), nullptr, ":op/sub_l");
+                    draft.setNormInputs(
+                        lastIndex, std::span<const gc_node_ref_t>(lastRound.data(), lastRound.size()));
+                    const std::array<gc_node_ref_t, 3> steps{lastIndex, intConstant(-1), intConstant(-1)};
+                    Type *const rangeType = ArrayType::create(Type::Int64());
+                    backwardsRange = draft.addOperNode(rangeType, nullptr, ":struct/range");
+                    draft.setNormInputs(
+                        backwardsRange, std::span<const gc_node_ref_t>(steps.data(), steps.size()));
+                }
                 const uint32_t newRegion =
                     draft.addRegion(rt::GCRegionKind::LoopBody, 0);
                 draft.setInsertRegion(newRegion);
-                // The body takes the iterated element first and the states after it. The element is
-                // not differentiated (it comes from the range), so it keeps its type and goes
-                // unused; each state becomes one cotangent, so the region grows one port per state
-                // and, later, one per escaped value.
+                // The body takes the round number first and the states after it; each state becomes
+                // one cotangent, so the region grows one port per state and, later, one per escaped
+                // value. The number is not differentiated (it comes from the range), so it keeps its
+                // type and goes unused by the rules.
                 std::vector<gc_node_ref_t> newPorts;
-                const gc_node_ref_t elementPort = draft.addPortNode(
-                    function->node(regionPorts.front())->dataType(),
-                    draft.allocateRuntimeSlot(function->node(regionPorts.front())->dataType()));
+                Type *const elementType =
+                    iterates ? Type::Int64() : function->node(regionPorts.front())->dataType();
+                const gc_node_ref_t elementPort =
+                    draft.addPortNode(elementType, draft.allocateRuntimeSlot(elementType));
                 newPorts.push_back(elementPort);
-                // The round's element is the one thing both loops have: the forward loop iterated
-                // it and the reverse loop iterates the same array, so round k reads element k in
-                // either direction. It is therefore a value a round can *forward* rather than one
-                // it has to refuse -- and it is where the backward half `split` hands out reads its
-                // per-round residuals from, because the tape the cut gives that half to iterate is
-                // that half's element. A rule that needs the round's own state still refuses
+                // The round's element, read at the round's own number: `xs[round]` for an array and
+                // `a + round` for an interval. Both stand inside the body region, so the number they
+                // read is this round's. A rule that needs the round's own state still refuses
                 // (`skip=state`): the state has no per-round value in the reverse walk.
-                forwardOf[regionPorts.front()] = elementPort;
+                if (iterates) {
+                    const gc_node_ref_t elementOfRound = [&]() -> gc_node_ref_t {
+                        if (intervalForm) {
+                            const std::array<gc_node_ref_t, 2> at{intervalLower, elementPort};
+                            const gc_node_ref_t sum =
+                                draft.addOperNode(Type::Int64(), nullptr, ":op/add_l");
+                            draft.setNormInputs(
+                                sum, std::span<const gc_node_ref_t>(at.data(), at.size()));
+                            return sum;
+                        }
+                        const std::array<gc_node_ref_t, 2> at{sequence, elementPort};
+                        const gc_node_ref_t read = draft.addOperNode(
+                            function->node(regionPorts.front())->dataType(), nullptr, ":op/idx_arr");
+                        draft.setNormInputs(
+                            read, std::span<const gc_node_ref_t>(at.data(), at.size()));
+                        return read;
+                    }();
+                    forwardOf[regionPorts.front()] = elementOfRound;
+                } else {
+                    forwardOf[regionPorts.front()] = elementPort;
+                }
                 // A state's cotangent port lives in the state's own tangent space: a loop that
                 // carries a `float[]` state pulls back an array, and a port typed `float` would hand
                 // that array to a number -- the same read that took the process down when two
@@ -2035,21 +2124,26 @@ bool buildTransposeMember(
                 draft.setRegionResult(newRegion, regionResult);
                 draft.setInsertRegion(0);
                 const gc_node_ref_t loopNode = draft.addLoopNode(
-                    rt::loopBodyOf(*function, ref), loopType);
+                    [&] {
+                        rt::GCLoopBody payload = rt::loopBodyOf(*function, ref);
+                        if (iterates) {
+                            // The reverse loop iterates the round numbers, which is an array
+                            // whatever the old loop's sequence was: an interval loop's pair is read
+                            // by the body through `a + round`, and the numbers come from an array.
+                            payload.iterableForm = camel::core::LoopIterableForm::Array;
+                        }
+                        return payload;
+                    }(),
+                    loopType);
                 draft.setRegionOwner(newRegion, loopNode, function->region(bodyRegionOld)->index);
                 draft.setNodeOrigin(loopNode, static_cast<uint32_t>(function->region(bodyRegionOld)->origin));
                 std::vector<gc_node_ref_t> loopNorm;
-                // The range, and everything before the states in the old norm list: those are
-                // copied as they stand, because the reverse loop iterates over the same values.
-                // What follows them is the states, and those become cotangents.
-                for (size_t i = 0; i + stateCount < oldNorm.size(); ++i) {
-                    const gc_node_ref_t copied = forward(oldNorm[i]);
-                    if (!complete || copied == rt::kInvalidNodeRef) {
-                        os << "TRANSPOSE function=" << function->name() << " skip=range node="
-                           << ref << '\n';
-                        return false;
-                    }
-                    loopNorm.push_back(copied);
+                // What the loop iterates is `range(n - 1, -1, -1)`: the reverse walk of the rounds,
+                // not the sequence in the order it was written. Everything before the states in the
+                // old norm list is that sequence, and it is now a value the *body* reads at the round
+                // number instead, so it is not a norm input of this loop at all.
+                if (iterates) {
+                    loopNorm.push_back(backwardsRange);
                 }
                 // One seed per state: the cotangent the loop's value carried for that state. With
                 // one state that is the whole cotangent of the loop's value; with several it is the

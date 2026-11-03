@@ -39,8 +39,7 @@ export type Tangent<T>
 /// Forward mode: `jvp(f)` gives a function that takes the parameters of `f` followed by their
 /// tangents and returns the pair `(value, tangent)`. `jvp(f)(2.0, 1.0)` is the value `f(2.0)`
 /// together with the derivative of `f` at 2 in the direction 1.
-/// @example-fragment `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
-/// @example let forward = jvp(f)
+/// @example let forward = jvp((x: float) => x * x)
 export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()
 /// The step of `vjp` that separates a lifted function into the part computable now and the linear
 /// residue (design 4.2, 4.4). Implemented for the straight-line tier (`modules/transforms/split.cpp`):
@@ -86,8 +85,7 @@ export func split(f: (v: float, d: float) => (float, float)): (v: float, d: floa
 /// parameters the call site still passes" -- a missing capability of the splice, to be fixed, not a
 /// wording to be kept. `modules/transforms/transpose.cpp#transposeSignature` is the build that has to
 /// come to agree with it.
-/// @example-fragment `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
-/// @example let back = transpose(f)
+/// @example let back = transpose((x: float) => 2.0 * x + 3.0 * x)
 export func transpose::<F>(f: F): Transpose<F> when is_function::<F>()
 
 
@@ -103,8 +101,7 @@ export func transpose::<F>(f: F): Transpose<F> when is_function::<F>()
 /// operator with no rule is refused by name at the primitive, never batched by a guess; a call, a
 /// branch or a loop in the body is refused the same way, because the elementwise tier batches
 /// straight-line bodies.
-/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
-/// @example let batched = vmap(f)
+/// @example let batched = vmap((x: f32) => x * 2.0)
 export func vmap::<F>(f: F): Vmap<F> when is_function::<F>()
 
 /// Memory for recomputation: `remat(f)` gives a function whose graph is `f`'s graph with the
@@ -117,8 +114,7 @@ export func vmap::<F>(f: F): Vmap<F> when is_function::<F>()
 /// (`modules/transforms/split.cpp`). JAX writes the same transform as `jax.checkpoint`, whose other
 /// name is `jax.remat`; in this tree "checkpoint" is the persistence module `ckpt`, so the transform
 /// takes the other word.
-/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
-/// @example let remembered = remat(f)
+/// @example let remembered = remat((x: int) => x + 1)
 ///
 /// The type is the argument's own: a function in, the same function out, which is the whole of what
 /// the name says. `modules/transforms/remat_operator.cpp` answers `(f: F) => F` and builds the graph
