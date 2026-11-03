@@ -23,7 +23,7 @@
 // convention, so no `#op` tag is needed.
 
 
-import { is_float, is_numeric, is_plain } from types
+import { is_float, is_numeric, is_plain, is_same } from types
 
 // Every signature here writes the element type of its operand as an explicit type variable of
 // the head -- `func f::<T>(x: T[..]) when is_numeric::<T>()` -- and the call site's argument type
@@ -97,9 +97,16 @@ export func save_npy::<T>(t: T[..], path: string): void when is_numeric::<T>()
 // ---- conversion and display ----
 
 /// Prints t to the console, in the module's layout.
+///
+/// The elements are the ones a tensor stores -- the numbers and the booleans (`x * s`, a bool's
+/// gradient and the widths the kernels carry are all read at those, modules/tensor/dtype.cpp
+/// `isSupportedTensorScalar`) -- and the parameter says so, so an element type no kernel can read
+/// is refused at the call and not left to the runtime. The parameter takes `A[..]`, which includes
+/// rank 0 (design principles 5.4), so the condition is what keeps a `string` from being read as one
+/// element of a rank-zero array.
 /// @effect writes the console
 /// @example show([[1.0, 2.0]] as float[1, 2])
-export func show::<A>(t: A[..]): void
+export func show::<A>(t: A[..]): void when is_numeric::<A>() || is_same::<A, bool>()
 
 // ---- module state ----
 
