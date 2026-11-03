@@ -3422,10 +3422,11 @@ async function main() {
     if (selected.reachedNothing.length > 0) {
         for (const target of selected.reachedNothing) {
             const beside = `${path.resolve(target)}.plan.toml`
-            const hint = fs.existsSync(beside) ? ` The plan file beside it is ${relPath(beside)};` : ''
+            const hint = fs.existsSync(beside) ? `; the plan file beside it is ${relPath(beside)}` : ''
             console.log(
-                `${COLORS.red}[PLAN ERROR]${COLORS.reset} ${target} holds no *.plan.toml, so this run would ` +
-                    `start nothing.${hint} A target is a *.plan.toml or a directory that contains one.`,
+                `${COLORS.red}[PLAN ERROR]${COLORS.reset} ${relPath(path.resolve(target))} holds no *.plan.toml, ` +
+                    `so this run would start nothing${hint}. A target is a *.plan.toml or a directory that ` +
+                    'contains one.',
             )
         }
         console.log(
