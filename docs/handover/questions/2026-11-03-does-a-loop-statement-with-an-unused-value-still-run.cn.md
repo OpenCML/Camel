@@ -443,3 +443,30 @@ walks through it`），它把"链尾"从语句节点改成了**位门**，五处
 
 下一支探针因此只问一件事：**门 31 是哪一个 `visitExecNode` 调用造的**（打印每次 `if (!operands)`
 进入时的 gct 源位置与 graph id）。它不是"返回谁"的问题，是"哪一层的值"的问题。
+## 收：回退 `a49cac54d` 的五处链尾（`64a13921d`），并附读数
+
+| 计划 | 回退前 | 回退后 | develop |
+| --- | --- | --- | --- |
+| `feat/compile/stream` | 146 条，114 过 / 32 红 | **146 条全过，0 红** | 146/146 |
+| `feat/compile/transforms` | 78 条，73 过 / 4 红 / 1 known | **78 条，74 过 / 3 红 / 1 known** | 74/3/1 |
+
+`transforms` 的三条红与 develop 逐名相同（`transpose_loop_escape.two_values_of_two_kinds` /
+`.second_state_of_the_same_loop` / `.int_is_a_zero_tangent_space`），**`jvp_effect.runs_as_written_and_zero_tangent.nvm`
+转绿**。
+
+回退的只有五处：`buildBranch` 的 join、`visitLoopNode`、`buildStreamLoop`、`readVariableThrough`、
+`builder_operators.cpp` 的调用点，各自恢复 `lastSyncedNode_ = <语句>` 与 `linkSyncStatement(tail, 语句)`。
+**保留**：`chainPlaceGates_` 与它唯一的登记点 `chainPlaceForNode`、`inUnusedSyncBlock` 里"走过位门"那一支、
+`bd7a12fbe` 的链首守卫、`builder.cpp:1854` 的块值门判据。
+
+### 反向证据：**没有拿到**
+
+三个程序都试过，都没有出现那句警告（说明效果都被保留了，这本来就是我们要的方向）：
+
+1. `let unused = if c then sync { println } else sync { 2 }` —— 打印 `side`，`EXIT=0`；
+2. `if true then sync { println("side"); 1 } else …` 当作语句 —— 打印 `side`，`EXIT=0`；
+3. 一个从未被调用的 `sync` 函数里的 `println` —— 无输出无警告，`EXIT=0`。
+
+而且 `test/` 树里没有任何用例钉住这句话（`grep "sync block it is in is not used"` 零命中）。
+这条反向证据因此**还欠着**；能给出的保证是：这一段（五处之外）与 develop 逐字节相同，
+检查的口径没有被动过。
