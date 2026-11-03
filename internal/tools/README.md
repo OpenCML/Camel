@@ -35,6 +35,9 @@ To create it:
 2. Fill in the placeholders. `sshHost` and `stateDir` are required; the rest have defaults.
 3. Worktree-local: the file is git-ignored, so each checkout of the repository needs its own copy.
 
+The example file gives the shape only -- every value in it is a placeholder, and no host, drive letter
+or user's home appears anywhere in the repository. The real file is the one place those values live.
+
 Rules the loader keeps:
 
 - An unknown key is an error, not a silent no-op: a key that is misspelled would otherwise leave a
@@ -88,6 +91,12 @@ altogether, so an unchanged re-run costs one build pass and the plan.
 | `-StateDir <dir>` | Override the settings file's `stateDir`. |
 | `-LocalConfig <file>` | Use that settings file instead of the one beside the script. |
 | `-LibStdCxxDir <dir>` | Override the settings file's `hostLibStdCxxDir`. |
+
+Switches are spelled with one dash (`-NoBuild`), which is PowerShell's form; the two-dash form a shell
+habit reaches for (`--NoBuild`) binds to the same switch, so it costs nothing here. What is refused is
+a bare token that is not a switch at all: parameter binding is named-only, so `-Path <worktree> smoke`
+stops with PowerShell's "no positional parameter accepts 'smoke'" instead of quietly becoming
+`-LocalConfig smoke` -- a run that looks right and reads another settings file.
 
 Exit codes: the build's or the plan's own; `4` when the `-NoBuild` guard refused or a host lock was
 not obtained; `3` when the host is short of disk; `2` when the worktree, the push, the transfer or a

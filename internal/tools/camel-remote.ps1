@@ -153,6 +153,10 @@
 #   pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path <worktree> -Config Debug -Plan smoke -Tier debug
 #   pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path <worktree> -Clean
 
+# Named binding only: a token that is not a switch must not become the next parameter by position.
+# Without this, `-Path <worktree> smoke` binds `smoke` to -LocalConfig -- a run that looks right and
+# reads another settings file, or stops with a message about a setting the caller never named.
+[CmdletBinding(PositionalBinding = $false)]
 param(
     [Parameter(Mandatory = $true)][string]$Path,
     # The local settings file; empty means camel-gate.local.json beside this script. That file is the
