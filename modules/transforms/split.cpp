@@ -901,6 +901,26 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
             return isLiftedCall(lifted, ref, program);
         });
     }
+    // One residual per value. The walk can reach one value by two routes -- a parameter's value port
+    // seen as a value that crosses the cut, and the same port seen as what a parameter the tangent
+    // side reads stands for (`ports[valuePort]` below) -- and a value carried twice is not merely
+    // waste: it moves every residual after it one slot along, and the order that reads a parameter's
+    // value out of the closure is positional ("slot `at` is parameter `at`'s value",
+    // `modules/transforms/transpose.cpp`). A doubled member then hands `x` where `s` is due, the
+    // transposition's type check refuses the value it finds (rightly: an array is not a number), and
+    // the parameter it wanted never arrives. `sum(s * x)` carries `[x, x, s]` for that reason while
+    // `sum(x * s)` carries `[x, s, s]`: the same cut, one duplicate in a different place, and only
+    // one of the two writes the parameters at their own slots.
+    {
+        std::vector<gc_node_ref_t> once;
+        once.reserve(found.size());
+        for (const gc_node_ref_t ref : found) {
+            if (std::find(once.begin(), once.end(), ref) == once.end()) {
+                once.push_back(ref);
+            }
+        }
+        found = std::move(once);
+    }
     std::sort(found.begin(), found.end(), [&portIndex](gc_node_ref_t a, gc_node_ref_t b) {
         const bool aIsPort = portIndex[a] != Residual::kNotAParameter;
         const bool bIsPort = portIndex[b] != Residual::kNotAParameter;
@@ -929,6 +949,7 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
         }
         residuals.push_back(residual);
     }
+
     return residuals;
 }
 
