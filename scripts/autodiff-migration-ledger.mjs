@@ -190,6 +190,11 @@ let loaderFailure = ''
 // and is **not** counted as passing; a ledger that guesses an expectation to keep its count up is
 // the defect this whole column exists to avoid.
 //
+// No case carries its own expectation, so the plan is the only place it is written down: `expect_exit`,
+// `expect_stdout`, `@expect` and `vitest` appear 0 times across `test/cases/modules/autodiff`, and the
+// strings `expect_output_contains` names are read from the same `[[tests]]` table and are part of the
+// match (a case that exits 1 for some other reason does not pass).
+//
 // The fix is in `PLAN_ROOT`/`expectations`, not in these numbers: the scan is every `*.plan.toml`
 // under `test/plans`, home directory first, so the cases it already covered keep the exact test they
 // had (measured: 0 of them repicked) and a case declared by any plan is found (measured: 128 `.cml`
