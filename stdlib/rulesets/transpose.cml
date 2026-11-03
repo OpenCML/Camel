@@ -39,8 +39,11 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { element_at, exp, full, log_softmax, matmul, mean_axis_stated, numel, relu, sigmoid, subtract, sum, sum_stated, sum_to, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
-import { log, pow } from math
+import { abs, element_at, exp, full, log, log_softmax, matmul, maximum, mean_axis_stated, minimum, numel, relu, rsqrt, sigmoid, sqrt, subtract, sum, sum_stated, sum_to, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
+// `log as math_log`, for the reason `rulesets.jvp` records: the plain `log` here is the **array**
+// one (`log_t` files its law below), and a second import of one name hides the first instead of
+// overloading it, so `pow_d_t`'s scalar `log(x)` is spelled `math_log`.
+import { log as math_log, pow } from math
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
@@ -212,6 +215,103 @@ export rule sigmoid_t::<T>(x: T[..]) when is_float::<T>() {
 /// broadcast: for `ct = 1` the wrong one answers zero everywhere, because `sum(p) = 1`.
 export rule log_softmax_t::<T>(x: T[..]) when is_float::<T>() {
     log_softmax<0>(x) => (ct: T[..]) => (ct - exp(log_softmax<0>(x)) * sum<0, true>(ct))
+}
+
+// ---- the transpose laws of the eight basic elementwise operators ----
+//
+// The reverse half of the tranche whose forward half is in `stdlib/rulesets/jvp.cml`
+// (`jvp_neg_tensor`, `jvp_abs`, `jvp_sqrt`, `jvp_log`, `jvp_rsqrt`, `jvp_maximum`, `jvp_minimum`,
+// `jvp_divide`). Each law is the adjoint of its forward rule and the same number the engine's own
+// rule answers (`modules/tensor/ops/elementwise_ops.cpp`: `negVjp`, `absVjp`, `sqrtVjp`, `logVjp`,
+// `rsqrtVjp`, `extremumVjp`, `divideVjp`), in the engine's grouping, because the two legs of a
+// `grad` are compared bit for bit and an algebraically equal grouping is not the same double.
+//
+// A law is used by the backward walk wherever the *forward* rule put the operator on a linear value;
+// for the five that recompute, the operator is applied to the operand instead, so what the walk meets
+// is the residue the cut carried (`residuals=` on the `split` line) plus the products and quotients
+// around it. The law is the family's own answer either way: a second-order walk, a hand-written
+// linear function over one of these operators, and the day a forward rule is written with the
+// operator inside the linear half all read it, and none of them may read a missing one.
+
+/// `-x` on an array: the left side `tensor:neg`'s law is filed under, the way `mul_tensor` above
+/// stands for `tensor:multiply`. `tensor:neg`'s exported spelling is `__neg__`, which is not a call.
+func neg::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return -x
+}
+
+/// The transpose of `-x`: `-ct`. A sign flip is its own adjoint, and the law reads the cotangent and
+/// nothing else -- the cheapest shape a law has.
+export rule neg_tensor_t::<T>(x: T[..]) when is_float::<T>() {
+    neg(x) => (ct: T[..]) => -ct
+}
+
+/// The transpose of `abs`: `ct` where the operand is not negative, `-ct` where it is.
+///
+/// `abs` has no derivative at `0`, so the law has to choose a side there, and it chooses the one the
+/// engine's `absVjp` chooses: that rule asks `tensor:ge` (`x >= 0`), so the zero keeps its
+/// cotangent's sign. `>` would answer `0.0` at the zero where the engine answers `ct`, and the two
+/// legs would disagree at the one input where the maths cannot say which is right.
+///
+/// The mask is `x`'s alone, so it is a residue and not a linear value: the walk carries it and the
+/// law's answer is one `where` over the cotangent and its negation.
+export rule abs_t::<T>(x: T[..]) when is_float::<T>() {
+    abs(x) => (ct: T[..]) => (where(x >= 0.0, ct, -ct))
+}
+
+/// The transpose of `sqrt`: `(ct * 0.5) / sqrt(x)` -- one over twice the root, written as the
+/// engine's `sqrtVjp` writes it (`ct * 0.5` first, then the division, so the two legs round the same
+/// way). The root is recomputed from the operand; it is a function of `x` alone, the channel
+/// `exp_t` above established.
+export rule sqrt_t::<T>(x: T[..]) when is_float::<T>() {
+    sqrt(x) => (ct: T[..]) => (ct * 0.5) / sqrt(x)
+}
+
+/// The transpose of `log`: `ct / x`. The slope is the reciprocal of the operand, so nothing is
+/// recomputed and nothing is carried: this is the member of the tranche that shows a law need not
+/// invent a value at all.
+export rule log_t::<T>(x: T[..]) when is_float::<T>() {
+    log(x) => (ct: T[..]) => ct / x
+}
+
+/// The transpose of `rsqrt`: `(ct * -0.5) * (y * (y * y))` with `y = rsqrt(x)`, which is the grouping
+/// the engine's `rsqrtVjp` builds (`cube = y * (y * y)`, `scaled = ct * -0.5`, `scaled * cube`).
+export rule rsqrt_t::<T>(x: T[..]) when is_float::<T>() {
+    rsqrt(x) => (ct: T[..]) => (ct * (-0.5)) * (rsqrt(x) * (rsqrt(x) * rsqrt(x)))
+}
+
+/// The transpose of `maximum`: `ct` to the operand the value was taken from, `0` to the other, the
+/// tie going to the left one -- the engine's `extremumVjp` asks `tensor:ge` for `maximum`, so at
+/// `x == w` the left operand takes the cotangent and the right one takes zero.
+///
+/// Both operands are answered, and each answer is reduced to its own shape with `sum_to`: the identity
+/// when the two shapes are equal, the sum over the lanes a broadcast spread the operand over when
+/// they are not -- the same reduction `mul_tensor_t` above writes, for the same reason.
+export rule maximum_t::<T, X, W>(x: X, w: W) when is_float::<T>() {
+    maximum(x, w) => (ct: T[..]) =>
+        (sum_to(where(x >= w, ct, 0.0), x), sum_to(where(x >= w, 0.0, ct), w))
+}
+
+/// The transpose of `minimum`: the mirror of `maximum_t`, and its own law because the comparison is
+/// the law. `tensor:le` is the engine's choice (`extremumVjp`), so a tie again goes to the left
+/// operand.
+export rule minimum_t::<T, X, W>(x: X, w: W) when is_float::<T>() {
+    minimum(x, w) => (ct: T[..]) =>
+        (sum_to(where(x <= w, ct, 0.0), x), sum_to(where(x <= w, 0.0, ct), w))
+}
+
+/// `x / w` on two arrays: the left side `tensor:divide`'s law is filed under. `tensor:divide`'s
+/// exported spellings are `__div__` and the infix form, and neither is a call -- the same stand-in
+/// `subtract` below is.
+func divide::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
+    return x / w
+}
+
+/// The transpose of `x / w`: `ct / w` for `x`, and `-(ct / w) * (x / w)` for `w` -- the two answers
+/// the engine's `divideVjp` builds, in its order (`dlhs = ct / w`, then `dlhs * (x / w)`, then the
+/// negation), so the quotients that produce the two cotangents are the same quotients.
+export rule divide_t::<T, X, W>(x: X, w: W) when is_float::<T>() {
+    divide(x, w) => (ct: T[..]) =>
+        (sum_to(ct / w, x), sum_to(-((ct / w) * (x / w)), w))
 }
 
 /// `x - w` on two arrays: what `tensor:subtract` means, and the left side this rule is filed under.
@@ -575,13 +675,13 @@ func pow_d(x: float, y: float): float {
 /// The transpose of `pow(x, w)`: `ct * w * x^(w-1)` for the base, `ct * x^w * ln(x)` for the exponent.
 /// Its numbers are pinned by `pow_gradient_through_the_library.cml`.
 export rule pow_d_t(x: float, y: float) {
-    pow_d(x, y) => (ct: float) => (ct * y * pow(x, y - 1.0), ct * pow(x, y) * log(x))
+    pow_d(x, y) => (ct: float) => (ct * y * pow(x, y - 1.0), ct * pow(x, y) * math_log(x))
 }
 
 /// `log(x)`: what `math:log_d` means, and the left side this rule is filed under.
 /// @example log_d(1.0)    // 0.0
 func log_d(x: float): float {
-    return log(x)
+    return math_log(x)
 }
 
 /// The transpose of `log(x)`: `ct / x`, which is the whole law -- the derivative of the logarithm is
