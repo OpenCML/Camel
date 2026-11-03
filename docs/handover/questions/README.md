@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：38 页
+## 现在在等作者：39 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -22,6 +22,7 @@
 | [`2026-11-04-a-parameter-holds-no-cotangent-on-a-two-operand-reduction`](2026-11-04-a-parameter-holds-no-cotangent-on-a-two-operand-reduction.cn.md) | 为什么 `sqrt`/`log`/`divide` 的两腿用例停在“一个参数拿不到余切，因为没有东西用它” |
 | [`2026-11-04-a-struct-field-read-refused-or-copied-by-key`](2026-11-04-a-struct-field-read-refused-or-copied-by-key.cn.md) | 一个 struct 字段读（`qq.a`）：切里按名字拒，还是把 key 抄过去 |
 | [`2026-11-04-can-a-pass-build-the-graph-a-transform-hands-out`](2026-11-04-can-a-pass-build-the-graph-a-transform-hands-out.cn.md) | `autodiff` 能不能在改写时自己把 `split` 造出来的那个值造出来？ |
+| [`2026-11-04-does-a-build-gated-case-count-as-a-name-pin`](2026-11-04-does-a-build-gated-case-count-as-a-name-pin.cn.md) | 只在 no-JIT / arm64 构建里才跑得到的用例，算不算把这条码按名字钉住了？ |
 | [`2026-11-04-does-a-closure-members-cotangent-have-a-slot`](2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md) | 闭包成员的余切应不应该有一个槽？ |
 | [`2026-11-04-does-a-transpose-law-count-when-the-first-order-walk-does-not-read-it`](2026-11-04-does-a-transpose-law-count-when-the-first-order-walk-does-not-read-it.cn.md) | 一条转置律没被一阶走查读到，算不算"律已经补上"？ |
 | [`2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value`](2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md) | 转置成员要不要给"一个参数自己的值"留一个端口？ |
