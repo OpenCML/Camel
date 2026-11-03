@@ -17,7 +17,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             {
                 "RuntimeError",
                 "An error has occurred: {0}.",
-                "The runtime has no diagnostic of its own for this fault: it is the code every fault falls back to, so the message is the whole of what is known.",
+                "The runtime has no diagnostic of its own for this fault: every fault falls back to this code, so the message is all there is.",
             },
         },
         {

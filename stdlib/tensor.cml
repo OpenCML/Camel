@@ -23,7 +23,7 @@
 // convention, so no `#op` tag is needed.
 
 
-import { is_numeric, is_plain } from types
+import { is_float, is_numeric, is_plain } from types
 
 // Every signature here writes the element type of its operand as an explicit type variable of
 // the head -- `func f::<T>(x: T[..]) when is_numeric::<T>()` -- and the call site's argument type
@@ -160,6 +160,20 @@ export func fuse::<F>(f: F): F! when is_function::<F>()
 /// @pure
 /// @example sum_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [4.0, 6.0]
 export func sum_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..] when is_numeric::<T>()
+
+/// `t` reduced to the shape `like` states: the lanes `like` would have been spread over are summed
+/// back into one element each, in `f64`, rounded once into the element type. Two shapes that are
+/// equal give `t` unchanged, and `like` of rank 0 -- which `T[..]` includes, a rank-zero array being
+/// that element and nothing else (design principles 5.4) -- gives the total sum as that element.
+///
+/// It is the adjoint of broadcasting read off the shape: what a broadcast handed out along a lane,
+/// this adds back up. The differentiation rules use it for exactly that (`rulesets.transpose`,
+/// where an operand of a broadcast product answers `sum_to(ct * other, operand)`), and its own VJP
+/// broadcasts back (`modules/tensor/ops/gradient_ops.cpp`).
+/// @pure
+/// @example sum_to([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 1.0)    // 10.0
+/// @example sum_to([1.0, 2.0, 3.0] as float[3], [0.0, 0.0, 0.0] as float[3])    // [1.0, 2.0, 3.0]
+export func sum_to::<T>(t: T[..], like: T[..]): T[..] when is_float::<T>()
 
 /// The mean of each lane along one axis: the sum and the count both in `f64`, one rounding into
 /// the element type. An empty axis is a fault.

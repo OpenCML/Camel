@@ -909,6 +909,32 @@ if (shorthand.status !== 0 || !shorthand.output.includes('[SUMMARY] total: 5, pa
     problems.push(`target shorthand: a plan target without its suffix did not run in full (${summaryLine(shorthand.output)})`)
 }
 
+//  --- a target that names a directory holding no plan refuses ------------------------------
+// `test/plans/feat/docs_links` is the plan's fixture directory; the plan file is the sibling
+// `docs_links.plan.toml`, so the suffix-less shorthand above does not apply (the directory
+// exists). Naming it used to reach no plan, start nothing and explain that with the layer
+// sentence -- "none of their entries is in this layer", which is an answer about plans that were
+// reached. It now refuses, names the plan beside it, and prints no [SUMMARY] at all: a run that
+// started nothing must not look finished.
+const barren = runTestCli(['test/plans/feat/docs_links'])
+if (barren.status !== 2) problems.push(`target that names no plan: exit ${barren.status}, expected 2`)
+if (!/holds no \*\.plan\.toml/.test(barren.output) || !/docs_links\.plan\.toml/.test(barren.output)) {
+    problems.push(`target that names no plan: the refusal did not name the plan file beside it: ${barren.output.trim()}`)
+}
+if (/\[SUMMARY\]/.test(barren.output)) problems.push('target that names no plan: a [SUMMARY] was printed for a run that started nothing')
+// `--list` is the other entry point onto the same target and used to answer it differently: it
+// printed the directory and exited 0, so "what would this run?" was answered with a path no plan
+// is behind. Same exit code, same sentence -- the sentence is asserted equal, so a rewording in
+// one of the two places cannot leave them describing the same mistake in two ways.
+const barrenList = runTestCli(['test/plans/feat/docs_links', '--list'])
+if (barrenList.status !== 2) problems.push(`--list on a target that names no plan: exit ${barrenList.status}, expected 2`)
+const sentenceOf = (output) => (output.match(/^\[PLAN ERROR\].*$/m) || [''])[0].trim()
+if (!sentenceOf(barrenList.output)) {
+    problems.push(`--list on a target that names no plan: no [PLAN ERROR] line: ${barrenList.output.trim()}`)
+} else if (sentenceOf(barrenList.output) !== sentenceOf(barren.output)) {
+    problems.push(`--list and the run disagree about the same target: ${sentenceOf(barrenList.output)} vs ${sentenceOf(barren.output)}`)
+}
+
 // The base branch: origin/develop by default, overridden by CAMEL_TEST_BASE.
 const savedBase = process.env.CAMEL_TEST_BASE
 delete process.env.CAMEL_TEST_BASE

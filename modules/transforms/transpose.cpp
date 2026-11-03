@@ -61,6 +61,8 @@ const char *transposeRefusalWord(TransposeRefusalCause cause) {
         return "arm";
     case TransposeRefusalCause::Rule:
         return "rule";
+    case TransposeRefusalCause::RuleShape:
+        return "rule-shape";
     case TransposeRefusalCause::Kind:
         return "kind";
     case TransposeRefusalCause::Arity:
@@ -86,6 +88,122 @@ const char *transposeRefusalWord(TransposeRefusalCause cause) {
 }
 
 namespace {
+
+/// The type list as the index's reports write it: `(float[..], float)`, `()` when empty.
+std::string typeTextOf(const std::vector<Type *> &types) {
+    std::string text;
+    for (const Type *type : types) {
+        text += (text.empty() ? "(" : ", ");
+        text += type != nullptr ? type->toString() : std::string("?");
+    }
+    return text.empty() ? std::string("()") : text + ")";
+}
+
+/// Whether a port written `written` takes an operand of type `operand` **as the shape the law was
+/// written for**.
+///
+/// "Takes" is the relation a call site uses -- `assignableFrom`, the port accepts the value -- and
+/// it is not the whole question here. `T[..]` is an open rank, and design principles 5.4 says a
+/// rank-zero array *is* the element, so `float[..]` accepts a `float`: the same value, and not the
+/// same shape. A law that names an array operand reduces along the lanes a broadcast handed out
+/// (`sum_to` rewrites `t` to the shape of `like`), and a number has no lanes to reduce; so a port
+/// written as an array does not take a value that is not an array, however willingly the type system
+/// hands it over. The other direction needs no clause here: a port written `float` takes no
+/// `float[]` at all (`ArrayType::assignableFrom` is the array on the left of that sentence, not the
+/// right).
+///
+/// This is the clause that keeps a law for two arrays from being taken for an array and a number,
+/// which is the shape `tensor:multiply` is called with and answers no cotangent for
+/// (`ruleTakesOperands`, and the page
+/// `docs/handover/questions/array-scalar-product-transpose.cn.md`).
+bool sameOperandShape(const Type *written, const Type *operand) {
+    if (written == nullptr || operand == nullptr) {
+        return false;
+    }
+    if (!written->assignableFrom(const_cast<Type *>(operand))) {
+        return false;
+    }
+    const bool portIsArray = written->code() == camel::core::type::TypeCode::Array;
+    const bool operandIsArray = operand->code() == camel::core::type::TypeCode::Array;
+    return !portIsArray || operandIsArray;
+}
+
+/// Whether the rule named `ruleName` describes a node whose ports are `operandTypes`.
+///
+/// It does not, and this is why the question is asked here rather than left to the index: a rule is
+/// filed under the head of its left side and that head's operand count, and the index does not read
+/// the operand *types* (`rule_head.cpp`). One key therefore holds one law for every shape the
+/// operator is called with -- `tensor:multiply` is called with two arrays and with an array and a
+/// number -- and the law it finds was written for two arrays. Its right side is then expanded at
+/// `T = float`, where `T[..]` reads `float[..]`, a type that *takes* a number (`ArrayType::
+/// assignableFrom`, design principles 5.4: rank 0 is the element itself). So the expansion succeeds,
+/// and answers a cotangent of a shape the law was never written for: measured, `sum(x * s)`'s
+/// cotangent at `s` read `0.0` with no `skip=` and no `contribution=0` line, which is the one
+/// reading a transform may not give (design principles 9.9: a wrong number is worse than a refusal,
+/// and refusing the wrong shape is what the walk is for).
+///
+/// `jvp` asks the same question one step earlier and refuses this shape by name
+/// (`jvp.cpp#portsTakeOperands`: "the rule takes (float[..], float[..]), and the operator has
+/// (float[..], float)"). This is that reading, in that wording, asked of the transpose's rule.
+///
+/// The extra clause is 5.4's other direction: a port written `T[..]` asks for an array, and an
+/// operand that is not an array is not the shape it asked for even though the *value* is the same
+/// (`assignableFrom` says so in both directions). A law that names an array operand reduces along
+/// the lanes a broadcast handed out (`sum_to`), and a number has none to reduce -- the law was
+/// written for the array shape and does not take the scalar one until someone writes a law that
+/// does.
+bool ruleTakesOperands(
+    camel::core::context::Context &context, const std::string &ruleName,
+    const std::vector<Type *> &operandTypes, const std::vector<bool> &answered,
+    std::string &why) {
+    std::string unused;
+    const std::vector<Type *> types{Type::Float64()};
+    const auto *instance =
+        camel::compile::gir::genericRuleInstanceByName(context, ruleName, types, {}, unused);
+    const FunctionType *ports =
+        instance != nullptr && instance->lhs != nullptr ? instance->lhs->funcType() : nullptr;
+    if (ports == nullptr) {
+        // Nothing to check against: the expansion below says what it could not find, in its own
+        // words, and this is not the place to invent a second spelling for "no instance".
+        return true;
+    }
+    const size_t count = ports->normTypesCount();
+    std::vector<Type *> wanted;
+    wanted.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        wanted.push_back(ports->normTypeAt(i));
+    }
+    // A rule names the node's ports, in port order: the values, then the `<>` ones (`reshape<shape>`
+    // names one of the two). Naming more ports than the node has cannot be filled; naming all of
+    // the node's values is what a law for this operator does.
+    const bool namesTheNode = count > 0 && count <= operandTypes.size();
+    bool takes = namesTheNode;
+    for (size_t i = 0; takes && i < count; ++i) {
+        // A position the walk answers no cotangent for -- a constant, a value with no tangent space
+        // -- is not a position the law is asked about (`isConstant`, `hasTangentSpace` in the walk),
+        // so its shape cannot make the law wrong: `x * 2.0` is one array operand and one constant,
+        // and the law for two arrays answers it correctly. What is checked is the operands the walk
+        // will hand the right side.
+        if (i < answered.size() && !answered[i]) {
+            continue;
+        }
+        Type *const written = wanted[i];
+        Type *const operand = operandTypes[i];
+        if (written == nullptr || operand == nullptr) {
+            takes = false;
+            break;
+        }
+        if (!sameOperandShape(written, operand)) {
+            takes = false;
+            break;
+        }
+    }
+    if (!takes) {
+        why = "the rule takes " + typeTextOf(wanted) + ", and the operator has " +
+              typeTextOf(operandTypes);
+    }
+    return takes;
+}
 
 /// The sum a cotangent accumulates with is the sum of the type it lands in: two array cotangents
 /// add element by element (`:tangent/add_arr`, design principles 9.9) and a number's add is
@@ -371,9 +489,14 @@ bool buildTransposeMember(
     // log's line is rendered from the same cause. A site adds the *where* -- the node, the uri, the
     // callee -- because that is not the cause and no caller decides anything from it; a site that
     // wanted a sentence of its own would add an enumerator instead of writing one here.
+    //
+    // The graph is part of the where and is recorded here rather than at the sites, because every
+    // refusal is met inside a graph and the lambda is the one place that has it: the sentence keeps
+    // saying "this function" only because the name never left the log before.
     const auto refuse = [&](TransposeRefusalCause cause,
                             std::optional<size_t> param = std::nullopt) -> void {
         state.refusal = TransposeRefusal{cause, param};
+        state.refusal.graph = function->name();
         os << "TRANSPOSE function=" << function->name() << " skip=" << transposeRefusalWord(cause);
     };
     // What this member needs is discovered by asking: the body decides which parameters it reads by
@@ -1963,6 +2086,14 @@ bool buildTransposeMember(
                             ? "no-such-family"
                             : "no-rule";
                     refuse(TransposeRefusalCause::Rule);
+                    // The where of this refusal, recorded for the sentence as well as the log: the
+                    // step is this node, its operator is this uri, and the lookup answered this
+                    // word. The site has all three -- the log has printed them since the walk
+                    // existed -- and until now the sentence a reader was handed dropped them and
+                    // said only that *a* step had no rule.
+                    state.refusal.node   = ref;
+                    state.refusal.uri    = std::string(uri);
+                    state.refusal.lookup = reason;
                     os << " uri=" << uri << " reason=" << reason << '\n';
                     return false;
                 }
@@ -2006,6 +2137,42 @@ bool buildTransposeMember(
                 std::vector<gc_node_ref_t> inputs(normOperands.begin(), normOperands.end());
                 for (gc_node_ref_t input : function->withInputsOf(ref)) {
                     inputs.push_back(input);
+                }
+                // The rule filed under this key was written for a shape, and the index does not
+                // read shapes: ask the operand types whether this node is that shape before the
+                // right side is expanded at a type tuple it was not written for.
+                {
+                    std::vector<Type *> operandTypes;
+                    std::vector<bool> answered;
+                    operandTypes.reserve(inputs.size());
+                    answered.reserve(inputs.size());
+                    for (const gc_node_ref_t input : inputs) {
+                        const camel::runtime::GCNode *inputNode = function->node(input);
+                        operandTypes.push_back(
+                            inputNode != nullptr ? const_cast<Type *>(inputNode->dataType())
+                                                 : nullptr);
+                        answered.push_back(
+                            !isConstant(input) && wantsCotangent(input) && hasTangentSpace(input));
+                    }
+                    std::string whyNot;
+                    if (state.context != nullptr &&
+                        !ruleTakesOperands(
+                            *state.context, rule->rule, operandTypes, answered, whyNot)) {
+                        // The key has a law; the law was written for another shape. Not `Rule`:
+                        // that sentence ("the rule table has no rule for a step of this body")
+                        // describes a lookup that found nothing, and this lookup found a law that
+                        // says this step is not what it takes. The three facts a reader needs --
+                        // which node, which operator, and what the two type lists are -- go into
+                        // the record the sentence is rendered from, and the log says them here so
+                        // the reading above can be grepped to the same node.
+                        refuse(TransposeRefusalCause::RuleShape);
+                        state.refusal.node = ref;
+                        state.refusal.uri  = uri;
+                        state.refusal.shape = whyNot;
+                        os << " uri=" << uri << " node=" << ref
+                           << " operands=" << normOperands.size() << " reason=" << whyNot << '\n';
+                        return false;
+                    }
                 }
                 const gc_node_ref_t ct = cotangent[ref];
                 noteRule(rule->rule);
