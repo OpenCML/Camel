@@ -27,7 +27,7 @@ REINTERP split function=jvp_of___g_243__ skip=exit (a lifted function answers wi
   (result, tangent); this graph's exit is not a two-member tuple fill, so there is no pair to cut)
 ```
 
-**读数**：出口的**类型**是对的（`exit=Tuple{chain,tangent}`），错的是**形状**——出口结点 7 不是一个两元的 tuple `Fill`。`__g_243__` 就是被微分的那个 lambda `(ww: float) => loss_with<ww, b>(x, t)`：它的体以一次「带 `with` 实参的调用」收尾，抬升后这个对是**那次调用的作答**，不是本图里一个把两半拼起来的 `Fill`。
+**读数**：错的不是类型，是**形状**。`exit=Tuple{chain,tangent}` 这个字段是 `jvp` 每行都打的固定标签，不是读数（第一版页里我把它当证据用了，这是错的，见第六节）；真正的证据是 `skip=exit` 加上探测：出口结点是**应用结点** `kind=10`（`GCNodeKind::Func`），两个 `with` 输入、两个普通输入，它抬升后的副本类型是 `(float, float)`。`__g_243__` 就是被微分的那个 lambda `(ww: float) => loss_with<ww, b>(x, t)`：它的体以一次「带 `with` 实参的调用」收尾，抬升后这个对是**那次调用的作答**，不是本图里一个把两半拼起来的 `Fill`。
 
 这落到 `modules/transforms/split.cpp#exitShapeOf` 的第三个格：它只认 `GCNodeKind::Fill` + `GCFillKind::Tuple` + `withInputsOf(exit).size() == 2`，其余都归 `ExitShape::NotAPair`；而 `NotAPair` 那一格的注释写的是**"Defensive, and unreachable from `.cml`"**。这条例子**从 `.cml` 走到了它**——那句注释是假的，这也是这条墙第一次被一个真实程序钉住（此前只有 `showcase_s2` 的 `tensor_vjp_stops_at_split` 钉着 `split` 的别的形状）。
 
@@ -64,3 +64,22 @@ func step(x: float, t: float): (float, float) {
 ## 五、这一轮的处理
 
 库层 `with_grad` **没有**进 `stdlib/vjp.cml`（写了会在任何调用点报上面那段报文）；组合写在上面那个用例里，作为**负向用例**钉住 `skip=exit` 与那句 reason。出口能剪的那天，把 `stdlib/vjp.cml` 末尾（`grad` 之后）补上同一个体，把这条用例改成正向、钉 `(0.125, -0.75)`，用例注释与 plan 条目里的 desc 都已写明这一步。
+## 六、B 试过了：第一堵墙让开了，后面还有第二堵
+
+按本节默认（B）改了一版：抬升时若出口结点的副本**就是**那个对、且结点是应用结点（`Call` / `Func`），就用 `valueOf`/`tangentOf` 已经算好的两个投影**水合**成一个两元 tuple `Fill` 当出口——`split` 的判据一个字没动。结果：
+
+- **第一堵墙确实让开了**：`skip=exit` 消失，抬升图从 `nodes=9 exit=6` 变成 `nodes=11 exit=10`（多出的正是那个 `Fill`）。
+- **紧跟其后是第二堵墙**，在 `split` 的**前向走**里：
+
+```
+REINTERP split function=jvp_of___g_242__ skip=forward construct=a port uri=- why=the port is not
+parameter of the graph, so neither half takes it
+(vjp)/…/stdlib/vjp.cml:85:24: [Error]: … split does not build this function (the port is not a
+parameter of the graph, so neither half takes it) …
+```
+
+判断（未证到根，但形状对得上）：这个 lambda 的**抬升类型没有 `with` 列表**（`(float, float) => (float, float)`），而它的图仍然通过 **port** 读捕获进来的 `x`/`t`/`b`；`split` 的 `addWithPorts` 按声明里的 `with` 个数列半边自己的端口，于是那些 port 既不在 `withPortOf` 也不在 `portIndex` 里，前向走就拒了。也就是说：**B 是必要的，但不充分**——B 之后还要回答"被抬升的闭包读的那几个 port 算什么"（算参数？算残差？这是 `split` 判据侧的问题，比 B 更接近 A 的性质）。
+
+- 已**回滚**（树与 `7432f65cc` 相同，`git status` 空）。读数：`transforms` 87 = 84/2/1 复原；那一版里除了本页对应的负向用例因报文变化而红，**84 条通行用例一条没红**（`grep '[FAIL]'` 只有两条已知红 + 本用例）。
+
+所以本页的排期变成两件：**B（水合出口，本页默认）→ 闭包 port 归类**。两件都不做，库层 `with_grad` 出不了数。
