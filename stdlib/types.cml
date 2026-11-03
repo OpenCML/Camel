@@ -115,7 +115,7 @@ export type Vjp<F> = <..WithOf<F>> (..ParamsOf<F>) => (ResultOf<F>, Pullback<F>)
 /// licence to call the declaration approximate.
 /// @example is_same::<Jvp<(x: float) => float>, (x: float, d: float) => (float, float)>()    // true
 export type Jvp<F> =
-    (..ParamsOf<F>, ..Tangent<ParamsOf<F>>) => (ResultOf<F>, Tangent<ResultOf<F>>)
+    <..WithOf<F>> (..ParamsOf<F>, ..Tangent<ParamsOf<F>>) => (ResultOf<F>, Tangent<ResultOf<F>>)
 
 /// The transpose of a linear function: the values the call site still passes, then the cotangent of
 /// the result, then the cotangents of the parameters. The cotangent comes last because a pullback may
