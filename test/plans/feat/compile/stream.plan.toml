@@ -1353,15 +1353,11 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 
 [[tests]]
 name = "stream.generators_match_binding_across_yield"
-desc = "A `match` arm that binds a name and yields it is refused, because the binding lives in the arm's own graph and cannot outlive the `yield` -- building the shape needs the binding to become a cell with its payload written into it in the arm, which is a mechanism, not a local edit. The refusal names the code and the position, and says that this is a defect of the compiler rather than an error of the program."
-kind = "negative"
+desc = "A `match` arm that binds a name and then `yield`s it builds: a binding is a local, and a local that lives across a `yield` is a cell of the generator body, registered with the declared locals and the loop binders. The name is written where the case's value is in hand, so the pull that resumes after the `yield` reads the same value: the arm hands out `7` and then `17`, and the case pins the values rather than the refusal it used to get."
+kind = "behavior"
 case = "../../../cases/compile/stream/generators_match_binding_across_yield.cml"
 args = ["${case}", "std::nvm"]
-expect_exit = 1
-expect_diagnostic_name = "InternalDiag::UnknownInternalError"
-expect_diagnostic_code = "0x00000000"
-expect_diagnostic_line = 18
-expect_diagnostic_column = 9
-expect_output_not_contains = ["Please report it"]
-expect_output_contains = ["This is a defect of the compiler, not an error of the program"]
+expect_exit = 0
+expect_stdout_exact = "7\n17\n"
+expect_output_not_contains = ["[Error]", "UnknownInternalError", "Please report it"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

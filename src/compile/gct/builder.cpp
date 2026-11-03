@@ -6313,22 +6313,124 @@ node_ptr_t Builder::visitGeneratorBody(
                         *brch << readCell(subjectCell);
                         for (const auto &caseNode : *matchAst->atAs<AST::RepeatedLoad>(1)) {
                             const auto &pattern = caseNode->at(0);
-                            if (pattern->type() == AST::LoadType::Data &&
-                                (pattern->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Ref ||
-                                 pattern->loadAs<AST::DataLoad>()->dataType() ==
-                                     AST::DataType::EnumPattern)) {
-                                // The arm binds a name; a binding lives in the arm's own graph, so
-                                // it would have to become a cell to outlive the `yield`.
-                                // reachable from source: stream.generators_match_binding_across_yield (2026-11-03)
+                            const bool writtenPattern = pattern->type() == AST::LoadType::Data;
+                            const auto patternKind =
+                                writtenPattern
+                                    ? pattern->loadAs<AST::DataLoad>()->dataType()
+                                    : AST::DataType::Literal;
+                            const bool isEnumPattern =
+                                writtenPattern && patternKind == AST::DataType::EnumPattern;
+                            const bool isRefPattern =
+                                writtenPattern && patternKind == AST::DataType::Ref;
+                            // `case error e` binds the error of a `T!`, which is not the payload
+                            // the tagged value holds, so the cell this name would live in has no
+                            // type written where the body is built. The value a `case v` binds is
+                            // the payload, and that one is built below. Not reachable from source
+                            // today: no test writes `case error e` in a body that `yield`s.
+                            if (isRefPattern && pattern->size() > 0) {
                                 diags_->of(InternalDiag::UnknownInternalError)
                                     .at(caseNode->load()->tokenRange())
                                     .commit(
-                                        "a `match` arm binds a name and the arm then `yield`s it: the "
-                                        "binding lives in the arm's own graph, so it has to become a cell "
-                                        "to outlive the `yield`");
+                                        "a `match` arm binds the error of a `T!` and the arm then "
+                                        "`yield`s it: the error is not the payload the value "
+                                        "holds, so the name has no type written for its cell");
                                 throw BuildAbortException();
                             }
+                            // The names a case binds are locals of the body like any other, and a
+                            // local that lives across a `yield` is part of the state (design
+                            // principles 5.4). So each is a cell of the body, registered with the
+                            // declared locals and the loop binders -- not with a state of its own.
+                            // The case binds a name of its own, because a cell's name is what every
+                            // arm reads; the body the case runs writes the cell where the value is
+                            // in hand, and the arm and the pull after a `yield` in it then read the
+                            // same cell.
+                            std::vector<std::string> patternFields;
+                            std::vector<std::string> patternBindings;
+                            // The cell each bound name is written into, and the name the case
+                            // binds it to.
+                            std::vector<std::pair<std::string, std::string>> cellWrites;
+                            if (isEnumPattern) {
+                                const auto enumPattern = pattern->loadAs<AST::EnumPatternLoad>();
+                                // The pattern names the enum, so that name resolves here the way a
+                                // type annotation written at this point would, and the variant it
+                                // names gives the type of each field.
+                                const EnumVariant *variant = nullptr;
+                                if (!enumPattern->ref().paths().empty()) {
+                                    const Reference enumName(enumPattern->ref().paths());
+                                    if (Type *declared = lookupType(enumName, pattern);
+                                        declared != nullptr) {
+                                        if (EnumType *enumType = asEnumType(declared)) {
+                                            const auto tag = enumType->decl()->findVariant(
+                                                enumPattern->ref().ident());
+                                            if (tag.has_value()) {
+                                                variant =
+                                                    &enumType->decl()->variants()[*tag];
+                                            }
+                                        }
+                                    }
+                                }
+                                for (size_t k = 0; k < enumPattern->fields().size(); ++k) {
+                                    const AST::EnumPatternField &field =
+                                        enumPattern->fields()[k];
+                                    patternFields.push_back(field.name);
+                                    if (field.binding.empty()) {
+                                        patternBindings.push_back(std::string());
+                                        continue;
+                                    }
+                                    const std::string holder =
+                                        "__gen_match_bind_" + std::to_string(idIndex_++);
+                                    patternBindings.push_back(holder);
+                                    Type *fieldType = nullptr;
+                                    if (variant != nullptr) {
+                                        const auto at =
+                                            enumPattern->structShape()
+                                                ? variant->findField(field.name)
+                                                : std::optional<size_t>(k);
+                                        if (at.has_value() &&
+                                            *at < variant->fieldCount()) {
+                                            fieldType = variant->fieldTypes[*at];
+                                        }
+                                    }
+                                    if (fieldType != nullptr) {
+                                        cellWrites.emplace_back(field.binding, holder);
+                                        if (std::find(
+                                                cellNames.begin(),
+                                                cellNames.end(),
+                                                field.binding) == cellNames.end()) {
+                                            addCellOfType(field.binding, fieldType, caseNode);
+                                            cellNames.push_back(field.binding);
+                                        }
+                                    }
+                                }
+                            } else if (isRefPattern) {
+                                const std::string name =
+                                    pattern->loadAs<AST::RefDataLoad>()->ref().toString();
+                                const std::string holder =
+                                    "__gen_match_bind_" + std::to_string(idIndex_++);
+                                patternBindings.push_back(holder);
+                                // `case v` binds the payload of the tagged value: `PayloadOf<T?>`
+                                // is the `U` of `U?`, and of `U!` as well.
+                                std::vector<Type *> payloadArgument = {
+                                    TypeOfType::create(readCell(subjectCell))};
+                                cellWrites.emplace_back(name, holder);
+                                if (std::find(cellNames.begin(), cellNames.end(), name) ==
+                                    cellNames.end()) {
+                                    addCellOfType(
+                                        name,
+                                        TypeCallType::create("PayloadOf", payloadArgument),
+                                        caseNode);
+                                    cellNames.push_back(name);
+                                }
+                            }
                             const int armPc = newArm();
+                            // What the case runs: the cells its bindings live in are written
+                            // where the value is in hand, then the arm goes on at its own point.
+                            node_ptr_t entry = makeExec(synced);
+                            for (const auto &[cellName, holder] : cellWrites) {
+                                *entry << writeCell(cellName, tree_->makeDRef(holder));
+                            }
+                            *entry << jumpTo(armPc);
+                            mark(entry, caseNode, "gct.generator.jump");
                             fill(
                                 armPc,
                                 caseNode->atAs<AST::StmtBlockLoad>(1)->atAs<AST::RepeatedLoad>(0),
@@ -6338,13 +6440,29 @@ node_ptr_t Builder::visitGeneratorBody(
                             if (pattern->type() == AST::LoadType::Null) {
                                 // `case _`: the arm every other value takes.
                                 node_ptr_t gCase = tree_->makeCase(CaseType::Else);
-                                *gCase << jumpTo(armPc);
+                                *gCase << entry;
+                                *brch << gCase;
+                                continue;
+                            }
+                            if (isEnumPattern) {
+                                const auto enumPattern = pattern->loadAs<AST::EnumPatternLoad>();
+                                node_ptr_t gCase = tree_->makeEnumCase(
+                                    enumPattern->ref().toString(),
+                                    patternFields,
+                                    patternBindings,
+                                    enumPattern->structShape());
+                                *gCase << entry;
+                                *brch << gCase;
+                                continue;
+                            }
+                            if (isRefPattern) {
+                                node_ptr_t gCase = tree_->makeCase(CaseType::Bind, patternBindings[0]);
+                                *gCase << entry;
                                 *brch << gCase;
                                 continue;
                             }
                             node_ptr_t gCase = tree_->makeCase(CaseType::Value);
-                            *gCase << visitData(caseNode->atAs<AST::DataLoad>(0))
-                                   << jumpTo(armPc);
+                            *gCase << visitData(caseNode->atAs<AST::DataLoad>(0)) << entry;
                             *brch << gCase;
                         }
                         mark(brch, stmt, "gct.generator.match");
