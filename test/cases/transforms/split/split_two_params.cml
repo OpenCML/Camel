@@ -20,8 +20,11 @@ func f(x: float, y: float): float {
 
 func main(): int sync {
     let lifted = jvp(f)
-    let (vx, tx) = lifted(3.0, 1.0, 2.0, 0.0)
-    let (vy, ty) = lifted(3.0, 0.0, 2.0, 1.0)
+    // The lift's parameters are `jvpSignature`'s: the value of every parameter and then the tangent of
+    // every one (`50ecaf5e3`), so the four numbers are (x, y, dx, dy) -- not the (x, dx, y, dy) this
+    // case was written with, which was the layout before that landing.
+    let (vx, tx) = lifted(3.0, 2.0, 1.0, 0.0)
+    let (vy, ty) = lifted(3.0, 2.0, 0.0, 1.0)
     println("value=", vx)
     println("dfdx=", tx)
     println("dfdy=", ty)
