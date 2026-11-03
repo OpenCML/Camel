@@ -35,6 +35,19 @@ desc = "The relative links of the reader-facing documents point at files and hea
 # name is resolved by the symbol. A run that verified no citation fails, so a green run checked
 # something. What the check cannot know is whether the symbol still supports the sentence.
 #
+# Both whole-tree modes walk a checkout that on a developer's machine holds what a build, a Python
+# environment and a dependency download left there: `.venv`, `venv`, `.cache`, `.ccache`,
+# `__pycache__` and `vendor` are not content of the repository -- git ignores all of them -- and on
+# the machine where this was measured two of them (a `.venv` of 29,926 files and a `.cache` of
+# 15,481) made a `--citations` run take longer than ten minutes and get reported as a hang, while
+# two headers of `vendor` send the citation patterns into catastrophic backtracking (208.5 s and
+# 82.7 s in the symbol pattern, 205.7 s and 82.8 s in the line pattern, for zero matches) and the
+# vendored trees report citations of this repository that nobody made. So SKIP_DIRS names them, and
+# `--self-test` is that property as a case: it writes a miniature checkout beside one directory per
+# name that must be skipped, each holding a citation of a missing file, and fails if any of them is
+# read or if the walk stops reading the checkout. The names are written down in the case rather
+# than read from SKIP_DIRS, so it is red the moment a name leaves that set.
+#
 
 [[tests]]
 name = "docs.links.reader_facing"
@@ -141,6 +154,18 @@ case = "../../../scripts/check-doc-links.mjs"
 args = ["${case}", "--citations", "--root", "test/plans/feat/docs_links/fixture/symbol/empty"]
 expect_exit = 2
 expect_stdout_contains = ["no citation in 1 file(s): nothing was checked"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "docs.links.citations_skip_local_caches"
+desc = "A virtual environment, a tool cache and a dependency tree beside the checkout are not scanned and the checkout still is: a tree with one page, one source file and one directory per name that must be skipped -- each cache file citing a file that does not exist -- is verified whole, so the case is red when a name leaves the skip set (a reported citation) and also when the walk stops reading real files (a count that is not the three the miniature checkout holds). It is the reading that failed before: 45,407 files and 1.87 GB of cache plus two backtracing vendored headers turned a four-second walk into a run that had not finished after three quarters of an hour."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-links.mjs"
+args = ["${case}", "--self-test"]
+expect_exit = 0
+expect_stdout_contains = ["were not scanned", "1 of 1 symbol citation(s) verified, 1 path citation(s) across 3 file(s)"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
 
