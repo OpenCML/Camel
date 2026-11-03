@@ -110,12 +110,17 @@ export func pick_at::<T>(t: T[..], at: int[]): T when is_numeric::<T>()
 // 17:35), and the operand a cotangent comes back through has no value on that side -- while `T[..]`
 // carries no extents in its type (design principles 5.4).
 //
-// So the forward half states them, and these three declarations are what it states them to. Each is
-// the operation above it with one more operand, an `int[]` the value does not need and the reverse
-// law reads instead of the array. `pick_at` is the same arrangement for the read: `at[1]` is the
-// length `xs[i]` cannot state for itself. The extents travel in one list because a transpose walk
-// answers an operator with one or two normal operands: a third position would be refused before any
-// law was looked up.
+// So the forward half states them, and these declarations are what it states them to. Each is the
+// operation above it with one more operand, an `int[]` the value does not need and the reverse law
+// reads instead of the array. `pick_at` is the same arrangement for the read: `at[1]` is the length
+// `xs[i]` cannot state for itself.
+//
+// The extents travel in one list because that is the list the reverse law wants whole: the axis and
+// the flag decide which extents are lanes and the extents decide where each lane's cotangent goes, so
+// one argument holds the three facts the adjoint reads and the value spends on nothing. (The number
+// of ordinary ports is not the constraint it once was: the walk used to refuse a third position before
+// looking for a law, and `TransposeRefusalCause` no longer has that cause -- the two extrema below take
+// a third port, their tie selection, which no extent list could carry.)
 
 /// The sum of every element, with the operand's extents stated: `sum(t)`, and `at` is `shape(t)`.
 ///
