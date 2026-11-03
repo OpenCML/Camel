@@ -130,7 +130,11 @@ RegionWalk walkRegion(const rt::GCGraph *graph, uint32_t regionId) {
             ++walk.nestedBrchs;
         }
         for (gc_node_ref_t input : dataInputsOf(graph, ref)) {
-            if (input < graph->nodeCount() && graph->nodeRegion(input) != regionId) {
+            // A ref that is not a node of this graph is not in any region, and the region query no
+            // longer answers the body for it: ask "is this a node" here (`containsNodeRef`), which
+            // is the question, instead of leaning on a region query's fallback for a node that is
+            // not there.
+            if (graph->containsNodeRef(input) && graph->nodeRegion(input) != regionId) {
                 const rt::GCNode *read = graph->node(input);
                 if (read != nullptr && read->kind != rt::GCNodeKind::Data) {
                     outside.insert(input);
@@ -2266,8 +2270,12 @@ SplitGraph buildSplitGraph(
                     // report (`probeRegion`, `probeMembers`, `probeJoin`, `conditionCopied`) are gone,
                     // and `from=[...]` now names source nodes as it always meant to.
                     Type *pairType = exitNode->dataType();
+                    // The condition that selects among the arms. A ref that is not a node of this
+                    // graph is in no region -- 0 stands for "the body, and so in none of the arms
+                    // this loop walks" -- and the region query is not asked about it, because it
+                    // would no longer answer the body for a node that is not there.
                     const uint32_t conditionRegion =
-                        condition < function->nodeCount() ? function->nodeRegion(condition) : 0;
+                        function->containsNodeRef(condition) ? function->nodeRegion(condition) : 0;
                     for (uint32_t region = 1; region < function->regionCount(); ++region) {
                         const rt::GCRegion *one = function->region(region);
                         if (one == nullptr || one->kind != rt::GCRegionKind::Arm ||
