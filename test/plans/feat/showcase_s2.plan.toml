@@ -19,7 +19,7 @@ tags = ["feat", "showcase", "s2", "vjp", "autodiff", "gradient"]
 # bias to the front with a lambda. The PyTorch reading is the third leg, recorded beside the case.
 
 [[tests]]
-name = "first_step.scalar_library_vjp.nvm"
+name = "first_step.scalar_library_vjp"
 desc = "The first step's gradient on a SCALAR model (one weight, one bias, `x = 1.5`, `t = 2.0`), by the library's `vjp(loss_plain)(0.5, 0.75)` -> `pullback(1.0)` against the engine's `with_grad(loss_with)<0.5, 0.75>(1.5, 2.0)` plus `grad` for the bias, and against the PyTorch reading recorded beside the case (torch 2.5.1+cu121, float64, cpu): loss 0.125, dL/dw -0.75, dL/db -0.5"
 kind = "behavior"
 case = "../../cases/compile/transforms/first_step_library.cml"
@@ -79,7 +79,7 @@ timeout_ms = 120000
 # answer the same four numbers and the same loss (PyTorch 2.5.1+cu121, float64, cpu, 2026-11-03,
 # `D:\Temp\s2-tensor-first-step-torch.py`).
 [[tests]]
-name = "first_step.tensor_forward_jvp.nvm"
+name = "first_step.tensor_forward_jvp"
 desc = "The first step's gradient on a TENSOR model read through the library's forward transform, four seeds, against the engine's `with_grad`: loss 10.34375 and dL/dw [[3.75, 13.5], [5.5, 19.5]], element by element, against the hand calculation and PyTorch's reading of the same literals"
 kind = "behavior"
 case = "../../cases/compile/transforms/first_step_tensor.cml"
@@ -104,7 +104,7 @@ timeout_ms = 60000
 # for the `REINTERP` line, `expect_stdout_contains` for the fault), and the day either stops being
 # printed this entry fails and says which one.
 [[tests]]
-name = "first_step.tensor_vjp_stops_at_split.nvm"
+name = "first_step.tensor_vjp_stops_at_split"
 desc = "The tensor step through the library's `vjp`: the capture no longer refuses the lift, and the reverse half is refused by `split` -- a port of the lifted graph that is not one of its parameters, which is what a captured value is. Pinned as the two readings `split` prints (`skip=forward construct=a port uri=-`, and the fault naming the port), so the entry fails the day the wall falls rather than passing silently"
 kind = "negative"
 case = "../../cases/compile/transforms/first_step_tensor_vjp.cml"
@@ -137,7 +137,7 @@ timeout_ms = 60000
 #
 # Every element is exact in binary floating point, so these assertions are exact and not a tolerance.
 [[tests]]
-name = "matmul_t.law_read_through_vjp.nvm"
+name = "matmul_t.law_read_through_vjp"
 desc = "The product's transpose law, read through `vjp`: a product under a sum and the whole step answer dL/dw [[3.75, 13.5], [5.5, 19.5]] at loss 10.34375, element by element against the hand calculation and the engine's `with_grad`, max_abs_diff 0.0. The step's values are ordinary parameters here so that the law is the only thing under measurement; the captured form is the entry above, which still stops at `split`"
 kind = "behavior"
 case = "../../cases/compile/transforms/matmul_transpose_law.cml"
@@ -161,7 +161,7 @@ timeout_ms = 60000
 # pattern was narrowed. So the entry is deliberately not "expect exit 1" and nothing else: it pins the
 # sentence, on both streams, and the day the vector forms are written it fails and names the sentence.
 [[tests]]
-name = "matmul_t.vector_operand_is_refused_by_shape.nvm"
+name = "matmul_t.vector_operand_is_refused_by_shape"
 desc = "The product's transpose law takes two matrices and refuses a vector operand by naming the shape: `skip=rule-shape uri=tensor:matmul ... reason=the rule takes (float[?, k], float[k, ?]), and the operator has (float[], float[2, 2])`. Pinned as the reading on both streams, not as an exit code, so the day the vector forms are served this entry fails rather than passing silently"
 kind = "negative"
 case = "../../cases/compile/transforms/matmul_transpose_vector_operand.cml"
