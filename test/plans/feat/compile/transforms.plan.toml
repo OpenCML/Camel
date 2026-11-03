@@ -1720,3 +1720,32 @@ expect_exit = 1
 expect_output_contains = ["answers the extents the type `A` writes down, and this call's type writes none: the type it is instantiated at is 'float[]', and an extent it writes is not a number"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "extent_of_answers_the_type"
+desc = "`extent_of::<float[2, 3]>()` answers `[2, 3]`: the extents are a fact of the type argument and of nothing else, and the value is settled where the call is built -- an OPER node records the instantiated type of the call but not the type argument it was written with, so before this the program reached a kernel with nothing to read and failed with `RuntimeDiag::PassInternalError` ('Pass ''calling `extent_of`'' failed with an internal error'), which is a compiler''s own sentence about a program that is right. The graph holds the `int[]` now (`src/compile/gir/builder_operators.cpp`, the `:op/extent_of` settlement), so the run reads a constant. The second line reads one element to pin the order."
+kind = "behavior"
+case = "../../../cases/compile/transforms/extent_of_answers_the_type.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["[2, 3]", "3"]
+expect_output_not_contains = ["PassInternalError", "internal error", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_of_a_sum_over_a_parameter"
+desc = "The transpose of `f(xs: float[3]) = sum(xs)`: the one number`''`s cotangent is that number at every position of the operand''s shape, and the shape is in the **type**, so the law is handed it -- `rulesets/transpose.cml#sum_from_type_t` names one port more than `tensor:sum` has, the walk offers the operands'' own types with the extents `extent_of`''s rule reads appended, and `back(1.0)` answers `([1.0, 1.0, 1.0])`. Measured 2026-11-04 on the base tree (`c4391db57`) this program stopped at `TRANSPOSE function=total skip=rule uri=tensor:sum reason=unbound`: the index had a law, and the law was written for a call the program did not make. The extents the law reads are not a value of the program -- no array stands in for the operand (author, 2026-11-03 17:55)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_of_a_sum_over_a_parameter.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["([1.0, 1.0, 1.0])"]
+expect_output_contains = ["rhs=sum_from_type_t"]
+expect_output_not_contains = ["skip=rule uri=tensor:sum reason=unbound", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
