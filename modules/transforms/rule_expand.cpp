@@ -220,6 +220,11 @@ gc_node_ref_t expandRuleRightSide(
             for (gc_node_ref_t input : body->normInputsOf(ref)) {
                 work.push_back(input);
             }
+            // An angle argument the answer names is part of what the answer is made of: it is copied
+            // with the nodes that read it, not left behind for the copy to trip over.
+            for (gc_node_ref_t input : body->withInputsOf(ref)) {
+                work.push_back(input);
+            }
         }
     }
     const auto capturePorts     = body->closureNodes();
@@ -298,9 +303,20 @@ gc_node_ref_t expandRuleRightSide(
             }
             inputs.push_back(at->second);
         }
-        if (!body->withInputsOf(ref).empty()) {
-            why = "the rule's right side passes a context argument of its own";
-            return rt::kInvalidNodeRef;
+        // What the rule's right side passes in angle brackets: `reshape<shape>(dx)` states, on the
+        // right, the same shape the left side was written with, so the value is a constant of the
+        // rule's own graph -- a `with` input like any other, copied the way an operand is. A with
+        // input that is not a constant of the body would have to be the matched node's own context
+        // argument, and the expansion carries the rule's values, not the node's: that one is still
+        // refused by name, below.
+        std::vector<gc_node_ref_t> withs;
+        for (gc_node_ref_t input : body->withInputsOf(ref)) {
+            const auto at = copied.find(input);
+            if (at == copied.end()) {
+                why = "the rule's right side passes a context argument it does not carry";
+                return rt::kInvalidNodeRef;
+            }
+            withs.push_back(at->second);
         }
         const bool isFunctionValue =
             node->dataType() != nullptr &&
@@ -333,6 +349,9 @@ gc_node_ref_t expandRuleRightSide(
             const gc_node_ref_t made = draft.addOperNode(node->dataType(), nullptr, oper->uri());
             if (!inputs.empty()) {
                 draft.setNormInputs(made, inputs);
+            }
+            if (!withs.empty()) {
+                draft.setWithInputs(made, withs);
             }
             copied[ref] = made;
             break;
@@ -369,6 +388,9 @@ gc_node_ref_t expandRuleRightSide(
                 tangentArgs);
             if (!inputs.empty()) {
                 draft.setNormInputs(made, inputs);
+            }
+            if (!withs.empty()) {
+                draft.setWithInputs(made, withs);
             }
             // The call reaches its callee through this node, so that graph is a dependency of this
             // one by the reference table's own rule (a FUNC node names its callee).
