@@ -25,14 +25,64 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/runtime/graph.h"
 
+#include <cstddef>
+#include <optional>
 #include <vector>
 
 namespace camel::transforms {
 
-/// The graph of `transpose(f)` and the program of the graphs built with it.
+/// Why `transpose(f)` refused the function.
+///
+/// This is the fact, and it is said once. `buildTransposeMember` records it where the walk stopped,
+/// `transposeRefusalWord` spells it into the reading log, and the caller reads *this* to know what to
+/// tell a reader -- no one parses the log back into a cause. A cause added here without a word, a
+/// sentence and a site that records it is a red in `test/tools/transpose_refusal/check.py`, which
+/// holds the four sets together.
+///
+/// `None` is "the build refused and recorded nothing": it is what an attempt that stopped before any
+/// site ran leaves, and it keeps the sentence that names no cause instead of inventing one.
+enum class TransposeRefusalCause {
+    None,
+    Signature,
+    Exit,
+    Output,
+    Component,
+    Join,
+    Kind,
+    Condition,
+    ArmTangents,
+    Arm,
+    Rule,
+    Arity,
+    CotangentNeedsAValue,
+    State,
+    StateUnread,
+    Range,
+    CallNoTranspose,
+    CallValueMissing,
+    UnreadParameter,
+    NeedsAValueOutsideTheClosure,
+};
+
+/// The word the reading log spells `cause` as, or `nullptr` for `None`. The log's spelling and the
+/// caller's decision are two readings of one value, so this is the only place that spells it.
+const char *transposeRefusalWord(TransposeRefusalCause cause);
+
+/// What a refusal is: the cause, and the parameter it is about when the cause is about one. The
+/// index is the callee's parameter position as the graph counts it; the sentence adds one because a
+/// reader counts from one.
+struct TransposeRefusal {
+    TransposeRefusalCause cause = TransposeRefusalCause::None;
+    std::optional<size_t> param;
+};
+
+/// The graph of `transpose(f)` and the program of the graphs built with it. `refusal` is what the
+/// build said when `graph` is null: a null graph on its own would leave the caller with the log
+/// string as its only account of why.
 struct TransposeGraph {
     const camel::runtime::Program *program = nullptr;
     camel::runtime::GCGraph *graph         = nullptr;
+    TransposeRefusal refusal;
 };
 
 /// The signature `transpose(f)` has for `function`, or nullptr when the function has no transpose:

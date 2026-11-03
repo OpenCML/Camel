@@ -73,6 +73,16 @@ camel::core::type::TupleType *pairTypeOf(camel::core::type::Type *type) {
         std::vector<camel::core::type::Type *>{type, type});
 }
 
+/// The empty tuple `()`, which is the tangent space of a parameter that has none
+/// (`Tangent<int> = ()`, `stdlib/types.cml`). It is **the** empty tuple type and not a second one:
+/// `TupleType::create()` (src/core/type/composite/tuple.cpp:98) is the zero-argument form of the
+/// interning constructor, so every place that writes `()` -- this one, `split`'s empty closure,
+/// `vmap`, `typecall` -- gets the same object back. A helper rather than a bare call so that the
+/// reason a signature has an empty slot at all is written where the slot is made.
+camel::core::type::Type *emptyTupleType() {
+    return camel::core::type::TupleType::create();
+}
+
 /// The tangent of one primitive: the rule `stdlib/rulesets/jvp.cml` files for its operator, applied
 /// to the operands' values and their tangents.
 ///
@@ -243,25 +253,30 @@ FunctionType *jvpSignature(FunctionType *function) {
         return nullptr;
     }
     auto *lifted = TupleType::create(std::vector<Type *>{function->exitType(), resultSpace.space});
-    // Every parameter becomes two parameters, the value and its tangent: `jvp(f)(2.0, 1.0)` passes
-    // two numbers, so the graph reads two ports. Handing the pair in as one tuple would need a node
-    // that takes it apart, and the only such node -- `Dref` -- belongs to graph construction and is
-    // refused outright in a runtime graph (src/runtime/graph.cpp).
+    // Every parameter becomes two parameters, the value and its tangent, and the two halves are
+    // written **values first, then tangents** (author, 2026-11-03): `(..ParamsOf<F>, ..
+    // Tangent<ParamsOf<F>>)`, which is the order the declared `Jvp<F>` type writes
+    // (`stdlib/types.cml`), so the graph and the type cannot drift apart, and the k-th tangent is
+    // the tangent of the k-th value by position rather than by arithmetic on the pairs.
+    //
+    // `jvp(f)(2.0, 1.0)` passes two numbers, so the graph reads two ports; handing the pair in as one
+    // tuple would need a node that takes it apart, and the only such node -- `Dref` -- belongs to
+    // graph construction and is refused outright in a runtime graph (src/runtime/graph.cpp).
+    //
+    // A parameter with no tangent space -- the `n` of `xs[n]` -- keeps its place in the tangent half
+    // as `()`, an empty slot: the two halves line up position by position, so a reader that walks
+    // them together never has to know which parameters were left out. The empty slot is a place a
+    // cotangent could be written with nothing to write in it, which is why an earlier reading of this
+    // function gave such a parameter no slot at all; that made the halves two lists of different
+    // lengths and left the pairing to arithmetic. The author's ruling is the slot.
     camel::core::type::param_vec_t params;
     for (size_t i = 0; i < function->normTypesCount(); ++i) {
-        Type *parameter = function->normTypeAt(i);
-        const camel::core::TangentSpaceAnswer answer = camel::core::tangentSpaceOf(parameter);
-        // A parameter with no tangent space -- the `n` of `xs[n]` -- takes no tangent port, and the
-        // lift carries on: the same rule as `Tangent<bool> = ()` with a contribution of zero, stated
-        // once, here, by the same question the walk asks (`tangentSpaceOf`). The signature layer used
-        // to refuse such a function outright; that refusal is gone, because refusing would make a
-        // program that differentiates with respect to `xs` stop compiling for the sake of an index it
-        // was told to leave alone. Ports, not a `()` slot: an empty slot would be a place a cotangent
-        // could be written, and there is nothing to write (design principles 9.9).
-        params.emplace_back(parameter, false);
-        if (answer.hasSpace()) {
-            params.emplace_back(answer.space, false);
-        }
+        params.emplace_back(function->normTypeAt(i), false);
+    }
+    for (size_t i = 0; i < function->normTypesCount(); ++i) {
+        const camel::core::TangentSpaceAnswer answer =
+            camel::core::tangentSpaceOf(function->normTypeAt(i));
+        params.emplace_back(answer.hasSpace() ? answer.space : emptyTupleType(), false);
     }
     if (params.empty()) {
         return nullptr;
@@ -532,30 +547,38 @@ bool liftGraph(
         std::vector<gc_node_ref_t> tangentPorts;
         valuePorts.reserve(parameterCount);
         tangentPorts.reserve(parameterCount);
+        // The value half first, in the parameters' order, and then the tangent half in the same
+        // order: the lifted signature is `(..ParamsOf<F>, ..Tangent<ParamsOf<F>>)` (author,
+        // 2026-11-03), so the ports of the graph line up with the declared `Jvp<F>` by position --
+        // port k is the k-th value, port n + k is its tangent. A caller copies its arguments into
+        // these in order, so the order here *is* the interface.
         for (size_t i = 0; i < parameterCount; ++i) {
-            // The port's type is the parameter's own, and the tangent port's is that parameter's
-            // tangent space -- `tangentSpaceOf`'s answer, not `float`: a `float[]` parameter's
-            // tangent is an array of the same shape, and a rule that consumes it (`index_into`)
-            // takes it whole. The element's tangent only appears one layer down, at `xs[i]`.
+            // The port's type is the parameter's own. The tangent port's is that parameter's tangent
+            // space -- `tangentSpaceOf`'s answer, not `float`: a `float[]` parameter's tangent is an
+            // array of the same shape, and a rule that consumes it (`index_into`) takes it whole. The
+            // element's tangent only appears one layer down, at `xs[i]`.
             camel::core::type::Type *parameterType = function.funcType()->normTypeAt(i);
             const gc_node_ref_t value = draft.addPortNode(
                 parameterType, draft.allocateRuntimeSlot(parameterType));
             draft.appendNormPort(value);
             valuePorts.push_back(value);
-            // A parameter with no tangent space takes no tangent port at all -- the same question the
-            // signature asks, so the two layers cannot disagree about which parameters have a slot.
+        }
+        for (size_t i = 0; i < parameterCount; ++i) {
+            camel::core::type::Type *parameterType = function.funcType()->normTypeAt(i);
             const camel::core::TangentSpaceAnswer tangentSpace =
                 camel::core::tangentSpaceOf(parameterType);
-            if (tangentSpace.hasSpace()) {
-                const gc_node_ref_t tangent = draft.addPortNode(
-                    tangentSpace.space, draft.allocateRuntimeSlot(tangentSpace.space));
-                draft.appendNormPort(tangent);
-                tangentPorts.push_back(tangent);
-            } else {
-                // No port, and a place in this list that says so: the list is indexed by the
-                // parameter's position, so it cannot simply be shorter.
-                tangentPorts.push_back(rt::kInvalidNodeRef);
-            }
+            // A parameter with no tangent space takes a `()` slot here too, and the slot is a port:
+            // the two halves keep their places position by position, so a reader that walks them
+            // together never has to know which parameters were left out. What such a parameter does
+            // *not* get is a tangent to walk with -- `tangentPorts` holds the invalid ref, so the
+            // chain below reads "nothing to differentiate" and answers a zero contribution rather
+            // than a `()`-typed node where a direction belongs.
+            camel::core::type::Type *tangentType =
+                tangentSpace.hasSpace() ? tangentSpace.space : emptyTupleType();
+            const gc_node_ref_t slot =
+                draft.addPortNode(tangentType, draft.allocateRuntimeSlot(tangentType));
+            draft.appendNormPort(slot);
+            tangentPorts.push_back(tangentSpace.hasSpace() ? slot : rt::kInvalidNodeRef);
         }
         // Which parameter a port of the original body is, by its place in that list.
         std::unordered_map<gc_node_ref_t, size_t> parameterOf;
