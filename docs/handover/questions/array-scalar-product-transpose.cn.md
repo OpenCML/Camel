@@ -56,6 +56,14 @@ DBGPROBE answer at=1 portNode=4 part=15 type=float
 1. **律的答案类型按参数的切空间走**（每个成员一个 `Tangent<Param_i>`，而不是一个 `T[..]` 通吃）。这样 `(sum_to(ct*w, x), sum_to(ct*x, w))` 的第二个成员就是 `float`，`sum_to` 的返回值也就是 `float`，`0.0` 不会发生；同一处改动也顺带让"一个键下两条形参不同的律"不再需要派发——**这正是作者裁过、今天卡在实现上的那件事**。
 2. **数组进 float 槽要拒绝**（设计原则 9.9：跑通却给出错值不允许）。今天它是静默的 `0.0`，和 lane-mult 上量到的 `6.5897671638891e-310`（未初始化 double）是同一类：错数不是拒绝。
 
+**同一形状的加法不会错，因为它根本走不到**：`g(x: float[..], s: float) = sum(x + s)`（同一 `s = 4.0`）的读数是**拒绝**，不是错数——
+
+```
+error[RuntimeDiag::RuntimeError]: ... transforms: jvp has no forward rule for `tensor:add` (the operator has no forward rule bound at all).
+```
+
+所以"数组 + 数字"今天停在 jvp 那一层，`add_tensor_t` 的右式再怎么写都到不了它；这一笔的错数只属于 `tensor:multiply`——**因为它有 jvp 律，却没有一条对方是数字的转置律**。
+
 另外两条副产物，各自是一个名字而不是一个猜测：
 
 - 律里写**字面量** `sum_to(ct * x, 0.0)` 被拒，理由 `the rule's right side uses a node written after it`——字面量被当作"写在它后面"的节点。这条拒绝是对的（拒绝优于错数），但理由是错的：常量不可能是写在后面的节点。
