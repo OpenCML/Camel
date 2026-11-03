@@ -67,10 +67,10 @@ TRANSPOSE function=first graph=49 type=(float[4], float) => (float[4],) nodes=3 
 ## 不知道的
 
 - 规则的返回类型能不能按**操作数的秩**特化（秩多态：`ElementOf` 给了元素，5.6 没有给"少一维"）。
-- `portsTakeOperands`（`modules/transforms/jvp.cpp:131-186`）能不能对切线那一位改按**节点自己的切空间
+- `portsTakeOperands`（`modules/transforms/jvp.cpp#buildRuleTangent`）能不能对切线那一位改按**节点自己的切空间
   类型**去比，而不是按律里写下的类型。
 - `vmap` 一族**不需要**同样的改动，且这一点已经量到（下节 d）：它按**元素**类型实例化规则
-  （`modules/transforms/vmap.cpp:325` 的 `ruleElementTypeOf(operandType)`），所以 `T[]` 在那里是"元素的
+  （`modules/transforms/vmap.cpp#buildVmapGraph` 的 `ruleElementTypeOf(operandType)`），所以 `T[]` 在那里是"元素的
   数组"、正好是那个批的拼法；把 `vmap_rule_idx` 也写成 `T[..]` 会把批从 `Lift<T[]>` 改成 `Lift<T[..]>`，
   秩一批的读数就不再是今天这个值 —— 那是把一个能用的拼法换掉，不是放宽。
 

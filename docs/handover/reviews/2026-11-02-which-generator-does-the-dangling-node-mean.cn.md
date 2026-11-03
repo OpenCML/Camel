@@ -31,7 +31,7 @@ Builder::extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &danglin
 if (dangling) { *execNode << dataNode; dataNode = execNode; }
 ```
 
-（`src/compile/gct/builder.cpp:2205`，同样四行还出现在 `:4202`、`:4860`、`:4916`、`:4983`、`:5091`。）
+（`src/compile/gct/builder.cpp#Builder::visitExitStmt`，同样四行还出现在 `:4202`、`:4860`、`:4916`、`:4983`、`:5091`。）
 
 生成器那一侧有两个**真**拒绝点，都不是"悬垂"：
 
@@ -79,7 +79,7 @@ sample: O05[EXIT] O06[EXIT] O07[EXIT] O04[EXIT] O03[EXIT] O02[EXIT] O0B[EXIT] O0
   **没有图可读，因此不构成"无读者"的样本**（这 5 条的红与"悬垂"无关，另案）。
 
 **字节码/VM 层：这一层不存在"读者"这个概念，所以这条结论到 GIR 为止。** `std::bc`
-（= `std::fastvm::bytecode`，`src/execute/pass.cpp:758`）转储的是**槽位与指令**：
+（= `std::fastvm::bytecode`，`src/execute/pass.cpp#passAliases`）转储的是**槽位与指令**：
 
 ```
 [index] opcode (opsize) [self] | [fastops] | <with> | extra
@@ -104,7 +104,7 @@ sample: O05[EXIT] O06[EXIT] O07[EXIT] O04[EXIT] O03[EXIT] O02[EXIT] O0B[EXIT] O0
 **字节码层无此概念，结论到 GIR 为止**。下一层若要读，需要先定义那一层的"读"。
 ## 6. 作者 13:50 指明出处（本页结论不变）
 
-作者 13:50 说明他说的那一件是 **`stream.*` 11 条在 Windows 上崩在 `src/compile/gir/builder_support.h:125` 的
+作者 13:50 说明他说的那一件是 **`stream.*` 11 条在 Windows 上崩在 `src/compile/gir/builder_support.h#nodeKindOf` 的
 `nodeGraphOf()`（"Draft node is not owned by a compile graph builder"）**，Linux 上碰巧读得到已释放的内存所以不报；
 **与 GCT 的 `extractData` 的 `dangling` 无关，与 `test/tools/progen` 也无关**。本页第 4 节那份 GIR 层扫描
 （24 条用例、19 条绿、0 个非 EXIT 无读者节点）**是另一件事，结论照旧**。

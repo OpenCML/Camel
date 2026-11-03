@@ -1,11 +1,11 @@
 # `tensor:` 与 `array:` 的同名算子，是不是同一个调用形状？
 
-作者 19:50 的裁定说"键从声明读"，并且"同一个键可以有多条规则，按类型选"。把这条用到张量上就会出现这个问题：`sum(xs)` 只有一个键，而树里有两条同名的声明候选——`stdlib/array.cml:155` 的 `sum::<T>(xs: T[..]): T`（数组归约，带函数体）和 `tensor:sum` 那条只有计算签名、没有声明的注册。
+作者 19:50 的裁定说"键从声明读"，并且"同一个键可以有多条规则，按类型选"。把这条用到张量上就会出现这个问题：`sum(xs)` 只有一个键，而树里有两条同名的声明候选——`stdlib/array.cml#sum` 的 `sum::<T>(xs: T[..]): T`（数组归约，带函数体）和 `tensor:sum` 那条只有计算签名、没有声明的注册。
 
 ## 事实
 
 1. **数**：`tensor` 协议注册 **86** 个 URI，其中 **18** 个已经有声明造出的重载（`norm >= 0`，孪生行），**68** 个只有 C++ 的计算签名（`norm = -2`）。按调用形状（名字 + 元数）扫全树 585 行注册重载：**已覆盖 413 / 真缺 206 / 签名表达不了 36**（`docs/handover/reports/2026-11-02-p1-13-three-columns-call-shape.cn.md`）。
-2. **`sum_axis` 早就有声明**：`stdlib/tensor.cml:162` 那条 `export func sum_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]` 就是它，给它补 `#op('tensor:sum_axis')` 之后 `camel inspect --ops` 的两行**逐字未变**——tag 只在声明不遵循"模块名 + 名字"约定时才需要（设计原则 6.4 第 1 步）。
+2. **`sum_axis` 早就有声明**：`stdlib/tensor.cml#argmin_axis` 那条 `export func sum_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]` 就是它，给它补 `#op('tensor:sum_axis')` 之后 `camel inspect --ops` 的两行**逐字未变**——tag 只在声明不遵循"模块名 + 名字"约定时才需要（设计原则 6.4 第 1 步）。
 3. **`reshape` 的注册签名是联合**：`(t: float[..] | number[], shape: int[]) => float[..]`，声明今天表达不了联合参数，所以它属于"签名表达不了"，不是"缺声明"。
 4. **真跑过的证据**（`import { ones } from tensor` + `import { sum, mean, min, max, argmax, argmin } from array`，`ones::<f32>([2, 3])` 实参，`std::nvm`）：`sum` 6.0、`mean` 1.0、`min` 1.0、`max` 1.0、`argmax` 0、`argmin` 0——**`array:` 的声明接受张量实参**。
 5. **反例也在同一批里**：`abs`、`exp`、`log`、`erf`、`erfc`、`pow`（`stdlib/math.cml`）**拒绝**张量实参，报的是 `WhenConditionUnmet`——"every candidate's `when` is false"，因为它们是 `when is_float::<T>()` 这类**元素类型**条件；`dim` 的轴是 `<1>` 里的**静态**参数，不在括号里，所以它的"同名同元数"是假匹配。

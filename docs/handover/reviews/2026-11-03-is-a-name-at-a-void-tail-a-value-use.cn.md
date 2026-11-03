@@ -48,7 +48,7 @@
 
 ## 4 这一处能碰到多少份文档示例
 
-一份都没有修之前是**一份**：`stdlib/signatures/transforms.cml:66` 的 `@example let step = split`。`scripts/stdlib-reference.mjs#exampleSource`
+一份都没有修之前是**一份**：`stdlib/signatures/transforms.cml#split` 的 `@example let step = split`。`scripts/stdlib-reference.mjs#exampleSource`
 把每个 `@example` 都包进 `func __doc_example(...): void`，所以只要示例的最后一个语句是 `let x = <一个没有单一函数值的名字>`，它就站在
 这个位置上 —— 修前它是 `internal error: Compile graph '__doc_example' still contains a live DREF node at draft ref 0`，
 修后编译通过（这一份还让它的 `@example-fragment` 标记变成陈旧：原来那句"示例是片段"是靠编译器崩掉才对上的）。

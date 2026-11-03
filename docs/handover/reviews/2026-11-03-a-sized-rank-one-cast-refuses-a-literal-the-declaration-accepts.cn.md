@@ -47,7 +47,7 @@ the literal a wider type.
 
 ## 3. 代码里确实有两条路（只读，未改）
 
-`src/compile/gir/builder_control.cpp:406-443` 的 `arrayLiteralFitsShape` 开头就按秩分叉：
+`src/compile/gir/builder_control.cpp#arrayLiteralFitsShape` 的 `arrayLiteralFitsShape` 开头就按秩分叉：
 
 ```cpp
 const std::span<const ExtentForm> extents = type->extents();
@@ -57,7 +57,7 @@ if (extents.size() < 2) {
 // 秩二及以上：flattenLiteral 摊平、逐层比较每个定长 extent、收集叶子
 ```
 
-`holdsStatedLength`（同文件 351-354）只做一件事：`array->raw().size() == statedLength(type)`。t1 是 3 对 3，这一支**本来应当返回 true**，所以拒绝不是从这里发的。发这条诊断的是 `Builder::rejectLiteralData`（`src/compile/gir/builder_diagnostics.cpp:1688`），而它拿到的 `reason` 是最后那个兜底分支 `"the value cannot become that type"`（`:1715`）——**不是** `literalNotFitReason` 给出的具体理由，也就是说"装不下"这条具体判断根本没被触发过，是上游先决定拒、再来要理由。
+`holdsStatedLength`（同文件 351-354）只做一件事：`array->raw().size() == statedLength(type)`。t1 是 3 对 3，这一支**本来应当返回 true**，所以拒绝不是从这里发的。发这条诊断的是 `Builder::rejectLiteralData`（`src/compile/gir/builder_diagnostics.cpp#Builder::rejectLiteralData`），而它拿到的 `reason` 是最后那个兜底分支 `"the value cannot become that type"`（`:1715`）——**不是** `literalNotFitReason` 给出的具体理由，也就是说"装不下"这条具体判断根本没被触发过，是上游先决定拒、再来要理由。
 
 ⇒ 这条诊断的措辞（"写一个类型装得下的值，或者给字面量一个更宽的类型"）**在 u1/u3 上是被自己否证的**：那个值装得下，而且不用更宽的类型。
 

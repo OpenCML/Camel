@@ -13,7 +13,7 @@
 | `a-version-port-that-must-carry-a-value` 的**算子本身** | `OperId VarAfter = 21`、`builtin.cpp:175` kernel、`builtin.cpp:681` `stateOnly`、`builtin_semantics.cpp:343-347` 资源、`builder_expr.cpp:629-631` 链式构造、`builder_diagnostics.cpp:209`；`callback_write_ignored` 四后端打印 `3` | **已裁已落（算子）**，**但 `orderAfterLastWriter` 的 ctrl 替身未拆**——这一条要留"已裁未落"或改成"已裁已落，替身待拆" |
 | `generator-cell-type-by-inference` | `FeatureNotSupported("generators")` 在 `src` **0 命中**（`git grep -n 'FeatureNotSupported("generators")' -- src`） | **已裁已落**（若还有别的生成器墙，请以命令复核为准） |
 | `who-consumes-the-ruleset-index` 的**索引与规则搬运** | `stdlib/rulesets/jvp.cml`、`transpose.cml` 已在树上（`67b4c17bc`）；`autodiff` 只留包装 | **已裁已落（索引与规则）**；**消费者 `reinterp<jvp>` 未做**——这一条同样是"一半落地" |
-| `one-operator-two-names` | `argmax_axis`/`argmin_axis` 只有 `stdlib/tensor.cml:189/196` 一处定义，`array.cml:264` 委托 `tensor` 的 | **已裁已落**（若 ONNX 导出侧还有 `array:`，请以 `git grep -n 'array:argmax' -- src` 复核） |
+| `one-operator-two-names` | `argmax_axis`/`argmin_axis` 只有 `stdlib/tensor.cml#sum_to（以及同文件的 `mean_axis`）` 一处定义，`array.cml:264` 委托 `tensor` 的 | **已裁已落**（若 ONNX 导出侧还有 `array:`，请以 `git grep -n 'array:argmax' -- src` 复核） |
 
 ## 二、确实还没做（保持"已裁未落"）
 
@@ -22,7 +22,7 @@
 | `reinterp-rule-set` | `git grep -n 'reinterp' -- stdlib modules` 只中 `reinterpret_cast` | 算子与 `modules/transforms/` 都还没有 |
 | `who-consumes-the-ruleset-index` 的**消费者** | 同上 | `reinterp<jvp>` 未实现 |
 | `a-version-port-that-must-carry-a-value` 的**替身拆除** | `orderAfterLastWriter`（`builder_expr.cpp:777-796`）仍写 `writeControlLink` | 这一轮正在量"拆了会红谁"，量完给名单 |
-| `literal-head-type-expression` | `stdlib/rulesets/jvp.cml:42-56` 的 `zero_tangent` 仍以 `case _ => ()` 收尾 | 元组/结构体臂与字面量头解析未做 |
+| `literal-head-type-expression` | `stdlib/rulesets/jvp.cml#zero_tangent` 的 `zero_tangent` 仍以 `case _ => ()` 收尾 | 元组/结构体臂与字面量头解析未做 |
 | `match-type-guard` | 同上一条；`T[..]` 已有 `float[..]` 一族臂，`T[?]` 的任意秩语义未核 | 需一次 `match type` 的实施例复核 |
 | `what-carries-a-wait-for-a-write` 的"②a 停造 ctrl" | `writeControlLink` 仍有 15 个调用点（本车道 2026-11-02 的计数） | 停造 ctrl 是片 3b 之后的事 |
 | `grad-builds-its-graph-at-runtime` | 依赖 `reinterp`/`split`/`transpose` | 第 6 条未做 |
@@ -43,11 +43,11 @@
 
 | 条目 | 8 小时前的写法 | 现在的命令与读数 | 结论 |
 |---|---|---|---|
-| `reinterp-rule-set` / `who-consumes-the-ruleset-index` 的消费者 | "`git grep reinterp` 只中 `reinterpret_cast`"、"`modules/transforms/` 只有骨架" | `git grep -n 'reinterp' -- stdlib modules` = **127 行**，其中 `reinterpret_cast` **85** 行、**其余 42 行是 `reinterp` 本身**（`modules/transforms/jvp.h:5` 写的就是 `reinterp<jvp>(f)`）；模块不再是小骨架：`split.cpp` **1517** 行、`transpose.cpp` **1945** 行、`jvp.cpp` **1103** 行 | **变了**：消费者已经在模块里；仍成立的部分只有"**C++ 侧没有 `reinterp` 算子 id**"（`git grep -n 'reinterp' -- src include` 只中 `reinterpret_*`） |
+| `reinterp-rule-set` / `who-consumes-the-ruleset-index` 的消费者 | "`git grep reinterp` 只中 `reinterpret_cast`"、"`modules/transforms/` 只有骨架" | `git grep -n 'reinterp' -- stdlib modules` = **127 行**，其中 `reinterpret_cast` **85** 行、**其余 42 行是 `reinterp` 本身**（`modules/transforms/jvp.h#JvpGraph` 写的就是 `reinterp<jvp>(f)`）；模块不再是小骨架：`split.cpp` **1517** 行、`transpose.cpp` **1945** 行、`jvp.cpp` **1103** 行 | **变了**：消费者已经在模块里；仍成立的部分只有"**C++ 侧没有 `reinterp` 算子 id**"（`git grep -n 'reinterp' -- src include` 只中 `reinterpret_*`） |
 | `what-carries-a-wait-for-a-write` ②a 停造 ctrl | `writeControlLink` **15** 个调用点 | `git grep -n 'writeControlLink' -- src` = **16** 行 | **变了 1**（多的一处在本轮之前就进了 `develop`） |
 | `parallel-map-fault-what-runs-after` | `taskflow.cpp` 里 `DESIGN-QUESTION` 0 命中 | 同上：`src` 下命中的 8 个文件里**没有** `taskflow.cpp` | 不变 |
 | `generator-cell-type-by-inference` | `FeatureNotSupported("generators")` 0 命中 | = **0** | 不变 |
 | `one-operator-two-names` | `array:argmax` 在 `src` 0 命中 | = **0** | 不变 |
-| `literal-head-type-expression` / `match-type-guard` | `zero_tangent` 仍以 `case _ => ()` 收尾 | `stdlib/rulesets/jvp.cml:54` 仍是 `case _ => ()` | 不变 |
+| `literal-head-type-expression` / `match-type-guard` | `zero_tangent` 仍以 `case _ => ()` 收尾 | `stdlib/rulesets/jvp.cml#zero_tangent` 仍是 `case _ => ()` | 不变 |
 
 **⇒ 第一节里"已经落地"那六条没有一条被推翻；被推翻的是第二节里那条"`reinterp` 与 `transforms` 都还没有"**——它现在是"模块已有 `reinterp<jvp>`、C++ 侧还没有算子 id"。

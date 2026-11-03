@@ -30,4 +30,4 @@
 - `feat/transforms/split` **19/19**（改前改后同）；`feat/compile/transforms` **91 = 88/2/1**，与基线同。
 - 两条长红仍拒绝、原文不变；`grad_array_no_int` 仍 `6.0` / `([2.0, 3.0])`；`transpose_hand_closed_lambda` 四行不变；`jax_has_aux` 未动（`answersAPair` 的签名侧把它挡在外面：一参数、`splitHalvesWith` 判奇数）。
 - **`with_grad_composition_meets_the_split_wall` 仍红且理由相同**（`skip=forward`，闭包端口不是参数）——不许被这次改动弄绿。
-- 剩余 `liftedFrom` 命中：`modules/transforms/split.cpp:309`（`Half::retargets` 的判据）、`:642`（`makeCopy` 的重定向动作）；`include/camel/runtime/graph.h` 的 `kGraphRefLiftedFrom` 字段本体保留（清单第 6 项）。
+- 剩余 `liftedFrom` 命中：`modules/transforms/split.cpp#Half`（`Half::retargets` 的判据）、`:642`（`makeCopy` 的重定向动作）；`include/camel/runtime/graph.h` 的 `kGraphRefLiftedFrom` 字段本体保留（清单第 6 项）。

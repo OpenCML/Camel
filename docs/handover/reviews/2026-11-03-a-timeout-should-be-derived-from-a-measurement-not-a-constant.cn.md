@@ -2,9 +2,9 @@
 
 ## 问题
 
-`test/plans/feat/consistency/runner.plan.toml:29` 的 `timeout_ms = 180000` 是**字面常数**。这台闸机主机上这条自检今天要 **68.57 s** CPU，2026-10-24 记的 12.41–12.69 s 是**别的主机、`-Jobs 8`** 量的 —— 两个数不可比，于是每次"这台机今天多慢"都只能靠人抬一格：180 → 240（`98a500e4f`）→ 400。
+`test/plans/feat/consistency/runner.plan.toml#runner.backend_matrix` 的 `timeout_ms = 180000` 是**字面常数**。这台闸机主机上这条自检今天要 **68.57 s** CPU，2026-10-24 记的 12.41–12.69 s 是**别的主机、`-Jobs 8`** 量的 —— 两个数不可比，于是每次"这台机今天多慢"都只能靠人抬一格：180 → 240（`98a500e4f`）→ 400。
 
-计划格式今天不支持派生：`test/tools/run-tests.mjs:72-73` 的关键字白名单里只有字面值 `timeout_ms`、`cpu_budget_ms`、`verify_timeout_ms`，`:1900` 直接拿数字乘 `TIMEOUT_SCALE`，`:231` 还规定 `cpu_budget_ms` 必须有一个 `timeout_ms` 作伴。**一个常数只能被另一只手改掉。**
+计划格式今天不支持派生：`test/tools/run-tests.mjs#tests` 的关键字白名单里只有字面值 `timeout_ms`、`cpu_budget_ms`、`verify_timeout_ms`，`:1900` 直接拿数字乘 `TIMEOUT_SCALE`，`:231` 还规定 `cpu_budget_ms` 必须有一个 `timeout_ms` 作伴。**一个常数只能被另一只手改掉。**
 
 ## 三条路与代价
 

@@ -4,7 +4,7 @@
 
 ## 三句事实
 
-1. **删边只能在 `emitDraftNativePayload` 做**（`src/runtime/graph.cpp:1946`，只吃 `const GraphDraft &`）。`GCGraph` 在构造里把 payload 固化进 `nativePayload_`；`git grep 'GCGraphPayloadArena &payload'` 只命中 `draft.cpp:2401`、`draft_session.cpp:535`、`graph.cpp`、`graph_build.h:188` —— 全在 draft→payload 这一侧，没有一处接受"已冻结的 `GCGraph` + 新 payload"。后端手里是 `const GCGraph *`，没有 draft。
+1. **删边只能在 `emitDraftNativePayload` 做**（`src/runtime/graph.cpp#graph`，只吃 `const GraphDraft &`）。`GCGraph` 在构造里把 payload 固化进 `nativePayload_`；`git grep 'GCGraphPayloadArena &payload'` 只命中 `draft.cpp:2401`、`draft_session.cpp:535`、`graph.cpp`、`graph_build.h:188` —— 全在 draft→payload 这一侧，没有一处接受"已冻结的 `GCGraph` + 新 payload"。后端手里是 `const GCGraph *`，没有 draft。
 2. **`05_effect_order` 考的是"优化不许改变副作用轨迹"**（`test/cases/trans/effect_trace/effect_trace.py`：`inline + NodeVM` 的 trace 必须与 NodeVM、FastVM 逐行相同）。它在建图时删边之后失败，证明的是"删早了"，不是"谓词算错了"。
 3. **同一条判据在两个时刻给出不同答案 ⇒ 判据没错，问它的人问得太早。**
 

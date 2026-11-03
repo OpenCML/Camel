@@ -32,13 +32,13 @@ TRANSPOSE op signature=(f: (float) => float | ((..Residuals), float, ...) => flo
 
 ## 选项 1 的三问（作者对"新字段/标志/变体"的规矩）
 
-**为什么推不出？** 因为 `lin` 的类型与一个普通双参函数的类型**逐字节相同**：`(float, float) => float`。`is_same` 是结构比较（`stdlib/types.cml:119` 用它测），残差的个数与类型不在类型里（这是 08:30 那条裁定的结论：`lin` 的静态类型是普通函数类型），而 `Tangent<float> = float`、`Tangent<float[]> = float[]`，所以连"参数的类型是不是切向"都推不出来。**能用的信息只有"这个值有没有闭包"，而它在值上，不在类型上。**
+**为什么推不出？** 因为 `lin` 的类型与一个普通双参函数的类型**逐字节相同**：`(float, float) => float`。`is_same` 是结构比较（`stdlib/types.cml#is_same` 用它测），残差的个数与类型不在类型里（这是 08:30 那条裁定的结论：`lin` 的静态类型是普通函数类型），而 `Tangent<float> = float`、`Tangent<float[]> = float[]`，所以连"参数的类型是不是切向"都推不出来。**能用的信息只有"这个值有没有闭包"，而它在值上，不在类型上。**
 
 **为什么不能用已有机制？**
 
 - `with <...>`（函数类型的捕获位）：`lin` 的闭包**正是**它的捕获，但 `with` 要求**声明处**写出成员类型与个数，而残差个数是图的答案（5 个、3 个、4 个，逐程序不同）——这正是 08:30 否掉的"arity 未知的类型"，而且 `transposeSignature` 今天第一条就拒绝 `withTypesCount() != 0`（`transpose.cpp:44`）。
 - `ResidualsOf<F>` / `TupleType::residuals(...)`：残差已不再是类型，两张空表已随 `split` 那一笔删掉。
-- `param_t` 的 bool：`include/camel/core/type/composite/func.h:49` 写着它是 `var`（可变参数），不是"切向"。
+- `param_t` 的 bool：`include/camel/core/type/composite/func.h#param_t` 写着它是 `var`（可变参数），不是"切向"。
 - 静态实参（`static_args_t`）：`transpose(lin)` 的实参是运行期值（`Fill(FunctionClosure)`），没有静态实参可用。
 
 **通用在哪？** 它说的是"这个函数值的参数是**被求导的那个量**，值由闭包提供"——`split` 的后半段是第一个这样的值，但 `vjp`/`jvp` 之外任何"把图连捕获一起交出去"的算子都会用到同一位。换句话说，这个位描述的是**函数值的种类**（开/闭），不是 `split` 的私有形状。

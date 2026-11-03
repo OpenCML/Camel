@@ -13,7 +13,7 @@
 
 ## 要作者看的一句
 
-作者 2026-11-02 的裁定（`a1b782c19`，提交信息原文）是 "the ne_ rows are a second implementation of == and go"。**但删掉它们之后全量掉了 508 条**，而 `modules/graph/module.cpp:110` 的注释与代码说清了为什么：**`!=` 的排除法（`a != b` 即 `!(a == b)`）只覆盖"有 `==` 可取"的场合；对 handler 那类没有 `==` 可取的重载，编译器要的是 `__neq__` 组本身。** 按本轮页里写死的判据——"掉了就说明有地方直接调，那就不是候选"——**默认动作是保留**，而"裁定与读数冲突"这件事需要作者裁。
+作者 2026-11-02 的裁定（`a1b782c19`，提交信息原文）是 "the ne_ rows are a second implementation of == and go"。**但删掉它们之后全量掉了 508 条**，而 `modules/graph/module.cpp#GraphModule` 的注释与代码说清了为什么：**`!=` 的排除法（`a != b` 即 `!(a == b)`）只覆盖"有 `==` 可取"的场合；对 handler 那类没有 `==` 可取的重载，编译器要的是 `__neq__` 组本身。** 按本轮页里写死的判据——"掉了就说明有地方直接调，那就不是候选"——**默认动作是保留**，而"裁定与读数冲突"这件事需要作者裁。
 
 ## ① 读数：删 9 条规则之后
 
@@ -34,7 +34,7 @@ src/builtin/modules/globals.cpp 里 ${':op/ne_i', ':op/ne_l', ':op/ne_f', ':op/n
 
 ## ② 原文（这条注释本身就是答案）
 
-`modules/graph/module.cpp:110`：
+`modules/graph/module.cpp#GraphModule`：
 
 ```
 // `==` of the handle types is declared in stdlib/graph.cml (design principles 4.3): two
@@ -52,7 +52,7 @@ for (HandleKind kind : kHandleKinds) {
 exportEntity("__neq__", OperatorGroup::create("__neq__", ne));
 ```
 
-另一处按名构造的消费者：`modules/onnx/lowering.cpp:1376` — `add(":op/ne_" + t, scalarCompare("Equal", true));`。
+另一处按名构造的消费者：`modules/onnx/lowering.cpp#LoweringRegistry::LoweringRegistry` — `add(":op/ne_" + t, scalarCompare("Equal", true));`。
 内核对：`src/builtin/executors/builtin.cpp` 里 `{"op/ne_i", __builtin__ne__}` … 共 9 条。
 
 ## ③ 问句与三条路

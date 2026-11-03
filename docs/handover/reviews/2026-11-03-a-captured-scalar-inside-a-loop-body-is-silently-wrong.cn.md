@@ -162,7 +162,7 @@ the state is '((float, float), float, float, float, (float, float))'.
 这条错误不是"多打了一次端口"，它把运行期的契约说出来了：
 
 - `include/camel/runtime/loop.cpp:131` `initialState(j) = normInputs[j + iterates]`：iterable 之后的**每一个** norm 输入都被当成一个 state，于是捕获的四份被读成了 state 的四个分量；
-- `include/camel/runtime/exec_plan.h:95-99`：`slots` 的排布是"state 的各分量，然后 cond 的端口，然后**体的端口：先 element，再 k 个**"——体的端口个数就是 `element + k`，**没有给捕获留位置**。
+- `include/camel/runtime/exec_plan.h#ExecLoop`：`slots` 的排布是"state 的各分量，然后 cond 的端口，然后**体的端口：先 element，再 k 个**"——体的端口个数就是 `element + k`，**没有给捕获留位置**。
 
 所以"把捕获加进循环的 norm 输入"这条路在运行期不成立：**循环体不可能有捕获端口**。剩下的唯一通道是把捕获**放进 state**——让它成为一个每轮原样返回的状态分量（配对的两半各占一个分量），于是循环的值类型从 `(state…)` 变成 `(state…, 捕获…)`；这要求读循环值的地方都改成 `.0` 投影（多种状态那一路在 `jvp.cpp` 里已经有这个形状）。
 

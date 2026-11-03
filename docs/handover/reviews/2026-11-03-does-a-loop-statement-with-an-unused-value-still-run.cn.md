@@ -12,7 +12,7 @@
 
 ## 现象（三个用例，同形）
 
-`test/cases/compile/stream/generators_loop.cml:27,29,30`，三处 `for v in count(n) do sync {…}`。
+`test/cases/compile/stream/generators_loop.cml#main`，三处 `for v in count(n) do sync {…}`。
 诊断对三处各报一条 `EffectNotExecuted`（"the sync block it is in is not used"），输出期望的
 `0\n1\n2\n-\n0\n1\nend` 一个字符也没有；`std::gir` 里 `main` 连一个 `:io/println` 都不剩。
 
@@ -186,10 +186,10 @@ A（`feat/compile/stream` 里 `stream.generator_*` 那 32 条，加另一个计�
 3. **不是 `builder_control.cpp` 3536–3541 那条拆分路径**。打印一次也没触发：这段在"状态可拆成
    分量"的分支里，这三个循环的状态不是可拆分聚合。
 4. **不是标记退役的副作用**。`kGCNodeFlagSyncStatement` **还在**，还有 28 个读点
-   （`src/runtime/graph_edges.cpp:208`、`src/runtime/draft_regions.cpp:103`、
-   `src/passes/opt/generic/generic.cpp:342` 等），`git log -S` 的历史里它是"退成边"而不是被删；
+   （`src/runtime/graph_edges.cpp#EdgeChecker`、`src/runtime/draft_regions.cpp#GraphDraft::inheritRegion`、
+   `src/passes/opt/generic/generic.cpp#joinBlockFragments` 等），`git log -S` 的历史里它是"退成边"而不是被删；
    而**诊断这条路根本不读它**：`inUnusedSyncBlock`
-   （`src/copy/…` 实际是 `src/compile/gir/builder_diagnostics.cpp:478`）只沿 ctrl/sync 使用者走，
+   （`src/copy/…` 实际是 `src/compile/gir/builder_diagnostics.cpp#Builder::reportDroppedEffects`）只沿 ctrl/sync 使用者走，
    碰到不在 `chainPlaceGates_` 里的 `GATE` 就判"块没被用"。所以这条线干净。
 
 **第五轮的读数（推出来的，源头在这条代码路径里）**：把 `visitBodyNode` 的
@@ -260,7 +260,7 @@ exit=8 function=g`），节点 8 就是出口门，手造在
 {result})` + `setCtrlInputs(exit, {oldExit})`。
 
 它写的等待是**控制输入**——正是 `edges.cn.md` 5.3 说 `GATE` 不再带的那种（"一个数据端口、一个
-同步前驱"）。`src/runtime/graph.cpp:619–630` 两者都收，所以建图器还在链首造位门时它旁边那条控制边
+同步前驱"）。`src/runtime/graph.cpp#validateRuntimeGraphPayloadImpl` 两者都收，所以建图器还在链首造位门时它旁边那条控制边
 让检查通过了；位门没了之后它就只剩那条控制边，而它已经不是这个门的等待。
 
 **修法是让它按建图器的等待方式等（同步前驱），不是在这里手补一条等待**——补会把"绕过建图器"
@@ -336,7 +336,7 @@ walks through it`），它把"链尾"从语句节点改成了**位门**，五处
 
 ### 下一层：步行在门口停下时问的是"它是不是位门"，从没问"这个门有没有人读"
 
-`inUnusedSyncBlock`（`src/compile/gir/builder_diagnostics.cpp:478–507`）：
+`inUnusedSyncBlock`（`src/compile/gir/builder_diagnostics.cpp#Builder::reportDroppedEffects`）：
 
 - 只沿 `draft.ctrlUsersOf(id)` 与 `draft.syncUsersOf(id)` 走（484 行），**从不沿数据输入/数据使用者走**；
 - 遇到 `GATE`：在 `chainPlaceGates_` 里就继续走（496–498），不在就**立刻 `return true`**（500）；
@@ -409,7 +409,7 @@ walks through it`），它把"链尾"从语句节点改成了**位门**，五处
 [P02GATE] site=8 from=115 gate=116 kind=13 place=0 dataIn=[114] dataUsers=[] withUsers=[] ctrlUsers=[] syncUsers=[] feeds=[114:d=115 116 w=118 c= s=]
 ```
 
-- **标号 = 8**：门造在 `src/compile/gir/builder.cpp:1854`（`visitExecNode` 的 `if (!operands)` 分支，
+- **标号 = 8**：门造在 `src/compile/gir/builder.cpp#Builder::visitExecNode`（`visitExecNode` 的 `if (!operands)` 分支，
   "块的值放上链"那一处：`addGateNode` + `Norm(res, gate)` + `writeSyncStatement(tail, gate)` + `res = gate`）。
   它是**块的值门**，按设计**本来就不该进 `chainPlaceGates_`**（位门才是位置，值门是链的最后一站），
   所以这不是"绕过登记"。

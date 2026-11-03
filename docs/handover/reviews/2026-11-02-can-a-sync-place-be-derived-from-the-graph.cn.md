@@ -21,7 +21,7 @@
 
 ### 起点侧：照字面（只认语句）故障族单层 6 → 185 红
 
-读数里被拒的起点是 `Func`(kind 10)、`Fill`(4)、纯 `Oper`(11)、`Join`(7)。它们不是建错的边：`GraphDraft::takeStatementPlace` 与 `handChainPlaceTo`（`src/runtime/draft.cpp:1490`、`:1610`）在改写替换一条语句时，把那条语句的**位置**交给了替换物，替换物因此站进了链——与它是什么种类无关。
+读数里被拒的起点是 `Func`(kind 10)、`Fill`(4)、纯 `Oper`(11)、`Join`(7)。它们不是建错的边：`GraphDraft::takeStatementPlace` 与 `handChainPlaceTo`（`src/runtime/draft.cpp#GraphDraft::handChainPlaceTo`、`:1610`）在改写替换一条语句时，把那条语句的**位置**交给了替换物，替换物因此站进了链——与它是什么种类无关。
 
 ### 这就是"循环定义"
 

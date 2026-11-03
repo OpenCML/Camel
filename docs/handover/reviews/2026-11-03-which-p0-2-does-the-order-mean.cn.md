@@ -14,7 +14,7 @@
 
 ## 2. A 的两处不是同一个条件（逐分支对照）
 
-两个谓词的全文：`src/compile/gir/builder_helpers.h:526-545`（builder，吃 `node_handle_t`，操作符按 target 的 `uri` 查）与 `src/runtime/graph_edges.cpp:193-219`（seal，吃 `gc_node_ref_t`，操作符按 `GCOperBody::oper` 查）。逐分支：
+两个谓词的全文：`src/compile/gir/builder_helpers.h#nodeTakesAnOrder`（builder，吃 `node_handle_t`，操作符按 target 的 `uri` 查）与 `src/runtime/graph_edges.cpp#EdgeChecker`（seal，吃 `gc_node_ref_t`，操作符按 `GCOperBody::oper` 查）。逐分支：
 
 | 节点 kind | builder `nodeTakesAnOrder` | seal `isChainStatement` | 同否 |
 | --- | --- | --- | --- |
@@ -25,7 +25,7 @@
 | `Oper` 纯 + 可 fold + 不会故障 | false | false | 同 |
 | `Oper` 纯 + 可 fold + 会故障 | true | true | 同 |
 | `Oper` 有副作用 | true（`mayBeRecomputed` 假） | true（`!isPure`） | 同 |
-| `Oper` 纯但 `declareUnfoldable`（`src/core/operator_table.cpp:141`） | true | false | **不同** |
+| `Oper` 纯但 `declareUnfoldable`（`src/core/operator_table.cpp#OperatorTable::declareUnfoldable`） | true | false | **不同** |
 | `Oper` 未声明 / `kNoOper` | false | false | 同 |
 | `Cast` 会故障 | true（`mayFault(cast)`） | false（默认支） | **不同** |
 | `Cast` 不会故障 | false | false | 同 |
