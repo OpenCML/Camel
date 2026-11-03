@@ -41,12 +41,28 @@ EXPECTED = {
     # (`8194d89fd` and the author's ruling of 2026-11-02 11:30) -- before that the module did not
     # compile at all and the probe reported a refusal that belonged to the module, not to the shape.
     "01_grad_scalar": "ok",
-    "02_grad_table": "refused",
-    "03_matmul": "refused",
+    # 02 and 07 were pinned `refused` on 2026-11-02 because they genuinely refused then: the library
+    # `vjp` was being rewritten and `stdlib/vjp.cml` did not compile, so every probe that went through
+    # it reported the module's refusal rather than its own construct's.  Both answer today, and the
+    # numbers are checked by hand here rather than taken on trust -- the probe is the only thing
+    # between the reader and "it runs, so it is right".
+    #
+    # `read(w) = w[0] * w[1] + w[2]` at `w = [3, 2, 5]` is `3 * 2 + 5 = 11.0`, and
+    # `d/dw = [w[1], w[0], 1] = [2.0, 3.0, 1.0]`.
+    "02_grad_table": "ok",
+    # `dot(a, b)` at `a = [3, 4]`, `b = [2, 5]` is `3 * 2 + 4 * 5 = 26.0`, and the two cotangents are
+    # each other's operand: `d/da = b = [2.0, 5.0]`, `d/db = a = [3.0, 4.0]`.
+    #
+    # `sum(w @ w)` at `w = [[1, 0.5], [0.5, 1]]` is 4.5, and `w @ w` summed is
+    # `sum_ij sum_k w_ik w_kj`, so `d/dw_ab = sum_j w_bj + sum_i w_ia = 1.5 + 1.5 = 3.0` for every
+    # entry; the all-ones direction the probe seeds is therefore `4 * 3.0 = 12.0`.  This is the first
+    # probe the new `jvp_sum` rule answers, which is why it moved.
+    "03_matmul": "ok",
     "04_softmax": "refused",
     "05_reduction": "refused",
     "06_layout": "refused",
-    "07_two_parameters": "refused",
+    # `dot` again: 26.0, with one cotangent per parameter, `a -> [2.0, 5.0]` and `b -> [3.0, 4.0]`.
+    "07_two_parameters": "ok",
     "08_embedding": "refused",
     "09_causal_mask": "refused",
     "10_with_parameter": "refused",
