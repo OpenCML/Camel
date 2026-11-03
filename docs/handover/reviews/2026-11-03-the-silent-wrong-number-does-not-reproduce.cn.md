@@ -16,6 +16,9 @@ std::nvm   A v=16.0 d1=4.0 ； A v=16.0 d2=5.0        （纸面 16 / 4 / 5）
 std::fvm   同上
 ```
 
+同一个程序在**当前 develop 顶端 `776b8b6d8`**（`out/latest` 报 `dirty false`）上也一样：`A v=16.0 d1=4.0 / A v=16.0 d2=5.0`，
+变体 `16 / 3 / 12`。两棵树（`643ab371b` 与顶端）分别构建、都干净，读数相同。
+
 页 §5 的三条 iterable 变体（函数体逐字相同）：
 
 | iterable | 页记 | develop 实测 | 纸面 |
@@ -40,7 +43,7 @@ develop 上同一个打印给出的是 `1 → 3`（状态每轮正确喂回）�
 
 ## 3 候选提交：空
 
-`542ba0dda..HEAD`（页自称的基线到 develop，34 笔）里：
+**先看页自称的基线到 `643ab371b`（34 笔）**：
 
 - `src/runtime` + `include/camel/runtime`：**0 笔**
 - `src/passes/sched`：**0 笔**
@@ -48,7 +51,12 @@ develop 上同一个打印给出的是 `1 → 3`（状态每轮正确喂回）�
 - `modules/transforms/jvp.cpp`：**1 笔** —— `bde6b6063`（合并为 `f385b42aa`），diff 只加 array 分支，tuple 分支的产物不变
 - `8245a0f93..HEAD` 在上述路径：**0 笔**
 
-执行路径与标量抬升路径一个字没动 ⇒ **没有提交能改变这个读数**。所以 12 的来历不是"某笔提交关掉了缺陷"，
+**再看 `643ab371b` 到顶端 `776b8b6d8`（22 笔，两段合计 89 笔）**：`jvp.cpp` 2 笔
+（`942f35372` 规则端口取操作数自身的类型、`04720eb7c` 的 `when` 决定实例，连同 `stdlib/rulesets/jvp.cml` 2 笔），
+都落在 **array 抬升与规则实例**上 —— 而且它们都在 `643ab371b` **之后**，那时读数已经是 16，所以它们不可能是"关掉 12"的那一笔。
+
+⇒ 整段里没有一笔能解释 12 → 16。中间那些提交没有逐个构建（只量了 `643ab371b` 与顶端两点），
+但执行路径与标量抬升路径在这个区间一字未动，所以 12 的来历不是"某笔提交关掉了缺陷"，
 只能是**二进制与树不一致**：一个带 capture-进-state 实验的构建，或一个没有重编的 `out/latest`
 （`lane-m4b2-v2` 那份页的 §12 记的 `captures=2`，正是那次实验留下的打印）。
 
@@ -74,4 +82,5 @@ develop 上同一个打印给出的是 `1 → 3`（状态每轮正确喂回）�
 - 探针与日志：`D:\Temp\probe-mul\`（`a/g/h/ab/v/page_a/page_variants.cml`、`probe-out.txt`、`probe-graph.txt`）。
 - 被质疑的那页在 develop 上是 119 行；`lane-m4b2-v2` 的树上还有一份更长的（多出 §8–§12 的四条实验记录，
   含 `captures=2` 那段），两份 §1 的程序原文相同。核对与复跑用的是 develop 那份的原文。
-- 复跑用的二进制：`out/latest/build-info.json` = `revision 643ab371b`、`dirty false` —— 这一行本身就是上面第 5 节要说的事。
+- 复跑用的二进制两次都是干净构建：`out/latest/build-info.json` 分别报 `revision 643ab371b / dirty false` 与
+  `revision 776b8b6d8 / dirty false` —— 这正是上面第 5 节要说的事。
