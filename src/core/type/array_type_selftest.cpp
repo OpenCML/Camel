@@ -138,6 +138,11 @@ std::string debugRunArrayTypeSelfTest() {
     ArrayType *openF32 = ArrayType::openRank(f32);
     require(openF32->assignableFrom(fromInts), "f32[..] does not accept f32[3, 4]");
     require(openF32->assignableFrom(fixed4), "f32[..] does not accept f32[4]");
+    // The other half of the line below at `open3`: `f32[..]` states no extent of its own, so a
+    // rank-one array of unknown extent -- `f32[]`, the same rank with its one dimension unnamed --
+    // enters it. This is the relation the widened `:op/idx_arr` rules rest on (design principles
+    // 5.4): one law written on `T[..]` answers `T[]` and `T[..]` both.
+    require(openF32->assignableFrom(anyF32), "f32[..] does not accept f32[] (one unknown extent)");
     ArrayType *open3 = ArrayType::openRank(f32, constants({3}));
     require(open3->assignableFrom(fromInts), "f32[3, ..] does not accept f32[3, 4]");
     require(!open3->assignableFrom(ArrayType::create(f32, shapeOf({4, 5}))), "f32[3, ..] accepts f32[4, 5]");
