@@ -1,6 +1,6 @@
 # 一个成员的端口槽没有人填
 
-**读数树**：`lane-splitprimal @ 25880f2a8`（clean，`out/latest` Release；崩溃那一次用 `out/debug` 的带符号构建）。
+**读数树**：`25880f2a8`（原 `lane-splitprimal`，该分支已删；clean，`out/latest` Release；崩溃那一次用 `out/debug` 的带符号构建）。
 **程序**：`h(x) = loop s = 0.0 for i in [1,2,3,4] do s + 2.0`，经 `vjp(h)`；对照 `k(x) = loop s = 0.0 for i in [1,2,3] do s + 2.0` 直接 `transpose(k)`。
 **一句话**：转置出来的那个成员图里有一个 `Port` 端口没人填，执行到读它的 `Accs` 就崩；而它之所以没人填，是因为"零答案"让这个成员不再声明它需要的那个捕获。
 

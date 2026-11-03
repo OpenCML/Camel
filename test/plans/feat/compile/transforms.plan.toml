@@ -117,14 +117,26 @@ timeout_ms = 20000
 # residuals=1 loop=1 tape=5 invariants=0`), because the exit reads the loop's cell through one
 # `TupleIndex` per side and those two projections are what the cut hands each half -- no body region
 # is copied. The wall is one step later and is not a loop wall at all:
-# `TRANSPOSE function=split_of_jvp_of_g_backward skip=call node=23 arg=2` -- the exit the backward
-# half copies is `index_into(dxs, 0)`, a FUNC node whose array argument is *linear*, and the member
-# built for the callee answers the array alone, so the call site asks for the array's **value**.
-# That is the same wall the six `grad_array_*` cases stand on (`xs[0]` on its own, no loop in sight:
-# `same wall: the element read's member is built, and the call site needs the array's value`), so it
-# belongs to whoever lands that one, with all seven cases to check at once.
-# Owner: whoever lands the array argument at a transposed call site (`grad_array_one_element` names
-# it); the loop's own reverse walk in `modules/transforms/transpose.cpp` is behind it, not before it.
+# `TRANSPOSE function=split_of_jvp_of_g_backward skip=call-value-missing param=0 node=23 arg=2` -- the
+# exit the backward half copies is `index_into(dxs, 0)`, whose array argument the backward half
+# *recomputes* (the loop is copied into that half and its cell is a node there, not a residual), so
+# the member built for the callee cannot be handed the array's **value**. Measured 2026-11-03: the
+# same refusal stands with and without the reverse walk in `modules/transforms/transpose.cpp` -- the
+# walk is behind this wall, not in front of it, so the number this case asks for is not readable until
+# the array argument at that call is carried instead of recomputed.
+# Owner: the cut's residual set for a loop the exit reads into. Two other cases are red on the same
+# `split` side (`transpose_loop_escape.second_state_of_the_same_loop`,
+# `transpose_loop_escape.int_is_a_zero_tangent_space`: `skip=forward ... the cut copies a loop where
+# the exit reads its two components`, and `skip=backward ... the backward half reads the value of
+# parameter 0`), so the three go together.
+#
+# The reverse walk itself is *not* behind that wall any more (2026-11-03): `transpose`'s loop case now
+# iterates `range(n - 1, -1, -1)` and reads each round's element with `:op/idx_arr` instead of copying
+# the sequence, which is the shape the author named at 18:50 and the one path B of
+# `docs/handover/questions/2026-11-02-does-reversing-a-backward-need-a-new-operator.cn.md` describes --
+# no operator is added. Measured on this tree: the refusal below is identical with and without it, so
+# the walk is behind the wall rather than in front of it, and the number this case asks for stays
+# unreadable until the array argument at that call is carried instead of recomputed.
 [[tests]]
 name = "vjp_loop.rounds_are_undone_in_reverse"
 desc = "The pullback of a two-round loop reads `(1.0, 1.0)` and not `(1.0, 10.0)`: for `loop x = s for k in [1.0, 10.0] do [x[1], x[0] + x[1] * k]` the per-round map is `M_k = [[0,1],[1,k]]`, so `M = M_10 * M_1 = [[1,1],[10,11]]`, and a pullback must apply `M_1^T` after `M_10^T` -- the rounds are undone in the other direction (design 4.2/4.3). Reading the loop's first component, the correct walk gives the gradient `(1.0, 1.0)` and a copied range gives `(1.0, 10.0)`; the two numbers separate the walks and nothing else in the program has to change. `vjp` takes a function whose result is a `float` (the cotangent of the result is the seed), so the pullback's subject is `g(s) = (loop ...)[0]` -- the same loop, the same two numbers."
@@ -133,8 +145,8 @@ case = "../../../cases/compile/transforms/vjp_loop_rounds_walk_backwards.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 known_fail = ["nvm"]
-known_fail_msg = "split_of_jvp_of_g_backward skip=call"
-known_fail_note = "`split` builds both halves; `transpose` then refuses at the call above the loop, whose array argument is linear and is asked for as a value -- the `grad_array_*` wall, not a loop one."
+known_fail_msg = "split_of_jvp_of_g_backward skip=call-value-missing param=0 node=23"
+known_fail_note = "倒序本身已经做了（`transpose` 侧不再照抄 iterable）；这条用例仍红是因为 backwards 里 `index_into` 的数组参数是重算的、不是残差 -- 那一项归闭包返工（作者第 1 项）。`split` builds both halves; the refusal is one step before the walk, at the call the backward half recomputes (`index_into(dxs, 0)`), whose array argument is not a residual the cut carries."
 expect_exit = 0
 expect_output_contains = ["value= 3.0", "grad= [1.0, 1.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

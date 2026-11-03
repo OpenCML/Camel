@@ -1,6 +1,6 @@
 # M4 组装：库层 `vjp` 拼好了，作者的三条读数由程序自己给出
 
-对象：`stdlib/vjp.cml`，分支 `lane-m4-assembly`（含 `lane-m4`、`origin/develop`、`split` 改成残差图定那笔）。
+对象：`stdlib/vjp.cml`，分支 `c2181c95f`（原 `lane-m4-assembly`，该分支已删；含 `lane-m4`、`origin/develop`、`split` 改成残差图定那笔）。
 判据（已满足）：**一个只 `import { grad, vjp } from vjp` 的程序**给出 `18.0` / `(12.0, 9.0)` 与 `27.0`。
 
 ## 组装长什么样

@@ -1,4 +1,4 @@
-# 「等第 5 步（外部对象）」的程序按结果类型分桶（2026-10-31，`lane-census2`）
+# 「等第 5 步（外部对象）」的程序按结果类型分桶（2026-10-31，`f80a4cd7e`，原 `lane-census2`，该分支已删；两笔补丁落在 `add32e1c8` 与 `6d535959c`）
 
 **尺子**：`test/tools/cppexec/tensor_buckets.py`（只测量，不改翻译）。对 `test/cases/**/*.cml` 逐个跑 `camel <case> std::cpp`，读出拒绝里点名的算子，按"这个算子交回的是哪种值"分桶。
 
