@@ -549,6 +549,13 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
     // read are ordered after it, and that holds whether the write is a statement of a `sync`
     // block or not: where a read is written is what decides the value it sees, and a body that is
     // not synchronised does not move a read past a write written below it.
+    //
+    // This is where the rule is written and it is the whole of it (docs/design/effects/edges.cn.md
+    // 5.6, the author's 2026-11-03 ruling): for one cell, a write is ordered after every read since
+    // the write before it. A chain place is not the carrier of that order -- a read is not a
+    // statement of the chain, and the pure node a read stands beside may leave the chain -- so the
+    // order is written here, once, by the write. Rewrites and inlining keep the edge: it is an
+    // order edge of the pair, and replacing either end hands it to the replacement (4.6).
     auto &uses = pendingUsesOf(variable);
     {
         // A read is not on a sync chain, so the write is ordered after it by an order edge: the
@@ -573,12 +580,16 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
         const bool regionExit = exitKind == camel::runtime::GCNodeKind::Join ||
                                 exitKind == camel::runtime::GCNodeKind::Loop;
         for (const VariableUse &use : uses) {
-            if (!use.isRead || !sameGraph(use.node, currGraph_)) {
-                // An operation that used the variable itself -- a call that captured it and wrote
-                // nothing, the JOIN of a branch that touched it -- is not ordered by a write: it
-                // stays pending so that the next write meets it, and a region merges it around
-                // its own (pendingUsesOf, mergeArmVariables). A `sync` block orders it with the
-                // chain already, which is why it is not kept there.
+            // A read of the cell is the `:var/get` and the call that read a captured variable
+            // (docs/design/effects/edges.cn.md 5.6: both are reads). The write written after
+            // either of them is ordered after it, so the read sees the cell as it was before the
+            // write changed it.
+            const bool read = use.isRead || nodeKindOf(use.node) == camel::runtime::GCNodeKind::Call;
+            if (!read || !sameGraph(use.node, currGraph_)) {
+                // An operation that used the variable itself and is not a read -- the JOIN of a
+                // branch that touched it -- is not ordered by a write: it stays pending so that
+                // the next write meets it, and a region merges it around its own (pendingUsesOf,
+                // mergeArmVariables).
                 if (!synced_) {
                     pending.push_back(use);
                 }
