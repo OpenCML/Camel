@@ -291,4 +291,102 @@ REGION-PORT graph=pick node=5 region=1 regionKind=Arm port=1 portRegion=0 portRe
    纪律（不生效的守卫比不留更糟，见 `questions/2026-11-03-a-norm-port-count-over-the-call-arguments-is-not-a-wall-today.cn.md`）
    **不合入**，直到有一条真实程序能让它拦住；在那之前它只是一台仪器，而不是一条不变式。
 
+**这两条结论的后续（同一晚，见第十节）**：第 1 条被吸收 —— 判据落成"**同一条链，两个方向都算**"，
+即"不跨枝"，而不是单向"只许读祖先"（单向版实测 7 条新红，因为建图器每天都在写父读子）。第 2 条
+被换掉的是**载体**而不是纪律：	est::regions 换成一张 body 有自己工作的图之后，这条检查在旧形状上
+确实拦住过东西（三条红），于是它不再是"0 命中的仪器"。
+
 patch 位置：`D:\Temp\region-port-printonly.patch`（只打印版，4809 B）。
+
+## 十、同链判据落地：一条检查、一张带 body 的图、一组关系式断言（2026-11-03，`lane-sortchain @ 810f58818`）
+
+第九节末尾说"只拦兄弟读的版本今天 0 命中 ⇒ 不合入"。这一节是它**合入**的那次，因为判据与测试载体
+都被换掉了 —— 不是把第九节那个结论推翻，而是把它说的两个障碍各自修掉。
+
+### 1. 判据：同一条链，两个方向都算
+
+```cpp
+// include/camel/runtime/graph.h
+bool isAncestorOf(uint32_t ancestor, uint32_t region) const;   // 沿 parent 走到 0
+bool regionsShareChain(uint32_t a, uint32_t b) const { return isAncestorOf(a, b) || isAncestorOf(b, a); }
+// src/runtime/graph_edges.cpp#checkGraphCrossReferences
+if (graph.regionsShareChain(region, portRegion)) { continue; }   // 否则 violations.push_back(...)
+```
+
+违规文本点名两侧：
+
+```
+graph '<名>' node <n> in region <r> (<Kind> parent <p>): it reads port <q> of region <k>
+(<Kind> parent <pk>), which is not on the same chain of regions as the region the node runs in
+```
+
+**为什么"两个方向"**：第九节 961 行里 926 行是 `Arm`→`Root`、`Arm`→`LoopBody`、`LoopBody`→`Root`、
+`Inline`→`Root`、`Arm`→`LoopCond`（祖先方向），兄弟读（`Arm`→`Arm`、`LoopBody`→`Arm`）**0 行**。
+所以"同链双向"与"不跨枝"在全量上是同一个判断，而单向版（只许读祖先）会把建图器每天在写的
+**父读子**形状误判成违规 —— 实测单向版全量 8501/20，7 条新红：
+`graph 'through_match' node 10 in region 1 (Arm parent 0): it reads port 9 of region 2 (LoopBody parent 1)`、
+`graph 'main' node 16 in region 1 (Inline parent 0): … region 2 (LoopBody parent 1)` 等。**这条弯路值得记**：
+"一个区域读祖先的端口"听起来像性质，落成代码就是"只许一个方向"，而树里的实际形状是双向的。
+
+### 2. 一条必须撤回的证据
+
+中途出现过一次"过滤器说没有 arm 读它、可 arm 读到了"的读数，被当成缺陷证据。它不成立：那一版
+**没有 `live.size() < 5` 的守卫**，在只有 2 个候选的图上继续读写 `live[2]/[3]/[4]` —— 读越界，
+被搬的是垃圾引用。装上守卫再量：`PROBE give-up live=2`。**越界版的"违规"测的是我的越界，不是编码器。**
+
+### 3. 载体：`arm_tail_gate_regions.cml`
+
+`test::regions` 只搬"body 里没有任何区域读者"的节点（Port 不搬、等 BRCH 的节点不搬、别的枝读的
+节点不搬），找不到 5 个就整趟不搬。`arm_tail_gate.cml` 的 `run` 图上这种节点只有 **2 个** —— 它的
+两个臂读的就是 body 的四个端口和条件。而把块放到臂里（那样同链）会让被搬的节点只在臂里跑，程序
+不再打印 `[8.0, 8.0]`（实测：14 条红里只差这一条）。
+
+新图是同一个递归，分支答案后面接四步 `+ 0.0`：答案不变（仍打印 `[8.0, 8.0]`），body 有了没人读
+的值，块就能留在 body 级。三条用例的 expect **一字未改**搬过去；旧文件留在树里，计划条目的 `desc`
+里写明"旧图让 arm 读 body 级的端口与条件，那个形状在新规则下非法"。
+
+### 4. 断言：把"下标表"换成它自己声称的东西
+
+`test::graph_faces` 的 `[NF] dead 16` 读起来像"第 16 个节点是死的"，量下去是 **`nodeCount + 5`** ——
+那张图有 11 个节点。`erased 10` 是 `nodeCount − 1` 位置的那个节点，`brch 6` 与 `exit 5` 是分配顺序
+落在它上面的两个下标。**四条合起来是那一张图的下标表，不是性质**，换一张图必然全错（实测：加了
+四步 `+ 0.0` 后 `dead` 从 16 变 24、`exit` 从 5 变 18）。
+
+所以这一趟让 pass **两个版本同时打印、一次运行里打出来**：
+
+```
+[NF] dead 16 draft=null frozen=null          [GF] nodes 11  [NF] dead past=16 gap=5 beyond=1 both=1
+[NF] erased 10 draft=null frozen=record      [NF] erased at=10 last=1 draft-null=1 frozen-record=1
+[BF] brch 6 arms 2/2                         [BF] brch at=6 only=1 arms-same=1 arms=2
+[GF] regions 3/3 exit 5/5 slots 2/2 …        [GF] exit at=5 same=1 answer=1
+```
+
+两边**同一次运行**都成立，所以"关系式版没有放宽"不需要论证 —— 它是同一批数字换个说法。计划里
+`graph_faces.readings_absolute` 把旧图的绝对值继续钉着，`graph_faces.readings_body` 只读关系式。
+
+### 5. 读数（两套基）
+
+| 基 | `[SUMMARY]` | 新增红 |
+| --- | --- | --- |
+| 旧基 `lane-norm-arity @ 97fdb234f` | 8542 = 8509 通过 / 13 失败 / skip 10 / known 10 / killed 0 | 0（与基准 13 条逐名相同） |
+| 新基 `lane-sortchain @ 810f58818`（`origin/develop fa85a5e7f`） | 8551 = 8525 通过 / 5 失败 / skip 10 / known 11 / killed 0 | 0 |
+
+新基上五条红逐名：`python_binding.session`、`registry.docs_complete`、
+`transpose_loop_escape.{int_is_a_zero_tangent_space, second_state_of_the_same_loop, two_values_of_two_kinds}.nvm`。
+前四条里 `python_binding.session` 在旧基上也红（环境依赖），`transpose_loop_escape` 由旧基的 4 条变 3 条
+是闭包四笔带来的转绿 —— **检查与它无关**：那三条的读口都在同一链上（`LoopBody` 读自己区域的口，
+`nodeRegion(port) == region`），第九节的 961 行里也没有一条落在 `transpose_loop_escape` 的图上。
+
+### 6. 判据今天能被什么触发
+
+**只有 `test::regions` 自己造的形状。** 建图器与所有变换在 961 处跨区域读里跨枝 0。这不是"不生效的
+守卫"：它在旧形状上确实拒过（`regions.survive_commit`、`regions.survive_optimization`、
+`graph_faces.readings` 三条红），那三条红是被**换载体 + 换断言**解决的，不是把检查关掉。它守的是
+"**将来某个通过能绕到跨枝**"。
+
+### 7. 给下一个人
+
+> `[NF] dead 16` 读起来像性质，量下去是 `nodeCount + 5` —— 凡是钉节点号的断言，先问它是不是图的函数。
+
+同类的第四次（前三：`skip=forward`、`skip=call`、`dataIndex`）：一条读起来在说"性质"的断言，量下去
+在说"这张图刚好长这样"。

@@ -33,6 +33,7 @@
 #include "camel/utils/assert.h"
 
 #include <algorithm>
+#include <array>
 #include <format>
 #include <stdexcept>
 #include <string>
@@ -858,6 +859,32 @@ namespace camel::runtime {
 std::vector<std::string> checkGraphCrossReferences(const GCGraph &graph) {
     std::vector<std::string> violations;
     const auto nodeCount = graph.nodeCount();
+    const auto regionKindText = [](const GCGraph &g, uint32_t id) {
+        const GCRegion *one = g.region(id);
+        if (one == nullptr) {
+            return std::string_view("none");
+        }
+        switch (one->kind) {
+        case GCRegionKind::Root:
+            return std::string_view("Root");
+        case GCRegionKind::Arm:
+            return std::string_view("Arm");
+        case GCRegionKind::LoopCond:
+            return std::string_view("LoopCond");
+        case GCRegionKind::LoopBody:
+            return std::string_view("LoopBody");
+        case GCRegionKind::Inline:
+            return std::string_view("Inline");
+        case GCRegionKind::Block:
+            return std::string_view("Block");
+        default:
+            return std::string_view("Dead");
+        }
+    };
+    const auto regionParentOf = [](const GCGraph &g, uint32_t id) {
+        const GCRegion *one = g.region(id);
+        return one == nullptr ? id : one->parent;
+    };
     const auto inRange   = [&](gc_node_ref_t ref) {
         return ref == kInvalidNodeRef || (ref >= 0 && static_cast<uint32_t>(ref) < nodeCount);
     };
@@ -943,6 +970,62 @@ std::vector<std::string> checkGraphCrossReferences(const GCGraph &graph) {
                     id,
                     region->result,
                     nodeCount));
+        }
+    }
+    // A node reads a port of a region on its own chain: its own region's ports, those of the
+    // regions it sits in, and those of the regions inside it. The builder writes all three
+    // (measured over the whole fast tier on 2026-11-03: 647 reads `Arm` -> `Root`, 155 `Arm` ->
+    // `LoopBody`, 122 `LoopBody` -> `Root`, and none across two branches -- see
+    // docs/handover/reports/2026-11-03-does-a-partial-transposition-need-the-operand-values.cn.md
+    // 9). `regionsShareChain` answers for the three at once, and the rule is the author's
+    // (2026-11-03: "a region reads its ancestors' ports and commit checks that"), widened by that
+    // measurement to the other direction: an arm that holds a loop reads the loop's body port.
+    //
+    // What is refused is a read *across two branches*: no value of that region is in the frame the
+    // reader runs in -- the branch's frame is entered and left on its own, and its port is a slot
+    // of a frame that is not there when the read happens.
+    //
+    // Nothing in the tree reads across two branches today except the graph `src/passes/test/
+    // regions.cpp#run` fabricates, which now keeps its ports where they are so that its readers and
+    // their ports stay on one chain. So this check reports nothing today: it is here because the
+    // rule is the tree's rule, and because the first rewrite that moves a port into another branch
+    // would read a slot that is not there in silence.
+    //
+    // A region's own ports are recorded in the region itself (a port belongs to the graph and is
+    // written into the region it serves), so `regionsShareChain` answers for them on the same walk.
+    // Constants are Data nodes and are never ports.
+    for (auto it = graph.nodes().begin(); it != graph.nodes().end(); ++it) {
+        const gc_node_ref_t ref = it.ref();
+        const uint32_t region   = graph.nodeRegion(ref);
+        if (region == 0) {
+            continue;
+        }
+        std::array<std::span<const gc_node_ref_t>, 3> readGroups{
+            graph.normInputsOf(ref), graph.withInputsOf(ref), graph.ctrlInputsOf(ref)};
+        for (const std::span<const gc_node_ref_t> &reads : readGroups) {
+            for (gc_node_ref_t input : reads) {
+                if (!inRange(input) || input == kInvalidNodeRef || kindOf(input) != GCNodeKind::Port) {
+                    continue;
+                }
+                const uint32_t portRegion = graph.nodeRegion(input);
+                if (graph.regionsShareChain(region, portRegion)) {
+                    continue;
+                }
+                violations.push_back(
+                    std::format(
+                        "graph '{}' node {} in region {} ({} parent {}): it reads port {} of region"
+                        " {} ({} parent {}), which is not on the same chain of regions as the region"
+                        " the node runs in",
+                        graph.name(),
+                        ref,
+                        region,
+                        regionKindText(graph, region),
+                        regionParentOf(graph, region),
+                        input,
+                        portRegion,
+                        regionKindText(graph, portRegion),
+                        regionParentOf(graph, portRegion)));
+            }
         }
     }
     return violations;
