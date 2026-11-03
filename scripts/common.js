@@ -409,6 +409,10 @@ export function runCmakeBuild(config, cmakeOptionFlags) {
     )
 
     logStep(`Building ${config}... (${BUILD_FOOTPRINT})`)
+    // Whether the configure step runs at all used to be invisible: a build that skipped it looks exactly
+    // like one that ran it and succeeded, so a "-D" that never reached CMake could not be told from a
+    // cached "option()". One line before the call makes the answer a reading instead of a guess.
+    console.log('[build] configure: running')
     runCommand(
         `cmake .. -G "Ninja Multi-Config" -DBUILD_FOOTPRINT="${BUILD_FOOTPRINT}" -DCMAKE_TOOLCHAIN_FILE=./build/conan_toolchain.cmake ${clangFlags} ${ccacheFlags} ${cmakeOptionFlags}`,
         cmakeEnv ? { env: cmakeEnv } : {}

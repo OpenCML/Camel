@@ -419,3 +419,27 @@ matches no rule in `test/plan-selection.json`, and the audit answers "tracked fi
 which turns a reading into a red about the reading. This happened twice in one night -- once as an
 extra failure in a full run, once as a "thirtieth red" that was the log itself. The log is the record
 of the measurement, so it belongs where records live and not where the sources do.
+
+## Getting a stack trace
+
+An assertion prints a stack trace only in a **diagnostic build**: `camel-remote.ps1 -StackTrace` (on the remote gate) or `npm run build -- --stack-trace` locally. It adds `-DCAMEL_STACK_TRACE=ON` and drops `build/CMakeCache.txt` so the option is re-read; **it never adds `-rdynamic**, because exporting the executable's symbols changes which definition a module's `dlsym` finds. A diagnostic build is for reading a trace, not for deciding green or red. See `docs/handover/questions/the-switch-that-reaches-no-target.md`.
+
+### the reading was stable, plausible, and not a reading at all
+
+A build-configuration change needs five separate readings before anyone may say it is on:
+
+1. **the source has it** -- the option, the definition, the code path;
+2. **the command has it** -- the `-D` in the configure line;
+3. **the configure step ran** -- `[build] configure: running`;
+4. **the artifact has it, and it is the right artifact** -- a multi-config generator writes compile lines
+   to `build-<Config>.ninja`, not to `build.ninja`;
+5. **the process received it** -- the program prints the value it was compiled with.
+
+Missing any one, "on" is an intention. Reading 4 is the one that fooled a whole night: `grep` on
+`build.ninja` answered 0 four times, consistently, and that file does not carry compile lines at all.
+
+### Editing files
+
+Multi-line text with quotes or backticks goes into a single-quoted here-string and is appended from there;
+`Add-Content` with an inline escaped string has broken three times in one night (`@' ... '@` escapes
+nothing).

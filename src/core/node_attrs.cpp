@@ -496,6 +496,20 @@ const std::vector<FateRow> &fateTable() {
         const Fate notNode = Fate::NotOnANode;
 
         // Node attributes: what a pass or a decorator writes on a node.
+        // `#remat`: the programmer requires the marked function to be *recomputed* where it is needed
+        // rather than carried there as a value. Nothing consumes it yet -- `split` is the pass that will
+        // read it (the next piece of that work) -- so every consumer carries it as a fact and acts on
+        // none of it, which is the honest fate for a tag whose reader does not exist yet: carrying it
+        // means a later backend sees the request instead of losing it.
+        add("remat",
+            "",
+            "#remat (a function)",
+            carried,
+            carried,
+            carried,
+            carried,
+            "the recompute request belongs to the graph, not to any one consumer: `split` will read it, "
+            "the dumps record it, and a backend that cannot act on it must still not drop it.");
         add("strict",
             "",
             "#strict (a function or block)",
