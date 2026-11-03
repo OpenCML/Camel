@@ -25,10 +25,10 @@
 | --- | --- | --- |
 | ~~`GraphDraft::replaceAllSyncUses`~~ | ~~`draft.h:739` / `draft.cpp:2028`~~ | **2026-11-03 已删**（见 §删除那一笔）。删前：全树只有声明与定义；函数体里那句 `requireOneWriting("replaceAllSyncUses")` 是**自报名字**，不是调用 |
 | ~~`GraphDraft::replaceSyncStructuralRefs`~~ | ~~`draft.cpp:1989`~~ | **2026-11-03 一起删掉**：它只被 `replaceAllSyncUses` 调用（`draft.cpp:2033`），是随它悬空的那一个 |
-| `GraphDraft::retireRegion` | `draft.h:831` / `src/runtime/draft_regions.cpp:161` | 只有声明与定义 |
-| `GraphDraft::flattenRegion` | `draft.h:857` / `src/runtime/draft_regions.cpp:200` | 只有声明与定义 |
-| `GraphDraft::hasWaiters` | `draft.h:535` / `src/runtime/draft.cpp:576` | 只有声明与定义 |
-| `GraphDraft::dropUncalledGraphs` | `draft.h:489` / `src/runtime/draft.cpp:2043` | 只有声明与定义 |
+| `GraphDraft::retireRegion` | `draft.h:831` / `src/runtime/draft_regions.cpp#GraphDraft::inlinedCopyOf` | 只有声明与定义 |
+| `GraphDraft::flattenRegion` | `draft.h:857` / `src/runtime/draft_regions.cpp#GraphDraft::inlinedCopyOf` | 只有声明与定义 |
+| `GraphDraft::hasWaiters` | `draft.h:535` / `src/runtime/draft.cpp#GraphDraft::hasWaiters` | 只有声明与定义 |
+| `GraphDraft::dropUncalledGraphs` | `draft.h:489` / `src/runtime/draft.cpp#GraphDraft::dropUncalledGraphs` | 只有声明与定义 |
 | `GraphDraft::setCaptureNames`、`GraphDraft::setOuterGraphId` | `draft.h:560`、`draft.h:345`（内联） | 头文件里各出现一次（内联定义），全树无调用点。这两个是**设置器**，可能是留给外部调用的接口，删前要问一句“API 面还是死代码” |
 
 ## 回滚残留那一条（特别标注）

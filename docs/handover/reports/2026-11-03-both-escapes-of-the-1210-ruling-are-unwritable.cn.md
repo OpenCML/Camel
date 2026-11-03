@@ -24,9 +24,9 @@
 | 合成一条 + `Tangent<S>` 辅助函数（`(Tangent<S>)` 泛型重载 + `(dx: ())` 具体重载） | `SemanticDiag::Redeclaration: 'float_from_tangent'. Each identifier must be declared only once in its scope.` —— 本语言不允许按参数类型重载同名函数 |
 | 删掉 step 律、只留 float 律 | 层 2181/3/3：`transpose_loop_escape.int_is_a_zero_tangent_space` 红，`jvp has no forward rule for :op/ltod` —— step 律不能删 |
 | 合成一条 + `match type S` 分支（右值闭包参数写 `Tangent<S>`） | 编译过、`feat/compile/rulesets` 67/67，层 2181/3/3，红因是 `jvp has no forward rule for :op/ltod (the rule's right side does not take the values and tangents the rule binds)` —— **arity 不随类型变**：step 源要 0 参闭包，`(dx: Tangent<S>)` 仍是 1 参 |
-| 按参数类型分流（`(x: int)` / `(x: i32)` / `(x: string)` 三条具体律） | `the rule is named in the index but its templates are not registered`（`modules/transforms/jvp.cpp:242`）—— **单态规则根本不进模板表** |
+| 按参数类型分流（`(x: int)` / `(x: i32)` / `(x: string)` 三条具体律） | `the rule is named in the index but its templates are not registered`（`modules/transforms/jvp.cpp#fail`）—— **单态规则根本不进模板表** |
 
-第三条值得单独说：`match type` 是**能做类型分支**的（`stdlib/types.cml:143` 的 `is_same` 就这么写），
+第三条值得单独说：`match type` 是**能做类型分支**的（`stdlib/types.cml#is_same` 的 `is_same` 就这么写），
 所以"带分支的一条"本来是最像作者意图的形态；它失败的地方不是分支，而是**闭包的参数个数**——一个
 `Tangent<S>` 参数在 `S = int` 时是 `()`，但引擎按声明给的参数个数调用，`()` 不会被展平成 0 个。
 要让这条成立，需要"参数个数随类型变"，那不是一处补丁。
@@ -34,7 +34,7 @@
 ## 三、按参数类型分流为什么曾经不可写，以及补了什么
 
 第四条是把作者第一句话（按参数类型区分）做出来：`is_integer::<T>()` 恰好是 `int | i32`
-（`stdlib/types.cml:153`），`is_string` 是 `string`，所以每个目的地一条泛型 float 律 + 三条具体
+（`stdlib/types.cml#is_same`），`is_string` 是 `string`，所以每个目的地一条泛型 float 律 + 三条具体
 step 律，四条参数类型互不相同，判重自然通过。
 
 它卡在**另有其事**：模板表只由 `__rule_generic` 填（`src/compile/gir/builder_operators.cpp`），也就是
@@ -117,8 +117,8 @@ RuleChoice chooseRuleAmong(
 
 判据（`git grep -n chooseRuleAmong modules`）：
 
-- **一个定义**：`modules/transforms/rule_expand.cpp:74`
-- **一个声明**：`modules/transforms/rule_expand.h:84`
+- **一个定义**：`modules/transforms/rule_expand.cpp#chooseRuleAmong`
+- **一个声明**：`modules/transforms/rule_expand.h#RuleChoice`
 - **三处调用**：`jvp.cpp:136`、`transpose.cpp:121`、`vmap.cpp:150`
 
 收掉 355 行、新增 251 行（`git diff --stat`：`jvp.cpp` −198、`transpose.cpp` −115、`vmap.cpp` −85，

@@ -6,16 +6,16 @@
 
 | 位置 | 在做什么 | 判 |
 | --- | --- | --- |
-| `include/camel/runtime/draft.h:90` | 解码一个边种类 | 只是被读 |
-| `include/camel/runtime/draft.h:694` | `appendInput(Ctrl, userId, inputId)` —— **写入** | 写入 |
-| `src/compile/gir/builder_support.h:87` | 把某个种类映射成 `Ctrl` | **写入的源头之一** |
-| `src/compile/gir/builder_support.h:200` | `unlink(Ctrl, from, to)` | 摘下 |
-| `src/runtime/draft.cpp:998` | `decodeUsers(Ctrl, ctrlOutputsOf(source))` | 只是被读（传输） |
-| `src/passes/opt/generic/gates.cpp:98` | GATE 的 `unlinkInput(Ctrl, …)` | 摘下 |
-| `src/passes/opt/generic/generic.cpp:614` / `:667` | 分支/汇合处的 `unlinkInput(Ctrl, …)` | 摘下 |
-| `src/passes/opt/generic/rewrite.cpp:419` | 重写时 `unlinkInput(Ctrl, …)` | 摘下 |
-| `src/passes/opt/generic/rewrite.h:117` | `appendInput(Ctrl, user, pred)` | **写入（重写器自己造一条）** |
-| `src/passes/test/fault.cpp:79/80/97/144` | 故障注入测试 | 测试 |
+| `include/camel/runtime/draft.h#edgeSlotOf` | 解码一个边种类 | 只是被读 |
+| `include/camel/runtime/draft.h#appendInput` | `appendInput(Ctrl, userId, inputId)` —— **写入** | 写入 |
+| `src/compile/gir/builder_support.h#toDraftEdgeKind` | 把某个种类映射成 `Ctrl` | **写入的源头之一** |
+| `src/compile/gir/builder_support.h#linkNodes` | `unlink(Ctrl, from, to)` | 摘下 |
+| `src/runtime/draft.cpp#GraphDraft::decode` | `decodeUsers(Ctrl, ctrlOutputsOf(source))` | 只是被读（传输） |
+| `src/passes/opt/generic/gates.cpp#bypassValueGate` | GATE 的 `unlinkInput(Ctrl, …)` | 摘下 |
+| `src/passes/opt/generic/generic.cpp#pruneBranch` / `:667` | 分支/汇合处的 `unlinkInput(Ctrl, …)` | 摘下 |
+| `src/passes/opt/generic/rewrite.cpp#replaceNode` | 重写时 `unlinkInput(Ctrl, …)` | 摘下 |
+| `src/passes/opt/generic/rewrite.h#handOverSyncWait` | `appendInput(Ctrl, user, pred)` | **写入（重写器自己造一条）** |
+| `src/passes/test/fault.cpp#LeakBranchArmTestPass::apply（以及同文件的 `ShareBranchArmTestPass::apply`、`OrderOnlyEffectTestPass::apply`）` | 故障注入测试 | 测试 |
 
 **判据的落点：真正"写入"控制边的只有三处 —— `builder_support.h:87`（构造）、`rewrite.h:117`（重写器）、`draft.h:694`（底层入口）。其余是摘下或读取。** 「谁在算链位」要落在前三处的调用者身上，而这需要一次调用图，本页没有做，**所以本页不声明"链位只剩几处"。**
 
@@ -72,13 +72,13 @@ if (!draft.ctrlInputsOf(id).empty()) {
 **① 它依赖控制边做哪个判断**：**"这个效果等的那个前驱是谁"**。第一分支读 `ctrlInputsOf`；**控制链被写成 sync 边之后这个分支永远空**，于是它退到 `normInputsOf`，锚点从"链前驱"变成"第一个值输入"，order 边挂错节点，用例期望的那条诊断不再出现 ⇒ 红。
 
 **② 还能靠什么判（两个候选）**
-- **甲：读 `syncInputsOf`** —— `include/camel/runtime/draft.h:490` 已有这个访问器，**数据已经在图里，不缺**；改的是"先问谁"的顺序。
-- **乙：读标记 `kGCNodeFlagSyncStatement`** —— `include/camel/runtime/graph.h:176` 定义、`src/compile/gir/builder_helpers.h:668` 打上，**数据也在**；但它是"我知道这里有等待"的布尔，回答不了"等的是谁"，**只能用来筛节点，不能单独当锚点**。
+- **甲：读 `syncInputsOf`** —— `include/camel/runtime/draft.h#syncInputsOf` 已有这个访问器，**数据已经在图里，不缺**；改的是"先问谁"的顺序。
+- **乙：读标记 `kGCNodeFlagSyncStatement`** —— `include/camel/runtime/graph.h#GCNodeFlag` 定义、`src/compile/gir/builder_helpers.h#isFailCall` 打上，**数据也在**；但它是"我知道这里有等待"的布尔，回答不了"等的是谁"，**只能用来筛节点，不能单独当锚点**。
 
 **③ 换判据之后的读数会是什么样**：**这一条从红变绿**是必然的；**同族一起变绿需要一次计数**——那个 pass 的用例清单本轮没有取，所以本页只写"这一条"，不写"这一族"。
 ## 换判据的收益率：177 → 40（≈77%）
 
-改法（`1c97c4792`）：`src/passes/test/fault.cpp:125-129` 的锚点**先问 `syncInputsOf`**，`ctrlInputsOf` 那一支**删掉，不留兜底** —— 注释原文：**"a control link is written as a sync edge once P0-2 lands, and then the branch below would be empty for every node"**。留一个永不生效的分支比不留更糟：它让下一个读者以为还有两条路。
+改法（`1c97c4792`）：`src/passes/test/fault.cpp#OrderOnlyEffectTestPass::apply` 的锚点**先问 `syncInputsOf`**，`ctrlInputsOf` 那一支**删掉，不留兜底** —— 注释原文：**"a control link is written as a sync edge once P0-2 lands, and then the branch below would be empty for every node"**。留一个永不生效的分支比不留更糟：它让下一个读者以为还有两条路。
 
 **读数**（一次性分支 `probe/ctrl-off2`，与改动分属两笔，探针那笔从未进车道）：
 - 改前：`[FAIL] fault.*` **177 条**；
@@ -113,7 +113,7 @@ if (!draft.ctrlInputsOf(id).empty()) {
 
 **三问的答案（读代码 + 探针跑出的 stdout 原文）：**
 
-**① `DivisionByZero` 在哪一层发出**：**在执行的算子层** —— `src/builtin/executors/builtin_semantics.cpp:230` 给 `:op/div_*` 声明 `FaultSpec{FaultKind::DivisionByZero, 1}`（下标 1 = 除数），**除法真的执行时才发。**
+**① `DivisionByZero` 在哪一层发出**：**在执行的算子层** —— `src/builtin/executors/builtin_semantics.cpp#declareBuiltinOperatorSemantics` 给 `:op/div_*` 声明 `FaultSpec{FaultKind::DivisionByZero, 1}`（下标 1 = 除数），**除法真的执行时才发。**
 
 **② 那一层看的是什么次序**：**它根本轮不到执行。** 探针跑出的 stdout 原文（`test/results/log/20261101_230542_745449/fail/.../stdout.txt`）：
 
@@ -137,7 +137,7 @@ camel: internal error: Runtime graph 'pick' breaks its edge invariants (2 violat
 
 ## 那条不变量本身（原文）
 
-**检查处**：`src/runtime/graph_edges.cpp:203-241`（`bad(...)` 造每条 violation），**汇总打印在 `:710`**：`Runtime graph '{}' breaks its edge invariants ({} violation(s)):`。
+**检查处**：`src/runtime/graph_edges.cpp#EdgeChecker`（`bad(...)` 造每条 violation），**汇总打印在 `:710`**：`Runtime graph '{}' breaks its edge invariants ({} violation(s)):`。
 
 **它要求什么**（判据原文，`:226-241`）：
 
@@ -152,7 +152,7 @@ if ((pred->flags & kGCNodeFlagSyncStatement) == 0) {
 
 ⇒ **一条 sync 边的两端都必须带 `kGCNodeFlagSyncStatement`；终点额外允许是 `Gate`。**
 
-**为什么这条要求曾经是对的**：sync 边原本只由 `sync` 块产生，而 `sync` 块写过的节点由 `src/compile/gir/builder_helpers.h:668` 打上这个 flag —— **"sync 边"与"sync 块写过的节点"是同一件东西的两种说法。**
+**为什么这条要求曾经是对的**：sync 边原本只由 `sync` 块产生，而 `sync` 块写过的节点由 `src/compile/gir/builder_helpers.h#isFailCall` 打上这个 flag —— **"sync 边"与"sync 块写过的节点"是同一件东西的两种说法。**
 
 **P0-2 之后它该变成什么**：谓词要回答的是 **"这条链的终点是不是某个等待的承担者"**，而不是"它是不是 sync 块写的"。
 

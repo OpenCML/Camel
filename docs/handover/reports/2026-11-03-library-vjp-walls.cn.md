@@ -24,18 +24,18 @@
 
 | # | 挡住的步骤 | 实测消息（原话截断处标 …） | 缺的东西 / 规则名 |
 |---|---|---|---|
-| 1 | 被捕获的**数组常数**当算子操作数（`let x = [[…]] as float[2,2]` 然后 `x @ wq`） | `transforms: jvp has no forward transform for this function`（`stdlib/vjp.cml:73`） | `modules/transforms/jvp.cpp:64#pairTypeOf` 只给浮点标量造 `(值, 切向)` 对；数组型值的零切向没有节点可交。不是某条 rule 的问题 |
-| 2 | 数组上的 `sum(w * w)` 反向 | `transforms: transpose has no transpose for this function: the rule table has no rule for a step of this body`（`stdlib/vjp.cml:74`） | `stdlib/rulesets/transpose.cml:54#mul_t` 只写到 `is_float::<T>()`（标量），缺 `T[..]` 的乘法律——即 `stdlib/rulesets/jvp.cml:278#jvp_mul_tensor` 的伴随。`stdlib/rulesets/transpose.cml:85#sum_t` 已有，不是它 |
-| 3 | `softmax<1>(z)` 的前向 | ``transforms: jvp has no forward rule for `tensor:softmax` (the rule takes (float[..]), and the operator has (floa…`` | `stdlib/rulesets/jvp.cml:283#jvp_softmax` 存在，但算子的 axis 是一个端口，`portsTakeOperands`（`modules/transforms/jvp.cpp`）按 arity 拒——就是 `rules_angle_args` 那条 |
-| 4 | `mean<-1, true>(...)` 的反向 | `transforms: transpose has no transpose for this function: the shape this program used has no transpose (the transform named it `arity`)` | `stdlib/rulesets/transpose.cml:179#mean_axis_t` 存在，同样卡在 axis/keepdims 的 arity 上 |
+| 1 | 被捕获的**数组常数**当算子操作数（`let x = [[…]] as float[2,2]` 然后 `x @ wq`） | `transforms: jvp has no forward transform for this function`（`stdlib/vjp.cml#vjp`） | `modules/transforms/jvp.cpp#pairTypeOf` 只给浮点标量造 `(值, 切向)` 对；数组型值的零切向没有节点可交。不是某条 rule 的问题 |
+| 2 | 数组上的 `sum(w * w)` 反向 | `transforms: transpose has no transpose for this function: the rule table has no rule for a step of this body`（`stdlib/vjp.cml#vjp`） | `stdlib/rulesets/transpose.cml#mul_t` 只写到 `is_float::<T>()`（标量），缺 `T[..]` 的乘法律——即 `stdlib/rulesets/jvp.cml#jvp_mul_tensor` 的伴随。`stdlib/rulesets/transpose.cml#sum_t` 已有，不是它 |
+| 3 | `softmax<1>(z)` 的前向 | ``transforms: jvp has no forward rule for `tensor:softmax` (the rule takes (float[..]), and the operator has (floa…`` | `stdlib/rulesets/jvp.cml#jvp_softmax` 存在，但算子的 axis 是一个端口，`portsTakeOperands`（`modules/transforms/jvp.cpp`）按 arity 拒——就是 `rules_angle_args` 那条 |
+| 4 | `mean<-1, true>(...)` 的反向 | `transforms: transpose has no transpose for this function: the shape this program used has no transpose (the transform named it `arity`)` | `stdlib/rulesets/transpose.cml#mean_axis_t` 存在，同样卡在 axis/keepdims 的 arity 上 |
 
 给 `lane-arity` 的三条可照抄：3、4 是同一个 arity 端口帐（axis/keepdims 是 `with` 端口，规则左右两边的 `normTypesCount()` 与节点操作数对不上）；2 是 `mul_t` 缺数组那一半，与 arity 无关，写 `T[..]` 的乘法律即可；1 不在规则表里，是 `pairTypeOf` 的标量假设。
 
 ## 3. 待办：用户面两个 `grad` 并存
 
-`stdlib/vjp.cml:84#grad` 只收 `(x: float) => float`，实现是 `vjp(f)` 读种子 1 取 `.0`；用户面另一个 `grad`/`with_grad` 是 `stdlib/signatures/autodiff.cml:51`、`:66` 的声明，实现在 `modules/autodiff/operators.cpp:155#gradFunction`（C++ 直接 pullback，对第一个 `with` 参数求导）。作者 2026-11-03 10:00 的第 3 条要的是库层那个写成一次组合——`<w, ..rest> (..xs) => …`，体里对 `(w) => f<w, ..rest>(..xs)` 做 `vjp`——并删掉只收 `float` 的那个，用户面只剩一个。
+`stdlib/vjp.cml#grad` 只收 `(x: float) => float`，实现是 `vjp(f)` 读种子 1 取 `.0`；用户面另一个 `grad`/`with_grad` 是 `stdlib/signatures/autodiff.cml#with_grad`、`:66` 的声明，实现在 `modules/autodiff/operators.cpp#gradFunction`（C++ 直接 pullback，对第一个 `with` 参数求导）。作者 2026-11-03 10:00 的第 3 条要的是库层那个写成一次组合——`<w, ..rest> (..xs) => …`，体里对 `(w) => f<w, ..rest>(..xs)` 做 `vjp`——并删掉只收 `float` 的那个，用户面只剩一个。
 
-写不出来是因为它需要**带体的 `with` 参数包**：`src/compile/gct/builder.cpp:5378` 的守卫拿掉之后，`with <..ws>` 加体里 `inner<..ws>(x)` 直接 `camel: internal error: Unknown GCT NodeType`，而 `with <..ws: int>` 更早被拒（`The rest parameter '..ws' cannot write a type`）。所以这条排在增补 1（语法那件）之后；**在那之前不要删引擎的 `pullback.cpp`**。
+写不出来是因为它需要**带体的 `with` 参数包**：`src/compile/gct/builder.cpp#Builder::visitFuncData` 的守卫拿掉之后，`with <..ws>` 加体里 `inner<..ws>(x)` 直接 `camel: internal error: Unknown GCT NodeType`，而 `with <..ws: int>` 更早被拒（`The rest parameter '..ws' cannot write a type`）。所以这条排在增补 1（语法那件）之后；**在那之前不要删引擎的 `pullback.cpp`**。
 
 ## 3.5 第一堵墙的措辞与读数不符（2026-11-03 20:30，车道 `lane-s2wall`，呈上）
 

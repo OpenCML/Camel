@@ -26,10 +26,10 @@ error[RuntimeDiag::RuntimeError]: … transforms: transpose has no transpose for
 
 | 层 | 位置 | 事实 |
 |---|---|---|
-| 规则的应用条件 | `modules/transforms/rule_expand.cpp:252` | `valueOf(argument)` 交回 `kInvalidNodeRef` ⇒ `why = "the rule's right side reads a value the caller does not carry"` |
-| 规则本身 | `stdlib/rulesets/transpose.cml:54` | `mul_t: x * c => (ct) => (mul_cotangent(c, ct), mul_cotangent_c(x, ct))` —— 两条右式都读**操作数的值** |
-| 拒绝的发起处 | `modules/transforms/transpose.cpp:1685` | 见 `answer == kInvalidNodeRef` ⇒ 打印 `skip=cotangent-needs-a-value` 并 `return false` |
-| 抛出点 | `modules/transforms/transpose_operator.cpp:136` | `built.graph == nullptr` ⇒ `transpose has no transpose for this function` |
+| 规则的应用条件 | `modules/transforms/rule_expand.cpp#RuleRightSide` | `valueOf(argument)` 交回 `kInvalidNodeRef` ⇒ `why = "the rule's right side reads a value the caller does not carry"` |
+| 规则本身 | `stdlib/rulesets/transpose.cml#mul_t` | `mul_t: x * c => (ct) => (mul_cotangent(c, ct), mul_cotangent_c(x, ct))` —— 两条右式都读**操作数的值** |
+| 拒绝的发起处 | `modules/transforms/transpose.cpp#ArmSeed` | 见 `answer == kInvalidNodeRef` ⇒ 打印 `skip=cotangent-needs-a-value` 并 `return false` |
+| 抛出点 | `modules/transforms/transpose_operator.cpp#refusalSentence` | `built.graph == nullptr` ⇒ `transpose has no transpose for this function` |
 
 `transpose.cpp:1666` 的那句注释是本题的争点：*"A value parameter of a partial transposition takes no
 cotangent, and computing one would need the value of a participating parameter -- the one thing this

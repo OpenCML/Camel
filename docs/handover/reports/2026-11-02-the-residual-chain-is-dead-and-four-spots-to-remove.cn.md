@@ -6,20 +6,20 @@
 
 | 名字 | 今天还剩什么 | 判 |
 | --- | --- | --- |
-| `TupleType::residuals` | 只剩**定义** `src/core/type/composite/tuple.cpp:188` 与枚举注释 `include/camel/core/type/intern.h:113` | **没有任何生产者**：`modules/transforms/split.cpp` 与 `split_operator.cpp` 里原先那三处调用（`split.cpp:842,849`、`split_operator.cpp:60`）在 `lane-resid` 这一轮里删空了 |
-| `TupleType::isResiduals()` | 只剩**一个读者**：`src/compile/gir/builder_expr.cpp:2195` 的守卫；定义在 `include/camel/core/type/composite/tuple.h:139` | 守卫判断的是"这个元组类型是残差类型吗"，而**已经没人能造出残差类型的元组** ⇒ 条件恒假 |
-| `SemanticDiag::ResidualsAreNotVisible` | 枚举 `include/camel/core/error/diagnostics/messages/semantic.h:478`、消息表 `src/core/error/diagnostics/messages/semantic.cpp:1800`、**唯一发点** `builder_expr.cpp:2196` | 发点就在那条恒假守卫里 ⇒ **已不可能发出** |
+| `TupleType::residuals` | 只剩**定义** `src/core/type/composite/tuple.cpp#TupleType::nullable` 与枚举注释 `include/camel/core/type/intern.h#Shape` | **没有任何生产者**：`modules/transforms/split.cpp` 与 `split_operator.cpp` 里原先那三处调用（`split.cpp:842,849`、`split_operator.cpp:60`）在 `lane-resid` 这一轮里删空了 |
+| `TupleType::isResiduals()` | 只剩**一个读者**：`src/compile/gir/builder_expr.cpp#Builder::visitAccsNode` 的守卫；定义在 `include/camel/core/type/composite/tuple.h#codes` | 守卫判断的是"这个元组类型是残差类型吗"，而**已经没人能造出残差类型的元组** ⇒ 条件恒假 |
+| `SemanticDiag::ResidualsAreNotVisible` | 枚举 `include/camel/core/error/diagnostics/messages/semantic.h#SemanticDiag`、消息表 `src/core/error/diagnostics/messages/semantic.cpp#getSemanticDiagInfoMap`、**唯一发点** `builder_expr.cpp:2196` | 发点就在那条恒假守卫里 ⇒ **已不可能发出** |
 | `split_residuals_destructured` 的旧断言 | `test/cases/compile/transforms/split_residuals_destructured.cml`、`test/cases/transforms/split/split_forward_half.cml` 的注释、`test/plans/feat/compile/transforms.plan.toml` 那一条、`diagnostics/examples.tsv` / `docs/diagnostics.md` 的示例 | 断的是"残差元组不能被拆"；机制没了，这条拒绝再也构造不出来 |
 
 ## 二、为什么这一笔不是"作者说的删"而是"作者说的删，但要按它自己的次序删"
 
-`include/camel/core/type/composite/tuple.h:135` 与 `builder_expr.cpp:2188-2194` 的注释都写着这条机制的**用意**：残差元组是变换自己的（成员数是图的答案，不是类型的答案），所以程序既不拆它也不读它的元素，而是整个交下去（设计原则 4.4，现在与以后的那一刀）。
+`include/camel/core/type/composite/tuple.h#GUARD` 与 `builder_expr.cpp:2188-2194` 的注释都写着这条机制的**用意**：残差元组是变换自己的（成员数是图的答案，不是类型的答案），所以程序既不拆它也不读它的元素，而是整个交下去（设计原则 4.4，现在与以后的那一刀）。
 
 ⇒ 只要还有人在产这种类型，守卫就是**活**的，删它就是删一条活守卫。在 `67a6420ea` 上产它的那三处已经没了，**所以这一格从"活"翻成"死"是 `lane-resid` 自己这一轮的动作，不是我的判断**。
 
 ## 三、四处，按删除的次序（给 `lane-resid` 的收尾用）
 
-1. `src/compile/gir/builder_expr.cpp:2195-2198` 的守卫（连同上面那段 2188-2194 的说明）；
+1. `src/compile/gir/builder_expr.cpp#Builder::visitAccsNode` 的守卫（连同上面那段 2188-2194 的说明）；
 2. `SemanticDiag::ResidualsAreNotVisible` 的枚举项、消息表行、`diagnostics/registry.tsv` 的那一行，并按仓库的规矩重生成 `docs/diagnostics.md` / `diagnostics/examples.tsv` / `docs/reference/camel-for-ai-diagnostics.md`；
 3. `TupleType::isResiduals()`、`residuals_` 成员与 `TupleType::residuals(...)` 工厂（`tuple.h:135-139`、`tuple.cpp:188`），以及 `TypeCode::Residuals`（`intern.h:113`）；
 4. 最后是那两处用例与计划条目（`split_residuals_destructured`、`split_forward_half` 的注释与 `feat/compile/transforms.plan.toml` 的那一条）。

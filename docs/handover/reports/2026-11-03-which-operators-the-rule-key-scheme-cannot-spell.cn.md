@@ -164,7 +164,7 @@ REINTERP jvp function=p skip=rule uri=:op/pow_d reason=the operator has no forwa
 
 作者 2026-11-03 选了 (b)（例外 3→6、覆盖 29/32、律仍 20 条），并要求先答"这个名字可信吗"。答：**名字作为数据是可信的，但从名字推出来的键装不下 20 条律**——(b) 的算术假设了"键能编码源类型"，而键是**拼写**。
 
-**名字是谁写的**：`#op(':op/<name>')` 是写在每条声明上方的**手写标注**（`stdlib/prelude.cml:643` 起），不是从类型推出来的。而且 `:op/dt od` 这一条 uri 在 `float(x: float)` 与 `f64(x: float)` 上**各写一次**——同一个 uri 对应两种拼写；反过来，拼写 `float(x)` 在**7 条**源类型声明上重复出现。没有任何测试检查字母与类型是否一致（`--verify-ops` 检查的是"uri 在注册里存在"，不是"`ltod` 就是 int→double"）。所以"名字可信"只在"它是人写的、有意的"这个意义上成立，它不携带机器可校验的源类型。
+**名字是谁写的**：`#op(':op/<name>')` 是写在每条声明上方的**手写标注**（`stdlib/prelude.cml#float` 起），不是从类型推出来的。而且 `:op/dt od` 这一条 uri 在 `float(x: float)` 与 `f64(x: float)` 上**各写一次**——同一个 uri 对应两种拼写；反过来，拼写 `float(x)` 在**7 条**源类型声明上重复出现。没有任何测试检查字母与类型是否一致（`--verify-ops` 检查的是"uri 在注册里存在"，不是"`ltod` 就是 int→double"）。所以"名字可信"只在"它是人写的、有意的"这个意义上成立，它不携带机器可校验的源类型。
 
 **从名字推键之后会怎样（关键读数）**：把 32 条缺口按"它们各自需要的那条律的写法定键"归一下类（脚本按 `stdlib/prelude.cml` 的 `#op` + 声明统计）：
 
@@ -179,7 +179,7 @@ REINTERP jvp function=p skip=rule uri=:op/pow_d reason=the operator has no forwa
 
   （剩下 3 条 `parse_float`/`idx_take`/`slice_sub` 不是转换形状。）**29 条缺口只落在 5 个键上**，而它们至少需要 **20 条标量律 + 4 条数组律**——`float/1` 一个键要同时装 `itod`（源无切空间，0 实参）、`dtod`（1 实参）、`atod`（数组，1 个数组实参）三种形状。**5 个键放不下 24 条律。**
 
-**代码里的硬约束**（两处，同一句话）：`include/camel/parse/ast/rule_head.h:101-105` 的 `indexRule`——"The name of a *different* rule already filed under that key is returned -- the caller reports the duplicate, and **the two are never silently merged**"；`src/core/forward.cpp:57` 把同一句话当作 `tensor:multiply` 那条例外的**理由**——"`*/2` is already `:op/mul_d`'s key and **one key holds one rule**"。
+**代码里的硬约束**（两处，同一句话）：`include/camel/parse/ast/rule_head.h#indexRule` 的 `indexRule`——"The name of a *different* rule already filed under that key is returned -- the caller reports the duplicate, and **the two are never silently merged**"；`src/core/forward.cpp#vmapRulesOf` 把同一句话当作 `tensor:multiply` 那条例外的**理由**——"`*/2` is already `:op/mul_d`'s key and **one key holds one rule**"。
 
 **所以 (b) 的两种结局都不好**：说 `float(x)` 的律只能有一条，其余 5 条在装载时按重复键报错（rulesets 直接红、家族建不起来）；若真按"先到先得"放过去，`dtod`（源有切空间，实参 1 个）会被派到 `ltod` 那条零实参的律上——**实参个数不符**，正是本分支早先撞过的 `Runtime indirect call norm-arity mismatch`。这不是"缺规则"，是"套错规则"，比拒绝更糟。
 

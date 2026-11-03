@@ -4,7 +4,7 @@
 
 ## 现象：一条测试的层，决定了整份文件的去处
 
-`scripts/plan-inventory.mjs:121`：
+`scripts/plan-inventory.mjs#plan`：
 
 ```js
 { file: 'test/plans/feat/linear/jit_framed.plan.toml', reason: 'its 2 milestone tests are GC stress (`--gc-stress safepoint` + `--gc-check verify`)' },
@@ -32,7 +32,7 @@
 ## 建议：按条排除，而不是按文件排除
 
 1. **`FORBIDDEN` 从"文件 → 理由"改成"文件 → 条目名单（或理由 + 条目名单）"**：登记的是"`feat/linear/jit_framed` 的 `framed.operators.gc_stress`、`framed.loops.gc_stress`"，其余 51 条照常归 fast 层。理由也就能写准：这 2 条 × 3 个后端是 GC stress。
-2. **前提是给 runner 一个"按名字选测试"的开关**。今天它做不到，`scripts/plan-inventory.mjs:75-77` 的注释就是在说这件事：*"the runner cannot select a test by name, so naming such a file would start the excluded tests too (the ONNX row)"*。所以顺序是：先给 runner `--skip-test <plan>:<name>`（或 `--only-test`），再让 `FORBIDDEN` 记条目。没有第一步，第二步只是把"整份跑"换成"整份不跑"，问题不变。
+2. **前提是给 runner 一个"按名字选测试"的开关**。今天它做不到，`scripts/plan-inventory.mjs#plan` 的注释就是在说这件事：*"the runner cannot select a test by name, so naming such a file would start the excluded tests too (the ONNX row)"*。所以顺序是：先给 runner `--skip-test <plan>:<name>`（或 `--only-test`），再让 `FORBIDDEN` 记条目。没有第一步，第二步只是把"整份跑"换成"整份不跑"，问题不变。
 3. **在开关落地之前，先让"这份文件里有几条被跳过"可见**：闸门跑 `-Plan all` 时，按文件打出"读到 N 条、跑 M 条、按 tier 跳过 K 条"。今天的读数里只有 8429 这个总数，`文件被走到` 与 `条目被跳过` 是两件事，看总数分辨不出来。
 
 ## 验收

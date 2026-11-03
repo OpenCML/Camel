@@ -17,7 +17,7 @@ if (!isWaitingCarrier(pred)) {                // :304
 }
 ```
 
-`isWaitingCarrier(const GCNode*)` = `(node->flags & kGCNodeFlagSyncStatement) != 0`（`:243`），标记由 `src/compile/gir/builder_helpers.h:661 markSyncStatement` 在建图时打上。**只读标记，不读边、不读算子表、不读区域。**
+`isWaitingCarrier(const GCNode*)` = `(node->flags & kGCNodeFlagSyncStatement) != 0`（`:243`），标记由 `src/compile/gir/builder_helpers.h#markSyncStatement markSyncStatement` 在建图时打上。**只读标记，不读边、不读算子表、不读区域。**
 
 ## 二、两次改判据的读数（同一棵树、同一条命令，只差这一个文件）
 
@@ -44,13 +44,13 @@ N09 [:io/println, OPER] --SYNC--> N0B [label="update", type=FUNC, value_type=int
 
 `FUNC` **不是 lambda，是「经由函数值的调用点」**（`update(c)`、`choose(...)` 都是）。它是语句，链必须穿过它。甲只认 `Brch/Loop/Call` + 不纯 `Oper` ⇒ 4994 条（4268 end + 726 start）是 FUNC 被误拒。**文件里当时有两个近重复的 `isChainStatement*`，其中一个没有调用者——这条判据从来没被定下来，就是这个样子。**
 
-**乙用了错的分类。** `include/camel/runtime/graph.h:195 #nodeIsFreelySchedulable` 回答的是「遍能不能随意挪动它」，`isChainStatement` 要回答的是「它承不承担一次等待」——**两个不同的问题**。证据：乙的残余按 kind 分组是 `Join`(7) 3732 end + 1009 start、纯 `Oper`(11) 2865 end + 2113 start、`Brch`(6) 763 start。而 `edges.cn.md` 3.4 明说「含效应或可能出故障的分支是链上的一条语句」、「链尾连到块的值」——`Brch` 与块的值**本来就该在链上**，共享分类却说它们自由。**同一堵墙两个名字比没有更坏，这次是同一件事两套分类。**
+**乙用了错的分类。** `include/camel/runtime/graph.h#graph #nodeIsFreelySchedulable` 回答的是「遍能不能随意挪动它」，`isChainStatement` 要回答的是「它承不承担一次等待」——**两个不同的问题**。证据：乙的残余按 kind 分组是 `Join`(7) 3732 end + 1009 start、纯 `Oper`(11) 2865 end + 2113 start、`Brch`(6) 763 start。而 `edges.cn.md` 3.4 明说「含效应或可能出故障的分支是链上的一条语句」、「链尾连到块的值」——`Brch` 与块的值**本来就该在链上**，共享分类却说它们自由。**同一堵墙两个名字比没有更坏，这次是同一件事两套分类。**
 
 ## 四、缺的是哪个事实，要改哪一层
 
 **缺的事实：一个节点是不是占据一个链位。** 图上没有任何字段说它，除了标记：
 
-1. **块的值**：`GCRegion::result` 只对有自己区域的块成立（`src/compile/gir/builder_control.cpp:2707/3544/3648` 打）；图的 body 没有区域，只能退回 `returnNodeRef()`，而那只对 `main` 的退出值成立。`sync { … }` 的块值是 `:op/add_l` 这类节点时，**图上一个字段都没有**。
+1. **块的值**：`GCRegion::result` 只对有自己区域的块成立（`src/compile/gir/builder_control.cpp#Builder::buildBranch（以及同文件的 `Builder::visitLoopNode`）` 打）；图的 body 没有区域，只能退回 `returnNodeRef()`，而那只对 `main` 的退出值成立。`sync { … }` 的块值是 `:op/add_l` 这类节点时，**图上一个字段都没有**。
 2. **链穿过值**：甲/乙都测出大量 `starts at :op/…`（乙 2113 条）。按 `edges.cn.md` 5.3/5.7，链尾到不归本块独有的值要经 `GATE`，**而建图今天插的是标记，不是 `GATE`**。
 3. **纯节点在链上**：算子表判「纯、无效应、不出故障」（`:op/add_l` 601 start / 537 end、`:op/mul_l`、`:op/eq_l`、`:struct/len_arr` …），建图仍然连它们。
 

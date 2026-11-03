@@ -84,7 +84,7 @@ poison-exit=1
 作者说"同一笔删掉"。搜不到就不硬删，证据如下：
 
 1. `git grep -n -i 'upper' -- src/runtime src/compile` —— 6 处，全是流格式（`std::uppercase`）、
-   `builder.h` 关于"递归体未闭合时写入集只是上界"的注释，与 `src/compile/literal.cpp:487` 的十进制位循环；
+   `builder.h` 关于"递归体未闭合时写入集只是上界"的注释，与 `src/compile/literal.cpp#exactDecimal` 的十进制位循环；
    **没有收集器按上界扫的循环**。
 2. `git grep -n -i -E 'fallback|safety|in case|conservative|upper|scan' -- src/core/mm` —— 唯一"扫到末尾"
    的是 `include/camel/core/mm/alloc/free_list.h` 的 `Step 2: scan the entire memory region`
@@ -120,12 +120,12 @@ if (dangling) {
 }
 ```
 
-（`src/compile/gct/builder.cpp:2205`，同样的四行在 `:4202`、`:4860`、`:4916`、`:4983`、`:5091` 各出现一次。）
+（`src/compile/gct/builder.cpp#Builder::visitExitStmt`，同样的四行在 `:4202`、`:4860`、`:4916`、`:4983`、`:5091` 各出现一次。）
 
 所以"检查太严"这个形状在这里**不存在**：没有一条规则因为"悬垂"而拒掉程序，也就没有可放松的条件。
 生成器自己那一侧有两个真实的拒绝点，都不是"悬垂"：
 
-- `Builder::visitGeneratorBody`（`src/compile/gct/builder.cpp:5707`）对状态机建不出的形状点名叫人送程序：
+- `Builder::visitGeneratorBody`（`src/compile/gct/builder.cpp#Builder::visitGeneratorBody`）对状态机建不出的形状点名叫人送程序：
   `"the generator machine does not build this shape; send the program, this is a …"`（`:5715` 一带）；
 - 一个没被生成器机器认领的 `yield` 走到语句构造器时被 `FeatureNotSupported` 拒（`:2164`）。
 

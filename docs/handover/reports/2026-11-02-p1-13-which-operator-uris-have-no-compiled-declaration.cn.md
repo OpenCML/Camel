@@ -36,7 +36,7 @@
 
 ## 对 P1-7 最要紧的两条
 
-**1. 五个算术族 34 个算子只有 4 个有声明。** `:op/add_d`、`:op/add_f`、`:op/sub_d`、`:op/sub_f` 是前奏里仅有的四条（`stdlib/prelude.cml:84,89,94,99`）。`:op/mul_*` 0/8、`:op/div_*` 0/8、`:op/neg_*` 0/8。所以"键从声明读"今天只能读出 `+`/2 与 `-`/2 各两个类型，**`*`、`/`、一元 `-` 一条都读不出来**。
+**1. 五个算术族 34 个算子只有 4 个有声明。** `:op/add_d`、`:op/add_f`、`:op/sub_d`、`:op/sub_f` 是前奏里仅有的四条（`stdlib/prelude.cml#operator`）。`:op/mul_*` 0/8、`:op/div_*` 0/8、`:op/neg_*` 0/8。所以"键从声明读"今天只能读出 `+`/2 与 `-`/2 各两个类型，**`*`、`/`、一元 `-` 一条都读不出来**。
 
 **2. `tensor` 协议 86 个算子一条被编译的声明都没有。** 包括批量族（`rulesets.vmap`）今天挂了规则的 21 个：`tensor:multiply`、`matmul`、`sum`、`sum_axis`、`mean`、`mean_axis`、`max`、`max_axis`、`min`、`min_axis`、`argmax`、`argmax_axis`、`argmin`、`argmin_axis`、`reshape`、`unsqueeze`、`transpose`、`permute`、`concat`、`dim`、`where`。`stdlib/tensor.cml` 里有这些名字的固定签名声明（`export func sum_axis::<T>(…)`），**但没有 `#op('tensor:sum_axis')` 那一行**；`stdlib/signatures/tensor.cml` 有 17 条 `#op`，而那个文件不被编译。
 
@@ -50,8 +50,8 @@
 
 | 协议 | 条数 | 例子 |
 |---|---|---|
-| `rewrite:` | 12 | `rewrite:rewrite`（`stdlib/rewrite.cml:98`）、`rewrite:saturate`、`rewrite:extract` |
-| `rand:` | 9 | `rand:philox`（`stdlib/random.cml:40`）、`rand:uniform_array` |
+| `rewrite:` | 12 | `rewrite:rewrite`（`stdlib/rewrite.cml#rule_consts`）、`rewrite:saturate`、`rewrite:extract` |
+| `rand:` | 9 | `rand:philox`（`stdlib/random.cml#philox`）、`rand:uniform_array` |
 | `ckpt:` | 2 | `ckpt:save_tree`、`ckpt:load_tree` |
 | `re:` | 2 | `re:test`、`re:find` |
 | `test_support:` | 2 | `test_support:with_probe_array`、`test_support:arity_two` |
@@ -64,13 +64,13 @@
 
 ## 4. `func operator X` 今天就能用，只是几乎没人用
 
-5 条声明用了这个写法：`:op/add_f`→`+`、`:op/add_d`→`+`、`:op/sub_f`→`-`、`:op/sub_d`→`-`（`stdlib/prelude.cml:84,89,94,99`）与 `graph:eq`→`==`（`stdlib/graph.cml:317`）。所以 P1-13 要的不是新机制，是把已有写法补齐。
+5 条声明用了这个写法：`:op/add_f`→`+`、`:op/add_d`→`+`、`:op/sub_f`→`-`、`:op/sub_d`→`-`（`stdlib/prelude.cml#operator`）与 `graph:eq`→`==`（`stdlib/graph.cml#eval`）。所以 P1-13 要的不是新机制，是把已有写法补齐。
 
 ## 第二次读数：tag 不等于"有声明"，tensor 那 86 个数要先更正
 
 第一批、第二批之后（`+`、`-`、`*`、`/` 与 `[]` 都补了 tag），我按"每个算子一条被编译的 `#op`"去量 tensor，第一条实验就把自己的读数推翻了。
 
-**实验**：给 `stdlib/tensor.cml:162` 那条**已经存在**的 `export func sum_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]` 加上 `#op('tensor:sum_axis')`，重构建后 `inspect --ops` 里 `tensor:sum_axis` 的两行**逐字未变**（`with=0 norm=3` 的那一行本来就在）。也就是说：**那条声明早就在实现这个算子**，tag 是多余的。
+**实验**：给 `stdlib/tensor.cml#argmin_axis` 那条**已经存在**的 `export func sum_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]` 加上 `#op('tensor:sum_axis')`，重构建后 `inspect --ops` 里 `tensor:sum_axis` 的两行**逐字未变**（`with=0 norm=3` 的那一行本来就在）。也就是说：**那条声明早就在实现这个算子**，tag 是多余的。
 
 原因是设计原则 6.4 第 1 步自己写的：`#op('module:function')` 只在声明**不遵循"模块名 + 名字"约定**时才需要。tensor 的名字都遵循约定——`export func sum_axis` 在 `tensor` 模块里就是 `tensor:sum_axis`。所以本页第一节那句"tensor 86 个算子一条被编译的声明都没有"**是错的**：它数的是 tag，不是声明。
 
@@ -88,8 +88,8 @@
 
 | 算子 | 注册形状 | 今天有声明吗 |
 |---|---|---|
-| `tensor:sum_axis` | 计算签名 + `norm:3` 孪生 | **有**（`stdlib/tensor.cml:162`） |
-| `tensor:mean_axis` | 同上 | **有**（`stdlib/tensor.cml:169`） |
+| `tensor:sum_axis` | 计算签名 + `norm:3` 孪生 | **有**（`stdlib/tensor.cml#argmin_axis`） |
+| `tensor:mean_axis` | 同上 | **有**（`stdlib/tensor.cml#mean_axis`） |
 | `tensor:sum` | 只有 `(t: Tensor) => T` | 没有 |
 | `tensor:mean` | 只有 `(t: Tensor) => T` | 没有 |
 | `tensor:max` | 只有 `(t: Tensor) => T` | 没有 |
@@ -98,7 +98,7 @@
 
 **剩下 5 个为什么停手（三条都撞上已有的东西，不是不肯做）**
 
-1. **名字撞车**：`tensor:sum` 要写成 `export func sum::<T>(xs: T[..]): T when is_numeric::<T>()`，而 `stdlib/array.cml:155` **已经有一条形状一模一样的** `sum`（`array` 模块的数组归约，带函数体）。再写一条，树里就有两个"一维数组求和"的声明，正是设计原则 §8 说的"两个机制做同一件事"。`mean`、`min`、`max` 同理（`array.cml:167,177,187`；`max`/`min` 还与 `stdlib/math.cml:469,483` 的二元版本同名）。
+1. **名字撞车**：`tensor:sum` 要写成 `export func sum::<T>(xs: T[..]): T when is_numeric::<T>()`，而 `stdlib/array.cml#sum` **已经有一条形状一模一样的** `sum`（`array` 模块的数组归约，带函数体）。再写一条，树里就有两个"一维数组求和"的声明，正是设计原则 §8 说的"两个机制做同一件事"。`mean`、`min`、`max` 同理（`array.cml:167,177,187`；`max`/`min` 还与 `stdlib/math.cml#min（以及同文件的 `max`）` 的二元版本同名）。
 2. **`reshape` 的注册签名是联合类型**（`float[..] | number[]`），声明只能写其中一支，写哪一支都是自己做主。
 3. **这 5 个也没有 `#op` 可言**：它们的 URI 遵循约定，加上去是多余的（`sum_axis` 的实验已经证明）。
 

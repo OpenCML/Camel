@@ -38,7 +38,7 @@ order_only_effect: node=1 uri=:io/println
 
 **为什么分辨不出**：**这个形状的标记在输入图上、也进了 draft，但它到不了凭据检查。**
 
-先纠正一处我写错的判断：**`DraftNodeHeader` 是有 flags 的，字段叫 `runtimeFlags`**（`include/camel/runtime/draft.h:134`），`DraftNodeHeader` 的 `flags` 这个名字不存在，所以我第一版探针写 `header->flags` 编译错，我由此写成"draft 没有 flags"——**那是错的**。改成 `header->runtimeFlags` 之后：
+先纠正一处我写错的判断：**`DraftNodeHeader` 是有 flags 的，字段叫 `runtimeFlags`**（`include/camel/runtime/draft.h#DraftNodeHeader`），`DraftNodeHeader` 的 `flags` 这个名字不存在，所以我第一版探针写 `header->flags` 编译错，我由此写成"draft 没有 flags"——**那是错的**。改成 `header->runtimeFlags` 之后：
 
 ```
 order_only_effect: marked node=1 graph=1
