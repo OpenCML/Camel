@@ -1388,27 +1388,30 @@ args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_output_contains = ["(2.0, 0.0)"]
 
-# The same wall from the other side, and the one the missing thing has to be named for. `transpose`
-# answers one cotangent per parameter and passes nothing else (design principles 9.9: every parameter
-# is a linear input), while this body reads its array parameter to build a zero array of that array's
-# shape. What is missing is the parameter's **value** -- its shape is already written in its type --
-# so the refusal says that, and it says the route that carries the value today: the library's cut,
-# whose backward half closes over it. The program used to reach this as a count on both back ends
-# (`Runtime indirect call norm-arity mismatch ... has 1 args, target graph 'transpose_of_pick' has 2
-# norm ports` on nvm, with a help that asked a reader to report their own program as a defect of the
-# compiler; `FastVM indirect call norm-arity mismatch ... expected 2, got 1` and exit 134 on fvm).
-# The entry pins the refusal and pins that neither sentence comes back, and it pins no count: the fact
-# is that a program which cannot be turned around is refused in words.
+# The same wall from the other side, and the one the zero carrier answers. `transpose` answers one
+# cotangent per parameter and passes nothing else (design principles 9.9: every parameter is a linear
+# input), while this body reads its array parameter to build a zero array of that array's shape. What
+# the law needs from that read is the parameter's **shape**, and since `lane-trefuse` the shape a
+# parameter's type states is enough to carry it: the zero carrier answers `pick(x: float[3]) = x[1]`
+# as `([0.0, 1.0, 0.0])` -- slot 1 filled, every other slot zero -- without being handed the value.
+# So the entry asserts that array and exit 0, on both back ends, and pins that the crash this program
+# used to be (`Runtime indirect call norm-arity mismatch ... has 1 args, target graph
+# 'transpose_of_pick' has 2 norm ports` on nvm, `FastVM indirect call norm-arity mismatch ...
+# expected 2, got 1` and exit 134 on fvm) does not come back.
+#
+# This is the zero carrier answering by type, not a widened criterion: the refusal is still raised
+# for the positions whose law reads *elements* rather than shapes (`#mul_tensor_t`'s `ct * w`,
+# `#relu_t`'s `where(x > 0.0, ct, 0.0)`), which no shape can stand in for.
 [[tests]]
 name = "transpose_refuses_a_parameter_value_it_cannot_be_handed"
-desc = "`transpose(pick)` where `pick(x: float[3]) = x[1]`: the cotangent of `x` is a zero array of its shape with one slot filled, so the member the walk builds takes the array's value as a parameter and the transposed function's type has no place for it. The answer is one sentence naming the missing value (`the body reads the value of its float[3] parameter`) and the repair that works today (`Take the cotangent through vjp`, whose cut closes over the array: `vjp(pick)([1.0, 2.0, 3.0])` answers 2.0 and ([0.0, 1.0, 0.0])). Before, this program was a crash on both back ends -- a norm-arity count on nvm whose help asked for the program to be reported, an abort with exit 134 on fvm -- and the entry asserts neither of those sentences appears."
+desc = "`transpose(pick)` where `pick(x: float[3]) = x[1]`: the cotangent of `x` is a zero array of its shape with slot 1 filled, and the shape is written in the parameter's type, so the zero carrier answers it without being handed the value -- `back(1.0)` prints `([0.0, 1.0, 0.0])` and exits 0 on both back ends. The entry used to pin a refusal here. Before the zero carrier landed this program was a crash on both back ends -- a norm-arity count on nvm whose help asked for the program to be reported, an abort with exit 134 on fvm -- so the entry still asserts that neither of those sentences appears."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_refuses_a_parameter_value_it_cannot_be_handed.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 1
-expect_output_contains = ["transpose has no transpose for this function", "the body reads the value of its `float[3]` parameter", "Take the cotangent through `vjp`"]
+expect_exit = 0
+expect_stdout_contains = ["([0.0, 1.0, 0.0])"]
 expect_output_not_contains = ["Invariant Violation", "norm-arity mismatch", "defect of the compiler", "report the program"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
