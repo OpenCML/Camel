@@ -331,14 +331,14 @@ timeout_ms = 20000
 
 [[tests]]
 name = "remat_tag_removes_the_parameter_residual"
-desc = "`#remat` written on a function is the same request as calling `remat(f)`: it becomes the graph's recompute bit at build time (`src/compile/gir/builder.cpp`), so the whole downstream -- `jvp`'s lift carrying it, `split` reading it -- is one mechanism and the tag has no reader of its own. Two cubics, `g` tagged and `h` not: both lifts carry one non-parameter residual (`x*x`), and only `g`'s cut drops it, reading `residuals=1 recompute=1` against `h`'s `residuals=2`. The values are the same 27.0, which is what \"store less, compute again\" means; a cut that also changed the answer would be a different bug, not a cheaper cut."
+desc = "`#remat` written on a function is the same request as calling `remat(f)`: it becomes the graph's recompute bit at build time (`src/compile/gir/builder.cpp`), so the whole downstream -- `jvp`'s lift carrying it, `split` reading it -- is one mechanism and the tag has no reader of its own. Two cubics, `g` tagged and `h` not: both lifts carry one non-parameter residual (`x*x`), and only `g`'s cut drops it, reading `residuals=2 recompute=1` against `h`'s `residuals=3` -- the count includes the parameter, which the backward half reads (`ca1941405`), so the difference is the one the tag removes. The values are the same 27.0, which is what \"store less, compute again\" means; a cut that also changed the answer would be a different bug, not a cheaper cut."
 kind = "behavior"
 case = "../../../cases/transforms/split/remat_tag_residuals.cml"
 args = ["${case}", "std::nvm"]
 envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["split function=jvp_of_g forward=", "residuals=1 recompute=1", "split function=jvp_of_h forward=", "residuals=2", "tagged dx= 27.0", "plain dx= 27.0"]
+expect_output_contains = ["REINTERP split function=jvp_of_g", "residuals=2 recompute=1", "REINTERP split function=jvp_of_h", "residuals=3", "tagged dx= 27.0", "plain dx= 27.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -351,19 +351,19 @@ args = ["${case}", "std::nvm"]
 envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["residuals=2 recompute=1", "jvp_of_remat_lib::g", "tagged dx= 27.0"]
+expect_output_contains = ["REINTERP split function=jvp_of_remat_lib::g", "residuals=2 recompute=1", "tagged dx= 27.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
 name = "remat_effectful_body_is_not_recomputed"
-desc = "A body with an external effect is not marked for recompute: `jvp`'s lift asks `hasExternalEffect` before it carries `kGraphFlagRecomputeBackward`, and says `REINTERP jvp not_recomputed=g why=an operator of the body has an external effect, so it would run twice`. The cut then stops earlier and for another reason -- `split does not build this function` -- so this entry pins *where* an effectful `#remat` function is stopped, and both lines are compared, not just the exit code. If `split` learns to accept effectful bodies, this goes red first; the case file says what to read then."
+desc = "A body with an external effect is not marked for recompute: `jvp`'s lift asks `hasExternalEffect` before it carries `kGraphFlagRecomputeBackward`, and says `REINTERP jvp not_recomputed=g why=an operator of the body has an external effect, so it would run twice`. What the program then meets has moved: it used to be `split does not build this function`, and measured 2026-11-04 it is `Pass 'std::nvm' failed with an internal error: Runtime graph 'jvp_of_g' has GATE node 10 without a wait: no sync predecessor and no control input` -- the cut of this body now builds (`nodes=11 exit=10`, the graph `uses stdout`) and the GATE the effect put in it is not served by anything the cut emits. Both lines are compared, not just the exit code, so the entry records *where* an effectful `#remat` function is stopped today. The pass says of itself that this is `a defect of the compiler rather than of the program`, which is the honest severity: it is not a refusal the language chose. If `split` learns to serve that GATE, this goes red first; the case file says what to read then."
 kind = "negative"
 case = "../../../cases/transforms/split/remat_effect_is_not_recomputed.cml"
 args = ["${case}", "std::nvm"]
 envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 1
-expect_stdout_contains = ["REINTERP jvp not_recomputed=g why=an operator of the body has an external effect, so it would run twice", "split does not build this function"]
+expect_output_contains = ["REINTERP jvp not_recomputed=g why=an operator of the body has an external effect, so it would run twice", "Pass 'std::nvm' failed with an internal error", "has GATE node 10 without a wait"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
