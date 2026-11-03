@@ -47,7 +47,7 @@
 
 上面"留下的两处"说 `:4403`/`:4427` 没有答案、停造 ctrl 会把等待丢掉。**20:35 裁定**（2026-10-30，`reviews/questions-2026-10-29.md:697`）说：在同步块里，门的等待就是同步前驱（5.3，与 `coerceArmExit` 同一处理）；不在同步块里，门不需要存在；停造 ctrl 时这两处按此改，而不是换成别的边。**以裁定为准**——那两处有答案，答案不是"再找一种边"。
 
-今天的现状（2026-10-31，本树，只读读数；报告写的行号今天漂到 `:4425`/`:4449`，仍是同两个门）：
+今天的现状（2026-10-31，本树，只读读数；报告写的行号今天漂到 `builder_operators.cpp:4425`/`:4449`，仍是同两个门）：
 
 - **写侧未改**：`builder_operators.cpp:4425`（赋值门）与 `:4449`（`void` 门）仍各写一条 `linkNodes(LinkType::Ctrl, targetNode, gate)`。
 - **写侧没有同步块判断**：`git grep -n "isSyncStatement" -- src/compile/gir` 无命中。`isSyncStatement` 只在读侧：`include/camel/runtime/effect_liveness.h#EffectLivenessFacts`、`src/passes/opt/generic/gates.cpp#bypassValueGate`、`src/runtime/graph.cpp#validateRuntimeGraphPayloadImpl`、`src/execute/fusion_group.cpp#FusionGroupView::isPrivateTo`、`src/runtime/effects.cpp#effectStandingOf`。

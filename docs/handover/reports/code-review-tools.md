@@ -81,7 +81,7 @@
 - 2,877 行一个文件；约 400 行是"槽位计时"记账（`slotTiming`、`summarizeSlotTimings`、`loop_lag`……），每次运行打印一行十余个指标的 `[SLOT]` 行（`:2840–2860`），与"这个运行器判断测试对不对"的职责无关，应当放进一个单独的、默认关闭的剖析模块。
 - 预算规则按 CPU 时间判（`CAN_READ_CHILD_CPU = fs.existsSync('/proc/self/stat')`），非 Linux 回退到墙钟：Windows/macOS 开发机上，同一条"通过的测试用时不得超过自己超时的四分之一"规则在不同机器上用不同的量判定，注释承认"the margin rule falls back to the wall clock"；开发机上偶发红、网关上绿，是最难查的一种不一致。
 - 错误提示里写死 `path.join(path.dirname(REPO_ROOT), 'camel-build.ps1')`（`:643`）：指向仓库外兄弟目录的脚本；仓库公开后这条路径不存在。
-- 退出码：缺少二进制 `2`，失败 `1`，运行器自己崩溃也是 `1`（`:2875`）——"测试失败"与"运行器出错"同码。
+- 退出码：缺少二进制 `2`，失败 `1`，运行器自己崩溃也是 `1`（`run-tests.mjs:2875`）——"测试失败"与"运行器出错"同码。
 - `known_fail` 字段在运行器里有 6 处引用，`test/plans` 里 0 个使用：死特性或没有被用到的豁免通道，应当删或写用例。
 
 ### 12. VS Code 扩展与 LS 各自找服务器

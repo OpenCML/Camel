@@ -39,7 +39,7 @@ Runtime graph 'f' breaks its edge invariants (1 violation(s)):
 - `:532` 在今天这份源码里是注释行（"its members are not, and seeding them here…"），不是代码；
 - 复查请按**符号**找：`git grep -n 'isMember' src/execute`，改后只剩定义（`:242`）与两处分组（`:251`/`:261`）；
 - `|| isMember` 式取种：**0 处**。
-## A4b 与 P0-1 的关系：这条读数分辨不出 `:509`（两侧逐字相同）
+## A4b 与 P0-1 的关系：这条读数分辨不出 `graph_runtime_support.cpp:509`（两侧逐字相同）
 
 **A4b** 是"Region yields node … not in the execution"那一类；`test/cases/trans/reduced/` 在这个工作树上不存在（它在 `verify` 的车道里，没并过来），所以两侧都跑 `docs/handover/reports/eval-defects-2026-11-01/minimal/` 里现成的两支（`recompile_segv.cml`、`cml_segv.cml`），四个组合（`nvm` / `opt nvm` / `fvm` / `opt fvm`）。
 
