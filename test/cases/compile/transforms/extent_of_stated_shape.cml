@@ -1,0 +1,23 @@
+// The lengths of a shape, asked of a value whose **type states every extent**.
+//
+//     t: f32[2, 3]   ->   shape(t) = [2, 3]   dim<0> = 2   dim<1> = 3   dim<-1> = 3   numel = 6
+//
+// This is the family `extent_of` was named for (`shape`, `numel`, `dim` in `stdlib/tensor.cml`,
+// and `extent_pair` in `stdlib/rulesets/jvp.cml`): one dimension's length is what a transpose law
+// needs and cannot read off its own operand. `dim<axis>` is the name that answers it today, and it
+// answers **from the value** -- which is why the law cannot use it: a law's linear operand has no
+// value on the transpose side (author, 2026-11-03 11:10 and 17:35).
+//
+// What a stated type buys is the other half: with every extent in the type, the same call is folded
+// at compile time and the operator does not survive into the graph
+// (`test/plans/feat/compile/extent_of.plan.toml`, `extent_of.stated_shape_folds`). The numbers are
+// the same either way, so this case pins them and the fold has a case of its own.
+import { dim, numel, shape, zeros } from tensor
+
+func main(): int sync {
+    let t = zeros::<f32>([2, 3])
+    println(
+        `shape={} dim0={} dim1={} dim-1={} numel={}`->format<
+            shape(t), dim<0>(t), dim<1>(t), dim<-1>(t), numel(t)>)
+    return 0
+}

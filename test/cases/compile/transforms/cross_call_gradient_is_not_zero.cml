@@ -1,0 +1,42 @@
+// The gradient across a call: `f` is a function of its own and `g` calls it.
+//   f(x) = 2.0 * x
+//   g(x) = f(x) * x            ==   2 * x*x
+//   g(3) = 18,  g'(3) = 4x = 12
+//
+// The number this case asks for is 12 -- the author's ruling of 2026-11-03 19:35 in one line:
+// `transpose(call(g, x)) = transpose(lin_g)`, so a call is differentiated through the callee's own
+// linear half.
+//
+// Today the line answers `g'(3) = 0.0` with no diagnostic and no refusal: the transposition is
+// right and the value it transposes is not. `jvp(g)` is right -- `jvp(g)(3.0, 1.0)` is `(18.0,
+// 12.0)` and `jvp(g)(3.0, 2.0)` is `(18.0, 24.0)` -- while `split(jvp(g)).1`, the `lin_g` this
+// ruling transposes, ignores its own parameter: `lin(1.0) = lin(0.5) = lin(2.0) = 36.0`. 36 is
+// `mul_tangent(y = 6, x = 3, lin_f(3) = 6, 3)`, i.e. the *value* `x = 3` is spent as the tangent
+// `dx`. The cut's backward half carries a parameter port its body never reads and reads a residual
+// the forward half never computes; the mark's note names the site.
+//
+// `flat` is the same arithmetic written without a call. It answers 12.0 today and must keep
+// answering it: the difference between the two lines is the call, and only the call.
+import rulesets.jvp
+import rulesets.transpose
+import { vjp } from vjp
+
+func f(x: float): float {
+    return 2.0 * x
+}
+
+func g(x: float): float {
+    return f(x) * x
+}
+
+func flat(x: float): float {
+    return 2.0 * x * x
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(g)(3.0)
+    println(`g(3) = {:.1f}  g'(3) = {:.1f}`->format<value, pullback(1.0).0>)
+    let (flatValue, flatPullback) = vjp(flat)(3.0)
+    println(`flat(3) = {:.1f}  flat'(3) = {:.1f}`->format<flatValue, flatPullback(1.0).0>)
+    return 0
+}
