@@ -310,7 +310,7 @@ class EdgeChecker {
             // its tail, the block a statement sits in when nothing wraps it being region 0) or a
             // `GATE` (edges.cn.md 5.3).
             const bool endSameBlockValue = isTheBlocksOwnValue(graph_, edge.user, edge.pred);
-            if (!isChainStatement(edge.user) && !endSameBlockValue &&
+            if (!isChainStatement(graph_, edge.user) && !endSameBlockValue &&
                 user->kind != GCNodeKind::Gate) {
                 bad(std::format(
                     "ends on a node that is not a statement of the block, not the block's value and "
@@ -320,7 +320,7 @@ class EdgeChecker {
                     user->dataType() != nullptr ? user->dataType()->toString() : "-"));
                 continue;
             }
-            if (!isChainStatement(edge.pred)) {
+            if (!isChainStatement(graph_, edge.pred)) {
                 bad(std::format(
                     "starts at a node that is not a statement of a chain (kind {}, flags {}, data "
                     "type '{}')",
@@ -416,7 +416,7 @@ class EdgeChecker {
             if (user->kind == GCNodeKind::Dead || pred->kind == GCNodeKind::Dead) {
                 continue; // reported by checkSyncEdges
             }
-            if (!isChainStatement(edge.user) || !isChainStatement(edge.pred)) {
+            if (!isChainStatement(graph_, edge.user) || !isChainStatement(graph_, edge.pred)) {
                 continue; // reported by checkSyncEdges
             }
             if (controlBlockOf(edge.user) != controlBlockOf(edge.pred)) {
