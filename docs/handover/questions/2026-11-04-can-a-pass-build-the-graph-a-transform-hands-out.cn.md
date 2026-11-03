@@ -42,18 +42,18 @@
 | 路 | 做法 | 代价 |
 | --- | --- | --- |
 | **甲：把三个 builder 交给 `macroCallee`** | `ForwardRewrite::macroCallee` 再认 `transforms:jvp` / `transforms:split` / `transforms:transpose` 三个 uri，各调一次 `modules/transforms/jvp.h#buildJvpGraph`、`modules/transforms/split.h#buildSplitGraph`、`modules/transforms/transpose.h#buildTransposeGraph`，把结果 `::Function` 按 `grad` 那条路的办法 root 住并交回改写 | **三处**：①`modules/autodiff/pullback.cpp`（认 uri、造图、`roots_` 生命周期、闭包搬 `f` 的 `with` 元组）；②`modules/autodiff/CMakeLists.txt` 加 `EXTRA_LIBS transforms_cmo`（今天**没有任何模块依赖 `transforms`**，`random`/`tiles` 依赖 `tensor_cmo` 是唯一先例，见 `modules/camel_module.cmake`）；③**依赖 `jvp.cpp` 与 `transpose.cpp` 的现有签名**——这两个文件正被另两条车道改写，本车道任务书把它们列在"不要碰"。另外 `buildSplitGraph`/`buildTransposeGraph` 只出图，`::Function::create` 那十行在各 `*_operator.cpp` 里（不在本车道可改范围），要抄一份到 `pullback.cpp`。能移动第 2/3/4/7/8/9/10 条 |
-| **乙：改写时跑一遍算子，取返回值里的 graph** | 不跨模块：pass 对一个 `readsGraphs` 算子、操作数全静态的节点，调它的 kernel 一遍，拿返回值里的 `::Function*` | 要先裁**"pass 能不能在编译期执行一个变换算子"**：`transforms:split` 声明的是 `.pure = false`（`modules/transforms/split_operator.cpp#registerSplitOperatorMetadata`），编译期跑它等于在 pass 里跑用户可见的副作用（readings 会打 `REINTERP split function=…`）。入口在 `src/` 里今天没有，本车道不许动 `src/**` |
+| **乙：改写时跑一遍算子，取返回值里的 graph** | 不跨模块：pass 对一个 `readsGraphs` 算子、操作数全静态的节点调它的 kernel 一遍，拿返回值里的 `::Function*`（自下而上：先把 `jvp(f)` 算出来，再算 `split`） | 要先裁**"pass 能不能在编译期执行一个变换算子"**：`transforms:split` 声明的是 `.pure = false`（`modules/transforms/split_operator.cpp#registerSplitOperatorMetadata`），编译期跑它等于在 pass 里跑用户可见的副作用（readings 会打 `REINTERP split function=…`）。入口在 `src/` 里今天没有，本车道不许动 `src/**` |
 | **丙（默认）：本轮不动** | 只把这页与读数留下 | 4 个形状里 3 个要 `jvp`/`transpose` 的 builder，**只认 `split` 一个也一个都移动不了**——第 2 条的操作数是 `jvp(f)` 的产物，而那个产物自己就拒（第 4 条已量到）；只有第 10 条那种"操作数是静态具名函数"的形状会动。这就是丙的代价：**它不动任何一条已量的红，但它是唯一不跟两条在改的车道撞车的选择** |
 
 ## 4. 我方默认：丙，等两条车道落地再接甲
 
 理由，按读数排：
 
-1. 第 2、3、4、8、9 条（含**用户真会写的那一条**，第 9 条）都要 `jvp` 与 `transpose` 的 builder，而 `modules/transforms/jvp.cpp` 与 `modules/transforms/transpose.cpp` **正在被另两条车道改**。接甲的接口就是在改的那两个文件的签名上，落地即撞。
+1. 第 2、3、4、8、9 条（含**用户真会写的那一条**，第 9 条）全都要 `jvp`／`split`／`transpose` 的 builder（第 4 条只要 `jvp`，第 2 条要前两个，第 3、8、9 条三个都要），而 `modules/transforms/jvp.cpp` 与 `modules/transforms/transpose.cpp` **正在被另两条车道改**。接甲的接口正落在那两个文件的签名上，落地即撞。
 2. 只做 `split` 一处的折中方案，按第 1 节**一个形状都不动**（第 2 条的操作数是 `jvp` 的产物）。不要按"先做一半"去动 `split.cpp`。
 3. 甲落地时还要定"读数打不打"：`buildSplitGraph` 会往 readings 打 `REINTERP split function=…`。pass 里再造一张图，打了就比今天多一行、不打就与原来那一行不一致；而 `test/plans/feat/transforms/compositions.plan.toml` 的 `verify_script` 把 stdout **每一行**都当数字读（`map(s => Number(s.trim()))`），多一行就是红。这一处得和作者一起定。
 
-**这一轮不改任何代码**：`modules/autodiff/**`、`modules/transforms/**`、`stdlib/vjp.cml`、`test/` 全部原样；拒绝句、读数、与那 8 条 known 都不动。
+**这一轮不改任何代码**：`modules/autodiff/**`、`modules/transforms/**`、`stdlib/vjp.cml`、`test/` 全部原样；拒绝句、读数、与那 8 条 known 都不动。门在不在，看 `feat/transforms/compositions` 的 `[SUMMARY]`：同一棵树上改前改后都是 `total: 10, pass: 2, fail: 0, known failures: 8`（`-Tier fast -Jobs 4`）。
 
 ## 要作者答的一句
 
