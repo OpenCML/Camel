@@ -1717,3 +1717,44 @@ expect_stderr_contains = ["skip=backward construct=a node whose input was not co
 expect_output_not_contains = ["TRANSPOSE function="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# ---- `mean` at a negative axis: the engine's numbers, and the library's law reading the axis ----
+#
+# One lane, two spellings. `mean<-1, true>(x)` says "the last axis" without counting the rank, and
+# on a 2x3 value it names axis 1, the lane `mean<1, true>(x)` names. The two entries below are one
+# pair: the first pins the numbers the engine answers and that both spellings answer the same ones;
+# the second pins that the library's own path answers the same numbers through its own machinery.
+#
+# The pair is the reading that "the library answers what the engine answers" is measured on for this
+# operator, and it is the reason the pair exists: until the axis was read in its canonical form,
+# `jvp_mean_axis` used it as written (`shape(xs)[axis]`), so `-1` was a position in a two-long
+# extent array and the library's leg ended with `Index -1 is out of range for an array of length 2`
+# while the engine answered `1 / 3`. The second entry used to pin that refusal; it now asserts the
+# number, element for element, because the defect it pinned is gone. The count half of the same
+# expression was never wrong (it reads the operand, per the ruling of 2026-11-03 16:15), which is why
+# the positive spelling of the lane already passed (`mean_axis1_keepdims_gradient_reads_the_row_length`):
+# what was wrong is the axis, not the law's source of the length.
+[[tests]]
+name = "mean_axis_negative_axis.engine"
+desc = "The engine's gradient of `sum(mean<axis, true>(x))` on `x = [[1, 2, 3], [4, 5, 6]]` is `1 / 3` at every element -- a mean divides by the length of the lane it reduced (three) and the surrounding `sum` hands every position the cotangent 1. Both axis spellings are printed and asserted to be the same value: `mean<-1, true>` (the last axis, without counting the rank) and `mean<1, true>` (the same lane named by position) must not be able to answer different numbers. The wrong laws separate at the FIRST element: the other extent (2) answers `0.5` and `numel(x)` (6) answers `0.16666666666666666`, so the array is the assertion rather than its sum. The neighbouring `mean_axis_negative_axis.through_the_library` entry asserts the same numbers on the library's own path, element for element."
+kind = "behavior"
+case = "../../../cases/compile/transforms/mean_axis_negative_axis_through_the_engine.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["mean_axis_negative negative=[[0.3333333333333333, 0.3333333333333333, 0.3333333333333333], [0.3333333333333333, 0.3333333333333333, 0.3333333333333333]]", "mean_axis_negative positive=[[0.3333333333333333, 0.3333333333333333, 0.3333333333333333], [0.3333333333333333, 0.3333333333333333, 0.3333333333333333]]", "mean_axis_negative same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "mean_axis_negative_axis.through_the_library"
+desc = "The same gradient through the library's `vjp` answers the engine's numbers instead of stopping on the axis. `jvp_mean_axis` (`stdlib/rulesets/jvp.cml`) used to read the axis as written, `T(1.0 / float(shape(xs)[axis]))`, so the scale it divided by indexed the two-long extent array of a 2x3 value at `-1` and the run ended inside the transposed body with `Index -1 is out of range for an array of length 2` -- this entry used to pin that refusal. The law now sums the rank for a negative axis (`axis + numel(shape(xs)) * ((1 - sign(axis)) / 2)`, the engine's own `axis < 0 ? axis + rank : axis`), so the lane length is extent 1 and both halves are asserted here: the value `7.0` (`sum(mean<-1, true>(x))` on `x = [[1, 2, 3], [4, 5, 6]]`, the means 2 and 5 added) and the pullback `1 / 3` at every element, the same array the `.engine` entry asserts. The path is still the one the cut and the walk built (`rules=jvp_mean_axis,jvp_sum`, `residuals=2`, `rhs=sum_t,mul_tensor_t,dtod_t,div_t`), so the entry also says that the number is the library's own and not a shortcut. An axis outside the rank is refused before this law runs -- the operator's own normalisation answers `reduce: 'tensor:mean_axis': the axis -3 is outside the rank 2` for `-3` on a rank-2 value -- and the sum never takes a remainder, so nothing wraps."
+kind = "behavior"
+case = "../../../cases/compile/transforms/mean_axis_negative_axis_through_the_library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["mean_axis_negative library value=7.00000000000000000 d=[[0.3333333333333333, 0.3333333333333333, 0.3333333333333333], [0.3333333333333333, 0.3333333333333333, 0.3333333333333333]]"]
+expect_stderr_contains = ["rules=jvp_mean_axis,jvp_sum", "residuals=2", "rhs=sum_t,mul_tensor_t,dtod_t,div_t"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

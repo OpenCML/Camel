@@ -20,8 +20,8 @@
  */
 
 import { is_float, is_integer, is_same, is_string, Tangent } from types
-import { exp, log_softmax, matmul, mean_axis, relu, reshape, shape, sigmoid, softmax, sum, take, tanh, where, zeros_like } from tensor
-import { log, pow } from math
+import { exp, log_softmax, matmul, mean_axis, numel, relu, reshape, shape, sigmoid, softmax, sum, take, tanh, where, zeros_like } from tensor
+import { log, pow, sign } from math
 import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
 
 /// A value of type `T` with its tangent: what a forward transform carries for one value.
@@ -241,8 +241,35 @@ export rule jvp_sum::<T>(xs: T[..]) when is_float::<T>() {
 /// there is the incoming cotangent, which carries the *reduced* shape. `xs` depends on nothing the
 /// tangent does, so `split` computes the scale in the forward half and carries it as a residual
 /// (`jvp_relu` above writes its mask the same way), and the linear half is only the product.
+///
+/// The axis is read in its canonical form: a negative axis counts from the last one, so `-1` on a
+/// rank-2 value names the axis `1` names, and the lane the mean divided by is extent `1`. The scale
+/// used to be `shape(xs)[axis]` with the axis as written, which is how `mean<-1, true>` came to
+/// answer `Index -1 is out of range for an array of length 2` inside the transposed body while the
+/// engine and the operator both answered the mean: an axis is a position in the extent array, and
+/// `-1` is not one. `numel(shape(xs))` is the rank, the count of extents, so the sum is the one the
+/// engine's own normalisation writes (`modules/tensor/kernels/reduce.cpp#normalizeAxis`:
+/// `axis < 0 ? axis + rank : axis`); the count stays read off `xs`.
+///
+/// The sum is written branch-free on purpose: a rule's right side is copied into a graph node by
+/// node, and its expander has no case for a branch (`modules/transforms/rule_expand.cpp`, "the
+/// rule's right side is not a straight line of computations: ... kind 6" -- `GCNodeKind::Brch`), so
+/// `if axis < 0 then ...` is refused before it can be measured. `(1 - sign(axis)) / 2` is the same
+/// decision as an integer: `1` when the axis is negative, `0` when it is `0` or positive, by
+/// integer division, and `sign` is `math:sign_<T>` at the axis's own type.
+///
+/// An axis the rank does not have is still refused, and nothing wraps. The sum adds the rank once
+/// for a negative axis and never takes a remainder, so the only way to reach a position is to name
+/// one. A negative axis too far out -- `-3` on a rank-2 value -- is refused before this law runs, by
+/// the operator's own normalisation in the forward half (`reduce: 'tensor:mean_axis': the axis -3 is
+/// outside the rank 2`, the sentence an axis of `2` gets on that value in the other direction), and
+/// a canonical axis still outside the rank would reach the extent lookup and be refused there. A
+/// modulo would instead answer axis `1` in both cases, which is the one reading a lane length must
+/// not invent.
 export rule jvp_mean_axis::<T>(xs: T[..], axis: int, keepdims: bool) when is_float::<T>() {
-    mean_axis(xs, axis, keepdims) => (dxs: T[..]) => dxs * T(1.0 / float(shape(xs)[axis]))
+    mean_axis(xs, axis, keepdims) =>
+        (dxs: T[..]) =>
+            dxs * T(1.0 / float(shape(xs)[axis + numel(shape(xs)) * ((1 - sign(axis)) / 2)]))
 }
 
 /// `d(reshape(x)) = reshape(dx)`: a reshape moves no element, so the tangent moves with the value.
