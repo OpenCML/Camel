@@ -23,6 +23,9 @@
 //                                               defect, because a line number moves with every edit
 //   node scripts/check-doc-links.mjs --citations --root DIR
 //                                               check a fixture tree instead of the repository
+//   node scripts/check-doc-links.mjs --self-test  a cache or virtual-environment directory beside
+//                                               the checkout is not scanned, and the checkout is
+//                                               (the trees in SKIP_DIRS, on a tree it writes itself)
 //   node scripts/check-doc-links.mjs FILE DIR  the given files and directories
 //
 // Exit status 1 when a link is broken or a citation does not resolve, 2 when the scope is empty or
@@ -30,7 +33,9 @@
 // (http, mailto) are not fetched.
 
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { isRunnerOutput } from '../test/tools/runner-output.mjs'
 
@@ -62,7 +67,46 @@ const SCOPE = [
 
 // `fixture` trees are inputs of the checks themselves (test/plans/feat/*/fixture): their
 // citations are deliberately wrong, so the whole-tree runs must not read them.
-const SKIP_DIRS = new Set(['.git', 'node_modules', 'third_party', 'out', 'build', 'tmp', 'dist', 'sdks', 'fixture'])
+//
+// A developer's checkout also carries trees that are not its content, and they were the whole cost
+// of a `--citations` run on this machine: `.venv` (29,926 files, 826.4 MB) and `.cache` (15,481
+// files, 1,047.0 MB) -- 45,407 files and 1.87 GB together, 24,886 of them carrying an extension
+// this scan reads (2,922 `.py`, 1,166 `.cml`, 1,624 `.h` and 490 `.ts` of the packages and headers
+// that live there) -- and `vendor/`, the dependency trees (744 files). A run that entered them took
+// longer than ten minutes and was read as a hang or as a red check rather than as a walk of the
+// repository (measured 2026-11-04).
+//
+// `vendor` is here for the three reasons `sdks` is: git ignores it, so it is not content of a
+// checkout; its files cite *their own* paths, so it reports citations of this repository that were
+// never made (a page named `README` under the other project's `docs`, a `src/shape/...` of another
+// project in Eigen's); and two of its headers send the citation patterns into catastrophic
+// backtracking -- `nlohmann/detail/meta/type_traits.hpp` costs 208.5 s in the symbol pattern and
+// 205.7 s in the line pattern, `taskflow/dsl/task_dsl.hpp` 82.7 s and 82.8 s, both for zero
+// matches. Every one of those four measurements is on one 28.8 KB or 4.0 KB file, so it is the
+// pattern and not the walk. (No literal path of that kind is written here: this file is scanned
+// too, and the first draft of this very paragraph was reported as a citation it never made.)
+//
+// Git ignores every name below, so none of them is content of a checkout: with them skipped the
+// run verifies the same citations and the walk is the repository's own. `venv` is named beside
+// `.venv` because a checkout that a build runs in holds either name; `.cache` and `.ccache` are the
+// tool and compiler caches a build leaves at the root; `__pycache__` is the bytecode of both.
+const SKIP_DIRS = new Set([
+    '.git',
+    'node_modules',
+    'third_party',
+    'out',
+    'build',
+    'tmp',
+    'dist',
+    'sdks',
+    'fixture',
+    '.venv',
+    'venv',
+    '.cache',
+    '.ccache',
+    '__pycache__',
+    'vendor'
+])
 // 'sdks' is upstream CPython: its headers cite CPython's own documentation, not ours.
 
 function markdownFiles(entry) {
@@ -656,6 +700,87 @@ function checkCitations() {
 }
 if (args.includes('--citations')) {
     process.exit(checkCitations())
+}
+// The trees `SKIP_DIRS` names are the reason a `--citations` run on a developer's checkout was
+// reported as a hang, so "a name in that set is not walked into" is checked here rather than
+// promised by the set. This mode writes a tree that is a checkout in miniature -- one page, the
+// source file it cites by symbol, another page cited by path -- and one directory per name that
+// must not be read, each holding a file whose comment cites a file that does not exist. The run it
+// then starts is this script over that tree: a name that leaves `SKIP_DIRS` is a reported citation
+// of the missing file (exit 1), and a walk that stops reading real files shows up in the same
+// reading, because the count says which files were scanned. Both halves matter: the guard must not
+// read a cache, and it must still read the checkout.
+//
+// The citation in that file is joined from parts, because this script is itself scanned: a literal
+// `path#Symbol` on a line that also carries a `//` is a citation of this repository, and the first
+// version of this case failed exactly that way -- the guard reported its own test data as an
+// unpaid citation, naming the absent source file twice in this file. For the same reason this
+// paragraph names no such literal either. One ghost file per name below, and the names are written
+// down here rather than read from `SKIP_DIRS`: a list the case derives from the set it tests cannot
+// report a name that left that set, which is the one failure it exists for (measured: a first
+// version of it built the tree out of `[...SKIP_DIRS]` and stayed green with the set emptied).
+const ghostCitation = (marker) =>
+    `${marker} cites ${['src/absent', 'c'].join('.')}#Absent and ${['gone/missing', 'md'].join('.')}\n`
+
+const MUST_SKIP = [
+    '.git',
+    'node_modules',
+    'third_party',
+    'out',
+    'build',
+    'tmp',
+    'dist',
+    'sdks',
+    'fixture',
+    '.venv',
+    'venv',
+    '.cache',
+    '.ccache',
+    '__pycache__',
+    'vendor'
+]
+
+function selfTestSkipTrees() {
+    return MUST_SKIP.map((tree) => [tree, path.join('lib', 'ghost.ts'), ghostCitation('//')])
+}
+
+function selfTestSkipDirs() {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-doc-links-skip-'))
+    const write = (relative, text) => {
+        const file = path.join(directory, relative)
+        fs.mkdirSync(path.dirname(file), { recursive: true })
+        fs.writeFileSync(file, text)
+    }
+    try {
+        write('notes.md', '# notes\n\nThe walk reads `src/thing.c#Thing`, and `docs/page.md` is a page.\n')
+        write('src/thing.c', 'int Thing(void) { return 0; }\n')
+        write('docs/page.md', '# page\n')
+        const trees = selfTestSkipTrees()
+        for (const [tree, relative, text] of trees) write(path.join(tree, relative), text)
+
+        const run = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--citations', '--root', directory], {
+            encoding: 'utf8'
+        })
+        const reading = (run.stdout ?? '').trim().split('\n').filter((line) => line !== '')
+        const expected =
+            'no unverified citation: 1 of 1 symbol citation(s) verified, 1 path citation(s) across 3 file(s)'
+        // One line and one count: a problem line means a skipped tree was walked, and a different
+        // file count means the three files of the miniature checkout were not all read.
+        if (run.status === 0 && reading.length === 1 && reading[0] === expected) {
+            console.log(
+                `the ${trees.length} tree(s) a checkout carries and SKIP_DIRS must name were not scanned: ${reading[0]}`
+            )
+            return 0
+        }
+        for (const line of reading) console.log(`  ${line}`)
+        console.log(`the walk read a tree SKIP_DIRS names, or stopped reading a real file: ${run.status}`)
+        return 1
+    } finally {
+        fs.rmSync(directory, { recursive: true, force: true })
+    }
+}
+if (args.includes('--self-test')) {
+    process.exit(selfTestSkipDirs())
 }
 // A rule about the pages that only a reader of the rule could keep: "我方新问题一律一页一问放进
 // docs/handover/questions/" and "每页都要写默认建议，并当轮按默认开工" (author, 2026-11-03). The second
