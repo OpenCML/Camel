@@ -325,6 +325,18 @@ A probe log that records only `[FAIL] <name> <ms>` can count failures and cannot
 `nodeGraphOf()` cannot return null -- its `GUARD (builder != nullptr)` fails through `fail_invariant` first -- so none of its **61** call sites needs a null branch, and that is the point: the guard turns "no answer" into a stop. But 14 of them only **compare** two answers for identity (`builder_helpers.h`, `builder_expr.cpp`, `builder_control.cpp`, `builder_operators.cpp`, `captures.cpp`, `builder_support.h`), where a null would be worse than a crash: `nullptr == nullptr` says "the same graph". When one of those wants to be sure two handles name one graph, ask the draft whether it is the one the handle names (`isNamedBy`, address **and** epoch, which `3609d015a` made the identity) instead of comparing the address a handle happens to carry.
 
 - 主检出 `D:\Projects\Camel` 只用来 `pull --ff-only`；所有编辑都用工作树内的相对路径，或 `D:\Projects\Camel-wt\<lane>\...` 的绝对路径。写完用 `git -C <树> status --porcelain` 自检，不要用 `git status`（它按进程 CWD 解析，会看到另一棵树）。
+
+## 改名与抽谓词这类重构，判据是逐用例比，不是总数不变
+
+两棵总数相同的树，可以是一条转绿一条转红互相抵消。把上一跑的失败用例名单和这一跑逐条比：
+`0 条转绿、0 条转红` 才叫中性。这一条是 2026-11-02 夜里做出来的：`8508/4735/3758` →
+`8512/4738/3759` 多出的 4 个是 develop 新用例，逐用例比 0/0，唯一的新红 `gpu_preference.named_device`
+是那条 CUDA 探针随卡可见性翻，不是这次改的。
+
+顺带记在这条旁边，因为它是同一件事的反面：`gpu_preference.named_device` 与
+`gpu_scope.placement_with_a_device` 这种 `skip_unless` 一首卡就翻的用例，
+**今天分辨不了"实现对不对"，只分辨"有没有卡"** —— 用例先坏在仪器上，判据跟着坏。待办，不是本轮修。
+
 ## Check the input before you believe the reading
 
 A measurement is a reading of two things: the program and the input. When they disagree with

@@ -40,6 +40,7 @@ namespace mm = camel::core::mm;
 namespace rt = camel::runtime;
 using camel::core::type::ArrayType;
 using camel::core::type::FunctionType;
+using camel::core::type::ArrayType;
 using camel::core::type::TupleType;
 using camel::core::type::Type;
 using camel::runtime::gc_node_ref_t;
@@ -49,6 +50,24 @@ using camel::compile::gir::NodeFace;
 using camel::runtime::GraphId;
 
 namespace {
+
+/// Whether this lift carries a pair for a value of `type`: a floating scalar, or an array of values
+/// it carries a pair for -- `float[]` and `float[][]` are one answer, asked recursively. An array of
+/// a type it does not carry (`int[]`, an array of tuples) is not carried either: its members would
+/// have no tangent to put in the second half.
+bool pairCarried(camel::core::type::Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    if (camel::core::type::isFloatingScalar(type->code())) {
+        return true;
+    }
+    if (type->code() != camel::core::type::TypeCode::Array) {
+        return false;
+    }
+    const auto *array = tt::as_ptr<camel::core::type::ArrayType>(type);
+    return array != nullptr && pairCarried(const_cast<camel::core::type::Type *>(array->elemType()));
+}
 
 /// The type of the lifted *pair* of a value: `(v, dv)`, written at the value's own type, because
 /// the tangent of a value is a value of its own type wherever `tangentSpaceOf` answers `Self`. Null

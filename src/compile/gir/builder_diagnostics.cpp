@@ -1014,12 +1014,16 @@ void Builder::reportUnusedFallibleValues() {
             default:
                 continue; // not the result of an evaluation
             }
-            // "Ordered" here means a statement of a `sync` block: the edge that says so is a
-            // sync edge, and the old control edge still carries it where one is left.
-            const bool ordered =
-                !draft.ctrlUsersOf(id).empty() || !draft.syncUsersOf(id).empty();
+            // An `if` without `else` is answered here when nothing takes the join's value: what
+            // the arm gives is dropped where the arm ends, and that is the question the warning
+            // asks -- whether the value has a taker -- not whether the join stands on a chain.
+            // A control edge orders nothing of its own (docs/design/effects/edges.cn.md 1), so it
+            // is not read as a place in a chain either.
+            const bool ordered = !draft.syncUsersOf(id).empty();
+            const bool takesNothing =
+                draft.normUsersOf(id).empty() && draft.withUsersOf(id).empty();
             if (nodeIsKind(node, runtime::GCNodeKind::Join) &&
-                isVoidGraphExitType(nodeTypeOf(node)) && (ordered || isExit(id))) {
+                isVoidGraphExitType(nodeTypeOf(node)) && (takesNothing || isExit(id))) {
                 // An `if` without `else`: the join takes nothing, so what an arm gives is
                 // dropped where the arm ends.
                 for (draft_node_ref_t armId : draft.withInputsOf(id)) {

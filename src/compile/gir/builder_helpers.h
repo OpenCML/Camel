@@ -681,11 +681,90 @@ inline void markSyncStatement(node_handle_t node) {
         id, static_cast<uint8_t>(draft->header(id)->runtimeFlags | runtime::kGCNodeFlagSyncStatement));
 }
 
+/// Whether a node is a statement of a chain, read the way the seal check reads it
+/// (src/runtime/graph.cpp, `nodeIsChainStatement`): a branch, a loop or a call is a statement of
+/// one; an operator is one when running it is observable or may fault; a value is never one. The
+/// builder and the check have to answer this the same way, or the builder writes a link its own
+/// check refuses -- which is what "starts at a node that is not a statement of a chain" is.
+inline bool nodeIsChainStatementNode(node_handle_t node) {
+    if (node == nullptr) {
+        return false;
+    }
+    const runtime::GCNodeKind kind = nodeKindOf(node);
+    if (kind != runtime::GCNodeKind::Oper) {
+        return camel::runtime::nodeIsChainStatement(kind, camel::core::kNoOper);
+    }
+    // The operator of a node being built is named by its target, not yet by a payload (the same
+    // read `nodeTakesAnOrder` does, a few functions up).
+    const auto &op = nodeGraphOf(node)->operTarget(node);
+    const auto id  = op == nullptr
+                         ? std::optional<camel::core::OperId>{}
+                         : camel::core::OperatorTable::instance().lookup(op->uri());
+    return id.has_value() && camel::runtime::nodeIsChainStatement(kind, *id);
+}
+
+/// The value gives up the place in the chain it was handed. A chain is a sequence of statements
+/// (docs/design/effects/edges.cn.md 1, 4.6); a value that is left standing in it keeps the successor
+/// it was given and the next statement gets a second one, which is a chain that forks. So before the
+/// next link is written, what waited on the value waits on what the value waited on -- the same
+/// splice `GraphDraft::closeChainOver` writes for a node the graph loses (src/runtime/draft.cpp,
+/// `eraseNode`), applied to a node that stays.
+///
+/// Taken only when the place can be handed on without a guess: one sync predecessor, no other
+/// successor, all three in one region, and the predecessor a statement itself. Anything else -- two
+/// successors is the fork itself, a predecessor in another block is a block boundary, a join is not
+/// a statement -- is left alone and the link is written as the caller asked; a chain place is not
+/// reassigned across a block boundary, and handing it to a join only moves the same violation back
+/// a node (tutorial.examples.10_sync_block is what says so).
+inline node_handle_t releaseChainPlaceOfValue(node_handle_t value, node_handle_t successor) {
+    if (value == nullptr || successor == nullptr || nodeDraftOf(value) != nodeDraftOf(successor)) {
+        return value;
+    }
+    if (nodeIsChainStatementNode(value)) {
+        return value;
+    }
+    runtime::GraphDraft *draft = nodeDraftOf(value);
+    const auto preds           = syncInputsOf(value);
+    if (preds.empty()) {
+        // Nothing stands behind the value in this chain at all, so the value is where the chain
+        // would start -- and a chain does not start at a value (docs/design/effects/edges.cn.md
+        // 1, 4.6): a link written from it orders nothing and the seal refuses it. The value is
+        // transparent here too; the statement after it starts the chain, which is what a block
+        // whose first statement computes a value does.
+        return nullptr;
+    }
+    if (preds.size() != 1 || !draft->syncUsersOf(nodeIdOf(value)).empty()) {
+        return value;
+    }
+    const draft_node_ref_t predId = preds.front();
+    const uint32_t block          = draft->nodeRegion(nodeIdOf(successor));
+    if (!draft->alive(predId) || draft->nodeRegion(predId) != block ||
+        draft->nodeRegion(nodeIdOf(value)) != block) {
+        // A chain place in another block is not this link's to hand on.
+        return value;
+    }
+    if (!nodeIsChainStatementNode(draft->ref(predId))) {
+        // The place is handed to a statement or to nobody: a value with no statement behind it is
+        // transparent to the chain -- it writes no sync edge of its own, and the next statement
+        // links from wherever the chain stood before it.
+        return nullptr;
+    }
+    draft->setSyncInputs(nodeIdOf(value), {});
+    return draft->ref(predId);
+}
+
 /// The chain link itself: both ends marked as statements of one block, which is what the seal check
 /// reads back (src/runtime/graph_edges.cpp, `checkSyncEdges`), and the sync edge between them. No
 /// control edge: this is the pair as the model wants it, for a caller whose edge is not written for a
 /// consumer that still reads the old kind.
+///
+/// The start is a statement: a value that was handed the place gives it up first
+/// (`releaseChainPlaceOfValue`), so the link begins at the statement the value followed.
 inline void writeSyncLink(node_handle_t from, node_handle_t to) {
+    from = releaseChainPlaceOfValue(from, to);
+    if (from == nullptr || from == to) {
+        return;
+    }
     markSyncStatement(from);
     markSyncStatement(to);
     linkNodes(LinkType::Sync, from, to);
