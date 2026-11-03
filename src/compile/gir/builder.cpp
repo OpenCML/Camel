@@ -1576,6 +1576,16 @@ void Builder::buildFuncBody(
     staticValueScopes_ = std::move(outerStaticValues);
 }
 
+node_handle_t Builder::droppedValueAt(const GCT::node_ptr_t &last) {
+    // A name in a position that drops its value is not used as a value: it produces no node at
+    // all. A DREF is a compile-time marker the encoder refuses to find in a graph
+    // (graph_encode, prepareGraph), so what stands where the dropped value stood is the null
+    // constant -- what a void graph exits at anyway. This is the one place a dropped tail stops
+    // being a name, and every position that drops its value comes here (visitExecNode).
+    node_handle_t dropped = currGraph_->addStaticDataNode(Data::null());
+    registerNodeOrigin(context_, dropped, last, "gir.data.dropped");
+    return dropped;
+}
 
 node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpected) {
     ENTER("EXEC");
@@ -1787,28 +1797,36 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
     const bool nameAtTail =
         gct->size() > 0 && res != nullptr && nodeIsKind(res, runtime::GCNodeKind::Dref) &&
         sameGraph(res, currGraph_);
+    // Whether the value this block ends with is one nothing takes: the tail of a body or an arm
+    // declared `: void` (`acceptsAsResult`), a position that takes no value (the channel
+    // visitInPosition hands the position down by, the one branchTakesNoValue asks a branch about),
+    // and a block whose value is dropped where it stands (`{ len };` written as a statement of a
+    // `sync` block, or of any block, and the body of a decorated block nothing takes). There is
+    // one rule and it is about the position, not the shape: a position that drops a value does not
+    // use a name, so every one of these is the same `dropped` here.
+    const bool dropped =
+        valueDropped || (tailExpected != nullptr && isVoidGraphExitType(tailExpected)) ||
+        (expectedValueType_ != nullptr && isVoidGraphExitType(expectedValueType_));
     // The value of a block is that of its last statement, and a name standing there is a value
     // only where a value is wanted -- a DREF is a compile-time marker and no node of the graph
     // (graph_encode, prepareGraph).
-    if (nameAtTail && tailExpected != nullptr && isVoidGraphExitType(tailExpected)) {
-        // The tail sits in a `void` position: a body declared `: void` discards whatever its body
-        // ends with (`acceptsAsResult`), and so does an arm of a branch such a body drops. The
-        // value is dropped, and dropping a name is not using it, so nothing is asked of it: the
-        // null constant -- what a void graph exits at anyway -- stands where it stood, and the
-        // sync chain reaches it as it reaches any other value. `func g(): void { let step = len }`
-        // left the stack as a live DREF here, and was an internal error about a legal program.
-        const auto &last = gct->at(gct->size() - 1);
-        res              = currGraph_->addStaticDataNode(Data::null());
-        registerNodeOrigin(context_, res, last, "gir.data.dropped");
-    } else if (nameAtTail &&
-               (!valueDropped || gct->at(gct->size() - 1)->type() == GCT::NodeKind::DREF)) {
+    if (nameAtTail && dropped) {
+        // Nothing takes the value the block ends with, and dropping a name is not using it, so
+        // nothing is asked of it: the null constant -- what a void graph exits at anyway -- stands
+        // where it stood, and the sync chain reaches it as it reaches any other value. A `: void`
+        // body's tail (`func g(): void { let step = len }`) left the stack as a live DREF here,
+        // and was an internal error about a legal program; a name written last in a statement the
+        // block drops (`{ len };`) was asked for a function value it does not have, and was a
+        // report about a legal program. Both are positions that drop their value: same rule, same
+        // function -- `droppedValueAt` is where a name stops being a node.
+        res = droppedValueAt(gct->at(gct->size() - 1));
+    } else if (nameAtTail) {
         // The value is wanted: a block that ends in the name of a function has that function's
         // value -- of a branch arm (`if c then inc else dec`), of a block, of a function body --
         // and a name that is no single function value is reported where it is used. Left a name,
         // it gave the block the type void. The name arrives here from the `let` written last as
         // well (`let step = len` binds the name, and the binding's value is the statement's), so
-        // the last statement is not asked what kind it is; a block whose value nothing takes
-        // keeps the rule it had, and asks only for a name written last.
+        // the last statement is not asked what kind it is.
         const auto &last = gct->at(gct->size() - 1);
         res              = namedValueOf(res, last->name(), last);
     }

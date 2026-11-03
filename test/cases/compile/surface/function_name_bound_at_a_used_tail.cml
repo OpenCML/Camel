@@ -1,0 +1,6 @@
+// The third row of the same ruling: the body's value IS used, so the name bound last is asked for
+// one, and the diagnostic lands on the `let` -- the line the name is bound on, not the body and not
+// the name. Dropped_value_statement.cml holds the rows where nothing takes the value.
+func g(): int { let step = len }
+
+func main(): int sync { return 0 }
