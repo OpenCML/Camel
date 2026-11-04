@@ -133,18 +133,18 @@ export func pick_at::<T>(t: T[...], at: int[]): T when is_numeric::<T>()
 /// @example sum_stated([1.0, 2.0, 3.0] as float[], [3])    // 6.0
 export func sum_stated::<T>(t: T[...], extents: int[]): T when is_numeric::<T>()
 
-/// The rows `take` reads, with the indices and the operand's extents stated in one list:
-/// `[n, i0, ..., i(n-1), d0, ..., d(rank-1)]` is `take(t, [i0, ..., i(n-1)])`.
+/// The rows `take` reads, with the indices it reads **and** the operand's extents stated:
+/// `take_stated(t, [i0, ..., i(n-1)], [d0, ..., d(rank-1)])` is `take(t, [i0, ..., i(n-1)])`.
 ///
-/// The value is that take; the leading count splits the list, so the indices are the `n` entries
-/// after it and the extents are everything after them. `rulesets.transpose`'s `take_stated_t` reads
-/// the extents to build the array the scatter-add writes into, which is the operand's shape and
-/// therefore has to come from a known operand.
+/// The value is that take. `rulesets.transpose`'s `take_stated_t` reads `extents` to build the
+/// array the scatter-add writes into, which is the operand's shape and therefore has to come from a
+/// known operand. The two lists are told apart by their parameters, not by a count written into the
+/// first one: `indices` is what `take` reads and `extents` is the shape to spread the rows back into.
 /// @pure
-/// @fails fault `RuntimeError` when the list's first entry is not its index count, the extents
-/// disagree with the tensor's shape, or an index is outside the first dimension
-/// @example take_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1, 1, 2, 2])    // [[3.0, 4.0]]
-export func take_stated::<T>(t: T[...], at: int[]): T[...] when is_numeric::<T>()
+/// @fails fault `RuntimeError` when `extents` disagrees with the tensor's shape, or an index is
+/// outside the first dimension
+/// @example take_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1], [2, 2])    // [[3.0, 4.0]]
+export func take_stated::<T>(t: T[...], indices: int[], extents: int[]): T[...] when is_numeric::<T>()
 
 // The lane mean with its extents stated -- `mean_axis_stated(t, at)`, `at` being `[axis, keepdims,
 // d0, ..., d(rank-1)]` -- is not declared here. Its result's extents are the operand's with the axis

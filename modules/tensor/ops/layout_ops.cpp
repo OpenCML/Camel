@@ -672,60 +672,43 @@ std::optional<Type *> elementAtInfer(const InferContext &ctx) {
     return Type::create(t.dtype.value_or(TypeCode::Float64));
 }
 
-// The stated take's adjoint, `take_stated(t, at)`.
+// The stated take's adjoint, `take_stated(t, indices, extents)`.
 //
-// It is `take`'s adjoint with the indices taken out of the list: `at[0]` is how many indices the
-// list holds, so the indices are `at[1 : 1 + at[0]]` -- the same split `takeStatedKernel` below
-// reads -- and the rest is the extents. The extents are read nowhere here: a pullback rule is
-// handed the operand, so `tensor:take_grad(t, indices, dy)` takes the array's shape from `t` and
-// the row count from the indices. That is the one difference from the library's law for this
-// operator (`stdlib/rulesets/transpose.cml#take_stated_t`), which builds the zeros from the
-// extents because a transpose law reads only known operands and the tensor a cotangent comes back
-// through has no value there (author, 2026-11-03 11:10 and 17:35). Both answer the same array:
+// It is `take`'s adjoint: `tensor:take_grad(t, indices, dy)` takes the array's shape from `t` and
+// the row count from the indices. The extents are read nowhere here, and since the indices became
+// a parameter of their own the slice that used to cut them out of a packed list is gone -- the node
+// this rule walks to `take_grad` is the caller's own `indices`. That is the one difference from
+// the library's law for this operator (`stdlib/rulesets/transpose.cml#take_stated_t`), which
+// builds the zeros from the extents because a transpose law reads only known operands and the
+// tensor a cotangent comes back through has no value there (author, 2026-11-03 11:10 and 17:35).
+// Both answer the same array:
 // `test/cases/compile/transforms/stated_take_answered_by_the_engine.cml` prints the two together.
-//
-// The bound of the slice is `1 + at[0]`, a value of the run, which is why it is written as an
-// `:op/add_l` node rather than as a constant. A mask of 3 says both bounds are written and the
-// step is 1, the same six words `concatVjp` writes for its slice.
 void takeStatedVjp(VjpBuilder &b, const VjpCall &call) {
-    requireVjpInputs(call, 2, 2);
+    requireVjpInputs(call, 3, 3);
     const auto dy = b.gradientOf(call.output);
     if (!dy) {
         return;
     }
-    const vjp_node_t t  = call.inputs[0];
-    const vjp_node_t at = call.inputs[1];
-    const std::array<vjp_node_t, 2> countWords{at, staticInt(b, 0)};
-    const vjp_node_t count = b.addOper(Type::Int64(), ":op/idx_arr", countWords);
-    const std::array<vjp_node_t, 2> endWords{count, staticInt(b, 1)};
-    const vjp_node_t end = b.addOper(Type::Int64(), ":op/add_l", endWords);
-    const std::array<vjp_node_t, 6> slice{
-        at,
-        staticInt(b, 0),
-        staticInt(b, 1),
-        end,
-        staticInt(b, 1),
-        staticInt(b, 3),
-    };
-    const vjp_node_t indices = b.addOper(b.nodeType(at), ":op/slice_sub", slice);
+    const vjp_node_t t       = call.inputs[0];
+    const vjp_node_t indices = call.inputs[1];
     b.accumulateGradient(t, addTensorOperFor(b, t, "tensor:take_grad", {t, indices, *dy}));
 }
 
-// take_stated(t, at): the rows `take` reads, with the indices it reads **and** the operand's extents
-// stated in one integer list, `[n, i0, ..., i(n-1), d0, ..., d(rank-1)]`.
+// take_stated(t, indices, extents): the rows `take` reads, with the indices it reads **and** the
+// operand's extents stated beside them.
 //
 // A take's adjoint puts each row's cotangent back where that row came from, in an array of zeros
 // with the *operand's* shape -- and the operand is the one thing the reverse side does not have: a
 // transpose law reads only known operands, and `t` is the operand the cotangent comes back through
 // (author, 2026-11-03 11:10, 17:35). The indices do not supply the row count and the cotangent
 // supplies only the columns, so the extents have to be stated by the forward half
-// (`rulesets.jvp`'s `jvp_take` passes `[len(indices), the indices, shape(t)]`).
+// (`rulesets.jvp`'s `jvp_take` passes `shape(t)` beside the indices).
 //
-// The indices and the extents are one list for the reason `pick_at`'s position and length are:
-// the transpose walk answers an operator with one or two normal operands, so a third one would be
-// refused before any law was looked up. The first entry is the number of indices, which is what
-// tells the two halves of the list apart -- the indices are as long as the list says, and the
-// extents are everything after them.
+// The two arrays are separate parameters: `indices` is what `take` reads and `extents` is the
+// shape the adjoint spreads the rows back into. They used to travel in one list with a leading
+// count, because the transpose walk was believed to answer an operator with one or two normal
+// operands; the walk takes two `int[]` operands beside the tensor, which is what the take_stated
+// law reads today.
 //
 // Both are checked: the extents against the tensor's shape (`support.h#checkStatedExtents`) and
 // every index against the first extent, so a gradient is never built over a shape nobody verified.
@@ -734,15 +717,9 @@ slot_t takeStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
     if (input->rank() < 1) {
         reportShapeError("take_stated", "expects a tensor with at least one dimension");
     }
-    const std::vector<int64_t> at = intListArg(norm, 1, "take_stated");
-    if (at.empty() || at[0] < 0 || static_cast<size_t>(at[0]) + 1 > at.size()) {
-        reportShapeError(
-            "take_stated",
-            "expects an integer list whose first entry is the number of indices it holds");
-    }
-    const size_t count = static_cast<size_t>(at[0]);
-    checkStatedExtents(input, at, count + 1, "take_stated");
-    const std::vector<int64_t> indices(at.begin() + 1, at.begin() + 1 + count);
+    const std::vector<int64_t> indices = intListArg(norm, 1, "take_stated");
+    const std::vector<int64_t> extents = intListArg(norm, 2, "take_stated");
+    checkStatedExtents(input, extents, 0, "take_stated");
     const int64_t extent = input->dim(0);
     for (const int64_t index : indices) {
         if (index < 0 || index >= extent) {
@@ -855,7 +832,8 @@ std::vector<OpDef> layoutOps() {
     defs.push_back(OpDef{
         .name      = "take_stated",
         .exports   = {"take_stated"},
-        .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
+        .params    =
+            {{"t", ParamKind::Tensor}, {"indices", ParamKind::IntArray}, {"extents", ParamKind::IntArray}},
         .resultDoc = "T[...]",
         .infer     = takeStatedInfer,
         .kernel    = &takeStatedKernel,

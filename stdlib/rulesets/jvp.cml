@@ -281,12 +281,6 @@ func stated_axis_shape(axis: int, keepdims: bool, s: int[]): int[] {
     return concat([axis, flag], s)
 }
 
-/// `[n, i0, ..., i(n-1), d0, ..., d(rank-1)]`: what a take's linear half states to its adjoint.
-/// The leading count is what splits the list: `n` indices, then the operand's extents.
-func stated_rows(indices: int[], s: int[]): int[] {
-    return concat(concat([len(indices)], indices), s)
-}
-
 /// `d(sum(xs)) = sum(dxs)`: a sum adds its elements up, so it is linear and the sum of the tangents is
 /// the tangent of the sum.
 ///
@@ -377,7 +371,7 @@ export rule jvp_reshape::<T>(x: T[...]) when is_float::<T>() {
 /// tangent call is `take_stated`, which takes the indices and the extents in one list, and
 /// `take_stated_t` builds the zeros from those extents and reads nothing of `dt`.
 export rule jvp_take::<T>(t: T[...], indices: int[]) {
-    take(t, indices) => (dt: T[...]) => take_stated(dt, stated_rows(indices, shape(t)))
+    take(t, indices) => (dt: T[...]) => take_stated(dt, indices, shape(t))
 }
 
 // ---- the forward rule of the array subtraction ----

@@ -3,7 +3,7 @@
 
 # The three reverse laws that need the extents their forward half consumed: a sum, a take and a lane
 # mean. Each forward rule (`stdlib/rulesets/jvp.cml`) passes the extents to the **stated** spelling of
-# the operator -- `sum_stated`, `take_stated`, `mean_axis_stated` -- as one known actual argument, and
+# the operator -- `sum_stated`, `take_stated`, `mean_axis_stated` -- as a named argument, and
 # each reverse law (`stdlib/rulesets/transpose.cml`, `sum_stated_t` and its two neighbours) reads that
 # argument and nothing of the operand the cotangent comes back through. These three cases are what
 # says the laws answer the number on paper, and not merely that the walk stopped refusing.
@@ -250,7 +250,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "stated_take_answered_by_the_engine"
-desc = "`take_stated(x, [2, 0, 2, 4])` over `[1.0, 2.0, 3.0, 4.0]` differentiated by `autodiff:grad`: rows 0 and 2 are read, so both legs answer `[1.0, 0.0, 1.0, 0.0]` -- the engine by slicing the indices out of the list and running `tensor:take_grad` against the operand, the library by scattering into the stated extents. The list is the point: the indices start after the count and the array's shape is not among the operator's operands, so a rule that read the cotangent's shape would answer a two-element array and a rule that read the list from position 0 would take the count for an index."
+desc = "`take_stated(x, [0, 2], [4])` over `[1.0, 2.0, 3.0, 4.0]` differentiated by `autodiff:grad`: rows 0 and 2 are read, so both legs answer `[1.0, 0.0, 1.0, 0.0]` -- the engine by running `tensor:take_grad` against the indices operand, the library by scattering into the stated extents. The two arrays are separate parameters, and that is the point: the indices are what the take reads and the extents are the shape the adjoint spreads into, so a rule that read the cotangent's shape would answer a two-element array and a rule that took the first list for the extents would spread over the indices."
 kind = "behavior"
 case = "../../../cases/compile/transforms/stated_take_answered_by_the_engine.cml"
 args = ["${case}", "${backend}"]
@@ -298,7 +298,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "stated_take_extents_refused"
-desc = "The same check at the second list's own offset: `take_stated(x, [1, 0, 9])` states one index, then one extent of nine against four rows, and stops with `states extent 9 at dimension 0 and the tensor has 4`. The offset is the point -- the extents start after the count and the indices -- so a check that always read from position 0 would compare the index with the extent and pass."
+desc = "The same check on the parameter that carries it: `take_stated(x, [0], [9])` states an extent of nine against four rows, and stops with `states extent 9 at dimension 0 and the tensor has 4`. The parameter is the point -- the extents are the third one and the indices are the second, and a check that read the indices for the extents would compare `0` with `4` and pass."
 kind = "behavior"
 case = "../../../cases/compile/transforms/stated_take_extents_refused.cml"
 args = ["${case}", "${backend}"]

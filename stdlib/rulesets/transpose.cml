@@ -503,7 +503,7 @@ export rule matmul_t::<T, A, B>(a: A, b: B) when is_float::<T>() {
 // read that operand and nothing of the tensor: `sum_stated_t` spreads over the list's extents,
 // `take_stated_t` scatters into an array of them, and `mean_axis_stated_t` spreads each lane's
 // cotangent over `numel(t) / numel(ct)` positions. Each list's layout is stated where the forward
-// half builds it (`stdlib/rulesets/jvp.cml#stated_axis_shape`, `#stated_rows`).
+// half builds it (`stdlib/rulesets/jvp.cml#stated_axis_shape`, `shape(t)`).
 //
 // The value of a stated operator is the operation itself -- the extents are there for this side --
 // so what a call site hands over is one integer list, and the arrays these laws build carry the
@@ -696,27 +696,25 @@ func zeros_of_shape::<T>(ct: T[...], s: int[]): T[...] when is_float::<T>() {
     return zeros::<T>(s)
 }
 
-/// The cotangent of `take_stated(t, at)`: `ct`'s rows added back where `at`'s indices say they came
-/// from, in an array of `at`'s extents.
+/// The cotangent of `take_stated(t, indices, extents)`: `ct`'s rows added back where `indices` say
+/// they came from, in an array of `extents`.
 ///
-/// `at` is `[n, i0, ..., i(n-1), d0, ..., d(rank-1)]` (`stdlib/rulesets/jvp.cml#stated_rows`), so the
-/// leading count splits it: the indices are the `n` entries after it and the extents are everything
-/// after those. The law reads the list and nothing of `t`, which is what it may do: a transpose rule
-/// reads only known operands, and the row count a take forgets -- the indices say where its rows go,
-/// not how many there were -- is a value of the primal.
+/// The law reads `indices` and `extents` and nothing of `t`, which is what it may do: a transpose
+/// rule reads only known operands, and the row count a take forgets -- the indices say where its rows
+/// go, not how many there were -- is a value of the primal. Each parameter says which array it is, so
+/// nothing here counts positions in a list.
 ///
 /// The axis is `0` because that is the axis `take` reads (`tensor:take` names its first dimension).
-func take_cotangent::<T>(ct: T[...], at: int[]): T[...] when is_float::<T>() {
-    let count = at[0]
-    let base = zeros_of_shape(ct, at[1 + count:len(at)])
-    return scatter_rows(base, at[1:1 + count], ct, 0)
+func take_cotangent::<T>(ct: T[...], indices: int[], extents: int[]): T[...] when is_float::<T>() {
+    let base = zeros_of_shape(ct, extents)
+    return scatter_rows(base, indices, ct, 0)
 }
 
-/// The transpose of `take_stated(t, at)`: the indices are an `int[]` and take no cotangent, so the
-/// rule's right side answers one value, and the extents it spreads into are `at`'s. The head states
-/// the same per-position type parameters as `sum_stated_t`.
-export rule take_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
-    take_stated(t, at) => (ct: T[...]) => take_cotangent(ct, at)
+/// The transpose of `take_stated(t, indices, extents)`: the two `int[]` parameters take no
+/// cotangent, so the rule's right side answers one value, and the extents it spreads into are the
+/// third parameter's. The head states the same per-position type parameters as `sum_stated_t`.
+export rule take_stated_t::<T, X, I, E>(t: X, indices: I, extents: E) when is_float::<T>() {
+    take_stated(t, indices, extents) => (ct: T[...]) => take_cotangent(ct, indices, extents)
 }
 
 // ---- the transpose of `mean` over an axis ----

@@ -2595,21 +2595,21 @@ gradient of the wrong shape.
 #### `take_stated`
 
 ```camel
-take_stated: (t: T[...], at: int[]) => T[...] when is_numeric::<T>()
+take_stated: (t: T[...], indices: int[], extents: int[]) => T[...] when is_numeric::<T>()
 ```
 
-The rows `take` reads, with the indices and the operand's extents stated in one list:
-`[n, i0, ..., i(n-1), d0, ..., d(rank-1)]` is `take(t, [i0, ..., i(n-1)])`.
+The rows `take` reads, with the indices it reads **and** the operand's extents stated:
+`take_stated(t, [i0, ..., i(n-1)], [d0, ..., d(rank-1)])` is `take(t, [i0, ..., i(n-1)])`.
 
-The value is that take; the leading count splits the list, so the indices are the `n` entries
-after it and the extents are everything after them. `rulesets.transpose`'s `take_stated_t` reads
-the extents to build the array the scatter-add writes into, which is the operand's shape and
-therefore has to come from a known operand.
-disagree with the tensor's shape, or an index is outside the first dimension
+The value is that take. `rulesets.transpose`'s `take_stated_t` reads `extents` to build the
+array the scatter-add writes into, which is the operand's shape and therefore has to come from a
+known operand. The two lists are told apart by their parameters, not by a count written into the
+first one: `indices` is what `take` reads and `extents` is the shape to spread the rows back into.
+outside the first dimension
 
 - Pure.
-- Failure: fault `RuntimeError` when the list's first entry is not its index count, the extents.
-- Example: `take_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1, 1, 2, 2])` gives `[[3.0, 4.0]]`
+- Failure: fault `RuntimeError` when `extents` disagrees with the tensor's shape, or an index is.
+- Example: `take_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1], [2, 2])` gives `[[3.0, 4.0]]`
 
 #### `sum_axis_stated`
 
