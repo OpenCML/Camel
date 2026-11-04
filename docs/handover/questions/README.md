@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：54 页
+## 现在在等作者：55 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -30,6 +30,7 @@
 | [`2026-11-04-does-adopt-carry-what-it-adopted-or-does-a-cut-carry-its-own-chain`](2026-11-04-does-adopt-carry-what-it-adopted-or-does-a-cut-carry-its-own-chain.cn.md) | 嵌套两级的 cut 丢掉自己的孙程序：把 `adopt` 改成传递，还是让每个 cut 自带一条链？ |
 | [`2026-11-04-does-pick-at-need-a-forward-rule`](2026-11-04-does-pick-at-need-a-forward-rule.cn.md) | 问题：`pick_at` 该补一条**前向**律吗？ |
 | [`2026-11-04-does-the-engine-need-a-pick-at-rule`](2026-11-04-does-the-engine-need-a-pick-at-rule.cn.md) | 问题：引擎的反向表要不要给 `pick_at` 补一条规则？ |
+| [`2026-11-04-does-the-library-graphs-node-numbering-drift-with-a-laws-declaration`](2026-11-04-does-the-library-graphs-node-numbering-drift-with-a-laws-declaration.cn.md) | 库自己图的节点下标，会随一条律的声明而平移——这算黄金漂移吗？ |
 | [`2026-11-04-does-the-library-need-forward-rules-for-the-stated-spellings`](2026-11-04-does-the-library-need-forward-rules-for-the-stated-spellings.cn.md) | 问题：`rulesets.jvp` 要不要给四个"stated"拼写补前向律？ |
 | [`2026-11-04-does-the-transpose-walk-still-refuse-by-arity`](2026-11-04-does-the-transpose-walk-still-refuse-by-arity.cn.md) | 问题：转置走图还按操作数个数拒一个算子吗？ |
 | [`2026-11-04-how-does-a-tie-mask-travel-with-an-extremums-shape`](2026-11-04-how-does-a-tie-mask-travel-with-an-extremums-shape.cn.md) | `max_axis` / `min_axis` 的孪生算子：并列极值的选择怎么随形状走？ |
