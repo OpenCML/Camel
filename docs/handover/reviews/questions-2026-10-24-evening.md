@@ -1860,7 +1860,7 @@ C9 已合入（`22d03dd80` 经 `a503f6130`），`thread_count` 只在 `test_supp
 ## 2026-10-26-onnx-migration-three-measured-differences
 
 1. 18 个，收下。
-2. **`let _ = export_model<out: path>(f, x)` 是对的**：`void!` 被忽略要警告，有意丢弃就这么写。只关心导出成功的用例，更好的写法是把它作为 `main(): void!` 的结果，或用 `!!` 处理；只有确实不关心结果的才用 `let _ =`。
+2. ~~**`let _ = export_model<out: path>(f, x)` 是对的**~~：**已被 2026-10-29 的裁定推翻**——`let _ =` 是错的写法，拒绝必须看得见（`export_model` 的 `void!` 要接住，`!!` 对它也用不了：`export_model(...) !! { }` 报 `'!!' cannot be applied here: its right side has type '{  }', but the left side holds a 'void'`）。见 `docs/handover/reviews/questions-2026-10-29.md` 末尾的裁定与 `test/cases/modules/onnx/export_refusal_is_visible.cml`。
 3. **`checkExamples` 补上位置**：两种形式要报同一处，这是同一条"错误值带着被拒绝节点的位置"规则。
 
 ## 2026-10-26-our-mechanical-rename-left-two-false-sentences

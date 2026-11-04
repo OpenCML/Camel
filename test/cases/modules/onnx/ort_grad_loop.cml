@@ -46,7 +46,7 @@ func step(w: f32[...], x: f32[...]): (float[...], f32[...], float[...], f32[...]
     return (reshape<[1]>([a.0]), a.1.w, reshape<[1]>([b.0]), b.1.w)
 }
 
-func main(): int sync {
+func main(): string! sync {
     let w = load_npy::<f32>('w.npy')
     let x = load_npy::<f32>('x.npy')
     let r = step(w, x)
@@ -54,10 +54,10 @@ func main(): int sync {
     save_npy(r.1, 'native_1.npy')
     save_npy(r.2, 'native_2.npy')
     save_npy(r.3, 'native_3.npy')
-    let exported = if (get_env('ONNX_OUT') ?? '') != '' then sync {
-        let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((w: f32[...], x: f32[...]): (float[...], f32[...], float[...], f32[...]) => step(w, x), (w, x))
-        1
-    } else 0
-    println(exported)
-    return 0
+    return if (get_env('ONNX_OUT') ?? '') != '' then sync {
+        match export_model<out: get_env('ONNX_OUT') ?? ''>((w: f32[...], x: f32[...]): (float[...], f32[...], float[...], f32[...]) => step(w, x), (w, x)) {
+            case error e => { return e }
+            case v => '1'
+        }
+    } else '0'
 }

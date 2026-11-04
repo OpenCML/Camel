@@ -17,14 +17,18 @@ func branch(x: f32[...]): f32[...] {
     return if sum(x) > 100.0 then x else head(x)
 }
 
-func main(): int sync {
+func main(): string! sync {
     let x = reshape<[3]>([1.0, 1.0, 1.0] as f32[])
     println(head(x))
     if (get_env('MODE') ?? '') == 'branch' then {
-        let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[...]): f32[...] => branch(x), x)
+        return match export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[...]): f32[...] => branch(x), x) {
+            case error e => { return e }
+            case v => 'exported'
+        }
     } else {
-        let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[...]): f32[...] => head(x), x)
+        return match export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[...]): f32[...] => head(x), x) {
+            case error e => { return e }
+            case v => 'exported'
+        }
     }
-    println('exported')
-    return 0
 }
