@@ -1476,21 +1476,19 @@ gives the cotangent of its parameter. The data flow runs backwards -- each primi
 by the rule the `rulesets.transpose` family files under it, and a value used k times receives k
 cotangents that add. `f(x) = 2*x + 3*x` transposed at the cotangent `1.0` gives `5.0`.
 
-The transposed function takes the values the call site still passes first and the cotangent of
-the result last, because a pullback may need the value it is transposing at: a branch's condition
-is a value, and the cotangent of an arm only means something for the arm that ran.
+The transposed function takes one value, the cotangent of `f`'s result, and answers one cotangent
+per parameter. Both lists are `f`'s own: every parameter of `f` is a linear input, and the
+cotangent it is answered for is the one the caller hands in.
 
-Which values those are is a property of `f`'s body, not of its type: a parameter that takes a
-cotangent is not passed (the cotangent carries it), a parameter with no tangent space (an `int`,
-a `bool`, a string) stands there as a value, and a value the body reads from outside stands there
-too. So for a one-`float` function the call is `transpose(f)(1.0)`.
+A value the transposed body needs beside the cotangent is not passed to it: it is a residual the
+function that is transposed was closed over, and the body reads it as a closure port. That is the
+same rule for a value the body computed, a value it read from outside, and a `with` value it read
+(`lin`'s residual tuple): a parameter with no tangent space is a value, and it is the one place
+the transposed graph takes a port that is not a cotangent, because the call site still fills it.
 
-**`stdlib/types.cml#Transpose` is the contract, not an approximation** (author, 2026-11-03,
-`origin/fsh-dev` `6eceaa89d`): the build makes the declared type. The declaration cannot write
-that shape exactly today because the type-bundle splice loses multiplicity and lacks "the value
-parameters the call site still passes" -- a missing capability of the splice, to be fixed, not a
-wording to be kept. `modules/transforms/transpose.cpp#transposeSignature` is the build that has to
-come to agree with it.
+**`stdlib/types.cml#Transpose` is the contract**: the build makes the declared type, and the build
+that makes it is `modules/transforms/transpose.cpp#transposeSignature`. So `transpose(f)` is
+called as `transpose(f)(1.0)` for a one-`float` function -- one argument, the cotangent.
 
 - Example: `let back = transpose((x: float) => 2.0 * x + 3.0 * x)`
 
@@ -7398,18 +7396,26 @@ wherever `x ^ w` is. The second is the derivative with respect to the **exponent
 `x^w * log(x)`: for `x <= 0` that has no real value, because a real power of a negative number
 exists only for integer exponents and has no derivative in the exponent there.
 
-So the second term is computed only where it contributes. A tangent is a number, and a constant
-exponent's tangent is a zero constant (`jvp.cpp`'s `zeroConstantFor`: "the tangent a constant
-gets: the zero of the value's own type"), so `dw = 0` is a *zero* tangent, not a missing one --
-and the product it multiplies is exactly zero. Multiplying that zero by `log(x)` in floating
-point is not zero, it is `NaN` (the log of a negative number), which would turn an ordinary
-`(-3.0) ^ 2.0` into `NaN` for a term that is arithmetically nothing. The zero is therefore taken
-where it is, and where `dw` is not zero the log is asked for and left to answer `NaN`: an
-undefined derivative says so, and is not written as a zero.
+**No branch on a tangent's value.** The author's ruling of 2026-11-04 (`docs/handover/reviews/
+2026-11-04-a-guarded-tangent-cannot-be-transposed-what-does-the-power-keep.cn.md`) took the
+`if dw == T(0)` guard this helper used to carry away: the zero of a constant's tangent is
+**structurally known** -- a constant has no tangent -- and not a value a law computes and
+compares. What replaces it happens before anything runs: the rule's right side is expanded with
+the structurally-zero tangents named, and the product one of them multiplies is omitted rather
+than computed (`modules/transforms/rule_expand.cpp#expandRuleRightSide`). So `(-3.0) ^ 2.0`
+still answers `-6.0` and `log(-3.0)` is never asked for its `NaN`, while a law with no branch
+is a law the backward walk can turn around: `^`'s pullback answers the same number as `pow`'s
+(`test/cases/compile/transforms/pow_gradient_through_the_library.cml` against
+`pow_gradient_of_a_caret_through_the_library.cml`).
+
+A program that calls this helper itself hands it a real `dw`, and then the second term is a real
+term: at a negative base it answers `NaN`, because the derivative in the exponent does not exist
+there. The omission is the rule expander's, not this function's -- there is nothing here that
+could omit it, which is why the law below is written out rather than called.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `pow_tangent(3.0, 2.0, 1.0, 0.0)` gives `6.0`
-- Example: `pow_tangent(-3.0, 2.0, 1.0, 0.0)` gives `-6.0`
+- Example: `pow_tangent(2.0, 3.0, 0.0, 1.0)` gives `5.545177444479562`
+- Example: `pow_tangent(-3.0, 2.0, 1.0, 0.0)` gives `nan`
 
 <a id="rulesets.vmap"></a>
 

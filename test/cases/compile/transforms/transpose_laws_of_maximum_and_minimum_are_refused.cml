@@ -1,0 +1,58 @@
+// The two cotangent laws a bare `transpose` never gets to read: `maximum_t` and `minimum_t`.
+//
+// Neither law can be read at any rank a program can spell, and this case pins that rather than
+// covering it:
+//
+//   - At the ranks a program actually writes (`x` and `w` both `float[3]`) the walk finds the law
+//     and the law's own cotangent refuses to instantiate -- `skip=rule-ranks` naming the rule, the
+//     node, the position and the ranks, which is what this entry pins.
+//   - The blocker is the cotangent port itself: the law writes `ct: T[...]`, and a three-parameter
+//     instantiation binds `T` to the **operand's whole type**, so `ct` is an open-rank array *of*
+//     `float[3]` instead of `float[...]`. The `where` the law writes is the scalar one
+//     (`where(bool, T, T)`), so its array mask and its scalar zero cannot match either, and three
+//     other spellings of the zero arm fail for the same binding rather than for their own reason.
+//     The four refusals are in `docs/handover/reports/` (the page
+//     `2026-11-04-a-zero-tangent-term-that-was-never-built.cn.md`, section 5) -- they are a
+//     measurement, so they live there and not here.
+//   - The rank the law *is* written for is not reachable either: `tensor:maximum` has no scalar
+//     spelling a program can write (`maximum(x, 1.0)` does not type-check -- the tensor module's
+//     overloads take arrays), so there is no rank at which the array/scalar mismatch would go away.
+//   - A `split` graph does not reach these laws at all: `jvp_maximum` answers the tangent with the
+//     mask, so the linear half of `vjp(f_max)` is other laws -- the right number, from a law that is
+//     not this one.
+//
+// So both are **unverified** in `test/plans/feat/compile/transforms.plan.toml`, and the reason is
+// "no case can tell a right one from a wrong one", not "a case has not been written yet". The
+// blockers, in the order a fix would meet them: `stdlib/rulesets/transpose.cml#maximum_t` (its
+// `ct: T[...]` does not bind `T` to the element at a three-parameter instantiation) and `#minimum_t`
+// behind it, then the missing scalar spelling of `maximum`/`minimum`. This case pins the refusal on
+// both streams: the day the law instantiates, it fails and names the number that replaced it.
+//
+//     camel test/cases/compile/transforms/transpose_laws_of_maximum_and_minimum_are_refused.cml
+import rulesets.transpose
+import { transpose } from transforms
+import { maximum, minimum, sum } from tensor
+
+/// `x ↦ Σ max(x, [1, 2, 3])` at x = [0, 2, 4]: the right cotangent is [0, 1, 1].
+func f_max(x: float[3]): float {
+    return float(sum(maximum(x, [1.0, 2.0, 3.0])))
+}
+
+/// The mirror: at the same x the right cotangent is [1, 1, 0].
+func f_min(x: float[3]): float {
+    return float(sum(minimum(x, [1.0, 2.0, 3.0])))
+}
+
+func main(): int sync {
+    let maxAnswer = attempt(() => transpose(f_max)(1.0))()
+    println(match maxAnswer {
+        case error e => 'max  refused  ' + e.kind
+        case _ => 'max  answered'
+    })
+    let minAnswer = attempt(() => transpose(f_min)(1.0))()
+    println(match minAnswer {
+        case error e => 'min  refused  ' + e.kind
+        case _ => 'min  answered'
+    })
+    return 0
+}

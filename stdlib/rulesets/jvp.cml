@@ -456,8 +456,8 @@ export rule jvp_log_softmax::<T>(x: T[...]) when is_float::<T>() {
 /// transpose rule of its own. The three-operand form puts `where` itself in the linear half, and the
 /// walk refuses any node with three normal operands before it looks a rule up (measured:
 /// `skip=arity uri=tensor:where operands=3`, 2026-11-03). A helper named here would be the other
-/// wall -- `pow_tangent` has no transpose and that is where `^`'s `vjp` stops
-/// (`skip=call-no-transpose`).
+/// wall -- a call in the linear half has no transpose of its own (`skip=call-no-transpose`), which
+/// is where `^`'s `vjp` used to stop and where `jvp_pow` below now writes its law out instead.
 export rule jvp_relu::<T>(x: T[...]) when is_float::<T>() {
     relu(x) => (dx: T[...]) => (where(x > 0.0, 1.0, 0.0) * dx)
 }
@@ -480,7 +480,8 @@ export rule jvp_exp::<T>(x: T[...]) when is_float::<T>() {
 /// right side is one recomputed x-only value multiplied by the tangent -- the shape `jvp_exp`
 /// (`stdlib/rulesets/jvp.cml`) measured the cut carrying, and no helper: a helper named here becomes
 /// a call in the linear half, and a call with no transpose of its own stops the backward walk
-/// (`skip=call-no-transpose`, measured on `rulesets.jvp::pow_tangent` 2026-11-03).
+/// (`skip=call-no-transpose`, measured on `rulesets.jvp::pow_tangent` 2026-11-03 -- the spelling is
+/// gone and the rule is kept: what the measurement names is a shape, not that helper).
 ///
 /// The engine's `sigmoidVjp` (`modules/tensor/ops/elementwise_ops.cpp`) scales its cotangent by
 /// `y * (1 - y)` read off the output it already holds; this rule and `sigmoid_t`
@@ -526,7 +527,7 @@ export rule jvp_tanh::<T>(x: T[...]) when is_float::<T>() {
 // the operand, which is the channel `jvp_exp` established; `log`'s slope needs only the operand, and
 // `divide`'s needs both operands. None of the eight names a helper on the right: a helper becomes a
 // call in the linear half, and a call with no transpose of its own stops the backward walk
-// (`skip=call-no-transpose`, measured on `rulesets.jvp::pow_tangent`).
+// (`skip=call-no-transpose`, measured on `rulesets.jvp::pow_tangent` before `jvp_pow` was inlined).
 
 /// `-x` on an array: what `tensor:neg` is, and the name its rule is filed under. `x * w`'s array
 /// form needed the same stand-in (`mul_tensor`, `stdlib/rulesets/transpose.cml`) for the same
@@ -699,24 +700,44 @@ export rule jvp_pick_at::<T>(xs: T[], at: int[]) when is_float::<T>() {
 /// `x^w * log(x)`: for `x <= 0` that has no real value, because a real power of a negative number
 /// exists only for integer exponents and has no derivative in the exponent there.
 ///
-/// So the second term is computed only where it contributes. A tangent is a number, and a constant
-/// exponent's tangent is a zero constant (`jvp.cpp`'s `zeroConstantFor`: "the tangent a constant
-/// gets: the zero of the value's own type"), so `dw = 0` is a *zero* tangent, not a missing one --
-/// and the product it multiplies is exactly zero. Multiplying that zero by `log(x)` in floating
-/// point is not zero, it is `NaN` (the log of a negative number), which would turn an ordinary
-/// `(-3.0) ^ 2.0` into `NaN` for a term that is arithmetically nothing. The zero is therefore taken
-/// where it is, and where `dw` is not zero the log is asked for and left to answer `NaN`: an
-/// undefined derivative says so, and is not written as a zero.
-/// @example pow_tangent(3.0, 2.0, 1.0, 0.0)    // 6.0
-/// @example pow_tangent(-3.0, 2.0, 1.0, 0.0)    // -6.0
+/// **No branch on a tangent's value.** The author's ruling of 2026-11-04 (`docs/handover/reviews/
+/// 2026-11-04-a-guarded-tangent-cannot-be-transposed-what-does-the-power-keep.cn.md`) took the
+/// `if dw == T(0)` guard this helper used to carry away: the zero of a constant's tangent is
+/// **structurally known** -- a constant has no tangent -- and not a value a law computes and
+/// compares. What replaces it happens before anything runs: the rule's right side is expanded with
+/// the structurally-zero tangents named, and the product one of them multiplies is omitted rather
+/// than computed (`modules/transforms/rule_expand.cpp#expandRuleRightSide`). So `(-3.0) ^ 2.0`
+/// still answers `-6.0` and `log(-3.0)` is never asked for its `NaN`, while a law with no branch
+/// is a law the backward walk can turn around: `^`'s pullback answers the same number as `pow`'s
+/// (`test/cases/compile/transforms/pow_gradient_through_the_library.cml` against
+/// `pow_gradient_of_a_caret_through_the_library.cml`).
+///
+/// A program that calls this helper itself hands it a real `dw`, and then the second term is a real
+/// term: at a negative base it answers `NaN`, because the derivative in the exponent does not exist
+/// there. The omission is the rule expander's, not this function's -- there is nothing here that
+/// could omit it, which is why the law below is written out rather than called.
+/// @example pow_tangent(2.0, 3.0, 0.0, 1.0)    // 5.545177444479562
+/// @example pow_tangent(-3.0, 2.0, 1.0, 0.0)    // nan
 export func pow_tangent::<T>(x: T, w: T, dx: T, dw: T): T when is_float::<T>() {
-    let throughExponent = if dw == T(0) then T(0) else pow(x, w) * math_log(x) * dw
-    return w * pow(x, w - T(1)) * dx + throughExponent
+    return w * pow(x, w - T(1)) * dx + pow(x, w) * math_log(x) * dw
 }
 
-/// `d(x ^ w) = w * x^(w-1) * dx + x^w * log(x) * dw`, written out in `pow_tangent` above. The
-/// operator is spelled `^`, and its key is derived from its name -- `pow` is one of the written
+/// `d(x ^ w) = w * x^(w-1) * dx + x^w * log(x) * dw`, written out **here** rather than called.
+///
+/// The operator is spelled `^`, and its key is derived from its name -- `pow` is one of the written
 /// operations `src/core/forward.cpp` lists -- so nothing here is filed under a call.
+///
+/// The law is in the rule and not in `pow_tangent` above because of what the right side becomes: the
+/// linear half of a lifted program is what `transpose` turns around, and a **call** in it has no
+/// transpose of its own (`skip=call-no-transpose`, the wall that stopped `^`'s pullback while the
+/// rule was `(dx, dw) => pow_tangent(x, w, dx, dw)`). Two products of the operand's own tangents
+/// are not a call: `w * x^(w-1)` and `x^w * log(x)` are the coefficients, and the walk has laws for
+/// the products they multiply. The same shape `jvp_pow_d` writes, for the same reason.
+///
+/// Splitting the law into two products is also what lets the expansion omit the exponent's term when
+/// the exponent's tangent is structurally zero: a constant exponent has no tangent, so the term is
+/// not built at all, and `(-3.0) ^ 2.0` answers `-6.0` without asking `log(-3.0)` for a `NaN`
+/// (`pow_tangent` above says what replaced its old guard).
 ///
 /// The tangent helper lives here rather than in `autodiff` with its siblings for one measured
 /// reason: it needs `log` and `pow`, which belong to `math`, and a module dependency added to
@@ -726,7 +747,7 @@ export func pow_tangent::<T>(x: T, w: T, dx: T, dw: T): T when is_float::<T>() {
 /// lands here instead.
 /// @example 3.0 ^ 2.0    // 9.0
 export rule jvp_pow::<T>(x: T, w: T) when is_float::<T>() {
-    x ^ w => (dx: T, dw: T) => pow_tangent(x, w, dx, dw)
+    x ^ w => (dx: T, dw: T) => w * pow(x, w - T(1)) * dx + pow(x, w) * math_log(x) * dw
 }
 
 // ---- the forward rule of `pow` (`math:pow_d`) ----
@@ -755,8 +776,9 @@ func pow_d(x: float, y: float): float {
 }
 
 /// `d(pow(x, w)) = w * x^(w-1) * dx + x^w * ln(x) * dw`, both branches. The exponent's branch is
-/// undefined for `x <= 0` and answers `NaN` there, the same reading `pow_tangent` gives the same
-/// operator spelled `^`.
+/// undefined for `x <= 0` and answers `NaN` there, the same reading `jvp_pow` gives the same
+/// operator spelled `^`. The term is a product of the exponent's tangent and a coefficient, so a
+/// constant exponent's term is omitted where the rule is expanded, exactly as `jvp_pow`'s is.
 export rule jvp_pow_d(x: float, y: float) {
     pow_d(x, y) => (dx: float, dy: float) => y * pow(x, y - 1.0) * dx + pow(x, y) * math_log(x) * dy
 }
@@ -883,7 +905,8 @@ export rule jvp_bf16_from_string(x: string) {
 // law below is one straight line whose right side names only registered operators: a *function* of
 // this module on a rule's right side becomes a call in the graph the linear half has to transpose,
 // and the walk refuses a call it has no transpose for (`skip=call-no-transpose`, measured on
-// `pow_tangent`). The two `erf`-family laws are written in the engine's own grouping because the
+// `pow_tangent`, which is why `jvp_pow` writes the same law out instead of calling it). The two
+// `erf`-family laws are written in the engine's own grouping because the
 // two legs of one `grad` are compared bit for bit; the knot each one is tied to is written where it
 // sits.
 
