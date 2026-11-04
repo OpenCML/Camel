@@ -125,24 +125,27 @@ export type Vjp<F> = <..WithOf<F>> (..ParamsOf<F>) => (ResultOf<F>, Pullback<F>)
 export type Jvp<F> =
     <..WithOf<F>> (..ParamsOf<F>, ..Tangent<ParamsOf<F>>) => (ResultOf<F>, Tangent<ResultOf<F>>)
 
-/// The transpose of a linear function: the values the call site still passes, then the cotangent of
-/// the result, then the cotangents of the parameters. The cotangent comes last because a pullback may
-/// need the value it transposes at (a branch's condition is a value).
+/// The transpose of a linear function: the cotangent of the result, and one cotangent per parameter
+/// of `f`.
 ///
-/// **This declaration is the contract** (author, 2026-11-03, `origin/fsh-dev` `6eceaa89d`: "a
-/// declaration is the contract -- `transpose` and `jvp` build the declared types, no approximate
-/// declarations; the type-bundle splice loses multiplicity and that is first"). What the build makes
-/// must be what is written here, so the shape below is the one the build has to produce.
+/// **This declaration is the contract**: the build makes the declared type, and the build that makes
+/// it is `modules/transforms/transpose.cpp#transposeSignature`. There is no value parameter and no
+/// `with` list here, because a value the transposed body needs beside the cotangent is not one its
+/// caller passes: it is a residual the function that is transposed was closed over -- `x` in
+/// `transpose((dx: float) => 2.0 * x * dx)`, and the residue a cut captured in `lin`'s closure --
+/// and the transposed body reads it as a closure port. A `with` value the backward half reads is a
+/// residual like every other one the second half reads, so `transpose(lin)` is `(ct) => (...)`
+/// whether `lin` came from a `with` function or from a plain one.
 ///
-/// It is not written exactly today, and that is a **missing capability of the type-bundle splice**,
-/// not a spelling to be kept: `(..A, ..B)` loses multiplicity, and two operations the exact shape needs
-/// -- "the value parameters the call site still passes" and "value and tangent interleaved" -- do not
-/// exist yet. When the splice carries multiplicity, this declaration gets the exact form. Until then
-/// the difference is a defect of the declaration layer, to be written down and fixed, never a licence
-/// to call the declaration approximate.
-/// @example is_same::<Transpose<(x: float) => float>, (x: float, ct: float) => (float,)>()    // true
-export type Transpose<F> =
-    (..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
+/// A parameter **without** a tangent space (`int`, `bool`, a string) is the one place the shape above
+/// is not the one the build makes: `Tangent<int>` is `()`, so it needs no cotangent, and the call site
+/// still has to supply its value -- the transposed member takes it as one ordinary argument **before**
+/// the cotangent (`transpose(pick)` reads the index and answers the array's cotangent). Written here
+/// as `(..ValueParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)` if the splice could
+/// state it. For a differentiable function every parameter has a tangent space, so the shape above is
+/// the exact one.
+/// @example is_same::<Transpose<(x: float) => float>, (ct: float) => (float,)>()    // true
+export type Transpose<F> = (ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
 
 /// True when `T` and `U` are the same type. Identity, not shape: two named types with the same
 /// fields are different, `i32` and `int` are different.

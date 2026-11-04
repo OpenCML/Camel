@@ -110,6 +110,23 @@ enum class TransposeRefusalCause {
     /// No case in the tree reaches it (every space the language registers for a differentiable value
     /// declares an addition); it exists so the state has a name instead of a `float` sum.
     NoCotangentArithmetic,
+    /// The rule's cotangent port declares one type and the walk hands it another, with no conversion
+    /// between them: the comparison the author asked for on 2026-11-04 (compare the port's declared
+    /// type with the type of the value really handed, and refuse a disagreement). A law is filed
+    /// under its operator's head and its operand count, so nothing about the index ties the law's
+    /// cotangent port to the shape the step has: `mul_tangent`'s law writes `(ct: T[..])`, and at a
+    /// `float` step the cotangent the member is handed is the number itself.
+    ///
+    /// **This is a compiler defect, not a language rule** (author, 2026-11-04, second ruling on the
+    /// item): no program reaches it, because the cotangent a program can hand a transposed function is
+    /// `Tangent<ResultOf<F>>` -- the type the declaration states -- so a port that disagrees with it is
+    /// a law whose writing and whose instancing came apart inside the compiler.
+    /// The cause stays as a guard against that inconsistency (the expansion reads the port's type to
+    /// instance the law's right side and hands the value through it, which is how a wrong number or
+    /// a bad read would get in), it is refused before anything is built, it carries both spellings
+    /// (`portType`, `handedType`), and its sentence says whose fault it is. No case pins it: a case
+    /// cannot reach it, and a criterion nothing reaches is not a criterion.
+    CotangentPortMismatch,
 };
 
 /// The word the reading log spells `cause` as, or `nullptr` for `None`. The log's spelling and the
@@ -159,6 +176,13 @@ struct TransposeRefusal {
     /// for the causes that are about a parameter's type rather than about a step (`ParameterShape`):
     /// the repair is an edit to this spelling, so a reader is handed it verbatim.
     std::string paramType;
+    /// The type the rule's cotangent port declares (`CotangentPortMismatch`), spelled as the law
+    /// writes it: the port is the line a reader edits, so it is handed over verbatim.
+    std::string portType;
+    /// The type of the value the walk really hands that port, spelled the same way. The other half of
+    /// the same fact, and the one the program wrote: a reader compares the two and knows which side
+    /// moved. Empty for every cause but `CotangentPortMismatch`.
+    std::string handedType;
 };
 
 /// The graph of `transpose(f)` and the program of the graphs built with it. `refusal` is what the
