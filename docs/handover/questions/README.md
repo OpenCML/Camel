@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：51 页
+## 现在在等作者：52 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -50,6 +50,7 @@
 | [`2026-11-04-when-a-lookup-that-finds-nothing-should-refuse`](2026-11-04-when-a-lookup-that-finds-nothing-should-refuse.cn.md) | 查不到的时候，什么时候该拒绝、什么时候该答默认？ |
 | [`2026-11-04-when-the-lift-promotes-a-with-value-and-the-cut-cannot-take-the-port`](2026-11-04-when-the-lift-promotes-a-with-value-and-the-cut-cannot-take-the-port.cn.md) | 抬起的 `with` 值进了值列表：已按甲收窄，切不动的形状按名字拒 |
 | [`2026-11-04-where-a-laws-port-disagrees-with-the-value-it-is-handed`](2026-11-04-where-a-laws-port-disagrees-with-the-value-it-is-handed.cn.md) | 律的端口和它收到的那个值不符时，该在哪一层拒绝？ |
+| [`2026-11-04-where-does-the-value-of-a-linear-operand-come-from`](2026-11-04-where-does-the-value-of-a-linear-operand-come-from.cn.md) | 参与微分的那个参数自己的值，由谁交给转置？ |
 | [`2026-11-04-where-the-seal-says-the-exit-type-is-wrong`](2026-11-04-where-the-seal-says-the-exit-type-is-wrong.cn.md) | 出口类型对不上：已按 B 落到 `RuntimeDiag::ExitTypeMismatch`，请作者裁这个码与措辞 |
 | [`2026-11-04-which-shape-reads-can-become-extent-of`](2026-11-04-which-shape-reads-can-become-extent-of.cn.md) | 律里那几处取形状的地方，哪些能换成 `extent_of`？ |
 | [`2026-11-04-who-adopts-the-graphs-of-a-nested-cut`](2026-11-04-who-adopts-the-graphs-of-a-nested-cut.cn.md) | 两级嵌套的切：谁来带第二层的图 |
