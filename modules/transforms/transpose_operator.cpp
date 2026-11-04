@@ -310,16 +310,23 @@ case TransposeRefusalCause::RuleShape: {
         // law was chosen, and its body -- the cotangent helpers a law that serves several shapes
         // writes, one overload per shape -- has nothing for the ranks this step has. So the sentence
         // names the law, the operator it is filed under, and the ranks, because those three are
-        // what a reader edits or writes a case for.
+        // what a reader edits or writes a case for. The expansion's own words follow when the call
+        // wrote any: they name the helper the body calls and the types it was handed, which is the
+        // difference between "this law serves other ranks" and an edit.
         std::string answer = "the law ";
         answer += refusal.rule.empty() ? std::string("the index filed") : "`" + refusal.rule + "`";
         answer += " has no cotangent for ";
         answer += refusal.uri.empty() ? std::string("this step") : "`" + refusal.uri + "`";
-        answer += " at these operands";
         if (!refusal.ranks.empty()) {
-            answer += ": their ranks are " + refusal.ranks;
+            answer += " at operands of rank " + refusal.ranks;
+        } else {
+            answer += " at the operands this step has";
         }
-        answer += ", and it serves the ranks its cotangents are written for";
+        if (!refusal.expansion.empty()) {
+            answer += ", and no instance of its body applies: " + refusal.expansion;
+        } else {
+            answer += ", and it serves the ranks its cotangents are written for";
+        }
         if (refusal.node.has_value()) {
             answer += " (node " + std::to_string(*refusal.node) + ")";
         }

@@ -12,8 +12,8 @@
 //     reason=No matching function found for argument types: <> (float[..], float[3, 2, 2], float[2, 2]).
 //
 //     transforms: transpose has no transpose for this function: the law `matmul_t` has no cotangent
-//     for `tensor:matmul` at these operands: their ranks are (3, 2), and it serves the ranks its
-//     cotangents are written for (node 6).
+//     for `tensor:matmul` at operands of rank (3, 2), and no instance of its body applies:
+//     <what the call's candidate search wrote> (node 6).
 //
 // `rule-ranks` and not `rule-shape`: that word means the law's *pattern* rejected the operand types
 // and nothing was built, which is what this reading was while the law named its ranks in the pattern
