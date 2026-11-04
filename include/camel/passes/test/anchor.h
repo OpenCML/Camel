@@ -32,19 +32,6 @@ inline camel::runtime::gc_node_ref_t anchorNode(camel::runtime::GraphTransaction
     return cast;
 }
 
-/// A node that stands where a statement of the source would, read the way the seal check reads one
-/// (src/runtime/graph.cpp, `nodeIsChainStatement`): running it is observable. A conversion is not
-/// such a node -- `anchorNode` above is one, and it is enough for the edges that only need to sit on
-/// something schedulable -- so a fixture that must build a *chain* out of statements asks this.
-///
-/// The operator is a print, which the standard library declares: a node's `OperId` comes from its
-/// URI (`bytesForOperPayload` interns it), so naming it here is enough to give the node the traits
-/// that make running it observable. Nothing runs it in these fixtures; what the shape is for is that
-/// the node is a statement of the model.
-inline camel::runtime::gc_node_ref_t statementNode(camel::runtime::GraphTransaction &transaction) {
-    return transaction.edit().addOperNode(
-        camel::core::type::Type::Void(), nullptr, ":io/println");
-}
 /// A node nothing reads and nothing executes: the null constant (slot 0, no type). It is what a
 /// test adds when it only needs the graph to change, or a node to hang an edge on that no rule about
 /// purity, chains or layout has anything to say about -- it is pure, so no order edge may end on it.

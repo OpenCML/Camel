@@ -1,19 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
 project(camel)
-# Assertion stack traces, off by default. No `-rdynamic`: exporting the executable's symbols would change
-# which definition a module's `dlsym` finds (with RTLD_LOCAL the module's own symbols stay local, but
-# `dlsym(handle, ...)` searches the global scope too). The frames come from libcamel.so, which exports its own.
-# Opened by `camel-remote.ps1 -StackTrace`.
-#
-# This must sit **before any target is created**: `add_compile_definitions` is a directory property, so it
-# applies only to targets created after this call. Written after `add_library` it applies to zero targets,
-# which looks exactly like "not defined": no error, and no entry in build.ninja.
-option(CAMEL_STACK_TRACE "Print assertion stack traces (diagnostic build; changes nothing else)" OFF)
-if(CAMEL_STACK_TRACE AND NOT WIN32)
-    add_compile_definitions(CAMEL_STACK_TRACE=1)
-endif()
-
-
 
 # Object libraries whose undefined symbols decide what libcamel exports. Every target that
 # is compiled separately and links libcamel registers its OBJECT library here; the generation at

@@ -1348,7 +1348,7 @@ void Builder::coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_
         // statements of a sync arm) is still waited for.
         node_handle_t gate = currGraph_->addGateNode(target);
         linkNodes(LinkType::Norm, coerced, gate);
-        writeSyncLink(output, gate);
+        linkNodes(LinkType::Sync, output, gate);
         coerced = gate;
     }
     draft.setInsertRegion(outerRegion);
@@ -2861,7 +2861,7 @@ node_handle_t Builder::buildBranch(
         if (lastSyncedNode_ != nullptr && linkCheek(lastSyncedNode_, joinNode)) {
             markSyncStatement(lastSyncedNode_);
             markSyncStatement(joinNode);
-            writeSyncLink(lastSyncedNode_, joinNode);
+            linkNodes(LinkType::Sync, lastSyncedNode_, joinNode);
         }
         lastSyncedNode_ = joinNode;
         chainedNodes_.insert(brchNode);
@@ -2931,7 +2931,7 @@ void Builder::linkArmEntries(const std::vector<arm_ptr_t> &arms, node_handle_t b
         }
         markSyncStatement(brchNode);
         markSyncStatement(entry);
-        writeSyncLink(brchNode, entry);
+        linkNodes(LinkType::Sync, brchNode, entry);
     }
 }
 

@@ -25,7 +25,6 @@
 #include <vector>
 
 using camel::passes::test::anchorNode;
-using camel::passes::test::statementNode;
 using camel::passes::test::blankNode;
 
 namespace {
@@ -491,11 +490,17 @@ EdgesSyncForkTestPass::apply(const camel::runtime::Program *program, std::ostrea
     RuntimeGraphDraftSession session(context_, program);
     auto &transaction = session.edit(program->root());
     auto &draft       = transaction.edit();
+    const auto markStatement = [&](gc_node_ref_t node) {
+        draft.setNodeRuntimeFlags(node, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
+    };
     // One statement two statements follow: what the splice leaves behind when it cannot move a
     // statement to the end of the chain growing from it (docs/design/effects/edges.cn.md 5.3).
-    const gc_node_ref_t first  = statementNode(transaction);
-    const gc_node_ref_t second = statementNode(transaction);
-    const gc_node_ref_t third  = statementNode(transaction);
+    const gc_node_ref_t first  = anchorNode(transaction);
+    const gc_node_ref_t second = anchorNode(transaction);
+    const gc_node_ref_t third  = anchorNode(transaction);
+    markStatement(first);
+    markStatement(second);
+    markStatement(third);
     const gc_node_ref_t afterFirst[1] = {first};
     draft.setSyncInputs(second, afterFirst);
     draft.setSyncInputs(third, afterFirst);
@@ -519,15 +524,20 @@ EdgesSyncForkGateTestPass::apply(const camel::runtime::Program *program, std::os
     RuntimeGraphDraftSession session(context_, program);
     auto &transaction = session.edit(program->root());
     auto &draft       = transaction.edit();
+    const auto markStatement = [&](gc_node_ref_t node) {
+        draft.setNodeRuntimeFlags(node, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
+    };
     // 5.3's other shape: the one chain end hands its value on, and a GATE does that for each block
     // that ends on it -- so two GATEs may follow one statement. It is an end of the chain, not a
     // continuation of it, and the seal check accepts it.
     const gc_node_ref_t tail = anchorNode(transaction);
+    markStatement(tail);
     for (float written : {2.0f, 3.0f}) {
         const gc_node_ref_t value = draft.materializeStaticValue(
             camel::core::rtdata::toSlot(written), camel::core::type::Type::Float32());
         const gc_node_ref_t gate = draft.addGateNode(camel::core::type::Type::Float32());
         draft.setNormInputs(gate, std::span<const gc_node_ref_t>(&value, 1));
+        markStatement(gate);
         const gc_node_ref_t afterTail[1] = {tail};
         draft.setSyncInputs(gate, afterTail);
     }
@@ -553,9 +563,10 @@ EdgesSyncGateTestPass::apply(const camel::runtime::Program *program, std::ostrea
     auto &transaction = session.edit(program->root());
     auto &draft       = transaction.edit();
     // The chain's tail: a statement a `sync` block wrote. A pass stands in for the builder here, so
-    // it records what makes a node a statement is the node itself (src/runtime/graph.cpp, `nodeIsChainStatement`): the seal check reads
+    // it records the same fact the builder records (kGCNodeFlagSyncStatement): the seal check reads
     // it back, and a sync edge may only join statements of the block.
     const gc_node_ref_t tail = anchorNode(transaction);
+    draft.setNodeRuntimeFlags(tail, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
     // The value the GATE lets out, and the GATE itself. The GATE is the block's value, which the
     // same flag covers: the chain's tail reaches the value through the GATE (5.3).
     const gc_node_ref_t value = draft.materializeStaticValue(
@@ -563,6 +574,7 @@ EdgesSyncGateTestPass::apply(const camel::runtime::Program *program, std::ostrea
         camel::core::type::Type::Float32());
     const gc_node_ref_t gate = draft.addGateNode(camel::core::type::Type::Float32());
     draft.setNormInputs(gate, std::span<const gc_node_ref_t>(&value, 1));
+    draft.setNodeRuntimeFlags(gate, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
     // The wait is the chain's tail, written as a sync edge (docs/design/effects/edges.cn.md 5.3: a
     // GATE has one data port and one sync predecessor, and no control input at all).
     const bool wrote = draft.setSyncPredecessor(gate, tail);
@@ -615,8 +627,13 @@ EdgesSyncCycleTestPass::apply(const camel::runtime::Program *program, std::ostre
     RuntimeGraphDraftSession session(context_, program);
     auto &transaction = session.edit(program->root());
     auto &draft       = transaction.edit();
+    const auto markStatement = [&](gc_node_ref_t node) {
+        draft.setNodeRuntimeFlags(node, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
+    };
     const gc_node_ref_t a = anchorNode(transaction);
     const gc_node_ref_t b = anchorNode(transaction);
+    markStatement(a);
+    markStatement(b);
     const gc_node_ref_t afterA[1] = {a};
     const gc_node_ref_t afterB[1] = {b};
     draft.setSyncInputs(a, afterB);
@@ -661,10 +678,14 @@ EdgeUsersTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     RuntimeGraphDraftSession session(context_, program);
     auto &transaction = session.edit(program->root());
     auto &draft       = transaction.edit();
+    const auto markStatement = [&](gc_node_ref_t node) {
+        draft.setNodeRuntimeFlags(node, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
+    };
     // The one node all five kinds reach: a value port (twice, so the five counts are not all
     // equal), a context port, a control input, a place on a `sync` block's chain, and an order
     // edge that goes out of it.
     const gc_node_ref_t source = anchorNode(transaction);
+    markStatement(source);
     for (size_t i = 0; i < 2; ++i) {
         const gc_node_ref_t reader = draft.addCopyNode(camel::core::type::Type::Float32());
         draft.setNormInputs(reader, std::span<const gc_node_ref_t>(&source, 1));
@@ -681,6 +702,7 @@ EdgeUsersTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     const gc_node_ref_t controller = anchorNode(transaction);
     draft.setCtrlInputs(controller, std::span<const gc_node_ref_t>(&source, 1));
     const gc_node_ref_t follower = anchorNode(transaction);
+    markStatement(follower);
     if (!draft.setSyncPredecessor(follower, source)) {
         os << "EDGE_USERS wrote=0\n";
         return program;

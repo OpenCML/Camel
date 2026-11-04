@@ -1,4 +1,0 @@
-#remat
-export func g(x: float): float {
-    return x * x * x
-}

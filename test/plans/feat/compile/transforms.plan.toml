@@ -2412,7 +2412,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "extent_of_needs_a_type_that_states_its_shape"
-desc = "`extent_of::<A>()` answers the extents a type writes down; `float[]` writes none, so the call is refused where it is instantiated. The sentence names the type and the repair, and no count is pinned: what has to stay true is that a type which states no shape is refused in words. The refusal is also asserted by name (`SemanticDiag::ExtentOfNeedsStatedShape`) and not only by the sentence it prints, so the identity of the report these words belong to is pinned as well -- the catalog's `--pinned-coverage-check` counts a code only when a case asserts it by name or by number, and a code no case asserts is a diagnostic whose identity no test would notice changing. `transpose(pick)` on `x: float[3]` reads the same rule (`statedExtentsOf`) for the shape it spreads a cotangent over, so this entry and `transpose_refuses_a_parameter_value_it_cannot_be_handed` are the two sides of one rule."
+desc = "`extent_of::<A>()` answers the extents a type writes down; `float[]` writes none, so the call is refused where it is instantiated. The sentence names the type and the repair, and no count is pinned: what has to stay true is that a type which states no shape is refused in words. `transpose(pick)` on `x: float[3]` reads the same rule (`statedExtentsOf`) for the shape it spreads a cotangent over, so this entry and `transpose_refuses_a_parameter_value_it_cannot_be_handed` are the two sides of one rule."
 kind = "negative"
 case = "../../../cases/compile/transforms/extent_of_needs_a_type_that_states_its_shape.cml"
 args = ["${case}", "${backend}"]
@@ -2565,45 +2565,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 
-[[tests]]
-name = "extent_of_answers_the_shape_a_type_writes_down"
-desc = "The answer side of the rule `extent_of_needs_a_type_that_states_its_shape` pins the refusal side of: a type with every extent written down is answered, at rank one and at rank two, and the answer is the same whatever the type argument came from -- written in the call (`extent_of::<float[3]>()`), or named by a generic function whose `A` the instance fixes (`widths::<A>()`). The value is settled where the call is built, because the type argument is in hand only there: an OPER node records the instantiated type of the call (`() => int[]`) and not the type it was written with, so the graph holds the constant (one DATA node, `std::gir` shows it) and not a call. Before the fold this program was reachable and was told the compiler was broken (`RuntimeDiag::PassInternalError`), which is a sentence no program a user can write may produce. All four back ends read the constant, so `nvm`, `fvm`, `jit` and `prl` agree on the two lines by construction; the two named here are the two the plan runs everywhere else."
-case = "../../../cases/compile/transforms/extent_of_answers_the_shape_a_type_writes_down.cml"
-args = ["${case}", "${backend}"]
-backends = ["nvm", "fvm"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-expect_stdout_contains = ["[3]", "[2, 3]"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-[[tests]]
-name = "extent_of_answers_through_a_function_value"
-desc = "An operator taken as a value is called by a node whose callee is the name, not the call the program wrote, and the type argument it was written with is the only place its extents can come from: `let f: () => int[] = extent_of::<float[3]>` built an OPER node with no type argument in it and reached the kernel, which is the same internal error the direct call was. The value is now a function of no parameters whose body is the folded constant, so all three spellings answer: the value with its type written out, the same value called twice (the type argument belongs to the value, not to one call of it -- the first call used to consume it, and the second was refused as a call of an operator that takes no such argument), and the operator handed to a function that takes it as a parameter. Only the answers are pinned: what has to stay true is that a value of `extent_of` answers what the call it was made from would have answered."
-case = "../../../cases/compile/transforms/extent_of_answers_through_a_function_value.cml"
-args = ["${case}", "${backend}"]
-backends = ["nvm", "fvm"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-expect_stdout_contains = ["[3]", "[2, 3]", "1"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-# `gelu`, `erf` and `erfc`: three slopes that read the input alone, the shape the cut carries.
-[[tests]]
-name = "elementwise_slopes_through_the_engine"
-desc = "The gradients of `gelu`, `erf` and `erfc` through the engine's own slopes (`gelu_grad`/`erf_grad`, `geluVjp`/`erfVjp`/`erfcVjp` in `modules/tensor/ops/elementwise_ops.cpp`), whole arrays on `[-1.0, 0.0, 1.0]`. The engine has a fused operator per slope and a library law can only write primitives, so the two sides meet at the numbers. The wrong laws worth writing out: `ct` answers `[1.0, 1.0, 1.0]` against every one of the three, and an `erfc` written with `erf`'s slope (the sign dropped) is positive where the right answer is negative everywhere -- a sum would hide it, because the two ends cancel."
-kind = "behavior"
-case = "../../../cases/compile/transforms/elementwise_slopes_through_the_engine.cml"
-args = ["${case}", "${backend}"]
-backends = ["nvm"]
-backends_agree = ["exit_code", "diagnostics"]
-expect_exit = 0
-expect_output_contains = ["gelu engine d=[-0.08296408384578255, 0.5, 1.0829640838457826]", "erf engine d=[0.4151074974205947, 1.1283791670955126, 0.4151074974205947]", "erfc engine d=[-0.4151074974205947, -1.1283791670955126, -0.4151074974205947]"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-
 
 # The tangent of a loop's *iterated element*, and what the forward half does when it has nowhere to
 # put it. `jvp_loop_array_state` pins the shape this transform supports -- a `for` loop over a
@@ -2661,8 +2622,8 @@ backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
 expect_output_contains = ["grad_g_3= 12.0", "grad_g_5= 20.0", "grad_g2_3= 54.0", "grad_h_3= 12.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-
 timeout_ms = 20000
+
 
 [[tests]]
 name = "extent_of_refuses_an_open_rank_type"

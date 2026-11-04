@@ -76,26 +76,20 @@ verify_script = """
 const lines = input.normalized.stdout.split('\n')
 const nodes = (re) => lines.map((l) => l.match(re)).filter(Boolean)
 const allNodes = lines.filter((l) => l.startsWith('RESOURCES node')).join(' ; ')
-const orders = nodes(/^RESOURCES order \S+ (\d+) (\d+) resource ordered by (control|data)$/)
-const ordered = (a, b, by) => orders.some((m) => m[3] === by && ((m[1] === a && m[2] === b) || (m[1] === b && m[2] === a)))
-const pair = (label, found, by = 'control') => {
+const orders = nodes(/^RESOURCES order \S+ (\d+) (\d+) resource ordered by control$/)
+const ordered = (a, b) => orders.some((m) => (m[1] === a && m[2] === b) || (m[1] === b && m[2] === a))
+const pair = (label, found) => {
   assert(found.length === 2, `${label}: expected two calls, got ${found.map((m) => m[0]).join(' | ')}; all nodes: ${allNodes}`)
-  assert(ordered(found[0][1], found[1][1], by), `${label}: the two calls are not ordered by ${by}: ${found.map((m) => m[0]).join(' | ')}; orders: ${orders.map((m) => m[0]).join(' | ')}`)
+  assert(ordered(found[0][1], found[1][1]), `${label}: the two calls are not ordered by control: ${found.map((m) => m[0]).join(' | ')}; orders: ${orders.map((m) => m[0]).join(' | ')}`)
 }
 
 const handles = nodes(/^RESOURCES node \S+ (\d+) FUNC consume: rmw handle \S+::Stream \(node (\d+)\)$/)
 pair('consume', handles)
 assert(handles[0][2] === handles[1][2], `consume: the two calls name different values: ${handles[0][0]} | ${handles[1][0]}`)
 
-// The clause says a call of `bump` writes the cell it is given, so the read of `cell` below the
-// first call is the version that call left: `:var/after(cell, bump)`, whose result is the cell
-// itself (`Same(0)`). The second call is handed that version, so the two calls are joined by a
-// data edge -- the version the first produced is the second's argument -- and the pair is ordered
-// by data rather than by control. Same cell, one resource, two writes of it.
 const cells = nodes(/^RESOURCES node \S+ (\d+) FUNC bump: rmw variable \(node (\d+)\)$/)
-pair('bump', cells, 'data')
-const afterOfFirst = lines.some((l) => l.startsWith(`RESOURCES node main ${cells[1][2]} `) && l.includes(`:var/after: read variable (node ${cells[0][2]})`))
-assert(cells[0][2] === cells[1][2] || afterOfFirst, `bump: the second call names neither the cell the first did nor the version it left: ${cells[0][0]} | ${cells[1][0]}`)
+pair('bump', cells)
+assert(cells[0][2] === cells[1][2], `bump: the two calls name different cells: ${cells[0][0]} | ${cells[1][0]}`)
 
 const ambient = nodes(/^RESOURCES node \S+ (\d+) FUNC tick: rmw ambient db; rmw ambient stdout; external$/)
 assert(ambient.length === 2, `tick: expected two calls of the group, got ${ambient.map((m) => m[0]).join(' | ')}; all nodes: ${allNodes}`)

@@ -252,49 +252,6 @@ The same applies to a plan that must stay out of an ordinary change: `SLOW_PLANS
 rules are two halves of one fact — a plan is either reachable on purpose or named in the slow list on
 purpose, never neither.
 
-## Guess the name and the count is wrong, not small
-
-Three counts on 2026-11-02 were wrong because the name was invented rather than read out of the
-header, and each one was wrong in a way that looked like a finding:
-
-- `setTagUses`, `setFieldTagUses`, `setOperRef`, `setNativeValueType` all counted **0 call sites**,
-  which read as "four of the fifteen per-node side tables of the construction tree are never
-  filled, so a serializer can drop them". The tables are all live: the setters are named
-  `addTagUses`, `addFieldTagUses`, `markNativeValue`, and the operator reference is written
-  `operRefs_[node]` directly. Every one of the fifteen has 1 to 8 write sites.
-- A `shape` count of tree lines was 9,381 lines too high -- exactly `3 x 3,127`, the three record
-  header lines of every dump -- because the header loop advanced an index and the body loop then
-  walked the list from the start. A throwaway script written first had it right; the tool did not.
-- A pass named `upper` was searched for and found nowhere, because no pass is called that.
-
-**Before counting a setter, an accessor or a pass, read the family out of the header**: setters here
-are `set*`, `add*`, `mark*` or a direct map write, and a pass name is in `stdlib/std.cml`. A zero
-from a guessed name says the name is wrong, not that the code is missing -- and the difference
-matters, because the first version of the four-table reading above was about to be reported as a
-finding about the model.
-
-## A wall clock on this host is not a cost, and a phase is not a sum with its children
-
-Two readings taken on 2026-11-02, from one command, wrong in the two ways that make a performance
-number unusable:
-
-- **`--time-phases` scopes nest.** `compile` is the scope around `mainModule->compile(Done)`
-  (`tools/camel-cli/main.cpp`), so `parse prelude`, `gct prelude` and `declare prelude` are reported
-  at depth 1, inside it. A report that added 11.22 ms of prelude phases to a `compile` that had
-  grown by 10.96 ms counted the same work twice and read 22.2 ms where the truth was 11.2. **A
-  child's time is inside its parent's: read `depth` before adding anything up, and sum one depth.**
-- **A wall clock on this host measures the other lanes.** The same command read `imports_nothing`
-  6.00 ms of wall time on one run and 30.12 ms on the next, while the top-level CPU phases of the
-  two runs read 5.60 and 17.09 ms: eight lanes run suites on 32 threads, so a wall clock is the
-  queue and the CPU time is the work. `total_ns` in the phase report is wall; `cpu_ns` per phase is
-  the half that does not move with load. **Compare CPU, quote CPU, and when a wall number has to
-  appear, say what other load the two runs met.**
-
-The pair matters because it fails in opposite directions: the nesting makes a cost look twice as
-large as it is, and the shared host makes it look arbitrary. A performance reading in this tree is
-`cpu_ns` summed over one depth, from two binaries whose `camel --version` lines are quoted beside
-it.
-
 ## A timeout budget is a change like any other
 
 A `timeout_ms` in a plan file is not housekeeping: it decides whether a slow machine reports a red or
@@ -368,18 +325,6 @@ A probe log that records only `[FAIL] <name> <ms>` can count failures and cannot
 `nodeGraphOf()` cannot return null -- its `GUARD (builder != nullptr)` fails through `fail_invariant` first -- so none of its **61** call sites needs a null branch, and that is the point: the guard turns "no answer" into a stop. But 14 of them only **compare** two answers for identity (`builder_helpers.h`, `builder_expr.cpp`, `builder_control.cpp`, `builder_operators.cpp`, `captures.cpp`, `builder_support.h`), where a null would be worse than a crash: `nullptr == nullptr` says "the same graph". When one of those wants to be sure two handles name one graph, ask the draft whether it is the one the handle names (`isNamedBy`, address **and** epoch, which `3609d015a` made the identity) instead of comparing the address a handle happens to carry.
 
 - 主检出 `D:\Projects\Camel` 只用来 `pull --ff-only`；所有编辑都用工作树内的相对路径，或 `D:\Projects\Camel-wt\<lane>\...` 的绝对路径。写完用 `git -C <树> status --porcelain` 自检，不要用 `git status`（它按进程 CWD 解析，会看到另一棵树）。
-
-## 改名与抽谓词这类重构，判据是逐用例比，不是总数不变
-
-两棵总数相同的树，可以是一条转绿一条转红互相抵消。把上一跑的失败用例名单和这一跑逐条比：
-`0 条转绿、0 条转红` 才叫中性。这一条是 2026-11-02 夜里做出来的：`8508/4735/3758` →
-`8512/4738/3759` 多出的 4 个是 develop 新用例，逐用例比 0/0，唯一的新红 `gpu_preference.named_device`
-是那条 CUDA 探针随卡可见性翻，不是这次改的。
-
-顺带记在这条旁边，因为它是同一件事的反面：`gpu_preference.named_device` 与
-`gpu_scope.placement_with_a_device` 这种 `skip_unless` 一首卡就翻的用例，
-**今天分辨不了"实现对不对"，只分辨"有没有卡"** —— 用例先坏在仪器上，判据跟着坏。待办，不是本轮修。
-
 ## Check the input before you believe the reading
 
 A measurement is a reading of two things: the program and the input. When they disagree with
@@ -419,27 +364,3 @@ matches no rule in `test/plan-selection.json`, and the audit answers "tracked fi
 which turns a reading into a red about the reading. This happened twice in one night -- once as an
 extra failure in a full run, once as a "thirtieth red" that was the log itself. The log is the record
 of the measurement, so it belongs where records live and not where the sources do.
-
-## Getting a stack trace
-
-An assertion prints a stack trace only in a **diagnostic build**: `camel-remote.ps1 -StackTrace` (on the remote gate) or `npm run build -- --stack-trace` locally. It adds `-DCAMEL_STACK_TRACE=ON` and drops `build/CMakeCache.txt` so the option is re-read; **it never adds `-rdynamic**, because exporting the executable's symbols changes which definition a module's `dlsym` finds. A diagnostic build is for reading a trace, not for deciding green or red. See `docs/handover/questions/the-switch-that-reaches-no-target.md`.
-
-### the reading was stable, plausible, and not a reading at all
-
-A build-configuration change needs five separate readings before anyone may say it is on:
-
-1. **the source has it** -- the option, the definition, the code path;
-2. **the command has it** -- the `-D` in the configure line;
-3. **the configure step ran** -- `[build] configure: running`;
-4. **the artifact has it, and it is the right artifact** -- a multi-config generator writes compile lines
-   to `build-<Config>.ninja`, not to `build.ninja`;
-5. **the process received it** -- the program prints the value it was compiled with.
-
-Missing any one, "on" is an intention. Reading 4 is the one that fooled a whole night: `grep` on
-`build.ninja` answered 0 four times, consistently, and that file does not carry compile lines at all.
-
-### Editing files
-
-Multi-line text with quotes or backticks goes into a single-quoted here-string and is appended from there;
-`Add-Content` with an inline escaped string has broken three times in one night (`@' ... '@` escapes
-nothing).

@@ -709,43 +709,6 @@ bool liftGraph(
         // the port nodes it lists as its norm ports, and a call is checked against that list ("has 0
         // norm ports" is how a graph with the nodes but no entries in the list refused the call) --
         // so the lifted signature's parameters are exactly these ports, in the same order.
-        // The recompute request is a fact about the *body*, so a lift keeps it: `remat` marks a
-        // graph, `jvp` lifts that graph, and the graph `split` cuts is the lift -- if the mark
-        // stopped at the primal, the lift would be cut as if nothing had been asked for, which is
-        // what the measurement showed (a cubic lifted from a marked graph still carried two
-        // residuals, the same as an unmarked one). Same bit, no new field:
-        // `kGraphFlagRecomputeBackward` (`camel/runtime/graph.h`) travels from the source graph to
-        // the graph that copies its body.
-        if (const camel::runtime::GCGraph *primal = program->graph(source);
-            primal != nullptr && primal->recomputesOnBackward()) {
-            // **The request is honoured only when running the body twice cannot be seen.** The bit
-            // means "store less, compute again", and recomputing is only safe when the body has no
-            // external effect: a second run of something that prints, writes or reads the world is a
-            // second effect the program never asked for. The question is the operator table's --
-            // `hasExternalEffect` (`src/core/operator_table.cpp`) is "does running this get noticed" --
-            // and it is asked *here*, where the graph is in hand, rather than where the bit is read,
-            // because a graph cannot be judged from a place that cannot reach it.
-            // `mayBeRecomputed` is deliberately not used: it also requires `foldable`, and "can this
-            // be folded" is a different question from "is recomputing it safe".
-            bool recomputable      = true;
-            const auto &table      = camel::core::OperatorTable::instance();
-            for (rt::gc_node_ref_t ref = 0; ref < primal->nodeCount(); ++ref) {
-                const rt::GCNode *node = primal->node(ref);
-                if (node == nullptr || node->kind != rt::GCNodeKind::Oper) {
-                    continue;
-                }
-                const auto *body = primal->nodeBodyAs<rt::GCOperBody>(ref);
-                if (body != nullptr && table.hasExternalEffect(body->oper)) {
-                    recomputable = false;
-                    os << "REINTERP jvp not_recomputed=" << primal->name()
-                       << " why=an operator of the body has an external effect, so it would run twice\n";
-                    break;
-                }
-            }
-            if (recomputable) {
-                draft.setFlags(static_cast<uint8_t>(draft.flags() | rt::kGraphFlagRecomputeBackward));
-            }
-        }
         const size_t parameterCount = function.funcType()->normTypesCount();
         const size_t withCount =
             function.funcType() != nullptr ? function.funcType()->withTypesCount() : 0;

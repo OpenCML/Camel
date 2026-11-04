@@ -107,24 +107,7 @@ KeepShapeTestPass::apply(const camel::runtime::Program *program, std::ostream &o
            << " data_user=" << (facts.hasDataUser ? 1 : 0)
            << " sync_statement=" << (facts.isSyncStatement ? 1 : 0)
            << " wait_edge=" << (hasWaitEdge ? 1 : 0)
-           << " waited_on=" << (isWaitedOn ? 1 : 0)
-           // **This column does not answer "would a fusion group take this node in".** It prints the
-           // `with`-user term alone; the other term -- a `norm` user outside the group -- is decided by
-           // a separate loop (`fusion_group`'s `isPrivate`), which returns before this expression is ever
-           // asked. So `fusion_private=1` beside `data_user=1` is not a contradiction: the two columns
-           // answer two questions, one about a credential and one about a structure. A reading shipped
-           // here once as if they were one fact and was retired for that reason.
-           // The expression below is the would-be question:
-           // `fusion_group`'s `isPrivate` asks, but **reading the raw fact itself** (`withUsersOf`), never
-           // `facts.hasDataUser`: that field is already this pass's answer (`norm` + `with`), so
-           // borrowing it would prove this side's conclusion with this side's conclusion. Do not
-           // simplify this back into `!facts.hasDataUser` -- that version cannot be 1 by construction.
-           << " fusion_private="
-           << ((draft.withUsersOf(print).empty() && draft.ctrlUsersOf(print).empty() &&
-                !facts.isSyncStatement)
-                   ? 1
-                   : 0)
-           << " standing="
+           << " waited_on=" << (isWaitedOn ? 1 : 0) << " standing="
            << (keepsEffectAlive(effectStandingOf(facts)) ? "alive" : "none") << "\n";
         return session.commit();
     }

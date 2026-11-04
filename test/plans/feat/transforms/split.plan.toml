@@ -40,7 +40,6 @@ desc = "The forward half of split(reinterp<jvp>(g)) for g(x) = x*x at x = 3, und
 kind = "behavior"
 case = "../../../cases/transforms/split/split_forward_half.cml"
 args = ["${case}", "std::nvm"]
-envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 0
 expect_output_contains = ["forward y= 9", "tangent dx1= 6", "residuals=1"]
@@ -53,7 +52,6 @@ desc = "The backward half alone: it takes the residuals the forward half collect
 kind = "behavior"
 case = "../../../cases/transforms/split/split_backward_tangent.cml"
 args = ["${case}", "std::nvm"]
-envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["tangent dx1= 6"]
@@ -66,7 +64,6 @@ desc = "The backward half is linear in the tangent direction: at x = 3 it is dx 
 kind = "behavior"
 case = "../../../cases/transforms/split/split_linear_in_dx.cml"
 args = ["${case}", "std::nvm"]
-envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["dx1= 6", "dx2= 12", "dx0= 0", "doubles= true"]
@@ -78,7 +75,6 @@ desc = "The reading program the author named for this tier (f(x, y) = x*x*y at x
 kind = "behavior"
 case = "../../../cases/transforms/split/split_two_params.cml"
 args = ["${case}", "std::nvm"]
-envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 0
 expect_output_contains = ["value= 18.0", "dfdx= 12.0", "dfdy= 9.0", "forward y= 18.0", "lin dx= 12.0", "lin dy= 9.0", "type=(float, float) => (float, (float, float) => float pure) pure residuals=3"]
@@ -102,7 +98,6 @@ desc = "A chain of multiplies, both ends of the composition: `f3(x) = x*x*x` and
 kind = "behavior"
 case = "../../../cases/transforms/split/split_product_chain.cml"
 args = ["${case}", "std::nvm"]
-envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 0
 expect_output_contains = ["cubic y= 8.0", "cubic dx1= 12.0", "quartic y= 16.0", "quartic dx1= 32.0", "type=(float) => (float, (float) => float pure) pure residuals=2", "type=(float) => (float, (float) => float pure) pure residuals=3", "REINTERP split function=jvp_of_cubic", "REINTERP split function=jvp_of_quartic"]
@@ -172,7 +167,6 @@ desc = "The identity graph: `reinterp<jvp>` builds a body with no operator in it
 kind = "behavior"
 case = "../../../cases/compile/transforms/split_identity_pipeline.cml"
 args = ["${case}", "std::nvm"]
-envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 0
 expect_output_contains = ["identity y= 3", "identity dx1= 1", "type=(float) => (float, (float) => float pure) pure residuals=1"]
@@ -309,67 +303,6 @@ args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout = "captured value=32.0 pullback=([4.0, 5.0, 6.0])\ncaptured value=4.5 pullback=([-1.0, 2.0, 0.5])\n"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-
-[[tests]]
-name = "remat_tag_is_a_standard_tag"
-desc = "`#remat` written on a function is a standard tag, so it compiles, checks its own position, and changes nothing: `g` is tagged and `f` calls it, and the program prints 7.0 either way. **What this entry is for**: the tag exists in the standard table (`src/core/tags.cpp`, next to `strict`), so the spelling and the placement are checked by the compiler even though no pass reads it yet. The pass that gives it meaning is `split` (its reading is the next piece of this work); `std::gir` does not print declaration tags today, which this entry does not claim -- it claims that a function carrying the tag is an ordinary function to every other pass."
-kind = "behavior"
-case = "../../../cases/transforms/split/remat_tag.cml"
-args = ["${case}", "std::nvm"]
-envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
-backends = ["nvm"]
-expect_exit = 0
-expect_stdout_contains = ["7.0"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-# The three `#remat` readings below ask the cut with the **closure ABI** (author, 2026-11-02):
-# `split(f)` is the forward function, `fwd(x)` answers `(y, lin)`, and the residuals are closed over
-# inside `lin`. The earlier spelling destructured `split(jvp(g))` into `(fwd, lin)` and called
-# `lin(residuals, seed)` -- that is the binary-tuple ABI that was replaced, so those three entries were
-# withdrawn for "a cut this tree does not have" when what this tree does not have is *that spelling*.
-# `test/cases/transforms/split/split_forward_half.cml` is the author's own sample of the shape used
-# here; nothing in `split*.cpp` was changed to accept the old one.
-
-[[tests]]
-name = "remat_tag_removes_the_parameter_residual"
-desc = "`#remat` written on a function is the same request as calling `remat(f)`: it becomes the graph's recompute bit at build time (`src/compile/gir/builder.cpp`), so the whole downstream -- `jvp`'s lift carrying it, `split` reading it -- is one mechanism and the tag has no reader of its own. Two cubics, `g` tagged and `h` not: both lifts carry one non-parameter residual (`x*x`), and only `g`'s cut drops it, reading `residuals=2 recompute=1` against `h`'s `residuals=3` -- the count includes the parameter, which the backward half reads (`ca1941405`), and both counts are one lower than they were before `modules/transforms/split.cpp#residualsOf` stopped listing a tangent port as a residual (2026-11-04) -- so the difference the tag makes is still one, which is what the two numbers are read for. The values are the same 27.0, which is what \"store less, compute again\" means; a cut that also changed the answer would be a different bug, not a cheaper cut."
-kind = "behavior"
-case = "../../../cases/transforms/split/remat_tag_residuals.cml"
-args = ["${case}", "std::nvm"]
-envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
-backends = ["nvm"]
-expect_exit = 0
-expect_output_contains = ["REINTERP split function=jvp_of_g", "residuals=1 recompute=1", "REINTERP split function=jvp_of_h", "residuals=2", "tagged dx= 27.0", "plain dx= 27.0"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-[[tests]]
-name = "remat_across_module_boundary"
-desc = "`#remat` on a function in another module still marks the graph that is cut. The tag becomes the graph's recompute bit when the graph is built (`src/compile/gir/builder.cpp`), and a module's declarations are built the same way as the file's own, so the reading is the one the same-file case gets, and the answer is still 27.0. The same-file case could not have shown a mark that stops at an import, and this one also shows it survives the closure ABI at the cut."
-kind = "behavior"
-case = "../../../cases/transforms/split/remat_across_module.cml"
-args = ["${case}", "std::nvm"]
-envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
-backends = ["nvm"]
-expect_exit = 0
-expect_output_contains = ["REINTERP split function=jvp_of_remat_lib::g", "residuals=1 recompute=1", "tagged dx= 27.0"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-[[tests]]
-name = "remat_effectful_body_is_not_recomputed"
-desc = "A body with an external effect is not marked for recompute: `jvp`'s lift asks `hasExternalEffect` before it carries `kGraphFlagRecomputeBackward`, and says `REINTERP jvp not_recomputed=g why=an operator of the body has an external effect, so it would run twice`. What the program then meets has moved: it used to be `split does not build this function`, and measured 2026-11-04 it is `Pass 'std::nvm' failed with an internal error: Runtime graph 'jvp_of_g' has GATE node 10 without a wait: no sync predecessor and no control input` -- the cut of this body now builds (`nodes=11 exit=10`, the graph `uses stdout`) and the GATE the effect put in it is not served by anything the cut emits. Both lines are compared, not just the exit code, so the entry records *where* an effectful `#remat` function is stopped today. The pass says of itself that this is `a defect of the compiler rather than of the program`, which is the honest severity: it is not a refusal the language chose. If `split` learns to serve that GATE, this goes red first; the case file says what to read then."
-kind = "negative"
-case = "../../../cases/transforms/split/remat_effect_is_not_recomputed.cml"
-args = ["${case}", "std::nvm"]
-envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
-backends = ["nvm"]
-expect_exit = 1
-expect_output_contains = ["REINTERP jvp not_recomputed=g why=an operator of the body has an external effect, so it would run twice", "Pass 'std::nvm' failed with an internal error", "has GATE node 10 without a wait"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

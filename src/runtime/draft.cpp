@@ -1501,18 +1501,19 @@ void GraphDraft::handChainPlaceTo(gc_node_ref_t id, gc_node_ref_t tail) {
     if (id == tail || node(id) == nullptr || node(tail) == nullptr) {
         return;
     }
-    if (!isChainStatement(tail)) {
-        // A value is not a statement of a chain, so a place is not handed to it (docs/design/
-        // effects/edges.cn.md 1 and 4.6): handing one over writes a sync edge that starts at a
-        // value. The statements written after `id` keep following `id`, and when `id` goes the
-        // chain closes over it (closeChainOver) -- they follow what `id` followed and the chain
-        // steps over the value, which its readers reach anyway.
-        return;
-    }
     ++mutations_;
     const std::vector<gc_node_ref_t> preds(syncInputsOf(id).begin(), syncInputsOf(id).end());
     const std::vector<gc_node_ref_t> users(syncUsersOf(id).begin(), syncUsersOf(id).end());
+    const auto markStatement = [&](gc_node_ref_t n) {
+        const DraftNodeHeader *h = header(n);
+        if (h != nullptr) {
+            setNodeRuntimeFlags(
+                n, static_cast<uint8_t>(h->runtimeFlags | kGCNodeFlagSyncStatement));
+        }
+    };
     const auto chainTo = [&](gc_node_ref_t user, gc_node_ref_t pred) {
+        markStatement(user);
+        markStatement(pred);
         const gc_node_ref_t only[1] = {pred};
         setSyncInputs(user, only);
         const auto ctrl = ctrlInputsOf(user);
@@ -1520,6 +1521,7 @@ void GraphDraft::handChainPlaceTo(gc_node_ref_t id, gc_node_ref_t tail) {
             appendControlEdge(user, pred);
         }
     };
+    markStatement(tail);
     // The statements written after `id` are written after the code that replaced it: they were
     // waiting on the place `id` had, and that place is `tail`'s now. The edge is written in both
     // kinds the ordering is carried as (src/runtime/graph_edges.cpp, `checkSyncEdges`).
@@ -1630,16 +1632,8 @@ void GraphDraft::takeStatementPlace(gc_node_ref_t oldId, gc_node_ref_t newId) {
         // edges.cn.md 4), whether or not it also stood in a `sync` block's chain.
         replaceOrderEdgesAt(oldId, newId);
     }
-    if (!isChainStatement(newId)) {
-        // The replacer takes the order edges above -- every replacement transfers those -- and no
-        // place in the chain: a value stands on none (docs/design/effects/edges.cn.md 1), and a
-        // place handed to one is a sync edge that starts at a value. The chain closes over the
-        // statement that went instead (closeChainOver).
-        return;
-    }
-    if (!isChainStatement(oldId)) {
-        // Nothing stood in a chain, so there is no chain place to take: whether it did is the
-        // node's own answer (draft.h, `isChainStatement`), not a mark someone set on it.
+    if ((oldHeader->runtimeFlags & kGCNodeFlagSyncStatement) == 0) {
+        // Nothing stood in a chain, so there is no chain place to take.
         return;
     }
     if (!sameSyncBlock(*this, oldId, newId)) {
@@ -1653,9 +1647,11 @@ void GraphDraft::takeStatementPlace(gc_node_ref_t oldId, gc_node_ref_t newId) {
         return;
     }
     ++mutations_;
-    // The replacer is the block's statement now (docs/design/effects/edges.cn.md 1.5): what says so
-    // is the node itself, which the seal check derives from the graph (graph.cpp,
-    // `nodeIsChainStatement`), so a sync edge may join it to the block's chain (edges.cn.md 4.6).
+    // The replacer is the block's statement now (docs/design/effects/edges.cn.md 1.5): the seal
+    // check reads the flag back, and a sync edge may only join statements of the block
+    // (docs/design/effects/edges.cn.md 4.6).
+    setNodeRuntimeFlags(
+        newId, static_cast<uint8_t>(newHeader->runtimeFlags | kGCNodeFlagSyncStatement));
     const std::vector<gc_node_ref_t> preds(syncInputsOf(oldId).begin(), syncInputsOf(oldId).end());
     const std::vector<gc_node_ref_t> users(syncUsersOf(oldId).begin(), syncUsersOf(oldId).end());
     std::vector<gc_node_ref_t> kept;

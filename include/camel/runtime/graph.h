@@ -212,22 +212,6 @@ inline bool nodeIsFreelySchedulable(
     return graph::may_be_rearranged(kind, oper, castTarget, castSource, fixedShapes);
 }
 
-/// Whether a node of this kind is a statement of a chain: one that runs for its effect or may
-/// fault, or a structure that holds such statements -- a branch, a loop, a call
-/// (docs/design/effects/edges.cn.md 1 and 4.6). `oper` is `kNoOper` for every kind but OPER.
-///
-/// This is the question a sync edge's *start* asks: the node the chain is written from must be a
-/// statement of that chain, because a value has no place on it. It is one definition for the three
-/// readers: the seal check when it reads a frozen graph, the census beside it, and the builder and
-/// the draft when they are about to write or hand over a place. The copies are why a `GATE`
-/// exception grew on one of them and not the other.
-///
-/// Not the same question as `nodeTakesAnOrder`: that one also lets an order sit on the *end* of a
-/// chain, where a `GATE` (a block's value, section 5.3) and a `FUNC` (the function value a `CALL`
-/// runs) legitimately stand. Both are refused as a start and allowed as an end, which is why the
-/// two functions exist and why neither may be written as the other.
-bool nodeIsChainStatement(GCNodeKind kind, camel::core::OperId oper);
-
 /// The fault half of `nodeIsFreelySchedulable`, on its own: whether running a node of this kind
 /// can raise a fault (`castMayFault`, `OperatorTraits::mayFault`; design principles 3.9) where it
 /// is written. It is the fact that decides whether a statement nobody reads may still be dropped,
@@ -295,31 +279,6 @@ bool is_chain_statement(const GCGraph &graph, gc_node_ref_t ref);
 inline bool isChainStatement(const GCGraph &graph, gc_node_ref_t ref) {
     return graph::is_chain_statement(graph, ref);
 }
-
-/// `nodeIsChainStatement` of a node of a graph: the operator body is read here, so a caller that
-/// holds only a reference asks it the same way the seal check does.
-bool nodeIsChainStatement(const GCGraph &graph, gc_node_ref_t ref);
-
-/// Whether `candidate` is the block's own value node where an edge's end stands, the block being
-/// the one `tail` is a statement of. A sync edge may end on one of three things
-/// (docs/design/effects/edges.cn.md 5.3): a statement of the block's chain, the block's own value
-/// -- any kind of node, because a block's value is whatever its chain's tail computed -- or a
-/// `GATE`. This is the second of the three, asked as "the same block": a node's region is the block
-/// it belongs to, and region 0 is the graph itself, the block a statement sits in when nothing
-/// wraps it (control_regions.h: `0 when it is in none`), so an end and its tail in one region are
-/// in one block -- outside any block, the graph's own chain.
-///
-/// The seal check asks it of a frozen graph and the census beside it counts by it; they had the
-/// same expression written twice, which is the state the question was already in when
-/// `nodeIsChainStatement` was two copies.
-///
-/// Not the same question as the one the inline splice asks of its result (`draft_inline.cpp`,
-/// the bridge gate): that one asks whether the value is *within* the call's block, this one
-/// whether an edge's end is *in* the block. Measured 2026-11-02 over 304 splices of the fast
-/// tier: 302 leave the value in a region nested inside the call's block, so containment says yes
-/// and equality says no, and a gate built by this question would stand 304 times where the splice
-/// builds 2. Two relations, two questions; neither is the other's approximation.
-bool isTheBlocksOwnValue(const GCGraph &graph, gc_node_ref_t candidate, gc_node_ref_t tail);
 
 /// Whether a node owns a control region of this graph, and so stands on the outside for what runs
 /// inside it (`docs/design/effects/edges.cn.md` 4.6): a `BRCH` or a `LOOP` that carries an arm or a

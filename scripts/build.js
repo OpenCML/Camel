@@ -432,21 +432,6 @@ export default function main(opts = {}) {
     }
 
     const cmakeExtra = []
-// The one entry point of a *diagnostic* build: assertion stack traces (`CAMEL_STACK_TRACE`). Off unless
-// asked for, and asking for it changes nothing but that one definition -- no `-rdynamic`, ever (see
-// CMakeLists.txt). The remote gate passes `--stack-trace` when given `-StackTrace`.
-if (process.argv.includes('--stack-trace')) {
-    cmakeExtra.push('-DCAMEL_STACK_TRACE=ON')
-    // CMake caches option() values and cmake --build does not reconfigure because a -D appeared on
-    // the command line, so adding the definition alone leaves the cached OFF in place -- a build that
-    // says it has the tracer and does not. Dropping the cache is the smallest way to force the configure
-    // step; the configure invocation re-supplies every -D it needs from cmakeExtra.
-    const cache = path.join(BASEDIR, 'build', 'CMakeCache.txt')
-    if (fs.existsSync(cache)) {
-        fs.rmSync(cache)
-        console.log('[build] --stack-trace: dropped build/CMakeCache.txt so the option is re-read')
-    }
-}
     const qcmake = (p) => `"${p.replace(/\\/g, '/')}"`
     if (pythonRootDir) {
         cmakeExtra.push(`-DPython3_ROOT_DIR=${qcmake(pythonRootDir)}`, `-DPython_ROOT_DIR=${qcmake(pythonRootDir)}`)

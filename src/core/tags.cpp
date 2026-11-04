@@ -129,17 +129,6 @@ void declareStandardTags() {
         strict.ident = "strict";
         strict.on    = static_cast<Positions>(Func | Nodes);
         declare(std::move(strict));
-        // `remat`: the programmer says **"I require this to appear"** -- recompute it where it is
-        // needed instead of carrying it there as a value. A standard tag on a function, like
-        // `strict`; it grants nothing and forbids nothing by being written, because the meaning
-        // belongs to the pass that reads it. **The reader is `split`** (the next piece of this
-        // work), so until that lands nothing reads it -- and a tag nothing reads is still a
-        // spelling and a position the compiler checks, which is what this declaration buys.
-        Decl remat;
-        remat.name  = "remat";
-        remat.ident = "remat";
-        remat.on    = Func;
-        declare(std::move(remat));
         // `reads`, written on a Camel pass function: the tags the pass reads. Its arguments are
         // tag names, not values, and there may be any number of them (`#reads(reassociate,
         // contract)`); `registerCamelPass` records the pass as a reader of each.
@@ -568,37 +557,6 @@ Facts factsOfSet(attr::AttrSetId tags, sem::PermissionMask permissions) {
 }
 
 } // namespace
-
-/// `#remat`: the standard tag a programmer writes on a function to say **"I require this to appear"**
-/// -- to be recomputed where it is needed rather than carried there as a value. Like `#strict` it is
-/// declared once with the others and found by name in the standard table, and like `#strict` it
-/// decides nothing by having been declared: the pass that reads it decides. **The reader is `split`**
-/// (the next piece of this work), which is why this file defines the id and the test and nothing more --
-/// a tag whose reader does not exist yet is still a spelling and a position the compiler checks.
-TagId rematTag() {
-    static const TagId id = [] {
-        const auto found = find(std::string_view{}, "remat");
-        return found.has_value() ? *found : kNoTag;
-    }();
-    return id;
-}
-
-bool hasRematTag(attr::AttrSetId tags) {
-    const TagId remat = rematTag();
-    if (remat == kNoTag || tags == attr::kNoAttrs) {
-        return false;
-    }
-    const Decl *decl = get(remat);
-    if (decl == nullptr) {
-        return false;
-    }
-    for (const attr::Attr &entry : attr::entries(tags)) {
-        if (entry.key == decl->key) {
-            return true;
-        }
-    }
-    return false;
-}
 
 Facts factsOf(const module::Module &module, const Reference &name) {
     return factsOfSet(module.declarationTags(name), module.declarationPermissions(name));

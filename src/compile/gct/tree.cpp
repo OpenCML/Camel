@@ -6,7 +6,6 @@
  * subtree and the text dump (camel/compile/gct/tree.h, node.h).
  */
 
-#include "camel/compile/gct/serialize.h"
 #include "camel/compile/gct/tree.h"
 #include "camel/core/operator_semantics.h"
 

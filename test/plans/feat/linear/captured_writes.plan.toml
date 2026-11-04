@@ -597,7 +597,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_direct_user.graph"
-desc = "`before(i + 1); modify(i)` in a sync body: the body orders its statements, so the graph has the control edge `before` -> `modify` even though `before` never touches `i`, and the read written after `modify` follows it by taking the version that call made (`:var/after`). (Re-recorded when the version edge was added: one `:var/after` node per call that wrote a variable, and no node is renumbered. The retired `wait` ordered the direct user of `i` instead.)"
+desc = "`before(i + 1); modify(i)` in a sync body: the body orders its statements, so the graph has the control edge `before` -> `modify` even though `before` never touches `i`, and the read written after `modify` follows it. (The retired `wait` ordered the direct user of `i` instead: `+` -> `modify` and no `before` -> `modify`.)"
 kind = "behavior"
 case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::gir"]
@@ -620,12 +620,7 @@ const adds = [...text.matchAll(/(N[0-9A-F]+) \[label=":op\/add[^"]*", type="OPER
 assert(adds.some(n => edge(n, a, 'NORM')), 'no `+` feeding `before`')
 // The read written after modify follows it.
 const reads = [...text.matchAll(/(N[0-9A-F]+) \[label=":var\/(?:get|peek)", type="OPER"/g)].map(m => m[1])
-// The read after `modify` takes the version that call made, so it follows that write by a data
-// edge rather than by the control edge this test used to look for (design principles 3.1, 5.6).
-const afters = [...text.matchAll(/(N[0-9A-F]+) \[label=":var\/after", type="OPER"/g)].map(m => m[1])
-assert(afters.length > 0, 'no `:var/after` node for the write of modify')
-assert(reads.some(r => afters.some(x => edge(modify, x, 'NORM') && edge(x, r, 'NORM'))),
-    'the read does not take the version the call made')
+assert(reads.some(r => edge(modify, r, 'CTRL')), 'missing control edge modify -> later read of i')
 }
 """
 timeout_ms = 10000
