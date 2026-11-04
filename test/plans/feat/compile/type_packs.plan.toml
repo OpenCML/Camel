@@ -139,3 +139,28 @@ expect_exit = 0
 expect_stdout_contains = ["<float[2]> (float) => float[2]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "type_packs.taken_apart_in_a_program"
+desc = "A program takes a type pack apart itself (design principles 5.6): `type Head<P> = match type P { case (W, ...Rest) => W }` is the language's pattern, and the case writes it without importing anything that takes a pack apart -- `WithOf<F>` and `ParamsOf<F>` only compute one. `Head<WithOf<Loss>>` is the weight's type, `Head<ParamsOf<Loss>>` the first parameter's, `Second<P>` reaches the member after the head by writing two names out before the rest, `RestOf<P>` gives the rest itself and `...RestOf<...>` writes it back -- the members after the ones written out, and the empty tuple when there are none -- and `FirstWithOf<F>` is a function type computed from `F` in the file: the shape `Gradient<F>` has, from the pattern alone."
+kind = "behavior"
+case = "../../../cases/compile/type_packs/pack_taken_apart.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "true\ntrue\ntrue\nfalse\ntrue\ntrue\ntrue\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "type_packs.taken_apart_from_an_empty_pack"
+desc = "The empty pack selects no case that writes its first member, and the type computed from it is refused where the program uses it, naming the pack that was empty -- with the program's own pattern, so the refusal states the rule of the case: `Head<WithOf<Plain>>` for a function with no `with` parameter is `SemanticDiag::TypeFunctionNotApplicable` over `pack<>`. The same pack written where a type stands is refused with the same sentence, and so is `Gradient<Plain>`."
+kind = "negative"
+case = "../../../cases/compile/type_packs/pack_taken_apart_empty.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeFunctionNotApplicable"
+expect_output_contains = ["'pack<>' is not applicable", "a type pack is a list of types"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000

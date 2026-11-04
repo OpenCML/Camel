@@ -83,6 +83,13 @@ struct MatchTypeArm {
     uint16_t shapes = 0;
     /// The types the case names by identity.
     std::vector<Type *> identities;
+    /// The patterns the case writes to take a type pack apart, one for each alternative of `|`
+    /// (`case (W, ...Rest)`): a tuple type whose members are the pattern's members and whose last
+    /// one is `...Rest` (design principles 5.6, where a type pack takes apart the same way a value
+    /// pack does). Such a case selects a pack whose members the pattern fits, and the names it
+    /// writes stand for those members. The head of a pack is this pattern in the standard library
+    /// and nothing else (`stdlib/types.cml` declares it as a `match type`).
+    std::vector<Type *> packPatterns;
     /// The type the case gives.
     Type *result = nullptr;
 };
@@ -100,6 +107,8 @@ class MatchTypeType final : public OtherType {
     size_t armCount() const { return shapes_.size(); }
     uint16_t armShapes(size_t arm) const { return shapes_[arm]; }
     std::span<Type *const> armIdentities(size_t arm) const;
+    /// The patterns the case writes to take a pack apart; empty when it writes none.
+    std::span<Type *const> armPackPatterns(size_t arm) const;
     Type *armResult(size_t arm) const;
 
     bool typeArguments() const override { return true; }
@@ -113,15 +122,16 @@ class MatchTypeType final : public OtherType {
 
   private:
     MatchTypeType(
-        std::vector<uint16_t> shapes, std::vector<uint32_t> identityCounts, size_t paramCount,
-        Type **params)
+        std::vector<uint16_t> shapes, std::vector<uint32_t> identityCounts,
+        std::vector<uint32_t> packCounts, size_t paramCount, Type **params)
         : OtherType(typeCode(), paramCount, params), shapes_(std::move(shapes)),
-          identityCounts_(std::move(identityCounts)) {}
+          identityCounts_(std::move(identityCounts)), packCounts_(std::move(packCounts)) {}
 
     size_t firstParamOf(size_t arm) const;
 
     std::vector<uint16_t> shapes_;
     std::vector<uint32_t> identityCounts_;
+    std::vector<uint32_t> packCounts_;
 };
 
 /// Whether a type computed from types (a primitive application or a `match type`) occurs
