@@ -220,10 +220,10 @@ expect_output_not_contains = ["'countdown' as framed code; loop rounds: helper",
 [[tests]]
 name = "framed.loops.regions.compiled.inline"
 desc = "The same program after std::opt::inline: every function is inlined into main, so the graph compiled as framed code is main, with all the loops of the program in it -- and the compile line names, for that one graph, every reason its loops keep the helpers: the sequence rounds (8 of them), the two native rounds, the collecting round and the round with an operator in it."
-# The whole line is pinned, not its prefix: it carries no node id, no address and no time, and two
-# runs of the same build read it byte for byte (`len=256`, and 256 is also the longest line of the
-# run). What the line says is a fact of this build's lowering of this program's loops, so a change
-# of the lowering that moves it is a change this entry is meant to notice.
+# The whole line is pinned, not its prefix: it carries no node id, no address and no time, so one
+# build prints it the same way every run, and the reasons it lists are the lowering's own -- a
+# lowering that moves it is a change this entry is meant to notice. The reading behind that, run by
+# run, is in docs/handover/reports/2026-11-05-rc04-answers-nothing-and-rc00-signals-under-gir-too.cn.md.
 case = "../../../cases/loops/compiled.cml"
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
