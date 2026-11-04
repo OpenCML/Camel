@@ -2,6 +2,6 @@
 import tensor
 
 
-export func gelu(x: f32[..]): f32[..] {
+export func gelu(x: f32[...]): f32[...] {
     return x + undefined_name
 }

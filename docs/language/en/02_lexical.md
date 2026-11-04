@@ -1,6 +1,6 @@
 # 2. Lexical structure
 
-English | [中文](../02_lexical.md)
+English | [中文](.../02_lexical.md)
 
 This chapter describes the lexical structure of source code. The token table is `include/camel/parse/syntax/token_kinds.def`, the lexer `src/parse/syntax/lexer.cpp`.
 

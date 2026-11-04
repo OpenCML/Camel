@@ -35,7 +35,7 @@ import path from 'node:path';
 
 const ROOTS = ['stdlib', 'test/cases', 'docs/language', 'docs/design'];
 const EXTENSIONS = new Set(['.cml', '.md', '.toml']);
-const LEFT = new Set(['(', '<', '[', ',']);
+const LEFT = new Set(['(', '<', '[', ',', ':', '=']);
 
 const CWD = process.cwd();
 

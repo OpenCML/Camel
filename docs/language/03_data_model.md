@@ -18,7 +18,7 @@
 | 布尔 | `bool` | `true`、`false` |
 | 字符串 | `string` | 合法的 UTF-8 文本，不可变；长度与下标按码点 |
 | 字节串 | `Bytes` | 二进制数据，不可变；内建类型名，与 `string` 之间显式编码、解码 |
-| 数组 | `T[]`、`T[4]`、`T[n]`、`T[..]` | 元素类型相同；方括号里是维度：常数、未知的 `?`，或尾部的包 `..s`；`T[][]` 是嵌套数组，rank 2 写作 `T[m, n]` |
+| 数组 | `T[]`、`T[4]`、`T[n]`、`T[...]` | 元素类型相同；方括号里是维度：常数、未知的 `?`，或尾部的包 `..s`；`T[][]` 是嵌套数组，rank 2 写作 `T[m, n]` |
 | 结构体 | `{ x: T1, y: T2 }`，或 `type` 声明的名字 | 按名字，用 `.x` 访问；`type Name = { ... }` 声明的是命名类型，见 3.3.3 |
 | 函数 | `(x: T) => R` | 见 [6.9](06_expressions.md#69-lambda-与函数类型) |
 | 可能为空 | `T?` | 见 3.4 |
@@ -33,7 +33,7 @@
 
 读取 JSON：形状事先知道时用 `json::decode_as::<T>(text)`，结果是 `T!`；形状事先不知道时用 `json::decode(text)`，它给出 `Json!`：文字不是 JSON 时是错误值 `JsonParseError`，嵌套超过深度上限时是 `JsonTooDeep`（都不是故障，设计原则 11.2；上限固定为 10000），否则是 `Json`，类型确定，内容运行时才知道；用 `get`、`as_int`、`as_array` 等取出，每个都给出类型确定的值（找不到时为空），并接受 `Json?`、`Json!`（以及 `Json!?`）以便链式取值，例如 `j->get<'server'>->get<'port'>->as_int ?? 8080`；对 `Json!` 取值时错误原样传下去，结果是 `Json!?` 这样的两层，用 `??`、`!!` 拆开；`as_float` 也接受整数，`get<下标>` 越界给 `null`（11.2 定下的访问器设计）。
 
-标准库签名说明里的 `T` 与剩余形参 `..rest`（如 `println: (x: T, ..rest) => T`）是声明的写法：调用按实参的类型实例化，图上只有具体类型。
+标准库签名说明里的 `T` 与剩余形参 `..rest`（如 `println: (x: T, ...rest) => T`）是声明的写法：调用按实参的类型实例化，图上只有具体类型。
 
 用 `type` 给类型起名字，见 [7.7](07_statements.md#77-类型声明)：
 
@@ -121,7 +121,7 @@ func main(): int sync {
   | `map`、`filter`、`reduce`、`foreach` | 见 [6.10](06_expressions.md#610-高阶算子) |
   | `xs->append<v>` | 在末尾加上 `v` 的**新数组**，`xs` 不变；要追加到变量上写 `xs = xs->append<v>`（见 3.7）；连接两个数组用 `concat(xs, ys)` |
 
-- 更多的数组函数在 `array` 模块里，使用前要导入（`import { reverse, sum } from array`）：`reverse`、`take`、`drop`、`enumerate`、`flatten`、`unique`、`index_of`、`find`、`find_index`、`any`、`all`、`count`、`chunks`、`sum`、`mean`、`min`、`max`、`argmax`、`argmin`、`flat_map`、`sort_by`、`zip_with`，见 [标准库参考](../stdlib-reference.md)。
+- 更多的数组函数在 `array` 模块里，使用前要导入（`import { reverse, sum } from array`）：`reverse`、`take`、`drop`、`enumerate`、`flatten`、`unique`、`index_of`、`find`、`find_index`、`any`、`all`、`count`、`chunks`、`sum`、`mean`、`min`、`max`、`argmax`、`argmin`、`flat_map`、`sort_by`、`zip_with`，见 [标准库参考](.../stdlib-reference.md)。
 
 ### 3.3.2 元组
 
@@ -190,7 +190,7 @@ func main(): int sync {
 | `strs->join<sep>` | 连接字符串数组 |
 | `s[i]` | 第 `i` 个码点，结果是只含这一个字符的字符串；越界是故障 |
 
-其余的字符串函数在 `str` 模块里（[标准库参考](../stdlib-reference.md)）：`split`、`trim`、`to_upper`、`to_lower`、`replace`、`index_of`（位置按码点；切片是核心的 `s[a:b]`）、`starts_with`、`ends_with`、`repeat`、`codepoints`、`from_codepoints`。
+其余的字符串函数在 `str` 模块里（[标准库参考](.../stdlib-reference.md)）：`split`、`trim`、`to_upper`、`to_lower`、`replace`、`index_of`（位置按码点；切片是核心的 `s[a:b]`）、`starts_with`、`ends_with`、`repeat`、`codepoints`、`from_codepoints`。
 
 ```cml
 import { split, trim, to_upper } from str
@@ -392,7 +392,7 @@ func main(): int sync {
 - 值类型本身可空时（`Map<string, int?>`），`m[k]` 的类型就是 `int?`：键不存在与值为 `null` 无法区分，需要时用 `has`。
 - 三种调用写法并存；打印的格式；`json::decode_as` 用类型实参指定解码的目标类型。
 
-实现与取舍见 [技术文档 31](../technical/31_map_and_set.md)。
+实现与取舍见 [技术文档 31](.../technical/31_map_and_set.md)。
 
 ## 3.7 `let`、`var` 与引用
 

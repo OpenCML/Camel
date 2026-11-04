@@ -24,13 +24,13 @@ import { vjp } from vjp
 import { abs, min_axis, sum } from tensor
 
 /// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
-with <w: float[..]>
+with <w: float[...]>
 func total(): float {
     return sum(min_axis(w, -1, false))
 }
 
 /// The library's spelling: the same function with the value as an ordinary parameter.
-func total_plain(x: float[..]): float {
+func total_plain(x: float[...]): float {
     return sum(min_axis(x, -1, false))
 }
 

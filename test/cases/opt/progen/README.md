@@ -1,7 +1,7 @@
 # progen findings
 
 Defects found by the random program generator and differential runner in
-[`test/tools/progen`](../../../tools/progen/README.md), each with a reduced program.
+[`test/tools/progen`](.../../../tools/progen/README.md), each with a reduced program.
 
 - `findings/<name>.cml`: one program per finding. Its header gives the pipeline, the expected
   output (computed by the generator's reference evaluator, not by a backend) and what happens.

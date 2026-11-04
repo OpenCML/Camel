@@ -9,12 +9,12 @@ import { ones, shape, sum, zeros } from tensor
 import { sgd } from nn
 
 type LinearBias = {
-    weight: f32[..],
-    bias: f32[..]
+    weight: f32[...],
+    bias: f32[...]
 }
 
 with <model: LinearBias>
-func mse_loss(x: f32[..], y: f32[..]): float {
+func mse_loss(x: f32[...], y: f32[...]): float {
     let pred = (x @ model.weight) + model.bias
     let errors = pred - y
     let squared = errors * errors

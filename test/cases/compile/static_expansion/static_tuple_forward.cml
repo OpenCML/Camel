@@ -4,12 +4,12 @@
  * so `main` is the hand-written sum of the three arguments.
  */
 
-func sum(..ts): int {
+func sum(...ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
-func forward(..ts): int {
-    return sum(..ts)
+func forward(...ts): int {
+    return sum(...ts)
 }
 
 func main(): int sync {

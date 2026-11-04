@@ -9,7 +9,7 @@ func sum3(a: int, b: int, c: int): int {
 }
 
 func viaTuple(t: (int, int, int)): int {
-    return sum3(..t)
+    return sum3(...t)
 }
 
 func main(): int sync {

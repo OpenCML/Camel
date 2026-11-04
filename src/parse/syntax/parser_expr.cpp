@@ -522,10 +522,10 @@ bool ParserImpl::lambdaAhead() const {
     if (t1 == TK::KwVar) {
         return true;
     }
-    // A rest parameter's head, `(..xs)` / `(..xs, ...)`, is a lambda's like any other: the reader of
+    // A rest parameter's head, `(...xs)` / `(...xs, ...)`, is a lambda's like any other: the reader of
     // the list that follows is the same, `=>` (or a return type's `:`) after the `)`. A tuple
     // written `(..xs)` -- one rest argument in it -- has that `=>` too only when it is a lambda.
-    if (t1 == TK::DotDot) {
+    if (t1 == TK::DotDot || t1 == TK::Ellipsis) {
         uint32_t depth = 0;
         for (uint32_t i = 0;; ++i) {
             switch (peek(i)) {
@@ -736,7 +736,7 @@ bool ParserImpl::shapeCompAhead() const {
             kind == TK::Identifier &&
             (!previous.has_value() || *previous == TK::ColonColon || *previous == TK::KwTypeof);
         if (!nameHere && kind != TK::ColonColon && kind != TK::Question && kind != TK::Bang &&
-            kind != TK::DotDot) {
+            kind != TK::DotDot && kind != TK::Ellipsis) {
             return false;
         }
         previous = kind;
@@ -833,12 +833,15 @@ void ParserImpl::parseLiteral() {
     close(m, NK::Literal);
 }
 
-/// indexValue : '..'? dataExpr
-/// `..e` is a rest argument: the arguments left over, as a compile-time tuple (design
-/// principles 5.5). A spread `...e` is not in the language, so the `...` token is refused here
-/// like any other token that fits nothing.
+/// indexValue : '...'? dataExpr
+/// `...e` is a rest argument: the arguments left over, as a compile-time tuple (design
+/// principles 5.5). A `..` here is reported as the spelling `...` and then read as the rest
+/// argument it was meant to be, so one mistake is one sentence.
 void ParserImpl::parseIndexValue() {
-    if (cur_ == TK::DotDot) {
+    if (cur_ == TK::DotDot || cur_ == TK::Ellipsis) {
+        if (cur_ == TK::DotDot) {
+            unexpected({e(TK::Ellipsis)});
+        }
         const size_t m = mark();
         bump();
         parseExpr();

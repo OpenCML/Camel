@@ -52,7 +52,7 @@ var count = 0
   ```
 
   结构体解构 `let { x, y } = p` 与数组解构 `let [a, b] = xs` 不在语言里：名字位置上的 `{` 或 `[` 是普通语法错误。用 `p.x`、`xs[0]`。
-- **`let _ = e` 有意丢弃 `e` 的值。** `_` 不是名字：它不绑定任何东西，所以同一个块里可以写任意多次，也不能读它。表达式与任何 `let` 的初值一样求值（在同步块里按顺序）。这是表明有意忽略一个 `T!` 的写法（[7.1](#71-表达式语句)）。单独写是这样；元组解构的名字表里也可以写 `_`（`let (x, _) = t`），表示丢掉对应位置的那个元素——名字的个数仍要与元组的元素个数相等，少了或多了都是 `SemanticDiag::TupleUnpackingCountMismatch`，报在 `let` 上。`var _` 仍不是写法。**这条迁移过**：以前名字少于元素个数是静默截断（只绑前几个，其余丢掉），现在是上面那条错误；外部程序里靠少写名字丢值的写法要补上 `_` 或补全名字（见 [reports/unpack-count-migration.md](../handover/reports/unpack-count-migration.md)）。
+- **`let _ = e` 有意丢弃 `e` 的值。** `_` 不是名字：它不绑定任何东西，所以同一个块里可以写任意多次，也不能读它。表达式与任何 `let` 的初值一样求值（在同步块里按顺序）。这是表明有意忽略一个 `T!` 的写法（[7.1](#71-表达式语句)）。单独写是这样；元组解构的名字表里也可以写 `_`（`let (x, _) = t`），表示丢掉对应位置的那个元素——名字的个数仍要与元组的元素个数相等，少了或多了都是 `SemanticDiag::TupleUnpackingCountMismatch`，报在 `let` 上。`var _` 仍不是写法。**这条迁移过**：以前名字少于元素个数是静默截断（只绑前几个，其余丢掉），现在是上面那条错误；外部程序里靠少写名字丢值的写法要补上 `_` 或补全名字（见 [reports/unpack-count-migration.md](.../handover/reports/unpack-count-migration.md)）。
 - 模块顶层的 `let` 是全局常量，顶层的 `var` 是本模块的一个资源，函数读它、写它，可以导出，也可以写进 `uses`（[5.3](05_modules.md#53-导出)）。**顶层的声明与书写顺序无关，只看依赖**：`let area = pi * r * r` 可以写在 `let pi` 之前；顶层的值之间成环是 `SemanticDiag::ModuleValueCycle`（[5.6](05_modules.md#56-模块的加载)）。函数体里的局部 `let` 仍是先声明后使用。
 
 ## 7.3 `return`
@@ -218,7 +218,7 @@ int 1 string a
 |---|---|
 | `sync` | 函数体是同步块（[4.3.3](04_execution_model.md#433-函数体的-sync函数修饰符)） |
 
-没有别的修饰符。C++ 实现的函数写成无函数体的 `export func` 声明（[6.4](../design-principles.cn.md)），C++ 提供的值是同一条规则，写成不带右边的 `export let inf: float`：它是 C++ 模块以 `inf` 为名登记的那个值，类型与登记的不一致是 `SemanticDiag::NativeValueMismatch`，没有这个名字的值是 `SemanticDiag::NativeValueNotLoaded`；只在模块内使用的辅助函数写成不导出的 `func`：`func` 本身就是模块私有。
+没有别的修饰符。C++ 实现的函数写成无函数体的 `export func` 声明（[6.4](.../design-principles.cn.md)），C++ 提供的值是同一条规则，写成不带右边的 `export let inf: float`：它是 C++ 模块以 `inf` 为名登记的那个值，类型与登记的不一致是 `SemanticDiag::NativeValueMismatch`，没有这个名字的值是 `SemanticDiag::NativeValueNotLoaded`；只在模块内使用的辅助函数写成不导出的 `func`：`func` 本身就是模块私有。
 
 `#macro` 不是修饰符，是写在函数声明前的标准标签（[4.5](04_execution_model.md#45-macro-函数)）。
 
@@ -300,7 +300,7 @@ func main(): int sync {
 - **类型变量从实参得到类型。** 每个实参按它所在形参的类型与形参统一；实参什么都没说时（是 `null`，或是一个自己还在等类型的泛型函数），取它在别处出现的位置上的类型。所有实参给出的约束收集完再检查：每个形参按代入后的类型检查，不做隐式转换（值进入 `T?`/`T!` 形参除外，见 [3.4](03_data_model.md)）。`pick(true, 1, 2.5)` 是错误（`T` 已绑定为 `int`）；定不下来的变量是编译期错误，诊断指出是哪一个。
 - 函数头声明的名字可以在签名的任何类型位置上写：数组元素、元组元素、结构体字段、函数类型的形参与返回值、`T?`/`T!` 的内层、`Map`/`Set` 与类型函数的实参。不能作为模块类型的实参。
 - 只有函数头声明的名字才是类型变量。形参类型里一个不指向任何类型、也没有在函数头声明的名字是未知类型错误（`SemanticDiag::UnresolvedTypeReference`），不会被自动绑定。同一个名字在函数头声明两次是 `SemanticDiag::TypeVariableRedeclared`；声明了却不在签名里写是警告 `SemanticDiag::TypeVariableUnused`，声明仍然可用。函数头声明的名字与已有类型同名时，在这个函数里它是类型参数：头部的声明优先。
-- 只出现在返回类型中的变量由期望类型推出：`let xs: int[] = empty()`、已知形参类型的位置、声明的返回位置。没有足够上下文时写显式类型实参：`empty::<int>()`。类型实参按函数头里变量声明的顺序给出，也可以按名字给出，不依赖位置：`pair::<A = int, B = string>(..)`。同一处要么全按位置、要么全按名字，不能混写；按名字时每个类型变量都要给出，名字写错或重复是编译错误；内建算子（`tree`、`json::decode_as` 等）只接受按位置。类型实参只在编译期参与实例化；`f<w>` 继续表示值上下文参数，合用时为 `f::<T><w>(x)`。显式实例也可以作函数值：`let f = id::<int>`。
+- 只出现在返回类型中的变量由期望类型推出：`let xs: int[] = empty()`、已知形参类型的位置、声明的返回位置。没有足够上下文时写显式类型实参：`empty::<int>()`。类型实参按函数头里变量声明的顺序给出，也可以按名字给出，不依赖位置：`pair::<A = int, B = string>(...)`。同一处要么全按位置、要么全按名字，不能混写；按名字时每个类型变量都要给出，名字写错或重复是编译错误；内建算子（`tree`、`json::decode_as` 等）只接受按位置。类型实参只在编译期参与实例化；`f<w>` 继续表示值上下文参数，合用时为 `f::<T><w>(x)`。显式实例也可以作函数值：`let f = id::<int>`。
 - **函数体在实例化时检查。** 函数体里的类型错误在实例化时报告，诊断给出错误在函数体里的位置，并指出是哪个实例、由哪一处调用实例化的。从未被调用的泛型函数不会被检查。
 - 递归的泛型函数可以用（要写出返回类型）。每次递归都换成更大类型的函数无法终止实例化，嵌套到 8 层时报错。
 - 函数体里可以用 `T`：lambda 的形参类型、`let z: T = 0`、`e as T`。
@@ -353,13 +353,13 @@ func main(): int sync {
 **剩余参数（rest parameter）**：函数声明的最后一个形参可以写 `..ts`，它没有类型，代表调用时剩下的全部实参。调用点写出的固定实参依次绑定到固定形参，其余实参按顺序成为 `ts` 的元素；`ts` 是编译期已知的元组，可以用 `indices ts`、`ts.[j]` 和 `..ts`。
 
 ```cml
-func sum(..ts): int {
+func sum(...ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
 func main(): int sync {
     println(sum(1, 2, 3))
-    println(sum(..(4, 5)))
+    println(sum(...(4, 5)))
     return 0
 }
 ```
@@ -373,7 +373,7 @@ func main(): int sync {
 - **`ts` 是编译期元组，不是值。** 它只有三种用法：`indices ts` 取位置表、`ts.[j]` 取一个元素、`..ts` 把元素展开成实参。三种用法都不为 `ts` 建 `FILL`，也不为元素建 `ACCS`。把 `ts` 本身放到需要运行期值的位置（打印、返回、赋给变量、作为普通实参）报 `SemanticDiag::StaticTupleEscapes`，不会悄悄物化成一个运行期元组；需要运行期元组时写元组字面量 `(a, b)`。
 - **剩余实参**写作 `..e`，且必须是调用实参表的最后一项。`e` 必须是编译期元组：元组字面量、元组推导式，或外层剩余函数的 `..ts`。运行时的元组值没有固定个数，是 `SemanticDiag::RestArgumentNotTuple`；`..e` 后面还有实参是 `SemanticDiag::RestArgumentNotLast`。
 - 剩余形参必须在最后（`SemanticDiag::RestParameterNotLast`），不能写类型（`SemanticDiag::RestParameterTypeNotSupported`），只能出现在函数声明和函数类型里（lambda 和规则里写 `..` 是语法错误）。
-- **同一个写法也用在 `with` 参数和函数类型上。** `with <..args>` 表示 `with` 实参在固定的几个之后还可以再给任意多个、任意类型，写成 `with <..args: T>` 则每一个都是 `T`（类型写的是包自己的实参，普通形参的规则往外一层）；`(..A) => R` 是形参表不限的函数类型，任何结果类型合适的函数都能放进去。包对带函数体的函数与对没有函数体的声明是**同一条规则**（原则 4.4、5.6），`with <..args>` 两处都能写：没有函数体的那种声明一个由 C++ 实现的算子（`format`、`print` 就是这样在标准库的 `prelude.cml` 里声明自己的形状），带函数体的那种就是普通函数。固定形参少给实参是 `SemanticDiag::RestArgumentsMismatch`。带函数体的函数里，包和 `ts` 一样是编译期元组：`ws.[j]` 取一个、`indices ws` 取位置表、`..ws` 把元素展开成实参（`f<..ws>(..xs)` 就这样把包转给另一个函数的包）；固定形参写在包前面（`with <w: float, ..rest>`）时，`w` 拿前几个、`rest` 拿剩下的。**lambda 也一样写**：`<..ws> (..xs) => …`（原则 §5，作者裁定 2026-11-03 13:50），解析、GCT 与签名补全走 `func` 的同一条路。区别只在于 lambda 是一个**值**，签名里不留个数未知的包：它站在一个已知函数类型的位置上时，补全把这个包**绑成位置的那份 `with` 列表**（与 `..xs` 从期望类型补全是同一条规则），体里的 `ws` 就是那份值的编译期元组；不在有任何期望类型的位上写 `with` 包报 `SemanticDiag::LambdaParameterWithoutType`。
+- **同一个写法也用在 `with` 参数和函数类型上。** `with <...args>` 表示 `with` 实参在固定的几个之后还可以再给任意多个、任意类型，写成 `with <...args: T>` 则每一个都是 `T`（类型写的是包自己的实参，普通形参的规则往外一层）；`(...A) => R` 是形参表不限的函数类型，任何结果类型合适的函数都能放进去。包对带函数体的函数与对没有函数体的声明是**同一条规则**（原则 4.4、5.6），`with <...args>` 两处都能写：没有函数体的那种声明一个由 C++ 实现的算子（`format`、`print` 就是这样在标准库的 `prelude.cml` 里声明自己的形状），带函数体的那种就是普通函数。固定形参少给实参是 `SemanticDiag::RestArgumentsMismatch`。带函数体的函数里，包和 `ts` 一样是编译期元组：`ws.[j]` 取一个、`indices ws` 取位置表、`..ws` 把元素展开成实参（`f<...ws>(...xs)` 就这样把包转给另一个函数的包）；固定形参写在包前面（`with <w: float, ...rest>`）时，`w` 拿前几个、`rest` 拿剩下的。**lambda 也一样写**：`<...ws> (...xs) => …`（原则 §5，作者裁定 2026-11-03 13:50），解析、GCT 与签名补全走 `func` 的同一条路。区别只在于 lambda 是一个**值**，签名里不留个数未知的包：它站在一个已知函数类型的位置上时，补全把这个包**绑成位置的那份 `with` 列表**（与 `..xs` 从期望类型补全是同一条规则），体里的 `ws` 就是那份值的编译期元组；不在有任何期望类型的位上写 `with` 包报 `SemanticDiag::LambdaParameterWithoutType`。
 - 带剩余参数的函数**不是值**：不能赋给变量、作为实参或导出后当函数值用（`SemanticDiag::RestFunctionNeedsExpansion`），只能直接调用。调用可以跨模块：函数体仍然在声明它的模块里解析（和泛型实例一样），展开在调用者的图里；函数体里用到声明模块的顶层**值**时，那个值在调用者的图里没有结点，会报 `SemanticDiag::RestFunctionNeedsExpansion`，函数和它自己的实参不受影响。
 - `with` 实参命名泛型函数或一组重载时（`tree_map<twice>`、`tree_map<bump>`），调用在被调函数里按每处调用的实参类型解析它；这要求被调函数带剩余参数（实例在调用点展开），普通的泛型函数仍按参数类型选定一个函数值。
 
@@ -401,11 +401,11 @@ func main(): int sync {
 - **类型不止 `int`。** `string`、`int`、`float`、`bool` 等有编译期常量的类型都可以；值必须与形参类型相容。类型要写出来（`SemanticDiag::ConstasTypeRequired`）。`enum` 成员目前还不能作为编译期值传递（`SemanticDiag::ConstasValueNotConstant`），要等 `enum` 值有了编译期表示。
 - **值由函数体读取。** `n` 在实例体里是一个编译期常量：可以当类型里的具名维度（`f32[n]`），可以当字段名（`t.[n]`），也可以当普通值用于算术、条件、打印。它不需要被任何类型读到：只有函数体读它也是合法的。
 - **不是运行时参数。** 调用点要给出常量，但它不进入调用结点：实例的形参表里没有 `n`，调用只传其余的实参（`total(3, xs)` 的调用只有一个实参 `xs`）。
-- **值可以转手。** 一个 `constas` 值可以传给另一个 `constas` 参数，也可以来自 `static for` 绑定的字段名、`indices` 的位置这类编译期名字。`func columnOf(constas n: string, ..ts) { return column(n, ..ts) }` 合法：`tree_map` 正是这样把字段名和树一起交给 `column`。
-- **和剩余参数一起用。** `func column(constas n: string, ..ts)` 合法：值在展开前绑定，`ts` 得到剩下的实参。设计稿 3.1.1 的 `column` 今天可以写成
+- **值可以转手。** 一个 `constas` 值可以传给另一个 `constas` 参数，也可以来自 `static for` 绑定的字段名、`indices` 的位置这类编译期名字。`func columnOf(constas n: string, ...ts) { return column(n, ...ts) }` 合法：`tree_map` 正是这样把字段名和树一起交给 `column`。
+- **和剩余参数一起用。** `func column(constas n: string, ...ts)` 合法：值在展开前绑定，`ts` 得到剩下的实参。设计稿 3.1.1 的 `column` 今天可以写成
 
   ```cml
-  func column(constas n: string, ..ts): (int, int) {
+  func column(constas n: string, ...ts): (int, int) {
       return ( static for j in indices ts => ts.[j].[n] )
   }
   ```
@@ -415,7 +415,7 @@ func main(): int sync {
 - 值必须是编译期常量（`SemanticDiag::ConstasValueNotConstant`）：运行期的值不行，因为它要选实例。目前常量可以是字面量、另一个 `constas` 值、`static for` 的 `n` 和 `indices` 的 `j` 这类编译期名字，以及一个纯函数在所有实参都是编译期常量时的调用（`label(first_field::<S>())`），编译期把它折叠成那个值；读不出来的调用按自己的名字拒绝（`SemanticDiag::FoldCallNotEvaluable`，其余 `FoldCall*` 诊断说明原因）。
 - `n` 只在实例体里绑定。具名维度写在形参的声明类型里（`x: f32[n]`）；函数体里的类型位置按"维度名由形参类型里第一次出现的那个绑定"来读，`let z: f32[n]` 在那里没有把实例的 `n` 带进来（`SemanticDiag::DimensionNameNotBound`）。
 
-**目前的限制**：泛型函数不能加标注；带上下文实参的泛型函数（`f<w>`）不能作值；带 `constas` 参数的函数不能作值，也不能和无体声明组合，`enum` 值还不能作为 `constas` 实参。设计稿 3.1.1 的 `column(constas n, ts)` 省写了类型，今天要写成 `column(constas n: string, ..ts)`。
+**目前的限制**：泛型函数不能加标注；带上下文实参的泛型函数（`f<w>`）不能作值；带 `constas` 参数的函数不能作值，也不能和无体声明组合，`enum` 值还不能作为 `constas` 实参。设计稿 3.1.1 的 `column(constas n, ts)` 省写了类型，今天要写成 `column(constas n: string, ...ts)`。
 
 ## 7.6 标注
 
@@ -530,7 +530,7 @@ tag finite = [kernel, fast]                 // 标签组：成员一起生效
 
 语言核心自带一组**数值许可标签**（设计原则 7.2），不必导入，写在 `on nodes`：`reassociate`、`contract`、`approx_math`、`change_precision`、`no_nans`、`no_infs`、`no_signed_zeros`、`flush_subnormals`、`nondeterministic`（允许结果随调度变化，如浮点原子加），以及把它们前四项合在一起的组 `finite_math`；`strict`（7.4）也是核心的标签，写在 `on func, nodes`。`#contract` 落在节点的许可列上（dump 里的 `numeric="..."`），`#strict` 落在节点的属性集里（`attrs="strict"`），读者通过同一个查询（`camel/core/tags.h` 的 `permissionsOf` / `effectivePermissions`）取得许可：`effectivePermissions` 对 `#strict` 返回空集。默认值见 7.3：`reassociate` 与 `contract` 本来就允许，其余要写明才生效。
 
-规则的声明之前可以写 `#requires(许可, ...)`：实参是许可名、核心的组 `finite_math`，或本模块用 `tag 名字 = [许可, ...]` 声明的组（成员递归展开，组名等于其中各许可的并集）。规则只在节点所在的数值策略满足这些许可时才被应用（[46 规则](../technical/46_rules.md)）。要求写成普通的标签、写成未声明的名字，或者在规则之外写 `#requires`，都是定位到该处的错误，不会静默放过。
+规则的声明之前可以写 `#requires(许可, ...)`：实参是许可名、核心的组 `finite_math`，或本模块用 `tag 名字 = [许可, ...]` 声明的组（成员递归展开，组名等于其中各许可的并集）。规则只在节点所在的数值策略满足这些许可时才被应用（[46 规则](.../technical/46_rules.md)）。要求写成普通的标签、写成未声明的名字，或者在规则之外写 `#requires`，都是定位到该处的错误，不会静默放过。
 
 `#` 有三种写法，可以写在函数、类型声明、结构体字段或块之前：
 
@@ -563,7 +563,7 @@ func main(): int {
 
 `on nodes` 的标签是**节点的属性**（`camel/core/node_attrs.h`）：写在前面的标签对那个函数体或块里写下的节点生效，与外面同名的标签按属性的合并规则累积，内层带参数的标签取内层的值。`on func`、`on type`、`on field` 的标签属于声明本身，C++ 模块用 `tag::factsOf` 一处读取（标签、许可、读者；`tag::ofDeclaration` / `tag::ofField` 仍在）；在 Camel 代码里读它们要等泛型的第一阶段。
 
-形参也可以是一个函数：声明成类型参数，加上条件 `when is_function::<F>()`，与遍的签名 `opt::<F>(f: F): F! when is_function::<F>()` 是同一种写法；签名固定时直接写具体的函数类型 `(x: T) => R`。实参是一个函数，标签的事实就是那个函数本身（还原成那个函数），不是它的名字，也不是任何内部记号；它的签名是否合用，由读这个标签的一方在贴的位置检查。自动微分模块就是这样声明 `export tag vjp::<F>(rule: F) on func when is_function::<F>()` 的：`#vjp(rule)` 写在函数声明之前，调用这个函数时用规则而不是函数体的导数（[26 自动微分](../technical/26_autodiff_as_graph_rewrite.md)）。
+形参也可以是一个函数：声明成类型参数，加上条件 `when is_function::<F>()`，与遍的签名 `opt::<F>(f: F): F! when is_function::<F>()` 是同一种写法；签名固定时直接写具体的函数类型 `(x: T) => R`。实参是一个函数，标签的事实就是那个函数本身（还原成那个函数），不是它的名字，也不是任何内部记号；它的签名是否合用，由读这个标签的一方在贴的位置检查。自动微分模块就是这样声明 `export tag vjp::<F>(rule: F) on func when is_function::<F>()` 的：`#vjp(rule)` 写在函数声明之前，调用这个函数时用规则而不是函数体的导数（[26 自动微分](.../technical/26_autodiff_as_graph_rewrite.md)）。
 
 **`#impl(f)`：Camel 函数体是语义，原生内核是执行**（设计原则 10.4）。它写在带函数体的函数声明之前：
 
@@ -700,7 +700,7 @@ export type Txn<F>
 sync? { 语句 ... }
 ```
 
-块是表达式：它的值由块里的 `return` 给出，没有 `return` 时没有值。块引入一个作用域。带 `sync` 的块按书写顺序执行**它自己直接写着的**语句（[4.3.1](04_execution_model.md#431-同步块块修饰符)）；里面的分支臂、循环体与嵌套块按它们自己的写法执行（同步块不向内继承，[设计原则 3.4](../design-principles.cn.md#34-sync-块)）。不带 `sync` 的块按依赖求值。
+块是表达式：它的值由块里的 `return` 给出，没有 `return` 时没有值。块引入一个作用域。带 `sync` 的块按书写顺序执行**它自己直接写着的**语句（[4.3.1](04_execution_model.md#431-同步块块修饰符)）；里面的分支臂、循环体与嵌套块按它们自己的写法执行（同步块不向内继承，[设计原则 3.4](.../design-principles.cn.md#34-sync-块)）。不带 `sync` 的块按依赖求值。
 
 块用作函数体、分支臂、lambda 体，也可以单独作语句。
 

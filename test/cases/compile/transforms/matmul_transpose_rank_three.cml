@@ -9,7 +9,7 @@
 //
 //     TRANSPOSE function=split_of_jvp_of_batched_sum_of_product_backward skip=rule-ranks
 //     uri=tensor:matmul rule=matmul_t node=6 position=0 ranks=(3, 2) operands=2
-//     reason=No matching function found for argument types: <> (float[..], float[3, 2, 2], float[2, 2]).
+//     reason=No matching function found for argument types: <> (float[...], float[3, 2, 2], float[2, 2]).
 //
 //     transforms: transpose has no transpose for this function: the law `matmul_t` has no cotangent
 //     for `tensor:matmul` at these operands: their ranks are (3, 2), and it serves the ranks its

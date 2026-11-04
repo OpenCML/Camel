@@ -8,10 +8,10 @@
 
 ## 0. 结论摘要
 
-1. **`..` 今天有四种身份，没有一种是流**：（a）类型位置**只在 `[...]` 里**的维度包 `T[..]` / `T[..rest]`（已落地，实测 `let xs: f32[..] = [1.0, 2.0]` 编译并打印 `[1.0, 2.0]`）；（b）表达式里的**二元运算符**，`CompExpr` 层次（`ParserImpl::parseComp` 同时吃 `..` 与 `?..`）；（c）落图时 `CompExpr` 编译成编译器自有宏算子 `:macro/cmp`；（d）`?..` 是**保留记号**，报错不实现。任务书要的 `T..`（类型后缀）与 `f..g`（函数组合）都要在 (b) 这一层落地，并与 (a) 共存。**`T..` 是今天唯一没有先例的形状**。
+1. **`..` 今天有四种身份，没有一种是流**：（a）类型位置**只在 `[...]` 里**的维度包 `T[...]` / `T[...rest]`（已落地，实测 `let xs: f32[...] = [1.0, 2.0]` 编译并打印 `[1.0, 2.0]`）；（b）表达式里的**二元运算符**，`CompExpr` 层次（`ParserImpl::parseComp` 同时吃 `..` 与 `?..`）；（c）落图时 `CompExpr` 编译成编译器自有宏算子 `:macro/cmp`；（d）`?..` 是**保留记号**，报错不实现。任务书要的 `T..`（类型后缀）与 `f..g`（函数组合）都要在 (b) 这一层落地，并与 (a) 共存。**`T..` 是今天唯一没有先例的形状**。
 2. **`f..g` 与 `?..` 今天都是硬错误，而且是同一个诊断**：`Builder::visitCompExpr` 对 `..` 报「function composition is not implemented」，对 `?..` 报「the operator is not implemented」，两处都是 `SemanticDiag::ConstructNotSupported`。诊断**不看操作数类型**：实测 `let xs = 1..5` 拿到的仍是「function composition is not implemented」——即「两边是数时是区间」这条读法今天连诊断都没有对应物。今天等价的区间写法是库函数 `range(start, end)`。
 3. **`yield` 不是关键字**：实测 `let yield = 1; println(yield)` 编译并打印 `1`。`include/camel/parse/syntax/token_kinds.def` 的词法表里没有 `yield`；`src/parse/ast/stmt.cpp` 里出现的 `"yield"` 只是 `ExitStmt` 的打印名，与生成器无关。
-4. **流类型不存在，而且是核心类型层面的缺口**：`TypeCode` 枚举（`include/camel/core/type/base.h#TypeCode`）没有流；`include/camel/core/type/composite/array.h#ArrayType` 的开秩形状 `[..]` 是**最接近**的邻居，但它是数组（有长度、可下标、可追加），不是按需产生的序列。写 `T..` 今天在**类型位置**是语法错误（实测 `let s: int.. = [1, 2, 3]` → `SyntaxDiag::UnexpectedToken`「Unexpected '..'; expected '='.」）；`as int..` 同样（「expected '}'.」）。
+4. **流类型不存在，而且是核心类型层面的缺口**：`TypeCode` 枚举（`include/camel/core/type/base.h#TypeCode`）没有流；`include/camel/core/type/composite/array.h#ArrayType` 的开秩形状 `[...]` 是**最接近**的邻居，但它是数组（有长度、可下标、可追加），不是按需产生的序列。写 `T..` 今天在**类型位置**是语法错误（实测 `let s: int.. = [1, 2, 3]` → `SyntaxDiag::UnexpectedToken`「Unexpected '..'; expected '='.」）；`as int..` 同样（「expected '}'.」）。
 5. **`map`/`filter`/`reduce`/`foreach` 今天只作用于数组**，是 `:mark/*_arr` 一类**带 `with` 参数的算子**（`stdlib/prelude.cml#map` 等，`stdlib/prelude.cml#map` 的声明是 `with <f: (item: T) => U> (collect: T[]) => U[]`）。流的对应物（`scan`/`batch`/`zip` 流版/`take` 流版）**一个都没有**：实测在 `stdlib/` 与 `src/builtin/modules/` 里 `scan`、`batch`、`unfold`、`tee`、`window` 的声明数都是 0。`fold` 今天只有两个**遍**叫这个名字（`stdlib/std.cml#fold`、`stdlib/opt.cml#fold`），不是流折叠；数组的折叠叫 `reduce`。
 6. **驻留今天只是一个「推断 + 打印」，不插节点、不驱动执行**：`modules/tiles/src/residency.cpp#residencyReport` 按 `docs/design/gpu/plan.cn.md` 3.2 从图推出「每个值的块在哪、哪些值跨边界、调用搬不搬」，由 `modules/tiles/src/region_pass.cpp#RegionPass` 印成 `TILES_RESIDENCY`，注释明写 *"It reads the graph; it inserts no node yet."*。所以任务书第 4 条要的「涉及流的图可以驻留执行」今天**没有任何可复用的执行器**；可复用的是这套**推断的形状**（owner 表 + 跨边界计数 + 循环状态留在原地）。
 7. **规则引擎今天表达不了 `map` 融合，有两道各自独立的门**：（a）**项读取器**只接受算子、常量、参数，并且**明确拒绝带上下文（`with`）参数的算子**（`src/runtime/rules.cpp#SideReader::term`：「has an operator with a context argument or an order dependency」），而 `map` 的 `f` 正是 `with` 参数——实测 `std::gir` 里两个 map 节点各有一条 `type="WITH"` 的入边（`Function(graph=dbl, tupleSlots=0) -> N0A`）；（b）**规则的形参表写不出函数类型**：`rule h248_map_comp(xs: int[], f: (int) => int, g: (int) => int)` 在 `)` 处报 `SyntaxDiag::MissingComma`。另外规则体里必须写 `map<inc>(xs)` 而不是 `map(xs, inc)`（实测 `SemanticDiag::NoMatchingFunction` 给了这句话），所以融合规则的**左式拼写**已经定死为尖括号形式（泛型规则写法也在同一层）。
@@ -40,7 +40,7 @@ pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
 
 | 身份 | 位置 | 落点 | 今天 |
 |---|---|---|---|
-| 维度包（已落地） | 类型位置，**只在 `[...]` 里** | `ParserImpl::parseArrayDim`；`include/camel/core/type/composite/array.h#ArrayType::openRank` | `T[..]`、`T[3, ..rest]`；实测 `f32[..]` 可声明可打印 |
+| 维度包（已落地） | 类型位置，**只在 `[...]` 里** | `ParserImpl::parseArrayDim`；`include/camel/core/type/composite/array.h#ArrayType::openRank` | `T[...]`、`T[3, ...rest]`；实测 `f32[...]` 可声明可打印 |
 | 二元运算符 | 表达式 | `ParserImpl::parseComp`（同时吃 `..` 与 `?..`），AST 结点 `CompExpr` | 建图时报 `ConstructNotSupported` |
 | 宏算子 | 落图以后 | `src/compile/gct/builder.cpp#MacroCmp`，`:macro/cmp`，`src/builtin/operators/macro.cpp#__cmp__` | 实现体是 `return NullSlot`（空实现）；因为 AST 先报错，这条路径今天到不了 |
 | 保留记号 `?..` | 表达式 | 词法 `QuestionDotDot`；`Builder::visitCompExpr` 的独立分支 | 报 `ConstructNotSupported`，并在 AST 上额外建一个 `NotNullThen` 结点 |
@@ -69,7 +69,7 @@ pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
 ### 1.5 没有流类型
 
 - `include/camel/core/type/base.h#TypeCode` 共 16 个码（`Int32`…`Float16`、`Other`），**没有流**；0x00C（`any`）与 0x00D（联合）已退役，注释里写明「每一个值在编译之后都有确定的类型」。
-- 最接近的邻居是**开秩数组**：`include/camel/core/type/composite/array.h#ArrayType` 的文档写明 `T[..]` / `T[..rest]` 是「开秩：`extents()` 是一个前缀，任何不短于它的秩都接受」。实测 `let xs: f32[..] = [1.0, 2.0]` 编译并打印 `[1.0, 2.0]`（附录 A 的 t14）。**设计原则 5.4 也正是拿 `T[..]` 来类比的**（「与 `T[..]`（后面还有不定数量的维度）同读」）——所以 `T..` 必须与 `T[..]` 在词法与类型上共存，这是本任务第一个要问作者的点（问题 1）。
+- 最接近的邻居是**开秩数组**：`include/camel/core/type/composite/array.h#ArrayType` 的文档写明 `T[...]` / `T[...rest]` 是「开秩：`extents()` 是一个前缀，任何不短于它的秩都接受」。实测 `let xs: f32[...] = [1.0, 2.0]` 编译并打印 `[1.0, 2.0]`（附录 A 的 t14）。**设计原则 5.4 也正是拿 `T[...]` 来类比的**（「与 `T[...]`（后面还有不定数量的维度）同读」）——所以 `T..` 必须与 `T[...]` 在词法与类型上共存，这是本任务第一个要问作者的点（问题 1）。
 - 类型位置的 `T..` 今天**语法错误**：`ParserImpl::parseArrayDim` 只在 `[` 之后认 `..`，`T` 之后直接跟 `..` 无人接收。实测两条：`let s: int.. = ...` → 「Unexpected '..'; expected '='.」；`xs as int..` → 「Unexpected '..'; expected '}'.」。
 - **`T?..` 的拆分今天没有先例**：`T?` 是可空（`T?` 与 `T!` 是既有的可选/可错类型，设计原则 5.3 的 `match` 穷尽性把 `T?`、`T!` 与 `bool` 并列），`..` 是流后缀，两个后缀叠在一起时「先 `?` 后 `..`」还是「先 `..` 后 `?`」在今天的类型解析器里无从判断。
 - `as T..` 的两种读法同样没有先例：`as` 的右式今天是一个**类型**（`ParserImpl` 的 `KwAs` 分支），而任务书要的是「`as T..` 后紧跟值时按流后缀读，写区间加括号」——即 `as` 的右式要有**由后续记号决定的两种读法**。
@@ -473,7 +473,7 @@ G5/G7/G8 + GPU/JAX ── G11 ── G12
 
 按项目既有体例单独成文，**不在这里给结论**：
 
-1. 流类型 —— `T..` 的表面：与既有开秩数组 `T[..]` 的共存、`T?..` 的拆分、`as T..` 两种读法的判定、以及**流是核心类型还是标准库类型**（第 6 节第 5 条与 5.4 的冲突）。
+1. 流类型 —— `T..` 的表面：与既有开秩数组 `T[...]` 的共存、`T?..` 的拆分、`as T..` 两种读法的判定、以及**流是核心类型还是标准库类型**（第 6 节第 5 条与 5.4 的冲突）。
 2. 线性 —— 判据（循环体、`match` 的多臂、`tee` 的结果是否也线性）、`tee(s, n)` 的 `n` 默认值与非法值、缓冲峰值报告的**格式与阈值**、「两种调度结果逐字相同」的比较范围与 `take` 的计算次数怎么观测。
 3. 生成器 —— `yield` 状态机的边界（故障路径、嵌套、委托、生成器里的效应顺序）、生成器值是否也线性、`f..g` 的类型规则（参数个数、`with` 参数、泛型、重载函数值、能否进 `map<>` 的尖括号）、以及区间读法（闭/半开、与 `range(start, end)` 的关系）。
 
@@ -482,7 +482,7 @@ G5/G7/G8 + GPU/JAX ── G11 ── G12
 ## 6. 风险与不做
 
 1. **最大的风险是「两种调度结果逐字相同」的判据见不到底**。按到达顺序合并与按时间开窗口**定义上**就不确定；如果「逐字相同」被理解成字节相等，那么任何含不确定算子的程序都无法验收。片 H 的第一件事必须是**划定比较范围**（哪些算子排除、以什么为单位比较），并且要作者裁定（问题 2）——否则会写出一个永远红的用例。
-2. **`T..` 与 `T[..]` 的共存是语法风险，不是类型风险**。`f32[..]` 已经是一个合法类型并会打印成 `[..]`；`T..` 加进来之后，`T[..]..`、`T[..]?..`、`T[3, ..rest]..` 这类叠法必须有明确读法，否则会出现「同一个拼写两种读法」而**没有诊断**。片 B 的第一步是把这些叠法的**读法与诊断**一起定下来，不是先做最简的 `T..`。
+2. **`T..` 与 `T[...]` 的共存是语法风险，不是类型风险**。`f32[...]` 已经是一个合法类型并会打印成 `[...]`；`T..` 加进来之后，`T[...]..`、`T[...]?..`、`T[3, ...rest]..` 这类叠法必须有明确读法，否则会出现「同一个拼写两种读法」而**没有诊断**。片 B 的第一步是把这些叠法的**读法与诊断**一起定下来，不是先做最简的 `T..`。
 3. **不写第二套驻留执行器**（4.2）。流与 GPU 共用「整图驻留 + 每条边一个有界缓冲」，重复实现会让验收退化成两个实现互相印证。
 4. **不在片 I 里自己改规则语法**（4.4）。不自己定对带 `with` 参数算子的模式是否合法的判据（图的边重构会改），不自己加规则形参的函数类型（规则语言会改）。
 5. **不做的事**：不实现语言表面（本轮只交计划）；不改 `docs/design/**` 已有的任何文件（含 1.10 记下的两处缺陷，只记录、等裁定）；不新增 `Stream<T>` 的写法；不把 `async`/`await` 引进来（该稿第 1 节的核心主张）；不为流新造结点种类（`for` 走 `__iter__` 重载，`yield` 走状态机，复用 `LOOP`/`BRCH`）。
@@ -578,7 +578,7 @@ N09 -> N0A [label="0|0", type="NORM"];
 (h248_t13_range)/.../t13_range.cml:9:15: [Error]: '..' is not supported: function composition is not implemented; write a lambda, e.g. '(x: int): int => g(f(x))'. The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet. (name=SemanticDiag::ConstructNotSupported, code=0x0300001F)
 ```
 
-**t14 `t14_open_rank.cml`** —— `let xs: f32[..] = [1.0, 2.0]`，`EXIT=0`（既有开秩数组，改动后必须保持）：
+**t14 `t14_open_rank.cml`** —— `let xs: f32[...] = [1.0, 2.0]`，`EXIT=0`（既有开秩数组，改动后必须保持）：
 
 ```
 [1.0, 2.0]
@@ -600,7 +600,7 @@ N09 -> N0A [label="0|0", type="NORM"];
 | 宏算子本体 | `src/builtin/operators/macro.cpp#__cmp__` | 12（`return NullSlot`） |
 | 算子 id | `include/camel/core/operator_table.h#MacroCmp` | 117（`= 19`，`:macro/cmp`） |
 | `TypeCode` 无流 | `include/camel/core/type/base.h#TypeCode` | 56–100 |
-| 开秩数组 `T[..]` | `include/camel/core/type/composite/array.h#ArrayType::openRank` | 83–87、111–118 |
+| 开秩数组 `T[...]` | `include/camel/core/type/composite/array.h#ArrayType::openRank` | 83–87、111–118 |
 | 维度包落图 | `src/compile/gct/builder.cpp#DimPack` | 5095–5120、5775–5805 |
 | `map` / `filter` 的类型解析 | `stdlib/prelude.cml#map` | 2266–2348 |
 | 高阶算子的语义形状 | `src/builtin/executors/builtin_semantics.cpp#ElementCalls` | 190、222 |

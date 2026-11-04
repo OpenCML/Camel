@@ -16,8 +16,8 @@ import { reshape, sum } from tensor
 import { with_grad } from autodiff
 
 type Model = {
-    weights: f32[..],
-    labels: i64[..], // the integer index array
+    weights: f32[...],
+    labels: i64[...], // the integer index array
 }
 
 with <m: Model>

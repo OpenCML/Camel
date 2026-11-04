@@ -2,9 +2,9 @@
 
 [English](en/README.md) | 中文
 
-> 语言的根本定位与执行模型由 [设计原则](../design-principles.cn.md) 规定，它是规范性的；本参考与它冲突时以它为准。
+> 语言的根本定位与执行模型由 [设计原则](.../design-principles.cn.md) 规定，它是规范性的；本参考与它冲突时以它为准。
 
-本目录是 Camel 的语言参考，按主题分章。文中的示例都在当前实现上运行过，`text` 代码块是真实输出。初次接触 Camel 请先读[入门教程](../tutorial/tutorial.cn.md)。
+本目录是 Camel 的语言参考，按主题分章。文中的示例都在当前实现上运行过，`text` 代码块是真实输出。初次接触 Camel 请先读[入门教程](.../tutorial/tutorial.cn.md)。
 
 | 章 | 文档 | 内容 |
 |---|---|---|
@@ -20,7 +20,7 @@
 
 ## 相关文档
 
-- [入门教程](../tutorial/tutorial.cn.md) 与 [示例集](../../examples/README.cn.md)
-- [命令行](../cli.cn.md)、[诊断目录](../diagnostics.md)
-- [技术文档](../technical/README.md)：编译流水线、图的中间表示、运行时
+- [入门教程](.../tutorial/tutorial.cn.md) 与 [示例集](.../../examples/README.cn.md)
+- [命令行](.../cli.cn.md)、[诊断目录](.../diagnostics.md)
+- [技术文档](.../technical/README.md)：编译流水线、图的中间表示、运行时
 - 文法：[8.5 完整文法](08_top_level_and_grammar.md#85-完整文法)，由解析器源码（`src/parse/syntax/`）中每个函数上方的产生式生成；记号表在 `include/camel/parse/syntax/token_kinds.def`

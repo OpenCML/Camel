@@ -63,13 +63,13 @@ func main(): int sync {
 - 对数组不能用 `.`（`xs.1` 是 `SemanticDiag::TypeNotIndexable`）。
 - 下标紧贴被访问的表达式，不能有空白。
 - **下标从 0 开始，负数不是从尾部数**：`xs[-1]` 是故障 `RuntimeDiag::IndexOutOfRange`。最后一个元素写 `last(xs)`。
-- **`xs[idx]` 是 `take`**：`idx` 的类型必须是 `int[]`，结果是 `idx` 各位置上的元素，按 `idx` 的顺序；同一个位置出现两次就取两次。越界与负数都是故障 `RuntimeDiag::IndexOutOfRange`。结果是一份新数组，不是视图（[5.4](../design-principles.cn.md)）。
-- **切片沿第一维，左闭右开**：`xs[a:b]` 是位置 `a` 到 `b-1`。`a` 省略表示从头，`b` 省略表示到末尾，`xs[:]` 是整个数组；`s` 是步长。切片是**共用数据块的视图**（[5.4](../design-principles.cn.md)），不复制元素。
-  - 两端都是 0 到 `len(xs)` 之间的位置（`b` 可以等于长度，表示取到最后一个）；负数或越界是故障 `RuntimeDiag::SliceOutOfRange`，与下标越界一致（[3.9](../design-principles.cn.md)）。`b < a` 是空数组，不是故障。长度在编译期已知而边界是常量时，越界是编译期错误（[3.9](../design-principles.cn.md)）。
+- **`xs[idx]` 是 `take`**：`idx` 的类型必须是 `int[]`，结果是 `idx` 各位置上的元素，按 `idx` 的顺序；同一个位置出现两次就取两次。越界与负数都是故障 `RuntimeDiag::IndexOutOfRange`。结果是一份新数组，不是视图（[5.4](.../design-principles.cn.md)）。
+- **切片沿第一维，左闭右开**：`xs[a:b]` 是位置 `a` 到 `b-1`。`a` 省略表示从头，`b` 省略表示到末尾，`xs[:]` 是整个数组；`s` 是步长。切片是**共用数据块的视图**（[5.4](.../design-principles.cn.md)），不复制元素。
+  - 两端都是 0 到 `len(xs)` 之间的位置（`b` 可以等于长度，表示取到最后一个）；负数或越界是故障 `RuntimeDiag::SliceOutOfRange`，与下标越界一致（[3.9](.../design-principles.cn.md)）。`b < a` 是空数组，不是故障。长度在编译期已知而边界是常量时，越界是编译期错误（[3.9](.../design-principles.cn.md)）。
   - 步长写在第二个冒号之后：`xs[a:b:s]`，得到的仍是共用数据块的视图；要一份拷贝写 `slice(xs, 0, a, b, s)`。
   - 元素是对象的数组（`[[1, 2], [3, 4]]` 这类）按行复制，槽数组没有可共用的数据块。
-- **多维下标**：`xs[:, 0]`、`xs[a:b, c]` 沿各维取坐标，得到视图；某一维整个取用 `:`（[5.4](../design-principles.cn.md)）。
-- **字符串下标按码点**：`s[i]` 是第 `i` 个码点，结果是只含这一个字符的字符串（`'中文'[0]` 是 `'中'`）；越界同样是故障。要数值用 `str` 模块的 `codepoints`（见 [标准库参考](../stdlib-reference.md)）。
+- **多维下标**：`xs[:, 0]`、`xs[a:b, c]` 沿各维取坐标，得到视图；某一维整个取用 `:`（[5.4](.../design-principles.cn.md)）。
+- **字符串下标按码点**：`s[i]` 是第 `i` 个码点，结果是只含这一个字符的字符串（`'中文'[0]` 是 `'中'`）；越界同样是故障。要数值用 `str` 模块的 `codepoints`（见 [标准库参考](.../stdlib-reference.md)）。
 
 ## 6.4 调用
 
@@ -215,12 +215,12 @@ false
 
 - `==`、`!=`：数值、`bool`、`string`、`Map`、`Set`，以及数组、元组、结构体、张量，两边类型必须相同（否则是编译期错误 `SemanticDiag::NoMatchingFunction`，不做转换），结果是 `bool`。
   - **数组、元组、结构体按内容逐个比较**，递归进行：`[1, 2] == [1, 2]`、`(1, 'a') == (1, 'a')`、两个字段都相等的结构体，结果都是 `true`；长度不同的数组不相等。
-  - **整体比较就是逐元素比较再归约成一个 `bool`**：`a == b` 是形状相同、并且逐元素相等处处成立（见 [4.2](../design-principles.cn.md)）。数值数组（`f32[]`、`f32[..]` 这类）也一样，结果同样是 `bool`。
+  - **整体比较就是逐元素比较再归约成一个 `bool`**：`a == b` 是形状相同、并且逐元素相等处处成立（见 [4.2](.../design-principles.cn.md)）。数值数组（`f32[]`、`f32[...]` 这类）也一样，结果同样是 `bool`。
   - 元素类型本身要能比较：数值、`bool`、`string`、`Map`、`Set`、`T?`、`T!`，以及由它们组成的数组、元组、结构体。含函数值的（`[f] == [f]`）不能比较，是带位置的编译期错误。
   - 浮点元素按浮点的规则：含 `nan` 的数组不等于它自己，`[0.0] == [-0.0]`。
   - `T?`、`T!` 本身（不在数组、元组、结构体里）仍然没有 `==`，先用 `??`、`!!` 或 `match` 拆开。
 - **`===`、`!==` 是逐元素的相等与不等**：`a === b` 对两个数组逐个元素比较，得到同形状的 `bool` 数组：`[1, 2, 3] === [1, 2, 4]` 是 `[true, true, false]`；`a !== b` 是它的逐元素否定。形状规则与别的逐元素运算相同（形状不能广播是带位置的运行期错误）。标量上 `===` 就是 `==`（`1 === 1`、`'a' === 'a'`）。
-  - 与 `<`、`>`、`<=`、`>=` 一样，它在数值数组上定义：`f32[]`、`f32[..]`、`int[]`，元素类型是数值的数组。整体比较（上一条）在任何元素类型能比较的数组上都有定义。
+  - 与 `<`、`>`、`<=`、`>=` 一样，它在数值数组上定义：`f32[]`、`f32[...]`、`int[]`，元素类型是数值的数组。整体比较（上一条）在任何元素类型能比较的数组上都有定义。
 - **`x == null`、`x != null`** 对 `T?` 类型的 `x` 有定义，两边顺序不限，得到 `bool`：它判断 `x` 的标记，不是比较两个值（与 `??` 分支所依据的是同一个节点）。它是普通的表达式：`let has = x != null`。可空的函数值也可以这样与 `null` 比较。一个永远不为空的值（`int`、`T!`、已经收窄成 `T` 的名字）与 `null` 比较也可以写，结果是固定的（`==` 恒为 `false`，`!=` 恒为 `true`），编译器给出警告 `SemanticDiag::NullTestNeverNull`，这个值本身不求值。两个 `T?` 互相比较仍是 `SemanticDiag::NoMatchingFunction`；两个函数值不能比较。
 - `<`、`>`、`<=`、`>=`：数值与 `string`（按码点顺序）；**数值数组上逐元素比较**，得到同形状的 `bool` 数组。比较不能连写：`1 < 2 < 3` 是类型错误。
 
@@ -394,7 +394,7 @@ func main(): int sync {
 
 ### 6.8.3 `match type`
 
-`match type` 按**类型的形状或身份**选一条分支，用于泛型函数（[5.5](../design-principles.cn.md)）：`T` 在实例化时已经是具体类型，编译器只把选中的分支建进图里，其余分支不建图、不做类型检查（名字仍然解析）。
+`match type` 按**类型的形状或身份**选一条分支，用于泛型函数（[5.5](.../design-principles.cn.md)）：`T` 在实例化时已经是具体类型，编译器只把选中的分支建进图里，其余分支不建图、不做类型检查（名字仍然解析）。
 
 ```
 match type 类型 {
@@ -414,7 +414,7 @@ match type 类型 {
 }
 ```
 
-- `struct` 匹配结构体；`tuple` 匹配**普通**元组；`array` 匹配所有数组类型（不论元素是什么）；`func` 匹配函数类型；`nullable` 匹配所有 `T?`，`fallible` 匹配所有 `T!`，`map` 匹配所有映射，`set` 匹配所有集合；`#leaf` 匹配其余所有类型（标量、`string`、数组、函数、`T?`、`T!`、映射、集合、单元格等）。`struct` 和 `tuple` 是 [R3 内部节点](../design/generic-structure/README.cn.md)的两种形状：`T?`、`T!` 是带标记的元组，和可变单元格一样落在 `#leaf`，不算 `tuple`。
+- `struct` 匹配结构体；`tuple` 匹配**普通**元组；`array` 匹配所有数组类型（不论元素是什么）；`func` 匹配函数类型；`nullable` 匹配所有 `T?`，`fallible` 匹配所有 `T!`，`map` 匹配所有映射，`set` 匹配所有集合；`#leaf` 匹配其余所有类型（标量、`string`、数组、函数、`T?`、`T!`、映射、集合、单元格等）。`struct` 和 `tuple` 是 [R3 内部节点](.../design/generic-structure/README.cn.md)的两种形状：`T?`、`T!` 是带标记的元组，和可变单元格一样落在 `#leaf`，不算 `tuple`。
 - 类型位置写一个类型名就是**身份模式**：`case int`、`case Json`、`case MyStruct`、`case T`。身份是**精确**的：`case float` 不选 `int`（`float` 与 `f64` 是同一个类型，`int` 与 `i64` 也是；`int` 与 `i32` 不是）；`case f32` 不选 `f64`；`case MyStruct` 按声明的名字选，不选另一个字段形状相同的结构体；`case T` 在实例化时先代入 `T` 的绑定，所以它选的正是那个类型。形状与身份可以写在同一个 case 里（`case tuple | MyStruct`），按书写顺序判断：前面的 case 已经选中的类型，后面的同一身份是 `SemanticDiag::StaticMatchPatternCannotMatch`。
 - `_` 与 `#leaf` 一样匹配一切，只作为“兜底”写法；两者都必须是最后一个 case。`case struct | tuple` 用 `|` 合并几种形状。`case int` 写在 `case #leaf` 之前是正常的；写在 `#leaf`/`_` 之后是 `SemanticDiag::StaticMatchUnreachableCase`。
 - `match type` 后面是类型位置：紧跟的 `(` 一律读作类型的开头，所以 `match type () { ... }` 匹配空元组类型；函数类型要再包一层括号，写成 `match type ((x: int) => int) { ... }`。`case` 后面也是类型位置，同样的规则：`case (int, int)`、`case ()` 是元组，函数类型写成 `case ((x: int) => int)`。
@@ -425,7 +425,7 @@ match type 类型 {
 
 **类型函数。** 类型也可以由类型算出（设计原则 5.6）：类型函数用 `type` 声明，`type F<T> = 体`，在类型位置写成 `F<...>` 调用；函数体是类型表达式，各 case 给出类型的 `match type` 也是：`type ElemOrSelf<T> = match type T { case array => ElementOf<T>  case _ => T }`。`types` 声明了六个 `match type` 取不出或造不出的部分：`ElementOf<T>` 是数组或集合的元素类型，`PayloadOf<T>` 是 `U?` 或 `U!` 里的 `U`，`KeyOf<T>` 与 `ValueOf<T>` 是映射的键类型与值类型，`WithElement<A, E>` 是把数组类型 `A` 的元素类型换成 `E`、形状不变的数组类型（`f32(xs)` 的结果就是 `WithElement<A, f32>`），`RowsOf<T>` 是第一维元素为 `T` 的数组类型（`RowsOf<f32[3]>` 是 `f32[?, 3]`，`vmap` 把一个行函数的批类型写成的形状）。调用本身就是一个类型，和别的类型一样用：`is_integer::<ElementOf<T>>()` 里它是类型实参，`func first::<T>(xs: T): ElementOf<T>` 里它是结果类型。`T` 还是类型变量时调用等着；实例绑定 `T` 之后，调用被它算出的类型取代。函数不接受的类型（`ElementOf<int>`，或没有 case 选中的 `match type`）是 `SemanticDiag::TypeFunctionNotApplicable`：参数是具体类型时在类型写出处报，否则在造出实例的调用处报。
 
-**类型包。** `ParamsOf<F>`、`WithOf<F>` 是函数类型的普通参数与 `with` 参数，作为一个类型包；`ResultOf<F>` 是返回类型。`..` 写在类型表达式前，对包的每个成员各展开一次：`(..ParamsOf<F>)` 是 `F` 的参数组成的元组，`(..ElementOf<A>)` 是 `A` 的每个成员取元素类型。用到几个包，它们的长度必须相同，否则是 `SemanticDiag::TypeFunctionNotApplicable`，信息里写出每个包与它的长度。声明头写 `::<..A>`，rest 形参写成 `..xs: ..A`，调用把 `A` 绑定为 rest 实参类型组成的包；`when ..pred::<A>()` 表示包的每个成员都满足 `pred`。`zip` 就是这样声明的：`zip::<..A>(..xs: ..A): (..ElementOf<A>)[] when ..is_array::<A>()`。
+**类型包。** `ParamsOf<F>`、`WithOf<F>` 是函数类型的普通参数与 `with` 参数，作为一个类型包；`ResultOf<F>` 是返回类型。`..` 写在类型表达式前，对包的每个成员各展开一次：`(...ParamsOf<F>)` 是 `F` 的参数组成的元组，`(...ElementOf<A>)` 是 `A` 的每个成员取元素类型。用到几个包，它们的长度必须相同，否则是 `SemanticDiag::TypeFunctionNotApplicable`，信息里写出每个包与它的长度。声明头写 `::<...A>`，rest 形参写成 `..xs: ...A`，调用把 `A` 绑定为 rest 实参类型组成的包；`when ...pred::<A>()` 表示包的每个成员都满足 `pred`。`zip` 就是这样声明的：`zip::<...A>(...xs: ...A): (...ElementOf<A>)[] when ...is_array::<A>()`。
 
 ```cml
 func duplicate::<T>(t: T) {
@@ -439,9 +439,9 @@ func duplicate::<T>(t: T) {
 
 ### 6.8.4 `static for` 与 `t.[n]`
 
-`static for n, F in fields T => 块` 把 `T` 的**字段表**在实例化时展开（[5.5](../design-principles.cn.md)）：每个字段执行一次块，展开出的代码直接成为当前位置的直线代码，运行时没有循环节点。
+`static for n, F in fields T => 块` 把 `T` 的**字段表**在实例化时展开（[5.5](.../design-principles.cn.md)）：每个字段执行一次块，展开出的代码直接成为当前位置的直线代码，运行时没有循环节点。
 
-- `T` 必须是具体类型，而且是 [R3 内部节点](../design/generic-structure/README.cn.md)：结构体或**普通**元组。`T?`、`T!`、可变单元格、标量、数组和函数都是叶子，报 `SemanticDiag::StaticForNotComposite`；先用 `match type` 处理它们。
+- `T` 必须是具体类型，而且是 [R3 内部节点](.../design/generic-structure/README.cn.md)：结构体或**普通**元组。`T?`、`T!`、可变单元格、标量、数组和函数都是叶子，报 `SemanticDiag::StaticForNotComposite`；先用 `match type` 处理它们。
 - `n` 是字段名；元组的字段名是十进制下标（`"0"`、`"1"`，……），按声明顺序。`F` 是字段类型。两者只在块内可见；`F` 可以写在类型位置（`let x: F`），不能当值用。其中任何一个写成 `_` 表示这一轮不绑定它，与 `match` 的 `_` 同义：`static for n, _ in fields T => e` 只取字段名，`static for _, F in fields T => e` 只取字段类型（`_` 不是名字，块里写 `_` 仍然未定义）。
 - `fields` 后面也是类型位置：紧跟的 `(` 一律读作类型的开头，所以空元组直接写 `fields ()`，不需要先 `type EmptyTuple = ()`；函数类型要再包一层括号，写成 `fields ((x: int) => int)`。
 - 字段按声明顺序展开，每个字段的块有独立的块作用域。空结构体或空元组展开零次，块一次也不建。
@@ -557,7 +557,7 @@ func from_array(): int {
     return static loop acc = 0 for x in xs do acc + x
 }
 
-func sum_args(..ts): int {
+func sum_args(...ts): int {
     return static loop acc = 0 for x in ts do acc + x
 }
 ```
@@ -584,7 +584,7 @@ let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else h
   - **数组**：元素本身，`a..b` 就是一个数组。
   - **字符串**：按码点，每个元素是只含这个字符的字符串，与 `s[i]` 相同（11.1）：`for c in '中文'` 的两轮是 `'中'`、`'文'`；多字节的字符按一个码点算一次。
   - **映射**：`(键, 值)` 元组，按键的顺序（11.3 的遍历顺序，与 `items(m)` 相同），不是插入顺序：`for kv in m` 取到的键严格递增，元组用 `kv.0`、`kv.1` 取出。
-  - **张量**：张量是数值数组（`f32[2, 3]` 就是一种数值数组类型），遍历与数组同一条规则：沿第一维，每个元素是去掉第一维后的子数组（与这一维上的一段共享同一份数据，不复制）：rank 2 的 `f32[2, 3]` 给出两个 `f32[3]`，rank 1 给出元素本身（`sum(x)` 是它的数）。元素类型没写在类型里时，给出的元素仍是那个类型；维数不定的 `f32[..]` 给出的元素还是 `f32[..]`。rank 0 的数组没有第一维，不是序列。
+  - **张量**：张量是数值数组（`f32[2, 3]` 就是一种数值数组类型），遍历与数组同一条规则：沿第一维，每个元素是去掉第一维后的子数组（与这一维上的一段共享同一份数据，不复制）：rank 2 的 `f32[2, 3]` 给出两个 `f32[3]`，rank 1 给出元素本身（`sum(x)` 是它的数）。元素类型没写在类型里时，给出的元素仍是那个类型；维数不定的 `f32[...]` 给出的元素还是 `f32[...]`。rank 0 的数组没有第一维，不是序列。
   空数组、空字符串、空映射、第一维为 0 的数组一轮都不执行，循环的值是初值。**`while c`** 在条件成立时继续；条件是 `bool`（`SemanticDiag::LoopConditionNotBool`）。两者都写时，每一轮先看条件，再取下一个元素：条件不成立或元素取完即结束。至少写其中一个。
 - **没有 `break` 与 `continue`**：提前结束写成 `while` 条件，跳过一轮的其余部分写成 `if`。
 - **作用域**：初值与序列在循环所在处求值一次，其中看不到循环头的名字；条件看得到状态的名字，循环体看得到状态的名字与 `for` 的名字。循环头的名字不能重复（`SemanticDiag::LoopNameRepeated`）。条件与循环体看得到外面的名字，读到的是循环开始时的值（`var` 每轮读其当前值）。
@@ -752,13 +752,13 @@ DivisionByZero at main.cml:1:38
 - 边界就是那一次调用：实参的求值在边界之外；边界之内在故障之前已经发生的效应不收回（打印的行、写过的 `var`、写过的文件都保留）。
 - `exit(n)` 不是故障，不被隔离；内存耗尽与编译器自身的错误也不被隔离。
 - 并行调度器下，`map` 的一个元素故障时，已经开始的元素运行到结束，尚未开始的不再开始；`attempt` 在已开始的全部结束之后才给出错误值。
-- 在图上，`attempt(f)` 的值持有它自己的一个小图，图体是一个 `OPER` 节点（`:mark/isolate`），第一个输入是捕获的 `f`，其余是实参。实现与尚待裁定的问题见 [技术说明](../technical/33_fault_isolation.md)。
+- 在图上，`attempt(f)` 的值持有它自己的一个小图，图体是一个 `OPER` 节点（`:mark/isolate`），第一个输入是捕获的 `f`，其余是实参。实现与尚待裁定的问题见 [技术说明](.../technical/33_fault_isolation.md)。
 
 ## 6.11 赋值
 
 - `x = e`、`x += e` 等是表达式，值见下。目标是 `var` 变量或 `var` 形参本身，或从它出发的一条**路径**：字段、下标、任意组合（[3.7](03_data_model.md#37-letvar-与引用)）。`p.x = e`、`xs[0] = e`、`m[i].f = e` 都是对 `p`、`xs`、`m` 整体的重新绑定：`xs[i].f = e` 就是 `xs = set(xs, i, set(xs[i], f, e))`，`set` 是只改一个位置、返回新值的纯算子。路径赋值因此可以写在任何表达式位置；目标的根不是变量时（如 `f().x = e`、`{ x: 1 }.x = e`）是 `AssignmentTargetNotVariable`，下标越界是故障 `IndexOutOfRange`。
 - 路径赋值的值是**重新绑定后的整体**：`xs = xs->append<…>` 的值是新数组，`xs[0] = 5` 的值是改过之后的那个 `xs`，不是 `5`。只有目标就是变量本身时，值才是所赋的值。
-- 在 `sync` 里写一个 `var` 数组的一个元素**不复制**：写回用与 `xs = xs->sort` 同一套“未被共享”判据（[10.5](../design-principles.cn.md#105-库边界)），即 `:var/take` 在变量被别处读过之后才交出副本。所以 `let a = xs` 之后写 `xs[0]` 会复制，`a` 保持不变；没有读过 `xs` 时直接改它自己的存储。
+- 在 `sync` 里写一个 `var` 数组的一个元素**不复制**：写回用与 `xs = xs->sort` 同一套“未被共享”判据（[10.5](.../design-principles.cn.md#105-库边界)），即 `:var/take` 在变量被别处读过之后才交出副本。所以 `let a = xs` 之后写 `xs[0]` 会复制，`a` 保持不变；没有读过 `xs` 时直接改它自己的存储。
 - 复合赋值可用的类型：
 
   | 运算符 | 类型 |

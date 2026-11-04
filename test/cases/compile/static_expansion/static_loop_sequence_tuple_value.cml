@@ -6,7 +6,7 @@
  * with `typeof(x)` where it is needed.
  */
 
-func f(..ts): int {
+func f(...ts): int {
     return static loop acc = 0 for x in ts do acc + x
 }
 

@@ -1,12 +1,12 @@
 # 1. Introduction
 
-English | [中文](../01_introduction.md)
+English | [中文](.../01_introduction.md)
 
 ## 1.1 Purpose of this reference
 
-This reference describes the syntax and core semantics of Camel. It is divided into chapters by topic, and every example can be run as written. If you are new to Camel, read the [tutorial](../../tutorial/tutorial.en.md) first; for the command line see [cli.md](../../cli.md); for the meaning of each diagnostic see [diagnostics.md](../../diagnostics.md) or `camel --explain <name>`.
+This reference describes the syntax and core semantics of Camel. It is divided into chapters by topic, and every example can be run as written. If you are new to Camel, read the [tutorial](.../../tutorial/tutorial.en.md) first; for the command line see [cli.md](.../../cli.md); for the meaning of each diagnostic see [diagnostics.md](.../../diagnostics.md) or `camel --explain <name>`.
 
-The fundamental positioning of the language and its execution model are laid down by [the design principles](../../design-principles.en.md), which are normative: where this reference conflicts with them, they prevail.
+The fundamental positioning of the language and its execution model are laid down by [the design principles](.../../design-principles.en.md), which are normative: where this reference conflicts with them, they prevail.
 
 ## 1.2 What Camel is
 

@@ -129,7 +129,7 @@ func bytes_ne(a: Bytes, b: Bytes): bool {
 
 /// A `tensor` operator, which declares no fault list at all: the answer that reads back is the
 /// third state, "nobody has checked, so assume it may fault".
-func tensor_sum(t: f32[..]): float {
+func tensor_sum(t: f32[...]): float {
     return float(sum(t))
 }
 

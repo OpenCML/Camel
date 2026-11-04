@@ -1,7 +1,7 @@
 import { sum, abs } from tensor
 import { next_key, seed, uniform } from random
 import { run_preferred_resident, download } from tiles
-func twice(x: f32[..]): f32[..] { return x + x }
+func twice(x: f32[...]): f32[...] { return x + x }
 func main(): int sync {
     seed(73)
     let x = (next_key()->uniform::<f32><shape: [8388736]> * 2.0 - 1.0)

@@ -1,5 +1,5 @@
 /**
- * A product is computed in the one element type its two arrays state, so `f64[..] @ f32[..]` is the
+ * A product is computed in the one element type its two arrays state, so `f64[...] @ f32[...]` is the
  * mixed pair that matches no arm (design principles 5.1), the same answer the arithmetic gives. The
  * conversion is written where the program wants the product; the shape rule is untouched by this.
  */

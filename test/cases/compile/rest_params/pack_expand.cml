@@ -1,12 +1,12 @@
 /**
  * A pack (design principles 5.6): `..` at the head of a declaration declares a pack parameter,
- * `..xs: ..A` is a rest parameter that gives the pack its members, and a type written `..A` is
+ * `..xs: ...A` is a rest parameter that gives the pack its members, and a type written `..A` is
  * one type per member. Each call binds the pack to the types of the arguments it leaves over —
  * one member per argument, in order — so the members take the types the arguments have, and the
  * result type written `..A` is those types as the tuple they make.
  */
 
-func both::<..A>(..xs: ..A): ..A {
+func both::<...A>(...xs: ...A): ...A {
     return (xs.[0], xs.[1])
 }
 

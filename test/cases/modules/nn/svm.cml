@@ -4,14 +4,14 @@
 
 import { matmul, ones, zeros, sum, eye, transpose, show, shape, concat, reshape, where } from tensor
 
-func svm_train(X: f32[..], y: f32[..], learning_rate: float, epochs: int, lambda: float): f32[..] sync {
+func svm_train(X: f32[...], y: f32[...], learning_rate: float, epochs: int, lambda: float): f32[...] sync {
     let m = shape(X)[0]
     let n = shape(X)[1]
     let X_bias = concat<1>(X, ones::<f32>([m, 1]))
     let y_col = reshape<[m, 1]>(((y * 2.0) - 1.0))
     let w0 = zeros::<f32>([n + 1, 1])
 
-    func svm_epoch(epoch: int, weights: f32[..]): f32[..] sync {
+    func svm_epoch(epoch: int, weights: f32[...]): f32[...] sync {
         if (epoch >= epochs) then {
             return weights
         } else sync {
@@ -32,7 +32,7 @@ func svm_train(X: f32[..], y: f32[..], learning_rate: float, epochs: int, lambda
     return svm_epoch(0, w0)
 }
 
-func svm_predict(X: f32[..], model: f32[..]): f32[..] sync {
+func svm_predict(X: f32[...], model: f32[...]): f32[...] sync {
     let n = shape(X)[0]
     let X_bias = concat<1>(X, ones::<f32>([n, 1]))
     let predictions = matmul(X_bias, model)

@@ -953,9 +953,15 @@ void ParserImpl::parseTagRef() {
 void ParserImpl::parseWhenClause() {
     const size_t m = mark();
     bump(); // `when`
-    if (cur_ == TK::DotDot) {
+    if (cur_ == TK::DotDot || cur_ == TK::Ellipsis) {
+        // A pack predicate is written `...` (design principles 5.6); `..` is an interval, a
+        // composition or a stream type. The `..` is reported here, naming the spelling, and then
+        // read on as the pack it was meant to be, so one mistake is one sentence.
+        if (cur_ == TK::DotDot) {
+            unexpected({e(TK::Ellipsis)});
+        }
         const size_t cm = mark();
-        bump(); // `..`
+        bump();
         if (!panic_) {
             parseExpr();
         }
@@ -1033,9 +1039,14 @@ void ParserImpl::parseTypeParams() {
     bump(); // `<`
     {
         Scope scope(*this, false);
-        // `::<` at the end of the text: the name is reported, not read.
-        bool pack = cur_ == TK::DotDot;
+        // `::<` at the end of the text: the name is reported, not read. A pack is written `...`
+        // (design principles 5.6) and a `..` here is reported as that spelling, then read on as
+        // the pack it was meant to be.
+        bool pack = cur_ == TK::DotDot || cur_ == TK::Ellipsis;
         if (pack) {
+            if (cur_ == TK::DotDot) {
+                unexpected({e(TK::Ellipsis)});
+            }
             bump();
         }
         {
@@ -1046,9 +1057,12 @@ void ParserImpl::parseTypeParams() {
             }
         }
         while (!panic_ && eat(TK::Comma) &&
-               (cur_ == TK::Identifier || cur_ == TK::DotDot)) {
-            const bool packAgain = cur_ == TK::DotDot;
+               (cur_ == TK::Identifier || cur_ == TK::DotDot || cur_ == TK::Ellipsis)) {
+            const bool packAgain = cur_ == TK::DotDot || cur_ == TK::Ellipsis;
             if (packAgain) {
+                if (cur_ == TK::DotDot) {
+                    unexpected({e(TK::Ellipsis)});
+                }
                 bump();
             }
             const size_t nm = mark();
@@ -1392,9 +1406,15 @@ void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas, bool angle
         close(m, NK::TupleParam);
         return;
     }
-    if (allowRest && cur_ == TK::DotDot) {
+    if (allowRest && (cur_ == TK::DotDot || cur_ == TK::Ellipsis)) {
+        // A parameter pack is written `...` (design principles 5.6); `..` is an interval, a
+        // composition or a stream type. Reported here, naming the spelling, and read on as the
+        // pack it was meant to be, so one mistake is one sentence.
+        if (cur_ == TK::DotDot) {
+            unexpected({e(TK::Ellipsis)});
+        }
         bump();
-        // `..ts` (and `..P` in a function type) is a name; `..ParamsOf<F>` is a type expression,
+        // `...ts` (and `...P` in a function type) is a name; `...ParamsOf<F>` is a type expression,
         // a pack written out in a function type's parameter list.
         const bool plain =
             cur_ == TK::Identifier &&
@@ -1464,7 +1484,8 @@ void ParserImpl::parseParentParams(bool allowRest, bool allowConstas) {
         Scope scope(*this, false);
         if (cur_ == TK::Identifier || cur_ == TK::KwVar || cur_ == TK::KwConst ||
             (lambdaParams_ && cur_ == TK::LParen) ||
-            (allowRest && cur_ == TK::DotDot) || (allowConstas && cur_ == TK::KwConstas)) {
+            (allowRest && (cur_ == TK::DotDot || cur_ == TK::Ellipsis)) ||
+            (allowConstas && cur_ == TK::KwConstas)) {
             parsePairedParams(TK::RParen, allowRest, allowConstas);
         } else if (cur_ != TK::RParen && cur_ != TK::Comma) {
             unexpected(

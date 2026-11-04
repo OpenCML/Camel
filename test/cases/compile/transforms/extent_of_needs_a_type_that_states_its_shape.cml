@@ -7,7 +7,7 @@
 // (`transpose(pick)` on `x: float[3]`).
 //
 // That the answer is a fact of the type is also why a type that writes no shape has no answer:
-// `float[]` (= `float[?]`) states one dimension and leaves its length open, and `float[..]` states
+// `float[]` (= `float[?]`) states one dimension and leaves its length open, and `float[...]` states
 // neither the rank nor a length, so neither tells the function what to answer. Nothing here is a
 // value that was not computed or a shape nobody wrote down: the call asks a question the type does
 // not answer, and it is refused where it is instantiated, which is where the type is in hand.

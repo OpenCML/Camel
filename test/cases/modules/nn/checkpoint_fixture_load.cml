@@ -7,7 +7,7 @@ import { load_tree } from ckpt
 import { sha256 } from hash
 
 type Record = {
-    w: f32[..], odd: int[..], empty: f32[..],
+    w: f32[...], odd: int[...], empty: f32[...],
     note: string, cursor: (int, float), enabled: bool
 }
 

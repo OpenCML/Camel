@@ -12,7 +12,7 @@
 // literals; what differs is which of the two positions the value sits in.
 //
 // A tensor model cannot be written on this path yet, and that is a boundary rather than a missing
-// test: `vjp` of a function of `float[..]` stops before the walk (a captured array operand has no
+// test: `vjp` of a function of `float[...]` stops before the walk (a captured array operand has no
 // tangent pair; `sum` over an array, `softmax<1>` and `mean` at an axis stop the transpose), and the
 // library's `grad` is declared for `(x: float) => float` only. `docs/handover/reports/
 // 2026-11-03-library-vjp-walls.cn.md` names the four places in the order the path meets them.

@@ -76,12 +76,16 @@ void ParserImpl::parseType() {
         return;
     }
     const size_t m = mark();
-    if (cur_ == TK::DotDot) {
-        // `..E`: a type pack expanded, one member for each member of the packs `E` uses (design
+    if (cur_ == TK::DotDot || cur_ == TK::Ellipsis) {
+        // `...E`: a type pack expanded, one member for each member of the packs `E` uses (design
         // principles 5.6). It is read where a type is, and the builder says where it may stand.
-        // The body is a whole type expression, so `..A[]` is the expansion of the array type
-        // `A[]` and not the array of `..A`: an expansion is one type, and an array of it is
-        // written `(..A)[]` or after a parenthesised body.
+        // The body is a whole type expression, so `...A[]` is the expansion of the array type
+        // `A[]` and not the array of `...A`: an expansion is one type, and an array of it is
+        // written `(...A)[]` or after a parenthesised body. A `..` here is reported as the
+        // spelling `...` and read on as the expansion it was meant to be.
+        if (cur_ == TK::DotDot) {
+            unexpected({e(TK::Ellipsis)});
+        }
         bump();
         parseType();
         return close(m, NK::PackType);
@@ -154,7 +158,13 @@ void ParserImpl::parseArrayDim() {
             while (!panic_) {
                 if (cur_ == TK::Question) {
                     bump();
-                } else if (cur_ == TK::DotDot) {
+                } else if (cur_ == TK::DotDot || cur_ == TK::Ellipsis) {
+                    // The trailing pack of a dimension list is written `...` -- `T[...]` for any
+                    // rank, `f32[n, ...rest]` for the rest of them (design principles 5.4). A `..`
+                    // is reported as that spelling and read on, so one mistake is one sentence.
+                    if (cur_ == TK::DotDot) {
+                        unexpected({e(TK::Ellipsis)});
+                    }
                     bump();
                     if (cur_ == TK::Identifier) {
                         parseIdentDef();
@@ -305,7 +315,10 @@ void ParserImpl::parsePrimaryType() {
              (t1 == TK::RParen && peek(2) == TK::FatArrow) ||
              (t1 == TK::DotDot && peek(2) == TK::Identifier && peek(3) == TK::RParen &&
               peek(4) == TK::FatArrow) ||
+             (t1 == TK::Ellipsis && peek(2) == TK::Identifier && peek(3) == TK::RParen &&
+              peek(4) == TK::FatArrow) ||
              (t1 == TK::DotDot && parenClosesBeforeArrow()) ||
+             (t1 == TK::Ellipsis && parenClosesBeforeArrow()) ||
              (t1 == TK::Comma && peek(2) == TK::RParen && peek(3) == TK::FatArrow))) {
             return parseFuncType();
         }
@@ -316,8 +329,8 @@ void ParserImpl::parsePrimaryType() {
             Scope scope(*this, false);
             if (cur_ != TK::RParen && cur_ != TK::Comma) {
                 const size_t lm = mark();
-                // `(..E)` is a tuple of the members `E` stands for, not a parenthesised type.
-                const bool pack = cur_ == TK::DotDot;
+                // `(...E)` is a tuple of the members `E` stands for, not a parenthesised type.
+                const bool pack = cur_ == TK::DotDot || cur_ == TK::Ellipsis;
                 parseType();
                 if (cur_ == TK::RParen && !pack) {
                     parenthesized = true;

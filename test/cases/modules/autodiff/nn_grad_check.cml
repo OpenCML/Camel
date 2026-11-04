@@ -8,7 +8,7 @@ import { sum, reshape, tanh } from tensor
 import { next_key, seed, uniform } from random
 import { conv2d, max_pool2d, avg_pool2d, embedding, softmax_cross_entropy } from nn
 
-func check(name: string, f: <x: f32[..]> () => float, df: <x: f32[..]> () => f32[..], x: f32[..], v: f32[..]): int sync {
+func check(name: string, f: <x: f32[...]> () => float, df: <x: f32[...]> () => f32[...], x: f32[...], v: f32[...]): int sync {
     let h = 0.001
     let analytic = float(sum(df<x>() * v))
     let numeric = (f<x + v * h>() - f<x - v * h>()) / (2.0 * h)
@@ -20,27 +20,27 @@ func check(name: string, f: <x: f32[..]> () => float, df: <x: f32[..]> () => f32
     return 0
 }
 
-func image(): f32[..] {
+func image(): f32[...] {
     return reshape<[1, 2, 4, 4]>([0.1, -0.4, 0.8, 0.3, -0.9, 0.5, 0.2, -0.1, 0.7, -0.3, 0.6, 0.4, -0.2, 0.9, -0.6, 0.1, 0.3, -0.8, 0.5, 0.2, -0.4, 0.6, 0.1, -0.7, 0.8, -0.5, 0.3, 0.9, -0.1, 0.2, 0.4, -0.6] as f32[])
 }
-func kernel(): f32[..] {
+func kernel(): f32[...] {
     return reshape<[3, 2, 2, 2]>([0.5, -0.3, 0.2, 0.7, -0.4, 0.1, 0.6, -0.2, 0.3, 0.8, -0.5, 0.4, 0.2, -0.6, 0.9, 0.1, -0.7, 0.3, 0.5, 0.2, -0.1, 0.4, -0.3, 0.6] as f32[])
 }
-func bias(): f32[..] { return [0.1, -0.2, 0.3] as f32[] }
-func weights(): f32[..] { return reshape<[1, 3, 3, 3]>([0.3, -1.2, 0.5, 2.0, 1.1, 0.4, -0.7, 0.2, -0.5, 0.9, 1.3, -0.1, 0.8, -0.6, 0.2, 0.4, 1.0, -0.3, 0.6, 0.7, -0.9, 0.5, 0.1, -0.4, 0.3, 0.2, -0.8] as f32[]) }
-func labels(): f32[..] { return [[0.0, 0.0, 1.0, 0.0], [1.0, 0.0, 0.0, 0.0], [0.0, 0.5, 0.0, 0.5]] as f32[3, 4] }
+func bias(): f32[...] { return [0.1, -0.2, 0.3] as f32[] }
+func weights(): f32[...] { return reshape<[1, 3, 3, 3]>([0.3, -1.2, 0.5, 2.0, 1.1, 0.4, -0.7, 0.2, -0.5, 0.9, 1.3, -0.1, 0.8, -0.6, 0.2, 0.4, 1.0, -0.3, 0.6, 0.7, -0.9, 0.5, 0.1, -0.4, 0.3, 0.2, -0.8] as f32[]) }
+func labels(): f32[...] { return [[0.0, 0.0, 1.0, 0.0], [1.0, 0.0, 0.0, 0.0], [0.0, 0.5, 0.0, 0.5]] as f32[3, 4] }
 
-with <x: f32[..]>
+with <x: f32[...]>
 func conv_input(): float { return float(sum(tanh(conv2d(x, kernel(), bias())) * weights())) }
-with <k: f32[..]>
+with <k: f32[...]>
 func conv_kernel(): float { return float(sum(tanh(conv2d(image(), k, bias())) * weights())) }
-with <b: f32[..]>
+with <b: f32[...]>
 func conv_bias(): float { return float(sum(tanh(conv2d(image(), kernel(), b)) * weights())) }
-with <x: f32[..]>
+with <x: f32[...]>
 func pools(): float { return float(sum(tanh(max_pool2d(x, 2)))) + float(sum(tanh(avg_pool2d(x, 2, 1)))) }
-with <t: f32[..]>
+with <t: f32[...]>
 func embed(): float { return float(sum(tanh(embedding(t, int([1, 3, 1, 0] as int[]))))) }
-with <z: f32[..]>
+with <z: f32[...]>
 func xent(): float { return softmax_cross_entropy(z, labels()) }
 
 func main(): int sync {

@@ -4,7 +4,7 @@
  * a scalar derived from the input (t[1] * 2.0) is used inside tensor math.
  *
  * `gate` reads one number out of its argument, so it is written at the type that says which
- * numbers the argument holds: `f32[..]`, the generic spelling of `f32[..]`, and the read
+ * numbers the argument holds: `f32[...]`, the generic spelling of `f32[...]`, and the read
  * `t[0]` then has the element
  * type the comparison needs.
  */
@@ -13,7 +13,7 @@ import { reshape, relu } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func gate(t: f32[..]): f32[..] {
+func gate(t: f32[...]): f32[...] {
     return if t[0] > 0.5 then relu(t) * 2.0 else t * (t[1] * 2.0) - 1.0
 }
 
@@ -21,7 +21,7 @@ func main(): int sync {
     let x = reshape<[4]>([1.0, -2.0, 3.0, 0.5] as f32[])
     let y = gate(x)
     'camel gate={} {} {} {}'->format<y[0], y[1], y[2], y[3]>->println
-    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((t: f32[..]): f32[..] => gate(t), x)
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((t: f32[...]): f32[...] => gate(t), x)
     println('exported')
     return 0
 }

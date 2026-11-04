@@ -11,7 +11,7 @@ func apply(f: (a: float, b: float) => float): float {
 }
 
 func spread(): float {
-    return apply((..xs) => add(..xs))
+    return apply((...xs) => add(...xs))
 }
 
 func main(): int sync {

@@ -16,7 +16,7 @@ func tag::<T>(): int {
     }
 }
 
-func tags(..ts): int {
+func tags(...ts): int {
     return static loop acc = 0 for x in ts do acc + tag::<typeof(x)>()
 }
 

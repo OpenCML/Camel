@@ -4,18 +4,18 @@ import { with_grad } from autodiff
 import { source, run_preferred_resident, download } from tiles
 import { exit } from process
 
-type Pair = { a: f32[..], b: f32[..] }
-func pair(a: f32[..], b: f32[..]): Pair { return { a: a, b: b } }
-func product(a: f32[..], b: f32[..]): f32[..] { return a @ b }
+type Pair = { a: f32[...], b: f32[...] }
+func pair(a: f32[...], b: f32[...]): Pair { return { a: a, b: b } }
+func product(a: f32[...], b: f32[...]): f32[...] { return a @ b }
 with <w: Pair>
-func loss(target: f32[..]): float {
+func loss(target: f32[...]): float {
     let e = w.a @ w.b - target
     return float(mean(e * e))
 }
-func derivative(w: Pair, target: f32[..]): (float, Pair) {
+func derivative(w: Pair, target: f32[...]): (float, Pair) {
     return with_grad(loss)<w>(target)
 }
-func check(name: string, a: f32[..], b: f32[..], target: f32[..], run_gpu: bool): int sync {
+func check(name: string, a: f32[...], b: f32[...], target: f32[...], run_gpu: bool): int sync {
     let w = pair(a, b)
     let code = source<derivative>((w, target))
     if len(code) == 0 then sync { exit(1) }

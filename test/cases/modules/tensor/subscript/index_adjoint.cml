@@ -40,12 +40,12 @@ func columnTake(m: f32[2, 2], idx: int[2]): float {
     return table(m[:, idx])
 }
 
-with <x: f32[..]>
+with <x: f32[...]>
 func columnSum(): float {
     return firstColumn(reshape<[2, 2]>(x))
 }
 
-with <x: f32[..]>
+with <x: f32[...]>
 func repeatedSum(): float {
     return columnTake(reshape<[2, 2]>(x), [1, 1])
 }

@@ -1,23 +1,23 @@
 /**
  * Aggregates of precisely typed tensors are accepted where the declared type
- * uses an open-rank array (`f64[..]`): struct fields, tuple elements, and array elements are
+ * uses an open-rank array (`f64[...]`): struct fields, tuple elements, and array elements are
  * checked covariantly (they are immutable).
  */
 
 import { reshape, sum } from tensor
 
-type Layer = { w: f64[..], b: f64[..] }
+type Layer = { w: f64[...], b: f64[...] }
 
 with <l: Layer>
-func apply(x: f64[..]): f64[..] {
+func apply(x: f64[...]): f64[...] {
     return x @ l.w + l.b
 }
 
-func total(ts: f64[..][]): float {
+func total(ts: f64[...][]): float {
     return float(sum(ts[0])) + float(sum(ts[1]))
 }
 
-func first(pair: (f64[..], f64[..])): f64[..] {
+func first(pair: (f64[...], f64[...])): f64[...] {
     return pair.0
 }
 

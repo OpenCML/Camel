@@ -8,7 +8,7 @@
 // it) -- so `transpose(lin)` captures x = 3, y = 2 and the products, and nothing crosses a parameter.
 //
 // The two leading arguments are the tangent values, which the type law still asks for
-// (`Transpose<F> = (..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)`, unchanged by
+// (`Transpose<F> = (...ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (...Tangent<ParamsOf<F>>)`, unchanged by
 // this step). They are passed as **zeros on purpose**: a coefficient that came from a parameter would
 // read 0 there, and the answer would be (0, 0). It is (12, 9) -- 2xy and x^2 for f(x, y) = x*x*y at
 // x = 3, y = 2 -- which is the statement that the values the transposition needs were read out of the

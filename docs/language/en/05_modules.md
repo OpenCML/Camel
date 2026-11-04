@@ -1,6 +1,6 @@
 # 5. Modules
 
-English | [中文](../05_modules.md)
+English | [中文](.../05_modules.md)
 
 Every source file is a module. This chapter describes a module's name, imports, exports and namespaces.
 
@@ -65,7 +65,7 @@ Names that can be used without an import (global built-ins): `print`, `println`,
 | `tensor`, `nn`, `autodiff`, `onnx` | Tensors, network layers and optimisers, gradients, ONNX export; the row gather `take`, `one_hot`, and `softmax_cross_entropy` overloaded on the target's type (one-hot rows or integer class labels) |
 | `python` | Embedded Python (must be enabled at build time) |
 
-For every function of the modules in the table other than `tensor`, `nn`, `autodiff`, `onnx` and `python`, see the [standard library reference](../../stdlib-reference.md); for the conventions see [5.5](#55-standard-library). Tensor row gathering, class labels and keyed random are in [43_rows_labels_and_keys.md](../../technical/43_rows_labels_and_keys.md); array indexing and slicing are in [design principles 5.4](../../design-principles.en.md).
+For every function of the modules in the table other than `tensor`, `nn`, `autodiff`, `onnx` and `python`, see the [standard library reference](.../../stdlib-reference.md); for the conventions see [5.5](#55-standard-library). Tensor row gathering, class labels and keyed random are in [43_rows_labels_and_keys.md](.../../technical/43_rows_labels_and_keys.md); array indexing and slicing are in [design principles 5.4](.../../design-principles.en.md).
 
 ## 5.3 Exports
 
@@ -227,7 +227,7 @@ func f(): int {
 
 ## 5.5 Standard library
 
-For the functions each module exports (signature, whether it is pure, behaviour on failure, examples) see the [standard library reference](../../stdlib-reference.md), which is generated from `stdlib/signatures/*.cml` and the libraries written in Camel (`stdlib/*.cml`). Conventions:
+For the functions each module exports (signature, whether it is pure, behaviour on failure, examples) see the [standard library reference](.../../stdlib-reference.md), which is generated from `stdlib/signatures/*.cml` and the libraries written in Camel (`stdlib/*.cml`). Conventions:
 
 - The value a function works on is its ordinary parameter and the values that configure the call are `with` parameters, so calls can be chained:
 

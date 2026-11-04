@@ -1,11 +1,11 @@
-// `f64[..]` holds f64. 16777217.0 is exact in f64 and is 16777216.0 in f32, so the printed
+// `f64[...]` holds f64. 16777217.0 is exact in f64 and is 16777216.0 in f32, so the printed
 // values, the 8-byte elements and the round trip through `to_bytes`/`from_bytes` are the evidence
 // that no creation, arithmetic, reduction or conversion narrows the element type.
 
 import { sum, mean, to_bytes, from_bytes } from tensor
 import { to_array } from bytes
 
-func scaled(x: f64[..], by: f64): f64[..] {
+func scaled(x: f64[...], by: f64): f64[...] {
     return (x * by)
 }
 
@@ -18,7 +18,7 @@ func main(): int sync {
     println(mean(spread))
     println(len(to_bytes(t)))
     println(to_array(to_bytes(t)))
-    let back: f64[..] = from_bytes(to_bytes(t), [1])
+    let back: f64[...] = from_bytes(to_bytes(t), [1])
     println(sum(back))
     return 0
 }

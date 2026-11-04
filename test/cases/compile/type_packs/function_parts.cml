@@ -7,9 +7,9 @@ type Weighted = <w: float, k: int> (a: int) => bool
 type Unary = (a: int) => string
 
 func main(): int sync {
-    println(is_same::<(..ParamsOf<Binary>), (int, string)>())
-    println(is_same::<(..WithOf<Weighted>), (float, int)>())
+    println(is_same::<(...ParamsOf<Binary>), (int, string)>())
+    println(is_same::<(...WithOf<Weighted>), (float, int)>())
     println(is_same::<ResultOf<Unary>, string>())
-    println(is_same::<(..ParamsOf<Weighted>), (int)>())
+    println(is_same::<(...ParamsOf<Weighted>), (int)>())
     return 0
 }

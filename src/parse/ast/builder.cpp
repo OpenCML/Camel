@@ -2695,7 +2695,8 @@ parameter writes its type; one left out stays a pair with no type child, so GCT 
 */
 Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
     ENTER("KeyParamPair");
-    const bool isRest   = static_cast<bool>(context->tok(TK::DotDot));
+    const bool isRest =
+        static_cast<bool>(context->tok(TK::Ellipsis)) || static_cast<bool>(context->tok(TK::DotDot));
     const bool isConstas = context->has(TK::KwConstas);
     bool isVar        = false;
     if (context->tok(TK::KwVar)) {
@@ -5192,7 +5193,7 @@ DimGroup Builder::dimGroupOf(cst::ArrayDim context) {
                 group.extents.push_back(nullptr);
                 ++group.itemCount;
                 packNameNext = false;
-            } else if (child.token().is(TK::DotDot)) {
+            } else if (child.token().is(TK::Ellipsis) || child.token().is(TK::DotDot)) {
                 if (group.pack != DimPack::None) {
                     group.packRepeated = true;
                 } else {

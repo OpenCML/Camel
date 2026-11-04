@@ -3,7 +3,7 @@
 // the point -- the shape is refused because a lambda's rest parameters are not built, and the
 // report says that rather than a compiler error saying it.
 func main(): int {
-    let slope = (..xs: float[..]) => 0.0
+    let slope = (...xs: float[...]) => 0.0
     let _ = slope
     return 0
 }

@@ -8,7 +8,7 @@
 import { reshape, sum } from tensor
 import { grad } from autodiff
 
-with <m: (f32[..], string)>
+with <m: (f32[...], string)>
 func plain(): float {
     let p = m.0
     return sum(p)

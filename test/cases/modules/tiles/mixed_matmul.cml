@@ -4,10 +4,10 @@ import { inspect, run_preferred_resident, download } from tiles
 import { exit } from process
 
 #[reassociate, change_precision, finite_math]
-func mixed(a: f32[..], b: f32[..]): f32[..] { return a @ b }
-func strict(a: f32[..], b: f32[..]): f32[..] { return a @ b }
+func mixed(a: f32[...], b: f32[...]): f32[...] { return a @ b }
+func strict(a: f32[...], b: f32[...]): f32[...] { return a @ b }
 #[change_precision]
-func incomplete(a: f32[..], b: f32[..]): f32[..] { return a @ b }
+func incomplete(a: f32[...], b: f32[...]): f32[...] { return a @ b }
 
 func main(run_gpu: bool): int sync {
     set_num_threads(1)

@@ -1,4 +1,4 @@
-// A lambda's parameter list takes a rest parameter: `(..xs) => body` parses. The parameters it
+// A lambda's parameter list takes a rest parameter: `(...xs) => body` parses. The parameters it
 // stands for are the ones the function type the lambda stands in would give, and the front end does
 // not build those yet, so the program is refused by name -- at the shape, with a position -- rather
 // than by a compiler error.
@@ -6,7 +6,7 @@
 // The day the parameters are built, this case is the one whose expectation moves: it goes from a
 // diagnostic to a program that runs.
 func main(): int {
-    let slope = (..xs) => 0.0
+    let slope = (...xs) => 0.0
     let _ = slope
     return 0
 }

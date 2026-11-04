@@ -16,18 +16,18 @@
 
 import { mean, reshape, sum, where } from tensor
 
-func count_hits(x: f32[..], y: f32[..]): float {
+func count_hits(x: f32[...], y: f32[...]): float {
     let hits = (x > 0.0) === (y > 0.5)
-    let hit: float[..] = float(hits)
+    let hit: float[...] = float(hits)
     return sum(hit)
 }
 
-func count_hits_selected(x: f32[..], y: f32[..]): float {
+func count_hits_selected(x: f32[...], y: f32[...]): float {
     let hits = (x > 0.0) === (y > 0.5)
     return sum(where(hits, 1.0, 0.0))
 }
 
-func agreement(x: f32[..], y: f32[..]): float {
+func agreement(x: f32[...], y: f32[...]): float {
     return float(mean(f32((x > 0.0) === (y > 0.5))))
 }
 

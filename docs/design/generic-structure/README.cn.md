@@ -2,7 +2,7 @@
 
 # 泛型按结构展开：设计稿（待作者讨论）
 
-状态：提案，未实现。服务于 [设计原则 5.5](../../design-principles.cn.md) 第一条：`tree_map` 这类"形状由类型决定、编译期展开"的操作用泛型写在库里，不做编译器内建；为此泛型要能在编译期按结构体、元组的字段递归。
+状态：提案，未实现。服务于 [设计原则 5.5](.../../design-principles.cn.md) 第一条：`tree_map` 这类"形状由类型决定、编译期展开"的操作用泛型写在库里，不做编译器内建；为此泛型要能在编译期按结构体、元组的字段递归。
 
 本稿里的 Camel 代码都是**示意**：语法尚未定，只用来比较方案。设计原则第 15 节"尚未决定的问题"（类型表达式语言、`typeof`、类型函数不终止时的处理）只引用，不替作者决定。
 
@@ -54,7 +54,7 @@
 1. `match type T { case struct => …; case tuple => …; case _ => … }`：按类型的**形状**在实例化时选一条分支，**没被选中的分支不建图、不做类型检查**（相当于 C++ 的 `if constexpr`）。`struct`、`tuple` 只匹配 R3 定义的内部节点，所以 `T?`、`T!`、单元格落在 `case _`。一个 case 也可以写类型名（`case int`、`case MyStruct`、`case T`），按类型的**身份**精确选一条分支（语言文档 6.8.3）。
 2. `static for n, F in fields T`：把字段表展开，每个字段一份函数体。`n` 是编译期常量（结构体是字段名，元组是下标的十进制字面，两者都能直接当路径的一段），`F` 是字段类型。`n`、`F` 的绑定写法就是位置本身（5.4、5.5），不引入新的绑定机制。
 3. 编译期字段访问 `x.[n]`，以及"推导式"构造 `{ static for … => n: e }`（结构体）与 `( static for … => e )`（元组）：生成同形的新值，字段类型由 `e` 的类型得到。
-4. 变长参数 `..ts` 与展开调用 `f(t, ..ts)`：`ts` 是元数在编译期已知的元组，`static for j in indices ts` 遍历它。解决 R6。
+4. 变长参数 `..ts` 与展开调用 `f(t, ...ts)`：`ts` 是元数在编译期已知的元组，`static for j in indices ts` 遍历它。解决 R6。
 
 另外，带 `static` 构造的泛型函数**可以省略返回类型**，由实例化后的函数体推出（见 3.1.4）。
 
@@ -62,13 +62,13 @@
 
 ```camel
 // 回调 f 作为 with 参数；t 决定叶子边界；ts 是其余同形的树（元数可以是 0）
-export func tree_map::<T>(t: T, ..ts) {
+export func tree_map::<T>(t: T, ...ts) {
     return match type T {
         case struct => { static for n, F in fields T =>
-                             n: tree_map(t.[n], ..column(n, ts)) }
+                             n: tree_map(t.[n], ...column(n, ts)) }
         case tuple  => ( static for n, F in fields T =>
-                             tree_map(t.[n], ..column(n, ts)) )
-        case _      => f(t, ..ts)
+                             tree_map(t.[n], ...column(n, ts)) )
+        case _      => f(t, ...ts)
     }
 }
 
@@ -80,7 +80,7 @@ func column(constas n, ts) {
 
 要点：
 
-- 对 `{ w: Tensor<f32>, b: Tensor<f32> }`，实例展开成 `{ w: f(t.w, ts.0.w), b: f(t.b, ts.0.b) }`；`f` 是泛型函数或重载集合时，`f(t, ..ts)` 就是一次普通调用，按此处实参类型选择、实例化，和现在 `tree.cpp` 里的 `invoke` 一致。
+- 对 `{ w: Tensor<f32>, b: Tensor<f32> }`，实例展开成 `{ w: f(t.w, ts.0.w), b: f(t.b, ts.0.b) }`；`f` 是泛型函数或重载集合时，`f(t, ...ts)` 就是一次普通调用，按此处实参类型选择、实例化，和现在 `tree.cpp` 里的 `invoke` 一致。
 - 同一个类型只实例化一次：12 个相同的 `Block` 组成的元组，`Block` 的实例只有一份，元组那一层展开成 12 次对它的调用。
 - 其余树与第一棵形状不同时：缺字段由 `ts.[j].[n]` 报"类型 X 没有字段 n"；**多出**的字段不会被发现。库里另有一个同样用 `match type` 写的 `same_shape(a, b)`，`tree_map` 开头调用它（略，约 12 行）。
 
@@ -172,22 +172,22 @@ func type_spec::<T>(): string { … }
 
 借鉴：GHC.Generics、Rust 里为元组逐元数 `impl`、`HList`。
 
-不引入循环，只引入"类型上的模式匹配 + 剩余部分"：`match type` 的模式可以写 `(H, ..R)` 与 `{ n: H, ..R }`，值上对应 `let (h, ..r) = t` 与 `{ n: x, ..rest }`。
+不引入循环，只引入"类型上的模式匹配 + 剩余部分"：`match type` 的模式可以写 `(H, ...R)` 与 `{ n: H, ...R }`，值上对应 `let (h, ...r) = t` 与 `{ n: x, ...rest }`。
 
 ```camel
-export func tree_map::<T>(t: T, ..ts) {
+export func tree_map::<T>(t: T, ...ts) {
     return match type T {
         case ()                    => ()
-        case (H, ..R) => {
-            let (h, ..r) = t
-            return (tree_map(h, ..heads(ts)), ..tree_map(r, ..tails(ts)))
+        case (H, ...R) => {
+            let (h, ...r) = t
+            return (tree_map(h, ...heads(ts)), ...tree_map(r, ...tails(ts)))
         }
         case {}                    => {}
-        case { n: H, ..R } => {
-            let { n: h, ..r } = t
-            return { n: tree_map(h, ..heads(ts)), ..tree_map(r, ..tails(ts)) }
+        case { n: H, ...R } => {
+            let { n: h, ...r } = t
+            return { n: tree_map(h, ...heads(ts)), ...tree_map(r, ...tails(ts)) }
         }
-        case _                     => f(t, ..ts)
+        case _                     => f(t, ...ts)
     }
 }
 ```
@@ -207,7 +207,7 @@ export func tree_map::<T>(t: T, ..ts) {
 
 ```camel
 trait Tree {
-    func tree_map(self, ..others: Self): Self'    // 结果类型随 f 变化，需要关联类型
+    func tree_map(self, ...others: Self): Self'    // 结果类型随 f 变化，需要关联类型
 }
 impl Tree for Tensor<f32> { … }
 derive Tree for struct, tuple                       // 谁来实现 derive？
@@ -295,9 +295,9 @@ type Device<T> = match type T {
 建议 A（编译期字段展开）。若倾向 B，需要先定类型层的余部写法（`..R`）和对 100 字段结构体 100 个实例的接受程度；若倾向 C，需要同时承诺 `trait` 这个新的语言特性。
 
 **2. 带静态构造的泛型函数可以省略返回类型，由实例化后的函数体推出吗？**
-例：`func tree_map(t: T, ..ts) { return match type T { … } }`，不写 `: …`。返回类型依赖回调的返回类型，用户写不出（没有类型层的"调用结果"）。建议：只允许泛型函数省略，且只有函数体含 `match type`/`static` 时；递归回到正在实例化的同一个键时报错。
+例：`func tree_map(t: T, ...ts) { return match type T { … } }`，不写 `: …`。返回类型依赖回调的返回类型，用户写不出（没有类型层的"调用结果"）。建议：只允许泛型函数省略，且只有函数体含 `match type`/`static` 时；递归回到正在实例化的同一个键时报错。
 
-**3. 同时遍历多棵树，用变长参数 `..ts` 与展开调用 `f(t, ..ts)`，还是为 1 到 N 棵树分别写重载？**
+**3. 同时遍历多棵树，用变长参数 `..ts` 与展开调用 `f(t, ...ts)`，还是为 1 到 N 棵树分别写重载？**
 例：`tree_map<adam_leaf>(p, g, m, v)`。建议：变长，`..` 绑定一个元数在编译期已知的元组，元数 0 合法；不引入运行时变长。
 
 **4. 静态构造的拼写。**
@@ -355,7 +355,7 @@ Camel 的风险：5.5 定的是"实例化时检查函数体"，正是 C++ 的模
 
 C++ 的泛型函数体里，名字有的在定义处找、有的在实例化处按参数类型的命名空间找（ADL），结果随调用者导入了什么而变，是长年的坑。
 
-Camel 的风险：4.3 定了"用户写的更具体的重载优先"。`tree_map` 的叶子处 `f(t, ..ts)`、`==`、`print` 在实例化时按叶子类型选重载——**能看到哪些重载？** 只看 `tree` 模块自己导入的，还是也看调用者导入的，还是看叶子类型所在模块的？不定下来，同一段程序换个导入顺序就可能选到不同的重载。
+Camel 的风险：4.3 定了"用户写的更具体的重载优先"。`tree_map` 的叶子处 `f(t, ...ts)`、`==`、`print` 在实例化时按叶子类型选重载——**能看到哪些重载？** 只看 `tree` 模块自己导入的，还是也看调用者导入的，还是看叶子类型所在模块的？不定下来，同一段程序换个导入顺序就可能选到不同的重载。
 
 建议：**名字一律在定义处按词法查找；只有"对依赖类型变量的值做运算"这一类，额外在该类型声明所在的模块里找重载**（类型的作者为它的类型写的 `operator ==` 总能被找到，调用者导入了什么无关）。不看调用者的导入。这与模块系统已有的"按模块+名字绑定"一致。
 

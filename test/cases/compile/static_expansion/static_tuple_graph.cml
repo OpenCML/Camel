@@ -4,7 +4,7 @@
  * hand-written sum of the three arguments: no FILL for `ts` and no ACCS for its elements.
  */
 
-func sum(..ts): int {
+func sum(...ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 

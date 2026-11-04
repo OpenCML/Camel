@@ -1,10 +1,10 @@
 # Camel Language Reference
 
-English | [中文](../README.md)
+English | [中文](.../README.md)
 
-> The fundamental positioning of the language and its execution model are laid down by [the design principles](../../design-principles.en.md), which are normative; where this reference conflicts with them, they prevail.
+> The fundamental positioning of the language and its execution model are laid down by [the design principles](.../../design-principles.en.md), which are normative; where this reference conflicts with them, they prevail.
 
-This directory is the language reference of Camel, divided into chapters by topic. Every example in it has been run on the current implementation, and the `text` code blocks are real output. If you are new to Camel, read the [tutorial](../../tutorial/tutorial.en.md) first.
+This directory is the language reference of Camel, divided into chapters by topic. Every example in it has been run on the current implementation, and the `text` code blocks are real output. If you are new to Camel, read the [tutorial](.../../tutorial/tutorial.en.md) first.
 
 | Chapter | Document | Contents |
 |---|---|---|
@@ -20,7 +20,7 @@ This directory is the language reference of Camel, divided into chapters by topi
 
 ## Related documents
 
-- [Tutorial](../../tutorial/tutorial.en.md) and [examples](../../../examples/README.md)
-- [Command line](../../cli.md), [diagnostics catalogue](../../diagnostics.md)
-- [Technical documents](../../technical/README.md): compilation pipeline, the intermediate representation of the graph, runtime
+- [Tutorial](.../../tutorial/tutorial.en.md) and [examples](.../../../examples/README.md)
+- [Command line](.../../cli.md), [diagnostics catalogue](.../../diagnostics.md)
+- [Technical documents](.../../technical/README.md): compilation pipeline, the intermediate representation of the graph, runtime
 - Grammar: [8.5 The complete grammar](08_top_level_and_grammar.md#85-the-complete-grammar), generated from the production above each function of the parser (`src/parse/syntax/`); the token table is `include/camel/parse/syntax/token_kinds.def`

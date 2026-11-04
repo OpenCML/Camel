@@ -1,9 +1,9 @@
 /// A function with a body takes a pack the same way a declaration without one does: the rest
-/// parameter `..xs: ..A` binds `A` to the types of the arguments it takes, the result type is
-/// written over the pack, and `when ..is_array::<A>()` asks every member.
+/// parameter `..xs: ...A` binds `A` to the types of the arguments it takes, the result type is
+/// written over the pack, and `when ...is_array::<A>()` asks every member.
 import { ElementOf, is_array } from types
 
-func firsts::<..A>(..xs: ..A): (..ElementOf<A>) when ..is_array::<A>() {
+func firsts::<...A>(...xs: ...A): (...ElementOf<A>) when ...is_array::<A>() {
     return ( static for j in indices xs => xs.[j][0] )
 }
 

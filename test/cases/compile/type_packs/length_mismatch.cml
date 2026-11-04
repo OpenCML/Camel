@@ -3,7 +3,7 @@
 /// two of the second.
 import { ParamsOf, WithOf } from types
 
-type Mix<F> = (..(ParamsOf<F>, WithOf<F>))
+type Mix<F> = (...(ParamsOf<F>, WithOf<F>))
 type Weighted = <w: float, k: int> (a: int) => bool
 
 func f(x: Mix<Weighted>): int {

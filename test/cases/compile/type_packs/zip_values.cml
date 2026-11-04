@@ -1,4 +1,4 @@
-/// `zip` is a declaration of the prelude, `zip::<..A>(..xs: ..A): (..ElementOf<A>)[] when
+/// `zip` is a declaration of the prelude, `zip::<...A>(...xs: ...A): (...ElementOf<A>)[] when
 /// ..is_array::<A>()`: the pack `A` is the types of the arrays it is given, and the result is the
 /// array of tuples with one element type for each of them.
 func main(): int sync {

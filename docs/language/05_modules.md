@@ -65,7 +65,7 @@ func main(): int sync {
 | `tensor`、`nn`、`autodiff`、`onnx` | 张量、网络层与优化器、求梯度、ONNX 导出；取行 `take`、`one_hot`，按目标类型重载的 `softmax_cross_entropy`（独热分布或整数类标） |
 | `python` | 嵌入 Python（需要构建时启用） |
 
-除 `tensor`、`nn`、`autodiff`、`onnx` 与 `python` 之外，表中各模块的每个函数见 [标准库参考](../stdlib-reference.md)，约定见 [5.5](#55-标准库)。张量的取行、类标与键式随机见 [43_rows_labels_and_keys.md](../technical/43_rows_labels_and_keys.md)，数组的下标与切片规则见 [设计原则 5.4](../design-principles.cn.md)。
+除 `tensor`、`nn`、`autodiff`、`onnx` 与 `python` 之外，表中各模块的每个函数见 [标准库参考](.../stdlib-reference.md)，约定见 [5.5](#55-标准库)。张量的取行、类标与键式随机见 [43_rows_labels_and_keys.md](.../technical/43_rows_labels_and_keys.md)，数组的下标与切片规则见 [设计原则 5.4](.../design-principles.cn.md)。
 
 ## 5.3 导出
 
@@ -227,7 +227,7 @@ func f(): int {
 
 ## 5.5 标准库
 
-各模块导出的函数（签名、是否纯、失败时的行为、例子）见 [标准库参考](../stdlib-reference.md)，它由 `stdlib/signatures/*.cml` 与用 Camel 写的库（`stdlib/*.cml`）生成。约定：
+各模块导出的函数（签名、是否纯、失败时的行为、例子）见 [标准库参考](.../stdlib-reference.md)，它由 `stdlib/signatures/*.cml` 与用 Camel 写的库（`stdlib/*.cml`）生成。约定：
 
 - 函数要处理的值是它的普通形参，配置这次调用的值是 `with` 形参，因此可以链式书写：
 

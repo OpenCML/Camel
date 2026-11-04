@@ -1,6 +1,6 @@
 # 3. Data model
 
-English | [中文](../03_data_model.md)
+English | [中文](.../03_data_model.md)
 
 This chapter describes Camel's types and values: basic types, compound types, `let` and `var`, the types that may be null and may fail, maps and sets.
 
@@ -17,7 +17,7 @@ Every expression has a definite type at compile time; the graph contains only co
 | Complex | `c64`, `c128` | Single and double precision complex: a real and an imaginary floating-point part |
 | Boolean | `bool` | `true`, `false` |
 | String | `string` | Sequence of bytes, immutable |
-| Array | `T[]`, `T[4]`, `T[n]`, `T[..]` | Elements of the same type; the brackets hold dimensions: a constant, the unknown `?`, or a trailing pack `..s`; `T[][]` is a nested array, rank 2 is written `T[m, n]` |
+| Array | `T[]`, `T[4]`, `T[n]`, `T[...]` | Elements of the same type; the brackets hold dimensions: a constant, the unknown `?`, or a trailing pack `..s`; `T[][]` is a nested array, rank 2 is written `T[m, n]` |
 | Tuple | `(T1, T2, ...)` | By position, accessed with `.0`, `.1` |
 | Struct | `{ x: T1, y: T2 }`, or the name a `type` declares | By name, accessed with `.x`; `type Name = { ... }` declares a named type, see 3.3.3 |
 | Function | `(x: T) => R` | See [6.9](06_expressions.md#69-lambdas-and-function-types) |
@@ -32,7 +32,7 @@ There is no type `any`: after compilation every value has a definite type (desig
 
 Reading JSON: for a known shape use `json::decode_as::<T>(text)`, whose result is a `T!`; for an unknown shape use `json::decode(text)`, which gives a `Json!`: an error value `JsonParseError` when the text is not JSON, and `JsonTooDeep` when the document nests deeper than the limit (neither is a fault, design principles 11.2; the limit is 10000), otherwise a `Json`, whose type is definite and whose content is known only at run time; take parts out with `get`, `as_int`, `as_array` and the like, each of which gives a value of a definite type (null when there is none) and also takes a `Json?`, `Json!` or `Json!?` so that calls chain, as in `j->get<'server'>->get<'port'>->as_int ?? 8080`; an accessor of a `Json!` gives the two-layer result (`Json!?` and the like) with the error of the document passed on unchanged, taken apart with `??` and `!!`; `as_float` takes an integer too, and `get<index>` out of range gives `null` (the accessor design settled in 11.2).
 
-The `T` and the rest parameter `..rest` in the signatures of the standard library (as in `println: (x: T, ..rest) => T`) are how the declaration is written: a call is instantiated at the types of its arguments, and the graph holds concrete types only.
+The `T` and the rest parameter `..rest` in the signatures of the standard library (as in `println: (x: T, ...rest) => T`) are how the declaration is written: a call is instantiated at the types of its arguments, and the graph holds concrete types only.
 
 Use `type` to give a type a name, see [7.7](07_statements.md#77-type-declarations):
 
@@ -120,7 +120,7 @@ func main(): int sync {
   | `map`, `filter`, `reduce`, `foreach` | See [6.10](06_expressions.md#610-higher-order-operators) |
   | `xs->append<v>` | A **new array** with `v` at the end; `xs` is unchanged. To append to a variable write `xs = xs->append<v>` (see 3.7); to join two arrays use `concat(xs, ys)` |
 
-- More array functions are in the `array` module, which has to be imported (`import { reverse, sum } from array`): `reverse`, `take`, `drop`, `enumerate`, `flatten`, `unique`, `index_of`, `find`, `find_index`, `any`, `all`, `count`, `chunks`, `sum`, `mean`, `min`, `max`, `argmax`, `argmin`, `flat_map`, `sort_by`, `zip_with`; see the [standard library reference](../../stdlib-reference.md).
+- More array functions are in the `array` module, which has to be imported (`import { reverse, sum } from array`): `reverse`, `take`, `drop`, `enumerate`, `flatten`, `unique`, `index_of`, `find`, `find_index`, `any`, `all`, `count`, `chunks`, `sum`, `mean`, `min`, `max`, `argmax`, `argmin`, `flat_map`, `sort_by`, `zip_with`; see the [standard library reference](.../../stdlib-reference.md).
 
 ### 3.3.2 Tuples
 
@@ -186,7 +186,7 @@ A string is immutable text and is **always valid UTF-8**; length and subscripts 
 | `strs->join<sep>` | Joins an array of strings |
 | `s[i]` | The `i`-th code point; the result is a string containing just that one character; an out-of-range subscript is a fault |
 
-The remaining string functions are in the `str` module ([standard library reference](../../stdlib-reference.md)): `split`, `trim`, `to_upper`, `to_lower`, `replace`, `index_of` (positions in code points; a cut is the core's `s[a:b]`), `starts_with`, `ends_with`, `repeat`, `codepoints`, `from_codepoints`.
+The remaining string functions are in the `str` module ([standard library reference](.../../stdlib-reference.md)): `split`, `trim`, `to_upper`, `to_lower`, `replace`, `index_of` (positions in code points; a cut is the core's `s[a:b]`), `starts_with`, `ends_with`, `repeat`, `codepoints`, `from_codepoints`.
 
 ```cml
 import { split, trim, to_upper } from str
@@ -388,7 +388,7 @@ func main(): int sync {
 - When the value type is itself nullable (`Map<string, int?>`), the type of `m[k]` is just `int?`: a missing key and a `null` value cannot be told apart; use `has` where needed.
 - The coexistence of the three call forms; the print format; `json::decode_as` using a type argument to specify the target type of decoding.
 
-For the implementation and trade-offs see [technical document 31](../../technical/31_map_and_set.md).
+For the implementation and trade-offs see [technical document 31](.../../technical/31_map_and_set.md).
 
 ## 3.7 `let`, `var` and references
 

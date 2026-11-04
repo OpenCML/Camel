@@ -1,9 +1,9 @@
-// The printed form of an array type is the array spelling: `f32[..]` and `f32[2, 3]`. The
+// The printed form of an array type is the array spelling: `f32[...]` and `f32[2, 3]`. The
 // candidate list of a refused call is where the text is visible.
 import tensor
 
 
-func takes(a: f32[..], b: f32[2, 3]): int {
+func takes(a: f32[...], b: f32[2, 3]): int {
     return 0
 }
 

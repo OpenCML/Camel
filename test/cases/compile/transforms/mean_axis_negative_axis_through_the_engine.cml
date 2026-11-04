@@ -27,13 +27,13 @@ import { grad } from autodiff
 import { mean, sum } from tensor
 
 /// The last axis, written as `-1`.
-with <w: float[..]>
+with <w: float[...]>
 func last_axis(): float {
     return sum(mean<-1, true>(w))
 }
 
 /// The same lane of a rank-2 value, written as `1`.
-with <w: float[..]>
+with <w: float[...]>
 func named_axis(): float {
     return sum(mean<1, true>(w))
 }

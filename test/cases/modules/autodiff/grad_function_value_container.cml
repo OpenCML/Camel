@@ -2,10 +2,10 @@ import { reshape, sum, tanh } from tensor
 import { grad } from autodiff
 
 // Refused: the function called is read from a tuple.
-with <p: f64[..]>
+with <p: f64[...]>
 func loss(): float {
     let s = float(sum(p))
-    let fs = ((t: f64[..]): f64[..] => tanh(t * s), (t: f64[..]): f64[..] => t * s)
+    let fs = ((t: f64[...]): f64[...] => tanh(t * s), (t: f64[...]): f64[...] => t * s)
     let f = fs.0
     return float(sum(f(p)))
 }

@@ -8,7 +8,7 @@ import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func forward(x: float[..]): float[..] sync {
+func forward(x: float[...]): float[...] sync {
     var parts: float[] = []
     parts = parts->append<sum(x)>
     parts = parts->append<1.5>
@@ -18,5 +18,5 @@ func forward(x: float[..]): float[..] sync {
 func main(): void! sync {
     let x = reshape<[2, 2]>([1.0, -2.0, 3.0, 4.0])
     println(forward(x))
-    export_model<out: get_env('ONNX_OUT') ?? ''>((x: float[..]): float[..] => forward(x), x)
+    export_model<out: get_env('ONNX_OUT') ?? ''>((x: float[...]): float[...] => forward(x), x)
 }

@@ -3,17 +3,17 @@
  * signature, and `..(a, b)` / `..ts` is the last argument of a call.
  */
 
-func total(..ts): int {
+func total(...ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
-func forward(..ts): int {
-    return total(..ts)
+func forward(...ts): int {
+    return total(...ts)
 }
 
 func main(): int sync {
     println(total(1, 2, 3))
-    println(total(..(4, 5)))
+    println(total(...(4, 5)))
     println(forward(6, 7))
     return 0
 }

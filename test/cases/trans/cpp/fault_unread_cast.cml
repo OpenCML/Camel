@@ -9,8 +9,8 @@
  * The generated function keeps the call where it stands -- `rt::asShape(v1_open2, {3, 3},
  * "float[3, 3]", at_...);` -- and the report is the interpreter's, byte for byte.
  */
-func open2(v: float[2, 2]): float[..] {
-    return v as float[..]
+func open2(v: float[2, 2]): float[...] {
+    return v as float[...]
 }
 
 func main(): int sync {

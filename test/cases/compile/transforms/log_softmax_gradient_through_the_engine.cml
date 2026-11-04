@@ -23,7 +23,7 @@ import { grad } from autodiff
 import { log_softmax, sum } from tensor
 
 /// The differentiated value is the `with` parameter (design principles 9.9).
-with <x: float[..]>
+with <x: float[...]>
 func total(): float {
     return sum(log_softmax<0>(x))
 }
