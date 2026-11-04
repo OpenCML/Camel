@@ -1,0 +1,57 @@
+// `d(x ^ w)` through the library at a **constant** exponent: `^`'s pullback, and the same number
+// through the other spelling of the same power (`pow`).
+//
+// This case replaces `pow_gradient_refused_by_the_library.cml`, which pinned the refusal until
+// 2026-11-04. The tangent `pow_tangent` used to answer behind an `if dw == T(0)` guard, and a branch
+// on a tangent's value is a node the backward walk cannot turn around (`skip=condition`, then
+// `skip=call-no-transpose` naming the helper call). The author's ruling of 2026-11-04 took the guard
+// away and put the omission where it belongs, in the rule expansion: the term a structurally-zero
+// tangent multiplies is not built. So `^`'s linear half is two products of the operand's own
+// tangents, the walk has laws for both of them, and the pullback answers the engine's number.
+//
+// What is pinned, and why each line is here:
+//   - `caret jvp(-3.0)`: 9.0 and -6.0. The second number is the one the guard used to protect: the
+//     exponent's term is `x^w * log(x) * dw`, `log(-3.0)` is NaN, and a rule that *computed* that
+//     term would answer NaN for a term that is arithmetically nothing.
+//   - `REINTERP jvp rule=rulesets.jvp::jvp_pow omit=structurally-zero-tangent nodes=3
+//     uris=:op/mul_d,math:log_d,math:pow_d`: the expansion's own record of the three places it did
+//     **not** copy. That is the absence, not a value of zero -- the term's nodes are not in the
+//     graph, which is why the NaN is never computed and then cancelled.
+//   - `caret vjp( 3.0)` and `named vjp( 3.0)`: 9.0 and 6.0 from `^`, then 9.0 and 6.0 from `pow`.
+//     Two spellings of one power answering one number through one library.
+//   - `caret vjp(-3.0)` and `named vjp(-3.0)`: -6.0 twice, at the base the guard was written for.
+//
+//     camel test/cases/compile/transforms/pow_gradient_of_a_caret_through_the_library.cml
+import rulesets.jvp
+import { vjp } from vjp
+import { jvp } from transforms
+import { pow } from math
+
+/// The spelling the library could not differentiate: the differentiated value is an ordinary
+/// parameter (design principles 9.9), so `vjp` transforms it and the pullback answers its cotangent.
+func caret(x: float): float {
+    return x ^ 2.0
+}
+
+/// The same power, spelled as the call the ruleset files under `math:pow_d`.
+func named(x: float): float {
+    return pow(x, 2.0)
+}
+
+func main(): int sync {
+    let (negativeValue, negativeTangent) = jvp(caret)(0.0 - 3.0, 1.0)
+    `caret jvp(-3.0) value={} tangent={}`->format<negativeValue, negativeTangent>->println
+    let (caretValue, caretPullback) = vjp(caret)(3.0)
+    let caretCotangent = caretPullback(1.0)
+    `caret vjp( 3.0) value={} dL/dx={}`->format<caretValue, caretCotangent.0>->println
+    let (namedValue, namedPullback) = vjp(named)(3.0)
+    let namedCotangent = namedPullback(1.0)
+    `named vjp( 3.0) value={} dL/dx={}`->format<namedValue, namedCotangent.0>->println
+    let (caretNegativeValue, caretNegativePullback) = vjp(caret)(0.0 - 3.0)
+    let caretNegativeCotangent = caretNegativePullback(1.0)
+    `caret vjp(-3.0) value={} dL/dx={}`->format<caretNegativeValue, caretNegativeCotangent.0>->println
+    let (namedNegativeValue, namedNegativePullback) = vjp(named)(0.0 - 3.0)
+    let namedNegativeCotangent = namedNegativePullback(1.0)
+    `named vjp(-3.0) value={} dL/dx={}`->format<namedNegativeValue, namedNegativeCotangent.0>->println
+    return 0
+}

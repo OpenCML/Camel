@@ -16,9 +16,11 @@
 //     `n`. `x <= 0` is where that branch has no real value, and the law says so with `NaN` instead of
 //     a zero (the same reading `jvp_of_a_power.cml` pins for the `^` spelling).
 //
-// The refused half of the same key is the neighbouring `pow_gradient_refused_by_the_library.cml`:
-// `^`'s pullback stops on the guard `pow_tangent` keeps for a constant exponent, which is a fact
-// about that helper and not about this law.
+// The other half of the same key is the neighbouring `pow_gradient_of_a_caret_through_the_library.cml`:
+// `^`'s pullback used to stop on the guard `pow_tangent` kept for a constant exponent, and since
+// 2026-11-04 that guard is gone -- the term is omitted where the rule is expanded -- so the two
+// spellings answer the same numbers here and there. Both laws are the same arithmetic with the
+// exponent's term written as a separate product, which is what the backward walk can turn around.
 //
 //     camel test/cases/compile/transforms/pow_gradient_through_the_library.cml
 import rulesets.jvp
