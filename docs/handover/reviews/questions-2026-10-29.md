@@ -2882,3 +2882,15 @@ ICPC 的 LLM 实验统一改用 v0.2.43（`ae874ce04`，pin 在 camel-lanes 的 
 ## 文档（2026-11-04 14:00）：§4.4 那句"stored lambda"要收窄
 
 语言参考 §4.4 写着："For a call through a function value (an argument, a return value or a stored lambda), the call site can recognise side effects only by its type (`var` parameters)"。实际行为是：在同一个函数里 `let f = () => sync { c += 1 }` 绑定、调用处能看到函数体的 lambda，编译器会把 `f()` 记为一次对捕获的 `c` 的写；后面读了 `c`，这次写就执行（ICPC 在 v0.2.43 上量到 `c=1`）。行为符合"对捕获变量的写也被跟踪"这条规则，是那句话写宽了。改成：只有**调用处看不到函数体**的函数值（作为参数传入、作为返回值得到、存进容器或结构后再取出）才只能按类型识别副作用。另外补一条正例和一条反例：后面读 `c` 时执行；不读时报 `IgnoredSideEffect`、不执行。
+
+## 裁定（2026-11-04 14:55）：声明没写形状时用哪个词——这是两个原因，不是一个
+
+**进展**：`1803d7f1d` 把拒绝原因收成一张表，用例改为断言原因记录而不是日志行，这是 11-03 每日审查 A3 的修法。`4d5e7d9a2` 让 `extent_of` 在任何写到它的地方都从类型取值，不再按 URI 特判，这是 11-04 审查 B5 的修法。两笔都对。
+
+**那一页**：页里把两句拒绝当成"同一个原因的两种说法"，这个前提不成立。
+- **裸 `transpose(f)`**，参数写成 `float[...]`：转置后的函数只拿到余切，参数的形状又没写在类型里，确实无处可来。这是语言规则（11-03 16:15），词是 `parameter-shape`，诊断是 `TransposeNeedsParameterShape`。对。
+- **走 `vjp`**（`split` 的后一半）：原值在前一半里，形状**总是**能从原值得到，照 17:35 作为已知实参交给线性调用，再成为残差。所以这里的拒绝不是"声明没写形状"，而是 `jvp_matmul` 这条规则没有把形状交出去，是规则库的缺口。修法是那组孪生算子（`matmul_stated` 一类）；修好后这一族不应再拒绝。
+- **改词还是修规则**：不为这 18 条断言去改词。修好规则以后，这 18 条要么转绿（改成断言答数），要么还剩下的就是真缺口。`cotangent-needs-a-value` 这个名字确实会误导，它把"律读了线性操作数的值或形状"说成了"拿不到一个值"。在原因表里改名为 `law-reads-a-linear-operand`，归在"规则库缺陷"一类。
+- 判据：`split_of_jvp_of_sum_of_product_backward` 那条 `matmul` 用例经 `vjp` 答出数，与引擎同答。
+
+页挪到 `reviews/` 留档。
