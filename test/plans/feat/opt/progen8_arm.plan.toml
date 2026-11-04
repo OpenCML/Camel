@@ -1,0 +1,62 @@
+id = "opt.progen8_arm"
+order = 480
+tier = "fast"
+tags = ["feat", "opt", "fold", "branches", "defects"]
+
+# `std::opt` on progen seed 8 is refused today, and the refused graph is the one the folding of a
+# branch arm writes wrongly. The reduced program is `test/cases/opt/progen/seed8_join_reads_gate.cml`
+# (20 lines), the seed's own program reduced by `test/tools/progen`'s reducer with the kind of node
+# that reports the violation pinned, so the reduction stays on the reading the batch records
+# (`JOIN 113 reads GATE 217` there, `JOIN 30 reads GATE 41` here). It reproduces 10 times out of 10:
+#
+#   Pass 'std::opt' failed with an internal error: Runtime graph '__root__' breaks the branch-arm
+#   invariant: JOIN 30 reads GATE 41, which lies in an arm of BRCH 26 that may not be taken when
+#   JOIN 30 runs (see docs/technical/17_graph_rewrite_api_contracts.md, 4.1).
+#
+# Which rewrite: `std::opt::fold`, in `pruneBranch` (src/passes/opt/generic/generic.cpp). A branch
+# whose condition the pass knows is replaced by the arm it takes, and the branch's place in the
+# block's chain is handed to the last statement of that arm -- chosen among the nodes the arm's
+# region *contains*, which includes the regions nested in it: the condition of a loop written in the
+# arm runs inside the loop, not whenever the arm runs. The statements written after the branch then
+# read a value only that nested region computes, which is 4.1 rule 3 ("a node reads only nodes of
+# its own control region or of the control regions around it").
+#
+# The matrix over the six rewrites says which two do it: each of `std::opt::fold`, `std::opt::inline`,
+# `std::opt::cse`, `std::opt::dce`, `std::opt::specialize` and `std::opt::devirtualize` alone is
+# accepted, and of the 30 ordered pairs exactly one is refused -- `std::opt::inline` then
+# `std::opt::fold` (`JOIN 29 reads GATE 42`). `inline` supplies the shape (the value of a `sync`
+# call forwarded by a `GATE`, a loop whose condition is written as a branch); the folding does the
+# damage.
+#
+# The two tests below are the defect as *work owed*, not as exceptions -- no `known_fail` mark, so
+# the plan's `fail` count is the debt, and it goes to zero only when the pass stops writing that
+# relation. The reference test is what the passing runs must reproduce: exit 0 and no output.
+
+[defaults]
+kind = "behavior"
+case = "../../../cases/opt/progen/seed8_join_reads_gate.cml"
+expect_exit = 0
+backends = ["nvm"]
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "progen8_arm.reference"
+desc = "The program without any optimization pass: it exits 0 and prints nothing, and that is what every run of the pass below must reproduce. Green."
+args = ["${case}", "${backend}"]
+
+[[tests]]
+name = "progen8_arm.inline_then_fold"
+desc = "The pair that writes the illegal relation: `std::opt::inline` then `std::opt::fold`. RED TODAY, expected to be fixed: `Runtime graph 'main' breaks the branch-arm invariant: JOIN 29 reads GATE 42, which lies in an arm of BRCH 25 that may not be taken when JOIN 29 runs` (17_graph_rewrite_api_contracts.md, 4.1 rule 3)."
+args = ["${case}", "std::opt::inline", "std::opt::fold", "${backend}"]
+
+[[tests]]
+name = "progen8_arm.std_opt"
+desc = "The pipeline the batch found it with: `std::opt`, whose round runs the inlining and then the fold. RED TODAY, expected to be fixed: `JOIN 30 reads GATE 41, which lies in an arm of BRCH 26 that may not be taken when JOIN 30 runs`."
+args = ["${case}", "std::opt", "${backend}"]
