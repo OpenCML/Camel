@@ -1600,6 +1600,17 @@ void resolvePlaceForks(GraphDraft &draft) {
     // the answer is no: a statement's place may not be one that waits on the statement itself (the
     // graph would lie on a cycle of inputs). An exhausted walk answers yes, because not proving it
     // free does not make it safe to move.
+    //
+    // Every kind of input is walked, the order ones included. An order edge is as real an ordering as
+    // a sync one (docs/design/effects/edges.cn.md 1), and the check the frozen graph gets walks it
+    // beside them (graph_edges.cpp, `findCycle`: "every edge kind takes part, the sync and order ones
+    // included"). Walking four of the five kinds was not a narrowing that stayed safe: a chain end
+    // whose only way back to the statement runs along an order edge -- the edge a write to a `var`
+    // leaves on the read before it, the edge a spliced body leaves on the statement after the call --
+    // looked free when it was not. `rc04_seed72` (test/cases/opt/adb67e081) is the program that
+    // showed it: the move closed a cycle through the chain end's order input, and the seal then
+    // reported a cycle of inputs -- the wrong defect, at the wrong node -- where the truth was that
+    // the statement has no place in that chain, and refusing the move leaves a graph the pass runs.
     const auto waitsOn = [&](gc_node_ref_t from, gc_node_ref_t target) {
         std::vector<gc_node_ref_t> work{from};
         std::unordered_set<gc_node_ref_t> seen;
@@ -1617,6 +1628,7 @@ void resolvePlaceForks(GraphDraft &draft) {
                  {draft.normInputsOf(node),
                   draft.withInputsOf(node),
                   draft.ctrlInputsOf(node),
+                  draft.orderInputsOf(node),
                   draft.syncInputsOf(node)}) {
                 for (gc_node_ref_t input : group) {
                     if (budget == 0) {

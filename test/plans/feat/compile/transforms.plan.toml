@@ -2948,12 +2948,13 @@ timeout_ms = 30000
 
 [[tests]]
 name = "transpose_refuses_a_nonlinear_operator"
-desc = "`abs` is not linear, so it has no transpose, and a bare `transpose` of it stops at the build. The sentence names the operator, says the family holds no rule for it, and points at the way a gradient is taken (`vjp`). It deliberately does **not** say `abs` is not linear in its parameter: that fact lives in the forward family's index, which a program importing only `rulesets.transpose` does not carry, and a wrong explanation is worse than none because a reader acts on it (`docs/handover/questions/2026-11-04-must-a-transpose-refusal-claim-the-operator-is-not-linear.cn.md`). The right numbers for `abs` are pinned where they belong, through `vjp`, in `vjp_answers_abs_log_maximum_and_minimum` -- only one of the two routes is supposed to answer, which is what makes them a pair."
+desc = "`abs` is refused by a bare `transpose` at the build, and the sentence says exactly three things: which operator (`tensor:abs`), that the transpose family `rulesets.transpose` holds no rule for it, and that `transpose` is for linear functions while a gradient is taken with `vjp`. It does **not** say the operator is not linear: that claim would need the forward family's index, and a program that imports only `rulesets.transpose` does not carry it, so a wrong explanation is worse than none because a reader acts on it (`docs/handover/questions/2026-11-04-must-a-transpose-refusal-claim-the-operator-is-not-linear.cn.md`). The three truths are a floor and not a summary -- a refusal that dropped any one of them would leave a reader with nothing to act on -- and `expect_output_not_contains` is the same rule as a criterion: the day a refusal infers nonlinearity from a missing law again, this entry turns red and names the word. The right numbers for `abs` are pinned where they belong, through `vjp`, in `vjp_answers_abs_log_maximum_and_minimum` -- only one of the two routes is supposed to answer, which is what makes them a pair."
 kind = "negative"
 case = "../../../cases/compile/transforms/transpose_refuses_a_nonlinear_operator.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_stdout_contains = ["operator `tensor:abs`", "the family holds no rule for `tensor:abs`", "`transpose` is for linear functions", "take the gradient with `vjp`"]
+expect_output_not_contains = ["not linear"]
 timeout_ms = 20000
 
 [[tests]]
@@ -2997,5 +2998,17 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["pair ct=1.0 da=[1.0, 1.0, 1.0] db=[1.0, 1.0, 1.0]"]
 expect_stderr_contains = ["rhs=dtod_t,sum_from_type_t,add_tensor_t"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_still_turns_subtract"
+desc = "The third guard, and the one that reads a number where the two above read a shape. The refusal may now stop only when `rulesets.transpose` really holds no law for the operator, so a program that used to be refused for a reason that was never a language rule passes again -- and passing is not answering: a wrong adjoint passes exactly as happily as a right one. `subtract` is the operator because it has a law in **both** tables (the forward `jvp_subtract`, `d(x - w) = dx - dw`, and the transpose `subtract_t`, `ct` for `x` and `-ct` for `w`), so the map `(a, b) ↦ Σ(a - b)` at cotangent 1 has an answer the definition gives without asking the transform: `da` is [1.0, 1.0, 1.0] and `db` is [-1.0, -1.0, -1.0]. The entry pins both arrays and `max_abs_diff=0.000000000000e+00` against them: a law that dropped the difference's sign would answer [1.0, 1.0, 1.0] twice and the diff would read 2.0, so the guard is on the arithmetic and not on the absence of a refusal. The `rhs=` line names `subtract_t` among the laws the walk took, which is the other half of the claim -- the law that answered is the transpose family's, not another one that happens to be reachable. Whether the gradient route agrees is `vjp`'s subject and is not claimed here."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_still_turns_subtract.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["subtract ct=1.0 da=[1.0, 1.0, 1.0] db=[-1.0, -1.0, -1.0]", "transpose subtract max_abs_diff=0.000000000000e+00"]
+expect_stderr_contains = ["rhs=dtod_t,sum_from_type_t,subtract_t"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
