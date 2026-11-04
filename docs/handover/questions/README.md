@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：50 页
+## 现在在等作者：51 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -22,6 +22,7 @@
 | [`2026-11-04-does-a-call-stand-on-its-callees-lin-or-on-its-body`](2026-11-04-does-a-call-stand-on-its-callees-lin-or-on-its-body.cn.md) | 一条**静态具名**的调用，转置时站哪儿：被调函数的 body，还是它的 `lin`？ |
 | [`2026-11-04-does-a-closure-members-cotangent-have-a-slot`](2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md) | 闭包成员的余切应不应该有一个槽？ |
 | [`2026-11-04-does-a-product-transpose-still-need-a-zero-carrier`](2026-11-04-does-a-product-transpose-still-need-a-zero-carrier.cn.md) | 乘积的转置还要不要一个零载体？ |
+| [`2026-11-04-does-a-program-own-what-it-adopted`](2026-11-04-does-a-program-own-what-it-adopted.cn.md) | `Program` 交出去的图：只有它自己加的，还是连它 adopt 进来的一起？ |
 | [`2026-11-04-does-a-transpose-law-count-when-the-first-order-walk-does-not-read-it`](2026-11-04-does-a-transpose-law-count-when-the-first-order-walk-does-not-read-it.cn.md) | 一条转置律没被一阶走查读到，算不算"律已经补上"？ |
 | [`2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value`](2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md) | 转置成员要不要给"一个参数自己的值"留一个端口？ |
 | [`2026-11-04-does-a-with-value-get-a-tangent`](2026-11-04-does-a-with-value-get-a-tangent.cn.md) | `with` 值该不该有自己的切向？ |

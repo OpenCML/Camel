@@ -1071,7 +1071,10 @@ void RuntimeGraphDraftSession::adoptGraph(GCGraph *graph) const {
     // the commit did not bind it (a commit that replaced it with a copy of its own).
     context_->noteUnboundRuntimeGraph(graph);
     if (work_->graph(graph->id()) == nullptr) {
-        work_->bind(graph->id(), graph);
+        // Taken in, not inherited: the session made it for this program after the commit that
+        // made the base, so a program that adopts this one's work table has to receive it too --
+        // a group that inlines through such a session calls these graphs.
+        work_->bindTaken(graph->id(), graph);
     }
 }
 
