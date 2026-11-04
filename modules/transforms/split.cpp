@@ -3304,11 +3304,10 @@ SplitGraph buildSplitGraph(
     // same shape `jvp` uses for its own recursion).
     std::unordered_map<const rt::GCGraph *, CutMember> calleeCuts;
     // **The programs whose graphs this build stands on.** A nested build's two halves are graphs its
-    // own program owns, so adopting that program brings them; the graphs a nested build *adopted* are
-    // owned by the program they were made in, which is this list (`SplitGraph::nestedPrograms`). One
-    // list for both levels, in the order they were taken and without repeats: `Program::adoptMissing`
-    // binds what the program it reads owns and skips what is already bound, so the order says which
-    // program answers for an id and the repeat would only bump a version.
+    // own program owns, so adopting that program brings them. One entry per direct callee cut, in the
+    // order they were taken and without repeats: `Program::adoptMissing` binds what the program it
+    // reads hands on and skips what is already bound, so the order says which program answers for an
+    // id and the repeat would only bump a version.
     std::vector<const rt::Program *> nestedPrograms;
     const auto remember = [&nestedPrograms](const rt::Program *standsOn) {
         if (standsOn != nullptr &&
@@ -3355,37 +3354,18 @@ SplitGraph buildSplitGraph(
             }
             // **A cut of a cut.** The forward half of `callee` that this build calls is not the whole
             // answer when that half is itself answered by a call of *its* callee's forward half: the
-            // nested build made that second cut and adopted its two graphs into its own program, and
-            // this build adopts that program in turn -- but `Program::adoptMissing` copies only the
-            // graphs the program it reads **owns**, and an adopted graph is not one it owns. So
-            // adopting the nested program alone would leave this one holding the halves of `callee`
-            // and not the halves of `callee`'s callee, and the call the value half writes to the
-            // deeper forward half would name a graph the program does not hold -- `runtimeTarget !=
-            // nullptr`, "a direct call names a function whose graph is not in the program's graph
-            // table" in `nodevm.cpp` (measured 2026-11-04 on `split(jvp(f))` where `f` calls `g` and
-            // `g` calls `h`: the cut of `jvp_of_f` answers a call of `split_of_jvp_of_g_forward`,
-            // which answers one of `split_of_jvp_of_h_forward`).
-            //
-            // So the list is **transitive**: the programs this build stands on are the ones the
-            // nested builds stand on, one level down and however much further, because the field is
-            // collected the same way one level out. Nothing else travels: every program in it is one
-            // a cut this build calls was built in, so the graphs are the calls' own halves and not
-            // some other function's. What it costs is the depth: every nested build has its own
-            // callee table, so a chain of n pair-answering calls builds 2^(n-1) pairs of graphs where
-            // n would do (measured: 8 pairs, graph ids 340..355, for `f -> g -> h -> k`, where `k` is
-            // cut four times). Every one of them is adopted here, which is a pointer in a table and
-            // not a copy, and no value is recomputed. Two levels read
-            // `test/cases/transforms/split/split_two_nested_cuts.cml`, three and four were probed at
-            // depth (the readings are in
-            // `docs/handover/questions/2026-11-04-who-adopts-the-graphs-of-a-nested-cut.cn.md`).
+            // nested build made that second cut, and its two halves are graphs its own program holds.
+            // The graphs of the second callee's cut are in that program as well, and as **taken**
+            // graphs rather than added ones -- `Program::adoptMissing` carries `added ∪ taken`
+            // (`Program::bindTaken`, 2026-11-04), so adopting the nested program hands on the whole
+            // chain however deep it goes. That is why one entry per direct callee cut is enough here,
+            // and why `SplitGraph` carries no transitive list: `adoptMissing` is what makes a call to
+            // a grandchild's half resolve (`runtimeTarget != nullptr`, "a direct call names a function
+            // whose graph is not in the program's graph table" was the symptom of it not doing so).
+            // `test/cases/runtime/adopt_chain/split_three_calls.cml` is the case that shows it.
             calleeCuts.emplace(callee, member);
-            // The callee's cut and the cuts *it* stands on: both have to be adopted below, because
-            // `Program::adoptMissing` binds the graphs a program owns and not the ones it adopted, so
-            // the grandchild of a cut is not carried by its child's program (see `SplitGraph::standing`).
+            // The callee's cut itself: what that program took travels with it.
             remember(nested.program);
-            for (const rt::Program *onward : nested.standing) {
-                remember(onward);
-            }
             pending.push_back(callee);
         }
     }
@@ -3553,17 +3533,16 @@ SplitGraph buildSplitGraph(
         draft.setOutputNode(out);
         draft.setReturnNode(out, rt::GCReturnKind::Self);
     }
-    // The programs of the cuts this one stands on: the graphs of those two halves join this build's
+    // The programs of the cuts this one calls: the graphs of those two halves join this build's
     // program, so the calls this half wrote resolve at run time. Adopted, not rebuilt -- the ids the
-    // calls name are the graphs those builds made, and no value is recomputed. The list is this
-    // build's own `standing`, so a cut above this one adopts the whole chain in one step.
+    // calls name are the graphs those builds made, and no value is recomputed. The list is the direct
+    // callee cuts' own programs; whatever those programs took travels with them by adoption.
     for (const rt::Program *nested : nestedPrograms) {
         group.adopt(*nested);
     }
     group.encode();
     const rt::GCGraph *forwardMade  = group.encoded(forwardId);
     const rt::GCGraph *backwardMade = group.encoded(backwardId);
-    built.standing                  = nestedPrograms;
     built.residuals                 = graphResiduals.size();
     os << "REINTERP split function=" << function->name() << " forward=" << rt::toValue(forwardId)
        << " backward=" << rt::toValue(backwardId)
@@ -3580,10 +3559,9 @@ SplitGraph buildSplitGraph(
     built.program  = group.program();
     built.forward  = const_cast<rt::GCGraph *>(forwardMade);
     built.backward = const_cast<rt::GCGraph *>(backwardMade);
-    // What this cut stands on, past the graphs `program` already holds: a caller one level out
-    // cannot adopt them (`Program::adoptMissing` copies owned graphs only), so it reads this list.
-    // Transitive by construction -- the nested builds' own lists are in it -- so a caller that adopts
-    // every program named here holds every half a call of this cut can reach.
+    // What this cut stands on, past the graphs `program` already holds: one program per direct callee
+    // cut, each of which holds every graph it took. A caller one level out adopts every program named
+    // here and, with it, the whole chain a call of this cut can reach.
     built.nestedPrograms = nestedPrograms;
     return built;
 }
