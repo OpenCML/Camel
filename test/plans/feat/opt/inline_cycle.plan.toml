@@ -50,10 +50,10 @@ args = ["${case}", "std::opt::fold", "std::opt::inline", "${run_nvm}"]
 expect_stdout_exact = "q45 2\nq45 2\nq45 5\nq45 2\nq45 5\nL3 (2, 5) 5\nL4 xx\nL4 xx\nL4 xx\nL5 true x\nL5 true x\nq45 5\nq45 0\nL6 1.0\nL7 2\nL8 false\n"
 verify_script = """
 ({ input, assert }) => {
-    const stderr = input.normalized.stderr.trim()
-    assert(input.exit_code === 0, `camel exited ${input.exit_code}: ${stderr}`)
-    assert(!stderr.includes('PassInternalError'), `the pass refused the graph it built: ${stderr}`)
-    assert(!stderr.includes('lies on a cycle of inputs'), `the splice wrote a statement after one it reads: ${stderr}`)
+    const said = input.normalized.stderr.trim() || input.normalized.stdout.trim()
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}: ${said}`)
+    assert(!said.includes('PassInternalError'), `the pass refused the graph it built: ${said}`)
+    assert(!said.includes('lies on a cycle of inputs'), `the splice wrote a statement after one it reads: ${said}`)
 }
 """
 
@@ -63,9 +63,9 @@ desc = "The same pair drawn with `std::gir`: the placed statements are read, not
 args = ["${case}", "std::opt::fold", "std::opt::inline", "std::gir"]
 verify_script = """
 ({ input, assert }) => {
-    const stderr = input.normalized.stderr.trim()
-    assert(input.exit_code === 0, `camel exited ${input.exit_code}: ${stderr}`)
-    assert(!stderr.includes('PassInternalError'), `the pass refused the graph it built: ${stderr}`)
+    const said = input.normalized.stderr.trim() || input.normalized.stdout.trim()
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}: ${said}`)
+    assert(!said.includes('PassInternalError'), `the pass refused the graph it built: ${said}`)
     const lines = input.normalized.stdout.split('\n')
     const edgeRe = /^ *(N[0-9A-F]+) -> (N[0-9A-F]+) \[label="([^"]*)", type="([A-Z_]+)"\]/
     const nodeRe = /^ *(N[0-9A-F]+) \[label="([^"]*)", type="([A-Z_]+)"/
