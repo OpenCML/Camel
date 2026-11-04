@@ -60,7 +60,7 @@ class TensorExecutor : public Executor {
 /// `stdlib/signatures/tensor.cml`).
 ///
 /// `mean_axis_stated` is not among them for the same kind of reason and one step further: its
-/// result's extents are the operand's with the axis `at[0]` removes -- or the flag `at[1]` keeps --
+/// result's extents are the operand's with the `axis` removed -- or `keepdims` keeps --
 /// so they follow from a *value*, and the only type a declaration could write is `T[..]`. That
 /// type is a claim the value can contradict: the answer is the element itself when the reduction
 /// leaves rank 0 (design principles 5.4), and a cotangent typed array over a value that has no

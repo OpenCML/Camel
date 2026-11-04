@@ -306,16 +306,16 @@ export func argmin_axis::<T>(t: T[...], axis: int, keepdims: bool): int[...]
 // ---- the reductions with their extents stated ----
 
 /// The mean of each lane along one axis, with the axis, `keepdims` and the operand's extents stated
-/// in one list: `[axis, keepdims, d0, ..., d(rank-1)]` is `mean_axis(t, axis, keepdims)`.
+/// as parameters of their own: `mean_axis_stated(t, axis, keepdims, extents)` is
+/// `mean_axis(t, axis, keepdims)`.
 ///
-/// The result is `mean_axis`'s at the extents `at` states: the operand's, with the axis at `at[0]`
-/// removed, or kept as an extent of one when `at[1]` is not zero. It is computed rather than
-/// declared because those extents follow from values, so a call that writes `at` states its own
-/// result -- `[0, 0, 4]` over a rank-1 operand is the element, not `float[...]` and a conversion --
-/// and a call whose list is a value of the run states the operand's element type at a rank nobody
-/// fixed.
+/// The result is `mean_axis`'s at the stated extents: the operand's, with the `axis` removed, or kept
+/// as an extent of one when `keepdims`. It is computed rather than declared because those extents
+/// follow from values, so a call that states all three states its own result -- `0, false, [4]` over a
+/// rank-1 operand is the element, not `float[...]` and a conversion -- and a call whose parameters are
+/// values of the run states the operand's element type at a rank nobody fixed.
 /// @pure
-/// @fails fault `RuntimeError` when the list is shorter than three entries, the extents disagree with the tensor's shape, or the axis is outside the rank
+/// @fails fault `RuntimeError` when the extents disagree with the tensor's shape, or the axis is outside the rank
 /// @example mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, true, [2, 2])    // [[2.0, 3.0]]
 export func mean_axis_stated::<T>(t: T[...], axis: int, keepdims: bool, extents: int[]): T[...]
 

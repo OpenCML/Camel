@@ -2033,7 +2033,7 @@ bool readLoopCut(
     }
     // **A residual computed from the loop's own result is taken after the loop** (author, 2026-11-03
     // 11:10: 凡是由前一半循环的输出算出来的残差，在循环建好之后再取). `jvp_idx_arr` states the length
-    // of the array it reads (`pick_at(dxs, extent_pair(i, len(xs)))`) instead of letting the
+    // of the array it reads (`pick_at(dxs, i, len(xs))`) instead of letting the
     // transposed rule read a linear operand, so the tangent side of an escape reads `len(xs)` where
     // `xs` is the loop's *value*: a node above the cell, which exists only once the forward half's
     // loop has run. Nothing before the loop can compute it, so it is not an invariant.
@@ -2718,11 +2718,11 @@ enum class ExitShape { Straight, Branch, Loop, NotAPair };
 ///
 /// The two components are kept apart rather than folded into one "which component" answer: a chain
 /// may read *both*, and that is not the same fact as reading one. `jvp_idx_arr` states the length of
-/// the array it reads (`pick_at(dxs, extent_pair(i, len(xs)))`) so that the transposed rule never
+/// the array it reads (`pick_at(dxs, i, len(xs))`) so that the transposed rule never
 /// reads a linear operand, and the tangent side of an escape therefore reads `len(xs)` off the loop's
 /// **value** while the tangent itself comes from the loop's **tangent** (measured 2026-11-04 on
-/// `vjp_loop.rounds_are_undone_in_reverse`: the tangent root is `pick_at(35, extent_pair(0,
-/// len(34)))`, 34 reading component 0 and 35 component 1). One answer for "which component" cannot
+/// `vjp_loop.rounds_are_undone_in_reverse`: the tangent root is `pick_at(35, 0, len(34))`, 34
+/// reading component 0 and 35 component 1). One answer for "which component" cannot
 /// hold that, and refusing it made the exit unreadable.
 struct LoopReach {
     bool ok            = false;

@@ -121,7 +121,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "stated_sum_axis_gradient"
-desc = "The gradient of `pick_at(sum_axis(x, 0, false), [1, 3])` over a `[2, 3]` tensor, through the engine and through the library in one program: `jvp_sum_axis` states the axis, the flag and `shape(xs)` in the linear call and `sum_axis_stated_t` spreads each column's cotangent back down the column. The reading is `value=7.0` -- the middle column's lane, picked -- and `same=true`: the two legs answer the same numbers bit for bit. Picking one lane rather than summing the lanes is what makes the reading name the axis the cotangent went back along: the answer is `[[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]]`, and an all-ones gradient would have said nothing about where it went."
+desc = "The gradient of `pick_at(sum_axis(x, 0, false), 1, 3)` over a `[2, 3]` tensor, through the engine and through the library in one program: `jvp_sum_axis` states the axis, the flag and `shape(xs)` in the linear call and `sum_axis_stated_t` spreads each column's cotangent back down the column. The reading is `value=7.0` -- the middle column's lane, picked -- and `same=true`: the two legs answer the same numbers bit for bit. Picking one lane rather than summing the lanes is what makes the reading name the axis the cotangent went back along: the answer is `[[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]]`, and an all-ones gradient would have said nothing about where it went."
 kind = "behavior"
 case = "../../../cases/compile/transforms/stated_sum_axis_gradient.cml"
 args = ["${case}", "${backend}"]

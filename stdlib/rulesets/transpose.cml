@@ -643,17 +643,17 @@ func zeros_of::<T>(ct: T, n: int): T[] when is_float::<T>() {
     return zeros::<T>([n])
 }
 
-/// The transpose of `tensor:pick_at(xs, at)`: `ct` at `at[0]`, zero everywhere else, where the
-/// zeros are `at[1]` of them and that is the length the **forward** half stated.
+/// The transpose of `tensor:pick_at(xs, position, length)`: `ct` at `position`, zero everywhere else,
+/// where the zeros are `length` of them and that is the length the **forward** half stated.
 ///
 /// This is the law the linear half of a read meets (`rulesets.jvp`'s `jvp_idx_arr` passes
-/// `[i, len(xs)]`). It reads the list and nothing of `xs`: a transpose rule reads only known
-/// operands, and `T[]` carries no length in its type (design principles 5.4), so the length arrives
-/// as an operand instead of being taken from the array the cotangent comes back through. `len(xs)`
-/// is a value of the primal, which the cut carries to the half that reads it, so what a call site
-/// hands over is one integer list.
-export rule pick_at_t::<T>(xs: T[], at: int[]) when is_float::<T>() {
-    pick_at(xs, at) => (ct: T) => scatter_into(zeros_of(ct, at[1]), at[0], ct)
+/// `i, len(xs)`). It reads `position` and `length` and nothing of `xs`: a transpose rule reads only
+/// known operands, and `T[]` carries no length in its type (design principles 5.4), so the length
+/// arrives as an operand instead of being taken from the array the cotangent comes back through.
+/// `len(xs)` is a value of the primal, which the cut carries to the half that reads it, so what a
+/// call site hands over is the number itself.
+export rule pick_at_t::<T, X, P, L>(xs: X, position: P, length: L) when is_float::<T>() {
+    pick_at(xs, position, length) => (ct: T) => scatter_into(zeros_of(ct, length), position, ct)
 }
 
 /// The transpose of `xs[i]`: `ct` at `i`, zero everywhere else, in the extents the operand's **type**

@@ -273,8 +273,8 @@ export rule jvp_matmul::<T>(a: T[...], b: T[...]) when is_float::<T>() {
 // stated reductions take their axis, their flag and their extents as three parameters today
 // (`stdlib/tensor.cml`, `tensor:sum_axis_stated` and its four neighbours), the walk hands the law a
 // node with five operands, and the laws read them by name. A list would have needed a function to
-// build it -- `extent_pair` below still does, for the one place a two-element list is computed --
-// because a list literal holding a computed element is written before the node that computes it.
+// build it. Nothing builds a list for a call's arguments any more: every one of those parameters
+// is a parameter of its own.
 
 /// `d(sum(xs)) = sum(dxs)`: a sum adds its elements up, so it is linear and the sum of the tangents is
 /// the tangent of the sum.
@@ -616,22 +616,11 @@ func index_into::<T>(x: T[], i: int): T {
     return x[i]
 }
 
-/// `[position, length]`: how a read states where it reads and how long the array is.
-///
-/// The pair is a call rather than a list literal written in `jvp_idx_arr`'s right side because a
-/// rule's right side is copied node by node and has to be a straight line of nodes in the order it
-/// writes them: a list literal holding a computed element is written before the node that computes
-/// it, and the copy refuses that (`skip=rule uri=:op/idx_arr reason=the rule's right side uses a node
-/// written after it`, measured 2026-11-04).
-func extent_pair(position: int, length: int): int[] {
-    return [position, length]
-}
-
 /// `d(xs[i]) = dxs[i]`: the tangent of an element is that element of the array's tangent. The index
 /// carries no tangent of its own -- `Tangent<int>` is `()` -- so it does not enter the right side.
 ///
 /// The linear body also states how long the array is: `len(xs)` is a value of the primal, and it
-/// travels to the read as `at[1]` (`tensor.pick_at` is `xs[i]` with the length stated). The law
+/// travels to the read as its `length` (`tensor.pick_at` is `xs[i]` with the length stated). The law
 /// that answers the read's transposition builds its zeros from that length and reads nothing of the
 /// array, which is what a transpose rule is allowed to do (author, 2026-11-03 11:10 and 17:35): `xs`
 /// is the operand the cotangent comes back through, so on the reverse side it has no value, and
@@ -643,14 +632,14 @@ func extent_pair(position: int, length: int): int[] {
 /// tangent *and* carries the fact the reverse reading needs.
 /// @example index_into([0.5, 0.25], 1)    // the tangent of `xs[1]` when `dxs` is `[0.5, 0.25]`
 export rule jvp_idx_arr::<T>(xs: T[], i: int) {
-    index_into(xs, i) => (dxs: T[]) => pick_at(dxs, extent_pair(i, len(xs)))
+    index_into(xs, i) => (dxs: T[]) => pick_at(dxs, i, len(xs))
 }
 
 // ---- the forward rule of `tensor:pick_at`, the read that states its length ----
 //
-// `pick_at(xs, at)` is `xs[at[0]]` of a rank-1 array whose length `at[1]` states, and it is the
-// operator the linear half of a read is written with: `jvp_idx_arr` above answers with
-// `pick_at(dxs, extent_pair(i, len(xs)))`. That node never reached this rule, because a rule's right
+// `pick_at(xs, position, length)` is `xs[position]` of a rank-1 array whose length `length` states,
+// and it is the operator the linear half of a read is written with: `jvp_idx_arr` above answers with
+// `pick_at(dxs, i, len(xs))`. That node never reached this rule, because a rule's right
 // side is not differentiated again -- so the read carried a reverse law
 // (`stdlib/rulesets/transpose.cml#pick_at_t`) and no forward one, and a program that wrote the read
 // itself was refused by name while the same program written as `xs[i]` ran:
@@ -662,21 +651,22 @@ export rule jvp_idx_arr::<T>(xs: T[], i: int) {
 // the read of the tangent, and the **same** `at` answers both -- which is why this rule needs no
 // stated twin the way `sum`, `mean_axis` and `take` do. Those three state extents because their
 // adjoints have to build an array of the operand's shape and nothing in the cotangent says how long
-// that is; here the list that carries the position (`at[0]`) already carries the length (`at[1]`),
-// and the tangent is checked against the same length the primal was.
+// that is; here the call that carries the position carries the length beside it, and the tangent is
+// checked against the same length the primal was.
 //
 // The operands are the registration's, in its order (`modules/tensor/ops/layout_ops.cpp`, the OpDef
-// named `pick_at`: a `Tensor` then an `IntArray`), and the closure takes **one** tangent and not
-// two: `at` is a known value of the call, not a differentiated one -- `Tangent<int[]>` is `()` -- so
-// there is no second position to answer. The reverse law's closure looks different because it is
+// named `pick_at`: a `Tensor` then two `int`s), and the closure takes **one** tangent and not
+// three: both integers are known values of the call, not differentiated ones -- `Tangent<int>` is
+// `()` -- so there is no second position to answer. The reverse law's closure looks different because it is
 // handed the other half: `pick_at_t` answers `(ct: T)`, one cotangent of the **result**, where this
 // one answers `(dxs: T[])`, one tangent of the **operand**.
 
-/// `d(pick_at(xs, at)) = pick_at(dxs, at)`: the read is linear, so the tangent of the element is that
-/// element of the array's tangent, at the position the primal read and against the length it stated.
-/// @example pick_at([0.5, 0.25, -1.0] as float[], [1, 3])    // the tangent of `xs[1]` when `dxs` is `[0.5, 0.25, -1.0]`
-export rule jvp_pick_at::<T>(xs: T[], at: int[]) when is_float::<T>() {
-    pick_at(xs, at) => (dxs: T[]) => pick_at(dxs, at)
+/// `d(pick_at(xs, position, length)) = pick_at(dxs, position, length)`: the read is linear, so the
+/// tangent of the element is that element of the array's tangent, at the position the primal read and
+/// against the length it stated.
+/// @example pick_at([0.5, 0.25, -1.0] as float[], 1, 3)    // the tangent of `xs[1]` when `dxs` is `[0.5, 0.25, -1.0]`
+export rule jvp_pick_at::<T>(xs: T[], position: int, length: int) when is_float::<T>() {
+    pick_at(xs, position, length) => (dxs: T[]) => pick_at(dxs, position, length)
 }
 
 // ---- the forward rule of `^` (a power) ----

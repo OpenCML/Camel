@@ -574,26 +574,24 @@ void takeVjp(VjpBuilder &b, const VjpCall &call) {
             {call.inputs[0], call.inputs[1], *dy}));
 }
 
-// pick_at(t, at): the element at `at[0]` of a rank-1 tensor whose length `at[1]` states
-// (`elementAtKernel` below). A read moves no element, so its adjoint is the read's own: the
+// pick_at(t, position, length): the element at `position` of a rank-1 tensor whose length `length`
+// states (`elementAtKernel` below). A read moves no element, so its adjoint is the read's own: the
 // cotangent of the element goes back to the position that was read, and every other position keeps
 // a zero (design principles 9.9: the reverse of a gather is a scatter-add). That is the adjoint the
 // core files for the same read under its own spelling
-// (`src/builtin/operators/derivative.cpp#idxArrayVjp`), written here with the position taken out of
-// the list.
+// (`src/builtin/operators/derivative.cpp#idxArrayVjp`), and the position is the node's own operand.
 //
-// The zeros are `:tangent/zeros_arr` of `t` and not an array built from `at[1]`: a pullback rule is
+// The zeros are `:tangent/zeros_arr` of `t` and not an array built from `length`: a pullback rule is
 // handed the operand, and the length that operand holds is the one `elementAtKernel` checked the
 // stated length against -- a length that disagrees is a fault there, never a silently reshaped
-// read -- so the zeros are as long as `at[1]` says. `at[1]` is therefore read nowhere; the list is
-// read only at `at[0]` (`:op/idx_arr(at, 0)`), the position the cotangent lands on. That is the one
-// difference from the library's law for this read
+// read -- so the zeros are as long as `length` says. `length` is therefore read nowhere here; the
+// adjoint scatters into `position`. That is the one difference from the library's law for this read
 // (`stdlib/rulesets/transpose.cml#pick_at_t`): a transpose law reads only known operands and has no
-// array to take a length from, so it builds the same zeros from `at[1]`. Both scatter into `at[0]`,
-// so both answer the same array
+// array to take a length from, so it builds the same zeros from `length`. Both scatter into
+// `position`, so both answer the same array
 // (`test/cases/compile/transforms/pick_at_gradient_answered_by_the_engine.cml`).
 void pickAtVjp(VjpBuilder &b, const VjpCall &call) {
-    requireVjpInputs(call, 2, 2);
+    requireVjpInputs(call, 3, 3);
     const auto dy = b.gradientOf(call.output);
     if (!dy) {
         return;
@@ -604,21 +602,20 @@ void pickAtVjp(VjpBuilder &b, const VjpCall &call) {
     }
     const std::array<vjp_node_t, 1> zeroInputs{call.inputs[0]};
     const vjp_node_t zero = b.addOper(tangent, ":tangent/zeros_arr", zeroInputs);
-    const std::array<vjp_node_t, 2> positionInputs{call.inputs[1], staticInt(b, 0)};
-    const vjp_node_t position = b.addOper(Type::Int64(), ":op/idx_arr", positionInputs);
-    const std::array<vjp_node_t, 3> scatter{zero, position, *dy};
+    const std::array<vjp_node_t, 3> scatter{zero, call.inputs[1], *dy};
     b.accumulateGradient(call.inputs[0], b.addOper(tangent, ":tangent/scatter_add_arr", scatter));
 }
 
-// pick_at(t, at): the element at `at[0]` of a rank-1 tensor whose length `at[1]` states.
+// pick_at(t, position, length): the element at `position` of a rank-1 tensor whose length `length`
+// states.
 //
 // The length is not a convenience and not a hint: it is the operand that makes the read's pullback
 // writable at all. `xs[i]`'s transpose is a scatter into an array of zeros with `xs`'s length
 // (design principles 9.9), `T[]` carries no length in its type (5.4), and a transpose law may read
 // only known operands -- the array itself is the operand the cotangent comes back through, so on
 // that side it has no value (author, 2026-11-03 11:10 and 17:35). So the linear half of the read
-// states the length: `rulesets.jvp`'s `jvp_idx_arr` passes `[i, len(xs)]`, a value the forward side
-// computes, and `rulesets.transpose`'s `pick_at_t` builds its zeros from `at[1]` and reads
+// states the length: `rulesets.jvp`'s `jvp_idx_arr` passes `len(xs)`, a value the forward side
+// computes, and `rulesets.transpose`'s `pick_at_t` builds its zeros from `length` and reads
 // nothing of the array.
 //
 // It is a second spelling of `:op/idx_arr` rather than a third operand of it, because that
@@ -626,9 +623,11 @@ void pickAtVjp(VjpBuilder &b, const VjpCall &call) {
 // `kRuleKeyExceptions`) and a law's parameters are bound one per operand: a law filed under it
 // cannot receive a third value (measured -- `skip=rule uri=:op/idx_arr reason=no-rule`).
 //
-// The position and the length are one integer list because the transpose walk answers an operator
-// with one or two normal operands (the guard `tensor:mean_axis`'s three ports are held by); two
-// integer operands beside the tensor would be three.
+// The position and the length are two parameters of their own. They used to travel in one integer
+// list, on the reading that the transpose walk answers an operator with one or two normal operands
+// and two integers beside the tensor would be three. Measured 2026-11-04: the walk refuses a third
+// *tensor*, not a third parameter -- `tensor:take_stated` takes two `int[]` operands beside its
+// tensor and its law is reached on both legs -- so the packing had no constraint behind it.
 //
 // The stated length is checked against the tensor and the position against both: a length that
 // disagrees is a fault, not a silently reshaped answer. An answer sized by a number nobody verified
@@ -638,13 +637,7 @@ slot_t elementAtKernel(ArgsView &, ArgsView &norm, context::Context &) {
     if (t->rank() != 1) {
         reportShapeError("pick_at", "expects a tensor with exactly one dimension");
     }
-    const std::vector<int64_t> at = intListArg(norm, 1, "pick_at");
-    if (at.size() != 2) {
-        reportShapeError(
-            "pick_at",
-            "expects a two-entry integer list: the position and the length of the tensor");
-    }
-    const int64_t length = at[1];
+    const int64_t length = intArg(norm, 2);
     if (length < 0 || static_cast<uint64_t>(length) != t->numel()) {
         throwRuntimeFault(
             RuntimeDiag::InvalidArgument,
@@ -652,7 +645,7 @@ slot_t elementAtKernel(ArgsView &, ArgsView &norm, context::Context &) {
             std::format(
                 "the stated length {} does not agree with the tensor's {}", length, t->numel()));
     }
-    const int64_t index = at[0];
+    const int64_t index = intArg(norm, 1);
     if (index < 0 || index >= length) {
         throwRuntimeFault(
             RuntimeDiag::IndexOutOfRange, index, std::string("the tensor"), length);
@@ -817,12 +810,14 @@ std::vector<OpDef> layoutOps() {
         .infer     = takeInfer,
         .kernel    = &takeKernel,
         .traits    = {}});
-    // The read with a stated length: `t[at[0]]` of a rank-1 tensor whose length `at[1]` states.
+    // The read with a stated length: `t[position]` of a rank-1 tensor whose length `length` states.
     // Both are the element type's own answer (see `elementAtKernel` and `stdlib/tensor.cml`).
     defs.push_back(OpDef{
         .name      = "pick_at",
         .exports   = {"pick_at"},
-        .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
+        .params    = {{"t", ParamKind::Tensor},
+                      {"position", ParamKind::Int},
+                      {"length", ParamKind::Int}},
         .resultDoc = "T",
         .infer     = elementAtInfer,
         .kernel    = &elementAtKernel,

@@ -126,7 +126,7 @@ timeout_ms = 20000
 #    `docs/handover/questions/2026-11-02-does-reversing-a-backward-need-a-new-operator.cn.md`), so no
 #    operator is added.
 #  - the residual taken *after* the loop. The tangent side of the exit states the length it reads
-#    (`pick_at(dxs, extent_pair(0, len(xs)))`), and that length is computed from the loop's
+#    (`pick_at(dxs, 0, len(xs))`), and that length is computed from the loop's
 #    **value**, so no invariant can be it: `split`'s `Residual::afterLoop` copies it once, after the
 #    loop and after the cell's projections are seeded (author, 2026-11-03 11:10: 凡是由前一半循环的
 #    输出算出来的残差，在循环建好之后再取). Before it, `split` refused the whole cut
@@ -2096,7 +2096,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 # A read with a stated length, `tensor:pick_at`, is the operator the linear half of a read is written
-# with (`stdlib/rulesets/jvp.cml#jvp_idx_arr` answers with `pick_at(dxs, extent_pair(i, len(xs)))`).
+# with (`stdlib/rulesets/jvp.cml#jvp_idx_arr` answers with `pick_at(dxs, i, len(xs))`).
 # It carried a reverse law (`stdlib/rulesets/transpose.cml#pick_at_t`) and no forward one, so a
 # program that wrote the read itself was refused where the lift looks the rule up:
 #
@@ -2110,7 +2110,7 @@ timeout_ms = 20000
 # they answer the same number: the library's `jvp`/`vjp` and the engine's `grad`.
 [[tests]]
 name = "pick_at_forward_rule_answers_both_directions"
-desc = "The library's two legs over `read(x) = pick_at(x, [1, 3])` on `x = [1.0, 2.0, 3.0]` and the direction `dx = [0.5, 0.25, -1.0]`, every number hand-computed before the run: the read is the second element, so the forward tangent is `dx[1] = 0.25` and the reverse leg's cotangent of 1.0 lands at position 1 alone, `dL/dx = [0.0, 1.0, 0.0]`. The third line is what ties the two laws together instead of comparing them by eye -- the forward tangent is the gradient applied to the direction, `sum(dL/dx * dx) = 0.0*0.5 + 1.0*0.25 + 0.0*(-1.0) = 0.25` -- so a `pick_at_t` that scattered the cotangent to another position, or a `jvp_pick_at` that read one, prints a line that does not close. Before the law the program stopped at the lift with `skip=rule uri=tensor:pick_at reason=the operator has no forward rule bound at all`; the stderr side pins the rule that answers now (`rules=jvp_pick_at`) and that no `skip=` line remains."
+desc = "The library's two legs over `read(x) = pick_at(x, 1, 3)` on `x = [1.0, 2.0, 3.0]` and the direction `dx = [0.5, 0.25, -1.0]`, every number hand-computed before the run: the read is the second element, so the forward tangent is `dx[1] = 0.25` and the reverse leg's cotangent of 1.0 lands at position 1 alone, `dL/dx = [0.0, 1.0, 0.0]`. The third line is what ties the two laws together instead of comparing them by eye -- the forward tangent is the gradient applied to the direction, `sum(dL/dx * dx) = 0.0*0.5 + 1.0*0.25 + 0.0*(-1.0) = 0.25` -- so a `pick_at_t` that scattered the cotangent to another position, or a `jvp_pick_at` that read one, prints a line that does not close. Before the law the program stopped at the lift with `skip=rule uri=tensor:pick_at reason=the operator has no forward rule bound at all`; the stderr side pins the rule that answers now (`rules=jvp_pick_at`) and that no `skip=` line remains."
 kind = "behavior"
 case = "../../../cases/compile/transforms/pick_at_forward_rule.cml"
 args = ["${case}", "${backend}"]

@@ -266,13 +266,14 @@ InferFn wholeReductionInfer(k::ReduceOp op) {
 //
 // Both are second spellings of the operator above them for the reason `tensor:pick_at` is a
 // second spelling of `:op/idx_arr` (`modules/tensor/ops/layout_ops.cpp#elementAtKernel`): a law's
-// parameters are bound one per operand, and the transpose walk answers an operator with one or two
-// normal operands, so the extents travel in one integer list beside the value rather than as
-// operands of their own. `rulesets.jvp`'s `jvp_sum` and `jvp_mean_axis` state them, and
-// `rulesets.transpose`'s `sum_stated_t` and `mean_axis_stated_t` read them and nothing of the
-// operand.
+// parameters are bound one per operand, and `:op/idx_arr`'s key is filed at two operands in the
+// core, so a third value cannot ride on it. The extents are operands of their own here -- the walk
+// answers an operator with a third *parameter*; what it refuses is a third *tensor* (measured
+// 2026-11-04 on `take_stated`, two `int[]` beside the tensor, both legs answered).
+// `rulesets.jvp`'s `jvp_sum` and `jvp_mean_axis` state them, and `rulesets.transpose`'s
+// `sum_stated_t` and `mean_axis_stated_t` read them and nothing of the operand.
 
-/// `sum_stated(t, at)`: the whole-tensor sum, with `at` the operand's extents.
+/// `sum_stated(t, extents)`: the whole-tensor sum, with the operand's extents beside it.
 ///
 /// The value is `sum(t)` -- `sumAllKernel` below is the same kernel, so the accumulation, the
 /// element type and the one rounding are the definition's own -- and `at` is checked against the
@@ -828,8 +829,7 @@ std::vector<OpDef> reductionOps() {
         .traits    = {}});
     defs.push_back(reduceAxisDef<k::ReduceOp::Mean>("mean_axis", "mean", "T[...]"));
     // The two stated twins of the reductions above (`sumStatedKernel`, `meanAxisStatedKernel`):
-    // the same value, with the extents the reverse law needs as a second operand. Both are one
-    // ordinary operand and one integer list, which is the count the transpose walk answers.
+    // the same value, with the extents the reverse law needs as an operand of its own.
     defs.push_back(OpDef{
         .name      = "sum_stated",
         .exports   = {"sum_stated"},
@@ -851,7 +851,7 @@ std::vector<OpDef> reductionOps() {
         .traits    = {}});
     // The two stated twins the lane reductions and the whole-tensor mean were missing
     // (`sumAxisStatedKernel`, `meanStatedKernel`): the same value as the operator above them, with
-    // the extents the reverse law reads as one integer list beside it.
+    // the extents the reverse law reads as a parameter beside them.
     defs.push_back(OpDef{
         .name      = "sum_axis_stated",
         .exports   = {"sum_axis_stated"},
