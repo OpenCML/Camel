@@ -489,10 +489,19 @@ way to run them is to name the plan file deliberately. The ordinary opt selectio
 `feat/opt`, but as a **directory**, so `--tier fast` runs its fast plans and filters the slow
 progen plan while `--tier all` runs it.
 
-When no rule matches, or git cannot read the base branch, the whole fast layer runs. `--tier all`
-combines with `--changed` to run the slow tests of directory targets too; a layered plan then runs
-its slow cases, so `--tier all` is what reaches the autodiff/onnx comparisons. `--changed --list`
-prints the plan targets the changed files select without running them.
+Two ways the selection can come up empty are not the same answer and no longer read the same
+either. A change that matches no rule **widens** to the whole fast layer -- that is the policy for
+a change that only touches a class the project keeps out of `--changed` (perf, GC stress, progen)
+-- and the widening is printed as a widening, with the files that caused it and the size of the layer
+it runs. A base branch or a rule file that cannot be **read** is refused with exit 2: the plans the
+change touches are unknown, so none is selected and no layer is run, and the refusal names the base
+(or the list, or the rules file) that failed and the layer it declines to run. `--tier all` combines
+with `--changed` to run the slow tests of directory targets too; a layered plan then runs its slow
+cases, so `--tier all` is what reaches the autodiff/onnx comparisons. `--changed --list` prints the
+plan targets the changed files select without running them, and `--changed-files <path>` reads the
+changed paths from a file that a caller listed where the base branch was readable: that is how
+`internal/tools/camel-remote.ps1` hands the change to a host that holds the lane's commits but not
+the base branch, and it is the same selection code either way.
 
 A non-plan file under `test/plans/` (a golden, a fixture) selects the nearest directory that
 holds a plan: editing `feat/parse/golden/ast_hashes.txt` runs `feat/parse`, and editing a golden
