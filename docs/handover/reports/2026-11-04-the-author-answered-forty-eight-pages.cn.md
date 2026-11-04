@@ -52,7 +52,7 @@
 | 页名 | 裁定 | 落点 | 已在树上 |
 | --- | --- | --- | --- |
 | `how-is-a-two-port-transposed-value-called` | 不加值端口；要用 `x` 的走 `vjp`（`x` 是 `lin` 闭包里的残差）；裸 `transpose(read_outer)` 照 16:15 拒绝 | `modules/transforms/transpose.cpp#buildTransposeMember` | 树上没有值端口，无改动 |
-| `does-a-transposed-member-get-a-port-for-a-parameter-value` | 同上；`Transpose<F>` 的声明照 22:30 写成 `(ct) => …`，声明和构建一致 | `#transposeSignature` | 待核（声明与构建是否一致未独立读） |
+| `does-a-transposed-member-get-a-port-for-a-parameter-value` | 同上；`Transpose<F>` 的声明照 22:30 写成 `(ct) => …`，声明和构建一致 | `modules/transforms/transpose.cpp#transposeSignature` | 已落：签名就是"收余切、不带参数" |
 | `when-the-lift-promotes-a-with-value-and-the-cut-cannot-take-the-port` | `with` 值不进抬升后的值列表，照 15:15 作为残差进闭包；删掉"只提升标量 `with`"那道门和那句诊断 | `modules/transforms/jvp_operator.cpp` 的 `does not reinterpret … yet` | **相反**：那句诊断还在树上 |
 | `who-reads-the-first-operand-as-a-callee` | 删掉那段读法是对的；剩下的 `mk(x)(2.0)` 按内容处理，转置成调用 `transpose(v)`，现在就做 | `modules/transforms/transpose.cpp` | **待做** |
 | `can-a-pass-build-the-graph-a-transform-hands-out` | 引擎里"这是 `transforms:split` 的结果"那句拒绝要删，让库层 `grad` 覆盖这些形状 | 引擎（按出处判断处） | **待做** |
