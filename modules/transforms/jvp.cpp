@@ -215,6 +215,18 @@ gc_node_ref_t buildRuleTangent(
 /// A `var` `with` parameter is a cell the body writes. There is no direction to hand in for it (the
 /// lift reads it and does not write it, `jvpSignature`'s own sentence), so it keeps the place it had
 /// -- a `with` port of its declared value type, with the zero of that type as its tangent.
+///
+/// **Promotion is a bridge, and it is not a rule** (author, 2026-11-04 07:15). The library's `grad`
+/// answers a `with` weight's derivative correctly today because a *callee's* lift promotes that
+/// weight into the value list and gives it a direction; deleting the promotion before `grad` is
+/// written as a composition over `vjp` would turn right answers into wrong ones, so it stays. Its
+/// deadline is the merge that moves the library's `grad`/`with_grad` onto a lambda -- the second half
+/// of type-pack unpacking -- and the promotion goes in that same merge, not before it. The criterion
+/// for going is that the cases which read a `with` weight's gradient today
+/// (`library_grad_of_a_with_weight`, `grad_first_with_parameter`) keep answering the numbers they
+/// answer now, with the seed written in the lambda instead of in the lift. Nothing here is a
+/// language rule and nothing about it belongs in `docs/design/`: a `with` list is `f`'s own at
+/// `jvp(f)`, and promotion happens only inside a callee's lift (`liftSignature`'s `promoteWiths`).
 bool withIsPromoted(const FunctionType *function, size_t index) {
     if (function == nullptr || function->withIsVarAt(index)) {
         return false;

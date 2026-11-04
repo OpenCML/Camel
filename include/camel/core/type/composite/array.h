@@ -244,6 +244,40 @@ bool isUntypedArrayType(const Type *type);
 /// stands in to state one — and a generic parameter states none (design principles 5.1, 5.2).
 bool isElementTypeUnstated(const Type *type);
 
+/// Whether a value's type goes from `T` to `T[..]`, or back from `T[..]` to `T`: the two edges the
+/// run represents with a rank-zero array (design principles 5.4 -- a rank-zero array *is* the
+/// element, so the conversion is invisible to the program: the same value, the same printing, the
+/// same comparison, and `numel` of it answers `1` while `shape` answers `[]`).
+///
+/// This is the **one** spelling of that question, because it is a rule of the language and not of an
+/// entrance. `Builder::coerceTo` asks it where a value takes the type of its position and
+/// `Builder::visitCall` where an argument enters a parameter; the transposition walk asks it where it
+/// hands a law the cotangent of that law's port (`modules/transforms/transpose.cpp#ruleCotangent`,
+/// the entrance that is not some position's `coerceTo` because the port is filled by the caller and
+/// not by a builder). A second reading of the same rule somewhere else is the way the two ends start
+/// disagreeing about one value.
+inline bool isRankZeroEdge(Type *target, Type *source) {
+    if (target == nullptr || source == nullptr || target->equals(source)) {
+        return false;
+    }
+    const bool targetIsArray = target->code() == TypeCode::Array;
+    if (targetIsArray == (source->code() == TypeCode::Array)) {
+        return false;
+    }
+    if (targetIsArray) {
+        // `T` into `T[..]`: the value of the element type is the value of the open rank, and the
+        // slot keeps it as the rank-zero array the run holds.
+        const auto *arrayTarget = asArrayType(target);
+        return arrayTarget != nullptr && arrayTarget->rankZeroType() != nullptr &&
+               arrayTarget->assignableFrom(source);
+    }
+    // `T[..]` into `T`: only the open rank has a value with no dimension to read the element from;
+    // `T[]` and `T[3, ..]` state dimensions and are not this edge.
+    const auto *arraySource = asArrayType(source);
+    Type *element          = arraySource != nullptr ? arraySource->rankZeroType() : nullptr;
+    return element != nullptr && target->assignableFrom(element);
+}
+
 /// The extents a type states, in declaration order: `float[2, 3]` answers `{2, 3}`.
 ///
 /// Nothing when the type is not an array, and nothing when it leaves an extent open: `float[]`

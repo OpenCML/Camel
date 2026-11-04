@@ -5,13 +5,8 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：6 页
+## 现在在等作者：1 页
 
 | 页 | 问什么 |
 | --- | --- |
-| [`2026-11-04-a-bare-transpose-hands-a-law-a-zero-what-does-the-law-owe`](2026-11-04-a-bare-transpose-hands-a-law-a-zero-what-does-the-law-owe.cn.md) | 裸 `transpose` 把操作数的**零**递给读它的律时，这条律算不算"验过" |
-| [`2026-11-04-does-a-program-own-what-it-adopted`](2026-11-04-does-a-program-own-what-it-adopted.cn.md) | `Program` 交出去的图：只有它自己加的，还是连它 adopt 进来的一起？ |
-| [`2026-11-04-does-the-with-gate-gate-scalars-or-all-promotion`](2026-11-04-does-the-with-gate-gate-scalars-or-all-promotion.cn.md) | 删掉“只提升标量 `with`”那道门，删的是标量限制，还是提升本身？ |
-| [`2026-11-04-the-refusal-was-not-a-closure-member`](2026-11-04-the-refusal-was-not-a-closure-member.cn.md) | 那句「这一处补上，7 条应当回到原来的数」，我们照做了，打印指向另一个地方——剩下的 6 条算规则层，还是你认为还有一处没找到？ |
-| [`2026-11-04-what-comes-after-reading-a-body-built-callee-by-its-content`](2026-11-04-what-comes-after-reading-a-body-built-callee-by-its-content.cn.md) | 调用的被调值是体自己算出来的函数值：按内容读完之后，答案从哪儿来？ |
-| [`2026-11-04-where-does-the-value-of-a-linear-operand-come-from`](2026-11-04-where-does-the-value-of-a-linear-operand-come-from.cn.md) | 参与微分的那个参数自己的值，由谁交给转置？ |
+| [`2026-11-04-who-types-the-rank-zero-tangent-at-a-cuts-exit`](2026-11-04-who-types-the-rank-zero-tangent-at-a-cuts-exit.cn.md) | 切口的出口上，秩零的切向量由谁定类型 |
