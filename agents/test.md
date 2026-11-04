@@ -97,8 +97,13 @@ p
   the layer prints `[tier] milestone: ...`. Measured 2026-11-04: 28 plan files and 3518 declared
   entries -- 4 of the 28 hold `milestone` tests their header does not claim (three name `tier` on
   single tests, one sweeps copies in), which is why counting the headers undercounts the layer.
-  Naming a plan file still runs all of it, whatever `--tier` says; the layer is what a directory
-  target or the whole tree selects. (On that first measurement those files declared 3330 entries;
+  **The same tree therefore has three numbers that are each right about something else: 24 plan
+  files whose header says `milestone`, 27 when the tree is read through `testTier` but without
+  expanding a `[[sweeps]]` entry, and 28 for the layer a run of `--tier milestone` selects -- the
+  first two count what the files declare, the third counts the plan files the selection reaches,
+  and only the third is the layer.** Quote which reading produced the number, or the number is not comparable with the next
+  one. Naming a plan file still runs all of it, whatever `--tier` says; the layer is what a
+  directory target or the whole tree selects. (On that first measurement those files declared 3330 entries;
   a run of the layer reported `tests: 3404`, because back ends expand and `compare_to` companions
   join the run. The file count and the run count are two subjects; the gate prints the first and
   says "test entries".) That
