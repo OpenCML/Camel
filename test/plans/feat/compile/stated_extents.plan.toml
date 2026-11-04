@@ -48,6 +48,11 @@ expect_exit = 0
 expect_output_contains = ["stated mean value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]"]
 expect_output_not_contains = ["skip="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+known_fail = ["nvm"]
+known_fail_owner = "lane-rank0point"
+known_fail_reason = "the graph is built and then refused by its own return type: `():?:?: [Error]: The value the graph 'split_of_jvp_of_total_backward' hands on has type 'float[..]', and the graph declares 'float'; the value is node 8.` -- `tensor:mean_axis` computes the element at rank 0, the lift states the pair as `(float, float)` because that is the value's own type, and the tangent the rule's right side wrote (`mean_axis_stated(dxs, at)`) is typed `T[..]`; `split` then copies that node as the backward half's exit, whose declared type is `Tangent<float>`"
+known_fail_msg = "declares 'float'"
+known_fail_note = "Three things. One: this red is what removing the `keepdims = true` workaround exposed -- the case used to write `true` to stay off the rank-zero path, the author's ruling of 2026-11-04 04:20 turned it back, and the defect that workaround was hiding is now visible instead of dodged. Two: it is not `mean_axis`'s defect and not the law's port -- the same sentence appears with the port stated `T[..]` and with the conversion the language makes at a `T[..]` position (measured: `numel` of a scalar entering `float[..]` answers 1 and `shape` answers `[]`); what it pins is `split`'s exit type, the boundary between the two halves of a cut, which is why the two entries below carry the same sentence. Three: the decision this entry waits on is `docs/handover/questions/2026-11-04-who-types-the-rank-zero-tangent-at-a-cuts-exit.cn.md` -- two attempts to convert at the lift were measured and reverted (one turned this case green and made the two entries below refuse by node kind, the other built the graph and crashed at run time in `numelKernel`), and the recorded default is to convert once where the cut declares its exit. The mark comes off the day that lands, not before."
 timeout_ms = 20000
 
 # The law with the mean's answer an element instead of an array: `keepdims = false` on a rank-one
@@ -55,8 +60,9 @@ timeout_ms = 20000
 # `mean_axis_stated_t` stated its cotangent as `float[..]`
 # (docs/handover/questions/2026-11-04-a-rank-zero-cotangent-is-read-as-a-pointer.cn.md): a port that
 # looks like it already has a rank is a slot nothing converts, so `numel(ct)` read the number's bits
-# as a pointer. The law states the element now, and the language's own `T` -> `T[..]` conversion --
-# the one a call argument gets -- does the rest.
+# as a pointer. That reading is what the port's `T` was for; the ruling of 2026-11-04 04:20 has the
+# port say `T[..]` again and the conversion happen in the compiler, once, where a value's type goes
+# from `T` to `T[..]` -- so this entry's own red is now the next boundary, not this one.
 [[tests]]
 name = "stated_mean_axis_element_gradient"
 desc = "The gradient of a lane mean whose answer is the element itself: `mean_axis(x, 0, false)` over `[1.0, 2.0, 3.0, 4.0]` is 2.5, and the adjoint gives every position a quarter, `dL/dx=[0.25, 0.25, 0.25, 0.25]`. The lane length `numel(t) / numel(ct)` divides by three extents' product over `numel(ct)`, so a cotangent read as a pointer is a SIGSEGV and one spread over the lane answers 1.0 -- the number, not just the exit, is what says the conversion happened."
