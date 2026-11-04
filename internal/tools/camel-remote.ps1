@@ -111,7 +111,10 @@
 # exit code:
 #
 #   * the names are the table below, and every entry is the invocation the repository already uses,
-#     so a lane runs what the gate runs and not a paraphrase. `-Check all` runs all of them in order;
+#     so a lane runs what the gate runs and not a paraphrase. `-Check all` runs all of them in order,
+#     except the entries marked `planStage`: those read the plan stage's own record and are asked for
+#     by name beside the plan they read (`-Plan <target> -Check plan-debt`), because a check with no
+#     reading of its own must refuse rather than pass over nothing;
 #   * the stages are build -> plan -> checks, so one call answers both questions and a failing plan
 #     still gets its checkers (their readings are not thrown away with the plan's);
 #   * the run exits non-zero when any checker failed, and the exit code is the plan's when it failed,
@@ -176,6 +179,7 @@
 #        -Plan test/plans/feat/modules/graph.plan.toml -Jobs 16
 #   pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path <worktree> -Plan smoke -NoBuild
 #   pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path <worktree> -Config Debug -Plan smoke -Tier debug
+#   pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path <worktree> -Plan feat/opt -Check plan-debt
 #   pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path <worktree> -Clean
 
 # Named binding only: a token that is not a switch must not become the next parameter by position.
@@ -227,6 +231,8 @@ param(
     # Run these of the repository's static checkers on the host, after the build and after the plan:
     # names from the table below, comma-separated, or `all` for every one of them. Each checker's
     # output is printed verbatim with its exit code, and the run exits non-zero when one failed.
+    # `all` leaves out the `planStage` entries (today: `plan-debt`), which read the plan stage's own
+    # record and are named beside the plan they read.
     # An unknown name is exit 2 before anything runs; see "what the panel sees" and the -Check
     # section of the header for the stages and the exit code.
     [string[]]$Check = @(),
@@ -294,6 +300,13 @@ $checkers = [ordered]@{
     # ~/.local/bin/z3 itself, so the host's copy is found without an environment variable here; it
     # reads sources only and never starts the tree's binary, so it is not a compiler entry.
     'rule-proofs'         = @{ script = 'scripts/rule-proofs.mjs'; args = @('--require-solver'); compiler = $false }
+    # The plan's own prose against the plan's own reading: a `desc`, a `known_fail_note` or a `#`
+    # comment that says its case is red today must find that case running red in the run this gate
+    # just took (`scripts/check-plan-debt.mjs`). It is the one checker whose evidence is the plan
+    # stage and not the checkout, so it needs a plan in the same call -- `-Plan <target> -Check
+    # plan-debt` -- and it is left out of `all`: with no plan selected it has no reading to judge
+    # against, and it says so (exit 2) rather than passing over nothing.
+    'plan-debt'           = @{ script = 'scripts/check-plan-debt.mjs'; args = @(); compiler = $false; planStage = $true }
     # The whole static layer of the release gate, in the gate's own order and with the gate's own
     # criterion: this entry exists because the layer had never actually been run on the mainline.
     # The merges only ever ran plans, and the gate's static phase -- thirteen checks, four of which
@@ -315,7 +328,13 @@ $Check = @($Check | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim(
 $checkNames = @()
 foreach ($requested in $Check) {
     if ($requested -eq 'all') {
-        foreach ($known in $checkers.Keys) { if ($checkNames -notcontains $known) { $checkNames += $known } }
+        # A `planStage` entry reads the plan stage's own record, so it is not part of the static
+        # layer `all` means: it would refuse (exit 2) on every call that selects no plan, which is
+        # what `-Check all` is for. It is asked for by name, beside the plan it reads.
+        foreach ($known in $checkers.Keys) {
+            if ($checkers[$known].planStage) { continue }
+            if ($checkNames -notcontains $known) { $checkNames += $known }
+        }
     } elseif ($checkers.Contains($requested)) {
         if ($checkNames -notcontains $requested) { $checkNames += $requested }
     } else {

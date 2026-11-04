@@ -11,15 +11,19 @@ expected to do what the program does without the optimization passes: exit 0 and
 with) is fixed and is in `feat/compile/fold_arms` beside the case of that defect. `rc04_seed72`
 is fixed too and stays here: its red was the place-fork guard of the inliner walking four of the
 five kinds of input edge, so a chain end that reached the moved statement through an order edge
-only looked free to move it, and the move closed a cycle the seal then reported. The one test
-below that still fails is `rc03_seed30`: it is in the plan as *work owed*, not as an exception --
-no `known_fail` mark, so the plan's `fail` count is the debt and moves down only when something
-fixes it. `rc00_seed27` (SIGSEGV under `std::opt std::nvm`, in the scheduler rather than in a
-pass) is in no plan: it belongs to the lane that owns the schedulers.
+only looked free to move it, and the move closed a cycle the seal then reported. `rc03_seed30` is
+green as well: the folding used to hand the pruned branch's place to a `DATA` that belongs to no
+arm, and the fixes are in the passes (`aa157702a`, `0add4cd3c`, `060fbffaa`), not in this plan and
+not in the case -- the head of both paths is still `7cde424bd` (2026-11-04 21:52, when the two were
+red). So the pair below guards the fix, and a red here is the defect returning.
+`rc00_seed27` (SIGSEGV under `std::opt std::nvm`, in the scheduler rather than in a pass) is in no
+plan: it belongs to the lane that owns the schedulers.
 """
 # Why not `known_fail`: a mark says "this program is expected to be refused", and these are
 # programs the compiler is expected to run. A red here is the defect, visible in `feat/opt`
-# `[SUMMARY]`, and it goes away by fixing the pass.
+# `[SUMMARY]`, and it goes away by fixing the pass. That choice paid off when the two went green
+# (2026-11-05): there was no mark to take off, so the reading was a fix and not a cleanup -- and a
+# red here today means the defect is back.
 
 [[tests]]
 name = "adb67e081.rc03_seed30_reference"
@@ -40,7 +44,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "adb67e081.rc03_seed30_std_opt"
-desc = "`rc03_seed30` under `std::opt`, the pipeline it was found with. RED TODAY, expected to be fixed: the folding leaves a `DATA` between `BRCH 7` and its `JOIN 6` that belongs to no arm -- `Runtime graph '__root__' breaks the branch-arm invariant: DATA 30 runs between BRCH 7 and its JOIN 6 and belongs to no arm: it waits on the BRCH and no arm's result depends on it` (17_graph_rewrite_api_contracts.md, 4.1 rule 2)."
+desc = "`rc03_seed30` under `std::opt`, the pipeline it was found with. Green today, measured 2026-11-05: exits 0 and prints nothing. What it guards against is the refusal it used to meet -- the folding leaves a `DATA` between `BRCH 7` and its `JOIN 6` that belongs to no arm: `Runtime graph '__root__' breaks the branch-arm invariant: DATA 30 runs between BRCH 7 and its JOIN 6 and belongs to no arm: it waits on the BRCH and no arm's result depends on it` (17_graph_rewrite_api_contracts.md, 4.1 rule 2) -- and that sentence is in `expect_output_not_contains`, so a run that reports it again turns red here."
 kind = "behavior"
 case = "../../../cases/opt/adb67e081/rc03_seed30.cml"
 args = ["${case}", "std::opt", "${run_nvm}"]
