@@ -2578,10 +2578,10 @@ a third port, their tie selection, which no extent list could carry.)
 #### `sum_stated`
 
 ```camel
-sum_stated: (t: T[...], at: int[]) => T when is_numeric::<T>()
+sum_stated: (t: T[...], extents: int[]) => T when is_numeric::<T>()
 ```
 
-The sum of every element, with the operand's extents stated: `sum(t)`, and `at` is `shape(t)`.
+The sum of every element, with the operand's extents stated: `sum(t)`, and `extents` is `shape(t)`.
 
 The extents are read by `rulesets.transpose`'s `sum_stated_t` and by nothing else -- the value is
 the sum, and the accumulation, the element type and the one rounding are `sum`'s own. A list that
@@ -2589,7 +2589,7 @@ disagrees with the tensor's shape is a fault, because a spread over extents nobo
 gradient of the wrong shape.
 
 - Pure.
-- Failure: fault `RuntimeError` when `at` disagrees with the tensor's shape.
+- Failure: fault `RuntimeError` when `extents` disagrees with the tensor's shape.
 - Example: `sum_stated([1.0, 2.0, 3.0] as float[], [3])` gives `6.0`
 
 #### `take_stated`

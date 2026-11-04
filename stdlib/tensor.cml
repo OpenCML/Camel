@@ -122,16 +122,16 @@ export func pick_at::<T>(t: T[...], at: int[]): T when is_numeric::<T>()
 // looking for a law, and `TransposeRefusalCause` no longer has that cause -- the two extrema below take
 // a third port, their tie selection, which no extent list could carry.)
 
-/// The sum of every element, with the operand's extents stated: `sum(t)`, and `at` is `shape(t)`.
+/// The sum of every element, with the operand's extents stated: `sum(t)`, and `extents` is `shape(t)`.
 ///
 /// The extents are read by `rulesets.transpose`'s `sum_stated_t` and by nothing else -- the value is
 /// the sum, and the accumulation, the element type and the one rounding are `sum`'s own. A list that
 /// disagrees with the tensor's shape is a fault, because a spread over extents nobody verified is a
 /// gradient of the wrong shape.
 /// @pure
-/// @fails fault `RuntimeError` when `at` disagrees with the tensor's shape
+/// @fails fault `RuntimeError` when `extents` disagrees with the tensor's shape
 /// @example sum_stated([1.0, 2.0, 3.0] as float[], [3])    // 6.0
-export func sum_stated::<T>(t: T[...], at: int[]): T when is_numeric::<T>()
+export func sum_stated::<T>(t: T[...], extents: int[]): T when is_numeric::<T>()
 
 /// The rows `take` reads, with the indices and the operand's extents stated in one list:
 /// `[n, i0, ..., i(n-1), d0, ..., d(rank-1)]` is `take(t, [i0, ..., i(n-1)])`.
