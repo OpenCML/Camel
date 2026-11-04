@@ -119,9 +119,9 @@ struct PassApplyResult {
  * stderr. applyPassesDetailed calls it for its own list; a driver that runs several lists
  * (the given passes, then the fallback) calls it for all of them first.
  *
- * With a context, a name that is not known yet and is written `<module>::<pass>` first loads
- * the module `<module>` (as an `import` of it would): naming a module's pass on the command
- * line is enough to have it, the program need not import a module it does not use. A module
+ * With a context, naming a module's pass (`<module>::<pass>`) loads that module first, as an
+ * `import` of it would: a pass named on the command line is available to the program, which
+ * need not import a module it does not use. A module
  * that cannot be found leaves the name unknown, which is reported as before.
  */
 void requireKnownPasses(

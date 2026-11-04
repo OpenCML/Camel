@@ -315,7 +315,8 @@ class Node {
         ASSERT(caseType() == CaseType::Enum, "The case names no enum variant");
         return *payload_.enumCase;
     }
-    /// CASE of an enum variant: the pattern is written `{ ... }` (struct) rather than `( ... )`.
+    /// CASE of an enum variant: whether the case binds the variant's fields by name (`{ ... }`),
+    /// rather than taking its payload by position (`( ... )`).
     bool enumStructPattern() const {
         check(NodeKind::CASE);
         ASSERT(caseType() == CaseType::Enum, "The case names no enum variant");

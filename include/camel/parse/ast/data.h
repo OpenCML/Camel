@@ -260,7 +260,7 @@ class StaticForLoad : public DataLoad {
     const std::string &valueName() const { return valueName_; }
     const std::string &typeName() const { return typeName_; }
     /// The third name of `(n, F, tags)`: the field's tags. Empty when the head names two things
-    /// or one; also empty (written as `_`) when the position is the wildcard.
+    /// or one; also empty when the position is the wildcard `_`, which binds nothing.
     const std::string &tagsName() const { return tagsName_; }
     /// How many names the head writes, in all: the count the element must have parts for
     /// (`SemanticDiag::StaticHeadNameCount`). The three names above are the first three written;

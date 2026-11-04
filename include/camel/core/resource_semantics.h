@@ -265,9 +265,9 @@ bool covers(const ResourceSignature &target, const ResourceSignature &source);
 /// them; a module may still write `resource fs` to say it uses it, and a group may name them.
 std::span<const std::string_view> standardResourceNames();
 
-/// The name of a resource as source text and reports write it. A resource of a module is keyed
-/// `module:name` with one colon (`tiles:driver`, `counter:cnt`); it is written `module::name`.
-/// A name without a module is written as it is.
+/// The name of a resource as source text and reports write it: a resource of a module is shown
+/// with the module's own name (`tiles::driver`, `counter::cnt`), though the key it is stored
+/// under has one colon (`tiles:driver`). A name without a module is shown as it is.
 std::string resourceDisplayName(std::string_view key);
 bool isStandardResource(std::string_view name);
 
