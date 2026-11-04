@@ -21,12 +21,15 @@ func taken(x: f32[...]): f32[...] {
     return reshape<[2, 3]>(x)[:, idx]
 }
 
-func main(): int sync {
+func main(): string! sync {
     let x = reshape<[6]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
-    let _ = export_model<out: get_env('ONNX_OUT_A') ?? ''>(
-        (x: f32[...]): f32[...] => position(x), x)
-    let _ = export_model<out: get_env('ONNX_OUT_B') ?? ''>(
-        (x: f32[...]): f32[...] => taken(x), x)
-    println('exported')
-    return 0
+    return match export_model<out: get_env('ONNX_OUT_A') ?? ''>(
+        (x: f32[...]): f32[...] => position(x), x) {
+        case error e1 => { return e1 }
+        case v1 => match export_model<out: get_env('ONNX_OUT_B') ?? ''>(
+            (x: f32[...]): f32[...] => taken(x), x) {
+            case error e2 => { return e2 }
+            case v2 => 'exported'
+        }
+    }
 }

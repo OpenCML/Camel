@@ -188,14 +188,23 @@ timeout_ms = 10000
 
 [[tests]]
 name = "export_import_order"
-desc = "Importing onnx before tensor keeps a single tensor module (one operator registry), so inference still knows shapes."
+desc = "Importing onnx before tensor keeps a single tensor module (one operator registry), so inference still knows shapes: the export of the layer_norm/matmul graph reaches emission, and the operator it names there is the one it cannot export. That operator is `keep`, which the lowering of `layer_norm` leaves in the graph and the purity check refuses (`impure operator ':op/keep'` uses a slot the model cannot carry), so no model is written today -- a defect of the exporter, recorded here rather than worked around. What the case pins is the pair the ruling asks for: the refused program says why and does not print `exported`, exits non-zero, and leaves no model on disk. Before the refusal was handled the same program printed `exported` and exited 0 with no file."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_import_order.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=${test_tmp}/export_import_order.onnx"]
-expect_exit = 0
-expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const out = input.normalized.stdout
+const err = input.normalized.stderr + input.normalized.stdout
+assert(!out.includes('exported'), `a refused export must not say it exported: ${out}`)
+assert(input.exit_code !== 0, `the refusal must be visible: exit ${input.exit_code}`)
+assert(err.includes("impure operator ':op/keep'"), `the refusal must name the impure operator: ${err}`)
+assert(!fs.existsSync(`${input.test_tmp}/export_import_order.onnx`), 'a refused export must leave no model on disk')
+}
+"""
 timeout_ms = 10000
 
 [[tests]]
@@ -1713,9 +1722,9 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_loop"
-desc = "Two tail recursions whose depth depends on the model input (one bounded by the data alone, one a counter against a data-dependent bound with an argument that never changes) export as two ONNX Loops; the unchanged argument is not a carried value."
+desc = "Two tail recursions whose depth depends on the model input (one bounded by the data alone, one a counter against a data-dependent bound with an argument that never changes) export as two ONNX Loops; the unchanged argument is not a carried value. The case is the pass copy of export_loop.cml: `onnx::export` reads requests from the top level of the entry graph, so the program keeps the request as its own result there, while export_loop.cml (the run-time case) takes it apart to report a refusal."
 kind = "behavior"
-case = "../../../cases/modules/onnx/export_loop.cml"
+case = "../../../cases/modules/onnx/export_loop_pass.cml"
 args = ["${case}", "std::macro", "std::opt", 'onnx::export out="${test_tmp}/pass_export_loop.onnx"']
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/pass_export_loop.onnx"]
@@ -1813,9 +1822,9 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_slice_loop"
-desc = "A recursion over the time axis that stops early on the data exports: the slice of step t takes a start and an end that depend on the model input (inputs of the ONNX Slice; they had to be export-time constants)."
+desc = "A recursion over the time axis that stops early on the data exports: the slice of step t takes a start and an end that depend on the model input (inputs of the ONNX Slice; they had to be export-time constants). The case is the pass copy of export_slice_loop.cml: `onnx::export` reads requests from the top level of the entry graph, so the program keeps the request as its own result there, while export_slice_loop.cml (the run-time case) takes it apart to report a refusal."
 kind = "behavior"
-case = "../../../cases/modules/onnx/export_slice_loop.cml"
+case = "../../../cases/modules/onnx/export_slice_loop_pass.cml"
 args = ["${case}", "std::macro", "std::opt", 'onnx::export out="${test_tmp}/pass_export_slice_loop.onnx"']
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/pass_export_slice_loop.onnx"]
@@ -3270,7 +3279,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "export_refusal_is_visible"
-desc = "A refused export must not read as a successful one. `export_model` answers `void!`, so its refusal is a value; a program that discards it with `let _ =` prints its own `exported` line, exits 0, and leaves no file -- which is how `modules.onnx` spent a whole run reporting failures whose stdout said `exported`. This case pins the pair the printed word and the disk must be compared on: the refused program does not print `exported`, the refusal is visible (`ExportUnsupported`, or a non-zero exit), and no model reaches the disk. What it does not pin is the discarding form itself, which needs a rule about `let _` on an error value: docs/handover/questions/2026-11-05-does-a-shape-declaration-need-a-length-in-its-return-type.cn.md, section 5."
+desc = "A refused export must not read as a successful one. `export_model` answers `void!`, so its refusal is a value; a program that discards it with `let _ =` prints its own `exported` line, exits 0, and leaves no file -- which is how `modules.onnx` spent a whole run reporting failures whose stdout said `exported`. This case pins the pair the printed word and the disk must be compared on: the refused program does not print `exported`, the refusal is visible (`ExportUnsupported`, or a non-zero exit), and no model reaches the disk. The discarding form itself is settled: `let _ = export_model(...)` is the wrong writing, and every case, plan and document that used it handles the refusal instead (the 2026-10-29 ruling in docs/handover/reviews/questions-2026-10-29.md; the discovery is recorded in docs/handover/questions/2026-11-05-does-a-shape-declaration-need-a-length-in-its-return-type.cn.md, section 5)."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_refusal_is_visible.cml"
 args = ["${case}"]

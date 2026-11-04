@@ -25,7 +25,7 @@ func step(w: f32[...], v: f32[...], x: f32[...]): (f32[...], f32[...], f32[...])
     return (reshape<[1]>([f32(vg.0)]), vg.1.w, vg.1.v)
 }
 
-func main(): int sync {
+func main(): string! sync {
     let w = reshape<[3, 2]>([0.5, 0.25, -1.0, 2.0, 1.5, -0.5] as f32[])
     let v = reshape<[3]>([1.0, -2.0, 0.5] as f32[])
     let x = reshape<[2]>([0.3, -0.7] as f32[])
@@ -33,7 +33,8 @@ func main(): int sync {
     println(r.0)
     println(r.1)
     println(r.2)
-    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((w: f32[...], v: f32[...], x: f32[...]): (f32[...], f32[...], f32[...]) => step(w, v, x), (w, v, x))
-    println('exported')
-    return 0
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>((w: f32[...], v: f32[...], x: f32[...]): (f32[...], f32[...], f32[...]) => step(w, v, x), (w, v, x)) {
+        case error e => { return e }
+        case v => 'exported'
+    }
 }
