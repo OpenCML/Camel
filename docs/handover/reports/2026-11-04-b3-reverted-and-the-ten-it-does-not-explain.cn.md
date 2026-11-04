@@ -48,8 +48,8 @@
 | --- | --- | --- | --- |
 | 1 | `first_step.tensor_vjp_answers_the_step.nvm` | `test/plans/feat/showcase_s2.plan.toml` | **回归**：develop 上过、train 上不过（develop 侧读数引自 `lane-packdots` 的二分，本页没有重跑） |
 | 2 | `matmul_t.law_read_through_vjp.nvm` | `test/plans/feat/showcase_s2.plan.toml` | **回归**：同上 |
-| 3 | `matmul_t.vector_lhs_law.nvm` | `test/plans/feat/showcase_s2.plan.toml` | 既有欠账：develop 与 train 句子相同（原来是 `skip=rule-ranks ranks=(3, 2)`，B6 的签名改动之后走到更远、换成了 `cotangent-needs-a-value`） |
-| 4 | `matmul_t.vector_rhs_law.nvm` | `test/plans/feat/showcase_s2.plan.toml` | 既有欠账：同上 |
+| 3 | `matmul_t.vector_lhs_law.nvm` | `test/plans/feat/showcase_s2.plan.toml` | 既有欠账：**两棵树句子逐字相同**，与合并无关 |
+| 4 | `matmul_t.vector_rhs_law.nvm` | `test/plans/feat/showcase_s2.plan.toml` | 既有欠账：**两棵树句子逐字相同**，与合并无关 |
 | 5 | `mean_axis1_keepdims_gradient_reads_the_row_length.nvm` | `test/plans/feat/compile/transforms.plan.toml` | 既有欠账 |
 | 6 | `erf_gradient_both_legs.nvm` | `test/plans/feat/compile/transforms.plan.toml` | 既有欠账 |
 | 7 | `erfc_gradient_both_legs.nvm` | `test/plans/feat/compile/transforms.plan.toml` | 既有欠账 |
@@ -60,12 +60,14 @@
 
 **10 条是既有欠账／回归的行为欠账，1 条是文档引用。** 这 11 条里没有一条是"合并把两棵绿的树撞红了"之外的第三种东西。
 
+**原稿曾写成本条由 `rule-ranks` 换句而来，该说法来自协调者的一次误记，已由同平台逐字比对推翻。** `skip=rule-ranks uri=tensor:matmul ranks=(3, 2)` 是 `rank_three_is_refused_by_name`（函数 `batched_sum_of_product`）的原话，不是这两条 `*_law`；而 `rank_three` 在两棵树上的差别只有 `node=6` → `node=7`。**一个错的解释写进账本，会自己长出下一份错账。** 留着那句话，下一个人会去查一个不存在的换句。
+
 ## 五、门槛写 3、合并树上读出 11：不是多了 8 条债，是第一次一起看见
 
 门槛那 3 条是 `matmul_t` 三兄弟（`vector_lhs_law`、`vector_rhs_law`、`rank_three_is_refused_by_name`）。在合并树上：
 
 - `rank_three_is_refused_by_name` **过**（`node=7` 是 `0dc18fa9d` 自己交代过的编号位移，不是修出来的绿，也没有再动它的 pin）；
-- `vector_lhs_law` / `vector_rhs_law` 以**新的句子**红——原来是 `skip=rule-ranks ranks=(3, 2)`，现在是 `cotangent-needs-a-value`。**同一条用例从一个拒绝句换成另一个拒绝句，是"红了但红法变了"，不是"又红了一条"**；它是 `lane-packdots` 的 B6（七笔 `*_stated` 算子签名 `(t, at)` → `(t, axis, keepdims, extents)`）之后走查能走到更远的结果，B6 之后没有人跑过完整 `feat`。
+- `vector_lhs_law` / `vector_rhs_law` 在 develop 与 train 上**句子逐字节相同**（`skip=cotangent-needs-a-value uri=tensor:matmul position=0`），**与合并无关**。它们不是"换红法"的例子；`rule-ranks ranks=(3, 2)` 那句属于 `rank_three_is_refused_by_name`。
 - 真正"多出来"的 8 条是同一族欠账，落在 `feat/compile/transforms` 与 `feat/showcase_s2` 这两张 plan 里，而**各车道只跑自己那一角的 plan**——`lane-packdots` 记 `8803 = 8757/3` 那次是 B6 之前、且只在 `feat/compile` 上。**这 8 条从没进过任何一条车道的读数，不是合并造出来的。**
 
 一句话：**门槛的 3 是"车道上看得见的那一角"，树上的 11 是"合并之后全部看得见的那一片"；两者相差的不是债的数量，是视野。**
