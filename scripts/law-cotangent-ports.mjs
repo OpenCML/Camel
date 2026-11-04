@@ -9,8 +9,8 @@
 // says what the cotangent of the left side's answer is, and the body consumes it. The two neighbours
 // below are one word apart, and each is right only for its own law:
 //
-//     sum_stated(t, at)       => (ct: T)         => spread_over(ct, at)          // an element
-//     mean_axis_stated(t, at) => (ct: float[..]) => mean_axis_cotangent(ct, at)  // an array
+//     sum_stated(t, at)       => (ct: T) => spread_over(ct, at)          // one number, spread over
+//     mean_axis_stated(t, at) => (ct: T) => mean_axis_cotangent(ct, at)  // one number, entered twice
 //
 // `spread_over` takes one number (`stdlib/rulesets/transpose.cml#spread_over`: `ct: T`, feeding
 // `full(at, ct)` whose `value` is a `number`); `numel` reads an array (`stdlib/tensor.cml#numel`:
@@ -18,17 +18,38 @@
 // instantiates, still builds a graph -- and the slot the body reads is not the value the port
 // promised. Nothing compared the two sentences, so nothing said so.
 //
+// One disagreement is not one: design principles 5.4 makes a rank-zero array *be* its element -- the
+// same value, the same printing, the same comparison -- and the language converts between the two
+// spellings wherever a value enters an array position (`ArrayType::castSlotFrom` ->
+// `Array::createRankZero`, inserted by `Builder::coerceTo`; the exporter writes it as
+// `rt::Array<T>::element`). So an **element port** handed to a parameter declared as **that same
+// element's open rank with no prefix** (`T` handed to `t: T[..]`) is one value read either way: the
+// box is made at the argument position and `numel` of it answers 1. Allowed, and only that:
+//
+//   * the port has to be a bare element type (`T` or `float`), not `T[3]` and not `T[..]`;
+//   * the parameter has to be an open rank with no prefix (`T[..]`), not `T[3]` and not fixed extents
+//     in any other spelling -- a fixed extent says the body reads more than one element, and the box
+//     is one element wide;
+//   * the element types have to be the same letter (`T` to `T`, never `T` to `U`).
+//
+// Every other disagreement is still a finding, in both directions. The sentence a finding prints
+// says which requirement it violated, so a port handed to a `T[3]` parameter still reads "reads an
+// array" -- that one does.
+//
 // The failure this class produces was measured by `lane-rank0` on 2026-11-04: 8 of 8 runs died in
 // `numelKernel`. That reading has two halves and this check owns the first of them:
 //
-//   * a port that disagrees with its own body. This check reports that. On the tree of 2026-11-04 it
-//     reports nothing, because every law's port matches the way its body uses it -- including the law
-//     that crashed.
+//   * a port that disagrees with its own body. This check reports that -- except for the rank-zero
+//     equivalence above, which is not a disagreement. On the tree of 2026-11-04 the only shape left
+//     is a body that reads a length, which the allowance lets through; before the allowance the same
+//     shape was reported, and the reported tree was the one whose 8 runs died in `numelKernel` -- the
+//     check said nothing about the law that crashed and said something about the repair. That is the
+//     honest history of this paragraph and the reason the allowance exists at all.
 //   * a port that agrees with its body and disagrees with the value the transform hands over. That is
 //     the half `mean_axis_stated_t` was on, and a law's source has no witness for it: `ruleCotangent`
 //     (`modules/transforms/transpose.cpp`) decides the types at build time. It is recorded as a
 //     question beside this change
-//     (`docs/handover/questions/2026-11-04-where-a-laws-port-disagrees-with-the-value-it-is-handed.cn.md`).
+//     (`docs/handover/questions/2026-11-04-narrow-the-declaration-or-teach-the-consumer.cn.md`).
 //
 // So this reads the laws as text and asks one question of each port: what does the body require of
 // it? Three kinds of witness, and each names where its requirement comes from:
@@ -49,6 +70,12 @@
 // What this cannot do, said here rather than discovered later:
 //
 //   * it cannot see the type the transform actually hands a law -- the half above;
+//   * it cannot look inside the body of the helper a port is handed to. `numel(ct)` inside
+//     `mean_axis_cotangent` answers 1 for the rank-zero box and the lane count for an array
+//     cotangent, and this check sees only the port and the parameter -- so a law whose helper reads a
+//     length *and assumes more than one element* is not caught here. The probe
+//     `element_port_many.cml` in the self-test is that law, and the self-test prints which of the two
+//     readings it gets, so the gap is measured rather than assumed;
 //   * a port the body only returns, only multiplies by a value of unknown shape (`mul_ok`'s `dx + dw`),
 //     or never uses at all (`probe_rule_mul`'s `bw`) has no witness: this prints those as counted, not
 //     as passed, and says how many;
@@ -59,8 +86,12 @@
 //
 //   node scripts/law-cotangent-ports.mjs                    check stdlib/rulesets, print every finding
 //   node scripts/law-cotangent-ports.mjs --explain          the table: law, port, first use, witness
-//   node scripts/law-cotangent-ports.mjs --self-test        the reverse reading: two broken laws must
-//                                                           be reported and a clean pair must not
+//   node scripts/law-cotangent-ports.mjs --self-test        the reverse reading: a fixed-extent
+//                                                           disagreement and an array port handed
+//                                                           one number must be reported, the
+//                                                           rank-zero equivalence and a clean pair
+//                                                           must not, and the helper that assumes
+//                                                           more than one element is measured
 //   node scripts/law-cotangent-ports.mjs FILE...            check the files named instead
 //
 // Exit: 0 when nothing disagrees, 1 when a port and its body disagree, 2 when the run checked no law
@@ -292,6 +323,22 @@ function kindOfPortType(text) {
     const kind = kindOfType(text)
     if (kind === 'unknown' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(text.trim())) return 'element'
     return kind
+}
+
+/// Whether one use of an element port is the rank-zero equivalence of design principles 5.4 rather
+/// than a disagreement: the port is a bare element type, the parameter it enters is the *same*
+/// element's open rank with no prefix, and nothing else. `T` handed to `t: T[..]` is one value read
+/// two ways -- the box is `Array::createRankZero` at the argument position, `numel` of it answers 1 --
+/// while `T` handed to `t: T[3]` is a body that reads three elements, and `T` handed to `t: U[..]` is
+/// another element's array. Only the first is allowed, which is what keeps this a rule and not a
+/// blanket.
+function isRankZeroEquivalence(portType, parameterType) {
+    if (parameterType === undefined) return false
+    const port = portType.trim()
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(port)) return false
+    const open = /^([A-Za-z_][A-Za-z0-9_]*)\s*\[\s*\.\.\s*\]$/.exec(parameterType.trim())
+    if (open === null) return false
+    return open[1] === port
 }
 
 // ---- the declarations the requirements come from ----
@@ -541,8 +588,11 @@ function requirementAt(declarations, name, index) {
     // instead of believing it: `stdlib/tensor.cml#numel, parameter 1 't: T[..]'`.
     const parameter = matching[0].params[index]
     const where = `${matching[0].where}, parameter ${index + 1} \`${parameter.name}: ${parameter.type}\``
-    if (unique.size !== 1) return { kind: 'either', where }
-    return { kind: kinds[0], where }
+    // The parameter's own type text travels with the requirement, because whether this use is the
+    // rank-zero equivalence of 5.4 depends on the spelling and not on the kind alone: `T[..]` is an
+    // array and so is `T[3]`, and only the first one can hold a value that is one element.
+    if (unique.size !== 1) return { kind: 'either', where, parameterType: parameter.type }
+    return { kind: kinds[0], where, parameterType: parameter.type }
 }
 
 function resultKind(declarations, name) {
@@ -575,6 +625,7 @@ function witnessesOfPort(law, port, declarations) {
                 text: `${site.name}(${site.args.map((a) => a.trim()).join(', ')})`,
                 kind: requirement.kind,
                 where: requirement.where,
+                parameterType: requirement.parameterType,
                 callee: site.name
             })
         })
@@ -711,7 +762,12 @@ function checkLaw(law, declarations) {
             rows.push(row)
             continue
         }
-        const contradicting = uses.find((use) => use.kind !== kind)
+        const contradicting = uses.find(
+            (use) => use.kind !== kind && !isRankZeroEquivalence(port.type, use.parameterType)
+        )
+        const equivalent = uses.filter(
+            (use) => use.kind !== kind && isRankZeroEquivalence(port.type, use.parameterType)
+        )
         if (contradicting !== undefined) {
             row.verdict = 'disagrees'
             row.witness = `${contradicting.kind} (${contradicting.where})`
@@ -719,6 +775,14 @@ function checkLaw(law, declarations) {
             findings.push(
                 `${row.file}:${law.name}: ${noun} is '${port.type}' but the body hands it to '${contradicting.callee}', which ${reads} (${contradicting.where})`
             )
+            rows.push(row)
+            continue
+        }
+        if (equivalent.length > 0) {
+            // 5.4: the value is one element and the parameter is that element's open rank, so the
+            // language makes the rank-zero box where it enters and the body reads one element.
+            row.verdict = 'agrees'
+            row.witness = `${equivalent[0].where} -- the rank-zero array of 5.4, one value read either way`
             rows.push(row)
             continue
         }
@@ -812,12 +876,17 @@ function run(targets, { explain }) {
 // ---- the reverse reading ----
 
 const PROBES = {
-    'element_port_numel.cml': [
-        '// A law whose cotangent port is one number and whose body hands it to `numel`, which reads an',
-        '// array: the same pair of sentences the law `lane-rank0` crashed on, with the port written as',
-        '// the one thing the body is not.',
-        'export rule element_port_numel::<T>(t: T[..], at: int[]) when is_float::<T>() {',
-        '    mean_axis_stated(t, at) => (ct: T) => numel(ct)',
+    'element_port_fixed_extent.cml': [
+        '// A law whose cotangent port is one number and whose body hands it to a parameter of three',
+        '// numbers: a fixed extent is a body that reads more than one element, and the rank-zero box of',
+        '// 5.4 is one element wide, so this stays a finding. It is the negative control of the',
+        '// allowance: without it, allowing `T` -> `T[..]` would have allowed every extent.',
+        'func three_lanes::<T>(ct: T[3]): T[..] when is_float::<T>() {',
+        '    return full([3], ct[0])',
+        '}',
+        '',
+        'export rule element_port_fixed_extent::<T>(t: T[..], at: int[]) when is_float::<T>() {',
+        '    mean_axis_stated(t, at) => (ct: T) => three_lanes(ct)',
         '}',
         ''
     ].join('\n'),
@@ -833,10 +902,48 @@ const PROBES = {
         '}',
         ''
     ].join('\n'),
+    'element_port_open_rank.cml': [
+        '// The shape the allowance exists for: a port of one number handed to a parameter declared as',
+        '// that same number\'s open rank, with no prefix and no extents. Design principles 5.4 makes the',
+        '// two the same value and the language makes the box at the argument position, so this is not a',
+        '// finding -- `numel` of it answers 1, which is what `mean_axis_cotangent` computes with.',
+        'func lanes_of::<T>(ct: T[..], at: int[]): T[..] when is_float::<T>() {',
+        '    let extents = at[2:len(at)]',
+        '    let lanes = float(extent_product(extents)) / float(numel(ct))',
+        '    return full(extents, 1.0) * (ct / lanes)',
+        '}',
+        '',
+        'func extent_product(extents: int[]): int {',
+        '    return extents->reduce<(acc: int, d: int) => acc * d, 1>',
+        '}',
+        '',
+        'export rule element_port_open_rank::<T, X, A>(t: X, at: A) when is_float::<T>() {',
+        '    mean_axis_stated(t, at) => (ct: T) => lanes_of(ct, at)',
+        '}',
+        ''
+    ].join('\n'),
+    'element_port_many.cml': [
+        '// The shape the allowance cannot see, and the reason it is bounded: the port promises one',
+        '// number, the parameter is that number\'s open rank (so the allowance lets it through), and the',
+        '// helper\'s body reads a length and assumes more than one element. The assumption is inside the',
+        '// helper, which this check does not open, so it is measured here rather than caught: a port and',
+        '// a parameter can agree while the arithmetic behind them still means a lane count.',
+        'func scaled_by_lanes::<T>(ct: T[..], at: int[]): T[..] when is_float::<T>() {',
+        '    let n = numel(ct)',
+        '    let doubled = n > 1 ? float(n) * 2.0 : 1.0',
+        '    return full(at, doubled * ct)',
+        '}',
+        '',
+        'export rule element_port_many::<T, X, A>(t: X, at: A) when is_float::<T>() {',
+        '    mean_axis_stated(t, at) => (ct: T) => scaled_by_lanes(ct, at)',
+        '}',
+        ''
+    ].join('\n'),
     'clean_control.cml': [
-        '// The two laws of the library today, written the way it writes them: an element port spread over',
-        '// the extents it states, and an array port whose helper reads its length. Neither is a finding,',
-        '// which is the half of the reading that says the check is not merely refusing everything.',
+        '// The two laws of the library as it writes them today: an element port spread over the extents',
+        '// it states, and an element port handed to the helper that reads its length through the open',
+        '// rank. Neither is a finding, which is the half of the reading that says the check is not',
+        '// merely refusing everything.',
         'func spread_over::<T>(ct: T, at: int[]): T[..] when is_float::<T>() {',
         '    return full(at, ct)',
         '}',
@@ -856,7 +963,7 @@ const PROBES = {
         '}',
         '',
         'export rule mean_axis_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {',
-        '    mean_axis_stated(t, at) => (ct: float[..]) => mean_axis_cotangent(ct, at)',
+        '    mean_axis_stated(t, at) => (ct: T) => mean_axis_cotangent(ct, at)',
         '}',
         ''
     ].join('\n')
@@ -878,24 +985,35 @@ function selfTest() {
             console.log = log
         }
     }
-    const element = ran('element_port_numel.cml')
+    const fixed = ran('element_port_fixed_extent.cml')
     const array = ran('array_port_spread.cml')
+    const openRank = ran('element_port_open_rank.cml')
+    const many = ran('element_port_many.cml')
     const clean = ran('clean_control.cml')
-    const caught = [...element.lines, ...array.lines].filter((line) => line.includes('disagrees') || line.includes('cotangent port is'))
+    const caught = [...fixed.lines, ...array.lines].filter(
+        (line) => line.includes('disagrees') || line.includes('cotangent port is')
+    )
     for (const line of caught) console.log(line)
     console.log(
-        `self-test: an element port read by \`numel\` is ${element.status === 1 ? 'reported' : 'NOT reported'}, an array port handed to \`spread_over\` is ${array.status === 1 ? 'reported' : 'NOT reported'}, and the two laws of the library are ${clean.status === 0 ? 'not' : 'NOT'}`
+        `self-test: a port 'T' handed to a parameter 'T[3]' is ${fixed.status === 1 ? 'reported' : 'NOT reported'}, a port 'T[..]' handed to a parameter 'T' is ${array.status === 1 ? 'reported' : 'NOT reported'}`
     )
     console.log(
-        `self-test: ${clean.lines[0] === undefined ? '(no line)' : clean.lines[0]}`
+        `self-test: the rank-zero pair 'T' -> 'T[..]' is ${openRank.status === 0 ? 'not reported' : 'REPORTED'}, and the two laws of the library are ${clean.status === 0 ? 'not reported either' : 'REPORTED'}`
     )
-    const ok = element.status === 1 && array.status === 1 && clean.status === 0 && caught.length === 2
+    // The gap the allowance leaves is printed, not hidden: the law below is one number handed to an
+    // open rank whose body reads a length and assumes more than one element, and no reading of the
+    // port and the parameter can tell it from the one above.
+    console.log(
+        `self-test: the helper that reads a length and assumes more than one element is ${many.status === 1 ? 'reported' : 'NOT reported'} -- ${many.status === 1 ? 'caught' : 'the assumption is inside the helper, which this check does not open'}`
+    )
+    const ok =
+        fixed.status === 1 && array.status === 1 && openRank.status === 0 && clean.status === 0 && caught.length === 2
     console.log(
         ok
-            ? 'self-test: both disagreements are caught and the clean pair is not, so the reading is a rule and not a blanket'
+            ? 'self-test: both disagreements are caught, the rank-zero equivalence and the clean pair are not, so the reading is a rule and not a blanket'
             : 'self-test: FAILED'
     )
-    // The three modules are the whole fixture and they live in the system temp directory, so a run of
+    // The probe modules are the whole fixture and they live in the system temp directory, so a run of
     // the gate leaves nothing behind.
     fs.rmSync(directory, { recursive: true, force: true })
     return ok ? 0 : 1
