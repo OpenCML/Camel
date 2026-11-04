@@ -1946,6 +1946,19 @@ expect_output_not_contains = ["Warning", "[Error]", "library=(0.0", "library=(9.
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
+[[tests]]
+name = "transforms.jvp_refuses_a_call_through_a_value"
+desc = "The construct that stops every library transform written as a composition, refused by name instead of crashed on. A `Call` node is a call through a value: its callee is a value the body reads, so which graph it stands for is a question only the run time answers, while a lifted call reaches a lifted callee and hands it `(value, tangent)` pairs. The lift used to copy the call as it stood and pair its arguments anyway, and the program died where the number should have been -- `jvp(use)(plain, 2.0, (), 1.0)` on `func use(f: (y: float) => float, z: float): float { return f(z) }` ended in `SIGSEGV` inside `NodeVMSchedPass::call` on `std::nvm`, `std::fvm` and `std::jit` (measured 2026-11-05), and so did a body that calls a function value it made for itself. Design principles 9.9 asks for the third worse thing to be a refusal: the construct is named at the node it stands at, the reading says `skip=callee`, and the record carries `construct`. The engine refuses the same shape from the other side (`cannot differentiate through this call of a function value`), which is why `stdlib/vjp.cml#with_grad` cannot be the composition inside a library yet; the pin below holds the construct's name and not the sentence, so rewording the reason leaves this entry alone."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_refuses_a_call_through_a_value.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout = "kind=RuntimeError\nnames_the_construct=true\n"
+expect_output_not_contains = ["Warning", "[Error]"]
+expect_refusal = ['jvp cause=callee function=use construct="a call through a function value"']
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
 # The anchor of the D1 difference set in
 # `docs/handover/reports/2026-11-03-what-deleting-the-engine-pullback-takes.cn.md`: `^` on two floats.
 # Three entries: the engine's number, the library's number for the same arithmetic under the spelling
