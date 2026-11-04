@@ -1,4 +1,4 @@
-// `..` has two readings - two functions, or two integers - and a function with an integer is
+// `...` has two readings - two functions, or two integers - and a function with an integer is
 // neither, so the construct is refused with the reading it does not have as its own diagnostic:
 // the operands are named
 // by their types, and

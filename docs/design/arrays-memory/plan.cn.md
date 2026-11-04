@@ -250,7 +250,7 @@ arrayType   : specType arrayDim+
 arrayDim    : '[' ']'                          // 一个未知维度，T[] = T[?]
             | '[' extent (',' extent)* ']'
 extent      : '?'                              // 未知
-            | '..' ident?                      // 尾部包：..rest 或 ..
+            | '...' ident?                      // 尾部包：..rest 或 ..
             | linearExpr                       // 只允许 + - * 常数 / 整数
 ```
 
@@ -265,17 +265,17 @@ Tensor<f32>               // f32[...]
 规则：
 
 - `T[][]` 与今天的含义相同（嵌套数组），**不是** rank 2；rank 2 写作 `T[m, n]`。
-- 一个数组类型里 `..` 最多一次，且必须最后（`DimensionAfterAnyRank`）；`T[..., 3]` 是错误。
-- 裸 `..` 匿名（打印 `T[3, ...]`）；`..s` 命名，名字只活在类型里。
+- 一个数组类型里 `...` 最多一次，且必须最后（`DimensionAfterAnyRank`）；`T[..., 3]` 是错误。
+- 裸 `...` 匿名（打印 `T[3, ...]`）；`...s` 命名，名字只活在类型里。
 - `?` 是未知维度，`T[?]` 就是 `T[]`；`2 * n - 1` 这类线性形式保留名字。
 - 元素类型可以是类型变量：函数头声明 `T` 后写 `T[n, m]`（`typeUnit` 已有 `identDef 'of'` 前缀）。
 - 形状参数里写 `const`（`Tensor<f32, const [3]>`）报 `InvalidTypeArgument`，消息给出"去掉 `const`"的写法；不新增诊断码（批复 Q2 的同类处理）。
 
 ### 4.2 AST、CST 与格式化
 
-- `node_kinds.def:113` 的注释更新为 `ArrayType // specType arrayDim+`；新增 `ArrayDim // '[' (extent (',' extent)*)? ']' | '[' '..' ident? ']'`。
+- `node_kinds.def:113` 的注释更新为 `ArrayType // specType arrayDim+`；新增 `ArrayDim // '[' (extent (',' extent)*)? ']' | '[' '...' ident? ']'`。
 - `src/parse/syntax/parser_type.cpp` 的 `parseArrayType`（158–206）改为循环解析 `ArrayDim`；`parseSpecType`（208+）的 `typeOrData` 增加"以 `[` 开头的形状参数"分支（解析成 `ArrayData`，里面的项是 extent 表达式），`const` 分支保留但只对普通类型参数有效。
-- AST：`include/camel/parse/ast/type.h` 的 `ArrayTypeLoad` 从 `dims_`（计数）改为 `std::vector<DimGroup>`：每组是 `std::vector<node_ptr_t>` 的 extent 表达式 + `pack`（无/匿名/名字）。`geneCode`（`src/parse/ast/type.cpp#ArrayTypeLoad`）按源文本打印，`[]` 仍打印为空括号，`?` 打印 `?`，包打印 `..name`。
+- AST：`include/camel/parse/ast/type.h` 的 `ArrayTypeLoad` 从 `dims_`（计数）改为 `std::vector<DimGroup>`：每组是 `std::vector<node_ptr_t>` 的 extent 表达式 + `pack`（无/匿名/名字）。`geneCode`（`src/parse/ast/type.cpp#ArrayTypeLoad`）按源文本打印，`[]` 仍打印为空括号，`?` 打印 `?`，包打印 `...name`。
 - CST→AST：`src/parse/ast/builder.cpp#visitArrayType` 每遇到一个 `ArrayDim` 建一组；`visitArrayType`（`src/compile/gct/builder.cpp#visitArrayType`）对每组建一个 `ArrayType`：`[]` → `[?]`，`[...s]` → `anyRank` + 包名，`[n, m]` → 两个形式。**一组 `[]` 仍是一个嵌套层**，与今天一致。
 - 格式化器：`tools/format/fmt.cpp#Formatter` 的 `visitArrayType` 逐组打印 `[?]/[...s]/[n, 3]`；`visitSpecType` 打印形状参数不带 `const`。格式化幂等测试（`feat/format`）覆盖新语法。
 
@@ -289,7 +289,7 @@ Tensor<f32>               // f32[...]
 4. 名字只出现在返回类型、参数里没有 ⇒ 错误 `DimensionNameNotBound`（今天已有）；
 5. 参数里的名字同时是一个可编译期求值的常量（`const IN = 784; f32[b, IN]`）⇒ 按常量维度，不绑定名字（设计 5.4 的例子）；
 6. `?` ⇒ `ExtentForm::unknown()`，不绑定；
-7. `..s` ⇒ 绑定包名 `s`（参数里可再次引用 `..s`）；`..` 匿名；包名与维度名分属两个命名空间，重名是错误；
+7. `...s` ⇒ 绑定包名 `s`（参数里可再次引用 `...s`）；`...` 匿名；包名与维度名分属两个命名空间，重名是错误；
 8. 线性形式只从名字与整数常数构造：`n`、`n + 1`、`2 * n`、`n - 2` 保留；名字乘名字、除法、函数调用 ⇒ `ExtentForm::unknown()`（现有 `visitExtent` 4173–4252 的规则，保留）。
 
 删除 `collectDimensionNames`（3697–3720 的 `constas` 预扫描）：绑定按源顺序发生，不再需要预示。删掉之后，`constas` 在形状位置不再被识别 ⇒ 普通语法错误（批复 Q2：不加 `ConstasRetired`）。`ConstAsLoad` 节点与 `constas` 关键字本身留给后续工作。
@@ -303,7 +303,7 @@ Tensor<f32>               // f32[...]
 | `DimensionMismatch` | 秩/已知维度不符 | 有（GCT） |
 | `DimensionNameNotBound` | 名字只在返回类型或拼错 | 有 |
 | `DimensionNameUsedOnce` | 名字只出现一次（警告） | **新增** |
-| `DimensionAfterAnyRank` | `..` 不在最后或出现两次 | **新增** |
+| `DimensionAfterAnyRank` | `...` 不在最后或出现两次 | **新增** |
 | `InvalidExtentExpression` | 非整数、名字乘名字等 | 有（未知维度不报错，沿用） |
 | `InvalidTypeArgument` | `const` 形状、`Tensor<string>` | 有 |
 
@@ -313,7 +313,7 @@ Tensor<f32>               // f32[...]
 
 - `stdlib/prelude.cml`：`map`/`filter`/`foreach`/`reduce` 的声明从 `T[]` 改为 `T[...]` 并在注释里写第一维规则（实际类型规则在 `globals.cpp`，见 P5）；`append`/`extend`/`slice`/`concat` 仍是 `T[]`（只对 rank 1 有意义）；`len` 从 `T[]` 改 `T[...]`。
 - `stdlib/array.cml`：`sort` 家族与 `argsort` 改 `T[...]`；`sort_by` 等 `stdlib/array.cml` 的 Camel 实现保持 rank 1（下标切片落地后再泛化）。
-- `docs/language/08_top_level_and_grammar.md` 与 `en/`（76–77、201–202 行）的 `arrayType` 产生式、`constas` 说明；`docs/language/03_data_model.md` 的类型表加 `T[dims]`、`?`、`..s`、`Tensor` 别名。
+- `docs/language/08_top_level_and_grammar.md` 与 `en/`（76–77、201–202 行）的 `arrayType` 产生式、`constas` 说明；`docs/language/03_data_model.md` 的类型表加 `T[dims]`、`?`、`...s`、`Tensor` 别名。
 - `docs/stdlib-reference.md` 由 `scripts/stdlib-reference.mjs` 重新生成。
 
 ### 4.6 测试重写（机械，同车道）
@@ -322,7 +322,7 @@ Tensor<f32>               // f32[...]
 - 12 个用例含 `constas`：形状位置改写为首次出现的名字，其余引用；例如 `f<T>(x: T[constas n, 4])` → `f<T>(x: T[n, 4])`。
 - `test/cases/modules/tensor/static_types.cml`：`var w = zeros([2, 1]); w = grow(w) (Tensor any)` 依赖"任意秩加宽"；按 Q5 的结论（同秩加宽）改写成两次 `var` 或显式 `as`。另有一处与加宽无关：`grow(t: Tensor): Tensor` 的裸 `Tensor` 签名返回过渡类型，进不了元素类型已定的格子（`f32[?, ?]`）；改写签名为具体类型（`grow(t: f32[?, ?]): f32[?, ?]`）。
 - `test/cases/tools/grammar/keywords.cml` 的 `Tensor<f32, const [constas n, 4]>` 改写为 `Tensor<f32, [n, 4]>`，并重新生成 `test/plans/feat/tools/golden/grammar/keywords.scopes` 金标。
-- 新增 `test/cases/compile/array_shape/*`：语法、绑定、`?`、`..s`、线性、常量名、诊断、`T[]` 不变、`T[][]` 嵌套、`as` 检查；`test/plans/feat/compile/array_shape.plan.toml`。
+- 新增 `test/cases/compile/array_shape/*`：语法、绑定、`?`、`...s`、线性、常量名、诊断、`T[]` 不变、`T[][]` 嵌套、`as` 检查；`test/plans/feat/compile/array_shape.plan.toml`。
 - AST/格式化/金样：新增语法进入 `feat/format` 的往返语料；`feat/compile` 的 AST 快照只对 smoke 语料，不改既有快照。
 
 ### 4.7 P3 的文件与门禁
@@ -711,7 +711,7 @@ println(after - before);             // 期望 0
 - `test/cases/tools/grammar/keywords.cml` 的 `Tensor<f32, const [constas n, 4]>`（金标 `test/plans/feat/tools/golden/grammar/keywords.scopes` 随之更新）。
 - `test/plan-selection.json`：`src/core/type`、`src/core/rtdata/array.cpp`、`include/camel/core/type` 的改动应选中 `feat/compile/array_*`、`feat/mm`、`feat/modules/tensor`（新增规则）。
 - 文档：`docs/language/08_top_level_and_grammar.md`（+`en/`）、`docs/language/03_data_model.md`、`docs/stdlib-reference.md`（重新生成）、`docs/diagnostics.md`（重新生成）、`docs/performance/graph-store-baseline.md`（P7 节）。
-- 格式化：`feat/format` 的往返语料加 `T[n, m]`、`?`、`..s`、`Tensor<f32, [3]>`。
+- 格式化：`feat/format` 的往返语料加 `T[n, m]`、`?`、`...s`、`Tensor<f32, [3]>`。
 - 快照：`feat/compile` 的 AST 金样只在 smoke 语料上；新语法进入 `feat/format` 与 `feat/parse` 的语料，不改旧金样。
 
 ### 10.3 内部接口
@@ -755,8 +755,8 @@ P4 是一个提交。如果评审或实施中发现它无法在合理时间内�
 
 | 风险 | 表现 | 缓解 |
 |---|---|---|
-| `..s` 空包 | `T[...rest]` 在 rank 1 实参上折叠成元素类型（标量）；语义新，评审要点头 | Q1 先定；`withExtentValues` 一处实现；用例锁住 |
-| 裸 `..` | 打印任意秩类型需要它 | Q2；只允许在最后 |
+| `...s` 空包 | `T[...rest]` 在 rank 1 实参上折叠成元素类型（标量）；语义新，评审要点头 | Q1 先定；`withExtentValues` 一处实现；用例锁住 |
+| 裸 `...` | 打印任意秩类型需要它 | Q2；只允许在最后 |
 | `map` 的行语义 | rank ≥ 2 结果是 `U[d0]` 而非保形 | Q3 确认；rank 1 不变，用例锁住两种秩 |
 | `sort` 行序 | 字典序 vs 其它 | Q4；选字典序 |
 | `var` 加宽 | 同秩会改写 `static_types.cml` | Q5；选同秩，改写一个用例 |
@@ -778,9 +778,9 @@ P4 是一个提交。如果评审或实施中发现它无法在合理时间内�
 
 ## 12. 给协调者的问题
 
-**Q1（`..s` 空包）**：`f32[...rest]` 在 `xs: f32[3]` 上，`rest` 绑定为空。返回类型 `T[...rest]` 应折叠成元素类型 `T`（标量），这样 `first_row(xs: T[n, ...rest]): T[...rest]` 才能对 rank 1 返回标量。另一种选择是禁止 rank 1 实参、要求至少两维。建议：**折叠**；数组本身仍 rank ≥ 1。
+**Q1（`...s` 空包）**：`f32[...rest]` 在 `xs: f32[3]` 上，`rest` 绑定为空。返回类型 `T[...rest]` 应折叠成元素类型 `T`（标量），这样 `first_row(xs: T[n, ...rest]): T[...rest]` 才能对 rank 1 返回标量。另一种选择是禁止 rank 1 实参、要求至少两维。建议：**折叠**；数组本身仍 rank ≥ 1。
 
-**Q2（裸 `..`）**：打印 `Tensor<f32>` 需要 `f32[...]` 这个拼写。建议：**允许裸 `..`**（匿名包），只允许在最后、最多一次。
+**Q2（裸 `...`）**：打印 `Tensor<f32>` 需要 `f32[...]` 这个拼写。建议：**允许裸 `...`**（匿名包），只允许在最后、最多一次。
 
 **Q3（`map` 的行语义）**：按任务与设计第 8 节的字面规则，`map` 与 `filter`/`foreach`/`reduce`/`sort` 一样按第一维：rank 1 的"行"是元素（行为与今天不变），rank ≥ 2 时 `f` 收到一行、结果是 `U[d0]`（见 6.1）。另一种是逐元素保形（`f` 收到元素、结果保留全部维度），它与任务文字不符、且需要另一套类型规则。建议：**按行**；请确认 rank ≥ 2 时 `map` 的结果是 rank 1 的 `U[d0]`，而不是保形成 `U[d0, ..., dn]`。
 

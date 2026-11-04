@@ -1,5 +1,5 @@
 /// A function with a body takes a pack the same way a declaration without one does: the rest
-/// parameter `..xs: ...A` binds `A` to the types of the arguments it takes, the result type is
+/// parameter `...xs: ...A` binds `A` to the types of the arguments it takes, the result type is
 /// written over the pack, and `when ...is_array::<A>()` asks every member.
 import { ElementOf, is_array } from types
 

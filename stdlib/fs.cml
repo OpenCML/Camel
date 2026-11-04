@@ -107,7 +107,7 @@ export func is_dir(path: string): bool
 export func file_size(path: string): int!
 
 /// The names of what a directory holds, without the path in front of them, in the byte order of
-/// the names (so the order is the same on every platform). `.` and `..` are not listed.
+/// the names (so the order is the same on every platform). `.` and `...` are not listed.
 /// @effect reads the file system
 /// @fails error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the listing; error value `IOError` when the path is not a directory
 /// @example 'out'->list_dir !! []    // ['log.txt', 'today']

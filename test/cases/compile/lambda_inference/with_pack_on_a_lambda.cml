@@ -10,7 +10,7 @@
 //                                              spreads nothing -- value 9.0, slope 6.0
 //
 // The second line is the capability: before, `<...ws>` was
-// `SyntaxDiag::UnexpectedToken: Unexpected '..'; expected a name`. The third line is the shape
+// `SyntaxDiag::UnexpectedToken: Unexpected '...'; expected a name`. The third line is the shape
 // `vjp` itself stands in for every function without `with` parameters, and the one an empty tuple
 // would break first.
 import { vjp } from vjp

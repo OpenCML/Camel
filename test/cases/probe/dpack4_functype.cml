@@ -1,0 +1,3 @@
+// shape 4: a parameter pack in a function type, old spelling.
+func k(f: (..int) => float): float { return 0.0 }
+func main(): int sync { return 0 }

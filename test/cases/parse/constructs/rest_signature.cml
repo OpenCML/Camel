@@ -1,6 +1,6 @@
 /**
- * The rest parameter and the rest argument as syntax: `..ts` is the last parameter of a
- * signature, and `..(a, b)` / `..ts` is the last argument of a call.
+ * The rest parameter and the rest argument as syntax: `...ts` is the last parameter of a
+ * signature, and `...(a, b)` / `...ts` is the last argument of a call.
  */
 
 func total(...ts): int {

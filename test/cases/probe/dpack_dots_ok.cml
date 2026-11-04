@@ -1,4 +1,4 @@
-// The three ordinary uses of `..` that the migration must not touch: an interval of two integers,
+// The three ordinary uses of `...` that the migration must not touch: an interval of two integers,
 // an interval whose far end is a name, and a composition of two functions.
 func inc(x: int): int {
     return x + 1

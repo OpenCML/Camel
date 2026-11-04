@@ -6,7 +6,7 @@
  * function body; a value crossing the call is not an effect pair), so only the state after the
  * value is named is the contract..
  *
- * The module it imports is `../lazy_let/lazy_let_writer.cml`; a copy named for this case keeps the
+ * The module it imports is `.../lazy_let/lazy_let_writer.cml`; a copy named for this case keeps the
  * two programs independent.
  */
 

@@ -1,0 +1,10 @@
+// shape 2 with the new spelling: a with parameter pack.
+with <...ws: float>
+func g(x: float): float {
+    return x
+}
+
+func main(): int sync {
+    println("ok")
+    return 0
+}

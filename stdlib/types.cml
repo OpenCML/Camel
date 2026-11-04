@@ -62,12 +62,12 @@ export type KeyOf<T>
 /// @example is_same::<ValueOf<Map<string, int[]>>, int[]>()    // true
 export type ValueOf<T>
 
-/// The ordinary parameters of a function type, as a type pack: `..ParamsOf<F>` writes them where a
+/// The ordinary parameters of a function type, as a type pack: `...ParamsOf<F>` writes them where a
 /// list of types is (the elements of a tuple); the `constas` parameters are not among them.
 /// @example is_same::<(...ParamsOf<(a: int, b: string) => bool>), (int, string)>()    // true
 export type ParamsOf<F>
 
-/// The `with` parameters of a function type, as a type pack, written with `..` as `ParamsOf<F>` is.
+/// The `with` parameters of a function type, as a type pack, written with `...` as `ParamsOf<F>` is.
 /// @example is_same::<(...WithOf<<w: float> (a: int) => bool>), (float)>()    // true
 export type WithOf<F>
 

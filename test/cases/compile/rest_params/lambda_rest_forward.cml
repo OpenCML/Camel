@@ -1,5 +1,5 @@
 // The rest parameter of a lambda is a value in its body: `xs` is the tuple of the parameters the
-// position's function type gave the lambda, and `..xs` spreads it into a call by the rule that
+// position's function type gave the lambda, and `...xs` spreads it into a call by the rule that
 // already spreads a tuple.
 
 func add(a: float, b: float): float {

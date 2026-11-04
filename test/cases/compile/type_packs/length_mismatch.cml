@@ -1,4 +1,4 @@
-/// `..` expands the packs it uses together, so they must have the same length: `Mix<F>` pairs the
+/// `...` expands the packs it uses together, so they must have the same length: `Mix<F>` pairs the
 /// ordinary parameters of `F` with its `with` parameters, and `Weighted` has one of the first and
 /// two of the second.
 import { ParamsOf, WithOf } from types

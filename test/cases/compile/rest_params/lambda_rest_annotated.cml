@@ -1,6 +1,6 @@
 // A lambda's rest parameter takes the parameters of the function type the position gives it. Here
 // the position is an argument to a parameter of function type: `apply` takes
-// `(a: float, b: float) => float`, so `..xs` stands for both parameters, in their types, and
+// `(a: float, b: float) => float`, so `...xs` stands for both parameters, in their types, and
 // `(...ys: float[...])` gets one.
 
 func apply(f: (a: float, b: float) => float): float {
