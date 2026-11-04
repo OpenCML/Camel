@@ -1,0 +1,25 @@
+[camel-remote] note lane-changed2 — `--changed` 不再静默回落成整层 fast
+
+`[SUMMARY] total 8836 / pass 8794 / fail 2 / skip 13 / known 27；killed 0、timed out 0`（基线 8833/8791/2/13/27；两条 fail 是 0.2.44 老欠账 matmul_t.vector_lhs_law.nvm / vector_rhs_law.nvm；tip 8b90f88a8，基 origin/develop 8544472cd；跑期间 develop 前进 2 笔到 f08951def，未合）。
+
+回落原话（`test/runner.mjs#selectChangedTargets`）：`[INFO] --changed: cannot read ${base}; running the whole fast layer`；同族的几条静默路：`no change against ${base}; running the whole fast layer`、`no rule matches N changed file(s); running the whole fast layer`、`--list` 打 `(the whole fast layer: smoke + feat)`。
+
+失败分支全表（前 → 后；号码是分支，不是行号）：
+1 `git rev-parse --verify <base>^{commit}` 失败 → exit 2，点名基线 + 它拒跑的层（334 个 plan 文件：smoke 1 + feat 333）。
+2 ref 在、无 merge-base → 原先 `git diff` 跨无关历史**照样成功**并列出 7521 个文件（等于整树，读数像「大改动」），现 exit 2 `shares no merge-base with HEAD`。
+3 `git diff --name-only <base>` 其它失败 → exit 2；4 git 起不来 → exit 2 `git cannot run (...)`。
+5 `--changed-files` 读不到 → exit 2 点名清单文件（ENOENT）；6 清单为空 → 打 `0 changed file(s) … 0 plan(s) selected，整层(334)不跑`，选 0 张、exit 0（不落层）；7 本机零改动同上。
+8 规则文件 JSON 坏 → 原先未捕获异常 exit 1 + 堆栈，现 exit 2 点名 `test/plan-selection.json`；9 规则文件没有规则 → exit 2；10 规则点名树里没有的计划 → 原先 `resolvedSelection` 抛栈，现 exit 2 点名那个计划。
+11 无规则命中（perf/GC/progen 的政策性放宽）→ 仍落整层，但改成 `[WARN] … widening to the whole fast layer (334 …)` + 命中不了的文件名；12 混合改动里的无规则文件 → `[WARN]` 不变；13 `--changed-files` 不带 `--changed` → exit 2；14 `internal/tools/camel-remote.ps1 -Changed` 本机读不到基线 → **push 之前** exit 2（不花一次 push+build）。
+
+自证命中：`-Changed -ChangedBase 6018535e5`（改动只有 `internal/tools/README.md`）→ 主机读 `/tmp/camel-remote-changed2-015409/changed.txt`，`[INFO] --changed: 1 changed file(s) … select 1 plan(s)` + `internal/tools/README.md: rule internal/tools/ -> feat/docs_links.plan.toml`，`[tier] fast: 1 plan file(s), 21 declared test entries, 21 started`，`[SUMMARY] total 21 / pass 21 / fail 0`，`RUN_EXIT=0`。
+
+自证读不到：`-Changed -ChangedBase origin/no-such-base` → `ERROR -Changed: cannot read origin/no-such-base: it does not resolve to a commit here` + `… none is selected and no plan runs. The fallback this replaces would have run the whole fast layer (334 plan file(s) …)`，`SELFB_EXIT=2`，日志里无 `pushed`、无 `[SUMMARY]`、无 `RUN_EXIT`。
+
+门禁两条分开跑：`--citations` 865/865 符号 + 2386 路径（exit 0）；`--questions-index` 通过（exit 0）。整层 fast 里 docs_links 21/21 绿（自证那一跑）。
+
+lane-milestone 的 milestone 段不在本树（未合：97a91ec7f / 1f7670e2a），它已用「本机列改动 + `--changed-files`」，与本轮同一条机制（同一个 runner 选择函数）；合并时删掉它那段 `try { $changedList = @(git …) }`，`$milestoneChangedArg` 改成无条件 ` --changed-files '$remoteScratch/changed.txt'`，两段就是一份清单、一条失败规则。
+
+改动：`test/runner.mjs#parseArgs/#changedFiles/#plansForChanges/#selectChangedTargets`（+ `fastLayerInventory`/`refuseChanged`/`loadRulesForSelection`）、`internal/tools/camel-remote.ps1`（push 前的清单块 + 运行行 + 参数注释）、`docs/test-plans.md`、`test/plan-selection.json` 注释、`internal/tools/README.md`。
+
+分支 `lane-changed2`，两个提交 6018535e5 / 8b90f88a8，未 push、未碰 develop/main。风险与约定：主机侧现在只读清单、不读主机 git（这是要点）；空清单按「量过的零」处理而非报错（与 lane-milestone 的 0 也打印一致）；分支 8/9/10 是临时改 JSON 量的，已恢复，树干净。
