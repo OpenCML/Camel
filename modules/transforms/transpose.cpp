@@ -4715,6 +4715,17 @@ bool buildTransposeMember(
                     portType == nullptr ? camel::core::TangentSpaceAnswer{}
                                         : camel::core::tangentSpaceOf(portType);
                 if (hasCotangent[ports[port]]) {
+                    // Answered, and answered with a *node*: a port the walk marked and then left
+                    // empty is the one shape that used to reach the encoder as a node with no input,
+                    // and a signal there says nothing about which parameter it was. The `Port` case
+                    // above is what joins a tuple's slots back into a cotangent; this line is the
+                    // check that no other reader of the slot table leaves a hole for the encoder.
+                    if (cotangent[ports[port]] == rt::kInvalidNodeRef) {
+                        refuse(TransposeRefusalCause::Component);
+                        os << " port=" << ports[port] << " at=" << at
+                           << " why=answered-with-no-cotangent\n";
+                        return false;
+                    }
                     parts.push_back(cotangent[ports[port]]);
                     partTypes.push_back(space.space);
                     continue;
