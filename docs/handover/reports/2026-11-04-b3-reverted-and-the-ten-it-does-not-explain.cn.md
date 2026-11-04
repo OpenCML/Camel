@@ -91,3 +91,30 @@
 - `probe-b3off`（`5fb44476f`）留在本地，不推：它是证据，不是交付。
 - 想重做这个实验：`git switch -c <名字> m-train; git revert 821f30c83`。冲突在 `docs/handover/questions/README.md`（用脚本重生成，别手改）与 `stdlib/rulesets/transpose.cml`（取 revert 那一侧，即 `take_from_type_t`/`mean_axis_from_type_t` 重新把 extents 当 `at` 端口收，并用今天的三点包写法 `T[...]`）。
 - **别为了让 fail 变 3 去动任何 pin。** 那 10 条要的是律里"把形状当已知实参交给乘法"的落地，不是标记。
+
+## 八、`probe-b3full` 的 `fail = 2`：分量，以及它为什么现在还不能用
+
+**先说分量。** `probe-b3full`（`5d3017ca2`，19:31:54 从 `c044d373d` 建、19:34:22 amend）读到：
+
+`[SUMMARY] total: 8804, pass: 8759, fail: 2, skip: 13, known failures: 30`，killed 0，timed out 0。
+
+**如果它是真的，它比 `develop` 的 `fail = 3` 还低一条**：整条线 revert 之后，合并树不但没有回归，还少一条红。这同时说明**本页第三节的判词只对 `821f30c83` 这一笔成立**——我 revert 的只是那一笔（4 个文件：`transpose.cpp`、`transpose.cml`、两处 docs），而 `probe-b3full` 覆盖 10 个文件，多出 `modules/transforms/rule_expand.cpp`、`rule_expand.h`、`include/camel/core/type/composite/array.h`、`src/builtin/operators/struct.cpp` 与两条测试。**那 8 条不是被 B3 关掉的，是 B3 之外的那几笔关掉的**——供给是在整条线里断的，不是在这一笔里断的。
+
+**再说它为什么现在还不能用。** 量它的那次 run 和另一条 run 共用了 host 上同一个 checkout 名 `mtrain`：一条 19:47 起（`m-train`），另一条 19:54 起（`probe-b3full`），两次 run 的 checkout/patch 阶段互相改写对方 plan 阶段正在读的树。证据是 `[provenance] tip 5d3017ca2…` 出现在一条属于 `m-train` 的 run 里，而那条分支的树从来没有过这个提交；`[SUMMARY]` 本身一个字都不怪，这正是它危险的地方。**这条读数要在独占的 checkout 名下重量一次才算数。**
+
+**顺带记下别人留在 `D:\Projects\Camel-wt\mtrain` 的 10 个改动**（原本打算先记后撤，撤之前它们已被提交成 `10abd59d0`，所以我没有 `checkout -- .`、也没有丢任何东西）：
+
+```
+D  docs/handover/questions/2026-11-04-a-sum-to-that-takes-the-shape-itself.cn.md
+M  docs/handover/questions/README.md
+M  include/camel/core/type/composite/array.h
+M  modules/transforms/rule_expand.cpp
+M  modules/transforms/rule_expand.h
+M  modules/transforms/transpose.cpp
+M  src/builtin/operators/struct.cpp
+M  stdlib/rulesets/transpose.cml
+M  test/cases/compile/transforms/transpose_refuses_a_parameter_value_it_cannot_be_handed.cml
+M  test/plans/feat/compile/transforms.plan.toml
+```
+
+`git diff --stat HEAD` 当时是空（全部已 staged），现在为空是因为那 10 个文件已是 `10abd59d0` 的提交。**`m-train` 的 tip 因此被推到 `10abd59d0`（整条线 revert），而本车的交付点仍是 `merge-train` = `c044d373d`。**

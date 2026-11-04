@@ -129,6 +129,28 @@ Two ways to name a process, and only two: `kill <PID>`, or `pkill -f '~/camel-wo
 
 The same day made the other half of the point with a check instead of an accident: with the "zero tests started" gate in place, 31 of the tree's 309 plans turned out to be silent zeros - their tier puts them out of an ordinary run, and until the gate existed they said nothing at all - and the first real defect came with them, `test/plans/feat/trans/cml_sweep.plan.toml` missing a plan-level `tier`, calling itself fast while its only test is slow, reddening the whole fast pass. **Green because nothing ran is not green.**
 
+## A host checkout name is a lane's identity, and two runs under one name overwrite each other's reading
+
+`camel-remote.ps1` keeps one checkout per worktree name on the host, so the name is the only thing
+that says which lane a build directory belongs to. Two lanes that pass the same `-Path`, or one
+session's two runs on two branches, take turns on one directory: the checkout and patch phase of
+whichever starts second rewrites the tree the first one's plan phase is still reading, and the build
+directory stays incremental across both.
+
+2026-11-04 measured how quietly that goes wrong. A lane's confirmation run on `m-train` started at
+19:47 with `-Plan all -Tier fast -Jobs 8`; a second run under the same `mtrain` name started at
+19:54 from another branch of the same repository. The first run finished with an entirely ordinary
+line -- `[SUMMARY] total: 8804, pass: 8759, fail: 2, skip: 13, known failures: 30`, killed 0, timed
+out 0 -- and only the line above it disagreed: `[provenance] tip 5d3017ca2…`, a commit the measured
+branch never contained. A summary reading 2 where the same tree read 11 an hour earlier is not
+evidence of progress; it is evidence that somebody else's tree was measured.
+
+So **give every lane its own checkout name** (`mtrain`, `b3full`, `devbase`), and when a
+`[provenance]` line names a tip this tree does not contain, throw the reading away: do not reconcile
+it, do not ask whether the difference is explainable. Re-run under the lane's own name. The number
+then is honest and the price is one run; a reconciled number becomes a fact in the next report and
+nobody can tell afterwards that it was never measured.
+
 ## A guard that reports and then reads on can turn a red into a green
 
 `Tuple::updateRefs` compared the value's member count with its type's and, on a disagreement, printed
