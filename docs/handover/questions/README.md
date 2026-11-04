@@ -5,12 +5,11 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：6 页
+## 现在在等作者：5 页
 
 | 页 | 问什么 |
 | --- | --- |
 | [`2026-11-04-a-sum-to-that-takes-the-length-itself`](2026-11-04-a-sum-to-that-takes-the-length-itself.cn.md) | 由长度直接收长度的 `sum_to`：`sum_to_at(t, at)` |
-| [`2026-11-04-a-sum-to-that-takes-the-shape-itself`](2026-11-04-a-sum-to-that-takes-the-shape-itself.cn.md) | `sum_to` 收形状的版本：返回的秩从哪来？ |
 | [`2026-11-04-does-the-library-graphs-node-numbering-drift-with-a-laws-declaration`](2026-11-04-does-the-library-graphs-node-numbering-drift-with-a-laws-declaration.cn.md) | 库自己图的节点下标，会随一条律的声明而平移——这算黄金漂移吗？ |
 | [`2026-11-04-must-a-transpose-refusal-claim-the-operator-is-not-linear`](2026-11-04-must-a-transpose-refusal-claim-the-operator-is-not-linear.cn.md) | `transpose` 拒绝时，是否必须声称「第 k 个参数不是线性的」？ |
 | [`2026-11-04-where-does-transpose-learn-that-an-operator-is-not-linear`](2026-11-04-where-does-transpose-learn-that-an-operator-is-not-linear.cn.md) | 裸 `transpose` 拒绝非线性算子：那个「不是线性的」事实写在哪？ |
