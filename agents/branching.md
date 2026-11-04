@@ -20,36 +20,6 @@ This repository uses a strict `main` / `develop` / feature-branch workflow. Foll
 - After the merge completes, rebase the merged feature branch so it stays synchronized with the updated `develop`.
 - After the merge, verify branch ancestry before proceeding.
 
-### Cutting a lane: point it at itself, and keep its probes out of the tree
-
-Two things a lane gets wrong in its first ten minutes, both of which look like nothing until someone
-reads a number or runs a `git pull` on the branch.
-
-**A branch cut from `origin/develop` inherits `origin/develop` as its upstream.** `git checkout -b
-lane-x origin/develop` sets `branch.lane-x.merge` to `refs/heads/develop`, so the next person who runs
-`git pull` on that branch pulls **develop into the lane** -- the merge direction is reversed, and nothing
-prints a warning. Set it the moment the branch exists:
-
-```
-git branch --set-upstream-to=origin/lane-x lane-x
-git rev-parse --abbrev-ref '@{u}'     # must answer origin/lane-x
-```
-
-**A probe's artifacts belong in `D:\Temp\`, never in the worktree.** Two files left over from a probe make
-`git status --porcelain` non-empty, and the runner prints that fact in every reading it takes:
-
-```
-[provenance] tip (dirty: 2 files) | binary built ... | tree ... | tier fast | jobs 4
-```
-
-That `dirty` field is not decoration: it is the reading's own answer to "was this measured on a clean
-tree", which is the first question a number that disagrees with someone else's number has to answer. An
-alarm that is always on is not an alarm, and a reading that always shows the same value is decoration.
-Here it was on for a whole evening across every gate run of one lane, and the only reason anyone looked
-was that the number next to it was the sha they expected -- so the field had already stopped doing its
-job. Keep the artifacts under `D:\Temp\<lane>\`, and copy them onto the host only for the run that needs
-them.
-
 ### A lane may not accumulate: the ten-commit rule
 
 A lane's age is measured in `develop`'s API changes, not in days. A lane holding forty unmerged
@@ -192,6 +162,7 @@ The coordinator's own work follows a two-step integration so the remote stays qu
 - Merge each finished handover branch into `wzj-dev` first (`git merge --no-ff`), and promote `wzj-dev` into `develop` in batches — at least every half hour, so an AI reading `develop` sees the progress quickly. Pushing `develop` and `wzj-dev` is what makes the work visible.
 - As soon as a handover branch is merged into `wzj-dev` and its worktree is removed, delete the branch. If an older remote `handover/...` branch still exists from before this rule, delete it too; the commits are in `develop`.
   - `git branch -d` refuses for **two different reasons** and they print almost the same. One is that the branch's **content** is not in `origin/develop` — that is the one a human must read. The other is that the branch's **configured upstream** (`origin/<same name>`) is not merged: `warning: not deleting branch '<b>' that is not yet merged to 'refs/remotes/origin/<b>', even though it is merged to HEAD`, followed by `error: the branch '<b>' is not fully merged`. The second refuses `-d` but would pass `-D`, while the content is demonstrably in `develop` (`git cherry origin/develop <b>` all `-`, `git rev-list --count origin/develop..<b>` = 0). Do not read it as "content not merged", and do not switch to `-D`; record which of the two the message was and leave the branch for its owner.
+- `git checkout -b <lane> origin/develop` makes `origin/develop` the branch's **configured upstream**, so a later `git pull` on that branch merges `develop` **into** the lane — the direction of integration reverses, and nothing reports it. Point the upstream at the lane's own remote branch right after creating it (`git branch --set-upstream-to=origin/<lane> <lane>`; `git rev-parse --abbrev-ref '@{u}'` must read `origin/<lane>`).
 - The rules above still hold: merge commits only, never rebase `develop`, never force-push, never touch `main`.
 
 ## The `release` Branch: Where A Version Is Assembled
