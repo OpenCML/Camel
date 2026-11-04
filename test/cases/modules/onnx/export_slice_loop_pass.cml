@@ -1,0 +1,30 @@
+/**
+ * A loop over the time axis that stops early on the data: the slice of step t has bounds that
+ * depend on the model input. Checked on ONNX Runtime against NumPy for 1, 2 and 4 steps
+ * (artifacts: b2/probes/check_slice_loop.py).
+ *
+ * The same program with the request as the program's own result, for the `onnx::export` pass:
+ * that pass reads requests from the top level of the entry graph, so a `main` that takes the
+ * request apart with `match` (the run-time case, where the refusal is reported) hides it from
+ * the pass. Running this one still reports the refusal: the request is what `main` answers.
+ */
+import { reshape, sum, shape, tanh, zeros } from tensor
+import { export_model } from onnx
+import { get_env } from env
+
+// A loop over the time axis that stops early: the number of steps depends on the data, so the
+// slice of step t has a start and an end that depend on the model input.
+func scan(t: int, steps: int, x: float[...], h: float[...]): float[...] {
+    return if t >= steps then h else if float(sum(h)) > 2.5 then h else scan(t + 1, steps, x, tanh(h + reshape<[shape(x)[0], shape(x)[2]]>(slice(x, 1, t, t + 1))))
+}
+
+func forward(x: float[...]): float[...] {
+    // `zeros` gives an f32 array, so its element type is written to the one this state has.
+    let h0 = float(zeros::<f32>([shape(x)[0], shape(x)[2]]))
+    return scan(0, shape(x)[1], x, h0)
+}
+
+func main(): void! sync {
+    let x = reshape<[2, 4, 3]>([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 0.2, 0.1, 0.4, 0.3, 0.6, 0.5, 0.8, 0.7, 1.0, 0.9, 1.2, 1.1])
+    export_model<out: get_env('ONNX_OUT') ?? ''>((x: float[...]): float[...] => forward(x), x)
+}

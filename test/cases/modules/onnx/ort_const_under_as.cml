@@ -41,11 +41,26 @@ func step(x: f32[...]): (float, f32[...]) {
     return with_grad(loss)<x>()
 }
 
-func main(): int sync {
+// The refusal of the first request that was refused, or 'exported' when all three were written.
+// The requests stay the program's own statements (see main): the `onnx::export` pass reads them
+// from the top level of the entry graph, while the error they answer is handled here.
+func report(r1: void!, r2: void!, r3: void!): string! {
+    return match r1 {
+        case error e1 => { return e1 }
+        case v1 => match r2 {
+            case error e2 => { return e2 }
+            case v2 => match r3 {
+                case error e3 => { return e3 }
+                case v3 => 'exported'
+            }
+        }
+    }
+}
+
+func main(): string! sync {
     let ex = reshape<[2, 3]>([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[]) as f32[2, 3]
-    let _ = export_model<out: 'affine.onnx'>(affine, ex)
-    let _ = export_model<out: 'checked.onnx'>(checked, ex)
-    let _ = export_model<out: 'step.onnx'>(step, ex)
-    println('exported')
-    return 0
+    let r1 = export_model<out: 'affine.onnx'>(affine, ex)
+    let r2 = export_model<out: 'checked.onnx'>(checked, ex)
+    let r3 = export_model<out: 'step.onnx'>(step, ex)
+    return report(r1, r2, r3)
 }

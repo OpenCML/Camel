@@ -25,7 +25,7 @@ func forward(x: f32[...], w: f32[...]): f32[...] {
     return reshape<[n * shape(w)[1]]>(h)
 }
 
-func main(): int sync {
+func main(): int! sync {
 let x = load_npy::<f32>(get_env('X') ?? '')
     let w = reshape<[2, 3]>([1.0, 0.0, 2.0, 0.0, 1.0, -1.0] as f32[])
     let isGate = (get_env('MODEL') ?? '') == 'gate'
@@ -33,10 +33,14 @@ let x = load_npy::<f32>(get_env('X') ?? '')
     save_npy(y, get_env('Y') ?? '')
     let out = get_env('ONNX_OUT') ?? ''
     return if out == '' then 0 else if isGate then sync {
-        let _ = export_model<out: out>(gate, x)
-        return 0
+        match export_model<out: out>(gate, x) {
+            case error e => { return e }
+            case v => 0
+        }
     } else sync {
-        let _ = export_model<out: out, dynamic_axes: [0]>((t: f32[...]): f32[...] => forward(t, w), x)
-        return 0
+        match export_model<out: out, dynamic_axes: [0]>((t: f32[...]): f32[...] => forward(t, w), x) {
+            case error e => { return e }
+            case v => 0
+        }
     }
 }
