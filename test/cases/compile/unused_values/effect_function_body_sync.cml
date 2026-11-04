@@ -1,0 +1,15 @@
+/**
+ * The remedy the help gives for an effect written in a function body: the body declares itself a sync
+ * block, `func f(): T sync { ... }`, so the call written there runs when the function runs. The
+ * caller's own body is a sync block too, which is what puts the call on a chain at all.
+ */
+
+func greet(): int sync {
+    println('hello from greet')
+    return 1
+}
+
+func main(): int sync {
+    greet()
+    return 0
+}

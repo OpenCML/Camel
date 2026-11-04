@@ -1,0 +1,17 @@
+/**
+ * The writing the help used to invite, in a loop body: `sync { ... }` written as a statement there
+ * is a block whose value nothing takes, so the block does not run and the call inside it does not
+ * run with it -- the warning comes back. That is why the help names `do sync` for a loop body and
+ * not a sync block written inside the body.
+ */
+
+func main(): int sync {
+    let total = loop i = 0 while i < 3 do {
+        sync {
+            println(i)
+        }
+        i + 1
+    }
+    'total={}'->format<total>->println
+    return 0
+}
