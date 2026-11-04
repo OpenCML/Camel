@@ -1,0 +1,32 @@
+// `stop_gradient` through the library: `vjp` is `transpose(split(jvp(f)))`, so both halves need a
+// law -- `jvp_stop_gradient` and `stop_gradient_t` (`stdlib/rulesets`).
+//
+// Until those two were written, `vjp` of this function stopped in the **forward** half by name
+// (`skip=rule uri=autodiff:stop_gradient reason=the operator has no forward rule bound at all`): the
+// engine's rule table had an entry for the operator and the library's had none. The law answers what
+// the operator means -- the value passes through, so the tangent of the result is the zero of its own
+// type, and the cotangent of the argument is the same zero. The zero is the answer, not a value
+// standing in for one: no operand is read, and the type the zero belongs to is the operator's own
+// signature (`stop_gradient::<T>(x: T): T`).
+//
+// The reading is the engine's (`stop_gradient_gradient_through_the_engine.cml`) to the number:
+// `4.0` and `0.0`. The split also says what the law is: `residuals=0` -- there is nothing to carry to
+// the backward half, because the tangent depends on no input.
+//
+//     camel test/cases/compile/transforms/stop_gradient_gradient_through_the_library.cml
+import rulesets.jvp
+import rulesets.transpose
+import { stop_gradient } from autodiff
+import { vjp } from vjp
+
+/// The library's spelling: the differentiated value is an ordinary parameter (design principles 9.9).
+func cut(x: float): float {
+    return stop_gradient(x)
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(cut)(4.0)
+    let cotangents = pullback(1.0)
+    `stop_gradient library value={} dL/dx={}`->format<value, cotangents.0>->println
+    return 0
+}

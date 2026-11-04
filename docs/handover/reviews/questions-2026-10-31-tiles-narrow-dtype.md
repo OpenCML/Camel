@@ -17,9 +17,9 @@
 
 ## 树里的现状（今天 develop 的读数）
 
-- `modules/tiles/include/tiles/dtype.h:11` → `enum class DType { F32, F64, I64 };`
-- `modules/tiles/include/tiles/internal/scalar_expr.h:19` → `enum Kind { F32, F64, I32, U32, I64 } kind;`
-- `modules/tiles/src/graph_regions.cpp:41-43` → 类型门只放行 `Float32` / `Int64`，窄浮点在那里返回 `nullopt`
+- `modules/tiles/include/tiles/dtype.h#DType` → `enum class DType { F32, F64, I64 };`
+- `modules/tiles/include/tiles/internal/scalar_expr.h#Kind` → `enum Kind { F32, F64, I32, U32, I64 } kind;`
+- `modules/tiles/src/graph_regions.cpp#tensorElement` → 类型门只放行 `Float32` / `Int64`，窄浮点在那里返回 `nullopt`
 - `modules/tiles` 里 `bf16` 今天只作为 cuBLAS 混合精度开关出现（`schedule.cpp:433` `cublas_bf16`），不是元素类型
 - 已有裁定 `docs/handover/reviews/reduced-precision.md`（2026-10-23）只说窄浮点是**语言核心**里的浮点类型
   （类型、字面量、标量算术、转换），**没有一句涉及设备侧的元素表示**

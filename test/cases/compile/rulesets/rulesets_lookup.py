@@ -151,11 +151,22 @@ check(
 code, bound = run(["std::rulesets", "forward=true"])
 check(code == 0, f"the program exits 0 asking for the keys (got {code}):\n{bound}")
 
+# The count is two, and it went three -> two on 2026-11-03: `:op/ltod` was the third earlier the same
+# day (it was bound through the table to `float_of_int/1`, because `float` at one operand is a
+# spelling every conversion to a double shares), and it is derived now -- a conversion's key is the
+# destination's spelling the name ends in (`ltod` -> `float`, one operand), and the family holds one
+# rule per operand type under it, which the engine dispatches between. What remains is the pair whose
+# reason is not a shared spelling: a bracket form with no token, and a spelling an operator of the
+# same arity already holds.
 exceptions = [line for line in bound.splitlines() if line.startswith("RULEKEY-EXCEPTION ")]
 check(len(exceptions) == 2, f"exactly two operators have a key that cannot be derived: {exceptions}")
 keys = [(line.split()[1], line.split()[3]) for line in exceptions]
 check(
-    keys == [(":op/idx_arr", "index_into/2"), ("tensor:multiply", "mul_tensor/2")],
+    keys
+    == [
+        (":op/idx_arr", "index_into/2"),
+        ("tensor:multiply", "mul_tensor/2"),
+    ],
     f"the two are the array index and the array product, at the keys their rules are filed under: {keys}",
 )
 check(

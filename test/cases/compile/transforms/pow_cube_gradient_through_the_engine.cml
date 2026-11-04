@@ -1,0 +1,25 @@
+// The engine's gradient of `w ^ 3.0` at `w = 2`: `3w^2 = 12`, and the number the library's `pow` law
+// has to answer for the same arithmetic.
+//
+// `pow_gradient_through_the_engine.cml` (the neighbouring case) pins the same operator at `w ^ 2.0`
+// and `6.0`; this one moves the exponent to `3.0` so that the library's half
+// (`pow_gradient_through_the_library.cml`, which differentiates `pow(x, 3.0)`) answers the **same**
+// 12.0 and the two can be read side by side. `^` and `pow` are two operators over one kernel, and the
+// library has a law for each; the engine has one for `^` only, so the `^` spelling is where the
+// comparison has to stand.
+//
+//     camel test/cases/compile/transforms/pow_cube_gradient_through_the_engine.cml
+import { grad } from autodiff
+
+/// The differentiated value is the `with` parameter: the body is a cube of it and nothing else.
+with <w: float>
+func cube(): float {
+    return w ^ 3.0
+}
+
+func main(): int sync {
+    let slope = grad(cube)
+    let d = slope<2.0>()
+    `pow engine value=8.0 dL/dw={}`->format<d>->println
+    return 0
+}

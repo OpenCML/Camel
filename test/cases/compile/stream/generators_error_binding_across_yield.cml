@@ -1,0 +1,30 @@
+/**
+ * `case error e` binds the error of a `T!`, and the arm `yield`s it. The error a fallible value
+ * carries is the one `Error` structure the prelude declares (design principles 3.9), so the name
+ * is typed from the declaration and is a cell of the body like any other binding: the second
+ * `yield` stands after the first, so the pull that resumes there reads `e` out of the cell.
+ *
+ * `g(fail())` hands out `"!"` and then `"broke"`; the loop counts two elements and `main`
+ * returns 0.
+ */
+
+func fail(): int! {
+    return error("a8", "broke")
+}
+
+func g(x: int!): string.. sync {
+    match x {
+        case v => {
+            yield "ok"
+        }
+        case error e => {
+            yield "!"
+            yield e.message
+        }
+    }
+}
+
+func main(): int sync {
+    loop acc = 0 for s in g(fail()) do sync { println(s); acc + 1 }
+    return 0
+}

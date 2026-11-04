@@ -10,8 +10,8 @@
 
 ### O1 标量除法与类型转换的故障没有复刻
 
-- 运行时：`src/builtin/operators/ops.cpp:681-700` 的 `/` 对 Int32/Int64/Float32/Float64 的除数为 0（浮点含 -0）都报 `DivisionByZero`；整数 `min / -1` 有明确的商（`utils::quotient`）；`src/core/numeric_convert.h` 规定浮点转整数遇 NaN、无穷、越界为 `ConversionOutOfRange`，int 到 i32 越界同样是故障。
-- 导出：`modules/onnx/lowering.cpp:1263-1290` 把 `:op/div_{i,l,f,d}` 直接降为 ONNX `Div`，`:op/{i,l,f,d}to{i,l,f,d}` 直接降为 `Cast`（`lowerScalarCast`，约 1000 行处）；`tensor:cast`（`lowerCast`，约 280 行处）同。
+- 运行时：`src/builtin/operators/ops.cpp#__builtin__mul__` 的 `/` 对 Int32/Int64/Float32/Float64 的除数为 0（浮点含 -0）都报 `DivisionByZero`；整数 `min / -1` 有明确的商（`utils::quotient`）；`src/core/numeric_convert.h` 规定浮点转整数遇 NaN、无穷、越界为 `ConversionOutOfRange`，int 到 i32 越界同样是故障。
+- 导出：`modules/onnx/lowering.cpp#lowerArrayTake` 把 `:op/div_{i,l,f,d}` 直接降为 ONNX `Div`，`:op/{i,l,f,d}to{i,l,f,d}` 直接降为 `Cast`（`lowerScalarCast`，约 1000 行处）；`tensor:cast`（`lowerCast`，约 280 行处）同。
 - 失败场景：依赖模型输入的标量 `a / b`，`b = 0.0` 时运行时故障，导出模型给出 inf/NaN（整数则是 ORT 的未定义行为或报错）；`int(x)` 的 x 为 NaN 或 1e30 时运行时故障，导出模型静默饱和或回绕。Tiles 对同一件事有测试和故障（`test/cases/modules/tiles/scalar_zero*.cml`），ONNX 没有。
 - 修法：除数不是已证非零的常量时，按切片的先例在图里放"守卫"（对除数做 `Equal(0)`，用 `Where` 接一个必然让 ORT 失败的 Gather/Reshape），或明确拒绝导出（`ExportError`：该除法的除数依赖模型输入，运行时会报除零故障，导出无法等价）。转换同理：窄化与浮点到整数要么加范围守卫，要么拒绝。与其静默，不如拒绝，再逐个补守卫。
 

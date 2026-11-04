@@ -14,9 +14,12 @@
  *   - every ordinary parameter of `F` becomes two parameters, the value and its tangent, so
  *     `jvp(f)` for `f(x, y)` takes `(x, dx, y, dy)`;
  *   - the result is the pair `(value, tangent)`, the same shape in and out;
- *   - `F` must take no `with` parameter, at least one parameter, every parameter a `float` and a
- *     `float` result, because a captured value has no port to enter the copied graph by and a
- *     tangent is a `float` direction.
+ *   - `F` keeps its `with` parameters: each is one port of the lifted function, of the declared
+ *     type, and the tangent of a captured value is the zero of its type -- a value that reaches the
+ *     body through a `with` parameter does not move in forward mode. So `jvp(f)` for `f` of `<m:
+ *     Model> (x: float)` is a function of `<m: Model> (x, dx)`.
+ *   - `F` must take at least one ordinary parameter, every ordinary parameter a `float` and a
+ *     `float` result, because a tangent is a `float` direction.
  * The tangent of an input is the seed: `jvp(f)(2.0, 1.0)` asks for the derivative in the
  * direction 1, and `jvp(f)(2.0, 2.0)` for twice it. Nothing here picks the direction for the
  * caller, so a function of several parameters is read one direction per run (`jvp(f)(3.0, 1.0, 2.0,
@@ -39,8 +42,7 @@ export type Tangent<T>
 /// Forward mode: `jvp(f)` gives a function that takes the parameters of `f` followed by their
 /// tangents and returns the pair `(value, tangent)`. `jvp(f)(2.0, 1.0)` is the value `f(2.0)`
 /// together with the derivative of `f` at 2 in the direction 1.
-/// @example-fragment `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
-/// @example let forward = jvp(f)
+/// @example let forward = jvp((x: float) => x * x)
 export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()
 /// The step of `vjp` that separates a lifted function into the part computable now and the linear
 /// residue (design 4.2, 4.4). Implemented for the straight-line tier (`modules/transforms/split.cpp`):
@@ -61,8 +63,6 @@ export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()
 /// (`ResidualsOf<F>`, and the `_` position before it, are both gone). `lin` is linear in the tangent
 /// it is given -- the condition the transpose step (M3) reads -- and both halves speak in `Tangent<T>`
 /// at the top of this file.
-/// @example-fragment `split` takes the lifted function a `jvp` call writes, so the example is a
-/// fragment of the composition: `let fwd = split(jvp(f))`, then `let (y, lin) = fwd(x)`.
 /// @example let step = split
 export func split(f: (v: float, d: float) => (float, float)): (v: float, d: float) => (float, (float, float) => float)
 
@@ -71,13 +71,22 @@ export func split(f: (v: float, d: float) => (float, float)): (v: float, d: floa
 /// by the rule the `rulesets.transpose` family files under it, and a value used k times receives k
 /// cotangents that add. `f(x) = 2*x + 3*x` transposed at the cotangent `1.0` gives `5.0`.
 ///
-/// The transposed function takes the parameters of `f` first and the cotangent last --
-/// `transpose(f)(x, 1.0)` -- because a pullback may need the value it is transposing at: a branch's
-/// condition is a value, and the cotangent of an arm only means something for the arm that ran.
-/// The shape is the same for every `f`, so a reader writes the same call whether the body branches
-/// or not. The type is `(..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)`.
-/// @example-fragment `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
-/// @example let back = transpose(f)
+/// The transposed function takes the values the call site still passes first and the cotangent of
+/// the result last, because a pullback may need the value it is transposing at: a branch's condition
+/// is a value, and the cotangent of an arm only means something for the arm that ran.
+///
+/// Which values those are is a property of `f`'s body, not of its type: a parameter that takes a
+/// cotangent is not passed (the cotangent carries it), a parameter with no tangent space (an `int`,
+/// a `bool`, a string) stands there as a value, and a value the body reads from outside stands there
+/// too. So for a one-`float` function the call is `transpose(f)(1.0)`.
+///
+/// **`stdlib/types.cml#Transpose` is the contract, not an approximation** (author, 2026-11-03,
+/// `origin/fsh-dev` `6eceaa89d`): the build makes the declared type. The declaration cannot write
+/// that shape exactly today because the type-bundle splice loses multiplicity and lacks "the value
+/// parameters the call site still passes" -- a missing capability of the splice, to be fixed, not a
+/// wording to be kept. `modules/transforms/transpose.cpp#transposeSignature` is the build that has to
+/// come to agree with it.
+/// @example let back = transpose((x: float) => 2.0 * x + 3.0 * x)
 export func transpose::<F>(f: F): Transpose<F> when is_function::<F>()
 
 
@@ -93,8 +102,7 @@ export func transpose::<F>(f: F): Transpose<F> when is_function::<F>()
 /// operator with no rule is refused by name at the primitive, never batched by a guess; a call, a
 /// branch or a loop in the body is refused the same way, because the elementwise tier batches
 /// straight-line bodies.
-/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
-/// @example let batched = vmap(f)
+/// @example let batched = vmap((x: f32) => x * 2.0)
 export func vmap::<F>(f: F): Vmap<F> when is_function::<F>()
 
 /// Memory for recomputation: `remat(f)` gives a function whose graph is `f`'s graph with the
@@ -107,8 +115,7 @@ export func vmap::<F>(f: F): Vmap<F> when is_function::<F>()
 /// (`modules/transforms/split.cpp`). JAX writes the same transform as `jax.checkpoint`, whose other
 /// name is `jax.remat`; in this tree "checkpoint" is the persistence module `ckpt`, so the transform
 /// takes the other word.
-/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
-/// @example let remembered = remat(f)
+/// @example let remembered = remat((x: int) => x + 1)
 ///
 /// The type is the argument's own: a function in, the same function out, which is the whole of what
 /// the name says. `modules/transforms/remat_operator.cpp` answers `(f: F) => F` and builds the graph

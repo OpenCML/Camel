@@ -5,9 +5,9 @@
 ## 读者先看这一行
 
 ```
-include/camel/core/mm/alloc/header.h:72   void incAge() { if (age_ < 15) age_++; }
+include/camel/core/mm/alloc/header.h#incAge   void incAge() { if (age_ < 15) age_++; }
                                           void setAge(size_t age) { GUARD(age <= 15, "Age must be between 0 and 15"); }
-src/core/mm/gc_debug.cpp:36               promotionAgeThreshold_ = 16;
+src/core/mm/gc_debug.cpp#GenerationalAllocatorWithGC::configureDebug               promotionAgeThreshold_ = 16;
 ```
 
 `age_` 是 4 位、封顶 15；阈值是 16 ⇒ **任何对象都不可能晋升**。不是复制路径没走到，是走到了、加龄了，但加不上去。
@@ -73,6 +73,6 @@ STREAM_TEE {"tee":4,…,"elements":3,"peak":3,…,"hint":64,"cap":64}
 
 ## 扫描器替我们做组合覆盖，而它从没被跑过
 
-`poison:` 变体不是谁写的，是 `gc_poison_sweep` 从计划条目自动派生出来的（`skip_args_prefix = "--gc-"`，`test/plans/feat/mm/gc_poison_sweep.plan.toml:38`）——**我们有一个机制在替我们做组合覆盖，而这个机制所在的那一层（milestone）从没被跑过。它第一次跑就抓到一个真 bug，而且那个 bug 是 poison 检查自己报的案，不是我们猜出来的。**
+`poison:` 变体不是谁写的，是 `gc_poison_sweep` 从计划条目自动派生出来的（`skip_args_prefix = "--gc-"`，`test/plans/feat/mm/gc_poison_sweep.plan.toml#poison`）——**我们有一个机制在替我们做组合覆盖，而这个机制所在的那一层（milestone）从没被跑过。它第一次跑就抓到一个真 bug，而且那个 bug 是 poison 检查自己报的案，不是我们猜出来的。**
 
 **"不是我的线"不等于"没人管"**：把发现交出去时，要把它交到具体人手上——这条报给了协调人，由它派给 `guard`，闭环才成立；写在页里不算交付。

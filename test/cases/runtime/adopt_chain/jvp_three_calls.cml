@@ -1,0 +1,26 @@
+import rulesets.jvp
+import { jvp } from transforms
+
+func f(x: float): float {
+    return 2.0 * x
+}
+
+func g(x: float): float {
+    return f(x) * x
+}
+
+func g2(x: float): float {
+    return g(x) * x
+}
+
+func g3(x: float): float {
+    return g2(x) * x
+}
+
+func main(): int sync {
+    let d = jvp(g3)
+    let (value, tangent) = d(2.0, 1.0)
+    'value={}'->format<value>->println
+    'tangent={}'->format<tangent>->println
+    return 0
+}

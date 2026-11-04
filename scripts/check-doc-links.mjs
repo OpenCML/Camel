@@ -8,6 +8,12 @@
 //   node scripts/check-doc-links.mjs            the reader-facing documents (see SCOPE)
 //   node scripts/check-doc-links.mjs --default-roots  the same, ignoring a script path argument
 //   node scripts/check-doc-links.mjs --all      every tracked *.md of the repository
+//   node scripts/check-doc-links.mjs --source-line-citations  outside docs/handover no source is cited
+//                                               by line (a line moves with every edit; name the symbol)
+//   node scripts/check-doc-links.mjs --questions-defaults  every page under docs/handover/questions
+//                                               names a default in a heading and gives it text (the
+//                                               author's rule of 2026-11-03: a question is asked with
+//                                               the answer this side would start on)
 //   node scripts/check-doc-links.mjs --technical-index  every page under docs/technical is listed
 //                                               in docs/technical/README.md (the list is the tree)
 //   node scripts/check-doc-links.mjs --citations  every *.md path cited anywhere in the tree — in a
@@ -17,14 +23,26 @@
 //                                               defect, because a line number moves with every edit
 //   node scripts/check-doc-links.mjs --citations --root DIR
 //                                               check a fixture tree instead of the repository
+//   node scripts/check-doc-links.mjs --self-test  a cache or virtual-environment directory beside
+//                                               the checkout is not scanned, and the checkout is
+//                                               (the trees in SKIP_DIRS, on a tree it writes itself)
 //   node scripts/check-doc-links.mjs FILE DIR  the given files and directories
+//
+// Over a developer's checkout a `--citations` run reads the checkout and not the trees a build, a
+// Python environment or a dependency download leaves beside it (they are the names in SKIP_DIRS).
+// Before those names were skipped, one run of this check over such a checkout had not finished
+// after 46 minutes and was taken for a hang by two lanes in one night. So: if a run over a
+// developer checkout does not end in seconds, it is walking a tree that belongs in that set -- the
+// answer is to add the name, never to wait an hour or to read the wait as a red check.
 //
 // Exit status 1 when a link is broken or a citation does not resolve, 2 when the scope is empty or
 // names a missing entry: a check of nothing is refused, never reported as a pass. External links
 // (http, mailto) are not fetched.
 
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { isRunnerOutput } from '../test/tools/runner-output.mjs'
 
@@ -56,7 +74,48 @@ const SCOPE = [
 
 // `fixture` trees are inputs of the checks themselves (test/plans/feat/*/fixture): their
 // citations are deliberately wrong, so the whole-tree runs must not read them.
-const SKIP_DIRS = new Set(['.git', 'node_modules', 'third_party', 'out', 'build', 'tmp', 'dist', 'sdks', 'fixture'])
+//
+// A developer's checkout also carries trees that are not its content, and they were the whole cost
+// of a `--citations` run on this machine: `.venv` (29,926 files, 826.4 MB) and `.cache` (15,481
+// files, 1,047.0 MB) -- 45,407 files and 1.87 GB together, 24,886 of them carrying an extension
+// this scan reads (2,922 `.py`, 1,166 `.cml`, 1,624 `.h` and 490 `.ts` of the packages and headers
+// that live there) -- and `vendor/`, the dependency trees (744 files). A run that entered them took
+// longer than ten minutes and was read as a hang or as a red check rather than as a walk of the
+// repository (measured 2026-11-04).
+//
+// `vendor` is here for two reasons of content and one of cost. Content: git ignores it, so it is
+// not content of a checkout, exactly like `sdks`; and its files cite *their own* paths, so the
+// check reported citations of this repository that nobody made and the run went red for files of
+// other projects (a page named `README` under the other project's `docs`, a `src/shape/...` of
+// another project in Eigen's) -- two such rows on this developer checkout. Cost: two of its
+// headers send the citation patterns into catastrophic backtracking --
+// `nlohmann/detail/meta/type_traits.hpp` costs 208.5 s in the symbol pattern and 205.7 s in the
+// line pattern, `taskflow/dsl/task_dsl.hpp` 82.7 s and 82.8 s, both for zero matches. Every one of
+// those four measurements is on one 28.8 KB or 4.0 KB file, so it is the pattern and not the walk.
+// (No literal path of that kind is written here: this file is scanned too, and the first draft of
+// this very paragraph was reported as a citation it never made.)
+//
+// Git ignores every name below, so none of them is content of a checkout: with them skipped the
+// run verifies the same citations and the walk is the repository's own. `venv` is named beside
+// `.venv` because a checkout that a build runs in holds either name; `.cache` and `.ccache` are the
+// tool and compiler caches a build leaves at the root; `__pycache__` is the bytecode of both.
+const SKIP_DIRS = new Set([
+    '.git',
+    'node_modules',
+    'third_party',
+    'out',
+    'build',
+    'tmp',
+    'dist',
+    'sdks',
+    'fixture',
+    '.venv',
+    'venv',
+    '.cache',
+    '.ccache',
+    '__pycache__',
+    'vendor'
+])
 // 'sdks' is upstream CPython: its headers cite CPython's own documentation, not ours.
 
 function markdownFiles(entry) {
@@ -258,6 +317,81 @@ function checkQuestionsIndex() {
     return 1
 }
 
+// The author's 18:30 ruling: whether a page has been answered is decided by `reviews/`, not by
+// what is left in `questions/` -- a merge can leave the answered page behind, and a leftover reads
+// as an unanswered question nobody is working on. So a page in `questions/` that already has a
+// page of its own in `reviews/` is a stale copy, and this check names the two files.
+const REVIEWS_DIR = path.join(root, 'docs', 'handover', 'reviews')
+
+function pageStem(name) {
+    return name.replace(/\.cn\.md$|\.md$/, '')
+}
+
+function checkAnsweredPages() {
+    if (!fs.existsSync(QUESTIONS_DIR) || !fs.existsSync(REVIEWS_DIR)) return 0
+    const reviews = fs.readdirSync(REVIEWS_DIR).filter((name) => name.endsWith('.md'))
+    // A page is answered when the reviewer's index names it, whichever way that reads: a page of
+    // its own in reviews/, or its name inside the index of a batch of questions
+    // (`reviews/questions-<date>.md`), where the reply is a line and not a file. Both are the
+    // author's rule of 18:30, and reading only the first would leave every page of a batch
+    // looking unanswered.
+    // The two halves do different jobs and must not be merged: a file of the same name is strong
+    // evidence, so per-question replies (`questions-<slug>.md`) are matched by NAME only and their
+    // text is never read; a name inside a batch index (`questions-<date>[-word].md`) is strong
+    // because that is where a batch's replies are lines rather than files. A word found in the
+    // body of some other page's reply is weak evidence and would report a question nobody answered.
+    const indexFiles = reviews.filter((name) => /^questions-\d{4}-\d{2}-\d{2}(-[A-Za-z0-9_]+)?\.md$/.test(name))
+    const indexLines = indexFiles.map((name) => ({
+        name,
+        lines: fs.readFileSync(path.join(REVIEWS_DIR, name), 'utf8').split(/\r?\n/),
+    }))
+    const problems = []
+    for (const page of fs.readdirSync(QUESTIONS_DIR)) {
+        if (!page.endsWith('.md') || page === 'README.md') continue
+        const stem = pageStem(page)
+        const answered = reviews.filter((review) => {
+            if (review.startsWith('questions-')) return false // matched by name only; see indexFiles
+            const reviewStem = pageStem(review)
+            return reviewStem === stem || reviewStem.endsWith(`-${stem}`) || reviewStem.endsWith(stem)
+        })
+        // A stem shorter than this is a word rather than a page name, and matching one would
+        // report a page nobody answered; a wrong report here blocks the next real question, which
+        // is worse than a miss.
+        const namedIn =
+            stem.length < 20
+                ? []
+                : indexLines
+                      .map(({ name, lines }) => {
+                          const hits = []
+                          lines.forEach((line, i) => {
+                              if (line.includes(stem)) hits.push(i + 1)
+                          })
+                          return { name, hits }
+                      })
+                      .filter((entry) => entry.hits.length > 0)
+        const where = [
+            ...answered.map((review) => `docs/handover/reviews/${review}`),
+            ...namedIn.map((entry) => `docs/handover/reviews/${entry.name}:${entry.hits.join(',')}`),
+        ]
+        if (where.length > 0) {
+            problems.push(
+                `docs/handover/questions/${page}: already answered by ${where.join('; ')}` +
+                    ' -- the page was read and the reply is in reviews/, so this copy is left over',
+            )
+        }
+    }
+    for (const problem of problems) console.log(problem.replace(/\\/g, '/'))
+    if (problems.length > 0) {
+        console.log(
+            `${problems.length} answered page(s) still in questions/: the reviewer's ruling lives in ` +
+                'reviews/, and a page left behind reads as a question nobody is answering',
+        )
+        return 1
+    }
+    console.log('no answered page is left in questions/: every page there is still waiting')
+    return 0
+}
+
 function checkTechnicalIndex() {
     if (!fs.existsSync(TECHNICAL_INDEX)) {
         console.log('docs/technical/README.md: no such file')
@@ -373,6 +507,20 @@ function isComment(file, text, index) {
 
 // A fenced block shows an example, often of a file that a plan *will* create; it is not a citation.
 // A fence may be indented, as it is inside a list item.
+//
+// This function and `lineAt` below both read the whole prefix of a document, which looks quadratic
+// and was twice mistaken for the reason this check is slow: it is not, and the numbers are here so
+// that nobody pays for them again (measured 2026-11-03). `lineAt` is called *only when a problem is
+// reported*, so on a tree whose citations all resolve it is called zero times. `inFence` is called
+// only for a match inside a markdown document, which is a small part of the walk. Neither is on the
+// main path: a run over this tree is 1.43 s on the build host and about 3 s locally, of which
+// roughly half is reading the 33.7 MB of the 6027 scanned files and the rest is the regexes. An
+// index of line starts and of fence ends, asked by binary search, was written and measured: the
+// report was byte-identical, the wall clock did not move (2.94 s before, 3.04 s after, with 240 ms
+// of the "after" being the index build itself), so it was dropped. What that index did buy is the
+// red tree -- 487 KB holding 4000 unresolvable citations went from 1.00 s to 0.41 s -- and a red
+// tree is a report, not a check. If this ever does need to be fast, the walk is the thing to
+// measure, not this.
 function inFence(text, index) {
     const fences = (text.slice(0, index).match(/^\s*(?:```|~~~)/gm) || []).length
     return fences % 2 === 1
@@ -562,8 +710,174 @@ function checkCitations() {
 if (args.includes('--citations')) {
     process.exit(checkCitations())
 }
+// The trees `SKIP_DIRS` names are the reason a `--citations` run on a developer's checkout was
+// reported as a hang, so "a name in that set is not walked into" is checked here rather than
+// promised by the set. This mode writes a tree that is a checkout in miniature -- one page, the
+// source file it cites by symbol, another page cited by path -- and one directory per name that
+// must not be read, each holding a file whose comment cites a file that does not exist. The run it
+// then starts is this script over that tree: a name that leaves `SKIP_DIRS` is a reported citation
+// of the missing file (exit 1), and a walk that stops reading real files shows up in the same
+// reading, because the count says which files were scanned. Both halves matter: the guard must not
+// read a cache, and it must still read the checkout.
+//
+// The citation in that file is joined from parts, because this script is itself scanned: a literal
+// `path#Symbol` on a line that also carries a `//` is a citation of this repository, and the first
+// version of this case failed exactly that way -- the guard reported its own test data as an
+// unpaid citation, naming the absent source file twice in this file. For the same reason this
+// paragraph names no such literal either. One ghost file per name below, and the names are written
+// down here rather than read from `SKIP_DIRS`: a list the case derives from the set it tests cannot
+// report a name that left that set, which is the one failure it exists for (measured: a first
+// version of it built the tree out of `[...SKIP_DIRS]` and stayed green with the set emptied).
+const ghostCitation = (marker) =>
+    `${marker} cites ${['src/absent', 'c'].join('.')}#Absent and ${['gone/missing', 'md'].join('.')}\n`
+
+const MUST_SKIP = [
+    '.git',
+    'node_modules',
+    'third_party',
+    'out',
+    'build',
+    'tmp',
+    'dist',
+    'sdks',
+    'fixture',
+    '.venv',
+    'venv',
+    '.cache',
+    '.ccache',
+    '__pycache__',
+    'vendor'
+]
+
+function selfTestSkipTrees() {
+    return MUST_SKIP.map((tree) => [tree, path.join('lib', 'ghost.ts'), ghostCitation('//')])
+}
+
+function selfTestSkipDirs() {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-doc-links-skip-'))
+    const write = (relative, text) => {
+        const file = path.join(directory, relative)
+        fs.mkdirSync(path.dirname(file), { recursive: true })
+        fs.writeFileSync(file, text)
+    }
+    try {
+        write('notes.md', '# notes\n\nThe walk reads `src/thing.c#Thing`, and `docs/page.md` is a page.\n')
+        write('src/thing.c', 'int Thing(void) { return 0; }\n')
+        write('docs/page.md', '# page\n')
+        const trees = selfTestSkipTrees()
+        for (const [tree, relative, text] of trees) write(path.join(tree, relative), text)
+
+        const run = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--citations', '--root', directory], {
+            encoding: 'utf8'
+        })
+        const reading = (run.stdout ?? '').trim().split('\n').filter((line) => line !== '')
+        const expected =
+            'no unverified citation: 1 of 1 symbol citation(s) verified, 1 path citation(s) across 3 file(s)'
+        // One line and one count: a problem line means a skipped tree was walked, and a different
+        // file count means the three files of the miniature checkout were not all read.
+        if (run.status === 0 && reading.length === 1 && reading[0] === expected) {
+            console.log(
+                `the ${trees.length} tree(s) a checkout carries and SKIP_DIRS must name were not scanned: ${reading[0]}`
+            )
+            return 0
+        }
+        for (const line of reading) console.log(`  ${line}`)
+        console.log(`the walk read a tree SKIP_DIRS names, or stopped reading a real file: ${run.status}`)
+        return 1
+    } finally {
+        fs.rmSync(directory, { recursive: true, force: true })
+    }
+}
+if (args.includes('--self-test')) {
+    process.exit(selfTestSkipDirs())
+}
+// A rule about the pages that only a reader of the rule could keep: "我方新问题一律一页一问放进
+// docs/handover/questions/" and "每页都要写默认建议，并当轮按默认开工" (author, 2026-11-03). The second
+// half is a property of the page, so it is checked on the page rather than remembered: a section
+// whose heading names a default, and at least one line of text under it. The report names which of
+// the two is missing, because "this page is not compliant" sends the reader back to the rule to work
+// out which half it broke.
+function checkQuestionsHaveDefaults() {
+    if (!fs.existsSync(QUESTIONS_DIR)) {
+        console.log(`${QUESTIONS_DIR}: no such directory`)
+        return 2
+    }
+    const pages = fs
+        .readdirSync(QUESTIONS_DIR)
+        .filter((name) => name.endsWith('.cn.md'))
+        .sort()
+    if (pages.length === 0) {
+        console.log(`${QUESTIONS_DIR}: no page to check, so nothing here is a pass`)
+        return 2
+    }
+    let checked = 0
+    for (const page of pages) {
+        const file = path.posix.join(QUESTIONS_DIR, page)
+        const lines = fs.readFileSync(path.join(QUESTIONS_DIR, page), 'utf8').replace(/\r\n/g, '\n').split('\n')
+        const isHeading = (line) => /^#{1,6}\s+\S/.test(line)
+        const start = lines.findIndex((line) => isHeading(line) && /(默认|default)/i.test(line))
+        if (start === -1) {
+            console.log(`${file}: no section names a default: a heading has to hold 默认 or default, and the answer goes under it`)
+            continue
+        }
+        let body = 0
+        for (let i = start + 1; i < lines.length && !isHeading(lines[i]); i += 1) {
+            if (lines[i].trim() !== '') body += 1
+        }
+        if (body === 0) {
+            console.log(`${file}: the default section "${lines[start].replace(/^#{1,6}\s+/, '')}" has no text, so there is no default to start on`)
+            continue
+        }
+        checked += 1
+    }
+    if (checked !== pages.length) {
+        console.log(`${checked} of ${pages.length} pending page(s) give a default; a page without one is a question nobody can start on`)
+        return 1
+    }
+    console.log(`every pending page names a default and gives it: ${checked} page(s) in ${QUESTIONS_DIR}`)
+    return 0
+}
+// The rule the handover index states: a citation names a file and a symbol (`file#Symbol`), never a
+// line, because a line moves with every edit. Inside docs/handover/ the line numbers are that day's
+// reading and stay; outside it, a line number on a repository source is a citation that will rot.
+// The match is deliberately narrow: a path that starts at one of the source roots and ends in a
+// position. A `.cml` name with a position is excluded: it is a tool's output or an example program's
+// line, and rewriting one would falsify the transcript it is quoted in. Two transcripts made this
+// narrow -- a debugger session stepping through `docs/tutorial/examples/folded.cml` and printing its
+// own positions, and a timing line from docs/cli.md that names a case file of
+// `test/cases/perf` with a position after it. (Written this way because the citation check reads
+// comments too: a comment that spells either out with a line number is itself an unpaid citation.)
+const SOURCE_LINE_CITATION = /(?<![\w/])(?:src|include|modules|stdlib|scripts|test)\/[A-Za-z0-9_./-]*\.(?:cpp|h|hpp|cc|ts|mjs|js|toml|py):\d+/
+function checkSourceLineCitations() {
+    const files = markdownFiles('docs').filter((f) => !f.includes(`${path.sep}handover${path.sep}`))
+    let found = 0
+    for (const file of files) {
+        const lines = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n').split('\n')
+        lines.forEach((line, index) => {
+            const hit = SOURCE_LINE_CITATION.exec(line)
+            if (hit === null) return
+            found += 1
+            console.log(`${path.relative(root, file).split(path.sep).join('/')}:${index + 1}: \`${hit[0]}\` cites a source by line; name the symbol instead (file#Symbol)`)
+        })
+    }
+    if (found > 0) {
+        console.log(`${found} source citation(s) outside docs/handover give a line number, which moves with every edit`)
+        return 1
+    }
+    console.log(`no source citation outside docs/handover gives a line number: ${files.length} page(s) checked`)
+    return 0
+}
+if (args.includes('--source-line-citations')) {
+    process.exit(checkSourceLineCitations())
+}
+if (args.includes('--questions-defaults')) {
+    process.exit(checkQuestionsHaveDefaults())
+}
 if (args.includes('--questions-index')) {
-    process.exit(args.includes('--write') ? writeQuestionsIndex() : checkQuestionsIndex())
+    if (args.includes('--write')) process.exit(writeQuestionsIndex())
+    const indexCode = checkQuestionsIndex()
+    const answeredCode = checkAnsweredPages()
+    process.exit(indexCode !== 0 ? indexCode : answeredCode)
 }
 if (args.includes('--technical-index')) {
     process.exit(checkTechnicalIndex())

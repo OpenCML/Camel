@@ -1,0 +1,12 @@
+// A rank-one position that states its extent is a shape, and a literal written in it is built
+// into that shape -- the same way a declaration and an argument already did. `take3` takes
+// nothing but a `f32[3]`, so this program compiling is the reading: before, `as float[3]` left
+// the literal a `f32[]` and the conversion refused it.
+func take3(x: float[3]): void {
+    println(x)
+}
+
+func main(): int sync {
+    take3([1.5, 2.5, 3.5] as float[3])
+    return 0
+}

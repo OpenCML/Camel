@@ -29,9 +29,11 @@
 #include "camel/runtime/graph.h"
 #include "camel/runtime/node_ref.h"
 #include "camel/runtime/program.h"
+#include "camel/utils/assert.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <memory>
 #include <optional>
 #include <span>
@@ -132,12 +134,15 @@ struct DraftNodeHeader {
 
     GCNodeKind kind                  = GCNodeKind::Data;
     uint8_t runtimeFlags             = 0;
-    /// How many of a FUNC node's arguments are tangents. A rule's right side is
+    /// Which of a FUNC node's arguments are tangents, one bit per argument position: bit `i` is set
+    /// when the call's i-th argument is a tangent. A rule's right side is
     /// `(dx, dw) => mul_tangent(x, w, dx, dw)`: the values are the captures the expansion bound and the
-    /// tangents are the lambda's own parameters, so the expansion knows the count and records it here,
-    /// on the call it produces. One source: the rule. Nothing re-derives the boundary from a name or a
-    /// spelling, and a reader that needs it (`transpose`, at a call inside a branch arm) reads the
-    /// node. 0 for every node that is not a rule's tangent call.
+    /// tangents are the lambda's own parameters, so the expansion knows the positions and records them
+    /// here, on the call it produces. One source: the rule. Nothing re-derives the boundary from a name
+    /// or a spelling, and a reader that needs it (`transpose`, at a call inside a branch arm) reads the
+    /// node. A rule may write a tangent anywhere its right side writes one -- `index_into(dxs, i)` puts
+    /// one first -- so the record is a set of positions, not a count of trailing ones. 0 for every node
+    /// that is not a rule's tangent call.
     uint16_t tangentArgs             = 0;
     DraftNodeStorageClass storageCls = DraftNodeStorageClass::Slab64;
     // The numeric permissions the program granted to the node with the standard permission
@@ -345,7 +350,16 @@ class GraphDraft {
         outerGraphId_ = outer;
     }
 
-    GraphDraft()  = default;
+    /// A draft always has its body: region 0 is made here, with the draft, so the table is never
+    /// empty and `region(0)` answers a region the draft really holds (see `region`).
+    ///
+    /// A region is a record *and* a membership, and this model keeps the two apart: the record is
+    /// `regions_[0]`, while which nodes are in it is written on the nodes themselves
+    /// (`DraftNodeHeader::region`, read by `nodeRegion`) -- a region has no member table that could
+    /// be empty or full. The body is not a value either: `setRegionResult` takes only ids above 0,
+    /// and the exit of a graph is its own field (`exitNode`). So a body record of all defaults is
+    /// complete, not missing, and a graph of one region has every node in it.
+    GraphDraft() { regions_.push_back(GCRegion{}); }
     ~GraphDraft() = default;
 
     GraphDraft(const GraphDraft &)            = delete;
@@ -609,9 +623,11 @@ class GraphDraft {
     /// The index of `graph` in payloadGraphs(), added when it is not there; kNoLoopGraph for
     /// an invalid id.
     uint32_t payloadGraphIndexOf(GraphId graph);
-    /// `tangentArgs` is how many of the call's trailing arguments are tangents, when the caller knows
-    /// (see DraftNodeHeader::tangentArgs): a rule's expansion does, because the values are the captures
-    /// it bound and the tangents are the lambda's own parameters. 0 for a call that is not one.
+    /// `tangentArgs` is which of the call's arguments are tangents, one bit per argument position
+    /// (bit `i` = the i-th argument is a tangent), when the caller knows (see
+    /// DraftNodeHeader::tangentArgs): a rule's expansion does, because the values are the captures it
+    /// bound and the tangents are the lambda's own parameters. A position, not a trailing count: the
+    /// rule writes a tangent where its right side writes it. 0 for a call that is not one.
     gc_node_ref_t addFuncNode(
         GraphId calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags = 0,
         gc_slot_idx_t dataIndex = 0, uint32_t writtenCaptures = 0, uint16_t tangentArgs = 0);
@@ -725,7 +741,6 @@ class GraphDraft {
     void replaceAllWithUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllCtrlUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllOrderUses(gc_node_ref_t oldId, gc_node_ref_t newId);
-    void replaceAllSyncUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllValueUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     /// Removes GATEs that wait on nothing (no control input): such a gate only forwards its value,
     /// so its users read the value directly. Rewrites that remove what a gate waited on (a pruned
@@ -748,14 +763,35 @@ class GraphDraft {
     /// materialising an array); no graph producer of a library does. Asserts that `id` is a LOOP
     /// node.
     void setLoopIterableInterval(gc_node_ref_t id);
-    /// Regions (GCRegion). A draft has region 0, the body, once it has any other. Ids are not
-    /// reused.
+    /// Regions (GCRegion). Region 0 is the body and the draft makes it when it is made, so the
+    /// table always holds the body and then the other regions; ids are not reused.
     size_t regionCount() const { return regions_.size(); }
-    const GCRegion &region(uint32_t id) const { return regions_[id]; }
+    /// The region `id`.
+    ///
+    /// Region 0 is **the body**, and it is a record of this draft like any other: the draft is
+    /// made with it, `clearRegions` keeps it, and `nodeRegion` answers 0 for every node that is in
+    /// no other. So "which region encloses this node" has an answer, and the answer is a region
+    /// the draft holds -- nothing here makes one up. Any id the draft does not have is a `GUARD`
+    /// failure, and the `GUARD` stays in every build: a build that reads past the end of the table
+    /// without saying anything is one where only a Debug build's standard library would object
+    /// (`settleStreamLinearity` read `regions_[0]` of an empty table in Release, bound the
+    /// reference, never read through it and passed; 24 tests of `feat/compile/stream` aborted in
+    /// Debug on 2026-11-02).
+    const GCRegion &region(uint32_t id) const {
+        GUARD(
+            id < regions_.size(),
+            std::format(
+                "A draft names a region by id, and this one has {}: id {} is neither the body, "
+                "which is region 0, nor a control region it carries.",
+                regions_.size(),
+                id));
+        return regions_[id];
+    }
     size_t regionPortCount() const { return regionPorts_.size(); }
     gc_node_ref_t regionPort(size_t index) const { return regionPorts_[index]; }
     std::span<const gc_node_ref_t> regionPortsOf(uint32_t id) const {
-        return {regionPorts_.data() + regions_[id].portBegin, regions_[id].portCount};
+        const GCRegion &record = region(id);
+        return {regionPorts_.data() + record.portBegin, record.portCount};
     }
     /// The equivalences between the nodes of the draft (writings.h): the draft is not in the
     /// executable state while there are any. Until they are extracted, the nodes can only be
@@ -773,7 +809,10 @@ class GraphDraft {
       private:
         GraphDraft &draft_;
     };
-    /// The region node `id` is in, 0 when it is in none but the body.
+    /// The region node `id` is in: 0 is the body, which every node the draft holds is in unless a
+    /// control region holds it. An `id` the draft does not hold (erased, or never a node of it) has
+    /// no region at all: it is not answered as 0, because 0 names the body, a region that exists.
+    /// Asking for it fails (`GUARD`), so "which region" has an answer or none, never a wrong one.
     uint32_t nodeRegion(gc_node_ref_t id) const;
     void setNodeRegion(gc_node_ref_t id, uint32_t region);
     /// A new region in `parent`; for a control region the node that owns it and its index.
@@ -916,7 +955,6 @@ class GraphDraft {
     void appendInputEntry(gc_node_ref_t userId, DraftEdgeSlot slot, gc_node_ref_t inputId);
     void replaceValueStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId);
-    void replaceSyncStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceUsesInList(
         gc_node_ref_t ownerId, std::span<const gc_node_ref_t> users, gc_node_ref_t oldId,
         gc_node_ref_t newId, DraftEdgeSlot slot);
@@ -944,7 +982,7 @@ class GraphDraft {
     std::unordered_map<GraphId, uint32_t> payloadGraphIndex_;
     std::vector<DraftNode *> nodesById_;
     std::vector<std::unique_ptr<DraftUserLists>> users_; // by node id; null: no users
-    std::vector<GCRegion> regions_; // empty, or region 0 (the body) then the others
+    std::vector<GCRegion> regions_; // region 0 (the body), made with the draft, then the others
     uint32_t insertRegion_    = 0;
     bool inheritsRegions_     = true;
     std::vector<gc_node_ref_t> regionPorts_;
@@ -1024,6 +1062,12 @@ std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphTransaction &transact
 /// fixed); only a question about one decision of one pass may ask it, never the question of
 /// whether a node takes an order edge, which must not change as types are refined.
 bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byShape = false);
+
+/// `isChainStatement` (camel/runtime/graph.h) asked of a node of a draft: the operator from the
+/// node's payload, a cast's types from its input, and whether it owns a region from the draft's
+/// own regions. The builder writes a `sync` block's chain by this, so it is the same rule the seal
+/// check's census reads.
+bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id);
 
 /// `nodeMayFault` (camel/runtime/graph.h) asked of a node of a draft, with the same `byShape`
 /// reading of an elementwise operator. It is the fault half of `nodeIsFreelySchedulable` above,

@@ -188,6 +188,18 @@ inline constexpr std::string_view kWellKnownOperatorUris[oper::kWellKnownCount] 
 };
 
 /**
+ * The types a conversion of the language reads and writes: `:op/itod` is an i32 going into a
+ * float. Both are written where the operator is registered (the builtin executor's conversion
+ * table), which is the one place that knows what the operator is; a reader asks the operator
+ * table for them instead of reading the letters of the URI (`:op/dtod` ends in `d`, `:op/var/get`
+ * does not, and a variable read whose result is a float converts nothing).
+ */
+struct ConversionTypes {
+    type::TypeCode source = type::TypeCode::Void;
+    type::TypeCode target = type::TypeCode::Void;
+};
+
+/**
  * The traits of an operator, as `find` reports them. They are not stored: every one is derived
  * from the operator's semantic record (`sem::OperatorSemantics`), the only place a fact is
  * declared (`traitsOf`, operator_table.cpp). Declaring a trait means declaring the fact the
@@ -207,8 +219,11 @@ struct OperatorTraits {
     bool stateOnly = false;
     /// The operator can raise a fault (design principles 3.9: division by zero, an index out
     /// of range, a conversion whose value does not fit). True unless the module declares
-    /// otherwise. Recorded for consumers of the graph model; no pass in this repository
-    /// changes its behaviour on it yet (docs/design/graph-model, question Q1).
+    /// otherwise. Passes read it: `src/runtime/graph.cpp#nodeMayFault` answers with it (beside
+    /// `elementwise`, for shapes the type states in full), and `nodeIsFreelySchedulable` hands
+    /// that answer to whoever may drop, move or recompute a node -- a node the program observes
+    /// is kept alive with `:op/keep` when a removal takes its last read
+    /// (`src/passes/opt/generic/rewrite.cpp#isObservedRun`).
     bool mayFault = true;
     /// While it runs, the operator calls function values it received as arguments (the
     /// higher-order operators and `attempt`), so what it does depends on those functions.
@@ -440,6 +455,23 @@ class OperatorTable {
 
     /// Whether the operator `uri` was declared to reuse an operand.
     bool reusesOperand(std::string_view uri) const;
+
+    // ---- Conversions (the fact a rule's key is read from) -----------------------------------
+    //
+    // A conversion of the language is written `op/<source>to<destination>` and its rule is filed
+    // under the destination's spelling (`src/core/forward.cpp#conversionKeyOf`). The two types are
+    // what the operator *is*, so they are declared with it when it is registered, and the key is
+    // read from this declaration rather than decoded from the letters of the URI.
+
+    /// Declares that `uri` is a conversion reading `types.source` and writing `types.target`
+    /// (module load time).
+    void declareConversion(std::string_view uri, ConversionTypes types);
+
+    /// The types `uri` converts between, or nullopt when it is not a declared conversion.
+    std::optional<ConversionTypes> conversionTypesOf(std::string_view uri) const;
+
+    /// True when the operator is a declared conversion. The question `find("to")` used to answer.
+    bool isConversion(std::string_view uri) const { return conversionTypesOf(uri).has_value(); }
 
     // ---- Decorators that grant attributes (language reference 7.6) -------------------------
 
@@ -699,6 +731,9 @@ class OperatorTable {
         /// The operator may return its operand (declareReusesOperand): an elementwise operator
         /// that writes into an operand it owns, rather than allocating a result.
         bool reusesOperand = false;
+        /// The types this operator converts between (declareConversion), or nullopt when it is
+        /// not a conversion. Guarded by mutex_, written at module load time only.
+        std::optional<ConversionTypes> conversion;
         /// What it grants as a decorator (declareGrant), or nullptr.
         std::shared_ptr<const AttrGrant> grant;
 

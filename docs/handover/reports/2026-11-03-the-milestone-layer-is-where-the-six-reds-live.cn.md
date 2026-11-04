@@ -31,7 +31,7 @@ name = "framed.operators.gc_stress"
 tier = "milestone"
 ```
 
-**它们不是 `fast` 层、也不是 `slow` 层的测试，而是 `milestone` 层**（`test/plans` 下 `tier = "milestone"` 现为 **30 行**：21 行写在计划头、也就是 21 个整文件归这一层；9 行写在单条测试上，按后端展开是 13 次运行。此前记作"20 条"，实测 30 行 / 13 次运行，核对命令见"`tier = "milestone"` 到底是几条"一节）。我们每轮的闸门命令是 `-Plan all -Tier fast`，`fast` 层按 `tier` 跳过它们；而 `scripts/plan-inventory.mjs:121` 又把这个**计划**登记在 `FORBIDDEN` 里（理由："its 2 milestone tests are GC stress"），所以连"整份计划被哪一层跑到"这条兜底也不指向 milestone。
+**它们不是 `fast` 层、也不是 `slow` 层的测试，而是 `milestone` 层**（`test/plans` 下 `tier = "milestone"` 现为 **30 行**：21 行写在计划头、也就是 21 个整文件归这一层；9 行写在单条测试上，按后端展开是 13 次运行。此前记作"20 条"，实测 30 行 / 13 次运行，核对命令见"`tier = "milestone"` 到底是几条"一节）。我们每轮的闸门命令是 `-Plan all -Tier fast`，`fast` 层按 `tier` 跳过它们；而 `scripts/plan-inventory.mjs#plan` 又把这个**计划**登记在 `FORBIDDEN` 里（理由："its 2 milestone tests are GC stress"），所以连"整份计划被哪一层跑到"这条兜底也不指向 milestone。
 
 ⇒ **`fail 0` 是真的，但它只覆盖 `fast` 层；这 6 条红从来没有被任何一层跑到。** 这正是"绿是因为没测到"。
 
@@ -105,7 +105,7 @@ grep -rn '^tier = "milestone"' test/plans | awk -F: '$2 < 5' | wc -l   # 21（�
 
 ## 一个文件里有一条跑不动，就把整份文件从所有层里摘掉
 
-`scripts/plan-inventory.mjs:121` 把 `jit_framed` 这**整份计划**登记进 `FORBIDDEN`，理由却是"its 2 milestone tests are GC stress"——而它是 57 条里 2 条（`modules/onnx` 157 里 4 条、`modules/autodiff` 263 里 5 条、`feat/mm/gc` 45 里 43 条）。**按文件排除，而实际只需要按条排除**：464 条 fast 用例因为 58 条非 fast 用例一起被划走。
+`scripts/plan-inventory.mjs#plan` 把 `jit_framed` 这**整份计划**登记进 `FORBIDDEN`，理由却是"its 2 milestone tests are GC stress"——而它是 57 条里 2 条（`modules/onnx` 157 里 4 条、`modules/autodiff` 263 里 5 条、`feat/mm/gc` 45 里 43 条）。**按文件排除，而实际只需要按条排除**：464 条 fast 用例因为 58 条非 fast 用例一起被划走。
 
 建议、代价与验收写在单独一页（**不改工具**，这是测试工具的选层粒度设计）：[`2026-11-03-a-whole-plan-excluded-for-one-entry-in-it.cn.md`](2026-11-03-a-whole-plan-excluded-for-one-entry-in-it.cn.md)——`FORBIDDEN` 改记条目名单，前提是先给 runner 一个按名字选测试的开关（`plan-inventory.mjs:75-77` 的注释说明它今天做不到）。
 

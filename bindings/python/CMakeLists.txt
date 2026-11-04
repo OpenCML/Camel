@@ -11,10 +11,24 @@
 # the wheel's copy of the install carries it at camel/.cmlenv/python/ and libcamel at
 # camel/.cmlenv/libs/ -- the same relative distance ($ORIGIN/../libs) the install has.
 
+# One build serves every CPython 3.10 and later: the module is compiled against the stable ABI
+# (Limited API, `Py_LIMITED_API=0x030A0000`) and `Python3_add_library(... USE_SABI 3.10)` names the
+# artifact `_camel.abi3.<ext>`. This is the 2026-10-25 ruling carried out on 2026-11-02
+# (docs/handover/README.cn.md item 7, review index C28): before it the extension was built once per
+# CPython version and `cp310-cp310` / `cp311-cp311` wheels covered nothing else.
+#
+# `USE_SABI` arrived in CMake 3.26, so this directory raises the minimum for its own subtree: the
+# rest of the tree still configures with 3.25 and does not have to move for this binding.
+cmake_minimum_required(VERSION 3.26)
+
 # Development.Module is the component for an extension module: headers and, on Windows, the
 # import library. It is present wherever Python can build an extension at all, which is also
 # where `pip install` can build this one from source.
-find_package(Python3 3.10 COMPONENTS Interpreter Development.Module QUIET)
+#
+# Development.SABIModule is the same headers for a module that only uses the stable ABI, and it is
+# what `Python3_add_library(... USE_SABI)` links against (`Python3::SABIModule`); without it that
+# command stops with "dependent target 'Python3::SABIModule' is not defined".
+find_package(Python3 3.10 COMPONENTS Interpreter Development.Module Development.SABIModule QUIET)
 
 if(NOT Python3_FOUND)
   message(STATUS "Skipping bindings/python: no Python 3.10+ development files (Development.Module).")
@@ -29,9 +43,16 @@ include(${PROJECT_SOURCE_DIR}/tools/libcamel_tool.cmake)
 # libcamel's export list.
 camel_add_tool_objects(camel_python_ext_objects module.cpp)
 target_include_directories(camel_python_ext_objects PRIVATE ${Python3_INCLUDE_DIRS})
+# The definition goes on the compilation of module.cpp, which is this object library:
+# `USE_SABI` below applies to the module target, and that target's only inputs are these objects.
+target_compile_definitions(camel_python_ext_objects PRIVATE Py_LIMITED_API=0x030A0000)
 target_link_libraries(camel_python_ext_objects PRIVATE Python3::Module)
 
-Python3_add_library(camel_python_ext MODULE $<TARGET_OBJECTS:camel_python_ext_objects> WITH_SOABI)
+# `Python3::Module`, not `Python3::Python`: a module is imported by an interpreter it does not
+# contain, so the extension must not link libpython. Only modules/python (the embedding side,
+# pybind11::embed + Python3::Python) links one, and that is what stays version-specific.
+Python3_add_library(camel_python_ext MODULE WITH_SOABI USE_SABI 3.10
+  $<TARGET_OBJECTS:camel_python_ext_objects>)
 set_target_properties(camel_python_ext PROPERTIES OUTPUT_NAME "_camel")
 target_link_libcamel(camel_python_ext)
 target_link_libraries(camel_python_ext PRIVATE Python3::Module)

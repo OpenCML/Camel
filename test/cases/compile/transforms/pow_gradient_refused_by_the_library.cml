@@ -1,0 +1,46 @@
+// The library's answer for the gradient of `^` at a **constant** exponent: still a refusal, and the
+// sentence that refuses it changed when the missing laws were written.
+//
+// This case used to pin `skip=rule uri=math:pow_d reason=unbound`: the forward rule `jvp_pow` was
+// there, and `pow_tangent` -- the helper it answers with -- called `pow`, whose operator
+// (`math:pow_d`) had no transpose law. Both laws are written now (`rulesets.jvp#jvp_pow_d` and
+// `rulesets.transpose#pow_d_t`, plus the `log` law the second one needs), and the walk gets one step
+// further and stops at the next thing, which is not a rule at all:
+//
+//     TRANSPOSE function=rulesets.jvp::pow_tangent<float> skip=condition
+//     TRANSPOSE function=split_of_jvp_of_p_backward skip=call-no-transpose node=5 callee=rulesets.jvp::pow_tangent<float> why=the cotangent reaches a call whose callee has no transpose
+//
+// `skip=condition` is the guard the tangent `pow_tangent` answers is written behind --
+// `if dw == T(0) then T(0) else pow(x, w) * math_log(x) * dw` -- and what that guard reads is `dw`,
+// the exponent's tangent's **value**: the walk is handed the cotangent and not the tangents, so the
+// branch is one it cannot turn around. The guard is what keeps `(-3.0) ^ 2.0`'s tangent at `-6.0`
+// instead of `NaN` (`jvp_of_a_power.cml` pins it), and `modules/transforms/transpose.cpp` says so at
+// the only place it can, which is the sentence this line quotes.
+//
+// So the wall this case now names is *the guard*, not a missing law: the law's own numbers are pinned
+// by `pow_gradient_through_the_library.cml`, which differentiates `pow(x, 3.0)` -- the same arithmetic
+// under the spelling whose forward rule has no guard -- and answers 12.0, the engine's number for
+// `w ^ 3.0` (`pow_cube_gradient_through_the_engine.cml`). Removing this refusal means giving a
+// transposed rule the value of a tangent, which is a change in `split`/`transpose` and not in a
+// ruleset; it is written up in `docs/handover/questions/` beside this lane.
+//
+// The node index in the last line is positional: it counts the nodes of the cut's backward graph,
+// and it moved from 6 to 5 when that graph lost the duplicate residual it used to carry
+// (`modules/transforms/split.cpp#residualsOf`, 2026-11-04). What the line is read for is the callee
+// and the sentence.
+//
+//     camel test/cases/compile/transforms/pow_gradient_refused_by_the_library.cml
+import { vjp } from vjp
+
+/// The library's spelling: the differentiated value is an ordinary parameter (design principles
+/// 9.9), so `vjp` transforms it and the pullback answers its cotangent.
+func p(x: float): float {
+    return x ^ 2.0
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(p)(3.0)
+    let cotangents = pullback(1.0)
+    `pow library value={} dL/dx={}`->format<value, cotangents.0>->println
+    return 0
+}

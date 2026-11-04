@@ -1,0 +1,30 @@
+// The same function through the library's `vjp`, element for element against the engine's answer.
+//
+// Before `jvp_exp` and `exp_t`, this program stopped at the lift with
+// `skip=rule uri=tensor:exp reason=the operator has no forward rule bound at all`; after them it is
+// the smallest program whose backward half needs a **recomputed forward value** -- `exp(x)` appears
+// only inside both rules, not in the program text. So this case answers the question
+// `docs/handover/questions/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`
+// asks, and the answer is recorded there in both directions: `relu`'s mask (a recomputation of `x`
+// alone) is carried, `softmax` (a recomputation carrying its axis in `<>`) is refused, and `exp` is the
+// case that says which of the two the wall follows.
+//
+// The wrong laws and the values they would print are written out in the neighbouring engine case;
+// here the criterion is that the library prints the engine's two numbers, not an aggregate:
+// `[2.718281828459045, 7.38905609893065]`, and `value` = `e + e^2` = 10.107337927389695.
+//
+//     camel test/cases/compile/transforms/exp_gradient_through_the_library.cml
+import { vjp } from vjp
+import { exp, sum } from tensor
+
+/// The same function as the engine case, with the differentiated value as an ordinary parameter.
+func total(x: float[..]): float {
+    return sum(exp(x))
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(total)([1.0, 2.0] as float[])
+    let d = pullback(1.0).0
+    `exp library value={} d={}`->format<value, d>->println
+    return 0
+}

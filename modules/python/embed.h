@@ -191,6 +191,34 @@ inline void promote_libpython_to_global() {
 #endif
 }
 
+// `pyvenv.cfg` records the directory the base interpreter's *executable* lives in -- `/usr/bin` for
+// a system Python, `C:\hostedtoolcache\...\bin` in CI -- while the prefix CPython wants as its home
+// is the one that holds `lib/pythonX.Y/os.py` (`/usr`). Handing the executable's directory over
+// makes CPython look for `/usr/bin/lib/python3.10`, find no standard library and stop with "failed
+// to get the Python codec of the filesystem encoding", which is what a Linux host saw on
+// 2026-11-03 (Windows retains `home` as written: there the two are the same directory).
+inline std::string basePrefixFromVenvHome(const std::string &homeInCfg) {
+#if defined(_WIN32)
+    return homeInCfg;
+#else
+    std::error_code ec;
+    fs::path candidate = camel::utils::pathFromUtf8(homeInCfg);
+    for (int step = 0; step < 3; ++step) {
+        const fs::path landmark =
+            candidate / "lib" /
+            ("python" + std::to_string(PY_MAJOR_VERSION) + "." +
+             std::to_string(PY_MINOR_VERSION)) /
+            "os.py";
+        if (fs::exists(landmark, ec))
+            return camel::utils::pathToUtf8(candidate);
+        if (!candidate.has_parent_path())
+            break;
+        candidate = candidate.parent_path();
+    }
+    return homeInCfg;
+#endif
+}
+
 // Set Python Home to the venv's base Python (from pyvenv.cfg) before Py_Initialize. Pointing it
 // at the venv itself triggers codec errors; the base Python removes the "Could not find platform
 // independent libraries" warning.
@@ -203,7 +231,8 @@ inline void set_python_home_from_venv() {
     auto home = readPyVenvCfgValue(venv.value(), "home");
     if (!home.has_value())
         return;
-    wchar_t *whome = Py_DecodeLocale(home.value().c_str(), nullptr);
+    const std::string homeDir = basePrefixFromVenvHome(home.value());
+    wchar_t *whome            = Py_DecodeLocale(homeDir.c_str(), nullptr);
     if (!whome)
         return;
     static std::wstring python_home_storage;
@@ -335,7 +364,12 @@ inline void ensureInitialized() {
             return;
         detail::PythonInitEnvGuard envGuard;
         detail::promote_libpython_to_global();
-        detail::set_python_home_from_venv();
+        // `CAMEL_PYTHON_INHERIT_HOST_ENV` is the old behaviour as it was: the host's `PYTHONHOME`
+        // reaches CPython. A home derived from the venv would override it, and then a broken
+        // `PYTHONHOME` would quietly become a working interpreter -- the flag asks for the
+        // opposite, and the failure under a home CPython cannot start with is what it pins.
+        if (!detail::envFlagEnabled("CAMEL_PYTHON_INHERIT_HOST_ENV"))
+            detail::set_python_home_from_venv();
         py::initialize_interpreter();
         detail::keepPythonOutputInOrder();
         detail::ensure_extra_python_paths_in_path();

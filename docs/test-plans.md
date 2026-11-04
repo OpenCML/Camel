@@ -187,9 +187,10 @@ Rules for a new test:
 - Naming a plan **file** as the target runs all its tests, whatever `--tier` says; the layer
   still filters a directory target and the whole tree. This keeps a named slow test reachable
   without `--tier all` and keeps `--tier` meaningful for a broad run.
-- A debug test that expects an abort states `expect_exit` with the abort's code and asserts the
-  message, and also asserts that the "not caught" line is **absent**: the positive form is what
-  makes a missing guard a failure instead of a pass.
+- A debug test that expects an abort states `expect_signal = "ABRT"` (the process dies of the abort,
+  and there is no exit code to compare) and asserts the message, and also asserts that the "not
+  caught" line is **absent**: the positive form is what makes a missing guard a failure instead of a
+  pass.
 
 ## The Debug Build And The Debug Layer
 
@@ -519,11 +520,14 @@ the rule, or add the class and its reason to the self-test.
 That check is why the file rules now cover the classes the first rule set could not have known about: the
 `stdlib/<module>.cml` declaration bodies (`feat/modules` plus `feat/compile`) and their computed
 halves in `stdlib/signatures/` (the registry plan, which runs `--verify-ops` and `--verify-doc`),
-the documentation and release-gate scripts (`feat/docs_links`), the debugger race harness
-(`feat/tools/debugger`), exemplars, root Markdown and assets, the public headers under
-`include/` (mirroring `src/`), the rest of `src/` and the test harnesses. The plan-reachability
-check added the case directories whose plans live elsewhere: the loop, macro, JSON, unicode-path,
-print-format and compiler-benchmark cases. `test/perf-baseline.json`
+the documentation and release-gate scripts (`feat/docs_links`), the gate entry and its helpers
+under `internal/tools/` (`feat/docs_links` too, and for the reason the rule states: no plan can run
+a PowerShell gate, but the conflict-marker and citation walkers both read those `.ps1`, `.md` and
+`.json` files, so that is the plan a change there runs and the whole of the guard it gets), the
+debugger race harness (`feat/tools/debugger`), exemplars, root Markdown and assets, the public
+headers under `include/` (mirroring `src/`), the rest of `src/` and the test harnesses. The
+plan-reachability check added the case directories whose plans live elsewhere: the loop, macro,
+JSON, unicode-path, print-format and compiler-benchmark cases. `test/perf-baseline.json`
 and `scripts/perf-gate.mjs` are the one class left without a perf plan on purpose: perf is manual
 (the rule that perf is manual), so a change there must not select a perf plan.
 
@@ -588,7 +592,25 @@ Every `[[tests]]` entry may use these common fields:
 - `args`
   Required in practice. Argument vector passed to `camel`. Variable tokens like `${case}` or `${run_jit}` are expanded before execution.
 - `expect_exit`
-  Optional integer expected process exit code.
+  Optional integer expected process exit code. It and `expect_signal` are one question with one
+  answer: a table that writes both is a plan error, because a process killed by a signal has no exit
+  code to compare.
+- `expect_signal`
+  Optional signal the test's process must have been killed by, written as a name (`"ABRT"`,
+  `"SIGABRT"`) or as the number this platform numbers it by (`6`); the three are one expectation.
+  There is no default and no boolean form: an entry that expects a death has to name the signal,
+  because "it dies somehow" is not a reading a reader can check and would pass a death by any other
+  signal. It stands in place of `expect_exit`, so the entry is green when the process dies of
+  exactly that signal and red otherwise, and the failure prints what happened instead
+  (`expected signal SIGSEGV, got signal SIGABRT (rc=134, 0.03 s)`); a signal that did not arrive
+  is `expected signal SIGABRT, got exit 0`. **It is only for a guard that stops the process by
+  design** -- the always-on invariants, which abort on purpose when a precondition does not hold. A
+  crash signal has no place in an expectation: `SIGSEGV` (or a second `SIGABRT`) written here would
+  accept exactly the defect the test exists to find, and it would accept it in the build where the
+  guard is the only instrument. Before this field existed, the only way to record "this
+  run is meant to die" was `known_fail`, which says the run is wrong today and turns the entry green
+  again the day the process stops dying -- the opposite of what the entry is for. See
+  `test/tools/selftest/signal/` for the fixture that pins both directions.
 - `timeout_ms`
   Optional process timeout in milliseconds. Default is `10000`. A timeout is a pass condition, so it
   is a bound only with room under it: the runner fails a test that used more than a quarter of its
@@ -707,8 +729,45 @@ everywhere is written once:
   for the first time (2026-11-02: compiling `modules/transforms` moved `skip 43 -> 10` and
   `known failures 3 -> 6` in the same run). Read the two numbers together before calling it a
   regression.
+- `known_fail_owner`
+  Who is responsible for making a marked case green: a lane (`lane-transforms`) or a person.
+  **Required on every mark**, and the plan is refused when it is loaded if it is missing, naming the
+  plan, the case and the field (`test/tools/run-tests.mjs`, `checkKnownFailMark`). The author's
+  ruling of 2026-11-03 00:30 asks a case that cannot pass today to stay in the plan with three
+  things -- the mark, the owner and the reason -- and the other two used to be prose inside
+  `known_fail_note`, which nothing checked and a review had to remember to read. There is
+  deliberately no default: a default owner would let a case nobody owns pass the check, which is the
+  state the ruling is about. A placeholder (`unassigned`, `tbd`, `nobody`, `待定`) is refused for the
+  same reason. The owner is inherited from `[defaults]` like the mark, and it is printed as
+  `known_fail_owner: …` under every `[XFAIL]`, so it is a field the run reads and not a promise kept
+  in a file.
+- `known_fail_reason`
+  **Required on every mark**, one sentence saying where the case is stuck -- which refusal, which
+  law, which missing slot -- written in one of the three shapes this tree already records walls in:
+  - the refusal or the law in backticks: `` `skip=rule uri=tensor:sum reason=unbound` ``;
+  - the file and the symbol that refuses: `modules/transforms/vmap.cpp#liftConstant`;
+  - the page that decides the question:
+    `docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md`.
+
+  It is refused at load with the same refusal the owner gets, and three more shapes are refused with
+  it: an empty value, a stock phrase (`待修`, `todo`, `known issue`, …) and a sentence that names no
+  wall ("this case does not pass yet"). Each of those records that the case is red, which the mark
+  already said, and leaves the next reader nothing to act on. It is not a replacement for
+  `known_fail_note`: the reason says where the wall is, the note keeps the readings, the counts and
+  the history.
 - `known_fail_note`
   Printed with an `[XFAIL]`: why, and what will fix it.
+- `known_fail_msg`
+  A fragment of the reason a marked test fails with, so the reason is pinned and not only the
+  failure. When a marked test fails and the fragment does not appear in its output, the case stays
+  `fail` and the runner prints
+  `known failure changed its mind: expected "<pinned>", got "<first line>"` (`test/tools/run-tests.mjs`,
+  `executePlans`): a pin whose reason drifted is reported instead of staying a quiet `[XFAIL]`. A
+  fragment identifies the reason -- the words the refusal uses, not a whole message. Absent is legal
+  and pins nothing: `expandBackends` reads the field as `null`, so every mark written before it
+  existed keeps working, and the mechanism grows by pinning cases one at a time rather than by a
+  migration. A mark without this field is therefore still legal; one that carries it is the only kind
+  that can say its reason moved.
 
 `test/tools/selftest/run.mjs` checks these fields on fixture plans, together with the parallel
 ordering (the same status lines as a serial run, tests really overlapping), the serial mark (a
@@ -717,6 +776,11 @@ the expected tests) and the `--changed` mapping (`src/passes/sched/` selects the
 plans, `docs/` the documentation checks, `modules/tiles/` the GPU plans, `modules/onnx/` a
 layered plan, a plan file itself, the forbidden perf/GC-stress/progen plans nothing, an unknown
 path nothing); it runs with the default test set (`test/plans/feat/consistency/runner.plan.toml`).
+The `known_fail` gate has five plan files of its own under `test/tools/selftest/knownfail/`: four
+ways to be incomplete -- no owner, no reason, a placeholder reason and a reason that names no wall --
+each refused with its file, its case and its missing field named, and one complete entry that loads,
+runs and reports `[XFAIL]` with its owner printed. A default owner or a default reason would make
+the four pass and that check red, which is the direction that matters.
 
 ## Supported Normalizers
 
@@ -806,7 +870,7 @@ virtual environment's interpreter, else `benchmarks/.venv`'s, else PATH's; also 
 
 Behavior-style tests may combine:
 
-- `expect_exit`
+- `expect_exit` (or `expect_signal` in its place: a process ends with a code or of a signal)
 - `expect_stdout_contains`
 - `expect_stdout_exact`
 - `expect_stdout`

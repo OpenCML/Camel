@@ -1326,3 +1326,49 @@ expect_exit = 0
 expect_stdout_exact = "1384\n102101112202122\n88\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+[[tests]]
+name = "stream.generators_loop_computed_initialiser"
+desc = "The initial value of a generator `loop` is evaluated where the loop stands, once, before the first condition, so a value held in a local or produced by a call is the first round's state just as a literal is. Two loops read 3 4 and 5 6."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_loop_computed_initialiser.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["3\n4\n5\n6\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+[[tests]]
+name = "stream.generators_loop_body_without_next_state"
+desc = "A generator `loop` body ends with the next value of its state, and one that ends without writing it is reported by name -- SemanticDiag::LoopBodyNeedsNextState at the `yield` -- because the pull after it runs the rest of the body and the condition again. A body of only `yield i` reads a fresh `i` on every pull, so the loop never moves on. Writing `i + 1` as the last statement runs it."
+kind = "negative"
+case = "../../../cases/compile/stream/generators_loop_body_without_next_state.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LoopBodyNeedsNextState"
+expect_diagnostic_code = "0x03000208"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 9
+expect_output_contains = ["next value of its state"]
+expect_output_not_contains = ["UnknownInternalError", "GeneratorInitialValueShapeUnsupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "stream.generators_match_binding_across_yield"
+desc = "A `match` arm that binds a name and then `yield`s it builds: a binding is a local, and a local that lives across a `yield` is a cell of the generator body, registered with the declared locals and the loop binders. The name is written where the case's value is in hand, so the pull that resumes after the `yield` reads the same value: the arm hands out `7` and then `17`, and the case pins the values rather than the refusal it used to get."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_match_binding_across_yield.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "7\n17\n"
+expect_output_not_contains = ["[Error]", "UnknownInternalError", "Please report it"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "stream.generators_error_binding_across_yield"
+desc = "`case error e` binds the error of a `T!` and the arm `yield`s it. The error is the one `Error` structure the prelude declares (design principles 3.9), not the payload of the tagged value, so the cell the name lives in is typed by reading that declaration -- the same registration a `case v` gets, and the same cell. The second `yield` stands after the first, so it runs on the next pull and reads `e` out of the cell: the arm hands out `!` and then `broke`."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_error_binding_across_yield.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "!\nbroke\n"
+expect_output_not_contains = ["[Error]", "UnknownInternalError", "Please report it"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

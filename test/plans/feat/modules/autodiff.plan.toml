@@ -414,6 +414,55 @@ assert(stats[1].direct_calls === 0 && stats[1].indirect_calls === 0, `calls left
 """
 timeout_ms = 6000
 
+# Second order as a *nest* of the transform (`grad(grad(f))`, and the lambda form), plus the two
+# shapes that are refused because the inner transform is reached as a function value instead of
+# being written in the body: a captured value, and the forward half `split` answers at run time.
+# The refusals are pinned so that the wall cannot move silently; the numbers are hand-computed in
+# each desc, not read back from the code.
+[[tests]]
+name = "second_order_nest.nvm"
+desc = "Second order written as a nest of the transform rather than as a call to a named function: grad(grad(f)) and grad of a lambda whose body applies grad. f(x)=x^3, f'(x)=3x^2, f''(x)=6x, so at x=2 the second derivative is 6*2=12, from both writings. The inner gradient is an OPER of this module over a static function, so the outer transformation builds the function it computes while the rewrite runs (macroCallee) and has a graph to plan for."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order_nest.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "second_order_nest nested=12.0 lambda=12.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 6000
+
+[[tests]]
+name = "second_order_nest.simplified"
+desc = "The nested second-order gradient keeps the same two numbers through std::macro and std::opt: 6x at x=2 is 12 for both writings, so the expansion and the inlining neither lose the inner gradient nor answer a different derivative."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order_nest.cml"
+args = ["${case}", "std::macro", "std::opt", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "second_order_nest nested=12.0 lambda=12.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 6000
+
+[[tests]]
+name = "second_order_refused_captured"
+desc = "The second derivative through a captured function value is refused, and the answer it would have given is 12 (f(x)=x^3, f''(x)=6x at 2). The program binds a named gradient function to a value and calls it from a lambda; inside that lambda's graph the callee is a port, and a derivative is planned once per graph with the captures as trailing parameters (Engine::planForClosure), so a function-typed parameter leaves no body to differentiate. The refusal names that: 'the function is a parameter, or a captured value, of the function being differentiated'."
+kind = "negative"
+case = "../../../cases/modules/autodiff/second_order_refused_captured.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_output_contains = ["cannot differentiate through this call of a function value", "the function is a parameter, or a captured value, of the function being differentiated"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 6000
+
+[[tests]]
+name = "second_order_refused_vjp"
+desc = "The second derivative of a function whose body applies vjp is refused at the library's own line, stdlib/vjp.cml#vjp's split(jvp(f))<..ws>(..xs), naming 'transforms:split': the forward half it answers does not exist as a graph until the program runs (modules/transforms/split_operator.cpp#splitKernel reads function->graph()), so the derivative that call needs cannot be planned before it runs. The answer it would have given is 12 (f(x)=x^3, f''(x)=6x at 2). What is available today is the same number through the grad nest (second_order_nest.nvm)."
+kind = "negative"
+case = "../../../cases/modules/autodiff/second_order_refused_vjp.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_output_contains = ["cannot differentiate through this call of a function value", "the function is the result of 'transforms:split'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 6000
+
 [[tests]]
 name = "fused_grad_check"
 desc = "After tensor::fuse (and without std::macro), the program's own matmul, add and relu rules differentiate the marked groups: every operand's gradient matches finite differences."
@@ -2670,7 +2719,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_first_with_parameter.cml"
 args = ["${case}", "std::macro", "${run_nvm}"]
 expect_exit = 0
-expect_stdout_contains = ["gx=3.0 vg=(9.0, 3.0)", "pg={ a: 4.0, b: 1.0 }", "pvg=(11.0, { a: 4.0, b: 1.0 })", "sk=6.0 sx=4.0"]
+expect_stdout_contains = ["gx=3.0 vg=(9.0, 3.0) gy=3.0 gl=3.0", "pg={ a: 4.0, b: 1.0 } pvg=(11.0, { a: 4.0, b: 1.0 })", "wg=[4.0, 5.0, 6.0] wvg=(32.0, [4.0, 5.0, 6.0])", "sk=6.0 sx=4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -2681,7 +2730,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_first_with_parameter.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
-expect_stdout_contains = ["gx=3.0 vg=(9.0, 3.0)", "pg={ a: 4.0, b: 1.0 }", "pvg=(11.0, { a: 4.0, b: 1.0 })", "sk=6.0 sx=4.0"]
+expect_stdout_contains = ["gx=3.0 vg=(9.0, 3.0) gy=3.0 gl=3.0", "pg={ a: 4.0, b: 1.0 } pvg=(11.0, { a: 4.0, b: 1.0 })", "wg=[4.0, 5.0, 6.0] wvg=(32.0, [4.0, 5.0, 6.0])", "sk=6.0 sx=4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -3449,4 +3498,134 @@ backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "1.0\n1.0\n0.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# ---- `has_aux`: the four forms of a transform whose subject is the pair `(value, aux)` ----
+#
+# The four forms are the engine and the library, each with and without an auxiliary value, and
+# the point of every number below is that the three quantities a `has_aux` call answers -- the
+# value, the auxiliary value and the gradient -- are three *different* numbers. JAX's own
+# example, `f(x) = (x*x, 3x)` at 2, which `derivatives.has_aux` in
+# test/plans/feat/modules/jax_alignment.plan.toml pins, has value 4.0 and gradient 4.0 at the same
+# point: an implementation that handed the value back where the gradient belongs answers the same
+# line there. The readings here use `(w*w, w+10.0)` at 3 -- 9.0, 13.0, 6.0 -- so the value read as
+# the gradient (9.0), the gradient read as the auxiliary value (6.0) and a gradient that took the
+# auxiliary value's own slope (6.0 + 1.0) are each a different line, and `frozen(w) = (1.0, w*w)`
+# at 3 goes further: its value carries no dependence at all, so the gradient is 0.0 while the
+# auxiliary value is 9.0, and a backward pass seeded at the pair rather than at the pair's first
+# element answers 6.0 where the gradient is 0.0.
+[[tests]]
+name = "has_aux.engine"
+desc = "The engine's `has_aux`, built at run time: `grad(f, has_aux: true)` answers `(gradient, aux)` = `(6.0, 13.0)` and `with_grad(f, has_aux: true)` answers `((value, aux), gradient)` = `((9.0, 13.0), 6.0)` for `f(w) = (w*w, w+10.0)` at 3 -- JAX's two orders. The value, the auxiliary value and the gradient are three different numbers, so the three ways this transform can be wrong are three different lines: the value handed back as the gradient (9.0), the gradient handed back as the auxiliary value (6.0), and the auxiliary value's own slope added to the gradient (7.0). `frozen(w) = (1.0, w*w)` is the sharpest form of the same statement: the gradient is 0.0 and the auxiliary value 9.0, so the zero is what says the auxiliary value is carried and not differentiated, and a backward pass seeded at the pair instead of at its first element answers 6.0."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/has_aux_engine.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "has_aux_engine\ngrad=6.0 aux=13.0\nvalue=9.0 aux=13.0 grad=6.0\nvalue_is_not_the_gradient=true\naux_is_not_the_gradient=true\nheld grad=0.0 aux=9.0\nheld value=1.0 aux=9.0 grad=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+# The `has_aux` form is reached from the compiler's rewriting too: `std::macro` expands the call
+# before anything runs, so the pair has to be split there as well, on the same numbers.
+[[tests]]
+name = "has_aux.engine.macro"
+desc = "The same program with the transform built by `std::macro` instead of at run time: the compiler's rewriting reads `has_aux` from the call's argument list as the run-time kernel does, and answers the same three numbers (9.0, 13.0, 6.0) and the same `frozen` zero. The two builds of one transform are read separately because a spelling that only the kernel knows is a spelling the rewritten program would lose."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/has_aux_engine.cml"
+args = ["${case}", "std::macro", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "has_aux_engine\ngrad=6.0 aux=13.0\nvalue=9.0 aux=13.0 grad=6.0\nvalue_is_not_the_gradient=true\naux_is_not_the_gradient=true\nheld grad=0.0 aux=9.0\nheld value=1.0 aux=9.0 grad=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+# Form two: the control group. `f(w) = w*w` at 3 is 9.0 with a gradient of 6.0, and nothing about
+# the pair form may move it. The program also reads the same arithmetic through the library's leg
+# (`vjp` and the seed 1) and compares the two legs as floats, member for member.
+[[tests]]
+name = "has_aux.engine.plain"
+desc = "The engine's transform with no `has_aux`, the control group for the pair form: `grad(f)` is 6.0 and `with_grad(f)` is `(9.0, 6.0)` for `f(w) = w*w` at 3, so a transform that decided its result's shape from anything other than the call's own argument list fails here by answering a pair. The same program then reads the same arithmetic through the library's leg -- `vjp(f)(3.0)` is `(9.0, pullback)` and `pullback(1.0)` is `(6.0)` -- and compares the two legs as floats: `same_value=true same_grad=true`. The library differentiates the ordinary parameters and the engine the first `with` parameter, so the arithmetic is written twice (`square` with `with`, `square_plain` with a parameter) and that is the two legs' only difference."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/has_aux_engine_plain.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "has_aux_off_engine\ngrad=6.0 value=9.0 with_grad_grad=6.0\nlibrary value=9.0 grad=6.0\nsame_value=true same_grad=true\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+# Form three: the library's leg with an auxiliary value. `vjp` has no `has_aux` parameter -- a call
+# that names one is refused, `has_aux.vjp_named` below -- so the pair is split where the pair is
+# written, and the three numbers are compared with the engine's in the program itself.
+[[tests]]
+name = "has_aux.library"
+desc = "The library's leg with an auxiliary value, on the same `(w*w, w+10.0)` at 3: `vjp(value_of)(3.0)` is `(9.0, pullback)` with `pullback(1.0) == (6.0)`, and `aux_of(3.0)` is 13.0 -- the value, the gradient and the auxiliary value, reached by composition because `vjp` differentiates a `float` result and has no `has_aux` parameter to split a pair with. Each of the three is compared with the engine's `with_grad(f, has_aux: true)` in the program: `same_value=true same_aux=true same_grad=true`. A library leg that put the auxiliary value where the gradient belongs, or that also differentiated the auxiliary value (`x + 10.0` has slope 1.0), fails on a `false` line rather than on a reader's memory of the numbers."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/has_aux_library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "has_aux_library\nengine value=9.0 aux=13.0 grad=6.0\nlibrary value=9.0 aux=13.0 grad=6.0\nsame_value=true same_aux=true same_grad=true\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+# Form four: the library's leg with no auxiliary value, the control group. `f(x) = x*x*x` at 2 --
+# 8.0 with a gradient of 12.0, and the point is 2 and not 3, where all three numbers are 27.
+[[tests]]
+name = "has_aux.library.plain"
+desc = "The library's own two names with no auxiliary value: `vjp(f)(2.0)` is `(8.0, pullback)` with `pullback(1.0) == (12.0)`, and `grad(f)(2.0)` -- `vjp` read at the seed 1 -- is 12.0, for `f(x) = x*x*x`. The value and the gradient are different numbers, so a `grad` that answered the value it differentiates is caught; the point is 2 and not 3 for that reason, since at 3 the value and the derivative `3x^2` are both 27 (`vjp_gradient` in test/plans/feat/compile/transforms.plan.toml makes the same choice and records the reading as P2-22 of the 2026-11-01 review)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/has_aux_library_plain.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "has_aux_off_library\nvalue=8.0\n(12.0)\ngrad=12.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+# The refusals that make form three a composition rather than a guess: the parameter form names a
+# parameter `vjp` does not declare, and a pair-returning function handed to `vjp` stops where the
+# cotangent of a pair would have to go into `transpose`.
+[[tests]]
+name = "has_aux.vjp_named"
+desc = "`vjp(loss, has_aux: true)` is refused by name: `has_aux` is a parameter of the engine's `grad` and `with_grad`, not of the library's `vjp`, and the reason says exactly that (`'has_aux' is not a parameter of ...`, with the instantiated signature printed where the callee's name would stand). Neither is it silently accepted by differentiating the pair's first element, which would answer a gradient for a function nobody asked to differentiate."
+kind = "negative"
+case = "../../../cases/modules/autodiff/has_aux_vjp_named.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentUnknown"
+expect_diagnostic_code = "0x030001CD"
+expect_output_contains = ["'has_aux' is not a parameter of"]
+expect_output_not_contains = ["UnknownInternalError", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+[[tests]]
+name = "has_aux.vjp_pair"
+desc = "A pair-returning function handed to `vjp` with no named argument is refused inside the library: `transpose` takes a function whose result has a cotangent (the cotangent of the result is what goes in), and a pair has none, so the call stops at `stdlib/vjp.cml`'s `transpose(lin)` instead of answering `(value, pullback)` with the pair's first element silently differentiated. This is the pair form of the same mistake `has_aux.vjp_named` pins as the parameter form. The sentence changed with `lane-f32trans` (2026-11-04): the old text, `takes a function that returns a `float``, is what `transpose` said while its exit-type check was written for `float` only; the check now asks the result's tangent space (`modules/transforms/transpose_operator.cpp#explainRejection`) -- quoted verbatim from the merged tree: `transpose` takes a function whose result has a cotangent: the cotangent of the result is what goes in, it is the result's own tangent space (`Tangent<f32>` is `f32`), and this law adds cotangents with the addition of that space -- `:op/add_d` at `float` and `:op/add_f` at `f32`."
+kind = "negative"
+case = "../../../cases/modules/autodiff/has_aux_vjp_pair.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["Invalid call to 'transpose'", "takes a function whose result has a cotangent"]
+expect_output_not_contains = ["UnknownInternalError", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+# The pair contract itself: the three results that break "the pair is `(value, aux)`, the first
+# element is what is differentiated", each refused with its own sentence. `triple` is the one
+# worth keeping: a transform that accepted it and differentiated its first element would answer a
+# number a reader could not tell from the right one.
+[[tests]]
+name = "has_aux.refused_shapes"
+desc = "The three shapes `has_aux` refuses, each with its own reason: a pair whose first element is not a float (`counted` returns `(int, float)` -- the pair is right and the element a gradient could be taken of is not), a tuple that is not a pair of two (`triple` returns three floats -- there is no second element for the auxiliary value to be), and a result that is not a pair at all (`plain` returns a float -- the writer means the plain transform and the call says `has_aux`). All three are refusals rather than answers, which is the property: a transform that accepted `triple` and differentiated its first element would answer a number indistinguishable from the right one, since the first element of a three-tuple is still the loss."
+kind = "negative"
+case = "../../../cases/modules/autodiff/has_aux_refused_shapes.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NotDifferentiable"
+expect_diagnostic_code = "0x03000150"
+expect_output_contains = ["`has_aux` differentiates the first element of the pair it returns, and that element is int, not a float", "`has_aux` differentiates the first element of a pair, and it returns (float, float, float); write the function's result as `(value, aux)`", "`has_aux` differentiates the first element of a pair, and it returns float; write the function's result as `(value, aux)`"]
+expect_output_not_contains = ["UnknownInternalError", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000

@@ -190,3 +190,101 @@ expect_exit = 0
 expect_stdout_exact = "(1.0, ())\n(2.0, 3.0)\n(4.0, 5.0)\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+# A rank-one position that states its extent is a shape, and a literal in it is built into that
+# shape. The three entries below are one rule read three ways: it fits (and the value is that
+# type, which `take3` proves by refusing anything else), it does not fit (a length, named), and
+# the rank-two case it was already true for (kept, so the fix cannot move it).
+[[tests]]
+name = "array_literal_as_stated_shape.nvm"
+desc = "`[1.5, 2.5, 3.5] as float[3]` is built into the shape the position states, as a declaration and an argument already did: the value it makes is a `f32[3]`, which `take3(x: f32[3])` takes, so the program compiling at all is the reading. Before, the literal stayed a `f32[]` and the conversion refused it with 'the value cannot become that type' -- a value that fits, refused by the one position that could not build it (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/casts/array_literal_as_stated_shape.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["2.5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_literal_length_mismatch.nvm"
+desc = "Three elements in a `float[2]` position is a length, not a conversion: the literal is refused by the shape check with 'The array literal written here has extent 3, but the position states 2 for this dimension'. The guard, and the reason it is not the old fallback 'the value cannot become that type' (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/casts/array_literal_length_mismatch.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_stdout_contains = ["has extent 3, but the position states 2 for this dimension"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_literal_as_rank_two_shape.nvm"
+desc = "`[[1.5, 2.5], [3.5, 4.5]] as float[2, 2]` is still built into the stated shape and still a `f32[2, 2]`: the rank-two half of the same rule, kept so that extending the rank check down to one dimension cannot move it (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/casts/array_literal_as_rank_two_shape.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["4.5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+# The rank-one shape as the surface the rule actually bears on. The three entries below stand on
+# the positions that are not a cast and not a declaration: the empty literal (a length of zero
+# against three), computed elements (the shape comes from the position, not from the values), and
+# a return type. They are what keeps `statesARank` from being narrowed back to the `as` branch
+# alone -- that narrowing would keep every cast test green and move these three.
+[[tests]]
+name = "array_literal_empty_into_stated_shape.nvm"
+desc = "`[]` in a `float[3]` position is a length of zero against a stated three, and is reported at the position: 'The array literal written here has extent 0, but the position states the shape 'f32[3]''. It is not the empty array of the element type reshaped to fit (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/casts/array_literal_empty_into_stated_shape.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_stdout_contains = ["has extent 0, but the position states the shape"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_literal_computed_into_stated_shape.nvm"
+desc = "`[a, b, c]` with computed elements in a `float[3]` position is still that shape: the position gives the type and the elements fill it, rather than the literal taking its type from what the elements happened to be (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/casts/array_literal_computed_into_stated_shape.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["2.5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+
+# The `return` slot, a position like a declaration (design principles 5.4): a literal written in
+# it takes the shape the return type states, and one of another length is reported as a length.
+[[tests]]
+name = "array_literal_in_return_shape.nvm"
+desc = "`func three(): float[3] { return [1.5, 2.5, 3.5] }` gives a `f32[3]`, and `take3(x: f32[3])` takes it, so this compiling is the reading; the rank-two return in the same program keeps its own shape. Before, the rank-one return refused a literal that fits with ReturnNeedsConversion ('the value has type float[] ... write the conversion') while the rank-two one passed by its own shape (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/casts/array_literal_in_return_shape.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["2.5", "4.5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_literal_in_return_length_mismatch.nvm"
+desc = "Two elements in a `float[3]` return position is a length, reported with both sides -- 'the literal writes 2 element(s) and the type states 3' -- and not as a value that is merely 'less exact than' the return type (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/casts/array_literal_in_return_length_mismatch.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_stdout_contains = ["the literal writes 2 element(s) and the type states 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+[[tests]]
+name = "array_literal_three_positions_agree.nvm"
+desc = "One literal, one type, three positions that state it -- a cast, a declaration and an argument all build it into a `f32[3]`, which `take3` is the reading for; the author's ruling is that a sized rank-one `as` is not narrower than the declaration and the argument (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/casts/array_literal_three_positions_agree.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["[1.5, 2.5, 2.5]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

@@ -1,0 +1,25 @@
+// The same question asked through a parameter whose **type states no extent at all**.
+//
+//     read(t: f32[..]) called at t = zeros::<f32>([2, 3])
+//     -> shape = [2, 3]   dim<0> = 2   dim<1> = 3   numel = 6
+//
+// The rank is open, so nothing is folded and nothing can be: the lengths are the value's, read when
+// it runs (`test/plans/feat/compile/extent_of.plan.toml`, `extent_of.open_rank_keeps_its_nodes`).
+// That is the whole reason a law cannot reach them: `T[..]` has no extents to read, and the value
+// the law would read them off is the operand the cotangent comes back through.
+//
+// An axis outside the rank is a fault and not a default: `dim<2>` on this value stops with
+// `RuntimeDiag::RuntimeError: dim: dim axis out of range` (measured 2026-11-04; the case that pins
+// it is `extent_of.axis_outside_the_rank_faults`).
+import { dim, numel, shape, zeros } from tensor
+
+func read(t: f32[..]): int sync {
+    println(
+        `shape={} dim0={} dim1={} numel={}`->format<shape(t), dim<0>(t), dim<1>(t), numel(t)>)
+    return 0
+}
+
+func main(): int sync {
+    let _ = read(zeros::<f32>([2, 3]))
+    return 0
+}

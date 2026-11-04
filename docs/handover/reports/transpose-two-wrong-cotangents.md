@@ -9,7 +9,7 @@ Both are inside the five `law == ...` branches of `modules/transforms/transpose.
 re-writes the law instead of expanding the rule's right side. Both are dead weight *and* wrong, which
 is the argument for deleting the branches rather than keeping them.
 
-**Update (2026-11-02, `lane-m4-assembly`):** the five branches are gone and both positions now expand
+**Update (2026-11-02, `c2181c95f`, 原 `lane-m4-assembly`, 该分支已删):** the five branches are gone and both positions now expand
 the rule's right side. **T1 is repaired** -- `-x` answers `-1.0` / `-2.0`, measured on `std::nvm`.
 **T2 is repaired too, and it was reachable all along.** The branch's `-ct/x` is gone, and the reason it
 looked unreachable was the wrong test: a divisor is a *constant* only in the forward graph. `grad` is
@@ -17,7 +17,7 @@ looked unreachable was the wrong test: a divisor is a *constant* only in the for
 `w * w`, a computed value -- reaches `div_t`'s second position. Under "one rule answers the first name"
 that position answered `ct / dividend`, and for `grad((x) => x / 4.0)` the dividend there is `x * dw`
 with `dw = 0`, so the answer was a division by zero (`RuntimeDiag::DivisionByZero` at
-`stdlib/autodiff.cml:145`) where the law says `0`. The rule now answers every name its left side writes,
+`stdlib/autodiff.cml#div_cotangent`) where the law says `0`. The rule now answers every name its left side writes,
 in that order, and the transform takes the component for the position it is writing:
 `grad((x) => x / 4.0)` at 8 is `0.25` and `grad((x) => 4.0 / x)` at 2 is `-1.0` (plan
 `feat.compile.transforms`, case `grad_of_a_division`). The reading behind it -- a rule answers N

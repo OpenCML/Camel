@@ -33,7 +33,7 @@
 
 ## 二、止在哪一层（定到了）
 
-`modules/transforms/transpose.cpp:1354-1358` 的兜底 `else`：
+`modules/transforms/transpose.cpp#Escape` 的兜底 `else`：
 
 ```cpp
                 } else if (law == "mul_t" || law == "div_t") {
@@ -45,7 +45,7 @@
                 }
 ```
 
-**转置器只认算术那几条 law。** 而 `idx_arr_t` 在规则库里写着（`stdlib/rulesets/transpose.cml:73`）：
+**转置器只认算术那几条 law。** 而 `idx_arr_t` 在规则库里写着（`stdlib/rulesets/transpose.cml#dtod_t`）：
 
 ```camel
 export rule idx_arr_t::<T>(xs: T[], i: int) {
@@ -56,7 +56,7 @@ export rule idx_arr_t::<T>(xs: T[], i: int) {
 **⇒ 缺口是"规则库声明了一条 law，转置器没有 arm"**；`else` 的注释写明拒绝是有意的
 （"refused by name rather than answered with a cotangent from nowhere"）——**拒绝对，缺的是这条 law 的转置。**
 
-**同一条路的另一侧已经有实现**：`modules/autodiff/pullback.cpp:2146-2161` 对数组元素读就散一个 slot，
+**同一条路的另一侧已经有实现**：`modules/autodiff/pullback.cpp#buildReverseBody` 对数组元素读就散一个 slot，
 发的正是 `:tangent/scatter_add_arr`；`tensor:zeros_like` 也是现成的（`modules/tensor/ops/gradient_ops.cpp`）。
 
 ## 三、问题与默认建议

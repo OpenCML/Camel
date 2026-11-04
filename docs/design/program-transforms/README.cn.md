@@ -121,8 +121,8 @@ type Reinterp<F, H> = (..H.Lift<ParamsOf<F>>) => H.Lift<ResultOf<F>>
 
 ```camel
 func split::<F>(f: F): Split<F>
-type Split<F> = ((..ParamsOf<F>) => (ResultOf<F>, _,),   // 残差位：由编译器在实例化时填，用户写不出
-                 (_, ..WithOf<F>)  => ResultOf<F>)
+type Split<F> = ((..ParamsOf<F>)          => (ResultOf<F>, (..Tangent<ParamsOf<F>>) => Tangent<ResultOf<F>>),
+                 (..Tangent<ParamsOf<F>>) => Tangent<ResultOf<F>>)   // 残差是后一半的闭包，不在类型里
 ```
 
 把一个"一部分输入现在就有、另一部分以后才有"的函数拆成两个：前一个只用现在就有的输入，算出能算的一切，并把后一个要用的中间值（残差）作为输出；后一个接残差与其余输入。线性化就是 `split(reinterp<jvp>(f))`，"现在就有"的是原始输入，"以后才有"的是切向量。
@@ -130,6 +130,7 @@ type Split<F> = ((..ParamsOf<F>) => (ResultOf<F>, _,),   // 残差位：由编�
 **残差取决于函数本身（它的图），不取决于它的类型**（作者，2026-11-01，撤回 10-31 的 `ResidualsOf<F>`）：残差的个数与内容由"前一半算出来的值里被后一半读到的那些"决定，只有图能回答，类型不能——`f(x) = x` 与 `f(x) = x*x` 的 lifted 类型完全相同，一个残差为 0 一个为 1。所以 `Split<F>` 里的残差位不是一个类型函数，是**实例化时由编译器按图填的空位**；它对用户不可见，程序既不写它、不解构它、也不数它（`ResidualsOf<F>` 因此从 `stdlib/signatures` 里删掉了）。读到该值的后一半**不重算**它：值从残差元组里取（`residuals.cpp` 的 `residualsOf` 按程序顺序编号），重算只在没有残差位可用时才发生，而那不是设计允许的形状。
 
 - **循环**：每一轮的残差作为收集输出保存，是值不是闭包（原则 9.9 现有规定），后一个函数里循环按同样的轮数执行，逐轮取残差。
+  - 今天的树上这一条**能测，但分辨不出走序**（2026-11-02）：能给循环状态配对的只有浮点标量（`pairTypeOf`，`modules/transforms/jvp.cpp#pairTypeOf`），单 `float` 的逐轮映射可交换，正序与倒序打出同一个数；「倒序」本身属 4.3，而 `transpose` 仍按原样复制循环区间，所以 `vjp` 过循环**尚未保序**。聚合状态现在能 lift（`jvp` 逐状态抬起），所以判别用例已经能分出两个数；真正的缺口换成了「倒序需要一个倒序的数组值，而 `LoopKind::For` 里没有轮次下标」，见 `docs/handover/questions/2026-11-02-does-reversing-a-backward-need-a-new-operator.cn.md`。
 - **分支**：条件是残差，后一个函数按同一个条件选臂。
 - **调用**：被调函数各自拆分，残差按调用嵌套。
 
@@ -137,10 +138,10 @@ type Split<F> = ((..ParamsOf<F>) => (ResultOf<F>, _,),   // 残差位：由编�
 
 ```camel
 func transpose::<F>(f: F): Transpose<F> when is_linear::<F>()
-type Transpose<F> = (ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
+type Transpose<F> = (..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
 ```
 
-对一个对其输入线性的函数（残差是已知值），把数据流反过来。
+对一个对其输入线性的函数（残差是已知值），把数据流反过来。上面那条**声明就是契约**（作者，2026-11-03，`origin/fsh-dev` `6eceaa89d`：声明即契约，`transpose`/`jvp` 按声明建类型，不许近似声明；类型包拼接丢重数的事先修）：构建必须产出声明写下的形状。今天两者还不一致，是因为**类型包还写不出准确形状** —— `(..A, ..B)` 丢重数，且缺"按调用点仍要传的值参数"与"值/切向交错"两个运算，那是**待补的类型包能力**，不是可以保留的口径。准确形状要表达的是：取余切的参数不再传，没有切空间的参数（`int`、`bool`、字符串）与体从外面读到的值各占一格，余切永远在最后 —— 因此单 `float` 函数的转置是 `transpose(f)(1.0)`。
 
 - **原语**：换成它的 `#transpose` 规则；
 - **一个值被用了几次**：反过来就是几份相加；
@@ -156,7 +157,7 @@ func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
     let (fwd, lin) = split(reinterp<jvp>(f))
     return (..xs: ..ParamsOf<F>) => {
         let (y, res) = fwd(..xs)
-        (y, (ct) => transpose(lin)(res, ct))
+        (y, (ct) => transpose(lin)(ct))
     }
 }
 ```

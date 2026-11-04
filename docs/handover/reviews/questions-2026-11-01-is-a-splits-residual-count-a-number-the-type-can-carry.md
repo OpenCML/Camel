@@ -29,8 +29,8 @@ f(x,y)= x*x*y*y  →  REINTERP split function=jvp_of_f type=(float, float) => (f
 |---|---|
 | `\bsplit\b` 在 `stdlib/**/*.cml` | **36 处 / 35 行** |
 | 其中真是 `transforms` 的 `split` | **19 处 / 18 行**（`autodiff.cml:20,24`、`signatures/transforms.cml:32,46,63,64,65,66,104,106,114`、`vjp.cml:7,11,41,49,67`、`signatures/autodiff.cml:50`） |
-| 其中**真正的调用点** | **2 处**：`stdlib/vjp.cml:49`、`:67`，都是 `split(jvp(f))` |
-| 声明 | 1 处：`stdlib/signatures/transforms.cml:66` |
+| 其中**真正的调用点** | **2 处**：`stdlib/vjp.cml#vjp`、`:67`，都是 `split(jvp(f))` |
+| 声明 | 1 处：`stdlib/signatures/transforms.cml#split` |
 | 另一个函数 | **17 处**：`str::split`（9/8）、`random::split`（3）、`re::split`（2）、`tensor.cml` 散文（3） |
 
 **3. 今天 0 个用例能观察到占位项数。** 树里没有任何用例把残差元组**拆开**（`vjp_split_halves.cml:15-17` 是
@@ -38,12 +38,12 @@ f(x,y)= x*x*y*y  →  REINTERP split function=jvp_of_f type=(float, float) => (f
 ——那是精确的，不受占位影响（`transpose` 的余切元组按参数给，不按残差给）。唯一可观察的是诊断里的
 `residuals=`，那是图算的。
 
-**4. 占位被问 3 次，其中一次在运行期，而且它给返回值定类型。** `splitHalvesOf`（`modules/transforms/split.cpp:516`，
+**4. 占位被问 3 次，其中一次在运行期，而且它给返回值定类型。** `splitHalvesOf`（`modules/transforms/split.cpp#Half`，
 替身分支 `:561-567`）：
 
 | 位置 | 何时 | 用途 |
 |---|---|---|
-| `modules/transforms/split_operator.cpp:58` | 编译期（GIR 建图） | 调用点的静态类型 |
+| `modules/transforms/split_operator.cpp#splitOperatorSignature` | 编译期（GIR 建图） | 调用点的静态类型 |
 | `:95` | 编译期 | 拒绝正文 |
 | `:151` | **运行期**（`splitKernel`） | 给返回的 `(forward, backward)` 元组定类型（`:165-166` 的 `pair->set<slot_t>(…, halves.pair)`） |
 

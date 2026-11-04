@@ -42,9 +42,9 @@
 
 | 写法 | 拒绝处 | 说明 |
 |---|---|---|
-| `t[a:b, c]`、`t[a:b, c:d]`（多维的范围或位置混合下标） | `src/compile/gct/builder.cpp:2536-2551`（`ConstructNotSupported`，"the slice operator takes one axis…"） | 设计原则 5.4 把它定义成核心语义（"`t[a:b, c]` 在第一维切片、在第二维取位置"）；这里是缺的功能，不是语法 |
-| 带类型参数的 `fact`（`fact range::<T>(v: T): …`） | `src/parse/ast/builder.cpp:1470-1476`（`giveUp`，"…is not compiled"） | `docs/design/rewrite/v2.cn.md:121` 把它写成目标写法 |
-| 生成器 `yield`、返回类型 `T..` 的函数体 | `src/compile/gct/builder.cpp:2048`（`FeatureNotSupported "generators"`） | 关键字、语句、AST 节点都有，语义没有 |
+| `t[a:b, c]`、`t[a:b, c:d]`（多维的范围或位置混合下标） | `src/compile/gct/builder.cpp#BinaryDataOp`（`ConstructNotSupported`，"the slice operator takes one axis…"） | 设计原则 5.4 把它定义成核心语义（"`t[a:b, c]` 在第一维切片、在第二维取位置"）；这里是缺的功能，不是语法 |
+| 带类型参数的 `fact`（`fact range::<T>(v: T): …`） | `src/parse/ast/builder.cpp#Builder::visitRuleDecl`（`giveUp`，"…is not compiled"） | `docs/design/rewrite/v2.cn.md:121` 把它写成目标写法 |
+| 生成器 `yield`、返回类型 `T..` 的函数体 | `src/compile/gct/builder.cpp#Builder::declareStructType`（`FeatureNotSupported "generators"`） | 关键字、语句、AST 节点都有，语义没有 |
 | 一条 `fact` 缺 `join`、缺 `case _`、case 不含变量 | `ast/builder.cpp:1492`、`:1524`、`:1773`（`giveUp`，再加 `FactCaseDefaultMissing`） | 是对声明形状的要求，本该是语法层的"期望什么" |
 
 - **问题**：`ConstructNotSupported` 是个兜底的诊断码，消息说的是"这个构建不支持"而不是"语言规定什么"。读者无法判断是自己写错、语言不允许、还是实现还没做。

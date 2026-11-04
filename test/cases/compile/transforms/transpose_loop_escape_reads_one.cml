@@ -18,6 +18,6 @@ func read_one(x: float): float {
 
 func main(): int sync {
     let back = transpose(read_one)
-    println(back(1.0, 1.0))
+    println(back(1.0))
     return 0
 }

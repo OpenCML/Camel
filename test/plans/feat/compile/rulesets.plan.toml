@@ -92,14 +92,14 @@ timeout_ms = 60000
 
 [[tests]]
 name = "rulesets_keys_are_derived_and_the_exceptions_are_printed"
-desc = "No operator is bound to a key by hand: `std::rulesets forward=true` prints the two operators whose key cannot be derived from the operator itself, each with the reason, and the sentence saying how every other key is derived. `xs[i]` is a bracket form, which is none of `a <op> b`, `<op> a` or `f(a, b)`, so `:op/idx_arr`'s rule is filed under the call `index_into(x, i)`; `*/2` is already `:op/mul_d`'s key, so `tensor:multiply`'s rule is filed under `mul_tensor(x, w)`. The two lines print on every run of the pass, not only when asked for, because an exception only visible on request is an exception nobody reads."
+desc = "No operator is bound to a key by hand: `std::rulesets forward=true` prints the three operators whose key cannot be derived from the operator itself, each with the reason, and the sentence saying how every other key is derived. `xs[i]` is a bracket form, which is none of `a <op> b`, `<op> a` or `f(a, b)`, so `:op/idx_arr`'s rule is filed under the call `index_into(x, i)`; `float(n)` is `float` at one operand, a spelling every conversion to a double shares, so `:op/ltod`'s rule is filed under the call `float_of_int(n)`; `*/2` is already `:op/mul_d`'s key, so `tensor:multiply`'s rule is filed under `mul_tensor(x, w)`. The three lines print on every run of the pass, not only when asked for, because an exception only visible on request is an exception nobody reads. The other half of the reading -- the key an operator's rule is looked up under -- is asked with an operator and no field (`query=:op/itod`): a conversion's key is the spelling of the destination the registration states (`float` for `:op/itod`, and `int` for `:op/dtol`, which the old letter table could not spell at all), and an operator that converts nothing has no key at all -- `:var/get` reads a variable, its result is a float, and it must not be given a conversion's key."
 kind = "behavior"
 case = "../../../cases/compile/rulesets/rulesets_lookup.cml"
-args = ["${case}", "std::rulesets", "forward=true", "${backend}"]
+args = ["${case}", "std::rulesets", "forward=true", "query=:op/itod;:op/dtol;:var/get", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["RULEKEY-EXCEPTION :op/idx_arr -> index_into/2 because", "RULEKEY-EXCEPTION tensor:multiply -> mul_tensor/2 because", "RULEKEY derivable: an operator's key is its own spelling"]
+expect_stdout_contains = ["RULEKEY-EXCEPTION :op/idx_arr -> index_into/2 because", "RULEKEY-EXCEPTION tensor:multiply -> mul_tensor/2 because", "RULEKEY derivable: an operator's key is its own spelling", "KEY :op/itod -> float/1", "KEY :op/dtol -> int/1", "KEY :var/get -> none"]
 expect_stdout_not_contains = ["FORWARD ", "VMAP ", "-> no rule", "no such family"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

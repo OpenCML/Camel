@@ -114,7 +114,13 @@ void Builder::buildEntryCall() {
                            ? std::string(entryType->argNameAt(argIndex))
                            : std::format("{}{}", prefix, i);
             };
-            for (size_t i = 0; i < entryType->withTypesCount(); ++i) {
+            // The entry graph takes the same parameters, and a pack among the `with` ones is not
+            // one of them: a pack is the arguments a call writes beyond the fixed parameters, and
+            // the entry graph is called with the values given from outside, one per parameter
+            // (design principles 4.4, 5.6).
+            const size_t entryWithPorts =
+                entryType->withTypesCount() - (entryType->hasWithRest() ? 1 : 0);
+            for (size_t i = 0; i < entryWithPorts; ++i) {
                 const std::string name = nameAt(i, "__w", i);
                 const bool isVar       = entryType->withIsVarAt(i);
                 Type *type             = entryType->withTypeAt(i);
@@ -1141,7 +1147,22 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
 FunctionType *Builder::completeLambdaSignature(
     const GCT::node_ptr_t &gct, FunctionType *funcType, Type *expected) {
     const auto *unwritten = GCT::Tree::of(gct)->unwrittenParamsOf(gct);
-    if (unwritten == nullptr || unwritten->empty()) {
+    // A pack among the `with` parameters (`<..ws> (..xs) => ...`) is open in the same sense a
+    // parameter without a type is: the function type of the position says what it stands for
+    // (author's ruling of 2026-11-03 13:50, on the pack rule of design principles 5.6). It is not
+    // in the GCT's unwritten list -- that list is about parameter types -- so it joins the holes
+    // here, at its own index (the `with` parameters are numbered first).
+    const bool withPack = funcType->hasWithRest();
+    std::vector<GCT::Tree::UnwrittenParam> holes;
+    if (unwritten != nullptr) {
+        holes = *unwritten;
+    }
+    if (withPack) {
+        holes.push_back({funcType->withTypesCount() - 1, gct->origin(), true});
+        std::stable_sort(
+            holes.begin(), holes.end(), [](const auto &a, const auto &b) { return a.index < b.index; });
+    }
+    if (holes.empty()) {
         return funcType;
     }
     // A lambda takes the types it does not write from the function type of the position it
@@ -1150,16 +1171,16 @@ FunctionType *Builder::completeLambdaSignature(
     // the value of a declared type, or the result of a function whose result type is a function
     // type.
     if (expected == nullptr) {
-        const std::string name(funcType->argNameAt((*unwritten)[0].index));
+        const std::string name(funcType->argNameAt(holes[0].index));
         diags_->of(SemanticDiag::LambdaParameterWithoutType)
-            .atOrigin((*unwritten)[0].origin)
+            .atOrigin(holes[0].origin)
             .commit(name, "nothing here expects a function type");
         throw BuildAbortException();
     }
     if (expected->code() != TypeCode::Function) {
-        const std::string name(funcType->argNameAt((*unwritten)[0].index));
+        const std::string name(funcType->argNameAt(holes[0].index));
         diags_->of(SemanticDiag::LambdaParameterWithoutType)
-            .atOrigin((*unwritten)[0].origin)
+            .atOrigin(holes[0].origin)
             .commit(
                 name,
                 std::format(
@@ -1183,25 +1204,54 @@ FunctionType *Builder::completeLambdaSignature(
     // parameter's (GCT recorded it), not a difference in arithmetic -- an omitted parameter type
     // keeps the strict comparison, because a hole that takes one type cannot stand for several.
     const GCT::Tree::UnwrittenParam *restHole = nullptr;
-    for (const GCT::Tree::UnwrittenParam &param : *unwritten) {
+    for (const GCT::Tree::UnwrittenParam &param : holes) {
         if (param.rest) {
             restHole = &param;
             break;
         }
     }
-    const size_t expectedTotal =
-        expectedFunc->withTypesCount() + expectedFunc->normTypesCount();
+    // A lambda takes the `with` list it does not write from the position it stands in as well
+    // (design principles 5.9: the types it does not write come from the function type of the
+    // position). A transform's result declares the differentiated function's own `with` list --
+    // `Vjp<F>` is `<..WithOf<F>> (..ParamsOf<F>) => ...` -- and the library's `vjp` answers a lambda
+    // written `(..xs) => ...`, so this is the one place the two lists differ: without adopting the
+    // position's list the value would answer `(..ParamsOf<F>)` while the declaration promises the
+    // `with` prefix too, and `vjp(f)<2.0>(3.0)` would pass a `with` argument to a function with no
+    // `with` port. A lambda that *writes* a `with` list of its own keeps it, and one that writes a
+    // different number of them than the position has is told so below.
+    const size_t expectedWith = expectedFunc->withTypesCount();
+    const size_t adoptedWith =
+        withCount == 0 && expectedWith > 0 ? expectedWith : size_t{0};
+    // A pack among the `with` parameters stands for the position's `with` list from its own index
+    // on, one `with` parameter each, exactly as an ordinary rest parameter stands for the ordinary
+    // ones: the arity it leaves open is the position's, so the count compared below is the
+    // position's too. A pack is last in the list (the parser refuses one that is not), so the
+    // parameters before it are the written ones.
+    const size_t withPackAt    = withPack ? withCount - 1 : withCount;
+    const size_t effectiveWith =
+        withPack ? expectedWith : withCount + adoptedWith;
+    const size_t expectedTotal  = expectedWith + expectedFunc->normTypesCount();
+    if (withPack && expectedWith < withPackAt) {
+        report(
+            holes[0],
+            std::format(
+                "the expected type '{}' has {} `with` parameters and the lambda writes {} before "
+                "its pack",
+                expectedFunc->toString(),
+                expectedWith,
+                withPackAt));
+    }
     if (restHole == nullptr) {
-        if (expectedTotal != total) {
+        if (expectedTotal != effectiveWith + funcType->normTypesCount()) {
             report(
-                (*unwritten)[0],
+                holes[0],
                 std::format(
                     "the expected type '{}' takes {} parameters and the lambda {}",
                     expectedFunc->toString(),
                     expectedTotal,
-                    total));
+                    effectiveWith + funcType->normTypesCount()));
         }
-    } else if (expectedTotal < restHole->index) {
+    } else if (expectedTotal < effectiveWith + restHole->index) {
         report(
             *restHole,
             std::format(
@@ -1227,12 +1277,41 @@ FunctionType *Builder::completeLambdaSignature(
         exitType = expectedFunc->exitType();
     }
     factory.setExitType(exitType);
+    // The `with` list a lambda does not write is the position's (design principles 5.9), and a call
+    // numbers `with` parameters before the ordinary ones, so the adopted list goes in first.
+    for (size_t k = 0; k < adoptedWith; ++k) {
+        factory.addWithArg(
+            expectedFunc->hasArgNames() ? std::string(expectedFunc->argNameAt(k)) : std::string(),
+            expectedFunc->withTypeAt(k),
+            expectedFunc->withIsVarAt(k),
+            expectedFunc->withNeedsValueAt(k));
+    }
     size_t hole = 0;
     for (size_t i = 0; i < total; ++i) {
         Type *type   = typeAt(i);
-        bool isHole  = hole < unwritten->size() && (*unwritten)[hole].index == i;
+        bool isHole  = hole < holes.size() && holes[hole].index == i;
         if (isHole) {
-            const GCT::Tree::UnwrittenParam &param = (*unwritten)[hole++];
+            const GCT::Tree::UnwrittenParam &param = holes[hole++];
+            if (param.rest && i < withCount) {
+                // A pack among the `with` parameters stands for the position's `with` list from its
+                // own index on, one `with` parameter each, named after the pack (`ws_0`, `ws_1`,
+                // ...) as an ordinary rest parameter names the parameters it stands for. The body
+                // reads the pack itself as the tuple of them, built where the body is
+                // (buildFuncBody), so what it can forward is `ws` and not one name per element.
+                const std::string base = nameAt(i);
+                for (size_t k = i; k < expectedWith; ++k) {
+                    Type *const expanded = expectedFunc->withTypeAt(k);
+                    if (expanded == nullptr) {
+                        report(param, "the expected function type does not say what this parameter is");
+                    }
+                    factory.addWithArg(
+                        base + "_" + std::to_string(k - i),
+                        expanded,
+                        expectedFunc->withIsVarAt(k),
+                        expectedFunc->withNeedsValueAt(k));
+                }
+                continue;
+            }
             if (param.rest) {
                 // The rest parameter stands for the expected type's members from this position on:
                 // one parameter each, named after the rest parameter (`xs_0`, `xs_1`, ...), typed
@@ -1241,7 +1320,11 @@ FunctionType *Builder::completeLambdaSignature(
                 // parameters including none, which is why the arity check above only requires the
                 // expected type to reach this position.
                 const std::string base = nameAt(i);
-                for (size_t k = i; k < expectedTotal; ++k) {
+                // The ordinary parameters the rest hole stands for, and only them: the expected
+                // type's `with` list is not one of the lambda's parameters (a `with` value reaches
+                // the body as a value of the function, not as an argument), so the range is the
+                // expected type's ordinary count, not its total.
+                for (size_t k = i; k - withCount < expectedFunc->normTypesCount(); ++k) {
                     Type *const expanded = k < withCount ? expectedFunc->withTypeAt(k)
                                                          : expectedFunc->normTypeAt(k - withCount);
                     if (expanded == nullptr) {
@@ -1413,19 +1496,24 @@ void Builder::buildFuncBody(
                     if (!graphNamesValue(gct->at(1), restName)) {
                         break;
                     }
-                    const size_t withCount   = funcType->withTypesCount();
+                    // `param.index` numbers the parameters as the lambda *wrote* them, and the
+                    // completed signature is what the ports are read from: a `with` list the lambda
+                    // took from the position (`completeLambdaSignature`) is in the second and not in
+                    // the first, so the two are subtracted in their own terms.
+                    const size_t writtenWith = written->withTypesCount();
+                    const size_t firstNorm =
+                        param.index >= writtenWith ? param.index - writtenWith : 0;
                     const auto normPorts     = graph->view().normPorts();
                     std::vector<Type *> parts;
                     std::vector<size_t> slots;
                     std::vector<node_handle_t> members;
-                    for (size_t k = param.index; k < withCount + funcType->normTypesCount(); ++k) {
-                        const size_t norm = k - withCount;
+                    for (size_t norm = firstNorm; norm < funcType->normTypesCount(); ++norm) {
                         if (norm >= normPorts.size()) {
                             break;
                         }
                         members.push_back(graph->view().ref(normPorts[norm]));
                         parts.push_back(funcType->normTypeAt(norm));
-                        slots.push_back(k - param.index);
+                        slots.push_back(norm - firstNorm);
                     }
                     if (!members.empty()) {
                         node_handle_t tuple = currGraph_->addFillNode(
@@ -1443,6 +1531,36 @@ void Builder::buildFuncBody(
                     }
                     break;
                 }
+            }
+        }
+        // A pack among the `with` parameters that the lambda itself wrote (`<..ws> (..xs) => ...`)
+        // is a value in its body for the same reason its rest parameter is: `ws` is the tuple of
+        // the `with` parameters the position gave the value, and `f<..ws>(..xs)` spreads it into a
+        // call of `f`. The pack is not in the unwritten list (that list is about parameter types),
+        // so the name and the index come from the signature as it was written, and the members are
+        // the `with` ports the completion expanded the pack into (`ws_0`, `ws_1`, ...).
+        if (written != nullptr && name.empty() && written->hasWithRest()) {
+            const size_t packIndex = written->withTypesCount() - 1;
+            const std::string packName(written->argNameAt(packIndex));
+            if (graphNamesValue(gct->at(1), packName)) {
+                const auto withPorts = graph->view().withPorts();
+                std::vector<Type *> parts;
+                std::vector<size_t> slots;
+                std::vector<node_handle_t> members;
+                for (size_t w = packIndex; w < funcType->withTypesCount() && w < withPorts.size();
+                     ++w) {
+                    members.push_back(graph->view().ref(withPorts[w]));
+                    parts.push_back(funcType->withTypeAt(w));
+                    slots.push_back(w - packIndex);
+                }
+                node_handle_t tuple = currGraph_->addFillNode(
+                    TupleType::create(parts),
+                    camel::runtime::makeFillPayload(
+                        camel::runtime::GCFillKind::Tuple, slots));
+                for (node_handle_t member : members) {
+                    linkNodes(LinkType::With, member, tuple);
+                }
+                insertNode(packName, tuple);
             }
         }
         bodyStates_[graph.get()] = BodyState::Open;
@@ -1576,6 +1694,16 @@ void Builder::buildFuncBody(
     staticValueScopes_ = std::move(outerStaticValues);
 }
 
+node_handle_t Builder::droppedValueAt(const GCT::node_ptr_t &last) {
+    // A name in a position that drops its value is not used as a value: it produces no node at
+    // all. A DREF is a compile-time marker the encoder refuses to find in a graph
+    // (graph_encode, prepareGraph), so what stands where the dropped value stood is the null
+    // constant -- what a void graph exits at anyway. This is the one place a dropped tail stops
+    // being a name, and every position that drops its value comes here (visitExecNode).
+    node_handle_t dropped = currGraph_->addStaticDataNode(Data::null());
+    registerNodeOrigin(context_, dropped, last, "gir.data.dropped");
+    return dropped;
+}
 
 node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpected) {
     ENTER("EXEC");
@@ -1784,11 +1912,39 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
     if (failed) {
         throw BuildAbortException();
     }
-    if (gct->size() > 0 && res != nullptr && nodeIsKind(res, runtime::GCNodeKind::Dref) &&
-        gct->at(gct->size() - 1)->type() == GCT::NodeKind::DREF && sameGraph(res, currGraph_)) {
-        // A block that ends in the name of a function has that function's value: the value
-        // of a branch arm (`if c then inc else dec`), of a block, of a function body. Left a
-        // name, it gave the block the type void.
+    const bool nameAtTail =
+        gct->size() > 0 && res != nullptr && nodeIsKind(res, runtime::GCNodeKind::Dref) &&
+        sameGraph(res, currGraph_);
+    // Whether the value this block ends with is one nothing takes: the tail of a body or an arm
+    // declared `: void` (`acceptsAsResult`), a position that takes no value (the channel
+    // visitInPosition hands the position down by, the one branchTakesNoValue asks a branch about),
+    // and a block whose value is dropped where it stands (`{ len };` written as a statement of a
+    // `sync` block, or of any block, and the body of a decorated block nothing takes). There is
+    // one rule and it is about the position, not the shape: a position that drops a value does not
+    // use a name, so every one of these is the same `dropped` here.
+    const bool dropped =
+        valueDropped || (tailExpected != nullptr && isVoidGraphExitType(tailExpected)) ||
+        (expectedValueType_ != nullptr && isVoidGraphExitType(expectedValueType_));
+    // The value of a block is that of its last statement, and a name standing there is a value
+    // only where a value is wanted -- a DREF is a compile-time marker and no node of the graph
+    // (graph_encode, prepareGraph).
+    if (nameAtTail && dropped) {
+        // Nothing takes the value the block ends with, and dropping a name is not using it, so
+        // nothing is asked of it: the null constant -- what a void graph exits at anyway -- stands
+        // where it stood, and the sync chain reaches it as it reaches any other value. A `: void`
+        // body's tail (`func g(): void { let step = len }`) left the stack as a live DREF here,
+        // and was an internal error about a legal program; a name written last in a statement the
+        // block drops (`{ len };`) was asked for a function value it does not have, and was a
+        // report about a legal program. Both are positions that drop their value: same rule, same
+        // function -- `droppedValueAt` is where a name stops being a node.
+        res = droppedValueAt(gct->at(gct->size() - 1));
+    } else if (nameAtTail) {
+        // The value is wanted: a block that ends in the name of a function has that function's
+        // value -- of a branch arm (`if c then inc else dec`), of a block, of a function body --
+        // and a name that is no single function value is reported where it is used. Left a name,
+        // it gave the block the type void. The name arrives here from the `let` written last as
+        // well (`let step = len` binds the name, and the binding's value is the statement's), so
+        // the last statement is not asked what kind it is.
         const auto &last = gct->at(gct->size() - 1);
         res              = namedValueOf(res, last->name(), last);
     }

@@ -1440,6 +1440,22 @@ class Builder {
             camel::compile::gct::Tree::of(node)->headTypeParamsOf(node) != nullptr) {
             return true;
         }
+        // A pack among the `with` parameters (`with <..ws>`) decides the `with` arity at each call
+        // exactly as a rest parameter decides the ordinary one, so a declaration with a body is a
+        // template for the same reason: no graph is built for the declaration itself, and each
+        // call expands the body where it is (design principles 5.5, applied to the pack rule of
+        // 4.4 and 5.6). Both the declaration's own node and its function node answer here, or the
+        // one that did not would be read as an ordinary function of the same name and refused as
+        // a redeclaration. A declaration without a body is an operator implemented in C++, whose
+        // resolver takes the arguments itself, and is not one. A lambda is not one either: it is a
+        // value, and the pack it writes is bound to the `with` list of the position it stands in
+        // (completeLambdaSignature), so the signature of a lambda never keeps an unknown arity.
+        if (node != nullptr && !node->nativeDeclaration() && !node->name().empty() &&
+            type != nullptr &&
+            type->code() == camel::core::type::TypeCode::Function &&
+            static_cast<FunctionType *>(type)->hasWithRest()) {
+            return true;
+        }
         return isGenericHere(type);
     }
     // The type parameters of a template in declaration order: the head names first, then the
@@ -1498,6 +1514,25 @@ class Builder {
     /// `__rule_generic('name', two_way, needs, consts, id)` and resolves as the `Rule` it is. Does
     /// nothing when the call is not that shape, and the maker's own resolution reports it.
     void settleGenericRuleMaker(
+        std::vector<Argument> &normInputs, camel::core::type::type_vec_t &normTypes,
+        const GCT::node_ptr_t &call);
+    /// `__rule('name', two_way, needs, consts, <the sides>)`, the maker of a rule whose head declares
+    /// **no** type parameters: its sides are ordinary functions and have values, so the maker keeps
+    /// taking them and the rule value is unchanged (id 0, an ordinary rule).
+    ///
+    /// It is registered in the table of rule templates all the same, with no type parameters and one
+    /// instance already made from the two graphs. Before this, only a generic rule reached that
+    /// table, so a transform that asks "which of this key's laws answers these operands" could not see
+    /// a law written `jvp_float_from_int(x: int)` at all: the index named it and the table did not
+    /// hold it (`the rule is named in the index but its templates are not registered`,
+    /// `modules/transforms/jvp.cpp`). That is what the author's ruling of 2026-11-03 12:10 asks for --
+    /// two laws of one key told apart by their parameter types instead of by `when` -- so a law that
+    /// names a type has to be reachable.
+    ///
+    /// Does nothing when the call is not that shape (a side that is not a function value, a rule that
+    /// declares `with` values -- those are the generic maker's), and nothing is reported: the maker's
+    /// own resolution reports what it cannot do.
+    void settleRuleMaker(
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &normTypes,
         const GCT::node_ptr_t &call);
     /// The maker of a fact whose head declares type parameters (`fact range::<T>(v: T)`): the
@@ -2137,6 +2172,12 @@ class Builder {
     // functionValueOf, and FunctionNameAsValue when `name` has no single function value.
     node_handle_t
     namedValueOf(node_handle_t node, const std::string &name, const GCT::node_ptr_t &origin);
+    // The node that stands where a value was dropped -- the tail of a block in a position whose
+    // value nothing takes: a `: void` body's or arm's tail (`acceptsAsResult`), a statement whose
+    // value the block drops (`{ len };` in a `sync` block, or in any block). A name there is not
+    // used as a value and produces no node, so the null constant -- what a void graph exits at --
+    // stands in its place. One rule, one function: every such position calls this.
+    node_handle_t droppedValueAt(const GCT::node_ptr_t &last);
     // Reports FunctionNameAsValue at `origin` when `node` is still such a name (`name`) in
     // a place that needs a value.
     void rejectNameWithoutValue(

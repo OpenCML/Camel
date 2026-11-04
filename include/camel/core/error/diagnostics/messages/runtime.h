@@ -31,6 +31,7 @@ enum class RuntimeDiag : uint32_t {
     PassInternalError         = 0x00000C,
     PassBoundaryResources     = 0x00000D,
     PassBoundaryNodes         = 0x00000F,
+    ExitTypeMismatch          = 0x0001AE,
     PassBoundaryPorts         = 0x000013,
     MacroEvaluationFailed     = 0x00000E,
     EntryArgumentMissing      = 0x000010,
@@ -46,10 +47,11 @@ enum class RuntimeDiag : uint32_t {
     FieldNotFound          = 0x000033,
     InvalidArgument        = 0x000034,
     // 0x000037: empty. The number is not reused.
-    RegexInvalid                = 0x000039,
-    TimeFormatFailed            = 0x00003A,
-    GradientElementTypeMismatch = 0x00003C,
-    ValueWithNoDerivativeRule   = 0x0001A8,
+    RegexInvalid                 = 0x000039,
+    TimeFormatFailed             = 0x00003A,
+    GradientElementTypeMismatch  = 0x00003C,
+    ValueWithNoDerivativeRule    = 0x0001A8,
+    TransposeNeedsParameterShape = 0x0001AD,
     // Faults and reports of design principles log 2.10.
     ConversionOutOfRange = 0x000050,
     UnhandledError       = 0x000051,
@@ -106,6 +108,11 @@ enum class RuntimeDiag : uint32_t {
     ConstantExpressionFaults      = 0x100015,
     TranslationLinksRuntime       = 0x100016,
     DefunctionalizationIncomplete = 0x100017,
+    // `std::jit` in a build whose JIT has no code generator for this processor: x86-64 is the only
+    // one, so an arm64 build and the manual no-JIT leg of CI both land here. The pipeline is accepted
+    // and the program runs on the bytecode interpreter with the same result, which is why this is a
+    // warning and not an error: what it reports is that the pass named does less here than its name says.
+    JitWithoutCodeGenerator = 0x100018,
 };
 
 constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }

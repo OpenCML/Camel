@@ -1,0 +1,58 @@
+// `where`'s gradient through the engine and through the library, in one program.
+//
+// `where(c, a, b)` is a choice, not an arithmetic: the cotangent goes to the branch that was taken
+// and zero to the other, and the condition takes none -- a boolean is a choice and not a magnitude
+// (`stdlib/rulesets/jvp.cml#jvp_where` answers two tangents, one per branch). The two answers are
+//
+//     d/da = where(c, ct, 0.0)        d/db = where(c, 0.0, ct)
+//
+// which is the engine's own pair, node for node (`whereVjp`, `modules/tensor/ops/elementwise_ops.cpp`:
+// the same two `tensor:where` nodes over the same condition and a static `0.0`), so the two legs are
+// not merely equal but the same graph.
+//
+// **Both branches are measured**, and the condition is a value the program computes (`a > 0.0`)
+// rather than one it is handed: that is the shape every mask in a training step has, and it puts the
+// condition on the backward side as a residual. The input is chosen so that both readings separate a
+// swapped law (`d/da` of `[0.0, 1.0, 1.0, 1.0]` against `d/db` of `[1.0, 0.0, 0.0, 0.0]`) and a law
+// that answered a branch's own value instead of the cotangent.
+//
+// The forward rule cannot write `where(c, dx, 0.0)` -- the walk would meet a three-operand `where`
+// in the linear half -- so it answers `where(c, da, db)` and the transpose law above is what takes
+// it apart. This case is where both are read together.
+//
+//     camel test/cases/compile/transforms/where_gradient_both_legs.cml
+import { grad } from autodiff
+import { vjp } from vjp
+import { abs, sum, where } from tensor
+
+/// The engine's spelling of `d/da`: the branch under measurement is the `with` parameter.
+with <a: float[..]>
+func total_a(b: float[]): float {
+    return sum(where(a > 0.0, a, b))
+}
+
+/// The same for `d/db`: the other branch is the `with` parameter.
+with <b: float[..]>
+func total_b(a: float[]): float {
+    return sum(where(a > 0.0, a, b))
+}
+
+/// The library's spelling: both branches are ordinary parameters.
+func total_plain(a: float[], b: float[]): float {
+    return sum(where(a > 0.0, a, b))
+}
+
+func main(): int sync {
+    let a = [-2.0, 3.0, 0.5, 1.5] as float[]
+    let b = [3.0, -2.0, 2.0, 0.0] as float[]
+    let engine_a = grad(total_a)<[-2.0, 3.0, 0.5, 1.5] as float[]>([3.0, -2.0, 2.0, 0.0] as float[])
+    let engine_b = grad(total_b)<[3.0, -2.0, 2.0, 0.0] as float[]>([-2.0, 3.0, 0.5, 1.5] as float[])
+    `where engine da={} db={}`->format<engine_a, engine_b>->println
+    let (_, pullback) = vjp(total_plain)(a, b)
+    let (library_a, library_b) = pullback(1.0)
+    let same_a = sum(abs(engine_a - library_a)) == 0.0
+    let same_b = sum(abs(engine_b - library_b)) == 0.0
+    `where: engine={} library={} same={}`->format<engine_a, library_a, same_a>->println
+    `where db: engine={} library={} same={}`->format<engine_b, library_b, same_b>->println
+    return 0
+}

@@ -1,0 +1,52 @@
+// The engine's reading of a `mean_axis_stated` node, beside the library's reading of the same mean.
+//
+// `mean_axis_stated(t, at)` is the stated spelling of `mean_axis`: `at` is
+// `[axis, keepdims, d0, ..., d(rank-1)]`, the two scalars the call passes and the operand's
+// extents, because a transpose law cannot read the shape of the value a cotangent comes back
+// through (`modules/tensor/ops/reduction_ops.cpp#meanAxisStatedKernel`).
+//
+// The library answers a lane mean's gradient through `stdlib/rulesets/jvp.cml#jvp_mean_axis`, whose
+// tangent call is `mean_axis_stated`, and `stdlib/rulesets/transpose.cml#mean_axis_stated_t` spreads
+// each lane's cotangent over the lane with the length `numel(t) / numel(ct)`. The engine's reverse
+// pass answers it through `DerivativeRegistry` only if a rule is filed under the node's operator --
+// this program is the one whose reading was once a refusal
+// (`autodiff: no derivative rule for operator 'tensor:mean_axis_stated'`), a missing row in the
+// engine's C++ table and not a missing law.
+//
+// Four elements, one lane, so a mean divides by four and both legs put a quarter at every position:
+//
+//     engine dL/dw=[0.25, 0.25, 0.25, 0.25] library dL/dx=[0.25, 0.25, 0.25, 0.25]
+//
+// The two legs state the flag differently -- `at[1] = 1` here, `mean_axis`'s own port `false` on the
+// library's side -- because that is the only difference between the two spellings of this program:
+// the mean is the same mean, and `at[1]` reaches the engine's rule as a flag and not as an integer
+// where a flag is read (`:op/gt_l` in `meanAxisStatedVjp`).
+//
+// The `sum` sits on the stated leg and not on the library's, and the asymmetry is the types':
+// `at[1] = 1` keeps the axis, so `mean_axis_stated` answers `float[1]` and a `sum` is what reaches
+// the scalar `grad` differentiates; `mean_axis(x, 0, false)` answers the element itself (design
+// principles 5.4) because its result is computed rather than declared, so a `sum` over it is a call
+// with no matching signature. Both legs still read a quarter per position -- the mean is the same
+// mean -- and the value both reach is 2.5.
+////     camel test/cases/compile/transforms/stated_mean_axis_answered_by_the_engine.cml
+import { grad } from autodiff
+import { mean_axis, mean_axis_stated, sum } from tensor
+import { vjp } from vjp
+
+/// The differentiated value is the `with` parameter (design principles 9.9).
+with <w: float[]>
+func stated(): float {
+    return sum(mean_axis_stated(w, [0, 1, 4]))
+}
+
+func through_library(x: float[]): float {
+    return mean_axis(x, 0, false)
+}
+
+func main(): int sync {
+    let engine = grad(stated)<[1.0, 2.0, 3.0, 4.0] as float[]>()
+    let (value, pullback) = vjp(through_library)([1.0, 2.0, 3.0, 4.0] as float[])
+    let fromLibrary = pullback(1.0).0
+    `value={} engine dL/dw={} library dL/dx={}`->format<value, engine, fromLibrary>->println
+    return 0
+}

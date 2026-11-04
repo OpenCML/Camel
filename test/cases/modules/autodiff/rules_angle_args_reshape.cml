@@ -1,0 +1,35 @@
+/**
+ * `reshape`'s target shape is written in angle brackets, and the JVP of it is a rule.
+ *
+ * `reshape<shape>(x)` states its shape in `<>`, because that is what decides which function this is
+ * (design principles 4.4). A rule's left side is the operator written the way a call writes it, so
+ * the shape is a value the rule has to carry from its left side to its right -- and the rule
+ * protocol makes a rule's parameters the operator's *ports*, in port order: the normal ones first,
+ * then the `<>` ones. A `reshape<[2, 2]>(x)` node therefore has two ports and one data operand, and
+ * `jvp_reshape` names one of them.
+ *
+ * This is its own file, and not a line in a file with the other two operators, so that its answer
+ * is not reported behind another line's wall: the transposed walk of `mean_axis` (see
+ * `rules_angle_args_mean_transpose.cml`) stops the whole program, and while the three readings
+ * shared one `main` a correct number here was recorded as a red one. One program, one reading.
+ *
+ * The number is derived by hand, not read off a run:
+ *
+ *   reshape  f(x) = sum(reshape<[2, 2]>(x) * [[1, 2], [3, 4]]) on x = [1, 2, 3, 4]
+ *            f = 1*1 + 2*2 + 3*3 + 4*4 = 30.0, and a reshape moves no element, so along
+ *            dx = [0.5, 0.5, 0.5, 0.5] the tangent is 0.5 * (1 + 2 + 3 + 4) = 5.0.
+ */
+import rulesets.jvp
+import { jvp } from transforms
+import { reshape, sum } from tensor
+
+func loss_reshape(x: float[..]): float {
+    return float(sum(reshape<[2, 2]>(x) * ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])))
+}
+
+func main(): int sync {
+    let (reshapeValue, reshapeTangent) =
+        jvp(loss_reshape)([1.0, 2.0, 3.0, 4.0] as float[], [0.5, 0.5, 0.5, 0.5] as float[])
+    'rules_angle_args reshape value={} tangent={}'->format<reshapeValue, reshapeTangent>->println
+    return 0
+}

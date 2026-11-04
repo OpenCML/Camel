@@ -57,14 +57,14 @@
 
 **类型里今天有资源集**：
 
-- `include/camel/core/type/composite/func.h:179` —— `FunctionType::resources() const` 返回 `const sem::ResourceSignature &`（`setResources` 在同文件 `:65`）。
-- `include/camel/core/resource_semantics.h:190` —— `ResourceSignature`：`mode`（`:191`，`Generic` 表示"什么都不承诺"、`Concrete` 是声明或推断出的集合）、`params`（`:214`，每个形参一条 `ParamUse{index, cls, name, mode}`，见 `:193`）、`captures`（`:216`）、`ambient`（`:218`）、`anyOf`（`:220`）。
+- `include/camel/core/type/composite/func.h#withExitType` —— `FunctionType::resources() const` 返回 `const sem::ResourceSignature &`（`setResources` 在同文件 `:65`）。
+- `include/camel/core/resource_semantics.h#ResourceSignature` —— `ResourceSignature`：`mode`（`:191`，`Generic` 表示"什么都不承诺"、`Concrete` 是声明或推断出的集合）、`params`（`:214`，每个形参一条 `ParamUse{index, cls, name, mode}`，见 `:193`）、`captures`（`:216`）、`ambient`（`:218`）、`anyOf`（`:220`）。
 
 **缺的是把签名里的资源映射回这一层的单元**：
 
 - `param` 好用：调用点知道实参在第几个普通形参位置，`ParamUse::index` 对得上，`cls == Variable` 加 `mode` 就能说出"这次调用写的是第 k 个实参那个单元"，而不是"程序里某个写过这个名字的函数"。
 - **`captures` 不好用**：它只有位置（`std::vector<uint8_t>`，按捕获位置），**不带名字、不带作用域**。闭包捕获的是调用点外层的单元，而调用点这一层只有"这个函数值"和它的类型，没有一个把"捕获位置"翻回"哪个单元"的映射。这是这一步真正的缺口——要么让推断出的闭包类型记下捕获的名字（编译期它明明知道），要么在调用点把函数值与它的捕获列表一起留着。
-- 旁路（"被调者是本层能解析到图的函数值就用它的捕获表"）**今天给不出任何收窄**：取样 5 个程序（含 `resources/effects.cml` 的 12 个、`two_references_write_one_object_unsynced.cml` 的 1 个）共 **16 个未知调用点，能解析到图的 0 个**。原因是未知路径上被调者只是形参的引用（`DREF`），不是 `FunctionData` 节点，`functionValueGraphOf`（`src/compile/gir/builder_calls.cpp:101`）只能从后者取出图；捕获表本身是有的（`include/camel/runtime/graph.h:656` 的 `captureNames()`），但那条路径取不到图。`inc()` 那种 `let inc = () => ...; inc()` 的调用**根本不走未知路径**（构建时就有 `targetGraph`），所以也不能靠它收窄。
+- 旁路（"被调者是本层能解析到图的函数值就用它的捕获表"）**今天给不出任何收窄**：取样 5 个程序（含 `resources/effects.cml` 的 12 个、`two_references_write_one_object_unsynced.cml` 的 1 个）共 **16 个未知调用点，能解析到图的 0 个**。原因是未知路径上被调者只是形参的引用（`DREF`），不是 `FunctionData` 节点，`functionValueGraphOf`（`src/compile/gir/builder_calls.cpp#Builder::functionValueGraphOf`）只能从后者取出图；捕获表本身是有的（`include/camel/runtime/graph.h#GCGraph::uses` 的 `captureNames()`），但那条路径取不到图。`inc()` 那种 `let inc = () => ...; inc()` 的调用**根本不走未知路径**（构建时就有 `targetGraph`），所以也不能靠它收窄。
 
 ## 4. 判据
 

@@ -14,6 +14,7 @@
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator_table.h"
 #include "camel/runtime/effect_liveness.h"
+#include "camel/runtime/graph_exit_type.h"
 #include "camel/runtime/resources.h"
 #include "camel/core/tags.h"
 #include "camel/core/mm/block.h"
@@ -2651,6 +2652,28 @@ void reportPassFailure(const context_ptr_t &ctx, const std::string &name, const 
     // array. There is no source position for it. The stage names the pass even for a scheduling
     // pass: the failure belongs to the pass, whatever part of the program had run.
     setPipelineStage("pass:" + specName(name));
+    // One exception is not that: a graph whose exit hands on a value of another type than its own
+    // signature declares is the program's own rewrite having written the wrong value (the seal's
+    // check, graph_edges.cpp `checkReturnValueType`), so it is reported as itself -- the graph, the
+    // two types, the value and the value's position -- and the reader is told what in the program
+    // to change. `PassInternalError` stays what it says: a pass that broke the graph it was given.
+    if (const auto *mismatch = dynamic_cast<const camel::runtime::GraphExitTypeMismatch *>(&e)) {
+        try {
+            auto diag = ctx->rtmDiags()->of(RuntimeDiag::ExitTypeMismatch);
+            if (mismatch->origin() != camel::source::kInvalidOriginId) {
+                // The value's own position: the expression that builds it. A node a rewrite built
+                // records no origin, and then the message names the node and the value instead.
+                diag.atOrigin(mismatch->origin());
+            }
+            diag.commit(
+                mismatch->graphName(), mismatch->valueType(), mismatch->declaredType(),
+                mismatch->whereInGraph());
+        } catch (const camel::core::error::DiagnosticsLimitExceededBaseException &) {
+            // The diagnostic is recorded; the limit is what throws (see below).
+        }
+        CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (exit type)", specName(name));
+        return;
+    }
     std::string what = e.what();
     while (!what.empty() && (what.back() == '.' || what.back() == '\n')) {
         what.pop_back(); // the diagnostic's message ends the sentence itself
@@ -2898,6 +2921,24 @@ passesNeverRunWarning(const std::vector<std::string> &passes, const context_ptr_
         DiagnosticBuilder::of(RuntimeDiag::PassesNeverRun).commit(passes[*consumer], rest);
     warning.stage = "pass:" + specName(passes[*consumer]);
     return warning;
+}
+std::optional<Diagnostic> jitWithoutCodeGeneratorWarning(
+    const std::vector<std::string> &passes, const context_ptr_t &ctx) {
+    (void)ctx;
+#if ENABLE_FASTVM_JIT
+    (void)passes;
+    return std::nullopt;
+#else
+    for (const std::string &spec : passes) {
+        if (resolveAlias(specName(spec)) != "std::fastvm::jit") {
+            continue;
+        }
+        auto warning = DiagnosticBuilder::of(RuntimeDiag::JitWithoutCodeGenerator).commit();
+        warning.stage = "pass:" + specName(spec);
+        return warning;
+    }
+    return std::nullopt;
+#endif
 }
 
 namespace {

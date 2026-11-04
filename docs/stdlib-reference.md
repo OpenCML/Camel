@@ -582,6 +582,36 @@ The number of bytes of a `Bytes`.
 - Example (a fragment, not compiled): `len(encode('h€'))` gives `4`
 - Why it is not compiled: the example builds its `Bytes` with `encode` from the `bytes` module, which this page does not import
 
+#### `extent_of`
+
+```camel
+extent_of: () => int[] when is_array::<A>()
+```
+
+The extents an array type writes down, in order: `extent_of::<float[2, 3]>()` is `[2, 3]`.
+
+The answer is a fact of the type argument and of nothing else, so the call takes no argument and
+names one type: `A` is the whole array type, the way a transposition law names one (`matmul_t::<T,
+A, B>`). Every extent of `A` has to be a number written in the type; a type that leaves one open
+states no shape -- `float[]` (= `float[?]`) states one dimension and no length, and `float[..]`
+states neither the rank nor a length -- and is refused where the call is instantiated. A shape
+that is a fact of a *value* is `shape(x)`, which is a question about the value and not the type.
+
+A transposition is where this is needed: the adjoint of a map is a function of the cotangent and
+of the shape of the map's domain, and a parameter whose cotangent is what the transposed function
+takes has no value to read (`func pick(x: float[3])`). `transpose(pick)` answers
+`([0.0, 1.0, 0.0])` because the shape the law spreads its cotangent over is written in the type
+`x` is declared with, and this is the language's one spelling of "the shape a type writes down" --
+the transposition walk asks the same rule (`statedExtentsOf`).
+
+The value is settled where the call is built, and the graph holds the list itself: the operator
+records the instantiated type of the call but not the type argument it was written with, so the
+run has nothing left to read (`src/compile/gir/builder_operators.cpp`, the `:op/extent_of`
+settlement).
+
+- Pure.
+- Example: `extent_of::<float[2, 3]>()` gives `[2, 3]`
+
 ### Arrays
 
 #### `range`
@@ -1405,8 +1435,7 @@ Forward mode: `jvp(f)` gives a function that takes the parameters of `f` followe
 tangents and returns the pair `(value, tangent)`. `jvp(f)(2.0, 1.0)` is the value `f(2.0)`
 together with the derivative of `f` at 2 in the direction 1.
 
-- Example (a fragment, not compiled): `let forward = jvp(f)`
-- Why it is not compiled: `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
+- Example: `let forward = jvp((x: float) => x * x)`
 
 #### `split`
 
@@ -1433,10 +1462,8 @@ function type, so no signature states a count it cannot know and no guard has to
 (`ResidualsOf<F>`, and the `_` position before it, are both gone). `lin` is linear in the tangent
 it is given -- the condition the transpose step (M3) reads -- and both halves speak in `Tangent<T>`
 at the top of this file.
-fragment of the composition: `let fwd = split(jvp(f))`, then `let (y, lin) = fwd(x)`.
 
-- Example (a fragment, not compiled): `let step = split`
-- Why it is not compiled: `split` takes the lifted function a `jvp` call writes, so the example is a
+- Example: `let step = split`
 
 #### `transpose`
 
@@ -1449,14 +1476,23 @@ gives the cotangent of its parameter. The data flow runs backwards -- each primi
 by the rule the `rulesets.transpose` family files under it, and a value used k times receives k
 cotangents that add. `f(x) = 2*x + 3*x` transposed at the cotangent `1.0` gives `5.0`.
 
-The transposed function takes the parameters of `f` first and the cotangent last --
-`transpose(f)(x, 1.0)` -- because a pullback may need the value it is transposing at: a branch's
-condition is a value, and the cotangent of an arm only means something for the arm that ran.
-The shape is the same for every `f`, so a reader writes the same call whether the body branches
-or not. The type is `(..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)`.
+The transposed function takes the values the call site still passes first and the cotangent of
+the result last, because a pullback may need the value it is transposing at: a branch's condition
+is a value, and the cotangent of an arm only means something for the arm that ran.
 
-- Example (a fragment, not compiled): `let back = transpose(f)`
-- Why it is not compiled: `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
+Which values those are is a property of `f`'s body, not of its type: a parameter that takes a
+cotangent is not passed (the cotangent carries it), a parameter with no tangent space (an `int`,
+a `bool`, a string) stands there as a value, and a value the body reads from outside stands there
+too. So for a one-`float` function the call is `transpose(f)(1.0)`.
+
+**`stdlib/types.cml#Transpose` is the contract, not an approximation** (author, 2026-11-03,
+`origin/fsh-dev` `6eceaa89d`): the build makes the declared type. The declaration cannot write
+that shape exactly today because the type-bundle splice loses multiplicity and lacks "the value
+parameters the call site still passes" -- a missing capability of the splice, to be fixed, not a
+wording to be kept. `modules/transforms/transpose.cpp#transposeSignature` is the build that has to
+come to agree with it.
+
+- Example: `let back = transpose((x: float) => 2.0 * x + 3.0 * x)`
 
 #### `vmap`
 
@@ -1477,8 +1513,7 @@ operator with no rule is refused by name at the primitive, never batched by a gu
 branch or a loop in the body is refused the same way, because the elementwise tier batches
 straight-line bodies.
 
-- Example (a fragment, not compiled): `let batched = vmap(f)`
-- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+- Example: `let batched = vmap((x: f32) => x * 2.0)`
 
 #### `remat`
 
@@ -1502,8 +1537,7 @@ the name says. `modules/transforms/remat_operator.cpp` answers `(f: F) => F` and
 the value stands on; the shapes a call site can write today are the ones `jvp`'s and `split`'s
 declarations show, because the result of a call is the exit type its resolver gives.
 
-- Example (a fragment, not compiled): `let remembered = remat(f)`
-- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+- Example: `let remembered = remat((x: int) => x + 1)`
 
 <a id="vjp"></a>
 
@@ -1517,8 +1551,9 @@ vjp: (f: F) => Vjp<F> when is_function::<F>()
 
 The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
 `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters, `ct`'s own weight one
-member per parameter. The juxtaposed call `transpose(residuals, ct)` is the internal step, not this
-signature.
+member per parameter. The pullback is `lin`'s transpose, and that is the whole of the step: the
+two have the shape `(ct) => (cotangents)` (author's ruling of 2026-11-02 11:30), so nothing is
+wrapped around it.
 
 The pullback answers a tuple in every case, one member per parameter, so a function of one
 parameter has a one-long one -- `(27.0)` for `vjp(cube)(3.0)`'s pullback at `ct = 1.0` -- and the
@@ -1532,11 +1567,19 @@ rule for every arity, no exception for one parameter, no type function that take
 a one-long tuple).
 
 One declaration for every arity: `F` is the function, `Vjp<F>` says the parameters are `F`'s and the
-pullback's cotangents are too (stdlib/types.cml), and `(..xs)` takes the parameters the instantiated
-`Vjp<F>` has -- the ordinary rule that a lambda takes its parameters' types from the position it
-stands in, applied to a pack (author's ruling of 2026-11-01 19:10). The lambda's rest parameter is a
-value in its body: `xs` is the tuple of those parameters, and `split(jvp(f))(..xs)` spreads it into
-the call of the forward half, which is the rule the language already had for spreading a tuple.
+pullback's cotangents are too (stdlib/types.cml), and `<..ws> (..xs)` takes both lists the
+instantiated `Vjp<F>` has -- the `with` list and the parameters, each from the position the lambda
+stands in (author's rulings of 2026-11-01 19:10 and 2026-11-03 13:50). The packs are values in the
+body: `xs` is the tuple of the parameters and `ws` the tuple of `f`'s `with` values, so
+`split(jvp(f))<..ws>(..xs)` hands the forward half the list it declares and the parameters it
+takes. `transpose(lin)` takes no `with` argument and none is written for it: `lin` has no `with`
+list, because the `with` value the backward half reads is a residual the cut captured in its
+closure (author's ruling of 2026-11-03 15:15; `Pullback<F>` in stdlib/types.cml is
+`(ct) => (..Tangent<ParamsOf<F>>)`, no list). So the `with` values are written once, where the
+lambda receives them, and `split(jvp(f))<..ws>(..xs)` is the only place they appear. The lambda
+writes the pack rather than naming the `with` parameters: `Vjp<F>` splices `WithOf<F>` as types,
+and a body that read a name from there would depend on what the caller of `vjp` called its own
+parameters.
 The whole reading in one line: the function is written where the call is, so the example is a
 program of its own -- `y` is `x * x` at 3, and the pullback read at `ct = 1.0` answers the
 derivative there, one member per parameter.
@@ -1563,15 +1606,54 @@ the `.0` added: the pullback always answers a tuple). Read `grad(f)` as a name f
 #### `with_grad`
 
 ```camel
-with_grad: (f: F) => F when is_function::<F>()
+with_grad: (f: F) => <..WithOf<F>> (..ParamsOf<F>) => never when is_function::<F>()
 ```
 
-The gradient of the first `with` parameter of `f` (design principles 9.9): the same `vjp`, taken
-with respect to a captured value instead of a parameter.
+The value and the gradient of `f`'s first `with` parameter -- the shape the engine's `with_grad`
+answers (`stdlib/signatures/autodiff.cml`), written as the composition design principles 9.9 asks
+for and held at the wall the composition meets. **The call refuses, and the refusal is the
+reading**: what stands here is a name that can be called, not a name that answers a number it
+cannot compute.
+
+The composition is one step: `vjp` differentiates the ordinary parameters only, so the weight is
+moved to one by a lambda -- `vjp((ww: W) => f<ww>(..))(w)` -- and the seed 1 read off the
+pullback is its gradient. The lambda can be written; the body inside it cannot do its half,
+because the lambda's parameter goes back into a call's `with` list and forward mode answers the
+tangent of a value that crosses that list as the zero of its type (`stdlib/signatures/transforms.cml`
+states the rule under `Jvp<F>`: a value that reaches a body through a `with` parameter does not
+move). Measured on this tree, `x_times_y` being `x * y`:
+
+    jvp((ww: float) => x_times_y<ww>(2.0))(3.0, 1.0)   value=6.0 tangent=0.0
+    jvp((y: float) => x_times_y<3.0>(y))(2.0, 1.0)     value=6.0 tangent=3.0
+
+The first line is the shape every `with_grad` composition has, and the derivative it owes is
+`d/dx (x*y)` at `y = 2`, which is 2.0. So the composition answers the zero of the gradient's
+type for every weight that reaches the body through that list -- and a weight always does, since
+the `with` list is what a weight is written as. The other shapes a `with_grad` is asked for stop
+before that point and are refused where they stop, so each one names its own wall instead of
+answering a number: a `with` parameter that is a struct, and a function of two `with` parameters
+with no ordinary parameter, both stop in `jvp`; a tensor `with` parameter whose lambda captures
+an array stops in `split`.
+
+The result type says only what is true of this call: it never gives a value. The declaration the
+engine's transform has -- `ValueAndGradient<F>`, whose second member is the type of the *first*
+member of `F`'s `with` list -- is not writable in the library today: `stdlib/types.cml` writes
+`ParamsOf<F>`, `WithOf<F>`, `ResultOf<F>` and `Tangent<T>`, and no type function names the first
+element of a pack, so a declaration written here would either refuse to compile or be an
+approximation of the shape it claims. `never` is neither.
+
+The day forward mode carries the tangent of a value handed to a `with` list, the body of this
+function is `vjp`'s own composition and the declaration is the engine's; the four shapes to
+measure it on are the four groups of
+`test/cases/modules/autodiff/grad_first_with_parameter.cml`, and the entry that holds this
+refusal is `test/cases/compile/transforms/with_grad_from_the_library.cml`.
+The example is a program of its own and stops at the name: it writes a call that is a value, and it
+reads nothing out of it, because the function `with_grad` answers returns `never` -- a program that
+asked `frozen(3.0)` for a number would not compile, and one that ran would stop with the sentence
+above. The gradient of a first `with` parameter is read with `grad`: `grad(weighted)<3.0>(2.0)`.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example (a fragment, not compiled): `let slope_over_the_capture = with_grad(f)`
-- Why it is not compiled: `f` captures the value it differentiates against, so the example is a fragment of a program that declares one
+- Example: `let frozen = with_grad((y: float) => y * 2.0)`
 
 <a id="tensor"></a>
 
@@ -1917,6 +1999,35 @@ The extent of one axis; a negative axis counts from the last one (`-1` is the la
 - Failure: fault `RuntimeError` when the axis is outside the rank.
 - Example: `dim<1>(zeros::<f32>([2, 2]))` gives `2`
 
+#### `pick_at`
+
+```camel
+pick_at: (t: T[..], at: int[]) => T when is_numeric::<T>()
+```
+
+The element at `at[0]` of a rank-1 tensor whose length is `at[1]`: `t[at[0]]`, with the length
+stated by whoever holds the value.
+
+The length is a **known operand**, and it is the reason this spelling exists beside the
+language's own `t[i]`. A transpose rule may read only known operands (author, 2026-11-03 11:10),
+and `T[]` carries no length in its type (design principles 5.4), so the law that scatters a
+cotangent back into the array's shape (9.9: the reverse of a gather is a scatter-add) has nothing
+to build the zeros from unless the value's length is handed to it. A forward half can state it --
+`rulesets.jvp`'s `jvp_idx_arr` passes `[i, len(xs)]`, a value of the primal -- and this operator
+is what it passes it to.
+
+The position and the length travel in one integer list because the transpose walk's operator path
+takes one or two normal operands, and that count is not this operator's to lift: it is the guard
+`tensor:mean_axis`'s three ports are held by.
+
+The stated length is checked against the tensor and the position against both, so a wrong length
+is a fault rather than an array of the wrong shape.
+or `at[0]` is outside it
+
+- Pure.
+- Failure: fault `RuntimeError` when the list is not two entries, `at[1]` disagrees with the tensor,.
+- Example: `pick_at([1.0, 2.0, 3.0] as float[], [2, 3])` gives `3.0`
+
 ### Reduction
 
 #### `sum`
@@ -1950,6 +2061,21 @@ The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis wit
 - Failure: fault `RuntimeError` when the axis is outside the rank.
 - Example: `sum<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[4.0, 6.0]`
 
+#### `sum_axis`
+
+```camel
+sum_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
+```
+
+The sum of each lane along one axis, accumulated in `f64` from `+0` in ascending order and
+rounded once into the element type. `keepdims` leaves the reduced axis as an extent of one.
+The result's extents are the operand's, with that axis removed or kept as an extent of one, so
+the type a call reads states them (`float[2, 3]` along axis 0 is a `float[3]`).
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `sum_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[4.0, 6.0]`
+
 #### `mean`
 
 ```camel
@@ -1978,6 +2104,20 @@ The same mean over one axis; keepdims keeps the axis with extent 1.
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `DivisionByZero` when the axis is empty.
 - Example: `mean<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[1.5, 3.5]`
+
+#### `mean_axis`
+
+```camel
+mean_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
+```
+
+The mean of each lane along one axis: the sum and the count both in `f64`, one rounding into
+the element type. An empty axis is a fault. The result's extents are the operand's, with that
+axis removed or kept as an extent of one.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element.
+- Example: `mean_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[2.0, 3.0]`
 
 #### `max`
 
@@ -2047,6 +2187,19 @@ the same bits); keepdims keeps the axis with extent 1.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
 - Example: `max<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[3.0, 4.0]`
 
+#### `max_axis`
+
+```camel
+max_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
+```
+
+The largest element of each lane along one axis. An empty axis is a fault, as for the whole
+tensor. The result's extents are the operand's, with that axis removed or kept.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element.
+- Example: `max_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[3.0, 4.0]`
+
 #### `min`
 
 ```camel
@@ -2059,6 +2212,20 @@ axis with extent 1.
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
 - Example: `min<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[1.0, 3.0]`
+
+#### `min_axis`
+
+```camel
+min_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
+```
+
+The smallest element of each lane along one axis. An empty axis is a fault: a minimum over no
+element has no identity to return. The result's extents are the operand's, with that axis
+removed or kept.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element.
+- Example: `min_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[1.0, 2.0]`
 
 #### `argmax`
 
@@ -2073,6 +2240,20 @@ NaN if there is one, +0 above -0, the earlier position on a tie.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
 - Example: `argmax<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[1, 1]`
 
+#### `argmax_axis`
+
+```camel
+argmax_axis: (t: T[..], axis: int, keepdims: bool) => int[..]
+```
+
+The position of the largest element of each lane along one axis, an `int` index along that
+axis. A tie keeps the earlier position. An empty axis is a fault. The result's extents are the
+operand's, with that axis removed or kept.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element.
+- Example: `argmax_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[1, 1]`
+
 #### `argmin`
 
 ```camel
@@ -2085,6 +2266,42 @@ NaN if there is one, -0 below +0, the earlier position on a tie.
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
 - Example: `argmin<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[0, 0]`
+
+#### `argmin_axis`
+
+```camel
+argmin_axis: (t: T[..], axis: int, keepdims: bool) => int[..]
+```
+
+The position of the smallest element of each lane along one axis; a tie keeps the earlier
+position. An empty axis is a fault. The result's extents are the operand's, with that axis
+removed or kept.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element.
+- Example: `argmin_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[0, 0]`
+
+### The reductions with their extents stated
+
+#### `mean_axis_stated`
+
+```camel
+mean_axis_stated: (t: T[..], at: int[]) => T[..]
+```
+
+The mean of each lane along one axis, with the axis, `keepdims` and the operand's extents stated
+in one list: `[axis, keepdims, d0, ..., d(rank-1)]` is `mean_axis(t, axis, keepdims)`.
+
+The result is `mean_axis`'s at the extents `at` states: the operand's, with the axis at `at[0]`
+removed, or kept as an extent of one when `at[1]` is not zero. It is computed rather than
+declared because those extents follow from values, so a call that writes `at` states its own
+result -- `[0, 0, 4]` over a rank-1 operand is the element, not `float[..]` and a conversion --
+and a call whose list is a value of the run states the operand's element type at a rank nobody
+fixed.
+
+- Pure.
+- Failure: fault `RuntimeError` when the list is shorter than three entries, the extents disagree with the tensor's shape, or the axis is outside the rank.
+- Example: `mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0, 1, 2, 2])` gives `[[2.0, 3.0]]`
 
 #### `softmax`
 
@@ -2276,10 +2493,17 @@ that says neither is not a use of this operator.
 #### `show`
 
 ```camel
-show: (t: A[..]) => void
+show: (t: A[..]) => void when is_numeric::<A>() || is_same::<A, bool>()
 ```
 
 Prints t to the console, in the module's layout.
+
+The elements are the ones a tensor stores -- the numbers and the booleans (`x * s`, a bool's
+gradient and the widths the kernels carry are all read at those, modules/tensor/dtype.cpp
+`isSupportedTensorScalar`) -- and the parameter says so, so an element type no kernel can read
+is refused at the call and not left to the runtime. The parameter takes `A[..]`, which includes
+rank 0 (design principles 5.4), so the condition is what keeps a `string` from being read as one
+element of a rank-zero array.
 
 - With effects: writes the console.
 - Example: `show([[1.0, 2.0]] as float[1, 2])`
@@ -2331,6 +2555,136 @@ Writes a tensor to a NumPy `.npy` file, replacing it.
 - With effects: writes a file.
 - Failure: fault `RuntimeError` when the file cannot be written.
 - Example: `save_npy(zeros::<f32>([2, 2]), 'x.npy')`
+
+### The same operations, with the extents the reverse law needs
+
+A reduction and a gather both forget something a pullback has to put back: `sum` forgets how many
+elements it added, `take` forgets how many rows it read from, and `mean` over an axis forgets the
+lane. The reverse of each spreads one cotangent over *that* shape, and it cannot read the shape
+off the operand: a transpose rule may read only **known** operands (author, 2026-11-03 11:10 and
+17:35), and the operand a cotangent comes back through has no value on that side -- while `T[..]`
+carries no extents in its type (design principles 5.4).
+
+So the forward half states them, and these declarations are what it states them to. Each is the
+operation above it with one more operand, an `int[]` the value does not need and the reverse law
+reads instead of the array. `pick_at` is the same arrangement for the read: `at[1]` is the length
+`xs[i]` cannot state for itself.
+
+The extents travel in one list because that is the list the reverse law wants whole: the axis and
+the flag decide which extents are lanes and the extents decide where each lane's cotangent goes, so
+one argument holds the three facts the adjoint reads and the value spends on nothing. (The number
+of ordinary ports is not the constraint it once was: the walk used to refuse a third position before
+looking for a law, and `TransposeRefusalCause` no longer has that cause -- the two extrema below take
+a third port, their tie selection, which no extent list could carry.)
+
+#### `sum_stated`
+
+```camel
+sum_stated: (t: T[..], at: int[]) => T when is_numeric::<T>()
+```
+
+The sum of every element, with the operand's extents stated: `sum(t)`, and `at` is `shape(t)`.
+
+The extents are read by `rulesets.transpose`'s `sum_stated_t` and by nothing else -- the value is
+the sum, and the accumulation, the element type and the one rounding are `sum`'s own. A list that
+disagrees with the tensor's shape is a fault, because a spread over extents nobody verified is a
+gradient of the wrong shape.
+
+- Pure.
+- Failure: fault `RuntimeError` when `at` disagrees with the tensor's shape.
+- Example: `sum_stated([1.0, 2.0, 3.0] as float[], [3])` gives `6.0`
+
+#### `take_stated`
+
+```camel
+take_stated: (t: T[..], at: int[]) => T[..] when is_numeric::<T>()
+```
+
+The rows `take` reads, with the indices and the operand's extents stated in one list:
+`[n, i0, ..., i(n-1), d0, ..., d(rank-1)]` is `take(t, [i0, ..., i(n-1)])`.
+
+The value is that take; the leading count splits the list, so the indices are the `n` entries
+after it and the extents are everything after them. `rulesets.transpose`'s `take_stated_t` reads
+the extents to build the array the scatter-add writes into, which is the operand's shape and
+therefore has to come from a known operand.
+disagree with the tensor's shape, or an index is outside the first dimension
+
+- Pure.
+- Failure: fault `RuntimeError` when the list's first entry is not its index count, the extents.
+- Example: `take_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1, 1, 2, 2])` gives `[[3.0, 4.0]]`
+
+#### `sum_axis_stated`
+
+```camel
+sum_axis_stated: (t: T[..], at: int[]) => T[..] when is_numeric::<T>()
+```
+
+The sum of each lane along one axis, with the axis, `keepdims` and the operand's extents stated in
+one list: `[axis, keepdims, d0, ..., d(rank-1)]` is `sum_axis(t, axis, keepdims)`.
+
+The value needs the axis and the flag -- `k::reduceAxis` is the kernel the axis form runs, so the
+accumulation in `f64`, the element type and the one rounding are the definition's own -- and the
+extents after the two scalars are checked against the tensor's shape. `rulesets.transpose`'s
+`sum_axis_stated_t` reads the list and nothing of the operand: the adjoint of a lane sum spreads
+each lane's cotangent back over the lane, which is a shape of the primal. A negative axis counts
+from the last one, as it does in the axis form: the reduction normalizes it on entry and this
+spelling hands it over unchanged.
+
+- Pure.
+- Failure: fault `RuntimeError` when the list is shorter than three entries, the extents disagree with the tensor's shape, or the axis is outside the rank.
+- Example: `sum_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0, 0, 2, 2])` gives `[4.0, 6.0]`
+
+#### `mean_stated`
+
+```camel
+mean_stated: (t: T[..], at: int[]) => T when is_numeric::<T>()
+```
+
+The mean of every element, with the operand's extents stated: `mean(t)`, and `at` is `shape(t)`.
+
+The value is the mean -- the sum and the division both in `f64`, rounded into the element type
+once, which is `mean`'s own definition -- and the extents are what its adjoint needs: the reverse
+law (`rulesets.transpose`'s `mean_stated_t`) divides the cotangent by the number of elements and
+spreads it over those extents, and neither number is in the cotangent's type.
+
+- Pure.
+- Failure: fault `RuntimeError` when `at` disagrees with the tensor's shape, or the tensor has no element.
+- Example: `mean_stated([1.0, 2.0, 3.0, 4.0] as float[], [4])` gives `2.5`
+
+#### `max_axis_stated`
+
+```camel
+max_axis_stated: (t: T[..], mask: bool[..], at: int[]) => T[..] when is_numeric::<T>()
+```
+
+The largest element of each lane along one axis, with the tie selection, the axis, `keepdims` and
+the operand's extents stated: `max_axis(t, axis, keepdims)`, `at` is `[axis, keepdims, d0, ..., d(rank-1)]`
+and `mask` holds `true` at every position that holds its lane's largest element.
+
+The mask is what an extremum's adjoint needs and what the extents cannot rebuild: an extremum
+gives the whole cotangent to **every** position that holds it (a tie is not shared out), and which
+positions those are is a fact of the values. Both the mask and `at` are read by
+`rulesets.transpose`'s `max_axis_stated_t` and by nothing else -- the value is the axis form's own
+reduction -- so a mask of another shape is answered where it is used: the reverse law's `where`
+broadcasts it against the extents `at` states.
+
+- Pure.
+- Failure: fault `RuntimeError` when `at` is shorter than three entries, its extents disagree with the tensor's shape, or the axis is outside the rank.
+- Example: `max_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[false, true], [false, true]] as bool[2, 2], [1, 0, 2, 2])` gives `[2.0, 4.0]`
+
+#### `min_axis_stated`
+
+```camel
+min_axis_stated: (t: T[..], mask: bool[..], at: int[]) => T[..] when is_numeric::<T>()
+```
+
+The smallest element of each lane along one axis, with the tie selection, the axis, `keepdims` and
+the operand's extents stated: `min_axis(t, axis, keepdims)`, laid out exactly as
+`max_axis_stated` is.
+
+- Pure.
+- Failure: fault `RuntimeError` when `at` is shorter than three entries, its extents disagree with the tensor's shape, or the axis is outside the rank.
+- Example: `min_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[true, false], [true, false]] as bool[2, 2], [1, 0, 2, 2])` gives `[1.0, 3.0]`
 
 ### Module state
 
@@ -2407,88 +2761,55 @@ CBLAS, otherwise the canonical kernel's name, which is what the path forwards to
 - Pure.
 - Example: `gemm_library()`
 
-### The reductions along an axis, named by the function
+### The reductions along an axis, computed rather than declared
 
-A declaration names `tensor:<function>`, so `sum_axis` below is the operator `tensor:sum_axis`
--- the same naming `shape` and `numel` use, and the one the ONNX lowering table and the
-semantics declarations are keyed on. `stdlib/array.cml` imports these instead of declaring a
-second spelling of each.
+`sum_axis`, `mean_axis`, `min_axis`, `max_axis`, `argmax_axis` and `argmin_axis` are the
+operators `tensor:sum_axis` and its five siblings (the same naming `shape` and `numel` use, and
+the one the ONNX lowering table and the semantics declarations are keyed on), and they are not
+declared here: their **result type** is not a signature a declaration can state. The extents of
+an axis reduction are the operand's extents with one axis removed -- or kept as an extent of one
+-- so they follow from the operand's type *and* from the value of `axis` and of `keepdims`, and
+a declaration's result is a type, not a function of two values. Written here as a declaration
+the name answered `T[..]`, which is a result that states no extent at all; the operator's own
+inference computes the extents (`modules/tensor/ops/reduction_ops.cpp#reduceAxisInfer`, through
+`support.cpp#reduceShape`), and a program that writes `mean_axis(x, 0, false)` now reads a
+`float[3]` where it used to read a `float[..]`.
 
-#### `sum_axis`
+The one thing that stays unknown is what the axis and the flag really are: `mean_axis_stated`
+takes them inside a runtime integer list, so no call site states the rank, and its result is
+`T[..]` and honestly so. That is why it is still declared above and these six are not.
 
-```camel
-sum_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
-```
+`stdlib/signatures/tensor.cml` records the six computed signatures; `stdlib/array.cml` imports
+the names instead of declaring a second spelling of each.
 
-The sum of each lane along one axis, accumulated in `f64` from `+0` in ascending order and
-rounded once into the element type. `keepdims` leaves the reduced axis as an extent of one.
-
-- Pure.
-- Example: `sum_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[4.0, 6.0]`
-
-#### `mean_axis`
-
-```camel
-mean_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
-```
-
-The mean of each lane along one axis: the sum and the count both in `f64`, one rounding into
-the element type. An empty axis is a fault.
-
-- Pure.
-- Failure: fault `InvalidArgument` when the axis has no element.
-- Example: `mean_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[2.0, 3.0]`
-
-#### `min_axis`
+#### `sum_to`
 
 ```camel
-min_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
+sum_to: (t: T[..], like: S) => S when is_float::<T>()
 ```
 
-The smallest element of each lane along one axis. An empty axis is a fault: a minimum over no
-element has no identity to return.
+`t` read at the shape `like` states, which is the shape of the answer. Two shapes that are
+equal give `t` unchanged, and `like` of rank 0 -- which `T[..]` includes, a rank-zero array being
+that element and nothing else (design principles 5.4) -- gives the total sum as that element.
+
+It is the adjoint of broadcasting read off the shape, and the adjoint runs both ways. Along the
+lanes `like` is lower in, what a broadcast handed out is added back up into one element each, in
+`f64`, rounded once into the element type. Along the lanes `like` is *higher* in, `t` has none of
+its own and there is nothing to add back: `t` is spread out over them, every element of the
+answer being the element of `t` its index came from -- the same law read the other way, and the
+direction is decided by the two ranks (`modules/tensor/kernels/gradient.cpp#sumTo`). A rank-zero
+`t` is the element itself (5.4), so it spreads as that value: `sum_to(6.0, xs)` with
+`xs: float[] = [1.0, 2.0, 3.0]` is `[6.0, 6.0, 6.0]`. A `like` the shape of `t` cannot reach at
+all (`[2, 3]` against `[4]`) is a fault, not a number.
+
+The differentiation rules use it for the reduction (`rulesets.transpose`, where an operand of a
+broadcast product answers `sum_to_stated(ct * other, shape(operand))`: this function with the
+extents the law's own port states, because a transposition has the operand's shape and not its
+value), and its own VJP broadcasts back (`modules/tensor/ops/gradient_ops.cpp`).
 
 - Pure.
-- Failure: fault `InvalidArgument` when the axis has no element.
-- Example: `min_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[1.0, 2.0]`
-
-#### `max_axis`
-
-```camel
-max_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
-```
-
-The largest element of each lane along one axis. An empty axis is a fault, as for `min_axis`.
-
-- Pure.
-- Failure: fault `InvalidArgument` when the axis has no element.
-- Example: `max_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[3.0, 4.0]`
-
-#### `argmax_axis`
-
-```camel
-argmax_axis: (xs: T[..], axis: int, keepdims: bool) => int[] when is_numeric::<T>()
-```
-
-The position of the largest element of each lane along one axis, an `int` index along that
-axis. A tie keeps the earlier position. An empty axis is a fault.
-
-- Pure.
-- Failure: fault `InvalidArgument` when the axis has no element.
-- Example: `argmax_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[1, 1]`
-
-#### `argmin_axis`
-
-```camel
-argmin_axis: (xs: T[..], axis: int, keepdims: bool) => int[] when is_numeric::<T>()
-```
-
-The position of the smallest element of each lane along one axis; a tie keeps the earlier
-position. An empty axis is a fault.
-
-- Pure.
-- Failure: fault `InvalidArgument` when the axis has no element.
-- Example: `argmin_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[0, 0]`
+- Example: `sum_to([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 1.0)` gives `10.0`
+- Example: `sum_to([1.0, 2.0, 3.0] as float[], [0.0, 0.0, 0.0] as float[])` gives `[1.0, 2.0, 3.0]`
 
 <a id="types"></a>
 
@@ -5348,6 +5669,24 @@ pass may drop, move or merge away, whatever the purity of its operator.
 - Example (a fragment, not compiled): `may_fault(n)`
 - Why it is not compiled: n is a node of the surrounding pass
 
+#### `may_be_rearranged`
+
+```camel
+may_be_rearranged: (n: Node) => bool
+```
+
+Whether a pass may arrange the node anywhere: drop it, move it, merge it with an identical
+call, or leave it with no order edge after an inline. The node must be pure *and* unable to
+fault (design principles 3.4); a pure operator that must run where the program writes it, one
+that may fault, one nobody declared, a call, a loop or a gate are not free. This is the one
+predicate behind that question on both sides of the boundary: `graph::may_be_rearranged`
+(camel/runtime/graph.h) is its implementation, the C++ passes read it under its older name
+`nodeIsFreelySchedulable`, and a pass written in Camel reads this name. Ask it rather than
+writing `is_pure(n) && may_be_recomputed(n) && !may_fault(n)`: the two writings drift apart.
+
+- Example (a fragment, not compiled): `may_be_rearranged(n)`
+- Why it is not compiled: n is a node of the surrounding pass
+
 #### `is_anchor`
 
 ```camel
@@ -5459,8 +5798,7 @@ function, in the order of their names; empty for a graph that is no declaration 
 for a declaration that writes none. The declaration's facts travel with the graph, so a pass
 reads them without the module that declares the function.
 
-- Example (a fragment, not compiled): `declaration_tags(graph_of(f))`
-- Why it is not compiled: pass is the surrounding pass and f the function it received
+- Example: `declaration_tags(graph_of((x: int): int => x + 1))`
 
 #### `tag_name`
 
@@ -5496,8 +5834,7 @@ The rule the declaration of `g` writes for the transformation `name`: `jvp` is f
 Null when the declaration writes none, when it writes that tag twice, and when what the tag
 names is not a function. The name is the one the program writes, or its qualified spelling.
 
-- Example (a fragment, not compiled): `rule_of(graph_of(f), 'vjp')`
-- Why it is not compiled: pass is the surrounding pass and f the function it received
+- Example: `rule_of(graph_of((x: int): int => x + 1), 'vjp')`
 
 #### `origin`
 
@@ -5683,8 +6020,7 @@ holds it. The value is a number, a bool or a string; a string is copied into the
 space because a value a transaction creates may be live at a safepoint where its draft is not
 traced.
 
-- Example (a fragment, not compiled): `add_constant(t, g, 7)`
-- Why it is not compiled: t is an open transaction and g a graph of it
+- Example: `add_constant(open((x: int): int => x + 1), graph_of((x: int): int => x + 1), 7)`
 
 #### `commit`
 
@@ -5696,8 +6032,7 @@ Checks the edits and makes the changed function: the same type as the one that w
 the values it captured, sharing every graph nothing changed. The transaction is over.
 
 - Failure: error value `GraphConflict` when a graph the transaction touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant (the message names the graph, the node and the edge); error value `TxnUsed` when the transaction was over already.
-- Example (a fragment, not compiled): `commit(t)`
-- Why it is not compiled: t is an open transaction
+- Example: `commit(open((x: int): int => x + 1))`
 
 #### `abort`
 
@@ -5707,8 +6042,7 @@ abort: (t: Txn<F>) => void uses t
 
 Drops the transaction.
 
-- Example (a fragment, not compiled): `abort(t)`
-- Why it is not compiled: t is an open transaction
+- Example: `abort(open((x: int): int => x + 1))`
 
 <a id="rewrite"></a>
 
@@ -5818,8 +6152,8 @@ either, because a `with` parameter without a default may not follow one that has
 `void`, and `F?` leaves `F` unbound). Written first, it is the argument the arrow carries:
 `rules->check<8, 1>(f)`.
 
-- Example (a fragment, not compiled): `rules->check(f)`
-- Why it is not compiled: `rules` and `f` come from the caller
+- Example (a fragment, not compiled): `rules->check((x: int) => x + 1)`
+- Why it is not compiled: `rules` comes from the caller
 
 #### `check_text`
 
@@ -7048,6 +7382,35 @@ The forward rule of `/` on two 64-bit floats.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `div_jvp(6.0, 2.0, (1.0, 0.25))` gives `(3.0, 0.125)`
 
+### The forward rule of `^` (a power)
+
+#### `pow_tangent`
+
+```camel
+pow_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+```
+
+The tangent of `x ^ w` along `(dx, dw)`: `w * x^(w-1) * dx + x^w * log(x) * dw`.
+
+The two terms answer two different questions, and keeping them apart is what makes the negative
+base honest. The first term is the derivative with respect to the **base**, and it is defined
+wherever `x ^ w` is. The second is the derivative with respect to the **exponent**, and it is
+`x^w * log(x)`: for `x <= 0` that has no real value, because a real power of a negative number
+exists only for integer exponents and has no derivative in the exponent there.
+
+So the second term is computed only where it contributes. A tangent is a number, and a constant
+exponent's tangent is a zero constant (`jvp.cpp`'s `zeroConstantFor`: "the tangent a constant
+gets: the zero of the value's own type"), so `dw = 0` is a *zero* tangent, not a missing one --
+and the product it multiplies is exactly zero. Multiplying that zero by `log(x)` in floating
+point is not zero, it is `NaN` (the log of a negative number), which would turn an ordinary
+`(-3.0) ^ 2.0` into `NaN` for a term that is arithmetically nothing. The zero is therefore taken
+where it is, and where `dw` is not zero the log is asked for and left to answer `NaN`: an
+undefined derivative says so, and is not written as a zero.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `pow_tangent(3.0, 2.0, 1.0, 0.0)` gives `6.0`
+- Example: `pow_tangent(-3.0, 2.0, 1.0, 0.0)` gives `-6.0`
+
 <a id="rulesets.vmap"></a>
 
 ## `rulesets.vmap`: how a batched transform lifts a value
@@ -7654,7 +8017,6 @@ one that runtime has (`'none'` switches the check off).
 
 - With effects: writes a file and reads the function's graph.
 - Failure: error value `ExportUnsupported` when `fn` is not a function, when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node; error value `IOError` when the model cannot be written.
-- Example (a fragment, not compiled): `export_model<out: "/tmp/model.onnx">(fn, example)`
-- Example (a fragment, not compiled): `export_model<out: "/tmp/model.onnx", dynamic_axes: [0]>(fn, example)`
-- Example (a fragment, not compiled): `export_model<out: "/tmp/model.onnx", target: "onnxruntime-cpu">(fn, example)`
-- Why it is not compiled: the call needs a function value and an example of the arguments that function takes, which the description introduces (the exporter reads the function's graph, so no value a fragment can write stands for it)
+- Example: `export_model<out: "/tmp/model.onnx">((x: float) => x * 2.0, 2.0)`
+- Example: `export_model<out: "/tmp/model.onnx", dynamic_axes: [0]>((xs: f32[2, 3]) => xs[0][0], [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])`
+- Example: `export_model<out: "/tmp/model.onnx", target: "onnxruntime-cpu">((x: float) => x * 2.0, 2.0)`

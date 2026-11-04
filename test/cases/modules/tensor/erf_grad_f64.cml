@@ -1,0 +1,38 @@
+/**
+ * `erf`'s gradient on an `f64[..]` input, element by element, beside the value it is the derivative
+ * of.
+ *
+ * erf'(v) = 2 / sqrt(pi) * exp(-v^2), and the three numbers below are what a central difference of
+ * the printed forward agrees with, (f(x + h) - f(x - h)) / 2h at h = 1e-3:
+ * [0.41510764, 1.1283788, 0.41510764], within 3.8e-7 of them (the h^2 term of a Gaussian's second
+ * difference).
+ *
+ * What this case read before the operator was fixed: the kernel wrote its answer at f32 whatever its
+ * input's element type was, while the operator's declared result is the arguments' own element type
+ * (gradient_ops.cpp, `gradientLikeTyped`). On an `f64[..]` input the value was a 12-byte f32 array
+ * behind an `f64[..]` type, so each element read back was an f32 answer's bits in the low half of a
+ * double: [0.0, 5.098027537e-315, 0.0] at x = [-1.0, 0.0, 1.0] -- zero where the answer was zero
+ * and a 1e-314-scale denormal where it was not, and the reading moved when the input moved. Nothing
+ * refused it and nothing was uninitialized: the storage was too narrow for the number of elements
+ * the type promised.
+ *
+ * The f32 line is the same gradient at f32's width and must keep its numbers.
+ */
+
+import { erf, sum } from tensor
+import { grad } from autodiff
+
+with <x: f64[..]>
+func loss64(): float { return float(sum(erf(x))) }
+
+with <x: f32[..]>
+func loss32(): float { return float(sum(erf(x))) }
+
+func main(): int sync {
+    let x = [-1.0, 0.0, 1.0] as f64[]
+    println('erf_grad_f64 forward={}'->format<erf(x)>)
+    println('erf_grad_f64 grad={}'->format<grad(loss64)<x>()>)
+    let y = [-1.0, 0.0, 1.0] as f32[]
+    println('erf_grad_f32 grad={}'->format<grad(loss32)<y>()>)
+    return 0
+}

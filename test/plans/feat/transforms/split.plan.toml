@@ -36,13 +36,13 @@
 # so there is nothing for a gate to ask.
 [[tests]]
 name = "split_forward_half"
-desc = "The forward half of split(reinterp<jvp>(g)) for g(x) = x*x at x = 3, under the closure ABI (2026-11-02): it computes what the present inputs allow and hands the linear map back closed over the residuals it carried, so the map takes the tangent direction alone. Reads `forward y= 9` and `tangent dx1= 6`; `residuals=2` is the graph's count -- the pair the body computes, plus the parameter's value port, which crosses now that the tangent side reads its tangent, and the members are the graph's answer, not a signature's, which is why no value and no type carries them."
+desc = "The forward half of split(reinterp<jvp>(g)) for g(x) = x*x at x = 3, under the closure ABI (2026-11-02): it computes what the present inputs allow and hands the linear map back closed over the residuals it carried, so the map takes the tangent direction alone. Reads `forward y= 9` and `tangent dx1= 6`; `residuals=1` is the graph's count -- the value `x`, which is the only thing the backward half reads: the tangent side reads the parameter's **tangent** through its own port (that port crosses as nothing), and the value `x` is read by the rule twice and crosses once. The members are the graph's answer, not a signature's, which is why no value and no type carries them."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_forward_half.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_output_contains = ["forward y= 9", "tangent dx1= 6", "residuals=2"]
+expect_output_contains = ["forward y= 9", "tangent dx1= 6", "residuals=1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -71,19 +71,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 [[tests]]
 name = "split_two_params"
-desc = "The reading program the author named for this tier (f(x, y) = x*x*y at x = 3, y = 2), read at both ends of the composition. The lift takes the four numbers (x, dx, y, dy) and answers the value 18.0 with the derivative in the direction the caller seeded: 12.0 for (1, 0) and 9.0 for (0, 1), which is 2xy and x^2. `split` of that lift cuts at the pair, and what crosses the cut is read off the graph: **five** residuals -- `x`, `y`, `x*x`, the product the backward half's rule for the second `mul` reads, and the two parameters' value ports, which cross because the tangent side reads their tangents -- so the forward half answers a five-member tuple and the backward half turns (1, 0) into 12.0 and (0, 1) into 9.0 without computing that product again. The diagnostic reads `residuals=5` and the forward half's type is `(float, float) => (float, (float, float, float, float, float))`: the arity is the graph's, not the signature's."
+desc = "The reading program the author named for this tier (f(x, y) = x*x*y at x = 3, y = 2), read at both ends of the composition. The lift takes the four numbers (x, dx, y, dy) and answers the value 18.0 with the derivative in the direction the caller seeded: 12.0 for (1, 0) and 9.0 for (0, 1), which is 2xy and x^2. `split` of that lift cuts at the pair, and what crosses the cut is read off the graph: **three** residuals -- `x`, `y`, and `x*x`, the product the backward half's rule for the second `mul` reads -- so the forward half answers a three-member tuple and the backward half turns (1, 0) into 12.0 and (0, 1) into 9.0 without computing that product again. The two parameters' **tangents** cross as nothing: each half reads the component it keeps through its own port, and what a port contributes to the packet is the value port of its own parameter, which here is `x` and `y` themselves -- already members, so the list does not grow. The diagnostic reads `residuals=3`."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_two_params.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_output_contains = ["value= 18.0", "dfdx= 12.0", "dfdy= 9.0", "forward y= 18.0", "lin dx= 12.0", "lin dy= 9.0", "type=(float, float) => (float, (float, float) => float pure) pure residuals=5"]
+expect_output_contains = ["value= 18.0", "dfdx= 12.0", "dfdy= 9.0", "forward y= 18.0", "lin dx= 12.0", "lin dy= 9.0", "type=(float, float) => (float, (float, float) => float pure) pure residuals=3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
 name = "residuals_in_the_closure"
-desc = "The transposed linear half, reading the cut's residuals out of the closure (2026-11-02). `lin` is the backward graph closed over the five values the cut carried, so `transpose(lin)` declares one **capture port** per residual, in the closure's order, and gets them because `transpose(f)` keeps `f`'s closure. The two leading arguments are the tangent values the type law still asks for (`Transpose<F>` is unchanged by this step) and they are passed as **zeros on purpose**: a coefficient read from a parameter would be 0 and the answer would be (0, 0). It is (12, 9) -- 2xy and x^2 for f(x, y) = x*x*y at x = 3, y = 2 -- which says the values came out of the closure and out of nowhere else. The counts are read too: the transposed graph is `(float, float, float) => (float, float)` (two tangents, the cotangent, two cotangents out), and the `mul_tangent` call inside it is transposed as the linear map it is (`(float, float, float) => (float, float)`), which is the participating set the arm path always built and the straight-line body now builds as well."
+desc = "The transposed linear half, reading the cut's residuals out of the closure (2026-11-02). `lin` is the backward graph closed over the three values the cut carried (`x`, `y` and `x*x`), so `transpose(lin)` declares one **capture port** per residual, in the closure's order, and gets them because `transpose(f)` keeps `f`'s closure. The answer is (12, 9) -- 2xy and x^2 for f(x, y) = x*x*y at x = 3, y = 2 -- which says the values came out of the closure and out of nowhere else: the call passes the cotangent and nothing else. The counts are read too. Since the ruling of 2026-11-03 00:50 ① the closure carries two more members after the residuals, `x` and `y` themselves, and a transposed graph answers a parameter's value from that tail instead of being handed it as an argument; so the transposed graph is `(float) => (float, float)` -- the cotangent in, two cotangents out, and no tangent value ahead of it -- which is the reading the two zeros used to stand for and the count this entry pins. The `mul_tangent` call inside it is still transposed as the linear map it is (`(float, float, float) => (float, float)`), which is the participating set the arm path always built and the straight-line body now builds as well."
 kind = "behavior"
 case = "../../../cases/transforms/transpose/residuals_in_the_closure.cml"
 args = ["${case}", "std::nvm"]
@@ -94,13 +94,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 [[tests]]
 name = "split_product_chain"
-desc = "A chain of multiplies, both ends of the composition: `f3(x) = x*x*x` and `f4(x) = x*x*x*x` at x = 2. The derivatives are the analytic ones read through the backward half -- 12 = 3x^2 and 32 = 4x^3 -- and the cut carries 3 residuals for the cubic and 4 for the quartic (`x`, `x*x`; plus `x*x*x`; plus the parameter's value port, which crosses because the tangent side reads its tangent). The forward half's type reads `(float) => (float, (float, float, float))` and `(float) => (float, (float, float, float, float))` -- the arity the graph gave it."
+desc = "A chain of multiplies, both ends of the composition: `f3(x) = x*x*x` and `f4(x) = x*x*x*x` at x = 2. The derivatives are the analytic ones read through the backward half -- 12 = 3x^2 and 32 = 4x^3 -- and the cut carries 2 residuals for the cubic and 3 for the quartic (`x`, `x*x`; plus `x*x*x`): one more product per factor, and the parameter's own value port is `x`, already the first member, so nothing is carried twice."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_product_chain.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
-expect_output_contains = ["cubic y= 8.0", "cubic dx1= 12.0", "quartic y= 16.0", "quartic dx1= 32.0", "type=(float) => (float, (float) => float pure) pure residuals=3", "type=(float) => (float, (float) => float pure) pure residuals=4", "REINTERP split function=jvp_of_cubic", "REINTERP split function=jvp_of_quartic"]
+expect_output_contains = ["cubic y= 8.0", "cubic dx1= 12.0", "quartic y= 16.0", "quartic dx1= 32.0", "type=(float) => (float, (float) => float pure) pure residuals=2", "type=(float) => (float, (float) => float pure) pure residuals=3", "REINTERP split function=jvp_of_cubic", "REINTERP split function=jvp_of_quartic"]
+# Why these two counts moved (2026-11-04): the list used to hold `x` twice -- once because the result
+# side reaches it, once because the tangent side reads the tangent -- and the second copy came from the
+# same branch that could carry a **tangent** port as if it were a computed value. That branch now leaves
+# ports to the port branch, which keeps one member per value (`Carry each residual once`), so the counts
+# are the plan's own header numbers: 1 for `x*x`, 3 for `x*x*y`, 2 and 3 for the chain.
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -152,7 +157,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=split_of_jvp_of_f_backward arm-call region=1 node=7 callee=autodiff::mul_tangent<float> args=4 tangent-args=2", "TRANSPOSE function=autodiff::mul_tangent<float>", "type=(float, float, float) => (float, float)", "author vjp value=4.0 dfdx=4.0", "author vjp value=-6.0 dfdx=3.0"]
+expect_output_contains = ["TRANSPOSE function=split_of_jvp_of_f_backward arm-call region=1 node=6 callee=autodiff::mul_tangent<float> args=4 tangent-args=2", "TRANSPOSE function=autodiff::mul_tangent<float>", "type=(float, float, float) => (float, float)", "author vjp value=4.0 dfdx=4.0", "author vjp value=-6.0 dfdx=3.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -165,5 +170,159 @@ args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
 expect_output_contains = ["identity y= 3", "identity dx1= 1", "type=(float) => (float, (float) => float pure) pure residuals=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "split_loop_taped_rounds"
+desc = "`split` through a loop: the exit of a lifted loop is the LOOP node itself (its two value components *are* the pair), so the cut gives the forward loop one collection slot -- one tuple per round holding what the backward half reads from that round -- and `lin` loops over that tape. The round's factor changes (2, 3, 5), so the primal 30 and the tangent 30 are the per-round tape's doing: a tape that kept only the last round's residuals would print 125 for `lin(1.0)`. The diagnostic pins the shape -- `loop=1 tape=2 invariants=0`, one collection slot and two residuals per round (the round's element and the state's value) -- and `residuals=1` says the tape crosses the cut inside `lin`'s closure like every other residual. What this entry cannot pin is the order the rounds are walked in: with one float state the per-round maps are scalars 2, 3, 5, they commute, and every walk order prints the same 30. No loop in this tree can pin the order, and that is the lift rather than this cut: `jvp` pairs a floating scalar and nothing else (`pairTypeOf`, jvp.cpp:59-72), so a loop state can only be a float, and one float's per-round maps are scalars that commute. The construct that would break the tie -- one state holding a 2x2 matrix, round maps Mk = [[1, k], [k*k, 1]] -- runs as a primal and is refused by the lift with `REINTERP jvp function=f skip=body` (jvp.cpp:995), before `split` sees it; the case records that verbatim, so the next reader measures it instead of rebuilding the probe. The reverse walk itself is `transpose`'s (4.3), and `transpose` still copies a loop's range as it stands; named in the case, not hidden."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_loop_taped_rounds.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["loop y= 30.0", "loop d= 30.0", "type=(float) => (float, (float) => float pure) pure residuals=1 loop=1 tape=2 invariants=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The same loop, read *into*: `g(s) = (loop x = s ...)[1]`. The exit is then not the LOOP cell but a
+# tuple fill whose two members are one component of the loop read through a projection, so the cut has
+# to reach the cell through the chain the exit reads. It does that by seeding the two projections --
+# each half gets its own value for the component it reads -- and copying the chain above the loop into
+# that half; no body region is copied, which is what the old refusal (`the half would have to copy a
+# body region`) said it would have to do. The numbers are row 1 of `M = M_10 * M_1 = [[1,1],[10,11]]`:
+# the value at (1, 2) is 32, and the linearization answers 10 for the seed (1, 0) and 11 for (0, 1).
+# A half that answered the whole state instead of the projection would print a pair, so the three
+# numbers check that the chain is on both sides of the cut and not only on one.
+[[tests]]
+name = "split_loop_value_projected"
+desc = "`split` through a loop whose value the exit reads *into* (`g(s) = (loop ...)[1]`): the loop cell is one node inside the chain the exit reads, not the exit, so the cut seeds the cell's two `TupleIndex` projections and copies the chain above it into each half -- the forward half's answers the projection's value, `lin`'s answers its tangent. Nothing of the body region is copied. The numbers are row 1 of `M = M_10 * M_1 = [[1,1],[10,11]]` on `s = (1, 2)`: 32 for the value, 10 for the tangent along (1, 0) and 11 along (0, 1) -- three numbers that separate a half answering the projection from one answering the state whole (`(3, 32)`), and a chain copied on one side of the cut from a chain copied on both. What this case does not reach is the pullback: `transpose` refuses one step later, at the call above the loop, so `vjp_loop.rounds_are_undone_in_reverse` stays marked." 
+kind = "behavior"
+case = "../../../cases/transforms/split/split_loop_value_projected.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["proj y= 32.0", "proj d1= 10.0", "proj d2= 11.0", "loop=1 tape=5 invariants=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# What a **struct** is to the cut: a struct is a port like any other -- `Tangent<Point>` is the struct
+# of the members' tangents, so the two halves take one `Point` each and the halving of the lifted
+# signature is right -- and a struct field read is a read by **name**, which the two halves carry by
+# name as well (the copy keeps `GCAccsKind::StructKey` and writes `addAccsNode(type, key)`).
+#
+# That second shape used to be lost rather than carried: the copy of an `Accs` node wrote a
+# `TupleIndex` from the payload's `value` and dropped the key, so at run time a `Struct` was indexed
+# as a `Tuple` and the VM stopped at `idx < t->size()` ("Tuple index out of bounds", nodevm.cpp).
+# `jvp` alone answers 11.0 and 4.0 on that program, so the lift was never the defect.
+[[tests]]
+name = "split_struct_port"
+desc = "A struct parameter the body only **passes** (`g(qq: Point) = qq`): the forward half answers the struct it was handed and `lin` answers the struct of the direction's members, so the reading is `{ a: 2.0, b: 3.0 }` and `{ a: 1.0, b: 0.0 }`. `residuals=1` is the parameter's value crossing, which the tangent side needs because it reads the tangent beside it. This entry is the guard beside `split_struct_field_read`: a struct port is cut, and a cut that stopped taking one would fail here first."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_struct_port.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["forward y= { a: 2.0, b: 3.0 }", "lin dp= { a: 1.0, b: 0.0 }", "type=(Point) => (Point, (Point) => Point pure) pure residuals=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "split_struct_field_read"
+desc = "A struct parameter whose member the body **names** (`g(qq: Point) = qq.a * 4.0 + qq.b`), read by name through both halves: the copy of an `Accs` keeps the `GCAccsKind::StructKey` and the key, so the two halves project `a` and `b` of the same struct the source named. The reading is `forward y= 11.0` and `lin dp= 4.0` -- the two `jvp` alone answers on the same program, which is what says the cut carried the graph rather than reading another member: the cut's numbers are not the lift's by construction, they are the lift's because the same reads are copied. A member read as a *place* would misnumber a `Struct` and stop the VM at `idx < t->size()`; that is the reading this entry replaced, and it stays in the case file's header."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_struct_field_read.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["lift value= 11.0  tangent= 4.0", "forward y= 11.0", "lin dp= 4.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# A callee whose parameter has no tangent space, which is where the second half's **argument
+# arithmetic** was wrong rather than merely unsupported: `Tangent<int> = ()`, the lifted callee
+# declares `(int, float, (), float)`, its backward half declares one port (the float's tangent), and
+# the cut handed it the slot's `()` as well -- `Runtime indirect call norm-arity mismatch: caller
+# graph 'split_of_jvp_of_g_backward' ... has 2 args, target graph 'split_of_jvp_of_widen_backward'
+# has 1 norm ports`. The slot is now dropped by the callee's own signature (`tangentArgumentsOf`),
+# the same list `buildSplitGraph` numbers the backward ports from.
+[[tests]]
+name = "split_int_parameter_slot"
+desc = "`split` of a lift whose body calls a function with an `int` parameter (`widen(n: int, x: float)`), so the callee's lifted list has the `()` slot `Tangent<int> = ()` writes. The reading is the cut's own numbers -- 7.0 for `widen(2, 2) + 1.0` and 3.0 for its tangent -- and the backward half's type `((), float) => float`: the slot stays in the *type* (the halves keep their places position by position) and is not an argument anyone takes."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_int_parameter_slot.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["lift value= 7.0  tangent= 3.0", "g y= 7.0", "g d= 3.0", "type=(int, float) => (float, ((), float) => float pure) pure residuals=2"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# A cut of a cut. `split(jvp(f))` with `f` calling `g` and `g` calling `h`: the cut of `jvp_of_f`
+# answers f's call with the forward half of `jvp_of_g`, and the cut of that half answered g's call
+# with the forward half of `jvp_of_h` -- a pair of graphs the nested build *adopted* and therefore did
+# not own, so adopting only that build's program held one level of them and not two
+# (`runtimeTarget != nullptr`, "a direct call names a function whose graph is not in the program's
+# graph table"). `SplitGraph::nestedPrograms` is transitive now, and every program in it is adopted.
+# `split_call_one` is the same shape one level shallower.
+[[tests]]
+name = "split_two_nested_cuts"
+desc = "Two levels of nesting (`f` calls `g`, `g` calls `h`, `split(jvp(f))`): the cut of `jvp_of_f` names the forward half of `jvp_of_g`, and that half names the forward half of `jvp_of_h`, which the nested build only adopted -- so the outer build adopts the programs of both levels and the deeper call resolves. The numbers are `f(x) = 3·(2x + 1)` at x = 2 -- 15 -- and 6 in the direction 1.0, the ones the lift answers on the same program: a run that had lost the deeper pair would stop at the call, and one that recomputed it would print a different 6 only by luck, so both numbers are pinned. The two shallower cuts print their own lines above (`REINTERP split function=jvp_of_h forward=` and `jvp_of_g`), which is what shows the three cuts were built and in which order."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_two_nested_cuts.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["REINTERP split function=jvp_of_h forward=", "REINTERP split function=jvp_of_g forward=", "REINTERP split function=jvp_of_f forward=", "f y= 15.0", "f d= 6.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+
+# A value the differentiated lambda captured, of a tensor-shaped type: the cut had no reading for a
+# **closure** port, and the two roads it did have (an ordinary parameter, a `with` argument) are not
+# where a capture arrives. `jvp` declares a capture as a closure port of the lifted graph, `split`
+# listed its halves' ports from `normPorts` and from the call's `with` inputs, and the read was in
+# neither map -- the refusal both halves gave was `the port is not a parameter of the graph, so
+# neither half takes it`, measured on `vjp((ww) => dot<ww>(x))(w)` with `x` the capture, which is the
+# shape of item 3 of `2026-11-04-where-the-library-and-the-engine-still-differ.cn.md`.
+#
+# The forward half now declares one port per closure node of the source, in the source's order, and
+# takes the source's closure type when it states one (`addCapturePorts`): the operator already hands
+# the forward half `f`'s tuple (`splitKernel` creates the value with `function->tupleType()` and
+# copies every slot), so the port reads the caller's value and the call site fills it as it always
+# filled a closure -- the author's shape for a closure port (2026-11-04 02:50: 转发成成员自己的端口、
+# 调用点照常填). A capture the tangent side reads crosses the cut as a residual like a `with` port
+# (`residualsOf`), so the backward half reads it out of `lin`'s closure and declares nothing.
+[[tests]]
+name = "split_capture_of_a_tensor"
+desc = "`vjp` of a lambda whose body reads a captured tensor, `dot(w) = sum(w * x)`: the cut of the lifted lambda reads the capture through a closure port, which neither `normPorts` nor the call's `with` inputs named, so both halves refused the read (`skip=forward construct=a port uri=- why=the port is not a parameter of the graph, so neither half takes it`). The answer is the engine's number for the same derivative, computed by hand before the reading was taken: `sum([1,2,3] * [4,5,6]) = 32` with pullback `[4, 5, 6]`, and the same `w` against the capture `[-1, 2, 0.5]` giving `4.5` with pullback `[-1, 2, 0.5]` -- the second point is what separates a pullback that reads the capture from one that hands back a remembered array. The extent is stated (`f64[3]`): with an open extent the same cut answers and `transpose` refuses one step later (`skip=cotangent-needs-a-value uri=tensor:multiply`), which is the case's boundary and not its subject."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_capture_of_a_tensor.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout = "captured value=32.0 pullback=([4.0, 5.0, 6.0])\ncaptured value=4.5 pullback=([-1.0, 2.0, 0.5])\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The same question as `split_linear_in_dx`, asked where a *call* is on the path: `g(x) = f(x) * x`
+# with `f(x) = 2.0 * x`, so the tangent the cut carries is `mul_tangent(y, x, lin_f(dx), dx)` and
+# every one of those reads has to be a read of what `jvp` computed. Three directions at x = 3 are
+# 12, 6 and 24 -- and 36, 36, 36 is what a cut that carried the *seed* instead of the value port
+# answered before this case existed: the value half receives the tangent port as an ordinary
+# argument of the call to the lifted callee, and a residual list that took every node the result
+# side reaches as a computed value took the seed with it (modules/transforms/split.cpp#residualsOf).
+# `residuals=3` is the count the cut now names for this shape, and it is pinned because it is the
+# shape of the answer: x's value, the callee's `lin`, and f(x)'s value the rule reads.
+[[tests]]
+name = "split_linear_across_a_call"
+desc = "`lin` through a call: `g(x) = f(x) * x`, `f(x) = 2.0 * x`, so g = 2x² and the linear half is dx -> 4x·dx. At x = 3 the three directions read 12, 6 and 24 -- where the cut used to answer 36.0 for all three, because it carried g's tangent port as 'parameter 0's value' and the backward half read the closure slot holding x in place of its own port. The tangent `jvp` computes itself (12) agrees with the first direction, `twice_dx1` is the linearity statement, and `residuals=3` is the count this shape has."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_linear_across_a_call.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["value= 18.0  tangent= 12.0", "dx1= 12.0", "dx05= 6.0", "dx2= 24.0", "twice_dx1= true", "residuals=3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

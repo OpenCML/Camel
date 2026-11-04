@@ -46,6 +46,68 @@ A lane may be red; `develop` may not. When a lane's tip is red, take its **last 
 green** and say so in the merge message, so the red's cause lands with the next commit instead of
 sitting on `develop`.
 
+### A lane squashes its own wip before it merges
+
+The author's ruling of 2026-11-02 13:30, after a whole-lane merge carried a lane's work-in-progress
+states into `develop`'s history: **"add then take back" commits are squashed by the lane into one
+complete commit before the lane merges into `develop`; force-pushing one's own lane branch is
+allowed; the merging side does not squash for the lane.**
+
+The instance on record: `796f5ae07` ("The tangent bit exists but does not yet reach the resolver: the
+closed shape is asked for and never given") and `2850834ab` ("The closed half's type answers
+`(ct) => (cotangents)`: the marker split puts on `lin`, and the red it makes") were written as
+steps inside one piece of work, and both are now on `origin/develop` (and on `fsh-dev`,
+`lane-casemig`) because the lane handed over a history that still contained them. Neither is a state
+anyone would want to bisect to or revert to.
+
+Executable form, in this order:
+
+- The **lane**, before handing over: `git log --oneline origin/develop..HEAD` and read it as a
+  history, not as a to-do list. A commit whose message describes the state *between* two finished
+  ones ("does not yet reach", "still red", "wip", "try"), or whose successor reverts part of it, is
+  folded into the commit it belongs to (`git rebase -i origin/develop`, `git reset --soft` to the
+  base, then commit once) and the lane is pushed again with
+  `git push --force-with-lease origin lane-xxx`.
+- The **merging side**, before merging: the same `git log --oneline origin/develop..origin/lane-xxx`
+  goes into the merge message, one line per commit. If a wip pair is still there, the lane is
+  returned to its owner to squash. The merger does not squash it: rewriting a lane's history is the
+  owner's act, and a merger that does it silently leaves the owner's branch and `develop` disagreeing
+  about the same work.
+
+The rule does not license rewriting history that is already on `develop`. It is about the state of
+the lane **before** the door.
+
+### A reading carries the tree, the sha, the build time and the clock
+
+A number in a report is only a number until the four facts around it are written down: **which tree**
+it was measured in (a worktree path, not "the repo"), **the sha `origin/develop` was at when it was
+fetched** (not the sha someone quoted an hour earlier), **when the binary that produced it was
+built** (the runner prints it as `binary built <timestamp>`), and **when the measurement was taken**.
+
+The instance on record: a page was priced against `95d6ab4fc` while `origin/develop` had already
+moved to `8529eb9c4`, so the "current" figure was two merges old and nobody could tell from the page
+itself. `git rev-parse --short origin/develop` **after** the fetch, pasted next to the number, is
+what settles it.
+
+### A lane's reading is not develop's number
+
+The same numbers measured on a lane tree and written as `develop`'s are wrong for every reader who
+arrives after the next merge, and they are wrong silently, because the shape of the number is
+unchanged. A lane that quotes line counts, test totals, timings or file lists says **which tree** it
+read them in; a page that needs a `develop` figure measures it on `develop` (`git show
+<develop-sha>:<path> | wc -l`, not a file in the lane's working directory) or states the lane and the
+merge base it belongs to.
+
+The instance on record: the closure page
+`docs/handover/reviews/questions-2026-11-01-closures-as-values-block-the-transposed-backward-half.md`
+carried six line counts measured in a lane tree and read as `develop`'s; they were off by up to 34
+lines, and one path named a file by a name two files share. The first repair put the sha and the
+command beside the numbers, and the author rejected that on 2026-11-02 05:30: **a design page or a
+handover page states rules and reasons, and a reading that moves with the code belongs in the commit
+message of the change that took it.** A sha and a command do not make such a number durable -- they
+only make a wrong number look checked. The page now states no counts at all and points at those
+commit messages.
+
 ### "Green" is only green on today's `develop`
 
 A lane that reports a green suite reports it about **the `develop` it last merged in**. Five times in
@@ -212,3 +274,14 @@ that says "only my content is in it" is the **two-dot** diff, `git diff <base>..
   lands; the base's newer files are untouched because they were never in your paths.
 - **Force-push a shared lane with `--force-with-lease` only.** Another lane may have written to it, and
   the lease is what turns "I am replacing what I saw" into a refusal when that is no longer true.
+
+## The Main Checkout Is A Read-Only Coordination Surface
+The checkout at the repository root is where merges are inspected and where a reader looks; it is not
+anyone's work tree. Before a lane starts work, `git -C <main checkout> rev-parse --abbrev-ref HEAD` must
+answer `develop`. A lane that finds itself editing a file inside that checkout stops, stashes what it
+wrote, and redoes the change in its own worktree -- a stash is not a rescue, it is a way to keep the
+work while the checkout goes back to being readable. Six times in one night this surface was written
+into from somewhere else: a reformatted header, a broken replacement in `graph_read.cpp`, a duplicated
+probe diagnostic, a zero-byte `cml.cpp`, and once eight files plus a branch other than `develop`. Each
+time the diff had to be recovered from the wreckage before anyone could say whether it was work or a
+repeat of work that had already landed.

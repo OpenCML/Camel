@@ -61,6 +61,21 @@ struct RuleHead {
     // Which of those names the right side writes (`x`, `x,w`): empty when it reads none of them,
     // which is what a family whose transform never calls the right side requires of every rule.
     std::string outerUses;
+    // The rule's applicability condition as written (`is_same::<T, int>()`), empty when it has
+    // none. Two rules may share a key now (`lookupRules` returns the candidates and the engine
+    // dispatches by the operand's type), so the condition is also what tells a genuine duplicate
+    // -- two laws of one operator that could answer for the same operand -- apart from two laws of
+    // one operator that cannot.
+    std::string condition;
+    // The type written for each of the rule's parameters, in order, joined by `|` after the
+    // whitespace is squeezed out (`T[..]|T`); empty for a rule that takes none. This is the second
+    // thing a duplicate is: two laws of one key whose parameter types are the same list can answer
+    // for the same operands and cannot be told apart, while two whose lists differ are two laws of
+    // two shapes -- `T[]`'s `t[0]` is the element and `T[..]`'s `t[0]` is the open-rank array
+    // (design principles 5.4) -- and the engine picks between them by the operand's own type. The
+    // author's ruling of 2026-11-03 11:10: a key holds one rule per parameter-type list, which is
+    // *not* the same question as whether two `when` clauses read alike.
+    std::string parameterTypes;
     uint32_t arity = 0; // how many operands the head takes: 2 for `a + b`, 1 for `-a`
     // The rule's tokens in its module's buffer, for a diagnostic about the rule itself.
     uint32_t tokenStart = 0;
@@ -77,6 +92,8 @@ void collectRuleHead(
     std::string shape,
     std::string variables,
     std::string outerUses,
+    std::string condition,
+    std::string parameterTypes,
     uint32_t arity,
     uint32_t tokenStart,
     uint32_t tokenEnd);
@@ -102,12 +119,26 @@ struct RuleMatch {
 /// The name of a *different* rule already filed under that key is returned -- the caller reports the
 /// duplicate, and the two are never silently merged -- and an empty string means the rule was filed,
 /// or was already there under the same name (a module built twice files its rules twice).
+///
+/// Two rules under one key are a duplicate when they answer for the same operands: the same
+/// parameter-type list *and* the same condition. One of the two differing is enough to file both --
+/// `T[..]` and `T` are two shapes (design principles 5.4), and two `when` clauses are two questions
+/// the engine asks -- and the choice between them is made where the operand types are known.
 std::string indexRule(const std::string &family, const RuleHead &rule);
 
 /// The rule of `family` whose left side is `head` with `arity` operands. A ruleset that is only
 /// built and printed answers nothing, and reads as if it did: this is the question a transform asks
 /// it, and the answer says which of the two ways there is no rule.
 RuleMatch lookupRule(const std::string &family, const std::string &head, uint32_t arity);
+
+/// Every rule of `family` whose left side is `head` with `arity` operands, in the order they were
+/// filed. A key holds **one or more** rules: an operator whose spelling several operators share
+/// (`float(x: float)` and `float(x: int)` are one spelling at one operand) has one rule per operand
+/// type, and which of them answers is decided by the engine, which instantiates a rule at the
+/// operand's own type and refuses by name (`no instance of the rule at float`) when there is none.
+/// The index's job is the name; the type is not its to encode.
+std::vector<std::string>
+lookupRules(const std::string &family, const std::string &head, uint32_t arity);
 
 /// How many operands the rule whose left side is `head` takes, when the family holds exactly one
 /// such rule; nullopt when it holds none, or more than one (`-` at one operand and at two are two

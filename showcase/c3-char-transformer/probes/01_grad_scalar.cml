@@ -1,0 +1,17 @@
+// WALL PROBE 01 -- the control: the library `grad` at one float, a function of one scalar
+// parameter and nothing but `*`. This is the shape `stdlib/vjp.cml` declares `grad` for:
+//
+//     export func grad(f: (x: float) => float): (x: float) => float
+//
+// It has to answer 6 and -4 before any other probe's refusal can be read as the library's.
+import { grad } from vjp
+
+func square(x: float): float {
+    return x * x
+}
+
+func main(): int sync {
+    println(`grad square at 3 = ${grad(square)(3.0):.1f}`)
+    println(`grad square at -2 = ${grad(square)(-2.0):.1f}`)
+    return 0
+}

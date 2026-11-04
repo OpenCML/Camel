@@ -1,0 +1,28 @@
+// WALL PROBE 10 -- the parameter tree as a `with` parameter. This is the shape the author's C2 uses
+// (`with <m: Mlp>` and `with_grad(loss)<m>(x)`), and the question this probe asks is the one a
+// transform has to answer before a model can be trained: is `m` a parameter of the function the
+// transform sees, and does the pullback answer its cotangent?
+import rulesets.jvp
+import rulesets.transpose
+import { vjp } from vjp
+
+type Weights = {
+    w: float[],
+    b: float[]
+}
+
+with <m: Weights>
+func residual(x: float[]): float {
+    let d = x[0] - m.w[0]
+    return d * d + m.b[0] * x[1]
+}
+
+func main(): int sync {
+    let m = { w: [1.0, 2.0] as float[], b: [0.5] as float[] }
+    let g = vjp(residual)
+    let (value, pullback) = g<m>([3.0, 4.0])
+    println(`value = ${value:.4f}`)
+    let cotangents = pullback(1.0)
+    println(`cotangent of x = ${cotangents.0}`)
+    return 0
+}

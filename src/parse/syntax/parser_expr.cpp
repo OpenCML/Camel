@@ -52,6 +52,7 @@ bool ParserImpl::startsExpr(TK kind) const {
     case TK::Real:
     case TK::Imaginary:
     case TK::String:
+    case TK::RawString:
     case TK::MultiStr:
     case TK::FString:
     case TK::KwTrue:
@@ -777,6 +778,7 @@ void ParserImpl::parsePrimary() {
     case TK::Real:
     case TK::Imaginary:
     case TK::String:
+    case TK::RawString:
     case TK::MultiStr:
     case TK::FString:
     case TK::KwTrue:
@@ -1188,7 +1190,10 @@ void ParserImpl::parseFuncData() {
     const bool outerLambdaParams = lambdaParams_;
     lambdaParams_                = true;
     if (cur_ == TK::Lt || cur_ == TK::LAngle) {
-        parseAngledParams();
+        // A pack among the `with` parameters is the same rule on a lambda as on a declaration
+        // (design principles 5.6, and the author's ruling of 2026-11-03 13:50): `<..ws> (..xs) => ...`
+        // names the `with` list the position gives the value, so the lambda's body can forward it.
+        parseAngledParams(true);
     }
     if (cur_ != TK::LParen) {
         lambdaParams_ = outerLambdaParams;
@@ -1589,9 +1594,9 @@ void ParserImpl::parsePattern(bool fieldPosition) {
         bump();
         break;
     default:
-        if (cur_ == TK::Integer || cur_ == TK::Real || cur_ == TK::String || cur_ == TK::MultiStr ||
-            cur_ == TK::KwTrue || cur_ == TK::KwFalse ||
-            cur_ == TK::KwNull || literalSignAhead()) {
+        if (cur_ == TK::Integer || cur_ == TK::Real || cur_ == TK::String ||
+            cur_ == TK::RawString || cur_ == TK::MultiStr || cur_ == TK::KwTrue ||
+            cur_ == TK::KwFalse || cur_ == TK::KwNull || literalSignAhead()) {
             parseLiteral();
         } else {
             unexpected({SyntaxError::PatternItem});

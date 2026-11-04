@@ -1,0 +1,31 @@
+/**
+ * The value a graph hands on is a value of the declared type, and a `float[]` is not a `float`
+ * (design principles 5.1: no implicit conversion, and a return is a position like any other).
+ *
+ * The program builds the graph itself: a rule library replaces the returned operator, which is a
+ * `float`, with the array literal `[1.0, 2.0]`, which is a `float[]`. The graph that reaches the
+ * seal then declares `float` and hands on a `float[]`. Nothing about that graph is a defect of the
+ * compiler: the program wrote a rewrite whose right side is not of the type of its left side.
+ *
+ * Measured 2026-11-04, before the seal judged every declared exit type: the run printed
+ * `6.3956244425295e-310` and exited 0 -- the array's address read as a float -- because the check
+ * refused only a `T?` / `T!` exit that had lost its boxed form. After: the seal refuses it, and the
+ * run exits 1 with `RuntimeDiag::ExitTypeMismatch`, whose sentence names the graph, the value's
+ * type and the declared type. That code is the program's own: the pass list is not what is wrong
+ * here, and the report says so instead of sending the reader to the compiler.
+ *
+ * Run as `camel float_declared_array_returned.cml std::nvm`.
+ */
+
+import { rewrite } from rewrite
+
+rule retype(x: float) { x * 1.0 => [1.0, 2.0] }
+
+func target(n: float): float { n * 1.0 }
+
+func main(): int sync {
+    let rules = [retype]
+    let g     = target->rewrite<rules> !! target
+    print(g(7.0))
+    return 0
+}

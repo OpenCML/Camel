@@ -2161,16 +2161,15 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     // Create an ExitLoad node to represent the exit statement.
     const AST::ExitType astExit = ast->loadAs<AST::ExitStmtLoad>()->exitType();
     if (astExit == AST::ExitType::Yield) {
-        // A `yield` the generator machine did not claim reached the statement builder, which means
-        // the machine missed a shape it builds: that is a defect of this builder, not a property of
-        // the program (author's ruling of 2026-10-31: the machine's narrowings are compiler
-        // defects, reported as internal errors with the program to send, and not as a missing
-        // feature).
+        // A `yield` the generator machine did not claim reached the statement builder: the machine
+        // missed a shape it builds. Nothing in the program is wrong, and the report says so without
+        // asking for the program (author's ruling of 2026-11-02: a refusal is not a defect of the
+        // program, and the text never asks the reader to send it).
         diags_->of(InternalDiag::UnknownInternalError)
             .at(ast->load()->tokenRange())
             .commit(
                 "a `yield` reached the statement builder, so the generator machine did not claim "
-                "it; send the program, this is a compiler defect");
+                "it. Nothing in the program is wrong: the machine missed a shape it builds");
         throw BuildAbortException();
     }
     node_ptr_t exitNode = tree_->makeExit(ExitType::Return);
@@ -3933,9 +3932,16 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         //
         // Every escape form is decoded here, so an unknown escape is reported here too, once per
         // spelling, in the lexical catalogue: an octal escape is simply unknown, and so is
-        // `\q`. The text keeps the pair as written; a warning does not stop the program.
+        // `\q`. The text keeps the pair as written; the diagnostic is an error, so a program
+        // that writes one does not compile (the author's ruling of 2026-11-02: a string that
+        // silently becomes something else is dearer than one that refuses to build).
+        //
+        // A raw string (`r"C:\dir"`) is not decoded at all: its text is the value, so a backslash
+        // in it is a backslash -- there is no escape to be unknown, and the table is not run.
         std::vector<std::string> unknownEscapes;
-        std::string decoded = decodeEscapes(str, literal->fromFormattedString(), &unknownEscapes);
+        std::string decoded = literal->fromRawString()
+                                ? str
+                                : decodeEscapes(str, literal->fromFormattedString(), &unknownEscapes);
         for (const std::string &escape : unknownEscapes) {
             diags_->of(LexicalDiag::InvalidEscapeSequence)
                 .at(ast->load()->tokenRange())
@@ -4539,13 +4545,22 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
 
 namespace {
 
-/// Whether an array position states a rank of its own: a shape of two or more dimensions, all
-/// written as constants (`f32[2, 2]`). Those are the positions a nested literal is one array of
-/// (design principles 5.1, 5.4); a shape with a dimension left open, or a rank of one, keeps the
-/// ordinary build.
+/// Whether an array position states a rank of its own: a shape whose dimensions are all written
+/// as constants (`f32[2, 2]`, `f32[3]`). Those are the positions a literal is one array of
+/// (design principles 5.1, 5.4); a shape with a dimension left open keeps the ordinary build.
+///
+/// A rank of one is a shape too. It used to be left out here, and that was the whole difference
+/// between `let v: float[3] = [1.0, 2.0, 3.0]` (which built the literal into the stated shape)
+/// and `[1.0, 2.0, 3.0] as float[3]` (which did not: the ordinary build made a `float[]`, and the
+/// `as` path then refused it on `castSafety` with "the value cannot become that type" -- a value
+/// that fits, refused by the one position that could not build it). Nothing about the literal's
+/// own rank decides this: the position's shape does, and `[a, b, c]` in a `f32[3]` position is
+/// that shape however it is spelled. The length it writes is checked here, in the same place a
+/// rank-two literal's is, so a mismatch names the extent instead of falling to a conversion that
+/// could not say why.
 bool statesARank(const ArrayType *type) {
     const std::span<const ExtentForm> extents = type->extents();
-    if (extents.size() < 2) {
+    if (extents.empty()) {
         return false;
     }
     for (const ExtentForm &extent : extents) {
@@ -4554,6 +4569,25 @@ bool statesARank(const ArrayType *type) {
         }
     }
     return true;
+}
+
+/// Whether `type` states exactly the one dimension of no elements that `[]` writes: `f32[0]`.
+///
+/// The empty literal writes extent 0 in one dimension, and a position that states `f32[0]` states
+/// the same extent. Extent 0 equals extent 0, so the position takes that literal, and refusing it
+/// reads "no elements" as "no shape" -- the two are not the same statement, and a zero-length
+/// array is a shape a program may declare, pass and compute with (an empty tensor's reduction is
+/// `InvalidArgument`, not a compile error).
+///
+/// The same question is asked in three places and they answer alike: this literal-vs-position check,
+/// the ranked comparison of the literal's lengths to the stated extents
+/// (`visitRankedArrayInto` below, where `[]` into `f32[0]` compares 0 to 0), and a `f32[0]`
+/// parameter taking a `[]` argument. A position that states *another* rank or another extent still
+/// does not take `[]`: `f32[2]` asks for two elements, `f32[0, 0]` for a second axis the literal
+/// does not write.
+bool isADimensionOfNoElements(const ArrayType *type) {
+    const std::span<const ExtentForm> extents = type->extents();
+    return extents.size() == 1 && extents.front().isConstant() && extents.front().constant() == 0;
 }
 
 
@@ -4581,15 +4615,26 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
             if (type->code() == TypeCode::Array) {
                 if (items.empty()) {
                     const auto *emptyInto = tt::as_ptr<ArrayType>(type);
-                    if (emptyInto != nullptr && statesARank(emptyInto)) {
+                    if (emptyInto != nullptr && statesARank(emptyInto) &&
+                        !isADimensionOfNoElements(emptyInto)) {
                         // `[]` writes one dimension of no elements: it is not the shape the
-                        // position states, and it is not reshaped into it either.
+                        // position states, and it is not reshaped into it either. A position that
+                        // states that same dimension (`f32[0]`) is the one stated shape `[]` writes,
+                        // and it is taken below like any other empty array of the position's type.
                         diags_->of(SemanticDiag::DimensionMismatch)
                             .at(ast->load()->tokenRange())
                             .commit(
                                 "The array literal written here", "0",
                                 "the position states the shape '" + type->toString() + "'");
                         throw BuildAbortException();
+                    }
+                    if (emptyInto != nullptr && statesARank(emptyInto)) {
+                        // `f32[0]`: the literal writes the one dimension of no elements the
+                        // position states, so it is built *as* that shape -- the stated extent is
+                        // the literal's own extent, zero, and the value carries it. Built as the
+                        // open `f32[]` below, the declaration's type was checked but not applied,
+                        // and the name bound a value no `f32[0]` parameter would take.
+                        return visitRankedArrayInto(ast, type, entered);
                     }
                     // `[]` in a position of type `T[]` is the empty array of `T` (design
                     // principles 5.1, 5.2): the elements it does not have are the only thing
@@ -4712,6 +4757,11 @@ bool isArrayLiteralData(const AST::node_ptr_t &ast) {
 /// as the brackets write it. `at` holds the level's own literal, which is where a level is
 /// reported; `shaped` is false when a level is not one shape — a row beside an element, or two
 /// rows of different lengths — and then no rank-N array has that shape.
+///
+/// When `shaped` is false, `lengths` holds only the levels walked before the disagreement: a half
+/// shape, not a wrong one. So a caller reads `shaped` first and `lengths` second; whoever reads
+/// `lengths` first and `shaped` after is one `if` away from the same accident as the rank-one
+/// literal walk had (a judgement that worked out the lengths and did not hand them out).
 void literalShapeOf(
     const AST::node_ptr_t &ast, std::vector<int64_t> &lengths, std::vector<AST::node_ptr_t> &at,
     bool &shaped) {
@@ -5369,12 +5419,11 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     // (step 1) -- unless its condition is the pass applicability, in which case it
     // declares a pass and the pipeline reads it (design principles 9.3).
     const bool nativeDeclaration = ast->size() < 2;
-    if (!nativeDeclaration && funcType->hasWithRest()) {
-        diags_->of(SemanticDiag::WithPackNeedsNativeDeclaration)
-            .at(ast->atAs<AST::FuncTypeLoad>(0)->load()->tokenRange())
-            .commit(std::string(funcType->argNameAt(funcType->withTypesCount() - 1)));
-        throw BuildAbortException();
-    }
+    // A pack among the `with` parameters is allowed on a declaration with a body as on one without
+    // (language author, 2026-11-03): the pack rule is the one the ordinary parameters follow
+    // (design principles 4.4, 5.6). Its binding of the call's `with` arguments, and what the body
+    // may do with it, are built where the body is; here the signature keeps it as the `void` slot
+    // `addWithRest` writes, which a call never passes a value for.
     // A `.cml` found beside a `.cmo` of the same name is that C++ module's *declaration*
     // module, in which the C++ operators are declared; it may also hold Camel definitions
     // (rule impl-kernel-site, 2026-10-23: "声明模块可以有函数体，`DeclarationModuleHasBody`
@@ -5710,17 +5759,15 @@ node_ptr_t Builder::visitGeneratorBody(
     const AST::node_ptr_t &bodyAst = funcAst->atAs<AST::StmtBlockLoad>(1);
     const auto &bodyStmts         = bodyAst->atAs<AST::RepeatedLoad>(0);
 
-    // The head writes the stream type, and it is what says what one `yield` hands out. A shape
-    // this machine does not build is a defect of the machine, not a property of the program: the
-    // ruling of 2026-10-31 retired the "generators are not supported" refusal, and what is left is
-    // a defect reporter -- `reportUnbuiltShape` -- that names the shape and asks for the program.
-    const auto reportUnbuiltShape = [&](const AST::node_ptr_t &atNode) -> void {
-        const AST::node_ptr_t atYield = firstOwnYield(atNode);
-        diags_->of(InternalDiag::UnknownInternalError)
-            .at((atYield != nullptr ? atYield : atNode)->load()->tokenRange())
-            .commit(
-                "the generator machine does not build this shape; send the program, this is a "
-                "compiler defect");
+    // The head writes the stream type, and it is what says what one `yield` hands out. A statement
+    // shape this machine does not build is a broken invariant, guarded where the statement walk
+    // meets it -- not a refusal written for the reader, and not a property of any program.
+    // The body of a generator `loop` is cut at its `yield`, and its last statement writes the next
+    // state value. A body that does not is a rule the reader has to be told, not a defect.
+    const auto reportLoopBodyShape = [&](const AST::node_ptr_t &atNode) -> void {
+        diags_->of(SemanticDiag::LoopBodyNeedsNextState)
+            .at(atNode->load()->tokenRange())
+            .commit();
         throw BuildAbortException();
     };
     // A local that lives across a `yield` is a cell of the body (see `addTypedCell`), so there is
@@ -5994,11 +6041,15 @@ node_ptr_t Builder::visitGeneratorBody(
                     stmt->loadAs<AST::ExitStmtLoad>()->exitType() == AST::ExitType::Yield) {
                     // The answer: the element and the stream that continues after this point.
                     const auto &values = stmt->atAs<AST::RepeatedLoad>(0);
+                    // Not reachable from source today: the statement parser requires an expression after
+                    // `yield`, so a bare `yield` is a syntax error before this point. The refusal stays
+                    // because everything below reads `values`; it is a guard on the shape of the node,
+                    // not a gate this version chose to keep shut.
                     // `yield a, b` hands out the tuple `(a, b)`, the same element `yield (a, b)`
                     // writes. A `yield` with no value has no element to hand out and keeps the
                     // named refusal.
                     if (values->size() == 0) {
-                        reportUnbuiltShape(stmt);
+                        GUARD(false, "a `yield` with no value reached the generator machine");
                     }
                     const auto elementOf = [&](const auto &list) -> node_ptr_t {
                         if (list->size() == 1) {
@@ -6102,7 +6153,7 @@ node_ptr_t Builder::visitGeneratorBody(
                             popScope();
                             return;
                         }
-                        reportUnbuiltShape(stmt);
+                        GUARD(false, "a statement the generator body does not build reached the machine");
                     }
                     if (isLoop) {
                         // A `while` loop whose body writes a `yield`. The pull that hands an
@@ -6123,7 +6174,7 @@ node_ptr_t Builder::visitGeneratorBody(
                             if (seqAst == nullptr || loopAst->optAtAs<AST::DataLoad>(2) != nullptr ||
                                 loopLoad->state().size() != 1 || init == nullptr ||
                                 !hoistable(init)) {
-                                reportUnbuiltShape(stmt);
+                                GUARD(false, "a `loop ... for` clause reached the generator machine");
                             }
                             const std::string stateName = loopLoad->state()[0].toString();
                             if (std::find(cellNames.begin(), cellNames.end(), stateName) ==
@@ -6213,7 +6264,7 @@ node_ptr_t Builder::visitGeneratorBody(
                         // the arm boundary is the next step).
                         if (inits->size() == 0 || loopLoad->state().empty() || loopLoad->hasFor() ||
                             inits->size() != loopLoad->state().size()) {
-                            reportUnbuiltShape(stmt);
+                            GUARD(false, "a `loop` with no state, or a state with no first value, reached the machine");
                         }
                         // One cell per carried name. The body already may have a cell of that name
                         // (a `var` of its own): the loop carries that one cell, and the value below
@@ -6224,9 +6275,9 @@ node_ptr_t Builder::visitGeneratorBody(
                         for (size_t k = 0; k < loopLoad->state().size(); ++k) {
                             const std::string name = loopLoad->state()[k].toString();
                             const AST::node_ptr_t eachInit = inits->at(k);
-                            if (!hoistable(eachInit)) {
-                                reportUnbuiltShape(stmt);
-                            }
+                            // The initial value is evaluated where the loop stands (see the write below),
+                            // once, before the first condition: a value computed there, or read from a
+                            // local, is the first round's state like a constant is.
                             if (std::find(cellNames.begin(), cellNames.end(), name) ==
                                 cellNames.end()) {
                                 addTypedCell(name, visitData(eachInit), stmt);
@@ -6290,19 +6341,144 @@ node_ptr_t Builder::visitGeneratorBody(
                         const auto &matchAst = stmt->at(0);
                         const int afterMatch = newArm();
                         fill(afterMatch, stmts, i + 1, next, nextState);
+                        // The matched value outlives the `yield`s the arms are cut at, so it is put in
+                        // a cell where the `match` stands and the branch reads the cell. A cell declared
+                        // in the walk is captured with the others (the capture loop reads every name in
+                        // `cellNames`, which the walk filled), so an arm that starts after a `yield`
+                        // still finds it written.
+                        node_ptr_t subject = visitData(matchAst->atAs<AST::DataLoad>(0));
+                        const std::string subjectCell =
+                            "__gen_match_subject_" + std::to_string(cellNames.size());
+                        addTypedCell(subjectCell, subject, stmt);
+                        cellNames.push_back(subjectCell);
+                        *exec << writeCell(subjectCell, subject);
                         node_ptr_t brch = tree_->makeBrch();
-                        *brch << visitData(matchAst->atAs<AST::DataLoad>(0));
+                        *brch << readCell(subjectCell);
                         for (const auto &caseNode : *matchAst->atAs<AST::RepeatedLoad>(1)) {
                             const auto &pattern = caseNode->at(0);
-                            if (pattern->type() == AST::LoadType::Data &&
-                                (pattern->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Ref ||
-                                 pattern->loadAs<AST::DataLoad>()->dataType() ==
-                                     AST::DataType::EnumPattern)) {
-                                // The arm binds a name; a binding lives in the arm's own graph, so
-                                // it would have to become a cell to outlive the `yield`.
-                                reportUnbuiltShape(caseNode);
+                            const bool writtenPattern = pattern->type() == AST::LoadType::Data;
+                            const auto patternKind =
+                                writtenPattern
+                                    ? pattern->loadAs<AST::DataLoad>()->dataType()
+                                    : AST::DataType::Literal;
+                            const bool isEnumPattern =
+                                writtenPattern && patternKind == AST::DataType::EnumPattern;
+                            const bool isRefPattern =
+                                writtenPattern && patternKind == AST::DataType::Ref;
+                            // The names a case binds are locals of the body like any other, and a
+                            // local that lives across a `yield` is part of the state (design
+                            // principles 5.4). So each is a cell of the body, registered with the
+                            // declared locals and the loop binders -- not with a state of its own.
+                            // The case binds a name of its own, because a cell's name is what every
+                            // arm reads; the body the case runs writes the cell where the value is
+                            // in hand, and the arm and the pull after a `yield` in it then read the
+                            // same cell.
+                            std::vector<std::string> patternFields;
+                            std::vector<std::string> patternBindings;
+                            // The cell each bound name is written into, and the name the case
+                            // binds it to.
+                            std::vector<std::pair<std::string, std::string>> cellWrites;
+                            if (isEnumPattern) {
+                                const auto enumPattern = pattern->loadAs<AST::EnumPatternLoad>();
+                                // The pattern names the enum, so that name resolves here the way a
+                                // type annotation written at this point would, and the variant it
+                                // names gives the type of each field.
+                                const EnumVariant *variant = nullptr;
+                                if (!enumPattern->ref().paths().empty()) {
+                                    const Reference enumName(enumPattern->ref().paths());
+                                    if (Type *declared = lookupType(enumName, pattern);
+                                        declared != nullptr) {
+                                        if (EnumType *enumType = asEnumType(declared)) {
+                                            const auto tag = enumType->decl()->findVariant(
+                                                enumPattern->ref().ident());
+                                            if (tag.has_value()) {
+                                                variant =
+                                                    &enumType->decl()->variants()[*tag];
+                                            }
+                                        }
+                                    }
+                                }
+                                for (size_t k = 0; k < enumPattern->fields().size(); ++k) {
+                                    const AST::EnumPatternField &field =
+                                        enumPattern->fields()[k];
+                                    patternFields.push_back(field.name);
+                                    if (field.binding.empty()) {
+                                        patternBindings.push_back(std::string());
+                                        continue;
+                                    }
+                                    const std::string holder =
+                                        "__gen_match_bind_" + std::to_string(idIndex_++);
+                                    patternBindings.push_back(holder);
+                                    Type *fieldType = nullptr;
+                                    if (variant != nullptr) {
+                                        const auto at =
+                                            enumPattern->structShape()
+                                                ? variant->findField(field.name)
+                                                : std::optional<size_t>(k);
+                                        if (at.has_value() &&
+                                            *at < variant->fieldCount()) {
+                                            fieldType = variant->fieldTypes[*at];
+                                        }
+                                    }
+                                    if (fieldType != nullptr) {
+                                        cellWrites.emplace_back(field.binding, holder);
+                                        if (std::find(
+                                                cellNames.begin(),
+                                                cellNames.end(),
+                                                field.binding) == cellNames.end()) {
+                                            addCellOfType(field.binding, fieldType, caseNode);
+                                            cellNames.push_back(field.binding);
+                                        }
+                                    }
+                                }
+                            } else if (isRefPattern) {
+                                // `case v` binds the payload of a `T?` / `T!`; `case error e` binds
+                                // the error of a `T!`, and that one is not the payload. Every
+                                // fallible value carries the one `Error` structure (design
+                                // principles 3.9), and the prelude declares that type under the name
+                                // `Error`, so the cell a `case error e` binds is typed by reading the
+                                // declaration, the way a written annotation would.
+                                const bool isError = pattern->size() > 0;
+                                const std::string name = (isError ? pattern->front() : pattern)
+                                                             ->loadAs<AST::RefDataLoad>()
+                                                             ->ref()
+                                                             .toString();
+                                const std::string holder =
+                                    "__gen_match_bind_" + std::to_string(idIndex_++);
+                                patternBindings.push_back(holder);
+                                cellWrites.emplace_back(name, holder);
+                                if (std::find(cellNames.begin(), cellNames.end(), name) ==
+                                    cellNames.end()) {
+                                    Type *cellType = nullptr;
+                                    if (isError) {
+                                        // The error of a `T!` is not the payload the tagged value
+                                        // holds, so `typeof` the value does not give it. What does
+                                        // give it is the one `Error` structure every fallible
+                                        // value carries (design principles 3.9) -- the same object
+                                        // the graph builder compares a failing value against, so
+                                        // the cell is typed by the language's own fact and not by
+                                        // one the builder picks.
+                                        cellType = errorType();
+                                    } else {
+                                        // `PayloadOf<T?>` is the `U` of `U?`, and of `U!` too.
+                                        std::vector<Type *> payloadArgument = {
+                                            TypeOfType::create(readCell(subjectCell))};
+                                        cellType =
+                                            TypeCallType::create("PayloadOf", payloadArgument);
+                                    }
+                                    addCellOfType(name, cellType, caseNode);
+                                    cellNames.push_back(name);
+                                }
                             }
                             const int armPc = newArm();
+                            // What the case runs: the cells its bindings live in are written
+                            // where the value is in hand, then the arm goes on at its own point.
+                            node_ptr_t entry = makeExec(synced);
+                            for (const auto &[cellName, holder] : cellWrites) {
+                                *entry << writeCell(cellName, tree_->makeDRef(holder));
+                            }
+                            *entry << jumpTo(armPc);
+                            mark(entry, caseNode, "gct.generator.jump");
                             fill(
                                 armPc,
                                 caseNode->atAs<AST::StmtBlockLoad>(1)->atAs<AST::RepeatedLoad>(0),
@@ -6312,13 +6488,33 @@ node_ptr_t Builder::visitGeneratorBody(
                             if (pattern->type() == AST::LoadType::Null) {
                                 // `case _`: the arm every other value takes.
                                 node_ptr_t gCase = tree_->makeCase(CaseType::Else);
-                                *gCase << jumpTo(armPc);
+                                *gCase << entry;
+                                *brch << gCase;
+                                continue;
+                            }
+                            if (isEnumPattern) {
+                                const auto enumPattern = pattern->loadAs<AST::EnumPatternLoad>();
+                                node_ptr_t gCase = tree_->makeEnumCase(
+                                    enumPattern->ref().toString(),
+                                    patternFields,
+                                    patternBindings,
+                                    enumPattern->structShape());
+                                *gCase << entry;
+                                *brch << gCase;
+                                continue;
+                            }
+                            if (isRefPattern) {
+                                // `case v` takes the value side of a `T?` / `T!`; `case error e`
+                                // takes the side that failed (design principles 3.8).
+                                node_ptr_t gCase = tree_->makeCase(
+                                    pattern->size() > 0 ? CaseType::Error : CaseType::Bind,
+                                    patternBindings[0]);
+                                *gCase << entry;
                                 *brch << gCase;
                                 continue;
                             }
                             node_ptr_t gCase = tree_->makeCase(CaseType::Value);
-                            *gCase << visitData(caseNode->atAs<AST::DataLoad>(0))
-                                   << jumpTo(armPc);
+                            *gCase << visitData(caseNode->atAs<AST::DataLoad>(0)) << entry;
                             *brch << gCase;
                         }
                         mark(brch, stmt, "gct.generator.match");
@@ -6373,7 +6569,7 @@ node_ptr_t Builder::visitGeneratorBody(
                 // already written as a cell) would go round without moving: refused by name
                 // here rather than run as a loop that never advances.
                 if (last == nullptr) {
-                    reportUnbuiltShape(from < stmts->size() ? stmts->at(from) : stmts);
+                    reportLoopBodyShape(from < stmts->size() ? stmts->at(from) : stmts);
                 }
                 // One name takes the value itself; a list of names takes the tuple the body built, one
                 // element per name -- the shape a loop that carries several values hands on:
@@ -6409,7 +6605,7 @@ node_ptr_t Builder::visitGeneratorBody(
                     if (tupleItems == nullptr || tupleItems->size() != names.size()) {
                         // A loop that carries several values hands them on as a tuple of the
                         // same length; anything else has no value for one of the names.
-                        reportUnbuiltShape(lastStmt != nullptr ? lastStmt : stmts->at(from));
+                        reportLoopBodyShape(lastStmt != nullptr ? lastStmt : stmts->at(from));
                     }
                     // The next values are built before any of them is written: a state name the
                     // second element reads must be the value of this round, not the one the first
@@ -6996,17 +7192,13 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
                 factory.addWithArg(name + "_" + std::to_string(wi), pack, false);
                 continue;
             }
-            // A pack among the `with` parameters (`with <..args>`): untyped and last, like
-            // the rest parameter of the ordinary ones. A lambda does not write one (the parser
-            // refuses it); a declaration with a body is refused where its body is known.
+            // A pack among the `with` parameters (`with <..args>`): last, like the rest parameter of
+            // the ordinary ones, and typed or not. A pack that writes a type (`with <..args: T>`)
+            // takes `with` arguments of that type, on the rule an ordinary parameter follows one
+            // type further out (design principles 4.4, 5.6); `with <..args>` takes any type. What
+            // the body may do with the pack is built where the body is.
             if (wi + 1 != withParams.size()) {
                 diags_->of(SemanticDiag::RestParameterNotLast)
-                    .at(paramLoad->tokenRange())
-                    .commit(name);
-                throw BuildAbortException();
-            }
-            if (paramPair->size() > 0) {
-                diags_->of(SemanticDiag::RestParameterTypeNotSupported)
                     .at(paramLoad->tokenRange())
                     .commit(name);
                 throw BuildAbortException();
@@ -7018,7 +7210,13 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
                 throw BuildAbortException();
             }
             defaults.with.push_back({nullptr, camel::source::kInvalidOriginId});
-            factory.addWithRest(name);
+            factory.addWithRest(
+                name, paramPair->size() > 0 ? visitType(paramPair->at(0)) : nullptr);
+            // The pack takes one slot in the numbering of the parameters the function wrote, which
+            // is the numbering the unwritten parameters of a lambda are recorded against (`with`
+            // parameters first): a parameter written after it (an ordinary rest parameter, say) is
+            // one place further on than its position in the source suggests.
+            ++paramIndex;
             continue;
         }
         Type *type                = nullptr;
@@ -7222,10 +7420,19 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
     if (signature) {
         std::vector<std::string> used;
         collectTypeVars(built, used);
+        // A `rule`'s head is written once and its sides are three declarations of the compiler's
+        // making, so "the signature" of a rule side is not where the rule's parameters are written:
+        // `mul_tensor_t::<T, X, W>` names `T` only on its right side (`(ct: T[..])`), which is the
+        // author's line and cannot be written any other way. What the rule writes is carried here
+        // from the rule's own text (`src/parse/ast/builder.cpp`, `visitRuleDecl`), so the check
+        // reads the whole declaration and not the one side it happens to be building.
+        const auto &acrossTheRule =
+            ast->loadAs<AST::FuncTypeLoad>()->typeParamsWrittenElsewhere();
         pendingUnusedHeadVars_.clear();
         for (const std::string &name : declaredTypeVars_) {
             if (std::find(used.begin(), used.end(), name) == used.end() &&
-                !writtenHeadVars_.contains(name)) {
+                !writtenHeadVars_.contains(name) &&
+                std::find(acrossTheRule.begin(), acrossTheRule.end(), name) == acrossTheRule.end()) {
                 pendingUnusedHeadVars_.push_back(name);
             }
         }

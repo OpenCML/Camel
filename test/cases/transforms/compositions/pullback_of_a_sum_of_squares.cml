@@ -1,0 +1,40 @@
+/**
+ * The pullback of an array whose cotangent is one number, in `f32` and in `float`, in one program.
+ *
+ * `g(v) = sum(v * v)` over four numbers, so the pullback of the cotangent `ct` is `2 * ct * v` and it
+ * is an array of four numbers: the result's cotangent is a number, a parameter's is a vector, and
+ * `transpose` answers one per parameter of its own type. Both widths print the same two sums, `f32`
+ * first:
+ *
+ *     v = [1, 2, 3, 4], ct = 1   -> sum 20
+ *     v = [1, 2, 3, 4], ct = 0.5 -> sum 10
+ *
+ * The element-wise reading is printed too (`2, 4, 6, 8` summed by hand), because a sum is blind to a
+ * permutation: the case is about an array cotangent crossing the walk, not about addition.
+ */
+import { vjp } from vjp
+import { sum } from array
+
+func gf(v: f32[4]): f32 {
+    return v[0] * v[0] + v[1] * v[1] + v[2] * v[2] + v[3] * v[3]
+}
+
+func gd(v: float[4]): float {
+    return v[0] * v[0] + v[1] * v[1] + v[2] * v[2] + v[3] * v[3]
+}
+
+func main(): int sync {
+    let vsf: f32[4] = [1.0, 2.0, 3.0, 4.0]
+    let vsd: float[4] = [1.0, 2.0, 3.0, 4.0]
+    let pf = vjp(gf)(vsf).1(1.0).0
+    let pd = vjp(gd)(vsd).1(1.0).0
+    'pullback f32  ct=1 sum -> {}'->format<sum(pf)>->println
+    'pullback float ct=1 sum -> {}'->format<sum(pd)>->println
+    'pullback f32  ct=1 by hand -> {}'->format<pf[0] + pf[1] + pf[2] + pf[3]>->println
+    'pullback float ct=1 by hand -> {}'->format<pd[0] + pd[1] + pd[2] + pd[3]>->println
+    let hf = vjp(gf)(vsf).1(0.5).0
+    let hd = vjp(gd)(vsd).1(0.5).0
+    'pullback f32  ct=0.5 sum -> {}'->format<sum(hf)>->println
+    'pullback float ct=0.5 sum -> {}'->format<sum(hd)>->println
+    return 0
+}

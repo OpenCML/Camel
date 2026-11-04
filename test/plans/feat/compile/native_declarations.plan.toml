@@ -871,7 +871,7 @@ kind = "negative"
 case = "../../../cases/compile/native/tensor_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_type.cml:10:21", "argument types: <> (string)", "<tensor:to_bytes>: (t: T[..]) => Bytes"]
+expect_output_contains = ["SemanticDiag::WhenConditionUnmet", "code=0x030001AC", "tensor_type.cml:10:21", "No candidate of 'to_bytes' applies to (<> (string))", "(t: T[..]) => Bytes", "when is_plain::<T>()"]
 #  ---- The declaration of `show` ----
 #
 # `show` is the last zero-syntax name of the inventory: its result is fixed `void`, and its
@@ -901,12 +901,12 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.tensor_show_wrong_type"
-desc = "A `string` where the declaration of `tensor:show` accepts an array of any element type: refused at the call against the declared type, and the listed overload is the declaration's one rule."
+desc = "A `string` where the declaration of `tensor:show` accepts an array of a tensor's element type: refused at the call against the declared type, and the listed overload is the declaration's one rule."
 kind = "negative"
 case = "../../../cases/compile/native/tensor_show_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_type.cml:10:5", "argument types: <> (string)", "<tensor:show>: (t: A[..]) => void"]
+expect_output_contains = ["SemanticDiag::WhenConditionUnmet", "code=0x030001AC", "tensor_show_type.cml:10:5", "No candidate of 'show' applies to (<> (string))", "(t: A[..]) => void", "when is_numeric::<A>() || is_same::<A, bool>()"]
 
 [[tests]]
 name = "native.tensor_show_empty_array"

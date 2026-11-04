@@ -289,6 +289,8 @@ enum class SemanticDiag : uint32_t {
     WithArgumentCallee = 0x0001BD,
     /// A `with` argument is given by name in a binding used as a function value.
     WithArgumentInValue = 0x0001BE,
+    /// A `with` argument of the wrong type given to a pack that writes its element type.
+    WithPackArgumentType = 0x00020A,
 
     // Predicate lookup in a `when` condition (design principles 4.4, 10.2). 0x1BF and up.
     /// A predicate another module declares, but this module does not import it.
@@ -393,11 +395,6 @@ enum class SemanticDiag : uint32_t {
     /// the step of a slice follows the same rule the step of a range does).
     SliceStepZero       = 0x0001E9,
     CalledFallibleValue = 0x000209,
-    /// A transform (`transpose`, `jvp`) was handed something that is not a function known at compile time:
-    /// a parameter, or a closure that captures a value. The transform builds the transformed graph at the
-    /// call, out of the graph of the function it is given, and neither of those names one until the program
-    /// runs -- so it is refused at the call, by name, rather than left to the run.
-    WithPackNeedsNativeDeclaration = 0x000191,
     // #impl(f) (design principles 10.4): the Camel body of the function is its semantics and the
     // body-less declaration f of the same module is the operator that runs it. The graph builder
     // resolves the tag when it declares the module, so no pass reads it and it names no reader.
@@ -472,9 +469,11 @@ enum class SemanticDiag : uint32_t {
     TypeFunctionNotApplicable  = 0x0001FE,
     StatementAfterReturn       = 0x000201,
     YieldRequiresStreamHead    = 0x000206,
+    LoopBodyNeedsNextState     = 0x000208,
     RuleLeftIsNotAnOperator    = 0x000204,
     DuplicateRuleForOperator   = 0x000205,
     RuleRightUsesOuterVariable = 0x000207,
+    ExtentOfNeedsStatedShape   = 0x00020B,
 
     // Warnings
     IgnoredSideEffect = 0x100002,

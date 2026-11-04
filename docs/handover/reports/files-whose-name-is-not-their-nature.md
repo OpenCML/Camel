@@ -19,7 +19,7 @@
 ## 2. 五个"签名"：`stdlib/signatures/*.cml`
 
 - **叫什么、在哪**：`stdlib/signatures/{autodiff,ckpt,nn,tensor,tiles}.cml`，放在会被 import 的 `stdlib/` 根下，写法与声明同形（`#op(...)` + 无函数体 `func`），共 75 条。
-- **实际是什么**：参考镜像，不参与编译。头部自述：`autodiff.cml:37`、`nn.cml:25`、`tiles.cml:19` 都是 "For reference only: these declarations are not compiled."；`tensor.cml:8-9` "this file is for reference only (it is not compiled)"；`ckpt.cml:4` "(reference metadata, not compiled)"。读者只有脚本：`scripts/stdlib-reference.mjs`（生成 `docs/stdlib-reference.md`、跑 `--verify-ops`）与 `scripts/camel-for-ai.mjs:46`（生成给 AI 的参考）。真实声明在 `stdlib/<模块>.cml`；C++ 侧已声明的名字由 `modules/<模块>/module.cpp` 的 `kDeclaredOperators` 跳过导出（`modules/nn/module.cpp:30`、`modules/tensor/module.cpp:60`）。
+- **实际是什么**：参考镜像，不参与编译。头部自述：`autodiff.cml:37`、`nn.cml:25`、`tiles.cml:19` 都是 "For reference only: these declarations are not compiled."；`tensor.cml:8-9` "this file is for reference only (it is not compiled)"；`ckpt.cml:4` "(reference metadata, not compiled)"。读者只有脚本：`scripts/stdlib-reference.mjs`（生成 `docs/stdlib-reference.md`、跑 `--verify-ops`）与 `scripts/camel-for-ai.mjs#REPO_ROOT`（生成给 AI 的参考）。真实声明在 `stdlib/<模块>.cml`；C++ 侧已声明的名字由 `modules/<模块>/module.cpp` 的 `kDeclaredOperators` 跳过导出（`modules/nn/module.cpp#kDeclaredOperators`、`modules/tensor/module.cpp#kDeclaredOperators`）。
 - **谁会判断错**：下一个想给某算子"补个签名 / 加个默认值 / 让它进库"的人。他会改这里，以为改了接口；编译行为与程序行为都不变——权威写法一在 `stdlib/<模块>.cml` 的声明，二在 `modules/<模块>` 的 C++ 解析器。
 - **读数**：
   ```
@@ -48,7 +48,7 @@
 ## 4. 规则集模块里没有 `rule`：`stdlib/rulesets/jvp.cml`
 
 - **叫什么、在哪**：前向求导的规则集模块，`stdlib/rulesets/jvp.cml`。
-- **实际是什么**：7 个形状像规则的普通函数，不是 `rule`。文件里有 `Lift<T>`、`lift`、`zero_tangent` 和 7 个标量 `*_jvp` 的 `func`（`add_jvp` 连 `export` 都没有），**`rule` 声明 0 条**；`rule` 声明 10 条全在 `stdlib/autodiff.cml`（前向 5：`add/sub/mul/div/neg_jvp`，转置 5：`*_t`）。索引只对模块名以 `rulesets.` 开头的模块建（`src/compile/gir/program.cpp:658-659`）：`rulesets.jvp` 以它开头却没有规则，`autodiff` 有 10 条却不以它开头。
+- **实际是什么**：7 个形状像规则的普通函数，不是 `rule`。文件里有 `Lift<T>`、`lift`、`zero_tangent` 和 7 个标量 `*_jvp` 的 `func`（`add_jvp` 连 `export` 都没有），**`rule` 声明 0 条**；`rule` 声明 10 条全在 `stdlib/autodiff.cml`（前向 5：`add/sub/mul/div/neg_jvp`，转置 5：`*_t`）。索引只对模块名以 `rulesets.` 开头的模块建（`src/compile/gir/program.cpp#Builder::scanProgramWriters`）：`rulesets.jvp` 以它开头却没有规则，`autodiff` 有 10 条却不以它开头。
 - **判据（这一处的关键）**：**名字叫规则集模块，装的是 7 个形状像规则的普通函数，而真正的 `rule` 声明全在 `autodiff` 里。** 这比"空的"更危险：空文件一眼看穿；这个文件有类型、有零切向量、能编译，还被 `test/cases/compile/rulesets/jvp_lift.cml` 导入，**看起来有内容**——照着它加规则的人不会怀疑自己走错了地方。
 - **谁会判断错**：下一个按设计稿第 3 节给前向求导加规则的人。设计稿说"写在规则集模块里，例如 `rulesets/jvp.cml`"，他会打开这个文件，照着 `add_jvp` 加一条 `func`；那不是 `rule`，不进索引，前向求导不会变。反过来他也会以为 `autodiff.cml` 的 10 条 `rule` 不属于任何规则集。
 - **读数**：

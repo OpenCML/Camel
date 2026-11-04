@@ -111,10 +111,27 @@ compile_graph_ptr_t Builder::buildDecoratedGraph(
         decoratedValue = applyDecoratorAnno(*it, decoratedValue);
     }
 
+    // A decorated function *is* the function its decorators answered, and a call of it is a call
+    // of that function (`visitLinkNode`). An answer of another type is a program that calls a
+    // value holding no function: it is reported as that, at the decorator, and the call is
+    // refused. Stopping the process would make the writer's decorator look like a broken
+    // builder -- the report `visitLinkNode` gives for `T!` is this one (536999073).
     if (nodeTypeOf(decoratedValue)->code() != TypeCode::Function) {
-        diags_->of(SemanticDiag::ArgumentsMismatch)
-            .atOrigin(annoNodes.front()->origin())
-            .commit("decorator must return function", nodeTypeOf(decoratedValue)->toString());
+        // Reported at the decorator the writer wrote (`@bad`), which is where the value that is
+        // not a function came from; an ANNO node carries no position of its own.
+        const GCT::node_ptr_t &decoratorExpr = annoNodes.front()->at(0);
+        const std::string decoratorName      = writtenCalleeName(decoratorExpr);
+        diags_->of(SemanticDiag::ArgumentsRejected)
+            .atOrigin(decoratorExpr->origin())
+            .commit(
+                decoratorName.empty() ? std::string("the decorator") : "@" + decoratorName,
+                "<" + (rawGraph->funcType() != nullptr ? rawGraph->funcType()->toString()
+                                                       : std::string("function")) +
+                    "> ()",
+                "the value the decorator answered has type '" +
+                    nodeTypeOf(decoratedValue)->toString() +
+                    "', and that is not a function: a decorated function is the function its "
+                    "decorators answer, so this one has no function to be");
         throw BuildAbortException();
     }
 

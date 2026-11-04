@@ -28,11 +28,11 @@
 
 C++（整个模块删除）：
 - `modules/statistics/`（`module.cpp`、`operators.cpp`、`executor.*`、`CMakeLists.txt`）；根 `CMakeLists.txt:256` 的 `add_subdirectory(modules/statistics)`。
-- `src/passes/trans/cpp/operator_rules.cpp:474-475`（`statistics:mean`、`statistics:stdev` 的 `runtimeFunction("statisticsMean"/"statisticsStdev")`）和运行时里对应的两个函数。写成 Camel 之后 `std::cpp` 把它们当普通函数转译，不需要特规则（请施工方确认 `std::cpp` 对 `sort`、`sum` 的支持；`array` 的原生算子目前不在 `operator_rules.cpp` 里）。
+- `src/passes/trans/cpp/operator_rules.cpp#buildRules`（`statistics:mean`、`statistics:stdev` 的 `runtimeFunction("statisticsMean"/"statisticsStdev")`）和运行时里对应的两个函数。写成 Camel 之后 `std::cpp` 把它们当普通函数转译，不需要特规则（请施工方确认 `std::cpp` 对 `sort`、`sum` 的支持；`array` 的原生算子目前不在 `operator_rules.cpp` 里）。
 
 脚本与计划：
-- `scripts/stdlib-reference.mjs:161` 的 `statistics` 条目改 `kind: 'camel'`（去掉 `source`/`declaration`）；`scripts/stdlib-declarations.mjs:21` 注释里的 `statistics` 去掉。
-- `test/plans/feat/modules/stdlib_registry.plan.toml:23` 的模块清单仍含 `statistics`，`:39` 的纯度表里 `statistics:median` 删掉（Camel 函数的纯度由推断给出）；`test/plan-selection.json` 里指向 `modules/statistics` 的规则改指 `stdlib/statistics.cml`。
+- `scripts/stdlib-reference.mjs#source` 的 `statistics` 条目改 `kind: 'camel'`（去掉 `source`/`declaration`）；`scripts/stdlib-declarations.mjs#REPO_ROOT` 注释里的 `statistics` 去掉。
+- `test/plans/feat/modules/stdlib_registry.plan.toml#registry.purity_declared` 的模块清单仍含 `statistics`，`:39` 的纯度表里 `statistics:median` 删掉（Camel 函数的纯度由推断给出）；`test/plan-selection.json` 里指向 `modules/statistics` 的规则改指 `stdlib/statistics.cml`。
 - `test/plans/feat/compile/native_declarations.plan.toml` 里三条把 `statistics` 当“原生声明样本”的用例（`test/cases/compile/native/statistics_arity.cml`、`statistics_declaration_import.cml`、`statistics_type.cml`，及 `:358` 附近的 desc）：测的是声明机制，换到另一个仍有无体声明的模块，不留 `statistics`。
 
 ## 4. 行为变化（要写进用例）
@@ -50,7 +50,7 @@ C++（整个模块删除）：
 
 在导入了 `statistics` 的 23 个文件里：`mean` 14 个文件 / 19 行，`stdev` 9 / 10，`variance` 3 / 5，`median` 4 / 9，`quantile` 4 / 8。每一处都要加 `?? 默认值`（或 `match`），整数数组的要先转浮点。
 
-- 库内：`stdlib/perf.cml:8,31,32`（`mean(results) * 1000.0`、`stdev(results) * 1000.0`，`results` 若是 `float[]`，改成 `(mean(results) ?? 0.0) * 1000.0`；基准样本为空本来是调用方错误，所以此处用 `??` 取 0 不算哨兵扩散，仍请施工方按语义定）。
+- 库内：`stdlib/perf.cml#timeit`（以及同文件的 perfms）（`mean(results) * 1000.0`、`stdev(results) * 1000.0`，`results` 若是 `float[]`，改成 `(mean(results) ?? 0.0) * 1000.0`；基准样本为空本来是调用方错误，所以此处用 `??` 取 0 不算哨兵扩散，仍请施工方按语义定）。
 - 用例：`test/cases/modules/std/statistics/basic.cml`、`test/cases/modules/stdlib/stats_quantiles.cml`（含整数字面量数组，如 `variance([1, 2, 3, 4])`、`median([3, 1, 2])`，要改成浮点字面量；空数组与单元素的期望从 `0` 改成 `null`）、`fault_quantile_range.cml`（故障种类 `IndexOutOfRange`）、`registry_all.cml`、`test/cases/para/core/bootstrap_medians.cml`（`mean(medians)` 是 `int[]`，要先转浮点）、`test/cases/trans/cpp/exec/draws.cml`（含 `mean(none)` 空数组与 `stdev([1])`，期望变）。
 - 示例：`examples/numeric/random_walk.cml`、`monte_carlo_pi.cml`；两个 README 的函数表。
 - 文档：`docs/tutorial/examples/12_stdlib.cml` 与 `tutorial.cn.md`/`tutorial.en.md` 的统计段；`docs/language/05_modules.md`（及英文）、`docs/cli.md`、`docs/design/stdlib/README.cn.md` 里的 `statistics` 表述；`docs/stdlib-reference.md`、`docs/reference/camel-for-ai-stdlib-signatures.md` 由脚本重生。
@@ -86,7 +86,7 @@ C++（整个模块删除）：
 - `mean` 移到 `array`（`T[..]`），`statistics` 现有 `variance`、`stdev`、`median`、`quantile` 四个函数，都答 `T`，不再答 `T?`。
 - 不足的情形都是故障 `InvalidArgument`（7.7）：`variance`/`stdev` 少于两个元素；`median`/`quantile` 空数组；`quantile` 的 q 不在 [0, 1]（旧 C++ 的 `InvalidArgument` 保留）。`fail` 的使用位置见 `array.notes.md` R2。`median`、`quantile` 含 NaN 仍答 NaN。
 - 整数数组仍被拒绝。修法写在模块头：`cast(xs, 'f64')`（`tensor` 的 `cast`，`'f64'` 与 `'float'` 同义，见 `modules/tensor/ops/elementwise_ops.cpp`；数组元素类型转换目前就是它的字符串拼写，不是 Camel 风格，等 tensor 重写时换成 `T` 类型实参的形式）。
-- 调用点：去掉所有 `?? 默认值`；`mean` 改从 `array` 导入（`import { mean } from array`），其余仍从 `statistics`。`stdlib/perf.cml:31,32` 写回 `mean(results) * 1000.0`，空样本即故障。
+- 调用点：去掉所有 `?? 默认值`；`mean` 改从 `array` 导入（`import { mean } from array`），其余仍从 `statistics`。`stdlib/perf.cml#perfms` 写回 `mean(results) * 1000.0`，空样本即故障。
 - 行为变化表：空数组 `mean` 和不足两个元素的 `variance`/`stdev` 由 `0` 变成故障；`quantile` 越界仍是 `InvalidArgument`；其余（整数被拒、结果类型为元素类型）同上文。
 - `tensor` 的整体 `mean` 删除后，规范式 `mean::<T>(x: T[..]): T = T(sum(float(x)) / float(numel(x)))` 的唯一来源是 `array::mean`。
 

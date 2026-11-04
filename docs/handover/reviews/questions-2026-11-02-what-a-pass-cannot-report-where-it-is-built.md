@@ -154,7 +154,7 @@ settle_runs must be at least 1, got 0.      EXIT=1，没有 terminate
 
 | 项 | 现状 | 要做 |
 |---|---|---|
-| `PassDescriptor`（`include/camel/execute/pass/params.h:96`） | `{ PassMaker make; std::vector<PassParam> params; bool readsTags; }`——**没有 kind** | 加一个 `PassKind kind`（`Rewrite`/`Translate`/`Schedule`），由注册点填；或从 stdlib 声明读 |
+| `PassDescriptor`（`include/camel/execute/pass/params.h#PassDescriptor`） | `{ PassMaker make; std::vector<PassParam> params; bool readsTags; }`——**没有 kind** | 加一个 `PassKind kind`（`Rewrite`/`Translate`/`Schedule`），由注册点填；或从 stdlib 声明读 |
 | `resolvePass` 读 kind 的路径 | 声明里没有"这是翻译 pass"这种信息；`std::gir` 之类靠 C++ 类的 `dynamic_cast` 区分 | 若加 `kind`，注册点（`pass.cpp:583` 附近 `PassDescriptor descriptor;`）就要填，**34 个注册点都要看一遍**——这是这一笔真正的工作量 |
 | 预检点 1 `firstConsumingPass` | `pass.cpp:2639` `factory(ctx)`，cast 到 `GraphSchedulePass` / `GraphTranslatePass` | 改问 `descriptor.kind`，不构造 |
 | 预检点 2 `passListTranslatesProgram` | `pass.cpp:2624` `factory(ctx)`，cast 到 `GraphTranslatePass` / `GraphSchedulePass` | 同上 |

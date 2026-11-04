@@ -1,0 +1,38 @@
+// The second derivative through `vjp`, and where it stops: this pins the refusal, not a number.
+//
+//   f(x) = x*x*x,  f'(x) = 3x^2,  f''(2) = 12
+//
+// The writing is the natural one -- differentiate the result of `vjp` -- and it is refused inside
+// the library, at `stdlib/vjp.cml#vjp`'s `split(jvp(f))<..ws>(..xs)`:
+//
+//   cannot differentiate through this call of a function value: which function it calls is not
+//   evident where it is called: the function is the result of 'transforms:split'
+//
+// The forward half `split` answers does not exist as a graph until the program runs
+// (`modules/transforms/split_operator.cpp#splitKernel` reads `function->graph()` and builds it), so
+// the derivative the call would need cannot be planned before it runs. Reading the pullback out of
+// the pair and calling that stops at the second half of the same wall: "the function is read from a
+// tuple, a struct or an array" (`pullback.cpp#Backward::whyNotEvident`).
+//
+// What *is* available today is the second derivative through `grad`, whose inner transform is an
+// OPER of the autodiff module over a static function and is built while the rewrite runs:
+// `second_order_nest.cml` (12 from the nest), `second_order.cml` (12 from the named form).
+
+import { grad } from autodiff
+import { vjp } from vjp
+
+func cube(x: float): float {
+    return x * x * x
+}
+
+with <x: float>
+func vjp_value(): float {
+    let (value, pullback) = vjp(cube)(x)
+    let _ = pullback
+    return value
+}
+
+func main(): int sync {
+    println(grad(vjp_value)<2.0>())
+    return 0
+}

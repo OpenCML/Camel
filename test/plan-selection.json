@@ -58,9 +58,13 @@
             "paths": ["test/tools/roundtrip-compare.mjs"],
             "plans": ["feat/trans/cml.plan.toml"]
         },        {
+            "comment": "The plan-normaliser guard: its case is the tool itself, so a change there selects the plan that runs it. Its two fixture trees under test/tools/selftest/plan-normalizers are read by that plan as well, which is why the selftest rule below names it too. The plan is fast, so the rule carries no layer.",
+            "paths": ["test/tools/check-plan-normalizers.mjs"],
+            "plans": ["feat/tools/plan_normalizers.plan.toml"]
+        },        {
             "comment": "The parse-check harness, the selftest fixtures and the load-class guard: a change here runs smoke, the runner plan, the load-class plan (its cases are the selftest fixtures) and the front-end plan (layered so its slow fuzz test is filtered under --tier fast).",
             "paths": ["test/tools/parsecheck/", "test/tools/jitcov/workloads.cml", "test/tools/selftest/", "test/tools/check-load-class.mjs"],
-            "plans": ["smoke", "feat/consistency/runner.plan.toml", "feat/tools/load_class.plan.toml", { "plan": "feat/parse/frontend.plan.toml", "layer": true }]
+            "plans": ["smoke", "feat/consistency/runner.plan.toml", "feat/tools/load_class.plan.toml", "feat/tools/plan_normalizers.plan.toml", { "plan": "feat/parse/frontend.plan.toml", "layer": true }]
         },
         {
             "comment": "The runner itself and the self-test: the plans that exercise the runner and the smoke set.",
@@ -86,6 +90,11 @@
             "comment": "The other test harnesses (cppexec, parsecheck, jitcov, progen, gcbench, ...): no plan tests a harness directly, and naming the plan that invokes one would mean naming most of feat/. The smallest honest check is smoke plus the runner plan, which is what a harness change can break first. The specific debugger and LSP clients above are narrower because their plans own them.",
             "paths": ["test/tools/"],
             "plans": ["smoke", "feat/consistency/runner.plan.toml"]
+        },
+        {
+            "comment": "The gate entry and the helpers beside it (internal/tools): the tools that move a tree to the build host, build and run plans there, the local build and test helpers, the watcher, the settings loader, the example settings file and their README. No plan exercises them -- they are the harness that runs the plans, they run on the workstation under PowerShell, and the build host has no pwsh -- so there is no behavioural plan to name, and naming smoke here would be the shape of a guard that guards nothing. They are still read, though, which is why this is a rule and not a rule-less class: scripts/conflict-markers.mjs walks every tracked file whose extension it knows (.md, .ps1 and .json are all in that set) and scripts/check-doc-links.mjs --citations reads .ps1 and .md from the repository root, and both are tests of feat/docs_links. Measured on 2026-11-04: one hunk head appended to internal/tools/watch-fsh-dev.ps1 is reported as internal/tools/watch-fsh-dev.ps1:71, and one stale `*.md` citation in a .ps1 or a .md under internal/tools is reported by name. So `--changed` on a gate-script edit runs feat/docs_links, and a merge left unfinished or a citation that stops resolving in one of these files goes red there. That is the whole of what the plan sees: it does not verify what the gate does. A file added here that neither walker reads is a new hole, and must not be read as covered because this rule exists.",
+            "paths": ["internal/tools/"],
+            "plans": ["feat/docs_links.plan.toml"]
         },
         {
             "comment": "FastVM and the other schedulers.",
@@ -197,7 +206,14 @@
             "comment": "Automatic differentiation. `layer` is true because five slow cases compare gradients against PyTorch: --tier fast runs the fast autodiff cases and filters those.",
             "paths": ["modules/autodiff/", "test/cases/modules/autodiff/"],
             "layer": true,
-            "plans": ["feat/modules/autodiff.plan.toml", "feat/modules/autodiff_inspection.plan.toml"]
+            "plans": ["feat/modules/autodiff.plan.toml", "feat/modules/autodiff_inspection.plan.toml", { "plan": "feat/compile/rules_angle_args.plan.toml", "ownCases": true }]
+        },
+        {
+            "comment": "The showcase's first-step gradient: `feat/showcase_s2.plan.toml` reads one case under test/cases/compile/transforms/, which the directory rules mirror to feat/compile/transforms.plan.toml, and it sits beside the feat/ plans rather than in that mirrored directory, so no case path selected it and `--changed` could never reach it. `ownCases` keeps the rule from riding every edit in that directory into a plan that reads one program. This and the `feat/compile/rules_angle_args.plan.toml` entry above are the author's 2026-11-03 ruling on the red self-test carried out: the two names the self-test reports are a rule missing from this file, and the runner has nothing to do with it.",
+            "paths": ["test/cases/compile/transforms/"],
+            "plans": [
+                { "plan": "feat/showcase_s2.plan.toml", "ownCases": true }
+            ]
         },
         {
             "comment": "Tensor operators and shapes: the tensor plans, the index/operator semantics plans, the thread budget (the pool and the library GEMM share one number), the numeric licence that the library path is allowed under, and autodiff (layered, for the same PyTorch reason), because a shape or operator change shows up in gradients.",
@@ -331,7 +347,12 @@
             "plans": ["feat/gate/conformance.plan.toml"]
         },
         {
-            "comment": "The other build/dev scripts (build.js, format.js, collect-out.js, ...): every plan runs the binary they build, but no plan reads them. Smoke is the smallest check that the toolchain still produces a working camel. scripts/perf-gate.mjs is covered here too: smoke does not run a perf plan.",
+            "comment": "The build stamp and the -NoBuild guard: build_stamp drives scripts/build-info.js on a fake checkout, and the option record it compares comes from scripts/common.js (with scripts/cmake-opts.js reading the same values for the -D flags) and is written by scripts/collect-out.js at the end of every build. The general rule below sends scripts/ to smoke, which never reads the stamp.",
+            "paths": ["scripts/build-info.js", "scripts/common.js", "scripts/cmake-opts.js", "scripts/collect-out.js"],
+            "plans": ["feat/tools/build_stamp.plan.toml"]
+        },
+        {
+            "comment": "The other build/dev scripts (build.js, format.js, debug.js, ...): every plan runs the binary they build, but no plan reads them. Smoke is the smallest check that the toolchain still produces a working camel. scripts/perf-gate.mjs is covered here too: smoke does not run a perf plan.",
             "paths": ["scripts/"],
             "plans": ["smoke"]
         },

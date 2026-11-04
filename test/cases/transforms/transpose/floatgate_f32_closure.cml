@@ -1,0 +1,36 @@
+/**
+ * The transposed **linear half** of an `f32` function: the residuals ride in its closure, so the
+ * transposed graph's closure ports are the residual slots and each one is an `f32`.
+ *
+ * `f(x, y) = x*x*y`, so at `x = 3, y = 2`:
+ *
+ *     value     = x*x*y = 18
+ *     d/dx      = 2xy   = 12
+ *     d/dy      = x*x   = 9
+ *
+ * `split(jvp(f))` hands out `(value, lin)`, and `lin`'s **closure** is the two residuals and the
+ * product the cut carried -- the backward half's ports are not parameters of `lin`, they are the
+ * ports the closure stands for. `transpose(lin)` copies the closure and declares one capture port per
+ * residual (`carried=<n>` in the reading), and those ports take the residual's own type. At `f32` a
+ * capture port typed `float` hands an `f32` residual to a `float` slot, so the two answers below do
+ * not come out as 12 and 9.
+ *
+ * `back(1.0)` is the seed the cotangent is read at (the author's `transpose(lin)(1)`): the answer is
+ * `(2xy, x^2)` and it does not move when the seed does, because a transposition is linear in it.
+ */
+import rulesets.jvp
+import rulesets.transpose
+import { jvp, split, transpose } from transforms
+
+func f(x: f32, y: f32): f32 {
+    return x * x * y
+}
+
+func main(): int sync {
+    let fwd = split(jvp(f))
+    let (value, lin) = fwd(3.0, 2.0)
+    let back = transpose(lin)
+    let (bx, by) = back(1.0)
+    'closure f32 value={} dx={} dy={}'->format<value, bx, by>->println
+    return 0
+}

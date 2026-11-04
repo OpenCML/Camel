@@ -151,8 +151,8 @@ export func check(rules: Rule[]): CheckReport
 /// (`WithParameterAfterDefault`), and a function-typed one takes no default (`null` has type
 /// `void`, and `F?` leaves `F` unbound). Written first, it is the argument the arrow carries:
 /// `rules->check<8, 1>(f)`.
-/// @example-fragment `rules` and `f` come from the caller
-/// @example rules->check(f)
+/// @example-fragment `rules` comes from the caller
+/// @example rules->check((x: int) => x + 1)
 #op('rewrite:check_over')
 with <samples: int = 100, seed: int = 0>
 export func check::<F>(rules: Rule[], over: F): CheckReport when is_function::<F>()

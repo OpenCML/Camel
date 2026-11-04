@@ -1,8 +1,9 @@
 id = "compile.escapes"
 order = 923
 tier = "fast"
-tags = ["feat", "compile", "literals", "escapes"]
-desc = "The one escape table of the three string forms: `\\0`, `\\xHH`, `\\u{...}` and the named escapes decode; an octal-looking form (`\\101`, `\\01`, `\\012`, `\\033`) and any other unknown pair (`\\q`, `\\8`) are unknown escapes -- kept as written, warned as LexicalDiag::InvalidEscapeSequence, one code and one message shape for all of them."
+tags = ["feat", "compile", "literals", "escapes", "raw"]
+
+desc = "The one escape table of the three quoted string forms, and the two ways to write a backslash without it. `\\0`, `\\xHH`, `\\u{...}` and the named escapes decode; an octal-looking form (`\\101`, `\\01`, `\\012`, `\\033`) and any other unknown pair (`\\q`, `\\8`) are LexicalDiag::InvalidEscapeSequence at error severity, so the program does not build (the author's ruling of 2026-11-02). A raw string (`r\"...\"`, `r#\"...\"#`) is not decoded at all, and a raw string without its closing delimiter is UnclosedStringLiteral at the opening quote. `std::cml` prints a value with several backslashes back as a raw string, and the print round trip is compared as behaviour in trans.cml."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -10,64 +11,46 @@ timeout_ms = 8000
 
 [[tests]]
 name = "escapes.plain"
-desc = "A plain string: the seven probes of the rule and the three octal-looking forms. `\\101`, `\\8`, `\\01`, `\\012` and `\\033` are unknown (six warnings, the text kept); `\\0` is the null byte, `\\x41` is `A`, `\\u{1F600}` is one code point, `\\n` is the line feed, and `\\0x` is the null byte and an `x`."
+desc = "A plain string: the valid escapes only. `\\0` is the null byte, `\\x41` is `A`, `\\u{1F600}` is one code point, `\\n` is the line feed, and `\\0x` is the null byte and an `x` -- no diagnostic at all, since every pair here is in the table."
 kind = "behavior"
 case = "../../../cases/compile/escapes/plain.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stderr_contains = ["[Warn]:", "name=LexicalDiag::InvalidEscapeSequence, code=0x01100000", "Invalid escape sequence in string: \\101", "Invalid escape sequence in string: \\8", "Invalid escape sequence in string: \\01", "Invalid escape sequence in string: \\012", "Invalid escape sequence in string: \\033"]
 verify_script = """
 ({ input, assert }) => {
-const bs = String.fromCharCode(92)
-const want = [
-    '101 4', '0 1', 'x41 1 A', 'u 1', 'n 1', '8 2 ' + bs + '8', '0x 2',
-    '01 3', '012 4', '033 4',
-].join('\n')
+const want = ['0 1', 'x41 1 A', 'u 1', 'n 1', '0x 2'].join('\n')
 assert(input.normalized.stdout.trim() === want, 'stdout: ' + input.normalized.stdout)
-const warnings = (input.normalized.stderr.match(/Invalid escape sequence in string:/g) || []).length
-assert(warnings === 6, 'six warnings, got ' + warnings + ': ' + input.normalized.stderr)
+assert(input.normalized.stderr.trim() === '', 'no diagnostic: ' + input.normalized.stderr)
 }
 """
 
 [[tests]]
 name = "escapes.formatted"
-desc = "A formatted string: the same probes and the same six unknown escapes; the pattern text reaches the same table."
+desc = "A formatted string: the same valid probes, so the pattern text reaches the same one table and warns about nothing."
 kind = "behavior"
 case = "../../../cases/compile/escapes/formatted.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stderr_contains = ["[Warn]:", "name=LexicalDiag::InvalidEscapeSequence, code=0x01100000", "Invalid escape sequence in string: \\101", "Invalid escape sequence in string: \\8"]
 verify_script = """
 ({ input, assert }) => {
-const bs = String.fromCharCode(92)
-const want = [
-    '101 4', '0 1', 'x41 1 A', 'u 1', 'n 1', '8 2 ' + bs + '8', '0x 2',
-    '01 3', '012 4', '033 4',
-].join('\n')
+const want = ['0 1', 'x41 1 A', 'u 1', 'n 1', '0x 2'].join('\n')
 assert(input.normalized.stdout.trim() === want, 'stdout: ' + input.normalized.stdout)
-const warnings = (input.normalized.stderr.match(/Invalid escape sequence in string:/g) || []).length
-assert(warnings === 6, 'six warnings, got ' + warnings + ': ' + input.normalized.stderr)
+assert(input.normalized.stderr.trim() === '', 'no diagnostic: ' + input.normalized.stderr)
 }
 """
 
 [[tests]]
 name = "escapes.triple"
-desc = "A triple-quoted string: the same probes and the same six unknown escapes; the form that takes no escaped quote still shares the one table."
+desc = "A triple-quoted string: the same valid probes; the form that takes no escaped quote still shares the one table."
 kind = "behavior"
 case = "../../../cases/compile/escapes/triple.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stderr_contains = ["[Warn]:", "name=LexicalDiag::InvalidEscapeSequence, code=0x01100000", "Invalid escape sequence in string: \\101", "Invalid escape sequence in string: \\8"]
 verify_script = """
 ({ input, assert }) => {
-const bs = String.fromCharCode(92)
-const want = [
-    '101 4', '0 1', 'x41 1 A', 'u 1', 'n 1', '8 2 ' + bs + '8', '0x 2',
-    '01 3', '012 4', '033 4',
-].join('\n')
+const want = ['0 1', 'x41 1 A', 'u 1', 'n 1', '0x 2'].join('\n')
 assert(input.normalized.stdout.trim() === want, 'stdout: ' + input.normalized.stdout)
-const warnings = (input.normalized.stderr.match(/Invalid escape sequence in string:/g) || []).length
-assert(warnings === 6, 'six warnings, got ' + warnings + ': ' + input.normalized.stderr)
+assert(input.normalized.stderr.trim() === '', 'no diagnostic: ' + input.normalized.stderr)
 }
 """
 
@@ -87,30 +70,66 @@ const want = [
     'A ' + String.fromCharCode(0x4E2D),
 ].join('\n')
 assert(input.normalized.stdout.trim() === want, 'stdout: ' + input.normalized.stdout)
-assert(input.normalized.stderr.trim() === '', 'no warning: ' + input.normalized.stderr)
+assert(input.normalized.stderr.trim() === '', 'no diagnostic: ' + input.normalized.stderr)
 }
 """
 
 [[tests]]
-name = "escapes.unknown_forms"
-desc = "`\\q` and `\\101` sit in the same catalogue entry, with the same message shape: eight warnings and the text kept as written (`\\q`, `\\101`, `\\8`, `\\01`). `\\0` alone stays the null byte."
-kind = "behavior"
+name = "escapes.unknown_is_an_error"
+desc = "`\"\\q\"` does not compile: LexicalDiag::InvalidEscapeSequence is an error since the author's ruling of 2026-11-02, so a program that writes an unknown escape is refused instead of running with the pair kept. The message names the pair that was written, and nothing is printed."
+kind = "negative"
 case = "../../../cases/compile/escapes/unknown.cml"
 args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "LexicalDiag::InvalidEscapeSequence"
+expect_output_contains = ["Invalid escape sequence in string: \\q", "unknown.cml:8:13", "code=0x01000004"]
+
+[[tests]]
+name = "escapes.raw_strings"
+desc = "The raw forms decode nothing: `r\"\\q\"` is two characters, `r\"C:\\dir\\file\"` is that path, `r#\"a\"b\"#` holds a `\"` and does not end there, `r##\"a\"#b\"##` holds `\"#`, `\"\\\\\"` is the other way to write one backslash, and the empty raw forms are empty."
+kind = "behavior"
+case = "../../../cases/compile/escapes/raw.cml"
+args = ["${case}"]
 expect_exit = 0
-expect_stderr_contains = ["name=LexicalDiag::InvalidEscapeSequence, code=0x01100000", "Invalid escape sequence in string: \\q", "Invalid escape sequence in string: \\101", "Invalid escape sequence in string: \\8", "Invalid escape sequence in string: \\01"]
 verify_script = """
 ({ input, assert }) => {
 const bs = String.fromCharCode(92)
+const dq = String.fromCharCode(34)
 const want = [
     'q 2 ' + bs + 'q',
-    '101 4 ' + bs + '101',
-    '8 2 ' + bs + '8',
-    '01 3 ' + bs + '01',
-    '0 1',
+    'path C:' + bs + 'dir' + bs + 'file',
+    'quotes 3 a' + dq + 'b',
+    'hash 4 a' + dq + '#' + 'b',
+    'escaped 1 ' + bs,
+    'empty 0 0',
 ].join('\n')
 assert(input.normalized.stdout.trim() === want, 'stdout: ' + input.normalized.stdout)
-const warnings = (input.normalized.stderr.match(/LexicalDiag::InvalidEscapeSequence/g) || []).length
-assert(warnings === 8, 'eight warnings, got ' + warnings + ': ' + input.normalized.stderr)
+assert(input.normalized.stderr.trim() === '', 'no diagnostic: ' + input.normalized.stderr)
+}
+"""
+
+[[tests]]
+name = "escapes.raw_unclosed"
+desc = "A raw string with no closing delimiter is LexicalDiag::UnclosedStringLiteral, reported at the opening quote (line 8, column 14 -- the quote of `r\"abc`, not the end of the file): the text after it is source again, so a missing delimiter does not swallow the program."
+kind = "negative"
+case = "../../../cases/compile/escapes/raw_unclosed.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "LexicalDiag::UnclosedStringLiteral"
+expect_output_contains = ["raw_unclosed.cml:8:14"]
+
+[[tests]]
+name = "escapes.raw_roundtrip_runs"
+desc = "The program trans.cml prints and runs again, run once here as itself: a path with three backslashes prints as that path (11 characters), and a value holding a backslash, a quote and a line feed is 6. This is also the read that keeps the case in the tree -- the round-trip tool names it without the extension, which the inventory does not count as a read."
+kind = "behavior"
+case = "../../../cases/compile/escapes/raw_roundtrip.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const bs = String.fromCharCode(92)
+const want = ['C:' + bs + 'dir' + bs + 'file', '11', '6'].join('\n')
+assert(input.normalized.stdout.trim() === want, 'stdout: ' + input.normalized.stdout)
+assert(input.normalized.stderr.trim() === '', 'no diagnostic: ' + input.normalized.stderr)
 }
 """

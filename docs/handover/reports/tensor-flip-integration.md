@@ -30,7 +30,7 @@ file, so the two touch `modules/tensor/type.{h,cpp}`:
   change to this file was the declaration of `TensorType::literalOperandType()`.
 - `modules/tensor/type.cpp` — resolved to the flip's side: the `TensorType` implementation,
   `literalOperandType` included, goes with the class. **The rule survives on
-  `ArrayType::literalOperandType()`** (`src/core/type/composite/array.cpp:641`), which the same
+  `ArrayType::literalOperandType()`** (`src/core/type/composite/array.cpp#isElementTypeUnstated`), which the same
   develop commit (`2c9c05e78`) added to the core and the flip never touches.
 - `modules/tensor/ops/indexing.cpp` — no conflict: the `sum_to` law string is byte-identical on
   both sides (`{sumLaw("sum_to_f32", …), sumLaw("sum_to_f64", …)}`), and the merge carries it
@@ -161,7 +161,7 @@ reaches two places this slice left alone, because each needs a ruling rather tha
   `total 16380`. 85 reds carry `null` in their captured output, 79 of them with no diagnostic in
   the first block. The value itself is intact — `to_bytes` of such a tensor is the 8 bytes of f32
   zero and `shape` is `[2]` — so this is the print path losing the type, not the data. The rule is
-  already written down one file over (`src/core/rtdata/array.cpp:1244-1251`: "when the declaration
+  already written down one file over (`src/core/rtdata/array.cpp#Array::compactEqualsElements`: "when the declaration
   does not fix the element type, an element prints by the element type it holds itself"), so the
   reader is missing rather than the ruling; but the goldens those reds sit behind are the tensor
   print form and the wide-aligned array form, so no slice can score them green until the print-form
@@ -601,7 +601,7 @@ not support a value of type 'Tensor<void>'; it takes f32 and f64 tensors`, raise
 `logits.pb`. On `9670cd287` **no failing entry names `Tensor<void>`** any more: the refusal is
 gone and the three run further, to `train_step.cml:117:13`, where they fail with
 `RuntimeDiag::RuntimeError: Expected Tensor argument` — raised by `tensorArg`
-(`modules/tensor/ops/support.cpp:55`) because the argument's declared type is an array whose
+(`modules/tensor/ops/support.cpp#tensorArg`) because the argument's declared type is an array whose
 element type is undetermined, which `isTensorType` rejects and the rank-0 scalar box does not
 cover (`test/results/log/20261024_021832_2719996/fail/modules.naive_in_expert_out/train_step.loss.nvm/stdout.txt`).
 
@@ -800,7 +800,7 @@ own sentence: **rank 0 is the element type itself**.
   - **Then**: `declaration_evaluator`'s `EVAL_MISMATCH op=tensor:add (f32[], f32[]) … no instance
     for a call the kernel accepts` — 1 entry. The harness reports a rank-0 operand as the element
     (`f32[]` prints for rank 0) while the kernel boxes it, so the instance search
-    (`sem::instantiate`, `include/camel/core/index_semantics.h:501`) finds none; that entry point
+    (`sem::instantiate`, `include/camel/core/index_semantics.h#instantiate`) finds none; that entry point
     is core, so this shape is a diagnosis for the core lane unless the harness can name the
     operand the way the kernel reads it.
 - **The `var Tensor` edge invariant — done** (`h395`): 41 reds, one root cause (a declared `Tensor`

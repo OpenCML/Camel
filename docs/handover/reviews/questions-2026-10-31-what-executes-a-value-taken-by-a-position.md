@@ -4,7 +4,7 @@
 
 ## 一、现象
 
-`src/compile/gir/builder_operators.cpp:4450-4455` 与 `:4474-4479`，两处同一形状：一次写（或一次 `void` 调用）的**值被位置直接取走**——
+`src/compile/gir/builder_operators.cpp#Builder::visitLinkNode` 与 `:4474-4479`，两处同一形状：一次写（或一次 `void` 调用）的**值被位置直接取走**——
 
 ```cpp
 node_handle_t value = valueOf(normInputs[1].node);

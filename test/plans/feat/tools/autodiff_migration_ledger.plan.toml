@@ -18,13 +18,13 @@ desc = "The autodiff migration ledger is a ratchet: `pass` may only rise, `with`
 
 [[tests]]
 name = "tools.autodiff_migration_ledger.ratchet"
-desc = "`--ledger-check` reads `total=128 library=119 pass=6 with=45 array=67 other=7`, which is what `LEDGER_RECORDED` holds, and says so instead of reding a number nothing moved."
+desc = "`--ledger-check` reads `total=143 library=134 with=53 array=72 other=9`, which is what `LEDGER_RECORDED` holds, and holds the recorded floor of `pass=22` -- the ledger reads a case's expectation from the plans that actually hold it, so the five cases that pin `expect_exit = 1` in `feat/compile` and `feat/linear` are compared against their own plans and turn over -- and says so instead of reding a number nothing moved. Every number here fell by one with `ab9b5bf1a`'s cut: that merge carried `stdlib/rulesets/transpose.cml#sum_axis_t` (one `array` law) and `test/cases/modules/autodiff/rules_angle_args_sum_axis_jvp.cml` (one passing case), and the denominators are a decision, so the decision is restated here rather than left to drift."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/autodiff-migration-ledger.mjs"
 args = ["${case}", "--ledger-check"]
 expect_exit = 0
-expect_stdout_contains = ["[LEDGER-CHECK] ok: total=128 library=119", "with=45 array=67 other=7 -- pass 没有降，三类没有升"]
+expect_stdout_contains = ["[LEDGER-CHECK] ok: total=143 library=134", "with=53 array=72 other=9 -- pass 没有降，三类与记录的读数一致"]
 # It runs alone: for the length of the run, `test/cases/modules/autodiff/` holds files that are not
 # there before or after it (`<case>.ledger-probe.cml`, written and deleted per case), and two other
 # checks walk that tree -- `plan-inventory.mjs`'s case ledger and `check-doc-links.mjs`'s citations --

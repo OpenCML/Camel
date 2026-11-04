@@ -1,0 +1,51 @@
+// The same gradient through the library's `vjp`: the law of a mean reads its axis in its canonical form.
+//
+// This case used to be `mean_axis_negative_axis_refused_by_the_library.cml`, and it pinned a defect
+// rather than a law: `stdlib/rulesets/jvp.cml#jvp_mean_axis` wrote the scale of a mean as
+// `T(1.0 / float(shape(xs)[axis]))` with the axis **as written**, and `-1` is not a position any
+// extent array has. The cut and the walk both succeeded there and the run ended inside the
+// transposed body with `Index -1 is out of range for an array of length 2`, while the engine's leg
+// (`mean_axis_negative_axis_through_the_engine.cml`) answered `1 / 3` at every element and the
+// positive spelling of the same lane ran on this very path
+// (`mean_axis1_keepdims_gradient_reads_the_row_length.cml`). The pair therefore separated "the law
+// reads the axis in one spelling only" from "the law is missing", and the defect was the axis, not
+// the law.
+//
+// The law states the axis instead of indexing by it: `jvp_mean_axis` answers
+// `mean_axis_stated(dxs, stated_axis_shape(axis, keepdims, shape(xs)))`, and its adjoint
+// (`stdlib/rulesets/transpose.cml#mean_axis_stated_t`) reads only the list's extents,
+// `at[2:len(at)]` -- never `at[0]`, the axis. So the axis travels as written and is normalized where
+// the reduction's own entry point normalizes it (`modules/tensor/kernels/reduce.cpp#normalizeAxis`,
+// `axis < 0 ? axis + rank : axis`): `-1` on a 2x3 value names axis 1, the lane length is
+// `extent_product(at[2:])`, and this leg answers the engine's number. The cut and the walk build it
+// as `residuals=4`, `rhs=sum_stated_t,mean_axis_stated_t`:
+//
+//     mean_axis_negative library value=7.00000000000000000
+//     d=[[0.3333333333333333, 0.3333333333333333, 0.3333333333333333],
+//        [0.3333333333333333, 0.3333333333333333, 0.3333333333333333]]
+//
+// `7.0` is the value of `sum(mean<-1, true>(x))` on `x = [[1, 2, 3], [4, 5, 6]]` -- the means of
+// the two lanes, `2` and `5`, added -- so the case pins the forward half and the backward half at
+// once, and the number is the one the engine's leg asserts, element for element.
+//
+// An axis outside the rank is still refused, and it is refused before this law runs: the operator's
+// own normalisation ends the forward half with `reduce: 'tensor:mean_axis': the axis -3 is outside
+// the rank 2` (`-3` on a rank-2 value), the sentence an axis of `2` gets on that value in the other
+// direction. What the law must not do is wrap it: the extents it states are the operand's own, so an
+// axis outside the rank is the operator's refusal and not a lane length this side invents.
+//
+//     camel test/cases/compile/transforms/mean_axis_negative_axis_through_the_library.cml
+import { vjp } from vjp
+import { mean, sum } from tensor
+
+/// The library's spelling: the differentiated value is an ordinary parameter (design principles 9.9).
+func f(x: float[..]): float {
+    return sum(mean<-1, true>(x))
+}
+
+func main(): int sync {
+    let input = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
+    let (value, pullback) = vjp(f)(input)
+    `mean_axis_negative library value={:.17f} d={}`->format<value, pullback(1.0).0>->println
+    return 0
+}

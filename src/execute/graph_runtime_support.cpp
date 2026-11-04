@@ -192,17 +192,46 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         std::vector<gc_node_ref_t> fromExit{startRef};
         reachBack(fromExit, used);
         live = used;
-        std::vector<gc_node_ref_t> seeds;
-        seeds.reserve(graph->regionCount());
-        // Every control region in the walk order (position 0 is the body, which is not a region).
-        for (uint32_t at = 1; at < static_cast<uint32_t>(seedRegions.size()); ++at) {
-            const camel::runtime::GCRegion *region = graph->region(seedRegions.regionAt(at));
-            if (region == nullptr || region->result == camel::runtime::kInvalidNodeRef) {
-                continue;
+        // The seed is the region's result, and the ruling above says why: a region runs because its
+        // owner runs. So a region is seeded only once its owner is in the execution. Seeding every
+        // region of the graph instead laid out the members of a region whose owner nothing reached,
+        // and they ran with the ports the owner would have bound still empty: the body of a loop
+        // that answers nothing ran before any round, and the element its round binds was read as a
+        // null tuple (the member `h(x) = loop s = 0.0 for i in [1,2,3,4] do s + 2.0` transposes to,
+        // 2026-11-03). The walk repeats because an owner may itself be a member of a region: what a
+        // seed brings in can be the owner of another region.
+        //
+        // Measured on 2026-11-03 (`test/plans/feat/compile/transforms.plan.toml`, 84 entries): no
+        // entry needs more than one round -- a seeded result is one the exit walk already had, so no
+        // seed brings in an owner the walk had not reached (the GUARD below is what keeps that true:
+        // an owner in `used` with a result outside it is an error, not a seed). The load-bearing half
+        // of this change is the owner-live condition, and this loop is defensive: it is kept, and not
+        // deleted, so that a graph whose seed does bring in another region's owner walks to the
+        // fixpoint instead of stopping one round short -- but it solves nothing this tree can show
+        // today, and the count above is the reading, not a claim that it will always be one.
+        for (bool grew = true; grew;) {
+            grew = false;
+            std::vector<gc_node_ref_t> seeds;
+            seeds.reserve(graph->regionCount());
+            // Every control region in the walk order (position 0 is the body, which is not a region).
+            for (uint32_t at = 1; at < static_cast<uint32_t>(seedRegions.size()); ++at) {
+                const camel::runtime::GCRegion *region = graph->region(seedRegions.regionAt(at));
+                if (region == nullptr || region->result == camel::runtime::kInvalidNodeRef ||
+                    !graph->containsNodeRef(region->result) || live[region->result]) {
+                    continue;
+                }
+                const gc_node_ref_t owner = region->owner;
+                if (owner == camel::runtime::kInvalidNodeRef || !graph->containsNodeRef(owner) ||
+                    !live[owner]) {
+                    continue;
+                }
+                seeds.push_back(region->result);
             }
-            seeds.push_back(region->result);
+            if (!seeds.empty()) {
+                reachBack(seeds, live);
+                grew = true;
+            }
         }
-        reachBack(seeds, live);
     }
 
     // A region that yields a value yields it to the node that reads it -- the owner of the region --

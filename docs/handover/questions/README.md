@@ -9,6 +9,6 @@
 
 | 页 | 问什么 |
 | --- | --- |
-| [`2026-11-02-is-an-unknown-escape-in-a-string-a-warning-or-an-error`](2026-11-02-is-an-unknown-escape-in-a-string-a-warning-or-an-error.cn.md) | 字符串里的未知转义是警告还是错误？ |
-| [`2026-11-02-transpose-tangent-parameters`](2026-11-02-transpose-tangent-parameters.cn.md) | `transpose` 怎么知道一个函数的参数是切向（半身），而不是普通参数？ |
-| [`2026-11-02-which-generator-does-the-dangling-node-mean`](2026-11-02-which-generator-does-the-dangling-node-mean.cn.md) | 「生成器悬垂节点」指的是哪一件事：`yield` 状态机降级出的无人读节点，还是 `test/tools/progen` 生成的程序里的悬垂？ |
+| [`2026-11-04-does-a-program-own-what-it-adopted`](2026-11-04-does-a-program-own-what-it-adopted.cn.md) | `Program` 交出去的图：只有它自己加的，还是连它 adopt 进来的一起？ |
+| [`2026-11-04-the-refusal-was-not-a-closure-member`](2026-11-04-the-refusal-was-not-a-closure-member.cn.md) | 那句「这一处补上，7 条应当回到原来的数」，我们照做了，打印指向另一个地方——剩下的 6 条算规则层，还是你认为还有一处没找到？ |
+| [`2026-11-04-where-does-the-value-of-a-linear-operand-come-from`](2026-11-04-where-does-the-value-of-a-linear-operand-come-from.cn.md) | 参与微分的那个参数自己的值，由谁交给转置？ |

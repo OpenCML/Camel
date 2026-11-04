@@ -1,0 +1,48 @@
+// `minimum`'s gradient through the engine and through the library, in one program.
+//
+// The mirror of `maximum_gradient_both_legs.cml`, kept as its own case because the law is a different
+// comparison and not the negation of the other's: `where(x <= w, ct, 0.0)` for `x` and
+// `where(x <= w, 0.0, ct)` for `w`, with a tie belonging to the left operand. The engine's
+// `extremumVjp` asks `tensor:le` for `minimum`, so a tie keeps the left operand's cotangent on both
+// legs, and the input below carries a tie (`x = 0.0`, `w = 0.0`).
+//
+// On this input the two operators' readings are mirrors, which is what a reader checks them against:
+// `minimum` answers `[1.0, 1.0, 0.0, 1.0]` for `x` and `[0.0, 0.0, 1.0, 0.0]` for `w`. Both operands
+// are measured, and the tie lane is the one that would move if the comparison were `>=`.
+//
+//     camel test/cases/compile/transforms/minimum_gradient_both_legs.cml
+import { grad } from autodiff
+import { vjp } from vjp
+import { abs, minimum, sum } from tensor
+
+/// The engine's spelling of `d/dx`: the differentiated value is the `with` parameter.
+with <x: float[..]>
+func total_x(w: float[]): float {
+    return sum(minimum(x, w))
+}
+
+/// The same for `d/dw`: the other operand is the `with` parameter.
+with <w: float[..]>
+func total_w(x: float[]): float {
+    return sum(minimum(x, w))
+}
+
+/// The library's spelling: both operands are ordinary parameters.
+func total_plain(x: float[], w: float[]): float {
+    return sum(minimum(x, w))
+}
+
+func main(): int sync {
+    let xa = [-2.0, 0.0, 3.0, -0.5] as float[]
+    let wa = [1.0, 0.0, 1.0, 2.0] as float[]
+    let engine_dx = grad(total_x)<[-2.0, 0.0, 3.0, -0.5] as float[]>([1.0, 0.0, 1.0, 2.0] as float[])
+    let engine_dw = grad(total_w)<[1.0, 0.0, 1.0, 2.0] as float[]>([-2.0, 0.0, 3.0, -0.5] as float[])
+    `minimum engine dx={} dw={}`->format<engine_dx, engine_dw>->println
+    let (_, pullback) = vjp(total_plain)(xa, wa)
+    let (library_dx, library_dw) = pullback(1.0)
+    let same_x = sum(abs(engine_dx - library_dx)) == 0.0
+    let same_w = sum(abs(engine_dw - library_dw)) == 0.0
+    `minimum: engine={} library={} same={}`->format<engine_dx, library_dx, same_x>->println
+    `minimum dw: engine={} library={} same={}`->format<engine_dw, library_dw, same_w>->println
+    return 0
+}

@@ -1,0 +1,15 @@
+// WALL PROBE 13 -- the forward transform's control: `jvp` at one float, a function of one scalar
+// parameter and nothing but `*`. This has to answer 9 and 6 before any other probe's refusal can be
+// read as the library's rather than this harness's.
+import rulesets.jvp
+import { jvp } from transforms
+
+func square(x: float): float {
+    return x * x
+}
+
+func main(): int sync {
+    let (value, tangent) = jvp(square)(3.0, 1.0)
+    println(`jvp square at 3 = ${value:.1f} and ${tangent:.1f}`)
+    return 0
+}

@@ -1,0 +1,26 @@
+id = "tools.install_runtime"
+order = 940
+tier = "fast"
+tags = ["feat", "tools", "install", "runtime"]
+desc = "An install whose C++ runtime is too old says which version it needs, which copy provided too little and where to put a newer one -- two lines and exit 1, instead of the loader's own pile of `version `GLIBCXX_x.y.z' not found` -- and the ordinary install still starts through the launcher."
+
+# The versions a binary requires from libstdc++.so.6 are ELF version requirements, and the loader
+# resolves them before `main`: nothing inside the program can report them, so `bin/camel` is a
+# launcher (scripts/cxx-runtime-guard.mjs) that asks the loader before exec'ing the binary
+# (docs/technical/58_install_cxx_runtime.md). This case holds both ends -- the ordinary start, and
+# an install whose `libs/libstdc++.so.6` is the distribution's older copy -- and asserts that the
+# second one does not read like a broken toolchain. It builds that install in a temporary
+# directory, so it writes nothing to `out/`, and it skips the second half where no too-old runtime
+# exists to build it from.
+
+[[tests]]
+name = "tools.install_runtime.answer"
+desc = "`bin/camel --version` exits 0 with the stamp; an install carrying an older libstdc++.so.6 exits 1 with one sentence naming the version required and the copy that provides too little, one naming where to put a newer one, no output from the program, and no `(required by` line from the loader."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/install/runtime_guard.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 120000

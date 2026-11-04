@@ -495,6 +495,22 @@ slot_t mayFaultKernel(ArgsView &, ArgsView &norm, Context &) {
         camel::runtime::nodeMayFault(graphOf(handle, "graph.may_fault"), handle->index()));
 }
 
+/// Whether a pass may arrange the node anywhere -- drop it, move it, merge it with an identical
+/// call, or leave it with no order edge after an inline: pure *and* unable to fault. It is
+/// `graph::may_be_rearranged` (camel/runtime/graph.h), the one predicate the C++ passes read and
+/// that the passes written in Camel read under this name. A draft is asked with the shapes its
+/// types state (`isValueOnly` asks the same), so the two sides cannot answer differently.
+slot_t mayBeRearrangedKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle  = norm.get<Handle *>(0);
+    const NodeView node = viewOf(handle, "graph.may_be_rearranged");
+    if (node.isDraft()) {
+        return toSlot<Bool>(camel::runtime::nodeIsFreelySchedulable(node.draft(), node.ref, true));
+    }
+    return toSlot<Bool>(
+        camel::runtime::graph::may_be_rearranged(
+            graphOf(handle, "graph.may_be_rearranged"), handle->index()));
+}
+
 slot_t typeOfKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle = norm.get<Handle *>(0);
     Type *type         = viewOf(handle, "graph.type_of").dataType();
@@ -816,13 +832,23 @@ slot_t regionOfKernel(ArgsView &, ArgsView &norm, Context &) {
     return toSlot(region);
 }
 
-/// The body of a graph whose region table is empty; region 0 is always the body.
-const GCRegion &bodyRegion() {
-    static const GCRegion body;
-    return body;
-}
+/// The body of a graph whose region table is empty: the same record the encoder writes for the
+/// body of every other graph, made here because that graph has no table to point into.
+///
+/// What it holds is not a guess. A body region never carries a result -- `setRegionResult` takes
+/// only ids above 0, because it is an arm, a part of a loop or an inlined body that yields a value
+/// -- and it has no owner, no ports and no parameters. A graph whose table is empty is also one
+/// whose body carried no tag: a tag on the body writes the record, and a draft is made with its
+/// body, so an empty table means the body says nothing. The body of such a graph is therefore
+/// exactly a default `GCRegion`.
+///
+/// It is returned by value rather than as a shared static: the answer belongs to the graph that
+/// was asked about, and a caller that compares two answers must not get one object.
+GCRegion bodyRegion() { return GCRegion{}; }
 
-const GCRegion &regionOf(const Handle *handle, const char *site) {
+/// The region `handle` names. By value: the body of a graph with no region table is not in that
+/// table, so there is nothing to return a reference to.
+GCRegion regionOf(const Handle *handle, const char *site) {
     const GCGraph &graph = graphOf(handle, site);
     if (handle->index() == 0) {
         return graph.region(0) != nullptr ? *graph.region(0) : bodyRegion();
@@ -924,6 +950,7 @@ const std::vector<ReadOp> &readOps() {
         {"is_pure", isPureKernel},
         {"may_be_recomputed", mayRecomputeKernel},
         {"may_fault", mayFaultKernel},
+        {"may_be_rearranged", mayBeRearrangedKernel},
         {"type_of", typeOfKernel},
         {"type_name", typeNameKernel},
         {"callee", calleeKernel},

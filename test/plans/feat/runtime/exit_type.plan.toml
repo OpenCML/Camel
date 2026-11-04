@@ -1,0 +1,57 @@
+id = "runtime.exit_type"
+order = 382
+tier = "fast"
+tags = ["feat", "runtime", "seal", "exit-type"]
+desc = "The seal's judgement of the value a graph hands on: it is a value of the declared type, and that relation is the one a position holds a value to everywhere else -- assignability (design principles 5.1), not 'the same width' and not 'the same type name'."
+
+# A graph's exit is a promise to its callers: the value it hands on is of the type the signature
+# declares, which is also the slot a back end writes it into. Until 2026-11-04 the seal asked that
+# question of `T?` / `T!` exits only (`asTagged(declared) == nullptr` returned early), so a graph
+# whose declared type was anything else handed on whatever its builder left there.
+#
+# The two refusals below build the bad graph *themselves*, in the program, which is why they are
+# evidence and not a fixture: a rule library (`import { rewrite } from rewrite`) replaces the node
+# the function returns with a value of another type. That is a program's error -- a rewrite whose
+# right side is not of the type of its left side -- so the run fails with a code of its own,
+# `RuntimeDiag::ExitTypeMismatch`, whose sentence names the graph, the value's type, the declared
+# type and the value (see docs/diagnostics.md).
+#
+# It is not `RuntimeDiag::PassInternalError`, which is still the code for the rest of the seal's
+# invariants -- a graph that breaks one of those is a defect of whatever wrote it, and the difference
+# between "the program wrote a value of another type" and "a pass broke the graph" is the difference
+# between the program's repair and the compiler's. `EdgeChecker` keeps the two apart: the exit-type
+# violation is raised as its own exception (`camel::runtime::GraphExitTypeMismatch`), the pass
+# boundary turns it into the code below, and a structural violation still throws the text the old
+# channel reports.
+
+[defaults]
+kind = "behavior"
+args = ["${case}", "std::nvm"]
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "runtime.exit_type.float_declared_array_returned"
+desc = "A function declared `: float` hands on a `float[]`: the rule replaces the returned `float` operator with the array literal `[1.0, 2.0]`. Before the seal judged every declared type the run printed `6.3956244425295e-310` (the array's address read as a float) and exited 0; now the graph is refused where it is frozen, and both types are named."
+kind = "negative"
+case = "../../../cases/runtime/exit_type/float_declared_array_returned.cml"
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::ExitTypeMismatch"
+expect_output_contains = ["The value the graph 'target' hands on has type 'float[]', and the graph declares 'float'"]
+
+[[tests]]
+name = "runtime.exit_type.int_declared_float_returned"
+desc = "A function declared `: int` hands on a `float`: the rule replaces the returned `int` operator with the float literal `2.5`. The two are the same width, which is what a check relaxed to 'as wide as the declared type' would have accepted; nothing is converted between the numbers (design principles 5.1), so it is refused. Before, the run printed `4612811918334230528` and exited 0."
+kind = "negative"
+case = "../../../cases/runtime/exit_type/int_declared_float_returned.cml"
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::ExitTypeMismatch"
+expect_output_contains = ["The value the graph 'target' hands on has type 'float', and the graph declares 'int'"]
+
+[[tests]]
+name = "runtime.exit_type.legal_exits_are_not_refused"
+desc = "The legal side of the same judgement, one shape per line of the case: a `void` function keeps the value it computes (the one pair the seal leaves alone), a `float[..]` takes a `float[]`, a `float[]` takes a `f32[3]`, a position read of a `float[..]` is a `float`, a `float?` takes `null`, an `int!` takes a value, a named type takes an unnamed value with its fields, and `int`/`float` take themselves. Every one of these is a graph the seal accepts, so a widening of the check that refused one of them would be a false positive, and the printed line is the same numbers read from the same shapes."
+case = "../../../cases/runtime/exit_type/legal_exits.cml"
+expect_exit = 0
+expect_stdout_contains = ["legal_exits 2 3 4.5 -1.0 42 3.0 42 1.5"]
+expect_output_not_contains = ["refused", "edge invariants"]

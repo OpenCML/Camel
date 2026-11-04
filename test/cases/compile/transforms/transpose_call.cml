@@ -19,6 +19,6 @@ func f(x: float): float {
 
 func main(): int sync {
     println(f(1.0))
-    println(transpose(f)(1.0, 1.0))
+    println(transpose(f)(1.0))
     return 0
 }

@@ -1,0 +1,63 @@
+// The derivative of a constant function is zero, for every shape its parameter has: a zero
+// *cotangent* is the identity of the sum a pullback takes, so the answer is the zero of the
+// parameter's own tangent space and never a refusal (48bfa6778: "a parameter the body never reads
+// answers a zero cotangent, not a refusal" -- read here for an array instead of a number).
+//
+//   f(x) = 1.0 for every x, so f'(x) = 0; for an array parameter the zero is an *array* of zeros,
+//   one per position: at `[2.0, 3.0, 4.0]` the answer is `[0.0, 0.0, 0.0]`.
+//
+// Three shapes, because the zero is spelled differently for each and only one of them was ever read:
+//   * `float[3]` -- the shape is in the type, so the member writes the zero down while it builds the
+//     graph (`zeroOfType`, modules/transforms/transpose.cpp) and answers `[0.0, 0.0, 0.0]`.
+//   * `float[..]` -- the type states no extent, and the transposed function is handed the cotangent
+//     and nothing else (author's ruling of 2026-11-02 11:30), so no value of this member carries the
+//     length. The zero the type states has no elements: `[]`. The line is here so that the day a
+//     member is handed the value, the answer reads `[0.0, 0.0, 0.0]` and this line says so
+//     (docs/handover/questions/2026-11-04-what-shape-a-zero-with-no-stated-extent-has.cn.md).
+//   * `float` -- `0.0`.
+//
+// Each answer is read twice where it is a number, at a cotangent of 1 and of 2: the answer is
+// *linear*, and a constant 1.0 in the answer's place would read 1.0 and 2.0.
+//
+// Before the fix the two array halves threw "autodiff: a zero tangent array needs an array with a
+// tangent" (exit 1) out of `__tangent_zeros_arr__`: the member handed that operator the **result's**
+// cotangent -- a `float` -- because it named a port of the source graph where it had to name a node
+// of its own, and because it spelled `:tangent/zeros_arr` for an array whose tangent space names
+// `tensor:zeros_like`.
+import rulesets.jvp
+import rulesets.transpose
+import { vjp } from vjp
+
+func const_fixed(x: float[3]): float {
+    let _ = x
+    return 1.0
+}
+
+func const_open(x: float[..]): float {
+    let _ = x
+    return 1.0
+}
+
+func const_scalar(x: float): float {
+    let _ = x
+    return 1.0
+}
+
+func main(): int sync {
+    let fixed = [2.0, 3.0, 4.0] as float[3]
+    let (fixedValue, fixedPull) = vjp(const_fixed)(fixed)
+    println('fixed value=', fixedValue)
+    println('fixed pullback(1.0)=', fixedPull(1.0))
+    println('fixed pullback(2.0)=', fixedPull(2.0))
+
+    let open = [2.0, 3.0, 4.0] as float[..]
+    let (openValue, openPull) = vjp(const_open)(open)
+    println('open value=', openValue)
+    println('open pullback(1.0)=', openPull(1.0))
+
+    let (scalarValue, scalarPull) = vjp(const_scalar)(2.0)
+    println('scalar value=', scalarValue)
+    println('scalar pullback(1.0)=', scalarPull(1.0))
+    println('scalar pullback(2.0)=', scalarPull(2.0))
+    return 0
+}

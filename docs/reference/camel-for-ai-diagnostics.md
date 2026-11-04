@@ -23,15 +23,12 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `UnknownInternalError` | An error has occurred: {0}. |
 
-**Lexical — errors** (`LexicalDiag`) — 4
+**Lexical — errors** (`LexicalDiag`) — 5
 
 | `IllegalCharacter` | Illegal character '{0}'. |
 | `InvalidNumberFormat` | Invalid number format: '{0}'. |
 | `UnclosedStringLiteral` | This string literal is not closed. |
 | `UnterminatedComment` | Unterminated comment: {0}. |
-
-**Lexical — warnings** (`LexicalDiag`) — 1
-
 | `InvalidEscapeSequence` | Invalid escape sequence in string: {0}. |
 
 **Syntax — errors** (`SyntaxDiag`) — 19
@@ -60,7 +57,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 223
+**Semantic — errors** (`SemanticDiag`) — 225
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -216,6 +213,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `WithParameterAfterDefault` | The 'with' parameter '{0}' has no default and follows '{1}', which has one. |
 | `WithArgumentCallee` | The 'with' argument '{0}' is given by name, and the signature of '{1}' is not known where the binding is written. |
 | `WithArgumentInValue` | The 'with' argument '{0}' is given by name, and this binding is used as a function value. |
+| `WithPackArgumentType` | The pack '..{0}' of '{1}' takes 'with' arguments of type '{2}': argument {3} has type '{4}'. |
 | `WhenPredicateNotImported` | '{1}' is declared in module '{2}', but that name is not imported where the 'when' condition of '{0}' is written. |
 | `WhenPredicateNotCompileTime` | '{1}' is not a compile-time predicate that the 'when' condition of '{0}' can call: {2}. |
 | `WhenPredicateAmbiguous` | The 'when' condition of '{0}' calls '{1}', and that name is ambiguous: it is imported from {2}. |
@@ -255,7 +253,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `RangeStepZero` | The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers. |
 | `SliceStepZero` | The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are. |
 | `CalledFallibleValue` | This value has type '{0}' and it is fallible: calling it as a function leaves the error it may hold nowhere to be read. |
-| `WithPackNeedsNativeDeclaration` | The pack '..{0}' among the 'with' parameters needs a declaration without a body. |
 | `ImplOnBodylessDeclaration` | The body-less declaration '{0}' cannot carry '#impl({1})': it has no Camel body. |
 | `ImplKernelUnknown` | The '#impl' tag of '{0}' names '{1}', which is no body-less declaration. |
 | `ImplKernelForeign` | The '#impl' tag of '{0}' names '{1}', which another module declares. |
@@ -282,9 +279,11 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `TypeFunctionNotApplicable` | The type function '{0}' is not applicable: {1}. |
 | `StatementAfterReturn` | This statement cannot run: the 'return' written before it gives the value of this block, so nothing after it in the block is reached. |
 | `YieldRequiresStreamHead` | A function whose body writes 'yield' hands out a stream, and this function's head does not write one. |
+| `LoopBodyNeedsNextState` | A loop body ends with the next value of its state, and this one ends without writing one: the round after this one has nowhere to go on from. |
 | `RuleLeftIsNotAnOperator` | The rule '{0}' has a left side that is not one operator; it is written as '{1}', and a ruleset indexes its rules by the head of the left side. |
-| `DuplicateRuleForOperator` | The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side, and one ruleset has one rule per operator. |
+| `DuplicateRuleForOperator` | The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side and write the same parameter types, and one ruleset holds one rule per operator and parameter-type list. |
 | `RuleRightUsesOuterVariable` | The rule '{0}' reads '{1}' on its right side, and '{1}' is a name its left side binds: in this ruleset the right side names the function the transform calls, and the pattern's names are never bound. |
+| `ExtentOfNeedsStatedShape` | `extent_of::<A>()` answers the extents the type `A` writes down, and this call's type writes none: {0}. |
 
 **Semantic — warnings** (`SemanticDiag`) — 15
 
@@ -304,7 +303,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `FailNotExecuted` | This 'fail' is not executed: {0}. |
 | `StatementAfterFail` | This statement cannot run: the 'fail' written before it never returns. |
 
-**Run time and passes — errors** (`RuntimeDiag`) — 38
+**Run time and passes — errors** (`RuntimeDiag`) — 40
 
 | `RuntimeError` | An error has occurred: {0}. |
 | `DivisionByZero` | Attempted division by zero. |
@@ -317,6 +316,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `PassInternalError` | Pass '{0}' failed with an internal error: {1}. |
 | `PassBoundaryResources` | Pass '{0}' changed the ambient resources the program touches: before {1}, after {2}. |
 | `PassBoundaryNodes` | Pass '{0}' returned a program whose {1} has no {2}. |
+| `ExitTypeMismatch` | The value the graph '{0}' hands on has type '{1}', and the graph declares '{2}'; the value is {3}. |
 | `PassBoundaryPorts` | Pass '{0}' returned a program whose operator node {1} no longer matches its declaration: {2}. |
 | `MacroEvaluationFailed` | '{0}' could not be evaluated by std::macro: {1}. |
 | `EntryArgumentMissing` | No value was given for the {0} {1} of 'main'. |
@@ -332,6 +332,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `TimeFormatFailed` | '{0}' failed: {1}. |
 | `GradientElementTypeMismatch` | The gradient of a value of type '{0}' has element type '{1}': {2}. A gradient must have the element type of the value it is the gradient of (design principles 9.9); accumulated as it is, the value would be read at the wrong width and answer with a number that is not the derivative. |
 | `ValueWithNoDerivativeRule` | The operator '{0}' takes a differentiable value through its with parameter {1} (counting from 1), of type '{2}', but {3}. |
+| `TransposeNeedsParameterShape` | The transpose of '{0}' needs the shape of {1}, and the type '{2}' does not state it. |
 | `ConversionOutOfRange` | Cannot convert {0} to {1}: {2}. |
 | `UnhandledError` | An error value reached the exit of 'main' without being handled: {0}: {1}. |
 | `SliceOutOfRange` | The range {0} to {1} is out of range for {2} of length {3}. |
@@ -345,10 +346,11 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `DeviceNotSelected` | No device to run '{0}' on: {1}. |
 | `GpuScopeMacroNotExpanded` | `#gpu` scope '{0}': {1} is a macro operator no pass has expanded, so the derived graph does not exist when the scope is compiled; put the pass '{2}' before this one. |
 
-**Run time and passes — warnings** (`RuntimeDiag`) — 4
+**Run time and passes — warnings** (`RuntimeDiag`) — 5
 
 | `PassesNeverRun` | Pass '{0}' consumes the graph, so {1} written after it will not run. |
 | `ConstantExpressionFaults` | This constant expression faults whenever it is evaluated ({0}); it is not folded. |
 | `TranslationLinksRuntime` | std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel. |
 | `DefunctionalizationIncomplete` | Defunctionalization left {0} as written. |
+| `JitWithoutCodeGenerator` | `std::jit` has no native code generator in this build; the program runs on the bytecode interpreter, as under `std::fvm`, and the result is the same. |
 <!-- camel-for-ai end: diagnostics -->

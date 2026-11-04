@@ -41,7 +41,7 @@ func main(): int sync {
 
 判据（留给接手的人）：**区域图里带效应的成员，必须仍排在它原来的效应前驱之后、效应后继之前**；否则 `println('before')` 与 `println('older')` 这两条同一资源（stdout）上的效应顺序变了，**直接违反设计原则 3.3**（同一资源上的效应在每一个遍之后都保持写下的顺序），也违反红线 3 的意图。
 
-「带效应」的判法，**全树唯一的那一种**（`modules/tiles/src/graph_regions.cpp:97`）：
+「带效应」的判法，**全树唯一的那一种**（`modules/tiles/src/graph_regions.cpp#operations`）：
 
 ```cpp
 if (!table.isPure(oper) || table.hasExternalEffect(oper))

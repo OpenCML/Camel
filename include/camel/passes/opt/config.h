@@ -154,7 +154,12 @@ struct OptimizeRewriteConfig {
     /// declare it as the `constant_budget` parameter.
     size_t constantBudgetBytes = kDefaultConstantBudgetBytes;
     /// The nodes already copied, for a driver that runs the engine several times against one
-    /// budget (std::opt). Null: each run of the engine has the whole budget.
+    /// budget (std::opt, whose rounds share one count). **Required** by
+    /// `applyOptimizeRewritePass`: every pass that runs the rewrite keeps one — `std::opt` through
+    /// `simplifyGraph`, `std::opt::inline`, `::devirtualize` and `::specialize` on their own
+    /// instances, cleared where their run starts — and a run given none is refused rather than
+    /// counted in a local, which would spend the whole `growth_budget` again on the next run and
+    /// say nothing about it (engine.cpp).
     size_t *growthSpentNodes = nullptr;
     InlineRewriteConfig inlineConfig{};
     /// Restrict algebra to strictly equivalent floating-point rewrites. By default local
@@ -171,6 +176,10 @@ struct OptimizeRewriteConfig {
     /// OptimizeRewritePass) and therefore cleared when a run starts. Not a static in the engine: a
     /// count that outlived the program it was counting would report a run of one program against
     /// the next, and nothing in a count of runs belongs to the process rather than to a pass.
+    /// **Required** by `applyOptimizeRewritePass`: every pass that runs the rewrite keeps one
+    /// (`std::opt`, `std::opt::inline`, `std::opt::devirtualize`, `std::opt::specialize`), and a
+    /// run given none is refused rather than counted from zero in a local, which would hide the
+    /// rewrite that never settles (engine.cpp).
     SettleStreak *settleStreak = nullptr;
     bool checkScreens = false;
 };

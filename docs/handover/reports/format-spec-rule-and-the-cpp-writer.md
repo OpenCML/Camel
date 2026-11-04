@@ -27,10 +27,10 @@ mcts selfplay losses=[0.640625, 0.483687, 0.358262, 0.279323, 0.263602, 0.297754
 
 ## 二、为什么一样：本来就是一个解析器
 
-- `src/builtin/operators/str.cpp:235` —— `checkFormatPattern`，**唯一**判断一条格式说明是否被接受的代码。
-- `src/builtin/executors/builtin.cpp:690/694` —— `:io/print`、`:io/println`（`formatWithArg`）与 `:str/format`（`formatNormArg`）登记的是**同一个**检查器。
-- `src/compile/gir/builder_operators.cpp:3699` —— 编译期**唯一**的调用点。
-- `src/parse/ast/builder.cpp:4736` —— `visitFStringData` 把 `${expr:spec}` 就地落成同一个 `:str/format` 调用（表达式进 `with`、pattern 进 `norm`），此后各阶段看不见"插值"这回事。
+- `src/builtin/operators/str.cpp#checkFormatPattern` —— `checkFormatPattern`，**唯一**判断一条格式说明是否被接受的代码。
+- `src/builtin/executors/builtin.cpp#registerBuiltinOperatorTraits` —— `:io/print`、`:io/println`（`formatWithArg`）与 `:str/format`（`formatNormArg`）登记的是**同一个**检查器。
+- `src/compile/gir/builder_operators.cpp#Builder::visitLinkNode` —— 编译期**唯一**的调用点。
+- `src/parse/ast/builder.cpp#isEmptyInterpolation` —— `visitFStringData` 把 `${expr:spec}` 就地落成同一个 `:str/format` 调用（表达式进 `with`、pattern 进 `norm`），此后各阶段看不见"插值"这回事。
 
 所以没有第二套解析器，也没有"让哪一处向哪一处看齐"可谈。裁定引用的读数来自更早的二进制：
 `85a591b34`（2026-10-25，**act on every element when a specification meets a numeric array**）

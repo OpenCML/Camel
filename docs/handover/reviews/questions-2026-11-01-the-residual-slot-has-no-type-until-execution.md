@@ -34,7 +34,7 @@ println("tangent dy=", lin(res, 0.0, 1.0))   // 9.0，仍然对
 ## 试过的两条，各自停在哪
 
 **甲 把残差位的定型推迟到 `fwd`/`lin` 的调用点。** 取消：调用点没有"推迟"这个时刻。
-调用点的结果类型在调用**执行之前**由被调者的类型算出（`src/compile/gir/builder_operators.cpp:883`
+调用点的结果类型在调用**执行之前**由被调者的类型算出（`src/compile/gir/builder_operators.cpp#Builder::overloadValueFor`
 的 `resolveForCall(` 就是这一步），能推迟到的只有"一个没解的类型变量"，而"编译结束后没有值带着未定类型"是原则
 5.10，`any` 正是为此被删掉的。即便允许，未解变量也不带项数——它答不出 0/1/3。
 
@@ -48,8 +48,8 @@ println("tangent dy=", lin(res, 0.0, 1.0))   // 9.0，仍然对
 ## 一句话
 
 调用点的类型在 GIR 建图期由 `SplitResolver::resolve(with, norm)`
-（`modules/transforms/split_operator.cpp:74`）**从类型**算出，而决定残差项数的图要等到 `std::nvm`
-执行 `splitKernel`（同文件 `:123`）里的 `buildSplitGraph`（`modules/transforms/split.cpp:562`）
+（`modules/transforms/split_operator.cpp#SplitResolver`）**从类型**算出，而决定残差项数的图要等到 `std::nvm`
+执行 `splitKernel`（同文件 `:123`）里的 `buildSplitGraph`（`modules/transforms/split.cpp#Half`）
 才存在——**定型比建图早一个阶段**，所以静态类型拿不到那个数。
 
 ## 两条能闭的路，各要作者一句话

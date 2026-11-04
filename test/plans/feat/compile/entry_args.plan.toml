@@ -95,7 +95,18 @@ kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "std::rgir"]
 expect_exit = 0
-expect_output_not_contains = ["Error", "arity"]
+# The needles name the semantic strings and nothing a file path can spell. They used to be the bare
+# words "Error" and "arity", and a bare word is a substring of a path: the rgir dump prints
+# `srcfile=".../camel-work/<worktree>/..."`, so every worktree whose name contains "arity" turned
+# this entry red with `output contains 'arity'` while the dump was correct. That run -- a worktree
+# named `arityrefuse` reading one red more than the same tree under another name, with its host and
+# date -- is recorded in
+# docs/handover/reports/2026-11-04-readings-moved-out-of-plan-notes.cn.md, section 3.
+# A rendering, a count check and the one registry wording that spells the word are what this entry
+# actually forbids: `error[RuntimeDiag::` and `[Error]` are the two diagnostic renderings,
+# `arity mismatch` is the run's norm-arity text, and `runtime arity` is
+# `SemanticDiag::RestFunctionNeedsExpansion`'s wording.
+expect_output_not_contains = ["[Error]", "error[RuntimeDiag::", "runtime arity", "arity mismatch"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 const ports = (name) => input.normalized.stdout.split('label="' + name + '", type="PORT"').length - 1

@@ -1,0 +1,15 @@
+// An axis outside the rank is named, never defaulted.
+//
+//     t: f32[2, 3]   ->   dim<2>(t)
+//     RuntimeDiag::RuntimeError: dim: dim axis out of range
+//
+// The number a law would use is wrong if this answered anything at all: 2 is not an extent of a
+// rank-2 value, and a zero, a one or the last extent would each be a silently wrong shape.
+import { dim, zeros } from tensor
+
+func main(): int sync {
+    let t = zeros::<f32>([2, 3])
+    println(dim<0>(t))
+    println(dim<2>(t))
+    return 0
+}

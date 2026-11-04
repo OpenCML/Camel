@@ -6,6 +6,7 @@
 #include "camel/core/type/composite/composite.h"
 #include "camel/core/type/extent.h"
 
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -242,5 +243,47 @@ bool isUntypedArrayType(const Type *type);
 /// no such type: the empty literal `[]` is one, states no element type, and leaves the position it
 /// stands in to state one — and a generic parameter states none (design principles 5.1, 5.2).
 bool isElementTypeUnstated(const Type *type);
+
+/// The extents a type states, in declaration order: `float[2, 3]` answers `{2, 3}`.
+///
+/// Nothing when the type is not an array, and nothing when it leaves an extent open: `float[]`
+/// (== `float[?]`) states one dimension and no length, and `float[..]` states neither the rank nor
+/// a length. An extent that is an expression over names nothing binds is not stated either -- the
+/// evaluation is the one `ExtentForm::evaluate` makes everywhere else, so a written number answers
+/// and a `?` does not.
+///
+/// This is the **one** spelling of "the shape a type writes down" for a question that has no value
+/// behind it, and both such readers go through here: the builtin `extent_of::<A>()`, which answers
+/// these extents as an `int[]` (`src/builtin/operators/struct.cpp#extentOfResolver`), and the
+/// transposition walk, which asks a bare `transpose` for the shape a law reads
+/// (`modules/transforms/transpose.cpp#shapeFromTypeOf`). A second evaluation for that question would
+/// be a second answer to one question. The literal conversion keeps its own reading
+/// (`src/core/data/composite/array.cpp#statedShapeOf`) because it asks something else: which written
+/// shape a literal's elements can fill, where a form that is an expression states none however it
+/// would evaluate.
+inline std::optional<std::vector<int64_t>> statedExtentsOf(const Type *type) {
+    const ArrayType *array = asArrayType(type);
+    if (array == nullptr) {
+        return std::nullopt;
+    }
+    if (array->anyRank()) {
+        // `T[..]` (and `T[3, ..rest]`): the rank is the value's, so the type states no shape.
+        return std::nullopt;
+    }
+    const std::span<const ExtentForm> written = array->extents();
+    if (written.empty()) {
+        return std::nullopt;
+    }
+    std::vector<int64_t> extents;
+    extents.reserve(written.size());
+    for (const ExtentForm &extent : written) {
+        const std::optional<int64_t> size = extent.evaluate({});
+        if (!size.has_value()) {
+            return std::nullopt;
+        }
+        extents.push_back(*size);
+    }
+    return extents;
+}
 
 } // namespace camel::core::type

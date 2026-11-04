@@ -15,6 +15,7 @@
 
 #include "camel/runtime/draft.h"
 
+#include <unordered_map>
 #include <vector>
 
 namespace camel::runtime {

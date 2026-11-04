@@ -1,0 +1,44 @@
+// `abs`'s gradient through the engine and through the library, in one program.
+//
+// `d|x| = +1 * dx` where `x` is positive and `-1 * dx` where it is negative, so the law needs one
+// thing off the operand -- which side of zero it is -- and nothing else: it is a pure cotangent law
+// with a mask, `where(x >= 0.0, ct, -ct)`, and it needs no forward value the cut would have to carry
+// beyond `x` itself, which is an operand of the node.
+//
+// **The zero is the point of the input.** `abs` has no derivative at `0`, so a law has to say which
+// side it takes there, and the two halves must say the same thing: the engine's `absVjp` asks
+// `tensor:ge` of the operand (`modules/tensor/ops/elementwise_ops.cpp#absVjp`), so the zero is on
+// the positive side and its cotangent keeps its sign. The library's law writes `>=` for that reason
+// and not `>`: with `>` the third lane below would answer `0.0` instead of `1.0`, and the two legs
+// would disagree exactly at the one input where a reader cannot tell which is right from the maths.
+//
+// The input holds both signs and the boundary, and every lane separates the two candidate laws:
+//
+//   * `abs_t` written as `where(x > 0.0, ct, -ct)`  -> [-1.0, -1.0, 1.0, -1.0];
+//   * the correct `where(x >= 0.0, ct, -ct)`        -> [-1.0, 1.0, 1.0, -1.0].
+//
+//     camel test/cases/compile/transforms/abs_gradient_both_legs.cml
+import { grad } from autodiff
+import { vjp } from vjp
+import { abs, sum } from tensor
+
+/// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
+with <x: float[..]>
+func total(): float {
+    return sum(abs(x))
+}
+
+/// The library's spelling: the same function with the value as an ordinary parameter.
+func total_plain(x: float[]): float {
+    return sum(abs(x))
+}
+
+func main(): int sync {
+    let engine = grad(total)<[-2.0, 0.0, 3.0, -0.5] as float[]>()
+    `abs engine={}`->format<engine>->println
+    let (_, pullback) = vjp(total_plain)([-2.0, 0.0, 3.0, -0.5] as float[])
+    let library = pullback(1.0).0
+    let same = sum(abs(engine - library)) == 0.0
+    `abs: engine={} library={} same={}`->format<engine, library, same>->println
+    return 0
+}

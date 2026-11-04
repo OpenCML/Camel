@@ -97,7 +97,7 @@ TILES_OPERATOR_DECLARATION tensor:reshape declared major=1
 
 3. **对照**：`tensor:reshape` 导出的 `.onnx` 里 op 类型是 `['Reshape', 'Identity']`。
 
-**为什么**：lowering 表按 **URI** 键注册，`modules/onnx/lowering.cpp:1349` 注册的名字是
+**为什么**：lowering 表按 **URI** 键注册，`modules/onnx/lowering.cpp#LoweringRegistry::LoweringRegistry` 注册的名字是
 **`tensor:argmax_axis`**；节点带的是 `array:argmax_axis`，查不到，于是拒绝。**导出用的是 URI，不是别名表**——
 导出这边早就认 `tensor:` 这个拼法，只有标准库的 `#op` 声明说 `array:`。
 

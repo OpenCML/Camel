@@ -2,7 +2,7 @@
 
 ## 1. A 项：不变量被查在了一个看不见理由的层
 
-**事实**：`src/runtime/graph_edges.cpp:236` 的这条检查跑在**已提交的 `GCGraph`** 上：
+**事实**：`src/runtime/graph_edges.cpp#EdgeChecker` 的这条检查跑在**已提交的 `GCGraph`** 上：
 
 ```
 if ((pred->flags & kGCNodeFlagSyncStatement) == 0) {
@@ -11,7 +11,7 @@ if ((pred->flags & kGCNodeFlagSyncStatement) == 0) {
 ```
 
 而"这个节点是被 `keep` 保活的"是 **draft 才知道的事实**（`carriesOrdering` 在
-`src/runtime/graph.cpp:1295`，要 draft 才读得到 ctrl/sync/可自由调度）。
+`src/runtime/graph.cpp#emitDraftPayload`，要 draft 才读得到 ctrl/sync/可自由调度）。
 
 **我上一轮提的结构条件（`kind == Gate` 的 `normUser` + `syncUsers` 为空）作废**，理由就是作者 23:30 那句：
 *"审查清单写的是『同步链上的位置，读边，不读标记』：标记是谁都能打的。"* 一个结构形状虽然不像标记那样
@@ -61,15 +61,15 @@ if ((pred->flags & kGCNodeFlagSyncStatement) == 0) {
 ## 4. ②族一的入口（下一笔的起点）
 
 族一 = `var_param`(32) + `var_params`(4) + `partial_application_written_var`(2) = **38 条**，
-最小用例 `test/cases/linear/nvm/var_params.cml`（计划 `test/plans/feat/linear/closures_and_state.plan.toml:180`
+最小用例 `test/cases/linear/nvm/var_params.cml`（计划 `test/plans/feat/linear/closures_and_state.plan.toml#var_params.nvm`
 起的 `.nvm/.fvm/...` 一族）。
 
 它今天靠的 ctrl 写点，已经定位到两处：
 
 | 位置 | 它在干什么 |
 |---|---|
-| `src/runtime/writings.cpp:2199` | `draft_.appendControlEdge(made, wait);` —— 写入改写把一个写节点换成 `made` 之后，**把它原来的 ctrl 等待逐个抄到新节点上**（`takeStatementPlace` + `replaceAllCtrlUses` 之后） |
-| `src/runtime/writings.cpp:2047` | `draft_.ctrlUsersOf(node).empty() && draft_.syncUsersOf(node).empty()` —— 判"这个写入节点有没有人等我"的**唯一依据是 ctrl 或 sync** |
+| `src/runtime/writings.cpp#DraftWritings::rewrite` | `draft_.appendControlEdge(made, wait);` —— 写入改写把一个写节点换成 `made` 之后，**把它原来的 ctrl 等待逐个抄到新节点上**（`takeStatementPlace` + `replaceAllCtrlUses` 之后） |
+| `src/runtime/writings.cpp#DraftWritings::rewrite` | `draft_.ctrlUsersOf(node).empty() && draft_.syncUsersOf(node).empty()` —— 判"这个写入节点有没有人等我"的**唯一依据是 ctrl 或 sync** |
 
 **改法（下一笔）**：把第 2199 行那个"抄 ctrl"换成"抄 sync 前驱"——即在 `made` 上写它的同步前驱
 （`setSyncPredecessor`），前提是被抄的那个 `wait` 本身已经有 sync 位置；没有的，说明它是②里更靠内的

@@ -9,10 +9,10 @@
 ## 四处命中（读写分明）
 
 ```
-src/compile/gir/builder.h:2947            std::unordered_set<node_handle_t> negatedEqualities_;   // 声明
-src/compile/gir/builder_operators.cpp:294  negatedEqualities_.insert(dref);                        // 写
-src/compile/gir/builder_operators.cpp:390  negatedEqualities_.insert(drefNode);                    // 写
-src/compile/gir/builder_operators.cpp:2797 negateResult = negatedEqualities_.contains(targetNode); // 读（仅声明重载支）
+src/compile/gir/builder.h#Builder            std::unordered_set<node_handle_t> negatedEqualities_;   // 声明
+src/compile/gir/builder_operators.cpp#Builder::addDeclaringModuleOverloads  negatedEqualities_.insert(dref);                        // 写
+src/compile/gir/builder_operators.cpp#Builder::operatorDrefOf  negatedEqualities_.insert(drefNode);                    // 写
+src/compile/gir/builder_operators.cpp#Builder::visitLinkNode negateResult = negatedEqualities_.contains(targetNode); // 读（仅声明重载支）
 ```
 
 ## 两次红的读数（都干净回退）

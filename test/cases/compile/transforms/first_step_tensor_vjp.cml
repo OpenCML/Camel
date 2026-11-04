@@ -1,0 +1,38 @@
+// The same tensor step through the library's `vjp` -- `transpose(split(jvp(f)))` -- which is the
+// path S2's training step is written on.
+//
+// The capture was never the reason it stopped: a body that captures the batch and the target lifts,
+// and the four directions of `dL/dw` are answered by the forward transform (`first_step_tensor.cml`,
+// 3.75 / 13.5 / 5.5 / 19.5 against the engine's 3.75 / 13.5 / 5.5 / 19.5). What `vjp` needed was
+// the *reverse* of every step, and the reverse rule table had no rule for the matrix product at all
+// (`stdlib/rulesets/transpose.cml` files `add_t`, `sub_t`, `mul_t`, `div_t`, `neg_t`, `dtod_t`,
+// `sum_t`, `mean_axis_t`, `idx_arr_t`, `take_t` and, until 2026-11-04, no `matmul_t`), so the walk
+// stopped at the product with the message this case used to pin -- the wall `split` answered for a
+// while, one operator earlier than the `mul_t` it named.
+//
+// The case was the measured boundary of that wall, not a wish. It said: "it flips the day the
+// reverse of the product is filed, and the number it must then answer is the one above." The law is
+// filed (`stdlib/rulesets/transpose.cml#matmul_t`, `lane-withport`), the wall is down, and the
+// program now answers the number above:
+//
+//     first_step tensor vjp loss=10.34375 dL/dw=([[3.75, 13.5], [5.5, 19.5]])
+//
+// -- the outer parentheses are the pullback's one-tuple of cotangents, and every element is exact in
+// binary floating point. The plan row that pins it is
+// `test/plans/feat/showcase_s2.plan.toml#first_step.tensor_vjp_answers_the_step` (it was named
+// `..._stops_at_split` while it pinned the refusal).
+import { matmul, sum } from tensor
+import { vjp } from vjp
+
+func main(): int sync {
+    let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
+    let t = [[0.0, 0.0], [1.0, 1.0]] as float[2, 2]
+    let step = (w: float[2, 2]): float => {
+        let e = matmul(x, w) - t
+        return 0.5 * sum(e * e)
+    }
+    let (value, pullback) = vjp(step)([[0.5, 0.25], [0.125, 1.0]] as float[2, 2])
+    let cotangents = pullback(1.0)
+    `first_step tensor vjp loss={} dL/dw={}`->format<value, cotangents>->println
+    return 0
+}

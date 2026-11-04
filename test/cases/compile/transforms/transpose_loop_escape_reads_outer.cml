@@ -22,6 +22,6 @@ func read_outer(x: float): float {
 
 func main(): int sync {
     let back = transpose(read_outer)
-    println(back(1.0, 1.0))
+    println(back(1.0))
     return 0
 }

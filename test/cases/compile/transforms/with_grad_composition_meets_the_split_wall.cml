@@ -1,0 +1,50 @@
+// A library-level `with_grad` as the composition of `vjp` (design principles 9.9, author's ruling of
+// 2026-11-03 09:50): `vjp` differentiates ordinary parameters only, so the weight is moved to one by
+// a lambda -- `(ww) => loss_with<ww, b>(x, t)` -- and the seed 1 read off the pullback is its
+// gradient.
+//
+// This case was written about the walls between that composition and its number. It now answers the
+// number: `(0.125, -0.75)` for x = 1.5, t = 2.0, w = 0.5, b = 0.75 -- err = 0.5*1.5 + 0.75 - 2 =
+// -0.5, loss = 0.5 * err * err = 0.125, and d(loss)/dw = err * x = -0.75.
+//
+// Three walls stood in its way, and each is kept here because which refusal stood says what was
+// missing where -- a reader who finds only the last cannot tell what was answered:
+//
+//   1. The exit's shape: the lifted graph answered with the call's pair instead of a two-member tuple
+//      `Fill` of its own, and `split` cut only a fill (`skip=exit`, `split does not build this
+//      function (a lifted function answers with the pair (result, tangent); ...)`). Answered by the
+//      lift hydrating an application's pair (route B of the ruling of 2026-11-03 15:15).
+//   2. The cut's **forward** walk on a captured value: the lifted lambda has no `with` list while its
+//      graph still reads the captures through ports, and the half listed its ports from the
+//      declaration, so a captured port was in neither map (`skip=forward`, `the port is not a
+//      parameter of the graph, so neither half takes it`). Answered by `split` declaring one closure
+//      port per captured value (`modules/transforms/split.cpp#addCapturePorts`) and carrying the
+//      tangent side's capture as a residual.
+//   3. The cut's **backward** walk on the same kind of port, and behind it a `with` value with no
+//      tangent slot: `jvp` wrote a call's arguments interleaved -- `(value, tangent)` per parameter --
+//      while the lifted signature is the values and then their tangents, and the weight's tangent was
+//      the zero constant the lift wrote. Answered by `lane-withtan`
+//      (`modules/transforms/jvp.cpp`): the lifted call's arguments are filled from the callee's own
+//      lifted signature, and a `with` argument keeps its direction.
+//
+// The three sentences above are quoted as they were measured, not as they were remembered. The tree
+// that answers the number prints `value=0.12500000000000000 w=-0.75000000000000000` and exits 0.
+import { vjp } from vjp
+
+with <w: float, b: float>
+func loss_with(x: float, t: float): float {
+    let err = x * w + b - t
+    return 0.5 * err * err
+}
+
+with <w: float, b: float>
+func step(x: float, t: float): (float, float) {
+    let (value, pullback) = vjp((ww: float) => loss_with<ww, b>(x, t))(w)
+    return (value, pullback(1.0).0)
+}
+
+func main(): int sync {
+    let (value, weight_gradient) = step<0.5, 0.75>(1.5, 2.0)
+    println(`value={:.17f} w={:.17f}`->format<value, weight_gradient>)
+    return 0
+}

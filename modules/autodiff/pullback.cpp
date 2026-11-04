@@ -973,8 +973,12 @@ class ForwardRewrite {
     void rewriteClosureCall(
         gc_node_ref_t call, GCGraph *graph, std::vector<gc_node_ref_t> captures,
         gc_node_ref_t calleeValue);
-    /// The function `callee` computes when it applies one of autodiff's own macros (grad,
-    /// with_grad, vjp) to static functions, else nullptr.
+    /// The function `callee` computes when it applies one of this module's own macros (`grad`,
+    /// `with_grad`, and their `has_aux` forms) to a static function, else nullptr. `vjp` is not one
+    /// of them: it is a function of `stdlib/vjp.cml`, built out of `jvp`, `split` and `transpose`,
+    /// so a call of it inside a differentiated graph has no OPER of this module to resolve and the
+    /// pullback it hands out is a value the graph cannot name (see
+    /// `docs/handover/questions/2026-11-04-what-does-the-second-derivative-need.cn.md`).
     ::Function *macroCallee(gc_node_ref_t callee);
     /// Makes `node` return `plan`'s (value, pullback) and splits the pair for its users. A call
     /// that writes captured variables hands on their new versions after its value

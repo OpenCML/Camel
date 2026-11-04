@@ -1,0 +1,22 @@
+// A parameter without a tangent space standing *before* one with a tangent space: the case that
+// separates a half's port index from the parameter's index. `f(n, xs) = xs[n]` at (1, [3.0, 2.0]) is
+// 2.0, the `int` answers `()` -- an empty member, since `Tangent<int>` is `()` -- and `xs` answers
+// [0.0, 1.0]. The backward half's type is `((), float[])` and its only port is `dxs`, which is
+// parameter **1**: reading the port's own position as the parameter's position names `n` and answers
+// the wrong shape (or refuses), and the two numbers here are what tell the two readings apart.
+import rulesets.jvp
+import rulesets.transpose
+import { vjp } from vjp
+
+func read_at(n: int, xs: float[]): float {
+    return xs[n]
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(read_at)(1, [3.0, 2.0])
+    println(value)
+    let cotangents = pullback(1.0)
+    println(cotangents.0)
+    println(cotangents.1)
+    return 0
+}

@@ -9,7 +9,7 @@ implemented in `src/runtime/graph_edges.cpp`):
 | caller | when | what it does with a violation |
 |---|---|---|
 | `EdgeChecker::run` (`src/runtime/graph_edges.cpp`) | a frozen graph is checked | appends it to the violations the checker reports |
-| `encodeDraftGraph` (`src/runtime/draft_session.cpp:543`) | a draft is about to be published | refuses the encode: `std::runtime_error` naming the graph and the reference, which the pass boundary reports as `PassInternalError` naming the pass |
+| `encodeDraftGraph` (`src/runtime/draft_session.cpp#encodeDraftGraph`) | a draft is about to be published | refuses the encode: `std::runtime_error` naming the graph and the reference, which the pass boundary reports as `PassInternalError` naming the pass |
 
 The four checks, unchanged in wording: `BRCH.join` in range and a JOIN; `JOIN.brch` in range and a
 BRCH; a branch and its join naming each other; a region's `owner` and `result` in range. The encoder

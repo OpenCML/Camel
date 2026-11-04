@@ -878,6 +878,47 @@ makes the three sides functions of `tile` as well, and
 so that `tile_matmul<64>` -- the same spelling a function's partial application has -- calls it
 and gives the `Rule`, and `tile_matmul` alone does too when every parameter has a default.
 */
+namespace {
+
+/// A rule's parameters as one string: the type written for each, in order, with the whitespace
+/// between the tokens squeezed out and the positions joined by `|` (`T[..]|T`). Empty for a rule
+/// that takes none.
+///
+/// This is the part of a rule's signature the head cannot answer -- the head is the operator, and
+/// two laws of one operator with different parameter types are two laws (the author's ruling of
+/// 2026-11-03 11:10; design principles 5.4, 9.11) -- and it is read here, where the declaration is
+/// still syntax, for the same reason the head is: at the stage a module's declarations are read a
+/// rule's `__lhs` has no body, so nothing later has these types as they were written.
+std::string parameterTypesOf(cst::ParentParams params) {
+    std::string joined;
+    const auto paired = params ? params->get<cst::PairedParams>() : cst::PairedParams();
+    if (!paired) {
+        return joined;
+    }
+    bool first = true;
+    for (const syn::Node child : paired->nodes()) {
+        if (!child.is(NK::KeyParamPair)) {
+            continue; // a tuple parameter: one position, many types, not the one this string holds
+        }
+        const cst::KeyParamPair pair(child);
+        const auto type = pair->type();
+        if (!first) {
+            joined += '|';
+        }
+        first = false;
+        if (type) {
+            for (const char c : type->text()) {
+                if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
+                    joined += c;
+                }
+            }
+        }
+    }
+    return joined;
+}
+
+} // namespace
+
 Value Builder::visitRuleDecl(cst::RuleDecl context) {
     ENTER("RuleDecl");
     const std::string name = std::string(context->get<cst::IdentDef>()->text());
@@ -905,6 +946,18 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         // rule where it is written (the rule is wrong here, not at the call that would use it).
         std::string outerUses =
             sides[1] ? outerNamesUsedInRight(sides[0], sides[1]) : std::string();
+        // The rule's condition as written (`is_same::<T, int>()`), or empty. It is part of what a
+        // rule *is*: two rules filed under one key with the same condition could not be told apart
+        // by the engine, so that pair is a duplicate, while two that differ in their condition are
+        // a family it dispatches over.
+        const auto conditionClause = context->get<cst::WhenClause>();
+        std::string condition = conditionClause ? conditionClause->text() : std::string();
+        // The type of each parameter, in order: the other half of what a duplicate is. A key holds
+        // one rule per parameter-type list (the author's ruling of 2026-11-03 11:10), so the two
+        // laws of `T[..]` and `T` are filed under one key and the engine picks the one the
+        // operand's own type enters -- the declaration is not refused for writing the same
+        // `is_float::<T>()` twice.
+        std::string parameterTypes = parameterTypesOf(context->get<cst::ParentParams>());
         collectRuleHead(
             diags_->moduleName(),
             std::move(head),
@@ -913,6 +966,8 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
             std::move(shape),
             std::move(variables),
             std::move(outerUses),
+            std::move(condition),
+            std::move(parameterTypes),
             arity,
             range.start,
             range.end);
@@ -1118,6 +1173,37 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         return list;
     };
 
+    // The type parameters the rule writes *anywhere* -- its left side, its right side, its
+    // condition. A rule's head is written once, but the sides are three declarations of the
+    // compiler's making, so a name the user writes on the right is absent from the left: the
+    // unused-parameter check reads one declaration's own signature, and `rule
+    // mul_tensor_t::<T, X, W>(x: X, w: W) { mul_tensor(x, w) => (ct: T[..]) => … }` names `T`
+    // only in the right side's cotangent. What the rule uses is the union, read here from the
+    // rule's own tokens, and carried to every side.
+    std::vector<std::string> writtenAcrossTheRule;
+    {
+        const syn::TokenBuffer &tokens = context.tree()->tokens();
+        const auto writesName = [&](syn::Node node, const std::string &name) {
+            if (!node) {
+                return false;
+            }
+            // Token *indices*, not byte offsets: `begin()`/`end()` are offsets into the source.
+            const uint32_t first = node->firstToken().index();
+            const uint32_t last  = node->lastToken().index();
+            for (uint32_t i = first; i <= last && i < tokens.size(); ++i) {
+                if (!syn::isTrivia(tokens[i].kind) && tokens.text(i) == name) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        for (const std::string &name : typeParams) {
+            if (writesName(sides[0], name) || writesName(sides[1], name) ||
+                writesName(when, name)) {
+                writtenAcrossTheRule.push_back(name);
+            }
+        }
+    }
     // One side as a function of the rule's parameters: `func name__<side>(params) => expr`. A side
     // is read as a pattern the engine matches and rebuilds with, so its ports are the rule's own
     // parameters; a `with` parameter is a `constas` parameter of it, which the instance reads from
@@ -1127,6 +1213,8 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(funcTypeNode, context);
         unwrapNodeAs<FuncTypeLoad>(funcTypeNode)->setTypeParamNames(typeParams);
+        unwrapNodeAs<FuncTypeLoad>(funcTypeNode)
+            ->setTypeParamsWrittenElsewhere(writtenAcrossTheRule);
         *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
         *funcTypeNode << constasParams(
             params ? any2node(visitParentParams(params)) : createNodeAs<RepeatedLoad>("NamedPair"));
@@ -2934,6 +3022,10 @@ Value Builder::visitPattern(cst::Pattern context) {
     if (context->get<cst::Literal>()) {
         Literal literal = value_cast<Literal>(visitLiteral(context->get<cst::Literal>()));
         res             = createNodeAs<LiteralLoad>(literal);
+        if (context->get<cst::Literal>()->tok(TK::RawString)) {
+            // `case r"C:\dir"`: the pattern's value is the text, not what escapes would make.
+            unwrapNodeAs<LiteralLoad>(res)->setFromRawString();
+        }
         setNodeTokenRangeByContext(res, context->get<cst::Literal>());
     } else if (context->text() == "_") {
         res = createNodeAs<NullLoad>();
@@ -4604,6 +4696,10 @@ Value Builder::visitLiteralData(cst::Literal context) {
     }
     Literal literal = value_cast<Literal>(visitLiteral(context));
     node_ptr_t res  = createNodeAs<LiteralLoad>(literal);
+    if (context->tok(TK::RawString)) {
+        // A raw string's text is its value: the GCT must not decode anything in it.
+        unwrapNodeAs<LiteralLoad>(res)->setFromRawString();
+    }
     setNodeTokenRangeByContext(res, context);
     return res;
 }
@@ -4887,6 +4983,21 @@ Value Builder::visitLiteral(cst::Literal context) {
         // strings of an expression go to visitFStringData (visitLiteralData), and the pattern
         // production no longer takes one, so what arrives here is a plain string.
         data = data.substr(1, data.size() - 2); // Remove quotes
+        type = LiteralType::String;
+    } else if (context->tok(TK::RawString)) {
+        // `r"..."` and `r#"..."#`: the text between the delimiters is the value, with nothing
+        // decoded. Strip `r`, the `#`s that open it and the quote, then the quote and the same
+        // number of `#`s at the end; the caller marks the load raw so that the GCT does not run
+        // the escape table over it (a `\n` written in a raw string is a backslash and an `n`).
+        size_t hashes = 0;
+        while (1 + hashes < data.size() && data[1 + hashes] == '#') {
+            ++hashes;
+        }
+        const size_t inner = hashes + 2; // `r`, the `#`s, the opening quote
+        GUARD(
+            data.size() >= inner + hashes + 1,
+            "A raw string token is `r`, some `#`, `\"`, its text, `\"` and the same `#`.");
+        data = data.substr(inner, data.size() - inner - 1 - hashes);
         type = LiteralType::String;
     } else if (context->tok(TK::MultiStr)) {
         data = data.substr(3, data.size() - 6); // Remove triple quotes

@@ -16,7 +16,7 @@
 | **只认 `ctrl` 的判据** | `runtime/control.cpp:104`、`:148`、`:274-283`（`std::opt::ctrl`：一个 GATE **必须**留一条 ctrl） | 决定约简时能删哪些等待 | 改读**同步前驱**：GATE 的等待在 sync 上，不留 ctrl |
 | 同上 | `passes/opt/generic/gates.cpp:19`（有 ctrl 的 GATE 不可绕过） | 值门能否被它的输入替换 | 条件补上 `syncInputsOf(id).empty()`（第 26 行本来已单独判 sync，两处对齐） |
 | 同上 | `execute/graph_runtime_support.cpp:472`（GATE 没有数据入边时沿 ctrl 找尾值） | 求图尾值时穿过多余的 GATE | 改读**同步前驱**，ctrl 只作旧图的退路 |
-| 二者皆可 | `opt/generic/generic.cpp:288`（`waits = ctrl\|\|sync`）、`modules/autodiff/pullback.cpp:323/609`（两者都遍历）、`control.cpp:301-313`（`std::opt::order` 的 `Pass` 读法只走 order+sync，**data/control 早已被排除在证明之外**） | 判"这个节点等什么" | **不动**；② 之后删掉 `ctrl` 那一半 |
+| 二者皆可 | `opt/generic/generic.cpp:288`（`waits = ctrl\|\|sync`）、`modules/autodiff/pullback.cpp#addCall`（以及同文件的 portTypesOf）（两者都遍历）、`control.cpp:301-313`（`std::opt::order` 的 `Pass` 读法只走 order+sync，**data/control 早已被排除在证明之外**） | 判"这个节点等什么" | **不动**；② 之后删掉 `ctrl` 那一半 |
 | 转发/搬运 | `runtime/draft.cpp`(45)、`draft_inline.cpp`(27)、`draft_clone.cpp`(10)、`writings.cpp`(10)、`generic/rewrite.cpp`(9)，以及 `autodiff` 其余 | 改写、克隆、内联时把等待原样搬过去 | **不动**；② 随列删除，不需要语义判断 |
 | 表示/输出 | `trans/dot`(3)、`trans/json`(4)、`trans/cml`(7)、`modules/onnx`(2)、`modules/tiles`(9)、`trans/gir_metadata` | 打印 `type="CTRL"`、编码 JSON/DOT | **不动**；② 之后图里没有这种边，输出自然消失 |
 | 测试专用 | `passes/test/control.cpp`(26) | `std::opt::ctrl` 自己的用例 | 跟 ① 的改动一起改 |
@@ -47,10 +47,10 @@
 
 上面"留下的两处"说 `:4403`/`:4427` 没有答案、停造 ctrl 会把等待丢掉。**20:35 裁定**（2026-10-30，`reviews/questions-2026-10-29.md:697`）说：在同步块里，门的等待就是同步前驱（5.3，与 `coerceArmExit` 同一处理）；不在同步块里，门不需要存在；停造 ctrl 时这两处按此改，而不是换成别的边。**以裁定为准**——那两处有答案，答案不是"再找一种边"。
 
-今天的现状（2026-10-31，本树，只读读数；报告写的行号今天漂到 `:4425`/`:4449`，仍是同两个门）：
+今天的现状（2026-10-31，本树，只读读数；报告写的行号今天漂到 `builder_operators.cpp:4425`/`:4449`，仍是同两个门）：
 
 - **写侧未改**：`builder_operators.cpp:4425`（赋值门）与 `:4449`（`void` 门）仍各写一条 `linkNodes(LinkType::Ctrl, targetNode, gate)`。
-- **写侧没有同步块判断**：`git grep -n "isSyncStatement" -- src/compile/gir` 无命中。`isSyncStatement` 只在读侧：`include/camel/runtime/effect_liveness.h:41`、`src/passes/opt/generic/gates.cpp:30`、`src/runtime/graph.cpp:584`、`src/execute/fusion_group.cpp:94`、`src/runtime/effects.cpp:120`。
+- **写侧没有同步块判断**：`git grep -n "isSyncStatement" -- src/compile/gir` 无命中。`isSyncStatement` 只在读侧：`include/camel/runtime/effect_liveness.h#EffectLivenessFacts`、`src/passes/opt/generic/gates.cpp#bypassValueGate`、`src/runtime/graph.cpp#validateRuntimeGraphPayloadImpl`、`src/execute/fusion_group.cpp#FusionGroupView::isPrivateTo`、`src/runtime/effects.cpp#effectStandingOf`。
 - **读侧已先读同步前驱**：`gates.cpp:30` 取 `syncInputsOf`，`:38` 对同步块里的门直接不绕；`graph_runtime_support.cpp:472` 同样先把同步前驱当等待。
 
 所以这两处**没有改**：改的是读侧（`d52823be4` 那一族），写侧仍按老样子造 ctrl；②a 之前，那两条 ctrl 还在图里。

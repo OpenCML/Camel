@@ -11,6 +11,7 @@
 #include "builder_support.h"
 
 #include "camel/compile/gir/static_function.h"
+#include "camel/core/data/composite/array.h"
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/rtdata/string.h"
@@ -467,34 +468,6 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         return false;
     };
     auto sourceContext = context_ ? context_->sourceContext() : nullptr;
-    // Why the effect does not run changes with where it is written. An effect that is the value of
-    // a `sync { ... }` block nothing needs is not "outside a sync block": it is inside one that
-    // never runs, and putting the block on a chain is what the writer has to do (design principles
-    // 3.4, as the author ruled on the standalone block statement). A `sync` body hands its value on
-    // through a GATE (builder_control.cpp, the `sync` body's exit), and the block's statements are
-    // reached from it by the control edges it carries, so the block is found by walking the users
-    // of the effect: a GATE above it means the effect's value is the block's value, and a block
-    // whose value nothing needs is one that never runs.
-    const auto inUnusedSyncBlock = [&](draft_node_ref_t start) {
-        std::unordered_set<draft_node_ref_t> seen{start};
-        std::vector<draft_node_ref_t> stack{start};
-        while (!stack.empty()) {
-            const draft_node_ref_t id = stack.back();
-            stack.pop_back();
-            for (auto users : {draft.ctrlUsersOf(id), draft.syncUsersOf(id)}) {
-                for (draft_node_ref_t user : users) {
-                    if (!seen.insert(user).second) {
-                        continue;
-                    }
-                    if (nodeKindOf(draft.ref(user)) == runtime::GCNodeKind::Gate) {
-                        return true;
-                    }
-                    stack.push_back(user);
-                }
-            }
-        }
-        return false;
-    };
     for (draft_node_ref_t id : dropped) {
         if (feedsDroppedEffect(id)) {
             continue;
@@ -526,19 +499,15 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         }
         diags_->of(SemanticDiag::EffectNotExecuted)
             .atOrigin(origin)
-            .commit(
-                subject, inUnusedSyncBlock(id)
-                             ? std::string("the sync block it is in is not used")
-                             : std::string("nothing depends on it and it is not in a sync block"));
+            .commit(subject, "nothing depends on it and it is not in a sync block");
     }
     // A `fail` written as a statement whose value nothing takes (design principles 3.9; the
     // author's ruling of 2026-10-26 on a `fail` on a line of its own). It gives no value and is no
     // effect of its own, so where its value is not wanted nothing runs it and the fault is never
     // raised -- which is what the writer has to be told, because the program was meant to stop
     // there. Inside a `sync` block the statement is on the chain and runs; on the path the data
-    // takes its value is wanted; the two ways it can be left unrun are the two the effect rule
-    // already tells apart (inUnusedSyncBlock), and the warning is its own so that a `fail` is not
-    // read as a call with an effect.
+    // takes its value is wanted. The warning is its own so that a `fail` is not read as a call
+    // with an effect.
     for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (!draft.alive(id) || needed.contains(id)) {
             continue;
@@ -556,9 +525,7 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         }
         diags_->of(SemanticDiag::FailNotExecuted)
             .atOrigin(origin)
-            .commit(
-                inUnusedSyncBlock(id) ? std::string("the sync block it is in is not used")
-                                      : std::string("nothing needs it and it is not in a sync block"));
+            .commit("nothing needs it and it is not in a sync block");
     }
     // The statements a `fail` of this block leaves behind (design principles 3.9; the author's
     // ruling of 2026-10-26): they are reached only if the `fail` is not run at all, which the walk
@@ -1719,6 +1686,34 @@ void Builder::rejectLiteralValue(
     throw BuildAbortException();
 }
 
+namespace {
+
+/// Why an array literal cannot be an array type that states one dimension: the length it writes.
+/// This decides nothing -- `arrayLiteralFitsShape` already decided, and the elements are each
+/// reported by whoever builds the value -- it says which side is what, because a rank-one length
+/// that does not match used to arrive here as the fallback sentence "the value cannot become that
+/// type", which names neither the length nor the side that wrote it, for a literal whose elements
+/// all fit.
+std::string arrayLengthReason(const data_ptr_t &data, Type *type) {
+    const auto *stated  = type != nullptr ? tt::as_ptr<ArrayType>(type) : nullptr;
+    const auto written  = data != nullptr ? std::dynamic_pointer_cast<ArrayData>(data) : nullptr;
+    if (stated == nullptr || written == nullptr) {
+        return {};
+    }
+    const std::span<const ExtentForm> extents = stated->extents();
+    if (extents.size() != 1 || !extents.front().isConstant()) {
+        return {};
+    }
+    const int64_t count = static_cast<int64_t>(written->raw().size());
+    if (count == extents.front().constant()) {
+        return {};
+    }
+    return "the literal writes " + std::to_string(count) + " element(s) and the type states " +
+           std::to_string(extents.front().constant());
+}
+
+} // namespace
+
 void Builder::rejectLiteralData(
     const data_ptr_t &data, Type *type, camel::source::origin_id_t where,
     const GCT::node_ptr_t &written, camel::source::origin_id_t writtenAt,
@@ -1730,6 +1725,9 @@ void Builder::rejectLiteralData(
         reason = reasonGiven;
     } else if (const std::string notFit = literalNotFitReason(data, type); !notFit.empty()) {
         reason = notFit;
+    } else if (const std::string lengthMismatch = arrayLengthReason(data, type);
+               !lengthMismatch.empty()) {
+        reason = lengthMismatch;
     } else if (data->type()->isPrimitive() && isIntegerType(type)) {
         // A decimal literal in an integer type: `int(1.9)` loses the fraction, `int(1.0e30)`
         // is out of the range.

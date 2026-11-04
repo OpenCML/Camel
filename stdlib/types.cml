@@ -91,23 +91,55 @@ export type Tangent<T>
 /// of `f`'s parameters, one tuple member per parameter. A function of one parameter's pullback
 /// answers a one-long tuple -- `(27.0)` -- because the rule is one rule for every arity (author's
 /// ruling of 2026-11-01 14:30).
+///
+/// It does **not** take `f`'s `with` list (author's ruling of 2026-11-03 15:15). A `with` value the
+/// backward half reads is a residual like every other value it reads -- the rule is one rule, and it
+/// is "whatever the second half reads is a residual and goes into `lin`'s closure", `with` values
+/// included. `lin` is therefore a function of the tangents alone, and its transpose is this: one
+/// parameter, the cotangent of the result, and one answer member per parameter of `f`. The `with`
+/// values are written once, at the call that supplies them to `vjp`, and are captured there.
 /// @example is_same::<Pullback<(x: float) => float>, (ct: float) => (float,)>()    // true
+/// @example is_same::<Pullback<<w: float> (x: float) => float>, (ct: float) => (float,)>()    // true
 export type Pullback<F> = (ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
 
 /// The turn of a forward transform into a reverse one, as a function's own type: `vjp(f)` is a
-/// function of `f`'s parameters that answers the value and the pullback.
-/// @example is_same::<Vjp<(x: float) => float>, (x: float) => (float, Pullback<(x: float) => float>)>()    // true
-export type Vjp<F> = (..ParamsOf<F>) => (ResultOf<F>, Pullback<F>)
+/// function of `f`'s parameters that answers the value and the pullback, and it takes `f`'s `with`
+/// parameters as `f` does (author's ruling of 2026-11-03 09:50): a transform differentiates the
+/// ordinary parameters only, and a `with` value is handed on unchanged, as a constant, its tangent
+/// the zero of its type. So this is `Jvp<F>`'s shape -- the same `with` list, then the parameters.
+/// @example is_same::<Vjp<(x: float) => float>, <..WithOf<(x: float) => float>> (x: float) => (float, Pullback<(x: float) => float>)>()    // true
+export type Vjp<F> = <..WithOf<F>> (..ParamsOf<F>) => (ResultOf<F>, Pullback<F>)
 
-/// The forward transform's type: the parameters of `f`, then their tangents, then the value and its
+/// The forward transform's type: the parameters of `f` and their tangents, then the value and its
 /// tangent (`jvp(f)(2.0, 1.0)` is `f(2.0)` and `df` in the direction 1).
+///
+/// **This declaration is the contract** (author, 2026-11-03, `origin/fsh-dev` `6eceaa89d`): the build
+/// makes the declared type, and no declaration is approximate. The order written above is "all the
+/// parameters, then all their tangents"; the build today pairs each parameter with its tangent as it
+/// goes (`modules/transforms/jvp.cpp#jvpSignature`), and gives a parameter with no tangent space one
+/// place only. That difference is a **missing capability of the type-bundle splice** -- the exact shape
+/// needs an interleaving operation `(..A, ..B)` cannot express -- so the declaration is to be made
+/// exact when the splice can write it, and the gap is a defect of the declaration layer, not a
+/// licence to call the declaration approximate.
 /// @example is_same::<Jvp<(x: float) => float>, (x: float, d: float) => (float, float)>()    // true
 export type Jvp<F> =
-    (..ParamsOf<F>, ..Tangent<ParamsOf<F>>) => (ResultOf<F>, Tangent<ResultOf<F>>)
+    <..WithOf<F>> (..ParamsOf<F>, ..Tangent<ParamsOf<F>>) => (ResultOf<F>, Tangent<ResultOf<F>>)
 
-/// The transpose of a linear function: its parameters, then the cotangent of its result, then the
-/// cotangents of its parameters. The cotangent comes last because a pullback may need the value it
-/// transposes at (a branch's condition is a value).
+/// The transpose of a linear function: the values the call site still passes, then the cotangent of
+/// the result, then the cotangents of the parameters. The cotangent comes last because a pullback may
+/// need the value it transposes at (a branch's condition is a value).
+///
+/// **This declaration is the contract** (author, 2026-11-03, `origin/fsh-dev` `6eceaa89d`: "a
+/// declaration is the contract -- `transpose` and `jvp` build the declared types, no approximate
+/// declarations; the type-bundle splice loses multiplicity and that is first"). What the build makes
+/// must be what is written here, so the shape below is the one the build has to produce.
+///
+/// It is not written exactly today, and that is a **missing capability of the type-bundle splice**,
+/// not a spelling to be kept: `(..A, ..B)` loses multiplicity, and two operations the exact shape needs
+/// -- "the value parameters the call site still passes" and "value and tangent interleaved" -- do not
+/// exist yet. When the splice carries multiplicity, this declaration gets the exact form. Until then
+/// the difference is a defect of the declaration layer, to be written down and fixed, never a licence
+/// to call the declaration approximate.
 /// @example is_same::<Transpose<(x: float) => float>, (x: float, ct: float) => (float,)>()    // true
 export type Transpose<F> =
     (..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)

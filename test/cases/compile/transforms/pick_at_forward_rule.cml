@@ -1,0 +1,61 @@
+// The forward rule of a read with a stated length: `pick_at`, and the two legs of the library that
+// answer it.
+//
+// `pick_at(xs, at)` is `xs[at[0]]` of a rank-1 array whose length `at[1]` states. It is the operator
+// the linear half of a read is written with (`stdlib/rulesets/jvp.cml#jvp_idx_arr` answers with
+// `pick_at(dxs, extent_pair(i, len(xs)))`), and until this commit it had a reverse law
+// (`stdlib/rulesets/transpose.cml#pick_at_t`) and no forward one: a program that wrote the read
+// itself was refused by name, although the same program written as `xs[i]` ran.
+//
+// The law is one line, because a read moves no element: the tangent of the read is the read of the
+// tangent, and the same `at` answers both -- the tangent has the primal's shape, and `at[1]` is that
+// length. No stated twin is needed the way a `sum`, a lane mean and a `take` need one: their
+// adjoints have to build an array whose length nothing in the cotangent states, and here the list
+// that carries the position already carries the length.
+//
+// Everything below is hand-computed before it is run. The read is the second element of a
+// three-element array and the direction is a three-element array:
+//
+//     x  = [1.0, 2.0, 3.0]          read(x) = x[1] = 2.0
+//     dx = [0.5, 0.25, -1.0]        forward tangent = dx[1] = 0.25
+//
+// The reverse leg answers the adjoint of the same read: the cotangent of the result is one number
+// and it lands at position 1, so the gradient is the unit vector there and zero elsewhere --
+//
+//     vjp: ct = 1.0                 dL/dx = [0.0, 1.0, 0.0]
+//
+// and the two legs are the same function in two directions, so their numbers are tied: the forward
+// tangent is the gradient applied to the direction, element for element,
+//
+//     <dL/dx, dx> = 0.0*0.5 + 1.0*0.25 + 0.0*(-1.0) = 0.25
+//
+// which is the third line of the reading. Two laws that disagree about the position, or a scatter
+// that put the cotangent somewhere else, would print three numbers that do not close.
+//
+// The engine's own `grad` is a different reading and this file is not it: its reverse pass reads a
+// table of C++ rules, not this law, and for this read that table is
+// `modules/tensor/ops/layout_ops.cpp#pickAtVjp` (filed 2026-11-04, `lane-pickatvjp`). It answers the
+// same array this file's reverse leg prints -- `[0.0, 1.0, 0.0]` -- which
+// `pick_at_gradient_answered_by_the_engine.cml` is the reading of, so the two are read together.
+//
+//     camel test/cases/compile/transforms/pick_at_forward_rule.cml
+import rulesets.jvp
+import { jvp } from transforms
+import { vjp } from vjp
+import { pick_at, sum } from tensor
+
+/// The read: one element of an array, with the array's length stated beside the position.
+func read(x: float[]): float {
+    return pick_at(x, [1, 3])
+}
+
+func main(): int sync {
+    let (value, tangent) = jvp(read)([1.0, 2.0, 3.0] as float[], [0.5, 0.25, -1.0] as float[])
+    `forward value={} tangent={}`->format<value, tangent>->println
+    let (again, pullback) = vjp(read)([1.0, 2.0, 3.0] as float[])
+    let g = pullback(1.0).0
+    `reverse value={} dL/dx={}`->format<again, g>->println
+    let agreement = sum(g * [0.5, 0.25, -1.0] as float[])
+    `agreement {}`->format<agreement>->println
+    return 0
+}

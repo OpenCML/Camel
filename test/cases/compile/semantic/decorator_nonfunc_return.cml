@@ -1,5 +1,13 @@
 /**
  * Ensures decorator validation rejects wrappers that do not return a callable with the original function signature.
+ *
+ * A decorated function *is* the function its decorators answered, so a decorator that answers an
+ * `int` makes a function value holding an int, and `base(1)` has nothing to run. The refusal is
+ * written at the decorator and says what it answered. Before, it was `ArgumentsMismatch` at 1:1
+ * whose sentence read "Function of type 'decorator must return function' cannot be called with
+ * argument types: int." -- the message's own words stood where the type belonged, so a reader was
+ * told that a function type was named "decorator must return function", and the int the decorator
+ * answered was presented as the arguments of a call.
  */
 
 with <k: int>

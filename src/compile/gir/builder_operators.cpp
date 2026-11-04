@@ -2056,16 +2056,22 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                               gct->at(0)->name() == "__assn__";
     Type *assignedType      = nullptr;
     // The declaration of a rest function, when this call names one: its arguments are expanded
-    // into a body in place of the call, and no instance is made (inlineRestCall).
+    // into a body in place of the call, and no instance is made (inlineRestCall). A pack among the
+    // `with` parameters is a pack like any other -- it stands for the `with` arguments given past
+    // the fixed ones -- so a function that writes one is expanded the same way, and the body reads
+    // the pack's own arguments as a compile-time tuple (language author, 2026-11-03; design
+    // principles 4.4, 5.6).
     generic_template_ptr_t restTemplate;
     if (auto generic = genericDrefs_.find(targetNode);
         generic != genericDrefs_.end() && generic->second.one() != nullptr &&
-        generic->second.one()->funcType->hasRest()) {
+        (generic->second.one()->funcType->hasRest() ||
+         generic->second.one()->funcType->hasWithRest())) {
         restTemplate = generic->second.one();
     }
     const size_t restFixedCount =
         restTemplate != nullptr
-            ? restTemplate->funcType->normTypesCount() - 1 -
+            ? restTemplate->funcType->normTypesCount() -
+                  (restTemplate->funcType->hasRest() ? 1 : 0) -
                   restTemplate->funcType->normConstasCount()
             : 0;
     const size_t restDeclaredCount =
@@ -2736,7 +2742,18 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // all: a float passed where the decorated function takes an int was read as an int).
     const auto callDecorated = [&](const compile_graph_ptr_t &decoratedGraph) {
         node_handle_t decoratorInvoke = lowerDecoratedGraphValue(decoratedGraph, gct);
-        FunctionType *factoryType     = tt::as_ptr<FunctionType>(nodeTypeOf(decoratorInvoke));
+        // The node `lowerDecoratedGraphValue` returns is a call of the decorated graph, stamped
+        // with that graph's exit type, and that function refuses the graph whose exit type is not
+        // a function before it creates the node
+        // (`builder_decorators.cpp#Builder::lowerDecoratedGraphValue`). So the type here is a
+        // function by that refusal, and the check states it where the cast spends it: a decorator
+        // that answers something else is a program the builder has already reported, never a
+        // value that reaches this line.
+        Type *decoratorValueType       = nodeTypeOf(decoratorInvoke);
+        GUARD(
+            decoratorValueType != nullptr && decoratorValueType->code() == TypeCode::Function,
+            "The value a decorator's invocation answers must be a function.");
+        FunctionType *factoryType = tt::as_ptr<FunctionType>(decoratorValueType);
         if (!accepts(factoryType, false) && !accepts(factoryType, true)) {
             yieldToPipe(gct);
             reportConversionGaps(
@@ -2982,7 +2999,19 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             std::vector<std::pair<std::string, std::string>> unmetConditions;
             const auto signatureOf = [&](const compile_graph_ptr_t &g) -> FunctionType * {
                 if (auto it = decoratedOf_.find(g.get()); it != decoratedOf_.end()) {
-                    return tt::as_ptr<FunctionType>(it->second->funcType()->exitType());
+                    // `decoratedOf_` is written in one place, with the graph
+                    // `buildDecoratedGraph` returned (`builder.cpp#Builder::visitFuncNode`), and
+                    // that function sets the graph's exit type from the value its decorators
+                    // answered only after refusing one that is not a function
+                    // (`builder_decorators.cpp#Builder::buildDecoratedGraph`). The exit type is
+                    // therefore a function by that refusal; the check states it where the cast
+                    // spends it.
+                    Type *decoratedType = it->second->funcType()->exitType();
+                    GUARD(
+                        decoratedType != nullptr && decoratedType->code() == TypeCode::Function,
+                        "A decorated graph's exit type must be the function its decorator "
+                        "answered.");
+                    return tt::as_ptr<FunctionType>(decoratedType);
                 }
                 return g->funcType();
             };
@@ -2997,6 +3026,35 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             const std::string argumentTypes =
                 strutil::join(argumentTypeTexts, ", ", [](const std::string &s) { return s; });
+            // A call that hands a pack among the `with` parameters an argument: every argument the
+            // pack takes is of the type the declaration wrote for it (`with <..ws: int>`), the
+            // rule an ordinary parameter follows one type further out (design principles 4.4,
+            // 5.6). It is decided here, at the call, because the pack's element type is the
+            // declaration's and the arguments are the call's; what the body may do with the pack
+            // is step 3 of the same work, and until then such a call is reported as one with no
+            // matching function, the type notwithstanding.
+            if (graphs->size() == 1) {
+                FunctionType *packed = signatureOf(graphs->front());
+                const size_t fixedWith =
+                    packed->withTypesCount() - (packed->hasWithRest() ? 1 : 0);
+                Type *element = packed->withRestType();
+                if (element != nullptr && withInputTypes.size() > fixedWith) {
+                    for (size_t i = fixedWith; i < withInputTypes.size(); ++i) {
+                        if (element->assignableFrom(valueTypeOf(withInputTypes[i]))) {
+                            continue;
+                        }
+                        diags_->of(SemanticDiag::WithPackArgumentType)
+                            .atOrigin(gct->origin())
+                            .commit(
+                                std::string(packed->argNameAt(fixedWith)),
+                                graphs->front()->name(),
+                                element->toString(),
+                                std::to_string(i - fixedWith + 1),
+                                valueTypeOf(withInputTypes[i])->toString());
+                        throw BuildAbortException();
+                    }
+                }
+            }
             // A declaration takes every count of `with` arguments from its required ones to its
             // full arity (design principles 4.4): the call is completed for each declaration with
             // the defaults that declaration registers, and the arguments of the one chosen are
@@ -3221,6 +3279,15 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 // the id they are registered under (design principles 5.5; the rule of
                 // 2026-10-23 on generic-rule-instantiation).
                 settleGenericRuleMaker(normInputs, normInputTypes, gct);
+            }
+            if (ops->name() == "__rule") {
+                // The maker of a rule whose head declares no type parameters: the call keeps its two
+                // function values and the rule value is an ordinary rule, but the two graphs are
+                // registered in the table of rule templates too, so a transform that picks between
+                // the laws of one key can find a law whose parameter types name a type
+                // (author, 2026-11-03 12:10: two laws of one key are told apart by their parameter
+                // types). The call itself is not changed: an ordinary rule stays ordinary.
+                settleRuleMaker(normInputs, normInputTypes, gct);
             }
             if (ops->name() == "__fact") {
                 // The maker of a fact whose head declares type parameters: the functions it is made
@@ -3807,6 +3874,37 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                 LEAVE("LINK");
                 return transformed;
             }
+            if (targetOperator->uri() == ":op/extent_of" && explicitTypes.size() == 1) {
+                // `extent_of::<A>()` answers the extents `A` states, and they are a fact of the
+                // **call** and not of the run: the node keeps the instantiated type of the call but
+                // not the type argument it was written with (`src/builtin/operators/struct.cpp`
+                // #__op_extent_of__), so the value is settled here -- where the argument is still
+                // readable -- and the graph holds the list itself, as a constant.
+                //
+                // Nothing is invented: a type argument that states no extents was refused by the
+                // resolver before this point (`SemanticDiag::ExtentOfNeedsStatedShape`), so the
+                // answer exists exactly where the type says it does.
+                if (const auto extents = camel::core::type::statedExtentsOf(explicitTypes[0]);
+                    extents.has_value()) {
+                    auto *const intArrayType =
+                        camel::core::type::ArrayType::create(camel::core::type::Type::Int64());
+                    ::Array *stated = ::Array::create(
+                        camel::core::mm::autoSpace(), intArrayType, extents->size());
+                    if (stated != nullptr) {
+                        for (size_t at = 0; at < extents->size(); ++at) {
+                            stated->set<camel::core::rtdata::Int64>(
+                                at, static_cast<camel::core::rtdata::Int64>((*extents)[at]));
+                        }
+                        auto &draft          = currGraph_->transaction().edit();
+                        node_handle_t settled = draft.ref(draft.materializeStaticValue(
+                            camel::core::rtdata::toSlot<::Array *>(stated), intArrayType,
+                            runtime::kGCNodeFlagConstant));
+                        registerNodeOrigin(context_, settled, gct->at(0), "gir.link.oper");
+                        LEAVE("LINK");
+                        return settled;
+                    }
+                }
+            }
             targetNode = currGraph_->addOperNode(targetOperator, 0);
             stampPermissions(targetNode);
             // An operator declared macro runs in std::macro once its inputs are static, like a call
@@ -3865,18 +3963,49 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         // is a fact about the input rather than about the compiler, and it is an error, not a
         // warning: a warning would let the statement be dropped and the run go on as if the call
         // had been made (`UnusedFallibleValue` is the other case, a value whose loss the writer
-        // may choose). The `GUARD` below keeps its own case -- a target that is neither a function
-        // nor an operator and is not fallible either -- where the type says something the builder
-        // cannot explain and stopping the process is the honest answer.
+        // may choose).
         if (asFallible(dataType) != nullptr) {
             diags_->of(SemanticDiag::CalledFallibleValue)
                 .atOrigin(gct->origin())
                 .commit(dataType->toString());
             throw BuildAbortException();
         }
-        GUARD(
-            dataType->code() == TypeCode::Function,
-            "Target node of LINK must be a function or operator node.");
+        // A call runs the function the target value holds, so the target of a LINK is a function
+        // or an operator node: that is the builder's own contract, and it is what the cast below
+        // needs. A program can stand a value of another type there -- a number, a tuple, the answer
+        // a transform hands back before the member it names is built -- and an ordinary program
+        // that does is not a broken builder. Reporting it and refusing the call is what keeps the
+        // contract: the assertion that used to stand here stopped the process instead, which is
+        // what the fallible case above left it doing for every other type (536999073). A target
+        // whose type the *builder* failed to record is the one case left for a `GUARD`, and it is
+        // the precondition of the cast and nothing a program can write.
+        if (dataType == nullptr || dataType->code() != TypeCode::Function) {
+            const std::string argTypesStr = std::format(
+                "<{}> ({})",
+                strutil::join(withInputTypes, ", ", [](Type *t) { return t->toString(); }),
+                strutil::join(normInputTypes, ", ", [](Type *t) { return t->toString(); }));
+            const std::string calleeType =
+                dataType != nullptr ? dataType->toString() : std::string("void");
+            // What the report names as the callee: the name the program wrote where it wrote one
+            // (`t`), and the type the value has where the callee is an expression
+            // (`transpose(f)(1.0, 1.0)` -- there is no name to quote, and the type is what the
+            // reader has to look at). The reason says the same thing either way: this type holds
+            // no function, so a call of it has nothing to run.
+            const std::string writtenName = writtenCalleeName(gct->at(0));
+            const bool namesCallee         = !writtenName.empty();
+            diags_->of(SemanticDiag::ArgumentsRejected)
+                .atOrigin(gct->origin())
+                .commit(
+                    namesCallee ? writtenName : calleeType,
+                    argTypesStr,
+                    (namesCallee ? "the value this call stands on has type '" + calleeType +
+                                       "', and that"
+                                 : std::string("a value of that type")) +
+                        " is not a function: a call runs the function a value holds, so there is "
+                        "nothing here to call");
+            throw BuildAbortException();
+        }
+        GUARD(dataType != nullptr, "A LINK target node must have a type.");
         auto *funcType = tt::as_ptr<FunctionType>(dataType);
         if (!accepts(funcType, false) && !accepts(funcType, true)) {
             yieldToPipe(gct);

@@ -816,6 +816,39 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "gelu_grad.f64"
+desc = "The gradient of `gelu` on an f64 array, element by element, pinned against the value it is the derivative of: the engine's tanh approximation (the forward is 0.8411919906082768 at x = 1, not the erf form's 0.8413447460685429), so the three numbers are that function's derivative, which a central difference at h = 1e-3 reproduces to 1.3e-7. Before this was fixed the operator wrote its answer at f32 behind an `f64[..]` type: the case then read [0.0, 1.5769529523e-314, 0.0] -- zero where the answer was zero, a 1e-314-scale denormal where it was not, the reading moving with the input -- instead of [-0.08296408384578255, 0.5, 1.0829640838457826]. The f32 gradient beside it is the arm that was right all along and must keep its numbers."
+kind = "behavior"
+case = "../../../cases/modules/tensor/gelu_grad_f64.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "gelu_grad_f64 forward=[-0.15880800939172324, 0.0, 0.8411919906082768]\ngelu_grad_f64 grad=[-0.08296408384578255, 0.5, 1.0829640838457826]\ngelu_grad_f32 grad=[-0.08296409, 0.5, 1.0829641]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "erf_grad.f64"
+desc = "The gradient of `erf` on an f64 array, element by element: 2/sqrt(pi) * exp(-x^2), which a central difference of the printed forward at h = 1e-3 reproduces to 3.8e-7. Before this was fixed the operator wrote its answer at f32 behind an `f64[..]` type, so the case read [0.0, 5.098027537e-315, 0.0] -- zero where the answer was zero and a 1e-314-scale denormal where it was not, the reading moving with the input -- instead of [0.4151074974205947, 1.1283791670955126, 0.4151074974205947]. The f32 gradient beside it must keep its numbers."
+kind = "behavior"
+case = "../../../cases/modules/tensor/erf_grad_f64.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "erf_grad_f64 forward=[-0.8427007929497149, 0.0, 0.8427007929497149]\nerf_grad_f64 grad=[0.4151074974205947, 1.1283791670955126, 0.4151074974205947]\nerf_grad_f32 grad=[0.41510752, 1.1283792, 0.41510752]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "erfc_grad.f64"
+desc = "The gradient of `erfc` on an f64 array, element by element: `erfc`'s rule is `erf`'s with the incoming gradient negated, so this is -2/sqrt(pi) * exp(-x^2), which a central difference of the printed forward at h = 1e-3 reproduces to 3.8e-7. The `neg_erf` line is the identity that says the rule runs the right kernel: erfc = 1 - erf makes the two gradients exact negatives, so every element of their sum is 0.0. Before this was fixed it read [0.0, 1.570800649e-314, 0.0] -- the erf reading with its sign turned, a f32 answer hidden in the low half of each f64 element -- instead of [-0.4151074974205947, -1.1283791670955126, -0.4151074974205947]. The f32 gradient beside it must keep its numbers."
+kind = "behavior"
+case = "../../../cases/modules/tensor/erfc_grad_f64.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "erfc_grad_f64 forward=[1.842700792949715, 1.0, 0.15729920705028513]\nerfc_grad_f64 grad=[-0.4151074974205947, -1.1283791670955126, -0.4151074974205947]\nerfc_grad_f64 neg_erf=[0.0, 0.0, 0.0]\nerfc_grad_f32 grad=[-0.41510752, -1.1283792, -0.41510752]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "numeric_contract.generic_unit"
 desc = "The numeric-contract program in the portable kernel units: the same output as the default units."
 kind = "behavior"
@@ -1162,4 +1195,50 @@ backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout = "[[false, true], [false, true]]\n[[false, true], [false, true]]\n[[true, true], [true, true]]\n[false, true, false]\n[false, true]\n[true, true, true]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+# The fused gradients of an f64 tensor are f64. `gelu_grad` and `erf_grad` built their answer with
+# `createTensor(TypeCode::Float32, ...)` whatever the input was (and read their operands with
+# `dataAs<float>()`, which validates the width but does not convert), while the operator states the
+# input's element type: an f64 `x` came back as an f64-typed value over an f32 buffer. An f64 [3] is
+# 24 bytes and the kernel wrote 12, so the low half of every element was an f32 it wrote and the
+# high half was not part of what it wrote -- the number read is a denormal of order 1e-314, and it
+# is deterministic for a given input (x = [-1, 0, 1] reads 1.5769529523e-314, x = [1, 0, 0] reads
+# 5.30626085e-315), so comparing two runs would have missed this class entirely. The storage's width
+# and the derivative's values are both asserted, and the two scheduling backends have to agree.
+[[tests]]
+name = "grad.f64.width"
+desc = "The gradient of an f64 tensor is written at f64's width, element for element: `sum(gelu(x))`, `sum(erf(x))`, `sum(erfc(x))` (which is `erf_grad` with dy negated) on x = [-1, 0, 1], and `layer_norm`'s three answers on x = [[1,2,3],[4,5,6]], gamma = [1, 0.5, 2], beta = [0.1, 0.2, 0.3]. Repair: before it, `gelu_grad` and `erf_grad` wrote an f32 buffer (12 bytes) behind an f64 type (24 bytes), so the low half of each element was an f32 the kernel wrote and the high half was not part of what it wrote -- the number read is a denormal of order 1e-314, deterministic for a given input, while the forward had answered at 8 bytes per element all along. `layer_norm_grad`'s `layerNormGradInfer` stated f32 while its kernel already wrote the input's width; its three answers are here as the guard against a re-narrowed buffer. `bytes=` is the storage's own length over `to_bytes`; the values are the analytic derivatives, checked against a central difference of the forward to 1e-9 and pinned to 1e-12 here."
+kind = "behavior"
+case = "../../../cases/modules/tensor/grad_f64_width.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+const out = input.normalized.stdout
+const n = '([-0-9.eE+]+)'
+const list = (count) => '\\[' + new Array(count).fill(n).join(', ') + '\\]'
+const gelu = match(new RegExp('f64\\.gelu bytes=(\\d+) d=' + list(3)), out)
+assert(Number(gelu[1]) === 24, `gelu gradient storage ${gelu[1]} bytes, an f64 [3] is 24`)
+assert(approx(gelu[2], -0.08296408384578255, 1e-12) && Number(gelu[3]) === 0.5 && approx(gelu[4], 1.0829640838457826, 1e-12), `gelu gradient ${gelu[0]}`)
+const erf = match(new RegExp('f64\\.erf bytes=(\\d+) d=' + list(3)), out)
+assert(Number(erf[1]) === 24, `erf gradient storage ${erf[1]} bytes, an f64 [3] is 24`)
+assert(approx(erf[2], 0.4151074974205947, 1e-12) && approx(erf[3], 1.1283791670955126, 1e-12) && approx(erf[4], 0.4151074974205947, 1e-12), `erf gradient ${erf[0]}`)
+const erfc = match(new RegExp('f64\\.erfc bytes=(\\d+) d=' + list(3)), out)
+assert(Number(erfc[1]) === 24, `erfc gradient storage ${erfc[1]} bytes, an f64 [3] is 24`)
+assert(approx(erfc[2], -0.4151074974205947, 1e-12) && approx(erfc[3], -1.1283791670955126, 1e-12) && approx(erfc[4], -0.4151074974205947, 1e-12), `erfc gradient ${erfc[0]}`)
+const dx = match(new RegExp('f64\\.lnorm\\.dx bytes=(\\d+) d=\\[' + list(3) + ', ' + list(3) + '\\]'), out)
+assert(Number(dx[1]) === 48, `layer_norm input gradient storage ${dx[1]} bytes, an f64 [2, 3] is 48`)
+assert(approx(dx[2], 0.4082360432562664, 1e-12) && approx(dx[3], -0.8164904572722602, 1e-12) && approx(dx[4], 0.40825441401599355, 1e-12), `layer_norm input gradient ${dx[0]}`)
+assert(approx(dx[5], 0.4082360432562664, 1e-12) && approx(dx[6], -0.8164904572722602, 1e-12) && approx(dx[7], 0.40825441401599355, 1e-12), `layer_norm input gradient second row ${dx[0]}`)
+const dg = match(new RegExp('f64\\.lnorm\\.dgamma bytes=(\\d+) d=' + list(3)), out)
+assert(Number(dg[1]) === 24, `layer_norm gamma gradient storage ${dg[1]} bytes, an f64 [3] is 24`)
+assert(approx(dg[2], -2.4494713718167804, 1e-12) && Number(dg[3]) === 0 && approx(dg[4], 2.4494713718167804, 1e-12), `layer_norm gamma gradient ${dg[0]}`)
+const db = match(new RegExp('f64\\.lnorm\\.dbeta bytes=(\\d+) d=' + list(3)), out)
+assert(Number(db[1]) === 24, `layer_norm beta gradient storage ${db[1]} bytes, an f64 [3] is 24`)
+assert(Number(db[2]) === 2 && Number(db[3]) === 2 && Number(db[4]) === 2, `layer_norm beta gradient ${db[0]}`)
+}
+"""
 timeout_ms = 10000

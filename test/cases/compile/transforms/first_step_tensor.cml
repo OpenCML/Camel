@@ -1,0 +1,75 @@
+// The first training step's gradient on a TENSOR model, taken by the library's forward transform and
+// by the engine's pullback, on one capture.
+//
+// The model is S2's shape at its smallest: an input batch `x` and a target `t` are captured where the
+// step is written, and the weight is the only thing that moves.
+//
+//     pred = x @ w            (2x2) @ (2x2)
+//     loss = 0.5 * sum((pred - t) * (pred - t))
+//
+// with
+//
+//     x = [[1, 2], [3, 4]]      t = [[0, 0], [1, 1]]      w = [[0.5, 0.25], [0.125, 1]]
+//
+// Every number below is exact in binary floating point, so "equal" means equal, not close:
+//
+//     x @ w   = [[0.75, 2.25], [2.0, 4.75]]
+//     e = x@w - t = [[0.75, 2.25], [1.0, 3.75]]
+//     loss = 0.5 * (0.5625 + 5.0625 + 1 + 14.0625) = 10.34375
+//     dL/dw = x^T e = [[1, 3], [2, 4]] · [[0.75, 2.25], [1.0, 3.75]] = [[3.75, 13.5], [5.5, 19.5]]
+//
+// The library's derivative is read one direction at a time -- `jvp` answers the derivative in the
+// direction it is seeded with -- so the four elements of `dL/dw` are four seeds, each of which picks
+// one element out of `x^T e`: seeding the (0,0) direction answers 3.75, and so on. The reverse
+// transform would answer all four in one call, and it is the next wall rather than this case.
+//
+// The capture is the point. Until 2026-11-03 the lift refused a body that captured anything at all
+// (`transforms: jvp has no forward transform for this function`, `REINTERP jvp ... skip=body`), for a
+// captured `float` as much as for a captured `float[2, 2]`: the ports a body's captures arrive at
+// were the one kind `jvp` did not make, so the body was refused whole and `pairTypeOf` -- which the
+// tensor path's report blamed -- was never asked. `a` and `t` here are exactly that: two arrays the
+// step reads and does not differentiate.
+//
+//     camel test/cases/compile/transforms/first_step_tensor.cml
+import { matmul, sum } from tensor
+import rulesets.jvp
+import { jvp } from transforms
+import { grad, with_grad } from autodiff
+import { abs, max } from math
+
+// The engine's leg: `with_grad` differentiates the first `with` parameter.
+with <w: float[2, 2]>
+func loss_with(x: float[2, 2], t: float[2, 2]): float {
+    let e = matmul(x, w) - t
+    return 0.5 * sum(e * e)
+}
+
+func main(): int sync {
+    let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
+    let t = [[0.0, 0.0], [1.0, 1.0]] as float[2, 2]
+    let w = [[0.5, 0.25], [0.125, 1.0]] as float[2, 2]
+
+    // The library's leg: one closure that captures the batch and the target, seeded four times.
+    let step = (ww: float[2, 2]): float => {
+        let e = matmul(x, ww) - t
+        return 0.5 * sum(e * e)
+    }
+    let (loss, d00) = jvp(step)(w, [[1.0, 0.0], [0.0, 0.0]] as float[2, 2])
+    let (_l1, d01) = jvp(step)(w, [[0.0, 1.0], [0.0, 0.0]] as float[2, 2])
+    let (_l2, d10) = jvp(step)(w, [[0.0, 0.0], [1.0, 0.0]] as float[2, 2])
+    let (_l3, d11) = jvp(step)(w, [[0.0, 0.0], [0.0, 1.0]] as float[2, 2])
+
+    // The engine's leg: the same arithmetic with the weight as the differentiated `with` parameter.
+    let (engine_loss, engine_w) = with_grad(loss_with)<[[0.5, 0.25], [0.125, 1.0]] as float[2, 2]>(x, t)
+    let engine_00 = engine_w[0][0]
+    let engine_01 = engine_w[0][1]
+    let engine_10 = engine_w[1][0]
+    let engine_11 = engine_w[1][1]
+
+    `first_step tensor loss={} dL/dw=[[{}, {}], [{}, {}]]`->format<loss, d00, d01, d10, d11>->println
+    `first_step tensor engine loss={} dL/dw=[[{}, {}], [{}, {}]]`->format<engine_loss, engine_00, engine_01, engine_10, engine_11>->println
+    let dw = max(max(abs(d00 - engine_00), abs(d01 - engine_01)), max(abs(d10 - engine_10), abs(d11 - engine_11)))
+    let dv = abs(loss - engine_loss)
+    `first_step tensor max_abs_diff_library_vs_engine w={:.12e} loss={:.12e}`->format<dw, dv>->println
+    return 0
+}

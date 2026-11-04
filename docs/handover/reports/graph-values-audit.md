@@ -24,12 +24,12 @@
 图在构造之后不可变：
 
 - `GCGraphBuildAccess` 只在编码器里使用：
-  - `src/compile/gir/graph_encode.cpp:695`、`:1038`
-  - `src/runtime/draft_session.cpp:515`、`:564`
-  - `src/runtime/draft.cpp:2130`
+  - `src/compile/gir/graph_encode.cpp#EncodeSession`、`:1038`
+  - `src/runtime/draft_session.cpp#encodeDraftGraph`、`:564`
+  - `src/runtime/draft.cpp#GraphDraft::dissolveUnorderedGates`
 - 唯一例外是 F2 的标记位。
 
-一切编辑都在 `GraphDraft` 上进行。提交时（`src/runtime/draft_session.cpp:1441` 起）把改过的图编码成新副本：
+一切编辑都在 `GraphDraft` 上进行。提交时（`src/runtime/draft_session.cpp#RuntimeGraphDraftSession::conflictsWithProgram` 起）把改过的图编码成新副本：
 
 - `fresh` 表，`draft_session.cpp:1554`；
 - 静态槽里的函数值逐个克隆，`cloneStaticSlot`，`draft_session.cpp:503`；
@@ -67,11 +67,11 @@
 
 **位置**
 
-- `modules/graph/txn.cpp:356`：`commit(t)` 对 `open(p)` 打开的事务调用 `session.commitChecked()`。
-- `modules/rewrite/module.cpp:931`：`rewrite` 与 `run` 共用的 `applyRewrite`，`commitChecked()`。
-- `modules/rewrite/module.cpp:1519`：`saturate`，`commitChecked()`。
-- `src/runtime/writings.cpp:1208`：`extract` 经 `modules/rewrite/module.cpp:1541` 调用 `extractWritings`，`session.commit()`。
-- 机制：`src/runtime/draft_session.cpp:1456-1460`（判定 `installing`）、`:1741`（装入）。
+- `modules/graph/txn.cpp#evalKernel`：`commit(t)` 对 `open(p)` 打开的事务调用 `session.commitChecked()`。
+- `modules/rewrite/module.cpp#applyRewrite`：`rewrite` 与 `run` 共用的 `applyRewrite`，`commitChecked()`。
+- `modules/rewrite/module.cpp#saturateKernel`：`saturate`，`commitChecked()`。
+- `src/runtime/writings.cpp#extractWritings`：`extract` 经 `modules/rewrite/module.cpp#CamelCostModel` 调用 `extractWritings`，`session.commit()`。
+- 机制：`src/runtime/draft_session.cpp#RuntimeGraphDraftSession::conflictsWithProgram`（判定 `installing`）、`:1741`（装入）。
 
 **现象**
 
@@ -80,7 +80,7 @@
 最清楚的一例是 `discard_pass`：
 
 1. pass 做了重写，但返回的是原来的 `p`。
-2. 驱动看到返回值未变，于是什么也不装（`src/execute/camel_pass.cpp:253`，`produced == program`）。
+2. 驱动看到返回值未变，于是什么也不装（`src/execute/camel_pass.cpp#CamelPass`，`produced == program`）。
 3. 运行时 `current()` 里却是被丢弃的重写结果（`current: 0`；不加这个 pass 时为 `current: 1`）。
 
 这正是 9.1 说的"变换改了别人看得到的东西"：
@@ -105,13 +105,13 @@
 下面是当初提出的修法：
 
 1. 这四个从 Camel 侧可调的提交点一律 detached 提交：`session.commit(true)`。`extractWritings` 增加一个 `detached` 参数：流水线里的提取照旧，Camel 的 `extract` 传 `true`。
-2. 装入程序只由 pass 驱动来做。用 Camel 写的 pass 已经如此（`src/execute/camel_pass.cpp:254`，`installRuntimeProgramIfCurrent`），C++ 的 pass 由流水线自己提交。这样唯一持有者（流水线）原地发布，其余调用只交出值。
+2. 装入程序只由 pass 驱动来做。用 Camel 写的 pass 已经如此（`src/execute/camel_pass.cpp#CamelPass`，`installRuntimeProgramIfCurrent`），C++ 的 pass 由流水线自己提交。这样唯一持有者（流水线）原地发布，其余调用只交出值。
 3. `GraphConflict` 原本表示"上下文的程序在事务期间变了"。detached 提交只对照事务打开时的 Program，在 Camel 侧已不可能发生。按"不考虑兼容成本"，从 `stdlib/graph.cml` 的 `commit` 文档里删去这个错误，`commitChecked` 只留给驱动用。
 4. 测试：上表三项 `known_fail` 修好后会被运行器报成"标了 known_fail 却通过了"，到时去掉标记即可。
 
 ### F2（良性，不是违反）共享图上的缓存标记
 
-**位置**：`src/runtime/draft_session.cpp:1524`
+**位置**：`src/runtime/draft_session.cpp#RuntimeGraphDraftSession::commit`
 
 ```cpp
 GCGraphBuildAccess::addFlags(graph, kGraphFlagGatesDissolved);
@@ -127,12 +127,12 @@ GCGraphBuildAccess::addFlags(graph, kGraphFlagGatesDissolved);
 - 这个标记只记录图内容本身的一个性质（"没有无序门"）；
 - 写入是幂等的，不改语义，属于 9.1 说的"性能上的事实"，与数组计数同类。
 
-**建议**：在标记的定义处（`include/camel/runtime/graph.h:204`）写明这条不变量："只能记录由内容决定、单调的事实"。这样以后不会有人在共享图上记别的东西。
+**建议**：在标记的定义处（`include/camel/runtime/graph.h#graph`）写明这条不变量："只能记录由内容决定、单调的事实"。这样以后不会有人在共享图上记别的东西。
 
 ### F3（缺口，不是违反）9.1 的写法尚未全部实现
 
 - **pass 不能在源码里当函数调用**：`twice->std::opt` 报 `UnresolvedReference`；`import { opt } from std` 报 `ImportNameNotExported`。目前没有运行时路径，也就谈不上违反。
-- **以函数为中心的事务已有，但名字不同**：`open_function(f)` / `to_function(t, sample)`（`modules/graph/txn.cpp:371`、`:380`），走 detached 提交（`:395`），行为合规。
+- **以函数为中心的事务已有，但名字不同**：`open_function(f)` / `to_function(t, sample)`（`modules/graph/txn.cpp#commitKernel`、`:380`），走 detached 提交（`:395`），行为合规。
 - **写 pass 的接口里仍有 `Program`**：`current`、`open(p)`、`commit(t): Program!`、`rewrite(p, rules)`；9.1 说 Program 是内部表示，不出现在这个接口上。
 - 将来实现 `f->std::opt` 和 `open(f)` / `commit(t)` 时，提交必须 detached，即 F1 的修法；否则同样的问题会出现在新入口上。
 
@@ -140,13 +140,13 @@ GCGraphBuildAccess::addFlags(graph, kGraphFlagGatesDissolved);
 
 | 路径 | 依据 | 测试 |
 |---|---|---|
-| `grad` / `with_grad` / `vjp`（运行时构造） | `modules/autodiff/pullback.cpp:1106`、`:1121`：在自己的会话工作副本上解码草稿，产出新的图组，从不向上下文提交 | `grad_leaves_loss_and_its_callers` |
-| `std::macro` 展开 | `src/execute/macro/macro.cpp:21-76`：每轮在草稿上改写、提交新 Program；是流水线的唯一持有者，允许原地发布 | `grad_expanded_by_macro_*` |
+| `grad` / `with_grad` / `vjp`（运行时构造） | `modules/autodiff/pullback.cpp#Backward`、`:1121`：在自己的会话工作副本上解码草稿，产出新的图组，从不向上下文提交 | `grad_leaves_loss_and_its_callers` |
+| `std::macro` 展开 | `src/execute/macro/macro.cpp#reportGraphs`：每轮在草稿上改写、提交新 Program；是流水线的唯一持有者，允许原地发布 | `grad_expanded_by_macro_*` |
 | `attempt(f, x)` | 运行结果 | `attempt_leaves_the_function` |
-| ONNX 导出 | `modules/onnx/exporter.cpp:4628`：会话以函数自己的图为根，`installing` 为假，不改运行中的程序 | — |
-| 规则检查的采样会话 | `modules/rewrite/module.cpp:3454-3481`：以规则左侧为根，不装入 | — |
-| 流水线里的 pass（`tensor` 融合、`tiles` 区域、通用重写） | `modules/tensor/passes/fuse.cpp:221`、`modules/tiles/src/region_outline.cpp:541`、`src/passes/opt/generic/rewrite.cpp:402`：唯一持有者 | `pipeline_rewrites_its_only_holder` |
-| 执行计划 | `src/execute/exec_plan.cpp:629` 的 `const_cast` 只为调用常量接口，不写图 | — |
+| ONNX 导出 | `modules/onnx/exporter.cpp#exampleFits`：会话以函数自己的图为根，`installing` 为假，不改运行中的程序 | — |
+| 规则检查的采样会话 | `modules/rewrite/module.cpp#checkOneRule`：以规则左侧为根，不装入 | — |
+| 流水线里的 pass（`tensor` 融合、`tiles` 区域、通用重写） | `modules/tensor/passes/fuse.cpp#TensorFusePass::apply`、`modules/tiles/src/region_outline.cpp#outlineRegions`、`src/passes/opt/generic/rewrite.cpp#replaceNode`：唯一持有者 | `pipeline_rewrites_its_only_holder` |
+| 执行计划 | `src/execute/exec_plan.cpp#planStorageReuse` 的 `const_cast` 只为调用常量接口，不写图 | — |
 
 ## 附录：`saturate` 的内部错误（已修）
 
@@ -186,7 +186,7 @@ Runtime graph 'str::cut' has region 1 with a port the graph does not have.
 - `DraftWritings::extract`（`src/runtime/writings.cpp`）保留的东西有：图自己的端口、入口、出口、结果，以及每个区域的结果。
 - 它没有保留区域的端口。
 - 条件区域里那个没人读的状态端口被当成死节点擦掉了。
-- 而控制区域（臂、循环条件、循环体）进入时带着全部端口，图的校验也要求全部端口都在（`src/runtime/graph.cpp:324-327`）。
+- 而控制区域（臂、循环条件、循环体）进入时带着全部端口，图的校验也要求全部端口都在（`src/runtime/graph.cpp#typeIdOf`）。
 
 **修法**：提取时保留每个控制区域的全部端口。注解区域照旧，可以没有被改写去掉的端口。
 

@@ -1,0 +1,9 @@
+with <w: float, ..rest>
+func combine(x: float): float {
+    return x * w + rest.[0]
+}
+
+func main(): int sync {
+    println(combine<2.0, 3.0>(4.0))
+    return 0
+}

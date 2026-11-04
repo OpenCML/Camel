@@ -1,0 +1,63 @@
+// The first training step's gradient, taken three ways on ONE scalar model: the library's own
+// composition, the engine's direct pullback, and the PyTorch reference beside the case.
+//
+// THIS IS A SCALAR MODEL, not S2's. The model is `pred = x * w + b`, `loss = 0.5 * (pred - t)^2`
+// with x = 1.5, t = 2.0 and the start w = 0.5, b = 0.75: one weight and one bias, two gradient
+// elements and the loss. A tensor model's three-way reading does not exist yet, because the
+// library's `vjp` cannot reverse four things the tensor path needs (see
+// `docs/handover/reports/2026-11-03-library-vjp-walls.cn.md`): a captured array operand, a `sum`
+// over an array, `softmax<1>`, and `mean` at an axis.
+//
+// What makes the two Camel legs comparable is only the spelling of the weight, which is the whole
+// point of design principles 9.9: `vjp` transforms the *ordinary* parameters and hands a `with`
+// value on unchanged, so
+//
+//   * the library's leg writes the weight and the bias as ordinary parameters and asks `vjp` for
+//     their cotangents -- `vjp(loss_plain)(0.5, 0.75)` then `pullback(1.0)`;
+//   * the engine's `grad`/`with_grad` differentiates the *first* `with` parameter, so its leg
+//     writes the weight first and the bias second and reaches the bias by moving it to the front
+//     with a lambda (the move `grad_first_with_parameter.cml` already pins).
+//
+// Same arithmetic, same literals, same quantity; what differs is which of the two positions the
+// value sits in, and that is exactly what the two transforms call "differentiated".
+//
+//     camel test/cases/compile/transforms/first_step_library.cml
+//     D:\Projects\CamelTest\.venv\Scripts\python.exe D:\Temp\s2-first-step-torch.py
+import { grad, with_grad } from autodiff
+import { vjp } from vjp
+import { abs, max } from math
+
+// The library's spelling: everything the loss reads is an ordinary parameter.
+func loss_plain(w: float, b: float): float {
+    let err = 1.5 * w + b - 2.0
+    return 0.5 * err * err
+}
+
+// The engine's spelling: the same arithmetic, the weight first among the `with` parameters.
+with <w: float, b: float>
+func loss_with(x: float, t: float): float {
+    let err = x * w + b - t
+    return 0.5 * err * err
+}
+
+func main(): int sync {
+    // The library's leg.
+    let (library_value, pullback) = vjp(loss_plain)(0.5, 0.75)
+    let (library_w, library_b) = pullback(1.0)
+
+    // The engine's leg: `with_grad` gives the first `with` parameter's gradient, and the bias is
+    // moved to the front by a lambda to be differentiated in its turn.
+    let (engine_value, engine_w) = with_grad(loss_with)<0.5, 0.75>(1.5, 2.0)
+    let engine_b = grad(<bb: float> (ww: float): float => loss_with<ww, bb>(1.5, 2.0))<0.75>(0.5)
+
+    let dw = abs(library_w - engine_w)
+    let db = abs(library_b - engine_b)
+    let dv = abs(library_value - engine_value)
+
+    `first_step scalar value library={:.12f} engine={:.12f}`->format<library_value, engine_value>->println
+    `first_step scalar library w={} b={}`->format<library_w, library_b>->println
+    `first_step scalar engine w={} b={}`->format<engine_w, engine_b>->println
+    `first_step scalar diff_library_vs_engine w={} b={} value={:.12e}`->format<dw, db, dv>->println
+    `first_step scalar max_abs_diff_library_vs_engine {:.12e}`->format<max(max(dw, db), dv)>->println
+    return 0
+}

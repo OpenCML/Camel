@@ -1,0 +1,58 @@
+// The call's **first argument is itself a call written by name**, and the callee is a value the body
+// made: `f(x) = h(g(x), 1.0)` with `h = (y, z) => y * z * x` and `g(x) = 2x`.
+//
+// On paper `f(x) = g(x) * 1.0 * x = 2x^2`, so `f(3) = 18` and the derivative at 3 is `4x = 12`.
+//
+// THIS CASE REACHED A BRANCH NO OTHER CASE DOES, AND THAT WAS A DEFECT. The GIR of `f` holds
+//
+//     N0A [label="(y: float, z: float) => float pure", type="FILL", value_type="(y: float, z: float) => float pure"]
+//     N0B [label="g", type="FUNC", value_type="float"]
+//     N0C [label="1.0", type="DATA", value_type="float"]
+//     N0D [label="CALL", type="CALL", value_type="float"]
+//     N0A -> N0D [label="0|0", type="WITH"]      // the callee: a closure the body assembled
+//     N0B -> N0D [label="0|0", type="NORM"]      // the first argument: a call written by name
+//     N0C -> N0D [label="0|1", type="NORM"]      // the second argument
+//
+// The walk used to ask three questions of a CALL node in this order (`GCGraph::calleeIdOf` answers only
+// for FUNC nodes, i.e. for a call written by name): does the node itself name a graph (no, it is a CALL);
+// does a `with` input name one (no: the closure is a FILL and not a Port, so it is not a value this graph
+// receives, and the FILL names no graph); then -- and this was the step -- **does the first normal input
+// name one**. It did: `N0B` is a FUNC node, so the walk read `g` as this call's callee, set
+// `argumentAt = 1`, found `g`'s one parameter against the two ordinary inputs, and accepted.
+//
+// So the callee it transposed was `g`, which is not the callee of this call at all -- it is the callee of
+// the *first argument*. The branch it landed in (`modules/transforms/transpose.cpp#buildTransposeMember`,
+// `argumentAt == 1`) wrote the transposed call with that callee in the call's first ordinary input and no
+// `with` input, which `src/runtime/graph.cpp` refuses to run:
+//
+//     error[RuntimeDiag::PassInternalError]: Pass 'std::default' failed with an internal error:
+//     Runtime graph 'transpose_of_f' has CALL node 2 without callee input.
+//
+// That was a compiler defect, not the program's fault, and it is fixed: the walk no longer asks a call's
+// operands whether they name a callee, so this program reads the refusal it owes -- the same one the
+// closure gets when the first argument is a bare name --
+//
+//     TRANSPOSE function=f skip=call-no-transpose node=5 callee=none value=3:10 with=2:4 reason=function-closure
+//
+// and stops at exit 1 with the forward line `18.0` printed. The paper answer is still 12 (this program's
+// derivative exists); it is owed to a transform that can take the captured `x` as a parameter of its own,
+// which is the piece `transpose_no_tangent_closure.cml` measures. What this case holds is the reading: no
+// operand is a callee, and a compiler internal error is not an answer.
+import rulesets.transpose
+import { transpose } from transforms
+
+func g(x: float): float {
+    return 2.0 * x
+}
+
+func f(x: float): float {
+    let h = (y: float, z: float) => y * z * x
+    return h(g(x), 1.0)
+}
+
+func main(): int sync {
+    println(f(3.0))
+    // The paper answer: (12.0,). No forward line prints 12, so the claim is about the transpose.
+    println(transpose(f)(1.0))
+    return 0
+}

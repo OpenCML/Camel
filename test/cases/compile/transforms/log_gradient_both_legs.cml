@@ -1,0 +1,55 @@
+// `log`'s gradient through the engine and through the library, in one program -- and where the
+// derivative is not finite.
+//
+// `d(log(x)) = dx / x`. The slope is the reciprocal of the operand, so the law reads `x` -- an
+// operand of the node, not a value it would have to recompute -- and it writes the one operator the
+// engine's `logVjp` writes (`modules/tensor/ops/elementwise_ops.cpp`: `divide(dy, x)`). Nothing is a
+// residue here: this is the cheapest law in the tranche after `neg`, and it is the one that says why
+// the tranche is not "every law needs a carried value".
+//
+// **The domain boundary is a reading, and it is not the reading a reader expects.** `log` is `-inf`
+// at `0` and not real below it, but the cotangent is `ct / x`, which never reads the output: at
+// `0.0` it answers `+inf`, and at `-1.0` it answers `ct / -1.0 = -1.0` -- a finite number for an
+// operand where `log` itself is `nan`. Neither leg refuses either input, and the law must not either:
+// a law that guarded the boundary, or that special-cased it, would disagree with the engine on the
+// input where the function has no derivative. The boundary line prints both legs on `[0.0, -1.0]`
+// (measured `log boundary engine=[inf, -1.0] library=[inf, -1.0]`), so a guard added later is
+// visible here rather than silent.
+//
+// `[1.0, 2.0, 4.0]` gives `[1.0, 0.5, 0.25]`, three distinct lanes, and the two wrong laws a reader
+// is likely to write are separable without a tolerance:
+//
+//   * `log_t` written as `ct` (the identity)            -> [1.0, 1.0, 1.0];
+//   * `log_t` written as `ct * x` (reciprocal inverted) -> [1.0, 2.0, 4.0];
+//   * the correct `ct / x`                              -> [1.0, 0.5, 0.25].
+//
+//     camel test/cases/compile/transforms/log_gradient_both_legs.cml
+import { grad } from autodiff
+import { vjp } from vjp
+import { abs, log, sum } from tensor
+
+/// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
+with <x: float[..]>
+func total(): float {
+    return sum(log(x))
+}
+
+/// The library's spelling: the same function with the value as an ordinary parameter.
+func total_plain(x: float[]): float {
+    return sum(log(x))
+}
+
+func main(): int sync {
+    let engine = grad(total)<[1.0, 2.0, 4.0] as float[]>()
+    `log engine={}`->format<engine>->println
+    let (_, pullback) = vjp(total_plain)([1.0, 2.0, 4.0] as float[])
+    let library = pullback(1.0).0
+    let same = sum(abs(engine - library)) == 0.0
+    `log: engine={} library={} same={}`->format<engine, library, same>->println
+    // The boundary: `log` is `-inf` at 0 and `nan` below it, and neither leg refuses.
+    let edge = grad(total)<[0.0, -1.0] as float[]>()
+    let (_, edge_pullback) = vjp(total_plain)([0.0, -1.0] as float[])
+    let edge_library = edge_pullback(1.0).0
+    `log boundary engine={} library={}`->format<edge, edge_library>->println
+    return 0
+}

@@ -1,0 +1,48 @@
+// The gradient of a lane mean along a non-leading axis of a **square** tensor.
+//
+// This case exists to catch one number. `mean_axis_stated_t` spreads a lane's cotangent with
+// `full(extents, 1.0) * (ct / lanes)` (`stdlib/rulesets/transpose.cml`), which broadcasts by
+// **trailing** alignment: a cotangent shaped `[2]` against extents `[2, 2]` is read as two columns,
+// not two rows. A square tensor is where that is invisible -- the broadcast succeeds, the shapes
+// agree, and the answer is the wrong array with no diagnostic at all. A non-square one stops with a
+// shape error instead (the neighbouring case), which is why this reading and not that one is the
+// clock that catches the defect.
+//
+// The readout takes one lane and not both: a uniform cotangent spreads to the same array either way,
+// so the case has to make the two lanes answer different numbers.
+//
+//     x     = [[1.0, 2.0],
+//              [3.0, 4.0]]
+//     lanes = mean_axis(x, 1, false) = [1.5, 3.5]            (one lane per row)
+//     value = sum(take(lanes, [1])) = 3.5
+//     dL/dx = [[0.0, 0.0],
+//              [0.5, 0.5]]                                  (row 1, half of the 1.0 to each element)
+//
+// The wrong answer is the spread down the columns, `[[0.0, 0.5], [0.0, 0.5]]`: it has the same
+// numbers in it, which is exactly why nothing but a reading like this one says which is right.
+//
+//     camel test/cases/compile/transforms/stated_mean_axis_gradient_square_axis.cml
+import { grad } from autodiff
+import { vjp } from vjp
+import { abs, mean_axis, sum, take } from tensor
+
+/// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
+with <w: float[..]>
+func total(): float {
+    return sum(take(mean_axis(w, 1, false), [1]))
+}
+
+/// The library's spelling: the same function with the value as an ordinary parameter.
+func total_plain(x: float[..]): float {
+    return sum(take(mean_axis(x, 1, false), [1]))
+}
+
+func main(): int sync {
+    let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
+    let engine = grad(total)<[[1.0, 2.0], [3.0, 4.0]] as float[2, 2]>()
+    let (value, pullback) = vjp(total_plain)(x)
+    let library = pullback(1.0).0
+    let same = sum(abs(engine - library)) == 0.0
+    `mean_axis square: value={} engine={} library={} same={}`->format<value, engine, library, same>->println
+    return 0
+}

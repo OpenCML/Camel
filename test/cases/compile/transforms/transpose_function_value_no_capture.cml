@@ -38,8 +38,8 @@ func g(x: float): float {
 func main(): int sync {
     println(g(1.0))
     let back = transpose(g)
-    println(back(1.0, 1.0))
+    println(back(1.0))
     // Twice the cotangent, 4: a number no forward line prints, so the claim is about the transpose.
-    println(back(1.0, 2.0))
+    println(back(2.0))
     return 0
 }

@@ -1245,6 +1245,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::WithPackArgumentType,
+            {
+                "WithPackArgumentType",
+                "The pack '..{0}' of '{1}' takes 'with' arguments of type '{2}': argument {3} has type '{4}'.",
+                "Every 'with' argument the pack takes is of the type it writes, the rule an ordinary parameter follows one type further out. Give an argument of that type, or write the pack without one ('..{0}') to take any type.",
+            },
+        },
+        {
             SemanticDiag::WhenPredicateNotImported,
             {
                 "WhenPredicateNotImported",
@@ -1557,14 +1565,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::WithPackNeedsNativeDeclaration,
-            {
-                "WithPackNeedsNativeDeclaration",
-                "The pack '..{0}' among the 'with' parameters needs a declaration without a body.",
-                "A pack among the 'with' parameters stands for the arguments a call gives beyond the fixed ones, and only a declaration of a native operator, which takes them as they come, can use them. A function with a body names each 'with' parameter; write them out, or write the pack in a function type.",
-            },
-        },
-        {
             SemanticDiag::ImplOnBodylessDeclaration,
             {
                 "ImplOnBodylessDeclaration",
@@ -1773,6 +1773,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::LoopBodyNeedsNextState,
+            {
+                "LoopBodyNeedsNextState",
+                "A loop body ends with the next value of its state, and this one ends without writing one: the round after this one has nowhere to go on from.",
+                "The body of a loop is cut at its yield: the pull that hands an element out stops there, and the pull after it runs the rest of the body and the condition again, so the last statement of the body has to write the loop's next state value. Writing 'yield i' and then 'i + 1' moves the loop on; a body of only 'yield i' reads a fresh i on every pull, so the loop never moves on.",
+            },
+        },
+        {
             SemanticDiag::RuleLeftIsNotAnOperator,
             {
                 "RuleLeftIsNotAnOperator",
@@ -1784,8 +1792,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::DuplicateRuleForOperator,
             {
                 "DuplicateRuleForOperator",
-                "The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side, and one ruleset has one rule per operator.",
-                "A transform looks up the rules of a primitive by the operator its left side is written with and the number of operands it takes, so a second rule under the same operator with the same number of operands has no way to be chosen: which of the two applies would be decided by the order they are written in, and the program would mean different things depending on where a rule sits. Merge the two into one rule whose right side covers both cases, or give one of them a left side with a different operator -- and remember that `-x` and `x - w` are two primitives, not one.",
+                "The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side and write the same parameter types, and one ruleset holds one rule per operator and parameter-type list.",
+                "A transform finds a rule for a primitive by the operator its left side is written with, the number of operands it takes, and then by the types its parameters are written with: two laws of one operator that name different parameter types are two laws -- `T[]`'s `t[0]` is the element and `T[..]`'s `t[0]` is the open-rank array (design principles 5.4) -- and the engine answers with the one the operand's own type enters. Two laws that write the same parameter types have nothing left to be told apart by: which of them applies would be decided by the order they are written in, and the program would mean different things depending on where a rule sits. Merge the two into one rule whose right side covers both cases, write one of them with a parameter type the other does not write (`T[..]` in place of `T`), or give one of them a left side with a different operator -- and remember that `-x` and `x - w` are two primitives, not one.",
             },
         },
         {
@@ -1794,6 +1802,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "RuleRightUsesOuterVariable",
                 "The rule '{0}' reads '{1}' on its right side, and '{1}' is a name its left side binds: in this ruleset the right side names the function the transform calls, and the pattern's names are never bound.",
                 "A family whose transform reads a rule's callee and calls it with the batch never calls the rule's right side as a function, so nothing binds the names the left side's pattern writes ('x', 'w'): the batched graph has batches where those values used to be, and a reference to one is a value the graph has none of. Write the right side so it reads only the names its own arrow declares -- the batch parameters -- and passes them to the named function: 'x + w => (bx: Lift<T>, bw: Lift<T>) => vmap_add(bx, bw)'.",
+            },
+        },
+        {
+            SemanticDiag::ExtentOfNeedsStatedShape,
+            {
+                "ExtentOfNeedsStatedShape",
+                "`extent_of::<A>()` answers the extents the type `A` writes down, and this call's type writes none: {0}.",
+                "Every extent of the type has to be a number written in it: `float[2, 3]` answers `[2, 3]`, and that is what `extent_of::<float[2, 3]>()` gives. `float[]` (= `float[?]`) states one dimension and no length, and `float[..]` states neither the rank nor a length, so neither tells the function what to answer. Write the extents in the type the call names (`float[2, 3]`), or take the shape from a value the program has (`shape(xs)`). A transposition reaches this rule for a parameter whose value nobody has, and the type is then the only place its shape can come from.",
             },
         },
         {

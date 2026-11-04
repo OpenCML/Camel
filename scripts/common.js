@@ -540,7 +540,10 @@ export const BUILD_INFO_FILE = 'build-info.json'
 /** Bumped when the recorded shape changes so an old stamp is refused instead of misread. */
 //  2: the build footprint the configure compiled in is recorded beside the fingerprint, so
 // `camel --version` can be compared with what the build stamped.
-export const BUILD_INFO_SCHEMA = 2
+//  3: the build options are recorded beside the source fingerprint, because two builds of the same
+// sources with different CMake options produce different binaries and the source hash alone called
+// them the same install. A schema-2 stamp has no options in it and is refused, not trusted.
+export const BUILD_INFO_SCHEMA = 3
 
 /** Bumped when the fingerprint algorithm or `BUILD_INFO_ROOTS` changes. */
 export const FINGERPRINT_VERSION = 1
@@ -649,6 +652,111 @@ export function sourceFingerprint(root = BASEDIR) {
     }
 }
 
+//  --- the build options -------------------------------------------------
+//
+// `sourceFingerprint` answers "which bytes did the build read". It cannot answer "which
+// configuration compiled them", and those are two different questions with two different answers:
+// `.camel-opts.json` is git-ignored (so no fingerprint covers it), and the option values reach the
+// compiler as `-D` flags and compile definitions. Two installs built from the same sources with
+// `ENABLE_FASTVM_JIT=ON` and `ENABLE_FASTVM_JIT=OFF` therefore carried the same
+// `fingerprint.hash`, and `-NoBuild` would reuse the no-JIT binary for a JIT tree: the readings
+// looked normal and answered a question the tree never asked.
+//
+// Only what changes the artifact is recorded. In: the option values a build passes as `-D`, the two
+// environment overrides `cmake/Options.cmake` honours, the platform (an `add_platform_option` value
+// becomes a different macro per processor, so `ENABLE_FASTVM_JIT=ON` compiles differently on x64
+// and on arm64) and the compiler selection the build scripts pass. Out, on purpose: timestamps,
+// absolute paths, the user name, the ccache launcher (a cache returns the same bytes it was given)
+// and the clang *version* -- probing it would make `-NoBuild` depend on PATH and refuse every
+// install after a toolchain update, which is why the question is open in
+// docs/handover/questions/2026-11-04-should-the-compiler-version-invalidate-an-install.cn.md.
+export const BUILD_OPTIONS_VERSION = 1
+
+/** `CAMEL_SKIP_PYTHON` as `cmake/Options.cmake` reads it: case-sensitive, the same four spellings. */
+export function envFlagOn(value) {
+    return typeof value === 'string' && /^(1|ON|YES|TRUE)$/.test(value)
+}
+
+/**
+ * Effective `-D` values, exactly as a build passes them right now: `cmake/options.json` with
+ * `.camel-opts.json` on top. Same rule as `cmake-opts.js: getEffectiveValue`, kept here because
+ * that module imports `BASEDIR` from this one (the stamp cannot import it back).
+ *
+ * @param {string} [root] - repository root; defaults to this checkout
+ * @returns {{name: string, value: string, defaultValue: string}[]} in `cmake/options.json` order
+ */
+export function effectiveCmakeOptions(root = BASEDIR) {
+    let definitions = []
+    try {
+        definitions = JSON.parse(fs.readFileSync(path.join(root, 'cmake', 'options.json'), 'utf-8')).options ?? []
+    } catch {
+        definitions = []
+    }
+    let user = {}
+    try {
+        user = JSON.parse(fs.readFileSync(path.join(root, '.camel-opts.json'), 'utf-8')) ?? {}
+    } catch {
+        user = {}
+    }
+    return definitions.map((opt) => ({
+        name: opt.name,
+        value: user[opt.name] !== undefined ? String(user[opt.name]) : String(opt.default),
+        defaultValue: String(opt.default)
+    }))
+}
+
+/**
+ * What a build of this tree would compile with, and a hash over it. The hash is the authority (it
+ * covers every field, so a new field cannot be forgotten); the fields are kept beside it so a
+ * refusal can name the option that moved instead of printing two opaque digests.
+ *
+ * @param {string} [root] - repository root; defaults to this checkout
+ * @returns {{version: number, cmake: Record<string, string>, env: Record<string, string>, platform: string, compilerFlags: string, hash: string}}
+ */
+export function buildOptions(root = BASEDIR) {
+    const cmake = {}
+    const overrides = []
+    for (const { name, value, defaultValue } of effectiveCmakeOptions(root).sort((a, b) =>
+        a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+    )) {
+        cmake[name] = value
+        if (value !== defaultValue) {
+            overrides.push(`${name}=${value}`)
+        }
+    }
+    const env = {
+        // `-march` for libcamel; the variable wins over the cache for one configure run.
+        CAMEL_TARGET_ARCH: process.env.CAMEL_TARGET_ARCH || 'native',
+        // Forces `CAMEL_ENABLE_PYTHON` off at configure time, above every cache value.
+        CAMEL_SKIP_PYTHON: envFlagOn(process.env.CAMEL_SKIP_PYTHON) ? '1' : '0'
+    }
+    if (env.CAMEL_TARGET_ARCH !== 'native') {
+        overrides.push(`CAMEL_TARGET_ARCH=${env.CAMEL_TARGET_ARCH}`)
+    }
+    if (env.CAMEL_SKIP_PYTHON !== '0') {
+        overrides.push('CAMEL_SKIP_PYTHON=1')
+    }
+    const platform = `${process.platform}/${process.arch}`
+    const compilerFlags = getCmakeClangFlags()
+    const canonical = [
+        `version ${BUILD_OPTIONS_VERSION}`,
+        `platform ${platform}`,
+        `compiler ${compilerFlags}`,
+        ...Object.entries(cmake).map(([name, value]) => `cmake ${name}=${value}`),
+        ...Object.entries(env).map(([name, value]) => `env ${name}=${value}`)
+    ].join('\n')
+    return {
+        version: BUILD_OPTIONS_VERSION,
+        cmake,
+        env,
+        platform,
+        compilerFlags,
+        // What this build is *not* at the defaults: the part a reader of a gate log has to see.
+        overrides,
+        hash: createHash('sha256').update(canonical).digest('hex')
+    }
+}
+
 /**
  * HEAD and "is the working tree dirty" for the stamp and for the refusal message. `git` being
  * unavailable is not fatal: the fingerprint is filesystem content and still guards the run, so this
@@ -714,6 +822,7 @@ export function writeBuildInfo(config, tag = 'latest', root = BASEDIR) {
             'The source fingerprint is still recorded, so -NoBuild can still tell whether the install matches this tree.')
     }
     const fingerprint = sourceFingerprint(root)
+    const options = buildOptions(root)
     const info = {
         schema: BUILD_INFO_SCHEMA,
         config,
@@ -727,7 +836,10 @@ export function writeBuildInfo(config, tag = 'latest', root = BASEDIR) {
         dirtyCount: git.dirtyCount,
         dirtyPaths: git.dirtyPaths,
         git: git.available,
-        fingerprint
+        fingerprint,
+        // The configuration the sources were compiled with; `fingerprint` above says only which
+        // sources. A stamp without this field is from a build that could not record its options.
+        buildOptions: options
     }
     // collect-out has already created out/<tag>/; `node scripts/build-info.js stamp` may not have.
     fs.mkdirSync(path.dirname(buildInfoPath(tag, root)), { recursive: true })
@@ -735,7 +847,30 @@ export function writeBuildInfo(config, tag = 'latest', root = BASEDIR) {
     const dirty = git.dirty === null ? 'no git' : git.dirty ? `dirty: ${git.dirtyCount} file(s)` : 'clean'
     logStep(
         `Stamped out/${tag}/${BUILD_INFO_FILE}: ${shortRevision(info)} (${dirty}), ` +
-            `${fingerprint.files} source files, fingerprint ${fingerprint.hash.slice(0, 12)}`
+            `${fingerprint.files} source files, fingerprint ${fingerprint.hash.slice(0, 12)}, ` +
+            `options ${options.hash.slice(0, 12)} (${describeBuildOptions(options)})`
     )
     return info
+}
+
+/**
+ * The option set as a stamp log should print it: what this build is *not* at the `cmake/options.json`
+ * defaults, or `defaults` when nothing was overridden. A refusal prints the whole set instead
+ * (`build-info.js: describeOptionSet`), because there the reader has no log to look back at.
+ *
+ * @param {{overrides: string[]}} options
+ * @returns {string}
+ */
+export function describeBuildOptions(options) {
+    const overrides = options.overrides ?? []
+    return overrides.length > 0 ? overrides.join(' ') : 'defaults'
+}
+
+/** Every effective option as `NAME=value`, for a refusal message. */
+export function describeOptionSet(options) {
+    const parts = Object.entries(options.cmake || {}).map(([name, value]) => `${name}=${value}`)
+    for (const [name, value] of Object.entries(options.env || {})) {
+        parts.push(`${name}=${value}`)
+    }
+    return parts.length > 0 ? parts.join(', ') : 'none'
 }
