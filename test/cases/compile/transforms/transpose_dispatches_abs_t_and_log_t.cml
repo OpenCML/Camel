@@ -1,11 +1,17 @@
-// The two cotangent laws a bare `transpose` reads -- `abs_t` and `log_t` -- and the wall behind the
-// numbers they answer.
+// **The subject of this case is dispatch, not correctness.** A bare `transpose` reaches `abs_t` and
+// `log_t`, and the numbers it gets back are the laws' own bodies evaluated on a **zero carrier** --
+// they are not the right answers, and the right answers are printed beside them as `right=`. Read
+// the `inf` below as "the carrier is zero and `log_t` divides by it", never as a defect to repair:
+// repairing it means changing what a bare `transpose` hands a law, which fails this case by design
+// (see `docs/handover/questions/2026-11-04-a-bare-transpose-hands-a-law-a-zero-what-does-the-law-owe.cn.md`).
 //
 // `transpose` of a function that is not a `split` has the **cotangent only**: the parameter's value
 // is not among its arguments, so a law that reads an operand is handed a zero carrier there. Both
 // readings below are that carrier, and they say which number it is:
 //   - `log_t` is `ct / x`, and the answer is `inf` at every element -- `1.0 / 0.0`, so the carrier
-//     is zero and not, say, the cotangent.
+//     is zero and not, say, the cotangent. `inf` is pinned on all three back ends (`nvm`, `fvm`,
+//     `jit`) and all three print `inf`; it is the one reading whose *spelling* could differ per
+//     runtime, which is why the plan entry runs all three.
 //   - `abs_t` is `where(x >= 0.0, ct, -ct)`, and `0.0 >= 0.0` is true, so every element answers
 //     `ct`. At x = [1, -2, 3] the right cotangent is [1, -1, 1].
 //   - The third reading tells the two carrier hypotheses apart: at cotangent -3.0 `abs_t` answers
@@ -19,7 +25,7 @@
 // these three lines change to [1, -1, 1], [1, 0.5, 0.3333333333333333] and [-3, 3, -3] -- the values
 // the comments name -- and that change is the point of the case.
 //
-//     camel test/cases/compile/transforms/transpose_laws_of_abs_and_log.cml
+//     camel test/cases/compile/transforms/transpose_dispatches_abs_t_and_log_t.cml
 import rulesets.transpose
 import { transpose } from transforms
 import { abs, sum, log } from tensor

@@ -47,7 +47,7 @@
 **乙，且不改 `transpose.cpp` 的载体判定。** 理由两条：
 1. 改载体判定会动到树上**每一条**裸 `transpose` 读数（`transpose_*.cml` 一族），超出本车道
    （`pow_tangent` 无守卫那条裁定）的授权面；甲/丙是语义决定，该由裁定给。
-2. 乙仍然满足「律要被读到」：用例 `transpose_laws_of_abs_and_log` 钉住三条读数，**删掉 `abs_t`
+2. 乙仍然满足「律要被读到」：用例 `transpose_dispatches_abs_t_and_log_t` 钉住三条读数（三个后端各一次），**删掉 `abs_t`
    或 `log_t` 会变成拒绝、改掉其中任何一条的算术会移动一个被钉的数**——2026-11-04 已做红绿各一次
    （把 `abs_t` 两臂对调、`log_t` 的 `/` 换成 `*`：三条读数变成 `([-1.0, -1.0, -1.0])`、
    `([3.0, 3.0, 3.0])`、`([0.0, 0.0, 0.0])`，恢复后回绿）。所以这两条律**算读到**，钉的是"律在跑、
@@ -61,7 +61,7 @@
 
 | 用例 | 守什么 | 今天的读数 |
 |---|---|---|
-| `transpose_laws_of_abs_and_log.cml` | `abs_t`/`log_t` 被读到：`rhs=` 指名它们，改律即红 | exit 0；`([1.0, 1.0, 1.0])` / `([-3.0, -3.0, -3.0])` / `([inf, inf, inf])` |
+| `transpose_dispatches_abs_t_and_log_t.cml`（nvm/fvm/jit） | `abs_t`/`log_t` 被读到：`rhs=` 指名它们，改律即红 | exit 0；`([1.0, 1.0, 1.0])` / `([-3.0, -3.0, -3.0])` / `([inf, inf, inf])` |
 | `transpose_laws_of_maximum_and_minimum_are_refused.cml` | 这两条**未验证**：律找得到、实例化不成立 | exit 0；`skip=rule-ranks … rule=maximum_t/minimum_t … (bool[3], float[3][..], float)` |
 
 ## 5. 裁了之后要改什么
