@@ -1112,51 +1112,6 @@ bool foldStaticCast(
     return true;
 }
 
-/// Replaces a pure operator by the constant its argument types fix, through the operator's
-/// registered type folder. Returns false when there is none or the types do not fix the result.
-bool foldFromTypes(
-    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id,
-    std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
-    auto &draft = transaction.edit();
-    const auto *folder     = camel::core::OperatorTable::instance().typeFolder(operIdOf(transaction, id));
-    type::Type *resultType = draft.header(id)->dataType;
-    // The arguments as the operator's kernel reads them (with-arguments after the ordinary ones
-    // when it takes them so); an operator with other with-arguments is not folded.
-    const camel::runtime::KernelArguments arguments = camel::runtime::kernelArgumentsOf(draft, id);
-    if (!folder || !resultType || !arguments.with.empty()) {
-        return false;
-    }
-    std::vector<type::Type *> types;
-    std::vector<type::StaticArg> statics;
-    for (gc_node_ref_t in : arguments.norm) {
-        const auto *h = draft.header(in);
-        if (!h || !h->dataType) {
-            return false;
-        }
-        types.push_back(h->dataType);
-        const auto value = staticValueOf(transaction, in);
-        statics.push_back(value ? std::optional<slot_t>(value->first) : std::nullopt);
-    }
-    const auto result = (*folder)(types, statics, camel::core::mm::autoSpace());
-    if (!result || holdsNoValue(*result, resultType)) {
-        return false;
-    }
-    if (!fitsConstantBudget(*result, resultType, constantBudget)) {
-        return false; // the value is above the budget: the computation that builds it stays
-    }
-    if (type::isGCTraced(resultType->code()) && *result != NullSlot) {
-        // Keep the value alive until commit moves it into the graph's static area.
-        roots.emplace_back(
-            camel::core::mm::autoSpace(),
-            camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(*result),
-            resultType,
-            "std::opt::fold");
-    }
-    replaceFoldResult(
-        transaction, id, draft.materializeStaticValue(*result, resultType));
-    return true;
-}
-
 size_t foldDraft(
     camel::runtime::GraphTransaction &transaction, camel::core::context::Context &ctx,
     std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
@@ -1506,6 +1461,57 @@ size_t dceDraft(camel::runtime::GraphTransaction &transaction, bool valuesOnly =
 
 } // namespace
 
+namespace camel::passes::generic {
+
+/// The type-folder fold (rewrite.h): a pure operator whose argument types fix its result is that
+/// constant. It lives here, outside the file's own namespace, because two drivers reach it -- the
+/// `std::opt::fold` stage below (`foldDraft`) and `foldTypedOperators` -- and a second copy of it
+/// would be a second answer to the same question.
+bool foldFromTypes(
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id,
+    std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
+    auto &draft            = transaction.edit();
+    const auto *folder     = camel::core::OperatorTable::instance().typeFolder(operIdOf(transaction, id));
+    type::Type *resultType = draft.header(id)->dataType;
+    // The arguments as the operator's kernel reads them (with-arguments after the ordinary ones
+    // when it takes them so); an operator with other with-arguments is not folded.
+    const camel::runtime::KernelArguments arguments = camel::runtime::kernelArgumentsOf(draft, id);
+    if (!folder || !resultType || !arguments.with.empty()) {
+        return false;
+    }
+    std::vector<type::Type *> types;
+    std::vector<type::StaticArg> statics;
+    for (gc_node_ref_t in : arguments.norm) {
+        const auto *h = draft.header(in);
+        if (!h || !h->dataType) {
+            return false;
+        }
+        types.push_back(h->dataType);
+        const auto value = staticValueOf(transaction, in);
+        statics.push_back(value ? std::optional<slot_t>(value->first) : std::nullopt);
+    }
+    const auto result = (*folder)(types, statics, camel::core::mm::autoSpace());
+    if (!result || holdsNoValue(*result, resultType)) {
+        return false;
+    }
+    if (!fitsConstantBudget(*result, resultType, constantBudget)) {
+        return false; // the value is above the budget: the computation that builds it stays
+    }
+    if (type::isGCTraced(resultType->code()) && *result != NullSlot) {
+        // Keep the value alive until commit moves it into the graph's static area.
+        roots.emplace_back(
+            camel::core::mm::autoSpace(),
+            camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(*result),
+            resultType,
+            "std::opt::fold");
+    }
+    replaceFoldResult(
+        transaction, id, draft.materializeStaticValue(*result, resultType));
+    return true;
+}
+
+} // namespace camel::passes::generic
+
 const camel::runtime::Program *
 ConstantFoldPass::apply(const camel::runtime::Program *program, std::ostream &) {
     std::deque<camel::core::mm::RootHandle> roots;
@@ -1516,6 +1522,49 @@ ConstantFoldPass::apply(const camel::runtime::Program *program, std::ostream &) 
         [&](camel::runtime::GraphTransaction &transaction) {
             auto &draft = transaction.edit();
             return foldDraft(transaction, *context_, roots, constantBudgetBytes_);
+        },
+        nullptr,
+        nullptr,
+        mayFold);
+}
+
+const camel::runtime::Program *foldTypedOperators(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    size_t constantBudgetBytes) {
+    // The values the fold materializes are rooted for the whole call, so they are alive when each
+    // graph's commit moves them into its static area.
+    std::deque<camel::core::mm::RootHandle> roots;
+    return rewriteReachableGraphs(
+        context,
+        program,
+        "std::opt::fold",
+        [&](camel::runtime::GraphTransaction &transaction) {
+            auto &draft   = transaction.edit();
+            size_t folded = 0;
+            for (bool changed = true; changed;) {
+                changed = false;
+                for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+                    const auto *h = draft.header(id);
+                    // The node must be one whose value may be replaced where it stands: a branch
+                    // arm's head or a statement of a chain keeps its place, and `foldDraft` asks
+                    // the same question of the same nodes.
+                    if (!h || h->kind != GCNodeKind::Oper || !isPureOper(transaction, id) ||
+                        !isFoldable(transaction, id)) {
+                        continue;
+                    }
+                    if (foldFromTypes(transaction, id, roots, constantBudgetBytes)) {
+                        ++folded;
+                        changed = true;
+                    }
+                }
+                // A folded shape sharpens the type of what reads it (a reshape to a now constant
+                // shape), and that type is what its own folder reads: the stage goes round again,
+                // as `foldDraft` does after any fold.
+                if (changed) {
+                    (void)camel::runtime::reinferDraftTypes(draft);
+                }
+            }
+            return folded;
         },
         nullptr,
         nullptr,

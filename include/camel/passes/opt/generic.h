@@ -129,6 +129,30 @@ class OrderReductionPass : public RuntimeGraphRewritePass {
 struct OptimizeRewriteConfig;
 
 /**
+ * The type-folder half of `std::opt::fold`, run once over `program` on its own: a pure operator
+ * whose argument types fix its result is replaced by that constant, through the folder the
+ * operator registered (`OperatorTable::typeFolder`; `tensor:shape` is
+ * `modules/tensor/ops/layout_ops.cpp#shapeFold`, and `tensor:numel` / `tensor:dim` sit beside it
+ * in `gradient_ops.cpp`). The fold itself is one function
+ * (`src/passes/opt/generic/generic.cpp#foldFromTypes`), the one `std::opt::fold` reaches for a
+ * node its arguments do not all fix; this entry point runs it and nothing else, so a pass that
+ * reads the shape of a graph before it rewrites it does not have to run the whole stage.
+ *
+ * That second caller exists because what the fold decides can be the difference between a graph a
+ * consumer accepts and one it refuses: `tiles::compile` cuts a `#gpu` scope into segments, a
+ * `shape` operator left inside one is an operator no device program exists for
+ * (`modules/tiles/src/graph_regions.cpp#operations`), and the constant folded here is a value the
+ * segment reads. It runs there before the cut, once per program: folding a segment for itself
+ * would fold again for every segment, and each repetition is an operator call and an allocation,
+ * which `fusion_group.profile.none` would read as a worse step.
+ *
+ * Returns the program to continue with (the same one when nothing folded).
+ */
+const camel::runtime::Program *foldTypedOperators(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    size_t constantBudgetBytes = kDefaultConstantBudgetBytes);
+
+/**
  * The std::opt fixpoint on `program`, with `config` for its call-rewrite rounds. `program` may
  * be detached from the running program (a function being exported); then the program is left as
  * it is. Stops after `maxRounds` rounds (each unrolls about one more level of a recursion of
