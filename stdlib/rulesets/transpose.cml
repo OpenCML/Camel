@@ -39,7 +39,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean_axis, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, numel, pick_at, relu, reshape, rsqrt, shape, sigmoid, sqrt, subtract, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
+import { abs, broadcast_like, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean_axis, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, numel, pick_at, relu, reshape, rsqrt, shape, sigmoid, sqrt, subtract, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 // `log as math_log`, for the reason `rulesets.jvp` records: the plain `log` here is the **array**
 // one (`log_t` files its law below), and a second import of one name hides the first instead of
 // overloading it, so `pow_d_t`'s scalar `log(x)` is spelled `math_log`.
@@ -119,15 +119,14 @@ export rule stop_gradient_t::<T>(x: T) when is_float::<T>() {
 // summed back to the shape the operand states". That second half is not a detail. The operator is
 // called with an array and a *number* as well as with two arrays, and the number's cotangent is a
 // reduction: the number fed every lane the broadcast spread it over, so its cotangent is the sum
-// of what it fed. One law covers both shapes because it names the shape instead of assuming it --
-// `sum_to_stated(ct * other, shape(operand))` is the identity when the shapes are equal, and `T[...]`
+// of what it fed. One law covers both shapes because it names the extents instead of assuming them --
+// `sum_to(ct * other, shape(operand))` is the identity when the shapes are equal, and `T[...]`
 // includes rank 0, a rank-zero array being that element and nothing else (design principles 5.4), so
 // the number's shape is a shape like any other and its reduction is the total sum.
 //
-// The shape is `shape(operand)` and not the operand itself: a transposition has no value for the
-// operand it differentiates, so what it can be given is the extents its port states
-// (`sum_to_stated` above, and `modules/transforms/rule_expand.cpp#expandRuleRightSide` for who hands
-// them over).
+// The list is `shape(operand)` and not the operand itself: `sum_to` takes the extents (ruling 甲),
+// and a value is only needed where the walk holds one. Where the forward rule states the list
+// instead, `mul_stated_t` below is the same law with that port in place of the call.
 //
 // This is one rule and cannot be two: the index tells two rules of one key apart by their `when`
 // condition, so a second rule `(T[...], T)` -- no position of which overlaps the shapes above --
@@ -166,37 +165,27 @@ func mul_tensor::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
     return x * w
 }
 
-/// `t` read at the shape whose extents are `at` -- `sum_to` with the target shape as a list, which is
-/// what a transpose law can state and a value it cannot.
-///
-/// `sum_to(t, like)` reads the shape off **another value**, and the one value a transposition never
-/// has is the operand it differentiates. So when the shape is the thing a law needs, the law is
-/// handed the extents and this is the move that turns them into the operand `sum_to` is written
-/// against. The zeros are `sum_to`'s own way of naming a shape -- its second operand is read for its
-/// shape and for nothing else (`stdlib/tensor.cml#sum_to`, whose second example is a zero array) --
-/// built here from extents the law was given, and never substituted for an operand of the operator
-/// being differentiated (author, 2026-11-03 17:35: a shape arrives as a known operand, never read
-/// off an operand's value, and not as a zero standing in for one).
-///
-/// It reads `at` and nothing else of the operand, which is why a law that names it can answer a
-/// position whose value the walk does not carry.
-func sum_to_stated::<T>(t: T[...], at: int[]): T[...] when is_float::<T>() {
-    return sum_to(t, zeros::<T>(at))
-}
+// The shape a law needs arrives as `at` and goes straight into `sum_to`, which takes the extents
+// themselves (`stdlib/tensor.cml#sum_to`): `sum_to(t, shape(x))` is the reduction, and there is no
+// helper between the list and the call any more. The `sum_to_stated(t, at)` that built
+// `zeros::<T>(at)` was a second spelling of one call, and two spellings of one move is what this
+// lane removes.
 
 /// The transpose of `x * w`: `ct * w` reduced to `x`'s shape for `x`, `ct * x` reduced to `w`'s
-/// shape for `w`. The reduction is the one `sum_to_stated` names, so the law is written once for both
+/// shape for `w`. The reduction is `sum_to` with the extents, so the law is written once for both
 /// shapes the operator is called with -- two arrays, and an array and a number.
 ///
-/// The second operand of each `sum_to_stated` is `shape(x)` / `shape(w)`, and it is answered from the
-/// law's **own port** when the walk carries no value for that operand
-/// (`modules/transforms/rule_expand.cpp#expandRuleRightSide`): the ports are `X` and `W`, the instance
-/// is made at the node's operand types, and a stated extent is a fact about a type. That is what makes
-/// the broadcast shape `w`'s own and not `x`'s -- reading the other operand was measured to answer
-/// `[6.0]` where the engine answers a `[2, 2, 2]` tensor, and reading a zero carrier for it answered
-/// zeros -- and it is the difference between a law that names a shape and one that guesses at it.
+/// The second operand of each `sum_to` is `shape(x)` / `shape(w)` -- the extents **computed from the
+/// value**, which is the layer the extents belong to (author, 2026-11-05: from the primal's runtime
+/// shape, not from the type). It is answered where the walk carries that value
+/// (`modules/transforms/rule_expand.cpp#expandRuleRightSide`); where it does not, the step is
+/// refused by name rather than guessed at, and the stated pair of rules below is the spelling for a
+/// law whose forward half writes the lists into the call. That is what makes the broadcast shape
+/// `w`'s own and not `x`'s -- reading the other operand was measured to answer `[6.0]` where the
+/// engine answers a `[2, 2, 2]` tensor, and reading a zero carrier for it answered zeros -- and it
+/// is the difference between a law that names a shape and one that guesses at it.
 export rule mul_tensor_t::<T, X, W>(x: X, w: W) {
-    mul_tensor(x, w) => (ct: T[...]) => (sum_to_stated(ct * w, shape(x)), sum_to_stated(ct * x, shape(w)))
+    mul_tensor(x, w) => (ct: T[...]) => (sum_to(ct * w, shape(x)), sum_to(ct * x, shape(w)))
 }
 
 /// The transpose of `mul_stated(x, w, ax, aw)`: `ct * w` reduced to `ax` for `x`, and `ct * x`
@@ -211,10 +200,10 @@ export rule mul_tensor_t::<T, X, W>(x: X, w: W) {
 ///
 /// Two lists and not one: a product broadcasts, so the two cotangents come back to two different
 /// shapes, and one list would answer the wrong one of them (`mul_tensor_t` records the measurement:
-/// `sum_to(ct * w, w)` answers `[6.0]` where the engine answers a `[2, 2, 2]` tensor).
+/// `sum_to(ct * w, shape(w))` answers `[6.0]` where the engine answers a `[2, 2, 2]` tensor).
 export rule mul_stated_t::<T, X, W, AX, AW>(x: X, w: W, ax: AX, aw: AW) {
     mul_stated(x, w, ax, aw) => (ct: T[...]) =>
-        (sum_to_stated(ct * w, ax), sum_to_stated(ct * x, aw))
+        (sum_to(ct * w, ax), sum_to(ct * x, aw))
 }
 
 /// `relu(x) = maximum(x, 0)` per element: the cotangent is `ct` where the input was positive and
@@ -322,7 +311,7 @@ func divide::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
 /// negation), so the quotients that produce the two cotangents are the same quotients.
 export rule divide_t::<T, X, W>(x: X, w: W) when is_float::<T>() {
     divide(x, w) => (ct: T[...]) =>
-        (sum_to(ct / w, x), sum_to(-((ct / w) * (x / w)), w))
+        (sum_to(ct / w, shape(x)), sum_to(-((ct / w) * (x / w)), shape(w)))
 }
 
 /// `x - w` on two arrays: what `tensor:subtract` means, and the left side this rule is filed under.
@@ -359,21 +348,29 @@ export rule subtract_t::<T>(x: T[...], w: T[...]) when is_float::<T>() {
 // as a row or a column and drops that axis from the answer (`modules/tensor/kernels/gemm.cpp#planMatmul`),
 // so the cotangent that comes back is a rank-one value where the operand is rank one, and the cotangent
 // that goes to the *other* operand is an outer product the matmul cannot write -- the product of a
-// rank-one value with a rank-one value is a number. That outer product is what `sum_to` is for, and it
-// is written in the two lane orderings the shapes allow:
+// rank-one value with a rank-one value is a number. That outer product is a **spread**, so it is
+// `broadcast_like`'s, and it is written in the two lane orderings the shapes allow:
 //
 //   * `a` a vector, `b` a matrix: `bᵀ` is (n, k) and both the cotangent of the answer (n) and `a` (k)
-//     spread into that shape from the right -- `sum_to(ct, bᵀ) * sum_to(a, bᵀ)` is (n, k) with
-//     `ct[i] * a[j]` in it, and the transpose of it is the (k, n) outer product `a ⊗ ct` that goes
-//     back to `b`. The shape is `bᵀ`'s own, read from a known operand; no extent is reconstructed.
+//     spread into that shape from the right -- `broadcast_like(ct, bᵀ) * broadcast_like(a, bᵀ)` is
+//     (n, k) with `ct[i] * a[j]` in it, and the transpose of it is the (k, n) outer product `a ⊗ ct`
+//     that goes back to `b`. The shape is `bᵀ`'s own, read from a known operand; no extent is
+//     reconstructed.
 //   * `a` a matrix, `b` a vector: `a` is (m, k) and the cotangent of the answer (m) spreads along its
-//     leading axis while `b` (k) spreads along its last -- `sum_to(ct, a) * sum_to(b, a)` is `ct ⊗ b`.
+//     leading axis while `b` (k) spreads along its last -- `broadcast_like(ct, a) * broadcast_like(b, a)`
+//     is `ct ⊗ b`.
+//
+// The spread is a different operator and not a direction of `sum_to` since ruling 甲: a reduction
+// removes leading axes from a target that is a suffix of its operand's shape, and `sum_to` refuses a
+// target longer than its operand by name (`stdlib/tensor.cml#sum_to`). Using it for the spread was
+// the wrong operator, and the two rules read better apart: the reduction names extents, the spread
+// names the value whose lanes are wanted.
 //
 // Both are the same law `matmul` states, read at the rank the operands have; nothing here reads a
 // linear operand's value or asks for a count. What the matrix form needs is the reduction
-// `sum_to(matmul(ct, bᵀ), a)`: the identity when the shapes agree, and the sum over a batch axis the
-// day an operand carries one -- the reduction half of this law, written where it belongs rather than
-// left to the day a batch appears.
+// `sum_to(matmul(ct, bᵀ), shape(a))`: the identity when the shapes agree, and the sum over a batch
+// axis the day an operand carries one -- the reduction half of this law, written where it belongs
+// rather than left to the day a batch appears.
 //
 // **The rank dispatch lives in the helpers, because a ruleset files one rule per operator and arity.**
 // A second `matmul(a, b)` rule is refused by name (`SemanticDiag::DuplicateRuleForOperator`, 0x03000205:
@@ -385,12 +382,14 @@ export rule subtract_t::<T>(x: T[...], w: T[...]) when is_float::<T>() {
 // `<T, X, W>` for the same reason. The shapes are therefore stated by the two cotangent helpers,
 // overloaded on the operands' ranks.
 //
-// What a helper must not do is build a shape: every one of them ends by reading its answer at the
-// *known* operand -- `sum_to(..., a)` or `sum_to(..., b)` -- so the extents come from a value the cut
-// already carries and a shape is never reconstructed from a count (design principles 5.4, and the
-// author's 11:10 note: a shape may be taken from an operand, never read off the linear operand).
-// `sum_to` is also where the reduction half of this law lives: for two matrices the call is the
-// identity, and it becomes the sum over a batch axis the day an operand has one.
+// What a helper must not do is build a shape: every one of them ends by naming the extents of the
+// *known* operand -- `sum_to(..., shape(a))` or `sum_to(..., shape(b))` -- so the extents are
+// computed from a value the cut already carries and a shape is never reconstructed from a count
+// (design principles 5.4, and the author's 11:10 note: a shape may be taken from an operand, never
+// read off the linear operand). `shape(x)` is the extents of a runtime value, which is the layer
+// the author's 2026-11-05 ruling puts them on; the operator that reduces reads the list and never
+// the operand's type. `sum_to` is also where the reduction half of this law lives: for two matrices
+// the call is the identity, and it becomes the sum over a batch axis the day an operand has one.
 //
 // **What is outside the law stops in the helpers, and the walk has a word for it.** Rank three and
 // above, and the vector-vector product whose answer is a number, have no overload; the law is chosen,
@@ -415,108 +414,121 @@ export rule subtract_t::<T>(x: T[...], w: T[...]) when is_float::<T>() {
 // and the vector lanes are read in `matmul_transpose_vector_lhs.cml` and
 // `matmul_transpose_vector_rhs.cml`.
 
-/// The cotangent of the left operand, both operands matrices: `ct · bᵀ`, read at `a`'s shape.
+/// The cotangent of the left operand, both operands matrices: `ct · bᵀ`, reduced to `a`'s extents.
 func ct_of_a(ct: float[...], a: float[?, ?], b: float[?, ?]): float[?, ?] {
-    return sum_to(matmul(ct, transpose(b)), a)
+    return sum_to(matmul(ct, transpose(b)), shape(a)) as float[?, ?]
 }
 
 /// The cotangent of the left operand when it is a row: `ct · bᵀ` is already its own shape.
 func ct_of_a(ct: float[...], a: float[?], b: float[?, ?]): float[?] {
-    return sum_to(matmul(ct, transpose(b)), a)
+    return sum_to(matmul(ct, transpose(b)), shape(a)) as float[?]
 }
 
 /// The cotangent of the left operand when the right one is a column: the outer product `ct ⊗ b`,
-/// which is `a`'s shape, read off `a` itself.
+/// spread into `a`'s lanes from the two values that have the elements.
 func ct_of_a(ct: float[...], a: float[?, ?], b: float[?]): float[?, ?] {
-    return sum_to(ct, a) * sum_to(b, a)
+    return broadcast_like(ct, a) * broadcast_like(b, a)
 }
 
-/// The cotangent of the right operand, both matrices: `aᵀ · ct`, read at `b`'s shape.
+/// The cotangent of the right operand, both matrices: `aᵀ · ct`, reduced to `b`'s extents.
 func ct_of_b(ct: float[...], a: float[?, ?], b: float[?, ?]): float[?, ?] {
-    return sum_to(matmul(transpose(a), ct), b)
+    return sum_to(matmul(transpose(a), ct), shape(b)) as float[?, ?]
 }
 
 /// The cotangent of the right operand when the left one is a row: the outer product `a ⊗ ct`, built
 /// in `bᵀ`'s lanes and turned round, because a row's cotangent is where the missing axis is.
 func ct_of_b(ct: float[...], a: float[?], b: float[?, ?]): float[?, ?] {
-    return sum_to(transpose(sum_to(ct, transpose(b)) * sum_to(a, transpose(b))), b)
+    return sum_to(
+        transpose(broadcast_like(ct, transpose(b)) * broadcast_like(a, transpose(b))),
+        shape(b)) as float[?, ?]
 }
 
 /// The cotangent of the right operand when it is a column: `aᵀ · ct` is already its own shape.
 func ct_of_b(ct: float[...], a: float[?, ?], b: float[?]): float[?] {
-    return sum_to(matmul(transpose(a), ct), b)
+    return sum_to(matmul(transpose(a), ct), shape(b)) as float[?]
 }
 
-// ---- the same six answers, with the shape handed over instead of read ----
+// ---- the same six answers, with the extents handed over instead of computed ----
 //
 // `matmul_stated_t` below answers a node whose two operands' shapes are ports (`sa`, `sb`) rather
-// than facts of the operands: `stdlib/rulesets/jvp.cml#jvp_matmul` states `shape(a)` and `shape(b)`
-// in the linear call, where both are values. So each helper here is its `ct_of_a` / `ct_of_b`
-// counterpart with `sum_to(..., operand)` replaced by `sum_to_stated(..., list)` -- and that is the
-// whole difference, which is why the six are written out rather than folded into the six above: what
-// changes is where one argument comes from, and the reduction itself is the same reduction.
+// than values in the cut: `stdlib/rulesets/jvp.cml#jvp_matmul` states `shape(a)` and `shape(b)` in
+// the linear call, where both operands are values. So each helper here is its `ct_of_a` / `ct_of_b`
+// counterpart with `shape(a)` replaced by `sa` -- and that is the whole difference, which is why the
+// six are written out rather than folded into the six above: what changes is where the list comes
+// from, and the reduction itself is the same reduction. Both spellings pass a list into `sum_to`,
+// which is the one signature (`stdlib/tensor.cml#sum_to`): one operator, one spelling of the call.
 //
-// The rank dispatch is kept, and it is the operands' ranks that choose a helper: a product's two
-// cotangents are not the same expression at rank one as at rank two (`matmul` reads a row operand as
-// a row and contracts its extent against the matrix's first axis).
+// **What the six still need of the answered operand is its rank, and what they may not ask the
+// caller for is its value.** The rank picks the helper (`matmul` reads a row operand as a row and
+// contracts its extent against the matrix's first axis), and the walk never holds a value for the
+// position it is answering (`buildTransposeMember`: the transposition is handed the cotangent and the
+// *other* operand). The plain helpers above therefore reach `float[]` and stop: `ct_of_a(ct, a, b)`
+// names `a`, the expansion asks for a value behind it, the type states no extents, no carrier can be
+// built from it (`modules/transforms/transpose.cpp#shapeCarrierOf`), and the step is refused by name.
+// Measured 2026-11-04 on the two vector cases of `test/plans/feat/showcase_s2.plan.toml`:
 //
-// Each helper takes only the list it needs. The answered operand's own shape is the one the caller
-// cannot read -- that operand is a tangent on this side -- while the *other* operand is a value the
-// cut carries, so the helper still reads it.
+//     skip=parameter-shape uri=tensor:matmul_stated node=11 position=0 param=0 param-type=float[]
 //
-// ---- what the two stated laws answer, and what they do not ----
+// So the law builds the carrier itself, from the list, and hands it over in the answered operand's
+// place -- the same move the walk makes when a type *does* state the extents (a zero array read for
+// its shape and never for its elements: `shapeCarrierOf`, the author's 2026-11-03 16:15 ruling),
+// with the extents taken from `sa` / `sb` instead of from the type.
 //
-// The rule, so that a red reading has an owner instead of a chore list (author's ruling of
-// 2026-11-04 12:40, and the question its own page raises:
-// `docs/handover/questions/2026-11-04-which-half-of-a-page-decides-whether-the-twins-exist.cn.md`):
+// **The carrier is not where the length comes from; `sa` is, and it goes straight into `sum_to`.**
+// Since ruling 甲 the reduction reads `at`, and here that is `sa`: the known argument of the linear
+// call, written by the forward half (`matmul_stated(da, b, shape(a), shape(b))`) where `a` is a
+// value, and carried to the backward half as a port. The carrier's extents agree with it -- `sa`
+// *is* `shape(a)` -- but nothing reads the length off the carrier or off the type; what the carrier
+// is read for is the **rank**, which is the part of the declaration the type does state. The cast
+// keeps that rank: `float[]` says rank one and no extent, and `float[3, 2, 2]` still matches no
+// helper, so a batched product is refused exactly as before (`skip=rule-ranks`). Where an answer is
+// a spread instead of a reduction, the carrier's extents are the lanes it spreads into and
+// `broadcast_like` reads them -- the same value, read for its shape, in the one operator that owns
+// that direction.
 //
-// **`mul_stated_t` and `matmul_stated_t` answer a product whose two operands' shapes are operands of
-// the linear call** -- that is, a product reached through a forward rule that states `shape(...)` in
-// the half where both operands are values (`stdlib/rulesets/jvp.cml#jvp_mul_tensor` and
-// `#jvp_matmul` do, and `#jvp_linear` does not yet). Inside that domain each cotangent is reduced by
-// `sum_to_stated` to a list, and the law reads at most the **other** operand's value.
+// The alternative -- dropping the answered operand from the helpers and dispatching on the cotangent's
+// rank -- was measured and does not exist: the law's closure types the cotangent `T[...]`, so a helper
+// over `float[?]` / `float[?, ?]` never takes it (2026-11-04, `No matching function found for argument
+// types: <> (float[...], ...)`).
 //
-// **Outside it the domain stops at the type, not at the arithmetic.** A product whose operand type is
-// open (`float[]`, `float[...]`) is answered by these laws only while the position being answered
-// still has what it needs: a parameter's *value* behind the reads. Measured 2026-11-04 on the two
-// vector cases of `test/plans/feat/showcase_s2.plan.toml`: they walk in (`skip=
-// cotangent-needs-a-value uri=tensor:matmul_stated position=0` / `position=1`), so the law is the one
-// being asked, and the same law answers the same case with the type written out (`v: float[2]`),
-// `max_abs_diff 0.0` -- what is missing at an open type is the answered position's own value, not a
-// shape. Carrying that value into the backward half is a different lane (the residual-to-port
-// correspondence, `modules/transforms/split.cpp#residualsOf` and
-// `docs/handover/questions/2026-11-04-who-records-which-closure-member-is-which-parameter.cn.md`), and
-// the author's ruling of 2026-11-04 put it on hold rather than open it here.
+// The law's domain is unchanged: `mul_stated_t` and `matmul_stated_t` answer a product reached
+// through a forward rule that states `shape(...)` in the half where both operands are values
+// (`stdlib/rulesets/jvp.cml#jvp_mul_tensor` and `#jvp_matmul` do, and `#jvp_linear` does not yet). A
+// product whose forward rule writes the bare operator still meets `mul_tensor_t` / `matmul_t`, and
+// those compute the lists from the operands' values where the walk holds them.
 
 /// Both operands matrices: `ct · bᵀ`, reduced to `sa`.
 func ct_of_a_stated(ct: float[...], a: float[?, ?], b: float[?, ?], sa: int[]): float[?, ?] {
-    return sum_to_stated(matmul(ct, transpose(b)), sa) as float[?, ?]
+    return sum_to(matmul(ct, transpose(b)), sa) as float[?, ?]
 }
 
 /// The left operand a row: `ct · bᵀ` is already its own shape, and `sa` is that shape.
 func ct_of_a_stated(ct: float[...], a: float[?], b: float[?, ?], sa: int[]): float[?] {
-    return sum_to_stated(matmul(ct, transpose(b)), sa) as float[?]
+    return sum_to(matmul(ct, transpose(b)), sa) as float[?]
 }
 
-/// The right operand a column: the outer product `ct ⊗ b`, built in `sa`'s lanes.
+/// The right operand a column: the outer product `ct ⊗ b`, spread into `a`'s lanes (the carrier's
+/// extents are `sa`, so this is the spread into `sa`).
 func ct_of_a_stated(ct: float[...], a: float[?, ?], b: float[?], sa: int[]): float[?, ?] {
-    return (sum_to_stated(ct, sa) * sum_to_stated(b, sa)) as float[?, ?]
+    return broadcast_like(ct, a) * broadcast_like(b, a)
 }
 
 /// Both operands matrices: `aᵀ · ct`, reduced to `sb`.
 func ct_of_b_stated(ct: float[...], a: float[?, ?], b: float[?, ?], sb: int[]): float[?, ?] {
-    return sum_to_stated(matmul(transpose(a), ct), sb) as float[?, ?]
+    return sum_to(matmul(transpose(a), ct), sb) as float[?, ?]
 }
 
 /// The left operand a row: the outer product `a ⊗ ct`, built in `bᵀ`'s lanes and turned round, then
-/// reduced to `sb`.
+/// reduced to `sb`. `b` here is the carrier, so `transpose(b)`'s lanes are `b`'s own extents.
 func ct_of_b_stated(ct: float[...], a: float[?], b: float[?, ?], sb: int[]): float[?, ?] {
-    return sum_to_stated(transpose(sum_to(ct, transpose(b)) * sum_to(a, transpose(b))), sb) as float[?, ?]
+    return sum_to(
+        transpose(broadcast_like(ct, transpose(b)) * broadcast_like(a, transpose(b))),
+        sb) as float[?, ?]
 }
 
 /// The right operand a column: `aᵀ · ct` is already its own shape, and `sb` is that shape.
 func ct_of_b_stated(ct: float[...], a: float[?, ?], b: float[?], sb: int[]): float[?] {
-    return sum_to_stated(matmul(transpose(a), ct), sb) as float[?]
+    return sum_to(matmul(transpose(a), ct), sb) as float[?]
 }
 
 // The head takes three type parameters because the walk hands a rule one type per value it can see:
@@ -531,14 +543,19 @@ export rule matmul_t::<T, A, B>(a: A, b: B) when is_float::<T>() {
 /// The transpose of `matmul_stated(a, b, sa, sb)`: `ct · bᵀ` reduced to `sa` for `a`, and `aᵀ · ct`
 /// reduced to `sb` for `b` -- `matmul_t`'s two answers with the two shapes **handed over**.
 ///
-/// It serves the same three shapes `matmul_t` does, and its helpers differ only in where one argument
-/// comes from: `sum_to(..., operand)` becomes `sum_to_stated(..., list)`, so each cotangent is reduced
-/// to its own operand's shape without reading that operand. A batched product is refused by name in
-/// this law's body, the way `matmul_t` refuses one (`skip=rule-ranks`, and the reading says which law
-/// declined: `test/cases/compile/transforms/matmul_transpose_rank_three.cml`).
+/// It serves the same three shapes `matmul_t` does. What differs is where each answer's extents come
+/// from: the `sa` / `sb` port the forward half computed, instead of `shape(a)` / `shape(b)` computed
+/// here; and the answered operand arrives as the carrier the law builds from that list
+/// (`zeros::<T>(sa) as A`), not as a value the walk would have to hold -- the carrier is what picks
+/// the helper by rank, and `sa` is what `sum_to` reduces to. The rank is still the declaration's --
+/// `A` and `B` are the operands' own types, so `float[3, 2, 2]` still matches nothing and a batched
+/// product is refused by name in this law's body, the way `matmul_t` refuses one (`skip=rule-ranks`,
+/// and the reading says which law declined:
+/// `test/cases/compile/transforms/matmul_transpose_rank_three.cml`).
 export rule matmul_stated_t::<T, A, B, SA, SB>(a: A, b: B, sa: SA, sb: SB) when is_float::<T>() {
     matmul_stated(a, b, sa, sb) => (ct: T[...]) =>
-        (ct_of_a_stated(ct, a, b, sa), ct_of_b_stated(ct, a, b, sb))
+        (ct_of_a_stated(ct, zeros::<T>(sa) as A, b, sa),
+         ct_of_b_stated(ct, a, zeros::<T>(sb) as B, sb))
 }
 // ---- the transpose rules of the reductions and the layout ----
 //
@@ -1039,15 +1056,17 @@ export rule min_t::<T>(xs: T[...]) when is_float::<T>() {
     min(xs) => (ct: T) => where(xs <= min(xs), ct, 0.0)
 }
 
-/// The transpose of `linear`: `ct @ wᵀ` for `x` and `xᵀ @ ct` for `w`, each reduced to its own
-/// operand's shape with `sum_to` -- the two answers `matmul_t` already gives for `matmul`
+/// The transpose of `linear`: `ct @ wᵀ` for `x` and `xᵀ @ ct` for `w`, each reduced to the extents
+/// of its own operand with `sum_to` -- the two answers `matmul_t` already gives for `matmul`
 /// (`#ct_of_a`, `#ct_of_b`), one operator further out, and the pair the engine reaches through
 /// `tensor:matmul_grad_lhs` / `_rhs` (`modules/tensor/ops/linalg_ops.cpp#linearVjp`).
 ///
 /// Both operands are read here and both are read from the *known* side: `x` and `w` are a call's
-/// parameters, which the cut carries, the same way `matmul_t` reads them. The head takes three type
-/// parameters for the reason that law's does -- the walk hands a rule the cotangent's element type
-/// and then each operand's own type.
+/// parameters, which the cut carries, the same way `matmul_t` reads them. The extents are
+/// `shape(x)` / `shape(w)`, the runtime shape of those values (author, 2026-11-05), not a type's.
+/// The head takes three type parameters for the reason that law's does -- the walk hands a rule the
+/// cotangent's element type and then each operand's own type.
 export rule linear_t::<T, A, B>(x: A, w: B) when is_float::<T>() {
-    linear(x, w) => (ct: T[...]) => (sum_to(matmul(ct, transpose(w)), x), sum_to(matmul(transpose(x), ct), w))
+    linear(x, w) => (ct: T[...]) =>
+        (sum_to(matmul(ct, transpose(w)), shape(x)), sum_to(matmul(transpose(x), ct), shape(w)))
 }

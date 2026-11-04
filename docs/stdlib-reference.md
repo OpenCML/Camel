@@ -2830,31 +2830,68 @@ the names instead of declaring a second spelling of each.
 #### `sum_to`
 
 ```camel
-sum_to: (t: T[...], like: S) => S when is_float::<T>()
+sum_to: (t: T[...], at: int[]) => T[...] when is_float::<T>()
 ```
 
-`t` read at the shape `like` states, which is the shape of the answer. Two shapes that are
-equal give `t` unchanged, and `like` of rank 0 -- which `T[...]` includes, a rank-zero array being
-that element and nothing else (design principles 5.4) -- gives the total sum as that element.
+`t` reduced over its **leading axes** to the extents `at`: a leading-axis reduction, and nothing
+else.
 
-It is the adjoint of broadcasting read off the shape, and the adjoint runs both ways. Along the
-lanes `like` is lower in, what a broadcast handed out is added back up into one element each, in
-`f64`, rounded once into the element type. Along the lanes `like` is *higher* in, `t` has none of
-its own and there is nothing to add back: `t` is spread out over them, every element of the
-answer being the element of `t` its index came from -- the same law read the other way, and the
-direction is decided by the two ranks (`modules/tensor/kernels/gradient.cpp#sumTo`). A rank-zero
-`t` is the element itself (5.4), so it spreads as that value: `sum_to(6.0, xs)` with
-`xs: float[] = [1.0, 2.0, 3.0]` is `[6.0, 6.0, 6.0]`. A `like` the shape of `t` cannot reach at
-all (`[2, 3]` against `[4]`) is a fault, not a number.
+`at` is the target itself -- the extents the answer has, written where the call is. The length is
+therefore the caller's: it is not read off another value's shape (the older spelling passed a
+zero array whose shape stood in for the target) and not off a type, and no registry, context or
+expected result type supplies it -- the extents are the runtime shape the caller states, which is
+the layer the author's ruling of 2026-11-05 puts them on.
 
-The differentiation rules use it for the reduction (`rulesets.transpose`, where an operand of a
-broadcast product answers `sum_to_stated(ct * other, shape(operand))`: this function with the
-extents the law's own port states, because a transposition has the operand's shape and not its
-value), and its own VJP broadcasts back (`modules/tensor/ops/gradient_ops.cpp`).
+**The contract is 甲: `at` is a suffix of `t`'s shape.** The axes `t` has in front of `at`'s are
+summed away, and an axis `at` states 1 against a longer one is summed too -- the adjoint of a
+broadcast that handed one element along that lane (design principles 5.4). Two equal shapes are
+the identity, which is the shape a gradient usually arrives in. Anything else is a fault named at
+the call: a target *longer* than `t`, or one asking for an extent `t` does not have at that
+position, is refused with both shapes in the sentence
+(`modules/tensor/kernels/gradient.cpp#requireSuffixTarget`). The operator never spreads;
+`broadcast_like` is the operator that does.
+
+The element type is `t`'s, and the answer is written at it (design principles 9.9: a gradient is
+the width of the value it belongs to). The extents are not in the result type, because they are a
+runtime value -- `T[...]` is the result, and a caller that needs a rank states it with `as`.
+
+The transposition laws reduce a product's cotangents with it (`rulesets.transpose`:
+`sum_to(ct * other, ax)` is one operand's cotangent at the extents that operand states), and the
+engine accumulates a tensor operand with it (`modules/tensor/ops/vjp.cpp#accumulateOperand`).
 
 - Pure.
-- Example: `sum_to([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 1.0)` gives `10.0`
-- Example: `sum_to([1.0, 2.0, 3.0] as float[], [0.0, 0.0, 0.0] as float[])` gives `[1.0, 2.0, 3.0]`
+- Example: `sum_to([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [2])` gives `[3.0, 7.0]`
+- Example: `sum_to([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [])` gives `10.0`
+- Example: `sum_to([1.0, 2.0, 3.0] as float[], [3])` gives `[1.0, 2.0, 3.0]`
+
+#### `broadcast_like`
+
+```camel
+broadcast_like: (t: T, like: S) => S
+```
+
+`t` spread out to the shape `like` states: the **other** direction of the same adjoint, and the
+operator that owns it.
+
+The two directions used to share `sum_to`, and they are not one move: a reduction reads a target
+that is a suffix of its operand's shape and adds over the axes in front of it, while a spread
+writes an element into every lane a broadcast would have handed it out along -- the operation
+`broadcast_like` is named for. `sum_to` now takes the extents themselves (ruling 甲) and refuses
+a target *longer* than its operand by name; a law that needs a rank-one value in the lanes of a
+rank-two one says `broadcast_like(value, like)` and reads the shape off a value the cut carries.
+
+`like` is a tensor (or a value whose stated shape is the target); `t` is a tensor or a single
+number, and a number is written at `like`'s element type -- a rank-zero operand *is* an element
+(design principles 5.4), so it spreads as that value. Two tensors that are not one element type
+are refused: a broadcast is a copy of the elements, not a conversion between them
+(design principles 5.1).
+
+It is what the transpose laws of the broadcast products write where an operand has to grow
+(`stdlib/rulesets/transpose.cml`), and it is the adjoint-turned-around of `sum_to`.
+
+- Pure.
+- Example: `broadcast_like(2.0, [[0.0, 0.0], [0.0, 0.0]] as float[2, 2])` gives `[[2.0, 2.0], [2.0, 2.0]]`
+- Example: `broadcast_like([1.0, 2.0] as float[2], [[0.0, 0.0], [0.0, 0.0]] as float[2, 2])` gives `[[1.0, 2.0], [1.0, 2.0]]`
 
 <a id="types"></a>
 

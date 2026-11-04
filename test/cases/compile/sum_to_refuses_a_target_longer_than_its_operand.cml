@@ -1,0 +1,17 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// The other half of ruling 甲's check: a target that is **longer** than the tensor is refused too,
+// and the sentence says which side is longer. `[2]` states two axes over a rank-one tensor, so there
+// are lanes `t` never had and nothing to sum them away from -- that is a spread, and `broadcast_like`
+// is the operator whose shape it is (`broadcast_like_spreads_rank_zero.cml`).
+//
+// The list is written where the call is, so this is the same sentence a reader who mistyped the
+// target gets.
+import { sum_to } from tensor
+
+func main(): int sync {
+    let xs: float[3] = [1.0, 2.0, 3.0]
+    println(`sum_to(xs, [2, 3]) = ${sum_to(xs, [2, 3]):.1f}`)
+    return 0
+}

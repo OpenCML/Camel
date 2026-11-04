@@ -256,7 +256,48 @@ Array *sumToArm(const Array *src, std::span<const int64_t> shape, mm::IAllocator
 
 } // namespace
 
-/// Sum of `g` over the axes that `shape` broadcasts away: the backward of a broadcast.
+/// The target of a leading-axis reduction, checked: `at` is a **suffix** of `shape` (ruling 甲).
+///
+/// This is the one thing 甲 states as testable, so it is checked and named here rather than left to
+/// the stride walk: a target that is *longer* than the tensor, or that asks for an extent the
+/// tensor does not have at that position, is a fault and not a number. An axis the target states as
+/// 1 against a longer one is still a reduction -- the adjoint of a broadcast that handed one element
+/// along that lane (design principles 5.4: the extent-1 lane is a broadcast axis) -- so it is
+/// admitted; what is refused is the *other* direction, spreading `t` over lanes it never had, which
+/// is `broadcast_like`'s job and is not a reduction at all.
+///
+/// The sentence names both sides and the position, because a reader who wrote the target has to
+/// know whether the tensor or the target is the one to change.
+void requireSuffixTarget(
+    std::span<const int64_t> at, std::span<const int64_t> shape, const char *what) {
+    const std::string head =
+        std::string(what) + ": the target extents " + shapeText(at) + " are not a suffix of the " +
+        "tensor's shape " + shapeText(shape);
+    if (at.size() > shape.size()) {
+        throw ShapeError(
+            head + ": the target states " + std::to_string(at.size()) + " axes and the tensor " +
+            std::to_string(shape.size()));
+    }
+    const size_t shift = shape.size() - at.size();
+    for (size_t i = 0; i < at.size(); ++i) {
+        const int64_t want = at[i];
+        const int64_t have = shape[i + shift];
+        if (want == have || want == 1) {
+            continue;
+        }
+        throw ShapeError(
+            head + ": position " + std::to_string(i + shift) + " is " + std::to_string(want) +
+            " where the tensor has " + std::to_string(have));
+    }
+}
+
+/// Sum of `g` over its leading axes down to the extents `shape`, which must be a suffix of `g`'s.
+///
+/// The length is the caller's: since `sum_to` takes its target as an `int[]` (the twin of the
+/// tensors it reduces), the extents are a runtime value and the operator never reads a shape off
+/// another value of the program. What it still does not do is spread: 甲 is a leading-axis
+/// reduction, and the axes it removes are the ones `g` has in front of `shape`'s (plus the ones the
+/// target states as 1). `requireSuffixTarget` refuses the rest by name.
 ///
 /// Accumulation type: the input's element type, and one arm per admitted type (f32 and f64). An
 /// f32 gradient is added as f32 from +0 and answers f32, exactly as before; an f64 gradient is
@@ -267,25 +308,14 @@ Array *sumToArm(const Array *src, std::span<const int64_t> shape, mm::IAllocator
 /// no code inside either one asks what the element type is.
 Array *
 sumTo(const Array *g, std::span<const int64_t> shape, mm::IAllocator &allocator) {
-    if (g->shapeSpan().size() == shape.size() &&
-        std::equal(shape.begin(), shape.end(), g->shapeSpan().begin())) {
+    const auto big = g->shapeSpan();
+    if (big.size() == shape.size() && std::equal(shape.begin(), shape.end(), big.begin())) {
+        // Equal shapes: no leading axis to remove and no extent-1 lane, so the input is the answer
+        // (the kernel the gradient path relies on to stay bit-for-bit).
         return const_cast<Array *>(g);
     }
+    requireSuffixTarget(shape, big, "sum_to");
     const Array *src = asFloat(g, allocator);
-    // The adjoint of broadcasting runs both ways (design principles 5.4: `T[..]` includes rank 0,
-    // and a rank-zero array *is* that element). A `like` of higher rank than `t` states lanes `t`
-    // never had, so there is nothing to sum back along them: what a broadcast would have handed
-    // out along those lanes, this spreads out again -- every element of the answer is the element
-    // of `t` its index came from. A rank-zero `t` is the total, spread over every lane:
-    // `sum_to(6.0, [1.0, 2.0, 3.0])` is `[6.0, 6.0, 6.0]`. `broadcastTo` is the same walk read the
-    // other way and refuses a `like` the shape cannot reach (`[2, 3]` against `[4]`), so a shape
-    // that is not a spreading of `t` is still a fault and not a number.
-    //
-    // This is the one place the direction is decided: a `like` of the same rank or lower keeps the
-    // reduction below, extent 1 or not.
-    if (src->shapeSpan().size() < shape.size()) {
-        return broadcastTo(src, shape, allocator);
-    }
     if (src->dtype() == TypeCode::Float64) {
         return sumToArm<TypeCode::Float64>(src, shape, allocator);
     }

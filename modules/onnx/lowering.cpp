@@ -131,6 +131,15 @@ std::vector<int64_t> LowerContext::constInts(size_t index) const {
     fail(index, "int array");
 }
 
+std::optional<std::vector<int64_t>> LowerContext::tryConstInts(size_t index) const {
+    if (auto c = constArg(index)) {
+        if (auto *v = std::get_if<std::vector<int64_t>>(&*c)) {
+            return *v;
+        }
+    }
+    return std::nullopt;
+}
+
 Value LowerContext::emit(
     std::string opType, std::vector<std::string> inputs, std::vector<Attribute> attributes) const {
     return result(emitter_.node(std::move(opType), std::move(inputs), std::move(attributes)));
