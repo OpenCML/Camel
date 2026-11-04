@@ -3,6 +3,8 @@
 
 #include "split.h"
 
+#include "refusal_readings.h"
+
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/func.h"

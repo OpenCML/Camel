@@ -17,8 +17,9 @@ This check holds the places that have to agree, as relations and never as counts
   that names no cause cannot spell one;
 * **the word table** spells every cause exactly once, and the words are distinct: two causes spelled
   the same are one cause a reader cannot tell from the other;
-* **no site spells a cause itself**: `skip=` is a literal nowhere in the three walks, and every
-  `skip="` is followed by the table's call, so a hand-written word cannot come back;
+* **no site spells a cause itself**: `skip=` is a literal nowhere in the three walks, every
+  `skip="` is followed by the table's call, and a file that spells through the table includes it --
+  without that last one the other relations are green on a file that does not compile;
 * **every printed cause is recorded and every record names the printed cause**: the number of
   `refusalCauseName` calls in a file equals the number of `noteRefusal` calls, and the cause in the
   record beside a line is the cause that line printed. Without this the two halves could say two
@@ -172,6 +173,11 @@ def main() -> int:
                 problems.append(f"{walk.name}: a literal spells `skip={word}`: the table is the only spelling")
 
         code = strip_comments(text)
+        # A file that spells through the table has to include it: without this relation the other
+        # relations are green on a file that does not compile (measured 2026-11-04 -- a rewrite of
+        # `split.cpp` from the parent commit dropped the include, and only the build said so).
+        if "refusalCauseName(" in code and '#include "refusal_readings.h"' not in text:
+            problems.append(f"{walk.name}: spells a cause through the table and does not include it")
         printed = [m for m in re.finditer(r'skip="\s*<<\s*refusalCauseName\(RefusalCause::(\w+)\)', code)]
         causes_in_file = re.findall(r"refusalCauseName\(RefusalCause::(\w+)\)", code)
         records = re.findall(r"noteRefusal\(", code)

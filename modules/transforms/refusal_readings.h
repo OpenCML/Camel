@@ -18,15 +18,16 @@
  * * `RefusalCause` -- the causes a `REINTERP` line may refuse by, declared once;
  * * `refusalCauseName` -- the one place a cause is spelled, and therefore the only spelling the
  *   printed line has (`skip=` + this word);
- * * `RefusalReading` -- the cause *and the place it names* (the operator's URI, the rule, the node,
- *   the parameter, the position) as a value, written by `noteRefusal` as one machine-readable line
+ * * `RefusalReading` -- the cause *and the place it names* (the operator's URI, the rule, the callee,
+ *   the construct) as a value, written by `noteRefusal` as one machine-readable line
  *   (`READING_REFUSAL {json}`, the shape `src/passes/trans/stats/stats.cpp` established with
  *   `GRAPH_STATS`).
  *
  * The printed line stays: it is what a person reads, and it carries the prose a value does not. The
  * record is what a plan asserts -- cause plus place, never the sentence -- so a case pins the
- * transform's decision and not its wording (`test/plans/feat/compile/transforms.plan.toml#reading
- *_refusal_is_one_cause_in_one_table`, `test/tools/reading_refusal/check.py`).
+ * transform's decision and not its wording
+ * (`test/plans/feat/compile/transforms.plan.toml#reading_refusal_is_one_cause_in_one_table`,
+ * `test/tools/reading_refusal/check.py`).
  *
  * A record is written by the site that writes the line, from the same values. Nothing parses the
  * log back: the defect the transpose change removed was exactly that second reading
