@@ -9,7 +9,7 @@
 // the law as a **known operand**. `rulesets/transpose.cml#idx_arr_t` names one port more than
 // `index_into` has, that port is `extent_of::<X>()` -- the extents the type states, written into the
 // graph as an `int[]` where the step is met
-// (`modules/transforms/transpose.cpp#statedExtentsNodeOf`, the one reading of
+// (`modules/transforms/rule_expand.cpp#statedExtentsValue`, the one reading of
 // `camel::core::type::statedExtentsOf`) -- and the law builds its zeros with `zeros_of(ct,
 // extent_product(at))`. So the answer rests on `extent_of`, not on an array standing in for `x`
 // (author, 2026-11-03 17:55, and 2026-11-04: the walk's zero carrier is removed).

@@ -73,7 +73,7 @@ slot_t __len_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // instantiated type of the call, never the type argument it was written with, so nothing at run
 // time still says which type the extents belong to. A reader that has the type -- the transposition
 // walk -- asks `statedExtentsOf` directly and writes the answer as the known operand a law reads
-// (`modules/transforms/transpose.cpp#statedExtentsNodeOf`), and the kernel below is the case of a
+// (`modules/transforms/rule_expand.cpp#statedExtentsValue`), and the kernel below is the case of a
 // call that reached the run without being settled.
 
 slot_t __op_extent_of__(ArgsView &with, ArgsView &norm, Context &ctx) {

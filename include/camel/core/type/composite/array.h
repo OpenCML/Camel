@@ -290,7 +290,7 @@ inline bool isRankZeroEdge(Type *target, Type *source) {
 /// behind it, and both such readers go through here: the builtin `extent_of::<A>()`, which answers
 /// these extents as an `int[]` (`src/builtin/operators/struct.cpp#extentOfResolver`), and the
 /// transposition walk, which writes them into the graph as the known operand a law reads its lengths
-/// from (`modules/transforms/transpose.cpp#statedExtentsNodeOf`). A second evaluation for that
+/// from (`modules/transforms/rule_expand.cpp#statedExtentsValue`). A second evaluation for that
 /// question would be a second answer to one question. The literal conversion keeps its own reading
 /// (`src/core/data/composite/array.cpp#statedShapeOf`) because it asks something else: which written
 /// shape a literal's elements can fill, where a form that is an expression states none however it

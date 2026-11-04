@@ -779,7 +779,7 @@ export rule mean_axis_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
 //
 // What the walk has is the **type**, so these laws name one port more than their operator has and
 // that port is `extent_of::<X>()` -- the extents the operand's type states, materialized as an
-// `int[]` where the step is met (`modules/transforms/transpose.cpp#statedExtentsNodeOf`). The
+// `int[]` where the step is met (`modules/transforms/rule_expand.cpp#statedExtentsValue`). The
 // argument is offered *after* the operands' own types, so a law that does not name it answers
 // exactly as before, and only a step the family above left unanswered can reach these.
 //
