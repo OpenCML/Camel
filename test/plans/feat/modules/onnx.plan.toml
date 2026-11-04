@@ -528,7 +528,7 @@ timeout_ms = 240000
 name = "export_train_step_dynamic"
 known_fail = true
 known_fail_owner = "lane-shapeext"
-known_fail_reason = "stops at `tensor:matmul_grad_lhs: the rank of an operand is not known statically`: the rank the pullback reduces to came from `like`'s type, and 甲 ruled that type-level copy out, so nothing states it any more; the way back is decided in docs/handover/questions/2026-11-05-does-a-shape-declaration-need-a-length-in-its-return-type.cn.md"
+known_fail_reason = "the export is still refused by `tensor:matmul_grad_lhs: the rank of an operand is not known statically` (the rank the pullback reduces to came from `like`'s type, and 甲 ruled that type-level copy out, so nothing states it any more), but on this tree the refusal is an error value the case drops with `let _ =`: the run prints `exported`, exits 0, and the check stops at `ENOENT: no such file or directory` for `export_train_step_dynamic.onnx`. Measured on this tree 2026-11-04 by reading the value back -- a probe that matched on it printed `refused ExportUnsupported: in 'step': tensor:matmul_grad_lhs: the rank of an operand is not known statically`; why the case keeps the discarding form and where the way back is decided are both on docs/handover/questions/2026-11-05-does-a-shape-declaration-need-a-length-in-its-return-type.cn.md (section 5 and section 4)."
 desc = "E14/T7: a training step (with_grad + sgd) exports with a dynamic batch axis. The batch mean written as sum / shape arithmetic keeps the divisor input-dependent (Shape + Gather + Div instead of a folded constant) and the gradient's broadcast becomes an Expand on a Shape."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_dynamic.cml"
@@ -565,7 +565,7 @@ timeout_ms = 6000
 name = "export_train_step_dynamic_mean"
 known_fail = true
 known_fail_owner = "lane-shapeext"
-known_fail_reason = "stops at `tensor:matmul_grad_lhs: the rank of an operand is not known statically`: the rank the pullback reduces to came from `like`'s type, and 甲 ruled that type-level copy out, so nothing states it any more; the way back is decided in docs/handover/questions/2026-11-05-does-a-shape-declaration-need-a-length-in-its-return-type.cn.md"
+known_fail_reason = "the export is still refused by `tensor:matmul_grad_lhs: the rank of an operand is not known statically` (the rank the pullback reduces to came from `like`'s type, and 甲 ruled that type-level copy out, so nothing states it any more), but on this tree the refusal is an error value the case drops with `let _ =`: the run prints `exported`, exits 0, and the check stops at `ENOENT: no such file or directory` for `export_train_step_dynamic_mean.onnx`. Measured on this tree 2026-11-04 by reading the value back -- a probe that matched on it printed `refused ExportUnsupported: in 'step': tensor:matmul_grad_lhs: the rank of an operand is not known statically`; why the case keeps the discarding form and where the way back is decided are both on docs/handover/questions/2026-11-05-does-a-shape-declaration-need-a-length-in-its-return-type.cn.md (section 5 and section 4)."
 desc = "E14/T7 (boundary removed): the canonical mean(y*y) batch mean exports with a dynamic batch axis. Its VJP divides by tensor:numel, which is input-dependent once the batch is symbolic; it is lowered to the ONNX Size of the tensor (a constant when the shape is static). Checked by hand on ONNX Runtime against NumPy at batch sizes 1, 2, 5 and 16."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_dynamic_mean.cml"
