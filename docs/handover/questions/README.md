@@ -5,12 +5,13 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：5 页
+## 现在在等作者：6 页
 
 | 页 | 问什么 |
 | --- | --- |
 | [`2026-11-04-should-an-assertion-pin-a-node-number`](2026-11-04-should-an-assertion-pin-a-node-number.cn.md) | 断言侧钉 `node=`/`param=` 的期望串，要不要一律改成按名字或关系断言？ |
 | [`2026-11-04-which-half-of-a-page-decides-whether-the-twins-exist`](2026-11-04-which-half-of-a-page-decides-whether-the-twins-exist.cn.md) | 同一条裁定指向的页面，在「孪生算子该不该存在」上自相矛盾，以哪一段为准？ |
 | [`2026-11-04-which-word-does-a-declaration-that-states-no-shape-get`](2026-11-04-which-word-does-a-declaration-that-states-no-shape-get.cn.md) | 同一个原因（声明未陈述形状），该用哪个词？ |
+| [`2026-11-05-can-match-type-take-an-array-types-dimensions-apart`](2026-11-05-can-match-type-take-an-array-types-dimensions-apart.cn.md) | `match type` 能不能像拆类型包那样拆开数组类型的维度列表，让 `ShapeOf<T>` 用 GN 写得出？ |
 | [`2026-11-05-does-a-shape-declaration-need-a-length-in-its-return-type`](2026-11-05-does-a-shape-declaration-need-a-length-in-its-return-type.cn.md) | `tensor:shape` 的声明返回 `int[]`（无长度）——要不要让它能说「每轴一条」？ |
 | [`2026-11-05-does-a-sweep-grow-with-every-test-that-is-added`](2026-11-05-does-a-sweep-grow-with-every-test-that-is-added.cn.md) | `[[sweeps]]` 的派生数随「被命名计划里的条目数」自动增长，这是有意设计还是需要一个上限？ |
