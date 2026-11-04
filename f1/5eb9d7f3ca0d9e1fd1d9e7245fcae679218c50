@@ -1,0 +1,43 @@
+# lane-repin 报告
+
+分支：lane-repin（从 `origin/develop = 7736cbf3c` 开），代码改动在 `f15eb9d7f`，最后提交 `9517c4550`（问题页）。主机 `88zjwei`，`-Tier fast -Jobs 8`。
+
+## 做了什么
+
+- `0a4fff5ea`：12 条 case×backend 的 `known_fail_msg` 从 `TRANSPOSE` 追踪行片段（`skip=cotangent-needs-a-value uri=tensor:multiply`，`959` 那条是 `skip=law-reads-a-value uri=:op/mul_d position=0`）改钉到程序真正停下的那句诊断：`transpose has no transpose for this function: a parameter holds no cotangent: nothing uses its value`。
+- `f15eb9d7f`：把 `rules_angle_args.mean_axis_transpose`（nvm+fvm）也改过来，钉 `the law \`mul_tensor_t\` has no cotangent for \`tensor:multiply\` at operands of rank (1, 1), and no instance of its body applies`（原文里的 `(node 5)` 与 `-->` 位置不进 pin）；13 条 `known_fail_reason` 末尾加 `Entrance: …`，写明停在乘法律（`uri=tensor:multiply`）还是 `uri=:op/mul_d` 的律，并说明它与 sqrt/log/divide 的参数检查打印同一句、只有该字段区分。
+- `9517c4550`：一页问题（断言侧钉编号），见下「待决问题」。
+
+合计 **14 条 case×backend pin**（13 个用例）。红线未动：这 14 条仍是 known_fail，没有任何一条改成会绿；3 条本来就钉在 `[Error]` 上的（sqrt/log/divide）、3 条 `declares 'float'` 未动。
+
+## 设计上的选择
+
+- **钉句不钉行**：`known_fail_msg` 是 `seen.includes` 子串匹配（`test/tools/run-tests.mjs`），所以可以只钉诊断里稳定的那一段。追踪行里的 `node=`/`position=`/`param=` 是走法的仪表盘读数；句子才是程序撞的墙。
+- **句子的边界**：从 `transpose has no transpose for this function:` 之后取到句号，丢掉 `(node 5)`、`-->` 位置、`error[...]` 前缀与 `transforms:` 模块前缀。`rules_angle_args` 那句里 `(1, 1)` 保留——它钉的是「哪条律、哪个算子、哪个秩」，是诊断要说的事。
+- **两类共用一句**：12 条与 sqrt/log/divide 的读者句子相同，这是诊断措辞的现状，不是 pin 的缺陷；区别放 `known_fail_reason`，不往 pin 里加回 `uri=`。
+
+## 用户可见的变化
+
+无。只动了测试计划的 pin 与说明文字，没有改语言、诊断措辞或任何用例。
+
+## 测试
+
+- `feat/compile`：`total 2337, pass 2317, fail 0, known 20`（基线、自证轮、改完、tip 四次读数一致）。
+- `feat/transforms`：`total 48, pass 40, fail 0, known 8`。
+- 自证一（12 条）：临时给 `transpose_loop_escape_reads_outer.cml` 的 `read_outer` 加一个节点（`let z = k + 0.0`，值不变），实跑 `node=12→14`、`from=11→13`、`from=10→12`、`with=[11,13,]→[13,15,]`，该用例自身三条 `expect_output_contains` 全断，而 12 条 pin 全中（2337/2317/0/20）。
+- 自证二（rules_angle_args 两条）：临时改 `rules_angle_args_mean_transpose.cml` 的 `loss_mean`（`let z = x[0][0] * 0.0`、数组首元素 `1.0 + z`），实跑 `node=5→14`、误差句 `(node 5)→(node 14)`（nvm 与 fvm 同），两条 `[XFAIL]` 全中，整轮 2337/2317/0/20。
+- 两次临时改动都已撤回（`git status` 干净）。
+- 文档检查分开跑：`--citations` 842/842 符号 + 2373 路径；`--questions-index` 1 页 1 行。
+
+## 自查（`docs/handover/README.cn.md` 第 2 节）
+
+没有改语义、没有按名字写特例、没有为测试通过而改期望、没有兼容层；只改断言/标记所在的那一层。
+
+## 待决问题
+
+一页：`docs/handover/questions/2026-11-04-should-an-assertion-pin-a-node-number.cn.md`——断言侧钉 `node=`/`param=` 的期望串是否一律改成按名字/关系断言。今天 8 处字面编号（绿用例的期望串），`param=` 14 处，274 个 golden 文件里 0 处；三条路与代价已写，默认第 1 条（全改）。
+
+## 没做完的
+
+- 那份问题页按默认开工是下一轮的事，本轮没动任何断言串。
+- `transpose_needs_parameter_shape` 的 `expect_stderr_contains` 仍带 `node=6 param=0 param-type=float[...]`——就是这一页里 8 处之一，等裁。
