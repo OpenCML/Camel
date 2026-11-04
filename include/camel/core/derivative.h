@@ -285,6 +285,17 @@ class DerivativeRegistry {
     std::unordered_map<type::TypeCode, bool (*)(const type::Type *)> discrete_;
 };
 
+/// The zero tangent of `type` as the constant its tangent space registers (`TangentSpace::zero`),
+/// or nothing when the type has no space or its space states only an operator (`zerosLikeUri`).
+///
+/// A caller asks this when it needs the zero *itself*: to write it into a graph, or to recognise a
+/// tangent as that zero. The answer is the type's -- design principles 9.9, "the tangent space is
+/// settled type by type" -- so it is not a list of the widths somebody remembered: `f64`, `f32`,
+/// `bf16` and `f16` all answer one today, and a module that registers a width tomorrow answers one
+/// without this function changing. A type whose zero is not a constant (an array, whose zero is
+/// `:tangent/zeros_arr` of a value) answers nothing, because there is no value here to write.
+std::optional<slot_t> zeroTangentConstantOf(const type::Type *type);
+
 /// The gradient type of the parameter `P` a user differentiates: what `grad` and `with_grad` hand
 /// back, and what `grad of P` names. A number and a boolean are their own gradient, with the value
 /// zero; a `string` and a function have none; and a struct or a tuple has one exactly when every
