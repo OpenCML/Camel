@@ -817,7 +817,8 @@ export rule mean_axis_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
 // The operand's own port stays in the head -- it is what fixes the instance -- and the right side
 // does not read it: an array that stands in for the value would make the length a fact of the
 // program's run rather than of its type, and an element of it could be read by mistake (author,
-// 2026-11-03 17:55: no zero carrier).
+// 2026-11-03 17:55: no zero carrier; 2026-11-04: the walk's carrier removed, so a law that reads
+// the operand's value is refused instead of being answered with zeros).
 
 /// The cotangent of `sum(t)`: the one number spread over the extents `at` states.
 export rule sum_from_type_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
