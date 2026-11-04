@@ -1281,6 +1281,71 @@ bool buildTransposeMember(
         // it. These nodes are copied forward, not transposed. Declared here because the zero of a
         // cotangent space reads a value's shape from it (`zeroOf`).
         std::vector<gc_node_ref_t> forwardOf(nodeCount, rt::kInvalidNodeRef);
+        // The same for a value that is a **tuple or a struct**, at the type that value's tangent
+        // space names: the Fill the builder writes for a tuple literal and for a struct literal
+        // (`builder_static.cpp`, `{ a: .., b: .. }`), which is the shape every reader of an aggregate
+        // already reads. The members are in the type's own order -- a struct's declaration order and
+        // a tuple's place order, never the order the body happened to read them in -- and the slots
+        // are the identity, one member per place, which is how `addAggregate` writes one
+        // (`modules/autodiff/pullback.cpp`). The type is handed in rather than built here because the
+        // caller is the one that asked the parameter's tangent space (`tangentSpaceOf`): a tuple of
+        // numbers is its own tangent, and so is a struct of them, while a tuple of `f32` members is a
+        // tuple of `f32` and not one of `float`.
+        const auto aggregateOf = [&](Type *aggregateType,
+                                     const std::vector<gc_node_ref_t> &parts) -> gc_node_ref_t {
+            if (aggregateType == nullptr) {
+                return rt::kInvalidNodeRef;
+            }
+            const bool structure = aggregateType->code() == camel::core::type::TypeCode::Struct;
+            camel::core::rtdata::Object *empty =
+                structure
+                    ? static_cast<camel::core::rtdata::Object *>(
+                          ::Struct::create(parts.size(), mm::autoSpace()))
+                    : static_cast<camel::core::rtdata::Object *>(
+                          ::Tuple::create(parts.size(), mm::autoSpace()));
+            if (empty == nullptr) {
+                return rt::kInvalidNodeRef;
+            }
+            const gc_node_ref_t source = draft.materializeStaticValue(
+                camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(empty), aggregateType);
+            std::vector<size_t> slots;
+            for (size_t i = 0; i < parts.size(); ++i) {
+                slots.push_back(i);
+            }
+            const gc_node_ref_t filled = draft.addFillNode(
+                aggregateType,
+                rt::makeFillPayload(structure ? rt::GCFillKind::Struct : rt::GCFillKind::Tuple,
+                                    slots));
+            draft.setNormInputs(filled, std::span<const gc_node_ref_t>(&source, 1));
+            draft.setWithInputs(filled, std::span<const gc_node_ref_t>(parts));
+            return filled;
+        };
+
+        // One member of an aggregate cotangent, as a node of the new graph: the place `i` of a value
+        // whose type is `aggregateType`. A struct's place is named (an `Accs` of
+        // `GCAccsKind::StructKey`), a tuple's is numbered (`TupleIndex`) -- the two forms the builder
+        // writes for `q.0` and `qq.a`, so a member read here is read exactly as a program reads it.
+        const auto memberOf = [&](gc_node_ref_t value, Type *aggregateType,
+                                  size_t place) -> gc_node_ref_t {
+            Type *const memberType = camel::core::type::tree::childType(aggregateType, place);
+            if (value == rt::kInvalidNodeRef || memberType == nullptr) {
+                return rt::kInvalidNodeRef;
+            }
+            gc_node_ref_t member = rt::kInvalidNodeRef;
+            if (aggregateType->code() == camel::core::type::TypeCode::Struct) {
+                const auto *structure =
+                    tt::as_ptr<camel::core::type::StructType>(aggregateType);
+                if (structure == nullptr || place >= structure->size()) {
+                    return rt::kInvalidNodeRef;
+                }
+                member = draft.addAccsNode(memberType, structure->fieldName(place));
+            } else {
+                member = draft.addAccsNode(memberType, static_cast<uint32_t>(place));
+            }
+            draft.setNormInputs(member, std::span<const gc_node_ref_t>(&value, 1));
+            return member;
+        };
+
         // Every cotangent accumulation in this file goes through this one function: given the cotangent
         // space of the value a cotangent lands on, what the place holds already (invalid means nothing
         // yet) and what arrives, it answers the value that place holds afterwards. The sum is that
@@ -1298,12 +1363,73 @@ bool buildTransposeMember(
         // `cotangentArithmeticMissing` records it so the member is refused by name at the end of the
         // walk (`NoCotangentArithmetic`) instead of handing the slot a `float` sum.
         bool cotangentArithmeticMissing = false;
-        const auto accumulate = [&](Type *space, gc_node_ref_t into,
-                                    gc_node_ref_t node) -> gc_node_ref_t {
+        // The sum, and **the sum of an aggregate is its members' sum** (design principles 9.9: an
+        // aggregate's tangent is its members' tangents, so its addition is the members' additions,
+        // one place at a time). It is therefore derived from the type and not registered: no tangent
+        // space has to spell an `addUri` for a tuple or a struct, and `addUriOfSpace` answering
+        // nothing for one is not "an aggregate has no addition" -- it is "a single operator cannot
+        // answer for it". Answering a refusal here would be a judgement about the registry mistaken
+        // for a judgement about the type (author, 2026-11-04: the aggregate's addition is derived
+        // from its type; refuse only a type that truly has no tangent space).
+        //
+        // A place whose member has no tangent space (`int`, `bool`) carries the unit: the value's
+        // tangent there is `()` and there is one of them, so summing two answers it -- and the walk
+        // hands that place through untouched rather than stopping the whole sum. A member that has a
+        // space but no addition of its own is still a refusal, and it is a refusal about *that
+        // member*: the walk cannot sum what nothing can sum.
+        std::function<gc_node_ref_t(Type *, gc_node_ref_t, gc_node_ref_t)> accumulate;
+        accumulate = [&](Type *space, gc_node_ref_t into, gc_node_ref_t node) -> gc_node_ref_t {
             if (into == rt::kInvalidNodeRef) {
                 return node;
             }
             const std::string addUri = addUriOfSpace(space);
+            if (space != nullptr && !addUri.empty() && space->code() != camel::core::type::TypeCode::Tuple &&
+                space->code() != camel::core::type::TypeCode::Struct) {
+                return into == node ? primitiveOf(space, addUri.c_str(), {node, node})
+                                    : primitiveOf(space, addUri.c_str(), {into, node});
+            }
+            if (space != nullptr &&
+                (space->code() == camel::core::type::TypeCode::Tuple ||
+                 space->code() == camel::core::type::TypeCode::Struct)) {
+                const size_t count = camel::core::type::tree::arity(space);
+                std::vector<gc_node_ref_t> parts;
+                parts.reserve(count);
+                for (size_t i = 0; i < count; ++i) {
+                    Type *const memberType = camel::core::type::tree::childType(space, i);
+                    const camel::core::TangentSpaceAnswer memberSpace =
+                        memberType != nullptr ? camel::core::tangentSpaceOf(memberType)
+                                              : camel::core::TangentSpaceAnswer{};
+                    if (!memberSpace.hasSpace() || memberSpace.space == nullptr) {
+                        // No tangent space of its own: the place is the unit, and the unit's sum is
+                        // the one value there is. Handing either side on says exactly that.
+                        const gc_node_ref_t kept = memberOf(into, space, i);
+                        parts.push_back(kept != rt::kInvalidNodeRef ? kept : memberOf(node, space, i));
+                        continue;
+                    }
+                    const gc_node_ref_t left  = memberOf(into, space, i);
+                    const gc_node_ref_t right = into == node ? left : memberOf(node, space, i);
+                    if (left == rt::kInvalidNodeRef || right == rt::kInvalidNodeRef) {
+                        parts.clear();
+                        break;
+                    }
+                    const gc_node_ref_t summed = accumulate(memberSpace.space, left, right);
+                    if (summed == rt::kInvalidNodeRef) {
+                        // The member's own refusal has already been recorded with the member's name.
+                        parts.clear();
+                        break;
+                    }
+                    parts.push_back(summed);
+                }
+                if (!parts.empty() && parts.size() == count) {
+                    const gc_node_ref_t assembled = aggregateOf(space, parts);
+                    if (assembled != rt::kInvalidNodeRef) {
+                        return assembled;
+                    }
+                }
+                if (cotangentArithmeticMissing) {
+                    return rt::kInvalidNodeRef;
+                }
+            }
             if (addUri.empty() || space == nullptr) {
                 cotangentArithmeticMissing = true;
                 os << "TRANSPOSE function=" << function->name() << " cotangent-no-arithmetic"
@@ -1434,48 +1560,6 @@ bool buildTransposeMember(
             draft.setWithInputs(tuple, std::span<const gc_node_ref_t>(parts));
             return std::pair<gc_node_ref_t, Type *>{tuple, tupleType};
         };
-        // The same for a value that is a **tuple or a struct**, at the type that value's tangent
-        // space names: the Fill the builder writes for a tuple literal and for a struct literal
-        // (`builder_static.cpp`, `{ a: .., b: .. }`), which is the shape every reader of an aggregate
-        // already reads. The members are in the type's own order -- a struct's declaration order and
-        // a tuple's place order, never the order the body happened to read them in -- and the slots
-        // are the identity, one member per place, which is how `addAggregate` writes one
-        // (`modules/autodiff/pullback.cpp`). The type is handed in rather than built here because the
-        // caller is the one that asked the parameter's tangent space (`tangentSpaceOf`): a tuple of
-        // numbers is its own tangent, and so is a struct of them, while a tuple of `f32` members is a
-        // tuple of `f32` and not one of `float`.
-        const auto aggregateOf = [&](Type *aggregateType,
-                                     const std::vector<gc_node_ref_t> &parts) -> gc_node_ref_t {
-            if (aggregateType == nullptr) {
-                return rt::kInvalidNodeRef;
-            }
-            const bool structure =
-                aggregateType->code() == camel::core::type::TypeCode::Struct;
-            camel::core::rtdata::Object *empty =
-                structure
-                    ? static_cast<camel::core::rtdata::Object *>(
-                          ::Struct::create(parts.size(), mm::autoSpace()))
-                    : static_cast<camel::core::rtdata::Object *>(
-                          ::Tuple::create(parts.size(), mm::autoSpace()));
-            if (empty == nullptr) {
-                return rt::kInvalidNodeRef;
-            }
-            const gc_node_ref_t source = draft.materializeStaticValue(
-                camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(empty), aggregateType);
-            std::vector<size_t> slots;
-            for (size_t i = 0; i < parts.size(); ++i) {
-                slots.push_back(i);
-            }
-            const gc_node_ref_t filled =
-                draft.addFillNode(aggregateType, rt::makeFillPayload(
-                                                     structure ? rt::GCFillKind::Struct
-                                                               : rt::GCFillKind::Tuple,
-                                                     slots));
-            draft.setNormInputs(filled, std::span<const gc_node_ref_t>(&source, 1));
-            draft.setWithInputs(filled, std::span<const gc_node_ref_t>(parts));
-            return filled;
-        };
-
         // The cotangent of a value in the original graph, as a node of the new one: `k summed
         // cotangents` when the value was used k times, which is the transpose of using it k times.
         std::vector<gc_node_ref_t> cotangent(nodeCount, rt::kInvalidNodeRef);
@@ -1692,7 +1776,13 @@ bool buildTransposeMember(
             }
             Type *addType            = nullptr;
             const std::string addUri = addUriFor(function, ref, addType);
-            if (addUri.empty() || addType == nullptr) {
+            // A space with one operator sums with it; an aggregate sums member by member
+            // (`accumulate`, design principles 9.9), so `addUri` being empty is not the answer for a
+            // tuple or a struct -- only for a space that has neither an operator nor members.
+            const bool aggregate =
+                addType != nullptr && (addType->code() == camel::core::type::TypeCode::Tuple ||
+                                       addType->code() == camel::core::type::TypeCode::Struct);
+            if (addType == nullptr || (addUri.empty() && !aggregate)) {
                 // Two cotangents land on one value and the value's space registers no addition:
                 // there is no sum to write, so this member answers no cotangent. Recorded here and
                 // refused by name at the end of the walk (`NoCotangentArithmetic`); a `float` sum
@@ -1702,11 +1792,15 @@ bool buildTransposeMember(
                    << " cotangent-no-arithmetic node=" << ref << '\n';
                 return;
             }
-            if (cotangent[ref] == node) {
-                cotangent[ref] = primitiveOf(addType, addUri.c_str(), {node, node});
+            // The sum itself is `accumulate`'s, the one function this file's comment says every
+            // accumulation goes through -- and until this commit this site was the exception: it
+            // spelled the addition itself, which is how the aggregate case stayed refused while the
+            // comment claimed otherwise.
+            const gc_node_ref_t summed = accumulate(addType, cotangent[ref], node);
+            if (summed == rt::kInvalidNodeRef) {
                 return;
             }
-            cotangent[ref] = primitiveOf(addType, addUri.c_str(), {cotangent[ref], node});
+            cotangent[ref] = summed;
         };
         // One position's cotangent: the rule the index filed for this operator, its right side
         // expanded where the operator stood. What stands in the graph is the rule's own function of
@@ -2861,24 +2955,7 @@ bool buildTransposeMember(
                 const camel::runtime::GCNode *const joinNode = function->node(ref);
                 const Type *const joinPrimal =
                     joinNode != nullptr ? joinNode->dataType() : nullptr;
-                if (cotangent[ref] != rt::kInvalidNodeRef) {
-                    // The parameter was read **both whole and by member**, and the adjoint of the two
-                    // uses is their sum. The sum of two aggregate cotangents is the addition of the
-                    // aggregate's tangent space, and that space declares none: `addUriOfSpace` answers
-                    // one operator per space out of the registry, which registers an `addUri` for a
-                    // float and for an array and for nothing else (design principles 9.9: an
-                    // aggregate's tangent is its members' tangents, and it is summed member by
-                    // member). So neither half may be answered alone -- either one would be a wrong
-                    // number -- and what is missing is named here rather than left to the reader of
-                    // the graph: the refusal is about the language's arithmetic, not about what the
-                    // program wrote.
-                    refuse(TransposeRefusalCause::Component);
-                    os << " node=" << ref
-                       << " type=" << (joinPrimal != nullptr ? joinPrimal->toString() : "?")
-                       << " whole-and-member slots=" << slots->second.size()
-                       << " why=no-addition-for-an-aggregate-cotangent\n";
-                    return false;
-                }
+                const gc_node_ref_t whole = cotangent[ref];
                 if (joinPrimal == nullptr ||
                     (joinPrimal->code() != camel::core::type::TypeCode::Tuple &&
                      joinPrimal->code() != camel::core::type::TypeCode::Struct)) {
@@ -2953,7 +3030,26 @@ bool buildTransposeMember(
                        << " why=the-member-join-built-nothing\n";
                     return false;
                 }
-                cotangent[ref]    = joined;
+                if (whole != rt::kInvalidNodeRef) {
+                    // The parameter was read **both whole and by member**, and the adjoint of the two
+                    // uses is their sum (`f(q) = q.0 * 2.0 + g(q)`). That sum is the aggregate's
+                    // addition, which is its members' addition one place at a time -- derived from
+                    // the type, not registered (design principles 9.9) -- so this is a sum and not a
+                    // refusal (author, 2026-11-04: the aggregate's addition is derived from its type;
+                    // the earlier refusal here judged the registry's completeness and called it the
+                    // type's ability).
+                    const gc_node_ref_t summed = accumulate(joinSpace.space, whole, joined);
+                    if (summed == rt::kInvalidNodeRef) {
+                        refuse(TransposeRefusalCause::Component);
+                        os << " node=" << ref << " type=" << joinPrimal->toString()
+                           << " whole-and-member slots=" << slots->second.size()
+                           << " why=no-addition-for-a-member-of-the-parameter\n";
+                        return false;
+                    }
+                    cotangent[ref] = summed;
+                } else {
+                    cotangent[ref] = joined;
+                }
                 hasCotangent[ref] = true;
                 break;
             }
