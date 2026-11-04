@@ -2823,22 +2823,27 @@ bool buildTransposeMember(
                 if (slots == memberCotangents.end()) {
                     break;
                 }
-                if (cotangent[ref] != rt::kInvalidNodeRef) {
-                    // The parameter was read **both whole and by member**, and the adjoint of the two
-                    // uses is their sum. There is no aggregate addition in the rules -- `addUriOfSpace`
-                    // answers one operator per tangent space, and the registry registers one for a
-                    // float and for an array and none for a tuple or a struct -- so answering either
-                    // half alone would be a wrong number. Refused by name; a refusal that names the
-                    // missing addition is the honest reading, and it is not a statement about the
-                    // program.
-                    refuse(TransposeRefusalCause::Component);
-                    os << " node=" << ref << " whole-and-member slots=" << slots->second.size()
-                       << '\n';
-                    return false;
-                }
                 const camel::runtime::GCNode *const joinNode = function->node(ref);
                 const Type *const joinPrimal =
                     joinNode != nullptr ? joinNode->dataType() : nullptr;
+                if (cotangent[ref] != rt::kInvalidNodeRef) {
+                    // The parameter was read **both whole and by member**, and the adjoint of the two
+                    // uses is their sum. The sum of two aggregate cotangents is the addition of the
+                    // aggregate's tangent space, and that space declares none: `addUriOfSpace` answers
+                    // one operator per space out of the registry, which registers an `addUri` for a
+                    // float and for an array and for nothing else (design principles 9.9: an
+                    // aggregate's tangent is its members' tangents, and it is summed member by
+                    // member). So neither half may be answered alone -- either one would be a wrong
+                    // number -- and what is missing is named here rather than left to the reader of
+                    // the graph: the refusal is about the language's arithmetic, not about what the
+                    // program wrote.
+                    refuse(TransposeRefusalCause::Component);
+                    os << " node=" << ref
+                       << " type=" << (joinPrimal != nullptr ? joinPrimal->toString() : "?")
+                       << " whole-and-member slots=" << slots->second.size()
+                       << " why=no-addition-for-an-aggregate-cotangent\n";
+                    return false;
+                }
                 if (joinPrimal == nullptr ||
                     (joinPrimal->code() != camel::core::type::TypeCode::Tuple &&
                      joinPrimal->code() != camel::core::type::TypeCode::Struct)) {
