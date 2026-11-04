@@ -90,11 +90,67 @@ slot_t __op_extent_of__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 namespace {
 
+/// The `int[]` an extents value is: `extent_of` answers this type and nothing else.
+ArrayType *extentsArrayType() {
+    return ArrayType::create(Type::Int64());
+}
+
+/// The extents `type` states, as the `int[]` a program reads -- or nullptr when the type states
+/// none. Both readers go through `statedExtentsOf`, so the builtin and the transposition walk
+/// cannot disagree about which types have a shape.
+Array *extentsValueOf(Type *type) {
+    const std::optional<std::vector<int64_t>> extents = statedExtentsOf(type);
+    if (!extents.has_value()) {
+        return nullptr;
+    }
+    Array *stated = Array::create(mm::autoSpace(), extentsArrayType(), extents->size());
+    if (stated == nullptr) {
+        return nullptr;
+    }
+    for (size_t at = 0; at < extents->size(); ++at) {
+        stated->set<rtdata::Int64>(at, static_cast<rtdata::Int64>((*extents)[at]));
+    }
+    return stated;
+}
+
+/// Which position of `type` is the one without a number, said in the words the refusal uses: the
+/// answer names a **position**, because the repair it prescribes ("write the extents in the type")
+/// is written at one. `float[..]` (`float[...]`) states no rank at all, and the position it leaves
+/// open is the first one; `float[2, ?]` states two and leaves its second open; `float[]`
+/// (`float[?]`) leaves its only one. A position whose extent is an expression over names nothing
+/// binds is that position too: what it lacks is a number, not an index.
+std::string openPositionText(Type *type) {
+    const ArrayType *array = asArrayType(type);
+    if (array == nullptr) {
+        return "it is not an array type, so it has no position whose length could be read";
+    }
+    if (array->anyRank()) {
+        return std::format(
+            "position {} is open: `..` states no dimension there, so no position has a length to "
+            "read",
+            array->rank());
+    }
+    const std::span<const ExtentForm> written = array->extents();
+    for (size_t at = 0; at < written.size(); ++at) {
+        if (!written[at].evaluate({}).has_value()) {
+            return std::format("position {} is open: it has no number written in it", at);
+        }
+    }
+    return "it states no extents at all";
+}
+
 /// `extent_of::<A>()`: the call's type argument is the whole question, so the rule reads it and
 /// nothing else. It takes no ordinary arguments and no `with` arguments (a call that writes any is
 /// not this function), and it answers `int[]` whenever `A` is an array type whose extents are all
 /// written down -- `statedExtentsOf` is the answer, so the builtin and the transposition walk cannot
 /// disagree about which types have a shape.
+///
+/// The answer is the rule's `valueFromTypeArgs` as well as its result type: a call of this rule
+/// reads no operand, and nothing in the graph or at run time could state the type argument it was
+/// written with, so the value is made where the call is instantiated -- and where the name is used
+/// as a value, as a function that gives it. This is the one `extent_of` special case; there is no
+/// second spelling of it anywhere in the builder (`Builder::visitLinkNode`,
+/// `Builder::functionValueOf`).
 class ExtentOfResolver final : public camel::core::type::FuncTypeResolver {
   public:
     /// A call with no type argument says nothing about a type, and this function answers about the
@@ -119,7 +175,21 @@ class ExtentOfResolver final : public camel::core::type::FuncTypeResolver {
         }
         return FunctionType::create(
             camel::core::type::param_init_list_t{}, camel::core::type::param_init_list_t{},
-            ArrayType::create(Type::Int64()));
+            extentsArrayType());
+    }
+
+    /// The answer itself, for the two places a call of this rule can be settled: the call
+    /// (`Builder::visitLinkNode`) and the name used as a value (`Builder::functionValueOf`). It is
+    /// the same `int[]` `resolveForCall` promises, made from the same `statedExtentsOf`, so a
+    /// settled call and a refusing one can never disagree about a type.
+    std::optional<slot_t> valueFromTypeArgs(const type_vec_t &types) const override {
+        if (types.size() != 1 || types.front() == nullptr) {
+            return std::nullopt;
+        }
+        if (Array *extents = extentsValueOf(types.front()); extents != nullptr) {
+            return rtdata::toSlot<Array *>(extents);
+        }
+        return std::nullopt;
     }
 
     std::optional<std::string> explainCallRejection(
@@ -131,7 +201,7 @@ class ExtentOfResolver final : public camel::core::type::FuncTypeResolver {
             return std::nullopt;
         }
         return std::string("the type it is instantiated at is '") + types.front()->toString() +
-               "', and an extent it writes is not a number";
+               "', and " + openPositionText(types.front());
     }
 
     /// The sentence a reader is handed. It is the shape rule of the language stated where the call
