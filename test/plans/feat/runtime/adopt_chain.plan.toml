@@ -1,0 +1,64 @@
+id = "runtime.adopt_chain"
+order = 382
+tier = "fast"
+tags = ["feat", "runtime", "graph", "adopt", "witness"]
+desc = "A program's graph table carries the programs it stood on, not only the graphs it added: a chain of three calls, cut three times, resolves at run time."
+
+# `Program::adoptMissing` (include/camel/runtime/program.h#Program::adoptMissing) used to hand on
+# only the graphs the donor added itself, so a cut that adopted the program of the cut below it lost
+# the cut below that one, and the direct call the outer half writes had nothing to enter: the node VM
+# refused with `a direct call names a function whose graph is not in the program's graph table`
+# (src/passes/sched/nodevm/nodevm.cpp#NodeVMSchedPass::call). Two cuts nested were enough. What the
+# fix adds is `Program::bindTaken`: a graph a program took in -- one it adopted, or one a session
+# encoded for it -- is owned like one it adds, so `adoptMissing` is closed under adoption without
+# walking a program, which is what keeps two programs that adopted each other from recursing.
+#
+# The chain is `f(x) = 2x`, `g = f(x)*x = 2x^2`, `g2 = g(x)*x = 2x^3`, `g3 = g2(x)*x = 2x^4`. Four
+# graphs answer the pair (value, tangent), so `split(jvp(g3))` builds four cuts, three of them nested
+# one inside the next, and the value it answers is by hand 2*2^4 = 32 at x = 2 and 2*3^4 = 162 at
+# x = 3. The value half is what this entry reads, because that is where the nested call is: the
+# forward half of the outermost cut calls the forward half of the one below it, which is the graph
+# the table used to be missing.
+#
+# The linear half of this same case reads 128.0 and 648.0 today -- dx-independent, equal to the
+# slope times x -- because the cut carries a parameter's *tangent* port as the residual tagged as its
+# value (modules/transforms/split.cpp#residualsOf). That is a different defect, it is pinned at two
+# cuts by the cut's own plan (`feat.transforms.split`, `split_linear_across_a_call`, whose numbers are
+# 12, 6 and 24 at x = 3), and a mark for it here would be a mark that passes as soon as that fix
+# lands. When it does, this case's three readings are dx -> 8x^3*dx: 216.0 at dx = 1, 432.0 at
+# dx = 2 and 0.0 at dx = 0, and this entry can carry them.
+[[tests]]
+name = "split_three_calls_chain_resolves"
+desc = "Three cuts nested, `split(jvp(g3))` for g3 = 2x^4: the value half answers 32.0 at x = 2 and 162.0 at x = 3, which it can only do by entering the forward half of the cut below it through the program's table. Before the fix this program died in the node VM before printing anything (`Guarantee: runtimeTarget != nullptr` at src/passes/sched/nodevm/nodevm.cpp#NodeVMSchedPass::call), so the two numbers are the whole reading: a table missing the grandchild's cut has no value to answer with."
+kind = "behavior"
+case = "../../../cases/runtime/adopt_chain/split_three_calls.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["y2=32.0", "y3=162.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "jvp_three_calls_no_program_crossed"
+desc = "The control: the same three calls through `jvp` alone, which builds one graph in one program and adopts nothing, answers value = 32.0 and tangent = 64.0 at x = 2 (2x^4 and 8x^3). It was green before the fix and stayed green, which is what says the reading above is about the table and not about the chain of calls: nothing crossed a program here, so nothing could be lost."
+kind = "behavior"
+case = "../../../cases/runtime/adopt_chain/jvp_three_calls.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["value=32.0", "tangent=64.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "grad_three_calls_no_program_crossed"
+desc = "The other control, on the pullback side: `grad(g3)` across the same three calls answers the value 32.0 and the gradient 64.0 at a = 2. The gradient inlines its callees into one graph of one program, so it never adopts across programs either -- it was green before the fix and is green after, which is what makes the cut the only shape that lost the tail of the chain."
+kind = "behavior"
+case = "../../../cases/runtime/adopt_chain/grad_three_calls.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["value=32.0", "dgdx=64.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
