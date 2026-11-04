@@ -2655,37 +2655,40 @@ element
 #### `max_axis_stated`
 
 ```camel
-max_axis_stated: (t: T[...], mask: bool[...], at: int[]) => T[...] when is_numeric::<T>()
+max_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
 ```
 
 The largest element of each lane along one axis, with the tie selection, the axis, `keepdims` and
-the operand's extents stated: `max_axis(t, axis, keepdims)`, `at` is `[axis, keepdims, d0, ..., d(rank-1)]`
-and `mask` holds `true` at every position that holds its lane's largest element.
+the operand's extents stated: `max_axis_stated(t, mask, axis, keepdims, extents)` is
+`max_axis(t, axis, keepdims)`, and `mask` holds `true` at every position that holds its lane's
+largest element.
 
 The mask is what an extremum's adjoint needs and what the extents cannot rebuild: an extremum
 gives the whole cotangent to **every** position that holds it (a tie is not shared out), and which
-positions those are is a fact of the values. Both the mask and `at` are read by
+positions those are is a fact of the values. The mask and the three stated values are read by
 `rulesets.transpose`'s `max_axis_stated_t` and by nothing else -- the value is the axis form's own
 reduction -- so a mask of another shape is answered where it is used: the reverse law's `where`
-broadcasts it against the extents `at` states.
+broadcasts it against the stated extents.
+outside the rank
 
 - Pure.
-- Failure: fault `RuntimeError` when `at` is shorter than three entries, its extents disagree with the tensor's shape, or the axis is outside the rank.
-- Example: `max_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[false, true], [false, true]] as bool[2, 2], [1, 0, 2, 2])` gives `[2.0, 4.0]`
+- Failure: fault `RuntimeError` when `extents` disagrees with the tensor's shape, or the axis is.
+- Example: `max_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[false, true], [false, true]] as bool[2, 2], 1, false, [2, 2])` gives `[2.0, 4.0]`
 
 #### `min_axis_stated`
 
 ```camel
-min_axis_stated: (t: T[...], mask: bool[...], at: int[]) => T[...] when is_numeric::<T>()
+min_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
 ```
 
 The smallest element of each lane along one axis, with the tie selection, the axis, `keepdims` and
 the operand's extents stated: `min_axis(t, axis, keepdims)`, laid out exactly as
 `max_axis_stated` is.
+outside the rank
 
 - Pure.
-- Failure: fault `RuntimeError` when `at` is shorter than three entries, its extents disagree with the tensor's shape, or the axis is outside the rank.
-- Example: `min_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[true, false], [true, false]] as bool[2, 2], [1, 0, 2, 2])` gives `[1.0, 3.0]`
+- Failure: fault `RuntimeError` when `extents` disagrees with the tensor's shape, or the axis is.
+- Example: `min_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[true, false], [true, false]] as bool[2, 2], 1, false, [2, 2])` gives `[1.0, 3.0]`
 
 ### Module state
 

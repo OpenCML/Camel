@@ -403,28 +403,24 @@ std::optional<Type *> sumAxisStatedInfer(const InferContext &ctx) {
     return tensorOf(reductionDtype(k::ReduceOp::Sum, ctx.facts(0).dtype), std::nullopt);
 }
 
-/// `max_axis_stated(t, mask, at)` / `min_axis_stated(t, mask, at)`: the lane extremum, with the tie
-/// selection, the axis, the flag and the extents stated.
+/// `max_axis_stated(t, mask, axis, keepdims, extents)` / `min_axis_stated(t, mask, axis, keepdims,
+/// extents)`: the lane extremum, with the tie selection, the axis, the flag and the extents stated.
 ///
 /// The value is `max_axis(t, axis, keepdims)` -- `k::reduceAxis` again, so the element type and the
-/// comparison are the axis form's own -- and `at` is `[axis, keepdims, d0, ..., d(rank-1)]`, checked
-/// like the lane sum's list. `mask` is not read for the value: it is the *selection* the reverse law
+/// comparison are the axis form's own -- and the three stated values are parameters of their own
+/// types, checked like the lane sum's. `mask` is not read for the value: it is the *selection* the reverse law
 /// needs, and an extremum's adjoint is not a spread but "the whole cotangent for every position that
 /// holds the extremum" (`extremumAxisVjp` answers exactly that), so the forward half carries
 /// `t >= spread(output)` beside the linear call. A mask of another shape is answered where it is
-/// used: the reverse law's `where` broadcasts it against the extents `at` states.
+/// used: the reverse law's `where` broadcasts it against the stated extents.
 template <k::ReduceOp Op> slot_t extremumAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
     constexpr std::string_view name =
         Op == k::ReduceOp::Max ? "max_axis_stated" : "min_axis_stated";
-    const Array *t                = tensorArg(norm, 0);
-    const std::vector<int64_t> at = intListArg(norm, 2, name);
-    if (at.size() < 3) {
-        reportShapeError(
-            name, "expects an integer list: the axis, the keepdims flag and the tensor's extents");
-    }
-    const int64_t axis  = at[0];
-    const bool keepDims = at[1] != 0;
-    checkStatedExtents(t, at, 2, name);
+    const Array *t                     = tensorArg(norm, 0);
+    const int64_t axis                 = intArg(norm, 2);
+    const bool keepDims                = boolArg(norm, 3);
+    const std::vector<int64_t> extents = intListArg(norm, 4, name);
+    checkStatedExtents(t, extents, 0, name);
     return runKernel(name, [&] {
         return wrap(
             norm.resultType(), k::reduceAxis(Op, t, axis, keepDims, resultAllocator()));
@@ -898,7 +894,9 @@ std::vector<OpDef> reductionOps() {
         .exports   = {"max_axis_stated"},
         .params    = {{"t", ParamKind::Tensor},
                       {"mask", ParamKind::BoolArray},
-                      {"at", ParamKind::IntArray}},
+                      {"axis", ParamKind::Int},
+                      {"keepdims", ParamKind::Bool},
+                      {"extents", ParamKind::IntArray}},
         .resultDoc = "T[...]",
         .infer     = extremumAxisStatedInfer<k::ReduceOp::Max>(),
         .kernel    = &extremumAxisStatedKernel<k::ReduceOp::Max>,
@@ -908,7 +906,9 @@ std::vector<OpDef> reductionOps() {
         .exports   = {"min_axis_stated"},
         .params    = {{"t", ParamKind::Tensor},
                       {"mask", ParamKind::BoolArray},
-                      {"at", ParamKind::IntArray}},
+                      {"axis", ParamKind::Int},
+                      {"keepdims", ParamKind::Bool},
+                      {"extents", ParamKind::IntArray}},
         .resultDoc = "T[...]",
         .infer     = extremumAxisStatedInfer<k::ReduceOp::Min>(),
         .kernel    = &extremumAxisStatedKernel<k::ReduceOp::Min>,
