@@ -20,6 +20,36 @@ This repository uses a strict `main` / `develop` / feature-branch workflow. Foll
 - After the merge completes, rebase the merged feature branch so it stays synchronized with the updated `develop`.
 - After the merge, verify branch ancestry before proceeding.
 
+### Cutting a lane: point it at itself, and keep its probes out of the tree
+
+Two things a lane gets wrong in its first ten minutes, both of which look like nothing until someone
+reads a number or runs a `git pull` on the branch.
+
+**A branch cut from `origin/develop` inherits `origin/develop` as its upstream.** `git checkout -b
+lane-x origin/develop` sets `branch.lane-x.merge` to `refs/heads/develop`, so the next person who runs
+`git pull` on that branch pulls **develop into the lane** -- the merge direction is reversed, and nothing
+prints a warning. Set it the moment the branch exists:
+
+```
+git branch --set-upstream-to=origin/lane-x lane-x
+git rev-parse --abbrev-ref '@{u}'     # must answer origin/lane-x
+```
+
+**A probe's artifacts belong in `D:\Temp\`, never in the worktree.** Two files left over from a probe make
+`git status --porcelain` non-empty, and the runner prints that fact in every reading it takes:
+
+```
+[provenance] tip (dirty: 2 files) | binary built ... | tree ... | tier fast | jobs 4
+```
+
+That `dirty` field is not decoration: it is the reading's own answer to "was this measured on a clean
+tree", which is the first question a number that disagrees with someone else's number has to answer. An
+alarm that is always on is not an alarm, and a reading that always shows the same value is decoration.
+Here it was on for a whole evening across every gate run of one lane, and the only reason anyone looked
+was that the number next to it was the sha they expected -- so the field had already stopped doing its
+job. Keep the artifacts under `D:\Temp\<lane>\`, and copy them onto the host only for the run that needs
+them.
+
 ### A lane may not accumulate: the ten-commit rule
 
 A lane's age is measured in `develop`'s API changes, not in days. A lane holding forty unmerged
