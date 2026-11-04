@@ -15,10 +15,14 @@ every one is the behaviour the program has without the optimization passes: exit
 (`rc05` reads `PROGEN_I0` from the environment, so the harness sets it).
 
 `rc05_seed104` passes now that a pruned branch hands its place to a node of the arm's own region
-(`pruneBranch`, `GraphDraft::armRegionOf`); its runs are in `feat/compile/fold_arms`. `rc03_seed30`
-and `rc04_seed72` still fail as recorded, with the same pipelines and the same messages, and their
-runs are in `feat/opt/adb67e081` as **work owed**: red on purpose, with no `known_fail` mark, so the
-plan's `fail` count is the debt and moves down only when something fixes them.
+(`pruneBranch`, `GraphDraft::armRegionOf`); its runs are in `feat/compile/fold_arms`. `rc04_seed72`
+passes too: the cycle of inputs its run reported was the place-fork guard of the inliner
+(`resolvePlaceForks`, `src/runtime/draft_inline.cpp`) walking four of the five kinds of input edge,
+so a chain end that reached the statement being moved through an order edge only looked free; the
+move closed the cycle and the seal named it. It is in `feat/opt/adb67e081`. `rc03_seed30` still
+fails as recorded, with the same pipeline and the same message, and is in that plan as **work
+owed**: red on purpose, with no `known_fail` mark, so the plan's `fail` count is the debt and
+moves down only when something fixes it.
 
 `rc00_seed27` is in **no plan**, and that is a gap rather than a decision: it crashes in the
 scheduler (`std::opt std::nvm` SIGSEGV 10/10, while `std::opt` alone returns; `std::opt std::gir`

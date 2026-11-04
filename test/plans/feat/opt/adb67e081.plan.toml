@@ -8,11 +8,14 @@ The reduced programs of result `adb67e081` of the CC2027 evaluation
 failed on the v0.2.43 pin, copied unedited into `test/cases/opt/adb67e081/`. Each run is
 expected to do what the program does without the optimization passes: exit 0 and no output.
 `rc05_seed104` (the folding of a branch arm, handed its place in a region the arm does not run
-with) is fixed and is in `feat/compile/fold_arms` beside the case of that defect. The two tests
-below are `rc03_seed30` and `rc04_seed72`, which still fail: they are in the plan as *work owed*,
-not as exceptions -- no `known_fail` mark, so the plan's `fail` count is the debt and moves down
-only when something fixes them. `rc00_seed27` (SIGSEGV under `std::opt std::nvm`, in the
-scheduler rather than in a pass) is in no plan: it belongs to the lane that owns the schedulers.
+with) is fixed and is in `feat/compile/fold_arms` beside the case of that defect. `rc04_seed72`
+is fixed too and stays here: its red was the place-fork guard of the inliner walking four of the
+five kinds of input edge, so a chain end that reached the moved statement through an order edge
+only looked free to move it, and the move closed a cycle the seal then reported. The one test
+below that still fails is `rc03_seed30`: it is in the plan as *work owed*, not as an exception --
+no `known_fail` mark, so the plan's `fail` count is the debt and moves down only when something
+fixes it. `rc00_seed27` (SIGSEGV under `std::opt std::nvm`, in the scheduler rather than in a
+pass) is in no plan: it belongs to the lane that owns the schedulers.
 """
 # Why not `known_fail`: a mark says "this program is expected to be refused", and these are
 # programs the compiler is expected to run. A red here is the defect, visible in `feat/opt`
@@ -71,7 +74,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "adb67e081.rc04_seed72_inline"
-desc = "`rc04_seed72` under `std::opt::inline`, the pipeline it was found with. RED TODAY, expected to be fixed: the inlined graph has a cycle of inputs -- `node 24 (11): lies on a cycle of inputs: 24(11) <- 27(13) <- 38(13) <- 24`."
+desc = "`rc04_seed72` under `std::opt::inline`, the pipeline it was found with. Green since the place-fork guard walks the order edges beside the other four kinds: the chain end it was about to place the statement after waited on that statement through an order edge, the move closed a cycle, and the run read `node 24 (11): lies on a cycle of inputs: 24(11) <- 27(13) <- 38(13) <- 24` -- the guard's blind spot, reported as a cycle of inputs at a node that was not the defect. With the move refused the statement keeps its place and the graph runs."
 kind = "behavior"
 case = "../../../cases/opt/adb67e081/rc04_seed72.cml"
 args = ["${case}", "std::opt::inline", "${run_nvm}"]
