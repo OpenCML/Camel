@@ -196,11 +196,17 @@ let loaderFailure = ''
 // under: `pass` follows the host binary, and the two readings above the old floor of 12 were the
 // host's. 17 = 12 + the 5 this fix turns over, and those 5 are the ruler's, so they are required
 // everywhere; the 2 that ride on the binary are not.
+// **2026-11-04, second move: three cases arrived and they are all `with`.** `total` 141 -> 144,
+// `library` 132 -> 135, `with` 50 -> 53; `array` and `other` do not move. The three are
+// `second_order_nest.cml`, `second_order_refused_captured.cml` and `second_order_refused_vjp.cml`
+// (`test/plans/feat/modules/autodiff.plan.toml`), added by the second-derivative lane: they ask what a
+// nested `jvp`/`vjp` can and cannot be handed, and each is written with a `with` parameter, which is
+// the class they land in. `pass` does not move: the record holds 23 and the host reads 23.
 const LEDGER_RECORDED = {
-    total: 141,
-    library: 132,
+    total: 144,
+    library: 135,
     pass: 23,
-    with: 50,
+    with: 53,
     array: 73,
     other: 9,
 }
