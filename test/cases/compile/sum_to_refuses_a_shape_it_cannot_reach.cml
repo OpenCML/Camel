@@ -1,15 +1,19 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// A shape `t` cannot reach is still a fault with a name, not a silent wrong number: `[2, 2]` has no
-// way to become the four lanes `[4]` states, so `sum_to` refuses rather than answering something.
-// The annotation makes the literal one two-dimensional array (design principles 5.4), so the shapes
-// are both known when the operator runs.
+// Ruling 甲's check, which is the one thing 甲 states that a program can test: `sum_to`'s target
+// extents are a suffix of `t`'s shape. `[2, 2]` has no way to become the four lanes `[4]` states --
+// position 1 is 4 where the tensor has 2 -- so the call is refused rather than answering something,
+// and the sentence names both sides and the position that does not fit. The annotation makes the
+// literal one two-dimensional array (design principles 5.4), so the shape is known when the operator
+// runs.
+//
+// A target that is not a suffix is a fault the caller fixes (`broadcast_like` if the value has to
+// grow), never a silent reshaping.
 import { sum_to } from tensor
 
 func main(): int sync {
     let wide: float[2, 2] = [[1.0, 2.0], [3.0, 4.0]]
-    let flat: float[4] = [1.0, 2.0, 3.0, 4.0]
-    println(`sum_to(wide, flat) = ${sum_to(wide, flat):.1f}`)
+    println(`sum_to(wide, [4]) = ${sum_to(wide, [4]):.1f}`)
     return 0
 }

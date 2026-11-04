@@ -1218,7 +1218,11 @@ class Compiler {
             auto product    = apply(
                 "tensor:matmul",
                 left ? std::vector<Value>{dy, transposed} : std::vector<Value>{transposed, dy});
-            return apply("tensor:sum_to", {product, args[left ? 1 : 2]});
+            // `sum_to` takes the target extents, not the operand they belong to (ruling 甲), and
+            // the tiles compiler already holds those extents: the shape of the operand the fused
+            // product is the cotangent of. Writing them as the list keeps the reduction a
+            // leading-axis one and reads no value for its shape.
+            return apply("tensor:sum_to", {product, integerArray(left ? a : b)});
         }
         const std::string unary  = "|neg|abs|exp|log|sqrt|rsqrt|relu|";
         const std::string binary = "|add|subtract|multiply|divide|maximum|minimum|";
