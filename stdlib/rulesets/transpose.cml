@@ -789,11 +789,17 @@ export rule mean_axis_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
 // `index_into` are (`rulesets.jvp` declares its own copies: a family cannot read another module's
 // private function).
 //
-// The two keys are the ones a **pullback** asks for, and they are what `^`'s backward walk stopped
-// on: `pow`'s forward rule is `jvp_pow_d` (`stdlib/rulesets/jvp.cml`), which writes
-// `w * x^(w-1) * dx + x^w * log(x) * dy` inline, so the linear half of a program that calls `pow`
-// holds a `math:pow_d` and a `math:log_d` node -- measured on `vjp(x => pow(x, 3.0))`, which answered
-// `skip=rule uri=math:log_d reason=unbound` once `pow_d_t` was in place and 12.0 once this law was.
+// The two keys are the ones a **pullback** would ask for, and they are *not* what `^`'s backward walk
+// stops on. `pow`'s forward rule is `jvp_pow_d` (`stdlib/rulesets/jvp.cml`), which writes
+// `w * x^(w-1) * dx + x^w * log(x) * dy` inline, so the `pow` and the `log` land in the **primal**
+// half of a `split` and the linear half holds only products and sums over their results: measured on
+// this tree (2026-11-04) `vjp(x => pow(x, 3.0))(2.0)` answers `12.0` through `rhs=add_t,mul_t`, with
+// neither `math:pow_d` nor `math:log_d` in the walk at all. So these two laws answer for a walk no
+// program reaches today, and the sentence this comment used to carry -- `skip=rule uri=math:log_d
+// reason=unbound` until this law was in place, then `12.0` -- was a reading of a tree whose forward
+// rule wrote the calls out instead of inlining them. Whether they should exist at all is the same
+// question `abs_t`/`log_t`/`maximum_t`/`minimum_t` were answered with ("no"); they are left here
+// because the sweep of this file's laws is one lane's work, not this paragraph's.
 //
 // The exponent's branch is `ct * x^w * ln(x)`: for `x <= 0` that is `NaN`, the same reading the
 // forward rule gives the same operator. It is not written as a zero -- an undefined derivative says
