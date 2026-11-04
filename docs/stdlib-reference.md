@@ -2803,8 +2803,9 @@ direction is decided by the two ranks (`modules/tensor/kernels/gradient.cpp#sumT
 all (`[2, 3]` against `[4]`) is a fault, not a number.
 
 The differentiation rules use it for the reduction (`rulesets.transpose`, where an operand of a
-broadcast product answers `sum_to(ct * other, operand)`), and its own VJP broadcasts back
-(`modules/tensor/ops/gradient_ops.cpp`).
+broadcast product answers `sum_to_stated(ct * other, shape(operand))`: this function with the
+extents the law's own port states, because a transposition has the operand's shape and not its
+value), and its own VJP broadcasts back (`modules/tensor/ops/gradient_ops.cpp`).
 
 - Pure.
 - Example: `sum_to([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 1.0)` gives `10.0`

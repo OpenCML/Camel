@@ -46,6 +46,7 @@ import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, max,
 // overloading it, so `pow_d_t`'s scalar `log(x)` is spelled `math_log`.
 import { log as math_log, pow } from math
 
+
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
     x + c => (ct: T) => (add_cotangent(ct), add_cotangent_c(ct))
