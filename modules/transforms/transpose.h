@@ -118,9 +118,9 @@ enum class TransposeRefusalCause {
     /// `float` step the cotangent the member is handed is the number itself.
     ///
     /// **This is a compiler defect, not a language rule** (author, 2026-11-04, second ruling on the
-    /// item): measured, no program reaches it, because the cotangent a program can hand a transposed
-    /// function is `Tangent<ResultOf<F>>` -- the type the declaration states -- so a port that
-    /// disagrees with it is a law whose writing and whose instancing came apart inside the compiler.
+    /// item): no program reaches it, because the cotangent a program can hand a transposed function is
+    /// `Tangent<ResultOf<F>>` -- the type the declaration states -- so a port that disagrees with it is
+    /// a law whose writing and whose instancing came apart inside the compiler.
     /// The cause stays as a guard against that inconsistency (the expansion reads the port's type to
     /// instance the law's right side and hands the value through it, which is how a wrong number or
     /// a bad read would get in), it is refused before anything is built, it carries both spellings

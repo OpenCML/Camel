@@ -3,34 +3,27 @@
 //
 // On paper `f(x) = 2x`, so `f(3) = 6` and the derivative at 3 is `2`.
 //
-// The GIR of `f` puts the callee where the builder puts every callee -- the call's `with` input -- and
-// that input is a FUNC node, `mk(x)`, whose value is the closure `mk` assembled:
+// The GIR of `f` puts the callee where the builder puts every callee -- the call's `with` input --
+// and that input is a FUNC node whose value is the closure `mk` assembled at `mk(x)`, not `mk` itself.
+// Asking that node whether it names a **callee** answered `mk`, the graph of the call that *produced*
+// the value, so the walk transposed `mk` -- whose answer is a function and which has no transposed
+// signature -- and refused with the wrong name and for the wrong reason.
 //
-//     N29 [label="mk", type="FUNC", value_type="(y: float) => float"]
-//     N2B [label="CALL", type="CALL", value_type="float"]
-//     N29 -> N2B [label="0|0", type="WITH"]      // the callee value: the result of `mk(x)`
-//     N2A -> N2B [label="0|0", type="NORM"]      // the 2.0 this call was given
+// The question is now "which graph does this *value* name" (`GCGraph::staticFunctionGraphOf`, which
+// answers nothing for a call's answer), so this entry pins: `skip=call-no-transpose` at the call,
+// `callee=none`, `reason=not-a-data-node`, exit 1, the forward line answered and the transposition
+// silent. The verdict is a refusal and the reason is the value's content rather than its provenance:
+// a call of a function value is transposed by calling `transpose(v)` (author, 2026-11-04 04:20), `v`
+// here is a value the **body computes** -- so it is not in the transposed graph, which is handed only
+// the cotangent (author, 2026-11-03 16:15: the transposed function takes one value). Recomputing
+// `mk(x)` inside the member would need `x`, a parameter that carries no port of its own; taking `v`
+// as a port is what the same ruling refuses. The answer this program is owed (2 at cotangent 1) is
+// owed by the library's cut, which carries such a value as a residual (`vjp`'s `lin`), not by a
+// transposition of a named graph.
 //
-// Asking that node whether it names a **callee** answered `mk` -- the graph of the call that produced
-// the value, not the graph this call applies -- so the walk transposed `mk`, whose answer is a
-// function and which has no transposed signature, and refused the program with `TRANSPOSE function=mk
-// skip=signature` and `callee=mk`: the right verdict (exit 1) said with the wrong name and for the
-// wrong reason.
-//
-// Fixed 2026-11-04: the `with` input is now read with "which graph does this *value* name"
-// (`GCGraph::staticFunctionGraphOf`, which answers nothing for a call's answer), so the reading is
-//
-//     TRANSPOSE function=f skip=call-no-transpose node=3 callee=none value=… reason=not-a-data-node
-//
-// and stops at exit 1 after the forward line `6.0`. The verdict is still a refusal, and the reason is
-// the value's content rather than its provenance: a call of a function value is transposed by calling
-// `transpose(v)` (author, 2026-11-04 04:20), and `v` here is a value the **body computes** -- so it is
-// not in the transposed graph, which is handed only the cotangent (author, 2026-11-03 16:15: the
-// transposed function takes one value). Recomputing `mk(x)` inside the member would need `x`, a
-// parameter that carries no port of its own; taking `v` as a port is what the same ruling refuses. So
-// the answer this program is owed (2) is owed by the library's cut, which carries such a value as a
-// residual (`vjp`'s `lin`), not by a transposition of a named graph. The shape is written and measured
-// in `docs/handover/questions/2026-11-04-who-reads-the-first-operand-as-a-callee.cn.md`.
+// The node layout, the two readings and their host are recorded in
+// `docs/handover/reports/2026-11-04-what-the-transpose-batch-measured.cn.md`, section 1; the rule and
+// the question it answers are in `docs/handover/questions/2026-11-04-who-reads-the-first-operand-as-a-callee.cn.md`.
 import rulesets.transpose
 import { transpose } from transforms
 

@@ -1803,13 +1803,12 @@ bool buildTransposeMember(
             // disagreement at all: a number handed to an array port is the rank-zero case the cast
             // above answers (design principles 5.4), an array handed to a number port is what the law's
             // own instancing answers from the operands' types, and a `Ref` is a type that is not
-            // decided yet, which `Type::assignableFrom` cannot compare at all. Measured 2026-11-04,
-            // with the cross-kind cases included: `mean_axis`'s law refused two cases that answer
-            // correct numbers (`mean_axis1_keepdims_gradient_reads_the_row_length`,
-            // `mean_axis_negative_axis.through_the_library`). That is **narrowing the check to the
-            // quantity it claims to measure**, not relaxing it so a red turns green: under
-            // correctness > an explicit refusal > a wrong number > a crash, turning a right number into
-            // a refusal is a step *down*, and no guard is worth that.
+            // decided yet, which `Type::assignableFrom` cannot compare at all. A comparison that also
+            // covered the cross-kind cases finds `mean_axis`'s law on shapes that answer correct
+            // numbers, and under correctness > an explicit refusal > a wrong number > a crash, turning
+            // a right number into a refusal is a step *down*, so the comparison stays inside one kind.
+            // The cases that separates and the host it was read on are in
+            // `docs/handover/reports/2026-11-04-what-the-transpose-batch-measured.cn.md`, section 3.
             const bool portIsArray   = port != nullptr && port->code() == camel::core::type::TypeCode::Array;
             const bool handedIsArray = ctType != nullptr && ctType->code() == camel::core::type::TypeCode::Array;
             const bool undecided     = (port != nullptr && port->code() == camel::core::type::TypeCode::Ref) ||

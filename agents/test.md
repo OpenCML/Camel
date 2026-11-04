@@ -364,3 +364,19 @@ matches no rule in `test/plan-selection.json`, and the audit answers "tracked fi
 which turns a reading into a red about the reading. This happened twice in one night -- once as an
 extra failure in a full run, once as a "thirtieth red" that was the log itself. The log is the record
 of the measurement, so it belongs where records live and not where the sources do.
+
+## Notes and comments hold the criterion, never the measurement
+
+A `desc`, a `known_fail_note` or a `#` comment next to a test says **what the case pins** — the
+criterion, the hand-computed number, the wall it stands on, and the page that records the decision.
+It does not say what the output *is today*.
+
+A measurement (an output excerpt, a count of cases, a `git grep` result, a load average, a date) is a
+fact about one tree on one host at one time. Written into a note it becomes an assertion that expires
+silently, and it will be read as current by whoever comes next. Put it in a page under
+`docs/handover/reports/` with the host, the time, the load and the tree it was taken on, and let the
+note point there.
+
+The cost of getting this wrong has been paid: a note carried "a ruling flips about 16 cases" for four
+hours after the tree changed so that flipping flipped nothing, and that sentence kept everyone from
+touching a line of code that had no consumer left.

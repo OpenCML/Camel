@@ -169,9 +169,11 @@ class Program final : public camel::core::rtdata::Object {
     /// Advances with every bind: equal versions of one program mean the same table.
     uint64_t version() const { return version_; }
     /// A satellite is a program made outside a commit (makeProgram, a draft group): the graphs
-    /// of the program it was made over, so that every id resolves, and the ones it adds. Only
-    /// those it adds are its own; the others are the versions the base had then, which a later
-    /// commit may have replaced and freed. A program that is not a satellite owns all it holds.
+    /// of the program it was made over, so that every id resolves, and the ones it adds. What it
+    /// owns is what it adds and what it takes in (bindTaken) -- a graph another program made and
+    /// this one adopted, or one a session encoded for it. The others are the versions the base had
+    /// then, which a later commit may have replaced and freed; those it only holds. A program
+    /// that is not a satellite owns all it holds: no commit has moved past it.
     bool owns(GraphId id) const {
         if (!satellite_) {
             return graph(id) != nullptr;
@@ -183,15 +185,28 @@ class Program final : public camel::core::rtdata::Object {
     void bindOwn(GraphId id, GCGraph *graph) {
         satellite_ = true;
         bind(id, graph);
-        const size_t index = toValue(id);
-        if (index >= own_.size()) {
-            own_.resize(index + 1, 0);
+        markOwn(id, kOwnAddedHere);
+    }
+    /// Binds `graph` as one the satellite takes in rather than inherits: a graph it adopted from
+    /// another program, or one a session encoded for it. It is not a version the base had, so
+    /// handing it on to a third program is as safe as handing on one it adds -- and that is what
+    /// carries a chain of programs (a cut of a cut, a gradient of a gradient) the whole way down.
+    /// A program that is not a satellite owns everything it holds already, and taking a graph in
+    /// must not turn it into one that owns only part of its table.
+    void bindTaken(GraphId id, GCGraph *graph) {
+        bind(id, graph);
+        if (satellite_) {
+            markOwn(id, kOwnTakenIn);
         }
-        own_[index] = 1;
     }
     /// Makes the program a satellite of what it holds.
     void makeSatellite() { satellite_ = true; }
-    /// Binds the graphs `other` owns that this program does not hold.
+    /// Binds the graphs `other` owns that this program does not hold. What `other` owns is closed
+    /// under adoption -- every graph it took in was marked when it took it -- so one call hands on
+    /// the whole chain `other` stands on, and no program is ever walked: two programs that adopted
+    /// each other cannot recurse, and a second call adds nothing because a graph already held is
+    /// left as it is. An entry `other` inherited from its base is not handed on; that version is
+    /// the base's, and a later commit may have moved past it.
     void adoptMissing(const Program &other) {
         if (&other == this) {
             return;
@@ -199,7 +214,7 @@ class Program final : public camel::core::rtdata::Object {
         for (size_t index = 0; index < other.byId_.size(); ++index) {
             const GraphId id = static_cast<GraphId>(index);
             if (other.byId_[index] != nullptr && other.owns(id) && graph(id) == nullptr) {
-                bind(id, other.byId_[index]);
+                bindTaken(id, other.byId_[index]);
             }
         }
     }
@@ -236,9 +251,21 @@ class Program final : public camel::core::rtdata::Object {
     friend class GCGraphManager;
     void note(GCGraph *graph);
     void noteAll();
+    /// What own_ records of a graph a satellite owns: it adds it, or it took it in.
+    static constexpr uint8_t kOwnAddedHere = 1;
+    static constexpr uint8_t kOwnTakenIn   = 2;
+    /// Records that the satellite owns `graph` (own_ is indexed like byId_).
+    void markOwn(GraphId id, uint8_t how) {
+        const size_t index = toValue(id);
+        if (index >= own_.size()) {
+            own_.resize(index + 1, 0);
+        }
+        own_[index] = how;
+    }
     GCGraphManager *manager_ = nullptr; // set for a program the manager owns
     std::vector<GCGraph *> byId_; // indexed by the value of the GraphId; nullptr where absent
-    std::vector<uint8_t> own_;    // satellite: 1 where the graph is one it adds
+    // Satellite: 1 where the graph is one it adds, 2 where it took it in, 0 where it inherited it.
+    std::vector<uint8_t> own_;
     bool satellite_          = false;
     uint64_t version_        = 0;
     size_t count_            = 0;
