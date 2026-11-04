@@ -319,8 +319,10 @@ branchArmNodes(const camel::runtime::GraphTransaction &transaction, gc_node_ref_
 /// `BRCH`, one range per arm, `JOIN`, and nothing outside the arms is ever entered from the `BRCH`
 /// (`docs/technical/17_graph_rewrite_api_contracts.md`, 4.1 rule 2). The front end writes the same
 /// link: the statement after a branch waits on the `JOIN`. The `JOIN` is returned even when it is
-/// gone -- the caller decides whether the place is still in its block.
-gc_node_ref_t branchPlaceInChain(const camel::runtime::GraphDraft &draft, gc_node_ref_t node) {
+/// gone -- the caller decides whether the place is still in its block. It takes the transaction its
+/// callers already hold rather than a draft: the object is the caller's, not one this function made.
+gc_node_ref_t branchPlaceInChain(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t node) {
+    const auto &draft = transaction.graph();
     const camel::runtime::DraftNodeHeader *header = draft.header(node);
     if (header == nullptr || header->kind != GCNodeKind::Brch) {
         return node;
@@ -399,7 +401,7 @@ joinBlockFragments(camel::runtime::GraphTransaction &transaction, gc_node_ref_t 
                 // fragment's tail a node of the block; ending it at the BRCH would chain the next
                 // fragment from the BRCH itself, and a statement that waits on a BRCH is a statement
                 // no back end runs unless it is in one of the branch's arms (17, 4.1 rule 2).
-                const gc_node_ref_t after = branchPlaceInChain(draft, tail);
+                const gc_node_ref_t after = branchPlaceInChain(transaction, tail);
                 if (after == tail) {
                     break;
                 }
@@ -617,7 +619,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         // A wait is never written from a BRCH: the node that follows a branch is its JOIN
         // (branchPlaceInChain), and a node chained from the BRCH would wait on a node it is not in an
         // arm of -- 17, 4.1 rule 2, the invariant no back end can run such a graph under.
-        pred = branchPlaceInChain(draft, pred);
+        pred = branchPlaceInChain(transaction, pred);
         if (pred == kInvalidNodeRef || !draft.alive(pred)) {
             return;
         }
