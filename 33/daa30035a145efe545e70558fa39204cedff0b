@@ -1,0 +1,49 @@
+docs: the split side already reads original values from closure ports; the ALIGN key measures another quantity
+
+## 后一半读原值：`split` 侧已达成，判据指向的是另一个量
+
+**读数先说**：`feat/showcase_s2` = total 7 / pass 5 / **fail 2**（`matmul_t.vector_lhs_law`、`matmul_t.vector_rhs_law`）；`feat/compile` = total 2337 / pass 2317 / **fail 0** / known failures 20；两条计划 killed 0。tip `33daa3003`，宿主检出名 `splitcp`，代码树与 `origin/develop` 逐字相同（本提交是空提交，只有这份报告）。
+
+## 1. `split` 侧已达成（裁定要的状态就是今天的树）
+
+临时探针（`split.cpp#Half::makeCopy`，跑完 `git checkout --`，不入树）把后一半对源图**每一个端口的读**都打了一遍，一次 `--tier fast` 的 `feat/compile` 上共 **168 次**：
+
+- **160 次是切向端口**（`value=0`，`crossed=0`）——后一半的参数端口只被当切向读；
+- **8 次是原值端口，且 8/8 `crossed=1`**：走 `Half::crossesCut → Half::projectResidual → Half::closurePorts[i]`，体里读的就是**闭包端口节点**（四条用例：`jvp_of_f`、`jvp_of_pick`、`jvp_of_merged`、`jvp_of_int_escape`）；
+- **「经参数端口读原值」= 0 次**。
+
+代码侧同一条：`split.cpp#Half::portOf` 只在 `sourcePorts.size() / 2 ..` 那一段填（切向），后一半的值端口恒为 `kInvalidNodeRef`；原值只有 `crossesCut → projectResidual → closurePorts[i]` 这一条路。`makeCopy` 的 Port 分支注释原文已经是「参数原值是残差，先于这里取走」。所以「后一半的参数端口只代表切向」也已是事实，没有第二处要改。
+
+## 2. 判据（`ALIGN` 的取值键变成闭包端口）不成立，因为它量的不是同一件东西
+
+`ALIGN` 的定义在 `docs/handover/questions/2026-11-04-who-records-which-closure-member-is-which-parameter.cn.md` 第 1 节（`transpose.cpp#buildTransposeMember` 的 `forward` Port 分支，五个字段：键／闭合成员／参数端口／`normPorts`／`closureNodes`）。今天同一份打印：
+
+```
+ALIGN key=3 kind=1 type=float[2, 2] closureMember=-1 param=0 withPort=-1
+  closureOf(3): 0[k=1,t=float[2, 2],p=0] 1[...] 2[...]
+  portOfParam(2): 0->4294967295 1->4294967295
+  paramCount=2 nodeCount=10
+  normPorts(2): 0:ref3[at=0] 1:ref4[at=1]
+  closureNodes(3): 0[ported] 1[ported] 2[ported]
+ALIGN key=4 kind=1 type=float[2, 2] closureMember=-1 param=1 withPort=-1
+```
+
+（`linear_gradient_both_legs`；`matmul_t.vector_lhs_law` 同型：`key=3 closureMember=-1`，随后 `skip=cotangent-needs-a-value uri=tensor:matmul position=0`。）
+
+**键 `closureMember=-1`：它不是闭包成员。** 键是**切向端口**（`normPorts[0]`），律要的是**这个切向参数的原值**；闭包里确实有这个参数的原值（同参数、另一格），但那是**另一个节点**，不是被问的那个端口——键与「闭包里那一格」不是同一件东西。要把键变成闭包端口，只有两条路：让 `transpose` 去查「哪个成员是哪个参数」，或恢复按位置取值（`closurePorts[at]`）。这两条正是 2026-11-03 14:55 与 2026-11-04 12:40 否掉的，所以没动 `transpose`。
+
+## 3. 剩下 2 红的真正落点：律要的是切向操作数的**形状**，属孪生算子那一层
+
+`sum_of_product(v: float[], w: float[2,2])` 的后一半体是 `matmul(v, dw) + matmul(dv, w)`（原值 `v`/`w` 走闭包端口，切向 `dv`/`dw` 走自己的端口）。转置 `matmul(dv, w)` 的 `position=0` 时，`matmul_t` 的律写 `sum_to(matmul(ct, transpose(b)), a)`，其中 `a` 是 `dv`：它要的是 **`a` 的形状**，而 `dv` 是**开秩 `float[]`**，`transpose.cpp#shapeFromTypeOf` 给不出；闭包里也没有「`dv` 的形状」这个成员（闭包是 `v`、`w`、结果）。所以这是**孪生算子（形状作为操作数）**那一层，验收明确要它保持 **2**，本轮一条没碰。
+
+## 4. 三条通道的查证
+
+`modules/transforms/` 里**没有** `transforms.parameter_of`（节点属性），**没有** `setPassFact`，`closureParameterOf` 也已不在树上：**没有第三条不该存在的通道**。
+
+## 5. 给后来人的一句
+
+**判据说「把 X 变成 Y」时，先确认 X 现在是什么；这一条的 X 已经是 Y，而它看见的那个打印显示的是 Z。**
+
+## 6. 这一轮改了什么
+
+**代码零改动**（`split.cpp`、`transpose.cpp` 与 `origin/develop` 逐字相同；探针 `git checkout --` 全部撤回）。分支 `lane-splitcp` 上只有这一笔空提交，承载这份报告；工作树留着给协调者合并，宿主检出 `splitcp` 未清理。
