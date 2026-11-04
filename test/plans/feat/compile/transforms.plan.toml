@@ -2646,7 +2646,8 @@ timeout_ms = 20000
 # list and must not move. The two-level reading also pins the second half of the fix: a cut adopts
 # its callee's program and not the cuts that program adopted, so `g2` used to stop the run at `a
 # direct call names a function whose graph is not in the program's graph table`
-# (modules/transforms/split.h#SplitGraph::standing).
+# (`include/camel/runtime/program.h#Program::adoptMissing` then carried only the graphs a program
+# added itself).
 [[tests]]
 name = "grad_across_a_call"
 desc = "`grad` through a call, at one level and at two: `f(x) = 2.0 * x`, `g(x) = f(x) * x` (2x², so 12 at 3 and 20 at 5), `g2(x) = g(x) * x` (2x³, so 54 at 3), and `h(x) = 2.0 * x * x` -- the flat spelling of g -- as the guard that the path which was already right still reads 12. Before the fix the first two answered 0.0 without a word and the third stopped the run at a callee graph that the outermost program did not hold."

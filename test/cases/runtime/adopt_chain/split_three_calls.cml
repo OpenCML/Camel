@@ -1,0 +1,50 @@
+// Three cuts nested inside one another: `split` of the lift of `g3`, whose value chain calls
+// `g2`, whose value chain calls `g`, whose value chain calls `f`. Every one of those callees
+// answers the pair (value, tangent), so every one of them gets a cut, and each cut's program
+// adopts the program of the cut below it.
+//
+//   f(x) = 2.0 * x, g(x) = f(x)*x = 2x^2, g2(x) = g(x)*x = 2x^3, g3(x) = g2(x)*x = 2x^4
+//
+// so by hand: at x = 2, g3 = 2*16 = 32 and g3' = 8x^3 = 64; at x = 3, g3 = 2*81 = 162 and
+// g3' = 8*27 = 216. The backward half is the linear map, so it is dx -> 216*dx at x = 3:
+// 216 at dx = 1, 432 at dx = 2, 0 at dx = 0.
+//
+// What this case is *for* is the value pair: before `Program::adoptMissing` carried what the program
+// it adopted had itself adopted, this program stopped in the node VM before printing anything, on the
+// direct call the outermost forward half writes to the forward half of the cut below it. The three
+// `d` lines are printed as the map's own reading and are not the numbers above yet: measured
+// 2026-11-04 they are 128.0 and 648.0, the same at every dx, because the cut takes a parameter's
+// tangent port for its value port (modules/transforms/split.cpp#residualsOf, pinned at two cuts by
+// `feat.transforms.split`'s `split_linear_across_a_call`). The comment states the hand's numbers so
+// that the day that one lands, this case's remaining readings are already written down.
+import rulesets.jvp
+import { jvp, split } from transforms
+
+func f(x: float): float {
+    return 2.0 * x
+}
+
+func g(x: float): float {
+    return f(x) * x
+}
+
+func g2(x: float): float {
+    return g(x) * x
+}
+
+func g3(x: float): float {
+    return g2(x) * x
+}
+
+func main(): int sync {
+    let forward = split(jvp(g3))
+    let (atTwo, dAtTwo) = forward(2.0)
+    'y2={}'->format<atTwo>->println
+    'd2_1={}'->format<dAtTwo(1.0)>->println
+    let (atThree, dAtThree) = forward(3.0)
+    'y3={}'->format<atThree>->println
+    'd3_1={}'->format<dAtThree(1.0)>->println
+    'd3_2={}'->format<dAtThree(2.0)>->println
+    'd3_0={}'->format<dAtThree(0.0)>->println
+    return 0
+}
