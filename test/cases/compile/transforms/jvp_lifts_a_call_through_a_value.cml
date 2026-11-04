@@ -1,0 +1,35 @@
+// A lifted body **can** call a function value: the lift writes a call of `jvp(v)` and lets the run
+// time answer which graph `v` stands for (author, 2026-11-05: 提升一个"通过函数值 `v` 的调用"，就
+// 生成一个对 `jvp(v)` 的调用，在运行时求值). Nothing is read about the value at lift time -- not a
+// `Data`'s static function, not a `FunctionClosure`'s `Fill` -- because at lift time it is not known
+// which graph the value is.
+//
+// The one reading that tells that rule from a lift that reads the value statically: the **same**
+// lifted function called with two different values answers each one's own number. A lift that read
+// the graph where the call is written answers the first value's answer twice.
+//
+// `use(f, z) = f(z)`, so its lift takes `(f, its tangent, z, its tangent)`; `f` has no tangent space
+// and takes the `()` slot the lifted signature writes for it.
+import rulesets.jvp
+import { jvp } from transforms
+
+func plain(y: float): float {
+    return y * y
+}
+
+func thrice(y: float): float {
+    return 3.0 * y
+}
+
+func use(f: (y: float) => float, z: float): float {
+    return f(z)
+}
+
+func main(): int sync {
+    let d = jvp(use)
+    let (a, da) = d(plain, 2.0, (), 1.0)
+    let (b, db) = d(thrice, 2.0, (), 1.0)
+    'plain={} {}'->format<a, da>->println
+    'thrice={} {}'->format<b, db>->println
+    return 0
+}
