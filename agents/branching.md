@@ -286,4 +286,43 @@ work while the checkout goes back to being readable. Six times in one night this
 into from somewhere else: a reformatted header, a broken replacement in `graph_read.cpp`, a duplicated
 probe diagnostic, a zero-byte `cml.cpp`, and once eight files plus a branch other than `develop`. Each
 time the diff had to be recovered from the wreckage before anyone could say whether it was work or a
-repeat of work that had already landed.
+repeat of work that had already landed.## The Merge Lane Is A Standing Slot
+
+One work slot is reserved for merging, always. It is not "the next free slot" — it is a slot
+that stays open so that a merge never has to wait, and so that a merge never runs inside the
+coordinator's own session.
+
+### Why it is reserved rather than scheduled
+
+A merge is the only operation that touches shared git state: `--no-ff`, conflict resolution,
+a full gate, a push. Those are long. When they run inside the coordinator's session, the session
+cannot answer anything else for their whole duration — a ruling, a new reading, a lane that
+finished, a question page that arrived. The cost is not the merge's runtime; it is everything
+that was not answered while it ran.
+
+So the merge is handed to a lane and the coordinator stays free. A lane that reports after
+twenty minutes costs nothing, because the coordinator was answering other things in the
+meantime. A merge that runs in the session costs twenty minutes of everything.
+
+### What counts as a merge-lane job
+
+- Integrating one or more finished lanes into `develop` (`--no-ff`, no rebase, no force).
+- Resolving conflicts, judged by content: docs keep both sides, code keeps both cases.
+- The full gate on the tree that will be pushed, and proof that the pushed tree is the gated
+  tree — same tree hash, not a verbal assurance.
+- Reverting something the gate proved broken, and gating the revert.
+- Pushing a lane branch, or `develop`, and verifying the remote ref afterwards.
+
+### What does not
+
+- Deciding whether a red is debt or a regression — that is a judgement on readings.
+- Writing a question page.
+- Anything that can be answered by reading an existing `[SUMMARY]`.
+
+### The rule, stated as a test
+
+> If an operation will take longer than a few minutes and it writes shared git state, it goes
+> to the merge lane. The coordinator does not hold a lock on the session to do it.
+
+A corollary that has already paid for itself: **a lane may finish its own work and then be
+re-tasked as the merge lane.** The slot is defined by the job, not by a fixed agent.
