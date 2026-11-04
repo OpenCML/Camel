@@ -1,0 +1,21 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// A spread is `broadcast_like`'s, not `sum_to`'s. The adjoint of a broadcast does run both ways, but
+// only one of the two is a reduction: `sum_to` takes the extents of a leading-axis reduction
+// (ruling 甲, `stdlib/tensor.cml#sum_to`) and refuses a target that is not a suffix of its operand by
+// name, while the direction that writes one element into many lanes belongs to the operator those
+// lanes come from. A rank-zero operand is an element and nothing else (design principles 5.4), so it
+// spreads as that value.
+//
+// The reduction keeps its own case beside this one: `sum_to_refuses_a_shape_it_cannot_reach.cml`.
+import { broadcast_like } from tensor
+
+func main(): int sync {
+    let xs = [1.0, 2.0, 3.0] as float[...]
+    let m: float[2, 3] = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+    println(`broadcast_like(6.0, xs) = ${broadcast_like(6.0, xs):.1f}`)
+    println(`broadcast_like(xs, m) = ${broadcast_like(xs, m):.1f}`)
+    println(`broadcast_like(6.0, m) = ${broadcast_like(6.0, m):.1f}`)
+    return 0
+}

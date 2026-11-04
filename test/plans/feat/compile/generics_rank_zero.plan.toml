@@ -40,24 +40,36 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 10000
 
 [[tests]]
-name = "sum_to_spreads_a_rank_zero_operand"
-desc = "`sum_to` is the adjoint of broadcasting both ways: a rank-zero `t` spreads over the lanes `like` states, while the reduction direction answers the total (design principles 5.4)."
+name = "broadcast_like_spreads_a_rank_zero_operand"
+desc = "A spread is `broadcast_like`'s and not one direction of `sum_to`: a rank-zero operand is an element (design principles 5.4), so it spreads as that value, and a rank-one value spreads along the lanes a rank-two shape states. `sum_to` took both directions until ruling 甲 gave it the extents of a leading-axis reduction only (`stdlib/tensor.cml#sum_to`)."
 kind = "behavior"
-case = "../../../cases/compile/sum_to_spreads_rank_zero.cml"
+case = "../../../cases/compile/broadcast_like_spreads_rank_zero.cml"
 args = ["${case}", "std::fvm"]
 expect_exit = 0
-expect_stdout_exact = "sum_to(6.0, xs) = [6.0, 6.0, 6.0]\nsum_to(xs, 6.0) = 6.0\nsum_to(xs, xs) = [1.0, 2.0, 3.0]\n"
+expect_stdout_exact = "broadcast_like(6.0, xs) = [6.0, 6.0, 6.0]\nbroadcast_like(xs, m) = [[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]\nbroadcast_like(6.0, m) = [[6.0, 6.0, 6.0], [6.0, 6.0, 6.0]]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
 name = "sum_to_still_refuses_a_shape_it_cannot_reach"
-desc = "A `like` the shape of `t` cannot reach is a fault with a name, not a silent number: `[2, 2]` cannot become `[4]`."
+desc = "Ruling 甲's check as a program can state it: the target extents are a suffix of `t`'s shape, so `[2, 2]` cannot become `[4]`. The refusal names both sides and the position that does not fit -- the tensor is `[2, 2]` and position 1 cannot be 4 -- which is what makes 甲 testable rather than a wording in a comment."
 kind = "negative"
 case = "../../../cases/compile/sum_to_refuses_a_shape_it_cannot_reach.cml"
 args = ["${case}", "std::fvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TensorDimensionMismatch"
-expect_output_contains = ["cannot broadcast [4] to [2, 2]"]
+expect_output_contains = ["the target extents [4] are not a suffix of the tensor's shape [2, 2]", "position 1 is 4 where the tensor has 2"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "sum_to_refuses_a_target_longer_than_its_operand"
+desc = "The other half of the same check, and the direction the operator no longer takes: a target with more axes than the tensor is not a reduction at all -- there are lanes `t` never had -- so it is refused, and the sentence says which side is longer. A value that has to grow is `broadcast_like`'s (see the case above)."
+kind = "negative"
+case = "../../../cases/compile/sum_to_refuses_a_target_longer_than_its_operand.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TensorDimensionMismatch"
+expect_output_contains = ["the target extents [2, 3] are not a suffix of the tensor's shape [3]", "the target states 2 axes and the tensor 1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

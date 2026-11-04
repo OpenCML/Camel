@@ -460,7 +460,7 @@ void reshapeLikeVjp(VjpBuilder &b, const VjpCall &call) {
             return;
         }
         const vjp_node_t shape = b.addOper(
-            ArrayType::create(Type::Int64()),
+            shapeListType(b, call.inputs[0]),
             "tensor:shape",
             std::span<const vjp_node_t>(call.inputs.data(), 1));
         // The adjoint is shaped like the input, and `addTensorOperFor` is what says so: the node

@@ -2,10 +2,10 @@
  "allocations": {
   "blocks": 0,
   "bytes": 0,
-  "calls": 54,
+  "calls": 63,
   "inside_blocks": 0,
   "inside_bytes": 0,
-  "inside_calls": 40,
+  "inside_calls": 49,
   "inside_ns": 0,
   "ns": 0
  },
@@ -33,7 +33,7 @@
  ],
  "loops": [
   {
-   "operators_per_round": 17,
+   "operators_per_round": 20,
    "origin": "L0",
    "rounds": 3,
    "samples": 2
@@ -143,6 +143,16 @@
   {
    "alloc_blocks": 0,
    "alloc_bytes": 0,
+   "alloc_calls": 9,
+   "alloc_ns": 0,
+   "calls": 9,
+   "device": "cpu",
+   "ns": 0,
+   "uri": "tensor:shape"
+  },
+  {
+   "alloc_blocks": 0,
+   "alloc_bytes": 0,
    "alloc_calls": 3,
    "alloc_ns": 0,
    "calls": 3,
@@ -182,7 +192,7 @@
   }
  ],
  "operators": {
-  "calls": 61,
+  "calls": 70,
   "ns": 0,
   "overhead_ns": 0,
   "untimed": 0
@@ -193,11 +203,11 @@
   "allocations_per_round": {
    "blocks": 0,
    "bytes": 0,
-   "calls": 9,
+   "calls": 12,
    "ns": 0
   },
   "kernels_per_round": 0,
-  "operators_per_round": 17,
+  "operators_per_round": 20,
   "origin": "L0",
   "rounds": 3,
   "samples": 2,

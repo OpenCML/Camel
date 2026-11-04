@@ -1,0 +1,38 @@
+/**
+ * A refused export must not read as a successful one.
+ *
+ * `export_model` answers `void!`: its refusal is an error *value*, and a program that discards that
+ * value with `let _ =` goes on to print its own `exported` line, exit 0, and leave no file. That is
+ * not a hypothesis -- it is how `modules.onnx` spent a whole run reporting failures whose stdout
+ * said `exported`, with the reason sitting in a value nobody read. The same program through
+ * `onnx::export` prints the reason in one line.
+ *
+ * So the value is read here, and the word `exported` is produced only in the case that the export
+ * returned. The export is refused by the capability check: `relu` of an int64 tensor has no ONNX
+ * Runtime CPU kernel at the default target (`export_capability.cml` writes the same model once the
+ * check is turned off), so `main` answers `refused ExportUnsupported` and no model reaches the
+ * output path.
+ *
+ * What this pins is the pair a printed word and a disk must be compared on: no `exported`, the
+ * refusal named, and no file. What it cannot pin is the discarding form itself -- `let _ =` on a
+ * `T!` is a language question, and it is recorded in
+ * `docs/handover/questions/2026-11-05-does-a-shape-declaration-need-a-length-in-its-return-type.cn.md`
+ * (section 5).
+ */
+
+import { reshape, relu } from tensor
+import { export_model } from onnx
+import { get_env } from env
+
+func counts(t: f32[...]): int[...] {
+    return relu(int(t) - 2)
+}
+
+func main(): string sync {
+    let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as f32[])
+    let r = export_model<out: get_env('ONNX_OUT') ?? ''>(counts, x)
+    return match r {
+        case error e => 'refused ' + e.kind
+        case v => 'exported'
+    }
+}

@@ -3,12 +3,13 @@
 
 # The transpose of the array product when its two operands are not the same shape.
 #
-# `tensor:multiply` broadcasts, so `mul_tensor_t`'s second operand is a *shape*: `w`'s cotangent is
-# `ct * h` reduced to `w`'s shape, and `w`'s shape is `float[2, 2, 3]` while `h` is `float[3]`. A law
-# that reads `w` for that shape cannot have it -- a transposition is handed the cotangent and never
-# the value it differentiates -- so the law reads the extents its own port states instead
-# (`stdlib/tensor.cml#sum_to_stated`, handed over by `modules/transforms/rule_expand.cpp`). The two
-# cases are one number read on both sides: the engine's own pullback and the library's law.
+# `tensor:multiply` broadcasts, so `mul_tensor_t`'s second operand is a *list of extents*: `w`'s
+# cotangent is `ct * h` reduced to `w`'s shape, and `w`'s shape is `float[2, 2, 3]` while `h` is
+# `float[3]`. A law that reads `w` for that shape cannot have it -- a transposition is handed the
+# cotangent and never the value it differentiates -- so the law passes the extents the forward half
+# computed into `sum_to`, which takes the target as an `int[]` (`stdlib/tensor.cml#sum_to`, the port
+# handed over by `modules/transforms/rule_expand.cpp`). The two cases are one number read on both
+# sides: the engine's own pullback and the library's law.
 [[tests]]
 name = "broadcast_product_gradient.engine_and_library_agree"
 desc = "`sum(w * h)` with `w: float[2, 2, 3]` and `h: float[3]` is a broadcast product: every element `w[i][j][k]` meets `h[k]`, so `dL/dw` is `h` spread over the leading axes -- twelve numbers, `[1, 2, 3]` three times over, and `value` is 24. The engine's pullback reads the operator's own rule (`modules/tensor/kernels/gradient.cpp#sumTo`) and the library's reads `mul_tensor_t`; both cases pin the same numbers, so a law that answered `w`'s shape from `h`'s -- or from a zero carrier standing in for `w` -- is a fail and not a different reading. `numel` comes first because a cotangent with the right digits in the wrong shape is the wrong answer, and that is exactly the shape a broadcast gets wrong."
