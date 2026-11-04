@@ -26,6 +26,8 @@ camel-remote.ps1 -Path D:\Projects\Camel-wt\zerocarrier -Plan <plan> -Tier fast 
 
 `[SUMMARY] total: 170, pass: 151, fail: 5, known failures: 14`（`feat/compile/transforms`，两次读数相同：第一次 `build 694.7 s`，第二次 `-NoBuild`）。
 
+**逐条的甲/乙分类**（谁陈述了、缺的是值还是形状）在单独的页里，见 `docs/handover/reports/2026-11-04-the-seven-reds-classified-by-what-the-port-states.cn.md`：七条里没有一条是"被回答那一位的形状陈述了却拿不到"；报出来的失败读的都是**别的操作数的值**（甲，但缺的是值），其中五条另有一半是真·乙（开秩 `float[..]`）。
+
 | 用例 | 停止点（原话） |
 | --- | --- |
 | `erf_gradient_both_legs` | `skip=cotangent-needs-a-value uri=tensor:multiply position=0` |
@@ -76,6 +78,8 @@ camel-remote.ps1 -Path D:\Projects\Camel-wt\zerocarrier -Plan <plan> -Tier fast 
 | 文件 | 旧值 | 新值 | 为什么 |
 | --- | --- | --- | --- |
 | —— | —— | —— | **本轮没有改任何 `expect_*`**。改动集中在注释、`desc`、用例头；`transpose_refuses_a_parameter_value_it_cannot_be_handed` 的两条期望（`expect_exit = 1`、`expect_stdout_contains = ["([0.0, 1.0, 0.0])"]`）原样保留，改的只是它"凭什么"那段话 |
+
+**说明性文字改了 8 处、`expect_*` 0 处**（8 处 = 用例头 1 处 + `test/plans/feat/compile/transforms.plan.toml` 里 7 处 `desc`/注释的 `TRANSPOSE-NEEDS` 说明）。这张表按"改了的期望值"记账，所以只有一行"——"：这一轮改的是"为什么"，不是"答什么"。
 
 ## 6. 给作者的一句话
 

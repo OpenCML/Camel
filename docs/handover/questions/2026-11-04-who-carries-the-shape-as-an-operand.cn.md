@@ -1,6 +1,6 @@
 # 形状要当操作数交下来：`mul_stated` 与 `matmul_stated`
 
-**状态**：待裁；我方默认见第 4 节（**甲：先在 `modules/tensor/ops/**` 加 `mul_stated`，再加 `matmul_stated`，两条反向律只读 `at` 与另一个操作数的值**）。本轮没做，报告里如实标为未完成，并把因此仍红的七条逐条列出。
+**状态**：待裁，**但第 4 节的默认已被 01:2x 的实测推翻一半**：七条红逐条打印后，两条 matmul 是**甲**（类型陈述了，律把 `a` 当值交给 `sum_to` 了），修法在律里；五条 `mul_tensor_t` 是**甲（值）+ 乙（形状）**两半，孪生算子只对乙那一半有理由，且单独关不掉任何一条。证据在 `docs/handover/reports/2026-11-04-the-seven-reds-classified-by-what-the-port-states.cn.md`，下一步见该页第 5 节。
 
 写这页的直接原因：作者 2026-11-04 04:20 裁"**现在就删掉 `shapeFromTypeOf` 里的零载体回落**；写死形状的类型用 `extent_of`；开秩的裸 `transpose` 按语言规则拒绝"，同一份裁定里"`exp`/`erf`/`gelu` 的 `jvp` 规则把形状作为已知实参交给乘法（与 `sum_stated` 同一个做法）"。前半句本轮落了（零载体已删，见 `docs/handover/reports/2026-11-04-extent-of-reads-the-type-and-hands-it-over.cn.md`），后半句要一个新算子，本轮没落——而**删掉零载体之后，正是这七条从绿转红**，所以这页不是可选工作，是那七条的唯一出路。
 
