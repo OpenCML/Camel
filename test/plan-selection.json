@@ -49,6 +49,11 @@
     ],
     "rules": [
         {
+            "comment": "The reduced programs of the archiving result adb67e081 (test/cases/opt/adb67e081): the reductions of the finder's report, kept unedited. Two plans run them, and both are named here: `feat/opt/adb67e081` holds the programs whose defect is still open (work owed, so its `fail` count is the debt) and `feat/compile/fold_arms` holds `rc05_seed104`, the one this lane fixed. The rules come first in this list, before the general ones: the directory rule for test/cases below mirrors the segments below test/cases and would look for `test/plans/feat/opt/adb67e081`, which is a plan file, so nothing would reach it.",
+            "paths": ["test/cases/opt/adb67e081/"],
+            "plans": ["feat/opt/adb67e081.plan.toml", "feat/compile/fold_arms.plan.toml"]
+        },
+        {
             "comment": "The corpus sweep tool: its case is the tool itself, so a change there selects the plan that runs it (a slow plan, so an ordinary change filters it out under --tier fast).",
             "paths": ["test/tools/cml-sweep.mjs"],
             "plans": ["feat/trans/cml_sweep.plan.toml"]

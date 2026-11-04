@@ -1,0 +1,87 @@
+id = "opt.adb67e081"
+order = 480
+tier = "fast"
+tags = ["feat", "opt", "fold", "branches", "defects"]
+desc = """
+The reduced programs of result `adb67e081` of the CC2027 evaluation
+(`Camel-Archive`, `CC2027/eval/results/adb67e081/e9_reduced/`), four of the six that still
+failed on the v0.2.43 pin, copied unedited into `test/cases/opt/adb67e081/`. Each run is
+expected to do what the program does without the optimization passes: exit 0 and no output.
+`rc05_seed104` (the folding of a branch arm, handed its place in a region the arm does not run
+with) is fixed and is in `feat/compile/fold_arms` beside the case of that defect. The two tests
+below are `rc03_seed30` and `rc04_seed72`, which still fail: they are in the plan as *work owed*,
+not as exceptions -- no `known_fail` mark, so the plan's `fail` count is the debt and moves down
+only when something fixes them. `rc00_seed27` (SIGSEGV under `std::opt std::nvm`, in the
+scheduler rather than in a pass) is in no plan: it belongs to the lane that owns the schedulers.
+"""
+# Why not `known_fail`: a mark says "this program is expected to be refused", and these are
+# programs the compiler is expected to run. A red here is the defect, visible in `feat/opt`
+# `[SUMMARY]`, and it goes away by fixing the pass.
+
+[[tests]]
+name = "adb67e081.rc03_seed30_reference"
+desc = "`rc03_seed30` without any optimization pass: the reference the folded run must reproduce. Exit 0 and no output."
+kind = "behavior"
+case = "../../../cases/opt/adb67e081/rc03_seed30.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_output_not_contains = ["branch-arm invariant", "PassInternalError", "internal error", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "adb67e081.rc03_seed30_std_opt"
+desc = "`rc03_seed30` under `std::opt`, the pipeline it was found with. RED TODAY, expected to be fixed: the folding leaves a `DATA` between `BRCH 7` and its `JOIN 6` that belongs to no arm -- `Runtime graph '__root__' breaks the branch-arm invariant: DATA 30 runs between BRCH 7 and its JOIN 6 and belongs to no arm: it waits on the BRCH and no arm's result depends on it` (17_graph_rewrite_api_contracts.md, 4.1 rule 2)."
+kind = "behavior"
+case = "../../../cases/opt/adb67e081/rc03_seed30.cml"
+args = ["${case}", "std::opt", "${run_nvm}"]
+expect_exit = 0
+expect_output_not_contains = ["branch-arm invariant", "PassInternalError", "internal error", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "adb67e081.rc04_seed72_reference"
+desc = "`rc04_seed72` without any optimization pass: the reference the inlined run must reproduce. Exit 0 and no output."
+kind = "behavior"
+case = "../../../cases/opt/adb67e081/rc04_seed72.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_output_not_contains = ["branch-arm invariant", "PassInternalError", "internal error", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "adb67e081.rc04_seed72_inline"
+desc = "`rc04_seed72` under `std::opt::inline`, the pipeline it was found with. RED TODAY, expected to be fixed: the inlined graph has a cycle of inputs -- `node 24 (11): lies on a cycle of inputs: 24(11) <- 27(13) <- 38(13) <- 24`."
+kind = "behavior"
+case = "../../../cases/opt/adb67e081/rc04_seed72.cml"
+args = ["${case}", "std::opt::inline", "${run_nvm}"]
+expect_exit = 0
+expect_output_not_contains = ["branch-arm invariant", "PassInternalError", "internal error", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
