@@ -627,6 +627,26 @@ void sumVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
+// sum_stated(t, at): the whole-tensor sum, the stated spelling of it (`sumStatedKernel` below).
+//
+// The adjoint is `sum`'s, because the *value* is `sum`'s -- `sumStatedKernel` runs the same kernel
+// -- and a pullback rule is handed the operand, so the shape the spread needs is the operand's
+// own. What the stated list answers on the *library's* side is a shape a transpose law does not
+// have: `stdlib/rulesets/transpose.cml#sum_stated_t` spreads over `at`'s extents because a
+// transpose law reads only known operands and the tensor a cotangent comes back through has no
+// value there. Both answer the same array, which is the one line
+// `test/cases/compile/transforms/stated_sum_answered_by_the_engine.cml` prints. So `at` carries
+// nothing this rule needs: it is read nowhere here, because the array whose shape the spread is
+// shaped by is an operand of this rule and not a number inside a list.
+void sumStatedVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 2);
+    if (auto dy = b.gradientOf(call.output)) {
+        b.accumulateGradient(
+            call.inputs[0],
+            addTensorOperFor(b, call.inputs[0], "tensor:broadcast_like", {*dy, call.inputs[0]}));
+    }
+}
+
 // max / min over every element: the same rule as the axis forms, which send the gradient to the
 // elements equal to the extremum (the selection is a bool mask and a mask is not a number, 5.1, so
 // the conversion the multiplication needs is written and `cast_like` puts the mask at the
@@ -698,6 +718,43 @@ void meanAxisVjp(VjpBuilder &b, const VjpCall &call) {
             call.inputs[0],
             addTensorOper(b, "tensor:divide", {expandReduced(b, call, *dy), extent}));
     }
+}
+
+// mean_axis_stated(t, at): the lane mean, with `at` = `[axis, keepdims, d0, ..., d(rank-1)]` and
+// the extents taken out of `at` (`meanAxisStatedKernel` below).
+//
+// The adjoint is `mean_axis`'s with the two scalars taken out of the list instead of off the
+// call's own ports: spread the cotangent back over the lane (`tensor:expand_axis`) and divide by
+// the lane's length (`tensor:dim`). `at[0]` is the axis and `at[1]` is the flag written as an
+// integer -- the list holds one element type (`stdlib/tensor.cml#mean_axis_stated`) -- so the flag
+// reaches `expand_axis` as a real `bool` and not as an integer where a flag is read
+// (`:op/gt_l(at[1], 0)`): a slot read at the wrong width answers a lane count of nonsense, which is
+// the one way this rule could be wrong silently.
+//
+// The extents after `at[1]` are read nowhere, for the reason `sumStatedVjp` gives: the operand is
+// at hand, so `tensor:dim` takes the lane's length from it, and the list's extents are what the
+// library's law reads in the same position (`stdlib/rulesets/transpose.cml#mean_axis_stated_t`,
+// whose `mean_axis_cotangent` needs `numel(t) / numel(ct)`).
+void meanAxisStatedVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 2);
+    const auto dy = b.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    const vjp_node_t x  = call.inputs[0];
+    const vjp_node_t at = call.inputs[1];
+    const std::array<vjp_node_t, 2> axisWords{at, staticInt(b, 0)};
+    const vjp_node_t axis = b.addOper(Type::Int64(), ":op/idx_arr", axisWords);
+    const std::array<vjp_node_t, 2> flagWords{at, staticInt(b, 1)};
+    const std::array<vjp_node_t, 2> flagInputs{
+        b.addOper(Type::Int64(), ":op/idx_arr", flagWords), staticInt(b, 0)};
+    const vjp_node_t keepDims = b.addOper(Type::Bool(), ":op/gt_l", flagInputs);
+    const vjp_node_t expanded =
+        addTensorOperFor(b, x, "tensor:expand_axis", {*dy, x, axis, keepDims});
+    const std::array<vjp_node_t, 2> dimInputs{x, axis};
+    const vjp_node_t extent =
+        addFloatOper(b, ":op/ltod", {b.addOper(Type::Int64(), "tensor:dim", dimInputs)});
+    b.accumulateGradient(x, addTensorOper(b, "tensor:divide", {expanded, extent}));
 }
 
 // max / min over an axis: the gradient goes to the elements equal to the extremum. The selection
@@ -950,6 +1007,11 @@ std::vector<OpDef> reductionOps() {
     setVjp(defs, "softmax", &softmaxVjp);
     setVjp(defs, "log_softmax", &logSoftmaxVjp);
     setVjp(defs, "layer_norm", &layerNormVjp);
+    // The two stated reductions, beside the forms whose value they are (`sumStatedVjp`,
+    // `meanAxisStatedVjp`): a program may write either spelling, and a stated call whose value is
+    // an operator's is a call the reverse pass has to answer for the same reason.
+    setVjp(defs, "sum_stated", &sumStatedVjp);
+    setVjp(defs, "mean_axis_stated", &meanAxisStatedVjp);
     return defs;
 }
 

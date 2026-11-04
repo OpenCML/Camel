@@ -650,6 +650,35 @@ expect_output_contains = ["the library imports rulesets.transpose", "transpose h
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
 
+# The two derivative tables are written independently -- `src/core/derivative.cpp` (keyed by the
+# operator's URI) and `stdlib/rulesets/*.cml` (keyed by the rule's left-hand head and operand count)
+# -- and nothing in the build compares them. That is how `pick_at`, `sum_stated`, `take_stated` and
+# `mean_axis_stated` each came to have a law the engine's reverse pass could not read: a hole no
+# compiler error can see, because each side is complete in itself.
+#
+# `scripts/vjp-parity.mjs` is the comparison, and `scripts/vjp-parity-exemptions.tsv` is the list of
+# differences the repo has decided to keep, one row per key with an owner and a reason (a wildcard is
+# refused, so every row answers "why is this one allowed"). A difference that is not in the list is a
+# debt and the gate exits 1. It is not a strict-equality check -- a law may belong to the library
+# alone (machinery, or a value with no tangent) and a rule to the engine alone (an operator the
+# library's forward half files no `jvp_*` for) -- so the list is the contract, not the count.
+#
+# `test/tools/check-vjp-parity.mjs` is the three readings that say the gate works: the real tree has
+# `0 new`; a law added to a copy of the rulesets with no engine rule behind it is **reported** by
+# name; and the same law with the row it would need is **not** reported. The copy links the real
+# `src/` and `modules/`, so the engine side of the comparison is the tree's own.
+[[tests]]
+name = "vjp_api.the_two_tables_are_compared"
+desc = "`scripts/vjp-parity.mjs` reads both derivative tables out of the source -- the library's laws and the engine's `setVjp`/`setRule` registrations, reduced to the same `head@arity` key -- and reports every difference the exemption list does not hold. This entry runs `test/tools/check-vjp-parity.mjs`, which pins three readings: the real tree answers `0 new`; a `fake_parity_op_t` law appended to a copy of `stdlib/rulesets/transpose.cml` (with `src/` and `modules/` linked to the real tree, so the engine's table is the tree's own) is reported by name with exit 1; and the same law with the row it would need appended to a copy of the exemption list is not reported, with exit 0. A gate that answered `0 new` for the second reading would be green on the day someone files a law no engine rule answers, which is the debt this comparison exists to catch."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/check-vjp-parity.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["the real tree has no difference the list does not hold", "a law with no engine rule is reported", "the same law is not reported once the list holds it", "PASS the parity gate answers the three readings it exists for"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
 # The comparison the author named: one `f` with two parameters, and the library's gradient beside
 # the derivative worked out on paper. `f(x, y) = x*x*y` at `(3, 2)` has `df/dx = 2*x*y = 12` and
 # `df/dy = x*x = 9`, and both numbers are printed -- `library` first, `analytic` under it -- so the

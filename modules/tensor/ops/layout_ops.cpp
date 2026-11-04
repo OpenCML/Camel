@@ -672,6 +672,45 @@ std::optional<Type *> elementAtInfer(const InferContext &ctx) {
     return Type::create(t.dtype.value_or(TypeCode::Float64));
 }
 
+// The stated take's adjoint, `take_stated(t, at)`.
+//
+// It is `take`'s adjoint with the indices taken out of the list: `at[0]` is how many indices the
+// list holds, so the indices are `at[1 : 1 + at[0]]` -- the same split `takeStatedKernel` below
+// reads -- and the rest is the extents. The extents are read nowhere here: a pullback rule is
+// handed the operand, so `tensor:take_grad(t, indices, dy)` takes the array's shape from `t` and
+// the row count from the indices. That is the one difference from the library's law for this
+// operator (`stdlib/rulesets/transpose.cml#take_stated_t`), which builds the zeros from the
+// extents because a transpose law reads only known operands and the tensor a cotangent comes back
+// through has no value there (author, 2026-11-03 11:10 and 17:35). Both answer the same array:
+// `test/cases/compile/transforms/stated_take_answered_by_the_engine.cml` prints the two together.
+//
+// The bound of the slice is `1 + at[0]`, a value of the run, which is why it is written as an
+// `:op/add_l` node rather than as a constant. A mask of 3 says both bounds are written and the
+// step is 1, the same six words `concatVjp` writes for its slice.
+void takeStatedVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 2);
+    const auto dy = b.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    const vjp_node_t t  = call.inputs[0];
+    const vjp_node_t at = call.inputs[1];
+    const std::array<vjp_node_t, 2> countWords{at, staticInt(b, 0)};
+    const vjp_node_t count = b.addOper(Type::Int64(), ":op/idx_arr", countWords);
+    const std::array<vjp_node_t, 2> endWords{count, staticInt(b, 1)};
+    const vjp_node_t end = b.addOper(Type::Int64(), ":op/add_l", endWords);
+    const std::array<vjp_node_t, 6> slice{
+        at,
+        staticInt(b, 0),
+        staticInt(b, 1),
+        end,
+        staticInt(b, 1),
+        staticInt(b, 3),
+    };
+    const vjp_node_t indices = b.addOper(b.nodeType(at), ":op/slice_sub", slice);
+    b.accumulateGradient(t, addTensorOperFor(b, t, "tensor:take_grad", {t, indices, *dy}));
+}
+
 // take_stated(t, at): the rows `take` reads, with the indices it reads **and** the operand's extents
 // stated in one integer list, `[n, i0, ..., i(n-1), d0, ..., d(rank-1)]`.
 //
@@ -883,6 +922,10 @@ std::vector<OpDef> layoutOps() {
     // write stop_gradient around a label. `classes` is an int parameter and takes no gradient
     // either. The rows' own gradient is used up here, as for every locally constant result.
     setVjp(defs, "one_hot", &camel::core::noGradient);
+    // The stated take, beside the two reads whose value it is (`takeStatedVjp`): a program may
+    // write `take_stated` itself, and its value is `take`'s, so the reverse pass answers it with
+    // the same scatter.
+    setVjp(defs, "take_stated", &takeStatedVjp);
     return defs;
 }
 
