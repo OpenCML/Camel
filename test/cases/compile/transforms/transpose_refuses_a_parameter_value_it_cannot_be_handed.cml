@@ -30,7 +30,7 @@
 // sentences comes back; what it answers now is `([0.0, 1.0, 0.0])` -- the adjoint of `x[1]` at
 // ct = 1 fills slot 1 and every other slot is zero.
 //
-// A parameter whose type states **no** extents (`float[..]`) is the other side of the same rule: no
+// A parameter whose type states **no** extents (`float[...]`) is the other side of the same rule: no
 // law can state the length, so the build refuses by name
 // (`RuntimeDiag::TransposeNeedsParameterShape`, pinned by `transpose_needs_parameter_shape`), and a
 // law that reads an *element* of the argument rather than its shape is refused as the value it is

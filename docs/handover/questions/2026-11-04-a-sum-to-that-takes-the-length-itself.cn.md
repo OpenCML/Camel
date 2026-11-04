@@ -4,12 +4,12 @@
 
 ## 1. 今天树上的读法（本轮实测）
 
-`stdlib/rulesets/transpose.cml#sum_to_stated::<T>(t: T[..], at: int[]): T[..] = sum_to(t, zeros::<T>(at))`：`sum_to` 的第二个操作数按文档**只被读形状**，所以律用规则层交来的长度自己造一串零当形状模板。作者 04:20 对这条读法的裁定是"用已知长度造一个形状模板，不顶替任何参数的值，规则上可以接受"。
+`stdlib/rulesets/transpose.cml#sum_to_stated::<T>(t: T[...], at: int[]): T[...] = sum_to(t, zeros::<T>(at))`：`sum_to` 的第二个操作数按文档**只被读形状**，所以律用规则层交来的长度自己造一串零当形状模板。作者 04:20 对这条读法的裁定是"用已知长度造一个形状模板，不顶替任何参数的值，规则上可以接受"。
 
 探针（`D:\Temp\zc_step2.cml`，宿主 `88zjwei`，2026-11-03 23:5x `-05:00`，1 m load 24.3）：
 
 ```
-source shape= [2, 3, 4]  numel= 24      // t: float[..]，类型不陈述任何 extents
+source shape= [2, 3, 4]  numel= 24      // t: float[...]，类型不陈述任何 extents
 template shape= [3, 4]  numel= 12       // zeros::<float>([3, 4])，长度是运行时的 int[]
 reduced shape= [3, 4]  numel= 12        // sum_to(t, template)
 from-type shape= [3, 4]  reduced= [3, 4]  // zeros::<float>(extent_of::<float[3, 4]>())
@@ -19,7 +19,7 @@ from-type shape= [3, 4]  reduced= [3, 4]  // zeros::<float>(extent_of::<float[3,
 
 ## 2. 要裁的那一句
 
-`zeros::<T>(at)` 每次调用都要**造一个零数组**，而它被读的只有 `shape`：一处多余的分配，一处读者要绕一圈才看明白的写法（"为什么这里有一个零？"）。`sum_to_at(t: T[..], at: int[]): T[..]` 把这件事说白：第二个参数就是目标形状，不是另一个同类值。
+`zeros::<T>(at)` 每次调用都要**造一个零数组**，而它被读的只有 `shape`：一处多余的分配，一处读者要绕一圈才看明白的写法（"为什么这里有一个零？"）。`sum_to_at(t: T[...], at: int[]): T[...]` 把这件事说白：第二个参数就是目标形状，不是另一个同类值。
 
 要裁的是它的**语义边界**，因为 `sum_to(t, like)` 今天允许的归约（把 `t` 的形状按广播规则收到 `like` 的形状）与"目标形状就是一个 `int[]`"之间存在一处必须写死的规则：
 

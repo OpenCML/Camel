@@ -29,7 +29,7 @@
 
    所以这次删除在整棵树上的账是 **7 条**（其中 5 条在 `feat/compile/transforms`），另外全量还有一条 `docs.links.questions_index`（本轮新加的两页问题页没进 `questions/README.md` 的待裁表，已用 `node scripts/check-doc-links.mjs --questions-index --write` 补上，那一页的表从 50 页变 52 页）。
 
-2. **缺的不是值，是"被回答那一位自己的形状"**。`stdlib/rulesets/transpose.cml#mul_tensor_t` 的答案写的是 `sum_to_stated(ct * w, shape(x))`：`ct * w` 要的是另一个操作数（前向值或常量，**闭包里都有**），`shape(x)` 要的是**被回答那一位**（`transpose(dx)`、`dx` 这类由切线派生的值）的形状，而它的类型是 `float[..]`，陈述不出 extents。`matmul_t` 的 `ct_of_a(ct, a, b) = sum_to(matmul(ct, transpose(b)), a)` 同理：要的是 `a` 的形状（`sum_to` 的第二个操作数按文档只被读形状）。
+2. **缺的不是值，是"被回答那一位自己的形状"**。`stdlib/rulesets/transpose.cml#mul_tensor_t` 的答案写的是 `sum_to_stated(ct * w, shape(x))`：`ct * w` 要的是另一个操作数（前向值或常量，**闭包里都有**），`shape(x)` 要的是**被回答那一位**（`transpose(dx)`、`dx` 这类由切线派生的值）的形状，而它的类型是 `float[...]`，陈述不出 extents。`matmul_t` 的 `ct_of_a(ct, a, b) = sum_to(matmul(ct, transpose(b)), a)` 同理：要的是 `a` 的形状（`sum_to` 的第二个操作数按文档只被读形状）。
 
 3. **把参数的值塞进闭包不解决这一族**（本轮实测两次，第一次是全参数、第二次只收"类型不陈述 extents"的参数，两次都读完即撤）：`residuals` 从 `0` 涨到 `1`、从 `2` 涨到 `4`、从 `3` 涨到 `4`，七条**一条都没翻**。原因是缺的那一位是**切线**（`dx`），不是原值；而收切线的值有实测的旧账：`modules/transforms/split.cpp#residualsOf` 里那条注记——`g(x) = f(x) * x` 曾经答成"对参数恒定的函数"、36.0 不变、`grad(g)` 静悄悄答 0.0（2026-11-04 实测）。所以切线不进闭包，这一族的形状只能当操作数交下来。
 
@@ -42,8 +42,8 @@
 两个孪生算子，照 `sum_stated` / `take_stated` / `mean_axis_stated` 的样子落在 `modules/tensor/ops/**`（声明 `stdlib/tensor.cml`，签名表与文档按仓库脚本重生成）：
 
 ```
-mul_stated::<T>(x: T[..], w: T[..], ax: int[], aw: int[]): T[..]     where is_float::<T>()
-matmul_stated::<T>(a: T[..], b: T[..], sa: int[], sb: int[]): T[..]  where is_float::<T>()
+mul_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]): T[...]     where is_float::<T>()
+matmul_stated::<T>(a: T[...], b: T[...], sa: int[], sb: int[]): T[...]  where is_float::<T>()
 ```
 
 - 两个算子的**值**与 `multiply` / `matmul` 逐位相同（内核直接转调今天的那两个），多的四个（两个）`int[]` 只说明"这两个操作数的形状是这些"，运行时期不看它们就能算——它们存在只为让反向律读得到。
