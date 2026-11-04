@@ -1,6 +1,6 @@
 # 声明的类型与运行时的装箱不一致时，改窄声明还是教会消费者：`mean_axis_stated_t` 与六个轴归约的两个实例
 
-**状态**：作者已裁（2026-11-04 11:2x）。**实例 A 按“教会消费者”收束并量过（`18dd544af`）**；**实例 B 裁为路 3（收窄的许可）＋两个负例**，已在 `scripts/law-cotangent-ports.mjs` 落地（第 3、4 节）。本页保留路 2 的代价读数，作为“为什么不选它”的证据；并记下这次许可**看不见**的那一类（第 4 节末，量过，不是推测）。
+**状态**：作者已裁，且**裁定推翻了本页第 3 节的落地方式**（2026-11-04 04:20，`docs/handover/reviews/questions-2026-10-29.md`「三、秩 0：只有一个转换点」，原文：“规则的端口照实写 `T[..]`，不把每条 `*_stated` 规则都约定成写 `ct: T`，那样同一件事就成了 N 处约定……由编译器在可赋值转换那一处统一做表示上的转换……**不在 `ruleCotangent` 或各条规则里各补一次**”）。实例 A 仍按“教会消费者”收束（`18dd544af`，第 5 节）；实例 B **不再收窄**：端口回到 `(ct: T[..])`，`scripts/law-cotangent-ports.mjs` 的许可（`isRankZeroEquivalence`）已删除，秩零那一对现在与其它不一致一样**被报**（第 4 节重写）。本页保留路 2 的代价读数与路 3 的原文，作为“为什么当时那样做、为什么不成立”的记录。
 
 **问句（一句）**：当一个归约答案的秩只有运行期知道时，它的余切的秩该由**律的端口**给（声明成元素，让语言在下一次调用处装箱），还是该由**产生余切的那一步**给（端口声明成数组，装箱放在还知道秩的地方）？
 
@@ -43,26 +43,21 @@ parameter 1 `ct: T[..]`)
 2. **那个 `T` → `T[..]` 转换是真的**，而且 `18dd544af` 刚刚教过导出器写它（`rt::Array<T>::element`）。5.4 已经让“元素”与“无前缀开秩的秩零数组”是同一个值，**那 lint 就是唯一还在说它们不同的地方**。
 3. 那 8 条是**量出来的**（`value=2.5`、`dL/dx=[0.25, 0.25, 0.25, 0.25]`、反例 `[[0.3333… ×3], [0.3333… ×3]]`）；lint 那句 “which reads an array” **没有量过运行时真正的装箱**——它是一句判断，不是一条读数。
 
-**路 3（采纳，但必须收窄）：lint 的判据允许“端口是元素、body 交给无前缀开秩形参”，三条同时满足才允许：**
+**路 3（当时采纳，2026-11-04 04:20 被作者推翻）：lint 的判据允许“端口是元素、body 交给无前缀开秩形参”，三条同时满足才允许。** 落地形态留着，供对照：
 
 - 端口是**裸元素类型**（`T`，或 `float` 这样的标量名）——**不是** `T[3]`，**不是** `T[..]`；
 - body 把它交给的形参是**无前缀开秩**（`T[..]`，**没有**固定 extents；`T[3]` 一律不算）；
 - **元素类型相同**（`T` 交 `T[..]`，不是 `T` 交 `U[..]`）。
 
-除此外的端口/body 不一致仍然拒绝，两个方向都拒绝。判据实现在 `scripts/law-cotangent-ports.mjs#isRankZeroEquivalence`（三条各自一行，`checkLaw` 只在把等价用法滤掉之后才报）。
+**推翻的理由（作者原文，见 §3 的状态行）**：许可把“元素与无前缀开秩是同一个值”写成了**每一条 `*_stated` 律都要记住的约定**，而 5.4 已经把这次表示转换规定成**编译器在可赋值转换那一处**统一做的事（和 `T` 进 `T?` 时自动包一层同一种机制）；写进 lint 就变成 N 处约定，下一次谁少写一处就又要一段新许可。**所以撤销的是许可，不是那条转换**：端口照实写 `T[..]`（与孪生 `#sum_axis_stated_t` 同型），秩零答案由编译器装箱。
 
-**两个负例（收窄的代价必须被量到，否则这次改动就是“把 lint 改松”）：**
-
-- **负例 1（必须仍红）**：端口 `T`，body 交给 `three_lanes(ct: T[3])`——**固定 extents**。实测仍被抓住（第 6 节的日志原文）。
-- **负例 2（造得出来，但 lint 看不进去）**：端口 `T`，body 交给 `scaled_by_lanes(ct: T[..])`，**而那个助手真的把 `numel(ct)` 用出大于 1 的语义**。这条**造得出来**（自测探针 `element_port_many.cml`），**但 lint 报不出来**：长度语义在助手的 **body** 里，而这个检查只读端口与形参的声明，不打开助手。实测原文见第 6 节。
-
-  这条为什么重要：它正是“元素端口 + 读长度”可能出错的那一类，而 `mean_axis_cotangent` 今天就属于“读长度”的形状——它没错，是因为 `numel(ct)` 对秩零装箱答 1、对数组余切答车道数，**两种形状它都算对**。所以这一类的安全不靠类型，靠助手的 body 写得对。第 4 节把它列成这次许可的边界。
+**撤销之后判据怎么变**：`isRankZeroEquivalence` 删除，`checkLaw` 不再滤任何等价用法，秩零那一对（端口 `T`、body 读数组）与其它不一致一样报。**两个负例都还在**：固定 extents（`element_port_fixed_extent.cml`）仍红，数组端口交标量（`array_port_spread.cml`）仍红；原来那条“秩零对不报”的正例翻成**第三个负例**（`element_port_open_rank.cml`，端口 `T` + body 读数组 → 必须报），而库本身**天然绿**，因为端口已经写成答案的样子（自测与库的读数见第 6 节）。曾用来演示“许可看不见的那一格”的探针 `element_port_many.cml` 随之删除：那一格是许可造成的，许可没了，它就不是一个可允许的形状了。
 
 ## 4. 裁定的落法（已落地）与它看不见的那一格
 
-落地的是路 3 收窄，四个文件里的一处判据：`scripts/law-cotangent-ports.mjs`（`isRankZeroEquivalence` ＋ `requirementAt` 带出形参类型文本 ＋ `checkLaw` 先滤等价用法 ＋ 开头说明文字改写）、`test/plans/feat/docs_links.plan.toml`（原反向读数那条改成固定 extents 的负例；新增一条把库里的 `mean_axis_stated_t` 行钉住，共 21 条）。用例、律的端口、语义一行没动。
+落地的是**撤销许可**：`scripts/law-cotangent-ports.mjs` 一处判据（删 `isRankZeroEquivalence`、`checkLaw` 不再滤等价用法、探针集合改为三个负例＋一份按库里写法写成的 clean control、开头说明文字改写）、`stdlib/rulesets/transpose.cml` 一处端口（`mean_axis_stated_t` 回 `(ct: T[..])`，注释按裁定重写）、`test/plans/feat/docs_links.plan.toml`（两条 port-check 的说明与期望重写，原“元素端口可进同元素开秩”那条改成钉住 `mean_axis_stated_t` 的 `--explain` 行）。
 
-**这次许可看不见的一格，说清在这里**：一个律的端口是元素、交给同一元素的无前缀开秩形参、而助手在 body 里按“不止一个元素”用它——lint 判过。若以后要把这一格也管住，能想到的路只有“打开同文件助手的 body 看它怎么用 `numel`”或“要求 `*_stated` 律只能把 `ct` 交给 body 里不按长度分支的助手”，两条都还没做，也都不该由一次 lint 改动顺手做。
+**这一格现在由谁管**：不是 lint。端口写对以后，剩下的风险是**值到端口之间**的那半句（transform 在 build 期交过来的类型），源码里没有见证，lint 也读不到——它记在 `docs/handover/questions/2026-11-04-where-a-laws-port-disagrees-with-the-value-it-is-handed.cn.md`。今晚实测：端口回到 `T[..]` 后这条路径**不再崩**，转换点在 `camel/core/type/composite/array.h#isRankZeroEdge`（`ArrayType::castSlotFrom` → `Array::createRankZero`），`numel` 对标量进入 `float[..]` 位置答 1、`shape` 答 `[]`。
 
 ## 5. 实例 A 已经按“教会消费者”收束（本树实测，供对照）
 
@@ -81,26 +76,30 @@ parameter 1 `ct: T[..]`)
 
 ## 6. 读数与它们的出处
 
-**本次裁定后的读数（本树实测，2026-11-04 11:2x–11:3x，`cppred` @ 88zjwei）**
+**撤销许可之后的读数（本树实测，2026-11-04 12:2x–13:0x，`rank0point` @ 88zjwei，宿主 1m load 23–27，不静默）**
 
 `node scripts/law-cotangent-ports.mjs --self-test`（探针写在系统临时目录，跑完删掉）：
 
 ```
 element_port_fixed_extent.cml:element_port_fixed_extent: cotangent port is 'T' but the body hands it to 'three_lanes', which reads an array (element_port_fixed_extent.cml#three_lanes, parameter 1 `ct: T[3]`)
 array_port_spread.cml:array_port_spread: cotangent port is 'T[..]' but the body hands it to 'spread_over', which takes an element (array_port_spread.cml#spread_over, parameter 1 `ct: T`)
+element_port_open_rank.cml:element_port_open_rank: cotangent port is 'T' but the body hands it to 'lanes_of', which reads an array (element_port_open_rank.cml#lanes_of, parameter 1 `ct: T[..]`)
 self-test: a port 'T' handed to a parameter 'T[3]' is reported, a port 'T[..]' handed to a parameter 'T' is reported
-self-test: the rank-zero pair 'T' -> 'T[..]' is not reported, and the two laws of the library are not reported either
-self-test: the helper that reads a length and assumes more than one element is NOT reported -- the assumption is inside the helper, which this check does not open
-self-test: both disagreements are caught, the rank-zero equivalence and the clean pair are not, so the reading is a rule and not a blanket
+self-test: the rank-zero pair 'T' -> 'T[..]' is reported, and the two laws of the library as they are written are not reported
+self-test: all three disagreements are caught, in both directions and in the open rank, and the laws of the library are not -- a port and its body are compared and nothing is allowed
 ```
 
-`node scripts/law-cotangent-ports.mjs`（全库）：`no law's port disagrees with its body or its left side: 137 law(s) in 5 file(s), 170 port(s), 9 with no witness on either side (counted, not passed)`，exit 0。
+`node scripts/law-cotangent-ports.mjs`（全库）：`no law's port disagrees with its body or its left side: 137 law(s) in 5 file(s), 170 port(s), 9 with no witness on either side (counted, not passed)`，exit 0 —— 端口回到 `T[..]` 之后它**天然绿**，不再需要许可。
 
 `node scripts/law-cotangent-ports.mjs --explain` 里那一行（`mean_axis_stated_t`）：
 
 ```
-mean_axis_stated_t  ct: T  mean_axis_cotangent(ct, at)  stdlib/rulesets/transpose.cml#mean_axis_cotangent, parameter 1 `ct: T[..]` -- the rank-zero array of 5.4, one value read either way
+mean_axis_stated_t     ct: T[..]              mean_axis_cotangent(ct, at)
+                           array (stdlib/rulesets/transpose.cml#mean_axis_cotangent, parameter 1 `ct: T[..]`)
 ```
+
+`test/plans/feat/docs_links.plan.toml`：`total: 21, pass: 21, fail: 0`（含重写的那两条）。
+`test/plans/feat/compile/stated_extents.plan.toml`：`total: 18, pass: 15, fail: 1, known failures: 2` —— 那一条红是 `stated_mean_axis_gradient`（本例的 `keepdims` 按裁定改回 `false` 之后露出来的），它撞的是**另一件事**：切口出口上的秩零切向量由谁定类型，见 `2026-11-04-who-types-the-rank-zero-tangent-at-a-cuts-exit.cn.md`。所以本页的撤销**没有**把那 8 条重新弄崩：`killed by a signal` 一条都没有。
 
 **引用的读数（本页未重跑）**
 
