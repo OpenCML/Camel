@@ -109,6 +109,20 @@ answer, so a test that merely passes does not catch it.
 - **Do not hard-code an element type.** Wrong: a gradient kernel reads `dataAs<float>()` for every
   tensor, so an f64 tensor is read as f32; a shape rule answers f32 whatever the input. Right:
   instantiate per supported element type and refuse the rest.
+- **A transposition law's head states every position as a type parameter.** A law is matched against
+  a node whose operand types are known only when a program reaches it, so a concrete type in the head
+  is a type nothing can fill in. Wrong: `export rule sum_axis_stated_t::<T, X, E>(t: X, axis: int,
+  keepdims: bool, extents: E)`. It compiles, the rule is filed, and the refusal arrives at the last
+  transposition of a program already lowered, naming neither the law nor the parameter:
+  `TRANSPOSE ... skip=parameter-shape uri=tensor:sum_axis_stated node=12 param=0
+  param-type=float[...]`, followed by `The transpose of '<graph>' needs the shape of the parameter at
+  position 1, and the type 'float[...]' does not state it`. Right: `(t: X, axis: A, keepdims: K,
+  extents: E)` with the left side binding the three, which is how every neighbouring law is written.
+  The criterion: **a concrete type is the one the walk cannot hand a shape back for; a type variable
+  is filled in from the node.** Measured 2026-11-04: both `stated_sum_axis_gradient` cases are green
+  on the type-variable form and red on the concrete one, and nothing between the parser and the
+  transpose mentions the difference -- so the reading of the case, not the reading of the build, is
+  what decides it.
 - **Fix the cause, in the layer that causes it.** When a fix has been prescribed and it cannot be
   written, the prescription was wrong about where the defect lives: report the measured cause and
   change the layer that holds it. Wrong: a type rule is bent so one case stops failing, or a
