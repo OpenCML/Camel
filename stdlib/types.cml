@@ -73,16 +73,16 @@ export type WithOf<F>
 
 /// The first member of a type pack: `FirstOf<WithOf<F>>` is the type of `F`'s first `with`
 /// parameter, and `FirstOf<ParamsOf<F>>` the type of its first ordinary parameter. A pack is a list
-/// of types, and this names the member at its head -- what a function type computed from `F` needs
-/// when it returns a value of one parameter's type (design principles 5.6, where a type pack takes
-/// apart the same way a value pack does).
+/// of types, and taking its head is the `match type` every program can write -- a type pack takes
+/// apart the same way a value pack does (design principles 5.6): the case binds the member it writes
+/// and the rest of the pack in a name of its own, and the empty pack selects no case, because it has
+/// no member to give the first name.
 ///
-/// An empty pack has no first member, and asking is refused where the type is used, naming the pack
-/// that was empty: a function type computed from a pack the writer gave no members to is a type the
-/// program did not ask for.
+/// This is not a primitive: it is the language, written here because a function type computed from
+/// `F` needs it and a program that writes the pattern itself gets the same answer.
 /// @example is_same::<FirstOf<WithOf<<w: float, k: int> (a: int) => bool>>, float>()    // true
 /// @example is_same::<FirstOf<ParamsOf<(a: int, b: string) => bool>>, int>()    // true
-export type FirstOf<P>
+export type FirstOf<P> = match type P { case (W, ...Rest) => W }
 
 /// The result type of a function type.
 /// @example is_same::<ResultOf<(a: int) => string>, string>()    // true
