@@ -437,7 +437,6 @@ export rule pick_at_t::<T>(xs: T[], at: int[]) when is_float::<T>() {
 export rule idx_arr_t::<T, X, I, A>(xs: X, i: I, at: A) when is_float::<T>() {
     index_into(xs, i) => (ct: T) => scatter_into(zeros_of(ct, extent_product(at)), i, ct)
 }
-}
 
 // ---- the transpose rule of `tensor:take` ----
 //
