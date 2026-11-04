@@ -47,29 +47,44 @@ TRANSPOSE function=split_of_jvp_of_sum_of_product_backward skip=cotangent-needs-
 `transpose_needs_parameter_shape`，「Write the extents the parameter's value has in its declaration」）；
 走 `vjp`（`split` 的 backward 那一半）时先撞上 `rule_expand` 的句子
 （`modules/transforms/rule_expand.cpp#expandRuleRightSide`，`why = "the rule's right side reads a value the caller does not carry"`），
-于是一个「改声明」的问题被读成「这条律要一个拿不到的值」。**这处没有改**：`cotangent-needs-a-value` 有三十余处 pin，
-把这一支改写成 `ParameterShape` 是另一笔、要先问作者「一个类两个词」要不要收。本页只把它写下来。
+于是一个「改声明」的问题被读成「这条律要一个拿不到的值」。**这处没有改**：`cotangent-needs-a-value` 有
+**18 条断言**押着（110 行 / 39 个文件），把这一支改写成 `ParameterShape` 是另一笔、要先裁「一个类两个词」——
+那件事单独成了一页：`docs/handover/questions/2026-11-04-which-word-does-a-declaration-that-states-no-shape-get.cn.md`
+（默认：一个类一个词，`TransposeNeedsParameterShape` 是那个词）。
 
-## 四、改法与读数
+## 四、树里现在有什么：两条红 + 两条证据
 
-改两处声明、两处调用点（数值、断言、pin 一个没动）：
+**先说结论：`float[]` 那两条留红，`fail` 与派工时一样是 2。**
 
-```
-func sum_of_product(v: float[2], w: float[2, 2])      let v = [1.0, 2.0] as float[2]
-func sum_of_product(x: float[2, 2], u: float[2])      let u = [0.5, 0.25] as float[2]
-```
+- `matmul_t.vector_lhs_law.nvm` / `matmul_t.vector_rhs_law.nvm`：**原样恢复**（声明 `float[]`、数值断言、pin
+  一个字节没动），注释与 `desc` 写明它等什么——形状作为**线性调用的已知实参**带上（`mul_stated` /
+  `matmul_stated`），**不是靠在这里写 `float[2]`**。
+- `matmul_t.vector_lhs_law_stated_extent.nvm` / `..._rhs_law_stated_extent.nvm`：同一段算术、声明写 `float[2]`，
+  绿。它证两件事——秩一操作数上律的算术是对的（三个 `max_abs_diff` 全 0.0，对着引擎的 `with_grad`），
+  以及「类型陈述了形状就能答」。
 
-调用点的 `as` 不是补丁：`SemanticDiag::ArgumentNeedsConversion` 的句子自己就要求它（「argument 1 ('v') has type
-`float[]`, which is less exact than `float[2]` … write the conversion: `v as float[2]`」）。
-
-读数（`-Plan feat/showcase_s2 -Tier fast -Jobs 8`，tip 干净）：`[SUMMARY] total: 7, pass: 7, fail: 0`，killed 0、timed out 0。
-`expect_output_contains` 逐字过，即打印出来的就是 pin 的那三个数：
+读数（`-Plan feat/showcase_s2 -Tier fast -Jobs 8`，tip 干净）：`[SUMMARY] total: 9, pass: 7, fail: 2`，
+两条红正是上面那两条；`expect_output_contains` 逐字过的那些数：
 `vector_lhs value=3.0 dL/dv=[0.75, 1.125] dL/dw=[[1.0, 1.0], [2.0, 2.0]]`、
 `vector_rhs value=3.5 dL/dx=[[0.5, 0.25], [0.5, 0.25]] dL/du=[4.0, 6.0]`，`max_abs_diff` 三个 0.0。
-**所以这两条从来不是「律缺一条」，是「程序没把形状写给律」**：形状一到手，`sum_to` 的 `like` 由
-`tensor:zeros(extent_of::<float[2]>())` 造出来，两条律按原样答对。
 
-## 五、别从这里读出的两件事
+## 五、这一版为什么绿——以及为什么它不是终态
+
+`float[2]` 那一版绿，**不是因为修了律**（律一个字没动），而是因为**形状从「无处可写」变成了「写在声明里」**：
+`sum_to` 的 `like` 由 `tensor:zeros(extent_of::<float[2]>())` 造出来，律按原样答对。
+
+**而那不是作者要的终态。** 作者 2026-11-04 12:40 的裁定是：**形状由线性调用作为已知实参带上**，
+顺序是**先落孪生算子 `mul_stated` / `matmul_stated`**，让这两条用例走新路答数。**「作为已知实参带上」和
+「写在类型声明里」是两条不同的路**，`float[2]` 是后者。**若声明里写出长度就够了，孪生算子就没有存在的理由**——
+而 `float[]`（= `float[?]`，陈述 rank、不陈述长度）恰恰是「长度在程序里无处可写」的那种程序，
+也就是它们存在的唯一理由。
+
+**这一步被走过，也被否过一次**（协调者 2026-11-04 晚的判词，原话）：
+「把 `float[]` 改成 `float[2]` 让 `fail = 2 → 0`……等于把待修的路由删掉、再报绿；**绿本身不是验收，
+'它为什么绿'才是**。」于是本轮把它退成**两条例外证 + 两条待修的红**，并把这一句留在页面上：
+这条路被走过、被否过，别第二次走。
+
+## 六、别从这里读出的两件事
 
 1. **不要把律里的 `sum_to` 删掉换绿。** 它是这条律的归约那一半（批轴那天要用的），也是答案**类型**的来处
    （`sum_to` 答 `S`，正是操作数的类型）；删掉它会让答案的类型对不上参数，是拿语义换颜色。
@@ -77,7 +92,7 @@ func sum_of_product(x: float[2, 2], u: float[2])      let u = [0.5, 0.25] as flo
    不是拒绝开放长度的向量本身：同一个 `v: float[]` 放进 `with <v: float[]>` 的 `with_grad` 那一腿是绿的
    （引擎的 kernel 自己不读形状）。
 
-## 六、更正：`docs/handover/reports/2026-11-04-the-seven-reds-classified-by-what-the-port-states.cn.md` 对这两条的归类
+## 七、更正：`docs/handover/reports/2026-11-04-the-seven-reds-classified-by-what-the-port-states.cn.md` 对这两条的归类
 
 那一页是三件事上最先把这条路量清楚的（`position` 的含义、`sum_to` 的第二操作数只被读形状、
 「`sum_to(..., a)` 不是为了归约而是为了把返回类型钉成 `a` 的秩」——§5.1 的编译错误确实是这么说的），
