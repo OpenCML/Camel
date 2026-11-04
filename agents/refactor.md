@@ -123,6 +123,19 @@ answer, so a test that merely passes does not catch it.
   on the type-variable form and red on the concrete one, and nothing between the parser and the
   transpose mentions the difference -- so the reading of the case, not the reading of the build, is
   what decides it.
+- **The two legs of a rule do not count the same number, and the head must be written to the count it
+  is asked for.** A **forward** (`jvp`) rule is asked for one type parameter per *free variable in
+  the operand types* -- `(float[], int, int)` asks for 1, so `jvp_idx_arr::<T>(xs: T[], i: int)` is
+  right to spell its index concretely. A **transposition law** is asked for one per operand *plus*
+  the cotangent's element type -- `pick_at_t::<T, X, P, L>` over three operands, `sum_axis_stated_t::<T,
+  X, A, K, E>` over four. The bullet above says a transposition head must not spell a position
+  concretely; this one says the *number* is a different arithmetic on each leg, and getting either
+  wrong is refused in the same breath as a missing rule:
+  `REINTERP jvp function=read skip=rule uri=tensor:pick_at reason=it takes 4 type parameter(s), and
+  it was asked for 1` (measured 2026-11-04, writing `jvp_pick_at::<T, X, P, L>`), and
+  `jvp has no forward rule for 'tensor:pick_at'` on the surface. Criterion: **count what the matcher
+  counts.** Neither error is caught by a build: both rules compile and file; only a program that
+  reaches the rule reds.
 - **Fix the cause, in the layer that causes it.** When a fix has been prescribed and it cannot be
   written, the prescription was wrong about where the defect lives: report the measured cause and
   change the layer that holds it. Wrong: a type rule is bent so one case stops failing, or a
