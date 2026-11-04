@@ -1,0 +1,33 @@
+// The gradient of a broadcasting product, through the engine: the number the library's own law has to
+// match when the two operands of `tensor:multiply` do not have the same shape.
+//
+// `w` is `float[2, 2, 3]` and `h` is `float[3]`, so every element `w[i][j][k]` meets `h[k]`: the
+// product spreads `h` over the two leading axes, and the gradient of a sum is that lane itself at
+// every position.
+//
+//     total = sum(w * h),  h = [1.0, 2.0, 3.0],  w = 1.0 everywhere
+//     value  = 4 * (1 + 2 + 3)                     = 24
+//     dL/dw  = h spread over [2, 2, 3]             = [[[1, 2, 3], [1, 2, 3]], [[1, 2, 3], [1, 2, 3]]]
+//
+// The engine reads this off the operator's own rule (`modules/tensor/ops/vjp.cpp#setVjp`, the
+// `sumTo` reduction in `modules/tensor/kernels/gradient.cpp`), which is the shape and the number the
+// library's `mul_tensor_t` law has to reproduce.
+//
+// The library's side is the neighbouring `broadcast_product_gradient_through_the_library.cml`.
+//
+//     camel test/cases/compile/transforms/broadcast_product_gradient_through_the_engine.cml
+import { grad } from autodiff
+import { numel, sum } from tensor
+
+with <w: float[2, 2, 3]>
+func total(): float {
+    return sum(w * ([1.0, 2.0, 3.0] as float[3]))
+}
+
+func main(): int sync {
+    let slope = grad(total)
+    let d = slope<[[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]], [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]] as float[2, 2, 3]>()
+    `broadcast engine numel={} d000={:.1f} d001={:.1f} d002={:.1f} d11_2={:.1f}`
+        ->format<numel(d), d[0][0][0], d[0][0][1], d[0][0][2], d[1][1][2]>->println
+    return 0
+}

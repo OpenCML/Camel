@@ -822,37 +822,11 @@ camel::core::type::ArrayType *intArrayTypeOf() {
 /// Nothing when the type states no shape: then the caller refuses by name instead of inventing one.
 /// The extents a type's shape states, or nothing when the type leaves one of them open.
 ///
-/// A shape is a fact about an array type: `float[2, 3]` states two extents, `float[]` states one
-/// dimension and leaves its length open, and `float[..]` states neither the rank nor a length. The
-/// reading of a stated extent is the one `jvp.cpp#zeroConstantFor` makes of the same fact --
-/// `ExtentForm::evaluate({})` answers the number a written extent holds and nothing for a `?` or for
-/// an extent over a name nothing binds -- so the two transforms agree about which types have a shape
-/// that can be written while the graph is built.
-std::optional<std::vector<int64_t>> statedShapeOf(const Type *type) {
-    if (type == nullptr || type->code() != camel::core::type::TypeCode::Array) {
-        return std::nullopt;
-    }
-    const auto *array = tt::as_ptr<camel::core::type::ArrayType>(const_cast<Type *>(type));
-    if (array == nullptr || array->elemType() == nullptr ||
-        !camel::core::type::isFloatingScalar(array->elemType()->code())) {
-        return std::nullopt;
-    }
-    const std::span<const camel::core::type::ExtentForm> stated = array->extents();
-    if (stated.empty()) {
-        // `T[..]`: the rank is the value's, so the type states no shape at all.
-        return std::nullopt;
-    }
-    std::vector<int64_t> extents;
-    extents.reserve(stated.size());
-    for (const camel::core::type::ExtentForm &extent : stated) {
-        const std::optional<int64_t> size = extent.evaluate({});
-        if (!size.has_value() || *size < 0) {
-            return std::nullopt;
-        }
-        extents.push_back(*size);
-    }
-    return extents;
-}
+/// The reading is `rule_expand.h#statedShapeOf`'s, and there is one of it: the rule layer hands the
+/// same numbers to a law that asks for an operand's shape (`expandRuleRightSide`, and the sector it
+/// is written for is the one below), so a second answer here would be a day when the two transforms
+/// disagree about which types have a shape that can be written while the graph is built.
+/// `jvp.cpp#zeroConstantFor` makes the same reading of the same fact.
 
 /// The value a law's right side is handed for a parameter a cotangent is answered for: the zero of
 /// the parameter's type, which is that type's **shape** and nothing else.

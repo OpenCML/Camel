@@ -39,7 +39,8 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, max, max_axis_stated, maximum, mean_axis, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, numel, pick_at, relu, reshape, rsqrt, sigmoid, sqrt, subtract, sum, sum_axis, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
+
+import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, max, max_axis_stated, maximum, mean_axis, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, numel, pick_at, relu, reshape, rsqrt, shape, sigmoid, sqrt, subtract, sum, sum_axis, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 // `log as math_log`, for the reason `rulesets.jvp` records: the plain `log` here is the **array**
 // one (`log_t` files its law below), and a second import of one name hides the first instead of
 // overloading it, so `pow_d_t`'s scalar `log(x)` is spelled `math_log`.
@@ -119,9 +120,14 @@ export rule stop_gradient_t::<T>(x: T) when is_float::<T>() {
 // called with an array and a *number* as well as with two arrays, and the number's cotangent is a
 // reduction: the number fed every lane the broadcast spread it over, so its cotangent is the sum
 // of what it fed. One law covers both shapes because it names the shape instead of assuming it --
-// `sum_to(ct * other, operand)` is the identity when the shapes are equal, and `T[..]` includes
-// rank 0, a rank-zero array being that element and nothing else (design principles 5.4), so the
-// number's shape is a shape like any other and its reduction is the total sum.
+// `sum_to_stated(ct * other, shape(operand))` is the identity when the shapes are equal, and `T[..]`
+// includes rank 0, a rank-zero array being that element and nothing else (design principles 5.4), so
+// the number's shape is a shape like any other and its reduction is the total sum.
+//
+// The shape is `shape(operand)` and not the operand itself: a transposition has no value for the
+// operand it differentiates, so what it can be given is the extents its port states
+// (`sum_to_stated` above, and `modules/transforms/rule_expand.cpp#expandRuleRightSide` for who hands
+// them over).
 //
 // This is one rule and cannot be two: the index tells two rules of one key apart by their `when`
 // condition, so a second rule `(T[..], T)` -- no position of which overlaps the shapes above --
@@ -160,11 +166,37 @@ func mul_tensor::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
     return x * w
 }
 
+/// `t` read at the shape whose extents are `at` -- `sum_to` with the target shape as a list, which is
+/// what a transpose law can state and a value it cannot.
+///
+/// `sum_to(t, like)` reads the shape off **another value**, and the one value a transposition never
+/// has is the operand it differentiates. So when the shape is the thing a law needs, the law is
+/// handed the extents and this is the move that turns them into the operand `sum_to` is written
+/// against. The zeros are `sum_to`'s own way of naming a shape -- its second operand is read for its
+/// shape and for nothing else (`stdlib/tensor.cml#sum_to`, whose second example is a zero array) --
+/// built here from extents the law was given, and never substituted for an operand of the operator
+/// being differentiated (author, 2026-11-03 17:35: a shape arrives as a known operand, never read
+/// off an operand's value, and not as a zero standing in for one).
+///
+/// It reads `at` and nothing else of the operand, which is why a law that names it can answer a
+/// position whose value the walk does not carry.
+func sum_to_stated::<T>(t: T[..], at: int[]): T[..] when is_float::<T>() {
+    return sum_to(t, zeros::<T>(at))
+}
+
 /// The transpose of `x * w`: `ct * w` reduced to `x`'s shape for `x`, `ct * x` reduced to `w`'s
-/// shape for `w`. The reduction is the one `sum_to` names, so the law is written once for both
+/// shape for `w`. The reduction is the one `sum_to_stated` names, so the law is written once for both
 /// shapes the operator is called with -- two arrays, and an array and a number.
+///
+/// The second operand of each `sum_to_stated` is `shape(x)` / `shape(w)`, and it is answered from the
+/// law's **own port** when the walk carries no value for that operand
+/// (`modules/transforms/rule_expand.cpp#expandRuleRightSide`): the ports are `X` and `W`, the instance
+/// is made at the node's operand types, and a stated extent is a fact about a type. That is what makes
+/// the broadcast shape `w`'s own and not `x`'s -- reading the other operand was measured to answer
+/// `[6.0]` where the engine answers a `[2, 2, 2]` tensor, and reading a zero carrier for it answered
+/// zeros -- and it is the difference between a law that names a shape and one that guesses at it.
 export rule mul_tensor_t::<T, X, W>(x: X, w: W) {
-    mul_tensor(x, w) => (ct: T[..]) => (sum_to(ct * w, x), sum_to(ct * x, w))
+    mul_tensor(x, w) => (ct: T[..]) => (sum_to_stated(ct * w, shape(x)), sum_to_stated(ct * x, shape(w)))
 }
 
 /// `relu(x) = maximum(x, 0)` per element: the cotangent is `ct` where the input was positive and
