@@ -237,7 +237,7 @@ void ParserImpl::parseRelational() {
     }
 }
 
-/// rangeExpr : additiveExpr ('...' additiveExpr)*
+/// rangeExpr : additiveExpr ('..' additiveExpr)*
 /// The range of two numbers and the composition of two functions, one level: `1..n+1` is
 /// `1..(n+1)`, and `...` is looser than `->`, so `x->f..g` is `(x->f)..g` (`x->f->g` is the
 /// composition).

@@ -4153,7 +4153,7 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
 
 /*
 rangeExpr
-    : additiveExpr ('...' additiveExpr)*
+    : additiveExpr ('..' additiveExpr)*
     ;
 */
 Value Builder::visitRangeExpr(cst::RangeExpr context) {
@@ -5113,7 +5113,7 @@ Value Builder::visitEnumType(cst::EnumType context) {
 
 /*
 typeExpr
-    : arrayType ('?' | '!' | '...')*
+    : arrayType ('?' | '!' | '..')*
     ;
 */
 Value Builder::visitTypeExpr(cst::TypeExpr context) {

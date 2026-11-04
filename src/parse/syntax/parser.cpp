@@ -561,7 +561,7 @@ void ParserImpl::parseBlockExpr() {
 
 // ---- Declarations ----
 
-/// moduleName : ('.' | '...' | '...')? IDENTIFIER ('.' IDENTIFIER)* ('::' IDENTIFIER)*
+/// moduleName : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ('::' IDENTIFIER)*
 /// A path after `::` names a namespace of the module (`import { f } from m::N`).
 void ParserImpl::parseModuleName() {
     const size_t m = mark();

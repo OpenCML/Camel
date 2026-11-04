@@ -55,7 +55,7 @@ bool ParserImpl::typeStartsAt(uint32_t n) const {
     }
 }
 
-/// typeExpr : '...' typeExpr | arrayType ('?' | '!' | '...')*
+/// typeExpr : '...' typeExpr | arrayType ('?' | '!' | '..')*
 /// A mark is `?` (may be null), `!` (may have failed) or `...` (the type is a stream). The marks
 /// are read left to right and each one wraps what is written before it, with no special case
 /// `T?..` is `(T?)..`, the stream of a nullable `T`, and
