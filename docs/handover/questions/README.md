@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：53 页
+## 现在在等作者：54 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -17,6 +17,7 @@
 | [`2026-11-04-a-rank-zero-cotangent-is-read-as-a-pointer`](2026-11-04-a-rank-zero-cotangent-is-read-as-a-pointer.cn.md) | 秩 0 的余切被当成指针读：`mean_axis_stated_t` 的端口写着 `float[..]` |
 | [`2026-11-04-a-struct-field-read-refused-or-copied-by-key`](2026-11-04-a-struct-field-read-refused-or-copied-by-key.cn.md) | 一个 struct 字段读（`qq.a`）：切里按名字拒，还是把 key 抄过去 |
 | [`2026-11-04-a-sum-to-that-takes-the-length-itself`](2026-11-04-a-sum-to-that-takes-the-length-itself.cn.md) | 由长度直接收长度的 `sum_to`：`sum_to_at(t, at)` |
+| [`2026-11-04-a-sum-to-that-takes-the-shape-itself`](2026-11-04-a-sum-to-that-takes-the-shape-itself.cn.md) | `sum_to` 收形状的版本：返回的秩从哪来？ |
 | [`2026-11-04-axis-reductions-state-their-extents`](2026-11-04-axis-reductions-state-their-extents.cn.md) | 轴归约的结果类型：把声明退掉交给推导，还是留着声明另开一条路？ |
 | [`2026-11-04-can-a-pass-build-the-graph-a-transform-hands-out`](2026-11-04-can-a-pass-build-the-graph-a-transform-hands-out.cn.md) | `autodiff` 能不能在改写时自己把 `split` 造出来的那个值造出来？ |
 | [`2026-11-04-does-a-build-gated-case-count-as-a-name-pin`](2026-11-04-does-a-build-gated-case-count-as-a-name-pin.cn.md) | 只在 no-JIT / arm64 构建里才跑得到的用例，算不算把这条码按名字钉住了？ |

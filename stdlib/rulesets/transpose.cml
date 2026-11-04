@@ -653,15 +653,14 @@ export rule pick_at_t::<T>(xs: T[], at: int[]) when is_float::<T>() {
 /// states.
 ///
 /// The length is not read off `xs`: a transposition is handed the cotangent and no forward value
-/// (design principles 4.3), so the number of positions comes from `extent_of::<X>()` -- the walk
-/// states the type's extents as an `int[]` and hands it over as the law's last port -- and `xs` is
-/// named here only because the operator has it. `zeros_of` is the rank-one base the scatter writes
-/// into, exactly as in `pick_at_t` above.
+/// (design principles 4.3), so the number of positions is asked of the language,
+/// `extent_of::<X>()`, and `xs` is named here only because the operator has it. `zeros_of` is the
+/// rank-one base the scatter writes into, exactly as in `pick_at_t` above.
 ///
 /// A type that states no extents (`float[..]`) reaches no law at all: the walk refuses the step by
 /// name (`parameter-shape`) instead of inventing a length.
-export rule idx_arr_t::<T, X, I, A>(xs: X, i: I, at: A) when is_float::<T>() {
-    index_into(xs, i) => (ct: T) => scatter_into(zeros_of(ct, extent_product(at)), i, ct)
+export rule idx_arr_t::<T, X, I>(xs: X, i: I) when is_float::<T>() {
+    index_into(xs, i) => (ct: T) => scatter_into(zeros_of(ct, extent_product(extent_of::<X>())), i, ct)
 }
 
 // ---- the transpose rule of `tensor:take` ----
@@ -820,9 +819,12 @@ export rule mean_axis_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
 // 2026-11-03 17:55: no zero carrier; 2026-11-04: the walk's carrier removed, so a law that reads
 // the operand's value is refused instead of being answered with zeros).
 
-/// The cotangent of `sum(t)`: the one number spread over the extents `at` states.
-export rule sum_from_type_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
-    sum(t) => (ct: T) => spread_over(ct, at)
+/// The cotangent of `sum(t)`: the one number spread over the extents `t`'s type states. The extents
+/// are asked of the language (`extent_of::<X>()`, a `int[]` the builder settles where the type
+/// argument is still in hand) instead of arriving as an operand the walk had to widen the law's port
+/// list to hand over (author, 2026-11-04: a law's ports come from its declaration).
+export rule sum_from_type_t::<T, X>(t: X) when is_float::<T>() {
+    sum(t) => (ct: T) => spread_over(ct, extent_of::<X>())
 }
 
 /// The cotangent of `take(t, indices)` where the row count is the type's: the indices say where each
@@ -834,9 +836,10 @@ func take_cotangent_from_type::<T>(ct: T[..], indices: int[], at: int[]): T[..]
 }
 
 /// The transpose of `take(t, indices)`: the indices are an `int[]` and take no cotangent, so the
-/// right side answers one value, and the extents it scatters into are the operand's own.
-export rule take_from_type_t::<T, X, I, A>(t: X, indices: I, at: A) when is_float::<T>() {
-    take(t, indices) => (ct: T[..]) => take_cotangent_from_type(ct, indices, at)
+/// right side answers one value, and the extents it scatters into are the operand's own, asked of the
+/// language rather than handed over as an operand (`extent_of::<X>()`).
+export rule take_from_type_t::<T, X, I>(t: X, indices: I) when is_float::<T>() {
+    take(t, indices) => (ct: T[..]) => take_cotangent_from_type(ct, indices, extent_of::<X>())
 }
 
 /// The cotangent of `mean_axis(t, axis, keepdims)`: each lane's `ct` spread back over the lane it was
@@ -850,10 +853,11 @@ func mean_axis_cotangent_from_type::<T>(ct: T[..], at: int[]): T[..] when is_flo
     return full(at, 1.0) * (ct / lanes)
 }
 
-/// The transpose of `mean_axis(t, axis, keepdims)`, with the extents taken from the operand's type.
-export rule mean_axis_from_type_t::<T, X, A, B, C>(t: X, axis: A, keepdims: B, at: C)
+/// The transpose of `mean_axis(t, axis, keepdims)`, with the extents asked of the operand's type
+/// (`extent_of::<X>()`) instead of arriving as an operand.
+export rule mean_axis_from_type_t::<T, X, A, B>(t: X, axis: A, keepdims: B)
     when is_float::<T>() {
-    mean_axis(t, axis, keepdims) => (ct: float[..]) => mean_axis_cotangent_from_type(ct, at)
+    mean_axis(t, axis, keepdims) => (ct: float[..]) => mean_axis_cotangent_from_type(ct, extent_of::<X>())
 }
 
 
