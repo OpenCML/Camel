@@ -85,6 +85,20 @@ backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TransposeNeedsParameterShape"
 expect_stdout_contains = ["[Error]: The transpose of 'loss_mean' needs the shape of the parameter 'x', and the type 'float[...]' does not state it.", "Write the extents the parameter's value has in its declaration"]
-expect_stderr_contains = ["TRANSPOSE function=loss_mean skip=parameter-shape uri=tensor:sum node=6 param=0 param-type=float[...]"]
 expect_stdout_not_contains = ["transpose should have been refused, and it answered"]
+# The reading names the step it stopped at by position (`node=`), so the position is `<>` and the
+# rest of the line stays exact: the function, the skip's own word, the operator URI, the parameter's
+# index and the type that states no shape. Nothing else in either stream names that node -- the
+# sentence belongs to the *function* (`RuntimeDiag::TransposeNeedsParameterShape`, asserted above)
+# and prints no node at all -- so this line can only be pinned by position, and `<>` says so
+# honestly: what identifies the step here is what it is (`uri=tensor:sum`) and what it owes
+# (`param=0`, a `float[...]`), not where it sits.
+verify_script = """
+({ input, assert }) => {
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/<>/g, '\\d+')
+const reading = 'TRANSPOSE function=loss_mean skip=parameter-shape uri=tensor:sum node=<> param=0 param-type=float[...]'
+const hits = input.normalized.stderr.split('\n').filter((l) => new RegExp('^' + esc(reading) + '$').test(l))
+assert(hits.length === 1, `expected exactly one line like '${reading}', found ${hits.length}`)
+}
+"""
 timeout_ms = 30000
