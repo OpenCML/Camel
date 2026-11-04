@@ -232,16 +232,26 @@ export func gemm_library(): string
 with <safe_fp: bool = false>
 export func fuse::<F>(f: F): F! when is_function::<F>()
 
-// ---- the reductions along an axis, named by the function ----
-// A declaration names `tensor:<function>`, so `sum_axis` below is the operator `tensor:sum_axis`
-// -- the same naming `shape` and `numel` use, and the one the ONNX lowering table and the
-// semantics declarations are keyed on. `stdlib/array.cml` imports these instead of declaring a
-// second spelling of each.
-/// The sum of each lane along one axis, accumulated in `f64` from `+0` in ascending order and
-/// rounded once into the element type. `keepdims` leaves the reduced axis as an extent of one.
-/// @pure
-/// @example sum_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [4.0, 6.0]
-export func sum_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..] when is_numeric::<T>()
+// ---- the reductions along an axis, computed rather than declared ----
+//
+// `sum_axis`, `mean_axis`, `min_axis`, `max_axis`, `argmax_axis` and `argmin_axis` are the
+// operators `tensor:sum_axis` and its five siblings (the same naming `shape` and `numel` use, and
+// the one the ONNX lowering table and the semantics declarations are keyed on), and they are not
+// declared here: their **result type** is not a signature a declaration can state. The extents of
+// an axis reduction are the operand's extents with one axis removed -- or kept as an extent of one
+// -- so they follow from the operand's type *and* from the value of `axis` and of `keepdims`, and
+// a declaration's result is a type, not a function of two values. Written here as a declaration
+// the name answered `T[..]`, which is a result that states no extent at all; the operator's own
+// inference computes the extents (`modules/tensor/ops/reduction_ops.cpp#reduceAxisInfer`, through
+// `support.cpp#reduceShape`), and a program that writes `mean_axis(x, 0, false)` now reads a
+// `float[3]` where it used to read a `float[..]`.
+//
+// The one thing that stays unknown is what the axis and the flag really are: `mean_axis_stated`
+// takes them inside a runtime integer list, so no call site states the rank, and its result is
+// `T[..]` and honestly so. That is why it is still declared above and these six are not.
+//
+// `stdlib/signatures/tensor.cml` records the six computed signatures; `stdlib/array.cml` imports
+// the names instead of declaring a second spelling of each.
 
 /// `t` read at the shape `like` states, which is the shape of the answer. Two shapes that are
 /// equal give `t` unchanged, and `like` of rank 0 -- which `T[..]` includes, a rank-zero array being
@@ -265,36 +275,7 @@ export func sum_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..] when is_n
 /// @example sum_to([1.0, 2.0, 3.0] as float[], [0.0, 0.0, 0.0] as float[])    // [1.0, 2.0, 3.0]
 export func sum_to::<T, S>(t: T[..], like: S): S when is_float::<T>()
 
-/// The mean of each lane along one axis: the sum and the count both in `f64`, one rounding into
-/// the element type. An empty axis is a fault.
-/// @pure
-/// @fails fault `InvalidArgument` when the axis has no element
-/// @example mean_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [2.0, 3.0]
-export func mean_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..] when is_numeric::<T>()
-
-/// The smallest element of each lane along one axis. An empty axis is a fault: a minimum over no
-/// element has no identity to return.
-/// @pure
-/// @fails fault `InvalidArgument` when the axis has no element
-/// @example min_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [1.0, 2.0]
-export func min_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..] when is_numeric::<T>()
-
-/// The largest element of each lane along one axis. An empty axis is a fault, as for `min_axis`.
-/// @pure
-/// @fails fault `InvalidArgument` when the axis has no element
-/// @example max_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [3.0, 4.0]
-export func max_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..] when is_numeric::<T>()
-
-/// The position of the largest element of each lane along one axis, an `int` index along that
-/// axis. A tie keeps the earlier position. An empty axis is a fault.
-/// @pure
-/// @fails fault `InvalidArgument` when the axis has no element
-/// @example argmax_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [1, 1]
-export func argmax_axis::<T>(xs: T[..], axis: int, keepdims: bool): int[] when is_numeric::<T>()
-
-/// The position of the smallest element of each lane along one axis; a tie keeps the earlier
-/// position. An empty axis is a fault.
-/// @pure
-/// @fails fault `InvalidArgument` when the axis has no element
-/// @example argmin_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [0, 0]
-export func argmin_axis::<T>(xs: T[..], axis: int, keepdims: bool): int[] when is_numeric::<T>()
+// `mean_axis`, `min_axis`, `max_axis`, `argmax_axis` and `argmin_axis` stand beside `sum_axis`
+// above and for the same reason: the extents of their result follow from the operand's type and
+// from the values of `axis` and `keepdims`, and their signatures are recorded in
+// `stdlib/signatures/tensor.cml`.

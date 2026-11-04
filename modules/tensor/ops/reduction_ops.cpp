@@ -107,6 +107,16 @@ template <k::ReduceOp Op> slot_t reduceAxisKernel(ArgsView &, ArgsView &norm, co
     });
 }
 
+/// The result of an axis reduction: the operand's element type (the reduction's own rule) at the
+/// extents `reduceShape` keeps. The shape follows from the operand's type and from the values of
+/// `axis` and `keepdims`, so it is stated whenever those are known -- and the result states less
+/// when they are not, by the same rule rather than by a promise: an axis that is a value of the
+/// run leaves the rank but not the extents (`T[?]`), and a `keepdims` that is a value of the run
+/// leaves the rank open (`T[..]`). None of the three is guessed.
+///
+/// This is the signature a program reads: the axis reductions are computed rather than declared
+/// (`modules/tensor/module.cpp#kDeclaredOperators`), because a declaration's result is a type and
+/// these extents are a function of two values.
 InferFn reduceAxisInfer(k::ReduceOp op) {
     return [op](const InferContext &ctx) -> std::optional<Type *> {
         const TensorFacts in          = ctx.facts(0);
@@ -122,20 +132,37 @@ InferFn reduceAxisInfer(k::ReduceOp op) {
 
 template <k::ReduceOp Op>
 OpDef reduceAxisDef(std::string_view name, std::string_view exportName, std::string_view resultDoc) {
-    return OpDef{
+    OpDef def{
         .name    = name,
-        .exports = {exportName},
+        // The operator's own name first: it is the one a call of this node is printed as
+        // (`tensor::mean_axis(x, 0, false)`), and the name the reduction's algebraic spelling
+        // shares (`mean`) is exported beside it, so both spellings are this one definition.
+        .exports = {name, exportName},
         .params =
             {{"t", ParamKind::Tensor},
              {"axis", ParamKind::Int},
              {"keepdims", ParamKind::Bool, true}},
         .resultDoc = resultDoc,
         .infer     = reduceAxisInfer(Op),
-        .kernel         = &positionally<reduceAxisKernel<Op>>,
-        .traits         = {},
-        .withAfterNorm  = true,
-        .ordinaryParams = 1,
+        .kernel    = &positionally<reduceAxisKernel<Op>>,
+        .traits    = {},
+        // Two call spellings, and both of them reach this definition's `infer`:
+        //
+        //   * `mean_axis(xs, 0, false)` -- every parameter in the parentheses, which is what a
+        //     program writes and what this node is printed as. `ordinaryParams` is the whole list,
+        //     so `OpDefResolver::resolveForCall` does not refuse the count, and the registry
+        //     records the call shape (`registry.cpp`, "every parameter is an ordinary one");
+        //   * `argmin<0, true>(rows)` -- the axis and the flag in angle brackets, which a pass
+        //     builds and which `withAfterNorm` joins back into the kernel's one list.
+        //
+        // The extents are `reduceAxisInfer`'s answer either way. They have to be: with no
+        // declaration standing above this name, nothing else states them, and a declaration cannot
+        // name them at all -- they follow from the operand's type *and* from the values of `axis`
+        // and `keepdims` (design principles 5.4).
+        .withAfterNorm = true,
     };
+    def.ordinaryParams = def.params.size();
+    return def;
 }
 
 /// The whole-tensor form's element type: `reductionDtype`, the one rule it shares with the axis
