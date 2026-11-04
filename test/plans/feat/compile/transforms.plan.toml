@@ -932,7 +932,34 @@ expect_exit = 0
 # (`REINTERP jvp function=read_one skip=loop`); re-pinning it before that would have been a guess.
 # That condition is met now, and the shape below is read off the run rather than guessed: the
 # transposed member answers `(float) => (float,)`, one cotangent in and one per parameter out.
-expect_output_contains = ["TRANSPOSE function=read_one carried=1 node=10 origin=0 captures=1 answer=summed", "ESCAPE target=0 from=9 kindOfFrom=11 kindOfTarget=1 typeOfTarget=float norm=[3,0,] with=[9,11,]", "TRANSPOSE function=read_one graph=", "type=(float) => (float,) nodes=12 arms=0 rhs=add_t,mul_t", "15.0"]
+#
+# The two reading lines name nodes by their position in the graph (`node=`, `target=`, `from=`,
+# `norm=[...]`, `with=[...]`), and a position moves when a declaration above it grows a node while
+# the reading still says the same thing (`lane-repin` added one node to `read_outer` and the whole
+# family shifted while every word of the reading stayed true). So the position is written `<>` here -- a number, every other character of the line exact -- and what is asserted is
+# the relation the numbers stand in. `answer=summed` says the escaped value IS the value the state
+# starts from, so the escape's `target` has to be one of the loop's `norm` inputs; and the `from`,
+# the body's product that handed the cotangent out, has to be one of the loop's `with` inputs. The
+# node the line names is the loop those two lists belong to.
+expect_output_contains = ["TRANSPOSE function=read_one graph=", "type=(float) => (float,) nodes=12 arms=0 rhs=add_t,mul_t", "15.0"]
+verify_script = """
+({ input, assert }) => {
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/<>/g, '\\d+')
+const pin = (stream, line) => {
+  const hits = stream.split('\n').filter((l) => new RegExp('^' + esc(line) + '$').test(l))
+  assert(hits.length === 1, `expected exactly one line like '${line}', found ${hits.length}`)
+  return hits[0]
+}
+const field = (text, name) => Number(text.split(name + '=')[1].split(/[ ,\]]/)[0])
+const list = (text, name) => text.split(name + '=[')[1].split(']')[0].split(',').filter(Boolean).map(Number)
+pin(input.normalized.stderr, 'TRANSPOSE function=read_one carried=1 node=<> origin=0 captures=1 answer=summed')
+const escape = pin(input.normalized.stderr, 'ESCAPE target=<> from=<> kindOfFrom=11 kindOfTarget=1 typeOfTarget=float norm=[<>,<>,] with=[<>,<>,]')
+const target = field(escape, 'target')
+const from = field(escape, 'from')
+assert(list(escape, 'norm').includes(target), `answer=summed: the escaped value ${target} has to be one of the loop's norm inputs ${list(escape, 'norm')}`)
+assert(list(escape, 'with').includes(from), `the product ${from} that handed the cotangent out has to be one of the loop's with inputs ${list(escape, 'with')}`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -945,7 +972,31 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=read_twice carried=1 node=11 origin=0 captures=1 answer=summed", "ESCAPE target=0 from=10 kindOfFrom=11 kindOfTarget=1 typeOfTarget=float norm=[3,0,] with=[10,12,]", "22.0"]
+expect_output_contains = ["22.0"]
+# The same two relations as the reading above, for the same reason: the positions are `<>`, the rest
+# of each line is exact, and the claim lives in the numbers' relation. The escaped value is the
+# state's initial (one of the loop's `norm` inputs -- `answer=summed`), and the product `from` names,
+# the one the reverse walk reached first, is one of the loop's `with` inputs. Two `add`s read `x`
+# here and either of them satisfies both, which is the point: `captures=1` says the collection is
+# keyed by the value and not by the product, and 22 rather than 15 is what the second read is worth.
+verify_script = """
+({ input, assert }) => {
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/<>/g, '\\d+')
+const pin = (stream, line) => {
+  const hits = stream.split('\n').filter((l) => new RegExp('^' + esc(line) + '$').test(l))
+  assert(hits.length === 1, `expected exactly one line like '${line}', found ${hits.length}`)
+  return hits[0]
+}
+const field = (text, name) => Number(text.split(name + '=')[1].split(/[ ,\]]/)[0])
+const list = (text, name) => text.split(name + '=[')[1].split(']')[0].split(',').filter(Boolean).map(Number)
+pin(input.normalized.stderr, 'TRANSPOSE function=read_twice carried=1 node=<> origin=0 captures=1 answer=summed')
+const escape = pin(input.normalized.stderr, 'ESCAPE target=<> from=<> kindOfFrom=11 kindOfTarget=1 typeOfTarget=float norm=[<>,<>,] with=[<>,<>,]')
+const target = field(escape, 'target')
+const from = field(escape, 'from')
+assert(list(escape, 'norm').includes(target), `answer=summed: the escaped value ${target} has to be one of the loop's norm inputs ${list(escape, 'norm')}`)
+assert(list(escape, 'with').includes(from), `the product ${from} that handed the cotangent out has to be one of the loop's with inputs ${list(escape, 'with')}`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -980,7 +1031,36 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=read_outer carried=2 node=12 origin=0 captures=2 answer=per-target", "ESCAPE target=0 from=11 kindOfFrom=11 kindOfTarget=1 typeOfTarget=float norm=[4,0,] with=[11,13,]", "ESCAPE target=1 from=10 kindOfFrom=11 kindOfTarget=11 typeOfTarget=float norm=[4,0,] with=[11,13,]", "29.0"]
+expect_output_contains = ["29.0"]
+# The three lines name nodes by position, so each position is `<>` and the rest of each line is
+# exact, as in the two readings above. What the lines say is `answer=per-target` -- two values
+# escaped, not two reads of one -- and that is what the numbers are read as a relation for: the two
+# `target`s and the two `from`s are four distinct nodes, and exactly one of the two escaped values
+# is one of the loop's `norm` inputs (the value the state starts from, `x`) while the other is not
+# (a product computed before the loop, `k = x*x`). A reading that summed them, or that landed both
+# on the same value, breaks one of those without moving a single number.
+verify_script = """
+({ input, assert }) => {
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/<>/g, '\\d+')
+const pin = (stream, line) => {
+  const hits = stream.split('\n').filter((l) => new RegExp('^' + esc(line) + '$').test(l))
+  assert(hits.length === 1, `expected exactly one line like '${line}', found ${hits.length}`)
+  return hits[0]
+}
+const field = (text, name) => Number(text.split(name + '=')[1].split(/[ ,\]]/)[0])
+const list = (text, name) => text.split(name + '=[')[1].split(']')[0].split(',').filter(Boolean).map(Number)
+const stderr = input.normalized.stderr
+pin(stderr, 'TRANSPOSE function=read_outer carried=2 node=<> origin=0 captures=2 answer=per-target')
+const port = pin(stderr, 'ESCAPE target=<> from=<> kindOfFrom=11 kindOfTarget=1 typeOfTarget=float norm=[<>,<>,] with=[<>,<>,]')
+const oper = pin(stderr, 'ESCAPE target=<> from=<> kindOfFrom=11 kindOfTarget=11 typeOfTarget=float norm=[<>,<>,] with=[<>,<>,]')
+const targets = [field(port, 'target'), field(oper, 'target')]
+const froms = [field(port, 'from'), field(oper, 'from')]
+assert(targets[0] !== targets[1], `two values escaped, not two reads of one: target ${targets[0]} twice`)
+assert(froms[0] !== froms[1], `two products handed the cotangents out, not one: from ${froms[0]} twice`)
+const norm = list(port, 'norm')
+assert(targets.filter((t) => norm.includes(t)).length === 1, `answer=per-target: exactly one escaped value is the loop's state initial (one of norm ${norm}), found ${targets.filter((t) => norm.includes(t)).length}`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 known_fail = ["nvm"]
@@ -1123,7 +1203,30 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 1
-expect_output_contains = ["2.0", "TRANSPOSE function=g2 skip=call-no-transpose node=4 callee=none", "reason=function-closure"]
+expect_output_contains = ["2.0", "reason=function-closure"]
+# The line names three nodes by position -- the call (`node=`), its first ordinary input (`value=`)
+# and the `with` input holding the closure (`with=`) -- so the three positions are `<>` and every
+# other character is exact, including the two kinds: a Data node for the argument and a Fill for the
+# partially applied function value. Nothing on the line *names* the call (`callee=none` is the point
+# of the entry), so the numbers are read as the order a graph is built in: a call can only name
+# nodes that already exist, so its own position has to be greater than both of the ones it reads.
+# That still catches a line that printed one of the call's inputs where the call belongs.
+verify_script = """
+({ input, assert }) => {
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/<>/g, '\\d+')
+const pin = (stream, line) => {
+  const hits = stream.split('\n').filter((l) => new RegExp('^' + esc(line) + '$').test(l))
+  assert(hits.length === 1, `expected exactly one line like '${line}', found ${hits.length}`)
+  return hits[0]
+}
+const field = (text, name) => Number(text.split(name + '=')[1].split(/[ :,\]]/)[0])
+const line = pin(input.normalized.stderr, 'TRANSPOSE function=g2 skip=call-no-transpose node=<> callee=none value=<>:0 with=<>:4 reason=function-closure')
+const call = field(line, 'node')
+const argument = field(line, 'value')
+const closure = field(line, 'with')
+assert(call > argument && call > closure, `the call ${call} has to come after the nodes it reads (${argument}, ${closure})`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1138,7 +1241,26 @@ backends_agree = ["exit_code"]
 expect_exit = 1
 expect_stdout_starts_with = "2.0\n"
 expect_stdout_not_contains = ["TRANSPOSE function=", "REINTERP "]
-expect_stderr_contains = ["TRANSPOSE function=g2 skip=call-no-transpose node=4 callee=none", "reason=function-closure"]
+expect_stderr_contains = ["reason=function-closure"]
+# The refusal's own line, read off stderr the way the entry above reads it: the three positions are
+# `<>`, the two kinds and the reason stay exact, and the call has to come after the two nodes it
+# reads. What this entry adds is the stream, and the stream is what the pin is on.
+verify_script = """
+({ input, assert }) => {
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/<>/g, '\\d+')
+const pin = (stream, line) => {
+  const hits = stream.split('\n').filter((l) => new RegExp('^' + esc(line) + '$').test(l))
+  assert(hits.length === 1, `expected exactly one line like '${line}', found ${hits.length}`)
+  return hits[0]
+}
+const field = (text, name) => Number(text.split(name + '=')[1].split(/[ :,\]]/)[0])
+const line = pin(input.normalized.stderr, 'TRANSPOSE function=g2 skip=call-no-transpose node=<> callee=none value=<>:0 with=<>:4 reason=function-closure')
+const call = field(line, 'node')
+const argument = field(line, 'value')
+const closure = field(line, 'with')
+assert(call > argument && call > closure, `the call ${call} has to come after the nodes it reads (${argument}, ${closure})`)
+}
+"""
 expect_output_contains = ["transpose has no transpose for this function"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
