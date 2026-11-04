@@ -73,22 +73,59 @@ enum class TransposeRefusalCause {
     /// what has nothing to say for these ranks. The two want different edits: `RuleShape` is answered
     /// by widening the pattern, and this one by writing the missing shape's law. Measured 2026-11-03
     /// on `matmul_t` at a rank-three operand: with the law serving ranks one and two only, the
-    /// refusal used to arrive as `CotangentNeedsAValue` carrying the builder's own sentence ("No
+    /// refusal used to arrive as `cotangent-needs-a-value` carrying the builder's own sentence ("No
     /// matching function found for argument types"), which names a helper instead of the law and says
     /// nothing about the rank a reader has to change.
     RuleRanks,
-    /// A parameter a cotangent is answered for, whose **value** the law's right side reads, and whose
-    /// type does not state its shape (`float[..]`, `float[]`). The transposed function is handed the
-    /// cotangent and nothing else, so a law that needs the parameter's value can only be answered
-    /// when the shape the value carries is in the type: `float[2, 3]` says how many positions the
-    /// parameter has, and `float[..]` does not. This is the language's rule about what a transposition
-    /// is (author, 2026-11-03 16:15) -- the adjoint of a linear map needs the shape of its domain --
-    /// not a limit of this walk: the same thing is why JAX's `linear_transpose` asks the caller for the
-    /// shape of the value it transposes. The refusal is raised as its own diagnostic
-    /// (`RuntimeDiag::TransposeNeedsParameterShape`), so a reader is told to write the shape in the
-    /// type instead of being told the compiler cannot do it.
+    /// A declaration that states no shape, where a transposition needs one: a parameter whose extents
+    /// are open (`float[..]`, `float[]`) and whose value -- or, what is the same question here, the
+    /// shape that value carries -- a law's right side has to read. The transposed function is handed
+    /// the cotangent and nothing else, so such a law can only be answered when the shape is in the
+    /// type: `float[2, 3]` says how many positions the parameter has, and `float[..]` does not. This is
+    /// the language's rule about what a transposition is (author, 2026-11-03 16:15) -- the adjoint of a
+    /// linear map needs the shape of its domain -- not a limit of this walk: the same thing is why
+    /// JAX's `linear_transpose` asks the caller for the shape of the value it transposes. The refusal is
+    /// raised as its own diagnostic (`RuntimeDiag::TransposeNeedsParameterShape`), so a reader is told
+    /// to write the shape in the type instead of being told the compiler cannot do it.
+    ///
+    /// **One class, one word: this is the word for "the declaration states no shape"** (author,
+    /// 2026-11-04). The same fact arrives at two entrances and used to be spelled two ways: the
+    /// operator's own call site refused when the member came out with a port the promised type has no
+    /// room for (`buildTransposeGraph`), and a law's right side that could not be handed an operand
+    /// reached through `vjp`/`split` arrived as `cotangent-needs-a-value` ("a value is missing"). The
+    /// second spelling is what taught readers to look for a lost value while the repair was an extents
+    /// write, so the walk now asks the same question at that site and refuses *this* cause: the operand
+    /// the law read is an array whose declaration leaves its extents open, which is the shape this
+    /// diagnostic names. A cause is one class of fact, and this class has one word.
     ParameterShape,
-    CotangentNeedsAValue,
+    /// A law's right side reads a **value** the walk cannot hand it, and no declaration of a shape
+    /// supplies that value: the parameter's own value is the tangent's (a transposition answers the
+    /// tangent, it is not handed one), or the operand is a number whose shape is already complete
+    /// (`float` needs no extents, so no edit to a declaration adds anything). Measured 2026-11-04:
+    /// `mul_tangent`'s law reads `w` and `dx`, both tangents, and `read_outer`'s `k = x*x` reads a
+    /// `float` parameter -- `skip=law-reads-a-value uri=:op/mul_d position=0`.
+    ///
+    /// It is **not** `ParameterShape`, and the two must not be merged: there the repair is an edit to
+    /// a declaration, and here there is no edit to make -- the value has to reach the member some
+    /// other way, which is the question
+    /// `docs/handover/questions/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md`
+    /// asks. A reader who is told to write extents in a declaration that already states them all has
+    /// been told to do something that changes nothing.
+    LawReadsAValue,
+    /// A call whose answer is the `(value, tangent)` pair is read as a whole, and this step has no
+    /// cotangent on the pair's tangent component: there is no rule for a cotangent arriving on a
+    /// pair, so the call cannot be turned around by reading one component's cotangent as another's.
+    /// Its own cause and not `LawReadsAValue`: nothing here reads a value the walk failed to reach --
+    /// the walk never reached a *cotangent*, and the sentence has to say so.
+    ///
+    /// **No case in the tree reaches it** (measured 2026-11-04: the step's own log field,
+    /// `why=no-cotangent-on-the-tangent-component`, occurs at the site in
+    /// `transpose.cpp#buildTransposeMember` and in no case, plan or page). It is kept as a guard
+    /// rather than deleted, the way `CallValueMissing` is: a pair read with a cotangent wanted on its
+    /// second component is a state the walk can still enter, and answering it with a cause about a
+    /// missing *value* is what sent a reader to the wrong edit. A program that reaches it needs a page
+    /// of its own before this can be called a language rule.
+    CotangentOnAPair,
     State,
     Range,
     CallNoTranspose,

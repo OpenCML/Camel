@@ -419,6 +419,31 @@ which turns a reading into a red about the reading. This happened twice in one n
 extra failure in a full run, once as a "thirtieth red" that was the log itself. The log is the record
 of the measurement, so it belongs where records live and not where the sources do.
 
+## A file is written by an absolute path, never a relative one
+
+**In PowerShell, write every file by its absolute path.** A `cd`, a `Push-Location` or a worktree you
+just entered does not make a relative path land where you think it does.
+
+`Set-Location` changes the shell's `$PWD` and **not** `Environment.CurrentDirectory`, and the .NET file
+APIs (`[System.IO.File]::WriteAllText`, `ReadAllText`, `[System.IO.Directory]`) resolve a relative path
+against the process's working directory, which is the one the shell started in -- for a lane, the main
+checkout. The symptom is not an error: the command succeeds, and either the file is unchanged, or, the
+worse half, **it is changed in another tree**. Both look exactly like a working edit, because a read and
+a write that take the same wrong path are self-consistent: a script that read a file, replaced a
+paragraph and wrote it back can report that everything went fine while the tree it was asked about was
+never touched.
+
+The rule comes from a mis-write (2026-11-04): a lane replaced a lambda in
+`modules/transforms/transpose.cpp#buildTransposeMember` and the diff appeared in the main checkout's
+`git status` while its own worktree showed nothing. The main checkout is the one surface every lane
+reads (`agents/branching.md#The Main Checkout Is A Read-Only Coordination Surface`), so a stray write
+there is read by someone else as their own working state.
+
+**Prove where it landed, every time**: immediately after a write, read both surfaces --
+`git -C <your worktree> status --porcelain` (the file you meant, and non-empty) and
+`git -C D:\Projects\Camel status --porcelain` (empty). Non-empty and empty, in that order, is the
+reading that says the write went where it was asked to go; anything else is a rescue, not an edit.
+
 ## Notes and comments hold the criterion, never the measurement
 
 A `desc`, a `known_fail_note` or a `#` comment next to a test says **what the case pins** — the

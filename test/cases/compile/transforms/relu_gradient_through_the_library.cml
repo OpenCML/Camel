@@ -43,7 +43,7 @@
 // asks the product's law for the mask's **own** cotangent, and stops at the position the answer does
 // need, the tangent's:
 //
-//     TRANSPOSE function=split_of_jvp_of_total_backward skip=cotangent-needs-a-value uri=tensor:multiply position=1
+//     TRANSPOSE function=split_of_jvp_of_total_backward skip=parameter-shape uri=tensor:multiply node=9 position=1 param=0 param-type=float[]
 //
 // `mul_tensor_t` names each operand's shape in its answer -- `sum_to(ct * w, x)` reads `x`, and
 // `sum_to(ct * x, w)` reads `w` -- so the answer for the tangent's cotangent reads the tangent
