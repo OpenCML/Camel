@@ -190,6 +190,30 @@ member built here”），所以捕获表从来不会被填，调用点从来没
 - 该页 §1.3 的“一翻 16 条”是 **d1aa176ee 之前**的代码状态（那时闭包端口经 `closurePorts[slot]` 收余切）；
   在今天的 `develop` 上，**收的那一侧翻不动任何东西**（第 2 节）。
 
+### 5.4 实验 4：把“记录”接回去（第 5.1 节的一处）——不合判据，已回退
+
+改动（**只用于测量，已 `git checkout --` 回退**）：在 `ruleCotangent` 的 `valueOf` 里，当律要的值取不到、
+而它正是某个**参与微分的参数**的端口时，把这个参数下标记进 `askedValues`；由一个 RAII 在
+`buildTransposeMember` 的每条出口把它交给 `needs`（`needs` 只有探针那一趟会传）。签名、捕获端口、三个调用点
+一处没动——这就是 §5.1 说的“一个函数、一处”。
+
+`test/plans/feat/compile/transforms`：`105 = 97 pass / 8 fail / 0 known`（基线 `98 / 2 / 5`）。
+
+| 判据 | 结果 |
+| --- | --- |
+| #2 `transpose_tuple_component.two_reads_of_one_tuple_add` 不许变静默零 | **守住**：仍绿（`add` 的律不读操作数的值，成员没多出端口） |
+| #3 `transpose_no_tangent.tuple_member` 不许变静默零 | **守住**：仍绿 |
+| #4–#7 四条不许“红得不对” | 仍红，但**句子换了**（`known failure changed its mind: expected "skip=…position=0", got "expected exit 0, got exit 1"`） |
+| #1 若变绿按过期标记处理 | **没变绿**：`TRANSPOSE function=__g_322__ ports=2 promised=1 cause=needs-a-value-outside-the-closure`——成员确实拿到了第二个端口（参数的值），**`buildTransposeGraph` 按端口数把它拒了**。这是第 5.2 节那道墙的现场证据 |
+| 不许超出上面四条 | **越界**：`transpose_many_parameters` **PASS→FAIL**（它断言的原句 `skip=cotangent-needs-a-value uri=:op/mul_d position=0` 变成了 `autodiff::mul_tangent<float>` 上的 `position=1`）；另有 `__g_323__ skip=call-no-transpose node=4 callee=mt` 这种新句子 |
+
+结论：**按判据停手，回退，取默认丁**。它同时给出一条有价值的读数：**把值接进成员是能做的**
+（`ports=2` 造出来了），**卡住的是顶层 `Transpose<F>` 的名字**——这正好把“值这一半”指到丙。
+
+> 同一实验还纠正了本节 5.2 自己的一个说法：第 4 节的探针显示缺的那个端口**就是切向量参数**（`float[]` /
+> `float[..]`，`port-param=0`），不是“残差参数”。所以“把残差参数排除出参与集”的谓词不能修 #4–#7——它们
+> 要的恰恰是那个必须被答余切的参数的值。
+
 ## 6 四种裁法与代价
 
 | 裁 | 做法 | 代价（量过的） |
