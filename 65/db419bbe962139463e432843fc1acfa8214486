@@ -1,0 +1,15 @@
+# libgrad 报告：库层 grad/with_grad 的缺口普查与那一处墙
+
+分支 lane-libgrad，最后提交 65db419bb（父 f08951def）。
+
+1. **三类计数（53 个 autodiff 用例 = feat/transforms 34 + feat/linear 19）：① 库层已答 31 / ② 库层写不出 22 / ③ 能写但答不同 0。**
+2. ① 31 = split 族 22（`split_forward_half` … `split_unread_member_with_no_zero`）+ floatgate 5（`f32_scalar_transpose` … `f32_branch_join`）+ `vjp_single`、`pullback_of_a_sum_of_squares`、`pullback_read_at_a_cotangent` + `split_identity_pipeline`。
+3. ② 22 = 组合 4（`grad_vmap_f`、`vmap_grad_f`、`jvp_vjp_f`、`grad_vjp_g_zero`）+ linear 的引擎 `grad` 10（`grad_refused`、`grad_through_loop`、`grad_array_loop`、`grad_array_index`、`grad_loop_collect`、`discrete_loop_state`/`iterable`/`struct_field`/`effectful_value`、`refuse_loop_no_channel`）+ `var_reference` 的 `with_grad` 8（`var_array_append`、`var_tensor_local`、`var_tensor_read`、`var_tensor_read_after_call`、`var_tensor_read_after_write`、`var_tensor_read_in_callee`、`var_through_with_grad`、`grad_tuple_read`）。
+4. ③ 0 的原因：凡「数字可能不同」的地方都先撞 ② 那堵墙——库层的 `grad`/`with_grad` 名字还没走到比较数字的一步，所以一个「答案不同」的用例都还立不起来。
+5. **墙只有一处**：被微分的体里「对函数值的调用」（CALL 节点）。`jvp(use)(plain, 2.0, (), 1.0)`（`use(f, z) = f(z)`）今天实测 SIGSEGV（nvm/fvm/jit 全崩在 `NodeVMSchedPass::call`），本笔改成具名拒绝：`skip=callee`、`construct=a call through a function value`，并新增用例 `jvp_refuses_a_call_through_a_value.cml` 钉住。这是 9.9 的顺序要求（崩 < 错数 < 拒绝），也是引擎对同一形状从另一侧给出的判决。
+6. **`grad` 的体是组合**：`transforms:jvp` → `transforms:split` → `transforms:transpose`，再加 seed 1 与 `.0`（`let reading = vjp(f)`，`pullback(1.0).0`）。`GradResolver`、`buildGradientGraph`、`pullback.cpp` 三个符号在 `stdlib/vjp.cml` 与 `vjp` 的体里都不出现；`library_grad_is_the_composition` 已把它逐元素对上引擎的 `grad`/`with_grad`。
+7. **`has_aux` 四形态的读数是「没有数」**：名字写不出来，不是语义写错——嵌套 lambda 不能捕获外层参数包（`Unresolved reference: 'xs'`）、lambda 的 `<w, ...rest>` 在期望表止于第一个 `with` 参数时不推断、`let` 绑定的包不可 `...` 拼接（`RestArgumentNotTuple`）、具名函数让嵌套 lambda 读自己的包会撞编译器不变量（`builder_support.h#linkNodes`）。同一组合写在 callee 是名字的调用点则与引擎逐元素相同：`9.0/3.0`、`[4.0, 5.0, 6.0]`、`{ a: 4.0, b: 1.0 }`。
+8. 旧句是假的：「forward mode 把 `with` 参数的切向答成其类型的零」自 `lane-withtan`（2026-11-04）起不成立（实测 `jvp((ww) => weighted<ww>(2.0))(3.0, 1.0)` 为 value=9.0 tangent=3.0）。本笔把 `stdlib/vjp.cml#with_grad` 的说明与拒绝句、以及 `with_grad_from_the_library.cml`/其计划条目一起改成实测的那一条。
+9. **三关**（宿主 release，与 `origin/develop` 基线在本工作树逐一相同）：`feat/linear` 882 total / 878 pass / 0 fail / 2 skip / 2 known / exit 0；`feat/transforms` 48 / 40 / 0 / 8 known / exit 0；`feat/showcase_s2` 9 / 7 / 2 fail / exit 1（两处是基线自带的 `matmul_t` 参数形状墙）。**killed 0。**
+10. 附加：`feat/compile/transforms.plan.toml` 186 项 174 pass / 0 fail / 12 known / exit 0（新条目绿）；`check-doc-links.mjs --citations` 866/866 与 `--questions-index` 均干净。
+11. 未做（按任务边界）：不删 `pullback.cpp`/`buildGradientGraph`/`GradResolver`；S2 未用库层 `grad`。要四形态出数，需要先让「lifted 体能调用函数值」（动态 lift callee 的图），那是另一条车道。
