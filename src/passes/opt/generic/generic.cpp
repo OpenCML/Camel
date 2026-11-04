@@ -519,17 +519,35 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     const auto inArm = [&](gc_node_ref_t n) {
         return std::ranges::find(armNodes, n) != armNodes.end();
     };
-    // The region of the arm itself, as against the regions nested in it. A node of a nested region --
-    // the condition or body of a loop written in the arm, the arm of a branch written in it that is
-    // still there -- runs when that region runs, not whenever the branch runs: the loop's condition
-    // runs inside the loop, and an inner arm only when that inner branch takes it. The place the
-    // branch stood in is taken by a node the whole block reaches, so only a node of the arm's own
-    // region may stand there; handing it to a node of a nested region makes the statements after the
-    // branch wait on a value that region computes, and the commit refuses that graph (17, 4.1: a node
-    // reads only nodes that run whenever it runs).
-    const uint32_t armRegion = draft.armRegionOf(brch, *arm);
-    const auto inArmRegion   = [&](gc_node_ref_t n) {
-        return armRegion != 0 && draft.alive(n) && draft.nodeRegion(n) == armRegion;
+    // The control region of the arm, as against the regions nested in it. A node of a nested
+    // control region -- the condition or body of a loop written in the arm, the arm of a branch
+    // written in it that is still there -- runs when that region runs, not whenever the branch
+    // runs: the loop's condition runs inside the loop, and an inner arm only when that inner branch
+    // takes it. The place the branch stood in is taken by a node the whole block reaches, so only a
+    // node that runs with the arm may stand there; handing it to a node of a nested region makes the
+    // statements after the branch wait on a value that region computes, and the commit refuses that
+    // graph (17, 4.1: a node reads only nodes that run whenever it does).
+    //
+    // `Inline`, `Block` and `Dead` are not control regions (control_regions.h): they only say where
+    // code came from, and their nodes run with the region around them, which is why the test below
+    // looks through them rather than comparing region ids. An inlined body's tail is such a node.
+    const auto controlRegionOf = [&](uint32_t region) {
+        while (region != 0 && region < draft.regionCount()) {
+            const camel::runtime::GCRegionKind kind = draft.region(region).kind;
+            if (kind != camel::runtime::GCRegionKind::Inline &&
+                kind != camel::runtime::GCRegionKind::Block &&
+                kind != camel::runtime::GCRegionKind::Dead) {
+                break;
+            }
+            region = draft.region(region).parent;
+        }
+        return region;
+    };
+    const uint32_t armRegion  = draft.armRegionOf(brch, *arm);
+    const uint32_t armControl = controlRegionOf(armRegion);
+    const auto inArmRegion    = [&](gc_node_ref_t n) {
+        return armControl != 0 && draft.alive(n) &&
+               controlRegionOf(draft.nodeRegion(n)) == armControl;
     };
     // The statements of the taken arm are the statements of this block once the branch is gone, and a
     // block's statements are one chain (docs/design/effects/edges.cn.md 5.3). They do not always
