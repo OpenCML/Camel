@@ -1,6 +1,6 @@
 # 闭包成员与参数的对应，由谁记录、经哪条通道
 
-**状态**：待裁；我方默认见第 5 节（**在闭包端口节点上记一个 Int 属性 `transforms.parameter_of`，`split` 写、`transpose` 读；读不到就保持今天的明确拒绝**）。本轮没做，原因见第 4 节：**记录已经有了，缺的是把它运到 `transpose` 的通道**。
+**状态**：待裁；**原默认（节点属性 `transforms.parameter_of`）已被"不许动黄金"这条判据挡下**，见第 5 节。本轮没做代码，只做了通道查证与基线导出。**记录已经有了（`split.h#Residual::parameter`），缺的是把它运到 `transpose` 的通道，而现成的两条通道一条改图内容、一条契约禁止用于语义。**
 
 ## 1. 问题
 
@@ -40,13 +40,34 @@ ALIGN key=3 kind=1 type=float[2, 2] closureMember=0 paramPort=2 withPort=0
 
 而 `camel/core/node_attrs.h` 本来就有 per-node 属性（`Int` 值、"graph content"、随重写复制），**它就是为这种事准备的通道**。所以缺的不是机制，是把这条通道用起来的那一次改动：注册一个键、`split` 写、`transpose` 读。
 
-## 5. 默认（我方按此做，除非被推翻）
+## 5. 通道查证：现成的两条，一条改内容、一条契约不许
+
+**（甲）节点属性 `camel/core/node_attrs.h`：没有"分析属性"这一类。** 四处原文：
+
+1. 文件开头第一句：**"Node attributes: what a library attaches to the nodes of a graph, as graph content"** —— 所有属性都是内容；
+2. `draft.h` 里 `attrs` 的注释：**"Graph content, ... attribute column (GCGraph::nodeAttrs)"**；
+3. `node_attrs.h#text`：**"Process-independent: caches, hashes and dumps use it"** —— 哈希与导出读的就是它；
+4. **`fates()` 这张表是类守卫**：每个（键, 值）都要在**五个消费者**（interpreter / dump / onnx / tiles，`FateRow` 的列）里各写一行 `Carried`/`Refused`/`NotOnANode`；ONNX 导出与 Tiles 遇到表里没有的键**直接拒绝**，`inspect --attrs` 会把表与已注册的键对一遍。新键不填这张表 = 构造上就红。
+
+结论：**没有"不进哈希"的那一类**，新键就是内容、就是黄金漂移。按裁决"没有 ⇒ 报我，不要自己创造一类、也不要硬塞进内容属性"，**停在这里**。
+
+**（乙）`Context::setPassFact`（`camel/core/context/context.h`）：有，但契约写着不许。** 原文："A fact a pass leaves for the passes that run after it on this context: something it decided that the graph it hands on does not show... **A later pass reads a fact to explain what it finds, never to decide what a program means.**" —— `transpose` 用"哪个闭包成员是参数 k 的值"去**决定算出来的数**，正是它禁止的用法。
+
+**没有任何现成通道同时满足"不改图内容"与"用来决定语义"**，这就是要问的那一句。
+
+## 6. 默认（改为：先定通道，不先选属性）
+
+1. **通道由作者定**，三个候选各自的代价已写在上面：节点属性（改内容、进哈希、要填 `fates` 五行）／`passFacts`（不改内容，但契约禁止用于语义）／新开一条非内容通道（要动 core 头）。
+2. 通道定了之后，接法不变：`split` 写"成员 ← 参数"，`transpose.cpp#forward` 的 Port 分支读它，**读不到就保持今天的明确拒绝**，一个字都不按类型或位置猜。
+3. **两条反例**（各钉一种错法，缺一不可）：
+   - **抓"按类型猜"**：同类型两参数（`float[2,2]`）、**取不同的值**（`a` 全 1、`b` 全 2），要求 `dL/da` 用 `b` 的值、`dL/db` 用 `a` 的值，两个答案都与手算一致——按类型猜会让两个答案变成同一个数；
+   - **抓"按位置猜"**：**只读一个参数的程序**（另一个参数不被后一半读到，闭包里少一个成员），参数序号不能因此错位——按位置猜在这里整体偏移，而第一条反例抓不到它（两个参数都被读到、连续排在前面时，位置猜恰好成立）。
 
 1. 在 `camel/core/node_attrs.h` 的既有机制上注册一个键 `transforms.parameter_of`（`Int`），值 = 参数下标 + 1（0 留给"没有"）。
 2. `split` 建闭包端口时，对 `residuals[i].parameter != kNotAParameter` 的成员写这个属性。
 3. `transpose.cpp#forward` 的 Port 分支：`portOfParam[at]` 为空时，**在闭包成员里找属性等于 `at` 的那一个**，找到就返回它的端口；**找不到就保持今天的拒绝**（一个字都不按类型或位置猜）。
 4. 配套一条反例（作者要求）：同类型两参数、**取不同的值**（`a` 全 1、`b` 全 2），要求 `dL/da` 用 `b` 的值、`dL/db` 用 `a` 的值，两个答案都与手算一致——**若解析走了"第一个同类型成员"，两个答案会变成同一个数，这条用例就能抓出来。**
 
-## 6. 为什么这值得一问而不是直接做
+## 7. 为什么这值得一问而不是直接做
 
 它给**所有**律加了一条事实来源（图上多一列属性），会进"graph content"、进哈希、进导出；而这条通道今天在图里是空的。作者对"图里记什么"一直有明确裁定（属性是"库挂上去的内容"，键由库注册），所以这一步的形状（键名、值域、是否随重写复制）应当由他一句话定，而不是我替他选。
