@@ -58,6 +58,8 @@ error[SyntaxDiag::UnexpectedToken]: Unexpected '('; expected 'case' or '}'.
 
 exit 1。**这个模式的第一个记号就没有位置可站**：`src/parse/syntax/parser_expr.cpp#ParserImpl::parseTypeCasePattern` 今天收的只有形状词与一个类型表达式（`typeCasePattern : 'struct' | 'tuple' | 'func' | '#' 'leaf' | '_' | typeExpr`），分支之间的分隔词是 `case`。
 
+> **注记（照裁定抄的人会以为自己抄错）**：裁定里那段 `match type (...WithOf<F>) { (W, ...Rest) => W }` 省略了 `case`——实现要求写 `case`，照抄会得到上面那行 `Unexpected '('; expected 'case' or '}'`。**这不是抄写错误，是裁定片段与实现之间的一个字的差。**
+
 **(b) 补上 `case` 再写一遍**：`type WeightOf<F> = match type (...WithOf<F>) { case (W, ...Rest) => W }`
 
 ```
