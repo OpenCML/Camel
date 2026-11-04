@@ -294,6 +294,14 @@ Type *cachedTangent(Type *primal, Audience audience) {
 
 } // namespace
 
+std::optional<slot_t> zeroTangentConstantOf(const type::Type *type) {
+    const TangentSpace *space = DerivativeRegistry::instance().findTangentSpace(type);
+    if (space == nullptr) {
+        return std::nullopt;
+    }
+    return space->zero;
+}
+
 Type *gradientTypeOf(Type *parameter) {
     return cachedTangent(parameter, Audience::User);
 }

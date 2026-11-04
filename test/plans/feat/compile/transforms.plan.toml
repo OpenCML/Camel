@@ -1683,6 +1683,48 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "jvp_structural_zero_at_the_wide_widths"
+desc = "A constant has no tangent, so the lift hands a rule the zero of the constant's own type, and the expansion drops the term that zero multiplies. The question it asks is one question about one fact -- *is this tangent the zero constant the tangent's type registers?*, `zeroTangentConstantOf` in `include/camel/core/derivative.h` -- and not a list of the widths somebody has met. This case pins the two widths the old `switch` in `modules/transforms/jvp.cpp` named (`float` and `f32`) and pins them by **absence**: each function is asked at a negative base, where the dropped exponent term `x^w * log(x) * dw` would answer NaN, so the reading is the expansion's `omit=structurally-zero-tangent` line naming the operators it never copied, beside the tangent that is still there. It goes red if the criterion stops recognising one of these widths, if the dropped term comes back (the tangent becomes NaN), or if the write side stops writing the zero of that width."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_structural_zero_at_the_wide_widths.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["REINTERP jvp rule=jvp_pow omit=structurally-zero-tangent nodes=3 uris=:op/mul_d,math:log_d,math:pow_d", "float value=9.0 tangent=-6.0", "REINTERP jvp rule=jvp_pow omit=structurally-zero-tangent nodes=3 uris=:op/mul_f,math:log_f,math:pow_f", "f32 value=9.0 tangent=-6.0"]
+expect_output_not_contains = ["skip=", "nan"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "jvp_structural_zero_at_the_half_widths"
+desc = "`bf16` and `f16` are floating types with a tangent space of their own (design principles 7.3, 9.9), so a constant of one has a tangent like any other constant's. The criterion in `modules/transforms/jvp.cpp` answered `false` for them: it named `Float64` and `Float32` in a `switch` and fell through for every other width, and the write side that gives a constant its zero named the same two widths, so the lift stopped at the first half-width constant with `skip=body` -- `jvp has no forward transform for this function` -- for a function whose derivative is plain arithmetic. The width is not a question this transform owns: the registry registers a zero constant for `f64`, `f32`, `bf16` and `f16`, and `zeroTangentConstantOf` is the one place that answers which. This case asks a half-width power at a negative base, where the term the structural zero multiplies is `x^w * log(x) * dw`, and pins both halves of the reading: the omitted product in the expansion's own line, and the tangent of the term that remains. It goes red if a width is listed by hand again (the lift refuses, `skip=body`), if the criterion stops recognising a half-width zero (the tangent becomes NaN), or if the constant's zero is not written in its own width."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_structural_zero_at_the_half_widths.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["REINTERP jvp rule=jvp_pow omit=structurally-zero-tangent nodes=2 uris=:op/mul_bf,:var/new", "bf16 value=9.0 tangent=-6.0", "REINTERP jvp rule=jvp_pow omit=structurally-zero-tangent nodes=2 uris=:op/mul_f6,:var/new", "f16 value=9.0 tangent=-6.0"]
+expect_output_not_contains = ["skip=", "nan"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "jvp_a_value_is_not_a_structural_zero"
+desc = "Zero is a value; *structurally zero* is a fact about where a tangent comes from. Only the second may be dropped from a rule's right side, and the difference is not academic: a dropped term is a term that is never computed, so judging a tangent zero when it is not answers a number that is silently wrong. This case is the guard on the other side of `jvp_structural_zero_at_the_half_widths` -- the one that has to stay green when the criterion is widened. Three readings. A product of two `float` parameters with a direction in each: both tangents are seeds, so both terms are computed, and a criterion that judged a seed structural zero would answer with one contribution instead of two (3.0 or 2.0 where the answer is 5.0). The same product at `bf16`, because the half-width arm is where a wrong width comparison would land: a `slot_t` compared in the wrong half is exactly how a non-zero tangent reads as zero. And a power whose exponent is **seeded with `0.0`**: the tangent is arithmetically nothing there, and the answer is still NaN because `log(-3.0)` is asked for -- a zero the program hands in is a value, not a zero the graph knows before it runs (the author's ruling of 2026-11-04). The `expect_output_not_contains` is the absence reading: no term was dropped anywhere in this case."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_a_value_is_not_a_structural_zero.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["product  value=6.0 tangent=5.0", "half     value=6.0 tangent=5.0", "zeroed   value=9.0 tangent=nan"]
+expect_output_not_contains = ["omit=structurally-zero-tangent", "skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "tangent_of_a_pack_keeps_every_parameter"
 desc = "A type function applied to a pack answers one member per member. `...Tangent<ParamsOf<F>>` in a function type's parameter list -- the splice `types` writes to declare `Jvp<F>` and `Vjp<F>` -- read as the empty tuple for every parameter, so a function whose parameters are arrays declared no tangent at all and the call that its own declaration asked for was refused. `Tangent<float[...]>` is `float[...]` and `Tangent<int[...]>` is `()`, so the reading agrees with the declared type for a function of `int`, `string` and `bool` (where every tangent is `()`) and disagrees only for a parameter that has something to differentiate: `(a: float[...], b: int[...], c: int[...]) => float` is six parameters at `(...ParamsOf<F>, ...Tangent<ParamsOf<F>>)`, three values and then the tangent of each, with both `int[...]` parameters still in place though their tangents are the same type. `Vjp<F3>` then equals the type written out by hand, pullback and all. The last line is the case that must not change: a function of two floats keeps two tangents, both `float` -- the reading that already worked, and the one a splice that merged members by type would have broken."
 kind = "behavior"

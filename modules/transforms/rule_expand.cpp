@@ -3,6 +3,7 @@
 
 #include "rule_expand.h"
 
+#include "camel/core/derivative.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
@@ -431,28 +432,44 @@ gc_node_ref_t statedExtentsValue(
 
 namespace {
 
-/// The operators a **product** is written with: the scalar `*` of the written table, in the two
-/// float widths it has, and the elementwise tensor product. A right side multiplies a tangent by a
+/// The operators a **product** is written with: the scalar `*` of the written table, at every float
+/// width it has, and the elementwise tensor product. A right side multiplies a tangent by a
 /// coefficient with one of these, and a product is the only shape whose value is decided by an
 /// input being zero: `where(x, dx, 0)` is not a product and its answer still depends on `x`.
 ///
 /// The list is written here rather than derived from an operator table because what is being asked
 /// is not "which operators are multiplications" but "which operators a *rule's* right side uses for
 /// a linear term", and the answer to that is the arithmetic the rulesets are written in
-/// (`stdlib/rulesets/**`): the scalar written ops and the tensor product. A product the list does
-/// not name is simply not collapsed -- no rule is made wrong by being absent here, the term is just
-/// computed the way it was before.
+/// (`stdlib/rulesets/**`): the scalar written ops and the tensor product. The scalar arm is read
+/// off the operator's name the way the rule key is (`ruleKeyOf`, `camel/core/forward.h`): `:op/mul`
+/// and then whatever width suffix the operator carries -- `_d`, `_f`, `_bf`, `_f6` -- so a width
+/// the language adds is a product without a list here changing, and `:op/assn_mul_*` (a compound
+/// assignment, not a term) is not one. A product the list does not name is simply not collapsed --
+/// no rule is made wrong by being absent here, the term is just computed the way it was before.
 bool isProductUri(std::string_view uri) {
-    return uri == ":op/mul_d" || uri == ":op/mul_f" || uri == ":op/mul" || uri == "tensor:multiply";
+    constexpr std::string_view opPrefix = ":op/";
+    if (uri == "tensor:multiply") {
+        return true;
+    }
+    if (uri.substr(0, opPrefix.size()) != opPrefix) {
+        return false;
+    }
+    const std::string_view name = uri.substr(opPrefix.size());
+    const size_t width          = name.find('_');
+    return name.substr(0, width) == "mul";
 }
 
 /// Whether a body node is a product this expansion can write as a zero instead of computing.
 ///
-/// The type has to be a float scalar: the zero of such a type is one number, which this graph can
-/// write down while it is built. An array's zero needs its extents, and a product whose value the
-/// expansion cannot write is left alone -- computing it and multiplying by a structural zero is the
-/// old behaviour, which is wrong only where the coefficient has no real value, and that is exactly
-/// the scalar case (`log(x)` at a negative `x`).
+/// The type has to be one whose tangent space states its zero as a **constant**: such a zero is
+/// one value this graph can write down while it is built, and which types those are is the
+/// registry's answer (`zeroTangentConstantOf`, `camel/core/derivative.h` -- every float width it
+/// knows), not a list of widths here. A type whose zero is an operator -- an array's
+/// `:tangent/zeros_arr`, which needs the value whose shape it reads -- is left alone: the product
+/// is computed and multiplied by a structural zero, the old behaviour, which is wrong only where
+/// the coefficient has no real value at all (the scalar `log(x)` at a negative `x`, and its
+/// elementwise form on an array, which this expansion cannot collapse for the same reason: the
+/// zero it would have to write is the shape of a value).
 bool isCollapsibleProduct(const rt::GCGraph &body, gc_node_ref_t ref) {
     const rt::GCNode *node = body.node(ref);
     if (node == nullptr || node->kind != rt::GCNodeKind::Oper) {
@@ -461,30 +478,22 @@ bool isCollapsibleProduct(const rt::GCGraph &body, gc_node_ref_t ref) {
     if (node->dataType() == nullptr) {
         return false;
     }
-    const auto code = node->dataType()->code();
-    if (code != camel::core::type::TypeCode::Float64 &&
-        code != camel::core::type::TypeCode::Float32) {
+    if (!camel::core::zeroTangentConstantOf(node->dataType()).has_value()) {
         return false;
     }
     const auto *oper = body.nodeBodyAs<rt::GCOperBody>(ref);
     return oper != nullptr && isProductUri(oper->uri());
 }
 
-/// The zero of a float type, written into this graph: what a collapsed product answers with.
+/// The zero of a type, written into this graph: what a collapsed product answers with. The value
+/// and the width are the tangent space's (`zeroTangentConstantOf`); a type it holds no constant
+/// for is not a type `isCollapsibleProduct` accepts.
 gc_node_ref_t staticZeroOf(camel::runtime::GraphDraft &draft, camel::core::type::Type *type) {
-    if (type == nullptr) {
+    const std::optional<slot_t> zero = camel::core::zeroTangentConstantOf(type);
+    if (!zero.has_value()) {
         return rt::kInvalidNodeRef;
     }
-    switch (type->code()) {
-    case camel::core::type::TypeCode::Float64:
-        return draft.materializeStaticValue(
-            camel::core::rtdata::toSlot<double>(0.0), type, rt::kGCNodeFlagConstant);
-    case camel::core::type::TypeCode::Float32:
-        return draft.materializeStaticValue(
-            camel::core::rtdata::toSlot<float>(0.0f), type, rt::kGCNodeFlagConstant);
-    default:
-        return rt::kInvalidNodeRef;
-    }
+    return draft.materializeStaticValue(*zero, type, rt::kGCNodeFlagConstant);
 }
 
 } // namespace

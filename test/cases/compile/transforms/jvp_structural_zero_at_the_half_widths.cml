@@ -1,0 +1,33 @@
+// `bf16` and `f16` are floating types of the language (design principles 7.3), and their tangent
+// space is their own type, exactly as `f32`'s is (9.9: the tangent space is settled type by type).
+// So a constant of one of them has a tangent like any other constant's -- the zero its space
+// registers -- and a rule that multiplies that tangent by a coefficient must be able to drop the
+// term, the same way the wide widths' case beside this one does.
+//
+// The criterion that decides "structurally zero" is one question about one fact: *is this tangent
+// the zero constant its tangent space registers?* (`zeroTangentConstantOf`,
+// `include/camel/core/derivative.h`). It has no width in it, so a width the registry answers for is
+// covered by construction; a criterion that named the widths it had met would answer `false` here
+// and the term would be computed -- `pow(x, w) * log(x) * dw` with `log(-3.0)` -- which is a NaN
+// multiplied by a zero.
+//
+// The two readings are the printed tangent (the term that is still there) and the expansion's own
+// `omit=structurally-zero-tangent` line naming the product it did *not* build.
+import rulesets.jvp
+import { jvp } from transforms
+
+func halfBrain(x: bf16): bf16 {
+    return x ^ 2.0
+}
+
+func halfPlain(x: f16): f16 {
+    return x ^ 2.0
+}
+
+func main(): int sync {
+    let (brainValue, brainTangent) = jvp(halfBrain)(0.0 - 3.0, 1.0)
+    `bf16 value={} tangent={}`->format<brainValue, brainTangent>->println
+    let (plainValue, plainTangent) = jvp(halfPlain)(0.0 - 3.0, 1.0)
+    `f16 value={} tangent={}`->format<plainValue, plainTangent>->println
+    return 0
+}
