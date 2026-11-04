@@ -38,14 +38,8 @@ export const REFUSAL_FIELDS = [
     'uri',
     'rule',
     'callee',
-    'construct',
-    'node',
-    'param',
-    'position'
+    'construct'
 ]
-
-/** The fields that are numbers in the record. */
-const NUMERIC_FIELDS = new Set(['node', 'param', 'position'])
 
 /**
  * Every refusal record in `text` (a run's stderr), in the order the run wrote them.
@@ -114,7 +108,7 @@ export function parseRefusalSpec(text) {
         if (field in spec) {
             throw new Error(`expect_refusal: '${field}' is named twice in one entry`)
         }
-        spec[field] = NUMERIC_FIELDS.has(field) ? Number(value) : value
+        spec[field] = value
         rest = rest.slice(match[0].length).trim()
     }
     return spec

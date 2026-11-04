@@ -111,9 +111,9 @@ inline const char *refusalCauseName(RefusalCause cause) {
 
 /// A refusal as a value: the cause, and the place of the program it names it at. The place fields
 /// are the ones a `REINTERP` line states about a refusal -- the operator's URI, the rule's name, the
-/// callee's name, the construct the plumbing could not copy, a node, a parameter, a position -- and
-/// a site fills the ones its line states. `-1` is "the line names no such place", the same sentinel
-/// the readings use for a node that is not one.
+/// callee's name, the construct the plumbing could not copy -- and a site fills the ones its line
+/// states. A reading that names a node or a parameter one day adds that field then: a field nothing
+/// records is a promise nothing keeps.
 struct RefusalReading {
     std::string_view transform; // "jvp" | "split" | "vmap"
     std::string_view function;
@@ -122,9 +122,6 @@ struct RefusalReading {
     std::string_view rule;
     std::string_view callee;
     std::string_view construct;
-    std::int64_t node     = -1;
-    std::int64_t param    = -1;
-    std::int64_t position = -1;
 
     RefusalReading() = default;
     /// A refusal of `cause` in `function`. The place it names -- if it names one -- is added with
@@ -152,18 +149,6 @@ struct RefusalReading {
     /// The construct the cut does not copy (`construct=a port`).
     RefusalReading &atConstruct(std::string_view value) {
         construct = value;
-        return *this;
-    }
-    RefusalReading &atNode(std::int64_t value) {
-        node = value;
-        return *this;
-    }
-    RefusalReading &atParam(std::int64_t value) {
-        param = value;
-        return *this;
-    }
-    RefusalReading &atPosition(std::int64_t value) {
-        position = value;
         return *this;
     }
 };
@@ -204,13 +189,6 @@ inline void appendJsonMember(std::string &out, const char *name, std::string_vie
     appendJsonString(out, value);
 }
 
-inline void appendJsonNumber(std::string &out, const char *name, std::int64_t value) {
-    out.push_back(',');
-    appendJsonString(out, name);
-    out.push_back(':');
-    out += std::to_string(value);
-}
-
 } // namespace detail
 
 /// The machine-readable half of a refusal, on the diagnostic side and beside the line that says it
@@ -243,15 +221,6 @@ inline void noteRefusal(const RefusalReading &reading) {
     }
     if (!reading.construct.empty()) {
         detail::appendJsonMember(json, "construct", reading.construct);
-    }
-    if (reading.node >= 0) {
-        detail::appendJsonNumber(json, "node", reading.node);
-    }
-    if (reading.param >= 0) {
-        detail::appendJsonNumber(json, "param", reading.param);
-    }
-    if (reading.position >= 0) {
-        detail::appendJsonNumber(json, "position", reading.position);
     }
     json += "}";
     readings() << "READING_REFUSAL " << json << '\n';

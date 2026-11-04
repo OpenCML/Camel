@@ -987,9 +987,8 @@ from `modules/transforms/refusal_readings.h#noteRefusal` — and each entry here
 fields it decides: `transform` (which may be written on its own first, as in the example above),
 `function`, `cause` (the named cause the transform's table spells,
 `refusal_readings.h#RefusalCause`) and the place the refusal names (`uri`, `rule`, `callee`,
-`construct`, or the numbers `node`, `param`, `position`). A record has to answer every field an
-entry names; a field an entry does not name is not compared. A value with a space is quoted
-(`construct="a call"`).
+`construct`). A record has to answer every field an entry names; a field an entry does not name is
+not compared. A value with a space is quoted (`construct="a call"`).
 
 The `REINTERP` line is not read by the runner at all: it is what a person reads, and its wording is
 kept, but it is not the criterion. A cause renamed in the table is one edit and no case changes
