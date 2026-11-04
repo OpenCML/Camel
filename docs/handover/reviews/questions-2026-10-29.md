@@ -2954,3 +2954,31 @@ ICPC 的 LLM 实验统一改用 v0.2.43（`ae874ce04`，pin 在 camel-lanes 的 
 这一步落地后，库层 `grad`/`with_grad` 按设计原则 9.9 写成组合。同一次合并里删掉 jvp 提升 `with` 值的过渡写法和总是拒绝的 `with_grad` 占位；S2 的 12 轮改用 `grad`，权重放回 `with` 参数，两条腿只剩"谁算"不同。
 
 另：提交信息说"`loop` 体里的效应没有输出"，这是规则本身（同步不被嵌套块继承，见 §4.3），不是缺陷。要在每一轮都打印，就在循环体里写 `sync { … }`。
+
+## 裁定（2026-11-04 22:45）：三页
+
+**一、`match type` 能不能拆数组类型的维度（`can-match-type-take-an-array-types-dimensions-apart`）**：能，按"类型包像值包一样拆"的同一条规则补上。
+- 数组类型的模式写成 `case E[...Dims] => …`：`E` 绑定元素类型；`Dims` 绑定维度，是一个编译期的值包，每个成员是一个常量或一个维度名。规则对照：设计原则第 1 节，类型是编译期的值，类型函数是普通函数；第 5 节，类型包像值包一样拆开。
+- 开放秩 `E[...]` 不匹配写出维度的臂。
+- 包的长度用值层拆包已有的写法取出（`indices ws` 的个数之类，不另造新语法）。`ShapeOf<T>` 写成 `match type T { case E[...Dims] => int[<Dims 的长度>]; case E[...] => int[] }`。
+- **统一**：`ElementOf`、`WithElement`、`RowsOf` 今天是 C++ 原语，理由是"`match type` 拆不开"。拆得开以后，这三个也改用 GN 写在库里，删掉 `typecall.cpp` 里的登记。同一类事只走一条路。
+- 在那之前，8 条用例按默认记为 `known_fail`；`sumToInfer`、`shapeListType`、`shapeInfer` 三处 C++ 照默认先不动，等 `ShapeOf` 落地时同一次删掉。
+- 这是类型层的一项扩展，我按既有原则定了方向。负责人如有不同意见可以改判。
+
+**二、`loop` 体里的 `println`（`does-a-println-in-a-loop-body-need-do-sync`）**：读数对，行为是规则。缺陷在诊断给的补救上，要改。
+- `EffectNotExecuted` 的 help 按效应所在的位置给出能用的写法：
+  - 在循环体里，写 `do sync { … }`；
+  - 在 `if` 的臂里，写 `then sync { … }` 或 `else sync { … }`；
+  - 在函数体里，写 `func f(): T sync { … }`，或者使用它的结果。
+- help 只列在那个位置写得通的补救，不再给 `let u = sync { … }` 这类语法上不成立的写法。
+- 判据：页里那四种写法各加一条用例。按 help 写，① 和 ③ 就有输出；help 里不再出现 ④ 那种写法。
+
+**三、jvp 的 `with` 提升（`should-the-jvp-with-promotion-go-with-the-language-gap`）**：走 ③。这就是 07:15 已定的次序：提升先留着，旁边的注记写明它是过渡；等两个缺口补上，同一次合并里删掉，那几组数照旧是判据。两个缺口的次序：
+1. 提升调用闭包值的函数体，22:20 已排为下一步。
+2. lambda 的 `(..xs)`：早已定为要收（16:10），现在停在"is not lowered yet"这句诊断上。这属于明令不许的"尚未支持"类诊断，要补上实现，诊断随之删掉。
+
+之后库层 `grad`/`with_grad` 写成组合，删掉提升和注记，S2 改用 `grad`。
+
+**返工 `9acbcf963`**：把 `with_grad` 占位的拒绝句改成"它的函数体还没写"，这就是一条"尚未实现"的诊断。照不留技术债的规矩，占位直接删掉：库里没有 `with_grad`，直到它作为组合写出来的那一天。用到它的用例改用引擎的 `with_grad`，或者先记为 `known_fail`。
+
+三页挪到 `reviews/` 留档。
