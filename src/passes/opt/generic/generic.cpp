@@ -312,6 +312,22 @@ branchArmNodes(const camel::runtime::GraphTransaction &transaction, gc_node_ref_
     return arms;
 }
 
+/// Where the block's chain goes when the node in front of a statement is a branch. A `BRCH` is not a
+/// link of that chain: it jumps into the arm it selects, and the node that runs once the branch is
+/// over, whichever arm was taken, is the `JOIN`. A statement chained from the `BRCH` itself waits on
+/// a node it is not in an arm of, and no back end runs it -- the four schedulers lay a branch out as
+/// `BRCH`, one range per arm, `JOIN`, and nothing outside the arms is ever entered from the `BRCH`
+/// (`docs/technical/17_graph_rewrite_api_contracts.md`, 4.1 rule 2). The front end writes the same
+/// link: the statement after a branch waits on the `JOIN`. The `JOIN` is returned even when it is
+/// gone -- the caller decides whether the place is still in its block.
+gc_node_ref_t branchPlaceInChain(const camel::runtime::GraphDraft &draft, gc_node_ref_t node) {
+    const camel::runtime::DraftNodeHeader *header = draft.header(node);
+    if (header == nullptr || header->kind != GCNodeKind::Brch) {
+        return node;
+    }
+    return reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(node).data())->join;
+}
+
 /**
  * Replaces a branch whose arm is statically known by that arm's code: the other arms are removed,
  * the JOIN's users read the taken arm's result, and the taken arm runs after what the BRCH ran
@@ -361,6 +377,7 @@ joinBlockFragments(camel::runtime::GraphTransaction &transaction, gc_node_ref_t 
     bool joinable = true;
     for (gc_node_ref_t head : heads) {
         gc_node_ref_t tail = head;
+        std::unordered_set<gc_node_ref_t> walked{head};
         for (;;) {
             gc_node_ref_t next = kInvalidNodeRef;
             for (gc_node_ref_t user : draft.syncUsersOf(tail)) {
@@ -374,6 +391,30 @@ joinBlockFragments(camel::runtime::GraphTransaction &transaction, gc_node_ref_t 
                 next = user;
             }
             if (!joinable || next == kInvalidNodeRef) {
+                if (!joinable) {
+                    break;
+                }
+                // The fragment's last statement is a branch: what follows the branch in the chain is
+                // its JOIN, not the BRCH (branchPlaceInChain). Walking on from the JOIN keeps the
+                // fragment's tail a node of the block; ending it at the BRCH would chain the next
+                // fragment from the BRCH itself, and a statement that waits on a BRCH is a statement
+                // no back end runs unless it is in one of the branch's arms (17, 4.1 rule 2).
+                const gc_node_ref_t after = branchPlaceInChain(draft, tail);
+                if (after == tail) {
+                    break;
+                }
+                if (after == kInvalidNodeRef || !inBlock(after) || !walked.insert(after).second) {
+                    // The branch's place is not in this block, or the walk has been here already:
+                    // the fragments cannot be joined without writing a place this block does not
+                    // hold.
+                    joinable = false;
+                    break;
+                }
+                tail = after;
+                continue;
+            }
+            if (!walked.insert(next).second) {
+                joinable = false; // the chain closes on itself
                 break;
             }
             tail = next;
@@ -573,6 +614,13 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         }
     };
     const auto chainTo = [&](gc_node_ref_t user, gc_node_ref_t pred) {
+        // A wait is never written from a BRCH: the node that follows a branch is its JOIN
+        // (branchPlaceInChain), and a node chained from the BRCH would wait on a node it is not in an
+        // arm of -- 17, 4.1 rule 2, the invariant no back end can run such a graph under.
+        pred = branchPlaceInChain(draft, pred);
+        if (pred == kInvalidNodeRef || !draft.alive(pred)) {
+            return;
+        }
         markStatement(user);
         markStatement(pred);
         const gc_node_ref_t only[1] = {pred};
