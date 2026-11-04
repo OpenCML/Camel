@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：50 页
+## 现在在等作者：51 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -58,4 +58,5 @@
 | [`2026-11-04-who-states-the-extents-a-product-law-reads`](2026-11-04-who-states-the-extents-a-product-law-reads.cn.md) | 乘积律读的那个形状，该由谁写出来？ |
 | [`2026-11-04-who-states-the-extents-of-a-stated-reduction`](2026-11-04-who-states-the-extents-of-a-stated-reduction.cn.md) | 一个 stated 归约的 extents，由谁在编译期说出来 |
 | [`2026-11-04-who-states-the-length-when-the-shape-is-open`](2026-11-04-who-states-the-length-when-the-shape-is-open.cn.md) | 形状开放时，长度由谁陈述？ |
+| [`2026-11-04-who-types-the-rank-zero-tangent-at-a-cuts-exit`](2026-11-04-who-types-the-rank-zero-tangent-at-a-cuts-exit.cn.md) | 切口的出口上，秩零的切向量由谁定类型 |
 | [`2026-11-04-widening-the-float-guard-turns-ten-hardcoded-types-into-defects`](2026-11-04-widening-the-float-guard-turns-ten-hardcoded-types-into-defects.cn.md) | 放宽 `Float64` 这道闸门时，十余处写死的类型会在同一刻变成缺陷 |

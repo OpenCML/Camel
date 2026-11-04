@@ -1,4 +1,4 @@
-// The gradient of a lane mean through the library's own rules.
+// The gradient of a lane mean whose answer is the element itself, through the library's own rules.
 //
 // `jvp_mean_axis` states the axis, the flag and the extents in one list, and `mean_axis_stated_t`
 // spreads each lane's cotangent back over the lane it was averaged from: the lane length is
@@ -9,21 +9,27 @@
 //
 //     x = [1.0, 2.0, 3.0, 4.0]   ->   value 2.5, dL/dx = [0.25, 0.25, 0.25, 0.25]
 //
-// The mean keeps its axis (`keepdims`), so the reduction's answer is a rank-1 tensor of extent 1
-// and `sum` reduces that: the cotangent the reverse law works from is an array, which is the shape
-// the law declares. Reducing the only axis of a rank-1 operand without `keepdims` answers the
-// element itself (a rank-zero array *is* its element, design principles 5.4), and
-// `stdlib/rulesets/transpose.cml#mean_axis_stated_t` declares its cotangent `float[..]` -- a
-// double read by that law is a pointer, and the run stops on a SIGSEGV inside
-// `modules/tensor/ops/gradient_ops.cpp#numelKernel`. That is the law's port to widen, not this
-// case's to hide: see docs/handover/questions/2026-11-04-axis-reductions-state-their-extents.cn.md.
+// Reducing the only axis of a rank-one operand without `keepdims` answers the element itself (a
+// rank-zero array *is* its element, design principles 5.4), so the cotangent the reverse law is
+// handed has no shape while its port says `T[..]`. That is not the law's to restate: the compiler
+// makes the rank-zero array where a value's type goes from `T` to `T[..]`
+// (`camel/core/type/composite/array.h#isRankZeroEdge`, `Array::createRankZero` through
+// `ArrayType::castSlotFrom`), so `numel(ct)` answers 1 -- one lane, the whole product of the stated
+// extents -- and the one law of this key reads both shapes of answer. Author, 2026-11-04 04:20
+// (`docs/handover/reviews/questions-2026-10-29.md`, "秩 0：只有一个转换点"): the ports say `T[..]`
+// and the conversion is the compiler's, once.
+//
+// This case wrote `keepdims = true` for a while to keep the answer a rank-one array, which dodged
+// the conversion rather than testing it. The ruling turned it back: the flag is `false`, the answer
+// is the element, and the quarter every position gets is the same number either way -- which is what
+// says the conversion did not change the derivative.
 //
 //     camel test/cases/compile/transforms/stated_mean_axis_gradient.cml
 import { vjp } from vjp
-import { mean_axis, sum } from tensor
+import { mean_axis } from tensor
 
 func total(x: float[]): float {
-    return sum(mean_axis(x, 0, true))
+    return mean_axis(x, 0, false)
 }
 
 func main(): int sync {
