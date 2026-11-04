@@ -348,8 +348,8 @@ std::string debugRunTypeIdentitySelfTest() {
         Type *elementOfA = TypeCallType::create("ElementOf", std::span<Type *const>(&packVar, 1));
         Type *expansion  = TypeCallType::makeExpand(elementOfA);
         require(
-            expansion->toString() == "..ElementOf<A>",
-            "an expansion prints as '..' and its body: " + expansion->toString());
+            expansion->toString() == "...ElementOf<A>",
+            "an expansion prints as '...' and its body: " + expansion->toString());
         require(
             TypeCallType::makeExpand(elementOfA) == expansion,
             "two expansions of one body are two objects");

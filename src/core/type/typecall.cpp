@@ -258,7 +258,7 @@ TypeCallType *TypeCallType::create(std::string_view name, std::span<Type *const>
 
 std::string TypeCallType::toString() const {
     if (*name_ == kExpandName) {
-        return ".." + (params_[0] != nullptr ? params_[0]->toString() : std::string("?"));
+        return "..." + (params_[0] != nullptr ? params_[0]->toString() : std::string("?"));
     }
     if (name_->starts_with(kLengthsTag)) {
         return name_->substr(kLengthsTag.size());
@@ -460,13 +460,13 @@ bool describeUnevaluatedTypeCall(Type *type, std::string &what, std::string &why
         if (std::all_of(call->paramsSpan().begin(), call->paramsSpan().end(), concrete)) {
             if (TypeCallType::isPack(call)) {
                 what = call->toString();
-                why  = "a type pack is a list of types, and `..` writes its members where a type "
+                why  = "a type pack is a list of types, and `...` writes its members where a type "
                        "list is";
                 return true;
             }
             if (TypeCallType::isExpand(call)) {
                 what = call->toString();
-                why  = "`..` expands a type pack, and the type after it uses none";
+                why  = "`...` expands a type pack, and the type after it uses none";
                 return true;
             }
             std::string error;

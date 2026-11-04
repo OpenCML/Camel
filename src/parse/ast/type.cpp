@@ -27,7 +27,7 @@ std::string dimGroupCode(const DimGroup &group) {
         if (!first) {
             result += ", ";
         }
-        result += group.pack == DimPack::Named ? ".." + group.packName : "..";
+        result += group.pack == DimPack::Named ? "..." + group.packName : "...";
     }
     return result + "]";
 }
@@ -71,7 +71,7 @@ std::string to_string(TypeOp op) {
         return "typeof";
     }
     if (op == TypeOp::Pack) {
-        return "..";
+        return "...";
     }
     ASSERT(false, "Unknown TypeOp");
     return "Unknown";

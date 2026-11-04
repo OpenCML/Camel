@@ -98,7 +98,7 @@ const string NamedTypeLoad::geneCode() const {
 }
 
 const string NamedPairLoad::geneCode() const {
-    return (isRest_ ? string("..")
+    return (isRest_ ? string("...")
                      : isConstas_ ? string("constas ")
                                   : isVar_ ? string("var ")
                                            : isConst_ ? string("const ") : "") +
