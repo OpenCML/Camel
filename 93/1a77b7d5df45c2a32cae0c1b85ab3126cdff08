@@ -1,0 +1,15 @@
+闸门（本轮树 931a77b7d，基线 688a07164）：feat/showcase_s2 9 = 7 / 2；feat/compile 2343 = 2323 / 0 / 20 known（与基线同）；feat/transforms 48 = 40 / 0 / 8 known；`check-doc-links.mjs --citations` 854/854 符号、2376 条路径；`--questions-index` 绿。后台作业全部收齐，无残留、无 killed 遗留。
+
+① 律读的是哪个值：`matmul_t` 六条 `ct_of_*` 都以 `sum_to(..., a)` / `sum_to(..., b)` 收尾。`sum_to` 的第二个操作数只被读形状（`stdlib/tensor.cml#sum_to`），但展开层只能把它当**值**交进去（`rule_expand.cpp#expandRuleRightSide`，`answerTheShapeOf` 只放过 `tensor:shape` 的读者），而那个值属于**正在被作答的操作数**——转置里被递进去的只有 cotangent 和另一个操作数的值（`buildTransposeMember`）。所以 vjp 那条红是「声明没写 extents」，不是「少了一个值」；作者裁定把它归原因一。
+
+② 改在律里、且是改律不是改词：六个 helper 现在读 `shape(a)`（由端口的 stated extents 作答），并用本文件内私有的 `sum_to_at(t, at) = sum_to(t, zeros::<T>(at))` 收口——长度模板只从操作数自己的 extents 造、不顶替任何参数的值（作者 2026-11-04 04:20）。数值没动：两个 `*_stated_extent` twin 仍 `max_abs_diff 0.0`，feat/compile 全绿，说明改的只是「读的是形状」这个事实。helper 返回 `float[...]` 而非重述秩，是量出来的（重述时 showcase_s2 9 条全红，含 twin 与 by-name 拒绝），已在注释里写明，别再"修"回去。
+
+③ 新词：`cotangent-needs-a-value` 拆成两个，因为它是两个原因——`law-reads-a-value`（律的右手边真的读了一个转置不携带的值，且没有任何声明能提供，如 `:op/mul_d` 的 `mul_cotangent(x, ct)`）与 `cotangent-on-a-pair`（成对调用没有 cotangent 落到切向分量，本来就没缺值）；形状那半并回 `parameter-shape`，由 `expandRuleByName` 新增的 `unboundArgument` 报出「是第几个操作数答不出来」，`transpose.cpp#shapeRefusalFor` 再问「它是不是走回一个没写 extents 的参数」，两个入口因此同一个词。`test/tools/transpose_refusal/check.py` 四条关系仍绿（一词一句一处）。
+
+④ pin 读数（改完读回，节选）：`skip=parameter-shape uri=tensor:matmul node=7 param=0 param-type=float[]`（列向量是 `node=6 param=1`）；`skip=parameter-shape uri=tensor:multiply node=7 param=0 param-type=float[...]`；`skip=law-reads-a-value uri=:op/mul_d position=0 reason=...`；三处旧句子的 pin 改为 `needs the shape of the parameter at position`（`RuntimeDiag::TransposeNeedsParameterShape`）。总共 transforms.plan.toml 28 行、transpose_array_product 4 行、split 1 行、showcase_s2 3 行与 10 处用例注释，逐条改后由三条闸门读回，无一条靠猜。
+
+⑤ 15 个 known_fail 换词是**纠正**：13 个 multiply/divide 家族（exp/relu/sigmoid/tanh/abs/rsqrt/maximum/minimum/sqrt/log/divide 与两个 array-product 读法）都停在「律读被作答操作数的 shape」处，它们的 note 本来就写着这句（"the law reads that same operand for `sum_to`'s shape and finds no value"、"`float[...]` states no extents"），词却说值缺了；`transpose_loop_escape.two_values_of_two_kinds` 与 `transpose_many_parameters` 是真·值原因，保留在新词下。
+
+⑥ 两条红仍红，理由照作者给：那些程序写不出长度，写 `float[2]` 不是路（路是 `matmul_stated` / `mul_stated`，0.2.44 的债），跟律读不读操作数已经无关——现在它们报的是声明的原因，句子是那条要求写 extents 的诊断。
+
+⑦ 未开：`docs/handover` 里 25 篇是当时的读数，保留旧拼写（这条即界线；`git grep cotangent-needs-a-value` 只剩它们与两处"旧词曾是 X"的说明）；`sum_to_at` 只是 ruleset 私有 helper，"`sum_to` 取长度本身"的算子问题（docs/handover/questions/2026-11-04-a-sum-to-that-takes-the-length-itself.cn.md）仍开着。
