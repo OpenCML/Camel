@@ -17,7 +17,7 @@ the relations those numbers stand for. `graph_faces.readings_absolute` pins the 
 program they belong to; `graph_faces.readings_body` reads only the relations, on the program whose
 body does work of its own. One run prints both, so the two writings can be read against each other.
 
-The entry that ran `test::regions` on `../../../cases/opt/generic/arm_tail_gate.cml` moved to
+The entry that ran `test::regions` on `.../../../cases/opt/generic/arm_tail_gate.cml` moved to
 `arm_tail_gate_regions.cml`: that program's arms read its body's ports and its condition, so no
 block can sit on its body without being read from an arm across two branches.
 """

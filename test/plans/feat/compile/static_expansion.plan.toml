@@ -472,7 +472,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_loop_sequence"
-desc = "`static loop` walks a sequence written after `in`. The constant interval `a..b` is read half-open as `..` is everywhere else, the trip count is the interval's and not any tuple's, an empty interval unrolls to no round, a `let` bound once to a constant is a bound the compiler knows, the iteration variable is a compile-time constant used as a value and as a `t.[i]` key at once, and one sequence loop nests in another."
+desc = "`static loop` walks a sequence written after `in`. The constant interval `a..b` is read half-open as `...` is everywhere else, the trip count is the interval's and not any tuple's, an empty interval unrolls to no round, a `let` bound once to a constant is a bound the compiler knows, the iteration variable is a compile-time constant used as a value and as a `t.[i]` key at once, and one sequence loop nests in another."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/static_loop_sequence.cml"
 args = ["${case}", "std::fvm"]
@@ -875,7 +875,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_tuple_is_not_a_runtime_tuple"
-desc = "A runtime tuple value is not a build-time tuple: `..t` over a parameter is still RestArgumentNotTuple, because its arity is not known when the call is compiled."
+desc = "A runtime tuple value is not a build-time tuple: `...t` over a parameter is still RestArgumentNotTuple, because its arity is not known when the call is compiled."
 kind = "negative"
 case = "../../../cases/compile/static_expansion/static_tuple_runtime_tuple.cml"
 args = ["${case}"]
@@ -886,7 +886,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_tuple_forward"
-desc = "`..ts` forwards a rest parameter's build-time tuple as its remaining argument nodes: the elements pass on with no FILL, and both rest calls are expanded into `main`."
+desc = "`...ts` forwards a rest parameter's build-time tuple as its remaining argument nodes: the elements pass on with no FILL, and both rest calls are expanded into `main`."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/static_tuple_forward.cml"
 args = ["${case}", "std::fvm"]
@@ -897,7 +897,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_tuple_forward_builds_no_value_node"
-desc = "Forwarding `..ts` builds no value node for the build-time tuple: `main` has no FILL, no ACCS and no call to either rest function, only the three argument nodes and the three additions."
+desc = "Forwarding `...ts` builds no value node for the build-time tuple: `main` has no FILL, no ACCS and no call to either rest function, only the three argument nodes and the three additions."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/static_tuple_forward.cml"
 args = ["${case}", "std::gir"]

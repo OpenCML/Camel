@@ -2,7 +2,7 @@ id = "parse.rulings"
 order = 306
 tier = "fast"
 tags = ["feat", "parse", "syntax"]
-desc = "The syntax rules of design principles 4.2: the precedence of `^`, literals with an exponent, renamed imports, documentation comments, an `if` statement without a block, and the postfix marks of a type (`?`, `!` and the stream's `..`, read left to right). The right side of `as` is a type, and a lambda's parameters are written in parentheses (5.9). The head of `static for` is read here too: it is the `for ... in ...` of `static loop`, without parentheses."
+desc = "The syntax rules of design principles 4.2: the precedence of `^`, literals with an exponent, renamed imports, documentation comments, an `if` statement without a block, and the postfix marks of a type (`?`, `!` and the stream's `...`, read left to right). The right side of `as` is a type, and a lambda's parameters are written in parentheses (5.9). The head of `static for` is read here too: it is the `for ... in ...` of `static loop`, without parentheses."
 
 [[tests]]
 name = "rulings.power"
@@ -249,7 +249,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.stream_type_marks"
-desc = "`..` is a postfix mark of a type beside `?` and `!`, and the marks are read left to right with no special case: `T..` is the stream of T, `T?..` the stream of a nullable T, `T!..` the stream of a fallible T, `T..?` the possibly absent stream, `T[3]..` the stream of three-element arrays, `T[..]..` the stream of open-rank arrays, and an item of a tuple takes one. `T[..]` keeps its own reading: an array whose extents are a prefix, which is not a stream. The tree is locked by feat/parse/frontend's snapshot; this test runs the program."
+desc = "`...` is a postfix mark of a type beside `?` and `!`, and the marks are read left to right with no special case: `T..` is the stream of T, `T?..` the stream of a nullable T, `T!..` the stream of a fallible T, `T..?` the possibly absent stream, `T[3]..` the stream of three-element arrays, `T[...]..` the stream of open-rank arrays, and an item of a tuple takes one. `T[...]` keeps its own reading: an array whose extents are a prefix, which is not a stream. The tree is locked by feat/parse/frontend's snapshot; this test runs the program."
 kind = "behavior"
 case = "../../../cases/parse/rulings/stream_type_marks.cml"
 args = ["${case}"]
@@ -261,7 +261,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.stream_type_as_interval"
-desc = "The right side of `as` is a type: `..` after a type there is the stream suffix. A number written directly after the `..` is the interval reading in a place where a type stands, and the refusal is named and says how to write it - the message the ruling asked for, at the `..`, with the operator of the `as` quoted. It used to be `Unexpected '..'; expected '}'.` at the `..`."
+desc = "The right side of `as` is a type: `...` after a type there is the stream suffix. A number written directly after the `...` is the interval reading in a place where a type stands, and the refusal is named and says how to write it - the message the ruling asked for, at the `...`, with the operator of the `as` quoted. It used to be `Unexpected '...'; expected '}'.` at the `...`."
 kind = "negative"
 case = "../../../cases/parse/rulings/stream_type_as_interval.cml"
 args = ["${case}"]
@@ -307,7 +307,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.dotdot_precedence"
-desc = "`..` is level 6a: looser than `+`/`-`, tighter than the comparisons, and looser than `->`. `1..n+1` is `1..(n+1)` (`[1, 2, 3]`), `0..len(xs)+1` is `0..(len(xs)+1)`, `-1..n` has a negative lower bound without parentheses, `(inc..dbl)(3)` and `3->inc->dbl` are both 8, and the levels around it hold: `!xs->contains<1>` is `!(xs->contains(1))`, `-n->inc` is `-(n->inc)`, `-1->inc` is `-(1->inc)`, `(-1)->inc` is `inc(-1)`, `-2 ^ 2` is `-(2 ^ 2)`, `-n + 1` is `(-n) + 1`."
+desc = "`...` is level 6a: looser than `+`/`-`, tighter than the comparisons, and looser than `->`. `1..n+1` is `1..(n+1)` (`[1, 2, 3]`), `0..len(xs)+1` is `0..(len(xs)+1)`, `-1..n` has a negative lower bound without parentheses, `(inc..dbl)(3)` and `3->inc->dbl` are both 8, and the levels around it hold: `!xs->contains<1>` is `!(xs->contains(1))`, `-n->inc` is `-(n->inc)`, `-1->inc` is `-(1->inc)`, `(-1)->inc` is `inc(-1)`, `-2 ^ 2` is `-(2 ^ 2)`, `-n + 1` is `(-n) + 1`."
 kind = "behavior"
 case = "../../../cases/parse/rulings/dotdot_precedence.cml"
 args = ["${case}", "${backend}"]
@@ -320,7 +320,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.dotdot_looser_than_link"
-desc = "`3->inc..dbl` is `(3->inc)..dbl`, not `3->(inc..dbl)`: the pipe gives an `int`, which `..` cannot compose with the function `dbl`, so the program is refused with `CompOperandMismatch` naming both operands instead of printing 8."
+desc = "`3->inc..dbl` is `(3->inc)..dbl`, not `3->(inc..dbl)`: the pipe gives an `int`, which `...` cannot compose with the function `dbl`, so the program is refused with `CompOperandMismatch` naming both operands instead of printing 8."
 kind = "negative"
 case = "../../../cases/parse/rulings/dotdot_looser_than_link.cml"
 args = ["${case}"]
@@ -329,7 +329,7 @@ expect_diagnostic_name = "SemanticDiag::CompOperandMismatch"
 expect_diagnostic_code = "0x030001E1"
 expect_diagnostic_line = 11
 expect_diagnostic_column = 13
-expect_output_contains = ["'..' takes two functions or two integers", "the left operand is 'int'"]
+expect_output_contains = ["'...' takes two functions or two integers", "the left operand is 'int'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

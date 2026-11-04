@@ -1,0 +1,38 @@
+id = "probe.dpack"
+tier = "fast"
+tags = ["probe"]
+desc = "Probe for the `...` migration: the old `...` pack spelling is refused with one sentence naming `...`, and the ordinary `...` uses (interval, composition) are untouched."
+
+[[tests]]
+name = "old_pack_dots"
+desc = "`(...xs: int)` after the migration: refused, one sentence, naming `...`."
+kind = "behavior"
+case = "../../cases/probe/dpack_old_pack.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["..."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "old_rank_dots"
+desc = "`f32[...]` after the migration: refused, one sentence, naming `...`."
+kind = "behavior"
+case = "../../cases/probe/dpack_old_rank.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["..."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "dots_interval_and_composition"
+desc = "`1..n` is an interval and `inc..twice` is a composition: both survived the migration, and neither prints as a pack."
+kind = "behavior"
+case = "../../cases/probe/dpack_dots_ok.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["interval=", "chain="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

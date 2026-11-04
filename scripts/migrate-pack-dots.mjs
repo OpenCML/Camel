@@ -36,6 +36,10 @@ import path from 'node:path';
 const ROOTS = [
     'stdlib',
     'test/cases',
+    // A plan pins what the compiler prints, and a printed type carries the spelling
+    // (`float[..]` for any rank). Leaving the plans out leaves the expectations on the old
+    // spelling and turns every one of them red for the reason the migration fixed.
+    'test/plans',
     'docs/language',
     'docs/design',
     // A diagnostic quotes the spelling it is about, so the sentences move with the rule. In a

@@ -1,0 +1,64 @@
+id = "probe.dpack5ok"
+tier = "fast"
+tags = ["probe"]
+desc = "The five pack shapes written the new way, `...`: each one must be accepted and run, which the five refusal cases alone cannot show."
+
+[[tests]]
+name = "shape1_param_ok"
+desc = "Shape 1, an ordinary parameter pack `(...xs)`."
+kind = "behavior"
+case = "../../cases/probe/dpack1_param_ok.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["count= 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "shape2_with_ok"
+desc = "Shape 2, a `with` parameter pack `with <...ws: float>`."
+kind = "behavior"
+case = "../../cases/probe/dpack2_with_ok.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["ok"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "shape3_rank_ok"
+desc = "Shape 3, any rank `f32[...]`."
+kind = "behavior"
+case = "../../cases/probe/dpack3_rank_ok.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["ok"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "shape4_functype_ok"
+desc = "Shape 4, a parameter pack in a function type `(...A) => float`."
+kind = "behavior"
+case = "../../cases/probe/dpack4_functype_ok.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["ok"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "shape5_spread_ok"
+desc = "Shape 5, a spread call `sum(...t)`."
+kind = "behavior"
+case = "../../cases/probe/dpack5_spread_ok.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["sum= 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

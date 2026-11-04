@@ -18,7 +18,7 @@
 /// linkExpr : negExpr ('->' compExpr)*
 /// negExpr : ('-' | '!') negPower | compExpr
 /// negPower : ('-' | '!') negPower | compExpr ('^' negPower)?
-/// compExpr : annoExpr ('..' annoExpr)*
+/// compExpr : annoExpr ('...' annoExpr)*
 /// annoExpr : accessExpr (indices | parentArgues | '!')*
 
 void ParserImpl::parseExpr() {}

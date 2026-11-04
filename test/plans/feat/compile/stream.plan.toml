@@ -3,7 +3,7 @@ id = "compile.stream"
 order = 336
 tier = "fast"
 tags = ["feat", "compile", "stream"]
-desc = "The stream surface: `f..g` and the interval `a..b` (slice A of the stream plan: the ruled readings of `..`, and the removal of `?..`); and the interval line: the two-parameter `range(a, b)` is deleted, and `for i in 0..n` is fused by the compiler rather than materialised."
+desc = "The stream surface: `f..g` and the interval `a..b` (slice A of the stream plan: the ruled readings of `...`, and the removal of `?..`); and the interval line: the two-parameter `range(a, b)` is deleted, and `for i in 0..n` is fused by the compiler rather than materialised."
 
 [[tests]]
 name = "stream.composition"
@@ -19,7 +19,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.composition_uses"
-desc = "A composition is a function value like any other: `map<inc..dbl>` and `3->(inc..dbl)` give what the two calls written out give. Beside `->` a composition keeps its parentheses, because `..` is looser than `->`: `3->inc..dbl` is `(3->inc)..dbl` and is refused where an `int` meets a function."
+desc = "A composition is a function value like any other: `map<inc..dbl>` and `3->(inc..dbl)` give what the two calls written out give. Beside `->` a composition keeps its parentheses, because `...` is looser than `->`: `3->inc..dbl` is `(3->inc)..dbl` and is refused where an `int` meets a function."
 kind = "behavior"
 case = "../../../cases/compile/stream/composition_uses.cml"
 args = ["${case}"]
@@ -43,7 +43,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_operand_mismatch"
-desc = "`..` has two readings and takes nothing else: two texts are neither two functions nor two integers, so the compiler refuses the construct and names both operand types."
+desc = "`...` has two readings and takes nothing else: two texts are neither two functions nor two integers, so the compiler refuses the construct and names both operand types."
 kind = "negative"
 case = "../../../cases/compile/stream/comp_operand_mismatch.cml"
 args = ["${case}"]
@@ -52,7 +52,7 @@ expect_diagnostic_name = "SemanticDiag::CompOperandMismatch"
 expect_diagnostic_code = "0x030001E1"
 expect_diagnostic_line = 5
 expect_diagnostic_column = 14
-expect_output_contains = ["'..' takes two functions or two integers; the left operand is 'string' and the right one 'string'."]
+expect_output_contains = ["'...' takes two functions or two integers; the left operand is 'string' and the right one 'string'."]
 expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -68,14 +68,14 @@ expect_diagnostic_name = "SemanticDiag::CompOperandNotUnary"
 expect_diagnostic_code = "0x030001E2"
 expect_diagnostic_line = 8
 expect_diagnostic_column = 13
-expect_output_contains = ["'..' composes a unary function on the left; '(a: int, b: int) => int pure' takes 2 parameters."]
+expect_output_contains = ["'...' composes a unary function on the left; '(a: int, b: int) => int pure' takes 2 parameters."]
 expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
 name = "stream.type_signature"
-desc = "A stream type stands where any type stands: a parameter, a result, a function type and a generic signature all take one, and the suffix is read left to right with no special case - `int?..` is the stream of a nullable int, `int..?` the possibly absent stream, `int[3]..` the stream of three-element arrays and `int[..]..` the stream of open-rank arrays, while `int[..]` keeps its own reading. None of these parsed before: `func count(s: int..)` was MissingComma at the `..`."
+desc = "A stream type stands where any type stands: a parameter, a result, a function type and a generic signature all take one, and the suffix is read left to right with no special case - `int?..` is the stream of a nullable int, `int..?` the possibly absent stream, `int[3]..` the stream of three-element arrays and `int[...]..` the stream of open-rank arrays, while `int[...]` keeps its own reading. None of these parsed before: `func count(s: int..)` was MissingComma at the `...`."
 kind = "behavior"
 case = "../../../cases/compile/stream/type_signature.cml"
 args = ["${case}"]
@@ -87,7 +87,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.type_signature_printed"
-desc = "One element type, one spelling: every stream type of a signature reaches `std::jgir` as the suffix that was written - `int..`, `int?..`, `int..?`, `int[3]..`, `int[..]..` - and the open-rank array `f32[..]` is still an array. The signature of the graph is where a type is read by every tool, so this is the printing the diagnostics and `std::gir` share."
+desc = "One element type, one spelling: every stream type of a signature reaches `std::jgir` as the suffix that was written - `int..`, `int?..`, `int..?`, `int[3]..`, `int[...]..` - and the open-rank array `f32[...]` is still an array. The signature of the graph is where a type is read by every tool, so this is the printing the diagnostics and `std::gir` share."
 kind = "behavior"
 case = "../../../cases/compile/stream/type_signature.cml"
 args = ["${case}", "std::jgir"]
@@ -103,13 +103,13 @@ const signature = (name) => {
 }
 assert(signature('count') === '(s: int..) => int pure', `count is ${signature('count')}`)
 assert(
-    signature('shapes') === '(a: int?.., b: int!.., c: int..?, d: int[3].., e: int[..]..) => int pure',
+    signature('shapes') === '(a: int?.., b: int!.., c: int..?, d: int[3].., e: int[...]..) => int pure',
     `shapes is ${signature('shapes')}`,
 )
 assert(signature('teePair') === '(pair: (int.., int)) => int pure', `teePair is ${signature('teePair')}`)
-assert(signature('openRank') === '(rows: f32[..]) => int pure', `openRank is ${signature('openRank')}`)
+assert(signature('openRank') === '(rows: f32[...]) => int pure', `openRank is ${signature('openRank')}`)
 const types = [...new Set(doc.graphs.flatMap((g) => g.nodes.map((n) => n.outputType)).filter(Boolean))]
-for (const wanted of ['int..', 'int?..', 'int!..', 'int..?', 'int[3]..', 'int[..]..', 'f32[..]', '(int.., int)']) {
+for (const wanted of ['int..', 'int?..', 'int!..', 'int..?', 'int[3]..', 'int[...]..', 'f32[...]', '(int.., int)']) {
     assert(types.includes(wanted), `${wanted} is not among ${JSON.stringify(types)}`)
 }
 }
@@ -193,7 +193,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.type_as"
-desc = "The right side of `as` is always a type (the right side of `as` is always a type): `xs as int..` reads the stream type where a type stands, and the program is not a syntax error. The conversion itself has no reading yet - nothing turns an array into a stream, and producing a stream value is another slice - so it is refused with the two types printed. It used to be `Unexpected '..'; expected '}'.` at the `..`."
+desc = "The right side of `as` is always a type (the right side of `as` is always a type): `xs as int..` reads the stream type where a type stands, and the program is not a syntax error. The conversion itself has no reading yet - nothing turns an array into a stream, and producing a stream value is another slice - so it is refused with the two types printed. It used to be `Unexpected '...'; expected '}'.` at the `...`."
 kind = "negative"
 case = "../../../cases/compile/stream/type_as.cml"
 args = ["${case}"]
@@ -225,7 +225,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_operand_generic"
-desc = "An operand of `..` whose type is not settled: `ident` is generic, and nothing at this position says which instance it is - the composition stands in a `let` with no declared type - so it is refused by that name. The refusal is the composition's own diagnostic, and it says what the old one did not: which operand is the generic function, that the type arguments name the instance, and that an expected function type for the whole expression settles it. With such a type the same program passes - stream.comp_expected_type - and the refusal no longer prints `void` as if it were the operand's type or reaches CompOperandMismatch, which stays for operands `..` cannot take at all."
+desc = "An operand of `...` whose type is not settled: `ident` is generic, and nothing at this position says which instance it is - the composition stands in a `let` with no declared type - so it is refused by that name. The refusal is the composition's own diagnostic, and it says what the old one did not: which operand is the generic function, that the type arguments name the instance, and that an expected function type for the whole expression settles it. With such a type the same program passes - stream.comp_expected_type - and the refusal no longer prints `void` as if it were the operand's type or reaches CompOperandMismatch, which stays for operands `...` cannot take at all."
 kind = "negative"
 case = "../../../cases/compile/stream/comp_operand_generic.cml"
 args = ["${case}"]
@@ -234,7 +234,7 @@ expect_diagnostic_name = "SemanticDiag::CompOperandGenericWithoutType"
 expect_diagnostic_code = "0x030001E4"
 expect_diagnostic_line = 13
 expect_diagnostic_column = 20
-expect_output_contains = ["'..' composes two functions, and its left operand, the generic function 'ident', has no instance here: write its type arguments ('ident::<int>'), or give the whole expression an expected function type."]
+expect_output_contains = ["'...' composes two functions, and its left operand, the generic function 'ident', has no instance here: write its type arguments ('ident::<int>'), or give the whole expression an expected function type."]
 expect_output_not_contains = ["UnknownInternalError", "Warning", "'void'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -257,7 +257,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_expected_type"
-desc = "`f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), so the function type the position expects is the type that lambda would have: it gives the composition its input - the parameter of `f` - and its output - the result of `g` - and it instantiates a generic operand where it stands, exactly as the lambda's calls are instantiated under that type. `let h: (x: int) => int = (x) => ident(ident(x))` passed before this, so the composition must too. It used to be CompOperandMismatch at the `..`, with the operand printed as `void`."
+desc = "`f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), so the function type the position expects is the type that lambda would have: it gives the composition its input - the parameter of `f` - and its output - the result of `g` - and it instantiates a generic operand where it stands, exactly as the lambda's calls are instantiated under that type. `let h: (x: int) => int = (x) => ident(ident(x))` passed before this, so the composition must too. It used to be CompOperandMismatch at the `...`, with the operand printed as `void`."
 kind = "behavior"
 case = "../../../cases/compile/stream/comp_expected_type.cml"
 args = ["${case}"]
@@ -301,7 +301,7 @@ verify_script = """
 
 [[tests]]
 name = "stream.comp_operand_function_integer"
-desc = "The refusal CompOperandMismatch was written for stays where it was written for: `..` takes two functions or two integers (design principles 4.2), and a function with an integer is neither. Both operands are named by their types, and a function among them is not a generic-operand case - that refusal needs a name that is generic, which this program has none of."
+desc = "The refusal CompOperandMismatch was written for stays where it was written for: `...` takes two functions or two integers (design principles 4.2), and a function with an integer is neither. Both operands are named by their types, and a function among them is not a generic-operand case - that refusal needs a name that is generic, which this program has none of."
 kind = "negative"
 case = "../../../cases/compile/stream/comp_operand_function_integer.cml"
 args = ["${case}"]
@@ -310,7 +310,7 @@ expect_diagnostic_name = "SemanticDiag::CompOperandMismatch"
 expect_diagnostic_code = "0x030001E1"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 20
-expect_output_contains = ["'..' takes two functions or two integers; the left operand is '(x: int) => int pure' and the right one 'int'."]
+expect_output_contains = ["'...' takes two functions or two integers; the left operand is '(x: int) => int pure' and the right one 'int'."]
 expect_output_not_contains = ["UnknownInternalError", "Warning", "has no instance here"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

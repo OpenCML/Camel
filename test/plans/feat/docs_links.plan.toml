@@ -293,24 +293,24 @@ timeout_ms = 60000
 
 [[tests]]
 name = "docs.a_port_and_its_body_disagreeing_are_caught_both_ways"
-desc = "The reverse reading, so the rule cannot be a blanket: on probe modules this script writes under the system temp directory, an element port whose body hands it to a parameter of three elements is reported with the declaration that makes it a requirement (`element_port_fixed_extent.cml#three_lanes`, `ct: T[3]` -- a fixed extent reads more than one element, and the rank-zero box is one wide), an array port handed to `spread_over` is reported as the other direction, the rank-zero equivalence (`T` handed to `ct: T[..]`, design principles 5.4) and the two laws of the library written the same way are not reported at all, and the one shape this check cannot open -- a helper whose body reads a length and assumes more than one element -- is printed as measured rather than caught."
+desc = "The reverse reading, so the rule cannot be a blanket: on probe modules this script writes under the system temp directory, an element port whose body hands it to a parameter of three elements is reported with the declaration that makes it a requirement (`element_port_fixed_extent.cml#three_lanes`, `ct: T[3]` -- a fixed extent reads more than one element, and the rank-zero box is one wide), an array port handed to `spread_over` is reported as the other direction, the rank-zero equivalence (`T` handed to `ct: T[...]`, design principles 5.4) and the two laws of the library written the same way are not reported at all, and the one shape this check cannot open -- a helper whose body reads a length and assumes more than one element -- is printed as measured rather than caught."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/law-cotangent-ports.mjs"
 args = ["${case}", "--self-test"]
 expect_exit = 0
-expect_stdout_contains = ["cotangent port is 'T' but the body hands it to 'three_lanes', which reads an array", "cotangent port is 'T[..]' but the body hands it to 'spread_over', which takes an element", "a port 'T' handed to a parameter 'T[3]' is reported", "the rank-zero pair 'T' -> 'T[..]' is not reported", "the helper that reads a length and assumes more than one element is NOT reported -- the assumption is inside the helper", "both disagreements are caught, the rank-zero equivalence and the clean pair are not, so the reading is a rule and not a blanket"]
+expect_stdout_contains = ["cotangent port is 'T' but the body hands it to 'three_lanes', which reads an array", "cotangent port is 'T[...]' but the body hands it to 'spread_over', which takes an element", "a port 'T' handed to a parameter 'T[3]' is reported", "the rank-zero pair 'T' -> 'T[...]' is not reported", "the helper that reads a length and assumes more than one element is NOT reported -- the assumption is inside the helper", "both disagreements are caught, the rank-zero equivalence and the clean pair are not, so the reading is a rule and not a blanket"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 
 [[tests]]
 name = "docs.an_element_port_may_enter_the_same_elements_open_rank"
-desc = "The allowance read on the library itself: `stdlib/rulesets/transpose.cml#mean_axis_stated_t` states its cotangent as `T` and hands it to `mean_axis_cotangent(ct: T[..])`, which `--explain` reads as the rank-zero equivalence of design principles 5.4 rather than as a disagreement -- one value read either way, the box made where it enters the array position (`ArrayType::castSlotFrom`, the exporter's `rt::Array<T>::element`). The row is pinned so the day the allowance widens or the law's port changes spelling, the table says so; the ruling is `docs/handover/questions/2026-11-04-narrow-the-declaration-or-teach-the-consumer.cn.md`."
+desc = "The allowance read on the library itself: `stdlib/rulesets/transpose.cml#mean_axis_stated_t` states its cotangent as `T` and hands it to `mean_axis_cotangent(ct: T[...])`, which `--explain` reads as the rank-zero equivalence of design principles 5.4 rather than as a disagreement -- one value read either way, the box made where it enters the array position (`ArrayType::castSlotFrom`, the exporter's `rt::Array<T>::element`). The row is pinned so the day the allowance widens or the law's port changes spelling, the table says so; the ruling is `docs/handover/questions/2026-11-04-narrow-the-declaration-or-teach-the-consumer.cn.md`."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/law-cotangent-ports.mjs"
 args = ["${case}", "--explain"]
 expect_exit = 0
-expect_stdout_contains = ["mean_axis_stated_t", "stdlib/rulesets/transpose.cml#mean_axis_cotangent, parameter 1 `ct: T[..]`", "the rank-zero array of 5.4, one value read either way"]
+expect_stdout_contains = ["mean_axis_stated_t", "stdlib/rulesets/transpose.cml#mean_axis_cotangent, parameter 1 `ct: T[...]`", "the rank-zero array of 5.4, one value read either way"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000

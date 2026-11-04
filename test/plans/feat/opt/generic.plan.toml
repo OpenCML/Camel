@@ -290,7 +290,7 @@ for (const line of input.normalized.stdout.split('\n')) {
     graphs[stack[stack.length - 1]].push([node[2], full])
   }
 }
-// The open extent a declaration writes is not a type argument: `forward(x: f32[..])` is the
+// The open extent a declaration writes is not a type argument: `forward(x: f32[...])` is the
 // instance its call takes, whatever shape the argument has, so the specialization is the
 // recursion it calls -- one instance per static key, and the call reuses the instance of its own
 // caller (the fixed point) instead of taking a copy per level.

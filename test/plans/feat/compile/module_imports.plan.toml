@@ -258,7 +258,7 @@ expect_stdout_exact = "42\n"
 # then each -I directory in the order given, then CAMEL_PACKAGES, then
 # the standard library; the entry program follows the same rule, so the entry file's directory is
 # its own directory and is not a root for another module. `-I` paths are resolved against the
-# entry file's directory, like CAMEL_PACKAGES, hence the `../roots/...` paths here.
+# entry file's directory, like CAMEL_PACKAGES, hence the `.../roots/...` paths here.
 
 [[tests]]
 name = "imports.include_root_only"
@@ -320,7 +320,7 @@ desc = "order exists in both the -I root (100) and the CAMEL_PACKAGES root (200)
 kind = "behavior"
 case = "../../../cases/compile/module_imports/include_path/prog/packages_order.cml"
 args = ["-E", "short", "-I", "../roots/one", "${case}"]
-envs = ["CAMEL_PACKAGES=../packages"]
+envs = ["CAMEL_PACKAGES=.../packages"]
 expect_exit = 0
 expect_stdout_exact = "100\n"
 
@@ -330,7 +330,7 @@ desc = "The same program and CAMEL_PACKAGES root with no -I: the package copy is
 kind = "behavior"
 case = "../../../cases/compile/module_imports/include_path/prog/packages_order.cml"
 args = ["-E", "short", "${case}"]
-envs = ["CAMEL_PACKAGES=../packages"]
+envs = ["CAMEL_PACKAGES=.../packages"]
 expect_exit = 0
 expect_stdout_exact = "200\n"
 
@@ -433,11 +433,11 @@ expect_output_contains = ["name=SyntaxDiag::UnexpectedToken", "Unexpected '/'", 
 
 #  ---- a relative spelling is a name, never a path ----
 # The grammar writes a relative module name as one to three leading dots before a dotted name
-# (`moduleName: ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*`), and the dots drop that many
+# (`moduleName: ('.' | '...' | '...')? IDENTIFIER ('.' IDENTIFIER)*`), and the dots drop that many
 # components from the importing module's own name (design principles 10.2). The resolved name is
 # looked up in the importing module's own directory and then the module roots; a spelling that
 # drops more components than the name has names nothing. Its spelling then reached the lookup as
-# a path: `..lib` became `//lib`, so the diagnostic reported `/` and `/lib` among the directories
+# a path: `...lib` became `//lib`, so the diagnostic reported `/` and `/lib` among the directories
 # it tried (and omitted `/` once a lib.* could be found there), and `moduleFileExists` could see a
 # file at the root. Measured with a module placed at `/lib.cml`: the import still failed and
 # loaded nothing, because an unresolved spelling produced no candidate at all. The pins below
@@ -453,12 +453,12 @@ kind = "negative"
 case = "../../../cases/compile/module_imports/import_order/relative_name/main_dotdot.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["main_dotdot.cml:7:1", "Module '..lib' not found", "name=SemanticDiag::ModuleNotFound", "drops 2 name component(s)", "no directory was searched"]
+expect_output_contains = ["main_dotdot.cml:7:1", "Module '...lib' not found", "name=SemanticDiag::ModuleNotFound", "drops 2 name component(s)", "no directory was searched"]
 expect_output_not_contains = ["/: no file", "/lib: no file", "//lib"]
 
 [[tests]]
 name = "imports.relative_name_too_deep_ignores_include_root"
-desc = "The same spelling with an -I root that holds lib.cml: the root is not a file to fall back to either, because `..lib` is not `lib`. The root's value is never printed and no directory is named, so the lookup cannot drift to a different module."
+desc = "The same spelling with an -I root that holds lib.cml: the root is not a file to fall back to either, because `...lib` is not `lib`. The root's value is never printed and no directory is named, so the lookup cannot drift to a different module."
 kind = "negative"
 case = "../../../cases/compile/module_imports/import_order/relative_name/main_dotdot.cml"
 args = ["-E", "short", "-I", "roots/one", "${case}"]
@@ -520,7 +520,7 @@ kind = "negative"
 case = "../../../cases/compile/module_imports/import_order/relative_name/main_short.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["short.cml:4:1", "Module '..lib' not found", "importing module's name 'short' has 1", "name=SemanticDiag::ModuleNotFound", "name=SemanticDiag::ImportedModuleHasErrors"]
+expect_output_contains = ["short.cml:4:1", "Module '...lib' not found", "importing module's name 'short' has 1", "name=SemanticDiag::ModuleNotFound", "name=SemanticDiag::ImportedModuleHasErrors"]
 expect_output_not_contains = ["/: no file", "/lib: no file"]
 
 [[tests]]
