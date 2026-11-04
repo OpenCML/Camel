@@ -2817,10 +2817,11 @@ bool buildTransposeMember(
                             return {};
                         }
                         refuse(TransposeRefusalCause::RuleRanks);
-                        state.refusal.node  = ref;
-                        state.refusal.uri   = std::string(body->uri());
-                        state.refusal.rule  = chosenRule;
-                        state.refusal.ranks = operandRanksText(function, inputs);
+                        state.refusal.node      = ref;
+                        state.refusal.uri       = std::string(body->uri());
+                        state.refusal.rule      = chosenRule;
+                        state.refusal.ranks     = operandRanksText(function, inputs);
+                        state.refusal.expansion = why;
                         os << " uri=" << body->uri() << " rule=" << chosenRule
                            << " position=" << i << " ranks=" << state.refusal.ranks
                            << " operands=" << inputs.size() << " reason=" << why << '\n';
@@ -3661,10 +3662,11 @@ bool buildTransposeMember(
                             return false;
                         }
                         refuse(TransposeRefusalCause::RuleRanks);
-                        state.refusal.node  = ref;
-                        state.refusal.uri   = uri;
-                        state.refusal.rule  = chosenRule;
-                        state.refusal.ranks = operandRanksText(function, inputs);
+                        state.refusal.node      = ref;
+                        state.refusal.uri       = uri;
+                        state.refusal.rule      = chosenRule;
+                        state.refusal.ranks     = operandRanksText(function, inputs);
+                        state.refusal.expansion = why;
                         os << " uri=" << uri << " rule=" << chosenRule << " node=" << ref
                            << " position=" << i << " ranks=" << state.refusal.ranks
                            << " operands=" << inputs.size() << " reason=" << why << '\n';

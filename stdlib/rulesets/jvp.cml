@@ -960,6 +960,13 @@ export rule jvp_transpose::<T>(x: T[...]) when is_float::<T>() {
 /// is the same `where` taken apart (`stdlib/rulesets/transpose.cml#where_t`); a right side that
 /// wrote `where(c, dx, 0.0)` would put a three-operand `where` in the linear half for the reduction
 /// half of the operator to answer, and this is the shape `jvp_relu` records as refused.
+/// `db` is the one port in this family that its body leaves unconstrained.
+/// `where`'s third operand is declared `rhs: float[...] | number`, so handing `db` to it
+/// fixes no rank: the branch is selected element by element against `cond` and is never spread
+/// or reshaped, and `db: T[...]` is the shape the law's own left side fixes (`b: T[...]`).
+/// What would refute this is a `where` whose third operand states a fixed rank (`T[3]`): then
+/// `db` would need a rank of its own, and this law would not instantiate at the shapes it is
+/// filed for.
 export rule jvp_where::<T>(c: bool[...], a: T[...], b: T[...]) when is_float::<T>() {
     where(c, a, b) => (da: T[...], db: T[...]) => where(c, da, db)
 }
