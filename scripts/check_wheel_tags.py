@@ -96,9 +96,21 @@ def platform_alternatives(platform_tag):
     return set(platform_tag.split("."))
 
 
-def platform_ok(platform_tag):
-    """Every alternative has to be publishable; one `linux_x86_64` in the list is enough to refuse."""
-    return all(part.startswith(ALLOWED) for part in platform_alternatives(platform_tag))
+def platform_ok(platform_tag, pending=False):
+    """Every alternative has to be publishable; one `linux_x86_64` in the list is enough to refuse.
+
+    `pending` is the state a Linux wheel is in between the rollup and `auditwheel repair`: it
+    claims the host tag (`linux_x86_64`, `linux_aarch64`) because only auditwheel knows which
+    glibc the bundled libraries need, and the repair is what makes the claim publishable. The
+    release job runs this same check again after the repair, without `--repair-pending`, and that
+    run is the one that decides.
+    """
+    parts = platform_alternatives(platform_tag)
+    if pending:
+        parts = {part for part in parts if not part.startswith("linux_")}
+        if not parts:
+            return True
+    return all(part.startswith(ALLOWED) for part in parts)
 
 
 def extension_names(path):
@@ -131,7 +143,7 @@ def role(path, python_tag, abi_tag):
     return ("interop" if tags == INTEROP else "runtime"), []
 
 
-def check(path, expect, ruling=False):
+def check(path, expect, ruling=False, pending=False):
     """Return a list of problems; empty means the wheel's tags are publishable."""
     problems = []
     try:
@@ -139,7 +151,7 @@ def check(path, expect, ruling=False):
     except ValueError as error:
         return [str(error)]
 
-    if not platform_ok(platform_tag):
+    if not platform_ok(platform_tag, pending):
         problems.append(
             "platform tag %r is not one of manylinux_*/musllinux_*/macosx_*/win_* "
             "(PyPI rejects it; see this file's docstring)" % platform_tag
@@ -163,7 +175,7 @@ def check(path, expect, ruling=False):
             problems.append("malformed Tag: %r" % tag)
             continue
         inner_platforms |= platform_alternatives(fields[2])
-        if not platform_ok(fields[2]):
+        if not platform_ok(fields[2], pending):
             problems.append("Tag: %r carries an unpublishable platform tag" % tag)
     # A single `Tag:` may name several platforms itself, so the two sides are compared as
     # sets. They have to be equal: the metadata left behind by an earlier tag is what the
@@ -189,6 +201,13 @@ def main():
         help="the platform tag this job is supposed to produce (e.g. manylinux_2_28_x86_64)",
     )
     parser.add_argument(
+        "--repair-pending",
+        action="store_true",
+        help="accept `linux_<arch>` as a platform tag: the rollup produces it before `auditwheel "
+        "repair` replaces it, and the release job checks the set again after that repair without "
+        "this flag",
+    )
+    parser.add_argument(
         "--ruling",
         action="store_true",
         help="also require the two forms of the 2026-10-25 decision: one cp310-abi3 interop "
@@ -206,7 +225,7 @@ def main():
             failed = True
             print("FAIL %s: no such file" % path, file=sys.stderr)
             continue
-        problems = check(path, args.expect, args.ruling)
+        problems = check(path, args.expect, args.ruling, args.repair_pending)
         if not problems and args.ruling:
             roles[role(path, *parse_wheel_name(path)[:2])[0]] = path
         if problems:
