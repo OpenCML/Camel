@@ -414,6 +414,55 @@ assert(stats[1].direct_calls === 0 && stats[1].indirect_calls === 0, `calls left
 """
 timeout_ms = 6000
 
+# Second order as a *nest* of the transform (`grad(grad(f))`, and the lambda form), plus the two
+# shapes that are refused because the inner transform is reached as a function value instead of
+# being written in the body: a captured value, and the forward half `split` answers at run time.
+# The refusals are pinned so that the wall cannot move silently; the numbers are hand-computed in
+# each desc, not read back from the code.
+[[tests]]
+name = "second_order_nest.nvm"
+desc = "Second order written as a nest of the transform rather than as a call to a named function: grad(grad(f)) and grad of a lambda whose body applies grad. f(x)=x^3, f'(x)=3x^2, f''(x)=6x, so at x=2 the second derivative is 6*2=12, from both writings. The inner gradient is an OPER of this module over a static function, so the outer transformation builds the function it computes while the rewrite runs (macroCallee) and has a graph to plan for."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order_nest.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "second_order_nest nested=12.0 lambda=12.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 6000
+
+[[tests]]
+name = "second_order_nest.simplified"
+desc = "The nested second-order gradient keeps the same two numbers through std::macro and std::opt: 6x at x=2 is 12 for both writings, so the expansion and the inlining neither lose the inner gradient nor answer a different derivative."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order_nest.cml"
+args = ["${case}", "std::macro", "std::opt", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "second_order_nest nested=12.0 lambda=12.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 6000
+
+[[tests]]
+name = "second_order_refused_captured"
+desc = "The second derivative through a captured function value is refused, and the answer it would have given is 12 (f(x)=x^3, f''(x)=6x at 2). The program binds a named gradient function to a value and calls it from a lambda; inside that lambda's graph the callee is a port, and a derivative is planned once per graph with the captures as trailing parameters (Engine::planForClosure), so a function-typed parameter leaves no body to differentiate. The refusal names that: 'the function is a parameter, or a captured value, of the function being differentiated'."
+kind = "negative"
+case = "../../../cases/modules/autodiff/second_order_refused_captured.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_output_contains = ["cannot differentiate through this call of a function value", "the function is a parameter, or a captured value, of the function being differentiated"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 6000
+
+[[tests]]
+name = "second_order_refused_vjp"
+desc = "The second derivative of a function whose body applies vjp is refused at the library's own line, stdlib/vjp.cml#vjp's split(jvp(f))<..ws>(..xs), naming 'transforms:split': the forward half it answers does not exist as a graph until the program runs (modules/transforms/split_operator.cpp#splitKernel reads function->graph()), so the derivative that call needs cannot be planned before it runs. The answer it would have given is 12 (f(x)=x^3, f''(x)=6x at 2). What is available today is the same number through the grad nest (second_order_nest.nvm)."
+kind = "negative"
+case = "../../../cases/modules/autodiff/second_order_refused_vjp.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_output_contains = ["cannot differentiate through this call of a function value", "the function is the result of 'transforms:split'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 6000
+
 [[tests]]
 name = "fused_grad_check"
 desc = "After tensor::fuse (and without std::macro), the program's own matmul, add and relu rules differentiate the marked groups: every operand's gradient matches finite differences."
