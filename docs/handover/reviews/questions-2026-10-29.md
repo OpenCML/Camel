@@ -2763,3 +2763,21 @@ P0-2 两处改写、`transpose` 递归捕获、循环倒序、M4 迁移、Transf
 2. 用它在 `stdlib/types.cml` 里写出 `Gradient<F>`、`ValueAndGradient<F>` 和两个 `…AndAux<F>`，`stdlib/signatures/autodiff.cml` 的签名照这几个声明。
 3. 库层 `grad`/`with_grad`/`has_aux` 写成组合（原则 9.9：用 lambda 把第一个 `with` 参数挪到普通参数位，对它做 `vjp`），与引擎在全部 autodiff 用例上逐元素同答。
 4. 之后删除 C++ 的 `GradResolver`/`gradientSignature`，以及 `pullback.cpp` 和 `buildGradientGraph`（第 7 项）。
+
+## 裁定（2026-11-04 05:20）：三页，加类型层拆包那页的两个前提
+
+**更正 03-19:55**：那天我把 7 条 `cotangent-needs-a-value` 归成"`forward` 还不会处理闭包端口"，归因错了。`forward` 的闭包端口转发在 `236d06f37` 就有；两条元组用例变零，是因为 `reachesAParticipant` 只走普通输入、不走 `Fill` 的 `with` 输入（已修）。`the-refusal-was-not-a-closure-member` 照**甲**记：两处成因，撤回我那句。协调者把第 1 项改成"先逐条跑这 7 条、报今天的实际症状，再决定改哪里"，并要求既不假设我说的原因对、也不假设它错，这个做法对。
+
+**参与微分的参数自己的值由谁交给转置**（`where-does-the-value-of-a-linear-operand-come-from`）：探针显示，5 条里律要的都是**线性输入自己的值**。答案是没有人交，也不应该有人交。线性函数里，任何一条律都不需要线性操作数的值。律之所以来要，是因为转置去问了一个**已知操作数**位置的余切：`mul(t, dx)` 里求 `t` 那一位的余切，就得读 `dx`。所以：
+- **规则**：转置只在操作数能走到参与微分的参数的位置上向律要余切。已知操作数（闭包端口、常量、残差，以及走不到线性输入的值）的位置一律不问。这是 R3 和"闭包成员不收余切"推到所有已知值上。`reachesAParticipant` 就是这个判据，所有 `ruleCotangent` 调用都先经过它。
+- 照这条改完，那几条用例里"律要线性输入的值"的请求应当消失。如果某个函数真的需要线性输入的值（例如 `dx * dx`），它对这个参数就不是线性的，`transpose` 按语言规则拒绝："这个函数对第 k 个参数不是线性的"。
+- 丙（给被答余切的参数加值端口）不取：违反 R2/R11。`transposeSignature` 里那张给参与参数加值参数的捕获表，和 `needs` 那条再也不会被填的记录，一起删掉。
+
+**程序交出去的图是否包括它收养的**（`does-a-program-own-what-it-adopted`）：传递，照 04:20 第七节。`9262df328`、`ce52f00d0` 已经这么做了，三层切口不再中止，答数对，结案。
+
+**类型层拆包那页的两个前提**（那页还在车道上，没有推到远端，我按协调者转述的两行答）：
+1. **`match type` 的被匹配项能不能是包**：不需要它是包。被匹配项写成把包展开成的元组类型 `(..WithOf<F>)`，它本来就是一个普通类型，不引入"包作被匹配项"这个新概念。
+2. **`(W, ..Rest)` 合不合法**：合法。`match type` 的元组模式允许最后一个成员写成 `..Rest`，绑定一个类型包，读起来与值层 `<w, ..rest>` 一致。空元组匹配不上 `(W, ..Rest)`，就按语言规则在实例化处报错（原则 §5）。
+- 写法因此是 `type Gradient<F> = match type (..WithOf<F>) { (W, ..Rest) => <W, ..Rest> (..ParamsOf<F>) => Tangent<W> }`。其余三行照那页默认。可以派第 3 项后半了。
+
+三页挪到 `reviews/` 留档。
