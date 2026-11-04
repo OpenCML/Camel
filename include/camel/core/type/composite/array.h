@@ -280,6 +280,12 @@ inline bool isRankZeroEdge(Type *target, Type *source) {
 
 /// The extents a type states, in declaration order: `float[2, 3]` answers `{2, 3}`.
 ///
+/// They are **this array type's own** extents, one level: an array of arrays states the outer
+/// level and nothing of its element type's (`float[2][3]` is three `float[2]` values, so it
+/// answers `{3}` -- the list `shape` answers for a value of that type -- and `{2}` is the question
+/// `float[2]` answers; `{2, 3}` is the rank-2 type `float[2, 3]`, which is a different type and
+/// the reason the nested spelling is not the rank-2 one).
+///
 /// Nothing when the type is not an array, and nothing when it leaves an extent open: `float[]`
 /// (== `float[?]`) states one dimension and no length, and `float[..]` states neither the rank nor
 /// a length. An extent that is an expression over names nothing binds is not stated either -- the

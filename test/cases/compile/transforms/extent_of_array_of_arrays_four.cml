@@ -1,0 +1,31 @@
+// The same reading one nesting deeper: `float[2][3][4]` is four values of type `float[2][3]`, so
+// its own extent is 4. Both inner levels are other types and have their own names
+// (`extent_of::<float[2]>()` is `[2]`, `extent_of::<float[3]>()` is `[3]`, and the rank-3 array
+// `float[2, 3, 4]` answers `[2, 3, 4]`), so an answer that drifted to either inner level, or to
+// the rank-3 list, is refused here by name.
+import { shape } from array
+
+func pair(): float[2] {
+    return [1.0, 2.0]
+}
+
+func triple(): float[2][3] {
+    return [pair(), pair(), pair()]
+}
+
+func main(): int sync {
+    let x: float[2][3][4] = [triple(), triple(), triple(), triple()]
+    let outside = extent_of::<float[2][3][4]>()
+    println(outside)
+    println(len(outside))
+    println(outside[0])
+    println(shape(x))
+    println(outside == shape(x))
+    println(outside == extent_of::<float[2]>())
+    println(outside == extent_of::<float[3]>())
+    println(outside == extent_of::<float[2, 3, 4]>())
+    println(extent_of::<float[2]>())
+    println(extent_of::<float[3]>())
+    println(extent_of::<float[2, 3, 4]>())
+    return 0
+}
