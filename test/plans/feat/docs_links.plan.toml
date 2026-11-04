@@ -311,6 +311,6 @@ tool = "node"
 case = "../../../scripts/law-cotangent-ports.mjs"
 args = ["${case}", "--explain"]
 expect_exit = 0
-expect_stdout_contains = ["mean_axis_stated_t", "the rank-zero array of 5.4, one value read either way", "port(s) read: 112 compared with the body"]
+expect_stdout_contains = ["mean_axis_stated_t", "stdlib/rulesets/transpose.cml#mean_axis_cotangent, parameter 1 `ct: T[..]`", "the rank-zero array of 5.4, one value read either way"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
