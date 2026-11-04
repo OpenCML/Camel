@@ -2756,3 +2756,15 @@ expect_exit = 0
 expect_stdout_contains = ["total ct=1.0 ([1.0, 1.0, 1.0])  right=[1.0, 1.0, 1.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "transpose_still_turns_add_tensor"
+desc = "The entry above guards the refusal with `sum`: one law, one parameter, one cotangent. One operator is a sample, so this one walks a **different** law -- `add_tensor_t`, filed under the array sum -- and a function of two parameters, and pins the two cotangents `transpose` answers for `Σ(a + b)` at cotangent 1: `da` and `db` are both [1.0, 1.0, 1.0], one member per parameter in the order the parameters are written. The `rhs=` line on stderr is pinned beside them because the claim is \"the law is still there and still usable\": the walk's own record names `add_tensor_t`, so a narrowed refusal that started rejecting a shape whose law exists fails here by naming what it refused. What it does not claim is that the numbers are the gradient -- that is `vjp`'s cases' claim, and the two must not be confused."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_still_turns_add_tensor.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["pair ct=1.0 da=[1.0, 1.0, 1.0] db=[1.0, 1.0, 1.0]"]
+expect_stderr_contains = ["rhs=dtod_t,sum_from_type_t,add_tensor_t"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
