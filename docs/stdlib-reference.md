@@ -1611,43 +1611,41 @@ with_grad: (f: F) => <...WithOf<F>> (...ParamsOf<F>) => never when is_function::
 
 The value and the gradient of `f`'s first `with` parameter -- the shape the engine's `with_grad`
 answers (`stdlib/signatures/autodiff.cml`), written as the composition design principles 9.9 asks
-for and held at the wall the composition meets. **The call refuses, and the refusal is the
-reading**: what stands here is a name that can be called, not a name that answers a number it
-cannot compute.
+for. **The name refuses because its body has not been written**: what stands here is a
+placeholder in this file, and this paragraph says what writing it takes, so that the refusal is
+read as a to-do of the library and not as a limit of the composition.
 
 The composition is one step: `vjp` differentiates the ordinary parameters only, so the weight is
-moved to one by a lambda -- `vjp((ww: W) => f<ww>(...))(w)` -- and the seed 1 read off the
-pullback is its gradient. The lambda can be written; the body inside it cannot do its half,
-because the lambda's parameter goes back into a call's `with` list and forward mode answers the
-tangent of a value that crosses that list as the zero of its type (`stdlib/signatures/transforms.cml`
-states the rule under `Jvp<F>`: a value that reaches a body through a `with` parameter does not
-move). Measured on this tree, `x_times_y` being `x * y`:
+moved to one by a lambda -- `vjp((ww: W) => f<ww>(...))(w)` -- and the gradient is the seed 1
+read off the pullback. That step answers the number today. Since `lane-withtan` (merged as
+`713e1ff26`) a `with` argument keeps its direction through a lifted call, so `weighted`
+(`x * y + x`) at a weight of 3.0 answers 3.0 through the composition -- the engine's own number,
+pinned by `test/cases/compile/transforms/library_grad_of_a_with_weight.cml`. The zero this name
+used to be justified by was the state before that merge, and it is not what the composition does
+now.
 
-    jvp((ww: float) => x_times_y<ww>(2.0))(3.0, 1.0)   value=6.0 tangent=0.0
-    jvp((y: float) => x_times_y<3.0>(y))(2.0, 1.0)     value=6.0 tangent=3.0
+What this file is missing is its own two things: the body that answers the `(value, gradient)`
+pair, and the declaration whose second member is the weight's gradient type
+(`FirstOf<WithOf<F>>`, design principles 5.6, `stdlib/types.cml`). The general form of the body
+calls the function value `f` from a body the lift has to walk -- the gap `lane-lgrad` records --
+and the parameter list that would write `f`'s `with` pack is the paused piece
+`docs/handover/reports/2026-11-02-a-lambdas-rest-parameter.cn.md` measures. Until both are in
+place the name answers `never`, the one type that promises no number.
 
-The first line is the shape every `with_grad` composition has, and the derivative it owes is
-`d/dx (x*y)` at `y = 2`, which is 2.0. So the composition answers the zero of the gradient's
-type for every weight that reaches the body through that list -- and a weight always does, since
-the `with` list is what a weight is written as. The other shapes a `with_grad` is asked for stop
-before that point and are refused where they stop, so each one names its own wall instead of
-answering a number: a `with` parameter that is a struct, and a function of two `with` parameters
-with no ordinary parameter, both stop in `jvp`; a tensor `with` parameter whose lambda captures
-an array stops in `split`.
+The other shapes a `with_grad` is asked for stop before a pair could be written, and each one
+names where it stops instead of answering a number: a `with` parameter that is a struct, and a
+function of two `with` parameters with no ordinary parameter, both stop in `jvp`; a tensor
+`with` parameter whose lambda captures an array stops in `split`.
 
 The result type says only what is true of this call: it never gives a value. The engine's
 transform has a declaration of its own -- `ValueAndGradient<F>`, whose second member is the type
 of the *first* member of `F`'s `with` list -- and the type can be named: `stdlib/types.cml`
 writes `ParamsOf<F>`, `WithOf<F>`, `ResultOf<F>`, `Tangent<T>` and `FirstOf<P>`, the head of a
 pack taken apart by a `match type` case (design principles 5.6, `FirstOf<WithOf<F>>`). What is
-written here is still `never`, because the body such a declaration would come with answers the
-zero of that type for every weight (the two lines above), and a declaration that promised a
-number the body cannot compute would be an approximation of the shape it claims. `never` is
-neither.
+written here is still `never`: a declaration that promised a number would be an approximation of
+the shape it claims until the body beside it answers one, and `never` is neither.
 
-The day forward mode carries the tangent of a value handed to a `with` list, the body of this
-function is `vjp`'s own composition and the declaration is the engine's; the four shapes to
-measure it on are the four groups of
+The four groups to measure the body on when it is written are the four groups of
 `test/cases/modules/autodiff/grad_first_with_parameter.cml`, and the entry that holds this
 refusal is `test/cases/compile/transforms/with_grad_from_the_library.cml`.
 The example is a program of its own and stops at the name: it writes a call that is a value, and it
