@@ -300,3 +300,53 @@ assert(Number(named[1]) === field(hits[0], 'node'), `the reading names node ${fi
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+
+# The loop, which is the thing S2 is. Every row above is a first step, and a first step is not
+# training. "The loss went down" is what any wrong gradient satisfies -- a gradient off by a constant
+# factor still makes it go down -- so the criterion here is the curve itself: twelve rounds of
+# `w = w - 0.03125 * dw`, the library's leg against the engine's `with_grad` leg on the same model
+# with the same update rule, compared value by value. `1/32` is exact in binary and so is every
+# literal, so the two legs are compared for equality and not against a tolerance, and the whole curve
+# is pinned -- a future change to either leg moves a pinned value instead of only the difference.
+#
+# What this row does not claim: the loop composes `vjp`, not the name `grad`. `stdlib/vjp.cml#grad`
+# is declared for `(x: float) => float`, and its general form -- the first `with` parameter, design
+# principles 9.9 -- is the item still blocked on a lifted body calling a function value; `vjp` is the
+# function `grad` is a reading of. The weights sit on ordinary parameters because that is the only
+# channel `vjp` differentiates today, which is why the engine's leg keeps them in a `with` list and
+# the two legs differ in where the weight sits and not in what they compute.
+[[tests]]
+name = "train.twelve_rounds_library_curve_is_the_engine_curve"
+desc = "S2 trained for twelve rounds by the library's reverse transform, `vjp` -- `transpose(split(reinterp<jvp>(f)))`, the composition `grad` is a reading of -- against the engine's `with_grad` on the same tensor model (`x @ w`, `0.5 * sum(e * e)`, `x = [[1, 2], [3, 4]]`, `t = [[0, 0], [1, 1]]`, `w0 = [[0.5, 0.25], [0.125, 1]]`) with the same update rule `w = w - 0.03125 * dw`. The step size is a power of two and every literal is exact in binary, so the two legs are compared for equality and not against a tolerance: the case prints both curves and their largest difference, and this row pins all twelve values of both. It is the row that decides whether S2 can train on the library layer at all, and the reason it cannot say `grad`: that name is declared for `(x: float) => float` and its general form (the first `with` parameter, design principles 9.9) is blocked on a lifted body calling a function value."
+kind = "behavior"
+case = "../../cases/showcase_s2/train_curve.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_exact = "s2 curve library=[10.34375, 0.22930908203125, 0.1827995777130127, 0.18107431195676327, 0.1795608826687385, 0.1780609732736167, 0.17657359680496876, 0.17509864468616157, 0.17363601311700427, 0.17218559918157558, 0.17074730082370665, 0.16932101683972314]\ns2 curve engine=[10.34375, 0.22930908203125, 0.1827995777130127, 0.18107431195676327, 0.1795608826687385, 0.1780609732736167, 0.17657359680496876, 0.17509864468616157, 0.17363601311700427, 0.17218559918157558, 0.17074730082370665, 0.16932101683972314]\ns2 curve_max_abs_diff=0.000000000000e+00\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+verify_script = '''
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.length === 3, `expected the two curves and their largest difference, found ${lines.length} line(s)`)
+const curve = (name) => {
+    const prefix = `s2 curve ${name}=`
+    const line = lines.find((l) => l.startsWith(prefix))
+    assert(line !== undefined, `no line reported for the ${name} curve`)
+    return line.slice(prefix.length + 1, -1).split(', ').map(Number)
+}
+const library = curve('library')
+const engine = curve('engine')
+assert(library.length === 12, `the library's curve is ${library.length} values long, not 12`)
+assert(engine.length === 12, `the engine's curve is ${engine.length} values long, not 12`)
+for (let i = 0; i < 12; i += 1) {
+    assert(Number.isFinite(library[i]), `round ${i}: the library's loss is not a number`)
+    assert(Number.isFinite(engine[i]), `round ${i}: the engine's loss is not a number`)
+    assert(library[i] === engine[i],
+        `round ${i}: the library's loss ${library[i]} is not the engine's ${engine[i]}`)
+}
+const worst = lines[2].slice('s2 curve_max_abs_diff='.length)
+assert(Number(worst) === 0, `the largest difference over the curve is ${worst}, not zero`)
+}
+'''
