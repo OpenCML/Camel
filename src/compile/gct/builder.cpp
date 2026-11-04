@@ -361,8 +361,8 @@ void Builder::initInnerTypes() {
     // The type of binary data (design principles 11.1), a built-in name like `string`.
     typeScope_->insert(Reference("Bytes"), camel::core::type::BytesType::get());
     typeScope_->insert(Reference("void"), Type::Void());
-    // The bottom type (design principles 3.9): a function that never returns, and an
-    // expression that leaves the function, are written `never`.
+    // The bottom type (design principles 3.9): `never` is the type of a function that never
+    // returns and of an expression that leaves the function.
     typeScope_->insert(Reference("never"), Type::Never());
     // The built-in collection types, written `Map<K, V>` and `Set<T>` (design principles 11.3).
     typeScope_->insert(Reference("Map"), MapType::prototype());

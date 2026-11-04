@@ -244,7 +244,7 @@ enum class SemanticDiag : uint32_t {
     PureAndUses = 0x0001A1,
     /// A resource group names itself, directly or through other groups.
     ResourceGroupCycle = 0x0001A2,
-    /// `#resource` is written before a type declaration that is not nominal.
+    /// The `#resource` tag is what makes a handle type, so a nominal declaration cannot carry one.
     HandleTypeNotNominal = 0x0001A3,
     /// A body-less declaration's clause differs from the operator's declared resources.
     NativeResourceMismatch = 0x0001A4,
@@ -326,7 +326,8 @@ enum class SemanticDiag : uint32_t {
     // README R3). 0x1B3 and up.
     /// The expression after `typeof` has no value, so the type it stands for cannot be taken.
     TypeOfNotAValue = 0x0001B3,
-    /// `typeof` is written inside a larger type (`typeof e[]`, `(typeof e, int)`).
+    /// `typeof` stands for a whole type, so it cannot stand inside a larger type (`typeof e[]`,
+    /// `(typeof e, int)`).
     TypeOfNotWholeType = 0x0001B4,
     /// `T { static for ... }` names a type that is not a struct or a tuple.
     SameShapeComprehensionNotComposite = 0x0001B5,
@@ -386,8 +387,8 @@ enum class SemanticDiag : uint32_t {
     CompOperandNotUnary = 0x0001E2,
     /// An operand of `..` is the name of a generic function, and nothing at this position says which instance it stands for. The refusal names the operand and both ways to settle it (design principles 5.5).
     CompOperandGenericWithoutType = 0x0001E4,
-    /// The interval of two integers is written `a..b` and nothing else: the two-parameter `range(a, b)`
-    /// the language used to have is gone (design principles 4.2).
+    /// A range over two integers is one construct, `a..b`, with no call form of its own
+    /// (design principles 4.2).
     /// `range(a, b, 0)` is no sequence at all: the step never moves (design principles 4.2,
     /// which makes a step of 0 a fault and a constant one a compile-time error).
     RangeStepZero = 0x0001E6,

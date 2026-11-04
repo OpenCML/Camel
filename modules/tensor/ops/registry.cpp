@@ -322,8 +322,8 @@ void OpRegistry::add(std::string_view protocol, std::vector<OpDef> defs) {
         // which is why `tensor:sum`, `tensor:tanh` and the rest of the family were refused while the
         // operators themselves were registered and ran.
         //
-        // The counts come from the definition's own parameters: `withAfterNorm` says that the
-        // parameters past `ordinaryParams` are written in `<>`. An operator whose element type is
+        // The counts come from the definition's own parameters: `withAfterNorm` marks the
+        // parameters past `ordinaryParams` as the ones a call carries in `<>`. An operator whose element type is
         // stated in the call (`zeros::<f32>([2, 2])`) is left without a shape: a call printed
         // without `::<T>` is a different program, and that fact has nowhere to be recorded yet, so
         // those keep being refused by name instead of being printed wrongly.

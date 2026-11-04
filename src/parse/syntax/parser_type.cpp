@@ -205,7 +205,8 @@ void ParserImpl::parseSpecType() {
                 const size_t cm = mark();
                 bump();
                 {
-                    // `constas` is written only in the expression of a const type argument.
+                    // A `constas` type argument is a constant expression, and this is the only
+                    // position that reads one.
                     ConstDataScope constData(*this, true);
                     parseExpr();
                 }

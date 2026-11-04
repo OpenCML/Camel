@@ -59,7 +59,8 @@ inline std::string childPath(const std::string &parent, const Type *type, size_t
     return parent.empty() ? childName(type, i) : parent + "." + childName(type, i);
 }
 
-/// A path for a message: the root, whose path is empty, is written `<root>`.
+/// A path for a message: every message names a place, so the root -- whose path is empty -- is
+/// shown as `<root>` rather than as nothing.
 inline std::string displayPath(const std::string &path) {
     return path.empty() ? std::string("<root>") : path;
 }

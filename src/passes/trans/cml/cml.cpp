@@ -3373,11 +3373,11 @@ class CmlPrinter {
             fail(ref, "a range without its bounds");
         }
 
-        // An operator whose declaration is a function is written as a call of that function, and
+        // An operator whose declaration is a function is printed as a call of that function, and
         // the name and the argument count come from the declaration (`:io/println`, `tensor:sum`,
-        // `jvp`). The printer no longer spells any of them out from the shape of the URI: the
-        // three places it used to (`:io/` stripped of its prefix, `:op/*to*` read off its last
-        // letter, `:struct/range` written as `range`) are the entries of this table now.
+        // `jvp`). No name is derived from the shape of the URI: this table is the only source, so
+        // `:io/println`, the conversions of `:op/*` and `:struct/range` are printed the way their
+        // own declarations name them.
         std::string name;
         const auto callForm = camel::core::OperatorTable::instance().callFormOf(uri);
         // A name is written when the program can write it: an operator of the core (`:io/println`,
@@ -3610,7 +3610,7 @@ class CmlPrinter {
         }
         // A direct call of a function that reads module values passes those values as `with`
         // inputs. The source omits them: the callee names the top-level values itself. The
-        // function's own `with` parameters come first and are written `<...>` at the call.
+        // function's own `with` parameters come first, and a call spells them inside `<...>`.
         const std::string name = functionNameOf(callee);
         if (name.empty()) {
             fail(ref, "a call of a function whose graph has no source name (a lambda)");
