@@ -188,6 +188,30 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
              refusal.paramType});
     case TransposeRefusalCause::State:
         return "a loop carries its state out of itself, and that shape has no transpose";
+    case TransposeRefusalCause::CotangentPortMismatch:
+        // **Measured unreachable from any program, so this is not a language rule** (author,
+        // 2026-11-04, second ruling on this item: an internal inconsistency that no program reaches
+        // must say so, and must not be written as "the language does not allow this"). The two
+        // spellings are handed over verbatim because the repair is an edit to one of them -- the
+        // law's port and the value the step really has -- but the sentence names the fault as the
+        // compiler's: a law filed under its operator's head and operand count cannot be tied to the
+        // shape a step has, and a program cannot make the two disagree (its cotangent is
+        // `Tangent<ResultOf<F>>`, the type the declaration states). The check stays because it
+        // guards a real internal inconsistency; it is a guard, not a judgement about programs.
+        return "internal error: the rule for '" + refusal.uri + "' takes its cotangent as `" +
+               refusal.portType + "` and this step has a `" + refusal.handedType +
+               "`; a law's port disagreeing with the value the walk hands it is a compiler defect and "
+               "not the program's fault";
+    case TransposeRefusalCause::CalleeBuiltFromAParameter:
+        // **The language's rule, and the parameter it is about** (author, 2026-11-04). `transpose`
+        // answers the map a linear function is; a call whose callee the body *built* out of a
+        // parameter applies a function that parameter produced, so the function being transposed is
+        // not linear in that parameter. The sentence names the parameter because that is the edit a
+        // reader makes, and it says "not linear" and not "the answer has no source": the second
+        // describes this walk, the first describes the language.
+        return "this function is not linear in " +
+               (refusal.paramName.empty() ? position : "the parameter '" + refusal.paramName + "'") +
+               ": it builds the function this call applies out of that parameter";
     case TransposeRefusalCause::CallNoTranspose:
         // One of the two causes a call site can meet, and the one this file said for both of them
         // until 2026-11-03. It is true only here: the callee has no transpose to call. A callee

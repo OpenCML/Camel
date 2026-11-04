@@ -1,0 +1,32 @@
+// A member nobody read, whose tangent space has **no zero this file can build**: the parameter is a
+// tuple whose first member is a struct of floats and the body reads only the second member. Refused,
+// by name, on purpose.
+//
+// `Tangent<Point>` is `Point` itself (a struct of numbers is its own tangent space, design principles
+// 9.9), so the member's space is known and is not in doubt -- what is missing is its zero. A zero is
+// either the constant the registry holds for that space or `zerosLike` asked of a shape the type
+// states, and a struct has neither: the registry registers both for a float and `zerosLike` for an
+// array, and nothing for an aggregate. So the walk refuses, naming the member, the member's type and
+// its space (`why=no-zero-for-an-unread-member`), rather than writing a `float` zero in a place that
+// holds a struct.
+//
+// This is the same refusal an *unread parameter* gets from the answer assembly, which is the point:
+// one member and one parameter are the same question. Building an aggregate's zero member by member
+// is a capability of its own, not claimed here -- and when it lands, this case is the one that turns
+// green, exactly as `split_whole_and_member_refused` does for an aggregate addition.
+import rulesets.jvp
+import { vjp } from vjp
+
+type Point = { a: float, b: float }
+
+func g(q: (Point, float)): float {
+    return q.1 * 4.0
+}
+
+func main(): int sync {
+    let (y, pullback) = vjp(g)(({ a: 1.0, b: 2.0 }, 3.0))
+    // Unreachable while the refusal stands: the answer here would be `({ a: 0.0, b: 0.0 }, 4.0)`,
+    // which is what a composite zero would give -- and what no code path builds today.
+    println("answered y=", y, " dq=", pullback(1.0))
+    return 0
+}

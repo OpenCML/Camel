@@ -189,6 +189,12 @@ jobs:
           EOF
           cat "$profile"
 
+      # The container runs as a different uid than the checkout, so git refuses the tree
+      # ("detected dubious ownership") and anything that reads the commit loses it -- the build
+      # stamp is what reads it, and its line was the only `fatal:` in the log of a green job.
+      - name: Let git read the checkout from inside the container
+        run: git config --global --add safe.directory '*'
+
       - name: Install npm dependencies (skip husky / postinstall conan wipe)
         run: npm ci --ignore-scripts
         env:

@@ -1,0 +1,67 @@
+// A parameter whose members the body reads **one at a time**, read through `vjp` -- the shape that
+// used to stop the run on a signal with nothing on stdout.
+//
+// The cut was never the defect: `split(jvp(g))` answers 11.0 and 4.0 on the same program, and it is
+// pinned below beside the pullback so that a change that "fixes" `vjp` by changing the halves shows
+// up as a cut that stopped agreeing with its own lift. The defect was one step later: `transpose`
+// files a member's cotangent in the place that member has in the value it was read from
+// (`memberCotangents`, `modules/transforms/transpose.cpp#buildTransposeMember`) and marks the
+// **parameter** answered, and nothing joined those places back into the cotangent the answer needs.
+// The answer tuple then held an empty reference, the encoder was handed a node whose input was no
+// node, and the run died inside the encoder's input table: SIGSEGV, empty stdout, stderr ending after
+// `REINTERP split function=...` with no `TRANSPOSE` line at all.
+//
+// The adjoint of reading a parameter by member **is** the parameter's cotangent, assembled member by
+// member -- `Tangent<(float, float)>` is the tuple of the members' tangents, `Tangent<Point>` the
+// struct of them, in the declaration's order (design principles 9.9; author, 2026-11-04: a member
+// read accumulates onto the parameter). A member nobody read gets the zero of its own tangent space,
+// which says "read, not differentiated" -- so `g_0` answers `(4.0, 0.0)` and `g_1` answers
+// `(0.0, 3.0)`, the member order of the **parameter** and not the order the body read them in.
+//
+// The struct half is the same join with the place resolved from the field's name instead of its
+// number (`qq.a` names a symbol, not an index): it refused before this page's ruling, and it answers
+// `{a: 4.0, b: 1.0}` now, which is what `Tangent<Point>` is for a struct of floats.
+import rulesets.jvp
+import { jvp, split } from transforms
+import { vjp } from vjp
+
+type Point = { a: float, b: float }
+
+func g(q: (float, float)): float {
+    return q.0 * 4.0 + q.1
+}
+
+func g_0(q: (float, float)): float {
+    return q.0 * 4.0
+}
+
+func g_1(q: (float, float)): float {
+    return q.1 * 3.0
+}
+
+func h(qq: Point): float {
+    return qq.a * 4.0 + qq.b
+}
+
+func main(): int sync {
+    // The cut, before the pullback: the numbers the transform was never wrong about.
+    let lifted = jvp(g)
+    let (v, t) = lifted((2.0, 3.0), (1.0, 0.0))
+    println("lift value=", v, " tangent=", t)
+    let fwd = split(lifted)
+    let (value, lin) = fwd((2.0, 3.0))
+    println("forward y=", value)
+    println("lin dp=", lin((1.0, 0.0)))
+    // The pullback of the same function: dg/dq is (4, 1) at every point, hand-computed.
+    let (y, pullback) = vjp(g)((2.0, 3.0))
+    println("vjp y=", y, " dq=", pullback(1.0))
+    // One member read, the other never: the zero is the place's, not a hole and not the neighbour's.
+    let (y0, pb0) = vjp(g_0)((2.0, 3.0))
+    println("vjp0 y=", y0, " dq=", pb0(1.0))
+    let (y1, pb1) = vjp(g_1)((2.0, 3.0))
+    println("vjp1 y=", y1, " dq=", pb1(1.0))
+    // The same read written as a name.
+    let (yh, pbh) = vjp(h)({ a: 2.0, b: 3.0 })
+    println("vjph y=", yh, " dq=", pbh(1.0))
+    return 0
+}

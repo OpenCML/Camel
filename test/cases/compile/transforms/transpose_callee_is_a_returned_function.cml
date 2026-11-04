@@ -3,31 +3,24 @@
 //
 // On paper `f(x) = 2x`, so `f(3) = 6` and the derivative at 3 is `2`.
 //
-// The GIR of `f` puts the callee where the builder puts every callee -- the call's `with` input -- and
-// that input is a FUNC node, `mk(x)`, whose value is the closure `mk` assembled:
+// **What this pins, and why it is a refusal** (author, 2026-11-04 07:15). A bare `transpose(f)` reads
+// every parameter of `f` as a linear input. The call here applies a function the body **built out of
+// `x`**, so `f` is not linear in `x` -- that is the language's rule, and the refusal says it:
+// `skip=callee-built-from-a-parameter`, `built-from=0` naming `x` by position, `callee=none` because no
+// node of this graph names the graph the call applies, then the sentence `this function is not linear
+// in the parameter at position 1: it builds the function this call applies out of that parameter`, and
+// exit 1. The forward line is answered; the transposition is silent.
 //
-//     N07 [label="mk", type="FUNC", value_type="(y: float) => float"]
-//     N09 [label="CALL", type="CALL", value_type="float"]
-//     N07 -> N09 [label="0|0", type="WITH"]      // the callee value: the result of `mk(x)`
-//     N08 -> N09 [label="0|0", type="NORM"]      // the 2.0 this call was given
+// The value is read by `GCGraph::staticFunctionGraphOf` ("what graph does this *value* name"), not by
+// `calleeIdOf` ("what does this node answer as a callee", which answered `mk` -- the graph of the call
+// that *produced* the value, not the graph this call applies), and no `skip=signature` line appears:
+// no signature of `mk` is read at all. The answer this program is owed (2 at cotangent 1) is owed by
+// the library's cut, which carries such a value as a residual (`vjp`'s `lin`), and it is answered
+// there: this case is the bare `transpose`, and its verdict is the rule above, not our state.
 //
-// A FUNC node is a call written by name, so `GCGraph::calleeIdOf` answers for it -- with the graph of
-// the call's **callee**, not with the graph of the call's value. The walk therefore transposes `mk`,
-// whose answer is a function and which has no transposed signature:
-//
-//     TRANSPOSE function=mk skip=signature
-//     TRANSPOSE function=f skip=call-no-transpose node=3 callee=mk
-//
-// The program is refused (exit 1), so nothing wrong is answered -- **right verdict, wrong name**: the
-// callee of this call is a closure that `mk`'s body assembled and returned, and the value it holds names
-// no graph at the call site. The reading this case owes is `callee=none` with the cause the walk has for
-// a value it cannot name; the plan entry marks the case until the reading is that one, and the mark says
-// in so many words that the classification is already right and only the sentence is not.
-//
-// This is the *other* half of the reading that was fixed on 2026-11-04. There the callee was read out of
-// an ordinary input -- `h(g(x), 1.0)` was read as a call of `g` -- and that question was deleted
-// (`transpose_call_first_argument_is_a_call.cml`). Here the misreading sits in the `with` list, one input
-// list over, and it is untouched: `calleeIdOf` still answers for the FUNC node that holds a call's value.
+// The two readings that separated provenance from content, and their host, are recorded in
+// `docs/handover/reports/2026-11-04-what-the-transpose-batch-measured.cn.md`, section 1; the ruling
+// behind the sentence is in `docs/handover/reviews/questions-2026-10-29.md`.
 import rulesets.transpose
 import { transpose } from transforms
 
@@ -41,7 +34,7 @@ func f(x: float): float {
 
 func main(): int sync {
     println(f(3.0))
-    // The paper answer: (2.0,).
+    // The paper answer: (2.0).
     println(transpose(f)(1.0))
     return 0
 }
