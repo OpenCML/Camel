@@ -526,6 +526,11 @@
             "plans": ["feat/trans/cpp.plan.toml"]
         },
         {
+            "comment": "The reduced seed 8 program of the branch-arm refusal (`std::opt` on the progen batch, `JOIN 113 reads GATE 217` before the reduction): it lives in the progen corpus, whose directory rule above selects nothing, so the fast plan that runs it is named here. Without this rule the plan would be one `--changed` can never reach, which is the hole the same case path is meant to close.",
+            "paths": ["test/cases/opt/progen/seed8_join_reads_gate.cml"],
+            "plans": ["feat/opt/progen8_arm.plan.toml"]
+        },
+        {
             "comment": "A plan file selects itself: editing the tests of one plan runs that plan. A non-plan file under test/plans (a golden, a fixture) selects the nearest directory that holds a plan, so editing a golden runs the plans it belongs to. The except list keeps the plans the project forbids from an ordinary change out of that: a perf, GC-stress or progen plan edit falls back to the fast layer (name the plan file to run it deliberately).",
             "paths": ["test/plans/"],
             "self": true,
