@@ -463,6 +463,30 @@ func ct_of_b(ct: float[...], a: float[?, ?], b: float[?]): float[?] {
 // Each helper takes only the list it needs. The answered operand's own shape is the one the caller
 // cannot read -- that operand is a tangent on this side -- while the *other* operand is a value the
 // cut carries, so the helper still reads it.
+//
+// ---- what the two stated laws answer, and what they do not ----
+//
+// The rule, so that a red reading has an owner instead of a chore list (author's ruling of
+// 2026-11-04 12:40, and the question its own page raises:
+// `docs/handover/questions/2026-11-04-which-half-of-a-page-decides-whether-the-twins-exist.cn.md`):
+//
+// **`mul_stated_t` and `matmul_stated_t` answer a product whose two operands' shapes are operands of
+// the linear call** -- that is, a product reached through a forward rule that states `shape(...)` in
+// the half where both operands are values (`stdlib/rulesets/jvp.cml#jvp_mul_tensor` and
+// `#jvp_matmul` do, and `#jvp_linear` does not yet). Inside that domain each cotangent is reduced by
+// `sum_to_stated` to a list, and the law reads at most the **other** operand's value.
+//
+// **Outside it the domain stops at the type, not at the arithmetic.** A product whose operand type is
+// open (`float[]`, `float[...]`) is answered by these laws only while the position being answered
+// still has what it needs: a parameter's *value* behind the reads. Measured 2026-11-04 on the two
+// vector cases of `test/plans/feat/showcase_s2.plan.toml`: they walk in (`skip=
+// cotangent-needs-a-value uri=tensor:matmul_stated position=0` / `position=1`), so the law is the one
+// being asked, and the same law answers the same case with the type written out (`v: float[2]`),
+// `max_abs_diff 0.0` -- what is missing at an open type is the answered position's own value, not a
+// shape. Carrying that value into the backward half is a different lane (the residual-to-port
+// correspondence, `modules/transforms/split.cpp#residualsOf` and
+// `docs/handover/questions/2026-11-04-who-records-which-closure-member-is-which-parameter.cn.md`), and
+// the author's ruling of 2026-11-04 put it on hold rather than open it here.
 
 /// Both operands matrices: `ct · bᵀ`, reduced to `sa`.
 func ct_of_a_stated(ct: float[...], a: float[?, ?], b: float[?, ?], sa: int[]): float[?, ?] {
