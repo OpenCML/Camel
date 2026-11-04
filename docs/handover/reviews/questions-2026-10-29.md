@@ -2753,3 +2753,13 @@ P0-2 两处改写、`transpose` 递归捕获、循环倒序、M4 迁移、Transf
 `does-adopt-carry-what-it-adopted-or-does-a-cut-carry-its-own-chain`、`who-adopts-the-graphs-of-a-nested-cut`：只要一种机制。由程序传递地收养嵌套切出来的图，按 id 去重；每个切口各自带链（`SplitGraph::standing`）的做法删掉。`calleeCuts` 照 17:55 改成每次变换调用只建一张表，不要随嵌套层数翻倍。
 
 48 页挪到 `reviews/` 留档。要负责人定的只有一件，就是早先列过的"类型层拆包"，本批没有新增。
+
+## 负责人定（2026-11-04 04:30）：类型层的包能拆
+
+负责人同意：类型层像值层一样，能把一个类型包拆成"第一个成员"和"其余"。规则写进原则 §5（中英文），紧接在"参数包是同一条规则"之后。
+
+**施工（下一批第 3 项后半）**：
+1. 类型层的拆包写法：在类型位置上把 `WithOf<F>` 拆成 `W` 和 `..Rest`。具体语法由施工方提一页（`match type` 的元组模式，或类型位置上的模式），与值层 `<w, ..rest>` 读起来一致。空包在实例化处按语言规则报错。
+2. 用它在 `stdlib/types.cml` 里写出 `Gradient<F>`、`ValueAndGradient<F>` 和两个 `…AndAux<F>`，`stdlib/signatures/autodiff.cml` 的签名照这几个声明。
+3. 库层 `grad`/`with_grad`/`has_aux` 写成组合（原则 9.9：用 lambda 把第一个 `with` 参数挪到普通参数位，对它做 `vjp`），与引擎在全部 autodiff 用例上逐元素同答。
+4. 之后删除 C++ 的 `GradResolver`/`gradientSignature`，以及 `pullback.cpp` 和 `buildGradientGraph`（第 7 项）。
