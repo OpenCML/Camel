@@ -276,12 +276,12 @@ InferFn wholeReductionInfer(k::ReduceOp op) {
 /// `sum_stated(t, extents)`: the whole-tensor sum, with the operand's extents beside it.
 ///
 /// The value is `sum(t)` -- `sumAllKernel` below is the same kernel, so the accumulation, the
-/// element type and the one rounding are the definition's own -- and `at` is checked against the
-/// operand's shape: an extent nobody verified would be a gradient of the wrong shape
+/// element type and the one rounding are the definition's own -- and `extents` is checked against
+/// the operand's shape: an extent nobody verified would be a gradient of the wrong shape
 /// (`support.h#checkStatedExtents`).
 slot_t sumStatedKernel(ArgsView &with, ArgsView &norm, context::Context &ctx) {
-    const std::vector<int64_t> at = intListArg(norm, 1, "sum_stated");
-    checkStatedExtents(tensorArg(norm, 0), at, 0, "sum_stated");
+    const std::vector<int64_t> extents = intListArg(norm, 1, "sum_stated");
+    checkStatedExtents(tensorArg(norm, 0), extents, 0, "sum_stated");
     return sumAllKernel(with, norm, ctx);
 }
 
@@ -833,7 +833,7 @@ std::vector<OpDef> reductionOps() {
     defs.push_back(OpDef{
         .name      = "sum_stated",
         .exports   = {"sum_stated"},
-        .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
+        .params    = {{"t", ParamKind::Tensor}, {"extents", ParamKind::IntArray}},
         .resultDoc = "T",
         .infer     = sumStatedInfer,
         .kernel    = &sumStatedKernel,
