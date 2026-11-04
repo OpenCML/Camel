@@ -2613,6 +2613,48 @@ disagree with the tensor's shape, or an index is outside the first dimension
 - Failure: fault `RuntimeError` when the list's first entry is not its index count, the extents.
 - Example: `take_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1, 1, 2, 2])` gives `[[3.0, 4.0]]`
 
+#### `mul_stated`
+
+```camel
+mul_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+```
+
+The product of two tensors, with **both** operands' extents stated: `x * w`, where `ax` is
+`shape(x)` and `aw` is `shape(w)`.
+
+The value is the product and spends nothing on the extents: the broadcast, the element type and the
+one rounding are `multiply`'s own. `rulesets.transpose`'s `mul_stated_t` reads the two lists
+instead of the operand whose cotangent it is answering -- that operand is a tangent on the reverse
+side, and a tangent's type states no extents (design principles 5.4) -- and the forward half that
+computes them is `rulesets.jvp`'s `jvp_mul_tensor`, where both operands are values.
+
+Two lists and not one, unlike the stated reductions above: a product broadcasts, so the operands'
+shapes differ (`[2, 2, 3] * [3]`), and each cotangent comes back to its **own** operand's shape. An
+operand that is one number states no extents, and its list is empty.
+
+- Pure.
+- Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
+- Example: `mul_stated([1.0, 2.0] as float[2], [3.0, 4.0] as float[2], [2], [2])` gives `[3.0, 8.0]`
+
+#### `matmul_stated`
+
+```camel
+matmul_stated: (a: T[...], b: T[...], sa: int[], sb: int[]) => T[...]
+```
+
+The matrix product, with **both** operands' extents stated: `a @ b`, where `sa` is `shape(a)` and
+`sb` is `shape(b)`.
+
+The value is the product (`matmul`'s own kernel, so the accumulation and the inner-extent check are
+the definition's own) and the two lists are read by `rulesets.transpose`'s `matmul_stated_t`, which
+reduces each cotangent to its own operand's shape without reading that operand. Two lists because
+the answer's shape is neither operand's: a `[3, 4] @ [4, 2]` product reduces the left cotangent to
+`[3, 4]` and the right one to `[4, 2]`.
+
+- Pure.
+- Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
+- Example: `matmul_stated([[1.0, 2.0]] as float[1, 2], [[3.0], [4.0]] as float[2, 1], [1, 2], [2, 1])` gives `[[11.0]]`
+
 #### `sum_axis_stated`
 
 ```camel
