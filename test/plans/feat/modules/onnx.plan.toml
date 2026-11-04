@@ -2116,9 +2116,6 @@ timeout_ms = 240000
 
 [[tests]]
 name = "ort_grad_loop_values"
-known_fail = true
-known_fail_owner = "lane-shapeext"
-known_fail_reason = "the export is refused and the model never reaches disk, so the check stops at `Load model ... failed. File doesn't exist`: the same wall measured on the sibling `export_train_step_dynamic` (`tensor:matmul_grad_lhs: the rank of an operand is not known statically`), where the rank the pullback reduces to came from `like`'s type and 甲 ruled that type-copy out; decided in docs/handover/questions/2026-11-05-does-a-shape-declaration-need-a-length-in-its-return-type.cn.md"
 desc = "The gradient of tail recursions that return a tensor state together with an integer counter (as a tuple, with the counter entering the loss as a number, as a struct, and with two more differentiable carried values, a tensor and a float) exports as paired ONNX Loops: the pullback of such a recursion takes a tuple or struct of cotangents. The model passes onnx.checker's full check; on ONNX Runtime, for loops of 0, 1, 2, 3, 5 and 6 (the maximum) steps, values and gradients match a NumPy reverse sweep and Camel's native run, and the counter, an int64 output, is exact. The exporter used to refuse the call of the pullback."
 kind = "behavior"
 tool = "python"

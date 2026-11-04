@@ -178,19 +178,31 @@ std::optional<Type *> intScalar(const InferContext &) { return Type::Int64(); }
 /// type: the length is the caller's (author, 2026-11-05: the extents are the primal's runtime
 /// shape, and no type states them).
 std::optional<Type *> sumToInfer(const InferContext &ctx) {
-    // The **rank** is the list's length, and an `int64[n]` argument states it (a constant list, one
-    // written in place, and a `tensor:shape` node whose operand's rank is fixed all do). Stating
-    // the rank is not a second copy of the shape: it is a fact the call fixes -- how many axes the
-    // result has -- and every *extent* stays where the ruling put it, in the list's values at run
-    // time. Without it a consumer that needs the rank of a value (the exporter's reduction axes, a
-    // `sub` of two open-rank tensors) has nothing to read, and the graph the pullback builds loses
-    // the ranks its own inputs state.
-    const auto at = ctx.facts(1).shape;
-    if (!at || at->size() != 1 || !(*at)[0]) {
-        return tensorOf(ctx.facts(0).dtype, std::nullopt);
+    const auto dtype = ctx.facts(0).dtype;
+    // The result's **extents** are the target list's values, and when that list is a constant they
+    // are facts of this call: nothing reads the primal's shape, the numbers are the ones the call
+    // carries (`reshape<[2, 3]>` states its result the same way). They have to be said, because a
+    // back end that emits a strided kernel needs every extent --
+    // `modules/tiles/src/compiler.cpp#lower` refuses an operator "needs a statically known f32
+    // tensor result" otherwise, which is how a rank without extents stopped every device compile of
+    // a pullback (`tiles.mean_grad.source.*` and its family).
+    if (const auto at = ctx.constInts(1)) {
+        tensor::StaticShape shape;
+        shape.reserve(at->size());
+        for (const int64_t extent : *at) {
+            shape.emplace_back(extent);
+        }
+        return tensorOf(dtype, shape);
     }
-    return tensorOf(
-        ctx.facts(0).dtype, PartialInts(static_cast<size_t>(*(*at)[0])));
+    // When the list is a **value** the model computes -- a dynamic-batch `shape(y)` -- only its
+    // length is a fact (an `int64[n]` argument states it: a list written in place, or a
+    // `tensor:shape` node whose operand's rank is fixed). Then only the rank is stated: the extents
+    // stay in the list, where ruling 甲 put them, and the exporter reads the rank it needs.
+    const auto length = ctx.facts(1).shape;
+    if (!length || length->size() != 1 || !(*length)[0]) {
+        return tensorOf(dtype, std::nullopt);
+    }
+    return tensorOf(dtype, PartialInts(static_cast<size_t>(*(*length)[0])));
 }
 
 /// The signature of `sum_to`, `broadcast_like`, `expand_axis`, `gelu_grad`, `erf_grad` and the
