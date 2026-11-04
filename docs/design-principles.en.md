@@ -508,7 +508,6 @@ Keywords are kept only for modifiers that change semantics (such as `sync`, `exp
 - **Numeric permissions are tags**: `#[reassociate, contract]`, with no separate `numeric` wrapper and `enum`; `finite_math` is an alias group (section 7).
 - **`macro` is the standard tag `#macro`** (section 8).
 - **All facts about operators are standard tags**: purity, faults, resources, numeric classification, index mapping (which elements of the input each element of the output is computed from) and so on are all standard tags on the operator declaration, whose meaning is written in this specification; C++ operators declare them through the same tag registration interface, and for functions written in Camel they are inferred automatically from the body. Concepts such as "index semantics" and "operator semantics" are not set up separately; the existing `operator_semantics` and `index_semantics` are kept as the internal storage of these standard tags.
-- **`#remat` is written on a function declaration and says the backward pass should recompute rather than keep intermediate values**; `split` drops the non-parameter residuals accordingly. (Written down from the author's ruling of 2026-11-02 19:30; the wording is for the author to approve.)
 - The sharding tag `#shard` and the block-kernel tag `#kernel` are in section 13.
 
 ---

@@ -5,17 +5,10 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：61 页
+## 现在在等作者：49 页
 
 | 页 | 问什么 |
 | --- | --- |
-| [`2026-11-02-is-a-chain-start-the-same-question-as-an-order-carrier`](2026-11-02-is-a-chain-start-the-same-question-as-an-order-carrier.cn.md) | `nodeTakesAnOrder` 与 `isChainStatement`：一个问题还是两个？ |
-| [`2026-11-02-the-gc-soak-step-is-not-the-eq-rewrite`](2026-11-02-the-gc-soak-step-is-not-the-eq-rewrite.cn.md) | `gc_soak` 的那一跳不是 `!=` 改 `!(==)` 造成的 —— 作者 12:10 的机制假设被读数证伪，预算怎么办 |
-| [`2026-11-02-what-carries-the-residuals`](2026-11-02-what-carries-the-residuals.cn.md) | 残差用什么承载？ |
-| [`2026-11-02-who-carries-the-chain-place-after-a-branch`](2026-11-02-who-carries-the-chain-place-after-a-branch.cn.md) | 分支之后，链位由谁承接？ |
-| [`2026-11-03-a-structural-nodes-chain-position-belongs-to-its-join`](2026-11-03-a-structural-nodes-chain-position-belongs-to-its-join.cn.md) | 结构节点的链位在它的 JOIN 之后，不在它自己身上 |
-| [`2026-11-03-does-a-mark-encode-shape-or-history`](2026-11-03-does-a-mark-encode-shape-or-history.cn.md) | 一处标记编码的是"形状"还是"已发生过的事件"？ |
-| [`2026-11-03-reversing-a-backward-can-only-be-pinned-when-a-loop-state-is-not-a-float`](2026-11-03-reversing-a-backward-can-only-be-pinned-when-a-loop-state-is-not-a-float.cn.md) | 反传倒着走要能钉住，先要循环状态不是浮点标量 |
 | [`2026-11-04-a-case-with-no-plan-entry-and-a-main`](2026-11-04-a-case-with-no-plan-entry-and-a-main.cn.md) | 一个用例带着 `func main` 却没有任何计划条目：删掉，还是给它写一条？ |
 | [`2026-11-04-a-draft-node-asked-of-the-source-graph`](2026-11-04-a-draft-node-asked-of-the-source-graph.cn.md) | 余切类型问的是哪张图：造图节点被当成源图节点来问，回退值该不该继续静默说 `float`？ |
 | [`2026-11-04-a-guarded-tangent-cannot-be-transposed-what-does-the-power-keep`](2026-11-04-a-guarded-tangent-cannot-be-transposed-what-does-the-power-keep.cn.md) | `^` 的反向半读不了切向的值：那句守卫留不留，`(-3.0) ^ 2.0` 答 `-6.0` 还是 `NaN`？ |
@@ -36,7 +29,6 @@
 | [`2026-11-04-does-pick-at-need-a-forward-rule`](2026-11-04-does-pick-at-need-a-forward-rule.cn.md) | 问题：`pick_at` 该补一条**前向**律吗？ |
 | [`2026-11-04-does-the-engine-need-a-pick-at-rule`](2026-11-04-does-the-engine-need-a-pick-at-rule.cn.md) | 问题：引擎的反向表要不要给 `pick_at` 补一条规则？ |
 | [`2026-11-04-does-the-library-need-forward-rules-for-the-stated-spellings`](2026-11-04-does-the-library-need-forward-rules-for-the-stated-spellings.cn.md) | 问题：`rulesets.jvp` 要不要给四个"stated"拼写补前向律？ |
-| [`2026-11-04-does-the-seal-check-judge-the-marker-or-the-statement`](2026-11-04-does-the-seal-check-judge-the-marker-or-the-statement.cn.md) | 同步边的封口判据：问标记，还是问"这个节点是不是语句" |
 | [`2026-11-04-does-the-transpose-walk-still-refuse-by-arity`](2026-11-04-does-the-transpose-walk-still-refuse-by-arity.cn.md) | 问题：转置走图还按操作数个数拒一个算子吗？ |
 | [`2026-11-04-how-does-a-tie-mask-travel-with-an-extremums-shape`](2026-11-04-how-does-a-tie-mask-travel-with-an-extremums-shape.cn.md) | `max_axis` / `min_axis` 的孪生算子：并列极值的选择怎么随形状走？ |
 | [`2026-11-04-how-is-a-two-port-transposed-value-called`](2026-11-04-how-is-a-two-port-transposed-value-called.cn.md) | 两端口（值 + 余切）的转置值，怎么被调用？ |
@@ -52,7 +44,6 @@
 | [`2026-11-04-what-answers-a-length-from-a-type-alone`](2026-11-04-what-answers-a-length-from-a-type-alone.cn.md) | `extent_of` 到底答「形状」还是答「某一维的长度」？ |
 | [`2026-11-04-what-does-a-call-of-a-value-that-is-not-a-function-say`](2026-11-04-what-does-a-call-of-a-value-that-is-not-a-function-say.cn.md) | 调用一个类型不是函数的值，诊断该怎么写？ |
 | [`2026-11-04-what-does-the-second-derivative-need`](2026-11-04-what-does-the-second-derivative-need.cn.md) | 二阶自动微分卡在哪一层：一个"图叫得出名字"的函数值？ |
-| [`2026-11-04-what-is-a-value-of-extent-of`](2026-11-04-what-is-a-value-of-extent-of.cn.md) | `extent_of::<A>` 当一个值用：答，还是拒绝这个值？ |
 | [`2026-11-04-what-shape-a-zero-with-no-stated-extent-has`](2026-11-04-what-shape-a-zero-with-no-stated-extent-has.cn.md) | 类型没写宽度时，那个零的宽度是多少？ |
 | [`2026-11-04-when-a-lookup-that-finds-nothing-should-refuse`](2026-11-04-when-a-lookup-that-finds-nothing-should-refuse.cn.md) | 查不到的时候，什么时候该拒绝、什么时候该答默认？ |
 | [`2026-11-04-when-the-lift-promotes-a-with-value-and-the-cut-cannot-take-the-port`](2026-11-04-when-the-lift-promotes-a-with-value-and-the-cut-cannot-take-the-port.cn.md) | 抬起的 `with` 值进了值列表：已按甲收窄，切不动的形状按名字拒 |
@@ -67,6 +58,3 @@
 | [`2026-11-04-who-states-the-extents-of-a-stated-reduction`](2026-11-04-who-states-the-extents-of-a-stated-reduction.cn.md) | 一个 stated 归约的 extents，由谁在编译期说出来 |
 | [`2026-11-04-who-states-the-length-when-the-shape-is-open`](2026-11-04-who-states-the-length-when-the-shape-is-open.cn.md) | 形状开放时，长度由谁陈述？ |
 | [`2026-11-04-widening-the-float-guard-turns-ten-hardcoded-types-into-defects`](2026-11-04-widening-the-float-guard-turns-ten-hardcoded-types-into-defects.cn.md) | 放宽 `Float64` 这道闸门时，十余处写死的类型会在同一刻变成缺陷 |
-| [`questions-2026-10-31-does-a-version-edge-order-two-writes`](questions-2026-10-31-does-a-version-edge-order-two-writes.md) | 版本边算不算"两次写同一资源的调用之间的排序" |
-| [`questions-2026-10-31-what-executes-a-value-taken-by-a-position`](questions-2026-10-31-what-executes-a-value-taken-by-a-position.md) | 被位置取走的值，怎么拿到执行的理由（不靠 ctrl）？ |
-| [`the-switch-that-reaches-no-target`](the-switch-that-reaches-no-target.md) | The switch that reaches no target |
