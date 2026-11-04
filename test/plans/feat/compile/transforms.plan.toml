@@ -2534,3 +2534,31 @@ expect_output_contains = ["jvp does not reinterpret a loop over a value that has
 expect_stdout_not_contains = ["tangent= 0.0", "value= 3.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+
+
+# The gradient across a call, pinned as the number it must answer. `f` is a function of its own,
+# `g` calls it, and `g'(3)` is 12 -- `d/dx (2*x*x) = 4x`. The author's ruling of 2026-11-03 19:35
+# makes that one step of a chain, not a special case: `transpose(call(g, x)) = transpose(lin_g)`.
+#
+# The mark is `known_fail` on the author's ruling of 2026-11-03 00:30 (a case that cannot pass today
+# belongs in the plan, with the wall named, and is not deleted). Owner: `lane-linres`.
+# `known_fail_msg` is the line this tree prints today, so a case that starts failing another way is
+# red rather than quietly re-marked. When the wall falls, the mark goes in the same commit that
+# flips the number, and `flat` must still answer 12.0.
+[[tests]]
+name = "cross_call_gradient_is_not_zero"
+desc = "The gradient across a call: `f(x) = 2.0 * x`, `g(x) = f(x) * x`, so `g(3) = 18` and `g'(3) = 4x = 12`; the same arithmetic written flat answers 12.0 in the same run and must keep answering it. Today the call line answers `g'(3) = 0.0` with no diagnostic: `jvp(g)` is right (`jvp(g)(3.0, 1.0)` = `(18.0, 12.0)`, `jvp(g)(3.0, 2.0)` = `(18.0, 24.0)`), and `split(jvp(g)).1` -- the `lin_g` the ruling transposes -- is a constant function, `lin(1.0) = lin(0.5) = lin(2.0) = 36.0`, where 36 is `mul_tangent(y = 6, x = 3, lin_f(3) = 6, 3)`: the value `x = 3` spent as the tangent `dx`. So the wall is not the transposition (the cotangent reaches the right node and the answer assembly reads a parameter port the body never uses) but the cut's residual list, which carries the tangent parameter as a residual and hands the backward half a parameter port nothing reads. The reading is in `docs/handover/questions/2026-11-04-does-a-call-stand-on-its-callees-lin-or-on-its-body.cn.md`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/cross_call_gradient_is_not_zero.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["g(3) = 18.0", "g'(3) = 12.0", "flat(3) = 18.0", "flat'(3) = 12.0"]
+known_fail = ["nvm"]
+known_fail_owner = "lane-linres"
+known_fail_reason = "`modules/transforms/split.cpp#residualsOf` lists the lifted graph tangents among the values that cross the cut, so the backward half is handed a parameter port its body never reads and reads a residual the forward half cannot compute"
+known_fail_msg = "g'(3) = 0.0"
+known_fail_note = "Owner `lane-linres`. Waits on the cut, not on the transposition: `modules/transforms/split.cpp#residualsOf` lists the lifted graph's tangent parameter as a value that crosses the cut, so `split_of_jvp_of_g_backward` carries one parameter port (`normPorts = [4]`) that its body never reads and reads a closure port (`node 1`) the forward half does not compute; `transpose` then answers the parameter with the zero the walk gives an unreached parameter (`TRANSPOSE function=split_of_jvp_of_g_backward ... answer=zero`). Measured 2026-11-04 on this branch: `jvp(g)` is right at `(18.0, 12.0)` and `(18.0, 24.0)`; `lin(1.0) = lin(0.5) = lin(2.0) = 36.0`; `g'(3) = 0.0` and `flat'(3) = 12.0`. The same wall answers 0.0 for `p(x) = f(x) + x` at 2 (should be 3.0) and is not reached by `q(x) = f(x) * 4.0` (8.0, right) or `r(x) = f(f(x))` (4.0, right), so the shape is the cut's residual list and not every call."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
