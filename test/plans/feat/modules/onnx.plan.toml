@@ -223,7 +223,7 @@ const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('MatMul') === 2, `expected 2 MatMul, got ${model.ops}`)
 assert(count('Gemm') === 3, `expected 3 Gemm for the three transposed products, got ${model.ops}`)
 assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
-assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
+assert(model.initializers.filter((_, i) => model.initializerTypes[i] === 1).length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
 }
 """
 timeout_ms = 6000
@@ -317,7 +317,7 @@ assert(count('Sub') === 6, `expected one update Sub per parameter plus two corre
 // standard opset-17 inference operators only (no training-domain ops)
 const standard = new Set(['MatMul', 'Add', 'Relu', 'Mul', 'ReduceMean', 'Expand', 'Transpose', 'Greater', 'Cast', 'ReduceSum', 'Reshape', 'Pow', 'Sub', 'Div', 'Sqrt', 'Identity'])
 assert(model.ops.every((o) => standard.has(o)), `non-standard op in ${model.ops}`)
-assert(model.initializers.length <= 16, `weights and state must be inputs, not initializers: ${model.initializers}`)
+assert(model.initializers.filter((_, i) => model.initializerTypes[i] === 1).length <= 16, `weights and state must be inputs, not initializers: ${model.initializers}`)
 }
 """
 timeout_ms = 6000
@@ -1023,7 +1023,7 @@ const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('MatMul') === 2, `expected 2 MatMul, got ${model.ops}`)
 assert(count('Gemm') === 3, `expected 3 Gemm, got ${model.ops}`)
 assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
-assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
+assert(model.initializers.filter((_, i) => model.initializerTypes[i] === 1).length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
 }
 """
 timeout_ms = 6000
@@ -1053,7 +1053,7 @@ const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('MatMul') === 2, `expected 2 MatMul, got ${model.ops}`)
 assert(count('Gemm') === 3, `expected 3 Gemm, got ${model.ops}`)
 assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
-assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
+assert(model.initializers.filter((_, i) => model.initializerTypes[i] === 1).length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
 }
 """
 timeout_ms = 6000
@@ -1083,7 +1083,7 @@ const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('MatMul') === 2, `expected 2 MatMul, got ${model.ops}`)
 assert(count('Gemm') === 3, `expected 3 Gemm, got ${model.ops}`)
 assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
-assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
+assert(model.initializers.filter((_, i) => model.initializerTypes[i] === 1).length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
 }
 """
 timeout_ms = 6000

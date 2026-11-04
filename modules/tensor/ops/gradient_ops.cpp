@@ -175,11 +175,22 @@ std::optional<Type *> intScalar(const InferContext &) { return Type::Int64(); }
 
 /// `sum_to(t, at)`: `t` reduced over its leading axes to the extents `at` states. The extents are
 /// the target itself and nothing else is read for them -- not another tensor's shape and not the
-/// type: the length is the caller's, and the result therefore states the element type (the input's)
-/// and no extents, because the extents are a runtime value (author, 2026-11-05: extents come from
-/// the primal's runtime shape, not from the type).
+/// type: the length is the caller's (author, 2026-11-05: the extents are the primal's runtime
+/// shape, and no type states them).
 std::optional<Type *> sumToInfer(const InferContext &ctx) {
-    return tensorOf(ctx.facts(0).dtype, std::nullopt);
+    // The **rank** is the list's length, and an `int64[n]` argument states it (a constant list, one
+    // written in place, and a `tensor:shape` node whose operand's rank is fixed all do). Stating
+    // the rank is not a second copy of the shape: it is a fact the call fixes -- how many axes the
+    // result has -- and every *extent* stays where the ruling put it, in the list's values at run
+    // time. Without it a consumer that needs the rank of a value (the exporter's reduction axes, a
+    // `sub` of two open-rank tensors) has nothing to read, and the graph the pullback builds loses
+    // the ranks its own inputs state.
+    const auto at = ctx.facts(1).shape;
+    if (!at || at->size() != 1 || !(*at)[0]) {
+        return tensorOf(ctx.facts(0).dtype, std::nullopt);
+    }
+    return tensorOf(
+        ctx.facts(0).dtype, PartialInts(static_cast<size_t>(*(*at)[0])));
 }
 
 /// The signature of `sum_to`, `broadcast_like`, `expand_axis`, `gelu_grad`, `erf_grad` and the
@@ -300,7 +311,7 @@ void broadcastLikeVjp(VjpBuilder &b, const VjpCall &call) {
             // The reduction's target is the extents, not the value: `sum_to` takes an `int[]`
             // (ruling 甲), so the shape is computed as an operand of its own.
             const vjp_node_t shape = b.addOper(
-                ArrayType::create(Type::Int64()),
+                shapeListType(b, g),
                 "tensor:shape",
                 std::span<const vjp_node_t>(&g, 1));
             b.accumulateGradient(g, addTensorOperFor(b, g, "tensor:sum_to", {*dy, shape}));

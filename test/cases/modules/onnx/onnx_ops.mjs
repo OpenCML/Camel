@@ -74,7 +74,7 @@ const dimsOf = (buf, info) => {
 // NodeProto.op_type = 4; TensorProto.name = 8; ValueInfoProto.name = 1.
 export function readOnnxModel(path) {
     const buf = fs.readFileSync(path)
-    const model = { ops: [], initializers: [], inputs: [], inputDims: [], outputs: [], metadata: {} }
+    const model = { ops: [], initializers: [], initializerTypes: [], inputs: [], inputDims: [], outputs: [], metadata: {} }
     for (const f of fields(buf)) {
         if (f.field === 14 && f.wire === 2) {
             model.metadata[firstString(buf, f, 1)] = firstString(buf, f, 2)
@@ -84,7 +84,19 @@ export function readOnnxModel(path) {
         for (const g of fields(buf, f.start, f.end)) {
             if (g.wire !== 2) continue
             if (g.field === 1) model.ops.push(firstString(buf, g, 4))
-            else if (g.field === 5) model.initializers.push(firstString(buf, g, 8))
+            else if (g.field === 5) {
+                model.initializers.push(firstString(buf, g, 8))
+                // A TensorProto's data_type (field 1; ONNX: FLOAT = 1, INT64 = 7) separates a
+                // baked-in *weight* -- what "weights must be inputs" refuses -- from the int64
+                // shape list an operator carries in the graph (ruling 甲 hands `sum_to` its target
+                // as a list). Counting both in one budget made that budget about constants rather
+                // than about parameters.
+                let type = 0
+                for (const t of fields(buf, g.start, g.end)) {
+                    if (t.field === 1 && t.wire === 0) type = Number(t.value)
+                }
+                model.initializerTypes.push(type)
+            }
             else if (g.field === 11) {
                 model.inputs.push(firstString(buf, g, 1))
                 model.inputDims.push(dimsOf(buf, g))
