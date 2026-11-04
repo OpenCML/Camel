@@ -1,9 +1,9 @@
 // The engine's reading of a `mean_axis_stated` node, beside the library's reading of the same mean.
 //
-// `mean_axis_stated(t, at)` is the stated spelling of `mean_axis`: `at` is
-// `[axis, keepdims, d0, ..., d(rank-1)]`, the two scalars the call passes and the operand's
-// extents, because a transpose law cannot read the shape of the value a cotangent comes back
-// through (`modules/tensor/ops/reduction_ops.cpp#meanAxisStatedKernel`).
+// `mean_axis_stated(t, axis, keepdims, extents)` is the stated spelling of `mean_axis`: the axis
+// and the flag the call passes, and the operand's extents beside them, because a transpose law
+// cannot read the shape of the value a cotangent comes back through
+// (`modules/tensor/ops/reduction_ops.cpp#meanAxisStatedKernel`).
 //
 // The library answers a lane mean's gradient through `stdlib/rulesets/jvp.cml#jvp_mean_axis`, whose
 // tangent call is `mean_axis_stated`, and `stdlib/rulesets/transpose.cml#mean_axis_stated_t` spreads
@@ -36,7 +36,7 @@ import { vjp } from vjp
 /// The differentiated value is the `with` parameter (design principles 9.9).
 with <w: float[]>
 func stated(): float {
-    return sum(mean_axis_stated(w, [0, 1, 4]))
+    return sum(mean_axis_stated(w, 0, true, [4]))
 }
 
 func through_library(x: float[]): float {

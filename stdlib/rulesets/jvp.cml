@@ -267,19 +267,14 @@ export rule jvp_matmul::<T>(a: T[...], b: T[...]) when is_float::<T>() {
 // its type (design principles 5.4). `jvp_idx_arr` below is the same arrangement for a read, and
 // `tensor.pick_at` is the operator it states a length to.
 //
-// The extents ride inside one integer list because the transpose walk answers an operator with one
-// or two normal operands: a third position is refused before any law is looked up
-// (`skip=arity uri=tensor:mean_axis operands=3`, measured 2026-11-03). And the list is built by a
-// function rather than written in the rule's right side, for the reason `extent_pair` below gives:
-// a list literal holding a computed element is written before the node that computes it, and the
-// copy of a rule's right side refuses that order.
-
-/// `[axis, keepdims, d0, ..., d(rank-1)]`: what a lane mean's linear half states to its adjoint.
-/// The flag is an integer because the list holds one element type, and `1` is true.
-func stated_axis_shape(axis: int, keepdims: bool, s: int[]): int[] {
-    let flag = if keepdims then 1 else 0
-    return concat([axis, flag], s)
-}
+// The extents used to ride inside one integer list with the axis and the flag, on the reading that
+// the transpose walk refuses an operator with a third operand (`skip=arity
+// uri=tensor:mean_axis operands=3`, measured 2026-11-03). That is true of a third *tensor*: the
+// stated reductions take their axis, their flag and their extents as three parameters today
+// (`stdlib/tensor.cml`, `tensor:sum_axis_stated` and its four neighbours), the walk hands the law a
+// node with five operands, and the laws read them by name. A list would have needed a function to
+// build it -- `extent_pair` below still does, for the one place a two-element list is computed --
+// because a list literal holding a computed element is written before the node that computes it.
 
 /// `d(sum(xs)) = sum(dxs)`: a sum adds its elements up, so it is linear and the sum of the tangents is
 /// the tangent of the sum.
@@ -302,7 +297,7 @@ export rule jvp_sum::<T>(xs: T[...]) when is_float::<T>() {
 /// was averaged from, so the tangent call states the axis, the flag and the extents in one list; the
 /// operator that takes them is `mean_axis_stated`, and `mean_axis_stated_t` reads that list alone.
 export rule jvp_mean_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_float::<T>() {
-    mean_axis(xs, axis, keepdims) => (dxs: T[...]) => mean_axis_stated(dxs, stated_axis_shape(axis, keepdims, shape(xs)))
+    mean_axis(xs, axis, keepdims) => (dxs: T[...]) => mean_axis_stated(dxs, axis, keepdims, shape(xs))
 }
 
 /// `d(sum_axis(xs, axis, keepdims)) = sum_axis(dxs, axis, keepdims)`: a lane sum adds up the

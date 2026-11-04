@@ -288,25 +288,20 @@ std::optional<Type *> sumStatedInfer(const InferContext &ctx) {
     return Type::create(wholeReductionDtype(k::ReduceOp::Sum, ctx.facts(0).dtype));
 }
 
-/// `mean_axis_stated(t, at)`: the lane mean, with `at` = `[axis, keepdims, d0, ..., d(rank-1)]`.
+/// `mean_axis_stated(t, axis, keepdims, extents)`: the lane mean, with the axis, the flag and the
+/// operand's extents stated as parameters of their own types.
 ///
 /// The value is `mean_axis(t, axis, keepdims)` -- `k::reduceAxis` is the kernel the axis form runs,
-/// so the lane's mean and its one rounding are the definition's own -- and the extents after the
-/// two scalars are checked against the operand's shape. The axis and the flag travel in the list
-/// because the reverse law needs the *shape* alone (`numel(t) / numel(ct)` is the lane length, and
-/// the answer is `full(shape, 1) * (ct / lanes)`), while the value is the one thing that needs the
-/// axis: one list, two readers.
+/// so the lane's mean and its one rounding are the definition's own -- and `extents` is checked
+/// against the operand's shape. The reverse law needs the *shape* (`numel(t) / numel(ct)` is the lane
+/// length, and the answer is `full(shape, 1) * (ct / lanes)`) and the value needs the axis, so the
+/// three facts are read where they are stated instead of being counted out of a list.
 slot_t meanAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    const Array *t               = tensorArg(norm, 0);
-    const std::vector<int64_t> at = intListArg(norm, 1, "mean_axis_stated");
-    if (at.size() < 3) {
-        reportShapeError(
-            "mean_axis_stated",
-            "expects an integer list: the axis, the keepdims flag and the tensor's extents");
-    }
-    const int64_t axis  = at[0];
-    const bool keepDims = at[1] != 0;
-    checkStatedExtents(t, at, 2, "mean_axis_stated");
+    const Array *t                     = tensorArg(norm, 0);
+    const int64_t axis                 = intArg(norm, 1);
+    const bool keepDims                = boolArg(norm, 2);
+    const std::vector<int64_t> extents = intListArg(norm, 3, "mean_axis_stated");
+    checkStatedExtents(t, extents, 0, "mean_axis_stated");
     return runKernel("mean_axis_stated", [&] {
         return wrap(
             norm.resultType(),
@@ -314,15 +309,15 @@ slot_t meanAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
     });
 }
 
-/// The stated lane mean's result: the axis form's own element type at the extents `at` states.
+/// The stated lane mean's result: the axis form's own element type at the extents the call states.
 ///
-/// `at` is `[axis, keepdims, d0, ..., d(rank-1)]`, so it carries the two values `reduceAxisInfer`
-/// reads as arguments -- the axis at `at[0]`, the flag at `at[1]` -- and the operand's extents after
-/// them. That is why this name is **computed** rather than declared
+/// The three parameters carry the values `reduceAxisInfer` reads as arguments -- `axis`, `keepdims`
+/// and the operand's `extents` -- and each is read by name now, not by its place in a list. That is
+/// why this name is **computed** rather than declared
 /// (`modules/tensor/module.cpp#kDeclaredOperators`): a declaration's result is a type, and these
 /// extents are a function of three values, so the only type a declaration could write is `T[..]`.
 ///
-/// When a call writes `at`, the extents are stated and the answer is stated with them: `axis 0`,
+/// When a call states all three, the extents are known and the answer is stated with them: `axis 0`,
 /// no `keepdims`, over a rank-1 operand of four elements answers the element itself (design
 /// principles 5.4), and the graph reads `float` -- not `float[..]` and a conversion. That is the
 /// difference between a result somebody stated and a result nobody did: with the declaration this
@@ -331,12 +326,12 @@ slot_t meanAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
 /// read a number's bits as a pointer,
 /// docs/handover/questions/2026-11-04-who-gives-a-shapeless-cotangent-its-rank.cn.md).
 ///
-/// A call whose `at` is a **value of the run** has stated nothing, and this inference says exactly
-/// that: the operand's element type at a rank nobody fixed (`T[..]`). It does not refuse, because
-/// the two call sites that exist -- `stdlib/rulesets/jvp.cml#jvp_mean_axis` and its tangent call --
-/// build the list with `stated_axis_shape(axis, keepdims, shape(xs))`, whose extents are the
-/// primal's and therefore a value; refusing would turn a legal program away for a shape its own
-/// operand has. Measured on that tree: both sites report `at=runtime`, and the reverse walk used to
+/// A call whose parameters are **values of the run** has stated nothing, and this inference says
+/// exactly that: the operand's element type at a rank nobody fixed (`T[..]`). It does not refuse,
+/// because the two call sites that exist -- `stdlib/rulesets/jvp.cml#jvp_mean_axis` and its tangent
+/// call -- pass `shape(xs)`, whose extents are the primal's and therefore a value; refusing would
+/// turn a legal program away for a shape its own operand has. Measured on that tree: both sites
+/// report the extents as a value, and the reverse walk used to
 /// stop on a SIGSEGV in `numelKernel`, because the cotangent a transposition is handed is typed from
 /// this node's type (`modules/transforms/transpose.cpp`, `cotangentTypeOf`) and a rank-0 answer under
 /// an array type has no conversion to make. The repair is not here and not in the walk -- a slot whose
@@ -348,31 +343,24 @@ slot_t meanAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
 std::optional<Type *> meanAxisStatedInfer(const InferContext &ctx) {
     const TensorFacts in = ctx.facts(0);
     const TypeCode dtype = reductionDtype(k::ReduceOp::Mean, in.dtype);
-    const auto at        = ctx.constInts(1);
-    if (!at.has_value()) {
+    const auto axis      = ctx.constInt(1);
+    const auto keepDims  = ctx.constBool(2);
+    const auto extents   = ctx.constInts(3);
+    if (!axis.has_value() || !keepDims.has_value() || !extents.has_value()) {
         return tensorOf(dtype, std::nullopt);
     }
-    if (at->size() < 3) {
-        throw ShapeError(std::format(
-            "mean_axis_stated expects `at` = `[axis, keepdims, d0, ..., d(rank-1)]`: the axis, the "
-            "flag and the operand's {} extent(s), and the list has {} entr{}",
-            in.shape ? in.shape->size() : 0,
-            at->size(),
-            at->size() == 1 ? "y" : "ies"));
-    }
-    const StaticShape stated(at->begin() + 2, at->end());
+    const StaticShape stated(extents->begin(), extents->end());
     // The extents a stated reduction names are the operand's own, and a list that names another
     // number of them is refused here rather than at the run: `support.h#checkStatedExtents` makes
     // the same comparison when the value is known, and a program that writes its extents is the
     // one case where the comparison can be made before it runs.
     if (in.shape && in.shape->size() != stated.size()) {
         throw ShapeError(std::format(
-            "mean_axis_stated states {} extent(s) and the operand has rank {}: `at` is "
-            "`[axis, keepdims, d0, ..., d(rank-1)]`",
+            "mean_axis_stated states {} extent(s) and the operand has rank {}",
             stated.size(),
             in.shape->size()));
     }
-    return tensorOf(dtype, reduceShape(stated, (*at)[0], (*at)[1] != 0));
+    return tensorOf(dtype, reduceShape(stated, *axis, *keepDims));
 }
 
 /// `sum_axis_stated(t, axis, keepdims, extents)`: the lane sum, with the three facts its adjoint
@@ -712,35 +700,29 @@ void meanAxisVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-// mean_axis_stated(t, at): the lane mean, with `at` = `[axis, keepdims, d0, ..., d(rank-1)]` and
-// the extents taken out of `at` (`meanAxisStatedKernel` below).
+// mean_axis_stated(t, axis, keepdims, extents): the lane mean, with the axis, the flag and the
+// extents stated as parameters of their own (`meanAxisStatedKernel` above).
 //
-// The adjoint is `mean_axis`'s with the two scalars taken out of the list instead of off the
-// call's own ports: spread the cotangent back over the lane (`tensor:expand_axis`) and divide by
-// the lane's length (`tensor:dim`). `at[0]` is the axis and `at[1]` is the flag written as an
-// integer -- the list holds one element type (`stdlib/tensor.cml#mean_axis_stated`) -- so the flag
-// reaches `expand_axis` as a real `bool` and not as an integer where a flag is read
-// (`:op/gt_l(at[1], 0)`): a slot read at the wrong width answers a lane count of nonsense, which is
-// the one way this rule could be wrong silently.
+// The adjoint is `mean_axis`'s: spread the cotangent back over the lane (`tensor:expand_axis`) and
+// divide by the lane's length (`tensor:dim`). The axis and the flag are operands this rule is
+// handed, so they reach `expand_axis` as they were stated -- the flag as a real `bool`, which is
+// what the parameter's type says it is, and no longer an integer read out of a list and compared
+// against zero. A slot read at the wrong width answers a lane count of nonsense, which is the one
+// way this rule could be wrong silently; a typed parameter cannot be read at the wrong width.
 //
-// The extents after `at[1]` are read nowhere, for the reason `sumStatedVjp` gives: the operand is
-// at hand, so `tensor:dim` takes the lane's length from it, and the list's extents are what the
-// library's law reads in the same position (`stdlib/rulesets/transpose.cml#mean_axis_stated_t`,
-// whose `mean_axis_cotangent` needs `numel(t) / numel(ct)`).
+// The extents are read nowhere here, for the reason `sumStatedVjp` gives: the operand is at hand,
+// so `tensor:dim` takes the lane's length from it, and the stated extents are what the library's
+// law reads in the same position (`stdlib/rulesets/transpose.cml#mean_axis_stated_t`, whose
+// `mean_axis_cotangent` needs `numel(t) / numel(ct)`).
 void meanAxisStatedVjp(VjpBuilder &b, const VjpCall &call) {
-    requireVjpInputs(call, 2, 2);
+    requireVjpInputs(call, 4, 4);
     const auto dy = b.gradientOf(call.output);
     if (!dy) {
         return;
     }
-    const vjp_node_t x  = call.inputs[0];
-    const vjp_node_t at = call.inputs[1];
-    const std::array<vjp_node_t, 2> axisWords{at, staticInt(b, 0)};
-    const vjp_node_t axis = b.addOper(Type::Int64(), ":op/idx_arr", axisWords);
-    const std::array<vjp_node_t, 2> flagWords{at, staticInt(b, 1)};
-    const std::array<vjp_node_t, 2> flagInputs{
-        b.addOper(Type::Int64(), ":op/idx_arr", flagWords), staticInt(b, 0)};
-    const vjp_node_t keepDims = b.addOper(Type::Bool(), ":op/gt_l", flagInputs);
+    const vjp_node_t x        = call.inputs[0];
+    const vjp_node_t axis     = call.inputs[1];
+    const vjp_node_t keepDims = call.inputs[2];
     const vjp_node_t expanded =
         addTensorOperFor(b, x, "tensor:expand_axis", {*dy, x, axis, keepDims});
     const std::array<vjp_node_t, 2> dimInputs{x, axis};
@@ -859,7 +841,10 @@ std::vector<OpDef> reductionOps() {
     defs.push_back(OpDef{
         .name      = "mean_axis_stated",
         .exports   = {"mean_axis_stated"},
-        .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
+        .params    = {{"t", ParamKind::Tensor},
+                      {"axis", ParamKind::Int},
+                      {"keepdims", ParamKind::Bool},
+                      {"extents", ParamKind::IntArray}},
         .resultDoc = "T[...]",
         .infer     = meanAxisStatedInfer,
         .kernel    = &meanAxisStatedKernel,

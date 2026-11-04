@@ -316,8 +316,8 @@ export func argmin_axis::<T>(t: T[...], axis: int, keepdims: bool): int[...]
 /// fixed.
 /// @pure
 /// @fails fault `RuntimeError` when the list is shorter than three entries, the extents disagree with the tensor's shape, or the axis is outside the rank
-/// @example mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0, 1, 2, 2])    // [[2.0, 3.0]]
-export func mean_axis_stated::<T>(t: T[...], at: int[]): T[...]
+/// @example mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, true, [2, 2])    // [[2.0, 3.0]]
+export func mean_axis_stated::<T>(t: T[...], axis: int, keepdims: bool, extents: int[]): T[...]
 
 /// The softmax over the axis (-1, the last axis, by default), computed as its normative
 /// definition in Camel, in `f32`.

@@ -503,11 +503,11 @@ export rule matmul_t::<T, A, B>(a: A, b: B) when is_float::<T>() {
 // read that operand and nothing of the tensor: `sum_stated_t` spreads over the list's extents,
 // `take_stated_t` scatters into an array of them, and `mean_axis_stated_t` spreads each lane's
 // cotangent over `numel(t) / numel(ct)` positions. Each list's layout is stated where the forward
-// half builds it (`stdlib/rulesets/jvp.cml#stated_axis_shape`, `shape(t)`).
+// half builds it: `shape(t)`, and the axis and the flag beside it.
 //
 // The value of a stated operator is the operation itself -- the extents are there for this side --
-// so what a call site hands over is one integer list, and the arrays these laws build carry the
-// extents of a value the transpose never reads.
+// so what a call site hands over is the operand's shape as a parameter of its own, and the arrays
+// these laws build carry the extents of a value the transpose never reads.
 
 /// `xs` with one number at every element: the shape a reduction's cotangent is spread over, taken
 /// from the extents the forward half stated.
@@ -727,7 +727,7 @@ export rule take_stated_t::<T, X, I, E>(t: X, indices: I, extents: E) when is_fl
 //
 // `mean_axis(xs, axis, keepdims)` is the spelling of `tensor:mean_axis` that names every parameter in
 // parentheses, and the forward half's linear call is `mean_axis_stated`, whose second operand states
-// the axis, the flag and the extents in one list (`stdlib/rulesets/jvp.cml#stated_axis_shape`).
+// the axis, the flag and the extents as parameters of their own.
 //
 // The law: the lane's mean spreads its cotangent back over exactly the elements it averaged, so
 // every position of `t` that fed lane `k` gets `ct[k] / lane length`. `numel(t) / numel(ct)` is the
@@ -766,25 +766,28 @@ export rule take_stated_t::<T, X, I, E>(t: X, indices: I, extents: E) when is_fl
 /// "秩 0：只有一个转换点"). Stating `ct: T` here instead is not the repair: it would say one number
 /// where the answer has a lane per number, and the law that reads a length would then be handed a
 /// shape it cannot see.
-func mean_axis_cotangent::<T>(ct: T[...], at: int[]): T[...] when is_float::<T>() {
-    let extents = at[2:len(at)]
+func mean_axis_cotangent::<T>(ct: T[...], axis: int, keepdims: bool, extents: int[]): T[...]
+    when is_float::<T>() {
     let lanes = float(extent_product(extents)) / float(numel(ct))
-    return lane_spread(ct / lanes, extents, at[0], at[1] != 0)
+    return lane_spread(ct / lanes, extents, axis, keepdims)
 }
 /// The number of positions a shape holds: what a lane mean divided by.
 func extent_product(extents: int[]): int {
     return extents->reduce<(acc: int, d: int) => acc * d, 1>
 }
 
-/// The transpose of `mean_axis_stated(t, at)`: the cotangent spread back over the averaged lane, in
-/// the same per-position type parameters `sum_stated_t` states.
+/// The transpose of `mean_axis_stated(t, axis, keepdims, extents)`: the cotangent spread back over the
+/// averaged lane, in the same per-position type parameters `sum_stated_t` states.
 ///
 /// The cotangent is stated `T[...]`, the way its twin `sum_axis_stated_t` states it and the way the
-/// answer is typed: `mean_axis_stated` is declared `(t: T[...], at: int[]) : T[...]`, and a rank-zero
-/// answer is one shape of that same type, not a different type a law would have to state. See
-/// `mean_axis_cotangent` above for the conversion that makes the one port serve both.
-export rule mean_axis_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
-    mean_axis_stated(t, at) => (ct: T[...]) => mean_axis_cotangent(ct, at)
+/// answer is typed: `mean_axis_stated` is computed as `(t: T[...], axis: int, keepdims: bool,
+/// extents: int[]) : T[...]`, and a rank-zero answer is one shape of that same type, not a different
+/// type a law would have to state. See `mean_axis_cotangent` above for the conversion that makes the
+/// one port serve both.
+export rule mean_axis_stated_t::<T, X, A, K, E>(t: X, axis: A, keepdims: K, extents: E)
+    when is_float::<T>() {
+    mean_axis_stated(t, axis, keepdims, extents) => (ct: T[...]) => mean_axis_cotangent(
+        ct, axis, keepdims, extents)
 }
 
 // ---- the transpose rules of the logarithm and of `pow` (`math:pow_d`) ----

@@ -2284,7 +2284,7 @@ removed or kept.
 #### `mean_axis_stated`
 
 ```camel
-mean_axis_stated: (t: T[...], at: int[]) => T[...]
+mean_axis_stated: (t: T[...], axis: int, keepdims: bool, extents: int[]) => T[...]
 ```
 
 The mean of each lane along one axis, with the axis, `keepdims` and the operand's extents stated
@@ -2299,7 +2299,7 @@ fixed.
 
 - Pure.
 - Failure: fault `RuntimeError` when the list is shorter than three entries, the extents disagree with the tensor's shape, or the axis is outside the rank.
-- Example: `mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0, 1, 2, 2])` gives `[[2.0, 3.0]]`
+- Example: `mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, true, [2, 2])` gives `[[2.0, 3.0]]`
 
 #### `softmax`
 
