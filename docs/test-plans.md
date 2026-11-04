@@ -1219,6 +1219,13 @@ before this one, because a sweep's source set is *whatever the plans it names co
 added to `smoke`, `modules`, `compile`, `linear`, `para`, `trans` or `consistency` adds a copy the
 same day, and nothing announces it.
 
+**A sweep's entry count is a function of the plans it names, not a constant.** Add a test to one of
+those 215 plans and the milestone layer grows by one entry that day: no command reports the growth,
+the `[tier]` line prints the total of whatever run somebody started, and `--tier-report` is how the
+split is asked for. Whether that multiplier should be unbounded belongs to the layer's owner rather
+than to the runner, and it is asked in
+`docs/handover/questions/2026-11-05-does-a-sweep-grow-with-every-test-that-is-added.cn.md`.
+
 ### The one sweep, and what it expands to
 
 The milestone layer's whole derived part is one entry: the `[[sweeps]]` table of
