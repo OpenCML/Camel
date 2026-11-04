@@ -294,6 +294,10 @@ A red also changes hands when the bookkeeping changes: the milestone layer s las
 nor its plan file (`git log 4fa772787..d526043da -- test/plans/feat/modules/rules.plan.toml` is
 empty, and the plan runs 173/173 on `2227c21c1`), because `a01fcdfdc` changed how `known_fail` is
 read. **A count belongs to a tip and to the rules that counted it.**
+## `[code=127] ccache: not found` is a host fault, not a failing test
+
+**看到 `[code=127] ccache: not found` 或 `cannot open shared object file` ⇒ 这一轮的 `BUILD_EXIT=1` 不是读数，丢掉重跑。** 先答 `~/camel-work/bin/ccache --version`：答版本就与本条无关，答 `exec: ...: not found` 或 `cannot open shared object file` 就是宿主那条（记录见 `docs/handover/reports/2026-11-04-the-host-ccache-lost-its-exec-target.cn.md`）。只走 stdlib/文档/用例的增量跑一次编译都不发生，所以"同机有的车道绿、有的 127"是正常的，别据此改自己的代码。
+
 ## `got null` is not a timeout
 
 The runner writes `expected exit 0, got null` when the process died on a signal and no exit code
