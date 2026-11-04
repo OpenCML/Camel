@@ -64,8 +64,8 @@
 | --- | --- | --- | --- |
 | `does-a-with-value-get-a-tangent` | 不取甲：`with` 值在变换层是常量，第一个 `with` 参数由 `grad` 用 lambda 挪到普通参数；顺带两个缺陷各自修 | `stdlib/rulesets/jvp.cml`（`zeros_like`）、`jvp` 的实参顺序 | 缺陷一已落 `c8bf5b4de`；缺陷二待核 |
 | `should-the-library-with-grad-be-an-export-that-refuses` | 删掉那个永远拒绝的导出：永远拒绝的公开函数就是"暂不支持"；`with_grad` 只留引擎那一份 | `stdlib/vjp.cml#with_grad`，连带用例 `test/cases/compile/transforms/with_grad_from_the_library.cml` 与 `test/plans/feat/compile/transforms.plan.toml` 的 `transforms.with_grad_from_the_library` | **相反**：树上有这份导出，返回 `never` 并带一句拒绝话 |
-| `should-the-library-grad-be-declared-per-arity` | 不按元数分写，等负责人对类型层拆包的裁定 | `stdlib/vjp.cml#grad` | 待做（等负责人） |
-| `should-the-library-grow-a-has-aux-form` | 库层 `grad`/`with_grad` 写成组合时一并带 `has_aux`，否则引擎删不掉；`vjp` 的随后再定 | `stdlib/autodiff.cml` | 部分已落 `a6471ef3c`（`has_aux` 形已在）；库层组合未读 |
+| `should-the-library-grad-be-declared-per-arity` | 不按元数分写。**裁定已到**（`d05035fed`，规章层）：用类型层拆包在标准库里写 `Gradient<F>`，不再由 C++ 另算一份 | `stdlib/types.cml`、`stdlib/signatures/autodiff.cml` | **可开工**：树上仍由 C++ 算（`modules/autodiff/operators.cpp#GradResolver`、`#gradientSignature`），`stdlib/types.cml` 里没有 `Gradient<F>` |
+| `should-the-library-grow-a-has-aux-form` | 库层 `grad`/`with_grad` 写成组合时一并带 `has_aux`。**裁定已到**（`d05035fed`）：两个 `…AndAux<F>` 同样用类型层拆包写 | `stdlib/types.cml`、`stdlib/autodiff.cml` | 部分已落 `a6471ef3c`（`has_aux` 形已在）；`…AndAux<F>` 的声明**可开工** |
 | `does-the-library-need-forward-rules-for-the-stated-spellings` | 取甲：四个都是线性的，每条规则一行 | `stdlib/rulesets/jvp.cml` | **待做** |
 
 ## 六、规则与判据
@@ -88,6 +88,26 @@
 | `does-adopt-carry-what-it-adopted-or-does-a-cut-carry-its-own-chain` | 只要一种机制：程序传递地收养嵌套切出来的图，按 id 去重；删掉每个切口各自带链的做法 | `modules/transforms/split.h#SplitGraph`（`standing`）、`modules/transforms/split.cpp` | **相反**：`standing` 那条链今天在树上 |
 | `who-adopts-the-graphs-of-a-nested-cut` | 同上；`calleeCuts` 每次变换调用只建一张表，不随嵌套层数翻倍 | `modules/transforms/split.cpp#calleeCuts` | **相反→待改**；`lane-batch3` 的 `9262df328`（"切只命名直接 callee，其余靠收养"）正在做这件事，尚未进 develop |
 
+## 规章层的变化（规范性的）
+
+`d05035fed`（11-04 04:12）在 `docs/design-principles.cn.md` 与 `.en.md` 的 §5 加了一条，紧接在"参数包是同一条规则"之后：
+
+> **类型层的包同样能拆**：值层能写 `<w, ..rest>`，类型层也能把一个类型包拆成"第一个成员"和"其余"，例如对 `WithOf<F>` 拆出第一个 `with` 参数的类型 `W`。由参数算出的函数类型（`Gradient<F>`、`ValueAndGradient<F>` 等）都用这种写法在标准库里声明，不由 C++ 另算一份。空包拆不出第一个成员，在实例化处按语言规则报错。
+
+同一笔在 `docs/handover/reviews/questions-2026-10-29.md` 的 `## 负责人定（2026-11-04 04:30）：类型层的包能拆` 里给了施工四步（下一批第 3 项后半）：
+
+| 步骤 | 做什么 | 落点 | 状态 |
+| --- | --- | --- | --- |
+| ① | 类型位置的拆包写法，具体语法由施工方提一页（`match type` 的元组模式，或类型位置上的模式），与值层 `<w, ..rest>` 读起来一致；空包在实例化处按语言规则报错 | 一页新问题页 + 语法 | 待做（先提页） |
+| ② | 用它写 `Gradient<F>`、`ValueAndGradient<F>` 与两个 `…AndAux<F>`；`stdlib/signatures/autodiff.cml` 照这几个声明 | `stdlib/types.cml`、`stdlib/signatures/autodiff.cml` | 待做 |
+| ③ | 库层 `grad`/`with_grad`/`has_aux` 写成组合（原则 9.9：lambda 把第一个 `with` 参数挪到普通参数位，再 `vjp`），与引擎在全部 autodiff 用例上逐元素同答 | `stdlib/autodiff.cml`、`stdlib/vjp.cml` | 待做 |
+| ④ | 之后删 C++ 的 `GradResolver`/`gradientSignature`、`pullback.cpp`、`buildGradientGraph`（第 7 项） | `modules/autodiff/operators.cpp#GradResolver` | 待做（在 ①②③ 之后） |
+
+**它解开了两个原本"等作者"的待办**（第五节对应的两行已改成"可开工"）：
+
+- `should-the-library-grad-be-declared-per-arity`：不再"等类型层拆包的裁定"，改成"按类型层拆包写"。`stdlib/types.cml` 今天没有 `Gradient<F>`，类型是 `modules/autodiff/operators.cpp#GradResolver` 与 `#gradientSignature` 另算的一份——正是裁定要停掉的那种"C++ 另算一份"。
+- `should-the-library-grow-a-has-aux-form`：不再"`vjp` 的 `has_aux` 随后再定"，改成"用 `…AndAux<F>` 写"。`stdlib/signatures/autodiff.cml` 已有 `GradientAndAux<F>` 与 `ValueAndGradientAndAux<F>` 两个名字（`a6471ef3c` 给了 `has_aux` 形），但它们的类型仍由 C++ 算；第 ② 步把这两个名字挪进 `stdlib/types.cml` 用拆包写。
+
 ## 要改代码的（与本树现状相反）
 
 1. **三**：端口照实写 `T[..]`。本树 `stdlib/rulesets/transpose.cml#mean_axis_stated_t` 今天写的是 `(ct: T)`，那是 `8fa4f742a`（11-04 07:10）刚做的、并且让 8 条段错误用例转绿的改动；`scripts/law-cotangent-ports.mjs#isRankZeroEquivalence` 是同一轮为它开的"路 3 收窄"。照裁定要反过来：端口写 `T[..]`，由编译器在可赋值转换那一处统一做表示转换。**`8fa4f742a` 的消息里已量到改 `ruleCotangent` 是 inert，所以这次要改的是"转换点"，不是"端口"**——两者不一致，需要一条专门的车道。
@@ -97,4 +117,4 @@
 5. **七**：`modules/transforms/split.h#SplitGraph` 的 `standing` 链删掉，收养改由程序传递地按 id 去重（`lane-batch3` 已在做）。
 6. **二**：`modules/transforms/transpose.cpp#shapeFromTypeOf` 的零载体回落删掉。
 
-48 页挪到 `reviews/` 留档，`docs/handover/questions/` 现在**空**（0 页），`README.md` 已由生成器重写为"目录为空"。要负责人定的仍只有"类型层拆包"一件，本批没有新增。
+48 页挪到 `reviews/` 留档，`docs/handover/questions/` 现在**空**（0 页），`README.md` 已由生成器重写为"目录为空"。"类型层拆包"这件要负责人定的已在 `d05035fed` 到了（见上一节）；本批之外没有新增要负责人定的事。有一处定位假设我们照做了、打印出来指向别处，单独写了一页：`docs/handover/questions/2026-11-04-the-refusal-was-not-a-closure-member.cn.md`。
