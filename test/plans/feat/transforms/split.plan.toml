@@ -363,21 +363,24 @@ expect_output_contains = ["lift value= 11.0  tangent= 4.0", "forward y= 11.0", "
 expect_output_not_contains = ["skip=unread-parameter"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
-# Two shapes the member read cannot answer, and each is a refusal this branch **chose**: a wrong number
-# is worse than a refusal (the ranking the author's page states: right > a named refusal > a wrong
-# number > a crash), so both sentences name what the language is missing rather than what the program
-# did. They are pinned because an intentional refusal that nothing pins is one edit away from a silent
-# zero -- the shape would then be green and wrong. Neither entry may be marked `known_fail`: they are
-# not failures, they are the answer.
+# The other side of the same shape: a parameter read **both whole and by member**. This entry used to
+# pin a refusal (`why=no-addition-for-an-aggregate-cotangent`) on the argument that no tangent space
+# registers an addition for an aggregate. The author judged that argument wrong on 2026-11-04: an
+# aggregate's addition is **derived from its type** -- its tangent is its members' tangents, so its sum
+# is the members' sums, one place at a time (design principles 9.9) -- and the refusal had been
+# measuring the registry's completeness and calling it the type's ability. It is the same shape as the
+# `Error` defect of that night: "not in the table" read as "not in the world". The entry now pins the
+# number, for a tuple and for a struct, with the hand-computation written into the case above the
+# engine's line.
 [[tests]]
 name = "split_whole_and_member"
-desc = "One parameter read both **whole** (handed to `first`) and **by member** (`q.1`): the adjoint of the two uses is their sum, and no tangent space declares an addition for an aggregate (`addUriOfSpace` registers one for a float and for an array and nothing else -- design principles 9.9, an aggregate's tangent is summed member by member). So neither half may be answered alone. Reads `skip=component` and `whole-and-member slots=2 why=no-addition-for-an-aggregate-cotangent`, exit 1. A green run of this case would mean the walk answered 4.0 or 1.0 for a gradient that is (4.0, 1.0)."
+desc = "One parameter read both **whole** (handed to `sum_of`) and **by member** (`q.0`), and the same shape with a struct parameter and a field name: the adjoint of the two uses is their sum, and an aggregate's sum is its members' sums one place at a time. `f(q) = q.0 * 2.0 + (q.0 + q.1)` at `(2.0, 3.0)` answers `y= 9.0` and `dq= ((3.0, 1.0))`; `h(p) = p.a * 2.0 + (p.a + p.b)` answers `y= 9.0` and `dp= ({ a: 3.0, b: 1.0 })`. Both numbers are hand-computed in the case and printed beside the engine's, and the plan asserts the engine's line. This entry used to read `skip=component` and `why=no-addition-for-an-aggregate-cotangent` with exit 1; a run that refuses here again would be reading the registry as the language."
 kind = "behavior"
-case = "../../../cases/transforms/split/split_whole_and_member_refused.cml"
+case = "../../../cases/transforms/split/split_whole_and_member_answers.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
-expect_exit = 1
-expect_output_contains = ["has no transpose for this function", "skip=component", "whole-and-member slots=2 why=no-addition-for-an-aggregate-cotangent"]
+expect_exit = 0
+expect_output_contains = ["vjp   y= 9.0  dq= ((3.0, 1.0))", "vpjp  y= 9.0  dp= ({ a: 3.0, b: 1.0 })"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
