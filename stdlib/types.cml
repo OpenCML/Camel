@@ -71,6 +71,19 @@ export type ParamsOf<F>
 /// @example is_same::<(...WithOf<<w: float> (a: int) => bool>), (float)>()    // true
 export type WithOf<F>
 
+/// The first member of a type pack: `FirstOf<WithOf<F>>` is the type of `F`'s first `with`
+/// parameter, and `FirstOf<ParamsOf<F>>` the type of its first ordinary parameter. A pack is a list
+/// of types, and this names the member at its head -- what a function type computed from `F` needs
+/// when it returns a value of one parameter's type (design principles 5.6, where a type pack takes
+/// apart the same way a value pack does).
+///
+/// An empty pack has no first member, and asking is refused where the type is used, naming the pack
+/// that was empty: a function type computed from a pack the writer gave no members to is a type the
+/// program did not ask for.
+/// @example is_same::<FirstOf<WithOf<<w: float, k: int> (a: int) => bool>>, float>()    // true
+/// @example is_same::<FirstOf<ParamsOf<(a: int, b: string) => bool>>, int>()    // true
+export type FirstOf<P>
+
 /// The result type of a function type.
 /// @example is_same::<ResultOf<(a: int) => string>, string>()    // true
 export type ResultOf<F>
@@ -101,6 +114,26 @@ export type Tangent<T>
 /// @example is_same::<Pullback<(x: float) => float>, (ct: float) => (float,)>()    // true
 /// @example is_same::<Pullback<<w: float> (x: float) => float>, (ct: float) => (float,)>()    // true
 export type Pullback<F> = (ct: Tangent<ResultOf<F>>) => (...Tangent<ParamsOf<F>>)
+
+/// The derivative of a function, as a type of its own: the parameters the function takes, and the
+/// cotangent of the one that is differentiated. `grad` differentiates the first `with` parameter
+/// (design principles 9.9), so the result is that parameter's tangent space -- for
+/// `<w: float> (x: float) => float` it is `<float> (float) => float`, one number; for a weight that
+/// is a tensor it is a tensor of the weight's shape.
+///
+/// The shape is computed from `F` and is not written once per arity: the parameters are `F`'s
+/// (`ParamsOf<F>`, `WithOf<F>`), and the result names one member of the pack of `with` parameters
+/// (`FirstOf<WithOf<F>>`), so one declaration covers every function whose first `with` parameter
+/// has a tangent space. A function with no `with` parameter has no gradient -- there is no
+/// parameter to differentiate -- and the empty pack is refused where the type is used, which is the
+/// refusal `grad` itself gives that function.
+///
+/// This is the type the derivative has, and the type a caller who writes `Gradient<F>` asks for:
+/// one type, not a second one that looks like it.
+/// @example is_same::<Gradient<<w: f32[2]> (x: float) => float>, <w: f32[2]> (x: float) => f32[2]>()    // true
+/// @example is_same::<Gradient<<w: f32[2]> (x: float) => float>, <w: f32[2]> (x: float) => float>()    // false
+export type Gradient<F> =
+    <...WithOf<F>> (...ParamsOf<F>) => Tangent<FirstOf<WithOf<F>>>
 
 /// The turn of a forward transform into a reverse one, as a function's own type: `vjp(f)` is a
 /// function of `f`'s parameters that answers the value and the pullback, and it takes `f`'s `with`

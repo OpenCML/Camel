@@ -38,7 +38,8 @@ constexpr std::string_view kTypeFunctions[] = {
     "ParamsOf",
     "WithOf",
     "ResultOf",
-    "Tangent"};
+    "Tangent",
+    "FirstOf"};
 
 constexpr std::string_view kPackName   = "$pack";
 constexpr std::string_view kExpandName = "$expand";
@@ -99,6 +100,33 @@ Type *TypeCallType::evaluate(
             return nullptr;
         }
         return static_cast<ArrayType *>(arguments[0])->withElementType(arguments[1]);
+    }
+    // A pack is a list of types, and taking it apart names the members it has (design principles
+    // 5.6): `FirstOf<WithOf<F>>` is the type of `F`'s first `with` parameter, which is what a
+    // gradient is a value of, and that is the member a function type computed from `F` has to name
+    // if it is to say what the derivative of `F` returns (design principles 9.9). It is the head of
+    // a pack and nothing more; the rest -- `(W, ...Rest)` -- is the same computation's other half.
+    //
+    // The rule below maps a type function over a pack member by member; this one takes the pack
+    // whole, so it is asked first. An empty pack has no first member, and the answer is an error
+    // rather than a type the writer did not ask for: it is reported where the type is used, with
+    // which pack was empty (design principles 5.6).
+    if (name == "FirstOf") {
+        if (arguments.size() != 1 || arguments.front() == nullptr) {
+            error = "it takes one type pack";
+            return nullptr;
+        }
+        Type *pack = arguments.front();
+        if (!TypeCallType::isPack(pack)) {
+            error = pack->toString() + " is not a type pack, and a pack is what has a first member";
+            return nullptr;
+        }
+        const std::span<Type *const> members = TypeCallType::packMembers(pack);
+        if (members.empty()) {
+            error = "the pack is empty, and an empty pack has no first member";
+            return nullptr;
+        }
+        return members.front();
     }
     if (arguments.size() != 1 || arguments.front() == nullptr) {
         error = "it takes one type";
