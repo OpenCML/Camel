@@ -17,6 +17,17 @@
 // sums: `matmul` contracts a row operand's extent against the matrix's first axis. The engine's own
 // pullback answers the same three numbers, and `max_abs_diff` below says so to twelve places.)
 //
+// **The vector's extent is written in the declaration, and the call site repeats it.** The law reads
+// the *known* operand's shape -- `sum_to(..., w)` in `#ct_of_a`, the shape the answer has -- and a
+// transposed function is handed the cotangent and no parameter (`transposeSignature`), so that shape
+// can come from one place only: the type. The walk writes the extents a type states into the graph
+// (`modules/transforms/transpose.cpp#shapeFromTypeOf`, `extent_of`'s own answer) and the law builds
+// the array from them. `float[]` states the rank and no length, so nothing can be written down: the
+// step stops as a value the caller does not carry, and the language's own sentence for that
+// declaration is `TransposeNeedsParameterShape` -- "state the shape in the type" (author, 2026-11-03
+// 16:15). The same rule reaches the call, where a `float[]` value is less exact than the `float[2]`
+// the parameter fixes, so the conversion is written where the value is known to fit.
+//
 //     camel test/cases/compile/transforms/matmul_transpose_vector_lhs.cml
 import { matmul, sum } from tensor
 import { vjp } from vjp
@@ -24,7 +35,7 @@ import { with_grad } from autodiff
 import { abs, max } from math
 
 /// The product under a sum, both operands ordinary parameters.
-func sum_of_product(v: float[], w: float[2, 2]): float {
+func sum_of_product(v: float[2], w: float[2, 2]): float {
     return sum(matmul(v, w))
 }
 
@@ -41,7 +52,7 @@ func product_with_v(w: float[2, 2]): float {
 }
 
 func main(): int sync {
-    let v = [1.0, 2.0]
+    let v = [1.0, 2.0] as float[2]
     let w = [[0.5, 0.25], [0.125, 1.0]] as float[2, 2]
 
     let (value, pullback) = vjp(sum_of_product)(v, w)
