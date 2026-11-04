@@ -9,9 +9,10 @@
 // is not among its arguments, so a law that reads an operand is handed a zero carrier there. Both
 // readings below are that carrier, and they say which number it is:
 //   - `log_t` is `ct / x`, and the answer is `inf` at every element -- `1.0 / 0.0`, so the carrier
-//     is zero and not, say, the cotangent. `inf` is pinned on all three back ends (`nvm`, `fvm`,
-//     `jit`) and all three print `inf`; it is the one reading whose *spelling* could differ per
-//     runtime, which is why the plan entry runs all three.
+//     is zero and not, say, the cotangent. `inf` is the one reading here whose *spelling* could
+//     differ from one runtime to the next, so the plan entry runs this case on all three back ends
+//     and says they must agree; the three readings are in
+//     `docs/handover/reports/2026-11-04-a-zero-tangent-term-that-was-never-built.cn.md`, section 3.
 //   - `abs_t` is `where(x >= 0.0, ct, -ct)`, and `0.0 >= 0.0` is true, so every element answers
 //     `ct`. At x = [1, -2, 3] the right cotangent is [1, -1, 1].
 //   - The third reading tells the two carrier hypotheses apart: at cotangent -3.0 `abs_t` answers
