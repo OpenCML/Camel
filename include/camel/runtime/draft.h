@@ -671,7 +671,23 @@ class GraphDraft {
     /// the place is handed over rather than closed over `id`. Handing it over is what keeps the
     /// replacing code reachable from the graph's result: the chain is what says a statement runs
     /// (docs/design/effects/edges.cn.md 2), and closing the chain over `id` steps over that code.
-    void handChainPlaceTo(gc_node_ref_t id, gc_node_ref_t tail);
+    ///
+    /// `how` says whether that block survives the rewrite. A caller splicing code it keeps -- an
+    /// inlined body -- keeps it, and then a statement of *another* block cannot follow `tail`: it does
+    /// not run whenever `tail` runs (src/runtime/branch_arms.cpp refuses exactly that graph,
+    /// docs/technical/17_graph_rewrite_api_contracts.md 4.1), so it heads its own block's chain
+    /// instead -- the same sentence `closeChainOver` applies to a predecessor of another block. A
+    /// caller that dissolves the block in the same rewrite -- a pruned branch, whose arm's code
+    /// becomes the block's code when `eraseNode` re-parents its regions -- hands the place over
+    /// normally, because by the time the graph is committed the two ends are statements of one block.
+    /// The distinction is the caller's to make: it is the only place that knows whether the region
+    /// outlives the rewrite.
+    enum class PlaceHandover {
+        KeepsItsBlock,
+        DissolvedIntoIdsBlock,
+    };
+    void handChainPlaceTo(
+        gc_node_ref_t id, gc_node_ref_t tail, PlaceHandover how = PlaceHandover::KeepsItsBlock);
     /// The node `newId` takes the place `oldId` had in its block's chain: the statements written
     /// after `oldId` are written after `newId`, and `newId` is written after what `oldId` followed
     /// (docs/design/effects/edges.cn.md 4: a replacement transfers the replaced node's orderings to
