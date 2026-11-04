@@ -24,6 +24,13 @@
   executable's mtime, not the build log's: four rewrites in one night came from a correct number
   attributed to the wrong artifact (a stale `refs/remotes`, `build.ninja` for `build-Release.ninja`, a
   lane's readings filed as `develop`'s, a `-NoBuild` exit code read as a failure).
+- **Probe artefacts live in `D:\Temp\`, never in the worktree.** An untracked probe directory
+  makes `[provenance]` print `(dirty: N files)` on every run, and that flag carries a duty: it is
+  how a reader tells whether a reading came off a clean tree. A flag that is always on has stopped
+  being a flag -- a permanently dirty tree reports the same line as a tree someone has just edited,
+  so the one run that matters reads like all the others. Measured 2026-11-04: a lane kept two probe
+  directories under `benchmarks/` and `test/plans/`, and every reading it took that night said
+  `(dirty: 2 files)` while the tracked files were untouched.
 - **Before treating a red as a new defect, ask whether somebody already fixed it on another branch.**
   Twice in one night the answer was yes: `grad_array_sum` was about to get a probe written for it
   while the fix sat on `origin/lane-lit2` (`19f0b05e8`, `0aed45eb6`), and a `GUARD` question was
@@ -294,6 +301,10 @@ A red also changes hands when the bookkeeping changes: the milestone layer s las
 nor its plan file (`git log 4fa772787..d526043da -- test/plans/feat/modules/rules.plan.toml` is
 empty, and the plan runs 173/173 on `2227c21c1`), because `a01fcdfdc` changed how `known_fail` is
 read. **A count belongs to a tip and to the rules that counted it.**
+## `[code=127] ccache: not found` is a host fault, not a failing test
+
+**看到 `[code=127] ccache: not found` 或 `cannot open shared object file` ⇒ 这一轮的 `BUILD_EXIT=1` 不是读数，丢掉重跑。** 先答 `~/camel-work/bin/ccache --version`：答版本就与本条无关，答 `exec: ...: not found` 或 `cannot open shared object file` 就是宿主那条（记录见 `docs/handover/reports/2026-11-04-the-host-ccache-lost-its-exec-target.cn.md`）。只走 stdlib/文档/用例的增量跑一次编译都不发生，所以"同机有的车道绿、有的 127"是正常的，别据此改自己的代码。
+
 ## `got null` is not a timeout
 
 The runner writes `expected exit 0, got null` when the process died on a signal and no exit code
