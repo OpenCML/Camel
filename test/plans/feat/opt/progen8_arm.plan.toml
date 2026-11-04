@@ -28,9 +28,12 @@ tags = ["feat", "opt", "fold", "branches", "defects"]
 # call forwarded by a `GATE`, a loop whose condition is written as a branch); the folding does the
 # damage.
 #
-# The two tests below are the defect as *work owed*, not as exceptions -- no `known_fail` mark, so
-# the plan's `fail` count is the debt, and it goes to zero only when the pass stops writing that
-# relation. The reference test is what the passing runs must reproduce: exit 0 and no output.
+# The two tests below were the plan's open debt until 2026-11-05, not exceptions -- no `known_fail`
+# mark, so the plan's `fail` count was the debt, and it read zero on that date because the fold
+# stopped writing the relation (`0add4cd3c`, 2026-11-04 23:13; this plan was written before it, at
+# 22:29 the same night, when both were red). Both are green today, measured 2026-11-05 on this tree
+# (3 of 3 pass), so they are the guard now. The reference test is what the passing runs must
+# reproduce: exit 0 and no output.
 
 [defaults]
 kind = "behavior"
@@ -53,10 +56,10 @@ args = ["${case}", "${backend}"]
 
 [[tests]]
 name = "progen8_arm.inline_then_fold"
-desc = "The pair that writes the illegal relation: `std::opt::inline` then `std::opt::fold`. RED TODAY, expected to be fixed: `Runtime graph 'main' breaks the branch-arm invariant: JOIN 29 reads GATE 42, which lies in an arm of BRCH 25 that may not be taken when JOIN 29 runs` (17_graph_rewrite_api_contracts.md, 4.1 rule 3)."
+desc = "The pair that writes the illegal relation: `std::opt::inline` then `std::opt::fold`. Green today, measured 2026-11-05: exit 0 and no output. It guards the relation the pair used to write -- `Runtime graph 'main' breaks the branch-arm invariant: JOIN 29 reads GATE 42, which lies in an arm of BRCH 25 that may not be taken when JOIN 29 runs` (17_graph_rewrite_api_contracts.md, 4.1 rule 3) -- and the run asserts an empty stdout, so that sentence printing again turns red here."
 args = ["${case}", "std::opt::inline", "std::opt::fold", "${backend}"]
 
 [[tests]]
 name = "progen8_arm.std_opt"
-desc = "The pipeline the batch found it with: `std::opt`, whose round runs the inlining and then the fold. RED TODAY, expected to be fixed: `JOIN 30 reads GATE 41, which lies in an arm of BRCH 26 that may not be taken when JOIN 30 runs`."
+desc = "The pipeline the batch found it with: `std::opt`, whose round runs the inlining and then the fold. Green today, measured 2026-11-05: exit 0 and no output. It guards the relation that round used to write -- `JOIN 30 reads GATE 41, which lies in an arm of BRCH 26 that may not be taken when JOIN 30 runs` -- and the run asserts an empty stdout, so that sentence printing again turns red here."
 args = ["${case}", "std::opt", "${backend}"]
