@@ -19,7 +19,7 @@
 | `m-train` | `34d9e7202`（tree `57139ba44`） | total 8804, pass 8750, **fail 11**, skip 13, known failures 30 | 0 | 0 |
 | `probe-b3off` | `5fb44476f`（revert `821f30c83`） | total 8804, pass 8751, **fail 10**, skip 13, known failures 30 | 0 | 0 |
 
-**revert 之后那 10 条一条没消**，逐名对照（两棵树上句子逐字相同）：
+**revert 之后那 10 条一条没消**，逐名对照（这里的「两棵树」是 `m-train` `34d9e7202` 与 `probe-b3off` `5fb44476f`，**两棵都还带着 B3**，所以句子相同是意料之中的；这一句只对这两棵树成立，读成 develop 与 train 的对照就是错的）：
 
 | 用例 | 句子 | revert 后 |
 | --- | --- | --- |
@@ -122,3 +122,23 @@ M  test/plans/feat/compile/transforms.plan.toml
 ```
 
 `git diff --stat HEAD` 当时是空（全部已 staged），现在为空是因为那 10 个文件已是 `10abd59d0` 的提交。**`m-train` 的 tip 因此被推到 `10abd59d0`（整条线 revert），而本车的交付点仍是 `merge-train` = `c044d373d`。**
+
+## 九、补记：第三车道量出的三份读数，与两处判据的更正
+
+三份全量读数，各自独占 host checkout、`[provenance]` 无 `dirty`，同日同 helper（`-Plan all -Tier fast -Jobs 8`）：
+
+| 树（checkout 名） | tip | `[SUMMARY]` | `fail` 名单 | killed / timed out |
+| --- | --- | --- | --- | --- |
+| `b3full` | `5d3017ca2` | total 8804, pass 8759, **fail 2**, skip 13, known failures 30 | `vector_lhs_law`、`vector_rhs_law` | 0 / 0 |
+| `b3rev` | `10abd59d0` | total 8804, pass 8759, **fail 2**, skip 13, known failures 30 | 同上（与上一行逐字相同） | 0 / 0 |
+| `devbase` | `00dc468f8` | total 8790, pass 8744, **fail 3**, skip 13, known failures 30 | 同上 + `rank_three_is_refused_by_name` | 0 / 0 |
+
+`killed` / `timed out` 不进 `[SUMMARY]` 的正文：`test/tools/run-tests.mjs` 只在它们大于 0 时才追加 `, timed out: N` / `, killed by a signal: N`，所以「没有这两个字段」就是 0。
+
+**判词更正，写死，别再用旧措辞**：**那 8 条不是欠账，是 B3 两笔造成的回归；先前的「句子逐字相同」是拿一份含 11 条的名单与一份含 3 条的名单比出来的，而被比较的两个名字在其中一份里根本不存在。**
+
+**比较两份 `fail` 名单之前，先确认它们的 `total` 相同**：`8804` 与 `8790` 相差 14 条，这两份名单不可直接相减，也不可逐名对照——那 8 条在 develop 的 plan 里确实存在（`first_step.tensor_vjp_answers_the_step`、`matmul_t.law_read_through_vjp` 在 `feat/showcase_s2.plan.toml`，`erf_gradient_both_legs`、`linear_gradient_both_legs` 在 `feat/compile/transforms.plan.toml`），在 develop 上是绿的；它们没出现在 develop 的 `fail` 里，是因为它们本来就绿，不是因为「句子相同」。
+
+**判据的参照点选错，会让一个正确的工作看起来不合格**：原判据写「这 5 个文件与 `821f30c83^` 相同」，而 `821f30c83^` 里已经含着 B3 的另一半 `bb432e8ae`、且它是 lane 老基（早于 develop 漂移），**那个状态从来没有存在过**，判据要求的是一个不存在的点。量 `bb432e8ae^` 才分得开：`src/builtin/operators/struct.cpp` **逐字节相同**（它根本不是这次的改动），其余四个的残差全是 B3 之后别人做的活（`8f713d53a` 的聚合余切、rank-zero 转换、三点包 `T[...]`、`6703113b6` 的括号、`4e4697456` 的结构性零切向）。
+
+**落地状态**：`m-train` 与 `origin/develop`（`8dc01598d`）的 tree 都是 `6675ae8d3`，`git diff m-train origin/develop` 为空——revert 已随 develop 落地，`git ls-remote` 上 `origin/m-train` = `dd62f0f147`。**`devbase` 的 `fail = 3` 是 develop 当前基线的唯一实测，那棵树别收。**
