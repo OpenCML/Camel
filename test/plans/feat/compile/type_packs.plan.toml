@@ -2,7 +2,7 @@ id = "compile.type_packs"
 order = 1006
 tier = "fast"
 tags = ["feat", "compile", "types", "packs"]
-desc = "Type packs (design principles 5.6): `ParamsOf<F>`, `WithOf<F>` and `ResultOf<F>` take a function type apart, `...E` in a tuple type is one member for each member of the packs it uses, a rest parameter typed `...xs: ...A` binds the pack `A` to the types of its arguments, and `when ...pred::<A>()` asks every member; `zip` is a declaration of the prelude written with them. `Tangent<T>` (9.9) is the fourth type function: a float and a tensor of floats are their own tangent space, a tuple and a struct take it member by member, and an integer, a `bool` and a `string` take the empty tuple"
+desc = "Type packs (design principles 5.6): `ParamsOf<F>`, `WithOf<F>` and `ResultOf<F>` take a function type apart, `...E` in a tuple type is one member for each member of the packs it uses, a rest parameter typed `...xs: ...A` binds the pack `A` to the types of its arguments, and `when ...pred::<A>()` asks every member; `zip` is a declaration of the prelude written with them. `Tangent<T>` (9.9) is the fourth type function: a float and a tensor of floats are their own tangent space, a tuple and a struct take it member by member, and an integer, a `bool` and a `string` take the empty tuple. `FirstOf<P>` takes the head of a pack, and `Gradient<F>` (9.9) is a function's derivative computed from `F` -- the parameters of `F` and the cotangent of its first `with` parameter, in one declaration for every shape"
 
 [[tests]]
 name = "type_packs.function_parts"
@@ -113,5 +113,29 @@ backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "true\ntrue\nfalse\ntrue\ntrue\ntrue\ntrue\nfalse\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "type_packs.gradient_type"
+desc = "`Gradient<F>` is the derivative of a function type, and it is a type and not a name that prints: it is computed from `F` (`ParamsOf<F>`, `WithOf<F>`, and `FirstOf<WithOf<F>>` for the result, the pack's head), so `FirstOf<WithOf<Loss>>` is the weight's type, `Gradient<Loss>` is the same type as the one written out in full, two instances of it are one type, and it is not `Loss` itself -- the derivative of a function is not the function. The value the case annotates with it is the engine's `grad`, so the annotation and the engine's answer are one type: if they were two, the program would not compile. The number at the end is what taking the derivative answered before the type had a name."
+kind = "behavior"
+case = "../../../cases/compile/type_packs/gradient_type.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "true\ntrue\ntrue\nfalse\ngradient_type g=[2.0, 2.0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "type_packs.gradient_type.printed"
+desc = "The same program under `std::gir`: the node `autodiff:grad` states in its `value_type` the type the call answers, `<float[2]> (float) => float[2]` -- the weight's type in the `with` list, the parameter, and a cotangent of the weight's type as the result. That is the type `Gradient<Loss>` computes, printed by the compiler rather than by the case, and the judgments of the entry above are about the same type: the print and the equality are two readings of one thing."
+kind = "behavior"
+case = "../../../cases/compile/type_packs/gradient_type.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["<float[2]> (float) => float[2]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
