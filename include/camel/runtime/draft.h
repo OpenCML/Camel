@@ -320,6 +320,23 @@ struct DraftUserLists {
 /// the constructor out of line.
 uint64_t nextDraftEpoch();
 
+/// Whether the region a chain place is handed to survives the rewrite that hands it over -- the one
+/// fact `handChainPlaceTo` cannot read off the draft, because it is about the graph the rewrite is
+/// making rather than the graph it is holding. It is a parameter type and not a member of
+/// `GraphDraft` so that a caller stating it does not name the type: the direct-connection ledger
+/// (test/cases/runtime/graph_draft_ledger) counts who names `GraphDraft` outside the transaction, and
+/// a caller that passes a value is not one of them.
+enum class PlaceHandover {
+    /// The code the place is handed to keeps a block of its own (the body an inline splice moved in).
+    /// A statement of another block does not run whenever a statement of that block runs, so it heads
+    /// its own block's chain instead of following that block's tail.
+    KeepsItsBlock,
+    /// The block the place is handed to is dissolved into `id`'s block by the same rewrite (a pruned
+    /// branch, whose arm's code becomes the block's code when `eraseNode` re-parents its regions), so
+    /// by the time the graph is committed the two ends are statements of one block.
+    DissolvedIntoIdsBlock,
+};
+
 class GraphDraft {
   public:
     /// A draft of `graph`, a graph of `program`: the draft reads the graphs it refers to (the
@@ -681,11 +698,7 @@ class GraphDraft {
     /// becomes the block's code when `eraseNode` re-parents its regions -- hands the place over
     /// normally, because by the time the graph is committed the two ends are statements of one block.
     /// The distinction is the caller's to make: it is the only place that knows whether the region
-    /// outlives the rewrite.
-    enum class PlaceHandover {
-        KeepsItsBlock,
-        DissolvedIntoIdsBlock,
-    };
+    /// outlives the rewrite, and it says so with `PlaceHandover`.
     void handChainPlaceTo(
         gc_node_ref_t id, gc_node_ref_t tail, PlaceHandover how = PlaceHandover::KeepsItsBlock);
     /// The node `newId` takes the place `oldId` had in its block's chain: the statements written

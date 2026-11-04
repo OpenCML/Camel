@@ -690,7 +690,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     // erases so that eraseNode's own chain closing finds no successor left to close over.
     if (armTail != kInvalidNodeRef && draft.alive(armTail) && draft.alive(join)) {
         draft.handChainPlaceTo(
-            join, armTail, camel::runtime::GraphDraft::PlaceHandover::DissolvedIntoIdsBlock);
+            join, armTail, camel::runtime::PlaceHandover::DissolvedIntoIdsBlock);
     }
     // The joined chain's head stands where the branch stood: `handChainPlaceTo` gave the place to the
     // chain's tail, which already waits on the fragment before it, so the entry is written here. The
